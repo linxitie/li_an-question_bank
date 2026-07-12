@@ -3,14 +3,17 @@
 """
 import base64
 import hashlib
+import ipaddress
 import json
 import logging
 import os
 import re
 import shutil
+import socket
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Optional, List, Dict, Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
@@ -41,6 +44,7 @@ logger = logging.getLogger(__name__)
 # ============ 常量 ============
 ALLOWED_EXTENSIONS = {'.xlsx', '.xls', '.csv', '.docx', '.pdf'}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB — per-image size limit
 MAX_BATCH_QUESTIONS = 500  # 单次批量最大题目数
 
 # 科目名称 → subject_id 缓存
@@ -525,6 +529,8 @@ def _extract_and_save_images(content_text, question_id, upload_dir='uploads/ques
     """
     从题目内容中提取base64或URL图片，保存到磁盘，返回路径列表。
     支持格式: <img src="..."> / [IMAGE:x_y] 占位符 / base64 data URI
+
+    安全措施：路径遍历防护、SSRF检测、图片大小限制(MAX_IMAGE_SIZE)。
     """
     images = []
     # Resolve absolute backend directory for path construction
@@ -536,36 +542,86 @@ def _extract_and_save_images(content_text, question_id, upload_dir='uploads/ques
     # Directory where docx-extracted images are staged during parsing
     static_img_dir = os.path.join(_backend_dir, 'static', 'questions')
 
+    # Helper: validate image data size
+    def _check_size(data: bytes, label: str) -> bool:
+        if len(data) > MAX_IMAGE_SIZE:
+            logger.warning(f"[images] {label} 超过大小限制 ({len(data)} > {MAX_IMAGE_SIZE})")
+            return False
+        return True
+
+    # Helper: validate extension
+    def _safe_ext(raw: str, default: str = 'png') -> str:
+        ext = (raw or default).lower().split('?')[0]
+        if ext not in ('jpg', 'jpeg', 'png', 'gif', 'webp'):
+            ext = default
+        return ext
+
     # 1. Extract <img> tags with src attribute
     img_tags = re.findall(r'<img[^>]+src=["\']([^"\']+)["\'][^>]*>', content_text or '')
     for idx, src in enumerate(img_tags):
         try:
             filepath = None
             if src.startswith('data:image'):
-                # Base64 image
+                # Base64 image — decode then check size
                 header, data = src.split(',', 1)
                 img_data = base64.b64decode(data)
+                if not _check_size(img_data, f'base64图片{idx}'):
+                    continue
                 md5 = hashlib.md5(img_data).hexdigest()[:8]
-                ext = header.split(';')[0].split('/')[-1] or 'png'
-                if ext not in ('jpg', 'jpeg', 'png', 'gif', 'webp'):
-                    ext = 'png'
+                ext = _safe_ext(header.split(';')[0].split('/')[-1])
                 filename = f'img_{idx}_{md5}.{ext}'
                 filepath = os.path.join(img_dir, filename)
                 with open(filepath, 'wb') as f:
                     f.write(img_data)
             elif src.startswith('http'):
-                # URL image — download
+                # URL image — SSRF protection + size check
                 import requests as _req
+
+                parsed = urlparse(src)
+                hostname = parsed.hostname
+                if not hostname:
+                    continue
+
+                # SSRF check: resolve hostname and reject private/localhost IPs
                 try:
-                    resp = _req.get(src, timeout=10, headers={
+                    resolved_ip = socket.gethostbyname(hostname)
+                    ip_addr = ipaddress.ip_address(resolved_ip)
+                    if ip_addr.is_private or ip_addr.is_loopback or ip_addr.is_link_local:
+                        logger.warning(f"[images] SSRF blocked: {hostname} -> {resolved_ip}")
+                        continue
+                except Exception:
+                    continue
+
+                try:
+                    resp = _req.get(src, timeout=10, stream=True, headers={
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                     })
                     if resp.status_code == 200:
-                        img_data = resp.content
+                        # Check Content-Length header early if available
+                        content_length = resp.headers.get('Content-Length')
+                        if content_length and int(content_length) > MAX_IMAGE_SIZE:
+                            logger.warning(f"[images] HTTP图片{idx} Content-Length超标: {content_length}")
+                            resp.close()
+                            continue
+
+                        # Read in chunks, enforcing size limit
+                        chunks = []
+                        total = 0
+                        for chunk in resp.iter_content(chunk_size=8192):
+                            chunks.append(chunk)
+                            total += len(chunk)
+                            if total > MAX_IMAGE_SIZE:
+                                logger.warning(f"[images] HTTP图片{idx} 超过大小限制")
+                                resp.close()
+                                chunks = None
+                                break
+                        if chunks is None:
+                            continue
+                        img_data = b''.join(chunks)
+                        if not _check_size(img_data, f'HTTP图片{idx}'):
+                            continue
                         md5 = hashlib.md5(img_data).hexdigest()[:8]
-                        ext = src.rsplit('.', 1)[-1].split('?')[0] or 'jpg'
-                        if ext not in ('jpg', 'jpeg', 'png', 'gif', 'webp'):
-                            ext = 'jpg'
+                        ext = _safe_ext(src.rsplit('.', 1)[-1], 'jpg')
                         filename = f'img_{idx}_{md5}.{ext}'
                         filepath = os.path.join(img_dir, filename)
                         with open(filepath, 'wb') as f:
@@ -573,15 +629,18 @@ def _extract_and_save_images(content_text, question_id, upload_dir='uploads/ques
                 except Exception:
                     continue
             else:
-                # Local path — copy directly from uploads root
-                src_path = os.path.join(_backend_dir, 'uploads', src.lstrip('/'))
-                if os.path.exists(src_path):
-                    ext = src.rsplit('.', 1)[-1] or 'png'
-                    if ext not in ('jpg', 'jpeg', 'png', 'gif', 'webp'):
-                        ext = 'png'
-                    filename = f'img_{idx}.{ext}'
-                    filepath = os.path.join(img_dir, filename)
-                    shutil.copy2(src_path, filepath)
+                # Local path — use basename to prevent directory traversal
+                safe_name = os.path.basename(src)
+                if safe_name:
+                    src_path = os.path.join(_backend_dir, 'uploads', safe_name)
+                    if os.path.exists(src_path):
+                        img_data = open(src_path, 'rb').read()
+                        if not _check_size(img_data, f'本地图片{idx}'):
+                            continue
+                        ext = _safe_ext(safe_name.rsplit('.', 1)[-1])
+                        filename = f'img_{idx}.{ext}'
+                        filepath = os.path.join(img_dir, filename)
+                        shutil.copy2(src_path, filepath)
 
             if filepath and os.path.exists(filepath):
                 rel_path = f'/static/questions/{question_id}/{os.path.basename(filepath)}'
@@ -601,6 +660,8 @@ def _extract_and_save_images(content_text, question_id, upload_dir='uploads/ques
             src_file = os.path.join(static_img_dir, candidate_name)
             if os.path.exists(src_file):
                 img_data = open(src_file, 'rb').read()
+                if not _check_size(img_data, f'docx图片{num}_{seq}'):
+                    continue
                 md5 = hashlib.md5(img_data).hexdigest()[:8]
                 dst_name = f'img_docx_{num}_{seq}_{md5}.png'
                 dst_file = os.path.join(img_dir, dst_name)
@@ -699,18 +760,21 @@ async def import_single_question(
         db.add(question)
         db.flush()
 
-        # 图片提取与保存
-        images = _extract_and_save_images(
-            question_data.get('question_content', '') + ' ' + str(question_data.get('options', '')),
-            question.question_id
-        )
-        for img_order, img_path in enumerate(images):
-            db.add(QuestionImage(
-                question_id=question.question_id,
-                image_path=img_path,
-                image_type='题干图',
-                image_order=img_order
-            ))
+        # 图片提取与保存（异常不回滚整题，仅跳过图片）
+        try:
+            images = _extract_and_save_images(
+                question_data.get('question_content', '') + ' ' + str(question_data.get('options', '')),
+                question.question_id
+            )
+            for img_order, img_path in enumerate(images):
+                db.add(QuestionImage(
+                    question_id=question.question_id,
+                    image_path=img_path,
+                    image_type='题干图',
+                    image_order=img_order
+                ))
+        except Exception as img_err:
+            logger.warning(f"图片提取失败 question_id={question.question_id}: {img_err}")
 
         # 详细分类
         detail = QuestionDetailCategory(
@@ -1149,18 +1213,23 @@ async def confirm_batch_import(
                 )
                 db.add(detail)
 
-                # 图片提取与保存
-                images = _extract_and_save_images(
-                    item.get('question_content', '') + ' ' + str(item.get('options', '')),
-                    question.question_id
-                )
-                for img_order, img_path in enumerate(images):
-                    db.add(QuestionImage(
-                        question_id=question.question_id,
-                        image_path=img_path,
-                        image_type='题干图',
-                        image_order=img_order
-                    ))
+                # 图片提取与保存（失败时清除已刷新的题目，避免孤儿行）
+                try:
+                    images = _extract_and_save_images(
+                        item.get('question_content', '') + ' ' + str(item.get('options', '')),
+                        question.question_id
+                    )
+                    for img_order, img_path in enumerate(images):
+                        db.add(QuestionImage(
+                            question_id=question.question_id,
+                            image_path=img_path,
+                            image_type='题干图',
+                            image_order=img_order
+                        ))
+                except Exception as img_err:
+                    logger.warning(f"图片提取失败 question_id={question.question_id}: {img_err}")
+                    db.delete(question)
+                    raise
 
                 imported += 1
             except Exception as e:
@@ -1562,18 +1631,23 @@ async def _import_structured_from_ocr(
                 detail.gongzhuan_subcategory = subcategory
             db.add(detail)
 
-            # 图片提取与保存
-            images = _extract_and_save_images(
-                content + ' ' + str(q_data.get('options', '')),
-                question.question_id
-            )
-            for img_order, img_path in enumerate(images):
-                db.add(QuestionImage(
-                    question_id=question.question_id,
-                    image_path=img_path,
-                    image_type='题干图',
-                    image_order=img_order
-                ))
+            # 图片提取与保存（失败时清除已刷新的题目，避免孤儿行）
+            try:
+                images = _extract_and_save_images(
+                    content + ' ' + str(q_data.get('options', '')),
+                    question.question_id
+                )
+                for img_order, img_path in enumerate(images):
+                    db.add(QuestionImage(
+                        question_id=question.question_id,
+                        image_path=img_path,
+                        image_type='题干图',
+                        image_order=img_order
+                    ))
+            except Exception as img_err:
+                logger.warning(f"OCR图片提取失败 question_id={question.question_id}: {img_err}")
+                db.delete(question)
+                raise
 
             imported += 1
             results.append({
