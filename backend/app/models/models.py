@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, DECIMAL, 
+    Column, Integer, String, Text, DateTime, Date, DECIMAL,
     Enum, JSON, ForeignKey, Index, UniqueConstraint, BigInteger
 )
 from sqlalchemy.orm import relationship
@@ -18,7 +18,7 @@ class SysUser(Base):
     """系统用户表"""
     __tablename__ = "sys_user"
     
-    user_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="用户ID")
+    user_id = Column(Integer, primary_key=True, autoincrement=True, comment="用户ID")
     user_no = Column(String(50), nullable=False, unique=True, comment="用户编号")
     username = Column(String(100), nullable=False, comment="用户名")
     password = Column(String(255), nullable=False, comment="密码")
@@ -30,6 +30,8 @@ class SysUser(Base):
     department = Column(String(100), comment="学院/部门")
     class_name = Column(String(100), comment="班级")
     school = Column(String(100), default="中国人民警察大学", comment="学校")
+    nianji = Column(String(50), comment="年级")
+    id_card = Column(String(20), comment="身份证号")
     title = Column(String(50), comment="职称")
     specialty = Column(String(100), comment="专业领域")
     role_level = Column(Integer, default=1, comment="权限级别")
@@ -39,19 +41,33 @@ class SysUser(Base):
     total_checkin_days = Column(Integer, default=0, comment="累计签到天数")
     register_time = Column(DateTime, default=datetime.now, comment="注册时间")
     last_login = Column(DateTime, comment="最后登录时间")
-    
+
+    # === 三端分离架构新增字段 ===
+    is_disabled = Column(Integer, default=0, comment="是否禁用 0正常/1禁用")
+    disabled_reason = Column(String(255), comment="禁用原因")
+    last_login_ip = Column(String(45), comment="最后登录IP地址")
+    password_reset_token = Column(String(255), comment="密码重置令牌(哈希)")
+    password_reset_expire = Column(DateTime, comment="密码重置令牌过期时间")
+    created_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="创建人ID(管理员创建教师)")
+    school_id = Column(Integer, comment="所属学校/机构ID")
+
+    # 自引用关系：创建人
+    creator = relationship("SysUser", remote_side=[user_id], foreign_keys=[created_by])
+
     __table_args__ = (
         Index("idx_user_no", user_no),
         Index("idx_user_type", user_type),
-        Index("idx_status", status),
+        Index("idx_status_sysuser", status),
+        Index("idx_is_disabled", is_disabled),
         Index("idx_department", department, class_name),
+        Index("idx_school_id", school_id),
     )
 
 class SysLoginLog(Base):
     """用户登录日志表"""
     __tablename__ = "sys_login_log"
     
-    log_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="日志ID")
+    log_id = Column(Integer, primary_key=True, autoincrement=True, comment="日志ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     login_time = Column(DateTime, default=datetime.now, comment="登录时间")
     login_ip = Column(String(50), comment="登录IP")
@@ -62,7 +78,7 @@ class SysLoginLog(Base):
     user = relationship("SysUser")
     
     __table_args__ = (
-        Index("idx_user_id", user_id),
+        Index("idx_user_id_sysloginlog", user_id),
         Index("idx_login_time", login_time),
     )
 
@@ -101,17 +117,17 @@ class QuestionType(Base):
     
     __table_args__ = (
         Index("idx_type_code", type_code),
-        Index("idx_subject_id", subject_id),
+        Index("idx_type_subject_id", subject_id),
     )
 
 class KnowledgePoint(Base):
     """知识点表"""
     __tablename__ = "knowledge_point"
     
-    point_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="知识点ID")
+    point_id = Column(Integer, primary_key=True, autoincrement=True, comment="知识点ID")
     point_name = Column(String(200), nullable=False, comment="知识点名称")
     subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), nullable=False, comment="所属科目")
-    parent_id = Column(BigInteger, default=0, comment="父知识点ID")
+    parent_id = Column(BigInteger, ForeignKey("knowledge_point.point_id"), default=0, comment="父知识点ID")
     level = Column(Integer, default=1, comment="层级")
     description = Column(String(500), comment="知识点描述")
     sort_order = Column(Integer, default=1, comment="排序")
@@ -128,7 +144,7 @@ class QuestionBank(Base):
     """题库主表"""
     __tablename__ = "question_bank"
     
-    question_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="题目ID")
+    question_id = Column(Integer, primary_key=True, autoincrement=True, comment="题目ID")
     subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), nullable=False, comment="科目ID")
     type_id = Column(Integer, ForeignKey("question_type.type_id"), nullable=False, comment="题型ID")
     question_content = Column(Text, nullable=False, comment="题目内容")
@@ -144,6 +160,19 @@ class QuestionBank(Base):
     video_url = Column(String(500), comment="讲解视频URL")
     accuracy_rate = Column(DECIMAL(5, 2), default=0.00, comment="正确率")
     exam_frequency = Column(Integer, default=0, comment="考试频率")
+    
+    # 子科目分类（行测/申论/公专）
+    xingce_subcategory = Column(Enum(
+        "政治理论", "资料分析", "数量关系", "常识",
+        "速度与知觉训练", "判断推理", "语言理解与表达", "无"
+    ), default="无", comment="行测细分类型")
+    shenlun_subcategory = Column(Enum(
+        "归纳概括", "综合分析", "提出对策", "应用文写作", "议论文写作", "无"
+    ), default="无", comment="申论细分类型")
+    gongzhuan_subcategory = Column(Enum(
+        "职业素养", "基本警务能力", "基础知识", "无"
+    ), default="无", comment="公专细分类型")
+    
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="创建人ID")
     auditor_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="审核人ID")
     audit_status = Column(Integer, default=0, comment="审核状态")
@@ -165,14 +194,14 @@ class QuestionBank(Base):
         Index("idx_point", point_id),
         Index("idx_difficulty", difficulty),
         Index("idx_audit_status", audit_status),
-        Index("idx_creator", creator_id),
+        Index("idx_creator_questionbank", creator_id),
     )
 
 class QuestionEditLog(Base):
     """题库编辑日志表"""
     __tablename__ = "question_edit_log"
     
-    log_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="日志ID")
+    log_id = Column(Integer, primary_key=True, autoincrement=True, comment="日志ID")
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
     editor_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="编辑人ID")
     action_type = Column(Enum("CREATE", "UPDATE", "DELETE", "AUDIT"), comment="操作类型")
@@ -185,7 +214,7 @@ class QuestionEditLog(Base):
     editor = relationship("SysUser")
     
     __table_args__ = (
-        Index("idx_question_id", question_id),
+        Index("idx_question_id_questioneditlog", question_id),
         Index("idx_editor_id", editor_id),
         Index("idx_edit_time", edit_time),
     )
@@ -198,7 +227,7 @@ class ExamPaper(Base):
     """试卷主表"""
     __tablename__ = "exam_paper"
     
-    paper_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="试卷ID")
+    paper_id = Column(Integer, primary_key=True, autoincrement=True, comment="试卷ID")
     paper_name = Column(String(200), nullable=False, comment="试卷名称")
     paper_code = Column(String(50), unique=True, nullable=False, comment="试卷编号")
     subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), nullable=False, comment="科目ID")
@@ -235,7 +264,7 @@ class ExamPaper(Base):
     __table_args__ = (
         Index("idx_paper_code", paper_code),
         Index("idx_subject_id", subject_id),
-        Index("idx_creator", creator_id),
+        Index("idx_creator_exampaper", creator_id),
         Index("idx_paper_type", paper_type),
         Index("idx_exam_time", exam_time),
     )
@@ -244,7 +273,7 @@ class PaperQuestionRelation(Base):
     """试卷题目关联表"""
     __tablename__ = "paper_question_relation"
     
-    relation_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="关联ID")
+    relation_id = Column(Integer, primary_key=True, autoincrement=True, comment="关联ID")
     paper_id = Column(BigInteger, ForeignKey("exam_paper.paper_id"), nullable=False, comment="试卷ID")
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
     question_order = Column(Integer, nullable=False, comment="题目顺序")
@@ -256,15 +285,15 @@ class PaperQuestionRelation(Base):
     
     __table_args__ = (
         UniqueConstraint("paper_id", "question_id", name="uk_paper_question"),
-        Index("idx_paper_id", paper_id),
-        Index("idx_question_id", question_id),
+        Index("idx_paper_id_paperquestionrelation", paper_id),
+        Index("idx_question_id_paperquestionrelation", question_id),
     )
 
 class PaperApproval(Base):
     """试卷审批记录表"""
     __tablename__ = "paper_approval"
     
-    approval_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="审批记录ID")
+    approval_id = Column(Integer, primary_key=True, autoincrement=True, comment="审批记录ID")
     paper_id = Column(BigInteger, ForeignKey("exam_paper.paper_id"), nullable=False, comment="试卷ID")
     approver_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="审批人ID")
     approval_result = Column(Enum("PENDING", "APPROVED", "REJECTED"), default="PENDING", comment="审批结果")
@@ -276,7 +305,7 @@ class PaperApproval(Base):
     approver = relationship("SysUser")
     
     __table_args__ = (
-        Index("idx_paper_id", paper_id),
+        Index("idx_paper_id_paperapproval", paper_id),
         Index("idx_approver_id", approver_id),
     )
 
@@ -288,7 +317,7 @@ class ExamRecord(Base):
     """考试记录表"""
     __tablename__ = "exam_record"
     
-    record_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="考试记录ID")
+    record_id = Column(Integer, primary_key=True, autoincrement=True, comment="考试记录ID")
     paper_id = Column(BigInteger, ForeignKey("exam_paper.paper_id"), nullable=False, comment="试卷ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="考生ID")
     exam_type = Column(Enum("SIMULATION", "PRACTICE"), nullable=False, comment="考试类型")
@@ -308,31 +337,38 @@ class ExamRecord(Base):
     
     __table_args__ = (
         UniqueConstraint("paper_id", "user_id", name="uk_paper_user"),
-        Index("idx_paper_id", paper_id),
-        Index("idx_user_id", user_id),
+        Index("idx_paper_id_examrecord", paper_id),
+        Index("idx_user_id_examrecord", user_id),
         Index("idx_start_time", start_time),
-        Index("idx_is_completed", is_completed),
+        Index("idx_is_completed_examrecord", is_completed),
     )
 
 class ExamAnswerDetail(Base):
     """答题详情表"""
     __tablename__ = "exam_answer_detail"
     
-    detail_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="答题详情ID")
+    detail_id = Column(Integer, primary_key=True, autoincrement=True, comment="答题详情ID")
     record_id = Column(BigInteger, ForeignKey("exam_record.record_id"), nullable=False, comment="考试记录ID")
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
     student_answer = Column(Text, comment="学生答案")
     is_correct = Column(Integer, comment="是否正确")
     time_spent = Column(Integer, comment="答题耗时")
     score_obtained = Column(DECIMAL(5, 2), default=0.00, comment="获得分数")
+    difficulty = Column(Integer, comment="题目难度")
+    correct_answer = Column(Text, comment="正确答案")
+    answer_analysis = Column(Text, comment="答案解析")
+    knowledge_point = Column(String(200), comment="知识点")
+    note = Column(Text, comment="学生笔记")
+    frequency = Column(Integer, default=0, comment="出题频率")
+    correct_rate = Column(DECIMAL(10, 2), comment="正确率")
     create_time = Column(DateTime, default=datetime.now, comment="答题时间")
     
     record = relationship("ExamRecord")
     question = relationship("QuestionBank")
     
     __table_args__ = (
-        Index("idx_record_id", record_id),
-        Index("idx_question_id", question_id),
+        Index("idx_record_id_examanswerdetail", record_id),
+        Index("idx_question_id_examanswerdetail", question_id),
         Index("idx_is_correct", is_correct),
     )
 
@@ -340,21 +376,35 @@ class ScoreAnalysis(Base):
     """成绩分析表"""
     __tablename__ = "score_analysis"
     
-    analysis_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="分析ID")
+    analysis_id = Column(Integer, primary_key=True, autoincrement=True, comment="分析ID")
     record_id = Column(BigInteger, ForeignKey("exam_record.record_id"), nullable=False, comment="考试记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="学生ID")
+    teacher_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="指导教师ID")
+    exam_type = Column(String(50), comment="考试类型")
     total_score = Column(DECIMAL(10, 2), nullable=False, comment="总分")
     score_percentage = Column(DECIMAL(5, 2), comment="得分率")
     subject_scores = Column(JSON, comment="各科目得分")
     question_type_scores = Column(JSON, comment="各题型得分")
     knowledge_scores = Column(JSON, comment="各知识点得分")
+    shenlun_score = Column(DECIMAL(10,2), default=0.00, comment="申论得分")
+    xingce_score = Column(DECIMAL(10,2), default=0.00, comment="行测得得分")
+    police_score = Column(DECIMAL(10,2), default=0.00, comment="公专得分")
+    single_correct_count = Column(Integer, default=0, comment="单选题正确数")
+    multiple_correct_count = Column(Integer, default=0, comment="多选题正确数")
+    essay_score = Column(DECIMAL(10,2), default=0.00, comment="论述题得分")
+    practical_score = Column(DECIMAL(10,2), default=0.00, comment="应用文写作得分")
+    argument_score = Column(DECIMAL(10,2), default=0.00, comment="议论文写作得分")
+    analysis_chart_data = Column(JSON, comment="分析图数据")
     weak_points = Column(JSON, comment="薄弱知识点")
     improvement_suggestion = Column(Text, comment="提升建议")
     analysis_time = Column(DateTime, default=datetime.now, comment="分析时间")
     
+    student = relationship("SysUser", foreign_keys=[user_id])
+    teacher = relationship("SysUser", foreign_keys=[teacher_id])
     record = relationship("ExamRecord")
     
     __table_args__ = (
-        Index("idx_record_id", record_id),
+        Index("idx_record_id_scoreanalysis", record_id),
     )
 
 # ------------------------------
@@ -364,35 +414,44 @@ class ScoreAnalysis(Base):
 class PracticeRecord(Base):
     """刷题记录表"""
     __tablename__ = "practice_record"
-    
-    record_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="刷题记录ID")
+
+    record_id = Column(Integer, primary_key=True, autoincrement=True, comment="刷题记录ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), comment="科目ID")
+    type_id = Column(Integer, ForeignKey("question_type.type_id"), comment="题型ID")
     answer = Column(Text, comment="用户答案")
     is_correct = Column(Integer, nullable=False, comment="是否正确")
     practice_time = Column(DateTime, default=datetime.now, comment="刷题时间")
-    time_spent = Column(Integer, comment="耗时")
-    source_type = Column(Enum("RANDOM", "CHAPTER", "WRONG"), comment="刷题来源")
-    
+    practice_date = Column(Date, comment="刷题日期（用于按日统计）")
+    time_spent = Column(Integer, comment="耗时（秒）")
+    source_type = Column(String(50), comment="刷题来源（随机练习/章节练习/错题复习/快速练习/历年试卷/智能组卷）")
+
     user = relationship("SysUser")
     question = relationship("QuestionBank")
-    
+    subject = relationship("QuestionSubject")
+    question_type = relationship("QuestionType")
+
     __table_args__ = (
-        Index("idx_user_id", user_id),
-        Index("idx_question_id", question_id),
+        Index("idx_user_id_practicerecord", user_id),
+        Index("idx_question_id_practicerecord", question_id),
         Index("idx_practice_time", practice_time),
+        Index("idx_practice_date", practice_date),
     )
 
 class WrongQuestionPersonal(Base):
     """个人错题集表"""
     __tablename__ = "wrong_question_personal"
     
-    wrong_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="错题ID")
+    wrong_id = Column(Integer, primary_key=True, autoincrement=True, comment="错题ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), comment="科目ID")
     collection_type = Column(Enum("WRONG", "FAVORITE", "ESSAY"), default="WRONG", comment="收藏类型")
     error_count = Column(Integer, default=1, comment="错误次数")
     mastery_level = Column(Enum("UNMASTERED", "PARTIAL", "MASTERED"), default="UNMASTERED", comment="掌握程度")
+    is_cut = Column(Integer, default=0, comment="是否已斩题")
+    accuracy_rate = Column(DECIMAL(5, 2), default=0.00, comment="正确率")
     cut_time = Column(DateTime, comment="斩题时间")
     auto_delete_time = Column(DateTime, comment="自动删除时间")
     review_count = Column(Integer, default=0, comment="复习次数")
@@ -406,8 +465,8 @@ class WrongQuestionPersonal(Base):
     
     __table_args__ = (
         UniqueConstraint("user_id", "question_id", "collection_type", name="uk_user_question"),
-        Index("idx_user_id", user_id),
-        Index("idx_question_id", question_id),
+        Index("idx_user_id_wrongquestionpersonal", user_id),
+        Index("idx_question_id_wrongquestionpersonal", question_id),
         Index("idx_mastery_level", mastery_level),
     )
 
@@ -415,7 +474,7 @@ class VideoWatchRecord(Base):
     """视频观看记录表"""
     __tablename__ = "video_watch_record"
     
-    record_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="观看记录ID")
+    record_id = Column(Integer, primary_key=True, autoincrement=True, comment="观看记录ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
     video_url = Column(String(500), nullable=False, comment="视频地址")
@@ -429,8 +488,8 @@ class VideoWatchRecord(Base):
     question = relationship("QuestionBank")
     
     __table_args__ = (
-        Index("idx_user_id", user_id),
-        Index("idx_question_id", question_id),
+        Index("idx_user_id_videowatchrecord", user_id),
+        Index("idx_question_id_videowatchrecord", question_id),
         Index("idx_watch_time", watch_time),
     )
 
@@ -442,7 +501,7 @@ class ForumPost(Base):
     """论坛帖子表"""
     __tablename__ = "forum_post"
     
-    post_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="帖子ID")
+    post_id = Column(Integer, primary_key=True, autoincrement=True, comment="帖子ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="发帖人ID")
     title = Column(String(200), nullable=False, comment="标题")
     content = Column(Text, nullable=False, comment="内容")
@@ -461,16 +520,16 @@ class ForumPost(Base):
     user = relationship("SysUser")
     
     __table_args__ = (
-        Index("idx_user_id", user_id),
+        Index("idx_user_id_forumpost", user_id),
         Index("idx_create_time", create_time),
-        Index("idx_status", status),
+        Index("idx_status_forumpost", status),
     )
 
 class ForumComment(Base):
     """论坛评论表"""
     __tablename__ = "forum_comment"
     
-    comment_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="评论ID")
+    comment_id = Column(Integer, primary_key=True, autoincrement=True, comment="评论ID")
     post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), nullable=False, comment="帖子ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="评论人ID")
     parent_comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="父评论ID")
@@ -485,7 +544,7 @@ class ForumComment(Base):
     
     __table_args__ = (
         Index("idx_post_id", post_id),
-        Index("idx_user_id", user_id),
+        Index("idx_user_id_forumcomment", user_id),
         Index("idx_parent_comment", parent_comment_id),
     )
 
@@ -497,7 +556,7 @@ class CoinRecord(Base):
     """金币记录表"""
     __tablename__ = "coin_record"
     
-    record_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="记录ID")
+    record_id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     coin_change = Column(Integer, nullable=False, comment="金币变化")
     current_balance = Column(Integer, nullable=False, comment="当前余额")
@@ -510,7 +569,7 @@ class CoinRecord(Base):
     user = relationship("SysUser")
     
     __table_args__ = (
-        Index("idx_user_id", user_id),
+        Index("idx_user_id_coinrecord", user_id),
         Index("idx_transaction_time", transaction_time),
         Index("idx_source_type", source_type),
     )
@@ -519,7 +578,7 @@ class DailyCheckin(Base):
     """每日签到表"""
     __tablename__ = "daily_checkin"
     
-    checkin_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="签到ID")
+    checkin_id = Column(Integer, primary_key=True, autoincrement=True, comment="签到ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     checkin_date = Column(String(10), nullable=False, comment="签到日期")
     checkin_time = Column(DateTime, default=datetime.now, comment="签到时间")
@@ -528,6 +587,8 @@ class DailyCheckin(Base):
     has_makeup = Column(Integer, default=0, comment="是否补签")
     coin_reward = Column(Integer, default=0, comment="金币奖励")
     streak_bonus = Column(Integer, default=0, comment="连续奖励")
+    makeup_card_count = Column(Integer, default=0, comment="补签卡数量")
+    practice_count_after_checkin = Column(Integer, default=0, comment="签到后做题量")
     
     user = relationship("SysUser")
     
@@ -546,7 +607,7 @@ class StudyGoal(Base):
     """学习目标表"""
     __tablename__ = "study_goal"
 
-    goal_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="目标ID")
+    goal_id = Column(Integer, primary_key=True, autoincrement=True, comment="目标ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     title = Column(String(200), nullable=False, comment="目标标题")
     description = Column(String(500), comment="目标描述")
@@ -564,9 +625,9 @@ class StudyGoal(Base):
     user = relationship("SysUser")
 
     __table_args__ = (
-        Index("idx_user_id", user_id),
+        Index("idx_user_id_studygoal", user_id),
         Index("idx_goal_type", goal_type),
-        Index("idx_is_completed", is_completed),
+        Index("idx_is_completed_studygoal", is_completed),
         Index("idx_deadline", deadline),
     )
 
@@ -579,7 +640,7 @@ class VideoResource(Base):
     """视频资源表"""
     __tablename__ = "video_resource"
     
-    video_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="视频ID")
+    video_id = Column(Integer, primary_key=True, autoincrement=True, comment="视频ID")
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), comment="关联题目ID")
     title = Column(String(200), nullable=False, comment="视频标题")
     original_filename = Column(String(200), comment="原始文件名")
@@ -597,15 +658,15 @@ class VideoResource(Base):
     question = relationship("QuestionBank")
     
     __table_args__ = (
-        Index("idx_question_id", question_id),
-        Index("idx_status", status),
+        Index("idx_question_id_videoresource", question_id),
+        Index("idx_status_videoresource", status),
     )
 
 class FileResource(Base):
     """文件资源表"""
     __tablename__ = "file_resource"
     
-    file_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="文件ID")
+    file_id = Column(Integer, primary_key=True, autoincrement=True, comment="文件ID")
     title = Column(String(200), comment="文件标题")
     original_filename = Column(String(200), nullable=False, comment="原始文件名")
     storage_path = Column(String(500), nullable=False, comment="存储路径")
@@ -631,7 +692,7 @@ class SysConfig(Base):
     """系统配置表"""
     __tablename__ = "sys_config"
     
-    config_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="配置ID")
+    config_id = Column(Integer, primary_key=True, autoincrement=True, comment="配置ID")
     config_key = Column(String(100), unique=True, nullable=False, comment="配置键")
     config_value = Column(Text, comment="配置值")
     config_desc = Column(String(500), comment="配置描述")
@@ -647,7 +708,7 @@ class SysOperationLog(Base):
     """操作日志表"""
     __tablename__ = "sys_operation_log"
     
-    log_id = Column(BigInteger, primary_key=True, autoincrement=True, comment="日志ID")
+    log_id = Column(Integer, primary_key=True, autoincrement=True, comment="日志ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="操作人ID")
     user_name = Column(String(100), comment="操作人姓名")
     operation_type = Column(String(50), comment="操作类型")
@@ -664,6 +725,634 @@ class SysOperationLog(Base):
     user = relationship("SysUser")
     
     __table_args__ = (
-        Index("idx_user_id", user_id),
+        Index("idx_user_id_sysoperationlog", user_id),
         Index("idx_operation_time", operation_time),
+    )
+
+# ------------------------------
+# 试卷标签模型（新增）
+# ------------------------------
+
+class ExamPaperTag(Base):
+    """试卷标签表"""
+    __tablename__ = "exam_paper_tag"
+    
+    tag_id = Column(Integer, primary_key=True, autoincrement=True, comment="标签ID")
+    paper_id = Column(BigInteger, ForeignKey("exam_paper.paper_id"), nullable=False, comment="试卷ID")
+    exam_year = Column(Integer, comment="考试年份")
+    exam_province = Column(String(50), comment="考试省份")
+    exam_type = Column(String(50), comment="考试类型（联考/省考/国考）")
+    subject_category = Column(Enum("行测", "申论", "公专", "其他"), comment="科目大类")
+    is_complete = Column(Integer, default=1, comment="是否完整试卷")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    paper = relationship("ExamPaper")
+    
+    __table_args__ = (
+        Index("idx_paper_id_exampapertag", paper_id),
+        Index("idx_exam_year", exam_year),
+        Index("idx_subject_category", subject_category),
+    )
+
+# ------------------------------
+# 题目详细分类模型（新增）
+# ------------------------------
+
+class QuestionDetailCategory(Base):
+    """题目详细分类表"""
+    __tablename__ = "question_detail_category"
+    
+    category_id = Column(Integer, primary_key=True, autoincrement=True, comment="分类ID")
+    question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    
+    # 行测细分类
+    xingce_subcategory = Column(Enum(
+        "政治理论", "资料分析", "数量关系", "常识", 
+        "速度与知觉训练", "判断推理", "语言理解与表达", "无"
+    ), default="无", comment="行测细分类型")
+    
+    # 申论细分类
+    shenlun_subcategory = Column(Enum(
+        "归纳概括", "综合分析", "提出对策", "应用文写作", "议论文写作", "无"
+    ), default="无", comment="申论细分类型")
+    
+    # 公专细分类
+    gongzhuan_subcategory = Column(Enum(
+        "职业素养", "基本警务能力", "基础知识", "无"
+    ), default="无", comment="公专细分类型")
+    
+    # 其他分类
+    other_subcategory = Column(String(100), default="无", comment="其他细分类型")
+    
+    # 题型细分
+    question_type_detail = Column(Enum(
+        "单选题", "多选题", "不定项", "选择题", "判断题",
+        "写作题", "简答题", "案例分析题", "论述题", "填空题", "无"
+    ), default="选择题", comment="题型详细分类")
+    
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    question = relationship("QuestionBank")
+    
+    __table_args__ = (
+        UniqueConstraint("question_id", name="uk_question_category"),
+        Index("idx_question_id_questiondetailcategory", question_id),
+        Index("idx_xingce_sub", xingce_subcategory),
+        Index("idx_shenlun_sub", shenlun_subcategory),
+        Index("idx_gongzhuan_sub", gongzhuan_subcategory),
+    )
+
+# ------------------------------
+# 题目图片关联模型（新增）
+# ------------------------------
+
+class QuestionImage(Base):
+    """题目图片关联表"""
+    __tablename__ = "question_image"
+    
+    image_id = Column(Integer, primary_key=True, autoincrement=True, comment="图片ID")
+    question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    image_path = Column(String(500), nullable=False, comment="图片存储路径")
+    image_type = Column(Enum("题干图", "选项图", "解析图", "其他"), default="题干图", comment="图片类型")
+    ocr_text = Column(Text, comment="OCR识别文本")
+    image_order = Column(Integer, default=0, comment="图片顺序")
+    file_size = Column(BigInteger, comment="文件大小")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    question = relationship("QuestionBank")
+    
+    __table_args__ = (
+        Index("idx_question_id_questionimage", question_id),
+        Index("idx_image_type", image_type),
+    )
+
+# ------------------------------
+# 题目导入记录模型（新增）
+# ------------------------------
+
+class QuestionImportRecord(Base):
+    """题目导入记录表"""
+    __tablename__ = "question_import_record"
+    
+    import_id = Column(Integer, primary_key=True, autoincrement=True, comment="导入记录ID")
+    paper_id = Column(BigInteger, ForeignKey("exam_paper.paper_id"), comment="关联试卷ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="导入人ID")
+    original_filename = Column(String(200), comment="原始文件名")
+    file_type = Column(Enum("WORD", "PDF", "EXCEL", "JSON"), comment="文件类型")
+    total_questions = Column(Integer, default=0, comment="识别题目总数")
+    success_count = Column(Integer, default=0, comment="成功入库数")
+    failed_count = Column(Integer, default=0, comment="失败数")
+    duplicate_count = Column(Integer, default=0, comment="重复题目数")
+    import_status = Column(Enum("PARSING", "PREVIEW", "CONFIRMED", "COMPLETED", "FAILED"), default="PARSING", comment="导入状态")
+    preview_data = Column(JSON, comment="预览数据")
+    error_messages = Column(JSON, comment="错误信息")
+    import_time = Column(DateTime, default=datetime.now, comment="导入时间")
+    complete_time = Column(DateTime, comment="完成时间")
+    
+    paper = relationship("ExamPaper")
+    user = relationship("SysUser")
+    
+    __table_args__ = (
+        Index("idx_user_id_questionimportrecord", user_id),
+        Index("idx_paper_id_questionimportrecord", paper_id),
+        Index("idx_import_status", import_status),
+        Index("idx_import_time", import_time),
+    )
+
+# ------------------------------
+# 班级模型（新增）
+# ------------------------------
+
+class Banji(Base):
+    """班级表"""
+    __tablename__ = "banji"
+    
+    class_id = Column(Integer, primary_key=True, autoincrement=True, comment="班级ID")
+    class_name = Column(String(100), nullable=False, comment="班级名称")
+    school = Column(String(100), comment="学校名称")
+    teacher_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="班主任ID")
+    student_count = Column(Integer, default=0, comment="学生数量")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    status = Column(Integer, default=1, comment="状态")
+    
+    teacher = relationship("SysUser", foreign_keys=[teacher_id])
+    
+    __table_args__ = (
+        Index("idx_teacher_id_banji", teacher_id),
+        Index("idx_school", school),
+    )
+
+# ------------------------------
+# 论坛点赞模型（新增）
+# ------------------------------
+
+class ForumLike(Base):
+    """论坛点赞表"""
+    __tablename__ = "forum_like"
+    
+    like_id = Column(Integer, primary_key=True, autoincrement=True, comment="点赞ID")
+    post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), comment="帖子ID")
+    comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="评论ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    create_time = Column(DateTime, default=datetime.now, comment="点赞时间")
+    
+    post = relationship("ForumPost")
+    comment = relationship("ForumComment")
+    user = relationship("SysUser")
+    
+    __table_args__ = (
+        UniqueConstraint("post_id", "user_id", name="uk_post_user_like"),
+        UniqueConstraint("comment_id", "user_id", name="uk_comment_user_like"),
+        Index("idx_post_id_forumlike", post_id),
+        Index("idx_comment_id_forumlike", comment_id),
+        Index("idx_user_id_forumlike", user_id),
+    )
+
+# ------------------------------
+# 全校错题统计模型（新增）
+# ------------------------------
+
+class WrongQuestionClass(Base):
+    """全校/班级错题统计表"""
+    __tablename__ = "wrong_question_class"
+    
+    stat_id = Column(Integer, primary_key=True, autoincrement=True, comment="统计ID")
+    question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    class_id = Column(BigInteger, ForeignKey("banji.class_id"), comment="班级ID")
+    wrong_count = Column(Integer, default=0, comment="错误次数")
+    total_attempts = Column(Integer, default=0, comment="总答题次数")
+    error_rate = Column(DECIMAL(5, 2), default=0.00, comment="错误率")
+    common_mistake = Column(Text, comment="常见错误")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+    
+    question = relationship("QuestionBank")
+    banji = relationship("Banji")
+    
+    __table_args__ = (
+        Index("idx_question_id_wrongquestionclass", question_id),
+        Index("idx_class_id", class_id),
+    )
+
+# ------------------------------
+# 历年试卷模型（新增）
+# ------------------------------
+
+class YearPaper(Base):
+    """历年试卷表"""
+    __tablename__ = "year_paper"
+    
+    year_paper_id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    record_id = Column(BigInteger, ForeignKey("exam_record.record_id"), nullable=False, unique=True, comment="考试记录ID")
+    year = Column(Integer, comment="年份")
+    paper_title = Column(String(200), comment="试卷标题")
+    subject_category = Column(String(50), comment="科目大类")
+    province = Column(String(50), comment="省份")
+    exam_type = Column(String(50), comment="考试类型")
+    total_score = Column(DECIMAL(10, 2), comment="试卷总分")
+    total_questions = Column(Integer, comment="题目总数")
+    answer_time = Column(Integer, comment="答题用时")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    record = relationship("ExamRecord", uselist=False)
+    
+    __table_args__ = (
+        Index("idx_year", year),
+        Index("idx_subject_category_yearpaper", subject_category),
+    )
+
+# ------------------------------
+# 招聘信息模型（新增）
+# ------------------------------
+
+class RecruitmentInfo(Base):
+    """招聘信息表"""
+    __tablename__ = "recruitment_info"
+
+    recruitment_id = Column(Integer, primary_key=True, autoincrement=True, comment="招聘ID")
+    title = Column(String(200), nullable=False, comment="招聘标题")
+    organization = Column(String(200), comment="发布单位")
+    category = Column(String(50), comment="招聘分类")
+    region = Column(String(100), comment="地区")
+    content = Column(Text, comment="招聘内容")
+    content_html = Column(Text, comment="过滤后的HTML正文")
+    requirements = Column(Text, comment="要求")
+    images = Column(JSON, comment="图片列表")
+    registration_start = Column(String(50), comment="报名开始时间")
+    registration_end = Column(String(50), comment="报名截止时间")
+    deadline = Column(String(20), comment="截止日期(旧字段)")
+    exam_format = Column(String(50), comment="考试方式")
+    contact_info = Column(String(200), comment="联系方式")
+    tag = Column(String(50), comment="标签")
+    tag_color = Column(String(20), comment="标签颜色")
+    view_count = Column(Integer, default=0, comment="浏览量")
+    url = Column(String(500), comment="原始链接")
+    status = Column(Integer, default=1, comment="状态")
+    create_time = Column(DateTime, default=datetime.now, comment="发布时间")
+
+    __table_args__ = (
+        Index("idx_category", category),
+        Index("idx_region", region),
+        Index("idx_create_time_recruitment", create_time),
+    )
+
+# ------------------------------
+# 考试日历模型（新增）
+# ------------------------------
+
+class ExamCalendar(Base):
+    """考试日历表"""
+    __tablename__ = "exam_calendar"
+
+    event_id = Column(Integer, primary_key=True, autoincrement=True, comment="事件ID")
+    title = Column(String(200), nullable=False, comment="考试名称")
+    exam_date = Column(DateTime, nullable=False, comment="考试日期")
+    month = Column(String(2), comment="考试月份")
+    day = Column(String(2), comment="考试日")
+    province = Column(String(50), comment="省份")
+    exam_type = Column(String(50), comment="考试类型")
+    exam_format = Column(String(50), comment="考试形式: 笔试/面试/笔试+面试")
+    description = Column(Text, comment="考试描述")
+    registration_start = Column(DateTime, comment="报名开始时间")
+    registration_end = Column(DateTime, comment="报名截止时间")
+    url = Column(String(500), comment="原始链接")
+    status = Column(Integer, default=1, comment="状态")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_exam_date", exam_date),
+        Index("idx_province_examcalendar", province),
+    )
+
+# ------------------------------
+# 备考资料模型（新增）
+# ------------------------------
+
+class StudyMaterial(Base):
+    """备考资料表"""
+    __tablename__ = "study_material"
+    
+    material_id = Column(Integer, primary_key=True, autoincrement=True, comment="资料ID")
+    title = Column(String(200), nullable=False, comment="资料标题")
+    description = Column(String(500), comment="资料描述")
+    category = Column(String(50), comment="分类（行测/申论/公专）")
+    type = Column(String(50), comment="资料类型")
+    badge = Column(String(20), comment="徽章（热门/精华/重要）")
+    file_path = Column(String(500), comment="文件路径")
+    icon_name = Column(String(50), comment="图标名称")
+    view_count = Column(Integer, default=0, comment="浏览量")
+    download_count = Column(Integer, default=0, comment="下载量")
+    status = Column(Integer, default=1, comment="状态")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    __table_args__ = (
+        Index("idx_category_studymaterial", category),
+        Index("idx_type_studymaterial", type),
+    )
+
+# ------------------------------
+# 新闻资讯模型（新增）
+# ------------------------------
+
+class NewsArticle(Base):
+    """新闻资讯表"""
+    __tablename__ = "news_article"
+    
+    news_id = Column(Integer, primary_key=True, autoincrement=True, comment="新闻ID")
+    title = Column(String(500), nullable=False, comment="新闻标题")
+    url = Column(String(1000), nullable=False, comment="原始链接")
+    source = Column(String(50), nullable=False, comment="来源: cpd/people")
+    category = Column(String(50), comment="分类: 理论/党史/公安报")
+    publish_date = Column(DateTime, comment="发布日期")
+    summary = Column(Text, comment="摘要")
+    content = Column(Text, comment="文章正文")
+    status = Column(Integer, default=1, comment="状态")
+    create_time = Column(DateTime, default=datetime.now, comment="入库时间")
+    
+    __table_args__ = (
+        UniqueConstraint("title", "source", name="uq_news_title_source"),
+        Index("idx_source_news", source),
+        Index("idx_publish_date_news", publish_date),
+    )
+
+# ------------------------------
+# 收藏/笔记/标记模型（新增）
+# ------------------------------
+
+class FavoriteQuestion(Base):
+    """题目收藏表"""
+    __tablename__ = "favorite_question"
+
+    fav_id = Column(Integer, primary_key=True, autoincrement=True, comment="收藏ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    create_time = Column(DateTime, default=datetime.now, comment="收藏时间")
+
+    user = relationship("SysUser")
+    question = relationship("QuestionBank")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "question_id", name="uq_user_question_fav"),
+        Index("idx_user_id_fav", user_id),
+        Index("idx_question_id_fav", question_id),
+    )
+
+
+class QuestionNote(Base):
+    """题目笔记表"""
+    __tablename__ = "question_note"
+
+    note_id = Column(Integer, primary_key=True, autoincrement=True, comment="笔记ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    note_text = Column(Text, nullable=False, comment="笔记内容")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+    question = relationship("QuestionBank")
+
+    __table_args__ = (
+        Index("idx_user_id_note", user_id),
+        Index("idx_question_id_note", question_id),
+    )
+
+
+class QuestionMarker(Base):
+    """题目标记表（重要/疑难/易错等）"""
+    __tablename__ = "question_marker"
+
+    marker_id = Column(Integer, primary_key=True, autoincrement=True, comment="标记ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    marker_type = Column(String(20), nullable=False, comment="标记类型: difficult/important/confusing/tricky")
+    marker_label = Column(String(50), comment="标记标签（自定义）")
+    create_time = Column(DateTime, default=datetime.now, comment="标记时间")
+
+    user = relationship("SysUser")
+    question = relationship("QuestionBank")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "question_id", name="uq_user_question_marker"),
+        Index("idx_user_id_marker", user_id),
+        Index("idx_question_id_marker", question_id),
+    )
+
+# ============================================================
+# 三端分离架构新增模型
+# ============================================================
+
+class School(Base):
+    """学校/机构表 — 支持多校区管理"""
+    __tablename__ = "school"
+
+    school_id = Column(Integer, primary_key=True, autoincrement=True, comment="学校ID")
+    school_name = Column(String(100), nullable=False, comment="学校名称")
+    school_code = Column(String(50), unique=True, comment="学校代码")
+    region = Column(String(100), comment="所在地区")
+    contact = Column(String(50), comment="联系人电话")
+    address = Column(String(200), comment="详细地址")
+    status = Column(Integer, default=1, comment="状态 1正常/0禁用")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_school_code", school_code),
+        Index("idx_school_region", region),
+        Index("idx_school_status", status),
+    )
+
+
+class SysAnnouncement(Base):
+    """系统公告表 — 管理员发布、三端可见"""
+    __tablename__ = "sys_announcement"
+
+    announcement_id = Column(Integer, primary_key=True, autoincrement=True, comment="公告ID")
+    title = Column(String(200), nullable=False, comment="公告标题")
+    content = Column(Text, nullable=False, comment="公告内容(支持HTML)")
+    level = Column(Enum("info", "warning", "urgent"), default="info", comment="公告级别")
+    target_role = Column(String(100), default="all", comment="目标角色: all/student/teacher/admin, 逗号分隔")
+    publisher_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="发布人ID")
+    is_pinned = Column(Integer, default=0, comment="是否置顶")
+    view_count = Column(Integer, default=0, comment="浏览次数")
+    publish_time = Column(DateTime, default=datetime.now, comment="发布时间")
+    expire_time = Column(DateTime, comment="过期时间(空=永不过期)")
+    status = Column(Integer, default=1, comment="状态 1正常/0删除")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    publisher = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_publish_time", publish_time),
+        Index("idx_target_role", target_role),
+        Index("idx_level_sysannouncement", level),
+        Index("idx_status_sysannouncement", status),
+    )
+
+
+class SysBackupRecord(Base):
+    """数据备份记录表 — 管理员端数据备份与恢复"""
+    __tablename__ = "sys_backup_record"
+
+    backup_id = Column(Integer, primary_key=True, autoincrement=True, comment="备份ID")
+    backup_type = Column(Enum("full", "incremental"), default="full", comment="备份类型")
+    backup_name = Column(String(200), comment="备份名称")
+    file_path = Column(String(500), nullable=False, comment="备份文件路径")
+    file_size = Column(BigInteger, default=0, comment="文件大小(字节)")
+    table_count = Column(Integer, default=0, comment="备份表数量")
+    record_count = Column(Integer, default=0, comment="备份记录数")
+    status = Column(Enum("running", "completed", "failed"), default="running", comment="备份状态")
+    error_message = Column(Text, comment="错误信息")
+    operator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="操作人ID")
+    start_time = Column(DateTime, default=datetime.now, comment="开始时间")
+    end_time = Column(DateTime, comment="完成时间")
+
+    operator = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_backup_status", status),
+        Index("idx_backup_start_time", start_time),
+        Index("idx_backup_type", backup_type),
+    )
+
+
+class SysVersion(Base):
+    """系统版本管理表 — 版本更新与功能开发"""
+    __tablename__ = "sys_version"
+
+    version_id = Column(Integer, primary_key=True, autoincrement=True, comment="版本ID")
+    version_code = Column(String(20), unique=True, nullable=False, comment="版本号 如 2.1.0")
+    version_name = Column(String(100), comment="版本名称")
+    release_notes = Column(Text, comment="更新日志(支持Markdown)")
+    download_url = Column(String(500), comment="下载地址")
+    file_size = Column(BigInteger, comment="安装包大小(字节)")
+    force_update = Column(Integer, default=0, comment="是否强制更新 0否/1是")
+    platform = Column(String(50), default="all", comment="平台: web/ios/android/all")
+    publish_time = Column(DateTime, default=datetime.now, comment="发布时间")
+    publisher_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="发布人ID")
+    status = Column(Integer, default=1, comment="状态 1正常/0废弃")
+
+    publisher = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_version_code", version_code),
+        Index("idx_publish_time_sysversion", publish_time),
+        Index("idx_platform", platform),
+    )
+
+
+class SysDictType(Base):
+    """数据字典类型表"""
+    __tablename__ = "sys_dict_type"
+
+    dict_type_id = Column(Integer, primary_key=True, autoincrement=True, comment="字典类型ID")
+    dict_name = Column(String(100), nullable=False, comment="字典名称")
+    dict_code = Column(String(50), unique=True, nullable=False, comment="字典编码")
+    description = Column(String(200), comment="字典描述")
+    status = Column(Integer, default=1, comment="状态")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_dict_code", dict_code),
+    )
+
+
+class SysDictData(Base):
+    """数据字典数据表"""
+    __tablename__ = "sys_dict_data"
+
+    dict_data_id = Column(Integer, primary_key=True, autoincrement=True, comment="字典数据ID")
+    dict_type_id = Column(Integer, ForeignKey("sys_dict_type.dict_type_id"), nullable=False, comment="字典类型ID")
+    label = Column(String(100), nullable=False, comment="字典标签(显示)")
+    value = Column(String(100), nullable=False, comment="字典值(存储)")
+    css_class = Column(String(50), comment="样式类名(如标签颜色)")
+    sort_order = Column(Integer, default=1, comment="排序")
+    is_default = Column(Integer, default=0, comment="是否默认值")
+    status = Column(Integer, default=1, comment="状态")
+    remark = Column(String(200), comment="备注")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    dict_type = relationship("SysDictType")
+
+    __table_args__ = (
+        UniqueConstraint("dict_type_id", "value", name="uk_dict_type_value"),
+        Index("idx_dict_type_id", dict_type_id),
+        Index("idx_dict_sort_order", sort_order),
+    )
+
+
+class PaperApprovalWorkflow(Base):
+    """试卷审批工作流表 — 增强版，支持多级审批"""
+    __tablename__ = "paper_approval_workflow"
+
+    workflow_id = Column(Integer, primary_key=True, autoincrement=True, comment="工作流ID")
+    paper_id = Column(BigInteger, ForeignKey("exam_paper.paper_id"), nullable=False, comment="试卷ID")
+    submitter_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="提交人ID(教师)")
+    approver_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="审批人ID(教研组长/管理员)")
+    step = Column(Integer, default=1, comment="审批步骤 1初审/2复审")
+    status = Column(Enum("pending", "approved", "rejected"), default="pending", comment="审批状态")
+    opinion = Column(Text, comment="审批意见")
+    submit_time = Column(DateTime, default=datetime.now, comment="提交时间")
+    approve_time = Column(DateTime, comment="审批时间")
+
+    paper = relationship("ExamPaper")
+    submitter = relationship("SysUser", foreign_keys=[submitter_id])
+    approver = relationship("SysUser", foreign_keys=[approver_id])
+
+    __table_args__ = (
+        Index("idx_workflow_paper_id", paper_id),
+        Index("idx_workflow_submitter", submitter_id),
+        Index("idx_workflow_approver", approver_id),
+        Index("idx_workflow_status", status),
+    )
+
+
+# ------------------------------
+# 新闻增强模型（图片/收藏/笔记）
+# ------------------------------
+
+class NewsImage(Base):
+    """新闻图片关联表"""
+    __tablename__ = "news_image"
+    image_id = Column(Integer, primary_key=True, autoincrement=True)
+    news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
+    image_path = Column(String(500), nullable=False)
+    image_order = Column(Integer, default=0)
+    create_time = Column(DateTime, default=datetime.now)
+    news = relationship("NewsArticle")
+    __table_args__ = (Index("idx_news_id_newsimage", news_id),)
+
+
+class NewsFavorite(Base):
+    """新闻收藏表"""
+    __tablename__ = "news_favorite"
+    fav_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
+    create_time = Column(DateTime, default=datetime.now)
+    user = relationship("SysUser")
+    news = relationship("NewsArticle")
+    __table_args__ = (
+        UniqueConstraint("user_id", "news_id", name="uq_user_news_fav"),
+        Index("idx_user_id_newsfav", user_id),
+        Index("idx_news_id_newsfav", news_id),
+    )
+
+
+class NewsNote(Base):
+    """新闻笔记表（划线+想法）"""
+    __tablename__ = "news_note"
+    note_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
+    note_text = Column(Text, nullable=False, comment="想法内容")
+    quote_text = Column(Text, comment="划线原文")
+    quote_position = Column(Integer, comment="位置锚点")
+    color = Column(String(10), default="#FFD700", comment="划线颜色")
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    user = relationship("SysUser")
+    news = relationship("NewsArticle")
+    __table_args__ = (
+        Index("idx_user_id_newsnote", user_id),
+        Index("idx_news_id_newsnote", news_id),
     )
