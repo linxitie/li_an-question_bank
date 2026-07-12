@@ -1,0 +1,486 @@
+{
+  "id": "kjvdoyca",
+  "css": ".countdown-wrapper {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  padding: 20px 24px;\n  background: linear-gradient(135deg, #f8f9fc 0%, #ffffff 100%);\n  border-radius: 16px;\n  box-shadow: 0 2px 16px rgba(26, 43, 95, 0.06);\n  position: relative;\n  overflow: hidden;\n}\n.countdown-wrapper::before {\n  content: \"\";\n  position: absolute;\n  top: -40px;\n  right: -40px;\n  width: 120px;\n  height: 120px;\n  background: radial-gradient(circle, rgba(196, 30, 58, 0.06) 0%, transparent 70%);\n  border-radius: 50%;\n}\n.countdown-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-bottom: 16px;\n}\n.header-title {\n  font-size: 16px;\n  font-weight: 700;\n  color: #1a2b5f;\n  letter-spacing: 2px;\n  font-family: \"PingFang SC\", \"Microsoft YaHei\", \"Helvetica Neue\", sans-serif;\n}\n.countdown-display {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  flex-wrap: wrap;\n  justify-content: center;\n}\n.time-block {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  background: linear-gradient(180deg, #1a2b5f 0%, #152350 100%);\n  border-radius: 10px;\n  padding: 8px 10px;\n  min-width: 48px;\n  box-shadow: 0 4px 12px rgba(26, 43, 95, 0.25);\n  position: relative;\n  overflow: hidden;\n}\n.time-block::after {\n  content: \"\";\n  position: absolute;\n  top: 50%;\n  left: 0;\n  right: 0;\n  height: 1px;\n  background: rgba(255, 255, 255, 0.1);\n}\n.time-number {\n  font-size: 28px;\n  font-weight: 900;\n  color: #ffffff;\n  font-family: \"SF Pro Display\", \"DIN Alternate\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n  line-height: 1;\n  text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);\n  letter-spacing: 2px;\n}\n.time-label {\n  font-size: 11px;\n  color: rgba(255, 255, 255, 0.7);\n  margin-top: 4px;\n  font-weight: 500;\n  letter-spacing: 1px;\n}\n.time-separator {\n  font-size: 22px;\n  font-weight: 700;\n  color: #c41e3a;\n  animation: blink 1s ease-in-out infinite;\n}\n@keyframes blink {\n  0%, 100% {\n    opacity: 1;\n  }\n  50% {\n    opacity: 0.3;\n  }\n}\n.countdown-subtitle {\n  margin-top: 12px;\n  font-size: 13px;\n  color: #5a6488;\n  letter-spacing: 1px;\n  font-weight: 500;\n}",
+  "name": "CountdownTimer",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "26k5jvdu4dy",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "countdown-wrapper"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26k6jvdu4dy",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "countdown-header"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26k7jvdu4dy",
+              "from": "@vtj/ui",
+              "name": "XIcon",
+              "props": {
+                "icon": {
+                  "type": "JSExpression",
+                  "value": "this.$libs.VtjIcons.AlarmClock"
+                },
+                "size": {
+                  "type": "JSExpression",
+                  "value": "22"
+                },
+                "color": "#c41e3a"
+              },
+              "events": {},
+              "locked": false,
+              "children": [],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26k8jvdu4dy",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "header-title"
+              },
+              "events": {},
+              "locked": false,
+              "children": "公安联考倒计时",
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26k9jvdu4dy",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "countdown-display"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26kajvdu4dy",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "time-block"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26kbjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.year"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26kcjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "年",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kdjvdu4dy",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "time-separator"
+              },
+              "events": {},
+              "locked": false,
+              "children": ":",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kejvdu4dy",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "time-block"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26kfjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.month"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26kgjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "月",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26khjvdu4dy",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "time-separator"
+              },
+              "events": {},
+              "locked": false,
+              "children": ":",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kijvdu4dy",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "time-block"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26kjjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.day"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26kkjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "日",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kljvdu4dy",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "time-separator"
+              },
+              "events": {},
+              "locked": false,
+              "children": ":",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kmjvdu4dy",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "time-block"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26knjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.hour"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26kojvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "时",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kpjvdu4dy",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "time-separator"
+              },
+              "events": {},
+              "locked": false,
+              "children": ":",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kqjvdu4dy",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "time-block"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26krjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.minute"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26ksjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "分",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26ktjvdu4dy",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "time-separator"
+              },
+              "events": {},
+              "locked": false,
+              "children": ":",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26kujvdu4dy",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "time-block"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26kvjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.second"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26kwjvdu4dy",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "time-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "秒",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26kxjvdu4dy",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "countdown-subtitle"
+          },
+          "events": {},
+          "locked": false,
+          "children": "距离2025年公安联考还有",
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [
+    {
+      "name": "targetDate",
+      "type": "String",
+      "default": {
+        "type": "JSExpression",
+        "value": "'2025-01-05T08:30:00'"
+      },
+      "required": false
+    }
+  ],
+  "slots": [],
+  "state": {
+    "day": {
+      "type": "JSExpression",
+      "value": "0"
+    },
+    "hour": {
+      "type": "JSExpression",
+      "value": "0"
+    },
+    "year": {
+      "type": "JSExpression",
+      "value": "0"
+    },
+    "month": {
+      "type": "JSExpression",
+      "value": "0"
+    },
+    "minute": {
+      "type": "JSExpression",
+      "value": "0"
+    },
+    "second": {
+      "type": "JSExpression",
+      "value": "0"
+    }
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "startTimer": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.calculateCountdown();\n  this._timer = setInterval(() => {\n    this.calculateCountdown();\n  }, 1000);\n}"
+    },
+    "calculateCountdown": {
+      "type": "JSFunction",
+      "value": "() => {\n  const target = new Date(this.props.targetDate).getTime();\n  const now = Date.now();\n  let diff = target - now;\n  if (diff <= 0) {\n    this.state.year = 0;\n    this.state.month = 0;\n    this.state.day = 0;\n    this.state.hour = 0;\n    this.state.minute = 0;\n    this.state.second = 0;\n    return;\n  }\n  const totalSeconds = Math.floor(diff / 1000);\n  this.state.second = totalSeconds % 60;\n  const totalMinutes = Math.floor(totalSeconds / 60);\n  this.state.minute = totalMinutes % 60;\n  const totalHours = Math.floor(totalMinutes / 60);\n  this.state.hour = totalHours % 24;\n  const totalDays = Math.floor(totalHours / 24);\n  this.state.year = Math.floor(totalDays / 365);\n  const remainingDays = totalDays % 365;\n  this.state.month = Math.floor(remainingDays / 30);\n  this.state.day = remainingDays % 30;\n}"
+    }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.startTimer();\n}"
+    },
+    "beforeUnmount": {
+      "type": "JSFunction",
+      "value": "() => {\n  if (this._timer) {\n    clearInterval(this._timer);\n    this._timer = null;\n  }\n}"
+    }
+  },
+  "__VERSION__": "1778917353115",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

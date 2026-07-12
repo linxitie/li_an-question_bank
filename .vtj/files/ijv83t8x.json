@@ -1,0 +1,1008 @@
+{
+  "id": "ijv83t8x",
+  "css": "/* 备考资料面板 */\n.materials-panel {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 24px;\n  border: 1px solid #e8ecf1;\n  box-shadow: 0 4px 20px rgba(10, 22, 40, 0.06);\n}\n/* 面板标题 */\n.panel-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 20px;\n  padding-bottom: 14px;\n  border-bottom: 2px solid #f0f2f5;\n}\n.header-left {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n.header-title {\n  font-size: 19px;\n  font-weight: 700;\n  color: #1a2a4a;\n  letter-spacing: 1.5px;\n  background: linear-gradient(135deg, #1a2a4a 0%, #2c3e50 100%);\n  -webkit-background-clip: text;\n  -webkit-text-fill-color: transparent;\n  background-clip: text;\n}\n.header-desc {\n  font-size: 12px;\n  color: #8899aa;\n  font-weight: 500;\n}\n/* Tab切换栏 */\n.tab-bar {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 20px;\n  background: #f5f7fa;\n  border-radius: 10px;\n  padding: 4px;\n}\n.tab-item {\n  flex: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 6px;\n  padding: 10px 16px;\n  border-radius: 8px;\n  cursor: pointer;\n  font-size: 14px;\n  font-weight: 500;\n  color: #778899;\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n  border: 1px solid transparent;\n}\n.tab-item:hover {\n  color: #c8161e;\n  background: rgba(200, 22, 30, 0.05);\n}\n.tab-item.tab-active {\n  background: linear-gradient(135deg, #0d1b2a 0%, #152238 100%);\n  color: #ffffff;\n  font-weight: 600;\n  border-color: rgba(200, 22, 30, 0.3);\n  box-shadow: 0 4px 12px rgba(10, 22, 40, 0.2);\n  transform: translateY(-1px);\n}\n.tab-item:active {\n  transform: scale(0.96);\n}\n/* 内容网格 */\n.materials-grid {\n  min-height: 200px;\n}\n/* 分类区块 */\n.material-category {\n  animation: fadeInUp 0.4s ease;\n}\n@keyframes fadeInUp {\n  from {\n    opacity: 0;\n    transform: translateY(10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n.category-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-bottom: 12px;\n  padding-bottom: 10px;\n  border-bottom: 1px dashed #e8ecf1;\n}\n.category-title {\n  font-size: 15px;\n  font-weight: 600;\n  color: #1a2a4a;\n}\n/* 资料项列表 */\n.category-items {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n/* 单个资料项 */\n.material-item {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 14px 16px;\n  border-radius: 10px;\n  cursor: pointer;\n  transition: all 0.3s ease;\n  border: 1px solid transparent;\n  background: #fafbfc;\n  position: relative;\n  overflow: hidden;\n}\n.material-item::before {\n  content: \"\";\n  position: absolute;\n  left: 0;\n  top: 0;\n  height: 100%;\n  width: 3px;\n  background: #c8161e;\n  border-radius: 0 3px 3px 0;\n  transform: scaleY(0);\n  transition: transform 0.3s ease;\n}\n.material-item:hover::before {\n  transform: scaleY(1);\n}\n.material-item:hover {\n  background: #fef5f5;\n  border-color: rgba(200, 22, 30, 0.12);\n  transform: translateX(4px);\n  box-shadow: 0 4px 16px rgba(200, 22, 30, 0.08);\n}\n/* 图标 */\n.item-icon {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 40px;\n  height: 40px;\n  border-radius: 10px;\n  background: rgba(200, 22, 30, 0.06);\n  flex-shrink: 0;\n}\n.material-item:hover .item-icon {\n  background: rgba(200, 22, 30, 0.12);\n  transform: scale(1.05);\n  transition: all 0.3s ease;\n}\n/* 内容 */\n.item-content {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 3px;\n  min-width: 0;\n}\n.item-title {\n  font-size: 14px;\n  font-weight: 600;\n  color: #2c3e50;\n}\n.item-desc {\n  font-size: 12px;\n  color: #8899aa;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* 徽章 */\n.item-badge {\n  font-size: 10px;\n  font-weight: 600;\n  color: #ffffff;\n  background: linear-gradient(135deg, #c8161e 0%, #a0121a 100%);\n  padding: 2px 8px;\n  border-radius: 4px;\n  flex-shrink: 0;\n}\n/* 箭头 */\n.item-arrow {\n  flex-shrink: 0;\n  opacity: 0;\n  transition: all 0.3s ease;\n}\n.material-item:hover .item-arrow {\n  opacity: 1;\n  transform: translateX(2px);\n}",
+  "name": "StudyMaterials",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "26exjvcxr4t",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "materials-panel"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26eyjvcxr4t",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "panel-header"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26ezjvcxr4t",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "header-left"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26f0jvcxr4t",
+                  "from": "@vtj/ui",
+                  "name": "XIcon",
+                  "props": {
+                    "icon": {
+                      "type": "JSExpression",
+                      "value": "this.$libs.VtjIcons.ReadingLamp"
+                    },
+                    "size": {
+                      "type": "JSExpression",
+                      "value": "22"
+                    },
+                    "color": "#c8161e"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26f1jvcxr4t",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "header-title"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "备考资料",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26f2jvcxr4t",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "header-desc"
+              },
+              "events": {},
+              "locked": false,
+              "children": "精选干货，助你上岸",
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26f3jvcxr4t",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "tab-bar"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26f4jvcxr4t",
+              "from": "",
+              "name": "div",
+              "props": {
+                "key": {
+                  "type": "JSExpression",
+                  "value": "this.context.tab.key"
+                },
+                "class": {
+                  "type": "JSExpression",
+                  "value": "['tab-item', { 'tab-active': this.state.activeTab === this.context.tab.key }]"
+                }
+              },
+              "events": {
+                "click": {
+                  "name": "click",
+                  "handler": {
+                    "type": "JSExpression",
+                    "value": "this.handleTabClick(this.context.tab.key)"
+                  },
+                  "modifiers": {}
+                }
+              },
+              "locked": false,
+              "children": [
+                {
+                  "id": "26f5jvcxr4t",
+                  "from": "@vtj/ui",
+                  "name": "XIcon",
+                  "props": {
+                    "icon": {
+                      "type": "JSExpression",
+                      "value": "this.context.tab.icon"
+                    },
+                    "size": {
+                      "type": "JSExpression",
+                      "value": "16"
+                    },
+                    "color": {
+                      "type": "JSExpression",
+                      "value": "this.state.activeTab === this.context.tab.key ? '#ffffff' : '#8899aa'"
+                    }
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26f6jvcxr4t",
+                  "from": "",
+                  "name": "span",
+                  "props": {},
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.context.tab.label"
+                  },
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": [
+                {
+                  "id": "26gbjvcxrdr",
+                  "name": "vFor",
+                  "value": {
+                    "type": "JSExpression",
+                    "value": "this.state.tabList"
+                  },
+                  "iterator": {
+                    "item": "tab",
+                    "index": "index"
+                  }
+                }
+              ]
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26f7jvcxr4t",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "materials-grid"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26f8jvcxr4t",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "material-category"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26f9jvcxr4t",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "category-header"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26fajvcxr4t",
+                      "from": "@vtj/ui",
+                      "name": "XIcon",
+                      "props": {
+                        "icon": {
+                          "type": "JSExpression",
+                          "value": "this.$libs.VtjIcons.EditPen"
+                        },
+                        "size": {
+                          "type": "JSExpression",
+                          "value": "18"
+                        },
+                        "color": "#1a2a4a"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26fbjvcxr4t",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "category-title"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "行测小讲堂",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26fcjvcxr4t",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "category-items"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26fdjvcxr4t",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "key": {
+                          "type": "JSExpression",
+                          "value": "this.context.idx"
+                        },
+                        "class": "material-item"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleMaterialClick(this.context.item)"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26fejvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-icon"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26ffjvcxr4t",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.context.item.icon"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "20"
+                                },
+                                "color": "#c8161e"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26fgjvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-content"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26fhjvcxr4t",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "item-title"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.title"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26fijvcxr4t",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "item-desc"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.desc"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26fjjvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-badge"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.item.badge"
+                          },
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26gcjvcxrdr",
+                              "name": "vIf",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.badge"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "26fkjvcxr4t",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.DArrowRight"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "14"
+                            },
+                            "class": "item-arrow",
+                            "color": "#c0c8d4"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "26gdjvcxrdr",
+                          "name": "vFor",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.xingceMaterials"
+                          },
+                          "iterator": {
+                            "item": "item",
+                            "index": "idx"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": [
+                {
+                  "id": "26gejvcxrdr",
+                  "name": "vIf",
+                  "value": {
+                    "type": "JSExpression",
+                    "value": "this.state.activeTab === 'xingce'"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "26fljvcxr4t",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "material-category"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26fmjvcxr4t",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "category-header"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26fnjvcxr4t",
+                      "from": "@vtj/ui",
+                      "name": "XIcon",
+                      "props": {
+                        "icon": {
+                          "type": "JSExpression",
+                          "value": "this.$libs.VtjIcons.Document"
+                        },
+                        "size": {
+                          "type": "JSExpression",
+                          "value": "18"
+                        },
+                        "color": "#1a2a4a"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26fojvcxr4t",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "category-title"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "申论小讲堂",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26fpjvcxr4t",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "category-items"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26fqjvcxr4t",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "key": {
+                          "type": "JSExpression",
+                          "value": "this.context.idx"
+                        },
+                        "class": "material-item"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleMaterialClick(this.context.item)"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26frjvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-icon"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26fsjvcxr4t",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.context.item.icon"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "20"
+                                },
+                                "color": "#c8161e"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26ftjvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-content"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26fujvcxr4t",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "item-title"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.title"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26fvjvcxr4t",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "item-desc"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.desc"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26fwjvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-badge"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.item.badge"
+                          },
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26gfjvcxrdr",
+                              "name": "vIf",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.badge"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "26fxjvcxr4t",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.DArrowRight"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "14"
+                            },
+                            "class": "item-arrow",
+                            "color": "#c0c8d4"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "26ggjvcxrdr",
+                          "name": "vFor",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.shenlunMaterials"
+                          },
+                          "iterator": {
+                            "item": "item",
+                            "index": "idx"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": [
+                {
+                  "id": "26ghjvcxrdr",
+                  "name": "vIf",
+                  "value": {
+                    "type": "JSExpression",
+                    "value": "this.state.activeTab === 'shenlun'"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "26fyjvcxr4t",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "material-category"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26fzjvcxr4t",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "category-header"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26g0jvcxr4t",
+                      "from": "@vtj/ui",
+                      "name": "XIcon",
+                      "props": {
+                        "icon": {
+                          "type": "JSExpression",
+                          "value": "this.$libs.VtjIcons.Medal"
+                        },
+                        "size": {
+                          "type": "JSExpression",
+                          "value": "18"
+                        },
+                        "color": "#1a2a4a"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26g1jvcxr4t",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "category-title"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "公安专业知识卡片",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26g2jvcxr4t",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "category-items"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26g3jvcxr4t",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "key": {
+                          "type": "JSExpression",
+                          "value": "this.context.idx"
+                        },
+                        "class": "material-item"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleMaterialClick(this.context.item)"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26g4jvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-icon"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26g5jvcxr4t",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.context.item.icon"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "20"
+                                },
+                                "color": "#c8161e"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26g6jvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-content"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26g7jvcxr4t",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "item-title"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.title"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26g8jvcxr4t",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "item-desc"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.desc"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26g9jvcxr4t",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "item-badge"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.item.badge"
+                          },
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26gijvcxrdr",
+                              "name": "vIf",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.badge"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "26gajvcxr4t",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.DArrowRight"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "14"
+                            },
+                            "class": "item-arrow",
+                            "color": "#c0c8d4"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "26gjjvcxrdr",
+                          "name": "vFor",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.gongzhuanMaterials"
+                          },
+                          "iterator": {
+                            "item": "item",
+                            "index": "idx"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": [
+                {
+                  "id": "26gkjvcxrdr",
+                  "name": "vIf",
+                  "value": {
+                    "type": "JSExpression",
+                    "value": "this.state.activeTab === 'gongzhuan'"
+                  }
+                }
+              ]
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "tabList": {
+      "type": "JSExpression",
+      "value": "[\n  { key: 'xingce', label: '行测', icon: this.$libs.VtjIcons.EditPen },\n  { key: 'shenlun', label: '申论', icon: this.$libs.VtjIcons.Document },\n  { key: 'gongzhuan', label: '公专', icon: this.$libs.VtjIcons.Medal }\n]"
+    },
+    "activeTab": {
+      "type": "JSExpression",
+      "value": "'xingce'"
+    },
+    "xingceMaterials": {
+      "type": "JSExpression",
+      "value": "[\n  {\n    title: '类比推理-拆分思维',\n    desc: '题型分辨不清？掌握拆分思维轻松应对',\n    icon: this.$libs.VtjIcons.DataAnalysis,\n    badge: '热门'\n  },\n  {\n    title: '组合排列材料题',\n    desc: '材料题解题思路与技巧详解',\n    icon: this.$libs.VtjIcons.Notebook,\n    badge: '精华'\n  },\n  {\n    title: '组合排列方法精讲',\n    desc: '排列组合常见误区与高效方法',\n    icon: this.$libs.VtjIcons.Collection,\n    badge: ''\n  }\n]"
+    },
+    "shenlunMaterials": {
+      "type": "JSExpression",
+      "value": "[\n  {\n    title: '拟定文章标题技巧',\n    desc: '如何写出高分申论标题',\n    icon: this.$libs.VtjIcons.EditPen,\n    badge: '精华'\n  },\n  {\n    title: '文章写作技巧精讲',\n    desc: '从结构到语言的全面指导',\n    icon: this.$libs.VtjIcons.Document,\n    badge: '热门'\n  },\n  {\n    title: '申论范文展示',\n    desc: '历年高分范文深度赏析',\n    icon: this.$libs.VtjIcons.Reading,\n    badge: ''\n  },\n  {\n    title: '申论必知知识点',\n    desc: '核心考点与答题模板',\n    icon: this.$libs.VtjIcons.Notebook,\n    badge: ''\n  }\n]"
+    },
+    "gongzhuanMaterials": {
+      "type": "JSExpression",
+      "value": "[\n  {\n    title: '职业素养必背',\n    desc: '公安职业素养核心知识卡片',\n    icon: this.$libs.VtjIcons.Medal,\n    badge: '重要'\n  },\n  {\n    title: '基本警务技能了解',\n    desc: '警务实战技能要点速记',\n    icon: this.$libs.VtjIcons.TrophyBase,\n    badge: ''\n  },\n  {\n    title: '基础知识记背',\n    desc: '公安基础法律知识卡片',\n    icon: this.$libs.VtjIcons.School,\n    badge: '精华'\n  }\n]"
+    }
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "handleTabClick": {
+      "type": "JSFunction",
+      "value": "(key) => {\n  this.state.activeTab = key;\n}"
+    },
+    "handleMaterialClick": {
+      "type": "JSFunction",
+      "value": "(item) => {\n  this.$message.info(`正在加载「${item.title}」详细内容...`);\n}"
+    }
+  },
+  "computed": {},
+  "lifeCycles": {},
+  "__VERSION__": "1778915843581",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

@@ -1,0 +1,18 @@
+{
+  "extends": "./node_modules/@vtj/cli/config/tsconfig.web.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "@/*": ["./src/*"],
+      "$vtj/*": ["./.vtj/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": [".vtj"],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

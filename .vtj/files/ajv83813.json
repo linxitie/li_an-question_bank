@@ -1,0 +1,524 @@
+{
+  "id": "ajv83813",
+  "css": "/* 签到卡片 */\n.signin-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  border: 1px solid #e8ecf1;\n  box-shadow: 0 4px 20px rgba(10, 22, 40, 0.06);\n  height: 100%;\n}\n/* 卡片标题 */\n.card-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 16px;\n}\n.header-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.header-title {\n  font-size: 16px;\n  font-weight: 600;\n  color: #1a2a4a;\n  letter-spacing: 1px;\n}\n/* 连续签到天数 */\n.streak-count {\n  font-size: 13px;\n  font-weight: 600;\n  color: #c8161e;\n  background: linear-gradient(135deg, rgba(200, 22, 30, 0.08) 0%, rgba(200, 22, 30, 0.04) 100%);\n  padding: 4px 12px;\n  border-radius: 16px;\n  border: 1px solid rgba(200, 22, 30, 0.15);\n  animation: streak-glow 2s ease-in-out infinite;\n}\n@keyframes streak-glow {\n  0%, 100% {\n    box-shadow: 0 0 4px rgba(200, 22, 30, 0.2);\n  }\n  50% {\n    box-shadow: 0 0 12px rgba(200, 22, 30, 0.4);\n  }\n}\n/* 迷你日历 */\n.calendar-mini {\n  margin-bottom: 16px;\n  background: #fafbfc;\n  border-radius: 12px;\n  padding: 12px;\n  border: 1px solid #f0f2f5;\n}\n.calendar-weekdays {\n  display: grid;\n  grid-template-columns: repeat(7, 1fr);\n  gap: 2px;\n  margin-bottom: 6px;\n}\n.weekday-label {\n  text-align: center;\n  font-size: 10px;\n  font-weight: 600;\n  color: #8899aa;\n  padding: 4px 0;\n}\n.calendar-days {\n  display: grid;\n  grid-template-columns: repeat(7, 1fr);\n  gap: 2px;\n}\n/* 日历日 */\n.calendar-day {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  aspect-ratio: 1;\n  border-radius: 6px;\n  cursor: default;\n  transition: all 0.25s ease;\n  position: relative;\n  background: transparent;\n  font-size: 12px;\n  color: #c0c8d4;\n}\n.calendar-day.day-signed {\n  background: rgba(200, 22, 30, 0.08);\n  color: #c8161e;\n  font-weight: 500;\n}\n.calendar-day.day-today {\n  background: linear-gradient(135deg, #0d1b2a 0%, #152238 100%);\n  color: #ffffff;\n  font-weight: 700;\n  box-shadow: 0 2px 8px rgba(10, 22, 40, 0.25);\n  transform: scale(1.05);\n}\n.day-number {\n  font-size: 11px;\n  line-height: 1;\n}\n.day-dot {\n  width: 3px;\n  height: 3px;\n  border-radius: 50%;\n  background: #c8161e;\n  margin-top: 2px;\n}\n.calendar-day.day-today .day-dot {\n  background: #ffffff;\n}\n/* 做题量统计 */\n.exercise-stats {\n  display: flex;\n  align-items: center;\n  justify-content: space-around;\n  padding: 12px 0;\n  background: linear-gradient(135deg, rgba(10, 22, 40, 0.02) 0%, rgba(200, 22, 30, 0.02) 100%);\n  border-radius: 12px;\n  border: 1px solid #f0f2f5;\n}\n.stat-item {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 2px;\n}\n.stat-number {\n  font-size: 22px;\n  font-weight: 700;\n  color: #c8161e;\n  font-family: \"JetBrains Mono\", \"Consolas\", monospace;\n}\n.stat-label {\n  font-size: 11px;\n  color: #8899aa;\n  font-weight: 500;\n}\n.stat-divider {\n  width: 1px;\n  height: 28px;\n  background: linear-gradient(180deg, transparent, #d0d8e0, transparent);\n}",
+  "name": "SignInStatus",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "26hcjvd2229",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "signin-card"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26hdjvd2229",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "card-header"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26hejvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "header-left"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26hfjvd2229",
+                  "from": "@vtj/ui",
+                  "name": "XIcon",
+                  "props": {
+                    "icon": {
+                      "type": "JSExpression",
+                      "value": "this.$libs.VtjIcons.Calendar"
+                    },
+                    "size": {
+                      "type": "JSExpression",
+                      "value": "20"
+                    },
+                    "color": "#c8161e"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26hgjvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "header-title"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "签到情况",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26hhjvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "header-stats"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26hijvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "streak-count"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26i2jvd2251",
+                      "from": "",
+                      "name": "span",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26i3jvd2251",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": "连续 ",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26i4jvd2251",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.state.streakDays"
+                          },
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26i5jvd2251",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": " 天",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26hjjvd2229",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "calendar-mini"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26hkjvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "calendar-weekdays"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26hljvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "key": {
+                      "type": "JSExpression",
+                      "value": "this.context.day"
+                    },
+                    "class": "weekday-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.context.day"
+                  },
+                  "invisible": false,
+                  "directives": [
+                    {
+                      "id": "26i6jvd2251",
+                      "name": "vFor",
+                      "value": {
+                        "type": "JSExpression",
+                        "value": "['一', '二', '三', '四', '五', '六', '日']"
+                      },
+                      "iterator": {
+                        "item": "day",
+                        "index": "index"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26hmjvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "calendar-days"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26hnjvd2229",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "key": {
+                      "type": "JSExpression",
+                      "value": "this.context.index"
+                    },
+                    "class": {
+                      "type": "JSExpression",
+                      "value": "[\n  'calendar-day',\n  {\n    'day-signed': this.context.day.signed,\n    'day-today': this.context.day.isToday,\n    'day-future': this.context.day.isFuture\n  }\n]"
+                    },
+                    "title": {
+                      "type": "JSExpression",
+                      "value": "this.context.day.dateStr"
+                    }
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26hojvd2229",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "day-number"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.day.day"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26hpjvd2229",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "day-dot"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "26i7jvd2251",
+                          "name": "vIf",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.context.day.signed"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": [
+                    {
+                      "id": "26i8jvd2251",
+                      "name": "vFor",
+                      "value": {
+                        "type": "JSExpression",
+                        "value": "this.state.calendarDays"
+                      },
+                      "iterator": {
+                        "item": "day",
+                        "index": "index"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26hqjvd2229",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "exercise-stats"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26hrjvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "stat-item"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26hsjvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "stat-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.todayQuestions"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26htjvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "stat-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "今日做题",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26hujvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "stat-divider"
+              },
+              "events": {},
+              "locked": false,
+              "children": [],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26hvjvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "stat-item"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26hwjvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "stat-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.totalQuestions"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26hxjvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "stat-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "累计做题",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26hyjvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "stat-divider"
+              },
+              "events": {},
+              "locked": false,
+              "children": [],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26hzjvd2229",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "stat-item"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26i0jvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "stat-number"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.state.monthDays"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26i1jvd2229",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "stat-label"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "本月打卡",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "monthDays": {
+      "type": "JSExpression",
+      "value": "15"
+    },
+    "streakDays": {
+      "type": "JSExpression",
+      "value": "7"
+    },
+    "calendarDays": {
+      "type": "JSExpression",
+      "value": "[]"
+    },
+    "todayQuestions": {
+      "type": "JSExpression",
+      "value": "85"
+    },
+    "totalQuestions": {
+      "type": "JSExpression",
+      "value": "12450"
+    }
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "generateCalendar": {
+      "type": "JSFunction",
+      "value": "() => {\n  const today = new Date();\n  const year = today.getFullYear();\n  const month = today.getMonth();\n  const firstDay = new Date(year, month, 1);\n  const lastDay = new Date(year, month + 1, 0);\n  const daysInMonth = lastDay.getDate();\n  const startDayOfWeek = firstDay.getDay();\n  const adjustedStartDay = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;\n  const signedDays = new Set([2, 3, 5, 6, 7, 9, 10, 12, 14, 15]);\n  const days = [];\n  for (let i = 0; i < adjustedStartDay; i++) {\n    days.push({\n      day: '',\n      signed: false,\n      isToday: false,\n      isFuture: false,\n      dateStr: ''\n    });\n  }\n  for (let d = 1; d <= daysInMonth; d++) {\n    const dateObj = new Date(year, month, d);\n    const isFuture = dateObj > today;\n    const isToday =\n      d === today.getDate() &&\n      month === today.getMonth() &&\n      year === today.getFullYear();\n    days.push({\n      day: d,\n      signed: signedDays.has(d) && !isFuture,\n      isToday,\n      isFuture,\n      dateStr: `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`\n    });\n  }\n  this.state.calendarDays = days;\n}"
+    }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.generateCalendar();\n}"
+    }
+  },
+  "__VERSION__": "1778916044314",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

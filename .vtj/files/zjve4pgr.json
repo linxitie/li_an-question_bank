@@ -1,0 +1,579 @@
+{
+  "id": "zjve4pgr",
+  "css": ".goal-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  box-shadow: 0 2px 16px rgba(26, 43, 95, 0.06);\n  transition: all 0.3s;\n}\n.goal-card:hover {\n  box-shadow: 0 4px 20px rgba(26, 43, 95, 0.1);\n}\n.goal-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-bottom: 16px;\n}\n.goal-title {\n  font-size: 15px;\n  font-weight: 700;\n  color: #1a2b5f;\n  flex: 1;\n}\n.edit-btn {\n  width: 28px;\n  height: 28px;\n  border-radius: 8px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  transition: all 0.3s;\n}\n.edit-btn:hover {\n  background: #f0f2f5;\n}\n.goal-content {\n  display: flex;\n  gap: 20px;\n  align-items: center;\n}\n.goal-progress-ring {\n  position: relative;\n  width: 90px;\n  height: 90px;\n  flex-shrink: 0;\n}\n.goal-progress-ring svg {\n  width: 100%;\n  height: 100%;\n}\n.ring-text {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  transform: translate(-50%, -50%);\n  text-align: center;\n}\n.ring-percent {\n  font-size: 20px;\n  font-weight: 900;\n  color: #1a2b5f;\n  display: block;\n  line-height: 1;\n}\n.ring-label {\n  font-size: 10px;\n  color: #8a8faa;\n  margin-top: 2px;\n}\n.goal-info {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.goal-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.goal-check {\n  width: 20px;\n  height: 20px;\n  border-radius: 6px;\n  border: 2px solid #e0e3e8;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  cursor: pointer;\n  transition: all 0.3s;\n  font-size: 12px;\n  color: #fff;\n  flex-shrink: 0;\n}\n.goal-check.done {\n  background: #22c55e;\n  border-color: #22c55e;\n}\n.goal-text {\n  font-size: 12px;\n  color: #1a2b5f;\n  font-weight: 500;\n  flex: 1;\n}\n.goal-text.done {\n  color: #22c55e;\n  text-decoration: line-through;\n}\n.goal-count {\n  font-size: 11px;\n  color: #8a8faa;\n  font-weight: 600;\n}",
+  "name": "GoalCard",
+  "emits": [
+    {
+      "name": "edit-goal",
+      "params": []
+    }
+  ],
+  "nodes": [
+    {
+      "id": "26mzjve6dd4",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "goal-card"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26n0jve6dd4",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "goal-header"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26n1jve6dd4",
+              "from": "@vtj/ui",
+              "name": "XIcon",
+              "props": {
+                "icon": {
+                  "type": "JSExpression",
+                  "value": "this.$libs.VtjIcons.Flag"
+                },
+                "size": {
+                  "type": "JSExpression",
+                  "value": "20"
+                },
+                "color": "#c41e3a"
+              },
+              "events": {},
+              "locked": false,
+              "children": [],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26n2jve6dd4",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "goal-title"
+              },
+              "events": {},
+              "locked": false,
+              "children": "个人小目标",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26n3jve6dd4",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "edit-btn"
+              },
+              "events": {
+                "click": {
+                  "name": "click",
+                  "handler": {
+                    "type": "JSFunction",
+                    "value": "this.handleEdit"
+                  },
+                  "modifiers": {}
+                }
+              },
+              "locked": false,
+              "children": [
+                {
+                  "id": "26n4jve6dd4",
+                  "from": "@vtj/ui",
+                  "name": "XIcon",
+                  "props": {
+                    "icon": {
+                      "type": "JSExpression",
+                      "value": "this.$libs.VtjIcons.EditPen"
+                    },
+                    "size": {
+                      "type": "JSExpression",
+                      "value": "14"
+                    },
+                    "color": "#8a8faa"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26n5jve6dd4",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "goal-content"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26n6jve6dd4",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "goal-progress-ring"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26n7jve6dd4",
+                  "from": "",
+                  "name": "svg",
+                  "props": {
+                    "viewBox": "0 0 100 100"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26n8jve6dd4",
+                      "from": "",
+                      "name": "circle",
+                      "props": {
+                        "r": "42",
+                        "cx": "50",
+                        "cy": "50",
+                        "fill": "none",
+                        "stroke": "#f0f2f5",
+                        "stroke-width": "6"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26n9jve6dd4",
+                      "from": "",
+                      "name": "circle",
+                      "props": {
+                        "r": "42",
+                        "cx": "50",
+                        "cy": "50",
+                        "fill": "none",
+                        "style": {
+                          "type": "JSExpression",
+                          "value": "({ transition: 'stroke-dashoffset 1s ease' })"
+                        },
+                        "stroke": "url(#progressGradient)",
+                        "transform": "rotate(-90 50 50)",
+                        "stroke-width": "6",
+                        "stroke-linecap": "round",
+                        "stroke-dasharray": {
+                          "type": "JSExpression",
+                          "value": "this.dashArray.value"
+                        },
+                        "stroke-dashoffset": {
+                          "type": "JSExpression",
+                          "value": "this.state.progressOffset"
+                        }
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26najve6dd4",
+                      "from": "",
+                      "name": "Defs",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26nbjve6dd4",
+                          "from": "",
+                          "name": "LinearGradient",
+                          "props": {
+                            "id": "progressGradient",
+                            "x1": "0%",
+                            "x2": "100%",
+                            "y1": "0%",
+                            "y2": "0%"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26ncjve6dd4",
+                              "from": "",
+                              "name": "Stop",
+                              "props": {
+                                "offset": "0%",
+                                "stop-color": "#c41e3a"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26ndjve6dd4",
+                              "from": "",
+                              "name": "Stop",
+                              "props": {
+                                "offset": "100%",
+                                "stop-color": "#ff4d5a"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26nejve6dd4",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "ring-text"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26nfjve6dd4",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "ring-percent"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26nnjve6dgh",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26nojve6dgh",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.state.progress"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26npjve6dgh",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "%",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26ngjve6dd4",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "ring-label"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "完成",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26nhjve6dd4",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "goal-info"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26nijve6dd4",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "key": {
+                      "type": "JSExpression",
+                      "value": "this.context.i"
+                    },
+                    "class": "goal-item"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26njjve6dd4",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "Object.assign({ 'goal-check': true }, { done: this.context.goal.done })"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.toggleGoal(this.context.i)"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26nkjve6dd4",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": "✓",
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26nqjve6dgh",
+                              "name": "vIf",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.context.goal.done"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26nljve6dd4",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "Object.assign({ 'goal-text': true }, { done: this.context.goal.done })"
+                        }
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.goal.text"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26nmjve6dd4",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "goal-count"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26nrjve6dgh",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26nsjve6dgh",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.goal.current"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26ntjve6dgh",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "/",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26nujve6dgh",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.goal.total"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": [
+                    {
+                      "id": "26nvjve6dgh",
+                      "name": "vFor",
+                      "value": {
+                        "type": "JSExpression",
+                        "value": "this.state.goals"
+                      },
+                      "iterator": {
+                        "item": "goal",
+                        "index": "i"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "goals": {
+      "type": "JSExpression",
+      "value": "[]"
+    },
+    "progress": {
+      "type": "JSExpression",
+      "value": "65"
+    },
+    "progressOffset": {
+      "type": "JSExpression",
+      "value": "0"
+    }
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "initGoals": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.state.goals = [\n    { text: '每日做题100道', current: 78, total: 100, done: false },\n    { text: '每周申论写作3篇', current: 2, total: 3, done: false },\n    { text: '本月行测模拟5次', current: 3, total: 5, done: false },\n    { text: '公安基础背诵3章', current: 3, total: 3, done: true }\n  ];\n  this.updateProgress();\n}"
+    },
+    "handleEdit": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.$emit('edit-goal');\n}"
+    },
+    "toggleGoal": {
+      "type": "JSFunction",
+      "value": "(index) => {\n  this.state.goals[index].done = !this.state.goals[index].done;\n  this.updateProgress();\n}"
+    },
+    "updateProgress": {
+      "type": "JSFunction",
+      "value": "() => {\n  const doneCount = this.state.goals.filter((g) => g.done).length;\n  this.state.progress = Math.round((doneCount / this.state.goals.length) * 100);\n  this.state.progressOffset =\n    this.circumference.value - (this.state.progress / 100) * this.circumference.value;\n}"
+    }
+  },
+  "computed": {
+    "dashArray": {
+      "type": "JSFunction",
+      "value": "() => {\n  return this.circumference.value;\n}"
+    },
+    "circumference": {
+      "type": "JSFunction",
+      "value": "() => {\n  return 2 * Math.PI * 42;\n}"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.initGoals();\n}"
+    }
+  },
+  "__VERSION__": "1778917924916",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

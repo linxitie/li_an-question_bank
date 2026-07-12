@@ -1,0 +1,246 @@
+<template>
+  <div class="goal-card">
+    <div class="goal-header">
+      <XIcon :icon="Flag" :size="20" color="#c41e3a"></XIcon>
+      <span class="goal-title"> 个人小目标</span>
+      <div class="edit-btn" @click="handleEdit">
+        <XIcon :icon="EditPen" :size="14" color="#8a8faa"></XIcon>
+      </div>
+    </div>
+    <div class="goal-content">
+      <div class="goal-progress-ring">
+        <svg viewBox="0 0 100 100">
+          <circle
+            r="42"
+            cx="50"
+            cy="50"
+            fill="none"
+            stroke="#f0f2f5"
+            stroke-width="6"></circle>
+          <circle
+            r="42"
+            cx="50"
+            cy="50"
+            fill="none"
+            :style="{ transition: 'stroke-dashoffset 1s ease' }"
+            stroke="url(#progressGradient)"
+            transform="rotate(-90 50 50)"
+            stroke-width="6"
+            stroke-linecap="round"
+            :stroke-dasharray="dashArray"
+            :stroke-dashoffset="state.progressOffset"
+            class="circle_26n9jve6dd4"></circle>
+          <Defs>
+            <LinearGradient
+              id="progressGradient"
+              x1="0%"
+              x2="100%"
+              y1="0%"
+              y2="0%">
+              <Stop offset="0%" stop-color="#c41e3a"></Stop>
+              <Stop offset="100%" stop-color="#ff4d5a"></Stop>
+            </LinearGradient>
+          </Defs>
+        </svg>
+        <div class="ring-text">
+          <span class="ring-percent">
+            <span>
+              <span> {{ state.progress }}</span>
+              <span> %</span></span
+            ></span
+          >
+          <span class="ring-label"> 完成</span>
+        </div>
+      </div>
+      <div class="goal-info">
+        <div v-for="(goal, i) in state.goals" :key="i" class="goal-item">
+          <div
+            :class="Object.assign({ 'goal-check': true }, { done: goal.done })"
+            @click="toggleGoal(i)">
+            <span v-if="goal.done"> ✓</span>
+          </div>
+          <div
+            :class="Object.assign({ 'goal-text': true }, { done: goal.done })">
+            {{ goal.text }}
+          </div>
+          <div class="goal-count">
+            <span>
+              <span> {{ goal.current }}</span>
+              <span> /</span>
+              <span> {{ goal.total }}</span></span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<script lang="ts">
+  // @ts-nocheck
+  import { defineComponent, reactive } from 'vue';
+  import { XIcon } from '@vtj/ui';
+  import { Flag, EditPen } from '@vtj/icons';
+  import { useProvider } from '@vtj/renderer';
+  export default defineComponent({
+    name: 'GoalCard',
+    components: { XIcon },
+    emits: ['edit-goal'],
+    setup(props) {
+      const provider = useProvider({ id: 'zjve4pgr', version: '1778917924916' });
+      const state = reactive({ goals: [], progress: 65, progressOffset: 0 });
+      return { state, props, provider, Flag, EditPen };
+    },
+    computed: {
+      dashArray() {
+        return this.circumference;
+      },
+      circumference() {
+        return 2 * Math.PI * 42;
+      }
+    },
+    methods: {
+      initGoals() {
+        this.state.goals = [
+          { text: '每日做题100道', current: 78, total: 100, done: false },
+          { text: '每周申论写作3篇', current: 2, total: 3, done: false },
+          { text: '本月行测模拟5次', current: 3, total: 5, done: false },
+          { text: '公安基础背诵3章', current: 3, total: 3, done: true }
+        ];
+        this.updateProgress();
+      },
+      handleEdit() {
+        this.$emit('edit-goal');
+      },
+      toggleGoal(index) {
+        this.state.goals[index].done = !this.state.goals[index].done;
+        this.updateProgress();
+      },
+      updateProgress() {
+        const doneCount = this.state.goals.filter((g) => g.done).length;
+        this.state.progress = Math.round(
+          (doneCount / this.state.goals.length) * 100
+        );
+        this.state.progressOffset =
+          this.circumference - (this.state.progress / 100) * this.circumference;
+      }
+    },
+    mounted() {
+      this.initGoals();
+    }
+  })
+</script>
+<style lang="css" scoped>
+  .goal-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 16px rgba(26, 43, 95, 0.06);
+    transition: all 0.3s;
+  }
+  .goal-card:hover {
+    box-shadow: 0 4px 20px rgba(26, 43, 95, 0.1);
+  }
+  .goal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .goal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a2b5f;
+    flex: 1;
+  }
+  .edit-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .edit-btn:hover {
+    background: #f0f2f5;
+  }
+  .goal-content {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .goal-progress-ring {
+    position: relative;
+    width: 90px;
+    height: 90px;
+    flex-shrink: 0;
+  }
+  .goal-progress-ring svg {
+    width: 100%;
+    height: 100%;
+  }
+  .ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .ring-percent {
+    font-size: 20px;
+    font-weight: 900;
+    color: #1a2b5f;
+    display: block;
+    line-height: 1;
+  }
+  .ring-label {
+    font-size: 10px;
+    color: #8a8faa;
+    margin-top: 2px;
+  }
+  .goal-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .goal-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .goal-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 2px solid #e0e3e8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 12px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .goal-check.done {
+    background: #22c55e;
+    border-color: #22c55e;
+  }
+  .goal-text {
+    font-size: 12px;
+    color: #1a2b5f;
+    font-weight: 500;
+    flex: 1;
+  }
+  .goal-text.done {
+    color: #22c55e;
+    text-decoration: line-through;
+  }
+  .goal-count {
+    font-size: 11px;
+    color: #8a8faa;
+    font-weight: 600;
+  }
+</style>

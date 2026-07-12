@@ -1,0 +1,47 @@
+{
+  "name": "vtj-web-template",
+  "description": "VTJ.PRO Web 项目模版",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "repository": {
+    "url": "https://gitee.com/newgateway/vtj"
+  },
+  "homepage": "https://vtj.pro",
+  "scripts": {
+    "setup": "npm install --unsafe-perm --registry=https://registry.npmmirror.com",
+    "dev": "cross-env ENV_TYPE=local vite",
+    "build": "npm run build:prod",
+    "build:sit": "vue-tsc && cross-env ENV_TYPE=sit vite build",
+    "build:uat": "vue-tsc && cross-env ENV_TYPE=uat vite build",
+    "build:pre": "vue-tsc && cross-env ENV_TYPE=pre vite build",
+    "build:prod": "vue-tsc && cross-env ENV_TYPE=live vite build",
+    "preview": "vite preview",
+    "clean": "node ./scripts/clean.mjs"
+  },
+  "dependencies": {
+    "@vtj/web": "latest",
+    "vue": "~3.5.0",
+    "vue-router": "~4.6.0",
+    "pinia": "~3.0.2",
+    "vue-i18n": "~11.2.2",
+    "@vtj/utils": "latest",
+    "@vtj/icons": "latest",
+    "@vueuse/core": "~14.1.0",
+    "element-plus": "~2.13.0",
+    "@vtj/ui": "latest",
+    "ant-design-vue": "~4.2.0",
+    "@vtj/charts": "latest",
+    "mockjs": "~1.1.0"
+  },
+  "devDependencies": {
+    "@vtj/cli": "latest",
+    "@vtj/pro": "latest"
+  },
+  "vtj": {
+    "platform": "web",
+    "id": "linxitie.policy-exam-bank",
+    "name": "砺安题库",
+    "remote": "https://app.vtj.pro"
+  }
+}

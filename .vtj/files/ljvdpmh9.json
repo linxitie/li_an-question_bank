@@ -1,0 +1,375 @@
+{
+  "id": "ljvdpmh9",
+  "css": ".exam-calendar {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  box-shadow: 0 2px 16px rgba(26, 43, 95, 0.06);\n  max-height: 420px;\n  overflow-y: auto;\n}\n.cal-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  margin-bottom: 16px;\n  padding-bottom: 12px;\n  border-bottom: 1px solid #f0f2f5;\n}\n.cal-title {\n  font-size: 15px;\n  font-weight: 700;\n  color: #1a2b5f;\n  flex: 1;\n}\n.cal-month {\n  font-size: 12px;\n  color: #8a8faa;\n  background: #f8f9fc;\n  padding: 4px 10px;\n  border-radius: 12px;\n}\n.cal-list {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n.cal-item {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 10px 12px;\n  border-radius: 12px;\n  background: #f8f9fc;\n  transition: all 0.3s;\n  cursor: pointer;\n}\n.cal-item:hover {\n  background: #f0f2f5;\n  transform: translateX(2px);\n}\n.cal-date {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  min-width: 44px;\n  padding: 6px;\n  background: #ffffff;\n  border-radius: 10px;\n  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);\n}\n.date-day {\n  font-size: 20px;\n  font-weight: 900;\n  color: #1a2b5f;\n  line-height: 1;\n}\n.date-month {\n  font-size: 10px;\n  color: #8a8faa;\n  margin-top: 2px;\n}\n.cal-content {\n  flex: 1;\n}\n.cal-name {\n  font-size: 13px;\n  font-weight: 600;\n  color: #1a2b5f;\n  margin-bottom: 2px;\n}\n.cal-region {\n  font-size: 11px;\n  color: #8a8faa;\n}\n.cal-status {\n  font-size: 11px;\n  padding: 3px 8px;\n  border-radius: 10px;\n  font-weight: 600;\n}\n.cal-status.upcoming {\n  background: #fff3e0;\n  color: #e65100;\n}\n.cal-status.open {\n  background: #e8f5e9;\n  color: #2e7d32;\n}\n.cal-status.preparing {\n  background: #e3f2fd;\n  color: #1565c0;\n}\n.cal-status.pending {\n  background: #f3e5f5;\n  color: #7b1fa2;\n}\n.cal-status.countdown {\n  background: #fce4ec;\n  color: #c62828;\n}\n.cal-footer {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 4px;\n  margin-top: 16px;\n  padding-top: 12px;\n  border-top: 1px solid #f0f2f5;\n  font-size: 13px;\n  color: #c41e3a;\n  font-weight: 600;\n  cursor: pointer;\n  transition: all 0.3s;\n}\n.cal-footer:hover {\n  color: #e8384f;\n}",
+  "name": "ExamCalendar",
+  "emits": [
+    {
+      "name": "exam-click",
+      "params": [
+        "item"
+      ]
+    },
+    {
+      "name": "view-all",
+      "params": []
+    }
+  ],
+  "nodes": [
+    {
+      "id": "26mgjve40xp",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "exam-calendar"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26mhjve40xp",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "cal-header"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26mijve40xq",
+              "from": "@vtj/ui",
+              "name": "XIcon",
+              "props": {
+                "icon": {
+                  "type": "JSExpression",
+                  "value": "this.$libs.VtjIcons.Calendar"
+                },
+                "size": {
+                  "type": "JSExpression",
+                  "value": "20"
+                },
+                "color": "#c41e3a"
+              },
+              "events": {},
+              "locked": false,
+              "children": [],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26mjjve40xq",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "cal-title"
+              },
+              "events": {},
+              "locked": false,
+              "children": "考试日历",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26mkjve40xq",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "cal-month"
+              },
+              "events": {},
+              "locked": false,
+              "children": {
+                "type": "JSExpression",
+                "value": "this.state.currentMonth"
+              },
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26mljve40xq",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "cal-list"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26mmjve40xq",
+              "from": "",
+              "name": "div",
+              "props": {
+                "key": {
+                  "type": "JSExpression",
+                  "value": "this.context.index"
+                },
+                "class": "cal-item"
+              },
+              "events": {
+                "click": {
+                  "name": "click",
+                  "handler": {
+                    "type": "JSExpression",
+                    "value": "this.handleItemClick(this.context.item)"
+                  },
+                  "modifiers": {}
+                }
+              },
+              "locked": false,
+              "children": [
+                {
+                  "id": "26mnjve40xq",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "cal-date"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26mojve40xq",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "date-day"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.item.day"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26mpjve40xq",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "date-month"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.item.month"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26mqjve40xq",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "cal-content"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26mrjve40xq",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "cal-name"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.item.name"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26msjve40xq",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "cal-region"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.item.region"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26mtjve40xq",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "cal-status"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": {
+                    "type": "JSExpression",
+                    "value": "this.context.item.status"
+                  },
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26mujve40xq",
+                  "from": "@vtj/ui",
+                  "name": "XIcon",
+                  "props": {
+                    "icon": {
+                      "type": "JSExpression",
+                      "value": "this.$libs.VtjIcons.ArrowRight"
+                    },
+                    "size": {
+                      "type": "JSExpression",
+                      "value": "14"
+                    },
+                    "color": "#8a8faa"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": [
+                {
+                  "id": "26myjve40zv",
+                  "name": "vFor",
+                  "value": {
+                    "type": "JSExpression",
+                    "value": "this.state.examList"
+                  },
+                  "iterator": {
+                    "item": "item",
+                    "index": "index"
+                  }
+                }
+              ]
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26mvjve40xq",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "cal-footer"
+          },
+          "events": {
+            "click": {
+              "name": "click",
+              "handler": {
+                "type": "JSFunction",
+                "value": "this.handleViewAll"
+              },
+              "modifiers": {}
+            }
+          },
+          "locked": false,
+          "children": [
+            {
+              "id": "26mwjve40xq",
+              "from": "",
+              "name": "span",
+              "props": {},
+              "events": {},
+              "locked": false,
+              "children": "查看全部招考信息",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26mxjve40xq",
+              "from": "@vtj/ui",
+              "name": "XIcon",
+              "props": {
+                "icon": {
+                  "type": "JSExpression",
+                  "value": "this.$libs.VtjIcons.DArrowRight"
+                },
+                "size": {
+                  "type": "JSExpression",
+                  "value": "14"
+                },
+                "color": "#c41e3a"
+              },
+              "events": {},
+              "locked": false,
+              "children": [],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "examList": {
+      "type": "JSExpression",
+      "value": "[]"
+    },
+    "currentMonth": {
+      "type": "JSExpression",
+      "value": "''"
+    }
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "loadExamData": {
+      "type": "JSFunction",
+      "value": "() => {\n  const now = new Date();\n  this.state.currentMonth = now.getMonth() + 1 + '月考试日历';\n  this.state.examList = [\n    {\n      day: '15',\n      month: now.getMonth() + 2 + '月',\n      name: '2025年国考笔试成绩公布',\n      region: '全国',\n      status: '即将发布',\n      statusType: 'upcoming'\n    },\n    {\n      day: '20',\n      month: now.getMonth() + 2 + '月',\n      name: '江苏省考面试公告',\n      region: '江苏',\n      status: '报名中',\n      statusType: 'open'\n    },\n    {\n      day: '05',\n      month: now.getMonth() + 3 + '月',\n      name: '浙江省事业单位联考',\n      region: '浙江',\n      status: '备考中',\n      statusType: 'preparing'\n    },\n    {\n      day: '12',\n      month: now.getMonth() + 3 + '月',\n      name: '公安院校联考专业课笔试',\n      region: '全国',\n      status: '待考',\n      statusType: 'pending'\n    },\n    {\n      day: '28',\n      month: now.getMonth() + 2 + '月',\n      name: '广东省考报名截止',\n      region: '广东',\n      status: '倒计时',\n      statusType: 'countdown'\n    }\n  ];\n}"
+    },
+    "handleViewAll": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.$emit('view-all');\n}"
+    },
+    "handleItemClick": {
+      "type": "JSFunction",
+      "value": "(item) => {\n  this.$emit('exam-click', item);\n  this.$message.info('跳转至' + item.name + '详情');\n}"
+    }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.loadExamData();\n}"
+    }
+  },
+  "__VERSION__": "1778917815278",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}
