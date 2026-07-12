@@ -53,6 +53,15 @@ SUBJECT_NAME_MAP = {
     '其他': 4, '综合': 4,
 }
 
+# 题型名称标准化映射（原始输入 → 标准化题型）
+TYPE_MAP = {
+    '单选题': '单选题', '选择题': '单选题', '单选': '单选题',
+    '多选题': '多选题', '不定项': '多选题', '多选': '多选题',
+    '判断题': '判断题', '填空题': '填空题',
+    '简答题': '简答题', '论述题': '论述题',
+    '案例分析题': '案例分析题', '写作题': '写作题',
+}
+
 # ============ 工具函数 ============
 
 # 行测子科目 → 关键词映射
@@ -116,6 +125,36 @@ def _detect_subcategory(subject_id: int, content: str, type_name: str = '') -> s
         best_score = 1  # 确保 return 逻辑正确
 
     return best_cat if best_score > 0 else '无'
+
+
+def _normalize_type_name(raw_type: str) -> str:
+    """
+    将任意输入的题型名称标准化为 QuestionDetailCategory 支持的枚举值。
+    若无法映射，则根据内容长度智能回退：长文本→简答题，短文本→选择题。
+    """
+    if not raw_type:
+        return '选择题'
+    normalized = TYPE_MAP.get(raw_type.strip())
+    if normalized:
+        return normalized
+    # 回退：检查是否包含关键词
+    lowered = raw_type.strip().lower()
+    if any(kw in lowered for kw in ['多选', '不定项']):
+        return '多选题'
+    if any(kw in lowered for kw in ['判断']):
+        return '判断题'
+    if any(kw in lowered for kw in ['填空']):
+        return '填空题'
+    if any(kw in lowered for kw in ['简答', '简述']):
+        return '简答题'
+    if any(kw in lowered for kw in ['论述', '论证']):
+        return '论述题'
+    if any(kw in lowered for kw in ['案例']):
+        return '案例分析题'
+    if any(kw in lowered for kw in ['写作', '作文']):
+        return '写作题'
+    # 最终回退：长文本→简答，短文本→选择
+    return '简答题' if len(raw_type.strip()) > 10 else '选择题'
 
 
 
@@ -782,7 +821,7 @@ async def import_single_question(
             xingce_subcategory=question_data.get('xingce_subcategory', '无'),
             shenlun_subcategory=question_data.get('shenlun_subcategory', '无'),
             gongzhuan_subcategory=question_data.get('gongzhuan_subcategory', '无'),
-            question_type_detail=type_name,
+            question_type_detail=_normalize_type_name(type_name),
         )
         db.add(detail)
 
@@ -1209,7 +1248,7 @@ async def confirm_batch_import(
 
                 detail = QuestionDetailCategory(
                     question_id=question.question_id,
-                    question_type_detail=item.get('type_name', '选择题'),
+                    question_type_detail=_normalize_type_name(item.get('type_name', '选择题')),
                 )
                 db.add(detail)
 
@@ -1504,7 +1543,7 @@ async def import_from_image(
 
         detail = QuestionDetailCategory(
             question_id=question.question_id,
-            question_type_detail=detected_type,
+            question_type_detail=_normalize_type_name(detected_type),
         )
         # 设置详细分类的子科目
         if subject.subject_id == 1:
@@ -1621,7 +1660,7 @@ async def _import_structured_from_ocr(
 
             detail = QuestionDetailCategory(
                 question_id=question.question_id,
-                question_type_detail=detected_type,
+                question_type_detail=_normalize_type_name(detected_type),
             )
             if subject.subject_id == 1:
                 detail.xingce_subcategory = subcategory
