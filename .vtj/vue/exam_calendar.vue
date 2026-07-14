@@ -12,24 +12,32 @@
       <div
         v-for="(exam, index) in state.exams"
         :key="index"
-        class="exam-item"
-        @click="handleExamClick(exam)">
-        <div class="exam-date-box">
-          <span class="exam-month"> {{ exam.month }}月</span>
-          <span class="exam-day"> {{ exam.day }}</span>
-        </div>
-        <div class="exam-info">
-          <div class="exam-title-row">
-            <span class="exam-title"> {{ exam.title }}</span>
-            <span v-if="exam.exam_format" class="exam-format-badge">{{ exam.exam_format }}</span>
+        class="exam-item-wrapper">
+        <div
+          class="exam-item"
+          @click="toggleExpand(index)">
+          <div class="exam-date-box">
+            <span class="exam-month"> {{ exam.month }}月</span>
+            <span class="exam-day"> {{ exam.day }}</span>
           </div>
-          <div class="exam-meta-row">
-            <span v-if="exam.registration_display" class="exam-reg-time">{{ exam.registration_display }}</span>
-            <span class="exam-province">{{ exam.province }}</span>
+          <div class="exam-info">
+            <div class="exam-title-row">
+              <span class="exam-title"> {{ exam.title }}</span>
+              <span v-if="exam.recruitment_count" class="exam-count-badge">{{ exam.recruitment_count }}人</span>
+              <span v-if="exam.exam_format" class="exam-format-badge">{{ exam.exam_format }}</span>
+            </div>
+            <div class="exam-meta-row">
+              <span v-if="exam.registration_display_html" class="exam-reg-time" v-html="exam.registration_display_html"></span>
+              <span class="exam-province">{{ exam.province }}</span>
+            </div>
+          </div>
+          <div class="exam-status">
+            <span class="status-badge" :style="{background: exam.status_color || '#10b981'}">{{ exam.status || '报名中' }}</span>
           </div>
         </div>
-        <div class="exam-status">
-          <span class="status-badge" :style="{background: exam.status_color || '#10b981'}">{{ exam.status || '报名中' }}</span>
+        <!-- Accordion 展开详情 -->
+        <div v-if="state.expandedId === index && (exam.content_html || exam.description)" class="exam-detail-expanded">
+          <div class="exam-detail-content" v-html="exam.content_html || exam.description"></div>
         </div>
       </div>
       <div v-if="state.loading" class="exam-loading">加载中...</div>
@@ -48,7 +56,7 @@
     components: { XIcon },
     setup(props) {
       const provider = useProvider({ id: 'exam_calendar', version: '1778915692038' });
-      const state = reactive({ exams: [], loading: false, page: 1, hasMore: true });
+      const state = reactive({ exams: [], loading: false, page: 1, hasMore: true, expandedId: -1 });
       const examList = ref(null);
       return { state, props, provider, Calendar, DArrowRight, examList };
     },
@@ -96,6 +104,10 @@
           registration_start: e.registration_start || '',
           registration_end: e.registration_end || '',
           registration_display: this.formatRegDate(e.registration_start, e.registration_end),
+          registration_display_html: this.formatRegDateHtml(e.registration_start, e.registration_end),
+          content_html: e.content_html || e.description || '',
+          description: e.description || '',
+          recruitment_count: e.recruitment_count || '',
           status: e.status || '',
           status_color: e.status_color || '#10b981'
         };
@@ -108,6 +120,18 @@
         if (s) return s;
         if (e) return '截止 ' + e;
         return '';
+      },
+      formatRegDateHtml(start, end) {
+        if (!start && !end) return '';
+        var s = start ? start.substring(0, 10) : '';
+        var e = end ? end.substring(0, 10) : '';
+        if (s && e) return s + ' ~ <span style="color:#c41e3a;font-weight:700">' + e + '</span>';
+        if (s) return s;
+        if (e) return '截止 <span style="color:#c41e3a;font-weight:700">' + e + '</span>';
+        return '';
+      },
+      toggleExpand(index) {
+        this.state.expandedId = this.state.expandedId === index ? -1 : index;
       },
       getStatusClass(status) {
         if (status === '已截止') return 'status-ended';
@@ -182,7 +206,7 @@
   .exam-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     max-height: 55vh;
     overflow-y: auto;
     padding-right: 4px;
@@ -196,6 +220,11 @@
   }
   .exam-list::-webkit-scrollbar-track {
     background: transparent;
+  }
+  /* 考试条目包裹（用于 accordion）*/
+  .exam-item-wrapper {
+    display: flex;
+    flex-direction: column;
   }
   .exam-item {
     display: flex;
@@ -248,17 +277,28 @@
   .exam-title-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
   }
   .exam-title {
     font-size: 15px;
     font-weight: 500;
     color: #2c3e50;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
     flex: 1;
+  }
+  .exam-count-badge {
+    font-size: 11px;
+    color: #c8161e;
+    background: rgba(200, 22, 30, 0.08);
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .exam-format-badge {
     font-size: 11px;
@@ -298,6 +338,33 @@
     padding: 3px 10px;
     border-radius: 10px;
     white-space: nowrap;
+  }
+  /* Accordion 展开详情 */
+  .exam-detail-expanded {
+    padding: 0 12px 10px 72px;
+    animation: examSlideDown 0.25s ease;
+  }
+  @keyframes examSlideDown {
+    from { opacity: 0; max-height: 0; }
+    to { opacity: 1; max-height: 500px; }
+  }
+  .exam-detail-content {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.7;
+    padding: 10px 14px;
+    background: #fafbfc;
+    border-radius: 8px;
+    border-left: 3px solid #c8161e;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .exam-detail-content::-webkit-scrollbar {
+    width: 4px;
+  }
+  .exam-detail-content::-webkit-scrollbar-thumb {
+    background: #d0d5dd;
+    border-radius: 3px;
   }
   /* 加载提示 */
   .exam-loading {

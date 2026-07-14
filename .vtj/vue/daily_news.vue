@@ -36,6 +36,10 @@
               <span>{{ item.publish_date ? item.publish_date.substring(0, 10) : '' }}</span>
             </div>
           </div>
+          <div class="news-card-actions" @click.stop>
+            <button :class="['card-fav-btn', { favorited: item.is_favorited }]" @click="toggleCardFavorite(item)" title="收藏">{{ item.is_favorited ? '⭐' : '☆' }}</button>
+            <button class="card-note-btn" @click="openDetail(item)" title="笔记">📝<span v-if="item.note_count" class="note-count-badge">{{ item.note_count }}</span></button>
+          </div>
           <span class="news-card-arrow">▶</span>
         </div>
         <div v-if="!state.loading && !state.newsItems.length" class="empty-state">
@@ -74,18 +78,30 @@
             <img v-for="(img, idx) in state.selectedNews.images" :key="idx" :src="img.url || img" :alt="'图片' + (idx + 1)" class="news-content-img" />
           </div>
         </div>
-        <!-- 选中文本操作菜单（多色划线+想法） -->
+        <!-- 选中文本操作菜单（5色+3线型） -->
         <div v-if="state.selectionMenuVisible" class="selection-menu" :style="{ top: state.selectionMenuPos.y + 'px', left: state.selectionMenuPos.x + 'px' }">
-          <button class="sel-menu-btn sel-color-yellow" @click="highlightYellow" title="黄色划线">🟡 划线</button>
-          <button class="sel-menu-btn sel-color-green" @click="highlightGreen" title="绿色划线">🟢 划线</button>
-          <button class="sel-menu-btn sel-color-blue" @click="highlightBlue" title="蓝色划线">🔵 划线</button>
-          <button class="sel-menu-btn" @click="noteSelection">📝 想法</button>
+          <div class="sel-menu-row sel-colors-row">
+            <button class="sel-color-dot" style="background:#FFD700" :class="{active: state.highlightColor==='#FFD700'}" @click="state.highlightColor='#FFD700'" title="黄色"></button>
+            <button class="sel-color-dot" style="background:#4CAF50" :class="{active: state.highlightColor==='#4CAF50'}" @click="state.highlightColor='#4CAF50'" title="绿色"></button>
+            <button class="sel-color-dot" style="background:#2196F3" :class="{active: state.highlightColor==='#2196F3'}" @click="state.highlightColor='#2196F3'" title="蓝色"></button>
+            <button class="sel-color-dot" style="background:#EF4444" :class="{active: state.highlightColor==='#EF4444'}" @click="state.highlightColor='#EF4444'" title="红色"></button>
+            <button class="sel-color-dot" style="background:#8B5CF6" :class="{active: state.highlightColor==='#8B5CF6'}" @click="state.highlightColor='#8B5CF6'" title="紫色"></button>
+          </div>
+          <div class="sel-menu-row sel-styles-row">
+            <button :class="['sel-style-btn', {active: state.lineStyle==='wavy'}]" @click="state.lineStyle='wavy'">〰️ 波浪线</button>
+            <button :class="['sel-style-btn', {active: state.lineStyle==='straight'}]" @click="state.lineStyle='straight'">＿ 直线</button>
+            <button :class="['sel-style-btn', {active: state.lineStyle==='marker'}]" @click="state.lineStyle='marker'">🖍️ 马克笔</button>
+          </div>
+          <div class="sel-menu-row sel-actions-row">
+            <button class="sel-action-btn" @click="applyHighlight">✅ 划线</button>
+            <button class="sel-action-btn" @click="noteSelection">📝 想法</button>
+          </div>
         </div>
         <!-- 笔记列表 -->
         <div v-if="state.showDetailModal && state.notes.length" class="news-notes-section">
           <h4 class="news-notes-title">我的笔记 ({{ state.notes.length }})</h4>
           <div v-for="note in state.notes" :key="note.note_id" class="news-note-item">
-            <blockquote v-if="note.quote_text" class="note-quote" :style="{ borderLeftColor: note.color }">{{ note.quote_text }}</blockquote>
+            <blockquote v-if="note.quote_text" class="note-quote" :style="renderNoteStyle(note)">{{ note.quote_text }}</blockquote>
             <p class="note-text">{{ note.note_text }}</p>
             <button class="note-delete-btn" @click="removeNote(note.note_id)">删除</button>
           </div>
@@ -124,7 +140,8 @@
         selectionMenuVisible: false,
         selectionMenuPos: { x: 0, y: 0 },
         selectedText: '',
-        highlightColor: '#FFD700'
+        highlightColor: '#FFD700',
+        lineStyle: 'wavy'
       });
       return { state, props, provider };
     },
@@ -206,8 +223,8 @@
           const range = sel.getRangeAt(0);
           const rect = range.getBoundingClientRect();
           this.state.selectionMenuPos = {
-            x: rect.left + rect.width / 2 - 60,
-            y: rect.top - 40 + window.scrollY
+            x: rect.left + rect.width / 2 - 80,
+            y: rect.top - 50 + window.scrollY
           };
           this.state.selectionMenuVisible = true;
         } else {
@@ -215,37 +232,46 @@
           this.state.selectedText = '';
         }
       },
-      async highlightSelection(color) {
+      setHighlightColor(color) {
+        this.state.highlightColor = color;
+      },
+      async toggleCardFavorite(item) {
+        const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + item.id + '/favorite', { method: 'POST' });
+        const data = await res.json();
+        item.is_favorited = data.favorited;
+      },
+      async applyHighlight() {
         if (!this.state.selectedText) return;
         const newsId = this.state.selectedNews.id;
-        const c = color || this.state.highlightColor || '#FFD700';
-        try {
-          await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              note_text: '',
-              quote_text: this.state.selectedText,
-              color: c
-            })
-          });
-          this.state.highlightColor = c;
-          this.state.selectionMenuVisible = false;
-          this.state.selectedText = '';
-          await this.fetchNotes(newsId);
-        } catch (e) {
-          console.error('划线失败:', e);
-        }
+        await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note_text: '',
+            quote_text: this.state.selectedText,
+            color: this.state.highlightColor,
+            line_style: this.state.lineStyle
+          })
+        });
+        this.state.selectionMenuVisible = false;
+        this.state.selectedText = '';
+        await this.fetchNotes(newsId);
       },
-      async highlightYellow() { await this.highlightSelection('#FFD700'); },
-      async highlightGreen() { await this.highlightSelection('#4CAF50'); },
-      async highlightBlue() { await this.highlightSelection('#2196F3'); },
+      renderNoteStyle(note) {
+        if (note.line_style === 'wavy') {
+          return 'text-decoration: underline wavy ' + (note.color || '#FFD700') + ';';
+        } else if (note.line_style === 'straight') {
+          return 'text-decoration: underline ' + (note.color || '#FFD700') + ';';
+        } else if (note.line_style === 'marker') {
+          return 'background-color: ' + (note.color || '#FFD700') + '40; padding: 0 2px;';
+        }
+        return 'border-left: 3px solid ' + (note.color || '#FFD700') + ';';
+      },
       async noteSelection() {
         if (!this.state.selectedText) return;
         const thought = prompt('记录想法:', '');
         if (thought === null) return;
         const newsId = this.state.selectedNews.id;
-        const c = this.state.highlightColor || '#FFD700';
         try {
           await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
             method: 'POST',
@@ -253,7 +279,8 @@
             body: JSON.stringify({
               note_text: thought,
               quote_text: this.state.selectedText,
-              color: c
+              color: this.state.highlightColor,
+              line_style: this.state.lineStyle
             })
           });
           this.state.selectionMenuVisible = false;
@@ -498,25 +525,54 @@
 .news-fav-btn:hover { background: #fef0f2; transform: scale(1.1); }
 .news-fav-btn.favorited { background: #fff8e1; }
 
-/* 选中文本操作菜单 */
+/* 卡片层收藏+笔记图标 */
+.news-card-actions {
+  display: flex; gap: 4px; flex-shrink: 0; position: relative;
+}
+.card-fav-btn, .card-note-btn {
+  width: 28px; height: 28px; border: none; background: #f8f9fc;
+  border-radius: 6px; cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; position: relative;
+}
+.card-fav-btn:hover, .card-note-btn:hover { background: #fef0f2; transform: scale(1.1); }
+.card-fav-btn.favorited { background: #fff8e1; }
+.note-count-badge {
+  position: absolute; top: -6px; right: -6px;
+  background: #c41e3a; color: #fff; font-size: 10px;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px; font-weight: 700;
+}
+
+/* 选中文本5色+3线型菜单 */
 .selection-menu {
   position: fixed; z-index: 2000;
-  background: #ffffff; border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(26,43,95,0.15);
-  display: flex; gap: 4px; padding: 6px;
+  background: #ffffff; border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(26,43,95,0.18);
+  padding: 8px; flex-direction: column;
 }
-.sel-menu-btn {
-  padding: 6px 12px; border: none; background: #f8f9fc;
-  border-radius: 6px; font-size: 13px; cursor: pointer;
-  white-space: nowrap; transition: all 0.2s;
+.sel-menu-row {
+  display: flex; gap: 6px; padding: 3px 0; justify-content: center;
 }
-.sel-menu-btn:hover { background: #fef0f2; color: #c41e3a; }
-.sel-color-yellow { border-left: 3px solid #FFD700; }
-.sel-color-green { border-left: 3px solid #4CAF50; }
-.sel-color-blue { border-left: 3px solid #2196F3; }
-.sel-color-yellow:hover { background: #fff8e1; color: #b8860b; }
-.sel-color-green:hover { background: #e8f5e9; color: #2e7d32; }
-.sel-color-blue:hover { background: #e3f2fd; color: #1565c0; }
+.sel-color-dot {
+  width: 22px; height: 22px; border: 2px solid transparent;
+  border-radius: 50%; cursor: pointer; transition: all 0.2s;
+}
+.sel-color-dot:hover { transform: scale(1.2); }
+.sel-color-dot.active { border-color: #1a2b5f; box-shadow: 0 0 0 2px rgba(26,43,95,0.25); }
+.sel-style-btn {
+  padding: 4px 10px; border: 1px solid #e8eaf0; background: #fff;
+  border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s;
+}
+.sel-style-btn.active { background: #eff6ff; border-color: #3b82f6; color: #3b82f6; font-weight: 700; }
+.sel-style-btn:hover { background: #f0f2f5; }
+.sel-action-btn {
+  padding: 6px 14px; border: none; border-radius: 6px;
+  font-size: 13px; cursor: pointer; background: #eff6ff; color: #3b82f6;
+  font-weight: 600; transition: all 0.2s;
+}
+.sel-action-btn:hover { background: #dbeafe; }
 
 /* 笔记区域 */
 .news-notes-section {

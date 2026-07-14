@@ -15,10 +15,11 @@
       <span>正在加载招考信息...</span>
     </div>
 
-    <!-- Accordion 列表 -->
-    <div v-else class="recruitment-list">
+    <!-- Accordion 列表（可滚动） -->
+    <div v-else class="recruitment-list-scroll" ref="scrollContainer">
+    <div class="recruitment-list">
       <div
-        v-for="item in state.allItems"
+        v-for="item in state.allItems.slice(0, state.displayCount)"
         :key="item.id"
         class="recruitment-card"
       >
@@ -57,6 +58,11 @@
             />
           </div>
 
+          <!-- 报名截止时间 红色高亮 -->
+          <span v-if="item.registration_end" class="deadline-highlight">
+            ⏰ 报名截止: {{ item.registration_end }}
+          </span>
+
           <!-- HTML 正文 -->
           <div class="detail-content" v-html="item.content_html || item.content || ''"></div>
 
@@ -87,6 +93,10 @@
       <div v-if="state.allItems.length === 0 && !state.loading" class="recruit-empty">
         <span>暂无招考信息</span>
       </div>
+
+      <!-- 滚动加载哨兵 -->
+      <div ref="scrollSentinel" class="scroll-sentinel"></div>
+    </div>
     </div>
   </div>
 </template>
@@ -108,9 +118,13 @@ export default defineComponent({
       expandedId: null as number | null,
       loading: false,
       categories: ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'] as string[],
-      allItems: [] as any[]
+      allItems: [] as any[],
+      displayCount: 10,
     });
-    return { state, props, provider, Opportunity };
+    const scrollContainer = ref<HTMLElement | null>(null);
+    const scrollSentinel = ref<HTMLElement | null>(null);
+    let observer: IntersectionObserver | null = null;
+    return { state, props, provider, Opportunity, scrollContainer, scrollSentinel };
   },
   methods: {
     async fetchRecruitment() {
@@ -129,6 +143,7 @@ export default defineComponent({
             }
           }
           this.state.allItems = all;
+          this.state.displayCount = 10;
         }
       } catch (e: any) {
         console.warn('[RecruitmentInfo] fetchRecruitment failed:', e.message);
@@ -151,10 +166,34 @@ export default defineComponent({
       };
       const color = colorMap[statusLabel] || '#10b981';
       return { color, background: color + '15' };
-    }
+    },
+    loadMore() {
+      if (this.state.displayCount < this.state.allItems.length) {
+        const next = Math.min(this.state.displayCount + 10, this.state.allItems.length);
+        this.state.displayCount = next;
+      }
+    },
+    setupObserver() {
+      if (!this.scrollSentinel) return;
+      this.observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+          this.loadMore();
+        }
+      }, { threshold: 0.1 });
+      this.observer.observe(this.scrollSentinel);
+    },
   },
   mounted() {
     this.fetchRecruitment();
+    this.$nextTick(() => {
+      this.setupObserver();
+    });
+  },
+  beforeUnmount() {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
   }
 })
 </script>
@@ -215,6 +254,26 @@ export default defineComponent({
   padding: 60px 0;
   color: #8899aa;
   font-size: 15px;
+}
+
+/* ========== 可滚动容器 ========== */
+.recruitment-list-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+.recruitment-list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.recruitment-list-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.recruitment-list-scroll::-webkit-scrollbar-thumb {
+  background: #d0d5dd;
+  border-radius: 3px;
+}
+.recruitment-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a0a8b4;
 }
 
 /* ========== Accordion 列表 ========== */
@@ -332,6 +391,18 @@ export default defineComponent({
   display: block;
 }
 
+/* 截止时间红色高亮 */
+.deadline-highlight {
+  color: #c41e3a;
+  font-weight: 700;
+  font-size: 15px;
+  background: #fef2f2;
+  padding: 6px 14px;
+  border-radius: 8px;
+  display: inline-block;
+  margin: 8px 0;
+}
+
 /* HTML 正文 */
 .detail-content {
   font-size: 15px;
@@ -418,5 +489,11 @@ export default defineComponent({
 .recruit-empty span {
   font-size: 15px;
   color: #bcc5ce;
+}
+
+/* ========== 滚动加载哨兵 ========== */
+.scroll-sentinel {
+  height: 1px;
+  width: 100%;
 }
 </style>

@@ -81,7 +81,7 @@ def _parse_registration_time(meta_divs) -> str:
 
 
 def _scrape_exam_detail(url: str) -> dict:
-    """进入考试详情页，抓取完整信息"""
+    """进入考试详情页，抓取完整信息（requests 回退方案）"""
     result = {'registration_start': '', 'registration_end': '', 'exam_format': '',
               'description': '', 'images': []}
     try:
@@ -130,6 +130,56 @@ def _scrape_exam_detail(url: str) -> dict:
     return result
 
 
+def _scrape_exam_detail_playwright(page, url):
+    """使用Playwright抓取考试详情页完整内容"""
+    result = {'registration_start': '', 'registration_end': '', 'exam_format': '',
+              'description': '', 'content_html': '', 'recruitment_count': ''}
+    try:
+        page.goto(url, wait_until='networkidle', timeout=30000)
+        import time; time.sleep(1)
+
+        # 精确选择器: div.ws-content.ws-card
+        content_elem = page.query_selector('div.ws-content.ws-card')
+        if not content_elem:
+            content_elem = page.query_selector('div.ws-content')
+        if not content_elem:
+            content_elem = page.query_selector('div.article-content')
+
+        if content_elem:
+            result['content_html'] = content_elem.inner_html()[:10000]
+            result['description'] = content_elem.inner_text()[:5000]
+
+        full_text = page.inner_text('body')
+
+        # 提取报名时间 (多行版)
+        time_pat = re.compile(r'报名时间[：:]?\s*(.+?)(?=\n\s*(?:考试|笔试|面试|联系|咨询|附件|\Z))', re.DOTALL)
+        m = time_pat.search(full_text)
+        if m:
+            time_str = m.group(1).strip()[:200]
+            parts = re.split(r'[-～~至]', time_str)
+            if len(parts) == 2:
+                result['registration_start'] = parts[0].strip()
+                result['registration_end'] = parts[1].strip()
+
+        # 提取考试方式
+        if '笔试' in full_text and '面试' in full_text:
+            result['exam_format'] = '笔试+面试'
+        elif '笔试' in full_text:
+            result['exam_format'] = '笔试'
+        elif '面试' in full_text:
+            result['exam_format'] = '面试'
+
+        # 提取招聘人数
+        count_pat = re.compile(r'(?:招聘|招录|拟招聘|拟招录)\s*(\d+)\s*(?:名|人|个)')
+        m = count_pat.search(full_text)
+        if m:
+            result['recruitment_count'] = m.group(1)
+
+    except Exception as e:
+        logger.warning(f"[exam/playwright] 详情抓取失败: {e}")
+    return result
+
+
 def _parse_date_str(date_str: str, default_year: int = None) -> datetime:
     """
     解析日期字符串为 datetime 对象。
@@ -157,8 +207,9 @@ def _parse_date_str(date_str: str, default_year: int = None) -> datetime:
 
 
 def scrape_exams_from_shiyebian(db: Session) -> int:
-    """爬取 shiyebian.com 的结构化考试信息，返回新增数量"""
+    """爬取 shiyebian.com 的结构化考试信息（Playwright 详情抓取），返回新增数量"""
     count = 0
+    p = browser = page = None
     try:
         url = "https://www.shiyebian.com/"
         logger.info("[exam] 开始爬取 shiyebian.com 考试日历...")
@@ -261,7 +312,61 @@ def scrape_exams_from_shiyebian(db: Session) -> int:
                 logger.warning(f"[exam] 解析条目失败: {parse_err}")
                 continue
 
-        # === 写入数据库 ===
+        # === 启动 Playwright 浏览器（用于详情页抓取） ===
+        try:
+            from playwright.sync_api import sync_playwright
+            p = sync_playwright().start()
+            browser = p.chromium.launch(headless=True, args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ])
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                locale="zh-CN",
+            )
+            page = context.new_page()
+            logger.info("[exam] Playwright 浏览器已启动（chromium headless）")
+        except Exception as pw_err:
+            logger.warning(f"[exam] Playwright 启动失败，将使用 requests 回退: {pw_err}")
+            # 回退方案：使用原有的 requests 详情抓取
+            now_year_fallback = datetime.now().year
+            for item in exam_items:
+                try:
+                    exists = db.query(ExamCalendar).filter(
+                        ExamCalendar.title == item["title"]
+                    ).first()
+                    if exists:
+                        continue
+                    detail = _scrape_exam_detail(item["url"])
+                    m = int(item["month"])
+                    d = int(item["day"])
+                    exam_date = datetime(now_year_fallback, m, d)
+                    reg_start = None; reg_end = None
+                    if detail.get('registration_start'):
+                        try: reg_start = _parse_date_str(detail['registration_start'], now_year_fallback)
+                        except Exception: pass
+                    if detail.get('registration_end'):
+                        try: reg_end = _parse_date_str(detail['registration_end'], now_year_fallback)
+                        except Exception: pass
+                    exam_format = detail.get('exam_format') or item.get('exam_format', '')
+                    description = detail.get('description') or item.get('registration_time', '')
+                    exam = ExamCalendar(
+                        title=item["title"], exam_date=exam_date,
+                        month=str(m), day=str(d),
+                        province=item["province"], exam_format=exam_format,
+                        url=item["url"], description=description[:10000] if description else '',
+                        content_html='', recruitment_count='',
+                        registration_start=reg_start, registration_end=reg_end, status=1,
+                    )
+                    db.add(exam)
+                    count += 1
+                except Exception as insert_err:
+                    logger.warning(f"[exam] 插入失败 '{item['title'][:30]}': {insert_err}")
+            db.commit()
+            return count
+
+        # === 写入数据库（使用 Playwright 抓取详情） ===
         now_year = datetime.now().year
         for item in exam_items:
             try:
@@ -271,8 +376,8 @@ def scrape_exams_from_shiyebian(db: Session) -> int:
                 if exists:
                     continue
 
-                # 进入详情页抓取完整信息
-                detail = _scrape_exam_detail(item["url"])
+                # 使用 Playwright 进入详情页抓取完整信息
+                detail = _scrape_exam_detail_playwright(page, item["url"])
 
                 # 构造 exam_date
                 m = int(item["month"])
@@ -296,12 +401,8 @@ def scrape_exams_from_shiyebian(db: Session) -> int:
                 # 优先使用详情页的 exam_format
                 exam_format = detail.get('exam_format') or item.get('exam_format', '')
 
-                # 构建描述（含图片）
+                # 构建描述
                 description = detail.get('description') or item.get('registration_time', '')
-                if detail.get('images'):
-                    img_html = ''.join([f'<img src="{img_url}" />' for img_url in detail['images'][:5]])
-                    if img_html:
-                        description = img_html + description
 
                 exam = ExamCalendar(
                     title=item["title"],
@@ -312,6 +413,8 @@ def scrape_exams_from_shiyebian(db: Session) -> int:
                     exam_format=exam_format,
                     url=item["url"],
                     description=description[:10000] if description else '',
+                    content_html=detail.get('content_html', '')[:10000] if detail.get('content_html') else '',
+                    recruitment_count=detail.get('recruitment_count', '') or '',
                     registration_start=reg_start,
                     registration_end=reg_end,
                     status=1,
@@ -331,6 +434,18 @@ def scrape_exams_from_shiyebian(db: Session) -> int:
     except Exception as e:
         db.rollback()
         logger.error(f"[exam] 爬取异常: {type(e).__name__}: {e}", exc_info=True)
+    finally:
+        # 关闭 Playwright 浏览器
+        if browser:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if p:
+            try:
+                p.stop()
+            except Exception:
+                pass
 
     return count
 

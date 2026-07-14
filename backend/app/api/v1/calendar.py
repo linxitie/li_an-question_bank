@@ -56,6 +56,8 @@ def _serialize_exam(e: ExamCalendarModel) -> dict:
         "registration_end": e.registration_end.isoformat() if e.registration_end else "",
         "url": e.url or "",
         "description": e.description or "",
+        "content_html": e.content_html or e.description or "",
+        "recruitment_count": getattr(e, 'recruitment_count', '') or "",
         "status": status,
         "status_color": STATUS_COLORS.get(status, "#10b981"),
     }

@@ -22,11 +22,34 @@ logger = logging.getLogger(__name__)
 
 # 噪音过滤正则模式
 NOISE_PATTERNS = [
+    # 通用噪音
     r'登录.*?注册', r'记住密码', r'忘记密码', r'扫码.*?关注',
     r'微信.*?微博', r'版权所有.*', r'ICP备.*',
     r'首页\s*[|/>]', r'上一页', r'下一页', r'推荐阅读.*',
     r'用户登录', r'会员中心', r'我的收藏', r'退出登录',
     r'举报.*', r'ICP备\d+号',
+    # 人民网专用噪音
+    r'打开\s*\n?\s*记住', r'原文', r'讲话', r'会议', r'活动',
+    r'考察', r'会见', r'出访', r'函电',
+    r'高层动态', r'中央文件', r'人事任免', r'反腐倡廉',
+    r'综合报道', r'视频报道', r'独家稿件', r'专题专栏',
+    r'党建要闻', r'党建论坛', r'先锋人物', r'创新案例',
+    r'基层党建', r'党建要参', r'人民日报理论版',
+    r'文选', r'评论', r'图书', r'言之有理', r'独家',
+    r'人物长廊', r'纪念回忆', r'红色访谈录', r'党史微课',
+    r'国史讲堂', r'群书博览', r'跟着总书记学党史',
+    r'中国政要资料库', r'党章党规', r'党建数据库',
+    r'党史资料库', r'图解库', r'报刊导航',
+    r'中国共产党新闻网', r'>>\s*\n?\s*党建',
+    r'分享[，,]?\d*', r'订阅', r'取消订阅', r'已收藏',
+    r'大字号', r'点击播报本文', r'约[，,]?\d*字',
+    r'学习路上', r'时习之', r'习近平',
+    r'系列重要讲话数据库', r'中央文件',
+    r'学习宣传贯彻', r'党的二十大精神',
+    r'跟着总书记学党史\s*数据库', r'中央和国家机关',
+    r'建设模范机关', r'言之有理', r'学习文选',
+    r'微信[“"][扫一扫][”"].*?[添加].*?[学习大国][“"]',
+    r'分享到[：:]?\s*',
 ]
 
 
@@ -59,6 +82,21 @@ def _download_images(soup, page_url: str, news_id: int, db: Session, label: str 
         if not src:
             src = img_tag.get("data-src", "").strip()
         if not src:
+            continue
+
+        # CRITICAL FIX: 截断URL到有效图片扩展名，去除HTML标签残留
+        # 修复公安报图片URL包含 %3C/a%3E%3Cp%20style= 等HTML实体的问题
+        import re as _re_url
+        clean_match = _re_url.match(r'^(.*?\.(?:jpg|jpeg|png|gif|webp|bmp))', src, _re_url.IGNORECASE)
+        if clean_match:
+            src = clean_match.group(1)
+        else:
+            # URL不以有效图片扩展名结尾，跳过
+            continue
+
+        # 安全检测: URL中不应包含HTML编码字符
+        if '%3C' in src or '%3E' in src or '<' in src or '>' in src:
+            logger.warning(f"[{label}] 图片URL包含HTML实体，已跳过: {src[:80]}")
             continue
 
         # 补全 URL
@@ -290,6 +328,60 @@ def _fetch_article_detail(url: str) -> tuple:
         return '', []
 
 
+def _fetch_people_detail_playwright(page, url):
+    """使用Playwright抓取人民网新闻详情页，精确提取div.p2j_con3内容"""
+    content = ''
+    images = []
+    try:
+        page.goto(url, wait_until='networkidle', timeout=30000)
+        time.sleep(0.5)
+
+        # 精确选择器（用户指定）
+        selectors = [
+            'div.p2j_con3.clearfix.g-w1200',
+            'div.p2j_con3',
+            'div.text-con',
+            'div.article-content',
+            'article',
+        ]
+        content_elem = None
+        for sel in selectors:
+            content_elem = page.query_selector(sel)
+            if content_elem:
+                break
+
+        if content_elem:
+            # 移除噪音子元素
+            noise_selectors = [
+                '.nav', '.sidebar', '.ad', '.login', '.register',
+                '.recommend', '.footer', '.header', '.share',
+                '.pagination', '.breadcrumb',
+            ]
+            for ns in noise_selectors:
+                for el in content_elem.query_selector_all(ns):
+                    try:
+                        el.evaluate('el => el.remove()')
+                    except:
+                        pass
+            content = content_elem.inner_text()[:8000]
+
+            # 提取图片
+            for img in content_elem.query_selector_all('img[src]'):
+                src = img.get_attribute('src') or ''
+                if src and not src.startswith('data:') and len(src) > 10:
+                    w = img.get_attribute('width') or '0'
+                    if w.isdigit() and int(w) < 50:
+                        continue
+                    images.append(src)
+
+        # 如果没有内容，回退
+        if not content:
+            content = page.inner_text('body')[:5000]
+    except Exception as e:
+        logger.warning(f"[people/playwright] 详情抓取失败: {e}")
+    return content, images
+
+
 def _random_delay(min_s=0.5, max_s=2.0):
     """模拟人类行为的随机延迟"""
     time.sleep(random.uniform(min_s, max_s))
@@ -301,6 +393,10 @@ def _extract_article_content(soup):
     覆盖人民公安报 CMS（TRS_Editor）和常见新闻模板
     """
     content_selectors = [
+        # 人民网专用选择器
+        "div.p2j_con3.clearfix.g-w1200",
+        "div.p2j_con3",
+        "div.text-con",
         # 人民公安报 CMS (TRS 编辑器)
         "div.TRS_Editor",
         "div.TRS_PreAppend",
@@ -602,8 +698,9 @@ def _parse_cpd_date(url: str) -> datetime:
 # ════════════════════════════════════════════════════════════
 
 def scrape_people_news(db: Session) -> int:
-    """爬取人民网理论/党建/党史新闻标题链接及正文，返回新增数量"""
+    """爬取人民网理论/党建/党史新闻标题链接及正文（Playwright增强），返回新增数量"""
     count = 0
+    p = browser = None
     try:
         resp = safe_request("https://www.people.com.cn/", label="news/people")
         if resp is None:
@@ -650,8 +747,25 @@ def scrape_people_news(db: Session) -> int:
             if exists:
                 continue
 
-            # 抓取文章正文（详情页）+ 图片提取
-            content, image_urls = _fetch_article_detail(href)
+            # 使用Playwright抓取详情页（首次使用时创建浏览器）
+            content = ""
+            image_urls = []
+            try:
+                if browser is None:
+                    logger.info(f"[people] 启动浏览器（{NEWS_BROWSER}）用于详情抓取...")
+                    p, browser, page = _create_browser()
+
+                if _goto_with_retry(page, href, wait_until="networkidle", timeout=30000, label="people-detail"):
+                    content, image_urls = _fetch_people_detail_playwright(page, href)
+                    content = _filter_noise(content)
+                else:
+                    # HTTP 回退
+                    logger.warning(f"[people] Playwright详情加载失败，回退HTTP: {href}")
+                    content, image_urls = _fetch_article_detail(href)
+            except Exception as e:
+                logger.warning(f"[people] Playwright异常，回退HTTP: {href}: {e}")
+                content, image_urls = _fetch_article_detail(href)
+
             if content:
                 logger.info(f"[people] 正文提取成功: {len(content)} 字符, {len(image_urls)} 图片")
             else:
@@ -688,6 +802,17 @@ def scrape_people_news(db: Session) -> int:
     except Exception as e:
         db.rollback()
         logger.error(f"[people] ❌ 爬取失败: {type(e).__name__}: {e}", exc_info=True)
+    finally:
+        if browser:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if p:
+            try:
+                p.stop()
+            except Exception:
+                pass
 
     return count
 

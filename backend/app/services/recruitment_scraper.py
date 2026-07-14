@@ -2,6 +2,7 @@
 招考信息爬虫（增强版）
 来源: rszk.net - 事业单位/国考省考/教师招聘/国企招聘/医疗卫生/三支一扶
 反爬策略: UA轮换池 + 请求延迟随机化 + 指数退避重试 + 健壮错误处理
+详情抓取: Playwright (channel-main 精确提取) + BeautifulSoup 回退
 """
 import logging
 import re
@@ -14,6 +15,12 @@ from sqlalchemy.orm import Session
 from ..core.database import SessionLocal
 from ..models.models import RecruitmentInfo
 from .scraper_utils import safe_request, get_random_ua
+
+try:
+    from playwright.sync_api import sync_playwright
+    HAS_PLAYWRIGHT = True
+except ImportError:
+    HAS_PLAYWRIGHT = False
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +110,100 @@ def _detect_registration_status(start_str: str, end_str: str, full_text: str = "
         return {"tag": "公示", "color": "#8b5cf6"}
 
     return {"tag": "正在报名", "color": "#10b981"}
+
+
+def _scrape_article_detail_playwright(page, url: str) -> dict:
+    """使用Playwright抓取招考详情页，精确提取channel-main内容"""
+    result = {
+        "content": "", "content_html": "", "organization": "",
+        "requirements": "", "registration_start": "", "registration_end": "",
+        "deadline": "", "region": "", "tag": "", "tag_color": "",
+        "images": [], "exam_format": "", "contact_info": "",
+    }
+    try:
+        page.goto(url, wait_until='networkidle', timeout=30000)
+        time.sleep(0.5)
+
+        # 精确选择器: div.channel-main.clearfix
+        main = page.query_selector('div.channel-main.clearfix')
+        if not main:
+            main = page.query_selector('div.channel-main')
+        if not main:
+            main = page.query_selector('div.article-content')
+
+        if main:
+            # 排除噪音div
+            exclude_selectors = [
+                'div.channel-article', 'div.channel-prompt', 'div.leftread',
+                '.recommend', '.ad', '.sidebar',
+            ]
+            for sel in exclude_selectors:
+                for el in main.query_selector_all(sel):
+                    try:
+                        el.evaluate('el => el.remove()')
+                    except Exception:
+                        pass
+
+            result["content_html"] = main.inner_html()[:10000]
+            result["content"] = main.inner_text()[:5000]
+
+            # 提取图片
+            for img in main.query_selector_all('img[src]'):
+                src = img.get_attribute('src') or ''
+                if src and not src.startswith('data:') and len(src) > 10:
+                    alt = img.get_attribute('alt') or ''
+                    full = urljoin(url, src) if not src.startswith('http') else src
+                    result["images"].append({"url": full, "alt": alt})
+
+        full_text = page.inner_text('body')
+
+        # 提取报名时间
+        time_pat = re.compile(r'报名时间[：:]?\s*(.+?)(?=\n\s*(?:考试|笔试|面试|联系|咨询|附件|\Z))', re.DOTALL)
+        m = time_pat.search(full_text)
+        if m:
+            time_str = m.group(1).strip()[:200]
+            parts = re.split(r'[-～~至]', time_str)
+            if len(parts) == 2:
+                result['registration_start'] = parts[0].strip()
+                result['registration_end'] = parts[1].strip()
+                result['deadline'] = parts[1].strip()
+
+        # 提取考试方式
+        if '笔试' in full_text and '面试' in full_text:
+            result['exam_format'] = '笔试+面试'
+        elif '笔试' in full_text:
+            result['exam_format'] = '笔试'
+        elif '面试' in full_text:
+            result['exam_format'] = '面试'
+
+        # 提取联系方式
+        contact_pat = re.compile(r'(?:联系|咨询|电话)[：:]\s*(\S{5,30})')
+        m = contact_pat.search(full_text)
+        if m:
+            result['contact_info'] = m.group(1)
+
+        # 提取单位
+        org_pat = re.compile(r'(?:发布单位|招聘单位|单位名称)[：:]\s*(\S{2,50})')
+        m = org_pat.search(full_text)
+        if m:
+            result['organization'] = m.group(1)
+
+        # 提取地区
+        region_pat = re.compile(r'(?:工作地点|地区|省份)[：:]\s*(\S{2,20})')
+        m = region_pat.search(full_text)
+        if m:
+            result['region'] = m.group(1)
+
+        # 智能标签检测
+        tag_info = _detect_registration_status(
+            result["registration_start"], result["registration_end"], full_text
+        )
+        result["tag"] = tag_info["tag"]
+        result["tag_color"] = tag_info["color"]
+
+    except Exception as e:
+        logger.warning(f"[recruitment/playwright] 详情抓取失败 {url}: {e}")
+    return result
 
 
 def _scrape_article_detail(url: str) -> dict:
@@ -200,8 +301,10 @@ CATEGORY_CONFIG = {
 
 
 def scrape_category(db: Session, category: str, config: dict) -> int:
-    """爬取指定分类的招考信息，返回新增数量"""
+    """爬取指定分类的招考信息，返回新增数量。使用Playwright抓取详情页（channel-main精确提取）"""
     count = 0
+    browser = None
+    pw_instance = None
     try:
         logger.info(f"[recruitment/{category}] 开始爬取...")
         resp = safe_request(config["url"], label=f"recruitment/{category}")
@@ -215,7 +318,6 @@ def scrape_category(db: Session, category: str, config: dict) -> int:
         links = soup.select("a[href]")
         if not links:
             logger.warning(f"[recruitment/{category}] 页面无链接，尝试备用解析...")
-            # 备用：查找所有文本节点中可能包含的链接
             links = soup.find_all("a")
 
         seen_titles = set()
@@ -250,6 +352,24 @@ def scrape_category(db: Session, category: str, config: dict) -> int:
         if not category_items:
             logger.warning(f"[recruitment/{category}] 未匹配到任何条目 (共扫描 {len(links)} 个链接)")
 
+        # 启动 Playwright 浏览器（用于详情页抓取）
+        if HAS_PLAYWRIGHT:
+            try:
+                pw_instance = sync_playwright().start()
+                browser = pw_instance.chromium.launch(headless=True)
+                logger.info(f"[recruitment/{category}] Playwright 浏览器已启动")
+            except Exception as pw_err:
+                logger.warning(f"[recruitment/{category}] Playwright 启动失败，回退到 requests: {pw_err}")
+                browser = None
+
+        # 创建共享 page 用于浏览详情页
+        page = None
+        if browser:
+            try:
+                page = browser.new_page()
+            except Exception:
+                page = None
+
         # 写入数据库（去重）
         for item in category_items:
             try:
@@ -260,8 +380,11 @@ def scrape_category(db: Session, category: str, config: dict) -> int:
                 if exists:
                     continue
 
-                # 抓取详情页
-                detail = _scrape_article_detail(item["url"])
+                # 抓取详情页：优先 Playwright，回退 requests
+                if page:
+                    detail = _scrape_article_detail_playwright(page, item["url"])
+                else:
+                    detail = _scrape_article_detail(item["url"])
 
                 rec = RecruitmentInfo(
                     title=item["title"],
@@ -297,6 +420,24 @@ def scrape_category(db: Session, category: str, config: dict) -> int:
     except Exception as e:
         db.rollback()
         logger.error(f"[recruitment/{category}] 爬取异常: {type(e).__name__}: {e}", exc_info=True)
+
+    finally:
+        # 关闭 Playwright 浏览器
+        if page:
+            try:
+                page.close()
+            except Exception:
+                pass
+        if browser:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if pw_instance:
+            try:
+                pw_instance.stop()
+            except Exception:
+                pass
 
     return count
 

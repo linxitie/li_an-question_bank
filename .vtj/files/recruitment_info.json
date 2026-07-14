@@ -431,7 +431,8 @@
     "expandedId": "null as number | null",
     "loading": "false",
     "categories": "['国考省考'",
-    "allItems": "[] as any[]"
+    "allItems": "[] as any[]",
+    "displayCount": "10"
   },
   "watch": [],
   "expose": [],
@@ -453,11 +454,26 @@
       "params": [
         "statusLabel"
       ]
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "resp && resp.items"
+      ]
+    },
+    "for": {
+      "type": "method",
+      "params": [
+        "const item of catItems"
+      ]
     }
   },
   "computed": {},
   "lifeCycles": {
     "mounted": {
+      "type": "method"
+    },
+    "beforeUnmount": {
       "type": "method"
     }
   },

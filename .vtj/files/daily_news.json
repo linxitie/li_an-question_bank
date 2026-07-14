@@ -683,7 +683,8 @@
     "selectionMenuVisible": "false",
     "selectionMenuPos": "{ x: 0, y: 0 }",
     "selectedText": "''",
-    "highlightColor": "'#FFD700'"
+    "highlightColor": "'#FFD700'",
+    "lineStyle": "'wavy'"
   },
   "watch": [],
   "expose": [],
@@ -724,22 +725,19 @@
       "type": "JSFunction",
       "value": "() => {\n  const sel = window.getSelection();\n  const text = (sel && sel.toString() || '').trim();\n  if (text.length > 0) {\n    this.state.selectedText = text;\n    const range = sel.getRangeAt(0);\n    const rect = range.getBoundingClientRect();\n    this.state.selectionMenuPos = { x: rect.left + rect.width / 2 - 60, y: rect.top - 40 + window.scrollY };\n    this.state.selectionMenuVisible = true;\n  } else {\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n  }\n}"
     },
-    "highlightSelection": {
+    "applyHighlight": {
       "type": "asyncMethod",
-      "params": ["color"],
-      "value": "async (color) => {\n  if (!this.state.selectedText) return;\n  const newsId = this.state.selectedNews.id;\n  const c = color || this.state.highlightColor || '#FFD700';\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {\n      method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ note_text: '', quote_text: this.state.selectedText, color: c })\n    });\n    this.state.highlightColor = c;\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n    await this.fetchNotes(newsId);\n  } catch (e) { console.error('划线失败:', e); }\n}"
+      "value": "async () => {\n  if (!this.state.selectedText) return;\n  const newsId = this.state.selectedNews.id;\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {\n      method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ note_text: '', quote_text: this.state.selectedText, color: this.state.highlightColor, line_style: this.state.lineStyle })\n    });\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n    await this.fetchNotes(newsId);\n  } catch (e) { console.error('划线失败:', e); }\n}"
     },
-    "highlightYellow": {
-      "type": "JSFunction",
-      "value": "async () => { await this.highlightSelection('#FFD700'); }"
+    "toggleCardFavorite": {
+      "type": "asyncMethod",
+      "params": ["item"],
+      "value": "async (item) => {\n  try {\n    const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + item.id + '/favorite', { method: 'POST' });\n    const data = await res.json();\n    item.is_favorited = data.favorited;\n  } catch (e) { console.error('收藏失败:', e); }\n}"
     },
-    "highlightGreen": {
-      "type": "JSFunction",
-      "value": "async () => { await this.highlightSelection('#4CAF50'); }"
-    },
-    "highlightBlue": {
-      "type": "JSFunction",
-      "value": "async () => { await this.highlightSelection('#2196F3'); }"
+    "renderNoteStyle": {
+      "type": "method",
+      "params": ["note"],
+      "value": "(note) => {\n  const color = note.color || '#FFD700';\n  const style = note.line_style || 'wavy';\n  if (style === 'marker') {\n    return { backgroundColor: color + '40', padding: '0 2px', borderRadius: '2px' };\n  } else if (style === 'straight') {\n    return { textDecoration: 'underline', textDecorationColor: color, textUnderlineOffset: '4px' };\n  } else {\n    return { textDecoration: 'underline wavy', textDecorationColor: color, textUnderlineOffset: '4px' };\n  }\n}"
     },
     "noteSelection": {
       "type": "JSFunction",

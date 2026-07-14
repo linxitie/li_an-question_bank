@@ -179,7 +179,8 @@ async def save_note(
         note_text=note_data.get("note_text", ""),
         quote_text=note_data.get("quote_text"),
         quote_position=note_data.get("quote_position"),
-        color=note_data.get("color", "#FFD700")
+        color=note_data.get("color", "#FFD700"),
+        line_style=note_data.get("line_style", "wavy")
     )
     db.add(note)
     db.commit()
@@ -208,6 +209,7 @@ async def get_notes(
                 "quote_text": n.quote_text,
                 "quote_position": n.quote_position,
                 "color": n.color,
+                "line_style": n.line_style or 'wavy',
                 "create_time": n.create_time.isoformat() if n.create_time else None,
                 "update_time": n.update_time.isoformat() if n.update_time else None
             }

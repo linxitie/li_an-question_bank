@@ -1015,6 +1015,8 @@ class ExamCalendar(Base):
     registration_start = Column(DateTime, comment="报名开始时间")
     registration_end = Column(DateTime, comment="报名截止时间")
     url = Column(String(500), comment="原始链接")
+    content_html = Column(Text, comment="考试详情HTML")
+    recruitment_count = Column(String(20), comment="招聘人数")
     status = Column(Integer, default=1, comment="状态")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
 
@@ -1348,6 +1350,7 @@ class NewsNote(Base):
     quote_text = Column(Text, comment="划线原文")
     quote_position = Column(Integer, comment="位置锚点")
     color = Column(String(10), default="#FFD700", comment="划线颜色")
+    line_style = Column(String(20), default='wavy', comment="划线样式: wavy/straight/marker")
     create_time = Column(DateTime, default=datetime.now)
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     user = relationship("SysUser")

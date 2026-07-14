@@ -390,22 +390,11 @@
   "props": [],
   "slots": [],
   "state": {
-    "exams": {
-      "type": "JSExpression",
-      "value": "[]"
-    },
-    "loading": {
-      "type": "JSExpression",
-      "value": "false"
-    },
-    "page": {
-      "type": "JSExpression",
-      "value": "1"
-    },
-    "hasMore": {
-      "type": "JSExpression",
-      "value": "true"
-    }
+    "exams": "[]",
+    "loading": "false",
+    "page": "1",
+    "hasMore": "true",
+    "expandedId": "-1"
   },
   "watch": [],
   "expose": [],
@@ -413,16 +402,26 @@
   "locked": false,
   "methods": {
     "fetchExams": {
-      "type": "JSFunction",
-      "value": "(reset) => {\n  if (reset === void 0) reset = false;\n  if (this.state.loading) return;\n  if (!reset && !this.state.hasMore) return;\n  if (reset) {\n    this.state.page = 1;\n    this.state.exams = [];\n    this.state.hasMore = true;\n  }\n  this.state.loading = true;\n  try {\n    var offset = (this.state.page - 1) * 20;\n    var res = await window.__VTJ_AUTH__.apiFetch('/api/calendar/exams?limit=20&offset=' + offset);\n    var data = await res.json();\n    if (res.ok && data.items) {\n      var items = data.items.map(this.formatExamItem);\n      if (reset) {\n        this.state.exams = items;\n      } else {\n        this.state.exams = this.state.exams.concat(items);\n      }\n      this.state.hasMore = data.has_more !== false;\n      if (data.has_more !== false) {\n        this.state.page = this.state.page + 1;\n      }\n    }\n  } catch (e) {\n  } finally {\n    this.state.loading = false;\n  }\n}"
+      "type": "asyncMethod",
+      "params": [
+        "reset"
+      ]
     },
     "formatExamItem": {
       "type": "JSFunction",
-      "value": "(e) => {\n  return {\n    month: e.month || '',\n    day: e.day || '',\n    title: e.title || '',\n    province: e.province || '',\n    url: e.url || '',\n    exam_format: e.exam_format || '',\n    registration_start: e.registration_start || '',\n    registration_end: e.registration_end || '',\n    registration_display: this.formatRegDate(e.registration_start, e.registration_end),\n    status: e.status || '',\n    status_color: e.status_color || '#10b981'\n  };\n}"
+      "value": "(e) => {\n  return {\n    month: e.month || '',\n    day: e.day || '',\n    title: e.title || '',\n    province: e.province || '',\n    url: e.url || '',\n    exam_format: e.exam_format || '',\n    registration_start: e.registration_start || '',\n    registration_end: e.registration_end || '',\n    registration_display: this.formatRegDate(e.registration_start, e.registration_end),\n    registration_display_html: this.formatRegDateHtml(e.registration_start, e.registration_end),\n    content_html: e.content_html || e.description || '',\n    description: e.description || '',\n    recruitment_count: e.recruitment_count || '',\n    status: e.status || '',\n    status_color: e.status_color || '#10b981'\n  };\n}"
     },
     "formatRegDate": {
       "type": "JSFunction",
       "value": "(start, end) => {\n  if (!start && !end) return '';\n  var s = start ? start.substring(0, 10) : '';\n  var e = end ? end.substring(0, 10) : '';\n  if (s && e) return s + ' ~ ' + e;\n  if (s) return s;\n  if (e) return '截止 ' + e;\n  return '';\n}"
+    },
+    "formatRegDateHtml": {
+      "type": "JSFunction",
+      "value": "(start, end) => {\n  if (!start && !end) return '';\n  var s = start ? start.substring(0, 10) : '';\n  var e = end ? end.substring(0, 10) : '';\n  if (s && e) return s + ' ~ <span style=\"color:#c41e3a;font-weight:700\">' + e + '</span>';\n  if (s) return s;\n  if (e) return '截止 <span style=\"color:#c41e3a;font-weight:700\">' + e + '</span>';\n  return '';\n}"
+    },
+    "toggleExpand": {
+      "type": "JSFunction",
+      "value": "(index) => {\n  this.state.expandedId = this.state.expandedId === index ? -1 : index;\n}"
     },
     "getStatusClass": {
       "type": "JSFunction",
@@ -435,10 +434,20 @@
     "handleExamClick": {
       "type": "JSFunction",
       "value": "(exam) => {\n  if (exam.url) {\n    window.open(exam.url, '_blank');\n  } else {\n    this.$message.info('暂无详情链接');\n  }\n}"
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "reset"
+      ]
     }
   },
   "computed": {},
-  "lifeCycles": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
   "__VERSION__": "1778915692038",
   "dataSources": {
     "examsApi": {
