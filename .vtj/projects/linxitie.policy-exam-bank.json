@@ -594,6 +594,22 @@
       "hidden": false,
       "layout": false,
       "needLogin": true
+    },
+    {
+      "id": "daily_news",
+      "title": "每日新闻",
+      "raw": true,
+      "path": "/daily-news"
+    },
+    {
+      "id": "exam_calendar",
+      "title": "考试日历",
+      "raw": true
+    },
+    {
+      "id": "recruitment_info",
+      "title": "招考信息",
+      "raw": true
     }
   ],
   "blocks": [
