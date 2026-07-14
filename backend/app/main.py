@@ -296,6 +296,25 @@ app.include_router(forum.router)
 app.include_router(admin_api.router, tags=["管理员端"])
 app.include_router(teacher_api.router, tags=["教师端"])
 
+@app.get("/health", tags=["系统"])
+async def health_check():
+    """
+    健康检查接口
+    """
+    return {
+        "status": "healthy",
+        "service": "公安联考题库系统",
+        "version": "1.0.0"
+    }
+
+@app.get("/metrics", tags=["系统"])
+async def get_metrics():
+    return metrics_collector.get_metrics_summary()
+
+@app.get("/metrics/system", tags=["系统"])
+async def get_system_metrics_endpoint():
+    return get_system_metrics()
+
 # ==================== 前端生产版本托管（SPA） ====================
 import os.path as _ospath
 _dist = _ospath.join(_ospath.dirname(_ospath.dirname(_ospath.dirname(_ospath.abspath(__file__)))), 'dist')
@@ -314,33 +333,6 @@ if _ospath.exists(_dist):
         if full_path and _ospath.isfile(file_path):
             return _FileResponse(file_path)
         return _FileResponse(_ospath.join(_dist, 'index.html'))
-
-@app.get("/health", tags=["系统"])
-async def health_check():
-    """
-    健康检查接口
-    """
-    return {
-        "status": "healthy",
-        "service": "公安联考题库系统",
-        "version": "1.0.0"
-    }
-
-# SPA 由 dist/index.html 提供服务，不再需要根路由返回 JSON
-
-@app.get("/metrics", tags=["系统"])
-async def get_metrics():
-    """
-    获取系统性能指标
-    """
-    return metrics_collector.get_metrics_summary()
-
-@app.get("/metrics/system", tags=["系统"])
-async def get_system_metrics_endpoint():
-    """
-    获取系统级性能指标
-    """
-    return get_system_metrics()
 
 @app.get("/metrics/endpoints", tags=["系统"])
 async def get_endpoint_metrics(
