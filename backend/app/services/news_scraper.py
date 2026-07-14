@@ -57,9 +57,41 @@ def _filter_noise(text: str) -> str:
     """过滤新闻正文中的噪音内容（使用 DOTALL 匹配跨行模式）"""
     for pat in NOISE_PATTERNS:
         text = re.sub(pat, '', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # 删除导航风格的行（含|分隔符的短行、纯链接文字行）
+    lines = text.split('\n')
+    filtered_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            filtered_lines.append('')
+            continue
+        # 跳过纯导航行：含多个|分隔且平均每段<15字符
+        if '|' in stripped:
+            parts = [p.strip() for p in stripped.split('|') if p.strip()]
+            if len(parts) >= 2:
+                avg_len = sum(len(p) for p in parts) / len(parts)
+                if avg_len < 15:
+                    continue  # 跳过导航行
+        # 跳过极短的非完整句子行（< 8字符且不以中文句号/问号/感叹号结尾）
+        if len(stripped) < 8 and not re.search(r'[。！？]$', stripped):
+            continue
+        # 跳过已知导航关键词开头的行
+        nav_starts = ['首页', '上一页', '下一页', '返回', '关于', '联系', '版权', 'ICP', '导航', '网站地图']
+        if any(stripped.startswith(ns) for ns in nav_starts):
+            continue
+        filtered_lines.append(stripped)
+
+    text = '\n'.join(filtered_lines)
     # 合并多余空行
     text = re.sub(r'\n{3,}', '\n\n', text)
-    return text.strip()
+    text = text.strip()
+
+    # 如果过滤后内容太短（< 100字符），可能全是噪音，保留原文
+    if len(text) < 100:
+        return text
+
+    return text
 
 
 def _download_images(soup, page_url: str, news_id: int, db: Session, label: str = "") -> int:
@@ -351,11 +383,18 @@ def _fetch_people_detail_playwright(page, url):
                 break
 
         if content_elem:
-            # 移除噪音子元素
+            # 激进移除噪音子元素（导航、侧栏、页头、分享、分页等）
             noise_selectors = [
-                '.nav', '.sidebar', '.ad', '.login', '.register',
-                '.recommend', '.footer', '.header', '.share',
-                '.pagination', '.breadcrumb',
+                '.nav', '.navbar', '.navigation', '.menu',
+                '.sidebar', '.ad', '.advertisement',
+                '.login', '.register', '.user',
+                '.recommend', '.related', '.hot',
+                '.footer', '.header', '.top-bar',
+                '.share', '.share-box', '.toolbar',
+                '.pagination', '.page-nav', '.breadcrumb', '.position',
+                '.crumb', '.path', '.channel-nav',
+                '.search', '.logo', '.qrcode',
+                'script', 'style', 'iframe',
             ]
             for ns in noise_selectors:
                 for el in content_elem.query_selector_all(ns):
