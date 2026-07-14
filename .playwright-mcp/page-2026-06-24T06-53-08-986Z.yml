@@ -1,0 +1,309 @@
+- generic [ref=e3]:
+  - link "Skip to content" [ref=e4] [cursor=pointer]:
+    - /url: "#VPContent"
+  - banner:
+    - generic:
+      - generic:
+        - generic:
+          - link "VTJ.PRO" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e7]: VTJ.PRO
+          - generic [ref=e8]:
+            - button "Search" [ref=e11] [cursor=pointer]:
+              - generic [ref=e14]: Search
+              - generic [ref=e15]:
+                - generic [ref=e16]: Ctrl
+                - generic [ref=e17]: K
+            - navigation "Main Navigation" [ref=e18]:
+              - generic [ref=e19]: Main Navigation
+              - link "指引" [ref=e20] [cursor=pointer]:
+                - /url: /guide/
+                - generic [ref=e21]: 指引
+              - link "平台" [ref=e22] [cursor=pointer]:
+                - /url: https://app.vtj.pro/
+                - generic [ref=e23]: 平台
+              - link "维基" [ref=e24] [cursor=pointer]:
+                - /url: /wiki/
+                - generic [ref=e25]: 维基
+              - link "🔥 高级" [ref=e26] [cursor=pointer]:
+                - /url: /service/
+                - generic [ref=e27]: 🔥 高级
+              - link "动态" [ref=e28] [cursor=pointer]:
+                - /url: /news/
+                - generic [ref=e29]: 动态
+              - button "文档" [ref=e31] [cursor=pointer]:
+                - generic [ref=e33]: 文档
+            - button "extra navigation" [ref=e36] [cursor=pointer]
+  - button "页面导航" [ref=e41] [cursor=pointer]: 页面导航
+  - complementary [ref=e43]:
+    - navigation "Sidebar Navigation" [ref=e45]:
+      - generic [ref=e46]: Sidebar Navigation
+      - generic [ref=e48]:
+        - button "开始" [ref=e49]:
+          - heading "开始" [level=2] [ref=e51]
+        - generic [ref=e52]:
+          - link "关于 VTJ.PRO" [ref=e56] [cursor=pointer]:
+            - /url: /guide/
+            - paragraph [ref=e57]: 关于 VTJ.PRO
+          - link "快速上手" [ref=e61] [cursor=pointer]:
+            - /url: /guide/start.html
+            - paragraph [ref=e62]: 快速上手
+          - link "项目集成" [ref=e66] [cursor=pointer]:
+            - /url: /guide/integration.html
+            - paragraph [ref=e67]: 项目集成
+      - generic [ref=e69]:
+        - button "基础" [ref=e70]:
+          - heading "基础" [level=2] [ref=e72]
+        - generic [ref=e73]:
+          - link "创建一个低代码应用（ Todo ）" [ref=e77] [cursor=pointer]:
+            - /url: /guide/base/todo.html
+            - paragraph [ref=e78]: 创建一个低代码应用（ Todo ）
+          - button "设计器入门教程 toggle section" [ref=e80] [cursor=pointer]:
+            - heading "设计器入门教程" [level=3] [ref=e82]
+            - button "toggle section" [ref=e83]
+          - link "设计器接入指南" [ref=e88] [cursor=pointer]:
+            - /url: /guide/base/integrate.html
+            - paragraph [ref=e89]: 设计器接入指南
+          - link "物料制作指南" [ref=e93] [cursor=pointer]:
+            - /url: /guide/base/materials.html
+            - paragraph [ref=e94]: 物料制作指南
+          - link "应用增强" [ref=e98] [cursor=pointer]:
+            - /url: /guide/base/enhance.html
+            - paragraph [ref=e99]: 应用增强
+          - link "网络请求" [ref=e103] [cursor=pointer]:
+            - /url: /guide/base/request.html
+            - paragraph [ref=e104]: 网络请求
+          - link "权限控制" [ref=e108] [cursor=pointer]:
+            - /url: /guide/base/access.html
+            - paragraph [ref=e109]: 权限控制
+          - link "应用全局设置" [ref=e113] [cursor=pointer]:
+            - /url: /guide/base/globals.html
+            - paragraph [ref=e114]: 应用全局设置
+          - link "视频教程专题" [ref=e118] [cursor=pointer]:
+            - /url: https://space.bilibili.com/1658426127
+            - paragraph [ref=e119]: 视频教程专题
+      - generic [ref=e121]:
+        - button "进阶" [ref=e122]:
+          - heading "进阶" [level=2] [ref=e124]
+        - generic [ref=e125]:
+          - link "设计器引擎" [ref=e129] [cursor=pointer]:
+            - /url: /guide/extras/engine.html
+            - paragraph [ref=e130]: 设计器引擎
+          - link "核心提供者" [ref=e134] [cursor=pointer]:
+            - /url: /guide/extras/provider.html
+            - paragraph [ref=e135]: 核心提供者
+          - button "核心三件套 toggle section" [ref=e137] [cursor=pointer]:
+            - heading "核心三件套" [level=3] [ref=e139]
+            - button "toggle section" [ref=e140]
+          - generic [ref=e143] [cursor=pointer]:
+            - link "设计器扩展" [ref=e145]:
+              - /url: /guide/extension.html
+              - heading "设计器扩展" [level=3] [ref=e146]
+            - button "toggle section" [ref=e147]
+      - generic [ref=e150]:
+        - button "高级" [ref=e151]:
+          - heading "高级" [level=2] [ref=e153]
+        - generic [ref=e154]:
+          - link "🔥 打造专属在线开发平台" [ref=e158] [cursor=pointer]:
+            - /url: /service/
+            - paragraph [ref=e159]: 🔥 打造专属在线开发平台
+          - link "🧩 集成 RuoYi-Vue3" [ref=e163] [cursor=pointer]:
+            - /url: https://gitee.com/newgateway/VTJ-RuoYi-Vue3
+            - paragraph [ref=e164]: 🧩 集成 RuoYi-Vue3
+      - generic [ref=e166]:
+        - button "专栏" [ref=e167]:
+          - heading "专栏" [level=2] [ref=e169]
+        - generic [ref=e170]:
+          - link "入门指南" [ref=e174] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615379311379283995
+            - paragraph [ref=e175]: 入门指南
+          - link "深入探究" [ref=e179] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615538630096764962
+            - paragraph [ref=e180]: 深入探究
+          - link "平台揭秘" [ref=e184] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7618920576732921882
+            - paragraph [ref=e185]: 平台揭秘
+  - generic [ref=e190]:
+    - main [ref=e191]:
+      - generic [ref=e193]:
+        - heading "关于 VTJ.PRO Permalink to \"关于 VTJ.PRO\"" [level=1] [ref=e194]:
+          - text: 关于 VTJ.PRO
+          - link "Permalink to \"关于 VTJ.PRO\"" [ref=e195] [cursor=pointer]:
+            - /url: "#关于-vtj-pro"
+            - text: "#"
+        - heading "我们为什么做 VTJ.PRO？ Permalink to \"我们为什么做 VTJ.PRO？\"" [level=2] [ref=e196]:
+          - text: 我们为什么做 VTJ.PRO？
+          - link "Permalink to \"我们为什么做 VTJ.PRO？\"" [ref=e197] [cursor=pointer]:
+            - /url: "#我们为什么做-vtj-pro"
+            - text: "#"
+        - paragraph [ref=e198]:
+          - text: 低代码火了很多年，但大多数产品的逻辑是：
+          - strong [ref=e199]: 用“效率”换“控制权”。
+        - list [ref=e200]:
+          - listitem [ref=e201]: 拖出来的页面，是一坨不可读的代码
+          - listitem [ref=e202]: 项目一旦做大，就必须依赖平台
+          - listitem [ref=e203]: 想二次开发？对不起，不支持
+          - listitem [ref=e204]: 想私有化？价格贵到离谱
+        - paragraph [ref=e205]:
+          - text: 作为开发者，我们很清楚这意味着什么：
+          - strong [ref=e206]: 短期爽，长期痛。
+        - paragraph [ref=e207]: VTJ.PRO 就是在这个背景下诞生的。
+        - heading "VTJ.PRO 是什么？ Permalink to \"VTJ.PRO 是什么？\"" [level=2] [ref=e208]:
+          - text: VTJ.PRO 是什么？
+          - link "Permalink to \"VTJ.PRO 是什么？\"" [ref=e209] [cursor=pointer]:
+            - /url: "#vtj-pro-是什么"
+            - text: "#"
+        - blockquote [ref=e210]:
+          - paragraph [ref=e211]:
+            - strong [ref=e212]: VTJ.PRO 是给专业开发者的 AI 低代码引擎。
+        - paragraph [ref=e213]:
+          - text: 它不是“业务人员的零代码工具”，
+          - text: 也不是“只能在线使用的 SaaS 平台”，
+          - text: 而是一个
+          - strong [ref=e214]: 可私有化、可深度定制、可完全掌控源码的工程化引擎
+          - text: 。
+        - paragraph [ref=e215]: 我们用一句话概括它：
+        - blockquote [ref=e216]:
+          - paragraph [ref=e217]:
+            - strong [ref=e218]: 设计即代码，代码即设计。
+        - heading "我们的核心原则 Permalink to \"我们的核心原则\"" [level=2] [ref=e219]:
+          - text: 我们的核心原则
+          - link "Permalink to \"我们的核心原则\"" [ref=e220] [cursor=pointer]:
+            - /url: "#我们的核心原则"
+            - text: "#"
+        - heading "1️⃣ 绝不锁代码 Permalink to \"1️⃣ 绝不锁代码\"" [level=3] [ref=e221]:
+          - text: 1️⃣ 绝不锁代码
+          - link "Permalink to \"1️⃣ 绝不锁代码\"" [ref=e222] [cursor=pointer]:
+            - /url: "#_1️⃣-绝不锁代码"
+            - text: "#"
+        - paragraph [ref=e223]:
+          - text: VTJ.PRO 生成的是
+          - strong [ref=e224]: 标准 Vue 3 + TypeScript 项目
+          - text: ：
+        - list [ref=e225]:
+          - listitem [ref=e226]: 无私有运行时
+          - listitem [ref=e227]: 无平台专属标记
+          - listitem [ref=e228]: 无“离开平台就废”的黑盒逻辑
+        - paragraph [ref=e229]: 你可以：
+        - list [ref=e230]:
+          - listitem [ref=e231]: 在设计器里拖
+          - listitem [ref=e232]: 在 IDE 里改
+          - listitem [ref=e233]: 随时脱离 VTJ.PRO 继续维护
+        - paragraph [ref=e234]:
+          - strong [ref=e235]: 这是我们对开发者最基本的尊重。
+        - heading "2️⃣ 双向代码转换 Permalink to \"2️⃣ 双向代码转换\"" [level=3] [ref=e236]:
+          - text: 2️⃣ 双向代码转换
+          - link "Permalink to \"2️⃣ 双向代码转换\"" [ref=e237] [cursor=pointer]:
+            - /url: "#_2️⃣-双向代码转换"
+            - text: "#"
+        - paragraph [ref=e238]: 这是我们和绝大多数低代码平台最大的区别。
+        - list [ref=e239]:
+          - listitem [ref=e240]: 拖拽生成的页面 → 导出为 Vue 单文件组件
+          - listitem [ref=e241]: 已有的 Vue 项目 → 反向解析为 DSL，回到设计器继续编辑
+        - paragraph [ref=e242]:
+          - text: 这不是“代码预览”，而是
+          - strong [ref=e243]: 真正的双向编译闭环
+          - text: 。
+        - heading "3️⃣ AI 是副驾驶，不是玩具 Permalink to \"3️⃣ AI 是副驾驶，不是玩具\"" [level=3] [ref=e244]:
+          - text: 3️⃣ AI 是副驾驶，不是玩具
+          - link "Permalink to \"3️⃣ AI 是副驾驶，不是玩具\"" [ref=e245] [cursor=pointer]:
+            - /url: "#_3️⃣-ai-是副驾驶-不是玩具"
+            - text: "#"
+        - paragraph [ref=e246]:
+          - text: VTJ.PRO 里的 AI 不是为了“聊天好看”，而是为了
+          - strong [ref=e247]: 干活
+          - text: ：
+        - list [ref=e248]:
+          - listitem [ref=e249]: 自然语言生成页面 / 组件
+          - listitem [ref=e250]: 设计稿 → Vue 组件
+          - listitem [ref=e251]: 报错信息 → 自动修复代码
+          - listitem [ref=e252]: 选中组件 → AI 帮你改样式、补逻辑
+        - paragraph [ref=e253]:
+          - text: 我们希望你用 AI，是为了
+          - strong [ref=e254]: 少写重复代码，而不是多学一个新系统
+          - text: 。
+        - heading "4️⃣ 工程化是第一优先级 Permalink to \"4️⃣ 工程化是第一优先级\"" [level=3] [ref=e255]:
+          - text: 4️⃣ 工程化是第一优先级
+          - link "Permalink to \"4️⃣ 工程化是第一优先级\"" [ref=e256] [cursor=pointer]:
+            - /url: "#_4️⃣-工程化是第一优先级"
+            - text: "#"
+        - paragraph [ref=e257]: VTJ.PRO 从第一天起就按企业级项目标准设计：
+        - list [ref=e258]:
+          - listitem [ref=e259]: Vue 3 / Vite / TypeScript
+          - listitem [ref=e260]: Pinia / vue-i18n / ESLint
+          - listitem [ref=e261]: 多端输出：Web / H5 / UniApp
+          - listitem [ref=e262]: Docker 私有化部署
+        - paragraph [ref=e263]:
+          - strong [ref=e264]: 我们不教你“新框架”，我们只让你用你已经熟悉的东西，更快一点。
+        - heading "谁在用 VTJ.PRO？ Permalink to \"谁在用 VTJ.PRO？\"" [level=2] [ref=e265]:
+          - text: 谁在用 VTJ.PRO？
+          - link "Permalink to \"谁在用 VTJ.PRO？\"" [ref=e266] [cursor=pointer]:
+            - /url: "#谁在用-vtj-pro"
+            - text: "#"
+        - paragraph [ref=e267]: VTJ.PRO 适合：
+        - list [ref=e268]:
+          - listitem [ref=e269]: 需要快速交付中后台系统的团队
+          - listitem [ref=e270]: 外包公司 / 内部工具团队
+          - listitem [ref=e271]: 想把老旧 Vue 项目现代化改造的技术负责人
+          - listitem [ref=e272]: 对代码质量有执念的前端工程师
+        - paragraph [ref=e273]:
+          - text: 我们不强求“人人都用”，
+          - text: 我们只服务那些
+          - strong [ref=e274]: 既想要效率，又不想丢掉控制权的人
+          - text: 。
+        - heading "关于作者 Permalink to \"关于作者\"" [level=2] [ref=e275]:
+          - text: 关于作者
+          - link "Permalink to \"关于作者\"" [ref=e276] [cursor=pointer]:
+            - /url: "#关于作者"
+            - text: "#"
+        - paragraph [ref=e277]: VTJ.PRO 由我一人发起并持续维护（目前）。
+        - paragraph [ref=e278]: 我做这个项目的初衷很简单：
+        - blockquote [ref=e279]:
+          - paragraph [ref=e280]:
+            - strong [ref=e281]: 如果低代码注定要牺牲代码质量，那我宁愿自己写一个不牺牲的。
+        - paragraph [ref=e282]: 目前 VTJ.PRO 已：
+        - list [ref=e283]:
+          - listitem [ref=e284]: 在 Gitee 获得 1w+ Star
+          - listitem [ref=e285]: 被多家企业用于实际生产环境
+          - listitem [ref=e286]: 逐步构建起围绕 Vue 3 的 AI 低代码生态
+        - paragraph [ref=e287]: 如果你愿意，欢迎一起把它做得更扎实一点。
+        - heading "开源 & 商业 Permalink to \"开源 & 商业\"" [level=2] [ref=e288]:
+          - text: 开源 & 商业
+          - link "Permalink to \"开源 & 商业\"" [ref=e289] [cursor=pointer]:
+            - /url: "#开源-商业"
+            - text: "#"
+        - paragraph [ref=e290]:
+          - text: VTJ.PRO 的核心引擎是
+          - strong [ref=e291]: 开源的
+          - text: 。
+        - paragraph [ref=e292]: 同时，我们也提供：
+        - list [ref=e293]:
+          - listitem [ref=e294]: 商业组件库
+          - listitem [ref=e295]: 企业级插件
+          - listitem [ref=e296]: 私有化部署支持
+          - listitem [ref=e297]: 定制化技术服务
+        - paragraph [ref=e298]:
+          - text: 我们相信：
+          - strong [ref=e299]: 开源赢得信任，商业保障可持续。
+        - heading "联系与合作 Permalink to \"联系与合作\"" [level=2] [ref=e300]:
+          - text: 联系与合作
+          - link "Permalink to \"联系与合作\"" [ref=e301] [cursor=pointer]:
+            - /url: "#联系与合作"
+            - text: "#"
+        - paragraph [ref=e302]: 无论你是：
+        - list [ref=e303]:
+          - listitem [ref=e304]: 想用 VTJ.PRO 做项目
+          - listitem [ref=e305]: 想基于 VTJ.PRO 做二次开发
+          - listitem [ref=e306]: 或者只是单纯想聊聊低代码和 AI
+        - paragraph [ref=e307]: 都欢迎你找到我。
+        - blockquote [ref=e308]:
+          - paragraph [ref=e309]:
+            - text: VTJ.PRO 不是一个“平台”，
+            - text: 它是一个属于开发者的工具。
+    - contentinfo [ref=e310]:
+      - navigation "Pager" [ref=e311]:
+        - generic [ref=e312]: Pager
+        - link "Next page 快速上手" [ref=e315] [cursor=pointer]:
+          - /url: /guide/start.html
+          - generic [ref=e316]: Next page
+          - generic [ref=e317]: 快速上手

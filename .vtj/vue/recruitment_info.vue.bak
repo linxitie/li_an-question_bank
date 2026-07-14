@@ -1,0 +1,652 @@
+<!-- 招考信息模块 - 2x3网格 · 箭头展开 · 胶囊状态标签 · 20px -->
+<template>
+  <div class="recruitment-panel">
+    <!-- 面板标题 -->
+    <div class="panel-header">
+      <div class="header-left">
+        <XIcon :icon="Opportunity" :size="24" color="#c8161e"></XIcon>
+        <span class="header-title">招考信息</span>
+      </div>
+      <span class="header-badge pulse-dot">实时更新</span>
+    </div>
+
+    <!-- 加载状态 -->
+    <div v-if="state.recruitLoading" class="recruit-loading">
+      <span>正在加载招考信息...</span>
+    </div>
+
+    <!-- 2x3 招考卡片网格 -->
+    <div v-else class="recruitment-grid">
+      <div
+        v-for="(card, idx) in state.recruitmentList"
+        :key="card.id"
+        class="recruitment-card"
+      >
+        <!-- 卡片头部：图标 + 分类名 + 数量 + 箭头(>) -->
+        <div class="card-header-row" @click="toggleCardExpand(card.id)">
+          <div class="card-header-left">
+            <div class="card-icon-circle" :style="{ background: card.color + '15' }">
+              <XIcon :icon="card.icon" :size="24" :color="card.color"></XIcon>
+            </div>
+            <div class="card-title-group">
+              <span class="card-title">{{ card.title }}</span>
+              <span class="card-count">{{ card.allItems.length }}条招考</span>
+            </div>
+          </div>
+          <div class="card-header-right">
+            <span class="card-arrow" :class="{ 'arrow-expanded': card.expanded }">›</span>
+          </div>
+        </div>
+
+        <!-- 标题列表：收起5条 / 展开10条，纯行高留白分割 -->
+        <div class="recruit-title-list" v-if="card.allItems.length > 0">
+          <div
+            v-for="(ri, ridx) in card.allItems.slice(0, card.expanded ? 10 : 5)"
+            :key="ridx"
+            class="recruit-title-item"
+            @click="openDetail(ri)"
+          >
+            <!-- 胶囊状状态标签 -->
+            <span
+              class="status-badge"
+              :style="{
+                color: ri.status_color || ri.tag_color || '#10b981',
+                background: (ri.status_color || ri.tag_color || '#10b981') + '15'
+              }"
+            >{{ ri.status_label || ri.tag || '正在报名' }}</span>
+            <!-- 标题文字 -->
+            <span class="recruit-title-text" :title="ri.title">
+              {{ ri.title && ri.title.length > 16 ? ri.title.substring(0, 16) + '...' : (ri.title || '未知标题') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- 空状态 -->
+        <div class="recruit-empty" v-else>
+          <span>暂无招考信息</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div class="recruit-modal-overlay" v-if="state.showModal" @click.self="closeDetail">
+      <div class="recruit-modal">
+        <div class="recruit-modal-header">
+          <h3 class="recruit-modal-title">{{ state.selectedRecruit.title }}</h3>
+          <button class="recruit-modal-close" @click="closeDetail">&times;</button>
+        </div>
+        <div class="recruit-modal-tags">
+          <span class="recruit-modal-cat" v-if="state.selectedRecruit.category">
+            {{ state.selectedRecruit.category }}
+          </span>
+          <span
+            class="recruit-modal-status"
+            v-if="state.selectedRecruit.status_label"
+            :style="{
+              color: state.selectedRecruit.status_color || '#10b981',
+              background: (state.selectedRecruit.status_color || '#10b981') + '15'
+            }"
+          >{{ state.selectedRecruit.status_label }}</span>
+          <span class="recruit-modal-org" v-if="state.selectedRecruit.organization">
+            {{ state.selectedRecruit.organization }}
+          </span>
+          <span class="recruit-modal-time" v-if="state.selectedRecruit.registration_start">
+            报名: {{ state.selectedRecruit.registration_start }}
+          </span>
+          <span class="recruit-modal-time" v-if="state.selectedRecruit.registration_end">
+            截止: {{ state.selectedRecruit.registration_end }}
+          </span>
+        </div>
+        <div class="recruit-modal-body">
+          <div class="recruit-modal-section" v-if="state.selectedRecruit.requirements">
+            <h4>招聘条件</h4>
+            <p>{{ state.selectedRecruit.requirements }}</p>
+          </div>
+          <div class="recruit-modal-section">
+            <h4>招聘详情</h4>
+            <p>{{ state.selectedRecruit.content || '暂无详细内容，请点击"查看原文"获取完整信息。' }}</p>
+          </div>
+        </div>
+        <div class="recruit-modal-footer">
+          <a v-if="state.selectedRecruit.url" :href="state.selectedRecruit.url" target="_blank" class="recruit-modal-link">查看原文</a>
+          <button class="recruit-modal-btn" @click="closeDetail">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快捷链接 -->
+    <div class="quick-links">
+      <div
+        v-for="(link, idx) in state.quickLinks"
+        :key="idx"
+        class="quick-link-item"
+        @click="handleQuickLink(link)"
+      >
+        <XIcon :icon="link.icon" :size="18" color="#c8161e"></XIcon>
+        <span>{{ link.label }}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script lang="ts">
+// @ts-nocheck
+import { defineComponent, reactive } from 'vue';
+import { XIcon } from '@vtj/ui';
+import {
+  Opportunity,
+  Files,
+  DArrowRight,
+  OfficeBuilding,
+  Suitcase,
+  CreditCard,
+  FirstAidKit,
+  School,
+  Briefcase
+} from '@vtj/icons';
+import { useProvider } from '@vtj/renderer';
+
+export default defineComponent({
+  name: 'RecruitmentInfo',
+  components: { XIcon },
+  setup(props) {
+    const provider = useProvider({ id: 'recruitment_info', version: '1778915950685' });
+    const CATEGORY_ORDER = ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'];
+    const CATEGORY_ICONS: Record<string, any> = {
+      '国考省考': OfficeBuilding, '事业单位': Suitcase, '教师招聘': School,
+      '国企招聘': Briefcase, '医疗卫生': FirstAidKit, '三支一扶': CreditCard
+    };
+    const CATEGORY_COLORS: Record<string, string> = {
+      '国考省考': '#c8161e', '事业单位': '#e67e22', '教师招聘': '#8e44ad',
+      '国企招聘': '#d35400', '医疗卫生': '#27ae60', '三支一扶': '#2e86c1'
+    };
+    const state = reactive({
+      quickLinks: [
+        { label: '查看全部招考', icon: Files },
+        { label: '订阅提醒', icon: DArrowRight }
+      ],
+      recruitmentList: [] as any[],
+      recruitLoading: false,
+      recruitLoaded: false,
+      showModal: false,
+      selectedRecruit: {} as any
+    });
+    return {
+      state, props, provider,
+      Opportunity, Files, DArrowRight,
+      OfficeBuilding, Suitcase, CreditCard, FirstAidKit, School, Briefcase,
+      CATEGORY_ORDER, CATEGORY_ICONS, CATEGORY_COLORS
+    };
+  },
+  methods: {
+    ensureLogin() {
+      if ((window as any).__VTJ_AUTH__ && (window as any).__VTJ_AUTH__.isLoggedIn && (window as any).__VTJ_AUTH__.isLoggedIn()) return true;
+      return false;
+    },
+    getJsonHeaders() {
+      return ((window as any).__VTJ_AUTH__ && (window as any).__VTJ_AUTH__.getJsonHeaders) ? (window as any).__VTJ_AUTH__.getJsonHeaders() : { 'Content-Type': 'application/json' };
+    },
+    getAuthHeaders() {
+      return ((window as any).__VTJ_AUTH__ && (window as any).__VTJ_AUTH__.getAuthHeaders) ? (window as any).__VTJ_AUTH__.getAuthHeaders() : {};
+    },
+    async fetchRecruitment() {
+      if (this.state.recruitLoading) return;
+      this.state.recruitLoading = true;
+      try {
+        const headers = this.getAuthHeaders();
+        const resp = await fetch('/api/recruitment?limit=10', { headers });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        if (data && data.items) {
+          this.buildRecruitCards(data.items);
+        } else {
+          this.buildEmptyCards();
+        }
+        this.state.recruitLoaded = true;
+      } catch (e: any) {
+        console.warn('[RecruitmentInfo] fetchRecruitment failed:', e.message);
+        this.buildEmptyCards();
+      } finally {
+        this.state.recruitLoading = false;
+      }
+    },
+    buildRecruitCards(items: any) {
+      var self = this as any;
+      this.state.recruitmentList = this.CATEGORY_ORDER.map(function(cat: string) {
+        var catItems = items[cat] || [];
+        return {
+          id: cat,
+          title: cat,
+          subtitle: self.getSubtitle(cat),
+          icon: self.CATEGORY_ICONS[cat],
+          color: self.CATEGORY_COLORS[cat],
+          allItems: catItems,
+          newCount: catItems.length,
+          expanded: false,
+          route: ''
+        };
+      });
+    },
+    buildEmptyCards() {
+      var self = this as any;
+      this.state.recruitmentList = this.CATEGORY_ORDER.map(function(cat: string) {
+        return {
+          id: cat, title: cat,
+          subtitle: self.getSubtitle(cat),
+          icon: self.CATEGORY_ICONS[cat],
+          color: self.CATEGORY_COLORS[cat],
+          allItems: [], newCount: 0, expanded: false, route: ''
+        };
+      });
+    },
+    getSubtitle(cat: string) {
+      var map: Record<string, string> = {
+        '国考省考': '公务员招录', '事业单位': '编制考试', '教师招聘': '教育系统',
+        '国企招聘': '中央企业', '医疗卫生': '医疗系统', '三支一扶': '基层服务'
+      };
+      return map[cat] || '';
+    },
+    /** 点击箭头(>)切换展开/收起 */
+    toggleCardExpand(catId: string) {
+      var card = this.state.recruitmentList.find(function(c: any) { return c.id === catId; });
+      if (card) card.expanded = !card.expanded;
+    },
+    openDetail(item: any) {
+      this.state.selectedRecruit = item;
+      this.state.showModal = true;
+    },
+    closeDetail() {
+      this.state.showModal = false;
+      this.state.selectedRecruit = {};
+    },
+    handleQuickLink(link: any) {
+      if (link.label === '查看全部招考') {
+        (this as any).$message.info('全部招考信息页面加载中...');
+      } else {
+        (this as any).$message.success('订阅提醒功能已开启');
+      }
+    }
+  },
+  mounted() {
+    this.fetchRecruitment();
+  }
+})
+</script>
+
+<style lang="css" scoped>
+/* ========== 全局字体 20px ========== */
+.recruitment-panel,
+.recruitment-panel * {
+  font-size: 20px;
+  box-sizing: border-box;
+}
+
+/* ========== 面板容器 ========== */
+.recruitment-panel {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 28px 24px;
+  border: 1px solid #e8ecf1;
+  box-shadow: 0 4px 20px rgba(10, 22, 40, 0.04);
+}
+
+/* ========== 面板标题 ========== */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.header-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a2a4a;
+  letter-spacing: 1.5px;
+}
+.header-badge {
+  font-size: 20px;
+  color: #c8161e;
+  background: rgba(200, 22, 30, 0.06);
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+.pulse-dot::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c8161e;
+  margin-right: 6px;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.5); }
+}
+
+/* ========== 加载状态 ========== */
+.recruit-loading {
+  text-align: center;
+  padding: 60px 0;
+  color: #8899aa;
+  font-size: 20px;
+}
+
+/* ========== 2x3 网格 ========== */
+.recruitment-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1000px) {
+  .recruitment-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .recruitment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========== 招考卡片（纯白） ========== */
+.recruitment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #eef1f5;
+  transition: all 0.25s ease;
+}
+.recruitment-card:hover {
+  border-color: rgba(200, 22, 30, 0.18);
+  box-shadow: 0 4px 18px rgba(10, 22, 40, 0.06);
+}
+
+/* ========== 卡片头部（含箭头） ========== */
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding-bottom: 10px;
+  user-select: none;
+  transition: color 0.2s;
+}
+.card-header-row:hover .card-arrow {
+  color: #c8161e;
+}
+.card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.card-icon-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.card-title {
+  font-size: 20px;
+  font-weight: 650;
+  color: #1a2a4a;
+}
+.card-count {
+  font-size: 20px;
+  color: #8899aa;
+}
+.card-header-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* 箭头 > */
+.card-arrow {
+  font-size: 28px;
+  font-weight: 300;
+  color: #bcc5ce;
+  transition: all 0.3s ease;
+  line-height: 1;
+}
+.card-arrow.arrow-expanded {
+  transform: rotate(90deg);
+  color: #c8161e;
+}
+
+/* ========== 标题列表（纯行高留白，无分割线） ========== */
+.recruit-title-list {
+  display: flex;
+  flex-direction: column;
+}
+.recruit-title-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.recruit-title-item:hover {
+  background: rgba(10, 22, 40, 0.02);
+}
+
+/* ========== 胶囊状态标签 ========== */
+.status-badge {
+  display: inline-block;
+  font-size: 20px;
+  font-weight: 500;
+  padding: 3px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: center;
+}
+
+/* ========== 标题文字 ========== */
+.recruit-title-text {
+  font-size: 20px;
+  color: #2c3e50;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+/* ========== 空状态 ========== */
+.recruit-empty {
+  text-align: center;
+  padding: 16px 0;
+}
+.recruit-empty span {
+  font-size: 20px;
+  color: #bcc5ce;
+}
+
+/* ========== 详情弹窗 ========== */
+.recruit-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 24px;
+}
+.recruit-modal {
+  background: #ffffff;
+  border-radius: 18px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 82vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+}
+.recruit-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 28px 28px 14px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.recruit-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a2a4a;
+  margin: 0;
+  flex: 1;
+  padding-right: 16px;
+  line-height: 1.4;
+}
+.recruit-modal-close {
+  background: none;
+  border: none;
+  font-size: 30px;
+  color: #8899aa;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+.recruit-modal-close:hover {
+  color: #c8161e;
+}
+.recruit-modal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 28px;
+}
+.recruit-modal-cat {
+  font-size: 20px;
+  color: #c8161e;
+  background: rgba(200, 22, 30, 0.06);
+  padding: 4px 14px;
+  border-radius: 20px;
+}
+.recruit-modal-status {
+  font-size: 20px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+.recruit-modal-org {
+  font-size: 20px;
+  color: #5a6b7c;
+  background: #f0f2f5;
+  padding: 4px 14px;
+  border-radius: 20px;
+}
+.recruit-modal-time {
+  font-size: 20px;
+  color: #e67e22;
+  background: rgba(230, 126, 34, 0.06);
+  padding: 4px 14px;
+  border-radius: 20px;
+}
+.recruit-modal-body {
+  padding: 8px 28px 20px;
+}
+.recruit-modal-section {
+  margin-bottom: 18px;
+}
+.recruit-modal-section h4 {
+  font-size: 20px;
+  font-weight: 650;
+  color: #2c3e50;
+  margin: 0 0 8px;
+}
+.recruit-modal-section p {
+  font-size: 20px;
+  color: #5a6b7c;
+  line-height: 1.8;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.recruit-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 16px 28px 24px;
+  border-top: 1px solid #f0f2f5;
+}
+.recruit-modal-link {
+  font-size: 20px;
+  color: #2e86c1;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.recruit-modal-link:hover {
+  color: #1a5f8a;
+  text-decoration: underline;
+}
+.recruit-modal-btn {
+  padding: 8px 24px;
+  border-radius: 10px;
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  color: #5a6b7c;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.recruit-modal-btn:hover {
+  border-color: #c8161e;
+  color: #c8161e;
+}
+
+/* ========== 快捷链接 ========== */
+.quick-links {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f2f5;
+}
+.quick-link-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #8899aa;
+  font-size: 20px;
+  transition: all 0.25s;
+}
+.quick-link-item:hover {
+  color: #c8161e;
+  transform: translateX(2px);
+}
+.quick-link-item span {
+  font-size: 20px;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 0.25s;
+}
+.quick-link-item:hover span {
+  border-bottom-color: #c8161e;
+}
+</style>

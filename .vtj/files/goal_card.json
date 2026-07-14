@@ -1,0 +1,52 @@
+{
+  "id": "goal_card",
+  "css": ".goal-card{background:#ffffff;border-radius:16px;padding:20px;box-shadow:0 2px 16px rgba(26,43,95,0.06);transition:all .3s;font-family:'Noto Sans SC','PingFang SC',sans-serif}.goal-card:hover{box-shadow:0 4px 20px rgba(26,43,95,0.1)}.goal-header{display:flex;align-items:center;gap:8px;margin-bottom:16px}.goal-title{font-size:15px;font-weight:700;color:#1a2b5f;flex:1}.add-goal-btn{padding:4px 14px;border:1.5px dashed #c41e3a;border-radius:20px;background:transparent;color:#c41e3a;font-size:15px;font-weight:600;cursor:pointer;transition:all .3s}.add-goal-btn:hover{background:#fef2f3;border-style:solid}.goal-content{display:flex;flex-direction:column;gap:12px;max-height:400px;overflow-y:auto}.goal-loading{text-align:center;padding:24px;color:#8a8faa;font-size:13px}.goal-empty{text-align:center;padding:28px 16px}.goal-empty .empty-icon{font-size:36px;display:block;margin-bottom:10px}.goal-empty p{font-size:14px;color:#8a8faa;margin:0}.goal-item-card{background:#fafbfc;border-radius:12px;padding:14px;border:1px solid #f0f2f5;transition:all .3s}.goal-item-card:hover{border-color:#e0e3e8;box-shadow:0 2px 8px rgba(26,43,95,0.04)}.goal-card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}.goal-type-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:#eef2ff;color:#4f6ef7}.goal-type-badge.weekly{background:#fef3c7;color:#b45309}.goal-type-badge.monthly{background:#ede9fe;color:#7c3aed}.goal-type-badge.custom{background:#fce7f3;color:#be185d}.status-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px}.status-badge.completed{background:#dcfce7;color:#16a34a}.status-badge.overdue{background:#fee2e2;color:#dc2626}.goal-card-title{font-size:13px;font-weight:600;color:#1a2b5f;margin-bottom:8px}.goal-progress-bar{height:6px;background:#f0f2f5;border-radius:3px;overflow:hidden;margin-bottom:8px}.progress-fill{height:100%;background:linear-gradient(90deg,#c41e3a,#ff4d5a);border-radius:3px;transition:width .5s ease;min-width:0}.goal-stats{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.goal-percent{font-size:15px;font-weight:600;color:#c41e3a}.goal-count{font-size:15px;color:#8a8faa;font-weight:500}.goal-deadline{display:flex;align-items:center;gap:4px;font-size:15px;color:#8a8faa;margin-bottom:8px;flex-wrap:wrap}.deadline-label{color:#8a8faa}.deadline-countdown{color:#f59e0b;font-weight:600}.deadline-sep{color:#c0c4d0}.deadline-date{color:#5a6488;font-weight:500}.goal-card-actions{display:flex;gap:6px;flex-wrap:wrap}.goal-action-btn{padding:3px 10px;border-radius:14px;border:1px solid #e0e3e8;background:#fff;font-size:15px;font-weight:500;cursor:pointer;transition:all .25s}.progress-btn{color:#4f6ef7;border-color:#dbeafe}.progress-btn:hover{background:#eef2ff;border-color:#4f6ef7}.complete-btn{color:#16a34a;border-color:#dcfce7}.complete-btn:hover{background:#f0fdf4;border-color:#16a34a}.edit-btn{color:#8a8faa}.edit-btn:hover{color:#1a2b5f;border-color:#1a2b5f}.delete-btn{color:#dc2626;border-color:#fee2e2}.delete-btn:hover{background:#fef2f2;border-color:#dc2626}.goal-dialog-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:1000}.goal-dialog{background:#fff;border-radius:16px;padding:24px;width:400px;max-width:90vw;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(26,43,95,0.15)}.dialog-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}.dialog-header h3{margin:0;font-size:16px;font-weight:700;color:#1a2b5f}.dialog-close-btn{width:28px;height:28px;border:none;background:transparent;font-size:20px;color:#8a8faa;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center}.dialog-close-btn:hover{background:#f0f2f5;color:#1a2b5f}.dialog-body{display:flex;flex-direction:column;gap:14px}.dialog-field{display:flex;flex-direction:column;gap:4px}.dialog-field label{font-size:15px;font-weight:600;color:#5a6488}.dialog-input,.dialog-select{padding:8px 12px;border:1.5px solid #e0e3e8;border-radius:8px;font-size:13px;color:#1a2b5f;background:#fafbfc;outline:none;transition:border-color .25s}.dialog-input:focus,.dialog-select:focus{border-color:#c41e3a;background:#fff}.dialog-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}.dialog-btn{padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .25s;border:none}.dialog-btn.cancel-btn{background:#f0f2f5;color:#8a8faa}.dialog-btn.cancel-btn:hover{background:#e0e3e8;color:#1a2b5f}.dialog-btn.save-btn{background:#c41e3a;color:#fff}.dialog-btn.save-btn:hover{background:#a01830}",
+  "name": "GoalCard",
+  "emits": [
+    { "name": "edit-goal", "params": [] }
+  ],
+  "nodes": [],
+  "props": [],
+  "slots": [],
+  "state": {
+    "goals": { "type": "JSExpression", "value": "[]" },
+    "loading": { "type": "JSExpression", "value": "false" },
+    "showDialog": { "type": "JSExpression", "value": "false" },
+    "dialogMode": { "type": "JSExpression", "value": "'create'" },
+    "editingGoalId": { "type": "JSExpression", "value": "null" },
+    "dialogForm": {
+      "type": "JSExpression",
+      "value": "({ title: '', target_count: 1, goal_type: 'DAILY', deadline: '', priority: 2 })"
+    },
+    "goalTypes": {
+      "type": "JSExpression",
+      "value": "([{ value: 'DAILY', label: '每日' }, { value: 'WEEKLY', label: '每周' }, { value: 'MONTHLY', label: '每月' }, { value: 'CUSTOM', label: '自定义' }])"
+    }
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": true,
+  "methods": {
+    "getJsonHeaders": { "type": "method" },
+    "fetchGoals": { "type": "asyncMethod" },
+    "openCreateDialog": { "type": "method" },
+    "openEditDialog": { "type": "method", "params": ["goal"] },
+    "closeDialog": { "type": "method" },
+    "saveGoal": { "type": "asyncMethod" },
+    "deleteGoal": { "type": "asyncMethod", "params": ["goalId"] },
+    "incrementProgress": { "type": "asyncMethod", "params": ["goalId"] },
+    "confirmComplete": { "type": "asyncMethod", "params": ["goalId"] },
+    "getGoalTypeLabel": { "type": "method", "params": ["type"] },
+    "getGoalStatus": { "type": "method", "params": ["goal"] },
+    "getDeadlineCountdown": { "type": "method", "params": ["deadline"] },
+    "formatDeadline": { "type": "method", "params": ["deadline"] }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": { "type": "JSFunction", "value": "() => { this.fetchGoals(); }" }
+  },
+  "__VERSION__": "1778917924916",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

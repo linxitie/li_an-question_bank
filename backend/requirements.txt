@@ -1,29 +1,60 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-sqlalchemy==2.0.23
-pymysql==1.1.0
-passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.3.0
-redis==5.0.1
-aiofiles==23.2.1
-python-multipart==0.0.6
-pydantic==2.5.2
-pandas==2.1.4
-numpy==1.26.2
-celery==5.3.4
-kombu==5.3.2
-requests==2.31.0
-python-dotenv==1.0.0
-watchdog==3.0.0
-pydantic-settings==2.1.0
-python-ldap==3.4.4
-cryptography==41.0.7
-aioredis==2.0.1
-websockets==12.0
-grpcio==1.60.0
-grpcio-tools==1.60.0
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-httpx==0.25.2
-psutil==5.9.6
+# ==================== 核心 Web 框架（必需）====================
+fastapi>=0.104.0
+uvicorn>=0.24.0
+sqlalchemy>=2.0.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+python-dotenv>=1.0.0
+aiofiles>=23.0.0
+
+# ==================== 认证安全（必需）====================
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+cryptography>=41.0.0
+
+# ==================== 数据库与缓存（必需）====================
+pymysql>=1.1.0
+redis>=5.0.0
+
+# ==================== 数据处理 ====================
+pandas>=2.2.0
+numpy>=1.26.0,<3.0
+openpyxl>=3.1.0
+
+# ==================== HTTP / 网络 ====================
+requests>=2.31.0
+httpx>=0.25.0
+websockets>=12.0
+
+# ==================== 定时任务 ====================
+apscheduler>=3.10.0
+
+# ==================== HTML 解析 ====================
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# ==================== 系统监控 ====================
+psutil>=5.9.0
+watchdog>=3.0.0
+
+# ==================== 测试 ====================
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# ==================== 可选：gRPC 服务（Python 3.13 需 >=1.67.0）====================
+# grpcio>=1.67.0
+# grpcio-tools>=1.67.0
+
+# ==================== 可选：异步任务队列 ====================
+# celery>=5.3.0
+# kombu>=5.3.0
+
+# ==================== 可选：图片 OCR 识别 ====================
+# paddlepaddle>=3.0.0
+# paddleocr>=3.6.0
+# Pillow>=10.0.0
+
+# ==================== 可选：爬虫 ====================
+playwright>=1.48.0
+playwright-stealth>=1.0.6

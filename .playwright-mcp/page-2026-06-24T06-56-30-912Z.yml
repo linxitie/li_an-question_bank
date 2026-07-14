@@ -1,0 +1,412 @@
+- generic [ref=e3]:
+  - link "Skip to content" [ref=e4] [cursor=pointer]:
+    - /url: "#VPContent"
+  - banner:
+    - generic:
+      - generic:
+        - generic:
+          - link "VTJ.PRO" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e7]: VTJ.PRO
+          - generic [ref=e8]:
+            - button "Search" [ref=e11] [cursor=pointer]:
+              - generic [ref=e14]: Search
+              - generic [ref=e15]:
+                - generic [ref=e16]: Ctrl
+                - generic [ref=e17]: K
+            - navigation "Main Navigation" [ref=e18]:
+              - generic [ref=e19]: Main Navigation
+              - link "指引" [ref=e20] [cursor=pointer]:
+                - /url: /guide/
+                - generic [ref=e21]: 指引
+              - link "平台" [ref=e22] [cursor=pointer]:
+                - /url: https://app.vtj.pro/
+                - generic [ref=e23]: 平台
+              - link "维基" [ref=e24] [cursor=pointer]:
+                - /url: /wiki/
+                - generic [ref=e25]: 维基
+              - link "🔥 高级" [ref=e26] [cursor=pointer]:
+                - /url: /service/
+                - generic [ref=e27]: 🔥 高级
+              - link "动态" [ref=e28] [cursor=pointer]:
+                - /url: /news/
+                - generic [ref=e29]: 动态
+              - button "文档" [ref=e31] [cursor=pointer]:
+                - generic [ref=e33]: 文档
+            - button "extra navigation" [ref=e36] [cursor=pointer]
+  - button "页面导航" [ref=e41] [cursor=pointer]: 页面导航
+  - complementary [ref=e43]:
+    - navigation "Sidebar Navigation" [ref=e45]:
+      - generic [ref=e46]: Sidebar Navigation
+      - generic [ref=e48]:
+        - button "开始" [ref=e49]:
+          - heading "开始" [level=2] [ref=e51]
+        - generic [ref=e52]:
+          - link "关于 VTJ.PRO" [ref=e56] [cursor=pointer]:
+            - /url: /guide/
+            - paragraph [ref=e57]: 关于 VTJ.PRO
+          - link "快速上手" [ref=e61] [cursor=pointer]:
+            - /url: /guide/start.html
+            - paragraph [ref=e62]: 快速上手
+          - link "项目集成" [ref=e66] [cursor=pointer]:
+            - /url: /guide/integration.html
+            - paragraph [ref=e67]: 项目集成
+      - generic [ref=e69]:
+        - button "基础" [ref=e70]:
+          - heading "基础" [level=2] [ref=e72]
+        - generic [ref=e73]:
+          - link "创建一个低代码应用（ Todo ）" [ref=e77] [cursor=pointer]:
+            - /url: /guide/base/todo.html
+            - paragraph [ref=e78]: 创建一个低代码应用（ Todo ）
+          - button "设计器入门教程 toggle section" [ref=e80] [cursor=pointer]:
+            - heading "设计器入门教程" [level=3] [ref=e82]
+            - button "toggle section" [ref=e83]
+          - link "设计器接入指南" [ref=e88] [cursor=pointer]:
+            - /url: /guide/base/integrate.html
+            - paragraph [ref=e89]: 设计器接入指南
+          - link "物料制作指南" [ref=e93] [cursor=pointer]:
+            - /url: /guide/base/materials.html
+            - paragraph [ref=e94]: 物料制作指南
+          - link "应用增强" [ref=e98] [cursor=pointer]:
+            - /url: /guide/base/enhance.html
+            - paragraph [ref=e99]: 应用增强
+          - link "网络请求" [ref=e103] [cursor=pointer]:
+            - /url: /guide/base/request.html
+            - paragraph [ref=e104]: 网络请求
+          - link "权限控制" [ref=e108] [cursor=pointer]:
+            - /url: /guide/base/access.html
+            - paragraph [ref=e109]: 权限控制
+          - link "应用全局设置" [ref=e113] [cursor=pointer]:
+            - /url: /guide/base/globals.html
+            - paragraph [ref=e114]: 应用全局设置
+          - link "视频教程专题" [ref=e118] [cursor=pointer]:
+            - /url: https://space.bilibili.com/1658426127
+            - paragraph [ref=e119]: 视频教程专题
+      - generic [ref=e121]:
+        - button "进阶" [ref=e122]:
+          - heading "进阶" [level=2] [ref=e124]
+        - generic [ref=e125]:
+          - link "设计器引擎" [ref=e129] [cursor=pointer]:
+            - /url: /guide/extras/engine.html
+            - paragraph [ref=e130]: 设计器引擎
+          - link "核心提供者" [ref=e134] [cursor=pointer]:
+            - /url: /guide/extras/provider.html
+            - paragraph [ref=e135]: 核心提供者
+          - button "核心三件套 toggle section" [ref=e137] [cursor=pointer]:
+            - heading "核心三件套" [level=3] [ref=e139]
+            - button "toggle section" [ref=e140]
+          - generic [ref=e143] [cursor=pointer]:
+            - link "设计器扩展" [ref=e145]:
+              - /url: /guide/extension.html
+              - heading "设计器扩展" [level=3] [ref=e146]
+            - button "toggle section" [ref=e147]
+      - generic [ref=e150]:
+        - button "高级" [ref=e151]:
+          - heading "高级" [level=2] [ref=e153]
+        - generic [ref=e154]:
+          - link "🔥 打造专属在线开发平台" [ref=e158] [cursor=pointer]:
+            - /url: /service/
+            - paragraph [ref=e159]: 🔥 打造专属在线开发平台
+          - link "🧩 集成 RuoYi-Vue3" [ref=e163] [cursor=pointer]:
+            - /url: https://gitee.com/newgateway/VTJ-RuoYi-Vue3
+            - paragraph [ref=e164]: 🧩 集成 RuoYi-Vue3
+      - generic [ref=e166]:
+        - button "专栏" [ref=e167]:
+          - heading "专栏" [level=2] [ref=e169]
+        - generic [ref=e170]:
+          - link "入门指南" [ref=e174] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615379311379283995
+            - paragraph [ref=e175]: 入门指南
+          - link "深入探究" [ref=e179] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615538630096764962
+            - paragraph [ref=e180]: 深入探究
+          - link "平台揭秘" [ref=e184] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7618920576732921882
+            - paragraph [ref=e185]: 平台揭秘
+  - generic [ref=e190]:
+    - main [ref=e191]:
+      - generic [ref=e193]:
+        - heading "设计器引擎 Permalink to \"设计器引擎\"" [level=1] [ref=e194]:
+          - text: 设计器引擎
+          - link "Permalink to \"设计器引擎\"" [ref=e195] [cursor=pointer]:
+            - /url: "#设计器引擎"
+            - text: "#"
+        - heading "概述 Permalink to \"概述\"" [level=2] [ref=e196]:
+          - text: 概述
+          - link "Permalink to \"概述\"" [ref=e197] [cursor=pointer]:
+            - /url: "#概述"
+            - text: "#"
+        - paragraph [ref=e198]:
+          - code [ref=e199]: Engine
+          - text: 是 VTJ 设计器的核心引擎类，负责管理整个设计器的生命周期和状态。它整合了项目管理、文件操作、历史记录、渲染等核心功能，是设计器架构的中枢系统。
+        - paragraph [ref=e200]
+        - heading "构造函数 (EngineOptions) Permalink to \"构造函数 (EngineOptions)\"" [level=2] [ref=e201]:
+          - text: 构造函数 (EngineOptions)
+          - link "Permalink to \"构造函数 (EngineOptions)\"" [ref=e202] [cursor=pointer]:
+            - /url: "#构造函数-engineoptions"
+            - text: "#"
+        - paragraph [ref=e203]: 创建 Engine 实例时需传入配置对象：
+        - generic [ref=e204]:
+          - button "Copy Code" [ref=e205] [cursor=pointer]
+          - generic [ref=e206]: typescript
+          - code [ref=e208]:
+            - generic [ref=e209]: "interface EngineOptions {"
+            - generic [ref=e210]: "container: MaybeRef<HTMLElement | undefined>; // 设计器渲染容器（必需）"
+            - generic [ref=e211]: "service: Service; // 文件服务接口（必需）"
+            - generic [ref=e212]: "project?: Partial<ProjectSchema>; // 当前加载的项目信息"
+            - generic [ref=e213]: "dependencies?: Record<string, () => Promise<any>>; // 项目依赖"
+            - generic [ref=e214]: "materials?: Record<string, () => Promise<any>>; // 项目物料"
+            - generic [ref=e215]: "materialPath?: string; // 内置物料路径"
+            - generic [ref=e216]: "globals?: Record<string, any>; // 全局变量"
+            - generic [ref=e217]: "adapter?: Partial<ProvideAdapter>; // 设计器画布适配"
+            - generic [ref=e218]: "install?: (app: App, engine?: Engine) => void; // 初始化回调"
+            - generic [ref=e219]: "access?: Access; // 权限控制器"
+            - generic [ref=e220]: "remote?: string | null; // 远程服务地址"
+            - generic [ref=e221]: "checkVersion?: boolean; // 是否检查版本"
+            - generic [ref=e222]: "openApi?: OpenApi; // OpenAPI服务"
+            - generic [ref=e223]: "enhance?: boolean | EnhanceConfig; // 应用增强配置"
+            - generic [ref=e224]: "}"
+        - heading "核心方法 Permalink to \"核心方法\"" [level=2] [ref=e225]:
+          - text: 核心方法
+          - link "Permalink to \"核心方法\"" [ref=e226] [cursor=pointer]:
+            - /url: "#核心方法"
+            - text: "#"
+        - heading "1. 文件操作 Permalink to \"1. 文件操作\"" [level=3] [ref=e227]:
+          - text: 1. 文件操作
+          - link "Permalink to \"1. 文件操作\"" [ref=e228] [cursor=pointer]:
+            - /url: "#_1-文件操作"
+            - text: "#"
+        - 'heading "openFile(fileId?: string) Permalink to \"`openFile(fileId?: string)`\"" [level=4] [ref=e229]':
+          - code [ref=e230]: "openFile(fileId?: string)"
+          - 'link "Permalink to \"`openFile(fileId?: string)`\"" [ref=e231] [cursor=pointer]':
+            - /url: "#openfile-fileid-string"
+            - text: "#"
+        - paragraph [ref=e232]: 打开指定文件：
+        - generic [ref=e233]:
+          - button "Copy Code" [ref=e234] [cursor=pointer]
+          - generic [ref=e235]: typescript
+          - code [ref=e237]:
+            - generic [ref=e238]: // 打开首页
+            - generic [ref=e239]: engine.openFile(project.homepage);
+            - generic [ref=e240]: // 打开特定页面
+            - generic [ref=e241]: engine.openFile('page_123');
+        - 'heading "saveCurrentFile() Permalink to \"`saveCurrentFile()`\"" [level=4] [ref=e242]':
+          - code [ref=e243]: saveCurrentFile()
+          - 'link "Permalink to \"`saveCurrentFile()`\"" [ref=e244] [cursor=pointer]':
+            - /url: "#savecurrentfile"
+            - text: "#"
+        - paragraph [ref=e245]: 保存当前编辑的文件：
+        - generic [ref=e246]:
+          - button "Copy Code" [ref=e247] [cursor=pointer]
+          - generic [ref=e248]: typescript
+          - code [ref=e250]:
+            - generic [ref=e251]: // 通常在内容变更后调用
+            - generic [ref=e252]: engine.saveCurrentFile();
+        - heading "2. 项目操作 Permalink to \"2. 项目操作\"" [level=3] [ref=e253]:
+          - text: 2. 项目操作
+          - link "Permalink to \"2. 项目操作\"" [ref=e254] [cursor=pointer]:
+            - /url: "#_2-项目操作"
+            - text: "#"
+        - 'heading "publish() Permalink to \"`publish()`\"" [level=4] [ref=e255]':
+          - code [ref=e256]: publish()
+          - 'link "Permalink to \"`publish()`\"" [ref=e257] [cursor=pointer]':
+            - /url: "#publish"
+            - text: "#"
+        - paragraph [ref=e258]: 发布整个项目：
+        - generic [ref=e259]:
+          - button "Copy Code" [ref=e260] [cursor=pointer]
+          - generic [ref=e261]: typescript
+          - code [ref=e263]:
+            - generic [ref=e264]: // 整站发布
+            - generic [ref=e265]: engine.publish();
+        - 'heading "genSource() Permalink to \"`genSource()`\"" [level=4] [ref=e266]':
+          - code [ref=e267]: genSource()
+          - 'link "Permalink to \"`genSource()`\"" [ref=e268] [cursor=pointer]':
+            - /url: "#gensource"
+            - text: "#"
+        - paragraph [ref=e269]: 生成项目源代码：
+        - generic [ref=e270]:
+          - button "Copy Code" [ref=e271] [cursor=pointer]
+          - generic [ref=e272]: typescript
+          - code [ref=e274]:
+            - generic [ref=e275]: // 返回生成的源代码
+            - generic [ref=e276]: const source = await engine.genSource();
+        - heading "3. 历史记录 Permalink to \"3. 历史记录\"" [level=3] [ref=e277]:
+          - text: 3. 历史记录
+          - link "Permalink to \"3. 历史记录\"" [ref=e278] [cursor=pointer]:
+            - /url: "#_3-历史记录"
+            - text: "#"
+        - 'heading "initHistory(block: BlockModel | null) Permalink to \"`initHistory(block: BlockModel | null)`\"" [level=4] [ref=e279]':
+          - code [ref=e280]: "initHistory(block: BlockModel | null)"
+          - 'link "Permalink to \"`initHistory(block: BlockModel | null)`\"" [ref=e281] [cursor=pointer]':
+            - /url: "#inithistory-block-blockmodel-null"
+            - text: "#"
+        - paragraph [ref=e282]: 初始化区块的历史记录：
+        - generic [ref=e283]:
+          - button "Copy Code" [ref=e284] [cursor=pointer]
+          - generic [ref=e285]: typescript
+          - code [ref=e287]:
+            - generic [ref=e288]: // 当激活新文件时自动调用
+            - generic [ref=e289]: engine.initHistory(currentBlock);
+        - heading "4. 生命周期 Permalink to \"4. 生命周期\"" [level=3] [ref=e290]:
+          - text: 4. 生命周期
+          - link "Permalink to \"4. 生命周期\"" [ref=e291] [cursor=pointer]:
+            - /url: "#_4-生命周期"
+            - text: "#"
+        - 'heading "dispose() Permalink to \"`dispose()`\"" [level=4] [ref=e292]':
+          - code [ref=e293]: dispose()
+          - 'link "Permalink to \"`dispose()`\"" [ref=e294] [cursor=pointer]':
+            - /url: "#dispose"
+            - text: "#"
+        - paragraph [ref=e295]: 销毁引擎并清理资源：
+        - generic [ref=e296]:
+          - button "Copy Code" [ref=e297] [cursor=pointer]
+          - generic [ref=e298]: typescript
+          - code [ref=e300]:
+            - generic [ref=e301]: // 组件卸载时调用
+            - generic [ref=e302]: "onUnmounted(() => {"
+            - generic [ref=e303]: engine.dispose();
+            - generic [ref=e304]: "});"
+        - heading "事件系统 Permalink to \"事件系统\"" [level=2] [ref=e305]:
+          - text: 事件系统
+          - link "Permalink to \"事件系统\"" [ref=e306] [cursor=pointer]:
+            - /url: "#事件系统"
+            - text: "#"
+        - paragraph [ref=e307]: Engine 使用事件发射器实现模块间通信，关键事件包括：
+        - table [ref=e308]:
+          - rowgroup [ref=e309]:
+            - row "事件名称 触发时机 参数" [ref=e310]:
+              - columnheader "事件名称" [ref=e311]
+              - columnheader "触发时机" [ref=e312]
+              - columnheader "参数" [ref=e313]
+          - rowgroup [ref=e314]:
+            - row "EVENT_PROJECT_CHANGE 项目信息变更 ProjectModelEvent" [ref=e315]:
+              - cell "EVENT_PROJECT_CHANGE" [ref=e316]:
+                - code [ref=e317]: EVENT_PROJECT_CHANGE
+              - cell "项目信息变更" [ref=e318]
+              - cell "ProjectModelEvent" [ref=e319]
+            - row "EVENT_BLOCK_CHANGE 区块内容变更 BlockModel" [ref=e320]:
+              - cell "EVENT_BLOCK_CHANGE" [ref=e321]:
+                - code [ref=e322]: EVENT_BLOCK_CHANGE
+              - cell "区块内容变更" [ref=e323]
+              - cell "BlockModel" [ref=e324]
+            - row "EVENT_HISTORY_CHANGE 历史记录变更 HistoryModelEvent" [ref=e325]:
+              - cell "EVENT_HISTORY_CHANGE" [ref=e326]:
+                - code [ref=e327]: EVENT_HISTORY_CHANGE
+              - cell "历史记录变更" [ref=e328]
+              - cell "HistoryModelEvent" [ref=e329]
+            - row "EVENT_PROJECT_PUBLISH 项目发布 -" [ref=e330]:
+              - cell "EVENT_PROJECT_PUBLISH" [ref=e331]:
+                - code [ref=e332]: EVENT_PROJECT_PUBLISH
+              - cell "项目发布" [ref=e333]
+              - cell "-" [ref=e334]
+            - row "SAVE_BLOCK_FILE_FINISH 文件保存完成 ProjectModelEvent" [ref=e335]:
+              - cell "SAVE_BLOCK_FILE_FINISH" [ref=e336]:
+                - code [ref=e337]: SAVE_BLOCK_FILE_FINISH
+              - cell "文件保存完成" [ref=e338]
+              - cell "ProjectModelEvent" [ref=e339]
+        - paragraph [ref=e340]:
+          - strong [ref=e341]: 事件监听示例
+          - text: ：
+        - generic [ref=e342]:
+          - button "Copy Code" [ref=e343] [cursor=pointer]
+          - generic [ref=e344]: typescript
+          - code [ref=e346]:
+            - generic [ref=e347]: "emitter.on(EVENT_PROJECT_CHANGE, (e) => {"
+            - generic [ref=e348]: console.log('项目变更:', e.model);
+            - generic [ref=e349]: "});"
+        - heading "使用示例 Permalink to \"使用示例\"" [level=2] [ref=e350]:
+          - text: 使用示例
+          - link "Permalink to \"使用示例\"" [ref=e351] [cursor=pointer]:
+            - /url: "#使用示例"
+            - text: "#"
+        - heading "基础用法：初始化引擎 Permalink to \"基础用法：初始化引擎\"" [level=3] [ref=e352]:
+          - text: 基础用法：初始化引擎
+          - link "Permalink to \"基础用法：初始化引擎\"" [ref=e353] [cursor=pointer]:
+            - /url: "#基础用法-初始化引擎"
+            - text: "#"
+        - generic [ref=e354]:
+          - button "Copy Code" [ref=e355] [cursor=pointer]
+          - generic [ref=e356]: typescript
+          - code [ref=e358]:
+            - generic [ref=e359]: "import { Engine } from '@vtj/designer';"
+            - generic [ref=e360]: "const engine = new Engine({"
+            - generic [ref=e361]: "container: document.getElementById('designer-container'),"
+            - generic [ref=e362]: "service: fileService,"
+            - generic [ref=e363]: "project: {"
+            - generic [ref=e364]: "name: '我的项目',"
+            - generic [ref=e365]: "pages: [...],"
+            - generic [ref=e366]: "blocks: [...]"
+            - generic [ref=e367]: "},"
+            - generic [ref=e368]: "materialPath: './materials/',"
+            - generic [ref=e369]: "access: new Access({...}),"
+            - generic [ref=e370]: "});"
+        - heading "高级用法：集成到Vue应用 Permalink to \"高级用法：集成到Vue应用\"" [level=3] [ref=e371]:
+          - text: 高级用法：集成到Vue应用
+          - link "Permalink to \"高级用法：集成到Vue应用\"" [ref=e372] [cursor=pointer]:
+            - /url: "#高级用法-集成到vue应用"
+            - text: "#"
+        - generic [ref=e373]:
+          - button "Copy Code" [ref=e374] [cursor=pointer]
+          - generic [ref=e375]: vue
+          - code [ref=e377]:
+            - generic [ref=e378]: <script setup>
+            - generic [ref=e379]: "import { useEngine } from '@vtj/designer';"
+            - generic [ref=e380]: const engine = useEngine();
+            - generic [ref=e381]: // 打开首页
+            - generic [ref=e382]: "const openHomePage = () => {"
+            - generic [ref=e383]: engine.openFile();
+            - generic [ref=e384]: "};"
+            - generic [ref=e385]: </script>
+            - generic [ref=e386]: <template>
+            - generic [ref=e387]: <button @click="openHomePage">打开首页</button>
+            - generic [ref=e388]: <div id="designer-container"></div>
+            - generic [ref=e389]: </template>
+        - heading "最佳实践 Permalink to \"最佳实践\"" [level=2] [ref=e390]:
+          - text: 最佳实践
+          - link "Permalink to \"最佳实践\"" [ref=e391] [cursor=pointer]:
+            - /url: "#最佳实践"
+            - text: "#"
+        - list [ref=e392]:
+          - listitem [ref=e393]:
+            - strong [ref=e394]: 初始化顺序
+            - text: ：
+        - paragraph [ref=e395]
+        - list [ref=e396]:
+          - listitem [ref=e397]:
+            - paragraph [ref=e398]:
+              - strong [ref=e399]: 错误处理
+              - text: ：
+            - list [ref=e400]:
+              - listitem [ref=e401]:
+                - text: 使用
+                - code [ref=e402]: try/catch
+                - text: 包裹可能失败的操作
+              - listitem [ref=e403]:
+                - text: 检查
+                - code [ref=e404]: project.value?.locked
+                - text: 处理项目锁定状态
+          - listitem [ref=e405]:
+            - paragraph [ref=e406]:
+              - strong [ref=e407]: 性能优化
+              - text: ：
+            - list [ref=e408]:
+              - listitem [ref=e409]:
+                - text: 使用
+                - code [ref=e410]: shallowReactive
+                - text: 减少响应式开销
+              - listitem [ref=e411]:
+                - text: 通过
+                - code [ref=e412]: nextTick
+                - text: 确保DOM更新后操作
+    - contentinfo [ref=e413]:
+      - navigation "Pager" [ref=e414]:
+        - generic [ref=e415]: Pager
+        - link "Previous page 视频教程专题" [ref=e417] [cursor=pointer]:
+          - /url: https://space.bilibili.com/1658426127
+          - generic [ref=e418]: Previous page
+          - generic [ref=e419]: 视频教程专题
+        - link "Next page 核心提供者" [ref=e421] [cursor=pointer]:
+          - /url: /guide/extras/provider.html
+          - generic [ref=e422]: Next page
+          - generic [ref=e423]: 核心提供者

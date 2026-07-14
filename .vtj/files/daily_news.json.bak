@@ -1,0 +1,772 @@
+{
+  "id": "daily_news",
+  "name": "DailyNews",
+  "css": ".news-page {\n  min-height: 100vh;\n  background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);\n  font-family: \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n}\n.news-container {\n  max-width: 1200px;\n  margin: 0 auto;\n  padding: 32px 40px;\n}\n.news-page-header {\n  text-align: center;\n  padding: 40px 0 20px;\n}\n.news-page-title {\n  font-size: 32px;\n  font-weight: 900;\n  color: #1a2b5f;\n  margin: 0;\n  letter-spacing: 4px;\n}\n.news-page-subtitle {\n  font-size: 14px;\n  color: #8a8faa;\n  margin: 8px 0 0;\n}\n/* 筛选标签 */\n.filter-bar {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 16px;\n  margin-bottom: 24px;\n  padding: 20px;\n  background: #ffffff;\n  border-radius: 16px;\n  box-shadow: 0 2px 12px rgba(26,43,95,0.05);\n}\n.filter-group {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.filter-label {\n  font-size: 13px;\n  font-weight: 700;\n  color: #5a6488;\n  margin-right: 4px;\n}\n.filter-tag {\n  padding: 6px 16px;\n  border-radius: 20px;\n  font-size: 13px;\n  cursor: pointer;\n  transition: all 0.3s;\n  border: none;\n  background: #f1f3f8;\n  color: #5a6488;\n  font-weight: 500;\n}\n.filter-tag:hover { background: #e8eaf0; color: #1a2b5f; }\n.filter-tag.active { background: #c41e3a; color: #ffffff; font-weight: 700; }\n/* 新闻列表 */\n.news-list-container {\n  background: #ffffff;\n  border-radius: 16px;\n  box-shadow: 0 2px 12px rgba(26,43,95,0.05);\n  overflow: hidden;\n}\n.news-list-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 20px 24px;\n  border-bottom: 1px solid #f0f2f5;\n}\n.news-count {\n  font-size: 14px;\n  color: #8a8faa;\n}\n.news-count strong { color: #c41e3a; font-size: 16px; }\n.news-card {\n  display: flex;\n  align-items: center;\n  gap: 16px;\n  padding: 18px 24px;\n  border-bottom: 1px solid #f8f9fc;\n  cursor: pointer;\n  transition: all 0.2s;\n}\n.news-card:hover { background: #f8f9fc; }\n.news-card:last-child { border-bottom: none; }\n.news-card-index {\n  width: 28px;\n  height: 28px;\n  border-radius: 8px;\n  background: #f1f3f8;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-size: 12px;\n  font-weight: 700;\n  color: #8a8faa;\n  flex-shrink: 0;\n}\n.news-card:nth-child(-n+3) .news-card-index { background: #fef0f2; color: #c41e3a; }\n.news-card-body { flex: 1; min-width: 0; }\n.news-card-title {\n  font-size: 15px;\n  font-weight: 600;\n  color: #1a2b5f;\n  margin: 0 0 6px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.news-card-meta {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  font-size: 12px;\n  color: #8a8faa;\n}\n.news-source-badge {\n  padding: 2px 8px;\n  border-radius: 6px;\n  font-size: 11px;\n  font-weight: 600;\n}\n.badge-cpd { background: #fef0f2; color: #c41e3a; }\n.badge-people { background: #eff6ff; color: #2563eb; }\n.news-card-arrow { color: #c9cdd8; font-size: 16px; flex-shrink: 0; }\n/* 分页 */\n.pagination-bar {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  padding: 20px;\n}\n.page-btn {\n  padding: 8px 14px;\n  border-radius: 8px;\n  border: 1px solid #e8eaf0;\n  background: #ffffff;\n  color: #5a6488;\n  font-size: 13px;\n  cursor: pointer;\n  transition: all 0.2s;\n}\n.page-btn:hover:not(:disabled) { background: #f1f3f8; color: #1a2b5f; }\n.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }\n.page-btn.active { background: #c41e3a; border-color: #c41e3a; color: #ffffff; font-weight: 700; }\n.page-info { font-size: 12px; color: #8a8faa; margin: 0 8px; }\n/* 空状态 */\n.empty-state {\n  text-align: center;\n  padding: 60px 20px;\n}\n.empty-state p { font-size: 14px; color: #8a8faa; margin: 0; }\n/* 加载状态 */\n.loading-state {\n  text-align: center;\n  padding: 60px 20px;\n}\n.loading-state p { font-size: 14px; color: #8a8faa; margin: 0; }\n/* 弹窗 */\n.news-modal-overlay {\n  position: fixed; top: 0; left: 0; right: 0; bottom: 0;\n  background: rgba(0,0,0,0.5); display: flex; align-items: center;\n  justify-content: center; z-index: 1000;\n}\n.news-modal {\n  background: #ffffff; border-radius: 16px; width: 90%; max-width: 1200px;\n  max-height: 85vh; display: flex; flex-direction: column;\n  box-shadow: 0 8px 40px rgba(26,43,95,0.15); overflow: hidden;\n  padding: 32px 40px;\n}\n.news-modal-header {\n  display: flex; align-items: flex-start; justify-content: space-between;\n  padding: 0 0 16px; border-bottom: 1px solid #f0f2f5;\n}\n.news-modal-title {\n  font-size: 20px; font-weight: 700; color: #1a2b5f;\n  margin: 0; line-height: 1.5; flex: 1; padding-right: 12px;\n}\n.news-modal-close {\n  width: 32px; height: 32px; border: none; background: #f8f9fc;\n  border-radius: 8px; cursor: pointer; font-size: 18px; color: #8a8faa;\n  display: flex; align-items: center; justify-content: center; flex-shrink: 0;\n}\n.news-modal-close:hover { background: #f0f2f5; color: #1a2b5f; }\n.news-modal-meta {\n  display: flex; align-items: center; gap: 12px;\n  padding: 12px 0; border-bottom: 1px solid #f8f9fc;\n}\n.news-modal-body {\n  padding: 20px 0; overflow-y: auto; flex: 1; max-height: 55vh;\n}\n.news-modal-content {\n  font-size: 15px; line-height: 1.8; color: #33375a;\n  margin: 0;\n}\n.news-modal-content p {\n  margin-bottom: 16px; line-height: 1.9;\n}\n.news-modal-content p:last-child { margin-bottom: 0; }\n.news-modal-images {\n  display: flex; flex-direction: column; gap: 16px;\n  padding: 0; margin: 20px 0;\n}\n.news-content-img {\n  max-width: 100%; border-radius: 8px; height: auto;\n  margin: 12px auto; display: block;\n}\n.news-modal-footer {\n  display: flex; justify-content: flex-end; gap: 12px;\n  padding: 16px 0 0; border-top: 1px solid #f0f2f5;\n}\n.news-modal-link {\n  padding: 8px 16px; border-radius: 8px; font-size: 13px;\n  text-decoration: none; color: #5a6488; background: #f8f9fc;\n}\n.news-modal-link:hover { background: #f0f2f5; color: #1a2b5f; }\n.news-modal-btn {\n  padding: 8px 20px; border: none; background: #c41e3a;\n  color: #ffffff; border-radius: 8px; font-size: 13px;\n  font-weight: 600; cursor: pointer;\n}\n.news-modal-btn:hover { background: #a0182e; }",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "dn-root",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "news-page"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "dn-nav",
+          "from": {
+            "id": "navbar",
+            "type": "Schema"
+          },
+          "name": "NavBar",
+          "props": {},
+          "events": {},
+          "locked": false,
+          "children": [],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "dn-container",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "news-container"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "dn-header",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "news-page-header"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "dn-title",
+                  "from": "",
+                  "name": "h1",
+                  "props": {
+                    "class": "news-page-title"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "每日新闻",
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "dn-subtitle",
+                  "from": "",
+                  "name": "p",
+                  "props": {
+                    "class": "news-page-subtitle"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "人民公安报 · 人民网 · 时政要闻早知道",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "dn-filter-bar",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "filter-bar"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "dn-filter-source",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "filter-group"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "dn-filter-source-label",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "filter-label"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "来源:",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-tag-all",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "this.state.sourceFilter === '' ? 'filter-tag active' : 'filter-tag'"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.setSourceFilter('')"
+                        }
+                      },
+                      "locked": false,
+                      "children": "全部",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-tag-cpd",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "this.state.sourceFilter === 'cpd' ? 'filter-tag active' : 'filter-tag'"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.setSourceFilter('cpd')"
+                        }
+                      },
+                      "locked": false,
+                      "children": "人民公安报",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-tag-people",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "this.state.sourceFilter === 'people' ? 'filter-tag active' : 'filter-tag'"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.setSourceFilter('people')"
+                        }
+                      },
+                      "locked": false,
+                      "children": "人民网",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "dn-filter-cat",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "filter-group"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "dn-filter-cat-label",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "filter-label"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "分类:",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-cat-all",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "this.state.categoryFilter === '' ? 'filter-tag active' : 'filter-tag'"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.setCategoryFilter('')"
+                        }
+                      },
+                      "locked": false,
+                      "children": "全部",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-cat-gazette",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "this.state.categoryFilter === '公安报' ? 'filter-tag active' : 'filter-tag'"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.setCategoryFilter('公安报')"
+                        }
+                      },
+                      "locked": false,
+                      "children": "公安报",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-cat-theory",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "this.state.categoryFilter === '理论' ? 'filter-tag active' : 'filter-tag'"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.setCategoryFilter('理论')"
+                        }
+                      },
+                      "locked": false,
+                      "children": "理论",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-cat-dangshi",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": {
+                          "type": "JSExpression",
+                          "value": "this.state.categoryFilter === '党史' ? 'filter-tag active' : 'filter-tag'"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.setCategoryFilter('党史')"
+                        }
+                      },
+                      "locked": false,
+                      "children": "党史",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "dn-list-container",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "news-list-container"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "dn-list-header",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "news-list-header"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "dn-list-count",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "news-count"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.state.loading ? '加载中...' : '共 ' + this.state.totalItems + ' 条新闻'"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "dn-news-cards",
+                  "from": "",
+                  "name": "div",
+                  "props": {},
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "dn-card-item",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "key": {
+                          "type": "JSExpression",
+                          "value": "item.id"
+                        },
+                        "class": "news-card"
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.openDetail(item)"
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "dn-card-index",
+                          "from": "",
+                          "name": "span",
+                          "props": {
+                            "class": "news-card-index"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "(this.state.currentPage - 1) * this.state.pageSize + context.index + 1"
+                          },
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "dn-card-body",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "news-card-body"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "dn-card-title",
+                              "from": "",
+                              "name": "p",
+                              "props": {
+                                "class": "news-card-title"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "item.title"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "dn-card-meta",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "news-card-meta"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "dn-card-source",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": {
+                                      "type": "JSExpression",
+                                      "value": "'news-source-badge ' + (item.source === 'cpd' ? 'badge-cpd' : 'badge-people')"
+                                    }
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "item.source === 'cpd' ? '人民公安报' : '人民网'"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "dn-card-cat",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "item.category"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "dn-card-date",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "item.publish_date ? item.publish_date.substring(0, 10) : ''"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "dn-card-arrow",
+                          "from": "",
+                          "name": "span",
+                          "props": {
+                            "class": "news-card-arrow"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "▶",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "dn-vfor",
+                          "name": "vFor",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.newsItems"
+                          },
+                          "iterator": {
+                            "item": "item",
+                            "index": "index"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "dn-empty",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "empty-state"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "dn-empty-text",
+                      "from": "",
+                      "name": "p",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": "暂无新闻数据，请稍后再来~",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": [
+                    {
+                      "id": "dn-vif-empty",
+                      "name": "vIf",
+                      "value": {
+                        "type": "JSExpression",
+                        "value": "!this.state.loading && !this.state.newsItems.length"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "dn-loading",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "loading-state"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "dn-loading-text",
+                      "from": "",
+                      "name": "p",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": "新闻加载中，请稍候...",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": [
+                    {
+                      "id": "dn-vif-loading",
+                      "name": "vIf",
+                      "value": {
+                        "type": "JSExpression",
+                        "value": "this.state.loading"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "dn-pagination",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "pagination-bar"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "dn-btn-prev",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": "page-btn",
+                        "disabled": {
+                          "type": "JSExpression",
+                          "value": "this.state.currentPage <= 1"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.goPage(this.state.currentPage - 1)"
+                        }
+                      },
+                      "locked": false,
+                      "children": "上一页",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-pages",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "page-info"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.state.currentPage + ' / ' + this.state.totalPages"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "dn-btn-next",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": "page-btn",
+                        "disabled": {
+                          "type": "JSExpression",
+                          "value": "this.state.currentPage >= this.state.totalPages"
+                        }
+                      },
+                      "events": {
+                        "click": {
+                          "type": "JSExpression",
+                          "value": "this.goPage(this.state.currentPage + 1)"
+                        }
+                      },
+                      "locked": false,
+                      "children": "下一页",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": [
+                    {
+                      "id": "dn-vif-pagination",
+                      "name": "vIf",
+                      "value": {
+                        "type": "JSExpression",
+                        "value": "this.state.totalPages > 1"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "newsItems": "[]",
+    "loading": "false",
+    "sourceFilter": "''",
+    "categoryFilter": "''",
+    "currentPage": "1",
+    "pageSize": "20",
+    "totalItems": "0",
+    "totalPages": "1",
+    "showDetailModal": "false",
+    "selectedNews": "{}",
+    "isFavorited": "false",
+    "notes": "[]",
+    "selectionMenuVisible": "false",
+    "selectionMenuPos": "{ x: 0, y: 0 }",
+    "selectedText": "''",
+    "highlightColor": "'#FFD700'",
+    "lineStyle": "'wavy'"
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "setSourceFilter": {
+      "type": "asyncMethod",
+      "params": [
+        "val"
+      ]
+    },
+    "setCategoryFilter": {
+      "type": "JSFunction",
+      "value": "async (val) => {\n  this.state.categoryFilter = val;\n  this.state.currentPage = 1;\n  await this.fetchNews();\n}"
+    },
+    "goPage": {
+      "type": "JSFunction",
+      "value": "async (page) => {\n  if (page < 1 || page > this.state.totalPages) return;\n  this.state.currentPage = page;\n  await this.fetchNews();\n}"
+    },
+    "openDetail": {
+      "type": "JSFunction",
+      "value": "(item) => {\n  this.state.selectedNews = item;\n  this.state.showDetailModal = true;\n  this.state.isFavorited = item.is_favorited || false;\n  this.state.notes = [];\n  this.state.selectionMenuVisible = false;\n  this.fetchNotes(item.id);\n}"
+    },
+    "closeDetail": {
+      "type": "JSFunction",
+      "value": "() => {\n  this.state.showDetailModal = false;\n  this.state.selectedNews = {};\n  this.state.isFavorited = false;\n  this.state.notes = [];\n  this.state.selectionMenuVisible = false;\n}"
+    },
+    "fetchNews": {
+      "type": "JSFunction",
+      "value": "async () => {\n  this.state.loading = true;\n  try {\n    let url = '/api/news?limit=50';\n    if (this.state.sourceFilter) url += '&source=' + this.state.sourceFilter;\n    if (this.state.categoryFilter) url += '&category=' + this.state.categoryFilter;\n    const res = await window.__VTJ_AUTH__.apiFetch(url);\n    const data = await res.json();\n    if (res.ok && data.items) {\n      this.state.totalItems = data.total;\n      const start = (this.state.currentPage - 1) * this.state.pageSize;\n      this.state.newsItems = data.items.slice(start, start + this.state.pageSize);\n      this.state.totalPages = Math.ceil(data.total / this.state.pageSize) || 1;\n    }\n  } catch (e) {\n    console.error('获取新闻失败:', e);\n  } finally {\n    this.state.loading = false;\n  }\n}"
+    },
+    "renderContent": {
+      "type": "JSFunction",
+      "value": "(content) => {\n  if (!content) return '';\n  const paragraphs = content.split(/\\n{2,}/);\n  let html = '';\n  for (const para of paragraphs) {\n    if (para.trim()) {\n      const escaped = para.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n      const withBreaks = escaped.replace(/\\n/g, '<br/>');\n      html += '<p style=\"margin-bottom:16px;text-indent:2em;\">' + withBreaks + '</p>';\n    }\n  }\n  return html;\n}"
+    },
+    "handleTextSelection": {
+      "type": "JSFunction",
+      "value": "() => {\n  const sel = window.getSelection();\n  const text = (sel && sel.toString() || '').trim();\n  if (text.length > 0) {\n    this.state.selectedText = text;\n    const range = sel.getRangeAt(0);\n    const rect = range.getBoundingClientRect();\n    this.state.selectionMenuPos = { x: rect.left + rect.width / 2 - 60, y: rect.top - 40 + window.scrollY };\n    this.state.selectionMenuVisible = true;\n  } else {\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n  }\n}"
+    },
+    "applyHighlight": {
+      "type": "asyncMethod",
+      "value": "async () => {\n  if (!this.state.selectedText) return;\n  const newsId = this.state.selectedNews.id;\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {\n      method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ note_text: '', quote_text: this.state.selectedText, color: this.state.highlightColor, line_style: this.state.lineStyle })\n    });\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n    await this.fetchNotes(newsId);\n  } catch (e) { console.error('划线失败:', e); }\n}"
+    },
+    "toggleCardFavorite": {
+      "type": "asyncMethod",
+      "params": [
+        "item"
+      ],
+      "value": "async (item) => {\n  try {\n    const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + item.id + '/favorite', { method: 'POST' });\n    const data = await res.json();\n    item.is_favorited = data.favorited;\n  } catch (e) { console.error('收藏失败:', e); }\n}"
+    },
+    "renderNoteStyle": {
+      "type": "method",
+      "params": [
+        "note"
+      ],
+      "value": "(note) => {\n  const color = note.color || '#FFD700';\n  const style = note.line_style || 'wavy';\n  if (style === 'marker') {\n    return { backgroundColor: color + '40', padding: '0 2px', borderRadius: '2px' };\n  } else if (style === 'straight') {\n    return { textDecoration: 'underline', textDecorationColor: color, textUnderlineOffset: '4px' };\n  } else {\n    return { textDecoration: 'underline wavy', textDecorationColor: color, textUnderlineOffset: '4px' };\n  }\n}"
+    },
+    "noteSelection": {
+      "type": "JSFunction",
+      "value": "async () => {\n  if (!this.state.selectedText) return;\n  const thought = prompt('记录想法:', '');\n  if (thought === null) return;\n  const newsId = this.state.selectedNews.id;\n  const c = this.state.highlightColor || '#FFD700';\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {\n      method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ note_text: thought, quote_text: this.state.selectedText, color: c })\n    });\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n    await this.fetchNotes(newsId);\n  } catch (e) { console.error('保存想法失败:', e); }\n}"
+    },
+    "toggleFavorite": {
+      "type": "JSFunction",
+      "value": "async () => {\n  const newsId = this.state.selectedNews.id;\n  try {\n    const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/favorite', { method: 'POST' });\n    const data = await res.json();\n    this.state.isFavorited = data.favorited;\n  } catch (e) { console.error('收藏操作失败:', e); }\n}"
+    },
+    "fetchNotes": {
+      "type": "JSFunction",
+      "value": "async (newsId) => {\n  try {\n    const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/notes');\n    const data = await res.json();\n    if (res.ok) { this.state.notes = data.items || []; }\n  } catch (e) { console.error('获取笔记失败:', e); }\n}"
+    },
+    "removeNote": {
+      "type": "JSFunction",
+      "value": "async (noteId) => {\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/notes/' + noteId, { method: 'DELETE' });\n    this.state.notes = this.state.notes.filter(n => n.note_id !== noteId);\n  } catch (e) { console.error('删除笔记失败:', e); }\n}"
+    }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1778918000715",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

@@ -1,0 +1,113 @@
+<h2>P4 招考信息 — 问题诊断与设计方案</h2>
+<p class="subtitle">内容直展 + 过滤优化 + 卡片排版 + 数据库完善</p>
+
+<div class="section">
+  <h3>📋 问题#1: 直接展示完整招考内容</h3>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">❌ 当前状态</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p>• 列表展示标题+标签<br>• 点击后需要跳转"查看原文"<br>• content字段已存储但前端未渲染<br>• 用户体验割裂</p>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">✅ 优化方案</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p><strong>交互改为"点击展开"模式：</strong></p>
+      <p>1. 列表卡片：标题 + 单位 + 地区 + 状态标签<br>2. 点击卡片 → 原地展开（Accordion/Collapse）<br>3. 展开后显示完整内容：<br>
+      ├─ 招聘条件<br>
+      ├─ 报名时间<br>
+      ├─ 考试方式<br>
+      ├─ 正文（HTML渲染）<br>
+      └─ 图片（如有）<br>
+      4. 支持再次点击收起</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🔍 问题#2: 内容过滤 + 排版</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">内容过滤规则</div>
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">过滤类型</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">规则</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">示例</td>
+      </tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">HTML标签</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">移除 script, style, iframe</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">&lt;script&gt;广告代码&lt;/script&gt;</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">非正文区块</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">移除 nav, footer, .sidebar, .ad</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">"上一篇/下一篇"、"推荐阅读"</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">空白噪音</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">合并连续空行（>2 → 1）</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">段间距统一</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">图片</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">保留正文图片，移除装饰图</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">二维码保留、无关icon移除</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📐 问题#3: 卡片排版</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <table style="width:100%; border-collapse:collapse;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">属性</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">值</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">说明</td>
+      </tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">卡片 max-width</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">1200px</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">与新闻统一</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">正文字号</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">15px</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">统一15px</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">行高</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">1.8</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">舒适阅读</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">段落间距</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">16px</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">段落分明</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">标题字号</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">18px / 700</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">招聘标题突出</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">图片</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">max-width: 100%; 居中</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">响应式图片</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🗄️ 问题#4: 数据库完善</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <p><strong>RecruitmentInfo 表字段增强：</strong></p>
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">新增字段</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">类型</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">说明</td>
+      </tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">content_html</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">Text</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">过滤后的HTML正文</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">images</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">JSON</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">[{url, alt, type}] 图片列表</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">exam_format</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">String(50)</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">考试方式（笔试/面试）</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">contact_info</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">String(200)</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">联系方式</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📁 P4 文件变更汇总</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">文件</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">操作</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">内容</td>
+      </tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/services/recruitment_scraper.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 增强</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">进入详情页抓取完整HTML+图片+过滤</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/models/models.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 增强</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">RecruitmentInfo字段扩展</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/api/v1/recruitment.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 修改</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">返回content_html + images + exam_format</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">.vtj/vue/recruitment_info.vue</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 重写</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">点击展开详情 + 1200px卡片 + 15px字体</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">.vtj/files/recruitment_info.json</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 更新</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">DSL更新</td></tr>
+    </table>
+  </div>
+</div>

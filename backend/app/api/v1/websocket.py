@@ -28,6 +28,10 @@ class MessageType(str, Enum):
     NOTIFICATION = "notification"
     CHAT_MESSAGE = "chat_message"
     SYSTEM_ALERT = "system_alert"
+    IMPORT_PROGRESS = "import_progress"
+    IMPORT_QUESTION = "import_question"
+    IMPORT_COMPLETED = "import_completed"
+    IMPORT_FAILED = "import_failed"
 
 class ConnectionManager:
     def __init__(self):

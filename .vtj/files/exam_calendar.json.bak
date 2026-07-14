@@ -1,0 +1,457 @@
+{
+  "id": "exam_calendar",
+  "css": "/* 考试日历卡片 — 75vw 宽 */\n.exam-calendar-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px 20px 12px;\n  border: 1px solid #e8ecf1;\n  box-shadow: 0 4px 20px rgba(10, 22, 40, 0.06);\n  transition: all 0.3s ease;\n  width: 75vw;\n  max-width: 1400px;\n}\n.exam-calendar-card:hover {\n  box-shadow: 0 6px 28px rgba(10, 22, 40, 0.1);\n}\n/* 卡片标题 */\n.card-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 16px;\n  padding-bottom: 12px;\n  border-bottom: 1px solid #f0f2f5;\n}\n.header-left {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.header-title {\n  font-size: 15px;\n  font-weight: 600;\n  color: #1a2a3a;\n  letter-spacing: 1px;\n}\n.header-badge {\n  font-size: 11px;\n  color: #c8161e;\n  background: rgba(200, 22, 30, 0.08);\n  padding: 3px 10px;\n  border-radius: 12px;\n  font-weight: 500;\n}\n/* 考试列表 — 可滚动 */\n.exam-list {\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n  max-height: 55vh;\n  overflow-y: auto;\n  padding-right: 4px;\n}\n.exam-list::-webkit-scrollbar {\n  width: 5px;\n}\n.exam-list::-webkit-scrollbar-thumb {\n  background: #d0d5dd;\n  border-radius: 4px;\n}\n.exam-list::-webkit-scrollbar-track {\n  background: transparent;\n}\n.exam-item {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 10px 12px;\n  border-radius: 10px;\n  cursor: pointer;\n  transition: all 0.25s ease;\n  border: 1px solid transparent;\n}\n.exam-item:hover {\n  background: rgba(200, 22, 30, 0.03);\n  border-color: rgba(200, 22, 30, 0.1);\n  transform: translateX(4px);\n}\n/* 日期盒子 */\n.exam-date-box {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  min-width: 48px;\n  height: 48px;\n  background: linear-gradient(135deg, #fef1f2 0%, #fde8ea 100%);\n  border-radius: 10px;\n  border: 1px solid rgba(200, 22, 30, 0.15);\n  flex-shrink: 0;\n}\n.exam-month {\n  font-size: 11px;\n  font-weight: 500;\n  color: #c8161e;\n  line-height: 1;\n}\n.exam-day {\n  font-size: 18px;\n  font-weight: 700;\n  color: #c8161e;\n  line-height: 1.2;\n}\n/* 考试信息 */\n.exam-info {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 3px;\n  min-width: 0;\n}\n.exam-title-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n}\n.exam-title {\n  font-size: 15px;\n  font-weight: 500;\n  color: #2c3e50;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  flex: 1;\n}\n.exam-format-badge {\n  font-size: 11px;\n  color: #1a2a6c;\n  background: rgba(26, 42, 108, 0.08);\n  padding: 2px 8px;\n  border-radius: 8px;\n  font-weight: 500;\n  white-space: nowrap;\n  flex-shrink: 0;\n}\n.exam-meta-row {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  font-size: 13px;\n}\n.exam-reg-time {\n  color: #666;\n  font-size: 13px;\n  white-space: nowrap;\n}\n.exam-province {\n  font-size: 13px;\n  color: #8899aa;\n}\n/* 状态徽章 */\n.exam-status {\n  display: flex;\n  align-items: center;\n  flex-shrink: 0;\n}\n.status-badge {\n  font-size: 12px;\n  font-weight: 500;\n  color: #fff;\n  padding: 3px 10px;\n  border-radius: 10px;\n  white-space: nowrap;\n}\n/* 加载提示 */\n.exam-loading {\n  text-align: center;\n  padding: 12px;\n  font-size: 13px;\n  color: #8899aa;\n}",
+  "name": "ExamCalendar",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "26edjvcuim8",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "exam-calendar-card"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26eejvcuim8",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "card-header"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26efjvcuim8",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "header-left"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26egjvcuim8",
+                  "from": "@vtj/ui",
+                  "name": "XIcon",
+                  "props": {
+                    "icon": {
+                      "type": "JSExpression",
+                      "value": "this.$libs.VtjIcons.Calendar"
+                    },
+                    "size": {
+                      "type": "JSExpression",
+                      "value": "18"
+                    },
+                    "color": "#c8161e"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26ehjvcuim8",
+                  "from": "",
+                  "name": "span",
+                  "props": {
+                    "class": "header-title"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "考试日历",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26eijvcuim8",
+              "from": "",
+              "name": "span",
+              "props": {
+                "class": "header-badge"
+              },
+              "events": {},
+              "locked": false,
+              "children": "全国招考",
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26ejjvcuim8",
+          "from": "",
+          "name": "div",
+          "props": {
+            "class": "exam-list"
+          },
+          "events": {
+            "scroll": {
+              "name": "scroll",
+              "handler": {
+                "type": "JSExpression",
+                "value": "this.handleScroll"
+              },
+              "modifiers": {}
+            }
+          },
+          "locked": false,
+          "children": [
+            {
+              "id": "26ekjvcuim8",
+              "from": "",
+              "name": "div",
+              "props": {
+                "key": {
+                  "type": "JSExpression",
+                  "value": "this.context.index"
+                },
+                "class": "exam-item"
+              },
+              "events": {
+                "click": {
+                  "name": "click",
+                  "handler": {
+                    "type": "JSExpression",
+                    "value": "this.handleExamClick(this.context.exam)"
+                  },
+                  "modifiers": {}
+                }
+              },
+              "locked": false,
+              "children": [
+                {
+                  "id": "26eljvcuim9",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "exam-date-box"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26emjvcuim9",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "exam-month"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.exam.month + '月'"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26enjvcuim9",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "exam-day"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.exam.day"
+                      },
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26eojvcuim9",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "exam-info"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26eojvcuim9a",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "exam-title-row"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26epjvcuim9",
+                          "from": "",
+                          "name": "span",
+                          "props": {
+                            "class": "exam-title"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.exam.title"
+                          },
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26epjvcuim9a",
+                          "from": "",
+                          "name": "span",
+                          "props": {
+                            "class": "exam-format-badge"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "condition": {
+                            "type": "JSExpression",
+                            "value": "this.context.exam.exam_format"
+                          },
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.exam.exam_format"
+                          },
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26epjvcuim9b",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "exam-meta-row"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26epjvcuim9c",
+                          "from": "",
+                          "name": "span",
+                          "props": {
+                            "class": "exam-reg-time"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "condition": {
+                            "type": "JSExpression",
+                            "value": "this.context.exam.registration_display"
+                          },
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.exam.registration_display"
+                          },
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26eqjvcuim9",
+                          "from": "",
+                          "name": "span",
+                          "props": {
+                            "class": "exam-province"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.exam.province"
+                          },
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26erjvcuim9",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "exam-status"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26erjvcuim9a",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "status-badge"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": {
+                        "type": "JSExpression",
+                        "value": "this.context.exam.status"
+                      },
+                      "invisible": false,
+                      "directives": [],
+                      "style": {
+                        "background": {
+                          "type": "JSExpression",
+                          "value": "this.context.exam.status_color || '#10b981'"
+                        }
+                      }
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": [
+                {
+                  "id": "26ewjvcuioc",
+                  "name": "vFor",
+                  "value": {
+                    "type": "JSExpression",
+                    "value": "this.state.exams"
+                  },
+                  "iterator": {
+                    "item": "exam",
+                    "index": "index"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "26esjvcuim9x",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "exam-loading"
+              },
+              "events": {},
+              "locked": false,
+              "condition": {
+                "type": "JSExpression",
+                "value": "this.state.loading"
+              },
+              "children": "加载中...",
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26esjvcuim9y",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "exam-loading"
+              },
+              "events": {},
+              "locked": false,
+              "condition": {
+                "type": "JSExpression",
+                "value": "!this.state.hasMore && this.state.exams.length > 0"
+              },
+              "children": "没有更多了",
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "exams": "[]",
+    "loading": "false",
+    "page": "1",
+    "hasMore": "true",
+    "expandedId": "-1"
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "fetchExams": {
+      "type": "JSFunction",
+      "value": "(reset) => {\n  if (reset === void 0) reset = false;\n  if (this.state.loading) return;\n  if (!reset && !this.state.hasMore) return;\n  if (reset) {\n    this.state.page = 1;\n    this.state.exams = [];\n    this.state.hasMore = true;\n  }\n  this.state.loading = true;\n  try {\n    var offset = (this.state.page - 1) * 20;\n    var res = await window.__VTJ_AUTH__.apiFetch('/api/calendar/exams?limit=20&offset=' + offset);\n    var data = await res.json();\n    if (res.ok && data.items) {\n      var items = data.items.map(this.formatExamItem);\n      if (reset) {\n        this.state.exams = items;\n      } else {\n        this.state.exams = this.state.exams.concat(items);\n      }\n      this.state.hasMore = data.has_more !== false;\n      if (data.has_more !== false) {\n        this.state.page = this.state.page + 1;\n      }\n    }\n  } catch (e) {\n  } finally {\n    this.state.loading = false;\n  }\n}"
+    },
+    "formatExamItem": {
+      "type": "JSFunction",
+      "value": "(e) => {\n  return {\n    month: e.month || '',\n    day: e.day || '',\n    title: e.title || '',\n    province: e.province || '',\n    url: e.url || '',\n    exam_format: e.exam_format || '',\n    registration_start: e.registration_start || '',\n    registration_end: e.registration_end || '',\n    registration_display: this.formatRegDate(e.registration_start, e.registration_end),\n    registration_display_html: this.formatRegDateHtml(e.registration_start, e.registration_end),\n    content_html: e.content_html || e.description || '',\n    description: e.description || '',\n    recruitment_count: e.recruitment_count || '',\n    status: e.status || '',\n    status_color: e.status_color || '#10b981'\n  };\n}"
+    },
+    "formatRegDate": {
+      "type": "JSFunction",
+      "value": "(start, end) => {\n  if (!start && !end) return '';\n  var s = start ? start.substring(0, 10) : '';\n  var e = end ? end.substring(0, 10) : '';\n  if (s && e) return s + ' ~ ' + e;\n  if (s) return s;\n  if (e) return '截止 ' + e;\n  return '';\n}"
+    },
+    "formatRegDateHtml": {
+      "type": "JSFunction",
+      "value": "(start, end) => {\n  if (!start && !end) return '';\n  var s = start ? start.substring(0, 10) : '';\n  var e = end ? end.substring(0, 10) : '';\n  if (s && e) return s + ' ~ <span style=\"color:#c41e3a;font-weight:700\">' + e + '</span>';\n  if (s) return s;\n  if (e) return '截止 <span style=\"color:#c41e3a;font-weight:700\">' + e + '</span>';\n  return '';\n}"
+    },
+    "toggleExpand": {
+      "type": "JSFunction",
+      "value": "(index) => {\n  this.state.expandedId = this.state.expandedId === index ? -1 : index;\n}"
+    },
+    "getStatusClass": {
+      "type": "JSFunction",
+      "value": "(status) => {\n  if (status === '已截止') return 'status-ended';\n  if (status === '即将报名') return 'status-upcoming';\n  return 'status-open';\n}"
+    },
+    "handleScroll": {
+      "type": "JSFunction",
+      "value": "() => {\n  var el = this.$refs.examList;\n  if (!el) return;\n  var threshold = 80;\n  if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {\n    this.fetchExams(false);\n  }\n}"
+    },
+    "handleExamClick": {
+      "type": "JSFunction",
+      "value": "(exam) => {\n  if (exam.url) {\n    window.open(exam.url, '_blank');\n  } else {\n    this.$message.info('暂无详情链接');\n  }\n}"
+    }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1778915692038",
+  "dataSources": {
+    "examsApi": {
+      "type": "fetch",
+      "url": "/api/calendar/exams",
+      "method": "GET",
+      "params": {
+        "limit": 20,
+        "offset": 0
+      },
+      "responseKey": "items"
+    }
+  },
+  "__VTJ_BLOCK__": true
+}

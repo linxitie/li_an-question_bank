@@ -18,6 +18,7 @@ import router from './router';
 import App from './App.vue';
 import { vtj, name } from '../package.json';
 import './style/index.scss';
+import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
 
 const app = createApp(App);
 const adapter = createAdapter({ loading, notify, Startup, useTitle });

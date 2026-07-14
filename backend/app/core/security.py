@@ -29,8 +29,8 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 class Permission(str, Enum):
-    """权限枚举"""
-    #题目权限
+    """权限枚举 — 三端分离架构 22 项细粒度权限"""
+    # 题目权限
     QUESTION_CREATE = "question:create"
     QUESTION_UPDATE = "question:update"
     QUESTION_DELETE = "question:delete"
@@ -38,80 +38,130 @@ class Permission(str, Enum):
     QUESTION_AUDIT = "question:audit"
     QUESTION_IMPORT = "question:import"
 
-    #试卷权限
+    # 试卷权限
     PAPER_CREATE = "paper:create"
     PAPER_APPROVE = "paper:approve"
     PAPER_PUBLISH = "paper:publish"
     PAPER_VIEW = "paper:view"
     PAPER_UPDATE = "paper:update"
 
-
-    #考试权限
+    # 考试权限
     EXAM_START = "exam:start"
     EXAM_VIEW_ALL = "exam:view_all"
     EXAM_VIEW = "exam:view"
     EXAM_GRADE = "exam:grade"
 
-    #用户管理权限
+    # 用户管理权限
     USER_MANAGE = "user:manage"
     USER_VIEW = "user:view"
 
-    #系统权限
+    # 系统权限
     SYSTEM_CONFIG = "system:config"
     SYSTEM_MONITOR = "system:monitor"
 
-    #视频权限
+    # 日志审计权限（新增）
+    LOG_AUDIT = "log:audit"
+
+    # 数据备份权限（新增）
+    DATA_BACKUP = "data:backup"
+
+    # 视频权限
     VIDEO_UPLOAD = "video:upload"
     VIDEO_DELETE = "video:delete"
 
-    #llm授权
+    # 论坛权限（新增）
+    FORUM_POST = "forum:post"
+    FORUM_MANAGE = "forum:manage"
+
+    # LLM 授权
     LLM_USE = "llm:use"
 
-#角色权限映射
+# 角色权限映射 — 三端分离架构
+# role_level: 0=学生, 1=教师, 2=管理员, 3=超级管理员
 ROLE_PERMISSIONS: Dict[str, List[Permission]] = {
     UserRole.STUDENT: [
         Permission.QUESTION_VIEW,
+        Permission.PAPER_VIEW,
         Permission.EXAM_START,
         Permission.EXAM_VIEW,
         Permission.LLM_USE,
+        Permission.FORUM_POST,
     ],
     UserRole.TEACHER: [
+        # 题目全生命周期
         Permission.QUESTION_CREATE,
         Permission.QUESTION_UPDATE,
+        Permission.QUESTION_DELETE,
+        Permission.QUESTION_VIEW,
+        Permission.QUESTION_AUDIT,
+        Permission.QUESTION_IMPORT,
+        # 试卷全生命周期
+        Permission.PAPER_CREATE,
+        Permission.PAPER_UPDATE,
+        Permission.PAPER_VIEW,
+        Permission.PAPER_PUBLISH,
+        Permission.PAPER_APPROVE,
+        # 考试与成绩
+        Permission.EXAM_START,
+        Permission.EXAM_VIEW_ALL,
+        Permission.EXAM_GRADE,
+        Permission.EXAM_VIEW,
+        # 用户查看
+        Permission.USER_VIEW,
+        # 视频上传
+        Permission.VIDEO_UPLOAD,
+        # 论坛与AI
+        Permission.FORUM_POST,
+        Permission.LLM_USE,
+    ],
+    UserRole.ADMIN: [
+        # 管理员拥有教师全部权限 + 管理权限
+        Permission.QUESTION_CREATE,
+        Permission.QUESTION_UPDATE,
+        Permission.QUESTION_DELETE,
         Permission.QUESTION_VIEW,
         Permission.QUESTION_AUDIT,
         Permission.QUESTION_IMPORT,
         Permission.PAPER_CREATE,
         Permission.PAPER_UPDATE,
         Permission.PAPER_VIEW,
-        Permission.PAPER_PUBLISH,
         Permission.PAPER_APPROVE,
+        Permission.PAPER_PUBLISH,
         Permission.EXAM_START,
         Permission.EXAM_VIEW_ALL,
         Permission.EXAM_GRADE,
         Permission.EXAM_VIEW,
         Permission.USER_VIEW,
-        Permission.VIDEO_UPLOAD,
-        Permission.LLM_USE,
-    ],
-    UserRole.ADMIN: [
-        Permission.QUESTION_CREATE,
-        Permission.QUESTION_UPDATE,
-        Permission.QUESTION_DELETE,
-        Permission.QUESTION_VIEW,
-        Permission.PAPER_CREATE,
-        Permission.PAPER_APPROVE,
-        Permission.PAPER_PUBLISH,
-        Permission.EXAM_START,
-        Permission.EXAM_VIEW_ALL,
-        Permission.EXAM_GRADE,
-        Permission.USER_VIEW,
         Permission.USER_MANAGE,
+        Permission.VIDEO_UPLOAD,
         Permission.VIDEO_DELETE,
         Permission.SYSTEM_CONFIG,
-        Permission.LLM_USE
+        Permission.SYSTEM_MONITOR,
+        Permission.LOG_AUDIT,
+        Permission.FORUM_POST,
+        Permission.FORUM_MANAGE,
+        Permission.LLM_USE,
     ],
 }
+
+# 超级管理员额外权限（role_level >= 3）
+SUPER_ADMIN_PERMISSIONS: List[Permission] = [
+    Permission.DATA_BACKUP,
+]
+
+def get_user_permissions(user: SysUser) -> List[Permission]:
+    """获取用户完整权限列表（含 role_level 升级）"""
+    try:
+        user_role = UserRole(user.user_type)
+    except ValueError:
+        return []
+    perms = list(ROLE_PERMISSIONS.get(user_role, []))
+    # 超级管理员 (role_level >= 3) 追加数据备份权限
+    if user.role_level >= 3:
+        for p in SUPER_ADMIN_PERMISSIONS:
+            if p not in perms:
+                perms.append(p)
+    return perms
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
@@ -202,6 +252,13 @@ async def get_current_user(
             detail="用户已被禁用",
         )
 
+    # 三端分离：检查 is_disabled 标志
+    if getattr(user, 'is_disabled', 0) == 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已被管理员禁用，请联系管理员",
+        )
+
     return user
 
 async def get_current_active_user(
@@ -215,13 +272,43 @@ async def get_current_active_user(
         )
     return current_user
 
-def check_permission(user: SysUser, permission: Permission) -> bool:
-    """检查用户是否有指定权限"""
+async def get_optional_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[SysUser]:
+    """获取当前用户（可选认证，不强制登录）"""
+    if not token:
+        return None
     try:
-        user_role = UserRole(user.user_type)
-    except ValueError:
+        payload = decode_token(token)
+        if payload.get("type") != TokenType.ACCESS.value:
+            return None
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+        user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
+        if user and user.status != 0:
+            return user
+    except Exception:
+        pass
+    return None
+
+def check_permission(user: SysUser, permission: Permission) -> bool:
+    """检查用户是否有指定权限（含 disabled 检查）"""
+    # 禁用用户无任何权限
+    if getattr(user, 'is_disabled', 0) == 1:
         return False
-    return permission in ROLE_PERMISSIONS.get(user_role, [])
+    if user.status == 0:
+        return False
+    user_perms = get_user_permissions(user)
+    return permission in user_perms
+
+def check_any_permission(user: SysUser, *permissions: Permission) -> bool:
+    """检查用户是否有任一权限"""
+    if getattr(user, 'is_disabled', 0) == 1 or user.status == 0:
+        return False
+    user_perms = get_user_permissions(user)
+    return any(p in user_perms for p in permissions)
 
 def require_permission(permission: Permission):
     """需要指定权限的装饰器"""
@@ -290,6 +377,41 @@ def require_student(current_user:SysUser = Depends(get_current_user)) -> SysUser
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="仅学生可以访问"
+        )
+    return current_user
+
+# === 三端分离架构：便捷角色依赖函数 ===
+
+async def get_current_teacher(
+    current_user: SysUser = Depends(get_current_user)
+) -> SysUser:
+    """获取当前教师用户（teacher/admin 均可）"""
+    if current_user.user_type not in [UserRole.TEACHER.value, UserRole.ADMIN.value]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要教师或管理员权限"
+        )
+    return current_user
+
+async def get_current_admin(
+    current_user: SysUser = Depends(get_current_user)
+) -> SysUser:
+    """获取当前管理员用户（role_level >= 2）"""
+    if current_user.user_type != UserRole.ADMIN.value or current_user.role_level < 2:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限"
+        )
+    return current_user
+
+async def get_current_super_admin(
+    current_user: SysUser = Depends(get_current_user)
+) -> SysUser:
+    """获取当前超级管理员用户（role_level >= 3）"""
+    if current_user.user_type != UserRole.ADMIN.value or current_user.role_level < 3:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要超级管理员权限"
         )
     return current_user
 
@@ -566,6 +688,64 @@ class WebSocketManager:
         return list(self.active_connections.keys())
 
 ws_manager = WebSocketManager()
+
+
+# ===================================Session 管理器================================
+class SessionManager:
+    """服务端 Session 管理器 — 三层认证中的 Session 层"""
+    def __init__(self):
+        self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def create_session(self, user_id: int, ip: str, device: str = "") -> str:
+        """创建 session，返回 session_id"""
+        import uuid
+        session_id = uuid.uuid4().hex
+        with self._lock:
+            self._sessions[session_id] = {
+                "user_id": user_id,
+                "ip": ip,
+                "device": device,
+                "login_time": datetime.utcnow(),
+                "last_active": datetime.utcnow(),
+            }
+        # 清理过期 session（超过 8 小时未活跃）
+        self._cleanup()
+        return session_id
+
+    def validate_session(self, session_id: str) -> Optional[int]:
+        """验证 session，返回 user_id 或 None"""
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return None
+            # 检查过期（8 小时未活跃）
+            if datetime.utcnow() - session["last_active"] > timedelta(hours=8):
+                del self._sessions[session_id]
+                return None
+            session["last_active"] = datetime.utcnow()
+            return session["user_id"]
+
+    def destroy_session(self, session_id: str) -> None:
+        """销毁 session"""
+        with self._lock:
+            self._sessions.pop(session_id, None)
+
+    def destroy_user_sessions(self, user_id: int) -> None:
+        """销毁某用户的所有 session（强制下线）"""
+        with self._lock:
+            to_remove = [sid for sid, s in self._sessions.items() if s["user_id"] == user_id]
+            for sid in to_remove:
+                del self._sessions[sid]
+
+    def _cleanup(self) -> None:
+        """清理过期 session"""
+        cutoff = datetime.utcnow() - timedelta(hours=8)
+        to_remove = [sid for sid, s in self._sessions.items() if s["last_active"] < cutoff]
+        for sid in to_remove:
+            del self._sessions[sid]
+
+session_manager = SessionManager()
 
 
 # ================================= 工具函数=====================================

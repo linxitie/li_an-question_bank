@@ -1,0 +1,16 @@
+{
+  "name": "vtj-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server bridging Claude Code with VTJ.PRO low-code platform",
+  "type": "module",
+  "main": "vtj-mcp-server.js",
+  "scripts": {
+    "start": "node vtj-mcp-server.js",
+    "setup": "npm install"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "keywords": ["vtj", "mcp", "claude-code", "low-code"],
+  "license": "MIT"
+}

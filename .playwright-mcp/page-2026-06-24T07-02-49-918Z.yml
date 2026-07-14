@@ -1,0 +1,267 @@
+- generic [ref=e3]:
+  - link "Skip to content" [ref=e4] [cursor=pointer]:
+    - /url: "#VPContent"
+  - banner:
+    - generic:
+      - generic:
+        - generic:
+          - link "VTJ.PRO" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e7]: VTJ.PRO
+          - generic [ref=e8]:
+            - button "Search" [ref=e11] [cursor=pointer]:
+              - generic [ref=e14]: Search
+              - generic [ref=e15]:
+                - generic [ref=e16]: Ctrl
+                - generic [ref=e17]: K
+            - navigation "Main Navigation" [ref=e18]:
+              - generic [ref=e19]: Main Navigation
+              - link "指引" [ref=e20] [cursor=pointer]:
+                - /url: /guide/
+                - generic [ref=e21]: 指引
+              - link "平台" [ref=e22] [cursor=pointer]:
+                - /url: https://app.vtj.pro/
+                - generic [ref=e23]: 平台
+              - link "维基" [ref=e24] [cursor=pointer]:
+                - /url: /wiki/
+                - generic [ref=e25]: 维基
+              - link "🔥 高级" [ref=e26] [cursor=pointer]:
+                - /url: /service/
+                - generic [ref=e27]: 🔥 高级
+              - link "动态" [ref=e28] [cursor=pointer]:
+                - /url: /news/
+                - generic [ref=e29]: 动态
+              - button "文档" [ref=e31] [cursor=pointer]:
+                - generic [ref=e33]: 文档
+            - button "extra navigation" [ref=e36] [cursor=pointer]
+  - button "页面导航" [ref=e41] [cursor=pointer]: 页面导航
+  - complementary [ref=e43]:
+    - navigation "Sidebar Navigation" [ref=e45]:
+      - generic [ref=e46]: Sidebar Navigation
+      - generic [ref=e48]:
+        - button "开始" [ref=e49]:
+          - heading "开始" [level=2] [ref=e51]
+        - generic [ref=e52]:
+          - link "关于 VTJ.PRO" [ref=e56] [cursor=pointer]:
+            - /url: /guide/
+            - paragraph [ref=e57]: 关于 VTJ.PRO
+          - link "快速上手" [ref=e61] [cursor=pointer]:
+            - /url: /guide/start.html
+            - paragraph [ref=e62]: 快速上手
+          - link "项目集成" [ref=e66] [cursor=pointer]:
+            - /url: /guide/integration.html
+            - paragraph [ref=e67]: 项目集成
+      - generic [ref=e69]:
+        - button "基础" [ref=e70]:
+          - heading "基础" [level=2] [ref=e72]
+        - generic [ref=e73]:
+          - link "创建一个低代码应用（ Todo ）" [ref=e77] [cursor=pointer]:
+            - /url: /guide/base/todo.html
+            - paragraph [ref=e78]: 创建一个低代码应用（ Todo ）
+          - button "设计器入门教程 toggle section" [ref=e80] [cursor=pointer]:
+            - heading "设计器入门教程" [level=3] [ref=e82]
+            - button "toggle section" [ref=e83]
+          - link "设计器接入指南" [ref=e88] [cursor=pointer]:
+            - /url: /guide/base/integrate.html
+            - paragraph [ref=e89]: 设计器接入指南
+          - link "物料制作指南" [ref=e93] [cursor=pointer]:
+            - /url: /guide/base/materials.html
+            - paragraph [ref=e94]: 物料制作指南
+          - link "应用增强" [ref=e98] [cursor=pointer]:
+            - /url: /guide/base/enhance.html
+            - paragraph [ref=e99]: 应用增强
+          - link "网络请求" [ref=e103] [cursor=pointer]:
+            - /url: /guide/base/request.html
+            - paragraph [ref=e104]: 网络请求
+          - link "权限控制" [ref=e108] [cursor=pointer]:
+            - /url: /guide/base/access.html
+            - paragraph [ref=e109]: 权限控制
+          - link "应用全局设置" [ref=e113] [cursor=pointer]:
+            - /url: /guide/base/globals.html
+            - paragraph [ref=e114]: 应用全局设置
+          - link "视频教程专题" [ref=e118] [cursor=pointer]:
+            - /url: https://space.bilibili.com/1658426127
+            - paragraph [ref=e119]: 视频教程专题
+      - generic [ref=e121]:
+        - button "进阶" [ref=e122]:
+          - heading "进阶" [level=2] [ref=e124]
+        - generic [ref=e125]:
+          - link "设计器引擎" [ref=e129] [cursor=pointer]:
+            - /url: /guide/extras/engine.html
+            - paragraph [ref=e130]: 设计器引擎
+          - link "核心提供者" [ref=e134] [cursor=pointer]:
+            - /url: /guide/extras/provider.html
+            - paragraph [ref=e135]: 核心提供者
+          - generic [ref=e136]:
+            - button "核心三件套 toggle section" [ref=e137] [cursor=pointer]:
+              - heading "核心三件套" [level=3] [ref=e139]
+              - button "toggle section" [ref=e140]
+            - generic [ref=e142]:
+              - link "DSL渲染器" [ref=e146] [cursor=pointer]:
+                - /url: /guide/extras/renderer.html
+                - paragraph [ref=e147]: DSL渲染器
+              - link "代码生成器" [ref=e151] [cursor=pointer]:
+                - /url: /guide/extras/generator.html
+                - paragraph [ref=e152]: 代码生成器
+              - link "代码解析器" [ref=e156] [cursor=pointer]:
+                - /url: /guide/extras/parser.html
+                - paragraph [ref=e157]: 代码解析器
+          - generic [ref=e159] [cursor=pointer]:
+            - link "设计器扩展" [ref=e161]:
+              - /url: /guide/extension.html
+              - heading "设计器扩展" [level=3] [ref=e162]
+            - button "toggle section" [ref=e163]
+      - generic [ref=e166]:
+        - button "高级" [ref=e167]:
+          - heading "高级" [level=2] [ref=e169]
+        - generic [ref=e170]:
+          - link "🔥 打造专属在线开发平台" [ref=e174] [cursor=pointer]:
+            - /url: /service/
+            - paragraph [ref=e175]: 🔥 打造专属在线开发平台
+          - link "🧩 集成 RuoYi-Vue3" [ref=e179] [cursor=pointer]:
+            - /url: https://gitee.com/newgateway/VTJ-RuoYi-Vue3
+            - paragraph [ref=e180]: 🧩 集成 RuoYi-Vue3
+      - generic [ref=e182]:
+        - button "专栏" [ref=e183]:
+          - heading "专栏" [level=2] [ref=e185]
+        - generic [ref=e186]:
+          - link "入门指南" [ref=e190] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615379311379283995
+            - paragraph [ref=e191]: 入门指南
+          - link "深入探究" [ref=e195] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615538630096764962
+            - paragraph [ref=e196]: 深入探究
+          - link "平台揭秘" [ref=e200] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7618920576732921882
+            - paragraph [ref=e201]: 平台揭秘
+  - generic [ref=e206]:
+    - main [ref=e207]:
+      - generic [ref=e209]:
+        - heading "Generator 代码生成器 Permalink to \"Generator 代码生成器\"" [level=1] [ref=e210]:
+          - text: Generator 代码生成器
+          - link "Permalink to \"Generator 代码生成器\"" [ref=e211] [cursor=pointer]:
+            - /url: "#generator-代码生成器"
+            - text: "#"
+        - heading "设计目标 Permalink to \"设计目标\"" [level=2] [ref=e212]:
+          - text: 设计目标
+          - link "Permalink to \"设计目标\"" [ref=e213] [cursor=pointer]:
+            - /url: "#设计目标"
+            - text: "#"
+        - paragraph [ref=e214]: 将可视化设计稿（DSL）结合组件物料描述，转换为可直接运行的 Vue 单文件组件（.vue），实现从设计到代码的无缝转换。
+        - heading "核心处理流程 Permalink to \"核心处理流程\"" [level=2] [ref=e215]:
+          - text: 核心处理流程
+          - link "Permalink to \"核心处理流程\"" [ref=e216] [cursor=pointer]:
+            - /url: "#核心处理流程"
+            - text: "#"
+        - paragraph [ref=e217]
+        - heading "参数说明 Permalink to \"参数说明\"" [level=2] [ref=e218]:
+          - text: 参数说明
+          - link "Permalink to \"参数说明\"" [ref=e219] [cursor=pointer]:
+            - /url: "#参数说明"
+            - text: "#"
+        - generic [ref=e220]:
+          - button "Copy Code" [ref=e221] [cursor=pointer]
+          - generic [ref=e222]: ts
+          - code [ref=e224]:
+            - generic [ref=e225]: generator(
+            - generic [ref=e226]: "dsl: BlockSchema, // 页面结构DSL"
+            - generic [ref=e227]: "componentMap: Map<string, MaterialDescription>, // 组件物料映射"
+            - generic [ref=e228]: "dependencies: Dependencie[] = [], // 第三方依赖"
+            - generic [ref=e229]: "platform: PlatformType = 'web', // 目标平台"
+            - generic [ref=e230]: "formatterDisabled?: boolean // 禁用格式化"
+            - generic [ref=e231]: )
+        - heading "输出说明 Permalink to \"输出说明\"" [level=2] [ref=e232]:
+          - text: 输出说明
+          - link "Permalink to \"输出说明\"" [ref=e233] [cursor=pointer]:
+            - /url: "#输出说明"
+            - text: "#"
+        - paragraph [ref=e234]: 返回 Promise 解析为以下结构的 Vue SFC 文件：
+        - generic [ref=e235]:
+          - button "Copy Code" [ref=e236] [cursor=pointer]
+          - generic [ref=e237]: vue
+          - code [ref=e239]:
+            - generic [ref=e240]: <template>
+            - generic [ref=e241]: <!-- 解析生成的模板 -->
+            - generic [ref=e242]: </template>
+            - generic [ref=e243]: <script lang="ts" setup>
+            - generic [ref=e244]: // 生成的TypeScript逻辑
+            - generic [ref=e245]: </script>
+            - generic [ref=e246]: <style scoped lang="scss">
+            - generic [ref=e247]: /* 生成的样式 */
+            - generic [ref=e248]: </style>
+        - heading "使用示例 Permalink to \"使用示例\"" [level=2] [ref=e249]:
+          - text: 使用示例
+          - link "Permalink to \"使用示例\"" [ref=e250] [cursor=pointer]:
+            - /url: "#使用示例"
+            - text: "#"
+        - generic [ref=e251]:
+          - button "Copy Code" [ref=e252] [cursor=pointer]
+          - generic [ref=e253]: ts
+          - code [ref=e255]:
+            - generic [ref=e256]: "import { generator } from '@vtj/coder';"
+            - generic [ref=e257]: const vueCode = await generator(
+            - generic [ref=e258]: pageSchema,
+            - generic [ref=e259]: componentMap,
+            - generic [ref=e260]: "[{ name: 'lodash', version: '^4.0' }],"
+            - generic [ref=e261]: "'web'"
+            - generic [ref=e262]: );
+        - heading "辅助方法 Permalink to \"辅助方法\"" [level=2] [ref=e263]:
+          - text: 辅助方法
+          - link "Permalink to \"辅助方法\"" [ref=e264] [cursor=pointer]:
+            - /url: "#辅助方法"
+            - text: "#"
+        - heading "createEmptyPage() Permalink to \"createEmptyPage()\"" [level=3] [ref=e265]:
+          - text: createEmptyPage()
+          - link "Permalink to \"createEmptyPage()\"" [ref=e266] [cursor=pointer]:
+            - /url: "#createemptypage"
+            - text: "#"
+        - paragraph [ref=e267]: 创建空白源码模式页面：
+        - generic [ref=e268]:
+          - button "Copy Code" [ref=e269] [cursor=pointer]
+          - generic [ref=e270]: ts
+          - code [ref=e272]:
+            - generic [ref=e273]: "createEmptyPage(file: PageFile) => Promise<string>"
+        - paragraph [ref=e274]: 生成默认页面模板，包含文件路径提示：
+        - generic [ref=e275]:
+          - button "Copy Code" [ref=e276] [cursor=pointer]
+          - generic [ref=e277]: vue
+          - code [ref=e279]:
+            - generic [ref=e280]: <template>
+            - generic [ref=e281]: <div>
+            - generic [ref=e282]: <h3>源码模式页面</h3>
+            - generic [ref=e283]: "<div>文件路径：/.vtj/vue/{file.id}.vue</div>"
+            - generic [ref=e284]: </div>
+            - generic [ref=e285]: </template>
+        - heading "注意事项 Permalink to \"注意事项\"" [level=2] [ref=e286]:
+          - text: 注意事项
+          - link "Permalink to \"注意事项\"" [ref=e287] [cursor=pointer]:
+            - /url: "#注意事项"
+            - text: "#"
+        - list [ref=e288]:
+          - listitem [ref=e289]:
+            - strong [ref=e290]: 格式化控制
+            - text: ：默认启用 Prettier 格式化，可通过
+            - code [ref=e291]: formatterDisabled=true
+            - text: 禁用
+          - listitem [ref=e292]:
+            - strong [ref=e293]: 错误处理
+            - text: ：格式化失败时返回原始未格式化代码
+          - listitem [ref=e294]:
+            - strong [ref=e295]: 平台适配
+            - text: ：通过
+            - code [ref=e296]: platform
+            - text: 参数支持多平台输出
+          - listitem [ref=e297]:
+            - strong [ref=e298]: 依赖管理
+            - text: ：需显式传入第三方依赖确保正确导入
+    - contentinfo [ref=e299]:
+      - navigation "Pager" [ref=e300]:
+        - generic [ref=e301]: Pager
+        - link "Previous page DSL渲染器" [ref=e303] [cursor=pointer]:
+          - /url: /guide/extras/renderer.html
+          - generic [ref=e304]: Previous page
+          - generic [ref=e305]: DSL渲染器
+        - link "Next page 代码解析器" [ref=e307] [cursor=pointer]:
+          - /url: /guide/extras/parser.html
+          - generic [ref=e308]: Next page
+          - generic [ref=e309]: 代码解析器

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Optional, Dict, Any, List
 import logging
 
 from fastapi import APIRouter, Depends,Query
@@ -15,7 +15,7 @@ from ...models.models import (
     SysUser
 )
 
-from ...core.security import get_current_user
+from ...core.security import get_current_user, get_optional_user
 
 router = APIRouter(prefix="/api/stats",tags=["学习统计"])
 logger = logging.getLogger(__name__)
@@ -263,3 +263,297 @@ async def get_system_messages(
     end = start + page_size
 
     return messages[start:end]
+
+
+@router.get("/dashboard", response_model=Dict[str, Any], summary="仪表盘数据")
+async def get_dashboard(
+    current_user: Optional[SysUser] = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    """
+    获取仪表盘综合数据
+
+    包含：今日/本周/总计刷题量、正确率、本月学习天数、连续签到天数
+    """
+    if current_user is None:
+        return {"todayQuestions": 0, "weeklyQuestions": 0, "monthlyQuestions": 0,
+                "totalQuestions": 0, "accuracyRate": 0, "totalStudyHours": 0,
+                "streak": 0, "examCount": 0, "examAvgScore": 0,
+                "totalGoals": 0, "completedGoals": 0, "goalCompletionRate": 0}
+
+    now = datetime.now()
+    today = now.date()
+    week_start = now - timedelta(days=7)
+    month_start = now.replace(day=1)
+
+    # 今日刷题数
+    today_questions = (
+        db.query(PracticeRecord)
+        .filter(
+            PracticeRecord.user_id == current_user.user_id,
+            func.DATE(PracticeRecord.practice_time) == today,
+        )
+        .count()
+    )
+
+    # 本周刷题数
+    weekly_questions = (
+        db.query(PracticeRecord)
+        .filter(
+            PracticeRecord.user_id == current_user.user_id,
+            PracticeRecord.practice_time >= week_start,
+        )
+        .count()
+    )
+
+    # 累计刷题数
+    total_questions = (
+        db.query(PracticeRecord)
+        .filter(PracticeRecord.user_id == current_user.user_id)
+        .count()
+    )
+
+    # 正确率
+    correct_count = (
+        db.query(PracticeRecord)
+        .filter(
+            PracticeRecord.user_id == current_user.user_id,
+            PracticeRecord.is_correct == 1,
+        )
+        .count()
+    )
+    accuracy_rate = round(correct_count / total_questions * 100, 1) if total_questions > 0 else 0
+
+    # 本月学习天数（当月有刷题记录的天数）
+    month_days_query = (
+        db.query(func.DATE(PracticeRecord.practice_time))
+        .filter(
+            PracticeRecord.user_id == current_user.user_id,
+            PracticeRecord.practice_time >= month_start,
+        )
+        .group_by(func.DATE(PracticeRecord.practice_time))
+    )
+    month_days = month_days_query.count()
+
+    # 连续签到天数
+    today_checkin = (
+        db.query(DailyCheckin)
+        .filter(
+            DailyCheckin.user_id == current_user.user_id,
+            DailyCheckin.checkin_date == today.strftime("%Y-%m-%d"),
+        )
+        .first()
+    )
+    streak_days = today_checkin.continuous_days if today_checkin else (current_user.continuous_checkin_days or 0)
+
+    return {
+        "todayQuestions": today_questions,
+        "weeklyQuestions": weekly_questions,
+        "totalQuestions": total_questions,
+        "accuracyRate": accuracy_rate,
+        "monthDays": month_days,
+        "streakDays": streak_days,
+    }
+
+
+@router.get("/practice-trend", response_model=Dict[str, Any], summary="练习趋势")
+async def get_practice_trend(
+    days: int = Query(7, ge=7, le=30, description="统计天数(7或30)"),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    获取练习趋势数据
+
+    按天统计最近7天或30天的刷题量和正确率趋势
+    """
+    now = datetime.now()
+    today = now.date()
+    trend_start = now - timedelta(days=days)
+
+    daily_trend = []
+    for i in range(days):
+        date = today - timedelta(days=days - 1 - i)
+
+        day_count = (
+            db.query(PracticeRecord)
+            .filter(
+                PracticeRecord.user_id == current_user.user_id,
+                func.DATE(PracticeRecord.practice_time) == date,
+            )
+            .count()
+        )
+
+        day_correct = (
+            db.query(PracticeRecord)
+            .filter(
+                PracticeRecord.user_id == current_user.user_id,
+                PracticeRecord.is_correct == 1,
+                func.DATE(PracticeRecord.practice_time) == date,
+            )
+            .count()
+        )
+
+        daily_trend.append(
+            {
+                "date": date.strftime("%Y-%m-%d"),
+                "questionsDone": day_count,
+                "correctCount": day_correct,
+                "accuracy": round(day_correct / day_count * 100, 1) if day_count > 0 else 0,
+            }
+        )
+
+    return {"days": days, "trend": daily_trend}
+
+
+# ========== 自动签到公共函数（供其他模块调用） ==========
+
+def ensure_daily_checkin(user_id: int, db: Session) -> bool:
+    """
+    自动签到：检查用户当日是否已签到，未签到则自动签到。
+    每个自然日（北京时间 0:00 - 23:59:59）仅记录一次。
+    返回 True 表示签到成功（或已签到），False 表示失败。
+    """
+    from datetime import date as date_obj
+    today_str = date_obj.today().strftime("%Y-%m-%d")
+
+    # 检查是否已签到
+    existing = db.query(DailyCheckin).filter(
+        DailyCheckin.user_id == user_id,
+        DailyCheckin.checkin_date == today_str
+    ).first()
+
+    if existing:
+        # 今日已签到，不重复计数
+        return True
+
+    # 查询用户连续签到天数
+    user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
+    if not user:
+        logger.warning(f"自动签到失败：用户 {user_id} 不存在")
+        return False
+
+    # 计算连续天数
+    yesterday_str = (date_obj.today() + timedelta(days=-1)).strftime("%Y-%m-%d")
+    yesterday_checkin = db.query(DailyCheckin).filter(
+        DailyCheckin.user_id == user_id,
+        DailyCheckin.checkin_date == yesterday_str
+    ).first()
+
+    if yesterday_checkin:
+        continuous_days = yesterday_checkin.continuous_days + 1
+    else:
+        continuous_days = 1
+
+    total_days = (user.total_checkin_days or 0) + 1
+
+    # 创建签到记录
+    checkin = DailyCheckin(
+        user_id=user_id,
+        checkin_date=today_str,
+        checkin_time=datetime.now(),
+        continuous_days=continuous_days,
+        total_days=total_days,
+        has_makeup=0,
+        coin_reward=0,
+        streak_bonus=0
+    )
+    db.add(checkin)
+
+    # 更新用户签到统计
+    user.continuous_checkin_days = continuous_days
+    user.total_checkin_days = total_days
+    db.commit()
+
+    logger.info(f"自动签到成功: user_id={user_id}, 连续{continuous_days}天")
+    return True
+
+
+@router.post("/auto-checkin", summary="自动签到（核心行为触发）")
+async def auto_checkin(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    由各核心功能行为触发（答题、看新闻、导入题目等）。
+    每个自然日仅签到一次，重复调用无副作用。
+    返回：{ checked_in: true/false, continuous_days: N, is_today_first: true/false }
+    """
+    from datetime import date as date_obj
+    today_str = date_obj.today().strftime("%Y-%m-%d")
+
+    # 检查今日是否已签到
+    existing = db.query(DailyCheckin).filter(
+        DailyCheckin.user_id == current_user.user_id,
+        DailyCheckin.checkin_date == today_str
+    ).first()
+
+    is_first = not bool(existing)
+    success = ensure_daily_checkin(current_user.user_id, db)
+
+    # 获取最新连续天数
+    days = existing.continuous_days if existing else 1
+    if not existing and success:
+        # 查询刚创建的记录
+        latest = db.query(DailyCheckin).filter(
+            DailyCheckin.user_id == current_user.user_id
+        ).order_by(DailyCheckin.checkin_id.desc()).first()
+        if latest:
+            days = latest.continuous_days
+
+    return {
+        "checked_in": success,
+        "is_today_first": is_first,
+        "continuous_days": days,
+        "message": "今日已签到 ✓" if not is_first else "签到成功！连续" + str(days) + "天"
+    }
+
+
+@router.get("/weekly-checkin", summary="获取本周签到数据")
+async def get_weekly_checkin(
+    current_user: Optional[SysUser] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
+):
+    """
+    获取本周（周一至周日）签到状态，用于前端日历展示
+    返回 7 天签到状态：[{dayOfWeek: 1-7, date: 'YYYY-MM-DD', signed: true/false}]
+    """
+    if current_user is None:
+        return {"weekDays": [], "streakDays": 0, "weekSigned": 0, "progressPercent": 0}
+
+    from datetime import date as date_obj
+    today = date_obj.today()
+    # 计算本周一
+    monday = today - timedelta(days=today.weekday())
+
+    # 查询本周签到记录
+    records = db.query(DailyCheckin).filter(
+        DailyCheckin.user_id == current_user.user_id,
+        DailyCheckin.checkin_date >= monday.strftime("%Y-%m-%d"),
+        DailyCheckin.checkin_date <= today.strftime("%Y-%m-%d")
+    ).all()
+
+    signed_dates = {r.checkin_date for r in records}
+    total_signed = len(signed_dates)
+
+    days = []
+    for i in range(7):
+        d = monday + timedelta(days=i)
+        date_str = d.strftime("%Y-%m-%d")
+        is_today = date_str == today.strftime("%Y-%m-%d")
+        is_future = d > today
+        days.append({
+            "dayOfWeek": i + 1,  # 1=周一, 7=周日
+            "date": date_str,
+            "signed": date_str in signed_dates,
+            "isToday": is_today,
+            "isFuture": is_future
+        })
+
+    return {
+        "weekStart": monday.strftime("%Y-%m-%d"),
+        "weekEnd": (monday + timedelta(days=6)).strftime("%Y-%m-%d"),
+        "totalSigned": total_signed,
+        "progress": round(total_signed / 7 * 100),
+        "days": days
+    }

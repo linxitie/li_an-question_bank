@@ -1,0 +1,2893 @@
+<template>
+  <div class="import-page">
+    <div class="import-header">
+      <div class="header-left">
+        <XIcon :icon="UploadFilled" :size="22" color="#ffffff"></XIcon>
+        <span class="header-title">题目导入</span>
+        <span class="header-sub">单题录入 / 批量解析 / 图片 OCR</span>
+      </div>
+      <div class="header-right">
+        <button class="back-btn" @click="goHome">
+          <XIcon :icon="ArrowLeft" :size="16" color="#ffffff"></XIcon>
+          <span>返回首页</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="import-body">
+      <div class="card-wrapper">
+        <div class="card-nav">
+          <div
+            v-for="tab in cardTabs"
+            :key="tab.key"
+            :class="['nav-tab', { active: activeTab === tab.key }]"
+            @click="activeTab = tab.key">
+            <XIcon :icon="tab.icon" :size="16" :color="activeTab === tab.key ? '#c41e3a' : '#8a8faa'"></XIcon>
+            <span>{{ tab.title }}</span>
+          </div>
+        </div>
+
+        <!-- 单题录入 -->
+        <div class="card-content" v-show="activeTab === 'single'">
+          <div class="form-row">
+            <div class="form-item">
+              <label>试卷名称</label>
+              <input v-model="state.form.paper_name" placeholder="如：2024 国考行测真题" />
+            </div>
+            <div class="form-item form-item-sm">
+              <label>考试年份</label>
+              <input v-model="state.form.year" type="number" placeholder="可空" />
+            </div>
+            <div class="form-item form-item-md">
+              <label>考试省份</label>
+              <select v-model="state.form.province">
+                <option value="">可空</option>
+                <option v-for="p in provinceList" :key="p" :value="p">{{ p }}</option>
+              </select>
+            </div>
+            <div class="form-item form-item-md">
+              <label>考试类型</label>
+              <select v-model="state.form.exam_type">
+                <option value="">可空</option>
+                <option v-for="t in examTypeList" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-item">
+              <label>科目</label>
+              <select v-model="state.form.subject_category">
+                <option value="行测">行测</option>
+                <option value="申论">申论</option>
+                <option value="公专">公专</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+            <div class="form-item">
+              <label>题型</label>
+              <select v-model="state.form.question_type_detail">
+                <option value="选择题">选择题</option>
+                <option value="判断题">判断题</option>
+                <option value="填空题">填空题</option>
+                <option value="简答题">简答题</option>
+              </select>
+            </div>
+            <div class="form-item form-item-sm">
+              <label>分值</label>
+              <input v-model="state.form.score" type="number" min="0" max="100" step="0.5" />
+            </div>
+            <div class="form-item form-item-sm">
+              <label>难度</label>
+              <select v-model="state.form.difficulty">
+                <option :value="1">简单</option>
+                <option :value="2">较易</option>
+                <option :value="3">中等</option>
+                <option :value="4">较难</option>
+                <option :value="5">困难</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-item">
+            <label>题干内容 <span class="required">*</span></label>
+            <textarea v-model="state.form.question_content" rows="3" placeholder="输入题目内容（必填）"></textarea>
+          </div>
+          <div class="form-item">
+            <label>选项</label>
+            <div class="option-row" v-for="(opt, idx) in state.form.options" :key="idx">
+              <span class="option-key">{{ opt.key }}</span>
+              <input v-model="opt.value" :placeholder="'选项 ' + opt.key" />
+              <button class="btn-icon" @click="removeOption(idx)" v-show="state.form.options.length > 2">
+                <XIcon :icon="Delete" :size="14" color="#c41e3a"></XIcon>
+              </button>
+            </div>
+            <button class="btn-link" @click="addOption">+ 添加选项</button>
+          </div>
+          <div class="form-row">
+            <div class="form-item">
+              <label>答案 <span class="required" v-show="state.importMode === 'combined'">*</span></label>
+              <input v-model="state.form.answer" :placeholder="state.importMode === 'combined' ? '答案内容（必填）' : '答案内容（可空，后续补录）'" />
+            </div>
+            <div class="form-item">
+              <label>题目来源</label>
+              <input v-model="state.form.source" placeholder="如：2024国考真题" />
+            </div>
+          </div>
+          <div class="form-item">
+            <label>答案解析</label>
+            <textarea v-model="state.form.analysis" rows="2" placeholder="答案解析（可空）"></textarea>
+          </div>
+          <div class="form-actions">
+            <button class="btn-secondary" @click="resetForm">重置</button>
+            <button class="btn-primary" @click="submitSingle" :disabled="state.loading">
+              <XIcon :icon="Check" :size="16" color="#ffffff"></XIcon>
+              <span>{{ state.loading ? '提交中...' : '提交入库' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 批量导入 -->
+        <div class="card-content" v-show="activeTab === 'batch'">
+          <div class="mode-switch" style="margin-bottom:16px;">
+            <button :class="['mode-btn', { active: state.importMode === 'combined' }]" @click="state.importMode = 'combined'">
+              合并导入
+            </button>
+            <button :class="['mode-btn', { active: state.importMode === 'separate' }]" @click="state.importMode = 'separate'">
+              分离导入
+            </button>
+          </div>
+          <!-- ========== 合并导入模式 ========== -->
+          <div v-if="state.importMode === 'combined'">
+            <div class="batch-upload">
+              <div class="upload-zone" @click="uploadBatchFile">
+                <XIcon :icon="Upload" :size="28" color="#c41e3a"></XIcon>
+                <p>点击选择文件上传</p>
+                <span class="upload-hint">支持 docx / pdf / xlsx / xls / csv 格式</span>
+              </div>
+              <div class="form-item">
+                <label>试卷名称</label>
+                <input v-model="state.batchPaperName" placeholder="可选，自动从文件名提取" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn-primary" @click="uploadBatchFile">选择文件并解析</button>
+            </div>
+            <!-- Excel/CSV 结构化预览 -->
+            <div class="batch-preview" v-if="state.batchPreviewData.length">
+              <div class="preview-header">
+                <span>解析预览：共 {{ state.batchPreviewData.length }} 题</span>
+              </div>
+              <div class="preview-list">
+                <div class="preview-item" v-for="(q, idx) in state.batchPreviewData.slice(0, 5)" :key="idx">
+                  <span class="preview-idx">{{ idx + 1 }}</span>
+                  <span class="preview-text">{{ q.question_content || q.题目内容 || JSON.stringify(q).substring(0, 80) }}</span>
+                </div>
+              </div>
+              <button class="btn-primary" @click="confirmBatchImport" :disabled="state.loading">
+                {{ state.loading ? '导入中...' : '确认入库 ' + state.batchPreviewData.length + ' 题' }}
+              </button>
+            </div>
+            <!-- Word/PDF 智能提取（合并模式） -->
+            <div class="batch-preview" v-if="state.rawTextPreview">
+              <div class="preview-header">
+                <span>文件原文已加载（{{ state.rawTextPreview.length }} 字符）</span>
+                <span v-if="state.combinedSubMode !== 'auto'" style="font-size:15px;color:#8899aa;margin-left:10px;">
+                  检测模式：{{ state.combinedSubMode === 'inline' ? '答案内嵌（每题含“本题考查”字样）' : '答案在末尾（先题后答）' }}
+                </span>
+              </div>
+              <div class="form-actions" style="justify-content:space-between;padding-top:0;border-top:none;margin-top:0;">
+                <button class="btn-primary" @click="parseRawTextToQuestions" :disabled="state.parsedDocsQuestions.length > 0">
+                  <XIcon :icon="Check" :size="14" color="#ffffff"></XIcon>
+                  <span>智能提取题目</span>
+                </button>
+                <button class="btn-secondary" @click="state.rawTextPreview = ''; state.parsedDocsQuestions = []; state.combinedSubMode = 'auto'">关闭预览</button>
+              </div>
+              <!-- 统一标准预览 -->
+              <div v-if="state.parsedDocsQuestions.length" style="margin-top:16px;">
+                <QuestionPreviewList
+                  :questions="state.parsedDocsQuestions"
+                  :mode="'combined'"
+                  @import-one="importSingleParsedQuestion"
+                  @import-all="importAllParsedQuestions"
+                  @reverify="reVerifyQuestion"
+                  @close="state.parsedDocsQuestions = []; state.rawTextPreview = ''; state.combinedSubMode = 'auto'"
+                  :loading="state.loading"
+                ></QuestionPreviewList>
+              </div>
+              <details style="margin-top:12px;">
+                <summary style="color:#8899aa;font-size:15px;cursor:pointer;">查看原始文本</summary>
+                <pre class="raw-text" style="margin-top:8px;">{{ state.rawTextPreview }}</pre>
+              </details>
+            </div>
+          </div>
+
+          <!-- ========== 分离导入模式 ========== -->
+          <div v-if="state.importMode === 'separate'">
+            <div style="display:flex;gap:16px;margin-bottom:12px;">
+              <!-- 题目文件上传 -->
+              <div class="batch-upload" style="flex:1;">
+                <div class="upload-zone" @click="uploadSeparateQuestionFile" :style="state.separateQuestionsLoaded ? 'border-color:#52c41a;' : ''">
+                  <XIcon :icon="Upload" :size="24" :color="state.separateQuestionsLoaded ? '#52c41a' : '#c41e3a'"></XIcon>
+                  <p v-if="!state.separateQuestionsFileName">上传题目文件</p>
+                  <p v-else style="color:#52c41a;">{{ state.separateQuestionsFileName }}</p>
+                  <span class="upload-hint">docx / pdf / txt</span>
+                </div>
+              </div>
+              <!-- 答案文件上传 -->
+              <div class="batch-upload" style="flex:1;">
+                <div class="upload-zone" @click="uploadSeparateAnswerFile" :style="state.separateAnswersLoaded ? 'border-color:#52c41a;' : ''">
+                  <XIcon :icon="Upload" :size="24" :color="state.separateAnswersLoaded ? '#52c41a' : '#c41e3a'"></XIcon>
+                  <p v-if="!state.separateAnswersFileName">上传答案解析文件</p>
+                  <p v-else style="color:#52c41a;">{{ state.separateAnswersFileName }}</p>
+                  <span class="upload-hint">含"解析"字样的文档</span>
+                </div>
+              </div>
+            </div>
+            <div class="form-item">
+              <label>试卷名称</label>
+              <input v-model="state.batchPaperName" placeholder="可选，自动从文件名提取" />
+            </div>
+            <!-- 匹配按钮 -->
+            <div class="form-actions" v-if="state.separateQuestionsLoaded && state.separateAnswersLoaded && !state.parsedDocsQuestions.length">
+              <button class="btn-primary" @click="matchSeparateQuestionsAnswers">
+                <XIcon :icon="Check" :size="14" color="#ffffff"></XIcon>
+                <span>匹配题目与解析</span>
+              </button>
+              <button class="btn-secondary" @click="state.separateQuestionsLoaded = false; state.separateAnswersLoaded = false; state.separateQuestionsFileName = ''; state.separateAnswersFileName = ''; state.separateQuestionsRawText = ''; state.separateAnswersRawText = ''">重置</button>
+            </div>
+            <!-- 分离导入统一预览 -->
+            <div v-if="state.parsedDocsQuestions.length" style="margin-top:16px;">
+              <div class="preview-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <div>
+                  <span>匹配完成：共 {{ state.parsedDocsQuestions.length }} 道题目</span>
+                  <span v-if="state.parsedDocsQuestions.filter(function(q){return q.answer && q.answer !== '待补充'}).length" style="font-size:15px;color:#52c41a;margin-left:10px;">
+                    其中 {{ state.parsedDocsQuestions.filter(function(q){return q.answer && q.answer !== '待补充'}).length }} 题已匹配答案
+                  </span>
+                  <span style="font-size:13px;font-weight:600;margin-left:10px;"
+                    :style="{color: state.separateMatchRate >= 99 ? '#52c41a' : state.separateMatchRate >= 90 ? '#f59e0b' : '#f56c6c'}">
+                    匹配率 {{ state.separateMatchRate }}%
+                  </span>
+                </div>
+                <!-- 导入按钮区域 -->
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <button v-if="state.separateMatchRate >= 99"
+                    class="btn-primary"
+                    style="background:linear-gradient(135deg,#c41e3a 0%,#e8384f 100%);padding:8px 24px;font-size:14px;font-weight:600;"
+                    @click="importAllParsedQuestions"
+                    :disabled="state.loading">
+                    <XIcon :icon="Upload" :size="14" color="#ffffff"></XIcon>
+                    <span>{{ state.loading ? '导入中...' : '导入到题库（' + state.parsedDocsQuestions.filter(function(q){return !q._imported && !q._is_duplicate}).length + ' 题）' }}</span>
+                  </button>
+                  <button v-else
+                    class="btn-primary"
+                    style="background:rgba(100,100,120,0.5);padding:8px 24px;font-size:14px;font-weight:600;cursor:not-allowed;border:1px solid rgba(245,108,108,0.4);"
+                    disabled
+                    :title="'匹配率仅 ' + state.separateMatchRate + '%，低于99%要求'">
+                    <span>匹配率太低，请修改后重新导入</span>
+                  </button>
+                </div>
+              </div>
+              <QuestionPreviewList
+                :questions="state.parsedDocsQuestions"
+                :mode="'separate'"
+                @import-one="importSingleParsedQuestion"
+                @import-all="importAllParsedQuestions"
+                @reverify="reVerifyQuestion"
+                @close="state.parsedDocsQuestions = []; state.separateQuestionsLoaded = false; state.separateAnswersLoaded = false; state.separateQuestionsFileName = ''; state.separateAnswersFileName = ''; state.separateQuestionsRawText = ''; state.separateAnswersRawText = ''; state.separateMatchRate = 0"
+                :loading="state.loading"
+              ></QuestionPreviewList>
+            </div>
+            <!-- 原始文本 -->
+            <details v-if="state.separateQuestionsRawText" style="margin-top:12px;">
+              <summary style="color:#8899aa;font-size:15px;cursor:pointer;">查看原始文本</summary>
+              <div style="display:flex;gap:12px;">
+                <div style="flex:1;"><strong>题目文件：</strong><pre class="raw-text">{{ state.separateQuestionsRawText.substring(0, 3000) }}</pre></div>
+                <div style="flex:1;"><strong>答案文件：</strong><pre class="raw-text">{{ state.separateAnswersRawText.substring(0, 3000) }}</pre></div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <!-- 图片导入 -->
+        <div class="card-content" v-show="activeTab === 'image'">
+          <div class="image-upload">
+            <div class="upload-zone" @click="selectImage">
+              <XIcon :icon="PictureFilled" :size="28" color="#c41e3a"></XIcon>
+              <p v-if="!state.imagePreviewUrl">点击选择图片上传</p>
+              <p v-else style="color:#4ade80;">已选择图片</p>
+              <span class="upload-hint">支持 jpg / png / bmp 格式，可多选</span>
+            </div>
+          </div>
+          <div class="image-preview" v-if="state.imagePreviewUrl">
+            <img :src="state.imagePreviewUrl" alt="preview" />
+          </div>
+          <!-- 多图片提示 -->
+          <div v-if="state.selectedImageFiles.length > 1" style="margin-top:8px;color:#8899aa;font-size:15px;text-align:center;">
+            已选择 {{ state.selectedImageFiles.length }} 张图片（预览显示第一张）
+          </div>
+          <div class="form-actions" v-if="!state.ocrQuestions.length" style="flex-wrap:wrap;gap:8px;">
+            <button class="btn-primary" @click="selectImage" v-if="!state.imagePreviewUrl">选择图片</button>
+            <button class="btn-primary" @click="ocrRecognize" v-if="state.imagePreviewUrl && !state.ocrLoading" :disabled="!state.imagePreviewUrl">
+              <XIcon :icon="PictureFilled" :size="14" color="#ffffff"></XIcon>
+              <span>PaddleOCR 智能识别</span>
+            </button>
+            <!-- 一键识别并入库（增强版：含自动分类） -->
+            <button class="btn-primary" @click="ocrAndImportStructured"
+              v-if="state.imagePreviewUrl && !state.ocrLoading"
+              style="background:linear-gradient(135deg, #c41e3a 0%, #e8384f 100%);">
+              <span>⚡ 一键识别并入库</span>
+            </button>
+            <button class="btn-primary" v-if="state.ocrLoading" disabled>
+              <span>{{ state.importProgress > 0 ? '导入中 ' + state.importProgress + '%' : '识别中...' }}</span>
+            </button>
+          </div>
+          <!-- 导入进度条 -->
+          <div v-if="state.loading && state.importProgress > 0" style="margin-top:8px;background:rgba(26,43,95,0.5);border-radius:8px;height:8px;overflow:hidden;">
+            <div :style="{width: state.importProgress + '%', height:'100%', background:'linear-gradient(90deg, #c41e3a, #e8384f)', transition:'width 0.3s ease'}"></div>
+          </div>
+          <!-- OCR 识别结果 -->
+          <div v-if="state.ocrText" style="margin-top:16px;">
+            <div class="preview-header">
+              <span>OCR 识别结果（{{ state.ocrText.length }} 字符）</span>
+              <button class="btn-secondary" @click="parseOcrTextToQuestions" :disabled="state.parsedDocsQuestions.length > 0" style="margin-left:10px;font-size:15px;">
+                智能提取题目
+              </button>
+            </div>
+            <details>
+              <summary style="color:#8899aa;font-size:15px;cursor:pointer;">查看识别文本</summary>
+              <pre class="raw-text" style="margin-top:8px;max-height:300px;">{{ state.ocrText }}</pre>
+            </details>
+          </div>
+          <!-- OCR 题目预览（增强版：含分类信息） -->
+          <div v-if="state.ocrQuestions.length" style="margin-top:16px;">
+            <div class="preview-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+              <div>
+                <span>识别成功：共 {{ state.ocrQuestions.length }} 道题目</span>
+                <span v-if="state.ocrAutoSubject" style="font-size:15px;color:#4ade80;margin-left:10px;">
+                  🏷 自动分类：{{ state.ocrAutoSubject }}
+                  <span v-if="state.ocrAutoSubcategories && state.ocrAutoSubcategories.length" style="color:#8899aa;">
+                    （{{ state.ocrAutoSubcategories.join('、') }}）
+                  </span>
+                </span>
+              </div>
+              <!-- 预览确认导入按钮 -->
+              <div style="display:flex;align-items:center;gap:8px;">
+                <button class="btn-primary" @click="importAllOcrQuestionsConfirmed"
+                  style="background:linear-gradient(135deg,#c41e3a 0%,#e8384f 100%);padding:8px 20px;font-size:13px;font-weight:600;"
+                  :disabled="state.ocrLoading">
+                  <span>{{ state.ocrLoading ? '导入中...' : '✅ 确认入库（' + state.ocrQuestions.filter(function(q){return !q._imported && !q._is_duplicate}).length + ' 题）' }}</span>
+                </button>
+              </div>
+            </div>
+            <QuestionPreviewList
+              :questions="state.ocrQuestions"
+              :mode="'image'"
+              @import-one="importSingleOcrQuestion"
+              @import-all="importAllOcrQuestionsConfirmed"
+              @reverify="reVerifyOcrQuestion"
+              @close="state.ocrQuestions = []; state.ocrText = ''; state.imagePreviewUrl = ''; state.ocrAutoSubject = ''; state.ocrAutoSubcategories = []"
+              :loading="state.ocrLoading"
+            ></QuestionPreviewList>
+          </div>
+        </div>
+      </div>
+
+      <div class="records-section" v-if="state.records.length">
+        <div class="section-title">
+          <XIcon :icon="List" :size="16" color="#c41e3a"></XIcon>
+          <span>最近导入记录</span>
+        </div>
+        <div class="records-list">
+          <div class="record-row" v-for="r in state.records" :key="r.import_id">
+            <span class="record-file">{{ r.original_filename }}</span>
+            <span class="record-count">成功 {{ r.success_count }} / 重复 {{ r.duplicate_count }}</span>
+            <span class="record-time">{{ r.complete_time }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<script lang="ts">
+  // @ts-nocheck
+  import { defineComponent, reactive } from 'vue';
+  import { XIcon } from '@vtj/ui';
+  import { ElMessage } from 'element-plus';
+  import { UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List } from '@vtj/icons';
+  import { useProvider } from '@vtj/renderer';
+  const QuestionPreviewList = {
+    props: {
+      questions: { type: Array, default: function() { return []; } },
+      mode: { type: String, default: 'combined' },
+      loading: { type: Boolean, default: false }
+    },
+    emits: ['import-one', 'import-all', 'reverify', 'close'],
+    template: '<div class="docs-question-list">' +
+      '<!-- 顶部统计 + 全部导入按钮 -->' +
+      '<div class="docs-list-topbar">' +
+        '<div class="docs-list-stats">' +
+          '<span class="docs-stat-total">共 {{ questions.length }} 题</span>' +
+          '<span class="docs-stat-answered">' +
+            '已答 {{ questions.filter(function(q){return q.answer && q.answer !== \'待补充\'}).length }}' +
+            '</span>' +
+          '<span class="docs-stat-missing" v-if="questions.filter(function(q){return !q.answer || q.answer === \'待补充\'}).length">' +
+            '缺答案 {{ questions.filter(function(q){return !q.answer || q.answer === \'待补充\'}).length }}' +
+            '</span>' +
+          '<span class="docs-stat-imported">' +
+            '已导入 {{ questions.filter(function(q){return q._imported}).length }}' +
+            '</span>' +
+          '<span class="docs-stat-dup" v-if="questions.filter(function(q){return q._is_duplicate}).length" style="color:#f56c6c;margin-left:8px;">' +
+            '⚠ 重复 {{ questions.filter(function(q){return q._is_duplicate}).length }}' +
+            '</span>' +
+        '</div>' +
+        '<div class="docs-list-actions-top">' +
+          '<button class="btn-primary btn-top-import" @click="$emit(\'import-all\')" :disabled="loading" :title="mode === \'combined\' ? \'导入所有有答案的题目\' : \'导入所有题目（含待补充答案）\'">' +
+            '<span>全部入库</span>' +
+            '<span style="font-size:15px;opacity:0.8;">({{ questions.filter(function(q){return !q._imported}).length }} 题)</span>' +
+          '</button>' +
+          '<button class="btn-secondary btn-top-close" @click="$emit(\'close\')">完成</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="docs-q-card" v-for="(q, idx) in questions" :key="idx" :class="{ \'docs-q-card-noans\': !q.answer || q.answer === \'待补充\' }">' +
+        '<div class="docs-q-header">' +
+          '<span class="docs-q-num">第 {{ idx + 1 }} 题</span>' +
+          '<span class="docs-q-type">{{ q.question_type_detail || \'选择题\' }}</span>' +
+          '<span class="docs-q-subject">{{ q.subject_category || \'公专\' }}</span>' +
+          '<span class="docs-q-dup-badge" v-if="q._is_duplicate" style="color:#f56c6c;font-size:15px;margin-right:6px;background:rgba(245,108,108,0.15);padding:2px 6px;border-radius:4px;" :title="\'该题目已存在（相似度 \' + Math.round((q._similarity || 0) * 100) + \'%），将自动跳过导入\'">⚠ 该题目已存在</span>' +
+          '<span class="docs-q-ans-badge" v-if="q.answer && q.answer !== \'待补充\'" style="color:#4ade80;font-size:15px;margin-right:8px;" title="已匹配答案">已匹配答案 ✓</span>' +
+          '<span class="docs-q-ans-badge docs-q-ans-badge-warn" v-else style="color:#f59e0b;font-size:15px;margin-right:8px;" title="缺少答案，请在下方手动录入">⚠ 缺答案</span>' +
+          '<button class="btn-mini-reverify" @click="$emit(\'reverify\', idx)" title="重新校验选项分割">重检</button>' +
+          '<button class="btn-mini-import" @click="$emit(\'import-one\', idx)" :disabled="q._imported">' +
+            '{{ q._imported ? \'已导入\' : \'导入此题\' }}' +
+          '</button>' +
+        '</div>' +
+        '<div class="docs-q-body">' +
+          '<div class="docs-q-content">{{ q.question_content }}</div>' +
+          '<div class="docs-q-options" v-if="q.options && q.options.length">' +
+            '<span class="docs-q-opt" v-for="opt in q.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</span>' +
+          '</div>' +
+          '<div class="docs-q-answer-row" :class="{ \'docs-q-answer-row-warn\': !q.answer || q.answer === \'待补充\' }">' +
+            '<span class="docs-q-ans-label">答案：</span>' +
+            '<input class="docs-q-ans-input" v-model="q.answer" placeholder="A/B/C/D" maxlength="4" />' +
+            '<span class="docs-q-ans-hint" v-if="!q.answer || q.answer === \'待补充\'">（必填 — 请输入选项字母）</span>' +
+          '</div>' +
+          '<div class="docs-q-answer-row" v-if="!q.answer || q.answer === \'待补充\'" style="border-top:none;padding-top:4px;margin-top:0;">' +
+            '<span class="docs-q-ans-label" style="font-size:15px;color:#8899aa;">解析：</span>' +
+            '<input v-model="q.analysis" placeholder="可选，补充答案解析" style="flex:1;padding:5px 10px;background:rgba(26,43,95,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#b0b8c4;font-size:15px;outline:none;" />' +
+          '</div>' +
+          '<div class="docs-q-analysis" v-if="q.analysis && (q.answer && q.answer !== \'待补充\')">' +
+            '<div class="docs-q-ans-label" style="margin-bottom:4px;">解析：</div>' +
+            '<div class="docs-q-analysis-text">{{ q.analysis }}</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="form-actions" style="justify-content:center;margin-top:16px;flex-wrap:wrap;">' +
+        '<button class="btn-primary" @click="$emit(\'import-all\')" :disabled="loading" style="min-width:200px;">' +
+          '{{ loading ? \'导入中...\' : \'全部导入（\' + questions.filter(function(q){return !q._imported && !q._is_duplicate}).length + \' 题）\' }}' +
+        '</button>' +
+        '<button class="btn-secondary" @click="$emit(\'close\')">完成</button>' +
+      '</div>' +
+    '</div>'
+  };
+  export default defineComponent({
+    name: 'QuestionImport',
+    components: { XIcon, QuestionPreviewList },
+    setup(props) {
+      const provider = useProvider({ id: 'question_import', version: '1778918346107' });
+      const state = reactive({
+        importMode: 'combined',
+        activeTab: 'single',
+        form: {
+          paper_name: '',
+          year: null,
+          province: '',
+          exam_type: '',
+          subject_category: '公专',
+          question_type_detail: '选择题',
+          question_content: '',
+          options: [{ key: 'A', value: '' }, { key: 'B', value: '' }, { key: 'C', value: '' }, { key: 'D', value: '' }],
+          answer: '',
+          source: '',
+          analysis: '',
+          score: 1,
+          difficulty: 3
+        },
+        batchPaperName: '',
+        batchPreviewData: [],
+        rawTextPreview: '',
+        parsedDocsQuestions: [],
+        importId: null,
+        imagePreviewUrl: '',
+        selectedImageFiles: [],       // 多图片支持
+        ocrText: '',
+        ocrQuestions: [],
+        ocrLoading: false,
+        records: [],
+        loading: false,
+        importProgress: 0,            // 导入进度
+        duplicateCount: 0,           // 重复题目计数
+        // 分离导入
+        separateQuestionsLoaded: false,
+        separateAnswersLoaded: false,
+        separateQuestionsFileName: '',
+        separateAnswersFileName: '',
+        separateQuestionsRawText: '',
+        separateAnswersRawText: '',
+        // 合并导入子场景
+        combinedSubMode: 'auto',
+        // 分离导入匹配率
+        separateMatchRate: 0,
+        // 图片导入自动分类结果
+        ocrAutoSubject: '',
+        ocrAutoSubcategories: [],
+        stats: { total_questions: 0, subject_stats: [], type_stats: [], latest_import: null }
+      });
+      return {
+        state, props, provider,
+        UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List,
+        cardTabs: [
+          { key: 'single', title: '单题录入', icon: UploadFilled },
+          { key: 'batch', title: '批量导入', icon: Upload },
+          { key: 'image', title: '图片导入', icon: PictureFilled }
+        ]
+      };
+    },
+    data() {
+      return {
+        activeTab: 'single',
+        provinceList: ['北京市','天津市','河北省','山西省','内蒙古自治区','辽宁省','吉林省','黑龙江省','上海市','江苏省','浙江省','安徽省','福建省','江西省','山东省','河南省','湖北省','湖南省','广东省','广西壮族自治区','海南省','重庆市','四川省','贵州省','云南省','西藏自治区','陕西省','甘肃省','青海省','宁夏回族自治区','新疆维吾尔自治区'],
+        examTypeList: ['国考','省考','联考','模拟考试','事业单位','招警考试']
+      };
+    },
+    methods: {
+      goHome() {
+        this.$router.push('/');
+      },
+      async ensureLogin() {
+        return window.__VTJ_AUTH__.ensureAuth();
+      },
+      getAuthHeaders() {
+        return window.__VTJ_AUTH__.getAuthHeaders();
+      },
+      getJsonHeaders() {
+        return window.__VTJ_AUTH__.getJsonHeaders();
+      },
+      /**
+       * 带超时和重试的 fetch 封装
+       * @param {string} url 请求地址
+       * @param {object} options fetch 选项
+       * @param {number} timeoutMs 超时毫秒数 (默认 30000)
+       * @param {number} retries 重试次数 (默认 1)
+       */
+      async fetchWithRetry(url, options, timeoutMs, retries) {
+        timeoutMs = timeoutMs || 30000;
+        retries = retries || 1;
+        var lastError = null;
+        for (var attempt = 0; attempt <= retries; attempt++) {
+          var controller = new AbortController();
+          var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+          try {
+            var fetchOpts = Object.assign({}, options, { signal: controller.signal });
+            var res = await fetch(url, fetchOpts);
+            clearTimeout(timer);
+            return res;
+          } catch (e) {
+            clearTimeout(timer);
+            lastError = e;
+            if (e.name === 'AbortError') {
+              console.warn('[fetchWithRetry] Timeout after ' + timeoutMs + 'ms, attempt ' + (attempt + 1) + '/' + (retries + 1));
+            } else {
+              console.warn('[fetchWithRetry] Error on attempt ' + (attempt + 1) + ': ' + (e.message || e));
+            }
+            if (attempt < retries) {
+              // 等待后重试
+              await new Promise(function(r) { setTimeout(r, 1000 * (attempt + 1)); });
+            }
+          }
+        }
+        throw lastError || new Error('请求失败，已重试 ' + retries + ' 次');
+      },
+      /**
+       * 预处理 fetch 错误，生成用户友好的错误信息
+       */
+      handleFetchError(e, context) {
+        context = context || '请求';
+        var msg = e.message || '';
+        if (msg.indexOf('Failed to fetch') !== -1 || msg.indexOf('NetworkError') !== -1) {
+          return context + '失败：无法连接到服务器，请确认服务已启动 (npm run dev / python start.py)';
+        }
+        if (e.name === 'AbortError' || msg.indexOf('abort') !== -1 || msg.indexOf('timeout') !== -1) {
+          return context + '超时：服务器响应过慢，请稍后重试';
+        }
+        return context + '出错：' + msg;
+      },
+      addOption() {
+        const keys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const next = keys[this.state.form.options.length];
+        if (next) this.state.form.options.push({ key: next, value: '' });
+      },
+      removeOption(idx) {
+        this.state.form.options.splice(idx, 1);
+      },
+      resetForm() {
+        this.state.form = {
+          paper_name: '', year: null, province: '', exam_type: '',
+          subject_category: '公专', question_type_detail: '选择题',
+          question_content: '',
+          options: [{ key: 'A', value: '' }, { key: 'B', value: '' }, { key: 'C', value: '' }, { key: 'D', value: '' }],
+          answer: '', source: '', analysis: '', score: 1, difficulty: 3
+        };
+      },
+      async submitSingle() {
+        const mode = this.state.importMode;
+        if (!this.state.form.question_content) {
+          ElMessage.warning('题目内容为必填项');
+          return;
+        }
+        if (mode === 'combined' && !this.state.form.answer) {
+          ElMessage.warning('合并模式下答案为必填项');
+          return;
+        }
+        this.state.loading = true;
+        try {
+          const res = await this.fetchWithRetry('/api/questions/import/single', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              paper_name: this.state.form.paper_name,
+              year: this.state.form.year,
+              province: this.state.form.province,
+              exam_type: this.state.form.exam_type,
+              subject_category: this.state.form.subject_category,
+              question_type_detail: this.state.form.question_type_detail,
+              question_content: this.state.form.question_content,
+              options: this.state.form.options,
+              answer: this.state.form.answer,
+              source: this.state.form.source,
+              answer_analysis: this.state.form.analysis,
+              score: this.state.form.score,
+              difficulty: this.state.form.difficulty,
+              import_mode: mode
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.import_status === 'SUCCESS') {
+            ElMessage.success('题目导入成功 (ID: ' + data.question_id + ')');
+            this.resetForm();
+            this.loadRecords();
+            // 通知题库首页刷新数据
+            this.notifyBankRefresh();
+          } else if (data.import_status === 'DUPLICATE') {
+            ElMessage.warning(data.message || '题目已存在');
+          } else {
+            ElMessage.warning(data.detail || data.message || '导入失败');
+          }
+        } catch (e) {
+          ElMessage.error(this.handleFetchError(e, '单题导入'));
+        }
+        this.state.loading = false;
+      },
+      // ========== 后端文本提取辅助（用于分离导入的docx/pdf文件） ==========
+      async _readDocViaBackend(file, callback) {
+        var self = this;
+        var formData = new FormData();
+        formData.append('file', file);
+        try {
+          // 使用 getAuthHeaders() 携带认证token（不含 Content-Type，让浏览器自动设置 multipart boundary）
+          var res = await this.fetchWithRetry('/api/questions/import/upload', {
+            method: 'POST',
+            headers: this.getAuthHeaders(),
+            body: formData
+          }, 30000, 0);
+          var data = await res.json();
+          if (!res.ok) {
+            ElMessage.error('文件上传失败 (HTTP ' + res.status + ')：' + (data.detail || data.message || '未知错误'));
+            return;
+          }
+          // Word/PDF → 返回 raw_text_preview
+          if (data.raw_text_preview) {
+            callback(data.raw_text_preview);
+            return;
+          }
+          // Excel/CSV → 返回 questions 数组
+          if (data.questions && data.questions.length > 0) {
+            var text = '';
+            for (var di = 0; di < data.questions.length; di++) {
+              var item = data.questions[di];
+              text += (text ? '\n' : '') + (item.question_content || '');
+              if (item.options) {
+                try {
+                  var opts = typeof item.options === 'string' ? JSON.parse(item.options) : item.options;
+                  for (var oi = 0; oi < opts.length; oi++) {
+                    text += ' ' + opts[oi].key + '. ' + opts[oi].value;
+                  }
+                } catch(e) {}
+              }
+            }
+            callback(text);
+            return;
+          }
+          // 其他情况
+          ElMessage.error('文件解析失败：返回数据格式不匹配（raw_text_preview/questions 均不存在）');
+        } catch (e) {
+          ElMessage.error('文件上传异常：' + (e.message || '网络错误'));
+        }
+      },
+      async uploadBatchFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.docx,.pdf,.xlsx,.xls,.csv';
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          ElMessage.info('正在解析文件：' + file.name + '...');
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            if (this.state.batchPaperName) formData.append('paper_name', this.state.batchPaperName);
+            const res = await this.fetchWithRetry('/api/questions/import/upload', {
+              method: 'POST',
+              headers: this.getAuthHeaders(),
+              body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              ElMessage.warning(data.detail || '上传失败 (HTTP ' + res.status + ')');
+              return;
+            }
+            // Excel/CSV 返回结构化 questions 数组
+            if (data.questions && data.questions.length > 0) {
+              this.state.batchPreviewData = data.questions;
+              this.state.rawTextPreview = '';
+              this.state.importId = data.import_id;
+              ElMessage.success('解析完成：' + (data.success_count || 0) + ' 题可导入，' + (data.failed_count || 0) + ' 题跳过');
+            }
+            // Word/PDF 返回 raw_text_preview → 自动智能提取题目
+            else if (data.raw_text_preview) {
+              this.state.batchPreviewData = [];
+              this.state.rawTextPreview = data.raw_text_preview;
+              this.state.importId = data.import_id;
+              // 自动提取题目结构，直接显示导入按钮
+              this.parseRawTextToQuestions();
+              if (this.state.parsedDocsQuestions.length) {
+                ElMessage.success('已自动提取 ' + this.state.parsedDocsQuestions.length + ' 道题目，可直接导入');
+              } else {
+                ElMessage.info('文件已解析，但未自动识别出题目结构。请点击"智能提取题目"或检查文件格式');
+              }
+            }
+            else {
+              ElMessage.warning('文件无有效题目数据');
+            }
+          } catch (e) {
+            ElMessage.error(this.handleFetchError(e, '文件上传'));
+          }
+        };
+        input.click();
+      },
+      async confirmBatchImport() {
+        if (!this.state.batchPreviewData.length) {
+          ElMessage.warning('无可导入的题目数据');
+          return;
+        }
+        this.state.loading = true;
+        try {
+          const res = await this.fetchWithRetry('/api/questions/import/confirm', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              import_id: this.state.importId,
+              paper_name: this.state.batchPaperName,
+              questions: this.state.batchPreviewData
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            ElMessage.success('导入完成：成功 ' + (data.success_count || 0) + ' 题，跳过 ' + (data.skipped_count || 0));
+            // 通知题库首页刷新数据
+            this.notifyBankRefresh();
+          } else {
+            ElMessage.warning(data.detail || '导入失败');
+          }
+          this.state.batchPreviewData = [];
+          this.state.rawTextPreview = '';
+          this.loadRecords();
+        } catch (e) {
+          ElMessage.error(this.handleFetchError(e, '批量导入'));
+        }
+        this.state.loading = false;
+      },
+      selectImage() {
+        const self = this;
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/jpeg,image/png,image/bmp';
+        input.multiple = true;
+        input.onchange = function(e) {
+          var files = Array.from(e.target.files);
+          if (!files.length) return;
+          self.state.selectedImageFiles = files;
+          // 显示第一张预览
+          var reader = new FileReader();
+          reader.onload = function(ev) {
+            self.state.imagePreviewUrl = ev.target.result;
+            self.state.ocrText = '';
+            self.state.ocrQuestions = [];
+          };
+          reader.readAsDataURL(files[0]);
+          if (files.length > 1) {
+            ElMessage.info('已选择 ' + files.length + ' 张图片（预览显示第一张）');
+          }
+        };
+        input.click();
+      },
+      // ========== 图片 OCR 识别 → 调用后端 PaddleOCR ==========
+      async ocrRecognize() {
+        if (!this.state.imagePreviewUrl) {
+          ElMessage.warning('请先选择图片');
+          return;
+        }
+        this.state.ocrLoading = true;
+        try {
+          var res = await this.fetchWithRetry('/api/questions/import/ocr', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              image_base64: this.state.imagePreviewUrl
+            })
+          }, 120000, 0);  // OCR 可能耗时较长，设置 120s 超时
+          var data = await res.json();
+          if (!res.ok) {
+            ElMessage.warning(data.detail || data.message || 'OCR识别失败 (HTTP ' + res.status + ')');
+            this.state.ocrLoading = false;
+            return;
+          }
+          if (data.status === 'success' && data.ocr_text) {
+            this.state.ocrText = data.ocr_text;
+            ElMessage.success(data.message || 'OCR 识别完成，请点击"智能提取题目"进行结构化');
+          } else {
+            ElMessage.warning(data.message || '未能识别到文字，请确认图片清晰度');
+          }
+        } catch (e) {
+          ElMessage.error(this.handleFetchError(e, 'OCR识别') +
+            '。提示：需要在用户目录安装 PaddleOCR 依赖');
+        }
+        this.state.ocrLoading = false;
+      },
+      // ========== 解析 OCR 文本 → 题目列表 ==========
+      parseOcrTextToQuestions() {
+        if (!this.state.ocrText) {
+          ElMessage.warning('无 OCR 文本可解析');
+          return;
+        }
+        // 复用已有的原始文本解析管线
+        this.state.rawTextPreview = this.state.ocrText;
+        this.state.importMode = 'separate';  // OCR 识别答案不可靠，用分离模式
+        this.parseRawTextToQuestions();
+        this.state.ocrQuestions = this.state.parsedDocsQuestions.slice();
+        this.state.parsedDocsQuestions = [];
+        if (!this.state.ocrQuestions.length) {
+          ElMessage.warning('未能从OCR文本中提取题目结构，请确认图片包含标准题号格式');
+        } else {
+          ElMessage.success('已提取 ' + this.state.ocrQuestions.length + ' 道题目，请补充答案后导入');
+        }
+      },
+      // ========== 一键识别并入库（OCR + 智能提取 + 自动分类 + 预览确认 + 导入） ==========
+      async ocrAndImportStructured() {
+        if (!this.state.imagePreviewUrl) {
+          ElMessage.warning('请先选择图片');
+          return;
+        }
+        this.state.ocrLoading = true;
+        this.state.importProgress = 0;
+        try {
+          // 步骤1: OCR识别
+          ElMessage.info('正在OCR识别...');
+          await this.ocrRecognize();
+          this.state.importProgress = 25;
+          if (!this.state.ocrText) {
+            this.state.ocrLoading = false;
+            return;
+          }
+          // 步骤2: 智能提取题目
+          this.parseOcrTextToQuestions();
+          this.state.importProgress = 50;
+          if (!this.state.ocrQuestions.length) {
+            this.state.ocrLoading = false;
+            return;
+          }
+          // 步骤3: 自动检测科目和子分类
+          var allText = this.state.ocrText;
+          var detectedSubject = this.detectSubjectCategory([], allText);
+          var subcategories = this.detectSubcategories(detectedSubject, allText);
+          this.state.ocrAutoSubject = detectedSubject;
+          this.state.ocrAutoSubcategories = subcategories;
+          this.state.form.subject_category = detectedSubject;
+          this.state.importProgress = 75;
+          // 更新 ocrQuestions 中的科目和子分类
+          for (var i = 0; i < this.state.ocrQuestions.length; i++) {
+            this.state.ocrQuestions[i].subject_category = detectedSubject;
+            var qText = this.state.ocrQuestions[i].question_content || '';
+            var subcat = this.detectSubcategoryForQuestion(detectedSubject, qText);
+            this.state.ocrQuestions[i].subcategory = subcat;
+          }
+          this.state.importProgress = 90;
+          // 步骤4: 批量导入（使用后端结构化导入端点）
+          var self = this;
+          var res = await this.fetchWithRetry('/api/questions/import/image', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              image_base64: this.state.imagePreviewUrl,
+              subject_category: detectedSubject,
+              paper_name: this.state.batchPaperName || '图片OCR导入',
+              structured_questions: this.state.ocrQuestions.map(function(q) {
+                return {
+                  content: q.question_content || q.content || '',
+                  options: q.options || [],
+                  answer: q.answer || '',
+                  analysis: q.analysis || '',
+                  question_type: q.question_type_detail || '选择题',
+                  subcategory: q.subcategory || '',
+                };
+              }),
+              auto_save: true
+            })
+          }, 60000, 2);
+          var data = await res.json();
+          this.state.importProgress = 100;
+          if (res.ok && (data.import_status === 'SUCCESS' || data.import_status === 'PARTIAL')) {
+            ElMessage.success('图片导入完成：成功 ' + data.imported + ' 题' +
+              (data.duplicates > 0 ? '，重复 ' + data.duplicates + ' 题（已跳过）' : '') +
+              ' | 分类：' + detectedSubject + (subcategories.length ? ' - ' + subcategories.join('、') : ''));
+            // 标记全部已导入
+            for (var j = 0; j < self.state.ocrQuestions.length; j++) {
+              self.state.ocrQuestions[j]._imported = true;
+            }
+            this.loadRecords();
+            this.notifyBankRefresh();
+          } else {
+            ElMessage.warning(data.detail || data.message || '导入结果：成功' + (data.imported || 0) + '题');
+          }
+        } catch (e) {
+          ElMessage.error(this.handleFetchError(e, '一键导入'));
+        }
+        this.state.ocrLoading = false;
+        this.state.importProgress = 0;
+      },
+      // ========== OCR 题目单题导入 ==========
+      async importSingleOcrQuestion(idx) {
+        this.state.parsedDocsQuestions = this.state.ocrQuestions;
+        await this.importSingleParsedQuestion(idx);
+        this.state.ocrQuestions = this.state.parsedDocsQuestions;
+        this.state.parsedDocsQuestions = [];
+      },
+      // ========== OCR 题目批量导入 ==========
+      async importAllOcrQuestions() {
+        this.state.parsedDocsQuestions = this.state.ocrQuestions;
+        // 强制分离导入模式（OCR识别结果答案不可靠）
+        var prevMode = this.state.importMode;
+        this.state.importMode = 'separate';
+        await this.importAllParsedQuestions();
+        this.state.importMode = prevMode;
+        this.state.ocrQuestions = this.state.parsedDocsQuestions;
+        this.state.parsedDocsQuestions = [];
+      },
+      // ========== OCR 题目确认入库（预览确认后） ==========
+      async importAllOcrQuestionsConfirmed() {
+        // 检查是否有未填答案的题目
+        var noAnswer = this.state.ocrQuestions.filter(function(q) {
+          return (!q.answer || q.answer === '待补充') && !q._imported && !q._is_duplicate;
+        });
+        if (noAnswer.length > 0) {
+          ElMessage.warning('有 ' + noAnswer.length + ' 道题目缺少答案，请手动补充后再导入');
+          return;
+        }
+        // 通过单题导入接口逐题导入（保证去重和分类）
+        this.state.parsedDocsQuestions = this.state.ocrQuestions;
+        var prevMode = this.state.importMode;
+        this.state.importMode = 'separate';
+        await this.importAllParsedQuestions();
+        this.state.importMode = prevMode;
+        this.state.ocrQuestions = this.state.parsedDocsQuestions;
+        this.state.parsedDocsQuestions = [];
+        // 导入后更新自动分类状态
+        var imported = this.state.ocrQuestions.filter(function(q) { return q._imported; }).length;
+        if (imported > 0) {
+          ElMessage.success('图片题目导入完成：成功 ' + imported + ' 题 | 分类：' + (this.state.ocrAutoSubject || '自动检测'));
+        }
+      },
+      // ========== 二级分类检测（科目 -> 子类型） ==========
+      detectSubcategories(subject, text) {
+        if (!text) return [];
+        var sample = text.substring(0, 3000);
+        var result = [];
+        if (subject === '行测') {
+          var xcMap = {
+            '常识判断': ['常识', '历史', '地理', '生物', '化学', '物理', '文化', '科技'],
+            '言语理解与表达': ['语言', '理解', '表达', '阅读', '填空', '成语', '语句', '排序', '主旨', '意图'],
+            '数量关系': ['数量', '数学', '计算', '方程', '几何', '排列组合', '概率', '数列', '行程'],
+            '判断推理': ['判断', '推理', '逻辑', '类比', '定义', '削弱', '加强', '前提', '结论'],
+            '资料分析': ['资料分析', '图表', '增长率', '百分比', '同比', '数据', '统计', '比重'],
+            '政治理论': ['政治', '马克思', '习近平', '党建', '时政', '党史', '理论', '中特'],
+          };
+          for (var cat in xcMap) {
+            for (var ki = 0; ki < xcMap[cat].length; ki++) {
+              if (sample.indexOf(xcMap[cat][ki]) >= 0) { result.push(cat); break; }
+            }
+          }
+        } else if (subject === '申论') {
+          var slMap = {
+            '归纳概括': ['概括', '归纳', '总结', '概述'],
+            '综合分析': ['分析', '综合', '评析', '评述', '理解'],
+            '提出对策': ['对策', '措施', '建议', '方案', '办法'],
+            '应用文写作': ['应用文', '通知', '报告', '请示', '函', '简报'],
+            '议论文写作': ['议论文', '论证', '论点', '论据', '作文'],
+          };
+          for (var cat2 in slMap) {
+            for (var kj = 0; kj < slMap[cat2].length; kj++) {
+              if (sample.indexOf(slMap[cat2][kj]) >= 0) { result.push(cat2); break; }
+            }
+          }
+        } else if (subject === '公专') {
+          var gzMap = {
+            '职业素养': ['职业', '素养', '道德', '纪律', '规范', '警风', '廉洁', '作风'],
+            '基础知识': ['基础', '法律', '法规', '治安', '刑事', '交通', '消防', '公安', '警察', '机关', '侦查', '取证', '拘留', '逮捕', '犯罪', '刑罚', '诉讼', '证据', '宪法', '民法', '行政'],
+            '基本警务能力': ['警务', '勤务', '巡逻', '盘查', '处置', '控制', '应急', '实战', '战术', '武器', '警械'],
+          };
+          for (var cat3 in gzMap) {
+            for (var kk = 0; kk < gzMap[cat3].length; kk++) {
+              if (sample.indexOf(gzMap[cat3][kk]) >= 0) { result.push(cat3); break; }
+            }
+          }
+        }
+        return result;
+      },
+      // ========== 单题子分类检测 ==========
+      detectSubcategoryForQuestion(subject, questionText) {
+        if (!questionText) return '';
+        var sample = questionText.substring(0, 500);
+        if (subject === '行测') {
+          var xcMap = {
+            '常识判断': ['常识', '历史', '地理', '生物', '化学', '物理', '文化', '科技'],
+            '言语理解与表达': ['语言', '理解', '表达', '阅读', '填空', '成语', '语句', '排序', '主旨'],
+            '数量关系': ['数量', '数学', '计算', '方程', '几何', '排列组合', '概率', '数列'],
+            '判断推理': ['判断', '推理', '逻辑', '类比', '定义', '削弱', '加强', '前提'],
+            '资料分析': ['资料分析', '图表', '增长率', '百分比', '同比', '数据'],
+            '政治理论': ['政治', '马克思', '习近平', '党建', '时政'],
+          };
+          for (var cat in xcMap) {
+            for (var ki = 0; ki < xcMap[cat].length; ki++) {
+              if (sample.indexOf(xcMap[cat][ki]) >= 0) return cat;
+            }
+          }
+        } else if (subject === '申论') {
+          if (/概括|归纳|总结|概述/.test(sample)) return '归纳概括';
+          if (/分析|综合|评析|评述/.test(sample)) return '综合分析';
+          if (/对策|措施|建议|方案|办法/.test(sample)) return '提出对策';
+          if (/应用文|通知|报告|请示|函|简报/.test(sample)) return '应用文写作';
+          if (/议论文|论证|论点|论据|作文/.test(sample)) return '议论文写作';
+        } else if (subject === '公专') {
+          if (/职业|素养|道德|纪律|规范|警风|廉洁|作风/.test(sample)) return '职业素养';
+          if (/警务|勤务|巡逻|盘查|处置|控制|应急|实战|战术|武器|警械/.test(sample)) return '基本警务能力';
+          return '基础知识'; // 公专默认
+        }
+        return '';
+      },
+      // ========== OCR 题目二次校验 ==========
+      reVerifyOcrQuestion(idx) {
+        this.state.parsedDocsQuestions = this.state.ocrQuestions;
+        this.state.rawTextPreview = this.state.ocrText;
+        this.reVerifyQuestion(idx);
+        this.state.ocrQuestions = this.state.parsedDocsQuestions;
+        this.state.parsedDocsQuestions = [];
+      },
+      // 自动检测科目大类
+      detectSubjectCategory(headerLines, blocksText) {
+        var sample = (headerLines || []).join(' ') + ' ' + (blocksText || '').substring(0, 2000);
+        if (/公安|公专|警务|治安|刑事|法律基础/i.test(sample)) return '公专';
+        if (/申论|概括|对策|议论文|应用文|综合分析/i.test(sample)) return '申论';
+        if (/行测|数量|资料分析|判断推理|言语|常识|速度与知觉/i.test(sample)) return '行测';
+        return '公专'; // 默认
+      },
+      // 自动检测题型
+      detectQuestionType(questionContent, options) {
+        var text = questionContent || '';
+        // 判断题特征：只有2个选项且是 对/错、正确/错误、A/B、是/否
+        if (options && options.length === 2) {
+          var vals = options.map(function(o) { return (o.value || '').replace(/[^\u4e00-\u9fff]/g, ''); }).join('');
+          if (/^[对错]$|^[是否]$|^正确错误$/.test(vals)) return '判断题';
+        }
+        // 填空题特征
+        if (/____|（）|\(\)|（\s*）/.test(text)) return '填空题';
+        // 简答题/论述题特征
+        if (!options || options.length < 2) {
+          if (text.length > 100) return '简答题';
+          return '选择题';
+        }
+        return '选择题';
+      },
+      parseRawTextToQuestions() {
+        var text = this.state.rawTextPreview;
+        if (!text) {
+          ElMessage.warning('无文本可解析');
+          return;
+        }
+        // Line-by-line streaming parser: scan each line,
+        // start new question block on "N." / "N、" / "N．" / "N)" at line start,
+        // accumulate all subsequent lines until next question number.
+        var lines = text.split(/\n/);
+        var blocks = [];
+        var currentNum = null;
+        var currentLines = [];
+        var headerLines = [];
+        // 支持更多题号格式：1.  1、  1．  1)   (1)  [1]  第1题
+        var questionHeaderRe = /^\s*(?:第\s*)?(\d+)\s*(?:[\.\u3001\uff0e\)\]）]|\s*题)/;
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          var m = line.match(questionHeaderRe);
+          if (m) {
+            // Start new question: save previous block first
+            if (currentNum !== null && currentLines.length > 0) {
+              blocks.push({ num: currentNum, lines: currentLines.slice() });
+            }
+            currentNum = parseInt(m[1]);
+            // Remove the question number prefix from first line
+            var rest = line.replace(questionHeaderRe, '').trim();
+            currentLines = rest ? [rest] : [];
+          } else if (currentNum === null) {
+            // Before first question number: collect header info
+            var trimmed = line.trim();
+            if (trimmed) headerLines.push(trimmed);
+          } else {
+            // Continue current question block
+            currentLines.push(line);
+          }
+        }
+        // Save last block
+        if (currentNum !== null && currentLines.length > 0) {
+          blocks.push({ num: currentNum, lines: currentLines.slice() });
+        }
+
+        if (!blocks.length) {
+          ElMessage.warning('未能识别出题目结构，请检查文档格式');
+          return;
+        }
+
+        // 汇总所有题目文本用于检测全局科目
+        var allBlocksText = blocks.map(function(b) { return b.lines.join('\n'); }).join('\n');
+        var detectedSubject = this.detectSubjectCategory(headerLines, allBlocksText);
+
+        // Parse each block into structured question
+        var questions = [];
+        for (var j = 0; j < blocks.length; j++) {
+          var fullText = blocks[j].lines.join('\n').trim();
+          if (!fullText || fullText.length < 4) continue;
+          var q = this.extractQuestionFromBlock(fullText);
+          if (q && q.question_content) {
+            // 附加来源题号（用于分离导入的题号精确匹配）
+            q.question_number = blocks[j].num;
+            // 自动推断题型
+            q.question_type_detail = this.detectQuestionType(q.question_content, q.options);
+            // 自动检测科目
+            q.subject_category = detectedSubject;
+            q.score = 1;
+            q.difficulty = 3;
+            q._imported = false;
+            questions.push(q);
+          }
+        }
+
+        if (!questions.length) {
+          ElMessage.warning('未能提取有效题目，请检查文档格式');
+          return;
+        }
+        this.state.parsedDocsQuestions = questions;
+        this.state._lastParseCount = questions.length;
+        // 合并导入：检测并处理尾部答案模式
+        if (this.state.importMode === 'combined') {
+          var subMode = this._detectCombinedSubMode(text);
+          this.state.combinedSubMode = subMode;
+          if (subMode === 'tail') {
+            // 尾部答案模式：匹配题目与答案
+            var answerMap = this.parseAnswerTextToMap(this.splitQuestionsAndAnswersSection(text).answersText);
+            var tailMatched = 0;
+            for (var tk = 0; tk < questions.length; tk++) {
+              var ansEntry = answerMap[tk + 1];
+              if (ansEntry) {
+                if (ansEntry.answer && !questions[tk].answer) {
+                  questions[tk].answer = ansEntry.answer;
+                  tailMatched++;
+                }
+                if (ansEntry.analysis) {
+                  questions[tk].analysis = ansEntry.analysis;
+                }
+              }
+            }
+            if (tailMatched > 0) {
+              ElMessage.success('尾部答案匹配：' + tailMatched + ' 题已匹配');
+            }
+          }
+        }
+        var withAnswer = questions.filter(function(q) { return q.answer && q.answer !== '待补充'; }).length;
+        var withoutAnswer = questions.length - withAnswer;
+        ElMessage.success('已提取 ' + questions.length + ' 道题目（含答案 ' + withAnswer + ' 题' +
+          (withoutAnswer ? '，其中 ' + withoutAnswer + ' 题缺少答案' : '') + '）');
+      },
+      extractQuestionFromBlock(block) {
+        if (!block) return null;
+        var allLines = block.split(/\n/).map(function(l) { return l.trim(); }).filter(Boolean);
+        if (!allLines.length) return null;
+
+        var questionContent = '';
+        var options = [];
+        var answer = '';
+
+        for (var i = 0; i < allLines.length; i++) {
+          var line = allLines[i];
+
+          // === 答案识别（多种模式，放在最前面优先匹配） ===
+          // 模式1: 【答案】C / 【答案】 CD / 答案：C / <答案>C
+          var ansBracket = line.match(/[\u3010\u300a<\[]?\s*\u7b54\u6848\s*[\u3011\u300b>\]\uff1a:]?\s*[:.\uff1a\uff1a]?\s*([A-Da-d\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]+)/);
+          if (ansBracket) {
+            var aRaw = ansBracket[1].toUpperCase();
+            // 处理中文答案
+            if (aRaw === '\u5bf9' || aRaw === '\u6b63\u786e' || aRaw === '\u662f') aRaw = 'A';
+            else if (aRaw === '\u9519' || aRaw === '\u9519\u8bef' || aRaw === '\u5426') aRaw = 'B';
+            answer = aRaw;
+            continue;
+          }
+
+          // 模式2: 参考答案：C / 答案：D / Answer: C
+          var ansLabel = line.match(/^(?:\u53c2\u8003)?\u7b54\u6848\s*[:.\uff1a\uff1a]\s*([A-Da-d\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]+)/i);
+          if (ansLabel) {
+            var aRaw2 = ansLabel[1].toUpperCase();
+            if (aRaw2 === '\u5bf9' || aRaw2 === '\u6b63\u786e' || aRaw2 === '\u662f') aRaw2 = 'A';
+            else if (aRaw2 === '\u9519' || aRaw2 === '\u9519\u8bef' || aRaw2 === '\u5426') aRaw2 = 'B';
+            answer = aRaw2;
+            continue;
+          }
+
+          // 模式3: Answer: C (英文)
+          var ansEng = line.match(/^answer\s*[:.\uff1a]\s*([A-Da-d]+)/i);
+          if (ansEng) {
+            answer = ansEng[1].toUpperCase();
+            continue;
+          }
+
+          // 模式4: 正确选项：C / 正确答案: C
+          var ansCorrect = line.match(/(?:\u6b63\u786e\u9009\u9879|\u6b63\u786e\u7b54\u6848)\s*[:.\uff1a]\s*([A-Da-d]+)/);
+          if (ansCorrect) {
+            answer = ansCorrect[1].toUpperCase();
+            continue;
+          }
+
+          // === 选项识别（支持更多格式） ===
+          // A. xxx / A、xxx / A．xxx / A) xxx / A）xxx / (A) xxx / [A] xxx
+          //
+          // 先检测同行多选项（如 "A. xxx B. xxx C. xxx D. xxx"）
+          // 用 replace+回调 提取所有选项标记，避免选项间内容错误拼接
+          var multiOpts = [];
+          var contentBeforeOpts = '';
+          line.replace(/\s*([A-Ha-h])\s*[\)\]\.\u3001\uff0e\uff09\)]\s*(.+?)(?=\s*[A-Ha-h]\s*[\)\]\.\u3001\uff0e\uff09\)]|$)/g, function(m, letter, val, offset) {
+            if (multiOpts.length === 0) contentBeforeOpts = line.substring(0, offset).trim();
+            multiOpts.push({ key: letter.toUpperCase(), value: val.replace(/[;\uff1b]$/, '').trim() });
+            return '';
+          });
+          // 同行多选项分离：≥2 个选项标记时视为同行多选项
+          if (multiOpts.length >= 2) {
+            if (contentBeforeOpts) {
+              questionContent += (questionContent ? '\n' : '') + contentBeforeOpts;
+            }
+            for (var mi = 0; mi < multiOpts.length; mi++) {
+              options.push(multiOpts[mi]);
+            }
+            continue;
+          }
+          // 仅1个选项标记 → 回退到精确行首匹配（避免误匹配段落中的字母）
+          var optMatch = line.match(/^[\(\[]?\s*([A-Ha-h])\s*[\)\]\.\u3001\uff0e\uff09\)]\s*(.+)/);
+          if (optMatch && optMatch[2].length > 0) {
+            options.push({ key: optMatch[1].toUpperCase(), value: optMatch[2].replace(/[;\uff1b]$/, '').trim() });
+            continue;
+          }
+
+          // 模式5: 末尾孤立的单个大写字母（可能是答案）
+          if (options.length >= 2 && /^[A-Da-d]$/.test(line) && questionContent) {
+            answer = line.toUpperCase();
+            continue;
+          }
+
+          // 模式6: 末尾行是 正确/错误/对/错（判断题）
+          if (options.length >= 1 && /^[\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]$/.test(line) && questionContent) {
+            answer = /[\u5bf9\u6b63\u786e\u662f]/.test(line) ? 'A' : 'B';
+            continue;
+          }
+
+          // Otherwise, part of question content
+          questionContent += (questionContent ? '\n' : '') + line;
+        }
+
+        // Clean question content: remove leading section headers
+        questionContent = questionContent
+          .replace(/^[\u4e00-\u9fff]{1,3}[、.)）]\s*(?:单项选择|多项选择|不定项选择|判断|填空|简答|论述|案例分析).*?\n?/g, '')
+          .replace(/^一[、.]\s*\u5355\u9879\u9009\u62e9.*?\n?/g, '')
+          .replace(/^二[、.]\s*\u591a\u9879\u9009\u62e9.*?\n?/g, '')
+          .replace(/^三[、.]\s*\u5224\u65ad\u9898.*?\n?/g, '')
+          .trim();
+
+        // 回退：若选项不足3个，从questionContent中尝试重新提取
+        if (options.length < 3 && questionContent) {
+          var retryOpts = [];
+          // 在questionContent中搜索所有A/B/C/D选项标记
+          var retryRe = /([A-D])\s*[.、．)）]\s*(.+?)(?=\s*[A-D]\s*[.、．)）]|$)/g;
+          var retryMatch;
+          while ((retryMatch = retryRe.exec(questionContent)) !== null) {
+            var rkey = retryMatch[1].toUpperCase();
+            var rval = retryMatch[2].trim().replace(/[;；\s]+$/, '');
+            if (rval) retryOpts.push({ key: rkey, value: rval });
+          }
+          if (retryOpts.length >= 3) {
+            options = retryOpts;
+            // 从questionContent中移除选项行
+            questionContent = questionContent.replace(/\n?\s*[A-D]\s*[.、．)）]\s*.+/g, ' ').trim();
+          }
+        }
+
+        if (!questionContent && options.length) {
+          questionContent = '（请查看选项内容）';
+        }
+
+        // 提供默认空选项确保结构化完整
+        var finalOptions = options.length >= 2
+          ? options
+          : [{ key: 'A', value: '' }, { key: 'B', value: '' }, { key: 'C', value: '' }, { key: 'D', value: '' }];
+
+        return {
+          question_content: questionContent.substring(0, 2000),
+          options: finalOptions,
+          answer: answer || '',
+          analysis: ''
+        };
+      },
+      // ========== 分离导入：上传题目文件 ==========
+      uploadSeparateQuestionFile() {
+        var self = this;
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.docx,.pdf,.txt';
+        input.onchange = function(e) {
+          var file = e.target.files[0];
+          if (!file) return;
+          self.state.separateQuestionsFileName = file.name;
+          self.state.separateAnswersLoaded = false;
+          self.state.separateAnswersFileName = '';
+          self.state.parsedDocsQuestions = [];
+          var reader = new FileReader();
+          reader.onload = function(ev) {
+            var text = ev.target.result;
+            self.state.separateQuestionsRawText = text;
+            // 解析题目
+            self.state.rawTextPreview = text;
+            self.parseRawTextToQuestions();
+            // 将解析结果保存到分离导入上下文
+            self.state.separateQuestionsLoaded = true;
+            self.state.parsedDocsQuestions = [];
+            ElMessage.success('题目文件已解析：' + self.state._lastParseCount + ' 题，请上传答案解析文件');
+          };
+          // 根据文件类型选择读取方式
+          if (file.name.endsWith('.txt')) {
+            reader.readAsText(file, 'UTF-8');
+          } else if (file.name.endsWith('.docx') || file.name.endsWith('.pdf')) {
+            // 非txt文件通过后端提取文本
+            self._readDocViaBackend(file, function(text) {
+              self.state.separateQuestionsRawText = text;
+              self.state.rawTextPreview = text;
+              self.parseRawTextToQuestions();
+              self.state.separateQuestionsLoaded = true;
+              self.state.parsedDocsQuestions = [];
+              ElMessage.success('题目文件已解析：' + self.state._lastParseCount + ' 题，请上传答案解析文件');
+            });
+          } else {
+            reader.readAsText(file, 'UTF-8');
+          }
+        };
+        input.click();
+      },
+      // ========== 分离导入：上传答案文件 ==========
+      uploadSeparateAnswerFile() {
+        var self = this;
+        if (!this.state.separateQuestionsLoaded) {
+          ElMessage.warning('请先上传题目文件');
+          return;
+        }
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.docx,.pdf,.txt';
+        input.onchange = function(e) {
+          var file = e.target.files[0];
+          if (!file) return;
+          self.state.separateAnswersFileName = file.name;
+          var reader = new FileReader();
+          reader.onload = function(ev) {
+            var text = ev.target.result;
+            self.state.separateAnswersRawText = text;
+            self.state.separateAnswersLoaded = true;
+            ElMessage.success('答案解析文件已加载，点击"匹配题目与解析"进行配对');
+          };
+          if (file.name.endsWith('.txt')) {
+            reader.readAsText(file, 'UTF-8');
+          } else if (file.name.endsWith('.docx') || file.name.endsWith('.pdf')) {
+            self._readDocViaBackend(file, function(text) {
+              self.state.separateAnswersRawText = text;
+              self.state.separateAnswersLoaded = true;
+              ElMessage.success('答案解析文件已加载，点击"匹配题目与解析"进行配对');
+            });
+          } else {
+            reader.readAsText(file, 'UTF-8');
+          }
+        };
+        input.click();
+      },
+      // ========== 统一题号提取器（支持多种格式） ==========
+      // 返回 [{ index, number, format, lineStart, lineEnd }]，按出现顺序排列
+      _extractQuestionNumbers(rawText) {
+        if (!rawText) return [];
+        var results = [];
+        var lines = rawText.split(/\n/);
+        // 5种格式按优先级检测，每个位置只取第一个命中
+        var patterns = [
+          { name: '第N题',  re: /^\s*第\s*(\d+)\s*题/ },
+          { name: 'N.',     re: /^\s*(\d+)\s*[.\u3001\uff0e]/ },
+          { name: '(N)',    re: /^\s*[（(]\s*(\d+)\s*[）)]/ },
+          { name: '[N]',   re: /^\s*[\[【]\s*(\d+)\s*[\]】]/ },
+          { name: 'N)',     re: /^\s*(\d+)\s*[)）]/ },
+        ];
+        for (var li = 0; li < lines.length; li++) {
+          var line = lines[li];
+          for (var pi = 0; pi < patterns.length; pi++) {
+            var m = line.match(patterns[pi].re);
+            if (m) {
+              var num = parseInt(m[1]);
+              // 去重：同一题号可能因格式被多次识别
+              var dup = false;
+              for (var ri = results.length - 1; ri >= 0 && ri >= results.length - 3; ri--) {
+                if (results[ri].number === num && (li - results[ri].lineStart) <= 2) {
+                  dup = true; break;
+                }
+              }
+              if (!dup) {
+                results.push({ index: results.length, number: num, format: patterns[pi].name, lineStart: li, lineEnd: li });
+              }
+              break; // 每种格式只取第一个命中，跳到下一行
+            }
+          }
+        }
+        return results;
+      },
+      // ========== 分离导入：答案文本解析（使用统一题号提取） ==========
+      parseAnswerTextToMap(rawText) {
+        if (!rawText) return {};
+        var answerMap = {};
+        var dupWarnings = [];
+        var lines = rawText.split(/\n/);
+        // 使用统一题号提取器找到所有题号位置
+        var numPositions = this._extractQuestionNumbers(rawText);
+        if (!numPositions.length) {
+          // 回退：尝试按行扫描独立大写字母作为答案（无题号的纯答案序列）
+          return this._parseAnswerSequence(rawText);
+        }
+        for (var ni = 0; ni < numPositions.length; ni++) {
+          var pos = numPositions[ni];
+          var startLine = pos.lineStart;
+          // 计算结束行：下一个题号位置的前一行，或文件末尾
+          var endLine = (ni < numPositions.length - 1)
+            ? numPositions[ni + 1].lineStart - 1
+            : lines.length - 1;
+          if (endLine < startLine) endLine = startLine;
+          // 提取该题号对应的文本块（首行去掉题号前缀）
+          var blockLines = [];
+          for (var li = startLine; li <= endLine; li++) {
+            if (li === startLine) {
+              // 去掉首行的题号部分，保留后续内容
+              var cleaned = lines[li].replace(/^\s*(?:第\s*\d+\s*题|（?\d+）?|[\[【]\d+[\]】]|\d+\s*[.\u3001\uff0e)）])\s*/, '').trim();
+              if (cleaned) blockLines.push(cleaned);
+            } else {
+              blockLines.push(lines[li]);
+            }
+          }
+          var fullBlock = blockLines.join('\n').trim();
+          // 如果该文本块为空，尝试合并到下一个题号（可能是题号连续标注）
+          if (!fullBlock && ni < numPositions.length - 1) continue;
+          var extracted = this._extractAnswerFromLines(blockLines);
+          var ans = extracted.answer;
+          // 如果没提取到答案，尝试在整个原始文本范围内搜索该题号的答案
+          if (!ans) {
+            var looseRe = new RegExp('(?:^|\\n)\\s*' + this._escapeRegExp(String(pos.number)) + '\\s*[.、．)）]\\s*([A-Da-d]+)', 'm');
+            var looseM = rawText.match(looseRe);
+            if (looseM) ans = looseM[1].toUpperCase().replace(/[^A-D]/g, '');
+          }
+          // 重复检测
+          if (answerMap.hasOwnProperty(pos.number)) {
+            dupWarnings.push(pos.number);
+            // 保留第一条
+            if (!answerMap[pos.number].answer && ans) {
+              answerMap[pos.number] = { answer: ans, analysis: extracted.analysis || fullBlock };
+            }
+          } else {
+            answerMap[pos.number] = { answer: ans, analysis: extracted.analysis || fullBlock };
+          }
+        }
+        // 存储重复警告供 matchSeparateQuestionsAnswers 使用
+        this._answerDupWarnings = dupWarnings;
+        return answerMap;
+      },
+      // 从解析文本行中提取答案和解析内容
+      _extractAnswerFromLines(lines) {
+        var fullText = lines.join('\n').trim();
+        var answer = '';
+        var analysis = fullText;
+        // 答案模式匹配
+        var ansPatterns = [
+          /[\u3010\u300a<\[]?\s*\u7b54\u6848\s*[\u3011\u300b>\]\uff1a:]?\s*[:.\uff1a]?\s*([A-Da-d\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]+)/,
+          /^(?:\u53c2\u8003)?\u7b54\u6848\s*[:.\uff1a]\s*([A-Da-d]+)/i,
+          /(\u6b63\u786e\u9009\u9879|\u6b63\u786e\u7b54\u6848)\s*[:.\uff1a]\s*([A-Da-d]+)/
+        ];
+        for (var pi = 0; pi < ansPatterns.length; pi++) {
+          var am = fullText.match(ansPatterns[pi]);
+          if (am) {
+            var raw = (am[2] || am[1]).toUpperCase();
+            if (raw === '\u5bf9' || raw === '\u6b63\u786e' || raw === '\u662f') raw = 'A';
+            else if (raw === '\u9519' || raw === '\u9519\u8bef' || raw === '\u5426') raw = 'B';
+            answer = raw.replace(/[^A-D]/g, '');
+            // 尝试去掉答案行保留解析
+            var ansLineIdx = -1;
+            for (var li = 0; li < lines.length; li++) {
+              if (lines[li].indexOf(am[0]) >= 0) { ansLineIdx = li; break; }
+            }
+            if (ansLineIdx >= 0) {
+              analysis = lines.slice(ansLineIdx + 1).join('\n').trim();
+              if (!analysis) analysis = lines.slice(0, ansLineIdx).join('\n').trim();
+            }
+            break;
+          }
+        }
+        // 末行孤立大写字母
+        if (!answer && lines.length > 0) {
+          var lastLine = lines[lines.length - 1].trim();
+          if (/^[A-Da-d]$/.test(lastLine)) {
+            answer = lastLine.toUpperCase();
+            analysis = lines.slice(0, lines.length - 1).join('\n').trim();
+          }
+        }
+        return { answer: answer, analysis: analysis || fullText };
+      },
+      // ========== 正则特殊字符转义 ==========
+      _escapeRegExp(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      },
+      // ========== 字符串相似度计算（用于检测重复文件） ==========
+      _textSimilarity(a, b) {
+        if (!a || !b) return 0;
+        // 简单Jaccard相似度：基于字符3-gram
+        var gramsA = new Set();
+        var gramsB = new Set();
+        var maxLen = Math.min(a.length, b.length);
+        for (var i = 0; i < Math.min(a.length - 2, 8000); i++) gramsA.add(a.substring(i, i + 3));
+        for (var j = 0; j < Math.min(b.length - 2, 8000); j++) gramsB.add(b.substring(j, j + 3));
+        var intersection = 0;
+        gramsA.forEach(function(g) { if (gramsB.has(g)) intersection++; });
+        var union = gramsA.size + gramsB.size - intersection;
+        return union > 0 ? intersection / union : 0;
+      },
+      // ========== 解析连续答案序列：1-5: ABCCD / 6-10: DABCD ==========
+      _parseAnswerSequence(rawText) {
+        if (!rawText) return {};
+        var map = {};
+        // 模式1: 1-5: ABCCD 或 1～5：ABCCD
+        var rangeRe = /(\d+)\s*[-～~]\s*(\d+)\s*[:：\uff1a]\s*([A-Da-d]+)/g;
+        var m;
+        while ((m = rangeRe.exec(rawText)) !== null) {
+          var start = parseInt(m[1]);
+          var answers = m[3].toUpperCase().split('');
+          for (var i = 0; i < answers.length && (start + i) <= parseInt(m[2]); i++) {
+            if (/[A-D]/.test(answers[i])) {
+              map[start + i] = { answer: answers[i], analysis: '' };
+            }
+          }
+        }
+        // 模式2: 1.C 2.B 3.A 4.D (单行逐个)
+        var singleRe = /(\d+)\s*[\.\u3001\uff0e\)\]）]\s*([A-Da-d\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426])/g;
+        while ((m = singleRe.exec(rawText)) !== null) {
+          var num = parseInt(m[1]);
+          var raw = m[2].toUpperCase();
+          if (raw === '\u5bf9' || raw === '\u6b63\u786e' || raw === '\u662f') raw = 'A';
+          else if (raw === '\u9519' || raw === '\u9519\u8bef' || raw === '\u5426') raw = 'B';
+          if (/[A-D]/.test(raw) && !map[num]) {
+            map[num] = { answer: raw, analysis: '' };
+          }
+        }
+        // 模式3: 纯答案序列（无题号，按顺序匹配）: A B C D A B C D
+        var pureSeqRe = /^[\s\n]*([A-Da-d\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]+)[\s\n]*$/;
+        var pureMatch = rawText.trim().match(pureSeqRe);
+        if (pureMatch && Object.keys(map).length === 0) {
+          var chars = pureMatch[1].split('');
+          var clean = [];
+          for (var ci = 0; ci < chars.length; ci++) {
+            var ch = chars[ci].toUpperCase();
+            if (ch === '\u5bf9' || ch === '\u6b63\u786e' || ch === '\u662f') clean.push('A');
+            else if (ch === '\u9519' || ch === '\u9519\u8bef' || ch === '\u5426') clean.push('B');
+            else if (/[A-D]/.test(ch)) clean.push(ch);
+          }
+          for (var ni = 0; ni < clean.length; ni++) {
+            map[ni + 1] = { answer: clean[ni], analysis: '' };
+          }
+        }
+        return map;
+      },
+      // ========== 从完整试卷文本中提取每个题块的内联答案 ==========
+      _reExtractInlineAnswers(rawText) {
+        // 使用统一题号提取器定位所有题块
+        var numPositions = this._extractQuestionNumbers(rawText);
+        if (!numPositions.length) return {};
+        var lines = rawText.split(/\n/);
+        var result = {};
+        for (var ni = 0; ni < numPositions.length; ni++) {
+          var pos = numPositions[ni];
+          var startLine = pos.lineStart;
+          var endLine = (ni < numPositions.length - 1)
+            ? numPositions[ni + 1].lineStart - 1
+            : lines.length - 1;
+          if (endLine < startLine) endLine = startLine;
+          var blockLines = [];
+          for (var li = startLine; li <= endLine; li++) {
+            blockLines.push(lines[li]);
+          }
+          var fullText = blockLines.join('\n').trim();
+          if (!fullText) continue;
+          var parsed = this.extractQuestionFromBlock(fullText);
+          if (parsed && parsed.answer) {
+            result[pos.number] = { answer: parsed.answer, analysis: parsed.analysis || '' };
+          }
+        }
+        return result;
+      },
+      // ========== 分离导入：后端智能匹配（策略0） ==========
+      async _backendSmartMatch() {
+        if (!this.state.separateQuestionsRawText || !this.state.separateAnswersRawText) {
+          return null;
+        }
+        try {
+          var res = await this.fetchWithRetry('/api/questions/import/separate-match', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              questions_text: this.state.separateQuestionsRawText,
+              answers_text: this.state.separateAnswersRawText,
+              paper_name: this.state.batchPaperName || '',
+              subject_category: this.state.form.subject_category
+            })
+          }, 30000, 1);
+          if (res.ok) {
+            var data = await res.json();
+            if (data.questions && data.questions.length) {
+              // 转换为前端格式
+              var converted = [];
+              for (var i = 0; i < data.questions.length; i++) {
+                var q = data.questions[i];
+                converted.push({
+                  question_number: q.question_number || (i + 1),
+                  question_content: q.content || q.question_content || '',
+                  content: q.content || '',
+                  options: (q.options || []).map(function(o, oi) {
+                    return { key: String.fromCharCode(65 + oi), value: typeof o === 'string' ? o : o };
+                  }),
+                  answer: q.answer || '待补充',
+                  analysis: q.analysis || '',
+                  question_type: q.question_type || '选择题',
+                  subject_category: data.auto_detected_subject || '行测',
+                  _source: 'backend_match',
+                  _is_duplicate: q.is_duplicate || false,
+                  _similarity: q.similarity || 0,
+                  _existing_id: q.existing_id || null,
+                  _imported: false
+                });
+              }
+              return {
+                questions: converted,
+                match_rate: data.match_rate,
+                matched_count: data.matched_count,
+                total_questions: data.total_questions,
+                analysis_count: data.analysis_count,
+                strategy_used: data.strategy_used,
+                unmatched: data.unmatched_question_numbers || [],
+                auto_detected_subject: data.auto_detected_subject
+              };
+            }
+          }
+        } catch (e) {
+          console.warn('后端智能匹配失败，回退到前端策略:', e);
+        }
+        return null;
+      },
+      // ========== 将后端答案映射到前端题目 ==========
+      _applyBackendAnswersToLocalQuestions(localQuestions, backendQuestions) {
+        // 按question_number匹配：后端题目数据可能少于前端，但题号对应
+        var byNumber = {};
+        for (var i = 0; i < backendQuestions.length; i++) {
+          var bq = backendQuestions[i];
+          var bn = bq.question_number || (i + 1);
+          byNumber[bn] = bq;
+        }
+        var matched = 0;
+        for (var j = 0; j < localQuestions.length; j++) {
+          var lq = localQuestions[j];
+          var ln = lq.question_number || (j + 1);
+          var bq = byNumber[ln];
+          if (bq && bq.answer && bq.answer !== '待补充') {
+            lq.answer = bq.answer;
+            if (bq.analysis && bq.analysis.length > 10) {
+              lq.analysis = bq.analysis;
+            }
+            lq._is_duplicate = bq._is_duplicate || false;
+            lq._similarity = bq._similarity || 0;
+            matched++;
+          }
+        }
+        return matched;
+      },
+      // ========== 分离导入：位置兜底匹配（当所有策略失败时） ==========
+      _positionBasedFallbackMatch(questions, rawAnswerText) {
+        // 从答案文本中提取所有独立A-D字母
+        var allAnswers = [];
+        var re = /\b([A-Da-d])\b/g;
+        var m;
+        while ((m = re.exec(rawAnswerText)) !== null) {
+          allAnswers.push(m[1].toUpperCase());
+        }
+        // 如果答案数量与题目数量接近（误差 < 20%），按位置映射
+        if (allAnswers.length === 0) return 0;
+        var lenDiff = Math.abs(allAnswers.length - questions.length);
+        var tolerance = Math.max(2, Math.floor(questions.length * 0.2));
+        if (lenDiff > tolerance) return 0;
+
+        var matched = 0;
+        for (var i = 0; i < Math.min(questions.length, allAnswers.length); i++) {
+          if (!questions[i].answer || questions[i].answer === '待补充') {
+            questions[i].answer = allAnswers[i];
+            matched++;
+          }
+        }
+        return matched;
+      },
+      // ========== 分离导入：匹配题目与答案（题号精确匹配版） ==========
+      matchSeparateQuestionsAnswers: async function() {
+        if (!this.state.separateQuestionsRawText || !this.state.separateAnswersRawText) {
+          ElMessage.warning('请确保题目和答案文件都已上传');
+          return;
+        }
+        // 重新解析题目（会自动附加 question_number）
+        this.state.rawTextPreview = this.state.separateQuestionsRawText;
+        this.parseRawTextToQuestions();
+        var questions = this.state.parsedDocsQuestions;
+
+        if (!questions.length) {
+          ElMessage.warning('题目文件未能解析出有效题目');
+          return;
+        }
+
+        // 检测双文件相似度
+        var sim = this._textSimilarity(
+          this.state.separateQuestionsRawText.substring(0, 8000),
+          this.state.separateAnswersRawText.substring(0, 8000)
+        );
+
+        // ===== 策略0: 后端智能匹配（优先，异步调用） =====
+        var backendResult = await this._backendSmartMatch();
+        if (backendResult && backendResult.questions && backendResult.match_rate >= 90) {
+          // 检查后端返回的题目数是否合理（>=前端的85%）
+          var backendCount = backendResult.total_questions;
+          var localCount = questions.length;
+          if (backendCount >= localCount * 0.85) {
+            // 后端题目数合理，直接使用
+            this.state.parsedDocsQuestions = backendResult.questions;
+            this.state.separateMatchRate = backendResult.match_rate;
+            this.state.duplicateCount = backendResult.questions.filter(function(q) { return q._is_duplicate; }).length;
+            var dupMsg = this.state.duplicateCount > 0 ? ('，⚠ ' + this.state.duplicateCount + ' 题已存在（将自动跳过）') : '';
+            ElMessage.success('后端智能匹配：匹配率 ' + backendResult.match_rate + '%（' + backendResult.matched_count + '/' + backendResult.total_questions + '）' + dupMsg + ' | 策略：' + (backendResult.strategy_used || '智能'));
+            if (backendResult.auto_detected_subject) {
+              this.state.form.subject_category = backendResult.auto_detected_subject;
+            }
+            return;
+          } else {
+            // 后端丢失了题目（只识别出backendCount题但前端有localCount题）
+            // 保留前端解析 + 用后端答案匹配到前端题目
+            ElMessage.warning('后端仅识别' + backendCount + '题（前端' + localCount + '题），将使用前端解析结果并智能匹配答案');
+            this._applyBackendAnswersToLocalQuestions(questions, backendResult.questions);
+            this.state.parsedDocsQuestions = questions;
+            // 重新计算匹配率
+            var ansCount = questions.filter(function(q) { return q.answer && q.answer !== '待补充'; }).length;
+            var newRatio = localCount > 0 ? Math.round(ansCount * 100 / localCount) : 0;
+            this.state.separateMatchRate = newRatio;
+            if (backendResult.auto_detected_subject) {
+              this.state.form.subject_category = backendResult.auto_detected_subject;
+            }
+            ElMessage.success('智能匹配完成：匹配率 ' + newRatio + '%（' + ansCount + '/' + localCount + '）| 含解析 ' + backendResult.analysis_count + ' 题');
+            return;
+          }
+        }
+
+        // 如果后端匹配率不够理想，继续使用前端策略补充
+        var answerMap = this.parseAnswerTextToMap(this.state.separateAnswersRawText);
+
+        // ===== 策略2: 连续答案序列（1-5: ABCCD） =====
+        var seqMap = this._parseAnswerSequence(this.state.separateAnswersRawText);
+        for (var sn in seqMap) {
+          if (seqMap.hasOwnProperty(sn) && !answerMap.hasOwnProperty(sn)) {
+            answerMap[sn] = seqMap[sn];
+          }
+        }
+
+        // ===== 策略3: 从题目文本自身提取内联答案 =====
+        var inlineMap = this._reExtractInlineAnswers(this.state.separateQuestionsRawText);
+        for (var ik in inlineMap) {
+          if (inlineMap.hasOwnProperty(ik) && !answerMap.hasOwnProperty(ik)) {
+            answerMap[ik] = inlineMap[ik];
+          }
+        }
+
+        // ===== 策略4: 两文件高度相似时，从答案文件中提取内联答案 =====
+        if (sim > 0.85) {
+          var inlineFromAns = this._reExtractInlineAnswers(this.state.separateAnswersRawText);
+          for (var ak in inlineFromAns) {
+            if (inlineFromAns.hasOwnProperty(ak) && !answerMap.hasOwnProperty(ak)) {
+              answerMap[ak] = inlineFromAns[ak];
+            }
+          }
+        }
+
+        // ===== 基于题号的精确匹配 =====
+        var matchedCount = 0;
+        var analysisCount = 0;
+        var noAnsQuestionNums = [];   // 题目有但答案文件中找不到
+        var unmatchedAnswerNums = []; // 答案文件中有但题目中没有（多余答案）
+        var answerKeysUsed = {};
+
+        // 构建答案题号集合
+        var answerNumSet = {};
+        for (var ank in answerMap) {
+          if (answerMap.hasOwnProperty(ank)) answerNumSet[parseInt(ank)] = true;
+        }
+
+        // 逐题匹配
+        for (var qi = 0; qi < questions.length; qi++) {
+          var qNum = questions[qi].question_number;
+          // question_number 可能未设置（旧数据兼容），回退到索引
+          if (qNum === undefined || qNum === null) qNum = qi + 1;
+          var ansEntry = answerMap[qNum];
+
+          if (ansEntry) {
+            answerKeysUsed[qNum] = true;
+            if (ansEntry.answer && /[A-D\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]/.test(ansEntry.answer)) {
+              var cleaned = ansEntry.answer.toUpperCase();
+              if (cleaned === '\u5bf9' || cleaned === '\u6b63\u786e' || cleaned === '\u662f') cleaned = 'A';
+              else if (cleaned === '\u9519' || cleaned === '\u9519\u8bef' || cleaned === '\u5426') cleaned = 'B';
+              if (/[A-D]/.test(cleaned)) {
+                questions[qi].answer = cleaned;
+                matchedCount++;
+              }
+            }
+            if (ansEntry.analysis && ansEntry.analysis.length > 10) {
+              questions[qi].analysis = ansEntry.analysis;
+              analysisCount++;
+            }
+          } else {
+            noAnsQuestionNums.push(qNum);
+          }
+        }
+
+        // 找出答案文件中多余的题号
+        for (var ank2 in answerMap) {
+          if (answerMap.hasOwnProperty(ank2) && !answerKeysUsed[ank2]) {
+            unmatchedAnswerNums.push(parseInt(ank2));
+          }
+        }
+
+        // ===== 策略5: 兜底 — 前5题全无匹配 + 相似度 > 0.6 → 用题目文本内联答案 =====
+        var first5Match = 0;
+        for (var fi = 0; fi < Math.min(5, questions.length); fi++) {
+          if (questions[fi].answer && questions[fi].answer !== '待补充') first5Match++;
+        }
+        if (first5Match === 0 && sim > 0.6) {
+          var fallback = this._reExtractInlineAnswers(this.state.separateQuestionsRawText);
+          for (var fk in fallback) {
+            if (fallback.hasOwnProperty(fk)) {
+              var fn = parseInt(fk);
+              var found = false;
+              for (var fqi = 0; fqi < questions.length; fqi++) {
+                if (questions[fqi].question_number === fn || (questions[fqi].question_number === undefined && (fqi + 1) === fn)) {
+                  if (!questions[fqi].answer || questions[fqi].answer === '待补充') {
+                    questions[fqi].answer = fallback[fk].answer;
+                    if (fallback[fk].analysis) questions[fqi].analysis = fallback[fk].analysis;
+                    matchedCount++;
+                  }
+                  found = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        // ===== 策略6: 位置兜底匹配（所有格式策略失败时） =====
+        if (matchedCount === 0 && questions.length > 0) {
+          var posMatched = this._positionBasedFallbackMatch(questions, this.state.separateAnswersRawText);
+          if (posMatched > 0) {
+            matchedCount += posMatched;
+            // 从未匹配列表中移除已位置匹配的
+            var newNoAns = [];
+            for (var ni = 0; ni < noAnsQuestionNums.length; ni++) {
+              var qIdx = -1;
+              for (var qi2 = 0; qi2 < questions.length; qi2++) {
+                if (questions[qi2].question_number === noAnsQuestionNums[ni]) { qIdx = qi2; break; }
+              }
+              if (qIdx >= 0 && (!questions[qIdx].answer || questions[qIdx].answer === '待补充')) {
+                newNoAns.push(noAnsQuestionNums[ni]);
+              }
+            }
+            noAnsQuestionNums = newNoAns;
+          }
+        }
+
+        // ===== 结构化结果报告 =====
+        var ratio = questions.length > 0 ? Math.round(matchedCount * 100 / questions.length) : 0;
+        // 存储匹配率到state，供模板中使用
+        this.state.separateMatchRate = ratio;
+
+        // 构建详细报告
+        var reportParts = [];
+        reportParts.push('匹配率 ' + ratio + '%（' + matchedCount + '/' + questions.length + '）');
+        if (analysisCount > 0) reportParts.push('含解析 ' + analysisCount + ' 题');
+
+        if (noAnsQuestionNums.length > 0) {
+          // 限制展示数量
+          var showNums = noAnsQuestionNums.slice(0, 15);
+          var numStr = showNums.join('、');
+          if (noAnsQuestionNums.length > 15) numStr += '...等共' + noAnsQuestionNums.length + '题';
+          reportParts.push('缺答案: 第' + numStr);
+        }
+
+        if (this._answerDupWarnings && this._answerDupWarnings.length > 0) {
+          var dupNums = this._answerDupWarnings.slice(0, 10);
+          reportParts.push('答案重复: ' + dupNums.join('、') + '（已使用第一条）');
+        }
+
+        if (unmatchedAnswerNums.length > 0) {
+          var extraNums = unmatchedAnswerNums.slice(0, 10);
+          var extraStr = extraNums.join('、');
+          if (unmatchedAnswerNums.length > 10) extraStr += '...等共' + unmatchedAnswerNums.length + '条';
+          reportParts.push('多余答案: ' + extraStr + '（题目文档中无对应）');
+        }
+
+        // 保存未匹配题目索引
+        this.state._unmatchedIndices = [];
+        for (var ui = 0; ui < questions.length; ui++) {
+          if (!questions[ui].answer || questions[ui].answer === '待补充') {
+            this.state._unmatchedIndices.push(ui);
+          }
+        }
+
+        var fullReport = reportParts.join(' | ');
+        if (ratio >= 99) {
+          ElMessage.success('匹配完成：' + fullReport);
+        } else if (ratio >= 90) {
+          ElMessage.warning('匹配完成：' + fullReport);
+        } else {
+          ElMessage.error('匹配率偏低：' + fullReport + '。请检查答案文件格式是否正确，或切换到"合并导入"模式。');
+        }
+      },
+      // ========== 二次验证：重新校验单题选项分割 ==========
+      reVerifyQuestion(idx) {
+        var q = this.state.parsedDocsQuestions[idx];
+        if (!q) return;
+        // 从原始文本中重新定位并解析该题
+        var rawText = this.state.rawTextPreview || this.state.separateQuestionsRawText;
+        if (!rawText) {
+          ElMessage.warning('原始文本已清除，无法重检');
+          return;
+        }
+        // 切割题目块
+        var lines = rawText.split(/\n/);
+        var blocks = [];
+        var currentNum = null;
+        var currentLines = [];
+        var questionHeaderRe = /^\s*(?:第\s*)?(\d+)\s*(?:[\.\u3001\uff0e\)\]）]|\s*题)/;
+        for (var li = 0; li < lines.length; li++) {
+          var m = lines[li].match(questionHeaderRe);
+          if (m) {
+            if (currentNum !== null && currentLines.length > 0) {
+              blocks.push({ num: currentNum, lines: currentLines.slice() });
+            }
+            currentNum = parseInt(m[1]);
+            var rest = lines[li].replace(questionHeaderRe, '').trim();
+            currentLines = rest ? [rest] : [];
+          } else if (currentNum !== null) {
+            currentLines.push(lines[li]);
+          }
+        }
+        if (currentNum !== null && currentLines.length > 0) {
+          blocks.push({ num: currentNum, lines: currentLines.slice() });
+        }
+        // 找到对应题号的块
+        var targetBlock = null;
+        for (var bi = 0; bi < blocks.length; bi++) {
+          if (blocks[bi].num === idx + 1) {
+            targetBlock = blocks[bi];
+            break;
+          }
+        }
+        if (!targetBlock) {
+          ElMessage.warning('未找到第 ' + (idx + 1) + ' 题的原始文本块');
+          return;
+        }
+        // 重新解析
+        var fullText = targetBlock.lines.join('\n').trim();
+        var reParsed = this.extractQuestionFromBlock(fullText);
+        if (!reParsed || !reParsed.question_content) {
+          ElMessage.error('重检失败：无法解析题目内容');
+          return;
+        }
+        // 对比检查
+        var oldOptCount = (q.options || []).length;
+        var newOptCount = (reParsed.options || []).length;
+        var hasChange = false;
+        if (newOptCount !== oldOptCount) {
+          hasChange = true;
+        } else {
+          for (var oi = 0; oi < oldOptCount; oi++) {
+            if ((q.options[oi].value || '') !== ((reParsed.options[oi] || {}).value || '')) {
+              hasChange = true;
+              break;
+            }
+          }
+        }
+        if (!hasChange && q.answer === (reParsed.answer || '')) {
+          ElMessage.success('第 ' + (idx + 1) + ' 题校验通过，选项无异常');
+          return;
+        }
+        // 刷新
+        q.options = reParsed.options;
+        if (reParsed.answer && !q.answer) q.answer = reParsed.answer;
+        // 保留已有的 analysis
+        ElMessage.warning('第 ' + (idx + 1) + ' 题已刷新（选项数：' + oldOptCount + ' → ' + newOptCount + '）');
+      },
+      // ========== 合并导入：尾部答案模式分割 ==========
+      splitQuestionsAndAnswersSection(rawText) {
+        // 检测分隔标记
+        var sepPatterns = [
+          /\n\s*(?:参\s*考\s*)?答\s*案\s*(?:解\s*析)?\s*[:：\n]/i,
+          /\n\s*Answer\s*(?:Key)?\s*[:：\n]/i,
+          /\n\s*\u89e3\u6790\s*[:：\n]/,
+          /\n\s*二[、.]\s*\u7b54\u6848/,
+          /\n\s*三[、.]\s*\u7b54\u6848/
+        ];
+        var bestIdx = -1;
+        for (var si = 0; si < sepPatterns.length; si++) {
+          var m = rawText.match(sepPatterns[si]);
+          if (m) {
+            bestIdx = m.index;
+            break;
+          }
+        }
+        if (bestIdx < 0) return { questionsText: rawText, answersText: '' };
+        return {
+          questionsText: rawText.substring(0, bestIdx).trim(),
+          answersText: rawText.substring(bestIdx).trim()
+        };
+      },
+      // ========== 合并导入：检测子场景 ==========
+      _detectCombinedSubMode(rawText) {
+        // 先检测尾部答案模式
+        var split = this.splitQuestionsAndAnswersSection(rawText);
+        if (split.answersText && split.answersText.length > 50) {
+          return 'tail';
+        }
+        // 检测是否有内嵌答案特征（每题块内含"答案"/"解析"字样比例>50%）
+        var lines = rawText.split(/\n/);
+        var questionHeaderRe = /^\s*(?:第\s*)?(\d+)\s*(?:[\.\u3001\uff0e\)\]）]|\s*题)/;
+        var blocks = [];
+        var currentNum = null;
+        var currentLines = [];
+        for (var i = 0; i < lines.length; i++) {
+          var m = lines[i].match(questionHeaderRe);
+          if (m) {
+            if (currentNum !== null && currentLines.length > 0) {
+              blocks.push({ num: currentNum, text: currentLines.join('\n') });
+            }
+            currentNum = parseInt(m[1]);
+            var rest = lines[i].replace(questionHeaderRe, '').trim();
+            currentLines = rest ? [rest] : [];
+          } else if (currentNum !== null) {
+            currentLines.push(lines[i]);
+          }
+        }
+        if (currentNum !== null && currentLines.length > 0) {
+          blocks.push({ num: currentNum, text: currentLines.join('\n') });
+        }
+        if (blocks.length === 0) return 'auto';
+        var inlineCount = 0;
+        for (var bi = 0; bi < blocks.length; bi++) {
+          if (/\u7b54\u6848|\u89e3\u6790|【\u7b54\u6848】/.test(blocks[bi].text)) {
+            inlineCount++;
+          }
+        }
+        if (inlineCount > blocks.length * 0.5) return 'inline';
+        return 'auto';
+      },
+      async importSingleParsedQuestion(idx) {
+        const q = this.state.parsedDocsQuestions[idx];
+        if (!q || q._imported) return;
+        const mode = this.state.importMode;
+        if (mode === 'combined' && !(q.answer || '').trim()) {
+          ElMessage.warning('合并模式下请先填写第 ' + (idx + 1) + ' 题的答案');
+          return;
+        }
+        try {
+          const res = await this.fetchWithRetry('/api/questions/import/single', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              paper_name: this.state.batchPaperName || 'Word导入',
+              subject_category: q.subject_category || '公专',
+              question_type_detail: q.question_type_detail || '选择题',
+              question_content: q.question_content,
+              options: q.options,
+              answer: q.answer || '',
+              answer_analysis: q.analysis || '',
+              score: q.score || 1,
+              difficulty: q.difficulty || 3,
+              import_mode: mode
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.import_status === 'SUCCESS') {
+            q._imported = true;
+            ElMessage.success('第 ' + (idx + 1) + ' 题导入成功');
+            this.loadRecords();
+          } else if (data.import_status === 'DUPLICATE') {
+            q._imported = true;
+            ElMessage.warning('第 ' + (idx + 1) + ' 题已存在（ID: ' + data.question_id + '）');
+          } else {
+            ElMessage.warning(data.detail || data.message || '导入失败');
+          }
+        } catch (e) {
+          ElMessage.error(this.handleFetchError(e, '第' + (idx + 1) + '题'));
+        }
+      },
+      async importAllParsedQuestions() {
+        const mode = this.state.importMode;
+        // 分离导入模式下检查匹配率
+        if (mode === 'separate' && this.state.separateMatchRate < 99) {
+          ElMessage.error('匹配率仅 ' + this.state.separateMatchRate + '%，低于99%要求，无法批量导入。请检查答案文件格式或手动补充答案后重试。');
+          return;
+        }
+        // 过滤掉已导入和标记为重复的题目
+        const pending = this.state.parsedDocsQuestions.filter(function(q) {
+          return !q._imported && !q._is_duplicate;
+        });
+        if (!pending.length) {
+          var already = this.state.parsedDocsQuestions.filter(function(q) { return q._imported; }).length;
+          var dups = this.state.parsedDocsQuestions.filter(function(q) { return q._is_duplicate; }).length;
+          if (dups > 0) {
+            ElMessage.info('所有新题目已处理完毕（已导入 ' + already + ' 题，跳过 ' + dups + ' 题重复）');
+          } else {
+            ElMessage.info('所有题目已导入');
+          }
+          return;
+        }
+        if (mode === 'combined') {
+          const noAnswer = pending.filter(function(q) { return !(q.answer || '').trim() || q.answer === '待补充'; });
+          if (noAnswer.length) {
+            ElMessage.warning('合并模式下有 ' + noAnswer.length + ' 道题目缺少答案，请填写后导入或切换到分离导入模式');
+            return;
+          }
+        }
+        this.state.loading = true;
+        this.state.importProgress = 0;
+        let ok = 0;
+        let dup = 0;
+        let fail = 0;
+        var total = pending.length;
+        for (let i = 0; i < pending.length; i++) {
+          const q = pending[i];
+          this.state.importProgress = Math.round((i + 1) * 100 / total);
+          try {
+            const res = await this.fetchWithRetry('/api/questions/import/single', {
+              method: 'POST',
+              headers: this.getJsonHeaders(),
+              body: JSON.stringify({
+                paper_name: this.state.batchPaperName || 'Word导入',
+                subject_category: q.subject_category || '公专',
+                question_type_detail: q.question_type_detail || '选择题',
+                question_content: q.question_content,
+                options: q.options,
+                answer: q.answer || '',
+                answer_analysis: q.analysis || '',
+                score: q.score || 1,
+                difficulty: q.difficulty || 3,
+                import_mode: mode
+              })
+            });
+            const data = await res.json();
+            if (res.ok && data.import_status === 'SUCCESS') { q._imported = true; ok++; }
+            else if (data.import_status === 'DUPLICATE') {
+              q._imported = true;
+              q._is_duplicate = true;
+              q._similarity = data.similarity || 1.0;
+              dup++;
+            }
+            else { fail++; console.log('[importAll] fail', {idx: i, status: res.status, data: data, question: q.question_content?.substring(0,60), answer: q.answer}); }
+          } catch (e) { fail++; }
+        }
+        this.state.duplicateCount = dup;
+        ElMessage.success('导入完成：成功 ' + ok + ' 题，重复 ' + dup + ' 题，失败 ' + fail + ' 题');
+        this.loadRecords();
+        // 通知题库首页刷新数据
+        this.notifyBankRefresh();
+        this.state.loading = false;
+        this.state.importProgress = 0;
+      },
+      notifyBankRefresh() {
+        // 通过 sessionStorage 标记通知 QuestionBank 首页刷新数据
+        try {
+          sessionStorage.setItem('__VTJ_BANK_NEEDS_REFRESH__', Date.now().toString());
+        } catch(e) {}
+      },
+      async loadRecords() {
+        try {
+          const res = await this.fetchWithRetry('/api/questions/import/records?page=1&page_size=10', {
+            headers: this.getAuthHeaders()
+          }, 10000, 0);
+          const data = await res.json();
+          if (res.ok) this.state.records = data.items || [];
+        } catch (e) {
+          console.warn('[loadRecords]', e.message || e);
+        }
+      },
+      mounted() {
+        this.ensureLogin().then(function(ok) {
+          if (ok) {
+            this.loadRecords();
+          } else {
+            ElMessage.warning('请先登录后再使用题目导入功能');
+          }
+        }.bind(this));
+      }
+    }
+  })
+</script>
+<style lang="css" scoped>
+  * { box-sizing: border-box; }
+  .import-page {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #0a1628 0%, #12233f 30%, #1a2a4a 100%);
+    color: #ffffff;
+    font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  }
+  .import-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    background: linear-gradient(135deg, rgba(10,22,40,0.95) 0%, rgba(20,30,55,0.9) 100%);
+    border-bottom: 2px solid rgba(200,22,30,0.25);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .header-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 1px;
+  }
+  .header-sub {
+    font-size: 12px;
+    color: #8899aa;
+    margin-left: 8px;
+  }
+  .header-center {
+    display: flex;
+    align-items: center;
+  }
+  .mode-switch {
+    display: flex;
+    gap: 0;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .mode-btn {
+    padding: 7px 18px;
+    background: transparent;
+    border: none;
+    color: #8899aa;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+  }
+  .mode-btn.active {
+    background: linear-gradient(135deg, #c41e3a 0%, #e8384f 100%);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(200,22,30,0.3);
+  }
+  .mode-btn:hover:not(.active) {
+    color: #cfd8e3;
+    background: rgba(200,22,30,0.1);
+  }
+  .header-right { display: flex; gap: 10px; }
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: rgba(200,22,30,0.3);
+    border: 1px solid rgba(200,22,30,0.5);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .back-btn:hover {
+    background: rgba(200,22,30,0.6);
+    border-color: #c41e3a;
+    box-shadow: 0 0 12px rgba(200,22,30,0.3);
+  }
+  .import-body {
+    max-width: 1000px;
+    margin: 24px auto;
+    padding: 0 24px 40px;
+  }
+  .card-wrapper {
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .card-nav {
+    display: flex;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .nav-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #8899aa;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-bottom: 2px solid transparent;
+  }
+  .nav-tab:hover { color: #cfd8e3; background: rgba(255,255,255,0.03); }
+  .nav-tab.active {
+    color: #ffffff;
+    background: rgba(200,22,30,0.12);
+    border-bottom-color: #c41e3a;
+  }
+  .card-content {
+    padding: 24px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .form-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .form-item label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8899aa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .form-item label .required { color: #c41e3a; }
+  .form-item input,
+  .form-item select,
+  .form-item textarea {
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.3s;
+    outline: none;
+  }
+  .form-item input:focus,
+  .form-item select:focus,
+  .form-item textarea:focus {
+    border-color: #c41e3a;
+    box-shadow: 0 0 0 3px rgba(200,22,30,0.15);
+  }
+  .form-item input::placeholder,
+  .form-item textarea::placeholder { color: #556677; }
+  .form-item select { cursor: pointer; }
+  .form-item select option { background: #1a2a4a; color: #ffffff; }
+  .form-item textarea { resize: vertical; min-height: 80px; }
+  .option-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .option-key {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(200,22,30,0.2);
+    border: 1px solid rgba(200,22,30,0.3);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #c41e3a;
+  }
+  .option-row input { flex: 1; }
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-icon:hover { background: rgba(200,22,30,0.15); }
+  .btn-link {
+    display: inline-flex;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px dashed rgba(255,255,255,0.2);
+    border-radius: 6px;
+    color: #8a8faa;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-link:hover { border-color: #c41e3a; color: #c41e3a; }
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .btn-primary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #c41e3a 0%, #e8384f 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 4px 16px rgba(200,22,30,0.4);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary {
+    padding: 10px 20px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: #8899aa;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-secondary:hover { background: rgba(255,255,255,0.12); color: #ffffff; }
+  .batch-upload,
+  .image-upload { margin-bottom: 16px; }
+  .upload-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 32px 20px;
+    border: 2px dashed rgba(255,255,255,0.15);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-bottom: 16px;
+  }
+  .upload-zone:hover {
+    border-color: #c41e3a;
+    background: rgba(200,22,30,0.06);
+  }
+  .upload-zone p { font-size: 14px; color: #cfd8e3; margin: 0; }
+  .upload-hint { font-size: 11px; color: #556677; }
+  .batch-preview {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+  }
+  .preview-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: #c41e3a;
+    margin-bottom: 12px;
+  }
+  .preview-list { display: flex; flex-direction: column; gap: 8px; }
+  .preview-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .preview-idx {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(200,22,30,0.2);
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #c41e3a;
+  }
+  .preview-text { color: #b0b8c4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .raw-text {
+    width: 100%;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    color: #b0b8c4;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .image-preview {
+    margin: 16px 0;
+    text-align: center;
+  }
+  .image-preview img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .records-section {
+    margin-top: 24px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 20px 24px;
+  }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .records-list { display: flex; flex-direction: column; gap: 6px; }
+  .record-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .record-file { color: #cfd8e3; flex: 1; }
+  .record-count { color: #c41e3a; margin: 0 16px; font-weight: 600; }
+  .record-time { color: #556677; font-size: 11px; }
+  .docs-question-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .docs-q-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    overflow: visible;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .docs-q-card:hover { border-color: rgba(200,22,30,0.4); box-shadow: 0 2px 16px rgba(200,22,30,0.12); }
+  .docs-q-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(200,22,30,0.1);
+    border-bottom: 1px solid rgba(200,22,30,0.18);
+    border-radius: 12px 12px 0 0;
+  }
+  .docs-q-num {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e8384f;
+    min-width: 60px;
+  }
+  .docs-q-type {
+    font-size: 12px;
+    color: #8899aa;
+    flex: 1;
+    background: rgba(200,22,30,0.08);
+    padding: 2px 10px;
+    border-radius: 10px;
+  }
+  .docs-q-subject {
+    font-size: 11px;
+    color: #8899aa;
+    background: rgba(26,43,95,0.3);
+    padding: 2px 8px;
+    border-radius: 8px;
+  }
+  .btn-mini-import {
+    padding: 6px 16px;
+    background: linear-gradient(135deg, #c41e3a 0%, #e8384f 100%);
+    border: none;
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+  }
+  .btn-mini-import:hover {
+    box-shadow: 0 2px 10px rgba(200,22,30,0.4);
+    transform: translateY(-1px);
+  }
+  .btn-mini-import:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: rgba(255,255,255,0.1);
+    color: #556677;
+  }
+  .docs-q-body {
+    padding: 16px 18px;
+  }
+  .docs-q-content {
+    font-size: 14px;
+    color: #e8ecf4;
+    line-height: 1.8;
+    margin-bottom: 12px;
+    word-break: break-word;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.15);
+    padding: 12px 14px;
+    border-radius: 8px;
+    border-left: 3px solid rgba(200,22,30,0.3);
+  }
+  .docs-q-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.1);
+    border-radius: 8px;
+  }
+  .docs-q-opt {
+    font-size: 13px;
+    color: #b0b8c4;
+    line-height: 1.6;
+    max-width: 45%;
+    word-break: break-word;
+  }
+  .docs-q-answer-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .docs-q-ans-label {
+    color: #8899aa;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .docs-q-answer {
+    font-size: 13px;
+    color: #4ade80;
+    margin-top: 4px;
+  }
+  .docs-q-ans-input {
+    width: 72px;
+    padding: 6px 10px;
+    background: rgba(26,43,95,0.4);
+    border: 1px solid rgba(200,22,30,0.3);
+    border-radius: 6px;
+    color: #4ade80;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .docs-q-ans-input:focus {
+    border-color: #c41e3a;
+    box-shadow: 0 0 0 3px rgba(200,22,30,0.2);
+    background: rgba(26,43,95,0.6);
+  }
+  .docs-q-ans-input::placeholder {
+    color: #556677;
+    font-weight: 400;
+    font-size: 12px;
+  }
+  .docs-q-ans-hint {
+    color: #e8384f;
+    font-size: 12px;
+  }
+  /* ====== 预览列表顶部工具栏 ====== */
+  .docs-list-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(26,43,95,0.5), rgba(20,30,55,0.4));
+    border: 1px solid rgba(200,22,30,0.15);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .docs-list-stats {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .docs-stat-total {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e8ecf4;
+    background: rgba(200,22,30,0.15);
+    padding: 4px 12px;
+    border-radius: 6px;
+  }
+  .docs-stat-answered {
+    font-size: 12px;
+    color: #4ade80;
+    background: rgba(74,222,128,0.1);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .docs-stat-missing {
+    font-size: 12px;
+    color: #f59e0b;
+    background: rgba(245,158,11,0.1);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .docs-stat-imported {
+    font-size: 12px;
+    color: #8899aa;
+    background: rgba(255,255,255,0.05);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .docs-list-actions-top {
+    display: flex;
+    gap: 8px;
+  }
+  .btn-top-import {
+    padding: 8px 20px;
+    font-size: 13px;
+  }
+  .btn-top-close {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+  /* ====== 无答案卡片高亮 ====== */
+  .docs-q-card-noans {
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+  .docs-q-card-noans .docs-q-header {
+    background: rgba(245, 158, 11, 0.08);
+    border-bottom-color: rgba(245, 158, 11, 0.18);
+  }
+  .docs-q-ans-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .docs-q-ans-badge-warn {
+    animation: pulse-warn 2s ease-in-out infinite;
+  }
+  @keyframes pulse-warn {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .docs-q-answer-row-warn {
+    background: rgba(245, 158, 11, 0.05);
+    border-radius: 6px;
+  }
+  /* ====== 重检按钮 ====== */
+  .btn-mini-reverify {
+    padding: 3px 10px;
+    background: rgba(255, 165, 0, 0.15);
+    border: 1px solid rgba(255, 165, 0, 0.4);
+    border-radius: 6px;
+    color: #ffa500;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+  }
+  .btn-mini-reverify:hover {
+    background: rgba(255, 165, 0, 0.3);
+    box-shadow: 0 2px 10px rgba(255, 165, 0, 0.3);
+  }
+  /* ====== 解析展示 ====== */
+  .docs-q-analysis {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(255,255,255,0.1);
+  }
+  .docs-q-analysis-text {
+    font-size: 13px;
+    color: #a0aab4;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(0,0,0,0.15);
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+</style>

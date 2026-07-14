@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "vtj": {
+      "command": "node",
+      "args": ["vtj-mcp-server/vtj-mcp-server.js"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}

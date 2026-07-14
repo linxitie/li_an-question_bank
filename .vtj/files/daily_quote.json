@@ -1,0 +1,49 @@
+{
+  "id": "daily_quote",
+  "css": "",
+  "name": "DailyQuote",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "5jvcckzj",
+      "from": {
+        "id": "personal_goal",
+        "type": "Schema"
+      },
+      "name": "PersonalGoalCard",
+      "props": {},
+      "events": {},
+      "locked": false,
+      "children": [],
+      "invisible": false,
+      "directives": []
+    },
+    {
+      "id": "7jvccmzt",
+      "from": {
+        "id": "countdown_block",
+        "type": "Schema"
+      },
+      "name": "CountdownTimer",
+      "props": {},
+      "events": {},
+      "locked": false,
+      "children": [],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {},
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {},
+  "computed": {},
+  "lifeCycles": {},
+  "__VERSION__": "1778914860907",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

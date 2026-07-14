@@ -1,0 +1,96 @@
+<h2>答题卡模块 — 问题诊断与优化方向</h2>
+<p class="subtitle">以下是当前识别出的7个问题及其影响评估</p>
+
+<div class="section">
+  <h3>📋 问题清单</h3>
+</div>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="p1-1">
+    <div class="letter">#1</div>
+    <div class="content">
+      <h3>选项缺失</h3>
+      <p>导入解析时选项提取不完整（如只有BCD缺少A）。根因在<code>_extract_options()</code>对同行多选项的分割逻辑有bug</p>
+      <p><strong>影响：</strong>🔴 严重 — 学生无法看到完整选项</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="p1-2">
+    <div class="letter">#2</div>
+    <div class="content">
+      <h3>图片显示为 IMAGE:0_87</h3>
+      <p>题干/选项中的图片占位符未被正确替换为&lt;img&gt;标签。正则替换逻辑存在但未覆盖所有格式</p>
+      <p><strong>影响：</strong>🔴 严重 — 图文题目完全不可用</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="p1-3">
+    <div class="letter">#3</div>
+    <div class="content">
+      <h3>单选题/多选题分类缺失</h3>
+      <p>导入题目后<code>question_type_detail</code>字段未正确写入数据库，前端题型徽章显示错误</p>
+      <p><strong>影响：</strong>🟠 中等 — 学生无法区分题目类型</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="p1-4">
+    <div class="letter">#4</div>
+    <div class="content">
+      <h3>多选题不能多选</h3>
+      <p>逻辑已支持数组型答案存储（<code>selectOption</code>的toggle逻辑），但UI层未区分单选/多选的视觉交互（无checkbox样式）</p>
+      <p><strong>影响：</strong>🔴 严重 — 多选题功能不可用</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="p1-5">
+    <div class="letter">#5</div>
+    <div class="content">
+      <h3>错题答案解析缺失</h3>
+      <p>部分题目<code>answer_analysis</code>字段为空或未正确关联到前端显示</p>
+      <p><strong>影响：</strong>🟠 中等 — 学生无法理解错题原因</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="p1-6">
+    <div class="letter">#6</div>
+    <div class="content">
+      <h3>难度分析缺失</h3>
+      <p>系统未对题目进行难度等级评分。数据库<code>difficulty</code>字段默认为3</p>
+      <p><strong>影响：</strong>🟡 低 — 影响智能组卷和个性化推荐</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="p1-7">
+    <div class="letter">#7</div>
+    <div class="content">
+      <h3>VTJ DSL节点设计</h3>
+      <p>路由定义过于简单，部分DSL节点缺少数据源配置，接口调用未走统一的apiFetch通道</p>
+      <p><strong>影响：</strong>🟡 低 — 影响系统的可维护性</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🎯 设计优先级建议</h3>
+  <div class="mockup">
+    <div class="mockup-header">修复策略：自底向上（数据层 → 业务层 → 展示层）</div>
+    <div class="mockup-body">
+      <div class="placeholder" style="padding:20px; font-size:14px; line-height:2;">
+        <strong>Phase 1: 数据层修复</strong><br>
+        ├─ 选项解析引擎重构（修复选项缺失根因）<br>
+        ├─ 图片导入/存储/引用链路修复<br>
+        └─ 题型分类入库逻辑修复<br>
+        <br>
+        <strong>Phase 2: 业务逻辑层</strong><br>
+        ├─ 多选题交互逻辑完善（checkbox UI + 数组存储）<br>
+        ├─ 答案解析关联修复<br>
+        └─ 难度自动评估算法<br>
+        <br>
+        <strong>Phase 3: 展示层优化</strong><br>
+        ├─ VTJ DSL节点规范化<br>
+        ├─ 路由/接口调用标准化<br>
+        └─ 题型徽章UI完善
+      </div>
+    </div>
+  </div>
+</div>

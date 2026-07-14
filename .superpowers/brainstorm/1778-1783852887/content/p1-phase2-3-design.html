@@ -1,0 +1,150 @@
+<h2>P1 答题卡 — Phase 2: 业务逻辑层 + Phase 3: UI展示层</h2>
+<p class="subtitle">多选题交互、答案解析、VTJ DSL规范化、题型徽章</p>
+
+<div class="section">
+  <h3>✅ 修复 #5: 多选题交互 — Checkbox UI + 数组存储</h3>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">当前状态（已部分实现）</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p><strong>✅ 已正确实现：</strong></p>
+      <p>• <code>selectOption()</code> 中多选toggle逻辑<br>
+      <code>type === '多选题' → 数组push/filter</code></p>
+      <p>• <code>isOptionSelected()</code> 支持数组检查</p>
+      <p>• <code>isCorrect()</code> 支持多选字母排序比较</p>
+      <p>• <code>submitPracticeRecords()</code> 支持数组→字母串</p>
+      <p><strong>❌ 缺失：</strong></p>
+      <p>• 选项UI未区分单选/多选<br>
+      • 没有checkbox视觉元素<br>
+      • 没有"已选X项"的反馈提示</p>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">UI修复方案</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p><strong>修改选项渲染：</strong></p>
+      <p>单选题：圆形 radio 样式（保持现有）<br>
+      <code>.option-label { border-radius: 50% }</code></p>
+      <p>多选题：方形 checkbox 样式（新增）<br>
+      <code>.option-label.multi { border-radius: 6px }</code><br>
+      选中时显示 ✓ 图标</p>
+      <p><strong>新增提示条：</strong></p>
+      <div style="background:#eff6ff; padding:8px 12px; border-radius:6px; margin-top:8px; font-size:12px; color:#3b82f6;">
+        多选题 — 已选 <strong>2</strong> 项（点击选项切换选中状态）
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🔧 修复 #6: 答案解析显示</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <p><strong>问题分析：</strong>当前前端已渲染 <code>q.explain</code>（v-if="q.explain"），但后端可能返回空值</p>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>层级</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>修复</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">导入阶段</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">text_parser.py 确保解析块中 analysis 字段被正确提取并写入 answer_analysis</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">API查询</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">questions.py random端点确保返回 answer_analysis 字段</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">前端渲染</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">添加fallback："暂未提供解析" → 后台异步调用LLM生成解析</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">数据修复</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">迁移脚本：对已有题目中 answer_analysis 为空的，尝试从原始导入数据回填</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🏗️ 修复 #1: VTJ DSL节点 + 路由 + 接口规范化</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>项目</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>当前状态</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>优化方案</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">路由</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">router.js只有2条路由，缺少answer_page路由</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">补充 /answer 路由 → answer_page.vue；确认所有页面路由完整</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">DSL JSON</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">answer_page.json 完整，但部分dataSources未配置</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">补充dataSources配置，添加images数据源；规范化nodes层级结构</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">接口调用</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">混用fetch()和apiFetch()</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">统一走 window.__VTJ_AUTH__.apiFetch()；增加错误重试+超时处理</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">认证</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">ensureLogin() + getAuthHeaders()</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">已合理，保持现有实现</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🎨 题型徽章设计（题号右侧）</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <p><strong>已有实现：</strong>q-type-badge 已渲染 q.type，CSS已定义 .q-type-badge.multi 黄色样式</p>
+    <p><strong>优化：</strong>增强映射逻辑，确保所有题型正确显示</p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div style="padding:3px 10px; border-radius:8px; background:#eff6ff; color:#3b82f6; font-weight:600; font-size:11px;">[单选]</div>
+      <div style="padding:3px 10px; border-radius:8px; background:#fef3c7; color:#d97706; font-weight:600; font-size:11px;">[多选]</div>
+      <div style="padding:3px 10px; border-radius:8px; background:#f0fdf4; color:#065f46; font-weight:600; font-size:11px;">[判断]</div>
+      <div style="padding:3px 10px; border-radius:8px; background:#fef2f2; color:#dc2626; font-weight:600; font-size:11px;">[填空]</div>
+      <div style="padding:3px 10px; border-radius:8px; background:#f5f3ff; color:#7c3aed; font-weight:600; font-size:11px;">[简答]</div>
+    </div>
+    <p style="margin-top:12px;"><strong>映射：</strong>单选题→[单选] 蓝色、多选题→[多选] 黄色、判断题→[判断] 绿色、填空题→[填空] 红色、简答题→[简答] 紫色</p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📁 P1 文件变更汇总</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>文件</strong></td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>类型</strong></td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>说明</strong></td>
+      </tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/services/text_parser.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧修改</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">选项解析引擎重构（三层回退）</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/api/v1/question_import.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧修改</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">图片提取+保存、QuestionDetailCategory写入</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/api/v1/questions.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧修改</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">返回type_detail + images字段</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/services/difficulty.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">➕新增</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">渐进式IRT难度评估引擎</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/scripts/migrate_question_types.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">➕新增</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">已有题目类型回填迁移脚本</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">.vtj/vue/answer_page.vue</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧修改</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">多选checkbox UI、图片渲染、徽章完善</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">.vtj/files/answer_page.json</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧修改</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">DSL数据源补充、nodes规范化</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">.vtj/router.js</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧修改</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">补充/answer路由</td></tr>
+    </table>
+  </div>
+</div>

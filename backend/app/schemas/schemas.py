@@ -128,20 +128,20 @@ class UserResponse(BaseModel):
     user_id: int
     user_no: str
     username: str
-    email: Optional[str]
-    phone: str
-    avatar: Optional[str]
-    gender: str
-    user_type: str
-    department: Optional[str]
-    class_name: Optional[str]
-    school: str
-    title: Optional[str]
-    specialty: Optional[str]
-    role_level: int
-    status: int
-    total_coins: int
-    register_time: datetime
+    email: Optional[str] = None
+    phone: str = ''
+    avatar: Optional[str] = None
+    gender: str = ''
+    user_type: str = 'student'
+    department: Optional[str] = None
+    class_name: Optional[str] = None
+    school: str = ''
+    title: Optional[str] = None
+    specialty: Optional[str] = None
+    role_level: int = 1
+    status: int = 1
+    total_coins: int = 0
+    register_time: Optional[datetime] = None
     
 
 
@@ -155,6 +155,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
+    refresh_token: str = ""
     token_type: str = "bearer"
     user: UserResponse
 
@@ -255,25 +256,26 @@ class QuestionResponse(BaseModel):
     subject_id: int
     type_id: int
     question_content: str
-    options: Optional[dict]
+    options: Optional[dict] = None
     answer: str
-    answer_analysis: Optional[str]
-    point_id: Optional[int]
-    difficulty: int
-    score: float
-    year: Optional[int]
-    source: Optional[str]
-    tags: Optional[str]
-    video_url: Optional[str]
-    accuracy_rate: float
-    exam_frequency: int
-    creator_id: int
-    auditor_id: Optional[int]
-    audit_status: int
-    create_time: datetime
-    update_time: datetime
-    status: int
-    version: int
+    answer_analysis: Optional[str] = None
+    question_type_detail: Optional[str] = None
+    point_id: Optional[int] = None
+    difficulty: int = 3
+    score: float = 1.0
+    year: Optional[int] = None
+    source: Optional[str] = None
+    tags: Optional[str] = None
+    video_url: Optional[str] = None
+    accuracy_rate: float = 0.0
+    exam_frequency: int = 0
+    creator_id: int = 0
+    auditor_id: Optional[int] = None
+    audit_status: int = 0
+    create_time: Optional[datetime] = None
+    update_time: Optional[datetime] = None
+    status: int = 1
+    version: int = 1
 
 
 class QuestionListQuery(BaseModel):

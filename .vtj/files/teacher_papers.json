@@ -1,0 +1,29 @@
+{
+  "id": "teacher_papers",
+  "name": "TeacherPapers",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1",
+  "state": {
+    "activeNav": "papers",
+    "username": "",
+    "papers": [],
+    "showCreateModal": false,
+    "creating": false,
+    "createForm": { "paper_name": "", "subject_id": 1, "duration": 120, "total_score": 100 }
+  },
+  "methods": {
+    "loadPapers": { "type": "asyncMethod" },
+    "statusLabel": { "type": "method", "params": ["t"] },
+    "statusClass": { "type": "method", "params": ["t"] },
+    "goTab": { "type": "method", "params": ["key"] },
+    "createPaper": { "type": "method" },
+    "doCreate": { "type": "asyncMethod" },
+    "submitApproval": { "type": "asyncMethod", "params": ["id"] },
+    "deletePaper": { "type": "asyncMethod", "params": ["id"] },
+    "aiGenerate": { "type": "asyncMethod" }
+  },
+  "lifeCycles": { "mounted": { "type": "method" } },
+  "css": ".teacher-papers{min-height:100vh;background:#F5F7FA;font-size:15px}.top-nav{display:flex;align-items:center;padding:0 24px;height:56px;background:#1A3C6D;color:#fff}.page-content{max-width:1200px;margin:0 auto;padding:24px}.btn-primary{padding:10px 22px;background:#1A3C6D;color:#fff;border:none;border-radius:6px;cursor:pointer}.btn-ai{padding:10px 22px;background:#C41E3A;color:#fff;border:none;border-radius:6px;cursor:pointer}.table-wrap{background:#fff;border-radius:10px}.data-table{width:100%;border-collapse:collapse}.data-table th{background:#fafafa;font-weight:600;color:#1A3C6D;padding:12px 14px;font-size:14px}.data-table td{padding:12px 14px;border-bottom:1px solid #f0f0f0;font-size:14px}",
+  "nodes": [],
+  "props": [], "emits": [], "slots": [], "watch": [], "expose": [], "inject": [], "dataSources": {}, "locked": false
+}

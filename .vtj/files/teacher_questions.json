@@ -1,0 +1,34 @@
+{
+  "id": "teacher_questions",
+  "name": "TeacherQuestions",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1",
+  "state": {
+    "activeNav": "questions",
+    "username": "",
+    "keyword": "",
+    "filterSubject": "",
+    "filterDifficulty": "",
+    "questions": [],
+    "page": 1,
+    "total": 0,
+    "showModal": false,
+    "currentQuestion": {}
+  },
+  "methods": {
+    "loadQuestions": { "type": "asyncMethod" },
+    "doSearch": { "type": "method" },
+    "changePage": { "type": "method", "params": ["p"] },
+    "showDetail": { "type": "method", "params": ["q"] },
+    "subjectName": { "type": "method", "params": ["id"] },
+    "truncate": { "type": "method", "params": ["text", "len"] },
+    "goTab": { "type": "method", "params": ["key"] },
+    "goImport": { "type": "method" },
+    "editQuestion": { "type": "asyncMethod", "params": ["q"] },
+    "deleteQuestion": { "type": "asyncMethod", "params": ["id"] }
+  },
+  "lifeCycles": { "mounted": { "type": "method" } },
+  "css": ".teacher-questions{min-height:100vh;background:#F5F7FA;font-size:15px}.top-nav{display:flex;align-items:center;padding:0 24px;height:56px;background:#1A3C6D;color:#fff}.page-content{max-width:1300px;margin:0 auto;padding:24px}.toolbar{display:flex;gap:12px;margin-bottom:20px}.search-input{flex:1;padding:8px 14px;border:1px solid #d9d9d9;border-radius:6px;font-size:15px}.btn-search{padding:8px 20px;background:#1A3C6D;color:#fff;border:none;border-radius:6px;cursor:pointer}.btn-import{padding:8px 20px;background:#C41E3A;color:#fff;border:none;border-radius:6px;cursor:pointer}.table-wrap{background:#fff;border-radius:10px;overflow-x:auto}.data-table{width:100%;border-collapse:collapse}.data-table th{background:#fafafa;font-weight:600;color:#1A3C6D;border-bottom:2px solid #e8e8e8;padding:12px 14px;font-size:14px}.data-table td{padding:12px 14px;border-bottom:1px solid #f0f0f0;font-size:14px}",
+  "nodes": [],
+  "props": [], "emits": [], "slots": [], "watch": [], "expose": [], "inject": [], "dataSources": {}, "locked": false
+}

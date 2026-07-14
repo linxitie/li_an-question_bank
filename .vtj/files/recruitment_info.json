@@ -455,17 +455,13 @@
         "statusLabel"
       ]
     },
-    "if": {
+    "loadMore": {
       "type": "method",
-      "params": [
-        "resp && resp.items"
-      ]
+      "params": []
     },
-    "for": {
+    "setupObserver": {
       "type": "method",
-      "params": [
-        "const item of catItems"
-      ]
+      "params": []
     }
   },
   "computed": {},

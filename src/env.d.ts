@@ -6,14 +6,46 @@ declare module '*.vue' {
   export default component;
 }
 
+declare module '*/*.vue' {
+  import type { DefineComponent } from 'vue';
+  const component: DefineComponent<{}, {}, any>;
+  export default component;
+}
+
+declare module '*/*/*.vue' {
+  import type { DefineComponent } from 'vue';
+  const component: DefineComponent<{}, {}, any>;
+  export default component;
+}
+
+declare module '*/vue/*.vue' {
+  import type { DefineComponent } from 'vue';
+  const component: DefineComponent<{}, {}, any>;
+  export default component;
+}
+
 declare namespace NodeJS {
   interface ProcessEnv {
     [key: string]: any;
   }
 }
 
-declare module global {
-  interface Window {}
+declare global {
+  interface Window {
+    __VTJ_AUTH__: {
+      getState: () => any;
+      isTokenExpired: (state: any) => boolean;
+      ensureAuth: () => Promise<boolean>;
+      refreshAccessToken: () => Promise<boolean>;
+      login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
+      logout: () => void;
+      getAuthHeaders: () => { Authorization?: string };
+      getJsonHeaders: () => Record<string, string>;
+      apiFetch: (url: string, options?: any) => Promise<Response>;
+      getUsername: () => string | null;
+      isLoggedIn: () => boolean;
+    };
+  }
 }
 
 declare module 'vue' {

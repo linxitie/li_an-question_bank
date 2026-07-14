@@ -1,0 +1,133 @@
+<h2>P1 答题卡 — Phase 1: 数据层修复设计</h2>
+<p class="subtitle">修复选项解析、图片处理、题型分类三个数据层根因</p>
+
+<div class="section">
+  <h3>🔧 修复 #2: 选项缺失问题 — 解析引擎重构</h3>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">❌ 当前问题</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p><strong>根因定位：</strong><code>_extract_options()</code> 函数</p>
+      <p>问题1: 同行多选项分割有bug<br>
+      正则 <code>(?=[A-D]\s*[.、．、．)])</code> 在遇到连续中文时可能漏切</p>
+      <p>问题2: 不足4个时的fallback逻辑不完善<br>
+      <code>_extract_question_blocks</code>中的回退正则使用了DOTALL但边界匹配不够严格</p>
+      <p>问题3: 选项清理逻辑粗暴<br>
+      从content_text中删除选项行时使用简单的<code>replace(line, '', 1)</code>，可能误删</p>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">✅ 修复方案</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p><strong>方案：三层回退解析策略</strong></p>
+      <p><strong>L1 - 结构化解析：</strong><br>
+      增强版正则：支持全角半角混排、中文标点<br>
+      <code>([A-D])\s*[.、．、．)）]\s*(.+?)(?=\s*[A-D]\s*[.、．、．)）]|$)</code></p>
+      <p><strong>L2 - 段落回退：</strong><br>
+      当L1结果不足2个时，扫描连续段落查找选项模式<br>
+      支持"ABCD"单行、"A/B/C/D"斜杠分隔等多格式</p>
+      <p><strong>L3 - LLM兜底：</strong><br>
+      前两层结果不足时，调用LLM从题干文本中抽取选项<br>
+      <em>（复用已有的LLM匹配基础设施）</em></p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🖼️ 修复 #3: 图片显示 IMAGE:0_87 问题</h3>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">❌ 当前问题</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p><strong>占位符格式：</strong><code>[IMAGE:0_87]</code></p>
+      <p>当前正则：<code>/\[IMAGE:(\d+)_(\d+)\]/g</code></p>
+      <p>替换为：<code>/static/questions/0_87.png</code></p>
+      <p><strong>失败原因：</strong><br>
+      1. 图片文件实际未保存到该路径<br>
+      2. 导入时图片提取逻辑不完整<br>
+      3. 数据库question_image表有定义但未使用</p>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">✅ 修复方案</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <p><strong>完整链路修复：</strong></p>
+      <p>1. <strong>导入时：</strong>从Word/PDF中提取图片 → 保存到 <code>uploads/questions/{question_id}/</code></p>
+      <p>2. <strong>存储时：</strong>写入 <code>question_image</code> 表（已定义但未使用）关联题目ID+图片类型</p>
+      <p>3. <strong>读取时：</strong>GET /api/questions/{id} 返回 images 字段</p>
+      <p>4. <strong>展示时：</strong>前端接收图片URL数组，按 image_type 分别渲染到题干/选项区域</p>
+      <p><strong>向后兼容：</strong>保留 IMAGE 占位符替换作为兜底</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🏷️ 修复 #4: 单选/多选题分类入库</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">✅ 修复：完整的数据写入链路</div>
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <p><strong>问题根因：</strong><code>question_import.py</code> 中写入QuestionBank时，未同步创建QuestionDetailCategory记录</p>
+    <p><strong>修复步骤：</strong></p>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>步骤</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>位置</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>操作</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">1. 解析阶段</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><code>text_parser.py::_detect_question_type()</code></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">增强关键词库，新增"下列选项"、"属于"、"包括"等多选标志</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">2. 入库阶段</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><code>question_import.py</code></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">每题写入时同时创建QuestionDetailCategory记录，填充question_type_detail字段</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">3. 查询阶段</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><code>questions.py</code></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">GET /api/questions/random 返回时JOIN question_detail_category，带上type字段</td>
+      </tr>
+      <tr>
+        <td style="padding:8px; border:1px solid #e8eaf0;">4. 修复阶段</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">迁移脚本</td>
+        <td style="padding:8px; border:1px solid #e8eaf0;">对已有题目，根据answer长度和题干关键词自动回填type</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📊 难度分析 — 渐进式IRT方案</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">三阶段渐进：冷启动 → Rasch → 2PL</div>
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <div style="display:flex; gap:20px;">
+      <div style="flex:1; background:#f0fdf4; border-radius:10px; padding:14px; border:1px solid #bbf7d0;">
+        <h4 style="margin:0 0 8px; color:#065f46;">❄️ 冷启动 (&lt;30次)</h4>
+        <p style="margin:4px 0;">难度 = max(1, min(5, round(5*(1-正确率))))</p>
+        <p style="margin:4px 0; color:#5a6488;">新题默认难度3（中等）</p>
+      </div>
+      <div style="flex:1; background:#eff6ff; border-radius:10px; padding:14px; border:1px solid #bfdbfe;">
+        <h4 style="margin:0 0 8px; color:#1e40af;">🔥 预热 (30-200次)</h4>
+        <p style="margin:4px 0;">Rasch 1PL模型估计b参数</p>
+        <p style="margin:4px 0; color:#5a6488;">固定a=1, c=0</p>
+      </div>
+      <div style="flex:1; background:#fef3c7; border-radius:10px; padding:14px; border:1px solid #fcd34d;">
+        <h4 style="margin:0 0 8px; color:#92400e;">⚡ 成熟 (>200次)</h4>
+        <p style="margin:4px 0;">2PL模型估计b+a参数</p>
+        <p style="margin:4px 0; color:#5a6488;">区分度a ∈ [0.3, 3.0]</p>
+      </div>
+    </div>
+    <p style="margin-top:16px;"><strong>实现：</strong>新增 <code>services/difficulty.py</code> — 核心算法约200行，使用scipy.optimize进行MLE参数估计。定时任务每100次新答题触发一次全量重估。</p>
+  </div>
+</div>

@@ -1,0 +1,1213 @@
+{
+  "id": "jjvdntly",
+  "css": ".home-page {\n  min-height: 100vh;\n  background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);\n  font-family: \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n}\n.home-main {\n  max-width: 1400px;\n  margin: 0 auto;\n  padding: 24px 32px 0;\n}\n/* 上层模块 */\n.top-section {\n  display: grid;\n  grid-template-columns: 280px 1fr 320px;\n  gap: 20px;\n  margin-bottom: 28px;\n}\n.left-col {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.center-col {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.right-col {\n  display: flex;\n}\n/* 中层模块 */\n.recruit-section, .resource-section {\n  margin-bottom: 28px;\n}\n.section-header {\n  display: flex;\n  align-items: baseline;\n  gap: 12px;\n  margin-bottom: 16px;\n}\n.section-title {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 18px;\n  font-weight: 800;\n  color: #1a2b5f;\n  margin: 0;\n}\n.section-subtitle {\n  font-size: 13px;\n  color: #8a8faa;\n}\n.recruit-grid {\n  display: grid;\n  grid-template-columns: repeat(6, 1fr);\n  gap: 12px;\n}\n.recruit-card {\n  background: #ffffff;\n  border-radius: 14px;\n  padding: 16px 14px;\n  cursor: pointer;\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  box-shadow: 0 1px 8px rgba(26, 43, 95, 0.04);\n}\n.recruit-card:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 18px rgba(26, 43, 95, 0.1);\n}\n.recruit-icon {\n  width: 42px;\n  height: 42px;\n  border-radius: 12px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n}\n.recruit-emoji {\n  font-size: 20px;\n}\n.recruit-info {\n  flex: 1;\n  min-width: 0;\n}\n.recruit-name {\n  font-size: 13px;\n  font-weight: 700;\n  color: #1a2b5f;\n  display: block;\n  margin-bottom: 2px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.recruit-count {\n  font-size: 11px;\n  color: #c41e3a;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* 下层模块 */\n.resource-grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 20px;\n}\n.resource-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 24px;\n  cursor: pointer;\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n  box-shadow: 0 2px 12px rgba(26, 43, 95, 0.05);\n  position: relative;\n  overflow: hidden;\n}\n.resource-card:hover {\n  transform: translateY(-3px);\n  box-shadow: 0 6px 24px rgba(26, 43, 95, 0.12);\n}\n.resource-card::before {\n  content: \"\";\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 4px;\n  height: 100%;\n  border-radius: 4px 0 0 4px;\n}\n.xc-card::before {\n  background: #3b82f6;\n}\n.sl-card::before {\n  background: #f59e0b;\n}\n.ga-card::before {\n  background: #c41e3a;\n}\n.card-badge {\n  display: inline-block;\n  padding: 3px 10px;\n  border-radius: 10px;\n  font-size: 11px;\n  font-weight: 700;\n  margin-bottom: 12px;\n  letter-spacing: 1px;\n}\n.xc-card .card-badge {\n  background: #eff6ff;\n  color: #3b82f6;\n}\n.sl-card .card-badge {\n  background: #fffbeb;\n  color: #f59e0b;\n}\n.ga-card .card-badge {\n  background: #fef2f2;\n  color: #c41e3a;\n}\n.card-title {\n  font-size: 17px;\n  font-weight: 800;\n  color: #1a2b5f;\n  margin: 0 0 8px;\n}\n.card-desc {\n  font-size: 13px;\n  color: #5a6488;\n  margin: 0 0 12px;\n  line-height: 1.5;\n}\n.card-topics {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 6px;\n  margin-bottom: 16px;\n}\n.card-topics span {\n  padding: 4px 10px;\n  background: #f8f9fc;\n  border-radius: 8px;\n  font-size: 11px;\n  color: #5a6488;\n}\n.card-footer {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  font-size: 12px;\n  color: #8a8faa;\n  padding-top: 12px;\n  border-top: 1px dashed #e8eaf0;\n}\n/* 底层 */\n.footer-section {\n  padding: 24px 0 32px;\n  text-align: center;\n  border-top: 1px solid #e8eaf0;\n}\n.footer-links {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 4px;\n  margin-bottom: 12px;\n}\n.footer-links a {\n  font-size: 13px;\n  color: #5a6488;\n  text-decoration: none;\n  transition: color 0.2s;\n}\n.footer-links a:hover {\n  color: #c41e3a;\n}\n.footer-divider {\n  color: #d1d5db;\n  margin: 0 4px;\n}\n.footer-copy {\n  font-size: 11px;\n  color: #b0b7c3;\n  margin: 0;\n}",
+  "name": "HomePage",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "26ofjvebfbt",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "home-page"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26ogjvebfbt",
+          "from": {
+            "id": "ijvdn7sw",
+            "type": "Schema"
+          },
+          "name": "NavBar",
+          "props": {},
+          "events": {},
+          "locked": false,
+          "children": [],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26ohjvebfbv",
+          "from": "",
+          "name": "main",
+          "props": {
+            "class": "home-main"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26oijvebfbv",
+              "from": "",
+              "name": "section",
+              "props": {
+                "class": "top-section"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26ojjvebfbv",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "left-col"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26okjvebfbv",
+                      "from": {
+                        "id": "wjve09k1",
+                        "type": "Schema"
+                      },
+                      "name": "SignInCard",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26oljvebfbw",
+                      "from": {
+                        "id": "zjve4pgr",
+                        "type": "Schema"
+                      },
+                      "name": "GoalCard",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26omjvebfbw",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "center-col"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26onjvebfbw",
+                      "from": {
+                        "id": "11jve6eq7",
+                        "type": "Schema"
+                      },
+                      "name": "QuoteBanner",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26oojvebfbw",
+                      "from": {
+                        "id": "kjvdoyca",
+                        "type": "Schema"
+                      },
+                      "name": "CountdownTimer",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26opjvebfbw",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "right-col"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26oqjvebfbw",
+                      "from": {
+                        "id": "ljvdpmh9",
+                        "type": "Schema"
+                      },
+                      "name": "ExamCalendar",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26orjvebfbw",
+              "from": "",
+              "name": "section",
+              "props": {
+                "class": "recruit-section"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26osjvebfbw",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "section-header"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26otjvebfbw",
+                      "from": "",
+                      "name": "h2",
+                      "props": {
+                        "class": "section-title"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26oujvebfbw",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.Briefcase"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "20"
+                            },
+                            "color": "#c41e3a"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26ovjvebfbw",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": "招考信息",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26owjvebfbw",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "section-subtitle"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "最新招考动态，助你把握每一个机会",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26oxjvebfbw",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "recruit-grid"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26oyjvebfbw",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "key": {
+                          "type": "JSExpression",
+                          "value": "this.context.item.id"
+                        },
+                        "class": "recruit-card"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleRecruitClick(this.context.item.id)"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26ozjvebfbw",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "recruit-icon",
+                            "style": {
+                              "type": "JSExpression",
+                              "value": "({ background: this.context.item.bg })"
+                            }
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26p0jvebfbw",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "recruit-emoji"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.icon"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26p1jvebfbw",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "recruit-info"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26p2jvebfbw",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "recruit-name"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.name"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26p3jvebfbw",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "recruit-count"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.latest"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26p4jvebfbw",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.ArrowRight"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "14"
+                            },
+                            "color": "#cbd5e0"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "26q9jvebfi2",
+                          "name": "vFor",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.recruitCategories"
+                          },
+                          "iterator": {
+                            "item": "item",
+                            "index": "index"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26p5jvebfbw",
+              "from": "",
+              "name": "section",
+              "props": {
+                "class": "resource-section"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26p6jvebfbw",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "section-header"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26p7jvebfbw",
+                      "from": "",
+                      "name": "h2",
+                      "props": {
+                        "class": "section-title"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26p8jvebfbw",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.Reading"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "20"
+                            },
+                            "color": "#c41e3a"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26p9jvebfbw",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": "备考资料",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26pajvebfbw",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "section-subtitle"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "系统化备考，全面提升应试能力",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26pbjvebfbw",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "resource-grid"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26pcjvebfby",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "resource-card xc-card"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleResourceClick('xc')"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26pdjvebfby",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-badge"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "行测",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26pejvebfby",
+                          "from": "",
+                          "name": "h4",
+                          "props": {
+                            "class": "card-title"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "行测小讲堂",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26pfjvebfbz",
+                          "from": "",
+                          "name": "p",
+                          "props": {
+                            "class": "card-desc"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "类比推理·拆分思维·组合排列·材料题精讲",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26pgjvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-topics"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26phjvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "题型分辨",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26pijvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "组合排列",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26pjjvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "方法技巧",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26pkjvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-footer"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26pljvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "视频+文档",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26pmjvebfbz",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.$libs.VtjIcons.VideoPlay"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "16"
+                                },
+                                "color": "#c41e3a"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26pnjvebfbz",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "resource-card sl-card"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleResourceClick('sl')"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26pojvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-badge"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "申论",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26ppjvebfbz",
+                          "from": "",
+                          "name": "h4",
+                          "props": {
+                            "class": "card-title"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "申论小讲堂",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26pqjvebfbz",
+                          "from": "",
+                          "name": "p",
+                          "props": {
+                            "class": "card-desc"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "标题拟定·写作技巧·范文展示·必知知识点",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26prjvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-topics"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26psjvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "文章写作",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26ptjvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "范文精读",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26pujvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "素材积累",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26pvjvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-footer"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26pwjvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "视频+文档",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26pxjvebfbz",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.$libs.VtjIcons.Document"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "16"
+                                },
+                                "color": "#c41e3a"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26pyjvebfbz",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "resource-card ga-card"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleResourceClick('ga')"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26pzjvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-badge"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "公专",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26q0jvebfbz",
+                          "from": "",
+                          "name": "h4",
+                          "props": {
+                            "class": "card-title"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "公安专业知识卡片",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26q1jvebfbz",
+                          "from": "",
+                          "name": "p",
+                          "props": {
+                            "class": "card-desc"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "职业素养·警务技能·基础知识记背",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26q2jvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-topics"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26q3jvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "必背卡片",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26q4jvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "警务技能",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26q5jvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "法条速记",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26q6jvebfbz",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "card-footer"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26q7jvebfbz",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "知识卡片",
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26q8jvebfbz",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.$libs.VtjIcons.Tickets"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "16"
+                                },
+                                "color": "#c41e3a"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26qajvebfi3",
+              "from": "",
+              "name": "footer",
+              "props": {
+                "class": "footer-section"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26qbjvebfi3",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "footer-links"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26qcjvebfi3",
+                      "from": "",
+                      "name": "a",
+                      "props": {
+                        "href": "#"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "用户协议",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qdjvebfi3",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "footer-divider"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "|",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qejvebfi3",
+                      "from": "",
+                      "name": "a",
+                      "props": {
+                        "href": "#"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "隐私政策",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qfjvebfi3",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "footer-divider"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "|",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qgjvebfi3",
+                      "from": "",
+                      "name": "a",
+                      "props": {
+                        "href": "#"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "法律声明",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qhjvebfi3",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "footer-divider"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "|",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qijvebfi3",
+                      "from": "",
+                      "name": "a",
+                      "props": {
+                        "href": "#"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "联系我们",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qjjvebfi3",
+                      "from": "",
+                      "name": "span",
+                      "props": {
+                        "class": "footer-divider"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "|",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26qkjvebfi3",
+                      "from": "",
+                      "name": "a",
+                      "props": {
+                        "href": "#"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": "加入我们",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26qljvebfi3",
+                  "from": "",
+                  "name": "p",
+                  "props": {
+                    "class": "footer-copy"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": "© 2025 砺安题库 · 专注公安联考备考 备案号：京ICP备2025000000号",
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "resourceItems": "[]",
+    "recruitCategories": "[]",
+    "recruitAllData": "{}",
+    "showRecruitModal": "false",
+    "selectedRecruit": "{}"
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "handleResourceClick": {
+      "type": "method",
+      "params": [
+        "type"
+      ]
+    },
+    "fetchRecruitment": {
+      "type": "asyncMethod"
+    },
+    "loadFallbackRecruit": {
+      "type": "method",
+      "params": [
+        "categories",
+        "icons",
+        "bgs"
+      ]
+    },
+    "_catIcon": {
+      "type": "method",
+      "params": [
+        "cat"
+      ]
+    },
+    "_catBg": {
+      "type": "method",
+      "params": [
+        "cat"
+      ]
+    },
+    "toggleCardExpand": {
+      "type": "method",
+      "params": [
+        "cardItem"
+      ]
+    },
+    "openRecruitDetail": {
+      "type": "method",
+      "params": [
+        "recruit"
+      ]
+    },
+    "closeRecruitDetail": {
+      "type": "method"
+    },
+    "buildRecruitCards": {
+      "type": "method"
+    }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1778936500684",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

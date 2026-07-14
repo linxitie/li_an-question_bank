@@ -1,0 +1,41 @@
+{
+  "id": "teacher_dashboard",
+  "name": "TeacherDashboard",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1",
+  "state": {
+    "activeNav": "dashboard",
+    "username": "",
+    "pendingPapers": [],
+    "recentActivities": [],
+    "statCards": [
+      { "label": "总题目数", "value": "--" },
+      { "label": "本月新增试卷", "value": "--" },
+      { "label": "今日练习人数", "value": "--" }
+    ],
+    "navTabs": [
+      { "key": "dashboard", "label": "工作台", "path": "/teacher/dashboard" },
+      { "key": "questions", "label": "题目管理", "path": "/teacher/questions" },
+      { "key": "papers", "label": "试卷管理", "path": "/teacher/papers" },
+      { "key": "scores", "label": "成绩管理", "path": "/teacher/scores" }
+    ]
+  },
+  "methods": {
+    "loadDashboard": { "type": "asyncMethod" },
+    "goTab": { "type": "method", "params": ["key"] },
+    "handleLogout": { "type": "method" }
+  },
+  "lifeCycles": {
+    "mounted": { "type": "method" }
+  },
+  "css": ".teacher-dashboard{min-height:100vh;background:#F5F7FA;font-size:15px}.dashboard-nav{display:flex;align-items:center;padding:0 24px;height:56px;background:#1A3C6D;color:#fff}.stats-row{display:flex;gap:20px;padding:24px;max-width:1200px;margin:0 auto}.stat-card{flex:1;background:#fff;border-radius:12px;padding:24px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.06)}.stat-value{font-size:32px;font-weight:700;color:#1A3C6D}.stat-label{font-size:14px;color:#888;margin-top:6px}.content-row{display:flex;gap:20px;padding:0 24px 24px;max-width:1200px;margin:0 auto}.panel{flex:1;background:#fff;border-radius:12px;padding:20px}.panel-title{font-size:16px;font-weight:700;color:#1A3C6D;margin:0 0 16px;border-bottom:2px solid #F5F7FA;padding-bottom:12px}",
+  "nodes": [],
+  "props": [],
+  "emits": [],
+  "slots": [],
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "dataSources": {},
+  "locked": false
+}

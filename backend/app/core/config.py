@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # 日志配置
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
     LOG_FILE: str = Field("./logs/app.log", env="LOG_FILE")
+
+    # 新闻爬虫配置
+    NEWS_BROWSER: str = Field("chromium", env="NEWS_BROWSER")
     
     @property
     def DATABASE_URL(self) -> str:

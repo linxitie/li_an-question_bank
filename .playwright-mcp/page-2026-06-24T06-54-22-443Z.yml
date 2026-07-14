@@ -1,0 +1,315 @@
+- generic [ref=e3]:
+  - link "Skip to content" [ref=e4] [cursor=pointer]:
+    - /url: "#VPContent"
+  - banner:
+    - generic:
+      - generic:
+        - generic:
+          - link "VTJ.PRO" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e7]: VTJ.PRO
+          - generic [ref=e8]:
+            - button "Search" [ref=e11] [cursor=pointer]:
+              - generic [ref=e14]: Search
+              - generic [ref=e15]:
+                - generic [ref=e16]: Ctrl
+                - generic [ref=e17]: K
+            - navigation "Main Navigation" [ref=e18]:
+              - generic [ref=e19]: Main Navigation
+              - link "指引" [ref=e20] [cursor=pointer]:
+                - /url: /guide/
+                - generic [ref=e21]: 指引
+              - link "平台" [ref=e22] [cursor=pointer]:
+                - /url: https://app.vtj.pro/
+                - generic [ref=e23]: 平台
+              - link "维基" [ref=e24] [cursor=pointer]:
+                - /url: /wiki/
+                - generic [ref=e25]: 维基
+              - link "🔥 高级" [ref=e26] [cursor=pointer]:
+                - /url: /service/
+                - generic [ref=e27]: 🔥 高级
+              - link "动态" [ref=e28] [cursor=pointer]:
+                - /url: /news/
+                - generic [ref=e29]: 动态
+              - button "文档" [ref=e31] [cursor=pointer]:
+                - generic [ref=e33]: 文档
+            - button "extra navigation" [ref=e36] [cursor=pointer]
+  - button "页面导航" [ref=e41] [cursor=pointer]: 页面导航
+  - complementary [ref=e43]:
+    - navigation "Sidebar Navigation" [ref=e45]:
+      - generic [ref=e46]: Sidebar Navigation
+      - generic [ref=e48]:
+        - button "开始" [ref=e49]:
+          - heading "开始" [level=2] [ref=e51]
+        - generic [ref=e52]:
+          - link "关于 VTJ.PRO" [ref=e56] [cursor=pointer]:
+            - /url: /guide/
+            - paragraph [ref=e57]: 关于 VTJ.PRO
+          - link "快速上手" [ref=e61] [cursor=pointer]:
+            - /url: /guide/start.html
+            - paragraph [ref=e62]: 快速上手
+          - link "项目集成" [ref=e66] [cursor=pointer]:
+            - /url: /guide/integration.html
+            - paragraph [ref=e67]: 项目集成
+      - generic [ref=e69]:
+        - button "基础" [ref=e70]:
+          - heading "基础" [level=2] [ref=e72]
+        - generic [ref=e73]:
+          - link "创建一个低代码应用（ Todo ）" [ref=e77] [cursor=pointer]:
+            - /url: /guide/base/todo.html
+            - paragraph [ref=e78]: 创建一个低代码应用（ Todo ）
+          - button "设计器入门教程 toggle section" [ref=e80] [cursor=pointer]:
+            - heading "设计器入门教程" [level=3] [ref=e82]
+            - button "toggle section" [ref=e83]
+          - link "设计器接入指南" [ref=e88] [cursor=pointer]:
+            - /url: /guide/base/integrate.html
+            - paragraph [ref=e89]: 设计器接入指南
+          - link "物料制作指南" [ref=e93] [cursor=pointer]:
+            - /url: /guide/base/materials.html
+            - paragraph [ref=e94]: 物料制作指南
+          - link "应用增强" [ref=e98] [cursor=pointer]:
+            - /url: /guide/base/enhance.html
+            - paragraph [ref=e99]: 应用增强
+          - link "网络请求" [ref=e103] [cursor=pointer]:
+            - /url: /guide/base/request.html
+            - paragraph [ref=e104]: 网络请求
+          - link "权限控制" [ref=e108] [cursor=pointer]:
+            - /url: /guide/base/access.html
+            - paragraph [ref=e109]: 权限控制
+          - link "应用全局设置" [ref=e113] [cursor=pointer]:
+            - /url: /guide/base/globals.html
+            - paragraph [ref=e114]: 应用全局设置
+          - link "视频教程专题" [ref=e118] [cursor=pointer]:
+            - /url: https://space.bilibili.com/1658426127
+            - paragraph [ref=e119]: 视频教程专题
+      - generic [ref=e121]:
+        - button "进阶" [ref=e122]:
+          - heading "进阶" [level=2] [ref=e124]
+        - generic [ref=e125]:
+          - link "设计器引擎" [ref=e129] [cursor=pointer]:
+            - /url: /guide/extras/engine.html
+            - paragraph [ref=e130]: 设计器引擎
+          - link "核心提供者" [ref=e134] [cursor=pointer]:
+            - /url: /guide/extras/provider.html
+            - paragraph [ref=e135]: 核心提供者
+          - button "核心三件套 toggle section" [ref=e137] [cursor=pointer]:
+            - heading "核心三件套" [level=3] [ref=e139]
+            - button "toggle section" [ref=e140]
+          - generic [ref=e143] [cursor=pointer]:
+            - link "设计器扩展" [ref=e145]:
+              - /url: /guide/extension.html
+              - heading "设计器扩展" [level=3] [ref=e146]
+            - button "toggle section" [ref=e147]
+      - generic [ref=e150]:
+        - button "高级" [ref=e151]:
+          - heading "高级" [level=2] [ref=e153]
+        - generic [ref=e154]:
+          - link "🔥 打造专属在线开发平台" [ref=e158] [cursor=pointer]:
+            - /url: /service/
+            - paragraph [ref=e159]: 🔥 打造专属在线开发平台
+          - link "🧩 集成 RuoYi-Vue3" [ref=e163] [cursor=pointer]:
+            - /url: https://gitee.com/newgateway/VTJ-RuoYi-Vue3
+            - paragraph [ref=e164]: 🧩 集成 RuoYi-Vue3
+      - generic [ref=e166]:
+        - button "专栏" [ref=e167]:
+          - heading "专栏" [level=2] [ref=e169]
+        - generic [ref=e170]:
+          - link "入门指南" [ref=e174] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615379311379283995
+            - paragraph [ref=e175]: 入门指南
+          - link "深入探究" [ref=e179] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615538630096764962
+            - paragraph [ref=e180]: 深入探究
+          - link "平台揭秘" [ref=e184] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7618920576732921882
+            - paragraph [ref=e185]: 平台揭秘
+  - generic [ref=e190]:
+    - main [ref=e191]:
+      - generic [ref=e193]:
+        - heading "VTJ.PRO 快速上手指南 Permalink to \"VTJ.PRO 快速上手指南\"" [level=1] [ref=e194]:
+          - text: VTJ.PRO 快速上手指南
+          - link "Permalink to \"VTJ.PRO 快速上手指南\"" [ref=e195] [cursor=pointer]:
+            - /url: "#vtj-pro-快速上手指南"
+            - text: "#"
+        - heading "创建 VTJ 应用 Permalink to \"创建 VTJ 应用\"" [level=2] [ref=e196]:
+          - text: 创建 VTJ 应用
+          - link "Permalink to \"创建 VTJ 应用\"" [ref=e197] [cursor=pointer]:
+            - /url: "#创建-vtj-应用"
+            - text: "#"
+        - paragraph [ref=e198]: VTJ.PRO 提供开箱即用的项目脚手架，可快速创建基于 VTJ 低代码的开发工程，预置最佳实践配置，特别适合新项目开发。
+        - generic [ref=e199]:
+          - paragraph [ref=e200]: 前提条件
+          - list [ref=e201]:
+            - listitem [ref=e202]:
+              - strong [ref=e203]: 命令行基础
+              - text: ：熟悉终端基本操作
+            - listitem [ref=e204]:
+              - strong [ref=e205]: Node.js 环境
+              - text: ：已安装 v20 或更高版本（推荐使用
+              - link "LTS 版本" [ref=e206] [cursor=pointer]:
+                - /url: https://nodejs.org/
+              - text: ）
+        - heading "通过脚手架创建项目 Permalink to \"通过脚手架创建项目\"" [level=3] [ref=e207]:
+          - text: 通过脚手架创建项目
+          - link "Permalink to \"通过脚手架创建项目\"" [ref=e208] [cursor=pointer]:
+            - /url: "#通过脚手架创建项目"
+            - text: "#"
+        - paragraph [ref=e209]: 执行以下命令创建项目（根据网络情况选择命令）：
+        - generic [ref=e210]:
+          - button "Copy Code" [ref=e211] [cursor=pointer]
+          - generic [ref=e212]: sh
+          - code [ref=e214]:
+            - generic [ref=e215]: "# 标准创建（推荐网络畅通时使用）"
+            - generic [ref=e216]: npm create vtj@latest -- -t app
+            - generic [ref=e217]: "# 国内用户加速方案（使用淘宝镜像）"
+            - generic [ref=e218]: npm create vtj@latest --registry=https://registry.npmmirror.com -- -t app
+        - heading "初始化与启动项目 Permalink to \"初始化与启动项目\"" [level=3] [ref=e219]:
+          - text: 初始化与启动项目
+          - link "Permalink to \"初始化与启动项目\"" [ref=e220] [cursor=pointer]:
+            - /url: "#初始化与启动项目"
+            - text: "#"
+        - paragraph [ref=e221]: 创建完成后按提示操作：
+        - generic [ref=e222]:
+          - button "Copy Code" [ref=e223] [cursor=pointer]
+          - generic [ref=e224]: sh
+          - code [ref=e226]:
+            - generic [ref=e227]: "# 进入项目目录（目录名根据提示输入）"
+            - generic [ref=e228]: cd your-project-name
+            - generic [ref=e229]: "# 安装依赖（首次执行可能需 1-3 分钟）"
+            - generic [ref=e230]: npm run setup
+            - generic [ref=e231]: "# 启动开发服务器"
+            - generic [ref=e232]: npm run dev
+        - paragraph [ref=e233]:
+          - text: 成功启动后，终端将显示本地访问地址（通常为
+          - code [ref=e234]: http://localhost:5173
+          - text: ），浏览器访问该地址看到如下界面即表示运行成功：
+        - paragraph [ref=e235]:
+          - img "启动页面" [ref=e236]
+        - blockquote [ref=e237]:
+          - paragraph [ref=e238]:
+            - strong [ref=e239]: 低代码开发提示
+            - text: ：此时可打开设计器开始可视化开发，设计器入口通常为
+            - code [ref=e240]: http://localhost:5173/__vtj__/
+        - separator [ref=e241]
+        - heading "项目类型选择 Permalink to \"项目类型选择\"" [level=3] [ref=e242]:
+          - text: 项目类型选择
+          - link "Permalink to \"项目类型选择\"" [ref=e243] [cursor=pointer]:
+            - /url: "#项目类型选择"
+            - text: "#"
+        - paragraph [ref=e244]: 根据目标平台选择创建命令：
+        - table [ref=e245]:
+          - rowgroup [ref=e246]:
+            - row "平台类型 命令" [ref=e247]:
+              - columnheader "平台类型" [ref=e248]
+              - columnheader "命令" [ref=e249]
+          - rowgroup [ref=e250]:
+            - row "Web应用 (PC端) npm create vtj@latest -- -t app 或镜像加速版： npm create vtj@latest --registry=https://registry.npmmirror.com -- -t app" [ref=e251]:
+              - cell "Web应用 (PC端)" [ref=e252]:
+                - strong [ref=e253]: Web应用
+                - text: (PC端)
+              - cell "npm create vtj@latest -- -t app 或镜像加速版： npm create vtj@latest --registry=https://registry.npmmirror.com -- -t app" [ref=e254]:
+                - code [ref=e255]: npm create vtj@latest -- -t app
+                - text: 或镜像加速版：
+                - code [ref=e256]: npm create vtj@latest --registry=https://registry.npmmirror.com -- -t app
+            - row "H5应用 (移动端) npm create vtj@latest -- -t h5 或镜像加速版： npm create vtj@latest --registry=https://registry.npmmirror.com -- -t h5" [ref=e257]:
+              - cell "H5应用 (移动端)" [ref=e258]:
+                - strong [ref=e259]: H5应用
+                - text: (移动端)
+              - cell "npm create vtj@latest -- -t h5 或镜像加速版： npm create vtj@latest --registry=https://registry.npmmirror.com -- -t h5" [ref=e260]:
+                - code [ref=e261]: npm create vtj@latest -- -t h5
+                - text: 或镜像加速版：
+                - code [ref=e262]: npm create vtj@latest --registry=https://registry.npmmirror.com -- -t h5
+        - separator [ref=e263]
+        - heading "项目工程资源 Permalink to \"项目工程资源\"" [level=3] [ref=e264]:
+          - text: 项目工程资源
+          - link "Permalink to \"项目工程资源\"" [ref=e265] [cursor=pointer]:
+            - /url: "#项目工程资源"
+            - text: "#"
+        - list [ref=e266]:
+          - listitem [ref=e267]:
+            - strong [ref=e268]: 配置文档
+            - text: ：
+            - link "项目工程模板详解" [ref=e269] [cursor=pointer]:
+              - /url: ./base/project-template.html
+            - list [ref=e270]:
+              - listitem [ref=e271]: 包含目录结构说明、环境配置、构建部署等核心配置
+          - listitem [ref=e272]:
+            - strong [ref=e273]: 示例代码库
+            - text: ：
+            - link "https://gitee.com/newgateway/examples-vtj/tree/master/packages/app" [ref=e274] [cursor=pointer]:
+              - /url: https://gitee.com/newgateway/examples-vtj/tree/master/packages/app
+        - separator [ref=e275]
+        - heading "设计器使用 Permalink to \"设计器使用\"" [level=3] [ref=e276]:
+          - text: 设计器使用
+          - link "Permalink to \"设计器使用\"" [ref=e277] [cursor=pointer]:
+            - /url: "#设计器使用"
+            - text: "#"
+        - list [ref=e278]:
+          - listitem [ref=e279]:
+            - strong [ref=e280]: 设计器手册
+            - text: ：
+            - link "低代码设计器完全指南" [ref=e281] [cursor=pointer]:
+              - /url: ./base/designer.html
+            - list [ref=e282]:
+              - listitem [ref=e283]: 组件拖拽配置 · 数据绑定 · 事件联动 · 主题定制
+        - separator [ref=e284]
+        - heading "常见问题排查 Permalink to \"常见问题排查\"" [level=3] [ref=e285]:
+          - text: 常见问题排查
+          - link "Permalink to \"常见问题排查\"" [ref=e286] [cursor=pointer]:
+            - /url: "#常见问题排查"
+            - text: "#"
+        - list [ref=e287]:
+          - listitem [ref=e288]:
+            - paragraph [ref=e289]:
+              - strong [ref=e290]: 依赖安装失败
+              - text: ：
+            - list [ref=e291]:
+              - listitem [ref=e292]:
+                - text: 尝试删除
+                - code [ref=e293]: node_modules
+                - text: 后重新执行
+                - code [ref=e294]: npm run setup
+              - listitem [ref=e295]: 检查网络代理设置或切换 npm 镜像源
+          - listitem [ref=e296]:
+            - paragraph [ref=e297]:
+              - strong [ref=e298]: 端口冲突
+              - text: ：
+            - list [ref=e299]:
+              - listitem [ref=e300]:
+                - text: 修改
+                - code [ref=e301]: vite.config.js
+                - text: 中的
+                - code [ref=e302]: server.port
+                - text: 配置项
+          - listitem [ref=e303]:
+            - paragraph [ref=e304]:
+              - strong [ref=e305]: 设计器加载异常
+              - text: ：
+            - list [ref=e306]:
+              - listitem [ref=e307]: 确保使用 Chrome/Edge 等现代浏览器
+              - listitem [ref=e308]: 清除浏览器缓存后重试
+        - blockquote [ref=e309]:
+          - paragraph [ref=e310]:
+            - text: 获取实时支持：加入
+            - link "VTJ 开发者社区" [ref=e311] [cursor=pointer]:
+              - /url: https://gitee.com/newgateway/vtj
+            - text: 或提交 Issue
+        - separator [ref=e312]
+        - paragraph [ref=e313]:
+          - strong [ref=e314]: 下一步建议
+          - text: ：
+          - text: 完成创建后，建议优先阅读
+          - link "设计器使用手册" [ref=e315] [cursor=pointer]:
+            - /url: ./base/designer.html
+          - text: 掌握核心开发工作流，再参考示例工程进行模块化开发。
+    - contentinfo [ref=e316]:
+      - navigation "Pager" [ref=e317]:
+        - generic [ref=e318]: Pager
+        - link "Previous page 关于 VTJ.PRO" [ref=e320] [cursor=pointer]:
+          - /url: /guide/
+          - generic [ref=e321]: Previous page
+          - generic [ref=e322]: 关于 VTJ.PRO
+        - link "Next page 项目集成" [ref=e324] [cursor=pointer]:
+          - /url: /guide/integration.html
+          - generic [ref=e325]: Next page
+          - generic [ref=e326]: 项目集成

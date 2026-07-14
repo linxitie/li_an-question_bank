@@ -1,0 +1,172 @@
+<h2>P2 考试日历 — 问题诊断与设计方案</h2>
+<p class="subtitle">5个问题的根因分析与完整修复方案</p>
+
+<div class="section">
+  <h3>📋 问题#1: 前端信息展示不全</h3>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">❌ 当前状态</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <div style="border:1px solid #e8ecf1; border-radius:10px; padding:12px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="background:#fef1f2; padding:8px 10px; border-radius:8px; text-align:center; min-width:48px;">
+            <div style="font-size:11px; color:#c8161e;">6月</div>
+            <div style="font-size:18px; font-weight:700; color:#c8161e;">22</div>
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">2026年国家公务员考试</div>
+            <div style="font-size:11px; color:#8899aa;">北京</div>
+          </div>
+          <div style="color:#c0c8d4;">→</div>
+        </div>
+      </div>
+      <p style="margin-top:12px;"><strong>缺失信息：</strong></p>
+      <p>• 报名时间-截止时间 ✗<br>• 考试方式（笔试/面试）✗<br>• 考试状态（已截止/正在报名）✗</p>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">✅ 优化后设计</div>
+    <div class="mockup-body" style="font-size:13px; padding:16px;">
+      <div style="border:1px solid #e8ecf1; border-radius:10px; padding:14px; background:#fff;">
+        <div style="display:flex; align-items:flex-start; gap:12px;">
+          <div style="background:linear-gradient(135deg,#fef1f2,#fde8ea); padding:8px 10px; border-radius:10px; text-align:center; min-width:52px;">
+            <div style="font-size:11px; color:#c8161e; font-weight:500;">6月</div>
+            <div style="font-size:20px; font-weight:700; color:#c8161e;">22</div>
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:14px; font-weight:600; color:#1a2a3a; margin-bottom:4px;">2026年国家公务员考试</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <span style="font-size:11px; padding:2px 8px; border-radius:6px; background:#eff6ff; color:#3b82f6; font-weight:600;">笔试</span>
+              <span style="font-size:11px; color:#5a6488;">报名: 6/15 - 6/22</span>
+              <span style="font-size:11px; padding:2px 8px; border-radius:6px; background:#d1fae5; color:#065f46; font-weight:600;">正在报名</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="margin-top:12px;">
+        ✅ 考试方式徽章<br>
+        ✅ 报名时间-截止时间<br>
+        ✅ 状态标签（颜色区分）
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📏 问题#2: 卡片宽度 + 字体排版</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">卡片尺寸调整方案</div>
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <table style="width:100%; border-collapse:collapse;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>属性</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>当前值</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>优化值</strong></td>
+        <td style="padding:8px; border:1px solid #e8eaf0;"><strong>说明</strong></td>
+      </tr>
+      <tr><td style="padding:8px; border:1px solid #e8eaf0;">卡片宽度</td><td style="padding:8px; border:1px solid #e8eaf0;">无max-width限制</td><td style="padding:8px; border:1px solid #e8eaf0;">width: 75vw; max-width: 1200px</td><td style="padding:8px; border:1px solid #e8eaf0;">占浏览器3/4宽度</td></tr>
+      <tr><td style="padding:8px; border:1px solid #e8eaf0;">标题字号</td><td style="padding:8px; border:1px solid #e8eaf0;">13px</td><td style="padding:8px; border:1px solid #e8eaf0;">15px</td><td style="padding:8px; border:1px solid #e8eaf0;">提升可读性</td></tr>
+      <tr><td style="padding:8px; border:1px solid #e8eaf0;">信息字号</td><td style="padding:8px; border:1px solid #e8eaf0;">11px</td><td style="padding:8px; border:1px solid #e8eaf0;">13px</td><td style="padding:8px; border:1px solid #e8eaf0;">次要信息</td></tr>
+      <tr><td style="padding:8px; border:1px solid #e8eaf0;">列表滚动</td><td style="padding:8px; border:1px solid #e8eaf0;">固定高度静态</td><td style="padding:8px; border:1px solid #e8eaf0;">max-height: 60vh; overflow-y: auto</td><td style="padding:8px; border:1px solid #e8eaf0;">支持上下滑动</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🔄 问题#3: 状态判定错误 + 过期自动删除</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">状态判定逻辑修复</div>
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <p><strong>当前问题根因：</strong></p>
+    <p>1. <code>exam_scraper.py</code> 爬取时未解析 <code>registration_start/end</code><br>
+    2. <code>calendar.py</code> 的 <code>_compute_status()</code> 依赖registration字段但数据为空<br>
+    3. <code>cleanup_expired_exams()</code> 按 exam_date 删除而非 registration_end</p>
+
+    <p><strong>修复方案：</strong></p>
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>修复点</strong></td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>文件</strong></td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>具体操作</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">爬虫增强</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">exam_scraper.py</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">进入详情页抓取registration_start/end + exam_format + description完整内容</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">状态判定</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">calendar.py</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">优先用registration字段判定：reg_end &lt; now → 已截止；reg_start &gt; now → 即将报名；else → 报名中</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">过期删除</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">scheduler.py</td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;">每日定时任务：硬删除 registration_end < now - 1day 的记录</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🗑️ 问题#4: 删除"查看全部"，改为可滑动</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <p><strong>操作：</strong></p>
+    <p>1. 删除 exam_calendar.vue 中 <code>.card-footer</code> 和"查看全部考试日历"按钮<br>
+    2. 将 <code>.exam-list</code> 改为 scrollable 容器：<code>max-height: 60vh; overflow-y: auto</code><br>
+    3. 首次加载 limit=20（之前是5）<br>
+    4. 添加滚动到底部自动加载更多（IntersectionObserver）</p>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🌐 问题#5: 直接获取目标网站内容并过滤</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <p><strong>内容获取流程：</strong></p>
+    <div style="background:#f8f9fc; border-radius:10px; padding:14px; font-size:12px; line-height:2;">
+      <strong>来源：shiyebian.com</strong><br>
+      ├─ 爬取 .rb_news-item → 标题、链接<br>
+      ├─ 进入详情页 → 完整正文（带HTML结构）<br>
+      ├─ 过滤规则：<br>
+      │  ├─ 移除 script/style/nav/footer 标签<br>
+      │  ├─ 移除广告/导航/版权等非正文区块<br>
+      │  ├─ 保留图片标签（含二维码）→ 转存本地<br>
+      │  └─ 保留报名时间/考试方式/招聘人数等结构化字段<br>
+      ├─ 提取二维码图片 → 下载到 /static/qrcodes/{id}.png<br>
+      └─ 存入数据库 → description字段保存完整HTML正文
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📁 P2 文件变更汇总</h3>
+</div>
+
+<div class="mockup">
+  <div class="mockup-body" style="font-size:13px; padding:16px;">
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <tr style="background:#f8f9fc;">
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>文件</strong></td>
+        <td style="padding:6px 8px; border:1px solid #e8eaf0;"><strong>操作</strong></td>
+      </tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/services/exam_scraper.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 重写：进入详情页抓取完整信息</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/api/v1/calendar.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 状态判定修复 + 返回字段增强</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/services/scheduler.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 过期删除逻辑修正</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">backend/app/models/models.py</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 ExamCalendar字段增强</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">.vtj/vue/exam_calendar.vue</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 重写：全宽卡片+滑动+状态徽章</td></tr>
+      <tr><td style="padding:6px 8px; border:1px solid #e8eaf0;">.vtj/files/exam_calendar.json</td><td style="padding:6px 8px; border:1px solid #e8eaf0;">🔧 DSL更新</td></tr>
+    </table>
+  </div>
+</div>

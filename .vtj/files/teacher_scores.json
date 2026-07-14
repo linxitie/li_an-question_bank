@@ -1,0 +1,25 @@
+{
+  "id": "teacher_scores",
+  "name": "TeacherScores",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1",
+  "state": {
+    "activeNav": "scores",
+    "username": "",
+    "selectedPaper": 0,
+    "paperList": [],
+    "overview": { "avg_score": "--", "max_score": "--", "pass_rate": "--", "total_students": "--" },
+    "distribution": [],
+    "studentScores": []
+  },
+  "methods": {
+    "loadPapers": { "type": "asyncMethod" },
+    "loadData": { "type": "asyncMethod" },
+    "barHeight": { "type": "method", "params": ["count"] },
+    "goTab": { "type": "method", "params": ["key"] }
+  },
+  "lifeCycles": { "mounted": { "type": "method" } },
+  "css": ".teacher-scores{min-height:100vh;background:#F5F7FA;font-size:15px}.top-nav{display:flex;align-items:center;padding:0 24px;height:56px;background:#1A3C6D;color:#fff}.page-content{max-width:1200px;margin:0 auto;padding:24px}.stats-row{display:flex;gap:16px;margin-bottom:24px}.stat-card{flex:1;background:#fff;border-radius:10px;padding:20px;text-align:center}.sv{font-size:28px;font-weight:700;color:#1A3C6D}.chart-panel{background:#fff;border-radius:10px;padding:20px;margin-bottom:24px}.table-wrap{background:#fff;border-radius:10px}.data-table{width:100%;border-collapse:collapse}.data-table th{background:#fafafa;font-weight:600;color:#1A3C6D;padding:12px 14px;font-size:14px}",
+  "nodes": [],
+  "props": [], "emits": [], "slots": [], "watch": [], "expose": [], "inject": [], "dataSources": {}, "locked": false
+}

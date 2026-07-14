@@ -28,21 +28,29 @@ def _safe_import_pb2(module_name: str = "exam_service_pb2"):
     Returns:
         module or None: 成功返回模块对象，失败返回 None
     """
+    # protoc 生成的代码使用绝对 import（如 import exam_service_pb2），
+    # 而文件位于 app/ 子目录下，需将 app/ 加入 sys.path 使其可被顶层导入
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
+
     try:
-        # 尝试直接导入
         __import__(module_name)
         return sys.modules[module_name]
     except ImportError:
-        # 如果导入失败，尝试自动生成和编译
-        logger.warning(f"{module_name} 模块未找到，尝试自动生成...")
-        try:
-            generate_proto_file()
-            # 重新尝试导入
-            __import__(module_name)
-            return sys.modules[module_name]
-        except Exception as e:
-            logger.error(f"无法生成或导入 {module_name}: {e}")
-            return None
+        pass
+
+    # 如果不存在，尝试自动生成和编译 proto
+    logger.warning(f"{module_name} 模块未找到，尝试自动生成...")
+    try:
+        generate_proto_file()
+        # 生成后清理可能缓存的失败导入
+        sys.modules.pop(module_name, None)
+        __import__(module_name)
+        return sys.modules[module_name]
+    except Exception as e:
+        logger.error(f"无法生成或导入 {module_name}: {e}")
+        return None
 
 
 def _get_pb2_class(class_name: str):
@@ -185,7 +193,15 @@ if _GRPC_AVAILABLE:
             self.server = None
 
         def create_server(self):
-            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+            options = [
+                ('grpc.so_reuseport', 0),
+                ('grpc.max_send_message_length', 50 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 50 * 1024 * 1024),
+            ]
+            self.server = grpc.server(
+                futures.ThreadPoolExecutor(max_workers=10),
+                options=options
+            )
 
         def start(self):
             if not self.server:
@@ -203,15 +219,20 @@ if _GRPC_AVAILABLE:
         def add_service(self, service_name, service_impl):
             """动态添加 gRPC 服务"""
             if self.server:
-                add_func = getattr(
-                    self.server,
-                    f"add_{service_name}Servicer_to_server",
-                    None
-                )
-                if add_func:
-                    add_func(service_impl, self.server)
+                # _pb2_grpc 模块中的 add_*Servicer_to_server 是顶层函数，不是 server 对象的方法
+                pb2_grpc_module = _safe_import_pb2("exam_service_pb2_grpc")
+                if pb2_grpc_module:
+                    add_func = getattr(
+                        pb2_grpc_module,
+                        f"add_{service_name}ServiceServicer_to_server",
+                        None
+                    )
+                    if add_func:
+                        add_func(service_impl, self.server)
+                    else:
+                        logger.warning(f"未找到服务注册方法: add_{service_name}ServiceServicer_to_server")
                 else:
-                    logger.warning(f"未找到服务注册方法: add_{service_name}Servicer_to_server")
+                    logger.warning(f"无法导入 exam_service_pb2_grpc 模块")
 
 
     class QuestionBankServicer:
@@ -396,6 +417,36 @@ if _GRPC_AVAILABLE:
             except Exception as e:
                 db.rollback()
                 return SubmitAnswerResponse(success=False, error=str(e))
+            finally:
+                db.close()
+
+        def GetExamResult(self, request, context):
+            from .core.database import SessionLocal
+            from .models.models import ExamRecord
+
+            # 使用安全方式获取 Proto 类
+            ExamResultResponse = _get_pb2_class("ExamResultResponse")
+            if not ExamResultResponse:
+                context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+                context.set_details("Proto 模块未正确生成")
+                return None
+
+            db = SessionLocal()
+            try:
+                record = db.query(ExamRecord).filter(
+                    ExamRecord.record_id == request.record_id
+                ).first()
+
+                if not record:
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    context.set_details("考试记录不存在")
+                    return None
+
+                return ExamResultResponse(
+                    record_id=record.record_id,
+                    total_score=record.total_score or 0.0,
+                    is_completed=bool(record.is_completed)
+                )
             finally:
                 db.close()
 

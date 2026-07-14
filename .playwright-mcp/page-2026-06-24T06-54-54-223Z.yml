@@ -1,0 +1,475 @@
+- generic [ref=e3]:
+  - link "Skip to content" [ref=e4] [cursor=pointer]:
+    - /url: "#VPContent"
+  - banner:
+    - generic:
+      - generic:
+        - generic:
+          - link "VTJ.PRO" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e7]: VTJ.PRO
+          - generic [ref=e8]:
+            - button "Search" [ref=e11] [cursor=pointer]:
+              - generic [ref=e14]: Search
+              - generic [ref=e15]:
+                - generic [ref=e16]: Ctrl
+                - generic [ref=e17]: K
+            - navigation "Main Navigation" [ref=e18]:
+              - generic [ref=e19]: Main Navigation
+              - link "指引" [ref=e20] [cursor=pointer]:
+                - /url: /guide/
+                - generic [ref=e21]: 指引
+              - link "平台" [ref=e22] [cursor=pointer]:
+                - /url: https://app.vtj.pro/
+                - generic [ref=e23]: 平台
+              - link "维基" [ref=e24] [cursor=pointer]:
+                - /url: /wiki/
+                - generic [ref=e25]: 维基
+              - link "🔥 高级" [ref=e26] [cursor=pointer]:
+                - /url: /service/
+                - generic [ref=e27]: 🔥 高级
+              - link "动态" [ref=e28] [cursor=pointer]:
+                - /url: /news/
+                - generic [ref=e29]: 动态
+              - button "文档" [ref=e31] [cursor=pointer]:
+                - generic [ref=e33]: 文档
+            - button "extra navigation" [ref=e36] [cursor=pointer]
+  - button "页面导航" [ref=e41] [cursor=pointer]: 页面导航
+  - complementary [ref=e43]:
+    - navigation "Sidebar Navigation" [ref=e45]:
+      - generic [ref=e46]: Sidebar Navigation
+      - generic [ref=e48]:
+        - button "开始" [ref=e49]:
+          - heading "开始" [level=2] [ref=e51]
+        - generic [ref=e52]:
+          - link "关于 VTJ.PRO" [ref=e56] [cursor=pointer]:
+            - /url: /guide/
+            - paragraph [ref=e57]: 关于 VTJ.PRO
+          - link "快速上手" [ref=e61] [cursor=pointer]:
+            - /url: /guide/start.html
+            - paragraph [ref=e62]: 快速上手
+          - link "项目集成" [ref=e66] [cursor=pointer]:
+            - /url: /guide/integration.html
+            - paragraph [ref=e67]: 项目集成
+      - generic [ref=e69]:
+        - button "基础" [ref=e70]:
+          - heading "基础" [level=2] [ref=e72]
+        - generic [ref=e73]:
+          - link "创建一个低代码应用（ Todo ）" [ref=e77] [cursor=pointer]:
+            - /url: /guide/base/todo.html
+            - paragraph [ref=e78]: 创建一个低代码应用（ Todo ）
+          - button "设计器入门教程 toggle section" [ref=e80] [cursor=pointer]:
+            - heading "设计器入门教程" [level=3] [ref=e82]
+            - button "toggle section" [ref=e83]
+          - link "设计器接入指南" [ref=e88] [cursor=pointer]:
+            - /url: /guide/base/integrate.html
+            - paragraph [ref=e89]: 设计器接入指南
+          - link "物料制作指南" [ref=e93] [cursor=pointer]:
+            - /url: /guide/base/materials.html
+            - paragraph [ref=e94]: 物料制作指南
+          - link "应用增强" [ref=e98] [cursor=pointer]:
+            - /url: /guide/base/enhance.html
+            - paragraph [ref=e99]: 应用增强
+          - link "网络请求" [ref=e103] [cursor=pointer]:
+            - /url: /guide/base/request.html
+            - paragraph [ref=e104]: 网络请求
+          - link "权限控制" [ref=e108] [cursor=pointer]:
+            - /url: /guide/base/access.html
+            - paragraph [ref=e109]: 权限控制
+          - link "应用全局设置" [ref=e113] [cursor=pointer]:
+            - /url: /guide/base/globals.html
+            - paragraph [ref=e114]: 应用全局设置
+          - link "视频教程专题" [ref=e118] [cursor=pointer]:
+            - /url: https://space.bilibili.com/1658426127
+            - paragraph [ref=e119]: 视频教程专题
+      - generic [ref=e121]:
+        - button "进阶" [ref=e122]:
+          - heading "进阶" [level=2] [ref=e124]
+        - generic [ref=e125]:
+          - link "设计器引擎" [ref=e129] [cursor=pointer]:
+            - /url: /guide/extras/engine.html
+            - paragraph [ref=e130]: 设计器引擎
+          - link "核心提供者" [ref=e134] [cursor=pointer]:
+            - /url: /guide/extras/provider.html
+            - paragraph [ref=e135]: 核心提供者
+          - button "核心三件套 toggle section" [ref=e137] [cursor=pointer]:
+            - heading "核心三件套" [level=3] [ref=e139]
+            - button "toggle section" [ref=e140]
+          - generic [ref=e143] [cursor=pointer]:
+            - link "设计器扩展" [ref=e145]:
+              - /url: /guide/extension.html
+              - heading "设计器扩展" [level=3] [ref=e146]
+            - button "toggle section" [ref=e147]
+      - generic [ref=e150]:
+        - button "高级" [ref=e151]:
+          - heading "高级" [level=2] [ref=e153]
+        - generic [ref=e154]:
+          - link "🔥 打造专属在线开发平台" [ref=e158] [cursor=pointer]:
+            - /url: /service/
+            - paragraph [ref=e159]: 🔥 打造专属在线开发平台
+          - link "🧩 集成 RuoYi-Vue3" [ref=e163] [cursor=pointer]:
+            - /url: https://gitee.com/newgateway/VTJ-RuoYi-Vue3
+            - paragraph [ref=e164]: 🧩 集成 RuoYi-Vue3
+      - generic [ref=e166]:
+        - button "专栏" [ref=e167]:
+          - heading "专栏" [level=2] [ref=e169]
+        - generic [ref=e170]:
+          - link "入门指南" [ref=e174] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615379311379283995
+            - paragraph [ref=e175]: 入门指南
+          - link "深入探究" [ref=e179] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7615538630096764962
+            - paragraph [ref=e180]: 深入探究
+          - link "平台揭秘" [ref=e184] [cursor=pointer]:
+            - /url: https://juejin.cn/column/7618920576732921882
+            - paragraph [ref=e185]: 平台揭秘
+  - generic [ref=e190]:
+    - main [ref=e191]:
+      - generic [ref=e193]:
+        - heading "项目集成指南 Permalink to \"项目集成指南\"" [level=1] [ref=e194]:
+          - text: 项目集成指南
+          - link "Permalink to \"项目集成指南\"" [ref=e195] [cursor=pointer]:
+            - /url: "#项目集成指南"
+            - text: "#"
+        - paragraph [ref=e196]: 通过脚手架可以快速创建新项目，但对于已有项目，本章将详细介绍如何集成VTJ低代码设计器。
+        - generic [ref=e197]:
+          - paragraph [ref=e198]: RuoYi-Vue3 集成示例
+          - paragraph [ref=e199]:
+            - link "https://gitee.com/newgateway/VTJ-RuoYi-Vue3" [ref=e200] [cursor=pointer]:
+              - /url: https://gitee.com/newgateway/VTJ-RuoYi-Vue3
+        - heading "前提条件 Permalink to \"前提条件\"" [level=2] [ref=e201]:
+          - text: 前提条件
+          - link "Permalink to \"前提条件\"" [ref=e202] [cursor=pointer]:
+            - /url: "#前提条件"
+            - text: "#"
+        - generic [ref=e203]:
+          - paragraph [ref=e204]: 项目技术要求
+          - paragraph [ref=e205]:
+            - text: 前端工程必须是基于
+            - strong [ref=e206]: Vite + TypeScript
+            - text: 的
+            - strong [ref=e207]: Vue3
+            - text: 项目
+        - paragraph [ref=e208]: 目前暂不支持以下项目类型：
+        - list [ref=e209]:
+          - listitem [ref=e210]: Vue2 项目
+          - listitem [ref=e211]: 使用 Webpack 构建的项目
+          - listitem [ref=e212]: 非 TypeScript 项目
+        - heading "集成步骤 Permalink to \"集成步骤\"" [level=2] [ref=e213]:
+          - text: 集成步骤
+          - link "Permalink to \"集成步骤\"" [ref=e214] [cursor=pointer]:
+            - /url: "#集成步骤"
+            - text: "#"
+        - paragraph [ref=e215]: 现有项目需按以下步骤集成VTJ低代码能力：
+        - heading "一、添加依赖包 Permalink to \"一、添加依赖包\"" [level=3] [ref=e216]:
+          - text: 一、添加依赖包
+          - link "Permalink to \"一、添加依赖包\"" [ref=e217] [cursor=pointer]:
+            - /url: "#一、添加依赖包"
+            - text: "#"
+        - paragraph [ref=e218]: 在项目中安装必要的依赖包：
+        - list [ref=e219]:
+          - listitem [ref=e220]:
+            - text: 将以下包添加到
+            - code [ref=e221]: devDependencies
+            - text: ：
+        - generic [ref=e222]:
+          - button "Copy Code" [ref=e223] [cursor=pointer]
+          - generic [ref=e224]: sh
+          - code [ref=e226]:
+            - generic [ref=e227]: npm install @vtj/cli @vtj/pro --save-dev
+        - list [ref=e228]:
+          - listitem [ref=e229]:
+            - text: 将核心包添加到
+            - code [ref=e230]: dependencies
+            - text: ：
+        - generic [ref=e231]:
+          - button "Copy Code" [ref=e232] [cursor=pointer]
+          - generic [ref=e233]: sh
+          - code [ref=e235]:
+            - generic [ref=e236]: npm install @vtj/web --save
+        - heading "二、配置Vite插件 Permalink to \"二、配置Vite插件\"" [level=3] [ref=e237]:
+          - text: 二、配置Vite插件
+          - link "Permalink to \"二、配置Vite插件\"" [ref=e238] [cursor=pointer]:
+            - /url: "#二、配置vite插件"
+            - text: "#"
+        - paragraph [ref=e239]:
+          - text: 在项目根目录的
+          - code [ref=e240]: vite.config.ts
+          - text: 文件中引入VTJ开发工具插件：
+        - generic [ref=e241]:
+          - button "Copy Code" [ref=e242] [cursor=pointer]
+          - generic [ref=e243]: js
+          - code [ref=e245]:
+            - generic [ref=e246]: "import { defineConfig } from 'vite';"
+            - generic [ref=e247]: import vue from '@vitejs/plugin-vue';
+            - generic [ref=e248]: // 导入VTJ开发工具
+            - generic [ref=e249]: "import { createDevTools } from '@vtj/pro/vite';"
+            - generic [ref=e250]: "export default defineConfig({"
+            - generic [ref=e251]: "plugins: ["
+            - generic [ref=e252]: vue(),
+            - generic [ref=e253]: // 添加VTJ开发工具插件
+            - generic [ref=e254]: createDevTools()
+            - generic [ref=e255]: "]"
+            - generic [ref=e256]: "});"
+        - generic [ref=e257]:
+          - paragraph [ref=e258]: 插件作用
+          - paragraph [ref=e259]: 此插件提供：
+          - list [ref=e260]:
+            - listitem [ref=e261]: 实时设计器预览
+            - listitem [ref=e262]: 热重载支持
+            - listitem [ref=e263]: 低代码组件编译
+        - heading "三、改造应用入口 Permalink to \"三、改造应用入口\"" [level=3] [ref=e264]:
+          - text: 三、改造应用入口
+          - link "Permalink to \"三、改造应用入口\"" [ref=e265] [cursor=pointer]:
+            - /url: "#三、改造应用入口"
+            - text: "#"
+        - paragraph [ref=e266]:
+          - text: 需要对项目入口文件
+          - code [ref=e267]: main.ts
+          - text: 进行改造，以支持低代码生成的组件：
+        - generic [ref=e268]:
+          - button "Copy Code" [ref=e269] [cursor=pointer]
+          - generic [ref=e270]: js
+          - code [ref=e272]:
+            - generic [ref=e273]: "import { createApp } from 'vue';"
+            - generic [ref=e274]: // 1. 引入VTJ核心功能
+            - generic [ref=e275]: "import {"
+            - generic [ref=e276]: createProvider,
+            - generic [ref=e277]: LocalService,
+            - generic [ref=e278]: createModules,
+            - generic [ref=e279]: NodeEnv
+            - generic [ref=e280]: "} from '@vtj/web';"
+            - generic [ref=e281]: // 2. 引入组件库样式
+            - generic [ref=e282]: import '@vtj/web/src/index.scss';
+            - generic [ref=e283]: import './style.css';
+            - generic [ref=e284]: import App from './App.vue';
+            - generic [ref=e285]: import router from './router';
+            - generic [ref=e286]: const app = createApp(App);
+            - generic [ref=e287]: // 3. 实例化低代码服务
+            - generic [ref=e288]: // 注意：LocalService仅适用于开发环境
+            - generic [ref=e289]: // 生产环境需实现RemoteService接口
+            - generic [ref=e290]: const service = new LocalService();
+            - generic [ref=e291]: // 4. 创建VTJ提供者实例
+            - generic [ref=e292]: "const { provider, onReady } = createProvider({"
+            - generic [ref=e293]: // 设置运行环境
+            - generic [ref=e294]: "nodeEnv: process.env.NODE_ENV as NodeEnv,"
+            - generic [ref=e295]: // 注册应用模块
+            - generic [ref=e296]: "modules: createModules(),"
+            - generic [ref=e297]: // 注入服务实例
+            - generic [ref=e298]: service,
+            - generic [ref=e299]: // 注入路由实例
+            - generic [ref=e300]: router
+            - generic [ref=e301]: "});"
+            - generic [ref=e302]: // 5. 初始化完成后挂载应用
+            - generic [ref=e303]: "onReady(async () => {"
+            - generic [ref=e304]: app.use(router);
+            - generic [ref=e305]: app.use(provider);
+            - generic [ref=e306]: app.mount('#app');
+            - generic [ref=e307]: "});"
+        - paragraph [ref=e308]: 关键改造点说明：
+        - list [ref=e309]:
+          - listitem [ref=e310]:
+            - strong [ref=e311]: 核心功能导入
+            - text: ：从
+            - code [ref=e312]: "@vtj/web"
+            - text: 引入必要的功能模块
+          - listitem [ref=e313]:
+            - strong [ref=e314]: 样式引入
+            - text: ：确保加载组件库样式
+          - listitem [ref=e315]:
+            - strong [ref=e316]: 服务实例化
+            - text: ：
+            - list [ref=e317]:
+              - listitem [ref=e318]:
+                - code [ref=e319]: LocalService
+                - text: ：开发环境使用本地服务
+              - listitem [ref=e320]: 生产环境需实现远程服务接口
+          - listitem [ref=e321]:
+            - strong [ref=e322]: 提供者创建
+            - text: ：配置运行环境和依赖模块
+          - listitem [ref=e323]:
+            - strong [ref=e324]: 异步初始化
+            - text: ：确保所有依赖就绪后再挂载应用
+        - heading "四、添加异步支持 Permalink to \"四、添加异步支持\"" [level=3] [ref=e325]:
+          - text: 四、添加异步支持
+          - link "Permalink to \"四、添加异步支持\"" [ref=e326] [cursor=pointer]:
+            - /url: "#四、添加异步支持"
+            - text: "#"
+        - paragraph [ref=e327]:
+          - text: 由于低代码组件采用异步加载，需在
+          - code [ref=e328]: App.vue
+          - text: 中添加
+          - code [ref=e329]: <Suspense>
+          - text: 组件：
+        - generic [ref=e330]:
+          - button "Copy Code" [ref=e331] [cursor=pointer]
+          - generic [ref=e332]: html
+          - code [ref=e334]:
+            - generic [ref=e335]: <template>
+            - generic [ref=e336]: <!-- 添加异步加载边界 -->
+            - generic [ref=e337]: <Suspense>
+            - generic [ref=e338]: <router-view></router-view>
+            - generic [ref=e339]: </Suspense>
+            - generic [ref=e340]: </template>
+            - generic [ref=e341]: <script lang="ts" setup>
+            - generic [ref=e342]: "import { Suspense } from 'vue';"
+            - generic [ref=e343]: </script>
+        - generic [ref=e344]:
+          - paragraph [ref=e345]: 为什么需要Suspense？
+          - paragraph [ref=e346]:
+            - text: VTJ生成的组件是异步加载的，
+            - code [ref=e347]: <Suspense>
+            - text: 提供：
+          - list [ref=e348]:
+            - listitem [ref=e349]: 加载状态处理
+            - listitem [ref=e350]: 错误边界捕获
+            - listitem [ref=e351]: 异步组件生命周期管理
+        - heading "五、配置TypeScript Permalink to \"五、配置TypeScript\"" [level=3] [ref=e352]:
+          - text: 五、配置TypeScript
+          - link "Permalink to \"五、配置TypeScript\"" [ref=e353] [cursor=pointer]:
+            - /url: "#五、配置typescript"
+            - text: "#"
+        - paragraph [ref=e354]:
+          - text: 在
+          - code [ref=e355]: tsconfig.json
+          - text: 中排除
+          - code [ref=e356]: .vtj
+          - text: 目录的检查：
+        - generic [ref=e357]:
+          - button "Copy Code" [ref=e358] [cursor=pointer]
+          - generic [ref=e359]: json
+          - code [ref=e361]:
+            - generic [ref=e362]: "{"
+            - generic [ref=e363]: "\"exclude\": [\".vtj\"]"
+            - generic [ref=e364]: "}"
+        - generic [ref=e365]:
+          - paragraph [ref=e366]: 排除原因
+          - paragraph [ref=e367]:
+            - code [ref=e368]: .vtj
+            - text: 目录包含：
+          - list [ref=e369]:
+            - listitem [ref=e370]: 运行时生成的临时文件
+            - listitem [ref=e371]: 设计器元数据
+            - listitem [ref=e372]: 低代码编译中间产物
+        - heading "进阶配置 Permalink to \"进阶配置\"" [level=2] [ref=e373]:
+          - text: 进阶配置
+          - link "Permalink to \"进阶配置\"" [ref=e374] [cursor=pointer]:
+            - /url: "#进阶配置"
+            - text: "#"
+        - heading "二级目录部署 Permalink to \"二级目录部署\"" [level=3] [ref=e375]:
+          - text: 二级目录部署
+          - link "Permalink to \"二级目录部署\"" [ref=e376] [cursor=pointer]:
+            - /url: "#二级目录部署"
+            - text: "#"
+        - paragraph [ref=e377]:
+          - text: 当项目配置了
+          - code [ref=e378]: base
+          - text: 路径时，需同步设置
+          - code [ref=e379]: staticBase
+          - text: ：
+        - generic [ref=e380]:
+          - button "Copy Code" [ref=e381] [cursor=pointer]
+          - generic [ref=e382]: js
+          - code [ref=e384]:
+            - generic [ref=e385]: "import { defineConfig } from 'vite';"
+            - generic [ref=e386]: import vue from '@vitejs/plugin-vue';
+            - generic [ref=e387]: "import { createDevTools } from '@vtj/pro/vite';"
+            - generic [ref=e388]: // 设置基础路径
+            - generic [ref=e389]: const base = '/sub/';
+            - generic [ref=e390]: "export default defineConfig({"
+            - generic [ref=e391]: base,
+            - generic [ref=e392]: "plugins: ["
+            - generic [ref=e393]: vue(),
+            - generic [ref=e394]: "createDevTools({"
+            - generic [ref=e395]: // 同步设置静态资源基础路径
+            - generic [ref=e396]: "staticBase: base"
+            - generic [ref=e397]: "})"
+            - generic [ref=e398]: "]"
+            - generic [ref=e399]: "});"
+        - heading "History路由模式适配 Permalink to \"History路由模式适配\"" [level=3] [ref=e400]:
+          - text: History路由模式适配
+          - link "Permalink to \"History路由模式适配\"" [ref=e401] [cursor=pointer]:
+            - /url: "#history路由模式适配"
+            - text: "#"
+        - paragraph [ref=e402]:
+          - text: 使用
+          - code [ref=e403]: createWebHistory
+          - text: 路由模式时，需设置物料路径：
+        - generic [ref=e404]:
+          - button "Copy Code" [ref=e405] [cursor=pointer]
+          - generic [ref=e406]: js
+          - code [ref=e408]:
+            - generic [ref=e409]: "const { provider, onReady } = createProvider({"
+            - generic [ref=e410]: // 关键：设置物料基础路径
+            - generic [ref=e411]: "materialPath: '/',"
+            - generic [ref=e412]: "nodeEnv: process.env.NODE_ENV as NodeEnv,"
+            - generic [ref=e413]: "modules: createModules(),"
+            - generic [ref=e414]: service,
+            - generic [ref=e415]: router
+            - generic [ref=e416]: "});"
+        - generic [ref=e417]:
+          - paragraph [ref=e418]: 物料路径说明
+          - paragraph [ref=e419]: 内置物料存储在：
+          - generic [ref=e420]:
+            - button "Copy Code" [ref=e421] [cursor=pointer]
+            - code [ref=e423]:
+              - generic [ref=e424]: /node_modules/@vtj/materials/dist/
+          - paragraph [ref=e425]:
+            - code [ref=e426]: materialPath
+            - text: 确保正确加载这些资源
+        - heading "设计器使用指南 Permalink to \"设计器使用指南\"" [level=2] [ref=e427]:
+          - text: 设计器使用指南
+          - link "Permalink to \"设计器使用指南\"" [ref=e428] [cursor=pointer]:
+            - /url: "#设计器使用指南"
+            - text: "#"
+        - paragraph [ref=e429]: 项目启动后，可在页面右下角激活设计器：
+        - paragraph [ref=e430]:
+          - img "设计器入口" [ref=e431]
+        - heading "设计器功能 Permalink to \"设计器功能\"" [level=3] [ref=e432]:
+          - text: 设计器功能
+          - link "Permalink to \"设计器功能\"" [ref=e433] [cursor=pointer]:
+            - /url: "#设计器功能"
+            - text: "#"
+        - list [ref=e434]:
+          - listitem [ref=e435]:
+            - strong [ref=e436]: 页面编辑
+            - text: ：实时修改当前页面
+          - listitem [ref=e437]:
+            - strong [ref=e438]: 组件拖拽
+            - text: ：从物料库添加组件
+          - listitem [ref=e439]:
+            - strong [ref=e440]: 属性配置
+            - text: ：可视化调整组件属性
+          - listitem [ref=e441]:
+            - strong [ref=e442]: 代码生成
+            - text: ：导出Vue单文件组件
+        - heading "生产环境部署 Permalink to \"生产环境部署\"" [level=3] [ref=e443]:
+          - text: 生产环境部署
+          - link "Permalink to \"生产环境部署\"" [ref=e444] [cursor=pointer]:
+            - /url: "#生产环境部署"
+            - text: "#"
+        - list [ref=e445]:
+          - listitem [ref=e446]:
+            - text: 实现
+            - code [ref=e447]: RemoteService
+            - text: 接口替代
+            - code [ref=e448]: LocalService
+          - listitem [ref=e449]: 部署物料资源到CDN
+          - listitem [ref=e450]: 配置API端点获取设计数据
+        - generic [ref=e451]:
+          - paragraph [ref=e452]: 安全提示
+          - paragraph [ref=e453]:
+            - text: 生产环境务必移除
+            - code [ref=e454]: createDevTools()
+            - text: 插件
+    - contentinfo [ref=e455]:
+      - navigation "Pager" [ref=e456]:
+        - generic [ref=e457]: Pager
+        - link "Previous page 快速上手" [ref=e459] [cursor=pointer]:
+          - /url: /guide/start.html
+          - generic [ref=e460]: Previous page
+          - generic [ref=e461]: 快速上手
+        - link "Next page 创建一个低代码应用（ Todo ）" [ref=e463] [cursor=pointer]:
+          - /url: /guide/base/todo.html
+          - generic [ref=e464]: Next page
+          - generic [ref=e465]: 创建一个低代码应用（ Todo ）
