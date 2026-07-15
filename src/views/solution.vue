@@ -192,7 +192,7 @@ export default defineComponent({
 .sol-empty p { color: #8899aa; margin-bottom: 24px; }
 /* 成绩卡片 */
 .sol-score-card {
-  max-width: 500px;
+  max-width: 1000px;
   margin: 32px auto;
   background: #ffffff;
   border-radius: 20px;
@@ -223,7 +223,7 @@ export default defineComponent({
 .stat-num { font-size: 28px; font-weight: 800; color: #1a2b5f; }
 .stat-num.correct { color: #22c55e; }
 .stat-num.wrong { color: #e8384f; }
-.stat-label { font-size: 13px; color: #8899aa; margin-top: 4px; }
+.stat-label { font-size: 17px; color: #8899aa; margin-top: 4px; }
 .stat-divider { width: 1px; height: 40px; background: #e8ecf2; }
 .score-time {
   display: flex;
@@ -231,7 +231,7 @@ export default defineComponent({
   justify-content: center;
   gap: 8px;
   color: #8899aa;
-  font-size: 14px;
+  font-size: 17px;
   padding-top: 16px;
   border-top: 1px solid #f0f1f5;
 }
@@ -261,7 +261,7 @@ export default defineComponent({
   border-radius: 10px;
   background: transparent;
   color: #1a2b5f;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
@@ -291,16 +291,16 @@ export default defineComponent({
 .q-correct { border-left-color: #22c55e; }
 .q-wrong { border-left-color: #e8384f; }
 .sol-q-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.sol-q-num { font-size: 14px; font-weight: 700; color: #1a2b5f; }
+.sol-q-num { font-size: 20px; font-weight: 700; color: #1a2b5f; }
 .sol-q-result { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; }
 .result-ok { color: #22c55e; }
 .result-fail { color: #e8384f; }
-.sol-q-content { font-size: 15px; line-height: 1.7; color: #33375a; margin-bottom: 10px; }
+.sol-q-content { font-size: 20px; line-height: 1.7; color: #33375a; margin-bottom: 10px; }
 .sol-q-options { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .sol-opt { font-size: 13px; color: #8899aa; padding: 4px 10px; border-radius: 6px; }
 .opt-right { background: rgba(34,197,94,0.08); color: #22c55e; font-weight: 600; }
 .opt-user-wrong { background: rgba(232,56,79,0.06); color: #e8384f; text-decoration: line-through; }
-.sol-q-answers { display: flex; gap: 24px; margin-bottom: 8px; font-size: 13px; color: #8899aa; }
+.sol-q-answers { display: flex; gap: 24px; margin-bottom: 8px; font-size: 18px; color: #8899aa; }
 .ans-ok { color: #22c55e; }
 .ans-fail { color: #e8384f; }
 .sol-q-analysis {
@@ -310,7 +310,7 @@ export default defineComponent({
   padding: 12px 14px;
   background: rgba(245,166,35,0.05);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 18px;
   color: #8b7355;
   line-height: 1.6;
 }
