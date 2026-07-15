@@ -171,14 +171,315 @@
     </div>
   </div>
 </template>
-    .q-type-badge {
-      font-size: 17px;
-      padding: 4px 14px;
-      border-radius: 8px;
-      background: #eff6ff;
-      color: #3b82f6;
-      font-weight: 700;
+<script lang="ts">
+  // @ts-nocheck
+  import { defineComponent, reactive, Transition } from 'vue';
+  import { XIcon } from '@vtj/ui';
+  import { Grid, AlarmClock, CloseBold } from '@vtj/icons';
+  import NavBar from './navbar.vue';
+  import { useProvider } from '@vtj/renderer';
+  export default defineComponent({
+    name: 'AnswerPage',
+    components: { NavBar, XIcon, Transition },
+    setup(props) {
+      const provider = useProvider({ id: 'answer_page', version: '1778918968644' });
+      const state = reactive({
+        answers: {},
+        timeLeft: 7200,
+        questions: [],
+        showResult: false,
+        currentIndex: 0,
+        optionLabels: ['A', 'B', 'C', 'D', 'E', 'F'],
+        sheetVisible: false,
+        markedQuestions: [],
+        // 笔记相关
+        showNoteEditor: false,
+        noteText: '',
+        currentNoteQuestionId: null
+      });
+      return { state, props, provider, Grid, AlarmClock, CloseBold };
+    },
+    computed: {
+      answeredCount() {
+        return Object.keys(this.state.answers).length;
+      }
+    },
+    methods: {
+      isCorrect(q) {
+        var userChoice = this.state.answers[q.id];
+        if (userChoice === undefined || userChoice === null) return false;
+        // 多选题：数组转字母后排序比较
+        if (q.type === '多选题') {
+          if (!Array.isArray(userChoice)) return false;
+          var userLetters = userChoice.map(function(idx) { return this.state.optionLabels[idx]; }.bind(this)).sort().join('');
+          var correctLetters = (q.answer || '').split('').sort().join('');
+          return userLetters === correctLetters;
+        }
+        // 单选题：索引映射字母
+        var userLetter = this.state.optionLabels[userChoice];
+        return userLetter === q.answer;
+      },
+      formatTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      },
+      handleExit() {
+        this.$router.back();
+      },
+      startTimer() {
+        this._timer = setInterval(() => {
+          if (this.state.timeLeft > 0) {
+            this.state.timeLeft--;
+          } else {
+            this.handleSubmit();
+          }
+        }, 1000);
+      },
+      toggleMark(qId) {
+        const idx = this.state.markedQuestions.indexOf(qId);
+        if (idx >= 0) {
+          this.state.markedQuestions.splice(idx, 1);
+        } else {
+          this.state.markedQuestions.push(qId);
+        }
+      },
+      handleSubmit() {
+        this.state.showResult = true;
+        this.$message.success('试卷已提交');
+        // 提交练习记录
+        this.submitPracticeRecords();
+        // 触发自动签到
+        this.triggerCheckin();
+      },
+      submitPracticeRecords() {
+        var self = this;
+        var questions = this.state.questions;
+        for (var i = 0; i < questions.length; i++) {
+          var q = questions[i];
+          var userAns = this.state.answers[q.id];
+          if (userAns === undefined) continue;
+          // 多选题：数组 → 字母串
+          var userLetter;
+          if (Array.isArray(userAns)) {
+            userLetter = userAns.map(function(idx) { return self.state.optionLabels[idx]; }).sort().join('');
+          } else {
+            userLetter = self.state.optionLabels[userAns] || '';
+          }
+          var correct = (q.type === '多选题') ?
+            (userLetter.split('').sort().join('') === (q.answer || '').split('').sort().join('')) :
+            (userLetter === q.answer);
+          window.__VTJ_AUTH__.apiFetch('/api/practice/record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question_id: q.id,
+              subject_id: q.subject_id || null,
+              is_correct: correct,
+              time_spent: 0,
+              user_answer: userLetter,
+              source: '随机练习'
+            })
+          }).catch(function() { /* 静默 */ });
+        }
+      },
+      triggerCheckin() {
+        window.__VTJ_AUTH__.apiFetch('/api/stats/auto-checkin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        }).catch(function() { /* 静默 */ });
+      },
+      selectOption(qId, oidx, type) {
+        if (this.state.showResult) return;
+        // 多选题/不定项：支持toggle多选
+        if (type === '多选题' || type === '不定项' || type === '多选') {
+          var current = this.state.answers[qId] || [];
+          if (current.includes(oidx)) {
+            this.state.answers[qId] = current.filter(function(o) { return o !== oidx; });
+          } else {
+            this.state.answers[qId] = current.concat([oidx]);
+          }
+        } else {
+          // 单选题：直接替换
+          this.state.answers[qId] = oidx;
+        }
+      },
+      getTypeLabel(type) {
+        var map = {'单选题':'[单选]','单选':'[单选]','多选题':'[多选]','不定项':'[多选]','多选':'[多选]','判断题':'[判断]','填空题':'[填空]','简答题':'[简答]'};
+        return map[type] || '[单选]';
+      },
+      getTypeClass(type) {
+        var map = {'多选题':'multi','不定项':'multi','多选':'multi','判断题':'judge','填空题':'fill','简答题':'essay'};
+        return map[type] || '';
+      },
+      loadQuestions() {
+        console.log('[AnswerPage] loadQuestions v20260623 - real API');
+        this.state.questions = [];
+        this.ensureLogin().then(() => {
+          const headers = this.getJsonHeaders();
+          // Use GET with query params for random endpoint
+          let params = new URLSearchParams({ count: 20 });
+          fetch('/api/questions/random?' + params.toString(), {
+            method: 'GET',
+            headers: headers
+          }).then(res => res.json()).then(data => {
+            if (data.questions && data.questions.length) {
+              this.state.questions = data.questions.map(q => {
+                // 稳健解析选项：支持多种存储格式
+                var rawOpts = q.options;
+                var parsedOpts = [];
+                if (rawOpts) {
+                  // 格式1: JSON字符串
+                  if (typeof rawOpts === 'string') {
+                    try { rawOpts = JSON.parse(rawOpts); } catch(e) { parsedOpts = [rawOpts]; }
+                  }
+                  // 格式2: 数组 [{key:"A",value:"..."}, ...] 或 ["text", ...]
+                  if (Array.isArray(rawOpts)) {
+                    parsedOpts = rawOpts.map(function(o) {
+                      if (typeof o === 'string') return o;
+                      if (o && typeof o === 'object') {
+                        var key = (o.key || '');
+                        var text = (o.value || o.text || '');
+                        text = text.replace(/[\.。、'；;：:，,！!？?]+$/g, '').trim();
+                        return (key ? key + '. ' : '') + (text || '(空)');
+                      }
+                      return String(o);
+                    });
+                  }
+                }
+                if (!parsedOpts.length) parsedOpts = ['(暂无选项)'];
+                // 对选项文本也做IMAGE占位替换
+                parsedOpts = parsedOpts.map(function(opt) {
+                  if (typeof opt === 'string') {
+                    return opt.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
+                      return '<img src="/static/questions/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.style.display=\'none\'" />';
+                    });
+                  }
+                  return opt;
+                });
+                // 清理题干中嵌入的选项行 + 图片占位
+                var stem = q.question_content || '';
+                stem = stem.replace(/\n?\s*[A-H]\s*[.、．)）]\s*.+/g, '');
+                stem = stem.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
+                  return '<img src="/static/questions/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.style.display=\'none\'" />';
+                });
+                stem = stem.trim();
+                return {
+                  id: q.question_id,
+                  type: (function() {
+                    var typeMap = {'单选题':'单选', '选择题':'单选', '单选':'单选', '多选题':'多选题', '不定项':'多选', '多选':'多选'};
+                    var mapped = typeMap[q.question_type_detail];
+                    if (!mapped && q.answer && q.answer.length > 1) mapped = '多选题';
+                    return mapped || '单选';
+                  })(),
+                  stem: stem || q.question_content || '',
+                  options: parsedOpts,
+                  answer: q.answer || '',
+                  explain: q.answer_analysis || '暂未提供解析'
+                };
+              });
+            }
+            if (!this.state.questions.length) {
+              this.state.questions = [{
+                id: 0, type: '提示', stem: '题库暂无题目数据，请先在题目导入页面添加题目',
+                options: [], answer: '', explain: ''
+              }];
+            }
+          }).catch(() => {
+            this.state.questions = [{
+              id: 0, type: '提示', stem: '无法连接到后端服务器，请检查服务是否运行',
+              options: [], answer: '', explain: ''
+            }];
+          });
+        });
+      },
+      ensureLogin() {
+        return window.__VTJ_AUTH__.ensureAuth();
+      },
+      getAuthHeaders() {
+        return window.__VTJ_AUTH__.getAuthHeaders();
+      },
+      getJsonHeaders() {
+        return window.__VTJ_AUTH__.getJsonHeaders();
+      },
+      jumpToQuestion(idx) {
+        this.state.currentIndex = idx;
+        const el = this.$refs['question_' + this.state.questions[idx].id];
+        if (el && el[0]) {
+          el[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      },
+      isOptionSelected(qId, oidx) {
+        const ans = this.state.answers[qId];
+        if (Array.isArray(ans)) return ans.includes(oidx);
+        return ans === oidx;
+      },
+      toggleAnswerSheet() {
+        this.state.sheetVisible = !this.state.sheetVisible;
+      },
+      // ========== 笔记功能 ==========
+      openNoteEditor(qId) {
+        this.state.showNoteEditor = true;
+        this.state.currentNoteQuestionId = qId;
+        this.state.noteText = '';
+        var self = this;
+        window.__VTJ_AUTH__.apiFetch('/api/questions/' + qId + '/note', {
+          headers: this.getJsonHeaders()
+        }).then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.has_note) {
+              self.state.noteText = data.note_text || '';
+            }
+          }).catch(function() {});
+      },
+      closeNoteEditor() {
+        this.state.showNoteEditor = false;
+        this.state.noteText = '';
+      },
+      async saveNote() {
+        var qId = this.state.currentNoteQuestionId;
+        if (!qId || !this.state.noteText.trim()) return;
+        try {
+          await window.__VTJ_AUTH__.apiFetch('/api/questions/' + qId + '/note', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({ note_text: this.state.noteText.trim() })
+          });
+          this.state.showNoteEditor = false;
+        } catch(e) {
+          console.warn('保存笔记失败:', e);
+        }
+      },
+      async deleteNote() {
+        var qId = this.state.currentNoteQuestionId;
+        if (!qId) return;
+        try {
+          await window.__VTJ_AUTH__.apiFetch('/api/questions/' + qId + '/note', {
+            method: 'DELETE',
+            headers: this.getJsonHeaders()
+          });
+          this.state.showNoteEditor = false;
+          this.state.noteText = '';
+        } catch(e) {
+          console.warn('删除笔记失败:', e);
+        }
+      }
+    },
+    mounted() {
+      console.log('[AnswerPage] mounted v20260623 - VUE SOURCE loaded');
+      this.loadQuestions();
+      this.startTimer();
+    },
+    beforeUnmount() {
+      if (this._timer) {
+        clearInterval(this._timer);
+        this._timer = null;
+      }
     }
+  })
+</script>
 <style lang="css" scoped>
   .answer-page {
     min-height: 100vh;
@@ -422,8 +723,8 @@
     color: #1a2b5f;
   }
   .q-type-badge {
-    font-size: 11px;
-    padding: 3px 10px;
+    font-size: 17px;
+    padding: 5px 16px;
     border-radius: 8px;
     background: #eff6ff;
     color: #3b82f6;
