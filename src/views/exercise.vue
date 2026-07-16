@@ -52,6 +52,9 @@
       <div class="ex-question-card">
         <div class="ex-q-header">
           <span class="ex-q-num">第 {{ state.currentIndex + 1 }} 题</span>
+          <span class="ex-q-type-badge" :class="getTypeBadgeClass(currentQ)" v-if="currentQ.question_type_detail">
+            {{ getTypeBadgeLabel(currentQ.question_type_detail) }}
+          </span>
           <span class="ex-q-difficulty" v-if="currentQ.difficulty">
             难度：{{ getDifficultyLabel(currentQ.difficulty) }}
           </span>
@@ -86,19 +89,31 @@
             </button>
           </div>
         </div>
-        <div class="ex-q-content">{{ currentQ.question_content }}</div>
+        <div class="ex-q-content" v-html="renderContent(currentQ.question_content)"></div>
 
         <!-- 选项 -->
         <div class="ex-options">
+          <label
+            v-if="isMultiSelect(currentQ)"
+            class="ex-option"
+            :class="{ 'opt-selected': isMultiOptSelected(opt.key) }"
+            v-for="opt in parsedOptions"
+            :key="opt.key"
+          >
+            <input type="checkbox" :value="opt.key" v-model="multiAnswers" class="ex-checkbox" />
+            <span class="opt-key">{{ opt.key }}</span>
+            <span class="opt-value" v-html="opt.value"></span>
+          </label>
           <div
+            v-else
             class="ex-option"
             :class="{ 'opt-selected': state.userAnswers[state.currentIndex] === opt.key }"
-            v-for="opt in currentQ.options"
+            v-for="opt in parsedOptions"
             :key="opt.key"
             @click="selectAnswer(opt.key)"
           >
             <span class="opt-key">{{ opt.key }}</span>
-            <span class="opt-value">{{ opt.value }}</span>
+            <span class="opt-value" v-html="opt.value"></span>
           </div>
         </div>
       </div>
@@ -255,6 +270,31 @@ export default defineComponent({
     currentQ() {
       return this.state.questions[this.state.currentIndex] || {};
     },
+    // 多选答案数组(自动同步checkbox v-model)
+    multiAnswers: {
+      get() {
+        var ans = this.state.userAnswers[this.state.currentIndex];
+        return Array.isArray(ans) ? ans : (ans ? [ans] : []);
+      },
+      set(val) {
+        this.state.userAnswers[this.state.currentIndex] = val;
+      }
+    },
+    parsedOptions() {
+      var opts = (this.currentQ.options || []).slice();
+      var labels = ['A', 'B', 'C', 'D'];
+      var existing = {};
+      for (var i = 0; i < opts.length; i++) {
+        existing[opts[i].key] = true;
+      }
+      for (var j = 0; j < labels.length; j++) {
+        if (!existing[labels[j]]) {
+          opts.push({ key: labels[j], value: '(待补充)' });
+        }
+      }
+      opts.sort(function(a, b) { return a.key.localeCompare(b.key); });
+      return opts;
+    },
     formattedTime() {
       var m = Math.floor(this.state.seconds / 60);
       var s = this.state.seconds % 60;
@@ -308,6 +348,42 @@ export default defineComponent({
     if (this.state.timerInterval) clearInterval(this.state.timerInterval);
   },
   methods: {
+    // === 题型判定 ===
+    isMultiSelect(q) {
+      var t = (q.question_type_detail || '').toLowerCase();
+      return t.indexOf('多选') >= 0 || t.indexOf('不定项') >= 0;
+    },
+    isMultiOptSelected(key) {
+      var ans = this.state.userAnswers[this.state.currentIndex];
+      if (Array.isArray(ans)) return ans.indexOf(key) >= 0;
+      return ans === key;
+    },
+    getTypeBadgeLabel(type) {
+      if (!type) return '';
+      var t = type.toString();
+      if (t.indexOf('多选') >= 0 || t.indexOf('不定项') >= 0) return '[多选]';
+      if (t.indexOf('单选') >= 0 || t.indexOf('选择') >= 0) return '[单选]';
+      if (t.indexOf('判断') >= 0) return '[判断]';
+      if (t.indexOf('填空') >= 0) return '[填空]';
+      if (t.indexOf('简答') >= 0) return '[简答]';
+      return '[单选]';
+    },
+    getTypeBadgeClass(q) {
+      var t = (q.question_type_detail || '').toString();
+      if (t.indexOf('多选') >= 0 || t.indexOf('不定项') >= 0) return 'type-multi';
+      if (t.indexOf('判断') >= 0) return 'type-judge';
+      if (t.indexOf('填空') >= 0) return 'type-fill';
+      if (t.indexOf('简答') >= 0) return 'type-essay';
+      return 'type-single';
+    },
+    // === 内容渲染 ===
+    renderContent(text) {
+      if (!text) return '';
+      var html = text;
+      html = html.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi,
+        '<img src="/static/questions/$1_$2.png" class="q-img" loading="lazy" onerror="this.style.display=\'none\'" />');
+      return html;
+    },
     getDifficultyLabel(d) {
       var labels = ['', '★', '★★', '★★★', '★★★★', '★★★★★'];
       return labels[d] || '★★★';
@@ -387,7 +463,18 @@ export default defineComponent({
     },
 
     selectAnswer(key) {
-      this.state.userAnswers[this.state.currentIndex] = key;
+      // 多选题由v-model数组自动管理，单选直接赋值
+      var q = this.currentQ;
+      if (this.isMultiSelect(q)) {
+        var ans = this.state.userAnswers[this.state.currentIndex] || [];
+        if (!Array.isArray(ans)) ans = [];
+        var idx = ans.indexOf(key);
+        if (idx >= 0) { ans.splice(idx, 1); }
+        else { ans.push(key); }
+        this.state.userAnswers[this.state.currentIndex] = ans;
+      } else {
+        this.state.userAnswers[this.state.currentIndex] = key;
+      }
     },
     prevQuestion() {
       if (this.state.currentIndex > 0) this.state.currentIndex--;
@@ -587,9 +674,23 @@ export default defineComponent({
       var wrong = 0;
       var details = [];
       for (var j = 0; j < questions.length; j++) {
-        var userAns = (this.state.userAnswers[j] || '未答');
-        var correctAns = questions[j].answer;
-        var isCorrect = userAns === correctAns;
+        var rawAns = this.state.userAnswers[j];
+        var userAns;
+        if (Array.isArray(rawAns)) {
+          userAns = rawAns.length ? rawAns.sort().join('') : '未答';
+        } else {
+          userAns = rawAns || '未答';
+        }
+        var correctAns = questions[j].answer || '';
+        // 多选题/数组答案：排序后比较字母串
+        var isCorrect;
+        if (Array.isArray(rawAns) && correctAns.length > 1) {
+          var sortedUser = rawAns.slice().sort().join('');
+          var sortedCorrect = correctAns.split('').sort().join('');
+          isCorrect = sortedUser === sortedCorrect;
+        } else {
+          isCorrect = userAns === correctAns;
+        }
         if (isCorrect) correct++; else wrong++;
         details.push({
           question_id: questions[j].question_id,
@@ -776,6 +877,31 @@ export default defineComponent({
   font-size: 16px;
   color: #f5a623;
   letter-spacing: 2px;
+}
+/* 题型徽章 */
+.ex-q-type-badge {
+  font-size: 17px;
+  padding: 4px 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  display: inline-block;
+}
+.type-single { background: #eff6ff; color: #3b82f6; }
+.type-multi  { background: #fef3c7; color: #d97706; }
+.type-judge { background: #f0fdf4; color: #065f46; }
+.type-fill  { background: #fef2f2; color: #dc2626; }
+.type-essay { background: #f5f3ff; color: #7c3aed; }
+/* 图片 */
+.ex-q-content :deep(img.q-img),
+.opt-value :deep(img.q-img) {
+  max-width: 100%; max-height: 300px;
+  display: block; margin: 10px auto; border-radius: 8px;
+}
+/* checkbox样式 */
+.ex-checkbox {
+  width: 18px; height: 18px;
+  accent-color: #c41e3a; flex-shrink: 0;
+  cursor: pointer;
 }
 /* 操作按钮组 */
 .ex-q-actions {

@@ -461,7 +461,10 @@ async def get_exercise_questions(
         3: QuestionBank.gongzhuan_subcategory,
     }
 
-    query = db.query(QuestionBank).filter(
+    query = db.query(QuestionBank).outerjoin(
+        QuestionDetailCategory,
+        QuestionBank.question_id == QuestionDetailCategory.question_id
+    ).filter(
         QuestionBank.status == 1
     )
 
@@ -483,21 +486,64 @@ async def get_exercise_questions(
             'message': '该分类暂无题目，请先导入题目'
         }
 
-    # 随机抽取
-    questions = query.order_by(func.random()).limit(min(count, total)).all()
+    # 按创建顺序排列（不随机，保持题组顺序）
+    questions_with_detail = query.order_by(QuestionBank.question_id.asc()).limit(min(count, total)).all()
 
     result = []
-    for q in questions:
+    import re as _img_re
+    for item in questions_with_detail:
+        # SQLAlchemy outerjoin returns Row objects; access by attribute
+        q = item.QuestionBank if hasattr(item, 'QuestionBank') else (item[0] if isinstance(item, (tuple, list)) else item)
+        detail_row = getattr(item, 'QuestionDetailCategory', None) if hasattr(item, 'QuestionDetailCategory') else (item[1] if isinstance(item, (tuple, list)) and len(item) > 1 else None)
+
+        # Fallback: get detail from DB directly if join didn't work
+        qtype = ''
+        if detail_row and detail_row.question_type_detail:
+            qtype = str(detail_row.question_type_detail)
+        if not qtype:
+            detail_fallback = db.query(QuestionDetailCategory).filter(QuestionDetailCategory.question_id == q.question_id).first()
+            if detail_fallback and detail_fallback.question_type_detail:
+                qtype = str(detail_fallback.question_type_detail)
+
+        # IMAGE标记转img标签
+        stem = q.question_content or ''
+        stem = _img_re.sub(
+            r'\[IMAGE:(\d+)_(\d+)\]',
+            r'<img src="/static/questions/\1_\2.png" class="q-img" loading="lazy" onerror="this.style.display=none" />',
+            stem
+        )
+
         opts = q.options
         if isinstance(opts, str):
             try:
                 opts = json.loads(opts)
             except:
                 opts = []
+        # 选项补全到4个
+        if isinstance(opts, list):
+            existing_keys = {o.get('key','') for o in opts if isinstance(o, dict)}
+            for label in ['A','B','C','D']:
+                if label not in existing_keys:
+                    opts.append({'key': label, 'value': '(待补充)'})
+            # 选项IMAGE替换
+            _opts = []
+            for o in opts:
+                if isinstance(o, dict):
+                    val = o.get('value', '')
+                    val = _img_re.sub(
+                        r'\[IMAGE:(\d+)_(\d+)\]',
+                        r'<img src="/static/questions/\1_\2.png" class="q-img" loading="lazy" onerror="this.style.display=none" />',
+                        str(val)
+                    )
+                    _opts.append({'key': o.get('key',''), 'value': val})
+                else:
+                    _opts.append(str(o))
+            opts = sorted(_opts, key=lambda x: x.get('key','') if isinstance(x, dict) else '')
         result.append({
             'question_id': q.question_id,
-            'question_content': q.question_content,
-            'options': opts or [],
+            'question_content': stem,
+            'question_type_detail': qtype,
+            'options': opts,
             'answer': q.answer,
             'answer_analysis': q.answer_analysis or '',
             'difficulty': q.difficulty,

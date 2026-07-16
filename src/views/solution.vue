@@ -297,7 +297,7 @@ export default defineComponent({
 .result-fail { color: #e8384f; }
 .sol-q-content { font-size: 20px; line-height: 1.7; color: #33375a; margin-bottom: 10px; }
 .sol-q-options { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-.sol-opt { font-size: 13px; color: #8899aa; padding: 4px 10px; border-radius: 6px; }
+.sol-opt { font-size: 17px; color: #8899aa; padding: 4px 10px; border-radius: 6px; }
 .opt-right { background: rgba(34,197,94,0.08); color: #22c55e; font-weight: 600; }
 .opt-user-wrong { background: rgba(232,56,79,0.06); color: #e8384f; text-decoration: line-through; }
 .sol-q-answers { display: flex; gap: 24px; margin-bottom: 8px; font-size: 18px; color: #8899aa; }
