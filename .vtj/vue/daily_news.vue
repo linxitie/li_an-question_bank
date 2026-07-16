@@ -62,6 +62,7 @@
           <h3 class="news-modal-title">{{ state.selectedNews.title }}</h3>
           <div class="news-modal-header-actions">
             <button :class="'news-fav-btn ' + (state.isFavorited ? 'favorited' : '')" @click="toggleFavorite" :title="state.isFavorited ? '取消收藏' : '收藏'">⭐</button>
+            <button class="news-note-btn" @click="scrollToNotes" title="笔记">📝</button>
             <button class="news-modal-close" @click="closeDetail">×</button>
           </div>
         </div>

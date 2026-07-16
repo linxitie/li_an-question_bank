@@ -52,7 +52,7 @@ async def get_news(
                 "publish_date": a.publish_date.isoformat() if a.publish_date else None,
                 "summary": a.summary,
                 "content": a.content or "",
-                "images": [{"url": img.image_path, "order": img.image_order}
+                "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order}
                            for img in db.query(NewsImage).filter(NewsImage.news_id == a.news_id).all()],
                 "is_favorited": db.query(NewsFavorite).filter(
                     NewsFavorite.user_id == current_user.user_id,
@@ -89,7 +89,7 @@ async def get_today_news(
                 "category": a.category,
                 "summary": a.summary,
                 "content": a.content or "",
-                "images": [{"url": img.image_path, "order": img.image_order}
+                "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order}
                            for img in db.query(NewsImage).filter(NewsImage.news_id == a.news_id).all()],
                 "is_favorited": db.query(NewsFavorite).filter(
                     NewsFavorite.user_id == current_user.user_id,
