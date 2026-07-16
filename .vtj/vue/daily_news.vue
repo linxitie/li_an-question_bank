@@ -529,6 +529,13 @@
 }
 .news-fav-btn:hover { background: #fef0f2; transform: scale(1.1); }
 .news-fav-btn.favorited { background: #fff8e1; }
+.news-note-btn {
+  width: 36px; height: 36px; border: none; background: #f8f9fc;
+  border-radius: 8px; cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.news-note-btn:hover { background: #eff6ff; transform: scale(1.1); }
 
 /* 卡片层收藏+笔记图标 */
 .news-card-actions {
