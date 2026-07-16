@@ -152,6 +152,10 @@
         this.state.currentPage = 1;
         await this.fetchNews();
       },
+      scrollToNotes() {
+        var el = this.$el.querySelector('.news-notes-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      },
       async setCategoryFilter(val) {
         this.state.categoryFilter = val;
         this.state.currentPage = 1;

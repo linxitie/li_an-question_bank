@@ -62,6 +62,7 @@
           <h3 class="news-modal-title">{{ state.selectedNews.title }}</h3>
           <div class="news-modal-header-actions">
             <button :class="'news-fav-btn ' + (state.isFavorited ? 'favorited' : '')" @click="toggleFavorite" :title="state.isFavorited ? '取消收藏' : '收藏'">⭐</button>
+            <button class="news-note-btn" @click="scrollToNotes" title="笔记">📝</button>
             <button class="news-modal-close" @click="closeDetail">×</button>
           </div>
         </div>
@@ -223,8 +224,8 @@
           const range = sel.getRangeAt(0);
           const rect = range.getBoundingClientRect();
           this.state.selectionMenuPos = {
-            x: rect.left + rect.width / 2 - 60,
-            y: rect.top - 40 + window.scrollY
+            x: rect.left + rect.width / 2 - 80,
+            y: rect.top - 50 + window.scrollY
           };
           this.state.selectionMenuVisible = true;
         } else {
@@ -232,42 +233,46 @@
           this.state.selectedText = '';
         }
       },
+      setHighlightColor(color) {
+        this.state.highlightColor = color;
+      },
+      async toggleCardFavorite(item) {
+        const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + item.id + '/favorite', { method: 'POST' });
+        const data = await res.json();
+        item.is_favorited = data.favorited;
+      },
       async applyHighlight() {
         if (!this.state.selectedText) return;
         const newsId = this.state.selectedNews.id;
-        try {
-          await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              note_text: '',
-              quote_text: this.state.selectedText,
-              color: this.state.highlightColor,
-              line_style: this.state.lineStyle
-            })
-          });
-          this.state.selectionMenuVisible = false;
-          this.state.selectedText = '';
-          await this.fetchNotes(newsId);
-        } catch (e) {
-          console.error('划线失败:', e);
-        }
+        await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note_text: '',
+            quote_text: this.state.selectedText,
+            color: this.state.highlightColor,
+            line_style: this.state.lineStyle
+          })
+        });
+        this.state.selectionMenuVisible = false;
+        this.state.selectedText = '';
+        await this.fetchNotes(newsId);
       },
-      async toggleCardFavorite(item) {
-        try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + item.id + '/favorite', { method: 'POST' });
-          const data = await res.json();
-          item.is_favorited = data.favorited;
-        } catch (e) {
-          console.error('收藏失败:', e);
+      renderNoteStyle(note) {
+        if (note.line_style === 'wavy') {
+          return 'text-decoration: underline wavy ' + (note.color || '#FFD700') + ';';
+        } else if (note.line_style === 'straight') {
+          return 'text-decoration: underline ' + (note.color || '#FFD700') + ';';
+        } else if (note.line_style === 'marker') {
+          return 'background-color: ' + (note.color || '#FFD700') + '40; padding: 0 2px;';
         }
+        return 'border-left: 3px solid ' + (note.color || '#FFD700') + ';';
       },
       async noteSelection() {
         if (!this.state.selectedText) return;
         const thought = prompt('记录想法:', '');
         if (thought === null) return;
         const newsId = this.state.selectedNews.id;
-        const c = this.state.highlightColor || '#FFD700';
         try {
           await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
             method: 'POST',
@@ -275,7 +280,8 @@
             body: JSON.stringify({
               note_text: thought,
               quote_text: this.state.selectedText,
-              color: c
+              color: this.state.highlightColor,
+              line_style: this.state.lineStyle
             })
           });
           this.state.selectionMenuVisible = false;
@@ -316,17 +322,6 @@
           this.state.notes = this.state.notes.filter(n => n.note_id !== noteId);
         } catch (e) {
           console.error('删除笔记失败:', e);
-        }
-      },
-      renderNoteStyle(note) {
-        const color = note.color || '#FFD700';
-        const style = note.line_style || 'wavy';
-        if (style === 'marker') {
-          return { backgroundColor: color + '40', padding: '0 2px', borderRadius: '2px' };
-        } else if (style === 'straight') {
-          return { textDecoration: 'underline', textDecorationColor: color, textUnderlineOffset: '4px' };
-        } else {
-          return { textDecoration: 'underline wavy', textDecorationColor: color, textUnderlineOffset: '4px' };
         }
       }
     },

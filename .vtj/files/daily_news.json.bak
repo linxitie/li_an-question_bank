@@ -681,10 +681,11 @@
     "isFavorited": "false",
     "notes": "[]",
     "selectionMenuVisible": "false",
-    "selectionMenuPos": "{ x: 0, y: 0 }",
+    "selectionMenuPos": "{ x: 0",
     "selectedText": "''",
     "highlightColor": "'#FFD700'",
-    "lineStyle": "'wavy'"
+    "lineStyle": "'wavy'",
+    "y": "0 }"
   },
   "watch": [],
   "expose": [],
