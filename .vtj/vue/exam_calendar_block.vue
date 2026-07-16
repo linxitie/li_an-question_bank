@@ -1,225 +1,179 @@
-<!-- 考试日历模块 — 浅蓝底色 · 纯白条目 · 大圆角 -->
+<!-- 考试日历模块 -->
 <template>
   <div class="exam-calendar">
-    <!-- 右上角装饰图标 -->
-    <div class="cal-decoration">
-      <XIcon :icon="Calendar" :size="72" color="#8ab4d6"></XIcon>
-    </div>
-
     <div class="cal-header">
-      <XIcon :icon="Calendar" :size="22" color="#3b7db5"></XIcon>
+      <XIcon :icon="Calendar" :size="22" color="#c8161e"></XIcon>
       <span class="cal-title">考试日历</span>
-      <div class="cal-month">{{ state.currentMonth }}</div>
+      <span class="cal-badge">全国招考</span>
     </div>
-
-    <!-- 空状态 -->
     <div class="cal-empty" v-if="state.examList.length === 0">
       <span>暂无考试信息</span>
     </div>
-
-    <!-- 考试列表 -->
-    <div class="cal-list" v-else>
-      <div
-        v-for="(item, index) in state.examList"
-        :key="index"
-        class="cal-item"
-        @click="handleItemClick(item)">
-        <!-- 日期徽标 -->
-        <div class="cal-date">
-          <span class="date-day">{{ item.day }}</span>
-          <span class="date-month">{{ item.month }}月</span>
-        </div>
-        <!-- 内容区 -->
-        <div class="cal-content">
-          <div class="cal-name">{{ item.name }}</div>
-          <div class="cal-meta">
-            <span v-if="item.region">{{ item.region }}</span>
-            <span v-if="item.examFormat" class="cal-format-tag">{{ item.examFormat }}</span>
-            <span v-if="item.registrationTime" class="cal-reg-time">报名: {{ item.registrationTime }}</span>
+    <div class="cal-list" v-else @scroll="handleScroll" ref="calList">
+      <div v-for="(item, index) in state.examList" :key="index" class="cal-item-wrapper">
+        <div class="cal-item" @click="toggleExpand(index)">
+          <div class="cal-date">
+            <span class="date-day">{{ item.day }}</span>
+            <span class="date-month">{{ item.month }}月</span>
           </div>
+          <div class="cal-content">
+            <div class="cal-name-row">
+              <span class="cal-name">{{ item.name }}</span>
+              <span v-if="item.recruitmentCount" class="cal-count-badge">{{ item.recruitmentCount }}人</span>
+              <span v-if="item.examFormat" class="cal-format-tag">{{ item.examFormat }}</span>
+            </div>
+            <div class="cal-meta">
+              <span v-if="item.registrationDisplay" class="cal-reg-time" v-html="item.registrationDisplay"></span>
+              <span v-if="item.region" class="cal-region">{{ item.region }}</span>
+            </div>
+          </div>
+          <span class="cal-status" :style="{ color: item.statusColor || '#10b981', background: (item.statusColor || '#10b981') + '18' }">{{ item.statusLabel || '报名中' }}</span>
         </div>
-        <!-- 状态标签 -->
-        <span class="cal-status" :style="{
-          color: item.statusColor || '#10b981',
-          background: (item.statusColor || '#10b981') + '18'
-        }">{{ item.statusLabel || '报名中' }}</span>
-        <XIcon :icon="ArrowRight" :size="16" color="#c0ccda"></XIcon>
+        <div v-if="state.expandedId === index && item.contentHtml" class="cal-detail" v-html="item.contentHtml"></div>
       </div>
-    </div>
-
-    <div class="cal-footer" @click="handleViewAll">
-      <span>查看全部招考信息</span>
-      <XIcon :icon="DArrowRight" :size="16" color="#3b7db5"></XIcon>
+      <div v-if="state.loading" class="cal-loading">加载中...</div>
     </div>
   </div>
 </template>
-
 <script lang="ts">
 // @ts-nocheck
 import { defineComponent, reactive } from 'vue';
 import { XIcon } from '@vtj/ui';
-import { Calendar, ArrowRight, DArrowRight } from '@vtj/icons';
+import { Calendar } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 export default defineComponent({
-  name: 'ExamCalendar',
+  name: 'ExamCalendarBlock',
   components: { XIcon },
-  emits: ['exam-click', 'view-all'],
   setup(props: any) {
     const provider = useProvider({ id: 'exam_calendar_block', version: '1778917815278' });
-    const state = reactive({ examList: [] as any[], currentMonth: '' });
-    return { state, props, provider, Calendar, ArrowRight, DArrowRight };
+    const state = reactive({ examList: [] as any[], currentMonth: '', loading: false, page: 1, hasMore: true, expandedId: -1 });
+    return { state, props, provider, Calendar };
   },
   methods: {
-    async fetchExams() {
-      var now = new Date();
-      this.state.currentMonth = (now.getMonth() + 1) + '月考试日历';
+    async fetchExams(reset?: boolean) {
+      if (this.state.loading) return;
+      if (!reset && !this.state.hasMore) return;
+      if (reset) { this.state.page = 1; this.state.examList = []; this.state.hasMore = true; }
+      this.state.loading = true;
       try {
-        var res = await (window as any).__VTJ_AUTH__.apiFetch('/api/calendar/exams?limit=5');
+        var now = new Date();
+        this.state.currentMonth = (now.getMonth() + 1) + '月';
+        var offset = (this.state.page - 1) * 20;
+        var res = await (window as any).__VTJ_AUTH__.apiFetch('/api/calendar/exams?limit=20&offset=' + offset);
         var data = await res.json();
         if (res.ok && data.items) {
-          this.state.examList = data.items.map(function(e: any) {
+          var items = data.items.map(function(e: any) {
+            var start = e.registration_start ? e.registration_start.substring(0, 10) : '';
+            var end = e.registration_end ? e.registration_end.substring(0, 10) : '';
+            var regDisplay = '';
+            if (start && end) { regDisplay = '报名: ' + start + ' ~ <span style="color:#c41e3a;font-weight:700">' + end + '</span>'; }
+            else if (start) { regDisplay = '报名: ' + start; }
+            else if (end) { regDisplay = '截止: <span style="color:#c41e3a;font-weight:700">' + end + '</span>'; }
             return {
               day: e.day || '--',
               month: e.month || '',
               name: e.title || '',
               region: e.province || '',
               examFormat: e.exam_format || '',
-              registrationTime: e.registration_start ? e.registration_start.substring(5, 10).replace('-', '月') + '日' : '',
+              recruitmentCount: e.recruitment_count || '',
+              registrationDisplay: regDisplay,
               url: e.url || '',
               statusLabel: e.status || '报名中',
-              statusColor: e.status_color || '#10b981'
+              statusColor: e.status_color || '#10b981',
+              contentHtml: e.content_html || e.description || '',
             };
           });
-        } else {
-          this.state.examList = [];
+          if (reset) { this.state.examList = items; }
+          else { this.state.examList = this.state.examList.concat(items); }
+          this.state.hasMore = data.has_more !== false;
+          if (data.has_more !== false) this.state.page++;
         }
-      } catch (e: any) {
-        console.warn('[ExamCalendar] fetchExams failed:', e.message);
-        this.state.examList = [];
-      }
+      } catch (e: any) { /* ignore */ }
+      finally { this.state.loading = false; }
     },
-    handleViewAll() {
-      (this as any).$emit('view-all');
+    toggleExpand(index: number) {
+      this.state.expandedId = this.state.expandedId === index ? -1 : index;
     },
-    handleItemClick(item: any) {
-      if (item.url) {
-        window.open(item.url, '_blank');
-      } else {
-        (this as any).$message.info('暂无详情链接');
+    handleScroll() {
+      var el = (this as any).$refs.calList;
+      if (!el) return;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
+        this.fetchExams(false);
       }
     }
   },
   mounted() {
-    this.fetchExams();
+    this.fetchExams(true);
   }
 })
 </script>
-
 <style lang="css" scoped>
-/* ===== 容器 — 浅蓝底色 + 大圆角 ===== */
 .exam-calendar {
-  position: relative;
-  background: #ffffff;
-  border-radius: 18px;
-  padding: 24px 20px 20px;
-  overflow: hidden;
+  background: #ffffff; border-radius: 18px;
+  padding: 24px 20px 20px; overflow: hidden;
+  max-width: 1200px;
 }
-
-/* 右上角装饰图标 — 半透明融入背景 */
-.cal-decoration {
-  position: absolute; top: 8px; right: 16px;
-  opacity: 0.15; pointer-events: none; z-index: 0;
-}
-
-/* ===== 标题栏 ===== */
 .cal-header {
-  position: relative; z-index: 1;
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+  padding-bottom: 14px; border-bottom: 1px solid #f0f2f5;
 }
-.cal-title {
-  font-size: 20px; font-weight: 700; color: #1a2b5f; flex: 1;
+.cal-title { font-size: 20px; font-weight: 700; color: #1a2a3a; flex: 1; }
+.cal-badge {
+  font-size: 12px; color: #c8161e;
+  background: rgba(200,22,30,0.08); padding: 3px 12px; border-radius: 12px; font-weight: 600;
 }
-.cal-month {
-  font-size: 13px; color: #5a7d9a;
-  background: rgba(59,125,181,0.1); padding: 4px 12px; border-radius: 14px;
-}
-
-/* ===== 空状态 ===== */
-.cal-empty {
-  text-align: center; padding: 30px 0; color: #a0bcd0; font-size: 14px;
-}
-
-/* ===== 考试列表 ===== */
+.cal-empty { text-align: center; padding: 30px 0; color: #a0bcd0; font-size: 14px; }
 .cal-list {
-  position: relative; z-index: 1;
   display: flex; flex-direction: column; gap: 8px;
+  max-height: 55vh; overflow-y: auto; padding-right: 4px;
 }
-
-/* 条目 — 纯白底色 + 大圆角 */
+.cal-list::-webkit-scrollbar { width: 5px; }
+.cal-list::-webkit-scrollbar-thumb { background: #d0d5e0; border-radius: 3px; }
+.cal-item-wrapper { display: flex; flex-direction: column; }
 .cal-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 14px 14px; border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 1px 4px rgba(26,43,95,0.04);
-  cursor: pointer;
-  transition: all 0.25s;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; border-radius: 14px;
+  background: #fafbfd; cursor: pointer;
+  transition: all 0.25s; border: 1px solid transparent;
 }
-.cal-item:hover {
-  box-shadow: 0 3px 12px rgba(26,43,95,0.08);
-  transform: translateX(3px);
-}
-
-/* 日期徽标 */
+.cal-item:hover { border-color: rgba(200,22,30,0.15); background: #fff; box-shadow: 0 2px 12px rgba(26,43,95,0.06); }
 .cal-date {
   display: flex; flex-direction: column; align-items: center;
-  min-width: 44px; padding: 6px 4px;
-  background: #f5f9fc; border-radius: 10px;
+  min-width: 48px; padding: 6px 4px;
+  background: linear-gradient(135deg, #fef1f2 0%, #fde8ea 100%);
+  border-radius: 10px; border: 1px solid rgba(200,22,30,0.15);
 }
-.date-day {
-  font-size: 20px; font-weight: 900; color: #1a2b5f; line-height: 1.1;
-}
-.date-month {
-  font-size: 15px; color: #8a9eb5; margin-top: 1px;
-}
-
-/* 内容区 */
+.date-day { font-size: 20px; font-weight: 900; color: #c8161e; line-height: 1.1; }
+.date-month { font-size: 12px; color: #c8161e; margin-top: 1px; }
 .cal-content { flex: 1; min-width: 0; }
+.cal-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
 .cal-name {
-  font-size: 16px; font-weight: 700; color: #1a2b5f;
-  margin-bottom: 4px; line-height: 1.3;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 16px; font-weight: 700; color: #1a2b5f; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.cal-meta {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: #8a8faa; flex-wrap: wrap;
-}
-.cal-meta-item {
-  font-size: 12px; color: #8a8faa;
+.cal-count-badge {
+  font-size: 12px; padding: 2px 10px; border-radius: 8px;
+  background: #eff6ff; color: #3b82f6; font-weight: 600; white-space: nowrap;
 }
 .cal-format-tag {
-  font-size: 14px; color: #5a7d9a;
-  background: #e8f4fd; padding: 1px 8px; border-radius: 6px;
-  font-weight: 500;
+  font-size: 12px; color: #5a7d9a; background: #e8f4fd;
+  padding: 2px 8px; border-radius: 6px; font-weight: 500; white-space: nowrap;
 }
-.cal-reg-time {
-  font-size: 12px; color: #8a8faa;
-}
-
-/* 状态标签 — 胶囊 + 动态颜色 */
+.cal-meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #8899aa; flex-wrap: wrap; }
+.cal-reg-time { font-size: 13px; }
+.cal-region { font-size: 12px; color: #8899aa; }
 .cal-status {
-  font-size: 13px; padding: 3px 10px; border-radius: 20px;
-  font-weight: 600; white-space: nowrap; flex-shrink: 0;
+  font-size: 13px; padding: 4px 12px; border-radius: 20px;
+  font-weight: 700; white-space: nowrap; flex-shrink: 0;
 }
-
-/* 底部链接 */
-.cal-footer {
-  position: relative; z-index: 1;
-  display: flex; align-items: center; justify-content: center;
-  gap: 6px; margin-top: 16px; padding-top: 12px;
-  border-top: 1px solid rgba(59,125,181,0.15);
-  font-size: 13px; color: #3b7db5; font-weight: 600;
-  cursor: pointer; transition: all 0.25s;
+.cal-detail {
+  padding: 16px 20px; margin: 4px 8px 0;
+  background: #f8f9fc; border-radius: 10px;
+  border-left: 3px solid #c41e3a;
+  font-size: 15px; line-height: 1.8; color: #333;
+  max-height: 260px; overflow-y: auto;
 }
-.cal-footer:hover { color: #2a5d8a; }
+.cal-detail :deep(p) { margin-bottom: 12px; }
+.cal-loading { text-align: center; padding: 16px; font-size: 13px; color: #8899aa; }
 </style>
