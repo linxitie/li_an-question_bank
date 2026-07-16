@@ -336,7 +336,11 @@
   "slots": [],
   "state": {
     "examList": "[] as any[]",
-    "currentMonth": "''"
+    "currentMonth": "''",
+    "loading": "false",
+    "page": "1",
+    "hasMore": "true",
+    "expandedId": "-1"
   },
   "watch": [],
   "expose": [],
@@ -344,8 +348,10 @@
   "locked": false,
   "methods": {
     "fetchExams": {
-      "type": "JSFunction",
-      "value": "async () => {\n  var now = new Date();\n  this.state.currentMonth = (now.getMonth() + 1) + '月考试日历';\n  try {\n    var res = await window.__VTJ_AUTH__.apiFetch('/api/calendar/exams?limit=5');\n    var data = await res.json();\n    if (res.ok && data.items) {\n      this.state.examList = data.items.map(function(e) {\n        return {\n          day: e.day || '--',\n          month: e.month || '',\n          name: e.title || '',\n          region: e.province || '',\n          examFormat: e.exam_format || '',\n          registrationTime: e.registration_start ? e.registration_start.substring(0, 10) : '',\n          url: e.url || '',\n          statusLabel: e.status || '报名中',\n          statusColor: e.status_color || '#10b981'\n        };\n      });\n    } else {\n      this.state.examList = [];\n    }\n  } catch (e) {\n    console.warn('[ExamCalendar] fetchExams failed:', e.message);\n    this.state.examList = [];\n  }\n}"
+      "type": "asyncMethod",
+      "params": [
+        "reset?: boolean"
+      ]
     },
     "handleViewAll": {
       "type": "JSFunction",
@@ -354,6 +360,18 @@
     "handleItemClick": {
       "type": "JSFunction",
       "value": "(item) => {\n  if (item.url) {\n    window.open(item.url, '_blank');\n  } else {\n    this.$message.info('暂无详情链接');\n  }\n}"
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "end"
+      ]
+    },
+    "map": {
+      "type": "method",
+      "params": [
+        "function(e: any"
+      ]
     }
   },
   "computed": {},

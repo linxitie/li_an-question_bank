@@ -340,7 +340,9 @@
     "loading": "false",
     "page": "1",
     "hasMore": "true",
-    "expandedId": "-1"
+    "expandedId": "-1",
+    "showModal": "false",
+    "selectedExam": "{} as any"
   },
   "watch": [],
   "expose": [],
