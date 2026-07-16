@@ -91,13 +91,15 @@ def _scrape_exam_detail(url: str) -> dict:
         resp.encoding = resp.apparent_encoding or 'utf-8'
         soup = BeautifulSoup(resp.text, 'lxml')
 
-        # 提取正文
-        for selector in ['div.article-content', 'div.content', 'div.article', 'article', 'div.main']:
+         # 提取正文
+        for selector in ['div.ws-content.ws-card', 'div.ws-content', 'div.article-content', 'div.content', 'div.article', 'div.main']:
             elem = soup.select_one(selector)
             if elem:
-                for bad in elem.select('script, style, nav, footer, .ad'):
+                for bad in elem.select('script, style, nav, footer, .ad, .sidebar, .recommend'):
                     bad.decompose()
-                result['description'] = str(elem)[:10000]
+                html = str(elem)[:10000]
+                text = elem.get_text(separator='\n', strip=True)[:5000]
+                result['description'] = html  # 存HTML到description
                 break
 
         full_text = soup.get_text()
@@ -351,12 +353,13 @@ def scrape_exams_from_shiyebian(db: Session) -> int:
                         except Exception: pass
                     exam_format = detail.get('exam_format') or item.get('exam_format', '')
                     description = detail.get('description') or item.get('registration_time', '')
+                    content_html = detail.get('description') or ''  # HTTP回退也存HTML
                     exam = ExamCalendar(
                         title=item["title"], exam_date=exam_date,
                         month=str(m), day=str(d),
                         province=item["province"], exam_format=exam_format,
-                        url=item["url"], description=description[:10000] if description else '',
-                        content_html='', recruitment_count='',
+                        url=item["url"], description=description[:5000] if description else '',
+                        content_html=content_html[:10000] if content_html else '', recruitment_count='',
                         registration_start=reg_start, registration_end=reg_end, status=1,
                     )
                     db.add(exam)
