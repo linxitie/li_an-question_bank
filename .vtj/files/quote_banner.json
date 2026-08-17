@@ -287,12 +287,28 @@
   "props": [],
   "slots": [],
   "state": {
-    "quote": "'忠诚是公安队伍代代相传的政治基因，是融入血脉的人民警察之魂。'",
-    "author": "'人民公安报'",
+    "quote": "'正在加载今日金句...'",
+    "author": "''",
+    "quoteId": "0",
+    "quoteFavorited": "false",
+    "quoteLoading": "false",
     "currentDate": "''",
     "showNewsModal": "false",
     "selectedNews": "{}",
-    "newsItems": "[]"
+    "newsItems": "[]",
+    "isFavorited": "false",
+    "notes": "[]",
+    "selectionMenuVisible": "false",
+    "selectionMenuPos": "{ x: 0, y: 0 }",
+    "selectedText": "''",
+    "highlightColor": "'#FFD700'",
+    "lineStyle": "'wavy'",
+    "showHint": "false",
+    "noteInputVisible": "false",
+    "noteText": "''",
+    "obsidianId": "''",
+    "obsidianSource": "''",
+    "sourceType": "'database'"
   },
   "watch": [],
   "expose": [],
@@ -304,8 +320,12 @@
       "params": []
     },
     "refreshQuote": {
-      "type": "JSFunction",
-      "value": "() => {\n  const quotes = [\n    {\n      text: '忠诚是公安队伍代代相传的政治基因，是融入血脉的人民警察之魂。',\n      author: '人民公安报'\n    },\n    {\n      text: '坚持以人民为中心的发展思想，把人民对美好生活的向往作为奋斗目标。',\n      author: '人民公安报'\n    },\n    {\n      text: '公平正义是执法司法工作的生命线，要努力让人民群众在每一起案件办理中都能感受到公平正义。',\n      author: '人民公安报'\n    },\n    {\n      text: '公安民警要坚定理想信念，强化责任担当，练就过硬本领，锤炼纪律作风。',\n      author: '人民公安报'\n    },\n    {\n      text: '国家安全是安邦定国的重要基石，维护国家安全是全国各族人民根本利益所在。',\n      author: '人民公安报'\n    }\n  ];\n  const next = quotes[Math.floor(Math.random() * quotes.length)];\n  this.state.quote = next.text;\n  this.state.author = next.author;\n}"
+      "type": "asyncMethod",
+      "params": []
+    },
+    "toggleQuoteFavorite": {
+      "type": "asyncMethod",
+      "params": []
     },
     "openNewsDetail": {
       "type": "method",
@@ -315,6 +335,86 @@
     },
     "closeNewsDetail": {
       "type": "method"
+    },
+    "fetchNews": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "ensureLoggedIn": {
+      "type": "method",
+      "params": []
+    },
+    "scrollToNotes": {
+      "type": "method",
+      "params": []
+    },
+    "resolveImgUrl": {
+      "type": "method",
+      "params": [
+        "url"
+      ]
+    },
+    "hasInlineMarkers": {
+      "type": "method",
+      "params": [
+        "content"
+      ]
+    },
+    "renderContent": {
+      "type": "method",
+      "params": [
+        "content"
+      ]
+    },
+    "handleTextSelection": {
+      "type": "method",
+      "params": []
+    },
+    "setLineStyle": {
+      "type": "method",
+      "params": [
+        "style"
+      ]
+    },
+    "applyHighlight": {
+      "type": "asyncMethod",
+      "params": [
+        "color"
+      ]
+    },
+    "renderNoteStyle": {
+      "type": "method",
+      "params": [
+        "note"
+      ]
+    },
+    "openNoteInput": {
+      "type": "method",
+      "params": []
+    },
+    "cancelNoteInput": {
+      "type": "method",
+      "params": []
+    },
+    "saveNoteOnBlur": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "toggleFavorite": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "fetchNotes": {
+      "type": "asyncMethod",
+      "params": [
+        "newsId"
+      ]
+    },
+    "removeNote": {
+      "type": "asyncMethod",
+      "params": [
+        "noteId"
+      ]
     }
   },
   "computed": {},
@@ -323,7 +423,7 @@
       "type": "method"
     }
   },
-  "__VERSION__": "1778918000715",
+  "__VERSION__": "1778918000716",
   "dataSources": {},
   "__VTJ_BLOCK__": true
 }
