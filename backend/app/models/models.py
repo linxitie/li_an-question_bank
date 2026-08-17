@@ -121,23 +121,26 @@ class QuestionType(Base):
     )
 
 class KnowledgePoint(Base):
-    """知识点表"""
+    """知识点/考点表 — 支持三级分类（科目→子科目→考点）"""
     __tablename__ = "knowledge_point"
-    
+
     point_id = Column(Integer, primary_key=True, autoincrement=True, comment="知识点ID")
     point_name = Column(String(200), nullable=False, comment="知识点名称")
     subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), nullable=False, comment="所属科目")
-    parent_id = Column(BigInteger, ForeignKey("knowledge_point.point_id"), default=0, comment="父知识点ID")
+    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True, comment="所属子科目ID（三级分类）")
+    parent_id = Column(BigInteger, ForeignKey("knowledge_point.point_id"), default=0, comment="父知识点ID（旧树形结构）")
     level = Column(Integer, default=1, comment="层级")
     description = Column(String(500), comment="知识点描述")
     sort_order = Column(Integer, default=1, comment="排序")
-    
+
     subject = relationship("QuestionSubject")
+    sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
     parent = relationship("KnowledgePoint", remote_side=[point_id])
-    
+
     __table_args__ = (
         Index("idx_subject_point", subject_id, point_name),
         Index("idx_parent_id", parent_id),
+        Index("idx_kp_sub_category", sub_category_id),
     )
 
 class QuestionBank(Base):
@@ -163,14 +166,16 @@ class QuestionBank(Base):
     
     # 子科目分类（行测/申论/公专）
     xingce_subcategory = Column(Enum(
-        "政治理论", "资料分析", "数量关系", "常识",
-        "速度与知觉训练", "判断推理", "语言理解与表达", "无"
+        "政治理论", "常识判断", "言语理解与表达", "数量关系",
+        "判断推理", "资料分析", "知觉速度与准确性",
+        "常识", "速度与知觉训练", "语言理解与表达", "无"  # 旧值兼容
     ), default="无", comment="行测细分类型")
     shenlun_subcategory = Column(Enum(
         "归纳概括", "综合分析", "提出对策", "应用文写作", "议论文写作", "无"
     ), default="无", comment="申论细分类型")
     gongzhuan_subcategory = Column(Enum(
-        "职业素养", "基本警务能力", "基础知识", "无"
+        "职业素养", "基础知识", "基本警务能力",
+        "法律知识", "业务能力", "无"  # 旧值兼容
     ), default="无", comment="公专细分类型")
     
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="创建人ID")
@@ -231,7 +236,7 @@ class ExamPaper(Base):
     paper_name = Column(String(200), nullable=False, comment="试卷名称")
     paper_code = Column(String(50), unique=True, nullable=False, comment="试卷编号")
     subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), nullable=False, comment="科目ID")
-    composition_method = Column(Enum("AUTO", "MANUAL", "TEMPLATE"), nullable=False, comment="组卷方式")
+    composition_method = Column(Enum("AUTO", "MANUAL", "TEMPLATE", "SMART", "IMPORT"), nullable=False, comment="组卷方式")
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="出卷人ID")
     approver_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="审批人ID")
     duration = Column(Integer, nullable=False, comment="考试时长")
@@ -320,7 +325,7 @@ class ExamRecord(Base):
     record_id = Column(Integer, primary_key=True, autoincrement=True, comment="考试记录ID")
     paper_id = Column(BigInteger, ForeignKey("exam_paper.paper_id"), nullable=False, comment="试卷ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="考生ID")
-    exam_type = Column(Enum("SIMULATION", "PRACTICE"), nullable=False, comment="考试类型")
+    exam_type = Column(Enum("SELF_TEST", "MOCK_EXAM"), nullable=False, comment="考试类型: SELF_TEST自测/MOCK_EXAM模考")
     start_time = Column(DateTime, nullable=False, comment="开始时间")
     end_time = Column(DateTime, comment="结束时间")
     duration_used = Column(Integer, comment="用时")
@@ -336,9 +341,10 @@ class ExamRecord(Base):
     user = relationship("SysUser")
     
     __table_args__ = (
-        UniqueConstraint("paper_id", "user_id", name="uk_paper_user"),
+        # B4修复: 移除uk_paper_user唯一约束，允许多次参加同一试卷
         Index("idx_paper_id_examrecord", paper_id),
         Index("idx_user_id_examrecord", user_id),
+        Index("idx_paper_user_examrecord", paper_id, user_id),
         Index("idx_start_time", start_time),
         Index("idx_is_completed_examrecord", is_completed),
     )
@@ -439,6 +445,40 @@ class PracticeRecord(Base):
         Index("idx_practice_date", practice_date),
     )
 
+class SmartExamRecord(Base):
+    """智能组卷练习记录表"""
+    __tablename__ = "smart_exam_record"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    paper_id = Column(Integer, ForeignKey("exam_paper.paper_id"), nullable=False, comment="试卷ID")
+    exam_record_id = Column(Integer, ForeignKey("exam_record.record_id"), nullable=True, comment="关联考试记录ID（提交后创建）")
+    paper_name = Column(String(200), comment="试卷名称快照")
+    subject_mode = Column(String(20), comment="科目模式: xingce/shenlun/gongzhuan/mixed")
+    total_questions = Column(Integer, default=0, comment="总题数")
+    completed_count = Column(Integer, default=0, comment="已答题数")
+    total_score = Column(DECIMAL(10, 2), default=0.00, comment="试卷总分")
+    earned_score = Column(DECIMAL(10, 2), nullable=True, comment="得分")
+    status = Column(String(20), default="incomplete", comment="状态: incomplete/completed")
+    current_index = Column(Integer, default=0, comment="当前答题索引（断点续答）")
+    answers_json = Column(Text, comment="已作答答案JSON快照")
+    marked_questions = Column(Text, comment="标记题目ID列表JSON")
+    time_spent = Column(Integer, default=0, comment="已用时间（秒）")
+    start_time = Column(DateTime, comment="开始时间")
+    end_time = Column(DateTime, comment="完成时间")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+    paper = relationship("ExamPaper", foreign_keys=[paper_id])
+
+    __table_args__ = (
+        Index("idx_smart_user_id", user_id),
+        Index("idx_smart_paper_id", paper_id),
+        Index("idx_smart_status", status),
+        Index("idx_smart_create_time", create_time),
+    )
+
 class WrongQuestionPersonal(Base):
     """个人错题集表"""
     __tablename__ = "wrong_question_personal"
@@ -455,7 +495,9 @@ class WrongQuestionPersonal(Base):
     cut_time = Column(DateTime, comment="斩题时间")
     auto_delete_time = Column(DateTime, comment="自动删除时间")
     review_count = Column(Integer, default=0, comment="复习次数")
+    correct_count = Column(Integer, default=0, comment="答对次数（用于答对3次自动斩题）")
     last_review_time = Column(DateTime, comment="最后复习时间")
+    user_answer = Column(Text, comment="用户最近一次复习的答案")
     note = Column(Text, comment="备注")
     status = Column(Integer, default=1, comment="状态")
     add_time = Column(DateTime, default=datetime.now, comment="添加时间")
@@ -514,15 +556,17 @@ class ForumPost(Base):
     view_count = Column(Integer, default=0, comment="浏览量")
     collect_count = Column(Integer, default=0, comment="收藏数")
     status = Column(Enum("NORMAL", "DELETED", "BLOCKED"), default="NORMAL", comment="状态")
+    attachments = Column(JSON, comment="附件列表JSON:[{name,url,size,type}]")
     create_time = Column(DateTime, default=datetime.now, comment="发布时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
-    
+
     user = relationship("SysUser")
-    
+
     __table_args__ = (
         Index("idx_user_id_forumpost", user_id),
         Index("idx_create_time", create_time),
         Index("idx_status_forumpost", status),
+        Index("idx_status_top_time", status, is_top, create_time),
     )
 
 class ForumComment(Base):
@@ -767,18 +811,20 @@ class QuestionDetailCategory(Base):
     
     # 行测细分类
     xingce_subcategory = Column(Enum(
-        "政治理论", "资料分析", "数量关系", "常识", 
-        "速度与知觉训练", "判断推理", "语言理解与表达", "无"
+        "政治理论", "常识判断", "言语理解与表达", "数量关系",
+        "判断推理", "资料分析", "知觉速度与准确性",
+        "常识", "速度与知觉训练", "语言理解与表达", "无"
     ), default="无", comment="行测细分类型")
-    
+
     # 申论细分类
     shenlun_subcategory = Column(Enum(
         "归纳概括", "综合分析", "提出对策", "应用文写作", "议论文写作", "无"
     ), default="无", comment="申论细分类型")
-    
+
     # 公专细分类
     gongzhuan_subcategory = Column(Enum(
-        "职业素养", "基本警务能力", "基础知识", "无"
+        "职业素养", "基础知识", "基本警务能力",
+        "法律知识", "业务能力", "无"
     ), default="无", comment="公专细分类型")
     
     # 其他分类
@@ -786,8 +832,8 @@ class QuestionDetailCategory(Base):
     
     # 题型细分
     question_type_detail = Column(Enum(
-        "单选题", "多选题", "不定项", "选择题", "判断题",
-        "写作题", "简答题", "案例分析题", "论述题", "填空题", "无"
+        "单选题", "多选题", "不定项", "选择题",
+        "写作题", "简答题", "案例分析题", "论述题", "无"
     ), default="选择题", comment="题型详细分类")
     
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
@@ -1340,6 +1386,48 @@ class NewsFavorite(Base):
     )
 
 
+# ------------------------------
+# 快速练习模块 — 子科目 & 题目-考点关联
+# ------------------------------
+
+class SubCategory(Base):
+    """子科目表 — 科目下的二级分类（如行测→政治理论）"""
+    __tablename__ = "sub_categories"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="子科目ID")
+    subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), nullable=False, comment="所属科目ID")
+    name = Column(String(100), nullable=False, comment="子科目名称")
+    description = Column(String(500), comment="子科目描述")
+    sort_order = Column(Integer, default=1, comment="排序序号")
+    status = Column(Integer, default=1, comment="状态 1正常/0禁用")
+
+    subject = relationship("QuestionSubject")
+
+    __table_args__ = (
+        UniqueConstraint("subject_id", "name", name="uq_subject_subcategory_name"),
+        Index("idx_sub_category_subject", subject_id),
+        Index("idx_sub_category_sort", sort_order),
+    )
+
+
+class QuestionKnowledge(Base):
+    """题目-考点关联表 — 多对多关系"""
+    __tablename__ = "question_knowledge"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="关联ID")
+    question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
+    knowledge_point_id = Column(BigInteger, ForeignKey("knowledge_point.point_id"), nullable=False, comment="考点ID")
+
+    question = relationship("QuestionBank")
+    knowledge_point = relationship("KnowledgePoint")
+
+    __table_args__ = (
+        UniqueConstraint("question_id", "knowledge_point_id", name="uq_question_knowledge"),
+        Index("idx_qk_question", question_id),
+        Index("idx_qk_knowledge", knowledge_point_id),
+    )
+
+
 class NewsNote(Base):
     """新闻笔记表（划线+想法）"""
     __tablename__ = "news_note"
@@ -1358,4 +1446,44 @@ class NewsNote(Base):
     __table_args__ = (
         Index("idx_user_id_newsnote", user_id),
         Index("idx_news_id_newsnote", news_id),
+    )
+
+
+# ------------------------------
+# 申论金句模块
+# ------------------------------
+
+class EssayQuote(Base):
+    """申论金句表"""
+    __tablename__ = "essay_quote"
+    quote_id = Column(Integer, primary_key=True, autoincrement=True, comment="金句ID")
+    content = Column(Text, nullable=False, comment="金句内容")
+    source = Column(String(200), comment="来源")
+    category = Column(String(50), comment="分类: 哲理/治国/民生/法治/品德")
+    author = Column(String(100), comment="作者")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    status = Column(Integer, default=1, comment="状态 1正常/0禁用")
+
+    __table_args__ = (
+        Index("idx_category_essayquote", category),
+        Index("idx_status_essayquote", status),
+    )
+
+
+class QuoteFavorite(Base):
+    """金句收藏表"""
+    __tablename__ = "quote_favorite"
+    fav_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    quote_id = Column(Integer, ForeignKey("essay_quote.quote_id"), nullable=True)
+    obsidian_source = Column(String(200), nullable=True, comment="Obsidian 金句来源标识（文件名）")
+    create_time = Column(DateTime, default=datetime.now)
+
+    user = relationship("SysUser")
+    quote = relationship("EssayQuote")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "quote_id", name="uq_user_quote_fav"),
+        UniqueConstraint("user_id", "obsidian_source", name="uq_user_obsidian_fav"),
+        Index("idx_user_id_quotefavorite", user_id),
     )
