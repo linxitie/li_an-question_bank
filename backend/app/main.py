@@ -12,9 +12,11 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
-from .api.v1 import auth, questions, papers, exams, videos, llm, goals, stats, media, news, recruitment, calendar, question_actions, practice, forum
+from .api.v1 import auth, questions, papers, exams, videos, llm, goals, stats, media, news, recruitment, calendar, question_actions, practice, forum, exam_records, wrong_questions, collection, notes, quick_practice, smart_exam
 from .api.v1 import admin as admin_api
 from .api.v1 import teacher as teacher_api
+from .api.v1 import admin_approval
+from .api.v1 import quotes
 # from .api.v1 import wrong_questions, checkin, coins  # TODO: 待创建
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
@@ -99,6 +101,54 @@ async def lifespan(app: FastAPI):
                         conn.execute(text(f"ALTER TABLE practice_record ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: practice_record 添加列 {col_name}")
+
+        # 检查 forum_post 表(论坛模块完善:新增 attachments 字段)
+        if 'forum_post' in inspector.get_table_names():
+            forum_cols = [c['name'] for c in inspector.get_columns('forum_post')]
+            if 'attachments' not in forum_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE forum_post ADD COLUMN attachments JSON"))
+                    conn.commit()
+                logger.info("自动迁移: forum_post 添加列 attachments")
+
+        # 检查 knowledge_point 表(快速练习三级分类:新增 sub_category_id 字段)
+        if 'knowledge_point' in inspector.get_table_names():
+            kp_cols = [c['name'] for c in inspector.get_columns('knowledge_point')]
+            if 'sub_category_id' not in kp_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE knowledge_point ADD COLUMN sub_category_id INTEGER REFERENCES sub_categories(id)"))
+                    conn.commit()
+                logger.info("自动迁移: knowledge_point 添加列 sub_category_id")
+
+        # 检查并修复双编码JSON options（99条历史数据）
+        if 'question_bank' in inspector.get_table_names():
+            try:
+                import json as _json
+                with engine.connect() as conn:
+                    rows = conn.execute(text(
+                        "SELECT question_id, options FROM question_bank WHERE options LIKE '\"[%' AND status=1"
+                    )).fetchall()
+                    fixed = 0
+                    for r in rows:
+                        qid, opts = r[0], r[1]
+                        if isinstance(opts, str):
+                            try:
+                                parsed = _json.loads(opts)
+                                if isinstance(parsed, str):
+                                    parsed = _json.loads(parsed)
+                                if isinstance(parsed, list):
+                                    conn.execute(text(
+                                        "UPDATE question_bank SET options = :opts WHERE question_id = :qid"
+                                    ), {"opts": _json.dumps(parsed, ensure_ascii=False), "qid": qid})
+                                    fixed += 1
+                            except Exception:
+                                pass
+                    if fixed > 0:
+                        conn.commit()
+                        logger.info(f"自动修复: 已修复 {fixed} 条双编码JSON options")
+            except Exception as e:
+                logger.warning(f"双编码JSON options修复跳过: {e}")
+
         # === 三端分离架构：SysUser 新增字段 ===
         if 'sys_user' in inspector.get_table_names():
             user_cols = [c['name'] for c in inspector.get_columns('sys_user')]
@@ -117,6 +167,37 @@ async def lifespan(app: FastAPI):
                         conn.execute(text(f"ALTER TABLE sys_user ADD COLUMN {col_name} {col_type} {default_clause}"))
                         conn.commit()
                     logger.info(f"自动迁移: sys_user 添加列 {col_name}")
+
+        # === 每日金句收藏：quote_favorite 表结构迁移（新增 obsidian_source + quote_id 可空） ===
+        # SQLite 不支持 ALTER COLUMN 修改 NOT NULL，需整表重建
+        if 'quote_favorite' in inspector.get_table_names():
+            qf_cols = [c['name'] for c in inspector.get_columns('quote_favorite')]
+            qf_nullable = {c['name']: c.get('nullable', True) for c in inspector.get_columns('quote_favorite')}
+            quote_id_notnull = qf_nullable.get('quote_id', True) is False
+            if 'obsidian_source' not in qf_cols or quote_id_notnull:
+                with engine.connect() as conn:
+                    conn.execute(text("""
+                        CREATE TABLE quote_favorite_new (
+                            fav_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                            user_id BIGINT NOT NULL,
+                            quote_id INTEGER,
+                            obsidian_source VARCHAR(200),
+                            create_time DATETIME,
+                            CONSTRAINT uq_user_quote_fav UNIQUE (user_id, quote_id),
+                            CONSTRAINT uq_user_obsidian_fav UNIQUE (user_id, obsidian_source),
+                            FOREIGN KEY(user_id) REFERENCES sys_user (user_id),
+                            FOREIGN KEY(quote_id) REFERENCES essay_quote (quote_id)
+                        )
+                    """))
+                    conn.execute(text("""
+                        INSERT INTO quote_favorite_new (fav_id, user_id, quote_id, create_time)
+                        SELECT fav_id, user_id, quote_id, create_time FROM quote_favorite
+                    """))
+                    conn.execute(text("DROP TABLE quote_favorite"))
+                    conn.execute(text("ALTER TABLE quote_favorite_new RENAME TO quote_favorite"))
+                    conn.execute(text("CREATE INDEX idx_user_id_quotefavorite ON quote_favorite (user_id)"))
+                    conn.commit()
+                logger.info("自动迁移: quote_favorite 表重建（新增 obsidian_source + quote_id 可空）")
 
         # === 三端分离架构：新增 sys_config 默认配置 ===
         try:
@@ -146,6 +227,84 @@ async def lifespan(app: FastAPI):
 
     except Exception as mig_err:
         logger.warning(f"自动迁移检查失败（可忽略）: {mig_err}")
+
+    # wrong_question_personal 表斩题字段迁移
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            columns = [row[1] for row in conn.execute(text("PRAGMA table_info(wrong_question_personal)")).fetchall()]
+            if 'is_cut' not in columns:
+                conn.execute(text("ALTER TABLE wrong_question_personal ADD COLUMN is_cut INTEGER DEFAULT 0"))
+            if 'cut_time' not in columns:
+                conn.execute(text("ALTER TABLE wrong_question_personal ADD COLUMN cut_time DATETIME"))
+            if 'auto_delete_time' not in columns:
+                conn.execute(text("ALTER TABLE wrong_question_personal ADD COLUMN auto_delete_time DATETIME"))
+            if 'correct_count' not in columns:
+                conn.execute(text("ALTER TABLE wrong_question_personal ADD COLUMN correct_count INTEGER DEFAULT 0"))
+            if 'user_answer' not in columns:
+                conn.execute(text("ALTER TABLE wrong_question_personal ADD COLUMN user_answer TEXT"))
+            conn.commit()
+        logger.info("wrong_question_personal 斩题字段迁移完成")
+    except Exception as e:
+        logger.warning(f"wrong_question_personal 迁移: {e}")
+
+    # 题型历史数据迁移：统一归一化为4种标准类型
+    try:
+        with engine.connect() as conn:
+            # === question_detail_category 表 ===
+            conn.execute(text("UPDATE question_detail_category SET question_type_detail='单选题' WHERE question_type_detail IN ('判断题', '选择题')"))
+            conn.execute(text("UPDATE question_detail_category SET question_type_detail='多选题' WHERE question_type_detail='不定项'"))
+            conn.execute(text("UPDATE question_detail_category SET question_type_detail='论述题' WHERE question_type_detail IN ('填空题', '简答题', '案例分析题', '无')"))
+            # === question_type 表 ===
+            conn.execute(text("UPDATE question_type SET type_name='单选题' WHERE type_name IN ('判断题', '选择题', '单选')"))
+            conn.execute(text("UPDATE question_type SET type_name='多选题' WHERE type_name IN ('不定项', '多选')"))
+            conn.execute(text("UPDATE question_type SET type_name='论述题' WHERE type_name IN ('填空题', '简答题', '案例分析题')"))
+            # 修复 is_objective 字段
+            conn.execute(text("UPDATE question_type SET is_objective=1 WHERE type_name IN ('单选题', '多选题')"))
+            conn.execute(text("UPDATE question_type SET is_objective=0 WHERE type_name IN ('论述题', '写作题')"))
+            conn.commit()
+        logger.info("题型历史数据迁移完成（统一归一化为4种标准类型）")
+    except Exception as e:
+        logger.warning(f"题型历史数据迁移: {e}")
+
+    # exam_record 表 exam_type 枚举值迁移：SIMULATION→SELF_TEST, PRACTICE→MOCK_EXAM
+    # 修复模型定义枚举(Enum("SELF_TEST","MOCK_EXAM"))与历史数据(SIMULATION/PRACTICE)不一致问题
+    try:
+        with engine.connect() as conn:
+            # SQLite 的 Enum 实际存储为 TEXT，可直接 UPDATE
+            conn.execute(text("UPDATE exam_record SET exam_type='SELF_TEST' WHERE exam_type='SIMULATION'"))
+            conn.execute(text("UPDATE exam_record SET exam_type='MOCK_EXAM' WHERE exam_type='PRACTICE'"))
+            conn.commit()
+        logger.info("exam_record 枚举值迁移完成（SIMULATION→SELF_TEST, PRACTICE→MOCK_EXAM）")
+    except Exception as e:
+        logger.warning(f"exam_record 枚举值迁移: {e}")
+
+    # 申论金句种子数据初始化
+    try:
+        from .models.models import EssayQuote
+        db_seed = SessionLocal()
+        try:
+            existing_count = db_seed.query(EssayQuote).count()
+            if existing_count == 0:
+                seed_quotes = [
+                    EssayQuote(content="天下之事，不难于立法，而难于法之必行。", source="张居正", category="法治", author="张居正"),
+                    EssayQuote(content="法者，天下之程式也，万事之仪表也。", source="管子", category="法治", author="管仲"),
+                    EssayQuote(content="治国之道，必先富民。", source="管子", category="治国", author="管仲"),
+                    EssayQuote(content="政之所兴在顺民心，政之所废在逆民心。", source="管子", category="民心", author="管仲"),
+                    EssayQuote(content="苟日新，日日新，又日新。", source="大学", category="哲理", author="曾子"),
+                    EssayQuote(content="天下为公，选贤与能，讲信修睦。", source="礼记", category="治国", author=""),
+                    EssayQuote(content="民惟邦本，本固邦宁。", source="尚书", category="民心", author=""),
+                    EssayQuote(content="德不孤，必有邻。", source="论语", category="品德", author="孔子"),
+                    EssayQuote(content="己所不欲，勿施于人。", source="论语", category="品德", author="孔子"),
+                    EssayQuote(content="穷则独善其身，达则兼济天下。", source="孟子", category="品德", author="孟子"),
+                ]
+                db_seed.add_all(seed_quotes)
+                db_seed.commit()
+                logger.info(f"申论金句种子数据初始化完成: {len(seed_quotes)} 条")
+        finally:
+            db_seed.close()
+    except Exception as seed_err:
+        logger.warning(f"金句种子数据初始化跳过: {seed_err}")
 
     # 自动修复已有题目的子科目分类（将'无'重新检测分类）
     try:
@@ -277,23 +436,31 @@ app.mount("/static/questions", StaticFiles(directory=_img_dir), name="question_i
 
 app.include_router(auth.router)
 app.include_router(questions.router)
-app.include_router(paper_router, tags=["试卷管理"])
-app.include_router(papers.router)
+app.include_router(paper_router, tags=["试卷管理"])  # paper_generation（含mode参数，优先注册）
+app.include_router(papers.router, tags=["试卷管理-基础"])
 app.include_router(question_import_router)
 app.include_router(exams.router)
 app.include_router(videos.router)
 app.include_router(llm.router)
 app.include_router(goals.router)
 app.include_router(stats.router)
+app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
 app.include_router(websocket_router)
 app.include_router(news.router)
 app.include_router(recruitment.router)
 app.include_router(calendar.router)
 app.include_router(practice.router)
+app.include_router(quick_practice.router)
+app.include_router(smart_exam.router)
 app.include_router(question_actions.router)
 app.include_router(forum.router)
+app.include_router(wrong_questions.router)
+app.include_router(notes.router)
+app.include_router(collection.router)
+app.include_router(quotes.router)
 app.include_router(admin_api.router, tags=["管理员端"])
+app.include_router(admin_approval.router, tags=["管理员端-试卷审批"])
 app.include_router(teacher_api.router, tags=["教师端"])
 
 @app.get("/health", tags=["系统"])
