@@ -355,6 +355,39 @@ async def toggle_quote_favorite(
     return {"favorited": True, "message": "已收藏"}
 
 
+@router.post("/obsidian/{obsidian_source}/favorite", summary="切换 Obsidian 金句收藏")
+async def toggle_obsidian_quote_favorite(
+    obsidian_source: str,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """添加或取消 Obsidian 金句收藏（以文件名作为稳定 ID）"""
+    # 校验参数格式（只允许文件名，不允许路径分隔符）
+    if not re.match(r'^[\w\-\.]+\.md$', obsidian_source):
+        raise HTTPException(status_code=400, detail="无效的金句来源标识")
+
+    # 检查是否已收藏
+    existing = db.query(QuoteFavorite).filter(
+        QuoteFavorite.user_id == current_user.user_id,
+        QuoteFavorite.obsidian_source == obsidian_source
+    ).first()
+
+    if existing:
+        db.delete(existing)
+        db.commit()
+        return {"favorited": False, "message": "已取消收藏"}
+
+    # 新增收藏（quote_id 为空）
+    fav = QuoteFavorite(
+        user_id=current_user.user_id,
+        quote_id=None,  # Obsidian 金句无数据库 ID
+        obsidian_source=obsidian_source,
+    )
+    db.add(fav)
+    db.commit()
+    return {"favorited": True, "message": "已收藏"}
+
+
 @router.get("/favorites", summary="我的金句收藏列表")
 async def get_quote_favorites(
     page: int = Query(1, ge=1),
