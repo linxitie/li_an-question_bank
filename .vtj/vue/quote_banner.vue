@@ -174,22 +174,39 @@
           if (auth && auth.isLoggedIn && auth.isLoggedIn()) {
             Object.assign(headers, auth.getJsonHeaders());
           }
+          // 辅助函数：安全解析 JSON（检查 Content-Type）
+          const safeJson = async (response) => {
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+              throw new Error('服务端返回非 JSON 响应');
+            }
+            return response.json();
+          };
           // 优先从 Obsidian 知识库获取每日金句，失败时回退到随机金句
           let res = await fetch('/api/quotes/quote/daily', { headers });
-          if (!res.ok) {
-            // 回退到原有的随机金句接口
-            res = await fetch('/api/quotes/random', { headers });
+          if (res.ok) {
+            const data = await safeJson(res);
+            this.state.quote = data.content || '暂无金句';
+            this.state.author = data.author || data.source || '佚名';
+            this.state.quoteId = data.quote_id || 0;
+            this.state.quoteFavorited = !!data.favorited;
+            // 存储 Obsidian 金句信息
+            this.state.obsidianId = data.obsidian_id || '';
+            this.state.obsidianSource = data.obsidian_source || '';
+            this.state.sourceType = data.source_type || 'database';
+            return;
           }
+          // daily 接口失败，回退到随机金句
+          res = await fetch('/api/quotes/random', { headers });
           if (!res.ok) throw new Error('获取金句失败');
-          const data = await res.json();
+          const data = await safeJson(res);
           this.state.quote = data.content || '暂无金句';
           this.state.author = data.author || data.source || '佚名';
           this.state.quoteId = data.quote_id || 0;
           this.state.quoteFavorited = !!data.favorited;
-          // 存储 Obsidian 金句信息
-          this.state.obsidianId = data.obsidian_id || '';
-          this.state.obsidianSource = data.obsidian_source || '';
-          this.state.sourceType = data.source_type || 'database';
+          this.state.obsidianId = '';
+          this.state.obsidianSource = '';
+          this.state.sourceType = 'database';
         } catch (e) {
           console.warn('获取金句失败:', e);
           // 失败时使用兜底金句，避免空白

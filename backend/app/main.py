@@ -492,10 +492,13 @@ if _ospath.exists(_dist):
         app.mount("/assets", StaticFiles(directory=_assets), name="spa_assets")
 
     # SPA fallback：非 API 路径返回 index.html
-    from fastapi.responses import FileResponse as _FileResponse
+    from fastapi.responses import FileResponse as _FileResponse, JSONResponse as _JSONResponse
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
-        """所有非 API 路径返回前端 index.html，由 Vue Router 接管路由"""
+        """所有非 API 路径返回前端 index.html，由 Vue Router 接管路由。
+        /api/* 路径返回 404 JSON，避免前端解析 HTML 出错。"""
+        if full_path.startswith("api/"):
+            return _JSONResponse(status_code=404, content={"detail": "Not Found"})
         file_path = _ospath.join(_dist, full_path)
         if full_path and _ospath.isfile(file_path):
             return _FileResponse(file_path)
