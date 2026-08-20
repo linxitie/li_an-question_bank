@@ -25,11 +25,24 @@ router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
 
 # Obsidian 知识库配置
-OBSIDIAN_VAULT_PATH = os.environ.get(
-    "OBSIDIAN_VAULT_PATH",
-    r"D:\Obsidian仓库\每日金句知识库"
-)
-OBSIDIAN_QUOTE_DIR = os.path.join(OBSIDIAN_VAULT_PATH, "01-金句素材库")
+# 优先使用环境变量；如果环境变量指向的路径下没有 01-金句素材库 子目录，
+# 则自动回退到常见的默认路径
+_OB_ENV_PATH = os.environ.get("OBSIDIAN_VAULT_PATH", "")
+_DEFAULT_VAULT = r"D:\Obsidian仓库\每日金句知识库"
+
+def _resolve_quote_dir() -> str:
+    """解析 Obsidian 金句目录，自动检测路径是否正确"""
+    candidates = []
+    if _OB_ENV_PATH:
+        candidates.append(os.path.join(_OB_ENV_PATH, "01-金句素材库"))
+    candidates.append(os.path.join(_DEFAULT_VAULT, "01-金句素材库"))
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    # 都不存在则返回默认值（让后续报错信息更清晰）
+    return candidates[-1] if candidates else os.path.join(_DEFAULT_VAULT, "01-金句素材库")
+
+OBSIDIAN_QUOTE_DIR = _resolve_quote_dir()
 
 # 过滤规则
 CORRUPTION_PATTERN = re.compile(r'\?{3,}')
