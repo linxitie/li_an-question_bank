@@ -29,7 +29,7 @@ OBSIDIAN_VAULT_PATH = os.environ.get(
     "OBSIDIAN_VAULT_PATH",
     r"D:\Obsidian仓库\每日金句知识库"
 )
-OBSIDIAN_QUOTE_DIR = os.path.join(OBSIDIAN_VAULT_PATH, "01-金句库", "2026")
+OBSIDIAN_QUOTE_DIR = os.path.join(OBSIDIAN_VAULT_PATH, "01-金句素材库")
 
 # 过滤规则
 CORRUPTION_PATTERN = re.compile(r'\?{3,}')
@@ -104,29 +104,36 @@ def _read_obsidian_quotes() -> list[dict]:
         return quotes
     
     try:
-        for fname in os.listdir(OBSIDIAN_QUOTE_DIR):
-            if not fname.endswith('.md') or fname.startswith('_'):
-                continue
-            
-            fpath = os.path.join(OBSIDIAN_QUOTE_DIR, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as f:
-                    content = f.read()
+        for root, dirs, files in os.walk(OBSIDIAN_QUOTE_DIR):
+            for fname in files:
+                if not fname.endswith('.md') or fname.startswith('_'):
+                    continue
                 
-                parsed = _parse_obsidian_quote(content)
-                if parsed:
-                    # 用文件名的哈希作为唯一 ID
-                    file_hash = hashlib.md5(fname.encode()).hexdigest()[:12]
-                    parsed['id'] = f"obsidian_{file_hash}"
-                    parsed['filename'] = fname
-                    quotes.append(parsed)
-            except Exception as e:
-                logger.warning(f"Failed to read quote file {fname}: {e}")
-                continue
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    parsed = _parse_obsidian_quote(content)
+                    if parsed:
+                        # 用文件名的哈希作为唯一 ID
+                        file_hash = hashlib.md5(fname.encode()).hexdigest()[:12]
+                        parsed['id'] = f"obsidian_{file_hash}"
+                        parsed['filename'] = fname
+                        quotes.append(parsed)
+                except Exception as e:
+                    logger.warning(f"Failed to read quote file {fname}: {e}")
+                    continue
     except Exception as e:
         logger.error(f"Failed to list Obsidian quote dir: {e}")
     
     return quotes
+
+
+def get_random_int(max_value: int) -> int:
+    """按日期种子返回 0 到 max_value-1 之间的整数，确保同一天结果稳定"""
+    today = date.today()
+    return (today.year * 366 + today.month * 31 + today.day) % max_value
 
 
 def _select_daily_quote(quotes: list[dict]) -> Optional[dict]:
@@ -134,9 +141,8 @@ def _select_daily_quote(quotes: list[dict]) -> Optional[dict]:
     if not quotes:
         return None
     
-    today = date.today()
     # 用日期作为种子，确保同一天返回相同金句
-    day_index = (today.year * 366 + today.month * 31 + today.day) % len(quotes)
+    day_index = get_random_int(len(quotes))
     return quotes[day_index]
 
 

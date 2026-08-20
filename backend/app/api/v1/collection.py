@@ -187,8 +187,13 @@ def _read_obsidian_quote_by_filename(filename: str) -> Optional[dict]:
     if not filename or not os.path.exists(OBSIDIAN_QUOTE_DIR):
         return None
 
-    fpath = os.path.join(OBSIDIAN_QUOTE_DIR, filename)
-    if not os.path.exists(fpath):
+    # 递归搜索整个目录树，匹配文件名（basename）
+    fpath = None
+    for root, dirs, files in os.walk(OBSIDIAN_QUOTE_DIR):
+        if filename in files:
+            fpath = os.path.join(root, filename)
+            break
+    if not fpath:
         return None
 
     try:

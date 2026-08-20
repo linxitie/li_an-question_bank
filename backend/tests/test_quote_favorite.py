@@ -7,6 +7,7 @@ Obsidian 金句收藏功能测试
 4. 无效 obsidian_source 400
 5. /news-favorites 合并返回 Obsidian 金句
 6. /quote/daily 返回 obsidian_id/source_type
+7. Obsidian 嵌套目录递归扫描
 """
 import os
 import tempfile
@@ -14,6 +15,8 @@ import pytest
 from unittest.mock import patch
 
 from app.models.models import EssayQuote, QuoteFavorite
+from app.api.v1.quotes import _read_obsidian_quotes
+from app.api.v1.collection import _read_obsidian_quote_by_filename
 
 
 @pytest.fixture
@@ -189,3 +192,52 @@ class TestDailyQuote:
             r = client.get("/api/quotes/quote/daily", headers=auth_headers)
             assert r.status_code == 200
             assert r.json()["favorited"] is True
+
+
+class TestObsidianRecursiveScan:
+    """Obsidian 金句嵌套目录递归扫描"""
+
+    NESTED_CONTENT = (
+        'quote: "忠诚是公安队伍代代相传的政治基因"\n'
+        "status: 已审核\n"
+        'source: "人民公安报"\n'
+        'author: ""\n'
+    )
+
+    def _create_nested_quote(self, tmp_path):
+        """在 tmp_path 下创建 01-政治类/党建引领/test-nested.md"""
+        nested_dir = tmp_path / "01-政治类" / "党建引领"
+        nested_dir.mkdir(parents=True)
+        (nested_dir / "test-nested.md").write_text(self.NESTED_CONTENT, encoding="utf-8")
+
+    def test_read_obsidian_quotes_recursive(self, tmp_path):
+        """嵌套子目录中的金句文件应被递归扫描到"""
+        self._create_nested_quote(tmp_path)
+
+        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
+            quotes = _read_obsidian_quotes()
+
+        assert len(quotes) == 1
+        assert quotes[0]["filename"] == "test-nested.md"
+        assert quotes[0]["content"] == "忠诚是公安队伍代代相传的政治基因"
+
+    def test_obsidian_quote_by_filename_nested(self, tmp_path):
+        """仅传文件名（不含路径）应能找到嵌套目录中的金句"""
+        self._create_nested_quote(tmp_path)
+
+        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
+            quote = _read_obsidian_quote_by_filename("test-nested.md")
+
+        assert quote is not None
+        assert quote["content"] == "忠诚是公安队伍代代相传的政治基因"
+
+    def test_get_daily_quote_nested(self, client, test_user, auth_headers, tmp_path):
+        """嵌套目录中的金句应被每日金句接口选中"""
+        self._create_nested_quote(tmp_path)
+
+        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
+            with patch("app.api.v1.quotes.get_random_int", return_value=0):
+                r = client.get("/api/quotes/quote/daily", headers=auth_headers)
+
+        assert r.status_code == 200
+        assert r.json()["source_type"] == "obsidian"
