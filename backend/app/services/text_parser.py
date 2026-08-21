@@ -207,6 +207,103 @@ class QuestionNumberRecognizer:
         return best_sequence
 
 
+# ============ AnswerExtractor: 答案提取器 ============
+
+class AnswerExtractor:
+    """
+    从答案文本中提取结构化答案信息，支持多种答案格式。
+    """
+
+    # 支持的答案格式
+    ANSWER_PATTERNS = [
+        r'答案[：:]\s*([A-Da-d]+)',           # 答案：A
+        r'参考答案[：:]\s*([A-Da-d]+)',       # 参考答案：AB
+        r'正确答案[：:]\s*([A-Da-d]+)',       # 正确答案：ABC
+        r'标准答案[：:]\s*([A-Da-d]+)',       # 标准答案：ABCD
+        r'Answer[：:]\s*([A-Da-d]+)',         # Answer: A
+        r'故本题答案为([A-Da-d]+)',           # 故本题答案为D
+        r'本题选([A-Da-d]+)',                 # 本题选AB
+        r'应选([A-Da-d]+)',                   # 应选C
+    ]
+
+    def extract_with_context(self, text: str, question_block: dict) -> dict:
+        """
+        带上下文的答案提取。
+        输入：答案文本和题目块信息（含 question_type）
+        输出：{answer, confidence, format, raw_text}
+        """
+        if not text:
+            return {'answer': '', 'confidence': 0.0, 'format': '', 'raw_text': ''}
+
+        question_type = question_block.get('question_type', '单选题')
+
+        # 尝试所有标准答案格式
+        for pattern in self.ANSWER_PATTERNS:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                answer = match.group(1).upper()
+                if self.validate_answer(answer, question_type):
+                    return {
+                        'answer': answer,
+                        'confidence': 0.9,
+                        'format': pattern,
+                        'raw_text': match.group(0),
+                    }
+
+        # 回退：尝试提取单个字母
+        single_letter_match = re.search(r'\b([A-Da-d])\b', text)
+        if single_letter_match:
+            answer = single_letter_match.group(1).upper()
+            if self.validate_answer(answer, question_type):
+                return {
+                    'answer': answer,
+                    'confidence': 0.7,
+                    'format': 'single_letter',
+                    'raw_text': single_letter_match.group(0),
+                }
+
+        # 论述题/写作题回退：整段文本即为答案
+        if question_type in ('论述题', '写作题'):
+            cleaned = text.strip()
+            if cleaned and self.validate_answer(cleaned, question_type):
+                return {
+                    'answer': cleaned,
+                    'confidence': 0.8,
+                    'format': 'full_text',
+                    'raw_text': cleaned[:200],
+                }
+
+        return {'answer': '', 'confidence': 0.0, 'format': '', 'raw_text': ''}
+
+    def validate_answer(self, answer: str, question_type: str) -> bool:
+        """
+        验证答案是否合理。
+        根据题目类型验证答案格式。
+        """
+        if question_type in ('单选题', '多选题'):
+            return self._validate_choice_answer(answer, question_type)
+        elif question_type in ('论述题', '写作题'):
+            return len(answer.strip()) >= 50
+        else:
+            return bool(answer.strip())
+
+    def _validate_choice_answer(self, answer: str, question_type: str) -> bool:
+        """
+        验证选择题答案格式。
+        - 单选题：单个字母 A-D
+        - 多选题：多个字母 A-D，按字母顺序排列
+        """
+        clean_answer = re.sub(r'[\s、,，]', '', answer.upper())
+
+        if question_type == '单选题':
+            return bool(re.match(r'^[A-D]$', clean_answer))
+        elif question_type == '多选题':
+            if not re.match(r'^[A-D]+$', clean_answer):
+                return False
+            return clean_answer == ''.join(sorted(clean_answer))
+        return False
+
+
 # ============ ContentCleaner: 噪声过滤器 ============
 
 class ContentCleaner:
