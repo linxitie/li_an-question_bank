@@ -164,17 +164,16 @@
         const d = new Date();
         this.state.currentDate = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
       },
-      async refreshQuote() {
+      async loadDailyQuote() {
+        // 页面加载时调用 daily 接口（同一天返回同一条）
         if (this.state.quoteLoading) return;
         this.state.quoteLoading = true;
         try {
-          // 首页金句匿名可访问，使用普通 fetch；登录态会通过 cookie/header 自动带 token
           const auth = window.__VTJ_AUTH__;
           const headers = {};
           if (auth && auth.isLoggedIn && auth.isLoggedIn()) {
             Object.assign(headers, auth.getJsonHeaders());
           }
-          // 辅助函数：安全解析 JSON（检查 Content-Type）
           const safeJson = async (response) => {
             const ct = response.headers.get('content-type') || '';
             if (!ct.includes('application/json')) {
@@ -182,7 +181,6 @@
             }
             return response.json();
           };
-          // 优先从 Obsidian 知识库获取每日金句，失败时回退到随机金句
           let res = await fetch('/api/quotes/quote/daily', { headers });
           if (res.ok) {
             const data = await safeJson(res);
@@ -190,13 +188,11 @@
             this.state.author = data.author || data.source || '佚名';
             this.state.quoteId = data.quote_id || 0;
             this.state.quoteFavorited = !!data.favorited;
-            // 存储 Obsidian 金句信息
             this.state.obsidianId = data.obsidian_id || '';
             this.state.obsidianSource = data.obsidian_source || '';
             this.state.sourceType = data.source_type || 'database';
             return;
           }
-          // daily 接口失败，回退到随机金句
           res = await fetch('/api/quotes/random', { headers });
           if (!res.ok) throw new Error('获取金句失败');
           const data = await safeJson(res);
@@ -204,12 +200,48 @@
           this.state.author = data.author || data.source || '佚名';
           this.state.quoteId = data.quote_id || 0;
           this.state.quoteFavorited = !!data.favorited;
-          this.state.obsidianId = '';
-          this.state.obsidianSource = '';
-          this.state.sourceType = 'database';
+          this.state.obsidianId = data.obsidian_id || '';
+          this.state.obsidianSource = data.obsidian_source || '';
+          this.state.sourceType = data.source_type || 'database';
         } catch (e) {
           console.warn('获取金句失败:', e);
-          // 失败时使用兜底金句，避免空白
+          if (!this.state.quote || this.state.quote === '正在加载今日金句...') {
+            this.state.quote = '忠诚是公安队伍代代相传的政治基因，是融入血脉的人民警察之魂。';
+            this.state.author = '人民公安报';
+          }
+        } finally {
+          this.state.quoteLoading = false;
+        }
+      },
+      async refreshQuote() {
+        if (this.state.quoteLoading) return;
+        this.state.quoteLoading = true;
+        try {
+          const auth = window.__VTJ_AUTH__;
+          const headers = {};
+          if (auth && auth.isLoggedIn && auth.isLoggedIn()) {
+            Object.assign(headers, auth.getJsonHeaders());
+          }
+          const safeJson = async (response) => {
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+              throw new Error('服务端返回非 JSON 响应');
+            }
+            return response.json();
+          };
+          // "换一句"始终调用随机接口，从 Obsidian + 数据库混合池中真随机
+          const res = await fetch('/api/quotes/random', { headers });
+          if (!res.ok) throw new Error('获取金句失败');
+          const data = await safeJson(res);
+          this.state.quote = data.content || '暂无金句';
+          this.state.author = data.author || data.source || '佚名';
+          this.state.quoteId = data.quote_id || 0;
+          this.state.quoteFavorited = !!data.favorited;
+          this.state.obsidianId = data.obsidian_id || '';
+          this.state.obsidianSource = data.obsidian_source || '';
+          this.state.sourceType = data.source_type || 'database';
+        } catch (e) {
+          console.warn('获取金句失败:', e);
           if (!this.state.quote || this.state.quote === '正在加载今日金句...') {
             this.state.quote = '忠诚是公安队伍代代相传的政治基因，是融入血脉的人民警察之魂。';
             this.state.author = '人民公安报';
@@ -468,7 +500,7 @@
     },
     mounted() {
       this.formatDate();
-      this.refreshQuote();
+      this.loadDailyQuote();
       this.fetchNews();
     }
   })

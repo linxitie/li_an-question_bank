@@ -273,26 +273,77 @@ async def get_quotes(
     return {'total': total, 'page': page, 'page_size': page_size, 'items': result}
 
 
+import random as _random
+
+
+def _format_obsidian_quote(selected: dict, favorited: bool = False) -> dict:
+    """将 Obsidian 金句格式化为统一的 API 返回格式"""
+    return {
+        'quote_id': 0,
+        'obsidian_id': f"obsidian_{selected['filename']}",
+        'content': selected['content'],
+        'source': selected.get('source', ''),
+        'category': ', '.join(selected['topics'][:2]) if selected['topics'] else '',
+        'author': selected['author'],
+        'favorited': favorited,
+        'source_type': 'obsidian',
+        'obsidian_source': selected['filename'],
+    }
+
+
+def _format_db_quote(quote, favorited: bool = False) -> dict:
+    """将数据库金句格式化为统一的 API 返回格式"""
+    return {
+        'quote_id': quote.quote_id,
+        'content': quote.content,
+        'source': quote.source or '',
+        'category': quote.category or '',
+        'author': quote.author or '',
+        'favorited': favorited,
+        'source_type': 'database',
+    }
+
+
+def _get_empty_quote() -> dict:
+    return {
+        'quote_id': 0,
+        'content': '暂无金句',
+        'source': '',
+        'category': '',
+        'author': '',
+        'favorited': False,
+        'source_type': 'database',
+    }
+
+
 @router.get("/random", summary="随机获取一条金句")
 async def get_random_quote(
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    """随机获取一条金句，用于首页展示（匿名用户可访问）"""
+    """随机获取一条金句：优先从 Obsidian 读取，回退到数据库"""
+    import random as _rnd
+
+    # 1. 尝试从 Obsidian 随机读取
+    obsidian_quotes = _read_obsidian_quotes()
+    if obsidian_quotes:
+        selected = _rnd.choice(obsidian_quotes)
+        favorited = False
+        if current_user:
+            fav = db.query(QuoteFavorite).filter(
+                QuoteFavorite.user_id == current_user.user_id,
+                QuoteFavorite.obsidian_source == selected['filename']
+            ).first()
+            favorited = fav is not None
+        return _format_obsidian_quote(selected, favorited)
+
+    # 2. 回退到数据库
     quote = db.query(EssayQuote).filter(EssayQuote.status == 1)\
         .order_by(func.random()).first()
 
     if not quote:
-        return {
-            'quote_id': 0,
-            'content': '暂无金句',
-            'source': '',
-            'category': '',
-            'author': '',
-            'favorited': False
-        }
+        return _get_empty_quote()
 
-    # 检查是否已收藏（未登录用户返回 False）
     favorited = False
     if current_user:
         favorited = db.query(QuoteFavorite).filter(
@@ -300,14 +351,7 @@ async def get_random_quote(
             QuoteFavorite.quote_id == quote.quote_id
         ).first() is not None
 
-    return {
-        'quote_id': quote.quote_id,
-        'content': quote.content,
-        'source': quote.source or '',
-        'category': quote.category or '',
-        'author': quote.author or '',
-        'favorited': favorited
-    }
+    return _format_db_quote(quote, favorited)
 
 
 @router.post("", summary="创建金句（管理员）")
