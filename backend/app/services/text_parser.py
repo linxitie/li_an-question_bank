@@ -51,8 +51,8 @@ class TextPreprocessor:
         if not text:
             return ""
 
-        # 1. 清理空白：匹配场景下彻底移除空白（中文题目中空格均为提取噪声）
-        text = re.sub(r'\s+', '', text)
+        # 1. 清理空白：移除行内空白（空格、制表符），保留换行符
+        text = re.sub(r'[^\S\n]+', '', text)
 
         # 2. 去除页码
         text = re.sub(r'第\s*\d+\s*页', '', text)
@@ -302,6 +302,201 @@ class AnswerExtractor:
                 return False
             return clean_answer == ''.join(sorted(clean_answer))
         return False
+
+
+# ============ IntelligentMatcher: 智能匹配引擎 ============
+
+class IntelligentMatcher:
+    """
+    智能匹配题目和答案，支持多策略降级。
+    """
+
+    def __init__(self):
+        self.text_preprocessor = TextPreprocessor()
+        self.question_recognizer = QuestionNumberRecognizer()
+        self.answer_extractor = AnswerExtractor()
+        self._similarity_calculator = None
+        self._structure_matcher = None
+
+    def _get_similarity_calculator(self):
+        if self._similarity_calculator is None:
+            from .similarity import SimilarityCalculator
+            self._similarity_calculator = SimilarityCalculator()
+        return self._similarity_calculator
+
+    def _get_structure_matcher(self):
+        if self._structure_matcher is None:
+            from .structure_matcher import StructureMatcher
+            self._structure_matcher = StructureMatcher()
+        return self._structure_matcher
+
+    def match_questions_answers(self, questions_text: str, answers_text: str,
+                                paper_name: str = '') -> 'MatchResult':
+        """
+        智能匹配题目和答案。
+        策略：题号分段解析匹配（主要策略）
+        """
+        if not questions_text or not answers_text:
+            return MatchResult(
+                match_rate=0.0, matched_count=0, total_questions=0,
+                questions=[], unmatched_question_numbers=[], extra_answer_numbers=[],
+                analysis_count=0, strategy_used='无数据', details={},
+            )
+
+        # 预处理文本
+        q_text = self.text_preprocessor.clean_text(questions_text)
+        a_text = self.text_preprocessor.clean_text(answers_text)
+
+        # 识别题号
+        question_numbers = self.question_recognizer.recognize_with_confidence(q_text)
+        question_numbers = self.question_recognizer.resolve_conflicts(question_numbers)
+
+        # 提取题目块
+        question_blocks = self._extract_question_blocks(q_text, question_numbers)
+
+        # 提取答案映射
+        answer_map = self._extract_answer_map(a_text)
+
+        # 执行匹配
+        matched_count = 0
+        analysis_count = 0
+        no_answer_nums = []
+
+        for block in question_blocks:
+            q_num = block['question_number']
+            ans_entry = answer_map.get(q_num)
+
+            if ans_entry and ans_entry.get('answer'):
+                ans = ans_entry['answer']
+                block['answer'] = ans
+                matched_count += 1
+                if ans_entry.get('analysis') and len(str(ans_entry['analysis'])) > 0:
+                    block['analysis'] = ans_entry['analysis']
+                    analysis_count += 1
+            else:
+                no_answer_nums.append(q_num)
+
+        # 计算匹配率
+        total = len(question_blocks)
+        match_rate = matched_count / total if total > 0 else 0.0
+
+        return MatchResult(
+            match_rate=match_rate,
+            matched_count=matched_count,
+            total_questions=total,
+            questions=question_blocks,
+            unmatched_question_numbers=no_answer_nums,
+            extra_answer_numbers=[],
+            analysis_count=analysis_count,
+            strategy_used='题号分段解析',
+            details={'answer_map_keys': list(answer_map.keys())},
+        )
+
+    def _extract_question_blocks(self, text: str, question_numbers: list) -> list:
+        """从文本中提取题目块"""
+        blocks = []
+        lines = text.split('\n')
+
+        current_block = None
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            # 检查是否是新的题号
+            matched_new = False
+            for q_info in question_numbers:
+                num = q_info['number']
+                if stripped.startswith(f"{num}.") or stripped.startswith(f"{num}、"):
+                    if current_block:
+                        blocks.append(current_block)
+                    current_block = {
+                        'question_number': num,
+                        'content': stripped,
+                        'options': [],
+                        'answer': '',
+                        'analysis': '',
+                        'question_type': '单选题',
+                    }
+                    matched_new = True
+                    break
+
+            if not matched_new and current_block:
+                # 检查是否是选项
+                option_match = re.match(r'^([A-D])\.\s*(.*)', stripped)
+                if option_match:
+                    current_block['options'].append({
+                        'key': option_match.group(1),
+                        'value': option_match.group(2),
+                    })
+
+        if current_block:
+            blocks.append(current_block)
+
+        return blocks
+
+    def _extract_answer_map(self, text: str) -> dict:
+        """从答案文本中提取答案映射 {题号: {answer, analysis}}"""
+        answer_map = {}
+
+        # 策略1：标准答案格式（"答案：A"、"参考答案：AB" 等）
+        for pattern in AnswerExtractor.ANSWER_PATTERNS:
+            matches = list(re.finditer(pattern, text, re.IGNORECASE))
+            for match in matches:
+                context = text[max(0, match.start() - 80):match.start()]
+                num_match = re.search(r'(\d+)', context)
+                if num_match:
+                    q_num = int(num_match.group(1))
+                    answer = match.group(1).upper()
+                    # 尝试提取解析
+                    analysis = self._extract_analysis(text, match.end())
+                    answer_map[q_num] = {'answer': answer, 'analysis': analysis}
+
+        # 策略2：题号.字母 格式（"1.A"、"2.B" 等，预处理后常见格式）
+        num_answer_pattern = re.compile(r'(\d+)\.\s*([A-Da-d]+)')
+        for match in num_answer_pattern.finditer(text):
+            q_num = int(match.group(1))
+            if q_num not in answer_map:
+                answer = match.group(2).upper()
+                analysis = self._extract_analysis(text, match.end())
+                answer_map[q_num] = {'answer': answer, 'analysis': analysis}
+
+        # 策略3：题号 + 单独字母（"1 A"、"2 B" 等空格分隔格式）
+        num_space_pattern = re.compile(r'(\d+)\s+([A-Da-d])\b')
+        for match in num_space_pattern.finditer(text):
+            q_num = int(match.group(1))
+            if q_num not in answer_map:
+                answer = match.group(2).upper()
+                analysis = self._extract_analysis(text, match.end())
+                answer_map[q_num] = {'answer': answer, 'analysis': analysis}
+
+        return answer_map
+
+    def _extract_analysis(self, text: str, start_pos: int) -> str:
+        """从答案后方提取解析文本"""
+        remaining = text[start_pos:start_pos + 500]
+        # 匹配"解析："后的内容，直到行尾或下一题号
+        analysis_match = re.search(r'解析[：:]\s*(.+?)(?:\n|$)', remaining)
+        if analysis_match:
+            return analysis_match.group(1).strip()
+        return ''
+
+    def evaluate_match_quality(self, result: 'MatchResult') -> dict:
+        """
+        评估匹配结果质量。
+        返回：{match_rate, confidence, consistency, quality_score}
+        """
+        match_rate = result.match_rate
+        confidence = min(match_rate * 1.1, 1.0)
+        consistency = 1.0 - (len(result.unmatched_question_numbers) / result.total_questions if result.total_questions > 0 else 0)
+        quality_score = match_rate * 0.5 + confidence * 0.3 + consistency * 0.2
+
+        return {
+            'match_rate': match_rate,
+            'confidence': confidence,
+            'consistency': consistency,
+            'quality_score': quality_score,
+        }
 
 
 # ============ ContentCleaner: 噪声过滤器 ============
@@ -1788,7 +1983,7 @@ def smart_match_questions_answers(
                     answer_keys_used.add(q_num)
                     if q_num in no_answer_nums:
                         no_answer_nums.remove(q_num)
-                    if ans_entry.get('analysis') and len(str(ans_entry['analysis'])) > 10:
+                if ans_entry.get('analysis') and len(str(ans_entry['analysis'])) > 0:
                         block['analysis'] = ans_entry['analysis']
                         analysis_count += 1
 
