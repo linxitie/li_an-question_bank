@@ -481,6 +481,8 @@ import QuestionPreviewList from './question_preview_list.vue';
         combinedSubMode: 'auto',
         // 分离导入匹配率
         separateMatchRate: 0,
+        // 中等匹配率待确认
+        separateNeedConfirm: false,
         // 手动匹配弹窗
         manualMatchVisible: false,
         // 图片导入自动分类结果
@@ -787,7 +789,15 @@ import QuestionPreviewList from './question_preview_list.vue';
           });
           const data = await res.json();
           if (res.ok) {
-            ElMessage.success('导入完成：成功 ' + (data.success_count || 0) + ' 题，跳过 ' + (data.skipped_count || 0));
+            // 增强导入结果展示
+            var msg = '导入完成：成功 ' + (data.success_count || 0) + ' 题，跳过 ' + (data.skipped_count || 0);
+            if (data.paper_id) {
+              msg += ' | 试卷ID: #' + data.paper_id;
+            }
+            if (data.match_rate !== undefined) {
+              msg += ' | 匹配率: ' + data.match_rate + '%';
+            }
+            ElMessage.success(msg);
             // 通知题库首页刷新数据
             this.notifyBankRefresh();
           } else {
@@ -1924,14 +1934,18 @@ import QuestionPreviewList from './question_preview_list.vue';
             return q.answer && q.answer !== '待补充';
           }).length;
 
-          if (matchRate >= 99) {
+          if (matchRate >= 80) {
             ElMessage.success('后端Pipeline匹配完成：匹配率 ' + matchRate + '%（' +
               withAnswer + '/' + result.total_questions + '）| 策略：' + (result.strategy_used || '智能'));
-          } else if (matchRate >= 90) {
+          } else if (matchRate >= 50) {
             ElMessage.warning('后端匹配率 ' + matchRate + '%（' + withAnswer + '/' +
-              result.total_questions + '）。可手动补充答案后导入。');
+              result.total_questions + '）。已自动合并，部分题目待人工确认。');
+            // 中等匹配率：标记待确认
+            this.state.separateNeedConfirm = true;
           } else {
-            ElMessage.error('匹配率偏低（' + matchRate + '%）。请检查答案文件格式，或切换到"合并导入"模式。');
+            ElMessage.error('匹配率偏低（' + matchRate + '%）。请使用手动匹配界面进行人工匹配。');
+            // 低匹配率：打开手动匹配界面
+            this.showManualMatchDialog();
           }
           return;
         }

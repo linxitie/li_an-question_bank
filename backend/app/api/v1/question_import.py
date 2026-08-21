@@ -24,9 +24,11 @@ from ...core.config import settings
 from ...core.security import get_current_user
 from ...models.models import (
     QuestionBank, QuestionSubject, QuestionType, KnowledgePoint,
-    QuestionDetailCategory, QuestionImage, QuestionImportRecord, SysUser
+    QuestionDetailCategory, QuestionImage, QuestionImportRecord, SysUser,
+    ExamPaper, PaperQuestionRelation, ExamPaperTag, QuestionKnowledge,
 )
-from ...schemas.schemas import SuccessResponse
+from ...schemas.schemas import SuccessResponse, ParseRequest, ParseResult, ParsedQuestion, ImageRef
+from ...services.question_classifier import QuestionClassifier, detect_subcategory_enhanced
 from ...services.text_parser import (
     normalize_text_for_comparison,
     compute_text_similarity,
@@ -36,6 +38,11 @@ from ...services.text_parser import (
     extract_question_blocks,
     extract_answer_from_lines,
     DEDUP_SIMILARITY_THRESHOLD,
+    ContentCleaner,
+    normalize_type_name,
+    canonical_answer,
+    _extract_options,
+    _detect_question_type,
 )
 
 router = APIRouter(prefix="/api/questions/import", tags=["题目导入"])
@@ -53,109 +60,79 @@ SUBJECT_NAME_MAP = {
     '其他': 4, '综合': 4,
 }
 
-# 题型名称标准化映射（原始输入 → 标准化题型）
-TYPE_MAP = {
-    '单选题': '单选题', '选择题': '单选题', '单选': '单选题',
-    '多选题': '多选题', '不定项': '多选题', '多选': '多选题',
-    '判断题': '判断题', '填空题': '填空题',
-    '简答题': '简答题', '论述题': '论述题',
-    '案例分析题': '案例分析题', '写作题': '写作题',
-}
+# 题型名称标准化映射 — 统一从 text_parser 导入
+# (删除本地 TYPE_MAP，使用 normalize_type_name 代替 _normalize_type_name)
 
 # ============ 工具函数 ============
 
-# 行测子科目 → 关键词映射
-XINGCE_SUBCATEGORY_KEYWORDS = {
-    '政治理论': ['政治', '马克思', '毛', '习近平', '党建', '时政', '党史', '理论'],
-    '资料分析': ['资料分析', '图表', '增长率', '百分比', '同比', '数据', '统计'],
-    '数量关系': ['数量', '数学', '计算', '方程', '几何', '排列组合', '概率', '数列'],
-    '常识': ['常识', '历史', '地理', '生物', '化学', '物理', '文化', '科技'],
-    '速度与知觉训练': ['速度', '知觉', '反应', '训练'],
-    '判断推理': ['判断', '推理', '逻辑', '类比', '定义', '削弱', '加强', '前提'],
-    '语言理解与表达': ['语言', '理解', '表达', '阅读', '填空', '成语', '语句', '排序'],
-}
-
-# 申论子科目 → 关键词映射
-SHENLUN_SUBCATEGORY_KEYWORDS = {
-    '归纳概括': ['概括', '归纳', '总结', '概述'],
-    '综合分析': ['分析', '综合', '评析', '评述'],
-    '提出对策': ['对策', '措施', '建议', '方案', '办法'],
-    '应用文写作': ['应用文', '通知', '报告', '请示', '函', '简报'],
-    '议论文写作': ['议论文', '论证', '论点', '论据', '作文'],
-}
-
-# 公专子科目 → 关键词映射
-GONGZHUAN_SUBCATEGORY_KEYWORDS = {
-    '职业素养': ['职业', '素养', '道德', '纪律', '规范', '警风', '廉洁', '作风'],
-    '基本警务能力': ['警务', '勤务', '巡逻', '盘查', '处置', '控制', '应急', '实战', '战术', '武器', '警械'],
-    '基础知识': ['基础', '法律', '法规', '治安', '刑事', '交通', '消防', '公安', '警察', '机关', '侦查', '取证', '拘留', '逮捕', '犯罪', '刑罚', '诉讼', '证据', '宪法', '民法', '行政'],
+# 各科目合法子科目名（与 question_classifier.SUB_CATEGORY_IDS 保持一致，用于校验显式子科目）
+VALID_SUBCATEGORY_NAMES = {
+    1: ["政治理论", "常识判断", "言语理解与表达", "数量关系", "判断推理", "资料分析", "知觉速度与准确性"],
+    2: ["归纳概括", "综合分析", "提出对策", "应用文写作", "议论文写作"],
+    3: ["职业素养", "基础知识", "基本警务能力"],
 }
 
 
 def _detect_subcategory(subject_id: int, content: str, type_name: str = '') -> str:
     """
-    根据题目内容和科目自动推断子科目分类。
+    根据题目内容和科目自动推断子科目分类（增强版）。
+    使用 QuestionClassifier 加权关键词+正则引擎。
     返回子科目名称，若无法判断则返回 '无'。
     """
-    if not content:
-        return '无'
-
-    text = content[:500]  # 只分析前500字符
-
-    if subject_id == 1:  # 行测
-        candidates = XINGCE_SUBCATEGORY_KEYWORDS
-    elif subject_id == 2:  # 申论
-        candidates = SHENLUN_SUBCATEGORY_KEYWORDS
-    elif subject_id == 3:  # 公专
-        candidates = GONGZHUAN_SUBCATEGORY_KEYWORDS
-    else:
-        return '无'
-
-    best_score = 0
-    best_cat = '无'
-    for cat, keywords in candidates.items():
-        score = sum(1 for kw in keywords if kw in text)
-        if score > best_score:
-            best_score = score
-            best_cat = cat
-
-    # 回退：科目明确但无法检测子科目时，公专默认"基础知识"
-    if best_cat == '无' and subject_id == 3:
-        best_cat = '基础知识'
-        best_score = 1  # 确保 return 逻辑正确
-
-    return best_cat if best_score > 0 else '无'
+    return detect_subcategory_enhanced(subject_id, content, type_name)
 
 
-def _normalize_type_name(raw_type: str) -> str:
+def _resolve_subcategory(subject_id: int, content: str, type_name: str = '', explicit: str = '') -> str:
+    """解析子科目：显式子科目（来自 Excel/JSON 的「子科目」列/键）优先，否则自动推断。"""
+    if explicit:
+        name = str(explicit).strip()
+        if name in VALID_SUBCATEGORY_NAMES.get(subject_id, []):
+            return name
+    return _detect_subcategory(subject_id, content, type_name)
+
+
+def _subcategory_tuple(subject_id: int, content: str, type_name: str = '', explicit: str = '') -> tuple:
+    """返回 (xingce, shenlun, gongzhuan) 三元组，非当前科目的恒为 '无'。"""
+    sc = _resolve_subcategory(subject_id, content, type_name, explicit)
+    return (
+        sc if subject_id == 1 else '无',
+        sc if subject_id == 2 else '无',
+        sc if subject_id == 3 else '无',
+    )
+
+
+def _link_knowledge_points(db: Session, questions) -> int:
+    """对导入的题目运行分类引擎并建立考点关联（幂等、异常不阻断导入）。
+
+    仅 db.add 关联，不 commit，由调用方在合适时机提交。
+    返回成功建立考点关联的题目数。
     """
-    将任意输入的题型名称标准化为 QuestionDetailCategory 支持的枚举值。
-    若无法映射，则根据内容长度智能回退：长文本→简答题，短文本→选择题。
-    """
-    if not raw_type:
-        return '选择题'
-    normalized = TYPE_MAP.get(raw_type.strip())
-    if normalized:
-        return normalized
-    # 回退：检查是否包含关键词
-    lowered = raw_type.strip().lower()
-    if any(kw in lowered for kw in ['多选', '不定项']):
-        return '多选题'
-    if any(kw in lowered for kw in ['判断']):
-        return '判断题'
-    if any(kw in lowered for kw in ['填空']):
-        return '填空题'
-    if any(kw in lowered for kw in ['简答', '简述']):
-        return '简答题'
-    if any(kw in lowered for kw in ['论述', '论证']):
-        return '论述题'
-    if any(kw in lowered for kw in ['案例']):
-        return '案例分析题'
-    if any(kw in lowered for kw in ['写作', '作文']):
-        return '写作题'
-    # 最终回退：长文本→简答，短文本→选择
-    return '简答题' if len(raw_type.strip()) > 10 else '选择题'
+    if not questions:
+        return 0
+    linked = 0
+    classifier = QuestionClassifier()
+    for q in questions:
+        try:
+            result = classifier.classify_with_db(
+                q.question_content or "", q.subject_id, db
+            )
+            if result.knowledge_point_id:
+                existing = db.query(QuestionKnowledge).filter(
+                    QuestionKnowledge.question_id == q.question_id,
+                    QuestionKnowledge.knowledge_point_id == result.knowledge_point_id
+                ).first()
+                if not existing:
+                    db.add(QuestionKnowledge(
+                        question_id=q.question_id,
+                        knowledge_point_id=result.knowledge_point_id
+                    ))
+                    linked += 1
+        except Exception as e:
+            logger.warning(f"考点关联失败 question_id={getattr(q, 'question_id', None)}: {e}")
+    return linked
 
+
+# _normalize_type_name 已删除，统一使用 text_parser.normalize_type_name
 
 
 def _get_or_create_subject(db: Session, name: str) -> QuestionSubject:
@@ -185,29 +162,87 @@ def _get_or_create_subject(db: Session, name: str) -> QuestionSubject:
         )
     else:
         subject = QuestionSubject(subject_name=name, subject_code=f"auto_{name}")
-    db.add(subject)
-    db.flush()
+    try:
+        db.add(subject)
+        db.flush()
+    except Exception:
+        db.rollback()
+        subject = db.query(QuestionSubject).filter(
+            QuestionSubject.subject_name == name
+        ).first()
     return subject
 
 
 def _get_or_create_type(db: Session, type_name: str, subject_id: int) -> QuestionType:
-    """获取或创建题型"""
+    """
+    获取或创建题型（处理并发重复插入与跨科目 type_code 冲突）。
+
+    根因修复：原 type_code=f"auto_{type_name}" 在跨科目（如行测与公专都有"单选题"）时
+    违反 type_code 的 UNIQUE 约束 → commit 失败 → rollback → 再查询 (type_name, subject_id)
+    仍返回 None → qtype.type_id 抛 AttributeError。
+    修复：type_code 改为带 subject_id 前缀，确保跨科目唯一；并加 fallback 防止返回 None。
+    """
+    # 规范化 type_name（防止脏数据）
+    if not type_name:
+        type_name = '选择题'
+
+    # 1. 主查询：(type_name, subject_id)
     qtype = db.query(QuestionType).filter(
         and_(
             QuestionType.type_name == type_name,
             QuestionType.subject_id == subject_id
         )
     ).first()
-    if not qtype:
-        qtype = QuestionType(
-            type_name=type_name,
-            type_code=f"auto_{type_name}",
-            subject_id=subject_id,
-            is_objective=1 if type_name in ('选择题', '判断题', '填空题') else 0
-        )
+    if qtype:
+        return qtype
+
+    # 2. 兼容旧数据：按 type_code 查询（旧格式 "auto_{type_name}"，可能跨科目存在）
+    legacy_code = f"auto_{type_name}"
+    qtype = db.query(QuestionType).filter(
+        QuestionType.type_code == legacy_code
+    ).first()
+    if qtype:
+        # 旧记录存在但 subject_id 不匹配 → 复用其 type_id 关联到当前科目
+        # 为避免破坏其他科目已有引用，这里改为：在该 type_id 下创建一条科目映射
+        # 实际上更安全的做法是新建一条带新 type_code 的记录
+        pass  # 落到下面的创建逻辑
+
+    # 3. 创建新记录：type_code 带 subject_id 前缀确保跨科目唯一
+    new_type_code = f"auto_{subject_id}_{type_name}"
+    qtype = QuestionType(
+        type_name=type_name,
+        type_code=new_type_code,
+        subject_id=subject_id,
+        is_objective=1 if type_name in ('选择题', '单选题', '多选题') else 0
+    )
+    try:
         db.add(qtype)
-        db.flush()
-    return qtype
+        db.commit()
+        db.refresh(qtype)
+        return qtype
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"_get_or_create_type 创建失败(type_name={type_name}, subject_id={subject_id}): {e}")
+        # 4. 并发场景：重新查询
+        qtype = db.query(QuestionType).filter(
+            and_(
+                QuestionType.type_name == type_name,
+                QuestionType.subject_id == subject_id
+            )
+        ).first()
+        if qtype:
+            return qtype
+        # 5. 终极兜底：按新 type_code 再查一次
+        qtype = db.query(QuestionType).filter(
+            QuestionType.type_code == new_type_code
+        ).first()
+        if qtype:
+            return qtype
+        # 6. 仍失败：抛出明确异常，避免返回 None 导致上层 qtype.type_id 报错
+        raise HTTPException(
+            status_code=500,
+            detail=f"题型创建失败: type_name={type_name}, subject_id={subject_id}, code={new_type_code}"
+        )
 
 
 def _detect_duplicate(db: Session, content: str, answer: str = '', subject_id: Optional[int] = None, use_fuzzy: bool = True) -> Optional[QuestionBank]:
@@ -302,7 +337,7 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     subject_name = row.get('科目') or row.get('科目大类') or row.get('subject') or '行测'
-    type_name = row.get('题型') or row.get('题目类型') or row.get('type') or '选择题'
+    raw_type = (row.get('题型') or row.get('题目类型') or row.get('type') or '').strip()
 
     options = []
     for key in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
@@ -319,6 +354,18 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                     options = parsed
             except (json.JSONDecodeError, TypeError):
                 pass
+
+    # 题型：通用'选择题'或缺失 → 用关键词工程细分单选/多选（避免'选择题'被归一化为单选）
+    if not raw_type or raw_type in ('选择题',):
+        type_name = _detect_question_type(content, options, answer)
+    else:
+        type_name = raw_type
+
+    # 客观选择题答案归一化（A、B → AB；对/错 → A/B），论述/写作保留原文
+    if type_name in ('单选题', '多选题', '判断题', '选择题'):
+        norm = canonical_answer(answer)
+        if norm:
+            answer = norm
 
     difficulty_map = {'简单': 1, '较易': 2, '中等': 3, '较难': 4, '困难': 5}
     diff_raw = row.get('难度') or row.get('difficulty') or '3'
@@ -354,6 +401,7 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         'paper_name': row.get('试卷名称') or row.get('paper_name') or '',
         'exam_province': row.get('省份') or row.get('exam_province') or '',
         'exam_type': row.get('考试类型') or row.get('exam_type') or '',
+        'subcategory': row.get('子科目') or row.get('细分') or row.get('小类') or row.get('subcategory') or '',
     }
 
 
@@ -367,12 +415,13 @@ def _extract_text_from_docx(buf: bytes) -> str:
       - 图片在选项段落(A.xxx) → marker 在选项值中 → 前端选项区展示
       - 独立图片段落(无文本) → 附加到最近段落，归属当前题号
     """
-    import io, os, re
+    import io, os, re, uuid
     try:
         from docx import Document
     except ImportError:
         raise HTTPException(status_code=500, detail="服务器缺少 python-docx 库")
 
+    _session_id = uuid.uuid4().hex[:8]  # 每次导入唯一前缀，避免跨文件覆盖
     doc = Document(io.BytesIO(buf))
     paragraphs = list(doc.paragraphs)
 
@@ -436,10 +485,10 @@ def _extract_text_from_docx(buf: bytes) -> str:
                 for rId in rids:
                     img_seq.setdefault(current_qn, 0)
                     seq = img_seq[current_qn]
-                    img_path = os.path.join(img_dir, f'{current_qn}_{seq}.png')
+                    img_path = os.path.join(img_dir, f'{_session_id}_{current_qn}_{seq}.png')
                     with open(img_path, 'wb') as f:
                         f.write(image_rel_map[rId])
-                    text += f' [IMAGE:{current_qn}_{seq}]'
+                    text += f' [IMAGE:{_session_id}_{current_qn}_{seq}]'
                     img_seq[current_qn] += 1
             else:
                 # 首题之前 → 缓冲
@@ -454,10 +503,10 @@ def _extract_text_from_docx(buf: bytes) -> str:
         for rId in pending_imgs:
             img_seq.setdefault(first_qn, 0)
             seq = img_seq[first_qn]
-            img_path = os.path.join(img_dir, f'{first_qn}_{seq}.png')
+            img_path = os.path.join(img_dir, f'{_session_id}_{first_qn}_{seq}.png')
             with open(img_path, 'wb') as f:
                 f.write(image_rel_map[rId])
-            parts[0] += f' [IMAGE:{first_qn}_{seq}]'
+            parts[0] += f' [IMAGE:{_session_id}_{first_qn}_{seq}]'
             img_seq[first_qn] += 1
 
     # --- 表格内容（文本+图片） ---
@@ -473,7 +522,7 @@ def _extract_text_from_docx(buf: bytes) -> str:
                         if current_qn is not None:
                             img_seq.setdefault(current_qn, 0)
                             seq = img_seq[current_qn]
-                            img_path = os.path.join(img_dir, f'{current_qn}_{seq}.png')
+                            img_path = os.path.join(img_dir, f'{_session_id}_{current_qn}_{seq}.png')
                             with open(img_path, 'wb') as f:
                                 f.write(image_rel_map[rId])
             if row_texts:
@@ -483,7 +532,7 @@ def _extract_text_from_docx(buf: bytes) -> str:
 
 
 def _extract_text_from_pdf(buf: bytes) -> str:
-    """从 PDF 提取纯文本（优先使用 pdfplumber，支持表格提取）"""
+    """从 PDF 提取纯文本（优先使用 pdfplumber，支持表格提取；扫描件自动OCR）"""
     import io
 
     # 优先使用 pdfplumber（更好的中文支持和表格提取）
@@ -523,17 +572,280 @@ def _extract_text_from_pdf(buf: bytes) -> str:
             t = page.extract_text()
             if t:
                 text += t + '\n'
-        return text.strip()
+        result = text.strip()
+        if result:
+            return result
     except Exception as e:
         logger.warning(f"PyPDF2 解析失败: {e}")
+
+    # === OCR 回退：检测到扫描件PDF（无文本层）→ 提取图片并OCR ===
+    logger.info("PDF文本提取为空，尝试OCR识别扫描件...")
+    ocr_text = _extract_text_from_scanned_pdf(buf)
+    if ocr_text:
+        logger.info(f"扫描件OCR成功: {len(ocr_text)} 字符")
+        return ocr_text
+
+    return ''
+
+
+def _extract_text_from_scanned_pdf(buf: bytes) -> str:
+    """
+    从扫描件PDF中提取图片并OCR识别文字。
+    使用PyPDF2提取页面嵌入的XObject图片 → PaddleOCR逐页识别 → 合并文本。
+    """
+    import io as _io
+    import base64 as _b64
+
+    try:
+        import PyPDF2
+        from PIL import Image as PILImage
+    except ImportError:
+        logger.warning("PyPDF2/Pillow 未安装，无法处理扫描件PDF")
+        return ''
+
+    try:
+        reader = PyPDF2.PdfReader(_io.BytesIO(buf))
+        total_pages = len(reader.pages)
+        if total_pages == 0:
+            return ''
+
+        # 限制：最多处理15页（覆盖约100道题目的答案；全量OCR请用图片导入）
+        max_pages = min(total_pages, 15)
+        logger.info(f"扫描件PDF: {total_pages} 页，OCR处理前 {max_pages} 页（预计{max_pages*20}秒）")
+
+        all_text_parts = []
+
+        for page_idx in range(max_pages):
+            page = reader.pages[page_idx]
+
+            # 尝试从页面资源中提取XObject图片
+            page_images = _extract_images_from_pdf_page(page, page_idx)
+
+            if not page_images:
+                logger.debug(f"第{page_idx+1}页无嵌入图片，跳过")
+                continue
+
+            # OCR每张图片（应用增强预处理）
+            for img_data in page_images[:3]:  # 每页最多3张图片
+                try:
+                    pil_img = PILImage.open(_io.BytesIO(img_data))
+                    if pil_img.mode != 'RGB':
+                        pil_img = pil_img.convert('RGB')
+
+                    # 应用增强预处理（超分辨率 + CLAHE）
+                    try:
+                        import cv2, numpy as np
+                        img_array = np.array(pil_img)
+                        h, w = img_array.shape[:2]
+                        # 小图2倍放大
+                        if w < 1000:
+                            img_array = cv2.resize(img_array, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
+                        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                        enhanced = clahe.apply(gray)
+                        pil_img = PILImage.fromarray(enhanced)
+                    except Exception:
+                        pass  # 增强失败用原图
+
+                    # 转为JPEG字节流供OCR识别
+                    img_buf = _io.BytesIO()
+                    pil_img.save(img_buf, format='JPEG', quality=90)
+                    img_bytes = img_buf.getvalue()
+
+                    from ...services.ocr import recognize_image
+                    page_text = recognize_image(img_bytes)
+
+                    if page_text and page_text.strip():
+                        all_text_parts.append(f'[第{page_idx+1}页]\n{page_text.strip()}')
+                        logger.debug(f"第{page_idx+1}页OCR: {len(page_text)} 字符")
+                except Exception as e:
+                    logger.warning(f"第{page_idx+1}页OCR失败: {e}")
+                    continue
+
+        result = '\n\n'.join(all_text_parts)
+        return result
+
+    except Exception as e:
+        logger.error(f"扫描件PDF处理失败: {e}", exc_info=True)
         return ''
 
 
+def _extract_images_from_pdf_page(page, page_idx: int) -> list:
+    """
+    从PDF页面中提取嵌入的图片数据。
+    使用 PyPDF2 的 low-level API 遍历 XObject 资源。
+    返回图片字节列表。
+    """
+    images = []
+
+    try:
+        # 获取页面资源
+        resources = None
+        if '/Resources' in page:
+            resources = page['/Resources']
+        elif hasattr(page, 'resources'):
+            resources = page.resources
+
+        if resources is None:
+            return images
+
+        # 尝试访问 XObject
+        xobject = None
+        try:
+            # PyPDF2 方式1: 字典访问
+            if '/XObject' in resources:
+                xobject = resources['/XObject']
+        except Exception:
+            pass
+
+        if xobject is None:
+            try:
+                # PyPDF2 方式2: get_object
+                xobj_ref = resources.get('/XObject')
+                if xobj_ref:
+                    xobject = xobj_ref.get_object()
+            except Exception:
+                pass
+
+        if xobject is None:
+            return images
+
+        # 遍历XObject中的每个对象
+        for obj_name in xobject:
+            try:
+                xobj = xobject[obj_name]
+                if xobj is None:
+                    continue
+
+                # 获取实际对象
+                if hasattr(xobj, 'get_object'):
+                    xobj = xobj.get_object()
+
+                # 检查是否为图片
+                subtype = xobj.get('/Subtype', '') if isinstance(xobj, dict) else ''
+                if subtype == '/Image':
+                    img_data = _decode_pdf_image(xobj)
+                    if img_data and len(img_data) > 100:  # 过滤太小的图片
+                        images.append(img_data)
+                        logger.debug(f"第{page_idx+1}页提取图片: {obj_name}, {len(img_data)} bytes")
+            except Exception as e:
+                logger.debug(f"跳过XObject {obj_name}: {e}")
+                continue
+
+    except Exception as e:
+        logger.warning(f"提取PDF页面图片失败: {e}")
+
+    return images
+
+
+def _decode_pdf_image(xobj: dict) -> Optional[bytes]:
+    """
+    解码PDF图片对象为PNG字节。
+    处理 FlateDecode、DCTDecode(JPEG) 等滤镜。
+    PyPDF2的get_data()已自动解压FlateDecode。
+    """
+    import zlib
+    import io as _io
+
+    try:
+        width = xobj.get('/Width', 0)
+        height = xobj.get('/Height', 0)
+        if width < 20 or height < 20:
+            return None
+
+        filter_type = xobj.get('/Filter', None)
+        bits = xobj.get('/BitsPerComponent', 8)
+        color_space = xobj.get('/ColorSpace', '')
+
+        # PyPDF2's get_data() already decompresses FlateDecode
+        raw_data = None
+        try:
+            raw_data = xobj.get_data()
+        except Exception:
+            try:
+                raw_data = xobj._data
+            except Exception:
+                pass
+
+        if raw_data is None or len(raw_data) == 0:
+            return None
+
+        # JPEG (DCTDecode) — return as-is
+        if filter_type == '/DCTDecode':
+            return raw_data
+
+        # For raw pixel data (FlateDecode already decompressed)
+        try:
+            from PIL import Image as PILImage
+
+            if color_space == '/DeviceRGB':
+                mode = 'RGB'
+                expected = width * height * 3
+            elif color_space == '/DeviceGray':
+                mode = 'L'
+                expected = width * height
+            else:
+                mode = 'RGB'
+                expected = width * height * 3
+
+            if len(raw_data) >= expected:
+                img = PILImage.frombytes(mode, (width, height), raw_data[:expected])
+                buf = _io.BytesIO()
+                img.save(buf, format='PNG')
+                return buf.getvalue()
+            else:
+                # Data too small — try as raw compressed
+                if len(raw_data) > 500:
+                    buf = _io.BytesIO()
+                    buf.write(raw_data)
+                    buf.seek(0)
+                    try:
+                        img = PILImage.open(buf)
+                        out = _io.BytesIO()
+                        img.save(out, format='PNG')
+                        return out.getvalue()
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug(f"PDF图片像素转换失败: {e}")
+
+    except Exception as e:
+        logger.debug(f"PDF图片解码失败: {e}")
+
+    return None
+
+
+def _pdf_has_images_only(buf: bytes) -> bool:
+    """快速检测PDF是否为纯扫描件（仅有图片、无文本层）"""
+    try:
+        import PyPDF2, io as _io
+        reader = PyPDF2.PdfReader(_io.BytesIO(buf))
+        if len(reader.pages) == 0:
+            return False
+        page = reader.pages[0]
+        resources = None
+        if '/Resources' in page:
+            resources = page['/Resources']
+        if resources is None:
+            return False
+        has_images = '/XObject' in resources
+        # 快速检测：尝试提取文本
+        text_sample = page.extract_text() or ''
+        has_text = len(text_sample.strip()) > 20
+        return has_images and not has_text
+    except Exception:
+        return False
+
+
 def _auto_detect_tags(filename: str, text: str) -> Dict[str, Any]:
-    """从文件名和文本自动检测标签"""
+    """从文件名和全文文本自动检测标签（增强版：扫描全文+检测完整试卷）"""
     tags = {}
+    # 合并搜索范围：文件名 + 全文文本（不再限制前500字符）
+    full_search = filename + '\n' + (text or '')
+    text_head = text[:3000] if text else ''  # 头部用于快速检测
+
     # 检测年份
-    year_match = re.search(r'(20\d{2})', filename + text[:2000])
+    year_match = re.search(r'(20\d{2})', full_search)
     if year_match:
         tags['exam_year'] = int(year_match.group(1))
 
@@ -543,33 +855,167 @@ def _auto_detect_tags(filename: str, text: str) -> Dict[str, Any]:
                  '湖北', '湖南', '广东', '广西', '海南', '重庆', '四川', '贵州',
                  '云南', '西藏', '陕西', '甘肃', '青海', '宁夏', '新疆']
     for p in provinces:
-        if p in filename or p in text[:1000]:
+        if p in filename or p in text_head:
             tags['exam_province'] = p if p not in ('内蒙古', '黑龙江') else (p + '省' if len(p) == 2 else p)
             break
 
-    # 检测考试类型
-    exam_types = {'国考': '国考', '省考': '省考', '联考': '联考', '模拟': '模拟考试', '招警': '招警考试'}
+    # 检测考试类型（扩展到全文）
+    exam_types = {
+        '国考': '国考', '省考': '省考', '联考': '联考',
+        '模拟': '模拟考试', '模拟考': '模拟考试', '招警': '招警考试',
+        '统考': '统考', '事业单位': '事业单位考试', '真题': '真题',
+        '考试': '考试',  # 兜底：标记为通用考试
+    }
     for k, v in exam_types.items():
-        if k in filename or k in text[:500]:
+        if k in filename or k in text_head:
             tags['exam_type'] = v
             break
 
-    # 检测科目
-    subjects = {'行测': '行测', '申论': '申论', '公专': '公专', '公安专业': '公专'}
+    # 检测科目（扩展到全文）
+    subjects = {
+        '行测': '行测', '申论': '申论', '公专': '公专',
+        '公安专业': '公专', '公安基础': '公专', '公安知识': '公专',
+        '基础知识': '公专', '行政职业能力': '行测', '职业能力': '行测',
+    }
     for k, v in subjects.items():
-        if k in filename or k in text[:500]:
+        if k in filename or k in text_head:
             tags['subject_category'] = v
+            break
+
+    # 检测是否为完整试卷
+    tags['is_complete_paper'] = _detect_complete_paper(text)
+
+    # 尝试从文档标题提取试卷名称
+    if not tags.get('paper_name'):
+        tags['paper_name'] = _extract_paper_name(filename, text)
+
+    # 检测考试来源标记
+    source_markers = {'绝密': '绝密', '启用前': '启用前', '机密': '机密'}
+    for k, v in source_markers.items():
+        if k in text_head:
+            tags['source_marker'] = v
             break
 
     return tags
 
 
-def _extract_and_save_images(content_text, question_id, upload_dir='uploads/questions'):
+def _detect_complete_paper(text: str) -> bool:
+    """检测文档是否为完整试卷（连续题号+答案区+科目一致性）"""
+    if not text or len(text) < 200:
+        return False
+    # 检测连续题号（至少5个连续题号）
+    numbers = re.findall(r'^(?:\s*(?:\d+)[.、．)）\]】]\s*)', text, re.MULTILINE)
+    if len(numbers) < 5:
+        # 备选：检测 "第X题" 模式
+        numbers = re.findall(r'第\s*\d+\s*题', text)
+    if len(numbers) < 5:
+        # 备选：简单的数字题号
+        numbers = re.findall(r'^\s*(\d{1,3})\s*[.、]', text, re.MULTILINE)
+        if len(numbers) < 5:
+            return False
+        # 检查数字是否连续递增
+        try:
+            nums = [int(n) for n in numbers[:min(20, len(numbers))]]
+            consecutive = sum(1 for i in range(1, len(nums)) if nums[i] == nums[i-1] + 1)
+            if consecutive < len(nums) * 0.6:
+                return False
+        except (ValueError, IndexError):
+            return False
+    # 检测是否有答案区域（参考答案/答案/正确答案等）
+    has_answer_section = bool(re.search(
+        r'(参考答案|答案[：:】\]])|正确答案|标准答案',
+        text[-2000:] if len(text) > 2000 else text
+    ))
+    return has_answer_section or len(numbers) >= 10
+
+
+def _extract_paper_name(filename: str, text: str) -> Optional[str]:
+    """从文件名或文档开头提取试卷名称"""
+    text_head = text[:500] if text else ''
+    # 模式1: XXXX年XX考试行测/申论/公专
+    m = re.search(r'(20\d{2}[年年度].{1,20}?(?:考试|联考|省考|国考).{0,10}?(?:行测|申论|公专|真题|试卷))', text_head)
+    if m:
+        return m.group(1).strip()
+    # 模式2: 从文件名去除扩展名
+    if filename:
+        name = re.sub(r'\.[^.]+$', '', filename)
+        name = re.sub(r'[（(].*?[）)]', '', name)  # 去除括号内容
+        if len(name) > 5:
+            return name.strip()
+    return None
+
+
+def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: str):
+    """根据检测到的标签自动创建或查找ExamPaper"""
+    from ...models.models import ExamPaper, ExamPaperTag
+    from .paper_generation import generate_paper_code
+
+    paper_name = auto_tags.get('paper_name') or filename.rsplit('.', 1)[0] if '.' in filename else filename
+    exam_type_tag = auto_tags.get('exam_type', '模拟考试')
+    subject_name = auto_tags.get('subject_category', '行测')
+    subject_id = SUBJECT_NAME_MAP.get(subject_name, 1)
+
+    # 查重：同名+同创建者 → 复用
+    existing = db.query(ExamPaper).filter(
+        ExamPaper.paper_name == paper_name,
+        ExamPaper.creator_id == user.user_id
+    ).first()
+    if existing:
+        logger.info(f"[import-paper] 复用已有试卷: {existing.paper_id} '{paper_name}'")
+        return existing
+
+    # 新建试卷(DRAFT状态)
+    paper = ExamPaper(
+        paper_name=paper_name,
+        paper_code=generate_paper_code(),
+        subject_id=subject_id,
+        composition_method="IMPORT",
+        creator_id=user.user_id,
+        duration=120,
+        total_score=100,
+        difficulty=3,
+        exam_type="SIMULATION",
+        paper_type="DRAFT",
+        question_count=0,
+    )
+    db.add(paper)
+    db.flush()
+
+    # 创建标签记录
+    try:
+        tag = ExamPaperTag(
+            paper_id=paper.paper_id,
+            exam_year=auto_tags.get('exam_year'),
+            exam_province=auto_tags.get('exam_province'),
+            exam_type=exam_type_tag,
+            subject_category=subject_name,
+            is_complete=1 if auto_tags.get('is_complete_paper') else 0,
+        )
+        db.add(tag)
+    except Exception as e:
+        logger.warning(f"[import-paper] 创建标签失败（表可能不存在）: {e}")
+
+    db.commit()
+    db.refresh(paper)
+    logger.info(f"[import-paper] 自动创建试卷: {paper.paper_id} '{paper_name}' "
+                f"年份={auto_tags.get('exam_year')} 类型={exam_type_tag} 科目={subject_name}")
+    return paper
+
+
+def _extract_and_save_images(content_text, question_id, upload_dir='static/questions', question_obj=None):
     """
     从题目内容中提取base64或URL图片，保存到磁盘，返回路径列表。
     支持格式: <img src="..."> / [IMAGE:x_y] 占位符 / base64 data URI
 
     安全措施：路径遍历防护、SSRF检测、图片大小限制(MAX_IMAGE_SIZE)。
+
+    路径一致性：upload_dir='static/questions' 与 main.py 中
+    `app.mount('/static/questions', StaticFiles(directory=.../static/questions))` 对应，
+    返回的 URL `/static/questions/{qid}/{filename}` 可被前端直接访问。
+
+    即时更新（第3层防线）：传入 question_obj 时，会立即把 question_content
+    和 options 中的 [IMAGE:xxx] 占位符替换为最终 <img> 标签，写入数据库，
+    避免占位符残留导致前端图片不显示。
     """
     images = []
     # Resolve absolute backend directory for path construction
@@ -689,29 +1135,82 @@ def _extract_and_save_images(content_text, question_id, upload_dir='uploads/ques
             logger.warning(f"[images] 图片{idx}保存失败: {e}")
             continue
 
-    # 2. Extract [IMAGE:x_y] markers (generated by _extract_text_from_docx)
-    marker_pattern = re.compile(r'\[IMAGE:(\d+)_(\d+)\]')
+    # 2. Extract [IMAGE:x_y] or [IMAGE:uuid_x_y] markers (generated by _extract_text_from_docx)
+    marker_pattern = re.compile(r'\[IMAGE:([a-f0-9]+_\d+_\d+|\d+_\d+)\]')
     markers = marker_pattern.findall(content_text or '')
-    for idx, (num, seq) in enumerate(markers):
+    for idx, marker_key in enumerate(markers):
         try:
-            # Look for the pre-extracted image in static/questions/
-            candidate_name = f'{num}_{seq}.png'
-            src_file = os.path.join(static_img_dir, candidate_name)
-            if os.path.exists(src_file):
+            # 尝试多个可能的源文件路径
+            possible_names = [f'{marker_key}.png']
+            # 如果 marker_key 是 uuid_x_y 格式，也尝试 x_y 格式
+            parts = marker_key.split('_')
+            if len(parts) == 3:
+                simple_key = f'{parts[1]}_{parts[2]}'
+                possible_names.append(f'{simple_key}.png')
+
+            src_file = None
+            for candidate_name in possible_names:
+                candidate_path = os.path.join(static_img_dir, candidate_name)
+                if os.path.exists(candidate_path):
+                    src_file = candidate_path
+                    break
+
+            if src_file:
                 img_data = open(src_file, 'rb').read()
-                if not _check_size(img_data, f'docx图片{num}_{seq}'):
+                if not _check_size(img_data, f'docx图片{marker_key}'):
                     continue
                 md5 = hashlib.md5(img_data).hexdigest()[:8]
-                dst_name = f'img_docx_{num}_{seq}_{md5}.png'
+                dst_name = f'img_docx_{idx}_{md5}.png'
                 dst_file = os.path.join(img_dir, dst_name)
                 shutil.copy2(src_file, dst_file)
                 rel_path = f'/static/questions/{question_id}/{dst_name}'
                 images.append(rel_path)
                 logger.debug(f"[images] 保存docx图片: {rel_path}")
+
+                # 关键：立即更新 question_content 中的占位符为最终 <img> 标签
+                if question_obj is not None:
+                    question_obj.question_content = (question_obj.question_content or '').replace(
+                        f'[IMAGE:{marker_key}]',
+                        f'<img src="{rel_path}" class="q-img" loading="lazy" />'
+                    )
+                    # 同时更新 options 中的占位符
+                    if hasattr(question_obj, 'options') and question_obj.options:
+                        opts = question_obj.options
+                        if isinstance(opts, str):
+                            try:
+                                import json as _json
+                                opts_list = _json.loads(opts)
+                                for o in opts_list:
+                                    if isinstance(o, dict) and 'value' in o:
+                                        o['value'] = o['value'].replace(
+                                            f'[IMAGE:{marker_key}]',
+                                            f'<img src="{rel_path}" class="q-img" loading="lazy" />'
+                                        )
+                                question_obj.options = _json.dumps(opts_list, ensure_ascii=False)
+                            except Exception:
+                                pass
+                        elif isinstance(opts, list):
+                            for o in opts:
+                                if isinstance(o, dict) and 'value' in o:
+                                    o['value'] = (o['value'] or '').replace(
+                                        f'[IMAGE:{marker_key}]',
+                                        f'<img src="{rel_path}" class="q-img" loading="lazy" />'
+                                    )
+
+                # 删除临时扁平文件，避免冗余
+                try:
+                    os.remove(src_file)
+                except Exception:
+                    pass
             else:
-                logger.debug(f"[images] docx图片未找到: {candidate_name}")
+                logger.debug(f"[images] docx图片未找到: {marker_key}")
+                # 文件不存在，移除占位符避免前端显示 broken image
+                if question_obj is not None:
+                    question_obj.question_content = (question_obj.question_content or '').replace(
+                        f'[IMAGE:{marker_key}]', ''
+                    )
         except Exception as e:
-            logger.warning(f"[images] docx图片{idx}({num}_{seq})保存失败: {e}")
+            logger.warning(f"[images] docx图片{idx}({marker_key})保存失败: {e}")
             continue
 
     return images
@@ -733,7 +1232,7 @@ async def import_single_question(
     - answer: 正确答案（合并模式必填，分离模式可选）
     - import_mode: 'combined'（默认，含答案）或 'separate'（仅题目）
     - subject_category: 科目大类（行测/申论/公专/其他）
-    - question_type_detail: 题型（选择题/判断题/填空题等）
+    - question_type_detail: 题型（选择题/单选题/多选题/论述题/写作题等）
     - options: 选项列表 [{"key":"A","value":"..."}]
     - difficulty: 难度 1-5
     - score: 分值
@@ -778,6 +1277,10 @@ async def import_single_question(
         options = question_data.get('options')
         # 直接赋值给JSON列，不调用json.dumps（避免双重编码）
 
+        _xingce_sc, _shenlun_sc, _gongzhuan_sc = _subcategory_tuple(
+            subject.subject_id, content, type_name,
+            question_data.get('subcategory') or question_data.get('子科目') or ''
+        )
         question = QuestionBank(
             subject_id=subject.subject_id,
             type_id=qtype.type_id,
@@ -792,9 +1295,9 @@ async def import_single_question(
             tags=question_data.get('tags', ''),
             creator_id=current_user.user_id,
             audit_status=1,  # 自动通过审核
-            xingce_subcategory=_detect_subcategory(subject.subject_id, content, type_name) if subject.subject_id == 1 else '无',
-            shenlun_subcategory=_detect_subcategory(subject.subject_id, content, type_name) if subject.subject_id == 2 else '无',
-            gongzhuan_subcategory=_detect_subcategory(subject.subject_id, content, type_name) if subject.subject_id == 3 else '无',
+            xingce_subcategory=_xingce_sc,
+            shenlun_subcategory=_shenlun_sc,
+            gongzhuan_subcategory=_gongzhuan_sc,
         )
         db.add(question)
         db.flush()
@@ -803,7 +1306,8 @@ async def import_single_question(
         try:
             images = _extract_and_save_images(
                 question_data.get('question_content', '') + ' ' + str(question_data.get('options', '')),
-                question.question_id
+                question.question_id,
+                question_obj=question
             )
             for img_order, img_path in enumerate(images):
                 db.add(QuestionImage(
@@ -818,10 +1322,10 @@ async def import_single_question(
         # 详细分类
         detail = QuestionDetailCategory(
             question_id=question.question_id,
-            xingce_subcategory=question_data.get('xingce_subcategory', '无'),
-            shenlun_subcategory=question_data.get('shenlun_subcategory', '无'),
-            gongzhuan_subcategory=question_data.get('gongzhuan_subcategory', '无'),
-            question_type_detail=_normalize_type_name(type_name),
+            xingce_subcategory=_xingce_sc,
+            shenlun_subcategory=_shenlun_sc,
+            gongzhuan_subcategory=_gongzhuan_sc,
+            question_type_detail=normalize_type_name(type_name),
         )
         db.add(detail)
 
@@ -839,6 +1343,7 @@ async def import_single_question(
             complete_time=datetime.now(),
         )
         db.add(record)
+        _link_knowledge_points(db, [question])
         db.commit()
 
         return {
@@ -1119,6 +1624,21 @@ async def upload_file_for_import(
             from ...services.text_parser import extract_question_blocks
             parsed_blocks = extract_question_blocks(text)
 
+            # 自动检测科目（基于文件名+正文），用于注入到每道题
+            auto_tags = _auto_detect_tags(file.filename, text)
+            detected_subject = auto_tags.get('subject_category', '行测')
+
+            # N1: 检测到完整试卷 → 自动创建ExamPaper记录
+            if auto_tags.get('is_complete_paper') or (
+                auto_tags.get('exam_year') and auto_tags.get('exam_type')
+            ):
+                try:
+                    paper = _get_or_create_import_paper(db, current_user, auto_tags, file.filename)
+                    record.paper_id = paper.paper_id
+                    logger.info(f"[import] 自动关联试卷: import_id={record.import_id} paper_id={paper.paper_id}")
+                except Exception as e:
+                    logger.warning(f"[import] 自动创建试卷失败(非阻断): {e}")
+
             preview_items = []
             for block in parsed_blocks:
                 if block.get('content'):
@@ -1130,6 +1650,7 @@ async def upload_file_for_import(
                         'analysis': block.get('analysis', ''),
                         'question_type_detail': qtype,
                         'type_name': qtype,
+                        'subject_name': detected_subject,
                         'status': 'NEW',
                         'is_duplicate': False,
                         'difficulty': 3,
@@ -1145,9 +1666,14 @@ async def upload_file_for_import(
             record.preview_data = json.dumps({
                 'items': preview_items,
                 'raw_text': text[:1000000],
-                'auto_detected_tags': _auto_detect_tags(file.filename, text),
+                'auto_detected_tags': auto_tags,
             }, ensure_ascii=False)
             db.commit()
+
+            # 扫描件PDF检测：有图片但无文本
+            is_scanned = (ext in ('.pdf',) and
+                          len(preview_items) == 0 and
+                          _pdf_has_images_only(buf))
 
             return {
                 'import_id': record.import_id,
@@ -1158,8 +1684,10 @@ async def upload_file_for_import(
                 'failed_count': 0,
                 'duplicate_count': 0,
                 'questions': preview_items,
-                'raw_text_preview': text[:1000000],
-                'auto_detected_tags': _auto_detect_tags(file.filename, text),
+                'raw_text_preview': text[:1000000] if text else '',
+                'auto_detected_tags': auto_tags,
+                'scanned_pdf': is_scanned,
+                'ocr_hint': '该PDF为扫描件（无文本层），请使用"图片导入"标签页上传，或先通过OCR工具转换为文本格式' if is_scanned else None,
             }
 
     except HTTPException:
@@ -1208,6 +1736,7 @@ async def confirm_batch_import(
         skipped = 0
         failed = 0
         errors = []
+        new_questions = []
 
         for item in items:
             if item.get('status') == 'DUPLICATE' or item.get('is_duplicate'):
@@ -1219,19 +1748,47 @@ async def confirm_batch_import(
                 continue
 
             try:
+                # 清洗题目内容：去除推广/无关字段
+                raw_content = item['question_content']
+                cleaned_content = ContentCleaner.clean_question_content(raw_content)
+                raw_analysis = item.get('answer_analysis', '')
+                cleaned_analysis = ContentCleaner.clean_question_content(raw_analysis)
+
                 subject = _get_or_create_subject(db, item.get('subject_name', '行测'))
-                qtype = _get_or_create_type(db, item.get('type_name', '选择题'), subject.subject_id)
 
                 options = item.get('options')
                 # 直接赋值给JSON列，不调用json.dumps（避免双重编码）
 
+                # 答案保护：question_bank.answer 字段为 NOT NULL，docx 无答案时默认占位
+                answer_val = item.get('answer') or '待补充'
+                if not str(answer_val).strip():
+                    answer_val = '待补充'
+
+                # 题型：通用'选择题'或缺失 → 关键词工程细分单选/多选
+                raw_type_name = (item.get('type_name') or '').strip()
+                if not raw_type_name or raw_type_name == '选择题':
+                    final_type_name = _detect_question_type(cleaned_content, options, answer_val)
+                else:
+                    final_type_name = raw_type_name
+                # 客观选择题答案归一化（A、B → AB；对/错 → A/B），论述/写作保留原文
+                if final_type_name in ('单选题', '多选题', '判断题', '选择题'):
+                    _norm = canonical_answer(answer_val)
+                    if _norm:
+                        answer_val = _norm
+
+                qtype = _get_or_create_type(db, final_type_name, subject.subject_id)
+
+                _xingce_sc, _shenlun_sc, _gongzhuan_sc = _subcategory_tuple(
+                    subject.subject_id, cleaned_content, final_type_name,
+                    item.get('subcategory') or item.get('子科目') or ''
+                )
                 question = QuestionBank(
                     subject_id=subject.subject_id,
                     type_id=qtype.type_id,
-                    question_content=item['question_content'],
+                    question_content=cleaned_content,
                     options=options,
-                    answer=item['answer'],
-                    answer_analysis=item.get('answer_analysis', ''),
+                    answer=answer_val,
+                    answer_analysis=cleaned_analysis,
                     difficulty=item.get('difficulty', 3),
                     score=item.get('score', 1.0),
                     year=item.get('year'),
@@ -1239,16 +1796,20 @@ async def confirm_batch_import(
                     tags=item.get('tags', ''),
                     creator_id=current_user.user_id,
                     audit_status=1,
-                    xingce_subcategory=_detect_subcategory(subject.subject_id, item['question_content'], item.get('type_name', '')) if subject.subject_id == 1 else '无',
-                    shenlun_subcategory=_detect_subcategory(subject.subject_id, item['question_content'], item.get('type_name', '')) if subject.subject_id == 2 else '无',
-                    gongzhuan_subcategory=_detect_subcategory(subject.subject_id, item['question_content'], item.get('type_name', '')) if subject.subject_id == 3 else '无',
+                    xingce_subcategory=_xingce_sc,
+                    shenlun_subcategory=_shenlun_sc,
+                    gongzhuan_subcategory=_gongzhuan_sc,
                 )
                 db.add(question)
                 db.flush()
+                new_questions.append(question)
 
                 detail = QuestionDetailCategory(
                     question_id=question.question_id,
-                    question_type_detail=_normalize_type_name(item.get('type_name', '选择题')),
+                    xingce_subcategory=_xingce_sc,
+                    shenlun_subcategory=_shenlun_sc,
+                    gongzhuan_subcategory=_gongzhuan_sc,
+                    question_type_detail=normalize_type_name(final_type_name),
                 )
                 db.add(detail)
 
@@ -1256,7 +1817,8 @@ async def confirm_batch_import(
                 try:
                     images = _extract_and_save_images(
                         item.get('question_content', '') + ' ' + str(item.get('options', '')),
-                        question.question_id
+                        question.question_id,
+                        question_obj=question
                     )
                     for img_order, img_path in enumerate(images):
                         db.add(QuestionImage(
@@ -1282,13 +1844,47 @@ async def confirm_batch_import(
         record.complete_time = datetime.now()
         if errors:
             record.error_messages = json.dumps(errors, ensure_ascii=False)
+        _link_knowledge_points(db, new_questions)
         db.commit()
+
+        # N1: 将导入的题目关联到试卷
+        if record.paper_id:
+            try:
+                paper = db.query(ExamPaper).filter(ExamPaper.paper_id == record.paper_id).first()
+                if paper:
+                    linked_count = 0
+                    for item in confirmed_items:
+                        qid = item.get('question_id')
+                        if not qid:
+                            continue
+                        # 检查是否已关联
+                        existing_rel = db.query(PaperQuestionRelation).filter(
+                            PaperQuestionRelation.paper_id == paper.paper_id,
+                            PaperQuestionRelation.question_id == qid
+                        ).first()
+                        if existing_rel:
+                            continue
+                        relation = PaperQuestionRelation(
+                            paper_id=paper.paper_id,
+                            question_id=qid,
+                            question_order=paper.question_count + linked_count + 1,
+                            question_score=item.get('score', 5.0)
+                        )
+                        db.add(relation)
+                        linked_count += 1
+                    paper.question_count = (paper.question_count or 0) + linked_count
+                    db.commit()
+                    logger.info(f"[import] 题目已关联到试卷: paper_id={paper.paper_id} linked={linked_count}")
+            except Exception as e:
+                logger.warning(f"[import] 关联题目到试卷失败(非阻断): {e}")
 
         return {
             'success_count': imported,
             'failed_count': failed,
             'skipped_count': skipped,
             'errors': errors,
+            'paper_id': record.paper_id,
+            'match_rate': preview_data.get('match_rate', 0),
             'message': f'导入完成：成功 {imported}，失败 {failed}，跳过 {skipped}',
         }
     except Exception as e:
@@ -1368,45 +1964,353 @@ async def separate_match_endpoint(
         raise HTTPException(status_code=500, detail=f"智能匹配失败: {str(e)}")
 
 
-@router.post("/ocr", summary="图片OCR识别（PaddleOCR）")
+@router.post("/parse", summary="统一文档解析（Pipeline入口）")
+async def unified_parse(
+    payload: ParseRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    统一文档解析端点 —— 替代前端所有本地解析逻辑。
+
+    支持三种模式：
+    - combined: 合并导入（单文档含题+答）→ 提取题目块
+    - separate: 分离导入（题目文档+答案文档）→ 智能匹配
+    - ocr: 图片OCR文本 → 提取题目结构
+
+    返回 ParseResult，前端仅负责渲染和用户修正。
+    """
+    from ...services.text_parser import (
+        extract_question_blocks, smart_match_questions_answers,
+        detect_subject_category, ContentCleaner, _extract_options,
+        extract_answer_from_lines, _detect_question_type,
+    )
+
+    mode = payload.mode or 'combined'
+    questions_text = (payload.questions_text or '').strip()
+    answers_text = (payload.answers_text or '').strip()
+    paper_name = payload.paper_name or ''
+    subject_category = payload.subject_category or ''
+
+    if not questions_text:
+        raise HTTPException(status_code=400, detail="题目文本为空")
+
+    warnings = []
+    questions = []
+    match_rate = 0.0
+    matched_count = 0
+    total_questions = 0
+    analysis_count = 0
+    unmatched_numbers = []
+    extra_answer_numbers = []
+    strategy_used = ''
+    auto_detected_subject = subject_category
+
+    try:
+        if mode == 'separate' and answers_text:
+            # ===== 分离导入：智能匹配 =====
+            result = smart_match_questions_answers(questions_text, answers_text, paper_name)
+            match_rate = round(result.match_rate * 100, 1)
+            matched_count = result.matched_count
+            total_questions = result.total_questions
+            unmatched_numbers = result.unmatched_question_numbers
+            extra_answer_numbers = result.extra_answer_numbers
+            analysis_count = result.analysis_count
+            strategy_used = result.strategy_used
+
+            if not auto_detected_subject:
+                all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
+                auto_detected_subject = detect_subject_category(all_content)
+
+            # 转换为 ParsedQuestion
+            for block in result.questions:
+                q_num = block.get('question_number', 0)
+                content = block.get('content', '')
+                answer = block.get('answer', '') or '待补充'
+                analysis = block.get('analysis', '')
+                qtype = block.get('question_type', '单选题')
+                options = block.get('options', [])
+
+                # 去重检测
+                dup_info = _get_duplicate_info(
+                    db, content, answer if answer != '待补充' else '',
+                    SUBJECT_NAME_MAP.get(auto_detected_subject)
+                )
+
+                # 提取图片引用
+                images = _extract_image_refs_from_content(content)
+
+                questions.append(ParsedQuestion(
+                    question_number=q_num,
+                    question_content=content[:50000],
+                    options=options,
+                    answer=answer,
+                    analysis=analysis[:50000] if analysis else None,
+                    images=images,
+                    question_type=qtype,
+                    subject_category=auto_detected_subject,
+                ))
+
+        else:
+            # ===== 合并导入 / OCR模式：提取题目块 =====
+            cleaned_text = ContentCleaner.clean_text(questions_text)
+            blocks = extract_question_blocks(cleaned_text)
+
+            if not blocks:
+                # 回退：尝试用前端兼容的宽松解析（按行切分）
+                warnings.append('未检测到标准题号格式，已尝试宽松解析')
+                blocks = _fallback_loose_parse(cleaned_text)
+
+            if not auto_detected_subject:
+                all_content = ' '.join(b.get('content', '') for b in blocks[:10])
+                auto_detected_subject = detect_subject_category(all_content)
+
+            total_questions = len(blocks)
+            for block in blocks:
+                q_num = block.get('question_number', 0)
+                content = block.get('content', '')
+                answer = block.get('answer', '') or '待补充'
+                analysis = block.get('analysis', '')
+                qtype = block.get('question_type', '单选题')
+                options = block.get('options', [])
+
+                # 去重检测
+                dup_info = _get_duplicate_info(
+                    db, content, answer if answer != '待补充' else '',
+                    SUBJECT_NAME_MAP.get(auto_detected_subject)
+                )
+
+                # 提取图片引用
+                images = _extract_image_refs_from_content(content)
+
+                questions.append(ParsedQuestion(
+                    question_number=q_num,
+                    question_content=content[:50000],
+                    options=options,
+                    answer=answer,
+                    analysis=analysis[:50000] if analysis else None,
+                    images=images,
+                    question_type=qtype,
+                    subject_category=auto_detected_subject,
+                ))
+
+            # 统计匹配结果
+            matched_count = sum(1 for q in questions if q.answer and q.answer != '待补充')
+            analysis_count = sum(1 for q in questions if q.analysis and len(q.analysis) > 10)
+            if total_questions > 0:
+                match_rate = round(matched_count * 100 / total_questions, 1)
+            strategy_used = '合并导入解析'
+
+        # 自动检测标签
+        auto_tags = _auto_detect_tags(paper_name, questions_text[:2000])
+
+        # ===== Validator: 数据完整性校验 + 置信度评分 =====
+        from ...services.text_parser import AnswerValidator
+        questions = AnswerValidator.validate(
+            [q.model_dump() if hasattr(q, 'model_dump') else (
+                q.dict() if hasattr(q, 'dict') else q
+            ) for q in questions],
+            strategy_used
+        )
+        # 重新转换为 ParsedQuestion（保留校验结果）
+        validated_questions = []
+        for q_data in questions:
+            validated_questions.append(ParsedQuestion(
+                question_number=q_data.get('question_number', 0),
+                question_content=q_data.get('question_content', ''),
+                options=q_data.get('options', []),
+                answer=q_data.get('answer'),
+                analysis=q_data.get('analysis'),
+                images=q_data.get('images', []),
+                question_type=q_data.get('question_type', '单选题'),
+                subject_category=q_data.get('subject_category'),
+                confidence=q_data.get('confidence', 1.0),
+                validation_errors=q_data.get('validation_errors', []),
+            ))
+        questions = validated_questions
+
+        # 收集校验警告
+        low_confidence = [q.question_number for q in questions if q.confidence < 0.5]
+        if low_confidence:
+            warnings.append(f'低置信度题目(建议人工核对): 第{",".join(map(str, low_confidence[:10]))}题')
+        invalid_answers = [q.question_number for q in questions if q.validation_errors]
+        if invalid_answers:
+            warnings.append(f'校验异常题目: 第{",".join(map(str, invalid_answers[:10]))}题')
+
+        return ParseResult(
+            status='success' if match_rate >= 80 or mode != 'separate' else 'partial',
+            questions=questions,
+            match_rate=match_rate,
+            matched_count=matched_count,
+            total_questions=total_questions,
+            unmatched_numbers=unmatched_numbers,
+            extra_answer_numbers=extra_answer_numbers,
+            analysis_count=analysis_count,
+            strategy_used=strategy_used,
+            auto_detected_subject=auto_detected_subject,
+            auto_detected_tags=auto_tags,
+            warnings=warnings,
+            raw_text_preview=questions_text[:100000],
+        )
+
+    except Exception as e:
+        logger.error(f"统一解析失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"文档解析失败: {str(e)}")
+
+
+def _extract_image_refs_from_content(content: str) -> list:
+    """从题目内容中提取 [IMAGE:xxx] 占位符，返回 ImageRef 列表"""
+    import re as _re
+    refs = []
+    markers = _re.findall(r'\[IMAGE:([^\]]+)\]', content or '')
+    for i, marker in enumerate(markers):
+        # 判断位置：在选项标记A.B.C.D.之后的为选项图片
+        position = 'stem'
+        idx = (content or '').find(f'[IMAGE:{marker}]')
+        if idx > 0:
+            before = content[:idx]
+            # 检查最后一个选项标记
+            last_opt = _re.findall(r'([A-D])\s*[.、．)）]', before)
+            if last_opt:
+                position = f'option_{last_opt[-1]}'
+        refs.append({'path': f'[IMAGE:{marker}]', 'position': position, 'order': i})
+    return refs
+
+
+def _fallback_loose_parse(text: str) -> List[Dict[str, Any]]:
+    """
+    宽松回退解析（当标准题号检测失败时）。
+    按空行分段，每段作为一道题。
+    """
+    from ...services.text_parser import _extract_options, extract_answer_from_lines, _detect_question_type
+
+    # 按双换行分段
+    paragraphs = re.split(r'\n\s*\n', text)
+    blocks = []
+    q_num = 1
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para or len(para) < 10:
+            continue
+
+        lines = para.split('\n')
+        content_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # 简单题号检测
+            m = re.match(r'^(?:第\s*)?(\d+)\s*(?:[.、．)）\]】]|\s*题)\s*', stripped)
+            if m:
+                q_num = int(m.group(1))
+                rest = stripped[m.end():].strip()
+                if rest:
+                    content_lines.append(rest)
+            else:
+                content_lines.append(stripped)
+
+        if not content_lines:
+            continue
+
+        options = _extract_options(content_lines)
+        extracted = extract_answer_from_lines(content_lines)
+        answer = extracted.get('answer') if extracted else None
+        analysis = extracted.get('analysis') if extracted else None
+        qtype = _detect_question_type('\n'.join(content_lines), options, answer or '')
+
+        # 移除选项行
+        content = '\n'.join(content_lines)
+        for opt in options:
+            if isinstance(opt, dict):
+                opt_line = f"{opt.get('key', '')}. {opt.get('value', '')}"
+                content = content.replace(opt_line, '').strip()
+
+        blocks.append({
+            'question_number': q_num,
+            'content': content.strip(),
+            'options': options,
+            'answer': answer,
+            'analysis': analysis,
+            'question_type': qtype,
+        })
+        q_num += 1
+
+    return blocks
+
+
+@router.post("/ocr", summary="图片OCR识别（增强版：文字+公式+表格）")
 async def ocr_recognize(
     payload: Dict[str, Any],
     current_user: SysUser = Depends(get_current_user),
 ):
     """
-    提交图片 Base64，返回 PaddleOCR 识别文本。
+    提交图片 Base64，返回增强版 OCR 识别结果（文字+公式+表格）。
 
     参数：
     - image_base64: 图片的 Base64 编码（可含 data:image/xxx;base64, 前缀）
+    - enhanced: 是否使用增强识别（默认 true，含公式/表格检测）
 
     返回：
     - ocr_text: 识别的纯文本
+    - formulas: 公式列表 [{latex, position, confidence}]
+    - tables: 表格列表 [{html, position, rows, cols}]
     - status: 'success' | 'error'
     """
     image_base64 = payload.get('image_base64', '')
+    use_enhanced = payload.get('enhanced', True)
+
     if not image_base64:
         raise HTTPException(status_code=400, detail="图片数据为空")
 
+    # 去除 data URL 前缀
+    if ',' in image_base64 and image_base64.startswith('data:'):
+        image_base64 = image_base64.split(',', 1)[1]
+
+    image_bytes = base64.b64decode(image_base64)
+
     try:
-        from ...services.ocr import recognize_image_base64
-        text = recognize_image_base64(image_base64)
-        if not text or not text.strip():
-            return {
+        from ...services.ocr import recognize_image_enhanced, recognize_image
+
+        if use_enhanced:
+            # 增强版：文字+公式+表格
+            result = recognize_image_enhanced(image_bytes)
+            response = {
                 'status': 'success',
-                'ocr_text': '',
-                'message': '未能识别到文字内容，请确认图片清晰度或手动输入'
+                'ocr_text': result.text,
+                'formulas': result.formulas,
+                'tables': result.tables,
+                'char_count': result.char_count,
+                'confidence': result.confidence,
+                'message': result.message or f'识别完成，共 {result.char_count} 字符' +
+                    (f'，{len(result.formulas)} 个公式' if result.formulas else '') +
+                    (f'，{len(result.tables)} 个表格' if result.tables else ''),
             }
-        return {
-            'status': 'success',
-            'ocr_text': text,
-            'char_count': len(text),
-            'message': f'识别成功，共 {len(text)} 字符'
-        }
+        else:
+            # 标准版：仅文字
+            text = recognize_image(image_bytes)
+            response = {
+                'status': 'success',
+                'ocr_text': text,
+                'formulas': [],
+                'tables': [],
+                'char_count': len(text),
+                'confidence': 0.0,
+                'message': f'识别成功，共 {len(text)} 字符' if text else '未能识别到文字内容',
+            }
+
+        if not response['ocr_text'] and not response['formulas'] and not response['tables']:
+            response['message'] = '未能识别到文字内容，请确认图片清晰度或手动输入'
+
+        return response
+
     except RuntimeError as e:
         logger.warning(f"OCR 服务不可用: {e}")
         return {
             'status': 'error',
             'ocr_text': '',
+            'formulas': [],
+            'tables': [],
             'message': 'OCR 服务暂不可用，请安装 PaddleOCR 依赖: pip install paddleocr paddlepaddle'
         }
     except Exception as e:
@@ -1493,13 +2397,18 @@ async def import_from_image(
         extracted = extract_answer_from_lines(ocr_text.split('\n'))
         detected_answer = extracted.get('answer') if extracted else None
 
-        # 自动检测题型
-        detected_type = _detect_question_type(ocr_text, [])
+        # 自动检测题型（传入从文本提取的选项与答案，避免选择/多选被误判为论述题）
+        ocr_options = _extract_options(ocr_text.split('\n'))
+        detected_type = _detect_question_type(ocr_text, ocr_options, detected_answer or '')
         qtype = _get_or_create_type(db, detected_type, subject.subject_id)
 
         content = ocr_text[:100000]
         answer = detected_answer or '[待人工补充]'
         analysis = extracted.get('analysis') if extracted else '[OCR导入，待补充答案解析]'
+
+        # 清洗题目内容：去除推广/无关字段
+        content = ContentCleaner.clean_question_content(content)
+        analysis = ContentCleaner.clean_question_content(analysis)
 
         # 去重检测
         dup_info = _get_duplicate_info(db, content, answer, subject.subject_id)
@@ -1527,7 +2436,7 @@ async def import_from_image(
             source=payload.get('source', '图片导入'),
             tags=payload.get('tags', 'OCR导入'),
             creator_id=current_user.user_id,
-            audit_status=0,
+            audit_status=1,  # 教师导入自动审核通过
         )
 
         # 设置子科目
@@ -1543,7 +2452,7 @@ async def import_from_image(
 
         detail = QuestionDetailCategory(
             question_id=question.question_id,
-            question_type_detail=_normalize_type_name(detected_type),
+            question_type_detail=normalize_type_name(detected_type),
         )
         # 设置详细分类的子科目
         if subject.subject_id == 1:
@@ -1566,6 +2475,7 @@ async def import_from_image(
             complete_time=datetime.now(),
         )
         db.add(record)
+        _link_knowledge_points(db, [question])
         db.commit()
 
         return {
@@ -1597,6 +2507,7 @@ async def _import_structured_from_ocr(
     duplicates = 0
     failed = 0
     results = []
+    new_questions = []
 
     # 自动检测科目
     all_text = ' '.join(
@@ -1629,8 +2540,14 @@ async def _import_structured_from_ocr(
             continue
 
         try:
-            detected_type = _detect_question_type(content, q_data.get('options', []))
+            detected_type = _detect_question_type(content, q_data.get('options', []), answer or '')
             qtype = _get_or_create_type(db, detected_type, subject.subject_id)
+            # 客观选择题：答案归一化（A、B → AB；对/错 → A/B），论述/写作保留原文
+            if detected_type in ('单选题', '多选题'):
+                _norm = canonical_answer(answer)
+                stored_answer = _norm if _norm else answer
+            else:
+                stored_answer = answer
             # 优先使用前端传来的子分类，否则自动检测
             subcategory = q_data.get('subcategory', '') or _detect_subcategory(subject.subject_id, content)
 
@@ -1639,7 +2556,7 @@ async def _import_structured_from_ocr(
                 type_id=qtype.type_id,
                 question_content=content[:50000],
                 options=q_data.get('options') if q_data.get('options') else None,
-                answer=answer,
+                answer=stored_answer,
                 answer_analysis=analysis,
                 difficulty=q_data.get('difficulty', 3),
                 score=float(q_data.get('score', 1.0)),
@@ -1647,7 +2564,7 @@ async def _import_structured_from_ocr(
                 source=payload.get('source', '图片OCR导入'),
                 tags=payload.get('tags', 'OCR导入'),
                 creator_id=current_user.user_id,
-                audit_status=0,
+                audit_status=1,  # 教师导入自动审核通过
             )
             if subject.subject_id == 1:
                 question.xingce_subcategory = subcategory
@@ -1657,10 +2574,11 @@ async def _import_structured_from_ocr(
                 question.gongzhuan_subcategory = subcategory
             db.add(question)
             db.flush()
+            new_questions.append(question)
 
             detail = QuestionDetailCategory(
                 question_id=question.question_id,
-                question_type_detail=_normalize_type_name(detected_type),
+                question_type_detail=normalize_type_name(detected_type),
             )
             if subject.subject_id == 1:
                 detail.xingce_subcategory = subcategory
@@ -1674,7 +2592,8 @@ async def _import_structured_from_ocr(
             try:
                 images = _extract_and_save_images(
                     content + ' ' + str(q_data.get('options', '')),
-                    question.question_id
+                    question.question_id,
+                    question_obj=question
                 )
                 for img_order, img_path in enumerate(images):
                     db.add(QuestionImage(
@@ -1713,6 +2632,7 @@ async def _import_structured_from_ocr(
         complete_time=datetime.now(),
     )
     db.add(record)
+    _link_knowledge_points(db, new_questions)
     db.commit()
 
     return {
@@ -1727,11 +2647,9 @@ async def _import_structured_from_ocr(
     }
 
 
-def _detect_question_type(content: str, options: list) -> str:
-    """从OCR文本自动检测题型"""
-    # 导入 text_parser 的函数
-    from ...services.text_parser import _detect_question_type as _detect
-    return _detect(content, options)
+# 注意：此处不再定义同名 _detect_question_type 遮蔽函数。
+# 统一使用顶部从 text_parser 导入的 3 参版本 _detect_question_type(content, options, answer)，
+# 避免丢弃 answer 参数导致多选被误判为单选，以及 3 参调用触发 TypeError 崩溃。
 
 
 @router.get("/records", summary="导入记录列表")
