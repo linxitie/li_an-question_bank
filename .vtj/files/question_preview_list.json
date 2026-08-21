@@ -1,0 +1,16 @@
+{
+  "id": "question_preview_list",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1785406000000",
+  "name": "QuestionPreviewList",
+  "state": {},
+  "methods": {},
+  "computed": {},
+  "lifeCycles": {},
+  "props": [
+    { "name": "questions", "type": "Array", "default": "[]" },
+    { "name": "mode", "type": "String", "default": "'combined'" },
+    { "name": "loading", "type": "Boolean", "default": "false" }
+  ],
+  "emits": ["import-one", "import-all", "reverify", "close"]
+}

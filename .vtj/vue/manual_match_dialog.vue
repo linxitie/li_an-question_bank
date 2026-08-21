@@ -22,7 +22,10 @@
             <div class="question-number">第{{ question.question_number }}题</div>
             <div class="question-content">{{ question.content }}</div>
             <div class="question-options" v-if="question.options && question.options.length">
-              <div v-for="(opt, idx) in question.options" :key="idx">{{ opt }}</div>
+              <div v-for="(opt, idx) in question.options" :key="idx" class="option-item">
+                <span class="option-key">{{ opt.key || String.fromCharCode(65 + idx) }}.</span>
+                <span class="option-value">{{ opt.value || opt }}</span>
+              </div>
             </div>
             <div class="question-answer" v-if="question.answer">
               <span class="answer-tag">答案：{{ question.answer }}</span>
@@ -105,7 +108,7 @@ import { ElMessage } from 'element-plus';
 export default defineComponent({
   name: 'ManualMatchDialog',
   setup(props) {
-    const provider = useProvider({ id: 'manual_match_dialog', version: Date.now().toString() });
+    const provider = useProvider({ id: 'manual_match_dialog', version: '1785406000000' });
     return { provider };
   },
   props: {
@@ -334,6 +337,20 @@ export default defineComponent({
   margin-top: 6px;
   font-size: 12px;
   color: #666;
+}
+.option-item {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 2px;
+  line-height: 1.4;
+}
+.option-key {
+  color: #1890ff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.option-value {
+  color: #333;
 }
 .question-answer {
   margin-top: 6px;

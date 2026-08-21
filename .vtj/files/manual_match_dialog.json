@@ -1,0 +1,21 @@
+{
+  "id": "manual_match_dialog",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1785406000000",
+  "name": "ManualMatchDialog",
+  "state": {},
+  "methods": {
+    "selectQuestion": {
+      "type": "method",
+      "params": ["question"]
+    }
+  },
+  "computed": {},
+  "lifeCycles": {},
+  "props": [
+    { "name": "visible", "type": "Boolean", "default": "false" },
+    { "name": "questions", "type": "Array", "default": "[]" },
+    { "name": "answers", "type": "Array", "default": "[]" }
+  ],
+  "emits": ["update:visible", "confirm", "cancel"]
+}

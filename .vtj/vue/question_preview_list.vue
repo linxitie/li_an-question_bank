@@ -74,6 +74,7 @@
 <script>
 // @ts-nocheck
 import { defineComponent } from 'vue';
+import { useProvider } from '@vtj/renderer';
 
 export default defineComponent({
   name: 'QuestionPreviewList',
@@ -82,7 +83,11 @@ export default defineComponent({
     mode: { type: String, default: 'combined' },
     loading: { type: Boolean, default: false }
   },
-  emits: ['import-one', 'import-all', 'reverify', 'close']
+  emits: ['import-one', 'import-all', 'reverify', 'close'],
+  setup() {
+    const provider = useProvider({ id: 'question_preview_list', version: '1785406000000' });
+    return { provider };
+  }
 });
 </script>
 
