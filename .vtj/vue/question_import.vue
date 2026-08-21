@@ -14,6 +14,26 @@
       </div>
     </div>
 
+    <!-- 阶段进度条 -->
+    <div class="import-progress-wrap" v-if="state.progressSteps.length">
+      <div class="import-progress-steps">
+        <template v-for="(step, si) in state.progressSteps" :key="si">
+          <span :class="['progress-step', step.status]">
+            <span class="step-check" v-if="step.status==='done'">✓</span>
+            <span class="step-num" v-else>{{ si + 1 }}</span>
+            {{ step.label }}
+          </span>
+          <span class="progress-step-arrow" v-if="si < state.progressSteps.length-1">→</span>
+        </template>
+      </div>
+      <div class="import-progress-bar">
+        <div class="import-progress-fill"
+          :class="{done: state.progressPercent >= 100}"
+          :style="{width: Math.max(state.progressPercent, 2) + '%'}">
+        </div>
+      </div>
+    </div>
+
     <div class="import-body">
       <div class="card-wrapper">
         <div class="card-nav">
@@ -66,10 +86,10 @@
             <div class="form-item">
               <label>题型</label>
               <select v-model="state.form.question_type_detail">
-                <option value="选择题">选择题</option>
-                <option value="判断题">判断题</option>
-                <option value="填空题">填空题</option>
-                <option value="简答题">简答题</option>
+                <option value="单选题">单选题</option>
+                <option value="多选题">多选题</option>
+                <option value="论述题">论述题</option>
+                <option value="写作题">写作题</option>
               </select>
             </div>
             <div class="form-item form-item-sm">
@@ -257,11 +277,17 @@
                     <XIcon :icon="Upload" :size="14" color="#ffffff"></XIcon>
                     <span>{{ state.loading ? '导入中...' : '导入到题库（' + state.parsedDocsQuestions.filter(function(q){return !q._imported && !q._is_duplicate}).length + ' 题）' }}</span>
                   </button>
+                  <button v-else-if="state.separateMatchRate >= 70"
+                    class="btn-primary"
+                    style="background:linear-gradient(135deg,#f59e0b 0%,#f97316 100%);padding:8px 24px;font-size:14px;font-weight:600;"
+                    @click="showManualMatchDialog">
+                    <span>手动匹配（当前 {{ state.separateMatchRate }}%）</span>
+                  </button>
                   <button v-else
                     class="btn-primary"
                     style="background:rgba(100,100,120,0.5);padding:8px 24px;font-size:14px;font-weight:600;cursor:not-allowed;border:1px solid rgba(245,108,108,0.4);"
                     disabled
-                    :title="'匹配率仅 ' + state.separateMatchRate + '%，低于99%要求'">
+                    :title="'匹配率仅 ' + state.separateMatchRate + '%，低于70%最低要求'">
                     <span>匹配率太低，请修改后重新导入</span>
                   </button>
                 </div>
@@ -385,15 +411,27 @@
         </div>
       </div>
     </div>
+    <!-- 手动匹配弹窗 -->
+    <div v-if="state.manualMatchVisible" class="manual-match-overlay" @click.self="onManualMatchCancel">
+      <div class="manual-match-modal">
+        <ManualMatchDialog
+          :questions="state.parsedDocsQuestions"
+          :answers="state.separateAnswerList || []"
+          @confirm="onManualMatchConfirm"
+          @cancel="onManualMatchCancel"
+        ></ManualMatchDialog>
+      </div>
+    </div>
   </div>
 </template>
 <script lang="ts">
   // @ts-nocheck
-  import { defineComponent, reactive } from 'vue';
-  import { XIcon } from '@vtj/ui';
-  import { ElMessage } from 'element-plus';
-  import { UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List } from '@vtj/icons';
-  import { useProvider } from '@vtj/renderer';
+import { defineComponent, reactive } from 'vue';
+import { XIcon } from '@vtj/ui';
+import { ElMessage } from 'element-plus';
+import { UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List } from '@vtj/icons';
+import { useProvider } from '@vtj/renderer';
+import ManualMatchDialog from './manual_match_dialog.vue';
   const QuestionPreviewList = {
     props: {
       questions: { type: Array, default: function() { return []; } },
@@ -418,6 +456,9 @@
           '<span class="docs-stat-dup" v-if="questions.filter(function(q){return q._is_duplicate}).length" style="color:#f56c6c;margin-left:8px;">' +
             '⚠ 重复 {{ questions.filter(function(q){return q._is_duplicate}).length }}' +
             '</span>' +
+          '<span class="docs-stat-confidence" v-if="questions.filter(function(q){return q.confidence !== undefined && q.confidence < 0.5}).length" style="color:#f56c6c;margin-left:8px;background:rgba(245,108,108,0.1);padding:2px 8px;border-radius:4px;">' +
+            '🔴 低置信度 {{ questions.filter(function(q){return q.confidence !== undefined && q.confidence < 0.5}).length }}' +
+            '</span>' +
         '</div>' +
         '<div class="docs-list-actions-top">' +
           '<button class="btn-primary btn-top-import" @click="$emit(\'import-all\')" :disabled="loading" :title="mode === \'combined\' ? \'导入所有有答案的题目\' : \'导入所有题目（含待补充答案）\'">' +
@@ -430,11 +471,12 @@
       '<div class="docs-q-card" v-for="(q, idx) in questions" :key="idx" :class="{ \'docs-q-card-noans\': !q.answer || q.answer === \'待补充\' }">' +
         '<div class="docs-q-header">' +
           '<span class="docs-q-num">第 {{ idx + 1 }} 题</span>' +
-          '<span class="docs-q-type">{{ q.question_type_detail || \'选择题\' }}</span>' +
+          '<span class="docs-q-type">{{ q.question_type_detail || \'单选题\' }}</span>' +
           '<span class="docs-q-subject">{{ q.subject_category || \'公专\' }}</span>' +
           '<span class="docs-q-dup-badge" v-if="q._is_duplicate" style="color:#f56c6c;font-size:15px;margin-right:6px;background:rgba(245,108,108,0.15);padding:2px 6px;border-radius:4px;" :title="\'该题目已存在（相似度 \' + Math.round((q._similarity || 0) * 100) + \'%），将自动跳过导入\'">⚠ 该题目已存在</span>' +
           '<span class="docs-q-ans-badge" v-if="q.answer && q.answer !== \'待补充\'" style="color:#4ade80;font-size:15px;margin-right:8px;" title="已匹配答案">已匹配答案 ✓</span>' +
           '<span class="docs-q-ans-badge docs-q-ans-badge-warn" v-else style="color:#f59e0b;font-size:15px;margin-right:8px;" title="缺少答案，请在下方手动录入">⚠ 缺答案</span>' +
+          '<span class="docs-q-conf-badge" v-if="q.confidence !== undefined && q.confidence < 0.5" style="color:#f56c6c;font-size:13px;margin-right:6px;background:rgba(245,108,108,0.15);padding:2px 6px;border-radius:4px;" :title="\'匹配置信度仅 \' + Math.round((q.confidence||0)*100) + \'%，建议人工核对\'">🔴 低置信度(' + "{{ Math.round((q.confidence||0)*100) }}%" + ')</span>' +
           '<button class="btn-mini-reverify" @click="$emit(\'reverify\', idx)" title="重新校验选项分割">重检</button>' +
           '<button class="btn-mini-import" @click="$emit(\'import-one\', idx)" :disabled="q._imported">' +
             '{{ q._imported ? \'已导入\' : \'导入此题\' }}' +
@@ -470,9 +512,9 @@
   };
   export default defineComponent({
     name: 'QuestionImport',
-    components: { XIcon, QuestionPreviewList },
+    components: { XIcon, QuestionPreviewList, ManualMatchDialog },
     setup(props) {
-      const provider = useProvider({ id: 'question_import', version: '1778918346107' });
+      const provider = useProvider({ id: 'question_import', version: '1785406000000' });
       const state = reactive({
         importMode: 'combined',
         activeTab: 'single',
@@ -482,7 +524,7 @@
           province: '',
           exam_type: '',
           subject_category: '公专',
-          question_type_detail: '选择题',
+          question_type_detail: '单选题',
           question_content: '',
           options: [{ key: 'A', value: '' }, { key: 'B', value: '' }, { key: 'C', value: '' }, { key: 'D', value: '' }],
           answer: '',
@@ -516,10 +558,20 @@
         combinedSubMode: 'auto',
         // 分离导入匹配率
         separateMatchRate: 0,
+        // 手动匹配弹窗
+        manualMatchVisible: false,
         // 图片导入自动分类结果
         ocrAutoSubject: '',
         ocrAutoSubcategories: [],
-        stats: { total_questions: 0, subject_stats: [], type_stats: [], latest_import: null }
+        stats: { total_questions: 0, subject_stats: [], type_stats: [], latest_import: null },
+        // 统一后端解析
+        parseResult: null,
+        parseLoading: false,
+        parseError: '',
+        // 头部进度条
+        progressPhase: 0,         // 当前阶段索引 0-based
+        progressPercent: 0,       // 当前阶段进度 0-100
+        progressSteps: [],        // [{label:'文档解析', status:'done'|'active'|'pending'}]
       });
       return {
         state, props, provider,
@@ -540,7 +592,13 @@
     },
     methods: {
       goHome() {
-        this.$router.push('/');
+        const auth = window.__VTJ_AUTH__;
+        const role = auth ? auth.getUserRole() : null;
+        if (role === 'teacher' || role === 'admin') {
+          this.$router.push('/teacher/questions');
+        } else {
+          this.$router.push('/');
+        }
       },
       async ensureLogin() {
         return window.__VTJ_AUTH__.ensureAuth();
@@ -611,7 +669,7 @@
       resetForm() {
         this.state.form = {
           paper_name: '', year: null, province: '', exam_type: '',
-          subject_category: '公专', question_type_detail: '选择题',
+          subject_category: '公专', question_type_detail: '单选题',
           question_content: '',
           options: [{ key: 'A', value: '' }, { key: 'B', value: '' }, { key: 'C', value: '' }, { key: 'D', value: '' }],
           answer: '', source: '', analysis: '', score: 1, difficulty: 3
@@ -671,13 +729,16 @@
         var self = this;
         var formData = new FormData();
         formData.append('file', file);
+        // PDF扫描件OCR需要更长时间（每页约20秒，15页=300秒）
+        var isPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
+        var timeout = isPdf ? 360000 : 30000;  // PDF: 6分钟, 其他: 30秒
         try {
           // 使用 getAuthHeaders() 携带认证token（不含 Content-Type，让浏览器自动设置 multipart boundary）
           var res = await this.fetchWithRetry('/api/questions/import/upload', {
             method: 'POST',
             headers: this.getAuthHeaders(),
             body: formData
-          }, 30000, 0);
+          }, timeout, 0);
           var data = await res.json();
           if (!res.ok) {
             ElMessage.error('文件上传失败 (HTTP ' + res.status + ')：' + (data.detail || data.message || '未知错误'));
@@ -706,59 +767,81 @@
             callback(text);
             return;
           }
-          // 其他情况
-          ElMessage.error('文件解析失败：返回数据格式不匹配（raw_text_preview/questions 均不存在）');
+          // 扫描件PDF特殊处理
+          if (data.scanned_pdf) {
+            ElMessage.warning('检测到扫描件PDF（图片型，无文字层）。请使用"图片导入"标签页单独上传，或先将PDF转换为可编辑文本格式。');
+            callback('');
+            return;
+          }
+          // 回退：尝试从response中提取任何文本内容
+          if (data.detail || data.message) {
+            callback(data.detail || data.message);
+            return;
+          }
+          // 终极回退：显示引导信息
+          ElMessage.warning('文件解析返回空内容。如果是PDF扫描件，请使用"图片导入"标签页；如果是Word文档，请确认文件包含可选择文本。');
+          callback('');
         } catch (e) {
           ElMessage.error('文件上传异常：' + (e.message || '网络错误'));
         }
       },
       async uploadBatchFile() {
+        var self = this;
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.docx,.pdf,.xlsx,.xls,.csv';
         input.onchange = async (e) => {
           const file = e.target.files[0];
           if (!file) return;
+          self.resetProgress('combined');
+          self.stepActive(0); self.setProgress(0, 10);
           ElMessage.info('正在解析文件：' + file.name + '...');
           try {
             const formData = new FormData();
             formData.append('file', file);
-            if (this.state.batchPaperName) formData.append('paper_name', this.state.batchPaperName);
-            const res = await this.fetchWithRetry('/api/questions/import/upload', {
+            if (self.state.batchPaperName) formData.append('paper_name', self.state.batchPaperName);
+            const res = await self.fetchWithRetry('/api/questions/import/upload', {
               method: 'POST',
-              headers: this.getAuthHeaders(),
+              headers: self.getAuthHeaders(),
               body: formData
             });
             const data = await res.json();
             if (!res.ok) {
               ElMessage.warning(data.detail || '上传失败 (HTTP ' + res.status + ')');
+              self.resetProgress('');
               return;
             }
+            self.setProgress(0, 50);
             // Excel/CSV 返回结构化 questions 数组
             if (data.questions && data.questions.length > 0) {
-              this.state.batchPreviewData = data.questions;
-              this.state.rawTextPreview = '';
-              this.state.importId = data.import_id;
+              self.state.batchPreviewData = data.questions;
+              self.state.rawTextPreview = '';
+              self.state.importId = data.import_id;
+              self.stepDone(0); self.setProgress(0, 100);
               ElMessage.success('解析完成：' + (data.success_count || 0) + ' 题可导入，' + (data.failed_count || 0) + ' 题跳过');
             }
             // Word/PDF 返回 raw_text_preview → 自动智能提取题目
             else if (data.raw_text_preview) {
-              this.state.batchPreviewData = [];
-              this.state.rawTextPreview = data.raw_text_preview;
-              this.state.importId = data.import_id;
+              self.state.batchPreviewData = [];
+              self.state.rawTextPreview = data.raw_text_preview;
+              self.state.importId = data.import_id;
+              self.stepDone(0); self.setProgress(0, 80);
               // 自动提取题目结构，直接显示导入按钮
-              this.parseRawTextToQuestions();
-              if (this.state.parsedDocsQuestions.length) {
-                ElMessage.success('已自动提取 ' + this.state.parsedDocsQuestions.length + ' 道题目，可直接导入');
+              self.parseRawTextToQuestions();
+              if (self.state.parsedDocsQuestions.length) {
+                self.setProgress(0, 100);
+                ElMessage.success('已自动提取 ' + self.state.parsedDocsQuestions.length + ' 道题目，可直接导入');
               } else {
                 ElMessage.info('文件已解析，但未自动识别出题目结构。请点击"智能提取题目"或检查文件格式');
               }
             }
             else {
+              self.resetProgress('');
               ElMessage.warning('文件无有效题目数据');
             }
           } catch (e) {
-            ElMessage.error(this.handleFetchError(e, '文件上传'));
+            self.resetProgress('');
+            ElMessage.error(self.handleFetchError(e, '文件上传'));
           }
         };
         input.click();
@@ -852,23 +935,38 @@
         }
         this.state.ocrLoading = false;
       },
-      // ========== 解析 OCR 文本 → 题目列表 ==========
+      // ========== 解析 OCR 文本 → 题目列表（后端Pipeline） ==========
       parseOcrTextToQuestions() {
         if (!this.state.ocrText) {
           ElMessage.warning('无 OCR 文本可解析');
           return;
         }
-        // 复用已有的原始文本解析管线
-        this.state.rawTextPreview = this.state.ocrText;
-        this.state.importMode = 'separate';  // OCR 识别答案不可靠，用分离模式
-        this.parseRawTextToQuestions();
-        this.state.ocrQuestions = this.state.parsedDocsQuestions.slice();
-        this.state.parsedDocsQuestions = [];
-        if (!this.state.ocrQuestions.length) {
-          ElMessage.warning('未能从OCR文本中提取题目结构，请确认图片包含标准题号格式');
-        } else {
-          ElMessage.success('已提取 ' + this.state.ocrQuestions.length + ' 道题目，请补充答案后导入');
-        }
+        // 调用后端统一解析（OCR模式）
+        this.callBackendParse(
+          this.state.ocrText,
+          '',  // OCR无独立答案文本
+          'ocr',
+          this.state.batchPaperName || '图片OCR导入'
+        ).then((function(result) {
+          if (result && result.questions && result.questions.length) {
+            this.state.ocrQuestions = this.state.parsedDocsQuestions.slice();
+            this.state.parsedDocsQuestions = [];
+            this.state.ocrAutoSubject = result.auto_detected_subject || '';
+            this.state.ocrAutoSubcategories = [];
+            ElMessage.success('已提取 ' + this.state.ocrQuestions.length + ' 道题目，请补充答案后导入');
+          } else {
+            // 回退到前端解析
+            ElMessage.warning('后端解析未返回结果，尝试本地解析...');
+            this.state.rawTextPreview = this.state.ocrText;
+            this.state.importMode = 'separate';
+            this.parseRawTextToQuestions();
+            this.state.ocrQuestions = this.state.parsedDocsQuestions.slice();
+            this.state.parsedDocsQuestions = [];
+            if (!this.state.ocrQuestions.length) {
+              ElMessage.warning('未能从OCR文本中提取题目结构，请确认图片包含标准题号格式');
+            }
+          }
+        }).bind(this));
       },
       // ========== 一键识别并入库（OCR + 智能提取 + 自动分类 + 预览确认 + 导入） ==========
       async ocrAndImportStructured() {
@@ -878,30 +976,38 @@
         }
         this.state.ocrLoading = true;
         this.state.importProgress = 0;
+        this.resetProgress('image');
         try {
           // 步骤1: OCR识别
+          this.stepActive(0); this.setProgress(0, 10);
           ElMessage.info('正在OCR识别...');
           await this.ocrRecognize();
-          this.state.importProgress = 25;
+          this.state.importProgress = 25; this.setProgress(0, 50);
           if (!this.state.ocrText) {
             this.state.ocrLoading = false;
+            this.resetProgress('');
             return;
           }
+          this.stepDone(0); this.setProgress(0, 100);
           // 步骤2: 智能提取题目
+          this.stepActive(1); this.setProgress(1, 30);
           this.parseOcrTextToQuestions();
-          this.state.importProgress = 50;
+          this.state.importProgress = 50; this.setProgress(1, 70);
           if (!this.state.ocrQuestions.length) {
             this.state.ocrLoading = false;
+            this.resetProgress('');
             return;
           }
+          this.stepDone(1); this.setProgress(1, 100);
           // 步骤3: 自动检测科目和子分类
+          this.stepActive(2); this.setProgress(2, 20);
           var allText = this.state.ocrText;
           var detectedSubject = this.detectSubjectCategory([], allText);
           var subcategories = this.detectSubcategories(detectedSubject, allText);
           this.state.ocrAutoSubject = detectedSubject;
           this.state.ocrAutoSubcategories = subcategories;
           this.state.form.subject_category = detectedSubject;
-          this.state.importProgress = 75;
+          this.state.importProgress = 75; this.setProgress(2, 40);
           // 更新 ocrQuestions 中的科目和子分类
           for (var i = 0; i < this.state.ocrQuestions.length; i++) {
             this.state.ocrQuestions[i].subject_category = detectedSubject;
@@ -925,7 +1031,7 @@
                   options: q.options || [],
                   answer: q.answer || '',
                   analysis: q.analysis || '',
-                  question_type: q.question_type_detail || '选择题',
+                  question_type: q.question_type_detail || '单选题',
                   subcategory: q.subcategory || '',
                 };
               }),
@@ -933,7 +1039,7 @@
             })
           }, 60000, 2);
           var data = await res.json();
-          this.state.importProgress = 100;
+          this.state.importProgress = 100; this.setProgress(2, 100); this.stepDone(2);
           if (res.ok && (data.import_status === 'SUCCESS' || data.import_status === 'PARTIAL')) {
             ElMessage.success('图片导入完成：成功 ' + data.imported + ' 题' +
               (data.duplicates > 0 ? '，重复 ' + data.duplicates + ' 题（已跳过）' : '') +
@@ -1091,19 +1197,126 @@
       // 自动检测题型
       detectQuestionType(questionContent, options) {
         var text = questionContent || '';
-        // 判断题特征：只有2个选项且是 对/错、正确/错误、A/B、是/否
-        if (options && options.length === 2) {
-          var vals = options.map(function(o) { return (o.value || '').replace(/[^\u4e00-\u9fff]/g, ''); }).join('');
-          if (/^[对错]$|^[是否]$|^正确错误$/.test(vals)) return '判断题';
-        }
-        // 填空题特征
-        if (/____|（）|\(\)|（\s*）/.test(text)) return '填空题';
-        // 简答题/论述题特征
+        // 写作题特征：包含写作关键词，或文本非常长
         if (!options || options.length < 2) {
-          if (text.length > 100) return '简答题';
-          return '选择题';
+          if (/写作|作文|请以|为题|写一篇|谈谈你的看法/.test(text) || text.length > 200) return '写作题';
+          // 论述题特征：包含论述/分析/简答关键词，或文本较长
+          if (/论述|分析|简答|阐述|说明|概括/.test(text) || text.length > 80) return '论述题';
+          // 含填空标记 → 归入论述题（需文本输入）
+          if (/____|（）|\(\)|（\s*）/.test(text)) return '论述题';
+          return '单选题';
         }
-        return '选择题';
+        // 多选题特征：选项超过4个
+        if (options.length > 4) return '多选题';
+        // 默认单选题
+        return '单选题';
+      },
+      /** ========== 进度条控制 ========== */
+      setProgress(phase, percent, steps) {
+        this.state.progressPhase = phase;
+        this.state.progressPercent = percent;
+        if (steps) this.state.progressSteps = steps;
+      },
+      resetProgress(mode) {
+        var steps;
+        if (mode === 'combined') {
+          steps = [
+            { label: '文档解析', status: 'pending' },
+            { label: '导入入库', status: 'pending' }
+          ];
+        } else if (mode === 'separate') {
+          steps = [
+            { label: '题目解析', status: 'pending' },
+            { label: '答案解析', status: 'pending' },
+            { label: '智能匹配', status: 'pending' },
+            { label: '导入入库', status: 'pending' }
+          ];
+        } else {
+          steps = [
+            { label: 'OCR识别', status: 'pending' },
+            { label: '题目提取', status: 'pending' },
+            { label: '导入入库', status: 'pending' }
+          ];
+        }
+        this.state.progressSteps = steps;
+        this.state.progressPhase = 0;
+        this.state.progressPercent = 0;
+      },
+      stepDone(idx) {
+        if (this.state.progressSteps[idx]) this.state.progressSteps[idx].status = 'done';
+      },
+      stepActive(idx) {
+        for (var i = 0; i < this.state.progressSteps.length; i++) {
+          this.state.progressSteps[i].status = i < idx ? 'done' : (i === idx ? 'active' : 'pending');
+        }
+        this.state.progressPhase = idx;
+      },
+
+      /**
+       * ========== 统一后端解析（替代所有前端本地解析逻辑） ==========
+       * 调用 POST /api/questions/import/parse，返回 ParseResult
+       */
+      async callBackendParse(questionsText, answersText, mode, paperName) {
+        mode = mode || 'combined';
+        paperName = paperName || this.state.batchPaperName || '';
+        this.state.parseLoading = true;
+        this.state.parseError = '';
+        try {
+          var res = await this.fetchWithRetry('/api/questions/import/parse', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              questions_text: questionsText || '',
+              answers_text: answersText || '',
+              mode: mode,
+              paper_name: paperName,
+              subject_category: this.state.form.subject_category || ''
+            })
+          }, 30000, 1);
+          var data = await res.json();
+          if (!res.ok) {
+            this.state.parseError = data.detail || '解析失败 (HTTP ' + res.status + ')';
+            ElMessage.error(this.state.parseError);
+            this.state.parseLoading = false;
+            return null;
+          }
+          // 转换为前端兼容格式（附加 _imported, _is_duplicate 等UI状态字段）
+          var questions = (data.questions || []).map(function(q, i) {
+            return {
+              question_number: q.question_number || (i + 1),
+              question_content: q.question_content || '',
+              options: q.options || [],
+              answer: q.answer || '待补充',
+              analysis: q.analysis || '',
+              question_type_detail: q.question_type || '单选题',
+              subject_category: q.subject_category || '公专',
+              images: q.images || [],
+              _imported: false,
+              _is_duplicate: false,
+              _similarity: 0,
+              _existing_id: null,
+              _source: 'backend_pipeline'
+            };
+          });
+          this.state.parseResult = data;
+          this.state.parsedDocsQuestions = questions;
+          this.state.separateMatchRate = data.match_rate || 0;
+          if (data.auto_detected_subject) {
+            this.state.form.subject_category = data.auto_detected_subject;
+          }
+          if (data.warnings && data.warnings.length) {
+            for (var wi = 0; wi < data.warnings.length; wi++) {
+              ElMessage.warning(data.warnings[wi]);
+            }
+          }
+          this.state.parseLoading = false;
+          return data;
+        } catch (e) {
+          this.state.parseError = this.handleFetchError(e, '文档解析');
+          ElMessage.error(this.state.parseError);
+          this.state.parseLoading = false;
+          return null;
+        }
       },
       parseRawTextToQuestions() {
         var text = this.state.rawTextPreview;
@@ -1296,7 +1509,7 @@
             continue;
           }
 
-          // 模式6: 末尾行是 正确/错误/对/错（判断题）
+          // 模式6: 末尾行是 正确/错误/对/错（对错型单选题）
           if (options.length >= 1 && /^[\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]$/.test(line) && questionContent) {
             answer = /[\u5bf9\u6b63\u786e\u662f]/.test(line) ? 'A' : 'B';
             continue;
@@ -1353,7 +1566,7 @@
         var self = this;
         var input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.docx,.pdf,.txt';
+        input.accept = '.docx,.pdf,.txt,.xlsx,.xls,.csv';
         input.onchange = function(e) {
           var file = e.target.files[0];
           if (!file) return;
@@ -1401,7 +1614,7 @@
         }
         var input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.docx,.pdf,.txt';
+        input.accept = '.docx,.pdf,.txt,.xlsx,.xls,.csv';
         input.onchange = function(e) {
           var file = e.target.files[0];
           if (!file) return;
@@ -1682,7 +1895,7 @@
                   }),
                   answer: q.answer || '待补充',
                   analysis: q.analysis || '',
-                  question_type: q.question_type || '选择题',
+                  question_type: q.question_type || '单选题',
                   subject_category: data.auto_detected_subject || '行测',
                   _source: 'backend_match',
                   _is_duplicate: q.is_duplicate || false,
@@ -1758,233 +1971,90 @@
         }
         return matched;
       },
-      // ========== 分离导入：匹配题目与答案（题号精确匹配版） ==========
+      // ========== 分离导入：匹配题目与答案（统一后端Pipeline） ==========
       matchSeparateQuestionsAnswers: async function() {
         if (!this.state.separateQuestionsRawText || !this.state.separateAnswersRawText) {
           ElMessage.warning('请确保题目和答案文件都已上传');
           return;
         }
-        // 重新解析题目（会自动附加 question_number）
+
+        // 初始化进度条
+        this.resetProgress('separate');
+        this.stepActive(0); this.setProgress(0, 20);  // 题目解析完成
+        this.stepDone(0); this.stepActive(1); this.setProgress(1, 40);  // 答案解析完成
+
+        // 策略0（优先）：调用后端统一解析 Pipeline
+        this.stepDone(1); this.stepActive(2); this.setProgress(2, 60);  // 智能匹配中
+        var result = await this.callBackendParse(
+          this.state.separateQuestionsRawText,
+          this.state.separateAnswersRawText,
+          'separate',
+          this.state.batchPaperName
+        );
+
+        if (result && result.questions && result.questions.length > 0) {
+          var matchRate = result.match_rate || 0;
+          this.state.separateMatchRate = matchRate;
+          this.stepDone(2); this.setProgress(2, 100);  // 匹配完成
+
+          var withAnswer = this.state.parsedDocsQuestions.filter(function(q) {
+            return q.answer && q.answer !== '待补充';
+          }).length;
+
+          if (matchRate >= 99) {
+            ElMessage.success('后端Pipeline匹配完成：匹配率 ' + matchRate + '%（' +
+              withAnswer + '/' + result.total_questions + '）| 策略：' + (result.strategy_used || '智能'));
+          } else if (matchRate >= 90) {
+            ElMessage.warning('后端匹配率 ' + matchRate + '%（' + withAnswer + '/' +
+              result.total_questions + '）。可手动补充答案后导入。');
+          } else {
+            ElMessage.error('匹配率偏低（' + matchRate + '%）。请检查答案文件格式，或切换到"合并导入"模式。');
+          }
+          return;
+        }
+
+        // 回退：后端解析失败，使用本地解析
+        ElMessage.warning('后端解析未返回结果，使用本地解析...');
+        // 重新解析题目
         this.state.rawTextPreview = this.state.separateQuestionsRawText;
         this.parseRawTextToQuestions();
         var questions = this.state.parsedDocsQuestions;
-
         if (!questions.length) {
           ElMessage.warning('题目文件未能解析出有效题目');
           return;
         }
-
-        // 检测双文件相似度
-        var sim = this._textSimilarity(
-          this.state.separateQuestionsRawText.substring(0, 8000),
-          this.state.separateAnswersRawText.substring(0, 8000)
-        );
-
-        // ===== 策略0: 后端智能匹配（优先，异步调用） =====
-        var backendResult = await this._backendSmartMatch();
-        if (backendResult && backendResult.questions && backendResult.match_rate >= 90) {
-          // 检查后端返回的题目数是否合理（>=前端的85%）
-          var backendCount = backendResult.total_questions;
-          var localCount = questions.length;
-          if (backendCount >= localCount * 0.85) {
-            // 后端题目数合理，直接使用
-            this.state.parsedDocsQuestions = backendResult.questions;
-            this.state.separateMatchRate = backendResult.match_rate;
-            this.state.duplicateCount = backendResult.questions.filter(function(q) { return q._is_duplicate; }).length;
-            var dupMsg = this.state.duplicateCount > 0 ? ('，⚠ ' + this.state.duplicateCount + ' 题已存在（将自动跳过）') : '';
-            ElMessage.success('后端智能匹配：匹配率 ' + backendResult.match_rate + '%（' + backendResult.matched_count + '/' + backendResult.total_questions + '）' + dupMsg + ' | 策略：' + (backendResult.strategy_used || '智能'));
-            if (backendResult.auto_detected_subject) {
-              this.state.form.subject_category = backendResult.auto_detected_subject;
-            }
-            return;
-          } else {
-            // 后端丢失了题目（只识别出backendCount题但前端有localCount题）
-            // 保留前端解析 + 用后端答案匹配到前端题目
-            ElMessage.warning('后端仅识别' + backendCount + '题（前端' + localCount + '题），将使用前端解析结果并智能匹配答案');
-            this._applyBackendAnswersToLocalQuestions(questions, backendResult.questions);
-            this.state.parsedDocsQuestions = questions;
-            // 重新计算匹配率
-            var ansCount = questions.filter(function(q) { return q.answer && q.answer !== '待补充'; }).length;
-            var newRatio = localCount > 0 ? Math.round(ansCount * 100 / localCount) : 0;
-            this.state.separateMatchRate = newRatio;
-            if (backendResult.auto_detected_subject) {
-              this.state.form.subject_category = backendResult.auto_detected_subject;
-            }
-            ElMessage.success('智能匹配完成：匹配率 ' + newRatio + '%（' + ansCount + '/' + localCount + '）| 含解析 ' + backendResult.analysis_count + ' 题');
-            return;
-          }
-        }
-
-        // 如果后端匹配率不够理想，继续使用前端策略补充
-        var answerMap = this.parseAnswerTextToMap(this.state.separateAnswersRawText);
-
-        // ===== 策略2: 连续答案序列（1-5: ABCCD） =====
-        var seqMap = this._parseAnswerSequence(this.state.separateAnswersRawText);
-        for (var sn in seqMap) {
-          if (seqMap.hasOwnProperty(sn) && !answerMap.hasOwnProperty(sn)) {
-            answerMap[sn] = seqMap[sn];
-          }
-        }
-
-        // ===== 策略3: 从题目文本自身提取内联答案 =====
-        var inlineMap = this._reExtractInlineAnswers(this.state.separateQuestionsRawText);
-        for (var ik in inlineMap) {
-          if (inlineMap.hasOwnProperty(ik) && !answerMap.hasOwnProperty(ik)) {
-            answerMap[ik] = inlineMap[ik];
-          }
-        }
-
-        // ===== 策略4: 两文件高度相似时，从答案文件中提取内联答案 =====
-        if (sim > 0.85) {
-          var inlineFromAns = this._reExtractInlineAnswers(this.state.separateAnswersRawText);
-          for (var ak in inlineFromAns) {
-            if (inlineFromAns.hasOwnProperty(ak) && !answerMap.hasOwnProperty(ak)) {
-              answerMap[ak] = inlineFromAns[ak];
-            }
-          }
-        }
-
-        // ===== 基于题号的精确匹配 =====
+        // 尝试本地匹配（简化版：仅使用纯序列匹配）
+        var answerMap = this._parseAnswerSequence(this.state.separateAnswersRawText);
         var matchedCount = 0;
-        var analysisCount = 0;
-        var noAnsQuestionNums = [];   // 题目有但答案文件中找不到
-        var unmatchedAnswerNums = []; // 答案文件中有但题目中没有（多余答案）
-        var answerKeysUsed = {};
-
-        // 构建答案题号集合
-        var answerNumSet = {};
-        for (var ank in answerMap) {
-          if (answerMap.hasOwnProperty(ank)) answerNumSet[parseInt(ank)] = true;
-        }
-
-        // 逐题匹配
         for (var qi = 0; qi < questions.length; qi++) {
-          var qNum = questions[qi].question_number;
-          // question_number 可能未设置（旧数据兼容），回退到索引
-          if (qNum === undefined || qNum === null) qNum = qi + 1;
-          var ansEntry = answerMap[qNum];
-
-          if (ansEntry) {
-            answerKeysUsed[qNum] = true;
-            if (ansEntry.answer && /[A-D\u5bf9\u9519\u6b63\u786e\u9519\u8bef\u662f\u5426]/.test(ansEntry.answer)) {
-              var cleaned = ansEntry.answer.toUpperCase();
-              if (cleaned === '\u5bf9' || cleaned === '\u6b63\u786e' || cleaned === '\u662f') cleaned = 'A';
-              else if (cleaned === '\u9519' || cleaned === '\u9519\u8bef' || cleaned === '\u5426') cleaned = 'B';
-              if (/[A-D]/.test(cleaned)) {
-                questions[qi].answer = cleaned;
-                matchedCount++;
-              }
-            }
-            if (ansEntry.analysis && ansEntry.analysis.length > 10) {
-              questions[qi].analysis = ansEntry.analysis;
-              analysisCount++;
-            }
-          } else {
-            noAnsQuestionNums.push(qNum);
+          var ansEntry = answerMap[qi + 1];
+          if (ansEntry && ansEntry.answer) {
+            questions[qi].answer = ansEntry.answer;
+            matchedCount++;
           }
         }
-
-        // 找出答案文件中多余的题号
-        for (var ank2 in answerMap) {
-          if (answerMap.hasOwnProperty(ank2) && !answerKeysUsed[ank2]) {
-            unmatchedAnswerNums.push(parseInt(ank2));
-          }
-        }
-
-        // ===== 策略5: 兜底 — 前5题全无匹配 + 相似度 > 0.6 → 用题目文本内联答案 =====
-        var first5Match = 0;
-        for (var fi = 0; fi < Math.min(5, questions.length); fi++) {
-          if (questions[fi].answer && questions[fi].answer !== '待补充') first5Match++;
-        }
-        if (first5Match === 0 && sim > 0.6) {
-          var fallback = this._reExtractInlineAnswers(this.state.separateQuestionsRawText);
-          for (var fk in fallback) {
-            if (fallback.hasOwnProperty(fk)) {
-              var fn = parseInt(fk);
-              var found = false;
-              for (var fqi = 0; fqi < questions.length; fqi++) {
-                if (questions[fqi].question_number === fn || (questions[fqi].question_number === undefined && (fqi + 1) === fn)) {
-                  if (!questions[fqi].answer || questions[fqi].answer === '待补充') {
-                    questions[fqi].answer = fallback[fk].answer;
-                    if (fallback[fk].analysis) questions[fqi].analysis = fallback[fk].analysis;
-                    matchedCount++;
-                  }
-                  found = true;
-                  break;
-                }
-              }
-            }
-          }
-        }
-
-        // ===== 策略6: 位置兜底匹配（所有格式策略失败时） =====
-        if (matchedCount === 0 && questions.length > 0) {
-          var posMatched = this._positionBasedFallbackMatch(questions, this.state.separateAnswersRawText);
-          if (posMatched > 0) {
-            matchedCount += posMatched;
-            // 从未匹配列表中移除已位置匹配的
-            var newNoAns = [];
-            for (var ni = 0; ni < noAnsQuestionNums.length; ni++) {
-              var qIdx = -1;
-              for (var qi2 = 0; qi2 < questions.length; qi2++) {
-                if (questions[qi2].question_number === noAnsQuestionNums[ni]) { qIdx = qi2; break; }
-              }
-              if (qIdx >= 0 && (!questions[qIdx].answer || questions[qIdx].answer === '待补充')) {
-                newNoAns.push(noAnsQuestionNums[ni]);
-              }
-            }
-            noAnsQuestionNums = newNoAns;
-          }
-        }
-
-        // ===== 结构化结果报告 =====
         var ratio = questions.length > 0 ? Math.round(matchedCount * 100 / questions.length) : 0;
-        // 存储匹配率到state，供模板中使用
         this.state.separateMatchRate = ratio;
-
-        // 构建详细报告
-        var reportParts = [];
-        reportParts.push('匹配率 ' + ratio + '%（' + matchedCount + '/' + questions.length + '）');
-        if (analysisCount > 0) reportParts.push('含解析 ' + analysisCount + ' 题');
-
-        if (noAnsQuestionNums.length > 0) {
-          // 限制展示数量
-          var showNums = noAnsQuestionNums.slice(0, 15);
-          var numStr = showNums.join('、');
-          if (noAnsQuestionNums.length > 15) numStr += '...等共' + noAnsQuestionNums.length + '题';
-          reportParts.push('缺答案: 第' + numStr);
-        }
-
-        if (this._answerDupWarnings && this._answerDupWarnings.length > 0) {
-          var dupNums = this._answerDupWarnings.slice(0, 10);
-          reportParts.push('答案重复: ' + dupNums.join('、') + '（已使用第一条）');
-        }
-
-        if (unmatchedAnswerNums.length > 0) {
-          var extraNums = unmatchedAnswerNums.slice(0, 10);
-          var extraStr = extraNums.join('、');
-          if (unmatchedAnswerNums.length > 10) extraStr += '...等共' + unmatchedAnswerNums.length + '条';
-          reportParts.push('多余答案: ' + extraStr + '（题目文档中无对应）');
-        }
-
-        // 保存未匹配题目索引
-        this.state._unmatchedIndices = [];
-        for (var ui = 0; ui < questions.length; ui++) {
-          if (!questions[ui].answer || questions[ui].answer === '待补充') {
-            this.state._unmatchedIndices.push(ui);
-          }
-        }
-
-        var fullReport = reportParts.join(' | ');
         if (ratio >= 99) {
-          ElMessage.success('匹配完成：' + fullReport);
-        } else if (ratio >= 90) {
-          ElMessage.warning('匹配完成：' + fullReport);
+          ElMessage.success('本地匹配完成：匹配率 ' + ratio + '%');
         } else {
-          ElMessage.error('匹配率偏低：' + fullReport + '。请检查答案文件格式是否正确，或切换到"合并导入"模式。');
+          ElMessage.warning('本地匹配率 ' + ratio + '%。建议检查答案文档格式。');
         }
       },
-      // ========== 二次验证：重新校验单题选项分割 ==========
+      showManualMatchDialog() {
+        this.state.manualMatchVisible = true;
+      },
+      onManualMatchConfirm(data) {
+        this.state.manualMatchVisible = false;
+        if (data && data.questions) {
+          this.state.parsedDocsQuestions = data.questions;
+          this.state.separateMatchRate = data.matchRate || 0;
+        }
+        ElMessage.success('手动匹配完成，匹配率 ' + (data.matchRate || 0) + '%');
+      },
+      onManualMatchCancel() {
+        this.state.manualMatchVisible = false;
+      },
       reVerifyQuestion(idx) {
         var q = this.state.parsedDocsQuestions[idx];
         if (!q) return;
@@ -2137,7 +2207,7 @@
             body: JSON.stringify({
               paper_name: this.state.batchPaperName || 'Word导入',
               subject_category: q.subject_category || '公专',
-              question_type_detail: q.question_type_detail || '选择题',
+              question_type_detail: q.question_type_detail || '单选题',
               question_content: q.question_content,
               options: q.options,
               answer: q.answer || '',
@@ -2165,8 +2235,8 @@
       async importAllParsedQuestions() {
         const mode = this.state.importMode;
         // 分离导入模式下检查匹配率
-        if (mode === 'separate' && this.state.separateMatchRate < 99) {
-          ElMessage.error('匹配率仅 ' + this.state.separateMatchRate + '%，低于99%要求，无法批量导入。请检查答案文件格式或手动补充答案后重试。');
+        if (mode === 'separate' && this.state.separateMatchRate < 70) {
+          ElMessage.error('匹配率仅 ' + this.state.separateMatchRate + '%，低于70%最低要求，无法批量导入。请检查答案文件格式或手动匹配后重试。');
           return;
         }
         // 过滤掉已导入和标记为重复的题目
@@ -2192,13 +2262,18 @@
         }
         this.state.loading = true;
         this.state.importProgress = 0;
+        // 更新进度条到最后阶段(导入入库)
+        var lastStepIdx = this.state.progressSteps.length - 1;
+        if (lastStepIdx >= 0) { this.stepActive(lastStepIdx); this.setProgress(lastStepIdx, 0); }
         let ok = 0;
         let dup = 0;
         let fail = 0;
         var total = pending.length;
         for (let i = 0; i < pending.length; i++) {
           const q = pending[i];
-          this.state.importProgress = Math.round((i + 1) * 100 / total);
+          var pct = Math.round((i + 1) * 100 / total);
+          this.state.importProgress = pct;
+          if (lastStepIdx >= 0) this.setProgress(lastStepIdx, pct);
           try {
             const res = await this.fetchWithRetry('/api/questions/import/single', {
               method: 'POST',
@@ -2206,7 +2281,7 @@
               body: JSON.stringify({
                 paper_name: this.state.batchPaperName || 'Word导入',
                 subject_category: q.subject_category || '公专',
-                question_type_detail: q.question_type_detail || '选择题',
+                question_type_detail: q.question_type_detail || '单选题',
                 question_content: q.question_content,
                 options: q.options,
                 answer: q.answer || '',
@@ -2228,6 +2303,9 @@
           } catch (e) { fail++; }
         }
         this.state.duplicateCount = dup;
+        // 进度条完成
+        var lastIdx = this.state.progressSteps.length - 1;
+        if (lastIdx >= 0) { this.stepDone(lastIdx); this.setProgress(lastIdx, 100); }
         ElMessage.success('导入完成：成功 ' + ok + ' 题，重复 ' + dup + ' 题，失败 ' + fail + ' 题');
         this.loadRecords();
         // 通知题库首页刷新数据
@@ -2347,6 +2425,47 @@
     background: rgba(200,22,30,0.6);
     border-color: #c41e3a;
     box-shadow: 0 0 12px rgba(200,22,30,0.3);
+  }
+  /* ====== 头部阶段进度条 ====== */
+  .import-progress-wrap {
+    padding: 0 32px 8px;
+    background: linear-gradient(135deg, rgba(10,22,40,0.95) 0%, rgba(20,30,55,0.9) 100%);
+  }
+  .import-progress-steps {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0 4px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .progress-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: rgba(255,255,255,0.25);
+    transition: color 0.3s;
+  }
+  .progress-step.done { color: #22c55e; }
+  .progress-step.active { color: #c41e3a; font-weight: 700; }
+  .progress-step-arrow { color: rgba(255,255,255,0.15); font-size: 11px; }
+  .step-check { font-size: 12px; font-weight: 700; }
+  .import-progress-bar {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 0;
+  }
+  .import-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #c41e3a, #e8384f);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  .import-progress-fill.done {
+    background: linear-gradient(90deg, #22c55e, #16a34a);
   }
   .import-body {
     max-width: 1000px;
@@ -2889,5 +3008,27 @@
     padding: 8px 12px;
     border-radius: 6px;
     margin-top: 4px;
+  }
+  /* ====== 手动匹配弹窗遮罩层 ====== */
+  .manual-match-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+  }
+  .manual-match-modal {
+    width: 90%;
+    height: 80%;
+    max-width: 1200px;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }
 </style>
