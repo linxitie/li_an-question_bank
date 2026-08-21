@@ -86,6 +86,127 @@ class TextPreprocessor:
         return text
 
 
+# ============ QuestionNumberRecognizer: 题号识别器 ============
+
+class QuestionNumberRecognizer:
+    """
+    带置信度的题号识别器，支持多种题号格式。
+    """
+
+    # 中文数字映射（长词优先，避免"十"误匹配"十一"）
+    CN_NUM_MAP = {
+        '二十': 20, '十九': 19, '十八': 18, '十七': 17, '十六': 16,
+        '十五': 15, '十四': 14, '十三': 13, '十二': 12, '十一': 11,
+        '十': 10, '九': 9, '八': 8, '七': 7, '六': 6,
+        '五': 5, '四': 4, '三': 3, '二': 2, '一': 1,
+    }
+
+    # 数字题号正则（锚定行首，避免匹配正文中的数字）
+    PATTERNS = [
+        re.compile(r'^\s*(\d+)\.\s*'),           # 1.
+        re.compile(r'^\s*(\d+)、\s*'),           # 1、
+        re.compile(r'^\s*(\d+)．\s*'),           # 1．
+        re.compile(r'^\s*(\d+)\s*[)）]\s*'),     # 1) / 1）
+        re.compile(r'^\s*[\(（](\d+)[)）]\s*'),   # (1) / （1）
+        re.compile(r'^\s*\[(\d+)\]\s*'),         # [1]
+        re.compile(r'^\s*第(\d+)题\s*'),          # 第1题
+        re.compile(r'^\s*Q(\d+)[:：]\s*'),        # Q1: / Q1：
+        re.compile(r'^\s*问题(\d+)\s*'),          # 问题1
+        re.compile(r'^\s*题(\d+)\s*'),            # 题1
+    ]
+
+    def recognize_with_confidence(self, text: str) -> list:
+        """
+        带置信度的题号识别。
+        返回：[{number, position, format, confidence, context}]
+        """
+        if not text:
+            return []
+
+        results = []
+        lines = text.split('\n')
+
+        for line_num, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            # 1. 尝试数字题号模式（优先）
+            matched = False
+            for pattern in self.PATTERNS:
+                match = pattern.match(stripped)
+                if match:
+                    number = int(match.group(1))
+                    confidence = 0.8
+                    # 连续题号提高置信度
+                    if results and number == results[-1]['number'] + 1:
+                        confidence = 0.95
+                    results.append({
+                        'number': number,
+                        'position': line_num,
+                        'format': pattern.pattern,
+                        'confidence': confidence,
+                        'context': stripped[:60],
+                    })
+                    matched = True
+                    break
+
+            # 2. 尝试中文数字题号（"一、"、"二、"等）
+            if not matched:
+                cn_match = re.match(r'^\s*([一二三四五六七八九十]+)、\s*', stripped)
+                if cn_match:
+                    cn_text = cn_match.group(1)
+                    number = self._cn_to_number(cn_text)
+                    if number is not None:
+                        confidence = 0.8
+                        if results and number == results[-1]['number'] + 1:
+                            confidence = 0.95
+                        results.append({
+                            'number': number,
+                            'position': line_num,
+                            'format': 'cn_number',
+                            'confidence': confidence,
+                            'context': stripped[:60],
+                        })
+
+        return results
+
+    def _cn_to_number(self, cn_text: str) -> Optional[int]:
+        """将中文数字转换为阿拉伯数字（长词优先）"""
+        for cn, num in self.CN_NUM_MAP.items():
+            if cn_text == cn:
+                return num
+        return None
+
+    def resolve_conflicts(self, candidates: list) -> list:
+        """
+        解决题号识别冲突。
+        使用连续性判断选择最长的连续序列。
+        """
+        if not candidates:
+            return []
+
+        # 按位置排序
+        sorted_candidates = sorted(candidates, key=lambda x: x['position'])
+
+        # 选择连续性最好的序列
+        best_sequence = []
+        current_sequence = [sorted_candidates[0]]
+
+        for i in range(1, len(sorted_candidates)):
+            if sorted_candidates[i]['number'] == current_sequence[-1]['number'] + 1:
+                current_sequence.append(sorted_candidates[i])
+            else:
+                if len(current_sequence) > len(best_sequence):
+                    best_sequence = current_sequence
+                current_sequence = [sorted_candidates[i]]
+
+        if len(current_sequence) > len(best_sequence):
+            best_sequence = current_sequence
+
+        return best_sequence
+
+
 # ============ ContentCleaner: 噪声过滤器 ============
 
 class ContentCleaner:
