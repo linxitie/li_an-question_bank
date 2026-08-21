@@ -11,6 +11,7 @@
 7. 智能匹配主入口（用于分离导入）
 """
 import re
+import os
 import logging
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional, Tuple
@@ -21,7 +22,356 @@ logger = logging.getLogger(__name__)
 # ============ 常量 ============
 
 # 去重相似度阈值（>= 此值视为重复）
-DEDUP_SIMILARITY_THRESHOLD = 0.80
+DEDUP_SIMILARITY_THRESHOLD = 0.75  # 从0.80降低，更严格的去重
+
+# ============ TextPreprocessor: 文本预处理器 ============
+
+class TextPreprocessor:
+    """
+    文本预处理器：清理空白、去除干扰、统一题号格式
+    """
+
+    # 中文数字映射
+    CN_NUM_MAP = {
+        '一': '1', '二': '2', '三': '3', '四': '4', '五': '5',
+        '六': '6', '七': '7', '八': '8', '九': '9', '十': '10',
+        '十一': '11', '十二': '12', '十三': '13', '十四': '14', '十五': '15',
+        '十六': '16', '十七': '17', '十八': '18', '十九': '19', '二十': '20',
+    }
+
+    def clean_text(self, text: str) -> str:
+        """
+        文本预处理流程：
+        1. 统一编码：UTF-8
+        2. 统一字符：全角→半角，中文标点→英文标点
+        3. 清理空白：多余空格、换行、制表符
+        4. 去除干扰：页眉、页脚、水印、页码
+        5. 统一题号格式：所有题号统一为"数字."格式
+        """
+        if not text:
+            return ""
+
+        # 1. 清理空白：匹配场景下彻底移除空白（中文题目中空格均为提取噪声）
+        text = re.sub(r'\s+', '', text)
+
+        # 2. 去除页码
+        text = re.sub(r'第\s*\d+\s*页', '', text)
+        text = re.sub(r'\d+\s*页', '', text)
+
+        # 3. 去除页眉页脚（常见格式）
+        text = re.sub(r'^(.*?)(?:页眉|页脚|水印).*?$', '', text, flags=re.MULTILINE)
+
+        return text
+
+    def normalize_question_numbers(self, text: str) -> str:
+        """
+        统一题号格式：
+        - "一、" → "1."
+        - "（1）" → "1."
+        - "第1题" → "1."
+        - "Q1:" → "1."
+        """
+        if not text:
+            return ""
+
+        # 替换中文数字题号
+        for cn, num in self.CN_NUM_MAP.items():
+            text = re.sub(re.escape(cn) + r'、', f'{num}.', text)
+
+        # 替换其他格式
+        text = re.sub(r'（(\d+)）', r'\1.', text)
+        text = re.sub(r'第(\d+)题', r'\1.', text)
+        text = re.sub(r'Q(\d+):', r'\1.', text)
+
+        return text
+
+
+# ============ ContentCleaner: 噪声过滤器 ============
+
+class ContentCleaner:
+    """
+    过滤文档中的无关内容（页眉、页脚、页码、日期、目录标记等）。
+    采用两阶段过滤：行级模式匹配 → 重复行检测。
+    """
+
+    # 行级噪声模式 (pattern, label)
+    NOISE_PATTERNS = [
+        (re.compile(r'^\s*\d{1,4}\s*$'), 'page_number'),            # 纯数字 → 页码
+        (re.compile(r'^\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?\s*$'), 'date'),  # 日期
+        (re.compile(r'^第\s*\d+\s*页\s*(?:共\s*\d+\s*页)?$'), 'page_label'),  # 第N页
+        (re.compile(r'^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]'), 'toc_marker'),   # 目录标记
+        (re.compile(r'^\s*(?:版权所有|翻印必究|内部资料|机密|绝密|秘密)\s*$'), 'classification'),  # 密级标记
+        (re.compile(r'^\s*(?:·\s*\d+\s*·|-\s*\d+\s*-)\s*$'), 'separator'),  # 分隔符 · 1 · / - 1 -
+        (re.compile(r'^\s*_{3,}\s*$'), 'hr'),                      # 下划线分隔
+        (re.compile(r'^\s*-{3,}\s*$'), 'hr_dash'),                 # 短横线分隔
+        (re.compile(r'^\s*\*{3,}\s*$'), 'hr_star'),                # 星号分隔
+        (re.compile(r'^https?://\S+$'), 'url'),                    # URL
+        (re.compile(r'^(?:扫描|扫一扫|二维码|关注|公众号|微信|QQ)\S*$'), 'social'),  # 社交推广
+        # === 第3波：推广/营销/联系方式过滤 ===
+        (re.compile(r'(?:来源|整理|编辑|制作|供稿|文\s*[／/]|作者)\s*[：:：]\s*.+'), 'credit_line'),
+        (re.compile(r'(?:微信|QQ|手机|电话|联系方式|咨询)\s*[：:：]\s*[\d\w]+'), 'contact'),
+        (re.compile(r'关注\s*(?:公众号|微信|微博|抖音|小红书)\s*[：:：]?\s*\S+'), 'social_promo'),
+        (re.compile(r'(?:扫码|扫一扫|二维码)\S*'), 'qr_promo'),
+        (re.compile(r'(?:上岸|保过|报班|课程咨询|免费领取|加微信|加QQ|联系客服|获取.*更新|一个上岸)\S*'), 'ad'),
+        (re.compile(r'(?:gwy\d+|gwyeasy|gk\d+|ht\d+)'), 'account_id'),
+        (re.compile(r'(?:淘宝|taobao|拼多多|京东|闲鱼)\S*'), 'ecommerce'),
+        (re.compile(r'^\s*(?:更多|全部|查看全文|阅读原文)\s*[：:：]?\s*$'), 'more_link'),
+        (re.compile(r'http[s]?://\S+'), 'url_inline'),
+    ]
+
+    # 页眉页脚检测：在文档中重复出现 ≥ HEADER_FOOTER_THRESHOLD 次的短行
+    HEADER_FOOTER_THRESHOLD = 3
+    HEADER_FOOTER_MAX_LENGTH = 60  # 页眉页脚通常较短
+
+    @classmethod
+    def clean(cls, lines: List[str]) -> List[str]:
+        """
+        过滤文本行中的噪声。
+        返回过滤后的行列表。
+        """
+        if not lines:
+            return []
+
+        # Phase 1: 行级模式过滤
+        filtered = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue  # 跳过完全空行
+            is_noise = False
+            for pattern, label in cls.NOISE_PATTERNS:
+                if pattern.match(stripped):
+                    logger.debug(f"[ContentCleaner] 过滤噪声({label}): {stripped[:50]}")
+                    is_noise = True
+                    break
+            if not is_noise:
+                filtered.append(line)
+
+        if not filtered:
+            return filtered
+
+        # Phase 2: 重复短行检测（页眉/页脚特征）
+        line_counts: Dict[str, List[int]] = {}
+        for i, line in enumerate(filtered):
+            stripped = line.strip()
+            if len(stripped) <= cls.HEADER_FOOTER_MAX_LENGTH and len(stripped) > 1:
+                line_counts.setdefault(stripped, []).append(i)
+
+        repeated_indices = set()
+        for text, indices in line_counts.items():
+            if len(indices) >= cls.HEADER_FOOTER_THRESHOLD:
+                # 检查是否均匀分布（页眉页脚的特征：出现在文档开头或结尾附近）
+                first_pos = indices[0] / max(len(filtered), 1)
+                last_pos = indices[-1] / max(len(filtered), 1)
+                if first_pos < 0.1 or last_pos > 0.9 or len(indices) >= 5:
+                    logger.debug(f"[ContentCleaner] 过滤重复行(×{len(indices)}): {text[:50]}")
+                    repeated_indices.update(indices)
+
+        if repeated_indices:
+            filtered = [line for i, line in enumerate(filtered) if i not in repeated_indices]
+
+        return filtered
+
+    @classmethod
+    def clean_text(cls, text: str) -> str:
+        """对完整文本进行噪声过滤，返回清理后的文本"""
+        if not text:
+            return ''
+        lines = text.split('\n')
+        cleaned = cls.clean(lines)
+        return '\n'.join(cleaned)
+
+    # 无关图片文件名黑名单
+    IRRELEVANT_IMAGE_PATTERNS = [
+        re.compile(r'(?:qr|qrcode|二维码|erweima)', re.IGNORECASE),
+        re.compile(r'(?:wechat|weixin|微信)', re.IGNORECASE),
+        re.compile(r'(?:taobao|淘宝|拼多多|京东|闲鱼|天猫)', re.IGNORECASE),
+        re.compile(r'(?:广告|ad|promo|推广)', re.IGNORECASE),
+        re.compile(r'(?:logo|图标|头像|avatar)', re.IGNORECASE),
+        re.compile(r'(?:公众号|订阅号|gzh)', re.IGNORECASE),
+    ]
+
+    @classmethod
+    def is_irrelevant_image(cls, filename: str, position_ratio: float = 0.0) -> bool:
+        """
+        判断图片是否与题目内容无关（二维码、推广图、尾部广告等）。
+
+        Args:
+            filename: 图片文件名或路径
+            position_ratio: 图片在文档中的位置比例（0.0~1.0），末尾>0.85的图片大概率是广告
+        """
+        if not filename:
+            return False
+        # 文档末尾的图片（最后15%）→ 大概率是广告/二维码
+        if position_ratio > 0.85:
+            return True
+        # 文件名匹配黑名单
+        basename = os.path.basename(filename) if os.path else filename
+        for pattern in cls.IRRELEVANT_IMAGE_PATTERNS:
+            if pattern.search(basename):
+                return True
+        return False
+
+    @classmethod
+    def clean_question_content(cls, text: str) -> str:
+        """
+        对单条题目内容进行深度清洗。
+
+        在 clean_text 基础上额外处理：
+        1. 移除尾随的行内 URL
+        2. 移除末尾来源/整理行（倒数 3 行内匹配 credit_line）
+        3. 移除文档末尾纯推广段落
+        4. 移除行内推广关键词（保留题干正文）
+        """
+        if not text:
+            return ''
+
+        # 先执行标准行级清洗
+        cleaned = cls.clean_text(text)
+        if not cleaned:
+            return cleaned
+
+        lines = cleaned.split('\n')
+        if not lines:
+            return cleaned
+
+        # 逐行处理：移除行内 URL（保留前面的正文）
+        url_inline_pattern = re.compile(r'http[s]?://\S+')
+        processed = []
+        for line in lines:
+            stripped = line.strip()
+            # 如果整行就是 URL，跳过
+            if url_inline_pattern.fullmatch(stripped):
+                continue
+            # 如果行以 URL 开头，跳过
+            if url_inline_pattern.match(stripped):
+                continue
+            # 移除行尾 URL（保留正文）
+            line = url_inline_pattern.sub('', line).strip()
+            if line:
+                processed.append(line)
+
+        if not processed:
+            return ''
+
+        # 从末尾开始检查：移除来源/整理行
+        credit_pattern = re.compile(
+            r'(?:来源|整理|编辑|制作|供稿|文\s*[／/]|作者)\s*[：:：]'
+        )
+        tail_remove_count = 0
+        for i in range(len(processed) - 1, max(len(processed) - 4, -1), -1):
+            line = processed[i].strip()
+            if credit_pattern.search(line):
+                tail_remove_count += 1
+            elif re.search(r'(?:gwy\d+|gwyeasy|gk\d+|微信|公众号|关注|上岸)',
+                          line, re.IGNORECASE):
+                tail_remove_count += 1
+            else:
+                break
+
+        if tail_remove_count > 0:
+            processed = processed[:len(processed) - tail_remove_count]
+
+        # 移除首尾空行
+        while processed and not processed[0].strip():
+            processed.pop(0)
+        while processed and not processed[-1].strip():
+            processed.pop()
+
+        return '\n'.join(processed)
+
+
+# ============ 增强纯序列匹配 ============
+
+def _match_pure_sequence_enhanced(answer_text: str, question_count: int) -> Dict[int, Dict[str, Optional[str]]]:
+    """
+    增强版纯序列匹配——处理无题号的纯答案序列。
+    支持格式：
+    - 空格分隔: "A B C D A B C D"
+    - 换行分隔: "A\\nB\\nC\\nD"
+    - 逗号分隔: "A,B,C,D"
+    - 中文答案: "对 错 对 错"
+    - 混合格式: "1A 2B 3C 4D"
+    - 连续无分隔: "ABCDABCD"
+
+    校验规则：
+    - 提取的答案数 ≈ 题目数(误差<20%) → 高置信度按位置映射
+    - 答案数明显少于题目 → 标记为低置信度
+    - 答案数为0 → 返回空
+    """
+    if not answer_text or not answer_text.strip():
+        return {}
+
+    text = answer_text.strip()
+
+    # 策略1: 混合格式 "1A 2B 3C 4D" 或 "1.A 2.B 3.C 4.D"
+    mixed_pattern = re.compile(r'(?:^|\s)(\d+)\s*[.、．)）]?\s*([A-Da-d对错正确错误是否])(?=\s|$)')
+    mixed_matches = mixed_pattern.findall(text)
+    if mixed_matches and len(mixed_matches) >= 2:
+        result = {}
+        for num_str, ans_str in mixed_matches:
+            num = int(num_str)
+            ans = ans_str.upper()
+            if ans in CN_ANSWER_MAP:
+                ans = CN_ANSWER_MAP[ans]
+            if ans and all(c in "ABCD" for c in str(ans)) and num not in result:
+                result[num] = {'answer': ans, 'analysis': None}
+        if len(result) >= min(2, question_count * 0.5):
+            return result
+
+    # 策略2: 提取所有单独的A-D字母（处理空格/逗号/换行分隔）
+    # 先规范化：将所有分隔符替换为空格
+    normalized = re.sub(r'[\s,;，；、\n\r]+', ' ', text)
+    # 提取所有独立的A-D字母或中文答案
+    tokens = normalized.split()
+    answers = []
+    for token in tokens:
+        token_upper = token.strip().upper()
+        if len(token_upper) == 1 and token_upper in 'ABCD':
+            answers.append(token_upper)
+        elif token_upper in CN_ANSWER_MAP:
+            answers.append(CN_ANSWER_MAP[token_upper])
+        # 也处理中文答案
+        elif token in ('对', '正确', '是', '√'):
+            answers.append('A')
+        elif token in ('错', '错误', '否', '×'):
+            answers.append('B')
+
+    if answers:
+        # 校验：答案数应与题目数接近
+        tolerance = max(2, int(question_count * 0.2))
+        if abs(len(answers) - question_count) <= tolerance:
+            result = {}
+            for i, ans in enumerate(answers):
+                result[i + 1] = {'answer': ans, 'analysis': None}
+            return result
+        elif len(answers) >= question_count * 0.5:
+            # 答案偏少但仍有参考价值，标记为低置信度
+            result = {}
+            for i, ans in enumerate(answers):
+                result[i + 1] = {'answer': ans, 'analysis': None}
+            return result
+
+    # 策略3: 连续无分隔字符串 "ABCDABCD"（回退已有逻辑）
+    # 检查文本是否为纯字母+中文答案序列
+    pure = re.sub(r'[\s,;，；、\n\r]+', '', text)
+    all_answers = []
+    for ch in pure:
+        ch_upper = ch.upper()
+        if ch_upper in 'ABCD':
+            all_answers.append(ch_upper)
+        elif ch in ('对', '正', '是', '√'):
+            all_answers.append('A')
+        elif ch in ('错', '误', '否', '×'):
+            all_answers.append('B')
+
+    if all_answers and abs(len(all_answers) - question_count) <= max(3, int(question_count * 0.25)):
+        result = {}
+        for i, ans in enumerate(all_answers):
+            result[i + 1] = {'answer': ans, 'analysis': None}
+        return result
+
+    return {}
 
 # 题号提取正则模式（按优先级排列）
 QUESTION_NUMBER_PATTERNS = [
@@ -40,21 +390,23 @@ QUESTION_NUMBER_PATTERNS = [
 ]
 
 # 答案提取正则模式（按优先级排列）
+# 捕获组拓宽为含分隔符（、，,;；空白·），修复"A、B、C"只被截取为"A"的多选答案丢失问题。
+# range/per_item 仍保持连续字母，交由 parse_answer_sequence 按题号逐题处理（非多选场景）。
 ANSWER_PATTERNS = [
     # 【答案】C / 《答案》C / <答案>C / 答案:C
-    ('chinese_bracket', re.compile(r'[【《<\[]?\s*答\s*案\s*[】》>\]：:：]\s*([A-Da-d对错正确错误是否]+)')),
+    ('chinese_bracket', re.compile(r'[【《<\[]?\s*答\s*案\s*[】》>\]：:：]\s*([A-Da-d对错正确错误是否、，,;；\s·]+)')),
     # 答案：C / 参考答案：C
-    ('chinese_colon', re.compile(r'(?:参考)?答案\s*[：:：]\s*([A-Da-d对错正确错误是否]+)')),
+    ('chinese_colon', re.compile(r'(?:参考)?答案\s*[：:：]\s*([A-Da-d对错正确错误是否、，,;；\s·]+)')),
     # 正确选项：C / 正确答案: C
-    ('correct_option', re.compile(r'(?:正确选项|正确答案|正确)\s*[：:：]\s*([A-Da-d]+)')),
+    ('correct_option', re.compile(r'(?:正确选项|正确答案|正确)\s*[：:：]\s*([A-Da-d、，,;；\s·]+)')),
     # Answer: C / Answer Key: C
-    ('english', re.compile(r'Answer\s*(?:Key)?\s*[：:：]\s*([A-Da-d]+)', re.IGNORECASE)),
+    ('english', re.compile(r'Answer\s*(?:Key)?\s*[：:：]\s*([A-Da-d、，,;；\s·]+)', re.IGNORECASE)),
     # 选C / 选 C
-    ('choose', re.compile(r'选\s*([A-Da-d])')),
+    ('choose', re.compile(r'选\s*([A-Da-d、，,;；\s·]+)')),
     # 连续答案序列: 1-5: ABCCD
     ('range', re.compile(r'(\d+)\s*[-～~]\s*(\d+)\s*[：:：]\s*([A-Da-d对错正确错误是否]+)')),
     # 逐题答案: 1.C 2.B 3.A
-    ('per_item', re.compile(r'(?:^|\n)\s*(\d+)\s*[.、．)）]\s*([A-Da-d对错正确错误是否])\s*(?=\d|$|\n)')),
+    ('per_item', re.compile(r'(?:^|\n)\s*(\d+)\s*[.、．)）]\s*([A-Da-d对错正确错误是否]+)\s*(?=\d|$|\n)')),
 ]
 
 # ============ 嵌入式答案模式（答案隐藏在详细解析末尾） ============
@@ -62,25 +414,25 @@ ANSWER_PATTERNS = [
 # 优先级高于普通答案模式中的宽松匹配
 EMBEDDED_ANSWER_PATTERNS = [
     # 故本题答案为D / 故本题答案选D
-    ('gu_ben_ti', re.compile(r'故本题答案(?:为|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('gu_ben_ti', re.compile(r'故本题答案(?:为|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 故正确答案为C / 故正确答案是C
-    ('gu_zheng_que', re.compile(r'故正确(?:的)?答案(?:为|是|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('gu_zheng_que', re.compile(r'故正确(?:的)?答案(?:为|是|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 故答案为B / 故答案选B
-    ('gu_daan', re.compile(r'故答案(?:为|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('gu_daan', re.compile(r'故答案(?:为|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 因此本题答案为A / 因此本题选A
-    ('yin_ci_ben_ti', re.compile(r'因此本题答案(?:为|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('yin_ci_ben_ti', re.compile(r'因此本题答案(?:为|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 因此正确答案为D
-    ('yin_ci_zheng_que', re.compile(r'因此正确(?:的)?答案(?:为|是|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('yin_ci_zheng_que', re.compile(r'因此正确(?:的)?答案(?:为|是|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 因此答案为C / 因此选C
-    ('yin_ci_daan', re.compile(r'因此答案(?:为|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('yin_ci_daan', re.compile(r'因此答案(?:为|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 本题答案为B / 本题选B
-    ('ben_ti_daan', re.compile(r'本题答案(?:为|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('ben_ti_daan', re.compile(r'本题答案(?:为|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 正确答案是A / 正确选项为C（无冒号版本）
-    ('zheng_que_shi', re.compile(r'正确(?:答案|选项)(?:是|为|选)\s*[：:：]?\s*([A-Da-d])')),
+    ('zheng_que_shi', re.compile(r'正确(?:答案|选项)(?:是|为|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 应选D / 应选择D
-    ('ying_xuan', re.compile(r'应选(?:择)?\s*[：:：]?\s*([A-Da-d])')),
+    ('ying_xuan', re.compile(r'应选(?:择)?\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 答案为D。（句号结尾）
-    ('daan_wei', re.compile(r'答案(?:为|是)\s*[：:：]?\s*([A-Da-d])\s*[。.]')),
+    ('daan_wei', re.compile(r'答案(?:为|是)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)\s*[。.]')),
 ]
 
 # 中文答案映射
@@ -170,6 +522,98 @@ def compute_text_similarity(text_a: str, text_b: str) -> float:
 
 # ============ 模糊去重 ============
 
+# 去重阈值：0.70（从0.75降低，配合答案硬约束提高准确性）
+DEDUP_SIMILARITY_THRESHOLD = 0.70
+
+# 选项结构相似度权重（占综合得分的30%）
+OPTION_STRUCTURE_WEIGHT = 0.30
+# 内容相似度权重（占70%）
+CONTENT_SIMILARITY_WEIGHT = 0.70
+
+
+def _normalize_answer(answer: str) -> str:
+    """标准化答案格式：去空格、去标点、统一大写、全角→半角"""
+    if not answer:
+        return ''
+    # 全角字母 → 半角
+    result = []
+    for c in str(answer):
+        code = ord(c)
+        if 0xFF21 <= code <= 0xFF3A:  # 全角大写 A-Z
+            result.append(chr(code - 0xFEE0))
+        elif 0xFF41 <= code <= 0xFF5A:  # 全角小写 a-z
+            result.append(chr(code - 0xFEE0))
+        else:
+            result.append(c)
+    answer = ''.join(result)
+    # 去空格、标点
+    answer = re.sub(r'[\s,，、;；.\-—/|\\]', '', answer)
+    # 去中文修饰词
+    answer = re.sub(r'[对正确错误是否√×①②③④⑤⑥⑦⑧⑨⑩]', '', answer)
+    # 只保留字母和数字
+    letters = re.sub(r'[^A-Za-z0-9]', '', answer)
+    return letters.upper()
+
+
+def canonical_answer(answer: str) -> str:
+    """
+    答案归一化（单一事实来源，供答案提取/题型判定/读路径兜底共用）。
+
+    - 全角字母/数字/符号 → 半角
+    - 中文判断词映射：对/正确/是/√ → A，错/错误/否/× → B（按长度降序替换，避免子串误命中）
+    - 去分隔符/空白/标点，统一大写，仅保留 [A-Z0-9]
+
+    例：'A、B、C' → 'ABC'；'A B' → 'AB'；'对' → 'A'；'错误' → 'B'；'正确' → 'A'。
+
+    注意：本函数面向客观题（单选/多选/判断）的字母答案归一化；
+    论述/写作题的自由文本答案不应经此处理（会丢失正文）。
+    """
+    if not answer:
+        return ''
+    s = str(answer)
+    # 1. 全角 → 半角
+    s = ''.join(chr(ord(c) - 0xFEE0) if 0xFF01 <= ord(c) <= 0xFF5E else c for c in s)
+    # 2. 中文判断词 → 字母（长词优先，避免 '错' 先于 '错误' 命中）
+    cn_map_sorted = sorted(CN_ANSWER_MAP.items(), key=lambda kv: len(kv[0]), reverse=True)
+    for cn, letter in cn_map_sorted:
+        s = s.replace(cn, letter)
+    # 3. 仅保留字母与数字（同时去除分隔符/空白/标点/残余中文）
+    s = re.sub(r'[^A-Za-z0-9]', '', s)
+    return s.upper()
+
+
+def _extract_options_structure(text: str) -> str:
+    """
+    从题目内容中提取选项结构指纹。
+    返回标准化选项字符串，用于结构相似度比较。
+    """
+    if not text:
+        return ''
+    # 提取 A/B/C/D 选项标记和选项首字
+    option_pattern = re.compile(r'(?:^|\n)\s*([A-D])\s*[.、．)）]\s*(.{0,20})', re.MULTILINE)
+    matches = option_pattern.findall(text)
+    if not matches:
+        return ''
+    # 构建结构指纹：A:xxx|B:xxx|C:xxx|D:xxx
+    structure_parts = []
+    for key, val in matches:
+        # 标准化：去空白、取前10字符
+        clean_val = re.sub(r'\s+', '', val)[:10]
+        structure_parts.append(f"{key}:{clean_val}")
+    return '|'.join(structure_parts)
+
+
+def _compute_option_similarity(text_a: str, text_b: str) -> float:
+    """计算两段文本的选项结构相似度"""
+    struct_a = _extract_options_structure(text_a)
+    struct_b = _extract_options_structure(text_b)
+    if not struct_a and not struct_b:
+        return 0.0  # 都没有选项，结构上无差别
+    if not struct_a or not struct_b:
+        return 0.0  # 一个有选项一个没有，结构不同
+    return SequenceMatcher(None, struct_a, struct_b).ratio()
+
+
 def fuzzy_detect_duplicate(
     db_session,
     content: str,
@@ -178,20 +622,21 @@ def fuzzy_detect_duplicate(
     threshold: float = DEDUP_SIMILARITY_THRESHOLD
 ) -> Tuple[bool, Optional[Any], float]:
     """
-    模糊去重检测。
+    增强版模糊去重检测。
 
-    策略：
-    1. 先在数据库中精确匹配（快速路径）
-    2. 精确未命中时，按科目过滤候选集
-    3. 逐条计算标准化相似度，找到最佳匹配
-    4. 相似度 >= threshold 视为重复
+    增强策略（v2）：
+    1. 精确答案匹配（快速路径）
+    2. 跨科目候选集构建（不限 subject_id，全局去重）
+    3. 复合相似度计算：内容70% + 选项结构30%
+    4. 答案归一化硬约束：相似度达标 + 答案必须匹配 → 才算重复
+    5. 答案匹配时降低阈值到0.65（答案相同则更可能是同一题的不同版本）
 
     参数：
     - db_session: SQLAlchemy Session
     - content: 题目内容（题干）
-    - answer: 答案（可选，用于精确匹配优先）
-    - subject_id: 科目ID（可选，用于缩小候选范围）
-    - threshold: 相似度阈值，默认 0.80
+    - answer: 答案（可选，用于精确匹配和硬约束）
+    - subject_id: 科目ID（可选，设为None则跨科目检查）
+    - threshold: 相似度阈值，默认 0.70
 
     返回：
     - (is_duplicate, matched_question, best_similarity)
@@ -202,6 +647,7 @@ def fuzzy_detect_duplicate(
         return False, None, 0.0
 
     normalized_input = normalize_text_for_comparison(content)
+    normalized_answer = _normalize_answer(answer)
 
     # 第1步：精确答案匹配（题干+答案完全相同）— 快速路径
     exact = None
@@ -219,20 +665,41 @@ def fuzzy_detect_duplicate(
     if exact:
         return True, exact, 1.0
 
-    # 第2步：构建候选集
+    # 第2步：构建候选集（跨科目检查）
     query = db_session.query(QuestionBank).filter(QuestionBank.status != 0)
-    if subject_id is not None:
-        query = query.filter(QuestionBank.subject_id == subject_id)
 
-    # 大库优化：限制候选数量（取最近的500条 + 同科目的500条）
-    candidates = query.order_by(QuestionBank.question_id.desc()).limit(1000).all()
+    # 前缀匹配缩小候选范围
+    content_prefix = content[:20] if len(content) > 20 else content
+    candidates = query.filter(
+        QuestionBank.question_content.like(content_prefix[:10] + '%')
+    ).limit(800).all()
+
+    # 补充：答案匹配但前缀不同的候选（捕获改写后的同一题目）
+    if normalized_answer and len(candidates) < 200:
+        more = query.filter(
+            ~QuestionBank.question_id.in_(
+                [c.question_id for c in candidates]
+            ) if candidates else True
+        ).limit(500).all()
+        # 答案预筛选：匹配才加入
+        for q in more:
+            if _normalize_answer(q.answer or '') == normalized_answer:
+                candidates.append(q)
+
+    if len(candidates) < 50 and not normalized_answer:
+        more = query.filter(
+            ~QuestionBank.question_id.in_(
+                [c.question_id for c in candidates]
+            ) if candidates else True
+        ).limit(500).all()
+        candidates.extend(more)
 
     if not candidates:
         return False, None, 0.0
 
-    # 第3步：逐条比对
+    # 第3步：逐条比对（复合相似度 + 答案硬约束）
     best_match = None
-    best_score = 0.0
+    best_composite_score = 0.0
 
     for q in candidates:
         q_content = q.question_content or ''
@@ -244,19 +711,60 @@ def fuzzy_detect_duplicate(
         if len(normalized_input) > 0 and len(q_normalized) > 0:
             len_ratio = min(len(normalized_input), len(q_normalized)) / \
                         max(len(normalized_input), len(q_normalized))
-            if len_ratio < 0.4:  # 长度差超过60%，不太可能是同一题
+            if len_ratio < 0.35:  # 长度差超过65%
                 continue
 
-        score = SequenceMatcher(None, normalized_input, q_normalized).ratio()
-        if score > best_score:
-            best_score = score
+        # 计算内容相似度
+        content_score = SequenceMatcher(None, normalized_input, q_normalized).ratio()
+
+        # 计算选项结构相似度（仅当双方都有选项时）
+        option_score = _compute_option_similarity(content, q_content)
+
+        # 复合得分：内容70% + 选项结构30%
+        composite = content_score * CONTENT_SIMILARITY_WEIGHT + \
+                    option_score * OPTION_STRUCTURE_WEIGHT
+
+        if composite > best_composite_score:
+            best_composite_score = composite
             best_match = q
-            # 提前退出：如果已经 ≥ threshold 且答案也匹配，直接返回
-            if score >= threshold and answer and q.answer == answer:
+
+            # 答案硬约束检查
+            q_answer_normalized = _normalize_answer(q.answer or '')
+
+            # 情况A：双方都有答案 → 答案必须匹配 + 复合得分≥threshold
+            if normalized_answer and q_answer_normalized:
+                if normalized_answer == q_answer_normalized:
+                    # 答案相同 → 降低阈值到0.65
+                    effective_threshold = min(threshold, 0.65)
+                    if composite >= effective_threshold:
+                        break
+                # 答案不同 → 不算重复，继续寻找
+                else:
+                    best_match = None
+                    best_composite_score = 0.0
+                    continue
+
+            # 情况B：仅一方有答案 → 使用原始阈值（无答案硬约束）
+            elif composite >= threshold:
                 break
 
-    is_dup = best_score >= threshold
-    return is_dup, best_match, best_score
+    # 最终判定
+    if best_match is None:
+        return False, None, 0.0
+
+    # 有答案时：答案必须匹配才算重复
+    if normalized_answer and best_match.answer:
+        q_ans = _normalize_answer(best_match.answer)
+        if q_ans and normalized_answer != q_ans:
+            return False, None, best_composite_score
+
+    # 答案相同 → 更宽松的阈值（0.65）
+    effective_threshold = threshold
+    if normalized_answer and _normalize_answer(best_match.answer or '') == normalized_answer:
+        effective_threshold = min(threshold, 0.65)
+
+    is_dup = best_composite_score >= effective_threshold
+    return is_dup, best_match, best_composite_score
 
 
 # ============ 题号提取 ============
@@ -337,13 +845,12 @@ def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
     for fmt_name, pattern in ANSWER_PATTERNS:
         if fmt_name == 'range' or fmt_name == 'per_item':
             continue  # 这两个由专门的解析函数处理
-        m = pattern.search(full_text)
-        if m:
-            raw_answer = m.group(1).strip().upper() if m.lastindex and m.lastindex >= 1 else m.group(1).strip().upper()
-
-            # 中文答案映射
-            if raw_answer in CN_ANSWER_MAP:
-                raw_answer = CN_ANSWER_MAP[raw_answer]
+        # 修复：取最后一个匹配，避免题干中"答案：A"干扰
+        matches = list(pattern.finditer(full_text))
+        if matches:
+            m = matches[-1]
+            # 归一化答案：A、B、C → ABC；对/正确 → A；错/错误 → B
+            raw_answer = canonical_answer(m.group(1))
 
             # 提取解析（答案标记之后的文本）
             analysis_parts = []
@@ -370,10 +877,9 @@ def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
         if matches:
             # 取最后一个匹配（最接近末尾的答案）
             m = matches[-1]
-            raw_answer = m.group(1).strip().upper()
-            if raw_answer in CN_ANSWER_MAP:
-                raw_answer = CN_ANSWER_MAP[raw_answer]
-            if raw_answer in 'ABCD':
+            raw_answer = canonical_answer(m.group(1))
+            # 修复：支持多字母答案（如 ABCD），不再仅限单字母
+            if raw_answer and all(c in 'ABCD' for c in raw_answer) and len(raw_answer) <= 4:
                 # 整个文本块作为解析
                 return {
                     'answer': raw_answer,
@@ -381,10 +887,11 @@ def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
                     'format': f'embedded_{fmt_name}',
                 }
 
-    # 兜底：最后一行如果是孤立的大写字母，视为答案
+    # 兜底：最后一行如果是孤立的大写字母串，视为答案
     for line in reversed(lines):
         stripped = line.strip()
-        if re.match(r'^[A-Da-d]$', stripped):
+        # 修复：加 + 量词，支持多字母答案（如 ABCD）
+        if re.match(r'^[A-Da-d]+$', stripped):
             return {'answer': stripped.upper(), 'analysis': None, 'format': 'standalone_letter'}
 
     return {}
@@ -415,7 +922,7 @@ def parse_answer_sequence(text: str) -> Dict[int, Dict[str, Optional[str]]]:
             ans = ch.upper()
             if ans in CN_ANSWER_MAP:
                 ans = CN_ANSWER_MAP[ans]
-            if ans in 'ABCD':
+            if all(c in "ABCD" for c in str(ans)):
                 result[num] = {'answer': ans, 'analysis': None}
 
     if result:
@@ -430,7 +937,7 @@ def parse_answer_sequence(text: str) -> Dict[int, Dict[str, Optional[str]]]:
         ans = m.group(2).upper()
         if ans in CN_ANSWER_MAP:
             ans = CN_ANSWER_MAP[ans]
-        if ans in 'ABCD':
+        if all(c in "ABCD" for c in str(ans)):
             result[num] = {'answer': ans, 'analysis': None}
 
     if result:
@@ -446,8 +953,16 @@ def parse_answer_sequence(text: str) -> Dict[int, Dict[str, Optional[str]]]:
             ans = ch.upper()
             if ans in CN_ANSWER_MAP:
                 ans = CN_ANSWER_MAP[ans]
-            if ans in 'ABCD':
+            if all(c in "ABCD" for c in str(ans)):
                 result[num] = {'answer': ans, 'analysis': None}
+
+    # 模式4: 增强纯序列匹配（处理空格/逗号/换行/中文答案等分隔格式）
+    if not result:
+        # 传入题目数=0让函数不校验数量（纯序列模式不需要数量校验）
+        result = _match_pure_sequence_enhanced(text, 0)
+        # 如果按数量校验增强版没匹配到，放宽条件再试
+        if not result:
+            result = _match_pure_sequence_enhanced(text, 999)
 
     return result
 
@@ -509,7 +1024,7 @@ def parse_answer_text_to_map(text: str) -> Dict[int, Dict[str, Optional[str]]]:
             ans = m.group(2).strip().upper()
             if ans in CN_ANSWER_MAP:
                 ans = CN_ANSWER_MAP[ans]
-            if ans in 'ABCD' and num not in seen:
+            if ans and all(c in "ABCD" for c in str(ans)) and num not in seen:
                 result[num] = {'answer': ans, 'analysis': None}
                 seen.add(num)
 
@@ -590,8 +1105,8 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         answer = extracted.get('answer') if extracted else None
         analysis = extracted.get('analysis') if extracted else None
 
-        # 检测题型
-        qtype = _detect_question_type(content_text, options)
+        # 检测题型（传入 answer 支持多字母答案检测）
+        qtype = _detect_question_type(content_text, options, answer or '')
 
         blocks.append({
             'question_number': qn.number,
@@ -664,32 +1179,155 @@ def _extract_options(lines: List[str]) -> List[Dict[str, str]]:
     return options
 
 
-def _detect_question_type(content: str, options: List[str]) -> str:
-    """根据内容和选项自动检测题型（区分单选/多选）"""
-    opt_count = len(options)
-    content_lower = content.lower() if content else ''
+# ============ 题型归一化映射 ============
 
-    # 多选题关键词检测
-    multi_keywords = ['多选', '不定项', '至少.*个', '两项', '2个以上', '多选题',
-                      '哪些', '几种', '包括.*有', '属于.*的有', '正确的有', '错误的有']
-    is_multi = any(re.search(kw, content_lower) for kw in multi_keywords) if content else False
+# 仅保留4种标准类型：单选题、多选题、论述题、写作题
+VALID_QUESTION_TYPES = ['单选题', '多选题', '论述题', '写作题']
 
-    if opt_count >= 3:
-        return '多选题' if is_multi else '单选题'
-    if opt_count == 2:
-        if any(kw in content for kw in ['正确', '错误', '对', '错']):
-            return '判断题'
+# 旧类型 → 新标准类型映射
+TYPE_NORMALIZE_MAP = {
+    '单选题': '单选题', '选择题': '单选题', '单选': '单选题',
+    '多选题': '多选题', '不定项': '多选题', '多选': '多选题',
+    '论述题': '论述题', '简答题': '论述题', '案例分析题': '论述题',
+    '无': '论述题', '填空题': '论述题',
+    '写作题': '写作题', '作文': '写作题', '应用文': '写作题',
+    # 判断题 → 单选题（判断题本质上是二选一的选择题）
+    '判断题': '单选题',
+}
+
+# 题型徽章颜色映射（供前端使用）
+TYPE_BADGE_COLORS = {
+    '单选题': '#409EFF',   # 蓝色
+    '多选题': '#67C23A',   # 绿色
+    '论述题': '#E6A23C',   # 橙色
+    '写作题': '#F56C6C',   # 红色
+}
+
+
+def normalize_type_name(type_name: str) -> str:
+    """将任意题型名称归一化为4种标准类型之一"""
+    if not type_name:
+        return '论述题'  # 默认
+    # 精确匹配优先
+    if type_name in TYPE_NORMALIZE_MAP:
+        return TYPE_NORMALIZE_MAP[type_name]
+    # 模糊匹配：包含关键词
+    for old, new in TYPE_NORMALIZE_MAP.items():
+        if old in type_name:
+            return new
+    return '论述题'  # 无法识别 → 默认论述题
+
+
+# ============ 题型识别关键词工程 ============
+
+# 多选题判定关键词（仅在有选项的前提下生效）
+MULTI_CHOICE_KEYWORDS = [
+    '多选', '多项选择', '不定项', '不定项选择',
+    '两项以上', '三项以上', '四项以上', '2项以上', '3项以上', '4项以上',
+    '至少两项', '至少三项', '至少两个', '至少三个', '至少选择两个',
+    '两个以上', '多个选项', '有几项', '正确的有几项', '符合的有几项',
+    '哪些', '下列哪些', '哪些是', '哪些属于',
+    '属于.*的有', '包括.*的有', '符合.*的有',
+    '正确的有', '错误的有', '正确的包括', '错误的包括',
+    '正确的组合', '正确的搭配', '全部正确的是', '均正确的',
+    '下列说法正确的有', '下列说法错误的有',
+]
+
+# 写作题判定关键词（无选项时生效，优先于论述关键词）
+WRITING_KEYWORDS = [
+    '作文', '写作', '大作文', '小作文', '应用文', '议论文', '申论写作', '公文',
+    '写一篇', '写一段', '写一篇文章', '写一篇短文', '写一篇作文',
+    '题目自拟', '自拟标题', '自选角度', '结合材料', '联系实际',
+    '不少于', '不超过', '以.*为题', '以.*为话题', '围绕.*写',
+    '请以.*为题', '请根据.*写', '撰写', '拟写',
+]
+
+# 论述题/简答题判定关键词（无选项且非写作时生效）
+ESSAY_KEYWORDS = [
+    '论述', '简述', '简答', '分析', '综合分析', '说明', '谈谈', '谈一谈',
+    '阐述', '论证', '为什么', '如何理解', '怎样理解', '试述', '试析',
+    '评价', '评析', '原因', '意义', '影响', '作用', '措施', '对策', '建议',
+    '概括', '归纳', '总结', '指出', '比较', '谈谈你的看法', '谈谈你的理解',
+    '你怎么看', '请分析', '请说明', '请阐述', '简述理由', '简要说明',
+]
+
+
+def count_options(content: str, options) -> int:
+    """
+    统计选项数量（单一事实来源）。
+
+    - 优先使用传入的 options（list / dict / JSON 字符串）
+    - 为空时从题干文本扫描 A-H 选项标记（行首 + 内联），解决 OCR 文本内联选项漏检，
+      从而避免"有选项的选择题"被误判为论述题。
+    """
+    # 1. 传入的 options
+    if options:
+        if isinstance(options, (list, tuple)):
+            valid = [o for o in options if o]
+            if valid:
+                return len(valid)
+        elif isinstance(options, dict):
+            valid_keys = [k for k, v in options.items() if v]
+            if valid_keys:
+                return len(valid_keys)
+        elif isinstance(options, str):
+            import json
+            try:
+                parsed = json.loads(options)
+                return count_options(content, parsed)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # 2. 文本扫描（行首 + 内联），A-H
+    if content:
+        text = content
+        # 行首标记：A. / A、 / A． / A) / A） / A: / A：
+        markers = re.findall(r'(?:^|[\n；;])\s*([A-H])\s*[.、．)）:：]', text, re.MULTILINE)
+        if len({m.upper() for m in markers}) < 2:
+            # 内联标记：'A. xxx B. xxx' / 'A、xxx B、xxx'
+            markers = re.findall(r'([A-H])\s*[.、．)）:：]\s*\S', text)
+        distinct = {m.upper() for m in markers}
+        if len(distinct) >= 2:
+            return len(distinct)
+    return 0
+
+
+def _detect_question_type(content: str, options: List[str], answer: str = '') -> str:
+    """
+    分层题型分类器（v4 · 关键词工程 · 单一事实来源）。
+
+    确定性分层规则（优先级从高到低）：
+      Step1 有选项(>=2) → 客观选择题：
+              答案多字母(>=2) 或 命中多选关键词 → 多选题；否则 → 单选题
+            （判断题自然归入单选题——其选项为"对/错"两项、答案归一化为单字母 A/B）
+      Step2 无选项 → 命中写作关键词 → 写作题
+      Step3 无选项 → 命中论述/简答关键词 → 论述题
+      Step4 兜底 → 论述题（记低置信日志）
+    """
+    content_text = content or ''
+    norm_answer = canonical_answer(answer)
+
+    opt_count = count_options(content_text, options)
+
+    # === Step 1: 客观选择题 ===
+    if opt_count >= 2:
+        if len(norm_answer) >= 2:
+            return '多选题'
+        if any(re.search(kw, content_text) for kw in MULTI_CHOICE_KEYWORDS):
+            return '多选题'
         return '单选题'
-    if opt_count == 1 and any(kw in content for kw in ['填空', '______', '___']):
-        return '填空题'
-    if any(kw in content for kw in ['判断', '对错', '正确', '错误']) and len(content) < 200:
-        return '判断题'
-    if any(kw in content for kw in ['简答', '简述', '简述题']):
-        return '简答题'
-    if any(kw in content for kw in ['论述', '论证', '论']):
+
+    # === Step 2: 写作题 ===
+    if any(re.search(kw, content_text) for kw in WRITING_KEYWORDS):
+        return '写作题'
+
+    # === Step 3: 论述题 ===
+    if any(re.search(kw, content_text) for kw in ESSAY_KEYWORDS):
         return '论述题'
 
-    return '单选题'  # 默认
+    # === Step 4: 兜底 ===
+    logger.warning(f"[type-detect] 低置信度兜底为论述题: {content_text[:50]!r}")
+    return '论述题'
 
 
 # ============ 智能匹配主入口（分离导入） ============
@@ -749,7 +1387,7 @@ def llm_match_questions_answers(
 {answers_text[:3000]}
 
 请分析答案文档中每道题的正确答案，输出JSON格式。如果答案文档中有"故本题答案为X"、"故正确答案为X"、"答案为X"等表述，提取对应的选项字母。
-对于判断题，"对/正确/是"对应A，"错/错误/否"对应B。
+对于对错型单选题，"对/正确/是"对应A，"错/错误/否"对应B。
 
 请严格按以下JSON格式输出（只输出JSON，不要其他文字）：
 {{"matches": [{{"number": 1, "answer": "D"}}, {{"number": 2, "answer": "C"}}], "notes": "匹配说明"}}
@@ -790,7 +1428,7 @@ def llm_match_questions_answers(
                 for m in matches:
                     num = m.get('number')
                     ans = str(m.get('answer', '')).upper().strip()
-                    if num and ans and ans in 'ABCD':
+                    if num and ans and all(c in "ABCD" for c in str(ans)):
                         result_map[num] = {'answer': ans, 'analysis': f'[LLM智能匹配] {answers_text[:500]}'}
                 logger.info(f"LLM匹配成功: {len(result_map)} 题")
                 return result_map
@@ -817,13 +1455,26 @@ def smart_match_questions_answers(
     策略链（按优先级降级）：
     1. 题号分段解析匹配（主要策略，增强版）
     2. 嵌入式答案提取（"故本题答案为D"等）
-    3. 连续答案序列匹配
+    3. 连续答案序列匹配（含增强纯序列）
     4. 内联答案提取
-    5. 宽松正则全局匹配
-    6. 位置兜底匹配
-    7. LLM智能匹配兜底（仅前6级<99%时触发）
+    5. 增强纯序列位置匹配（无题号场景——修复0%匹配率问题）
+    6. 宽松正则全局匹配
+    7. 位置兜底匹配
+    8. LLM智能匹配兜底（仅前7级<99%时触发）
     """
     strategies = []
+
+    # ===== 预处理：噪声过滤 =====
+    questions_text = ContentCleaner.clean_text(questions_text)
+    answers_text = ContentCleaner.clean_text(answers_text)
+
+    if not questions_text.strip():
+        return MatchResult(
+            match_rate=0.0, matched_count=0, total_questions=0,
+            questions=[], unmatched_question_numbers=[], extra_answer_numbers=[],
+            analysis_count=0, strategy_used='题目文本为空',
+            details={}
+        )
 
     # ===== 策略1: 题号分段解析（增强版） =====
     question_blocks = extract_question_blocks(questions_text)
@@ -880,7 +1531,7 @@ def smart_match_questions_answers(
             ans = ans_entry['answer']
             if ans in CN_ANSWER_MAP:
                 ans = CN_ANSWER_MAP[ans]
-            if ans in 'ABCD':
+            if all(c in "ABCD" for c in str(ans)):
                 block['answer'] = ans
                 matched_count += 1
                 answer_keys_used.add(q_num)
@@ -899,6 +1550,29 @@ def smart_match_questions_answers(
 
     # 多余答案
     extra_nums = [n for n in answer_map if n not in answer_keys_used and answer_map[n].get('answer')]
+
+    # ===== 策略5: 增强纯序列位置匹配（修复无题号0%问题） =====
+    # Always attempt enhanced pure sequence as supplement (Fix 3)
+    pure_seq_map = _match_pure_sequence_enhanced(answers_text, len(question_blocks))
+    if pure_seq_map:
+        strategies.append(f'增强纯序列匹配({len(pure_seq_map)}题)')
+        for num, ans_data in pure_seq_map.items():
+            if num not in answer_map:
+                answer_map[num] = ans_data
+        # 重新执行匹配
+        for block in question_blocks:
+            q_num = block['question_number']
+            if not block.get('answer') and q_num in answer_map:
+                ans_entry = answer_map[q_num]
+                if ans_entry and ans_entry.get('answer') and all(c in "ABCD" for c in str(ans_entry.get("answer", ""))):
+                    block['answer'] = ans_entry['answer']
+                    matched_count += 1
+                    answer_keys_used.add(q_num)
+                    if q_num in no_answer_nums:
+                        no_answer_nums.remove(q_num)
+                    if ans_entry.get('analysis') and len(str(ans_entry['analysis'])) > 10:
+                        block['analysis'] = ans_entry['analysis']
+                        analysis_count += 1
 
     # ===== 策略6: 位置兜底匹配 =====
     if matched_count == 0 and len(question_blocks) > 0:
@@ -935,7 +1609,7 @@ def smart_match_questions_answers(
                     q_num = block['question_number']
                     if not block.get('answer') and q_num in llm_map:
                         ans_entry = llm_map[q_num]
-                        if ans_entry.get('answer') and ans_entry['answer'] in 'ABCD':
+                        if ans_entry.get('answer') and all(c in "ABCD" for c in str(ans_entry.get("answer", ""))):
                             block['answer'] = ans_entry['answer']
                             matched_count += 1
                             if q_num in no_answer_nums:
@@ -990,7 +1664,7 @@ def _extract_embedded_answers(text: str) -> Dict[int, Dict[str, Optional[str]]]:
                 ans = m.group(1).strip().upper()
                 if ans in CN_ANSWER_MAP:
                     ans = CN_ANSWER_MAP[ans]
-                if ans in 'ABCD':
+                if all(c in "ABCD" for c in str(ans)):
                     pos = m.start()
                     all_embedded.append({'answer': ans, 'position': pos})
         if all_embedded:
@@ -1024,7 +1698,7 @@ def _extract_embedded_answers(text: str) -> Dict[int, Dict[str, Optional[str]]]:
                 ans = m.group(1).strip().upper()
                 if ans in CN_ANSWER_MAP:
                     ans = CN_ANSWER_MAP[ans]
-                if ans in 'ABCD':
+                if all(c in "ABCD" for c in str(ans)):
                     all_matches.append({
                         'answer': ans,
                         'position': m.start(),
@@ -1102,7 +1776,7 @@ def _loose_answer_search(text: str, question_num: int) -> Optional[str]:
             continue
 
         # 找到该题号，从这一行开始扫描后续N行
-        scan_lines = lines[i:min(i + 30, len(lines))]
+        scan_lines = lines[i:min(i + 200, len(lines))]  # Fix 7: extended from 30 to 200
         scan_text = '\n'.join(scan_lines)
 
         # 先尝试嵌入式答案模式
@@ -1112,7 +1786,7 @@ def _loose_answer_search(text: str, question_num: int) -> Optional[str]:
                 ans = m.group(1).strip().upper()
                 if ans in CN_ANSWER_MAP:
                     ans = CN_ANSWER_MAP[ans]
-                if ans in 'ABCD':
+                if all(c in "ABCD" for c in str(ans)):
                     return ans
 
         # 再尝试标准答案模式
@@ -1125,7 +1799,7 @@ def _loose_answer_search(text: str, question_num: int) -> Optional[str]:
             m = pat.search(scan_text)
             if m:
                 ans = m.group(1).strip().upper()
-                if ans in 'ABCD':
+                if all(c in "ABCD" for c in str(ans)):
                     return ans
 
         # 如果该行就是纯答案（如 "1. D"）
@@ -1163,7 +1837,7 @@ def _global_loose_answer_search(text: str, question_num: int) -> Optional[str]:
         idx = question_num - 1
         if idx < len(all_embedded):
             ans = all_embedded[idx]['answer']
-            if ans in 'ABCD':
+            if all(c in "ABCD" for c in str(ans)):
                 return ans
 
     return None
@@ -1199,7 +1873,7 @@ def _extract_inline_answers(text: str) -> Dict[int, Dict[str, Optional[str]]]:
 
         block_lines = lines[start_line:end_line]
         extracted = extract_answer_from_lines(block_lines)
-        if extracted and extracted.get('answer') and extracted['answer'] in 'ABCD':
+        if extracted and extracted.get('answer') and all(c in 'ABCD' for c in (extracted.get('answer') or '')):
             result[qn.number] = {
                 'answer': extracted['answer'],
                 'analysis': extracted.get('analysis'),
@@ -1228,3 +1902,170 @@ def detect_subject_category(text: str) -> str:
 
     best = max(scores, key=scores.get)
     return best if scores[best] > 0 else '行测'
+
+
+# ============ AnswerValidator: 数据完整性校验 ============
+
+class AnswerValidator:
+    """
+    Pipeline第6阶段 — 对匹配后的题目进行系统性校验。
+    校验答案合法性、字段完整性、图片关联、题号连续性，并计算置信度。
+    """
+
+    @staticmethod
+    def validate(questions: List[Dict[str, Any]], strategy_used: str = '') -> List[Dict[str, Any]]:
+        """
+        对每道题执行校验，填充 confidence 和 validation_errors 字段。
+
+        校验规则：
+        1. 答案-选项一致性：答案字母必须在options中存在
+        2. 多选题答案拆分校验
+        3. 必填字段检查
+        4. 题型-选项一致性
+        5. 置信度评分
+        """
+        for q in questions:
+            errors = []
+            options = q.get('options', [])
+            answer = q.get('answer', '') or ''
+            qtype = q.get('question_type', '单选题')
+            content = q.get('content', '') or q.get('question_content', '')
+
+            # 1. 答案-选项一致性
+            option_keys = {o.get('key', '') for o in options if isinstance(o, dict)}
+            if answer and answer != '待补充':
+                answer_letters = list(answer.upper())
+                for letter in answer_letters:
+                    if letter in 'ABCD' and letter not in option_keys:
+                        if option_keys:  # 有选项但答案不在选项中
+                            errors.append(f'答案"{letter}"不在选项{option_keys}中')
+                            break
+
+            # 2. 多选题答案拆分校验
+            if qtype == '多选题' and len(answer) > 1:
+                if not all(c in 'ABCD' for c in answer.upper()):
+                    errors.append(f'多选题答案"{answer}"包含非法字符')
+
+            # 3. 必填字段检查
+            if not content or len(str(content).strip()) < 4:
+                errors.append('题目内容为空或过短')
+            if len(options) < 2:
+                errors.append(f'选项不足(仅{len(options)}个)')
+
+            # 4. 题型-选项一致性(判断题)
+            if len(options) == 2 and qtype == '单选题':
+                if answer and answer.upper() not in ('A', 'B'):
+                    errors.append('判断题答案必须为A或B')
+
+            # 5. 置信度评分
+            confidence = AnswerValidator._compute_confidence(
+                answer, q, strategy_used, errors
+            )
+
+            q['confidence'] = round(confidence, 2)
+            q['validation_errors'] = errors
+
+        # 题号连续性检测
+        numbers = [q.get('question_number', 0) for q in questions if q.get('question_number')]
+        if numbers:
+            expected = set(range(min(numbers), max(numbers) + 1))
+            missing = sorted(expected - set(numbers))
+            if missing:
+                logger.warning(f"[Validator] 题号不连续，缺失: {missing[:20]}")
+
+        return questions
+
+    @staticmethod
+    def _compute_confidence(answer: str, question: dict, strategy: str, errors: list) -> float:
+        """计算匹配置信度"""
+        score = 0.60  # 默认基准
+
+        # 答案来源评分
+        if strategy:
+            if '题号分段解析' in strategy:
+                score = 0.95
+            elif '嵌入式答案提取' in strategy:
+                score = 0.85
+            elif '连续答案序列' in strategy or '纯序列' in strategy:
+                score = 0.75
+            elif '增强纯序列' in strategy:
+                score = 0.65
+            elif '位置兜底' in strategy:
+                score = 0.50
+            elif 'LLM' in strategy:
+                score = 0.40
+
+        # 完整性加分
+        analysis = question.get('analysis', '') or ''
+        if analysis and len(str(analysis)) > 10:
+            score += 0.05
+
+        # 无答案扣分
+        if not answer or answer == '待补充':
+            score -= 0.20
+
+        # 有校验错误扣分
+        if errors:
+            score -= 0.10 * len(errors)
+
+        return max(0.0, min(1.0, score))
+
+
+# ============ NumberFormatNormalizer: 跨格式题号统一 ============
+
+class NumberFormatNormalizer:
+    """
+    统一不同文档来源的题号表示差异。
+    处理全角数字、中文数字、不同分隔符等格式差异。
+    """
+
+    # 全角数字→半角映射
+    FULLWIDTH_DIGITS = str.maketrans('０１２３４５６７８９', '0123456789')
+
+    # 中文数字(1-99常用)
+    CN_NUMBERS = {
+        '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+        '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+        '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15,
+        '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
+    }
+
+    @classmethod
+    def normalize_text(cls, text: str) -> str:
+        """
+        预处理文本：统一所有题号格式为 "N." 格式。
+        - 全角数字→半角
+        - 中文数字→阿拉伯（仅行首题号位置）
+        - 统一分隔符
+        """
+        if not text:
+            return text
+
+        # 全角数字→半角
+        text = text.translate(cls.FULLWIDTH_DIGITS)
+
+        # 行首中文数字→阿拉伯（仅题号位置）
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            for cn, num in cls.CN_NUMBERS.items():
+                # 匹配 "一、" "一." "一．" "一)" 等格式
+                if stripped.startswith(cn) and len(stripped) > 1:
+                    if stripped[len(cn)] in '.、．)）':
+                        lines[i] = line.replace(cn, str(num), 1)
+                        break
+
+        return '\n'.join(lines)
+
+    @classmethod
+    def extract_number(cls, text: str) -> Optional[int]:
+        """从文本行提取标准化的题号"""
+        if not text:
+            return None
+        text = text.strip().translate(cls.FULLWIDTH_DIGITS)
+        for cn, num in cls.CN_NUMBERS.items():
+            if text.startswith(cn):
+                return num
+        # 标准数字提取
+        m = re.match(r'(\d+)', text)
+        return int(m.group(1)) if m else None
