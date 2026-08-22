@@ -238,3 +238,18 @@ mock `subprocess.run`，覆盖五条单测路径：
 
 1. 生产服务器 GPU 具体型号/驱动版本未知——Phase 2 安装时以 `nvidia-smi` 实测为准；若无 NVIDIA GPU，pipeline 后端 CPU 模式仍可用（10页约2-5分钟，需相应调大 `MINERU_TIMEOUT`）。
 2. `mineru.cli.client` 模块入口名以实际安装版本的 `--help` 输出为准（v3.x CLI 为 `mineru` 命令，等价 `-m` 调用）；实施时以实测为准并在代码中留注释。
+
+---
+
+## 附录A: 部署记录（Phase 2 运维填写）
+
+- [ ] 安装日期 / 执行人：__________
+- [ ] `nvidia-smi` GPU型号/显存实测：__________
+- [ ] CLI 入口实测结论（`-m mineru.cli.client` 是否有效，若否修正 `mineru_service.py::_CLI_MODULE`）：__________
+- [ ] `pip freeze` 基线归档路径：`docs/superpowers/specs/assets/mineru-pip-freeze-<日期>.txt`
+- [ ] `backend/scripts/test_mineru.py` 五连自检结果（贴输出）：__________
+- [ ] 开关启用时间与首个真实扫描件导入验证结果：__________
+
+### 降级演练结论（2026-08-22 已完成）
+- 场景A 文本层PDF + 故障MinerU配置 → 走 pdfplumber 快路径，未触碰 MinerU ✓
+- 场景B 扫描件PDF + 解释器缺失 → extract 静默失败 → 成功回退第二级 PaddleOCR 路径，无异常冒泡 ✓
