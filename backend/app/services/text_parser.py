@@ -536,6 +536,14 @@ class ContentCleaner:
     HEADER_FOOTER_THRESHOLD = 3
     HEADER_FOOTER_MAX_LENGTH = 60  # 页眉页脚通常较短
 
+    # 内容行豁免：命中这些标记的短行属于"答案/解析"正文数据，
+    # 即使重复出现也绝不是页眉页脚。
+    # 真实案例：2016江西答案解析PDF中 "故正确答案为A。" 恰好出现3次
+    # （≥阈值且末次位置>0.9）→ 被本机制整组误杀 → 匹配率从100%跌至52.6%，
+    # 且幸存的仅是字母组合稀有（<3次）的答案行——症状极具迷惑性。
+    _ANSWER_LINE_HINT = re.compile(
+        r'(?:正确答案|参考答案|标准答案|本题答案|答案\s*[为是:：]|故选|应选|本题选)')
+
     @classmethod
     def clean(cls, lines: List[str]) -> List[str]:
         """
@@ -568,6 +576,9 @@ class ContentCleaner:
         for i, line in enumerate(filtered):
             stripped = line.strip()
             if len(stripped) <= cls.HEADER_FOOTER_MAX_LENGTH and len(stripped) > 1:
+                # 内容行豁免：答案标记行是解析核心数据（见 _ANSWER_LINE_HINT 注释）
+                if cls._ANSWER_LINE_HINT.search(stripped):
+                    continue
                 line_counts.setdefault(stripped, []).append(i)
 
         repeated_indices = set()
@@ -1212,8 +1223,10 @@ def extract_question_numbers(text: str) -> List[QuestionNumber]:
             m = pattern.search(line)
             if m:
                 num = int(m.group(1))
-                # 过滤异常值
-                if num <= 0 or num > 5000:
+                # 过滤异常值（现实试卷题号≤999；同时排除1900-2100等年份噪声，
+                # 否则正文"2016 江西招警…"会被误判为题号导致分块腰斩——
+                # 真实案例：2016江西答案解析PDF因此从100%跌至52.6%）
+                if num <= 0 or num > 999:
                     continue
                 if best_match is None or priority < best_priority:
                     best_match = (num, fmt_name, m.start())
@@ -1857,6 +1870,33 @@ def llm_match_questions_answers(
     return {}
 
 
+def _merge_answer_entry(answer_map: Dict[int, Dict[str, Optional[str]]],
+                        num: int, ans_data: Dict[str, Optional[str]]) -> None:
+    """策略间答案条目"字段级互补"合并。
+
+    修复案例：先执行的"题号分段解析"产出 {answer:'A', analysis:None}，
+    其后"嵌入式答案提取"携带完整 full_block 解析却因 `num in answer_map`
+    守卫被整体丢弃 → 答案对而解析全空（真实案例 2016江西 解析缺失）。
+
+    规则：
+      - 新号直接写入；
+      - 已有条目缺 answer 时补齐；
+      - analysis 取更长者（解析宁多勿缺）。
+    """
+    if not isinstance(ans_data, dict):
+        return
+    prev = answer_map.get(num)
+    if prev is None or not isinstance(prev, dict):
+        answer_map[num] = ans_data
+        return
+    if not prev.get('answer') and ans_data.get('answer'):
+        prev['answer'] = ans_data['answer']
+    new_analysis = str(ans_data.get('analysis') or '')
+    old_analysis = str(prev.get('analysis') or '')
+    if len(new_analysis) > len(old_analysis):
+        prev['analysis'] = ans_data['analysis']
+
+
 def smart_match_questions_answers(
     questions_text: str,
     answers_text: str,
@@ -1901,24 +1941,21 @@ def smart_match_questions_answers(
     if embedded_map:
         strategies.append(f'嵌入式答案提取({len(embedded_map)}题)')
         for num, ans_data in embedded_map.items():
-            if num not in answer_map:
-                answer_map[num] = ans_data
+            _merge_answer_entry(answer_map, num, ans_data)
 
     # ===== 策略3: 连续答案序列补充 =====
     seq_map = parse_answer_sequence(answers_text)
     if seq_map:
         strategies.append('连续答案序列')
         for num, ans_data in seq_map.items():
-            if num not in answer_map:
-                answer_map[num] = ans_data
+            _merge_answer_entry(answer_map, num, ans_data)
 
     # ===== 策略4: 从题目文本提取内联答案 =====
     inline_from_q = _extract_inline_answers(questions_text)
     if inline_from_q:
         strategies.append('题目内联答案')
         for num, ans_data in inline_from_q.items():
-            if num not in answer_map:
-                answer_map[num] = ans_data
+            _merge_answer_entry(answer_map, num, ans_data)
 
     # ===== 策略5: 检测两文本相似度，高相似度时从答案文件提取内联答案 =====
     sim = compute_text_similarity(questions_text, answers_text)
@@ -1927,8 +1964,7 @@ def smart_match_questions_answers(
         if inline_from_a:
             strategies.append('答案文件内联答案')
             for num, ans_data in inline_from_a.items():
-                if num not in answer_map:
-                    answer_map[num] = ans_data
+                _merge_answer_entry(answer_map, num, ans_data)
 
     # ===== 执行匹配 =====
     matched_count = 0
@@ -1970,8 +2006,7 @@ def smart_match_questions_answers(
     if pure_seq_map:
         strategies.append(f'增强纯序列匹配({len(pure_seq_map)}题)')
         for num, ans_data in pure_seq_map.items():
-            if num not in answer_map:
-                answer_map[num] = ans_data
+            _merge_answer_entry(answer_map, num, ans_data)
         # 重新执行匹配
         for block in question_blocks:
             q_num = block['question_number']
