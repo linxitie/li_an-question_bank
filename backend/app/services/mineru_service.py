@@ -15,9 +15,12 @@
 """
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
+import glob
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +106,76 @@ def health_check(force: bool = False) -> dict:
         f"version={data.get('version') or '-'} msg={data['message'][:80]}"
     )
     return data
+
+
+# ---------------------------------------------------------------------------
+# CLI 入口说明（规格 开放问题#2）:
+#   v3.x 提供 `mineru` 命令行，等价于 `-m mineru.cli.client`。
+#   Phase 2 环境安装后以实测为准；若入口不同仅需修改 _CLI_MODULE 常量。
+# ---------------------------------------------------------------------------
+_CLI_MODULE = 'mineru.cli.client'
+
+
+def extract_text_sync(buf: bytes) -> str | None:
+    """核心解析：扫描件PDF字节 → MinerU结构化Markdown文本。
+
+    失败契约：任何失败路径返回 None（禁用/排队超时/子进程超时/输出为空/任意异常），
+    调用方据此回退旧 PaddleOCR 路径。GPU 串行锁保证同一时刻仅一份文档占用推理资源。
+
+    流程: mkdtemp → 落盘input.pdf → subprocess(mineru, timeout) → 收集*.md(按序首个非空)
+          → finally 释放信号量 + rmtree 清理临时目录
+    """
+    if not is_enabled():
+        return None
+
+    timeout = int(_cfg('MINERU_TIMEOUT', 300) or 300)
+    backend = str(_cfg('MINERU_BACKEND', 'pipeline') or 'pipeline')
+    py = str(_cfg('MINERU_PYTHON', '') or '')
+
+    # GPU 串行锁：并发扫描件上传时排队；等待超限直接放弃，避免请求堆积雪崩
+    if not _sem.acquire(timeout=_SEM_WAIT_SECONDS):
+        logger.warning(
+            f'[mineru] GPU锁排队超过{_SEM_WAIT_SECONDS}s，放弃本次解析（将回退旧OCR路径）')
+        return None
+
+    tmpdir = None
+    try:
+        t0 = time.time()
+        tmpdir = tempfile.mkdtemp(prefix='mineru_')
+        in_pdf = os.path.join(tmpdir, 'input.pdf')
+        outdir = os.path.join(tmpdir, 'out')
+        with open(in_pdf, 'wb') as f:
+            f.write(buf)
+
+        proc = subprocess.run(
+            [py, '-m', _CLI_MODULE,
+             '-p', in_pdf, '-o', outdir, '-b', backend],
+            capture_output=True,
+            timeout=timeout,
+            env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'},
+        )
+
+        md_files = sorted(glob.glob(os.path.join(outdir, '**', '*.md'), recursive=True))
+        for p in md_files:
+            with open(p, encoding='utf-8') as f:
+                content = f.read().strip()
+            if content:
+                dur = time.time() - t0
+                logger.info(f"[mineru] success chars={len(content)} dur={dur:.1f}s")
+                return content
+
+        logger.warning(
+            f'[mineru] 输出md为空/缺失 rc={proc.returncode} '
+            f'dur={time.time() - t0:.1f}s → 回退旧OCR路径')
+        return None
+
+    except subprocess.TimeoutExpired:
+        logger.warning(f'[mineru] 子进程超时({timeout}s)，已终止 → 回退旧OCR路径')
+        return None
+    except Exception as e:  # noqa: BLE001 — 兜底契约：绝不上抛
+        logger.warning(f'[mineru] 解析异常 {type(e).__name__}: {e} → 回退旧OCR路径')
+        return None
+    finally:
+        _sem.release()
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)

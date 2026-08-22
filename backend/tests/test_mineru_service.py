@@ -9,6 +9,7 @@
 因此测试通过 monkeypatch.setattr(settings, ...) 注入配置而非 setenv。
 """
 import os
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
@@ -105,3 +106,95 @@ class TestHealthCheck:
             r = ms.health_check(force=True)
         assert r['available'] is False
         assert 'OSError' in r['message']
+
+
+class TestExtractTextSync:
+    """extract_text_sync 五条路径（mock subprocess，规格§5.1 / 计划Task2）。"""
+
+    def _buf(self) -> bytes:
+        return b'%PDF-1.4 fake-scanned-bytes'
+
+    def test_returns_none_when_disabled_and_never_spawns_process(self, monkeypatch):
+        _cfg(monkeypatch, MINERU_ENABLED=False)
+        from app.services import mineru_service as ms
+        with patch.object(ms.subprocess, 'run') as m_run:
+            assert ms.extract_text_sync(self._buf()) is None
+            m_run.assert_not_called()
+
+    def test_success_returns_md_content(self, monkeypatch, tmp_path):
+        _cfg(monkeypatch, MINERU_ENABLED=True)
+        from app.services import mineru_service as ms
+        monkeypatch.setattr(ms, 'is_enabled', lambda: True)
+
+        # 真实工作目录（让 input.pdf 落盘真实发生），md 产物放在外部目录
+        # 注: 真实 tempfile.mkdtemp 返回"已存在"的目录，故此处须先创建
+        workdir = tmp_path / 'work'
+        workdir.mkdir()
+        out_md = tmp_path / 'out' / 'sub' / 'result.md'
+        out_md.parent.mkdir(parents=True)
+        out_md.write_text('# 第1题 题干\nA. 选项', encoding='utf-8')
+
+        with patch.object(ms.tempfile, 'mkdtemp', return_value=str(workdir)), \
+             patch.object(ms.glob, 'glob',
+                          return_value=[str(out_md)]) as m_glob, \
+             patch.object(ms.subprocess, 'run') as m_run:
+            m_run.return_value.returncode = 0
+            text = ms.extract_text_sync(self._buf())
+
+        assert text == '# 第1题 题干\nA. 选项'
+        # 校验命令行构造：解释器 + -m 入口 + -p/-o/-b 参数
+        argv = m_run.call_args.args[0]
+        assert argv[1:3] == ['-m', 'mineru.cli.client']
+        assert '-p' in argv and '-o' in argv and '-b' in argv
+        assert m_glob.call_args.kwargs.get('recursive') is True
+        # 工作目录已被清理（finally rmtree）
+        assert not workdir.exists()
+        # 信号量已释放
+        assert ms._sem._value == 1
+
+    def test_timeout_returns_none_and_cleans_up(self, monkeypatch, tmp_path):
+        _cfg(monkeypatch, MINERU_ENABLED=True, MINERU_TIMEOUT=300)
+        from app.services import mineru_service as ms
+        monkeypatch.setattr(ms, 'is_enabled', lambda: True)
+        workdir = tmp_path / 'work'
+
+        with patch.object(ms.tempfile, 'mkdtemp', return_value=str(workdir)), \
+             patch.object(ms.subprocess, 'run',
+                          side_effect=subprocess.TimeoutExpired(cmd='mineru', timeout=300)):
+            assert ms.extract_text_sync(self._buf()) is None
+        assert not workdir.exists()
+        assert ms._sem._value == 1
+
+    def test_empty_md_output_returns_none(self, monkeypatch, tmp_path):
+        _cfg(monkeypatch, MINERU_ENABLED=True)
+        from app.services import mineru_service as ms
+        monkeypatch.setattr(ms, 'is_enabled', lambda: True)
+        workdir = tmp_path / 'work'
+        empty_md = tmp_path / 'out' / 'empty.md'
+        empty_md.parent.mkdir(parents=True)
+        empty_md.write_text('   \n  ', encoding='utf-8')  # 仅空白 → 视为空
+
+        with patch.object(ms.tempfile, 'mkdtemp', return_value=str(workdir)), \
+             patch.object(ms.glob, 'glob', return_value=[str(empty_md)]), \
+             patch.object(ms.subprocess, 'run') as m_run:
+            m_run.return_value.returncode = 0
+            assert ms.extract_text_sync(self._buf()) is None
+        assert ms._sem._value == 1
+
+    def test_generic_exception_returns_none_not_raised(self, monkeypatch):
+        _cfg(monkeypatch, MINERU_ENABLED=True)
+        from app.services import mineru_service as ms
+        monkeypatch.setattr(ms, 'is_enabled', lambda: True)
+        with patch.object(ms.tempfile, 'mkdtemp', side_effect=OSError('disk full')):
+            assert ms.extract_text_sync(b'x') is None  # 不上抛
+        # mkdtemp 在 acquire 之后失败也必须释放信号量
+        assert ms._sem._value == 1
+
+    def test_semaphore_queue_timeout_returns_none(self, monkeypatch):
+        """GPU锁被长期占用时，等待60s超时后放弃（防并发雪崩）。"""
+        _cfg(monkeypatch, MINERU_ENABLED=True)
+        from app.services import mineru_service as ms
+        monkeypatch.setattr(ms, 'is_enabled', lambda: True)
+        monkeypatch.setattr(ms, '_SEM_WAIT_SECONDS', 0.05)  # 缩短测试等待
+        with ms._sem:  # 模拟另一份文档正在占用GPU
+            assert ms.extract_text_sync(self._buf()) is None
