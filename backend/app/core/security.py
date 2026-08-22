@@ -487,7 +487,10 @@ token_manager = TokenManager()
 # ===================================限流器===================================
 class RateLimiter:
     """滑动窗口限流器"""
-    def __init__(self, rate: int = 100, per: int = 60):
+    def __init__(self, rate: int = 300, per: int = 60):
+        # 2026-08: 100→300。原阈值下，批量导入97题的逐题请求(旧前端实现)
+        # 叠加仪表盘轮询即触顶429；批处理端点(/batch-parsed)上线后单次请求
+        # 即可完成整卷导入，300/60s 对正常交互仍具保护意义。
         self.rate = rate
         self.per = per
         self.allowance: Dict[str, List[float]] = defaultdict(list)
@@ -523,7 +526,7 @@ class RateLimiter:
             oldest_request = min(self.allowance[key])
             return int(self.per - (current_time - oldest_request)) + 1
 
-rate_limiter = RateLimiter(rate=100, per=60)
+rate_limiter = RateLimiter(rate=300, per=60)
 
 
 class LeakyBucketRateLimiter:

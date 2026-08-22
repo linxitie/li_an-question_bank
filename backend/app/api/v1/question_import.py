@@ -1235,6 +1235,113 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
 
 # ============ API 端点 ============
 
+def _upsert_question_core(db: Session, current_user: SysUser,
+                          question_data: Dict[str, Any]) -> Dict[str, Any]:
+    """单题入库核心逻辑（供 /single 与 /batch-parsed 复用）。
+
+    与原 /single 函数体的差异：
+      - 不创建 QuestionImportRecord（由调用方按批次汇总）
+      - 不调用 db.commit()（调用方控制事务边界，批处理保证单事务）
+    返回: {'import_status': 'SUCCESS'|'DUPLICATE', 'question_id': int, ...}
+    """
+    content = question_data.get('question_content', '').strip()
+    answer = question_data.get('answer', '').strip()
+    import_mode = question_data.get('import_mode', 'combined')
+    if not content:
+        raise HTTPException(status_code=400, detail="题目内容不能为空")
+    if not answer and import_mode != 'separate':
+        raise HTTPException(status_code=400, detail="题目内容和答案不能为空")
+    if import_mode == 'separate' and not answer:
+        # 分离模式：无答案题目标记为待补充
+        answer = '待补充'
+
+    # 科目（在去重前获取，用于缩小候选范围）
+    subject_name = question_data.get('subject_category', '行测')
+    subject = _get_or_create_subject(db, subject_name)
+
+    # 模糊去重检测
+    existing = _detect_duplicate(db, content, answer, subject.subject_id)
+    if existing:
+        # 获取相似度详情
+        dup_info = _get_duplicate_info(db, content, answer, subject.subject_id)
+        return {
+            'import_status': 'DUPLICATE',
+            'question_id': existing.question_id,
+            'message': f'该题目已存在（相似度 {dup_info["similarity"]*100:.0f}%，现有ID: {existing.question_id}）',
+            'similarity': dup_info['similarity'],
+            'existing_content_preview': dup_info.get('existing_content'),
+            'error_messages': [{'error': '重复题目', 'existing_id': existing.question_id, 'similarity': dup_info['similarity']}]
+        }
+
+    # 题型
+    type_name = question_data.get('question_type_detail', '选择题')
+    qtype = _get_or_create_type(db, type_name, subject.subject_id)
+
+    # 创建题目
+    difficulty = max(1, min(5, int(question_data.get('difficulty', 3))))
+    score = float(question_data.get('score', 1.0))
+    options = question_data.get('options')
+
+    _xingce_sc, _shenlun_sc, _gongzhuan_sc = _subcategory_tuple(
+        subject.subject_id, content, type_name,
+        question_data.get('subcategory') or question_data.get('子科目') or ''
+    )
+    question = QuestionBank(
+        subject_id=subject.subject_id,
+        type_id=qtype.type_id,
+        question_content=content,
+        options=options,
+        answer=answer,
+        answer_analysis=question_data.get('answer_analysis', ''),
+        difficulty=difficulty,
+        score=score,
+        year=question_data.get('exam_year') or question_data.get('year'),
+        source=question_data.get('source', ''),
+        tags=question_data.get('tags', ''),
+        creator_id=current_user.user_id,
+        audit_status=1,  # 自动通过审核
+        xingce_subcategory=_xingce_sc,
+        shenlun_subcategory=_shenlun_sc,
+        gongzhuan_subcategory=_gongzhuan_sc,
+    )
+    db.add(question)
+    db.flush()
+
+    # 图片提取与保存（异常不回滚整题，仅跳过图片）
+    try:
+        images = _extract_and_save_images(
+            question_data.get('question_content', '') + ' ' + str(question_data.get('options', '')),
+            question.question_id,
+            question_obj=question
+        )
+        for img_order, img_path in enumerate(images):
+            db.add(QuestionImage(
+                question_id=question.question_id,
+                image_path=img_path,
+                image_type='题干图',
+                image_order=img_order
+            ))
+    except Exception as img_err:
+        logger.warning(f"图片提取失败 question_id={question.question_id}: {img_err}")
+
+    # 详细分类
+    detail = QuestionDetailCategory(
+        question_id=question.question_id,
+        xingce_subcategory=_xingce_sc,
+        shenlun_subcategory=_shenlun_sc,
+        gongzhuan_subcategory=_gongzhuan_sc,
+        question_type_detail=normalize_type_name(type_name),
+    )
+    db.add(detail)
+    _link_knowledge_points(db, [question])
+
+    return {
+        'import_status': 'SUCCESS',
+        'question_id': question.question_id,
+        'message': '题目导入成功',
+    }
+
+
 @router.post("/single", summary="单题导入")
 async def import_single_question(
     question_data: Dict[str, Any],
@@ -1253,100 +1360,15 @@ async def import_single_question(
     - options: 选项列表 [{"key":"A","value":"..."}]
     - difficulty: 难度 1-5
     - score: 分值
+
+    实现：核心入库逻辑已抽取为 _upsert_question_core（与 /batch-parsed 共享），
+    本端点仅负责单题导入记录与事务提交。
     """
     try:
-        content = question_data.get('question_content', '').strip()
-        answer = question_data.get('answer', '').strip()
-        import_mode = question_data.get('import_mode', 'combined')
-        if not content:
-            raise HTTPException(status_code=400, detail="题目内容不能为空")
-        if not answer and import_mode != 'separate':
-            raise HTTPException(status_code=400, detail="题目内容和答案不能为空")
-        if import_mode == 'separate' and not answer:
-            # 分离模式：无答案题目标记为待补充
-            answer = '待补充'
-
-        # 科目（在去重前获取，用于缩小候选范围）
-        subject_name = question_data.get('subject_category', '行测')
-        subject = _get_or_create_subject(db, subject_name)
-
-        # 模糊去重检测
-        existing = _detect_duplicate(db, content, answer, subject.subject_id)
-        if existing:
-            # 获取相似度详情
-            dup_info = _get_duplicate_info(db, content, answer, subject.subject_id)
-            return {
-                'import_status': 'DUPLICATE',
-                'question_id': existing.question_id,
-                'message': f'该题目已存在（相似度 {dup_info["similarity"]*100:.0f}%，现有ID: {existing.question_id}）',
-                'similarity': dup_info['similarity'],
-                'existing_content_preview': dup_info.get('existing_content'),
-                'error_messages': [{'error': '重复题目', 'existing_id': existing.question_id, 'similarity': dup_info['similarity']}]
-            }
-
-        # 题型
-        type_name = question_data.get('question_type_detail', '选择题')
-        qtype = _get_or_create_type(db, type_name, subject.subject_id)
-
-        # 创建题目
-        difficulty = max(1, min(5, int(question_data.get('difficulty', 3))))
-        score = float(question_data.get('score', 1.0))
-        options = question_data.get('options')
-        # 直接赋值给JSON列，不调用json.dumps（避免双重编码）
-
-        _xingce_sc, _shenlun_sc, _gongzhuan_sc = _subcategory_tuple(
-            subject.subject_id, content, type_name,
-            question_data.get('subcategory') or question_data.get('子科目') or ''
-        )
-        question = QuestionBank(
-            subject_id=subject.subject_id,
-            type_id=qtype.type_id,
-            question_content=content,
-            options=options,
-            answer=answer,
-            answer_analysis=question_data.get('answer_analysis', ''),
-            difficulty=difficulty,
-            score=score,
-            year=question_data.get('exam_year') or question_data.get('year'),
-            source=question_data.get('source', ''),
-            tags=question_data.get('tags', ''),
-            creator_id=current_user.user_id,
-            audit_status=1,  # 自动通过审核
-            xingce_subcategory=_xingce_sc,
-            shenlun_subcategory=_shenlun_sc,
-            gongzhuan_subcategory=_gongzhuan_sc,
-        )
-        db.add(question)
-        db.flush()
-
-        # 图片提取与保存（异常不回滚整题，仅跳过图片）
-        try:
-            images = _extract_and_save_images(
-                question_data.get('question_content', '') + ' ' + str(question_data.get('options', '')),
-                question.question_id,
-                question_obj=question
-            )
-            for img_order, img_path in enumerate(images):
-                db.add(QuestionImage(
-                    question_id=question.question_id,
-                    image_path=img_path,
-                    image_type='题干图',
-                    image_order=img_order
-                ))
-        except Exception as img_err:
-            logger.warning(f"图片提取失败 question_id={question.question_id}: {img_err}")
-
-        # 详细分类
-        detail = QuestionDetailCategory(
-            question_id=question.question_id,
-            xingce_subcategory=_xingce_sc,
-            shenlun_subcategory=_shenlun_sc,
-            gongzhuan_subcategory=_gongzhuan_sc,
-            question_type_detail=normalize_type_name(type_name),
-        )
-        db.add(detail)
-
-        # 导入记录
+        result = _upsert_question_core(db, current_user, question_data)
+        if result.get('import_status') == 'DUPLICATE':
+            # 与原行为一致：重复题不做任何写库
+            return result
         record = QuestionImportRecord(
             user_id=current_user.user_id,
             original_filename=question_data.get('paper_name', '手工录入'),
@@ -1360,20 +1382,175 @@ async def import_single_question(
             complete_time=datetime.now(),
         )
         db.add(record)
-        _link_knowledge_points(db, [question])
         db.commit()
-
-        return {
-            'import_status': 'SUCCESS',
-            'question_id': question.question_id,
-            'message': '题目导入成功',
-        }
+        return result
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         logger.error(f"单题导入失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+
+
+@router.post("/batch-parsed", summary="批量导入已解析题目（单请求·双轨入库：题库+试卷）")
+async def batch_import_parsed(
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """批量入库前端已解析/已匹配的题目 —— 对应《双轨入库》流程图。
+
+    解决两个问题：
+      1. 前端逐题循环 POST /single（97题→97请求）触发限流429；
+         本端点单次请求承载全部题目，服务端单事务处理。
+      2. 分离导入路径此前从不创建试卷；本端点按"检测层"判定试卷文档后，
+         自动创建/复用 ExamPaper(DRAFT) 并批量建立 PaperQuestionRelation，
+         使导入成果同步出现在"试卷管理"。
+
+    请求体:
+    {
+      "paper_name": "2016江西招警考试《人民警察基础知识》真题",
+      "subject_category": "公专",
+      "import_mode": "separate",           # combined | separate
+      "match_rate": 100.0,                  # 可选，用于摘要展示
+      "questions": [ { ...与 /single 字段一致... }, ... ]
+    }
+
+    返回（对应"导入结果展示"原型）:
+    {total, success_count, duplicate_count, need_confirm_count, failed_items[],
+     new_question_ids[], reused_question_ids[], paper_id?, paper_name?, match_rate, message}
+    """
+    paper_name = (payload.get('paper_name') or '').strip()
+    mode = (payload.get('import_mode') or payload.get('mode') or 'combined').strip()
+    try:
+        match_rate = float(payload.get('match_rate') or 0)
+    except (TypeError, ValueError):
+        match_rate = 0.0
+    items = payload.get('questions') or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="questions 不能为空")
+    if len(items) > 500:
+        raise HTTPException(status_code=400, detail="单次最多导入500题，请分批操作")
+
+    ok_ids: List[int] = []
+    reused_ids: List[int] = []
+    failed_items: List[Dict[str, Any]] = []
+    need_confirm = 0
+    default_subject = (payload.get('subject_category') or '').strip()
+
+    for idx, q in enumerate(items):
+        if not isinstance(q, dict):
+            failed_items.append({'index': idx, 'reason': '题目数据格式异常'})
+            continue
+        q.setdefault('paper_name', paper_name or '批量解析导入')
+        q.setdefault('subject_category', default_subject or '公专')
+        q.setdefault('import_mode', mode)
+        try:
+            r = _upsert_question_core(db, current_user, q)
+            qid = r['question_id']
+            if r['import_status'] == 'DUPLICATE':
+                reused_ids.append(qid)
+            else:
+                ok_ids.append(qid)
+            ans = (q.get('answer') or '').strip()
+            conf = q.get('confidence')
+            if not ans or ans == '待补充' or (isinstance(conf, (int, float)) and conf < 0.5):
+                need_confirm += 1
+        except HTTPException as he:
+            failed_items.append({'index': idx, 'reason': str(he.detail)})
+        except Exception as e:  # noqa: BLE001 — 单题失败不阻断整批
+            failed_items.append({'index': idx, 'reason': str(e)[:200]})
+
+    # ===== 检测层 → 双轨入库层 =====
+    joined_head = ' '.join((q.get('question_content') or '')[:150] for q in items[:20])
+    auto_tags = _auto_detect_tags(paper_name or joined_head[:60], joined_head)
+    is_paper_doc = (
+        bool(auto_tags.get('is_complete_paper'))
+        or bool(auto_tags.get('exam_year') and auto_tags.get('exam_type'))
+        # 分离导入(题库文档+答案文档)本身即"成卷意图"：≥5题且给出匹配率时按试卷处理
+        or (mode == 'separate' and (len(ok_ids) + len(reused_ids)) >= 5 and match_rate > 0)
+    )
+
+    paper_id: Optional[int] = None
+    linked = 0
+    if is_paper_doc and (ok_ids or reused_ids):
+        try:
+            paper = _get_or_create_import_paper(
+                db, current_user, auto_tags,
+                paper_name or (auto_tags.get('paper_name') or '导入试卷'))
+            existing_rel_qids = {
+                r.question_id for r in db.query(PaperQuestionRelation).filter(
+                    PaperQuestionRelation.paper_id == paper.paper_id).all()}
+            all_ids = ok_ids + reused_ids
+            order_base = paper.question_count or 0
+            for pos, qid in enumerate(all_ids, start=order_base + 1):
+                if qid in existing_rel_qids:
+                    continue
+                item_score = items[min(pos - order_base - 1, len(items) - 1)].get('score')
+                db.add(PaperQuestionRelation(
+                    paper_id=paper.paper_id,
+                    question_id=qid,
+                    question_order=pos,
+                    question_score=float(item_score) if item_score else 5.0,
+                ))
+                linked += 1
+            if linked:
+                paper.question_count = (paper.question_count or 0) + linked
+            paper_id = paper.paper_id
+            logger.info(f"[batch-parsed] 试卷#{paper_id} 关联{linked}题 "
+                        f"(累计{paper.question_count})")
+        except Exception as pe:  # noqa: BLE001 — 建卷失败不阻断题库入库
+            logger.warning(f"[batch-parsed] 双轨建卷失败(不阻断): {pe}")
+
+    total = len(items)
+    summary_record = QuestionImportRecord(
+        user_id=current_user.user_id,
+        original_filename=paper_name or '批量解析导入',
+        file_type='JSON',
+        total_questions=total,
+        success_count=len(ok_ids),
+        failed_count=len(failed_items),
+        duplicate_count=len(reused_ids),
+        import_status=('COMPLETED' if not failed_items
+                       else ('PARTIAL' if ok_ids or reused_ids else 'FAILED')),
+        import_time=datetime.now(),
+        complete_time=datetime.now(),
+        # 模型无独立match_rate列 → 存入preview_data便于追溯
+        preview_data={
+            'source': 'batch-parsed',
+            'import_mode': mode,
+            'match_rate': round(match_rate, 1),
+            'need_confirm_count': need_confirm,
+            'paper_id': paper_id,
+        },
+        paper_id=paper_id,
+    )
+    db.add(summary_record)
+    try:
+        db.commit()
+    except Exception as ce:  # noqa: BLE001
+        db.rollback()
+        logger.error(f"[batch-parsed] 提交失败: {ce}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"批量入库失败: {str(ce)}")
+
+    msg = f"导入完成：新增 {len(ok_ids)} 题，复用 {len(reused_ids)} 题，失败 {len(failed_items)} 题"
+    if paper_id:
+        msg += f"；试卷 #{paper_id} 已保存到试卷管理（关联 {len(ok_ids)+len(reused_ids)} 题）"
+
+    return {
+        'import_status': 'SUCCESS' if not failed_items else 'PARTIAL',
+        'total': total,
+        'success_count': len(ok_ids),
+        'duplicate_count': len(reused_ids),
+        'failed_items': failed_items,
+        'new_question_ids': ok_ids,
+        'reused_question_ids': reused_ids,
+        'need_confirm_count': need_confirm,
+        'match_rate': match_rate,
+        'paper_id': paper_id,
+        'paper_name': paper_name or None,
+        'message': msg,
+    }
 
 
 @router.put("/update-answer/{question_id}", summary="更新题目答案")
