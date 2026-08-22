@@ -61,6 +61,14 @@ class Settings(BaseSettings):
 
     # 新闻爬虫配置
     NEWS_BROWSER: str = Field("chromium", env="NEWS_BROWSER")
+
+    # ==================== MinerU 扫描件OCR（默认关闭，灰度启用）====================
+    # 设计规格: docs/superpowers/specs/2026-08-22-mineru-scanned-pdf-ocr-design.md
+    # MINERU_PYTHON 指向独立 Python 3.12 venv 解释器（MinerU 不支持主后端的 3.13）
+    MINERU_ENABLED: bool = Field(False, env="MINERU_ENABLED")
+    MINERU_PYTHON: str = Field(r"D:\mineru-env\Scripts\python.exe", env="MINERU_PYTHON")
+    MINERU_TIMEOUT: int = Field(300, env="MINERU_TIMEOUT")
+    MINERU_BACKEND: str = Field("pipeline", env="MINERU_BACKEND")
     
     @property
     def DATABASE_URL(self) -> str:
