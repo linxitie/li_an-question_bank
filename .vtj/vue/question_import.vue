@@ -411,6 +411,45 @@
         </div>
       </div>
     </div>
+    <!-- 双轨入库结果摘要卡（《导入结果展示》原型落地） -->
+    <div v-if="state.importSummary" class="import-summary-card">
+      <div class="summary-header">
+        <span class="summary-title">✅ 导入完成</span>
+        <button class="btn-summary-close" @click="dismissImportSummary" title="关闭">✕</button>
+      </div>
+      <div class="summary-body">
+        <div class="summary-row">
+          <span class="s-label">文档类型：</span>
+          <span class="s-value">{{ state.importSummary.paperName || (state.importSummary.mode === 'separate' ? '分离导入试卷' : 'Word批量导入') }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="s-label">总题目数：</span>
+          <span class="s-value">{{ state.importSummary.total }} 题</span>
+        </div>
+        <div class="summary-row" v-if="state.importSummary.mode === 'separate'">
+          <span class="s-label">自动匹配：</span>
+          <span class="s-value">{{ state.importSummary.matchRate }}%（{{ state.importSummary.success + state.importSummary.dup }}/{{ state.importSummary.total }}）</span>
+        </div>
+        <div class="summary-row" v-if="state.importSummary.needConfirm > 0">
+          <span class="s-label s-warn">⚠️ 待确认项：</span>
+          <span class="s-value s-warn">{{ state.importSummary.needConfirm }} 题（缺答案/低置信度，建议确认后再发布试卷）</span>
+        </div>
+        <div class="summary-row" v-if="state.importSummary.paperId">
+          <span class="s-label s-ok">✅ 试卷已保存：</span>
+          <span class="s-value s-ok">试卷ID #{{ state.importSummary.paperId }}（草稿状态，可在"试卷管理"中编辑完善并发布）</span>
+        </div>
+        <div class="summary-row">
+          <span class="s-label s-ok">✅ 题目已入库：</span>
+          <span class="s-value">新增 {{ state.importSummary.success }} 题 · 复用 {{ state.importSummary.dup }} 题<template v-if="state.importSummary.failed"> · 失败 {{ state.importSummary.failed }} 题（见控制台明细）</template></span>
+        </div>
+      </div>
+      <div class="summary-actions">
+        <button class="btn-primary btn-sm-primary" v-if="state.importSummary.paperId" @click="goViewPaper">查看试卷</button>
+        <button class="btn-secondary" @click="goViewBank">查看题库</button>
+        <button class="btn-secondary" @click="continueImport">继续导入</button>
+        <button class="btn-secondary" @click="dismissImportSummary">稍后处理</button>
+      </div>
+    </div>
     <!-- 手动匹配弹窗 -->
     <div v-if="state.manualMatchVisible" class="manual-match-overlay" @click.self="onManualMatchCancel">
       <div class="manual-match-modal">
@@ -497,6 +536,8 @@ import QuestionPreviewList from './question_preview_list.vue';
         progressPhase: 0,         // 当前阶段索引 0-based
         progressPercent: 0,       // 当前阶段进度 0-100
         progressSteps: [],        // [{label:'文档解析', status:'done'|'active'|'pending'}]
+        // 批量导入结果摘要（双轨入库展示：试卷ID/新增复用/待确认）
+        importSummary: null,
       });
       return {
         state, props, provider,
@@ -2177,9 +2218,11 @@ import QuestionPreviewList from './question_preview_list.vue';
       },
       async importAllParsedQuestions() {
         const mode = this.state.importMode;
-        // 分离导入模式下检查匹配率
-        if (mode === 'separate' && this.state.separateMatchRate < 70) {
-          ElMessage.error('匹配率仅 ' + this.state.separateMatchRate + '%，低于70%最低要求，无法批量导入。请检查答案文件格式或手动匹配后重试。');
+        var rate = Number(this.state.separateMatchRate || 0);
+        // 匹配率分档（流程图：≥80自动合并 / 50-80合并+待确认 / <50手动匹配）
+        if (mode === 'separate' && rate < 50) {
+          ElMessage.error('匹配率仅 ' + rate + '%（低于50%）。请使用"手动匹配"界面建立对应关系后再导入。');
+          this.showManualMatchDialog();
           return;
         }
         // 过滤掉已导入和标记为重复的题目
@@ -2204,57 +2247,88 @@ import QuestionPreviewList from './question_preview_list.vue';
           }
         }
         this.state.loading = true;
-        this.state.importProgress = 0;
-        // 更新进度条到最后阶段(导入入库)
+        this.state.importProgress = 30;
+        // 进度条进入最后阶段(导入入库)
         var lastStepIdx = this.state.progressSteps.length - 1;
-        if (lastStepIdx >= 0) { this.stepActive(lastStepIdx); this.setProgress(lastStepIdx, 0); }
-        let ok = 0;
-        let dup = 0;
-        let fail = 0;
-        var total = pending.length;
-        for (let i = 0; i < pending.length; i++) {
-          const q = pending[i];
-          var pct = Math.round((i + 1) * 100 / total);
-          this.state.importProgress = pct;
-          if (lastStepIdx >= 0) this.setProgress(lastStepIdx, pct);
-          try {
-            const res = await this.fetchWithRetry('/api/questions/import/single', {
-              method: 'POST',
-              headers: this.getJsonHeaders(),
-              body: JSON.stringify({
-                paper_name: this.state.batchPaperName || 'Word导入',
-                subject_category: q.subject_category || '公专',
-                question_type_detail: q.question_type_detail || '单选题',
-                question_content: q.question_content,
-                options: q.options,
-                answer: q.answer || '',
-                answer_analysis: q.analysis || '',
-                score: q.score || 1,
-                difficulty: q.difficulty || 3,
-                import_mode: mode
+        if (lastStepIdx >= 0) { this.stepActive(lastStepIdx); this.setProgress(lastStepIdx, 30); }
+        try {
+          // ===== 单请求批量入库（双轨：题库 + 试卷管理）=====
+          // 替代旧的逐题POST /single循环（97题=97请求 → 触发限流429）
+          const res = await this.fetchWithRetry('/api/questions/import/batch-parsed', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({
+              paper_name: this.state.batchPaperName || (mode === 'separate' ? '分离导入试卷' : 'Word批量导入'),
+              subject_category: (pending[0] && pending[0].subject_category) || '公专',
+              import_mode: mode,
+              match_rate: mode === 'separate' ? rate : 0,
+              questions: pending.map(function(q) {
+                return {
+                  question_content: q.question_content,
+                  options: q.options,
+                  answer: q.answer || '',
+                  answer_analysis: q.analysis || '',
+                  question_type_detail: q.question_type_detail || '单选题',
+                  subject_category: q.subject_category,
+                  score: q.score || 1,
+                  difficulty: q.difficulty || 3
+                };
               })
-            });
-            const data = await res.json();
-            if (res.ok && data.import_status === 'SUCCESS') { q._imported = true; ok++; }
-            else if (data.import_status === 'DUPLICATE') {
-              q._imported = true;
-              q._is_duplicate = true;
-              q._similarity = data.similarity || 1.0;
-              dup++;
+            })
+          }, 600000); // 单事务整卷处理，超时放宽至10分钟
+          const data = await res.json();
+          if (!res.ok) {
+            ElMessage.error(data.detail || ('批量导入失败 (HTTP ' + res.status + ')'));
+          } else {
+            this.state.duplicateCount = data.duplicate_count || 0;
+            pending.forEach(function(q) { q._imported = true; });
+            this.state.importSummary = {
+              total: data.total || 0,
+              success: data.success_count || 0,
+              dup: data.duplicate_count || 0,
+              failed: (data.failed_items || []).length,
+              needConfirm: data.need_confirm_count || 0,
+              matchRate: data.match_rate || rate,
+              paperId: data.paper_id,
+              paperName: data.paper_name || this.state.batchPaperName || '',
+              mode: mode
+            };
+            if ((data.failed_items || []).length) {
+              console.warn('[batch-parsed] 失败明细:', data.failed_items);
             }
-            else { fail++; console.log('[importAll] fail', {idx: i, status: res.status, data: data, question: q.question_content?.substring(0,60), answer: q.answer}); }
-          } catch (e) { fail++; }
+            if (lastStepIdx >= 0) { this.stepDone(lastStepIdx); this.setProgress(lastStepIdx, 100); }
+            ElMessage.success(data.message || ('导入完成：成功 ' + data.success_count + ' 题'));
+            if (data.need_confirm_count > 0) {
+              ElMessage.warning(data.need_confirm_count + ' 题缺答案/低置信度，建议在试卷编辑中人工确认后再发布');
+            }
+          }
+        } catch (e) {
+          ElMessage.error(this.handleFetchError(e, '批量导入'));
         }
-        this.state.duplicateCount = dup;
-        // 进度条完成
-        var lastIdx = this.state.progressSteps.length - 1;
-        if (lastIdx >= 0) { this.stepDone(lastIdx); this.setProgress(lastIdx, 100); }
-        ElMessage.success('导入完成：成功 ' + ok + ' 题，重复 ' + dup + ' 题，失败 ' + fail + ' 题');
         this.loadRecords();
         // 通知题库首页刷新数据
         this.notifyBankRefresh();
         this.state.loading = false;
         this.state.importProgress = 0;
+      },
+      goViewPaper() {
+        // 跳转教师端试卷管理查看刚导入的整卷
+        if (this.$router && this.$router.push) this.$router.push('/teacher/papers');
+        else window.location.href = '/teacher/papers';
+      },
+      goViewBank() {
+        this.notifyBankRefresh();
+        if (this.$router && this.$router.push) this.$router.push('/');
+        else window.location.href = '/';
+      },
+      dismissImportSummary() { this.state.importSummary = null; },
+      continueImport() {
+        this.state.importSummary = null;
+        this.state.parsedDocsQuestions = [];
+        this.state.rawTextPreview = '';
+        this.state.separateMatchRate = 0;
+        this.state.separateNeedConfirm = false;
+        ElMessage.info('已重置，可继续导入下一份文档');
       },
       notifyBankRefresh() {
         // 通过 sessionStorage 标记通知 QuestionBank 首页刷新数据
@@ -2974,4 +3048,39 @@ import QuestionPreviewList from './question_preview_list.vue';
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }
+
+  /* ====== 双轨入库结果摘要卡 ====== */
+  .import-summary-card {
+    margin: 20px auto 0;
+    max-width: 760px;
+    background: linear-gradient(160deg, rgba(16,40,28,0.92), rgba(10,26,18,0.95));
+    border: 1px solid rgba(74,222,128,0.35);
+    border-radius: 14px;
+    box-shadow: 0 10px 36px rgba(0,0,0,0.45);
+    overflow: hidden;
+  }
+  .summary-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px;
+    background: rgba(74,222,128,0.12);
+    border-bottom: 1px solid rgba(74,222,128,0.25);
+  }
+  .summary-title { font-size: 15px; font-weight: 700; color: #4ade80; letter-spacing: 1px; }
+  .btn-summary-close {
+    background: transparent; border: none; color: #8899aa;
+    font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 6px;
+  }
+  .btn-summary-close:hover { color: #ffffff; background: rgba(255,255,255,0.08); }
+  .summary-body { padding: 14px 18px 6px; }
+  .summary-row { display: flex; gap: 8px; padding: 5px 0; font-size: 13px; line-height: 1.55; }
+  .s-label { min-width: 96px; color: #8899aa; flex-shrink: 0; }
+  .s-value { color: #dfe7f2; word-break: break-all; }
+  .s-ok, .s-value.s-ok { color: #4ade80; font-weight: 600; }
+  .s-warn, .s-value.s-warn { color: #f59e0b; font-weight: 600; }
+  .summary-actions {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    padding: 12px 18px 16px; justify-content: flex-end;
+  }
+  .btn-sm-primary { padding: 8px 22px; font-size: 13px; }
+
 </style>
