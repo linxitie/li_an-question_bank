@@ -654,9 +654,13 @@ import QuestionPreviewList from './question_preview_list.vue';
         var self = this;
         var formData = new FormData();
         formData.append('file', file);
-        // PDF扫描件OCR需要更长时间（每页约20秒，15页=300秒）
+        // PDF扫描件OCR需要更长时间：MinerU高精度解析约1-3分钟/份，
+        // 覆盖 300s子进程超时 + 60s GPU排队等待 + 上传与后端处理余量 → 7分钟
         var isPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
-        var timeout = isPdf ? 360000 : 30000;  // PDF: 6分钟, 其他: 30秒
+        var timeout = isPdf ? 420000 : 30000;  // PDF: 7分钟, 其他: 30秒
+        if (isPdf) {
+          ElMessage.info('正在解析文件：' + file.name + '（扫描件将启用MinerU高精度OCR，约需1-3分钟，请耐心等待）');
+        }
         try {
           // 使用 getAuthHeaders() 携带认证token（不含 Content-Type，让浏览器自动设置 multipart boundary）
           var res = await this.fetchWithRetry('/api/questions/import/upload', {
@@ -692,9 +696,9 @@ import QuestionPreviewList from './question_preview_list.vue';
             callback(text);
             return;
           }
-          // 扫描件PDF特殊处理
+          // 扫描件PDF特殊处理（此时系统已尝试MinerU高精度OCR + PaddleOCR逐页识别两级引擎）
           if (data.scanned_pdf) {
-            ElMessage.warning('检测到扫描件PDF（图片型，无文字层）。请使用"图片导入"标签页单独上传，或先将PDF转换为可编辑文本格式。');
+            ElMessage.warning('检测到扫描件PDF，自动识别未产出内容。请确认扫描清晰度，或改用"图片导入"标签页；若多次失败请联系管理员检查MinerU服务状态。');
             callback('');
             return;
           }
@@ -704,7 +708,7 @@ import QuestionPreviewList from './question_preview_list.vue';
             return;
           }
           // 终极回退：显示引导信息
-          ElMessage.warning('文件解析返回空内容。如果是PDF扫描件，请使用"图片导入"标签页；如果是Word文档，请确认文件包含可选择文本。');
+          ElMessage.warning('文件解析返回空内容。扫描件PDF已尝试MinerU高精度OCR仍无结果时，请改用"图片导入"标签页；Word文档请确认包含可选择文本。');
           callback('');
         } catch (e) {
           ElMessage.error('文件上传异常：' + (e.message || '网络错误'));
@@ -725,11 +729,13 @@ import QuestionPreviewList from './question_preview_list.vue';
             const formData = new FormData();
             formData.append('file', file);
             if (self.state.batchPaperName) formData.append('paper_name', self.state.batchPaperName);
+            // PDF走MinerU高精度OCR可达数分钟，显式提升超时（默认30s必超时）
+            var batchIsPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
             const res = await self.fetchWithRetry('/api/questions/import/upload', {
               method: 'POST',
               headers: self.getAuthHeaders(),
               body: formData
-            });
+            }, batchIsPdf ? 420000 : undefined);
             const data = await res.json();
             if (!res.ok) {
               ElMessage.warning(data.detail || '上传失败 (HTTP ' + res.status + ')');
