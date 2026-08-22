@@ -1,6 +1,7 @@
 """
 题目导入API - 支持单题导入、批量文件导入、图片OCR导入、分离导入智能匹配
 """
+import asyncio
 import base64
 import hashlib
 import ipaddress
@@ -29,6 +30,10 @@ from ...models.models import (
 )
 from ...schemas.schemas import SuccessResponse, ParseRequest, ParseResult, ParsedQuestion, ImageRef
 from ...services.question_classifier import QuestionClassifier, detect_subcategory_enhanced
+from ...services.mineru_service import (  # 扫描件三级回退链第一级（规格§5.2）
+    extract_text_sync as mineru_extract_text_sync,
+    is_enabled as mineru_is_enabled,
+)
 from ...services.text_parser import (
     normalize_text_for_comparison,
     compute_text_similarity,
@@ -578,8 +583,19 @@ def _extract_text_from_pdf(buf: bytes) -> str:
     except Exception as e:
         logger.warning(f"PyPDF2 解析失败: {e}")
 
-    # === OCR 回退：检测到扫描件PDF（无文本层）→ 提取图片并OCR ===
+    # === OCR 回退：检测到扫描件PDF（无文本层）→ 三级回退链 ===
     logger.info("PDF文本提取为空，尝试OCR识别扫描件...")
+
+    # 第一级: MinerU 高精度版面解析（独立venv子进程，GPU加速）
+    # 失败契约: extract_text_sync 任何失败返回 None → 继续第二级，绝不阻断
+    if mineru_is_enabled():
+        mineru_text = mineru_extract_text_sync(buf)
+        if mineru_text:
+            logger.info(f"[mineru] 解析成功: {len(mineru_text)}字符，采用MinerU结果")
+            return mineru_text
+        logger.warning("[mineru] 未返回有效文本，回退PaddleOCR逐页路径")
+
+    # 第二级(保底): 原有 PyPDF2图片提取 + PaddleOCR逐页识别 —— 保持原逻辑一字不改
     ocr_text = _extract_text_from_scanned_pdf(buf)
     if ocr_text:
         logger.info(f"扫描件OCR成功: {len(ocr_text)} 字符")
@@ -1553,7 +1569,9 @@ async def upload_file_for_import(
             text = _extract_text_from_docx(buf)
             raw_questions = [{'type': 'docx_text', 'content': text}]
         elif ext == '.pdf':
-            text = _extract_text_from_pdf(buf)
+            # asyncio.to_thread 卸载：PDF解析/OCR（含MinerU子进程等待，可达数分钟）
+            # 在线程池执行，避免阻塞事件循环拖垮整个API服务（规格§5.2 改动①）
+            text = await asyncio.to_thread(_extract_text_from_pdf, buf)
             raw_questions = [{'type': 'pdf_text', 'content': text}]
 
         # 标准化并预览

@@ -227,6 +227,88 @@ D. 72小时"""
         print(f"混合格式测试通过：匹配 {result.matched_count} 题")
 
 
+# ============ MinerU 扫描件三级回退链（计划 Task 3） ============
+
+import sys
+import types
+
+
+class TestScannedPdfMineruFallback:
+    """验证 _extract_text_from_pdf 的分支选择：
+    ① MinerU 启用且成功 → 返回其结构化文本（不再走旧OCR）
+    ② MinerU 禁用/失败 → 走既有 _extract_text_from_scanned_pdf（PaddleOCR，行为不变）
+
+    通过向 sys.modules 注入 pdfplumber/PyPDF2 存根（页数为空 → 两级文本提取
+    自然返回空），确定性地到达 OCR 回退段；不依赖真实解析器对垃圾字节的行为，
+    也不修改任何生产解析代码。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _stub_parsers(self, monkeypatch):
+        # --- pdfplumber 存根: open() 返回无页面上下文 ---
+        fake_plumber = types.ModuleType('pdfplumber')
+
+        class _FakePdf:
+            pages = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        fake_plumber.open = lambda *a, **k: _FakePdf()
+        monkeypatch.setitem(sys.modules, 'pdfplumber', fake_plumber)
+
+        # --- PyPDF2 存根: PdfReader 无页面 ---
+        fake_pypdf2 = types.ModuleType('PyPDF2')
+
+        class _FakeReader:
+            pages = []
+
+        fake_pypdf2.PdfReader = _FakeReader
+        monkeypatch.setitem(sys.modules, 'PyPDF2', fake_pypdf2)
+        yield
+
+    def test_prefers_mineru_when_available(self, monkeypatch):
+        import app.api.v1.question_import as qi
+
+        # 实现采用 from-import 直绑，故在 qi 命名空间打补丁
+        monkeypatch.setattr(qi, 'mineru_is_enabled', lambda: True)
+        monkeypatch.setattr(qi, 'mineru_extract_text_sync',
+                            lambda buf: 'MinerU结构化文本')
+        # 惰性间谍: 若旧路径被调用则记录（勿用 pytest.fail 急切求值——赋值即抛）
+        fallback_calls = []
+        monkeypatch.setattr(qi, '_extract_text_from_scanned_pdf',
+                            lambda buf: fallback_calls.append(1))
+
+        result = qi._extract_text_from_pdf(b'%PDF-1.4 scanned-stub')
+        assert result == 'MinerU结构化文本'
+        assert not fallback_calls, 'MinerU可用时不应回退到旧PaddleOCR路径'
+
+    def test_falls_back_to_paddleocr_path(self, monkeypatch):
+        import app.api.v1.question_import as qi
+
+        monkeypatch.setattr(qi, 'mineru_is_enabled', lambda: False)
+        monkeypatch.setattr(qi, '_extract_text_from_scanned_pdf',
+                            lambda buf: 'PADDLE_FALLBACK_TEXT')
+
+        result = qi._extract_text_from_pdf(b'%PDF-1.4 scanned-stub')
+        assert result == 'PADDLE_FALLBACK_TEXT'
+
+    def test_falls_back_when_mineru_returns_none(self, monkeypatch):
+        """MinerU 启用但解析失败(None) → 必须继续走旧路径（三级链第②级）。"""
+        import app.api.v1.question_import as qi
+
+        monkeypatch.setattr(qi, 'mineru_is_enabled', lambda: True)
+        monkeypatch.setattr(qi, 'mineru_extract_text_sync', lambda buf: None)
+        monkeypatch.setattr(qi, '_extract_text_from_scanned_pdf',
+                            lambda buf: 'PADDLE_FALLBACK_TEXT')
+
+        result = qi._extract_text_from_pdf(b'%PDF-1.4 scanned-stub')
+        assert result == 'PADDLE_FALLBACK_TEXT'
+
+
 # ============ 直接运行 ============
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
