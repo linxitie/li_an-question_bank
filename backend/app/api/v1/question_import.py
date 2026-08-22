@@ -33,6 +33,7 @@ from ...services.question_classifier import QuestionClassifier, detect_subcatego
 from ...services.mineru_service import (  # 扫描件三级回退链第一级（规格§5.2）
     extract_text_sync as mineru_extract_text_sync,
     is_enabled as mineru_is_enabled,
+    health_check as mineru_health_cached,
 )
 from ...services.text_parser import (
     normalize_text_for_comparison,
@@ -1980,6 +1981,15 @@ async def separate_match_endpoint(
     except Exception as e:
         logger.error(f"分离导入匹配失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"智能匹配失败: {str(e)}")
+
+
+@router.get('/mineru-health', summary='MinerU引擎健康巡检')
+async def mineru_health():
+    """探测独立venv中MinerU是否可用（结果缓存10分钟）。
+
+    供运维巡检与前端诊断使用；不鉴权、仅暴露可用性/版本，不含敏感路径信息。
+    """
+    return mineru_health_cached()
 
 
 @router.post("/parse", summary="统一文档解析（Pipeline入口）")
