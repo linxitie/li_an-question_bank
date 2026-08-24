@@ -124,3 +124,19 @@
    - 走查：卡片数字四来源口径 → 「查看全部」弹窗两Tab → 考点点击再练一组 → 各来源记录跳转续答/看解析 → 切标签页返回自动刷新 → 控制台零报错 → 相邻模块回归（快速练习入口/错题集/成绩分析/GoalCard）
 4. `.vtj/files/question_bank.json.bak` 为同步工具自动备份（本地回滚用），未纳入版本库。
 5. 先存于 question_bank.json state 区的碎片化污染条目（如键 `2`/`3`/practiceLog 截断值）为历史遗留，本次未触碰，建议独立清理任务处理。
+
+---
+
+## 追加轮执行记录（2026-08-24）：幻影徽章 + 空白跳转修复
+
+| 项 | 内容 | 提交 |
+|---|---|---|
+| 问题1「公专·综合」幻影徽章 | type-summary 移除 `'综合'` 兜底桶：子科目缺失/None/'无' 的题目直接跳过统计（系统中不存在该分类） | `59ce021` |
+| 问题2 跳转空白·真因 | recent-records 的 qp_ 行 `jump.subject` 透传了库中真实存在的 `auto_*` 科目码 → exercise 页旧接口科目校验 400 → 前端 `if(!res.ok) return` 静默留白。修复：按 subject_id 映射为约定键 xc/sl/ga（与 goKpPractice 同源缺陷的第二位点） | `59ce021` |
+| 回归测试 | 新增 `test_auto_code_maps_to_convention_key`；套件 **13/13** 通过 | `59ce021` |
+| 历史数据清理 | 新增 `scripts/cleanup_old_records.py`（--dry-run/--apply + 自动备份 + 幂等）；已执行 apply：**删除 practice_record 254 条**（<2026-08-01），exam 系 0 条；备份于 `backend/data/backups/pre_cleanup_20260824_163443/` | `31ec4bf` |
+| 真库复验 | `BAD_ZONGHE_COUNT=0`（types 4→3）；recent-records total=0（旧记录清除后合理空态）；exercise 旧接口整科取样正常（200，20/772 题）| — |
+
+### 追加轮说明
+- 清理前 dry-run 显示 exam 系全为 0 —— 库中不存在旧试卷记录；现存唯一 exam_record（8月23日，paper_id=18）数据完整（100 关联全部有效），可正常续答。
+- 后端改动需**重启 uvicorn 服务**后生效；本轮未改动任何前端文件。
