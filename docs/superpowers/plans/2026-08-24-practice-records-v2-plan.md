@@ -1,0 +1,103 @@
+# 「练习记录」模块优化 v2.0 — 实施计划
+
+| 项 | 内容 |
+|---|---|
+| 计划日期 | 2026-08-24 |
+| 规格来源 | `docs/superpowers/specs/2026-08-24-practice-records-v2-design.md`（已批准，commit 62c11fb） |
+| 分支 | `feat/practice-records-v2` |
+| 任务数 | 3 个主任务（后端 / 前端 / 验收），每任务独立提交 |
+
+---
+
+## Task 1：后端三端点追加 + 冒烟测试
+
+**目标**：`backend/app/api/v1/practice.py` 文件末尾追加 3 个只读端点；新增 `backend/tests/test_practice_unified.py`。**禁止改动文件内任何现有代码、禁止触碰 main.py / exams.py / smart_exam.py / quick_practice.py。**
+
+### 步骤
+
+1.1 在 practice.py 顶部 imports 补充所需模型：`SmartExamRecord, ExamRecord, ExamAnswerDetail, YearPaper, ExamPaper, KnowledgePoint, QuestionKnowledge, SubCategory`（检查现有 import 行，仅追加缺失项）。
+
+1.2 **GET `/unified-stats`**
+- 依赖 `get_current_user`。
+- `practice_record` 部分：单条 GROUP BY `practice_date` 查询取近 7 日 + 当日/本周/累计的 COUNT/SUM（用 `case()` 或一次取回聚合行后在 Python 汇总，杜绝逐日循环 N+1）。
+- 试卷部分（历年+模考）：`ExamRecord JOIN ExamAnswerDetail` 按 `DATE(submit_time/start_time)` 聚合题数/正确数/用时(duration_used)。
+- 双计排除：排除 `exam_record.record_id IN (SELECT exam_record_id FROM smart_exam_record WHERE exam_record_id IS NOT NULL)`（智能组卷题数已计入 practice_record）。
+- smart 组卷会话不另计题数（规格 §3.2 注记）。
+- 返回结构见规格 §3.2；时间一律秒。
+
+1.3 **GET `/knowledge-progress`**
+- ≤4 条 SQL：①`KnowledgePoint JOIN SubCategory JOIN QuestionSubject`（status=1）；②`QuestionKnowledge` 取 point_id→question_id 映射；③④对映射内题目按用户去重 done 与 correct 各一条 GROUP BY（或合并为一条含 SUM(case) 的查询）。
+- 只返回 total>0 考点；组内按 done_pct 升序；结构见规格 §3.3。
+
+1.4 **GET `/recent-records?source=&status=&limit=&offset=`**
+- Query 校验：limit ge=1 le=50 默认 10；offset ge=0；source 可选中文标签枚举；status ∈ completed/in_progress。
+- 四来源各自一条查询：
+  - 历年试卷：`ExamRecord(exam_type='SELF_TEST') JOIN YearPaper`；
+  - 小模考：`ExamRecord(exam_type='MOCK_EXAM') JOIN ExamPaper`；
+  - 智能组卷：`SmartExamRecord`；
+  - 快速练习：`PracticeRecord(source_type='快速练习') GROUP BY practice_date, subject_id`（JOIN QuestionSubject 取科目名）。
+- 得分查询模式复用 exam_records.py 中 /self、/mock 端点的现有写法（可参考其实现，不得 import 其私有函数以外内容造成耦合）。
+- 内存合并按最近时间倒序 → 过滤 source/status → 切片分页；条目结构与 `jump{path,params}` 见规格 §3.4；record_key 前缀 `exam_`/`smart_`/`qp_`。
+- 返回 `{total, limit, offset, items}`。
+
+### 验证
+
+1.5 `python -m pytest backend/tests/test_practice_unified.py -v` 通过（测试覆盖：未登录 401/403、参数校验 422、混合来源数值正确性、空数据边界）。若项目测试夹具不支持独立运行，则退化为：启动 uvicorn 后 curl 三端点断言 JSON 结构与鉴权行为，把结果贴入提交说明。
+
+### 提交
+
+`feat(practice): add unified-stats/knowledge-progress/recent-records aggregation endpoints`
+
+---
+
+## Task 2：前端 question_bank.vue 升级（VTJ 防护协议全程护航）
+
+**目标**：卡片升级 + 「查看全部」ElDialog 双 Tab + 自动刷新。**严格按规格 §7.1 六步执行，任何一步失败即停并报告。**
+
+### 步骤
+
+2.1 **基线**：`vtj_check_consistency(id="question_bank")` 必须 consistent；确认 `.vtj/projects/*.json` pages 数组中 question_bank 为 `raw:true`。对 `.vtj/vue/question_bank.vue` 做一次 git 基线提交（如工作区有未提交改动则记录 hash 即可，不强提他人改动）。
+
+2.2 **template 改造**（在现有结构上增量修改，不重构无关区块）：
+- log-stats/log-sub-stats 绑定字段切换到新接口数据；
+- type badge 内加 `%` 迷你进度条 span；
+- 移除 L228-230 常驻刷新按钮区，改为 statsError 错误态 + 重试（复用 L145-150 retry-btn 样式模式）;
+- 卡片底部加「查看全部 ›」入口；
+- 文件底部追加 ElDialog 结构（两个 Tab、筛选 chips、列表、加载更多、空态）——参照 admin_questions.vue 弹窗先例与本项目 Element Plus 用法。
+
+2.3 **script 改造**（methods 块追加，Options API，风格与现文件一致）：
+- state 新增：`unifiedStats`、`kpProgress`、`recentRecords`、`recordsFilter{source,status}`、`recordsPaging{limit,offset,total,loading}`、`dialogVisible`、`activeTab` 等；
+- `loadUnifiedStats()`：Promise.all 并行 fetch 三新端点（getJsonHeaders()）；
+- `openRecordsDialog()` / `switchTab()` / `setSourceFilter()` / `setStatusFilter()` / `loadMoreRecords()`；
+- `goRecordDetail(record)`：按 record.source 分发跳转（规格 §5 映射表；智能组卷已完成条目按 D1 结论处理）；
+- 生命周期：mounted 内调用 loadUnifiedStats 并注册 visibilitychange 监听 + 5 分钟 setInterval；beforeUnmount 清理定时器与监听。禁用 onActivated。
+- 保留旧 loadPracticeRecords 相关方法暂不删除？——否：本页统计入口统一切换到新接口；旧方法若无其他引用则一并移除，避免死代码（DSL 同步会如实反映）。
+
+2.4 **style 追加**：进度条、徽章四色（#409EFF/#E6A23C/#9B59B6/#67C23A）、弹窗布局、<768px 全屏化媒体查询。
+
+2.5 **版本同步**：useProvider version 更新为新时间戳 → `vtj_sync_vue_to_dsl(id="question_bank")` → 核对返回 changes 清单。
+
+2.6 **一致性校验**：`vtj_check_consistency(id="question_bank")` 必须 consistent；发现 missingInDsl 则手工补写 DSL methods 声明（用 vtj_write_dsl_file section=methods）。
+
+2.7 **显示生效**：删除 node_modules/.vite 缓存 → 重启 dev server → Ctrl+Shift+R。
+
+### 提交
+
+`feat(frontend): practice records card upgrade + records dialog with VTJ dsl sync`
+（包含 question_bank.vue + question_bank.json 及其 .bak 变更）
+
+---
+
+## Task 3：验收 a~g + 回归 + 收尾
+
+3.1 按规格 §八 逐项执行 a~g 验证（Playwright MCP 浏览器实测 + SQL 对照 + 控制台检查）。
+3.2 回归走查：分类切换、快速练习三级选择入口、搜索、错题集/笔记/收藏/金币购快捷工具、GoalCard。
+3.3 D1 开放项结论写入实施记录；R1~R5 风险逐项确认状态。
+3.4 最终汇报：分支提交清单、验收结果表、遗留事项。
+
+---
+
+## 执行纪律
+
+- 每 Task 完成即提交并勾选计划状态；Task 失败立即停止并上报阻塞点，不带病续跑。
+- 全程不触碰规格第二节"不做清单"所列范围。
