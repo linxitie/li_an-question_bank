@@ -49,6 +49,7 @@ from ...services.text_parser import (
     canonical_answer,
     _extract_options,
     _detect_question_type,
+    clean_question_text,
 )
 
 router = APIRouter(prefix="/api/questions/import", tags=["题目导入"])
@@ -948,17 +949,49 @@ def _detect_complete_paper(text: str) -> bool:
 
 def _extract_paper_name(filename: str, text: str) -> Optional[str]:
     """从文件名或文档开头提取试卷名称"""
-    text_head = text[:500] if text else ''
-    # 模式1: XXXX年XX考试行测/申论/公专
-    m = re.search(r'(20\d{2}[年年度].{1,20}?(?:考试|联考|省考|国考).{0,10}?(?:行测|申论|公专|真题|试卷))', text_head)
-    if m:
-        return m.group(1).strip()
-    # 模式2: 从文件名去除扩展名
+    text_head = text[:800] if text else ''
+
+    # 按优先级尝试多种模式提取标题
+    patterns = [
+        # 模式1: 带书名号的完整标题 —— 《2025年XX省公务员录用考试行政职业能力测验试卷》
+        r'《([^》]{5,60})》',
+        # 模式2: XXXX年XX省/市+考试类型+科目/试卷 —— 2025年国考行测真题、2024年公安联考公专试卷
+        r'(20\d{2}[年年度][^\n]{2,40}?(?:考试|联考|省考|国考|录用|招录)[^\n]{0,30}?(?:行测|申论|公专|真题|试卷|测验))',
+        # 模式3: XX省/市+XXXX年+考试 —— 河南省2025年公务员考试行测
+        r'([\u4e00-\u9fa5]{2,6}(?:省|市|自治区)?20\d{2}[年年度][^\n]{2,40}?(?:行测|申论|公专|真题|试卷|测验))',
+        # 模式4: 行政职业能力测验 / 申论 / 公安专业科目 —— 直接匹配科目全称做标题
+        r'((?:行政职业能力测验|申论|公安专业科目|综合应用能力)[^\n]{0,10}(?:试卷|真题|模拟|练习)?)',
+        # 模式5: 第一行非空文本（当作文档标题）—— 去除页眉/水印等短文本
+        r'^\s*(.{8,60})\s*$',
+    ]
+
+    for i, pattern in enumerate(patterns):
+        if i == 4:
+            # 模式5只取第一行
+            for line in text_head.split('\n'):
+                line = line.strip()
+                if line and len(line) >= 8 and not re.match(r'^[\d\s\.\-/\\]+$', line):
+                    # 过滤掉纯数字行、页码行
+                    name = re.sub(r'[\s]+', ' ', line).strip()
+                    if len(name) >= 5:
+                        return name
+            continue
+        m = re.search(pattern, text_head)
+        if m:
+            name = m.group(1).strip() if i == 0 else m.group(0).strip()
+            # 清理多余空白和特殊字符
+            name = re.sub(r'\s+', ' ', name)
+            name = name.strip('— —··、，。')
+            if len(name) >= 5:
+                return name
+
+    # 兜底：从文件名提取
     if filename:
         name = re.sub(r'\.[^.]+$', '', filename)
         name = re.sub(r'[（(].*?[）)]', '', name)  # 去除括号内容
-        if len(name) > 5:
-            return name.strip()
+        name = name.strip()
+        if len(name) >= 3:
+            return name
     return None
 
 
@@ -1035,6 +1068,40 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
     避免占位符残留导致前端图片不显示。
     """
     images = []
+
+    # 无关图片检测函数（过滤logo、页眉页脚、扫码条等）
+    def _is_irrelevant_image(img_data: bytes) -> bool:
+        """检测图片是否为无关内容（logo、页眉页脚、扫码条）"""
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(img_data))
+            w, h = img.size
+            # 小于100x100的图片大概率是logo/图标
+            if w < 100 and h < 100:
+                logger.debug(f"[images] 过滤小图片: {w}x{h}")
+                return True
+            # 宽高比极端的图片是页眉页脚/扫描条
+            ratio = max(w, h) / max(min(w, h), 1)
+            if ratio > 8 and min(w, h) < 60:
+                logger.debug(f"[images] 过滤极端宽高比图片: {w}x{h} ratio={ratio:.1f}")
+                return True
+            # 检测近乎纯白/纯灰的图片（扫描仪空白页边距）
+            if w > 200 and h > 50 and h < 100:
+                img_small = img.resize((20, 20))
+                pixels = list(img_small.getdata())
+                if len(pixels) > 0:
+                    avg = sum(p[:3]) / 3 if isinstance(pixels[0], tuple) else pixels[0]
+                    variance = sum((p[:3][0] if isinstance(p, tuple) else p - avg) ** 2 for p in pixels) / len(pixels)
+                    if variance < 50:  # 几乎纯色
+                        logger.debug(f"[images] 过滤纯色图片: {w}x{h} variance={variance:.1f}")
+                        return True
+        except ImportError:
+            pass  # PIL未安装则跳过检测
+        except Exception:
+            pass  # 检测失败不阻止保存
+        return False
+
     # Resolve absolute backend directory for path construction
     _current_file = os.path.abspath(__file__)
     _backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(_current_file)))
@@ -1068,6 +1135,9 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                 header, data = src.split(',', 1)
                 img_data = base64.b64decode(data)
                 if not _check_size(img_data, f'base64图片{idx}'):
+                    continue
+                # ★ 新增：过滤无关图片（logo/页眉页脚）
+                if _is_irrelevant_image(img_data):
                     continue
                 md5 = hashlib.md5(img_data).hexdigest()[:8]
                 ext = _safe_ext(header.split(';')[0].split('/')[-1])
@@ -1122,6 +1192,9 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                         img_data = b''.join(chunks)
                         if not _check_size(img_data, f'HTTP图片{idx}'):
                             continue
+                        # ★ 新增：过滤无关图片（logo/页眉页脚）
+                        if _is_irrelevant_image(img_data):
+                            continue
                         md5 = hashlib.md5(img_data).hexdigest()[:8]
                         ext = _safe_ext(src.rsplit('.', 1)[-1], 'jpg')
                         filename = f'img_{idx}_{md5}.{ext}'
@@ -1175,6 +1248,9 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
             if src_file:
                 img_data = open(src_file, 'rb').read()
                 if not _check_size(img_data, f'docx图片{marker_key}'):
+                    continue
+                # ★ 新增：过滤无关图片（logo/页眉页脚）
+                if _is_irrelevant_image(img_data):
                     continue
                 md5 = hashlib.md5(img_data).hexdigest()[:8]
                 dst_name = f'img_docx_{idx}_{md5}.png'
@@ -1255,6 +1331,12 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         # 分离模式：无答案题目标记为待补充
         answer = '待补充'
 
+    # 统一清洗口径（问题1/T2 配套修复）：去重检测与入库存储必须使用同一
+    # 清洗后的内容，否则"原始输入 vs 清洗后存储"指纹不一致会导致重复题
+    # 漏检（生产库同题多副本的根因之一）。clean_question_text 移除 UTB ID、
+    # "第X题："前缀并合并空白；清洗后为空则回退原文（防御极端输入）。
+    content = clean_question_text(content) or content
+
     # 科目（在去重前获取，用于缩小候选范围）
     subject_name = question_data.get('subject_category', '行测')
     subject = _get_or_create_subject(db, subject_name)
@@ -1286,6 +1368,7 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         subject.subject_id, content, type_name,
         question_data.get('subcategory') or question_data.get('子科目') or ''
     )
+    # content 已在函数入口统一清洗（与去重同口径），直接入库
     question = QuestionBank(
         subject_id=subject.subject_id,
         type_id=qtype.type_id,
@@ -1340,6 +1423,27 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         'question_id': question.question_id,
         'message': '题目导入成功',
     }
+
+
+# ============ 测试模板数据防御（问题1-R3 防呆闸门） ============
+# 历史事故：backend/tests/test_batch_parsed_import.py 曾直连真实库，断言失败后
+# 清理不执行，UTB 模板垃圾题（"UTB{8位hex}"标记 + "人民警察基本素养测试要点N"）
+# 污染生产库。此闸门在入库前拦截同类数据；真实公安题目不含这些标记（920题实测）。
+_TEST_UTB_RE = re.compile(r'UTB[a-f0-9]{8,}', re.IGNORECASE)
+_TEST_KEYWORD = '测试要点'
+
+
+def _is_test_garbage(q: Dict[str, Any]) -> bool:
+    """检测题目数据是否为自动化测试模板泄漏（UTB 标记 / 测试要点模板）"""
+    blob_parts = [str(q.get('question_content') or ''),
+                  str(q.get('answer_analysis') or '')]
+    for o in (q.get('options') or []):
+        if isinstance(o, dict):
+            blob_parts.append(str(o.get('value') or ''))
+        else:
+            blob_parts.append(str(o))
+    blob = ' '.join(blob_parts)
+    return bool(_TEST_UTB_RE.search(blob) or _TEST_KEYWORD in blob)
 
 
 @router.post("/single", summary="单题导入")
@@ -1445,6 +1549,13 @@ async def batch_import_parsed(
         q.setdefault('paper_name', paper_name or '批量解析导入')
         q.setdefault('subject_category', default_subject or '公专')
         q.setdefault('import_mode', mode)
+        # 测试模板防御（问题1-R3）：命中即拒收，不入库
+        if _is_test_garbage(q):
+            failed_items.append({
+                'index': idx,
+                'reason': 'test_pattern_detected: 检测到测试模板数据(UTB标记/测试要点模板)，拒绝入库',
+            })
+            continue
         try:
             r = _upsert_question_core(db, current_user, q)
             qid = r['question_id']
@@ -2130,7 +2241,7 @@ async def separate_match_endpoint(
         if not subject_name:
             # 从题目文本自动检测科目
             all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
-            subject_name = detect_subject_category(all_content)
+            subject_name, subject_confidence = detect_subject_category(all_content)
         subject = _get_or_create_subject(db, subject_name)
 
         for q in result.questions:
@@ -2225,7 +2336,7 @@ async def unified_parse(
 
             if not auto_detected_subject:
                 all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
-                auto_detected_subject = detect_subject_category(all_content)
+                auto_detected_subject, _ = detect_subject_category(all_content)
 
             # 转换为 ParsedQuestion
             for block in result.questions:
@@ -2268,7 +2379,7 @@ async def unified_parse(
 
             if not auto_detected_subject:
                 all_content = ' '.join(b.get('content', '') for b in blocks[:10])
-                auto_detected_subject = detect_subject_category(all_content)
+                auto_detected_subject, _ = detect_subject_category(all_content)
 
             total_questions = len(blocks)
             for block in blocks:
@@ -2585,7 +2696,7 @@ async def import_from_image(
         # 自动检测科目
         subject_name = payload.get('subject_category', '')
         if not subject_name:
-            subject_name = detect_subject_category(ocr_text)
+            subject_name, _ = detect_subject_category(ocr_text)
         subject = _get_or_create_subject(db, subject_name)
 
         # 尝试从OCR文本提取题目结构
@@ -2628,13 +2739,15 @@ async def import_from_image(
 
         # 子科目自动检测
         subcategory = _detect_subcategory(subject.subject_id, content)
+        clean_content = clean_question_text(content)
+        clean_analysis = clean_question_text(analysis)
 
         question = QuestionBank(
             subject_id=subject.subject_id,
             type_id=qtype.type_id,
-            question_content=content,
+            question_content=clean_content,
             answer=answer,
-            answer_analysis=analysis,
+            answer_analysis=clean_analysis,
             difficulty=3,
             score=1.0,
             year=auto_tags.get('exam_year') or payload.get('exam_year'),
@@ -2719,7 +2832,9 @@ async def _import_structured_from_ocr(
         q.get('content', '') or q.get('question_content', '')
         for q in structured_questions[:5]
     )
-    subject_name = payload.get('subject_category', '') or detect_subject_category(all_text)
+    subject_name = payload.get('subject_category', '')
+    if not subject_name:
+        subject_name, _ = detect_subject_category(all_text)
     subject = _get_or_create_subject(db, subject_name)
 
     for q_data in structured_questions:
@@ -2755,14 +2870,16 @@ async def _import_structured_from_ocr(
                 stored_answer = answer
             # 优先使用前端传来的子分类，否则自动检测
             subcategory = q_data.get('subcategory', '') or _detect_subcategory(subject.subject_id, content)
+            clean_content = clean_question_text(content)
+            clean_analysis = clean_question_text(analysis)
 
             question = QuestionBank(
                 subject_id=subject.subject_id,
                 type_id=qtype.type_id,
-                question_content=content[:50000],
+                question_content=clean_content[:50000],
                 options=q_data.get('options') if q_data.get('options') else None,
                 answer=stored_answer,
-                answer_analysis=analysis,
+                answer_analysis=clean_analysis,
                 difficulty=q_data.get('difficulty', 3),
                 score=float(q_data.get('score', 1.0)),
                 year=payload.get('exam_year'),
