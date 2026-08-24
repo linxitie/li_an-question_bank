@@ -1207,6 +1207,8 @@
   "props": [],
   "slots": [],
   "state": {
+    "2": "[]",
+    "3": "[] }",
     "practiceLog": "{ today: 0",
     "practiceRecords": "null",
     "showPracticeDetail": "false",
@@ -1233,7 +1235,14 @@
     "practiceTypeSummary": "[]",
     "practiceTrend": "[]",
     "showChart": "false",
-    "chartType": "'bar'"
+    "chartType": "'bar'",
+    "expandedSubCategory": "null",
+    "quickPracticeData": "{ 1: []",
+    "subject": "'xc'",
+    "yearRange": "'3'",
+    "subCategory": "''",
+    "questionCount": "20",
+    "timeLimit": "0"
   },
   "watch": [],
   "expose": [],
@@ -1370,7 +1379,7 @@
       "type": "method"
     }
   },
-  "__VERSION__": "1778918346107",
+  "__VERSION__": "1785750000010",
   "dataSources": {},
   "__VTJ_BLOCK__": true
 }

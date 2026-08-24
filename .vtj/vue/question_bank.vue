@@ -58,26 +58,79 @@
                 <div class="skeleton-text" style="width:40%;"></div>
               </div>
             </div>
+            <!-- 自定义刷题Tab -->
+            <div class="custom-practice-card" v-if="state.activeCategory === 'custom' && state.statsLoaded">
+              <div class="custom-header">⚙️ 自定义刷题</div>
+              <div class="custom-body">
+                <div class="custom-row">
+                  <label>练习科目</label>
+                  <select v-model="state.customConfig.subject">
+                    <option value="xc">行测</option>
+                    <option value="sl">申论</option>
+                    <option value="ga">公专</option>
+                  </select>
+                </div>
+                <div class="custom-row">
+                  <label>出题年份</label>
+                  <select v-model="state.customConfig.yearRange">
+                    <option value="3">前三年</option>
+                    <option value="5">近五年</option>
+                    <option value="0">不限</option>
+                  </select>
+                </div>
+                <div class="custom-row">
+                  <label>具体练习子科目</label>
+                  <select v-model="state.customConfig.subCategory">
+                    <option v-for="sc in customSubCategories" :key="sc.id" :value="sc.id">{{ sc.name }}</option>
+                  </select>
+                </div>
+                <div class="custom-row">
+                  <label>练习数量</label>
+                  <input type="number" v-model.number="state.customConfig.questionCount" min="5" max="100" placeholder="20题" />
+                </div>
+                <div class="custom-row">
+                  <label>练习时间（分钟）</label>
+                  <input type="number" v-model.number="state.customConfig.timeLimit" min="5" max="180" placeholder="不限制" />
+                </div>
+                <button class="custom-start-btn" @click="startCustomPractice">开始自定义练习</button>
+              </div>
+            </div>
+            <!-- 子科目卡片（可展开） -->
             <div
               v-for="(sub, index) in currentSubCategories"
               :key="sub.key"
-              class="subcard"
-              @click="startPractice(sub.key)" v-if="state.statsLoaded">
+              class="subcard-wrapper"
+              v-if="state.activeCategory !== 'custom' && state.statsLoaded">
               <div
-                class="subcard-icon div_26rejvefdo6"
-                :style="{ background: sub.bg }">
-                {{ sub.emoji }}
+                class="subcard"
+                @click="toggleSubCategory(sub.key)">
+                <div
+                  class="subcard-icon div_26rejvefdo6"
+                  :style="{ background: sub.bg }">
+                  {{ sub.emoji }}
+                </div>
+                <div class="subcard-info">
+                  <span class="subcard-name"> {{ sub.name }}</span>
+                  <span class="subcard-count">
+                    <span class="count-badge">{{ sub.done_count || 0 }}/{{ sub.total_questions || sub.count || 0 }}</span>
+                  </span>
+                </div>
+                <XIcon :icon="state.expandedSubCategory === sub.key ? ArrowDown : ArrowRightBold" :size="14" :color="state.expandedSubCategory === sub.key ? '#1a2b5f' : '#d1d5db'"></XIcon>
               </div>
-              <div class="subcard-info">
-                <span class="subcard-name"> {{ sub.name }}</span>
-                <span class="subcard-count">
-                  <span>
-                    <span> {{ sub.count }}</span>
-                    <span> 题</span></span
-                  ></span
-                >
+              <!-- 展开的考点列表 -->
+              <div class="kp-list" v-if="state.expandedSubCategory === sub.key">
+                <div class="kp-empty" v-if="!sub.knowledge_points || !sub.knowledge_points.length">
+                  <span>暂无考点数据</span>
+                </div>
+                <div
+                  v-for="kp in sub.knowledge_points"
+                  :key="kp.point_id"
+                  class="kp-row"
+                  @click.stop="startKnowledgePractice(sub.key, kp)">
+                  <span class="kp-name">{{ kp.point_name }}</span>
+                  <span class="kp-badge">{{ kp.done_count || 0 }}/{{ kp.total_questions || 0 }}</span>
+                </div>
               </div>
-              <XIcon :icon="ArrowRightBold" :size="14" color="#d1d5db"></XIcon>
             </div>
           </div>
         </div>
@@ -213,30 +266,6 @@
         </aside>
       </div>
     </main>
-
-    <!-- 笔记列表弹窗 -->
-    <div v-if="state.showNotesModal" class="note-modal-overlay" @click.self="closeNotesModal">
-      <div class="note-modal">
-        <div class="note-modal-header">
-          <h3>我的笔记</h3>
-          <button class="note-modal-close" @click="closeNotesModal">×</button>
-        </div>
-        <div class="note-modal-body">
-          <div v-if="state.notesLoading" class="note-loading">加载中...</div>
-          <div v-else-if="state.userNotes.length === 0" class="note-empty">
-            <span class="note-empty-icon">📝</span>
-            <p>还没有笔记哦！做题时可以添加笔记。</p>
-          </div>
-          <div v-else class="note-list">
-            <div v-for="note in state.userNotes" :key="note.question_id" class="note-item">
-              <div class="note-item-title">{{ note.title }}</div>
-              <div class="note-item-text">{{ note.note_text }}</div>
-              <button class="note-delete-btn" @click="deleteNoteItem(note.question_id)">删除</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 <script lang="ts">
@@ -249,6 +278,7 @@
     Monitor,
     Search,
     ArrowRightBold,
+    ArrowDown,
     DataLine,
     DocumentDelete,
     Edit,
@@ -263,11 +293,14 @@
   // 子科目 Emoji 和背景色映射（静态视觉配置）
   const SUBCARD_STYLES = {
     '政治理论': { emoji: '📖', bg: '#eff6ff' },
-    '资料分析': { emoji: '📊', bg: '#fef2f2' },
+    '常识判断': { emoji: '💡', bg: '#f0fdf4' },
+    '言语理解与表达': { emoji: '📝', bg: '#e0f2fe' },
     '数量关系': { emoji: '🔢', bg: '#fffbeb' },
+    '判断推理': { emoji: '🔍', bg: '#fdf2f8' },
+    '资料分析': { emoji: '📊', bg: '#fef2f2' },
+    '知觉速度与准确性': { emoji: '⏱️', bg: '#ede9fe' },
     '常识': { emoji: '💡', bg: '#f0fdf4' },
     '速度与知觉训练': { emoji: '⏱️', bg: '#ede9fe' },
-    '判断推理': { emoji: '🔍', bg: '#fdf2f8' },
     '语言理解与表达': { emoji: '📝', bg: '#e0f2fe' },
     '归纳概括': { emoji: '📋', bg: '#eff6ff' },
     '综合分析': { emoji: '🔬', bg: '#fef2f2' },
@@ -298,7 +331,7 @@
     name: 'QuestionBank',
     components: { NavBar, XIcon, GoalCard },
     setup(props) {
-      const provider = useProvider({ id: 'question_bank', version: '1778918346107' });
+      const provider = useProvider({ id: 'question_bank', version: '1785750000010' });
       const state = reactive({
         practiceLog: { today: 0, week: 0, total: 0 },
         practiceRecords: null,
@@ -323,16 +356,24 @@
         xingceStats: {},
         shenlunStats: {},
         gongzhuanStats: {},
-        // 笔记相关
-        showNotesModal: false,
-        userNotes: [],
-        notesLoading: false,
+        // 快速练习 — 展开/收起
+        expandedSubCategory: null,
+        // 快速练习 — 子科目+考点数据缓存
+        quickPracticeData: { 1: [], 2: [], 3: [] },
+        // 自定义刷题配置
+        customConfig: {
+          subject: 'xc',
+          yearRange: '3',
+          subCategory: '',
+          questionCount: 20,
+          timeLimit: 0,
+        },
       });
       return {
         state,
         props,
         provider,
-        Timer, Monitor, Search, ArrowRightBold, DataLine,
+        Timer, Monitor, Search, ArrowRightBold, ArrowDown, DataLine,
         DocumentDelete, Edit, StarFilled, DataAnalysis, ShoppingCartFull
       };
     },
@@ -371,29 +412,67 @@
       },
       currentSubCategories() {
         const cat = this.state.activeCategory;
-        // 自定义刷题保持静态
+        // 自定义刷题不需要子科目卡片
         if (cat === 'custom') {
-          return [{
-            key: 'custom-all', name: '自定义选题', count: 0, emoji: '⚙️', bg: '#f8f9fc'
-          }];
+          return [];
+        }
+        // 科目key → subject_id 映射
+        const catIdMap = { xc: 1, sl: 2, ga: 3 };
+        const subjectId = catIdMap[cat] || 1;
+
+        // 从快速练习API缓存中获取数据
+        const items = this.state.quickPracticeData[subjectId] || [];
+
+        // 如果 API 数据为空，回退到旧版静态数据
+        if (!items.length) {
+          const subDefs = this.getSubDefinitions(cat);
+          const statsMap = cat === 'xc' ? this.state.xingceStats
+            : cat === 'sl' ? this.state.shenlunStats
+            : this.state.gongzhuanStats;
+
+          return subDefs.map(function(def) {
+            const realCount = statsMap[def.name] !== undefined ? statsMap[def.name] : 0;
+            return {
+              key: def.key,
+              name: def.name,
+              total_questions: realCount,
+              done_count: 0,
+              count: realCount,
+              knowledge_points: [],
+              emoji: (SUBCARD_STYLES[def.name] || {}).emoji || '📝',
+              bg: (SUBCARD_STYLES[def.name] || {}).bg || '#f8f9fc',
+            };
+          });
         }
 
-        // 获取该分类下所有子科目定义
-        const subDefs = this.getSubDefinitions(cat);
-        // 用 API 返回的真实数据填充 count
-        const statsMap = cat === 'xc' ? this.state.xingceStats
-          : cat === 'sl' ? this.state.shenlunStats
-          : this.state.gongzhuanStats;
+        // 使用API返回的新数据结构
+        var subDefs = this.getSubDefinitions(cat);
+        var nameKeyMap = {};
+        subDefs.forEach(function(d) { nameKeyMap[d.name] = d.key; });
 
-        return subDefs.map(function(def) {
-          const realCount = statsMap[def.name] !== undefined ? statsMap[def.name] : 0;
+        return items.map(function(item) {
+          var defKey = nameKeyMap[item.name] || item.name;
           return {
-            key: def.key,
-            name: def.name,
-            count: realCount,
-            emoji: (SUBCARD_STYLES[def.name] || {}).emoji || '📝',
-            bg: (SUBCARD_STYLES[def.name] || {}).bg || '#f8f9fc',
+            key: defKey,
+            name: item.name,
+            id: item.id,
+            total_questions: item.total_questions || 0,
+            done_count: item.done_count || 0,
+            count: item.total_questions || 0,
+            knowledge_points: item.knowledge_points || [],
+            emoji: (SUBCARD_STYLES[item.name] || {}).emoji || '📝',
+            bg: (SUBCARD_STYLES[item.name] || {}).bg || '#f8f9fc',
           };
+        });
+      },
+      customSubCategories() {
+        // 返回当前自定义配置下可选子科目列表
+        var cat = this.state.customConfig.subject || 'xc';
+        var catIdMap = { xc: 1, sl: 2, ga: 3 };
+        var subjectId = catIdMap[cat] || 1;
+        var items = this.state.quickPracticeData[subjectId] || [];
+        return items.map(function(item) {
+          return { id: item.id, name: item.name };
         });
       }
     },
@@ -520,6 +599,10 @@
         this.state.statsRetryCount = retryCount;
         // 异步加载练习记录
         this.loadPracticeRecords();
+        // 异步加载快速练习三级分类数据（3个科目并行）
+        this.fetchQuickPracticeData('xc');
+        this.fetchQuickPracticeData('sl');
+        this.fetchQuickPracticeData('ga');
       },
       async loadPracticeRecords() {
         try {
@@ -550,6 +633,27 @@
             this.renderChart();
           }
         } catch(e) { /* 静默 */ }
+      },
+      // ========== 快速练习三级分类数据加载 ==========
+      async fetchQuickPracticeData(catKey) {
+        var catIdMap = { xc: 1, sl: 2, ga: 3 };
+        var subjectId = catIdMap[catKey];
+        if (!subjectId) return;
+        try {
+          var headers = this.getJsonHeaders();
+          var res = await fetch('/api/quick-practice/sub-categories?subjectId=' + subjectId, {
+            headers: headers,
+          });
+          if (res.ok) {
+            var data = await res.json();
+            this.state.quickPracticeData[subjectId] = data.items || [];
+          }
+        } catch(e) {
+          // 仅在开发模式输出，避免生产环境控制台噪音（解决"5条日志"折叠报错）
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[fetchQuickPracticeData] 加载失败:', e);
+          }
+        }
       },
       refreshStats() {
         // 强制刷新（清缓存重新加载）
@@ -676,28 +780,52 @@
         if (key === 'questionimport') {
           this.$router.push('/question-import');
         } else if (key === 'quick') {
-          // 快速练习：进入当前选中科目的综合练习
+          // 快速练习：进入当前选中科目的综合练习（不限子科目，传空subcategory由后端返回该科目所有题目）
           var catKey = this.state.activeCategory;
           if (catKey === 'custom') catKey = 'xc';
-          var catNames = { xc: '行测', sl: '申论', ga: '公专' };
-          var catName = catNames[catKey] || '行测';
-          this.$router.push('/exercise?subject=' + catKey + '&subcategory=' + encodeURIComponent(catName + '综合'));
+          this.$router.push('/exercise?subject=' + catKey + '&subcategory=');
         } else if (key === 'history') {
-          ElMessage.info('历年试卷功能开发中');
+          this.$router.push('/student/papers');
         } else if (key === 'smart') {
-          ElMessage.info('智能组卷功能开发中');
+          this.$router.push('/smart-exam');
         } else if (key === 'ai') {
           ElMessage.info('联考小智功能开发中');
         }
       },
       switchCategory(key) {
         this.state.activeCategory = key;
+        this.state.expandedSubCategory = null;
+        // 切换到非自定义Tab时，加载快速练习数据
+        if (key !== 'custom') {
+          this.fetchQuickPracticeData(key);
+        }
       },
       handleSubAction(key) {
         if (key === 'mini') {
-          ElMessage.info('小模考功能开发中');
+          this.startMiniExam();
         } else if (key === 'college') {
           ElMessage.info('院校联考机考系统开发中');
+        }
+      },
+      async startMiniExam() {
+        var auth = window.__VTJ_AUTH__;
+        try {
+          var res = await auth.apiFetch('/api/exams/list?exam_type=PRACTICE&page_size=5');
+          var data = await res.json();
+          var papers = data.data || data.items || [];
+          if (papers.length > 0) {
+            // 随机选取一份练习试卷
+            var paper = papers[Math.floor(Math.random() * papers.length)];
+            var startRes = await auth.apiFetch('/api/exams/' + paper.paper_id + '/start', { method: 'POST' });
+            var startData = await startRes.json();
+            if (startData.record_id) {
+              this.$router.push('/answer?record_id=' + startData.record_id + '&paper_id=' + paper.paper_id);
+            }
+          } else {
+            ElMessage.info('暂无可用模考试卷，请等待教师发布');
+          }
+        } catch(e) {
+          ElMessage.info('暂无可用模考试卷');
         }
       },
       handleSearch() {
@@ -717,6 +845,35 @@
         // 导航到练习页面，传递科目和子科目参数
         this.$router.push('/exercise?subject=' + catKey + '&subcategory=' + encodeURIComponent(subName));
       },
+      // ========== 快速练习 — 手风琴展开/收起 ==========
+      toggleSubCategory(subKey) {
+        if (this.state.expandedSubCategory === subKey) {
+          this.state.expandedSubCategory = null;
+        } else {
+          this.state.expandedSubCategory = subKey;
+        }
+      },
+      startKnowledgePractice(subKey, kp) {
+        if (!kp || !kp.point_id) return;
+        var catKey = this.state.activeCategory;
+        this.$router.push('/exercise?subject=' + catKey + '&kpId=' + kp.point_id + '&kpName=' + encodeURIComponent(kp.point_name || ''));
+      },
+      startCustomPractice() {
+        var cfg = this.state.customConfig;
+        var subCatId = cfg.subCategory;
+        if (!subCatId) {
+          ElMessage.warning('请选择具体练习子科目');
+          return;
+        }
+        var count = cfg.questionCount || 20;
+        var yearRange = cfg.yearRange || '3';
+        // 使用子科目ID获取题目
+        this.$router.push('/exercise?subject=' + cfg.subject
+          + '&scId=' + subCatId
+          + '&count=' + count
+          + '&yearRange=' + yearRange
+          + '&timeLimit=' + (cfg.timeLimit || 0));
+      },
       navigateTo(id) {
         if (id) {
           this.$router.push('/page/' + id);
@@ -724,82 +881,9 @@
       },
       handleToolClick(key) {
         if (key === 'note') {
-          this.openNotesModal();
+          this.$router.push('/page/notes');
         } else if (key === 'fav') {
-          ElMessage.info('收藏功能开发中');
-        }
-      },
-      // ========== 笔记功能 ==========
-      openNotesModal() {
-        this.state.showNotesModal = true;
-        this.fetchUserNotes();
-      },
-      closeNotesModal() {
-        this.state.showNotesModal = false;
-      },
-      async fetchUserNotes() {
-        this.state.notesLoading = true;
-        this.state.userNotes = [];
-        try {
-          // 获取所有题目操作状态来发现有笔记的题目
-          var headers = this.getJsonHeaders();
-          // 使用现有的题目列表数据配合笔记查询
-          var self = this;
-          var allQuestionIds = [];
-          // 从各个统计中收集所有子科目名称
-          var subNames = Object.keys(self.getSubDefinitions('xc'))
-            .concat(Object.keys(self.getSubDefinitions('sl')))
-            .concat(Object.keys(self.getSubDefinitions('ga')));
-          // 尝试从 API 获取有笔记的题目
-          try {
-            var res = await window.__VTJ_AUTH__.apiFetch('/api/questions/?page_size=5&has_notes=true', {
-              headers: headers
-            });
-            if (res.ok) {
-              var data = await res.json();
-              var items = data.items || data.data || [];
-              for (var i = 0; i < items.length; i++) {
-                var q = items[i];
-                if (q.question_id) {
-                  try {
-                    var noteRes = await window.__VTJ_AUTH__.apiFetch('/api/questions/' + q.question_id + '/note', {
-                      headers: self.getJsonHeaders()
-                    });
-                    var noteData = await noteRes.json();
-                    if (noteData.has_note && noteData.note_text) {
-                      self.state.userNotes.push({
-                        question_id: q.question_id,
-                        title: (q.question_content || q.title || '').substring(0, 120),
-                        note_text: noteData.note_text,
-                        update_time: noteData.update_time
-                      });
-                    }
-                  } catch(e) {}
-                }
-              }
-            }
-          } catch(e2) {
-            // 备用：直接尝试练习记录中关联的题目
-          }
-        } catch(e) {
-          console.warn('加载笔记失败:', e);
-        } finally {
-          this.state.notesLoading = false;
-        }
-      },
-      async deleteNoteItem(questionId) {
-        try {
-          var res = await window.__VTJ_AUTH__.apiFetch('/api/questions/' + questionId + '/note', {
-            method: 'DELETE',
-            headers: this.getJsonHeaders()
-          });
-          if (res.ok) {
-            this.state.userNotes = this.state.userNotes.filter(function(n) {
-              return n.question_id !== questionId;
-            });
-          }
-        } catch(e) {
-          console.warn('删除笔记失败:', e);
+          this.$router.push('/page/favorites');
         }
       },
     },
@@ -1175,29 +1259,24 @@
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
-  /* 笔记弹窗 */
-  .note-modal-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.45); display: flex; align-items: center;
-    justify-content: center; z-index: 1000;
-  }
-  .note-modal {
-    background: #fff; border-radius: 16px; padding: 24px;
-    width: 480px; max-width: 90vw; max-height: 70vh;
-    overflow-y: auto; box-shadow: 0 8px 32px rgba(26,43,95,0.15);
-  }
-  .note-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-  .note-modal-header h3 { margin: 0; font-size: 16px; font-weight: 700; color: #1a2b5f; }
-  .note-modal-close { width: 28px; height: 28px; border: none; background: transparent; font-size: 20px; color: #8a8faa; cursor: pointer; border-radius: 8px; }
-  .note-modal-close:hover { background: #f0f2f5; color: #1a2b5f; }
-  .note-loading { text-align: center; padding: 24px; color: #8a8faa; }
-  .note-empty { text-align: center; padding: 28px; }
-  .note-empty-icon { font-size: 36px; display: block; margin-bottom: 8px; }
-  .note-empty p { color: #8a8faa; font-size: 14px; margin: 0; }
-  .note-list { display: flex; flex-direction: column; gap: 10px; }
-  .note-item { background: #fafbfc; border-radius: 10px; padding: 12px; border: 1px solid #f0f2f5; }
-  .note-item-title { font-size: 12px; font-weight: 600; color: #1a2b5f; margin-bottom: 6px; }
-  .note-item-text { font-size: 12px; color: #5a6488; line-height: 1.5; margin-bottom: 8px; }
-  .note-delete-btn { padding: 2px 10px; border: 1px solid #fee2e2; border-radius: 12px; background: #fff; color: #dc2626; font-size: 11px; cursor: pointer; }
-  .note-delete-btn:hover { background: #fef2f2; }
+  /* 快速练习 — 考点展开列表 */
+  .subcard-wrapper { display: flex; flex-direction: column; }
+  .count-badge { font-size: 12px; font-weight: 700; color: #1a2b5f; background: #f0f2f5; padding: 2px 8px; border-radius: 10px; }
+  .kp-list { margin: -4px 8px 8px 8px; padding: 8px 0; background: #fafbfc; border-radius: 0 0 12px 12px; border: 1px solid #f0f2f5; border-top: none; }
+  .kp-empty { text-align: center; padding: 12px; font-size: 12px; color: #8a8faa; }
+  .kp-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; transition: all 0.2s; border-bottom: 1px solid #f0f2f5; }
+  .kp-row:last-child { border-bottom: none; }
+  .kp-row:hover { background: #f0f4ff; }
+  .kp-name { font-size: 13px; color: #1a2b5f; font-weight: 500; flex: 1; }
+  .kp-badge { font-size: 11px; color: #5a6488; background: #e8ecf2; padding: 2px 8px; border-radius: 8px; font-weight: 600; min-width: 48px; text-align: center; flex-shrink: 0; margin-left: 8px; }
+  /* 自定义刷题卡片 */
+  .custom-practice-card { background: #fff; border-radius: 16px; padding: 28px 32px; box-shadow: 0 2px 12px rgba(26,43,95,0.06); max-width: 620px; margin: 0 auto; }
+  .custom-header { font-size: 18px; font-weight: 700; color: #1a2b5f; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #f0f2f5; }
+  .custom-body { display: flex; flex-direction: column; gap: 16px; }
+  .custom-row { display: flex; align-items: center; gap: 12px; }
+  .custom-row label { width: 120px; font-size: 14px; font-weight: 600; color: #5a6488; flex-shrink: 0; }
+  .custom-row select, .custom-row input { flex: 1; padding: 8px 12px; border: 1px solid #e8eaf0; border-radius: 8px; font-size: 14px; color: #1a2b5f; background: #fafbfc; outline: none; transition: border-color 0.2s; }
+  .custom-row select:focus, .custom-row input:focus { border-color: #1a2b5f; background: #fff; }
+  .custom-start-btn { margin-top: 8px; padding: 12px 0; border: none; border-radius: 10px; background: linear-gradient(135deg, #1a2b5f, #1e3470); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.3s; }
+  .custom-start-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(26,43,95,0.3); }
 </style>
