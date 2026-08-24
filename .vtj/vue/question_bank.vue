@@ -890,7 +890,10 @@
         }
       },
       goKpPractice(sub, k) {
-        this.$router.push('/exercise?subject=' + (sub.subject_code || '')
+        // 与既有协议对齐：exercise 页期望 xc/sl/ga 键（种子数据的 subject_code 可能为 auto_*）
+        var catIdMap = { 1: 'xc', 2: 'sl', 3: 'ga' };
+        var cat = catIdMap[sub.subject_id] || sub.subject_code || '';
+        this.$router.push('/exercise?subject=' + cat
           + '&kpId=' + k.point_id
           + '&kpName=' + encodeURIComponent(k.point_name || ''));
       },
