@@ -1242,7 +1242,24 @@
     "yearRange": "'3'",
     "subCategory": "''",
     "questionCount": "20",
-    "timeLimit": "0"
+    "timeLimit": "0",
+    "practiceError": "''",
+    "kpProgress": "{ subjects: [] }",
+    "kpLoading": "false",
+    "kpError": "''",
+    "kpLoaded": "false",
+    "recordsDialogVisible": "false",
+    "recordsTab": "'progress'",
+    "recentRecords": "[]",
+    "recordsTotal": "0",
+    "recordsLimit": "10",
+    "recordsOffset": "0",
+    "recordsLoading": "false",
+    "recordsLoaded": "false",
+    "unifiedStats": "{ today: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, week: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, total: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, daily_trend: [] }",
+    "recordsFilter": "{ source: '', status: '' }",
+    "sourceChips": "[{ v: '', label: '全部' }, { v: '快速练习', label: '快速练习' }, { v: '历年试卷', label: '历年试卷' }, { v: '小模考', label: '小模考' }, { v: '智能组卷', label: '智能组卷' }]",
+    "statusChips": "[{ v: '', label: '全部' }, { v: 'completed', label: '已完成' }, { v: 'in_progress', label: '进行中' }]"
   },
   "watch": [],
   "expose": [],
@@ -1353,10 +1370,73 @@
         "questionId"
       ]
     },
-    "if": {
+    "loadUnifiedData": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "fmtDuration": {
       "type": "method",
       "params": [
-        "elapsed < 30000 && this.state.statsLoaded"
+        "sec"
+      ]
+    },
+    "openRecordsDialog": {
+      "type": "method",
+      "params": []
+    },
+    "closeRecordsDialog": {
+      "type": "method",
+      "params": []
+    },
+    "switchRecordsTab": {
+      "type": "method",
+      "params": [
+        "tab"
+      ]
+    },
+    "loadKnowledgeProgress": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "goKpPractice": {
+      "type": "method",
+      "params": [
+        "sub",
+        "k"
+      ]
+    },
+    "fetchRecentRecords": {
+      "type": "asyncMethod",
+      "params": [
+        "reset"
+      ]
+    },
+    "setSourceFilter": {
+      "type": "method",
+      "params": [
+        "v"
+      ]
+    },
+    "setStatusFilter": {
+      "type": "method",
+      "params": [
+        "v"
+      ]
+    },
+    "loadMoreRecords": {
+      "type": "method",
+      "params": []
+    },
+    "goRecordDetail": {
+      "type": "method",
+      "params": [
+        "item"
+      ]
+    },
+    "srcClass": {
+      "type": "method",
+      "params": [
+        "source"
       ]
     }
   },
@@ -1377,9 +1457,12 @@
   "lifeCycles": {
     "mounted": {
       "type": "method"
+    },
+    "beforeUnmount": {
+      "type": "method"
     }
   },
-  "__VERSION__": "1785750000010",
+  "__VERSION__": "1787547281992",
   "dataSources": {},
   "__VTJ_BLOCK__": true
 }

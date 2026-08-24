@@ -152,31 +152,32 @@
             <div class="right-header">
               <XIcon :icon="DataLine" :size="18" color="#1a2b5f"></XIcon>
               <span> 练习记录</span>
+              <span class="view-all-link" @click="openRecordsDialog">查看全部 ›</span>
             </div>
-            <!-- 今日/本周/累计 -->
+            <!-- 今日/本周/累计（四来源统一口径） -->
             <div class="log-stats">
               <div class="log-item">
-                <span class="log-value">{{ state.practiceStats.today.count }}</span>
+                <span class="log-value">{{ state.unifiedStats.today.count }}</span>
                 <span class="log-label">今日(题)</span>
               </div>
               <div class="log-item" @click="toggleChart">
-                <span class="log-value">{{ state.practiceStats.week.count }}</span>
+                <span class="log-value">{{ state.unifiedStats.week.count }}</span>
                 <span class="log-label">本周(题) ▾</span>
               </div>
               <div class="log-item">
-                <span class="log-value">{{ state.practiceStats.total.count }}</span>
+                <span class="log-value">{{ state.unifiedStats.total.count }}</span>
                 <span class="log-label">累计(题)</span>
               </div>
             </div>
-            <!-- 用时和正确率 -->
+            <!-- 用时和正确率（四来源统一口径） -->
             <div class="log-sub-stats">
               <div class="log-sub-item">
-                <span class="log-sub-label">做题用时</span>
-                <span class="log-sub-value">{{ state.practiceStats.today.time_spent_minutes }}分钟</span>
+                <span class="log-sub-label">做题用时(今日)</span>
+                <span class="log-sub-value">{{ fmtDuration(state.unifiedStats.today.time_spent_seconds) }}</span>
               </div>
               <div class="log-sub-item">
                 <span class="log-sub-label">正确率</span>
-                <span class="log-sub-value" :class="state.practiceStats.total.accuracy >= 70 ? 'accuracy-good' : 'accuracy-warn'">{{ state.practiceStats.total.accuracy }}%</span>
+                <span class="log-sub-value" :class="state.unifiedStats.total.accuracy >= 70 ? 'accuracy-good' : 'accuracy-warn'">{{ state.unifiedStats.total.accuracy }}%</span>
               </div>
             </div>
             <!-- 题目类型进度 -->
@@ -189,6 +190,7 @@
                      @click="startTypePractice(t)">
                   <span class="badge-name">{{ t.subject_name }}·{{ t.subcategory }}</span>
                   <span class="badge-status">{{ t.is_completed ? '已完成' : '未完成' }}</span>
+                  <span class="badge-bar"><i :style="{ width: (t.completion_rate || 0) + '%' }"></i></span>
                 </div>
               </div>
               <div class="type-progress-empty" v-if="!state.practiceTypeSummary.length">
@@ -225,8 +227,8 @@
                 </div>
               </div>
             </div>
-            <div class="log-refresh">
-              <button class="refresh-link" @click="refreshPracticeStats">刷新数据</button>
+            <div class="log-refresh" v-if="state.practiceError">
+              <button class="refresh-link retry-link-error" @click="loadUnifiedData">⚠ {{ state.practiceError }}，点击重试</button>
             </div>
           </div>
           <GoalCard></GoalCard>
@@ -260,6 +262,76 @@
                   :size="20"
                   color="#8b5cf6"></XIcon>
                 <span> 金币购</span>
+              </div>
+            </div>
+          </div>
+          <!-- 练习记录弹窗：知识点进度 + 多来源最近记录（v2 新增） -->
+          <div class="rp-mask" v-if="state.recordsDialogVisible" @click.self="closeRecordsDialog">
+            <div class="rp-dialog">
+              <div class="rp-header">
+                <span class="rp-title">练习记录</span>
+                <button class="rp-close" @click="closeRecordsDialog">✕</button>
+              </div>
+              <div class="rp-tabs">
+                <button :class="['rp-tab', { active: state.recordsTab === 'progress' }]" @click="switchRecordsTab('progress')">知识点进度</button>
+                <button :class="['rp-tab', { active: state.recordsTab === 'records' }]" @click="switchRecordsTab('records')">最近做题记录</button>
+              </div>
+              <div class="rp-body">
+                <!-- Tab1 知识点进度 -->
+                <div class="rp-panel" v-if="state.recordsTab === 'progress'">
+                  <div class="rp-tip" v-if="state.kpLoading">加载中...</div>
+                  <div class="rp-tip" v-else-if="state.kpError">
+                    {{ state.kpError }}
+                    <button class="refresh-link" @click="loadKnowledgeProgress">重试</button>
+                  </div>
+                  <div class="rp-tip" v-else-if="!state.kpProgress.subjects.length">暂无知识点数据，完成练习后查看进度</div>
+                  <div v-else>
+                    <div class="kp-group" v-for="sub in state.kpProgress.subjects" :key="sub.subject_id">
+                      <div class="kp-group-title">{{ sub.subject_name }}</div>
+                      <div class="kp-line" v-for="k in sub.kps" :key="k.point_id" @click="goKpPractice(sub, k)">
+                        <span class="kp-line-name" :title="k.point_name">{{ k.point_name }}</span>
+                        <span class="kp-track"><i :style="{ width: k.done_pct + '%' }"></i></span>
+                        <span class="kp-nums">{{ k.done }}/{{ k.total }}</span>
+                        <span :class="['acc-badge', k.accuracy >= 70 ? 'acc-good' : 'acc-warn']">{{ k.accuracy }}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Tab2 最近做题记录 -->
+                <div class="rp-panel" v-else>
+                  <div class="chip-row">
+                    <button v-for="c in state.sourceChips" :key="'s' + c.v"
+                            :class="['chip', { active: state.recordsFilter.source === c.v }]"
+                            @click="setSourceFilter(c.v)">{{ c.label }}</button>
+                  </div>
+                  <div class="chip-row">
+                    <button v-for="c in state.statusChips" :key="'t' + c.v"
+                            :class="['chip', { active: state.recordsFilter.status === c.v }]"
+                            @click="setStatusFilter(c.v)">{{ c.label }}</button>
+                  </div>
+                  <div class="rp-tip" v-if="state.recordsLoading && !state.recentRecords.length">加载中...</div>
+                  <div class="rp-tip" v-else-if="!state.recentRecords.length">暂无练习记录，快去刷题吧！</div>
+                  <div class="rec-list" v-else>
+                    <div class="rec-item" v-for="r in state.recentRecords" :key="r.record_key">
+                      <span :class="['src-badge', srcClass(r.source)]">{{ r.source }}</span>
+                      <div class="rec-main">
+                        <div class="rec-name" :title="r.name">{{ r.name }}</div>
+                        <div class="rec-meta">
+                          <span>{{ r.status === 'completed' ? '✅ 已完成' : '⏳ 进行中' }}</span>
+                          <span v-if="r.score !== null && r.score !== undefined && r.score > 0">{{ r.score }}分</span>
+                          <span v-else-if="r.question_count">正确率{{ r.accuracy }}%</span>
+                          <span v-if="r.time_spent_seconds">{{ fmtDuration(r.time_spent_seconds) }}</span>
+                        </div>
+                      </div>
+                      <button class="rec-jump" title="继续/查看" @click="goRecordDetail(r)">▶</button>
+                    </div>
+                    <div class="load-more-wrap" v-if="state.recentRecords.length < state.recordsTotal">
+                      <button class="load-more-btn" :disabled="state.recordsLoading" @click="loadMoreRecords">
+                        {{ state.recordsLoading ? '加载中...' : '加载更多' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -331,7 +403,7 @@
     name: 'QuestionBank',
     components: { NavBar, XIcon, GoalCard },
     setup(props) {
-      const provider = useProvider({ id: 'question_bank', version: '1785750000010' });
+      const provider = useProvider({ id: 'question_bank', version: '1787547281992' });
       const state = reactive({
         practiceLog: { today: 0, week: 0, total: 0 },
         practiceRecords: null,
@@ -368,6 +440,39 @@
           questionCount: 20,
           timeLimit: 0,
         },
+        // ===== 练习记录优化 v2 新增状态 =====
+        unifiedStats: {
+          today: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 },
+          week: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 },
+          total: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 },
+          daily_trend: []
+        },
+        practiceError: '',
+        kpProgress: { subjects: [] },
+        kpLoading: false,
+        kpError: '',
+        kpLoaded: false,
+        recordsDialogVisible: false,
+        recordsTab: 'progress',
+        recordsFilter: { source: '', status: '' },
+        sourceChips: [
+          { v: '', label: '全部' },
+          { v: '快速练习', label: '快速练习' },
+          { v: '历年试卷', label: '历年试卷' },
+          { v: '小模考', label: '小模考' },
+          { v: '智能组卷', label: '智能组卷' }
+        ],
+        statusChips: [
+          { v: '', label: '全部' },
+          { v: 'completed', label: '已完成' },
+          { v: 'in_progress', label: '进行中' }
+        ],
+        recentRecords: [],
+        recordsTotal: 0,
+        recordsLimit: 10,
+        recordsOffset: 0,
+        recordsLoading: false,
+        recordsLoaded: false,
       });
       return {
         state,
@@ -379,10 +484,22 @@
     },
     mounted() {
       this.loadStats();
+      this.loadUnifiedData();
       // 检查是否有来自导入页面的刷新通知
       this.checkImportRefreshFlag();
       // 检查是否有来自练习结果页的刷新标记
       this.checkPracticeRefreshFlag();
+      // 练习记录自动刷新：切回页面时刷新 + 每5分钟定时刷新（v2）
+      var self = this;
+      this._rpVisHandler = function () {
+        if (!document.hidden) self.loadUnifiedData();
+      };
+      document.addEventListener('visibilitychange', this._rpVisHandler);
+      this._rpTimer = setInterval(function () { self.loadUnifiedData(); }, 5 * 60 * 1000);
+    },
+    beforeUnmount() {
+      if (this._rpTimer) clearInterval(this._rpTimer);
+      if (this._rpVisHandler) document.removeEventListener('visibilitychange', this._rpVisHandler);
     },
     computed: {
       topActions() {
@@ -713,8 +830,120 @@
         // 图表数据在 state.practiceTrend 中，通过 computed 属性自动更新
         // 此方法可留空用于未来 ECharts 集成
       },
-      refreshPracticeStats() {
-        this.loadPracticeRecords();
+      // ========== 练习记录 v2：统一统计 / 弹窗 / 跳转 ==========
+      async loadUnifiedData() {
+        var ok = true;
+        try {
+          var res = await fetch('/api/practice/unified-stats', { headers: this.getJsonHeaders() });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          var data = await res.json();
+          var zero = { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 };
+          this.state.unifiedStats = {
+            today: data.today || zero,
+            week: data.week || zero,
+            total: data.total || zero,
+            daily_trend: data.daily_trend || []
+          };
+          // 同步旧字段与趋势图数据源（保持图表逻辑不变）
+          this.state.practiceLog.today = data.today ? data.today.count : 0;
+          this.state.practiceLog.week = data.week ? data.week.count : 0;
+          this.state.practiceLog.total = data.total ? data.total.count : 0;
+          this.state.practiceTrend = data.daily_trend || [];
+        } catch (e) {
+          ok = false;
+        }
+        this.state.practiceError = ok ? '' : '统计数据加载失败';
+      },
+      fmtDuration(sec) {
+        sec = parseInt(sec || 0, 10);
+        if (sec <= 0) return '0分钟';
+        if (sec < 60) return sec + '秒';
+        var m = Math.round(sec / 60);
+        if (m < 60) return m + '分钟';
+        var h = Math.floor(m / 60), mm = m % 60;
+        return h + '小时' + (mm ? mm + '分' : '');
+      },
+      openRecordsDialog() {
+        this.state.recordsDialogVisible = true;
+        if (!this.state.kpLoaded) this.loadKnowledgeProgress();
+        if (!this.state.recordsLoaded) this.fetchRecentRecords(true);
+      },
+      closeRecordsDialog() {
+        this.state.recordsDialogVisible = false;
+      },
+      switchRecordsTab(tab) {
+        this.state.recordsTab = tab;
+      },
+      async loadKnowledgeProgress() {
+        this.state.kpLoading = true;
+        this.state.kpError = '';
+        try {
+          var res = await fetch('/api/practice/knowledge-progress', { headers: this.getJsonHeaders() });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          var data = await res.json();
+          this.state.kpProgress = { subjects: data.subjects || [] };
+          this.state.kpLoaded = true;
+        } catch (e) {
+          this.state.kpError = '知识点进度加载失败';
+        } finally {
+          this.state.kpLoading = false;
+        }
+      },
+      goKpPractice(sub, k) {
+        this.$router.push('/exercise?subject=' + (sub.subject_code || '')
+          + '&kpId=' + k.point_id
+          + '&kpName=' + encodeURIComponent(k.point_name || ''));
+      },
+      async fetchRecentRecords(reset) {
+        if (this.state.recordsLoading) return;
+        this.state.recordsLoading = true;
+        try {
+          if (reset) this.state.recordsOffset = 0;
+          var params = new URLSearchParams();
+          params.set('limit', String(this.state.recordsLimit));
+          params.set('offset', String(this.state.recordsOffset));
+          if (this.state.recordsFilter.source) params.set('source', this.state.recordsFilter.source);
+          if (this.state.recordsFilter.status) params.set('status', this.state.recordsFilter.status);
+          var res = await fetch('/api/practice/recent-records?' + params.toString(), { headers: this.getJsonHeaders() });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          var data = await res.json();
+          var items = data.items || [];
+          this.state.recentRecords = reset ? items : this.state.recentRecords.concat(items);
+          this.state.recordsTotal = data.total || 0;
+          this.state.recordsOffset = reset ? items.length : this.state.recordsOffset + items.length;
+          this.state.recordsLoaded = true;
+        } catch (e) {
+          ElMessage.error('做题记录加载失败');
+        } finally {
+          this.state.recordsLoading = false;
+        }
+      },
+      setSourceFilter(v) {
+        if (this.state.recordsFilter.source === v) return;
+        this.state.recordsFilter.source = v;
+        this.fetchRecentRecords(true);
+      },
+      setStatusFilter(v) {
+        if (this.state.recordsFilter.status === v) return;
+        this.state.recordsFilter.status = v;
+        this.fetchRecentRecords(true);
+      },
+      loadMoreRecords() {
+        this.fetchRecentRecords(false);
+      },
+      goRecordDetail(item) {
+        var jump = item.jump || { path: '/', params: {} };
+        var p = jump.params || {};
+        var qs = Object.keys(p).map(function (k) {
+          return encodeURIComponent(k) + '=' + encodeURIComponent(p[k]);
+        }).join('&');
+        this.$router.push(jump.path + (qs ? '?' + qs : ''));
+      },
+      srcClass(source) {
+        return {
+          '快速练习': 'src-qp', '历年试卷': 'src-past',
+          '小模考': 'src-mock', '智能组卷': 'src-smart'
+        }[source] || 'src-qp';
       },
 
       // ========== 认证辅助 ==========
@@ -1279,4 +1508,59 @@
   .custom-row select:focus, .custom-row input:focus { border-color: #1a2b5f; background: #fff; }
   .custom-start-btn { margin-top: 8px; padding: 12px 0; border: none; border-radius: 10px; background: linear-gradient(135deg, #1a2b5f, #1e3470); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.3s; }
   .custom-start-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(26,43,95,0.3); }
+  /* ===== 练习记录 v2：徽章进度条 / 查看全部 / 记录弹窗 ===== */
+  .view-all-link { margin-left: auto; font-size: 12px; font-weight: 600; color: #1a63d8; cursor: pointer; }
+  .view-all-link:hover { color: #c41e3a; }
+  .type-badge { flex-wrap: wrap; row-gap: 4px; }
+  .badge-bar { flex-basis: 100%; height: 4px; border-radius: 2px; background: rgba(0,0,0,0.08); overflow: hidden; }
+  .badge-bar i { display: block; height: 100%; background: linear-gradient(90deg, #34d399, #10b981); border-radius: 2px; transition: width 0.3s; }
+  .retry-link-error { color: #e8384f !important; background: rgba(232,56,79,0.06) !important; }
+  /* 记录弹窗（自定义遮罩，遵循项目既有模式） */
+  .rp-mask { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .rp-dialog { width: 720px; max-width: 100%; max-height: 86vh; background: #ffffff; border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .rp-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #f1f2f6; }
+  .rp-title { font-size: 16px; font-weight: 800; color: #1a2b5f; }
+  .rp-close { border: none; background: transparent; font-size: 16px; color: #8a8faa; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+  .rp-close:hover { background: #f0f2f5; color: #1a2b5f; }
+  .rp-tabs { display: flex; gap: 8px; padding: 12px 18px 0; }
+  .rp-tab { padding: 8px 14px; border-radius: 10px; border: none; background: #f5f6fa; color: #5a6488; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .rp-tab.active { background: #1a2b5f; color: #ffffff; }
+  .rp-body { overflow-y: auto; padding: 14px 18px 18px; }
+  .rp-panel { min-height: 120px; }
+  .rp-tip { text-align: center; padding: 24px 8px; color: #8899aa; font-size: 13px; }
+  .kp-group { margin-bottom: 14px; }
+  .kp-group-title { font-size: 13px; font-weight: 800; color: #1a2b5f; margin-bottom: 8px; padding-left: 8px; border-left: 3px solid #c41e3a; }
+  .kp-line { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+  .kp-line:hover { background: #f0f4ff; }
+  .kp-line-name { width: 130px; font-size: 13px; color: #1a2b5f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+  .kp-track { flex: 1; height: 6px; background: #eceef3; border-radius: 3px; overflow: hidden; }
+  .kp-track i { display: block; height: 100%; background: linear-gradient(90deg, #1a63d8, #34d399); border-radius: 3px; }
+  .kp-nums { font-size: 12px; color: #5a6488; min-width: 44px; text-align: right; }
+  .acc-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; min-width: 46px; text-align: center; flex-shrink: 0; }
+  .acc-good { color: #10b981; background: #ecfdf5; }
+  .acc-warn { color: #ef4444; background: #fef2f2; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .chip { padding: 5px 12px; border-radius: 14px; border: 1px solid #e8eaf0; background: #ffffff; color: #5a6488; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .chip.active { background: #1a2b5f; border-color: #1a2b5f; color: #ffffff; }
+  .rec-list { display: flex; flex-direction: column; gap: 8px; }
+  .rec-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #f0f2f5; border-radius: 10px; transition: all 0.2s; }
+  .rec-item:hover { border-color: #d9defb; background: #fafbff; }
+  .src-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; color: #ffffff; flex-shrink: 0; }
+  .src-past { background: #409EFF; }
+  .src-mock { background: #E6A23C; }
+  .src-smart { background: #9B59B6; }
+  .src-qp { background: #67C23A; }
+  .rec-main { flex: 1; min-width: 0; }
+  .rec-name { font-size: 13px; font-weight: 600; color: #1a2b5f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rec-meta { display: flex; gap: 10px; font-size: 11px; color: #8a8faa; margin-top: 3px; flex-wrap: wrap; }
+  .rec-jump { border: none; background: #f0f4ff; color: #1a63d8; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; flex-shrink: 0; font-size: 12px; transition: all 0.2s; }
+  .rec-jump:hover { background: #1a2b5f; color: #ffffff; }
+  .load-more-wrap { text-align: center; padding-top: 4px; }
+  .load-more-btn { padding: 8px 22px; border: 1px solid #e8eaf0; border-radius: 10px; background: #ffffff; color: #5a6488; font-size: 13px; cursor: pointer; }
+  .load-more-btn:hover { border-color: #1a2b5f; color: #1a2b5f; }
+  @media (max-width: 768px) {
+    .rp-mask { padding: 0; }
+    .rp-dialog { width: 100%; height: 100%; max-height: none; border-radius: 0; }
+    .kp-line-name { width: 96px; }
+  }
 </style>
