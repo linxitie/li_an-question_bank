@@ -101,3 +101,26 @@
 
 - 每 Task 完成即提交并勾选计划状态；Task 失败立即停止并上报阻塞点，不带病续跑。
 - 全程不触碰规格第二节"不做清单"所列范围。
+
+---
+
+## 执行状态记录（2026-08-24 收尾更新）
+
+| 任务 | 状态 | 提交 | 验证证据 |
+|---|---|---|---|
+| Task 1 后端三端点 | ✅ 完成 | `91c55f9` | pytest **12/12 通过**（四来源混合数值、智能组卷双计排除、参数校验422、鉴权401、空态边界）；顺带修复趋势窗口差一错误 |
+| Task 2 前端改造+VTJ同步 | ✅ 完成 | `cc84cae`(基线) + `6385574` | vue/compiler-sfc 编译校验通过；`vtj_sync_vue_to_dsl` 对齐 `__VERSION__=1787547281992`；手工补写13个新方法声明入DSL（R2预案）；check_consistency versionMatch=true |
+| 验收期补充修复 | ✅ 完成 | `2a3f97b` | 真库冒烟暴露 goKpPractice 使用 subject_code(auto_*) 缺陷 → 改用 subject_id→xc/sl/ga 映射，SFC复验通过 |
+| Task 3 真库冒烟验收 | ✅ 完成 | — | OAuth2表单登录成功；三新端点 HTTP 200（25~48ms，远低于500ms标准）；真实数据吻合（qp_2026-07-30_3 / total.count=5 / secs=150）；中文筛选参数生效；旧接口 stats-card/type-summary 回归正常 |
+
+### 已知条件与移交清单（用户浏览器走查前必读）
+
+1. **R1/D1 待验**：smart_answer.vue 对已完成记录的回看能力需在真实数据下确认；若不支持，已完成态智能组卷条目按规格§5降级为摘要不可跳转。
+2. **R2 记录在案**：vtj-mcp-server 方法签名正则对本文件提取失效（基线即有）；check_consistency 的 extraInDsl(35项)/missingInDsl["if"] 均属该已知误报类，非真实漂移。raw:true + 版本号对齐(1787547281992)为实际生效的双重防护。
+3. **浏览器侧验收项**（b/c/d/e/f-console）由用户执行：
+   - 删除 `node_modules/.vite/` 缓存目录
+   - 重启 `npm run dev`（后端 uvicorn 照常）
+   - 浏览器 Ctrl+Shift+R 强刷
+   - 走查：卡片数字四来源口径 → 「查看全部」弹窗两Tab → 考点点击再练一组 → 各来源记录跳转续答/看解析 → 切标签页返回自动刷新 → 控制台零报错 → 相邻模块回归（快速练习入口/错题集/成绩分析/GoalCard）
+4. `.vtj/files/question_bank.json.bak` 为同步工具自动备份（本地回滚用），未纳入版本库。
+5. 先存于 question_bank.json state 区的碎片化污染条目（如键 `2`/`3`/practiceLog 截断值）为历史遗留，本次未触碰，建议独立清理任务处理。
