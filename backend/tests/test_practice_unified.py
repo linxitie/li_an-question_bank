@@ -265,3 +265,29 @@ class TestMixedSources:
         assert len(paged["items"]) == min(2, full["total"])
         if full["total"] >= 2:
             assert paged["items"][0] == full["items"][0]
+
+
+class TestQpJumpSubjectKeyMapping:
+    """回归：subject_code 为 auto_* 形式时，qp_ 跳转必须映射为约定键 xc/sl/ga"""
+
+    def test_auto_code_maps_to_convention_key(self, client, auth_headers, test_user, db_session):
+        today = date.today()
+        # 显式占用 subject_id=1，但 code 用真实库中出现的 auto_* 形式
+        subj = QuestionSubject(subject_id=1, subject_name="行测",
+                               subject_code="auto_weird", status=1)
+        db_session.add(subj); db_session.commit()
+
+        db_session.add(PracticeRecord(
+            user_id=test_user.user_id, question_id=80001, subject_id=1,
+            is_correct=1, time_spent=10,
+            practice_date=today, practice_time=datetime.now(),
+            source_type="快速练习",
+        ))
+        db_session.commit()
+
+        r = client.get("/api/practice/recent-records", headers=auth_headers)
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert len(items) == 1
+        assert items[0]["source"] == "快速练习"
+        assert items[0]["jump"]["params"]["subject"] == "xc"

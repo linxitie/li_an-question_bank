@@ -240,21 +240,23 @@ async def get_practice_type_summary(
             QuestionBank.status == 1
         ).all()
 
-        # 按子科目分组
+        # 按子科目分组（v2.1：无效子科目直接跳过，不再产生"综合"兜底类型）
         subcategories = {}
         for q in questions:
             # 确定子科目
             if subj.subject_id == 1:  # 行测
-                sc = q.xingce_subcategory or '综合'
+                sc = q.xingce_subcategory
             elif subj.subject_id == 2:  # 申论
-                sc = q.shenlun_subcategory or '综合'
+                sc = q.shenlun_subcategory
             elif subj.subject_id == 3:  # 公专
-                sc = q.gongzhuan_subcategory or '综合'
+                sc = q.gongzhuan_subcategory
             else:
-                sc = '其他'
+                sc = None
 
-            if sc == '无':
-                sc = '综合'
+            # 子科目缺失或占位值('无')的题目不参与类型进度统计
+            # （系统中不存在"综合"这一真实分类，兜底会产生幻影徽章）
+            if not sc or sc == '无':
+                continue
 
             if sc not in subcategories:
                 subcategories[sc] = {'total': 0, 'done': 0, 'question_ids': []}
@@ -782,6 +784,9 @@ async def get_recent_records(
             })
 
     if "快速练习" in want:
+        # 跳转参数需用 exercise 页约定的科目键(xc/sl/ga)；
+        # 种子数据的 subject_code 可能为 auto_* 形式，不能直接透传
+        _cat_by_id = {1: "xc", 2: "sl", 3: "ga"}
         subj_map = {
             s.subject_id: (s.subject_name, s.subject_code)
             for s in db.query(QuestionSubject).all()
@@ -818,7 +823,8 @@ async def get_recent_records(
                 "time_spent_seconds": int(secs or 0),
                 "started_at": _fmt_dt(d),
                 "completed_at": _fmt_dt(d),
-                "jump": {"path": "/exercise", "params": {"subject": scode or ""}},
+                "jump": {"path": "/exercise",
+                         "params": {"subject": _cat_by_id.get(sid, scode or "")}},
                 "_sort": _recency_dt(d),
             })
 
