@@ -19,6 +19,41 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
+# ============ UTB ID 清洗 ============
+
+# UTB ID 正则：UTB + 8位以上十六进制 + 可选的 -选项X-N 后缀
+UTB_PATTERN = re.compile(r'UTB[a-f0-9]{8,}(?:[-－]\s*选项[A-D]\s*\d*)?', re.IGNORECASE)
+# 题号前缀正则：第X题：/第X题 /
+QNUM_PREFIX_PATTERN = re.compile(r'^第\s*\d+\s*题[：:]\s*')
+# 选项中的UTB ID变体：UTB7df857a7-选项A-5 / UTB7df857a7-选项B
+UTB_OPTION_PATTERN = re.compile(r'UTB[a-f0-9]{8,}[-－]\s*选项[A-D][-－]?\d*', re.IGNORECASE)
+# 独立选项标签清理（如 "A.\nUTB7df857a7-选项A-5" 保留A.但清理UTB部分）
+UTB_LINE_PATTERN = re.compile(r'(?:^|\n)\s*[A-H]\s*[.、．）\]]\s*UTB[a-f0-9]{8,}[-－]?\s*选项?[A-H]?[-－]?\d*\s*', re.IGNORECASE)
+
+def clean_question_text(text: str) -> str:
+    """
+    统一清洗题目文本：移除 UTB ID、题号前缀、多余空白
+    适用场景：导入入库前、校验前、显示前（三重保险）
+    """
+    if not text:
+        return text
+    # 1. 移除 UTBxxxxxxxx 及其变体 (UTB7df857a7-选项A-5)
+    text = UTB_PATTERN.sub('', text)
+    # 2. 移除选项中的UTB ID变体
+    text = UTB_OPTION_PATTERN.sub('', text)
+    # 3. 移除"第X题："前缀
+    text = QNUM_PREFIX_PATTERN.sub('', text)
+    # 4. 合并连续空白行（保留单个换行）
+    text = re.sub(r'\n\s*\n', '\n', text)
+    # 5. 合并多余空白（保留换行结构）
+    text = re.sub(r'[^\S\n]+', ' ', text)
+    # 6. 清理每行首尾空白
+    lines = [line.strip() for line in text.split('\n')]
+    text = '\n'.join(line for line in lines if line)
+    # 7. 最终合并为单行（去除换行）
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 # ============ 常量 ============
 
 # 去重相似度阈值（>= 此值视为重复）
@@ -865,15 +900,39 @@ CN_ANSWER_MAP = {
     '错': 'B', '错误': 'B', '否': 'B', '×': 'B',
 }
 
-# 科目检测关键词
+# 科目检测关键词（三级权重：core=5, high=3, normal=1）
+# 设计原则：公专科目必须能从行测关键词中"突围"——核心词权重显著高于普通词
 SUBJECT_KEYWORDS = {
-    '公专': ['公安', '警务', '治安', '刑事', '法律', '处罚', '逮捕', '侦查', '警察', '取证',
-             '拘留', '犯罪', '刑罚', '诉讼', '证据', '宪法', '消防', '交通', '警械',
-             '职业道德', '纪律', '廉洁', '勤务', '巡逻', '盘查', '战术'],
-    '申论': ['概括', '归纳', '对策', '议论文', '应用文', '综合分析', '申论', '论证', '论述',
-             '评析', '方案', '建议', '措施', '通知', '报告', '请示'],
-    '行测': ['数量', '资料分析', '判断推理', '言语理解', '常识判断', '逻辑', '类比',
-             '增长率', '百分比', '数学运算', '排列组合', '概率', '数列'],
+    '公专': {
+        'core': ['公安专业', '公安基础知识', '警务实务', '公安专业知识', '警察执法',
+                 '治安管理', '刑事侦查', '行政执法', '公安机关', '人民警察',
+                 '公安专业考试', '人民警察基本素养', '警务技能', '公安业务',
+                 '刑事犯罪', '治安处罚', '公安法学', '警察法', '人民警察法',
+                 '公安基础', '基本警务能力', '职业素养'],
+        'high': ['公安', '警务', '警察', '执法', '侦查', '治安', '刑事',
+                 '犯罪', '刑罚', '拘留', '逮捕', '搜查', '盘查',
+                 '警械', '武器', '巡逻', '交警', '消防', '户籍'],
+        'normal': ['职业道德', '纪律', '廉洁', '勤务', '交通', '诉讼',
+                   '证据', '宪法', '行政处罚', '刑事诉讼', '民事诉讼',
+                   '治安管理处罚', '公安机关组织', '人民警察使用']
+    },
+    '申论': {
+        'core': ['申论', '归纳概括', '综合分析', '提出对策', '应用文写作', '议论文写作',
+                 '申论写作', '大作文', '小作文', '公文写作'],
+        'high': ['概括', '分析', '对策', '建议', '方案', '措施', '公文', '公务员',
+                 '材料', '给定资料', '根据材料', '结合材料'],
+        'normal': ['论证', '论述', '评析', '通知', '报告', '请示',
+                   '阐述', '说明', '评价', '评述', '为什么', '如何理解', '试述', '试析']
+    },
+    '行测': {
+        'core': ['行测', '行政职业能力测验', '数量关系', '资料分析', '判断推理',
+                 '言语理解', '常识判断', '逻辑填空', '片段阅读', '行测真题'],
+        'high': ['数量', '资料', '判断', '推理', '言语', '常识', '类比', '定义',
+                 '增长率', '百分比', '数学运算', '排列组合', '概率', '数列',
+                 '图形推理', '逻辑判断'],
+        'normal': ['逻辑', '类比', '增长率', '百分比', '数学运算', '排列组合', '概率', '数列',
+                   '中心理解', '词语理解', '语句表达']
+    },
 }
 
 
@@ -1532,7 +1591,7 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         analysis = extracted.get('analysis') if extracted else None
 
         # 检测题型（传入 answer 支持多字母答案检测）
-        qtype = _detect_question_type(content_text, options, answer or '')
+        qtype, type_confidence = _detect_question_type(content_text, options, answer or '')
 
         blocks.append({
             'question_number': qn.number,
@@ -1541,6 +1600,7 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
             'answer': answer,
             'analysis': analysis,
             'question_type': qtype,
+            'type_confidence': type_confidence,
             'format': qn.format_type,
         })
 
@@ -1718,42 +1778,190 @@ def count_options(content: str, options) -> int:
     return 0
 
 
-def _detect_question_type(content: str, options: List[str], answer: str = '') -> str:
+def _detect_question_type(content: str, options: List[str], answer: str = '') -> tuple[str, float]:
     """
-    分层题型分类器（v4 · 关键词工程 · 单一事实来源）。
-
-    确定性分层规则（优先级从高到低）：
-      Step1 有选项(>=2) → 客观选择题：
-              答案多字母(>=2) 或 命中多选关键词 → 多选题；否则 → 单选题
-            （判断题自然归入单选题——其选项为"对/错"两项、答案归一化为单字母 A/B）
-      Step2 无选项 → 命中写作关键词 → 写作题
-      Step3 无选项 → 命中论述/简答关键词 → 论述题
-      Step4 兜底 → 论述题（记低置信日志）
+    多维度题型分类器：返回 (type_name, confidence)
+    
+    判定维度（权重从高到低）：
+    1. 答案格式（权重最高）：单字母→单选，多字母→多选，对/错→判断，长文本→主观
+    2. 选项数量：2个→判断倾向，4个→单选倾向，>4个→多选倾向，0个→主观
+    3. 题干关键词：多选/单选/判断/论述/填空/写作 关键词匹配
+    4. 选项内容：选项极短→选择题
+    5. 选项内容清洗后分析（移除UTB残留）
+    6. 答案字母与选项数量一致性
+    
+    返回: (type_name, confidence) 置信度 0-1
     """
     content_text = content or ''
-    norm_answer = canonical_answer(answer)
-
-    opt_count = count_options(content_text, options)
-
-    # === Step 1: 客观选择题 ===
+    options_list = options or []
+    
+    # ★ 新增：预清洗选项文本（移除UTB残留），避免长度判断失效
+    cleaned_options = []
+    for o in (options_list or []):
+        o_str = str(o) if o else ''
+        # 清洗UTB ID
+        o_str = UTB_PATTERN.sub('', o_str).strip()
+        # 清理选项标签前缀（如 "A." "A、"）
+        o_str = re.sub(r'^[A-H]\s*[.、．）\]]\s*', '', o_str).strip()
+        cleaned_options.append(o_str)
+    
+    opt_count = len([o for o in cleaned_options if o])
+    
+    # ★ 清洗答案中的UTB残留
+    clean_answer = UTB_PATTERN.sub('', (answer or '')).strip().upper()
+    answer = clean_answer
+    
+    # ★ 清洗题干中的UTB残留
+    clean_content = UTB_PATTERN.sub('', content_text).strip()
+    content_lower = clean_content.lower()
+    
+    # 题型评分字典
+    scores = {
+        '单选题': 0,
+        '多选题': 0,
+        '判断题': 0,
+        '论述题': 0,
+        '填空题': 0,
+        '简答题': 0,
+        '写作题': 0,
+    }
+    
+    # === 维度1: 答案格式分析（权重最高）===
+    if answer:
+        if re.match(r'^[A-D]$', answer):
+            scores['单选题'] += 5
+        elif re.match(r'^[A-D]([，,][A-D])+$', answer):
+            scores['多选题'] += 5
+        elif re.fullmatch(r'[A-D]{2,4}', answer):
+            # ★ 连写多字母答案（如 ACD/ABCD，canonical_answer 归一化的标准形态）
+            # 无此分支时，无选项题的连写答案会被"下列"等关键词误判为单选
+            scores['多选题'] += 5
+        elif answer in ['正确', '错误', '对', '错', 'TRUE', 'FALSE', 'T', 'F']:
+            scores['判断题'] += 5
+        elif len(answer) > 20:
+            scores['论述题'] += 3
+            scores['简答题'] += 2
+        elif len(answer) > 5:
+            scores['简答题'] += 2
+    
+    # === 维度2: 选项数量分析 ===
+    if opt_count == 2:
+        scores['判断题'] += 3
+        scores['单选题'] += 1
+    elif opt_count == 4:
+        scores['单选题'] += 3
+        scores['多选题'] += 1
+    elif opt_count > 4:
+        scores['多选题'] += 3
+    elif opt_count == 0:
+        scores['论述题'] += 2
+        scores['简答题'] += 2
+        scores['填空题'] += 1
+    
+    # === 维度3: 答案格式细分 ===
+    if answer:
+        if re.match(r'^[A-D]([，,][A-D])+$', answer):
+            scores['多选题'] += 3
+        elif re.match(r'^[A-D]$', answer):
+            scores['单选题'] += 2
+        elif answer in ['正确', '错误', '对', '错', 'TRUE', 'FALSE', 'T', 'F']:
+            scores['判断题'] += 3
+    
+    # === 维度4: 题干关键词分析 ===
+    # 多选题关键词
+    if any(re.search(kw, content_text) for kw in MULTI_CHOICE_KEYWORDS):
+        scores['多选题'] += 3
+        scores['单选题'] += 1
+    
+    # 单选/选择题关键词
+    if any(kw in content_lower for kw in ['下列', '以下', '正确的是', '错误的是', '不正确的是', '属于的是', '不属于的是']):
+        scores['单选题'] += 2
+        scores['多选题'] += 1
+    
+    # ★ 有选项时，选择题关键词权重增强（防止论述题关键词覆盖）
     if opt_count >= 2:
-        if len(norm_answer) >= 2:
-            return '多选题'
-        if any(re.search(kw, content_text) for kw in MULTI_CHOICE_KEYWORDS):
-            return '多选题'
-        return '单选题'
-
-    # === Step 2: 写作题 ===
+        if any(kw in content_lower for kw in ['正确的是', '错误的是', '不正确的是', '表述正确', '说法正确']):
+            scores['单选题'] += 2  # 额外加分
+    
+    # 判断题关键词
+    if any(kw in content_lower for kw in ['判断', '是否', '对错', '正确还是错误', '说法正确', '说法错误']):
+        scores['判断题'] += 3
+    
+    # 论述题关键词
+    if any(kw in content_lower for kw in ['论述', '分析', '阐述', '说明', '简述', '论证', '评述']):
+        scores['论述题'] += 2
+    
+    # 写作题关键词（优先级高于论述）
     if any(re.search(kw, content_text) for kw in WRITING_KEYWORDS):
-        return '写作题'
-
-    # === Step 3: 论述题 ===
-    if any(re.search(kw, content_text) for kw in ESSAY_KEYWORDS):
-        return '论述题'
-
-    # === Step 4: 兜底 ===
-    logger.warning(f"[type-detect] 低置信度兜底为论述题: {content_text[:50]!r}")
-    return '论述题'
+        scores['写作题'] += 3
+    
+    # 简答题关键词
+    if any(kw in content_lower for kw in ['简述', '简答', '列举', '说明原因']):
+        scores['简答题'] += 2
+        scores['论述题'] += 1
+    
+    # 填空题关键词
+    if any(kw in content_lower for kw in ['填空', '_____', '____', '＿＿＿', '空白处']):
+        scores['填空题'] += 3
+    
+    # === 维度5: 选项内容分析（使用清洗后的选项） ===
+    # 选项中有明确文本内容 → 选择题倾向更强
+    if opt_count >= 2:
+        # 选项文本长度分析：短选项（<30字）→ 选择题特征更强
+        short_opts = sum(1 for o in cleaned_options if o and len(o) < 30)
+        if short_opts >= 2:
+            scores['单选题'] += 2
+            scores['多选题'] += 1
+    
+    # === 维度6: 答案字母与选项数量一致性 ===
+    if answer and opt_count >= 2:
+        answer_letters = re.findall(r'[A-H]', answer.upper())
+        if answer_letters:
+            if len(answer_letters) == 1 and opt_count >= 3:
+                # 单个字母答案 + 多个选项 → 强烈单选倾向
+                scores['单选题'] += 3
+            elif len(answer_letters) >= 2:
+                # 多个字母答案 → 多选倾向
+                scores['多选题'] += 4
+    
+    # === 计算最终结果 ===
+    # 关键修复：当有选项时，不应默认返回论述题
+    if opt_count >= 2:
+        # 有选项的题目，最低应为选择题（单选/多选/判断）
+        # 如果所有分数都为0，根据选项数量兜底
+        if not any(scores[k] for k in ['单选题', '多选题', '判断题']):
+            if opt_count == 2:
+                scores['判断题'] += 1
+            else:
+                scores['单选题'] += 1
+    
+    if not any(scores.values()):
+        return '论述题', 0.0
+    
+    best_type = max(scores, key=scores.get)
+    max_score = scores[best_type]
+    total_score = sum(scores.values())
+    
+    confidence = max_score / total_score if total_score > 0 else 0.0
+    
+    # 映射到数据库 ENUM 值
+    type_map = {
+        '单选题': '单选题',
+        '多选题': '多选题',
+        '判断题': '判断题',
+        '论述题': '论述题',
+        '写作题': '写作题',
+        '填空题': '填空题',
+        '简答题': '简答题',
+    }
+    
+    final_type = type_map.get(best_type, '单选题')
+    
+    # 低置信度警告
+    if confidence < 0.5:
+        logger.warning(f"[type-detect] 低置信度({confidence:.2f})题型判定: {final_type}, 题干前50字: {content_text[:50]!r}, scores: {scores}")
+    
+    return final_type, round(confidence, 2)
 
 
 # ============ 智能匹配主入口（分离导入） ============
@@ -2332,24 +2540,93 @@ def _extract_inline_answers(text: str) -> Dict[int, Dict[str, Optional[str]]]:
 
 # ============ 科目检测 ============
 
-def detect_subject_category(text: str) -> str:
+def detect_subject_category(text: str) -> tuple[str, float]:
     """
     从文本内容自动检测科目大类。
-    返回: '行测' / '申论' / '公专'
+    返回: (subject, confidence) - 如 ('公专', 0.85)
+    置信度 < 0.3 时回退默认 '行测'
     """
     if not text:
-        return '行测'
+        return '行测', 0.0
 
     scores = {'行测': 0, '申论': 0, '公专': 0}
-    text_sample = text[:2000]
+    text_sample = text[:3000].lower()  # 扩大采样范围，转小写匹配
 
-    for subject, keywords in SUBJECT_KEYWORDS.items():
-        for kw in keywords:
-            if kw in text_sample:
-                scores[subject] += 1
+    for subject, kw_groups in SUBJECT_KEYWORDS.items():
+        for kw in kw_groups.get('core', []):
+            count = text_sample.count(kw.lower())
+            scores[subject] += count * 5  # 核心词权重 5（从3提升）
+        for kw in kw_groups.get('high', []):
+            count = text_sample.count(kw.lower())
+            scores[subject] += count * 3  # 高权重词权重 3（从2提升）
+        for kw in kw_groups.get('normal', []):
+            count = text_sample.count(kw.lower())
+            scores[subject] += count * 1  # 普通词权重 1
 
     best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else '行测'
+    max_score = scores[best]
+    total = sum(scores.values())
+
+    # 置信度归一化
+    confidence = min(max_score / max(total, 1), 1.0) if total > 0 else 0.0
+
+    # 低置信度回退默认
+    if confidence < 0.3:
+        return '行测', confidence
+
+    return best, round(confidence, 2)
+
+
+# ============ 答案解析提取 ============
+
+# 解析格式模式（支持多种常见格式）
+ANALYSIS_PATTERNS = [
+    # 标准格式：解析：xxx / 答案解析：xxx / 详细解析：xxx
+    r'解析[：:]\s*(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+    r'答案解析[：:]\s*(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+    r'详细解析[：:]\s*(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+    # 方括号格式：【解析】xxx / 【答案解析】xxx / 【详解】xxx
+    r'【解析】\s*(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+    r'【答案解析】\s*(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+    r'【详解】\s*(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+    # 括号格式：(解析)xxx
+    r'\(解析\)\s*(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+    # 换行格式
+    r'解析[:：]\s*\n(.+?)(?=\n\n|\n\d+[\.、]|\n[第一二三四五六七八九十]|\Z)',
+]
+
+def extract_analysis(text: str) -> str:
+    """
+    从文本中提取答案解析，支持多种格式
+    返回提取的解析文本，未找到返回空字符串
+    """
+    if not text:
+        return ''
+    
+    for pattern in ANALYSIS_PATTERNS:
+        match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+        if match:
+            analysis = match.group(1).strip()
+            # 清洗多余空白
+            analysis = re.sub(r'\s+', ' ', analysis)
+            if len(analysis) > 10:  # 过滤太短的误匹配
+                return analysis
+    
+    # 位置兜底：答案后、下一题目前的文本
+    answer_pos = max(
+        text.rfind('答案'),
+        text.rfind('answer'),
+        text.rfind('正确答案'),
+    )
+    if answer_pos > 0:
+        remaining = text[answer_pos:answer_pos+500]
+        # 取第一段非空文本
+        for para in remaining.split('\n\n'):
+            para = para.strip()
+            if len(para) > 10 and not re.match(r'^[\d一二三四五六七八九十][\.、]', para):
+                return para
+    
+    return ''
 
 
 # ============ AnswerValidator: 数据完整性校验 ============
