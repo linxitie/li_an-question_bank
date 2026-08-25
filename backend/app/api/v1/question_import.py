@@ -27,6 +27,7 @@ from ...models.models import (
     QuestionBank, QuestionSubject, QuestionType, KnowledgePoint,
     QuestionDetailCategory, QuestionImage, QuestionImportRecord, SysUser,
     ExamPaper, PaperQuestionRelation, ExamPaperTag, QuestionKnowledge,
+    QuestionGroup,
 )
 from ...schemas.schemas import SuccessResponse, ParseRequest, ParseResult, ParsedQuestion, ImageRef
 from ...services.question_classifier import QuestionClassifier, detect_subcategory_enhanced
@@ -1457,6 +1458,94 @@ def _is_test_garbage(q: Dict[str, Any]) -> bool:
     return bool(_TEST_UTB_RE.search(blob) or _TEST_KEYWORD in blob)
 
 
+# ============ B2 复合题（题组）规则引擎识别（方案 v1.1 §4.2） ============
+# P0 聚焦显式标识 Pattern A："根据以下材料/情境…回答X-Y题"（公安联考最常见形态）。
+# 题组仅为展示聚合视图（v1.1 §7.5）：小题仍以扁平题目参与组卷/答题/计分。
+_GROUP_HEAD_RE = re.compile(
+    r'根据以[下此][^\n]{0,40}?(?:材料|情境|文章|图表)[^\n]{0,30}?回答\s*(\d+)\s*[-～~—－]\s*(\d+)\s*题?')
+
+
+def _extract_first_qnum(content: str):
+    """提取题干中第一个题号（复用 text_parser 统一题号提取器，禁止另写解析）"""
+    try:
+        from ...services.text_parser import extract_question_numbers
+        nums = extract_question_numbers(content or '')
+        return nums[0].number if nums else None
+    except Exception:
+        return None
+
+
+def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, source_tag=''):
+    """批内复合题识别：返回 (groups_created, members_linked)。
+
+    算法（批内作用域，调用方统一 commit 保证事务安全）：
+    1. 为每个成功入库题提取题号（question_number）
+    2. 扫描题干命中"根据以下材料/情境…回答X-Y题"的题 → 作为题组头
+    3. 建_question_groups_行（shared_content=头题题干），头题与批内题号∈[X,Y]的题
+       全部挂 group_id / question_level=2 / sort_order / question_number
+    """
+    if not settings.COMPOSITE_QUESTION_ENABLED:
+        return 0, 0
+    if not ok_items:
+        return 0, 0
+
+    # 预提取题号
+    numbered = []  # (idx, qid, qnum)
+    for i, q in enumerate(ok_items):
+        qid = qid_by_index.get(i)
+        if not qid:
+            continue
+        qn = _extract_first_qnum(q.get('question_content') or '')
+        numbered.append((i, qid, qn))
+    qnum_map = {qid: (qn if qn is not None else 9999) for _, qid, qn in numbered}
+
+    groups_created, members_linked = 0, 0
+    claimed = set()
+    for i, q in enumerate(ok_items):
+        if i in claimed:
+            continue
+        m = _GROUP_HEAD_RE.search(q.get('question_content') or '')
+        if not m:
+            continue
+        x, y = int(m.group(1)), int(m.group(2))
+        if y < x or y - x > 20:  # 防御异常范围
+            continue
+        head_qid = qid_by_index.get(i)
+        if not head_qid:
+            continue
+        group = QuestionGroup(
+            group_type='scenario' if '情境' in m.group(0) else 'material',
+            shared_content=q.get('question_content') or '',
+            title=(q.get('question_content') or '')[:200],
+            subject=subject_name or '公专',
+            source=source_tag or q.get('paper_name', ''),
+        )
+        db.add(group)
+        db.flush()
+        groups_created += 1
+
+        member_ids = [head_qid]
+        claimed.add(i)
+        for j, jid, qn in numbered:
+            if j == i or jid in claimed or qn is None:
+                continue
+            if x <= qn <= y:
+                member_ids.append(jid)
+                claimed.add(j)
+        # 写入组字段（按题号升序排列）
+        for sort_idx, mid in enumerate(sorted(member_ids, key=lambda mid_: qnum_map.get(mid_, 9999))):
+            db.query(QuestionBank).filter(
+                QuestionBank.question_id == mid).update({
+                    'group_id': group.id,
+                    'question_level': 2,
+                    'sort_order': sort_idx + 1,
+                }, synchronize_session=False)
+            members_linked += 1
+        logger.info(f"[composite] 题组#{group.id} 创建：{len(member_ids)} 题挂组 "
+                    f"(题号范围 {x}-{y})")
+    return groups_created, members_linked
+
+
 @router.post("/single", summary="单题导入")
 async def import_single_question(
     question_data: Dict[str, Any],
@@ -1675,9 +1764,23 @@ async def batch_import_parsed(
         logger.error(f"[batch-parsed] 提交失败: {ce}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"批量入库失败: {str(ce)}")
 
+    # ===== B2 复合题识别（独立事务：主数据已提交，识别失败仅丢分组不伤导入）=====
+    groups_created, members_linked = 0, 0
+    try:
+        groups_created, members_linked = _detect_and_link_composite_groups(
+            db, ok_items, dict(enumerate(ok_ids)),
+            default_subject or '公专', _inject_source)
+        if groups_created:
+            db.commit()
+    except Exception as ge:  # noqa: BLE001 — 分组失败不影响导入结果
+        db.rollback()
+        logger.warning(f"[composite] 题组识别失败（导入数据不受影响）: {ge}")
+
     msg = f"导入完成：新增 {len(ok_ids)} 题，复用 {len(reused_ids)} 题，失败 {len(failed_items)} 题"
     if backfill_count:
         msg += f"，回填缺失字段 {backfill_count} 题"
+    if groups_created:
+        msg += f"；识别复合题组 {groups_created} 组（{members_linked} 题挂组）"
     if paper_id:
         msg += f"；试卷 #{paper_id} 已保存到试卷管理（关联 {len(ok_ids)+len(reused_ids)} 题）"
     # 问题3-R2：分离导入明示缺答案/解析的题号（按提交顺序），避免静默缺失

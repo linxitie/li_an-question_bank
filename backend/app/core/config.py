@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     MINERU_PYTHON: str = Field(r"D:\mineru-env\Scripts\python.exe", env="MINERU_PYTHON")
     MINERU_TIMEOUT: int = Field(300, env="MINERU_TIMEOUT")
     MINERU_BACKEND: str = Field("pipeline", env="MINERU_BACKEND")
+
+    # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
+    # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
+    COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")
     
     @property
     def DATABASE_URL(self) -> str:
