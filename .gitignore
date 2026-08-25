@@ -33,3 +33,9 @@ dist-ssr
 .vtj/histories
 src/.vtj/logs
 src/.vtj/histories
+backend/mineru_env/
+mineru_verify_out/
+mineru_run.log
+mineru_err.log
+sample_scanned.pdf
+sample_scanned.png
