@@ -186,13 +186,20 @@ class QuestionBank(Base):
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
     status = Column(Integer, default=1, comment="状态")
     version = Column(Integer, default=1, comment="版本号")
-    
+
+    # ===== 复合题（题组）扩展字段（v1.1 §3.1 表2；group_id=0 表示非复合题）=====
+    group_id = Column(Integer, default=0, comment="所属题组ID（question_groups.id，0=非复合题）")
+    parent_id = Column(Integer, default=0, comment="母题ID（0=无母题）")
+    question_level = Column(Integer, default=1, comment="题目层级：1=母题/独立题 2=小题")
+    sort_order = Column(Integer, default=0, comment="题组内排序")
+    question_number = Column(String(10), comment="原题号（如71、72）")
+
     subject = relationship("QuestionSubject")
     type = relationship("QuestionType")
     point = relationship("KnowledgePoint")
     creator = relationship("SysUser", foreign_keys=[creator_id])
     auditor = relationship("SysUser", foreign_keys=[auditor_id])
-    
+
     __table_args__ = (
         Index("idx_subject", subject_id),
         Index("idx_type", type_id),
@@ -200,6 +207,34 @@ class QuestionBank(Base):
         Index("idx_difficulty", difficulty),
         Index("idx_audit_status", audit_status),
         Index("idx_creator_questionbank", creator_id),
+        Index("idx_questions_subject_status", "subject_id", "status"),
+        Index("idx_questions_creator_status", "creator_id", "status"),
+        Index("idx_group_id", group_id),
+    )
+
+
+class QuestionGroup(Base):
+    """题组表（复合题：共享材料/情境 → 小题集合）。
+
+    设计原则（方案 v1.1 §7.5 适配层）：题组仅是"展示聚合视图"，不是新业务实体——
+    组卷/答题/计分/统计仍以 question_bank 扁平小题为操作单元。
+    SQLite 兼容：JSON 类字段用 TEXT 存储 JSON 串；自增用 Integer PK。
+    """
+    __tablename__ = "question_groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="题组ID")
+    group_type = Column(String(20), default="material",
+                        comment="题组类型：material/scenario/passage/data_analysis")
+    shared_content = Column(Text, comment="共享内容（材料/情境/文章）")
+    shared_content_images = Column(Text, comment="共享内容图片URL列表（JSON串）")
+    title = Column(String(200), comment="题组标题（如：根据以下情境材料，回答71-73题）")
+    subject = Column(String(20), comment="科目：行测/申论/公专")
+    difficulty = Column(String(10), comment="整体难度")
+    source = Column(String(50), comment="来源（试卷名/年份）")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_qgroup_subject", subject),
     )
 
 class QuestionEditLog(Base):
@@ -234,8 +269,12 @@ class ExamPaper(Base):
     
     paper_id = Column(Integer, primary_key=True, autoincrement=True, comment="试卷ID")
     paper_name = Column(String(200), nullable=False, comment="试卷名称")
+    original_title = Column(Text, comment="原始文档标题")
     paper_code = Column(String(50), unique=True, nullable=False, comment="试卷编号")
     subject_id = Column(Integer, ForeignKey("question_subject.subject_id"), nullable=False, comment="科目ID")
+    subject_confidence = Column(DECIMAL(3, 2), comment="科目识别置信度")
+    is_manually_confirmed = Column(Integer, default=0, comment="是否人工确认 0否/1是")
+    detected_subject = Column(String(50), comment="系统识别的科目")
     composition_method = Column(Enum("AUTO", "MANUAL", "TEMPLATE", "SMART", "IMPORT"), nullable=False, comment="组卷方式")
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="出卷人ID")
     approver_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="审批人ID")
@@ -245,6 +284,7 @@ class ExamPaper(Base):
     question_count = Column(Integer, default=0, comment="题目数量")
     exam_type = Column(Enum("SIMULATION", "PRACTICE", "FORMAL"), default="SIMULATION", comment="考试类型")
     paper_type = Column(Enum("DRAFT", "PENDING", "APPROVED", "PUBLISHED", "ENDED"), default="DRAFT", comment="试卷状态")
+    publish_target = Column(String(20), comment="发布目标: past_paper(历年试卷)/mock_exam(小模考)")
     exam_time = Column(DateTime, comment="考试时间")
     start_time = Column(DateTime, comment="开始时间")
     end_time = Column(DateTime, comment="结束时间")
@@ -272,6 +312,8 @@ class ExamPaper(Base):
         Index("idx_creator_exampaper", creator_id),
         Index("idx_paper_type", paper_type),
         Index("idx_exam_time", exam_time),
+        Index("idx_papers_subject_status", "subject_id", "paper_type"),
+        Index("idx_papers_creator_status", "creator_id", "paper_type"),
     )
 
 class PaperQuestionRelation(Base):
@@ -1486,4 +1528,30 @@ class QuoteFavorite(Base):
         UniqueConstraint("user_id", "quote_id", name="uq_user_quote_fav"),
         UniqueConstraint("user_id", "obsidian_source", name="uq_user_obsidian_fav"),
         Index("idx_user_id_quotefavorite", user_id),
+    )
+
+
+# ------------------------------
+# 操作审计日志模型 (新增)
+# ------------------------------
+
+class OperationLog(Base):
+    """试卷/题目操作审计日志表"""
+    __tablename__ = "operation_logs"
+    
+    log_id = Column(Integer, primary_key=True, autoincrement=True, comment="日志ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="操作人ID")
+    action = Column(String(50), nullable=False, comment="操作类型: delete_paper/update_paper/confirm_paper/batch_update_type/batch_add_explanation")
+    target_type = Column(String(50), nullable=False, comment="目标类型: paper/question")
+    target_id = Column(BigInteger, comment="目标ID")
+    details = Column(Text, comment="操作详情(JSON)")
+    ip_address = Column(String(45), comment="IP地址")
+    user_agent = Column(String(500), comment="用户代理")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    user = relationship("SysUser")
+    
+    __table_args__ = (
+        Index("idx_user_action_time", "user_id", "action", "created_at"),
+        Index("idx_target", "target_type", "target_id"),
     )
