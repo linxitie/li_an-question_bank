@@ -89,6 +89,14 @@
             </button>
           </div>
         </div>
+        <!-- B4: 复合题材料（可折叠，仅 group_id>0 时显示） -->
+        <div v-if="currentQ.group_id" class="ex-group-material">
+          <button class="ex-material-toggle" @click="state.materialExpanded = !state.materialExpanded">
+            <span>📑 题组材料</span>
+            <span class="material-arrow">{{ state.materialExpanded ? '▲' : '▼' }}</span>
+          </button>
+          <div v-show="state.materialExpanded" class="ex-material-body" v-html="state.groupMaterial"></div>
+        </div>
         <div class="ex-q-content" v-html="renderContent(currentQ.question_content)"></div>
 
         <!-- 选项 -->
@@ -247,6 +255,10 @@ export default defineComponent({
       noteText: '',
       // 标记选择
       showMarkerPopup: false,
+      // B4: 复合题材料（可折叠）
+      materialExpanded: true,
+      groupMaterial: '',       // 当前题组共享材料（HTML）
+      _groupCache: {},         // group_id → 材料（会话内缓存）
     });
 
     var markerTypes = [
@@ -265,6 +277,9 @@ export default defineComponent({
       return m[this.$route.query.subject] || '练习';
     },
     subcategory() {
+      // 优先显示考点名称（快速练习三级分类）
+      var kpName = this.$route.query.kpName;
+      if (kpName) return decodeURIComponent(kpName);
       return this.$route.query.subcategory || '';
     },
     currentQ() {
@@ -281,17 +296,49 @@ export default defineComponent({
       }
     },
     parsedOptions() {
-      var opts = (this.currentQ.options || []).slice();
-      var labels = ['A', 'B', 'C', 'D'];
-      var existing = {};
-      for (var i = 0; i < opts.length; i++) {
-        existing[opts[i].key] = true;
+      var raw = this.currentQ.options;
+      var opts = [];
+
+      // 防御1: 如果是JSON字符串，先parse
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch(e) { raw = []; }
       }
-      for (var j = 0; j < labels.length; j++) {
-        if (!existing[labels[j]]) {
-          opts.push({ key: labels[j], value: '(待补充)' });
+      if (!Array.isArray(raw)) raw = [];
+
+      // 防御2: 遍历，将各种格式统一为 {key, value}
+      var labels = ['A', 'B', 'C', 'D'];
+      for (var i = 0; i < raw.length; i++) {
+        var item = raw[i];
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          // 对象格式: {key: "A", value: "xxx"} 或 {label: "A", text: "xxx"}
+          var k = (item.key || item.label || '').toString().toUpperCase();
+          var v = item.value || item.text || '';
+          if (typeof v === 'object') { v = JSON.stringify(v); }
+          if (k && labels.indexOf(k) >= 0) {
+            opts.push({ key: k, value: String(v) });
+          }
+        } else if (typeof item === 'string') {
+          // 字符串格式: "A. xxx" 或纯文本
+          var m = item.match(/^([A-D])[.\、\s]+(.+)/);
+          if (m) {
+            opts.push({ key: m[1], value: m[2] });
+          }
         }
       }
+
+      // 防御3: 补全缺失的A/B/C/D
+      var existing = {};
+      for (var j = 0; j < opts.length; j++) {
+        existing[opts[j].key] = true;
+      }
+      for (var n = 0; n < labels.length; n++) {
+        if (!existing[labels[n]]) {
+          opts.push({ key: labels[n], value: '(待补充)' });
+        }
+      }
+
+      // 只保留A-D，排序
+      opts = opts.filter(function(o) { return labels.indexOf(o.key) >= 0; });
       opts.sort(function(a, b) { return a.key.localeCompare(b.key); });
       return opts;
     },
@@ -339,6 +386,7 @@ export default defineComponent({
   watch: {
     currentQ: function() {
       this.loadQuestionActions();
+      this.ensureGroupMaterial();
     }
   },
   mounted() {
@@ -348,6 +396,34 @@ export default defineComponent({
     if (this.state.timerInterval) clearInterval(this.state.timerInterval);
   },
   methods: {
+    // === B4: 复合题材料加载（会话内缓存，切题不重复请求） ===
+    ensureGroupMaterial() {
+      var q = this.currentQ || {};
+      var gid = q.group_id;
+      if (!gid) {
+        this.state.groupMaterial = '';
+        return;
+      }
+      if (this.state._groupCache[gid]) {
+        this.state.groupMaterial = this.state._groupCache[gid];
+        return;
+      }
+      var self = this;
+      fetch('/api/questions/group/' + gid)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data && data.group) {
+            var html = data.group.shared_content || '';
+            self.state._groupCache[gid] = html;
+            // 仅当用户仍停留在此题组时更新（防竞态）
+            if ((self.currentQ || {}).group_id === gid) {
+              self.state.groupMaterial = html;
+            }
+          }
+        })
+        .catch(function (e) { console.error('题组材料加载失败:', e); });
+    },
+
     // === 题型判定 ===
     isMultiSelect(q) {
       var t = (q.question_type_detail || '').toLowerCase();
@@ -363,25 +439,31 @@ export default defineComponent({
       var t = type.toString();
       if (t.indexOf('多选') >= 0 || t.indexOf('不定项') >= 0) return '[多选]';
       if (t.indexOf('单选') >= 0 || t.indexOf('选择') >= 0) return '[单选]';
-      if (t.indexOf('判断') >= 0) return '[判断]';
-      if (t.indexOf('填空') >= 0) return '[填空]';
+      if (t.indexOf('论述') >= 0 || t.indexOf('论证') >= 0) return '[论述]';
+      if (t.indexOf('写作') >= 0 || t.indexOf('作文') >= 0 || t.indexOf('应用文') >= 0) return '[写作]';
+      if (t.indexOf('案例') >= 0) return '[案例]';
       if (t.indexOf('简答') >= 0) return '[简答]';
       return '[单选]';
     },
     getTypeBadgeClass(q) {
       var t = (q.question_type_detail || '').toString();
       if (t.indexOf('多选') >= 0 || t.indexOf('不定项') >= 0) return 'type-multi';
-      if (t.indexOf('判断') >= 0) return 'type-judge';
-      if (t.indexOf('填空') >= 0) return 'type-fill';
+      if (t.indexOf('论述') >= 0 || t.indexOf('论证') >= 0) return 'type-discuss';
+      if (t.indexOf('写作') >= 0 || t.indexOf('作文') >= 0 || t.indexOf('应用文') >= 0) return 'type-writing';
+      if (t.indexOf('案例') >= 0) return 'type-case';
       if (t.indexOf('简答') >= 0) return 'type-essay';
       return 'type-single';
     },
-    // === 内容渲染 ===
+    // === 内容渲染（第9层防线：前端智能重试） ===
     renderContent(text) {
       if (!text) return '';
       var html = text;
-      html = html.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi,
-        '<img src="/static/questions/$1_$2.png" class="q-img" loading="lazy" onerror="this.style.display=\'none\'" />');
+      // 支持 uuid_x_y 和 x_y 两种 IMAGE 占位符格式
+      html = html.replace(/\[?IMAGE:([a-f0-9]+_\d+_\d+|\d+_\d+)\]?/gi, function(match, marker) {
+        // 初始 src 使用扁平路径，onerror 调用全局 __retryImg 智能重试
+        return '<img src="/static/questions/' + marker + '.png" class="q-img" loading="lazy" ' +
+               'data-marker="' + marker + '" onerror="window.__retryImg && window.__retryImg(this)" />';
+      });
       return html;
     },
     getDifficultyLabel(d) {
@@ -393,6 +475,51 @@ export default defineComponent({
       return (window.__VTJ_AUTH__ && window.__VTJ_AUTH__.apiFetch)
         ? window.__VTJ_AUTH__.apiFetch
         : function(url, opts) { return fetch(url, opts); };
+    },
+
+    // 前端兜底去重：移除题干内容高度相似的题目（>80%相似度）
+    dedupQuestions(questions) {
+      if (!questions || questions.length <= 1) return questions || [];
+      var seen = [];
+      var result = [];
+      for (var i = 0; i < questions.length; i++) {
+        var q = questions[i];
+        var content = q.question_content || q.title || '';
+        if (!content.trim()) {
+          result.push(q);
+          continue;
+        }
+        // 标准化：去除HTML标签和空白
+        var norm = content.replace(/<[^>]+>/g, '').replace(/\s+/g, '').substring(0, 200);
+        if (norm.length < 5) {
+          result.push(q);
+          continue;
+        }
+        var isDup = false;
+        for (var j = 0; j < seen.length; j++) {
+          var existNorm = seen[j];
+          // 快速长度检查
+          var lenRatio = Math.min(norm.length, existNorm.length) / Math.max(norm.length, existNorm.length);
+          if (lenRatio < 0.5) continue;
+          // 简单相似度：公共字符比例
+          var common = 0;
+          var shorter = norm.length < existNorm.length ? norm : existNorm;
+          var longer = norm.length < existNorm.length ? existNorm : norm;
+          for (var k = 0; k < shorter.length; k++) {
+            if (longer.indexOf(shorter[k]) >= 0) common++;
+          }
+          var similarity = common / Math.max(norm.length, existNorm.length);
+          if (similarity > 0.8) {
+            isDup = true;
+            break;
+          }
+        }
+        if (!isDup) {
+          seen.push(norm);
+          result.push(q);
+        }
+      }
+      return result;
     },
 
     async loadQuestions() {
@@ -409,23 +536,54 @@ export default defineComponent({
           }
         }
         var subject = self.$route.query.subject || 'xc';
-        var subcategory = self.$route.query.subcategory || '';
-        var url = '/api/questions/exercise/questions?subject=' + subject +
-          '&subcategory=' + encodeURIComponent(subcategory) + '&count=20';
+        var kpId = self.$route.query.kpId || '';
+        var scId = self.$route.query.scId || '';
+        var count = parseInt(self.$route.query.count || '20', 10);
+        var yearRange = self.$route.query.yearRange || '';
+
+        var url;
+        if (kpId) {
+          // 通过考点ID加载题目（快速练习三级分类）
+          url = '/api/quick-practice/questions?knowledge_point_ids=' + kpId + '&limit=' + count;
+          if (yearRange && yearRange !== '0') {
+            url += '&year=' + yearRange;
+          }
+        } else if (scId) {
+          // 通过子科目ID加载题目（自定义刷题）
+          url = '/api/quick-practice/questions?knowledge_point_ids=' + scId + '&limit=' + count + '&bySubCategory=true';
+          if (yearRange && yearRange !== '0') {
+            url += '&year=' + yearRange;
+          }
+        } else {
+          // 回退到旧版API
+          var subcategory = self.$route.query.subcategory || '';
+          url = '/api/questions/exercise/questions?subject=' + subject +
+            '&subcategory=' + encodeURIComponent(subcategory) + '&count=' + count;
+        }
+
         var fetchFn = self.getFetch();
         var res = await fetchFn(url, { headers: { 'Content-Type': 'application/json' } });
         if (!res.ok) return;
         var data = await res.json();
-        if (data && data.questions && data.questions.length) {
-          self.state.questions = data.questions;
+        if (data && data.items && data.items.length) {
+          // 新API格式 (quick-practice) — 前端兜底去重
+          self.state.questions = self.dedupQuestions(data.items);
           self.state.currentIndex = 0;
           self.state.userAnswers = {};
           self.state.questionActions = {};
-          // 开始计时
           self.state.timerInterval = setInterval(function() {
             self.state.seconds++;
           }, 1000);
-          // 加载第一题的操作状态
+          self.loadQuestionActions();
+        } else if (data && data.questions && data.questions.length) {
+          // 旧API格式 — 前端兜底去重
+          self.state.questions = self.dedupQuestions(data.questions);
+          self.state.currentIndex = 0;
+          self.state.userAnswers = {};
+          self.state.questionActions = {};
+          self.state.timerInterval = setInterval(function() {
+            self.state.seconds++;
+          }, 1000);
           self.loadQuestionActions();
         } else {
           self.state.questions = [];
@@ -621,6 +779,29 @@ export default defineComponent({
       }
     },
 
+    collectWrongAnswers(details) {
+      // 对答错的题目异步收录到错题集 (fire-and-forget)
+      var self = this;
+      var subjectMap = { xc: 1, sl: 2, ga: 3 };
+      var routeSubject = self.$route.query.subject || 'xc';
+      var subjectId = subjectMap[routeSubject] || null;
+
+      details.forEach(function(d) {
+        if (!d.is_correct && d.question_id) {
+          var fetchFn = self.getFetch();
+          fetchFn('/api/wrong-questions/collect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question_id: d.question_id,
+              subject_id: subjectId,
+              is_correct: false
+            })
+          }).catch(function() { /* 静默 — 后端practice.py已做兜底收录 */ });
+        }
+      });
+    },
+
     async submitPracticeRecords(details) {
       try {
         var self = this;
@@ -700,6 +881,8 @@ export default defineComponent({
           correct_answer: correctAns,
           is_correct: isCorrect,
           answer_analysis: questions[j].answer_analysis || '',
+          question_type_detail: questions[j].question_type_detail || '选择题',
+          difficulty: questions[j].difficulty || 3,
         });
       }
       var score = Math.round((correct / questions.length) * 100);
@@ -720,6 +903,9 @@ export default defineComponent({
       if (!submitResult.success) {
         alert('练习记录提交失败: ' + (submitResult.error || '未知错误') + '\n\n答题结果已保存，返回后可重试提交。');
       }
+
+      // 自动收录错题（fire-and-forget，不阻塞跳转）
+      this.collectWrongAnswers(details);
 
       if (this.state.timerInterval) clearInterval(this.state.timerInterval);
       this.$router.push('/solution');
@@ -888,8 +1074,9 @@ export default defineComponent({
 }
 .type-single { background: #eff6ff; color: #3b82f6; }
 .type-multi  { background: #fef3c7; color: #d97706; }
-.type-judge { background: #f0fdf4; color: #065f46; }
-.type-fill  { background: #fef2f2; color: #dc2626; }
+.type-discuss { background: #f5f3ff; color: #7c3aed; }
+.type-writing { background: #ecfdf5; color: #059669; }
+.type-case { background: #fef2f2; color: #dc2626; }
 .type-essay { background: #f5f3ff; color: #7c3aed; }
 /* 图片 */
 .ex-q-content :deep(img.q-img),
@@ -928,6 +1115,34 @@ export default defineComponent({
 .ex-action-btn.action-active {
   border-color: rgba(26,43,95,0.08);
   background: rgba(26,43,95,0.03);
+}
+.ex-group-material {
+  margin-bottom: 16px;
+  border: 1px solid #d8e3f3;
+  border-radius: 8px;
+  background: #f5f8fd;
+  overflow: hidden
+}
+.ex-material-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #eaf1fb;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #2c5aa0;
+  font-weight: 600
+}
+.material-arrow { font-size: 12px }
+.ex-material-body {
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #33375a;
+  word-break: break-word
 }
 .ex-q-content {
   font-size: 16px;

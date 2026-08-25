@@ -322,6 +322,7 @@ async def get_random_questions(
             "question_id": q.question_id,
             "subject_id": q.subject_id,
             "type_id": q.type_id,
+            "group_id": q.group_id or 0,
             "question_content": _q_content,
             "options": _opts,
             "answer": q.answer,

@@ -1,15 +1,16 @@
 """
-教师端 API — 工作台、题目管理、试卷管理、成绩分析
+教师端 API — 工作台、题目管理、试卷管理、成绩分析、个人设置、班级管理、消息中心、数据分析
 """
+import os
 import logging
 from typing import Optional, List
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, desc, case
+from sqlalchemy import func, and_, or_, desc, case, text as sql_text
 
-from ...core.database import get_db
+from ...core.database import get_db, engine
 from ...core.security import (
     get_current_teacher, get_current_admin, get_password_hash,
     check_permission, Permission
@@ -18,15 +19,21 @@ from ...models.models import (
     SysUser, QuestionBank, QuestionSubject, QuestionType,
     ExamPaper, PaperQuestionRelation, PaperApproval, PaperApprovalWorkflow,
     ExamRecord, ExamAnswerDetail, PracticeRecord, ScoreAnalysis,
-    Banji, QuestionImportRecord,
+    Banji, QuestionImportRecord, KnowledgePoint,
 )
 from ...schemas.teacher import (
     TeacherDashboardStats, TeacherDashboardResponse,
     PendingApprovalItem, RecentStudentActivity,
-    TeacherQuestionUpdate,
+    PracticeTrend, SubjectAccuracyItem,
+    TeacherQuestionUpdate, TeacherQuestionCreate,
     TeacherPaperCreate, TeacherPaperUpdate, PaperAddQuestions,
-    AutoGenerateRequest, SubmitApprovalRequest,
+    AutoGenerateRequest, SubmitApprovalRequest, PublishPaperRequest,
+    PaperQuestionScoreUpdate, PaperQuestionOrderUpdate,
     ScoreOverviewResponse, ScoreDistribution, QuestionCorrectRate, StudentScoreItem,
+    TeacherProfileResponse, TeacherProfileUpdate, ChangePasswordRequest,
+    ClassItem, ClassDetailResponse, ClassCreateRequest, ClassStudentAdd,
+    MessageItem, MessageListResponse,
+    AnalyticsOverview, QuestionUsageItem, KnowledgeMasteryItem,
 )
 
 router = APIRouter(prefix="/api/teacher", tags=["教师端"])
@@ -34,17 +41,23 @@ logger = logging.getLogger(__name__)
 
 # ==================== 辅助函数 ====================
 
+from ...services.text_parser import clean_question_text
+
 def _format_question(q: QuestionBank) -> dict:
-    """格式化题目信息"""
+    """格式化题目信息（含内容清洗：移除UTB ID等系统噪音）"""
+    raw_content = q.question_content or ''
+    cleaned_content = clean_question_text(raw_content)
     return {
         "question_id": q.question_id,
         "subject_id": q.subject_id,
+        "subject_name": q.subject.subject_name if q.subject else "",
         "type_id": q.type_id,
-        "question_content": q.question_content[:120] if q.question_content else "",
-        "full_content": q.question_content,
+        "type_name": q.type.type_name if q.type else "",
+        "question_content": cleaned_content[:120] if cleaned_content else "",
+        "full_content": cleaned_content,
         "options": q.options,
         "answer": q.answer,
-        "answer_analysis": q.answer_analysis,
+        "answer_analysis": q.answer_analysis or "",
         "difficulty": q.difficulty,
         "score": float(q.score) if q.score else 0,
         "year": q.year,
@@ -58,6 +71,8 @@ def _format_question(q: QuestionBank) -> dict:
         "accuracy_rate": float(q.accuracy_rate) if q.accuracy_rate else 0,
         "create_time": q.create_time.isoformat() if q.create_time else None,
         "update_time": q.update_time.isoformat() if q.update_time else None,
+        # B4: 题组标记（>0 表示复合题小题，前端据此显示题组徽标并拉取聚合详情）
+        "group_id": q.group_id or 0,
     }
 
 
@@ -146,20 +161,93 @@ async def get_dashboard(
                 action_time=p.practice_time.isoformat() if p.practice_time else "",
             ))
 
+    # 近7天每日练习人数趋势
+    trend_dates = []
+    trend_counts = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        trend_dates.append(d.strftime("%m-%d"))
+        day_start = datetime.combine(d, datetime.min.time())
+        day_end = datetime.combine(d + timedelta(days=1), datetime.min.time())
+        cnt = db.query(func.count(func.distinct(PracticeRecord.user_id))).filter(
+            PracticeRecord.practice_time >= day_start,
+            PracticeRecord.practice_time < day_end
+        ).scalar() or 0
+        trend_counts.append(cnt)
+    practice_trend = PracticeTrend(dates=trend_dates, counts=trend_counts)
+
+    # 三大科目正确率（仅刷题记录，join question_bank 兜底 subject_id）
+    subject_names = {1: "行测", 2: "申论", 3: "公专"}
+    accuracy_rows = db.query(
+        QuestionBank.subject_id,
+        func.count(PracticeRecord.record_id).label('total'),
+        func.coalesce(func.sum(PracticeRecord.is_correct), 0).label('correct')
+    ).join(QuestionBank, PracticeRecord.question_id == QuestionBank.question_id
+    ).filter(QuestionBank.subject_id.in_([1, 2, 3])
+    ).group_by(QuestionBank.subject_id).all()
+    subject_accuracy = []
+    for sid, total, correct in accuracy_rows:
+        total = int(total or 0)
+        correct = int(correct or 0)
+        acc = round(correct / total * 100, 1) if total > 0 else 0.0
+        subject_accuracy.append(SubjectAccuracyItem(
+            subject_id=sid,
+            subject_name=subject_names.get(sid, f"科目{sid}"),
+            total=total,
+            correct=correct,
+            accuracy=acc,
+        ))
+
     return TeacherDashboardResponse(
         stats=stats,
         pending_approvals=pending_approvals,
-        recent_activities=recent_activities
+        recent_activities=recent_activities,
+        practice_trend=practice_trend,
+        subject_accuracy=subject_accuracy,
     )
 
 
 # ==================== 题目管理 ====================
+
+@router.get("/question-types", summary="题型列表")
+async def list_question_types(
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """返回题型列表（供下拉，含判断/填空/情境等独立题型）"""
+    fixed_types = [
+        {"type_name": "单选题", "is_objective": 1},
+        {"type_name": "多选题", "is_objective": 1},
+        {"type_name": "判断题", "is_objective": 1},
+        {"type_name": "填空题", "is_objective": 1},
+        {"type_name": "论述题", "is_objective": 0},
+        {"type_name": "写作题", "is_objective": 0},
+        {"type_name": "情境题", "is_objective": 0},
+    ]
+    return {"success": True, "items": fixed_types}
+
+
+@router.get("/knowledge-points", summary="知识点列表")
+async def list_knowledge_points(
+    subject_id: int = Query(..., description="科目ID"),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """返回某科目的知识点列表（供题目选择器知识点下拉）"""
+    kps = db.query(KnowledgePoint).filter(
+        KnowledgePoint.subject_id == subject_id
+    ).order_by(KnowledgePoint.sort_order).all()
+    items = [{"point_id": kp.point_id, "point_name": kp.point_name} for kp in kps]
+    return {"success": True, "total": len(items), "items": items}
+
 
 @router.get("/questions", summary="题目管理列表")
 async def list_teacher_questions(
     keyword: Optional[str] = Query(None, description="题干关键词"),
     subject_id: Optional[int] = Query(None),
     type_id: Optional[int] = Query(None),
+    type_name: Optional[str] = Query(None, description="题型名称（单选题/多选题/论述题/写作题）"),
+    point_id: Optional[int] = Query(None, description="知识点ID"),
     difficulty: Optional[int] = Query(None),
     audit_status: Optional[int] = Query(None),
     xingce_subcategory: Optional[str] = Query(None),
@@ -173,34 +261,42 @@ async def list_teacher_questions(
     db: Session = Depends(get_db)
 ):
     """按多条件筛选题目列表"""
-    query = db.query(QuestionBank).filter(QuestionBank.status == 1)
+    base_query = db.query(QuestionBank).filter(QuestionBank.status == 1)
 
     if keyword:
-        query = query.filter(QuestionBank.question_content.contains(keyword))
+        base_query = base_query.filter(QuestionBank.question_content.contains(keyword))
     if subject_id:
-        query = query.filter(QuestionBank.subject_id == subject_id)
+        base_query = base_query.filter(QuestionBank.subject_id == subject_id)
     if type_id:
-        query = query.filter(QuestionBank.type_id == type_id)
+        base_query = base_query.filter(QuestionBank.type_id == type_id)
+    if type_name:
+        base_query = base_query.join(
+            QuestionType, QuestionBank.type_id == QuestionType.type_id
+        ).filter(QuestionType.type_name == type_name)
     if difficulty:
-        query = query.filter(QuestionBank.difficulty == difficulty)
+        base_query = base_query.filter(QuestionBank.difficulty == difficulty)
+    if point_id:
+        base_query = base_query.filter(QuestionBank.point_id == point_id)
     if audit_status is not None:
-        query = query.filter(QuestionBank.audit_status == audit_status)
+        base_query = base_query.filter(QuestionBank.audit_status == audit_status)
     if xingce_subcategory:
-        query = query.filter(QuestionBank.xingce_subcategory == xingce_subcategory)
+        base_query = base_query.filter(QuestionBank.xingce_subcategory == xingce_subcategory)
     if shenlun_subcategory:
-        query = query.filter(QuestionBank.shenlun_subcategory == shenlun_subcategory)
+        base_query = base_query.filter(QuestionBank.shenlun_subcategory == shenlun_subcategory)
     if gongzhuan_subcategory:
-        query = query.filter(QuestionBank.gongzhuan_subcategory == gongzhuan_subcategory)
+        base_query = base_query.filter(QuestionBank.gongzhuan_subcategory == gongzhuan_subcategory)
 
-    # 排序
+    # 计数：在无ORDER BY的base_query上执行
+    total = base_query.count()
+
+    # 排序 + tiebreaker（确保分页确定性）
     sort_col = getattr(QuestionBank, sort_by, QuestionBank.create_time)
     if sort_order == "asc":
-        query = query.order_by(sort_col.asc())
+        paginated_query = base_query.order_by(sort_col.asc(), QuestionBank.question_id.asc())
     else:
-        query = query.order_by(sort_col.desc())
+        paginated_query = base_query.order_by(sort_col.desc(), QuestionBank.question_id.desc())
 
-    total = query.count()
-    questions = query.offset((page - 1) * page_size).limit(page_size).all()
+    questions = paginated_query.offset((page - 1) * page_size).limit(page_size).all()
 
     return {
         "success": True,
@@ -209,6 +305,56 @@ async def list_teacher_questions(
         "page_size": page_size,
         "items": [_format_question(q) for q in questions],
     }
+
+
+@router.post("/questions", summary="自设计题目")
+async def create_teacher_question(
+    data: TeacherQuestionCreate,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """教师自设计题目（复用导入建题逻辑，默认通过审核）"""
+    subject = db.query(QuestionSubject).filter(QuestionSubject.subject_id == data.subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="科目不存在")
+    # 按 科目+题型名 解析 type_id（题型表按科目冗余，type_id 非全局唯一）
+    qtype = db.query(QuestionType).filter(
+        QuestionType.type_name == data.type_name,
+        QuestionType.subject_id == data.subject_id
+    ).first()
+    if not qtype:
+        qtype = db.query(QuestionType).filter(QuestionType.type_name == data.type_name).first()
+    if not qtype:
+        qtype = QuestionType(type_name=data.type_name, subject_id=data.subject_id)
+        db.add(qtype)
+        db.flush()
+
+    # 子科目归类：教师自建题也自动分类，避免落「无」
+    from ...services.question_classifier import detect_subcategory_enhanced
+    _sc = detect_subcategory_enhanced(data.subject_id, data.question_content, data.type_name)
+    question = QuestionBank(
+        subject_id=data.subject_id,
+        type_id=qtype.type_id,
+        question_content=data.question_content,
+        options=data.options,
+        answer=data.answer,
+        answer_analysis=data.answer_analysis or "",
+        point_id=data.point_id,
+        difficulty=data.difficulty,
+        score=data.score,
+        year=data.year,
+        source=data.source or "教师自建",
+        tags=data.tags,
+        creator_id=current_user.user_id,
+        audit_status=1,  # 教师自建题默认通过审核
+        xingce_subcategory=_sc if data.subject_id == 1 else "无",
+        shenlun_subcategory=_sc if data.subject_id == 2 else "无",
+        gongzhuan_subcategory=_sc if data.subject_id == 3 else "无",
+    )
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    return {"success": True, "message": "题目创建成功", "question": _format_question(question)}
 
 
 @router.put("/questions/{question_id}", summary="编辑题目")
@@ -223,13 +369,17 @@ async def update_question(
     if not q:
         raise HTTPException(status_code=404, detail="题目不存在")
 
-    update_data = data.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(q, key, value)
-    q.update_time = datetime.now()
-    db.commit()
-
-    return {"success": True, "message": "题目已更新", "question": _format_question(q)}
+    try:
+        update_data = data.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(q, key, value)
+        q.update_time = datetime.now()
+        db.commit()
+        return {"success": True, "message": "题目已更新", "question": _format_question(q)}
+    except Exception as e:
+        logger.error(f"更新题目 {question_id} 失败: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
 
 
 @router.delete("/questions/{question_id}", summary="删除题目")
@@ -264,6 +414,9 @@ async def list_teacher_papers(
     query = db.query(ExamPaper).filter(ExamPaper.creator_id == current_user.user_id)
     if status:
         query = query.filter(ExamPaper.paper_type == status)
+    else:
+        # 默认不显示已删除(ENDED)试卷，需显式按 ENDED 筛选才可见
+        query = query.filter(ExamPaper.paper_type != "ENDED")
 
     total = query.count()
     papers = query.order_by(desc(ExamPaper.create_time)).offset(
@@ -273,6 +426,19 @@ async def list_teacher_papers(
     items = []
     for p in papers:
         subject = db.query(QuestionSubject).filter(QuestionSubject.subject_id == p.subject_id).first()
+        latest_wf = db.query(PaperApprovalWorkflow).filter(
+            PaperApprovalWorkflow.paper_id == p.paper_id
+        ).order_by(desc(PaperApprovalWorkflow.workflow_id)).first()
+
+        # 派生审批态，便于教师在 DRAFT 态区分「被驳回」与「未提交」
+        approval_status = "draft"
+        if p.paper_type == "PENDING":
+            approval_status = "pending"
+        elif p.paper_type in ("APPROVED", "PUBLISHED"):
+            approval_status = "approved"
+        elif p.paper_type == "DRAFT" and latest_wf and latest_wf.status == "rejected":
+            approval_status = "rejected"
+
         items.append({
             "paper_id": p.paper_id,
             "paper_name": p.paper_name,
@@ -286,11 +452,70 @@ async def list_teacher_papers(
             "question_count": p.question_count,
             "exam_type": p.exam_type,
             "paper_type": p.paper_type,
+            "approval_status": approval_status,
+            "approval_opinion": latest_wf.opinion if latest_wf else "",
             "create_time": p.create_time.isoformat() if p.create_time else None,
             "publish_time": p.publish_time.isoformat() if p.publish_time else None,
         })
 
     return {"success": True, "total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.get("/papers/{paper_id}", summary="试卷详情")
+async def get_teacher_paper_detail(
+    paper_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """教师查看自己的试卷详情（含题目，用于预览）"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+
+    subject = db.query(QuestionSubject).filter(QuestionSubject.subject_id == paper.subject_id).first()
+    relations = db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper_id
+    ).order_by(PaperQuestionRelation.question_order).all()
+
+    questions = []
+    for rel in relations:
+        q = db.query(QuestionBank).filter(QuestionBank.question_id == rel.question_id).first()
+        if not q:
+            continue
+        questions.append({
+            "question_id": q.question_id,
+            "question_order": rel.question_order,
+            "question_score": float(rel.question_score) if rel.question_score else 0,
+            "type_name": q.type.type_name if q.type else "",
+            "question_content": q.question_content,
+            "options": q.options,
+            "answer": q.answer,
+            "answer_analysis": q.answer_analysis or "",
+            "difficulty": q.difficulty,
+        })
+
+    return {
+        "success": True,
+        "paper": {
+            "paper_id": paper.paper_id,
+            "paper_name": paper.paper_name,
+            "paper_code": paper.paper_code,
+            "subject_id": paper.subject_id,
+            "subject_name": subject.subject_name if subject else "",
+            "duration": paper.duration,
+            "total_score": float(paper.total_score) if paper.total_score else 0,
+            "difficulty": paper.difficulty,
+            "question_count": paper.question_count,
+            "exam_type": paper.exam_type,
+            "paper_type": paper.paper_type,
+            "publish_target": paper.publish_target,
+            "create_time": paper.create_time.isoformat() if paper.create_time else None,
+        },
+        "questions": questions,
+    }
 
 
 @router.post("/papers", summary="创建试卷")
@@ -357,7 +582,7 @@ async def delete_paper(
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """删除草稿状态试卷"""
+    """删除试卷（已发布/已结束的试卷不可删除）"""
     paper = db.query(ExamPaper).filter(
         ExamPaper.paper_id == paper_id,
         ExamPaper.creator_id == current_user.user_id
@@ -365,11 +590,61 @@ async def delete_paper(
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
     if paper.paper_type == "PUBLISHED":
-        raise HTTPException(status_code=400, detail="已发布试卷不能删除，请先下线")
+        raise HTTPException(status_code=400, detail="已发布的试卷不可删除，请先下架")
+    if paper.paper_type == "ENDED":
+        raise HTTPException(status_code=400, detail="已移入回收站的试卷请使用彻底删除")
+    if paper.paper_type not in ("DRAFT", "PENDING", "APPROVED"):
+        raise HTTPException(status_code=400, detail="当前状态不可删除")
 
     paper.paper_type = "ENDED"
     db.commit()
     return {"success": True, "message": "试卷已删除"}
+
+
+@router.post("/papers/{paper_id}/restore", summary="回收站恢复")
+async def restore_paper(
+    paper_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """回收站恢复试卷（ENDED→DRAFT）"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.paper_type != "ENDED":
+        raise HTTPException(status_code=400, detail="仅已结束试卷可恢复")
+
+    paper.paper_type = "DRAFT"
+    paper.update_time = datetime.now()
+    db.commit()
+    return {"success": True, "message": "试卷已恢复为草稿"}
+
+
+@router.delete("/papers/{paper_id}/permanent", summary="彻底删除")
+async def permanent_delete_paper(
+    paper_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """彻底删除试卷（物理删除 paper + 关联 + 审批流）"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.paper_type != "ENDED":
+        raise HTTPException(status_code=400, detail="仅已结束试卷可彻底删除")
+
+    db.query(PaperQuestionRelation).filter(PaperQuestionRelation.paper_id == paper_id).delete()
+    db.query(PaperApprovalWorkflow).filter(PaperApprovalWorkflow.paper_id == paper_id).delete()
+    db.query(PaperApproval).filter(PaperApproval.paper_id == paper_id).delete()
+    db.delete(paper)
+    db.commit()
+    return {"success": True, "message": "试卷已彻底删除"}
 
 
 @router.post("/papers/{paper_id}/questions", summary="添加题目到试卷")
@@ -403,6 +678,8 @@ async def add_questions_to_paper(
                 question_score=item.question_score,
             ))
 
+    # autoflush=False 下需先 flush，否则新增关联对后续 count/sum 不可见，导致 question_count 恒为 0
+    db.flush()
     paper.question_count = db.query(func.count(PaperQuestionRelation.relation_id)).filter(
         PaperQuestionRelation.paper_id == paper_id
     ).scalar()
@@ -412,6 +689,157 @@ async def add_questions_to_paper(
     db.commit()
 
     return {"success": True, "message": "题目已添加", "question_count": paper.question_count}
+
+
+@router.delete("/papers/{paper_id}/questions/{question_id}", summary="从试卷移除题目")
+async def remove_question_from_paper(
+    paper_id: int,
+    question_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """教师从草稿试卷移除题目"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.paper_type != "DRAFT":
+        raise HTTPException(status_code=400, detail="仅草稿状态可移除题目")
+
+    rel = db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper_id,
+        PaperQuestionRelation.question_id == question_id
+    ).first()
+    if not rel:
+        raise HTTPException(status_code=404, detail="题目不在试卷中")
+
+    db.delete(rel)
+    db.flush()
+    paper.question_count = db.query(func.count(PaperQuestionRelation.relation_id)).filter(
+        PaperQuestionRelation.paper_id == paper_id
+    ).scalar()
+    total = db.query(func.sum(PaperQuestionRelation.question_score)).filter(
+        PaperQuestionRelation.paper_id == paper_id
+    ).scalar()
+    paper.total_score = total if total else 0
+    db.commit()
+    return {"success": True, "message": "题目已移除", "question_count": paper.question_count}
+
+
+@router.put("/papers/{paper_id}/questions/order", summary="调整题目顺序")
+async def reorder_paper_questions(
+    paper_id: int,
+    data: PaperQuestionOrderUpdate,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """按 question_ids 列表顺序重写 question_order"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.paper_type != "DRAFT":
+        raise HTTPException(status_code=400, detail="仅草稿状态可调整顺序")
+
+    for order, qid in enumerate(data.question_ids, 1):
+        rel = db.query(PaperQuestionRelation).filter(
+            PaperQuestionRelation.paper_id == paper_id,
+            PaperQuestionRelation.question_id == qid
+        ).first()
+        if rel:
+            rel.question_order = order
+    db.commit()
+    return {"success": True, "message": "题目顺序已更新"}
+
+
+@router.put("/papers/{paper_id}/questions/{question_id}", summary="调整题目分值")
+async def update_paper_question_score(
+    paper_id: int,
+    question_id: int,
+    data: PaperQuestionScoreUpdate,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """调整试卷题目分值"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.paper_type != "DRAFT":
+        raise HTTPException(status_code=400, detail="仅草稿状态可调整分值")
+
+    rel = db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper_id,
+        PaperQuestionRelation.question_id == question_id
+    ).first()
+    if not rel:
+        raise HTTPException(status_code=404, detail="题目不在试卷中")
+
+    rel.question_score = data.question_score
+    db.flush()
+    total = db.query(func.sum(PaperQuestionRelation.question_score)).filter(
+        PaperQuestionRelation.paper_id == paper_id
+    ).scalar()
+    paper.total_score = total if total else 0
+    db.commit()
+    return {"success": True, "message": "分值已更新", "total_score": float(paper.total_score)}
+
+
+@router.post("/papers/{paper_id}/questions/{question_id}/replace", summary="换一题")
+async def replace_paper_question(
+    paper_id: int,
+    question_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """删除原题并随机替换一道同科目/题型/难度的题"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.paper_type != "DRAFT":
+        raise HTTPException(status_code=400, detail="仅草稿状态可换一题")
+
+    old_rel = db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper_id,
+        PaperQuestionRelation.question_id == question_id
+    ).first()
+    if not old_rel:
+        raise HTTPException(status_code=404, detail="题目不在试卷中")
+
+    old_q = db.query(QuestionBank).filter(QuestionBank.question_id == question_id).first()
+    if not old_q:
+        raise HTTPException(status_code=404, detail="原题不存在")
+
+    existing_ids = [r[0] for r in db.query(PaperQuestionRelation.question_id).filter(
+        PaperQuestionRelation.paper_id == paper_id
+    ).all()]
+
+    candidate_query = db.query(QuestionBank).filter(
+        QuestionBank.subject_id == old_q.subject_id,
+        QuestionBank.type_id == old_q.type_id,
+        QuestionBank.difficulty == old_q.difficulty,
+        QuestionBank.status == 1,
+        QuestionBank.question_id != question_id,
+    )
+    if existing_ids:
+        candidate_query = candidate_query.filter(~QuestionBank.question_id.in_(existing_ids))
+    candidate = candidate_query.order_by(func.random()).first()
+
+    if not candidate:
+        raise HTTPException(status_code=400, detail="无可用替换题（同科目/题型/难度下已无剩余）")
+
+    old_rel.question_id = candidate.question_id
+    db.commit()
+    return {"success": True, "message": "已换一题", "new_question_id": candidate.question_id}
 
 
 @router.post("/papers/auto-generate", summary="AI智能组卷")
@@ -510,11 +938,45 @@ async def submit_for_approval(
     )
     db.add(workflow)
 
+    paper.publish_target = "mock_exam"
     paper.paper_type = "PENDING"
     paper.update_time = datetime.now()
     db.commit()
 
     return {"success": True, "message": "已提交审批", "workflow_id": workflow.workflow_id}
+
+
+@router.post("/papers/{paper_id}/publish", summary="发布试卷（双轨制）")
+async def publish_teacher_paper(
+    paper_id: int,
+    data: PublishPaperRequest,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """发布试卷：past_paper 免审批直发；mock_exam 需走审批"""
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.question_count == 0:
+        raise HTTPException(status_code=400, detail="试卷没有题目，请先添加题目")
+
+    if data.publish_target == "past_paper":
+        if paper.paper_type not in ("DRAFT", "APPROVED"):
+            raise HTTPException(status_code=400, detail="当前状态不可直接发布")
+        paper.publish_target = "past_paper"
+        paper.paper_type = "PUBLISHED"
+        paper.publish_time = datetime.now()
+    elif data.publish_target == "mock_exam":
+        raise HTTPException(status_code=400, detail="小模考需提交审批，请调用提交审批接口")
+    else:
+        raise HTTPException(status_code=400, detail="发布目标无效，应为 past_paper 或 mock_exam")
+
+    paper.update_time = datetime.now()
+    db.commit()
+    return {"success": True, "message": "试卷已发布到历年试卷", "paper_type": paper.paper_type}
 
 
 # ==================== 成绩管理 ====================
@@ -725,3 +1187,589 @@ async def get_question_stats(
         })
 
     return {"success": True, "paper_id": paper_id, "question_count": len(result), "questions": result}
+
+
+# ==================== 个人设置 ====================
+
+@router.get("/profile", summary="获取教师个人信息")
+async def get_teacher_profile(
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取当前教师的完整个人信息"""
+    # 统计所带班级数
+    class_count = db.query(func.count(func.distinct(Banji.class_id))).filter(
+        Banji.teacher_id == current_user.user_id
+    ).scalar() or 0
+
+    # 统计学生数
+    teacher_classes = db.query(Banji.class_name).filter(
+        Banji.teacher_id == current_user.user_id
+    ).all()
+    class_names = [c[0] for c in teacher_classes]
+    student_count = 0
+    if class_names:
+        student_count = db.query(func.count(SysUser.user_id)).filter(
+            SysUser.class_name.in_(class_names),
+            SysUser.user_type == 'student'
+        ).scalar() or 0
+
+    # 统计试卷数
+    paper_count = db.query(func.count(ExamPaper.paper_id)).filter(
+        ExamPaper.creator_id == current_user.user_id
+    ).scalar() or 0
+
+    # 统计题目数（教师自建）
+    question_count = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.creator_id == current_user.user_id,
+        QuestionBank.status == 1
+    ).scalar() or 0
+
+    return TeacherProfileResponse(
+        user_id=current_user.user_id,
+        username=current_user.username,
+        user_no=getattr(current_user, 'user_no', None),
+        avatar=getattr(current_user, 'avatar', None),
+        phone=getattr(current_user, 'phone', None),
+        email=getattr(current_user, 'email', None),
+        department=getattr(current_user, 'department', None),
+        hire_date=str(getattr(current_user, 'hire_date', '')) if getattr(current_user, 'hire_date', None) else None,
+        role=getattr(current_user, 'role', 'teacher'),
+        class_count=class_count,
+        student_count=student_count,
+        paper_count=paper_count,
+        question_count=question_count,
+    )
+
+
+@router.put("/profile", summary="更新教师个人信息")
+async def update_teacher_profile(
+    data: TeacherProfileUpdate,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """更新教师个人信息（姓名、手机号、邮箱、所属院系）"""
+    update_data = data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        if hasattr(current_user, key) and value is not None:
+            setattr(current_user, key, value)
+    current_user.update_time = datetime.now()
+    db.commit()
+    return {"success": True, "message": "个人信息已更新"}
+
+
+@router.post("/profile/avatar", summary="上传头像")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """上传教师头像图片"""
+    import uuid
+    ext = os.path.splitext(file.filename)[1] if file.filename else '.jpg'
+    filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'uploads', 'avatars')
+    os.makedirs(upload_dir, exist_ok=True)
+    filepath = os.path.join(upload_dir, filename)
+    content = await file.read()
+    with open(filepath, 'wb') as f:
+        f.write(content)
+    avatar_url = f"/uploads/avatars/{filename}"
+    current_user.avatar = avatar_url
+    db.commit()
+    return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}
+
+
+@router.post("/profile/change-password", summary="修改密码")
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """修改教师密码"""
+    from ...core.security import verify_password, get_password_hash
+    if not verify_password(data.old_password, current_user.password):
+        raise HTTPException(status_code=400, detail="当前密码错误")
+    current_user.password = get_password_hash(data.new_password)
+    db.commit()
+    return {"success": True, "message": "密码修改成功"}
+
+
+# ==================== 班级管理 ====================
+
+@router.get("/classes", summary="班级列表")
+async def list_teacher_classes(
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取教师所带班级列表"""
+    classes = db.query(Banji).filter(
+        Banji.teacher_id == current_user.user_id
+    ).order_by(desc(Banji.create_time)).all()
+
+    items = []
+    for cls in classes:
+        student_count = db.query(func.count(SysUser.user_id)).filter(
+            SysUser.class_name == cls.class_name,
+            SysUser.user_type == 'student'
+        ).scalar() or 0
+
+        # 计算班级平均分
+        user_ids = [u.user_id for u in db.query(SysUser.user_id).filter(
+            SysUser.class_name == cls.class_name,
+            SysUser.user_type == 'student'
+        ).all()]
+        avg_score = 0
+        if user_ids:
+            records = db.query(ExamRecord).filter(
+                ExamRecord.user_id.in_(user_ids),
+                ExamRecord.is_completed == 1
+            ).all()
+            scores = [float(r.total_score or 0) for r in records]
+            avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+
+        items.append(ClassItem(
+            class_id=cls.class_id,
+            class_name=cls.class_name,
+            student_count=student_count,
+            avg_score=avg_score,
+            create_time=cls.create_time.isoformat() if cls.create_time else None,
+        ))
+
+    return {"success": True, "total": len(items), "items": [i.dict() for i in items]}
+
+
+@router.post("/classes", summary="创建班级")
+async def create_class(
+    data: ClassCreateRequest,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """教师创建新班级"""
+    existing = db.query(Banji).filter(Banji.class_name == data.class_name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="班级名称已存在")
+
+    new_class = Banji(
+        class_name=data.class_name,
+        teacher_id=current_user.user_id,
+        create_time=datetime.now(),
+    )
+    db.add(new_class)
+    db.commit()
+    db.refresh(new_class)
+    return {"success": True, "message": "班级创建成功", "class_id": new_class.class_id}
+
+
+@router.get("/classes/{class_id}", summary="班级详情")
+async def get_class_detail(
+    class_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取班级详情（含学生列表）"""
+    cls = db.query(Banji).filter(
+        Banji.class_id == class_id,
+        Banji.teacher_id == current_user.user_id
+    ).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="班级不存在或无权操作")
+
+    students = db.query(SysUser).filter(
+        SysUser.class_name == cls.class_name,
+        SysUser.user_type == 'student'
+    ).all()
+
+    student_list = []
+    for s in students:
+        # 计算学生平均正确率
+        records = db.query(ExamRecord).filter(
+            ExamRecord.user_id == s.user_id,
+            ExamRecord.is_completed == 1
+        ).all()
+        scores = [float(r.total_score or 0) for r in records]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+
+        student_list.append({
+            "user_id": s.user_id,
+            "username": s.username,
+            "user_no": getattr(s, 'user_no', ''),
+            "avg_score": avg_score,
+            "exam_count": len(records),
+        })
+
+    return ClassDetailResponse(
+        class_id=cls.class_id,
+        class_name=cls.class_name,
+        student_count=len(students),
+        avg_score=round(sum(s["avg_score"] for s in student_list) / len(student_list), 1) if student_list else 0,
+        create_time=cls.create_time.isoformat() if cls.create_time else None,
+        students=student_list,
+    )
+
+
+@router.delete("/classes/{class_id}", summary="删除班级")
+async def delete_class(
+    class_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """删除班级"""
+    cls = db.query(Banji).filter(
+        Banji.class_id == class_id,
+        Banji.teacher_id == current_user.user_id
+    ).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="班级不存在或无权操作")
+    db.delete(cls)
+    db.commit()
+    return {"success": True, "message": "班级已删除"}
+
+
+@router.post("/classes/{class_id}/students", summary="添加学生到班级")
+async def add_students_to_class(
+    class_id: int,
+    data: ClassStudentAdd,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """添加学生到班级"""
+    cls = db.query(Banji).filter(
+        Banji.class_id == class_id,
+        Banji.teacher_id == current_user.user_id
+    ).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="班级不存在或无权操作")
+
+    added = 0
+    for uid in data.user_ids:
+        user = db.query(SysUser).filter(SysUser.user_id == uid).first()
+        if user and user.role == 'student':
+            user.class_name = cls.class_name
+            added += 1
+    db.commit()
+    return {"success": True, "message": f"已添加 {added} 名学生", "added_count": added}
+
+
+@router.delete("/classes/{class_id}/students/{user_id}", summary="从班级移除学生")
+async def remove_student_from_class(
+    class_id: int,
+    user_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """从班级移除学生"""
+    cls = db.query(Banji).filter(
+        Banji.class_id == class_id,
+        Banji.teacher_id == current_user.user_id
+    ).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="班级不存在或无权操作")
+
+    user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
+    if user and user.class_name == cls.class_name:
+        user.class_name = ''
+        db.commit()
+    return {"success": True, "message": "学生已移除"}
+
+
+# ==================== 消息中心 ====================
+
+@router.get("/messages", summary="消息列表")
+async def list_teacher_messages(
+    message_type: Optional[str] = Query(None, description="消息类型: system/approval/student"),
+    is_read: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取教师消息列表"""
+    # 动态创建消息表（如果不存在）
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS teacher_message (
+                    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    teacher_id INTEGER NOT NULL,
+                    message_type VARCHAR(20) NOT NULL DEFAULT 'system',
+                    title VARCHAR(200) NOT NULL,
+                    content TEXT,
+                    is_read INTEGER DEFAULT 0,
+                    related_id INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+    except Exception:
+        pass
+
+    base_query = text("SELECT * FROM teacher_message WHERE teacher_id = :tid")
+    params = {"tid": current_user.user_id}
+
+    if message_type:
+        base_query = text(str(base_query) + " AND message_type = :mt")
+        params["mt"] = message_type
+    if is_read is not None:
+        base_query = text(str(base_query) + " AND is_read = :ir")
+        params["ir"] = 1 if is_read else 0
+
+    count_query = text(str(base_query).replace("SELECT *", "SELECT COUNT(*)"))
+    total = 0
+    items = []
+
+    try:
+        from sqlalchemy import text as sql_text
+        with engine.connect() as conn:
+            total = conn.execute(count_query, params).scalar() or 0
+            list_query = text(str(base_query) + " ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+            params["limit"] = page_size
+            params["offset"] = (page - 1) * page_size
+            rows = conn.execute(list_query, params).fetchall()
+            for row in rows:
+                items.append({
+                    "message_id": row[0],
+                    "message_type": row[2],
+                    "title": row[3],
+                    "content": row[4],
+                    "is_read": bool(row[5]),
+                    "related_id": row[6],
+                    "created_at": str(row[7]) if row[7] else None,
+                })
+    except Exception as e:
+        logger.error(f"查询消息列表失败: {e}")
+
+    unread_count = 0
+    try:
+        with engine.connect() as conn:
+            unread_count = conn.execute(
+                text("SELECT COUNT(*) FROM teacher_message WHERE teacher_id = :tid AND is_read = 0"),
+                {"tid": current_user.user_id}
+            ).scalar() or 0
+    except Exception:
+        pass
+
+    return {"success": True, "total": total, "unread_count": unread_count, "items": items}
+
+
+@router.get("/messages/unread-count", summary="未读消息数")
+async def get_unread_count(
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取未读消息数量"""
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            count = conn.execute(
+                text("SELECT COUNT(*) FROM teacher_message WHERE teacher_id = :tid AND is_read = 0"),
+                {"tid": current_user.user_id}
+            ).scalar() or 0
+        return {"success": True, "unread_count": count}
+    except Exception:
+        return {"success": True, "unread_count": 0}
+
+
+@router.put("/messages/{message_id}/read", summary="标记消息已读")
+async def mark_message_read(
+    message_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """标记单条消息为已读"""
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(
+                text("UPDATE teacher_message SET is_read = 1 WHERE message_id = :mid AND teacher_id = :tid"),
+                {"mid": message_id, "tid": current_user.user_id}
+            )
+            conn.commit()
+        return {"success": True, "message": "已标记为已读"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
+
+
+@router.put("/messages/read-all", summary="全部标记已读")
+async def mark_all_read(
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """全部标记为已读"""
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(
+                text("UPDATE teacher_message SET is_read = 1 WHERE teacher_id = :tid AND is_read = 0"),
+                {"tid": current_user.user_id}
+            )
+            conn.commit()
+        return {"success": True, "message": "已全部标记为已读"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
+
+
+# ==================== 数据分析 ====================
+
+@router.get("/analytics/overview", summary="学情总览")
+async def get_analytics_overview(
+    class_id: Optional[int] = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取学情总览数据"""
+    # 获取教师所带班级的学生
+    teacher_classes = db.query(Banji.class_name).filter(
+        Banji.teacher_id == current_user.user_id
+    ).all()
+    class_names = [c[0] for c in teacher_classes]
+
+    if not class_names:
+        return AnalyticsOverview()
+
+    # 如果指定了班级
+    if class_id:
+        cls = db.query(Banji).filter(Banji.class_id == class_id).first()
+        if cls:
+            class_names = [cls.class_name]
+
+    user_ids = [u.user_id for u in db.query(SysUser.user_id).filter(
+        SysUser.class_name.in_(class_names),
+        SysUser.user_type == 'student'
+    ).all()]
+
+    if not user_ids:
+        return AnalyticsOverview()
+
+    # 最近N天的考试记录
+    since = datetime.now() - timedelta(days=days)
+    records = db.query(ExamRecord).filter(
+        ExamRecord.user_id.in_(user_ids),
+        ExamRecord.is_completed == 1,
+        ExamRecord.start_time >= since
+    ).all()
+
+    scores = [float(r.total_score or 0) for r in records]
+    total_students = len(set(r.user_id for r in records))
+
+    # 按日期统计平均分趋势
+    date_scores = {}
+    for r in records:
+        if r.start_time:
+            date_key = r.start_time.strftime("%m-%d")
+            if date_key not in date_scores:
+                date_scores[date_key] = []
+            date_scores[date_key].append(float(r.total_score or 0))
+
+    trend_dates = sorted(date_scores.keys())
+    trend_scores = [round(sum(date_scores[d]) / len(date_scores[d]), 1) for d in trend_dates]
+
+    # 按科目统计
+    subject_names = {1: "行测", 2: "申论", 3: "公专"}
+    subject_stats = {}
+    for r in records:
+        paper = db.query(ExamPaper).filter(ExamPaper.paper_id == r.paper_id).first()
+        if paper:
+            sid = paper.subject_id
+            if sid not in subject_stats:
+                subject_stats[sid] = {"scores": [], "count": 0}
+            subject_stats[sid]["scores"].append(float(r.total_score or 0))
+            subject_stats[sid]["count"] += 1
+
+    subject_comparison = []
+    for sid, stat in subject_stats.items():
+        avg = round(sum(stat["scores"]) / len(stat["scores"]), 1) if stat["scores"] else 0
+        subject_comparison.append({
+            "subject_name": subject_names.get(sid, f"科目{sid}"),
+            "avg_score": avg,
+            "exam_count": stat["count"],
+        })
+
+    return AnalyticsOverview(
+        total_students=total_students,
+        total_exams=len(records),
+        avg_score=round(sum(scores) / len(scores), 1) if scores else 0,
+        pass_rate=round(sum(1 for s in scores if s >= 60) / len(scores) * 100, 1) if scores else 0,
+        score_trend={"dates": trend_dates, "scores": trend_scores},
+        subject_comparison=subject_comparison,
+    )
+
+
+@router.get("/analytics/question-usage", summary="题目使用频率")
+async def get_question_usage(
+    subject_id: Optional[int] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取题目使用频率统计"""
+    query = db.query(
+        ExamAnswerDetail.question_id,
+        func.count(ExamAnswerDetail.detail_id).label('usage_count'),
+        func.sum(case((ExamAnswerDetail.is_correct == 1, 1), else_=0)).label('correct_count'),
+    ).group_by(ExamAnswerDetail.question_id).order_by(
+        desc('usage_count')
+    ).limit(limit)
+
+    rows = query.all()
+    items = []
+    for qid, usage_count, correct_count in rows:
+        q = db.query(QuestionBank).filter(QuestionBank.question_id == qid).first()
+        if q and (subject_id is None or q.subject_id == subject_id):
+            items.append({
+                "question_id": qid,
+                "question_content": (q.question_content or "")[:60],
+                "usage_count": usage_count,
+                "correct_rate": round((correct_count or 0) / usage_count * 100, 1) if usage_count > 0 else 0,
+                "subject_name": q.subject.subject_name if q.subject else "",
+            })
+
+    return {"success": True, "total": len(items), "items": items}
+
+
+@router.get("/analytics/knowledge-mastery", summary="知识点掌握度")
+async def get_knowledge_mastery(
+    subject_id: Optional[int] = Query(None),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取知识点掌握度统计"""
+    # 获取知识点列表
+    kp_query = db.query(KnowledgePoint)
+    if subject_id:
+        kp_query = kp_query.filter(KnowledgePoint.subject_id == subject_id)
+    knowledge_points = kp_query.all()
+
+    items = []
+    for kp in knowledge_points:
+        # 统计该知识点下的答题情况
+        questions = db.query(QuestionBank.question_id).filter(
+            QuestionBank.point_id == kp.point_id,
+            QuestionBank.status == 1
+        ).all()
+        qids = [q[0] for q in questions]
+
+        if not qids:
+            continue
+
+        total = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
+            ExamAnswerDetail.question_id.in_(qids)
+        ).scalar() or 0
+
+        correct = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
+            ExamAnswerDetail.question_id.in_(qids),
+            ExamAnswerDetail.is_correct == 1
+        ).scalar() or 0
+
+        items.append({
+            "point_id": kp.point_id,
+            "point_name": kp.point_name,
+            "total_attempts": total,
+            "correct_count": correct,
+            "mastery_rate": round(correct / total * 100, 1) if total > 0 else 0,
+            "subject_name": kp.subject.subject_name if kp.subject else "",
+        })
+
+    return {"success": True, "total": len(items), "items": items}

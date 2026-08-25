@@ -54,6 +54,7 @@
                 <span :class="['type-badge', typeBadgeClass(q.type_name)]">
                   {{ typeDisplayName(q.type_name) }}
                 </span>
+                <span v-if="q.group_id" class="group-badge" title="复合题小题（点击详情查看题组材料）">📑</span>
               </td>
               <td class="td-stars">{{ renderStars(q.difficulty) }}</td>
               <td class="td-actions">
@@ -92,6 +93,11 @@
           <span :class="{ 'high-rate': (currentQuestion.accuracy_rate || 0) >= 70, 'low-rate': (currentQuestion.accuracy_rate || 0) < 40 }">
             {{ currentQuestion.accuracy_rate ? currentQuestion.accuracy_rate + '%' : '暂无数据' }}
           </span>
+        </div>
+
+        <div class="detail-field" v-if="groupInfo && groupInfo.shared_content">
+          <strong>📑 题组材料：</strong>
+          <div class="detail-content group-material" v-html="cleanHtmlContent(groupInfo.shared_content)"></div>
         </div>
 
         <div class="detail-field">
@@ -227,8 +233,9 @@ export default defineComponent({
     const totalPages = ref(0);
 
     // 详情弹窗
-    const showDetailModal = ref(false);
-    const currentQuestion: any = ref({});
+const showDetailModal = ref(false);
+const currentQuestion: any = ref({});
+const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 
     // 编辑弹窗
     const showEditModal = ref(false);
@@ -412,6 +419,20 @@ export default defineComponent({
     function showDetail(q: any) {
       currentQuestion.value = q;
       showDetailModal.value = true;
+      // B4: 复合题小题 → 拉取题组聚合（共享材料+同组成员）
+      groupInfo.value = null;
+      if (q.group_id) {
+        const auth = (window as any).__VTJ_AUTH__;
+        auth.apiFetch(`/api/questions/group/${q.group_id}`)
+          .then((res: any) => res.json())
+          .then((data: any) => {
+            if (data && data.group) {
+              groupInfo.value = data.group;
+              currentQuestion.value = { ...q, group_members: data.members || [] };
+            }
+          })
+          .catch((e: any) => console.error('题组详情加载失败:', e));
+      }
     }
 
     // ========== 编辑弹窗 ==========
@@ -579,7 +600,9 @@ export default defineComponent({
 .detail-field strong { color: #1A3C6D; }
 .detail-content { margin-top: 6px; padding: 10px 14px; background: #f9fafb; border-radius: 8px; line-height: 1.8; }
 .detail-content img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
-.options-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .options-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .group-badge { margin-left: 6px; font-size: 12px; cursor: help; }
+  .group-material { background: #f5f7fa; border-left: 3px solid #409eff; padding: 8px 10px; border-radius: 4px; }
 .option-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 6px; border: 1px solid #e8e8e8; background: #fafafa; }
 .option-item.correct-option { background: #f0fdf4; border-color: #86efac; }
 .option-key { font-weight: 700; color: #1A3C6D; min-width: 24px; }
