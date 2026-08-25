@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Date, DECIMAL,
+    Column, Integer, SmallInteger, Float, Boolean, String, Text, DateTime, Date, DECIMAL,
     Enum, JSON, ForeignKey, Index, UniqueConstraint, BigInteger
 )
 from sqlalchemy.orm import relationship
@@ -1114,29 +1114,80 @@ class ExamCalendar(Base):
     )
 
 # ------------------------------
-# 备考资料模型（新增）
+# 备考资料模型 v2.2（重建：subject 三科 / type 四类内容）
 # ------------------------------
 
 class StudyMaterial(Base):
     """备考资料表"""
     __tablename__ = "study_material"
-    
+
     material_id = Column(Integer, primary_key=True, autoincrement=True, comment="资料ID")
-    title = Column(String(200), nullable=False, comment="资料标题")
-    description = Column(String(500), comment="资料描述")
-    category = Column(String(50), comment="分类（行测/申论/公专）")
-    type = Column(String(50), comment="资料类型")
-    badge = Column(String(20), comment="徽章（热门/精华/重要）")
-    file_path = Column(String(500), comment="文件路径")
-    icon_name = Column(String(50), comment="图标名称")
+    subject = Column(String(20), nullable=False, comment="科目: xingce/shenlun/gongzhuan")
+    type = Column(String(20), nullable=False, comment="类型: video_intro/video_advanced/article/card")
+    category = Column(String(50), comment="分类标签")
+    title = Column(String(200), nullable=False, comment="标题")
+    summary = Column(String(500), comment="摘要")
+    content = Column(Text, comment="文章HTML(bleach消毒后)；卡片时为背面详述")
+    card_front = Column(String(200), comment="卡片正面")
+    card_back = Column(Text, comment="卡片背面")
+    cover_image = Column(String(500), comment="封面图URL")
+    video_id = Column(Integer, comment="关联video_resource.video_id")
+    duration = Column(Integer, default=0, comment="视频时长(秒)")
+    read_time = Column(Integer, default=0, comment="阅读时长(分钟)")
+    difficulty = Column(Integer, default=1, comment="难度1-3")
+    badge = Column(String(20), comment="徽章: 热门/精华/重要/NEW")
+    sort_order = Column(Integer, default=0, comment="排序权重")
+    status = Column(Integer, default=1, comment="0下架/1上架")
     view_count = Column(Integer, default=0, comment="浏览量")
-    download_count = Column(Integer, default=0, comment="下载量")
-    status = Column(Integer, default=1, comment="状态")
+    study_count = Column(Integer, default=0, comment="完成人数")
+    creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="创建人")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
-    
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
     __table_args__ = (
-        Index("idx_category_studymaterial", category),
-        Index("idx_type_studymaterial", type),
+        Index("idx_subject_type", subject, type),
+        Index("idx_status_sort", status, sort_order),
+    )
+
+
+class UserMaterialProgress(Base):
+    """备考资料学习进度表（每用户每资料一行，UNIQUE 幂等 UPSERT）"""
+    __tablename__ = "user_material_progress"
+
+    progress_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("study_material.material_id"), nullable=False)
+    status = Column(SmallInteger, default=0, comment="0未学/1学习中/2已完成")
+    progress_percent = Column(Float, default=0, comment="0-100")
+    is_favorite = Column(Boolean, default=False)
+    completed_at = Column(DateTime, comment="完成时间")
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "material_id", name="uq_progress_user_material"),
+        Index("idx_progress_user", user_id),
+    )
+
+
+class MaterialImportRecord(Base):
+    """备考资料导入记录（内容工厂流水追溯）"""
+    __tablename__ = "material_import_record"
+
+    import_id = Column(Integer, primary_key=True, autoincrement=True)
+    file_name = Column(String(255), nullable=False, comment="原始文件名")
+    file_type = Column(String(10), comment="docx/xlsx/pdf/image")
+    file_size = Column(BigInteger, comment="字节")
+    parse_mode = Column(String(20), comment="sync / async(mineru)")
+    parse_status = Column(String(20), default="pending", comment="pending/processing/success/failed/consumed")
+    parse_result = Column(Text, comment="JSON结构化产物快照")
+    error_message = Column(String(1000), comment="失败原因")
+    uploader_id = Column(BigInteger, ForeignKey("sys_user.user_id"))
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("idx_import_status", parse_status),
     )
 
 # ------------------------------
