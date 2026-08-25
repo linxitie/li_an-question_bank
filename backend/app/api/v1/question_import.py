@@ -1517,6 +1517,7 @@ async def batch_import_parsed(
 
     ok_ids: List[int] = []
     reused_ids: List[int] = []
+    ok_items: List[Dict[str, Any]] = []  # 成功入库的原payload（用于缺答案/解析提示）
     failed_items: List[Dict[str, Any]] = []
     need_confirm = 0
     default_subject = (payload.get('subject_category') or '').strip()
@@ -1542,6 +1543,7 @@ async def batch_import_parsed(
                 reused_ids.append(qid)
             else:
                 ok_ids.append(qid)
+                ok_items.append(q)
             ans = (q.get('answer') or '').strip()
             conf = q.get('confidence')
             if not ans or ans == '待补充' or (isinstance(conf, (int, float)) and conf < 0.5):
@@ -1626,6 +1628,17 @@ async def batch_import_parsed(
     msg = f"导入完成：新增 {len(ok_ids)} 题，复用 {len(reused_ids)} 题，失败 {len(failed_items)} 题"
     if paper_id:
         msg += f"；试卷 #{paper_id} 已保存到试卷管理（关联 {len(ok_ids)+len(reused_ids)} 题）"
+    # 问题3-R2：分离导入明示缺答案/解析的题号（按提交顺序），避免静默缺失
+    if mode == 'separate' and ok_items:
+        missing = [
+            str(i + 1) for i, q in enumerate(ok_items)
+            if not (q.get('answer') or '').strip()
+            or not (q.get('answer_analysis') or '').strip()
+        ]
+        if missing:
+            head = '、'.join(missing[:20])
+            more = f" 等共{len(missing)}题" if len(missing) > 20 else ''
+            msg += f"；以下{len(missing)}题缺答案/解析待补：第{head}题{more}"
 
     return {
         'import_status': 'SUCCESS' if not failed_items else 'PARTIAL',
