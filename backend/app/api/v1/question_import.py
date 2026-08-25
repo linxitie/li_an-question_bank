@@ -1323,12 +1323,44 @@ def _upsert_question_core(db: Session, current_user: SysUser,
     # 模糊去重检测
     existing = _detect_duplicate(db, content, answer, subject.subject_id)
     if existing:
-        # 获取相似度详情
+        # ===== A2 回填式重导入 =====
+        # 已存题缺字段而新导入数据有 → 补空不覆盖（绝不破坏已有非空值）。
+        # 用户重导入题目/答案文档 = 给存量题补营养，不产生新重复。
+        backfilled = []
+        new_analysis = (question_data.get('answer_analysis') or '').strip()
+        if new_analysis and len(new_analysis) > 10 and \
+                not (existing.answer_analysis or '').strip():
+            existing.answer_analysis = new_analysis
+            backfilled.append('answer_analysis')
+        new_ans = answer
+        if new_ans and (existing.answer or '').strip() in ('', '待补充'):
+            existing.answer = new_ans
+            backfilled.append('answer')
+        new_source = (question_data.get('source') or '').strip()
+        if new_source and not (existing.source or '').strip():
+            existing.source = new_source
+            backfilled.append('source')
+        new_year = question_data.get('exam_year') or question_data.get('year')
+        if new_year and not existing.year:
+            try:
+                existing.year = int(new_year)
+                backfilled.append('year')
+            except (TypeError, ValueError):
+                pass
+        # 题干图回填：新导入带 <img>（如看图选择题的图标条）而已存题无
+        if '<img' in content and '<img' not in (existing.question_content or ''):
+            existing.question_content = content
+            backfilled.append('content_images')
+        if backfilled:
+            logger.info(f"[backfill] 题目{existing.question_id} 回填字段: {backfilled}")
         dup_info = _get_duplicate_info(db, content, answer, subject.subject_id)
         return {
             'import_status': 'DUPLICATE',
             'question_id': existing.question_id,
-            'message': f'该题目已存在（相似度 {dup_info["similarity"]*100:.0f}%，现有ID: {existing.question_id}）',
+            'backfilled_fields': backfilled,
+            'message': (f'该题目已存在（相似度 {dup_info["similarity"]*100:.0f}%，'
+                        f'现有ID: {existing.question_id}）'
+                        + (f'，已回填缺失字段: {",".join(backfilled)}' if backfilled else '')),
             'similarity': dup_info['similarity'],
             'existing_content_preview': dup_info.get('existing_content'),
             'error_messages': [{'error': '重复题目', 'existing_id': existing.question_id, 'similarity': dup_info['similarity']}]
@@ -1520,7 +1552,19 @@ async def batch_import_parsed(
     ok_items: List[Dict[str, Any]] = []  # 成功入库的原payload（用于缺答案/解析提示）
     failed_items: List[Dict[str, Any]] = []
     need_confirm = 0
+    backfill_count = 0  # A2: 重复题回填缺失字段的题数
     default_subject = (payload.get('subject_category') or '').strip()
+
+    # ===== A1 元数据自动注入（根因修复）=====
+    # 此前 _auto_detect_tags 只在建卷判断处调用，提取的年份/省份/考试类型
+    # 从未写入题目行，导致 source/year 为空（192题无法追溯来源的根因）。
+    # 现提前计算并注入每题 payload（payload 自带值优先，setdefault 语义）。
+    _joined_head = ' '.join((q.get('question_content') or '')[:150] for q in items[:20])
+    auto_tags = _auto_detect_tags(paper_name or _joined_head[:60], _joined_head)
+    _inject_source = ''.join(
+        p for p in (auto_tags.get('exam_province', ''), auto_tags.get('exam_type', '')) if p
+    )
+    _inject_year = auto_tags.get('exam_year')
 
     for idx, q in enumerate(items):
         if not isinstance(q, dict):
@@ -1529,6 +1573,10 @@ async def batch_import_parsed(
         q.setdefault('paper_name', paper_name or '批量解析导入')
         q.setdefault('subject_category', default_subject or '公专')
         q.setdefault('import_mode', mode)
+        if _inject_source:
+            q.setdefault('source', _inject_source)
+        if _inject_year:
+            q.setdefault('year', _inject_year)
         # 测试模板防御（问题1-R3）：命中即拒收，不入库
         if _is_test_garbage(q):
             failed_items.append({
@@ -1541,6 +1589,8 @@ async def batch_import_parsed(
             qid = r['question_id']
             if r['import_status'] == 'DUPLICATE':
                 reused_ids.append(qid)
+                if r.get('backfilled_fields'):
+                    backfill_count += 1
             else:
                 ok_ids.append(qid)
                 ok_items.append(q)
@@ -1554,8 +1604,8 @@ async def batch_import_parsed(
             failed_items.append({'index': idx, 'reason': str(e)[:200]})
 
     # ===== 检测层 → 双轨入库层 =====
-    joined_head = ' '.join((q.get('question_content') or '')[:150] for q in items[:20])
-    auto_tags = _auto_detect_tags(paper_name or joined_head[:60], joined_head)
+    # auto_tags 已在循环前计算并注入题目行（A1），此处直接复用
+    joined_head = _joined_head
     is_paper_doc = (
         bool(auto_tags.get('is_complete_paper'))
         or bool(auto_tags.get('exam_year') and auto_tags.get('exam_type'))
@@ -1626,6 +1676,8 @@ async def batch_import_parsed(
         raise HTTPException(status_code=500, detail=f"批量入库失败: {str(ce)}")
 
     msg = f"导入完成：新增 {len(ok_ids)} 题，复用 {len(reused_ids)} 题，失败 {len(failed_items)} 题"
+    if backfill_count:
+        msg += f"，回填缺失字段 {backfill_count} 题"
     if paper_id:
         msg += f"；试卷 #{paper_id} 已保存到试卷管理（关联 {len(ok_ids)+len(reused_ids)} 题）"
     # 问题3-R2：分离导入明示缺答案/解析的题号（按提交顺序），避免静默缺失
