@@ -17,6 +17,7 @@ from .api.v1 import admin as admin_api
 from .api.v1 import teacher as teacher_api
 from .api.v1 import admin_approval
 from .api.v1 import quotes
+from .api.v1 import materials
 # from .api.v1 import wrong_questions, checkin, coins  # TODO: 待创建
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
@@ -101,6 +102,15 @@ async def lifespan(app: FastAPI):
                         conn.execute(text(f"ALTER TABLE practice_record ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: practice_record 添加列 {col_name}")
+
+        # 检查 exam_paper 表(试卷管理完善:新增 publish_target 字段)
+        if 'exam_paper' in inspector.get_table_names():
+            paper_cols = [c['name'] for c in inspector.get_columns('exam_paper')]
+            if 'publish_target' not in paper_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE exam_paper ADD COLUMN publish_target VARCHAR(20)"))
+                    conn.commit()
+                logger.info("自动迁移: exam_paper 添加列 publish_target")
 
         # 检查 forum_post 表(论坛模块完善:新增 attachments 字段)
         if 'forum_post' in inspector.get_table_names():
@@ -248,24 +258,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"wrong_question_personal 迁移: {e}")
 
-    # 题型历史数据迁移：统一归一化为4种标准类型
+    # 题型客观性修复：保留 question_type 独立题型（判断题/填空题/情境题不再被归一化合并）
     try:
         with engine.connect() as conn:
-            # === question_detail_category 表 ===
-            conn.execute(text("UPDATE question_detail_category SET question_type_detail='单选题' WHERE question_type_detail IN ('判断题', '选择题')"))
+            # === question_detail_category 表（仅归一化该表，不影响主题型表） ===
+            # 注意：'选择题'是歧义值（可能为单选也可能为多选），不可在此批量折叠为'单选题'，
+            # 否则会把多选的选择题误判为单选；统一交由 repair_question_types.py 按关键词工程重检测。
+            conn.execute(text("UPDATE question_detail_category SET question_type_detail='单选题' WHERE question_type_detail='判断题'"))
             conn.execute(text("UPDATE question_detail_category SET question_type_detail='多选题' WHERE question_type_detail='不定项'"))
             conn.execute(text("UPDATE question_detail_category SET question_type_detail='论述题' WHERE question_type_detail IN ('填空题', '简答题', '案例分析题', '无')"))
-            # === question_type 表 ===
-            conn.execute(text("UPDATE question_type SET type_name='单选题' WHERE type_name IN ('判断题', '选择题', '单选')"))
-            conn.execute(text("UPDATE question_type SET type_name='多选题' WHERE type_name IN ('不定项', '多选')"))
-            conn.execute(text("UPDATE question_type SET type_name='论述题' WHERE type_name IN ('填空题', '简答题', '案例分析题')"))
-            # 修复 is_objective 字段
-            conn.execute(text("UPDATE question_type SET is_objective=1 WHERE type_name IN ('单选题', '多选题')"))
-            conn.execute(text("UPDATE question_type SET is_objective=0 WHERE type_name IN ('论述题', '写作题')"))
+            # 修复 is_objective 字段（客观题/主观题分类，含新增题型）
+            conn.execute(text("UPDATE question_type SET is_objective=1 WHERE type_name IN ('单选题', '多选题', '判断题', '填空题')"))
+            conn.execute(text("UPDATE question_type SET is_objective=0 WHERE type_name IN ('论述题', '写作题', '情境题')"))
             conn.commit()
-        logger.info("题型历史数据迁移完成（统一归一化为4种标准类型）")
+        logger.info("题型客观性字段修复完成（保留独立题型：判断/填空/情境）")
     except Exception as e:
-        logger.warning(f"题型历史数据迁移: {e}")
+        logger.warning(f"题型客观性字段修复: {e}")
 
     # exam_record 表 exam_type 枚举值迁移：SIMULATION→SELF_TEST, PRACTICE→MOCK_EXAM
     # 修复模型定义枚举(Enum("SELF_TEST","MOCK_EXAM"))与历史数据(SIMULATION/PRACTICE)不一致问题
@@ -459,6 +467,7 @@ app.include_router(wrong_questions.router)
 app.include_router(notes.router)
 app.include_router(collection.router)
 app.include_router(quotes.router)
+app.include_router(materials.router)
 app.include_router(admin_api.router, tags=["管理员端"])
 app.include_router(admin_approval.router, tags=["管理员端-试卷审批"])
 app.include_router(teacher_api.router, tags=["教师端"])
