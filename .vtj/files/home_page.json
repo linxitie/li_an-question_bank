@@ -1199,6 +1199,18 @@
     },
     "buildRecruitCards": {
       "type": "method"
+    },
+    "scrollToTop": {
+      "type": "method",
+      "params": [
+        "cardItem"
+      ]
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "el"
+      ]
     }
   },
   "computed": {},
@@ -1207,7 +1219,7 @@
       "type": "method"
     }
   },
-  "__VERSION__": "1778936500684",
+  "__VERSION__": "1785750000100",
   "dataSources": {},
   "__VTJ_BLOCK__": true
 }

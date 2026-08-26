@@ -16,6 +16,9 @@
           <ExamCalendar></ExamCalendar>
         </div>
       </section>
+      <section class="study-materials-section">
+        <StudyMaterialsEntry></StudyMaterialsEntry>
+      </section>
       <section class="recruit-section">
         <div class="section-header">
           <h2 class="section-title">
@@ -29,7 +32,7 @@
                :key="item.id"
                class="recruit-card">
             <!-- 卡片头部：图标 + 分类名 + 数量 + 箭头(›) -->
-            <div class="recruit-card-header" @click="toggleCardExpand(item)">
+            <div class="recruit-card-header" @click="scrollToTop(item)">
               <div class="recruit-header-left">
                 <div class="recruit-icon2" :style="{ background: item.bg }">
                   <span class="recruit-emoji">{{ item.icon }}</span>
@@ -40,12 +43,13 @@
                 </div>
               </div>
               <div class="recruit-header-right">
-                <span class="recruit-arrow" :class="{ 'arrow-expanded': item.expanded }">›</span>
+                <span class="recruit-arrow">›</span>
               </div>
             </div>
-            <!-- 标题列表：收起5条 / 展开10条，纯行高留白 -->
-            <div class="recruit-title-list" v-if="item.allItems.length > 0">
-              <div v-for="(ri, ridx) in item.allItems.slice(0, item.expanded ? 10 : 5)"
+            <!-- 标题列表：全部条目，卡片内滚动查看 -->
+            <div class="recruit-title-list-scroll" v-if="item.allItems.length > 0">
+            <div class="recruit-title-list" :ref="(el: any) => setRecruitListRef(item.id, el)">
+              <div v-for="(ri, ridx) in item.allItems"
                    :key="ridx"
                    class="recruit-title-item"
                    @click="openRecruitDetail(ri)">
@@ -57,6 +61,7 @@
                 <!-- 标题文字 -->
                 <span class="recruit-title-text" :title="ri.title">{{ ri.title && ri.title.length > 16 ? ri.title.substring(0, 16) + '...' : (ri.title || '未知标题') }}</span>
               </div>
+            </div>
             </div>
             <!-- 空状态 -->
             <div class="recruit-empty" v-else>
@@ -87,7 +92,11 @@
                 <h4>招聘条件</h4>
                 <p>{{ state.selectedRecruit.requirements }}</p>
               </div>
-              <div class="recruit-modal-section">
+              <div class="recruit-modal-section" v-if="state.selectedRecruit.content_html">
+                <h4>招聘详情</h4>
+                <div class="detail-content-html" v-html="state.selectedRecruit.content_html || state.selectedRecruit.content || ''"></div>
+              </div>
+              <div class="recruit-modal-section" v-else>
                 <h4>招聘详情</h4>
                 <p>{{ state.selectedRecruit.content || '暂无详细内容，请点击"查看原文"获取完整信息。' }}</p>
               </div>
@@ -174,7 +183,7 @@
 </template>
 <script lang="ts">
   // @ts-nocheck
-  import { defineComponent, reactive } from 'vue';
+  import { defineComponent, reactive, ref } from 'vue';
   import { XIcon } from '@vtj/ui';
   import {
     Briefcase,
@@ -190,7 +199,9 @@
   import QuoteBanner from './quote_banner.vue';
   import CountdownTimer from './countdown_timer.vue';
   import ExamCalendar from './exam_calendar_block.vue';
+  import StudyMaterialsEntry from './study_materials.vue';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'HomePage',
     components: {
@@ -200,10 +211,12 @@
       QuoteBanner,
       CountdownTimer,
       ExamCalendar,
+      StudyMaterialsEntry,
       XIcon
     },
     setup(props) {
-      const provider = useProvider({ id: 'home_page', version: '1778936500684' });
+      const provider = useProvider({ id: 'home_page', version: '1785750000100' });
+      const recruitListRefs = ref({} as Record<string, HTMLElement>);
       const state = reactive({
         resourceItems: [],
         recruitCategories: [],
@@ -211,11 +224,15 @@
         showRecruitModal: false,
         selectedRecruit: {}
       });
-      return { state, props, provider, Briefcase, ArrowRight, Reading, VideoPlay, Tickets };
+      return { state, props, provider, recruitListRefs, Briefcase, ArrowRight, Reading, VideoPlay, Tickets, Document };
     },
     methods: {
-      toggleCardExpand(cardItem) {
-        cardItem.expanded = !cardItem.expanded;
+      scrollToTop(cardItem) {
+        // 点击箭头时，将对应卡片滚动到顶部
+        const el = this.recruitListRefs[cardItem.id];
+        if (el) {
+          el.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       },
       openRecruitDetail(recruit) {
         this.state.selectedRecruit = recruit;
@@ -226,7 +243,7 @@
         this.state.selectedRecruit = {};
       },
       handleResourceClick(type) {
-        this.$message.info('跳转至备考资料详情：' + type);
+        ElMessage.info('跳转至备考资料详情：' + type);
       },
       async fetchRecruitment() {
         const categories = ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'];
@@ -240,7 +257,7 @@
           '三支一扶': 'linear-gradient(135deg, #d1fae5, #a7f3d0)'
         };
         try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/recruitment?limit=10');
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/recruitment?limit=20');
           const data = await res.json();
           if (res.ok && data.items) {
             this.state.recruitAllData = data.items;
@@ -253,7 +270,7 @@
         }
       },
       buildRecruitCards() {
-        // 构建招考信息卡片数据（每个分类显示前5条，支持展开到10条）
+        // 构建招考信息卡片数据（每个分类默认显示前6条，卡片内滚动查看更多）
         var result = [];
         var self = this;
         for (var cat in this.state.recruitAllData) {
@@ -262,8 +279,7 @@
             id: cat, name: cat,
             icon: self._catIcon(cat),
             bg: self._catBg(cat),
-            allItems: items,
-            expanded: false
+            allItems: items
           });
         }
         var order = ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'];
@@ -273,8 +289,13 @@
       loadFallbackRecruit(categories, icons, bgs) {
         var self = this;
         this.state.recruitCategories = categories.map(function(cat) {
-          return { id: cat, name: cat, icon: icons[cat] || '📋', bg: bgs[cat] || 'linear-gradient(135deg, #f8f9fc, #f1f3f8)', allItems: [], expanded: false };
+          return { id: cat, name: cat, icon: icons[cat] || '📋', bg: bgs[cat] || 'linear-gradient(135deg, #f8f9fc, #f1f3f8)', allItems: [] };
         });
+      },
+      setRecruitListRef(name, el) {
+        if (el) {
+          this.recruitListRefs[name] = el;
+        }
       },
       _catIcon(cat) {
         var m = { '国考省考': '🏛️', '事业单位': '🏢', '教师招聘': '📚', '国企招聘': '🏭', '医疗卫生': '🏥', '三支一扶': '🌾' };
@@ -331,7 +352,8 @@
   }
   /* 中层模块 */
   .recruit-section,
-  .resource-section {
+  .resource-section,
+  .study-materials-section {
     margin-bottom: 28px;
   }
   .section-header {
@@ -398,10 +420,29 @@
   /* 箭头 › */
   .recruit-arrow {
     font-size: 30px; font-weight: 300; color: #bcc5ce;
-    transition: all 0.3s ease; line-height: 1;
+    transition: color 0.3s ease; line-height: 1;
   }
-  .recruit-arrow.arrow-expanded {
-    transform: rotate(90deg); color: #c41e3a;
+  .recruit-card-header:hover .recruit-arrow { color: #c41e3a; }
+
+  /* 标题列表包裹 — 可滚动容器 */
+  .recruit-title-list-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+  }
+  .recruit-title-list-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .recruit-title-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .recruit-title-list-scroll::-webkit-scrollbar-thumb {
+    background: #d0d5dd;
+    border-radius: 2px;
+  }
+  .recruit-title-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: #a0a8b4;
+    width: 8px;
   }
 
   /* 标题列表 — 纯行高留白，无分割线 */
@@ -430,7 +471,7 @@
 
   /* 招考详情弹窗 */
   .recruit-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-  .recruit-modal { background: #fff; border-radius: 16px; width: 90%; max-width: 680px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(26,43,95,0.15); overflow: hidden; }
+  .recruit-modal { background: #fff; border-radius: 16px; width: 90%; max-width: 860px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(26,43,95,0.15); overflow: hidden; }
   .recruit-modal-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px 28px 16px; border-bottom: 1px solid #f0f2f5; }
   .recruit-modal-title { font-size: 20px; font-weight: 700; color: #1a2b5f; margin: 0; flex: 1; padding-right: 12px; }
   .recruit-modal-close { width: 32px; height: 32px; border: none; background: #f8f9fc; border-radius: 8px; cursor: pointer; font-size: 20px; color: #8a8faa; }
@@ -440,10 +481,36 @@
   .recruit-modal-status { font-size: 20px; font-weight: 500; padding: 3px 12px; border-radius: 20px; }
   .recruit-modal-org { font-size: 20px; color: #5a6488; }
   .recruit-modal-time { font-size: 20px; color: #f59e0b; font-weight: 600; }
-  .recruit-modal-body { padding: 20px 28px; overflow-y: auto; flex: 1; max-height: 50vh; }
+  .recruit-modal-body { padding: 20px 28px; overflow-y: auto; flex: 1; max-height: 65vh; }
   .recruit-modal-section { margin-bottom: 16px; }
   .recruit-modal-section h4 { font-size: 20px; font-weight: 700; color: #1a2b5f; margin: 0 0 8px; }
   .recruit-modal-section p { font-size: 20px; line-height: 1.8; color: #33375a; white-space: pre-wrap; margin: 0; }
+  .recruit-modal-section .detail-content-html {
+    font-size: 18px;
+    line-height: 1.9;
+    color: #2c3e50;
+  }
+  .recruit-modal-section .detail-content-html p {
+    margin-bottom: 14px;
+  }
+  .recruit-modal-section .detail-content-html img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 12px auto;
+    display: block;
+  }
+  .recruit-modal-section .detail-content-html table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 16px;
+  }
+  .recruit-modal-section .detail-content-html table td,
+  .recruit-modal-section .detail-content-html table th {
+    border: 1px solid #e0e4ea;
+    padding: 8px 12px;
+  }
   .recruit-modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 28px; border-top: 1px solid #f0f2f5; }
   .recruit-modal-link { padding: 8px 16px; border-radius: 8px; font-size: 20px; text-decoration: none; color: #5a6488; background: #f8f9fc; }
   .recruit-modal-link:hover { background: #f0f2f5; color: #1a2b5f; }

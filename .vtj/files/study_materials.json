@@ -984,7 +984,18 @@
     "gongzhuanMaterials": {
       "type": "JSExpression",
       "value": "[\n  {\n    title: '职业素养必背',\n    desc: '公安职业素养核心知识卡片',\n    icon: this.$libs.VtjIcons.Medal,\n    badge: '重要'\n  },\n  {\n    title: '基本警务技能了解',\n    desc: '警务实战技能要点速记',\n    icon: this.$libs.VtjIcons.TrophyBase,\n    badge: ''\n  },\n  {\n    title: '基础知识记背',\n    desc: '公安基础法律知识卡片',\n    icon: this.$libs.VtjIcons.School,\n    badge: '精华'\n  }\n]"
-    }
+    },
+    "subjects": "[",
+    "key": "'gongzhuan'",
+    "name": "'公专备考'",
+    "desc": "'职业素养与警务技能'",
+    "color": "'#F59E0B'",
+    "emoji": "'📕' }",
+    "counts": "{ xingce: 0",
+    "shenlun": "null",
+    "gongzhuan": "null }",
+    "progress": "{ xingce: null",
+    "loggedIn": "false"
   },
   "watch": [],
   "expose": [],
@@ -998,10 +1009,30 @@
     "handleMaterialClick": {
       "type": "JSFunction",
       "value": "(item) => {\n  this.$message.info(`正在加载「${item.title}」详细内容...`);\n}"
+    },
+    "fetchCounts": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "for": {
+      "type": "method",
+      "params": [
+        "const s of this.state.subjects"
+      ]
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "data && typeof data.total === 'number'"
+      ]
     }
   },
   "computed": {},
-  "lifeCycles": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
   "__VERSION__": "1778915843581",
   "dataSources": {},
   "__VTJ_BLOCK__": true
