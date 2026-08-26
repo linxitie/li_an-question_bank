@@ -124,13 +124,12 @@ import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 
 const SUBJECT = 'shenlun';
-const PAGE_VERSION = '20260825001';
 
 export default defineComponent({
   name: 'MaterialsShenlun',
   components: {},
   setup(props) {
-    const provider = useProvider({ id: 'materials_shenlun', version: PAGE_VERSION });
+    const provider = useProvider({ id: 'materials_shenlun', version: '20260825001' });
     const state = reactive({
       loggedIn: false,
       showFav: false,

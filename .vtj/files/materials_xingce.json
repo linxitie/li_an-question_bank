@@ -2,7 +2,7 @@
   "id": "materials_xingce",
   "name": "MaterialsXingce",
   "__VTJ_BLOCK__": true,
-  "__VERSION__": "1787724739072",
+  "__VERSION__": "20260825001",
   "state": {
     "loading": {
       "type": "JSExpression",
@@ -27,9 +27,6 @@
     "_lastReport": "{}"
   },
   "methods": {
-    "handleInit": {
-      "type": "asyncMethod"
-    },
     "sections": {
       "type": "method",
       "params": []

@@ -2,7 +2,7 @@
   "id": "materials_shenlun",
   "name": "MaterialsShenlun",
   "__VTJ_BLOCK__": true,
-  "__VERSION__": "1787724923189",
+  "__VERSION__": "20260825001",
   "state": {
     "loading": {
       "type": "JSExpression",
@@ -27,9 +27,6 @@
     "_lastReport": "{}"
   },
   "methods": {
-    "handleInit": {
-      "type": "asyncMethod"
-    },
     "sections": {
       "type": "method",
       "params": []

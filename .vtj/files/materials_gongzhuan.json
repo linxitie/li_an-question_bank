@@ -2,7 +2,7 @@
   "id": "materials_gongzhuan",
   "name": "MaterialsGongzhuan",
   "__VTJ_BLOCK__": true,
-  "__VERSION__": "1787724923407",
+  "__VERSION__": "20260825001",
   "state": {
     "loading": {
       "type": "JSExpression",
@@ -27,9 +27,6 @@
     "_lastReport": "{}"
   },
   "methods": {
-    "handleInit": {
-      "type": "asyncMethod"
-    },
     "sections": {
       "type": "method",
       "params": []

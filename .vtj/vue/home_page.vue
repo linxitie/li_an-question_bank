@@ -108,59 +108,6 @@
           </div>
         </div>
       </section>
-      <section class="resource-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <XIcon :icon="Reading" :size="20" color="#c41e3a"></XIcon>
-            <span> 备考资料</span>
-          </h2>
-          <span class="section-subtitle"> 系统化备考，全面提升应试能力</span>
-        </div>
-        <div class="resource-grid">
-          <div class="resource-card xc-card" @click="handleResourceClick('xc')">
-            <div class="card-badge">行测</div>
-            <h4 class="card-title">行测小讲堂</h4>
-            <p class="card-desc">类比推理·拆分思维·组合排列·材料题精讲</p>
-            <div class="card-topics">
-              <span> 题型分辨</span>
-              <span> 组合排列</span>
-              <span> 方法技巧</span>
-            </div>
-            <div class="card-footer">
-              <span> 视频+文档</span>
-              <XIcon :icon="VideoPlay" :size="16" color="#c41e3a"></XIcon>
-            </div>
-          </div>
-          <div class="resource-card sl-card" @click="handleResourceClick('sl')">
-            <div class="card-badge">申论</div>
-            <h4 class="card-title">申论小讲堂</h4>
-            <p class="card-desc">标题拟定·写作技巧·范文展示·必知知识点</p>
-            <div class="card-topics">
-              <span> 文章写作</span>
-              <span> 范文精读</span>
-              <span> 素材积累</span>
-            </div>
-            <div class="card-footer">
-              <span> 视频+文档</span>
-              <XIcon :icon="Document" :size="16" color="#c41e3a"></XIcon>
-            </div>
-          </div>
-          <div class="resource-card ga-card" @click="handleResourceClick('ga')">
-            <div class="card-badge">公专</div>
-            <h4 class="card-title">公安专业知识卡片</h4>
-            <p class="card-desc">职业素养·警务技能·基础知识记背</p>
-            <div class="card-topics">
-              <span> 必背卡片</span>
-              <span> 警务技能</span>
-              <span> 法条速记</span>
-            </div>
-            <div class="card-footer">
-              <span> 知识卡片</span>
-              <XIcon :icon="Tickets" :size="16" color="#c41e3a"></XIcon>
-            </div>
-          </div>
-        </div>
-      </section>
       <footer class="footer-section">
         <div class="footer-links">
           <div class="footer-links xh"></div>
@@ -187,11 +134,7 @@
   import { XIcon } from '@vtj/ui';
   import {
     Briefcase,
-    ArrowRight,
-    Reading,
-    VideoPlay,
-    Tickets,
-    Document
+    ArrowRight
   } from '@vtj/icons';
   import NavBar from './navbar.vue';
   import SignInCard from './signin_card.vue';
@@ -218,13 +161,12 @@
       const provider = useProvider({ id: 'home_page', version: '1785750000100' });
       const recruitListRefs = ref({} as Record<string, HTMLElement>);
       const state = reactive({
-        resourceItems: [],
         recruitCategories: [],
         recruitAllData: {},
         showRecruitModal: false,
         selectedRecruit: {}
       });
-      return { state, props, provider, recruitListRefs, Briefcase, ArrowRight, Reading, VideoPlay, Tickets, Document };
+      return { state, props, provider, recruitListRefs, Briefcase, ArrowRight };
     },
     methods: {
       scrollToTop(cardItem) {
@@ -241,9 +183,6 @@
       closeRecruitDetail() {
         this.state.showRecruitModal = false;
         this.state.selectedRecruit = {};
-      },
-      handleResourceClick(type) {
-        ElMessage.info('跳转至备考资料详情：' + type);
       },
       async fetchRecruitment() {
         const categories = ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'];
@@ -352,7 +291,6 @@
   }
   /* 中层模块 */
   .recruit-section,
-  .resource-section,
   .study-materials-section {
     margin-bottom: 28px;
   }
@@ -517,99 +455,6 @@
   .recruit-modal-btn { padding: 8px 20px; border: none; background: #c41e3a; color: #fff; border-radius: 8px; font-size: 20px; font-weight: 600; cursor: pointer; }
   .recruit-modal-btn:hover { background: #a0182e; }
 
-  /* 下层模块 */
-  .resource-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-  }
-  .resource-card {
-    background: #ffffff;
-    border-radius: 16px;
-    padding: 24px;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 12px rgba(26, 43, 95, 0.05);
-    position: relative;
-    overflow: hidden;
-  }
-  .resource-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 24px rgba(26, 43, 95, 0.12);
-  }
-  .resource-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-    border-radius: 4px 0 0 4px;
-  }
-  .xc-card::before {
-    background: #3b82f6;
-  }
-  .sl-card::before {
-    background: #f59e0b;
-  }
-  .ga-card::before {
-    background: #c41e3a;
-  }
-  .card-badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 10px;
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 12px;
-    letter-spacing: 1px;
-  }
-  .xc-card .card-badge {
-    background: #eff6ff;
-    color: #3b82f6;
-  }
-  .sl-card .card-badge {
-    background: #fffbeb;
-    color: #f59e0b;
-  }
-  .ga-card .card-badge {
-    background: #fef2f2;
-    color: #c41e3a;
-  }
-  .card-title {
-    font-size: 20px;
-    font-weight: 800;
-    color: #1a2b5f;
-    margin: 0 0 8px;
-  }
-  .card-desc {
-    font-size: 17px;
-    color: #5a6488;
-    margin: 0 0 12px;
-    line-height: 1.5;
-  }
-  .card-topics {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 16px;
-  }
-  .card-topics span {
-    padding: 4px 10px;
-    background: #f8f9fc;
-    border-radius: 8px;
-    font-size: 11px;
-    color: #5a6488;
-  }
-  .card-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #8a8faa;
-    padding-top: 12px;
-    border-top: 1px dashed #e8eaf0;
-  }
   /* 底层 */
   .footer-section {
     padding: 24px 0 32px;
