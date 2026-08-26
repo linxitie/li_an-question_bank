@@ -184,13 +184,23 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminBackup',
         component: () => import('$vtj/vue/admin_backup.vue'),
         meta: { roles: ['admin'] }
-      },
+      },,
+  {
+    path: '/materials/gongzhuan',
+    name: 'MaterialsGongzhuan',
+    component: () => import('$vtj/vue/materials_gongzhuan.vue')
+  }
       {
         path: 'permissions',
         name: 'AdminPermissions',
         component: () => import('$vtj/vue/admin_permissions.vue'),
         meta: { roles: ['admin'] }
-      },
+      },,
+  {
+    path: '/materials/shenlun',
+    name: 'MaterialsShenlun',
+    component: () => import('$vtj/vue/materials_shenlun.vue')
+  }
       {
         path: 'papers',
         name: 'AdminPapers',
