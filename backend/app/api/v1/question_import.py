@@ -1056,7 +1056,14 @@ def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: s
         ExamPaper.creator_id == user.user_id
     ).first()
     if existing:
-        logger.info(f"[import-paper] 复用已有试卷: {existing.paper_id} '{paper_name}'")
+        # P2.2 ENDED 复活：同名试卷被删除（ENDED）后重导入同名文档 →
+        # 复活为 DRAFT 并重新关联，避免"导入了但试卷管理看不到"
+        if existing.paper_type == "ENDED":
+            existing.paper_type = "DRAFT"
+            logger.info(f"[import-paper] 复活 ENDED 试卷: {existing.paper_id} "
+                        f"'{paper_name}' → DRAFT")
+        else:
+            logger.info(f"[import-paper] 复用已有试卷: {existing.paper_id} '{paper_name}'")
         return existing
 
     # 新建试卷(DRAFT状态)
