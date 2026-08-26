@@ -178,34 +178,25 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminLogs',
         component: () => import('$vtj/vue/admin_logs.vue'),
         meta: { roles: ['admin'] }
-      },,
-  {
-    path: '/admin/materials',
-    name: 'AdminMaterials',
-    component: () => import('$vtj/vue/admin_materials.vue')
-  }
+      },
+      {
+        path: 'materials',
+        name: 'AdminMaterials',
+        component: () => import('$vtj/vue/admin_materials.vue'),
+        meta: { roles: ['admin'] }
+      },
       {
         path: 'backup',
         name: 'AdminBackup',
         component: () => import('$vtj/vue/admin_backup.vue'),
         meta: { roles: ['admin'] }
-      },,
-  {
-    path: '/materials/gongzhuan',
-    name: 'MaterialsGongzhuan',
-    component: () => import('$vtj/vue/materials_gongzhuan.vue')
-  }
+      },
       {
         path: 'permissions',
         name: 'AdminPermissions',
         component: () => import('$vtj/vue/admin_permissions.vue'),
         meta: { roles: ['admin'] }
-      },,
-  {
-    path: '/materials/shenlun',
-    name: 'MaterialsShenlun',
-    component: () => import('$vtj/vue/materials_shenlun.vue')
-  }
+      },
       {
         path: 'papers',
         name: 'AdminPapers',
@@ -213,12 +204,24 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       }
     ]
-  },,
+  },
+
+  // ==================== 备考资料（学生端公开页） ====================
   {
     path: '/materials/xingce',
     name: 'MaterialsXingce',
     component: () => import('$vtj/vue/materials_xingce.vue')
-  }
+  },
+  {
+    path: '/materials/shenlun',
+    name: 'MaterialsShenlun',
+    component: () => import('$vtj/vue/materials_shenlun.vue')
+  },
+  {
+    path: '/materials/gongzhuan',
+    name: 'MaterialsGongzhuan',
+    component: () => import('$vtj/vue/materials_gongzhuan.vue')
+  },
 
   // ==================== 兜底路由 ====================
   {
