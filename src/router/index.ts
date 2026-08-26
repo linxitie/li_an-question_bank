@@ -178,7 +178,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminLogs',
         component: () => import('$vtj/vue/admin_logs.vue'),
         meta: { roles: ['admin'] }
-      },
+      },,
+  {
+    path: '/admin/materials',
+    name: 'AdminMaterials',
+    component: () => import('$vtj/vue/admin_materials.vue')
+  }
       {
         path: 'backup',
         name: 'AdminBackup',

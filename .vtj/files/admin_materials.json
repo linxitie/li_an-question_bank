@@ -1,0 +1,91 @@
+{
+  "id": "admin_materials",
+  "name": "AdminMaterials",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "20260825001",
+  "state": {
+    "loading": {
+      "type": "JSExpression",
+      "value": "false"
+    },
+    "items": "[]",
+    "fSubject": "''",
+    "fType": "''",
+    "editDlg": "false",
+    "saving": "false",
+    "form": "{}",
+    "editor": "null",
+    "editorReady": "false",
+    "uploadPct": "0",
+    "importDlg": "false",
+    "imp": "{ busy: false",
+    "id": "null",
+    "file_type": "''",
+    "parse_status": "''",
+    "elapsed": "0",
+    "error": "''",
+    "result": "null",
+    "subject": "'xingce'",
+    "type": "'article'",
+    "category": "null }",
+    "mapping": "{ front: 0",
+    "back": "1",
+    "confirming": "false",
+    "createdText": "'' }"
+  },
+  "methods": {
+    "handleInit": {
+      "type": "asyncMethod"
+    },
+    "isVideo": {
+      "type": "method",
+      "params": [
+        "t"
+      ]
+    },
+    "api": {
+      "type": "method",
+      "params": [
+        "url",
+        "opt"
+      ]
+    },
+    "loadList": {
+      "type": "asyncMethod",
+      "params": []
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    },
+    "beforeUnmount": {
+      "type": "method"
+    }
+  },
+  "nodes": [
+    {
+      "id": "admin_materials_root",
+      "name": "div",
+      "from": "",
+      "props": {
+        "class": {
+          "type": "JSExpression",
+          "value": "'admin_materials'"
+        }
+      },
+      "children": [
+        {
+          "id": "admin_materials_title",
+          "name": "h1",
+          "from": "",
+          "children": "备考资料管理"
+        }
+      ],
+      "locked": false,
+      "invisible": false
+    }
+  ],
+  "css": ".admin_materials { padding: 20px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; }",
+  "locked": false
+}

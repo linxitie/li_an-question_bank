@@ -1257,9 +1257,13 @@
     "recordsLoading": "false",
     "recordsLoaded": "false",
     "unifiedStats": "{ today: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, week: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, total: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, daily_trend: [] }",
-    "recordsFilter": "{ source: '', status: '' }",
+    "recordsFilter": "{ source: ''",
     "sourceChips": "[{ v: '', label: '全部' }, { v: '快速练习', label: '快速练习' }, { v: '历年试卷', label: '历年试卷' }, { v: '小模考', label: '小模考' }, { v: '智能组卷', label: '智能组卷' }]",
-    "statusChips": "[{ v: '', label: '全部' }, { v: 'completed', label: '已完成' }, { v: 'in_progress', label: '进行中' }]"
+    "statusChips": "[{ v: '', label: '全部' }, { v: 'completed', label: '已完成' }, { v: 'in_progress', label: '进行中' }]",
+    "time_spent_seconds": "0 }",
+    "status": "'' }",
+    "v": "'in_progress'",
+    "label": "'已完成' }"
   },
   "watch": [],
   "expose": [],
@@ -1437,6 +1441,12 @@
       "type": "method",
       "params": [
         "source"
+      ]
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "elapsed < 30000 && this.state.statsLoaded"
       ]
     }
   },

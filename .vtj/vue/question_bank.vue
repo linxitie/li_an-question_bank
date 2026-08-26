@@ -516,6 +516,9 @@
           if (role === 'teacher' || role === 'admin') {
             actions.push({ key: 'questionimport', name: '题目导入', icon: '📥' });
           }
+          if (role === 'admin') {
+            actions.push({ key: 'adminmaterials', name: '资料管理', icon: '📚' });
+          }
         }
         return actions;
       },
@@ -1011,6 +1014,8 @@
         this.state.activeTopAction = key;
         if (key === 'questionimport') {
           this.$router.push('/question-import');
+        } else if (key === 'adminmaterials') {
+          this.$router.push('/admin/materials');
         } else if (key === 'quick') {
           // 快速练习：进入当前选中科目的综合练习（不限子科目，传空subcategory由后端返回该科目所有题目）
           var catKey = this.state.activeCategory;

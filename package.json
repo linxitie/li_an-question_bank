@@ -18,6 +18,8 @@
     "build:prod": "vue-tsc && cross-env ENV_TYPE=live vite build",
     "preview": "vite preview",
     "clean": "node ./scripts/clean.mjs",
+    "sync:vtj-version": "node ./scripts/sync_vtj_version.mjs",
+    "prebuild": "npm run sync:vtj-version",
     "mcp:setup": "cd vtj-mcp-server && npm install",
     "mcp:start": "node vtj-mcp-server/vtj-mcp-server.js",
     "mcp:test": "node -e \"const{spawn}=require('child_process');const s=spawn('node',['vtj-mcp-server/vtj-mcp-server.js']);let o='';s.stdout.on('data',d=>o+=d);s.on('close',()=>{const r=JSON.parse(o);console.log('VTJ MCP Server -',r.result.tools.length,'tools registered');r.result.tools.forEach(t=>console.log(' ✅',t.name))});s.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})+'\\n');setTimeout(()=>s.stdin.end(),2000);\""
@@ -39,6 +41,7 @@
     "vue": "~3.5.0",
     "vue-i18n": "~11.2.2",
     "vue-router": "~4.6.0",
+    "wangeditor": "^4.7.15",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
