@@ -73,6 +73,15 @@ class Settings(BaseSettings):
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")
+
+    # ==================== 扫描件OCR子进程（P1.1 进程隔离）====================
+    # OCR 在独立子进程执行：子进程崩溃/超时被强杀，主后端进程无恙。
+    # 背景：本机 Python 3.13 超出 PaddleOCR 官方支持（≤3.12），进程内 OCR 会硬崩。
+    # OCR_PYTHON：独立 OCR 环境的解释器（须为 ≤3.12 的 Python，如 D:\ocr-env）；
+    # 留空则用主进程解释器（3.13 下 Paddle 推理会崩，仅作降级）。
+    OCR_PYTHON: str = Field(r"D:\ocr-env\Scripts\python.exe", env="OCR_PYTHON")
+    OCR_MAX_PAGES: int = Field(8, env="OCR_MAX_PAGES")
+    OCR_SUBPROCESS_TIMEOUT: int = Field(240, env="OCR_SUBPROCESS_TIMEOUT")
     
     @property
     def DATABASE_URL(self) -> str:

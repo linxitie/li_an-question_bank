@@ -609,11 +609,19 @@ def _extract_text_from_pdf(buf: bytes) -> str:
 
 def _extract_text_from_scanned_pdf(buf: bytes) -> str:
     """
-    从扫描件PDF中提取图片并OCR识别文字。
-    使用PyPDF2提取页面嵌入的XObject图片 → PaddleOCR逐页识别 → 合并文本。
+    从扫描件PDF中提取图片并OCR识别文字（P1.1 子进程隔离版）。
+
+    架构：主进程只做图片提取+预处理（纯 PIL/cv2，无崩溃风险）；
+    OCR 在独立子进程执行（python -m app.services.ocr_worker）——
+    子进程崩溃/超时被强杀，主进程返回明确错误，绝不拖死后端。
+    （根因：本机 Python 3.13 超出 PaddleOCR 官方支持，进程内 OCR 会硬崩）
     """
     import io as _io
-    import base64 as _b64
+    import tempfile
+    import subprocess
+    import sys as _sys
+    import shutil as _shutil
+    import glob as _glob
 
     try:
         import PyPDF2
@@ -622,71 +630,107 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
         logger.warning("PyPDF2/Pillow 未安装，无法处理扫描件PDF")
         return ''
 
+    tmpdir = None
     try:
         reader = PyPDF2.PdfReader(_io.BytesIO(buf))
         total_pages = len(reader.pages)
         if total_pages == 0:
             return ''
 
-        # 限制：最多处理15页（覆盖约100道题目的答案；全量OCR请用图片导入）
-        max_pages = min(total_pages, 15)
-        logger.info(f"扫描件PDF: {total_pages} 页，OCR处理前 {max_pages} 页（预计{max_pages*20}秒）")
+        # 页数上限（可配置）：覆盖主要答案内容，超限部分明确提示
+        max_pages = min(total_pages, settings.OCR_MAX_PAGES)
+        logger.info(f"扫描件PDF: {total_pages} 页，OCR处理前 {max_pages} 页"
+                    f"（子进程隔离，超时{settings.OCR_SUBPROCESS_TIMEOUT}秒）")
 
-        all_text_parts = []
-
+        # 1) 主进程：提取页面图片 + 预处理（放大+CLAHE），落盘临时目录
+        tmpdir = tempfile.mkdtemp(prefix='ocr_pages_')
+        saved = 0
         for page_idx in range(max_pages):
             page = reader.pages[page_idx]
-
-            # 尝试从页面资源中提取XObject图片
             page_images = _extract_images_from_pdf_page(page, page_idx)
-
             if not page_images:
-                logger.debug(f"第{page_idx+1}页无嵌入图片，跳过")
                 continue
-
-            # OCR每张图片（应用增强预处理）
-            for img_data in page_images[:3]:  # 每页最多3张图片
+            for k, img_data in enumerate(page_images[:3]):  # 每页最多3张
                 try:
                     pil_img = PILImage.open(_io.BytesIO(img_data))
                     if pil_img.mode != 'RGB':
                         pil_img = pil_img.convert('RGB')
-
-                    # 应用增强预处理（超分辨率 + CLAHE）
+                    # 增强预处理（限宽 + 放大 + CLAHE），失败用原图
+                    # 限宽 2600px：超大扫描图会导致检测模型显存/内存分配失败
                     try:
-                        import cv2, numpy as np
-                        img_array = np.array(pil_img)
-                        h, w = img_array.shape[:2]
-                        # 小图2倍放大
+                        import cv2
+                        import numpy as np
+                        arr = np.array(pil_img)
+                        h, w = arr.shape[:2]
+                        if w > 2600:
+                            nh = int(h * 2600 / w)
+                            arr = cv2.resize(arr, (2600, nh),
+                                             interpolation=cv2.INTER_AREA)
+                            h, w = 2600, nh
                         if w < 1000:
-                            img_array = cv2.resize(img_array, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
-                        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                            arr = cv2.resize(arr, (w * 2, h * 2),
+                                             interpolation=cv2.INTER_CUBIC)
+                        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
                         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                        enhanced = clahe.apply(gray)
-                        pil_img = PILImage.fromarray(enhanced)
+                        pil_img = PILImage.fromarray(clahe.apply(gray))
                     except Exception:
-                        pass  # 增强失败用原图
-
-                    # 转为JPEG字节流供OCR识别
-                    img_buf = _io.BytesIO()
-                    pil_img.save(img_buf, format='JPEG', quality=90)
-                    img_bytes = img_buf.getvalue()
-
-                    from ...services.ocr import recognize_image
-                    page_text = recognize_image(img_bytes)
-
-                    if page_text and page_text.strip():
-                        all_text_parts.append(f'[第{page_idx+1}页]\n{page_text.strip()}')
-                        logger.debug(f"第{page_idx+1}页OCR: {len(page_text)} 字符")
+                        pass
+                    out = os.path.join(
+                        tmpdir, f'page_{page_idx+1:03d}_{k}.jpg')
+                    pil_img.save(out, format='JPEG', quality=90)
+                    saved += 1
                 except Exception as e:
-                    logger.warning(f"第{page_idx+1}页OCR失败: {e}")
-                    continue
+                    logger.warning(f"第{page_idx+1}页图片预处理失败: {e}")
 
-        result = '\n\n'.join(all_text_parts)
-        return result
+        if saved == 0:
+            logger.info("扫描件PDF未提取到可OCR图片")
+            return ''
 
+        # 2) 子进程：OCR（崩溃/超时强杀，主进程无恙）
+        out_json = os.path.join(tmpdir, 'result.json')
+        # OCR 解释器：优先独立 ≤3.12 环境（settings.OCR_PYTHON），主进程 3.13 下
+        # Paddle 推理会原生崩溃（0xC0000005），故默认指向独立 venv
+        ocr_python = (settings.OCR_PYTHON or '').strip() or _sys.executable
+        if not os.path.exists(ocr_python):
+            logger.warning(f"[ocr-worker] OCR_PYTHON 不存在: {ocr_python}，"
+                           "回退主解释器（3.13 下可能失败）")
+            ocr_python = _sys.executable
+        cmd = [ocr_python, '-m', 'app.services.ocr_worker', tmpdir, out_json]
+        # cwd 必须是 backend/ 根（app 包的父目录）：本文件在 backend/app/api/v1/，向上4层
+        backend_root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))))
+        logger.info(f"[ocr-worker] 启动子进程OCR（{saved} 张图, python={ocr_python}）")
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=settings.OCR_SUBPROCESS_TIMEOUT,
+            cwd=backend_root,
+        )
+        if proc.returncode != 0:
+            logger.error(f"[ocr-worker] 子进程异常退出 code={proc.returncode}: "
+                         f"{(proc.stderr or '')[-300:]}")
+            return ''
+        with open(out_json, encoding='utf-8') as f:
+            result = json.load(f)
+        if not result.get('ok'):
+            logger.warning(f"[ocr-worker] 未得到文本: {result.get('error')}")
+            return ''
+        logger.info(f"[ocr-worker] 完成: 页OK={result.get('pages_ok')} "
+                    f"页失败={result.get('pages_fail')} 字符={len(result.get('text',''))}")
+        return result.get('text', '')
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"[ocr-worker] OCR超时（>{settings.OCR_SUBPROCESS_TIMEOUT}s），"
+                     "已终止。建议：该PDF为高清扫描件，请拆分后导入或联系管理员启用MinerU通道")
+        return ''
     except Exception as e:
         logger.error(f"扫描件PDF处理失败: {e}", exc_info=True)
         return ''
+    finally:
+        if tmpdir and os.path.exists(tmpdir):
+            try:
+                _shutil.rmtree(tmpdir, ignore_errors=True)
+            except Exception:
+                pass
 
 
 def _extract_images_from_pdf_page(page, page_idx: int) -> list:
