@@ -1,0 +1,68 @@
+{
+  "id": "materials_xingce",
+  "name": "MaterialsXingce",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1787724739072",
+  "state": {
+    "loading": {
+      "type": "JSExpression",
+      "value": "false"
+    },
+    "loggedIn": "false",
+    "showFav": "false",
+    "data": "{ video_intro: []",
+    "video_advanced": "true",
+    "article": "false",
+    "card": "false }",
+    "loaded": "{ video_intro: false",
+    "folded": "{ video_intro: true",
+    "summary": "{ percentage: 0",
+    "studied": "0",
+    "total": "0 }",
+    "pageEmpty": "false",
+    "cur": "{}",
+    "videoDlg": "false",
+    "articleDlg": "false",
+    "flipped": "{}",
+    "_lastReport": "{}"
+  },
+  "methods": {
+    "handleInit": {
+      "type": "asyncMethod"
+    },
+    "sections": {
+      "type": "method",
+      "params": []
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "nodes": [
+    {
+      "id": "materials_xingce_root",
+      "name": "div",
+      "from": "",
+      "props": {
+        "class": {
+          "type": "JSExpression",
+          "value": "'materials_xingce'"
+        }
+      },
+      "children": [
+        {
+          "id": "materials_xingce_title",
+          "name": "h1",
+          "from": "",
+          "children": "行测备考资料"
+        }
+      ],
+      "locked": false,
+      "invisible": false
+    }
+  ],
+  "css": ".materials_xingce { padding: 20px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; }",
+  "locked": false
+}
