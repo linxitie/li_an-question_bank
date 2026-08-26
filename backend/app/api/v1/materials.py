@@ -189,3 +189,199 @@ async def material_detail(material_id: int,
     d.update({"content": m.content or "", "card_back": m.card_back or "",
               "video_url": f"/api/video/{m.video_id}/stream" if m.video_id else ""})
     return d
+
+
+# ============================ 管理端（role=admin）============================
+
+import json as _json  # noqa: E402
+import os as _os  # noqa: E402
+import uuid as _uuid  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+from fastapi import File, UploadFile  # noqa: E402
+
+from ...models.models import MaterialImportRecord, SysOperationLog  # noqa: E402
+from ...services.material_sanitizer import sanitize_html  # noqa: E402
+
+UPLOAD_IMG_DIR = _Path("uploads/materials/images")
+UPLOAD_TMP_DIR = _Path("uploads/materials/tmp")
+
+MAGIC_BYTES = {
+    ".png": b"\x89PNG",
+    ".jpg": b"\xff\xd8\xff",
+    ".jpeg": b"\xff\xd8\xff",
+    ".webp": b"RIFF",
+    ".docx": b"PK\x03\x04",
+    ".xlsx": b"PK\x03\x04",
+    ".pdf": b"%PDF",
+}
+
+
+def _require_admin(user: SysUser):
+    """SysUser 的角色字段是 user_type（student/teacher/admin），非 role。"""
+    if user is None or getattr(user, "user_type", "") != "admin":
+        raise HTTPException(403, "需要管理员权限")
+
+
+def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = ""):
+    """写审计日志。字段名对照 models.SysOperationLog 真实定义（models.py:793）。"""
+    try:
+        db.add(SysOperationLog(
+            user_id=user.user_id,
+            user_name=getattr(user, "username", None) or getattr(user, "real_name", ""),
+            operation_type=action,
+            module_name="materials",
+            operation_desc=detail or target,
+            request_method="",
+            request_url=f"/api/materials/{target}",
+            ip_address="",
+        ))
+    except Exception as e:  # 审计失败不阻断业务
+        logger.warning("[materials] audit log failed: %s", e)
+
+
+def _safe_image_upload(file: UploadFile) -> str:
+    ext = _os.path.splitext(file.filename or "")[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+        raise HTTPException(400, "仅支持 png/jpg/webp 图片")
+    content = file.file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "图片不能超过 5MB")
+    magic = MAGIC_BYTES.get(".jpg" if ext == ".jpeg" else ext)
+    if magic and not content.startswith(magic):
+        raise HTTPException(400, "文件实际格式与扩展名不符")
+    UPLOAD_IMG_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"{_uuid.uuid4().hex}{ext}"
+    (UPLOAD_IMG_DIR / name).write_bytes(content)
+    return f"/uploads/materials/images/{name}"
+
+
+@router.post("/admin/upload/image", summary="上传封面/文章插图(管理员)")
+async def upload_image(file: UploadFile = File(...),
+                       current_user: SysUser = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    url = _safe_image_upload(file)
+    _audit(db, current_user, "upload_image", url)
+    db.commit()
+    return {"url": url}
+
+
+def _validate_material_body(body: dict, partial: bool = False) -> dict:
+    keys = ("subject", "type", "category", "title", "summary", "content",
+            "card_front", "card_back", "cover_image", "video_id",
+            "duration", "read_time", "difficulty", "badge", "sort_order")
+    data = {k: body.get(k) for k in keys}
+    if not partial:
+        if data["subject"] not in SUBJECTS:
+            raise HTTPException(400, "无效科目")
+        if data["type"] not in TYPES:
+            raise HTTPException(400, "无效类型")
+        if not (data["title"] or "").strip():
+            raise HTTPException(400, "标题必填")
+        if data["type"] == "card" and not (data["card_front"] or "").strip():
+            raise HTTPException(400, "卡片正面内容必填")
+        if data["content"]:
+            data["content"] = sanitize_html(data["content"])
+    elif data.get("content"):
+        data["content"] = sanitize_html(data["content"])
+    return {k: v for k, v in data.items() if v is not None}
+
+
+@router.get("/admin/list", summary="管理列表(含下架)")
+async def admin_list(subject: Optional[str] = Query(None),
+                     type: Optional[str] = Query(None),
+                     status: Optional[int] = Query(None),
+                     page: int = Query(1, ge=1),
+                     page_size: int = Query(20, ge=1, le=100),
+                     current_user: SysUser = Depends(get_current_user),
+                     db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    q = db.query(StudyMaterial)
+    if subject:
+        q = q.filter(StudyMaterial.subject == subject)
+    if type:
+        q = q.filter(StudyMaterial.type == type)
+    if status is not None:
+        q = q.filter(StudyMaterial.status == status)
+    total = q.count()
+    rows = (q.order_by(StudyMaterial.material_id.desc())
+             .offset((page - 1) * page_size).limit(page_size).all())
+    items = []
+    for m in rows:
+        item = _item_brief(m)
+        item.update({"status": m.status, "study_count": m.study_count or 0,
+                     "creator_id": m.creator_id})
+        items.append(item)
+    return {"total": total, "items": items}
+
+
+@router.post("/admin", summary="创建资料(管理员)")
+async def admin_create(body: dict,
+                       current_user: SysUser = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    data = _validate_material_body(body)
+    m = StudyMaterial(**data, creator_id=current_user.user_id)
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    _audit(db, current_user, "create", f"material:{m.material_id}", m.title)
+    db.commit()
+    return {"id": m.material_id}
+
+
+@router.put("/admin/{material_id}", summary="更新资料(管理员)")
+async def admin_update(material_id: int, body: dict,
+                       current_user: SysUser = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id).first()
+    if not m:
+        raise HTTPException(404, "资料不存在")
+    data = _validate_material_body(body, partial=True)
+    for k, v in data.items():
+        setattr(m, k, v)
+    db.commit()
+    _audit(db, current_user, "update", f"material:{material_id}")
+    db.commit()
+    return {"ok": True}
+
+
+@router.put("/admin/{material_id}/status", summary="上架/下架(管理员)")
+async def admin_set_status(material_id: int, body: dict,
+                           current_user: SysUser = Depends(get_current_user),
+                           db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    st = body.get("status")
+    if st not in (0, 1):
+        raise HTTPException(400, "status 只能为 0 或 1")
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id).first()
+    if not m:
+        raise HTTPException(404, "资料不存在")
+    m.status = st
+    db.commit()
+    _audit(db, current_user, "status", f"material:{material_id}", f"status={st}")
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/admin/{material_id}", summary="删除资料(管理员)")
+async def admin_delete(material_id: int,
+                       current_user: SysUser = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id).first()
+    if not m:
+        raise HTTPException(404, "资料不存在")
+    title = m.title
+    db.query(UserMaterialProgress).filter(
+        UserMaterialProgress.material_id == material_id).delete()
+    db.delete(m)
+    db.commit()
+    _audit(db, current_user, "delete", f"material:{material_id}", title)
+    db.commit()
+    return {"ok": True}

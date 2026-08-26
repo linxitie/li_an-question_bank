@@ -61,3 +61,10 @@ opencv-python>=4.8.0
 # ==================== 鍙�夛細鐖櫕 ====================
 playwright>=1.48.0
 playwright-stealth>=1.0.6
+
+# 备考资料模块 (study-materials)
+python-docx
+openpyxl
+pdfplumber
+bleach
+Pillow
