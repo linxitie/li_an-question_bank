@@ -195,6 +195,7 @@ async def material_detail(material_id: int,
 
 import json as _json  # noqa: E402
 import os as _os  # noqa: E402
+import shutil as _shutil  # noqa: E402
 import uuid as _uuid  # noqa: E402
 from pathlib import Path as _Path  # noqa: E402
 
@@ -385,3 +386,295 @@ async def admin_delete(material_id: int,
     _audit(db, current_user, "delete", f"material:{material_id}", title)
     db.commit()
     return {"ok": True}
+
+
+# ============================ 智能导入（内容工厂四步流）============================
+
+from fastapi import BackgroundTasks  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from starlette.concurrency import run_in_threadpool  # noqa: E402
+
+ALLOWED_DOC_EXT = {".docx", ".xlsx", ".pdf"}
+DOC_SIZE_LIMIT = 20 * 1024 * 1024
+XLSX_SIZE_LIMIT = 5 * 1024 * 1024
+CARD_ROW_LIMIT = 500
+
+
+def _save_tmp(file: UploadFile) -> tuple:
+    ext = _os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_DOC_EXT:
+        raise HTTPException(400, "仅支持 docx/xlsx/pdf")
+    content = file.file.read()
+    limit = XLSX_SIZE_LIMIT if ext == ".xlsx" else DOC_SIZE_LIMIT
+    if len(content) > limit:
+        raise HTTPException(400, f"文件超过 {limit // 1024 // 1024}MB 上限")
+    magic = MAGIC_BYTES.get(ext)
+    if magic and not content.startswith(magic):
+        raise HTTPException(400, "文件实际格式与扩展名不符")
+    UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_name = f"{_uuid.uuid4().hex}{ext}"
+    (UPLOAD_TMP_DIR / tmp_name).write_bytes(content)
+    return str(UPLOAD_TMP_DIR / tmp_name), ext
+
+
+def _load_result(rec: MaterialImportRecord) -> dict:
+    try:
+        return _json.loads(rec.parse_result or "{}")
+    except (TypeError, ValueError):
+        return {}
+
+
+def _migrate_images(import_id: int, result: dict) -> None:
+    """把 parse_result.images 的临时图片迁入正式目录并改写 html 引用。"""
+    html = result.get("html") or ""
+    dest_dir = UPLOAD_IMG_DIR / f"import_{import_id}"
+    for img in result.get("images", []):
+        src = _Path(img.get("src_path", ""))
+        if not src.exists():
+            continue
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / img.get("name", src.name)
+        _shutil.move(str(src), str(dest))
+        old_ref = f"/uploads/materials/tmp/{src.name}"
+        new_ref = f"/uploads/materials/images/import_{import_id}/{dest.name}"
+        html = html.replace(old_ref, new_ref)
+    # Word 内嵌图引用同样从 tmp 迁移
+    for name in result.get("images", []):
+        if isinstance(name, str):
+            src = UPLOAD_TMP_DIR / name
+            if src.exists():
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                _shutil.move(str(src), str(dest_dir / name))
+                html = html.replace(f"/uploads/materials/tmp/{name}",
+                                    f"/uploads/materials/images/import_{import_id}/{name}")
+    result["html"] = sanitize_html(html)
+
+
+@router.post("/admin/import/upload", summary="上传素材并解析(docx/xlsx/文字pdf同步；扫描pdf异步)")
+async def import_upload(background_tasks: BackgroundTasks,
+                        file: UploadFile = File(...),
+                        current_user: SysUser = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    tmp_path, ext = _save_tmp(file)
+    rec = MaterialImportRecord(
+        file_name=file.filename, file_type=ext.lstrip("."),
+        file_size=_os.path.getsize(tmp_path), parse_status="pending",
+        uploader_id=current_user.user_id)
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    scanned = False
+    if ext == ".pdf":
+        from ...services.material_parser import detect_scanned
+        try:
+            scanned = detect_scanned(tmp_path)
+        except Exception:
+            rec.parse_status = "failed"
+            rec.error_message = "PDF 已加密或损坏，请解除密码后重新上传"
+            rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
+            db.commit()
+            raise HTTPException(400, rec.error_message)
+
+    if ext == ".docx":
+        try:
+            from ...services.material_parser import parse_docx
+            out = parse_docx(tmp_path, image_dir=UPLOAD_TMP_DIR)
+            out["_tmp"] = tmp_path
+            rec.parse_mode = "sync"
+            rec.parse_status = "success"
+            rec.parse_result = _json.dumps(out, ensure_ascii=False)
+        except Exception as e:
+            rec.parse_status = "failed"
+            rec.error_message = f"Word 文档损坏或格式不受支持: {e}"
+            rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
+        db.commit()
+    elif ext == ".xlsx":
+        try:
+            from ...services.material_parser import parse_xlsx
+            out = parse_xlsx(tmp_path)
+            out["_tmp"] = tmp_path
+            rec.parse_mode = "sync"
+            rec.parse_status = "success"
+            rec.parse_result = _json.dumps(out, ensure_ascii=False)
+        except Exception as e:
+            rec.parse_status = "failed"
+            rec.error_message = f"Excel 解析失败（空表或损坏）: {e}"
+            rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
+        db.commit()
+    elif ext == ".pdf":
+        if scanned:
+            from ...services.mineru_material_service import (
+                mineru_available, run_mineru, MineruError)
+            if not mineru_available():
+                rec.parse_status = "failed"
+                rec.error_message = ("该 PDF 为扫描图片版且系统 OCR 组件未就绪，"
+                                     "请转存为文字版 Word 后重新上传")
+                rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
+                db.commit()
+                raise HTTPException(400, rec.error_message)
+            rec.parse_mode = "async(mineru)"
+            rec.parse_status = "processing"
+            rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
+            db.commit()
+
+            def _ocr_job(import_id: int, path: str, workdir: str):
+                """后台线程：跑 OCR 并回写记录（自带独立 DB 会话）。"""
+                from ...core.database import SessionLocal
+                s = SessionLocal()
+                try:
+                    r = run_mineru(path, _Path(workdir))
+                    row = s.query(MaterialImportRecord).get(import_id)
+                    result = _load_result(row)
+                    result.update({"chapters": [], "html": r["html"],
+                                   "images": r["images"],
+                                   "word_count": len(r["html"]),
+                                   "_seconds": r["seconds"]})
+                    row.parse_status = "success"
+                    row.parse_result = _json.dumps(result, ensure_ascii=False)
+                    s.commit()
+                except Exception as e:
+                    row = s.query(MaterialImportRecord).get(import_id)
+                    row.parse_status = "failed"
+                    row.error_message = f"OCR 失败({type(e).__name__}): 可点击重试或转存 Word"
+                    s.commit()
+                finally:
+                    s.close()
+
+            background_tasks.add_task(run_in_threadpool,
+                                      _ocr_job, rec.import_id, tmp_path,
+                                      str(UPLOAD_TMP_DIR))
+        else:
+            try:
+                from ...services.material_parser import parse_pdf_text
+                out = parse_pdf_text(tmp_path)
+                out["_tmp"] = tmp_path
+                rec.parse_mode = "sync"
+                rec.parse_status = "success"
+                rec.parse_result = _json.dumps(out, ensure_ascii=False)
+            except Exception as e:
+                rec.parse_status = "failed"
+                rec.error_message = f"PDF 解析失败: {e}"
+                rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
+            db.commit()
+
+    resp = {"import_id": rec.import_id, "parse_status": rec.parse_status}
+    if rec.error_message:
+        resp["error_message"] = rec.error_message
+    return JSONResponse(resp)
+
+
+@router.get("/admin/import/{import_id}/status", summary="轮询导入状态(前端3s一次)")
+async def import_status(import_id: int,
+                        current_user: SysUser = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    rec = db.query(MaterialImportRecord).filter(
+        MaterialImportRecord.import_id == import_id).first()
+    if not rec:
+        raise HTTPException(404, "导入记录不存在")
+    elapsed = ((datetime.now() - rec.create_time).total_seconds()
+               if rec.create_time else 0)
+    return {"parse_status": rec.parse_status, "elapsed_seconds": int(elapsed),
+            "error_message": rec.error_message}
+
+
+@router.get("/admin/import/{import_id}/preview", summary="取解析预览")
+async def import_preview(import_id: int,
+                         current_user: SysUser = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    rec = db.query(MaterialImportRecord).filter(
+        MaterialImportRecord.import_id == import_id).first()
+    if not rec:
+        raise HTTPException(404, "导入记录不存在")
+    if rec.parse_status != "success":
+        raise HTTPException(409, f"尚未解析成功: {rec.parse_status}")
+    result = _load_result(rec)
+    result.pop("_tmp", None)   # 不向前端泄露服务器路径
+    return {"file_type": rec.file_type, "result": result}
+
+
+@router.post("/admin/import/{import_id}/confirm", summary="确认入库(status=0下架态)")
+async def import_confirm(import_id: int, body: dict,
+                         current_user: SysUser = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    rec = db.query(MaterialImportRecord).filter(
+        MaterialImportRecord.import_id == import_id).first()
+    if not rec:
+        raise HTTPException(404, "导入记录不存在")
+    if rec.parse_status != "success":
+        raise HTTPException(409, f"尚未解析成功: {rec.parse_status}")
+    subject = body.get("subject")
+    if subject not in SUBJECTS:
+        raise HTTPException(400, "科目必选且有效")
+    category = body.get("category")
+    badge = body.get("badge")
+    result = _load_result(rec)
+    created_ids = []
+
+    if rec.file_type == "xlsx":
+        mapping = body.get("column_mapping") or {}
+        try:
+            col_front = int(mapping["front"])
+            col_back = int(mapping["back"])
+            col_cat = (int(mapping["category"])
+                       if mapping.get("category") not in (None, "") else None)
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, "列映射不完整（正面列/背面列必填）")
+        from ...services.material_parser import build_cards, parse_xlsx
+        # preview 只回传前200行；confirm 从原始文件重读全量行
+        full = parse_xlsx(result["_tmp"], max_rows=CARD_ROW_LIMIT) \
+            if result.get("_tmp") and _Path(result["_tmp"]).exists() else result
+        cards = build_cards(full.get("rows", []), col_front, col_back, col_cat,
+                            limit=CARD_ROW_LIMIT)
+        if not cards:
+            raise HTTPException(400, "按当前列映射未得到有效卡片（正反面均不能为空）")
+        base_title = _os.path.splitext(rec.file_name)[0]
+        for idx, c in enumerate(cards, start=1):
+            m = StudyMaterial(
+                subject=subject, type="card",
+                category=c["category"] or category,
+                title=c["card_front"], card_front=c["card_front"],
+                card_back=c["card_back"],
+                sort_order=idx, status=0,
+                creator_id=current_user.user_id)
+            db.add(m)
+            db.flush()          # 立即取自增主键，避免 commit 前为 None
+            created_ids.append(m.material_id)
+        _ = base_title
+    else:
+        mtype = body.get("type")
+        if mtype not in ("article",):
+            raise HTTPException(400, "文档类素材入库类型只能是 article")
+        _migrate_images(import_id, result)
+        word_count = result.get("word_count", 0)
+        m = StudyMaterial(
+            subject=subject, type="article",
+            category=category, badge=badge,
+            title=(body.get("title") or _os.path.splitext(rec.file_name)[0])[:200],
+            summary=(body.get("summary") or "")[:500],
+            content=result.get("html") or "",
+            status=0,
+            read_time=max(1, word_count // 400),
+            creator_id=current_user.user_id)
+        db.add(m)
+        db.flush()
+        created_ids.append(m.material_id)
+
+    db.commit()
+    rec.parse_status = "consumed"
+    db.commit()
+    # 清理临时源文件
+    tmp = result.get("_tmp")
+    if tmp and _Path(tmp).exists():
+        try:
+            _os.remove(tmp)
+        except OSError:
+            pass
+    _audit(db, current_user, "import_confirm", f"import:{import_id}",
+           f"created={len(created_ids)} type={rec.file_type}")
+    db.commit()
+    return {"created": len(created_ids), "material_ids": created_ids}
