@@ -39,3 +39,6 @@ mineru_run.log
 mineru_err.log
 sample_scanned.pdf
 sample_scanned.png
+
+# Worktrees
+.worktrees
