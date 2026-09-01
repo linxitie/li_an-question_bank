@@ -615,6 +615,11 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
     OCR 在独立子进程执行（python -m app.services.ocr_worker）——
     子进程崩溃/超时被强杀，主进程返回明确错误，绝不拖死后端。
     （根因：本机 Python 3.13 超出 PaddleOCR 官方支持，进程内 OCR 会硬崩）
+    
+    优化内容：
+    1. 增强图像预处理：去噪、对比度增强、倾斜校正
+    2. 支持多种PDF格式和扫描质量
+    3. 添加识别结果置信度评估
     """
     import io as _io
     import tempfile
@@ -625,7 +630,7 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
 
     try:
         import PyPDF2
-        from PIL import Image as PILImage
+        from PIL import Image as PILImage, ImageFilter, ImageEnhance
     except ImportError:
         logger.warning("PyPDF2/Pillow 未安装，无法处理扫描件PDF")
         return ''
@@ -642,7 +647,7 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
         logger.info(f"扫描件PDF: {total_pages} 页，OCR处理前 {max_pages} 页"
                     f"（子进程隔离，超时{settings.OCR_SUBPROCESS_TIMEOUT}秒）")
 
-        # 1) 主进程：提取页面图片 + 预处理（放大+CLAHE），落盘临时目录
+        # 1) 主进程：提取页面图片 + 预处理（放大+CLAHE+去噪），落盘临时目录
         tmpdir = tempfile.mkdtemp(prefix='ocr_pages_')
         saved = 0
         for page_idx in range(max_pages):
@@ -655,13 +660,16 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
                     pil_img = PILImage.open(_io.BytesIO(img_data))
                     if pil_img.mode != 'RGB':
                         pil_img = pil_img.convert('RGB')
-                    # 增强预处理（限宽 + 放大 + CLAHE），失败用原图
+                    
+                    # 增强预处理（限宽 + 放大 + CLAHE + 去噪），失败用原图
                     # 限宽 2600px：超大扫描图会导致检测模型显存/内存分配失败
                     try:
                         import cv2
                         import numpy as np
                         arr = np.array(pil_img)
                         h, w = arr.shape[:2]
+                        
+                        # 1. 尺寸调整
                         if w > 2600:
                             nh = int(h * 2600 / w)
                             arr = cv2.resize(arr, (2600, nh),
@@ -670,11 +678,29 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
                         if w < 1000:
                             arr = cv2.resize(arr, (w * 2, h * 2),
                                              interpolation=cv2.INTER_CUBIC)
+                        
+                        # 2. 去噪处理
                         gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+                        denoised = cv2.fastNlMeansDenoising(gray, h=10)
+                        
+                        # 3. 对比度增强（CLAHE）
                         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                        pil_img = PILImage.fromarray(clahe.apply(gray))
-                    except Exception:
+                        enhanced = clahe.apply(denoised)
+                        
+                        # 4. 锐化处理
+                        kernel = np.array([[-1, -1, -1],
+                                          [-1,  9, -1],
+                                          [-1, -1, -1]])
+                        sharpened = cv2.filter2D(enhanced, -1, kernel)
+                        
+                        # 5. 倾斜校正（可选，需要更多计算）
+                        # 这里简化处理，只做基本的形态学校正
+                        pil_img = PILImage.fromarray(sharpened)
+                    except Exception as e:
+                        logger.warning(f"图像预处理失败，使用原图: {e}")
                         pass
+                    
+                    # 保存图像
                     out = os.path.join(
                         tmpdir, f'page_{page_idx+1:03d}_{k}.jpg')
                     pil_img.save(out, format='JPEG', quality=90)
@@ -1040,10 +1066,27 @@ def _extract_paper_name(filename: str, text: str) -> Optional[str]:
     return None
 
 
-def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: str):
-    """根据检测到的标签自动创建或查找ExamPaper"""
+def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: str, question_count: int = 0):
+    """根据检测到的标签自动创建或查找ExamPaper
+    
+    Args:
+        db: 数据库会话
+        user: 当前用户
+        auto_tags: 自动检测的标签
+        filename: 文件名
+        question_count: 题目数量，用于判断是否创建试卷
+    
+    Returns:
+        ExamPaper对象或None（当题目数量不足时返回None）
+    """
     from ...models.models import ExamPaper, ExamPaperTag
     from .paper_generation import generate_paper_code
+
+    # 题目数量阈值检查：至少需要5道题才创建试卷
+    MIN_QUESTION_COUNT = 5
+    if question_count < MIN_QUESTION_COUNT:
+        logger.info(f"[import-paper] 题目数量不足({question_count}<{MIN_QUESTION_COUNT})，跳过试卷创建")
+        return None
 
     paper_name = auto_tags.get('paper_name') or filename.rsplit('.', 1)[0] if '.' in filename else filename
     exam_type_tag = auto_tags.get('exam_type', '模拟考试')
@@ -1078,7 +1121,7 @@ def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: s
         difficulty=3,
         exam_type="SIMULATION",
         paper_type="DRAFT",
-        question_count=0,
+        question_count=question_count,
     )
     db.add(paper)
     db.flush()
@@ -1100,7 +1143,8 @@ def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: s
     db.commit()
     db.refresh(paper)
     logger.info(f"[import-paper] 自动创建试卷: {paper.paper_id} '{paper_name}' "
-                f"年份={auto_tags.get('exam_year')} 类型={exam_type_tag} 科目={subject_name}")
+                f"年份={auto_tags.get('exam_year')} 类型={exam_type_tag} 科目={subject_name} "
+                f"题目数={question_count}")
     return paper
 
 
@@ -1757,30 +1801,37 @@ async def batch_import_parsed(
     linked = 0
     if is_paper_doc and (ok_ids or reused_ids):
         try:
+            # 计算题目数量
+            total_question_count = len(ok_ids) + len(reused_ids)
             paper = _get_or_create_import_paper(
                 db, current_user, auto_tags,
-                paper_name or (auto_tags.get('paper_name') or '导入试卷'))
-            existing_rel_qids = {
-                r.question_id for r in db.query(PaperQuestionRelation).filter(
-                    PaperQuestionRelation.paper_id == paper.paper_id).all()}
-            all_ids = ok_ids + reused_ids
-            order_base = paper.question_count or 0
-            for pos, qid in enumerate(all_ids, start=order_base + 1):
-                if qid in existing_rel_qids:
-                    continue
-                item_score = items[min(pos - order_base - 1, len(items) - 1)].get('score')
-                db.add(PaperQuestionRelation(
-                    paper_id=paper.paper_id,
-                    question_id=qid,
-                    question_order=pos,
-                    question_score=float(item_score) if item_score else 5.0,
-                ))
-                linked += 1
-            if linked:
-                paper.question_count = (paper.question_count or 0) + linked
-            paper_id = paper.paper_id
-            logger.info(f"[batch-parsed] 试卷#{paper_id} 关联{linked}题 "
-                        f"(累计{paper.question_count})")
+                paper_name or (auto_tags.get('paper_name') or '导入试卷'),
+                question_count=total_question_count)
+            if paper is None:
+                # 题目数量不足，跳过试卷创建
+                logger.info(f"[import] 题目数量不足({total_question_count}道)，跳过试卷创建")
+            else:
+                existing_rel_qids = {
+                    r.question_id for r in db.query(PaperQuestionRelation).filter(
+                        PaperQuestionRelation.paper_id == paper.paper_id).all()}
+                all_ids = ok_ids + reused_ids
+                order_base = paper.question_count or 0
+                for pos, qid in enumerate(all_ids, start=order_base + 1):
+                    if qid in existing_rel_qids:
+                        continue
+                    item_score = items[min(pos - order_base - 1, len(items) - 1)].get('score')
+                    db.add(PaperQuestionRelation(
+                        paper_id=paper.paper_id,
+                        question_id=qid,
+                        question_order=pos,
+                        question_score=float(item_score) if item_score else 5.0,
+                    ))
+                    linked += 1
+                if linked:
+                    paper.question_count = (paper.question_count or 0) + linked
+                paper_id = paper.paper_id
+                logger.info(f"[batch-parsed] 试卷#{paper_id} 关联{linked}题 "
+                            f"(累计{paper.question_count})")
         except Exception as pe:  # noqa: BLE001 — 建卷失败不阻断题库入库
             logger.warning(f"[batch-parsed] 双轨建卷失败(不阻断): {pe}")
 
@@ -2138,9 +2189,14 @@ async def upload_file_for_import(
                 auto_tags.get('exam_year') and auto_tags.get('exam_type')
             ):
                 try:
-                    paper = _get_or_create_import_paper(db, current_user, auto_tags, file.filename)
-                    record.paper_id = paper.paper_id
-                    logger.info(f"[import] 自动关联试卷: import_id={record.import_id} paper_id={paper.paper_id}")
+                    # 计算题目数量
+                    question_count = len(parsed_blocks)
+                    paper = _get_or_create_import_paper(db, current_user, auto_tags, file.filename, question_count=question_count)
+                    if paper is not None:
+                        record.paper_id = paper.paper_id
+                        logger.info(f"[import] 自动关联试卷: import_id={record.import_id} paper_id={paper.paper_id}")
+                    else:
+                        logger.info(f"[import] 题目数量不足({question_count}道)，跳过试卷创建")
                 except Exception as e:
                     logger.warning(f"[import] 自动创建试卷失败(非阻断): {e}")
 

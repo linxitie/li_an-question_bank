@@ -60,6 +60,7 @@
               <td class="td-actions">
                 <button class="btn-action" @click="openEdit(q)" title="编辑">✏️</button>
                 <button class="btn-action btn-danger" @click="deleteQuestion(q.question_id)" title="删除">🗑️</button>
+                <span v-if="!q.answer_analysis" class="missing-analysis-badge" title="缺少答案解析">📝</span>
               </td>
             </tr>
           </tbody>
@@ -102,7 +103,18 @@
 
         <div class="detail-field">
           <strong>题干：</strong>
-          <div class="detail-content" v-html="cleanHtmlContent(currentQuestion.full_content || currentQuestion.question_content)"></div>
+          <div class="detail-content" v-html="processImagePaths(cleanHtmlContent(currentQuestion.full_content || currentQuestion.question_content))"></div>
+        </div>
+
+        <div class="detail-field" v-if="extractImages(currentQuestion.full_content || currentQuestion.question_content).length > 0">
+          <strong>图片：</strong>
+          <div class="detail-images">
+            <img v-for="(img, idx) in extractImages(currentQuestion.full_content || currentQuestion.question_content)" 
+                 :key="idx" 
+                 :src="normalizeImagePath(img)" 
+                 @error="handleImageError"
+                 class="detail-image" />
+          </div>
         </div>
 
         <div class="detail-field" v-if="hasOptions(currentQuestion.options)">
@@ -135,7 +147,40 @@
 
         <div class="modal-footer">
           <button class="btn-edit-inline" @click="showDetailModal = false; openEdit(currentQuestion)">✏️ 编辑此题</button>
+          <button class="btn-feedback" @click="showDetailModal = false; openFeedback(currentQuestion)">🚩 反馈问题</button>
           <button class="btn-close" @click="showDetailModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 反馈弹窗 -->
+    <div class="modal-overlay" v-if="showFeedbackModal" @click.self="showFeedbackModal = false">
+      <div class="modal-content feedback-modal">
+        <h3>🚩 提交识别反馈</h3>
+        <p class="feedback-desc">题目 #{{ feedbackForm.question_id }} — 感谢您的反馈，帮助我们改进识别准确率。</p>
+
+        <div class="form-group">
+          <label>反馈类型 <span class="required">*</span></label>
+          <div class="feedback-type-list">
+            <label v-for="(label, key) in feedbackTypes" :key="key" class="feedback-type-item"
+                   :class="{ active: feedbackForm.feedback_type === key }">
+              <input type="radio" :value="key" v-model="feedbackForm.feedback_type" style="display:none" />
+              {{ label }}
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>问题描述</label>
+          <textarea class="form-input form-textarea" v-model="feedbackForm.description" rows="3"
+                    placeholder="请描述具体问题（可选）"></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-save" @click="submitFeedback" :disabled="feedbackSaving || !feedbackForm.feedback_type">
+            {{ feedbackSaving ? '提交中...' : '提交反馈' }}
+          </button>
+          <button class="btn-close" @click="showFeedbackModal = false">取消</button>
         </div>
       </div>
     </div>
@@ -192,6 +237,28 @@
         </div>
 
         <div class="form-group">
+          <label>图片上传</label>
+          <div class="image-upload-area">
+            <div class="uploaded-images" v-if="editForm.images && editForm.images.length > 0">
+              <div v-for="(img, idx) in editForm.images" :key="idx" class="uploaded-image-item">
+                <img :src="img.url" :alt="img.name" class="uploaded-image-preview" />
+                <div class="uploaded-image-info">
+                  <span class="uploaded-image-name">{{ img.name }}</span>
+                  <button class="btn-remove-image" @click="removeImage(idx)" title="删除图片">×</button>
+                </div>
+              </div>
+            </div>
+            <div class="upload-button-area">
+              <input type="file" ref="fileInput" @change="handleImageUpload" accept="image/*" multiple style="display: none;" />
+              <button class="btn-upload" @click="$refs.fileInput.click()" type="button">
+                📷 上传图片
+              </button>
+              <span class="upload-hint">支持 JPG、PNG、GIF 格式，单张不超过 5MB</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
           <label>难度</label>
           <div class="star-picker">
             <span v-for="s in 5" :key="s" :class="['star-item', { active: s <= editForm.difficulty }]" @click="editForm.difficulty = s">{{ s <= editForm.difficulty ? '★' : '☆' }}</span>
@@ -244,8 +311,27 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
     const editForm: any = ref({
       question_id: null, subject_id: 1, type_id: 1,
       question_content: '', answer: '', answer_analysis: '',
-      difficulty: 3, optionsParsed: { A: '', B: '', C: '', D: '' }
+      difficulty: 3, optionsParsed: { A: '', B: '', C: '', D: '' },
+      images: []  // 图片列表
     });
+    const fileInput = ref(null);
+
+    // 反馈弹窗
+    const showFeedbackModal = ref(false);
+    const feedbackSaving = ref(false);
+    const feedbackForm: any = ref({
+      question_id: null,
+      feedback_type: '',
+      description: ''
+    });
+    const feedbackTypes: Record<string, string> = {
+      'recognition_error': '识别错误',
+      'wrong_answer': '答案错误',
+      'missing_content': '内容缺失',
+      'format_error': '格式错误',
+      'duplicate': '重复题目',
+      'other': '其他问题'
+    };
 
     // 题型选项（需后台查询映射，这里用静态映射）
     const showOptionFields = computed(() => {
@@ -374,8 +460,10 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       const text = q.question_content || '';
       const cleaned = stripPromoText(text);
       const cleanText = cleanQuestionContent(cleaned); // 过滤 UTB ID
+      // 处理图片路径
+      const processedContent = processImagePaths(cleanText);
       // 替换img标签为[图片]占位符，避免显示无关图片
-      const withPlaceholders = cleanText.replace(/<img[^>]*\/?>/g, '[📷图片]');
+      const withPlaceholders = processedContent.replace(/<img[^>]*\/?>/g, '[📷图片]');
       const truncated = withPlaceholders.length > 80 ? withPlaceholders.substring(0, 80) + '...' : withPlaceholders;
       return truncated;
     }
@@ -414,6 +502,94 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       return normAnswer.includes(key.toUpperCase());
     }
 
+    // ========== 图片路径处理 ==========
+
+    // 图片路径标准化函数
+    function normalizeImagePath(path: string): string {
+      if (!path) return '';
+      
+      // 如果是完整URL，直接返回
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path;
+      }
+      
+      // 如果是data URL，直接返回
+      if (path.startsWith('data:')) {
+        return path;
+      }
+      
+      // 移除开头的./或../
+      let normalized = path.replace(/^\.\//, '').replace(/^\.\.\//, '');
+      
+      // 如果路径以/开头，直接使用
+      if (normalized.startsWith('/')) {
+        return normalized;
+      }
+      
+      // 如果路径不以/开头，添加前缀
+      if (!normalized.startsWith('static/') && !normalized.startsWith('uploads/')) {
+        normalized = 'static/questions/' + normalized;
+      }
+      
+      return '/' + normalized;
+    }
+
+    // 图片加载错误处理
+    function handleImageError(event: Event) {
+      const img = event.target as HTMLImageElement;
+      if (img) {
+        // 设置占位符图片
+        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJDNi40NzcgMiAyIDYuNDc3IDIgMTJzNC40NzcgMTAgMTAgMTAgMTAtNC40NzcgMTAtMTBTMTcuNTIzIDIgMTJ6bTAgNGEzIDMgMCAxMTAgNiAzIDMgMCAwMTAtNnoiIGZpbGw9IiM5OTkiLz4KPC9zdmc+';
+        img.alt = '图片加载失败';
+      }
+    }
+
+    // 处理题目内容中的图片路径
+    function processImagePaths(content: string): string {
+      if (!content) return '';
+      
+      // 处理<img>标签中的src属性
+      return content.replace(/<img[^>]*src=["']([^"']*)["'][^>]*\/?>/gi, (match, src) => {
+        const normalizedSrc = normalizeImagePath(src);
+        return match.replace(src, normalizedSrc);
+      });
+    }
+
+    // 检查图片是否存在（异步）
+    async function checkImageExists(url: string): Promise<boolean> {
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    // 从内容中提取图片URL
+    function extractImages(content: string): string[] {
+      if (!content) return [];
+      const images: string[] = [];
+      
+      // 提取<img>标签中的src
+      const imgRegex = /<img[^>]*src=["']([^"']*)["'][^>]*\/?>/gi;
+      let match;
+      while ((match = imgRegex.exec(content)) !== null) {
+        if (match[1]) {
+          images.push(match[1]);
+        }
+      }
+      
+      // 提取[IMAGE:xxx]格式的图片
+      const imageTagRegex = /\[IMAGE:([^\]]+)\]/gi;
+      while ((match = imageTagRegex.exec(content)) !== null) {
+        if (match[1]) {
+          images.push(match[1]);
+        }
+      }
+      
+      return images;
+    }
+
     // ========== 详情弹窗 ==========
 
     function showDetail(q: any) {
@@ -440,6 +616,12 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
     function openEdit(q: any) {
       const opts = parsedOptions(q.options);
       currentQuestionTypeName.value = typeDisplayName(q.type_name);
+      // 提取题目中的图片
+      const existingImages = extractImages(q.full_content || q.question_content || '').map((url: string, idx: number) => ({
+        url: url,
+        name: `图片 ${idx + 1}`,
+        isExisting: true
+      }));
       editForm.value = {
         question_id: q.question_id,
         subject_id: q.subject_id || 1,
@@ -448,8 +630,85 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
         answer_analysis: q.answer_analysis || '',
         difficulty: q.difficulty || 3,
         optionsParsed: Object.keys(opts).length > 0 ? { ...opts } : { A: '', B: '', C: '', D: '' },
+        images: existingImages
       };
       showEditModal.value = true;
+    }
+
+    // ========== 图片上传功能 ==========
+
+    function handleImageUpload(event: Event) {
+      const input = event.target as HTMLInputElement;
+      if (!input.files || input.files.length === 0) return;
+      
+      const files = Array.from(input.files);
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      
+      for (const file of files) {
+        // 验证文件类型
+        if (!allowedTypes.includes(file.type)) {
+          ElMessage.error(`文件 ${file.name} 不是支持的图片格式`);
+          continue;
+        }
+        
+        // 验证文件大小
+        if (file.size > maxSize) {
+          ElMessage.error(`文件 ${file.name} 超过 5MB 限制`);
+          continue;
+        }
+        
+        // 读取文件并添加到图片列表
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const url = e.target?.result as string;
+          editForm.value.images.push({
+            url: url,
+            name: file.name,
+            isExisting: false,
+            file: file
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+      
+      // 清空input
+      input.value = '';
+    }
+
+    function removeImage(index: number) {
+      editForm.value.images.splice(index, 1);
+    }
+
+    async function uploadImages(): Promise<string[]> {
+      const auth = (window as any).__VTJ_AUTH__;
+      const uploadedUrls: string[] = [];
+      
+      for (const img of editForm.value.images) {
+        if (img.isExisting) {
+          // 已存在的图片，直接使用URL
+          uploadedUrls.push(img.url);
+        } else if (img.file) {
+          // 新上传的图片，需要上传到服务器
+          try {
+            const formData = new FormData();
+            formData.append('file', img.file);
+            const res = await auth.apiFetch('/api/upload/image', {
+              method: 'POST',
+              body: formData
+            });
+            const data = await res.json();
+            if (data.success && data.url) {
+              uploadedUrls.push(data.url);
+            }
+          } catch (e) {
+            console.error('图片上传失败:', e);
+            ElMessage.error(`图片 ${img.name} 上传失败`);
+          }
+        }
+      }
+      
+      return uploadedUrls;
     }
 
     function addOption() {
@@ -473,12 +732,17 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       saving.value = true;
       try {
         const auth = (window as any).__VTJ_AUTH__;
+        
+        // 上传图片并获取URL
+        const imageUrls = await uploadImages();
+        
         const payload: any = {
           subject_id: editForm.value.subject_id,
           question_content: editForm.value.question_content,
           answer: editForm.value.answer,
           answer_analysis: editForm.value.answer_analysis,
           difficulty: editForm.value.difficulty,
+          images: imageUrls  // 添加图片URL列表
         };
         // 如果有选项数据，打包为数组格式
         if (showOptionFields.value) {
@@ -534,17 +798,58 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       router.push('/login');
     }
 
+    // ========== 反馈功能 ==========
+
+    function openFeedback(q: any) {
+      feedbackForm.value = {
+        question_id: q.question_id,
+        feedback_type: '',
+        description: ''
+      };
+      showFeedbackModal.value = true;
+    }
+
+    async function submitFeedback() {
+      if (!feedbackForm.value.feedback_type) {
+        ElMessage.warning('请选择反馈类型');
+        return;
+      }
+      feedbackSaving.value = true;
+      try {
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/teacher/questions/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(feedbackForm.value),
+        });
+        const data = await res.json();
+        if (data.success) {
+          ElMessage.success('反馈已提交，感谢您的帮助！');
+          showFeedbackModal.value = false;
+        } else {
+          ElMessage.error('提交失败: ' + (data.detail || data.message || '未知错误'));
+        }
+      } catch (e: any) {
+        ElMessage.error('网络错误，请检查连接后重试');
+      } finally {
+        feedbackSaving.value = false;
+      }
+    }
+
     return {
       provider,
       keyword, filterSubject, filterType, filterDifficulty,
       questions, page, pageSize, total, totalPages,
       showDetailModal, currentQuestion,
       showEditModal, saving, currentQuestionTypeName, editForm, showOptionFields, optionCount,
+      showFeedbackModal, feedbackSaving, feedbackForm, feedbackTypes,
       doSearch, changePage, subjectName, typeDisplayName, typeBadgeClass,
       renderStars, truncate, stripPromoText, hasImage, renderSummary,
       hasOptions, parsedOptions, isCorrectOption,
       showDetail, openEdit, addOption, removeOption, saveEdit,
       deleteQuestion, goImport, handleLogout, cleanHtmlContent,
+      normalizeImagePath, handleImageError, processImagePaths, checkImageExists, extractImages,
+      openFeedback, submitFeedback, fileInput, handleImageUpload, removeImage,
     };
   }
 });
@@ -635,4 +940,167 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-edit-inline { padding: 10px 28px; background: #409EFF; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
 .btn-close { padding: 10px 28px; background: #f0f0f0; color: #666; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
+
+/* 图片样式 */
+.detail-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+.detail-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+  object-fit: contain;
+}
+.detail-image:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* 缺失解析标记 */
+.missing-analysis-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: rgba(245, 158, 11, 0.15);
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: help;
+  margin-left: 4px;
+}
+.missing-analysis-badge:hover {
+  background: rgba(245, 158, 11, 0.3);
+}
+
+/* 图片上传样式 */
+.image-upload-area {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fafafa;
+}
+.uploaded-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.uploaded-image-item {
+  position: relative;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.uploaded-image-preview {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  display: block;
+}
+.uploaded-image-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: #f5f5f5;
+}
+.uploaded-image-name {
+  font-size: 12px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+}
+.btn-remove-image {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: #ff4d4f;
+  color: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-remove-image:hover {
+  background: #ff7875;
+}
+.upload-button-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.btn-upload {
+  padding: 8px 16px;
+  background: #409EFF;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-upload:hover {
+  background: #66b1ff;
+}
+.upload-hint {
+  font-size: 12px;
+  color: #909399;
+}
+
+/* 反馈弹窗 */
+.feedback-modal { max-width: 520px; }
+.feedback-modal h3 { color: #1A3C6D; margin: 0 0 8px; }
+.feedback-desc { color: #909399; font-size: 13px; margin-bottom: 16px; }
+.feedback-type-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.feedback-type-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: center;
+  transition: all 0.2s;
+  user-select: none;
+}
+.feedback-type-item:hover {
+  border-color: #409EFF;
+  color: #409EFF;
+}
+.feedback-type-item.active {
+  border-color: #409EFF;
+  background: #ecf5ff;
+  color: #409EFF;
+  font-weight: 600;
+}
+.required { color: #F56C6C; }
+.btn-feedback {
+  padding: 10px 28px;
+  background: #E6A23C;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.btn-feedback:hover { background: #ebb563; }
 </style>

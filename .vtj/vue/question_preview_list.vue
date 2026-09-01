@@ -38,6 +38,7 @@
         <span class="docs-q-ans-badge docs-q-ans-badge-warn" v-else style="color:#f59e0b;font-size:15px;margin-right:8px;" title="缺少答案，请在下方手动录入">⚠ 缺答案</span>
         <span class="docs-q-conf-badge" v-if="q.confidence !== undefined && q.confidence < 0.5" style="color:#f56c6c;font-size:13px;margin-right:6px;background:rgba(245,108,108,0.15);padding:2px 6px;border-radius:4px;" :title="'匹配置信度仅 ' + Math.round((q.confidence||0)*100) + '%，建议人工核对'">🔴 低置信度({{ Math.round((q.confidence||0)*100) }}%)</span>
         <button class="btn-mini-reverify" @click="$emit('reverify', idx)" title="重新校验选项分割">重检</button>
+        <button class="btn-mini-edit" @click="openEditDialog(idx)" title="编辑题目">编辑</button>
         <button class="btn-mini-import" @click="$emit('import-one', idx)" :disabled="q._imported">
           {{ q._imported ? '已导入' : '导入此题' }}
         </button>
@@ -68,12 +69,69 @@
       </button>
       <button class="btn-secondary" @click="$emit('close')">完成</button>
     </div>
+
+    <!-- 编辑对话框 -->
+    <div class="edit-dialog-overlay" v-if="editDialogVisible" @click.self="closeEditDialog">
+      <div class="edit-dialog">
+        <div class="edit-dialog-header">
+          <h3>编辑题目</h3>
+          <button class="edit-dialog-close" @click="closeEditDialog">×</button>
+        </div>
+        <div class="edit-dialog-body">
+          <div class="edit-field">
+            <label>题目内容：</label>
+            <textarea v-model="editForm.question_content" rows="4" placeholder="请输入题目内容"></textarea>
+          </div>
+          <div class="edit-field">
+            <label>题目类型：</label>
+            <select v-model="editForm.question_type_detail">
+              <option value="单选题">单选题</option>
+              <option value="多选题">多选题</option>
+              <option value="判断题">判断题</option>
+              <option value="填空题">填空题</option>
+              <option value="简答题">简答题</option>
+            </select>
+          </div>
+          <div class="edit-field">
+            <label>难度：</label>
+            <select v-model="editForm.difficulty">
+              <option value="简单">简单</option>
+              <option value="中等">中等</option>
+              <option value="困难">困难</option>
+            </select>
+          </div>
+          <div class="edit-field">
+            <label>选项：</label>
+            <div class="edit-options-list">
+              <div class="edit-option-item" v-for="(opt, optIdx) in editForm.options" :key="optIdx">
+                <span class="edit-option-key">{{ opt.key }}.</span>
+                <input v-model="opt.value" :placeholder="'选项' + opt.key" />
+                <button class="edit-option-delete" @click="removeOption(optIdx)" v-if="editForm.options.length > 2">×</button>
+              </div>
+              <button class="edit-option-add" @click="addOption">+ 添加选项</button>
+            </div>
+          </div>
+          <div class="edit-field">
+            <label>答案：</label>
+            <input v-model="editForm.answer" placeholder="请输入答案（如：A、AB、ABCD）" />
+          </div>
+          <div class="edit-field">
+            <label>答案解析：</label>
+            <textarea v-model="editForm.analysis" rows="3" placeholder="请输入答案解析（可选）"></textarea>
+          </div>
+        </div>
+        <div class="edit-dialog-footer">
+          <button class="btn-secondary" @click="closeEditDialog">取消</button>
+          <button class="btn-primary" @click="saveEdit">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 // @ts-nocheck
-import { defineComponent } from 'vue';
+import { defineComponent, ref, reactive } from 'vue';
 import { useProvider } from '@vtj/renderer';
 
 export default defineComponent({
@@ -83,10 +141,86 @@ export default defineComponent({
     mode: { type: String, default: 'combined' },
     loading: { type: Boolean, default: false }
   },
-  emits: ['import-one', 'import-all', 'reverify', 'close'],
-  setup() {
+  emits: ['import-one', 'import-all', 'reverify', 'close', 'edit-question'],
+  setup(props, { emit }) {
     const provider = useProvider({ id: 'question_preview_list', version: '1785406000000' });
-    return { provider };
+    
+    // 编辑对话框状态
+    const editDialogVisible = ref(false);
+    const editIndex = ref(-1);
+    const editForm = reactive({
+      question_content: '',
+      question_type_detail: '单选题',
+      difficulty: '中等',
+      options: [],
+      answer: '',
+      analysis: ''
+    });
+
+    // 打开编辑对话框
+    const openEditDialog = function(idx) {
+      const q = props.questions[idx];
+      editIndex.value = idx;
+      editForm.question_content = q.question_content || '';
+      editForm.question_type_detail = q.question_type_detail || '单选题';
+      editForm.difficulty = q.difficulty || '中等';
+      editForm.options = q.options ? JSON.parse(JSON.stringify(q.options)) : [
+        { key: 'A', value: '' },
+        { key: 'B', value: '' },
+        { key: 'C', value: '' },
+        { key: 'D', value: '' }
+      ];
+      editForm.answer = q.answer || '';
+      editForm.analysis = q.analysis || '';
+      editDialogVisible.value = true;
+    };
+
+    // 关闭编辑对话框
+    const closeEditDialog = function() {
+      editDialogVisible.value = false;
+      editIndex.value = -1;
+    };
+
+    // 保存编辑
+    const saveEdit = function() {
+      if (editIndex.value >= 0 && editIndex.value < props.questions.length) {
+        const q = props.questions[editIndex.value];
+        q.question_content = editForm.question_content;
+        q.question_type_detail = editForm.question_type_detail;
+        q.difficulty = editForm.difficulty;
+        q.options = JSON.parse(JSON.stringify(editForm.options));
+        q.answer = editForm.answer;
+        q.analysis = editForm.analysis;
+        emit('edit-question', editIndex.value, q);
+      }
+      closeEditDialog();
+    };
+
+    // 添加选项
+    const addOption = function() {
+      const keys = editForm.options.map(function(o) { return o.key; });
+      const nextKey = String.fromCharCode(Math.max.apply(null, keys.map(function(k) { return k.charCodeAt(0); })) + 1);
+      editForm.options.push({ key: nextKey, value: '' });
+    };
+
+    // 删除选项
+    const removeOption = function(idx) {
+      if (editForm.options.length > 2) {
+        editForm.options.splice(idx, 1);
+      }
+    };
+
+    return {
+      provider,
+      editDialogVisible,
+      editIndex,
+      editForm,
+      openEditDialog,
+      closeEditDialog,
+      saveEdit,
+      addOption,
+      removeOption
+    };
   }
 });
 </script>
@@ -359,5 +493,163 @@ export default defineComponent({
   padding: 8px 12px;
   border-radius: 6px;
   margin-top: 4px;
+}
+
+/* ====== 编辑按钮 ====== */
+.btn-mini-edit {
+  padding: 3px 10px;
+  background: rgba(100, 149, 237, 0.15);
+  border: 1px solid rgba(100, 149, 237, 0.4);
+  border-radius: 6px;
+  color: #6495ed;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+.btn-mini-edit:hover {
+  background: rgba(100, 149, 237, 0.3);
+  box-shadow: 0 2px 10px rgba(100, 149, 237, 0.3);
+}
+
+/* ====== 编辑对话框 ====== */
+.edit-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.edit-dialog {
+  background: #1a2b3f;
+  border: 1px solid rgba(200, 22, 30, 0.3);
+  border-radius: 12px;
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.edit-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: rgba(200, 22, 30, 0.1);
+  border-bottom: 1px solid rgba(200, 22, 30, 0.2);
+}
+.edit-dialog-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #e8ecf4;
+}
+.edit-dialog-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #8899aa;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.edit-dialog-close:hover {
+  color: #e8384f;
+}
+.edit-dialog-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.edit-field {
+  margin-bottom: 16px;
+}
+.edit-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #8899aa;
+  font-weight: 600;
+}
+.edit-field textarea,
+.edit-field input,
+.edit-field select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(26, 43, 95, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e8ecf4;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.3s;
+  box-sizing: border-box;
+}
+.edit-field textarea:focus,
+.edit-field input:focus,
+.edit-field select:focus {
+  border-color: rgba(200, 22, 30, 0.5);
+}
+.edit-field select {
+  appearance: none;
+  cursor: pointer;
+}
+.edit-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.edit-option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.edit-option-key {
+  color: #8899aa;
+  font-weight: 600;
+  min-width: 20px;
+}
+.edit-option-item input {
+  flex: 1;
+}
+.edit-option-delete {
+  background: rgba(245, 108, 108, 0.15);
+  border: 1px solid rgba(245, 108, 108, 0.4);
+  border-radius: 4px;
+  color: #f56c6c;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.edit-option-delete:hover {
+  background: rgba(245, 108, 108, 0.3);
+}
+.edit-option-add {
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px dashed rgba(74, 222, 128, 0.4);
+  border-radius: 6px;
+  color: #4ade80;
+  padding: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.edit-option-add:hover {
+  background: rgba(74, 222, 128, 0.2);
+}
+.edit-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 </style>

@@ -1639,13 +1639,30 @@ def _extract_options(lines: List[str]) -> List[Dict[str, str]]:
                         if val:
                             options.append({'key': key, 'value': val})
         else:
-            # 单行单选项
+            # 单行单选项 - 支持多种格式
+            # 格式1: A. xxx
             m = re.match(r'^\s*([A-D])\s*[.、．、．)]\s*(.+)', stripped)
             if m:
                 key = m.group(1)
                 val = re.sub(r'[;；\s]+$', '', m.group(2).strip())
                 if val:
                     options.append({'key': key, 'value': val})
+            else:
+                # 格式2: A、xxx (中文顿号)
+                m = re.match(r'^\s*([A-D])\s*[、]\s*(.+)', stripped)
+                if m:
+                    key = m.group(1)
+                    val = re.sub(r'[;；\s]+$', '', m.group(2).strip())
+                    if val:
+                        options.append({'key': key, 'value': val})
+                else:
+                    # 格式3: A xxx (空格分隔)
+                    m = re.match(r'^\s*([A-D])\s+(.+)', stripped)
+                    if m and len(stripped) > 2:  # 确保不是误匹配
+                        key = m.group(1)
+                        val = re.sub(r'[;；\s]+$', '', m.group(2).strip())
+                        if val and len(val) > 1:  # 选项值至少2个字符
+                            options.append({'key': key, 'value': val})
 
     # L2 段落回退：L1结果不足2个时，扫描连续段落查找选项
     if len(options) < 2:

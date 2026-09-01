@@ -1773,3 +1773,354 @@ async def get_knowledge_mastery(
         })
 
     return {"success": True, "total": len(items), "items": items}
+
+
+# ==================== 答案解析补充接口 ====================
+
+@router.get("/questions/missing-analysis", summary="获取缺失解析的题目列表")
+async def get_missing_analysis_questions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取缺失答案解析的题目列表"""
+    query = db.query(QuestionBank).filter(
+        QuestionBank.status == 1,
+        QuestionBank.creator_id == current_user.user_id,
+        (QuestionBank.answer_analysis == None) | (QuestionBank.answer_analysis == '')
+    )
+    
+    total = query.count()
+    questions = query.offset((page - 1) * page_size).limit(page_size).all()
+    
+    return {
+        "success": True,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [_format_question(q) for q in questions],
+    }
+
+
+@router.put("/questions/{question_id}/analysis", summary="补充题目答案解析")
+async def update_question_analysis(
+    question_id: int,
+    data: dict,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """补充题目的答案解析"""
+    q = db.query(QuestionBank).filter(QuestionBank.question_id == question_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    
+    if q.creator_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="无权编辑此题目")
+    
+    try:
+        analysis = data.get('answer_analysis', '')
+        q.answer_analysis = analysis
+        q.update_time = datetime.now()
+        db.commit()
+        return {"success": True, "message": "答案解析已更新", "question": _format_question(q)}
+    except Exception as e:
+        logger.error(f"更新题目 {question_id} 答案解析失败: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+
+
+@router.post("/questions/batch-analysis", summary="批量补充答案解析")
+async def batch_update_analysis(
+    data: dict,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """批量补充题目的答案解析"""
+    try:
+        updates = data.get('updates', [])  # 格式: [{"question_id": 1, "answer_analysis": "..."}]
+        success_count = 0
+        failed_count = 0
+        
+        for item in updates:
+            question_id = item.get('question_id')
+            analysis = item.get('answer_analysis', '')
+            
+            q = db.query(QuestionBank).filter(
+                QuestionBank.question_id == question_id,
+                QuestionBank.creator_id == current_user.user_id
+            ).first()
+            
+            if q:
+                q.answer_analysis = analysis
+                q.update_time = datetime.now()
+                success_count += 1
+            else:
+                failed_count += 1
+        
+        db.commit()
+        return {
+            "success": True, 
+            "message": f"批量更新完成: 成功{success_count}条, 失败{failed_count}条",
+            "success_count": success_count,
+            "failed_count": failed_count
+        }
+    except Exception as e:
+        logger.error(f"批量更新答案解析失败: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"批量更新失败: {str(e)}")
+
+
+@router.get("/questions/stats", summary="获取题目统计信息")
+async def get_question_stats(
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取题目统计信息，包括缺失解析的题目数量"""
+    # 总题目数
+    total_questions = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.status == 1,
+        QuestionBank.creator_id == current_user.user_id
+    ).scalar()
+    
+    # 缺失解析的题目数
+    missing_analysis_count = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.status == 1,
+        QuestionBank.creator_id == current_user.user_id,
+        (QuestionBank.answer_analysis == None) | (QuestionBank.answer_analysis == '')
+    ).scalar()
+    
+    # 缺失答案的题目数
+    missing_answer_count = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.status == 1,
+        QuestionBank.creator_id == current_user.user_id,
+        (QuestionBank.answer == None) | (QuestionBank.answer == '') | (QuestionBank.answer == '待补充')
+    ).scalar()
+    
+    return {
+        "success": True,
+        "total_questions": total_questions,
+        "missing_analysis_count": missing_analysis_count,
+        "missing_answer_count": missing_answer_count,
+    }
+
+
+# ========== 识别结果反馈系统 ==========
+
+# 反馈类型枚举
+FEEDBACK_TYPES = {
+    "recognition_error": "识别错误",
+    "wrong_answer": "答案错误",
+    "missing_content": "内容缺失",
+    "format_error": "格式错误",
+    "duplicate": "重复题目",
+    "other": "其他问题"
+}
+
+# 内存存储（生产环境应使用数据库）
+recognition_feedbacks: List[Dict[str, Any]] = []
+feedback_stats: Dict[str, int] = {k: 0 for k in FEEDBACK_TYPES.keys()}
+
+
+@router.post("/questions/feedback", summary="提交题目识别反馈")
+async def submit_feedback(
+    request: Request,
+    current_user: SysUser = Depends(get_current_teacher)
+):
+    """提交对题目识别结果的反馈"""
+    try:
+        body = await request.json()
+        question_id = body.get("question_id")
+        feedback_type = body.get("feedback_type")
+        description = body.get("description", "")
+        
+        if not question_id or not feedback_type:
+            raise HTTPException(status_code=400, detail="question_id 和 feedback_type 必填")
+        
+        if feedback_type not in FEEDBACK_TYPES:
+            raise HTTPException(status_code=400, detail=f"无效的反馈类型: {feedback_type}")
+        
+        # 记录反馈
+        feedback = {
+            "feedback_id": len(recognition_feedbacks) + 1,
+            "question_id": question_id,
+            "feedback_type": feedback_type,
+            "description": description,
+            "user_id": current_user.user_id,
+            "username": getattr(current_user, 'username', 'unknown'),
+            "created_at": datetime.now().isoformat(),
+            "status": "pending"  # pending, reviewing, resolved
+        }
+        
+        recognition_feedbacks.append(feedback)
+        feedback_stats[feedback_type] = feedback_stats.get(feedback_type, 0) + 1
+        
+        logger.info(f"收到反馈: 题目#{question_id}, 类型={FEEDBACK_TYPES[feedback_type]}, "
+                    f"用户={current_user.user_id}")
+        
+        return {
+            "success": True,
+            "message": "反馈已提交，感谢您的帮助！",
+            "feedback_id": feedback["feedback_id"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"提交反馈失败: {e}")
+        raise HTTPException(status_code=500, detail=f"提交失败: {str(e)}")
+
+
+@router.get("/questions/feedback/stats", summary="获取反馈统计")
+async def get_feedback_stats(
+    current_user: SysUser = Depends(get_current_teacher)
+):
+    """获取反馈统计数据"""
+    total = sum(feedback_stats.values())
+    return {
+        "success": True,
+        "total_feedbacks": total,
+        "stats": {FEEDBACK_TYPES[k]: v for k, v in feedback_stats.items()},
+        "recent_feedbacks": recognition_feedbacks[-10:]  # 最近10条
+    }
+
+
+@router.get("/questions/feedback/list", summary="获取反馈列表")
+async def get_feedback_list(
+    status: Optional[str] = None,
+    feedback_type: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: SysUser = Depends(get_current_teacher)
+):
+    """获取反馈列表（支持筛选和分页）"""
+    filtered = recognition_feedbacks
+    
+    # 按状态筛选
+    if status:
+        filtered = [f for f in filtered if f.get("status") == status]
+    
+    # 按类型筛选
+    if feedback_type:
+        filtered = [f for f in filtered if f.get("feedback_type") == feedback_type]
+    
+    total = len(filtered)
+    start = (page - 1) * page_size
+    end = start + page_size
+    
+    return {
+        "success": True,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": filtered[start:end]
+    }
+
+
+# ========== 文档识别训练机制 ==========
+
+# 训练数据存储（生产环境应使用数据库表）
+training_samples: List[Dict[str, Any]] = []
+training_stats: Dict[str, int] = {
+    "total_samples": 0,
+    "labeled_samples": 0,
+    "accuracy_improvements": 0
+}
+
+
+@router.post("/questions/training/sample", summary="提交训练样本")
+async def submit_training_sample(
+    request: Request,
+    current_user: SysUser = Depends(get_current_teacher)
+):
+    """提交训练样本（原始识别结果 + 人工修正）"""
+    try:
+        body = await request.json()
+        question_id = body.get("question_id")
+        original_text = body.get("original_text", "")
+        corrected_text = body.get("corrected_text", "")
+        correction_type = body.get("correction_type", "text_fix")
+        
+        if not question_id or not original_text:
+            raise HTTPException(status_code=400, detail="question_id 和 original_text 必填")
+        
+        sample = {
+            "sample_id": len(training_samples) + 1,
+            "question_id": question_id,
+            "original_text": original_text,
+            "corrected_text": corrected_text,
+            "correction_type": correction_type,
+            "user_id": current_user.user_id,
+            "created_at": datetime.now().isoformat(),
+            "is_labeled": bool(corrected_text),
+            "quality_score": 1.0 if corrected_text else 0.5
+        }
+        
+        training_samples.append(sample)
+        training_stats["total_samples"] += 1
+        if sample["is_labeled"]:
+            training_stats["labeled_samples"] += 1
+        
+        return {
+            "success": True,
+            "message": "训练样本已提交",
+            "sample_id": sample["sample_id"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"提交训练样本失败: {e}")
+        raise HTTPException(status_code=500, detail=f"提交失败: {str(e)}")
+
+
+@router.get("/questions/training/stats", summary="获取训练统计")
+async def get_training_stats(
+    current_user: SysUser = Depends(get_current_teacher)
+):
+    """获取训练数据统计信息"""
+    # 计算准确率改进（简化版）
+    labeled = [s for s in training_samples if s.get("is_labeled")]
+    if labeled:
+        avg_quality = sum(s.get("quality_score", 0) for s in labeled) / len(labeled)
+        training_stats["accuracy_improvements"] = int(avg_quality * 100)
+    
+    return {
+        "success": True,
+        "stats": training_stats,
+        "recent_samples": training_samples[-5:]  # 最近5条
+    }
+
+
+@router.get("/questions/training/export", summary="导出训练数据")
+async def export_training_data(
+    format: str = Query("json", regex="^(json|csv)$"),
+    current_user: SysUser = Depends(get_current_teacher)
+):
+    """导出训练数据用于模型微调"""
+    if format == "csv":
+        # CSV格式导出
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["sample_id", "question_id", "original_text", "corrected_text", 
+                        "correction_type", "quality_score"])
+        for sample in training_samples:
+            writer.writerow([
+                sample.get("sample_id"),
+                sample.get("question_id"),
+                sample.get("original_text"),
+                sample.get("corrected_text"),
+                sample.get("correction_type"),
+                sample.get("quality_score")
+            ])
+        return {"success": True, "data": output.getvalue(), "format": "csv"}
+    else:
+        # JSON格式导出
+        return {
+            "success": True,
+            "data": training_samples,
+            "format": "json",
+            "total": len(training_samples)
+        }
