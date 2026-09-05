@@ -292,3 +292,84 @@ def reextract_image_from_source(question_id: int, db) -> List[str]:
     except Exception as e:
         logger.warning(f"[image_service] 第8层重提取异常 qid={question_id}: {e}")
         return []
+
+
+def normalize_image_path(path: str, question_id: int = None) -> str:
+    """
+    将各种格式的图片路径标准化为 /static/questions/{qid}/{filename}
+    
+    支持的输入格式:
+    - /static/questions/42/img_0_abc.png
+    - static/questions/42/img_0_abc.png
+    - ../static/questions/42/img_0_abc.png
+    - /uploads/questions/42/img_0_abc.png
+    - [IMAGE:42_0]
+    - img_docx_0_abc.png (扁平文件名)
+    
+    输出格式:
+    - /static/questions/42/img_0_abc.png
+    
+    Args:
+        path: 原始图片路径
+        question_id: 题目ID（用于占位符转换）
+    
+    Returns:
+        标准化后的路径，无效路径返回空字符串
+    """
+    if not path:
+        return ''
+    
+    # 1. 去除查询参数
+    path = path.split('?')[0]
+    
+    # 2. 处理 [IMAGE:xxx] 占位符
+    image_match = re.match(r'\[(\d+)_(\d+)\]', path)
+    if image_match:
+        qid = int(image_match.group(1))
+        idx = image_match.group(2)
+        # 尝试在子目录中查找真实图片
+        subdir = os.path.join(STATIC_IMG_ROOT, str(qid))
+        if os.path.isdir(subdir):
+            for fname in os.listdir(subdir):
+                if fname.startswith(f'img_') and fname.endswith(f'_{idx}.'):
+                    return f'/static/questions/{qid}/{fname}'
+        # 兜底：生成默认路径
+        return f'/static/questions/{qid}/img_{idx}.jpg'
+    
+    # 3. 统一路径分隔符
+    path = path.replace('\\', '/')
+    
+    # 4. 去除多余的 ../ 或 ./
+    while '/../' in path or '/./' in path:
+        path = path.replace('/../', '/').replace('/./', '/')
+    
+    # 5. 防路径遍历
+    if '..' in path:
+        return ''
+    
+    # 6. 确保以 /static/questions/ 开头
+    if path.startswith('/static/questions/'):
+        return path
+    
+    if path.startswith('static/questions/'):
+        return '/' + path
+    
+    # 7. 处理其他前缀（如 /uploads/questions/）
+    if '/questions/' in path:
+        # 提取 question_id 和 filename
+        parts = path.split('/questions/')
+        if len(parts) >= 2:
+            remaining = parts[1]
+            sub_parts = remaining.split('/')
+            if len(sub_parts) >= 2:
+                qid_part = sub_parts[0]
+                filename = sub_parts[1]
+                return f'/static/questions/{qid_part}/{filename}'
+    
+    # 8. 处理扁平文件名（无目录前缀）
+    if not path.startswith('/') and question_id:
+        return f'/static/questions/{question_id}/{path}'
+    
+    # 9. 无法识别的格式
+    logger.debug(f"[image_service] 无法标准化路径: {path}")
+    return ''
