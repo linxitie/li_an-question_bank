@@ -1040,10 +1040,24 @@ def _extract_paper_name(filename: str, text: str) -> Optional[str]:
     return None
 
 
-def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: str):
-    """根据检测到的标签自动创建或查找ExamPaper"""
+def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: str, question_count: int = 0):
+    """根据检测到的标签自动创建或查找ExamPaper
+    
+    新增参数:
+        question_count: 导入的题目数量
+    
+    阈值规则:
+        - question_count < 5: 不创建试卷，只入库
+        - question_count >= 5: 正常创建试卷
+    """
     from ...models.models import ExamPaper, ExamPaperTag
     from .paper_generation import generate_paper_code
+
+    # 阈值检查：少于5题不创建试卷
+    MIN_QUESTION_COUNT = 5
+    if question_count < MIN_QUESTION_COUNT:
+        logger.info(f"[import-paper] 题目数量({question_count})少于阈值({MIN_QUESTION_COUNT})，跳过试卷创建")
+        return None
 
     paper_name = auto_tags.get('paper_name') or filename.rsplit('.', 1)[0] if '.' in filename else filename
     exam_type_tag = auto_tags.get('exam_type', '模拟考试')
@@ -1785,19 +1799,24 @@ async def batch_import_parsed(
         try:
             paper = _get_or_create_import_paper(
                 db, current_user, auto_tags,
-                paper_name or (auto_tags.get('paper_name') or '导入试卷'))
-            existing_rel_qids = {
-                r.question_id for r in db.query(PaperQuestionRelation).filter(
-                    PaperQuestionRelation.paper_id == paper.paper_id).all()}
-            all_ids = ok_ids + reused_ids
-            order_base = paper.question_count or 0
-            for pos, qid in enumerate(all_ids, start=order_base + 1):
-                if qid in existing_rel_qids:
-                    continue
-                item_score = items[min(pos - order_base - 1, len(items) - 1)].get('score')
-                db.add(PaperQuestionRelation(
-                    paper_id=paper.paper_id,
-                    question_id=qid,
+                paper_name or (auto_tags.get('paper_name') or '导入试卷'),
+                question_count=len(ok_ids) + len(reused_ids))
+            if paper is None:
+                # 题目数量少于阈值，不创建试卷
+                logger.info(f"[batch-parsed] 题目数量({len(ok_ids) + len(reused_ids)})少于阈值，跳过试卷创建")
+            else:
+                existing_rel_qids = {
+                    r.question_id for r in db.query(PaperQuestionRelation).filter(
+                        PaperQuestionRelation.paper_id == paper.paper_id).all()}
+                all_ids = ok_ids + reused_ids
+                order_base = paper.question_count or 0
+                for pos, qid in enumerate(all_ids, start=order_base + 1):
+                    if qid in existing_rel_qids:
+                        continue
+                    item_score = items[min(pos - order_base - 1, len(items) - 1)].get('score')
+                    db.add(PaperQuestionRelation(
+                        paper_id=paper.paper_id,
+                        question_id=qid,
                     question_order=pos,
                     question_score=float(item_score) if item_score else 5.0,
                 ))
@@ -2164,9 +2183,9 @@ async def upload_file_for_import(
                 auto_tags.get('exam_year') and auto_tags.get('exam_type')
             ):
                 try:
-                    paper = _get_or_create_import_paper(db, current_user, auto_tags, file.filename)
-                    record.paper_id = paper.paper_id
-                    logger.info(f"[import] 自动关联试卷: import_id={record.import_id} paper_id={paper.paper_id}")
+                    # 预览阶段不创建试卷，只解析
+                    # 试卷创建延迟到 confirm 阶段
+                    logger.info(f"[import] 预览阶段，跳过试卷创建")
                 except Exception as e:
                     logger.warning(f"[import] 自动创建试卷失败(非阻断): {e}")
 
@@ -2377,6 +2396,23 @@ async def confirm_batch_import(
             record.error_messages = json.dumps(errors, ensure_ascii=False)
         _link_knowledge_points(db, new_questions)
         db.commit()
+
+        # N1: 确认导入阶段创建试卷（延迟创建策略）
+        if imported > 0 and preview_data.get('auto_detected_tags'):
+            try:
+                auto_tags = preview_data.get('auto_detected_tags', {})
+                # 阈值检查：至少5题才创建试卷
+                paper = _get_or_create_import_paper(
+                    db, current_user, auto_tags,
+                    record.original_filename or '导入试卷',
+                    question_count=imported
+                )
+                if paper:
+                    record.paper_id = paper.paper_id
+                    logger.info(f"[confirm] 确认导入后创建试卷: paper_id={paper.paper_id}")
+                    db.commit()
+            except Exception as e:
+                logger.warning(f"[confirm] 创建试卷失败(非阻断): {e}")
 
         # N1: 将导入的题目关联到试卷
         if record.paper_id:
