@@ -370,6 +370,67 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       return /\[IMAGE:|<img/.test(text);
     }
 
+    // 图片加载失败处理 - 多级重试机制
+    function handleImageError(event: Event, questionId?: number) {
+      const img = event.target as HTMLImageElement;
+      const originalSrc = img.src;
+      
+      // 防止无限循环
+      if (img.dataset.retrying === 'true') {
+        img.src = '/static/images/placeholder.png';
+        return;
+      }
+      
+      img.dataset.retrying = 'true';
+      
+      // 尝试1: 去除查询参数
+      const cleanSrc = originalSrc.split('?')[0];
+      if (cleanSrc !== originalSrc) {
+        setTimeout(() => {
+          img.src = cleanSrc;
+          img.dataset.retrying = 'false';
+        }, 100);
+        return;
+      }
+      
+      // 尝试2: 从相对路径转为绝对路径
+      if (!cleanSrc.startsWith('http') && !cleanSrc.startsWith('/static/')) {
+        setTimeout(() => {
+          img.src = window.location.origin + cleanSrc;
+          img.dataset.retrying = 'false';
+        }, 100);
+        return;
+      }
+      
+      // 尝试3: 如果有questionId，从后端重新获取图片路径
+      if (questionId) {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (auth) {
+          auth.apiFetch(`/api/teacher/questions/${questionId}/images`)
+            .then((res: any) => res.json())
+            .then((data: any) => {
+              if (data.images && data.images.length > 0) {
+                img.src = data.images[0].path;
+              } else {
+                img.src = '/static/images/placeholder.png';
+              }
+              img.dataset.retrying = 'false';
+            })
+            .catch(() => {
+              img.src = '/static/images/placeholder.png';
+              img.dataset.retrying = 'false';
+            });
+          return;
+        }
+      }
+      
+      // 所有尝试失败，显示占位图
+      setTimeout(() => {
+        img.src = '/static/images/placeholder.png';
+        img.dataset.retrying = 'false';
+      }, 100);
+    }
+
     function renderSummary(q: any) {
       const text = q.question_content || '';
       const cleaned = stripPromoText(text);
@@ -545,6 +606,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       hasOptions, parsedOptions, isCorrectOption,
       showDetail, openEdit, addOption, removeOption, saveEdit,
       deleteQuestion, goImport, handleLogout, cleanHtmlContent,
+      handleImageError,
     };
   }
 });
