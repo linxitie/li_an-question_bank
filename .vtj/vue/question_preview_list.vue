@@ -8,7 +8,10 @@
           已答 {{ questions.filter(function(q){return q.answer && q.answer !== '待补充'}).length }}
         </span>
         <span class="docs-stat-missing" v-if="questions.filter(function(q){return !q.answer || q.answer === '待补充'}).length">
-          缺答案 {{ questions.filter(function(q){return !q.answer || q.answer === '待补充'}).length }}
+          ⚠ 缺答案 {{ questions.filter(function(q){return !q.answer || q.answer === '待补充'}).length }} 题
+        </span>
+        <span class="docs-stat-missing" v-if="questions.filter(function(q){return !q.analysis}).length" style="color:#e6a23c;background:rgba(230,162,60,0.1);">
+          💡 缺解析 {{ questions.filter(function(q){return !q.analysis}).length }} 题
         </span>
         <span class="docs-stat-imported">
           已导入 {{ questions.filter(function(q){return q._imported}).length }}
