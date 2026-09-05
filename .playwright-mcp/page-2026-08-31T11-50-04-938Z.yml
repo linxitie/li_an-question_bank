@@ -1,0 +1,27 @@
+- generic [active] [ref=e10]:
+  - generic [ref=e17]:
+    - generic [ref=e19]:
+      - heading "砺安题库" [level=1] [ref=e24]
+      - paragraph [ref=e25]: 公安联考智能学习平台
+      - paragraph [ref=e28]: 忠诚·担当·卓越以奋斗书写藏蓝青春
+      - generic [ref=e30]:
+        - generic [ref=e31]: AI 智能组卷
+        - generic [ref=e36]: 公安联考真题库
+        - generic [ref=e41]: 智能错题分析
+        - generic [ref=e46]: 个性化学习规划
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - button "登 录" [ref=e54] [cursor=pointer]
+        - button "注 册" [ref=e59] [cursor=pointer]
+      - generic [ref=e92]: 登录成功，即将跳转...
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - generic [ref=e67] [cursor=pointer]: 密码登录
+          - generic [ref=e68]: "|"
+          - generic [ref=e69] [cursor=pointer]: 验证码登录
+        - textbox "请输入学号 / 教师编号" [ref=e75]: ycc5678
+        - generic [ref=e76]:
+          - textbox "请输入密码" [ref=e82]: ycc5678
+          - generic [ref=e83] [cursor=pointer]
+        - button "登 录 砺安题库" [ref=e87] [cursor=pointer]
+  - generic [ref=e7] [cursor=pointer]

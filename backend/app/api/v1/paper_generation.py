@@ -737,9 +737,9 @@ async def publish_paper(
     if paper.creator_id != current_user.user_id and current_user.role_level < 3:
         raise HTTPException(status_code=403, detail="无权发布此试卷")
 
-    # 状态检查
-    if paper.paper_type not in ["DRAFT", "APPROVED"]:
-        raise HTTPException(status_code=400, detail="当前状态不允许发布")
+    # 状态检查：仅已审批通过的试卷可发布（封堵教师绕过审批直发草稿）
+    if paper.paper_type != "APPROVED":
+        raise HTTPException(status_code=400, detail="只有已审批通过的试卷才能发布")
 
     # 检查是否有题目
     question_count = db.query(PaperQuestionRelation).filter(

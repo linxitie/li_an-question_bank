@@ -9,4 +9,12 @@
 {
   path: '/daily-news',
   component: () => import('./vue/daily_news.vue')
+},
+{
+  path: '/smart-exam',
+  component: () => import('./vue/smart_exam.vue')
+},
+{
+  path: '/smart-answer',
+  component: () => import('./vue/smart_answer.vue')
 }

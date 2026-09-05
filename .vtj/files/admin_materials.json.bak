@@ -1,0 +1,47 @@
+{
+  "id": "admin_materials",
+  "name": "AdminMaterials",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1787726546438",
+  "state": {
+    "loading": {
+      "type": "JSExpression",
+      "value": "false"
+    }
+  },
+  "methods": {
+    "handleInit": {
+      "type": "asyncMethod"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "nodes": [
+    {
+      "id": "admin_materials_root",
+      "name": "div",
+      "from": "",
+      "props": {
+        "class": {
+          "type": "JSExpression",
+          "value": "'admin_materials'"
+        }
+      },
+      "children": [
+        {
+          "id": "admin_materials_title",
+          "name": "h1",
+          "from": "",
+          "children": "备考资料管理"
+        }
+      ],
+      "locked": false,
+      "invisible": false
+    }
+  ],
+  "css": ".admin_materials { padding: 20px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; }",
+  "locked": false
+}

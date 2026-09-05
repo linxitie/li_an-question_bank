@@ -86,6 +86,7 @@
   import { Download } from '@vtj/icons';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'DownloadClient',
     components: { NavBar, XIcon },
@@ -158,7 +159,7 @@
     },
     methods: {
       handleDownload(name) {
-        this.$message.success('正在准备下载 ' + name + ' 客户端...');
+        ElMessage.success('正在准备下载 ' + name + ' 客户端...');
       }
     }
   })

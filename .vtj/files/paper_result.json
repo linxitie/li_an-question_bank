@@ -1,0 +1,36 @@
+{
+  "id": "paper_result",
+  "name": "PaperResult",
+  "title": "试卷结果",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1",
+  "state": {
+    "loading": { "type": "JSExpression", "value": "true" },
+    "record": { "type": "JSExpression", "value": "null" },
+    "details": { "type": "JSExpression", "value": "[]" },
+    "correctCount": { "type": "JSExpression", "value": "0" },
+    "wrongCount": { "type": "JSExpression", "value": "0" },
+    "accuracy": { "type": "JSExpression", "value": "0" },
+    "expandedAnalysis": { "type": "JSExpression", "value": "{}" }
+  },
+  "methods": {
+    "formatTime": { "type": "method", "params": ["s"] },
+    "formatDate": { "type": "method", "params": ["d"] },
+    "getTypeLabel": { "type": "method", "params": ["type"] },
+    "getTypeClass": { "type": "method", "params": ["type"] },
+    "parseOptions": { "type": "method", "params": ["detail"] },
+    "isCorrectAnswer": { "type": "method", "params": ["opt", "correctAnswer"] },
+    "isUserWrongAnswer": { "type": "method", "params": ["opt", "oidx", "detail"] },
+    "toggleAnalysis": { "type": "method", "params": ["qid"] },
+    "loadResult": { "type": "asyncMethod" },
+    "retakeExam": { "type": "asyncMethod" },
+    "goWrongQuestions": { "type": "method" }
+  },
+  "lifeCycles": {
+    "mounted": { "type": "method" }
+  },
+  "nodes": [],
+  "css": "",
+  "slots": [],
+  "locked": false
+}

@@ -82,6 +82,25 @@ class Settings(BaseSettings):
     OCR_PYTHON: str = Field(r"D:\ocr-env\Scripts\python.exe", env="OCR_PYTHON")
     OCR_MAX_PAGES: int = Field(8, env="OCR_MAX_PAGES")
     OCR_SUBPROCESS_TIMEOUT: int = Field(240, env="OCR_SUBPROCESS_TIMEOUT")
+
+    # ==================== 资料管理配置 ====================
+    # 批量操作限制
+    MATERIAL_BATCH_LIMIT: int = Field(100, env="MATERIAL_BATCH_LIMIT")
+    # 单文件大小限制(MB)
+    MATERIAL_MAX_FILE_SIZE_MB: int = Field(200, env="MATERIAL_MAX_FILE_SIZE_MB")
+    # 允许的文件类型
+    MATERIAL_ALLOWED_TYPES: str = Field("docx,xlsx,pdf,jpg,jpeg,png,mp4,zip,rar", env="MATERIAL_ALLOWED_TYPES")
+    # 去重相似度阈值(0-1)
+    MATERIAL_DEDUP_THRESHOLD: float = Field(0.85, env="MATERIAL_DEDUP_THRESHOLD")
+    # 监控告警阈值
+    MATERIAL_MONITOR_ERROR_THRESHOLD: int = Field(10, env="MATERIAL_MONITOR_ERROR_THRESHOLD")
+    MATERIAL_MONITOR_RATE_THRESHOLD: float = Field(0.3, env="MATERIAL_MONITOR_RATE_THRESHOLD")
+    # 内容清洗开关
+    MATERIAL_SANITIZE_ENABLED: bool = Field(True, env="MATERIAL_SANITIZE_ENABLED")
+    # 智能分类开关
+    MATERIAL_CLASSIFIER_ENABLED: bool = Field(True, env="MATERIAL_CLASSIFIER_ENABLED")
+    # 去重检测开关
+    MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
     
     @property
     def DATABASE_URL(self) -> str:

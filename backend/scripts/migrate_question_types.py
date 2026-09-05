@@ -28,9 +28,9 @@ def detect_type_from_answer_and_content(q):
     if any(re.search(kw, content) for kw in multi_keywords):
         return '多选题'
     if any(kw in content for kw in ['判断', '对错', '正确', '错误']) and len(content) < 300:
-        return '判断题'
+        return '单选题'
     if any(kw in content for kw in ['填空', '______', '___']):
-        return '填空题'
+        return '论述题'
     if any(kw in content for kw in ['简答', '简述']):
         return '简答题'
     if any(kw in content for kw in ['论述', '论证']):

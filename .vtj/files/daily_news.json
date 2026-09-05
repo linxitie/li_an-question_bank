@@ -681,11 +681,13 @@
     "isFavorited": "false",
     "notes": "[]",
     "selectionMenuVisible": "false",
-    "selectionMenuPos": "{ x: 0",
+    "selectionMenuPos": "{ x: 0, y: 0 }",
     "selectedText": "''",
     "highlightColor": "'#FFD700'",
     "lineStyle": "'wavy'",
-    "y": "0 }"
+    "showHint": "false",
+    "noteInputVisible": "false",
+    "noteText": "''"
   },
   "watch": [],
   "expose": [],
@@ -728,7 +730,10 @@
     },
     "applyHighlight": {
       "type": "asyncMethod",
-      "value": "async () => {\n  if (!this.state.selectedText) return;\n  const newsId = this.state.selectedNews.id;\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {\n      method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ note_text: '', quote_text: this.state.selectedText, color: this.state.highlightColor, line_style: this.state.lineStyle })\n    });\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n    await this.fetchNotes(newsId);\n  } catch (e) { console.error('划线失败:', e); }\n}"
+      "params": [
+        "color"
+      ],
+      "value": "async (color) => {\n  if (!this.state.selectedText) return;\n  if (color) this.state.highlightColor = color;\n  const newsId = this.state.selectedNews.id;\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {\n      method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ note_text: '', quote_text: this.state.selectedText, color: this.state.highlightColor, line_style: this.state.lineStyle })\n    });\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n    await this.fetchNotes(newsId);\n  } catch (e) { console.error('划线失败:', e); }\n}"
     },
     "toggleCardFavorite": {
       "type": "asyncMethod",
@@ -744,9 +749,39 @@
       ],
       "value": "(note) => {\n  const color = note.color || '#FFD700';\n  const style = note.line_style || 'wavy';\n  if (style === 'marker') {\n    return { backgroundColor: color + '40', padding: '0 2px', borderRadius: '2px' };\n  } else if (style === 'straight') {\n    return { textDecoration: 'underline', textDecorationColor: color, textUnderlineOffset: '4px' };\n  } else {\n    return { textDecoration: 'underline wavy', textDecorationColor: color, textUnderlineOffset: '4px' };\n  }\n}"
     },
-    "noteSelection": {
-      "type": "JSFunction",
-      "value": "async () => {\n  if (!this.state.selectedText) return;\n  const thought = prompt('记录想法:', '');\n  if (thought === null) return;\n  const newsId = this.state.selectedNews.id;\n  const c = this.state.highlightColor || '#FFD700';\n  try {\n    await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {\n      method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ note_text: thought, quote_text: this.state.selectedText, color: c })\n    });\n    this.state.selectionMenuVisible = false;\n    this.state.selectedText = '';\n    await this.fetchNotes(newsId);\n  } catch (e) { console.error('保存想法失败:', e); }\n}"
+    "scrollToNotes": {
+      "type": "method",
+      "params": []
+    },
+    "resolveImgUrl": {
+      "type": "method",
+      "params": [
+        "url"
+      ]
+    },
+    "hasInlineMarkers": {
+      "type": "method",
+      "params": [
+        "content"
+      ]
+    },
+    "setLineStyle": {
+      "type": "method",
+      "params": [
+        "style"
+      ]
+    },
+    "openNoteInput": {
+      "type": "method",
+      "params": []
+    },
+    "cancelNoteInput": {
+      "type": "method",
+      "params": []
+    },
+    "saveNoteOnBlur": {
+      "type": "asyncMethod",
+      "params": []
     },
     "toggleFavorite": {
       "type": "JSFunction",

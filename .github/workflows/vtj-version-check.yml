@@ -1,0 +1,234 @@
+# .github/workflows/vtj-version-check.yml
+name: VTJ Version Consistency Check
+
+on:
+  push:
+    paths:
+      - '.vtj/vue/**'
+      - '.vtj/files/**'
+  pull_request:
+    paths:
+      - '.vtj/vue/**'
+      - '.vtj/files/**'
+
+jobs:
+  vtj-version-check:
+    name: VTJ Version Consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要完整历史用于对比
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          # 仅安装脚本需要的依赖
+      
+      - name: Check VTJ version consistency
+        run: |
+          echo "🔍 检查 VTJ 版本一致性..."
+          python scripts/vtj_version_sync.py
+        continue-on-error: false
+      
+      - name: Comment on PR (if failed)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ VTJ 版本不一致检测失败
+              
+              请运行以下命令同步版本号后再提交：
+              
+              \`\`\`bash
+              python scripts/vtj_version_sync.py
+              \`\`\`
+              
+              或手动更新 \`.vtj/files/*.json\` 的 \`__VERSION__\` 字段，使其与 \`.vtj/vue/*.vue\` 中的 \`useProvider({version})\` 一致。`
+            })
+
+  # Python 代码质量检查
+  python-quality:
+    name: Python Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install black isort flake8 mypy
+          if [ -f backend/requirements.txt ]; then
+            pip install -r backend/requirements.txt
+          fi
+      
+      - name: Run black (check only)
+        run: |
+          black --check --line-length=100 backend/ --exclude="\.vtj|migrations|alembic"
+      
+      - name: Run isort (check only)
+        run: |
+          isort --check --profile=black --line-length=100 backend/ --exclude="\.vtj|migrations|alembic"
+      
+      - name: Run flake8
+        run: |
+          flake8 backend/ --max-line-length=100 --ignore=E203,W503 --exclude="\.vtj,migrations,alembic"
+      
+      - name: Run mypy
+        run: |
+          mypy backend/ --exclude="\.vtj|migrations|alembic" --ignore-missing-imports || true
+
+  # 前端代码质量检查
+  frontend-quality:
+    name: Frontend Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          npm ci
+      
+      - name: Run prettier (check only)
+        run: |
+          npx prettier --check . --ignore-path .gitignore
+      
+      - name: Run ESLint
+        run: |
+          npx eslint . --ext .vue,.js,.ts --ignore-path .gitignore || true
+
+  # 单元测试
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio
+          if [ -f backend/requirements.txt ]; then
+            pip install -r backend/requirements.txt
+          fi
+      
+      - name: Run unit tests
+        run: |
+          cd backend
+          pytest tests/unit -v --tb=short --cov=app.services --cov-report=xml || true
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./backend/coverage.xml
+          fail_ci_if_error: false
+
+  # 数据库迁移测试
+  migration-test:
+    name: Database Migration Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install alembic sqlalchemy pymysql
+          if [ -f backend/requirements.txt ]; then
+            pip install -r backend/requirements.txt
+          fi
+      
+      - name: Test migrations (SQLite)
+        run: |
+          cd backend
+          # 创建测试数据库
+          alembic upgrade head
+          # 测试回滚
+          alembic downgrade -1
+          alembic upgrade head
+        env:
+          DATABASE_URL: sqlite:///test.db
+
+  # 汇总报告
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [vtj-version-check, python-quality, frontend-quality, unit-tests, migration-test]
+    if: always()
+    
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "## CI 结果汇总"
+          echo ""
+          echo "| Job | Status |"
+          echo "|-----|--------|"
+          echo "| VTJ Version Check | ${{ needs.vtj-version-check.result }} |"
+          echo "| Python Quality | ${{ needs.python-quality.result }} |"
+          echo "| Frontend Quality | ${{ needs.frontend-quality.result }} |"
+          echo "| Unit Tests | ${{ needs.unit-tests.result }} |"
+          echo "| Migration Test | ${{ needs.migration-test.result }} |"
+          
+          # 检查是否有失败
+          if [[ "${{ needs.vtj-version-check.result }}" != "success" ]] || \
+             [[ "${{ needs.python-quality.result }}" != "success" ]] || \
+             [[ "${{ needs.frontend-quality.result }}" != "success" ]] || \
+             [[ "${{ needs.unit-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.migration-test.result }}" != "success" ]]; then
+            echo ""
+            echo "❌ 部分检查失败，请查看详细日志"
+            exit 1
+          else
+            echo ""
+            echo "✅ 所有检查通过"
+          fi

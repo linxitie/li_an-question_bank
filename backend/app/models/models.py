@@ -1143,6 +1143,7 @@ class StudyMaterial(Base):
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="创建人")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+    content_hash = Column(String(64), comment="内容MD5哈希(去重用)")
 
     __table_args__ = (
         Index("idx_subject_type", subject, type),
@@ -1606,3 +1607,29 @@ class OperationLog(Base):
         Index("idx_user_action_time", "user_id", "action", "created_at"),
         Index("idx_target", "target_type", "target_id"),
     )
+
+
+class MaterialClassificationRule(Base):
+    """资料分类规则表"""
+    __tablename__ = "material_classification_rules"
+    
+    rule_id = Column(Integer, primary_key=True, autoincrement=True)
+    rule_name = Column(String(100), nullable=False, comment="规则名称")
+    rule_type = Column(String(50), nullable=False, comment="format/content/keyword")
+    rule_config = Column(JSON, comment="规则配置")
+    priority = Column(Integer, default=0, comment="优先级")
+    enabled = Column(Boolean, default=True, comment="是否启用")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+
+class MaterialDuplicateRecord(Base):
+    """资料去重记录表"""
+    __tablename__ = "material_duplicate_records"
+    
+    record_id = Column(Integer, primary_key=True, autoincrement=True)
+    original_material_id = Column(Integer, ForeignKey("study_material.material_id"), comment="原始资料ID")
+    duplicate_material_id = Column(Integer, ForeignKey("study_material.material_id"), comment="重复资料ID")
+    similarity = Column(DECIMAL(5, 4), comment="相似度")
+    duplicate_type = Column(String(20), comment="exact/fingerprint/semantic")
+    status = Column(String(20), default="pending", comment="pending/confirmed/ignored")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")

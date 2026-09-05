@@ -1724,6 +1724,32 @@ async def batch_import_parsed(
                 'reason': 'test_pattern_detected: 检测到测试模板数据(UTB标记/测试要点模板)，拒绝入库',
             })
             continue
+        
+        # ===== 新增：重新验证题目类型 =====
+        content = q.get('question_content', '')
+        options_raw = q.get('options', [])
+        answer = q.get('answer', '')
+        
+        # 提取选项文本
+        option_texts = []
+        for opt in options_raw:
+            if isinstance(opt, dict):
+                option_texts.append(opt.get('value', ''))
+            else:
+                option_texts.append(str(opt))
+        
+        # 调用后端识别逻辑
+        from ...services.text_parser import _detect_question_type
+        detected_type, confidence = _detect_question_type(content, option_texts, answer)
+        
+        # 如果前端传递的类型与后端识别不一致，使用后端识别结果
+        frontend_type = q.get('question_type_detail', '')
+        if frontend_type != detected_type:
+            direction = f"{frontend_type}→{detected_type}"
+            logger.warning(f"[batch-parsed] 题目{idx}类型修正: {direction} "
+                          f"(置信度: {confidence:.2f}, 答案: '{answer[:20]}')")
+            q['question_type_detail'] = detected_type
+        
         try:
             r = _upsert_question_core(db, current_user, q)
             qid = r['question_id']

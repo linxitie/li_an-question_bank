@@ -19,6 +19,10 @@ import App from './App.vue';
 import { vtj, name } from '../package.json';
 import './style/index.scss';
 import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
+import { registerImageRetry } from './image-retry';  // 第9层防线：图片智能重试
+
+// 注册全局图片重试函数（第9层防线）
+registerImageRetry();
 
 const app = createApp(App);
 const adapter = createAdapter({ loading, notify, Startup, useTitle });

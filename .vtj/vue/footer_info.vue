@@ -1,4 +1,4 @@
-<!-- 招考信息（增强版：API驱动 + 3x2网格 + 展开全部） -->
+<!-- 招考信息（增强版：API驱动 + 3x2网格 + 卡片内滚动） -->
 <template>
   <div class="recruit-panel">
     <div class="panel-header">
@@ -12,24 +12,18 @@
       <div
         v-for="cat in state.categories"
         :key="cat.key"
-        class="recruit-card"
-        :class="{ expanded: state.expandedCats.includes(cat.key) }">
+        class="recruit-card">
         <!-- 卡片头部 -->
-        <div class="card-header" @click="toggleCategory(cat.key)">
+        <div class="card-header">
           <div class="card-header-left">
             <span class="card-icon">{{ cat.icon }}</span>
             <span class="card-title">{{ cat.label }}</span>
             <span class="card-count">{{ getCatCount(cat.key) }}条</span>
           </div>
-          <XIcon
-            :icon="ArrowRight"
-            :size="14"
-            :color="state.expandedCats.includes(cat.key) ? '#c41e3a' : '#8899aa'"
-            class="card-arrow"
-            :class="{ rotated: state.expandedCats.includes(cat.key) }"></XIcon>
         </div>
 
-        <!-- 信息列表 -->
+        <!-- 信息列表（可滚动） -->
+        <div class="card-list-scroll">
         <div class="card-list">
           <a
             v-for="(item, idx) in getVisibleItems(cat.key)"
@@ -43,18 +37,11 @@
             <XIcon :icon="ArrowRight" :size="11" color="#556677"></XIcon>
           </a>
 
-          <!-- 展开全部按钮 -->
-          <div
-            v-if="getCatCount(cat.key) > 5"
-            class="expand-toggle"
-            @click="toggleCategory(cat.key)">
-            <span>{{ state.expandedCats.includes(cat.key) ? '收起' : '展开全部（' + getCatCount(cat.key) + '条）' }}</span>
-          </div>
-
           <!-- 暂无数据 -->
           <div v-if="getCatCount(cat.key) === 0" class="card-empty">
             暂无招考信息
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -75,7 +62,7 @@
     name: 'RecruitmentPanel',
     components: { XIcon },
     setup(props) {
-      const provider = useProvider({ id: 'footer_info', version: '1778907995433' });
+      const provider = useProvider({ id: 'footer_info', version: '1785750000102' });
       const state = reactive({
         // 按用户指定顺序排列的6个分类
         categories: [
@@ -88,8 +75,6 @@
         ],
         // API数据：{ 国考省考: [...], ... }
         items: {},
-        // 已展开的分类
-        expandedCats: [],
         // 加载状态
         loading: false,
       });
@@ -111,19 +96,8 @@
         return items ? items.length : 0;
       },
       getVisibleItems(catKey) {
-        var items = this.state.items[catKey] || [];
-        if (this.state.expandedCats.includes(catKey)) {
-          return items;
-        }
-        return items.slice(0, 6);
-      },
-      toggleCategory(catKey) {
-        var idx = this.state.expandedCats.indexOf(catKey);
-        if (idx >= 0) {
-          this.state.expandedCats.splice(idx, 1);
-        } else {
-          this.state.expandedCats.push(catKey);
-        }
+        // 全部显示，不做折叠
+        return this.state.items[catKey] || [];
       },
       fetchRecruitment() {
         var self = this;
@@ -131,7 +105,7 @@
         // 使用 VTJ 认证包装器调用 API
         var apiCall;
         if (window.__VTJ_AUTH__ && window.__VTJ_AUTH__.apiFetch) {
-          apiCall = window.__VTJ_AUTH__.apiFetch('/api/recruitment?limit=10');
+          apiCall = window.__VTJ_AUTH__.apiFetch('/api/recruitment?limit=10').then(function(r) { return r.json(); });
         } else {
           // 回退：直接 fetch
           apiCall = fetch('/api/recruitment?limit=10', {
@@ -246,9 +220,7 @@
   .card-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 14px 14px 10px;
-    cursor: pointer;
     user-select: none;
   }
   .card-header-left {
@@ -277,12 +249,25 @@
     border-radius: 10px;
     white-space: nowrap;
   }
-  .card-arrow {
-    transition: transform 0.3s ease;
-    flex-shrink: 0;
+
+  /* 卡片列表滚动容器 */
+  .card-list-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
   }
-  .card-arrow.rotated {
-    transform: rotate(90deg);
+  .card-list-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .card-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .card-list-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+  }
+  .card-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.35);
   }
 
   /* 列表 */
@@ -322,20 +307,7 @@
     color: #e63946;
   }
 
-  /* 展开全部 */
-  .expand-toggle {
-    text-align: center;
-    padding: 8px;
-    margin-top: 4px;
-    color: #c41e3a;
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: background 0.2s;
-  }
-  .expand-toggle:hover {
-    background: rgba(196, 30, 58, 0.1);
-  }
+  /* 展开全部 —— 已删除，改用卡片内滚动 */
 
   /* 空状态 */
   .card-empty {

@@ -410,8 +410,8 @@ async def list_teacher_papers(
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """教师查看自己的试卷列表"""
-    query = db.query(ExamPaper).filter(ExamPaper.creator_id == current_user.user_id)
+    """教师查看试卷列表（不限制creator_id，教师可查看所有试卷）"""
+    query = db.query(ExamPaper)
     if status:
         query = query.filter(ExamPaper.paper_type == status)
     else:
@@ -459,6 +459,29 @@ async def list_teacher_papers(
         })
 
     return {"success": True, "total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.get("/papers/stats", summary="试卷各状态统计")
+async def paper_stats(
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """教师查看各状态试卷数量（不限制creator_id）"""
+    from sqlalchemy import func
+    rows = db.query(
+        ExamPaper.paper_type, func.count(ExamPaper.paper_id)
+    ).group_by(ExamPaper.paper_type).all()
+
+    stats = {r[0]: r[1] for r in rows}
+    return {
+        "success": True,
+        "total": sum(stats.values()),
+        "draft": stats.get("DRAFT", 0),
+        "pending": stats.get("PENDING", 0),
+        "approved": stats.get("APPROVED", 0),
+        "published": stats.get("PUBLISHED", 0),
+        "ended": stats.get("ENDED", 0),
+    }
 
 
 @router.get("/papers/{paper_id}", summary="试卷详情")

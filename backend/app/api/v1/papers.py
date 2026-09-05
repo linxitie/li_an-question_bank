@@ -100,28 +100,78 @@ async def update_paper(
 @router.delete("/{paper_id}", response_model=SuccessResponse, summary="删除试卷")
 async def delete_paper(
     paper_id: int,
-    current_user: SysUser = Depends(require_admin),
+    current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    删除试卷
+    删除试卷（已发布试卷也可删除，需确认）
     """
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
     
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
     
-    # 检查是否有考试记录
-    records = db.query(ExamRecord).filter(ExamRecord.paper_id == paper_id).first()
-    if records:
-        raise HTTPException(status_code=400, detail="该试卷已有考试记录，无法删除")
+    # 权限检查：教师只能删自己的，管理员删所有
+    if current_user.user_type == "teacher" and paper.creator_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="无权删除此试卷")
     
+    # 删除关联题目关系
+    db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper_id
+    ).delete()
+    
+    # 删除审批记录
+    db.query(PaperApproval).filter(PaperApproval.paper_id == paper_id).delete()
+    
+    # 记录操作日志
+    from ...models.models import OperationLog
+    log = OperationLog(
+        user_id=current_user.user_id,
+        action="delete_paper",
+        target_type="paper",
+        target_id=paper_id,
+        details=f"删除试卷: {paper.paper_name}"
+    )
+    db.add(log)
+    
+    # 删除试卷
     db.delete(paper)
     db.commit()
     
     delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
     
     return SuccessResponse(message="删除成功")
+
+
+@router.get("/{paper_id}/preview", response_model=dict, summary="预览试卷（不含答案）")
+async def preview_paper(
+    paper_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    学生端预览试卷 - 仅显示题目，不含答案和解析
+    """
+    from ...services.exam_service import ExamService
+    try:
+        preview_data = ExamService.get_exam_preview(db, paper_id)
+        return preview_data
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/stats", response_model=dict, summary="获取题目统计")
+async def get_paper_stats(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    获取试卷/题目统计信息（按角色差异化）
+    """
+    from ...services.question_stats import QuestionStatsService
+    stats = QuestionStatsService.get_stats(db, current_user)
+    stats["paper_stats"] = QuestionStatsService.get_paper_stats(db, current_user)
+    return stats
 
 @router.post("/{paper_id}/questions", response_model=SuccessResponse, summary="添加题目到试卷")
 async def add_questions_to_paper(

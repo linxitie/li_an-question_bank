@@ -18,6 +18,21 @@ class TeacherDashboardStats(BaseModel):
     total_imported_questions: int = 0
 
 
+class PracticeTrend(BaseModel):
+    """近7天每日练习人数趋势"""
+    dates: List[str] = []      # 例 ["08-09",...,"08-15"]
+    counts: List[int] = []     # 每日去重 user_id 数
+
+
+class SubjectAccuracyItem(BaseModel):
+    """三大科目总体正确率"""
+    subject_id: int
+    subject_name: str          # 行测/申论/公专
+    total: int = 0             # 该科答题总数
+    correct: int = 0           # 该科答对数
+    accuracy: float = 0.0      # 正确率%，round(1)
+
+
 class PendingApprovalItem(BaseModel):
     """待审批试卷项"""
     paper_id: int
@@ -43,6 +58,8 @@ class TeacherDashboardResponse(BaseModel):
     stats: TeacherDashboardStats
     pending_approvals: List[PendingApprovalItem] = []
     recent_activities: List[RecentStudentActivity] = []
+    practice_trend: PracticeTrend = PracticeTrend()
+    subject_accuracy: List[SubjectAccuracyItem] = []
 
 
 # ==================== 题目管理 ====================
@@ -76,6 +93,22 @@ class TeacherQuestionUpdate(BaseModel):
     tags: Optional[str] = None
     subject_id: Optional[int] = None
     type_id: Optional[int] = None
+    point_id: Optional[int] = None
+
+
+class TeacherQuestionCreate(BaseModel):
+    """教师自设计题目"""
+    subject_id: int
+    type_name: str = Field(..., description="题型名称: 单选题/多选题/论述题/写作题")
+    question_content: str = Field(..., min_length=1)
+    options: Optional[Any] = None  # 选项列表 [{"key":"A","value":"..."}]
+    answer: str = Field(..., description="正确答案")
+    answer_analysis: Optional[str] = None
+    difficulty: int = Field(3, ge=1, le=5)
+    score: float = Field(5.0)
+    year: Optional[int] = None
+    source: Optional[str] = None
+    tags: Optional[str] = None
     point_id: Optional[int] = None
 
 
@@ -137,6 +170,21 @@ class SubmitApprovalRequest(BaseModel):
     approver_id: Optional[int] = None  # 指定审批人，为空则由管理员审批
 
 
+class PublishPaperRequest(BaseModel):
+    """发布试卷（双轨制）"""
+    publish_target: str = Field(..., description="past_paper(历年试卷直发) / mock_exam(小模考审批)")
+
+
+class PaperQuestionScoreUpdate(BaseModel):
+    """调整试卷题目分值"""
+    question_score: float = Field(..., gt=0, le=100, description="题目分值")
+
+
+class PaperQuestionOrderUpdate(BaseModel):
+    """调整试卷题目顺序"""
+    question_ids: List[int] = Field(..., description="有序的题目ID列表")
+
+
 # ==================== 成绩管理 ====================
 
 class ScoreOverviewQuery(BaseModel):
@@ -187,3 +235,121 @@ class ScoreOverviewResponse(BaseModel):
     max_score: float = 0
     min_score: float = 0
     pass_rate: float = 0  # 及格率(>=60分)
+
+
+# ==================== 个人设置 ====================
+
+class TeacherProfileResponse(BaseModel):
+    """教师个人信息响应"""
+    success: bool = True
+    user_id: int
+    username: str
+    user_no: Optional[str] = None
+    avatar: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None
+    hire_date: Optional[str] = None
+    role: Optional[str] = None
+    class_count: int = 0
+    student_count: int = 0
+    paper_count: int = 0
+    question_count: int = 0
+
+
+class TeacherProfileUpdate(BaseModel):
+    """教师个人信息更新"""
+    username: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    """修改密码请求"""
+    old_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6)
+
+
+# ==================== 班级管理 ====================
+
+class ClassItem(BaseModel):
+    """班级列表项"""
+    class_id: int
+    class_name: str
+    student_count: int = 0
+    avg_score: Optional[float] = None
+    create_time: Optional[str] = None
+
+
+class ClassDetailResponse(BaseModel):
+    """班级详情响应"""
+    success: bool = True
+    class_id: int
+    class_name: str
+    student_count: int = 0
+    avg_score: Optional[float] = None
+    create_time: Optional[str] = None
+    students: List[dict] = []
+
+
+class ClassCreateRequest(BaseModel):
+    """创建班级请求"""
+    class_name: str = Field(..., min_length=1, max_length=100)
+
+
+class ClassStudentAdd(BaseModel):
+    """添加学生到班级"""
+    user_ids: List[int] = Field(..., description="学生用户ID列表")
+
+
+# ==================== 消息中心 ====================
+
+class MessageItem(BaseModel):
+    """消息列表项"""
+    message_id: int
+    message_type: str
+    title: str
+    content: Optional[str] = None
+    is_read: bool = False
+    related_id: Optional[int] = None
+    created_at: Optional[str] = None
+
+
+class MessageListResponse(BaseModel):
+    """消息列表响应"""
+    success: bool = True
+    total: int = 0
+    unread_count: int = 0
+    items: List[MessageItem] = []
+
+
+# ==================== 数据分析 ====================
+
+class AnalyticsOverview(BaseModel):
+    """学情总览"""
+    total_students: int = 0
+    total_exams: int = 0
+    avg_score: float = 0
+    pass_rate: float = 0
+    score_trend: dict = {}  # {dates: [], scores: []}
+    subject_comparison: List[dict] = []  # [{subject_name, avg_score, exam_count}]
+
+
+class QuestionUsageItem(BaseModel):
+    """题目使用频率"""
+    question_id: int
+    question_content: str
+    usage_count: int = 0
+    correct_rate: float = 0
+    subject_name: Optional[str] = None
+
+
+class KnowledgeMasteryItem(BaseModel):
+    """知识点掌握度"""
+    point_id: int
+    point_name: str
+    total_attempts: int = 0
+    correct_count: int = 0
+    mastery_rate: float = 0
+    subject_name: Optional[str] = None

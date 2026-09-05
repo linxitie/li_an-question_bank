@@ -1,1 +1,1461 @@
-{"id":"forum","css":".forum-page {\n  min-height: 100vh;\n  background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);\n  font-family: \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n}\n.forum-main {\n  max-width: 1300px;\n  margin: 0 auto;\n  padding: 24px 32px 40px;\n}\n.forum-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 24px;\n}\n.forum-header h2 {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 22px;\n  font-weight: 800;\n  color: #1a2b5f;\n  margin: 0;\n}\n.post-btn {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 12px 24px;\n  border: none;\n  border-radius: 12px;\n  background: linear-gradient(135deg, #c41e3a, #e8384f);\n  color: #ffffff;\n  font-size: 14px;\n  font-weight: 700;\n  cursor: pointer;\n  transition: all 0.3s;\n  box-shadow: 0 2px 12px rgba(196, 30, 58, 0.3);\n}\n.post-btn:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 18px rgba(196, 30, 58, 0.4);\n}\n.forum-body {\n  display: grid;\n  grid-template-columns: 1fr 300px;\n  gap: 24px;\n}\n.forum-left {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  box-shadow: 0 2px 12px rgba(26, 43, 95, 0.04);\n}\n.category-tabs {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 20px;\n  flex-wrap: wrap;\n}\n.cat-btn {\n  padding: 8px 16px;\n  border: 1px solid #e8eaf0;\n  border-radius: 20px;\n  background: #f8f9fc;\n  font-size: 13px;\n  font-weight: 600;\n  color: #5a6488;\n  cursor: pointer;\n  transition: all 0.3s;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.cat-btn:hover {\n  border-color: #1a2b5f;\n  color: #1a2b5f;\n}\n.cat-btn.active {\n  background: #1a2b5f;\n  color: #ffffff;\n  border-color: #1a2b5f;\n}\n.cat-count {\n  font-size: 11px;\n  opacity: 0.7;\n}\n.post-list {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.post-item {\n  display: flex;\n  align-items: flex-start;\n  gap: 14px;\n  padding: 16px;\n  border-radius: 12px;\n  cursor: pointer;\n  transition: all 0.3s;\n  border: 1px solid transparent;\n}\n.post-item:hover {\n  background: #f8f9fc;\n  border-color: #e8eaf0;\n}\n.post-avatar {\n  width: 44px;\n  height: 44px;\n  border-radius: 12px;\n  background: linear-gradient(135deg, #eef2ff, #e0e7ff);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n}\n.avatar-emoji {\n  font-size: 22px;\n}\n.post-content {\n  flex: 1;\n  min-width: 0;\n}\n.post-title {\n  font-size: 15px;\n  font-weight: 700;\n  color: #1a2b5f;\n  margin: 0 0 6px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.post-excerpt {\n  font-size: 12px;\n  color: #8a8faa;\n  margin: 0 0 8px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.post-meta {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 11px;\n  color: #8a8faa;\n}\n.meta-dot {\n  color: #d1d5db;\n}\n.post-tag {\n  padding: 4px 10px;\n  border-radius: 8px;\n  font-size: 11px;\n  font-weight: 600;\n  color: #1a2b5f;\n  white-space: nowrap;\n  flex-shrink: 0;\n}\n.pagination {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 16px;\n  margin-top: 20px;\n  padding-top: 16px;\n  border-top: 1px solid #f0f2f5;\n}\n.pagination button {\n  padding: 6px 16px;\n  border: 1px solid #e8eaf0;\n  border-radius: 8px;\n  background: #ffffff;\n  cursor: pointer;\n  font-size: 13px;\n  color: #1a2b5f;\n  transition: all 0.2s;\n}\n.pagination button:hover:not(:disabled) {\n  background: #f0f2f5;\n}\n.pagination button:disabled {\n  opacity: 0.5;\n  cursor: default;\n}\n.page-info {\n  font-size: 13px;\n  color: #5a6488;\n}\n.forum-right {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.right-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  box-shadow: 0 2px 10px rgba(26, 43, 95, 0.04);\n}\n.right-card h4 {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 14px;\n  font-weight: 700;\n  color: #1a2b5f;\n  margin: 0 0 14px;\n}\n.hot-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 0;\n  border-bottom: 1px solid #f8f9fc;\n  cursor: pointer;\n  font-size: 12px;\n  transition: all 0.2s;\n}\n.hot-item:hover {\n  background: #f8f9fc;\n  border-radius: 8px;\n  padding-left: 8px;\n}\n.hot-rank {\n  width: 20px;\n  height: 20px;\n  border-radius: 6px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-size: 11px;\n  font-weight: 700;\n  color: #ffffff;\n  flex-shrink: 0;\n}\n.hot-rank.rank-1 {\n  background: #ef4444;\n}\n.hot-rank.rank-2 {\n  background: #f97316;\n}\n.hot-rank.rank-3 {\n  background: #f59e0b;\n}\n.hot-rank.rank-4, .hot-rank.rank-5 {\n  background: #94a3b8;\n}\n.hot-title {\n  flex: 1;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  color: #1a2b5f;\n}\n.hot-replies {\n  font-size: 10px;\n  color: #8a8faa;\n  flex-shrink: 0;\n}\n.stats-grid {\n  display: flex;\n  justify-content: space-around;\n}\n.stats-item {\n  text-align: center;\n}\n.stats-number {\n  display: block;\n  font-size: 22px;\n  font-weight: 900;\n  color: #1a2b5f;\n  font-family: \"DIN Alternate\", sans-serif;\n}\n.stats-label {\n  font-size: 11px;\n  color: #8a8faa;\n}\n/* Modal */\n.modal-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background: rgba(0, 0, 0, 0.4);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 2000;\n}\n.modal-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 28px;\n  width: 520px;\n  max-width: 90vw;\n  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);\n}\n.modal-card h3 {\n  font-size: 18px;\n  font-weight: 800;\n  color: #1a2b5f;\n  margin: 0 0 20px;\n}\n.modal-input, .modal-textarea, .modal-select {\n  width: 100%;\n  padding: 12px;\n  border: 1px solid #e8eaf0;\n  border-radius: 10px;\n  font-size: 13px;\n  margin-bottom: 14px;\n  outline: none;\n  color: #1a2b5f;\n  box-sizing: border-box;\n}\n.modal-textarea {\n  resize: vertical;\n}\n.modal-actions {\n  display: flex;\n  gap: 12px;\n  justify-content: flex-end;\n  margin-top: 8px;\n}\n.cancel-btn {\n  padding: 10px 20px;\n  border: 1px solid #e8eaf0;\n  border-radius: 10px;\n  background: #ffffff;\n  font-size: 13px;\n  font-weight: 600;\n  color: #5a6488;\n  cursor: pointer;\n}\n.confirm-btn {\n  padding: 10px 20px;\n  border: none;\n  border-radius: 10px;\n  background: linear-gradient(135deg, #1a2b5f, #1e3470);\n  color: #ffffff;\n  font-size: 13px;\n  font-weight: 700;\n  cursor: pointer;\n}","name":"Forum","emits":[],"nodes":[{"id":"2728jvez4om","from":"","name":"div","props":{"class":"forum-page"},"events":{},"locked":false,"children":[{"id":"2729jvez4om","from":{"id":"navbar","type":"Schema"},"name":"NavBar","props":{},"events":{},"locked":false,"children":[],"invisible":false,"directives":[]},{"id":"272ajvez4om","from":"","name":"main","props":{"class":"forum-main"},"events":{},"locked":false,"children":[{"id":"272bjvez4om","from":"","name":"div","props":{"class":"forum-header"},"events":{},"locked":false,"children":[{"id":"272cjvez4om","from":"","name":"h2","props":{},"events":{},"locked":false,"children":[{"id":"272djvez4om","from":"@vtj/ui","name":"XIcon","props":{"icon":{"type":"JSExpression","value":"this.$libs.VtjIcons.ChatRound"},"size":{"type":"JSExpression","value":"24"},"color":"#c41e3a"},"events":{},"locked":false,"children":[],"invisible":false,"directives":[]},{"id":"2741jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":" 备考论坛 ","invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"272ejvez4om","from":"","name":"button","props":{"class":"post-btn"},"events":{"click":{"name":"click","handler":{"type":"JSFunction","value":"this.openNewPost"},"modifiers":{}}},"locked":false,"children":[{"id":"272fjvez4om","from":"@vtj/ui","name":"XIcon","props":{"icon":{"type":"JSExpression","value":"this.$libs.VtjIcons.EditPen"},"size":{"type":"JSExpression","value":"16"},"color":"#ffffff"},"events":{},"locked":false,"children":[],"invisible":false,"directives":[]},{"id":"2742jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":" 发布新帖 ","invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"272gjvez4om","from":"","name":"div","props":{"class":"forum-body"},"events":{},"locked":false,"children":[{"id":"272hjvez4om","from":"","name":"div","props":{"class":"forum-left"},"events":{},"locked":false,"children":[{"id":"272ijvez4om","from":"","name":"div","props":{"class":"category-tabs"},"events":{},"locked":false,"children":[{"id":"272jjvez4om","from":"","name":"button","props":{"key":{"type":"JSExpression","value":"this.context.cat.key"},"class":{"type":"JSExpression","value":"['cat-btn', { active: this.state.activeCategory === this.context.cat.key }]"}},"events":{"click":{"name":"click","handler":{"type":"JSExpression","value":"this.switchCategory(this.context.cat.key)"},"modifiers":{}}},"locked":false,"children":[{"id":"2743jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":[{"id":"2744jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.cat.name"},"invisible":false,"directives":[]},{"id":"2745jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":"\n              ","invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"272kjvez4om","from":"","name":"span","props":{"class":"cat-count"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.cat.count"},"invisible":false,"directives":[]}],"invisible":false,"directives":[{"id":"2746jvez515","name":"vFor","value":{"type":"JSExpression","value":"this.categories.value"},"iterator":{"item":"cat","index":"index"}}]}],"invisible":false,"directives":[]},{"id":"272ljvez4om","from":"","name":"div","props":{"class":"post-list"},"events":{},"locked":false,"children":[{"id":"272mjvez4om","from":"","name":"div","props":{"key":{"type":"JSExpression","value":"this.context.post.id"},"class":"post-item"},"events":{"click":{"name":"click","handler":{"type":"JSExpression","value":"this.viewPost(this.context.post)"},"modifiers":{}}},"locked":false,"children":[{"id":"272njvez4om","from":"","name":"div","props":{"class":"post-avatar"},"events":{},"locked":false,"children":[{"id":"272ojvez4om","from":"","name":"span","props":{"class":"avatar-emoji"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.post.avatar"},"invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"272pjvez4om","from":"","name":"div","props":{"class":"post-content"},"events":{},"locked":false,"children":[{"id":"272qjvez4om","from":"","name":"h4","props":{"class":"post-title"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.post.title"},"invisible":false,"directives":[]},{"id":"272rjvez4om","from":"","name":"p","props":{"class":"post-excerpt"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.post.excerpt"},"invisible":false,"directives":[]},{"id":"272sjvez4om","from":"","name":"div","props":{"class":"post-meta"},"events":{},"locked":false,"children":[{"id":"272tjvez4om","from":"","name":"span","props":{"class":"meta-author"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.post.author"},"invisible":false,"directives":[]},{"id":"272ujvez4om","from":"","name":"span","props":{"class":"meta-dot"},"events":{},"locked":false,"children":"·","invisible":false,"directives":[]},{"id":"272vjvez4om","from":"","name":"span","props":{"class":"meta-date"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.post.date"},"invisible":false,"directives":[]},{"id":"272wjvez4om","from":"","name":"span","props":{"class":"meta-dot"},"events":{},"locked":false,"children":"·","invisible":false,"directives":[]},{"id":"272xjvez4om","from":"","name":"span","props":{"class":"meta-replies"},"events":{},"locked":false,"children":[{"id":"272yjvez4om","from":"@vtj/ui","name":"XIcon","props":{"icon":{"type":"JSExpression","value":"this.$libs.VtjIcons.ChatLineRound"},"size":{"type":"JSExpression","value":"12"},"color":"#8a8faa"},"events":{},"locked":false,"children":[],"invisible":false,"directives":[]},{"id":"2747jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":[{"id":"2748jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":"\n                    ","invisible":false,"directives":[]},{"id":"2749jvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.post.replies"},"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"272zjvez4om","from":"","name":"span","props":{"class":"meta-dot"},"events":{},"locked":false,"children":"·","invisible":false,"directives":[]},{"id":"2730jvez4om","from":"","name":"span","props":{"class":"meta-views"},"events":{},"locked":false,"children":[{"id":"2731jvez4om","from":"@vtj/ui","name":"XIcon","props":{"icon":{"type":"JSExpression","value":"this.$libs.VtjIcons.View"},"size":{"type":"JSExpression","value":"12"},"color":"#8a8faa"},"events":{},"locked":false,"children":[],"invisible":false,"directives":[]},{"id":"274ajvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":[{"id":"274bjvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":"\n                    ","invisible":false,"directives":[]},{"id":"274cjvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.post.views"},"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"2732jvez4om","from":"","name":"div","props":{"class":"post-tag","style":{"type":"JSExpression","value":"({ background: this.getTagColor(this.context.post.category) })"}},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.state.categoryMap[this.context.post.category]"},"invisible":false,"directives":[]}],"invisible":false,"directives":[{"id":"274djvez515","name":"vFor","value":{"type":"JSExpression","value":"this.filteredPosts.value"},"iterator":{"item":"post","index":"index"}}]}],"invisible":false,"directives":[]},{"id":"2733jvez4om","from":"","name":"div","props":{"class":"pagination"},"events":{},"locked":false,"children":[{"id":"2734jvez4om","from":"","name":"button","props":{"disabled":{"type":"JSExpression","value":"this.state.page === 1"}},"events":{"click":{"name":"click","handler":{"type":"JSFunction","value":"this.state.page--"},"modifiers":{}}},"locked":false,"children":"上一页","invisible":false,"directives":[]},{"id":"2735jvez4om","from":"","name":"span","props":{"class":"page-info"},"events":{},"locked":false,"children":[{"id":"274ejvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":[{"id":"274fjvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.state.page"},"invisible":false,"directives":[]},{"id":"274gjvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":" / ","invisible":false,"directives":[]},{"id":"274hjvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.totalPages.value"},"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"2736jvez4om","from":"","name":"button","props":{"disabled":{"type":"JSExpression","value":"this.state.page >= this.totalPages.value"}},"events":{"click":{"name":"click","handler":{"type":"JSFunction","value":"this.state.page++"},"modifiers":{}}},"locked":false,"children":"下一页","invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"2737jvez4on","from":"","name":"aside","props":{"class":"forum-right"},"events":{},"locked":false,"children":[{"id":"2738jvez4on","from":"","name":"div","props":{"class":"right-card hot-posts"},"events":{},"locked":false,"children":[{"id":"2739jvez4on","from":"","name":"h4","props":{},"events":{},"locked":false,"children":[{"id":"273ajvez4on","from":"@vtj/ui","name":"XIcon","props":{"icon":{"type":"JSExpression","value":"this.$libs.VtjIcons.TrendCharts"},"size":{"type":"JSExpression","value":"16"},"color":"#ef4444"},"events":{},"locked":false,"children":[],"invisible":false,"directives":[]},{"id":"274ijvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":" 热门帖子 ","invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"273bjvez4on","from":"","name":"div","props":{"key":{"type":"JSExpression","value":"this.context.hot.id"},"class":"hot-item"},"events":{"click":{"name":"click","handler":{"type":"JSExpression","value":"this.viewPost(this.context.hot)"},"modifiers":{}}},"locked":false,"children":[{"id":"273cjvez4on","from":"","name":"span","props":{"class":"hot-rank"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.hot.rank"},"invisible":false,"directives":[]},{"id":"273djvez4on","from":"","name":"span","props":{"class":"hot-title"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.hot.title"},"invisible":false,"directives":[]},{"id":"273ejvez4on","from":"","name":"span","props":{"class":"hot-replies"},"events":{},"locked":false,"children":[{"id":"274jjvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":[{"id":"274kjvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.context.hot.replies"},"invisible":false,"directives":[]},{"id":"274ljvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":"回复","invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[{"id":"274mjvez515","name":"vFor","value":{"type":"JSExpression","value":"this.hotPosts.value"},"iterator":{"item":"hot","index":"index"}}]}],"invisible":false,"directives":[]},{"id":"273fjvez4on","from":"","name":"div","props":{"class":"right-card user-stats"},"events":{},"locked":false,"children":[{"id":"273gjvez4on","from":"","name":"h4","props":{},"events":{},"locked":false,"children":[{"id":"273hjvez4on","from":"@vtj/ui","name":"XIcon","props":{"icon":{"type":"JSExpression","value":"this.$libs.VtjIcons.User"},"size":{"type":"JSExpression","value":"16"},"color":"#1a2b5f"},"events":{},"locked":false,"children":[],"invisible":false,"directives":[]},{"id":"274njvez515","from":"","name":"span","props":{},"events":{},"locked":false,"children":" 论坛活跃 ","invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"273ijvez4on","from":"","name":"div","props":{"class":"stats-grid"},"events":{},"locked":false,"children":[{"id":"273jjvez4on","from":"","name":"div","props":{"class":"stats-item"},"events":{},"locked":false,"children":[{"id":"273kjvez4on","from":"","name":"span","props":{"class":"stats-number"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.state.forumStats.posts"},"invisible":false,"directives":[]},{"id":"273ljvez4on","from":"","name":"span","props":{"class":"stats-label"},"events":{},"locked":false,"children":"帖子","invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"273mjvez4on","from":"","name":"div","props":{"class":"stats-item"},"events":{},"locked":false,"children":[{"id":"273njvez4on","from":"","name":"span","props":{"class":"stats-number"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.state.forumStats.users"},"invisible":false,"directives":[]},{"id":"273ojvez4on","from":"","name":"span","props":{"class":"stats-label"},"events":{},"locked":false,"children":"用户","invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"273pjvez4on","from":"","name":"div","props":{"class":"stats-item"},"events":{},"locked":false,"children":[{"id":"273qjvez4on","from":"","name":"span","props":{"class":"stats-number"},"events":{},"locked":false,"children":{"type":"JSExpression","value":"this.state.forumStats.online"},"invisible":false,"directives":[]},{"id":"273rjvez4on","from":"","name":"span","props":{"class":"stats-label"},"events":{},"locked":false,"children":"在线","invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]},{"id":"273sjvez4on","from":"","name":"div","props":{"class":"modal-overlay"},"events":{"click":{"name":"click","handler":{"type":"JSFunction","value":"this.state.showNewPost = false"},"modifiers":{"self":true}}},"locked":false,"children":[{"id":"273tjvez4on","from":"","name":"div","props":{"class":"modal-card"},"events":{},"locked":false,"children":[{"id":"273ujvez4on","from":"","name":"h3","props":{},"events":{},"locked":false,"children":"发布新帖","invisible":false,"directives":[]},{"id":"273vjvez4on","from":"","name":"input","props":{"class":"modal-input","placeholder":"请输入标题..."},"events":{},"locked":false,"children":[],"invisible":false,"directives":[{"id":"274ojvez515","name":"vModel","value":{"type":"JSExpression","value":"this.state.newPost.title"}}]},{"id":"273wjvez4on","from":"","name":"textarea","props":{"rows":"6","class":"modal-textarea","placeholder":"请输入内容..."},"events":{},"locked":false,"children":[],"invisible":false,"directives":[{"id":"274pjvez515","name":"vModel","value":{"type":"JSExpression","value":"this.state.newPost.content"}}]},{"id":"273xjvez4on","from":"","name":"select","props":{"class":"modal-select"},"events":{},"locked":false,"children":[{"id":"274qjvez515","from":"","name":"option","props":{"value":""},"events":{},"locked":false,"children":"选择分类","invisible":false,"directives":[]},{"id":"274rjvez515","from":"","name":"option","props":{"value":"xc"},"events":{},"locked":false,"children":"行测","invisible":false,"directives":[]},{"id":"274sjvez515","from":"","name":"option","props":{"value":"sl"},"events":{},"locked":false,"children":"申论","invisible":false,"directives":[]},{"id":"274tjvez515","from":"","name":"option","props":{"value":"ga"},"events":{},"locked":false,"children":"公专","invisible":false,"directives":[]},{"id":"274ujvez515","from":"","name":"option","props":{"value":"other"},"events":{},"locked":false,"children":"其他","invisible":false,"directives":[]}],"invisible":false,"directives":[{"id":"274vjvez515","name":"vModel","value":{"type":"JSExpression","value":"this.state.newPost.category"}}]},{"id":"273yjvez4on","from":"","name":"div","props":{"class":"modal-actions"},"events":{},"locked":false,"children":[{"id":"273zjvez4on","from":"","name":"button","props":{"class":"cancel-btn"},"events":{"click":{"name":"click","handler":{"type":"JSFunction","value":"this.state.showNewPost = false"},"modifiers":{}}},"locked":false,"children":"取消","invisible":false,"directives":[]},{"id":"2740jvez4on","from":"","name":"button","props":{"class":"confirm-btn"},"events":{"click":{"name":"click","handler":{"type":"JSFunction","value":"this.submitPost"},"modifiers":{}}},"locked":false,"children":"发布","invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[{"id":"274wjvez515","name":"vIf","value":{"type":"JSExpression","value":"this.state.showNewPost"}}]}],"invisible":false,"directives":[]}],"invisible":false,"directives":[]}],"props":[],"slots":[],"state":{"page":{"type":"JSExpression","value":"1"},"posts":{"type":"JSExpression","value":"[]"},"newPost":{"type":"JSExpression","value":"({ title: '', content: '', category: '' })"},"pageSize":{"type":"JSExpression","value":"8"},"forumStats":{"type":"JSExpression","value":"({ posts: 3280, users: 12560, online: 328 })"},"categoryMap":{"type":"JSExpression","value":"({ xc: '行测', sl: '申论', ga: '公专', other: '其他' })"},"showNewPost":{"type":"JSExpression","value":"false"},"activeCategory":{"type":"JSExpression","value":"'all'"}},"watch":[],"expose":[],"inject":[],"locked":false,"methods":{"viewPost":{"type":"JSFunction","value":"(post) => {\n  this.$message.info('查看帖子详情：' + post.title);\n}"},"loadPosts":{"type":"JSFunction","value":"() => {\n  this.state.posts = [\n    {\n      id: 1,\n      title: '行测判断推理秒杀技巧分享',\n      author: '警校小王',\n      date: '2024-12-22',\n      replies: 56,\n      views: 1230,\n      category: 'xc',\n      excerpt:\n        '判断推理是行测中的重点题型，掌握这些秒杀技巧可以大幅提升做题速度...',\n      avatar: '👮'\n    },\n    {\n      id: 2,\n      title: '申论大作文写作框架整理',\n      author: '上岸前辈',\n      date: '2024-12-21',\n      replies: 88,\n      views: 2450,\n      category: 'sl',\n      excerpt: '分享我的大作文万能写作框架，亲测有效，助力申论70+...',\n      avatar: '👨‍⚖️'\n    },\n    {\n      id: 3,\n      title: '公专公安基础知识口诀合集',\n      author: '老民警',\n      date: '2024-12-20',\n      replies: 102,\n      views: 3210,\n      category: 'ga',\n      excerpt: '公安基础知识记忆口诀，朗朗上口，背下来考场不慌...',\n      avatar: '🚔'\n    },\n    {\n      id: 4,\n      title: '2025公安联考备考时间线建议',\n      author: '师兄说',\n      date: '2024-12-19',\n      replies: 45,\n      views: 980,\n      category: 'other',\n      excerpt: '根据往年经验，合理规划备考时间线，每个阶段该做什么...',\n      avatar: '🎓'\n    },\n    {\n      id: 5,\n      title: '数量关系蒙题大法，准确率实测60%',\n      author: '数字达人',\n      date: '2024-12-18',\n      replies: 120,\n      views: 4500,\n      category: 'xc',\n      excerpt: '数学不好？这些蒙题套路让你在不会做的时候也能拿分...',\n      avatar: '🧮'\n    },\n    {\n      id: 6,\n      title: '申论归纳概括题常见陷阱',\n      author: '阅卷老师',\n      date: '2024-12-17',\n      replies: 67,\n      views: 1890,\n      category: 'sl',\n      excerpt: '作为阅卷老师，我总结了归纳概括题中最容易丢分的几个陷阱...',\n      avatar: '📝'\n    },\n    {\n      id: 7,\n      title: '警察体能测试备考经验',\n      author: '体测达人',\n      date: '2024-12-16',\n      replies: 35,\n      views: 760,\n      category: 'other',\n      excerpt: '体能测试是公安联考的重要环节，分享我的训练计划...',\n      avatar: '🏃'\n    },\n    {\n      id: 8,\n      title: '职业素养高频考点速记',\n      author: '公专笔记',\n      date: '2024-12-15',\n      replies: 90,\n      views: 2780,\n      category: 'ga',\n      excerpt: '整理了近年职业素养模块的高频考点，方便大家快速记忆...',\n      avatar: '📋'\n    },\n    {\n      id: 9,\n      title: '行测资料分析速算技巧',\n      author: '速算小王',\n      date: '2024-12-14',\n      replies: 42,\n      views: 1120,\n      category: 'xc',\n      excerpt: '资料分析五个速算技巧，让你的做题速度快一倍...',\n      avatar: '🔢'\n    },\n    {\n      id: 10,\n      title: '申论应用文写作模板',\n      author: '文书达人',\n      date: '2024-12-13',\n      replies: 55,\n      views: 1560,\n      category: 'sl',\n      excerpt: '应用文写作万能模板，背下这几个框架轻松应对...',\n      avatar: '✍️'\n    },\n    {\n      id: 11,\n      title: '公安基础知识思维导图',\n      author: '导图控',\n      date: '2024-12-12',\n      replies: 78,\n      views: 2340,\n      category: 'ga',\n      excerpt: '用思维导图的方式梳理公安基础知识，一目了然...',\n      avatar: '🧠'\n    },\n    {\n      id: 12,\n      title: '联考心态调整经验分享',\n      author: '过来人',\n      date: '2024-12-11',\n      replies: 110,\n      views: 3800,\n      category: 'other',\n      excerpt: '备考后期心态很重要，分享我的心态调整方法...',\n      avatar: '😊'\n    }\n  ];\n}"},"submitPost":{"type":"JSFunction","value":"() => {\n  if (!this.state.newPost.title.trim()) {\n    this.$message.warning('请输入标题');\n    return;\n  }\n  this.$message.success('发布成功！');\n  this.state.showNewPost = false;\n  this.state.newPost = { title: '', content: '', category: '' };\n}"},"getTagColor":{"type":"JSFunction","value":"(category) => {\n  const map = { xc: '#eff6ff', sl: '#fef3c7', ga: '#fce7f3', other: '#f0fdf4' };\n  return map[category] || '#f8f9fc';\n}"},"openNewPost":{"type":"JSFunction","value":"() => {\n  this.state.showNewPost = true;\n}"},"switchCategory":{"type":"JSFunction","value":"(key) => {\n  this.state.activeCategory = key;\n  this.state.page = 1;\n}"}},"computed":{"hotPosts":{"type":"JSFunction","value":"() => {\n  return this.state.posts\n    .sort((a, b) => b.replies - a.replies)\n    .slice(0, 5)\n    .map((p, i) => ({ ...p, rank: i + 1 }));\n}"},"categories":{"type":"JSFunction","value":"() => {\n  return [\n    { key: 'all', name: '全部', count: this.state.posts.length },\n    {\n      key: 'xc',\n      name: '行测',\n      count: this.state.posts.filter((p) => p.category === 'xc').length\n    },\n    {\n      key: 'sl',\n      name: '申论',\n      count: this.state.posts.filter((p) => p.category === 'sl').length\n    },\n    {\n      key: 'ga',\n      name: '公专',\n      count: this.state.posts.filter((p) => p.category === 'ga').length\n    },\n    {\n      key: 'other',\n      name: '其他',\n      count: this.state.posts.filter((p) => p.category === 'other').length\n    }\n  ];\n}"},"totalPages":{"type":"JSFunction","value":"() => {\n  const total =\n    this.state.activeCategory === 'all'\n      ? this.state.posts.length\n      : this.state.posts.filter((p) => p.category === this.state.activeCategory)\n          .length;\n  return Math.max(1, Math.ceil(total / this.state.pageSize));\n}"},"filteredPosts":{"type":"JSFunction","value":"() => {\n  let list =\n    this.state.activeCategory === 'all'\n      ? this.state.posts\n      : this.state.posts.filter(\n          (p) => p.category === this.state.activeCategory\n        );\n  const start = (this.state.page - 1) * this.state.pageSize;\n  return list.slice(start, start + this.state.pageSize);\n}"}},"lifeCycles":{"mounted":{"type":"JSFunction","value":"() => {\n  this.loadPosts();\n}"}},"__VERSION__":"1778919266946","dataSources":{},"__VTJ_BLOCK__":true}
+{
+  "id": "forum",
+  "css": ".forum-page {\n  min-height: 100vh;\n  background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);\n  font-family: \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n}\n.forum-main {\n  max-width: 1300px;\n  margin: 0 auto;\n  padding: 24px 32px 40px;\n}\n.forum-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 24px;\n}\n.forum-header h2 {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 22px;\n  font-weight: 800;\n  color: #1a2b5f;\n  margin: 0;\n}\n.post-btn {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 12px 24px;\n  border: none;\n  border-radius: 12px;\n  background: linear-gradient(135deg, #c41e3a, #e8384f);\n  color: #ffffff;\n  font-size: 14px;\n  font-weight: 700;\n  cursor: pointer;\n  transition: all 0.3s;\n  box-shadow: 0 2px 12px rgba(196, 30, 58, 0.3);\n}\n.post-btn:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 18px rgba(196, 30, 58, 0.4);\n}\n.forum-body {\n  display: grid;\n  grid-template-columns: 1fr 300px;\n  gap: 24px;\n}\n.forum-left {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  box-shadow: 0 2px 12px rgba(26, 43, 95, 0.04);\n}\n.category-tabs {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 20px;\n  flex-wrap: wrap;\n}\n.cat-btn {\n  padding: 8px 16px;\n  border: 1px solid #e8eaf0;\n  border-radius: 20px;\n  background: #f8f9fc;\n  font-size: 13px;\n  font-weight: 600;\n  color: #5a6488;\n  cursor: pointer;\n  transition: all 0.3s;\n  display: flex;\n  align-items: center;\n  gap: 6px;\n}\n.cat-btn:hover {\n  border-color: #1a2b5f;\n  color: #1a2b5f;\n}\n.cat-btn.active {\n  background: #1a2b5f;\n  color: #ffffff;\n  border-color: #1a2b5f;\n}\n.cat-count {\n  font-size: 11px;\n  opacity: 0.7;\n}\n.post-list {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n}\n.post-item {\n  display: flex;\n  align-items: flex-start;\n  gap: 14px;\n  padding: 16px;\n  border-radius: 12px;\n  cursor: pointer;\n  transition: all 0.3s;\n  border: 1px solid transparent;\n}\n.post-item:hover {\n  background: #f8f9fc;\n  border-color: #e8eaf0;\n}\n.post-avatar {\n  width: 44px;\n  height: 44px;\n  border-radius: 12px;\n  background: linear-gradient(135deg, #eef2ff, #e0e7ff);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  flex-shrink: 0;\n}\n.avatar-emoji {\n  font-size: 22px;\n}\n.post-content {\n  flex: 1;\n  min-width: 0;\n}\n.post-title {\n  font-size: 15px;\n  font-weight: 700;\n  color: #1a2b5f;\n  margin: 0 0 6px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.post-excerpt {\n  font-size: 12px;\n  color: #8a8faa;\n  margin: 0 0 8px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.post-meta {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  font-size: 11px;\n  color: #8a8faa;\n}\n.meta-dot {\n  color: #d1d5db;\n}\n.post-tag {\n  padding: 4px 10px;\n  border-radius: 8px;\n  font-size: 11px;\n  font-weight: 600;\n  color: #1a2b5f;\n  white-space: nowrap;\n  flex-shrink: 0;\n}\n.pagination {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 16px;\n  margin-top: 20px;\n  padding-top: 16px;\n  border-top: 1px solid #f0f2f5;\n}\n.pagination button {\n  padding: 6px 16px;\n  border: 1px solid #e8eaf0;\n  border-radius: 8px;\n  background: #ffffff;\n  cursor: pointer;\n  font-size: 13px;\n  color: #1a2b5f;\n  transition: all 0.2s;\n}\n.pagination button:hover:not(:disabled) {\n  background: #f0f2f5;\n}\n.pagination button:disabled {\n  opacity: 0.5;\n  cursor: default;\n}\n.page-info {\n  font-size: 13px;\n  color: #5a6488;\n}\n.forum-right {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.right-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  box-shadow: 0 2px 10px rgba(26, 43, 95, 0.04);\n}\n.right-card h4 {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  font-size: 14px;\n  font-weight: 700;\n  color: #1a2b5f;\n  margin: 0 0 14px;\n}\n.hot-item {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 8px 0;\n  border-bottom: 1px solid #f8f9fc;\n  cursor: pointer;\n  font-size: 12px;\n  transition: all 0.2s;\n}\n.hot-item:hover {\n  background: #f8f9fc;\n  border-radius: 8px;\n  padding-left: 8px;\n}\n.hot-rank {\n  width: 20px;\n  height: 20px;\n  border-radius: 6px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-size: 11px;\n  font-weight: 700;\n  color: #ffffff;\n  flex-shrink: 0;\n}\n.hot-rank.rank-1 {\n  background: #ef4444;\n}\n.hot-rank.rank-2 {\n  background: #f97316;\n}\n.hot-rank.rank-3 {\n  background: #f59e0b;\n}\n.hot-rank.rank-4, .hot-rank.rank-5 {\n  background: #94a3b8;\n}\n.hot-title {\n  flex: 1;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  color: #1a2b5f;\n}\n.hot-replies {\n  font-size: 10px;\n  color: #8a8faa;\n  flex-shrink: 0;\n}\n.stats-grid {\n  display: flex;\n  justify-content: space-around;\n}\n.stats-item {\n  text-align: center;\n}\n.stats-number {\n  display: block;\n  font-size: 22px;\n  font-weight: 900;\n  color: #1a2b5f;\n  font-family: \"DIN Alternate\", sans-serif;\n}\n.stats-label {\n  font-size: 11px;\n  color: #8a8faa;\n}\n/* Modal */\n.modal-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background: rgba(0, 0, 0, 0.4);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 2000;\n}\n.modal-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 28px;\n  width: 520px;\n  max-width: 90vw;\n  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);\n}\n.modal-card h3 {\n  font-size: 18px;\n  font-weight: 800;\n  color: #1a2b5f;\n  margin: 0 0 20px;\n}\n.modal-input, .modal-textarea, .modal-select {\n  width: 100%;\n  padding: 12px;\n  border: 1px solid #e8eaf0;\n  border-radius: 10px;\n  font-size: 13px;\n  margin-bottom: 14px;\n  outline: none;\n  color: #1a2b5f;\n  box-sizing: border-box;\n}\n.modal-textarea {\n  resize: vertical;\n}\n.modal-actions {\n  display: flex;\n  gap: 12px;\n  justify-content: flex-end;\n  margin-top: 8px;\n}\n.cancel-btn {\n  padding: 10px 20px;\n  border: 1px solid #e8eaf0;\n  border-radius: 10px;\n  background: #ffffff;\n  font-size: 13px;\n  font-weight: 600;\n  color: #5a6488;\n  cursor: pointer;\n}\n.confirm-btn {\n  padding: 10px 20px;\n  border: none;\n  border-radius: 10px;\n  background: linear-gradient(135deg, #1a2b5f, #1e3470);\n  color: #ffffff;\n  font-size: 13px;\n  font-weight: 700;\n  cursor: pointer;\n}",
+  "name": "Forum",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "2728jvez4om",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "forum-page"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "2729jvez4om",
+          "from": {
+            "id": "navbar",
+            "type": "Schema"
+          },
+          "name": "NavBar",
+          "props": {},
+          "events": {},
+          "locked": false,
+          "children": [],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "272ajvez4om",
+          "from": "",
+          "name": "main",
+          "props": {
+            "class": "forum-main"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "272bjvez4om",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "forum-header"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "272cjvez4om",
+                  "from": "",
+                  "name": "h2",
+                  "props": {},
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "272djvez4om",
+                      "from": "@vtj/ui",
+                      "name": "XIcon",
+                      "props": {
+                        "icon": {
+                          "type": "JSExpression",
+                          "value": "this.$libs.VtjIcons.ChatRound"
+                        },
+                        "size": {
+                          "type": "JSExpression",
+                          "value": "24"
+                        },
+                        "color": "#c41e3a"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "2741jvez515",
+                      "from": "",
+                      "name": "span",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": " 备考论坛 ",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "272ejvez4om",
+                  "from": "",
+                  "name": "button",
+                  "props": {
+                    "class": "post-btn"
+                  },
+                  "events": {
+                    "click": {
+                      "name": "click",
+                      "handler": {
+                        "type": "JSFunction",
+                        "value": "this.openNewPost"
+                      },
+                      "modifiers": {}
+                    }
+                  },
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "272fjvez4om",
+                      "from": "@vtj/ui",
+                      "name": "XIcon",
+                      "props": {
+                        "icon": {
+                          "type": "JSExpression",
+                          "value": "this.$libs.VtjIcons.EditPen"
+                        },
+                        "size": {
+                          "type": "JSExpression",
+                          "value": "16"
+                        },
+                        "color": "#ffffff"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "2742jvez515",
+                      "from": "",
+                      "name": "span",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": " 发布新帖 ",
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "272gjvez4om",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "forum-body"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "272hjvez4om",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "forum-left"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "272ljvez4om",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "post-list"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "272mjvez4om",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "key": {
+                              "type": "JSExpression",
+                              "value": "this.context.post.id"
+                            },
+                            "class": "post-item"
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSExpression",
+                                "value": "this.viewPost(this.context.post)"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "272njvez4om",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "post-avatar"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "272ojvez4om",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "avatar-emoji"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.context.post.avatar"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "272pjvez4om",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "post-content"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "272qjvez4om",
+                                  "from": "",
+                                  "name": "h4",
+                                  "props": {
+                                    "class": "post-title"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.context.post.title"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "272rjvez4om",
+                                  "from": "",
+                                  "name": "p",
+                                  "props": {
+                                    "class": "post-excerpt"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.context.post.excerpt"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "272sjvez4om",
+                                  "from": "",
+                                  "name": "div",
+                                  "props": {
+                                    "class": "post-meta"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [
+                                    {
+                                      "id": "272tjvez4om",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {
+                                        "class": "meta-author"
+                                      },
+                                      "events": {},
+                                      "locked": false,
+                                      "children": {
+                                        "type": "JSExpression",
+                                        "value": "this.context.post.author"
+                                      },
+                                      "invisible": false,
+                                      "directives": []
+                                    },
+                                    {
+                                      "id": "272ujvez4om",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {
+                                        "class": "meta-dot"
+                                      },
+                                      "events": {},
+                                      "locked": false,
+                                      "children": "·",
+                                      "invisible": false,
+                                      "directives": []
+                                    },
+                                    {
+                                      "id": "272vjvez4om",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {
+                                        "class": "meta-date"
+                                      },
+                                      "events": {},
+                                      "locked": false,
+                                      "children": {
+                                        "type": "JSExpression",
+                                        "value": "this.context.post.date"
+                                      },
+                                      "invisible": false,
+                                      "directives": []
+                                    },
+                                    {
+                                      "id": "272wjvez4om",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {
+                                        "class": "meta-dot"
+                                      },
+                                      "events": {},
+                                      "locked": false,
+                                      "children": "·",
+                                      "invisible": false,
+                                      "directives": []
+                                    },
+                                    {
+                                      "id": "272xjvez4om",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {
+                                        "class": "meta-replies"
+                                      },
+                                      "events": {},
+                                      "locked": false,
+                                      "children": [
+                                        {
+                                          "id": "272yjvez4om",
+                                          "from": "@vtj/ui",
+                                          "name": "XIcon",
+                                          "props": {
+                                            "icon": {
+                                              "type": "JSExpression",
+                                              "value": "this.$libs.VtjIcons.ChatLineRound"
+                                            },
+                                            "size": {
+                                              "type": "JSExpression",
+                                              "value": "12"
+                                            },
+                                            "color": "#8a8faa"
+                                          },
+                                          "events": {},
+                                          "locked": false,
+                                          "children": [],
+                                          "invisible": false,
+                                          "directives": []
+                                        },
+                                        {
+                                          "id": "2747jvez515",
+                                          "from": "",
+                                          "name": "span",
+                                          "props": {},
+                                          "events": {},
+                                          "locked": false,
+                                          "children": [
+                                            {
+                                              "id": "2748jvez515",
+                                              "from": "",
+                                              "name": "span",
+                                              "props": {},
+                                              "events": {},
+                                              "locked": false,
+                                              "children": "\n                    ",
+                                              "invisible": false,
+                                              "directives": []
+                                            },
+                                            {
+                                              "id": "2749jvez515",
+                                              "from": "",
+                                              "name": "span",
+                                              "props": {},
+                                              "events": {},
+                                              "locked": false,
+                                              "children": {
+                                                "type": "JSExpression",
+                                                "value": "this.context.post.replies"
+                                              },
+                                              "invisible": false,
+                                              "directives": []
+                                            }
+                                          ],
+                                          "invisible": false,
+                                          "directives": []
+                                        }
+                                      ],
+                                      "invisible": false,
+                                      "directives": []
+                                    },
+                                    {
+                                      "id": "272zjvez4om",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {
+                                        "class": "meta-dot"
+                                      },
+                                      "events": {},
+                                      "locked": false,
+                                      "children": "·",
+                                      "invisible": false,
+                                      "directives": []
+                                    },
+                                    {
+                                      "id": "2730jvez4om",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {
+                                        "class": "meta-views"
+                                      },
+                                      "events": {},
+                                      "locked": false,
+                                      "children": [
+                                        {
+                                          "id": "2731jvez4om",
+                                          "from": "@vtj/ui",
+                                          "name": "XIcon",
+                                          "props": {
+                                            "icon": {
+                                              "type": "JSExpression",
+                                              "value": "this.$libs.VtjIcons.View"
+                                            },
+                                            "size": {
+                                              "type": "JSExpression",
+                                              "value": "12"
+                                            },
+                                            "color": "#8a8faa"
+                                          },
+                                          "events": {},
+                                          "locked": false,
+                                          "children": [],
+                                          "invisible": false,
+                                          "directives": []
+                                        },
+                                        {
+                                          "id": "274ajvez515",
+                                          "from": "",
+                                          "name": "span",
+                                          "props": {},
+                                          "events": {},
+                                          "locked": false,
+                                          "children": [
+                                            {
+                                              "id": "274bjvez515",
+                                              "from": "",
+                                              "name": "span",
+                                              "props": {},
+                                              "events": {},
+                                              "locked": false,
+                                              "children": "\n                    ",
+                                              "invisible": false,
+                                              "directives": []
+                                            },
+                                            {
+                                              "id": "274cjvez515",
+                                              "from": "",
+                                              "name": "span",
+                                              "props": {},
+                                              "events": {},
+                                              "locked": false,
+                                              "children": {
+                                                "type": "JSExpression",
+                                                "value": "this.context.post.views"
+                                              },
+                                              "invisible": false,
+                                              "directives": []
+                                            }
+                                          ],
+                                          "invisible": false,
+                                          "directives": []
+                                        }
+                                      ],
+                                      "invisible": false,
+                                      "directives": []
+                                    }
+                                  ],
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "274djvez515",
+                              "name": "vFor",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.filteredPosts.value"
+                              },
+                              "iterator": {
+                                "item": "post",
+                                "index": "index"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "2733jvez4om",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "pagination"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "2734jvez4om",
+                          "from": "",
+                          "name": "button",
+                          "props": {
+                            "disabled": {
+                              "type": "JSExpression",
+                              "value": "this.state.page === 1"
+                            }
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSFunction",
+                                "value": "this.state.page--"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": "上一页",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "2735jvez4om",
+                          "from": "",
+                          "name": "span",
+                          "props": {
+                            "class": "page-info"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "274ejvez515",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "274fjvez515",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.state.page"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "274gjvez515",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": " / ",
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "274hjvez515",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.totalPages.value"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "2736jvez4om",
+                          "from": "",
+                          "name": "button",
+                          "props": {
+                            "disabled": {
+                              "type": "JSExpression",
+                              "value": "this.state.page >= this.totalPages.value"
+                            }
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSFunction",
+                                "value": "this.state.page++"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": "下一页",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "2737jvez4on",
+                  "from": "",
+                  "name": "aside",
+                  "props": {
+                    "class": "forum-right"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "2738jvez4on",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "right-card hot-posts"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "2739jvez4on",
+                          "from": "",
+                          "name": "h4",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "273ajvez4on",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.$libs.VtjIcons.TrendCharts"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "16"
+                                },
+                                "color": "#ef4444"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "274ijvez515",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": " 热门帖子 ",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "273bjvez4on",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "key": {
+                              "type": "JSExpression",
+                              "value": "this.context.hot.id"
+                            },
+                            "class": "hot-item"
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSExpression",
+                                "value": "this.viewPost(this.context.hot)"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "273cjvez4on",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "hot-rank"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.hot.rank"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "273djvez4on",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "hot-title"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.hot.title"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "273ejvez4on",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "hot-replies"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "274jjvez515",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [
+                                    {
+                                      "id": "274kjvez515",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {},
+                                      "events": {},
+                                      "locked": false,
+                                      "children": {
+                                        "type": "JSExpression",
+                                        "value": "this.context.hot.replies"
+                                      },
+                                      "invisible": false,
+                                      "directives": []
+                                    },
+                                    {
+                                      "id": "274ljvez515",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {},
+                                      "events": {},
+                                      "locked": false,
+                                      "children": "回复",
+                                      "invisible": false,
+                                      "directives": []
+                                    }
+                                  ],
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "274mjvez515",
+                              "name": "vFor",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.hotPosts.value"
+                              },
+                              "iterator": {
+                                "item": "hot",
+                                "index": "index"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "273fjvez4on",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "right-card user-stats"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "273gjvez4on",
+                          "from": "",
+                          "name": "h4",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "273hjvez4on",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.$libs.VtjIcons.User"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "16"
+                                },
+                                "color": "#1a2b5f"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "274njvez515",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": " 论坛活跃 ",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "273ijvez4on",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "stats-grid"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "273jjvez4on",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "stats-item"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "273kjvez4on",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "stats-number"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.state.forumStats.posts"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "273ljvez4on",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "stats-label"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "帖子",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "273mjvez4on",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "stats-item"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "273njvez4on",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "stats-number"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.state.forumStats.users"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "273ojvez4on",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "stats-label"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "用户",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "273pjvez4on",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "stats-item"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "273qjvez4on",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "stats-number"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.state.forumStats.online"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "273rjvez4on",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "stats-label"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "在线",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "273sjvez4on",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "modal-overlay"
+              },
+              "events": {
+                "click": {
+                  "name": "click",
+                  "handler": {
+                    "type": "JSFunction",
+                    "value": "this.state.showNewPost = false"
+                  },
+                  "modifiers": {
+                    "self": true
+                  }
+                }
+              },
+              "locked": false,
+              "children": [
+                {
+                  "id": "273tjvez4on",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "modal-card"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "273ujvez4on",
+                      "from": "",
+                      "name": "h3",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": "发布新帖",
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "273vjvez4on",
+                      "from": "",
+                      "name": "input",
+                      "props": {
+                        "class": "modal-input",
+                        "placeholder": "请输入标题..."
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "274ojvez515",
+                          "name": "vModel",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.newPost.title"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "id": "273wjvez4on",
+                      "from": "",
+                      "name": "textarea",
+                      "props": {
+                        "rows": "6",
+                        "class": "modal-textarea",
+                        "placeholder": "请输入内容..."
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "274pjvez515",
+                          "name": "vModel",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.newPost.content"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "id": "273xjvez4on",
+                      "from": "",
+                      "name": "select",
+                      "props": {
+                        "class": "modal-select"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "274qjvez515",
+                          "from": "",
+                          "name": "option",
+                          "props": {
+                            "value": ""
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "选择分类",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "274rjvez515",
+                          "from": "",
+                          "name": "option",
+                          "props": {
+                            "value": "xc"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "行测",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "274sjvez515",
+                          "from": "",
+                          "name": "option",
+                          "props": {
+                            "value": "sl"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "申论",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "274tjvez515",
+                          "from": "",
+                          "name": "option",
+                          "props": {
+                            "value": "ga"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "公专",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "274ujvez515",
+                          "from": "",
+                          "name": "option",
+                          "props": {
+                            "value": "other"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": "其他",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": [
+                        {
+                          "id": "274vjvez515",
+                          "name": "vModel",
+                          "value": {
+                            "type": "JSExpression",
+                            "value": "this.state.newPost.category"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "id": "273yjvez4on",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "modal-actions"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "273zjvez4on",
+                          "from": "",
+                          "name": "button",
+                          "props": {
+                            "class": "cancel-btn"
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSFunction",
+                                "value": "this.state.showNewPost = false"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": "取消",
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "2740jvez4on",
+                          "from": "",
+                          "name": "button",
+                          "props": {
+                            "class": "confirm-btn"
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSFunction",
+                                "value": "this.submitPost"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": "发布",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": [
+                {
+                  "id": "274wjvez515",
+                  "name": "vIf",
+                  "value": {
+                    "type": "JSExpression",
+                    "value": "this.state.showNewPost"
+                  }
+                }
+              ]
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "page": "1",
+    "pageSize": "8",
+    "posts": "[] as any[]",
+    "total": "0",
+    "loading": "false",
+    "submitting": "false",
+    "showNewPost": "false",
+    "showUserProfile": "false",
+    "userProfile": "{} as any",
+    "newPost": "{ title: ''",
+    "forumStats": "{ posts: 0",
+    "content": "''",
+    "attachments": "[] as any[] }",
+    "users": "0",
+    "online": "0 }",
+    "showPostDetail": "false",
+    "currentPost": "null as any",
+    "detailLoading": "false",
+    "comments": "[] as any[]",
+    "commentsLoading": "false",
+    "newComment": "''",
+    "commentSubmitting": "false",
+    "replyTarget": "null as any",
+    "myPosts": "[] as any[]",
+    "myPostsLoaded": "false",
+    "myPostsTotal": "0",
+    "showMyPosts": "false",
+    "myPostsPage": "1",
+    "myPostsPageSize": "20",
+    "myPostsLoading": "false"
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "loadPosts": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "loadStats": {
+      "type": "JSFunction",
+      "value": "async function() {\n  try {\n    const res = await fetch('/api/forum/stats');\n    const data = await res.json();\n    this.state.forumStats = { posts: data.posts || 0, users: data.users || 0, online: data.online || 0 };\n  } catch (e) {}\n}"
+    },
+    "submitPost": {
+      "type": "JSFunction",
+      "value": "async function() {\n  if (!this.state.newPost.title.trim()) { ElMessage.warning('请输入标题'); return; }\n  if (!this.state.newPost.content.trim()) { ElMessage.warning('请输入内容'); return; }\n  const auth = window.__VTJ_AUTH__;\n  if (!auth || !auth.isLoggedIn()) { ElMessage.warning('请先登录后发帖'); return; }\n  this.state.submitting = true;\n  try {\n    const formData = new FormData();\n    formData.append('title', this.state.newPost.title.trim());\n    formData.append('content', this.state.newPost.content.trim());\n    formData.append('share_type', 'EXPERIENCE');\n    if (this.state.newPost.attachments.length) {\n      formData.append('attachments', JSON.stringify(this.state.newPost.attachments));\n    }\n    const res = await auth.apiFetch('/api/forum/posts', { method: 'POST', body: formData });\n    const data = await res.json();\n    if (!res.ok) {\n      ElMessage.error(data.message || data.detail || '发布失败');\n      return;\n    }\n    this.state.posts.unshift(this._mapPost(data));\n    this.state.total += 1;\n    this.state.showNewPost = false;\n    this.state.newPost = { title: '', content: '', attachments: [] };\n    ElMessage.success('发布成功!');\n  } catch (e) {\n    ElMessage.error('网络错误,发布失败');\n  } finally {\n    this.state.submitting = false;\n  }\n}"
+    },
+    "triggerUpload": {
+      "type": "JSFunction",
+      "value": "function() {\n  this.$refs.fileInput && this.$refs.fileInput.click();\n}"
+    },
+    "handleFileUpload": {
+      "type": "JSFunction",
+      "value": "async function(e) {\n  const files = Array.from(e.target.files || []);\n  const auth = window.__VTJ_AUTH__;\n  if (!auth || !auth.isLoggedIn()) { ElMessage.warning('请先登录'); return; }\n  for (const file of files) {\n    const formData = new FormData();\n    formData.append('file', file);\n    try {\n      const res = await auth.apiFetch('/api/forum/upload', { method: 'POST', body: formData });\n      const data = await res.json();\n      if (res.ok) {\n        this.state.newPost.attachments.push(data);\n        ElMessage.success(`${file.name} 上传成功`);\n      } else {\n        ElMessage.error(data.message || data.detail || `${file.name} 上传失败`);\n      }\n    } catch (err) {\n      ElMessage.error(`${file.name} 上传失败`);\n    }\n  }\n  e.target.value = '';\n}"
+    },
+    "removeFile": {
+      "type": "JSFunction",
+      "value": "function(index) {\n  this.state.newPost.attachments.splice(index, 1);\n}"
+    },
+    "downloadAttachment": {
+      "type": "JSFunction",
+      "value": "function(att) {\n  if (att.url) { window.open(att.url, '_blank'); }\n}"
+    },
+    "toggleLike": {
+      "type": "JSFunction",
+      "value": "async function(post) {\n  const auth = window.__VTJ_AUTH__;\n  if (!auth || !auth.isLoggedIn()) { ElMessage.warning('请先登录后点赞'); return; }\n  try {\n    const res = await auth.apiFetch(`/api/forum/posts/${post.id}/like`, { method: 'POST' });\n    if (res.ok) {\n      const data = await res.json();\n      post.liked = data.liked;\n      post.likeCount = data.likeCount;\n    }\n  } catch (e) {}\n}"
+    },
+    "viewUser": {
+      "type": "JSFunction",
+      "value": "async function(userId) {\n  if (!userId) return;\n  try {\n    const res = await fetch(`/api/forum/users/${userId}/public`);\n    if (!res.ok) { ElMessage.error('获取用户信息失败'); return; }\n    const data = await res.json();\n    this.state.userProfile = data;\n    this.state.showUserProfile = true;\n  } catch (e) {\n    ElMessage.error('获取用户信息失败');\n  }\n}"
+    },
+    "viewPost": {
+      "type": "JSFunction",
+      "value": "function(post) {\n  ElMessage && ElMessage.info('帖子详情功能开发中: ' + post.title);\n}"
+    },
+    "formatTime": {
+      "type": "JSFunction",
+      "value": "function(iso) {\n  if (!iso) return '';\n  const d = new Date(iso);\n  const pad = (n) => String(n).padStart(2, '0');\n  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;\n}"
+    },
+    "formatFileSize": {
+      "type": "JSFunction",
+      "value": "function(bytes) {\n  if (!bytes) return '0B';\n  if (bytes < 1024) return bytes + 'B';\n  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';\n  return (bytes / 1024 / 1024).toFixed(1) + 'MB';\n}"
+    },
+    "prevPage": {
+      "type": "JSFunction",
+      "value": "function() {\n  if (this.state.page > 1) {\n    this.state.page--;\n    this.loadPosts();\n  }\n}"
+    },
+    "nextPage": {
+      "type": "JSFunction",
+      "value": "function() {\n  if (this.state.page < this.totalPages) {\n    this.state.page++;\n    this.loadPosts();\n  }\n}"
+    },
+    "openNewPost": {
+      "type": "JSFunction",
+      "value": "function() {\n  const auth = window.__VTJ_AUTH__;\n  if (!auth || !auth.isLoggedIn()) { ElMessage.warning('请先登录后发帖'); return; }\n  this.state.showNewPost = true;\n}"
+    },
+    "onAvatarError": {
+      "type": "JSFunction",
+      "value": "function(e) {\n  e.target.style.display = 'none';\n}"
+    },
+    "onProfileAvatarError": {
+      "type": "JSFunction",
+      "value": "function(e) {\n  e.target.style.display = 'none';\n}"
+    },
+    "_mapPost": {
+      "type": "JSFunction",
+      "value": "function(p) {\n  return {\n    id: p.id,\n    title: p.title || '',\n    content: p.content || '',\n    author: (p.user && p.user.nickname) || '匿名',\n    avatar: (p.user && p.user.avatar) || '',\n    date: this.formatTime(p.createTime),\n    likeCount: p.likeCount || 0,\n    commentCount: p.commentCount || 0,\n    viewCount: p.viewCount || 0,\n    liked: p.liked || false,\n    attachments: p.attachments || [],\n    userId: p.user && p.user.id\n  };\n}"
+    }
+  },
+  "computed": {
+    "totalPages": {
+      "type": "JSFunction",
+      "value": "function() {\n  return Math.max(1, Math.ceil(this.state.total / this.state.pageSize));\n}"
+    },
+    "filteredPosts": {
+      "type": "JSFunction",
+      "value": "function() {\n  return this.state.posts;\n}"
+    },
+    "hotPosts": {
+      "type": "JSFunction",
+      "value": "function() {\n  return [...this.state.posts]\n    .sort((a, b) => (b.likeCount + b.commentCount * 2) - (a.likeCount + a.commentCount * 2))\n    .slice(0, 5)\n    .map((p, i) => ({ ...p, rank: i + 1 }));\n}"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1785094400000",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

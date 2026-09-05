@@ -209,8 +209,8 @@ def fix_all():
 
         # ---- FIX 5: question_type_detail 乱码修复 ----
         VALID_TYPES = {
-            '单选题', '多选题', '不定项', '选择题', '判断题',
-            '写作题', '简答题', '案例分析题', '论述题', '填空题', '无'
+            '单选题', '多选题', '不定项', '选择题',
+            '写作题', '简答题', '案例分析题', '论述题', '无'
         }
         type_rows = db.execute(text(
             "SELECT dc.question_id, dc.question_type_detail, qb.question_content, qb.answer "

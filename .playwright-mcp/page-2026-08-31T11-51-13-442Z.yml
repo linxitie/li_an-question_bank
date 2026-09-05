@@ -1,0 +1,63 @@
+- generic [active] [ref=e10]:
+  - generic [ref=e219]:
+    - generic [ref=e221]:
+      - generic [ref=e222]: 砺安题库 · 教师端
+      - generic [ref=e223]:
+        - generic [ref=e224] [cursor=pointer]: 工作台
+        - generic [ref=e225] [cursor=pointer]: 题目管理
+        - generic [ref=e226] [cursor=pointer]: 试卷管理
+        - generic [ref=e227] [cursor=pointer]: 成绩管理
+        - generic [ref=e228] [cursor=pointer]: 班级管理
+        - generic [ref=e229] [cursor=pointer]: 数据分析
+        - generic [ref=e230] [cursor=pointer]: 消息中心
+      - generic [ref=e231] [cursor=pointer]:
+        - generic [ref=e232]: "y"
+        - generic [ref=e234]: ycc5678
+        - generic [ref=e235]: 教师
+        - generic [ref=e236]: ▼
+    - generic [ref=e237]:
+      - generic [ref=e238]:
+        - combobox [ref=e239]:
+          - option "全部状态" [selected]
+          - option "草稿"
+          - option "待审批"
+          - option "已审批"
+          - option "已发布"
+          - option "回收站 (14)"
+        - button "+ 创建试卷" [ref=e240] [cursor=pointer]
+        - button "🤖 AI智能组卷" [ref=e241] [cursor=pointer]
+        - button "📝 自设计题目" [ref=e242] [cursor=pointer]
+      - table [ref=e244]:
+        - rowgroup [ref=e245]:
+          - row [ref=e246]:
+            - columnheader "试卷名称" [ref=e247]
+            - columnheader "科目" [ref=e248]
+            - columnheader "题数" [ref=e249]
+            - columnheader "总分" [ref=e250]
+            - columnheader "状态" [ref=e251]
+            - columnheader "创建时间" [ref=e252]
+            - columnheader "操作" [ref=e253]
+        - rowgroup [ref=e254]:
+          - row [ref=e255]:
+            - cell "分离导入试卷" [ref=e256]
+            - cell "行测" [ref=e257]
+            - cell "100" [ref=e258]
+            - cell "100" [ref=e259]
+            - cell "已发布" [ref=e260]
+            - cell "2026-08-23 11:55" [ref=e261]
+            - cell [ref=e262]:
+              - button "预览" [ref=e263] [cursor=pointer]
+              - text: 已发布
+          - row [ref=e264]:
+            - cell "AI智能组卷" [ref=e265]
+            - cell "行测" [ref=e266]
+            - cell "13" [ref=e267]
+            - cell "100" [ref=e268]
+            - cell "草稿" [ref=e269]
+            - cell "2026-08-10 18:25" [ref=e270]
+            - cell [ref=e271]:
+              - button "预览" [ref=e272] [cursor=pointer]
+              - button "📝 编辑题目" [ref=e273] [cursor=pointer]
+              - button "🚀 发布" [ref=e274] [cursor=pointer]
+              - button "删除" [ref=e275] [cursor=pointer]
+  - generic [ref=e7] [cursor=pointer]

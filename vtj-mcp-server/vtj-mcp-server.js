@@ -376,6 +376,56 @@ const TOOLS = [
     }
   },
 
+  {
+    name: 'vtj_write_vue_template',
+    description: `写入 VTJ 生成的 .vue 文件的 <template> 部分。保留原有 <script> 和 <style> 不变。修改后需运行 vtj_sync_vue_to_dsl 同步版本号。`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '页面或区块的 ID' },
+        templateContent: { type: 'string', description: '完整的 <template> 标签及内容' }
+      },
+      required: ['id', 'templateContent']
+    }
+  },
+  {
+    name: 'vtj_write_vue_style',
+    description: `写入 VTJ 生成的 .vue 文件的 <style> 部分。保留原有 <template> 和 <script> 不变。`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '页面或区块的 ID' },
+        styleContent: { type: 'string', description: '完整的 <style scoped> 标签及内容' }
+      },
+      required: ['id', 'styleContent']
+    }
+  },
+  {
+    name: 'vtj_write_dsl_file',
+    description: `写入 VTJ DSL JSON 文件的指定部分。支持 nodes、state、methods、lifeCycles、__VERSION__ 或完整文件。`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '页面或区块的 ID' },
+        section: { type: 'string', enum: ['nodes', 'state', 'methods', 'lifeCycles', '__VERSION__', 'full'], description: '要写入的部分' },
+        content: { type: 'string', description: '要写入的内容（JSON 字符串或纯文本）' }
+      },
+      required: ['id', 'section', 'content']
+    }
+  },
+  {
+    name: 'vtj_write_vue_full',
+    description: `写入完整的 .vue 文件（template + script + style）。适用于大规模重构场景。`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '页面或区块的 ID' },
+        content: { type: 'string', description: '完整的 .vue 文件内容' }
+      },
+      required: ['id', 'content']
+    }
+  },
+
   // ════════════════════════════════════════════════════════
   // 3. 同步操作类
   // ════════════════════════════════════════════════════════
@@ -863,6 +913,80 @@ const toolHandlers = {
     };
   },
 
+  // ── 2b. 文件写入（template/style/dsl/full）──────────
+  'vtj_write_vue_template': ({ id, templateContent }) => {
+    const vuePath = join(VTJ_VUE_DIR, `${id}.vue`);
+    if (!existsSync(vuePath)) return { error: `文件不存在: .vtj/vue/${id}.vue` };
+    const original = readText(vuePath);
+    if (original === null) return { error: '无法读取文件' };
+
+    let newContent;
+    const templateRegex = /<template>[\s\S]*?<\/template>/i;
+    if (templateRegex.test(original)) {
+      newContent = original.replace(templateRegex, templateContent);
+    } else {
+      newContent = templateContent + '\n' + original;
+    }
+    if (!newContent) return { error: '无法生成新内容' };
+    writeText(vuePath + '.bak', original);
+    const success = writeText(vuePath, newContent);
+    if (!success) return { error: '写入失败' };
+    return { success: true, id, path: `.vtj/vue/${id}.vue`, backupPath: `.vtj/vue/${id}.vue.bak`, message: 'template 已更新。建议运行 vtj_sync_vue_to_dsl 同步版本号。' };
+  },
+
+  'vtj_write_vue_style': ({ id, styleContent }) => {
+    const vuePath = join(VTJ_VUE_DIR, `${id}.vue`);
+    if (!existsSync(vuePath)) return { error: `文件不存在: .vtj/vue/${id}.vue` };
+    const original = readText(vuePath);
+    if (original === null) return { error: '无法读取文件' };
+
+    let newContent;
+    const styleRegex = /<style[^>]*>[\s\S]*?<\/style>/i;
+    if (styleRegex.test(original)) {
+      newContent = original.replace(styleRegex, styleContent);
+    } else {
+      newContent = original + '\n' + styleContent;
+    }
+    if (!newContent) return { error: '无法生成新内容' };
+    writeText(vuePath + '.bak', original);
+    const success = writeText(vuePath, newContent);
+    if (!success) return { error: '写入失败' };
+    return { success: true, id, path: `.vtj/vue/${id}.vue`, backupPath: `.vtj/vue/${id}.vue.bak`, message: 'style 已更新。' };
+  },
+
+  'vtj_write_dsl_file': ({ id, section, content }) => {
+    const dslPath = join(VTJ_FILES_DIR, `${id}.json`);
+    if (!existsSync(dslPath)) return { error: `文件不存在: .vtj/files/${id}.json` };
+    const dsl = readJSON(dslPath);
+    if (!dsl) return { error: '无法读取 DSL 文件' };
+    writeJSON(dslPath + '.bak', dsl);
+
+    if (section === 'full') {
+      writeJSON(dslPath, JSON.parse(content));
+    } else if (section === '__VERSION__') {
+      dsl['__VERSION__'] = String(content);
+      writeJSON(dslPath, dsl);
+    } else if (section === 'nodes') {
+      dsl['nodes'] = JSON.parse(content);
+      writeJSON(dslPath, dsl);
+    } else {
+      dsl[section] = JSON.parse(content);
+      writeJSON(dslPath, dsl);
+    }
+    return { success: true, id, section, path: `.vtj/files/${id}.json`, backupPath: `.vtj/files/${id}.json.bak`, message: `DSL ${section} 已更新。` };
+  },
+
+  'vtj_write_vue_full': ({ id, content }) => {
+    const vuePath = join(VTJ_VUE_DIR, `${id}.vue`);
+    if (!existsSync(vuePath)) return { error: `文件不存在: .vtj/vue/${id}.vue` };
+    const original = readText(vuePath);
+    if (original === null) return { error: '无法读取文件' };
+    writeText(vuePath + '.bak', original);
+    const success = writeText(vuePath, content);
+    if (!success) return { error: '写入失败' };
+    return { success: true, id, path: `.vtj/vue/${id}.vue`, backupPath: `.vtj/vue/${id}.vue.bak`, message: '完整 .vue 文件已更新。建议运行 vtj_sync_vue_to_dsl 同步版本号。' };
+  },
+
   // ── 3. 同步操作 ──────────────────────────────────────
   'vtj_sync_vue_to_dsl': ({ id, dryRun = false }) => {
     const vuePath = join(VTJ_VUE_DIR, `${id}.vue`);
@@ -1278,7 +1402,7 @@ const toolHandlers = {
     // 创建 Vue SFC
     const vueContent = `<!-- ${title} -->
 <template>
-  <div class="${name.toLowerCase()}">
+  <div class="${id.toLowerCase()}">
     <h1>${title}</h1>
     <!-- VTJ 设计器生成的模板内容将在此处 -->
   </div>
@@ -1310,7 +1434,7 @@ export default defineComponent({
 </script>
 
 <style lang="css" scoped>
-.${name.toLowerCase()} {
+.${id.toLowerCase()} {
   padding: 20px;
   font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
 }
@@ -1339,7 +1463,7 @@ export default defineComponent({
           props: {
             class: {
               type: 'JSExpression',
-              value: `'${name.toLowerCase()}'`
+              value: `'${id.toLowerCase()}'`
             }
           },
           children: [
@@ -1354,7 +1478,7 @@ export default defineComponent({
           invisible: false
         }
       ],
-      css: `.${name.toLowerCase()} { padding: 20px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; }`,
+      css: `.${id.toLowerCase()} { padding: 20px; font-family: 'Noto Sans SC', 'PingFang SC', sans-serif; }`,
       locked: false
     };
 

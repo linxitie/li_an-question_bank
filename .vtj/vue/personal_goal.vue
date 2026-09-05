@@ -126,6 +126,7 @@
   import { XIcon } from '@vtj/ui';
   import { TrophyBase, EditPen, Sunrise, Close, Check } from '@vtj/icons';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'PersonalGoalCard',
     components: { XIcon },
@@ -189,7 +190,7 @@
           { text: '复习 公专 基础知识', color: '#2c3e50' }
         ];
         this.state.dialogVisible = false;
-        this.$message.success('个人目标已更新');
+        ElMessage.success('个人目标已更新');
       }
     },
     mounted() {

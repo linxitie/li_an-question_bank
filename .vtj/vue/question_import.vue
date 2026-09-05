@@ -165,7 +165,7 @@
               </div>
               <div class="form-item">
                 <label>试卷名称</label>
-                <input v-model="state.batchPaperName" placeholder="可选，自动从文件名提取" />
+                <input v-model="state.batchPaperName" placeholder="可选，自动从文档标题提取" />
               </div>
             </div>
             <div class="form-actions">
@@ -244,7 +244,7 @@
             </div>
             <div class="form-item">
               <label>试卷名称</label>
-              <input v-model="state.batchPaperName" placeholder="可选，自动从文件名提取" />
+              <input v-model="state.batchPaperName" placeholder="可选，自动从文档标题提取" />
             </div>
             <!-- 匹配按钮 -->
             <div class="form-actions" v-if="state.separateQuestionsLoaded && state.separateAnswersLoaded && !state.parsedDocsQuestions.length">
@@ -1174,22 +1174,59 @@ import QuestionPreviewList from './question_preview_list.vue';
         if (/行测|数量|资料分析|判断推理|言语|常识|速度与知觉/i.test(sample)) return '行测';
         return '公专'; // 默认
       },
-      // 自动检测题型
-      detectQuestionType(questionContent, options) {
+      // 自动检测题型（五维度综合判定）
+      detectQuestionType(questionContent, options, answer = '') {
         var text = questionContent || '';
-        // 写作题特征：包含写作关键词，或文本非常长
-        if (!options || options.length < 2) {
-          if (/写作|作文|请以|为题|写一篇|谈谈你的看法/.test(text) || text.length > 200) return '写作题';
-          // 论述题特征：包含论述/分析/简答关键词，或文本较长
-          if (/论述|分析|简答|阐述|说明|概括/.test(text) || text.length > 80) return '论述题';
-          // 含填空标记 → 归入论述题（需文本输入）
-          if (/____|（）|\(\)|（\s*）/.test(text)) return '论述题';
-          return '单选题';
+        var answerText = (answer || '').trim().toUpperCase();
+
+        // ===== 维度1：答案格式判断（权重最高）=====
+        if (answerText) {
+          // 单字母答案 → 单选题
+          if (/^[A-D]$/.test(answerText)) return '单选题';
+          // 多字母答案（逗号分隔或连写）→ 多选题
+          if (/^[A-D]([，,][A-D])+$/.test(answerText)) return '多选题';
+          if (/^[A-D]{2,}$/.test(answerText)) return '多选题';
+          // 判断题标志词
+          if (/^(正确|错误|对|错|TRUE|FALSE|T|F)$/i.test(answerText)) return '判断题';
+          // 长文本答案 → 主观题
+          if (answerText.length > 20) return '论述题';
         }
-        // 多选题特征：选项超过4个
-        if (options.length > 4) return '多选题';
-        // 默认单选题
-        return '单选题';
+
+        // ===== 维度2：选项数量 + 答案综合判断 =====
+        var optCount = (options && Array.isArray(options)) ? options.length : 0;
+
+        // ===== 维度4前置：先检查题干关键词（最高优先级之一）=====
+        if (/多选|多项选择|不定项/.test(text)) return '多选题';
+        if (/判断|对错|是否/.test(text) && optCount <= 2) return '判断题';
+
+        if (optCount >= 2) {
+          // 有选项时，结合答案判断
+          if (answerText && /^[A-D]{2,}$/.test(answerText)) return '多选题';
+          if (optCount === 4) {
+            // 4选项：有单字母答案→单选，无答案→默认单选
+            if (answerText && answerText.length === 1) return '单选题';
+            if (!answerText) return '单选题';
+          }
+          if (optCount > 4) return '多选题';
+          if (optCount === 2) {
+            // 2选项：判断题倾向
+            if (/判断|对错|是否/.test(text)) return '判断题';
+            return '单选题';
+          }
+        }
+
+        // ===== 维度3：无选项题目 —— 关键词判断 =====
+        if (optCount < 2) {
+          if (/写作|作文|请以.*为题|写一篇|谈谈你的看法/.test(text) || text.length > 200) return '写作题';
+          if (/____|（）|\(\)|（\s*）/.test(text)) return '填空题';
+          if (/判断|对错|是否正确|正确还是错误/.test(text)) return '判断题';
+          if (/论述|分析|简答|阐述|说明|概括|简述/.test(text) || text.length > 80) return '论述题';
+          return '论述题';
+        }
+
+        // ===== 默认 =====
+        if (optCount >= 3) return '单选题';
+        return '论述题';
       },
       /** ========== 进度条控制 ========== */
       setProgress(phase, percent, steps) {
@@ -1284,6 +1321,10 @@ import QuestionPreviewList from './question_preview_list.vue';
           if (data.auto_detected_subject) {
             this.state.form.subject_category = data.auto_detected_subject;
           }
+          // 从后端返回结果中提取试卷标题
+          if (data.paper_name && data.paper_name !== '分离导入试卷' && data.paper_name !== 'Word批量导入' && data.paper_name !== '图片OCR导入') {
+            this.state.batchPaperName = data.paper_name;
+          }
           if (data.warnings && data.warnings.length) {
             for (var wi = 0; wi < data.warnings.length; wi++) {
               ElMessage.warning(data.warnings[wi]);
@@ -1360,7 +1401,7 @@ import QuestionPreviewList from './question_preview_list.vue';
             // 附加来源题号（用于分离导入的题号精确匹配）
             q.question_number = blocks[j].num;
             // 自动推断题型
-            q.question_type_detail = this.detectQuestionType(q.question_content, q.options);
+            q.question_type_detail = this.detectQuestionType(q.question_content, q.options, q.answer || '');
             // 自动检测科目
             q.subject_category = detectedSubject;
             q.score = 1;
@@ -1405,6 +1446,27 @@ import QuestionPreviewList from './question_preview_list.vue';
         var withoutAnswer = questions.length - withAnswer;
         ElMessage.success('已提取 ' + questions.length + ' 道题目（含答案 ' + withAnswer + ' 题' +
           (withoutAnswer ? '，其中 ' + withoutAnswer + ' 题缺少答案' : '') + '）');
+        
+        // 自动提取试卷标题
+        this.extractAndSetPaperTitle(text, questions);
+      },
+      extractAndSetPaperTitle(rawText, questions) {
+        if (!rawText) return;
+        // 从文档首行提取标题
+        var lines = rawText.trim().split('\n');
+        for (var i = 0; i < Math.min(5, lines.length); i++) {
+          var line = lines[i].trim();
+          if (line && line.length > 3 && !/^UTB[a-f0-9]{16}/i.test(line) && !/^第\s*\d+\s*题[：:]/.test(line)) {
+            this.state.batchPaperName = line.substring(0, 100);
+            break;
+          }
+        }
+        // 如果首行没有有效标题，尝试从第一题内容推断
+        if (!this.state.batchPaperName && questions.length > 0) {
+          var firstQ = questions[0].question_content || questions[0].content || '';
+          var match = firstQ.match(/^([^第]+?(?:考试|测验|真题|模拟|练习))/);
+          if (match) this.state.batchPaperName = match[1].trim();
+        }
       },
       extractQuestionFromBlock(block) {
         if (!block) return null;
@@ -2247,13 +2309,24 @@ import QuestionPreviewList from './question_preview_list.vue';
           }
         }
         this.state.loading = true;
-        this.state.importProgress = 30;
+        this.state.importProgress = 0;
         // 进度条进入最后阶段(导入入库)
         var lastStepIdx = this.state.progressSteps.length - 1;
         if (lastStepIdx >= 0) { this.stepActive(lastStepIdx); this.setProgress(lastStepIdx, 30); }
         try {
+          // ===== 新增：验证题目类型 =====
+          ElMessage.info('正在验证题目类型...');
+          for (let i = 0; i < pending.length; i++) {
+            const q = pending[i];
+            q.question_type_detail = this.detectQuestionType(q.question_content, q.options, q.answer);
+            this.state.importProgress = Math.floor((i + 1) / pending.length * 50);
+          }
+          
           // ===== 单请求批量入库（双轨：题库 + 试卷管理）=====
           // 替代旧的逐题POST /single循环（97题=97请求 → 触发限流429）
+          ElMessage.info('正在导入题目...');
+          this.state.importProgress = 50;
+          
           const res = await this.fetchWithRetry('/api/questions/import/batch-parsed', {
             method: 'POST',
             headers: this.getJsonHeaders(),
@@ -2297,9 +2370,15 @@ import QuestionPreviewList from './question_preview_list.vue';
               console.warn('[batch-parsed] 失败明细:', data.failed_items);
             }
             if (lastStepIdx >= 0) { this.stepDone(lastStepIdx); this.setProgress(lastStepIdx, 100); }
+            this.state.importProgress = 100;
             ElMessage.success(data.message || ('导入完成：成功 ' + data.success_count + ' 题'));
             if (data.need_confirm_count > 0) {
               ElMessage.warning(data.need_confirm_count + ' 题缺答案/低置信度，建议在试卷编辑中人工确认后再发布');
+            }
+            
+            // 新增：验证试卷预览
+            if (data.paper_id) {
+              await this.verifyPaperPreview(data.paper_id);
             }
           }
         } catch (e) {
@@ -2310,6 +2389,27 @@ import QuestionPreviewList from './question_preview_list.vue';
         this.notifyBankRefresh();
         this.state.loading = false;
         this.state.importProgress = 0;
+      },
+      // 新增：试卷预览验证方法
+      async verifyPaperPreview(paperId) {
+        try {
+          const res = await this.fetchWithRetry(`/api/papers/${paperId}/preview`, {
+            method: 'GET',
+            headers: this.getJsonHeaders()
+          }, 10000, 1);
+          const data = await res.json();
+          if (res.ok && data.questions && data.questions.length > 0) {
+            ElMessage.success('试卷预览验证通过，共 ' + data.questions.length + ' 道题目');
+            return true;
+          } else {
+            ElMessage.warning('试卷预览验证失败：无题目内容');
+            return false;
+          }
+        } catch (e) {
+          console.error('[verifyPreview] 试卷预览验证失败:', e);
+          ElMessage.warning('试卷预览验证失败，请手动检查试卷管理');
+          return false;
+        }
       },
       goViewPaper() {
         // 跳转教师端试卷管理查看刚导入的整卷

@@ -25,23 +25,31 @@
     </div>
   </div>
 </template>
+
 <script lang="ts">
   // @ts-nocheck
   import { defineComponent, reactive } from 'vue';
   import { XIcon } from '@vtj/ui';
   import { UserFilled } from '@vtj/icons';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'AppNavigation',
     components: { XIcon },
     setup(props) {
-      const provider = useProvider({ id: 'app_navigation', version: '1778915425695' });
+      const provider = useProvider({ id: 'app_navigation', version: '1785750000005' });
       const state = reactive({
         loggedIn: false,
         username: '',
         navItems: [
           { name: 'home', title: '首页', route: '/page/home_page' },
           { name: 'questions', title: '题库', route: '/page/question_bank' },
+          { name: 'papers', title: '历年试卷', route: '/student/papers' },
+          { name: 'smartexam', title: '智能组卷', route: '/smart-exam' },
+          { name: 'wrongquestions', title: '错题集', route: '/page/wrong_questions' },
+          { name: 'notes', title: '笔记', route: '/page/notes' },
+          { name: 'favorites', title: '收藏', route: '/page/favorites' },
+          { name: 'recruitment', title: '招考信息', route: '/page/recruitment_info' },
           { name: 'about', title: '关于砺安题库', route: '/page/about' },
           { name: 'forum', title: '论坛', route: '/page/forum' },
           { name: 'download', title: '下载客户端', route: '/page/download_client' },
@@ -74,7 +82,7 @@
           }
           this.$router.push(item.route);
         } else {
-          this.$message.info(`${item.title}功能开发中`);
+          ElMessage.info(`${item.title}功能开发中`);
         }
       },
       updateLoginState() {
@@ -88,6 +96,7 @@
     }
   })
 </script>
+
 <style lang="css" scoped>
   .app-navigation {
     display: flex;

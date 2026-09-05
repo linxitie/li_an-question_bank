@@ -336,6 +336,17 @@ export default defineComponent({
   },
   mounted() {
     if (window.__VTJ_AUTH__ && window.__VTJ_AUTH__.isLoggedIn()) {
+      // 支持 /login?logout=1 强制退出登录，打破"已登录但仪表盘白屏"的死循环
+      // 解析 hash 路由中的查询参数（Vue Router hash 模式下 URL 形如 /#/login?logout=1）
+      var hashSearch = '';
+      var hashIdx = window.location.hash.indexOf('?');
+      if (hashIdx >= 0) hashSearch = window.location.hash.substring(hashIdx + 1);
+      var urlParams = new URLSearchParams(hashSearch);
+      if (urlParams.get('logout') === '1') {
+        window.__VTJ_AUTH__.logout();
+        this.showMessage('已退出登录，请重新登录', 'success');
+        return;  // 留在登录页，不跳转
+      }
       const username = window.__VTJ_AUTH__.getUsername();
       this.showMessage('已登录为 ' + username + '，即将跳转...', 'success');
       setTimeout(function() {
@@ -432,8 +443,8 @@ export default defineComponent({
             }));
             this.showMessage('登录成功，即将跳转...', 'success');
             setTimeout(function() {
-              if (this.$router) this.$router.push('/');
-              else window.location.href = '/';
+              if (this.$router) this.$router.push(this.getDashboardPath());
+              else window.location.href = this.getDashboardPath();
             }.bind(this), 800);
           } else {
             this.showMessage(data.detail || '验证码登录失败');
@@ -451,8 +462,8 @@ export default defineComponent({
         if (result.success) {
           this.showMessage('登录成功，即将跳转...', 'success');
           setTimeout(function() {
-            if (this.$router) this.$router.push('/');
-            else window.location.href = '/';
+            if (this.$router) this.$router.push(this.getDashboardPath());
+            else window.location.href = this.getDashboardPath();
           }.bind(this), 800);
         } else {
           this.showMessage(result.message);
@@ -501,8 +512,8 @@ export default defineComponent({
           const result = await window.__VTJ_AUTH__.login(username, password);
           if (result.success) {
             setTimeout(function() {
-              if (this.$router) this.$router.push('/');
-              else window.location.href = '/';
+              if (this.$router) this.$router.push(this.getDashboardPath());
+              else window.location.href = this.getDashboardPath();
             }.bind(this), 1000);
           }
         } else {

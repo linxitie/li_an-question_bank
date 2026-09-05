@@ -1,0 +1,51 @@
+{
+  "id": "teacher_profile",
+  "name": "TeacherProfile",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1785750000005",
+  "state": {
+    "profile": {},
+    "editing": false,
+    "saving": false,
+    "editForm": {
+      "username": "",
+      "phone": "",
+      "email": "",
+      "department": ""
+    }
+  },
+  "methods": {
+    "loadProfile": {
+      "type": "asyncMethod"
+    },
+    "startEdit": {
+      "type": "method"
+    },
+    "saveProfile": {
+      "type": "asyncMethod"
+    },
+    "uploadAvatar": {
+      "type": "asyncMethod",
+      "params": [
+        "e"
+      ]
+    },
+    "handleLogout": {
+      "type": "method"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "css": "",
+  "nodes": [],
+  "props": [],
+  "emits": [],
+  "slots": [],
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "dataSources": {}
+}

@@ -204,23 +204,23 @@ async def list_users(
     db: Session = Depends(get_db)
 ):
     """分页查询用户列表"""
-    query = db.query(SysUser)
+    base_query = db.query(SysUser)
 
     if keyword:
-        query = query.filter(or_(
+        base_query = base_query.filter(or_(
             SysUser.username.contains(keyword),
             SysUser.user_no.contains(keyword),
             SysUser.phone.contains(keyword),
         ))
     if user_type:
-        query = query.filter(SysUser.user_type == user_type)
+        base_query = base_query.filter(SysUser.user_type == user_type)
     if is_disabled is not None:
-        query = query.filter(SysUser.is_disabled == is_disabled)
+        base_query = base_query.filter(SysUser.is_disabled == is_disabled)
 
-    total = query.count()
-    users = query.order_by(desc(SysUser.register_time)).offset(
-        (page - 1) * page_size
-    ).limit(page_size).all()
+    total = base_query.count()
+    users = base_query.order_by(
+        desc(SysUser.register_time), desc(SysUser.user_id)
+    ).offset((page - 1) * page_size).limit(page_size).all()
 
     return {
         "success": True,
@@ -359,18 +359,18 @@ async def list_all_questions(
     db: Session = Depends(get_db)
 ):
     """管理员查看全部题目（含审核状态）"""
-    query = db.query(QuestionBank)
+    base_query = db.query(QuestionBank)
     if keyword:
-        query = query.filter(QuestionBank.question_content.contains(keyword))
+        base_query = base_query.filter(QuestionBank.question_content.contains(keyword))
     if subject_id:
-        query = query.filter(QuestionBank.subject_id == subject_id)
+        base_query = base_query.filter(QuestionBank.subject_id == subject_id)
     if audit_status is not None:
-        query = query.filter(QuestionBank.audit_status == audit_status)
+        base_query = base_query.filter(QuestionBank.audit_status == audit_status)
 
-    total = query.count()
-    questions = query.order_by(desc(QuestionBank.create_time)).offset(
-        (page - 1) * page_size
-    ).limit(page_size).all()
+    total = base_query.count()
+    questions = base_query.order_by(
+        desc(QuestionBank.create_time), desc(QuestionBank.question_id)
+    ).offset((page - 1) * page_size).limit(page_size).all()
 
     items = []
     for q in questions:
@@ -378,13 +378,19 @@ async def list_all_questions(
             "question_id": q.question_id,
             "subject_id": q.subject_id,
             "type_id": q.type_id,
+            "type_name": q.type.type_name if q.type else "",
             "question_content": q.question_content[:100] if q.question_content else "",
+            "full_content": q.question_content,
+            "options": q.options,
             "answer": q.answer,
+            "answer_analysis": q.answer_analysis or "",
             "difficulty": q.difficulty,
             "score": float(q.score) if q.score else 0,
             "audit_status": q.audit_status,
             "audit_comment": q.audit_comment,
             "creator_id": q.creator_id,
+            "source": q.source,
+            "year": q.year,
             "create_time": q.create_time.isoformat() if q.create_time else None,
             "status": q.status,
             "xingce_subcategory": q.xingce_subcategory,
@@ -449,11 +455,11 @@ async def list_announcements(
     db: Session = Depends(get_db)
 ):
     """获取公告列表"""
-    query = db.query(SysAnnouncement).filter(SysAnnouncement.status == 1)
-    total = query.count()
-    items = query.order_by(desc(SysAnnouncement.publish_time)).offset(
-        (page - 1) * page_size
-    ).limit(page_size).all()
+    base_query = db.query(SysAnnouncement).filter(SysAnnouncement.status == 1)
+    total = base_query.count()
+    items = base_query.order_by(
+        desc(SysAnnouncement.publish_time), desc(SysAnnouncement.announcement_id)
+    ).offset((page - 1) * page_size).limit(page_size).all()
 
     return {
         "success": True, "total": total, "page": page, "page_size": page_size,

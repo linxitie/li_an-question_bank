@@ -51,6 +51,7 @@
   import { XIcon } from '@vtj/ui';
   import { Calendar, DArrowRight } from '@vtj/icons';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'ExamCalendar',
     components: { XIcon },
@@ -150,7 +151,7 @@
         if (exam.url) {
           window.open(exam.url, '_blank');
         } else {
-          this.$message.info('暂无详情链接');
+          ElMessage.info('暂无详情链接');
         }
       }
     },

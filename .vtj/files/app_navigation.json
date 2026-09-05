@@ -137,10 +137,12 @@
   "props": [],
   "slots": [],
   "state": {
-    "navItems": {
-      "type": "JSExpression",
-      "value": "[\n  { name: 'home', title: '首页', route: '/page/home_page' },\n  { name: 'questions', title: '题库', route: '/page/question_bank' },\n  { name: 'about', title: '关于砺安题库', route: '/page/about' },\n  { name: 'forum', title: '论坛', route: '/page/forum' },\n  { name: 'download', title: '下载客户端', route: '/page/download_client' },\n  { name: 'login', title: '登录头像', route: '' }\n]"
-    }
+    "navItems": "[",
+    "loggedIn": "false",
+    "username": "''",
+    "name": "'login'",
+    "title": "'登录'",
+    "route": "'/login' }"
   },
   "watch": [],
   "expose": [],
@@ -148,12 +150,14 @@
   "locked": false,
   "methods": {
     "isActive": {
-      "type": "JSFunction",
-      "value": "(item) => {\n  if (item.name === 'login') return false;\n  return this.currentRoute.value === item.route;\n}"
+      "type": "method",
+      "params": [
+        "item"
+      ]
     },
     "handleNavClick": {
       "type": "JSFunction",
-      "value": "(item) => {\n  if (item.name === 'login') {\n    this.$message.info('登录功能开发中');\n    return;\n  }\n  if (item.route) {\n    this.$router.push(item.route);\n  } else {\n    this.$message.info(`${item.title}功能开发中`);\n  }\n}"
+      "value": "(item) => {\n  if (item.route) {\n    if (item.name === 'login' && this.state.loggedIn) {\n      window.__VTJ_AUTH__.logout();\n      this.state.loggedIn = false;\n      this.state.username = '';\n      return;\n    }\n    this.$router.push(item.route);\n  } else {\n    this.$message.info(`${item.title}功能开发中`);\n  }\n}"
     }
   },
   "computed": {
@@ -162,8 +166,12 @@
       "value": "() => {\n  return this.$route.path;\n}"
     }
   },
-  "lifeCycles": {},
-  "__VERSION__": "1778915425695",
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1785750000005",
   "dataSources": {},
   "__VTJ_BLOCK__": true
 }

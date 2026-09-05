@@ -72,6 +72,10 @@ def _filter_noise(text: str) -> str:
         if not stripped:
             filtered_lines.append('')
             continue
+        # 保护内联图片标记行（[[IMG:n]]），不被长度/导航过滤误删
+        if stripped.startswith('[[IMG:'):
+            filtered_lines.append(stripped)
+            continue
         # 跳过纯导航行：含多个|分隔且平均每段<15字符
         if '|' in stripped:
             parts = [p.strip() for p in stripped.split('|') if p.strip()]
@@ -98,6 +102,177 @@ def _filter_noise(text: str) -> str:
         return original_text[:8000]
 
     return text
+
+
+# 正文容器选择器（内联图片提取复用，与 _extract_article_content 保持一致）
+CONTENT_SELECTORS = [
+    "div.p2j_con3.clearfix.g-w1200",
+    "div.p2j_con3",
+    "div.text-con",
+    "div.TRS_Editor",
+    "div.TRS_PreAppend",
+    "div.TRS_Editor div",
+    "div.article-content",
+    "div#article-content",
+    "div.content",
+    "div.article",
+    "div.article-body",
+    "div.detail-content",
+    "div#detail-content",
+    "div.news-content",
+    "div#news-content",
+    "div.news-detail",
+    "div.main-text",
+    "article",
+    "div.text",
+    "div.entry-content",
+    "div.post-content",
+]
+
+
+def _should_skip_image(img_tag, src: str) -> bool:
+    """判断图片是否为二维码/登录码/图标等应过滤的内容"""
+    # 1. 尺寸过小的方形小图（图标/二维码）
+    try:
+        w = int(img_tag.get("width", "")) if str(img_tag.get("width", "")).isdigit() else 0
+        h = int(img_tag.get("height", "")) if str(img_tag.get("height", "")).isdigit() else 0
+    except (ValueError, TypeError):
+        w = h = 0
+    if (0 < w < 100) or (0 < h < 100):
+        return True
+
+    # 2. URL/alt/title 关键词（二维码/登录/验证码）
+    combined = f"{src} {img_tag.get('alt', '') or ''} {img_tag.get('title', '') or ''}".lower()
+    for kw in ("qr", "qrcode", "ewm", "二维码", "扫码", "login", "登录", "验证码", "验证", "verify", "captcha"):
+        if kw in combined:
+            return True
+
+    # 3. 父容器 class/id 关键词（向上查 3 层）
+    parent = getattr(img_tag, "parent", None)
+    depth = 0
+    while parent is not None and depth < 3:
+        if hasattr(parent, "get"):
+            cls_text = " ".join([str(parent.get("class", "")), str(parent.get("id", ""))]).lower()
+            for kw in ("qrcode", "qr-code", "login", "scan", "二维码", "登录", "验证码"):
+                if kw in cls_text:
+                    return True
+        parent = getattr(parent, "parent", None)
+        depth += 1
+
+    return False
+
+
+def _walk_nodes(node, out_text, images, counter):
+    """递归遍历节点，按文档顺序累积文本并在图片处插入 [[IMG:n]] 标记"""
+    from bs4 import NavigableString, Tag
+    for child in node.children:
+        if isinstance(child, NavigableString):
+            txt = child.strip()
+            if txt:
+                out_text.append(txt)
+        elif isinstance(child, Tag):
+            name = child.name.lower()
+            if name in ("script", "style", "iframe", "noscript"):
+                continue
+            if name == "img":
+                src = (child.get("src", "") or "").strip() or (child.get("data-src", "") or "").strip()
+                if src and not src.startswith("data:"):
+                    if not _should_skip_image(child, src):
+                        out_text.append(f"\n\n[[IMG:{counter[0]}]]\n\n")
+                        images.append((counter[0], src))
+                        counter[0] += 1
+                continue
+            if name == "br":
+                out_text.append("\n")
+                continue
+            if name in ("p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ul", "ol", "blockquote", "section", "article", "figure", "figcaption"):
+                out_text.append("\n")
+                _walk_nodes(child, out_text, images, counter)
+                out_text.append("\n")
+            else:
+                _walk_nodes(child, out_text, images, counter)
+
+
+def _extract_content_with_inline_images(soup):
+    """从 soup 定位正文容器，按文档顺序提取「文本 + [[IMG:n]] 内联标记」的正文。
+    返回 (content_with_markers, ordered_images)，ordered_images 为 [(order, src), ...]。
+    提取失败或正文过短时返回 ("", [])，由调用方回退纯文本路径。
+    """
+    try:
+        for selector in CONTENT_SELECTORS:
+            elem = soup.select_one(selector)
+            if elem:
+                out_text = []
+                images = []
+                counter = [0]
+                _walk_nodes(elem, out_text, images, counter)
+                raw = "".join(out_text)
+                raw = re.sub(r"\n{3,}", "\n\n", raw)
+                content = _filter_noise(raw)
+                if content and len(content) > 50:
+                    return content[:8000], images
+                return "", []
+        return "", []
+    except Exception as e:
+        logger.warning(f"[news] 内联图片提取异常: {type(e).__name__}: {e}")
+        return "", []
+
+
+def _download_inline_images(news_id: int, ordered_images: list, page_url: str, db: Session, label: str = "") -> int:
+    """按 [[IMG:n]] 的 n 顺序下载内联图片，image_order 与标记严格一致"""
+    upload_dir = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "news", str(news_id))
+    os.makedirs(upload_dir, exist_ok=True)
+    saved = 0
+    for order, src in ordered_images:
+        if saved >= 10:
+            break
+        try:
+            # 截断到有效图片扩展名，去除 HTML 实体残留
+            clean = re.match(r'^(.*?\.(?:jpg|jpeg|png|gif|webp|bmp))', src, re.IGNORECASE)
+            if clean:
+                src = clean.group(1)
+            if '%3C' in src or '%3E' in src or '<' in src or '>' in src:
+                continue
+            # 补全 URL
+            if not src.startswith("http"):
+                if src.startswith("//"):
+                    src = "https:" + src
+                elif src.startswith("/"):
+                    parsed = urlparse(page_url)
+                    src = f"{parsed.scheme}://{parsed.netloc}{src}"
+                else:
+                    src = urljoin(page_url, src)
+            r = safe_request(src, timeout=15, label=f"{label}/img/{order}")
+            if r is None or not hasattr(r, 'content'):
+                continue
+            if len(r.content) < 100 or len(r.content) > 5 * 1024 * 1024:
+                continue
+            content_type = r.headers.get("Content-Type", "")
+            ext = ".jpg"
+            if "png" in content_type:
+                ext = ".png"
+            elif "gif" in content_type:
+                ext = ".gif"
+            elif "webp" in content_type:
+                ext = ".webp"
+            fname = f"img_{order}{ext}"
+            fpath = os.path.join(upload_dir, fname)
+            with open(fpath, "wb") as f:
+                f.write(r.content)
+            relative_path = f"uploads/news/{news_id}/{fname}"
+            db.add(NewsImage(news_id=news_id, image_path=relative_path, image_order=order))
+            saved += 1
+            logger.debug(f"[{label}] 内联图片已下载: {relative_path}")
+        except Exception as e:
+            logger.warning(f"[{label}] 图片下载失败 {src}: {e}")
+            continue
+    if saved > 0:
+        try:
+            db.commit()
+        except Exception as e:
+            logger.warning(f"[{label}] 图片记录提交失败: {e}")
+            db.rollback()
+    return saved
 
 
 def _download_images(soup, page_url: str, news_id: int, db: Session, label: str = "") -> int:
@@ -347,21 +522,12 @@ def _fetch_article_detail(url: str) -> tuple:
             return '', []
         resp.encoding = resp.apparent_encoding or 'utf-8'
         soup = BeautifulSoup(resp.text, 'lxml')
-        content = _extract_article_content(soup)
-        content = _filter_noise(content)
-
-        # 提取图片URL
-        images = []
-        for img in soup.select('img[src]'):
-            src = img.get('src', '')
-            if src and not src.startswith('data:'):
-                w = img.get('width', '0')
-                if w.isdigit() and int(w) < 50:
-                    continue
-                from urllib.parse import urljoin as _urljoin
-                full_url = _urljoin(url, src) if not src.startswith('http') else src
-                images.append(full_url)
-        return content, images
+        # 优先内联图片提取（正文 + [[IMG:n]] 标记 + 有序图片）
+        content, ordered_images = _extract_content_with_inline_images(soup)
+        if not content:
+            # 降级回退：纯文本
+            content = _filter_noise(_extract_article_content(soup))
+        return content, ordered_images
     except Exception:
         return '', []
 
@@ -410,14 +576,17 @@ def _fetch_people_detail_playwright(page, url):
                         pass
             content = content_elem.inner_text()[:8000]
 
-            # 提取图片
+            # 提取图片（过滤二维码/登录码/图标）
             for img in content_elem.query_selector_all('img[src]'):
                 src = img.get_attribute('src') or ''
                 if src and not src.startswith('data:') and len(src) > 10:
                     w = img.get_attribute('width') or '0'
-                    if w.isdigit() and int(w) < 50:
+                    if w.isdigit() and int(w) < 100:
                         continue
-                    images.append(src)
+                    src_lower = (src + ' ' + (img.get_attribute('alt') or '')).lower()
+                    if any(kw in src_lower for kw in ('qr', 'qrcode', 'ewm', '二维码', 'login', '登录', '验证码', 'verify', 'captcha')):
+                        continue
+                    images.append((len(images), src))
 
         # 如果没有内容，回退
         if not content:
@@ -437,33 +606,7 @@ def _extract_article_content(soup):
     从 BeautifulSoup 对象中提取文章正文（多选择器 fallback）
     覆盖人民公安报 CMS（TRS_Editor）和常见新闻模板
     """
-    content_selectors = [
-        # 人民网专用选择器
-        "div.p2j_con3.clearfix.g-w1200",
-        "div.p2j_con3",
-        "div.text-con",
-        # 人民公安报 CMS (TRS 编辑器)
-        "div.TRS_Editor",
-        "div.TRS_PreAppend",
-        "div.TRS_Editor div",
-        # 通用文章内容
-        "div.article-content",
-        "div#article-content",
-        "div.content",
-        "div.article",
-        "div.article-body",
-        "div.detail-content",
-        "div#detail-content",
-        "div.news-content",
-        "div#news-content",
-        "div.news-detail",
-        "div.main-text",
-        "article",
-        "div.text",
-        "div.entry-content",
-        "div.post-content",
-    ]
-    for selector in content_selectors:
+    for selector in CONTENT_SELECTORS:
         elem = soup.select_one(selector)
         if elem:
             # 移除内部脚本和样式
@@ -657,17 +800,22 @@ def scrape_cpd_news(db: Session) -> int:
                 logger.debug(f"[cpd] 已存在，跳过: {title[:30]}")
                 continue
 
-            # 进入文章详情页抓取正文和图片
+            # 进入文章详情页抓取正文和图片（内联标记 + 降级回退）
+            article_soup = None
             content = ""
+            ordered_images = []
             try:
                 if _goto_with_retry(page, article_url, wait_until="domcontentloaded", timeout=20000, label="cpd-article"):
                     article_html = page.content()
                     article_soup = BeautifulSoup(article_html, "lxml")
-                    content = _extract_article_content(article_soup)
-                    # 噪音过滤
-                    content = _filter_noise(content)
+                    # 优先内联图片提取（正文 + [[IMG:n]] 标记 + 有序图片）
+                    content, ordered_images = _extract_content_with_inline_images(article_soup)
+                    if not content:
+                        # 降级回退：纯文本 + 独立图片下载
+                        content = _extract_article_content(article_soup)
+                        content = _filter_noise(content)
                     if content:
-                        logger.info(f"[cpd] 正文提取成功: {len(content)} 字符")
+                        logger.info(f"[cpd] 正文提取成功: {len(content)} 字符, {len(ordered_images)} 内联图")
                     else:
                         logger.warning(f"[cpd] 未提取到正文: {article_url}")
                 else:
@@ -690,9 +838,11 @@ def scrape_cpd_news(db: Session) -> int:
             db.add(article)
             db.flush()  # 获取 news_id 用于图片关联
 
-            # 提取图片
+            # 提取图片（内联有序下载，失败回退到原 _download_images）
             try:
-                if 'article_soup' in dir() and article_soup:
+                if ordered_images:
+                    _download_inline_images(article.news_id, ordered_images, article_url, db, label="cpd")
+                elif article_soup is not None:
                     _download_images(article_soup, article_url, article.news_id, db, label="cpd")
             except Exception as e:
                 logger.warning(f"[cpd] 图片提取异常: {e}")
@@ -828,10 +978,10 @@ def scrape_people_news(db: Session) -> int:
             db.add(article)
             db.flush()  # 获取 news_id 用于图片关联
 
-            # 提取图片（从详情页 URL 列表下载）
+            # 提取图片（有序下载，image_order 与内联标记一致）
             if image_urls:
                 try:
-                    _download_news_images(article.news_id, image_urls, db)
+                    _download_inline_images(article.news_id, image_urls, href, db, label="people")
                 except Exception as e:
                     logger.warning(f"[people] 图片提取异常: {e}")
 

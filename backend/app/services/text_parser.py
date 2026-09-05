@@ -1856,8 +1856,13 @@ def _detect_question_type(content: str, options: List[str], answer: str = '') ->
         scores['判断题'] += 3
         scores['单选题'] += 1
     elif opt_count == 4:
-        scores['单选题'] += 3
-        scores['多选题'] += 1
+        # 4选项默认单选，但题干含多选关键词时倾向多选
+        if any(re.search(kw, content_text) for kw in MULTI_CHOICE_KEYWORDS):
+            scores['多选题'] += 2
+            scores['单选题'] -= 1
+        else:
+            scores['单选题'] += 3
+            scores['多选题'] += 1
     elif opt_count > 4:
         scores['多选题'] += 3
     elif opt_count == 0:

@@ -1,0 +1,62 @@
+{
+  "id": "teacher_classes",
+  "name": "TeacherClasses",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1785750000005",
+  "state": {
+    "classes": [],
+    "showCreateModal": false,
+    "showDetailModal": false,
+    "newClassName": "",
+    "creating": false,
+    "detailClass": {
+      "class_name": "",
+      "student_count": 0,
+      "avg_score": 0,
+      "students": []
+    }
+  },
+  "methods": {
+    "loadClasses": {
+      "type": "asyncMethod"
+    },
+    "createClass": {
+      "type": "asyncMethod"
+    },
+    "deleteClass": {
+      "type": "asyncMethod",
+      "params": [
+        "id"
+      ]
+    },
+    "openDetail": {
+      "type": "asyncMethod",
+      "params": [
+        "cls"
+      ]
+    },
+    "formatDate": {
+      "type": "method",
+      "params": [
+        "t"
+      ]
+    },
+    "handleLogout": {
+      "type": "method"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "css": "",
+  "nodes": [],
+  "props": [],
+  "emits": [],
+  "slots": [],
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "dataSources": {}
+}

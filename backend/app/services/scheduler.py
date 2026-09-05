@@ -54,6 +54,36 @@ def init_scheduler():
         replace_existing=True
     )
 
+    # 每日 03:00 清理过期斩题记录
+    def cleanup_expired_zhanti():
+        """清理过期的斩题记录（auto_delete_time < now 的记录物理删除）"""
+        from ..models.models import WrongQuestionPersonal
+        from ..core.database import SessionLocal
+        db = SessionLocal()
+        try:
+            expired = db.query(WrongQuestionPersonal).filter(
+                WrongQuestionPersonal.is_cut == 1,
+                WrongQuestionPersonal.auto_delete_time < datetime.now()
+            ).all()
+            for wq in expired:
+                db.delete(wq)
+            db.commit()
+            if expired:
+                logger.info(f"已清理 {len(expired)} 条过期斩题记录")
+        except Exception as e:
+            logger.error(f"清理斩题记录失败: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        cleanup_expired_zhanti,
+        trigger=CronTrigger(hour=3, minute=0, timezone=CST),
+        id="cleanup_zhanti",
+        name="每日清理过期斩题",
+        replace_existing=True
+    )
+
     scheduler.start()
     logger.info("定时任务调度器已启动（每日 24:00 CST）")
 

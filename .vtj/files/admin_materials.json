@@ -34,9 +34,6 @@
     "createdText": "'' }"
   },
   "methods": {
-    "handleInit": {
-      "type": "asyncMethod"
-    },
     "isVideo": {
       "type": "method",
       "params": [

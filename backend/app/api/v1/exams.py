@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 async def get_exams_list(
     paper_type: Optional[str] = Query(None, description="试卷状态"),
     exam_type: Optional[str] = Query(None, description="考试类型"),
+    subject_id: Optional[int] = Query(None, description="科目ID"),
+    year: Optional[int] = Query(None, description="考试年份"),
+    keyword: Optional[str] = Query(None, description="试卷名称关键词"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     current_user: SysUser = Depends(get_current_user),
@@ -40,15 +43,45 @@ async def get_exams_list(
 
     if exam_type:
         query = query.filter(ExamPaper.exam_type == exam_type)
-    
+    if subject_id:
+        query = query.filter(ExamPaper.subject_id == subject_id)
+    if keyword:
+        query = query.filter(ExamPaper.paper_name.ilike(f"%{keyword}%"))
+    if year:
+        # 筛选包含该年份题目的试卷
+        from ...models.models import PaperQuestionRelation, QuestionBank
+        year_paper_ids = db.query(PaperQuestionRelation.paper_id).join(
+            QuestionBank, PaperQuestionRelation.question_id == QuestionBank.question_id
+        ).filter(QuestionBank.year == year).distinct().subquery()
+        query = query.filter(ExamPaper.paper_id.in_(year_paper_ids))
+
     total = query.count()
     papers = query.order_by(ExamPaper.create_time.desc()
     ).offset((page - 1) * page_size).limit(page_size).all()
-    
-    return {"total":total,
+
+    # 手动序列化，避免返回 SQLAlchemy ORM 对象导致 JSON 序列化 500
+    items = []
+    for p in papers:
+        items.append({
+            "paper_id": p.paper_id,
+            "paper_name": p.paper_name,
+            "paper_code": p.paper_code,
+            "subject_id": p.subject_id,
+            "subject_name": p.subject.subject_name if p.subject else "",
+            "exam_type": p.exam_type,
+            "paper_type": p.paper_type,
+            "question_count": p.question_count,
+            "duration": p.duration,
+            "total_score": float(p.total_score) if p.total_score else 0,
+            "difficulty": p.difficulty,
+            "create_time": p.create_time.isoformat() if p.create_time else None,
+            "publish_time": p.publish_time.isoformat() if p.publish_time else None,
+        })
+
+    return {"total": total,
             "page": page,
-            "page_size":page_size,
-            "data":papers}
+            "page_size": page_size,
+            "data": items}
 
 
 
@@ -85,6 +118,79 @@ async def get_exam_detail(
         "shuffle_questions": bool(paper.shuffle_questions),
         "shuffle_options": bool(paper.shuffle_options),
         "max_attempts": paper.max_attempts,
+    }
+
+
+@router.get("/{paper_id}/questions", response_model=Dict[str, Any], summary="获取试卷题目列表（考试模式）")
+async def get_paper_questions(
+    paper_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取试卷的全部题目（按顺序），用于学生答题。
+
+    - **不含**正确答案和解析（考试模式）
+    - 返回试卷基本信息和题目列表
+    """
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.paper_type == "PUBLISHED"
+    ).first()
+
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或未发布")
+
+    # 获取试卷题目关联（按顺序）
+    relations = db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper_id
+    ).order_by(PaperQuestionRelation.question_order).all()
+
+    if not relations:
+        raise HTTPException(status_code=404, detail="该试卷暂无题目")
+
+    question_ids = [r.question_id for r in relations]
+    questions = db.query(QuestionBank).filter(
+        QuestionBank.question_id.in_(question_ids)
+    ).all()
+
+    question_dict = {q.question_id: q for q in questions}
+    relation_dict = {r.question_id: r for r in relations}
+
+    # 按顺序组装题目列表（不含答案和解析）
+    paper_questions = []
+    for relation in relations:
+        q = question_dict.get(relation.question_id)
+        if not q:
+            continue
+
+        # 获取题型名称
+        qtype = db.query(QuestionType).filter(
+            QuestionType.type_id == q.type_id
+        ).first()
+        type_name = qtype.type_name if qtype else "单选题"
+
+        paper_questions.append({
+            "question_id": q.question_id,
+            "question_order": relation.question_order,
+            "question_score": float(relation.question_score),
+            "question_content": q.question_content,
+            "options": q.options,
+            "type_name": type_name,
+            "type_id": q.type_id,
+            "difficulty": q.difficulty,
+            "subject_id": q.subject_id,
+            "year": q.year,
+            "source": q.source,
+        })
+
+    return {
+        "paper_id": paper.paper_id,
+        "paper_name": paper.paper_name,
+        "subject_id": paper.subject_id,
+        "duration": paper.duration,
+        "total_score": float(paper.total_score),
+        "question_count": len(paper_questions),
+        "questions": paper_questions,
     }
 
 
@@ -130,10 +236,11 @@ async def start_exam(
         )
 
     # 创建考试记录
+    # B1修复: 从试卷启动的统一使用 SELF_TEST（避免SIMULATION/PRACTICE/FORMAL与SELF_TEST/MOCK_EXAM枚举不匹配）
     exam_record = ExamRecord(
         paper_id=paper_id,
         user_id=current_user.user_id,
-        exam_type=paper.exam_type,
+        exam_type="SELF_TEST",
         start_time=now,
         attempt_count=attempt_count + 1
     )
@@ -253,6 +360,19 @@ async def submit_answers(
     exam_record.is_scored = 1 if scored_count == len(questions) else 0
     exam_record.submit_time = now
     exam_record.is_late = 1 if is_late else 0
+
+    # 自动将错题写入个人错题集
+    from .practice import _auto_record_wrong
+    for question_id, student_answer in answers.items():
+        question = question_dict.get(question_id)
+        if not question:
+            continue
+        detail = db.query(ExamAnswerDetail).filter(
+            ExamAnswerDetail.record_id == record_id,
+            ExamAnswerDetail.question_id == question_id
+        ).first()
+        if detail and not detail.is_correct:
+            _auto_record_wrong(current_user.user_id, question_id, question.subject_id, db)
 
     db.commit()
 
@@ -402,3 +522,78 @@ async def get_all_exam_records(
         "page_size": page_size,
         "data": records
     }
+
+
+# ==================== 新增考试接口 ====================
+
+@router.post("/start", response_model=dict, summary="开始/继续考试")
+async def start_exam_new(
+        paper_id: int,
+        exam_type: str = "SELF_TEST",
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    开始考试（支持继续未完成的考试）
+    """
+    from ...services.exam_service import ExamService
+    try:
+        result = ExamService.start_exam(db, paper_id, current_user.user_id, exam_type)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{exam_id}/submit", response_model=dict, summary="提交考试")
+async def submit_exam_new(
+        exam_id: int,
+        answers: Optional[List[Dict]] = None,
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    提交考试并自动评分
+    """
+    from ...services.exam_service import ExamService
+    try:
+        result = ExamService.submit_exam(db, exam_id, current_user.user_id, answers)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{exam_id}/progress", response_model=dict, summary="保存答题进度")
+async def save_exam_progress(
+        exam_id: int,
+        answers: List[Dict],
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    保存答题进度（断点续答）
+    
+    answers: [{"question_id": 123, "answer": "A", "time_spent": 45}, ...]
+    """
+    from ...services.exam_service import ExamService
+    try:
+        result = ExamService.save_progress(db, exam_id, answers, current_user.user_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/preview/{paper_id}", response_model=dict, summary="预览试卷")
+async def preview_exam(
+        paper_id: int,
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    学生端预览试卷（不含答案）
+    """
+    from ...services.exam_service import ExamService
+    try:
+        result = ExamService.get_exam_preview(db, paper_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

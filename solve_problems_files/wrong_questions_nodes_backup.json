@@ -1,0 +1,1343 @@
+[
+  {
+    "id": "26sqjveifkq",
+    "from": "",
+    "name": "div",
+    "props": {
+      "class": "wrong-question-page"
+    },
+    "events": {},
+    "locked": false,
+    "children": [
+      {
+        "id": "26srjveifkq",
+        "from": {
+          "id": "navbar",
+          "type": "Schema"
+        },
+        "name": "NavBar",
+        "props": {},
+        "events": {},
+        "locked": false,
+        "children": [],
+        "invisible": false,
+        "directives": []
+      },
+      {
+        "id": "26ssjveifkq",
+        "from": "",
+        "name": "main",
+        "props": {
+          "class": "wq-main"
+        },
+        "events": {},
+        "locked": false,
+        "children": [
+          {
+            "id": "26stjveifkq",
+            "from": "",
+            "name": "div",
+            "props": {
+              "class": "wq-filter-bar"
+            },
+            "events": {},
+            "locked": false,
+            "children": [
+              {
+                "id": "26sujveifkq",
+                "from": "",
+                "name": "div",
+                "props": {
+                  "class": "filter-group"
+                },
+                "events": {},
+                "locked": false,
+                "children": [
+                  {
+                    "id": "26svjveifkq",
+                    "from": "",
+                    "name": "label",
+                    "props": {},
+                    "events": {},
+                    "locked": false,
+                    "children": "收录时间",
+                    "invisible": false,
+                    "directives": []
+                  },
+                  {
+                    "id": "26swjveifkq",
+                    "from": "",
+                    "name": "select",
+                    "props": {},
+                    "events": {},
+                    "locked": false,
+                    "children": [
+                      {
+                        "id": "26sxjveifkq",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "all"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "全部",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26syjveifkq",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "week"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "最近一周",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26szjveifkq",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "month"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "最近一月",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26t0jveifkq",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "3months"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "最近三月",
+                        "invisible": false,
+                        "directives": []
+                      }
+                    ],
+                    "invisible": false,
+                    "directives": [
+                      {
+                        "id": "26uljveifw2",
+                        "name": "vModel",
+                        "value": {
+                          "type": "JSExpression",
+                          "value": "this.state.filter.time"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "invisible": false,
+                "directives": []
+              },
+              {
+                "id": "26t1jveifkq",
+                "from": "",
+                "name": "div",
+                "props": {
+                  "class": "filter-group"
+                },
+                "events": {},
+                "locked": false,
+                "children": [
+                  {
+                    "id": "26t2jveifkq",
+                    "from": "",
+                    "name": "label",
+                    "props": {},
+                    "events": {},
+                    "locked": false,
+                    "children": "知识点",
+                    "invisible": false,
+                    "directives": []
+                  },
+                  {
+                    "id": "26t3jveifkq",
+                    "from": "",
+                    "name": "select",
+                    "props": {},
+                    "events": {},
+                    "locked": false,
+                    "children": [
+                      {
+                        "id": "26umjveifw2",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "all"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "全部知识点",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26unjveifw2",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "zzll"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "政治理论",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26uojveifw2",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "pdtl"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "判断推理",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26upjveifw2",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "slgx"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "数量关系",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26uqjveifw2",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "zlfx"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "资料分析",
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26urjveifw2",
+                        "from": "",
+                        "name": "option",
+                        "props": {
+                          "value": "yylj"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": "语言理解",
+                        "invisible": false,
+                        "directives": []
+                      }
+                    ],
+                    "invisible": false,
+                    "directives": [
+                      {
+                        "id": "26usjveifw2",
+                        "name": "vModel",
+                        "value": {
+                          "type": "JSExpression",
+                          "value": "this.state.filter.knowledge"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "invisible": false,
+                "directives": []
+              },
+              {
+                "id": "26t4jveifkr",
+                "from": "",
+                "name": "button",
+                "props": {
+                  "class": "filter-btn"
+                },
+                "events": {
+                  "click": {
+                    "name": "click",
+                    "handler": {
+                      "type": "JSFunction",
+                      "value": "this.applyFilter"
+                    },
+                    "modifiers": {}
+                  }
+                },
+                "locked": false,
+                "children": "筛选",
+                "invisible": false,
+                "directives": []
+              }
+            ],
+            "invisible": false,
+            "directives": []
+          },
+          {
+            "id": "26t5jveifkr",
+            "from": "",
+            "name": "div",
+            "props": {
+              "class": "wq-body"
+            },
+            "events": {},
+            "locked": false,
+            "children": [
+              {
+                "id": "26t6jveifkr",
+                "from": "",
+                "name": "nav",
+                "props": {
+                  "class": "wq-nav"
+                },
+                "events": {},
+                "locked": false,
+                "children": [
+                  {
+                    "id": "26t7jveifkr",
+                    "from": "",
+                    "name": "div",
+                    "props": {
+                      "key": {
+                        "type": "JSExpression",
+                        "value": "this.context.nav.key"
+                      },
+                      "class": {
+                        "type": "JSExpression",
+                        "value": "['nav-item', { active: this.state.activeNav === this.context.nav.key }]"
+                      }
+                    },
+                    "events": {
+                      "click": {
+                        "name": "click",
+                        "handler": {
+                          "type": "JSExpression",
+                          "value": "this.switchNav(this.context.nav.key)"
+                        },
+                        "modifiers": {}
+                      }
+                    },
+                    "locked": false,
+                    "children": [
+                      {
+                        "id": "26t8jveifkr",
+                        "from": "@vtj/ui",
+                        "name": "XIcon",
+                        "props": {
+                          "icon": {
+                            "type": "JSExpression",
+                            "value": "this.context.nav.icon"
+                          },
+                          "size": {
+                            "type": "JSExpression",
+                            "value": "18"
+                          },
+                          "color": {
+                            "type": "JSExpression",
+                            "value": "this.state.activeNav === this.context.nav.key ? '#ffffff' : '#5a6488'"
+                          }
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [],
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26t9jveifkr",
+                        "from": "",
+                        "name": "span",
+                        "props": {},
+                        "events": {},
+                        "locked": false,
+                        "children": {
+                          "type": "JSExpression",
+                          "value": "this.context.nav.name"
+                        },
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26tajveifkr",
+                        "from": "",
+                        "name": "span",
+                        "props": {
+                          "class": "nav-badge"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": {
+                          "type": "JSExpression",
+                          "value": "this.context.nav.badge"
+                        },
+                        "invisible": false,
+                        "directives": [
+                          {
+                            "id": "26utjveifw2",
+                            "name": "vIf",
+                            "value": {
+                              "type": "JSExpression",
+                              "value": "this.context.nav.badge"
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "invisible": false,
+                    "directives": [
+                      {
+                        "id": "26uujveifw2",
+                        "name": "vFor",
+                        "value": {
+                          "type": "JSExpression",
+                          "value": "this.navList.value"
+                        },
+                        "iterator": {
+                          "item": "nav",
+                          "index": "index"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "invisible": false,
+                "directives": []
+              },
+              {
+                "id": "26tbjveifkr",
+                "from": "",
+                "name": "div",
+                "props": {
+                  "class": "wq-content"
+                },
+                "events": {},
+                "locked": false,
+                "children": [
+                  {
+                    "id": "26tcjveifkr",
+                    "from": "",
+                    "name": "div",
+                    "props": {
+                      "class": "zhanti-section"
+                    },
+                    "events": {},
+                    "locked": false,
+                    "children": [
+                      {
+                        "id": "26tdjveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "section-top"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26tejveifkr",
+                            "from": "",
+                            "name": "h3",
+                            "props": {},
+                            "events": {},
+                            "locked": false,
+                            "children": "我的斩题",
+                            "invisible": false,
+                            "directives": []
+                          },
+                          {
+                            "id": "26tfjveifkr",
+                            "from": "",
+                            "name": "span",
+                            "props": {
+                              "class": "section-tip"
+                            },
+                            "events": {},
+                            "locked": false,
+                            "children": "斩题保存10天，过期自动删除",
+                            "invisible": false,
+                            "directives": []
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26tgjveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "empty-state"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26thjveifkr",
+                            "from": "",
+                            "name": "span",
+                            "props": {
+                              "class": "empty-icon"
+                            },
+                            "events": {},
+                            "locked": false,
+                            "children": "📭",
+                            "invisible": false,
+                            "directives": []
+                          },
+                          {
+                            "id": "26tijveifkr",
+                            "from": "",
+                            "name": "p",
+                            "props": {},
+                            "events": {},
+                            "locked": false,
+                            "children": "暂无斩题记录",
+                            "invisible": false,
+                            "directives": []
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": [
+                          {
+                            "id": "26uvjveifw2",
+                            "name": "vIf",
+                            "value": {
+                              "type": "JSExpression",
+                              "value": "this.state.zhantiList.length === 0"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "id": "26tjjveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "zhanti-grid"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26tkjveifkr",
+                            "from": "",
+                            "name": "div",
+                            "props": {
+                              "key": {
+                                "type": "JSExpression",
+                                "value": "this.context.idx"
+                              },
+                              "class": {
+                                "type": "JSExpression",
+                                "value": "['zhanti-card', { expiring: this.context.item.daysLeft <= 2 }]"
+                              }
+                            },
+                            "events": {},
+                            "locked": false,
+                            "children": [
+                              {
+                                "id": "26tljveifkr",
+                                "from": "",
+                                "name": "div",
+                                "props": {
+                                  "class": "card-top"
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": [
+                                  {
+                                    "id": "26tmjveifkr",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {
+                                      "class": "card-subject"
+                                    },
+                                    "events": {},
+                                    "locked": false,
+                                    "children": {
+                                      "type": "JSExpression",
+                                      "value": "this.context.item.subject"
+                                    },
+                                    "invisible": false,
+                                    "directives": []
+                                  },
+                                  {
+                                    "id": "26tnjveifkr",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {
+                                      "class": "card-days"
+                                    },
+                                    "events": {},
+                                    "locked": false,
+                                    "children": [
+                                      {
+                                        "id": "26uwjveifw2",
+                                        "from": "",
+                                        "name": "span",
+                                        "props": {},
+                                        "events": {},
+                                        "locked": false,
+                                        "children": [
+                                          {
+                                            "id": "26uxjveifw2",
+                                            "from": "",
+                                            "name": "span",
+                                            "props": {},
+                                            "events": {},
+                                            "locked": false,
+                                            "children": {
+                                              "type": "JSExpression",
+                                              "value": "this.context.item.daysLeft"
+                                            },
+                                            "invisible": false,
+                                            "directives": []
+                                          },
+                                          {
+                                            "id": "26uyjveifw2",
+                                            "from": "",
+                                            "name": "span",
+                                            "props": {},
+                                            "events": {},
+                                            "locked": false,
+                                            "children": "天后过期",
+                                            "invisible": false,
+                                            "directives": []
+                                          }
+                                        ],
+                                        "invisible": false,
+                                        "directives": []
+                                      }
+                                    ],
+                                    "invisible": false,
+                                    "directives": []
+                                  }
+                                ],
+                                "invisible": false,
+                                "directives": []
+                              },
+                              {
+                                "id": "26tojveifkr",
+                                "from": "",
+                                "name": "p",
+                                "props": {
+                                  "class": "card-title-text"
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": {
+                                  "type": "JSExpression",
+                                  "value": "this.context.item.title"
+                                },
+                                "invisible": false,
+                                "directives": []
+                              },
+                              {
+                                "id": "26tpjveifkr",
+                                "from": "",
+                                "name": "div",
+                                "props": {
+                                  "class": "card-bottom"
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": [
+                                  {
+                                    "id": "26tqjveifkr",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {},
+                                    "events": {},
+                                    "locked": false,
+                                    "children": {
+                                      "type": "JSExpression",
+                                      "value": "this.context.item.createTime"
+                                    },
+                                    "invisible": false,
+                                    "directives": []
+                                  },
+                                  {
+                                    "id": "26trjveifkr",
+                                    "from": "",
+                                    "name": "button",
+                                    "props": {},
+                                    "events": {
+                                      "click": {
+                                        "name": "click",
+                                        "handler": {
+                                          "type": "JSExpression",
+                                          "value": "this.reviewZhanti(this.context.item)"
+                                        },
+                                        "modifiers": {}
+                                      }
+                                    },
+                                    "locked": false,
+                                    "children": "复习",
+                                    "invisible": false,
+                                    "directives": []
+                                  }
+                                ],
+                                "invisible": false,
+                                "directives": []
+                              }
+                            ],
+                            "invisible": false,
+                            "directives": [
+                              {
+                                "id": "26uzjveifw2",
+                                "name": "vFor",
+                                "value": {
+                                  "type": "JSExpression",
+                                  "value": "this.state.zhantiList"
+                                },
+                                "iterator": {
+                                  "item": "item",
+                                  "index": "idx"
+                                }
+                              }
+                            ]
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26tsjveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "expiring-notice"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": " ⚠️ 您有斩题要离开了哦，请及时复习！ ",
+                        "invisible": false,
+                        "directives": [
+                          {
+                            "id": "26v0jveifw2",
+                            "name": "vIf",
+                            "value": {
+                              "type": "JSExpression",
+                              "value": "this.state.zhantiExpiringNotice"
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "invisible": false,
+                    "directives": [
+                      {
+                        "id": "26v1jveifw2",
+                        "name": "vIf",
+                        "value": {
+                          "type": "JSExpression",
+                          "value": "this.state.activeNav === 'zhanti'"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "26ttjveifkr",
+                    "from": "",
+                    "name": "div",
+                    "props": {
+                      "class": "review-section"
+                    },
+                    "events": {},
+                    "locked": false,
+                    "children": [
+                      {
+                        "id": "26tujveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "section-top"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26tvjveifkr",
+                            "from": "",
+                            "name": "h3",
+                            "props": {},
+                            "events": {},
+                            "locked": false,
+                            "children": "错题复习",
+                            "invisible": false,
+                            "directives": []
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26twjveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "review-options"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26txjveifkr",
+                            "from": "",
+                            "name": "div",
+                            "props": {
+                              "class": "review-option"
+                            },
+                            "events": {
+                              "click": {
+                                "name": "click",
+                                "handler": {
+                                  "type": "JSExpression",
+                                  "value": "this.startReview('knowledge')"
+                                },
+                                "modifiers": {}
+                              }
+                            },
+                            "locked": false,
+                            "children": [
+                              {
+                                "id": "26tyjveifkr",
+                                "from": "",
+                                "name": "div",
+                                "props": {
+                                  "class": "option-icon",
+                                  "style": {
+                                    "type": "JSExpression",
+                                    "value": "({ background: '#eff6ff' })"
+                                  }
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": "📚",
+                                "invisible": false,
+                                "directives": []
+                              },
+                              {
+                                "id": "26tzjveifkr",
+                                "from": "",
+                                "name": "span",
+                                "props": {},
+                                "events": {},
+                                "locked": false,
+                                "children": "按知识点复习",
+                                "invisible": false,
+                                "directives": []
+                              }
+                            ],
+                            "invisible": false,
+                            "directives": []
+                          },
+                          {
+                            "id": "26u0jveifkr",
+                            "from": "",
+                            "name": "div",
+                            "props": {
+                              "class": "review-option"
+                            },
+                            "events": {
+                              "click": {
+                                "name": "click",
+                                "handler": {
+                                  "type": "JSExpression",
+                                  "value": "this.startReview('time')"
+                                },
+                                "modifiers": {}
+                              }
+                            },
+                            "locked": false,
+                            "children": [
+                              {
+                                "id": "26u1jveifkr",
+                                "from": "",
+                                "name": "div",
+                                "props": {
+                                  "class": "option-icon",
+                                  "style": {
+                                    "type": "JSExpression",
+                                    "value": "({ background: '#fef2f2' })"
+                                  }
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": "📅",
+                                "invisible": false,
+                                "directives": []
+                              },
+                              {
+                                "id": "26u2jveifkr",
+                                "from": "",
+                                "name": "span",
+                                "props": {},
+                                "events": {},
+                                "locked": false,
+                                "children": "按收录时间复习",
+                                "invisible": false,
+                                "directives": []
+                              }
+                            ],
+                            "invisible": false,
+                            "directives": []
+                          },
+                          {
+                            "id": "26u3jveifkr",
+                            "from": "",
+                            "name": "div",
+                            "props": {
+                              "class": "review-option"
+                            },
+                            "events": {
+                              "click": {
+                                "name": "click",
+                                "handler": {
+                                  "type": "JSExpression",
+                                  "value": "this.startReview('subject')"
+                                },
+                                "modifiers": {}
+                              }
+                            },
+                            "locked": false,
+                            "children": [
+                              {
+                                "id": "26u4jveifkr",
+                                "from": "",
+                                "name": "div",
+                                "props": {
+                                  "class": "option-icon",
+                                  "style": {
+                                    "type": "JSExpression",
+                                    "value": "({ background: '#fffbeb' })"
+                                  }
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": "📋",
+                                "invisible": false,
+                                "directives": []
+                              },
+                              {
+                                "id": "26u5jveifkr",
+                                "from": "",
+                                "name": "span",
+                                "props": {},
+                                "events": {},
+                                "locked": false,
+                                "children": "按科目复习",
+                                "invisible": false,
+                                "directives": []
+                              }
+                            ],
+                            "invisible": false,
+                            "directives": []
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": []
+                      }
+                    ],
+                    "invisible": false,
+                    "directives": [
+                      {
+                        "id": "26v2jveifw2",
+                        "name": "vIf",
+                        "value": {
+                          "type": "JSExpression",
+                          "value": "this.state.activeNav === 'review'"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "26u6jveifkr",
+                    "from": "",
+                    "name": "div",
+                    "props": {
+                      "class": "question-list"
+                    },
+                    "events": {},
+                    "locked": false,
+                    "children": [
+                      {
+                        "id": "26u7jveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "section-top"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26u8jveifkr",
+                            "from": "",
+                            "name": "h3",
+                            "props": {},
+                            "events": {},
+                            "locked": false,
+                            "children": [
+                              {
+                                "id": "26v3jveifw2",
+                                "from": "",
+                                "name": "span",
+                                "props": {},
+                                "events": {},
+                                "locked": false,
+                                "children": [
+                                  {
+                                    "id": "26v4jveifw2",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {},
+                                    "events": {},
+                                    "locked": false,
+                                    "children": {
+                                      "type": "JSExpression",
+                                      "value": "this.state.navNameMap[this.state.activeNav]"
+                                    },
+                                    "invisible": false,
+                                    "directives": []
+                                  },
+                                  {
+                                    "id": "26v5jveifw2",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {},
+                                    "events": {},
+                                    "locked": false,
+                                    "children": "错题",
+                                    "invisible": false,
+                                    "directives": []
+                                  }
+                                ],
+                                "invisible": false,
+                                "directives": []
+                              }
+                            ],
+                            "invisible": false,
+                            "directives": []
+                          },
+                          {
+                            "id": "26u9jveifkr",
+                            "from": "",
+                            "name": "span",
+                            "props": {},
+                            "events": {},
+                            "locked": false,
+                            "children": [
+                              {
+                                "id": "26v6jveifw2",
+                                "from": "",
+                                "name": "span",
+                                "props": {},
+                                "events": {},
+                                "locked": false,
+                                "children": [
+                                  {
+                                    "id": "26v7jveifw2",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {},
+                                    "events": {},
+                                    "locked": false,
+                                    "children": "共 ",
+                                    "invisible": false,
+                                    "directives": []
+                                  },
+                                  {
+                                    "id": "26v8jveifw2",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {},
+                                    "events": {},
+                                    "locked": false,
+                                    "children": {
+                                      "type": "JSExpression",
+                                      "value": "this.filteredQuestions.value.length"
+                                    },
+                                    "invisible": false,
+                                    "directives": []
+                                  },
+                                  {
+                                    "id": "26v9jveifw2",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {},
+                                    "events": {},
+                                    "locked": false,
+                                    "children": " 题",
+                                    "invisible": false,
+                                    "directives": []
+                                  }
+                                ],
+                                "invisible": false,
+                                "directives": []
+                              }
+                            ],
+                            "invisible": false,
+                            "directives": []
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": []
+                      },
+                      {
+                        "id": "26uajveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "empty-state"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26ubjveifkr",
+                            "from": "",
+                            "name": "span",
+                            "props": {
+                              "class": "empty-icon"
+                            },
+                            "events": {},
+                            "locked": false,
+                            "children": "🎉",
+                            "invisible": false,
+                            "directives": []
+                          },
+                          {
+                            "id": "26ucjveifkr",
+                            "from": "",
+                            "name": "p",
+                            "props": {},
+                            "events": {},
+                            "locked": false,
+                            "children": "暂无错题，继续保持！",
+                            "invisible": false,
+                            "directives": []
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": [
+                          {
+                            "id": "26vajveifw2",
+                            "name": "vIf",
+                            "value": {
+                              "type": "JSExpression",
+                              "value": "this.filteredQuestions.value.length === 0"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "id": "26udjveifkr",
+                        "from": "",
+                        "name": "div",
+                        "props": {
+                          "class": "question-items"
+                        },
+                        "events": {},
+                        "locked": false,
+                        "children": [
+                          {
+                            "id": "26uejveifkr",
+                            "from": "",
+                            "name": "div",
+                            "props": {
+                              "key": {
+                                "type": "JSExpression",
+                                "value": "this.context.q.id"
+                              },
+                              "class": "q-item"
+                            },
+                            "events": {
+                              "click": {
+                                "name": "click",
+                                "handler": {
+                                  "type": "JSExpression",
+                                  "value": "this.goToQuestion(this.context.q)"
+                                },
+                                "modifiers": {}
+                              }
+                            },
+                            "locked": false,
+                            "children": [
+                              {
+                                "id": "26ufjveifkr",
+                                "from": "",
+                                "name": "div",
+                                "props": {
+                                  "class": "q-header"
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": [
+                                  {
+                                    "id": "26ugjveifkr",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {
+                                      "class": "q-type"
+                                    },
+                                    "events": {},
+                                    "locked": false,
+                                    "children": {
+                                      "type": "JSExpression",
+                                      "value": "this.context.q.type"
+                                    },
+                                    "invisible": false,
+                                    "directives": []
+                                  },
+                                  {
+                                    "id": "26uhjveifkr",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {
+                                      "class": "q-date"
+                                    },
+                                    "events": {},
+                                    "locked": false,
+                                    "children": {
+                                      "type": "JSExpression",
+                                      "value": "this.context.q.date"
+                                    },
+                                    "invisible": false,
+                                    "directives": []
+                                  }
+                                ],
+                                "invisible": false,
+                                "directives": []
+                              },
+                              {
+                                "id": "26uijveifkr",
+                                "from": "",
+                                "name": "p",
+                                "props": {
+                                  "class": "q-title"
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": {
+                                  "type": "JSExpression",
+                                  "value": "this.context.q.title"
+                                },
+                                "invisible": false,
+                                "directives": []
+                              },
+                              {
+                                "id": "26ujjveifkr",
+                                "from": "",
+                                "name": "div",
+                                "props": {
+                                  "class": "q-tags"
+                                },
+                                "events": {},
+                                "locked": false,
+                                "children": [
+                                  {
+                                    "id": "26ukjveifkt",
+                                    "from": "",
+                                    "name": "span",
+                                    "props": {
+                                      "key": {
+                                        "type": "JSExpression",
+                                        "value": "this.context.tag"
+                                      }
+                                    },
+                                    "events": {},
+                                    "locked": false,
+                                    "children": {
+                                      "type": "JSExpression",
+                                      "value": "this.context.tag"
+                                    },
+                                    "invisible": false,
+                                    "directives": [
+                                      {
+                                        "id": "26vbjveifw2",
+                                        "name": "vFor",
+                                        "value": {
+                                          "type": "JSExpression",
+                                          "value": "this.context.q.tags"
+                                        },
+                                        "iterator": {
+                                          "item": "tag",
+                                          "index": "index"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ],
+                                "invisible": false,
+                                "directives": []
+                              }
+                            ],
+                            "invisible": false,
+                            "directives": [
+                              {
+                                "id": "26vcjveifw2",
+                                "name": "vFor",
+                                "value": {
+                                  "type": "JSExpression",
+                                  "value": "this.filteredQuestions.value"
+                                },
+                                "iterator": {
+                                  "item": "q",
+                                  "index": "index"
+                                }
+                              }
+                            ]
+                          }
+                        ],
+                        "invisible": false,
+                        "directives": []
+                      }
+                    ],
+                    "invisible": false,
+                    "directives": [
+                      {
+                        "id": "26vdjveifw2",
+                        "name": "vIf",
+                        "value": {
+                          "type": "JSExpression",
+                          "value": "['xc', 'sl', 'ga'].includes(this.state.activeNav)"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "invisible": false,
+                "directives": []
+              }
+            ],
+            "invisible": false,
+            "directives": []
+          }
+        ],
+        "invisible": false,
+        "directives": []
+      }
+    ],
+    "invisible": false,
+    "directives": []
+  }
+]

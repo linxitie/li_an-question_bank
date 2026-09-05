@@ -216,7 +216,7 @@ async def sms_login(
 
     return LoginResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
+        refresh_token="",
         token_type="bearer",
         user=UserResponse.model_validate(user)
     )

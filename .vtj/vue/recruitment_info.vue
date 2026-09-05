@@ -112,7 +112,7 @@ export default defineComponent({
   name: 'RecruitmentInfo',
   components: { XIcon },
   setup(props) {
-    const provider = useProvider({ id: 'recruitment_info', version: '1778915950685' });
+    const provider = useProvider({ id: 'recruitment_info', version: '1785750000101' });
     const state = reactive({
       items: {} as Record<string, any[]>,
       expandedId: null as number | null,
@@ -132,12 +132,13 @@ export default defineComponent({
       this.state.loading = true;
       try {
         const resp = await (window as any).__VTJ_AUTH__.apiFetch('/api/recruitment?limit=20');
-        if (resp && resp.items) {
-          this.state.items = resp.items;
+        const data = await resp.json();
+        if (data && data.items) {
+          this.state.items = data.items;
           // Flatten all items for accordion display
           const all: any[] = [];
           for (const cat of this.state.categories) {
-            const catItems = resp.items[cat] || [];
+            const catItems = data.items[cat] || [];
             for (const item of catItems) {
               all.push({ ...item, _category: cat });
             }

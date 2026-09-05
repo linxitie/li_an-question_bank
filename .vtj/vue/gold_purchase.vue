@@ -115,6 +115,7 @@
   } from '@vtj/icons';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'GoldPurchase',
     components: { NavBar, XIcon },
@@ -194,9 +195,9 @@
             amount: item.price,
             date: new Date().toISOString().slice(0, 10)
           });
-          this.$message.success('兑换成功！');
+          ElMessage.success('兑换成功！');
         } else {
-          this.$message.warning('金币不足，快去刷题赚金币吧');
+          ElMessage.warning('金币不足，快去刷题赚金币吧');
         }
       },
       loadRecords() {

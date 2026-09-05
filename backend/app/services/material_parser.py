@@ -191,3 +191,51 @@ def parse_pdf_text(pdf_path: str) -> dict:
     full = "".join(html_parts)
     return {"chapters": chapters, "html": full,
             "word_count": len(re.sub(r"<[^>]+>", "", full))}
+
+
+# ==================== 扩展格式支持（Task 11）====================
+
+
+def parse_video_metadata(file_path: str) -> dict:
+    """使用 ffprobe 解析视频元数据（时长、大小、格式）。"""
+    import json as _json
+    import subprocess
+
+    try:
+        cmd = [
+            "ffprobe", "-v", "quiet",
+            "-print_format", "json",
+            "-show_format", "-show_streams",
+            file_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            data = _json.loads(result.stdout)
+            fmt = data.get("format", {})
+            return {
+                "duration": int(float(fmt.get("duration", 0))),
+                "size": int(fmt.get("size", 0)),
+                "format": fmt.get("format_name", ""),
+            }
+    except Exception:
+        pass
+    return {"duration": 0, "size": 0, "format": ""}
+
+
+def detect_video_type(file_path: str) -> str:
+    """根据视频时长判断类型：≤15min 为 video_intro，>15min 为 video_advanced。"""
+    meta = parse_video_metadata(file_path)
+    return "video_intro" if meta["duration"] <= 15 * 60 else "video_advanced"
+
+
+def parse_image_ocr(file_path: str) -> str:
+    """图片 OCR（可选，依赖 pytesseract + PIL）。"""
+    try:
+        from PIL import Image
+        import pytesseract
+
+        img = Image.open(file_path)
+        text = pytesseract.image_to_string(img, lang="chi_sim+eng")
+        return text.strip()
+    except Exception:
+        return ""

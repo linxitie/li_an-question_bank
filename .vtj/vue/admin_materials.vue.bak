@@ -1,0 +1,39 @@
+<!-- 备考资料管理 -->
+<template>
+  <div class="admin_materials">
+    <h1>备考资料管理</h1>
+    <!-- VTJ 设计器生成的模板内容将在此处 -->
+  </div>
+</template>
+
+<script lang="ts">
+// @ts-nocheck
+import { defineComponent, reactive } from 'vue';
+import { useProvider } from '@vtj/renderer';
+
+export default defineComponent({
+  name: 'AdminMaterials',
+  setup(props) {
+    const provider = useProvider({ id: 'admin_materials', version: '1787726546438' });
+    const state = reactive({
+      loading: false
+    });
+    return { state, provider };
+  },
+  methods: {
+    async handleInit() {
+      // TODO: 初始化逻辑
+    }
+  },
+  mounted() {
+    this.handleInit();
+  }
+});
+</script>
+
+<style lang="css" scoped>
+.admin_materials {
+  padding: 20px;
+  font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+}
+</style>

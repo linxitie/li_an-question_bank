@@ -61,10 +61,14 @@
         <div class="news-modal-header">
           <h3 class="news-modal-title">{{ state.selectedNews.title }}</h3>
           <div class="news-modal-header-actions">
-            <button :class="'news-fav-btn ' + (state.isFavorited ? 'favorited' : '')" @click="toggleFavorite" :title="state.isFavorited ? '取消收藏' : '收藏'">⭐</button>
-            <button class="news-note-btn" @click="scrollToNotes" title="笔记">📝</button>
+            <button :class="'news-fav-btn ' + (state.isFavorited ? 'favorited' : '')" @click="toggleFavorite" :title="state.isFavorited ? '取消收藏' : '收藏'">{{ state.isFavorited ? '⭐' : '☆' }}</button>
+            <button class="news-note-btn" @click="state.showHint = !state.showHint" title="划线/想法说明">📝</button>
             <button class="news-modal-close" @click="closeDetail">×</button>
           </div>
+        </div>
+        <div v-if="state.showHint" class="news-hint-bubble">
+          <span>💡 选中正文文字 → 点颜色即划线（自动保存）；点「📝 想法」输入后失焦自动保存。</span>
+          <button class="news-hint-notes" @click="scrollToNotes">查看我的笔记 ↓</button>
         </div>
         <div class="news-modal-meta">
           <span :class="'news-source-badge ' + (state.selectedNews.source === 'cpd' ? 'badge-cpd' : 'badge-people')">{{ state.selectedNews.source === 'cpd' ? '人民公安报' : '人民网' }}</span>
@@ -74,28 +78,34 @@
         <div class="news-modal-body" @mouseup="handleTextSelection" @touchend="handleTextSelection">
           <div v-if="state.selectedNews.content" class="news-modal-content" v-html="renderContent(state.selectedNews.content)"></div>
           <p v-else class="news-modal-content">{{ state.selectedNews.summary || '暂无内容' }}</p>
-          <!-- 图片展示区域 -->
-          <div v-if="state.selectedNews.images && state.selectedNews.images.length" class="news-modal-images">
-            <img v-for="(img, idx) in state.selectedNews.images" :key="idx" :src="img.url || img" :alt="'图片' + (idx + 1)" class="news-content-img" />
+          <!-- 图片兜底展示（正文无内联标记时） -->
+          <div v-if="state.selectedNews.images && state.selectedNews.images.length && !hasInlineMarkers(state.selectedNews.content)" class="news-modal-images">
+            <img v-for="(img, idx) in state.selectedNews.images" :key="idx" :src="resolveImgUrl(img.url || img)" :alt="'图片' + (idx + 1)" class="news-content-img" />
           </div>
         </div>
-        <!-- 选中文本操作菜单（5色+3线型） -->
-        <div v-if="state.selectionMenuVisible" class="selection-menu" :style="{ top: state.selectionMenuPos.y + 'px', left: state.selectionMenuPos.x + 'px' }">
+        <!-- 选中文本操作菜单（5色+3线型，点颜色即划线保存） -->
+        <div v-if="state.selectionMenuVisible" class="selection-menu" :style="{ top: state.selectionMenuPos.y + 'px', left: state.selectionMenuPos.x + 'px' }" @mousedown.prevent>
           <div class="sel-menu-row sel-colors-row">
-            <button class="sel-color-dot" style="background:#FFD700" :class="{active: state.highlightColor==='#FFD700'}" @click="state.highlightColor='#FFD700'" title="黄色"></button>
-            <button class="sel-color-dot" style="background:#4CAF50" :class="{active: state.highlightColor==='#4CAF50'}" @click="state.highlightColor='#4CAF50'" title="绿色"></button>
-            <button class="sel-color-dot" style="background:#2196F3" :class="{active: state.highlightColor==='#2196F3'}" @click="state.highlightColor='#2196F3'" title="蓝色"></button>
-            <button class="sel-color-dot" style="background:#EF4444" :class="{active: state.highlightColor==='#EF4444'}" @click="state.highlightColor='#EF4444'" title="红色"></button>
-            <button class="sel-color-dot" style="background:#8B5CF6" :class="{active: state.highlightColor==='#8B5CF6'}" @click="state.highlightColor='#8B5CF6'" title="紫色"></button>
+            <button class="sel-color-dot" style="background:#FFD700" :class="{active: state.highlightColor==='#FFD700'}" @click="applyHighlight('#FFD700')" title="黄色划线"></button>
+            <button class="sel-color-dot" style="background:#4CAF50" :class="{active: state.highlightColor==='#4CAF50'}" @click="applyHighlight('#4CAF50')" title="绿色划线"></button>
+            <button class="sel-color-dot" style="background:#2196F3" :class="{active: state.highlightColor==='#2196F3'}" @click="applyHighlight('#2196F3')" title="蓝色划线"></button>
+            <button class="sel-color-dot" style="background:#EF4444" :class="{active: state.highlightColor==='#EF4444'}" @click="applyHighlight('#EF4444')" title="红色划线"></button>
+            <button class="sel-color-dot" style="background:#8B5CF6" :class="{active: state.highlightColor==='#8B5CF6'}" @click="applyHighlight('#8B5CF6')" title="紫色划线"></button>
           </div>
           <div class="sel-menu-row sel-styles-row">
-            <button :class="['sel-style-btn', {active: state.lineStyle==='wavy'}]" @click="state.lineStyle='wavy'">〰️ 波浪线</button>
-            <button :class="['sel-style-btn', {active: state.lineStyle==='straight'}]" @click="state.lineStyle='straight'">＿ 直线</button>
-            <button :class="['sel-style-btn', {active: state.lineStyle==='marker'}]" @click="state.lineStyle='marker'">🖍️ 马克笔</button>
+            <button :class="['sel-style-btn', {active: state.lineStyle==='wavy'}]" @click="setLineStyle('wavy')">〰️ 波浪线</button>
+            <button :class="['sel-style-btn', {active: state.lineStyle==='straight'}]" @click="setLineStyle('straight')">＿ 直线</button>
+            <button :class="['sel-style-btn', {active: state.lineStyle==='marker'}]" @click="setLineStyle('marker')">🖍️ 马克笔</button>
           </div>
           <div class="sel-menu-row sel-actions-row">
-            <button class="sel-action-btn" @click="applyHighlight">✅ 划线</button>
-            <button class="sel-action-btn" @click="noteSelection">📝 想法</button>
+            <button class="sel-action-btn" @click="openNoteInput">📝 想法</button>
+          </div>
+        </div>
+        <!-- 想法输入气泡（失焦自动保存） -->
+        <div v-if="state.noteInputVisible" class="note-input-bubble" :style="{ top: state.selectionMenuPos.y + 'px', left: state.selectionMenuPos.x + 'px' }" @mousedown.stop>
+          <textarea v-model="state.noteText" class="note-input-textarea" placeholder="记录想法…（失焦自动保存）" @blur="saveNoteOnBlur" @keydown.enter.exact.prevent="saveNoteOnBlur"></textarea>
+          <div class="note-input-actions">
+            <button class="note-input-cancel" @mousedown.prevent="cancelNoteInput">✕ 取消</button>
           </div>
         </div>
         <!-- 笔记列表 -->
@@ -142,7 +152,10 @@
         selectionMenuPos: { x: 0, y: 0 },
         selectedText: '',
         highlightColor: '#FFD700',
-        lineStyle: 'wavy'
+        lineStyle: 'wavy',
+        showHint: false,
+        noteInputVisible: false,
+        noteText: ''
       });
       return { state, props, provider };
     },
@@ -202,21 +215,44 @@
           this.state.loading = false;
         }
       },
+      resolveImgUrl(url) {
+        if (!url) return '';
+        // 相对路径保持（同源 + dev proxy 已通），绝对 URL 直接用
+        return url;
+      },
+      hasInlineMarkers(content) {
+        return !!content && /\[\[IMG:\d+\]\]/.test(content);
+      },
       renderContent(content) {
         if (!content) return '';
-        // 分段：空行分隔为 <p>
+        const images = this.state.selectedNews.images || [];
+        const imageMap = {};
+        for (const img of images) {
+          const order = img.order !== undefined && img.order !== null ? img.order : null;
+          if (order !== null) imageMap[order] = img.url || img;
+        }
+        // 分段：空行分隔为 <p>，内联图片标记单独成段
         const paragraphs = content.split(/\n{2,}/);
         let html = '';
         for (const para of paragraphs) {
-          if (para.trim()) {
-            // 单行换行转为 <br/>
-            const escaped = para
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;');
-            const withBreaks = escaped.replace(/\n/g, '<br/>');
-            html += '<p style="margin-bottom:16px;text-indent:2em;">' + withBreaks + '</p>';
+          const trimmed = para.trim();
+          if (!trimmed) continue;
+          const imgMatch = trimmed.match(/^\[\[IMG:(\d+)\]\]$/);
+          if (imgMatch) {
+            const order = parseInt(imgMatch[1], 10);
+            const src = this.resolveImgUrl(imageMap[order]);
+            if (src) {
+              html += '<img src="' + src + '" alt="新闻图片" class="news-inline-img" />';
+            }
+            continue;
           }
+          // 单行换行转为 <br/>
+          const escaped = trimmed
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          const withBreaks = escaped.replace(/\n/g, '<br/>');
+          html += '<p style="margin-bottom:18px;text-indent:2em;">' + withBreaks + '</p>';
         }
         return html;
       },
@@ -227,26 +263,32 @@
           this.state.selectedText = text;
           const range = sel.getRangeAt(0);
           const rect = range.getBoundingClientRect();
-          this.state.selectionMenuPos = {
-            x: rect.left + rect.width / 2 - 80,
-            y: rect.top - 50 + window.scrollY
-          };
+          // 菜单约 260px 宽、140px 高，做越界钳制，避免被视口裁剪
+          const menuW = 260;
+          const menuH = 140;
+          let x = rect.left + rect.width / 2 - menuW / 2;
+          let y = rect.top - menuH + window.scrollY;
+          if (x < 8) x = 8;
+          if (x + menuW > window.innerWidth - 8) x = window.innerWidth - menuW - 8;
+          if (y < window.scrollY + 8) y = rect.bottom + 8 + window.scrollY;
+          this.state.selectionMenuPos = { x: x, y: y };
           this.state.selectionMenuVisible = true;
         } else {
           this.state.selectionMenuVisible = false;
           this.state.selectedText = '';
         }
       },
-      setHighlightColor(color) {
-        this.state.highlightColor = color;
+      setLineStyle(style) {
+        this.state.lineStyle = style;
       },
       async toggleCardFavorite(item) {
         const res = await window.__VTJ_AUTH__.apiFetch('/api/news/' + item.id + '/favorite', { method: 'POST' });
         const data = await res.json();
         item.is_favorited = data.favorited;
       },
-      async applyHighlight() {
+      async applyHighlight(color) {
         if (!this.state.selectedText) return;
+        if (color) this.state.highlightColor = color;
         const newsId = this.state.selectedNews.id;
         await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
           method: 'POST',
@@ -272,10 +314,26 @@
         }
         return 'border-left: 3px solid ' + (note.color || '#FFD700') + ';';
       },
-      async noteSelection() {
+      openNoteInput() {
         if (!this.state.selectedText) return;
-        const thought = prompt('记录想法:', '');
-        if (thought === null) return;
+        this.state.noteText = '';
+        this.state.selectionMenuVisible = false;
+        this.state.noteInputVisible = true;
+        this.$nextTick(() => {
+          const el = this.$el.querySelector('.note-input-textarea');
+          if (el) el.focus();
+        });
+      },
+      cancelNoteInput() {
+        this.state.noteInputVisible = false;
+        this.state.noteText = '';
+      },
+      async saveNoteOnBlur() {
+        const thought = (this.state.noteText || '').trim();
+        if (!thought) {
+          this.cancelNoteInput();
+          return;
+        }
         const newsId = this.state.selectedNews.id;
         try {
           await window.__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
@@ -288,11 +346,14 @@
               line_style: this.state.lineStyle
             })
           });
-          this.state.selectionMenuVisible = false;
+          this.state.noteInputVisible = false;
+          this.state.noteText = '';
           this.state.selectedText = '';
           await this.fetchNotes(newsId);
         } catch (e) {
           console.error('保存想法失败:', e);
+          this.state.noteInputVisible = false;
+          this.state.noteText = '';
         }
       },
       async toggleFavorite() {
@@ -615,4 +676,43 @@
 
 /* 点击空白区域隐藏选择菜单 */
 .news-modal-body { user-select: text; }
+
+/* 划线/想法说明气泡 */
+.news-hint-bubble {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; margin: 0 0 12px;
+  background: #eff6ff; border-radius: 10px;
+  font-size: 13px; color: #3b82f6; line-height: 1.6;
+}
+.news-hint-notes {
+  padding: 4px 10px; border: none; background: #ffffff; color: #3b82f6;
+  border-radius: 6px; font-size: 12px; cursor: pointer; flex-shrink: 0; white-space: nowrap;
+}
+.news-hint-notes:hover { background: #dbeafe; }
+
+/* 正文内联图片 */
+.news-inline-img {
+  display: block; max-width: 100%; height: auto;
+  margin: 20px auto; border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(26,43,95,0.08);
+}
+
+/* 想法输入气泡 */
+.note-input-bubble {
+  position: fixed; z-index: 2100; width: 280px;
+  background: #ffffff; border-radius: 10px;
+  box-shadow: 0 6px 28px rgba(26,43,95,0.22); padding: 10px;
+}
+.note-input-textarea {
+  width: 100%; height: 72px; resize: none; border: 1px solid #e8eaf0;
+  border-radius: 8px; padding: 8px; font-size: 13px; color: #33375a;
+  font-family: inherit; line-height: 1.6; outline: none; box-sizing: border-box;
+}
+.note-input-textarea:focus { border-color: #3b82f6; }
+.note-input-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.note-input-cancel {
+  padding: 4px 12px; border: none; background: #f8f9fc; color: #8a8faa;
+  border-radius: 6px; font-size: 12px; cursor: pointer;
+}
+.note-input-cancel:hover { background: #fef0f2; color: #c41e3a; }
 </style>

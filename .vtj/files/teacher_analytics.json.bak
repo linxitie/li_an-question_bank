@@ -1,0 +1,51 @@
+{
+  "id": "teacher_analytics",
+  "name": "TeacherAnalytics",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1785750000005",
+  "state": {
+    "classList": [],
+    "selectedClass": 0,
+    "selectedSubject": 0,
+    "overview": {
+      "total_students": 0,
+      "total_exams": 0,
+      "avg_score": 0,
+      "pass_rate": 0,
+      "subject_comparison": []
+    },
+    "knowledgeMastery": [],
+    "questionUsage": []
+  },
+  "methods": {
+    "loadClasses": {
+      "type": "asyncMethod"
+    },
+    "loadData": {
+      "type": "asyncMethod"
+    },
+    "barHeight": {
+      "type": "method",
+      "params": [
+        "score"
+      ]
+    },
+    "handleLogout": {
+      "type": "method"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "css": "",
+  "nodes": [],
+  "props": [],
+  "emits": [],
+  "slots": [],
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "dataSources": {}
+}

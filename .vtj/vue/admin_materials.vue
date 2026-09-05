@@ -1,6 +1,25 @@
 <!-- 备考资料管理（内容工厂）— spec v2.2 §7.6 -->
 <template>
   <div class="adm-page">
+    <!-- 统计概览 -->
+    <div class="stats-overview">
+      <div class="stat-card">
+        <div class="stat-value">{{ state.stats.total }}</div>
+        <div class="stat-label">总资料数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ (state.stats.by_type.video_intro || 0) + (state.stats.by_type.video_advanced || 0) }}</div>
+        <div class="stat-label">视频</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ state.stats.by_type.article || 0 }}</div>
+        <div class="stat-label">文档</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ state.stats.by_type.card || 0 }}</div>
+        <div class="stat-label">卡片</div>
+      </div>
+    </div>
     <header class="bar">
       <div>
         <h2>备考资料管理</h2>
@@ -20,14 +39,33 @@
           <option value="article">文章</option>
           <option value="card">知识卡片</option>
         </select>
+        <select v-model="state.fStatus" @change="loadList" class="mini">
+          <option value="">全部状态</option>
+          <option value="1">已发布</option>
+          <option value="0">草稿</option>
+        </select>
+        <input v-model="state.fKeyword" placeholder="搜索标题..."
+               @keyup.enter="loadList" class="mini" style="width:140px" />
+        <button class="btn" @click="loadList">搜索</button>
         <button class="btn primary" @click="openCreate">＋ 新建资料</button>
         <button class="btn" @click="state.importDlg = true; resetImport()">智能导入</button>
       </div>
     </header>
 
+    <!-- 批量操作工具栏 -->
+    <div class="batch-toolbar" v-if="state.selectedItems.length > 0">
+      <span>已选择 {{ state.selectedItems.length }} 项</span>
+      <button class="btn danger" @click="batchDelete">批量删除</button>
+      <button class="btn" @click="batchPublish">批量上架</button>
+      <button class="btn" @click="batchUnpublish">批量下架</button>
+    </div>
+
     <table class="tbl">
       <thead>
         <tr>
+          <th style="width:40px">
+            <input type="checkbox" @change="toggleSelectAll" :checked="state.selectedItems.length === state.items.length && state.items.length > 0" />
+          </th>
           <th style="width:60px">ID</th><th style="text-align:left">标题 / 类型</th>
           <th style="width:80px">科目</th><th style="width:110px">分类</th>
           <th style="width:70px">浏览</th><th style="width:70px">完成</th>
@@ -36,6 +74,9 @@
       </thead>
       <tbody>
         <tr v-for="row in state.items" :key="row.id">
+          <td>
+            <input type="checkbox" :value="row.id" v-model="state.selectedItems" />
+          </td>
           <td>{{ row.id }}</td>
           <td class="t-title">
             <b>{{ row.title }}</b>
@@ -239,7 +280,8 @@ export default defineComponent({
   setup(props) {
     const provider = useProvider({ id: 'admin_materials', version: '20260825001' });
     const state = reactive({
-      items: [], fSubject: '', fType: '',
+      items: [], fSubject: '', fType: '', fStatus: '', fKeyword: '',
+      selectedItems: [],
       editDlg: false, saving: false,
       form: {}, editor: null, editorReady: false,
       uploadPct: 0,
@@ -248,7 +290,10 @@ export default defineComponent({
              elapsed: 0, error: '', result: null,
              subject: 'xingce', type: 'article', category: '',
              mapping: { front: 0, back: 1, category: null },
-             confirming: false, createdText: '' }
+             confirming: false, createdText: '' },
+      stats: { total: 0, by_type: { video_intro: 0, video_advanced: 0, article: 0, card: 0 },
+               by_subject: { xingce: 0, shenlun: 0, gongzhuan: 0 },
+               by_status: { published: 0, draft: 0 } }
     });
     return { state, props, provider, TYPE_LABEL, SUBJECT_LABEL };
   },
@@ -269,12 +314,76 @@ export default defineComponent({
       const q = new URLSearchParams();
       if (this.state.fSubject) q.set('subject', this.state.fSubject);
       if (this.state.fType) q.set('type', this.state.fType);
+      if (this.state.fStatus !== '') q.set('status', this.state.fStatus);
+      if (this.state.fKeyword) q.set('keyword', this.state.fKeyword);
       q.set('page_size', '100');
       try {
         const r = await this.api('/api/materials/admin/list?' + q.toString());
         if (!r.ok) throw new Error('加载失败');
         const d = await r.json();
         this.state.items = d.items || [];
+      } catch (e) { ElMessage.error(e.message); }
+    },
+
+    /* ---------- 统计概览 ---------- */
+    async loadStats() {
+      try {
+        const r = await this.api('/api/materials/admin/stats');
+        if (!r.ok) return;
+        const d = await r.json();
+        this.state.stats = d;
+      } catch (e) { console.warn('[AdminMaterials] loadStats failed:', e); }
+    },
+
+    /* ---------- 批量操作 ---------- */
+    toggleSelectAll(e) {
+      if (e.target.checked) {
+        this.state.selectedItems = this.state.items.map(item => item.id);
+      } else {
+        this.state.selectedItems = [];
+      }
+    },
+    async batchDelete() {
+      if (!confirm('确认删除选中的 ' + this.state.selectedItems.length + ' 项资料？')) return;
+      try {
+        const r = await this.api('/api/materials/admin/batch', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: this.state.selectedItems })
+        });
+        if (!r.ok) throw new Error('批量删除失败');
+        ElMessage.success('批量删除成功');
+        this.state.selectedItems = [];
+        this.loadList();
+        this.loadStats();
+      } catch (e) { ElMessage.error(e.message); }
+    },
+    async batchPublish() {
+      try {
+        for (const id of this.state.selectedItems) {
+          await this.api('/api/materials/admin/' + id + '/status', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 1 })
+          });
+        }
+        ElMessage.success('批量上架成功');
+        this.state.selectedItems = [];
+        this.loadList();
+      } catch (e) { ElMessage.error(e.message); }
+    },
+    async batchUnpublish() {
+      try {
+        for (const id of this.state.selectedItems) {
+          await this.api('/api/materials/admin/' + id + '/status', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 0 })
+          });
+        }
+        ElMessage.success('批量下架成功');
+        this.state.selectedItems = [];
+        this.loadList();
       } catch (e) { ElMessage.error(e.message); }
     },
 
@@ -529,12 +638,22 @@ export default defineComponent({
       }
     }
   },
-  mounted() { this.loadList(); },
+  mounted() { this.loadList(); this.loadStats(); },
   beforeUnmount() { this.destroyEditor(); }
 })
 </script>
 
 <style lang="css" scoped>
+/* 统计概览 */
+.stats-overview { display: flex; gap: 16px; margin-bottom: 20px; }
+.stat-card { flex: 1; background: #fff; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 12px rgba(10,22,40,.05); }
+.stat-value { font-size: 28px; font-weight: 600; color: #1a2a4a; margin-bottom: 8px; }
+.stat-label { font-size: 13px; color: #8899aa; }
+/* 批量操作工具栏 */
+.batch-toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #f5f7fa; border-radius: 8px; margin-bottom: 16px; }
+.batch-toolbar span { font-size: 13px; color: #5a6b85; }
+.btn.danger { background: rgba(196, 30, 58, 0.08); border-color: #c41e3a; color: #c41e3a; }
+/* 原有样式 */
 .adm-page { max-width: 1280px; margin: 0 auto; padding: 24px; }
 .bar { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 18px; gap: 14px; flex-wrap: wrap; }
 .bar h2 { color: #1a2a4a; margin: 0 0 4px; font-size: 21px; }

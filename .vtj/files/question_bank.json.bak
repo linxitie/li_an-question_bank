@@ -1,0 +1,1468 @@
+{
+  "id": "question_bank",
+  "css": ".question-bank {\n  min-height: 100vh;\n  background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);\n  font-family: \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n}\n.qb-main {\n  max-width: 1400px;\n  margin: 0 auto;\n  padding: 24px 32px 40px;\n}\n/* 上层 */\n.qb-top {\n  margin-bottom: 24px;\n}\n.qb-actions {\n  position: relative;\n  margin-bottom: 12px;\n}\n.action-scroll {\n  display: flex;\n  gap: 12px;\n  overflow-x: auto;\n  scrollbar-width: none;\n  padding: 4px 0;\n}\n.action-scroll::-webkit-scrollbar {\n  display: none;\n}\n.action-btn {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 14px 24px;\n  border: none;\n  border-radius: 14px;\n  background: #ffffff;\n  cursor: pointer;\n  transition: all 0.3s;\n  white-space: nowrap;\n  box-shadow: 0 2px 10px rgba(26, 43, 95, 0.04);\n}\n.action-btn:hover {\n  transform: translateY(-1px);\n  box-shadow: 0 4px 16px rgba(26, 43, 95, 0.1);\n}\n.action-btn.active {\n  background: linear-gradient(135deg, #1a2b5f, #1e3470);\n  box-shadow: 0 4px 18px rgba(26, 43, 95, 0.3);\n}\n.action-btn.active .action-name {\n  color: #ffffff;\n}\n.action-icon {\n  font-size: 20px;\n}\n.action-name {\n  font-size: 15px;\n  font-weight: 700;\n  color: #1a2b5f;\n}\n.action-tag {\n  font-size: 9px;\n  padding: 1px 6px;\n  border-radius: 6px;\n  background: #c41e3a;\n  color: #fff;\n  font-weight: 700;\n}\n.qb-sub-actions {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n}\n.sub-btn {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 8px 16px;\n  border: 1px solid #e8eaf0;\n  border-radius: 10px;\n  background: #ffffff;\n  font-size: 13px;\n  font-weight: 600;\n  color: #1a2b5f;\n  cursor: pointer;\n  transition: all 0.3s;\n}\n.sub-btn:hover {\n  border-color: #c41e3a;\n}\n.search-box {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  margin-left: auto;\n  padding: 8px 16px;\n  background: #ffffff;\n  border-radius: 10px;\n  border: 1px solid #e8eaf0;\n  width: 240px;\n}\n.search-box input {\n  border: none;\n  outline: none;\n  font-size: 13px;\n  flex: 1;\n  color: #1a2b5f;\n}\n/* 主体 */\n.qb-body {\n  display: grid;\n  grid-template-columns: 1fr 300px;\n  gap: 24px;\n}\n.category-tabs {\n  display: flex;\n  gap: 4px;\n  margin-bottom: 20px;\n  background: #ffffff;\n  border-radius: 12px;\n  padding: 4px;\n  box-shadow: 0 1px 8px rgba(26, 43, 95, 0.04);\n}\n.cat-tab {\n  flex: 1;\n  padding: 12px;\n  border: none;\n  background: transparent;\n  border-radius: 10px;\n  font-size: 14px;\n  font-weight: 700;\n  color: #5a6488;\n  cursor: pointer;\n  transition: all 0.3s;\n}\n.cat-tab.active {\n  background: #1a2b5f;\n  color: #ffffff;\n  box-shadow: 0 2px 10px rgba(26, 43, 95, 0.3);\n}\n.subcategory-grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 12px;\n}\n.subcard {\n  background: #ffffff;\n  border-radius: 14px;\n  padding: 18px 16px;\n  cursor: pointer;\n  transition: all 0.3s;\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  box-shadow: 0 1px 8px rgba(26, 43, 95, 0.04);\n}\n.subcard:hover {\n  transform: translateY(-2px);\n  box-shadow: 0 4px 18px rgba(26, 43, 95, 0.1);\n}\n.subcard-icon {\n  width: 44px;\n  height: 44px;\n  border-radius: 12px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-size: 20px;\n  flex-shrink: 0;\n}\n.subcard-info {\n  flex: 1;\n}\n.subcard-name {\n  font-size: 14px;\n  font-weight: 700;\n  color: #1a2b5f;\n  display: block;\n  margin-bottom: 4px;\n}\n.subcard-count {\n  font-size: 11px;\n  color: #8a8faa;\n}\n/* 右侧 */\n.qb-right {\n  display: flex;\n  flex-direction: column;\n  gap: 16px;\n}\n.right-card {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 18px;\n  box-shadow: 0 2px 12px rgba(26, 43, 95, 0.04);\n}\n.right-header {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  font-size: 14px;\n  font-weight: 700;\n  color: #1a2b5f;\n  margin-bottom: 14px;\n}\n.log-stats {\n  display: flex;\n  justify-content: space-around;\n}\n.log-item {\n  text-align: center;\n}\n.log-value {\n  display: block;\n  font-size: 22px;\n  font-weight: 900;\n  color: #1a2b5f;\n  font-family: \"DIN Alternate\", sans-serif;\n}\n.log-label {\n  font-size: 11px;\n  color: #8a8faa;\n}\n.tools-grid {\n  display: grid;\n  grid-template-columns: repeat(3, 1fr);\n  gap: 8px;\n}\n.tool-item {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 4px;\n  padding: 12px 4px;\n  border-radius: 12px;\n  cursor: pointer;\n  transition: all 0.3s;\n  font-size: 11px;\n  color: #5a6488;\n  background: #f8f9fc;\n}\n.tool-item:hover {\n  background: #f0f2f5;\n  transform: scale(1.03);\n}",
+  "name": "QuestionBank",
+  "emits": [],
+  "nodes": [
+    {
+      "id": "26qmjvefdo5",
+      "from": "",
+      "name": "div",
+      "props": {
+        "class": "question-bank"
+      },
+      "events": {},
+      "locked": false,
+      "children": [
+        {
+          "id": "26qnjvefdo5",
+          "from": {
+            "id": "navbar",
+            "type": "Schema"
+          },
+          "name": "NavBar",
+          "props": {},
+          "events": {},
+          "locked": false,
+          "children": [],
+          "invisible": false,
+          "directives": []
+        },
+        {
+          "id": "26qojvefdo5",
+          "from": "",
+          "name": "main",
+          "props": {
+            "class": "qb-main"
+          },
+          "events": {},
+          "locked": false,
+          "children": [
+            {
+              "id": "26qpjvefdo5",
+              "from": "",
+              "name": "section",
+              "props": {
+                "class": "qb-top"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26qqjvefdo5",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "qb-actions"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26qrjvefdo5",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "ref": "actionScrollRef",
+                        "class": "action-scroll"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26qsjvefdo5",
+                          "from": "",
+                          "name": "button",
+                          "props": {
+                            "key": {
+                              "type": "JSExpression",
+                              "value": "this.context.item.key"
+                            },
+                            "class": {
+                              "type": "JSExpression",
+                              "value": "[\n  'action-btn',\n  { active: this.state.activeTopAction === this.context.item.key }\n]"
+                            }
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSExpression",
+                                "value": "this.handleTopAction(this.context.item.key)"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26qtjvefdo5",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "action-icon"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.icon"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26qujvefdo5",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "action-name"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.name"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26qvjvefdo5",
+                              "from": "",
+                              "name": "span",
+                              "props": {
+                                "class": "action-tag"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.item.tag"
+                              },
+                              "invisible": false,
+                              "directives": [
+                                {
+                                  "id": "26sijvefe1h",
+                                  "name": "vIf",
+                                  "value": {
+                                    "type": "JSExpression",
+                                    "value": "this.context.item.tag"
+                                  }
+                                }
+                              ]
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26sjjvefe1h",
+                              "name": "vFor",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.topActions.value"
+                              },
+                              "iterator": {
+                                "item": "item",
+                                "index": "index"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26qyjvefdo5",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "qb-sub-actions"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26qzjvefdo5",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": "sub-btn"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleSubAction('mini')"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26r0jvefdo5",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.Timer"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "16"
+                            },
+                            "color": "#c41e3a"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26r1jvefdo5",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": "小模考",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26r2jvefdo5",
+                      "from": "",
+                      "name": "button",
+                      "props": {
+                        "class": "sub-btn"
+                      },
+                      "events": {
+                        "click": {
+                          "name": "click",
+                          "handler": {
+                            "type": "JSExpression",
+                            "value": "this.handleSubAction('college')"
+                          },
+                          "modifiers": {}
+                        }
+                      },
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26r3jvefdo5",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.Monitor"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "16"
+                            },
+                            "color": "#1565c0"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26r4jvefdo5",
+                          "from": "",
+                          "name": "span",
+                          "props": {},
+                          "events": {},
+                          "locked": false,
+                          "children": "院校联考机考系统",
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26r5jvefdo6",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "search-box"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26r6jvefdo6",
+                          "from": "@vtj/ui",
+                          "name": "XIcon",
+                          "props": {
+                            "icon": {
+                              "type": "JSExpression",
+                              "value": "this.$libs.VtjIcons.Search"
+                            },
+                            "size": {
+                              "type": "JSExpression",
+                              "value": "16"
+                            },
+                            "color": "#8a8faa"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26r7jvefdo6",
+                          "from": "",
+                          "name": "input",
+                          "props": {
+                            "placeholder": "搜索题目..."
+                          },
+                          "events": {
+                            "keyup": {
+                              "name": "keyup",
+                              "handler": {
+                                "type": "JSFunction",
+                                "value": "this.handleSearch"
+                              },
+                              "modifiers": {
+                                "enter": true
+                              }
+                            }
+                          },
+                          "locked": false,
+                          "children": [],
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26skjvefe1h",
+                              "name": "vModel",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.state.searchQuery"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            },
+            {
+              "id": "26r8jvefdo6",
+              "from": "",
+              "name": "div",
+              "props": {
+                "class": "qb-body"
+              },
+              "events": {},
+              "locked": false,
+              "children": [
+                {
+                  "id": "26r9jvefdo6",
+                  "from": "",
+                  "name": "div",
+                  "props": {
+                    "class": "qb-left"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26rajvefdo6",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "category-tabs"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26rbjvefdo6",
+                          "from": "",
+                          "name": "button",
+                          "props": {
+                            "key": {
+                              "type": "JSExpression",
+                              "value": "this.context.cat.key"
+                            },
+                            "class": {
+                              "type": "JSExpression",
+                              "value": "['cat-tab', { active: this.state.activeCategory === this.context.cat.key }]"
+                            }
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSExpression",
+                                "value": "this.switchCategory(this.context.cat.key)"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": {
+                            "type": "JSExpression",
+                            "value": "this.context.cat.name"
+                          },
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26sljvefe1h",
+                              "name": "vFor",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.categoryList.value"
+                              },
+                              "iterator": {
+                                "item": "cat",
+                                "index": "index"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26rcjvefdo6",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "subcategory-grid"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26rdjvefdo6",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "key": {
+                              "type": "JSExpression",
+                              "value": "this.context.sub.key"
+                            },
+                            "class": "subcard"
+                          },
+                          "events": {
+                            "click": {
+                              "name": "click",
+                              "handler": {
+                                "type": "JSExpression",
+                                "value": "this.startPractice(this.context.sub.key)"
+                              },
+                              "modifiers": {}
+                            }
+                          },
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26rejvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "subcard-icon",
+                                "style": {
+                                  "type": "JSExpression",
+                                  "value": "({ background: this.context.sub.bg })"
+                                }
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": {
+                                "type": "JSExpression",
+                                "value": "this.context.sub.emoji"
+                              },
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26rfjvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "subcard-info"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26rgjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "subcard-name"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.context.sub.name"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26rhjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "subcard-count"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [
+                                    {
+                                      "id": "26smjvefe1h",
+                                      "from": "",
+                                      "name": "span",
+                                      "props": {},
+                                      "events": {},
+                                      "locked": false,
+                                      "children": [
+                                        {
+                                          "id": "26snjvefe1h",
+                                          "from": "",
+                                          "name": "span",
+                                          "props": {},
+                                          "events": {},
+                                          "locked": false,
+                                          "children": {
+                                            "type": "JSExpression",
+                                            "value": "this.context.sub.count"
+                                          },
+                                          "invisible": false,
+                                          "directives": []
+                                        },
+                                        {
+                                          "id": "26sojvefe1h",
+                                          "from": "",
+                                          "name": "span",
+                                          "props": {},
+                                          "events": {},
+                                          "locked": false,
+                                          "children": "题",
+                                          "invisible": false,
+                                          "directives": []
+                                        }
+                                      ],
+                                      "invisible": false,
+                                      "directives": []
+                                    }
+                                  ],
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26rijvefdo6",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.$libs.VtjIcons.ArrowRightBold"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "14"
+                                },
+                                "color": "#d1d5db"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": [
+                            {
+                              "id": "26spjvefe1h",
+                              "name": "vFor",
+                              "value": {
+                                "type": "JSExpression",
+                                "value": "this.currentSubCategories.value"
+                              },
+                              "iterator": {
+                                "item": "sub",
+                                "index": "index"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                },
+                {
+                  "id": "26rjjvefdo6",
+                  "from": "",
+                  "name": "aside",
+                  "props": {
+                    "class": "qb-right"
+                  },
+                  "events": {},
+                  "locked": false,
+                  "children": [
+                    {
+                      "id": "26rkjvefdo6",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "right-card practice-log"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26rljvefdo6",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "right-header"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26rmjvefdo6",
+                              "from": "@vtj/ui",
+                              "name": "XIcon",
+                              "props": {
+                                "icon": {
+                                  "type": "JSExpression",
+                                  "value": "this.$libs.VtjIcons.DataLine"
+                                },
+                                "size": {
+                                  "type": "JSExpression",
+                                  "value": "18"
+                                },
+                                "color": "#1a2b5f"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26rnjvefdo6",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "练习记录",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26rojvefdo6",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "log-stats"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26rpjvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "log-item"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26rqjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "log-value"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.state.practiceLog.today"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26rrjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "log-label"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "今日",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26rsjvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "log-item"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26rtjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "log-value"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.state.practiceLog.week"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26rujvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "log-label"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "本周",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26rvjvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "log-item"
+                              },
+                              "events": {},
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26rwjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "log-value"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": {
+                                    "type": "JSExpression",
+                                    "value": "this.state.practiceLog.total"
+                                  },
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26rxjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {
+                                    "class": "log-label"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "累计",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26ryjvefdo6",
+                      "from": {
+                        "id": "goal_card",
+                        "type": "Schema"
+                      },
+                      "name": "GoalCard",
+                      "props": {},
+                      "events": {},
+                      "locked": false,
+                      "children": [],
+                      "invisible": false,
+                      "directives": []
+                    },
+                    {
+                      "id": "26rzjvefdo6",
+                      "from": "",
+                      "name": "div",
+                      "props": {
+                        "class": "right-card quick-tools"
+                      },
+                      "events": {},
+                      "locked": false,
+                      "children": [
+                        {
+                          "id": "26s0jvefdo6",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "right-header"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26s1jvefdo6",
+                              "from": "",
+                              "name": "span",
+                              "props": {},
+                              "events": {},
+                              "locked": false,
+                              "children": "快捷工具",
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        },
+                        {
+                          "id": "26s2jvefdo6",
+                          "from": "",
+                          "name": "div",
+                          "props": {
+                            "class": "tools-grid"
+                          },
+                          "events": {},
+                          "locked": false,
+                          "children": [
+                            {
+                              "id": "26s3jvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "tool-item"
+                              },
+                              "events": {
+                                "click": {
+                                  "name": "click",
+                                  "handler": {
+                                    "type": "JSExpression",
+                                    "value": "this.navigateTo('wrong_questions')"
+                                  },
+                                  "modifiers": {}
+                                }
+                              },
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26s4jvefdo6",
+                                  "from": "@vtj/ui",
+                                  "name": "XIcon",
+                                  "props": {
+                                    "icon": {
+                                      "type": "JSExpression",
+                                      "value": "this.$libs.VtjIcons.DocumentDelete"
+                                    },
+                                    "size": {
+                                      "type": "JSExpression",
+                                      "value": "20"
+                                    },
+                                    "color": "#ef4444"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [],
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26s5jvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "错题集",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26s6jvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "tool-item"
+                              },
+                              "events": {
+                                "click": {
+                                  "name": "click",
+                                  "handler": {
+                                    "type": "JSExpression",
+                                    "value": "this.handleToolClick('note')"
+                                  },
+                                  "modifiers": {}
+                                }
+                              },
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26s7jvefdo6",
+                                  "from": "@vtj/ui",
+                                  "name": "XIcon",
+                                  "props": {
+                                    "icon": {
+                                      "type": "JSExpression",
+                                      "value": "this.$libs.VtjIcons.Edit"
+                                    },
+                                    "size": {
+                                      "type": "JSExpression",
+                                      "value": "20"
+                                    },
+                                    "color": "#3b82f6"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [],
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26s8jvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "笔记",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26s9jvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "tool-item"
+                              },
+                              "events": {
+                                "click": {
+                                  "name": "click",
+                                  "handler": {
+                                    "type": "JSExpression",
+                                    "value": "this.handleToolClick('fav')"
+                                  },
+                                  "modifiers": {}
+                                }
+                              },
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26sajvefdo6",
+                                  "from": "@vtj/ui",
+                                  "name": "XIcon",
+                                  "props": {
+                                    "icon": {
+                                      "type": "JSExpression",
+                                      "value": "this.$libs.VtjIcons.StarFilled"
+                                    },
+                                    "size": {
+                                      "type": "JSExpression",
+                                      "value": "20"
+                                    },
+                                    "color": "#f59e0b"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [],
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26sbjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "收藏",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26scjvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "tool-item"
+                              },
+                              "events": {
+                                "click": {
+                                  "name": "click",
+                                  "handler": {
+                                    "type": "JSExpression",
+                                    "value": "this.navigateTo('score_analysis')"
+                                  },
+                                  "modifiers": {}
+                                }
+                              },
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26sdjvefdo6",
+                                  "from": "@vtj/ui",
+                                  "name": "XIcon",
+                                  "props": {
+                                    "icon": {
+                                      "type": "JSExpression",
+                                      "value": "this.$libs.VtjIcons.DataAnalysis"
+                                    },
+                                    "size": {
+                                      "type": "JSExpression",
+                                      "value": "20"
+                                    },
+                                    "color": "#10b981"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [],
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26sejvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "成绩分析",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            },
+                            {
+                              "id": "26sfjvefdo6",
+                              "from": "",
+                              "name": "div",
+                              "props": {
+                                "class": "tool-item"
+                              },
+                              "events": {
+                                "click": {
+                                  "name": "click",
+                                  "handler": {
+                                    "type": "JSExpression",
+                                    "value": "this.navigateTo('gold_purchase')"
+                                  },
+                                  "modifiers": {}
+                                }
+                              },
+                              "locked": false,
+                              "children": [
+                                {
+                                  "id": "26sgjvefdo6",
+                                  "from": "@vtj/ui",
+                                  "name": "XIcon",
+                                  "props": {
+                                    "icon": {
+                                      "type": "JSExpression",
+                                      "value": "this.$libs.VtjIcons.ShoppingCartFull"
+                                    },
+                                    "size": {
+                                      "type": "JSExpression",
+                                      "value": "20"
+                                    },
+                                    "color": "#8b5cf6"
+                                  },
+                                  "events": {},
+                                  "locked": false,
+                                  "children": [],
+                                  "invisible": false,
+                                  "directives": []
+                                },
+                                {
+                                  "id": "26shjvefdo6",
+                                  "from": "",
+                                  "name": "span",
+                                  "props": {},
+                                  "events": {},
+                                  "locked": false,
+                                  "children": "金币购",
+                                  "invisible": false,
+                                  "directives": []
+                                }
+                              ],
+                              "invisible": false,
+                              "directives": []
+                            }
+                          ],
+                          "invisible": false,
+                          "directives": []
+                        }
+                      ],
+                      "invisible": false,
+                      "directives": []
+                    }
+                  ],
+                  "invisible": false,
+                  "directives": []
+                }
+              ],
+              "invisible": false,
+              "directives": []
+            }
+          ],
+          "invisible": false,
+          "directives": []
+        }
+      ],
+      "invisible": false,
+      "directives": []
+    }
+  ],
+  "props": [],
+  "slots": [],
+  "state": {
+    "2": "[]",
+    "3": "[] }",
+    "practiceLog": "{ today: 0",
+    "practiceRecords": "null",
+    "showPracticeDetail": "false",
+    "searchQuery": "''",
+    "activeCategory": "'xc'",
+    "activeTopAction": "'quick'",
+    "statsLoaded": "false",
+    "statsLoading": "false",
+    "statsError": "''",
+    "statsRetryCount": "0",
+    "xingceStats": "{}",
+    "shenlunStats": "{}",
+    "gongzhuanStats": "{}",
+    "showNotesModal": "false",
+    "userNotes": "[]",
+    "notesLoading": "false",
+    "week": "{ count: 0",
+    "total": "{ count: 0",
+    "practiceStats": "{",
+    "today": "{ count: 0",
+    "correct": "0",
+    "accuracy": "0",
+    "time_spent_minutes": "0 }",
+    "practiceTypeSummary": "[]",
+    "practiceTrend": "[]",
+    "showChart": "false",
+    "chartType": "'bar'",
+    "expandedSubCategory": "null",
+    "quickPracticeData": "{ 1: []",
+    "subject": "'xc'",
+    "yearRange": "'3'",
+    "subCategory": "''",
+    "questionCount": "20",
+    "timeLimit": "0",
+    "practiceError": "''",
+    "kpProgress": "{ subjects: [] }",
+    "kpLoading": "false",
+    "kpError": "''",
+    "kpLoaded": "false",
+    "recordsDialogVisible": "false",
+    "recordsTab": "'progress'",
+    "recentRecords": "[]",
+    "recordsTotal": "0",
+    "recordsLimit": "10",
+    "recordsOffset": "0",
+    "recordsLoading": "false",
+    "recordsLoaded": "false",
+    "unifiedStats": "{ today: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, week: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, total: { count: 0, correct: 0, accuracy: 0, time_spent_seconds: 0 }, daily_trend: [] }",
+    "recordsFilter": "{ source: '', status: '' }",
+    "sourceChips": "[{ v: '', label: '全部' }, { v: '快速练习', label: '快速练习' }, { v: '历年试卷', label: '历年试卷' }, { v: '小模考', label: '小模考' }, { v: '智能组卷', label: '智能组卷' }]",
+    "statusChips": "[{ v: '', label: '全部' }, { v: 'completed', label: '已完成' }, { v: 'in_progress', label: '进行中' }]"
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "checkImportRefreshFlag": {
+      "type": "method",
+      "params": []
+    },
+    "getSubDefinitions": {
+      "type": "method",
+      "params": [
+        "category"
+      ]
+    },
+    "loadStats": {
+      "type": "asyncMethod"
+    },
+    "_doLoadStats": {
+      "type": "asyncMethod",
+      "params": [
+        "retryCount"
+      ]
+    },
+    "loadPracticeRecords": {
+      "type": "asyncMethod"
+    },
+    "refreshStats": {
+      "type": "method"
+    },
+    "getJsonHeaders": {
+      "type": "method"
+    },
+    "getAuthHeaders": {
+      "type": "method",
+      "params": [
+        "init"
+      ]
+    },
+    "ensureLogin": {
+      "type": "asyncMethod"
+    },
+    "navigateToLogin": {
+      "type": "method"
+    },
+    "clearAuthAndRedirect": {
+      "type": "method"
+    },
+    "fetchWithRetry": {
+      "type": "asyncMethod",
+      "params": [
+        "url",
+        "options"
+      ]
+    },
+    "handleTopAction": {
+      "type": "method",
+      "params": [
+        "key"
+      ]
+    },
+    "switchCategory": {
+      "type": "method",
+      "params": [
+        "key"
+      ]
+    },
+    "handleSubAction": {
+      "type": "method",
+      "params": [
+        "key"
+      ]
+    },
+    "handleSearch": {
+      "type": "method"
+    },
+    "startPractice": {
+      "type": "method",
+      "params": [
+        "subKey"
+      ]
+    },
+    "navigateTo": {
+      "type": "method",
+      "params": [
+        "id"
+      ]
+    },
+    "handleToolClick": {
+      "type": "method",
+      "params": [
+        "key"
+      ]
+    },
+    "openNotesModal": {
+      "type": "method"
+    },
+    "closeNotesModal": {
+      "type": "method"
+    },
+    "fetchUserNotes": {
+      "type": "asyncMethod"
+    },
+    "deleteNoteItem": {
+      "type": "asyncMethod",
+      "params": [
+        "questionId"
+      ]
+    },
+    "loadUnifiedData": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "fmtDuration": {
+      "type": "method",
+      "params": [
+        "sec"
+      ]
+    },
+    "openRecordsDialog": {
+      "type": "method",
+      "params": []
+    },
+    "closeRecordsDialog": {
+      "type": "method",
+      "params": []
+    },
+    "switchRecordsTab": {
+      "type": "method",
+      "params": [
+        "tab"
+      ]
+    },
+    "loadKnowledgeProgress": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "goKpPractice": {
+      "type": "method",
+      "params": [
+        "sub",
+        "k"
+      ]
+    },
+    "fetchRecentRecords": {
+      "type": "asyncMethod",
+      "params": [
+        "reset"
+      ]
+    },
+    "setSourceFilter": {
+      "type": "method",
+      "params": [
+        "v"
+      ]
+    },
+    "setStatusFilter": {
+      "type": "method",
+      "params": [
+        "v"
+      ]
+    },
+    "loadMoreRecords": {
+      "type": "method",
+      "params": []
+    },
+    "goRecordDetail": {
+      "type": "method",
+      "params": [
+        "item"
+      ]
+    },
+    "srcClass": {
+      "type": "method",
+      "params": [
+        "source"
+      ]
+    }
+  },
+  "computed": {
+    "topActions": {
+      "type": "JSFunction",
+      "value": "() => {\n  return [\n    { key: 'quick', name: '快速练习', icon: '⚡', tag: 'NEW' },\n    { key: 'history', name: '历年试卷', icon: '📋' },\n    { key: 'smart', name: '智能组卷', icon: '🤖' },\n    { key: 'ai', name: '联考小智', icon: '🧠', tag: 'AI' },\n    { key: 'questionimport', name: '题目导入', icon: '📥' }\n  ];\n}"
+    },
+    "categoryList": {
+      "type": "JSFunction",
+      "value": "() => {\n  return [\n    { key: 'xc', name: '行测' },\n    { key: 'sl', name: '申论' },\n    { key: 'ga', name: '公专' },\n    { key: 'custom', name: '自定义刷题' }\n  ];\n}"
+    },
+    "currentSubCategories": {
+      "type": "JSFunction",
+      "value": "() => {\n  const cat = this.state.activeCategory;\n  if (cat === 'custom') return [{ key: 'custom-all', name: '自定义选题', count: 0, emoji: '⚙️', bg: '#f8f9fc' }];\n  const subDefs = this.getSubDefinitions(cat);\n  const statsMap = cat === 'xc' ? this.state.xingceStats : cat === 'sl' ? this.state.shenlunStats : this.state.gongzhuanStats;\n  return subDefs.map(function(def) {\n    const realCount = statsMap[def.name] !== undefined ? statsMap[def.name] : 0;\n    return {\n      key: def.key, name: def.name, count: realCount,\n      emoji: (SUBCARD_STYLES[def.name] || {}).emoji || '📝',\n      bg: (SUBCARD_STYLES[def.name] || {}).bg || '#f8f9fc'\n    };\n  });\n}"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    },
+    "beforeUnmount": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1787547281992",
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}

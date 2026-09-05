@@ -72,6 +72,8 @@
           <div class="sol-q-card" v-for="(d, idx) in result.details" :key="idx" :class="{ 'q-correct': d.is_correct, 'q-wrong': !d.is_correct }">
             <div class="sol-q-header">
               <span class="sol-q-num">第 {{ idx + 1 }} 题</span>
+              <span class="sol-q-type-badge" :class="getSolTypeClass(d.question_type_detail)">{{ getSolTypeLabel(d.question_type_detail) }}</span>
+              <span class="sol-q-difficulty" v-if="d.difficulty">{{ getSolDifficultyLabel(d.difficulty) }}</span>
               <span class="sol-q-result" :class="d.is_correct ? 'result-ok' : 'result-fail'">
                 <svg v-if="d.is_correct" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e8384f" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -122,7 +124,21 @@ export default defineComponent({
     result() {
       try {
         var raw = sessionStorage.getItem('exercise_result');
-        return raw ? JSON.parse(raw) : null;
+        var r = raw ? JSON.parse(raw) : null;
+        // 规范化每个题目的options，防御字符串/异常格式
+        if (r && r.details) {
+          var labels = ['A', 'B', 'C', 'D'];
+          r.details = r.details.map(function(d) {
+            var opts = d.options;
+            if (typeof opts === 'string') { try { opts = JSON.parse(opts); } catch(e) { opts = []; } }
+            if (!Array.isArray(opts)) opts = [];
+            d.options = opts.filter(function(o) {
+              return o && typeof o === 'object' && o.key;
+            });
+            return d;
+          });
+        }
+        return r;
       } catch(e) {
         return null;
       }
@@ -161,6 +177,28 @@ export default defineComponent({
     backToBank() {
       sessionStorage.setItem('refresh_practice', '1');
       this.$router.push('/');
+    },
+    getSolTypeLabel(type) {
+      if (!type) return '[单选]';
+      var t = String(type);
+      if (t.indexOf('多选') >= 0 || t.indexOf('不定项') >= 0) return '[多选]';
+      if (t.indexOf('判断') >= 0) return '[判断]';
+      if (t.indexOf('填空') >= 0) return '[填空]';
+      if (t.indexOf('简答') >= 0) return '[简答]';
+      return '[单选]';
+    },
+    getSolTypeClass(type) {
+      if (!type) return 'type-single';
+      var t = String(type);
+      if (t.indexOf('多选') >= 0 || t.indexOf('不定项') >= 0) return 'type-multi';
+      if (t.indexOf('判断') >= 0) return 'type-judge';
+      if (t.indexOf('填空') >= 0) return 'type-fill';
+      if (t.indexOf('简答') >= 0) return 'type-essay';
+      return 'type-single';
+    },
+    getSolDifficultyLabel(d) {
+      var labels = ['', '★', '★★', '★★★', '★★★★', '★★★★★'];
+      return '难度：' + (labels[d] || '★★★');
     },
   },
 });
@@ -295,6 +333,13 @@ export default defineComponent({
 .sol-q-result { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; }
 .result-ok { color: #22c55e; }
 .result-fail { color: #e8384f; }
+.sol-q-type-badge { font-size: 17px; padding: 4px 14px; border-radius: 8px; font-weight: 700; display: inline-block; margin-left: 10px; }
+.sol-q-type-badge.type-single { background: #eff6ff; color: #3b82f6; }
+.sol-q-type-badge.type-multi  { background: #fef3c7; color: #d97706; }
+.sol-q-type-badge.type-judge { background: #f0fdf4; color: #065f46; }
+.sol-q-type-badge.type-fill  { background: #fef2f2; color: #dc2626; }
+.sol-q-type-badge.type-essay { background: #f5f3ff; color: #7c3aed; }
+.sol-q-difficulty { font-size: 16px; color: #f5a623; letter-spacing: 2px; margin-left: 8px; }
 .sol-q-content { font-size: 20px; line-height: 1.7; color: #33375a; margin-bottom: 10px; }
 .sol-q-options { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .sol-opt { font-size: 17px; color: #8899aa; padding: 4px 10px; border-radius: 6px; }

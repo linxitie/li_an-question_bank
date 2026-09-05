@@ -35,7 +35,8 @@ def get_random_ua() -> str:
     return random.choice(USER_AGENTS)
 
 
-def safe_request(url: str, timeout: int = REQUEST_TIMEOUT, label: str = "") -> Optional[requests.Response]:
+def safe_request(url: str, timeout: int = REQUEST_TIMEOUT, label: str = "",
+                 encoding: str = None) -> Optional[requests.Response]:
     """
     带UA轮换、随机延迟、指数退避重试的安全HTTP请求。
 
@@ -43,6 +44,7 @@ def safe_request(url: str, timeout: int = REQUEST_TIMEOUT, label: str = "") -> O
         url: 请求URL
         timeout: 超时时间（秒）
         label: 日志标签（如 "[recruitment/国考省考]"）
+        encoding: 强制编码（如 'gbk', 'utf-8'），None 则自动检测
 
     Returns:
         Response 对象，失败返回 None
@@ -65,7 +67,19 @@ def safe_request(url: str, timeout: int = REQUEST_TIMEOUT, label: str = "") -> O
             }
             resp = requests.get(url, headers=headers, timeout=timeout)
             resp.raise_for_status()
-            resp.encoding = resp.apparent_encoding or "utf-8"
+            # 编码优先级: 指定编码 > apparent_encoding > meta标签检测 > utf-8
+            if encoding:
+                resp.encoding = encoding
+            elif resp.apparent_encoding and resp.apparent_encoding.lower() not in ('iso-8859-1', 'windows-1252'):
+                resp.encoding = resp.apparent_encoding
+            else:
+                # 从 HTML meta 标签检测
+                import re as _re
+                m = _re.search(rb'<meta[^>]+charset=["\']?([a-zA-Z0-9\-]+)', resp.content[:2048])
+                if m:
+                    resp.encoding = m.group(1).decode('ascii')
+                else:
+                    resp.encoding = "utf-8"
             return resp
 
         except requests.exceptions.Timeout:

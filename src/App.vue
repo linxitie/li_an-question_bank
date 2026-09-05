@@ -1,15 +1,17 @@
 <template>
   <ElConfigProvider :locale="zhCn">
     <Suspense>
-      <XMask
-        :title="title"
-        :logo="logo || _logo"
-        :menus="menus"
-        :disabled="disabled"
-        :pure="pure"
-        :actions="actions"
-        @action-click="onActionClick"
-        :theme="themeSwitchable"></XMask>
+      <VtjErrorBoundary>
+        <XMask
+          :title="title"
+          :logo="logo || _logo"
+          :menus="menus"
+          :disabled="disabled"
+          :pure="pure"
+          :actions="actions"
+          @action-click="onActionClick"
+          :theme="themeSwitchable"></XMask>
+      </VtjErrorBoundary>
     </Suspense>
   </ElConfigProvider>
 </template>
@@ -27,6 +29,7 @@ import {
 } from '@vtj/web';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import _logo from './assets/logo.svg';
+import VtjErrorBoundary from './components/VtjErrorBoundary.vue';
 const { disabled, title, menus, logo, themeSwitchable, pure } = useMask();
 
 const actions: ActionBarItems = [

@@ -1,0 +1,37 @@
+#!/bin/sh
+# Git pre-commit hook: 自动同步 VTJ 版本号
+#
+# 安装方式（在项目根目录执行）：
+#   # Linux/Mac
+#   cp scripts/git-hooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+#   # Windows PowerShell
+#   Copy-Item scripts/git-hooks/pre-commit .git/hooks/pre-commit -Force
+#
+# 作用：在 git commit 之前自动运行 npm run sync:vtj-version，
+#       确保 .vue 和 .json 版本号一致，并将修改的 .json 加入暂存区。
+
+echo "[pre-commit] 同步 VTJ 版本号..."
+
+# 运行版本同步脚本
+node ./scripts/sync_vtj_version.mjs
+SYNC_EXIT=$?
+
+if [ $SYNC_EXIT -ne 0 ]; then
+  echo "[pre-commit] 版本同步失败，请检查错误后重试"
+  exit 1
+fi
+
+# 检查 .vtj/files 目录下是否有 .json 文件被修改
+CHANGED_JSON=$(git diff --name-only --cached -- '.vtj/files/*.json')
+
+if [ -n "$CHANGED_JSON" ]; then
+  echo "[pre-commit] 检测到 .json 文件已修改，但版本可能未同步"
+fi
+
+# 重新暂存被同步脚本修改的 .json 文件
+git add '.vtj/files/*.json' 2>/dev/null
+
+echo "[pre-commit] 版本同步完成"
+exit 0

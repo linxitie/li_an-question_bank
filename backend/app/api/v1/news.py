@@ -40,6 +40,24 @@ async def get_news(
 
     articles = query.order_by(NewsArticle.create_time.desc()).limit(limit).all()
 
+    # 批量预取图片与收藏状态，消除 N+1 查询
+    news_ids = [a.news_id for a in articles]
+    images_by_news = {}
+    if news_ids:
+        all_images = db.query(NewsImage).filter(
+            NewsImage.news_id.in_(news_ids)
+        ).order_by(NewsImage.image_order).all()
+        for img in all_images:
+            images_by_news.setdefault(img.news_id, []).append(img)
+
+    favorite_ids = set()
+    if news_ids and current_user:
+        favs = db.query(NewsFavorite.news_id).filter(
+            NewsFavorite.user_id == current_user.user_id,
+            NewsFavorite.news_id.in_(news_ids)
+        ).all()
+        favorite_ids = {f[0] for f in favs}
+
     return {
         "total": len(articles),
         "items": [
@@ -53,11 +71,8 @@ async def get_news(
                 "summary": a.summary,
                 "content": a.content or "",
                 "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order}
-                           for img in db.query(NewsImage).filter(NewsImage.news_id == a.news_id).all()],
-                "is_favorited": db.query(NewsFavorite).filter(
-                    NewsFavorite.user_id == current_user.user_id,
-                    NewsFavorite.news_id == a.news_id
-                ).first() is not None if current_user else False,
+                           for img in images_by_news.get(a.news_id, [])],
+                "is_favorited": a.news_id in favorite_ids,
             }
             for a in articles
         ]
@@ -77,6 +92,24 @@ async def get_today_news(
         NewsArticle.create_time >= today
     ).order_by(NewsArticle.create_time.desc()).limit(limit).all()
 
+    # 批量预取图片与收藏状态，消除 N+1 查询
+    news_ids = [a.news_id for a in articles]
+    images_by_news = {}
+    if news_ids:
+        all_images = db.query(NewsImage).filter(
+            NewsImage.news_id.in_(news_ids)
+        ).order_by(NewsImage.image_order).all()
+        for img in all_images:
+            images_by_news.setdefault(img.news_id, []).append(img)
+
+    favorite_ids = set()
+    if news_ids and current_user:
+        favs = db.query(NewsFavorite.news_id).filter(
+            NewsFavorite.user_id == current_user.user_id,
+            NewsFavorite.news_id.in_(news_ids)
+        ).all()
+        favorite_ids = {f[0] for f in favs}
+
     return {
         "total": len(articles),
         "date": today.isoformat(),
@@ -90,11 +123,8 @@ async def get_today_news(
                 "summary": a.summary,
                 "content": a.content or "",
                 "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order}
-                           for img in db.query(NewsImage).filter(NewsImage.news_id == a.news_id).all()],
-                "is_favorited": db.query(NewsFavorite).filter(
-                    NewsFavorite.user_id == current_user.user_id,
-                    NewsFavorite.news_id == a.news_id
-                ).first() is not None if current_user else False,
+                           for img in images_by_news.get(a.news_id, [])],
+                "is_favorited": a.news_id in favorite_ids,
             }
             for a in articles
         ]
@@ -154,6 +184,45 @@ async def get_favorites(
         })
 
     return {"total": len(items), "items": items}
+
+
+@router.get("/{news_id}", summary="获取新闻详情")
+async def get_news_detail(
+    news_id: int,
+    current_user: Optional[SysUser] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
+):
+    """获取单条新闻完整内容，供收藏弹窗展示"""
+    article = db.query(NewsArticle).filter(
+        NewsArticle.news_id == news_id,
+        NewsArticle.status == 1
+    ).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="新闻不存在")
+
+    images = db.query(NewsImage).filter(
+        NewsImage.news_id == news_id
+    ).order_by(NewsImage.image_order).all()
+
+    is_favorited = False
+    if current_user:
+        is_favorited = db.query(NewsFavorite).filter(
+            NewsFavorite.user_id == current_user.user_id,
+            NewsFavorite.news_id == news_id
+        ).first() is not None
+
+    return {
+        "id": article.news_id,
+        "title": article.title,
+        "url": article.url,
+        "source": article.source,
+        "category": article.category,
+        "publish_date": article.publish_date.isoformat() if article.publish_date else None,
+        "summary": article.summary,
+        "content": article.content or "",
+        "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order} for img in images],
+        "is_favorited": is_favorited,
+    }
 
 
 # ════════════════════════════════════════════════════════════

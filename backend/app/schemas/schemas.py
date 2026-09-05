@@ -368,6 +368,123 @@ class GeneratePaperResponse(BaseModel):
     message: str
 
 # ------------------------------
+# 智能组卷相关Schema
+# ------------------------------
+
+class SmartQuestionConfig(BaseModel):
+    """智能组卷—题型配置"""
+    subject_id: int = Field(..., description="科目ID (1=行测, 2=申论, 3=公专)")
+    type_id: int = Field(..., description="题型ID")
+    subcategory: Optional[str] = Field(None, description="子科目（如'常识判断'）")
+    count: int = Field(..., ge=1, description="题目数量")
+    score_per_question: float = Field(1.0, gt=0, description="每题分值")
+
+
+class SmartExamGenerateRequest(BaseModel):
+    """智能组卷—生成请求"""
+    subject_mode: str = Field(..., description="科目模式: xingce/shenlun/gongzhuan/mixed")
+    year_range: str = Field("all", description="年份范围: 3/5/10/all")
+    year_start: Optional[int] = Field(None, description="自定义年份起始")
+    year_end: Optional[int] = Field(None, description="自定义年份结束")
+    difficulty_easy_pct: int = Field(20, ge=0, le=100, description="简单题比例")
+    difficulty_medium_pct: int = Field(50, ge=0, le=100, description="中等题比例")
+    difficulty_hard_pct: int = Field(30, ge=0, le=100, description="困难题比例")
+    question_configs: List[SmartQuestionConfig] = Field(..., min_items=1, description="题型配置列表")
+    paper_name: Optional[str] = Field(None, max_length=200, description="试卷名称（不传则自动生成）")
+    duration: Optional[int] = Field(None, gt=0, description="建议用时（分钟）")
+    # 混合模式参数
+    xingce_ratio: Optional[int] = Field(None, ge=0, le=100, description="行测比例（混合模式）")
+    gongzhuan_ratio: Optional[int] = Field(None, ge=0, le=100, description="公专比例（混合模式）")
+
+
+class ReplaceQuestionRequest(BaseModel):
+    """替换题目请求"""
+    current_question_id: int = Field(..., description="要替换的题目ID")
+
+
+class QuestionPreviewItem(BaseModel):
+    """预览题目项"""
+    question_id: int
+    question_content: str
+    question_type: str
+    type_name: str
+    difficulty: int
+    options: Optional[Any] = None
+    answer: Optional[str] = None
+    answer_analysis: Optional[str] = None
+    subcategory: Optional[str] = None
+    year: Optional[int] = None
+    score: float = 0
+
+    class Config:
+        from_attributes = True
+
+
+class SmartExamGenerateResponse(BaseModel):
+    """智能组卷—生成响应"""
+    paper_id: int
+    paper_name: str
+    paper_code: str
+    questions: List[QuestionPreviewItem]
+    total_score: float
+    question_count: int
+    difficulty_distribution: dict = {}
+    subject_breakdown: dict = {}
+    duration: Optional[int] = None
+    message: str = "生成成功"
+
+
+class SmartExamSubmitRequest(BaseModel):
+    """提交答案请求"""
+    answers: Dict[int, str] = Field(..., description="题目ID→答案映射")
+
+
+class SmartExamRecordItem(BaseModel):
+    """智能组卷记录列表项"""
+    id: int
+    record_id: int
+    paper_id: int
+    paper_name: str
+    subject_mode: str
+    total_questions: int
+    completed_count: int
+    total_score: float
+    earned_score: Optional[float] = None
+    status: str
+    time_spent: int
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    create_time: Optional[str] = None
+
+
+class SmartExamRecordListResponse(BaseModel):
+    """智能组卷记录列表"""
+    total: int
+    items: List[SmartExamRecordItem]
+
+
+class SmartExamRecordDetailResponse(BaseModel):
+    """智能组卷记录详情"""
+    id: int
+    paper_id: int
+    paper_name: str
+    subject_mode: str
+    total_questions: int
+    completed_count: int
+    total_score: float
+    earned_score: Optional[float] = None
+    status: str
+    time_spent: int
+    answers_json: Optional[str] = None
+    marked_questions: Optional[str] = None
+    current_index: int = 0
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    create_time: Optional[str] = None
+    # 关联考试记录详情（如果已完成）
+    exam_record: Optional[dict] = None
+
+# ------------------------------
 # 试卷相关Schema
 # ------------------------------
 
@@ -551,6 +668,65 @@ class AnswerDetailResponse(AnswerDetailBase):
     time_spent: Optional[int]
     score_obtained: float
     create_time: datetime
+
+
+# ===== 论坛 Schema(论坛模块完善) =====
+class ForumPostCreate(BaseModel):
+    """发帖请求"""
+    title: str = Field(..., max_length=200, description="标题")
+    content: str = Field(..., max_length=10000, description="内容")
+    share_type: str = Field("EXPERIENCE", description="分享类型: EXPERIENCE/RESOURCE/DISCUSSION/FEELING")
+    tags: Optional[str] = Field(None, max_length=500, description="标签, 逗号分隔")
+    attachments: Optional[List[Dict]] = Field(None, description="附件列表 [{name,url,size,type}]")
+
+
+class ForumPostResponse(BaseModel):
+    """帖子响应"""
+    id: int
+    title: str
+    content: str
+    shareType: str
+    attachments: List[Dict] = []
+    likeCount: int
+    commentCount: int
+    viewCount: int
+    createTime: str
+    user: Dict
+    liked: Optional[bool] = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ForumCommentCreate(BaseModel):
+    """发评论请求"""
+    content: str = Field(..., max_length=2000, description="评论内容")
+    parent_comment_id: Optional[int] = Field(None, description="父评论ID, 楼中楼回复")
+
+
+class ForumCommentResponse(BaseModel):
+    """评论响应"""
+    id: int
+    content: str
+    likeCount: int
+    createTime: str
+    user: Dict
+    liked: Optional[bool] = False
+    parentCommentId: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ForumUserPublic(BaseModel):
+    """用户公开信息"""
+    id: int
+    nickname: str
+    avatar: str
+    userType: str
+    school: Optional[str] = None
+    department: Optional[str] = None
+    createdAt: Optional[str] = None
+    postCount: int = 0
+    likeReceived: int = 0
     
     class Config:
         orm_mode = True
@@ -665,3 +841,194 @@ class PaginationResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+# ------------------------------
+# 错题集 Schema
+# ------------------------------
+
+class WrongQuestionResponse(BaseModel):
+    """错题响应"""
+    wrong_id: int
+    question_id: int
+    subject_id: Optional[int] = None
+    subject_name: str = ''
+    subcategory: str = ''
+    error_count: int = 1
+    mastery_level: str = 'UNMASTERED'
+    is_cut: int = 0
+    accuracy_rate: float = 0.0
+    review_count: int = 0
+    last_review_time: Optional[str] = None
+    add_time: str = ''
+    question_content: str = ''
+    question_options: Optional[List[Any]] = None
+    question_answer: str = ''
+    question_difficulty: int = 3
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SubcategoryStat(BaseModel):
+    """子科目统计"""
+    subject_id: int
+    subject_name: str
+    subcategory: str
+    count: int
+
+
+class ReviewQueueResponse(BaseModel):
+    """复习队列响应"""
+    total: int
+    items: List[WrongQuestionResponse]
+
+
+# ------------------------------
+# 笔记 Schema
+# ------------------------------
+
+class NewsNoteResponse(BaseModel):
+    """新闻笔记响应"""
+    note_id: int
+    note_text: str
+    quote_text: Optional[str] = None
+    color: str = '#FFD700'
+    line_style: str = 'wavy'
+    news_id: int
+    news_title: str = ''
+    news_source: str = ''
+    create_time: str = ''
+    update_time: str = ''
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuestionNoteResponse(BaseModel):
+    """典题笔记响应"""
+    note_id: int
+    note_text: str
+    question_id: int
+    question_content: str = ''
+    subject_name: str = ''
+    subcategory: str = ''
+    create_time: str = ''
+    update_time: str = ''
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ------------------------------
+# 收藏 Schema
+# ------------------------------
+
+class NewsFavoriteResponse(BaseModel):
+    """金句/新闻收藏统一响应"""
+    fav_type: str  # quote/news
+    fav_id: int
+    content: str
+    source: str = ''
+    category: str = ''
+    create_time: str = ''
+    # 新闻扩展字段
+    news_id: Optional[int] = None
+    title: str = ''
+    summary: str = ''
+
+
+class QuestionFavoriteResponse(BaseModel):
+    """典题收藏响应"""
+    fav_id: int
+    question_id: int
+    question_content: str
+    options: Optional[List[Any]] = None
+    answer: str = ''
+    answer_analysis: str = ''
+    difficulty: int = 3
+    accuracy_rate: float = 0.0
+    subject_id: Optional[int] = None
+    subject_name: str = ''
+    subcategory: str = ''
+    create_time: str = ''
+
+
+# ------------------------------
+# 申论金句 Schema
+# ------------------------------
+
+class EssayQuoteResponse(BaseModel):
+    """金句响应"""
+    quote_id: int
+    content: str
+    source: Optional[str] = None
+    category: Optional[str] = None
+    author: Optional[str] = None
+    create_time: str = ''
+    favorited: bool = False
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EssayQuoteCreate(BaseModel):
+    """创建金句"""
+    content: str = Field(..., min_length=1, max_length=1000, description="金句内容")
+    source: Optional[str] = Field(None, max_length=200, description="来源")
+    category: Optional[str] = Field(None, max_length=50, description="分类")
+    author: Optional[str] = Field(None, max_length=100, description="作者")
+
+
+# ------------------------------
+# 题目导入 — 统一解析 Schema
+# ------------------------------
+
+class ImageRef(BaseModel):
+    """题目中的图片引用（精准定位到题目的特定位置）"""
+    path: str = Field(..., description="图片存储路径，如 /static/questions/42/img_0_abc.png")
+    position: str = Field('stem', description="图片所在位置: stem(题干) | option_A | option_B | option_C | option_D | standalone")
+    order: int = Field(0, description="同位置图片序号")
+
+
+class ParsedQuestion(BaseModel):
+    """解析后的单道题目（后端统一输出格式）"""
+    question_number: int = Field(..., description="题号")
+    question_content: str = Field(..., description="题干内容（含<img>标签的图片引用）")
+    options: List[dict] = Field(default_factory=list, description="选项列表 [{key:'A', value:'...'}, ...]")
+    answer: Optional[str] = Field(None, description="答案字母 A/B/C/D 或 待补充")
+    analysis: Optional[str] = Field(None, description="答案解析")
+    images: List[ImageRef] = Field(default_factory=list, description="题目中包含的图片（含位置信息）")
+    question_type: str = Field('单选题', description="题型: 单选题/多选题/论述题/写作题/简答题/案例分析题")
+    subject_category: Optional[str] = Field(None, description="科目大类: 行测/申论/公专/其他")
+    confidence: float = Field(1.0, description="匹配置信度 0-1，<0.5为低置信度需人工核对")
+    validation_errors: List[str] = Field(default_factory=list, description="校验错误列表，空列表表示校验通过")
+
+
+class ParseRequest(BaseModel):
+    """统一解析请求（替代前端本地解析）"""
+    questions_text: str = Field(..., description="题目文档的原始文本")
+    answers_text: Optional[str] = Field('', description="答案文档的原始文本（分离导入时必填）")
+    mode: str = Field('combined', description="导入模式: combined(合并导入) | separate(分离导入) | ocr(图片OCR)")
+    paper_name: Optional[str] = Field('', description="试卷名称（可选，用于自动标签提取）")
+    subject_category: Optional[str] = Field('', description="科目大类（可选，自动检测）")
+
+
+class ParseResult(BaseModel):
+    """统一解析结果"""
+    status: str = Field('success', description="success | partial | error")
+    questions: List[ParsedQuestion] = Field(default_factory=list, description="解析后的题目列表")
+    match_rate: float = Field(0.0, description="匹配率 0-100")
+    matched_count: int = Field(0, description="答案匹配成功的题目数")
+    total_questions: int = Field(0, description="题目总数")
+    unmatched_numbers: List[int] = Field(default_factory=list, description="未匹配答案的题号")
+    extra_answer_numbers: List[int] = Field(default_factory=list, description="多余答案的题号")
+    analysis_count: int = Field(0, description="含解析的题目数")
+    strategy_used: str = Field('', description="使用的匹配策略说明")
+    auto_detected_subject: Optional[str] = Field(None, description="自动检测的科目")
+    auto_detected_tags: Optional[dict] = Field(None, description="自动检测的标签（年份/省份/考试类型）")
+    warnings: List[str] = Field(default_factory=list, description="用户友好的警告信息")
+    raw_text_preview: Optional[str] = Field(None, description="解析后的原始文本预览（供前端展示）")
+
+
+class OCREnhancedResult(BaseModel):
+    """增强版OCR识别结果"""
+    status: str = Field('success', description="success | error")
+    ocr_text: str = Field('', description="识别的纯文本（公式/表格区域用占位符替换）")
+    formulas: List[dict] = Field(default_factory=list, description="公式列表 [{latex, position, confidence}]")
+    tables: List[dict] = Field(default_factory=list, description="表格列表 [{html/markdown, position, confidence}]")
+    char_count: int = Field(0, description="识别字符总数")
+    confidence: float = Field(0.0, description="整体置信度 0-1")
+    message: str = Field('', description="用户提示信息")

@@ -141,6 +141,11 @@
                     state.markedQuestions.includes(q.id) ? '取消标记' : '标记'
                   }}
                 </button>
+                <button
+                  :class="['fav-btn', { favorited: state.favorites[q.id] }]"
+                  @click="toggleFavorite(q)">
+                  {{ state.favorites[q.id] ? '已收藏' : '收藏' }}
+                </button>
                 <button class="note-btn" @click="openNoteEditor(q.id)">笔记</button>
               </div>
             </div>
@@ -178,6 +183,7 @@
   import { Grid, AlarmClock, CloseBold } from '@vtj/icons';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'AnswerPage',
     components: { NavBar, XIcon, Transition },
@@ -195,7 +201,9 @@
         // 笔记相关
         showNoteEditor: false,
         noteText: '',
-        currentNoteQuestionId: null
+        currentNoteQuestionId: null,
+        // 收藏状态：{ [question_id]: boolean }
+        favorites: {}
       });
       return { state, props, provider, Grid, AlarmClock, CloseBold };
     },
@@ -245,9 +253,59 @@
           this.state.markedQuestions.push(qId);
         }
       },
+      // ========== 收藏功能 ==========
+      async toggleFavorite(q) {
+        // 乐观更新：先切换 UI 状态，提升响应速度
+        const prev = !!this.state.favorites[q.id];
+        this.state.favorites[q.id] = !prev;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/questions/' + q.id + '/favorite', {
+            method: 'POST',
+            headers: this.getJsonHeaders()
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            // 回滚
+            this.state.favorites[q.id] = prev;
+            ElMessage.error(data.detail || data.message || '操作失败');
+            return;
+          }
+          this.state.favorites[q.id] = !!data.favorited;
+          ElMessage.success(data.message || (data.favorited ? '已收藏' : '已取消收藏'));
+        } catch (e) {
+          // 回滚
+          this.state.favorites[q.id] = prev;
+          console.warn('收藏操作失败:', e);
+          ElMessage.error('收藏操作失败，请检查登录状态');
+        }
+      },
+      async loadFavoritesStatus() {
+        // 批量加载当前题目列表的收藏状态，避免每题单独请求
+        const ids = this.state.questions.map(function(q) { return q.id; }).filter(function(id) { return id; });
+        if (!ids.length) return;
+        // 复用已有接口 /api/questions/favorites 获取用户收藏列表，再在前端比对
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/questions/favorites?page_size=100', {
+            headers: this.getJsonHeaders()
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          const favIds = {};
+          (data.items || []).forEach(function(item) {
+            favIds[item.question_id] = true;
+          });
+          const favorites = {};
+          ids.forEach(function(id) {
+            favorites[id] = !!favIds[id];
+          });
+          this.state.favorites = favorites;
+        } catch (e) {
+          /* 静默失败，收藏按钮保持默认未收藏状态 */
+        }
+      },
       handleSubmit() {
         this.state.showResult = true;
-        this.$message.success('试卷已提交');
+        ElMessage.success('试卷已提交');
         // 提交练习记录
         this.submitPracticeRecords();
         // 触发自动签到
@@ -256,6 +314,7 @@
       submitPracticeRecords() {
         var self = this;
         var questions = this.state.questions;
+        var wrongList = [];  // 收集错题用于自动收录
         for (var i = 0; i < questions.length; i++) {
           var q = questions[i];
           var userAns = this.state.answers[q.id];
@@ -270,6 +329,10 @@
           var correct = (q.type === '多选题') ?
             (userLetter.split('').sort().join('') === (q.answer || '').split('').sort().join('')) :
             (userLetter === q.answer);
+          // 收集错题
+          if (!correct) {
+            wrongList.push({ question_id: q.id, subject_id: q.subject_id || null, is_correct: false });
+          }
           window.__VTJ_AUTH__.apiFetch('/api/practice/record', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -282,6 +345,16 @@
               source: '随机练习'
             })
           }).catch(function() { /* 静默 */ });
+        }
+        // 自动收录错题（fire-and-forget）
+        if (wrongList.length) {
+          wrongList.forEach(function(w) {
+            window.__VTJ_AUTH__.apiFetch('/api/wrong-questions/collect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(w)
+            }).catch(function() { /* 静默 */ });
+          });
         }
       },
       triggerCheckin() {
@@ -307,11 +380,11 @@
         }
       },
       getTypeLabel(type) {
-        var map = {'单选题':'[单选]','单选':'[单选]','多选题':'[多选]','不定项':'[多选]','多选':'[多选]','判断题':'[判断]','填空题':'[填空]','简答题':'[简答]'};
+        var map = {'单选题':'[单选]','单选':'[单选]','多选题':'[多选]','不定项':'[多选]','多选':'[多选]','简答题':'[简答]','论述题':'[论述题]','写作题':'[写作题]'};
         return map[type] || '[单选]';
       },
       getTypeClass(type) {
-        var map = {'多选题':'multi','不定项':'multi','多选':'multi','判断题':'judge','填空题':'fill','简答题':'essay'};
+        var map = {'多选题':'multi','不定项':'multi','多选':'multi','简答题':'essay','论述题':'essay','写作题':'essay'};
         return map[type] || '';
       },
       loadQuestions() {
@@ -387,6 +460,8 @@
                 options: [], answer: '', explain: ''
               }];
             }
+            // 题目加载完成后批量加载收藏状态
+            this.loadFavoritesStatus();
           }).catch(() => {
             this.state.questions = [{
               id: 0, type: '提示', stem: '无法连接到后端服务器，请检查服务是否运行',
@@ -886,6 +961,7 @@
     margin-top: 16px;
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
   }
   .mark-btn {
     padding: 6px 16px;
@@ -908,6 +984,18 @@
     transition: all 0.2s;
   }
   .note-btn:hover { background: #dbeafe; border-color: #3b82f6; }
+  /* 收藏按钮 - 与标记/笔记按钮风格统一，已收藏时红色高亮 */
+  .fav-btn {
+    padding: 6px 16px; border: 1px solid #fde2e6; border-radius: 8px;
+    background: #fff5f7; font-size: 12px; color: #c41e3a; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .fav-btn:hover { background: #fde2e6; border-color: #c41e3a; }
+  .fav-btn.favorited {
+    background: linear-gradient(135deg, #c41e3a, #e8384f);
+    color: #ffffff; border-color: #c41e3a; font-weight: 600;
+  }
+  .fav-btn.favorited:hover { box-shadow: 0 2px 8px rgba(196, 30, 58, 0.3); }
   /* 笔记弹窗 */
   .note-panel-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;

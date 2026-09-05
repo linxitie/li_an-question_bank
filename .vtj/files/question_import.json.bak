@@ -1,0 +1,415 @@
+{
+  "id": "question_import",
+  "__VERSION__": "1785406000000",
+  "css": ".import-page{min-height:100vh;background:linear-gradient(180deg,#0a1628 0%,#12233f 30%,#1a2a4a 100%);color:#ffffff;font-family:'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif}.import-header{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;background:linear-gradient(135deg,rgba(10,22,40,0.95) 0%,rgba(20,30,55,0.9) 100%);border-bottom:2px solid rgba(200,22,30,0.25);box-shadow:0 2px 10px rgba(0,0,0,0.3)}.header-left{display:flex;align-items:center;gap:10px}.header-title{font-size:20px;font-weight:700;color:#ffffff;letter-spacing:1px}.header-sub{font-size:15px;color:#8899aa;margin-left:8px}.header-right{display:flex;gap:10px}.back-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;background:rgba(200,22,30,0.3);border:1px solid rgba(200,22,30,0.5);border-radius:8px;color:#ffffff;font-size:13px;cursor:pointer;transition:all 0.3s}.back-btn:hover{background:rgba(200,22,30,0.6);border-color:#c41e3a;box-shadow:0 0 12px rgba(200,22,30,0.3)}.import-body{max-width:1000px;margin:24px auto;padding:0 24px 40px}.card-wrapper{background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden}.card-nav{display:flex;border-bottom:1px solid rgba(255,255,255,0.08)}.nav-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;font-size:14px;font-weight:600;color:#8899aa;cursor:pointer;transition:all 0.3s;border-bottom:2px solid transparent}.nav-tab:hover{color:#cfd8e3;background:rgba(255,255,255,0.03)}.nav-tab.active{color:#ffffff;background:rgba(200,22,30,0.12);border-bottom-color:#c41e3a}.card-content{padding:24px}.form-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px}.form-item{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}.form-item label{font-size:15px;font-weight:600;color:#8899aa;text-transform:uppercase;letter-spacing:0.5px}.form-item label .required{color:#c41e3a}.form-item input,.form-item select,.form-item textarea{padding:10px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#ffffff;font-size:14px;font-family:inherit;transition:all 0.3s;outline:none}.form-item input:focus,.form-item select:focus,.form-item textarea:focus{border-color:#c41e3a;box-shadow:0 0 0 3px rgba(200,22,30,0.15)}.form-item input::placeholder,.form-item textarea::placeholder{color:#556677}.form-item select{cursor:pointer}.form-item select option{background:#1a2a4a;color:#ffffff}.form-item textarea{resize:vertical;min-height:80px}.option-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}.option-key{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:rgba(200,22,30,0.2);border:1px solid rgba(200,22,30,0.3);border-radius:6px;font-size:14px;font-weight:700;color:#c41e3a}.option-row input{flex:1}.btn-icon{display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:transparent;border:none;border-radius:6px;cursor:pointer;transition:all 0.3s}.btn-icon:hover{background:rgba(200,22,30,0.15)}.btn-link{display:inline-flex;padding:6px 12px;background:transparent;border:1px dashed rgba(255,255,255,0.2);border-radius:6px;color:#8a8faa;font-size:15px;cursor:pointer;transition:all 0.3s}.btn-link:hover{border-color:#c41e3a;color:#c41e3a}.form-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08)}.btn-primary{display:flex;align-items:center;gap:8px;padding:10px 24px;background:linear-gradient(135deg,#c41e3a 0%,#e8384f 100%);border:none;border-radius:8px;color:#ffffff;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.3s}.btn-primary:hover{box-shadow:0 4px 16px rgba(200,22,30,0.4);transform:translateY(-1px)}.btn-primary:disabled{opacity:0.5;cursor:not-allowed}.btn-secondary{padding:10px 20px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#8899aa;font-size:14px;cursor:pointer;transition:all 0.3s}.btn-secondary:hover{background:rgba(255,255,255,0.12);color:#ffffff}.batch-upload,.image-upload{margin-bottom:16px}.upload-zone{display:flex;flex-direction:column;align-items:center;gap:8px;padding:32px 20px;border:2px dashed rgba(255,255,255,0.15);border-radius:12px;cursor:pointer;transition:all 0.3s;margin-bottom:16px}.upload-zone:hover{border-color:#c41e3a;background:rgba(200,22,30,0.06)}.upload-zone p{font-size:14px;color:#cfd8e3;margin:0}.upload-hint{font-size:15px;color:#556677}.batch-preview{margin-top:16px;padding:16px;background:rgba(255,255,255,0.04);border-radius:8px}.preview-header{font-size:14px;font-weight:600;color:#c41e3a;margin-bottom:12px}.preview-list{display:flex;flex-direction:column;gap:8px}.preview-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:13px}.preview-idx{width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:rgba(200,22,30,0.2);border-radius:4px;font-size:15px;font-weight:700;color:#c41e3a}.preview-text{color:#b0b8c4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.raw-text{width:100%;max-height:400px;overflow-y:auto;padding:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#b0b8c4;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word}.image-preview{margin:16px 0;text-align:center}.image-preview img{max-width:100%;max-height:300px;border-radius:8px;border:1px solid rgba(255,255,255,0.1)}.records-section{margin-top:24px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.08);padding:20px 24px}.section-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#ffffff;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.08)}.records-list{display:flex;flex-direction:column;gap:6px}.record-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;font-size:13px}.record-file{color:#cfd8e3;flex:1}.record-count{color:#c41e3a;margin:0 16px;font-weight:600}.record-time{color:#556677;font-size:15px}*{box-sizing:border-box}",
+  "state": {
+    "importMode": "'combined'",
+    "activeTab": "'single'",
+    "form": {
+      "paper_name": {
+        "type": "JSExpression",
+        "value": "''"
+      },
+      "year": {
+        "type": "JSExpression",
+        "value": "null"
+      },
+      "province": {
+        "type": "JSExpression",
+        "value": "''"
+      },
+      "exam_type": {
+        "type": "JSExpression",
+        "value": "''"
+      },
+      "subject_category": {
+        "type": "JSExpression",
+        "value": "'公专'"
+      },
+      "question_type_detail": {
+        "type": "JSExpression",
+        "value": "'选择题'"
+      },
+      "question_content": {
+        "type": "JSExpression",
+        "value": "''"
+      },
+      "options": {
+        "type": "JSExpression",
+        "value": "[{ key: 'A', value: '' }, { key: 'B', value: '' }, { key: 'C', value: '' }, { key: 'D', value: '' }]"
+      },
+      "answer": {
+        "type": "JSExpression",
+        "value": "''"
+      },
+      "source": {
+        "type": "JSExpression",
+        "value": "''"
+      },
+      "analysis": {
+        "type": "JSExpression",
+        "value": "''"
+      },
+      "score": {
+        "type": "JSExpression",
+        "value": "1"
+      },
+      "difficulty": {
+        "type": "JSExpression",
+        "value": "3"
+      }
+    },
+    "batchPaperName": "''",
+    "batchPreviewData": "[]",
+    "rawTextPreview": "''",
+    "parsedDocsQuestions": "[]",
+    "importId": "null",
+    "imagePreviewUrl": "''",
+    "selectedImageFiles": "[]",
+    "ocrText": "''",
+    "ocrQuestions": "[]",
+    "ocrLoading": "false",
+    "records": "[]",
+    "loading": "false",
+    "importProgress": "0",
+    "duplicateCount": "0",
+    "separateQuestionsLoaded": "false",
+    "separateAnswersLoaded": "false",
+    "separateQuestionsFileName": "''",
+    "separateAnswersFileName": "''",
+    "separateQuestionsRawText": "''",
+    "separateAnswersRawText": "''",
+    "combinedSubMode": "'auto'",
+    "separateMatchRate": "0",
+    "ocrAutoSubject": "''",
+    "ocrAutoSubcategories": "[]",
+    "stats": "{ total_questions: 0",
+    "paper_name": "''",
+    "year": "null",
+    "province": "''",
+    "exam_type": "''",
+    "subject_category": "'公专'",
+    "question_type_detail": "'单选题'",
+    "question_content": "''",
+    "options": "[{ key: 'A'",
+    "value": "'' }]",
+    "key": "'D'",
+    "answer": "''",
+    "source": "''",
+    "analysis": "''",
+    "score": "1",
+    "separateNeedConfirm": "false",
+    "manualMatchVisible": "false",
+    "subject_stats": "[]",
+    "type_stats": "[]",
+    "latest_import": "null }",
+    "parseResult": "null",
+    "parseLoading": "false",
+    "parseError": "''",
+    "progressPhase": "0",
+    "progressPercent": "0",
+    "progressSteps": "[]",
+    "label": "'文档解析'"
+  },
+  "data": {
+    "activeTab": "single",
+    "cardTabs": [
+      {
+        "key": "single",
+        "title": "单题录入",
+        "icon": "UploadFilled"
+      },
+      {
+        "key": "batch",
+        "title": "批量导入",
+        "icon": "Upload"
+      },
+      {
+        "key": "image",
+        "title": "图片导入",
+        "icon": "PictureFilled"
+      }
+    ],
+    "provinceList": [
+      "北京市",
+      "天津市",
+      "河北省",
+      "山西省",
+      "内蒙古自治区",
+      "辽宁省",
+      "吉林省",
+      "黑龙江省",
+      "上海市",
+      "江苏省",
+      "浙江省",
+      "安徽省",
+      "福建省",
+      "江西省",
+      "山东省",
+      "河南省",
+      "湖北省",
+      "湖南省",
+      "广东省",
+      "广西壮族自治区",
+      "海南省",
+      "重庆市",
+      "四川省",
+      "贵州省",
+      "云南省",
+      "西藏自治区",
+      "陕西省",
+      "甘肃省",
+      "青海省",
+      "宁夏回族自治区",
+      "新疆维吾尔自治区"
+    ],
+    "examTypeList": [
+      "国考",
+      "省考",
+      "联考",
+      "模拟考试",
+      "事业单位",
+      "招警考试"
+    ]
+  },
+  "methods": {
+    "goHome": {
+      "type": "method",
+      "params": []
+    },
+    "ensureLogin": {
+      "type": "asyncMethod"
+    },
+    "getAuthHeaders": {
+      "type": "method"
+    },
+    "getJsonHeaders": {
+      "type": "method"
+    },
+    "fetchWithRetry": {
+      "type": "asyncMethod",
+      "params": [
+        "url",
+        "options",
+        "timeoutMs",
+        "retries"
+      ]
+    },
+    "handleFetchError": {
+      "type": "method",
+      "params": [
+        "e",
+        "context"
+      ]
+    },
+    "addOption": {
+      "type": "method"
+    },
+    "removeOption": {
+      "type": "method",
+      "params": [
+        "idx"
+      ]
+    },
+    "resetForm": {
+      "type": "method"
+    },
+    "submitSingle": {
+      "type": "asyncMethod"
+    },
+    "_readDocViaBackend": {
+      "type": "asyncMethod",
+      "params": [
+        "file",
+        "callback"
+      ]
+    },
+    "uploadBatchFile": {
+      "type": "asyncMethod"
+    },
+    "confirmBatchImport": {
+      "type": "asyncMethod"
+    },
+    "selectImage": {
+      "type": "method"
+    },
+    "ocrRecognize": {
+      "type": "asyncMethod"
+    },
+    "parseOcrTextToQuestions": {
+      "type": "method"
+    },
+    "ocrAndImportStructured": {
+      "type": "asyncMethod"
+    },
+    "importSingleOcrQuestion": {
+      "type": "asyncMethod",
+      "params": [
+        "idx"
+      ]
+    },
+    "importAllOcrQuestions": {
+      "type": "asyncMethod"
+    },
+    "importAllOcrQuestionsConfirmed": {
+      "type": "asyncMethod"
+    },
+    "detectSubcategories": {
+      "type": "method",
+      "params": [
+        "subject",
+        "text"
+      ]
+    },
+    "detectSubcategoryForQuestion": {
+      "type": "method",
+      "params": [
+        "subject",
+        "questionText"
+      ]
+    },
+    "reVerifyOcrQuestion": {
+      "type": "method",
+      "params": [
+        "idx"
+      ]
+    },
+    "detectSubjectCategory": {
+      "type": "method",
+      "params": [
+        "headerLines",
+        "blocksText"
+      ]
+    },
+    "detectQuestionType": {
+      "type": "method",
+      "params": [
+        "questionContent",
+        "options"
+      ]
+    },
+    "parseRawTextToQuestions": {
+      "type": "method"
+    },
+    "extractQuestionFromBlock": {
+      "type": "method",
+      "params": [
+        "block"
+      ]
+    },
+    "uploadSeparateQuestionFile": {
+      "type": "method"
+    },
+    "uploadSeparateAnswerFile": {
+      "type": "method"
+    },
+    "_extractQuestionNumbers": {
+      "type": "method",
+      "params": [
+        "rawText"
+      ]
+    },
+    "parseAnswerTextToMap": {
+      "type": "method",
+      "params": [
+        "rawText"
+      ]
+    },
+    "_extractAnswerFromLines": {
+      "type": "method",
+      "params": [
+        "lines"
+      ]
+    },
+    "_escapeRegExp": {
+      "type": "method",
+      "params": [
+        "str"
+      ]
+    },
+    "_textSimilarity": {
+      "type": "method",
+      "params": [
+        "a",
+        "b"
+      ]
+    },
+    "_parseAnswerSequence": {
+      "type": "method",
+      "params": [
+        "rawText"
+      ]
+    },
+    "_reExtractInlineAnswers": {
+      "type": "method",
+      "params": [
+        "rawText"
+      ]
+    },
+    "_backendSmartMatch": {
+      "type": "asyncMethod"
+    },
+    "_applyBackendAnswersToLocalQuestions": {
+      "type": "method",
+      "params": [
+        "localQuestions",
+        "backendQuestions"
+      ]
+    },
+    "_positionBasedFallbackMatch": {
+      "type": "method",
+      "params": [
+        "questions",
+        "rawAnswerText"
+      ]
+    },
+    "matchSeparateQuestionsAnswers": {
+      "type": "asyncMethod"
+    },
+    "reVerifyQuestion": {
+      "type": "method",
+      "params": [
+        "idx"
+      ]
+    },
+    "splitQuestionsAndAnswersSection": {
+      "type": "method",
+      "params": [
+        "rawText"
+      ]
+    },
+    "_detectCombinedSubMode": {
+      "type": "method",
+      "params": [
+        "rawText"
+      ]
+    },
+    "importSingleParsedQuestion": {
+      "type": "asyncMethod",
+      "params": [
+        "idx"
+      ]
+    },
+    "importAllParsedQuestions": {
+      "type": "asyncMethod"
+    },
+    "notifyBankRefresh": {
+      "type": "method"
+    },
+    "loadRecords": {
+      "type": "asyncMethod"
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "role === 'teacher' || role === 'admin'"
+      ]
+    }
+  },
+  "computed": {},
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  }
+}

@@ -1,0 +1,140 @@
+[
+    [
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "行测备考资料测试文档"
+                    }
+                ]
+            },
+            "bbox": [
+                47,
+                59,
+                371,
+                109
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "第一章类比推理解题技巧"
+                    }
+                ]
+            },
+            "bbox": [
+                49,
+                160,
+                410,
+                208
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "类比推理是判断推理模块的高频题型。"
+                    }
+                ]
+            },
+            "bbox": [
+                47,
+                259,
+                567,
+                309
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "核心方法：先看词项关系，再比对选项。"
+                    }
+                ]
+            },
+            "bbox": [
+                47,
+                361,
+                598,
+                410
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "常见关系包括:近义、反义、全同、包含、交叉。"
+                    }
+                ]
+            },
+            "bbox": [
+                49,
+                460,
+                722,
+                509
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "第二章资料分析速算"
+                    }
+                ]
+            },
+            "bbox": [
+                49,
+                559,
+                348,
+                609
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "首数法与尾数法是资料分析的核心速算技巧。"
+                    }
+                ]
+            },
+            "bbox": [
+                49,
+                660,
+                660,
+                710
+            ]
+        },
+        {
+            "type": "paragraph",
+            "content": {
+                "paragraph_content": [
+                    {
+                        "type": "text",
+                        "content": "有效数字法可以大幅提升除法运算速度。"
+                    }
+                ]
+            },
+            "bbox": [
+                47,
+                759,
+                598,
+                809
+            ]
+        }
+    ]
+]

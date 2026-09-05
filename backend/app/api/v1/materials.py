@@ -203,6 +203,10 @@ from fastapi import File, UploadFile  # noqa: E402
 
 from ...models.models import MaterialImportRecord, SysOperationLog  # noqa: E402
 from ...services.material_sanitizer import sanitize_html  # noqa: E402
+from ...services.material_classifier import classifier  # noqa: E402
+from ...services.material_deduplicator import deduplicator  # noqa: E402
+from ...services.material_sanitizer import content_cleaner  # noqa: E402
+from ...services.material_monitor import import_monitor  # noqa: E402
 
 UPLOAD_IMG_DIR = _Path("uploads/materials/images")
 UPLOAD_TMP_DIR = _Path("uploads/materials/tmp")
@@ -216,6 +220,41 @@ MAGIC_BYTES = {
     ".xlsx": b"PK\x03\x04",
     ".pdf": b"%PDF",
 }
+
+
+# ==================== 文件校验（Task 12）====================
+
+ALLOWED_UPLOAD_EXT = {".docx", ".xlsx", ".pdf", ".jpg", ".jpeg", ".png", ".mp4", ".zip", ".rar"}
+MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
+
+
+def _validate_file_upload(file: UploadFile, content: bytes) -> list:
+    """校验上传文件，返回错误列表（空=通过）。"""
+    errors = []
+    if len(content) > MAX_FILE_SIZE:
+        errors.append(f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）")
+    ext = _os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXT:
+        errors.append(f"不支持的文件格式: {ext}")
+    magic = MAGIC_BYTES.get(ext)
+    if magic and not content.startswith(magic):
+        errors.append("文件实际格式与扩展名不符")
+    return errors
+
+
+def _safe_file_upload(file: UploadFile) -> tuple:
+    """安全上传：校验 + 写临时文件，返回 (tmp_path, ext)。"""
+    content = file.file.read()
+    file.file.seek(0)
+    errors = _validate_file_upload(file, content)
+    if errors:
+        raise HTTPException(400, "; ".join(errors))
+    UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    ext = _os.path.splitext(file.filename or "")[1].lower()
+    tmp_name = f"{_uuid.uuid4().hex}{ext}"
+    tmp_path = UPLOAD_TMP_DIR / tmp_name
+    tmp_path.write_bytes(content)
+    return str(tmp_path), ext
 
 
 def _require_admin(user: SysUser):
@@ -386,6 +425,146 @@ async def admin_delete(material_id: int,
     _audit(db, current_user, "delete", f"material:{material_id}", title)
     db.commit()
     return {"ok": True}
+
+
+# ============================ 统计概览 & 批量操作（Task3/4）============================
+
+@router.get("/admin/stats", summary="统计概览(管理员)")
+async def admin_stats(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回资料总量、按类型/科目/状态的分布统计。"""
+    _require_admin(current_user)
+
+    total = db.query(func.count(StudyMaterial.material_id)).scalar() or 0
+
+    type_rows = (
+        db.query(StudyMaterial.type, func.count(StudyMaterial.material_id))
+        .group_by(StudyMaterial.type)
+        .all()
+    )
+    type_stats = dict(type_rows)
+
+    subject_rows = (
+        db.query(StudyMaterial.subject, func.count(StudyMaterial.material_id))
+        .group_by(StudyMaterial.subject)
+        .all()
+    )
+    subject_stats = dict(subject_rows)
+
+    status_rows = (
+        db.query(StudyMaterial.status, func.count(StudyMaterial.material_id))
+        .group_by(StudyMaterial.status)
+        .all()
+    )
+    status_stats = dict(status_rows)
+
+    return {
+        "total": total,
+        "by_type": {
+            "video_intro": type_stats.get("video_intro", 0),
+            "video_advanced": type_stats.get("video_advanced", 0),
+            "article": type_stats.get("article", 0),
+            "card": type_stats.get("card", 0),
+        },
+        "by_subject": {
+            "xingce": subject_stats.get("xingce", 0),
+            "shenlun": subject_stats.get("shenlun", 0),
+            "gongzhuan": subject_stats.get("gongzhuan", 0),
+        },
+        "by_status": {
+            "published": status_stats.get(1, 0),
+            "draft": status_stats.get(0, 0),
+        },
+    }
+
+
+@router.post("/admin/batch", summary="批量创建资料(管理员)")
+async def admin_batch_create(
+    body: dict,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """批量创建多条资料。body.items 为资料对象数组。"""
+    _require_admin(current_user)
+    items = body.get("items", [])
+    if not items:
+        raise HTTPException(400, "items 不能为空")
+    limit = 100
+    if len(items) > limit:
+        raise HTTPException(400, f"单次最多 {limit} 条")
+
+    created_ids = []
+    for item in items:
+        data = _validate_material_body(item)
+        m = StudyMaterial(**data, creator_id=current_user.user_id)
+        db.add(m)
+        db.flush()
+        created_ids.append(m.material_id)
+
+    db.commit()
+    _audit(db, current_user, "batch_create", f"created={len(created_ids)}")
+    db.commit()
+    return {"created": len(created_ids), "material_ids": created_ids}
+
+
+@router.delete("/admin/batch", summary="批量删除资料(管理员)")
+async def admin_batch_delete(
+    body: dict,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """批量删除多条资料。body.ids 为资料 ID 数组。"""
+    _require_admin(current_user)
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(400, "ids 不能为空")
+
+    # 先删学习进度
+    db.query(UserMaterialProgress).filter(
+        UserMaterialProgress.material_id.in_(ids)
+    ).delete(synchronize_session=False)
+
+    deleted = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id.in_(ids)
+    ).delete(synchronize_session=False)
+
+    db.commit()
+    _audit(db, current_user, "batch_delete", f"deleted={deleted}")
+    db.commit()
+    return {"deleted": deleted}
+
+
+@router.get("/admin/import-records", summary="导入记录列表(管理员)")
+async def admin_import_records(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """查询导入记录分页列表。"""
+    _require_admin(current_user)
+    q = db.query(MaterialImportRecord)
+    total = q.count()
+    rows = (
+        q.order_by(MaterialImportRecord.import_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    items = []
+    for r in rows:
+        items.append({
+            "import_id": r.import_id,
+            "file_name": r.file_name,
+            "file_type": r.file_type,
+            "file_size": r.file_size,
+            "parse_status": r.parse_status,
+            "uploader_id": r.uploader_id,
+            "create_time": r.create_time.isoformat() if r.create_time else None,
+        })
+    return {"total": total, "items": items}
 
 
 # ============================ 智能导入（内容工厂四步流）============================
@@ -562,6 +741,13 @@ async def import_upload(background_tasks: BackgroundTasks,
     resp = {"import_id": rec.import_id, "parse_status": rec.parse_status}
     if rec.error_message:
         resp["error_message"] = rec.error_message
+
+    # 监控记录（Task 15）
+    import_monitor.record_import(success=(rec.parse_status == "success"))
+    alerts = import_monitor.check_alerts(db)
+    if alerts:
+        logger.warning("[materials] import alerts: %s", alerts)
+
     return JSONResponse(resp)
 
 
@@ -634,11 +820,26 @@ async def import_confirm(import_id: int, body: dict,
             raise HTTPException(400, "按当前列映射未得到有效卡片（正反面均不能为空）")
         base_title = _os.path.splitext(rec.file_name)[0]
         for idx, c in enumerate(cards, start=1):
+            # 内容清洗
+            card_front = content_cleaner.clean_text(c["card_front"])
+            card_back = content_cleaner.clean_text(c["card_back"])
+            # 去重检测
+            combined = card_front + card_back
+            dup_check = deduplicator.check_duplicate(combined, db)
+            if dup_check["is_duplicate"]:
+                import_monitor.record_duplicate_match()
+                continue  # 跳过重复内容
+            # 智能分类
+            classification = classifier.classify(
+                ".xlsx", content=combined, title=card_front
+            )
+            content_hash = content_cleaner.calculate_content_hash(combined)
             m = StudyMaterial(
-                subject=subject, type="card",
+                subject=subject, type=classification["type"],
                 category=c["category"] or category,
-                title=c["card_front"], card_front=c["card_front"],
-                card_back=c["card_back"],
+                title=card_front, card_front=card_front,
+                card_back=card_back,
+                content_hash=content_hash,
                 sort_order=idx, status=0,
                 creator_id=current_user.user_id)
             db.add(m)
@@ -651,14 +852,25 @@ async def import_confirm(import_id: int, body: dict,
             raise HTTPException(400, "文档类素材入库类型只能是 article")
         _migrate_images(import_id, result)
         word_count = result.get("word_count", 0)
+        # 内容清洗
+        raw_content = result.get("html") or ""
+        content = content_cleaner.clean_text(raw_content)
+        title = (body.get("title") or _os.path.splitext(rec.file_name)[0])[:200]
+        summary_text = (body.get("summary") or "")[:500]
+        # 去重检测
+        content_hash = content_cleaner.calculate_content_hash(content)
+        dup_check = deduplicator.check_duplicate(content, db)
+        if dup_check["is_duplicate"]:
+            import_monitor.record_duplicate_match()
+        # 智能分类
+        ext = "." + rec.file_type
+        classification = classifier.classify(ext, content=content, title=title)
         m = StudyMaterial(
-            subject=subject, type="article",
+            subject=subject, type=classification["type"],
             category=category, badge=badge,
-            title=(body.get("title") or _os.path.splitext(rec.file_name)[0])[:200],
-            summary=(body.get("summary") or "")[:500],
-            content=result.get("html") or "",
-            status=0,
-            read_time=max(1, word_count // 400),
+            title=title, summary=summary_text,
+            content=content, content_hash=content_hash,
+            status=0, read_time=max(1, word_count // 400),
             creator_id=current_user.user_id)
         db.add(m)
         db.flush()

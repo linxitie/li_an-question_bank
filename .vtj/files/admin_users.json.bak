@@ -1,0 +1,109 @@
+{
+  "id": "admin_users",
+  "name": "AdminUsers",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1",
+  "state": {
+    "username": "",
+    "userLevel": 0,
+    "keyword": "",
+    "filterType": "",
+    "users": [],
+    "showCreate": false,
+    "form": {
+      "username": "",
+      "user_no": "",
+      "password": "",
+      "user_type": "student"
+    }
+  },
+  "methods": {
+    "load": {
+      "type": "method",
+      "params": []
+    },
+    "search": {
+      "type": "method",
+      "params": []
+    },
+    "toggleDisable": {
+      "type": "method",
+      "params": [
+        "u: any"
+      ]
+    },
+    "resetPwd": {
+      "type": "method",
+      "params": [
+        "id: number"
+      ]
+    },
+    "doCreate": {
+      "type": "method",
+      "params": []
+    },
+    "resetFilter": {
+      "type": "method",
+      "params": []
+    },
+    "changePage": {
+      "type": "method",
+      "params": [
+        "page"
+      ]
+    },
+    "toggleAll": {
+      "type": "method",
+      "params": [
+        "e"
+      ]
+    },
+    "viewUser": {
+      "type": "method",
+      "params": [
+        "user"
+      ]
+    },
+    "editUser": {
+      "type": "method",
+      "params": [
+        "user"
+      ]
+    },
+    "batchImport": {
+      "type": "method",
+      "params": []
+    },
+    "exportUsers": {
+      "type": "method",
+      "params": []
+    },
+    "batchEnable": {
+      "type": "method",
+      "params": []
+    },
+    "batchDisable": {
+      "type": "method",
+      "params": []
+    },
+    "batchDelete": {
+      "type": "method",
+      "params": []
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "css": ".admin-page{display:flex;min-height:100vh;background:#F5F7FA;font-size:15px}.aside{width:200px;background:#1A3C6D;color:#fff}.aside-item{display:flex;align-items:center;padding:12px 20px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:14px}.aside-item.active{color:#fff;background:rgba(255,255,255,0.1);border-left-color:#C41E3A}.main-area{flex:1}.toolbar{display:flex;gap:10px;margin-bottom:20px}.btn-primary{padding:8px 18px;background:#C41E3A;color:#fff;border:none;border-radius:6px;cursor:pointer}",
+  "nodes": [],
+  "props": [],
+  "emits": [],
+  "slots": [],
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "dataSources": {},
+  "locked": false
+}

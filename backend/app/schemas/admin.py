@@ -133,6 +133,18 @@ class QuestionAuditRequest(BaseModel):
     audit_comment: Optional[str] = None
 
 
+# ==================== 试卷审批 ====================
+
+class PaperApproveRequest(BaseModel):
+    """试卷审批通过"""
+    opinion: Optional[str] = None
+
+
+class PaperRejectRequest(BaseModel):
+    """试卷审批驳回"""
+    opinion: str = Field(..., description="驳回理由（必填）")
+
+
 # ==================== 系统设置 ====================
 
 class SystemSettingsUpdate(BaseModel):

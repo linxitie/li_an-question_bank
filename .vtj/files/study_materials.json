@@ -1002,14 +1002,6 @@
   "inject": [],
   "locked": false,
   "methods": {
-    "handleTabClick": {
-      "type": "JSFunction",
-      "value": "(key) => {\n  this.state.activeTab = key;\n}"
-    },
-    "handleMaterialClick": {
-      "type": "JSFunction",
-      "value": "(item) => {\n  this.$message.info(`正在加载「${item.title}」详细内容...`);\n}"
-    },
     "fetchCounts": {
       "type": "asyncMethod",
       "params": []

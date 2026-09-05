@@ -1,0 +1,100 @@
+{
+  "id": "student_papers",
+  "name": "StudentPapers",
+  "title": "历年试卷",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1785407000000",
+  "state": {
+    "username": {
+      "type": "JSExpression",
+      "value": "''"
+    },
+    "papers": {
+      "type": "JSExpression",
+      "value": "[]"
+    },
+    "filterSubject": {
+      "type": "JSExpression",
+      "value": "''"
+    },
+    "filterExamType": {
+      "type": "JSExpression",
+      "value": "''"
+    },
+    "filterYear": {
+      "type": "JSExpression",
+      "value": "''"
+    },
+    "filterStatus": {
+      "type": "JSExpression",
+      "value": "''"
+    },
+    "searchKeyword": {
+      "type": "JSExpression",
+      "value": "''"
+    },
+    "loaded": {
+      "type": "JSExpression",
+      "value": "false"
+    },
+    "userProgress": {
+      "type": "JSExpression",
+      "value": "{}"
+    }
+  },
+  "methods": {
+    "loadPapers": {
+      "type": "method",
+      "params": []
+    },
+    "subjectName": {
+      "type": "method",
+      "params": [
+        "id: number"
+      ]
+    },
+    "examTypeLabel": {
+      "type": "method",
+      "params": [
+        "t: string"
+      ]
+    },
+    "examTypeClass": {
+      "type": "method",
+      "params": [
+        "t: string"
+      ]
+    },
+    "startExam": {
+      "type": "method",
+      "params": [
+        "p: any"
+      ]
+    },
+    "loadUserProgress": {
+      "type": "method",
+      "params": []
+    },
+    "getPaperStatus": {
+      "type": "method",
+      "params": [
+        "p: any"
+      ]
+    },
+    "previewPaper": {
+      "type": "method",
+      "params": [
+        "p: any"
+      ]
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "nodes": [],
+  "css": "",
+  "slots": [],
+  "locked": false
+}

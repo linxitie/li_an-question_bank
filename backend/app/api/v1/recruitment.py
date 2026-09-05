@@ -25,6 +25,14 @@ STATUS_COLORS = {
     "报名结束": "#c41e3a",  # 中国红
 }
 
+# 报名状态优先级（用于排序）：即将报名 最优先 > 正在报名 > 报名结束 底部
+STATUS_PRIORITY = {
+    "即将报名": 0,
+    "正在报名": 1,
+    "报名结束": 2,
+}
+# 其他标签（笔试通知/面试/复审/公示 等）归入 3，排在报名结束之后
+
 
 def _compute_status_label(rec: RecruitmentInfo) -> str:
     """根据报名时间计算前端展示的状态标签文本"""
@@ -72,10 +80,12 @@ async def get_recruitment(
         records = db.query(RecruitmentInfo).filter(
             RecruitmentInfo.status == 1,
             RecruitmentInfo.category == cat
-        ).order_by(RecruitmentInfo.create_time.desc()).limit(limit).all()
+        ).order_by(RecruitmentInfo.create_time.desc()).all()
 
-        items[cat] = [
-            {
+        cat_items = []
+        for r in records:
+            label = _compute_status_label(r)
+            cat_items.append({
                 "id": r.recruitment_id,
                 "title": r.title,
                 "url": r.url or "",
@@ -87,8 +97,8 @@ async def get_recruitment(
                 "deadline": r.deadline or r.registration_end or "",
                 "tag": r.tag or "",
                 "tag_color": r.tag_color or "",
-                "status_label": _compute_status_label(r),
-                "status_color": _compute_status_color(_compute_status_label(r)),
+                "status_label": label,
+                "status_color": _compute_status_color(label),
                 "content": r.content or "",
                 "content_html": r.content_html or r.content or "",
                 "images": r.images or [],
@@ -97,9 +107,11 @@ async def get_recruitment(
                 "requirements": r.requirements or "",
                 "view_count": r.view_count or 0,
                 "create_time": r.create_time.isoformat() if r.create_time else None
-            }
-            for r in records
-        ]
+            })
+
+        # 状态优先级排序：即将报名 > 正在报名 > 报名结束 > 其他（同状态保持 create_time 倒序）
+        cat_items.sort(key=lambda x: STATUS_PRIORITY.get(x["status_label"], 3))
+        items[cat] = cat_items[:limit]
 
     return {
         "categories": CATEGORIES,

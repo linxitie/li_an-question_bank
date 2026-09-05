@@ -2,28 +2,347 @@
   "id": "teacher_papers",
   "name": "TeacherPapers",
   "__VTJ_BLOCK__": true,
-  "__VERSION__": "1",
+  "__VERSION__": "1787100000000",
   "state": {
     "activeNav": "papers",
     "username": "",
     "papers": [],
-    "showCreateModal": false,
+    "filterStatus": "",
+    "page": 1,
+    "pageSize": 20,
+    "total": 0,
+    "showEditModal": false,
+    "editStep": 1,
+    "editorPaperId": 0,
     "creating": false,
-    "createForm": { "paper_name": "", "subject_id": 1, "duration": 120, "total_score": 100 }
+    "publishing": false,
+    "publishChoice": "draft",
+    "createForm": {
+      "paper_name": "",
+      "year": 2026,
+      "subject_id": 1,
+      "exam_type": "SIMULATION",
+      "duration": 120,
+      "difficulty": 3,
+      "total_score": 100
+    },
+    "paperQuestions": [],
+    "questionTypes": [],
+    "knowledgePoints": [],
+    "pkKeyword": "",
+    "pkSubject": "",
+    "pkType": "",
+    "pkDifficulty": "",
+    "pkPoint": "",
+    "pkChecked": [],
+    "pkSearched": false,
+    "availableQuestions": [],
+    "showAiModal": false,
+    "aiGenerating": false,
+    "aiForm": {
+      "paper_name": "",
+      "subject_id": 1,
+      "difficulty": 3,
+      "total_score": 100,
+      "duration": 120,
+      "single": 30,
+      "multi": 10,
+      "judge": 10,
+      "essay": 5
+    },
+    "showSelfDesignModal": false,
+    "selfDesignSubmitting": false,
+    "selfDesignForm": {
+      "subject_id": 1,
+      "type_name": "单选题",
+      "question_content": "",
+      "options": [
+        {
+          "key": "A",
+          "value": ""
+        },
+        {
+          "key": "B",
+          "value": ""
+        },
+        {
+          "key": "C",
+          "value": ""
+        },
+        {
+          "key": "D",
+          "value": ""
+        }
+      ],
+      "answer": "",
+      "answer_analysis": "",
+      "difficulty": 3,
+      "score": 5
+    },
+    "showPublishModal": false,
+    "publishTarget": "past_paper",
+    "publishingPaperId": 0,
+    "showPreviewModal": false,
+    "previewLoading": false,
+    "previewPaper": {},
+    "previewQuestions": [],
+    "showQuestionDetail": false,
+    "detailQuestion": {}
   },
   "methods": {
-    "loadPapers": { "type": "asyncMethod" },
-    "statusLabel": { "type": "method", "params": ["t"] },
-    "statusClass": { "type": "method", "params": ["t"] },
-    "goTab": { "type": "method", "params": ["key"] },
-    "createPaper": { "type": "method" },
-    "doCreate": { "type": "asyncMethod" },
-    "submitApproval": { "type": "asyncMethod", "params": ["id"] },
-    "deletePaper": { "type": "asyncMethod", "params": ["id"] },
-    "aiGenerate": { "type": "asyncMethod" }
+    "loadPapers": {
+      "type": "method",
+      "params": []
+    },
+    "prevPage": {
+      "type": "method",
+      "params": []
+    },
+    "nextPage": {
+      "type": "method",
+      "params": []
+    },
+    "statusLabel": {
+      "type": "method",
+      "params": [
+        "t: string"
+      ]
+    },
+    "statusClass": {
+      "type": "method",
+      "params": [
+        "t: string"
+      ]
+    },
+    "subjectName": {
+      "type": "method",
+      "params": [
+        "id: number"
+      ]
+    },
+    "formatTime": {
+      "type": "method",
+      "params": [
+        "t: string"
+      ]
+    },
+    "truncate": {
+      "type": "method",
+      "params": [
+        "text: string",
+        "len: number"
+      ]
+    },
+    "typeBadgeClass": {
+      "type": "method",
+      "params": [
+        "name: string"
+      ]
+    },
+    "goTab": {
+      "type": "method",
+      "params": [
+        "key: string"
+      ]
+    },
+    "openCreate": {
+      "type": "method",
+      "params": []
+    },
+    "openEdit": {
+      "type": "method",
+      "params": [
+        "p: any"
+      ]
+    },
+    "closeEdit": {
+      "type": "method",
+      "params": []
+    },
+    "step1Next": {
+      "type": "method",
+      "params": []
+    },
+    "finishCreate": {
+      "type": "method",
+      "params": []
+    },
+    "loadQuestionTypes": {
+      "type": "method",
+      "params": []
+    },
+    "onSubjectChange": {
+      "type": "method",
+      "params": []
+    },
+    "searchPicker": {
+      "type": "method",
+      "params": []
+    },
+    "toggleCheck": {
+      "type": "method",
+      "params": [
+        "qid: number"
+      ]
+    },
+    "toggleAll": {
+      "type": "method",
+      "params": []
+    },
+    "addChecked": {
+      "type": "method",
+      "params": []
+    },
+    "loadPaperQuestions": {
+      "type": "method",
+      "params": [
+        "paperId: number"
+      ]
+    },
+    "removeQuestion": {
+      "type": "method",
+      "params": [
+        "qid: number"
+      ]
+    },
+    "replaceQuestion": {
+      "type": "method",
+      "params": [
+        "qid: number"
+      ]
+    },
+    "updateScore": {
+      "type": "method",
+      "params": [
+        "qid: number",
+        "ev: any"
+      ]
+    },
+    "moveQuestion": {
+      "type": "method",
+      "params": [
+        "idx: number",
+        "dir: number"
+      ]
+    },
+    "previewQuestionDetail": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "openAiModal": {
+      "type": "method",
+      "params": []
+    },
+    "doAiGenerate": {
+      "type": "method",
+      "params": []
+    },
+    "needOptions": {
+      "type": "method",
+      "params": [
+        "t: string"
+      ]
+    },
+    "addOption": {
+      "type": "method",
+      "params": []
+    },
+    "removeOption": {
+      "type": "method",
+      "params": [
+        "idx: number"
+      ]
+    },
+    "onSelfTypeChange": {
+      "type": "method",
+      "params": []
+    },
+    "doSelfDesign": {
+      "type": "method",
+      "params": []
+    },
+    "openPublish": {
+      "type": "method",
+      "params": [
+        "p: any"
+      ]
+    },
+    "doPublish": {
+      "type": "method",
+      "params": []
+    },
+    "deletePaper": {
+      "type": "method",
+      "params": [
+        "p: any"
+      ]
+    },
+    "restorePaper": {
+      "type": "method",
+      "params": [
+        "id: number"
+      ]
+    },
+    "permanentDelete": {
+      "type": "method",
+      "params": [
+        "id: number"
+      ]
+    },
+    "openPreview": {
+      "type": "method",
+      "params": [
+        "p: any"
+      ]
+    },
+    "apiFetch": {
+      "type": "method",
+      "params": [
+        "url: string",
+        "options?: any"
+      ]
+    },
+    "loadQuestionStats": {
+      "type": "method",
+      "params": []
+    },
+    "handleLogout": {
+      "type": "method",
+      "params": []
+    },
+    "aiReplaceQuestion": {
+      "type": "method",
+      "params": [
+        "q: any",
+        "idx: number"
+      ]
+    },
+    "aiRemoveQuestion": {
+      "type": "method",
+      "params": [
+        "idx: number"
+      ]
+    },
+    "doAiPublish": {
+      "type": "method",
+      "params": []
+    }
   },
-  "lifeCycles": { "mounted": { "type": "method" } },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
   "css": ".teacher-papers{min-height:100vh;background:#F5F7FA;font-size:15px}.top-nav{display:flex;align-items:center;padding:0 24px;height:56px;background:#1A3C6D;color:#fff}.page-content{max-width:1200px;margin:0 auto;padding:24px}.btn-primary{padding:10px 22px;background:#1A3C6D;color:#fff;border:none;border-radius:6px;cursor:pointer}.btn-ai{padding:10px 22px;background:#C41E3A;color:#fff;border:none;border-radius:6px;cursor:pointer}.table-wrap{background:#fff;border-radius:10px}.data-table{width:100%;border-collapse:collapse}.data-table th{background:#fafafa;font-weight:600;color:#1A3C6D;padding:12px 14px;font-size:14px}.data-table td{padding:12px 14px;border-bottom:1px solid #f0f0f0;font-size:14px}",
   "nodes": [],
-  "props": [], "emits": [], "slots": [], "watch": [], "expose": [], "inject": [], "dataSources": {}, "locked": false
+  "props": [],
+  "emits": [],
+  "slots": [],
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "dataSources": {},
+  "locked": false
 }

@@ -60,6 +60,7 @@
   import { XIcon } from '@vtj/ui';
   import { Download, UserFilled, CaretBottom } from '@vtj/icons';
   import { useProvider } from '@vtj/renderer';
+  import { ElMessage } from 'element-plus';
   export default defineComponent({
     name: 'NavBar',
     components: { XIcon },
@@ -136,7 +137,7 @@
           });
           const data = await res.json();
           if (data.success) {
-            if (this.$message) this.$message.success('个人信息已保存');
+            ElMessage.success('个人信息已保存');
             this.state.showProfile = false;
           }
         } catch(e) { console.error('保存失败:', e); }
@@ -146,7 +147,7 @@
         this.state.loggedIn = false;
         this.state.username = '';
         this.state.showProfile = false;
-        if (this.$message) this.$message.success('已退出登录');
+        ElMessage.success('已退出登录');
         if (this.$router) this.$router.push('/login');
       },
       updateLoginState() {

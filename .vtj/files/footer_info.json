@@ -435,7 +435,12 @@
     "currentTab": {
       "type": "JSExpression",
       "value": "0"
-    }
+    },
+    "key": "'三支一扶'",
+    "label": "'三支一扶'",
+    "icon": "'🌾' }",
+    "items": "{}",
+    "loading": "false"
   },
   "watch": [],
   "expose": [],
@@ -449,6 +454,12 @@
     "handleInfoClick": {
       "type": "JSFunction",
       "value": "(item) => {\n  this.$message.success(`即将跳转至：${item.title}`);\n}"
+    },
+    "getCatCount": {
+      "type": "method",
+      "params": [
+        "catKey"
+      ]
     }
   },
   "computed": {
@@ -457,8 +468,12 @@
       "value": "() => {\n  return this.state.allItems\n    .filter((item) => item.tabIndex === this.state.currentTab)\n    .slice(0, 4);\n}"
     }
   },
-  "lifeCycles": {},
-  "__VERSION__": "1778907995433",
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1785750000102",
   "dataSources": {},
   "__VTJ_BLOCK__": true
 }
