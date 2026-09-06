@@ -19,7 +19,7 @@ from ...models.models import (
     SysUser, QuestionBank, QuestionSubject, QuestionType,
     ExamPaper, PaperQuestionRelation, PaperApproval, PaperApprovalWorkflow,
     ExamRecord, ExamAnswerDetail, PracticeRecord, ScoreAnalysis,
-    Banji, QuestionImportRecord, KnowledgePoint,
+    Banji, QuestionImportRecord, KnowledgePoint, QuestionImage,
 )
 from ...schemas.teacher import (
     TeacherDashboardStats, TeacherDashboardResponse,
@@ -398,6 +398,51 @@ async def delete_question(
     db.commit()
 
     return {"success": True, "message": "题目已删除"}
+
+
+@router.get("/questions/{question_id}/images", summary="获取题目图片列表")
+async def get_question_images(
+    question_id: int,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """获取指定题目的所有图片路径（用于前端图片加载失败重试）"""
+    q = db.query(QuestionBank).filter(QuestionBank.question_id == question_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    
+    import re
+    images = []
+    content = q.question_content or ''
+    
+    # 提取 [IMAGE:xxx] 占位符
+    for match in re.finditer(r'\[IMAGE:(\d+)_(\d+)\]', content):
+        qid = match.group(1)
+        idx = match.group(2)
+        # 检查文件是否存在
+        img_path = f'/static/questions/{qid}/{qid}_{idx}.png'
+        abs_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', img_path.lstrip('/'))
+        if os.path.exists(abs_path):
+            images.append({"path": img_path, "type": "placeholder"})
+    
+    # 提取 <img> 标签
+    for match in re.finditer(r'<img[^>]+src=["\']([^"\']+)["\']', content):
+        src = match.group(1)
+        images.append({"path": src, "type": "inline"})
+    
+    # 检查 question_images 表
+    try:
+        from ...models.models import QuestionImage
+        db_images = db.query(QuestionImage).filter(
+            QuestionImage.question_id == question_id
+        ).all()
+        for img in db_images:
+            if img.image_path:
+                images.append({"path": img.image_path, "type": "db"})
+    except Exception:
+        pass
+    
+    return {"success": True, "images": images}
 
 
 # ==================== 试卷管理 ====================

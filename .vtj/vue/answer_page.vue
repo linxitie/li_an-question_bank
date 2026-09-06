@@ -427,7 +427,7 @@
                 parsedOpts = parsedOpts.map(function(opt) {
                   if (typeof opt === 'string') {
                     return opt.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
-                      return '<img src="/static/questions/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.style.display=\'none\'" />';
+                      return '<img src="/static/questions/' + qn + '/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
                     });
                   }
                   return opt;
@@ -436,7 +436,7 @@
                 var stem = q.question_content || '';
                 stem = stem.replace(/\n?\s*[A-H]\s*[.、．)）]\s*.+/g, '');
                 stem = stem.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
-                  return '<img src="/static/questions/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.style.display=\'none\'" />';
+                  return '<img src="/static/questions/' + qn + '/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
                 });
                 stem = stem.trim();
                 return {

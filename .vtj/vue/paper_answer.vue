@@ -330,7 +330,7 @@ export default defineComponent({
     replaceImages(text) {
       if (!text) return '';
       return String(text).replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
-        return '<img src="/static/questions/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.style.display=\'none\'" />';
+        return '<img src="/static/questions/' + qn + '/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
       });
     },
 

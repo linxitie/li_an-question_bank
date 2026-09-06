@@ -345,7 +345,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       return cleaned;
     }
 
-    // 新增：清洗HTML内容中的UTB ID（用于详情弹窗v-html显示）
+    // 新增：清洗HTML内容中的UTB ID，并修复图片路径（用于详情弹窗v-html显示）
     function cleanHtmlContent(text: string) {
       if (!text) return '';
       let cleaned = text;
@@ -353,6 +353,23 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       cleaned = cleaned.replace(/UTB[a-f0-9]{8,}[-－]?\s*选项?[A-H]?[-－]?\d*/gi, '');
       // 移除题号前缀
       cleaned = cleaned.replace(/第\s*\d+\s*题[：:]\s*/g, '');
+      
+      // 修复 [IMAGE:qid_idx] 占位符为真实img标签
+      cleaned = cleaned.replace(/\[IMAGE:(\d+)[_-](\d+)\]/g, function(_match: string, qid: string, idx: string) {
+        return '<img src="/static/questions/' + qid + '/' + qid + '_' + idx + '.png" ' +
+          'class="question-img" loading="lazy" ' +
+          'onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
+      });
+      
+      // 修复已有的img标签，添加onerror兜底
+      cleaned = cleaned.replace(/<img\s+([^>]*?)(?:\s*\/?>|>)/g, function(match: string, attrs: string) {
+        // 如果已经有onerror，不重复添加
+        if (attrs.toLowerCase().includes('onerror')) return match;
+        // 修复路径：确保 /static/questions/ 格式
+        let fixedAttrs = attrs.replace(/src="(?!\/static\/|http)([^"]+)"/g, 'src="/static/questions/$1"');
+        return '<img ' + fixedAttrs + ' onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
+      });
+      
       // 合并多余空白
       cleaned = cleaned.replace(/\s+/g, ' ');
       return cleaned.trim();
@@ -435,9 +452,11 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       const text = q.question_content || '';
       const cleaned = stripPromoText(text);
       const cleanText = cleanQuestionContent(cleaned); // 过滤 UTB ID
-      // 替换img标签为[图片]占位符，避免显示无关图片
-      const withPlaceholders = cleanText.replace(/<img[^>]*\/?>/g, '[📷图片]');
-      const truncated = withPlaceholders.length > 80 ? withPlaceholders.substring(0, 80) + '...' : withPlaceholders;
+      // 将 [IMAGE:xxx] 占位符转为文字提示，避免显示损坏图片
+      const withPlaceholders = cleanText.replace(/\[IMAGE:(\d+)[_-](\d+)\]/g, '[📷图片]');
+      // 也处理 <img> 标签
+      const noImages = withPlaceholders.replace(/<img[^>]*\/?>/g, '[📷图片]');
+      const truncated = noImages.length > 80 ? noImages.substring(0, 80) + '...' : noImages;
       return truncated;
     }
 
@@ -599,7 +618,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       provider,
       keyword, filterSubject, filterType, filterDifficulty,
       questions, page, pageSize, total, totalPages,
-      showDetailModal, currentQuestion,
+      showDetailModal, currentQuestion, groupInfo,
       showEditModal, saving, currentQuestionTypeName, editForm, showOptionFields, optionCount,
       doSearch, changePage, subjectName, typeDisplayName, typeBadgeClass,
       renderStars, truncate, stripPromoText, hasImage, renderSummary,

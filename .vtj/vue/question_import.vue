@@ -209,6 +209,7 @@
                   @import-one="importSingleParsedQuestion"
                   @import-all="importAllParsedQuestions"
                   @reverify="reVerifyQuestion"
+                  @edit-question="handleEditQuestion"
                   @close="state.parsedDocsQuestions = []; state.rawTextPreview = ''; state.combinedSubMode = 'auto'"
                   :loading="state.loading"
                 ></QuestionPreviewList>
@@ -298,6 +299,7 @@
                 @import-one="importSingleParsedQuestion"
                 @import-all="importAllParsedQuestions"
                 @reverify="reVerifyQuestion"
+                @edit-question="handleEditQuestion"
                 @close="state.parsedDocsQuestions = []; state.separateQuestionsLoaded = false; state.separateAnswersLoaded = false; state.separateQuestionsFileName = ''; state.separateAnswersFileName = ''; state.separateQuestionsRawText = ''; state.separateAnswersRawText = ''; state.separateMatchRate = 0"
                 :loading="state.loading"
               ></QuestionPreviewList>
@@ -390,6 +392,7 @@
               @import-one="importSingleOcrQuestion"
               @import-all="importAllOcrQuestionsConfirmed"
               @reverify="reVerifyOcrQuestion"
+              @edit-question="handleEditQuestion"
               @close="state.ocrQuestions = []; state.ocrText = ''; state.imagePreviewUrl = ''; state.ocrAutoSubject = ''; state.ocrAutoSubcategories = []"
               :loading="state.ocrLoading"
             ></QuestionPreviewList>
@@ -2100,6 +2103,21 @@ import QuestionPreviewList from './question_preview_list.vue';
       },
       onManualMatchCancel() {
         this.state.manualMatchVisible = false;
+      },
+      // 处理预览列表中的编辑操作（来自 question_preview_list 的 @edit-question 事件）
+      handleEditQuestion(payload) {
+        if (!payload || payload.index < 0) return;
+        var q = this.state.parsedDocsQuestions[payload.index];
+        if (!q) return;
+        var data = payload.data || {};
+        // 更新本地数据
+        if (data.question_content !== undefined) q.question_content = data.question_content;
+        if (data.question_type_detail !== undefined) q.question_type_detail = data.question_type_detail;
+        if (data.difficulty !== undefined) q.difficulty = data.difficulty;
+        if (data.options !== undefined) q.options = data.options;
+        if (data.answer !== undefined) q.answer = data.answer;
+        if (data.analysis !== undefined) q.analysis = data.analysis;
+        ElMessage.success('第 ' + (payload.index + 1) + ' 题已更新');
       },
       reVerifyQuestion(idx) {
         var q = this.state.parsedDocsQuestions[idx];

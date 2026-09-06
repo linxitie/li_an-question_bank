@@ -1083,10 +1083,10 @@
           var key = num + '_' + seq;
           var src = imgMap[key];
           if (!src) {
-            // 无映射记录，隐藏占位符
-            return '';
+            // 无映射记录，尝试默认路径
+            src = '/static/questions/' + num + '/' + num + '_' + seq + '.png';
           }
-          return '<img src="' + src + '" onerror="this.style.display=\'none\'" ' +
+          return '<img src="' + src + '" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" ' +
                  'style="max-width:100%;height:auto;border:1px solid #e8eaf0;' +
                  'border-radius:8px;margin:4px 0;" alt="题目图片" />';
         });
