@@ -16,6 +16,7 @@
           <option value="">全部题型</option>
           <option value="单选题">单选题</option>
           <option value="多选题">多选题</option>
+          <option value="判断题">判断题</option>
           <option value="论述题">论述题</option>
           <option value="写作题">写作题</option>
         </select>
