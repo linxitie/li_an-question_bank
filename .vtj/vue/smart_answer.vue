@@ -41,12 +41,13 @@
             <div v-for="(q, idx) in state.questions" v-else :key="q.id" :ref="'q_' + q.id" class="question-block">
               <div class="q-header">
                 <span class="q-number">{{ idx + 1 }} .</span>
-                <span :class="['q-type-badge', q.type === '多选题' ? 'multi' : '']">{{ q.type === '多选题' ? '[多选]' : '[单选]' }}</span>
+                <span :class="['q-type-badge', q.type === '多选题' ? 'multi' : q.type === '判断题' ? 'judge' : '']">{{ q.type === '多选题' ? '[多选]' : q.type === '判断题' ? '[判断]' : '[单选]' }}</span>
                 <span v-if="state.markedQuestions.includes(q.id)" class="mark-badge">已标记</span>
               </div>
               <p class="q-stem" v-html="q.stem"></p>
               <div class="q-options">
                 <div v-if="q.type === '多选题'" class="multi-hint"><strong>多选题</strong> — 点击多个选项</div>
+                <div v-if="q.type === '判断题'" class="judge-hint"><strong>判断题</strong> — 选择"对"或"错"</div>
                 <div v-for="(opt, oidx) in q.options" :key="oidx"
                   :class="['option-item', { selected: isSelected(q.id, oidx), correct: state.showResult && state.optionLabels[oidx] === q.answer, wrong: state.showResult && isSelected(q.id, oidx) && state.optionLabels[oidx] !== q.answer }]"
                   @click="selectOption(q.id, oidx, q.type)">
@@ -250,7 +251,7 @@ export default defineComponent({
             if (Array.isArray(raw)) opts = raw.map(function(o) { return typeof o === 'string' ? o : (o.key||'')+'. '+(o.value||o.text||''); });
           }
           if (!opts.length) opts = ['(暂无选项)'];
-          return { id: q.question_id, type: q.type_name === '多选题' ? '多选题' : '单选', stem: (q.question_content||'').trim(), options: opts, answer: q.answer||'', explain: q.answer_analysis||'', subject_id: q.subject_id };
+          return { id: q.question_id, type: q.type_name || '单选题', stem: (q.question_content||'').trim(), options: opts, answer: q.answer||'', explain: q.answer_analysis||'', subject_id: q.subject_id };
         }));
         this.state.timeLeft = (data.duration || 120) * 60;
         // 恢复进度
@@ -323,10 +324,12 @@ export default defineComponent({
 .q-number { font-size: 18px; font-weight: 900; color: #1a2b5f; }
 .q-type-badge { font-size: 12px; padding: 4px 14px; border-radius: 8px; background: #eff6ff; color: #3b82f6; font-weight: 600; }
 .q-type-badge.multi { background: #fef3c7; color: #d97706; }
+.q-type-badge.judge { background: #f5f3ff; color: #7c3aed; }
 .mark-badge { font-size: 11px; padding: 3px 10px; border-radius: 8px; background: #fffbeb; color: #b45309; font-weight: 600; }
 .q-stem { font-size: 15px; line-height: 1.8; color: #1a2b5f; margin: 0 0 20px; font-weight: 500; }
 .q-options { display: flex; flex-direction: column; gap: 10px; }
 .multi-hint { padding: 8px 12px; background: #eff6ff; border-radius: 8px; font-size: 12px; color: #3b82f6; margin-bottom: 8px; }
+.judge-hint { padding: 8px 12px; background: #f5f3ff; border-radius: 8px; font-size: 12px; color: #7c3aed; margin-bottom: 8px; }
 .option-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 2px solid #e8eaf0; border-radius: 12px; cursor: pointer; transition: all 0.2s; font-size: 14px; color: #333; }
 .option-item:hover { border-color: #cbd5e0; background: #f8f9fc; }
 .option-item.selected { border-color: #1a2b5f; background: #f0f4ff; color: #1a2b5f; font-weight: 600; }

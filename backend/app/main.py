@@ -264,7 +264,6 @@ async def lifespan(app: FastAPI):
             # === question_detail_category 表（仅归一化该表，不影响主题型表） ===
             # 注意：'选择题'是歧义值（可能为单选也可能为多选），不可在此批量折叠为'单选题'，
             # 否则会把多选的选择题误判为单选；统一交由 repair_question_types.py 按关键词工程重检测。
-            conn.execute(text("UPDATE question_detail_category SET question_type_detail='单选题' WHERE question_type_detail='判断题'"))
             conn.execute(text("UPDATE question_detail_category SET question_type_detail='多选题' WHERE question_type_detail='不定项'"))
             conn.execute(text("UPDATE question_detail_category SET question_type_detail='论述题' WHERE question_type_detail IN ('填空题', '简答题', '案例分析题', '无')"))
             # 修复 is_objective 字段（客观题/主观题分类，含新增题型）

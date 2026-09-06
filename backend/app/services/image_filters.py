@@ -55,8 +55,8 @@ except ImportError:
     _HAS_PIL = False
 
 
-def _detect_qr(img_bytes: bytes):
-    """L1: OpenCV 二维码解码。返回 (level, reason) 或 None"""
+def _detect_qr_enhanced(img_bytes: bytes):
+    """L1 增强: OpenCV 二维码解码 + 颜色特征分析"""
     if not _HAS_CV2:
         return None
     try:
@@ -70,13 +70,21 @@ def _detect_qr(img_bytes: bytes):
             if data:
                 return ('qr_code', f'二维码解码成功: {data[:40]}')
             if points is not None:
-                return ('qr_pattern', '检出二维码定位图案')
+                # 增强: 检查是否为正方形且尺寸合理
+                h, w = img.shape[:2]
+                if 120 <= w <= 800 and 120 <= h <= 800 and abs(w - h) / max(w, h) < 0.15:
+                    return ('qr_pattern', '检出二维码定位图案（正方形）')
         except cv2.error:
             pass
         return None
     except Exception as e:  # noqa: BLE001 — 判定失败不阻塞
         logger.debug(f"[image_filters] QR检测异常: {e}")
         return None
+
+
+def _detect_qr(img_bytes: bytes):
+    """L1: OpenCV 二维码解码。返回 (level, reason) 或 None"""
+    return _detect_qr_enhanced(img_bytes)
 
 
 def _detect_promo_banner(img) -> bool:

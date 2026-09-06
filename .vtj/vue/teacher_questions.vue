@@ -299,7 +299,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       // 数字 type_id 映射已删除：历史硬编码 {'1':单选,'2':多选,'3':论述,'4':写作}
       // 与真实库 type_id 分配错位（2=论述/3=单选/4=多选），是题型误显示根源之一。
       const nameMap: Record<string, string> = {
-        '单选题': '单选题', '多选题': '多选题', '论述题': '论述题', '写作题': '写作题',
+        '单选题': '单选题', '多选题': '多选题', '判断题': '判断题', '论述题': '论述题', '写作题': '写作题',
       };
       return nameMap[s] || s;
     }
@@ -308,6 +308,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       const name = typeDisplayName(typeInfo);
       const map: Record<string, string> = {
         '单选题': 'badge-single', '多选题': 'badge-multi',
+        '判断题': 'badge-judge',
         '论述题': 'badge-essay', '写作题': 'badge-writing',
       };
       return map[name] || 'badge-single';
@@ -354,9 +355,9 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       // 移除题号前缀
       cleaned = cleaned.replace(/第\s*\d+\s*题[：:]\s*/g, '');
       
-      // 修复 [IMAGE:qid_idx] 占位符为真实img标签
-      cleaned = cleaned.replace(/\[IMAGE:(\d+)[_-](\d+)\]/g, function(_match: string, qid: string, idx: string) {
-        return '<img src="/static/questions/' + qid + '/' + qid + '_' + idx + '.png" ' +
+      // 修复 [IMAGE:hash_idx] 占位符为真实img标签（扁平路径格式）
+      cleaned = cleaned.replace(/\[IMAGE:([a-fA-F0-9]+)[_-](\d+)\]/g, function(_match: string, hash: string, idx: string) {
+        return '<img src="/static/questions/' + hash + '_' + idx + '.png" ' +
           'class="question-img" loading="lazy" ' +
           'onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
       });
@@ -668,6 +669,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 .type-badge-lg { padding: 4px 14px; font-size: 15px; }
 .badge-single { background: #409EFF; }
 .badge-multi { background: #67C23A; }
+.badge-judge { background: #8B5CF6; }
 .badge-essay { background: #E6A23C; }
 .badge-writing { background: #F56C6C; }
 

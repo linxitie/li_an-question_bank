@@ -1079,12 +1079,12 @@
       renderImageMarkers(html, imageMap) {
         if (!html) return '';
         var imgMap = imageMap || {};
-        return html.replace(/\[IMAGE:(\d+)_(\d+)\]/g, function(match, num, seq) {
-          var key = num + '_' + seq;
+        return html.replace(/\[IMAGE:([a-fA-F0-9]+)_(\d+)\]/g, function(match, hash, seq) {
+          var key = hash + '_' + seq;
           var src = imgMap[key];
           if (!src) {
-            // 无映射记录，尝试默认路径
-            src = '/static/questions/' + num + '/' + num + '_' + seq + '.png';
+            // 无映射记录，尝试扁平路径格式
+            src = '/static/questions/' + hash + '_' + seq + '.png';
           }
           return '<img src="' + src + '" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" ' +
                  'style="max-width:100%;height:auto;border:1px solid #e8eaf0;' +

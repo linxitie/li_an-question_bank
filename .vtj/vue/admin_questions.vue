@@ -62,6 +62,7 @@ export default defineComponent({
       const map: Record<string, string> = {
         '单选题': 'type-single',
         '多选题': 'type-multi',
+        '判断题': 'type-judge',
         '论述题': 'type-essay',
         '写作题': 'type-writing'
       };
@@ -99,6 +100,7 @@ export default defineComponent({
 .type-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; }
 .type-single { background: #e6f7ff; color: #1890ff; }
 .type-multi { background: #fff7e6; color: #fa8c16; }
+.type-judge { background: #f5f3ff; color: #7c3aed; }
 .type-essay { background: #fff1f0; color: #f5222d; }
 .type-writing { background: #f6ffed; color: #52c41a; }
 .type-default { background: #f5f5f5; color: #999; }

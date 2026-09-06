@@ -380,11 +380,11 @@
         }
       },
       getTypeLabel(type) {
-        var map = {'单选题':'[单选]','单选':'[单选]','多选题':'[多选]','不定项':'[多选]','多选':'[多选]','简答题':'[简答]','论述题':'[论述题]','写作题':'[写作题]'};
+        var map = {'单选题':'[单选]','单选':'[单选]','多选题':'[多选]','不定项':'[多选]','多选':'[多选]','判断题':'[判断]','简答题':'[简答]','论述题':'[论述题]','写作题':'[写作题]'};
         return map[type] || '[单选]';
       },
       getTypeClass(type) {
-        var map = {'多选题':'multi','不定项':'multi','多选':'multi','简答题':'essay','论述题':'essay','写作题':'essay'};
+        var map = {'多选题':'multi','不定项':'multi','多选':'multi','判断题':'judge','简答题':'essay','论述题':'essay','写作题':'essay'};
         return map[type] || '';
       },
       loadQuestions() {
@@ -810,8 +810,8 @@
     color: #d97706;
   }
   .q-type-badge.judge {
-    background: #f0fdf4;
-    color: #065f46;
+    background: #f5f3ff;
+    color: #7c3aed;
   }
   .q-type-badge.fill {
     background: #fef2f2;

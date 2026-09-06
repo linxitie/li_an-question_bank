@@ -329,8 +329,8 @@ export default defineComponent({
     // IMAGE占位替换（复用answer_page逻辑）
     replaceImages(text) {
       if (!text) return '';
-      return String(text).replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
-        return '<img src="/static/questions/' + qn + '/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
+      return String(text).replace(/\[?IMAGE:([a-fA-F0-9]+)_(\d+)\]?/gi, function(m, hash, idx) {
+        return '<img src="/static/questions/' + hash + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
       });
     },
 
