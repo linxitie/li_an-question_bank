@@ -1833,38 +1833,52 @@ def _detect_question_type(content: str, options: List[str], answer: str = '') ->
         '写作题': 0,
     }
     
-    # === 维度1: 答案格式分析（权重最高）===
+    # === 维度1: 答案格式分析（优化版）===
     if answer:
-        if re.match(r'^[A-D]$', answer):
-            scores['单选题'] += 5
-        elif re.match(r'^[A-D]([，,][A-D])+$', answer):
-            scores['多选题'] += 5
+        # ★ 多选题答案：强制认定
+        if re.match(r'^[A-D]([，,][A-D])+$', answer):
+            scores['多选题'] += 8  # 强多选倾向
         elif re.fullmatch(r'[A-D]{2,4}', answer):
-            # ★ 连写多字母答案（如 ACD/ABCD，canonical_answer 归一化的标准形态）
-            # 无此分支时，无选项题的连写答案会被"下列"等关键词误判为单选
-            scores['多选题'] += 5
+            scores['多选题'] += 8  # 连写多字母答案
+        # 单选题答案
+        elif re.match(r'^[A-D]$', answer):
+            scores['单选题'] += 5
+        # 判断题答案：必须是明确的判断词
         elif answer in ['正确', '错误', '对', '错', 'TRUE', 'FALSE', 'T', 'F']:
             scores['判断题'] += 5
+        # 主观题答案
         elif len(answer) > 20:
             scores['论述题'] += 3
             scores['简答题'] += 2
         elif len(answer) > 5:
             scores['简答题'] += 2
     
-    # === 维度2: 选项数量分析 ===
+    # === 维度2: 选项数量分析（优化版）===
     if opt_count == 2:
-        scores['判断题'] += 3
-        scores['单选题'] += 1
+        # ★ 判断题识别收紧：必须同时满足以下条件
+        # 1. 选项内容包含判断词（对/错/正确/错误）
+        # 2. 答案为A或B
+        has_judge_opts = False
+        for opt in cleaned_options:
+            if any(kw in opt for kw in ['对', '错', '正确', '错误', 'True', 'False']):
+                has_judge_opts = True
+                break
+        
+        if has_judge_opts and answer in ['A', 'B', '对', '错', '正确', '错误', 'TRUE', 'FALSE', 'T', 'F']:
+            scores['判断题'] += 5  # 强判断题倾向
+        else:
+            scores['单选题'] += 3  # 普通2选项题视为单选
+            scores['多选题'] += 1
     elif opt_count == 4:
         # 4选项默认单选，但题干含多选关键词时倾向多选
         if any(re.search(kw, content_text) for kw in MULTI_CHOICE_KEYWORDS):
-            scores['多选题'] += 2
+            scores['多选题'] += 3
             scores['单选题'] -= 1
         else:
             scores['单选题'] += 3
             scores['多选题'] += 1
     elif opt_count > 4:
-        scores['多选题'] += 3
+        scores['多选题'] += 4  # 增强多选倾向
     elif opt_count == 0:
         scores['论述题'] += 2
         scores['简答题'] += 2
@@ -1936,6 +1950,18 @@ def _detect_question_type(content: str, options: List[str], answer: str = '') ->
                 # 多个字母答案 → 多选倾向
                 scores['多选题'] += 4
     
+    # === 维度7: 排除条件（新增）===
+    # 如果答案为单个字母且选项>=3，强制排除判断题
+    if answer and re.match(r'^[A-D]$', answer) and opt_count >= 3:
+        scores['判断题'] = 0  # 强制排除判断题
+        scores['单选题'] += 3
+    
+    # 如果答案为多个字母，强制排除单选题和判断题
+    if answer and re.match(r'^[A-D]([，,][A-D])+$', answer):
+        scores['单选题'] = 0
+        scores['判断题'] = 0
+        scores['多选题'] += 5
+    
     # === 计算最终结果 ===
     # 关键修复：当有选项时，不应默认返回论述题
     if opt_count >= 2:
@@ -1969,8 +1995,8 @@ def _detect_question_type(content: str, options: List[str], answer: str = '') ->
     
     final_type = type_map.get(best_type, '单选题')
     
-    # 低置信度警告
-    if confidence < 0.5:
+    # 低置信度标记
+    if confidence < 0.6:
         logger.warning(f"[type-detect] 低置信度({confidence:.2f})题型判定: {final_type}, 题干前50字: {content_text[:50]!r}, scores: {scores}")
     
     return final_type, round(confidence, 2)

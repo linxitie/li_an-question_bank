@@ -179,3 +179,75 @@ def extract_text_sync(buf: bytes) -> str | None:
         _sem.release()
         if tmpdir:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# 增强图片文字提取能力
+# ---------------------------------------------------------------------------
+
+def extract_text_from_image(image_path: str) -> str | None:
+    """使用Tesseract提取图片中的文字（增强OCR能力）
+    
+    参数：
+        image_path: 图片文件路径
+    
+    返回：
+        提取的文字，失败返回None
+    """
+    try:
+        import pytesseract
+        from PIL import Image, ImageFilter, ImageEnhance
+        
+        # 打开图片
+        img = Image.open(image_path)
+        
+        # 图片预处理
+        # 1. 转灰度
+        img = img.convert('L')
+        
+        # 2. 增强对比度
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(2.0)
+        
+        # 3. 锐化
+        img = img.filter(ImageFilter.SHARPEN)
+        
+        # 4. 二值化
+        threshold = 128
+        img = img.point(lambda p: p > threshold and 255)
+        
+        # 5. 提取文字（支持中英文）
+        text = pytesseract.image_to_string(img, lang='chi_sim+eng')
+        
+        return text.strip() if text else None
+        
+    except ImportError:
+        logger.warning("[mineru] pytesseract未安装，图片文字提取功能不可用")
+        return None
+    except Exception as e:
+        logger.warning(f"[mineru] 图片文字提取异常: {type(e).__name__}: {e}")
+        return None
+
+
+def extract_text_from_image_bytes(image_bytes: bytes) -> str | None:
+    """从图片字节中提取文字
+    
+    参数：
+        image_bytes: 图片字节数据
+    
+    返回：
+        提取的文字，失败返回None
+    """
+    import tempfile
+    import os
+    
+    tmpdir = None
+    try:
+        tmpdir = tempfile.mkdtemp(prefix='ocr_')
+        tmp_path = os.path.join(tmpdir, 'image.png')
+        with open(tmp_path, 'wb') as f:
+            f.write(image_bytes)
+        return extract_text_from_image(tmp_path)
+    finally:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
