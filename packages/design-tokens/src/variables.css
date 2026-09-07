@@ -1,0 +1,104 @@
+/* ========== 色彩系统 ========== */
+:root {
+  /* 主色 - 深蓝色（权威、专业、稳重） */
+  --color-primary: #1A365D;
+  --color-primary-hover: #152C4A;
+  --color-primary-active: #0F2035;
+  
+  /* 强调色 - 金色（激励、收获） */
+  --color-accent: #D4A843;
+  --color-accent-hover: #C49A35;
+  --color-accent-active: #B08C2A;
+  
+  /* 状态色 */
+  --color-success: #52C41A;
+  --color-warning: #FAAD14;
+  --color-error: #FF4D4F;
+  --color-info: #1890FF;
+  
+  /* 业务色 */
+  --color-xingce: #3B82F6;
+  --color-shenlun: #10B981;
+  --color-gongzhuan: #F59E0B;
+  
+  /* 中性色 */
+  --color-text-primary: #1F2937;
+  --color-text-secondary: #6B7280;
+  --color-text-tertiary: #9CA3AF;
+  --color-border: #E5E7EB;
+  --color-divider: #F3F4F6;
+  
+  /* ========== 背景系统 ========== */
+  --bg-primary: #F0F2F5;
+  --bg-secondary: #F5F7FA;
+  --bg-tertiary: #FAFBFC;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #FAFAFA;
+  --bg-card-active: #F5F5F5;
+  
+  /* ========== 间距系统 ========== */
+  --space-unit: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 20px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 40px;
+  --space-4xl: 48px;
+  
+  /* ========== 圆角系统 ========== */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+  
+  /* ========== 字体系统 ========== */
+  --font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-base-tablet: 15px;
+  --font-size-base-mobile: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 20px;
+  --font-size-3xl: 24px;
+  --font-size-4xl: 30px;
+  --font-size-5xl: 36px;
+  
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.6;
+  
+  /* ========== 阴影系统 ========== */
+  --shadow-xs: 0 1px 2px rgba(26, 43, 95, 0.02);
+  --shadow-light: 0 1px 4px rgba(26, 43, 95, 0.04);
+  --shadow-medium: 0 4px 16px rgba(26, 43, 95, 0.1);
+  --shadow-heavy: 0 8px 28px rgba(26, 43, 95, 0.12);
+  --shadow-xl: 0 12px 40px rgba(26, 43, 95, 0.15);
+  
+  /* ========== 动画系统 ========== */
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
+  --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-in: cubic-bezier(0.4, 0, 1, 1);
+  --easing-out: cubic-bezier(0, 0, 0.2, 1);
+  
+  /* ========== 触控目标 ========== */
+  --touch-target-min: 44px;
+  
+  /* ========== 断点 ========== */
+  --breakpoint-mobile: 768px;
+  --breakpoint-tablet: 1024px;
+  --breakpoint-desktop: 1280px;
+}
