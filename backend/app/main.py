@@ -180,6 +180,7 @@ async def lifespan(app: FastAPI):
                 ('password_reset_expire', 'DATETIME', None),
                 ('created_by', 'BIGINT', None),
                 ('school_id', 'INTEGER', None),
+                ('device_sessions', 'JSON', None),
             ]:
                 if col_name not in user_cols:
                     default_clause = f"DEFAULT {col_default}" if col_default else ""
