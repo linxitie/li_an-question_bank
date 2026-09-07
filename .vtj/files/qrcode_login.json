@@ -1,0 +1,19 @@
+{
+  "id": "qrcode-login",
+  "type": "block",
+  "name": "QRCodeLogin",
+  "state": {
+    "uuid": "",
+    "status": "initial",
+    "countdown": 60,
+    "countdownTimer": null,
+    "qrImage": ""
+  },
+  "methods": {
+    "generateQRCode": "async function() {\n  try {\n    const token = localStorage.getItem('token')\n    const res = await fetch('/api/auth/qrcode/generate', {\n      method: 'POST',\n      headers: {\n        'Authorization': `Bearer ${token}`,\n        'Content-Type': 'application/json'\n      }\n    })\n    const data = await res.json()\n    if (data.uuid) {\n      this.uuid = data.uuid\n      this.qrImage = data.qr_image_base64\n      this.status = 'pending'\n      this.startCountdown()\n      this.startPolling()\n    }\n  } catch (error) {\n    console.error('生成二维码失败:', error)\n  }\n}",
+    "startCountdown": "function() {\n  this.countdown = 60\n  this.countdownTimer = setInterval(() => {\n    this.countdown--\n    if (this.countdown <= 0) {\n      clearInterval(this.countdownTimer)\n      this.status = 'expired'\n    }\n  }, 1000)\n}",
+    "startPolling": "async function() {\n  const poll = async () => {\n    try {\n      const res = await fetch(`/api/auth/qrcode/${this.uuid}/status`)\n      const data = await res.json()\n      \n      if (data.status === 'confirmed') {\n        localStorage.setItem('token', data.token)\n        this.status = 'confirmed'\n        window.location.href = '/'\n      } else if (data.status === 'expired') {\n        this.status = 'expired'\n      } else {\n        setTimeout(poll, 1500)\n      }\n    } catch (error) {\n      console.error('轮询状态失败:', error)\n    }\n  }\n  poll()\n}",
+    "refresh": "function() {\n  clearInterval(this.countdownTimer)\n  this.generateQRCode()\n}"
+  },
+  "template": "<div class=\"qrcode-login\"><div class=\"qrcode-container\"><img :src=\"qrImage\" v-if=\"qrImage\" class=\"qrcode-image\" /><div v-else class=\"qrcode-placeholder\"><span>正在生成二维码...</span></div></div><div class=\"qrcode-info\"><p class=\"qrcode-tip\">请使用砺安题库APP扫描二维码登录</p><p v-if=\"status === 'pending'\" class=\"qrcode-status\"><span class=\"countdown\">{{ countdown }}秒后过期</span></p><p v-if=\"status === 'expired'\" class=\"qrcode-status expired\"><span>二维码已过期</span><button @click=\"refresh\" class=\"refresh-btn\">刷新</button></p><p v-if=\"status === 'confirmed'\" class=\"qrcode-status confirmed\"><span>登录成功，正在跳转...</span></p></div></div>"
+}
