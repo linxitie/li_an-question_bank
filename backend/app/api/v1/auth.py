@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -26,6 +27,55 @@ from ...core.security import (
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+# 设备管理常量
+MAX_DEVICES = 3
+
+
+def detect_platform(request: Request) -> str:
+    """检测用户平台"""
+    ua = request.headers.get("user-agent", "").lower()
+    if "mobile" in ua or "android" in ua or "iphone" in ua:
+        return "mobile"
+    elif "tablet" in ua or "ipad" in ua:
+        return "tablet"
+    return "pc"
+
+
+def extract_browser(request: Request) -> str:
+    """提取浏览器信息"""
+    user_agent = request.headers.get("user-agent", "")
+    if "Chrome" in user_agent:
+        return "Chrome"
+    elif "Firefox" in user_agent:
+        return "Firefox"
+    elif "Safari" in user_agent:
+        return "Safari"
+    elif "Edge" in user_agent:
+        return "Edge"
+    return "Unknown"
+
+
+def extract_os(request: Request) -> str:
+    """提取操作系统信息"""
+    user_agent = request.headers.get("user-agent", "")
+    if "Windows" in user_agent:
+        return "Windows"
+    elif "Mac" in user_agent:
+        return "macOS"
+    elif "Linux" in user_agent:
+        return "Linux"
+    elif "Android" in user_agent:
+        return "Android"
+    elif "iPhone" in user_agent or "iPad" in user_agent:
+        return "iOS"
+    return "Unknown"
+
+
+def hash_token(token: str) -> str:
+    """哈希token用于存储"""
+    import hashlib
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 class RegisterForm(BaseModel):
@@ -104,6 +154,30 @@ async def login_for_access_token(
         user.user_id,
         device_info=client_ip
     )
+
+    # 注册设备会话
+    if request:
+        device_info = {
+            "device_id": str(uuid.uuid4()),
+            "platform": detect_platform(request),
+            "browser": extract_browser(request),
+            "os": extract_os(request),
+            "ip": client_ip,
+            "token_hash": hash_token(access_token),
+            "last_active": datetime.utcnow().isoformat(),
+            "is_current": True
+        }
+        
+        # 更新设备会话列表
+        sessions = user.device_sessions or []
+        sessions = [s for s in sessions if s.get("device_id") != device_info["device_id"]]
+        sessions.append(device_info)
+        
+        # 限制最多3个设备
+        if len(sessions) > MAX_DEVICES:
+            sessions = sessions[-MAX_DEVICES:]
+        
+        user.device_sessions = sessions
 
     user.last_login = datetime.now()
     db.commit()
