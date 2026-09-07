@@ -12,12 +12,15 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
+from .core.redis_client import get_redis, close_redis
 from .api.v1 import auth, questions, papers, exams, videos, llm, goals, stats, media, news, recruitment, calendar, question_actions, practice, forum, exam_records, wrong_questions, collection, notes, quick_practice, smart_exam
 from .api.v1 import admin as admin_api
 from .api.v1 import teacher as teacher_api
 from .api.v1 import admin_approval
 from .api.v1 import quotes
 from .api.v1 import materials
+from .api.v1 import auth_qrcode
+from .api.v1 import devices
 # from .api.v1 import wrong_questions, checkin, coins  # TODO: 待创建
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
@@ -48,6 +51,13 @@ async def lifespan(app: FastAPI):
     logger.info("启动公安联考题库系统服务...")
     logger.info(f"服务地址: http://{settings.HOST}:{settings.PORT}")
     logger.info(f"API文档: http://{settings.HOST}:{settings.PORT}/docs")
+
+    # 初始化Redis连接
+    try:
+        await get_redis()
+        logger.info("Redis连接初始化完成")
+    except Exception as e:
+        logger.warning(f"Redis连接初始化失败（二维码登录功能将不可用）: {e}")
 
     # 自动创建数据库表
     from .core.database import engine, Base, SessionLocal
@@ -389,6 +399,11 @@ async def lifespan(app: FastAPI):
         stop_grpc_service()
     except Exception:
         pass
+    # 关闭Redis连接
+    try:
+        await close_redis()
+    except Exception:
+        pass
 
 app = FastAPI(
     title="公安联考题库系统",
@@ -470,6 +485,8 @@ app.include_router(materials.router)
 app.include_router(admin_api.router, tags=["管理员端"])
 app.include_router(admin_approval.router, tags=["管理员端-试卷审批"])
 app.include_router(teacher_api.router, tags=["教师端"])
+app.include_router(auth_qrcode.router, tags=["二维码登录"])
+app.include_router(devices.router, tags=["设备管理"])
 
 @app.get("/health", tags=["系统"])
 async def health_check():
