@@ -50,6 +50,7 @@ class SysUser(Base):
     password_reset_expire = Column(DateTime, comment="密码重置令牌过期时间")
     created_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="创建人ID(管理员创建教师)")
     school_id = Column(Integer, comment="所属学校/机构ID")
+    device_sessions = Column(JSON, default=list, comment="设备会话列表")
 
     # 自引用关系：创建人
     creator = relationship("SysUser", remote_side=[user_id], foreign_keys=[created_by])
