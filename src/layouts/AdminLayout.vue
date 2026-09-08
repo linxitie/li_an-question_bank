@@ -104,11 +104,13 @@ export default defineComponent({
       { label: '系统总览', path: '/admin/dashboard', icon: '📊' },
       { label: '用户管理', path: '/admin/users', icon: '👥' },
       { label: '题库管理', path: '/admin/questions', icon: '📋' },
+      { label: '资料管理', path: '/admin/materials', icon: '📚' },
       { label: '试卷审批', path: '/admin/papers', icon: '📝' },
       { label: '系统设置', path: '/admin/settings', icon: '⚙️' },
       { label: '日志审计', path: '/admin/logs', icon: '📋' },
       { label: '数据备份', path: '/admin/backup', icon: '💾' },
       { label: '权限管理', path: '/admin/permissions', icon: '🔐' },
+      { label: '帮助文档', path: '/admin/help', icon: '📖' },
     ];
 
     const currentPath = computed(() => route.path);

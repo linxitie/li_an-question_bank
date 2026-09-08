@@ -1,108 +1,748 @@
 <template>
-  <div class="admin-content">
-    <div v-if="loading" class="skeleton-wrap"><div class="sk-bar"></div><div class="sk-table"></div></div>
-    <div v-else>
-      <div class="action-bar"><h2 class="page-title">📋 题库管理</h2>
-        <div class="action-buttons">
-          <button class="btn-secondary" @click="batchAudit(1)">✅ 批量通过</button>
-          <button class="btn-danger" @click="batchAudit(2)">❌ 批量驳回</button>
-        </div>
-      </div>
-      <div class="filter-bar">
-        <input class="filter-input" v-model="kw" placeholder="搜索题目" @keyup.enter="load"/>
-        <select class="filter-select" v-model="faudit" @change="load"><option value="">全部状态</option><option :value="0">待审核</option><option :value="1">已通过</option><option :value="2">已驳回</option></select>
-        <button class="btn-search" @click="load">🔍 搜索</button>
-      </div>
-      <div class="batch-bar" v-if="selectedIds.length"><span>已选 {{ selectedIds.length }} 项</span><button class="btn-batch" @click="batchAudit(1)">批量通过</button><button class="btn-batch-danger" @click="batchAudit(2)">批量驳回</button></div>
-      <div class="table-container">
-        <table class="data-table"><thead><tr><th><input type="checkbox" @change="toggleAll" :checked="isAllSelected"/></th><th>ID</th><th>科目</th><th>题干摘要</th><th>题型</th><th>难度</th><th>审核状态</th><th>操作</th></tr></thead>
-        <tbody><tr v-for="q in items" :key="q.question_id" :class="{selected:selectedIds.includes(q.question_id)}"><td><input type="checkbox" :value="q.question_id" v-model="selectedIds"/></td><td>{{ q.question_id }}</td><td><span class="tag">{{ subjectName(q.subject_id) }}</span></td><td class="question-summary">{{ stripPromoText(q.question_content)?.substring(0,80) }}...</td><td><span class="type-badge" :class="typeBadgeClass(q.type_name)">{{ q.type_name }}</span></td><td>{{ difficultyStars(q.difficulty) }}</td><td><span class="status-badge" :class="'status-'+q.audit_status">{{ {0:'待审核',1:'已通过',2:'已驳回'}[q.audit_status] }}</span></td>
-          <td class="actions"><button class="btn-icon" @click="view(q)">👁️</button><button class="btn-icon btn-success" @click="audit(q.question_id,1)" v-if="q.audit_status===0">✅</button><button class="btn-icon btn-danger" @click="audit(q.question_id,2)" v-if="q.audit_status===0">❌</button><button class="btn-icon" @click="archive(q.question_id)">📦</button></td></tr></tbody></table>
-        <div v-if="!items.length" class="empty-state"><div class="empty-icon">📋</div><div>暂无题目数据</div></div>
+  <div class="admin-questions">
+    <!-- 页面标题 -->
+    <div class="page-header">
+      <h2>📚 题库管理</h2>
+      <div class="header-actions">
+        <el-button @click="fetchQuestions">
+          <el-icon><Refresh /></el-icon> 刷新
+        </el-button>
+        <el-button @click="exportQuestions">
+          <el-icon><Download /></el-icon> 导出
+        </el-button>
       </div>
     </div>
-    <div class="modal-overlay" v-if="showDetail" @click.self="showDetail=false"><div class="modal-content">
-      <div class="modal-header"><h3>题目详情 #{{ current?.question_id }}</h3><span class="type-badge">{{ typeName(current?.type_name) }}</span><span class="close" @click="showDetail=false">✕</span></div>
-      <div class="f"><strong>科目：</strong>{{ subjectName(current?.subject_id) }}　<strong>难度：</strong>{{ '★'.repeat(current?.difficulty||1) }}　<strong>分值：</strong>{{ current?.score }}</div>
-      <div class="f"><strong>题干：</strong><div class="box" v-html="current?.full_content || current?.question_content"></div></div>
-      <div class="f" v-if="hasOpts(current?.options)"><strong>选项：</strong><div v-for="(opt,key) in parseOpts(current?.options)" :key="key" :class="['opt', isCorrect(key,current?.answer)?'ok':'']"><b>{{ key }}.</b><span class="opt-v" v-html="opt"></span><span v-if="isCorrect(key,current?.answer)" class="mark">✅</span></div></div>
-      <div class="f"><strong>答案：</strong><span class="ans">{{ current?.answer }}</span></div>
-      <div class="f"><strong>解析：</strong><div class="box" v-if="current?.answer_analysis" v-html="current?.answer_analysis"></div><span v-else class="none">暂无</span></div>
-    </div></div>
+
+    <!-- 筛选区 -->
+    <el-card class="filter-card">
+      <el-form :inline="true" :model="filters">
+        <el-form-item label="科目">
+          <el-select v-model="filters.subject_id" clearable placeholder="全部科目">
+            <el-option label="行测" :value="1" />
+            <el-option label="申论" :value="2" />
+            <el-option label="公专" :value="3" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="题型">
+          <el-select v-model="filters.type_id" clearable placeholder="全部题型">
+            <el-option v-for="t in typeList" :key="t.type_id" :label="t.type_name" :value="t.type_id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="难度">
+          <el-select v-model="filters.difficulty" clearable placeholder="全部难度">
+            <el-option label="1星" :value="1" />
+            <el-option label="2星" :value="2" />
+            <el-option label="3星" :value="3" />
+            <el-option label="4星" :value="4" />
+            <el-option label="5星" :value="5" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="审核状态">
+          <el-select v-model="filters.audit_status" clearable placeholder="全部状态">
+            <el-option label="待审核" :value="0" />
+            <el-option label="已通过" :value="1" />
+            <el-option label="已驳回" :value="2" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="搜索">
+          <el-input v-model="filters.keyword" placeholder="题目内容" clearable />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="fetchQuestions">查询</el-button>
+          <el-button @click="resetFilters">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 统计概览 -->
+    <el-row :gutter="20" class="stats-row">
+      <el-col :span="5">
+        <el-card shadow="hover">
+          <div class="stat-item">
+            <span class="stat-value">{{ stats.total }}</span>
+            <span class="stat-label">总题目数</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="5">
+        <el-card shadow="hover">
+          <div class="stat-item">
+            <span class="stat-value">{{ stats.xingce }}</span>
+            <span class="stat-label">行测</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="5">
+        <el-card shadow="hover">
+          <div class="stat-item">
+            <span class="stat-value">{{ stats.shenlun }}</span>
+            <span class="stat-label">申论</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="5">
+        <el-card shadow="hover">
+          <div class="stat-item">
+            <span class="stat-value">{{ stats.gongzhuan }}</span>
+            <span class="stat-label">公专</span>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="4">
+        <el-card shadow="hover">
+          <div class="stat-item">
+            <span class="stat-value warning">{{ stats.pending }}</span>
+            <span class="stat-label">待审核</span>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 题目列表 -->
+    <el-card>
+      <el-table :data="questionList" stripe v-loading="loading">
+        <el-table-column prop="question_id" label="ID" width="70" sortable />
+        <el-table-column label="科目" width="80">
+          <template #default="{ row }">
+            <el-tag>{{ row.subject_name }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="题目内容" min-width="300" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="question-content" @click="previewQuestion(row)">
+              {{ row.question_content }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="type_name" label="题型" width="80" />
+        <el-table-column label="难度" width="100">
+          <template #default="{ row }">
+            <el-rate v-model="row.difficulty" disabled :max="5" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="source" label="来源" width="100" show-overflow-tooltip />
+        <el-table-column label="审核状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getAuditStatusType(row.audit_status)">
+              {{ getAuditStatusName(row.audit_status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'info'">
+              {{ row.status === 1 ? '正常' : '已归档' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="previewQuestion(row)">预览</el-button>
+            <el-button type="warning" link @click="editQuestion(row)">编辑</el-button>
+            <template v-if="row.audit_status === 0">
+              <el-button type="success" link @click="auditPass(row)">通过</el-button>
+              <el-button type="danger" link @click="showRejectDialog(row)">驳回</el-button>
+            </template>
+            <template v-else-if="row.audit_status === 1">
+              <el-tag type="success" size="small">已通过</el-tag>
+            </template>
+            <template v-else-if="row.audit_status === 2">
+              <el-tag type="danger" size="small">已驳回</el-tag>
+            </template>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 分页 -->
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="total"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="fetchQuestions"
+        @current-change="fetchQuestions"
+      />
+    </el-card>
+
+    <!-- 题目预览弹窗 -->
+    <el-dialog v-model="previewVisible" title="题目预览" width="800px">
+      <div class="question-preview">
+        <div class="preview-header">
+          <el-tag>题目ID: {{ previewData.question_id }}</el-tag>
+          <el-tag type="info">{{ previewData.subject_name }}</el-tag>
+          <el-tag>{{ previewData.type_name }}</el-tag>
+          <el-tag :type="getAuditStatusType(previewData.audit_status)">
+            {{ getAuditStatusName(previewData.audit_status) }}
+          </el-tag>
+        </div>
+
+        <el-divider />
+
+        <div class="preview-content">
+          <h4>题目内容</h4>
+          <div class="content-box" v-html="previewData.full_content"></div>
+        </div>
+
+        <div class="preview-options" v-if="previewData.options && previewData.options.length">
+          <h4>选项</h4>
+          <div v-for="(opt, index) in previewData.options" :key="index" class="option-item">
+            <span class="option-label">{{ String.fromCharCode(65 + index) }}.</span>
+            <span class="option-content">{{ opt }}</span>
+          </div>
+        </div>
+
+        <div class="preview-answer">
+          <h4>正确答案</h4>
+          <div class="answer-box">{{ previewData.answer }}</div>
+        </div>
+
+        <div class="preview-analysis">
+          <h4>答案解析</h4>
+          <div class="analysis-box" v-html="previewData.answer_analysis"></div>
+        </div>
+
+        <div class="preview-meta">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="来源">{{ previewData.source || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="年份">{{ previewData.year || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="分值">{{ previewData.score }}分</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ formatDateTime(previewData.create_time) }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 题目编辑弹窗 -->
+    <el-dialog v-model="editVisible" title="编辑题目" width="900px">
+      <el-form :model="editForm" label-width="100px">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="科目">
+              <el-select v-model="editForm.subject_id" @change="onSubjectChange">
+                <el-option label="行测" :value="1" />
+                <el-option label="申论" :value="2" />
+                <el-option label="公专" :value="3" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="题型">
+              <el-select v-model="editForm.type_id">
+                <el-option v-for="t in filteredTypeList" :key="t.type_id" :label="t.type_name" :value="t.type_id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="题目内容">
+          <el-input v-model="editForm.question_content" type="textarea" :rows="4" />
+        </el-form-item>
+
+        <el-form-item label="选项">
+          <div v-for="(opt, index) in editForm.options" :key="index" class="option-row">
+            <span class="option-prefix">{{ String.fromCharCode(65 + index) }}.</span>
+            <el-input v-model="editForm.options[index]" style="flex: 1" />
+            <el-button type="danger" circle @click="removeOption(index)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+          <el-button @click="addOption">+ 添加选项</el-button>
+        </el-form-item>
+
+        <el-form-item label="正确答案">
+          <el-input v-model="editForm.answer" />
+        </el-form-item>
+
+        <el-form-item label="答案解析">
+          <el-input v-model="editForm.answer_analysis" type="textarea" :rows="3" />
+        </el-form-item>
+
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="难度">
+              <el-rate v-model="editForm.difficulty" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="来源">
+              <el-input v-model="editForm.source" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="年份">
+              <el-input-number v-model="editForm.year" :min="2000" :max="2030" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitEdit">保存修改</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 驳回原因弹窗 -->
+    <el-dialog v-model="rejectDialogVisible" title="驳回原因" width="500px">
+      <el-form :model="rejectForm" label-width="80px">
+        <el-form-item label="驳回原因" required>
+          <el-select v-model="rejectForm.reason_type" placeholder="选择常见原因" style="width: 100%; margin-bottom: 10px;">
+            <el-option label="题目内容有误" value="内容有误" />
+            <el-option label="选项不正确" value="选项问题" />
+            <el-option label="解析不准确" value="解析问题" />
+            <el-option label="重复题目" value="重复题目" />
+            <el-option label="难度不合适" value="难度问题" />
+            <el-option label="格式不规范" value="格式问题" />
+            <el-option label="其他原因" value="其他" />
+          </el-select>
+          <el-input
+            v-model="rejectForm.comment"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入详细的驳回原因（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rejectDialogVisible = false">取消</el-button>
+        <el-button type="danger" @click="submitReject">确认驳回</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
-<script lang="ts">
-// @ts-nocheck
-import { defineComponent, ref, onMounted } from 'vue';
-import { useProvider } from '@vtj/renderer';
-export default defineComponent({
-  name: 'AdminQuestions', setup() {
-    const provider = useProvider({ id: 'admin_questions', version: '1' });
-    const loading = ref(true);
-    const kw = ref(''); const faudit = ref(''); const items: any = ref([]);
-    const selectedIds: any = ref([]);
-    const showDetail = ref(false); const current: any = ref(null);
-    const isAllSelected = ref(false);
-    const auth = () => (window as any).__VTJ_AUTH__;
-    onMounted(load);
-    async function load() { loading.value = true; const p = new URLSearchParams(); if (kw.value) p.append('keyword', kw.value); if (faudit.value) p.append('audit_status', faudit.value); const r = await auth().apiFetch('/api/admin/questions?'+p.toString()); const d = await r.json(); if (d.success) items.value = d.items || []; loading.value = false; }
-    async function audit(id:number, status:number) { await auth().apiFetch(`/api/admin/questions/${id}/audit`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({audit_status:status,audit_comment:status===1?'审核通过':''})}); load(); }
-    async function archive(id:number) { await auth().apiFetch(`/api/admin/questions/${id}/archive`, {method:'PUT'}); load(); }
-    function view(q:any) { current.value = q; showDetail.value = true; }
-    function subjectName(id:any) { return ({1:'行测',2:'申论',3:'公专'} as any)[id] || '-'; }
-    function stripPromoText(text: string): string {
-      if (!text) return '';
-      return text
-        .replace(/来源[:：].*$/gm, '')
-        .replace(/\[图片\]/g, '')
-        .replace(/<[^>]+>/g, '')
-        .trim();
+
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
+// 加载状态
+const loading = ref(false)
+
+// 分页
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+
+// 筛选条件
+const filters = ref({
+  subject_id: null,
+  type_id: null,
+  difficulty: null,
+  audit_status: null,
+  keyword: ''
+})
+
+// 题目列表
+const questionList = ref([])
+
+// 题型列表
+const typeList = ref([])
+
+// 统计数据
+const stats = ref({
+  total: 0,
+  xingce: 0,
+  shenlun: 0,
+  gongzhuan: 0,
+  pending: 0
+})
+
+// 预览弹窗
+const previewVisible = ref(false)
+const previewData = ref({})
+
+// 编辑弹窗
+const editVisible = ref(false)
+const editForm = ref({
+  question_id: null,
+  subject_id: 1,
+  type_id: null,
+  question_content: '',
+  options: [],
+  answer: '',
+  answer_analysis: '',
+  difficulty: 3,
+  source: '',
+  year: 2026
+})
+
+// 驳回弹窗
+const rejectDialogVisible = ref(false)
+const rejectForm = ref({
+  question_id: null,
+  reason_type: '',
+  comment: ''
+})
+
+// 根据科目筛选题型
+const filteredTypeList = computed(() => {
+  if (!filters.value.subject_id) return typeList.value
+  return typeList.value.filter(t => t.subject_id === filters.value.subject_id)
+})
+
+// 获取审核状态类型
+const getAuditStatusType = (status) => {
+  const map = { 0: 'warning', 1: 'success', 2: 'danger' }
+  return map[status] || 'info'
+}
+
+// 获取审核状态名称
+const getAuditStatusName = (status) => {
+  const map = { 0: '待审核', 1: '已通过', 2: '已驳回' }
+  return map[status] || '未知'
+}
+
+// 格式化时间
+const formatDateTime = (timeStr) => {
+  if (!timeStr) return '-'
+  return timeStr.replace('T', ' ').substring(0, 19)
+}
+
+// 加载题目列表
+const fetchQuestions = async () => {
+  loading.value = true
+  try {
+    const params = new URLSearchParams({
+      page: currentPage.value,
+      page_size: pageSize.value,
+      sort_by: 'question_id',
+      sort_order: 'asc'
+    })
+    if (filters.value.subject_id) params.append('subject_id', filters.value.subject_id)
+    if (filters.value.type_id) params.append('type_id', filters.value.type_id)
+    if (filters.value.difficulty) params.append('difficulty', filters.value.difficulty)
+    if (filters.value.audit_status !== null) params.append('audit_status', filters.value.audit_status)
+    if (filters.value.keyword) params.append('keyword', filters.value.keyword)
+
+    const res = await fetch(`/api/admin/questions?${params}`)
+    const data = await res.json()
+    if (data.success) {
+      questionList.value = data.items
+      total.value = data.total
     }
-    function typeBadgeClass(typeName: string): string {
-      const map: Record<string, string> = {
-        '单选题': 'type-single',
-        '多选题': 'type-multi',
-        '判断题': 'type-judge',
-        '论述题': 'type-essay',
-        '写作题': 'type-writing'
-      };
-      return map[typeName] || 'type-default';
-    }
-    function difficultyStars(level: number): string {
-      return '⭐'.repeat(Math.min(level || 1, 5));
-    }
-    function typeName(t:any) { return t || '-'; }
-    function hasOpts(o:any) { if (!o) return false; if (Array.isArray(o)) return o.length>0; if (typeof o==='object') return Object.keys(o).length>0; if (typeof o==='string') { try { return (JSON.parse(o)||[]).length>0; } catch(e){ return false; } } return false; }
-    function parseOpts(o:any) { if (!o) return {}; if (Array.isArray(o)) { const r:any={}; o.forEach((x:any,i:number)=>{ r[String.fromCharCode(65+i)] = (x && typeof x==='object') ? (x.value||x.text||'') : String(x); }); return r; } if (typeof o==='object') return o; if (typeof o==='string') { try { return parseOpts(JSON.parse(o)); } catch(e){ return {}; } } return {}; }
-    function isCorrect(k:string, a:any) { if (!a) return false; const n=String(a).trim().toUpperCase().replace(/[^A-D]/g,''); return n.includes(k); }
-    function toggleAll(e:any) { selectedIds.value = e.target.checked ? items.value.map((q:any)=>q.question_id) : []; }
-    async function batchAudit(status:number) { for (const id of selectedIds.value) { await audit(id, status); } selectedIds.value = []; }
-    return { provider, loading, kw, faudit, items, selectedIds, isAllSelected, showDetail, current, load, audit, archive, view, subjectName, stripPromoText, typeBadgeClass, difficultyStars, typeName, hasOpts, parseOpts, isCorrect, toggleAll, batchAudit };
+  } catch (error) {
+    ElMessage.error('加载题目列表失败')
+  } finally {
+    loading.value = false
   }
-});
+}
+
+// 加载题型列表
+const fetchTypes = async () => {
+  try {
+    const res = await fetch('/api/questions/types')
+    const data = await res.json()
+    if (data.success) {
+      typeList.value = data.items
+    }
+  } catch (error) {
+    console.error('加载题型失败')
+  }
+}
+
+// 加载统计数据
+const fetchStats = async () => {
+  try {
+    const res = await fetch('/api/admin/questions/stats')
+    const data = await res.json()
+    if (data.success) {
+      stats.value = data
+    }
+  } catch (error) {
+    console.error('加载统计数据失败')
+  }
+}
+
+// 重置筛选
+const resetFilters = () => {
+  filters.value = {
+    subject_id: null,
+    type_id: null,
+    difficulty: null,
+    audit_status: null,
+    keyword: ''
+  }
+  fetchQuestions()
+}
+
+// 预览题目
+const previewQuestion = (row) => {
+  previewData.value = { ...row }
+  previewVisible.value = true
+}
+
+// 编辑题目
+const editQuestion = async (row) => {
+  try {
+    const res = await fetch(`/api/admin/questions?keyword=${row.question_id}`)
+    const data = await res.json()
+    if (data.success && data.items.length > 0) {
+      const question = data.items[0]
+      editForm.value = {
+        question_id: question.question_id,
+        subject_id: question.subject_id,
+        type_id: question.type_id,
+        question_content: question.full_content || question.question_content,
+        options: question.options || [],
+        answer: question.answer,
+        answer_analysis: question.answer_analysis || '',
+        difficulty: question.difficulty || 3,
+        source: question.source || '',
+        year: question.year || 2026
+      }
+      editVisible.value = true
+    }
+  } catch (error) {
+    ElMessage.error('获取题目信息失败')
+  }
+}
+
+// 科目变更
+const onSubjectChange = () => {
+  editForm.value.type_id = null
+}
+
+// 添加选项
+const addOption = () => {
+  editForm.value.options.push('')
+}
+
+// 移除选项
+const removeOption = (index) => {
+  editForm.value.options.splice(index, 1)
+}
+
+// 提交编辑
+const submitEdit = async () => {
+  try {
+    const res = await fetch(`/api/admin/questions/${editForm.value.question_id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editForm.value)
+    })
+
+    const data = await res.json()
+    if (data.success) {
+      ElMessage.success('题目更新成功')
+      editVisible.value = false
+      fetchQuestions()
+    } else {
+      ElMessage.error(data.message || '更新失败')
+    }
+  } catch (error) {
+    ElMessage.error('更新失败：' + error.message)
+  }
+}
+
+// 审核通过
+const auditPass = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定通过题目 ${row.question_id} 的审核吗？`, '审核确认', {
+      type: 'success'
+    })
+
+    const res = await fetch(`/api/admin/questions/${row.question_id}/audit`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audit_status: 1,
+        audit_comment: '审核通过'
+      })
+    })
+
+    const data = await res.json()
+    if (data.success) {
+      ElMessage.success('审核通过')
+      fetchQuestions()
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败')
+    }
+  }
+}
+
+// 显示驳回弹窗
+const showRejectDialog = (row) => {
+  rejectForm.value = {
+    question_id: row.question_id,
+    reason_type: '',
+    comment: ''
+  }
+  rejectDialogVisible.value = true
+}
+
+// 提交驳回
+const submitReject = async () => {
+  if (!rejectForm.value.reason_type) {
+    ElMessage.warning('请选择驳回原因')
+    return
+  }
+
+  try {
+    const comment = rejectForm.value.reason_type +
+      (rejectForm.value.comment ? '：' + rejectForm.value.comment : '')
+
+    const res = await fetch(`/api/admin/questions/${rejectForm.value.question_id}/audit`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audit_status: 2,
+        audit_comment: comment
+      })
+    })
+
+    const data = await res.json()
+    if (data.success) {
+      ElMessage.success('已驳回')
+      rejectDialogVisible.value = false
+      fetchQuestions()
+    }
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+// 导出题目
+const exportQuestions = () => {
+  ElMessage.info('导出功能开发中')
+}
+
+// 页面加载
+onMounted(() => {
+  fetchQuestions()
+  fetchTypes()
+  fetchStats()
+})
 </script>
+
 <style scoped>
-.admin-content{padding:20px}.skeleton-wrap{display:flex;flex-direction:column;gap:20px}.sk-bar,.sk-table{background:linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);background-size:200% 100%;animation:sk 1.5s infinite;border-radius:10px}.sk-bar{height:60px}.sk-table{height:400px}@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.action-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}.page-title{margin:0;color:#1A3C6D}.action-buttons{display:flex;gap:10px}
-.filter-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}.filter-input{flex:1;min-width:200px;padding:8px 12px;border:1px solid #d9d9d9;border-radius:6px}.filter-select{padding:8px 12px;border:1px solid #d9d9d9;border-radius:6px}
-.batch-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#e6f7ff;border:1px solid #91d5ff;border-radius:6px;margin-bottom:16px}
-.table-container{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow:hidden}.data-table{width:100%;border-collapse:collapse}.data-table th{padding:12px 16px;background:#fafafa;text-align:left;font-weight:600;color:#1A3C6D;border-bottom:2px solid #e8e8e8;font-size:14px}.data-table td{padding:12px 16px;border-bottom:1px solid #f0f0f0;font-size:14px}.data-table tr:hover{background:#f5f7fa}.data-table tr.selected{background:#e6f7ff}
-.q-content{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tag{padding:2px 8px;border-radius:4px;font-size:12px;background:#e6f7ff;color:#1890ff}
-.status-badge{padding:4px 8px;border-radius:4px;font-size:12px}.status-0{background:#fff7e6;color:#fa8c16}.status-1{background:#f6ffed;color:#52c41a}.status-2{background:#fff2f0;color:#ff4d4f}
-.actions{display:flex;gap:4px}.btn-icon{width:28px;height:28px;border:none;background:transparent;cursor:pointer;border-radius:4px;font-size:14px}.btn-icon:hover{background:#f0f0f0}.btn-success:hover{background:#f6ffed}.btn-danger:hover{background:#fff2f0}
-.empty-state{text-align:center;padding:60px 20px;color:#999}.empty-icon{font-size:48px;margin-bottom:16px}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000}.modal-content{background:#fff;border-radius:12px;padding:24px;max-width:1100px;width:90%;max-height:80vh;overflow-y:auto}
-.modal-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}.modal-header h3{color:#1A3C6D;margin:0;flex:1}.type-badge{background:#409EFF;color:#fff;padding:3px 12px;border-radius:12px;font-size:13px}.close{cursor:pointer;font-size:20px;color:#909399}
-.f{margin-bottom:12px;line-height:1.8}.f strong{color:#1A3C6D}.box{margin-top:6px;padding:10px 14px;background:#f9fafb;border-radius:8px;line-height:1.8}
-.opt{display:flex;align-items:flex-start;gap:8px;padding:6px 12px;border:1px solid #e8e8e8;border-radius:6px;margin-top:4px;background:#fafafa}.opt.ok{background:#f0fdf4;border-color:#86efac}.opt-v{flex:1}.mark{color:#22c55e;font-weight:700}.ans{color:#22c55e;font-weight:700;font-size:16px}.none{color:#909399}
-.btn-search{padding:8px 16px;background:#1A3C6D;color:#fff;border:none;border-radius:6px;cursor:pointer}.btn-secondary{padding:8px 16px;background:#fff;color:#333;border:1px solid #d9d9d9;border-radius:6px;cursor:pointer}.btn-danger{padding:8px 16px;background:#ff4d4f;color:#fff;border:none;border-radius:6px;cursor:pointer}.btn-batch{padding:6px 12px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer}.btn-batch-danger{padding:6px 12px;background:#ff4d4f;color:#fff;border:none;border-radius:4px;cursor:pointer}
-.type-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; }
-.type-single { background: #e6f7ff; color: #1890ff; }
-.type-multi { background: #fff7e6; color: #fa8c16; }
-.type-judge { background: #f5f3ff; color: #7c3aed; }
-.type-essay { background: #fff1f0; color: #f5222d; }
-.type-writing { background: #f6ffed; color: #52c41a; }
-.type-default { background: #f5f5f5; color: #999; }
-.question-summary { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.admin-questions {
+  padding: 20px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.page-header h2 {
+  margin: 0;
+  color: #303133;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.filter-card {
+  margin-bottom: 20px;
+}
+
+.stats-row {
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 10px 0;
+}
+
+.stat-value {
+  display: block;
+  font-size: 28px;
+  font-weight: bold;
+  color: #409eff;
+}
+
+.stat-value.warning {
+  color: #e6a23c;
+}
+
+.stat-label {
+  color: #909399;
+  font-size: 14px;
+}
+
+.question-content {
+  cursor: pointer;
+  color: #409eff;
+}
+
+.question-content:hover {
+  text-decoration: underline;
+}
+
+.el-pagination {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 预览样式 */
+.preview-header {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.preview-content,
+.preview-options,
+.preview-answer,
+.preview-analysis {
+  margin-bottom: 20px;
+}
+
+.preview-content h4,
+.preview-options h4,
+.preview-answer h4,
+.preview-analysis h4 {
+  margin-bottom: 10px;
+  color: #303133;
+}
+
+.content-box,
+.answer-box,
+.analysis-box {
+  padding: 15px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  line-height: 1.8;
+}
+
+.option-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+
+.option-label {
+  font-weight: bold;
+  color: #409eff;
+}
+
+.preview-meta {
+  margin-top: 20px;
+}
+
+/* 编辑弹窗样式 */
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.option-prefix {
+  font-weight: bold;
+  color: #409eff;
+  width: 20px;
+}
 </style>

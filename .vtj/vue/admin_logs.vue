@@ -51,7 +51,11 @@ export default defineComponent({
       loading.value = false;
     }
     function resetFilter() { kw.value=''; fop.value=''; startDate.value=''; endDate.value=''; load(); }
-    function formatTime(t:string) { if(!t) return '-'; return t.substring(0,19); }
+    function formatTime(t:string) { 
+      if(!t) return '-'; 
+      // 支持T格式和普通格式
+      return t.replace('T', ' ').substring(0,19); 
+    }
     function exportLogs() {
       const params = new URLSearchParams();
       if (startDate.value) params.append('start_date', startDate.value);

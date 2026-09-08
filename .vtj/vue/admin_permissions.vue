@@ -11,7 +11,7 @@
           </div>
           <p class="role-desc">{{ perms.description }}</p>
           <div class="perm-grid">
-            <span v-for="p in perms.permissions" :key="p" class="perm-tag">{{ p }}</span>
+            <span v-for="p in perms.permissions" :key="p" class="perm-tag">{{ getPermissionName(p) }}</span>
           </div>
         </div>
       </div>
@@ -29,6 +29,30 @@ export default defineComponent({
     const loading = ref(true);
     const roles: any = ref({});
     const auth = () => (window as any).__VTJ_AUTH__;
+    
+    // 权限名称映射
+    const permissionNames: Record<string, string> = {
+      'view_questions': '查看题目',
+      'manage_questions': '管理题目',
+      'view_users': '查看用户',
+      'manage_users': '管理用户',
+      'view_logs': '查看日志',
+      'manage_settings': '管理设置',
+      'manage_backup': '管理备份',
+      'view_materials': '查看资料',
+      'manage_materials': '管理资料',
+      'view_papers': '查看试卷',
+      'manage_papers': '管理试卷',
+      'view_analytics': '查看统计',
+      'manage_permissions': '管理权限',
+      'view_help': '查看帮助'
+    };
+    
+    // 获取权限中文名称
+    const getPermissionName = (key: string) => {
+      return permissionNames[key] || key;
+    };
+    
     onMounted(async () => {
       try {
         const r = await auth().apiFetch('/api/admin/permissions');
@@ -37,7 +61,7 @@ export default defineComponent({
       } catch(e) { console.error('加载权限失败:', e); }
       loading.value = false;
     });
-    return { provider, loading, roles };
+    return { provider, loading, roles, getPermissionName };
   }
 });
 </script>

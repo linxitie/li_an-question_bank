@@ -798,6 +798,7 @@ class SysOperationLog(Base):
     log_id = Column(Integer, primary_key=True, autoincrement=True, comment="日志ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="操作人ID")
     user_name = Column(String(100), comment="操作人姓名")
+    user_role = Column(String(50), comment="操作人角色")
     operation_type = Column(String(50), comment="操作类型")
     module_name = Column(String(100), comment="模块名称")
     operation_desc = Column(String(500), comment="操作描述")

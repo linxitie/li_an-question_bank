@@ -40,20 +40,48 @@ logger = logging.getLogger(__name__)
 
 def record_operation(db: Session, user: SysUser, op_type: str, module: str,
                      desc: str, request_url: str = "", request_params: str = "",
-                     ip_address: str = "", duration: int = 0):
-    """记录管理员操作日志"""
+                     ip_address: str = "", duration: int = 0, request=None):
+    """记录管理员操作日志（增强版）"""
     try:
+        # 自动获取IP地址
+        if not ip_address and request:
+            ip_address = request.client.host if request.client else ""
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                ip_address = forwarded.split(",")[0].strip()
+        
+        # 查询用户角色
+        role_map = {"admin": "管理员", "teacher": "教师", "student": "学生"}
+        user_role = role_map.get(user.user_type, "未知")
+        
+        # 模块名称中文化
+        module_map = {
+            "用户管理": "用户管理",
+            "题库管理": "题库管理",
+            "公告管理": "公告管理",
+            "日志审计": "日志审计",
+            "数据备份": "数据备份",
+            "系统设置": "系统设置",
+            "权限管理": "权限管理",
+            "试卷审批": "试卷审批",
+            "资料管理": "资料管理",
+            "BATCH": "批量操作",
+        }
+        module_name = module_map.get(module, module)
+        
         log_entry = SysOperationLog(
             user_id=user.user_id,
             user_name=user.username,
+            user_role=user_role,
             operation_type=op_type,
-            module_name=module,
+            module_name=module_name,
             operation_desc=desc,
             request_url=request_url,
             request_params=request_params,
             ip_address=ip_address,
             duration=duration,
-            response_result="success"
+            response_result="success",
+            operation_time=datetime.now()
         )
         db.add(log_entry)
         db.commit()
@@ -347,6 +375,49 @@ async def reset_user_password(
 
 
 # ==================== 题库管理 ====================
+
+@router.get("/questions/stats", summary="题目统计")
+async def get_question_stats(
+    current_user: SysUser = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """获取题目统计数据"""
+    # 总题目数
+    total = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.status == 1
+    ).scalar()
+    
+    # 各科目题目数
+    xingce = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.subject_id == 1,
+        QuestionBank.status == 1
+    ).scalar()
+    
+    shenlun = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.subject_id == 2,
+        QuestionBank.status == 1
+    ).scalar()
+    
+    gongzhuan = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.subject_id == 3,
+        QuestionBank.status == 1
+    ).scalar()
+    
+    # 待审核数
+    pending = db.query(func.count(QuestionBank.question_id)).filter(
+        QuestionBank.audit_status == 0,
+        QuestionBank.status == 1
+    ).scalar()
+    
+    return {
+        "success": True,
+        "total": total,
+        "xingce": xingce,
+        "shenlun": shenlun,
+        "gongzhuan": gongzhuan,
+        "pending": pending
+    }
+
 
 @router.get("/questions", summary="全部题目列表（含审核）")
 async def list_all_questions(

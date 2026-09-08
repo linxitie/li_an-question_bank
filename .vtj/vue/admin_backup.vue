@@ -17,7 +17,7 @@
         <tbody><tr v-for="b in items" :key="b.backup_id">
           <td>{{ b.backup_name }}</td><td><span class="tag">{{ b.backup_type==='full'?'全量':'增量' }}</span></td><td>{{ formatSize(b.file_size) }}</td>
           <td><span class="status-badge" :class="'status-'+b.status">{{ {running:'进行中',completed:'已完成',failed:'失败'}[b.status] }}</span></td>
-          <td>{{ b.start_time }}</td>
+          <td>{{ formatChineseTime(b.start_time) }}</td>
           <td class="actions"><button class="btn-icon" @click="downloadBackup(b)" :disabled="b.status!=='completed'" title="下载">📥</button><button class="btn-icon btn-danger" @click="restore(b.backup_id)" :disabled="b.status!=='completed'" title="恢复">🔄</button></td>
         </tr></tbody></table>
         <div v-if="!items.length" class="empty-state"><div class="empty-icon">💾</div><div>暂无备份文件</div></div>
@@ -58,7 +58,23 @@ export default defineComponent({
     }
     async function createBackup() {
       msg.value = '正在创建备份...';
-      const r = await auth().apiFetch('/api/admin/backup', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({backup_type:'full'})});
+      // 生成中文备份名称
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const backupName = `系统全量备份_${year}年${month}月${day}日_${hours}点${minutes}分`;
+      
+      const r = await auth().apiFetch('/api/admin/backup', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          backup_type:'full',
+          backup_name: backupName
+        })
+      });
       const d = await r.json(); msg.value = d.message || '✅ 备份完成';
       setTimeout(()=>msg.value='',3000); load();
     }
@@ -70,6 +86,19 @@ export default defineComponent({
     }
     function downloadBackup(b:any) { console.log('下载备份:', b.backup_name); }
     function formatSize(bytes:number) { return bytes ? (bytes/1024/1024).toFixed(1)+'MB' : '--'; }
+    
+    // 格式化时间为中文格式
+    function formatChineseTime(timeStr:string) {
+      if (!timeStr) return '-';
+      const date = new Date(timeStr);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}年${month}月${day}日 ${hours}:${minutes}:${seconds}`;
+    }
     return { provider, loading, items, dbSize, backupSize, autoBackup, msg, load, createBackup, restore, downloadBackup, formatSize };
   }
 });
