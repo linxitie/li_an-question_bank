@@ -262,7 +262,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed } from 'vue';
+import { defineComponent, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import {
@@ -331,6 +331,25 @@ export default defineComponent({
       }
     ]);
     
+    // 加载真实统计数据（/api/stats/）
+    onMounted(async () => {
+      try {
+        const auth = window.__VTJ_AUTH__;
+        if (auth && auth.isLoggedIn()) {
+          const res = await fetch('/api/stats/', { headers: auth.getAuthHeaders() });
+          if (res.ok) {
+            const data = await res.json();
+            todayCount.value = data.todayQuestions || 0;
+            accuracy.value = data.accuracyRate || 0;
+            studyTime.value = (data.totalStudyHours || 0) + 'h';
+            dailyCompleted.value = data.todayQuestions || 0;
+          }
+        }
+      } catch (error) {
+        console.error('加载数据失败:', error);
+      }
+    });
+
     // 方法
     const goToNotifications = () => router.push('/notifications');
     const goToSettings = () => router.push('/settings');

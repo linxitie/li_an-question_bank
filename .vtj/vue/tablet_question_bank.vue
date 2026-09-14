@@ -251,7 +251,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed } from 'vue';
+import { defineComponent, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
@@ -428,6 +428,38 @@ export default defineComponent({
       return result;
     });
     
+    // 加载真实题库数据（已发布试卷，替换下方演示数据）
+    onMounted(async () => {
+      try {
+        const auth = window.__VTJ_AUTH__;
+        if (auth && auth.isLoggedIn()) {
+          const res = await fetch('/api/papers/list?page=1&page_size=10', { headers: auth.getAuthHeaders() });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.items && data.items.length) {
+              const subjectMap: Record<number, string> = { 1: 'xc', 2: 'sw', 3: 'jy' };
+              const subjectName: Record<number, string> = { 1: '行测', 2: '申论', 3: '公专' };
+              const typeMap: Record<string, string> = { SIMULATION: '模拟卷', PRACTICE: '练习卷', FORMAL: '真题卷' };
+              questions.value = data.items.map((p: any) => ({
+                id: p.paper_id,
+                title: p.paper_name,
+                type: typeMap[p.exam_type] || '试卷',
+                typeColor: '#1A365D',
+                difficulty: p.difficulty || 3,
+                count: p.question_count || 0,
+                time: p.duration || 0,
+                popular: 0,
+                tags: [subjectName[p.subject_id] || '题库'],
+                category: subjectMap[p.subject_id] || 'all'
+              }));
+            }
+          }
+        }
+      } catch (error) {
+        console.error('加载题库失败:', error);
+      }
+    });
+
     // 方法
     const goToNotifications = () => router.push('/notifications');
     const goToSettings = () => router.push('/settings');
