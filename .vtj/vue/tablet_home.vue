@@ -308,15 +308,62 @@ export default defineComponent({
     // 加载用户数据
     onMounted(async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          const res = await fetch('/api/stats/home', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+        const auth = window.__VTJ_AUTH__;
+        if (auth && auth.isLoggedIn()) {
+          const uname = auth.getUsername();
+          if (uname) userName.value = uname;
+          // 学习统计（/api/stats/ 返回今日刷题量等）
+          const res = await fetch('/api/stats/', { headers: auth.getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
-            if (data.user) userName.value = data.user.name || '同学';
-            if (data.today) dailyCompleted.value = data.today.count || 0;
+            dailyCompleted.value = data.todayQuestions || 0;
+          }
+        }
+        // 每日金句（公开接口）
+        const qRes = await fetch('/api/quotes/quote/daily');
+        if (qRes.ok) {
+          const q = await qRes.json();
+          if (q.content) {
+            dailyQuote.value = q.content;
+            quoteAuthor.value = q.source || q.author || '';
+          }
+        }
+        // 每日新闻（公开接口）
+        const nRes = await fetch('/api/news?limit=5');
+        if (nRes.ok) {
+          const n = await nRes.json();
+          if (n.items && n.items.length) {
+            newsList.value = n.items.map((it: any) => ({ title: it.title, id: it.id }));
+          }
+        }
+        // 招考信息（公开接口）
+        const rRes = await fetch('/api/recruitment');
+        if (rRes.ok) {
+          const r = await rRes.json();
+          if (r.items) {
+            const flat: any[] = [];
+            Object.values(r.items).forEach((arr: any) => { if (Array.isArray(arr)) flat.push(...arr); });
+            recruitList.value = flat.slice(0, 3).map((it: any) => ({
+              title: it.title, status: it.status_label, statusColor: it.status_color, id: it.id
+            }));
+          }
+        }
+        // 考试日历（公开接口）
+        const cRes = await fetch('/api/stats/calendar');
+        if (cRes.ok) {
+          const c = await cRes.json();
+          if (Array.isArray(c)) {
+            const now = Date.now();
+            upcomingExams.value = c.slice(0, 3).map((it: any) => {
+              const d = it.date || '';
+              const target = d ? new Date(d).getTime() : now;
+              return {
+                month: d.slice(5, 7) + '月',
+                day: d.slice(8, 10),
+                name: it.title,
+                daysLeft: Math.max(0, Math.ceil((target - now) / 86400000))
+              };
+            });
           }
         }
       } catch (error) {

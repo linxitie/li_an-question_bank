@@ -203,14 +203,17 @@ export default defineComponent({
     // 加载用户数据
     onMounted(async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          const res = await fetch('/api/stats/home', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+        const auth = window.__VTJ_AUTH__;
+        if (auth && auth.isLoggedIn()) {
+          const uname = auth.getUsername();
+          if (uname) userName.value = uname;
+          // 学习统计（/api/stats/ 返回累计刷题量、正确率、连续签到天数）
+          const res = await fetch('/api/stats/', { headers: auth.getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
-            if (data.user) userName.value = data.user.name || '同学';
+            totalQuestions.value = data.totalQuestions || 0;
+            accuracy.value = data.accuracyRate || 0;
+            streakDays.value = data.streak || 0;
           }
         }
       } catch (error) {
@@ -235,8 +238,7 @@ export default defineComponent({
     const goToAbout = () => router.push('/about');
     
     const handleLogout = () => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      if (window.__VTJ_AUTH__) window.__VTJ_AUTH__.logout();
       router.push('/login');
     };
     

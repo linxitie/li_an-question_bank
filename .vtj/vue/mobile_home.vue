@@ -229,16 +229,34 @@ export default defineComponent({
     // 加载用户数据
     onMounted(async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          const res = await fetch('/api/stats/home', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+        const auth = window.__VTJ_AUTH__;
+        if (auth && auth.isLoggedIn()) {
+          const uname = auth.getUsername();
+          if (uname) userName.value = uname;
+          // 学习统计（/api/stats/ 返回今日/本周刷题量、正确率等）
+          const res = await fetch('/api/stats/', { headers: auth.getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
-            if (data.user) userName.value = data.user.name || '同学';
-            if (data.today) todayCount.value = data.today.count || 0;
-            if (data.week) weekCount.value = data.week.count || 0;
+            todayCount.value = data.todayQuestions || 0;
+            weekCount.value = data.weeklyQuestions || 0;
+            accuracy.value = data.accuracyRate || 0;
+          }
+        }
+        // 每日金句（公开接口）
+        const qRes = await fetch('/api/quotes/quote/daily');
+        if (qRes.ok) {
+          const q = await qRes.json();
+          if (q.content) {
+            dailyQuote.value = q.content;
+            quoteAuthor.value = q.source || q.author || '';
+          }
+        }
+        // 每日新闻（公开接口）
+        const nRes = await fetch('/api/news?limit=5');
+        if (nRes.ok) {
+          const n = await nRes.json();
+          if (n.items && n.items.length) {
+            newsList.value = n.items.map((it: any) => ({ title: it.title, id: it.id }));
           }
         }
       } catch (error) {
