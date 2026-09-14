@@ -181,6 +181,21 @@
   }
 
   /**
+   * 扫码登录：直接用后端返回的 token 建立本地登录态。
+   * PC 端轮询二维码状态拿到 confirmed 的 token 后调用此方法，
+   * 避免前端手写 localStorage（否则 token 键不一致会导致登录态不生效）。
+   */
+  function loginWithToken(accessToken: string, refreshToken?: string, username?: string) {
+    setState({
+      token: accessToken,
+      refreshToken: refreshToken || '',
+      username: username || '',
+      loginTime: Date.now()
+    });
+    return { success: true, message: '登录成功' };
+  }
+
+  /**
    * 退出登录
    */
   function logout() {
@@ -349,6 +364,7 @@
     ensureAuth: ensureAuth,
     refreshAccessToken: refreshAccessToken,
     login: login,
+    loginWithToken: loginWithToken,
     logout: logout,
     getAuthHeaders: getAuthHeaders,
     getJsonHeaders: getJsonHeaders,

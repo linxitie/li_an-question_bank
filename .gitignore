@@ -42,3 +42,19 @@ sample_scanned.png
 
 # Worktrees
 .worktrees
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Playwright 测试临时快照
+.playwright-mcp/
+
+# 运行时数据（新闻图片、上传资料、题目图片、SQLite 数据库）
+backend/uploads/
+backend/data/
+backend/app/static/questions/
+*.db-wal
+*.db-shm
+*.db.backup

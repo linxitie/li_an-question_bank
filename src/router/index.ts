@@ -2,6 +2,7 @@
  * 砺安题库 - 路由配置（三端分离）
  */
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
+import { detectDevice, resolveDevicePath } from '@/utils/device';
 
 const routes: RouteRecordRaw[] = [
   // ==================== 公共路由 ====================
@@ -235,6 +236,88 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/materials_gongzhuan.vue')
   },
 
+  // ==================== 平板端路由 ====================
+  {
+    path: '/tablet/login',
+    name: 'TabletLogin',
+    component: () => import('$vtj/vue/tablet_login.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/home',
+    name: 'TabletHome',
+    component: () => import('$vtj/vue/tablet_home.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/question-bank',
+    name: 'TabletQuestionBank',
+    component: () => import('$vtj/vue/tablet_question_bank.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/practice',
+    name: 'TabletPractice',
+    component: () => import('$vtj/vue/tablet_practice.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/forum',
+    name: 'TabletForum',
+    component: () => import('$vtj/vue/tablet_forum.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/profile',
+    name: 'TabletProfile',
+    component: () => import('$vtj/vue/tablet_profile.vue'),
+    meta: { platform: 'tablet' }
+  },
+
+  // ==================== 手机端路由 ====================
+  {
+    path: '/mobile/login',
+    name: 'MobileLogin',
+    component: () => import('$vtj/vue/mobile_login.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/scan',
+    name: 'MobileScan',
+    component: () => import('@/views/mobile_scan.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/home',
+    name: 'MobileHome',
+    component: () => import('$vtj/vue/mobile_home.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/question-bank',
+    name: 'MobileQuestionBank',
+    component: () => import('$vtj/vue/mobile_question_bank.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/practice',
+    name: 'MobilePractice',
+    component: () => import('$vtj/vue/mobile_practice.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/forum',
+    name: 'MobileForum',
+    component: () => import('$vtj/vue/mobile_forum.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/profile',
+    name: 'MobileProfile',
+    component: () => import('$vtj/vue/mobile_profile.vue'),
+    meta: { platform: 'mobile' }
+  },
+
   // ==================== 兜底路由 ====================
   {
     path: '/:pathMatch(.*)*',
@@ -250,7 +333,24 @@ const router = createRouter({
 
 // ==================== 路由守卫 — 三端权限控制 ====================
 router.beforeEach((to, _from, next) => {
-  // 公开路由：登录页和未授权页直接放行
+  const device = detectDevice();
+
+  // 1) 已在设备专属路径（/tablet、/mobile）→ 直接放行
+  //    登录态由各端登录页自行处理（各端登录页 mounted 时判断已登录则跳转对应首页）
+  if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
+    return next();
+  }
+
+  // 2) 移动设备（手机/平板）访问 PC 路径 → 映射到对应端
+  //    关键修复：登录页也区分设备，手机访问 /login 会映射到 /mobile/login
+  if (device !== 'pc') {
+    const target = resolveDevicePath(to.path, device);
+    if (target) {
+      return next({ path: target, replace: true });
+    }
+  }
+
+  // 3) PC 设备：公开路由直接放行
   if (to.path === '/login' || to.path === '/unauthorized') {
     return next();
   }

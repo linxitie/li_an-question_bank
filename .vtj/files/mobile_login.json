@@ -1,0 +1,20 @@
+{
+  "id": "mobile_login",
+  "__VERSION__": "1788919369989",
+  "css": "",
+  "state": {
+    "loginForm": "({ username: '', password: '', showPassword: false })",
+    "rememberMe": "false",
+    "loading": "false",
+    "message": "''",
+    "msgType": "'error'"
+  },
+  "methods": {
+    "showMessage": { "type": "method", "params": ["msg", "type"] },
+    "togglePasswordVisibility": { "type": "method" },
+    "handleLogin": { "type": "asyncMethod" },
+    "handleForgotPassword": { "type": "method" },
+    "goToQRLogin": { "type": "method" }
+  },
+  "lifeCycles": {}
+}

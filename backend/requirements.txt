@@ -58,11 +58,14 @@ Pillow>=10.0.0
 # ==================== 题目图片无关性检测（image_filters.py，二维码解码） ====================
 opencv-python>=4.8.0
 
+# ==================== 二维码扫码登录（auth_qrcode.py，PC端生成登录二维码） ====================
+qrcode>=7.4
+
 # ==================== 可选：爬虫 ====================
 playwright>=1.48.0
 playwright-stealth>=1.0.6
 
-# ��������ģ�� (study-materials)
+# ��������ģ�� (study-materials)
 python-docx
 openpyxl
 pdfplumber

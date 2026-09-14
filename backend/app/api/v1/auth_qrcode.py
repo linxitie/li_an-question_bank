@@ -54,17 +54,33 @@ def get_device_info(request: Request) -> dict:
         "user_agent": user_agent
     }
 
-@router.post("/generate", summary="生成二维码")
-async def generate_qrcode(
-    request: Request,
-    current_user: SysUser = Depends(get_current_user)
-):
-    """PC端生成登录二维码"""
+@router.post("/generate", summary="生成二维码（公开接口，PC端未登录时调用）")
+async def generate_qrcode(request: Request):
+    """PC端生成登录二维码。
+
+    注意：本接口必须是【公开接口】。扫码登录场景下 PC 端尚未登录，
+    若加 get_current_user 鉴权会返回 401，导致前端拿不到 uuid、二维码永远停在 loading 态。
+    """
     qr_uuid = str(uuid.uuid4())
     device_info = get_device_info(request)
     
     # 存储到Redis
     await QRCodeStore.create_qr(qr_uuid, device_info)
+    
+    # 解析前端传入的 origin，用于生成可被手机相机/微信直接识别的 URL 二维码
+    origin = None
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            origin = body.get("origin")
+    except Exception:
+        origin = None
+    
+    if origin:
+        qr_url = f"{str(origin).rstrip('/')}/#/mobile/scan?uuid={qr_uuid}"
+    else:
+        # 未传 origin 时兜底为相对路径
+        qr_url = f"/#/mobile/scan?uuid={qr_uuid}"
     
     # 生成二维码图片
     qr = qrcode.QRCode(
@@ -73,7 +89,7 @@ async def generate_qrcode(
         box_size=10,
         border=4,
     )
-    qr.add_data(f"liani://login/{qr_uuid}")
+    qr.add_data(qr_url)
     qr.make(fit=True)
     
     img = qr.make_image(fill_color="#1A365D", back_color="white")
@@ -83,7 +99,7 @@ async def generate_qrcode(
     
     return {
         "uuid": qr_uuid,
-        "qr_url": f"liani://login/{qr_uuid}",
+        "qr_url": qr_url,
         "qr_image_base64": f"data:image/png;base64,{qr_base64}",
         "expires_in": 60
     }
