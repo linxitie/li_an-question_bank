@@ -12,6 +12,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/login.vue')
   },
   {
+    path: '/scan',
+    name: 'ScanLogin',
+    component: () => import('$vtj/vue/download_client.vue')
+  },
+  {
     path: '/forum',
     name: 'Forum',
     component: () => import('$vtj/vue/forum.vue')

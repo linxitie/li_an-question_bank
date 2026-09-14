@@ -79,6 +79,8 @@
               <span
                 :class="['mode-tab', { active: state.loginMode === 'sms' }]"
                 @click="state.loginMode = 'sms'">验证码登录</span>
+              <span class="mode-divider">|</span>
+              <span class="mode-tab" @click="goToScanLogin">扫码登录</span>
             </div>
             <!-- 密码登录 -->
             <template v-if="state.loginMode === 'password'">
@@ -367,6 +369,13 @@ export default defineComponent({
     switchTab(tab) {
       this.state.activeTab = tab;
       this.state.message = '';
+    },
+    /**
+     * 跳转到扫码登录页（PC端）
+     */
+    goToScanLogin() {
+      if (this.$router) this.$router.push('/scan');
+      else window.location.href = '/#/scan';
     },
     selectRole(role) {
       this.state.registerForm.role = role;

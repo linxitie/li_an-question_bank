@@ -45,6 +45,14 @@
         <p class="confirm-title">扫码登录</p>
         <p class="confirm-sub">请在电脑端打开「扫码登录」页，用手机相机扫描屏幕上的二维码；或手动输入二维码编号。</p>
 
+        <button class="btn btn-scan" @click="startScan" :disabled="scanning">
+          {{ scanning ? '扫描中...' : '📷 扫一扫' }}
+        </button>
+        <video ref="scanVideo" class="scan-video" v-show="scanning" autoplay muted playsinline></video>
+        <div class="scan-error" v-if="scanError">{{ scanError }}</div>
+
+        <div class="divider-text">或</div>
+
         <div class="manual-input">
           <input v-model="manualUuid" type="text" placeholder="请输入二维码编号" class="uuid-input" />
           <button class="btn btn-confirm full" @click="submitManual" :disabled="!manualUuid.trim()">确认</button>
@@ -55,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
@@ -140,6 +148,69 @@ const submitManual = () => {
   uuid.value = id;
   fetchDeviceInfo(id);
 };
+
+// ===== 网页「扫一扫」（相机扫码，依赖浏览器原生 BarcodeDetector API，零依赖） =====
+const scanVideo = ref<HTMLVideoElement | null>(null);
+const scanning = ref(false);
+const scanError = ref('');
+
+const stopCamera = () => {
+  if (scanVideo.value && scanVideo.value.srcObject) {
+    const stream = scanVideo.value.srcObject as MediaStream;
+    stream.getTracks().forEach((t) => t.stop());
+    scanVideo.value.srcObject = null;
+  }
+};
+
+const startScan = async () => {
+  scanError.value = '';
+  const w = window as any;
+  if (!('BarcodeDetector' in w)) {
+    scanError.value = '当前浏览器不支持网页扫一扫，请用手机自带相机扫描电脑端二维码，或手动输入编号';
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    scanError.value = '无法访问相机，请手动输入编号';
+    return;
+  }
+  scanning.value = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    if (scanVideo.value) {
+      scanVideo.value.srcObject = stream;
+      await scanVideo.value.play();
+    }
+    const detector = new w.BarcodeDetector({ formats: ['qr_code'] });
+    const detectLoop = async () => {
+      if (!scanning.value) return;
+      try {
+        const codes = await detector.detect(scanVideo.value);
+        if (codes && codes.length > 0) {
+          const raw = codes[0].rawValue || '';
+          const m = raw.match(/[?&]uuid=([^&]+)/);
+          if (m) {
+            stopCamera();
+            scanning.value = false;
+            uuid.value = m[1];
+            fetchDeviceInfo(m[1]);
+            return;
+          }
+        }
+      } catch (e) {
+        // 忽略单帧检测错误，继续下一帧
+      }
+      requestAnimationFrame(detectLoop);
+    };
+    detectLoop();
+  } catch (e) {
+    scanning.value = false;
+    scanError.value = '无法访问相机，请检查权限后重试，或手动输入编号';
+  }
+};
+
+onUnmounted(() => {
+  stopCamera();
+});
 
 onMounted(() => {
   const q = route.query.uuid;
@@ -331,5 +402,50 @@ onMounted(() => {
 .uuid-input:focus {
   border-color: #1A365D;
   box-shadow: 0 0 0 3px rgba(26, 54, 95, 0.1);
+}
+
+.btn-scan {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #1A365D;
+  background: #fff;
+  color: #1A365D;
+  transition: all 0.3s ease;
+  margin-bottom: 12px;
+}
+
+.btn-scan:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scan-video {
+  width: 100%;
+  max-height: 200px;
+  border-radius: 10px;
+  background: #000;
+  object-fit: cover;
+}
+
+.scan-error {
+  font-size: 12px;
+  color: #d97706;
+  margin-top: 8px;
+  text-align: left;
+  padding: 8px 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+
+.divider-text {
+  text-align: center;
+  font-size: 13px;
+  color: #a0a4b8;
+  margin: 16px 0;
 }
 </style>
