@@ -230,7 +230,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed } from 'vue';
+import { defineComponent, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import {
@@ -367,6 +367,52 @@ export default defineComponent({
       return posts.value.filter(p => p.category === activeCategory.value);
     });
     
+    // 加载真实帖子数据（替换下方演示数据）
+    onMounted(async () => {
+      try {
+        const res = await fetch('/api/forum/posts');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.posts && data.posts.length) {
+            const typeMap: Record<string, string> = {
+              DISCUSSION: 'discuss',
+              EXPERIENCE: 'share',
+              RESOURCE: 'resource',
+              FEELING: 'discuss'
+            };
+            posts.value = data.posts.map((p: any) => {
+              const t = new Date(p.createTime).getTime();
+              const diff = Date.now() - t;
+              const min = Math.floor(diff / 60000);
+              let time = '';
+              if (min < 1) time = '刚刚';
+              else if (min < 60) time = min + '分钟前';
+              else if (min < 1440) time = Math.floor(min / 60) + '小时前';
+              else if (min < 43200) time = Math.floor(min / 1440) + '天前';
+              else time = new Date(p.createTime).toLocaleDateString();
+              return {
+                id: p.id,
+                title: p.title,
+                excerpt: p.content || '',
+                author: (p.user && p.user.nickname) || '匿名',
+                time,
+                avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
+                tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
+                tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
+                views: p.viewCount || 0,
+                comments: p.commentCount || 0,
+                likes: p.likeCount || 0,
+                category: typeMap[p.shareType] || 'discuss',
+                images: []
+              };
+            });
+          }
+        }
+      } catch (error) {
+        console.error('加载帖子失败:', error);
+      }
+    });
+
     // 方法
     const goToNotifications = () => router.push('/notifications');
     const goToSettings = () => router.push('/settings');
