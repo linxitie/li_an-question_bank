@@ -232,7 +232,7 @@ export default defineComponent({
     const goToNotes = () => router.push('/notes');
     
     const goToAchievements = () => router.push('/mobile/score-analysis');
-    const goToDownloads = () => router.push('/downloads');
+    const goToDownloads = () => router.push('/mobile/materials');
     const goToFeedback = () => router.push('/feedback');
     const goToHelp = () => router.push('/help');
     const goToAbout = () => router.push('/about');

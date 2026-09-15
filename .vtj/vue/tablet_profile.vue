@@ -339,7 +339,7 @@ export default defineComponent({
     const goToNotes = () => router.push('/notes');
     
     const goToAchievements = () => router.push('/tablet/score-analysis');
-    const goToDownloads = () => router.push('/downloads');
+    const goToDownloads = () => router.push('/tablet/materials');
     const goToFeedback = () => router.push('/feedback');
     const goToHelp = () => router.push('/help');
     const goToAbout = () => router.push('/about');

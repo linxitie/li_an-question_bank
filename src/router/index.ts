@@ -331,6 +331,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/mobile_calendar.vue'),
     meta: { platform: 'tablet' }
   },
+  {
+    path: '/tablet/materials',
+    name: 'TabletMaterials',
+    component: () => import('@/views/mobile_materials.vue'),
+    meta: { platform: 'tablet' }
+  },
 
   // ==================== 手机端路由 ====================
   {
@@ -391,6 +397,12 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/calendar',
     name: 'MobileCalendar',
     component: () => import('@/views/mobile_calendar.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/materials',
+    name: 'MobileMaterials',
+    component: () => import('@/views/mobile_materials.vue'),
     meta: { platform: 'mobile' }
   },
   {
