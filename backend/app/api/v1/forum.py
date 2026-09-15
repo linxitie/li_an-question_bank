@@ -120,9 +120,9 @@ def _log_violation(
         log = SysOperationLog(
             user_id=user_id,
             user_name="",
-            operation_type="SENSITIVE_VIOLATION",
-            module_name="forum",
-            operation_desc=f"敏感词触发 level={filter_result.get('level')} action={action} words={','.join(filter_result.get('words', []))}",
+            operation_type="敏感词拦截",
+            module_name="论坛",
+            operation_desc=f"敏感词触发 等级={filter_result.get('level')} 动作={action} 命中词={','.join(filter_result.get('words', []))}",
             request_method=request.method if request else "POST",
             request_url=str(request.url) if request else "",
             request_params=content_snippet[:100],

@@ -44,7 +44,8 @@
             </div>
           </div>
           <div class="user-menu" @click.stop="showUserMenu = !showUserMenu">
-            <div class="avatar-circle">{{ username?.charAt(0) || 'A' }}</div>
+            <img v-if="avatarUrl" :src="avatarUrl" class="avatar-img" :alt="username" />
+            <div v-else class="avatar-circle">{{ username?.charAt(0) || 'A' }}</div>
             <span class="user-name">{{ username }}</span>
             <span class="menu-arrow">▼</span>
             <div v-if="showUserMenu" class="user-dropdown">
@@ -68,6 +69,7 @@
     <div class="modal-overlay" v-if="showPasswordDialog" @click.self="showPasswordDialog = false">
       <div class="modal-content">
         <h3>修改密码</h3>
+        <input type="password" v-model="oldPassword" placeholder="当前密码" />
         <input type="password" v-model="newPassword" placeholder="新密码" />
         <input type="password" v-model="confirmPassword" placeholder="确认密码" />
         <div class="modal-actions">
@@ -98,6 +100,7 @@ export default defineComponent({
     const unreadCount = ref(0);
     const newPassword = ref('');
     const confirmPassword = ref('');
+    const oldPassword = ref('');
     const avatarUrl = ref('');
 
     const navItems = [
@@ -125,6 +128,9 @@ export default defineComponent({
       if (auth) {
         username.value = auth.getUsername() || '管理员';
       }
+      loadAvatar();
+      // 监听头像更新事件：个人信息/用户管理页更换头像后刷新下拉框头像
+      window.addEventListener('avatar-updated', loadAvatar);
       notificationService.startPolling();
       notificationService.subscribe((notifs: Notification[]) => {
         notifications.value = notifs;
@@ -133,8 +139,24 @@ export default defineComponent({
     });
 
     onUnmounted(() => {
+      window.removeEventListener('avatar-updated', loadAvatar);
       notificationService.stopPolling();
     });
+
+    // 加载当前用户头像
+    async function loadAvatar() {
+      try {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth) return;
+        const r = await auth.apiFetch('/api/auth/profile');
+        const d = await r.json();
+        if (d && d.avatar) {
+          avatarUrl.value = d.avatar;
+        }
+      } catch (e) {
+        // 头像加载失败不阻断页面
+      }
+    }
 
     function handleLogout() {
       const auth = (window as any).__VTJ_AUTH__;
@@ -149,21 +171,35 @@ export default defineComponent({
     }
 
     async function changePassword() {
+      if (!oldPassword.value) {
+        alert('请输入当前密码');
+        return;
+      }
       if (newPassword.value !== confirmPassword.value) {
         alert('两次密码不一致');
         return;
       }
+      if (!newPassword.value || newPassword.value.length < 6) {
+        alert('新密码至少6位');
+        return;
+      }
       try {
         const auth = (window as any).__VTJ_AUTH__;
-        await auth.apiFetch('/api/auth/change-password', {
+        const r = await auth.apiFetch('/api/auth/change-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: newPassword.value })
+          body: JSON.stringify({ old_password: oldPassword.value, new_password: newPassword.value })
         });
-        alert('密码修改成功');
-        showPasswordDialog.value = false;
-        newPassword.value = '';
-        confirmPassword.value = '';
+        const d = await r.json();
+        if (d.success) {
+          alert('密码修改成功');
+          showPasswordDialog.value = false;
+          oldPassword.value = '';
+          newPassword.value = '';
+          confirmPassword.value = '';
+        } else {
+          alert(d.message || '密码修改失败');
+        }
       } catch (e) {
         alert('密码修改失败');
       }
@@ -183,6 +219,7 @@ export default defineComponent({
       unreadCount,
       newPassword,
       confirmPassword,
+      oldPassword,
       avatarUrl,
       confirmLogout,
       changePassword,
@@ -353,6 +390,7 @@ export default defineComponent({
 /* 用户菜单 */
 .user-menu { position: relative; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 .avatar-circle { width: 32px; height: 32px; border-radius: 50%; background: #C41E3A; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; }
+.avatar-img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .menu-arrow { font-size: 10px; color: #999; }
 .user-dropdown { position: absolute; top: 100%; right: 0; background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); min-width: 180px; z-index: 1000; padding: 8px 0; }
 .dropdown-item { display: block; padding: 10px 16px; color: #333; text-decoration: none; cursor: pointer; font-size: 14px; }

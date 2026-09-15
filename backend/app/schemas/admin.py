@@ -37,17 +37,16 @@ class WeeklyActiveTrend(BaseModel):
 
 
 class SubjectDistribution(BaseModel):
-    """各科目题目占比"""
-    labels: List[str] = []
-    values: List[int] = []
-    colors: List[str] = []
+    """各科目题目占比（单项）"""
+    subject: str = ""
+    count: int = 0
 
 
 class DashboardResponse(AdminBaseResponse):
     """系统总览响应"""
     stats: DashboardStats
     weekly_trend: WeeklyActiveTrend
-    subject_distribution: SubjectDistribution
+    subject_distribution: List[SubjectDistribution] = []
     recent_logs: List[dict] = []
 
 
@@ -74,6 +73,7 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     gender: Optional[str] = None
+    avatar: Optional[str] = None
     department: Optional[str] = None
     class_name: Optional[str] = None
     school: Optional[str] = None
@@ -131,6 +131,18 @@ class QuestionAuditRequest(BaseModel):
     """题目审核"""
     audit_status: int = Field(..., description="审核状态: 1通过/2驳回")
     audit_comment: Optional[str] = None
+
+
+class QuestionUpdateRequest(BaseModel):
+    """题目编辑（管理员）"""
+    subject_id: Optional[int] = None
+    type_id: Optional[int] = None
+    question_content: Optional[str] = None
+    options: Optional[str] = None
+    answer: Optional[str] = None
+    answer_analysis: Optional[str] = None
+    difficulty: Optional[int] = None
+    source: Optional[str] = None
 
 
 # ==================== 试卷审批 ====================

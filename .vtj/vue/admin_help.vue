@@ -21,7 +21,7 @@
 
     <div class="help-footer">
       <p>如有其他问题，请联系系统管理员或技术支持</p>
-      <p>技术支持邮箱：support@example.com</p>
+      <p>技术支持：请联系系统管理员</p>
     </div>
   </div>
 </template>
@@ -178,11 +178,11 @@ export default defineComponent({
             <li>在"基本设置"选项卡中修改系统名称</li>
             <li>点击"保存设置"提交</li>
           </ol>
-          <h4>6.2 如何更换系统Logo？</h4>
+          <h4>6.2 如何更换系统标识？</h4>
           <ol>
             <li>进入"系统设置"页面</li>
-            <li>在"基本设置"选项卡中点击"更换Logo"</li>
-            <li>上传新的Logo图片</li>
+            <li>在"基本设置"选项卡中点击"更换标识"</li>
+            <li>上传新的标识图片</li>
             <li>点击"保存设置"提交</li>
           </ol>
         `

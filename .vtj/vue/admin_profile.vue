@@ -35,10 +35,6 @@
               <input class="fi" v-model="profileForm.username" disabled />
             </div>
             <div class="fg">
-              <label>真实姓名</label>
-              <input class="fi" v-model="profileForm.real_name" placeholder="请输入真实姓名"/>
-            </div>
-            <div class="fg">
               <label>手机号</label>
               <input class="fi" v-model="profileForm.phone" placeholder="请输入手机号"/>
             </div>
@@ -175,7 +171,6 @@ export default defineComponent({
     const profileForm = ref({
       user_id: null,
       username: '',
-      real_name: '',
       phone: '',
       email: '',
       gender: '未知',
@@ -209,30 +204,27 @@ export default defineComponent({
 
     const loadProfile = async () => {
       try {
-        const userInfo = auth()?.getUserInfo?.() || {};
-        const userId = userInfo.user_id;
-        if (userId) {
-          const r = await auth().apiFetch('/api/admin/users/' + userId);
-          const d = await r.json();
-          if (d.success && d.user) {
-            profileForm.value = {
-              user_id: d.user.user_id,
-              username: d.user.username,
-              real_name: d.user.real_name || d.user.username,
-              phone: d.user.phone || '',
-              email: d.user.email || '',
-              gender: d.user.gender || '未知',
-              avatar: d.user.avatar || ''
-            };
-            accountInfo.value = {
-              user_no: d.user.user_no,
-              user_type: d.user.user_type,
-              department: d.user.department || '',
-              register_time: d.user.register_time,
-              last_login: d.user.last_login,
-              last_login_ip: d.user.last_login_ip
-            };
-          }
+        // 修复: 后端已有专用接口 /api/auth/profile（GET 读取 + PUT 保存），
+        // 无需再走 getUserInfo / admin/users/{id}，直接读取当前用户完整信息
+        const r = await auth().apiFetch('/api/auth/profile');
+        const d = await r.json();
+        if (d && d.user_id) {
+          profileForm.value = {
+            user_id: d.user_id,
+            username: d.username,
+            phone: d.phone || '',
+            email: d.email || '',
+            gender: d.gender || '未知',
+            avatar: d.avatar || ''
+          };
+          accountInfo.value = {
+            user_no: d.user_no,
+            user_type: d.user_type,
+            department: d.department || '',
+            register_time: d.register_time,
+            last_login: d.last_login,
+            last_login_ip: d.last_login_ip
+          };
         }
       } catch (e) {
         msg.value = '❌ 加载个人信息失败';
@@ -253,11 +245,10 @@ export default defineComponent({
     const saveProfile = async () => {
       saving.value = true;
       try {
-        const r = await auth().apiFetch('/api/admin/users/' + profileForm.value.user_id, {
+        const r = await auth().apiFetch('/api/auth/profile', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            real_name: profileForm.value.real_name,
             phone: profileForm.value.phone,
             email: profileForm.value.email,
             gender: profileForm.value.gender,
@@ -267,6 +258,8 @@ export default defineComponent({
         const d = await r.json();
         if (d.success) {
           msg.value = '✅ 个人信息更新成功';
+          // 派发头像更新事件，让顶栏下拉框头像实时刷新
+          window.dispatchEvent(new CustomEvent('avatar-updated'));
         } else {
           msg.value = '❌ ' + (d.message || '更新失败');
         }
@@ -302,6 +295,8 @@ export default defineComponent({
         if (d.url) {
           profileForm.value.avatar = d.url;
           msg.value = '✅ 头像上传成功';
+          // 派发头像更新事件，让顶栏下拉框头像实时刷新
+          window.dispatchEvent(new CustomEvent('avatar-updated'));
         } else {
           msg.value = '❌ 头像上传失败';
         }

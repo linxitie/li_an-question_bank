@@ -58,14 +58,8 @@ export default defineComponent({
     }
     async function createBackup() {
       msg.value = '正在创建备份...';
-      // 生成中文备份名称
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const backupName = `系统全量备份_${year}年${month}月${day}日_${hours}点${minutes}分`;
+      // 备份显示名使用中文（不含时间），时间由后端 create_time 字段记录
+      const backupName = '系统全量备份';
       
       const r = await auth().apiFetch('/api/admin/backup', {
         method:'POST',
@@ -99,7 +93,7 @@ export default defineComponent({
       const seconds = String(date.getSeconds()).padStart(2, '0');
       return `${year}年${month}月${day}日 ${hours}:${minutes}:${seconds}`;
     }
-    return { provider, loading, items, dbSize, backupSize, autoBackup, msg, load, createBackup, restore, downloadBackup, formatSize };
+    return { provider, loading, items, dbSize, backupSize, autoBackup, msg, load, createBackup, restore, downloadBackup, formatSize, formatChineseTime };
   }
 });
 </script>

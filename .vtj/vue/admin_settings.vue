@@ -16,7 +16,7 @@
       <div class="settings-panel" v-if="activeTab==='basic'">
         <div class="panel"><h3>基本设置</h3>
           <div class="fg"><label>站点名称</label><input class="fi" v-model="settings.site_name" placeholder="请输入站点名称"/></div>
-          <div class="fg"><label>站点Logo</label><div class="logo-upload"><div class="logo-preview" v-if="settings.site_logo">📝</div><button class="btn-secondary">上传Logo</button></div></div>
+          <div class="fg"><label>站点标识</label><div class="logo-upload"><div class="logo-preview" v-if="settings.site_logo">📝</div><button class="btn-secondary">上传标识</button></div></div>
           <div class="fg"><label>站点简介</label><textarea class="fi textarea" v-model="settings.site_desc" placeholder="请输入站点简介"></textarea></div>
           <div class="fg"><label>备案号</label><input class="fi" v-model="settings.icp_number" placeholder="请输入ICP备案号"/></div>
         </div>

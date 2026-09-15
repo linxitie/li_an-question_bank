@@ -44,6 +44,10 @@
           <option value="2">申论</option>
           <option value="3">公专</option>
         </select>
+        <select class="filter-select" v-model="filters.type_id" @change="load">
+          <option value="">全部类型</option>
+          <option v-for="t in typeOptions" :key="t.type_id" :value="t.type_id">{{ t.type_name }}</option>
+        </select>
         <select class="filter-select" v-model="filters.audit_status" @change="load">
           <option value="">全部状态</option>
           <option value="0">待审核</option>
@@ -74,18 +78,20 @@
             <tr v-for="q in questionList" :key="q.question_id">
               <td>{{ q.question_id }}</td>
               <td>
-                <span class="tag">{{ q.subject_name }}</span>
+                <span class="tag">{{ q.subject_name || subjectName(q.subject_id) }}</span>
               </td>
               <td class="content-cell">
                 <span class="content-link" @click="previewQuestion(q)">
-                  {{ q.question_content }}
+                  {{ renderSummary(q) }}
                 </span>
               </td>
-              <td>{{ q.type_name }}</td>
+              <td>
+                <span :class="['type-badge', typeBadgeClass(q.type_name)]">{{ typeDisplayName(q.type_name) }}</span>
+              </td>
               <td>
                 <span class="stars">{{ '★'.repeat(q.difficulty || 0) }}{{ '☆'.repeat(5 - (q.difficulty || 0)) }}</span>
               </td>
-              <td>{{ q.source || '-' }}</td>
+              <td>{{ q.source || '未标注' }}</td>
               <td>
                 <span class="status-badge" :class="'audit-' + q.audit_status">
                   {{ {0:'待审核',1:'已通过',2:'已驳回'}[q.audit_status] || '未知' }}
@@ -121,21 +127,21 @@
         <div class="preview-section">
           <div class="preview-tags">
             <span class="tag">ID: {{ previewData.question_id }}</span>
-            <span class="tag tag-info">{{ previewData.subject_name }}</span>
-            <span class="tag">{{ previewData.type_name }}</span>
+            <span class="tag tag-info">{{ previewData.subject_name || subjectName(previewData.subject_id) }}</span>
+            <span :class="['type-badge', typeBadgeClass(previewData.type_name)]">{{ typeDisplayName(previewData.type_name) }}</span>
             <span class="status-badge" :class="'audit-' + previewData.audit_status">
               {{ {0:'待审核',1:'已通过',2:'已驳回'}[previewData.audit_status] }}
             </span>
           </div>
           <div class="preview-block">
             <h4>题目内容</h4>
-            <div class="preview-content">{{ previewData.full_content }}</div>
+            <div class="preview-content" v-html="cleanHtmlContent(previewData.full_content || previewData.question_content)"></div>
           </div>
-          <div class="preview-block" v-if="previewData.options && previewData.options.length">
+          <div class="preview-block" v-if="hasOptions(previewData.options)">
             <h4>选项</h4>
-            <div v-for="(opt, i) in previewData.options" :key="i" class="option-item">
-              <span class="option-label">{{ String.fromCharCode(65 + i) }}.</span>
-              <span>{{ opt }}</span>
+            <div v-for="(opt, key) in parsedOptions(previewData.options)" :key="key" class="option-item">
+              <span class="option-label">{{ key }}.</span>
+              <span class="option-value" v-html="cleanHtmlContent(opt)"></span>
             </div>
           </div>
           <div class="preview-block">
@@ -144,7 +150,7 @@
           </div>
           <div class="preview-block" v-if="previewData.answer_analysis">
             <h4>答案解析</h4>
-            <div class="preview-analysis">{{ previewData.answer_analysis }}</div>
+            <div class="preview-analysis" v-html="cleanHtmlContent(previewData.answer_analysis)"></div>
           </div>
         </div>
         <div class="modal-actions">
@@ -167,13 +173,23 @@
             </select>
           </div>
           <div class="fg">
-            <label>题型ID</label>
-            <input class="fi" v-model="editForm.type_id" type="number"/>
+            <label>题型</label>
+            <select class="fi" v-model="editForm.type_id">
+              <option value="1">单选题</option>
+              <option value="3">多选题</option>
+              <option value="5">判断题</option>
+              <option value="2">论述题</option>
+              <option value="4">写作题</option>
+            </select>
           </div>
         </div>
         <div class="fg">
           <label>题目内容</label>
           <textarea class="fi textarea" v-model="editForm.question_content" rows="4"></textarea>
+        </div>
+        <div class="fg">
+          <label>选项（JSON 格式，如 [{"key":"A","value":"选项内容"}]）</label>
+          <textarea class="fi textarea" v-model="editForm.options_text" rows="4"></textarea>
         </div>
         <div class="fg">
           <label>正确答案</label>
@@ -256,9 +272,20 @@ export default defineComponent({
 
     const filters = ref({
       subject_id: '',
+      type_id: '',
       audit_status: '',
       keyword: ''
     });
+
+    // 题型筛选项（按 type_name 去重；"单选题"历史错位为 type_id=1 和 3，筛选时后端会同时命中）
+    const typeOptions = ref([
+      { type_id: 1, type_name: '单选题' },
+      { type_id: 4, type_name: '多选题' },
+      { type_id: 5, type_name: '判断题' },
+      { type_id: 2, type_name: '论述题' },
+      { type_id: 6, type_name: '写作题' },
+      { type_id: 7, type_name: '简述题' },
+    ]);
 
     const previewData = ref<any>({});
     const editForm = ref({
@@ -266,6 +293,7 @@ export default defineComponent({
       subject_id: '1',
       type_id: '',
       question_content: '',
+      options_text: '',
       answer: '',
       answer_analysis: '',
       difficulty: 3,
@@ -278,6 +306,87 @@ export default defineComponent({
     });
 
     const auth = () => (window as any).__VTJ_AUTH__;
+
+    // ========== 对标教师端的工具函数 ==========
+
+    function subjectName(id: number) {
+      const map: Record<number, string> = { 1: '行测', 2: '申论', 3: '公专' };
+      return map[id] || '-';
+    }
+
+    function typeDisplayName(typeInfo: any) {
+      if (!typeInfo) return '-';
+      const s = String(typeInfo);
+      const nameMap: Record<string, string> = {
+        '单选题': '单选题', '多选题': '多选题', '判断题': '判断题', '论述题': '论述题', '写作题': '写作题',
+      };
+      return nameMap[s] || s;
+    }
+
+    function typeBadgeClass(typeInfo: any) {
+      const name = typeDisplayName(typeInfo);
+      const map: Record<string, string> = {
+        '单选题': 'badge-single', '多选题': 'badge-multi',
+        '判断题': 'badge-judge',
+        '论述题': 'badge-essay', '写作题': 'badge-writing',
+      };
+      return map[name] || 'badge-single';
+    }
+
+    // 清洗 HTML：移除 UTB ID、题号前缀，修复图片路径（用于 v-html 展示）
+    function cleanHtmlContent(text: string) {
+      if (!text) return '';
+      let cleaned = text;
+      cleaned = cleaned.replace(/UTB[a-f0-9]{8,}[-－]?\s*选项?[A-H]?[-－]?\d*/gi, '');
+      cleaned = cleaned.replace(/第\s*\d+\s*题[：:]\s*/g, '');
+      // 已有 img 标签添加 onerror 兜底，避免裂图
+      cleaned = cleaned.replace(/<img\s+([^>]*?)(?:\s*\/?>|>)/g, function(match: string, attrs: string) {
+        if (attrs.toLowerCase().includes('onerror')) return match;
+        return '<img ' + attrs + ' onerror="this.onerror=null;this.style.display=\'none\'" />';
+      });
+      return cleaned;
+    }
+
+    function renderSummary(q: any) {
+      const text = q.question_content || '';
+      // 图片占位符转文字，避免列表摘要显示长路径
+      let cleaned = text.replace(/<img[^>]*\/?>/g, '[图片]');
+      cleaned = cleaned.replace(/\[IMAGE:[^\]]+\]/g, '[图片]');
+      return cleaned;
+    }
+
+    function hasOptions(opts: any) {
+      if (!opts) return false;
+      if (Array.isArray(opts) && opts.length > 0) return true;
+      if (typeof opts === 'object' && Object.keys(opts).length > 0) return true;
+      if (typeof opts === 'string') {
+        try { const p = JSON.parse(opts); return Array.isArray(p) && p.length > 0; } catch(e) { return false; }
+      }
+      return false;
+    }
+
+    function parsedOptions(opts: any) {
+      if (!opts) return {};
+      if (Array.isArray(opts)) {
+        const result: Record<string, string> = {};
+        opts.forEach((o: any, i: number) => {
+          const key = (o && o.key) || String.fromCharCode(65 + i);
+          if (typeof o === 'object') result[key] = o.value || o.text || '';
+          else result[key] = String(o);
+        });
+        return result;
+      }
+      if (typeof opts === 'object') {
+        // 已是 {A: "...", B: "..."} 形式
+        const result: Record<string, string> = {};
+        Object.keys(opts).forEach(k => { result[k] = opts[k]; });
+        return result;
+      }
+      if (typeof opts === 'string') {
+        try { return parsedOptions(JSON.parse(opts)); } catch(e) { return {}; }
+      }
+      return {};
+    }
 
     onMounted(() => {
       load();
@@ -292,6 +401,7 @@ export default defineComponent({
           page_size: pageSize.value.toString()
         });
         if (filters.value.subject_id) params.append('subject_id', filters.value.subject_id);
+        if (filters.value.type_id !== '') params.append('type_id', filters.value.type_id);
         if (filters.value.audit_status !== '') params.append('audit_status', filters.value.audit_status);
         if (filters.value.keyword) params.append('keyword', filters.value.keyword);
 
@@ -321,7 +431,7 @@ export default defineComponent({
     }
 
     function resetFilter() {
-      filters.value = { subject_id: '', audit_status: '', keyword: '' };
+      filters.value = { subject_id: '', type_id: '', audit_status: '', keyword: '' };
       currentPage.value = 1;
       load();
     }
@@ -342,6 +452,7 @@ export default defineComponent({
         subject_id: String(q.subject_id),
         type_id: q.type_id,
         question_content: q.full_content || q.question_content,
+        options_text: typeof q.options === 'string' ? q.options : JSON.stringify(q.options || []),
         answer: q.answer,
         answer_analysis: q.answer_analysis || '',
         difficulty: q.difficulty || 3,
@@ -352,7 +463,28 @@ export default defineComponent({
 
     async function submitEdit() {
       try {
-        const data = { ...editForm.value, subject_id: parseInt(editForm.value.subject_id) };
+        // 解析选项 JSON，转换失败则不传 options
+        let options = null;
+        if (editForm.value.options_text && editForm.value.options_text.trim()) {
+          try {
+            options = JSON.parse(editForm.value.options_text);
+          } catch (e) {
+            msg.value = '❌ 选项 JSON 格式错误，请检查';
+            setTimeout(() => msg.value = '', 3000);
+            return;
+          }
+        }
+        const data: any = {
+          subject_id: parseInt(editForm.value.subject_id),
+          type_id: editForm.value.type_id,
+          question_content: editForm.value.question_content,
+          answer: editForm.value.answer,
+          answer_analysis: editForm.value.answer_analysis,
+          difficulty: editForm.value.difficulty,
+          source: editForm.value.source
+        };
+        if (options !== null) data.options = options;
+
         const r = await auth().apiFetch('/api/admin/questions/' + editForm.value.question_id, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -428,10 +560,12 @@ export default defineComponent({
 
     return {
       provider, loading, questionList, total, currentPage, totalPages,
-      stats, filters, msg, showPreviewModal, showEditModal, showRejectModal,
+      stats, filters, typeOptions, msg, showPreviewModal, showEditModal, showRejectModal,
       previewData, editForm, rejectForm,
       load, resetFilter, changePage, previewQuestion, editQuestion,
-      submitEdit, auditPass, showRejectDialog, submitReject
+      submitEdit, auditPass, showRejectDialog, submitReject,
+      subjectName, typeDisplayName, typeBadgeClass, cleanHtmlContent, renderSummary,
+      hasOptions, parsedOptions
     };
   }
 });
@@ -459,7 +593,7 @@ export default defineComponent({
   background: #fff; border-radius: 12px; padding: 16px; text-align: center;
   box-shadow: 0 2px 8px rgba(0,0,0,.06);
 }
-.stat-value { font-size: 28px; font-weight: bold; color: #409eff; }
+.stat-value { font-size: 28px; font-weight: bold; color: #1a2b5f; }
 .stat-label { color: #909399; font-size: 14px; margin-top: 4px; }
 .stat-warning .stat-value { color: #e6a23c; }
 
@@ -474,11 +608,19 @@ export default defineComponent({
 .data-table tr:hover { background: #f5f7fa; }
 
 .content-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.content-link { color: #409eff; cursor: pointer; }
+.content-link { color: #1a2b5f; cursor: pointer; }
 .content-link:hover { text-decoration: underline; }
 
 .tag { padding: 2px 8px; border-radius: 4px; font-size: 12px; background: #f0f9eb; color: #67C23A; }
 .tag-info { background: #ecf5ff; color: #409eff; }
+
+/* 题型彩色徽章（对标教师端） */
+.type-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 13px; font-weight: 500; color: #fff; }
+.badge-single { background: #409EFF; }
+.badge-multi { background: #67C23A; }
+.badge-judge { background: #8B5CF6; }
+.badge-essay { background: #E6A23C; }
+.badge-writing { background: #F56C6C; }
 
 .stars { color: #f7ba2a; font-size: 12px; }
 
@@ -516,14 +658,16 @@ export default defineComponent({
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
 
 .preview-section { margin-bottom: 20px; }
-.preview-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.preview-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
 .preview-block { margin-bottom: 16px; }
 .preview-block h4 { margin-bottom: 8px; color: #303133; }
 .preview-content, .preview-answer, .preview-analysis {
   padding: 12px; background: #f5f7fa; border-radius: 6px; line-height: 1.8;
 }
+.preview-content img, .preview-analysis img { max-width: 100%; height: auto; border-radius: 6px; display: block; margin: 8px 0; }
 .option-item { display: flex; gap: 8px; padding: 8px; background: #fafafa; border-radius: 4px; margin-bottom: 4px; }
-.option-label { font-weight: bold; color: #409eff; }
+.option-label { font-weight: bold; color: #1a2b5f; }
+.option-value img { max-width: 100%; height: auto; display: block; }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .fg { margin-bottom: 12px; }

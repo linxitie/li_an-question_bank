@@ -264,14 +264,27 @@ def _require_admin(user: SysUser):
 
 
 def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = ""):
-    """写审计日志。字段名对照 models.SysOperationLog 真实定义（models.py:793）。"""
+    """写审计日志。字段名对照 models.SysOperationLog 真实定义（models.py:793）。
+    操作类型与模块名统一中文化，保证日志界面无英文。"""
+    action_cn = {
+        "create": "新建资料",
+        "update": "编辑资料",
+        "delete": "删除资料",
+        "status": "状态变更",
+        "upload_image": "上传图片",
+        "import_confirm": "导入入库",
+        "batch_create": "批量创建",
+        "batch_delete": "批量删除",
+    }.get(action, action)
     try:
         db.add(SysOperationLog(
             user_id=user.user_id,
             user_name=getattr(user, "username", None) or getattr(user, "real_name", ""),
-            operation_type=action,
-            module_name="materials",
-            operation_desc=detail or target,
+            operation_type=action_cn,
+            module_name="资料管理",
+            # 操作描述优先用中文 detail，缺失时回退到中文动作名，
+            # 避免泄漏英文 target（URL 路径 / material:123 / created=1 等）
+            operation_desc=detail or action_cn,
             request_method="",
             request_url=f"/api/materials/{target}",
             ip_address="",
@@ -403,7 +416,8 @@ async def admin_set_status(material_id: int, body: dict,
         raise HTTPException(404, "资料不存在")
     m.status = st
     db.commit()
-    _audit(db, current_user, "status", f"material:{material_id}", f"status={st}")
+    _audit(db, current_user, "status", f"material:{material_id}",
+           "上架" if st == 1 else "下架")
     db.commit()
     return {"ok": True}
 
@@ -887,6 +901,6 @@ async def import_confirm(import_id: int, body: dict,
         except OSError:
             pass
     _audit(db, current_user, "import_confirm", f"import:{import_id}",
-           f"created={len(created_ids)} type={rec.file_type}")
+           f"导入 {len(created_ids)} 条资料")
     db.commit()
     return {"created": len(created_ids), "material_ids": created_ids}

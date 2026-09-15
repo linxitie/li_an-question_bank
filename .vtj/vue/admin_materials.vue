@@ -130,7 +130,7 @@
           <div class="frow"><label>标题 *</label>
             <input v-model="state.form.title" placeholder="资料标题"/></div>
           <div class="frow"><label>徽章</label>
-            <input v-model="state.form.badge" placeholder="热门 / 精华 / 重要 / NEW（可留空）"/></div>
+            <input v-model="state.form.badge" placeholder="热门 / 精华 / 重要 / 新（可留空）"/></div>
 
           <!-- 视频 -->
           <template v-if="isVideo(state.form.type)">
@@ -203,7 +203,7 @@
             <label for="impFile">点击选择文件（支持 .docx 讲义 / .xlsx 词库 / .pdf 文档，≤20MB）</label>
           </div>
           <div v-if="state.imp.parse_status === 'processing'" class="ocr-tip">
-            ⏳ OCR 解析中…已耗时 {{ state.imp.elapsed }}s
+            ⏳ 文字识别解析中…已耗时 {{ state.imp.elapsed }}秒
             <br/><small>扫描件解析较慢（约1分钟/页），请勿关闭本窗口</small>
           </div>
           <div v-if="state.imp.error" class="err-tip">{{ state.imp.error }}</div>

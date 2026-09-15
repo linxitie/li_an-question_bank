@@ -10,7 +10,18 @@
       </div>
       <div class="filter-bar">
         <input class="filter-input" v-model="kw" placeholder="操作人" @keyup.enter="load"/>
-        <select class="filter-select" v-model="fop" @change="load"><option value="">全部操作</option><option value="CREATE">创建</option><option value="UPDATE">更新</option><option value="DELETE">删除</option><option value="LOGIN">登录</option></select>
+        <select class="filter-select" v-model="fop" @change="load">
+          <option value="">全部操作</option>
+          <option value="CREATE">创建</option>
+          <option value="UPDATE">更新</option>
+          <option value="DELETE">删除</option>
+          <option value="AUDIT">审核</option>
+          <option value="LOGIN">登录</option>
+          <option value="import_confirm">导入入库</option>
+          <option value="upload_image">上传图片</option>
+          <option value="BACKUP">备份</option>
+          <option value="EXPORT">导出</option>
+        </select>
         <input class="filter-input" type="date" v-model="startDate"/>
         <input class="filter-input" type="date" v-model="endDate"/>
         <button class="btn-search" @click="load">🔍 搜索</button>
@@ -20,7 +31,7 @@
         <table class="data-table"><thead><tr><th>时间</th><th>用户</th><th>角色</th><th>IP</th><th>模块</th><th>操作描述</th><th>状态</th><th>耗时(ms)</th></tr></thead>
         <tbody><tr v-for="l in items" :key="l.log_id">
           <td>{{ formatTime(l.operation_time) }}</td><td>{{ l.user_name }}</td><td><span class="tag">{{ l.user_role || '-' }}</span></td><td>{{ l.ip_address }}</td><td>{{ l.module_name }}</td><td class="desc-cell">{{ l.operation_desc }}</td>
-          <td><span class="status-badge" :class="l.success ? 'status-ok' : 'status-fail'">{{ l.success ? '成功' : '失败' }}</span></td>
+          <td><span class="status-badge" :class="l.success ? 'status-ok' : 'status-fail'">{{ l.status_cn || (l.success ? '成功' : '失败') }}</span></td>
           <td>{{ l.duration }}</td></tr></tbody></table>
         <div v-if="!items.length" class="empty-state"><div class="empty-icon">📋</div><div>暂无日志数据</div></div>
       </div>
