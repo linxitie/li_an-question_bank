@@ -333,8 +333,8 @@ export default defineComponent({
     const goToSettings = () => router.push('/settings');
     const goToProfile = () => router.push('/profile');
     
-    const goToWrongQuestions = () => router.push('/wrong-questions');
-    const goToCollection = () => router.push('/collection');
+    const goToWrongQuestions = () => router.push('/tablet/wrong-questions');
+    const goToCollection = () => router.push('/tablet/favorites');
     const goToHistory = () => router.push('/history');
     const goToNotes = () => router.push('/notes');
     

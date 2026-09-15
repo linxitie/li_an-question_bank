@@ -226,8 +226,8 @@ export default defineComponent({
     
     const goToSettings = () => router.push('/settings');
     
-    const goToWrongQuestions = () => router.push('/wrong-questions');
-    const goToCollection = () => router.push('/collection');
+    const goToWrongQuestions = () => router.push('/mobile/wrong-questions');
+    const goToCollection = () => router.push('/mobile/favorites');
     const goToHistory = () => router.push('/history');
     const goToNotes = () => router.push('/notes');
     

@@ -295,6 +295,18 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/mobile_news.vue'),
     meta: { platform: 'tablet' }
   },
+  {
+    path: '/tablet/wrong-questions',
+    name: 'TabletWrongQuestions',
+    component: () => import('@/views/mobile_wrong_questions.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/favorites',
+    name: 'TabletFavorites',
+    component: () => import('@/views/mobile_favorites.vue'),
+    meta: { platform: 'tablet' }
+  },
 
   // ==================== 手机端路由 ====================
   {
@@ -319,6 +331,18 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/news/:id',
     name: 'MobileNewsDetail',
     component: () => import('@/views/mobile_news.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/wrong-questions',
+    name: 'MobileWrongQuestions',
+    component: () => import('@/views/mobile_wrong_questions.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/favorites',
+    name: 'MobileFavorites',
+    component: () => import('@/views/mobile_favorites.vue'),
     meta: { platform: 'mobile' }
   },
   {
