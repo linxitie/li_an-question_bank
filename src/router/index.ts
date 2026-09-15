@@ -313,6 +313,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/mobile_score_analysis.vue'),
     meta: { platform: 'tablet' }
   },
+  {
+    path: '/tablet/student-papers',
+    name: 'TabletStudentPapers',
+    component: () => import('@/views/mobile_student_papers.vue'),
+    meta: { platform: 'tablet' }
+  },
 
   // ==================== 手机端路由 ====================
   {
@@ -355,6 +361,12 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/score-analysis',
     name: 'MobileScoreAnalysis',
     component: () => import('@/views/mobile_score_analysis.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/student-papers',
+    name: 'MobileStudentPapers',
+    component: () => import('@/views/mobile_student_papers.vue'),
     meta: { platform: 'mobile' }
   },
   {

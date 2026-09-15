@@ -354,15 +354,19 @@ export default defineComponent({
     
     const selectTopAction = (key: string) => {
       activeTopAction.value = key;
-      if (key === 'smart') {
+      if (key === 'quick') {
+        router.push('/mobile/practice');
+      } else if (key === 'history') {
+        router.push('/mobile/student-papers');
+      } else if (key === 'smart') {
         router.push('/smart-exam');
       } else if (key === 'ai') {
         // 联考小智：功能还在开发中
         ElMessage.info('联考小智功能还在开发中，敬请期待！');
       } else if (key === 'wrong') {
-        router.push('/wrong-questions');
+        router.push('/mobile/wrong-questions');
       } else if (key === 'mock') {
-        router.push('/mock-exam');
+        ElMessage.info('模拟考试功能请在电脑端使用');
       }
     };
     

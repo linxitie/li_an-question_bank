@@ -465,14 +465,14 @@ export default defineComponent({
     const goToSettings = () => router.push('/settings');
     const goToProfile = () => router.push('/profile');
     
-    const goToQuickPractice = () => router.push('/practice/quick');
+    const goToQuickPractice = () => router.push('/tablet/practice');
     const goToSmartExam = () => router.push('/smart-exam');
     const goToLiankaoAI = () => {
       // 联考小智：功能还在开发中
       ElMessage.info('联考小智功能还在开发中，敬请期待！');
     };
-    const goToWrongQuestions = () => router.push('/wrong-questions');
-    const goToMockExam = () => router.push('/mock-exam');
+    const goToWrongQuestions = () => router.push('/tablet/wrong-questions');
+    const goToMockExam = () => ElMessage.info('模拟考试功能请在电脑端使用');
     
     const selectCategory = (key: string) => {
       activeCategory.value = key;
