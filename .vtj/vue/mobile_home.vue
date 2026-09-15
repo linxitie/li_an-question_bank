@@ -226,8 +226,8 @@ export default defineComponent({
       { title: '申论命题方向调整，重点考察实务能力', id: 3 }
     ]);
 
-    // 加载用户数据
-    onMounted(async () => {
+    // 统一数据加载（供 onMounted / 切回前台刷新 / 未来 WebSocket 推送复用）
+    const loadData = async () => {
       try {
         const auth = window.__VTJ_AUTH__;
         if (auth && auth.isLoggedIn()) {
@@ -262,6 +262,14 @@ export default defineComponent({
       } catch (error) {
         console.error('加载数据失败:', error);
       }
+    };
+
+    onMounted(() => {
+      loadData();
+      // 页面从后台切回前台时自动刷新（三端数据同步）
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') loadData();
+      });
     });
 
     // 导航方法
