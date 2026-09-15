@@ -22,6 +22,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/forum.vue')
   },
   {
+    path: '/recruit',
+    name: 'Recruitment',
+    component: () => import('$vtj/vue/recruitment_info.vue')
+  },
+  {
     path: '/unauthorized',
     name: 'Unauthorized',
     component: () => import('@/views/unauthorized.vue')
@@ -278,6 +283,18 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/tablet_profile.vue'),
     meta: { platform: 'tablet' }
   },
+  {
+    path: '/tablet/news',
+    name: 'TabletNews',
+    component: () => import('@/views/mobile_news.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/news/:id',
+    name: 'TabletNewsDetail',
+    component: () => import('@/views/mobile_news.vue'),
+    meta: { platform: 'tablet' }
+  },
 
   // ==================== 手机端路由 ====================
   {
@@ -290,6 +307,18 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/scan',
     name: 'MobileScan',
     component: () => import('@/views/mobile_scan.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/news',
+    name: 'MobileNews',
+    component: () => import('@/views/mobile_news.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/news/:id',
+    name: 'MobileNewsDetail',
+    component: () => import('@/views/mobile_news.vue'),
     meta: { platform: 'mobile' }
   },
   {
@@ -340,9 +369,14 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const device = detectDevice();
 
-  // 1) 已在设备专属路径（/tablet、/mobile）→ 直接放行
-  //    登录态由各端登录页自行处理（各端登录页 mounted 时判断已登录则跳转对应首页）
+  // 1) 已在设备专属路径（/tablet、/mobile）→ 校验角色：移动/平板端仅学生可访问
+  //    教师/管理员（已登录且非 student）跳转提示页；未登录放行到各端登录页
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
+    const auth = (window as any).__VTJ_AUTH__;
+    const role = auth ? auth.getUserRole() : null;
+    if (role && role !== 'student') {
+      return next('/unauthorized?reason=mobile_student_only');
+    }
     return next();
   }
 

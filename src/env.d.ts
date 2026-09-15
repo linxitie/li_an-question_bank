@@ -37,7 +37,7 @@ declare global {
       isTokenExpired: (state: any) => boolean;
       ensureAuth: () => Promise<boolean>;
       refreshAccessToken: () => Promise<boolean>;
-      login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
+      login: (username: string, password: string, clientType?: string) => Promise<{ success: boolean; message: string }>;
       loginWithToken: (accessToken: string, refreshToken?: string, username?: string) => { success: boolean; message: string };
       logout: () => void;
       getAuthHeaders: () => { Authorization?: string };

@@ -2,11 +2,11 @@
   <div class="page-container">
     <div class="card">
       <div class="lock-icon">🔒</div>
-      <h1>401 - 未授权</h1>
-      <p class="desc">您没有权限访问该页面，请先登录或联系管理员。</p>
+      <h1>{{ isMobileRestrict ? '仅限学生使用' : '401 - 未授权' }}</h1>
+      <p class="desc">{{ isMobileRestrict ? '移动端/平板端仅支持学生登录，教师/管理员请使用电脑端访问。' : '您没有权限访问该页面，请先登录或联系管理员。' }}</p>
       <div class="actions">
         <button class="btn-primary" @click="goHome">返回首页</button>
-        <button class="btn-outline" @click="goLogin">去登录</button>
+        <button v-if="!isMobileRestrict" class="btn-outline" @click="goLogin">去登录</button>
       </div>
     </div>
   </div>
@@ -16,6 +16,11 @@
 import { defineComponent } from 'vue'
 export default defineComponent({
   name: 'Unauthorized',
+  computed: {
+    isMobileRestrict() {
+      return this.$route.query.reason === 'mobile_student_only'
+    }
+  },
   methods: {
     goHome() {
       this.$router.push('/')

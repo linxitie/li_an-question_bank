@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Form
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -93,6 +93,7 @@ async def login_for_access_token(
         form_data: OAuth2PasswordRequestForm = Depends(),
         db: Session = Depends(get_db),
         request: Request = None,
+        client_type: str = Form("web", description="客户端类型: web/mobile/tablet"),
 ):
     """
     用户登录接口
@@ -130,8 +131,20 @@ async def login_for_access_token(
             detail="账户已被禁用",
         )
 
+    # 移动端/平板端仅允许学生登录（教师/管理员请使用电脑端）
+    # 三端分离安全约束：移动端是学生学习端，教师端/管理员端仅限电脑端访问
+    if client_type in ("mobile", "tablet") and user.user_type != "student":
+        logger.warning(
+            f"移动端登录被拒: 非学生角色 username={form_data.username} "
+            f"role={user.user_type} client_type={client_type}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="移动端/平板端仅支持学生登录，教师/管理员请使用电脑端",
+        )
+
     # 三端分离：JWT payload 含角色和权限，前端路由守卫依赖此信息
-    from ...core.security import get_user_permissions
+    from ...core.security import get_user_permissions_with_db
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -139,7 +152,7 @@ async def login_for_access_token(
             "user_no": user.user_no,
             "user_type": user.user_type,
             "role_level": user.role_level,
-            "permissions": [p.value for p in get_user_permissions(user)],
+            "permissions": [p.value for p in get_user_permissions_with_db(user, db)],
         },
         expires_delta=access_token_expires
     )
@@ -277,13 +290,13 @@ async def sms_login(
         )
 
     # sms-login: JWT payload 含角色权限
-    from ...core.security import get_user_permissions as _get_perms_sms
+    from ...core.security import get_user_permissions_with_db as _get_perms_sms
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
             "user_id": user.user_id, "user_no": user.user_no,
             "user_type": user.user_type, "role_level": user.role_level,
-            "permissions": [p.value for p in _get_perms_sms(user)],
+            "permissions": [p.value for p in _get_perms_sms(user, db)],
         },
         expires_delta=access_token_expires
     )
@@ -324,13 +337,13 @@ async def refresh_access_token(
         )
 
     # refresh: JWT payload 含角色权限
-    from ...core.security import get_user_permissions as _get_perms_refresh
+    from ...core.security import get_user_permissions_with_db as _get_perms_refresh
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
             "user_id": user.user_id, "user_no": user.user_no,
             "user_type": user.user_type, "role_level": user.role_level,
-            "permissions": [p.value for p in _get_perms_refresh(user)],
+            "permissions": [p.value for p in _get_perms_refresh(user, db)],
         },
         expires_delta=access_token_expires
     )
@@ -367,6 +380,34 @@ async def get_user_profile(
 ):
     """获取当前用户完整信息"""
     return current_user
+
+
+class ChangePasswordForm(BaseModel):
+    """修改密码表单"""
+    old_password: Optional[str] = None
+    new_password: str
+    password: Optional[str] = None  # 兼容前端字段名
+
+
+@router.post("/change-password", summary="修改密码")
+async def change_password(
+        form: ChangePasswordForm,
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """当前用户修改自己的密码（需验证旧密码）"""
+    new_pwd = form.new_password or form.password or ""
+    if not new_pwd:
+        raise HTTPException(status_code=400, detail="新密码不能为空")
+    if len(new_pwd) < 6:
+        raise HTTPException(status_code=400, detail="密码至少6位")
+    # 若提供了旧密码则校验，否则（首次设置等场景）允许直接改
+    if form.old_password:
+        if not verify_password(form.old_password, current_user.password):
+            raise HTTPException(status_code=400, detail="当前密码错误")
+    current_user.password = get_password_hash(new_pwd)
+    db.commit()
+    return {"success": True, "message": "密码修改成功"}
 
 
 @router.put("/profile", summary="编辑个人信息")

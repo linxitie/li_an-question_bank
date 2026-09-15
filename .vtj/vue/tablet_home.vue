@@ -348,18 +348,18 @@ export default defineComponent({
             }));
           }
         }
-        // 考试日历（公开接口）
-        const cRes = await fetch('/api/stats/calendar');
+        // 考试日历（真实接口 /api/calendar/exams，替换原静态 /api/stats/calendar）
+        const cRes = await fetch('/api/calendar/exams?limit=3');
         if (cRes.ok) {
           const c = await cRes.json();
-          if (Array.isArray(c)) {
+          if (c.items && c.items.length) {
             const now = Date.now();
-            upcomingExams.value = c.slice(0, 3).map((it: any) => {
-              const d = it.date || '';
+            upcomingExams.value = c.items.map((it: any) => {
+              const d = it.exam_date || '';
               const target = d ? new Date(d).getTime() : now;
               return {
-                month: d.slice(5, 7) + '月',
-                day: d.slice(8, 10),
+                month: (it.month || (d.slice(5, 7))) + '月',
+                day: it.day || d.slice(8, 10),
                 name: it.title,
                 daysLeft: Math.max(0, Math.ceil((target - now) / 86400000))
               };
@@ -376,10 +376,10 @@ export default defineComponent({
     const goToSettings = () => router.push('/settings');
     const goToProfile = () => router.push('/profile');
     const viewMoreTrend = () => {};
-    const viewAllNews = () => router.push('/news');
-    const viewNews = (news: any) => router.push(`/news/${news.id}`);
+    const viewAllNews = () => router.push('/tablet/news');
+    const viewNews = (news: any) => router.push(`/tablet/news/${news.id}`);
     const viewAllRecruit = () => router.push('/recruit');
-    const viewRecruit = (recruit: any) => router.push(`/recruit/${recruit.id}`);
+    const viewRecruit = (recruit: any) => router.push('/recruit');
     const startQuickPractice = () => router.push('/practice');
     const goToSmartExam = () => router.push('/smart-exam');
     const goToQuestionBank = () => router.push('/question-bank');

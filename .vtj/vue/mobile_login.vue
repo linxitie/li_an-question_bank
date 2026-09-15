@@ -192,7 +192,8 @@ export default defineComponent({
           showMessage('认证模块未就绪，请刷新页面重试', 'error');
           return;
         }
-        const result = await auth.login(username, password);
+        // client_type='mobile' 触发后端三端分离校验：移动端仅学生可登录
+        const result = await auth.login(username, password, 'mobile');
         if (result && result.success) {
           showMessage('登录成功', 'success');
           setTimeout(() => {

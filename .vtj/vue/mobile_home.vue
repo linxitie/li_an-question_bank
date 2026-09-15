@@ -278,11 +278,11 @@ export default defineComponent({
     };
 
     const viewAllNews = () => {
-      router.push('/news');
+      router.push('/mobile/news');
     };
 
     const viewNews = (news: any) => {
-      router.push(`/news/${news.id}`);
+      router.push(`/mobile/news/${news.id}`);
     };
 
     const switchTab = (tab: string) => {

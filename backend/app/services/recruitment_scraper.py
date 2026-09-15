@@ -534,79 +534,77 @@ def scrape_category(category: str, config: dict) -> list:
     return records
 
 
+def _replace_category(db: Session, category: str, records: list) -> int:
+    """分类独立更新：删除该分类旧数据并插入新数据（单事务）"""
+    deleted = db.query(RecruitmentInfo).filter(
+        RecruitmentInfo.category == category
+    ).delete(synchronize_session=False)
+    for rec_data in records:
+        rec = RecruitmentInfo(
+            title=rec_data["title"],
+            url=rec_data.get("url", ""),
+            category=category,
+            organization=rec_data.get("organization", ""),
+            region=rec_data.get("region", ""),
+            content=rec_data.get("content", ""),
+            content_html=rec_data.get("content_html", ""),
+            requirements=rec_data.get("requirements", ""),
+            registration_start=rec_data.get("registration_start", ""),
+            registration_end=rec_data.get("registration_end", ""),
+            deadline=rec_data.get("deadline", ""),
+            tag=rec_data.get("tag", "正在报名"),
+            tag_color=rec_data.get("tag_color", "#10b981"),
+            images=rec_data.get("images", []),
+            exam_format=rec_data.get("exam_format", ""),
+            contact_info=rec_data.get("contact_info", ""),
+            status=1,
+        )
+        db.add(rec)
+    db.commit()
+    return deleted
+
+
 def scrape_all_recruitment():
     """
     全量爬取入口（由调度器 scheduler.py 调用）。
 
-    数据安全策略（v5 — 先收集后替换）:
-      1. 将所有6个分类的数据收集到内存（不写DB）
-      2. 全部收集完毕后，在一个事务中:
-         a. DELETE 旧数据
-         b. INSERT 全部新数据
-         c. COMMIT
-      3. 任何分类失败 → 不执行替换，保留旧数据不变
-
-    这确保: 即使爬取过程中某分类失败，前端仍能看到历史数据。
-    也不会出现"新数据被自己删除"的问题。
+    数据安全策略（v6 — 分类独立更新）:
+      每个分类爬取成功后，立即替换该分类的数据（DELETE 该分类 → INSERT 新数据 → COMMIT）。
+      某分类失败 → 仅该分类保留旧数据，其他分类正常更新。
+      彻底解决 v5"全部分类成功才替换"导致的"一个分类拖垮全局、数据长期不更新"问题。
     """
     logger.info("=" * 60)
-    logger.info("招考信息爬取任务开始 (v5 — requests+BS4)")
+    logger.info("招考信息爬取任务开始 (v6 — 分类独立更新)")
     db = SessionLocal()
+    total = 0
+    failed_cats = []
     try:
-        all_records = []
-        failed_cats = []
-
         for category, config in CATEGORY_CONFIG.items():
             try:
                 records = scrape_category(category, config)
-                all_records.extend(records)
+                if records:
+                    deleted = _replace_category(db, category, records)
+                    total += len(records)
+                    logger.info(
+                        f"[recruitment/{category}] 独立更新完成: "
+                        f"删除 {deleted} 条旧数据, 插入 {len(records)} 条新数据"
+                    )
+                else:
+                    logger.warning(f"[recruitment/{category}] 未获取到数据，保留该分类旧数据")
                 # 分类间间隔（反爬）
                 if category != list(CATEGORY_CONFIG.keys())[-1]:
                     time.sleep(random.uniform(2.0, 4.0))
             except Exception as e:
                 failed_cats.append(category)
-                logger.error(f"[recruitment/{category}] 分类爬取失败: {type(e).__name__}: {e}")
-
-        total = len(all_records)
-        logger.info(f"共收集 {total} 条新记录 (失败分类: {len(failed_cats)})")
-
-        # ---- 数据安全: 原子替换 ----
-        if total > 0:
-            try:
-                # 单事务: 删旧 → 批量入新 → 提交
-                deleted = db.query(RecruitmentInfo).delete(synchronize_session=False)
-                for rec_data in all_records:
-                    rec = RecruitmentInfo(
-                        title=rec_data["title"],
-                        url=rec_data.get("url", ""),
-                        category=rec_data["category"],
-                        organization=rec_data.get("organization", ""),
-                        region=rec_data.get("region", ""),
-                        content=rec_data.get("content", ""),
-                        content_html=rec_data.get("content_html", ""),
-                        requirements=rec_data.get("requirements", ""),
-                        registration_start=rec_data.get("registration_start", ""),
-                        registration_end=rec_data.get("registration_end", ""),
-                        deadline=rec_data.get("deadline", ""),
-                        tag=rec_data.get("tag", "正在报名"),
-                        tag_color=rec_data.get("tag_color", "#10b981"),
-                        images=rec_data.get("images", []),
-                        exam_format=rec_data.get("exam_format", ""),
-                        contact_info=rec_data.get("contact_info", ""),
-                        status=1,
-                    )
-                    db.add(rec)
-                db.commit()
-                logger.info(f"原子替换完成: 删除 {deleted} 条旧数据, 插入 {total} 条新数据")
-            except Exception as e:
                 db.rollback()
-                logger.error(f"原子替换失败（保留旧数据不变）: {type(e).__name__}: {e}")
-        else:
-            logger.warning("未获取到任何新数据，保留现有数据不变")
+                logger.error(
+                    f"[recruitment/{category}] 分类爬取失败（保留该分类旧数据）: "
+                    f"{type(e).__name__}: {e}"
+                )
 
-        logger.info(f"招考信息爬取完成: 新增 {total} 条")
+        logger.info(f"招考信息爬取完成: 更新 {total} 条")
         if failed_cats:
-            logger.warning(f"失败分类: {', '.join(failed_cats)}")
+            logger.warning(f"失败分类（保留旧数据）: {', '.join(failed_cats)}")
         logger.info("=" * 60)
 
     except Exception as e:

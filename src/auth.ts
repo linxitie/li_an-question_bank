@@ -145,12 +145,13 @@
    * @param {string} password 密码
    * @returns {Promise<{success: boolean, message: string}>}
    */
-  async function login(username: string, password: string) {
+  async function login(username: string, password: string, clientType?: string) {
     try {
-      // 使用 OAuth2 标准格式
+      // 使用 OAuth2 标准格式（clientType 用于三端分离：web/mobile/tablet，移动/平板端仅学生可登录）
       var formBody = new URLSearchParams();
       formBody.append('username', username);
       formBody.append('password', password);
+      if (clientType) formBody.append('client_type', clientType);
 
       var res = await fetch('/api/auth/login', {
         method: 'POST',

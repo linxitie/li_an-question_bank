@@ -454,13 +454,16 @@ def scrape_exams_from_shiyebian(db: Session) -> int:
 
 
 def cleanup_expired_exams(db: Session = None) -> int:
-    """硬删除注册已截止且超过1天的记录（优先使用 registration_end）"""
+    """清理注册已截止且超过 30 天的记录（优先使用 registration_end）。
+
+    原逻辑 1 天即清理，导致数据被过度清理（仅剩 4 条）；放宽到 30 天保留近期历史。
+    """
     from datetime import datetime as dt, timedelta
     own_db = db is None
     if own_db:
         db = SessionLocal()
     try:
-        cutoff = dt.now() - timedelta(days=1)
+        cutoff = dt.now() - timedelta(days=30)
         deleted = db.query(ExamCalendar).filter(
             (ExamCalendar.registration_end < cutoff) |
             ((ExamCalendar.registration_end == None) & (ExamCalendar.exam_date < cutoff))
