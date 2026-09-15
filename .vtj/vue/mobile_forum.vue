@@ -210,7 +210,7 @@ export default defineComponent({
         excerpt: '刚考完，趁记忆还热乎，分享一下我能记住的真题，供大家参考...',
         author: '刚考完',
         time: '1天前',
-        avatarBg: 'linear-gradient(135deg, #d4a843 0%, #b8941f 100%)',
+        avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
         tag: '热门',
         tagColor: '#f59e0b',
         views: 3456,

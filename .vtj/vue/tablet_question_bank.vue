@@ -133,7 +133,7 @@
                   :key="i" 
                   :icon="i <= question.difficulty ? StarFilled : Star" 
                   :size="12" 
-                  :color="i <= question.difficulty ? '#d4a843' : '#e8ecf1'"
+                  :color="i <= question.difficulty ? '#f59e0b' : '#e8ecf1'"
                 ></XIcon>
               </span>
             </div>
@@ -356,7 +356,7 @@ export default defineComponent({
         id: 3,
         title: '公安基础知识：人民警察法',
         type: '多选题',
-        typeColor: '#d4a843',
+        typeColor: '#f59e0b',
         difficulty: 2,
         count: 30,
         time: 45,

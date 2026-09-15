@@ -319,7 +319,7 @@ export default defineComponent({
         excerpt: '刚考完，趁记忆还热乎，分享一下我能记住的真题，供大家参考...',
         author: '刚考完',
         time: '1天前',
-        avatarBg: 'linear-gradient(135deg, #d4a843 0%, #b8941f 100%)',
+        avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
         tag: '热门',
         tagColor: '#f59e0b',
         views: 3456,
@@ -356,7 +356,7 @@ export default defineComponent({
     const activeUsers = ref([
       { name: '上岸学姐', posts: 28, avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)' },
       { name: '学霸笔记', posts: 22, avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' },
-      { name: '刚考完', posts: 15, avatarBg: 'linear-gradient(135deg, #d4a843 0%, #b8941f 100%)' }
+      { name: '刚考完', posts: 15, avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }
     ]);
     
     // 过滤帖子

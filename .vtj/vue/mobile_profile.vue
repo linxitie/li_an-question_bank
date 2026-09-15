@@ -54,7 +54,7 @@
             <span class="data-label">错题本</span>
           </div>
           <div class="data-card" @click="goToCollection">
-            <XIcon :icon="Star" :size="24" color="#d4a843"></XIcon>
+            <XIcon :icon="Star" :size="24" color="#f59e0b"></XIcon>
             <span class="data-value">{{ collectionCount }}</span>
             <span class="data-label">收藏</span>
           </div>
@@ -76,7 +76,7 @@
         <div class="menu-list">
           <div class="menu-item" @click="goToAchievements">
             <div class="menu-icon">
-              <XIcon :icon="Trophy" :size="20" color="#d4a843"></XIcon>
+              <XIcon :icon="Trophy" :size="20" color="#f59e0b"></XIcon>
             </div>
             <span class="menu-name">我的成就</span>
             <XIcon :icon="ArrowRight" :size="16" color="#8899aa"></XIcon>

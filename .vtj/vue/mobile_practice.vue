@@ -39,7 +39,7 @@
           <div class="stat-divider"></div>
           <div class="stat-item">
             <div class="stat-icon">
-              <XIcon :icon="Clock" :size="24" color="#d4a843"></XIcon>
+              <XIcon :icon="Clock" :size="24" color="#f59e0b"></XIcon>
             </div>
             <div class="stat-info">
               <span class="stat-value">{{ studyTime }}</span>
@@ -225,7 +225,7 @@ export default defineComponent({
         name: '公安基础知识',
         desc: '正确率 82% | 用时 30分钟',
         icon: Cpu,
-        iconBg: 'linear-gradient(135deg, #d4a843 0%, #b8941f 100%)'
+        iconBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
       }
     ]);
     

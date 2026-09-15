@@ -122,7 +122,7 @@
 
         <!-- 每日金句 -->
         <div class="quote-card">
-          <XIcon :icon="ChatDotRound" :size="24" color="#d4a843" class="quote-icon"></XIcon>
+          <XIcon :icon="ChatDotRound" :size="24" color="#f59e0b" class="quote-icon"></XIcon>
           <p class="quote-text">{{ dailyQuote }}</p>
           <p class="quote-author">—— {{ quoteAuthor }}</p>
         </div>
