@@ -19,7 +19,7 @@ import hashlib
 
 from .config import settings
 from .database import get_db
-from ..models.models import SysUser
+from ..models.models import SysUser, SysConfig
 
 
 class UserRole(str, Enum):
@@ -157,6 +157,45 @@ def get_user_permissions(user: SysUser) -> List[Permission]:
         return []
     perms = list(ROLE_PERMISSIONS.get(user_role, []))
     # 超级管理员 (role_level >= 3) 追加数据备份权限
+    if user.role_level >= 3:
+        for p in SUPER_ADMIN_PERMISSIONS:
+            if p not in perms:
+                perms.append(p)
+    return perms
+
+
+def get_user_permissions_with_db(user: SysUser, db: Session) -> List[Permission]:
+    """获取用户完整权限列表（优先读 SysConfig 自定义配置，无则回退硬编码默认）
+
+    权限编辑功能（PUT /api/admin/permissions）将自定义权限写入 SysConfig 的
+    role_permissions_{role} 键。此函数在运行时读取该配置，使编辑真正生效。
+    未编辑过的角色回退到 ROLE_PERMISSIONS 硬编码默认值，保证向后兼容。
+    """
+    import json as _json
+    try:
+        user_role = UserRole(user.user_type)
+    except ValueError:
+        return []
+
+    # 1) 读取 SysConfig 自定义权限配置
+    custom_perms: List[Permission] = []
+    try:
+        config = db.query(SysConfig).filter(
+            SysConfig.config_key == f"role_permissions_{user.user_type}"
+        ).first()
+        if config and config.config_value:
+            perm_values = _json.loads(config.config_value)
+            custom_perms = [Permission(v) for v in perm_values if v in Permission._value2member_map_]
+    except Exception:
+        custom_perms = []
+
+    # 2) 有自定义配置则用自定义，否则回退硬编码默认
+    if custom_perms:
+        perms = custom_perms
+    else:
+        perms = list(ROLE_PERMISSIONS.get(user_role, []))
+
+    # 3) 超级管理员 (role_level >= 3) 始终追加数据备份权限（不可被编辑移除）
     if user.role_level >= 3:
         for p in SUPER_ADMIN_PERMISSIONS:
             if p not in perms:
