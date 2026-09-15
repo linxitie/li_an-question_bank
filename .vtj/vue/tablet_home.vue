@@ -378,8 +378,8 @@ export default defineComponent({
     const viewMoreTrend = () => {};
     const viewAllNews = () => router.push('/tablet/news');
     const viewNews = (news: any) => router.push(`/tablet/news/${news.id}`);
-    const viewAllRecruit = () => router.push('/recruit');
-    const viewRecruit = (recruit: any) => router.push('/recruit');
+    const viewAllRecruit = () => router.push('/tablet/recruit');
+    const viewRecruit = (recruit: any) => router.push('/tablet/recruit');
     const startQuickPractice = () => router.push('/practice');
     const goToSmartExam = () => router.push('/smart-exam');
     const goToQuestionBank = () => router.push('/question-bank');

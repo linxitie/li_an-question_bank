@@ -319,6 +319,18 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/mobile_student_papers.vue'),
     meta: { platform: 'tablet' }
   },
+  {
+    path: '/tablet/recruit',
+    name: 'TabletRecruitment',
+    component: () => import('@/views/mobile_recruitment.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/calendar',
+    name: 'TabletCalendar',
+    component: () => import('@/views/mobile_calendar.vue'),
+    meta: { platform: 'tablet' }
+  },
 
   // ==================== 手机端路由 ====================
   {
@@ -367,6 +379,18 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/student-papers',
     name: 'MobileStudentPapers',
     component: () => import('@/views/mobile_student_papers.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/recruit',
+    name: 'MobileRecruitment',
+    component: () => import('@/views/mobile_recruitment.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/calendar',
+    name: 'MobileCalendar',
+    component: () => import('@/views/mobile_calendar.vue'),
     meta: { platform: 'mobile' }
   },
   {
