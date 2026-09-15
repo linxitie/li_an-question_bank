@@ -58,3 +58,7 @@ backend/app/static/questions/
 *.db-wal
 *.db-shm
 *.db.backup
+
+# 运行时/会话元数据与嵌套技能仓库（不纳入版本控制）
+.omo/run-continuation/
+.claude/资源优化skills
