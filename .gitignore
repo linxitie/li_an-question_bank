@@ -13,7 +13,7 @@ lerna-debug.log*
 .idea
 .DS_Store
 *.suo
-*.ntvs*
+*.ntvsproj
 *.njsproj
 *.sln
 *.sw?
@@ -59,6 +59,6 @@ backend/app/static/questions/
 *.db-shm
 *.db.backup
 
-# ÔËĞĞÊ±/»á»°ÔªÊı¾İÓëÇ¶Ì×¼¼ÄÜ²Ö¿â£¨²»ÄÉÈë°æ±¾¿ØÖÆ£©
+# è¿è¡Œæ—¶/ä¼šè¯å…ƒæ•°æ®ä¸åµŒå¥—æŠ€èƒ½ä»“åº“ï¼ˆä¸çº³å…¥ç‰ˆæœ¬æ§åˆ¶ï¼‰
 .omo/run-continuation/
-.claude/×ÊÔ´ÓÅ»¯skills
+.claude/èµ„æºä¼˜åŒ–skills
