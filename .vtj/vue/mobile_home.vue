@@ -270,6 +270,8 @@ export default defineComponent({
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') loadData();
       });
+      // 后端 WebSocket 广播 sync 事件时刷新（实时同步）
+      window.addEventListener('__VTJ_SYNC__', loadData);
     });
 
     // 导航方法

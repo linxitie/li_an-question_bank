@@ -175,6 +175,7 @@
         username: username,
         loginTime: Date.now()
       });
+      initSyncSocket();
       return { success: true, message: '登录成功' };
     } catch (e: any) {
       return { success: false, message: '网络错误: ' + (e.message || '连接失败') };
@@ -193,6 +194,7 @@
       username: username || '',
       loginTime: Date.now()
     });
+    initSyncSocket();
     return { success: true, message: '登录成功' };
   }
 
@@ -202,6 +204,58 @@
   function logout() {
     localStorage.removeItem(STORAGE_KEY);
     _authPromise = null;
+    closeSyncSocket();
+  }
+
+  var _syncSocket: WebSocket | null = null;
+  var _syncReconnectTimer: number | null = null;
+
+  /**
+   * 建立 WebSocket 同步连接（三端实时同步）
+   * 后端数据更新（爬取完成）后广播 sync 事件，前端监听后触发 __VTJ_SYNC__ 全局事件，
+   * 各页面监听该事件刷新数据。
+   */
+  function initSyncSocket() {
+    var state = getState();
+    if (!state.token || isTokenExpired(state)) return;
+    if (_syncSocket && (_syncSocket.readyState === 0 || _syncSocket.readyState === 1)) return;
+
+    var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var url = proto + '//' + window.location.host + '/ws/connect?token=' + encodeURIComponent(state.token);
+
+    try {
+      _syncSocket = new WebSocket(url);
+    } catch (e) {
+      _syncSocket = null;
+      return;
+    }
+
+    _syncSocket.onmessage = function (ev: any) {
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg && msg.type === 'sync') {
+          window.dispatchEvent(new CustomEvent('__VTJ_SYNC__', { detail: msg }));
+        }
+      } catch (e) { /* 忽略非 JSON 消息 */ }
+    };
+
+    _syncSocket.onclose = function () {
+      _syncSocket = null;
+      if (_syncReconnectTimer) clearTimeout(_syncReconnectTimer);
+      _syncReconnectTimer = window.setTimeout(function () {
+        if (isLoggedIn()) initSyncSocket();
+      }, 10000);
+    };
+
+    _syncSocket.onerror = function () { /* onclose 会随之触发 */ };
+  }
+
+  function closeSyncSocket() {
+    if (_syncReconnectTimer) { clearTimeout(_syncReconnectTimer); _syncReconnectTimer = null; }
+    if (_syncSocket) {
+      try { _syncSocket.close(); } catch (e) {}
+      _syncSocket = null;
+    }
   }
 
   /**
@@ -378,7 +432,15 @@
     hasPermission: hasPermission,
     getRoleLevel: getRoleLevel,
     parseUserInfo: parseUserInfo,
+    // 三端实时同步
+    initSyncSocket: initSyncSocket,
+    closeSyncSocket: closeSyncSocket,
   };
+
+  // 页面加载时若已登录，自动建立同步连接
+  if (isLoggedIn()) {
+    initSyncSocket();
+  }
 
 })();
 

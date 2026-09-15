@@ -30,6 +30,15 @@ from .exceptions import register_exception_handlers, ExceptionHandlers, create_e
 from .middleware import setup_middlewares, RequestLoggingMiddleware, RateLimitMiddleware, CircuitBreakerMiddleware
 from .monitoring import metrics_collector, get_system_metrics, PerformanceMonitor
 
+import sys
+import io
+
+# 强制标准输出/错误流使用 UTF-8 编码
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 
 
 
@@ -39,8 +48,8 @@ logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(settings.LOG_FILE),
-        logging.StreamHandler()
+        logging.FileHandler(settings.LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)  # 使用已设置的UTF-8编码的stdout
     ]
 )
 
@@ -139,6 +148,17 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE knowledge_point ADD COLUMN sub_category_id INTEGER REFERENCES sub_categories(id)"))
                     conn.commit()
                 logger.info("自动迁移: knowledge_point 添加列 sub_category_id")
+
+        # 检查 study_material 表(备考资料:新增 content_hash 去重字段)
+        # 根因: 模型定义了 content_hash 但历史数据库表缺该列，导致 admin_list 的 count() 查询
+        #       触发 "no such column: study_material.content_hash" → 500 错误
+        if 'study_material' in inspector.get_table_names():
+            sm_cols = [c['name'] for c in inspector.get_columns('study_material')]
+            if 'content_hash' not in sm_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE study_material ADD COLUMN content_hash VARCHAR(64)"))
+                    conn.commit()
+                logger.info("自动迁移: study_material 添加列 content_hash")
 
         # 检查并修复双编码JSON options（99条历史数据）
         if 'question_bank' in inspector.get_table_names():
@@ -374,7 +394,10 @@ async def lifespan(app: FastAPI):
 
     # 启动定时任务调度器（新闻/招考/考试日历爬取）
     try:
-        from .services.scheduler import init_scheduler
+        import asyncio as _asyncio
+        from .services.scheduler import init_scheduler, set_main_loop
+        # 传递主事件循环引用，供调度器跨线程广播 WebSocket 同步事件
+        set_main_loop(_asyncio.get_running_loop())
         init_scheduler()
         logger.info("定时任务调度器已启动")
     except Exception as e:

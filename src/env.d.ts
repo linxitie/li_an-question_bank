@@ -50,6 +50,8 @@ declare global {
       hasPermission: (permission: string) => boolean;
       getRoleLevel: () => number;
       parseUserInfo: () => { role: string | null; roleLevel: number; permissions: string[]; userId?: number | null };
+      initSyncSocket: () => void;
+      closeSyncSocket: () => void;
     };
   }
 }

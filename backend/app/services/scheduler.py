@@ -14,6 +14,37 @@ CST = timezone(timedelta(hours=8))
 
 scheduler = BackgroundScheduler(timezone=CST, job_defaults={"misfire_grace_time": 300})
 
+# ========== 主事件循环引用（供跨线程 WebSocket 广播） ==========
+# scheduler 运行在独立线程，WebSocket 对象绑定在 FastAPI 主事件循环，
+# 跨线程广播必须通过 run_coroutine_threadsafe 提交到主循环。
+_main_loop = None
+
+
+def set_main_loop(loop):
+    """由 main.py 的 lifespan 调用，传入主事件循环引用"""
+    global _main_loop
+    _main_loop = loop
+
+
+def _broadcast_sync(message: str = "sync"):
+    """数据更新后广播同步事件，通知前端刷新（跨线程安全）"""
+    global _main_loop
+    if _main_loop is None:
+        return
+    try:
+        import asyncio
+        from ..api.v1.websocket import ws_connection_manager
+        payload = {
+            "type": "sync",
+            "data": {"message": message},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        asyncio.run_coroutine_threadsafe(
+            ws_connection_manager.broadcast_all(payload), _main_loop
+        )
+    except Exception as e:
+        logger.warning(f"广播同步事件失败: {e}")
+
 
 def init_scheduler():
     """初始化并启动定时任务调度器"""
@@ -22,23 +53,36 @@ def init_scheduler():
     from .exam_scraper import scrape_all_exams
     from .difficulty import update_all_difficulties
 
+    # 包装：爬取完成后广播同步事件（通知前端刷新）
+    def _news_with_broadcast():
+        scrape_all_news()
+        _broadcast_sync("新闻更新")
+
+    def _recruitment_with_broadcast():
+        scrape_all_recruitment()
+        _broadcast_sync("招考信息更新")
+
+    def _exams_with_broadcast():
+        scrape_all_exams()
+        _broadcast_sync("考试日历更新")
+
     # 每日 24:00（北京时间）执行爬取
     scheduler.add_job(
-        scrape_all_news,
+        _news_with_broadcast,
         trigger=CronTrigger(hour=0, minute=0, timezone=CST),
         id="scrape_news",
         name="每日新闻爬取",
         replace_existing=True
     )
     scheduler.add_job(
-        scrape_all_recruitment,
+        _recruitment_with_broadcast,
         trigger=CronTrigger(hour=0, minute=5, timezone=CST),
         id="scrape_recruitment",
         name="招考信息爬取",
         replace_existing=True
     )
     scheduler.add_job(
-        scrape_all_exams,
+        _exams_with_broadcast,
         trigger=CronTrigger(hour=0, minute=0, timezone=CST),
         id="scrape_exams",
         name="考试日历爬取+清理",
@@ -95,8 +139,7 @@ def init_scheduler():
             scrape_all_recruitment()
             scrape_all_exams()
             logger.info("首次全量爬取完成")
-        except Exception as e:
-            logger.error(f"首次爬取失败（服务继续运行）: {e}")
+        except Exception as e:            logger.error(f"首次爬取失败（服务继续运行）: {e}")
 
     scheduler.add_job(
         _initial_run,
