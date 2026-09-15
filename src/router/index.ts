@@ -307,6 +307,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/mobile_favorites.vue'),
     meta: { platform: 'tablet' }
   },
+  {
+    path: '/tablet/score-analysis',
+    name: 'TabletScoreAnalysis',
+    component: () => import('@/views/mobile_score_analysis.vue'),
+    meta: { platform: 'tablet' }
+  },
 
   // ==================== 手机端路由 ====================
   {
@@ -343,6 +349,12 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/favorites',
     name: 'MobileFavorites',
     component: () => import('@/views/mobile_favorites.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/score-analysis',
+    name: 'MobileScoreAnalysis',
+    component: () => import('@/views/mobile_score_analysis.vue'),
     meta: { platform: 'mobile' }
   },
   {
