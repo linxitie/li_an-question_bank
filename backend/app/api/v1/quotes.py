@@ -415,6 +415,14 @@ async def toggle_quote_favorite(
     )
     db.add(fav)
     db.commit()
+
+    # 触发金句收藏成就
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(current_user.user_id, "quote_favorite", db)
+    except Exception as e:
+        logger.warning(f"金句收藏成就判定失败: {e}")
+
     return {"favorited": True, "message": "已收藏"}
 
 
@@ -448,6 +456,14 @@ async def toggle_obsidian_quote_favorite(
     )
     db.add(fav)
     db.commit()
+
+    # 触发金句收藏成就
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(current_user.user_id, "quote_favorite", db)
+    except Exception as e:
+        logger.warning(f"金句收藏成就判定失败: {e}")
+
     return {"favorited": True, "message": "已收藏"}
 
 

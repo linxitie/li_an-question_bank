@@ -195,6 +195,13 @@ async def login_for_access_token(
     user.last_login = datetime.now()
     db.commit()
 
+    # 触发「初来乍到」成就（首次登录，幂等）
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(user.user_id, "sign_in", db)
+    except Exception as e:
+        logger.warning(f"首次登录成就判定失败: {e}")
+
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,

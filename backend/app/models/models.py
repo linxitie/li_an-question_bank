@@ -52,6 +52,12 @@ class SysUser(Base):
     school_id = Column(Integer, comment="所属学校/机构ID")
     device_sessions = Column(JSON, default=list, comment="设备会话列表")
 
+    # === 学生端「我的」模块新增字段 ===
+    growth_points = Column(Integer, default=0, comment="累计成长值(学习等级)")
+    settings = Column(JSON, comment="通知/隐私偏好JSON")
+    accuracy80_streak = Column(Integer, default=0, comment="连续练习正确率≥80%次数")
+    perfect_streak = Column(Integer, default=0, comment="连续练习全部答对次数")
+
     # 自引用关系：创建人
     creator = relationship("SysUser", remote_side=[user_id], foreign_keys=[created_by])
 
@@ -1635,3 +1641,70 @@ class MaterialDuplicateRecord(Base):
     duplicate_type = Column(String(20), comment="exact/fingerprint/semantic")
     status = Column(String(20), default="pending", comment="pending/confirmed/ignored")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+
+# ------------------------------
+# 学生端「我的」模块模型（成就/反馈）
+# ------------------------------
+
+class Achievement(Base):
+    """成就目录表"""
+    __tablename__ = "achievement"
+
+    achievement_id = Column(Integer, primary_key=True, autoincrement=True, comment="成就ID")
+    category = Column(String(32), nullable=False, comment="分类: 坚持/数量/正确率/错题/社交/综合")
+    name = Column(String(50), nullable=False, comment="成就名称")
+    icon = Column(String(16), default="", comment="图标(emoji)")
+    condition_desc = Column(String(200), nullable=False, comment="获得条件描述")
+    reward_coins = Column(Integer, default=0, comment="奖励金币")
+    trigger_type = Column(String(32), nullable=False, comment="触发类型")
+    condition_code = Column(String(32), nullable=False, comment="判定条件码")
+    threshold = Column(Integer, default=0, comment="条件阈值")
+    extra = Column(String(32), comment="附加参数")
+    sort_order = Column(Integer, default=0, comment="排序")
+
+    __table_args__ = (
+        Index("idx_achievement_category", category),
+        Index("idx_achievement_trigger", trigger_type),
+    )
+
+
+class UserAchievement(Base):
+    """用户成就表（幂等核心：唯一约束）"""
+    __tablename__ = "user_achievement"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    achievement_id = Column(Integer, ForeignKey("achievement.achievement_id"), nullable=False, comment="成就ID")
+    obtained_at = Column(DateTime, default=datetime.now, comment="获得时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "achievement_id", name="uk_user_achievement"),
+        Index("idx_user_achievement_user", user_id),
+    )
+
+
+class UserFeedback(Base):
+    """用户意见反馈表"""
+    __tablename__ = "user_feedback"
+
+    feedback_id = Column(Integer, primary_key=True, autoincrement=True, comment="反馈ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="提交人ID")
+    category = Column(String(32), nullable=False, comment="分类: 功能异常/内容错误/意见建议/其他")
+    content = Column(Text, nullable=False, comment="反馈内容")
+    contact = Column(String(100), comment="联系方式(可选)")
+    status = Column(String(20), default="pending", comment="状态: pending/processing/replied/closed")
+    reply = Column(Text, comment="管理员/教师回复")
+    reply_by = Column(BigInteger, comment="回复人ID")
+    replied_at = Column(DateTime, comment="回复时间")
+    created_at = Column(DateTime, default=datetime.now, comment="提交时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_feedback_user", user_id),
+        Index("idx_feedback_status", status),
+        Index("idx_feedback_created", created_at),
+    )

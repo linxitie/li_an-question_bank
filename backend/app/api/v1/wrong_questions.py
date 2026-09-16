@@ -80,6 +80,13 @@ async def get_wrong_questions(
             'note': wq.note,
         })
 
+    # 触发「直面错误」成就（首次查看错题集）
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(current_user.user_id, "view_wrong", db)
+    except Exception as e:
+        logger.warning(f"查看错题成就判定失败: {e}")
+
     return {'total': total, 'page': page, 'page_size': page_size, 'items': result}
 
 
@@ -402,6 +409,13 @@ async def chop_question(
     from datetime import timedelta
     wq.auto_delete_time = datetime.now() + timedelta(days=10)
     db.commit()
+
+    # 触发斩题成就
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(current_user.user_id, "chop", db)
+    except Exception as e:
+        logger.warning(f"斩题成就判定失败: {e}")
 
     return {"message": "已斩题，10天后自动删除", "wrong_id": wrong_id, "auto_delete_time": wq.auto_delete_time.isoformat()}
 
@@ -730,6 +744,13 @@ async def submit_review(
         })
 
     db.commit()
+
+    # 触发错题重练成就
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(current_user.user_id, "review", db)
+    except Exception as e:
+        logger.warning(f"错题重练成就判定失败: {e}")
 
     return {
         'total': len(answers),

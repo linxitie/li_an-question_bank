@@ -132,6 +132,14 @@ async def create_or_update_note(
         db.add(note)
         db.commit()
         db.refresh(note)
+
+        # 触发笔记成就
+        try:
+            from ...services import achievement_service
+            achievement_service.check_and_grant(current_user.user_id, "note", db)
+        except Exception as e:
+            logger.warning(f"笔记成就判定失败: {e}")
+
         return {"note_id": f"q_{note.note_id}", "message": "笔记已创建", "created": True}
 
     elif note_type == "news":
@@ -166,6 +174,14 @@ async def create_or_update_note(
         db.add(note)
         db.commit()
         db.refresh(note)
+
+        # 触发笔记成就
+        try:
+            from ...services import achievement_service
+            achievement_service.check_and_grant(current_user.user_id, "note", db)
+        except Exception as e:
+            logger.warning(f"笔记成就判定失败: {e}")
+
         return {"note_id": f"n_{note.note_id}", "message": "笔记已创建", "created": True}
 
     else:

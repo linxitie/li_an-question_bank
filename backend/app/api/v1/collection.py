@@ -96,6 +96,14 @@ async def toggle_favorite(
         db.add(fav)
         db.commit()
         db.refresh(fav)
+
+        # 触发收藏成就
+        try:
+            from ...services import achievement_service
+            achievement_service.check_and_grant(current_user.user_id, "favorite", db)
+        except Exception as e:
+            logger.warning(f"收藏成就判定失败: {e}")
+
         return {"favorited": True, "message": "已收藏", "fav_id": f"q_{fav.fav_id}"}
 
     elif fav_type == "news":

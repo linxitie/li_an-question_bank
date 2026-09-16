@@ -18,9 +18,45 @@ from ...models.models import (
     WrongQuestionPersonal, SmartExamRecord, ExamRecord, ExamAnswerDetail,
     YearPaper, ExamPaper, KnowledgePoint, QuestionKnowledge, SubCategory
 )
+from ...services.growth_service import add_growth, GROWTH_RULES
 
 router = APIRouter(prefix="/api/practice", tags=["练习记录"])
 logger = logging.getLogger(__name__)
+
+
+def _after_practice(user_id: int, db: Session, total: int, correct: int) -> list:
+    """练习后处理：成长值 + 会话正确率streak + 成就判定。返回 newly_unlocked。"""
+    user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
+    if not user:
+        return []
+
+    # 成长值（对+2 错+1）
+    wrong = total - correct
+    add_growth(db, user, GROWTH_RULES["correct_answer"] * correct)
+    add_growth(db, user, GROWTH_RULES["wrong_answer"] * wrong)
+
+    # 会话正确率 streak 更新（连续≥80% / 连续全对）
+    if total > 0:
+        accuracy = correct / total * 100
+        if accuracy >= 80:
+            user.accuracy80_streak = (user.accuracy80_streak or 0) + 1
+        else:
+            user.accuracy80_streak = 0
+        if correct == total:
+            user.perfect_streak = (user.perfect_streak or 0) + 1
+        else:
+            user.perfect_streak = 0
+    db.commit()
+
+    # 成就判定
+    try:
+        from ...services import achievement_service
+        return achievement_service.check_and_grant(
+            user_id, "do_question", db, session={"total": total, "correct": correct}
+        )
+    except Exception as e:
+        logger.warning(f"做题成就判定失败: {e}")
+        return []
 
 
 def _auto_record_wrong(user_id: int, question_id: int, subject_id: int, db: Session) -> str:
@@ -108,7 +144,8 @@ async def record_practice(
                           subject_id or (question.subject_id if question else None), db)
         db.commit()
 
-    return {"status": "ok", "record_id": record.record_id}
+    newly = _after_practice(current_user.user_id, db, 1, 1 if is_correct else 0)
+    return {"status": "ok", "record_id": record.record_id, "newly_unlocked": newly}
 
 
 @router.post("/batch-record", summary="批量记录练习行为")
@@ -158,7 +195,9 @@ async def batch_record_practice(
                               subject_id or (question.subject_id if question else None), db)
 
     db.commit()
-    return {"status": "ok", "count": count}
+    correct = sum(1 for i in records_data if i.get("is_correct", False))
+    newly = _after_practice(current_user.user_id, db, len(records_data), correct)
+    return {"status": "ok", "count": count, "newly_unlocked": newly}
 
 
 @router.get("/records", summary="查询练习记录")

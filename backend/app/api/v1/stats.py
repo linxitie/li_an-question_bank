@@ -12,10 +12,13 @@ from ...models.models import (
     ExamRecord,
     DailyCheckin,
     StudyGoal,
-    SysUser
+    SysUser,
+    CoinRecord
 )
 
 from ...core.security import get_current_user, get_optional_user
+from ...services import growth_service
+from ...services.growth_service import add_growth, get_level_info, GROWTH_RULES
 
 router = APIRouter(prefix="/api/stats",tags=["学习统计"])
 logger = logging.getLogger(__name__)
@@ -122,6 +125,15 @@ async def get_study_stats(
         "completedGoals": completed_goals,
         "goalCompletionRate": round(completed_goals / total_goals * 100, 1) if total_goals > 0 else 0,
     }
+
+
+@router.get("/level", response_model=Dict[str, Any], summary="学习等级与成长值")
+async def get_level(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """返回当前学习等级、称号、成长值、进度"""
+    return get_level_info(current_user.growth_points or 0)
 
 
 @router.get("/weekly", response_model=Dict[str, Any], summary="每周学习统计")
@@ -447,6 +459,11 @@ def ensure_daily_checkin(user_id: int, db: Session) -> bool:
 
     total_days = (user.total_checkin_days or 0) + 1
 
+    # 计算金币奖励：基础5币 + 连续满7天额外20币
+    base_coins = 5
+    streak_bonus = 20 if (continuous_days % 7 == 0) else 0
+    coin_reward = base_coins + streak_bonus
+
     # 创建签到记录
     checkin = DailyCheckin(
         user_id=user_id,
@@ -455,17 +472,38 @@ def ensure_daily_checkin(user_id: int, db: Session) -> bool:
         continuous_days=continuous_days,
         total_days=total_days,
         has_makeup=0,
-        coin_reward=0,
-        streak_bonus=0
+        coin_reward=coin_reward,
+        streak_bonus=streak_bonus
     )
     db.add(checkin)
 
-    # 更新用户签到统计
+    # 更新用户签到统计 + 发放金币
     user.continuous_checkin_days = continuous_days
     user.total_checkin_days = total_days
+    if coin_reward > 0:
+        user.total_coins = (user.total_coins or 0) + coin_reward
+        db.add(CoinRecord(
+            user_id=user_id,
+            coin_change=coin_reward,
+            current_balance=user.total_coins,
+            transaction_type="GAIN",
+            source_type="CHECKIN",
+            description="每日签到奖励" + (f"（连续{continuous_days}天）" if streak_bonus else ""),
+        ))
+    # 成长值
+    add_growth(db, user, GROWTH_RULES["checkin"])
+    if streak_bonus:
+        add_growth(db, user, GROWTH_RULES["checkin_7day"])
     db.commit()
 
-    logger.info(f"自动签到成功: user_id={user_id}, 连续{continuous_days}天")
+    # 触发成就判定（学习坚持类）
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(user_id, "sign_in", db)
+    except Exception as e:
+        logger.warning(f"签到成就判定失败: {e}")
+
+    logger.info(f"自动签到成功: user_id={user_id}, 连续{continuous_days}天, 奖励{coin_reward}金币")
     return True
 
 

@@ -291,6 +291,13 @@ async def create_post(
 
     logger.info(f"用户 {current_user.user_id} 发布帖子 {post.post_id}")
 
+    # 触发社交成就
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(current_user.user_id, "post", db)
+    except Exception as e:
+        logger.warning(f"发帖成就判定失败: {e}")
+
     # 4. 返回完整数据(前端 unshift 到列表头)
     return _serialize_post(post, current_user, liked=False, content_full=True)
 
@@ -361,6 +368,14 @@ async def toggle_post_like(
         liked = True
 
     db.commit()
+
+    # 触发社交成就（被点赞者：获赞/热门楼主）
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(post.user_id, "post", db)
+    except Exception as e:
+        logger.warning(f"点赞成就判定失败: {e}")
+
     return {"liked": liked, "likeCount": post.like_count}
 
 
@@ -478,6 +493,13 @@ async def create_comment(
     db.commit()
     db.refresh(comment)
 
+    # 触发社交成就（评论计数）
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(current_user.user_id, "post", db)
+    except Exception as e:
+        logger.warning(f"评论成就判定失败: {e}")
+
     return _serialize_comment(comment, current_user, liked=False)
 
 
@@ -513,6 +535,14 @@ async def toggle_comment_like(
         liked = True
 
     db.commit()
+
+    # 触发社交成就（被点赞的评论作者）
+    try:
+        from ...services import achievement_service
+        achievement_service.check_and_grant(comment.user_id, "post", db)
+    except Exception as e:
+        logger.warning(f"评论点赞成就判定失败: {e}")
+
     return {"liked": liked, "likeCount": comment.like_count}
 
 

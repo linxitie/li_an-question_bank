@@ -21,7 +21,7 @@ from .api.v1 import quotes
 from .api.v1 import materials
 from .api.v1 import auth_qrcode
 from .api.v1 import devices
-# from .api.v1 import wrong_questions, checkin, coins  # TODO: 待创建
+from .api.v1 import coins, achievements, feedback
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
 from .api.v1.question_import import router as question_import_router
@@ -74,10 +74,36 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("数据库表初始化完成")
 
+    # 初始化成就目录（幂等）
+    try:
+        from .services import achievement_service
+        _db = SessionLocal()
+        try:
+            achievement_service.seed_achievements(_db)
+        finally:
+            _db.close()
+    except Exception as e:
+        logger.warning(f"成就目录初始化失败: {e}")
+
     # 自动检测并添加缺失列（解决create_all不支持ALTER TABLE的问题）
     try:
         from sqlalchemy import inspect, text
         inspector = inspect(engine)
+
+        # 检查 sys_user 表（学生端「我的」模块新增字段）
+        if 'sys_user' in inspector.get_table_names():
+            user_cols = [c['name'] for c in inspector.get_columns('sys_user')]
+            for col_name, col_type in [
+                ('growth_points', 'INTEGER DEFAULT 0'),
+                ('settings', 'JSON'),
+                ('accuracy80_streak', 'INTEGER DEFAULT 0'),
+                ('perfect_streak', 'INTEGER DEFAULT 0'),
+            ]:
+                if col_name not in user_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(f"ALTER TABLE sys_user ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+                    logger.info(f"自动迁移: sys_user 添加列 {col_name}")
 
         # 检查 exam_calendar 表
         if 'exam_calendar' in inspector.get_table_names():
@@ -511,6 +537,10 @@ app.include_router(admin_approval.router, tags=["管理员端-试卷审批"])
 app.include_router(teacher_api.router, tags=["教师端"])
 app.include_router(auth_qrcode.router, tags=["二维码登录"])
 app.include_router(devices.router, tags=["设备管理"])
+app.include_router(coins.router, tags=["金币"])
+app.include_router(achievements.router, tags=["成就"])
+app.include_router(feedback.router, tags=["意见反馈"])
+app.include_router(feedback.admin_router, tags=["反馈管理"])
 
 @app.get("/health", tags=["系统"])
 async def health_check():
