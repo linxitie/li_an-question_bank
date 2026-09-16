@@ -63,3 +63,4 @@ backend/app/static/questions/
 .omo/run-continuation/
 .claude/资源优化skills
 backend/backend_pid.txt
+backend/_badge_write_test.txt
