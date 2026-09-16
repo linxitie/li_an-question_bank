@@ -209,7 +209,7 @@ async function saveProfile() {
 }
 
 async function loadDevices() {
-  const data = await apiGet('/api/auth/devices');
+  const data = await apiGet('/api/auth/devices/');
   devices.value = (data.devices || []).map((d: any) => ({
     ...d,
     is_current: !!d.is_current,

@@ -1673,7 +1673,7 @@ class UserAchievement(Base):
     """用户成就表（幂等核心：唯一约束）"""
     __tablename__ = "user_achievement"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="记录ID")
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     achievement_id = Column(Integer, ForeignKey("achievement.achievement_id"), nullable=False, comment="成就ID")
     obtained_at = Column(DateTime, default=datetime.now, comment="获得时间")
