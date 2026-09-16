@@ -233,14 +233,37 @@ export default defineComponent({
         if (auth && auth.isLoggedIn()) {
           const uname = auth.getUsername();
           if (uname) userName.value = uname;
-          // 学习统计（/api/stats/ 返回今日/本周刷题量、正确率等）
+          // 学习统计（/api/stats/ 返回今日/本周刷题量、正确率、学习时长、连续签到等）
           const res = await fetch('/api/stats/', { headers: auth.getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
             todayCount.value = data.todayQuestions || 0;
             weekCount.value = data.weeklyQuestions || 0;
             accuracy.value = data.accuracyRate || 0;
+            studyHours.value = data.totalStudyHours || 0;
+            streakDays.value = data.streak || 0;
           }
+          // 练习趋势（周图表数据，替换硬编码）
+          const tRes = await fetch('/api/stats/practice-trend?days=7', { headers: auth.getAuthHeaders() });
+          if (tRes.ok) {
+            const tData = await tRes.json();
+            if (tData.trend && tData.trend.length) {
+              const dayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+              weekData.value = tData.trend.map((d: any) => ({
+                label: dayLabels[new Date(d.date).getDay()] || '',
+                count: d.questionsDone || 0
+              }));
+            }
+          }
+          // 学习目标（今日目标，替换硬编码）
+          try {
+            const gRes = await fetch('/api/goals/stats/summary', { headers: auth.getAuthHeaders() });
+            if (gRes.ok) {
+              const gData = await gRes.json();
+              dailyGoal.value = gData.total_goals || 40;
+              dailyCompleted.value = gData.completed_goals || 0;
+            }
+          } catch (e) { /* 目标接口失败不影响主流程 */ }
         }
         // 每日金句（公开接口）
         const qRes = await fetch('/api/quotes/quote/daily');
@@ -280,7 +303,7 @@ export default defineComponent({
     };
 
     const goToNotifications = () => {
-      router.push('/notifications');
+      router.push('/mobile/notifications');
     };
 
     const viewMoreTrend = () => {
@@ -298,11 +321,11 @@ export default defineComponent({
     const switchTab = (tab: string) => {
       activeTab.value = tab;
       const tabRoutes: Record<string, string> = {
-        home: '/',
-        question: '/question-bank',
-        practice: '/practice',
-        forum: '/forum',
-        profile: '/profile'
+        home: '/mobile/home',
+        question: '/mobile/question-bank',
+        practice: '/mobile/practice',
+        forum: '/mobile/forum',
+        profile: '/mobile/profile'
       };
       router.push(tabRoutes[tab] || '/');
     };

@@ -363,6 +363,36 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/mobile_materials.vue'),
     meta: { platform: 'tablet' }
   },
+  {
+    path: '/tablet/notifications',
+    name: 'TabletNotifications',
+    component: () => import('@/views/mobile_notifications.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/answer',
+    name: 'TabletAnswer',
+    component: () => import('@/views/mobile_answer.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/notes',
+    name: 'TabletNotes',
+    component: () => import('@/views/mobile_notes.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/forum/create',
+    name: 'TabletForumCreate',
+    component: () => import('@/views/mobile_forum_create.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
+    path: '/tablet/forum/:id',
+    name: 'TabletForumDetail',
+    component: () => import('@/views/mobile_forum_detail.vue'),
+    meta: { platform: 'tablet' }
+  },
 
   // ==================== 手机端路由 ====================
   {
@@ -459,6 +489,36 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/profile',
     name: 'MobileProfile',
     component: () => import('$vtj/vue/mobile_profile.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/notes',
+    name: 'MobileNotes',
+    component: () => import('@/views/mobile_notes.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/answer',
+    name: 'MobileAnswer',
+    component: () => import('@/views/mobile_answer.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/notifications',
+    name: 'MobileNotifications',
+    component: () => import('@/views/mobile_notifications.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/forum/create',
+    name: 'MobileForumCreate',
+    component: () => import('@/views/mobile_forum_create.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/forum/:id',
+    name: 'MobileForumDetail',
+    component: () => import('@/views/mobile_forum_detail.vue'),
     meta: { platform: 'mobile' }
   },
 

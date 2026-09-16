@@ -461,9 +461,9 @@ export default defineComponent({
     });
 
     // 方法
-    const goToNotifications = () => router.push('/notifications');
-    const goToSettings = () => router.push('/settings');
-    const goToProfile = () => router.push('/profile');
+    const goToNotifications = () => router.push('/tablet/notifications');
+    const goToSettings = () => router.push('/tablet/profile');
+    const goToProfile = () => router.push('/tablet/profile');
     
     const goToQuickPractice = () => router.push('/tablet/practice');
     const goToSmartExam = () => router.push('/smart-exam');
@@ -487,11 +487,11 @@ export default defineComponent({
     };
     
     const startPractice = (question: any) => {
-      router.push(`/practice/${question.id}`);
+      router.push('/tablet/answer');
     };
     
     const continuePractice = (item: any) => {
-      router.push(`/practice/${item.id}`);
+      router.push('/tablet/answer');
     };
     
     return {

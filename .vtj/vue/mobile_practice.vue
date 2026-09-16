@@ -242,6 +242,30 @@ export default defineComponent({
             studyTime.value = (data.totalStudyHours || 0) + 'h';
             dailyCompleted.value = data.todayQuestions || 0;
           }
+          // 学习目标（今日目标，替换硬编码）
+          try {
+            const gRes = await fetch('/api/goals/stats/summary', { headers: auth.getAuthHeaders() });
+            if (gRes.ok) {
+              const gData = await gRes.json();
+              dailyGoal.value = gData.total_goals || 40;
+            }
+          } catch (e) { /* 目标接口失败不影响主流程 */ }
+          // 最近练习（替换硬编码）
+          try {
+            const rRes = await fetch('/api/practice/recent-records?limit=3', { headers: auth.getAuthHeaders() });
+            if (rRes.ok) {
+              const rData = await rRes.json();
+              if (rData.items && rData.items.length) {
+                recentList.value = rData.items.map((it: any) => ({
+                  id: it.record_key || it.id,
+                  name: it.name || '练习',
+                  desc: (it.source || '') + (it.accuracy !== undefined ? ' · 正确率 ' + it.accuracy + '%' : ''),
+                  icon: EditPen,
+                  iconBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)'
+                }));
+              }
+            }
+          } catch (e) { /* 最近练习接口失败不影响主流程 */ }
         }
       } catch (error) {
         console.error('加载数据失败:', error);
@@ -252,37 +276,37 @@ export default defineComponent({
     const goBack = () => router.back();
     
     const goToQuickPractice = () => {
-      router.push('/practice/quick');
+      router.push('/mobile/answer');
     };
     
     const goToWeakPractice = () => {
-      router.push('/practice/weak');
+      router.push('/mobile/answer');
     };
     
     const goToSmartPractice = () => {
-      router.push('/practice/smart');
+      router.push('/mobile/answer');
     };
     
     const goToMockExam = () => {
-      router.push('/mock-exam');
+      router.push('/mobile/answer');
     };
     
     const viewAllRecent = () => {
-      router.push('/practice/history');
+      router.push('/mobile/profile');
     };
     
     const continuePractice = (item: any) => {
-      router.push(`/practice/${item.id}`);
+      router.push('/mobile/answer');
     };
     
     const switchTab = (tab: string) => {
       activeTab.value = tab;
       const tabRoutes: Record<string, string> = {
-        home: '/',
-        question: '/question-bank',
-        practice: '/practice',
-        forum: '/forum',
-        profile: '/profile'
+        home: '/mobile/home',
+        question: '/mobile/question-bank',
+        practice: '/mobile/practice',
+        forum: '/mobile/forum',
+        profile: '/mobile/profile'
       };
       router.push(tabRoutes[tab] || '/');
     };

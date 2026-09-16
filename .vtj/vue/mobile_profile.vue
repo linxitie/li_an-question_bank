@@ -245,13 +245,13 @@ export default defineComponent({
     const goToWrongQuestions = () => router.push('/mobile/wrong-questions');
     const goToCollection = () => router.push('/mobile/favorites');
     const goToHistory = () => router.push('/profile');
-    const goToNotes = () => router.push('/page/notes');
+    const goToNotes = () => router.push('/mobile/notes');
     
     const goToAchievements = () => router.push('/achievements');
-    const goToDownloads = () => router.push('/page/download_client');
+    const goToDownloads = () => router.push('/mobile/materials');
     const goToFeedback = () => router.push('/feedback');
     const goToHelp = () => router.push('/help');
-    const goToAbout = () => router.push('/page/about');
+    const goToAbout = () => router.push('/mobile/profile');
     
     const handleLogout = () => {
       if (window.__VTJ_AUTH__) window.__VTJ_AUTH__.logout();
@@ -261,11 +261,11 @@ export default defineComponent({
     const switchTab = (tab: string) => {
       activeTab.value = tab;
       const tabRoutes: Record<string, string> = {
-        home: '/',
-        question: '/question-bank',
-        practice: '/practice',
-        forum: '/forum',
-        profile: '/profile'
+        home: '/mobile/home',
+        question: '/mobile/question-bank',
+        practice: '/mobile/practice',
+        forum: '/mobile/forum',
+        profile: '/mobile/profile'
       };
       router.push(tabRoutes[tab] || '/');
     };

@@ -210,80 +210,7 @@ export default defineComponent({
     ]);
     
     // 题目列表
-    const questions = ref([
-      {
-        id: 1,
-        title: '2025年公安联考行测真题精选',
-        type: '单选题',
-        typeColor: '#1A365D',
-        difficulty: 3,
-        count: 50,
-        time: 60,
-        popular: 2345,
-        tags: ['行测', '真题', '高频'],
-        category: 'xc'
-      },
-      {
-        id: 2,
-        title: '申论写作：如何写好策论文',
-        type: '主观题',
-        typeColor: '#10b981',
-        difficulty: 4,
-        count: 20,
-        time: 120,
-        popular: 1892,
-        tags: ['申论', '写作', '技巧'],
-        category: 'sw'
-      },
-      {
-        id: 3,
-        title: '公安基础知识：人民警察法',
-        type: '多选题',
-        typeColor: '#f59e0b',
-        difficulty: 2,
-        count: 30,
-        time: 45,
-        popular: 1567,
-        tags: ['公安', '法律', '重点'],
-        category: 'jy'
-      },
-      {
-        id: 4,
-        title: '政治理论：习近平新时代中国特色社会主义思想',
-        type: '单选题',
-        typeColor: '#1A365D',
-        difficulty: 3,
-        count: 40,
-        time: 50,
-        popular: 2100,
-        tags: ['政治', '必考', '新大纲'],
-        category: 'zl'
-      },
-      {
-        id: 5,
-        title: '法律基础：宪法修正案解读',
-        type: '判断题',
-        typeColor: '#8b5cf6',
-        difficulty: 2,
-        count: 25,
-        time: 30,
-        popular: 1234,
-        tags: ['法律', '宪法', '基础'],
-        category: 'fl'
-      },
-      {
-        id: 6,
-        title: '2024年国考行测真题完整版',
-        type: '单选题',
-        typeColor: '#1A365D',
-        difficulty: 4,
-        count: 100,
-        time: 120,
-        popular: 3456,
-        tags: ['国考', '真题', '完整'],
-        category: 'xc'
-      }
-    ]);
+    const questions = ref([]);
     
     // 过滤题目
     const filteredQuestions = computed(() => {
@@ -375,17 +302,17 @@ export default defineComponent({
     };
     
     const startPractice = (question: any) => {
-      router.push(`/practice/${question.id}`);
+      router.push('/mobile/answer');
     };
     
     const switchTab = (tab: string) => {
       activeTab.value = tab;
       const tabRoutes: Record<string, string> = {
-        home: '/',
-        question: '/question-bank',
-        practice: '/practice',
-        forum: '/forum',
-        profile: '/profile'
+        home: '/mobile/home',
+        question: '/mobile/question-bank',
+        practice: '/mobile/practice',
+        forum: '/mobile/forum',
+        profile: '/mobile/profile'
       };
       router.push(tabRoutes[tab] || '/');
     };

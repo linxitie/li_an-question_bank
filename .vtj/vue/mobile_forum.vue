@@ -313,21 +313,21 @@ export default defineComponent({
     };
     
     const createPost = () => {
-      router.push('/forum/create');
+      router.push('/mobile/forum/create');
     };
     
     const viewPost = (post: any) => {
-      router.push(`/forum/${post.id}`);
+      router.push(`/mobile/forum/${post.id}`);
     };
     
     const switchTab = (tab: string) => {
       activeTab.value = tab;
       const tabRoutes: Record<string, string> = {
-        home: '/',
-        question: '/question-bank',
-        practice: '/practice',
-        forum: '/forum',
-        profile: '/profile'
+        home: '/mobile/home',
+        question: '/mobile/question-bank',
+        practice: '/mobile/practice',
+        forum: '/mobile/forum',
+        profile: '/mobile/profile'
       };
       router.push(tabRoutes[tab] || '/');
     };

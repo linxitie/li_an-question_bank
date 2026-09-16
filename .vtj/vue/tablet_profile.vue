@@ -367,19 +367,19 @@ export default defineComponent({
     });
     
     // 方法
-    const goToSettings = () => router.push('/profile');
-    const goToProfile = () => router.push('/profile');
+    const goToSettings = () => router.push('/tablet/profile');
+    const goToProfile = () => router.push('/tablet/profile');
     
     const goToWrongQuestions = () => router.push('/tablet/wrong-questions');
     const goToCollection = () => router.push('/tablet/favorites');
-    const goToHistory = () => router.push('/profile');
-    const goToNotes = () => router.push('/page/notes');
+    const goToHistory = () => router.push('/tablet/profile');
+    const goToNotes = () => router.push('/tablet/notes');
     
     const goToAchievements = () => router.push('/achievements');
-    const goToDownloads = () => router.push('/page/download_client');
+    const goToDownloads = () => router.push('/tablet/materials');
     const goToFeedback = () => router.push('/feedback');
     const goToHelp = () => router.push('/help');
-    const goToAbout = () => router.push('/page/about');
+    const goToAbout = () => router.push('/tablet/profile');
     
     const handleLogout = () => {
       if (window.__VTJ_AUTH__) window.__VTJ_AUTH__.logout();

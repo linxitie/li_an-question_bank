@@ -414,9 +414,9 @@ export default defineComponent({
     });
 
     // 方法
-    const goToNotifications = () => router.push('/notifications');
-    const goToSettings = () => router.push('/settings');
-    const goToProfile = () => router.push('/profile');
+    const goToNotifications = () => router.push('/tablet/notifications');
+    const goToSettings = () => router.push('/tablet/profile');
+    const goToProfile = () => router.push('/tablet/profile');
     
     const selectCategory = (key: string) => {
       activeCategory.value = key;
@@ -427,11 +427,11 @@ export default defineComponent({
     };
     
     const createPost = () => {
-      router.push('/forum/create');
+      router.push('/tablet/forum/create');
     };
     
     const viewPost = (post: any) => {
-      router.push(`/forum/${post.id}`);
+      router.push(`/tablet/forum/${post.id}`);
     };
     
     const searchByTag = (tag: string) => {

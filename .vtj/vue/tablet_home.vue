@@ -372,19 +372,19 @@ export default defineComponent({
     });
 
     // 导航方法
-    const goToNotifications = () => router.push('/notifications');
-    const goToSettings = () => router.push('/settings');
-    const goToProfile = () => router.push('/profile');
+    const goToNotifications = () => router.push('/tablet/notifications');
+    const goToSettings = () => router.push('/tablet/profile');
+    const goToProfile = () => router.push('/tablet/profile');
     const viewMoreTrend = () => {};
     const viewAllNews = () => router.push('/tablet/news');
     const viewNews = (news: any) => router.push(`/tablet/news/${news.id}`);
     const viewAllRecruit = () => router.push('/tablet/recruit');
     const viewRecruit = (recruit: any) => router.push('/tablet/recruit');
-    const startQuickPractice = () => router.push('/practice');
+    const startQuickPractice = () => router.push('/tablet/answer');
     const goToSmartExam = () => router.push('/smart-exam');
-    const goToQuestionBank = () => router.push('/question-bank');
-    const goToWrongQuestions = () => router.push('/wrong-questions');
-    const goToMockExam = () => router.push('/mock-exam');
+    const goToQuestionBank = () => router.push('/tablet/question-bank');
+    const goToWrongQuestions = () => router.push('/tablet/wrong-questions');
+    const goToMockExam = () => router.push('/tablet/answer');
 
     return {
       searchQuery,
