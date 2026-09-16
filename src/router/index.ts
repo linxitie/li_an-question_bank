@@ -94,6 +94,32 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
 
+  // ==================== 学生端「我的」模块 ====================
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('@/views/profile.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/achievements',
+    name: 'Achievements',
+    component: () => import('@/views/achievements.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/feedback',
+    name: 'Feedback',
+    component: () => import('@/views/feedback.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/help',
+    name: 'Help',
+    component: () => import('@/views/help.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+
   // ==================== 教师端路由 ====================
   {
     path: '/question-import',

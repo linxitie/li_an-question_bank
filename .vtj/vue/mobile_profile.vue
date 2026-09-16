@@ -207,13 +207,29 @@ export default defineComponent({
         if (auth && auth.isLoggedIn()) {
           const uname = auth.getUsername();
           if (uname) userName.value = uname;
-          // 学习统计（/api/stats/ 返回累计刷题量、正确率、连续签到天数）
-          const res = await fetch('/api/stats/', { headers: auth.getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            totalQuestions.value = data.totalQuestions || 0;
-            accuracy.value = data.accuracyRate || 0;
-            streakDays.value = data.streak || 0;
+          // 学习统计
+          const res = await auth.apiFetch('/api/stats/');
+          const data = await res.json();
+          totalQuestions.value = data.totalQuestions || 0;
+          accuracy.value = data.accuracyRate || 0;
+          streakDays.value = data.streak || 0;
+          historyCount.value = data.totalQuestions || 0;
+
+          // 计数（错题/收藏/笔记）
+          try {
+            const [wq, coll, note] = await Promise.all([
+              auth.apiFetch('/api/wrong-questions?page=1&page_size=1'),
+              auth.apiFetch('/api/collection?page=1&page_size=1'),
+              auth.apiFetch('/api/notes'),
+            ]);
+            const wqData = await wq.json();
+            const collData = await coll.json();
+            const noteData = await note.json();
+            wrongCount.value = wqData.total || 0;
+            collectionCount.value = collData.total || 0;
+            notesCount.value = noteData.total || 0;
+          } catch (e) {
+            console.error('加载计数失败:', e);
           }
         }
       } catch (error) {
@@ -224,18 +240,18 @@ export default defineComponent({
     // 方法
     const goBack = () => router.back();
     
-    const goToSettings = () => router.push('/settings');
+    const goToSettings = () => router.push('/profile');
     
     const goToWrongQuestions = () => router.push('/mobile/wrong-questions');
     const goToCollection = () => router.push('/mobile/favorites');
-    const goToHistory = () => router.push('/history');
-    const goToNotes = () => router.push('/notes');
+    const goToHistory = () => router.push('/profile');
+    const goToNotes = () => router.push('/page/notes');
     
-    const goToAchievements = () => router.push('/mobile/score-analysis');
-    const goToDownloads = () => router.push('/mobile/materials');
+    const goToAchievements = () => router.push('/achievements');
+    const goToDownloads = () => router.push('/page/download_client');
     const goToFeedback = () => router.push('/feedback');
     const goToHelp = () => router.push('/help');
-    const goToAbout = () => router.push('/about');
+    const goToAbout = () => router.push('/page/about');
     
     const handleLogout = () => {
       if (window.__VTJ_AUTH__) window.__VTJ_AUTH__.logout();

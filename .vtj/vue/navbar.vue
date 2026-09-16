@@ -100,9 +100,8 @@
       },
       handleUserClick() {
         if (this.state.loggedIn) {
-          // 已登录 → 显示个人信息面板
-          this.state.showProfile = true;
-          this.loadProfile();
+          // 已登录 → 进入「我的」页
+          if (this.$router) this.$router.push('/profile');
         } else if (this.$router) {
           this.$router.push('/login');
         }
