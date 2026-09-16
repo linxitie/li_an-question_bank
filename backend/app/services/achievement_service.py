@@ -300,7 +300,7 @@ def _count_practice(user_id: int, db: Session, days: Optional[int] = None, week:
 
 def _month_study_days(user_id: int, db: Session) -> int:
     start = datetime.now().replace(day=1)
-    rows = db.query(cast(PracticeRecord.practice_time, Date)).filter(
+    rows = db.query(func.DATE(PracticeRecord.practice_time)).filter(
         PracticeRecord.user_id == user_id,
         PracticeRecord.practice_time >= start,
     ).distinct().all()
@@ -308,20 +308,31 @@ def _month_study_days(user_id: int, db: Session) -> int:
 
 
 def _time_band_streak(user_id: int, db: Session, before: Optional[int] = None, after: Optional[int] = None) -> int:
-    """连续 N 天在指定时段内有学习记录（自然日）"""
+    """连续 N 天在指定时段内有学习记录（自然日，跨数据库安全：Python 过滤小时）"""
+    from datetime import time as _time
     today = datetime.now().date()
     streak = 0
-    for i in range(0, 30):
+    for i in range(30):
         day = today - timedelta(days=i)
-        q = db.query(PracticeRecord).filter(
+        day_start = datetime.combine(day, _time.min)
+        day_end = datetime.combine(day + timedelta(days=1), _time.min)
+        rows = db.query(PracticeRecord.practice_time).filter(
             PracticeRecord.user_id == user_id,
-            cast(PracticeRecord.practice_time, Date) == day,
-        )
-        if before is not None:
-            q = q.filter(func.hour(PracticeRecord.practice_time) < before)
-        if after is not None:
-            q = q.filter(func.hour(PracticeRecord.practice_time) >= after)
-        if q.first() is not None:
+            PracticeRecord.practice_time >= day_start,
+            PracticeRecord.practice_time < day_end,
+        ).all()
+        hit = False
+        for (pt,) in rows:
+            if pt is None:
+                continue
+            h = pt.hour
+            if before is not None and h < before:
+                hit = True
+                break
+            if after is not None and h >= after:
+                hit = True
+                break
+        if hit:
             streak += 1
         else:
             break
