@@ -50,7 +50,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   '综合': '🏆 综合成就',
 };
 
-function categoryLabel(cat: string) {
+function categoryLabel(cat: any) {
   return CATEGORY_LABEL[cat] || cat;
 }
 
