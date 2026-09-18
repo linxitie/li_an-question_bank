@@ -55,6 +55,7 @@ class StudyGoalCreate(BaseModel):
     target_count: int = Field(..., ge=1, description="目标数量")
     deadline: Optional[datetime] = Field(None, description="截止时间")
     priority: int = Field(1, ge=1, le=3, description="优先级 1低/2中/3高")
+    base_reward: Optional[int] = Field(None, ge=1, description="基础奖励金币(缺省20)")
 
 
 class StudyGoalUpdate(BaseModel):

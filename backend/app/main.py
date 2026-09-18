@@ -22,6 +22,7 @@ from .api.v1 import materials
 from .api.v1 import auth_qrcode
 from .api.v1 import devices
 from .api.v1 import coins, achievements, feedback
+from .api.v1 import shop, tasks, admin_shop
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
 from .api.v1.question_import import router as question_import_router
@@ -98,6 +99,7 @@ async def lifespan(app: FastAPI):
                 ('settings', 'JSON'),
                 ('accuracy80_streak', 'INTEGER DEFAULT 0'),
                 ('perfect_streak', 'INTEGER DEFAULT 0'),
+                ('avatar_frame', 'VARCHAR(50)'),
             ]:
                 if col_name not in user_cols:
                     with engine.connect() as conn:
@@ -185,6 +187,25 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE study_material ADD COLUMN content_hash VARCHAR(64)"))
                     conn.commit()
                 logger.info("自动迁移: study_material 添加列 content_hash")
+
+        # 检查 study_goal 表(金币购:四维加权奖励字段)
+        if 'study_goal' in inspector.get_table_names():
+            sg_cols = [c['name'] for c in inspector.get_columns('study_goal')]
+            for col_name, col_type in [
+                ('base_reward', 'INTEGER DEFAULT 20'),
+                ('reward_coins', 'INTEGER DEFAULT 0'),
+                ('difficulty_factor', 'FLOAT DEFAULT 1.0'),
+                ('quality_score', 'FLOAT DEFAULT 0.0'),
+                ('persistence_score', 'FLOAT DEFAULT 0.0'),
+                ('improvement_score', 'FLOAT DEFAULT 0.0'),
+                ('baseline_accuracy', 'FLOAT DEFAULT 0.0'),
+                ('baseline_count', 'INTEGER DEFAULT 0'),
+            ]:
+                if col_name not in sg_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(f"ALTER TABLE study_goal ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+                    logger.info(f"自动迁移: study_goal 添加列 {col_name}")
 
         # 检查并修复双编码JSON options（99条历史数据）
         if 'question_bank' in inspector.get_table_names():
@@ -538,6 +559,9 @@ app.include_router(teacher_api.router, tags=["教师端"])
 app.include_router(auth_qrcode.router, tags=["二维码登录"])
 app.include_router(devices.router, tags=["设备管理"])
 app.include_router(coins.router, tags=["金币"])
+app.include_router(shop.router, tags=["金币商城"])
+app.include_router(tasks.router, tags=["任务中心"])
+app.include_router(admin_shop.router, tags=["管理员端-金币商城"])
 app.include_router(achievements.router, tags=["成就"])
 app.include_router(feedback.router, tags=["意见反馈"])
 app.include_router(feedback.admin_router, tags=["反馈管理"])

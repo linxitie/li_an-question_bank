@@ -8,7 +8,7 @@ from datetime import datetime
 from .core.config import settings
 from .core.database import SessionLocal
 from .core.security import get_password_hash
-from .models.models import SysUser, SysConfig, SubCategory, KnowledgePoint
+from .models.models import SysUser, SysConfig, SubCategory, KnowledgePoint, Title, ShopProduct, Task
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +336,112 @@ def seed_sub_categories_and_points():
         db.close()
 
 
+def seed_titles_and_products():
+    """初始化限定称号 + 金币商城商品（幂等：已存在则跳过）"""
+    db = SessionLocal()
+    try:
+        # 1. 称号目录（unlock_level=0 表示商城专属，非等级解锁）
+        titles = [
+            ("title_li_an_star", "砺安之星", "金币商城限定称号", 0, 1),
+            ("title_gongkao_master", "公考达人", "金币商城限定称号", 0, 2),
+            ("title_study_king", "学习之王", "金币商城限定称号", 0, 3),
+        ]
+        title_map = {}
+        for code, name, desc, unlock, order in titles:
+            existing = db.query(Title).filter(Title.title_code == code).first()
+            if existing:
+                title_map[code] = existing
+                continue
+            t = Title(title_code=code, name=name, description=desc,
+                      unlock_level=unlock, sort_order=order)
+            db.add(t)
+            db.flush()
+            title_map[code] = t
+        db.commit()
+
+        # 2. 商品（装饰类：限定称号 + 专属头像框）
+        products = [
+            ("砺安之星称号", "限定称号", 300, "🌟", "商城限定称号，彰显学习身份",
+             "title", {"title_id": title_map["title_li_an_star"].title_id}, 1),
+            ("公考达人称号", "限定称号", 200, "🎓", "商城限定称号，公考进阶之路",
+             "title", {"title_id": title_map["title_gongkao_master"].title_id}, 2),
+            ("学习之王称号", "限定称号", 500, "👑", "商城限定称号，顶级学习荣誉",
+             "title", {"title_id": title_map["title_study_king"].title_id}, 3),
+            ("金色警徽头像框", "专属头像框", 150, "🛡️", "专属金色头像框，个人主页展示",
+             "avatar_frame", {"frame_id": "gold_badge"}, 4),
+            ("藏蓝盾牌头像框", "专属头像框", 100, "💠", "藏蓝色盾牌头像框，沉稳大气",
+             "avatar_frame", {"frame_id": "blue_shield"}, 5),
+        ]
+        created = 0
+        for name, cat, price, img, desc, dtype, payload, order in products:
+            existing = db.query(ShopProduct).filter(
+                ShopProduct.name == name,
+                ShopProduct.deliverable_type == dtype,
+            ).first()
+            if existing:
+                continue
+            db.add(ShopProduct(
+                name=name, category=cat, product_type="virtual", coin_price=price,
+                stock=-1, image_url=img, description=desc,
+                deliverable_type=dtype, deliverable_payload=payload,
+                status="on_sale", sort_order=order,
+            ))
+            created += 1
+        db.commit()
+        if created > 0:
+            logger.info(f"Seed: 创建 {created} 个金币商城商品")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Seed: 称号/商品初始化失败（可忽略） - {e}")
+    finally:
+        db.close()
+
+
+def seed_tasks():
+    """初始化任务目录（每日/随机池/周常，幂等：已存在则跳过）"""
+    db = SessionLocal()
+    try:
+        tasks = [
+            # (task_code, t_type, title, description, metric, threshold, reward, sort)
+            # 每日任务
+            ("daily_10", "daily", "初露锋芒", "完成10道题目", "today_questions", 10, 10, 1),
+            ("daily_30", "daily", "小试牛刀", "完成30道题目", "today_questions", 30, 20, 2),
+            ("daily_50", "daily", "勤学苦练", "完成50道题目", "today_questions", 50, 35, 3),
+            ("daily_80", "daily", "博学多闻", "完成80道题目", "today_questions", 80, 50, 4),
+            ("daily_acc", "daily", "正确率挑战", "今日正确率≥85%", "today_accuracy", 85, 30, 5),
+            # 随机任务池
+            ("rand_50", "random", "题海冲刺", "今日完成50道题", "today_questions", 50, 50, 1),
+            ("rand_30", "random", "精准打击", "今日完成30道题", "today_questions", 30, 30, 2),
+            ("rand_week100", "random", "周度狂飙", "本周完成100道题", "week_questions", 100, 40, 3),
+            ("rand_total200", "random", "千锤百炼", "累计完成200道题", "total_questions", 200, 35, 4),
+            ("rand_acc80", "random", "稳扎稳打", "今日正确率≥80%", "today_accuracy", 80, 25, 5),
+            ("rand_streak3", "random", "坚持达人", "连续签到3天", "streak_days", 3, 30, 6),
+            # 周常任务
+            ("week_300", "weekly", "做题达人", "本周完成300道题", "week_questions", 300, 80, 1),
+            ("week_acc85", "weekly", "正确率之星", "本周正确率≥85%", "week_accuracy", 85, 70, 2),
+            ("week_checkin7", "weekly", "签到全勤", "连续签到7天", "streak_days", 7, 100, 3),
+        ]
+        created = 0
+        for code, ttype, title, desc, metric, th, reward, order in tasks:
+            existing = db.query(Task).filter(Task.task_code == code).first()
+            if existing:
+                continue
+            db.add(Task(
+                task_code=code, t_type=ttype, title=title, description=desc,
+                metric=metric, mode="calc", threshold=th, reward_coins=reward,
+                reward_growth=5, sort_order=order, enabled=1,
+            ))
+            created += 1
+        db.commit()
+        if created > 0:
+            logger.info(f"Seed: 创建 {created} 个任务")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Seed: 任务初始化失败（可忽略） - {e}")
+    finally:
+        db.close()
+
+
 def run_seed():
     """执行所有 Seed 任务"""
     logger.info("=" * 50)
@@ -350,6 +456,8 @@ def run_seed():
     seed_configs()
     seed_users()
     seed_sub_categories_and_points()
+    seed_titles_and_products()
+    seed_tasks()
 
     logger.info("Seed: 数据初始化完成")
     logger.info("=" * 50)

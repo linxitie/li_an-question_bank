@@ -25,6 +25,7 @@ class SysUser(Base):
     email = Column(String(100), comment="邮箱")
     phone = Column(String(20), nullable=False, comment="手机号")
     avatar = Column(String(500), comment="头像URL")
+    avatar_frame = Column(String(50), comment="头像框标识(金币购商城兑换)")
     gender = Column(Enum("男", "女", "未知"), default="未知", comment="性别")
     user_type = Column(Enum("student", "teacher", "admin"), nullable=False, comment="用户类型")
     department = Column(String(100), comment="学院/部门")
@@ -666,7 +667,7 @@ class CoinRecord(Base):
     coin_change = Column(Integer, nullable=False, comment="金币变化")
     current_balance = Column(Integer, nullable=False, comment="当前余额")
     transaction_type = Column(Enum("GAIN", "SPEND"), nullable=False, comment="交易类型")
-    source_type = Column(Enum("CHECKIN", "TASK", "EXAM", "SYSTEM", "PURCHASE"), comment="来源/用途")
+    source_type = Column(Enum("CHECKIN", "TASK", "EXAM", "SYSTEM", "PURCHASE", "RANDOM_TASK", "GOAL", "SHOP"), comment="来源/用途")
     related_id = Column(BigInteger, comment="关联ID")
     description = Column(String(500), comment="描述")
     transaction_time = Column(DateTime, default=datetime.now, comment="交易时间")
@@ -678,6 +679,59 @@ class CoinRecord(Base):
         Index("idx_transaction_time", transaction_time),
         Index("idx_source_type", source_type),
     )
+
+class ShopProduct(Base):
+    """金币商城商品表"""
+    __tablename__ = "shop_products"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="商品ID")
+    name = Column(String(200), nullable=False, comment="商品名称")
+    category = Column(String(20), default="", comment="分类: 限定称号/专属头像框")
+    product_type = Column(String(20), default="virtual", comment="类型: virtual/physical")
+    coin_price = Column(Integer, nullable=False, default=0, comment="金币价格")
+    cash_price = Column(DECIMAL(10, 2), nullable=True, comment="现金价格(后置预留)")
+    stock = Column(Integer, default=-1, comment="库存(-1=不限)")
+    image_url = Column(String(300), default="", comment="封面图(emoji或URL)")
+    description = Column(Text, comment="商品详情")
+    deliverable_type = Column(String(30), default="none", comment="权益类型: title/avatar_frame")
+    deliverable_payload = Column(JSON, comment="权益参数JSON")
+    status = Column(String(20), default="on_sale", comment="状态: on_sale/off_shelf")
+    sort_order = Column(Integer, default=0, comment="排序")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        Index("idx_shop_product_status", status),
+        Index("idx_shop_product_category", category),
+    )
+
+
+class CoinExchange(Base):
+    """金币兑换记录表"""
+    __tablename__ = "coin_exchanges"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="兑换ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    product_id = Column(Integer, comment="商品ID")
+    product_name = Column(String(200), comment="商品名称快照")
+    product_type = Column(String(20), comment="商品类型快照")
+    coin_cost = Column(Integer, nullable=False, default=0, comment="消耗金币")
+    cash_cost = Column(DECIMAL(10, 2), nullable=True, comment="现金支付(后置预留)")
+    status = Column(String(20), default="completed", comment="状态: pending/completed/refunded")
+    deliverable_type = Column(String(30), comment="权益类型快照")
+    deliverable_payload = Column(JSON, comment="权益参数快照")
+    request_id = Column(String(64), nullable=False, comment="幂等键(客户端请求ID)")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    completed_at = Column(DateTime, comment="完成时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("request_id", name="uk_coin_exchange_request"),
+        Index("idx_coin_exchange_user", user_id),
+        Index("idx_coin_exchange_product", product_id),
+    )
+
 
 class DailyCheckin(Base):
     """每日签到表"""
@@ -726,6 +780,16 @@ class StudyGoal(Base):
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
     status = Column(Integer, default=1, comment="状态 1正常/0删除")
+
+    # === 金币购：四维加权奖励字段 ===
+    base_reward = Column(Integer, default=20, comment="基础奖励金币")
+    reward_coins = Column(Integer, default=0, comment="最终发放金币")
+    difficulty_factor = Column(Float, default=1.0, comment="难度系数")
+    quality_score = Column(Float, default=0.0, comment="质量分")
+    persistence_score = Column(Float, default=0.0, comment="坚持分")
+    improvement_score = Column(Float, default=0.0, comment="进步分")
+    baseline_accuracy = Column(Float, default=0.0, comment="基线正确率(创建时快照)")
+    baseline_count = Column(Integer, default=0, comment="基线做题量(创建时快照)")
 
     user = relationship("SysUser")
 

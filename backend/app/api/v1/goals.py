@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
-from ...models.models import StudyGoal, SysUser
+from ...models.models import StudyGoal, SysUser, PracticeRecord, CoinRecord
 from ...schemas.schemas import (
     StudyGoalCreate,
     StudyGoalUpdate,
@@ -26,6 +26,15 @@ def compute_progress(goal: StudyGoal) -> float:
     if goal.target_count > 0:
         return round(goal.current_count / goal.target_count * 100, 1)
     return 0.0
+
+
+def _snapshot_baseline(user_id: int, db: Session) -> tuple:
+    """创建目标时快照用户当前做题基线（正确率 + 做题量），供进步分计算"""
+    rows = db.query(PracticeRecord).filter(PracticeRecord.user_id == user_id).all()
+    total = len(rows)
+    correct = sum(1 for r in rows if r.is_correct == 1)
+    accuracy = round(correct / total, 4) if total > 0 else 0.0
+    return accuracy, total
 
 
 def to_response(goal: StudyGoal) -> dict:
@@ -103,6 +112,7 @@ async def create_goal(
         db: Session = Depends(get_db)
 ):
     """创建新的学习目标"""
+    baseline_accuracy, baseline_count = _snapshot_baseline(current_user.user_id, db)
     new_goal = StudyGoal(
         user_id=current_user.user_id,
         title=goal_data.title,
@@ -113,6 +123,9 @@ async def create_goal(
         deadline=goal_data.deadline,
         priority=goal_data.priority,
         is_completed=0,
+        base_reward=goal_data.base_reward or 20,
+        baseline_accuracy=baseline_accuracy,
+        baseline_count=baseline_count,
     )
 
     db.add(new_goal)
@@ -314,6 +327,83 @@ async def confirm_goal_complete(
         "confirm_note": confirm_note or "",
         "previous_state": previous_state,
         "was_auto_completed": previous_state["progress"] >= 100,
+    }
+
+
+@router.post("/{goal_id}/complete", response_model=Dict[str, Any], summary="完成目标并结算四维加权奖励")
+async def complete_goal(
+        goal_id: int,
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """完成目标：按四维加权算法结算并发放金币（幂等：已完成直接返回已发奖励）"""
+    from ...services import goal_completion_service
+    from ...services.growth_service import add_growth
+
+    goal = db.query(StudyGoal).filter(
+        StudyGoal.goal_id == goal_id,
+        StudyGoal.user_id == current_user.user_id,
+        StudyGoal.status == 1
+    ).first()
+
+    if not goal:
+        raise HTTPException(status_code=404, detail="学习目标不存在")
+
+    if goal.is_completed:
+        return {
+            **to_response(goal),
+            "message": "目标已完成",
+            "reward_coins": goal.reward_coins or 0,
+            "already_completed": True,
+        }
+
+    # 进度未达标则补齐到目标值（完成结算时 completion_rate = 1.0）
+    if goal.current_count < goal.target_count:
+        goal.current_count = goal.target_count
+
+    # 四维加权结算
+    result = goal_completion_service.evaluate(goal, current_user, db)
+    reward = result["reward_coins"]
+
+    # 发币
+    current_user.total_coins = (current_user.total_coins or 0) + reward
+    db.add(CoinRecord(
+        user_id=current_user.user_id,
+        coin_change=reward,
+        current_balance=current_user.total_coins,
+        transaction_type="GAIN",
+        source_type="GOAL",
+        related_id=goal_id,
+        description=f"完成目标：{goal.title}",
+    ))
+
+    # 更新目标
+    now = datetime.now()
+    goal.is_completed = 1
+    goal.completed_time = now
+    goal.update_time = now
+    goal.reward_coins = reward
+    goal.difficulty_factor = result["difficulty_factor"]
+    goal.quality_score = result["quality_score"]
+    goal.persistence_score = result["persistence_score"]
+    goal.improvement_score = result["improvement_score"]
+
+    add_growth(db, current_user, 15)  # 完成目标 +15 成长值
+
+    db.commit()
+    db.refresh(goal)
+
+    logger.info(
+        f"用户 {current_user.username} 完成目标 {goal.title}，"
+        f"四维加权奖励 {reward} 金币（难度系数 {result['difficulty_factor']}）"
+    )
+
+    return {
+        **to_response(goal),
+        "message": "🎉 目标完成，奖励已发放",
+        "reward_coins": reward,
+        "overall_completion": result["overall_completion"],
+        "difficulty_factor": result["difficulty_factor"],
     }
 
 
