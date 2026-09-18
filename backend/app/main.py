@@ -100,12 +100,46 @@ async def lifespan(app: FastAPI):
                 ('accuracy80_streak', 'INTEGER DEFAULT 0'),
                 ('perfect_streak', 'INTEGER DEFAULT 0'),
                 ('avatar_frame', 'VARCHAR(50)'),
+                # 徽章生成器计数字段
+                ('ai_qa_total', 'INTEGER DEFAULT 0'),
+                ('news_read_total', 'INTEGER DEFAULT 0'),
+                ('news_read_today', 'INTEGER DEFAULT 0'),
+                ('news_read_date', 'DATE'),
+                ('recruit_read_total', 'INTEGER DEFAULT 0'),
+                ('recruit_read_today', 'INTEGER DEFAULT 0'),
+                ('recruit_read_date', 'DATE'),
+                ('ai_qa_count', 'INTEGER DEFAULT 0'),
+                ('news_read_count', 'INTEGER DEFAULT 0'),
+                ('recruit_read_count', 'INTEGER DEFAULT 0'),
             ]:
                 if col_name not in user_cols:
                     with engine.connect() as conn:
                         conn.execute(text(f"ALTER TABLE sys_user ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: sys_user 添加列 {col_name}")
+
+        # 检查 achievement 表（徽章体系：隐藏成就 + 视觉参数 + 五档升级）
+        if 'achievement' in inspector.get_table_names():
+            ach_cols = [c['name'] for c in inspector.get_columns('achievement')]
+            for col_name, col_type in [
+                ('is_hidden', 'INTEGER DEFAULT 0'),
+                ('style_params', 'JSON'),
+                ('tier_times', 'JSON'),
+            ]:
+                if col_name not in ach_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(f"ALTER TABLE achievement ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+                    logger.info(f"自动迁移: achievement 添加列 {col_name}")
+
+        # 检查 user_achievement 表（徽章档位）
+        if 'user_achievement' in inspector.get_table_names():
+            ua_cols = [c['name'] for c in inspector.get_columns('user_achievement')]
+            if 'tier' not in ua_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE user_achievement ADD COLUMN tier INTEGER DEFAULT 1"))
+                    conn.commit()
+                logger.info("自动迁移: user_achievement 添加列 tier")
 
         # 检查 exam_calendar 表
         if 'exam_calendar' in inspector.get_table_names():
