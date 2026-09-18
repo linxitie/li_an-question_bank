@@ -58,6 +58,18 @@ class SysUser(Base):
     accuracy80_streak = Column(Integer, default=0, comment="连续练习正确率≥80%次数")
     perfect_streak = Column(Integer, default=0, comment="连续练习全部答对次数")
 
+    # === 徽章生成器新增计数字段 ===
+    ai_qa_total = Column(Integer, default=0, comment="AI问答累计次数")
+    news_read_total = Column(Integer, default=0, comment="时政资讯阅读累计次数")
+    news_read_today = Column(Integer, default=0, comment="时政资讯当日阅读次数")
+    news_read_date = Column(Date, comment="时政资讯当日计数对应日期")
+    recruit_read_total = Column(Integer, default=0, comment="招考信息浏览累计次数")
+    recruit_read_today = Column(Integer, default=0, comment="招考信息当日浏览次数")
+    recruit_read_date = Column(Date, comment="招考信息当日计数对应日期")
+    ai_qa_count = Column(Integer, default=0, comment="AI问答累计次数")
+    news_read_count = Column(Integer, default=0, comment="时政资讯阅读累计次数")
+    recruit_read_count = Column(Integer, default=0, comment="招考信息浏览累计次数")
+
     # 自引用关系：创建人
     creator = relationship("SysUser", remote_side=[user_id], foreign_keys=[created_by])
 
@@ -1652,7 +1664,7 @@ class Achievement(Base):
     __tablename__ = "achievement"
 
     achievement_id = Column(Integer, primary_key=True, autoincrement=True, comment="成就ID")
-    category = Column(String(32), nullable=False, comment="分类: 坚持/数量/正确率/错题/社交/综合")
+    category = Column(String(32), nullable=False, comment="分类: 坚持/数量/正确率/错题/社交/综合/联考特色/隐藏/赛季限定")
     name = Column(String(50), nullable=False, comment="成就名称")
     icon = Column(String(16), default="", comment="图标(emoji)")
     condition_desc = Column(String(200), nullable=False, comment="获得条件描述")
@@ -1662,6 +1674,9 @@ class Achievement(Base):
     threshold = Column(Integer, default=0, comment="条件阈值")
     extra = Column(String(32), comment="附加参数")
     sort_order = Column(Integer, default=0, comment="排序")
+    is_hidden = Column(Integer, default=0, comment="是否隐藏成就: 1=条件对学生隐藏(仅剪影)")
+    style_params = Column(JSON, comment="徽章视觉参数JSON(shape/material/palette/icon等)")
+    tier_times = Column(JSON, comment="五档升级阈值倍数数组如[1,2,4,8,16]; NULL=不升档")
 
     __table_args__ = (
         Index("idx_achievement_category", category),
@@ -1677,6 +1692,7 @@ class UserAchievement(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     achievement_id = Column(Integer, ForeignKey("achievement.achievement_id"), nullable=False, comment="成就ID")
     obtained_at = Column(DateTime, default=datetime.now, comment="获得时间")
+    tier = Column(Integer, default=1, comment="徽章档位: 1铜/2银/3金/4铂金/5钻石")
 
     user = relationship("SysUser")
 
@@ -1685,6 +1701,109 @@ class UserAchievement(Base):
         Index("idx_user_achievement_user", user_id),
     )
 
+
+class BadgeNameBank(Base):
+    """徽章名称库表（规则引擎/LLM 产出统一入库）"""
+    __tablename__ = "badge_name_bank"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="名称ID")
+    name = Column(String(50), nullable=False, comment="徽章名称(2-6字)")
+    category = Column(String(32), comment="适用类别")
+    prefix_word = Column(String(20), comment="前缀词")
+    body_word = Column(String(30), comment="主体词")
+    suffix_word = Column(String(10), comment="后缀词")
+    score = Column(DECIMAL(8, 2), default=0, comment="音韵/契合度评分")
+    source = Column(String(16), default="rule", comment="来源: rule/llm/manual")
+    used = Column(Integer, default=0, comment="是否已被占用")
+    style_seed = Column(String(32), comment="生成种子(可复现)")
+    created_at = Column(DateTime, default=datetime.now, comment="入库时间")
+
+    __table_args__ = (
+        Index("idx_badge_name_name", name),
+        Index("idx_badge_name_cat", category),
+    )
+
+
+class Task(Base):
+    """任务目录表（每日/周常/赛季）"""
+    __tablename__ = "badge_task"
+
+    task_id = Column(Integer, primary_key=True, autoincrement=True, comment="任务ID")
+    task_code = Column(String(50), unique=True, nullable=False, comment="任务代码")
+    t_type = Column(String(16), nullable=False, comment="周期: daily/weekly/season")
+    title = Column(String(100), nullable=False, comment="任务名称")
+    description = Column(String(300), comment="任务描述")
+    metric = Column(String(32), nullable=False, comment="进度指标码(calc)/事件码(event)")
+    mode = Column(String(16), default="calc", comment="进度模式: calc=重算/event=事件累计")
+    threshold = Column(Integer, default=1, comment="目标值")
+    reward_coins = Column(Integer, default=0, comment="奖励金币")
+    reward_growth = Column(Integer, default=0, comment="奖励成长值")
+    sort_order = Column(Integer, default=0, comment="排序")
+    enabled = Column(Integer, default=1, comment="是否启用")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        Index("idx_badge_task_type", t_type),
+    )
+
+
+class UserTaskProgress(Base):
+    """用户任务进度表（按周期幂等）"""
+    __tablename__ = "user_task_progress"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    task_id = Column(Integer, ForeignKey("badge_task.task_id"), nullable=False, comment="任务ID")
+    period_key = Column(String(20), nullable=False, comment="周期键: 如20260916/2026-W38/202609")
+    current = Column(Integer, default=0, comment="当前进度")
+    completed = Column(Integer, default=0, comment="是否已完成")
+    claimed = Column(Integer, default=0, comment="是否已领取奖励")
+    completed_at = Column(DateTime, comment="完成时间")
+    claimed_at = Column(DateTime, comment="领取时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "task_id", "period_key", name="uk_user_task_period"),
+        Index("idx_user_task_user", user_id),
+    )
+
+
+class Title(Base):
+    """称号目录表"""
+    __tablename__ = "badge_title"
+
+    title_id = Column(Integer, primary_key=True, autoincrement=True, comment="称号ID")
+    title_code = Column(String(50), unique=True, nullable=False, comment="称号代码")
+    name = Column(String(50), nullable=False, comment="称号名称")
+    description = Column(String(200), comment="称号描述")
+    unlock_level = Column(Integer, nullable=False, comment="解锁所需学习等级")
+    sort_order = Column(Integer, default=0, comment="排序")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_badge_title_level", unlock_level),
+    )
+
+
+class UserTitle(Base):
+    """用户称号表（已解锁 + 佩戴状态）"""
+    __tablename__ = "user_title"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    title_id = Column(Integer, ForeignKey("badge_title.title_id"), nullable=False, comment="称号ID")
+    obtained_at = Column(DateTime, default=datetime.now, comment="解锁时间")
+    equipped = Column(Integer, default=0, comment="是否佩戴: 1=佩戴")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "title_id", name="uk_user_title"),
+        Index("idx_user_title_user", user_id),
+    )
 
 class UserFeedback(Base):
     """用户意见反馈表"""
