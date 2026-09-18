@@ -1,0 +1,19 @@
+{
+  "id": "admin_shop",
+  "__VERSION__": "20260918001",
+  "css": "",
+  "state": {},
+  "methods": {
+    "api": {
+      "type": "method"
+    },
+    "loadList": {
+      "type": "method"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  }
+}

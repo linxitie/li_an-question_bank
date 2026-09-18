@@ -892,19 +892,20 @@
   "inject": [],
   "locked": false,
   "methods": {
-    "handleBuy": {
-      "type": "JSFunction",
-      "value": "(item) => {\n  if (this.state.balance >= item.price) {\n    this.state.balance -= item.price;\n    this.state.usedRecords.unshift({\n      desc: item.name,\n      amount: item.price,\n      date: new Date().toISOString().slice(0, 10)\n    });\n    this.$message.success('兑换成功！');\n  } else {\n    this.$message.warning('金币不足，快去刷题赚金币吧');\n  }\n}"
+    "switchTab": {
+      "type": "method"
     },
     "loadRecords": {
-      "type": "JSFunction",
-      "value": "() => {\n  this.state.usedRecords = [\n    { desc: '行测精讲视频课', amount: 600, date: '2024-12-20' },\n    { desc: '模拟考试券', amount: 150, date: '2024-12-18' }\n  ];\n  this.state.earnedRecords = [\n    { desc: '每日签到奖励', amount: 10, date: '2024-12-22' },\n    { desc: '完成一套试卷', amount: 50, date: '2024-12-21' },\n    { desc: '连续刷题7天', amount: 100, date: '2024-12-20' },\n    { desc: '分享题库给好友', amount: 30, date: '2024-12-19' }\n  ];\n}"
+      "type": "method"
     },
-    "switchTab": {
-      "type": "method",
-      "params": [
-        "key"
-      ]
+    "loadTasks": {
+      "type": "method"
+    },
+    "loadGoals": {
+      "type": "method"
+    },
+    "loadAchievements": {
+      "type": "method"
     }
   },
   "computed": {

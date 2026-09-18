@@ -1,0 +1,28 @@
+{
+  "id": "mobile_gold_purchase",
+  "__VERSION__": "1778918740312",
+  "css": "",
+  "state": {},
+  "methods": {
+    "switchTab": {
+      "type": "method"
+    },
+    "loadRecords": {
+      "type": "method"
+    },
+    "loadTasks": {
+      "type": "method"
+    },
+    "loadGoals": {
+      "type": "method"
+    },
+    "loadAchievements": {
+      "type": "method"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  }
+}
