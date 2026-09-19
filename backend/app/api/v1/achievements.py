@@ -64,9 +64,12 @@ async def list_achievements(
 ):
     """返回 45 项成就，标注已获得与实时进度"""
     achievements = db.query(Achievement).order_by(Achievement.sort_order).all()
-    obtained = {r[0] for r in db.query(UserAchievement.achievement_id).filter(
-        UserAchievement.user_id == current_user.user_id
-    ).all()}
+    obtained = {
+        r[0]: (r[1] or 1)
+        for r in db.query(UserAchievement.achievement_id, UserAchievement.tier).filter(
+            UserAchievement.user_id == current_user.user_id
+        ).all()
+    }
     progress = _get_progress(current_user.user_id, db)
 
     categories: Dict[str, List[Dict[str, Any]]] = {}
@@ -82,6 +85,10 @@ async def list_achievements(
             "threshold": a.threshold,
             "extra": a.extra,
             "earned": a.achievement_id in obtained,
+            "tier": obtained.get(a.achievement_id, 0),
+            "is_hidden": a.is_hidden or 0,
+            "tier_times": a.tier_times,
+            "style_params": a.style_params,
             "current": progress.get(a.condition_code, 0),
         }
         categories.setdefault(a.category, []).append(item)
@@ -114,6 +121,7 @@ async def earned_achievements(
                 "category": a.category,
                 "condition_desc": a.condition_desc,
                 "reward_coins": a.reward_coins,
+                "tier": ua.tier or 1,
                 "obtained_at": ua.obtained_at.isoformat() if ua.obtained_at else None,
             }
             for ua, a in rows

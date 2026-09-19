@@ -87,21 +87,53 @@ ACHIEVEMENTS = [
 
 _TRIGGERS = {a[5] for a in ACHIEVEMENTS}
 
+# 支持五档升档的成就（累计数量型，condition_code 维度）
+TIERED_CODES = {
+    "total_questions", "today_questions", "week_questions",
+    "review_count", "chop_count", "post_count", "total_likes",
+    "favorite_count", "note_count", "quote_favorite_count",
+}
+# 五档达成倍数（档位 = 达到 threshold × 倍数的最高档）
+TIER_TIMES = [1, 2, 4, 8, 16]
+
+
+def _tier_times_for(code: str, threshold: int):
+    """升档成就返回 TIER_TIMES，否则返回 None（不升档，固定 tier 1）"""
+    if code in TIERED_CODES and threshold > 1:
+        return TIER_TIMES
+    return None
+
+
+def _tier_for_value(threshold: int, current: int, tier_times) -> int:
+    """根据当前达成值计算应达到的档位（1-5）"""
+    tier = 1
+    for mult in (tier_times or []):
+        if current >= threshold * mult:
+            tier += 1
+        else:
+            break
+    return min(tier, 5)
+
 
 def seed_achievements(db: Session) -> int:
-    """初始化成就目录（幂等：仅当目录为空时插入）"""
-    exists = db.query(Achievement).count()
-    if exists > 0:
-        return exists
+    """初始化成就目录（幂等）：空则插入；已存在则补 tier_times"""
     for cat, name, icon, desc, coins, trigger, code, th, extra, sort in ACHIEVEMENTS:
+        existing = db.query(Achievement).filter(Achievement.name == name).first()
+        if existing:
+            tt = _tier_times_for(code, th)
+            if existing.tier_times is None and tt is not None:
+                existing.tier_times = tt
+            continue
         db.add(Achievement(
             category=cat, name=name, icon=icon, condition_desc=desc,
             reward_coins=coins, trigger_type=trigger, condition_code=code,
             threshold=th, extra=extra, sort_order=sort,
+            tier_times=_tier_times_for(code, th),
         ))
     db.commit()
-    logger.info(f"成就目录初始化完成：{len(ACHIEVEMENTS)} 项")
-    return len(ACHIEVEMENTS)
+    total = db.query(Achievement).count()
+    logger.info(f"成就目录初始化完成：{total} 项")
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +151,13 @@ def check_and_grant(user_id: int, trigger_type: str, db: Session,
     if not user:
         return []
 
-    obtained = _obtained_ids(user_id, db)
+    # 已获得成就 -> tier 映射
+    obtained_map = {
+        r[0]: (r[1] or 1)
+        for r in db.query(UserAchievement.achievement_id, UserAchievement.tier).filter(
+            UserAchievement.user_id == user_id
+        ).all()
+    }
 
     # 匹配触发类型 + 综合类（general 全触发）
     candidates = db.query(Achievement).filter(
@@ -128,17 +166,29 @@ def check_and_grant(user_id: int, trigger_type: str, db: Session,
 
     newly: List[Dict[str, Any]] = []
     for ach in candidates:
-        if ach.achievement_id in obtained:
-            continue
         try:
-            if _check_condition(user, ach, db, session):
-                _grant(user, ach, db)
-                newly.append({
-                    "achievement_id": ach.achievement_id,
-                    "name": ach.name,
-                    "icon": ach.icon,
-                    "reward_coins": ach.reward_coins,
-                })
+            tier_times = ach.tier_times or []
+            if tier_times:
+                # 升档成就：计算当前达成值，判定获得/升档
+                current = _current_value(user, ach, db)
+                if current < ach.threshold:
+                    continue
+                target_tier = _tier_for_value(ach.threshold, current, tier_times)
+                if ach.achievement_id not in obtained_map:
+                    _grant(user, ach, db, tier=target_tier)
+                    newly.append(_newly_item(ach, target_tier, upgraded=False))
+                else:
+                    existing_tier = obtained_map[ach.achievement_id]
+                    if target_tier > existing_tier:
+                        _upgrade_tier(user, ach, db, target_tier)
+                        newly.append(_newly_item(ach, target_tier, upgraded=True))
+            else:
+                # 不升档成就：仅判定新获得
+                if ach.achievement_id in obtained_map:
+                    continue
+                if _check_condition(user, ach, db, session):
+                    _grant(user, ach, db, tier=1)
+                    newly.append(_newly_item(ach, 1, upgraded=False))
         except Exception as e:
             db.rollback()
             logger.error(f"成就判定异常 user={user_id} ach={ach.name}: {e}")
@@ -154,6 +204,17 @@ def check_and_grant(user_id: int, trigger_type: str, db: Session,
     return newly
 
 
+def _newly_item(ach: Achievement, tier: int, upgraded: bool) -> Dict[str, Any]:
+    return {
+        "achievement_id": ach.achievement_id,
+        "name": ach.name,
+        "icon": ach.icon,
+        "reward_coins": ach.reward_coins,
+        "tier": tier,
+        "upgraded": upgraded,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 内部实现
 # ---------------------------------------------------------------------------
@@ -165,9 +226,9 @@ def _obtained_ids(user_id: int, db: Session) -> set:
     return {r[0] for r in rows}
 
 
-def _grant(user: SysUser, ach: Achievement, db: Session):
+def _grant(user: SysUser, ach: Achievement, db: Session, tier: int = 1):
     """发放成就（同一事务）：插入成就 + 加金币 + 写流水 + 加成长值"""
-    db.add(UserAchievement(user_id=user.user_id, achievement_id=ach.achievement_id))
+    db.add(UserAchievement(user_id=user.user_id, achievement_id=ach.achievement_id, tier=tier))
 
     if ach.reward_coins > 0:
         user.total_coins = (user.total_coins or 0) + ach.reward_coins
@@ -181,7 +242,45 @@ def _grant(user: SysUser, ach: Achievement, db: Session):
         ))
 
     add_growth(db, user, GROWTH_RULES["achievement"])
-    logger.info(f"用户 {user.user_id} 获得成就「{ach.name}」，奖励 {ach.reward_coins} 金币")
+    logger.info(f"用户 {user.user_id} 获得成就「{ach.name}」tier={tier}，奖励 {ach.reward_coins} 金币")
+
+
+def _upgrade_tier(user: SysUser, ach: Achievement, db: Session, tier: int):
+    """升级成就档位（tier 只增不减）"""
+    ua = db.query(UserAchievement).filter(
+        UserAchievement.user_id == user.user_id,
+        UserAchievement.achievement_id == ach.achievement_id
+    ).first()
+    if ua and (ua.tier or 1) < tier:
+        ua.tier = tier
+        logger.info(f"用户 {user.user_id} 成就「{ach.name}」升级到 tier {tier}")
+
+
+def _current_value(user: SysUser, ach: Achievement, db: Session) -> int:
+    """计算升档成就的当前达成值（复用统计函数）"""
+    code = ach.condition_code
+    if code == "total_questions":
+        return _count_practice(user.user_id, db)
+    if code == "today_questions":
+        return _count_practice(user.user_id, db, days=0)
+    if code == "week_questions":
+        return _count_practice(user.user_id, db, week=True)
+    if code == "review_count":
+        return _total_review_count(user.user_id, db)
+    if code == "chop_count":
+        return _total_chop_count(user.user_id, db)
+    if code == "post_count":
+        return _post_count(user.user_id, db)
+    if code == "total_likes":
+        return _total_likes(user.user_id, db)
+    if code == "favorite_count":
+        return db.query(FavoriteQuestion).filter(FavoriteQuestion.user_id == user.user_id).count()
+    if code == "note_count":
+        return (db.query(QuestionNote).filter(QuestionNote.user_id == user.user_id).count()
+                + db.query(NewsNote).filter(NewsNote.user_id == user.user_id).count())
+    if code == "quote_favorite_count":
+        return db.query(QuoteFavorite).filter(QuoteFavorite.user_id == user.user_id).count()
+    return 0
 
 
 def _check_condition(user: SysUser, ach: Achievement, db: Session,

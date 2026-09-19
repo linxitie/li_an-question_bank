@@ -2,8 +2,9 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
 import uuid
+import os
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Form, File, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -430,3 +431,47 @@ async def update_user_profile(
     db.commit()
     db.refresh(current_user)
     return {"success": True, "message": "个人信息已更新", "user": UserResponse.model_validate(current_user)}
+
+
+# 头像上传允许的扩展名 + 大小上限（2MB）
+_ALLOWED_AVATAR_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+_MAX_AVATAR_SIZE = 2 * 1024 * 1024
+
+
+@router.post("/avatar", summary="上传头像")
+async def upload_avatar(
+        file: UploadFile = File(...),
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """学生端上传头像（白名单 + 大小限制 + UUID 重命名）"""
+    # 1. 扩展名白名单校验
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_AVATAR_EXT:
+        raise HTTPException(status_code=400, detail="仅支持 jpg/jpeg/png/gif/webp 格式")
+
+    # 2. 读取内容并校验大小
+    content = await file.read()
+    if len(content) > _MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="头像大小不能超过 2MB")
+    if not content:
+        raise HTTPException(status_code=400, detail="文件内容为空")
+
+    # 3. UUID 重命名（防路径穿越/覆盖），存 uploads/avatars/
+    filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
+    upload_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "uploads", "avatars"
+    )
+    os.makedirs(upload_dir, exist_ok=True)
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    # 4. 更新 avatar 字段
+    avatar_url = f"/uploads/avatars/{filename}"
+    current_user.avatar = avatar_url
+    db.commit()
+
+    logging.getLogger(__name__).info(f"用户 {current_user.user_id} 上传头像: {avatar_url}")
+    return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}
