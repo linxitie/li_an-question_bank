@@ -106,13 +106,13 @@ def _tier_times_for(code: str, threshold: int):
 
 def _tier_for_value(threshold: int, current: int, tier_times) -> int:
     """根据当前达成值计算应达到的档位（1-5）"""
-    tier = 1
+    tier = 0
     for mult in (tier_times or []):
         if current >= threshold * mult:
             tier += 1
         else:
             break
-    return min(tier, 5)
+    return max(tier, 1)
 
 
 def seed_achievements(db: Session) -> int:
