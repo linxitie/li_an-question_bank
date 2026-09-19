@@ -284,12 +284,17 @@ export default defineComponent({
       try {
         const auth = window.__VTJ_AUTH__;
         const res = await auth.apiFetch('/api/auth/avatar', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.detail || '上传失败');
+          return;
+        }
         const data = await res.json();
         if (data.success) {
           userAvatar.value = data.avatar_url;
         }
       } catch (e) {
-        console.error('头像上传失败:', e);
+        alert('上传失败，请重试');
       } finally {
         event.target.value = '';
       }

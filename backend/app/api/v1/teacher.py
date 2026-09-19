@@ -1336,7 +1336,8 @@ async def upload_avatar(
     import uuid
     ext = os.path.splitext(file.filename)[1] if file.filename else '.jpg'
     filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
-    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'uploads', 'avatars')
+    from app.core.config import settings
+    upload_dir = os.path.join(settings.UPLOAD_DIR, 'avatars')
     os.makedirs(upload_dir, exist_ok=True)
     filepath = os.path.join(upload_dir, filename)
     content = await file.read()

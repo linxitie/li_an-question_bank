@@ -459,10 +459,7 @@ async def upload_avatar(
 
     # 3. UUID 重命名（防路径穿越/覆盖），存 uploads/avatars/
     filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
-    upload_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "uploads", "avatars"
-    )
+    upload_dir = os.path.join(settings.UPLOAD_DIR, "avatars")
     os.makedirs(upload_dir, exist_ok=True)
     filepath = os.path.join(upload_dir, filename)
     with open(filepath, "wb") as f:

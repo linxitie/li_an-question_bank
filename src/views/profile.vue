@@ -229,6 +229,11 @@ async function handleAvatarChange(e: Event) {
   fd.append('file', file);
   try {
     const res = await auth.apiFetch('/api/auth/avatar', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      ElMessage.error(err.detail || '上传失败');
+      return;
+    }
     const data = await res.json();
     if (data.success) {
       user.value.avatar = data.avatar_url;
