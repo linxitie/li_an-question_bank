@@ -432,6 +432,18 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'mobile' }
   },
   {
+    path: '/mobile/wrong-review',
+    name: 'MobileWrongReview',
+    component: () => import('@/views/mobile_wrong_review.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/history',
+    name: 'MobileHistory',
+    component: () => import('@/views/mobile_history.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
     path: '/mobile/score-analysis',
     name: 'MobileScoreAnalysis',
     component: () => import('@/views/mobile_score_analysis.vue'),

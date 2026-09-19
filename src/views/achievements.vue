@@ -1,4 +1,4 @@
-<!-- 我的成就页（桌面端） -->
+<!-- 我的成就页（三端响应式） -->
 <template>
   <div class="achievements-page">
     <NavBar />
@@ -14,13 +14,19 @@
           <div
             v-for="a in items"
             :key="a.achievement_id"
-            :class="['ach-card', { earned: a.earned }]"
+            :class="['ach-card', { earned: a.earned, locked: !a.earned }]"
+            :style="a.earned ? { borderColor: tierColor(a.tier) } : {}"
           >
-            <div class="ach-icon">{{ a.icon }}</div>
+            <div class="ach-icon" :style="a.earned ? { background: tierColor(a.tier) + '22' } : {}">
+              {{ isHidden(a) ? '❓' : a.icon }}
+            </div>
+            <div v-if="a.earned" class="ach-earned-badge" :style="{ background: tierColor(a.tier) }">
+              ✓ {{ tierLabel(a.tier) }}
+            </div>
             <div class="ach-body">
-              <div class="ach-name">{{ a.name }}</div>
-              <div class="ach-desc">{{ a.condition_desc }}</div>
-              <div class="ach-progress-bar" v-if="!a.earned && a.threshold > 0">
+              <div class="ach-name">{{ isHidden(a) ? '神秘成就' : a.name }}</div>
+              <div class="ach-desc">{{ isHidden(a) ? '继续探索解锁' : a.condition_desc }}</div>
+              <div class="ach-progress-bar" v-if="!a.earned && a.threshold > 0 && !isHidden(a)">
                 <div class="ach-progress-fill" :style="{ width: Math.min(100, (a.current / a.threshold) * 100) + '%' }"></div>
               </div>
               <div class="ach-reward">🪙 {{ a.reward_coins }}</div>
@@ -33,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { reactive, onMounted } from 'vue';
 import { XIcon } from '@vtj/ui';
 import { Trophy } from '@vtj/icons';
 import NavBar from '$vtj/vue/navbar.vue';
@@ -48,10 +54,29 @@ const CATEGORY_LABEL: Record<string, string> = {
   '错题': '❌ 错题管理',
   '社交': '💬 社交互动',
   '综合': '🏆 综合成就',
+  '联考特色': '🎖️ 联考特色',
+  '隐藏': '🔒 隐藏成就',
+  '赛季限定': '🏅 赛季限定',
+};
+
+const TIER_COLORS: Record<number, string> = {
+  1: '#b87333', 2: '#c0c0c0', 3: '#ffd700', 4: '#e5e4e2', 5: '#b9f2ff',
+};
+const TIER_LABELS: Record<number, string> = {
+  1: '铜', 2: '银', 3: '金', 4: '铂金', 5: '钻石',
 };
 
 function categoryLabel(cat: any) {
   return CATEGORY_LABEL[cat] || cat;
+}
+function tierColor(tier: number) {
+  return TIER_COLORS[tier] || '#b87333';
+}
+function tierLabel(tier: number) {
+  return TIER_LABELS[tier] || '铜';
+}
+function isHidden(a: any) {
+  return (a.is_hidden === 1) && !a.earned;
 }
 
 onMounted(async () => {
@@ -99,16 +124,29 @@ onMounted(async () => {
 .cat-title { font-size: 16px; font-weight: 700; color: #1a2b5f; margin: 0 0 14px; }
 .ach-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .ach-card {
+  position: relative;
   display: flex;
   gap: 14px;
   padding: 16px;
   background: #ffffff;
   border-radius: 14px;
   box-shadow: 0 2px 12px rgba(26, 43, 95, 0.04);
-  opacity: 0.85;
+  border: 1px solid transparent;
   transition: all 0.2s;
 }
-.ach-card.earned { opacity: 1; border: 1px solid rgba(245, 158, 11, 0.4); }
+.ach-card.locked { opacity: 0.7; }
+.ach-card.locked .ach-icon { filter: grayscale(1); }
+.ach-earned-badge {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
 .ach-icon { width: 48px; height: 48px; font-size: 26px; display: flex; align-items: center; justify-content: center; background: #f8f9fc; border-radius: 12px; flex-shrink: 0; }
 .ach-body { flex: 1; min-width: 0; }
 .ach-name { font-size: 15px; font-weight: 700; color: #1a2b5f; }
@@ -116,4 +154,17 @@ onMounted(async () => {
 .ach-progress-bar { height: 5px; background: #f0f2f5; border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
 .ach-progress-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #d97706); border-radius: 3px; }
 .ach-reward { font-size: 12px; color: #b45309; font-weight: 600; }
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .ach-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .ach-main { padding: 16px; }
+  .ach-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .ach-card { flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 14px 8px; }
+  .ach-icon { width: 44px; height: 44px; font-size: 22px; }
+  .ach-name { font-size: 13px; }
+  .ach-desc { font-size: 11px; }
+}
 </style>

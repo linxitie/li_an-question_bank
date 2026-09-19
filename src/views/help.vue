@@ -46,6 +46,9 @@ onMounted(async () => {
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 .help-main { max-width: 900px; margin: 0 auto; padding: 24px 32px 40px; }
+@media (max-width: 768px) {
+  .help-main { padding: 16px; }
+}
 .help-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .help-header h2 { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 800; color: #1a2b5f; margin: 0; }
 .btn-feedback { padding: 9px 20px; background: linear-gradient(135deg, #c41e3a, #d42945); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }

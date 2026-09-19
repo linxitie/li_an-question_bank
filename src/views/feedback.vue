@@ -114,6 +114,10 @@ onMounted(loadMy);
 .fb-header { margin-bottom: 20px; }
 .fb-header h2 { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 800; color: #1a2b5f; margin: 0; }
 .fb-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 768px) {
+  .fb-main { padding: 16px; }
+  .fb-layout { grid-template-columns: 1fr; }
+}
 .card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 14px rgba(26, 43, 95, 0.05); }
 .card-title { font-size: 16px; font-weight: 700; color: #1a2b5f; margin: 0 0 16px; }
 .form-row { display: flex; flex-direction: column; margin-bottom: 14px; }

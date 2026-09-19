@@ -6,7 +6,10 @@
       <!-- 左栏：个人资料 + 金币 -->
       <aside class="left-col">
         <section class="card profile-card">
-          <div class="avatar"><XIcon :icon="UserFilled" :size="40" color="#fff" /></div>
+          <div class="avatar" @click="openEditProfile">
+            <img v-if="user.avatar" :src="user.avatar" class="avatar-img" alt="头像" />
+            <XIcon v-else :icon="UserFilled" :size="40" color="#fff" />
+          </div>
           <h2 class="name">{{ user.username || '同学' }}</h2>
           <p class="meta">{{ user.user_no || '' }}</p>
           <p class="meta">{{ user.class_name || '公安联考备考学员' }}</p>
@@ -54,6 +57,15 @@
       <aside class="right-col">
         <div class="card">
           <h3 class="card-title"><XIcon :icon="Trophy" :size="18" color="#f59e0b" /> 成就与激励</h3>
+          <div class="ach-badges" v-if="earnedBadges.length">
+            <span
+              v-for="b in earnedBadges"
+              :key="b.achievement_id"
+              class="ach-badge"
+              :style="{ borderColor: tierColor(b.tier), color: tierColor(b.tier) }"
+              :title="b.name"
+            >{{ b.icon }}</span>
+          </div>
           <p class="ach-count">已获得 <strong>{{ earnedCount }}</strong> 枚勋章</p>
           <button class="btn-mini full" @click="go('/achievements')">查看全部 →</button>
         </div>
@@ -83,6 +95,20 @@
     <div class="modal-overlay" v-if="showEdit" @click.self="showEdit = false">
       <div class="modal">
         <h3>编辑资料</h3>
+        <div class="avatar-edit">
+          <div class="avatar-edit-img" @click="triggerAvatarUpload">
+            <img v-if="user.avatar" :src="user.avatar" alt="头像" />
+            <XIcon v-else :icon="UserFilled" :size="40" color="#fff" />
+          </div>
+          <span class="avatar-edit-hint">点击更换头像</span>
+          <input
+            ref="avatarInput"
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            style="display:none"
+            @change="handleAvatarChange"
+          />
+        </div>
         <div class="form-row"><label>手机号</label><input v-model="editForm.phone" /></div>
         <div class="form-row"><label>邮箱</label><input v-model="editForm.email" /></div>
         <div class="form-row"><label>性别</label>
@@ -145,8 +171,10 @@ const stats = ref<any>({});
 const coin = ref<any>({ balance: 0, month_income: 0, month_expense: 0 });
 const level = ref<any>({ level: 1, title: '新手学员', progress: 0, growth_points: 0 });
 const earnedCount = ref(0);
+const earnedBadges = ref<any[]>([]);
 const devices = ref<any[]>([]);
 const coinRecords = ref<any[]>([]);
+const avatarInput = ref<HTMLInputElement | null>(null);
 
 const showEdit = ref(false);
 const showDevices = ref(false);
@@ -172,10 +200,48 @@ onMounted(async () => {
     coin.value = c;
     level.value = l;
     earnedCount.value = a.earned_count || 0;
+    earnedBadges.value = (a.items || []).slice(0, 12);
   } catch (e) {
     console.error('加载个人中心数据失败', e);
   }
 });
+
+const TIER_COLORS: Record<number, string> = {
+  1: '#b87333', 2: '#c0c0c0', 3: '#ffd700', 4: '#e5e4e2', 5: '#b9f2ff',
+};
+function tierColor(tier: number) {
+  return TIER_COLORS[tier] || '#b87333';
+}
+
+function triggerAvatarUpload() {
+  avatarInput.value?.click();
+}
+
+async function handleAvatarChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.warning('头像不能超过 2MB');
+    return;
+  }
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await auth.apiFetch('/api/auth/avatar', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      user.value.avatar = data.avatar_url;
+      ElMessage.success('头像上传成功');
+    } else {
+      ElMessage.error(data.message || '上传失败');
+    }
+  } catch (err) {
+    ElMessage.error('上传失败，请重试');
+  } finally {
+    input.value = '';
+  }
+}
 
 function go(path: string) {
   router.push(path);
@@ -276,7 +342,8 @@ function handleLogout() {
 .card-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: #1a2b5f; margin: 0 0 16px; }
 
 .profile-card { text-align: center; }
-.avatar { width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, #1a2b5f, #2a5298); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+.avatar { width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, #1a2b5f, #2a5298); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; overflow: hidden; cursor: pointer; }
+.avatar-img { width: 100%; height: 100%; object-fit: cover; }
 .name { font-size: 20px; font-weight: 800; color: #1a2b5f; margin: 0 0 4px; }
 .meta { font-size: 13px; color: #8a8faa; margin: 2px 0; }
 .btn-edit { margin-top: 16px; padding: 8px 20px; background: linear-gradient(135deg, #1a2b5f, #1e3470); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
@@ -302,6 +369,8 @@ function handleLogout() {
 
 .ach-count { font-size: 14px; color: #5a6488; }
 .ach-count strong { font-size: 22px; color: #f59e0b; }
+.ach-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ach-badge { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #b87333; display: flex; align-items: center; justify-content: center; font-size: 20px; background: #fafafa; }
 
 .level-text { font-size: 18px; font-weight: 800; color: #1a2b5f; margin: 0 0 10px; }
 .progress-bar { height: 8px; background: #f0f2f5; border-radius: 4px; overflow: hidden; }
@@ -317,6 +386,10 @@ function handleLogout() {
 .modal { background: #fff; border-radius: 14px; padding: 28px; width: 440px; max-width: 90vw; max-height: 80vh; overflow-y: auto; }
 .modal.wide { width: 560px; }
 .modal h3 { color: #1a2b5f; margin: 0 0 20px; font-size: 18px; }
+.avatar-edit { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+.avatar-edit-img { width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #1a2b5f, #2a5298); display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; }
+.avatar-edit-img img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-edit-hint { font-size: 12px; color: #8a8faa; margin-top: 8px; }
 .form-row { display: flex; align-items: center; margin-bottom: 14px; }
 .form-row label { width: 90px; font-weight: 600; color: #555; font-size: 14px; }
 .form-row input, .form-row select { flex: 1; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; }

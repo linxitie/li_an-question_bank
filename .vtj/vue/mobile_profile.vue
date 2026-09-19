@@ -16,8 +16,10 @@
     <main class="main-content">
       <!-- 用户信息卡片 -->
       <section class="user-card">
-        <div class="user-avatar">
-          <XIcon :icon="UserFilled" :size="40" color="#ffffff"></XIcon>
+        <div class="user-avatar" @click="triggerAvatarUpload">
+          <img v-if="userAvatar" :src="userAvatar" class="user-avatar-img" alt="头像" />
+          <XIcon v-else :icon="UserFilled" :size="40" color="#ffffff"></XIcon>
+          <input ref="avatarInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" @change="handleAvatarChange" />
         </div>
         <div class="user-info">
           <h2 class="user-name">{{ userName }}</h2>
@@ -190,6 +192,8 @@ export default defineComponent({
     
     // 用户数据
     const userName = ref('同学');
+    const userAvatar = ref('');
+    const avatarInput = ref(null);
     const streakDays = ref(15);
     const totalQuestions = ref(1289);
     const accuracy = ref(70.2);
@@ -207,6 +211,12 @@ export default defineComponent({
         if (auth && auth.isLoggedIn()) {
           const uname = auth.getUsername();
           if (uname) userName.value = uname;
+          // 头像
+          try {
+            const pRes = await auth.apiFetch('/api/auth/profile');
+            const pData = await pRes.json();
+            userAvatar.value = pData.avatar || '';
+          } catch (e) { /* 头像加载失败不影响主流程 */ }
           // 学习统计
           const res = await auth.apiFetch('/api/stats/');
           const data = await res.json();
@@ -244,7 +254,7 @@ export default defineComponent({
     
     const goToWrongQuestions = () => router.push('/mobile/wrong-questions');
     const goToCollection = () => router.push('/mobile/favorites');
-    const goToHistory = () => router.push('/profile');
+    const goToHistory = () => router.push('/mobile/history');
     const goToNotes = () => router.push('/mobile/notes');
     
     const goToAchievements = () => router.push('/achievements');
@@ -256,6 +266,33 @@ export default defineComponent({
     const handleLogout = () => {
       if (window.__VTJ_AUTH__) window.__VTJ_AUTH__.logout();
       router.push('/login');
+    };
+
+    const triggerAvatarUpload = () => {
+      if (avatarInput.value) avatarInput.value.click();
+    };
+
+    const handleAvatarChange = async (event: any) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        console.warn('头像超过2MB');
+        return;
+      }
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const auth = window.__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/auth/avatar', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) {
+          userAvatar.value = data.avatar_url;
+        }
+      } catch (e) {
+        console.error('头像上传失败:', e);
+      } finally {
+        event.target.value = '';
+      }
     };
     
     const switchTab = (tab: string) => {
@@ -273,6 +310,8 @@ export default defineComponent({
     return {
       activeTab,
       userName,
+      userAvatar,
+      avatarInput,
       streakDays,
       totalQuestions,
       accuracy,
@@ -292,6 +331,8 @@ export default defineComponent({
       goToHelp,
       goToAbout,
       handleLogout,
+      triggerAvatarUpload,
+      handleAvatarChange,
       switchTab,
       ArrowLeft,
       ArrowRight,
@@ -393,6 +434,13 @@ export default defineComponent({
   align-items: center;
   justify-content: center;
   margin: 0 auto 16px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.user-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-info {

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...core.security import get_current_user
 from ...models.models import (
-    QuestionBank, FavoriteQuestion, QuestionNote, QuestionMarker, SysUser
+    QuestionBank, FavoriteQuestion, QuestionNote, QuestionMarker, SysUser, QuestionSubject
 )
 
 router = APIRouter(prefix="/api/questions", tags=["题目交互"])
@@ -66,11 +66,25 @@ async def list_favorites(
     result = []
     for fav in items:
         question = fav.question
+        subject = db.query(QuestionSubject).filter(
+            QuestionSubject.subject_id == question.subject_id
+        ).first() if question else None
+        sub_category = ''
+        if question:
+            if question.subject_id == 1:
+                sub_category = question.xingce_subcategory or ''
+            elif question.subject_id == 2:
+                sub_category = question.shenlun_subcategory or ''
+            elif question.subject_id == 3:
+                sub_category = question.gongzhuan_subcategory or ''
         result.append({
             'fav_id': fav.fav_id,
-            'question_id': question.question_id,
+            'question_id': question.question_id if question else None,
             'question_content': question.question_content[:200] if question else '',
             'answer': question.answer if question else '',
+            'subject_id': question.subject_id if question else None,
+            'subject_name': subject.subject_name if subject else '',
+            'sub_category': sub_category if sub_category and sub_category != '无' else '',
             'create_time': fav.create_time.isoformat() if fav.create_time else None,
         })
 
