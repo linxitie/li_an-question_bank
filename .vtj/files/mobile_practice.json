@@ -9,24 +9,82 @@
   "slots": [],
   "state": {
     "activeTab": "'practice'",
-    "todayCount": "18",
-    "accuracy": "70.2",
-    "studyTime": "'1.8h'",
-    "dailyGoal": "40",
-    "dailyCompleted": "30"
+    "subjects": "[]",
+    "subjectStats": "{}",
+    "activeSubject": "1",
+    "subModules": "[]",
+    "knowledgePoints": "[]",
+    "viewState": "'subModules'",
+    "loaded": "false",
+    "loading": "false",
+    "showModeSheet": "false",
+    "currentKp": "null"
   },
   "methods": {
-    "goBack": { "type": "method" },
-    "goToQuickPractice": { "type": "method" },
-    "goToWeakPractice": { "type": "method" },
-    "goToSmartPractice": { "type": "method" },
-    "goToMockExam": { "type": "method" },
-    "viewAllRecent": { "type": "method" },
-    "continuePractice": { "type": "method", "params": ["item"] },
-    "switchTab": { "type": "method", "params": ["tab"] }
+    "switchTab": {
+      "type": "method",
+      "params": [
+        "tab"
+      ]
+    },
+    "loadSubjects": {
+      "type": "method",
+      "params": []
+    },
+    "loadSubjectStats": {
+      "type": "method",
+      "params": []
+    },
+    "switchSubject": {
+      "type": "method",
+      "params": [
+        "subjectId"
+      ]
+    },
+    "openSubModule": {
+      "type": "method",
+      "params": [
+        "sc"
+      ]
+    },
+    "openModeSheet": {
+      "type": "method",
+      "params": [
+        "kp"
+      ]
+    },
+    "closeModeSheet": {
+      "type": "method",
+      "params": []
+    },
+    "startPractice": {
+      "type": "method",
+      "params": [
+        "mode"
+      ]
+    },
+    "handleBack": {
+      "type": "method",
+      "params": []
+    }
   },
   "computed": {
-    "dailyGoalPercent": { "type": "JSExpression", "value": "Math.round((this.dailyCompleted / this.dailyGoal) * 100)" }
+    "currentSubject": {
+      "type": "JSExpression",
+      "value": "this.subjects.find((s) => s.subject_id === this.activeSubject)"
+    },
+    "currentDone": {
+      "type": "JSExpression",
+      "value": "this.subjectStats[this.activeSubject]?.done || 0"
+    },
+    "currentTotal": {
+      "type": "JSExpression",
+      "value": "this.subjectStats[this.activeSubject]?.total || 0"
+    },
+    "currentProgress": {
+      "type": "JSExpression",
+      "value": "this.currentTotal ? Math.round((this.currentDone * 100) / this.currentTotal) : 0"
+    }
   },
   "lifeCycles": {},
   "dataSources": {},

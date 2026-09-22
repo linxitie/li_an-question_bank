@@ -209,6 +209,8 @@
 
   var _syncSocket: WebSocket | null = null;
   var _syncReconnectTimer: number | null = null;
+  var _syncHeartbeatTimer: number | null = null;
+  var _reconnectDelay = 5000; // 重连延迟，指数退避，封顶 60s
 
   /**
    * 建立 WebSocket 同步连接（三端实时同步）
@@ -230,6 +232,11 @@
       return;
     }
 
+    _syncSocket.onopen = function () {
+      _reconnectDelay = 5000; // 连接成功，重置退避
+      startSyncHeartbeat();
+    };
+
     _syncSocket.onmessage = function (ev: any) {
       try {
         var msg = JSON.parse(ev.data);
@@ -241,17 +248,33 @@
 
     _syncSocket.onclose = function () {
       _syncSocket = null;
+      stopSyncHeartbeat();
       if (_syncReconnectTimer) clearTimeout(_syncReconnectTimer);
       _syncReconnectTimer = window.setTimeout(function () {
         if (isLoggedIn()) initSyncSocket();
-      }, 10000);
+      }, _reconnectDelay);
+      _reconnectDelay = Math.min(_reconnectDelay * 2, 60000); // 指数退避，封顶 60s
     };
 
     _syncSocket.onerror = function () { /* onclose 会随之触发 */ };
   }
 
+  function startSyncHeartbeat() {
+    stopSyncHeartbeat();
+    _syncHeartbeatTimer = window.setInterval(function () {
+      if (_syncSocket && _syncSocket.readyState === 1) {
+        try { _syncSocket.send(JSON.stringify({ type: 'heartbeat' })); } catch (e) {}
+      }
+    }, 30000); // 30s 心跳保活
+  }
+
+  function stopSyncHeartbeat() {
+    if (_syncHeartbeatTimer) { clearInterval(_syncHeartbeatTimer); _syncHeartbeatTimer = null; }
+  }
+
   function closeSyncSocket() {
     if (_syncReconnectTimer) { clearTimeout(_syncReconnectTimer); _syncReconnectTimer = null; }
+    stopSyncHeartbeat();
     if (_syncSocket) {
       try { _syncSocket.close(); } catch (e) {}
       _syncSocket = null;

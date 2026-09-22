@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...models.models import StudyGoal, SysUser, PracticeRecord, CoinRecord
 from ...schemas.schemas import (
     StudyGoalCreate,
@@ -129,7 +129,7 @@ async def create_goal(
     )
 
     db.add(new_goal)
-    db.commit()
+    commit_with_retry(db)
     db.refresh(new_goal)
 
     logger.info(
@@ -178,7 +178,7 @@ async def update_goal(
             goal.completed_time = datetime.now()
 
     goal.update_time = datetime.now()
-    db.commit()
+    commit_with_retry(db)
     db.refresh(goal)
 
     logger.info(f"用户 {current_user.username} 更新目标 ID: {goal_id}")
@@ -204,7 +204,7 @@ async def delete_goal(
 
     goal.status = 0
     goal.update_time = datetime.now()
-    db.commit()
+    commit_with_retry(db)
 
     logger.info(f"用户 {current_user.username} 删除目标 ID: {goal_id}")
 
@@ -241,7 +241,7 @@ async def update_goal_progress(
         goal.completed_time = datetime.now()
 
     goal.update_time = datetime.now()
-    db.commit()
+    commit_with_retry(db)
     db.refresh(goal)
 
     progress = compute_progress(goal)
@@ -311,7 +311,7 @@ async def confirm_goal_complete(
     if goal.current_count < goal.target_count:
         goal.current_count = goal.target_count
 
-    db.commit()
+    commit_with_retry(db)
     db.refresh(goal)
 
     logger.info(
@@ -390,7 +390,7 @@ async def complete_goal(
 
     add_growth(db, current_user, 15)  # 完成目标 +15 成长值
 
-    db.commit()
+    commit_with_retry(db)
     db.refresh(goal)
 
     logger.info(
@@ -454,7 +454,7 @@ async def undo_goal_complete(
     if reset_progress:
         goal.current_count = 0
 
-    db.commit()
+    commit_with_retry(db)
     db.refresh(goal)
 
     logger.info(
@@ -519,7 +519,7 @@ async def batch_confirm_goals(
         except Exception as e:
             failed.append({"goal_id": goal_id, "reason": str(e)})
 
-    db.commit()
+    commit_with_retry(db)
 
     logger.info(
         f"用户 {current_user.username} 批量确认完成: "

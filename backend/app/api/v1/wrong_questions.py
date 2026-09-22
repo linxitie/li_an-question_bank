@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...core.security import get_current_user
 from ...models.models import (
     WrongQuestionPersonal, QuestionBank, QuestionSubject, QuestionDetailCategory,
@@ -127,7 +127,7 @@ async def collect_wrong_question(
             existing.mastery_level = "MASTERED"
             existing.is_cut = 1
             existing.cut_time = datetime.now()
-            db.commit()
+            commit_with_retry(db)
             return {"message": "答对了，已标记为已掌握", "wrong_id": existing.wrong_id, "removed": False, "mastered": True}
         else:
             # 答错了，增加错误次数，修复accuracy_rate计算逻辑
@@ -138,7 +138,7 @@ async def collect_wrong_question(
             correct_count = max(0, total_attempts - existing.error_count)
             existing.accuracy_rate = round((correct_count / total_attempts) * 100, 2) if total_attempts > 0 else 0
             existing.last_review_time = datetime.now()
-            db.commit()
+            commit_with_retry(db)
             return {"message": "错题已更新", "wrong_id": existing.wrong_id, "updated": True}
 
     # 新增错题记录
@@ -154,7 +154,7 @@ async def collect_wrong_question(
             last_review_time=datetime.now(),
         )
         db.add(wrong_q)
-        db.commit()
+        commit_with_retry(db)
         db.refresh(wrong_q)
         return {"message": "错题已收录", "wrong_id": wrong_q.wrong_id, "created": True}
 
@@ -177,7 +177,7 @@ async def delete_wrong_question(
         raise HTTPException(status_code=404, detail="错题记录不存在")
 
     wq.status = 0  # 软删除
-    db.commit()
+    commit_with_retry(db)
     return {"message": "已删除"}
 
 
@@ -206,7 +206,7 @@ async def update_mastery(
     if mastery_level == 'MASTERED':
         wq.is_cut = 1
         wq.cut_time = datetime.now()
-    db.commit()
+    commit_with_retry(db)
 
     return {"message": "掌握度已更新", "mastery_level": mastery_level}
 
@@ -408,7 +408,7 @@ async def chop_question(
     # 10天后自动删除
     from datetime import timedelta
     wq.auto_delete_time = datetime.now() + timedelta(days=10)
-    db.commit()
+    commit_with_retry(db)
 
     # 触发斩题成就
     try:
@@ -605,7 +605,7 @@ async def unchop_question(
     wq.cut_time = None
     wq.auto_delete_time = None
     wq.mastery_level = "PARTIAL"
-    db.commit()
+    commit_with_retry(db)
     return {"message": "已恢复到错题列表", "wrong_id": wrong_id}
 
 
@@ -743,7 +743,7 @@ async def submit_review(
             'difficulty': q.difficulty or 3
         })
 
-    db.commit()
+    commit_with_retry(db)
 
     # 触发错题重练成就
     try:

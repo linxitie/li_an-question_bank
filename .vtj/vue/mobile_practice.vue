@@ -1,156 +1,158 @@
-<!-- 手机端练习页 - VTJ规范版 -->
+<!-- 手机端练习页 - 重构版（三科目 + 知识点下钻 + 一屏适配） -->
 <template>
   <div class="mobile-practice-page">
     <!-- 顶部导航 -->
     <header class="top-nav">
-      <div class="nav-left">
-        <XIcon :icon="ArrowLeft" :size="22" color="#1A365D" class="nav-back" @click="goBack"></XIcon>
+      <div class="nav-left" @click="handleBack">
+        <XIcon :icon="ArrowLeft" :size="20" color="#1A365D" class="nav-back"></XIcon>
       </div>
       <h1 class="nav-title">练习中心</h1>
-      <div class="nav-right">
-        <XIcon :icon="Timer" :size="22" color="#1A365D" class="nav-icon"></XIcon>
-      </div>
+      <div class="nav-right"></div>
     </header>
 
-    <!-- 主内容区 -->
-    <main class="main-content">
-      <!-- 学习统计 -->
-      <section class="stats-section">
-        <div class="stats-card">
-          <div class="stat-item">
-            <div class="stat-icon">
-              <XIcon :icon="TrendCharts" :size="24" color="#10b981"></XIcon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-value">{{ todayCount }}</span>
-              <span class="stat-label">今日做题</span>
-            </div>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <div class="stat-icon">
-              <XIcon :icon="CircleCheck" :size="24" color="#1A365D"></XIcon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-value">{{ accuracy }}%</span>
-              <span class="stat-label">正确率</span>
-            </div>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <div class="stat-icon">
-              <XIcon :icon="Clock" :size="24" color="#f59e0b"></XIcon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-value">{{ studyTime }}</span>
-              <span class="stat-label">学习时长</span>
-            </div>
-          </div>
-        </div>
-      </section>
+    <!-- 三科目 Tab（图标 + 文字 + 进度） -->
+    <section class="subject-tabs">
+      <div
+        v-for="s in subjects"
+        :key="s.subject_id"
+        :class="['subject-card', { active: activeSubject === s.subject_id }]"
+        @click="switchSubject(s.subject_id)"
+      >
+        <XIcon
+          :icon="(subjectMeta[s.subject_id] && subjectMeta[s.subject_id].icon) || TrendCharts"
+          :size="24"
+          :color="(subjectMeta[s.subject_id] && subjectMeta[s.subject_id].color) || '#3B82F6'"
+        ></XIcon>
+        <span class="subject-name">{{ s.subject_name }}</span>
+        <span class="subject-progress">{{ subjectProgress(s.subject_id) }}%</span>
+      </div>
+    </section>
 
-      <!-- 快捷入口 -->
-      <section class="quick-actions">
-        <div class="action-card" @click="goToQuickPractice">
-          <div class="action-icon quick">
-            <XIcon :icon="EditPen" :size="32" color="#ffffff"></XIcon>
-          </div>
-          <span class="action-name">快速练习</span>
-          <span class="action-desc">随机10题</span>
-        </div>
-        <div class="action-card" @click="goToWeakPractice">
-          <div class="action-icon weak">
-            <XIcon :icon="Warning" :size="32" color="#ffffff"></XIcon>
-          </div>
-          <span class="action-name">薄弱攻克</span>
-          <span class="action-desc">错题强化</span>
-        </div>
-        <div class="action-card" @click="goToSmartPractice">
-          <div class="action-icon smart">
-            <XIcon :icon="Cpu" :size="32" color="#ffffff"></XIcon>
-          </div>
-          <span class="action-name">智能练习</span>
-          <span class="action-desc">AI推荐</span>
-        </div>
-        <div class="action-card" @click="goToMockExam">
-          <div class="action-icon mock">
-            <XIcon :icon="Trophy" :size="32" color="#ffffff"></XIcon>
-          </div>
-          <span class="action-name">模拟考试</span>
-          <span class="action-desc">实战演练</span>
-        </div>
-      </section>
+    <!-- 当前科目概览 -->
+    <section class="subject-overview" v-if="currentSubject">
+      <div class="overview-row">
+        <span class="overview-text">{{ currentSubject.subject_name }} · 已练 {{ currentDone }}/{{ currentTotal }} 题</span>
+        <span class="overview-pct">{{ currentProgress }}%</span>
+      </div>
+      <div class="progress-bar">
+        <div
+          class="progress-fill"
+          :style="{ width: currentProgress + '%', background: (subjectMeta[currentSubject.subject_id] && subjectMeta[currentSubject.subject_id].color) || '#1A365D' }"
+        ></div>
+      </div>
+    </section>
 
-      <!-- 最近练习 -->
-      <section class="recent-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <XIcon :icon="Clock" :size="20" color="#1A365D"></XIcon>
-            最近练习
-          </h2>
-          <span class="section-action" @click="viewAllRecent">查看全部</span>
-        </div>
-        <div class="recent-list">
-          <div 
-            v-for="(item, index) in recentList" 
-            :key="index"
-            class="recent-item"
-            @click="continuePractice(item)"
-          >
-            <div class="recent-icon" :style="{ background: item.iconBg }">
-              <XIcon :icon="item.icon" :size="24" color="#ffffff"></XIcon>
-            </div>
-            <div class="recent-info">
-              <span class="recent-name">{{ item.name }}</span>
-              <span class="recent-desc">{{ item.desc }}</span>
-            </div>
-            <div class="recent-action">
-              <XIcon :icon="ArrowRight" :size="16" color="#8899aa"></XIcon>
-            </div>
+    <!-- 主内容区（可滚动） -->
+    <main class="scroll-area">
+      <!-- 状态0：子科目列表 -->
+      <div v-if="viewState === 'subModules'">
+        <div
+          v-for="sc in subModules"
+          :key="sc.id"
+          class="sub-module-card"
+          @click="openSubModule(sc)"
+        >
+          <div class="sub-header">
+            <span class="sub-name">{{ sc.name }}</span>
+            <span class="sub-stat">{{ sc.done_count }}/{{ sc.total_questions }} · {{ sc.accuracy ?? 0 }}%</span>
+          </div>
+          <div class="progress-bar">
+            <div
+              class="progress-fill"
+              :style="{ width: calcPct(sc.done_count, sc.total_questions) + '%', background: progressColor(calcPct(sc.done_count, sc.total_questions)) }"
+            ></div>
           </div>
         </div>
-      </section>
+        <div v-if="loadError" class="empty-state">
+          <span class="empty-title">加载失败</span>
+          <span class="empty-desc">请检查网络后重试</span>
+          <button class="retry-btn" @click="switchSubject(activeSubject)">点击重试</button>
+        </div>
+        <div v-else-if="loaded && !subModules.length" class="empty-state">
+          <span class="empty-title">该科目暂无子科目</span>
+          <span class="empty-desc">换一个科目试试</span>
+        </div>
+      </div>
 
-      <!-- 今日目标 -->
-      <section class="goal-section">
-        <div class="goal-card">
-          <div class="goal-header">
-            <XIcon :icon="Aim" :size="20" color="#1A365D"></XIcon>
-            <span class="goal-title">今日目标</span>
+      <!-- 状态1：知识点列表 -->
+      <div v-else-if="viewState === 'knowledgePoints'">
+        <div
+          v-for="kp in knowledgePoints"
+          :key="kp.point_id"
+          class="kp-item"
+          @click="openModeSheet(kp)"
+        >
+          <div class="kp-row">
+            <span class="kp-name">{{ kp.point_name }}</span>
+            <span class="kp-stat">{{ kp.done_count }}/{{ kp.total_questions }} · {{ kp.accuracy ?? 0 }}%</span>
           </div>
-          <div class="goal-progress">
-            <div class="progress-info">
-              <span>已完成 {{ dailyCompleted }}/{{ dailyGoal }} 题</span>
-              <span class="progress-percent">{{ dailyGoalPercent }}%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: dailyGoalPercent + '%' }"></div>
-            </div>
+          <div class="progress-bar">
+            <div
+              class="progress-fill"
+              :style="{ width: calcPct(kp.done_count, kp.total_questions) + '%', background: progressColor(calcPct(kp.done_count, kp.total_questions)) }"
+            ></div>
           </div>
         </div>
-      </section>
+        <div v-if="!knowledgePoints.length" class="empty-state">
+          <span class="empty-title">该子科目暂无知识点</span>
+          <span class="empty-desc">返回上级查看其他子科目</span>
+        </div>
+      </div>
     </main>
 
-    <!-- 底部Tab栏 -->
+    <!-- 练习模式 Bottom Sheet -->
+    <div v-if="showModeSheet" class="sheet-mask" @click="closeModeSheet">
+      <div class="bottom-sheet" @click.stop>
+        <div class="sheet-handle"></div>
+        <h3 class="sheet-title">选择练习模式</h3>
+        <div class="mode-item" @click="startPractice('random')">
+          <div class="mode-icon"><XIcon :icon="Lightning" :size="20" color="#1A365D"></XIcon></div>
+          <div class="mode-info">
+            <span class="mode-name">随机练习</span>
+            <span class="mode-desc">系统随机出题，快速刷题</span>
+          </div>
+          <XIcon :icon="ArrowRight" :size="16" color="#c0c4cc"></XIcon>
+        </div>
+        <div class="mode-item" @click="startPractice('special')">
+          <div class="mode-icon"><XIcon :icon="CircleCheck" :size="20" color="#1A365D"></XIcon></div>
+          <div class="mode-info">
+            <span class="mode-name">专项突破</span>
+            <span class="mode-desc">按题型分类练习</span>
+          </div>
+          <XIcon :icon="ArrowRight" :size="16" color="#c0c4cc"></XIcon>
+        </div>
+        <div class="mode-item" @click="startPractice('wrong')">
+          <div class="mode-icon"><XIcon :icon="Warning" :size="20" color="#1A365D"></XIcon></div>
+          <div class="mode-info">
+            <span class="mode-name">错题重练</span>
+            <span class="mode-desc">巩固薄弱知识点</span>
+          </div>
+          <XIcon :icon="ArrowRight" :size="16" color="#c0c4cc"></XIcon>
+        </div>
+        <button class="sheet-cancel" @click="closeModeSheet">取消</button>
+      </div>
+    </div>
+
+    <!-- 底部 Tab -->
     <nav class="bottom-tab-bar">
       <div :class="['tab-item', { active: activeTab === 'home' }]" @click="switchTab('home')">
-        <XIcon :icon="HomeFilled" :size="22" :color="activeTab === 'home' ? '#1A365D' : '#a0a4b8'"></XIcon>
+        <XIcon :icon="HomeFilled" :size="20" :color="activeTab === 'home' ? '#1A365D' : '#a0a4b8'"></XIcon>
         <span class="tab-label">首页</span>
       </div>
       <div :class="['tab-item', { active: activeTab === 'question' }]" @click="switchTab('question')">
-        <XIcon :icon="Reading" :size="22" :color="activeTab === 'question' ? '#1A365D' : '#a0a4b8'"></XIcon>
+        <XIcon :icon="Reading" :size="20" :color="activeTab === 'question' ? '#1A365D' : '#a0a4b8'"></XIcon>
         <span class="tab-label">题库</span>
       </div>
       <div :class="['tab-item', { active: activeTab === 'practice' }]" @click="switchTab('practice')">
-        <XIcon :icon="Edit" :size="22" :color="activeTab === 'practice' ? '#1A365D' : '#a0a4b8'"></XIcon>
+        <XIcon :icon="Edit" :size="20" :color="activeTab === 'practice' ? '#1A365D' : '#a0a4b8'"></XIcon>
         <span class="tab-label">练习</span>
       </div>
       <div :class="['tab-item', { active: activeTab === 'forum' }]" @click="switchTab('forum')">
-        <XIcon :icon="ChatLineRound" :size="22" :color="activeTab === 'forum' ? '#1A365D' : '#a0a4b8'"></XIcon>
+        <XIcon :icon="ChatLineRound" :size="20" :color="activeTab === 'forum' ? '#1A365D' : '#a0a4b8'"></XIcon>
         <span class="tab-label">论坛</span>
       </div>
       <div :class="['tab-item', { active: activeTab === 'profile' }]" @click="switchTab('profile')">
-        <XIcon :icon="User" :size="22" :color="activeTab === 'profile' ? '#1A365D' : '#a0a4b8'"></XIcon>
+        <XIcon :icon="User" :size="20" :color="activeTab === 'profile' ? '#1A365D' : '#a0a4b8'"></XIcon>
         <span class="tab-label">我的</span>
       </div>
     </nav>
@@ -165,15 +167,12 @@ import { XIcon } from '@vtj/ui';
 import {
   ArrowLeft,
   ArrowRight,
-  Timer,
   TrendCharts,
-  CircleCheck,
-  Clock,
   EditPen,
-  Warning,
-  Cpu,
   Trophy,
-  Aim,
+  Lightning,
+  CircleCheck,
+  Warning,
   HomeFilled,
   Reading,
   Edit,
@@ -184,191 +183,250 @@ import { useProvider } from '@vtj/renderer';
 
 export default defineComponent({
   name: 'MobilePractice',
-  components: {
-    XIcon
-  },
+  components: { XIcon },
   setup() {
     const router = useRouter();
     const provider = useProvider({ id: 'mobile_practice', version: '1788919369989' });
-    
-    // 当前Tab
+
+    // 当前底部 Tab
     const activeTab = ref('practice');
-    
-    // 统计数据
-    const todayCount = ref(18);
-    const accuracy = ref(70.2);
-    const studyTime = ref('1.8h');
-    
-    // 今日目标
-    const dailyGoal = ref(40);
-    const dailyCompleted = ref(30);
-    const dailyGoalPercent = computed(() => Math.round((dailyCompleted.value / dailyGoal.value) * 100));
-    
-    // 最近练习
-    const recentList = ref([
-      {
-        id: 1,
-        name: '2025年行测真题精选',
-        desc: '正确率 75% | 用时 45分钟',
-        icon: EditPen,
-        iconBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)'
-      },
-      {
-        id: 2,
-        name: '申论写作练习',
-        desc: '完成 3/5 题',
-        icon: Reading,
-        iconBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-      },
-      {
-        id: 3,
-        name: '公安基础知识',
-        desc: '正确率 82% | 用时 30分钟',
-        icon: Cpu,
-        iconBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-      }
-    ]);
-    
-    // 加载真实统计数据（/api/stats/）
-    onMounted(async () => {
-      try {
-        const auth = window.__VTJ_AUTH__;
-        if (auth && auth.isLoggedIn()) {
-          const res = await fetch('/api/stats/', { headers: auth.getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            todayCount.value = data.todayQuestions || 0;
-            accuracy.value = data.accuracyRate || 0;
-            studyTime.value = (data.totalStudyHours || 0) + 'h';
-            dailyCompleted.value = data.todayQuestions || 0;
-          }
-          // 学习目标（今日目标，替换硬编码）
-          try {
-            const gRes = await fetch('/api/goals/stats/summary', { headers: auth.getAuthHeaders() });
-            if (gRes.ok) {
-              const gData = await gRes.json();
-              dailyGoal.value = gData.total_goals || 40;
-            }
-          } catch (e) { /* 目标接口失败不影响主流程 */ }
-          // 最近练习（替换硬编码）
-          try {
-            const rRes = await fetch('/api/practice/recent-records?limit=3', { headers: auth.getAuthHeaders() });
-            if (rRes.ok) {
-              const rData = await rRes.json();
-              if (rData.items && rData.items.length) {
-                recentList.value = rData.items.map((it: any) => ({
-                  id: it.record_key || it.id,
-                  name: it.name || '练习',
-                  desc: (it.source || '') + (it.accuracy !== undefined ? ' · 正确率 ' + it.accuracy + '%' : ''),
-                  icon: EditPen,
-                  iconBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)'
-                }));
-              }
-            }
-          } catch (e) { /* 最近练习接口失败不影响主流程 */ }
-        }
-      } catch (error) {
-        console.error('加载数据失败:', error);
-      }
+
+    // 三科目元数据（图标/颜色前端硬编码，后端无此字段）
+    const subjectMeta = {
+      1: { icon: TrendCharts, color: '#3B82F6' }, // 行测
+      2: { icon: EditPen, color: '#10B981' },     // 申论
+      3: { icon: Trophy, color: '#F59E0B' },      // 公专
+    };
+
+    // ===== 状态机 =====
+    const subjects = ref([]);        // 科目列表 [{subject_id, subject_name, ...}]
+    const subjectStats = ref({});    // subject_id -> {done, total}
+    const activeSubject = ref(1);    // 当前选中科目
+    const subModules = ref([]);      // 当前科目子科目（含嵌套 knowledge_points）
+    const knowledgePoints = ref([]); // 当前子科目的知识点
+    const viewState = ref('subModules'); // 'subModules' | 'knowledgePoints'
+    const loaded = ref(false);
+    const loading = ref(false);
+    const loadError = ref(false);    // 子科目加载失败标记
+    let subjectSeq = 0;              // 科目切换竞态序列号
+
+    // 练习模式 Bottom Sheet
+    const showModeSheet = ref(false);
+    const currentKp = ref(null);
+
+    // ===== 计算属性 =====
+    const currentSubject = computed(() =>
+      subjects.value.find((s) => s.subject_id === activeSubject.value)
+    );
+    const currentDone = computed(() => subjectStats.value[activeSubject.value]?.done || 0);
+    const currentTotal = computed(() => subjectStats.value[activeSubject.value]?.total || 0);
+    const currentProgress = computed(() => {
+      const t = currentTotal.value;
+      const d = currentDone.value;
+      return t ? Math.round((d * 100) / t) : 0;
     });
 
-    // 方法
-    const goBack = () => router.back();
-    
-    const goToQuickPractice = () => {
-      router.push('/mobile/answer');
+    // ===== 工具函数 =====
+    const calcPct = (done, total) => (total ? Math.round((done * 100) / total) : 0);
+
+    const progressColor = (p) => {
+      if (p <= 0) return '#E4E7ED';
+      if (p < 30) return '#F56C6C';
+      if (p < 60) return '#E6A23C';
+      if (p < 80) return '#409EFF';
+      return '#52C41A';
     };
-    
-    const goToWeakPractice = () => {
-      router.push('/mobile/answer');
+
+    const subjectProgress = (sid) => {
+      const s = subjectStats.value[sid];
+      return s && s.total ? Math.round((s.done * 100) / s.total) : 0;
     };
-    
-    const goToSmartPractice = () => {
-      router.push('/mobile/answer');
-    };
-    
-    const goToMockExam = () => {
-      router.push('/mobile/answer');
-    };
-    
-    const viewAllRecent = () => {
-      router.push('/mobile/profile');
-    };
-    
-    const continuePractice = (item: any) => {
-      router.push('/mobile/answer');
-    };
-    
-    const switchTab = (tab: string) => {
+
+    const auth = () => window.__VTJ_AUTH__ || { isLoggedIn: () => false, getAuthHeaders: () => ({}), apiFetch: (url: string, opts?: any) => fetch(url, opts) };
+
+    // ===== API 调用 =====
+    async function loadSubjects() {
+      try {
+        const res = await auth().apiFetch('/api/quick-practice/subjects');
+        if (res.ok) {
+          const data = await res.json();
+          subjects.value = data.items || [];
+          if (subjects.value.length) {
+            activeSubject.value = subjects.value[0].subject_id;
+          }
+        }
+      } catch (e) {
+        console.error('加载科目失败:', e);
+      }
+    }
+
+    async function loadSubjectStats() {
+      // 用 type-summary 聚合科目级进度（done/total）
+      try {
+        const res = await auth().apiFetch('/api/practice/type-summary');
+        if (res.ok) {
+          const data = await res.json();
+          const agg = {};
+          (data.types || []).forEach((t) => {
+            if (!agg[t.subject_id]) agg[t.subject_id] = { done: 0, total: 0 };
+            agg[t.subject_id].done += t.done_count || 0;
+            agg[t.subject_id].total += t.total_questions || 0;
+          });
+          subjectStats.value = agg;
+        }
+      } catch (e) {
+        console.error('加载科目进度失败:', e);
+      }
+    }
+
+    async function switchSubject(subjectId) {
+      const seq = ++subjectSeq;  // 竞态：只处理最新一次请求
+      activeSubject.value = subjectId;
+      viewState.value = 'subModules';
+      knowledgePoints.value = [];
+      loading.value = true;
+      loadError.value = false;
+      try {
+        const res = await auth().apiFetch('/api/quick-practice/sub-categories?subjectId=' + subjectId);
+        if (seq !== subjectSeq) return; // 丢弃过期响应
+        if (res.ok) {
+          const data = await res.json();
+          subModules.value = data.items || [];
+          loadError.value = false;
+        } else {
+          subModules.value = [];
+          loadError.value = true;
+        }
+      } catch (e) {
+        if (seq !== subjectSeq) return;
+        console.error('加载子科目失败:', e);
+        subModules.value = [];
+        loadError.value = true;
+      } finally {
+        if (seq === subjectSeq) {
+          loaded.value = true;
+          loading.value = false;
+        }
+      }
+    }
+
+    function openSubModule(sc) {
+      knowledgePoints.value = sc.knowledge_points || [];
+      viewState.value = 'knowledgePoints';
+    }
+
+    function openModeSheet(kp) {
+      currentKp.value = kp;
+      showModeSheet.value = true;
+    }
+
+    function closeModeSheet() {
+      showModeSheet.value = false;
+    }
+
+    function startPractice(mode) {
+      const kp = currentKp.value;
+      closeModeSheet();
+      if (!kp) return;
+      router.push('/mobile/answer?kpIds=' + kp.point_id + '&mode=' + mode + '&subjectId=' + activeSubject.value);
+    }
+
+    function handleBack() {
+      if (viewState.value === 'knowledgePoints') {
+        viewState.value = 'subModules';
+        knowledgePoints.value = [];
+      } else {
+        router.back();
+      }
+    }
+
+    function switchTab(tab) {
       activeTab.value = tab;
-      const tabRoutes: Record<string, string> = {
+      const tabRoutes = {
         home: '/mobile/home',
         question: '/mobile/question-bank',
         practice: '/mobile/practice',
         forum: '/mobile/forum',
-        profile: '/mobile/profile'
+        profile: '/mobile/profile',
       };
       router.push(tabRoutes[tab] || '/');
-    };
-    
+    }
+
+    onMounted(async () => {
+      await loadSubjects();
+      loadSubjectStats();
+      if (activeSubject.value) {
+        await switchSubject(activeSubject.value);
+      }
+    });
+
     return {
       activeTab,
-      todayCount,
-      accuracy,
-      studyTime,
-      dailyGoal,
-      dailyCompleted,
-      dailyGoalPercent,
-      recentList,
-      goBack,
-      goToQuickPractice,
-      goToWeakPractice,
-      goToSmartPractice,
-      goToMockExam,
-      viewAllRecent,
-      continuePractice,
+      subjectMeta,
+      subjects,
+      subjectStats,
+      activeSubject,
+      subModules,
+      knowledgePoints,
+      viewState,
+      loaded,
+      loading,
+      loadError,
+      showModeSheet,
+      currentKp,
+      currentSubject,
+      currentDone,
+      currentTotal,
+      currentProgress,
+      subjectProgress,
+      calcPct,
+      progressColor,
+      switchSubject,
+      openSubModule,
+      openModeSheet,
+      closeModeSheet,
+      startPractice,
+      handleBack,
       switchTab,
       ArrowLeft,
       ArrowRight,
-      Timer,
       TrendCharts,
-      CircleCheck,
-      Clock,
       EditPen,
-      Warning,
-      Cpu,
       Trophy,
-      Aim,
+      Lightning,
+      CircleCheck,
+      Warning,
       HomeFilled,
       Reading,
       Edit,
       ChatLineRound,
-      User
+      User,
     };
-  }
+  },
 });
 </script>
 
 <style lang="css" scoped>
 .mobile-practice-page {
-  min-height: 100vh;
+  height: 100dvh;
+  height: 100vh;
   background: #f5f7fa;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-/* 顶部导航 */
+/* 顶部导航（44px） */
 .top-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 56px;
-  padding: 0 16px;
+  height: 44px;
+  padding: 0 12px;
+  padding-top: env(safe-area-inset-top, 0);
   background: #ffffff;
   border-bottom: 1px solid #f0f2f5;
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 100;
 }
 
@@ -378,317 +436,354 @@ export default defineComponent({
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.nav-back,
-.nav-icon {
+.nav-back {
   cursor: pointer;
   transition: opacity 0.2s;
 }
 
-.nav-back:hover,
-.nav-icon:hover {
-  opacity: 0.7;
+.nav-back:active {
+  opacity: 0.6;
 }
 
 .nav-title {
-  font-size: 18px;
-  font-weight: 700;
+  flex: 1;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
   color: #1A365D;
   margin: 0;
 }
 
-/* 主内容区 */
-.main-content {
+/* 三科目 Tab */
+.subject-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  flex-shrink: 0;
+}
+
+.subject-card {
   flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-  padding-bottom: 80px;
-}
-
-/* 学习统计 */
-.stats-section {
-  margin-bottom: 20px;
-}
-
-.stats-card {
+  height: 88px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-around;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px 16px;
-  box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
+  justify-content: center;
+  gap: 4px;
   background: #f5f7fa;
+  border: 1px solid transparent;
   border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1A365D;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #8899aa;
-}
-
-.stat-divider {
-  width: 1px;
-  height: 40px;
-  background: #f0f2f5;
-}
-
-/* 快捷入口 */
-.quick-actions {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.action-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px 12px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.15s ease;
 }
 
-.action-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(26, 54, 95, 0.1);
+.subject-card:active {
+  transform: scale(0.97);
 }
 
-.action-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 12px;
+.subject-card.active {
+  background: #ffffff;
+  border-color: #1A365D;
+  box-shadow: 0 2px 8px rgba(26, 54, 93, 0.12);
 }
 
-.action-icon.quick {
-  background: linear-gradient(135deg, #1A365D 0%, #2a5298 100%);
-}
-
-.action-icon.weak {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-}
-
-.action-icon.smart {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.action-icon.mock {
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-}
-
-.action-name {
+.subject-name {
   font-size: 15px;
   font-weight: 600;
-  color: #1a2b5f;
-  margin-bottom: 4px;
+  color: #606266;
 }
 
-.action-desc {
+.subject-progress {
   font-size: 12px;
-  color: #8899aa;
+  font-weight: 500;
+  color: #909399;
 }
 
-/* 最近练习 */
-.recent-section {
-  margin-bottom: 20px;
+/* 当前科目概览（56px） */
+.subject-overview {
+  padding: 0 16px 8px;
+  flex-shrink: 0;
 }
 
-.section-header {
+.overview-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }
 
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #1a2b5f;
-  margin: 0;
-}
-
-.section-action {
+.overview-text {
   font-size: 13px;
-  color: #1890ff;
-  cursor: pointer;
+  color: #5a6488;
 }
 
-.recent-list {
+.overview-pct {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1A365D;
+}
+
+/* 进度条（统一 4px） */
+.progress-bar {
+  height: 4px;
+  background: #e4e7ed;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* 可滚动区 */
+.scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 子科目卡片（72px） */
+.sub-module-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(26, 54, 93, 0.04);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sub-module-card:active {
+  background: #ebf0f7;
+}
+
+.sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sub-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.sub-stat {
+  font-size: 12px;
+  color: #8899aa;
+}
+
+/* 知识点列表项（56px） */
+.kp-item {
+  background: #ffffff;
+  padding: 10px 16px;
+  border-bottom: 1px solid #ebEEF5;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.kp-item:first-child {
+  border-radius: 10px 10px 0 0;
+}
+
+.kp-item:last-child {
+  border-bottom: none;
+  border-radius: 0 0 10px 10px;
+}
+
+.kp-item:active {
+  background: #f5f7fa;
+}
+
+.kp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.kp-name {
+  font-size: 15px;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.kp-stat {
+  font-size: 12px;
+  color: #8899aa;
+  flex-shrink: 0;
+}
+
+/* 空态 */
+.empty-state {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  padding: 60px 20px;
 }
 
-.recent-item {
+.empty-title {
+  font-size: 16px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: #909399;
+}
+
+.retry-btn {
+  margin-top: 16px;
+  padding: 8px 24px;
+  border: none;
+  border-radius: 20px;
+  background: #1A365D;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.retry-btn:active {
+  opacity: 0.8;
+}
+
+/* 练习模式 Bottom Sheet */
+.sheet-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  animation: fade-in 0.2s ease;
+}
+
+.bottom-sheet {
+  width: 100%;
+  max-height: 70vh;
+  background: #ffffff;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0));
+  animation: slide-up 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: #dcdfe6;
+  border-radius: 2px;
+  margin: 4px auto 12px;
+}
+
+.sheet-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  text-align: center;
+  margin: 0 0 12px;
+}
+
+.mode-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px;
-  background: #ffffff;
+  padding: 14px 12px;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.15s;
 }
 
-.recent-item:hover {
-  box-shadow: 0 4px 16px rgba(26, 54, 95, 0.1);
+.mode-item:active {
+  background: #f5f7fa;
 }
 
-.recent-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+.mode-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #f5f7fa;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.recent-info {
+.mode-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
-.recent-name {
+.mode-name {
   font-size: 15px;
   font-weight: 600;
-  color: #1a2b5f;
+  color: #303133;
 }
 
-.recent-desc {
+.mode-desc {
   font-size: 12px;
   color: #8899aa;
 }
 
-/* 今日目标 */
-.goal-section {
-  margin-bottom: 20px;
-}
-
-.goal-card {
-  background: #ffffff;
+.sheet-cancel {
+  width: 100%;
+  height: 44px;
+  margin-top: 8px;
+  border: none;
+  background: #f5f7fa;
   border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
-}
-
-.goal-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.goal-title {
   font-size: 15px;
-  font-weight: 600;
-  color: #1a2b5f;
+  color: #606266;
+  cursor: pointer;
 }
 
-.goal-progress {
-  margin-bottom: 0;
+.sheet-cancel:active {
+  opacity: 0.8;
 }
 
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: #5a6488;
-  margin-bottom: 8px;
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.progress-percent {
-  font-weight: 600;
-  color: #1A365D;
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
-.progress-bar {
-  height: 8px;
-  background: #f0f2f5;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #1A365D 0%, #2a5298 100%);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-/* 底部Tab栏 */
+/* 底部 Tab（56px） */
 .bottom-tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: #ffffff;
   display: flex;
-  justify-content: space-around;
-  align-items: center;
+  height: 56px;
+  background: #ffffff;
   border-top: 1px solid #f0f2f5;
   padding-bottom: env(safe-area-inset-bottom, 0);
+  flex-shrink: 0;
   z-index: 100;
 }
 
 .tab-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  height: 100%;
   cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-item.active {
-  color: #1A365D;
-}
-
-.tab-item:not(.active) {
-  color: #a0a4b8;
+  transition: color 0.2s;
 }
 
 .tab-label {
@@ -698,26 +793,11 @@ export default defineComponent({
 }
 
 @media (max-width: 375px) {
-  .stats-card {
-    padding: 16px 12px;
+  .subject-card {
+    height: 80px;
   }
-  
-  .stat-icon {
-    width: 40px;
-    height: 40px;
-  }
-  
-  .stat-value {
-    font-size: 18px;
-  }
-  
-  .action-card {
-    padding: 16px 8px;
-  }
-  
-  .action-icon {
-    width: 56px;
-    height: 56px;
+  .subject-tabs {
+    padding: 10px;
   }
 }
 </style>

@@ -40,8 +40,7 @@ class ConnectionManager:
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, user_id: int, room: Optional[str] = None) -> None:
-        await websocket.accept()
-
+        # 连接已在 websocket_connect 中 accept，此处仅做注册
         async with self._lock:
             if user_id not in self.active_connections:
                 self.active_connections[user_id] = {}
@@ -121,12 +120,15 @@ async def websocket_connect(
     token: Optional[str] = None,
     room: Optional[str] = None
 ):
+    # 先接受连接，再校验 token（避免 accept 前 close 导致握手异常断开/RST）
+    await websocket.accept()
+
     if not token:
         await websocket.close(code=4001, reason="Authentication required")
         return
 
     try:
-        from security import decode_token, TokenType
+        from ...core.security import decode_token, TokenType
         payload = decode_token(token)
 
         if payload.get("type") != TokenType.ACCESS.value:

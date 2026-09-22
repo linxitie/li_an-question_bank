@@ -11,7 +11,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...models.models import SysUser
 from ...schemas.schemas import UserResponse, LoginResponse, TokenData
 from ...core.config import settings
@@ -194,7 +194,7 @@ async def login_for_access_token(
         user.device_sessions = sessions
 
     user.last_login = datetime.now()
-    db.commit()
+    commit_with_retry(db)
 
     # 触发「初来乍到」成就（首次登录，幂等）
     try:
@@ -243,7 +243,7 @@ async def register_user(
     )
 
     db.add(new_user)
-    db.commit()
+    commit_with_retry(db)
     db.refresh(new_user)
 
     return {"message": "注册成功", "user_id": new_user.user_id}
@@ -414,7 +414,7 @@ async def change_password(
         if not verify_password(form.old_password, current_user.password):
             raise HTTPException(status_code=400, detail="当前密码错误")
     current_user.password = get_password_hash(new_pwd)
-    db.commit()
+    commit_with_retry(db)
     return {"success": True, "message": "密码修改成功"}
 
 
@@ -428,7 +428,7 @@ async def update_user_profile(
     update_data = form.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(current_user, key, value)
-    db.commit()
+    commit_with_retry(db)
     db.refresh(current_user)
     return {"success": True, "message": "个人信息已更新", "user": UserResponse.model_validate(current_user)}
 
@@ -468,7 +468,7 @@ async def upload_avatar(
     # 4. 更新 avatar 字段
     avatar_url = f"/uploads/avatars/{filename}"
     current_user.avatar = avatar_url
-    db.commit()
+    commit_with_retry(db)
 
     logging.getLogger(__name__).info(f"用户 {current_user.user_id} 上传头像: {avatar_url}")
     return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}

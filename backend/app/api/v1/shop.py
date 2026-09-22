@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...core.security import get_current_user
 from ...models.models import SysUser, ShopProduct, CoinExchange, CoinRecord
 from ...services import deliverable_service
@@ -147,7 +147,7 @@ async def exchange(
         # 触发权益发放（同一事务）
         deliverable_service.deliver(exchange_record, current_user, db)
 
-        db.commit()
+        commit_with_retry(db)
     except HTTPException:
         db.rollback()
         raise

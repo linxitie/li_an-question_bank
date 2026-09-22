@@ -31,6 +31,10 @@ def main():
     print(f"API 文档: http://0.0.0.0:8000/docs")
     print("-" * 50)
 
+    # 注意：不使用 --reload。
+    # 热重载模式下 uvicorn 会在文件变化时重启 worker，重启瞬间向所有已建立的
+    # TCP 连接发送 RST，导致前端（Vite 代理/WebSocket）报 ECONNRESET 并可能崩溃。
+    # 生产/联调应保持单进程稳定运行，需要热重载时由开发者在命令行临时追加 --reload。
     subprocess.run([
         sys.executable,
         "-m",
@@ -38,7 +42,6 @@ def main():
         "app.main:app",
         "--host", "0.0.0.0",
         "--port", "8000",
-        "--reload"
     ])
 
 if __name__ == "__main__":

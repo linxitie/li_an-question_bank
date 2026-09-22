@@ -670,66 +670,9 @@ class CircuitBreaker:
 
         return True
 
-circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
+circuit_breaker = CircuitBreaker(failure_threshold=20, recovery_timeout=60)
 
 
-
-
-# ===================================WebSocket管理器================================
-class WebSocketManager:
-    def __init__(self):
-        self.active_connections: Dict[int, List[WebSocket]] = defaultdict(list)
-        self._lock = asyncio.Lock()
-
-    async def connect(self, websocket: WebSocket, user_id: int) -> None:
-        """建立websocket连接"""
-        await websocket.accept()
-        async with self._lock:
-            self.active_connections[user_id].append(websocket)
-
-    async def disconnect(self, websocket: WebSocket, user_id: int) -> None:
-        """断开Websocket连接"""
-        async with self._lock:
-            if websocket in self.active_connections[user_id]:
-                self.active_connections[user_id].remove(websocket)
-
-    async def send_personal_message(self, message: str, user_id: int) -> None:
-        """发送个人信息"""
-        async with self._lock:
-            for connection in self.active_connections.get(user_id, []):
-                disconnected = []
-                try:
-                    await connection.send_text(message)
-                except Exception:
-                    disconnected.append(connection)
-
-
-            #清理断开连接
-            for conn in disconnected:
-                if conn in self.active_connections[user_id]:
-                    self.active_connections[user_id].remove(conn)
-
-    async def broadcast(self, message: str) -> None:
-        """广播消息"""
-        async with self._lock:
-            for user_id, connections in list(self.active_connections.items()):
-                disconnected = []
-                for connection in connections:
-                    try:
-                        await connection.send_text(message)
-                    except Exception:
-                        disconnected.append(connection)
-
-                #清理断开连接
-                for conn in disconnected:
-                    if conn in self.active_connections[user_id]:
-                        self.active_connections[user_id].remove(conn)
-
-    def get_online_users(self) -> List[int]:
-        """获取用户的连接数"""
-        return list(self.active_connections.keys())
-
-ws_manager = WebSocketManager()
 
 
 # ===================================Session 管理器================================

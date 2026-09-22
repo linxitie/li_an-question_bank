@@ -1,7 +1,10 @@
 """
 数据库连接模块 — WAL 模式 + 并发优化
 """
+import time
+
 from sqlalchemy import create_engine, event
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from .config import settings
@@ -29,7 +32,7 @@ if settings.DB_TYPE == "sqlite":
     def _set_sqlite_pragma(dbapi_conn, connection_record):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL;")
-        cursor.execute("PRAGMA busy_timeout=5000;")
+        cursor.execute("PRAGMA busy_timeout=30000;")
         cursor.execute("PRAGMA synchronous=NORMAL;")
         cursor.close()
 
@@ -62,6 +65,24 @@ def get_scoped_db():
         yield db
     finally:
         db.close()
+
+
+def commit_with_retry(db, max_retries: int = 3, base_delay: float = 0.5):
+    """
+    提交事务；遇到 SQLite "database is locked" 自动重试（指数退避）。
+
+    用于登录等关键写路径，避免与后台爬虫/定时任务偶发锁冲突导致 500。
+    注意：重试 sleep 为阻塞式，仅用于低频锁冲突场景（正常路径一次 commit 即返回）。
+    """
+    for attempt in range(max_retries):
+        try:
+            db.commit()
+            return
+        except OperationalError as e:
+            if "database is locked" in str(e).lower() and attempt < max_retries - 1:
+                time.sleep(base_delay * (2 ** attempt))
+                continue
+            raise
 
 class ReadWriteRouter:
     """

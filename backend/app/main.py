@@ -26,7 +26,6 @@ from .api.v1 import shop, tasks, admin_shop
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
 from .api.v1.question_import import router as question_import_router
-from .core.security import ws_manager
 from .exceptions import register_exception_handlers, ExceptionHandlers, create_error_response
 from .middleware import setup_middlewares, RequestLoggingMiddleware, RateLimitMiddleware, CircuitBreakerMiddleware
 from .monitoring import metrics_collector, get_system_metrics, PerformanceMonitor
@@ -699,7 +698,10 @@ if __name__ == "__main__":
         "app.main:app",
         host=settings.HOST,
         port=settings.PORT,
-        reload=settings.DEBUG,
+        # 关闭热重载：reload 模式下 worker 重启会 RST 所有已建立连接，
+        # 导致前端 Vite 代理/WebSocket 报 ECONNRESET 并崩溃（详见 proxy.config.ts 注释）。
+        # 需要热重载时请通过命令行显式 `uvicorn app.main:app --reload` 启动。
+        reload=False,
         log_level=settings.LOG_LEVEL.lower(),
         ssl_certfile=None,
         ssl_keyfile=None

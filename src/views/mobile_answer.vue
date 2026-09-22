@@ -46,9 +46,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 const router = useRouter();
+const route = useRoute();
 const questions = ref<any[]>([]);
 const currentIndex = ref(0);
 const selectedOptions = ref<number[]>([]);
@@ -94,11 +95,20 @@ const fetchQuestions = async () => {
   loading.value = true;
   try {
     const auth = (window as any).__VTJ_AUTH__;
-    const res = await auth.apiFetch('/api/questions/random?count=10');
-    const data = await res.json();
-    if (res.ok && data.questions && data.questions.length) {
-      questions.value = data.questions;
+    const kpIds = route.query.kpIds as string | undefined;
+    let list: any[] = [];
+    if (kpIds) {
+      // 练习页三科目下钻进入：按知识点取题
+      const res = await auth.apiFetch(`/api/quick-practice/questions?kpIds=${encodeURIComponent(kpIds)}&limit=20`);
+      const data = await res.json();
+      list = data.items || [];
+    } else {
+      // 兜底：随机取题
+      const res = await auth.apiFetch('/api/questions/random?count=10');
+      const data = await res.json();
+      list = data.questions || [];
     }
+    if (list.length) questions.value = list;
   } catch (e) {
     console.error('获取题目失败:', e);
   } finally {

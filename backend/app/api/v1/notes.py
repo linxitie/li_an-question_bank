@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...core.security import get_current_user
 from ...models.models import SysUser
 
@@ -119,7 +119,7 @@ async def create_or_update_note(
         if existing:
             existing.note_text = note_text
             existing.update_time = datetime.now()
-            db.commit()
+            commit_with_retry(db)
             return {"note_id": f"q_{existing.note_id}", "message": "笔记已更新", "updated": True}
 
         note = QuestionNote(
@@ -130,7 +130,7 @@ async def create_or_update_note(
             update_time=datetime.now()
         )
         db.add(note)
-        db.commit()
+        commit_with_retry(db)
         db.refresh(note)
 
         # 触发笔记成就
@@ -158,7 +158,7 @@ async def create_or_update_note(
             existing.color = color
             existing.line_style = line_style
             existing.update_time = datetime.now()
-            db.commit()
+            commit_with_retry(db)
             return {"note_id": f"n_{existing.note_id}", "message": "笔记已更新", "updated": True}
 
         note = NewsNote(
@@ -172,7 +172,7 @@ async def create_or_update_note(
             update_time=datetime.now()
         )
         db.add(note)
-        db.commit()
+        commit_with_retry(db)
         db.refresh(note)
 
         # 触发笔记成就
@@ -226,7 +226,7 @@ async def update_note(
 
     note.note_text = note_text
     note.update_time = datetime.now()
-    db.commit()
+    commit_with_retry(db)
     return {"message": "笔记已更新"}
 
 
@@ -262,7 +262,7 @@ async def delete_note(
         raise HTTPException(status_code=404, detail="笔记不存在")
 
     db.delete(note)
-    db.commit()
+    commit_with_retry(db)
     return {"message": "已删除"}
 
 

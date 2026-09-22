@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct, text
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...core.security import get_current_user
 from ...models.models import (
     QuestionSubject, SubCategory, KnowledgePoint, QuestionBank,
@@ -38,6 +38,17 @@ def _get_user_done_counts(db: Session, user_id: int, question_ids: List[int]) ->
     return db.query(func.count(distinct(PracticeRecord.question_id))).filter(
         PracticeRecord.user_id == user_id,
         PracticeRecord.question_id.in_(question_ids)
+    ).scalar() or 0
+
+
+def _get_user_correct_counts(db: Session, user_id: int, question_ids: List[int]) -> int:
+    """统计用户在指定题目列表中做对过的去重题数（is_correct=1）"""
+    if not question_ids:
+        return 0
+    return db.query(func.count(distinct(PracticeRecord.question_id))).filter(
+        PracticeRecord.user_id == user_id,
+        PracticeRecord.question_id.in_(question_ids),
+        PracticeRecord.is_correct == 1,
     ).scalar() or 0
 
 
@@ -119,6 +130,8 @@ async def get_sub_categories(
 
         sub_total = len(sub_question_ids)
         sub_done = _get_user_done_counts(db, current_user.user_id, sub_question_ids)
+        sub_correct = _get_user_correct_counts(db, current_user.user_id, sub_question_ids)
+        sub_accuracy = round(sub_correct * 100 / max(sub_done, 1), 1) if sub_done else 0
 
         # 构建考点列表
         point_items = []
@@ -130,12 +143,16 @@ async def get_sub_categories(
             ]
             kp_total = len(kp_question_ids)
             kp_done = _get_user_done_counts(db, current_user.user_id, kp_question_ids)
+            kp_correct = _get_user_correct_counts(db, current_user.user_id, kp_question_ids)
+            kp_accuracy = round(kp_correct * 100 / max(kp_done, 1), 1) if kp_done else 0
 
             point_items.append({
                 "point_id": kp.point_id,
                 "point_name": kp.point_name,
                 "total_questions": kp_total,
                 "done_count": kp_done,
+                "correct_count": kp_correct,
+                "accuracy": kp_accuracy,
             })
 
         result.append({
@@ -145,6 +162,8 @@ async def get_sub_categories(
             "sort_order": sc.sort_order,
             "total_questions": sub_total,
             "done_count": sub_done,
+            "correct_count": sub_correct,
+            "accuracy": sub_accuracy,
             "knowledge_points": point_items,
         })
 
@@ -374,7 +393,7 @@ async def submit_practice(
                 wrong_stats['updated'] += 1
         count += 1
 
-    db.commit()
+    commit_with_retry(db)
 
     # 计算正确率
     correct_count = sum(1 for r in records_data if r.get("is_correct"))

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...core.security import get_current_user
 from ...models.models import FavoriteQuestion, SysUser
 
@@ -85,7 +85,7 @@ async def toggle_favorite(
 
         if existing:
             db.delete(existing)
-            db.commit()
+            commit_with_retry(db)
             return {"favorited": False, "message": "已取消收藏"}
 
         fav = FavoriteQuestion(
@@ -94,7 +94,7 @@ async def toggle_favorite(
             create_time=datetime.now()
         )
         db.add(fav)
-        db.commit()
+        commit_with_retry(db)
         db.refresh(fav)
 
         # 触发收藏成就
@@ -119,7 +119,7 @@ async def toggle_favorite(
 
         if existing:
             db.delete(existing)
-            db.commit()
+            commit_with_retry(db)
             return {"favorited": False, "message": "已取消收藏"}
 
         fav = NewsFavorite(
@@ -128,7 +128,7 @@ async def toggle_favorite(
             create_time=datetime.now()
         )
         db.add(fav)
-        db.commit()
+        commit_with_retry(db)
         db.refresh(fav)
         return {"favorited": True, "message": "已收藏", "fav_id": f"n_{fav.fav_id}"}
 
@@ -168,7 +168,7 @@ async def delete_favorite(
         raise HTTPException(status_code=404, detail="收藏记录不存在")
 
     db.delete(fav)
-    db.commit()
+    commit_with_retry(db)
     return {"message": "已删除"}
 
 

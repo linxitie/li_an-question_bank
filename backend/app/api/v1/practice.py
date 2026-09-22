@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, case, distinct
 
-from ...core.database import get_db
+from ...core.database import get_db, commit_with_retry
 from ...core.security import get_current_user
 from ...models.models import (
     PracticeRecord, QuestionBank, QuestionSubject, QuestionType, SysUser,
@@ -46,7 +46,7 @@ def _after_practice(user_id: int, db: Session, total: int, correct: int) -> list
             user.perfect_streak = (user.perfect_streak or 0) + 1
         else:
             user.perfect_streak = 0
-    db.commit()
+    commit_with_retry(db)
 
     # 成就判定
     try:
@@ -136,13 +136,13 @@ async def record_practice(
         source_type=payload.get('source', '随机练习'),
     )
     db.add(record)
-    db.commit()
+    commit_with_retry(db)
 
     # 自动收录错题
     if not is_correct and question_id:
         _auto_record_wrong(current_user.user_id, question_id,
                           subject_id or (question.subject_id if question else None), db)
-        db.commit()
+        commit_with_retry(db)
 
     newly = _after_practice(current_user.user_id, db, 1, 1 if is_correct else 0)
     return {"status": "ok", "record_id": record.record_id, "newly_unlocked": newly}
@@ -194,7 +194,7 @@ async def batch_record_practice(
             _auto_record_wrong(current_user.user_id, question_id,
                               subject_id or (question.subject_id if question else None), db)
 
-    db.commit()
+    commit_with_retry(db)
     correct = sum(1 for i in records_data if i.get("is_correct", False))
     newly = _after_practice(current_user.user_id, db, len(records_data), correct)
     return {"status": "ok", "count": count, "newly_unlocked": newly}

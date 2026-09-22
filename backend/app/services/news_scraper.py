@@ -837,13 +837,15 @@ def scrape_cpd_news(db: Session) -> int:
             )
             db.add(article)
             db.flush()  # 获取 news_id 用于图片关联
+            news_id = article.news_id
+            db.commit()  # 立即提交释放写锁，避免图片下载（网络慢操作）期间持锁导致 database is locked
 
             # 提取图片（内联有序下载，失败回退到原 _download_images）
             try:
                 if ordered_images:
-                    _download_inline_images(article.news_id, ordered_images, article_url, db, label="cpd")
+                    _download_inline_images(news_id, ordered_images, article_url, db, label="cpd")
                 elif article_soup is not None:
-                    _download_images(article_soup, article_url, article.news_id, db, label="cpd")
+                    _download_images(article_soup, article_url, news_id, db, label="cpd")
             except Exception as e:
                 logger.warning(f"[cpd] 图片提取异常: {e}")
 
@@ -851,7 +853,6 @@ def scrape_cpd_news(db: Session) -> int:
             logger.info(f"[cpd] 第{count}条入库: {title[:40]}")
 
         if count > 0:
-            db.commit()
             logger.info(f"[cpd] ✅ 新增 {count} 条公安报新闻")
         else:
             logger.info("[cpd] 无新增新闻（可能已全部存在或未解析到链接）")
@@ -977,11 +978,13 @@ def scrape_people_news(db: Session) -> int:
             )
             db.add(article)
             db.flush()  # 获取 news_id 用于图片关联
+            news_id = article.news_id
+            db.commit()  # 立即提交释放写锁，避免图片下载期间持锁
 
             # 提取图片（有序下载，image_order 与内联标记一致）
             if image_urls:
                 try:
-                    _download_inline_images(article.news_id, image_urls, href, db, label="people")
+                    _download_inline_images(news_id, image_urls, href, db, label="people")
                 except Exception as e:
                     logger.warning(f"[people] 图片提取异常: {e}")
 
@@ -990,7 +993,6 @@ def scrape_people_news(db: Session) -> int:
                 break
 
         if count > 0:
-            db.commit()
             logger.info(f"[people] ✅ 新增 {count} 条人民网新闻")
         else:
             logger.info("[people] 无新增新闻")
