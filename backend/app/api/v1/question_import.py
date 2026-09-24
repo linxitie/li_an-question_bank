@@ -1523,11 +1523,10 @@ def _is_test_garbage(q: Dict[str, Any]) -> bool:
     return bool(_TEST_UTB_RE.search(blob) or _TEST_KEYWORD in blob)
 
 
-# ============ B2 复合题（题组）规则引擎识别（方案 v1.1 §4.2） ============
-# P0 聚焦显式标识 Pattern A："根据以下材料/情境…回答X-Y题"（公安联考最常见形态）。
+# ============ B2 复合题（题组）规则引擎识别（方案 v1.0 层1 规则集） ============
 # 题组仅为展示聚合视图（v1.1 §7.5）：小题仍以扁平题目参与组卷/答题/计分。
-_GROUP_HEAD_RE = re.compile(
-    r'根据以[下此][^\n]{0,40}?(?:材料|情境|文章|图表)[^\n]{0,30}?回答\s*(\d+)\s*[-～~—－]\s*(\d+)\s*题?')
+# 规则集已抽至 services/composite_matcher.py：题号范围/材料/情境/文章四类标识，
+# 避免识别逻辑散落在 API 层（单一事实来源）。
 
 
 def _extract_first_qnum(content: str):
@@ -1545,10 +1544,12 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
 
     算法（批内作用域，调用方统一 commit 保证事务安全）：
     1. 为每个成功入库题提取题号（question_number）
-    2. 扫描题干命中"根据以下材料/情境…回答X-Y题"的题 → 作为题组头
-    3. 建_question_groups_行（shared_content=头题题干），头题与批内题号∈[X,Y]的题
+    2. 用 composite_matcher 规则集识别题组头（题号范围/材料/情境/文章标识）
+    3. 建 question_groups 行（shared_content=头题题干），头题与推断的小题
        全部挂 group_id / question_level=2 / sort_order / question_number
     """
+    from ...services.composite_matcher import match_group_head, infer_member_qnums
+
     if not settings.COMPOSITE_QUESTION_ENABLED:
         return 0, 0
     if not ok_items:
@@ -1569,17 +1570,26 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
     for i, q in enumerate(ok_items):
         if i in claimed:
             continue
-        m = _GROUP_HEAD_RE.search(q.get('question_content') or '')
-        if not m:
+        head_hit = match_group_head(q.get('question_content') or '')
+        if not head_hit:
             continue
-        x, y = int(m.group(1)), int(m.group(2))
-        if y < x or y - x > 20:  # 防御异常范围
-            continue
+        group_type, qnum_range = head_hit
         head_qid = qid_by_index.get(i)
         if not head_qid:
             continue
+        head_qn = qnum_map.get(head_qid)
+        head_qn = None if head_qn == 9999 else head_qn
+
+        # 候选小题：批内其他未挂组的题号
+        candidate_qnums = [qn for j, jid, qn in numbered
+                           if j != i and jid not in claimed and qn is not None]
+        member_qnums = infer_member_qnums(head_qn, candidate_qnums, qnum_range)
+        if not member_qnums:
+            # 无小题可挂 → 不建组（避免空题组）
+            continue
+
         group = QuestionGroup(
-            group_type='scenario' if '情境' in m.group(0) else 'material',
+            group_type=group_type,
             shared_content=q.get('question_content') or '',
             title=(q.get('question_content') or '')[:200],
             subject=subject_name or '公专',
@@ -1589,14 +1599,15 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         db.flush()
         groups_created += 1
 
+        # 题号 → qid 映射（用于把 member_qnums 转为 qid）
+        qn_to_qid = {qn: jid for j, jid, qn in numbered if qn is not None}
         member_ids = [head_qid]
         claimed.add(i)
-        for j, jid, qn in numbered:
-            if j == i or jid in claimed or qn is None:
-                continue
-            if x <= qn <= y:
+        for mqn in member_qnums:
+            jid = qn_to_qid.get(mqn)
+            if jid and jid not in claimed:
                 member_ids.append(jid)
-                claimed.add(j)
+                claimed.add(jid)
         # 写入组字段（按题号升序排列）
         for sort_idx, mid in enumerate(sorted(member_ids, key=lambda mid_: qnum_map.get(mid_, 9999))):
             db.query(QuestionBank).filter(
@@ -1607,7 +1618,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
                 }, synchronize_session=False)
             members_linked += 1
         logger.info(f"[composite] 题组#{group.id} 创建：{len(member_ids)} 题挂组 "
-                    f"(题号范围 {x}-{y})")
+                    f"(type={group_type}, 题号 {member_qnums[:10]})")
     return groups_created, members_linked
 
 
