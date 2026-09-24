@@ -209,3 +209,30 @@ def is_irrelevant_image(img_data: bytes):
     except Exception as e:  # noqa: BLE001 — 判定失败不阻塞
         logger.debug(f"[image_filters] 判定异常: {e}")
         return False, ''
+
+
+# 实锤级 reason（可直接清理）：QR 解码出内容 / 黑名单 md5 命中
+_BLOCK_REASONS = {'qr_code', 'promo_banner'}
+# 疑似级 reason（需人工复核，不自动删除）
+_SUSPECT_REASONS = {'qr_likely', 'promo_likely', 'qr_pattern', 'tiny', 'extreme_ratio', 'blank'}
+
+
+def classify_image(img_data: bytes):
+    """P2-1 三级判定：返回 (decision, reason)。
+
+    decision 取值：
+      'block'   — 实锤无关图（QR 解码成功 / 黑名单 md5 命中），可自动拦截删除
+      'suspect' — 疑似无关图（推广横幅/疑似二维码/尺寸启发式），放行但标记人工复核
+      'keep'    — 正常内容图
+
+    与 is_irrelevant_image 的关系：本函数是其"分级"封装，供导入侧（block 拦截、
+    suspect 标记）与存量清理脚本（仅 block 删除、suspect 列出）复用同一判定标准。
+    """
+    hit, reason = is_irrelevant_image(img_data)
+    if not hit:
+        return 'keep', ''
+    if hit in _BLOCK_REASONS:
+        return 'block', reason
+    if hit in _SUSPECT_REASONS:
+        return 'suspect', reason
+    return 'suspect', reason  # 未知 reason 保守按疑似处理

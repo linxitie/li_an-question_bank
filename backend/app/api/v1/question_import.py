@@ -1135,17 +1135,23 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
     """
     images = []
 
-    # 无关图片检测（问题2-R2）：委托共享模块 image_filters，与存量清理脚本
-    # 使用同一判定标准（QR解码/推广横幅/像素降级/尺寸启发式四级），
-    # 防止"清理后新导入又混入"。函数名与签名保持不变，调用点零改动。
+    # 无关图片检测（问题2-R2/P2-1）：委托共享模块 image_filters 的 classify_image
+    # 三级判定（block/suspect/keep），与存量清理脚本使用同一判定标准。
+    #   block   → 实锤无关图（QR 解码成功 / 黑名单 md5），导入侧直接跳过
+    #   suspect → 疑似无关图（推广横幅/疑似二维码/尺寸启发式），放行但记日志待人工复核
+    #   keep    → 正常内容图
+    # 关键修复：旧逻辑 `hit != 'qr_likely'` 会把 promo_likely/tiny/extreme_ratio/blank
+    # 也拦截，误杀正常图表/警务照片等核心内容；现改为仅拦截 block 级。
     def _is_irrelevant_image(img_data: bytes) -> bool:
-        """检测图片是否为无关内容（二维码/推广横幅/logo/页眉页脚/扫码条）"""
-        from ...services.image_filters import is_irrelevant_image as _check
-        hit, reason = _check(img_data)
-        if hit:
-            logger.debug(f"[images] 过滤无关图片({reason})")
-        # qr_likely 属疑似信号，导入侧不拦截（宁可漏过进人工，不误删）
-        return bool(hit) and hit != 'qr_likely'
+        """检测图片是否为实锤无关内容（二维码解码成功 / 推广图黑名单）"""
+        from ...services.image_filters import classify_image as _check
+        decision, reason = _check(img_data)
+        if decision == 'block':
+            logger.debug(f"[images] 拦截无关图片({reason})")
+            return True
+        if decision == 'suspect':
+            logger.info(f"[images] 疑似无关图片放行待人工复核({reason})")
+        return False
 
     # Resolve absolute backend directory for path construction
     _current_file = os.path.abspath(__file__)
