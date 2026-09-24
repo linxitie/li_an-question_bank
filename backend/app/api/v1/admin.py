@@ -552,6 +552,8 @@ async def list_all_questions(
             "xingce_subcategory": q.xingce_subcategory,
             "shenlun_subcategory": q.shenlun_subcategory,
             "gongzhuan_subcategory": q.gongzhuan_subcategory,
+            # B4/P1-2: 题组标记（>0 表示复合题小题，前端详情弹窗据此聚合渲染材料）
+            "group_id": q.group_id or 0,
         })
 
     return {"success": True, "total": total, "page": page, "page_size": page_size, "items": items}

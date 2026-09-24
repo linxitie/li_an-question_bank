@@ -553,6 +553,8 @@ async def get_exercise_questions(
             'score': q.score,
             'year': q.year,
             'source': q.source,
+            # B4/P1-2: 题组标记（>0 表示复合题小题，前端据此聚合渲染材料+小题）
+            'group_id': q.group_id or 0,
         })
 
     return {

@@ -35,7 +35,7 @@
     "subjectName": {
       "type": "method",
       "params": [
-        "id:any"
+        "id: number"
       ]
     },
     "typeName": {
@@ -84,7 +84,7 @@
     "typeBadgeClass": {
       "type": "method",
       "params": [
-        "typeName: string"
+        "typeInfo: any"
       ]
     },
     "difficultyStars": {
@@ -92,6 +92,82 @@
       "params": [
         "level: number"
       ]
+    },
+    "typeDisplayName": {
+      "type": "method",
+      "params": [
+        "typeInfo: any"
+      ]
+    },
+    "cleanHtmlContent": {
+      "type": "method",
+      "params": [
+        "text: string"
+      ]
+    },
+    "renderSummary": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "hasOptions": {
+      "type": "method",
+      "params": [
+        "opts: any"
+      ]
+    },
+    "parsedOptions": {
+      "type": "method",
+      "params": [
+        "opts: any"
+      ]
+    },
+    "loadStats": {
+      "type": "method",
+      "params": []
+    },
+    "resetFilter": {
+      "type": "method",
+      "params": []
+    },
+    "changePage": {
+      "type": "method",
+      "params": [
+        "page: number"
+      ]
+    },
+    "previewQuestion": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "editQuestion": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "submitEdit": {
+      "type": "method",
+      "params": []
+    },
+    "auditPass": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "showRejectDialog": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "submitReject": {
+      "type": "method",
+      "params": []
     }
   },
   "lifeCycles": {

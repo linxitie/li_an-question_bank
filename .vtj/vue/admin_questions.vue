@@ -133,6 +133,11 @@
               {{ {0:'待审核',1:'已通过',2:'已驳回'}[previewData.audit_status] }}
             </span>
           </div>
+          <!-- P1-2: 复合题共享材料（预览复合题小题时展示） -->
+          <div class="preview-block" v-if="groupInfo && groupInfo.shared_content">
+            <h4>📖 题组材料</h4>
+            <div class="preview-content group-material" v-html="renderQuestionContent(groupInfo.shared_content)"></div>
+          </div>
           <div class="preview-block">
             <h4>题目内容</h4>
             <div class="preview-content" v-html="cleanHtmlContent(previewData.full_content || previewData.question_content)"></div>
@@ -250,6 +255,7 @@
 // @ts-nocheck
 import { defineComponent, ref, onMounted } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'AdminQuestions',
@@ -288,6 +294,8 @@ export default defineComponent({
     ]);
 
     const previewData = ref<any>({});
+    // P1-2: 题组聚合材料缓存（预览复合题小题时展示共享材料）
+    const groupInfo = ref<any>(null);
     const editForm = ref({
       question_id: null,
       subject_id: '1',
@@ -443,7 +451,15 @@ export default defineComponent({
 
     function previewQuestion(q: any) {
       previewData.value = { ...q };
+      groupInfo.value = null;
       showPreviewModal.value = true;
+      // P1-2: 复合题小题 → 拉取题组聚合（共享材料）
+      if (q.group_id) {
+        auth().apiFetch('/api/questions/group/' + q.group_id)
+          .then(function(r) { return r.json(); })
+          .then(function(d) { if (d && d.group) groupInfo.value = d.group; })
+          .catch(function() { /* 静默：材料加载失败不影响预览 */ });
+      }
     }
 
     function editQuestion(q: any) {
@@ -561,11 +577,11 @@ export default defineComponent({
     return {
       provider, loading, questionList, total, currentPage, totalPages,
       stats, filters, typeOptions, msg, showPreviewModal, showEditModal, showRejectModal,
-      previewData, editForm, rejectForm,
+      previewData, groupInfo, editForm, rejectForm,
       load, resetFilter, changePage, previewQuestion, editQuestion,
       submitEdit, auditPass, showRejectDialog, submitReject,
       subjectName, typeDisplayName, typeBadgeClass, cleanHtmlContent, renderSummary,
-      hasOptions, parsedOptions
+      hasOptions, parsedOptions, renderQuestionContent
     };
   }
 });

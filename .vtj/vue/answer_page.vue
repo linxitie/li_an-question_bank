@@ -81,6 +81,19 @@
               :key="q.id"
               :ref="'question_' + q.id"
               class="question-block">
+              <!-- P1-2: 复合题共享材料（可折叠，仅该题组首个出现时渲染） -->
+              <div
+                v-if="q.group_id && state.groupMaterials[q.group_id] && isGroupFirstOccurrence(q.id)"
+                class="group-material-block">
+                <div class="group-material-header" @click="toggleGroupCollapse(q.group_id)">
+                  <span class="group-material-title">📖 {{ state.groupMaterials[q.group_id].title || '题组材料' }}</span>
+                  <span class="group-material-toggle">{{ state.groupCollapsed[q.group_id] ? '展开 ▾' : '收起 ▴' }}</span>
+                </div>
+                <div
+                  v-if="!state.groupCollapsed[q.group_id]"
+                  class="group-material-content"
+                  v-html="renderQuestionContent(state.groupMaterials[q.group_id].shared_content)"></div>
+              </div>
               <div class="q-header">
                 <span class="q-number">
                   <span>
@@ -184,6 +197,7 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+  import { renderQuestionContent } from '@/utils/questionRender';
   export default defineComponent({
     name: 'AnswerPage',
     components: { NavBar, XIcon, Transition },
@@ -203,9 +217,13 @@
         noteText: '',
         currentNoteQuestionId: null,
         // 收藏状态：{ [question_id]: boolean }
-        favorites: {}
+        favorites: {},
+        // P1-2: 题组聚合材料缓存 { [group_id]: { title, shared_content, group_type } }
+        groupMaterials: {},
+        // P1-2: 材料折叠状态 { [group_id]: boolean }（默认展开）
+        groupCollapsed: {}
       });
-      return { state, props, provider, Grid, AlarmClock, CloseBold };
+      return { state, props, provider, Grid, AlarmClock, CloseBold, renderQuestionContent };
     },
     computed: {
       answeredCount() {
@@ -303,6 +321,30 @@
           /* 静默失败，收藏按钮保持默认未收藏状态 */
         }
       },
+      // P1-2: 批量加载题组材料（复合题小题聚合展示）
+      async loadGroupMaterials() {
+        var self = this;
+        var gids = {};
+        this.state.questions.forEach(function(q) {
+          if (q.group_id) gids[q.group_id] = true;
+        });
+        var groupIds = Object.keys(gids);
+        if (!groupIds.length) return;
+        // 串行加载（题组通常较少，避免并发风暴）
+        groupIds.forEach(function(gid) {
+          window.__VTJ_AUTH__.apiFetch('/api/questions/group/' + gid, {
+            headers: self.getJsonHeaders()
+          }).then(function(res) { return res.json(); }).then(function(data) {
+            if (data && data.group) {
+              self.state.groupMaterials[gid] = data.group;
+            }
+          }).catch(function() { /* 静默：材料加载失败不影响答题 */ });
+        });
+      },
+      // P1-2: 切换题组材料折叠
+      toggleGroupCollapse(gid) {
+        this.state.groupCollapsed[gid] = !this.state.groupCollapsed[gid];
+      },
       handleSubmit() {
         this.state.showResult = true;
         ElMessage.success('试卷已提交');
@@ -387,6 +429,17 @@
         var map = {'多选题':'multi','不定项':'multi','多选':'multi','判断题':'judge','简答题':'essay','论述题':'essay','写作题':'essay'};
         return map[type] || '';
       },
+      // P1-2: 判断当前题目是否为其题组在当前列表中的首个出现（用于仅渲染一次共享材料）
+      isGroupFirstOccurrence(qId) {
+        var self = this;
+        var q = this.state.questions.find(function(x) { return x.id === qId; });
+        if (!q || !q.group_id) return false;
+        var firstIdx = -1;
+        for (var i = 0; i < this.state.questions.length; i++) {
+          if (this.state.questions[i].group_id === q.group_id) { firstIdx = i; break; }
+        }
+        return firstIdx >= 0 && this.state.questions[firstIdx].id === qId;
+      },
       loadQuestions() {
         console.log('[AnswerPage] loadQuestions v20260623 - real API');
         this.state.questions = [];
@@ -441,6 +494,7 @@
                 stem = stem.trim();
                 return {
                   id: q.question_id,
+                  group_id: q.group_id || 0,
                   type: (function() {
                     var typeMap = {'单选题':'单选', '选择题':'单选', '单选':'单选', '多选题':'多选题', '不定项':'多选', '多选':'多选'};
                     var mapped = typeMap[q.question_type_detail];
@@ -460,6 +514,8 @@
                 options: [], answer: '', explain: ''
               }];
             }
+            // P1-2: 批量加载题组材料（复合题小题聚合展示）
+            this.loadGroupMaterials();
             // 题目加载完成后批量加载收藏状态
             this.loadFavoritesStatus();
           }).catch(() => {
@@ -785,6 +841,46 @@
     border-radius: 16px;
     padding: 28px;
     box-shadow: 0 2px 14px rgba(26, 43, 95, 0.05);
+  }
+  /* P1-2: 复合题共享材料块 */
+  .group-material-block {
+    margin-bottom: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #f8fafc;
+  }
+  .group-material-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    cursor: pointer;
+    background: #f1f5f9;
+    user-select: none;
+  }
+  .group-material-header:hover { background: #eef2f7; }
+  .group-material-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a2b5f;
+  }
+  .group-material-toggle {
+    font-size: 13px;
+    color: #64748b;
+  }
+  .group-material-content {
+    padding: 14px 16px;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #334155;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .group-material-content :deep(img.q-img) {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 8px 0;
   }
   .q-header {
     display: flex;

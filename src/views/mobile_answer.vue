@@ -10,6 +10,14 @@
     <div v-if="loading" class="empty">加载中...</div>
 
     <main v-else class="body">
+      <!-- 复合题共享材料（可折叠） -->
+      <div v-if="groupInfo && groupInfo.shared_content" class="group-material-card">
+        <div class="group-material-header" @click="groupCollapsed = !groupCollapsed">
+          <span class="group-material-title">📖 {{ groupInfo.title || '题组材料' }}</span>
+          <span class="group-material-toggle">{{ groupCollapsed ? '展开 ▾' : '收起 ▴' }}</span>
+        </div>
+        <div v-if="!groupCollapsed" class="group-material-content" v-html="renderQuestionContent(groupInfo.shared_content)"></div>
+      </div>
       <!-- 题目 -->
       <div class="q-card">
         <div class="q-type">{{ current.type_label || '' }} · {{ current.question_type_detail || '单选题' }}</div>
@@ -45,8 +53,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 const router = useRouter();
 const route = useRoute();
@@ -57,8 +66,24 @@ const answered = ref(false);
 const isCorrect = ref(false);
 const loading = ref(false);
 const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+// P1-2: 复合题共享材料（逐题模式下，当前题的题组材料）
+const groupInfo = ref<any>(null);
+const groupCollapsed = ref(false);
 
 const current = computed(() => questions.value[currentIndex.value] || {});
+
+// P1-2: 切题时加载当前题的题组材料
+watch(current, (q: any) => {
+  groupInfo.value = null;
+  groupCollapsed.value = false;
+  if (q && q.group_id) {
+    const auth = (window as any).__VTJ_AUTH__;
+    auth.apiFetch('/api/questions/group/' + q.group_id)
+      .then(function(r: any) { return r.json(); })
+      .then(function(d: any) { if (d && d.group) groupInfo.value = d.group; })
+      .catch(function() { /* 静默：材料加载失败不影响答题 */ });
+  }
+});
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -201,6 +226,45 @@ onMounted(fetchQuestions);
   padding: 16px;
   margin-bottom: 12px;
   box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
+}
+/* P1-2: 复合题共享材料卡 */
+.group-material-card {
+  background: #f8fafc;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.group-material-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f1f5f9;
+  cursor: pointer;
+  user-select: none;
+}
+.group-material-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a2b5f;
+}
+.group-material-toggle {
+  font-size: 12px;
+  color: #64748b;
+}
+.group-material-content {
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #334155;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.group-material-content :deep(img) {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
 }
 .q-type {
   font-size: 12px;

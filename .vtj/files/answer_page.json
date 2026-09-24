@@ -7,6 +7,7 @@
   "props": [],
   "slots": [],
   "state": {
+    "2": "题组聚合材料缓存 { [group_id]: { title",
     "answers": "{}",
     "timeLeft": "7200",
     "questions": "[]",
@@ -17,14 +18,9 @@
     "markedQuestions": "[]",
     "showNoteEditor": "false",
     "noteText": "''",
-    "currentNoteQuestionId": {
-      "type": "JSExpression",
-      "value": "null"
-    },
-    "favorites": {
-      "type": "JSExpression",
-      "value": "{}"
-    }
+    "currentNoteQuestionId": "null",
+    "favorites": "{}",
+    "groupMaterials": "{}"
   },
   "watch": [],
   "expose": [],
