@@ -101,7 +101,7 @@
               <span class="qi-difficulty">{{ '★'.repeat(q.difficulty) }}{{ '☆'.repeat(5 - q.difficulty) }}</span>
               <span v-if="q.subcategory" class="qi-subcat">{{ q.subcategory }}</span>
             </div>
-            <p class="qi-content">{{ q.question_content }}</p>
+            <p class="qi-content" v-html="renderQuestionContent(q.question_content)"></p>
             <div class="qi-actions">
               <button class="qi-btn replace-btn" @click.stop="openReplace(q, idx)">🔄 换一题</button>
             </div>
@@ -155,6 +155,7 @@
 import { defineComponent, reactive } from 'vue';
 import NavBar from './navbar.vue';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 const XINGCE_PRESET = [
   { subject_id: 1, type_id: 1, label: '常识判断', count: 20, score: 1.0, subcategory: '常识判断' },
@@ -230,7 +231,7 @@ export default defineComponent({
     // 初始化默认题型配置
     state.fm_questionConfigs = JSON.stringify(XINGCE_PRESET);
 
-    return { state, props, provider, subjectOptions: SUBJECT_OPTIONS, yearOptions: YEAR_OPTIONS };
+    return { state, props, provider, subjectOptions: SUBJECT_OPTIONS, yearOptions: YEAR_OPTIONS, renderQuestionContent };
   },
   computed: {
     questionConfigParsed() {

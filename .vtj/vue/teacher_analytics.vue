@@ -132,7 +132,7 @@
             <thead><tr><th>题目</th><th>使用次数</th><th>正确率</th><th>科目</th></tr></thead>
             <tbody>
               <tr v-for="q in questionUsage" :key="q.question_id">
-                <td>{{ q.question_content }}</td>
+                <td v-html="renderQuestionContent(q.question_content)"></td>
                 <td>{{ q.usage_count }}</td>
                 <td :class="{ 'high-rate': q.correct_rate >= 70, 'low-rate': q.correct_rate < 40 }">{{ q.correct_rate }}%</td>
                 <td>{{ q.subject_name }}</td>
@@ -150,6 +150,7 @@ import { defineComponent, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TeacherNavHeader from './TeacherNavHeader.vue';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'TeacherAnalytics',
@@ -287,7 +288,7 @@ export default defineComponent({
       classList, selectedClass, selectedSubject, selectedDays, overview, knowledgeMastery,
       questionUsage, trendData, timeRanges, switchTimeRange, exportReport, barHeight,
       radarSize, radarCx, radarCy, radarFillColor, radarAxes, radarGridPolygon,
-      radarDataPolygon, radarDataDots, handleLogout,
+      radarDataPolygon, radarDataDots, handleLogout, renderQuestionContent,
     };
   }
 });

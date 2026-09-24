@@ -559,6 +559,10 @@ import os as _os
 _img_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'static', 'questions')
 _os.makedirs(_img_dir, exist_ok=True)
 app.mount("/static/questions", StaticFiles(directory=_img_dir), name="question_images")
+# 图片加载失败兜底占位图（前端 onerror 统一指向此处）
+_images_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'static', 'images')
+_os.makedirs(_images_dir, exist_ok=True)
+app.mount("/static/images", StaticFiles(directory=_images_dir), name="static_images")
 
 app.include_router(auth.router)
 app.include_router(questions.router)

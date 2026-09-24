@@ -72,7 +72,7 @@
               <div class="preview-label">来源题目:
                 <span class="view-detail-link" @click="showQuestionDetail(note.question_id)">点击查看完整题目 ›</span>
               </div>
-              <div class="preview-text">{{ note.question_content }}</div>
+              <div class="preview-text" v-html="renderQuestionContent(note.question_content)"></div>
             </div>
             <div class="thought-section">
               <div class="thought-label">📖 笔记内容:</div>
@@ -147,7 +147,7 @@
           <!-- 题干 -->
           <div class="detail-section">
             <div class="detail-section-label">题干:</div>
-            <div class="detail-content" v-html="state.questionDetail.question_content"></div>
+            <div class="detail-content" v-html="renderQuestionContent(state.questionDetail.question_content)"></div>
           </div>
 
           <!-- 选项 -->
@@ -161,7 +161,7 @@
                 :class="{ 'correct-answer': opt.is_correct }"
               >
                 <span class="opt-letter">{{ opt.letter }}</span>
-                <span class="opt-text" v-html="opt.text"></span>
+                <span class="opt-text" v-html="renderQuestionContent(opt.text)"></span>
                 <span class="correct-mark" v-if="opt.is_correct">✓ 正确答案</span>
               </div>
             </div>
@@ -176,7 +176,7 @@
           <!-- 解析 -->
           <div class="detail-section">
             <div class="detail-section-label">答案解析:</div>
-            <div class="detail-content" v-html="state.questionDetail.answer_analysis"></div>
+            <div class="detail-content" v-html="renderQuestionContent(state.questionDetail.answer_analysis)"></div>
           </div>
         </div>
         <div class="dialog-body" v-else>
@@ -197,6 +197,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
+  import { renderQuestionContent } from '@/utils/questionRender';
   export default defineComponent({
     name: 'Notes',
     components: { NavBar, XIcon },
@@ -218,7 +219,7 @@
         detailDialogVisible: false,
         questionDetail: null
       });
-      return { state, props, provider, Edit };
+      return { state, props, provider, Edit, renderQuestionContent };
     },
     computed: {
       totalPages() {

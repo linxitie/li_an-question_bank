@@ -1107,17 +1107,29 @@
   "props": [],
   "slots": [],
   "state": {
-    "stats": "{ highest: 0",
+    "stats": "{",
     "advices": "[]",
     "details": "[]",
-    "hasData": "true",
+    "hasData": "false",
     "activeTab": "'self'",
     "average": "0",
     "rank": "'--'",
-    "accuracy": "0 }",
+    "accuracy": "0",
     "statsLoading": "false",
     "statsLoaded": "false",
-    "trendScores": "[]"
+    "trendScores": "[]",
+    "chartLoading": "false",
+    "detailsLoading": "false",
+    "aiLoading": "false",
+    "wrongBoardLoading": "false",
+    "highest": "0",
+    "trendData": "[]",
+    "avgTrendData": "[]",
+    "currentWrongData": "null",
+    "rawRecords": "[]",
+    "monitoring": "true",
+    "lastUpdate": "''",
+    "refreshTimer": "null"
   },
   "watch": [],
   "expose": [],
@@ -1135,6 +1147,10 @@
     "ensureLogin": {
       "type": "method",
       "params": []
+    },
+    "goToQuestionBank": {
+      "type": "method",
+      "params": []
     }
   },
   "computed": {
@@ -1145,6 +1161,9 @@
   },
   "lifeCycles": {
     "mounted": {
+      "type": "method"
+    },
+    "beforeUnmount": {
       "type": "method"
     }
   },

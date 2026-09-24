@@ -47,7 +47,7 @@
         </button>
       </div>
       <div class="docs-q-body">
-        <div class="docs-q-content">{{ q.question_content }}</div>
+        <div class="docs-q-content" v-html="renderQuestionContent(q.question_content)"></div>
         <div class="docs-q-options" v-if="q.options && q.options.length">
           <span class="docs-q-opt" v-for="opt in q.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</span>
         </div>
@@ -142,6 +142,7 @@
 // @ts-nocheck
 import { defineComponent, ref, reactive } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'QuestionPreviewList',
@@ -246,7 +247,8 @@ export default defineComponent({
       closeEditDialog,
       saveEdit,
       addOption,
-      removeOption
+      removeOption,
+      renderQuestionContent
     };
   }
 });

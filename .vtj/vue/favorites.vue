@@ -56,7 +56,7 @@
           <div v-for="item in state.questionFavorites" :key="item.fav_id" class="fav-card question-fav" @click="viewQuestionDetail(item)">
             <div class="fav-type-badge question">📝 典题</div>
             <div class="fav-card-body">
-              <div class="fav-content-text question-text">{{ item.question_content }}</div>
+              <div class="fav-content-text question-text" v-html="renderQuestionContent(item.question_content)"></div>
               <div class="fav-meta">
                 <span v-if="item.subject_name">科目: {{ item.subject_name }}</span>
                 <span v-if="item.subcategory">知识点: {{ item.subcategory }}</span>
@@ -112,19 +112,19 @@
           全网正确率: {{ state.questionDetail.accuracy_rate }}%
         </div>
         <div class="modal-body">
-          <div class="question-content-text">{{ state.questionDetail.question_content }}</div>
+          <div class="question-content-text" v-html="renderQuestionContent(state.questionDetail.question_content)"></div>
           <div class="question-options" v-if="state.questionDetail.options && state.questionDetail.options.length">
             <div v-for="(opt, idx) in state.questionDetail.options" :key="idx"
                  :class="['option-item', { 'correct-answer': isCorrectAnswer(idx, state.questionDetail) }]">
               <span class="option-label">{{ String.fromCharCode(65 + idx) }}.</span>
-              <span class="option-text">{{ typeof opt === 'object' ? (opt.value || opt.text) : opt }}</span>
+              <span class="option-text" v-html="renderQuestionContent(typeof opt === 'object' ? (opt.value || opt.text) : opt)"></span>
               <span v-if="isCorrectAnswer(idx, state.questionDetail)" class="correct-badge">✓ 正确答案</span>
             </div>
           </div>
         </div>
         <div class="answer-analysis" v-if="state.questionDetail.answer_analysis">
           <h4>📖 答案解析</h4>
-          <p>{{ state.questionDetail.answer_analysis }}</p>
+          <p v-html="renderQuestionContent(state.questionDetail.answer_analysis)"></p>
         </div>
         <div class="modal-footer">
           <button class="modal-btn" @click="removeQuestionFavorite(state.questionDetail.fav_id)">取消收藏</button>
@@ -141,6 +141,7 @@
   import { XIcon } from '@vtj/ui';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
+  import { renderQuestionContent } from '@/utils/questionRender';
   export default defineComponent({
     name: 'Favorites',
     components: { NavBar, XIcon },
@@ -160,7 +161,7 @@
         showQuestionModal: false,
         questionDetail: {}
       });
-      return { state, props, provider, Star };
+      return { state, props, provider, Star, renderQuestionContent };
     },
     computed: {
       totalPages() {

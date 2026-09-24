@@ -47,7 +47,7 @@
         <div class="q-list">
           <div v-for="q in detail.questions" :key="q.question_id" :class="['q-item', issueLevel(q.question_id)]">
             <div class="q-head"><span class="q-no">第 {{ q.question_no }} 题</span><span class="q-type">{{ q.type_name || '-' }}</span><span class="q-score">{{ q.score }} 分</span></div>
-            <div class="q-content">{{ q.question_content }}</div>
+            <div class="q-content" v-html="renderQuestionContent(q.question_content)"></div>
             <div class="q-answer">答案：{{ q.answer || '（无）' }}</div>
             <div v-for="(iss, i) in issuesOf(q.question_id)" :key="i" :class="['issue-tag', iss.severity]">{{ iss.description }}</div>
           </div>
@@ -80,6 +80,7 @@
 // @ts-nocheck
 import { defineComponent, ref, onMounted } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'PaperApproval',
@@ -184,7 +185,7 @@ export default defineComponent({
     return {
       provider, loading, kw, fstatus, fsubject, items, showDetail, detail, logs, opinion,
       load, openDetail, closeDetail, openReject, doApprove, doReject,
-      statusLabel, statusClass, statusOf, formatTime, issuesOf, issueLevel, errorCount, warnCount
+      statusLabel, statusClass, statusOf, formatTime, issuesOf, issueLevel, errorCount, warnCount, renderQuestionContent
     };
   }
 });

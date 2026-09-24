@@ -158,7 +158,7 @@
                   class="wrong-question-item">
                   <div class="wrong-question-content">
                     <span class="wrong-num">{{ idx + 1 }}</span>
-                    <span class="wrong-text">{{ q.question_content }}</span>
+                    <span class="wrong-text" v-html="renderQuestionContent(q.question_content)"></span>
                   </div>
                   <div class="wrong-answer-info">
                     <span class="your-answer">你的答案: {{ q.student_answer }}</span>
@@ -222,6 +222,7 @@
   } from '@vtj/icons';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
+  import { renderQuestionContent } from '@/utils/questionRender';
 
   export default defineComponent({
     name: 'ScoreAnalysis',
@@ -262,7 +263,7 @@
         refreshTimer: null
       });
 
-      return { state, props, provider };
+      return { state, props, provider, renderQuestionContent };
     },
     computed: {
       chartOption() {

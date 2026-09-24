@@ -134,7 +134,7 @@
             </div>
             <div class="preview-list">
               <div v-for="(q, idx) in paperQuestions" :key="q.question_id" class="preview-item">
-                <div class="preview-q-title">{{ idx + 1 }}. ({{ q.type_name }}，{{ q.question_score }}分) {{ q.question_content }}</div>
+                <div class="preview-q-title">{{ idx + 1 }}. ({{ q.type_name }}，{{ q.question_score }}分) <span v-html="renderQuestionContent(q.question_content)"></span></div>
                 <div class="preview-options" v-if="q.options && q.options.length">
                   <div v-for="opt in q.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</div>
                 </div>
@@ -230,7 +230,7 @@
                   <button class="btn-mini" @click="aiReplaceQuestion(q, idx)" title="替换此题">🔄 换一题</button>
                   <button class="btn-mini btn-mini-danger" @click="aiRemoveQuestion(idx)" title="删除此题">✕</button>
                 </div>
-                <div class="ai-q-content">{{ q.question_content }}</div>
+                <div class="ai-q-content" v-html="renderQuestionContent(q.question_content)"></div>
                 <div class="ai-q-options" v-if="q.options && q.options.length">
                   <span v-for="opt in q.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</span>
                 </div>
@@ -343,12 +343,12 @@
       <div class="modal-content preview-modal">
         <h3>题目详情</h3>
         <div class="preview-q-title">{{ detailQuestion.type_name }} · 难度 {{ detailQuestion.difficulty }} · {{ detailQuestion.subject_name }}</div>
-        <div class="preview-q-title" style="font-weight:400">{{ detailQuestion.question_content }}</div>
+        <div class="preview-q-title" style="font-weight:400" v-html="renderQuestionContent(detailQuestion.question_content)"></div>
         <div class="preview-options" v-if="detailQuestion.options && detailQuestion.options.length">
-          <div v-for="opt in detailQuestion.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</div>
+          <div v-for="opt in detailQuestion.options" :key="opt.key">{{ opt.key }}. <span v-html="renderQuestionContent(opt.value)"></span></div>
         </div>
         <div class="preview-answer">正确答案：{{ detailQuestion.answer }}</div>
-        <div class="preview-analysis" v-if="detailQuestion.answer_analysis">解析：{{ detailQuestion.answer_analysis }}</div>
+        <div class="preview-analysis" v-if="detailQuestion.answer_analysis">解析：<span v-html="renderQuestionContent(detailQuestion.answer_analysis)"></span></div>
         <button class="btn-primary" @click="showQuestionDetail = false">关闭</button>
       </div>
     </div>
@@ -361,6 +361,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import TeacherNavHeader from './TeacherNavHeader.vue';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'TeacherPapers',
@@ -849,7 +850,7 @@ export default defineComponent({
       loadQuestionTypes, onSubjectChange, searchPicker, toggleCheck, toggleAll, addChecked, loadPaperQuestions,
       removeQuestion, replaceQuestion, updateScore, moveQuestion, previewQuestionDetail,
       openAiModal, doAiGenerate, aiReplaceQuestion, aiRemoveQuestion, doAiPublish, needOptions, addOption, removeOption, onSelfTypeChange, doSelfDesign,
-      openPublish, doPublish, deletePaper, restorePaper, permanentDelete, openPreview, handleLogout,
+      openPublish, doPublish, deletePaper, restorePaper, permanentDelete, openPreview, handleLogout, renderQuestionContent,
     };
   }
 });
