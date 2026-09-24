@@ -1268,11 +1268,23 @@ class QuestionNumber:
     line_index: int      # 行号（0-based）
 
 
-def extract_question_numbers(text: str) -> List[QuestionNumber]:
+def extract_question_numbers(text: str, exclude_paren_bracket: bool = False,
+                             monotonic: bool = False) -> List[QuestionNumber]:
     """
     从文本中提取所有题号。
     每个位置只取第一个命中的格式（按优先级）。
     包含近邻去重逻辑。
+
+    exclude_paren_bracket=True 时禁用 paren/bracket 两种"括号题号"格式。
+    用途：答案解析文档中，真实题号是行首"1、"（num_dot）格式，而解析正文里的
+    "（1）指引作用（2）评价作用…"子项序号会被 paren 模式误判为题号，
+    导致答案块切分错乱、解析串题丢失（真实案例：2016多省联考答案解析 119个题号
+    中 19 个是误判的子项序号，导致 7 题解析缺失）。
+
+    monotonic=True 时，题号须严格单调递增（后一个 > 前一个）。用于答案解析：
+    解析正文里的枚举序号（如"5.丢失枪支不报"出现在第 27 题正文中）会被 num_dot
+    误判为题号 5，破坏第 27 题的块边界（"故正确答案为D"被截断归入错误块）。
+    标准试卷答案的题号必然单调递增，正文枚举必然违反单调性，据此可精准过滤。
     """
     if not text:
         return []
@@ -1286,6 +1298,8 @@ def extract_question_numbers(text: str) -> List[QuestionNumber]:
         best_priority = len(QUESTION_NUMBER_PATTERNS)
 
         for priority, (fmt_name, pattern) in enumerate(QUESTION_NUMBER_PATTERNS):
+            if exclude_paren_bracket and fmt_name in ('paren', 'bracket'):
+                continue
             m = pattern.search(line)
             if m:
                 num = int(m.group(1))
@@ -1310,6 +1324,11 @@ def extract_question_numbers(text: str) -> List[QuestionNumber]:
                 is_dup = True
                 break
         if is_dup:
+            continue
+
+        # monotonic 模式：题号须严格递增（后一个 > 前一个）。
+        # 答案解析正文里的枚举序号（如"5.丢失枪支不报"出现在第27题中）违反递增性，过滤。
+        if monotonic and results and num <= results[-1].number:
             continue
 
         results.append(QuestionNumber(
@@ -1464,11 +1483,11 @@ def parse_answer_text_to_map(text: str) -> Dict[int, Dict[str, Optional[str]]]:
     将答案文本解析为题号→答案的映射（主要策略）。
 
     流程：
-    1. 提取题号位置
+    1. 提取题号位置（排除括号题号，避免解析正文"（1）（2）"子项序号误判）
     2. 按题号切分文本块
     3. 从每个文本块中提取答案和解析
     """
-    numbers = extract_question_numbers(text)
+    numbers = extract_question_numbers(text, exclude_paren_bracket=True, monotonic=True)
 
     if not numbers:
         # 无题号时尝试连续序列解析
@@ -2206,7 +2225,7 @@ def smart_match_questions_answers(
     # ===== 策略5: 检测两文本相似度，高相似度时从答案文件提取内联答案 =====
     sim = compute_text_similarity(questions_text, answers_text)
     if sim > 0.6:  # 降低阈值以覆盖更多场景
-        inline_from_a = _extract_inline_answers(answers_text)
+        inline_from_a = _extract_inline_answers(answers_text, exclude_paren_bracket=True)
         if inline_from_a:
             strategies.append('答案文件内联答案')
             for num, ans_data in inline_from_a.items():
@@ -2349,7 +2368,7 @@ def _extract_embedded_answers(text: str) -> Dict[int, Dict[str, Optional[str]]]:
     if not text:
         return {}
 
-    numbers = extract_question_numbers(text)
+    numbers = extract_question_numbers(text, exclude_paren_bracket=True, monotonic=True)
     if not numbers:
         # 无题号时：全局搜索嵌入式答案标记，按顺序分配
         all_embedded = []
@@ -2549,9 +2568,14 @@ def _to_fullwidth(text: str) -> str:
     return ''.join(result)
 
 
-def _extract_inline_answers(text: str) -> Dict[int, Dict[str, Optional[str]]]:
-    """从完整文本中按题号提取内联答案"""
-    numbers = extract_question_numbers(text)
+def _extract_inline_answers(text: str, exclude_paren_bracket: bool = False) -> Dict[int, Dict[str, Optional[str]]]:
+    """从完整文本中按题号提取内联答案。
+
+    exclude_paren_bracket=True 用于答案解析文本（解析正文"（1）（2）"子项序号
+    会被 paren 模式误判为题号，需排除）。
+    """
+    numbers = extract_question_numbers(text, exclude_paren_bracket=exclude_paren_bracket,
+                                       monotonic=exclude_paren_bracket)
     if not numbers:
         return {}
 
