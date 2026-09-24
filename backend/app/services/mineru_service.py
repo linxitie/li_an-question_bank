@@ -87,7 +87,8 @@ def health_check(force: bool = False) -> dict:
                 [py, '-m', 'mineru.cli.client', '--version'],
                 capture_output=True,
                 timeout=30,
-                env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'},
+                env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
+                 'MINERU_MODEL_SOURCE': 'modelscope'},
             )
             if proc.returncode == 0:
                 data['available'] = True
@@ -152,7 +153,8 @@ def extract_text_sync(buf: bytes) -> str | None:
              '-p', in_pdf, '-o', outdir, '-b', backend],
             capture_output=True,
             timeout=timeout,
-            env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'},
+            env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
+                 'MINERU_MODEL_SOURCE': 'modelscope'},
         )
 
         md_files = sorted(glob.glob(os.path.join(outdir, '**', '*.md'), recursive=True))

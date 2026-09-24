@@ -62,12 +62,14 @@ class Settings(BaseSettings):
     # 新闻爬虫配置
     NEWS_BROWSER: str = Field("chromium", env="NEWS_BROWSER")
 
-    # ==================== MinerU 扫描件OCR（默认关闭，灰度启用）====================
+    # ==================== MinerU 扫描件OCR（MinerU 主 + PaddleOCR 辅）====================
     # 设计规格: docs/superpowers/specs/2026-08-22-mineru-scanned-pdf-ocr-design.md
-    # MINERU_PYTHON 指向独立 Python 3.12 venv 解释器（MinerU 不支持主后端的 3.13）
-    MINERU_ENABLED: bool = Field(False, env="MINERU_ENABLED")
-    MINERU_PYTHON: str = Field(r"D:\mineru-env\Scripts\python.exe", env="MINERU_PYTHON")
-    MINERU_TIMEOUT: int = Field(300, env="MINERU_TIMEOUT")
+    # MINERU_PYTHON 指向独立 Python 3.11 venv 解释器（MinerU 不支持主后端的 3.13）。
+    # 部署记录（solve_problems_files/mineru_deployment_log.md）：venv 位于纯 ASCII 路径
+    # C:\mineru_env（FastText 无法加载非 ANSI 路径）；模型源 MINERU_MODEL_SOURCE=modelscope。
+    MINERU_ENABLED: bool = Field(True, env="MINERU_ENABLED")
+    MINERU_PYTHON: str = Field(r"C:\mineru_env\Scripts\python.exe", env="MINERU_PYTHON")
+    MINERU_TIMEOUT: int = Field(600, env="MINERU_TIMEOUT")
     MINERU_BACKEND: str = Field("pipeline", env="MINERU_BACKEND")
 
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
