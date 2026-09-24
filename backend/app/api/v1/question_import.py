@@ -1548,7 +1548,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
     3. 建 question_groups 行（shared_content=头题题干），头题与推断的小题
        全部挂 group_id / question_level=2 / sort_order / question_number
     """
-    from ...services.composite_matcher import match_group_head, infer_member_qnums
+    from ...services.composite_matcher import match_group_head, infer_member_qnums, semantic_grouping
 
     if not settings.COMPOSITE_QUESTION_ENABLED:
         return 0, 0
@@ -1619,6 +1619,54 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             members_linked += 1
         logger.info(f"[composite] 题组#{group.id} 创建：{len(member_ids)} 题挂组 "
                     f"(type={group_type}, 题号 {member_qnums[:10]})")
+
+    # ===== 层2 语义增强兜底：对层1 未命中的题目做分组（无显式标识的复合题）=====
+    unclaimed = [(i, q) for i, q in enumerate(ok_items) if i not in claimed]
+    if unclaimed:
+        unclaimed_questions = [q for _, q in unclaimed]
+        suggestions = semantic_grouping(unclaimed_questions)
+        for sug in suggestions:
+            head_local = sug.get('head_index')
+            member_locals = sug.get('member_indices') or []
+            if head_local is None or not member_locals:
+                continue
+            # 映射回 ok_items 原始索引
+            head_idx = unclaimed[head_local][0]
+            head_qid = qid_by_index.get(head_idx)
+            if not head_qid:
+                continue
+            member_qids = []
+            for ml in member_locals:
+                if 0 <= ml < len(unclaimed):
+                    mqid = qid_by_index.get(unclaimed[ml][0])
+                    if mqid:
+                        member_qids.append(mqid)
+            if not member_qids:
+                continue
+
+            group = QuestionGroup(
+                group_type=sug.get('group_type') or 'material',
+                shared_content=ok_items[head_idx].get('question_content') or '',
+                title=(ok_items[head_idx].get('question_content') or '')[:200],
+                subject=subject_name or '公专',
+                source=source_tag or ok_items[head_idx].get('paper_name', ''),
+            )
+            db.add(group)
+            db.flush()
+            groups_created += 1
+
+            member_ids = [head_qid] + member_qids
+            for sort_idx, mid in enumerate(sorted(member_ids, key=lambda mid_: qnum_map.get(mid_, 9999))):
+                db.query(QuestionBank).filter(
+                    QuestionBank.question_id == mid).update({
+                        'group_id': group.id,
+                        'question_level': 2,
+                        'sort_order': sort_idx + 1,
+                    }, synchronize_session=False)
+                members_linked += 1
+            logger.info(f"[composite] 语义增强题组#{group.id} 创建：{len(member_ids)} 题挂组 "
+                        f"(type={sug.get('group_type')}, conf={sug.get('confidence')})")
+
     return groups_created, members_linked
 
 
