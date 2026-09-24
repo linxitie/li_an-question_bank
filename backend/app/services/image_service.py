@@ -124,15 +124,27 @@ def _find_in_question_image_table(question_id: int, db) -> Optional[str]:
 
 
 def _extract_marker_from_src(src: str) -> Optional[str]:
-    """从 src 路径中提取图片 marker（如 1_0 或 abc12345_1_0）
-    用于匹配 docx 提取的扁平文件名。
+    """从 src 路径中提取图片 marker，用于匹配子目录磁盘文件名。
+
+    兼容磁盘实际命名（img_docx_{idx}_{md5} / img_{idx}_{md5}）与
+    历史占位符扁平命名（uuid_qn_seq / qn_seq）：
+      - img_docx_0_5661de6d.png → 提取 md5 段 "5661de6d"（子目录文件名含此 md5）
+      - abc12345_1_0.png        → 提取 "abc12345_1_0"
+      - 1_0.png                 → 提取 "1_0"
     """
     if not src:
         return None
     basename = os.path.basename(src.split('?')[0])
     # 去除扩展名
     name_without_ext = os.path.splitext(basename)[0]
-    # 匹配 marker 格式：uuid_qn_seq 或 qn_seq
+    # 1) 磁盘实际命名 img_docx_{idx}_{md5} / img_{idx}_{md5} → 提取 md5（子串匹配文件名）
+    m = re.match(r'^img_docx_\d+_([a-f0-9]{6,})$', name_without_ext, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    m = re.match(r'^img_\d+_([a-f0-9]{6,})$', name_without_ext, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    # 2) 历史占位符扁平命名 uuid_qn_seq 或 qn_seq
     m = re.match(r'^([a-f0-9]+_\d+_\d+|\d+_\d+)$', name_without_ext, re.IGNORECASE)
     if m:
         return m.group(1)
