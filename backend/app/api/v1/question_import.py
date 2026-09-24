@@ -1706,6 +1706,7 @@ async def batch_import_parsed(
     ok_items: List[Dict[str, Any]] = []  # 成功入库的原payload（用于缺答案/解析提示）
     failed_items: List[Dict[str, Any]] = []
     need_confirm = 0
+    need_confirm_items: List[Dict[str, Any]] = []  # P0-3: 结构化异常题清单（含题号/类型/原因，供前端定位）
     backfill_count = 0  # A2: 重复题回填缺失字段的题数
     default_subject = (payload.get('subject_category') or '').strip()
 
@@ -1722,7 +1723,7 @@ async def batch_import_parsed(
 
     for idx, q in enumerate(items):
         if not isinstance(q, dict):
-            failed_items.append({'index': idx, 'reason': '题目数据格式异常'})
+            failed_items.append({'index': idx, 'question_number': str(idx + 1), 'reason': '题目数据格式异常'})
             continue
         q.setdefault('paper_name', paper_name or '批量解析导入')
         q.setdefault('subject_category', default_subject or '公专')
@@ -1731,10 +1732,14 @@ async def batch_import_parsed(
             q.setdefault('source', _inject_source)
         if _inject_year:
             q.setdefault('year', _inject_year)
+        # P0-3: 提取题号用于异常题定位（题干无题号时回退为序号 idx+1）
+        _qn = _extract_first_qnum(q.get('question_content') or '')
+        _qn_label = str(_qn) if _qn is not None else str(idx + 1)
         # 测试模板防御（问题1-R3）：命中即拒收，不入库
         if _is_test_garbage(q):
             failed_items.append({
                 'index': idx,
+                'question_number': _qn_label,
                 'reason': 'test_pattern_detected: 检测到测试模板数据(UTB标记/测试要点模板)，拒绝入库',
             })
             continue
@@ -1776,12 +1781,22 @@ async def batch_import_parsed(
                 ok_items.append(q)
             ans = (q.get('answer') or '').strip()
             conf = q.get('confidence')
-            if not ans or ans == '待补充' or (isinstance(conf, (int, float)) and conf < 0.5):
+            _confirm_reason = None
+            if not ans or ans == '待补充':
+                _confirm_reason = '缺答案'
+            elif isinstance(conf, (int, float)) and conf < 0.5:
+                _confirm_reason = '低置信度'
+            if _confirm_reason:
                 need_confirm += 1
+                need_confirm_items.append({
+                    'index': idx,
+                    'question_number': _qn_label,
+                    'reason': _confirm_reason,
+                })
         except HTTPException as he:
-            failed_items.append({'index': idx, 'reason': str(he.detail)})
+            failed_items.append({'index': idx, 'question_number': _qn_label, 'reason': str(he.detail)})
         except Exception as e:  # noqa: BLE001 — 单题失败不阻断整批
-            failed_items.append({'index': idx, 'reason': str(e)[:200]})
+            failed_items.append({'index': idx, 'question_number': _qn_label, 'reason': str(e)[:200]})
 
     # ===== 检测层 → 双轨入库层 =====
     # auto_tags 已在循环前计算并注入题目行（A1），此处直接复用
@@ -1900,6 +1915,7 @@ async def batch_import_parsed(
         'new_question_ids': ok_ids,
         'reused_question_ids': reused_ids,
         'need_confirm_count': need_confirm,
+        'need_confirm_items': need_confirm_items,
         'match_rate': match_rate,
         'paper_id': paper_id,
         'paper_name': paper_name or None,

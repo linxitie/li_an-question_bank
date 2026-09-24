@@ -31,7 +31,7 @@
         <button class="btn-secondary btn-top-close" @click="$emit('close')">完成</button>
       </div>
     </div>
-    <div class="docs-q-card" v-for="(q, idx) in questions" :key="idx" :class="{ 'docs-q-card-noans': !q.answer || q.answer === '待补充' }">
+    <div class="docs-q-card" v-for="(q, idx) in questions" :key="idx" :id="'qcard_' + idx" :class="{ 'docs-q-card-noans': !q.answer || q.answer === '待补充' }">
       <div class="docs-q-header">
         <span class="docs-q-num">第 {{ idx + 1 }} 题</span>
         <span class="docs-q-type">{{ q.question_type_detail || '单选题' }}</span>
@@ -270,6 +270,12 @@ export default defineComponent({
   transition: border-color 0.3s, box-shadow 0.3s;
 }
 .docs-q-card:hover { border-color: rgba(200,22,30,0.4); box-shadow: 0 2px 16px rgba(200,22,30,0.12); }
+/* P0-3: 异常题定位高亮 */
+.docs-q-card.qcard-highlight {
+  border-color: #e8384f;
+  box-shadow: 0 0 0 3px rgba(232,56,79,0.45), 0 4px 20px rgba(232,56,79,0.35);
+  transition: box-shadow 0.3s, border-color 0.3s;
+}
 .docs-q-header {
   display: flex;
   align-items: center;

@@ -110,7 +110,9 @@
     "progressPercent": "0",
     "progressSteps": "[]",
     "label": "'文档解析'",
-    "importSummary": "null"
+    "importSummary": "null",
+    "abnormalItems": "[]",
+    "highlightIndex": "-1"
   },
   "data": {
     "activeTab": "single",

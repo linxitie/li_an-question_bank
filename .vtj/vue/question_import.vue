@@ -437,6 +437,24 @@
           <span class="s-label s-warn">⚠️ 待确认项：</span>
           <span class="s-value s-warn">{{ state.importSummary.needConfirm }} 题（缺答案/低置信度，建议确认后再发布试卷）</span>
         </div>
+        <!-- P0-3: 异常题清单面板（失败题 + 待确认题，点击定位） -->
+        <div class="summary-row" v-if="state.abnormalItems.length > 0">
+          <div class="abnormal-list">
+            <div class="abnormal-list-header">🔍 异常题清单（点击定位到题目）：</div>
+            <div
+              v-for="(item, ai) in state.abnormalItems"
+              :key="'abn_' + ai"
+              class="abnormal-item"
+              :class="{ 'abnormal-failed': item.kind === 'failed' }"
+              @click="locateAbnormalItem(item)"
+              :title="'点击定位到第 ' + item.question_number + ' 题'"
+            >
+              <span class="abnormal-num">第{{ item.question_number }}题</span>
+              <span class="abnormal-tag">{{ item.kind === 'failed' ? '❌ 失败' : '⚠️ 待确认' }}</span>
+              <span class="abnormal-reason">{{ item.reason }}</span>
+            </div>
+          </div>
+        </div>
         <div class="summary-row" v-if="state.importSummary.paperId">
           <span class="s-label s-ok">✅ 试卷已保存：</span>
           <span class="s-value s-ok">试卷ID #{{ state.importSummary.paperId }}（草稿状态，可在"试卷管理"中编辑完善并发布）</span>
@@ -541,6 +559,10 @@ import QuestionPreviewList from './question_preview_list.vue';
         progressSteps: [],        // [{label:'文档解析', status:'done'|'active'|'pending'}]
         // 批量导入结果摘要（双轨入库展示：试卷ID/新增复用/待确认）
         importSummary: null,
+        // P0-3: 异常题清单（含题号/类型/原因，点击可定位到题目卡片）
+        abnormalItems: [],
+        // P0-3: 定位高亮标记的题目索引
+        highlightIndex: -1,
       });
       return {
         state, props, provider,
@@ -2384,6 +2406,25 @@ import QuestionPreviewList from './question_preview_list.vue';
               paperName: data.paper_name || this.state.batchPaperName || '',
               mode: mode
             };
+            // P0-3: 收集异常题清单（失败题 + 待确认题），供前端定位面板展示
+            this.state.abnormalItems = [];
+            var self = this;
+            (data.failed_items || []).forEach(function(f) {
+              self.state.abnormalItems.push({
+                index: f.index,
+                question_number: f.question_number || String((f.index || 0) + 1),
+                reason: f.reason || '导入失败',
+                kind: 'failed'
+              });
+            });
+            (data.need_confirm_items || []).forEach(function(nc) {
+              self.state.abnormalItems.push({
+                index: nc.index,
+                question_number: nc.question_number || String((nc.index || 0) + 1),
+                reason: nc.reason || '待确认',
+                kind: 'confirm'
+              });
+            });
             if ((data.failed_items || []).length) {
               console.warn('[batch-parsed] 失败明细:', data.failed_items);
             }
@@ -2440,6 +2481,22 @@ import QuestionPreviewList from './question_preview_list.vue';
         else window.location.href = '/';
       },
       dismissImportSummary() { this.state.importSummary = null; },
+      // P0-3: 异常题清单点击定位到对应题目卡片（scrollIntoView + 高亮）
+      locateAbnormalItem(item) {
+        var idx = (item && item.index !== undefined) ? item.index : -1;
+        if (idx < 0) return;
+        this.state.highlightIndex = idx;
+        var el = document.getElementById('qcard_' + idx);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('qcard-highlight');
+          setTimeout(function() { el.classList.remove('qcard-highlight'); }, 2500);
+          ElMessage.info('已定位到第 ' + (item.question_number || (idx + 1)) + ' 题');
+        } else {
+          // 卡片可能尚未渲染或预览列表已关闭
+          ElMessage.warning('题目预览列表已关闭，无法定位。请重新解析后再试。');
+        }
+      },
       continueImport() {
         this.state.importSummary = null;
         this.state.parsedDocsQuestions = [];
@@ -3200,5 +3257,45 @@ import QuestionPreviewList from './question_preview_list.vue';
     padding: 12px 18px 16px; justify-content: flex-end;
   }
   .btn-sm-primary { padding: 8px 22px; font-size: 13px; }
+
+  /* P0-3: 异常题清单面板 */
+  .abnormal-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: rgba(245,108,108,0.06);
+    border: 1px solid rgba(245,108,108,0.22);
+    border-radius: 8px;
+  }
+  .abnormal-list-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f56c6c;
+    margin-bottom: 2px;
+  }
+  .abnormal-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+  }
+  .abnormal-item:hover { background: rgba(245,108,108,0.14); }
+  .abnormal-failed { background: rgba(245,108,108,0.08); }
+  .abnormal-num { color: #e8ecf4; font-weight: 600; white-space: nowrap; }
+  .abnormal-tag { color: #f59e0b; font-weight: 600; white-space: nowrap; }
+  .abnormal-failed .abnormal-tag { color: #f56c6c; }
+  .abnormal-reason {
+    color: #8899aa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
 
 </style>

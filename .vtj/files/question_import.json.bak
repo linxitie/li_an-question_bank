@@ -109,7 +109,8 @@
     "progressPhase": "0",
     "progressPercent": "0",
     "progressSteps": "[]",
-    "label": "'文档解析'"
+    "label": "'文档解析'",
+    "importSummary": "null"
   },
   "data": {
     "activeTab": "single",
