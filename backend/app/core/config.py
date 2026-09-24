@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     OCR_MAX_PAGES: int = Field(8, env="OCR_MAX_PAGES")
     OCR_SUBPROCESS_TIMEOUT: int = Field(240, env="OCR_SUBPROCESS_TIMEOUT")
 
+    # ==================== 题目图片压缩配置（P2-2 存储量最小）====================
+    # 压缩开关：开启后导入题目图片统一缩放长边 + 转 WebP/JPEG 质量压缩
+    IMAGE_COMPRESSION_ENABLED: bool = Field(True, env="IMAGE_COMPRESSION_ENABLED")
+    # 压缩后长边像素上限（保持清晰度，图表/材料图可读）
+    IMAGE_MAX_SIDE: int = Field(1200, env="IMAGE_MAX_SIDE")
+    # 压缩质量（0-100，80 为清晰度与体积的平衡点）
+    IMAGE_QUALITY: int = Field(80, env="IMAGE_QUALITY")
+
     # ==================== 资料管理配置 ====================
     # 批量操作限制
     MATERIAL_BATCH_LIMIT: int = Field(100, env="MATERIAL_BATCH_LIMIT")

@@ -385,3 +385,60 @@ def normalize_image_path(path: str, question_id: int = None) -> str:
     # 9. 无法识别的格式
     logger.debug(f"[image_service] 无法标准化路径: {path}")
     return ''
+
+
+# ============ P2-2 图片压缩（存储量最小） ============
+
+def compress_image(img_data: bytes, max_side: int = None, quality: int = None):
+    """压缩图片：长边缩放至 max_side，转 JPEG（质量 quality）输出。
+
+    返回 (compressed_bytes, ext) 或 (原图, 原扩展名)：
+      - 压缩失败/无 PIL → 原样返回（不阻塞导入，宁可体积大不丢图）
+      - 透明图（PNG RGBA）→ 保留 PNG，仅做长边缩放（避免丢透明通道）
+      - 动图 GIF → 原样返回（避免丢帧）
+
+    设计：稳定优先，压缩失败不抛异常；存储量小的同时保证题目图清晰可读。
+    """
+    if not img_data:
+        return img_data, 'png'
+    try:
+        from PIL import Image
+        import io as _io
+
+        max_side = int(max_side or 1200)
+        quality = int(quality or 80)
+
+        img = Image.open(_io.BytesIO(img_data))
+        fmt = (img.format or 'PNG').upper()
+        w, h = img.size
+
+        # 动图/超大帧跳过压缩（Pillow 处理 GIF 帧会丢动画）
+        if fmt == 'GIF':
+            return img_data, 'gif'
+
+        # 长边缩放（若超过上限）
+        if max(w, h) > max_side:
+            scale = max_side / max(w, h)
+            nw, nh = int(w * scale), int(h * scale)
+            # Pillow 10+ 用 Image.Resampling.LANCZOS；旧版用 Image.LANCZOS
+            _resample = getattr(Image, 'Resampling', None)
+            _lanczos = getattr(_resample, 'LANCZOS', None) if _resample else getattr(Image, 'LANCZOS', None)
+            if _lanczos is None:
+                _lanczos = getattr(Image, 'BILINEAR', 0)
+            img = img.resize((nw, nh), _lanczos)
+
+        # 有透明通道 → PNG（保留透明度），否则 JPEG
+        if fmt in ('PNG', 'WEBP') and (img.mode in ('RGBA', 'LA', 'P') and 'transparency' in img.info):
+            out = _io.BytesIO()
+            img.save(out, 'PNG', optimize=True)
+            return out.getvalue(), 'png'
+
+        # 统一转 RGB 后存 JPEG
+        if img.mode not in ('RGB', 'L'):
+            img = img.convert('RGB')
+        out = _io.BytesIO()
+        img.save(out, 'JPEG', quality=quality, optimize=True)
+        return out.getvalue(), 'jpg'
+    except Exception as e:  # noqa: BLE001 — 压缩失败不阻塞
+        logger.warning(f"[image_service] 图片压缩失败，返回原图: {type(e).__name__}: {e}")
+        return img_data, 'png'

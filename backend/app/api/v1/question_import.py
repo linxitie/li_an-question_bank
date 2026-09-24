@@ -1176,6 +1176,27 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
             ext = default
         return ext
 
+    # P2-2: 压缩 + 落盘（存储量最小）。压缩后按内容 md5 命名（相同图同名=天然去重）。
+    # 返回 (filepath, filename) 或 (None, None)（压缩失败则回退原始字节原样落盘）。
+    def _compress_and_store(img_data: bytes, prefix: str, idx: int, fallback_ext: str):
+        from ...services.image_service import compress_image
+        ext = _safe_ext(fallback_ext)
+        if settings.IMAGE_COMPRESSION_ENABLED:
+            try:
+                img_data, ext = compress_image(
+                    img_data,
+                    max_side=settings.IMAGE_MAX_SIDE,
+                    quality=settings.IMAGE_QUALITY,
+                )
+            except Exception:
+                pass  # 压缩异常则原样落盘，不阻塞导入
+        md5 = hashlib.md5(img_data).hexdigest()[:8]
+        filename = f'{prefix}{idx}_{md5}.{ext}'
+        filepath = os.path.join(img_dir, filename)
+        with open(filepath, 'wb') as f:
+            f.write(img_data)
+        return filepath, filename
+
     # 1. Extract <img> tags with src attribute
     img_tags = re.findall(r'<img[^>]+src=["\']([^"\']+)["\'][^>]*>', content_text or '')
     for idx, src in enumerate(img_tags):
@@ -1190,12 +1211,9 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                 # ★ 新增：过滤无关图片（logo/页眉页脚）
                 if _is_irrelevant_image(img_data):
                     continue
-                md5 = hashlib.md5(img_data).hexdigest()[:8]
-                ext = _safe_ext(header.split(';')[0].split('/')[-1])
-                filename = f'img_{idx}_{md5}.{ext}'
-                filepath = os.path.join(img_dir, filename)
-                with open(filepath, 'wb') as f:
-                    f.write(img_data)
+                # P2-2: 压缩 + 落盘（存储量最小，压缩后 md5 命名）
+                filepath, _filename = _compress_and_store(
+                    img_data, 'img_', idx, header.split(';')[0].split('/')[-1])
             elif src.startswith('http'):
                 # URL image — SSRF protection + size check
                 import requests as _req
@@ -1246,12 +1264,9 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                         # ★ 新增：过滤无关图片（logo/页眉页脚）
                         if _is_irrelevant_image(img_data):
                             continue
-                        md5 = hashlib.md5(img_data).hexdigest()[:8]
-                        ext = _safe_ext(src.rsplit('.', 1)[-1], 'jpg')
-                        filename = f'img_{idx}_{md5}.{ext}'
-                        filepath = os.path.join(img_dir, filename)
-                        with open(filepath, 'wb') as f:
-                            f.write(img_data)
+                        # P2-2: 压缩 + 落盘（存储量最小，压缩后 md5 命名）
+                        filepath, _filename = _compress_and_store(
+                            img_data, 'img_', idx, src.rsplit('.', 1)[-1] if '.' in src else 'jpg')
                 except Exception:
                     continue
             else:
@@ -1303,10 +1318,8 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                 # ★ 新增：过滤无关图片（logo/页眉页脚）
                 if _is_irrelevant_image(img_data):
                     continue
-                md5 = hashlib.md5(img_data).hexdigest()[:8]
-                dst_name = f'img_docx_{idx}_{md5}.png'
-                dst_file = os.path.join(img_dir, dst_name)
-                shutil.copy2(src_file, dst_file)
+                # P2-2: 压缩 + 落盘（存储量最小，压缩后 md5 命名）
+                dst_file, dst_name = _compress_and_store(img_data, 'img_docx_', idx, 'png')
                 rel_path = f'/static/questions/{question_id}/{dst_name}'
                 images.append(rel_path)
                 logger.debug(f"[images] 保存docx图片: {rel_path}")
