@@ -416,6 +416,134 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
+def _rels_base_dir(rels_name: str) -> str:
+    """`<dir>/_rels/<name>.rels` → `<dir>/`（关系目标相对于其宿主 part 所在目录）。"""
+    d = os.path.dirname(rels_name)          # e.g. word/_rels
+    if os.path.basename(d) == '_rels':
+        d = os.path.dirname(d)             # e.g. word
+    return d
+
+
+def _sanitize_docx_rels(buf: bytes) -> Optional[bytes]:
+    """移除指向不存在 part 的 relationship，返回可被 python-docx 正常打开的新 docx 字节。
+
+    根治的必要性：python-docx 在**打开包**阶段就遍历全部物理 part 并逐个
+    `zipf.read(membername)`，只要有任何一个 relationship 指向不存在的成员，
+    整个 `Document()` 就抛 KeyError —— 连纯文本都取不出来。
+    典型畸形文件（实测 37 份真实题库中命中 1 份）：
+        2019年深圳市公安局第四批公开招聘警务辅助人员考试《行政职业能力测验》真题.docx
+        word/_rels/document.xml.rels 含 <Relationship ... Target="../NULL"/>，
+        解析后为包内成员 "NULL"，而 zip 中并无该条目 →
+        KeyError: "There is no item named 'NULL' in the archive"
+
+    仅删除**确实悬空**的内部关系，外部链接(External)与有效关系一律保留，
+    因此图片等正常资源仍可被解析（不是降级为"只取文本"）。
+    """
+    import io as _io
+    import re as _re
+    import zipfile as _zip
+    import xml.etree.ElementTree as _ET
+
+    try:
+        src = _zip.ZipFile(_io.BytesIO(buf))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"文件不是有效的 docx（无法作为 zip 打开）：{e}")
+
+    with src:
+        names = set(src.namelist())
+        rels_files = [n for n in names if n.endswith('.rels')]
+        if not rels_files:
+            raise HTTPException(status_code=400, detail="docx 缺少关系文件（.rels），文件可能已损坏")
+
+        patched: Dict[str, bytes] = {}
+        removed_total = 0
+        for rels_name in rels_files:
+            base = _rels_base_dir(rels_name)
+            try:
+                xml_bytes = src.read(rels_name)
+                root = _ET.fromstring(xml_bytes)
+            except Exception:  # noqa: BLE001 — 单个 rels 坏掉不阻断其它
+                continue
+            removed = 0
+            for rel_el in list(root):
+                tgt = rel_el.get('Target')
+                mode = (rel_el.get('TargetMode') or '')
+                if not tgt or mode.lower() == 'external':
+                    continue
+                if tgt.startswith(('http://', 'https://', 'mailto:', 'file:', 'ftp://')):
+                    continue
+                if tgt.startswith('/'):
+                    resolved = os.path.normpath(tgt.lstrip('/')).replace('\\', '/')
+                else:
+                    resolved = os.path.normpath(os.path.join(base, tgt)).replace('\\', '/').lstrip('/')
+                if resolved not in names:
+                    root.remove(rel_el)
+                    removed += 1
+            if removed:
+                removed_total += removed
+                patched[rels_name] = _ET.tostring(root, encoding='UTF-8', xml_declaration=True)
+
+        if not removed_total:
+            return None  # 没有悬空关系 → 不是这个问题，交给上层报错
+
+        out = _io.BytesIO()
+        with _zip.ZipFile(out, 'w', _zip.ZIP_DEFLATED) as dst:
+            for item in src.infolist():
+                data = patched.get(item.filename) or src.read(item.filename)
+                dst.writestr(item, data)
+        logger.warning(f"[docx] 清洗掉 {removed_total} 个悬空 relationship 后重试打开")
+        return out.getvalue()
+
+
+def _extract_text_from_docx_raw_xml(buf: bytes) -> str:
+    """最后兜底：直接从 zip 里读 word/document.xml 提取纯文本。
+
+    仅在 python-docx 完全无法打开时使用（畸形 docx）。放弃图片与排版，
+    但保证「文本不丢」——题目导入的最小可用信息是题干/选项/答案。
+    """
+    import io as _io
+    import re as _re
+    import zipfile as _zip
+
+    try:
+        with _zip.ZipFile(_io.BytesIO(buf)) as z:
+            xml = z.read('word/document.xml').decode('utf-8', 'ignore')
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(
+            status_code=400,
+            detail=f"无法解析该 Word 文件：文件结构已损坏（既不是有效 docx，也无法读取其 XML 内容）。请用 Word/WPS 打开后另存为 .docx 再上传。原始错误：{e}",
+        )
+    # 按段落切分，保留题号/选项的换行结构
+    xml = _re.sub(r'</w:p>', '\n', xml)
+    xml = _re.sub(r'<w:br[^>]*/>', '\n', xml)
+    texts = _re.findall(r'<w:t(?:\s[^>]*)?>(.*?)</w:t>', xml, _re.S)
+    joined = ''.join(texts) if len(texts) <= 1 else '\n'.join(texts)
+    if not joined.strip():
+        # 回退：粗暴剥标签
+        joined = _re.sub(r'<[^>]+>', '', xml)
+    return joined
+
+
+def _open_docx_resilient(buf: bytes, Document):
+    """弹性打开 docx：直接开 → 清洗悬空关系后开 → 失败返回 None（交由 XML 兜底）。"""
+    import io as _io
+    try:
+        return Document(_io.BytesIO(buf))
+    except HTTPException:
+        raise
+    except Exception as first_err:  # noqa: BLE001
+        logger.warning(f"[docx] 直接打开失败({type(first_err).__name__}: {first_err})，尝试清洗关系后重试")
+    try:
+        fixed = _sanitize_docx_rels(buf)
+        if fixed:
+            return Document(_io.BytesIO(fixed))
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[docx] 清洗后仍无法打开({type(e).__name__}: {e})，转 XML 兜底")
+    return None
+
+
 def _extract_text_from_docx(buf: bytes) -> str:
     """从docx提取文本+图片占位标记。
 
@@ -425,6 +553,10 @@ def _extract_text_from_docx(buf: bytes) -> str:
       - 图片在题干段落 → marker 在 stem 中 → 前端题干区展示
       - 图片在选项段落(A.xxx) → marker 在选项值中 → 前端选项区展示
       - 独立图片段落(无文本) → 附加到最近段落，归属当前题号
+
+    容错（2026-09-25 实测修复）：真实题库中存在 python-docx 无法打开的畸形 docx
+    （relationship 指向包内不存在的成员），此前直接 500 且整次导入失败。
+    现改为三级降级：直接打开 → 清洗悬空 relationship 后打开 → 纯 XML 取文本。
     """
     import io, os, re, uuid
     try:
@@ -433,7 +565,10 @@ def _extract_text_from_docx(buf: bytes) -> str:
         raise HTTPException(status_code=500, detail="服务器缺少 python-docx 库")
 
     _session_id = uuid.uuid4().hex[:8]  # 每次导入唯一前缀，避免跨文件覆盖
-    doc = Document(io.BytesIO(buf))
+    doc = _open_docx_resilient(buf, Document)
+    if doc is None:
+        logger.warning("[docx] python-docx 无法打开，转用纯 XML 兜底提取")
+        return _extract_text_from_docx_raw_xml(buf)
     paragraphs = list(doc.paragraphs)
 
     # 构建图片关系映射: rId -> image_blob

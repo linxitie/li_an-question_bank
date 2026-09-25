@@ -497,7 +497,7 @@ import QuestionPreviewList from './question_preview_list.vue';
     name: 'QuestionImport',
     components: { XIcon, QuestionPreviewList, ManualMatchDialog },
   setup(props) {
-    const provider = useProvider({ id: 'question_import', version: '1790328023543' });
+    const provider = useProvider({ id: 'question_import', version: '1790329880372' });
     // PDF 扫描件 OCR 超时预算（ms）——单一事实来源，勿在别处硬编码
     // 后端最坏耗时 = GPU串行锁排队60s + MinerU子进程600s + PaddleOCR兜底240s = 900s
     // 取 960s = 900s + 60s 余量。改后端任一超时必须同步改此值。
@@ -656,6 +656,57 @@ import QuestionPreviewList from './question_preview_list.vue';
       },
 
       /**
+       * 从后端错误响应体中提取**可读**的错误文案。
+       *
+       * 后端统一错误封装（backend/app/exceptions.py create_error_response）：
+       *   { "error": { "code": "...", "message": "...", "details": {...} } }
+       * 注意：FastAPI HTTPException 的 `detail` 会被搬进 `error.message`，
+       * 顶层**不存在** `detail` 字段。
+       * 历史教训：直接 `new Error(data.detail || data.error || ...)` 中
+       * `data.error` 是对象，Error 构造会 String() 成 "[object Object]"，
+       * 用户只看到无意义的 "[object Object]"，完全看不到真实原因。
+       */
+      _extractErrorMessage(data, fallback) {
+        fallback = fallback || '请求失败';
+        if (data == null) return fallback;
+        if (typeof data === 'string') return data || fallback;
+        // 1) 校验错误明细：比泛化的"数据验证失败"更有用，需与 message 拼接而非二选一
+        var d = (data.error && data.error.details) || data.details;
+        var extra = '';
+        if (d && Array.isArray(d.errors) && d.errors.length) {
+          try {
+            extra = d.errors.map(function (x) {
+              return (x && (x.msg || x.message)) || JSON.stringify(x);
+            }).join('；');
+          } catch (e) { extra = ''; }
+        }
+        // 2) 标准封装 error.message
+        if (data.error && typeof data.error === 'object' && typeof data.error.message === 'string' && data.error.message) {
+          return extra ? (data.error.message + '：' + extra) : data.error.message;
+        }
+        // 3) 兼容：detail 为字符串（未挂中间件时的 FastAPI 原始形态）
+        if (typeof data.detail === 'string' && data.detail) {
+          return extra ? (data.detail + '：' + extra) : data.detail;
+        }
+        // 4) 兼容：error 本身是字符串
+        if (typeof data.error === 'string' && data.error) {
+          return extra ? (data.error + '：' + extra) : data.error;
+        }
+        // 5) 兼容：message 字段
+        if (typeof data.message === 'string' && data.message) {
+          return extra ? (data.message + '：' + extra) : data.message;
+        }
+        if (extra) return extra;
+        // 6) 最后兜底：绝不返回 [object Object]
+        try {
+          var s = JSON.stringify(data);
+          return (s && s !== '{}' && s !== '[]') ? s : fallback;
+        } catch (e) {
+          return fallback;
+        }
+      },
+
+      /**
        * 轮询异步导入的解析状态，直到 PREVIEW / FAILED / 超出总预算。
        * 退避策略：1.5s 起，每次 ×1.3 递增，上限 8s（避免频繁请求又不拖慢体感）。
        * 每次轮询都是短请求（10s 超时）—— 因为后端已改为后台执行，
@@ -675,10 +726,10 @@ import QuestionPreviewList from './question_preview_list.vue';
           );
           var st = await res.json();
           if (!res.ok) {
-            throw new Error(st.detail || ('查询解析状态失败 (HTTP ' + res.status + ')'));
+            throw new Error(this._extractErrorMessage(st, '查询解析状态失败 (HTTP ' + res.status + ')'));
           }
           if (st.status === 'PREVIEW') return st.result || st;
-          if (st.status === 'FAILED') throw new Error(st.error || '解析失败');
+          if (st.status === 'FAILED') throw new Error(this._extractErrorMessage(st, '解析失败'));
           // PARSING / CONFIRMED / COMPLETED：继续等
           if (onTick) onTick(st, waited);
           delay = Math.min(Math.round(delay * 1.3), 8000);
@@ -702,7 +753,8 @@ import QuestionPreviewList from './question_preview_list.vue';
         }, 60000, 0);
         var data = await upRes.json();
         if (!upRes.ok) {
-          throw new Error(data.detail || data.error || ('上传失败 (HTTP ' + upRes.status + ')'));
+          // 必须经 _extractErrorMessage 提取：后端 error 是对象，直接拼接会得到 [object Object]
+          throw new Error(this._extractErrorMessage(data, '上传失败 (HTTP ' + upRes.status + ')'));
         }
         // 兼容：后端未升级时仍会直接返回预览数据
         if (!data.import_id || data.status !== 'PARSING') return data;
