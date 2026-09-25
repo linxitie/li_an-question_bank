@@ -1662,14 +1662,32 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         logger.warning(f"图片提取失败 question_id={question.question_id}: {img_err}")
 
     # 详细分类
-    detail = QuestionDetailCategory(
-        question_id=question.question_id,
-        xingce_subcategory=_xingce_sc,
-        shenlun_subcategory=_shenlun_sc,
-        gongzhuan_subcategory=_gongzhuan_sc,
-        question_type_detail=normalize_type_name(type_name),
-    )
-    db.add(detail)
+    #
+    # question_id 上有 UNIQUE 约束(uk_question_category)，此处原本是**盲目 INSERT**。
+    # 只要该 question_id 已存在明细行就会撞唯一约束，并因批量入库共用一个事务而
+    # **整批回滚、接口 500**。
+    # 真实故障：库中曾残留 231 条孤儿明细行（对应题目已被硬删除的脚本清理掉，
+    #   详见 clean_questions.py 漏清 question_detail_category），
+    #   SQLite 复用主键后新题分配到同 id → IntegrityError，整个导入失败。
+    # 因此改为幂等 upsert：存在则更新，不存在才插入 —— 对任何残留行都免疫。
+    _existing_detail = db.query(QuestionDetailCategory).filter(
+        QuestionDetailCategory.question_id == question.question_id
+    ).first()
+    if _existing_detail is not None:
+        _existing_detail.xingce_subcategory = _xingce_sc
+        _existing_detail.shenlun_subcategory = _shenlun_sc
+        _existing_detail.gongzhuan_subcategory = _gongzhuan_sc
+        _existing_detail.question_type_detail = normalize_type_name(type_name)
+        logger.debug(f"[import] 题{question.question_id} 复用已有明细分类行（残留/复用）")
+    else:
+        detail = QuestionDetailCategory(
+            question_id=question.question_id,
+            xingce_subcategory=_xingce_sc,
+            shenlun_subcategory=_shenlun_sc,
+            gongzhuan_subcategory=_gongzhuan_sc,
+            question_type_detail=normalize_type_name(type_name),
+        )
+        db.add(detail)
     _link_knowledge_points(db, [question])
 
     return {

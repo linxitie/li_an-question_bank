@@ -21,6 +21,10 @@ def clean_all_questions():
             "question_edit_log",        # 引用 question_bank
             "question_image",           # 引用 question_bank
             "question_import_record",   # 导入记录
+            # 引用 question_bank 且 question_id 上有 UNIQUE 约束(uk_question_category)。
+            # 历史遗漏：漏清本表 → 主表被清空后残留孤儿行 → SQLite 复用主键时
+            # 新题撞唯一约束，导致题目批量导入整批 500 失败（实测残留 231 条）。
+            "question_detail_category",
         ]
 
         for table in tables_to_clean:
