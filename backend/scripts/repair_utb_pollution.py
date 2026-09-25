@@ -120,6 +120,34 @@ def do_apply():
             cur.execute('DELETE FROM question_import_record WHERE import_id=?',
                         (r['import_id'],))
             audit('question_import_record', 'import_id', dict(r))
+
+        # 清理**全部**引用 question_id 的子表（自动发现）。
+        # 历史遗漏：本脚本原先只清 paper_question_relation，其余子表全部残留 ——
+        # 其中 question_detail_category.question_id 带 UNIQUE 约束
+        # (uk_question_category)，孤儿行会在 SQLite 复用主键时
+        # 撞唯一约束，导致题目批量导入整批 500 失败。
+        qids = [r['question_id'] for r in q_rows]
+        if qids:
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            _all = [x[0] for x in cur.fetchall()]
+            child_tables = []
+            for t in _all:
+                if t == 'question_bank' or t.startswith('sqlite_'):
+                    continue
+                cols = [x[1] for x in cur.execute(f'PRAGMA table_info("{t}")').fetchall()]
+                if 'question_id' in cols:
+                    child_tables.append(t)
+            marks = ','.join('?' * len(qids))
+            for t in sorted(child_tables):
+                try:
+                    n = cur.execute(
+                        f'DELETE FROM "{t}" WHERE question_id IN ({marks})', qids).rowcount
+                    if n:
+                        print(f'  已清理 {t}: {n} 行')
+                        audit(t, 'question_id', {'count': n})
+                except Exception as te:  # noqa: BLE001 — 单表失败不阻断其余清理
+                    print(f'  (跳过 {t}: {te})')
+
         for r in q_rows:
             cur.execute('DELETE FROM question_bank WHERE question_id=?',
                         (r['question_id'],))
