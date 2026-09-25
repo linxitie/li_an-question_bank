@@ -840,19 +840,23 @@ def _match_pure_sequence_enhanced(answer_text: str, question_count: int) -> Dict
     return {}
 
 # 题号提取正则模式（按优先级排列）
+# 行首前缀容忍 Markdown 标题标记（"## 1、正确答案是：D"）：部分答案解析 PDF
+# 由 Markdown 源生成，题号行带 "# " 前缀，导致行首锚定 \s* 失配、题号整段漏识别
+# （真实案例：2017多省联考答案解析 100 题只认出 5 个，匹配率跌至 74%）。
+_LINE_START = r'(?:^|\n)[ \t]*(?:#{1,6}[ \t]+)?'
 QUESTION_NUMBER_PATTERNS = [
     # 第N题 / 第 N 题 / 第N、题
     ('cn_di', re.compile(r'第\s*(\d+)\s*[题]')),
     # N. / N． / N、 / N．
-    ('num_dot', re.compile(r'(?:^|\n)\s*(\d+)\s*[.、．]')),
+    ('num_dot', re.compile(_LINE_START + r'(\d+)\s*[.、．]')),
     # (N) / （N）
     ('paren', re.compile(r'[（(]\s*(\d+)\s*[）)]')),
     # [N] / 【N】
     ('bracket', re.compile(r'[\[【]\s*(\d+)\s*[\]】]')),
     # N) / N）
-    ('num_close_paren', re.compile(r'(?:^|\n)\s*(\d+)\s*[)）]')),
+    ('num_close_paren', re.compile(_LINE_START + r'(\d+)\s*[)）]')),
     # 纯数字后跟空格（最宽松，用于纯序列）
-    ('bare_num', re.compile(r'(?:^|\n)\s*(\d+)\s+(?=[A-Da-d一-鿿])')),
+    ('bare_num', re.compile(_LINE_START + r'(\d+)\s+(?=[A-Da-d一-鿿])')),
 ]
 
 # 答案提取正则模式（按优先级排列）
@@ -1544,11 +1548,20 @@ def parse_answer_text_to_map(text: str) -> Dict[int, Dict[str, Optional[str]]]:
 
 # ============ 题目结构提取 ============
 
-# 材料头行正则：X、根据以下[情境材料/情境资料/材料/资料/文章/图表]，回答Y-Z题
+# 材料头行正则：X、请根据以下[情境/情景材料、资料、文章、图表]，回答Y-Z题
+# 变体覆盖（18 份真实语料实测）：
+#   "五、根据以下情境材料，回答86-89题。"     情境材料（原生支持）
+#   "三、根据以下情景材料，回答78-81题。"     情景材料（首版遗漏 -> 4 题污染）
+#   "八、请根据以下情景材料，回答90-93题。"  "请"前缀（首版遗漏）
+#   "根据以下情境资料，回答71-73题。"         无中文数字章节号
+# 关键：不用 $ 锚定 —— 实际语料中材料头常与材料正文挤在同一行
+#（"...正确的有（ ）⏎三、根据以下情景材料，回答78-81题。2015年10月4日，某铁路局…"），
+# 首版 $ 锚定要求独占一行，导致同行形态 100% 漏剥离。
 _MATERIAL_HEAD_RE = re.compile(
-    r'^[一二三四五六七八九十]+\s*[、，]\s*根据以下'
-    r'(?:情境材料|情境资料|材料|资料|文章|图表)[^\n]*?'
-    r'回答\s*(\d+)\s*[-～~—－]\s*(\d+)\s*题?[。.]?\s*$'
+    r'(?:^|\n)[ \t]*(?:[一二三四五六七八九十]+[ \t]*[、，．][ \t]*)?'
+    r'(?:请)?(?:根据|阅读)(?:以下|下面)'
+    r'(?:情境|情景)?(?:材料|资料|文章|图表|内容|案例)?'
+    r'[^\n]{0,20}?回答[ \t]*(\d+)[ \t]*[-～~—－至][ \t]*(\d+)[ \t]*题'
 )
 
 # 题号行 / 选项行 / 图片标记行（用于判定材料正文边界）
@@ -1570,17 +1583,24 @@ def _strip_trailing_material(lines: List[str]) -> List[str]:
     if not lines:
         return lines
 
-    # 找首个材料头行的位置（跳过首行，首行是题号行）
+    # 找首个材料头出现的位置（跳过首行，首行是题号行）
     head_idx = None
+    head_char = None
     for i in range(1, len(lines)):
-        if _MATERIAL_HEAD_RE.search(lines[i].strip()):
+        m = _MATERIAL_HEAD_RE.search(lines[i])
+        if m:
             head_idx = i
+            # +1 越过前导的 (?:^|\n) 零宽断言
+            head_char = m.start() + (1 if m.group(0).startswith('\n') else 0)
             break
     if head_idx is None:
         return lines
 
-    # 从材料头行开始，剥离到下一个边界（题号/选项/图片）之前
-    keep = lines[:head_idx]
+    # 材料头与正文同行 → 截断该行，只保留材料头之前的内容
+    keep = list(lines[:head_idx])
+    prefix = lines[head_idx][:head_char].rstrip()
+    if prefix:
+        keep.append(prefix)
     # 材料头后的材料正文：继续剥离直到遇到边界行
     for i in range(head_idx, len(lines)):
         stripped = lines[i].strip()
@@ -1602,7 +1622,13 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
     - analysis: 解析
     - question_type: 题型
     """
-    numbers = extract_question_numbers(text)
+    # monotonic=True：题目文档题号同样必须严格递增。
+    # 真实案例（2017国考第100题）："（1）附近居民（2）维持现场秩序的民警（3）媒体报道的人
+    # （4）参与应急的消防人员"是"安全撤离顺序"题的**被打乱子项编号**（A-D 选项引用
+    # 这四个序号），却被 paren 模式误判为第1~4题，凭空造出 4 道幽灵题，
+    # 同时把真题 1~4 挤成重题号。子项序号（1~4）必然小于当前题号（100），
+    # 违反单调性，据此精准过滤。
+    numbers = extract_question_numbers(text, monotonic=True)
     if not numbers:
         return []
 
@@ -1668,10 +1694,18 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         content_text = re.sub(r'\n{3,}', '\n\n', content_text).strip()
 
         # P0-fix: 图片选择题（选项是图片本身，文字无 A/B/C/D）。
-        # 题干含"图标/示意图/下图/如图/图表"等图片指向词 + 含 IMAGE 占位 + 无文字选项
-        # → 生成占位选项"见图"，保留图片，避免前端显示"选项缺失"。
+        # 题干含图片指向词 + 含 IMAGE 占位 + 无文字选项 → 生成占位选项"见图"，
+        # 保留图片，避免前端显示"选项缺失"。
+        # 关键词覆盖实测语料：图标/示意图/下图/如图/图中/图表/看图（图示）/标志/标识/图形/图片。
+        # 真实案例：2017国考题45"下列图示中，不属于法定特种车辆的是"、2018多省题69
+        # "在下列交通标志的区域中…可以停车的有"——"图示""标志"是最高频的两种表述，
+        # 首版关键词表遗漏导致 20 道图片选择题被判为"选项缺失"。
         if (not options or len(options) < 2) and re.search(r'\[IMAGE:', content_text):
-            if re.search(r'图标|示意图|下图|如图|图中|图表|看图', content_text):
+            if re.search(
+                r'图标|示意图|下图|如图|图中|图表|看图|图示|标志|标识|图形|图片|'
+                r'如上图|如下图所示|所示',
+                content_text,
+            ):
                 options = [
                     {'key': 'A', 'value': '（见图）'},
                     {'key': 'B', 'value': '（见图）'},
