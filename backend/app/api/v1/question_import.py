@@ -1878,7 +1878,14 @@ async def batch_import_parsed(
             conf = q.get('confidence')
             _confirm_reason = None
             # 静默错答：答案字段与解析正文声明矛盾（字段完整率无法发现此类问题）
-            _cf = _conflict_by_qn.get(q.get('question_number'))
+            # 预检按题号索引；题号缺失时退化为逐题检测，避免 None 键互相覆盖导致漏检
+            _cf = _conflict_by_qn.get(q.get('question_number')) if q.get('question_number') is not None else None
+            if _cf is None:
+                try:
+                    _hit = detect_answer_conflicts([q])
+                    _cf = _hit[0] if _hit else None
+                except Exception:  # noqa: BLE001
+                    _cf = None
             if _cf is not None:
                 _confirm_reason = '答案与解析不一致'
             elif not ans or ans == '待补充':
