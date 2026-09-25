@@ -1348,13 +1348,106 @@ def extract_question_numbers(text: str, exclude_paren_bracket: bool = False,
 
 # ============ 答案提取 ============
 
+# ---- 高置信度答案声明（权威性优先，而非"位置最靠后优先"）----
+#
+# 背景（20 份真实语料实测出 17 处静默错答，3 类根因收敛于此）：
+#   旧实现对所有答案模式一律取 matches[-1]（全文最后一个匹配）。
+#   当 PDF 抽取把下一题的答案粘连进本块末尾时，末位恰好是"下一题的答案"；
+#   当解析逐项点评 A/B/C/D 时，末位恰好是"最后一个干扰项字母"。
+#
+#   实例A（块边界滑动）2017多省联考题79：
+#     块首 "## 79、正确答案是：C"   ← 本题权威声明
+#     块尾 "…两抢犯罪数为12、正确答案是：B" ← 实为第80题（题号80在抽取中丢失）
+#     旧逻辑取末位 → B（错）    新逻辑取块首 → C（对）
+#
+#   实例B（干扰项泄漏）2017国考题14：
+#     "此题看似选D，因为…"（干扰项示范）… "故本题正确答案为C"（真答案）
+#     旧逻辑取末位仍可能命中"看似选D" → D（错）
+#
+# 设计原则：**声明的权威性由"它是谁的声明"决定，不由"它出现在哪"决定。**
+#   1) 题头声明（块首行，声明的就是本块这道题）—— 最高
+#   2) 结论声明（"故正确答案为X"）—— 高，取最后一个且排除干扰项前缀
+#   3) 其余原有模式 —— 保持原行为作为兜底，不改变既有解析结果
+_BLOCK_HEADER_ANSWER_RE = re.compile(
+    r'^\s*(?:#{1,6}\s*)?'
+    r'(?:第\s*\d+\s*题|\d+\s*[、.．)）\]]\s*)?'   # 题号前缀可缺（题号可能已被上游剥离）
+    r'(?:本题)?\s*(?:参考)?\s*(?:正确)?\s*答案'
+    r'(?:是|为|选)?\s*[：:：]?\s*'
+    r'([A-Da-d]{1,4})(?![A-Za-z])'
+)
+
+# 结论声明："故正确答案为C" / "因此本题选A"
+_CONCLUSION_ANSWER_RE = re.compile(
+    r'(?:故|因此|所以)\s*(?:本题|本问|该题)?\s*'
+    r'(?:正确)?\s*(?:答案|选项)'
+    r'(?:是|为|选)?\s*[：:：]?\s*'
+    r'([A-Da-d]{1,4})(?![A-Za-z])'
+)
+
+# 干扰项提示前缀：紧贴答案字母前出现这些词时，该字母是"错误选项示范"而非答案
+_DISTRACTOR_PREFIX_RE = re.compile(
+    r'(?:看似|似选|似为|易选|易错|易误|误选|干扰|注意|而非|不是)\s*(?:选|为|是)?\s*$'
+)
+
+
+def _pick_conclusion_answer(full_text: str) -> Optional[str]:
+    """从块内取最后一个"结论声明"作为答案，跳过干扰项前缀的假声明。
+
+    返回归一化后的答案字母串；无有效结论声明时返回 None。
+    """
+    best = None
+    for m in _CONCLUSION_ANSWER_RE.finditer(full_text):
+        prefix = full_text[max(0, m.start() - 12):m.start()]
+        if _DISTRACTOR_PREFIX_RE.search(prefix):
+            continue  # "看似选D" 这类干扰项示范，跳过
+        best = m
+    if best is None:
+        return None
+    ans = canonical_answer(best.group(1))
+    if ans and all(c in 'ABCD' for c in ans) and len(ans) <= 4:
+        return ans
+    return None
+
+
 def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
     """
     从文本行中提取答案和解析。
     支持标准答案格式和嵌入式答案格式（如"故本题答案为D"）。
-    返回 {'answer': 'A', 'analysis': '...'} 或空字典。
+
+    答案优先级：题头权威声明 > 结论声明（排除干扰项） > 原有模式兜底。
     """
     full_text = '\n'.join(lines)
+
+    # ===== 第零遍：题头权威声明（本块这道题的答案，优先级最高） =====
+    # 只在块首行匹配。长度护栏：题头声明是一行短声明；
+    # 若首行是长句（正文里顺带提到"答案是A"），则不算题头声明，交由后续结论判定。
+    if lines:
+        head = lines[0]
+        if len(head.strip()) <= 40:
+            mh = _BLOCK_HEADER_ANSWER_RE.match(head)
+            if mh:
+                raw = canonical_answer(mh.group(1))
+                if raw and all(c in 'ABCD' for c in raw) and len(raw) <= 4:
+                    # 解析 = 题头声明之后的剩余文本
+                    rest = '\n'.join(lines[1:]).strip()
+                    tail = head[mh.end():].strip()
+                    if tail and len(tail) > 5:
+                        rest = (tail + '\n' + rest).strip()
+                    return {
+                        'answer': raw,
+                        'analysis': rest or None,
+                        'format': 'block_header',
+                    }
+
+    # ===== 第零遍之二：结论声明（排除干扰项前缀） =====
+    # 放在原有模式之前：逐项点评型解析里，"故正确答案为X"才是权威结论。
+    concl = _pick_conclusion_answer(full_text)
+    if concl:
+        return {
+            'answer': concl,
+            'analysis': full_text,
+            'format': 'conclusion',
+        }
 
     # ===== 第一遍：标准答案格式 =====
     for fmt_name, pattern in ANSWER_PATTERNS:
