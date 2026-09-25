@@ -31,6 +31,7 @@ from ...models.models import (
 )
 from ...schemas.schemas import SuccessResponse, ParseRequest, ParseResult, ParsedQuestion, ImageRef
 from ...services.question_classifier import QuestionClassifier, detect_subcategory_enhanced
+from ...services import text_cache  # 文档提取文本缓存（P0 提速，260s→0.02s）
 from ...services.mineru_service import (  # 扫描件三级回退链第一级（规格§5.2）
     extract_text_sync as mineru_extract_text_sync,
     is_enabled as mineru_is_enabled,
@@ -541,8 +542,27 @@ def _extract_text_from_docx(buf: bytes) -> str:
 
 
 def _extract_text_from_pdf(buf: bytes) -> str:
-    """从 PDF 提取纯文本（优先使用 pdfplumber，支持表格提取；扫描件自动OCR）"""
+    """从 PDF 提取纯文本（优先使用 pdfplumber，支持表格提取；扫描件自动OCR）
+
+    提取文本缓存（P0 提速）：本函数是 buf → text 的**纯函数**（无落盘等副作用），
+    因此可按文件内容 md5 缓存提取结果。实测扫描件 OCR 需 260s/份，
+    而解析仅 0.1s —— 重复导入的耗时 99.6% 在此，缓存命中降到 ~0.02s。
+
+    只缓存本函数、不缓存 _extract_text_from_docx：后者除文本外还会把图片落盘，
+    且文件名带每次运行唯一的 _session_id；缓存其文本会让 IMAGE 占位标记与
+    实际落盘文件解耦。且 docx 提取仅 0.1~0.35s，缓存收益近零、风险非零。
+    """
     import io
+
+    # ===== 提取文本缓存：命中即返回（纯加速层，异常已在 text_cache 内降级） =====
+    _cached = text_cache.get(buf)
+    if _cached is not None:
+        return _cached
+
+    def _finish(text: str, engine: str) -> str:
+        """统一出口：成功产出才写缓存（空结果不写，避免固化偶发失败）"""
+        text_cache.put(buf, text, {'engine': engine})
+        return text
 
     # 优先使用 pdfplumber（更好的中文支持和表格提取）
     try:
@@ -564,7 +584,7 @@ def _extract_text_from_pdf(buf: bytes) -> str:
                             if row_text:
                                 parts.append(row_text)
             if parts:
-                return '\n'.join(parts)
+                return _finish('\n'.join(parts), 'pdfplumber')
     except ImportError:
         pass
 
@@ -583,7 +603,7 @@ def _extract_text_from_pdf(buf: bytes) -> str:
                 text += t + '\n'
         result = text.strip()
         if result:
-            return result
+            return _finish(result, 'pypdf2')
     except Exception as e:
         logger.warning(f"PyPDF2 解析失败: {e}")
 
@@ -596,15 +616,16 @@ def _extract_text_from_pdf(buf: bytes) -> str:
         mineru_text = mineru_extract_text_sync(buf)
         if mineru_text:
             logger.info(f"[mineru] 解析成功: {len(mineru_text)}字符，采用MinerU结果")
-            return mineru_text
+            return _finish(mineru_text, 'mineru')
         logger.warning("[mineru] 未返回有效文本，回退PaddleOCR逐页路径")
 
     # 第二级(保底): 原有 PyPDF2图片提取 + PaddleOCR逐页识别 —— 保持原逻辑一字不改
     ocr_text = _extract_text_from_scanned_pdf(buf)
     if ocr_text:
         logger.info(f"扫描件OCR成功: {len(ocr_text)} 字符")
-        return ocr_text
+        return _finish(ocr_text, 'paddleocr')
 
+    # 全部失败：不写缓存（空结果会把偶发失败固化成永久失败）
     return ''
 
 

@@ -93,6 +93,14 @@ class Settings(BaseSettings):
     # 压缩质量（0-100，80 为清晰度与体积的平衡点）
     IMAGE_QUALITY: int = Field(80, env="IMAGE_QUALITY")
 
+    # ==================== 文档提取文本缓存（导入提速 P0）====================
+    # 按"文件内容 md5"缓存提取出的纯文本：同一份文件重复导入不再重付提取成本。
+    # 实测依据：解析仅 0.1s/100题，而扫描件 PDF 走 MinerU OCR 需 260s/份 ——
+    # 重复导入的耗时 99.6% 都在提取层，缓存命中可降至 ~0.02s（4 个数量级）。
+    TEXT_CACHE_ENABLED: bool = Field(True, env="TEXT_CACHE_ENABLED")
+    # 缓存目录（相对 backend/ 或绝对路径）
+    TEXT_CACHE_DIR: str = Field("./data/text_cache", env="TEXT_CACHE_DIR")
+
     # ==================== 资料管理配置 ====================
     # 批量操作限制
     MATERIAL_BATCH_LIMIT: int = Field(100, env="MATERIAL_BATCH_LIMIT")
