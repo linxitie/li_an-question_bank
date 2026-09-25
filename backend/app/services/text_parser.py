@@ -1544,6 +1544,54 @@ def parse_answer_text_to_map(text: str) -> Dict[int, Dict[str, Optional[str]]]:
 
 # ============ 题目结构提取 ============
 
+# 材料头行正则：X、根据以下[情境材料/情境资料/材料/资料/文章/图表]，回答Y-Z题
+_MATERIAL_HEAD_RE = re.compile(
+    r'^[一二三四五六七八九十]+\s*[、，]\s*根据以下'
+    r'(?:情境材料|情境资料|材料|资料|文章|图表)[^\n]*?'
+    r'回答\s*(\d+)\s*[-～~—－]\s*(\d+)\s*题?[。.]?\s*$'
+)
+
+# 题号行 / 选项行 / 图片标记行（用于判定材料正文边界）
+_BOUNDARY_RE = re.compile(
+    r'^(?:\d+\s*[.、．)）\]】]|[A-D]\s*[.、．)）]|\[IMAGE:)')
+
+
+def _strip_trailing_material(lines: List[str]) -> List[str]:
+    """剥离题干块尾部粘连的材料头+材料正文（分节残留）。
+
+    真实案例：第85题题干尾部混入"五、根据以下情境材料，回答86-89题。
+    新生派出所位于老城区..."——材料头（中文数字章节号，非阿拉伯数字题号）
+    连同材料正文整体粘连到上一题。从首个材料头行起，剥离到下一个
+    题号行/选项行/图片标记之前的内容。
+
+    注意：仅剥离"位于块中后部"的材料头（材料头前已有题干内容），
+    保护复合题材料头题自身的开头材料句。
+    """
+    if not lines:
+        return lines
+
+    # 找首个材料头行的位置（跳过首行，首行是题号行）
+    head_idx = None
+    for i in range(1, len(lines)):
+        if _MATERIAL_HEAD_RE.search(lines[i].strip()):
+            head_idx = i
+            break
+    if head_idx is None:
+        return lines
+
+    # 从材料头行开始，剥离到下一个边界（题号/选项/图片）之前
+    keep = lines[:head_idx]
+    # 材料头后的材料正文：继续剥离直到遇到边界行
+    for i in range(head_idx, len(lines)):
+        stripped = lines[i].strip()
+        if i > head_idx and _BOUNDARY_RE.match(stripped):
+            # 遇到题号/选项/图片行 → 停（这些不是材料正文）
+            keep.extend(lines[i:])
+            break
+        # 材料头行及材料正文行 → 跳过（剥离）
+    return keep
+
+
 def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
     """
     将文本分割为题目块，每个块包含：
@@ -1569,6 +1617,14 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
             end_line = len(lines)
 
         block_lines = lines[start_line:end_line]
+        block_text = '\n'.join(block_lines)
+
+        # P0-fix: 剥离题干尾部粘连的材料头+材料正文（分节残留）。
+        # 材料头如"五、根据以下情境材料，回答86-89题"是中文数字章节号，
+        # 不被 extract_question_numbers（只认阿拉伯数字）识别，导致材料头
+        # +材料正文整体粘连到上一题题干尾部。从 block_lines 行级剥离：
+        # 从首个材料头行起，到下一个题号行/选项行/IMAGE标记之前的内容全部移除。
+        block_lines = _strip_trailing_material(block_lines)
         block_text = '\n'.join(block_lines)
 
         # 去掉首行题号前缀
