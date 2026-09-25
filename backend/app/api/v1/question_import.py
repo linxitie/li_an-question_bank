@@ -16,7 +16,8 @@ from difflib import SequenceMatcher
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func, desc
 
@@ -2201,20 +2202,174 @@ async def batch_import_answers(
         raise HTTPException(status_code=500, detail=f"批量答案导入失败: {str(e)}")
 
 
-@router.post("/upload", summary="批量文件上传与预览")
+def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, file_type: str) -> None:
+    """后台执行导入解析：提取文本 → 结构化 → 构建预览 → 落库为 PREVIEW。
+
+    异步化的动因（实测）：扫描件 PDF 走 MinerU OCR 需 260~320s，
+    而前端/代理层任何一环的超时都远小于此 → 长文档导入必然失败。
+    改为「立即返回 import_id + 后台执行 + 前端轮询」后，
+    单次 HTTP 请求只需毫秒级，代理层默认 60s 超时不再是瓶颈。
+
+    设计要点：
+      1. **自带独立 DB 会话** —— 请求会话在响应返回时即关闭，后台任务不能复用。
+      2. 成功与失败都**落库**：PREVIEW / FAILED(带 error_messages)，
+         前端据此轮询，不会出现"永远 PARSING"的无反馈状态。
+      3. 完整响应体存入 preview_data['_response']，使状态端点能**原样返回**，
+         前端拿到后的消费逻辑与原同步接口完全一致（零改动）。
+      4. 同步函数 —— Starlette 会自动丢到线程池执行，不阻塞事件循环。
+    """
+    from ...core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        record = db.query(QuestionImportRecord).filter(
+            QuestionImportRecord.import_id == import_id
+        ).first()
+        if record is None:
+            logger.error(f"[import-async] 记录不存在 import_id={import_id}")
+            return
+
+        # ---------- 1) 提取文本 / 原始行 ----------
+        raw_questions = []
+        text = ''
+        if ext in ('.xlsx', '.xls'):
+            raw_questions = _parse_excel_buffer(buf, filename)
+        elif ext == '.csv':
+            raw_questions = _parse_csv_buffer(buf)
+        elif ext == '.docx':
+            text = _extract_text_from_docx(buf)
+            raw_questions = [{'type': 'docx_text', 'content': text}]
+        elif ext == '.pdf':
+            text = _extract_text_from_pdf(buf)   # 含 md5 提取缓存
+            raw_questions = [{'type': 'pdf_text', 'content': text}]
+
+        # ---------- 2) 构建预览 ----------
+        if ext in ('.xlsx', '.xls', '.csv'):
+            preview_items = []
+            success_count = duplicate_count = failed_count = 0
+            for row in raw_questions[:MAX_BATCH_QUESTIONS]:
+                normalized = _normalize_question(row)
+                if not normalized:
+                    failed_count += 1
+                    preview_items.append({
+                        'status': 'SKIPPED', 'reason': '缺少题目内容或答案', 'raw': row,
+                    })
+                    continue
+                existing = _detect_duplicate(db, normalized['question_content'], normalized['answer'])
+                if existing:
+                    dup_info = _get_duplicate_info(db, normalized['question_content'], normalized['answer'])
+                    duplicate_count += 1
+                    preview_items.append({
+                        **normalized, 'status': 'DUPLICATE', 'is_duplicate': True,
+                        'existing_id': existing.question_id, 'similarity': dup_info['similarity'],
+                    })
+                else:
+                    success_count += 1
+                    preview_items.append({**normalized, 'status': 'NEW', 'is_duplicate': False})
+
+            total = len(raw_questions[:MAX_BATCH_QUESTIONS])
+            auto_tags = _auto_detect_tags(filename, str(preview_items[:5]) if preview_items else '')
+            response_payload = {
+                'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
+                'total_questions': total, 'success_count': success_count,
+                'failed_count': failed_count, 'duplicate_count': duplicate_count,
+                'questions': preview_items, 'auto_detected_tags': auto_tags,
+            }
+            stored = {'items': preview_items, 'auto_detected_tags': auto_tags,
+                      '_response': response_payload}
+            record.total_questions = total
+            record.success_count = success_count
+            record.failed_count = failed_count
+            record.duplicate_count = duplicate_count
+        else:
+            from ...services.text_parser import extract_question_blocks
+            parsed_blocks = extract_question_blocks(text)
+            auto_tags = _auto_detect_tags(filename, text)
+            detected_subject = auto_tags.get('subject_category', '行测')
+
+            preview_items = []
+            for block in parsed_blocks:
+                if block.get('content'):
+                    qtype = block.get('question_type', '选择题')
+                    preview_items.append({
+                        'question_content': block['content'],
+                        'options': block.get('options', []),
+                        'answer': block.get('answer', ''),
+                        'analysis': block.get('analysis', ''),
+                        'question_type_detail': qtype, 'type_name': qtype,
+                        'subject_name': detected_subject, 'status': 'NEW',
+                        'is_duplicate': False, 'difficulty': 3, 'score': 1,
+                    })
+
+            total = len(preview_items)
+            is_scanned = (ext == '.pdf' and len(preview_items) == 0 and _pdf_has_images_only(buf))
+            response_payload = {
+                'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
+                'total_questions': total, 'success_count': total, 'failed_count': 0,
+                'duplicate_count': 0, 'questions': preview_items,
+                'raw_text_preview': text[:1000000] if text else '',
+                'auto_detected_tags': auto_tags, 'scanned_pdf': is_scanned,
+                'ocr_hint': ('该PDF为扫描件（无文本层），请使用"图片导入"标签页上传，'
+                             '或先通过OCR工具转换为文本格式') if is_scanned else None,
+            }
+            stored = {'items': preview_items, 'raw_text': text[:1000000],
+                      'auto_detected_tags': auto_tags, '_response': response_payload}
+            record.total_questions = total
+            record.success_count = total
+            record.failed_count = 0
+            record.duplicate_count = 0
+
+        # ---------- 3) 落库为 PREVIEW ----------
+        record.import_status = 'PREVIEW'
+        record.preview_data = json.dumps(stored, ensure_ascii=False)
+        db.commit()
+        logger.info(f"[import-async] import_id={import_id} 解析完成 → PREVIEW（{total} 题）")
+
+    except Exception as e:  # noqa: BLE001 — 后台任务必须把失败写回库，否则前端永远轮询中
+        logger.error(f"[import-async] import_id={import_id} 解析失败: {e}", exc_info=True)
+        try:
+            db.rollback()
+            record = db.query(QuestionImportRecord).filter(
+                QuestionImportRecord.import_id == import_id
+            ).first()
+            if record is not None:
+                record.import_status = 'FAILED'
+                record.error_messages = [{'stage': 'parse', 'error': str(e)[:500]}]
+                record.complete_time = datetime.now()
+                db.commit()
+        except Exception:  # noqa: BLE001 — 连失败状态都写不回时只能放弃，绝不抛出
+            logger.error(f"[import-async] import_id={import_id} 写入 FAILED 状态亦失败", exc_info=True)
+    finally:
+        try:
+            db.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@router.post("/upload", summary="批量文件上传（异步解析，立即返回import_id）")
 async def upload_file_for_import(
     file: UploadFile = File(...),
     paper_name: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = None,
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    上传文件进行题目批量解析预览。
+    """上传文件进行题目批量解析（异步）。
+
     支持格式：.xlsx / .xls / .csv / .docx / .pdf
 
-    返回解析预览数据（不直接入库），等待前端 confirm 确认。
+    **立即返回** {import_id, status:'PARSING'}（HTTP 202），解析在后台执行。
+    前端轮询 `GET /records/{import_id}/status` 取结果：
+      - ``PARSING`` → 继续轮询
+      - ``PREVIEW`` → ``result`` 字段为完整预览数据（与原同步接口响应**同构**，
+        前端拿到后的消费逻辑零改动）
+      - ``FAILED``  → ``error`` 字段为失败原因
+
+    异步化的动因（实测）：扫描件 PDF 走 MinerU OCR 需 260~320s，而
+    前端 fetch 超时与 nginx ``proxy_read_timeout``（默认 60s）都远小于此，
+    同步模式下长文档导入必然失败。异步后单次 HTTP 请求仅需毫秒级，
+    代理层默认超时不再是瓶颈，也不再需要为长请求放大 nginx 配置。
     """
-    # 校验文件
     ext = os.path.splitext(file.filename or '')[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"不支持的文件格式: {ext}，仅支持 {', '.join(ALLOWED_EXTENSIONS)}")
@@ -2226,173 +2381,118 @@ async def upload_file_for_import(
     file_type_map = {'.xlsx': 'EXCEL', '.xls': 'EXCEL', '.csv': 'EXCEL', '.docx': 'WORD', '.pdf': 'PDF'}
     file_type = file_type_map.get(ext, 'EXCEL')
 
+    # 立即落库并提交 —— 必须先 commit，轮询方才能马上看到这条 PARSING 记录
+    record = QuestionImportRecord(
+        user_id=current_user.user_id,
+        original_filename=file.filename,
+        file_type=file_type,
+        import_status='PARSING',
+        import_time=datetime.now(),
+    )
+    db.add(record)
+    db.commit()
     try:
-        # 创建导入记录（状态：PARSING）
-        record = QuestionImportRecord(
-            user_id=current_user.user_id,
-            original_filename=file.filename,
-            file_type=file_type,
-            import_status='PARSING',
-            import_time=datetime.now(),
-        )
-        db.add(record)
-        db.flush()
+        db.refresh(record)
+    except Exception:  # noqa: BLE001 — 某些驱动 commit 后不回填，自增ID可能已在对象上
+        pass
+    import_id = record.import_id
 
-        # 解析文件
-        raw_questions = []
-        if ext in ('.xlsx', '.xls'):
-            raw_questions = _parse_excel_buffer(buf, file.filename)
-        elif ext == '.csv':
-            raw_questions = _parse_csv_buffer(buf)
-        elif ext == '.docx':
-            text = _extract_text_from_docx(buf)
-            raw_questions = [{'type': 'docx_text', 'content': text}]
-        elif ext == '.pdf':
-            # asyncio.to_thread 卸载：PDF解析/OCR（含MinerU子进程等待，可达数分钟）
-            # 在线程池执行，避免阻塞事件循环拖垮整个API服务（规格§5.2 改动①）
-            text = await asyncio.to_thread(_extract_text_from_pdf, buf)
-            raw_questions = [{'type': 'pdf_text', 'content': text}]
+    # 后台执行：Starlette 在响应返回后把同步函数丢到线程池，不阻塞事件循环
+    if background_tasks is not None:
+        background_tasks.add_task(_process_import_async, import_id, buf, file.filename, ext, file_type)
+    else:  # 兜底：无 BackgroundTasks 注入时退化为同步，功能不丢
+        logger.warning("[upload] 未注入 BackgroundTasks，退化为同步解析")
+        _process_import_async(import_id, buf, file.filename, ext, file_type)
 
-        # 标准化并预览
-        if ext in ('.xlsx', '.xls', '.csv'):
-            preview_items = []
-            success_count = 0
-            duplicate_count = 0
-            failed_count = 0
+    return JSONResponse(
+        status_code=202,
+        content={
+            'import_id': import_id,
+            'status': 'PARSING',
+            'original_filename': file.filename,
+            'file_type': file_type,
+            'message': f'文件已接收，正在后台解析，请轮询 /api/questions/import/records/{import_id}/status',
+        },
+    )
 
-            for row in raw_questions[:MAX_BATCH_QUESTIONS]:
-                normalized = _normalize_question(row)
-                if not normalized:
-                    failed_count += 1
-                    preview_items.append({
-                        'status': 'SKIPPED',
-                        'reason': '缺少题目内容或答案',
-                        'raw': row,
-                    })
-                    continue
 
-                existing = _detect_duplicate(db, normalized['question_content'], normalized['answer'])
-                if existing:
-                    dup_info = _get_duplicate_info(db, normalized['question_content'], normalized['answer'])
-                    duplicate_count += 1
-                    preview_items.append({
-                        **normalized,
-                        'status': 'DUPLICATE',
-                        'is_duplicate': True,
-                        'existing_id': existing.question_id,
-                        'similarity': dup_info['similarity'],
-                    })
-                else:
-                    success_count += 1
-                    preview_items.append({
-                        **normalized,
-                        'status': 'NEW',
-                        'is_duplicate': False,
-                    })
+@router.get("/records/{import_id}/status", summary="查询异步导入解析状态")
+async def get_import_parse_status(
+    import_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """轮询异步导入的解析状态。
 
-            total = len(raw_questions[:MAX_BATCH_QUESTIONS])
+    返回：``{import_id, status, total_questions, success_count, failed_count,
+    duplicate_count, error, result}``
 
-            # 更新记录
-            record.total_questions = total
-            record.success_count = success_count
-            record.failed_count = failed_count
-            record.duplicate_count = duplicate_count
-            record.import_status = 'PREVIEW'
-            record.preview_data = json.dumps({
-                'items': preview_items,
-                'auto_detected_tags': _auto_detect_tags(file.filename, str(preview_items[:5]) if preview_items else ''),
-            }, ensure_ascii=False)
-            db.commit()
+    ``status='PREVIEW'`` 时 ``result`` 为完整预览数据（与原同步 /upload 响应同构）。
+    """
+    record = db.query(QuestionImportRecord).filter(
+        QuestionImportRecord.import_id == import_id
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="导入记录不存在")
 
-            return {
-                'import_id': record.import_id,
-                'original_filename': file.filename,
-                'file_type': file_type,
-                'total_questions': total,
-                'success_count': success_count,
-                'failed_count': failed_count,
-                'duplicate_count': duplicate_count,
-                'questions': preview_items,
-                'auto_detected_tags': _auto_detect_tags(file.filename, str(preview_items[:5]) if preview_items else ''),
-            }
-        else:
-            # docx/pdf: 使用后端text_parser解析 → 返回结构化数据
-            text = raw_questions[0]['content'] if raw_questions else ''
-            from ...services.text_parser import extract_question_blocks
-            parsed_blocks = extract_question_blocks(text)
+    # 权限：非 admin/teacher 只能查询自己的导入记录
+    user_role = getattr(current_user, 'user_type', '') or getattr(current_user, 'role', '')
+    if user_role not in ('admin', 'teacher') and record.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="无权查看该导入记录")
 
-            # 自动检测科目（基于文件名+正文），用于注入到每道题
-            auto_tags = _auto_detect_tags(file.filename, text)
-            detected_subject = auto_tags.get('subject_category', '行测')
+    payload = {
+        'import_id': record.import_id,
+        'status': record.import_status,
+        'original_filename': record.original_filename,
+        'file_type': record.file_type,
+        'total_questions': record.total_questions or 0,
+        'success_count': record.success_count or 0,
+        'failed_count': record.failed_count or 0,
+        'duplicate_count': record.duplicate_count or 0,
+    }
 
-            # N1: 检测到完整试卷 → 自动创建ExamPaper记录
-            if auto_tags.get('is_complete_paper') or (
-                auto_tags.get('exam_year') and auto_tags.get('exam_type')
-            ):
-                try:
-                    # 预览阶段不创建试卷，只解析
-                    # 试卷创建延迟到 confirm 阶段
-                    logger.info(f"[import] 预览阶段，跳过试卷创建")
-                except Exception as e:
-                    logger.warning(f"[import] 自动创建试卷失败(非阻断): {e}")
+    if record.import_status == 'FAILED':
+        errs = record.error_messages
+        if isinstance(errs, str):
+            try:
+                errs = json.loads(errs)
+            except Exception:  # noqa: BLE001
+                errs = [{'error': errs}]
+        msg = ''
+        if isinstance(errs, list) and errs:
+            first = errs[0]
+            msg = first.get('error', '') if isinstance(first, dict) else str(first)
+        payload['error'] = msg or '解析失败'
+        return payload
 
-            preview_items = []
-            for block in parsed_blocks:
-                if block.get('content'):
-                    qtype = block.get('question_type', '选择题')
-                    preview_items.append({
-                        'question_content': block['content'],
-                        'options': block.get('options', []),
-                        'answer': block.get('answer', ''),
-                        'analysis': block.get('analysis', ''),
-                        'question_type_detail': qtype,
-                        'type_name': qtype,
-                        'subject_name': detected_subject,
-                        'status': 'NEW',
-                        'is_duplicate': False,
-                        'difficulty': 3,
-                        'score': 1,
-                    })
+    if record.import_status == 'PREVIEW':
+        data = record.preview_data
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:  # noqa: BLE001
+                data = {}
+        if isinstance(data, dict):
+            result = data.get('_response')
+            if isinstance(result, dict):
+                payload['result'] = result
+            else:  # 兼容历史记录：没有 _response 时回落到 items/raw_text 拼装
+                payload['result'] = {
+                    'import_id': record.import_id,
+                    'original_filename': record.original_filename,
+                    'file_type': record.file_type,
+                    'total_questions': record.total_questions or 0,
+                    'success_count': record.success_count or 0,
+                    'failed_count': record.failed_count or 0,
+                    'duplicate_count': record.duplicate_count or 0,
+                    'questions': data.get('items', []),
+                    'raw_text_preview': data.get('raw_text', ''),
+                    'auto_detected_tags': data.get('auto_detected_tags', {}),
+                }
+        return payload
 
-            total = len(preview_items)
-            record.total_questions = total
-            record.success_count = total
-            record.failed_count = 0
-            record.duplicate_count = 0
-            record.import_status = 'PREVIEW'
-            record.preview_data = json.dumps({
-                'items': preview_items,
-                'raw_text': text[:1000000],
-                'auto_detected_tags': auto_tags,
-            }, ensure_ascii=False)
-            db.commit()
-
-            # 扫描件PDF检测：有图片但无文本
-            is_scanned = (ext in ('.pdf',) and
-                          len(preview_items) == 0 and
-                          _pdf_has_images_only(buf))
-
-            return {
-                'import_id': record.import_id,
-                'original_filename': file.filename,
-                'file_type': file_type,
-                'total_questions': total,
-                'success_count': total,
-                'failed_count': 0,
-                'duplicate_count': 0,
-                'questions': preview_items,
-                'raw_text_preview': text[:1000000] if text else '',
-                'auto_detected_tags': auto_tags,
-                'scanned_pdf': is_scanned,
-                'ocr_hint': '该PDF为扫描件（无文本层），请使用"图片导入"标签页上传，或先通过OCR工具转换为文本格式' if is_scanned else None,
-            }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"文件解析失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"文件解析失败: {str(e)}")
+    # PARSING / CONFIRMED / COMPLETED —— 调用方按需处理
+    return payload
 
 
 @router.post("/confirm", summary="确认批量导入")

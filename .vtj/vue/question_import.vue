@@ -497,7 +497,7 @@ import QuestionPreviewList from './question_preview_list.vue';
     name: 'QuestionImport',
     components: { XIcon, QuestionPreviewList, ManualMatchDialog },
   setup(props) {
-    const provider = useProvider({ id: 'question_import', version: '1790309911041' });
+    const provider = useProvider({ id: 'question_import', version: '1790328023543' });
     // PDF 扫描件 OCR 超时预算（ms）——单一事实来源，勿在别处硬编码
     // 后端最坏耗时 = GPU串行锁排队60s + MinerU子进程600s + PaddleOCR兜底240s = 900s
     // 取 960s = 900s + 60s 余量。改后端任一超时必须同步改此值。
@@ -654,6 +654,65 @@ import QuestionPreviewList from './question_preview_list.vue';
         }
         return context + '出错：' + msg;
       },
+
+      /**
+       * 轮询异步导入的解析状态，直到 PREVIEW / FAILED / 超出总预算。
+       * 退避策略：1.5s 起，每次 ×1.3 递增，上限 8s（避免频繁请求又不拖慢体感）。
+       * 每次轮询都是短请求（10s 超时）—— 因为后端已改为后台执行，
+       * 代理层默认 60s 超时不再是瓶颈。
+       */
+      async _pollImportStatus(importId, budgetMs, onTick) {
+        var deadline = Date.now() + (budgetMs || (this.PDF_OCR_TIMEOUT_MS || 960000));
+        var delay = 1500;
+        var waited = 0;
+        while (Date.now() < deadline) {
+          await new Promise(function (r) { setTimeout(r, delay); });
+          waited += delay;
+          var res = await this.fetchWithRetry(
+            '/api/questions/import/records/' + importId + '/status',
+            { method: 'GET', headers: this.getAuthHeaders() },
+            10000, 0
+          );
+          var st = await res.json();
+          if (!res.ok) {
+            throw new Error(st.detail || ('查询解析状态失败 (HTTP ' + res.status + ')'));
+          }
+          if (st.status === 'PREVIEW') return st.result || st;
+          if (st.status === 'FAILED') throw new Error(st.error || '解析失败');
+          // PARSING / CONFIRMED / COMPLETED：继续等
+          if (onTick) onTick(st, waited);
+          delay = Math.min(Math.round(delay * 1.3), 8000);
+        }
+        var mins = Math.round(waited / 60000);
+        throw new Error('解析超时（已等待 ' + (mins > 0 ? mins + ' 分钟' : Math.round(waited / 1000) + ' 秒') +
+          '）。若文档很大请稍后重试；若反复超时，可能是服务重启导致任务中断，请重新上传。');
+      },
+
+      /**
+       * 上传文件并等待解析完成（后端 /upload 已改为异步：立即返回 import_id）。
+       * 返回值与**原同步接口完全同构**，因此调用方的消费逻辑无需改动。
+       */
+      async _uploadAndPoll(formData, isPdf) {
+        var self = this;
+        // 上传本身很快（实测 <1s），60s 足够容纳 50MB 传输
+        var upRes = await this.fetchWithRetry('/api/questions/import/upload', {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          body: formData
+        }, 60000, 0);
+        var data = await upRes.json();
+        if (!upRes.ok) {
+          throw new Error(data.detail || data.error || ('上传失败 (HTTP ' + upRes.status + ')'));
+        }
+        // 兼容：后端未升级时仍会直接返回预览数据
+        if (!data.import_id || data.status !== 'PARSING') return data;
+        return await this._pollImportStatus(data.import_id, this.PDF_OCR_TIMEOUT_MS, function (st, waited) {
+          var secs = Math.round(waited / 1000);
+          var tip = secs >= 60 ? Math.round(secs / 60) + ' 分钟' : secs + ' 秒';
+          if (self.state && self.state.loading) self.state.loading = false;   // 避免按钮转圈卡死观感
+          if (self.setProgress) self.setProgress(0, Math.min(45, 10 + Math.round(waited / 4000)));
+        });
+      },
       addOption() {
         const keys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         const next = keys[this.state.form.options.length];
@@ -725,29 +784,23 @@ import QuestionPreviewList from './question_preview_list.vue';
         var self = this;
         var formData = new FormData();
         formData.append('file', file);
-        // PDF扫描件OCR超时预算（必须 ≥ 后端最坏耗时，否则文档必然导入失败）
-        // 后端最坏耗时 = GPU串行锁排队 60s + MinerU子进程 600s + PaddleOCR兜底 240s = 900s
-        //   出处: mineru_service.py _SEM_WAIT_SECONDS=60 / config.py MINERU_TIMEOUT=600
-        //         config.py OCR_SUBPROCESS_TIMEOUT=240
-        // 取 960s = 900s + 60s 余量(上传50MB + 调度抖动)
-        // ⚠️ 改后端任一超时必须同步改这里，否则重新出现"长文档必失败"
+        // PDF扫描件OCR超时预算：后端已改为异步（立即返回 import_id），
+        // 此处不再是"单次请求超时"，而是"整体轮询预算"。
+        // 后端最坏耗时 = GPU排队60s + MinerU600s + PaddleOCR兜底240s = 900s
+        // 出处: mineru_service.py _SEM_WAIT_SECONDS=60 / config.py MINERU_TIMEOUT=600
+        //       config.py OCR_SUBPROCESS_TIMEOUT=240
+        // ⚠️ 改后端任一超时必须同步改这里
         // 注: 提取文本已按文件md5缓存(perf: backend/app/services/text_cache.py)，
-        //     重复导入同一文件命中缓存仅需 ~0.006s；本预算仅作用于"首次导入新文件"
+        //     重复导入同一文件仅需 ~0.006s；本预算仅作用于"首次导入新文件"
         var isPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
-        var timeout = isPdf ? (self.PDF_OCR_TIMEOUT_MS || 960000) : 30000;  // PDF: 16分钟(覆盖后端最坏900s), 其他: 30秒
         if (isPdf) {
           ElMessage.info('正在解析文件：' + file.name + '（扫描件将启用MinerU高精度OCR，约需1-3分钟，请耐心等待）');
         }
         try {
           // 使用 getAuthHeaders() 携带认证token（不含 Content-Type，让浏览器自动设置 multipart boundary）
-          var res = await this.fetchWithRetry('/api/questions/import/upload', {
-            method: 'POST',
-            headers: this.getAuthHeaders(),
-            body: formData
-          }, timeout, 0);
-          var data = await res.json();
-          if (!res.ok) {
-            ElMessage.error('文件上传失败 (HTTP ' + res.status + ')：' + (data.detail || data.message || '未知错误'));
+          var data = await this._uploadAndPoll(formData, isPdf);
+          if (!data) {
+            ElMessage.error('文件解析失败：未返回结果');
             return;
           }
           // Word/PDF → 返回 raw_text_preview
@@ -806,17 +859,12 @@ import QuestionPreviewList from './question_preview_list.vue';
             const formData = new FormData();
             formData.append('file', file);
             if (self.state.batchPaperName) formData.append('paper_name', self.state.batchPaperName);
-            // PDF走MinerU高精度OCR：超时预算必须≥后端最坏900s(排队60+MinerU600+PaddleOCR240)，
-            // 取960s留余量。改后端超时时须同步此处。
+            // 后端 /upload 已异步化：立即返回 import_id，这里轮询等待解析完成。
+            // 轮询总预算 PDF_OCR_TIMEOUT_MS(=后端最坏900s+余量)，非单次请求超时。
             var batchIsPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
-            const res = await self.fetchWithRetry('/api/questions/import/upload', {
-              method: 'POST',
-              headers: self.getAuthHeaders(),
-              body: formData
-            }, batchIsPdf ? (self.PDF_OCR_TIMEOUT_MS || 960000) : undefined);
-            const data = await res.json();
-            if (!res.ok) {
-              ElMessage.warning(data.detail || '上传失败 (HTTP ' + res.status + ')');
+            const data = await self._uploadAndPoll(formData, batchIsPdf);
+            if (!data) {
+              ElMessage.warning('上传失败：未返回结果');
               self.resetProgress('');
               return;
             }
