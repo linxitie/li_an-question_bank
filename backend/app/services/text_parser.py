@@ -2216,6 +2216,80 @@ def _detect_question_type(content: str, options: List[str], answer: str = '') ->
     return final_type, round(confidence, 2)
 
 
+# ============ 答案一致性校验（静默错答检测） ============
+
+def _norm_answer_letters(answer: Any) -> str:
+    """归一化答案为排序去重的字母串（'C,A' / 'ca' → 'AC'）；无有效字母返回 ''。"""
+    if not answer:
+        return ''
+    s = re.sub(r'[^A-Da-d]', '', str(answer).upper())
+    return ''.join(sorted(set(s)))
+
+
+def _declared_answer_in_analysis(analysis: Any) -> str:
+    """从解析正文中提取"本题正确答案"的权威声明；无声明返回 ''。
+
+    按权威性依次尝试：题头声明 → 结论声明（排除干扰项前缀）→ 显式答案标签。
+    与 extract_answer_from_lines 的优先级保持一致，确保校验口径与解析口径同源。
+    """
+    if not analysis:
+        return ''
+    text = str(analysis)
+
+    # 1) 题头声明："## 79、正确答案是：C" / "79. 答案：B"
+    for line in text.split('\n')[:3]:
+        s = line.strip()
+        if not s or len(s) > 60:
+            continue
+        m = _BLOCK_HEADER_ANSWER_RE.match(s)
+        if m:
+            v = _norm_answer_letters(canonical_answer(m.group(1)))
+            if v:
+                return v
+
+    # 2) 结论声明："故正确答案为C"（取末位，跳过"看似选D"这类干扰项）
+    concl = _pick_conclusion_answer(text)
+    if concl:
+        return _norm_answer_letters(concl)
+
+    # 3) 显式答案标签："答案：C" / "【答案】C"
+    m = re.search(r'(?:【\s*答案\s*】|\s答案\s*[：:：])\s*([A-Da-d]{1,4})(?![A-Za-z])', text)
+    if m:
+        return _norm_answer_letters(canonical_answer(m.group(1)))
+
+    return ''
+
+
+def detect_answer_conflicts(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """检测 answer 字段与解析正文中显式声明答案之间的矛盾（静默错答）。
+
+    为什么必须有这道门禁：
+      「答案存在」不等于「答案正确」。字段完整率检查对**错答案完全免疫**——
+      一道题有答案就能通过完整率校验，哪怕这个答案是从干扰项或下一题里取错的。
+      实测（20 份真实试卷 / 1929 题）在完整率 100% 的同时存在 17 处此类损坏。
+
+    处置：不在此处自动改写答案（源数据可能自相矛盾，如"故正确答案为AC。
+    但是本题为单选"这类），而是显式上报，交 need_confirm_items 走人工复核。
+    这样冲突从"不可见"变为"可见、可定位、可复核"，成为可持续门禁维度。
+    """
+    conflicts: List[Dict[str, Any]] = []
+    for q in questions or []:
+        ans = _norm_answer_letters(q.get('answer'))
+        if not ans:
+            continue
+        # 兼容两种字段名：解析器内部用 analysis，API 入库层用 answer_analysis
+        analysis = q.get('analysis') or q.get('answer_analysis') or ''
+        declared = _declared_answer_in_analysis(analysis)
+        if declared and declared != ans:
+            conflicts.append({
+                'question_number': q.get('question_number'),
+                'answer': ans,
+                'declared_in_analysis': declared,
+                'reason': f'答案字段为 {ans}，但解析正文声明为 {declared}',
+            })
+    return conflicts
+
+
 # ============ 智能匹配主入口（分离导入） ============
 
 @dataclass
@@ -2529,6 +2603,19 @@ def smart_match_questions_answers(
         except Exception as e:
             logger.warning(f"LLM匹配兜底失败: {e}")
 
+    # ===== 静默错答检测（答案字段 vs 解析正文声明） =====
+    # 字段完整率对"错答案"完全免疫：这里把矛盾显式化，写入 details 供上层上报。
+    try:
+        answer_conflicts = detect_answer_conflicts(question_blocks)
+    except Exception as e:  # 校验绝不能阻断解析主流程
+        logger.warning(f"答案一致性检测异常（已忽略）: {e}")
+        answer_conflicts = []
+    if answer_conflicts:
+        logger.warning(
+            f"检测到 {len(answer_conflicts)} 处答案与解析声明不一致（静默错答），"
+            f"题号: {[c['question_number'] for c in answer_conflicts][:20]}"
+        )
+
     return MatchResult(
         match_rate=match_rate,
         matched_count=matched_count,
@@ -2546,6 +2633,8 @@ def smart_match_questions_answers(
             'inline_from_answer': len(inline_from_a) if sim > 0.6 and inline_from_a else 0,
             'embedded_from_answer': len(embedded_map) if embedded_map else 0,
             'llm_fallback_used': llm_used,
+            'answer_conflicts': answer_conflicts,
+            'answer_conflict_count': len(answer_conflicts),
         }
     )
 

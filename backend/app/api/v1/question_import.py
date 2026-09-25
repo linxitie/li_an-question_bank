@@ -50,6 +50,7 @@ from ...services.text_parser import (
     canonical_answer,
     _extract_options,
     _detect_question_type,
+    detect_answer_conflicts,
     clean_question_text,
 )
 
@@ -1794,6 +1795,22 @@ async def batch_import_parsed(
     # 现提前计算并注入每题 payload（payload 自带值优先，setdefault 语义）。
     _joined_head = ' '.join((q.get('question_content') or '')[:150] for q in items[:20])
     auto_tags = _auto_detect_tags(paper_name or _joined_head[:60], _joined_head)
+
+    # ===== 静默错答预检（答案字段 vs 解析正文声明） =====
+    # 字段完整率对"错答案"完全免疫：有答案就能通过完整率，哪怕答案是从干扰项
+    # 或下一题取错的。整批一次性检测，按题号建索引，供下方循环 O(1) 查询。
+    # 不自动改写答案（源数据可能自相矛盾），只标记出来交人工复核。
+    _conflict_by_qn: Dict[Any, Dict[str, Any]] = {}
+    try:
+        for _c in detect_answer_conflicts(items):
+            _conflict_by_qn[_c.get('question_number')] = _c
+        if _conflict_by_qn:
+            logger.warning(
+                f"[batch-parsed] 预检到 {len(_conflict_by_qn)} 处答案与解析声明不一致，"
+                f"题号: {list(_conflict_by_qn)[:20]}"
+            )
+    except Exception as e:  # noqa: BLE001 — 预检绝不能阻断导入
+        logger.warning(f"答案一致性预检异常（已忽略）: {e}")
     _inject_source = ''.join(
         p for p in (auto_tags.get('exam_province', ''), auto_tags.get('exam_type', '')) if p
     )
@@ -1860,17 +1877,25 @@ async def batch_import_parsed(
             ans = (q.get('answer') or '').strip()
             conf = q.get('confidence')
             _confirm_reason = None
-            if not ans or ans == '待补充':
+            # 静默错答：答案字段与解析正文声明矛盾（字段完整率无法发现此类问题）
+            _cf = _conflict_by_qn.get(q.get('question_number'))
+            if _cf is not None:
+                _confirm_reason = '答案与解析不一致'
+            elif not ans or ans == '待补充':
                 _confirm_reason = '缺答案'
             elif isinstance(conf, (int, float)) and conf < 0.5:
                 _confirm_reason = '低置信度'
             if _confirm_reason:
                 need_confirm += 1
-                need_confirm_items.append({
+                _item = {
                     'index': idx,
                     'question_number': _qn_label,
                     'reason': _confirm_reason,
-                })
+                }
+                if _cf is not None:
+                    _item['answer'] = _cf.get('answer')
+                    _item['declared_in_analysis'] = _cf.get('declared_in_analysis')
+                need_confirm_items.append(_item)
         except HTTPException as he:
             failed_items.append({'index': idx, 'question_number': _qn_label, 'reason': str(he.detail)})
         except Exception as e:  # noqa: BLE001 — 单题失败不阻断整批
