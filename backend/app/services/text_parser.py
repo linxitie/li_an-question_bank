@@ -1667,6 +1667,18 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         content_text = re.sub(r'[\[（(]\s*(?:单选|多选|不定项)\s*[\]）)]', '', content_text)
         content_text = re.sub(r'\n{3,}', '\n\n', content_text).strip()
 
+        # P0-fix: 图片选择题（选项是图片本身，文字无 A/B/C/D）。
+        # 题干含"图标/示意图/下图/如图/图表"等图片指向词 + 含 IMAGE 占位 + 无文字选项
+        # → 生成占位选项"见图"，保留图片，避免前端显示"选项缺失"。
+        if (not options or len(options) < 2) and re.search(r'\[IMAGE:', content_text):
+            if re.search(r'图标|示意图|下图|如图|图中|图表|看图', content_text):
+                options = [
+                    {'key': 'A', 'value': '（见图）'},
+                    {'key': 'B', 'value': '（见图）'},
+                    {'key': 'C', 'value': '（见图）'},
+                    {'key': 'D', 'value': '（见图）'},
+                ]
+
         # 提取内联答案
         extracted = extract_answer_from_lines(block_lines)
         answer = extracted.get('answer') if extracted else None
