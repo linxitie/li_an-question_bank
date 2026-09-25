@@ -496,9 +496,13 @@ import QuestionPreviewList from './question_preview_list.vue';
   export default defineComponent({
     name: 'QuestionImport',
     components: { XIcon, QuestionPreviewList, ManualMatchDialog },
-    setup(props) {
-      const provider = useProvider({ id: 'question_import', version: '1785406000000' });
-      const state = reactive({
+  setup(props) {
+    const provider = useProvider({ id: 'question_import', version: '1790309911041' });
+    // PDF 扫描件 OCR 超时预算（ms）——单一事实来源，勿在别处硬编码
+    // 后端最坏耗时 = GPU串行锁排队60s + MinerU子进程600s + PaddleOCR兜底240s = 900s
+    // 取 960s = 900s + 60s 余量。改后端任一超时必须同步改此值。
+    const PDF_OCR_TIMEOUT_MS = 960000;
+    const state = reactive({
         importMode: 'combined',
         activeTab: 'single',
         form: {
@@ -566,6 +570,7 @@ import QuestionPreviewList from './question_preview_list.vue';
       });
       return {
         state, props, provider,
+        PDF_OCR_TIMEOUT_MS,
         UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List,
         cardTabs: [
           { key: 'single', title: '单题录入', icon: UploadFilled },
@@ -720,10 +725,16 @@ import QuestionPreviewList from './question_preview_list.vue';
         var self = this;
         var formData = new FormData();
         formData.append('file', file);
-        // PDF扫描件OCR需要更长时间：MinerU高精度解析约1-3分钟/份，
-        // 覆盖 300s子进程超时 + 60s GPU排队等待 + 上传与后端处理余量 → 7分钟
+        // PDF扫描件OCR超时预算（必须 ≥ 后端最坏耗时，否则文档必然导入失败）
+        // 后端最坏耗时 = GPU串行锁排队 60s + MinerU子进程 600s + PaddleOCR兜底 240s = 900s
+        //   出处: mineru_service.py _SEM_WAIT_SECONDS=60 / config.py MINERU_TIMEOUT=600
+        //         config.py OCR_SUBPROCESS_TIMEOUT=240
+        // 取 960s = 900s + 60s 余量(上传50MB + 调度抖动)
+        // ⚠️ 改后端任一超时必须同步改这里，否则重新出现"长文档必失败"
+        // 注: 提取文本已按文件md5缓存(perf: backend/app/services/text_cache.py)，
+        //     重复导入同一文件命中缓存仅需 ~0.006s；本预算仅作用于"首次导入新文件"
         var isPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
-        var timeout = isPdf ? 420000 : 30000;  // PDF: 7分钟, 其他: 30秒
+        var timeout = isPdf ? (self.PDF_OCR_TIMEOUT_MS || 960000) : 30000;  // PDF: 16分钟(覆盖后端最坏900s), 其他: 30秒
         if (isPdf) {
           ElMessage.info('正在解析文件：' + file.name + '（扫描件将启用MinerU高精度OCR，约需1-3分钟，请耐心等待）');
         }
@@ -795,13 +806,14 @@ import QuestionPreviewList from './question_preview_list.vue';
             const formData = new FormData();
             formData.append('file', file);
             if (self.state.batchPaperName) formData.append('paper_name', self.state.batchPaperName);
-            // PDF走MinerU高精度OCR可达数分钟，显式提升超时（默认30s必超时）
+            // PDF走MinerU高精度OCR：超时预算必须≥后端最坏900s(排队60+MinerU600+PaddleOCR240)，
+            // 取960s留余量。改后端超时时须同步此处。
             var batchIsPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
             const res = await self.fetchWithRetry('/api/questions/import/upload', {
               method: 'POST',
               headers: self.getAuthHeaders(),
               body: formData
-            }, batchIsPdf ? 420000 : undefined);
+            }, batchIsPdf ? (self.PDF_OCR_TIMEOUT_MS || 960000) : undefined);
             const data = await res.json();
             if (!res.ok) {
               ElMessage.warning(data.detail || '上传失败 (HTTP ' + res.status + ')');
