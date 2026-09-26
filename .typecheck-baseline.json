@@ -1,0 +1,48 @@
+{
+  "generatedAt": "2026-09-26T12:53:24.563Z",
+  "command": "vue-tsc --noEmit -p tsconfig.json",
+  "note": "仅记录无法从配置层消除的 codegen 噪音；新增错误会使 verify-typecheck-baseline 失败",
+  "totalErrors": 8,
+  "entries": [
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 113,
+      "code": "TS2365"
+    },
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 116,
+      "code": "TS2345"
+    },
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 117,
+      "code": "TS2345"
+    },
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 137,
+      "code": "TS2365"
+    },
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 228,
+      "code": "TS2365"
+    },
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 230,
+      "code": "TS2345"
+    },
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 231,
+      "code": "TS2345"
+    },
+    {
+      "file": ".vtj/vue/teacher_papers.vue",
+      "line": 327,
+      "code": "TS2365"
+    }
+  ]
+}
