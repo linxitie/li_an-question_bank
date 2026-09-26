@@ -71,7 +71,7 @@
         <div class="profile-modal-body">
           <!-- 头像区 -->
           <div class="profile-avatar-section">
-            <div class="profile-avatar-large" @click="$refs.profileAvatarInput.click()">
+            <div class="profile-avatar-large" @click="openProfileAvatarPicker">
               <img v-if="profileData.avatar" :src="profileData.avatar" />
               <div v-else class="profile-avatar-placeholder">{{ profileAvatarText }}</div>
               <div class="profile-avatar-overlay">点击更换</div>
@@ -141,7 +141,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted, onUnmounted } from 'vue';
+    import { defineComponent, ref, computed, onMounted, onUnmounted, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 
@@ -153,6 +153,10 @@ export default defineComponent({
   emits: ['logout'],
   setup(props, { emit }) {
     const router = useRouter();
+    const profileAvatarInput = useTemplateRef<HTMLInputElement>('profileAvatarInput');
+    function openProfileAvatarPicker() {
+      profileAvatarInput.value?.click();
+    }
     const showUserMenu = ref(false);
     const showPasswordModal = ref(false);
     const showProfileModal = ref(false);
@@ -375,7 +379,7 @@ export default defineComponent({
       changingPassword, profileSaving, unreadCount, userInfo, passwordForm, avatarText,
       profileData, profileEditMode, profileEditForm, profileAvatarText,
       toggleUserMenu, goTab, goProfile, loadProfileData, startProfileEdit, saveProfile, uploadProfileAvatar,
-      showHelp, changePassword, handleLogout,
+      showHelp, changePassword, handleLogout, openProfileAvatarPicker,
     };
   }
 });

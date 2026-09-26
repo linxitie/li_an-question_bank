@@ -1,0 +1,22 @@
+/**
+ * `src/utils/questionRender.js` 的类型声明。
+ * 该实现为无类型 JavaScript 模块，此处按其实际导出签名提供类型，
+ * 避免 TS7016（隐式 any）污染调用方。
+ */
+
+/** 题目内容渲染：返回可直接用于 v-html 的安全 HTML 字符串 */
+export function renderQuestionContent(content: unknown): string;
+
+/** 列表摘要渲染：移除图片标签并剥离 HTML，返回纯文本 */
+export function renderQuestionSummary(content: unknown): string;
+
+/** HTML 清洗 */
+export function sanitizeHtml(html: string): string;
+
+declare const _default: {
+  renderQuestionContent: (content: unknown) => string;
+  renderQuestionSummary: (content: unknown) => string;
+  sanitizeHtml: (html: string) => string;
+};
+
+export default _default;

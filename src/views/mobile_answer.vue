@@ -59,7 +59,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
 
 const router = useRouter();
 const route = useRoute();
-const questions = ref<any[]>([]);
+const questions = ref<{ options?: string[]; [key: string]: any }[]>([]);
 const currentIndex = ref(0);
 const selectedOptions = ref<number[]>([]);
 const answered = ref(false);
@@ -70,7 +70,7 @@ const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const groupInfo = ref<any>(null);
 const groupCollapsed = ref(false);
 
-const current = computed(() => questions.value[currentIndex.value] || {});
+const current = computed<{ options?: string[]; [key: string]: any }>(() => questions.value[currentIndex.value] || {});
 
 // P1-2: 切题时加载当前题的题组材料
 watch(current, (q: any) => {

@@ -26,7 +26,9 @@ import { QuestionFilled } from '@vtj/icons';
 import NavBar from '$vtj/vue/navbar.vue';
 
 const auth: any = (window as any).__VTJ_AUTH__;
-const faq = ref<any[]>([]);
+interface FaqItem { q: string; a: string; }
+interface FaqCategory { category: string; items: FaqItem[]; }
+const faq = ref<FaqCategory[]>([]);
 
 onMounted(async () => {
   try {

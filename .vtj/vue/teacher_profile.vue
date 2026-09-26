@@ -6,7 +6,7 @@
       <div class="profile-card">
         <!-- 头像区 -->
         <div class="avatar-section">
-          <div class="avatar-large" @click="$refs.avatarInput.click()">
+          <div class="avatar-large" @click="openAvatarPicker">
             <img v-if="profile.avatar" :src="profile.avatar" />
             <div v-else class="avatar-placeholder">{{ avatarText }}</div>
             <div class="avatar-overlay">点击更换</div>
@@ -147,7 +147,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted } from 'vue';
+    import { defineComponent, ref, computed, onMounted, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TeacherNavHeader from './TeacherNavHeader.vue';
@@ -157,6 +157,10 @@ export default defineComponent({
   components: { TeacherNavHeader },
   setup() {
     const router = useRouter();
+    const avatarInput = useTemplateRef<HTMLInputElement>('avatarInput');
+    function openAvatarPicker() {
+      avatarInput.value?.click();
+    }
     const profile = ref<any>({});
     const editing = ref(false);
     const saving = ref(false);
@@ -291,7 +295,7 @@ export default defineComponent({
       profile, editing, saving, editForm, avatarText, startEdit, saveProfile, uploadAvatar,
       passwordForm, changingPassword, changePassword,
       preferences, savingPrefs, savePreferences,
-      handleLogout,
+      handleLogout, openAvatarPicker,
     };
   }
 });

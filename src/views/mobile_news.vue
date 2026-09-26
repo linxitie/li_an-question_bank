@@ -29,7 +29,7 @@
         <img
           v-for="(img, idx) in currentNews.images"
           :key="idx"
-          :src="resolveImg(img.url || img)"
+          :src="resolveImg(imageUrlOf(img))"
           :alt="'图片' + (idx + 1)"
         />
       </div>
@@ -84,7 +84,13 @@ const route = useRoute();
 const router = useRouter();
 
 const newsList = ref<any[]>([]);
-const currentNews = ref<any>(null);
+interface NewsImage { url?: string; order?: number; [key: string]: any; }
+type NewsImageItem = string | NewsImage;
+/** 图片项可能是纯 URL 字符串，也可能是带 url/order 的对象，统一取 URL */
+function imageUrlOf(img: NewsImageItem): string {
+  return typeof img === 'string' ? img : (img.url || '');
+}
+const currentNews = ref<{ id?: any; images?: NewsImageItem[]; [key: string]: any } | null>(null);
 const loading = ref(false);
 const notes = ref<any[]>([]);
 
@@ -130,7 +136,8 @@ const renderContent = (content: string) => {
   const images = (currentNews.value && currentNews.value.images) || [];
   const imageMap: Record<number, string> = {};
   for (const img of images) {
-    if (img.order !== undefined && img.order !== null) imageMap[img.order] = img.url || img;
+    if (typeof img === 'string') continue;
+    if (img.order !== undefined && img.order !== null) imageMap[img.order] = imageUrlOf(img);
   }
   const paragraphs = content.split(/\n{2,}/);
   let html = '';
