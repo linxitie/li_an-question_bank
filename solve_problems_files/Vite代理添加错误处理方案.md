@@ -990,7 +990,7 @@ Playwright 移动视口（390×844）访问 `http://localhost:9527/`：
 > `npm run typecheck:guarded`。`npm run build:prod` 已从裸 `vue-tsc` 改为调用 `typecheck:guarded`，
 > 因此 `npm run build` 不会被这 8 项已知噪音阻断。
 
-**提交清单（本轮 15 个）**
+**提交清单（功能与工具 12 个 + 文档 4 个，不含本清单自身的修正提交）**
 
 功能修复：`1022537`（删除孤立死文件）、`7373484`（PriceTag）、`ec15dad`（class_trend + N+1 + 日期键）、`b265ebd`（统一跨年日期格式）、`24125a7`（趋势图 + loadData）、`f5a0f85`（类型声明与收窄）、`222968e`（CSP font-src）
 
