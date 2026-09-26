@@ -1,70 +1,107 @@
-/**
- * Vite 开发服务器代理配置
- *
- * 修复目标（ECONNRESET 崩溃）：
- * 后端（uvicorn）在热重载、强制重启、或连接超时被关闭时，会向所有已建立
- * 的 TCP 连接发送 RST 复位包。Vite 底层使用的 http-proxy 在 socket 收到
- * ECONNRESET / ECONNREFUSED 时，若未注册 'error' 监听器，会以
- * "throw er; // Unhandled 'error' event" 崩溃整个 dev server。
- *
- * 解决方案：为每个代理条目注册 configure() 回调，挂载 'error' 监听器，
- * 吞掉连接级错误并返回 502，保证 dev server 始终存活，下次请求自动重连。
- */
+import type { ServerResponse } from 'node:http';
+import type { ProxyOptions } from 'vite';
 
-/** 可安全降级的连接级错误码（属于后端重启/宕机的正常现象，不应使进程崩溃） */
+const DEFAULT_BACKEND_ORIGIN = 'http://127.0.0.1:8000';
+
+function resolveBackendOrigin(): string {
+  const raw = process.env.DEV_BACKEND_ORIGIN || DEFAULT_BACKEND_ORIGIN;
+  const url = new URL(raw);
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`DEV_BACKEND_ORIGIN 仅支持 http/https：${url.protocol}`);
+  }
+
+  return url.origin;
+}
+
+const backendOrigin = resolveBackendOrigin();
+
 const RECOVERABLE_CODES = new Set([
   'ECONNRESET',
-  'ECONNREFUSED',
   'ECONNABORTED',
   'EPIPE',
   'ETIMEDOUT',
+  'ECONNREFUSED',
   'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENETDOWN',
 ]);
 
-/**
- * 统一的代理错误处理函数
- * @param proxy http-proxy 实例
- */
-function handleProxyError(proxy: any) {
-  proxy.on('error', (err: any, _req: any, res: any) => {
-    const code = err && err.code;
-
-    // 后端重启/宕机导致的连接级错误：记录后返回 502，不抛异常，进程不崩溃
-    if (code && RECOVERABLE_CODES.has(code)) {
-      console.warn(`[vite-proxy] 后端连接异常(${code})，已容错处理，等待下次请求重试`);
-      try {
-        if (res && !res.headersSent && typeof res.writeHead === 'function') {
-          res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
-        }
-        if (res && !res.finished && typeof res.end === 'function') {
-          res.end(JSON.stringify({ detail: '后端服务暂不可用，请稍后重试' }));
-        }
-      } catch (e) {
-        // 响应已关闭等边缘情况，忽略
-      }
-      return;
-    }
-
-    // 其他未知错误：仅记录，不中断进程（避免任何 socket error 导致 dev server 崩溃）
-    console.warn('[vite-proxy] error:', code || (err && err.message) || err);
-  });
+function isServerResponse(value: unknown): value is ServerResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as ServerResponse).writeHead === 'function' &&
+    'headersSent' in value
+  );
 }
+
+function statusForCode(code: string): number {
+  if (code === 'ETIMEDOUT') return 504;
+  if (
+    code === 'ECONNREFUSED' ||
+    code === 'EHOSTUNREACH' ||
+    code === 'ENETUNREACH' ||
+    code === 'ENETDOWN'
+  ) {
+    return 503;
+  }
+  return 502;
+}
+
+function createProxyConfigure(scope: string): NonNullable<ProxyOptions['configure']> {
+  return (proxy) => {
+    proxy.on('error', (error, _request, response) => {
+      const code = (error as NodeJS.ErrnoException).code;
+
+      if (!code || !RECOVERABLE_CODES.has(code)) {
+        console.error(`[vite-proxy:${scope}] 非预期错误`, error);
+        return;
+      }
+
+      if (
+        isServerResponse(response) &&
+        !response.headersSent &&
+        !response.writableEnded
+      ) {
+        response.writeHead(statusForCode(code), {
+          'Content-Type': 'application/json; charset=utf-8',
+        });
+        response.end(
+          JSON.stringify({
+            detail: '后端服务暂不可用，请稍后重试',
+            code: 'BACKEND_UNAVAILABLE',
+          })
+        );
+        return;
+      }
+
+      console.warn(`[vite-proxy:${scope}] 连接中断(${code})，已释放`);
+    });
+  };
+}
+
+const baseProxy = {
+  target: backendOrigin,
+  changeOrigin: true,
+};
 
 export default {
   '/api': {
-    target: 'http://localhost:8000',
-    changeOrigin: true,
+    ...baseProxy,
+    configure: createProxyConfigure('api'),
+  },
+  '/ws': {
+    ...baseProxy,
     ws: true,
-    configure: handleProxyError,
+    configure: createProxyConfigure('ws'),
   },
   '/static': {
-    target: 'http://localhost:8000',
-    changeOrigin: true,
-    configure: handleProxyError,
+    ...baseProxy,
+    configure: createProxyConfigure('static'),
   },
   '/uploads': {
-    target: 'http://localhost:8000',
-    changeOrigin: true,
-    configure: handleProxyError,
+    ...baseProxy,
+    configure: createProxyConfigure('uploads'),
   },
 };
