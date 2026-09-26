@@ -919,13 +919,73 @@ Playwright 移动视口（390×844）访问 `http://localhost:9527/`：
 - 页面完整渲染，无“一直加载”状态，无无效代理导致的挂起请求；
 - 真实后端在线时 `/ws/connect` 握手成功（`OPEN ok`），`/api/*` 经代理返回 200。
 
-### 13.5 范围外的既有问题（未修改，仅记录）
+### 13.5 三个历史问题的后续修复（同分支完成）
 
-以下问题在本次改动前即存在，且位于 P0 禁止修改范围，故未处理：
+上一节记录的三项「范围外既有问题」已在后续提交中全部解决：
 
-- `npm run typecheck` 78 项错误，全部集中于 `.vtj/vue/`、`src/vtj/vue/`、`src/views/`、`src/router/`，
-  本次改动文件命中数为 **0**；
-- `vite build` 失败于 `.vtj/vue/tablet_forum.vue` 导入 `@vtj/icons` 的 `Tag`；
-  已核实 `Tag` 在 `0.16.35`（本次锁定版本）与 `latest 0.20.6` 中**均未导出**，属既有缺陷而非版本锁定引入；
-- 浏览器控制台的 `font-src` CSP 拦截告警（图标 base64 字体回退到 `default-src 'self'`），
-  实际渲染正常，属改动前既有配置。
+| 问题 | 根因 | 修复 | 提交 |
+| --- | --- | --- | --- |
+| `vite build` 阻断 | `Tag` 在 `@vtj/icons` 0.16.35 与 0.20.6 中均未导出；全量扫描 44 个导入文件确认**仅此 1 处** | 替换为语义最贴近的 `PriceTag`（同步导入/模板/导航配置/return），DSL 中本就无 `Tag`，不会被设计器复现 | `7373484` |
+| 78 项类型错误 | 37 项来自孤立死文件；22 项是真实功能缺陷；其余为缺声明与模板推断噪音 | 见 13.6 | `1022537` `24125a7` `f5a0f85` |
+| `font-src` CSP 告警 | 未设 `font-src`，回退 `default-src 'self'`，拦截 4 个 base64 图标字体 | 补 `font-src 'self' data:;` 与 `worker-src 'self' blob:;` | `222968e` |
+
+### 13.6 类型错误治理与长期守卫
+
+**错误数变化轨迹（实测）**
+
+| 阶段 | 错误数 | 说明 |
+| --- | ---: | --- |
+| 初始 | 78 | 实测基线 |
+| 删除孤立死文件后 | 41 | −37（`src/vtj/vue/score_analysis.vue` 无任何引用且含断裂的 `./navbar.vue` 导入） |
+| 修复学情分析页后 | 20 | −21（`loadData` 未从 `setup()` return 导致筛选失效；8 个趋势图绑定完全不存在；`trendData` 从未填充） |
+| 补齐类型声明后 | **8** | −12（`questionRender.d.ts`、`vue-shims.d.ts`、`useTemplateRef`、`v-for` 源集合类型） |
+
+残余 8 项全部位于 `.vtj/vue/teacher_papers.vue`，属 VTJ codegen 无类型 `reactive({...})` 导致的模板类型推断噪音
+（`{{ idx + 1 }}` 被报为 `Operator '+' cannot be applied to types 'string | number' and 'number'`），运行时正常。
+
+**已实测排除的方案**：`vueCompilerOptions.strictTemplates: false` 对这些错误**完全无效**——
+以临时探针 tsconfig 实测，78 项错误在开关前后数量与内容完全一致。原因是这些错误来自 Volar 的
+模板属性访问检查（`__VLS_ctx.x` 路径解析），独立于 `strictTemplates` 运行。故改用错误基线机制。
+
+**顺带修复的既有隐患**
+
+- `mobile_news.vue` 的 `imageMap[img.order] = img.url || img` 在 `url` 缺失时会把**对象**写入
+  `Record<number, string>`；该隐患此前被 `any` 掩盖，已改为 `imageUrlOf()` 统一取值。
+- `src/env.d.ts` 含 `export {}` 因而属于模块文件，其中的 `declare module '*.vue'` 会被 TypeScript
+  视为「模块增强」而非「环境声明」，对 `@/views/*.vue` 不生效（TS7016）。已拆出全局脚本 `src/vue-shims.d.ts`。
+
+**后端改动**（`class_trend` 分班级趋势 + 两处稳定性修复）
+
+- 新增 `ClassTrendPoint` / `ClassTrendSeries`，`AnalyticsOverview` 增加 `class_trend`；
+- 消除 N+1 查询：原在遍历 `records` 的循环体内逐条 `db.query(ExamPaper).first()`，改为批量构建 `paper_id -> subject_id` 映射；
+- 修正日期键碰撞：原以 `%m-%d` 为键，`days > 30` 时跨月/跨年同日会被静默合并；改为内部用完整日期键，
+  且**全局一次性**判定是否跨年，确保全站趋势与各班级序列使用同一日期格式。
+
+合成数据验证 16/16 通过（含跨年分离、空班级跳过、空记录、`start_time=None`、科目映射）。
+
+**长期守卫** `scripts/verify-project-health.mjs`（接入 `prebuild`）
+
+| # | 检查 | 分级 |
+| --- | --- | --- |
+| 1 | 图标导入合法性：扫描 104 个 `.vue` 的 `@vtj/icons` 导入，比对运行时导出集，未知图标失败并推荐近义候选 | **阻断** |
+| 2 | typecheck 错误基线：复用 `verify-typecheck-baseline.mjs`，仅在出现新错误/新文件时失败 | **阻断** |
+| 3 | 孤立文件扫描：页面级 `.vue` 未被 `src/router/index.ts` 或 `.vtj/router.js` 引用 | 警告 |
+| 4 | VTJ 版本漂移：`useProvider` version 与 DSL `__VERSION__` 不一致（提示手改会被设计器覆盖） | 警告 |
+
+反向验证：临时改回 `Tag` 后守卫以退出码 1 失败并推荐 `CollectionTag / IconTag / PriceTag`；临时引入类型错误后基线校验以退出码 1 失败。
+
+### 13.7 最终验证结果
+
+| # | 验证项 | 结果 |
+| --- | --- | --- |
+| 1 | `npm run verify:health` | 通过，阻断类 0 项（警告 27 条为 VTJ 内部区块组件，非死页面） |
+| 2 | `npm run typecheck` | 零新增错误（8 项与基线一致） |
+| 3 | `npm run build` | **端到端通过**（prebuild 守卫 + 基线校验 + vite build，21.70s） |
+| 4 | `npm run test:vite-resilience` | PASS，**连续 3 次零偶发失败** |
+| 5 | Playwright 移动视口 390×844 | 页面正常渲染无卡加载；控制台 **0 错误 0 告警**；教师分析页筛选实测可用（切换时间范围触发完整 analytics 请求）；`/tablet/forum` 模块编译正常 |
+
+**提交清单（本轮 11 个）**
+
+`1022537` `7373484` `ec15dad` `24125a7` `f5a0f85` `222968e` `826d5df` `17a900a` `0ea3e98` `97840bd` `b265ebd`
+
+**范围合规**：无 `.vtj/files/*.json` DSL 变更、无 `tsconfig*` 变更、无数据模型与后端配置变更。
