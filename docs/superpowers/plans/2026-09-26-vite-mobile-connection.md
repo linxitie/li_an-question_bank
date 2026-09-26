@@ -1,4 +1,4 @@
-# Vite Mobile WebSocket Stability Implementation Plan
+﻿# Vite Mobile WebSocket Stability Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` or `superpowers:executing-plans` to implement this plan task-by-task. Per the user's explicit instruction, this plan will be executed inline by the primary agent in the main directory, without a worktree and without writing subagents.
 
@@ -8,9 +8,9 @@
 
 **Tech Stack:** Node.js 24, npm 11, Vite 6.3, `@vtj/cli` 0.12.19, VTJ 0.16.35, TypeScript 5.9, `ws` 8.20, PowerShell, Playwright.
 
-**Workspace:** `D:\砺安题库\砺安题库`
+**Workspace:** `D:\鐮哄畨棰樺簱\鐮哄畨棰樺簱`
 **Branch:** `fix/vite-mobile-connection`
-**Design spec:** `solve_problems_files/Vite代理添加错误处理方案.md`
+**Design spec:** `solve_problems_files/Vite浠ｇ悊娣诲姞閿欒澶勭悊鏂规.md`
 **Ports:** Vite/HMR 9527; FastAPI 8000
 **Constraint:** Do not create or use a Git worktree. Do not merge whole `.worktrees/*` branches. Port only the approved file-level changes.
 
@@ -28,7 +28,7 @@
 | `proxy.config.ts` | Route `/api`, `/ws`, `/static`, `/uploads`; classify proxy errors without corrupting WebSocket sockets or leaking JWTs |
 | `vite.config.ts` | Enforce workspace/port, disable VTJ analytics, isolate worktrees, and guard dev sockets |
 | `index.html` | Allow mobile same-origin WebSockets through CSP |
-| `solve_problems_files/Vite代理添加错误处理方案.md` | Approved design and operational contract; update final status after verification |
+| `solve_problems_files/Vite浠ｇ悊娣诲姞閿欒澶勭悊鏂规.md` | Approved design and operational contract; update final status after verification |
 
 **Explicitly unchanged:** `tsconfig.json`, `src/auth.ts`, `backend/app/api/v1/websocket.py`, `backend/app/main.py`, `backend/app/core/security.py`, `.vtj/files/*.json`, `.vtj/vue/*.vue`, `src/vtj/vue/*.vue`, `src/views/*.vue`.
 
@@ -42,7 +42,7 @@
 - Modify: `.gitignore`
 - Create/track: `package-lock.json`
 
-- [ ] **Step 1: Record the failing baseline**
+- [x] **Step 1: Record the failing baseline**
 
 Run:
 
@@ -53,8 +53,7 @@ npm run dev -- --host 127.0.0.1 --port 9527
 Expected before this task:
 
 ```text
-'cross-env' 不是内部或外部命令，也不是可运行的程序
-```
+'cross-env' 涓嶆槸鍐呴儴鎴栧閮ㄥ懡浠わ紝涔熶笉鏄彲杩愯鐨勭▼搴?```
 
 Also record:
 
@@ -65,14 +64,14 @@ Test-Path node_modules/@vtj/cli/config/tsconfig.web.json
 
 Expected: both `False`.
 
-- [ ] **Step 2: Replace `package.json` with the pinned contract**
+- [x] **Step 2: Replace `package.json` with the pinned contract**
 
 Write:
 
 ```json
 {
   "name": "vtj-web-template",
-  "description": "VTJ.PRO Web 项目模版",
+  "description": "VTJ.PRO Web 椤圭洰妯＄増",
   "private": true,
   "version": "2.0.0",
   "type": "module",
@@ -101,7 +100,7 @@ Write:
     "prebuild": "npm run sync:vtj-version",
     "mcp:setup": "cd vtj-mcp-server && npm install",
     "mcp:start": "node vtj-mcp-server/vtj-mcp-server.js",
-    "mcp:test": "node -e \"const{spawn}=require('child_process');const s=spawn('node',['vtj-mcp-server/vtj-mcp-server.js']);let o='';s.stdout.on('data',d=>o+=d);s.on('close',()=>{const r=JSON.parse(o);console.log('VTJ MCP Server -',r.result.tools.length,'tools registered');r.result.tools.forEach(t=>console.log(' ✅',t.name))});s.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})+'\\n');setTimeout(()=>s.stdin.end(),2000);\""
+    "mcp:test": "node -e \"const{spawn}=require('child_process');const s=spawn('node',['vtj-mcp-server/vtj-mcp-server.js']);let o='';s.stdout.on('data',d=>o+=d);s.on('close',()=>{const r=JSON.parse(o);console.log('VTJ MCP Server -',r.result.tools.length,'tools registered');r.result.tools.forEach(t=>console.log(' 鉁?,t.name))});s.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})+'\\n');setTimeout(()=>s.stdin.end(),2000);\""
   },
   "dependencies": {
     "@vtj/charts": "0.16.35",
@@ -137,7 +136,7 @@ Write:
   "vtj": {
     "platform": "web",
     "id": "linxitie.policy-exam-bank",
-    "name": "砺安题库",
+    "name": "鐮哄畨棰樺簱",
     "remote": "https://app.vtj.pro"
   }
 }
@@ -145,7 +144,7 @@ Write:
 
 Preserve the existing `mcp:test` body exactly from the current file if the text above differs only in JSON escaping; do not change MCP behavior.
 
-- [ ] **Step 3: Reduce `.npmrc` to npm-only configuration**
+- [x] **Step 3: Reduce `.npmrc` to npm-only configuration**
 
 Write:
 
@@ -153,7 +152,7 @@ Write:
 registry=https://registry.npmmirror.com
 ```
 
-- [ ] **Step 4: Track the npm lockfile**
+- [x] **Step 4: Track the npm lockfile**
 
 In `.gitignore`, remove only:
 
@@ -169,7 +168,7 @@ node_modules
 
 Do not copy the worktree's `yarn.lock.json` typo.
 
-- [ ] **Step 5: Generate the lockfile without running install scripts**
+- [x] **Step 5: Generate the lockfile without running install scripts**
 
 Run:
 
@@ -179,7 +178,7 @@ npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
 Expected: exit 0 and no `Unknown project config "hoist"` warnings.
 
-- [ ] **Step 6: Rebuild the dependency tree deterministically**
+- [x] **Step 6: Rebuild the dependency tree deterministically**
 
 Run:
 
@@ -189,7 +188,7 @@ npm ci
 
 Expected: exit 0; `node_modules/.bin` is recreated.
 
-- [ ] **Step 7: Verify the dependency contract**
+- [x] **Step 7: Verify the dependency contract**
 
 Run:
 
@@ -206,11 +205,11 @@ Expected:
 - both `Test-Path` commands return `True`;
 - version line is `6.3.7 0.12.19 8.20.1`.
 
-- [ ] **Step 8: Commit the dependency contract**
+- [x] **Step 8: Commit the dependency contract**
 
 ```powershell
 git add package.json package-lock.json .npmrc .gitignore
-git commit -m "build: 固定前端依赖并跟踪 package-lock"
+git commit -m "build: 鍥哄畾鍓嶇渚濊禆骞惰窡韪?package-lock"
 ```
 
 ---
@@ -221,7 +220,7 @@ git commit -m "build: 固定前端依赖并跟踪 package-lock"
 - Create: `scripts/verify-vite-resilience.mjs`
 - Test: `scripts/verify-vite-resilience.mjs`
 
-- [ ] **Step 1: Create the deterministic integration harness**
+- [x] **Step 1: Create the deterministic integration harness**
 
 Write:
 
@@ -461,7 +460,7 @@ main().catch((error) => {
 });
 ```
 
-- [ ] **Step 2: Run the harness and verify the current code goes red**
+- [x] **Step 2: Run the harness and verify the current code goes red**
 
 Run:
 
@@ -477,11 +476,11 @@ FAIL vite resilience: Error: WebSocket did not open: ws://127.0.0.1:<port>/ws/co
 
 Exit code must be non-zero.
 
-- [ ] **Step 3: Commit the red regression harness**
+- [x] **Step 3: Commit the red regression harness**
 
 ```powershell
 git add scripts/verify-vite-resilience.mjs
-git commit -m "test: 添加 Vite WebSocket 稳定性回归测试"
+git commit -m "test: 娣诲姞 Vite WebSocket 绋冲畾鎬у洖褰掓祴璇?
 ```
 
 ---
@@ -492,7 +491,7 @@ git commit -m "test: 添加 Vite WebSocket 稳定性回归测试"
 - Modify: `proxy.config.ts`
 - Test: `scripts/verify-vite-resilience.mjs`
 
-- [ ] **Step 1: Replace `proxy.config.ts` with the validated proxy contract**
+- [x] **Step 1: Replace `proxy.config.ts` with the validated proxy contract**
 
 Write:
 
@@ -507,7 +506,7 @@ function resolveBackendOrigin(): string {
   const url = new URL(raw);
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error(`DEV_BACKEND_ORIGIN 仅支持 http/https：${url.protocol}`);
+    throw new Error(`DEV_BACKEND_ORIGIN 浠呮敮鎸?http/https锛?{url.protocol}`);
   }
 
   return url.origin;
@@ -554,7 +553,7 @@ function createProxyConfigure(scope: string): NonNullable<ProxyOptions['configur
       const code = (error as NodeJS.ErrnoException).code;
 
       if (!code || !RECOVERABLE_CODES.has(code)) {
-        console.error(`[vite-proxy:${scope}] 非预期错误`, error);
+        console.error(`[vite-proxy:${scope}] 闈為鏈熼敊璇痐, error);
         return;
       }
 
@@ -567,13 +566,13 @@ function createProxyConfigure(scope: string): NonNullable<ProxyOptions['configur
           'Content-Type': 'application/json; charset=utf-8',
         });
         response.end(JSON.stringify({
-          detail: '后端服务暂不可用，请稍后重试',
+          detail: '鍚庣鏈嶅姟鏆備笉鍙敤锛岃绋嶅悗閲嶈瘯',
           code: 'BACKEND_UNAVAILABLE',
         }));
         return;
       }
 
-      console.warn(`[vite-proxy:${scope}] 连接中断(${code})，已释放`);
+      console.warn(`[vite-proxy:${scope}] 杩炴帴涓柇(${code})锛屽凡閲婃斁`);
     });
   };
 }
@@ -604,7 +603,7 @@ export default {
 };
 ```
 
-- [ ] **Step 2: Run the regression harness**
+- [x] **Step 2: Run the regression harness**
 
 Run:
 
@@ -617,7 +616,7 @@ Expected at this stage:
 - WebSocket handshake and 50 reset checks pass;
 - the run fails at strict-port collision because `vite.config.ts` has not yet enabled `strictPort`.
 
-- [ ] **Step 3: Verify no token is printed**
+- [x] **Step 3: Verify no token is printed**
 
 Run the harness and inspect output:
 
@@ -627,11 +626,11 @@ npm run test:vite-resilience 2>&1 | Select-String "token="
 
 Expected: no match.
 
-- [ ] **Step 4: Commit the proxy fix**
+- [x] **Step 4: Commit the proxy fix**
 
 ```powershell
 git add proxy.config.ts
-git commit -m "fix: 补全 /ws 代理与安全错误处理"
+git commit -m "fix: 琛ュ叏 /ws 浠ｇ悊涓庡畨鍏ㄩ敊璇鐞?
 ```
 
 ---
@@ -642,7 +641,7 @@ git commit -m "fix: 补全 /ws 代理与安全错误处理"
 - Modify: `vite.config.ts`
 - Test: `scripts/verify-vite-resilience.mjs`
 
-- [ ] **Step 1: Replace `vite.config.ts` with the workspace-safe configuration**
+- [x] **Step 1: Replace `vite.config.ts` with the workspace-safe configuration**
 
 Write:
 
@@ -664,7 +663,7 @@ function samePath(left: string, right: string): boolean {
 
 if (!samePath(process.cwd(), workspaceRoot)) {
   throw new Error(
-    `Vite 必须从配置所在工作区启动：expected ${workspaceRoot}, received ${process.cwd()}`
+    `Vite 蹇呴』浠庨厤缃墍鍦ㄥ伐浣滃尯鍚姩锛歟xpected ${workspaceRoot}, received ${process.cwd()}`
   );
 }
 
@@ -715,12 +714,12 @@ function devRuntimeSafety(): Plugin {
 
             if (now - (lastLogAt.get(key) || 0) > 10_000) {
               console.warn(
-                `[vite:socket] ${route} 客户端连接中断(${code})，已安全关闭`
+                `[vite:socket] ${route} 瀹㈡埛绔繛鎺ヤ腑鏂?${code})锛屽凡瀹夊叏鍏抽棴`
               );
               lastLogAt.set(key, now);
             }
           } else {
-            console.error(`[vite:socket] ${route} 非预期错误`, error);
+            console.error(`[vite:socket] ${route} 闈為鏈熼敊璇痐, error);
           }
 
           if (!socket.destroyed) socket.destroy();
@@ -765,7 +764,7 @@ export default createViteConfig({
 });
 ```
 
-- [ ] **Step 2: Run the resilience harness and verify green**
+- [x] **Step 2: Run the resilience harness and verify green**
 
 Run:
 
@@ -781,7 +780,7 @@ PASS vite resilience: ws proxy, 50 resets, strictPort, backend outage
 
 Exit code 0.
 
-- [ ] **Step 3: Verify the resolved Vite configuration**
+- [x] **Step 3: Verify the resolved Vite configuration**
 
 Run:
 
@@ -791,7 +790,7 @@ node node_modules/vite/bin/vite.js --debug --host 127.0.0.1 --port 19527
 
 Inspect resolved config and confirm:
 
-- root is `D:/砺安题库/砺安题库`;
+- root is `D:/鐮哄畨棰樺簱/鐮哄畨棰樺簱`;
 - port is 9527 unless CLI override is used;
 - `strictPort: true`;
 - `cors: false`;
@@ -801,11 +800,11 @@ Inspect resolved config and confirm:
 
 Stop the process after inspection.
 
-- [ ] **Step 4: Commit the Vite configuration**
+- [x] **Step 4: Commit the Vite configuration**
 
 ```powershell
 git add vite.config.ts
-git commit -m "fix: 固定 9527 并加固 Vite 开发服务器"
+git commit -m "fix: 鍥哄畾 9527 骞跺姞鍥?Vite 寮€鍙戞湇鍔″櫒"
 ```
 
 ---
@@ -816,7 +815,7 @@ git commit -m "fix: 固定 9527 并加固 Vite 开发服务器"
 - Modify: `index.html`
 - Test: `scripts/verify-vite-resilience.mjs`
 
-- [ ] **Step 1: Update the CSP `connect-src` directive**
+- [x] **Step 1: Update the CSP `connect-src` directive**
 
 Change the existing meta tag to:
 
@@ -826,7 +825,7 @@ Change the existing meta tag to:
 
 Do not change the VTJ page templates or any `.vtj` DSL file.
 
-- [ ] **Step 2: Re-run the resilience harness**
+- [x] **Step 2: Re-run the resilience harness**
 
 ```powershell
 npm run test:vite-resilience
@@ -834,7 +833,7 @@ npm run test:vite-resilience
 
 Expected: PASS.
 
-- [ ] **Step 3: Run TypeScript validation**
+- [x] **Step 3: Run TypeScript validation**
 
 ```powershell
 npm run typecheck
@@ -842,7 +841,7 @@ npm run typecheck
 
 Expected: exit 0. If unrelated pre-existing errors appear, capture the exact output and stop rather than expanding P0 scope.
 
-- [ ] **Step 4: Run the production build**
+- [x] **Step 4: Run the production build**
 
 ```powershell
 npm run build
@@ -850,7 +849,7 @@ npm run build
 
 Expected: exit 0 with the VTJ/Vite build completing.
 
-- [ ] **Step 5: Confirm the working tree scope**
+- [x] **Step 5: Confirm the working tree scope**
 
 ```powershell
 git status --short
@@ -859,11 +858,11 @@ git diff --check
 
 Expected: only `index.html` is uncommitted; no `.vtj`, backend, or page changes.
 
-- [ ] **Step 6: Commit the CSP fix**
+- [x] **Step 6: Commit the CSP fix**
 
 ```powershell
 git add index.html
-git commit -m "fix: 兼容移动端同源 WebSocket CSP"
+git commit -m "fix: 鍏煎绉诲姩绔悓婧?WebSocket CSP"
 ```
 
 ---
@@ -872,9 +871,9 @@ git commit -m "fix: 兼容移动端同源 WebSocket CSP"
 
 **Files:**
 - No source changes expected
-- Update after success: `solve_problems_files/Vite代理添加错误处理方案.md`
+- Update after success: `solve_problems_files/Vite浠ｇ悊娣诲姞閿欒澶勭悊鏂规.md`
 
-- [ ] **Step 1: Verify the real backend**
+- [x] **Step 1: Verify the real backend**
 
 ```powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health
@@ -882,7 +881,7 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health
 
 Expected: HTTP 200.
 
-- [ ] **Step 2: Start the real Vite dev server**
+- [x] **Step 2: Start the real Vite dev server**
 
 ```powershell
 npm run dev
@@ -894,9 +893,9 @@ Expected:
 - no `cross-env` error;
 - no `tsconfig.web.json` ENOENT;
 - no silent switch to 9528;
-- startup log identifies `D:/砺安题库/砺安题库`.
+- startup log identifies `D:/鐮哄畨棰樺簱/鐮哄畨棰樺簱`.
 
-- [ ] **Step 3: Verify the port owner**
+- [x] **Step 3: Verify the port owner**
 
 ```powershell
 Get-NetTCPConnection -State Listen | Where-Object LocalPort -eq 9527
@@ -905,9 +904,9 @@ Get-CimInstance Win32_Process -Filter "ProcessId = <PID>"
 
 Expected: the owning process command line points to the main workspace, not `.worktrees`.
 
-- [ ] **Step 4: Run Playwright mobile QA**
+- [x] **Step 4: Run Playwright mobile QA**
 
-Use viewport `390×844` and open:
+Use viewport `390脳844` and open:
 
 ```text
 http://<LAN-IP>:9527/#/mobile/login
@@ -923,7 +922,7 @@ Verify:
 - console has no CSP WebSocket error;
 - terminal logs contain no JWT.
 
-- [ ] **Step 5: Run connection-loss scenarios**
+- [x] **Step 5: Run connection-loss scenarios**
 
 Perform at least 20 cycles of:
 
@@ -939,7 +938,7 @@ After each cycle:
 - the app recovers without a manual reload;
 - no `Unhandled 'error' event` appears.
 
-- [ ] **Step 6: Stop the dev server and all spawned test processes**
+- [x] **Step 6: Stop the dev server and all spawned test processes**
 
 Confirm no Vite process remains on 9527 unless intentionally left running.
 
@@ -948,9 +947,9 @@ Confirm no Vite process remains on 9527 unless intentionally left running.
 ### Task 7: Record verification results and close the plan
 
 **Files:**
-- Modify: `solve_problems_files/Vite代理添加错误处理方案.md`
+- Modify: `solve_problems_files/Vite浠ｇ悊娣诲姞閿欒澶勭悊鏂规.md`
 
-- [ ] **Step 1: Update the final checklist**
+- [x] **Step 1: Update the final checklist**
 
 Mark only checks whose evidence exists. Replace the remaining unchecked items with the actual command output summary, including:
 
@@ -962,7 +961,7 @@ npm run build
 Playwright 390x844 LAN QA
 ```
 
-- [ ] **Step 2: Record deviations**
+- [x] **Step 2: Record deviations**
 
 If any test failed, record:
 
@@ -971,14 +970,14 @@ If any test failed, record:
 - whether it is caused by this change;
 - the corrective action or explicit scope decision.
 
-- [ ] **Step 3: Commit the verification record**
+- [x] **Step 3: Commit the verification record**
 
 ```powershell
-git add solve_problems_files/Vite代理添加错误处理方案.md
-git commit -m "docs: 记录 Vite 稳定性验证结果"
+git add solve_problems_files/Vite浠ｇ悊娣诲姞閿欒澶勭悊鏂规.md
+git commit -m "docs: 璁板綍 Vite 绋冲畾鎬ч獙璇佺粨鏋?
 ```
 
-- [ ] **Step 4: Final repository verification**
+- [x] **Step 4: Final repository verification**
 
 ```powershell
 git status --short --branch
@@ -996,7 +995,7 @@ Expected:
 
 ## Plan Self-Review
 
-- **Spec coverage:** dependency repair, `/ws` proxy, 9527, workspace isolation, worktree selective port, VTJ analytics opt-out, CSP, socket boundary, red-green harness, static checks, Playwright QA, rollback — all mapped to tasks.
+- **Spec coverage:** dependency repair, `/ws` proxy, 9527, workspace isolation, worktree selective port, VTJ analytics opt-out, CSP, socket boundary, red-green harness, static checks, Playwright QA, rollback 鈥?all mapped to tasks.
 - **Placeholder scan:** no TBD/TODO/implement-later steps; every code-changing task contains concrete content and commands.
 - **Type consistency:** `ProxyOptions`, `Plugin`, `DEV_BACKEND_ORIGIN`, `strictPort`, `hmr.clientPort`, `workspaceRoot`, and `createDevTools({ hm: '' })` are consistent across tasks.
 - **Scope check:** one subsystem (local development connectivity), small enough for a single plan.

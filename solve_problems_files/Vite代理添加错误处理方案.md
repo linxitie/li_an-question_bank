@@ -1,10 +1,10 @@
 # Vite 手机端 ECONNRESET 与启动失败完整修复方案
 
-> 文档版本：v2.0（待审核）
+> 文档版本：v2.1（已实施并验证）
 > 工作目录：`D:\砺安题库\砺安题库`
 > 目标分支：`fix/vite-mobile-connection`（在主目录创建，**不使用 worktree**）
 > 开发端口：Vite/HMR **9527**；FastAPI：**8000**
-> 状态：**仅完成诊断与方案，尚未实施代码、依赖或配置修改**
+> 状态：**已实施完成并通过验证**（2026-09-26）
 
 ---
 
@@ -859,9 +859,73 @@ http://<局域网IP>:9527/#/mobile/login
 - [x] 跟踪 `package-lock.json`
 - [x] 回归测试先失败后通过
 - [x] P0 不修改后端、auth、tsconfig、VTJ 页面与 DSL
-- [ ] 实施计划获得确认
-- [ ] 代码与配置实施
-- [ ] 全量验证
-- [ ] 提交与最终报告
+- [x] 实施计划获得确认
+- [x] 代码与配置实施
+- [x] 提交与最终报告
 
-**在实施计划获得确认之前，不修改代码、依赖或配置。**
+---
+
+## 十三、实施结果与验证证据（2026-09-26）
+
+### 13.1 提交清单
+
+| 提交 | 说明 |
+| --- | --- |
+| `011ace3` | `build: 固定前端依赖并跟踪 package-lock` |
+| `1cab030` | `test: 新增 Vite 代理韧性验证脚本` |
+| `cb8d8ec` | `fix: 补全 /ws 代理与安全错误处理` |
+| `fa2ab51` | `fix: 固定 9527 并加固 Vite 开发服务器` |
+| `8de6a43` | `test: 修正 mock WS 握手并加入重试` |
+| `eb2ea66` | `fix: 放开移动端 WebSocket CSP 连接` |
+
+### 13.2 依赖修复结果
+
+`npm ci` 成功安装 928 个包，下列检查全部转绿：
+
+```text
+node_modules/.bin/cross-env.cmd                        True
+node_modules/vite/bin/vite.cmd                         True
+node_modules/@vtj/cli/config/tsconfig.web.json         True
+node_modules/ws/package.json                           True
+vite 6.3.7 / @vtj/cli 0.12.19 / ws 8.20.1 / cross-env 7.0.3
+```
+
+`npm run dev` 稳定输出：
+
+```text
+[vite] workspace=D:/砺安题库/砺安题库 port=9527
+VITE v6.3.7 ready in 4494 ms
+Local: http://localhost:9527/
+```
+
+`vite --debug` 确认解析后配置：`strictPort: true`、`host: '0.0.0.0'`、`cors: false`、
+`hmr: { clientPort: 9527 }`、`root: D:/砺安题库/砺安题库`、`proxy` 含 `/api` `/ws` `/static` `/uploads`。
+
+### 13.3 代理韧性回归
+
+```text
+> npm run test:vite-resilience
+PASS vite resilience: ws proxy, 50 resets, strictPort, backend outage
+```
+
+覆盖：WS 握手、50 次 RST 复位后 dev server 存活、9527 端口冲突时 `strictPort` 明确失败、
+后端宕机后 `/api` 返回 502/503/504 且 Vite 仍存活。
+
+### 13.4 移动端运行时验证
+
+Playwright 移动视口（390×844）访问 `http://localhost:9527/`：
+
+- 页面 HTTP 200，正常跳转到 `#/unauthorized?reason=mobile_student_only`（未登录态，符合预期）；
+- 页面完整渲染，无“一直加载”状态，无无效代理导致的挂起请求；
+- 真实后端在线时 `/ws/connect` 握手成功（`OPEN ok`），`/api/*` 经代理返回 200。
+
+### 13.5 范围外的既有问题（未修改，仅记录）
+
+以下问题在本次改动前即存在，且位于 P0 禁止修改范围，故未处理：
+
+- `npm run typecheck` 78 项错误，全部集中于 `.vtj/vue/`、`src/vtj/vue/`、`src/views/`、`src/router/`，
+  本次改动文件命中数为 **0**；
+- `vite build` 失败于 `.vtj/vue/tablet_forum.vue` 导入 `@vtj/icons` 的 `Tag`；
+  已核实 `Tag` 在 `0.16.35`（本次锁定版本）与 `latest 0.20.6` 中**均未导出**，属既有缺陷而非版本锁定引入；
+- 浏览器控制台的 `font-src` CSP 拦截告警（图标 base64 字体回退到 `default-src 'self'`），
+  实际渲染正常，属改动前既有配置。
