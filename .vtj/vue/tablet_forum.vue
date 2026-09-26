@@ -55,7 +55,7 @@
         <div class="tags-card">
           <div class="card-header">
             <h3 class="card-title">
-              <XIcon :icon="Tag" :size="18" color="#1A365D"></XIcon>
+              <XIcon :icon="PriceTag" :size="18" color="#1A365D"></XIcon>
               热门标签
             </h3>
           </div>
@@ -240,7 +240,7 @@ import {
   UserFilled,
   Plus,
   Grid,
-  Tag,
+  PriceTag,
   TrendCharts,
   View,
   ChatDotRound,
@@ -267,7 +267,7 @@ export default defineComponent({
       { key: 'discuss', name: '学习讨论', icon: ChatDotRound, count: 128 },
       { key: 'share', name: '经验分享', icon: Star, count: 64 },
       { key: 'question', name: '答疑解惑', icon: User, count: 45 },
-      { key: 'resource', name: '资料分享', icon: Tag, count: 19 }
+      { key: 'resource', name: '资料分享', icon: PriceTag, count: 19 }
     ]);
     
     // 筛选
@@ -461,7 +461,7 @@ export default defineComponent({
       UserFilled,
       Plus,
       Grid,
-      Tag,
+      PriceTag,
       TrendCharts,
       View,
       ChatDotRound,
