@@ -1737,7 +1737,8 @@ async def get_analytics_overview(
             date_scores[date_key].append(float(r.total_score or 0))
 
     sorted_date_keys = sorted(date_scores.keys())
-    # 跨度跨年时输出完整日期，避免 X 轴出现无法区分的重复 "09-01"
+    # 跨度跨年时统一输出完整日期，避免 X 轴出现无法区分的重复 "09-01"；
+    # 全局一次性判定，确保全站趋势与各班级序列使用同一种日期格式
     spans_years = len({d[:4] for d in sorted_date_keys}) > 1
     trend_dates = [d if spans_years else d[5:] for d in sorted_date_keys]
     trend_scores = [round(sum(date_scores[d]) / len(date_scores[d]), 1) for d in sorted_date_keys]
@@ -1771,7 +1772,7 @@ async def get_analytics_overview(
             "class_name": cname,
             "points": [
                 {
-                    "date": d[5:],
+                    "date": d if spans_years else d[5:],
                     "avg_score": round(sum(per_date[d]) / len(per_date[d]), 1),
                 }
                 for d in sorted(per_date.keys())
