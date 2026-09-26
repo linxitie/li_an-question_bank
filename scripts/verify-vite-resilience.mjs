@@ -11,6 +11,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const children = new Set();
 let backendHttpServer;
 let backendWss;
+let backendUpgradeCount = 0;
 
 function trackChild(child) {
   children.add(child);
@@ -133,6 +134,35 @@ async function openWebSocketWithRetry(url, attempts = 3, timeoutMs = 4_000) {
   throw lastError;
 }
 
+/**
+ * 等待 Vite 的 /ws 代理隧道就绪。
+ *
+ * Vite 冷启动时 HTTP 已可响应，但代理中间件与后端隧道的建立仍可能落后若干毫秒，
+ * 此时握手会偶发 ECONNRESET。此处用比压测循环更宽裕的预算单独完成预热，
+ * 避免把「尚未就绪」误判为「代理缺陷」。
+ */
+async function waitForProxyReady(url, attempts = 8, timeoutMs = 5_000) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const socket = await openWebSocket(url, timeoutMs);
+      socket.terminate();
+      console.log(`[harness] 代理隧道就绪（第 ${attempt} 次尝试）`);
+      return;
+    } catch (error) {
+      lastError = error;
+      console.warn(`[harness] 代理尚未就绪（第 ${attempt}/${attempts} 次）：${error.message}`);
+      await new Promise((resolveWait) => setTimeout(resolveWait, 1_000));
+    }
+  }
+  const error = new Error(
+    `Vite /ws 代理在 ${attempts} 次尝试后仍不可用；mock 后端收到 ${backendUpgradeCount} 次 upgrade。` +
+      `最后错误：${lastError?.message}`
+  );
+  error.diagnostics = true;
+  throw error;
+}
+
 function resetWebSocket(socket) {
   return new Promise((resolveClose) => {
     socket.once('close', () => resolveClose());
@@ -168,6 +198,7 @@ async function startBackend(port) {
   });
 
   backendHttpServer.on('upgrade', (request, socket, head) => {
+    backendUpgradeCount += 1;
     backendWss.handleUpgrade(request, socket, head, (client) => {
       backendWss.emit('connection', client, request);
     });
@@ -199,10 +230,11 @@ async function main() {
   try {
     await waitForHttp(`${baseUrl}/`);
 
+    const wsUrl = `ws://127.0.0.1:${vitePort}/ws/connect?token=integration-test`;
+    await waitForProxyReady(wsUrl);
+
     for (let index = 0; index < 50; index += 1) {
-      const socket = await openWebSocketWithRetry(
-        `ws://127.0.0.1:${vitePort}/ws/connect?token=integration-test`
-      );
+      const socket = await openWebSocketWithRetry(wsUrl);
       await resetWebSocket(socket);
       const response = await fetch(`${baseUrl}/`);
       assert.equal(response.status, 200, `Vite died after reset ${index + 1}`);
@@ -244,8 +276,11 @@ async function main() {
   } catch (error) {
     console.error('--- primary Vite output ---');
     console.error(vite.output || '(empty)');
-    console.error('--- backend clients ---');
-    console.error(`backendWssClients=${backendWss ? backendWss.clients.size : 'n/a'}`);
+    console.error('--- backend diagnostics ---');
+    console.error(`backendUpgradeCount=${backendUpgradeCount}`);
+    console.error(
+      `backendWssClients=${backendWss ? backendWss.clients.size : 'n/a'}`
+    );
     throw error;
   } finally {
     await stopBackend();
