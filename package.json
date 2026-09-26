@@ -16,7 +16,7 @@
   "scripts": {
     "setup": "npm ci",
     "dev": "cross-env ENV_TYPE=local vite",
-    "prebuild": "node scripts/verify-project-health.mjs",
+    "prebuild": "npm run sync:vtj-version && node scripts/verify-project-health.mjs",
     "build": "npm run build:prod",
     "build:sit": "npm run typecheck:guarded && cross-env ENV_TYPE=sit vite build",
     "build:uat": "npm run typecheck:guarded && cross-env ENV_TYPE=uat vite build",
@@ -29,7 +29,6 @@
     "preview": "vite preview",
     "clean": "node ./scripts/clean.mjs",
     "sync:vtj-version": "node ./scripts/sync_vtj_version.mjs",
-    "prebuild": "npm run sync:vtj-version",
     "mcp:setup": "cd vtj-mcp-server && npm install",
     "mcp:start": "node vtj-mcp-server/vtj-mcp-server.js",
     "mcp:test": "node -e \"const{spawn}=require('child_process');const s=spawn('node',['vtj-mcp-server/vtj-mcp-server.js']);let o='';s.stdout.on('data',d=>o+=d);s.on('close',()=>{const r=JSON.parse(o);console.log('VTJ MCP Server -',r.result.tools.length,'tools registered');r.result.tools.forEach(t=>console.log(' ✅',t.name))});s.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})+'\\n');setTimeout(()=>s.stdin.end(),2000);\""
