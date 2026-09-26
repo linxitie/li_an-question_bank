@@ -206,6 +206,22 @@ export default defineComponent({
         if (overviewData.success !== false) overview.value = overviewData;
         if (masteryData.success) knowledgeMastery.value = masteryData.items || [];
         if (usageData.success) questionUsage.value = usageData.items || [];
+
+        // 趋势数据：优先使用后端分班级序列；缺失时降级为全站平均分单序列
+        const classTrend = overviewData.class_trend;
+        if (Array.isArray(classTrend) && classTrend.length) {
+          trendData.value = classTrend;
+        } else {
+          const st = overviewData.score_trend || {};
+          const dates: string[] = st.dates || [];
+          const scores: number[] = st.scores || [];
+          trendData.value = dates.length
+            ? [{
+                class_name: '平均分',
+                points: dates.map((d: string, i: number) => ({ date: d, avg_score: scores[i] ?? 0 })),
+              }]
+            : [];
+        }
       } catch (e) { console.error('加载分析数据失败:', e); }
     }
 
@@ -217,6 +233,100 @@ export default defineComponent({
     function exportReport() {
       ElMessage.info('正在导出报告...');
     }
+
+    // ==================== 班级成绩趋势对比（SVG 手绘） ====================
+    const TREND_W = 640;
+    const TREND_H = 260;
+    const TREND_PAD_L = 40;
+    const TREND_PAD_R = 10;
+    const TREND_PAD_T = 28;
+    const TREND_PAD_B = 24;
+
+    const TREND_COLORS = [
+      '#1A365D', '#f59e0b', '#22c55e', '#ef4444', '#8b5cf6',
+      '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#64748b',
+    ];
+
+    const trendSvgWidth = TREND_W;
+    const trendSvgHeight = TREND_H;
+
+    const trendColors = TREND_COLORS;
+
+    // X 轴日期标签：取所有班级序列日期的并集，按字典序排序
+    // （后端对全站与各班级统一日期格式，%m-%d 与 %Y-%m-%d 均可正确字典序排序）
+    const trendPoints = computed<{ label: string }[]>(() => {
+      const seen = new Set<string>();
+      for (const series of trendData.value) {
+        for (const p of series?.points || []) {
+          const label = String(p?.date ?? '');
+          if (label) seen.add(label);
+        }
+      }
+      return [...seen].sort().map((label) => ({ label }));
+    });
+
+    // Y 轴值域：0 到向上取整到 10 的倍数
+    const trendMaxScore = computed<number>(() => {
+      let max = 0;
+      for (const series of trendData.value) {
+        for (const p of series?.points || []) {
+          const v = Number(p?.avg_score);
+          if (Number.isFinite(v) && v > max) max = v;
+        }
+      }
+      if (max <= 0) return 100;
+      return Math.ceil(max / 10) * 10;
+    });
+
+    // Y 轴刻度：5 等分，值从 0 到 trendMaxScore
+    const trendYTicks = computed<number[]>(() => {
+      const top = trendMaxScore.value;
+      const count = 5;
+      return Array.from({ length: count + 1 }, (_, i) => Math.round((top / count) * i));
+    });
+
+    /** 刻度值 -> 像素 Y 坐标（与 trendYTicks 生成规则严格互逆） */
+    function trendY(tick: number): number {
+      const top = trendMaxScore.value;
+      const innerH = TREND_H - TREND_PAD_T - TREND_PAD_B;
+      if (top <= 0) return TREND_H - TREND_PAD_B;
+      const ratio = Number(tick) / top;
+      const clamped = Math.min(Math.max(ratio, 0), 1);
+      return TREND_H - TREND_PAD_B - clamped * innerH;
+    }
+
+    /** 索引 -> 像素 X 坐标 */
+    function trendX(i: number): number {
+      const n = trendPoints.value.length;
+      const innerW = TREND_W - TREND_PAD_L - TREND_PAD_R;
+      if (n <= 0) return TREND_PAD_L + innerW / 2;
+      if (n === 1) return TREND_PAD_L + innerW / 2;
+      const step = innerW / (n - 1);
+      return TREND_PAD_L + i * step;
+    }
+
+    /** 每个班级一条折线；某班在某日期无数据时跳过该点，不补 0 */
+    const trendLines = computed<{ name: string; points: string; dots: { x: number; y: number }[] }[]>(() => {
+      const labels = trendPoints.value.map((p) => p.label);
+      const indexOf = new Map<string, number>(labels.map((l, i) => [l, i]));
+
+      return trendData.value.map((series, si) => {
+        const dots: { x: number; y: number }[] = [];
+        for (const p of series?.points || []) {
+          const label = String(p?.date ?? '');
+          const i = indexOf.get(label);
+          if (i === undefined) continue;
+          const score = Number(p?.avg_score);
+          if (!Number.isFinite(score)) continue;
+          dots.push({ x: trendX(i), y: trendY(score) });
+        }
+        return {
+          name: String(series?.class_name || `班级${si + 1}`),
+          points: dots.map((d) => `${d.x},${d.y}`).join(' '),
+          dots,
+        };
+      });
+    });
 
     // Bar chart
     function barHeight(score: number) {
@@ -289,6 +399,9 @@ export default defineComponent({
       questionUsage, trendData, timeRanges, switchTimeRange, exportReport, barHeight,
       radarSize, radarCx, radarCy, radarFillColor, radarAxes, radarGridPolygon,
       radarDataPolygon, radarDataDots, handleLogout, renderQuestionContent,
+      loadData,
+      trendSvgWidth, trendSvgHeight, trendYTicks, trendY, trendPoints, trendX,
+      trendLines, trendColors,
     };
   }
 });
