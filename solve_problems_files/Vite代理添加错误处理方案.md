@@ -990,8 +990,14 @@ Playwright 移动视口（390×844）访问 `http://localhost:9527/`：
 > `npm run typecheck:guarded`。`npm run build:prod` 已从裸 `vue-tsc` 改为调用 `typecheck:guarded`，
 > 因此 `npm run build` 不会被这 8 项已知噪音阻断。
 
-**提交清单（本轮 11 个）**
+**提交清单（本轮 15 个）**
 
-`1022537` `7373484` `ec15dad` `24125a7` `f5a0f85` `222968e` `826d5df` `17a900a` `0ea3e98` `97840bd` `b265ebd`
+功能修复：`1022537`（删除孤立死文件）、`7373484`（PriceTag）、`ec15dad`（class_trend + N+1 + 日期键）、`b265ebd`（统一跨年日期格式）、`24125a7`（趋势图 + loadData）、`f5a0f85`（类型声明与收窄）、`222968e`（CSP font-src）
+
+守卫与工具：`826d5df`（typecheck 基线）、`17a900a`（统一健康守卫）、`97840bd`（韧性脚本预热）
+
+缺陷修复：`0ea3e98`（合并重复 prebuild 钩子）
+
+文档：`73cf88c`（验证证据）、`7c6eb04`（移除 BOM）、`462f905`（修复中文乱码）、`53864c4`（澄清门禁口径）
 
 **范围合规**：无 `.vtj/files/*.json` DSL 变更、无 `tsconfig*` 变更、无数据模型与后端配置变更。
