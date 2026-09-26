@@ -118,6 +118,21 @@ function openWebSocket(url, timeoutMs = 4_000) {
   });
 }
 
+async function openWebSocketWithRetry(url, attempts = 3, timeoutMs = 4_000) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await openWebSocket(url, timeoutMs);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 500 * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
+
 function resetWebSocket(socket) {
   return new Promise((resolveClose) => {
     socket.once('close', () => resolveClose());
@@ -141,7 +156,7 @@ async function startBackend(port) {
     response.end('{"detail":"not found"}');
   });
 
-  backendWss = new WebSocketServer({ server: backendHttpServer });
+  backendWss = new WebSocketServer({ noServer: true });
   backendWss.on('connection', (socket) => {
     socket.send(JSON.stringify({ type: 'connected' }));
     socket.on('message', (raw) => {
@@ -149,6 +164,12 @@ async function startBackend(port) {
       if (message.type === 'heartbeat') {
         socket.send(JSON.stringify({ type: 'heartbeat' }));
       }
+    });
+  });
+
+  backendHttpServer.on('upgrade', (request, socket, head) => {
+    backendWss.handleUpgrade(request, socket, head, (client) => {
+      backendWss.emit('connection', client, request);
     });
   });
 
@@ -179,7 +200,7 @@ async function main() {
     await waitForHttp(`${baseUrl}/`);
 
     for (let index = 0; index < 50; index += 1) {
-      const socket = await openWebSocket(
+      const socket = await openWebSocketWithRetry(
         `ws://127.0.0.1:${vitePort}/ws/connect?token=integration-test`
       );
       await resetWebSocket(socket);
@@ -220,6 +241,12 @@ async function main() {
     assert.equal(vite.exitCode, null, 'primary Vite must still be running');
 
     console.log('PASS vite resilience: ws proxy, 50 resets, strictPort, backend outage');
+  } catch (error) {
+    console.error('--- primary Vite output ---');
+    console.error(vite.output || '(empty)');
+    console.error('--- backend clients ---');
+    console.error(`backendWssClients=${backendWss ? backendWss.clients.size : 'n/a'}`);
+    throw error;
   } finally {
     await stopBackend();
     killChildren();
