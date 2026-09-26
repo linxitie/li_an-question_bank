@@ -506,9 +506,16 @@ git commit -m "test: 新增项目健康度统一守卫并接入 prebuild"
 
 预计时间：约 2–5 分钟（内含 typecheck）。期望：退出码 0。
 
-- [x] **Step 2：`npm run typecheck`**
+- [x] **Step 2：`npm run typecheck:guarded`（门禁）与 `npm run typecheck`（全量视图）**
 
-预计时间：约 2–4 分钟。期望：零新增错误。
+预计时间：约 2–4 分钟。期望：
+
+- `npm run typecheck:guarded` 退出码 0，报告「零新增错误（当前 8 项，与基线一致）」——**这才是门禁**；
+- `npm run typecheck`（裸 `vue-tsc`，全量诊断视图）退出码 2，仍报出 8 项基线噪音且全部位于 `.vtj/vue/teacher_papers.vue`——**属预期行为，不表示回归**。
+
+> 实施过程中已确认：原验证标准把 `npm run typecheck` 当作门禁是表述错误。
+> 裸 `vue-tsc` 会如实报告已知噪音并返回非零；`npm run build:prod` 已从 `vue-tsc` 改为
+> `npm run typecheck:guarded`，因此构建不会被这 8 项噪音阻断。
 
 - [x] **Step 3：`npm run build`**
 

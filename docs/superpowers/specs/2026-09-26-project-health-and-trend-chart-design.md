@@ -120,7 +120,7 @@ default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src
 ### 2.1 目标
 
 1. `npm run build` 端到端通过（当前在 3909 模块后中断）。
-2. `npm run typecheck` 达到「零新增错误」状态，且对新增错误具备自动拦截能力。
+2. typecheck 达到「零新增错误」状态，且对新增错误具备自动拦截能力。门禁命令为 `npm run typecheck:guarded`；裸 `npm run typecheck` 保留为全量诊断视图（会如实报出已知噪音并返回退出码 2）。
 3. 修复 `teacher_analytics` 页面的**真实功能缺陷**：筛选下拉框可用、趋势图正确渲染。
 4. 趋势图展示**真实的分班级多序列**数据（与模板既有设计一致）。
 5. 消除全部 CSP 告警。
@@ -334,11 +334,18 @@ class_trend: List[ClassTrendSeries] = []
 
 | # | 命令 / 手段 | 通过标准 |
 | --- | --- | --- |
-| 1 | `npm run verify:health` | 四类检查全绿（检查 3、4 允许警告） |
-| 2 | `npm run typecheck` | 零新增错误（相对基线） |
-| 3 | `npm run build` | 端到端完成（当前在 3909 模块后中断） |
+| 1 | `npm run verify:health` | 四类检查全绿（检查 3、4 允许警告），退出码 0 |
+| 2 | `npm run typecheck:guarded` | 零新增错误（相对基线），退出码 0 |
+| 2b | `npm run typecheck` | **原始全量视图**：仍会报出 8 项基线噪音并以退出码 2 结束，属预期行为，不作为门禁 |
+| 3 | `npm run build` | 端到端完成（内部串联 `prebuild` 守卫 + 基线校验 + `vite build`） |
 | 4 | `npm run test:vite-resilience` | 仍输出 `PASS`，代理/端口工作无回归 |
 | 5 | Playwright 移动视口 390×844 访问 `http://localhost:9527/` | 教师分析页筛选可用、趋势图渲染多班级折线、`/tablet/forum` 正常加载、控制台零 CSP 违规 |
+
+**关于标准 2 的重要说明**：`npm run typecheck` 是未经门禁包装的原始 `vue-tsc`，它会如实报告
+`.vtj/vue/teacher_papers.vue` 的 8 项 codegen 模板推断噪音并返回退出码 2。**这不代表回归**。
+真正用于 CI 与构建的判定命令是 `npm run typecheck:guarded`（等价于 `node scripts/verify-typecheck-baseline.mjs`），
+它在出现**新增**错误时才失败。`npm run build:prod` 已从裸 `vue-tsc` 改为调用 `typecheck:guarded`，
+因此 `npm run build` 不会被这 8 项已知噪音阻断。
 
 补充：后端改动需验证 `/api/teacher/analytics/overview` 在 `class_id` 有值与无值两种情形下均返回结构合法的 `class_trend`，且 `score_trend` 保持原样。
 

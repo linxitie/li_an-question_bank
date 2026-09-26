@@ -979,10 +979,16 @@ Playwright 移动视口（390×844）访问 `http://localhost:9527/`：
 | # | 验证项 | 结果 |
 | --- | --- | --- |
 | 1 | `npm run verify:health` | 通过，阻断类 0 项（警告 27 条为 VTJ 内部区块组件，非死页面） |
-| 2 | `npm run typecheck` | 零新增错误（8 项与基线一致） |
-| 3 | `npm run build` | **端到端通过**（prebuild 守卫 + 基线校验 + vite build，21.70s） |
-| 4 | `npm run test:vite-resilience` | PASS，**连续 3 次零偶发失败** |
+| 2 | `npm run typecheck:guarded`（门禁） | 退出码 0，零新增错误（8 项与基线一致） |
+| 2b | `npm run typecheck`（全量视图） | 退出码 2，报出 8 项基线噪音且全部位于 `.vtj/vue/teacher_papers.vue` —— **属预期行为，不表示回归** |
+| 3 | `npm run build` | **端到端通过**（prebuild 守卫 + 基线校验 + vite build，16.64s） |
+| 4 | `npm run test:vite-resilience` | PASS，**连续 4 次零偶发失败** |
 | 5 | Playwright 移动视口 390×844 | 页面正常渲染无卡加载；控制台 **0 错误 0 告警**；教师分析页筛选实测可用（切换时间范围触发完整 analytics 请求）；`/tablet/forum` 模块编译正常 |
+
+> **关于 typecheck 的门禁口径**：裸 `npm run typecheck` 是未经门禁包装的 `vue-tsc`，会如实报告
+> `teacher_papers.vue` 的 8 项 codegen 模板推断噪音并返回退出码 2。真正用于 CI 与构建的判定命令是
+> `npm run typecheck:guarded`。`npm run build:prod` 已从裸 `vue-tsc` 改为调用 `typecheck:guarded`，
+> 因此 `npm run build` 不会被这 8 项已知噪音阻断。
 
 **提交清单（本轮 11 个）**
 
