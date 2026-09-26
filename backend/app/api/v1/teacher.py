@@ -1704,10 +1704,14 @@ async def get_analytics_overview(
         if cls:
             class_names = [cls.class_name]
 
-    user_ids = [u.user_id for u in db.query(SysUser.user_id).filter(
-        SysUser.class_name.in_(class_names),
-        SysUser.user_type == 'student'
-    ).all()]
+    user_class_map = {
+        row[0]: row[1]
+        for row in db.query(SysUser.user_id, SysUser.class_name).filter(
+            SysUser.class_name.in_(class_names),
+            SysUser.user_type == 'student'
+        ).all()
+    }
+    user_ids = list(user_class_map.keys())
 
     if not user_ids:
         return AnalyticsOverview()
@@ -1723,29 +1727,76 @@ async def get_analytics_overview(
     scores = [float(r.total_score or 0) for r in records]
     total_students = len(set(r.user_id for r in records))
 
-    # 按日期统计平均分趋势
+    # 按完整日期统计平均分趋势（内部用可排序的完整日期键，避免 days>30 时跨月/跨年同日被静默合并）
     date_scores = {}
     for r in records:
         if r.start_time:
-            date_key = r.start_time.strftime("%m-%d")
+            date_key = r.start_time.strftime("%Y-%m-%d")
             if date_key not in date_scores:
                 date_scores[date_key] = []
             date_scores[date_key].append(float(r.total_score or 0))
 
-    trend_dates = sorted(date_scores.keys())
-    trend_scores = [round(sum(date_scores[d]) / len(date_scores[d]), 1) for d in trend_dates]
+    sorted_date_keys = sorted(date_scores.keys())
+    # 跨度跨年时输出完整日期，避免 X 轴出现无法区分的重复 "09-01"
+    spans_years = len({d[:4] for d in sorted_date_keys}) > 1
+    trend_dates = [d if spans_years else d[5:] for d in sorted_date_keys]
+    trend_scores = [round(sum(date_scores[d]) / len(date_scores[d]), 1) for d in sorted_date_keys]
 
-    # 按科目统计
+    # 分班级趋势序列：学生与班级的唯一关联是 SysUser.class_name 字符串
+    class_date_scores = {}
+    for r in records:
+        if not r.start_time:
+            continue
+        cname = user_class_map.get(r.user_id)
+        if not cname:
+            continue
+        per_date = class_date_scores.setdefault(cname, {})
+        per_date.setdefault(r.start_time.strftime("%Y-%m-%d"), []).append(
+            float(r.total_score or 0)
+        )
+
+    class_id_map = {
+        c.class_name: c.class_id
+        for c in db.query(Banji).filter(Banji.class_name.in_(class_names)).all()
+    }
+
+    class_trend = []
+    for cname in class_names:
+        per_date = class_date_scores.get(cname)
+        if not per_date:
+            # 该班在时间窗内无完成记录，不输出空折线
+            continue
+        class_trend.append({
+            "class_id": class_id_map.get(cname),
+            "class_name": cname,
+            "points": [
+                {
+                    "date": d[5:],
+                    "avg_score": round(sum(per_date[d]) / len(per_date[d]), 1),
+                }
+                for d in sorted(per_date.keys())
+            ],
+        })
+
+    # 按科目统计（一次性批量查询试卷，避免在记录循环内逐条查询造成 N+1）
     subject_names = {1: "行测", 2: "申论", 3: "公专"}
     subject_stats = {}
+    paper_ids = {r.paper_id for r in records if r.paper_id}
+    paper_subject_map = {}
+    if paper_ids:
+        for pid, sid in db.query(ExamPaper.paper_id, ExamPaper.subject_id).filter(
+            ExamPaper.paper_id.in_(paper_ids)
+        ).all():
+            paper_subject_map[pid] = sid
+
     for r in records:
-        paper = db.query(ExamPaper).filter(ExamPaper.paper_id == r.paper_id).first()
-        if paper:
-            sid = paper.subject_id
-            if sid not in subject_stats:
-                subject_stats[sid] = {"scores": [], "count": 0}
-            subject_stats[sid]["scores"].append(float(r.total_score or 0))
-            subject_stats[sid]["count"] += 1
+        sid = paper_subject_map.get(r.paper_id)
+        if sid is None:
+            continue
+        if sid not in subject_stats:
+            subject_stats[sid] = {"scores": [], "count": 0}
+        subject_stats[sid]["scores"].append(float(r.total_score or 0))
+        subject_stats[sid]["count"] += 1
 
     subject_comparison = []
     for sid, stat in subject_stats.items():
@@ -1762,6 +1813,7 @@ async def get_analytics_overview(
         avg_score=round(sum(scores) / len(scores), 1) if scores else 0,
         pass_rate=round(sum(1 for s in scores if s >= 60) / len(scores) * 100, 1) if scores else 0,
         score_trend={"dates": trend_dates, "scores": trend_scores},
+        class_trend=class_trend,
         subject_comparison=subject_comparison,
     )
 

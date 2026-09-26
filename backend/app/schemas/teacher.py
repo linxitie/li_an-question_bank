@@ -326,6 +326,19 @@ class MessageListResponse(BaseModel):
 
 # ==================== 数据分析 ====================
 
+class ClassTrendPoint(BaseModel):
+    """班级趋势单点"""
+    date: str          # 输出格式 "09-01"
+    avg_score: float
+
+
+class ClassTrendSeries(BaseModel):
+    """班级成绩趋势序列"""
+    class_id: Optional[int] = None
+    class_name: str
+    points: List[ClassTrendPoint] = []
+
+
 class AnalyticsOverview(BaseModel):
     """学情总览"""
     total_students: int = 0
@@ -333,6 +346,7 @@ class AnalyticsOverview(BaseModel):
     avg_score: float = 0
     pass_rate: float = 0
     score_trend: dict = {}  # {dates: [], scores: []}
+    class_trend: List[ClassTrendSeries] = []  # 每班级一条趋势序列
     subject_comparison: List[dict] = []  # [{subject_name, avg_score, exam_count}]
 
 
