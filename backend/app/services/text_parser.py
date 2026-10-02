@@ -590,11 +590,79 @@ class ContentCleaner:
 
     # 内容行豁免：命中这些标记的短行属于"答案/解析"正文数据，
     # 即使重复出现也绝不是页眉页脚。
-    # 真实案例：2016江西答案解析PDF中 "故正确答案为A。" 恰好出现3次
+    # 真实案例1：2016江西答案解析PDF中 "故正确答案为A。" 恰好出现3次
     # （≥阈值且末次位置>0.9）→ 被本机制整组误杀 → 匹配率从100%跌至52.6%，
     # 且幸存的仅是字母组合稀有（<3次）的答案行——症状极具迷惑性。
+    # 真实案例2：2019深圳辅警卷判断题的结论写作 "故表述正确。"/"故表述错误。"，
+    # 既短又成组重复（10 道判断题），同样被整组误删；随后答案段缺失，
+    # 宽松重试从邻近解析文字里抓了 C/D/D/B 当答案。
+    # 判断题结论行必须一并豁免，否则重演案例1。
     _ANSWER_LINE_HINT = re.compile(
-        r'(?:正确答案|参考答案|标准答案|本题答案|答案\s*[为是:：]|故选|应选|本题选)')
+        r'(?:正确答案|参考答案|标准答案|本题答案|答案\s*[为是:：]|故选|应选|本题选)'
+        r'|(?:故|因此|所以|综上)?\s*(?:上述|该|此项|此|本)?\s*(?:表述|说法)\s*(?:是)?\s*'
+        r'(?:正确|错误|错|对)\s*[。．.！!]?\s*$'
+        r'|本题为判断题'
+        r'|(?:正确)?答案\s*(?:为|是)\s*(?:正确|错误|错|对)\s*[。．.！!]?\s*$'
+    )
+
+    # === 2026-09-29 新增：页脚/水印专项规则 ===
+    # 真实案例：2023年1月7日国考公安专业科目 PDF（16页）
+    #   ① 页脚「第 17 页，共 18 页」：NOISE_PATTERNS 的 page_label 模式中间只允许 \s*，
+    #      匹配不到中文逗号「，」，真实 PDF 全部使用「，」→ 16页×2处 全部漏网；
+    #   ② 水印「小绵羊上岸店 小绵羊上岸店」：Phase2 以「整行完全相同」计数，
+    #      而该水印每页重复次数不一（2连/3连/4连…各有变体），每种变体单独计数后
+    #      多数不足 HEADER_FOOTER_THRESHOLD → 集体漏网（实测残留 80 处）。
+
+    # 页脚：允许「，,、」分隔（真实 PDF 常见「第 17 页，共 18 页」）
+    _PAGE_FOOTER = re.compile(
+        r'^第\s*\d+\s*页\s*[，,、]?\s*(?:共\s*\d+\s*页)?\s*$'
+    )
+    # 页脚变体：「— 17 —」「17 / 18」「17-18」
+    _PAGE_FOOTER_ALT = re.compile(
+        r'^[—\-–]\s*\d+\s*[—\-–]?\s*$'
+        r'|^\d{1,3}\s*[/／\-–]\s*\d{1,3}\s*$'
+    )
+
+    # 内容行豁免：命中即视为题目正文，绝不可当噪声删除
+    _OPTION_MARK = re.compile(r'(?:^|\s)[A-DＡ-Ｄ][.．、)）]')
+    _QNUM_PREFIX = re.compile(r'^\s*\d{1,3}\s*[．.、]')
+
+    @staticmethod
+    def _strip_punct(t: str) -> str:
+        """取 token 的字词核心（去标点/空白），用于水印同一性比对"""
+        return re.sub(r'[^\w\u4e00-\u9fff]', '', t)
+
+    @classmethod
+    def _is_page_footer(cls, stripped: str) -> bool:
+        """整行是否只是「第N页，共M页」页脚。
+
+        含题号前缀或选项标记时一律返回 False —— 「参见第3页」这类正文表述
+        以及「第3页第4题」必须保留，误删会直接损坏题干。
+        """
+        if cls._OPTION_MARK.search(stripped) or cls._QNUM_PREFIX.match(stripped):
+            return False
+        return bool(cls._PAGE_FOOTER.match(stripped)
+                    or cls._PAGE_FOOTER_ALT.match(stripped))
+
+    @classmethod
+    def _is_watermark_line(cls, stripped: str) -> bool:
+        """整行是否由同一短词重复 2 次以上构成（水印/推广行）。
+
+        真实案例「小绵羊上岸店 小绵羊上岸店」在不同页重复次数不一，
+        Phase2 精确字符串计数无法覆盖，必须按「同一性」而非「字符串相等」判定。
+        含题号、选项标记或答案结论标记时一律豁免。
+        """
+        if cls._OPTION_MARK.search(stripped) or cls._QNUM_PREFIX.match(stripped):
+            return False
+        if cls._ANSWER_LINE_HINT.search(stripped):
+            return False
+        tokens = stripped.split()
+        if len(tokens) < 2:
+            return False
+        base = cls._strip_punct(tokens[0])
+        if len(base) < 2:          # 过短的 token（如单个数字）不判定，避免误伤
+            return False
+        return all(cls._strip_punct(t) == base for t in tokens)
 
     @classmethod
     def clean(cls, lines: List[str]) -> List[str]:
@@ -606,17 +674,28 @@ class ContentCleaner:
             return []
 
         # Phase 1: 行级模式过滤
+        # 顺序要点：专项规则先于 NOISE_PATTERNS 判定。页脚/水印若留到后面，
+        # 页面文本里紧邻的题号行可能先被拼接，污染「题号在行首」的假设。
         filtered = []
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue  # 跳过完全空行
             is_noise = False
-            for pattern, label in cls.NOISE_PATTERNS:
-                if pattern.match(stripped):
-                    logger.debug(f"[ContentCleaner] 过滤噪声({label}): {stripped[:50]}")
-                    is_noise = True
-                    break
+            # ① 页脚专项（含中文逗号变体）
+            if cls._is_page_footer(stripped):
+                logger.debug(f"[ContentCleaner] 过滤页脚: {stripped[:50]}")
+                is_noise = True
+            # ② 水印专项（同一短词重复变体）
+            elif cls._is_watermark_line(stripped):
+                logger.debug(f"[ContentCleaner] 过滤水印行: {stripped[:50]}")
+                is_noise = True
+            else:
+                for pattern, label in cls.NOISE_PATTERNS:
+                    if pattern.match(stripped):
+                        logger.debug(f"[ContentCleaner] 过滤噪声({label}): {stripped[:50]}")
+                        is_noise = True
+                        break
             if not is_noise:
                 filtered.append(line)
 
@@ -630,6 +709,15 @@ class ContentCleaner:
             if len(stripped) <= cls.HEADER_FOOTER_MAX_LENGTH and len(stripped) > 1:
                 # 内容行豁免：答案标记行是解析核心数据（见 _ANSWER_LINE_HINT 注释）
                 if cls._ANSWER_LINE_HINT.search(stripped):
+                    continue
+                # 选项行豁免：「A.说法一」这类行是**题目内容**，绝不可当页眉整组删除。
+                # 真实事故（tests/test_realworld_formats 江西2016 端到端用例）：
+                # 该卷每题选项文本相同，「A.说法一」重复 5 次 ≥ HEADER_FOOTER_THRESHOLD(3)
+                # 且 len(indices)>=5，被 Phase2 重复短行检测整组误删 →
+                # 题块 options 变 0 → 无选项题门控 block_accepts_letter_answer 拒绝
+                # 字母答案 → 匹配率由 100% 跌至 0%。
+                # 选项行与页眉页脚形态完全不同（页眉不会长成「A.xxx」），豁免是安全的。
+                if cls._OPTION_MARK.search(stripped):
                     continue
                 line_counts.setdefault(stripped, []).append(i)
 
@@ -893,6 +981,27 @@ ANSWER_PATTERNS = [
 # 用于解析"故本题答案为D"、"故正确答案为C"等格式
 # 优先级高于普通答案模式中的宽松匹配
 EMBEDDED_ANSWER_PATTERNS = [
+    # ---------- 判断题结论（最高优先级）----------
+    # 真实事故：2019 深圳辅警《公安素质测试》判断题 81–90 的答案写作
+    # 「故表述正确。」「故表述错误。」——既不含"答案"二字，也没有冒号，
+    # 下面 12 条模式一个都匹配不上，于是退化成单字母兜底，
+    # 从上一题遗留的「A项、B项错误，C项正确」里抓了 C/D/D/B 写进库里。
+    # 必须放在最前：它们要求结论词位于**行尾**，避免把选择题解析中的
+    # 中间描述（如"A项表述正确"）误当成整题答案。
+    # 捕获组是必需的：抽取侧统一取 m.group(1) 作为答案。
+    ('pan_jiao_wu', re.compile(
+        r'(?:故|因此|所以|综上)?\s*(?:上述|该|此项|此|本)?\s*(?:表述|说法)\s*(?:是)?\s*'
+        r'(错误|错)\s*[。．.！!]?\s*$', re.MULTILINE)),
+    ('pan_jiao_dui', re.compile(
+        r'(?:故|因此|所以|综上)?\s*(?:上述|该|此项|此|本)?\s*(?:表述|说法)\s*(?:是)?\s*'
+        r'(正确|对)\s*[。．.！!]?\s*$', re.MULTILINE)),
+    # 整行只有一个判定词（"正确。"/"错误"/"本题为判断题，正确"）
+    ('pan_jiao_bare_wu', re.compile(
+        r'^\s*(?:故|因此|所以|综上)?\s*(?:上述|该|此项|此|本)?\s*(?:表述|说法)?\s*(?:是)?\s*'
+        r'(错误|错)\s*[。．.！!]?\s*$', re.MULTILINE)),
+    ('pan_jiao_bare_dui', re.compile(
+        r'^\s*(?:故|因此|所以|综上)?\s*(?:上述|该|此项|此|本)?\s*(?:表述|说法)?\s*(?:是)?\s*'
+        r'(正确|对)\s*[。．.！!]?\s*$', re.MULTILINE)),
     # 故本题答案为D / 故本题答案选D
     ('gu_ben_ti', re.compile(r'故本题答案(?:为|选)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)')),
     # 故正确答案为C / 故正确答案是C
@@ -914,6 +1023,102 @@ EMBEDDED_ANSWER_PATTERNS = [
     # 答案为D。（句号结尾）
     ('daan_wei', re.compile(r'答案(?:为|是)\s*[：:：]?\s*([A-Da-d、，,;；\s·]+)\s*[。.]')),
 ]
+
+# 判断题判定词（从解析结论直读"正确/错误"，用于无选项题）
+# 真实事故：2019 深圳辅警卷判断题 81–90 没有任何选项，答案却被写成
+# A/B/C/D —— 上游 CN_ANSWER_MAP 把"正确/错误"映射成 A/B，
+# 下游又只接受纯字母，于是无选项题被塞进一个不可判分的假答案。
+_JUDGE_VERDICT_PATTERNS = (
+    (re.compile(r'(?:故|因此|所以|综上)[^。\n]{0,12}表述\s*(?:是)?\s*(错误|错)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '错误'),
+    (re.compile(r'(?:故|因此|所以|综上)[^。\n]{0,12}表述\s*(?:是)?\s*(正确|对)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '正确'),
+    (re.compile(r'(?:故|因此|所以|综上)[^。\n]{0,12}说法\s*(?:是)?\s*(错误|错)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '错误'),
+    (re.compile(r'(?:故|因此|所以|综上)[^。\n]{0,12}说法\s*(?:是)?\s*(正确|对)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '正确'),
+    # 整行只有判定词
+    (re.compile(r'^\s*(?:故|因此|所以|综上)?\s*(?:上述|该|此项|此|本)?\s*'
+                r'(?:表述|说法)?\s*(?:是)?\s*(错误|错)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '错误'),
+    (re.compile(r'^\s*(?:故|因此|所以|综上)?\s*(?:上述|该|此项|此|本)?\s*'
+                r'(?:表述|说法)?\s*(?:是)?\s*(正确|对)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '正确'),
+    # "故正确答案为错误。" / "答案为正确" —— 同一份答案卷里两种写法并存
+    # （2019 深圳辅警卷 81–84 用"故表述错误"，85–89 用"本题为判断题，故正确答案为错误"）
+    (re.compile(r'(?:故|因此|所以|综上)?\s*(?:本题为判断题[，,]\s*)?'
+                r'(?:本题)?\s*(?:正确)?答案\s*(?:为|是)\s*(错误|错)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '错误'),
+    (re.compile(r'(?:故|因此|所以|综上)?\s*(?:本题为判断题[，,]\s*)?'
+                r'(?:本题)?\s*(?:正确)?答案\s*(?:为|是)\s*(正确|对)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '正确'),
+    # "本题为判断题，正确"（逗号直接跟判定词，无"答案"二字）
+    (re.compile(r'本题为判断题\s*[，,]\s*(错误|错)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '错误'),
+    (re.compile(r'本题为判断题\s*[，,]\s*(正确|对)\s*[。．.！!]?\s*$',
+                re.MULTILINE), '正确'),
+)
+
+
+def judge_verdict_from_text(text: Any) -> str:
+    """从解析正文提取判断题结论，返回 '正确' / '错误' / ''。
+
+    必须取**最后一个**结论：解析里常先否定部分选项（如"A项错误"）再给总结论。
+    """
+    if not text:
+        return ''
+    s = str(text)
+    verdict = ''
+    for pat, v in _JUDGE_VERDICT_PATTERNS:
+        for _m in pat.finditer(s):
+            verdict = v
+    return verdict
+
+
+def block_accepts_letter_answer(block: Dict[str, Any]) -> bool:
+    """该题块是否允许落 A/B/C/D 形式的答案。
+
+    真实事故（2019 深圳辅警卷 81–90）：判断题没有 A/B 选项，却因
+    「宽松重试」「增强纯序列匹配」「位置兜底匹配」三道兜底策略把字母灌了进去，
+    产出 C/D/D/B 这类与题干无关的假答案 —— 不可判分，也会误导教师。
+
+    判据只看**有没有选项**，不看题型名：
+    - 有选项（>=2）→ 字母有意义。即便题型判成"判断题"（如
+      "（ ）A.正确 B.错误 C.正确 D.错误"），答案也应当是字母。
+    - 无选项 → 字母无意义。判断题只能落"正确/错误"，
+      主观题只能留空交 need_review 复核，绝不允许猜字母。
+    """
+    return len(block.get('options') or []) >= 2
+
+
+_ANSWER_REGION_HEAD_RE = re.compile(r'^[ \t]*(\d{1,3})\s*[、.．)）]')
+
+
+def answer_region_for(text: str, q_num: int) -> str:
+    """从答案文本中截取题号 q_num 所属的整段（到下一个题号标题为止）。
+
+    用于无选项题（判断题）从解析结论直读"正确/错误" —— 这类题在答案
+    文件里既没有"答案：C"也没有 A/B 选项，只有自然语言结论。
+    """
+    if not text:
+        return ''
+    lines = str(text).split('\n')
+    start = None
+    for i, ln in enumerate(lines):
+        m = _ANSWER_REGION_HEAD_RE.match(ln)
+        if m and int(m.group(1)) == q_num:
+            start = i
+            break
+    if start is None:
+        return ''
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        m = _ANSWER_REGION_HEAD_RE.match(lines[j])
+        if m and int(m.group(1)) == q_num + 1:
+            end = j
+            break
+    return '\n'.join(lines[start:end])
+
 
 # 中文答案映射
 CN_ANSWER_MAP = {
@@ -1670,48 +1875,726 @@ _MATERIAL_HEAD_RE = re.compile(
 _BOUNDARY_RE = re.compile(
     r'^(?:\d+\s*[.、．)）\]】]|[A-D]\s*[.、．)）]|\[IMAGE:)')
 
+# ============ P2：分节指令段（题型说明段）识别 ============
+# 真实语料实测（30 份 docx / 2899 题块，污染 20 道 = 0.7%）：
+#   "二、多项选择题。请从每题的四个备选答案中，选出两个或两个以上的正确答案，多选、少选、错选均不得分。"
+#   "三、情景分析题，根据给出的情境材料做出分析，按照提问要求选择正确答案。每题所设选项中至少有一个正确答案…"
+#   "三、判断题。判断下列说法的正误。"
+#   "二、多项选择题。按照提问选择正确答案，多选、少选、错选或不选均不得分。"
+# 分节指令段与 _MATERIAL_HEAD_RE 认的"材料头"是两种东西：
+#   材料头     → 后面接"回答 N-M 题"，指向具体题号区间
+#   分节指令段 → 后面接"答题说明"，只是换题型的过渡语
+# 历史实现只认前者，导致分节指令段整体粘连到上一题题干尾部，
+# 并把下一节的首题材料一起吞掉（判断题整节消失由此而来）。
+# 关键：同样不用 $ 锚定 —— 实际语料常与上一题的题干/图片挤在同一行。
+_SECTION_TYPE_WORDS = (
+    r'单项选择题|多项选择题|不定项选择题|不定项选择|单项选择|多项选择|'
+    r'案例分析题|情景分析题|选择题|判断题|简述题|简答题|论述题|写作题|材料题'
+)
+_SECTION_DIRECTIVE_RE = re.compile(
+    r'[一二三四五六七八九十]{1,3}\s*[、，．.]\s*'
+    r'(?:' + _SECTION_TYPE_WORDS + r')'
+    r'\s*[。．.、，]'
+    r'[^\n]{0,150}?'
+    r'(?:不得分|不评分|不扣分|判断下列|请选择|回答下列|按要求|最恰当|中选择|选择填)'
+)
 
-def _strip_trailing_material(lines: List[str]) -> List[str]:
-    """剥离题干块尾部粘连的材料头+材料正文（分节残留）。
 
-    真实案例：第85题题干尾部混入"五、根据以下情境材料，回答86-89题。
-    新生派出所位于老城区..."——材料头（中文数字章节号，非阿拉伯数字题号）
-    连同材料正文整体粘连到上一题。从首个材料头行起，剥离到下一个
-    题号行/选项行/图片标记之前的内容。
+# 题号前缀（第N题 / 12. / 12、/ 12））——供 extract_question_blocks 去首行题号用
+_QNUM_PREFIX_RE = re.compile(r'^(?:第\s*\d+\s*题|\d+\s*[.、．)）\]】])\s*')
 
-    注意：仅剥离"位于块中后部"的材料头（材料头前已有题干内容），
-    保护复合题材料头题自身的开头材料句。
+
+def _find_section_directive(line: str):
+    """在一行文本中定位分节指令段。返回 (起始下标, 结束下标, 匹配文本) 或 None。
+
+    只认「中文数字序号 + 题型名 + 答题说明」的完整形态，避免把题干里
+    正常出现的"一、""二、"列举误判成分节标记。
+
+    必须同时给出**结束下标**：分节指令独占一行时，整行都该丢弃；
+    与材料同行时，只有 end 之后的部分才是节首材料。用起始下标切会把
+    指令本身回吐给下一题（等于污染搬家，没解决）。
+    """
+    m = _SECTION_DIRECTIVE_RE.search(line)
+    if m:
+        return m.start(), m.end(), m.group(0)
+    return None
+
+
+# 分节声明题型 → 标准题型名。
+# 用于给"无选项题"提供题型依据：判断题在真题里常以"陈述句 +（  ）"呈现，
+# 本身没有任何选项，若只看题块结构必然落到"简答题"兜底分支。
+# 真实事故：2019 深圳辅警《公安素质测试》卷三、每题所设选项中至少有两个正确答案…／三、判断题。判断下列说法的正误。
+# 第 81–90 题是标准判断题，却因 0 选项被判成"简答题"，随后答案抽取抓不到
+# "故表述正确/错误"这种文字结论，退化成单字母兜底，被填入 C/D/D/B 假答案。
+_SECTION_TYPE_MAP = (
+    ('单项选择题', '单选题'),
+    ('单项选择', '单选题'),
+    ('多项选择题', '多选题'),
+    ('不定项选择题', '多选题'),
+    ('不定项选择', '多选题'),
+    ('多项选择', '多选题'),
+    ('判断题', '判断题'),
+    ('案例分析题', '案例分析题'),
+    ('情景分析题', '情景分析题'),
+    ('简述题', '简答题'),
+    ('简答题', '简答题'),
+    ('论述题', '论述题'),
+    ('写作题', '写作题'),
+    ('材料题', '材料题'),
+)
+
+
+def _section_type_of(text: str) -> str:
+    """从分节指令文本解析其声明的题型；未声明任何题型返回 ''。"""
+    if not text:
+        return ''
+    for kw, ty in _SECTION_TYPE_MAP:
+        if kw in text:
+            return ty
+    return ''
+
+
+def _build_section_index(lines: List[str]) -> List[Tuple[int, str]]:
+    """预扫描全部分节指令，返回按行号升序的 [(行号, 题型)]。
+
+    必须在题块循环**之前**建好：分节标题行本身会被 P2 的
+    _strip_trailing_material 从上一题尾部剥离掉，循环内已无从取到。
+    """
+    marks: List[Tuple[int, str]] = []
+    for i, ln in enumerate(lines):
+        hit = _find_section_directive(ln)
+        if not hit:
+            continue
+        ty = _section_type_of(hit[2])
+        if ty:
+            marks.append((i, ty))
+    return marks
+
+
+def _section_type_at(marks: List[Tuple[int, str]], line_idx: int) -> str:
+    """取行号 line_idx 之前最近一次分节声明的题型；无则返回 ''。"""
+    ty = ''
+    for idx, t in marks:
+        if idx < line_idx:
+            ty = t
+        else:
+            break
+    return ty
+
+
+def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
+    """剥离题干块尾部粘连的「材料头」与「分节指令段」（分节残留）。
+
+    返回 (保留的行, 溢出到下一题块的首行)：
+    - 保留的行：属于本题的行
+    - 溢出行：分节指令段之后、下一个题号行之前的"节首材料"（如情景分析的图表说明），
+      它属于**下一节的第一题**，必须回吐给下一题块，否则下一题题干残缺。
+      这正是"判断题整节消失"与"下一节首题只剩选项没有题干"的成因。
+
+    真实案例 1（材料头）：第85题尾部混入"五、根据以下情境材料，回答86-89题。新生派出所位于老城区…"
+    真实案例 2（分节指令）：第70题尾部混入"三、情景分析题，…（一）下图为甲县公安局的机构设置图。[IMAGE]"
+
+    注意：仅剥离"位于块中后部"的分节标记（其前已有本题题干内容），
+    保护复合题/题组题自身的开头材料句。
     """
     if not lines:
-        return lines
+        return lines, []
 
-    # 找首个材料头出现的位置（跳过首行，首行是题号行）
-    head_idx = None
-    head_char = None
+    # ---- 定位首个分节标记（材料头 或 分节指令段），跳过首行（首行是题号行）----
+    cut_idx = None      # 该行从 cut_char 起全部剥离
+    cut_char = None
+    cut_end = None      # 指令行保留 [cut_end:] 部分（同行材料）
     for i in range(1, len(lines)):
         m = _MATERIAL_HEAD_RE.search(lines[i])
         if m:
-            head_idx = i
-            # +1 越过前导的 (?:^|\n) 零宽断言
-            head_char = m.start() + (1 if m.group(0).startswith('\n') else 0)
+            cut_idx = i
+            cut_char = m.start() + (1 if m.group(0).startswith('\n') else 0)
+            # 材料头：整行剩余部分视为材料正文
+            cut_end = cut_char
             break
-    if head_idx is None:
-        return lines
+        hit = _find_section_directive(lines[i])
+        if hit:
+            cut_idx, cut_char, cut_end = i, hit[0], hit[1]
+            break
+    if cut_idx is None:
+        return lines, []
 
-    # 材料头与正文同行 → 截断该行，只保留材料头之前的内容
-    keep = list(lines[:head_idx])
-    prefix = lines[head_idx][:head_char].rstrip()
+    keep = list(lines[:cut_idx])
+    prefix = lines[cut_idx][:cut_char].rstrip()
     if prefix:
         keep.append(prefix)
-    # 材料头后的材料正文：继续剥离直到遇到边界行
-    for i in range(head_idx, len(lines)):
-        stripped = lines[i].strip()
-        if i > head_idx and _BOUNDARY_RE.match(stripped):
-            # 遇到题号/选项/图片行 → 停（这些不是材料正文）
-            keep.extend(lines[i:])
+
+    # ---- 从分节标记之后收集"节首材料" ----
+    # 注意：块的右边界已由「下一题题号所在行」限定，因此分节指令之后的**所有**
+    # 内容（含 [IMAGE:...] 与选项行）都属于下一节的首题，全部回吐。
+    # 早期版本在 [IMAGE: 处 break，会把下一节首题的共享材料图直接丢掉。
+    spill: List[str] = []
+    tail = lines[cut_idx][cut_end:].strip()
+    # 指令正则的 [^\n]{0,150}? 会在最后一个关键词处收尾，行尾常剩一个句号
+    # 之类的孤立标点，它是指令的一部分而非节首材料，去掉。
+    if tail and not re.fullmatch(r'[\s。，、；：,.;:!?！？]+', tail):
+        spill.append(tail)
+    spill.extend(lines[cut_idx + 1:])
+
+    # 去掉溢出行首尾空行
+    while spill and not spill[0].strip():
+        spill.pop(0)
+    while spill and not spill[-1].strip():
+        spill.pop()
+    return keep, spill
+
+
+# ==================== 申论（Essay / 主观题）解析 ====================
+# 设计约束（2026-10-01）：
+#  1) 本段只做"增量"：新增函数 + 在 extract_question_blocks 入口加一个分支。
+#     原有选择题切分逻辑（extract_question_numbers / monotonic / P2 回吐等）
+#     一行都不改，确保公专/行测回归不受影响。
+#  2) 非申论文档一律返回 None，走原路径 —— 这是行测/公测零影响的保证。
+#  3) 申论文法实测要点（详见 .omo/plans/shenlun-import-precision-v4.md §2.5）：
+#     · 安徽/多省联考卷：题号 = 半角 "1."；要求子项 = 全角 "（1）"
+#     · 国考卷：题号 = 全角 "（1）"；要求子项同为全角，靠"含分值"区分
+#     所以必须先判定题号样式，再决定切题正则。
+#  4) 答案文档（分离型）自带完整题干 + 要求，可与题目文档做三方交叉校验；
+#     校验不通过时 blocked=True，绝不"就近填充"，避免配对错位。
+
+_ESSAY_SCORE_RE = re.compile(r'[（(]\s*(\d{1,3})\s*分\s*[）)]')
+_ESSAY_REQ_LINE_RE = re.compile(r'^[ \t　]*[（(]\s*\d{1,2}\s*[）)]')
+_ESSAY_REQ_MARK = '要求'
+_ESSAY_ANS_ALONE_RE = re.compile(r'^[ \t　]*(?:[一二三四五六七八九十]+\s*、\s*)?参考答案[ \t　]*[:：]?[ \t　]*$', re.M)
+_ESSAY_ANS_INLINE_RE = re.compile(r'参考答案[ \t　]*[:：](?!说明)')
+# 答案区「段头」：一、（15 分）—— 2022 国考行政执法卷等用「中文序号 + 分值」标出每题答案起点。
+# 必须与「参考答案」锚点区分：前者只切分段（cur=[]），后者才把整段正文纳入答案。
+_ESSAY_ANS_SEG_RE = re.compile(
+    r'^[ \t　]*[一二三四五六七八九十]{1,3}[ \t　]*[、.．]?[ \t　]*[（(][ \t　]*\d{1,3}[ \t　]*分[ \t　]*[）)]'
+)
+
+
+# 解析标记（同一段内「答案」与「解析」的分界，**不是**段起点）
+# 全语料实测：127 份有答案区的文档中，94% 靠 `参考答案说明` 分隔，6% 无分隔。
+_ESSAY_ANALYSIS_MARK_RE = re.compile(
+    r'^[ \t　]*[【\[]?\s*(?:参考答案说明|答案说明|答案解析|试题解析|解析|思路方面|总体思路|'
+    r'答题思路|思路分析)\s*[】\]]?\s*[：:]?'
+)
+# 「审题及答题思路」在双段式版式里属于**答案区开头的审题分析**，
+# 后面紧跟的【参考答案】才是答案主体 —— 它不是段级解析标记，
+# 若当解析分界会把答案主体整段落进 analysis（实测 Q3/Q4/Q5 串题即由此而来）。
+_ESSAY_AUDIT_MARK_RE = re.compile(
+    r'^[ \t　]*[【\[]?\s*(?:审题及答题思路|审题思路|审题分析)\s*[】\]]?\s*[：:]?')
+
+
+def _essay_is_analysis_mark(ls: str) -> bool:
+    """该行是否「解析起始标记」—— 归入 analysis，且**绝不能**当作段起点。
+
+    ⚠️ 真实回归（实测 2019 国考省级卷 line 203/328/353）：`参考答案说明：…`
+    被误当成新的答案段起点 → 一段答案被切成多段 → 尾段数与题目数不等 →
+    整份卷误报 `answer_block_count_mismatch`，同时造成答案/解析内容互相吞并。
+    """
+    return bool(_ESSAY_ANALYSIS_MARK_RE.match(ls))
+
+
+# 段起点：必须容忍 `【参考答案】` 的方括号包装。
+# 实测 2019 国考省级卷 line 303 是 `2、【参考答案】`，line 328/353 是 `【参考答案】`，
+# 旧正则只认裸 `参考答案` → 第 2 段起点漏识别 → 尾段 5 段只切出 4 段 →
+# 第 2 题答案被并进第 1 段尾，进而在块级产出「Q1 含下一题分值/题干措辞」的串题。
+_ESSAY_ANS_START_RE = re.compile(
+    r'^[ \t　]*(?:[（(]?\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s*[）)]?\s*[、.．]?\s*)?'
+    r'[【\[]?\s*(?:参考答案|答案)\s*[】\]]?\s*[：:]?'
+    # 允许段起点行**带正文**：实测 2019 国考省级卷 line 303 的
+    # `2、【参考答案】发展经济挖掘文化美化环境弘扬正气建设好新农村`
+    # 段标记与答案正文同行，若要求行尾必须为空（`\s*$`）就会漏识别段起点，
+    # 导致第 2 题答案并进第 1 段尾 → Q1/Q2 answer 含下一题分值与题干措辞 → 串题。
+    r'\S'
+)
+# 带分值的纯段头：2022 行政执法卷 `一、（15 分）`
+_ESSAY_ANS_SEG_BRACKET_RE = re.compile(
+    r'^[ \t　]*[一二三四五六七八九十]{1,3}\s*[、.．]?\s*[（(]\s*\d{1,3}\s*分\s*[）)]'
+)
+
+
+def _essay_is_ans_anchor(ls: str) -> bool:
+    """该行是否是答案区**段起点**（用于切分答案段）。
+
+    覆盖全语料实测到的全部形态：
+      · `参考答案` / `参考答案：` / `【参考答案】`（独立行）
+      · `1、参考答案：` / `一、参考答案（F）`（编号）
+      · `一、（15 分）`（纯分值段头）
+
+    排除项（易错点）：
+      · 解析标记（`参考答案说明` 等）是段内分界，不是段起点
+      · 行中有实际正文内容的（如 `参考答案从"…`开头）不是段起点
+    """
+    if _essay_is_analysis_mark(ls):
+        return False
+    # ★ 无编号的 `【参考答案】` **不是**段起点。
+    #   实测 2019 国考省级卷是「审题及答题思路 + 参考答案」双段式版式，
+    #   答案区 5 题共出现 7 处"参考答案"字样：
+    #     197 `1、参考答案：`      ← 段起点（题号1）
+    #     303 `2、【参考答案】`    ← 段起点（题号2）
+    #     319 `3、参考答案：`      ← 段起点（题号3）
+    #     328 `【参考答案】`      ← **同题内**的答案主体，不是新题
+    #     346 `4、参考答案：`      ← 段起点（题号4）
+    #     353 `【参考答案】`      ← 同题内的答案主体
+    #     361 `5、参考答案：`      ← 段起点（题号5）
+    #   若把裸 `【参考答案】` 当段起点，7 段去配 5 题，按序配对整体错位
+    #   → 后续题答案被贴到前面题上 → 串题。
+    #   段起点必须带**题号或分值**；裸括号形式只作同段内标记。
+    if re.match(r'^[ \t　]*[（(]?\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s*[）)]?\s*[、.．]?\s*'
+                r'[【\[]?\s*(?:参考答案|答案)\s*[】\]]?\s*[（(]\s*[A-Za-z]\s*[）)]', ls):
+        # ★ 带卷别后缀的「一、参考答案（H）」「参考答案（F）」**不是**段起点。
+        #   实测 2021 国考副省级/地市级是「H/F 两套答案」版式：
+        #     240 一、参考答案（H）  250 参考答案（F）
+        #     259 二、参考答案（H）  267 参考答案（F）
+        #     275 三、参考答案（H）  287 参考答案（F） ……
+        #   5 道题共 10 处答案锚点。若每处都切段，10 段去配 5 题 → 段数不等 →
+        #   5 题全部误报 `answer_block_count_mismatch`（阻断 30→35 的退步来源）。
+        #   H/F 是同一题的两套参考答案，不是新题。
+        #   判据：段起点必须带**中文/阿拉伯题号**，且不得带 (H)/(F) 这类卷别后缀。
+        return False
+    if re.match(r'^[ \t　]*[【\[]\s*(?:参考答案|答案)\s*[】\]]', ls):
+        return False
+    if _ESSAY_ANS_START_RE.match(ls) or _ESSAY_ANS_SEG_BRACKET_RE.match(ls):
+        return True
+    return bool(_ESSAY_ANS_ALONE_RE.match(ls) or _ESSAY_ANS_INLINE_RE.search(ls)
+                or _ESSAY_ANS_NUMBERED_RE.match(ls) or _ESSAY_ANS_SEG_RE.match(ls))
+
+
+def _essay_looks_like_question_number(line: str, style: str) -> bool:
+    """该行是否是真题号行（用于答案段的段尾兜底）。
+
+    复用 `_essay_split_questions` 的同一套判据：体例正则 + 「题号+分值同行」严格判据。
+    ⚠️ 必须要求分值：答案正文里大量 `1.经济价值。 2.生态能力。` 这类分点，
+    若只靠题号正则会把它们当成新题号，导致答案被切碎。
+    """
+    s = (line or '').strip()
+    if not s or _essay_is_analysis_mark(s) or _essay_is_ans_anchor(s):
+        return False
+    m = _ESSAY_NUM_RES.get(style, _ESSAY_HALF_NUM_RE).match(s)
+    if not m:
+        return False
+    return bool(_ESSAY_SCORE_RE.search(s))
+
+
+def _essay_split_answer_analysis(seg_lines: List[str]) -> Tuple[List[str], List[str]]:
+    """把一个答案段切成 (答案行, 解析行)。
+
+    全语料实测的规则（优先级从高到低）：
+      1. `参考答案说明` / `【参考答案说明】` / `思路方面` 等**解析标记**出现即切换到解析，
+         该行**归入解析**（用户原话：答案为参考答案，答案解析为参考答案说明）。
+      2. 解析标记之前的内容全部归入答案。
+      3. 段内无解析标记时，解析留空 —— 绝不把答案当解析（6% 的文档本就无分界）。
+
+    返回 ([答案行], [解析行])，两者都不含解析标记行本身。
+    """
+    ans_lines: List[str] = []
+    ana_lines: List[str] = []
+    seen_mark = False
+    for l in seg_lines:
+        if _essay_is_analysis_mark(l):
+            if not seen_mark:
+                seen_mark = True
+            # 解析标记行的正文（如"本参考答案从…五个方面"）归入解析
+            body = _ESSAY_ANALYSIS_MARK_RE.sub('', l).strip()
+            if body:
+                ana_lines.append(body)
+            continue
+        (ana_lines if seen_mark else ans_lines).append(l)
+    # ===== 去重校验：答案与解析不得包含对方=====
+    # 用户原话：「不能区分答案和答案解析，导致答案解析为空」
+    # 以及实测截图里 `参考答案说明` 同时出现在 answer 与 analysis 两处。
+    # 根因是按解析标记切分时，若标记行之后又出现答案正文（或标记本身被
+    # 两侧同时收下），同一段文字会落进两个字段。
+    # 规则：以**先切出的部分**为准，另一侧若是其子串则置空，绝不两边都留。
+    if ans_lines and ana_lines:
+        _a_norm = re.sub(r'\s+', '', '\n'.join(ans_lines))
+        _n_norm = re.sub(r'\s+', '', '\n'.join(ana_lines))
+        # 解析是答案的子串 → 说明文字被重复收下，以答案为准
+        if _n_norm and _n_norm in _a_norm:
+            ana_lines = []
+        # 答案是解析的子串 → 答案被误并入解析，以解析为准
+        elif _a_norm and _a_norm in _n_norm:
+            ans_lines = []
+    return ans_lines, ana_lines
+_ESSAY_ANS_NUMBERED_RE = re.compile(r'^[一二三四五六七八九十]+\s*、\s*参考答案\s*[（(]?\s*([HFhf])?\s*[）)]?', re.M)
+_ESSAY_ANSNOTE_RE = re.compile(r'参考答案说明\s*[:：]?')
+_ESSAY_MATERIAL_ANCHOR_RE = re.compile(
+    r'^[ \t　]*(?:[一二三四五六七八九十]+\s*、\s*)?给定(?:材料|资料)[ \t　]*$')
+_ESSAY_NOISE_RE = re.compile(r'^[ \t　]*(?:[一二三四五六七八九十]+\s*、\s*)?注意事项[ \t　]*$')
+_ESSAY_MATERIAL_BLOCK_RE = re.compile(r'^[ \t　]*材料\s*(\d+)[ \t　]*$')
+# 半角题号：安徽/多省联考体
+_ESSAY_HALF_NUM_RE = re.compile(r'^[ \t　]*(\d{1,2})\s*[.．、](?![\d])[ \t　]*\S')
+# 全角阿拉伯题号：国考体
+_ESSAY_FULL_NUM_RE = re.compile(r'^[ \t　]*[（(]\s*(\d{1,2})\s*[）)][ \t　]*\S')
+# 全角中文数字题号：2018 地市级等卷的「（一）（二）」体例
+_ESSAY_CN_NUM_RE = re.compile(r'^[ \t　]*[（(]\s*([一二三四五六七八九十]+)\s*[）)][ \t　]*\S')
+# 「问题一：」体例：2022 国考行政执法卷等
+_ESSAY_WORD_NUM_RE = re.compile(r'^[ \t　]*问\s*题\s*([一二三四五六七八九十]+)\s*[：:][ \t　]*\S')
+_CN_DIGITS = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
+# 要求特征词（用于全角体下把"要求子项"从"题号"里排除）
+_ESSAY_REQ_WORDS = (
+    '准确全面', '准确、全面', '恰当提炼', '不超过', '紧扣资料', '条理清晰',
+    '内容具体', '语言流畅', '逻辑清晰', '观点明确', '自选角度', '字数',
+    '全面、准确', '分析全面', '对策得当', '针对性强', '言之有理', '不超过',
+)
+_ESSAY_VALID_TYPES = ('简答题', '论述题', '写作题', '简述题', '议论文/写作')
+
+
+def _essay_norm_fp(s: str) -> str:
+    """题干指纹：去所有空白与标点，仅留文字与数字，用于跨文档比对同一题。"""
+    return re.sub(r'[\s　·．.、,，;；:：!！?？\'"“”‘’()（）《》<>\[\]【】—\-]', '', s or '')
+
+
+def _essay_find_score(seg: str):
+    """取一段文本里的分值；同一题内分值可能重复出现（题干 + 要求各一次），
+    取首个即可 —— 不做求和，避免 2022 行政执法卷那类"10 个锚点/5 题"的误算。"""
+    m = _ESSAY_SCORE_RE.search(seg or '')
+    return int(m.group(1)) if m else None
+
+
+def _essay_cn_to_int(s: str) -> int:
+    """中文数字转阿拉伯（仅需 1..10，申论题号不会更大）。"""
+    s = (s or '').strip()
+    if not s:
+        return 0
+    if s == '十':
+        return 10
+    if len(s) == 1:
+        return _CN_DIGITS.get(s, 0)
+    if len(s) == 2 and s[0] == '十':
+        return 10 + _CN_DIGITS.get(s[1], 0)
+    if len(s) == 2 and s[1] == '十':
+        return _CN_DIGITS.get(s[0], 0) * 10
+    if len(s) == 3 and s[1] == '十':
+        return _CN_DIGITS.get(s[0], 0) * 10 + _CN_DIGITS.get(s[2], 0)
+    return 0
+
+
+_ESSAY_NUM_RES = {
+    'half': _ESSAY_HALF_NUM_RE,
+    'full': _ESSAY_FULL_NUM_RE,
+    'cn': _ESSAY_CN_NUM_RE,
+    'word': _ESSAY_WORD_NUM_RE,
+}
+
+
+def _essay_questions_floor(lines: List[str]) -> int:
+    """返回「作答要求区」起始行号；题号候选必须落在该行之后。
+
+    合订本开头是「一、注意事项」，其中的 "1. 2. 3." 会被半角正则命中。
+    实测（2022 国考地市级卷）：注意事项占 line 3-11，真题在 line 239 之后，
+    不设下界就会把 6 条注意事项当成前 6 题。用作答要求锚点/材料锚点做下界即可隔离。
+    """
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if re.match(r'^[一二三四五六七八九十]+\s*、\s*作答要求', s):
+            return i
+        if s.startswith('作答要求'):
+            return i
+    # 无「作答要求」标题时，退回用材料锚点（材料区之后的才是题目）
+    for i, ln in enumerate(lines):
+        if _ESSAY_MATERIAL_ANCHOR_RE.match(ln.strip()):
+            # 从材料区往后找第一道题（材料块标题行不算），这里直接返回锚点行，
+            # 由分值窗口进一步过滤
+            return i
+    return 0
+
+
+def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
+    """判定题号样式：'half'（1.）/ 'full'（（1））/ 'cn'（（一））/ None。
+
+    判据分两级，**严格级优先**：
+      严格级：题号与分值标记在**同一行**。这是最精确的信号 ——
+        安徽卷 "1. 根据“给定资料1”，请谈谈E县…（15分）"
+        国考卷 "（1）根据“给定资料1”，对调研组的调研材料…（15 分）"
+        而要求子项 "（1）准确全面；" 与答案分点 "1. 创新项目落地机制。"
+        所在行都不含分值，故不会被误判。
+      宽松级：题号行下方 5 行窗口内出现分值。仅当严格级一个都没命中时才启用，
+        用于兜住那些分值被 PDF 换行拆到下一行的卷。
+
+    ⚠️ 宽松级单独使用会造成严重误判（实测 2023 安徽B卷）：
+      要求子项 "（1）准确全面；"（line 149）下方 5 行内含下一题的 "（25分）"（line 152），
+      会被当成题号 → 3 道真题只切出 3 个"要求子项"块，真题全丢。
+    """
+    floor = _essay_questions_floor(lines)
+    res = _ESSAY_NUM_RES
+
+    def _scan(strict: bool) -> Dict[str, int]:
+        tally = {style: 0 for style in res}
+        for idx in range(floor, len(lines)):
+            s = lines[idx].strip()
+            if not s:
+                continue
+            if strict:
+                scope = lines[idx]          # 仅本行
+            else:
+                scope = '\n'.join(lines[idx:idx + 5])
+            if not _ESSAY_SCORE_RE.search(scope):
+                continue
+            for style, rx in res.items():
+                m = rx.match(s)
+                if not m:
+                    continue
+                if style == 'cn' and not _essay_cn_to_int(m.group(1)):
+                    break
+                tally[style] += 1
+                break
+        return tally
+
+    tally = _scan(True)
+    if max(tally.values()) > 0:
+        return max(tally.items(), key=lambda kv: kv[1])[0]
+    tally = _scan(False)
+    return max(tally.items(), key=lambda kv: kv[1])[0] if max(tally.values()) > 0 else None
+
+
+def _essay_split_questions(lines: List[str], style: str):
+    """按判定出的题号样式切出 (题号, 行号, 卷别标记) 列表。
+
+    两道硬约束：
+      1) 分值校验（严格级：题号同行含分值；本函数沿用宽松窗口，
+         但由于体例已由严格级确定，误判概率大幅降低）
+      2) 题号必须严格递增（monotonic）—— 申论题号天然 1..N 递增，
+         任何重复或回退都说明该候选不是真题号
+    """
+    num_re = _ESSAY_NUM_RES.get(style, _ESSAY_HALF_NUM_RE)
+    floor = _essay_questions_floor(lines)
+    raw = []
+    for i in range(floor, len(lines)):
+        m = num_re.match(lines[i])
+        if not m:
+            continue
+        window = '\n'.join(lines[i:i + 5])
+        if not _ESSAY_SCORE_RE.search(window):
+            continue
+        if style in ('cn', 'word'):
+            qno = _essay_cn_to_int(m.group(1))
+        else:
+            qno = int(m.group(1))
+        if qno <= 0:
+            continue
+        variant = ''
+        mv = re.search(r'[（(]\s*([HFhf])\s*[）)]', lines[i])
+        if mv:
+            variant = mv.group(1).upper()
+        raw.append((qno, i, variant))
+
+    pruned: List[Tuple[int, int, str]] = []
+    last = 0
+    for qno, idx, variant in raw:
+        if qno > last:
+            pruned.append((qno, idx, variant))
+            last = qno
+    return pruned
+
+
+def _essay_collect_materials(lines: List[str], q_start: int):
+    """抽取材料正文（给定材料锚点 ~ 第一个题号行）与材料小标题列表。"""
+    anchor = None
+    for i in range(min(q_start, len(lines))):
+        if _ESSAY_MATERIAL_ANCHOR_RE.match(lines[i].strip()):
+            anchor = i
             break
-        # 材料头行及材料正文行 → 跳过（剥离）
-    return keep
+    if anchor is None:
+        return None, []
+    blocks = []
+    for i in range(anchor, q_start):
+        m = _ESSAY_MATERIAL_BLOCK_RE.match(lines[i].strip())
+        if m:
+            blocks.append((int(m.group(1)), i))
+    body = '\n'.join(lines[anchor:q_start]).strip()
+    # 去掉锚点行本身
+    body = re.sub(r'^[ \t　]*(?:[一二三四五六七八九十]+\s*、\s*)?给定(?:材料|资料)[ \t　]*\n', '', body)
+    titles = ['材料%d' % n for n, _ in blocks]
+    return (body or None), titles
+
+
+def _essay_is_requirement_run(block_lines: List[str], start: int, style: str) -> bool:
+    """判断 start 行起是否为"要求子项序列"。硬判据：整段无分值标记。"""
+    seg = '\n'.join(block_lines[start:])
+    return not _ESSAY_SCORE_RE.search(seg)
+
+
+def _parse_essay_document(text: str) -> Optional[List[Dict[str, Any]]]:
+    """申论文档 → 题目块列表；非申论体例返回 None。
+
+    返回的块在原有键之外新增：
+      requirements    要求清单（list[str]）
+      material_text   共享材料全文（仅第一块携带，避免重复占用内存）
+      material_titles 材料小标题列表（仅第一块）
+      low_confidence  题干指纹是否未能对齐
+      blocked         是否存在阻断性问题（映射不可信）
+      block_reasons   阻断原因列表
+    """
+    lines = text.split('\n')
+    style = _detect_essay_numbering(lines)
+    if style is None:
+        return None
+
+    # 锚点门槛：至少命中 2 个申论特征才认定为申论（材料锚点 / 题号 / 答案锚点）
+    hits = 0
+    if any(_ESSAY_MATERIAL_ANCHOR_RE.match(l.strip()) for l in lines):
+        hits += 1
+    if _essay_split_questions(lines, style):
+        hits += 1
+    if (_ESSAY_ANS_ALONE_RE.search(text) or _ESSAY_ANS_INLINE_RE.search(text)
+            or _ESSAY_ANS_NUMBERED_RE.search(text)):
+        hits += 1
+    if hits < 2:
+        return None
+
+    numbers = _essay_split_questions(lines, style)
+    if not numbers:
+        return None
+
+    material_text, material_titles = _essay_collect_materials(lines, numbers[0][1])
+
+    # ---- 形态①判定：全部答案锚点都落在「最后一个题号之后」→ 文末统一答案区 ----
+    # 合订本（2018/2019/2020/2022 国考真题卷及答案）把 5 份参考答案集中放在
+    # 文末，此时「就地配对」找不到每题的答案，必须改为按序切分答案区再顺序配对。
+    # 形态②③（分离型答案 PDF）答案紧随各题，就地配对即可。
+    last_q_line = numbers[-1][1]
+
+    def _first_anchor_pos(from_line: int) -> Optional[int]:
+        for i in range(from_line, len(lines)):
+            if _essay_is_ans_anchor(lines[i].strip()):
+                return i
+        return None
+
+    tail_anchor = _first_anchor_pos(last_q_line)
+    # 最后一个题号之前完全没有答案锚点 → 认定为形态①
+    head_anchor = _first_anchor_pos(0)
+    head_has_answer = head_anchor is not None and head_anchor < last_q_line
+    trailing_block = (tail_anchor is not None) and not head_has_answer
+
+    # 形态①：把文末答案区按答案锚点切成 N 段，与题目按序一一对应
+    trailing_segments: List[List[str]] = []
+    if trailing_block:
+        tail_lines = lines[tail_anchor:]
+        cur: List[str] = []
+        started = False
+        for l in tail_lines:
+            is_anchor = _essay_is_ans_anchor(l.strip())
+            # ★ 段尾兜底：答案段内若出现**下一个题号行**，立即截断。
+            #   这是串题的最终保险 —— 无论段起点正则是否漏识别形态，
+            #   都不允许一个答案段跨越到下一题。
+            #   实测 2019 国考省级卷 line 303 是 `2、【参考答案】`：
+            #   段起点漏识别 → 第2题答案并进第1段尾 → Q1/Q2/Q3 的 answer 里
+            #   出现下一题的分值与题干措辞 → 串题。
+            #   有题号兜底后，即使段起点漏了，内容也不会越界到下一题。
+            if started and cur and _essay_looks_like_question_number(l, style):
+                trailing_segments.append(cur)
+                cur = [l]
+                continue
+            if is_anchor:
+                if started and cur:
+                    trailing_segments.append(cur)
+                cur = []
+                started = True
+                continue
+            if started:
+                cur.append(l)
+        if started and cur:
+            trailing_segments.append(cur)
+
+    blocks: List[Dict[str, Any]] = []
+    for k, (qno, sline, _variant) in enumerate(numbers):
+        eline = numbers[k + 1][1] if k + 1 < len(numbers) else len(lines)
+        raw = lines[sline:eline]
+        seg = '\n'.join(raw)
+
+        answer_txt = analysis_txt = ''
+        if trailing_block:
+            # 按序配对：第 k 题取第 k 段；段数不足则留空并阻断，绝不越界取用
+            if k < len(trailing_segments):
+                    # 统一走权威切分：解析标记归解析，且不再误命中正文里的"参考答案"
+                    _ans_l, _ana_l = _essay_split_answer_analysis(trailing_segments[k])
+                    answer_txt = '\n'.join(_ans_l).strip()
+                    analysis_txt = '\n'.join(_ana_l).strip()
+            stem_and_req = seg
+        else:
+            # 形态②③：就地配对（题号之后、下一个题号之前找答案锚点）
+            ans_pos = None
+            for off, l in enumerate(raw):
+                if _essay_is_ans_anchor(l.strip()):
+                    ans_pos = off
+                    break
+            stem_and_req = seg
+            if ans_pos is not None:
+                stem_and_req = '\n'.join(raw[:ans_pos])
+                ans_body = raw[ans_pos + 1:]
+                # 统一走权威切分：解析标记归解析（用户原话：答案为参考答案，
+                # 答案解析为参考答案说明），且不会把答案正文里的"该条参考答案为：…"
+                # 误当成解析起点（旧 `_ESSAY_ANSNOTE_RE.search` 就会误命中）。
+                _ans_l, _ana_l = _essay_split_answer_analysis(ans_body)
+                answer_txt = '\n'.join(_ans_l).strip()
+                analysis_txt = '\n'.join(_ana_l).strip()
+
+        # --- 题干 / 要求 拆分 ---
+        req_at = None
+        req_inline = ''
+        for j, l in enumerate(stem_and_req.split('\n')):
+            if l.strip().startswith(_ESSAY_REQ_MARK):
+                req_at = j
+                # 要求内容可能与「要求：」同行（实测 2022 国考行政执法卷：
+                #   "　　要求：全面、准确、有条理。不超过250 字。"），必须先摘掉前缀取正文，
+                # 否则只取后续行会把内容整段丢掉，导致 requirements 为空。
+                req_inline = re.sub(
+                    r'^[ \t　]*' + re.escape(_ESSAY_REQ_MARK) + r'[ \t　]*[：:]?[ \t　]*',
+                    '', l).strip()
+                break
+        if req_at is None:
+            stem = stem_and_req.strip()
+            requirements: List[str] = []
+        else:
+            sl = stem_and_req.split('\n')
+            stem = '\n'.join(sl[:req_at]).strip()
+            collected: List[str] = []
+            if req_inline:
+                collected.append(req_inline)
+            for l in sl[req_at + 1:]:
+                t = l.strip()
+                if _ESSAY_REQ_LINE_RE.match(t):
+                    collected.append(t)
+            # 纯文本要求（无「（1）」编号）没有子项行，整段作为一条要求保留，
+            # 绝不能因为缺少编号就把要求丢掉——要求是申论题的采分点依据。
+            requirements = collected
+        # 去掉题干里的题号前缀
+        stem = re.sub(r'^[ \t　]*(?:\d{1,2}\s*[.．、]|[（(]\s*\d{1,2}\s*[）)])[ \t　]*', '', stem).strip()
+
+        score = _essay_find_score(stem_and_req)
+        reasons: List[str] = []
+        low_conf = False
+        if not score:
+            reasons.append('missing_score')
+        # 形态①按序配对时，答案段数必须与题目数一致，否则说明有一段答案缺失或多出，
+        # 此时不能靠"顺序第 k 段"盲取，必须阻断交人工核对。
+        if trailing_block and len(trailing_segments) != len(numbers):
+            reasons.append('answer_block_count_mismatch')
+        blk: Dict[str, Any] = {
+            'question_number': str(qno),
+            'content': stem,
+            'options': [],
+            'answer': answer_txt,
+            'analysis': analysis_txt,
+            'requirements': requirements,
+            'question_type': '简答题',
+            'type_confidence': 0.9,
+            'format': 'essay',
+            'low_confidence': low_conf,
+            'blocked': bool(reasons),
+            'block_reasons': reasons,
+            'score': score if score else 1,
+            'suspicious': False,
+        }
+        blocks.append(blk)
+
+    if blocks:
+        blocks[0]['material_text'] = material_text
+        blocks[0]['material_titles'] = material_titles
+        for i, b in enumerate(blocks):
+            b['group_id'] = 0
+            b['question_level'] = 2 if len(blocks) > 1 else 1
+            b['sort_order'] = i + 1
+    return blocks
 
 
 def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
@@ -1724,6 +2607,10 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
     - analysis: 解析
     - question_type: 题型
     """
+    # ---- 申论分支（2026-10-01）：非申论文档返回 None，此处行为与改动前完全一致 ----
+    _essay_blocks = _parse_essay_document(text)
+    if _essay_blocks is not None:
+        return _essay_blocks
     # monotonic=True：题目文档题号同样必须严格递增。
     # 真实案例（2017国考第100题）："（1）附近居民（2）维持现场秩序的民警（3）媒体报道的人
     # （4）参与应急的消防人员"是"安全撤离顺序"题的**被打乱子项编号**（A-D 选项引用
@@ -1736,6 +2623,11 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
 
     lines = text.split('\n')
     blocks = []
+    # P2 回吐缓冲区：上一题剥离出的"节首材料"暂存于此，下一轮作为本题前缀
+    pending_spill: List[str] = []
+    # 分节题型索引：必须在循环外预扫描。分节标题行会被 P2 从上一题尾部剥离，
+    # 循环内取不到；而"无选项题"的题型判定又恰恰只能依赖它。
+    section_marks = _build_section_index(lines)
 
     for i, qn in enumerate(numbers):
         start_line = qn.line_index
@@ -1744,22 +2636,39 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         else:
             end_line = len(lines)
 
-        block_lines = lines[start_line:end_line]
-        block_text = '\n'.join(block_lines)
+        raw_block = lines[start_line:end_line]
 
-        # P0-fix: 剥离题干尾部粘连的材料头+材料正文（分节残留）。
-        # 材料头如"五、根据以下情境材料，回答86-89题"是中文数字章节号，
-        # 不被 extract_question_numbers（只认阿拉伯数字）识别，导致材料头
-        # +材料正文整体粘连到上一题题干尾部。从 block_lines 行级剥离：
-        # 从首个材料头行起，到下一个题号行/选项行/IMAGE标记之前的内容全部移除。
-        block_lines = _strip_trailing_material(block_lines)
-        block_text = '\n'.join(block_lines)
-
-        # 去掉首行题号前缀
-        content_text = block_text
-        m = re.match(r'^(?:第\s*\d+\s*题|\d+\s*[.、．)）\]】])\s*', block_text)
+        # ---- 步骤 1：去掉首行题号前缀（只改首行，其余行原样）----
+        # 注意 first_nl 是在 block_text 上取的偏移，因此切片也必须在 block_text 上做。
+        # 早期版本拿 block_text 的偏移去切 block_text[m.end():] 得到的子串，
+        # 偏移错位 m.end() 个字符，首行末尾会多出 "\n[I" 之类的垃圾。
+        block_text = '\n'.join(raw_block)
+        m = _QNUM_PREFIX_RE.match(block_text)
         if m:
-            content_text = block_text[m.end():]
+            first_nl = block_text.find('\n')
+            if first_nl < 0:
+                block_lines = [block_text[m.end():]]
+            else:
+                head = block_text[m.end():first_nl]
+                block_lines = ([head] if head.strip() else []) \
+                    + block_text[first_nl + 1:].split('\n')
+        else:
+            block_lines = list(raw_block)
+
+        # ---- 步骤 2：剥离题干尾部粘连的分节标记（材料头 + 分节指令段）----
+        # 返回 (保留行, 溢出行)。溢出的节首材料留给下一题。
+        block_lines, pending_spill = _strip_trailing_material(block_lines)
+
+        # ---- 步骤 3：由剥离后的行**重算**题干，再前置回吐内容 ----
+        # ★ 必须在剥离之后重算 content_text。早期版本在步骤 1 就把 content_text
+        #   定死，步骤 2 剥离后没有重算，导致 content_text 仍是未剥离的原文 ——
+        #   分节指令段照样留在题干里，污染"看起来一点没变"。
+        content_text = '\n'.join(block_lines)
+        spill_text = '\n'.join(pending_spill).strip()
+        pending_spill = []
+        if spill_text:
+            content_text = f'{spill_text}\n{content_text}'.strip()
+        block_text = '\n'.join(block_lines)
 
         # 提取选项
         options = _extract_options(block_lines)
@@ -1820,8 +2729,18 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         answer = extracted.get('answer') if extracted else None
         analysis = extracted.get('analysis') if extracted else None
 
-        # 检测题型（传入 answer 支持多字母答案检测）
-        qtype, type_confidence = _detect_question_type(content_text, options, answer or '')
+        # 检测题型（传入 answer 支持多字母答案检测；section_hint 提供分节声明的题型）
+        section_hint = _section_type_at(section_marks, start_line)
+        qtype, type_confidence = _detect_question_type(content_text, options, answer or '', section_hint)
+
+        # ============ P4：剥离文末推广图/二维码 ============
+        # 真实事故（2019 新疆兵团卷第 90 题，末题）：
+        #   [IMAGE:72648561_90_0] [IMAGE:72648561_90_1]
+        # 挂在最后一题尾部，是文档末尾的推广二维码。它们过不了二维码解码
+        # （印刷模糊/带 logo），image_filters 的 block 级规则漏过。
+        # 位置规则与内容规则正交：**文末区间的图片无论能否解码一律丢弃**。
+        if i == len(numbers) - 1:
+            content_text = _strip_trailing_images(content_text)
 
         blocks.append({
             'question_number': qn.number,
@@ -1834,7 +2753,147 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
             'format': qn.format_type,
         })
 
-    return blocks
+    return _mark_and_split_suspected(blocks)
+
+
+# 行首题号（用于检测题块内部是否混入其他题号）
+# 必须带 MULTILINE：findall 逐块扫描正文时，^ 需匹配每一行行首而非仅整段开头
+_INNER_QN_LINE = re.compile(r'^\s*(\d{1,3})\s*[．.、]', re.M)
+
+
+def _mark_and_split_suspected(blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """串题检测：标记可疑（主）+ 自动二次切分（辅）。
+
+    背景
+    ----
+    PDF 曾因 ``extract_tables()`` 与 ``extract_text()`` 重复拼接导致全文翻倍，
+    单调性过滤丢弃了重复题号却把重复文本留在题块内 → 一道题吞掉后续多道题。
+    该根因已在上游修复，但历史脏数据、以及其他成因（如答案段混入正文）
+    仍可能产生「块内含多个题号」的题块，必须在切分层兜底。
+
+    策略（按用户决策：以标记可疑为主）
+    ----------------------------------
+    1. **主**：任何块内出现除自身以外的题号，一律打 ``suspicious=True`` 并写明原因，
+       交由教师在预览页用「逐题删除」处理 —— 宁可标记，也不错切。
+    2. **辅**：仅当内部题号**严格递增且互不重复**、且首行恰为本块自身题号时，
+       才自动二次切分。条件不满足则只标记、不动内容。
+
+    为什么不放宽 monotonic
+    ----------------------
+    ``extract_question_numbers(monotonic=True)`` 的单调性是防止「答案段题号被
+    误当作新题」的关键（曾有 2017 国考第 100 题幽灵题的教训）。放宽会重引入该缺陷。
+
+    Returns
+    -------
+    切分后的题块列表（顺序与输入一致，可能因二次切分而变长）
+    """
+    if not blocks:
+        return blocks
+
+    out: List[Dict[str, Any]] = []
+    for b in blocks:
+        content = b.get('content') or ''
+        qn = b.get('question_number')
+        qn_txt = str(qn) if qn is not None else None
+        inner = _INNER_QN_LINE.findall(content)
+        others = [q for q in inner if q != qn_txt]
+        if not others:
+            b.setdefault('suspicious', False)
+            out.append(b)
+            continue
+
+        uniq_others = sorted({int(q) for q in others})
+        b['suspicious'] = True
+        b['suspicious_reason'] = (
+            f"块内混入 {len(uniq_others)} 个其他题号: {uniq_others[:8]}"
+        )
+
+        # --- 辅策略：安全条件下自动二次切分 ---
+        nums = [int(q) for q in inner]
+        qn_int: Optional[int] = None
+        if qn is not None:
+            try:
+                qn_int = int(qn)
+            except (TypeError, ValueError):
+                qn_int = None
+        safe = (
+            qn_int is not None
+            and len(set(nums)) == len(nums)
+            and all(nums[i] < nums[i + 1] for i in range(len(nums) - 1))
+            and bool(nums)
+            and nums[0] == qn_int
+        )
+        if not safe:
+            out.append(b)
+            continue
+
+        lines_c = content.split('\n')
+        positions: List[tuple] = []
+        for i, ln in enumerate(lines_c):
+            m = _INNER_QN_LINE.match(ln)
+            if m:
+                positions.append((i, int(m.group(1))))
+        subs: List[Dict[str, Any]] = []
+        for k, (li, sq) in enumerate(positions):
+            end = positions[k + 1][0] if k + 1 < len(positions) else len(lines_c)
+            seg = '\n'.join(lines_c[li:end]).strip()
+            if not seg:
+                continue
+            sub_opts = _extract_options([str(x) for x in seg.split('\n')])
+            subs.append({
+                'question_number': sq,
+                'content': seg,
+                'options': sub_opts,
+                'answer': None,          # 答案/解析需在匹配阶段重新归属
+                'analysis': None,
+                'question_type': None,
+                'type_confidence': 0.0,
+                'format': b.get('format'),
+                'suspicious': False,
+                'recovered_from': qn,     # 记录来源题块，便于回溯
+            })
+        if len(subs) >= 2:
+            b['suspicious'] = True
+            b['suspicious_reason'] += f"；已自动二次切分为 {len(subs)} 个子题"
+            b['split_into'] = [s['question_number'] for s in subs]
+            out.extend(subs)
+        else:
+            out.append(b)
+
+    return out
+
+
+# [IMAGE:xxx] 占位符
+_IMAGE_MARKER_RE = re.compile(r'\[IMAGE:[^\]\s]+\]')
+# A/B/C/D 选项行（行首）
+_OPTION_LINE_RE = re.compile(r'^\s*[A-H]\s*[.、．)）]')
+
+
+def _strip_trailing_images(content: str) -> str:
+    """剥离**最后一道题**题干中、位于最后一个选项行之后的图片占位符。
+
+    判定依据（结构性而非猜测）：
+      - 该题是全文最后一块，其后不再有任何题号
+      - 图片标记出现在最后一个 A-H 选项行之后
+    → 说明这些图不属于题目本身，而是文档页尾的推广位/二维码。
+
+    正常题目的图片都在选项行**之前**（题干图），不受影响。
+    真实案例："[IMAGE:72648561_90_0] [IMAGE:72648561_90_1]"
+    """
+    if not content or '[IMAGE:' not in content:
+        return content
+    lines = content.split('\n')
+    last_opt = -1
+    for i, ln in enumerate(lines):
+        if _OPTION_LINE_RE.match(ln):
+            last_opt = i
+    if last_opt < 0:
+        # 没有可识别的选项行 → 无法用结构判断，保守不动
+        return content
+    for i in range(len(lines) - 1, last_opt, -1):
+        if _IMAGE_MARKER_RE.search(lines[i]):
+            lines[i] = _IMAGE_MARKER_RE.sub('', lines[i]).rstrip()
+    return '\n'.join(lines)
 
 
 def _extract_options(lines: List[str]) -> List[Dict[str, str]]:
@@ -2008,222 +3067,135 @@ def count_options(content: str, options) -> int:
     return 0
 
 
-def _detect_question_type(content: str, options: List[str], answer: str = '') -> tuple[str, float]:
-    """
-    多维度题型分类器：返回 (type_name, confidence)
-    
-    判定维度（权重从高到低）：
-    1. 答案格式（权重最高）：单字母→单选，多字母→多选，对/错→判断，长文本→主观
-    2. 选项数量：2个→判断倾向，4个→单选倾向，>4个→多选倾向，0个→主观
-    3. 题干关键词：多选/单选/判断/论述/填空/写作 关键词匹配
-    4. 选项内容：选项极短→选择题
-    5. 选项内容清洗后分析（移除UTB残留）
-    6. 答案字母与选项数量一致性
-    
-    返回: (type_name, confidence) 置信度 0-1
+def _judge_option_text(o: Any) -> str:
+    """把选项（str / dict）归一化为纯文本，供题型判定使用。"""
+    if o is None:
+        return ''
+    if isinstance(o, dict):
+        s = o.get('value') or o.get('text') or o.get('label') or ''
+    else:
+        s = o
+    s = UTB_PATTERN.sub('', str(s)).strip()
+    s = re.sub(r'^[A-H]\s*[.、．)）\]]\s*', '', s).strip()
+    return s
+
+
+# 判断题的"判断对"选项特征
+_JUDGE_OPTION_TOKENS = ('正确', '错误', '对', '错', '√', '×', 'TRUE', 'FALSE')
+_JUDGE_ANSWER_TOKENS = {'对', '错', '正确', '错误', '√', '×', 'T', 'F', 'TRUE', 'FALSE'}
+
+# 主观题关键词（P3 收窄：不再用"文本长度"当题型信号）
+_WRITING_KW = ('作文', '写作', '撰写', '写一篇', '写一段', '议论文', '申论',
+               '应用文', '自拟标题', '题目自拟', '不少于', '字左右', '请以', '为题写')
+_ESSAY_KW = ('论述', '试述', '评析', '阐述', '论证', '如何理解', '怎样理解',
+             '谈谈你的看法', '谈谈你的理解', '综合分析', '评价并')
+_SHORT_ANSWER_KW = ('简述', '简答', '列举', '概括', '归纳', '指出', '说明理由')
+_FILL_BLANK_KW = ('填空', '横线处', '划线处', '括号内', '内填写')
+_MULTI_KW = ('多选', '多项选择', '不定项', '正确的有', '错误的有',
+             '正确的包括', '错误的包括', '至少两个', '至少两个以上', '两个以上')
+
+
+def _detect_question_type(content: str, options: List[str], answer: str = '',
+                          section_hint: str = '') -> tuple[str, float]:
+    """题型分类器（P3 重写：由加权投票改为**规则优先级**）。
+
+    返回 (type_name, confidence)
+
+    为什么重写
+    ----------
+    旧实现是 7 个维度的**加权累加**，各维度分数互相叠加、互相抵消，
+    同一份证据会被重复计分，且最终用 max() 决胜 —— dict 顺序即优先级，
+    "谁先写进字典谁赢"。实测后果：
+      - 「有 4 个选项但选项解析失败」的题 opt_count=0，
+        落入 `opt_count==0 → 论述题+2, 简答题+2` 的平局，靠 dict 顺序
+        判成"论述题"（30 份真实语料 76 道）；
+      - 题干里混入"二、多项选择题"（P2 修复前的分节污染）会被
+        MULTI_CHOICE_KEYWORDS 加 6 分，把单选题误判成多选题；
+      - `text.length > 200 → 写作题` 这类长度阈值与题型无因果关系。
+
+    新实现按**结构硬约束**逐层判定，命中即返回，不再累加：
+      L1 有选项 → 答案字母数是唯一依据（1 个=单选，≥2 个=多选）
+      L2 有选项 + 选项为判断对 + 答案为判断词 → 判断题
+      L3 无选项 → 按题型关键词细分（写作 > 论述 > 简答 > 填空）
+      L4 以上均无 → 保守兜底 + 低置信度（供 need_review 标记）
     """
     content_text = content or ''
-    options_list = options or []
-    
-    # ★ 新增：预清洗选项文本（移除UTB残留），避免长度判断失效
-    cleaned_options = []
-    for o in (options_list or []):
-        o_str = str(o) if o else ''
-        # 清洗UTB ID
-        o_str = UTB_PATTERN.sub('', o_str).strip()
-        # 清理选项标签前缀（如 "A." "A、"）
-        o_str = re.sub(r'^[A-H]\s*[.、．）\]]\s*', '', o_str).strip()
-        cleaned_options.append(o_str)
-    
-    opt_count = len([o for o in cleaned_options if o])
-    
-    # ★ 清洗答案中的UTB残留
-    clean_answer = UTB_PATTERN.sub('', (answer or '')).strip().upper()
-    answer = clean_answer
-    
-    # ★ 清洗题干中的UTB残留
-    clean_content = UTB_PATTERN.sub('', content_text).strip()
-    content_lower = clean_content.lower()
-    
-    # 题型评分字典
-    scores = {
-        '单选题': 0,
-        '多选题': 0,
-        '判断题': 0,
-        '论述题': 0,
-        '填空题': 0,
-        '简答题': 0,
-        '写作题': 0,
-    }
-    
-    # === 维度1: 答案格式分析（优化版）===
-    if answer:
-        # ★ 多选题答案：强制认定
-        if re.match(r'^[A-D]([，,][A-D])+$', answer):
-            scores['多选题'] += 8  # 强多选倾向
-        elif re.fullmatch(r'[A-D]{2,4}', answer):
-            scores['多选题'] += 8  # 连写多字母答案
-        # 单选题答案
-        elif re.match(r'^[A-D]$', answer):
-            scores['单选题'] += 5
-        # 判断题答案：必须是明确的判断词
-        elif answer in ['正确', '错误', '对', '错', 'TRUE', 'FALSE', 'T', 'F']:
-            scores['判断题'] += 5
-        # 主观题答案
-        elif len(answer) > 20:
-            scores['论述题'] += 3
-            scores['简答题'] += 2
-        elif len(answer) > 5:
-            scores['简答题'] += 2
-    
-    # === 维度2: 选项数量分析（优化版）===
-    if opt_count == 2:
-        # ★ 判断题识别收紧：必须同时满足以下条件
-        # 1. 选项内容包含判断词（对/错/正确/错误）
-        # 2. 答案为A或B
-        has_judge_opts = False
-        for opt in cleaned_options:
-            if any(kw in opt for kw in ['对', '错', '正确', '错误', 'True', 'False']):
-                has_judge_opts = True
-                break
-        
-        if has_judge_opts and answer in ['A', 'B', '对', '错', '正确', '错误', 'TRUE', 'FALSE', 'T', 'F']:
-            scores['判断题'] += 5  # 强判断题倾向
-        else:
-            scores['单选题'] += 3  # 普通2选项题视为单选
-            scores['多选题'] += 1
-    elif opt_count == 4:
-        # 4选项默认单选，但题干含多选关键词时倾向多选
-        if any(re.search(kw, content_text) for kw in MULTI_CHOICE_KEYWORDS):
-            scores['多选题'] += 3
-            scores['单选题'] -= 1
-        else:
-            scores['单选题'] += 3
-            scores['多选题'] += 1
-    elif opt_count > 4:
-        scores['多选题'] += 4  # 增强多选倾向
-    elif opt_count == 0:
-        scores['论述题'] += 2
-        scores['简答题'] += 2
-        scores['填空题'] += 1
-    
-    # === 维度3: 答案格式细分 ===
-    if answer:
-        if re.match(r'^[A-D]([，,][A-D])+$', answer):
-            scores['多选题'] += 3
-        elif re.match(r'^[A-D]$', answer):
-            scores['单选题'] += 2
-        elif answer in ['正确', '错误', '对', '错', 'TRUE', 'FALSE', 'T', 'F']:
-            scores['判断题'] += 3
-    
-    # === 维度4: 题干关键词分析 ===
-    # 多选题关键词
-    if any(re.search(kw, content_text) for kw in MULTI_CHOICE_KEYWORDS):
-        scores['多选题'] += 3
-        scores['单选题'] += 1
-    
-    # 单选/选择题关键词
-    if any(kw in content_lower for kw in ['下列', '以下', '正确的是', '错误的是', '不正确的是', '属于的是', '不属于的是']):
-        scores['单选题'] += 2
-        scores['多选题'] += 1
-    
-    # ★ 有选项时，选择题关键词权重增强（防止论述题关键词覆盖）
-    if opt_count >= 2:
-        if any(kw in content_lower for kw in ['正确的是', '错误的是', '不正确的是', '表述正确', '说法正确']):
-            scores['单选题'] += 2  # 额外加分
-    
-    # 判断题关键词
-    if any(kw in content_lower for kw in ['判断', '是否', '对错', '正确还是错误', '说法正确', '说法错误']):
-        scores['判断题'] += 3
-    
-    # 论述题关键词
-    if any(kw in content_lower for kw in ['论述', '分析', '阐述', '说明', '简述', '论证', '评述']):
-        scores['论述题'] += 2
-    
-    # 写作题关键词（优先级高于论述）
-    if any(re.search(kw, content_text) for kw in WRITING_KEYWORDS):
-        scores['写作题'] += 3
-    
-    # 简答题关键词
-    if any(kw in content_lower for kw in ['简述', '简答', '列举', '说明原因']):
-        scores['简答题'] += 2
-        scores['论述题'] += 1
-    
-    # 填空题关键词
-    if any(kw in content_lower for kw in ['填空', '_____', '____', '＿＿＿', '空白处']):
-        scores['填空题'] += 3
-    
-    # === 维度5: 选项内容分析（使用清洗后的选项） ===
-    # 选项中有明确文本内容 → 选择题倾向更强
-    if opt_count >= 2:
-        # 选项文本长度分析：短选项（<30字）→ 选择题特征更强
-        short_opts = sum(1 for o in cleaned_options if o and len(o) < 30)
-        if short_opts >= 2:
-            scores['单选题'] += 2
-            scores['多选题'] += 1
-    
-    # === 维度6: 答案字母与选项数量一致性 ===
-    if answer and opt_count >= 2:
-        answer_letters = re.findall(r'[A-H]', answer.upper())
-        if answer_letters:
-            if len(answer_letters) == 1 and opt_count >= 3:
-                # 单个字母答案 + 多个选项 → 强烈单选倾向
-                scores['单选题'] += 3
-            elif len(answer_letters) >= 2:
-                # 多个字母答案 → 多选倾向
-                scores['多选题'] += 4
-    
-    # === 维度7: 排除条件（新增）===
-    # 如果答案为单个字母且选项>=3，强制排除判断题
-    if answer and re.match(r'^[A-D]$', answer) and opt_count >= 3:
-        scores['判断题'] = 0  # 强制排除判断题
-        scores['单选题'] += 3
-    
-    # 如果答案为多个字母，强制排除单选题和判断题
-    if answer and re.match(r'^[A-D]([，,][A-D])+$', answer):
-        scores['单选题'] = 0
-        scores['判断题'] = 0
-        scores['多选题'] += 5
-    
-    # === 计算最终结果 ===
-    # 关键修复：当有选项时，不应默认返回论述题
-    if opt_count >= 2:
-        # 有选项的题目，最低应为选择题（单选/多选/判断）
-        # 如果所有分数都为0，根据选项数量兜底
-        if not any(scores[k] for k in ['单选题', '多选题', '判断题']):
-            if opt_count == 2:
-                scores['判断题'] += 1
-            else:
-                scores['单选题'] += 1
-    
-    if not any(scores.values()):
-        return '论述题', 0.0
-    
-    best_type = max(scores, key=scores.get)
-    max_score = scores[best_type]
-    total_score = sum(scores.values())
-    
-    confidence = max_score / total_score if total_score > 0 else 0.0
-    
-    # 映射到数据库 ENUM 值
-    type_map = {
-        '单选题': '单选题',
-        '多选题': '多选题',
-        '判断题': '判断题',
-        '论述题': '论述题',
-        '写作题': '写作题',
-        '填空题': '填空题',
-        '简答题': '简答题',
-    }
-    
-    final_type = type_map.get(best_type, '单选题')
-    
-    # 低置信度标记
-    if confidence < 0.6:
-        logger.warning(f"[type-detect] 低置信度({confidence:.2f})题型判定: {final_type}, 题干前50字: {content_text[:50]!r}, scores: {scores}")
-    
-    return final_type, round(confidence, 2)
+    # 题型判定前先剥掉分节指令段/材料头，防止它们污染关键词信号
+    # （P2 已把它们从题干里剥离，这里是双保险：OCR/Excel 路径可能绕过 P2）
+    clean_content = _SECTION_DIRECTIVE_RE.sub(' ', content_text)
+    clean_content = re.sub(
+        r'(?:根据|阅读)(?:以下|下面)[^\n]{0,20}?回答[ \t]*\d+[ \t]*[-~\u2014\uff0d\u81f3][ \t]*\d+[ \t]*题',
+        ' ', clean_content)
 
+    cleaned_options = []
+    for o in (options or []):
+        t = _judge_option_text(o)
+        if t:
+            cleaned_options.append(t)
+    opt_count = len(cleaned_options)
+
+    # 答案归一化：只保留 A-D 字母（中文数字答案在别处已转阿拉伯）
+    ans = UTB_PATTERN.sub('', str(answer or '')).strip().upper()
+    letters = ''.join(sorted(set(ch for ch in ans if ch in 'ABCD')))
+    n_letter = len(letters)
+    is_judge_answer = ans in _JUDGE_ANSWER_TOKENS
+
+    # ---------- L2：判断题（结构特征最明确，先判）----------
+    if opt_count == 2:
+        has_pos = any(('正确' in t) or (t.strip() == '对') for t in cleaned_options)
+        has_neg = any(('错误' in t) or (t.strip() == '错') for t in cleaned_options)
+        if (has_pos and has_neg) or is_judge_answer:
+            return '判断题', 0.95
+
+    # ---------- L1：有选项 → 答案字母数是唯一依据 ----------
+    if opt_count >= 2:
+        if is_judge_answer:
+            return '判断题', 0.90
+        if n_letter >= 2:
+            return '多选题', 0.95
+        if n_letter == 1:
+            return '单选题', 0.95
+        # 答案缺失：题干关键词降级
+        if any(k in clean_content for k in _MULTI_KW):
+            return '多选题', 0.70
+        if '判断' in clean_content or '对错' in clean_content:
+            return '判断题', 0.70
+        # 有 4 个以上选项却给不出答案 → 保守按单选，置信度低，交给人工复核
+        return ('单选题' if opt_count <= 4 else '多选题'), 0.40
+
+    # ---------- L1.5：分节声明的题型（仅对无选项题生效）----------
+    # 判断题在真题里普遍以"陈述句 +（  ）"呈现，本身没有选项，题块层面
+    # 与主观题无法区分。此时题块自身无任何信号，只能、也只应采用分节声明。
+    # 有选项的题不在此处理 —— 选项结构是强于分节标题的证据。
+    if section_hint and opt_count < 2:
+        if section_hint == '判断题':
+            return '判断题', 0.90
+        # 主观题分节：分节声明比题干关键词更可信（题干里可能只是引用了"简述"二字）
+        if section_hint in ('简答题', '论述题', '写作题', '填空题',
+                            '案例分析题', '情景分析题', '材料题'):
+            return section_hint, 0.85
+
+    # ---------- L3：无选项 → 主观题，按关键词细分 ----------
+    has = lambda kws: any(k in clean_content for k in kws)  # noqa: E731
+    if has(_WRITING_KW):
+        return '写作题', 0.90
+    if has(_FILL_BLANK_KW):
+        return '填空题', 0.85
+    if has(_ESSAY_KW):
+        return '论述题', 0.85
+    if has(_SHORT_ANSWER_KW):
+        return '简答题', 0.85
+    if is_judge_answer:
+        return '判断题', 0.90
+    # 答案本身是长文本（参考答案式主观题）
+    if len(ans) > 20:
+        return '简答题', 0.70
+
+    # ---------- L4：兜底 ----------
+    # 说明：0 选项 + 无任何题型关键词的题，绝大多数是"情景分析题/材料题"
+    #   （题干整体是一张图，选项也在图里）。旧实现判成"论述题"，
+    #   新实现判成"简答题"并给低置信度，由 need_review 引导教师复核。
+    return '简答题', 0.40
 
 # ============ 答案一致性校验（静默错答检测） ============
 
@@ -2521,24 +3493,59 @@ def smart_match_questions_answers(
 
         if ans_entry and ans_entry.get('answer'):
             ans = ans_entry['answer']
-            if ans in CN_ANSWER_MAP:
-                ans = CN_ANSWER_MAP[ans]
-            if all(c in "ABCD" for c in str(ans)):
-                block['answer'] = ans
-                matched_count += 1
-                answer_keys_used.add(q_num)
-            if ans_entry.get('analysis') and len(str(ans_entry['analysis'])) > 10:
-                block['analysis'] = ans_entry['analysis']
-                analysis_count += 1
-        else:
-            # 宽松重试：在答案文本中全局搜索该题号的答案
-            retry_ans = _loose_answer_search(answers_text, q_num)
-            if retry_ans:
-                block['answer'] = retry_ans
-                matched_count += 1
-                answer_keys_used.add(q_num)
+            _is_choice = block_accepts_letter_answer(block)
+            # ---- 无选项题（判断题/主观题）绝不允许落 A/B/C/D ----
+            # 真实事故：判断题没有 A/B 选项，答案却被写成字母，既无法判分，
+            # 也会让教师在题目管理里看到与题干无关的假答案。
+            # 改为从解析结论直读"正确/错误"；读不到就留空，交 need_review 复核。
+            if not _is_choice:
+                _verdict = judge_verdict_from_text(ans_entry.get('analysis') or '')
+                if not _verdict:
+                    # ans_entry 里的 analysis 可能被前序策略截断/替换，
+                    # 回落按题号直接从答案文本取整段再判一次。
+                    _verdict = judge_verdict_from_text(answer_region_for(answers_text, q_num))
+                if _verdict:
+                    block['answer'] = _verdict
+                    matched_count += 1
+                    answer_keys_used.add(q_num)
+                if ans_entry.get('analysis') and len(str(ans_entry['analysis'])) > 10:
+                    block['analysis'] = ans_entry['analysis']
+                    analysis_count += 1
             else:
-                no_answer_nums.append(q_num)
+                if ans in CN_ANSWER_MAP:
+                    ans = CN_ANSWER_MAP[ans]
+                if all(c in "ABCD" for c in str(ans)):
+                    block['answer'] = ans
+                    matched_count += 1
+                    answer_keys_used.add(q_num)
+                if ans_entry.get('analysis') and len(str(ans_entry['analysis'])) > 10:
+                    block['analysis'] = ans_entry['analysis']
+                    analysis_count += 1
+        else:
+            # 无选项题（判断题/主观题）：宽松字母搜索一律拒绝。
+            # 真实事故：判断题 81–90 被宽松重试灌入 C/D/D/B 假答案。
+            # 改为从该题答案段直读"正确/错误"；读不到就留空交 need_review。
+            if not block_accepts_letter_answer(block):
+                _region = answer_region_for(answers_text, q_num)
+                _verdict = judge_verdict_from_text(_region)
+                if _verdict:
+                    block['answer'] = _verdict
+                    matched_count += 1
+                    answer_keys_used.add(q_num)
+                    if len(_region) > 10:
+                        block['analysis'] = _region
+                        analysis_count += 1
+                else:
+                    no_answer_nums.append(q_num)
+            else:
+                # 宽松重试：在答案文本中全局搜索该题号的答案
+                retry_ans = _loose_answer_search(answers_text, q_num)
+                if retry_ans:
+                    block['answer'] = retry_ans
+                    matched_count += 1
+                    answer_keys_used.add(q_num)
+                else:
+                    no_answer_nums.append(q_num)
 
     # 多余答案
     extra_nums = [n for n in answer_map if n not in answer_keys_used and answer_map[n].get('answer')]
@@ -2555,7 +3562,10 @@ def smart_match_questions_answers(
             q_num = block['question_number']
             if not block.get('answer') and q_num in answer_map:
                 ans_entry = answer_map[q_num]
-                if ans_entry and ans_entry.get('answer') and all(c in "ABCD" for c in str(ans_entry.get("answer", ""))):
+                # 判断题/无选项题禁止接受字母答案（见 block_accepts_letter_answer）
+                if (ans_entry and ans_entry.get('answer')
+                        and block_accepts_letter_answer(block)
+                        and all(c in "ABCD" for c in str(ans_entry.get("answer", "")))):
                     block['answer'] = ans_entry['answer']
                     matched_count += 1
                     answer_keys_used.add(q_num)
@@ -2575,7 +3585,9 @@ def smart_match_questions_answers(
         if abs(len(all_answers) - len(question_blocks)) <= max(2, len(question_blocks) * 0.25):
             strategies.append('位置兜底匹配')
             for i, block in enumerate(question_blocks):
-                if not block.get('answer') and i < len(all_answers):
+                # 判断题/无选项题禁止按位置灌字母（见 block_accepts_letter_answer）
+                if not block.get('answer') and i < len(all_answers) \
+                        and block_accepts_letter_answer(block):
                     block['answer'] = all_answers[i]
                     matched_count += 1
                     if block['question_number'] in no_answer_nums:
@@ -3011,6 +4023,24 @@ class AnswerValidator:
             qtype = q.get('question_type', '单选题')
             content = q.get('content', '') or q.get('question_content', '')
 
+            # ★ 申论题豁免选择题校验。
+            #   下面 1-4 条规则全部是为「有选项、答案是字母」的选择题设计的：
+            #     · 第3条 `len(options) < 2 → 选项不足` 对申论**必然**成立
+            #       （申论是主观题，本来就没有选项）→ 每题都进validation_errors
+            #       → 前端弹「校验异常题目: 第1,2,3,4题」
+            #     · 第1条答案字母校验对长文本答案同样会误报
+            #     · _compute_confidence 也是按选项匹配度打分 → confidence 0.0
+            #       → 前端弹「低置信度题目(建议人工核对): 第1,2,3,4题」
+            #   申论的正确性判据是**题号+分值+题干指纹**三方交叉校验
+            #   （见 question_import._essay_cross_validate），不是选项匹配。
+            #   故此处直接给高分放行，把正确性判定交给申论专用校验器。
+            if q.get('format') == 'essay':
+                if not content or len(str(content).strip()) < 4:
+                    errors.append('题目内容为空或过短')
+                q['confidence'] = 0.95
+                q['validation_errors'] = errors
+                continue
+
             # 1. 答案-选项一致性
             option_keys = {o.get('key', '') for o in options if isinstance(o, dict)}
             if answer and answer != '待补充':
@@ -3046,7 +4076,17 @@ class AnswerValidator:
             q['validation_errors'] = errors
 
         # 题号连续性检测
-        numbers = [q.get('question_number', 0) for q in questions if q.get('question_number')]
+        # ★ 题号可能是 str（申论解析器统一产出 str），必须先转 int 再比较，
+        #   否则 min()/max() 在混合类型上抛 TypeError: '<' not supported between str and int
+        numbers = []
+        for q in questions:
+            raw_no = q.get('question_number')
+            if raw_no in (None, ''):
+                continue
+            try:
+                numbers.append(int(raw_no))
+            except (TypeError, ValueError):
+                continue
         if numbers:
             expected = set(range(min(numbers), max(numbers) + 1))
             missing = sorted(expected - set(numbers))

@@ -213,6 +213,13 @@ class QuestionBank(Base):
     question_level = Column(Integer, default=1, comment="题目层级：1=母题/独立题 2=小题")
     sort_order = Column(Integer, default=0, comment="题组内排序")
     question_number = Column(String(10), comment="原题号（如71、72）")
+    # P1/P3b：题型判定置信度不足时置 1，交由教师在「题目管理 → 待复核」筛选中人工确认。
+    # 0=已确认/无需复核，1=待复核。写入时机：导入管线判定 confidence < 阈值时。
+    need_review = Column(Integer, default=0, comment="待人工复核标记：1=题型存疑待复核 0=正常")
+    # 申论题目要求（乙方案）：采集/作答/格式要求原文，可能是纯文本也可能是「（1）（2）」分点。
+    # 独立成列而非塞进 question_content：要求是采分点依据，题库要能单独检索与比对。
+    # 缺解析时留空，绝不伪造。
+    requirements = Column(Text, comment="申论题目要求（作答要求/采分点依据）")
 
     subject = relationship("QuestionSubject")
     type = relationship("QuestionType")
@@ -773,6 +780,10 @@ class StudyGoal(Base):
     goal_type = Column(Enum("DAILY", "WEEKLY", "MONTHLY", "CUSTOM"), default="DAILY", comment="目标类型")
     target_count = Column(Integer, nullable=False, default=0, comment="目标数量")
     current_count = Column(Integer, default=0, comment="当前完成数")
+    # 今日学习科目：0=混科（不限定科目），>0=单科 subject_id
+    subject_mode = Column(Integer, default=0, comment="今日学习科目 0混科/>0单科subject_id")
+    # 单日预期学习时长（分钟），0=未设置
+    expected_minutes = Column(Integer, default=0, comment="单日预期学习时长(分钟)")
     deadline = Column(DateTime, comment="截止时间")
     priority = Column(Integer, default=1, comment="优先级 1低/2中/3高")
     is_completed = Column(Integer, default=0, comment="是否完成")
@@ -1020,6 +1031,9 @@ class QuestionImportRecord(Base):
     error_messages = Column(JSON, comment="错误信息")
     import_time = Column(DateTime, default=datetime.now, comment="导入时间")
     complete_time = Column(DateTime, comment="完成时间")
+    # 2026-09-29 新增：异步解析真实进度（由 _process_import_async 写、状态接口读）
+    progress_percent = Column(Integer, default=0, comment="解析进度 0-100")
+    current_phase = Column(String(50), comment="当前阶段标识")
     
     paper = relationship("ExamPaper")
     user = relationship("SysUser")

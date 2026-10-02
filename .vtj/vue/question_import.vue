@@ -32,6 +32,11 @@
           :style="{width: Math.max(state.progressPercent, 2) + '%'}">
         </div>
       </div>
+      <!-- 后端上报的真实阶段文案（如「提取图片（已用 12 秒）」），
+           配合单调递增的百分比，避免长耗时解析时用户误判为卡死 -->
+      <div class="import-progress-phase" v-if="state.progressPhaseLabel">
+        {{ state.progressPhaseLabel }} · {{ state.progressPercent }}%
+      </div>
     </div>
 
     <div class="import-body">
@@ -179,12 +184,18 @@
               <div class="preview-list">
                 <div class="preview-item" v-for="(q, idx) in state.batchPreviewData.slice(0, 5)" :key="idx">
                   <span class="preview-idx">{{ idx + 1 }}</span>
-                  <span class="preview-text">{{ q.question_content || q.题目内容 || JSON.stringify(q).substring(0, 80) }}</span>
+                  <!-- P0-3 修复：原用 {{ }} 文本插值，把 <img src="/static/questions/..."> 当文字打印。
+                       改走 renderQuestionContent 统一渲染口径（与试卷管理/题目管理一致）。 -->
+                  <span class="preview-text" v-html="renderQuestionContent(q.question_content || q.题目内容 || '')"></span>
                 </div>
               </div>
-              <button class="btn-primary" @click="confirmBatchImport" :disabled="state.loading">
-                {{ state.loading ? '导入中...' : '确认入库 ' + state.batchPreviewData.length + ' 题' }}
+              <button class="btn-primary" @click="confirmBatchImport" :disabled="state.loading || hasBlockedQuestions">
+                {{ state.loading ? '导入中...' : (hasBlockedQuestions ? '存在阻断问题，无法入库' : '确认入库 ' + state.batchPreviewData.length + ' 题') }}
               </button>
+              <!-- 阻断原因：把内部原因码翻译成可读文案，让用户知道该去核对什么 -->
+              <div v-if="hasBlockedQuestions" class="blocked-hint">
+                有 {{ blockedQuestionList.length }} 题存在阻断问题（{{ blockedReasonText }}），已禁止入库。请核对原卷后重新导入。
+              </div>
             </div>
             <!-- Word/PDF 智能提取（合并模式） -->
             <div class="batch-preview" v-if="state.rawTextPreview">
@@ -205,19 +216,20 @@
               <div v-if="state.parsedDocsQuestions.length" style="margin-top:16px;">
                 <QuestionPreviewList
                   :questions="state.parsedDocsQuestions"
+                  :groups="state.previewGroups || []"
+                  <!-- 复合题组总题干：按给定材料聚合，缺省为空数组时行为与旧版完全一致 -->
                   :mode="'combined'"
                   @import-one="importSingleParsedQuestion"
                   @import-all="importAllParsedQuestions"
                   @reverify="reVerifyQuestion"
                   @edit-question="handleEditQuestion"
+                  @delete-question="handleDeleteParsedQuestion"
+                  @attach-image="handleAttachImage"
+                  ref="previewListRef"
                   @close="state.parsedDocsQuestions = []; state.rawTextPreview = ''; state.combinedSubMode = 'auto'"
                   :loading="state.loading"
                 ></QuestionPreviewList>
               </div>
-              <details style="margin-top:12px;">
-                <summary style="color:#8899aa;font-size:15px;cursor:pointer;">查看原始文本</summary>
-                <pre class="raw-text" style="margin-top:8px;">{{ state.rawTextPreview }}</pre>
-              </details>
             </div>
           </div>
 
@@ -295,23 +307,18 @@
               </div>
               <QuestionPreviewList
                 :questions="state.parsedDocsQuestions"
+                :groups="state.previewGroups || []"
+                <!-- 复合题组总题干：按给定材料聚合，缺省为空数组时行为与旧版完全一致 -->
                 :mode="'separate'"
                 @import-one="importSingleParsedQuestion"
                 @import-all="importAllParsedQuestions"
                 @reverify="reVerifyQuestion"
                 @edit-question="handleEditQuestion"
+                @delete-question="handleDeleteParsedQuestion"
                 @close="state.parsedDocsQuestions = []; state.separateQuestionsLoaded = false; state.separateAnswersLoaded = false; state.separateQuestionsFileName = ''; state.separateAnswersFileName = ''; state.separateQuestionsRawText = ''; state.separateAnswersRawText = ''; state.separateMatchRate = 0"
                 :loading="state.loading"
               ></QuestionPreviewList>
             </div>
-            <!-- 原始文本 -->
-            <details v-if="state.separateQuestionsRawText" style="margin-top:12px;">
-              <summary style="color:#8899aa;font-size:15px;cursor:pointer;">查看原始文本</summary>
-              <div style="display:flex;gap:12px;">
-                <div style="flex:1;"><strong>题目文件：</strong><pre class="raw-text">{{ state.separateQuestionsRawText.substring(0, 3000) }}</pre></div>
-                <div style="flex:1;"><strong>答案文件：</strong><pre class="raw-text">{{ state.separateAnswersRawText.substring(0, 3000) }}</pre></div>
-              </div>
-            </details>
           </div>
         </div>
 
@@ -388,11 +395,14 @@
             </div>
             <QuestionPreviewList
               :questions="state.ocrQuestions"
+              :groups="state.previewGroups || []"
+              <!-- 复合题组总题干：按给定材料聚合，缺省为空数组时行为与旧版完全一致 -->
               :mode="'image'"
               @import-one="importSingleOcrQuestion"
               @import-all="importAllOcrQuestionsConfirmed"
               @reverify="reVerifyOcrQuestion"
               @edit-question="handleEditQuestion"
+              @delete-question="handleDeleteOcrQuestion"
               @close="state.ocrQuestions = []; state.ocrText = ''; state.imagePreviewUrl = ''; state.ocrAutoSubject = ''; state.ocrAutoSubcategories = []"
               :loading="state.ocrLoading"
             ></QuestionPreviewList>
@@ -488,11 +498,12 @@
   // @ts-nocheck
 import { defineComponent, reactive } from 'vue';
 import { XIcon } from '@vtj/ui';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import ManualMatchDialog from './manual_match_dialog.vue';
 import QuestionPreviewList from './question_preview_list.vue';
+import { renderQuestionContent } from '@/utils/questionRender';
   export default defineComponent({
     name: 'QuestionImport',
     components: { XIcon, QuestionPreviewList, ManualMatchDialog },
@@ -522,6 +533,8 @@ import QuestionPreviewList from './question_preview_list.vue';
         },
         batchPaperName: '',
         batchPreviewData: [],
+        // 复合题组总题干：后端按「给定材料」聚合，缺省空数组时行为与旧版一致
+        previewGroups: [],
         rawTextPreview: '',
         parsedDocsQuestions: [],
         importId: null,
@@ -561,6 +574,8 @@ import QuestionPreviewList from './question_preview_list.vue';
         progressPhase: 0,         // 当前阶段索引 0-based
         progressPercent: 0,       // 当前阶段进度 0-100
         progressSteps: [],        // [{label:'文档解析', status:'done'|'active'|'pending'}]
+        // 2026-09-29 新增：后端上报的解析阶段中文提示（如「提取图片（已用 12 秒）」）
+        progressPhaseLabel: '',
         // 批量导入结果摘要（双轨入库展示：试卷ID/新增复用/待确认）
         importSummary: null,
         // P0-3: 异常题清单（含题号/类型/原因，点击可定位到题目卡片）
@@ -572,6 +587,8 @@ import QuestionPreviewList from './question_preview_list.vue';
         state, props, provider,
         PDF_OCR_TIMEOUT_MS,
         UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List,
+        // P0-3：模板中的 v-html 渲染入口（统一走 @/utils/questionRender）
+        renderQuestionContent,
         cardTabs: [
           { key: 'single', title: '单题录入', icon: UploadFilled },
           { key: 'batch', title: '批量导入', icon: Upload },
@@ -585,6 +602,43 @@ import QuestionPreviewList from './question_preview_list.vue';
         provinceList: ['北京市','天津市','河北省','山西省','内蒙古自治区','辽宁省','吉林省','黑龙江省','上海市','江苏省','浙江省','安徽省','福建省','江西省','山东省','河南省','湖北省','湖南省','广东省','广西壮族自治区','海南省','重庆市','四川省','贵州省','云南省','西藏自治区','陕西省','甘肃省','青海省','宁夏回族自治区','新疆维吾尔自治区'],
         examTypeList: ['国考','省考','联考','模拟考试','事业单位','招警考试']
       };
+    },
+    computed: {
+      // ★ 申论阻断检测
+      //   后端解析器对「题号邻近找不到分值」「答案段数与题目数不等」的题块会置
+      //   blocked=true。这类题一旦入库就是错配数据，事后无法与正确数据区分，
+      //   因此前端必须在**提交前**拦住，而不是等后端 400。
+      //   用户硬约束：宁可阻断报错交人工，也不允许把错配数据写进题库。
+      blockedQuestionList() {
+        const list = this.state.batchPreviewData || [];
+        return list.filter(function (q) {
+          return q && (q.blocked === true || q.blocked === 1 || q.blocked === 'true');
+        });
+      },
+      hasBlockedQuestions() {
+        return this.blockedQuestionList.length > 0;
+      },
+      // 内部原因码 → 中文可读文案。未识别的码原样显示，便于排查而不丢失信息。
+      blockedReasonText() {
+        const LABEL = {
+          missing_score: '缺少分值信息',
+          answer_block_count_mismatch: '答案段数与题目数不匹配',
+          answer_missing_for_question: '答案卷缺少该题号',
+          stem_fingerprint_mismatch: '题干与答案卷不匹配（可能传错文件）',
+          score_mismatch: '题目与答案分值不一致'
+        };
+        const seen = {};
+        this.blockedQuestionList.forEach(function (q) {
+          const reasons = q.block_reasons || [];
+          (Array.isArray(reasons) ? reasons : [reasons]).forEach(function (r) {
+            if (!r) return;
+            seen[r] = LABEL[r] || r;
+          });
+        });
+        const keys = Object.keys(seen);
+        if (!keys.length) return '';
+        return keys.map(function (k) { return seen[k]; }).join('；');
+      }
     },
     methods: {
       goHome() {
@@ -762,8 +816,37 @@ import QuestionPreviewList from './question_preview_list.vue';
           var secs = Math.round(waited / 1000);
           var tip = secs >= 60 ? Math.round(secs / 60) + ' 分钟' : secs + ' 秒';
           if (self.state && self.state.loading) self.state.loading = false;   // 避免按钮转圈卡死观感
-          if (self.setProgress) self.setProgress(0, Math.min(45, 10 + Math.round(waited / 4000)));
+          // ★ 2026-09-29 修复：此前是 `Math.min(45, 10 + Math.round(waited / 4000))`
+          //   —— 纯按等待时间伪造百分比，与后端真实解析进度毫无关系，
+          //   表现为「百分比停在 45% 不动，等解析结束突然跳到 100」。
+          //   后端 _process_import_async 现按六阶段写库 progress_percent/current_phase，
+          //   此处直接采信；后端未升级（无该字段）时不写任何值，绝不再伪造。
+          self.applyBackendProgress(st, tip);
         });
+      },
+
+      /**
+       * 用后端上报的真实进度刷新进度条与阶段提示。
+       * @param st   状态接口响应（已含 progress_percent / current_phase）
+       * @param tip  已等待时长文案，用于扫描件等长耗时场景的安抚提示
+       */
+      applyBackendProgress(st, tip) {
+        if (!st) return;
+        var pct = st.progress_percent;
+        if (typeof pct !== 'number' || isNaN(pct)) return;   // 旧后端无此字段 -> 不伪造
+        pct = Math.max(0, Math.min(100, pct));
+        this.setProgress(0, pct);
+        // 阶段名映射为中文；扫描件 OCR 阶段耗时可达数分钟，补一句提示避免误判卡死
+        var labels = {
+          READING: '读取文件', EXTRACTING: '提取文本', IMAGES: '提取图片',
+          SPLITTING: '切分题目', MATCHING: '匹配答案', BUILDING: '构建预览',
+          DONE: '解析完成'
+        };
+        var label = labels[st.current_phase] || '';
+        if (label && pct < 100) {
+          this.state.importProgress = pct;
+          this.state.progressPhaseLabel = label + '（已用 ' + (tip || '') + '）';
+        }
       },
       addOption() {
         const keys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -924,6 +1007,7 @@ import QuestionPreviewList from './question_preview_list.vue';
             // Excel/CSV 返回结构化 questions 数组
             if (data.questions && data.questions.length > 0) {
               self.state.batchPreviewData = data.questions;
+              self.state.previewGroups = data.groups || [];
               self.state.rawTextPreview = '';
               self.state.importId = data.import_id;
               self.stepDone(0); self.setProgress(0, 100);
@@ -956,6 +1040,16 @@ import QuestionPreviewList from './question_preview_list.vue';
         input.click();
       },
       async confirmBatchImport() {
+        // ★ 程序性守卫：不能只靠按钮 disabled —— disabled 可被绕过
+        //   （控制台直接调方法、Enter 提交表单、并发点击都会击穿 UI 层）。
+        //   阻断是数据正确性闸门，必须在真正发请求前再拦一次。
+        if (this.hasBlockedQuestions) {
+          ElMessage.error(
+            '存在阻断问题，无法入库：' + this.blockedReasonText +
+            '。已阻断 ' + this.blockedQuestionList.length + ' 题，请核对原卷后重新导入。'
+          );
+          return;
+        }
         if (!this.state.batchPreviewData.length) {
           ElMessage.warning('无可导入的题目数据');
           return;
@@ -1311,59 +1405,72 @@ import QuestionPreviewList from './question_preview_list.vue';
         if (/行测|数量|资料分析|判断推理|言语|常识|速度与知觉/i.test(sample)) return '行测';
         return '公专'; // 默认
       },
-      // 自动检测题型（五维度综合判定）
-      detectQuestionType(questionContent, options, answer = '') {
-        var text = questionContent || '';
-        var answerText = (answer || '').trim().toUpperCase();
+      // P0-3 题型判定：降级为**兜底**，不再在前端重新裁决
+      //
+      // 历史事故（本函数是第 3 套题型判定实现，与后端 text_parser._detect_question_type
+      // 各写各的）。两个调用点都是 `q.question_type_detail = this.detectQuestionType(...)`
+      // 无条件覆盖，把后端算好的结果丢掉，于是：
+      //   1) `/多选|多项选择|不定项/.test(text) → 多选题`
+      //      会命中**粘连进题干的分节指令段**（"二、多项选择题。请从每题…"），
+      //      把一道单选题误判为多选题 —— 这正是"试卷里显示多选题"但答案只有 1 个字母的成因；
+      //   2) `text.length > 200 → 写作题` / `> 80 → 论述题`
+      //      使选项解析失败的长选择题被误判为主观题。
+      //
+      // 新策略：题型以**后端返回的 question_type_detail 为准**；
+      // 仅当后端未给值时才用下面的保守规则兜底，且规则不再依赖文本长度。
+      _stripSectionDirective(text) {
+        if (!text) return '';
+        // 去掉粘连的分节指令段与材料头，避免其关键词污染题型判定
+        return String(text)
+          .replace(/[一二三四五六七八九十]{1,3}\s*[、，．.]\s*(?:单项选择题|多项选择题|不定项选择题|选择题|判断题|情景分析题|案例分析题|简答题|简述题|论述题|写作题|材料题)[^\n]{0,120}/g, ' ')
+          .replace(/(?:根据|阅读)(?:以下|下面)[^\n]{0,20}?回答[ \t]*\d+[ \t]*[-~—－至][ \t]*\d+[ \t]*题/g, ' ');
+      },
+      _judgeOptionText(o) {
+        var s = '';
+        if (o == null) return s;
+        if (typeof o === 'string') s = o;
+        else if (typeof o === 'object') s = o.value || o.text || o.label || '';
+        return String(s).replace(/^[A-H]\s*[.、．)）\]]\s*/, '').trim();
+      },
+      // 兜底题型判定（仅在后端未提供 question_type_detail 时使用）
+      detectQuestionType(questionContent, options, answer = '', backendType = '') {
+        // 1) 后端结论优先
+        if (backendType) return backendType;
 
-        // ===== 维度1：答案格式判断（权重最高）=====
-        if (answerText) {
-          // 单字母答案 → 单选题
-          if (/^[A-D]$/.test(answerText)) return '单选题';
-          // 多字母答案（逗号分隔或连写）→ 多选题
-          if (/^[A-D]([，,][A-D])+$/.test(answerText)) return '多选题';
-          if (/^[A-D]{2,}$/.test(answerText)) return '多选题';
-          // 判断题标志词
-          if (/^(正确|错误|对|错|TRUE|FALSE|T|F)$/i.test(answerText)) return '判断题';
-          // 长文本答案 → 主观题
-          if (answerText.length > 20) return '论述题';
+        var text = this._stripSectionDirective(questionContent);
+        var opts = (options && Array.isArray(options)) ? options : [];
+        var optCount = opts.filter(function (o) { return this._judgeOptionText(o); }, this).length;
+        var ans = String((answer || '')).trim().toUpperCase();
+        var letters = ans.replace(/[^A-H]/g, '');
+        var JUDGE_WORDS = ['正确', '错误', '对', '错', 'TRUE', 'FALSE', 'T', 'F'];
+
+        // 2) 答案格式是硬信号，优先级最高
+        if (letters.length >= 2) return '多选题';
+        if (letters.length === 1 && optCount >= 2) return '单选题';
+        if (JUDGE_WORDS.indexOf(ans) >= 0) return '判断题';
+
+        // 3) 判断题：选项恰好是 {正确,错误} 或 {对,错}
+        if (optCount === 2) {
+          var texts = opts.map(this._judgeOptionText, this);
+          var isJudgePair =
+            (texts.some(function (t) { return /正确|对/.test(t); }) &&
+             texts.some(function (t) { return /错误|错/.test(t); }));
+          if (isJudgePair) return '判断题';
         }
 
-        // ===== 维度2：选项数量 + 答案综合判断 =====
-        var optCount = (options && Array.isArray(options)) ? options.length : 0;
-
-        // ===== 维度4前置：先检查题干关键词（最高优先级之一）=====
-        if (/多选|多项选择|不定项/.test(text)) return '多选题';
-        if (/判断|对错|是否/.test(text) && optCount <= 2) return '判断题';
-
+        // 4) 有选项但无答案 → 走题干关键词，仍无结论则保守判单选
         if (optCount >= 2) {
-          // 有选项时，结合答案判断
-          if (answerText && /^[A-D]{2,}$/.test(answerText)) return '多选题';
-          if (optCount === 4) {
-            // 4选项：有单字母答案→单选，无答案→默认单选
-            if (answerText && answerText.length === 1) return '单选题';
-            if (!answerText) return '单选题';
-          }
-          if (optCount > 4) return '多选题';
-          if (optCount === 2) {
-            // 2选项：判断题倾向
-            if (/判断|对错|是否/.test(text)) return '判断题';
-            return '单选题';
-          }
+          if (/多选|多项选择|不定项|正确的有|错误的有/.test(text)) return '多选题';
+          return '单选题';
         }
 
-        // ===== 维度3：无选项题目 —— 关键词判断 =====
-        if (optCount < 2) {
-          if (/写作|作文|请以.*为题|写一篇|谈谈你的看法/.test(text) || text.length > 200) return '写作题';
-          if (/____|（）|\(\)|（\s*）/.test(text)) return '填空题';
-          if (/判断|对错|是否正确|正确还是错误/.test(text)) return '判断题';
-          if (/论述|分析|简答|阐述|说明|概括|简述/.test(text) || text.length > 80) return '论述题';
-          return '论述题';
-        }
-
-        // ===== 默认 =====
-        if (optCount >= 3) return '单选题';
-        return '论述题';
+        // 5) 无选项 → 主观题，按关键词细分（不再用文本长度当信号）
+        if (/判断|对错|是否正确|正确还是错误/.test(text)) return '判断题';
+        if (/作文|写作|撰写|写一篇|请以.{0,20}为题|自拟标题|议论文|应用文|不少于\d{2,4}字/.test(text)) return '写作题';
+        if (/论述|试述|评析|阐述|论证|如何理解|谈谈你的/.test(text)) return '论述题';
+        if (/简述|简答|列举|概括|归纳/.test(text)) return '简答题';
+        if (/填空|_{3,}|＿{3,}|横线处/.test(text)) return '填空题';
+        return '简答题';
       },
       /** ========== 进度条控制 ========== */
       setProgress(phase, percent, steps) {
@@ -1537,8 +1644,10 @@ import QuestionPreviewList from './question_preview_list.vue';
           if (q && q.question_content) {
             // 附加来源题号（用于分离导入的题号精确匹配）
             q.question_number = blocks[j].num;
-            // 自动推断题型
-            q.question_type_detail = this.detectQuestionType(q.question_content, q.options, q.answer || '');
+            // P0-3：仅在后端未给出题型时才用前端兜底规则，不再无条件覆盖
+            q.question_type_detail = this.detectQuestionType(
+              q.question_content, q.options, q.answer || '', q.question_type_detail
+            );
             // 自动检测科目
             q.subject_category = detectedSubject;
             q.score = 1;
@@ -2253,6 +2362,102 @@ import QuestionPreviewList from './question_preview_list.vue';
         if (data.analysis !== undefined) q.analysis = data.analysis;
         ElMessage.success('第 ' + (payload.index + 1) + ' 题已更新');
       },
+      // ===== 逐题删除（识别匹配后剔除解析出错的题）=====
+      // 序号重排由预览列表的索引驱动显示（第 {{idx+1}} 题）自动完成；
+      // 答案与解析是题目对象自身的字段，随对象整体移除，
+      // 不存在"删了题干却把别的题的答案留下"的错位风险。
+      // question_number 保留原文档编号：异常面板依赖它回溯原文位置。
+      _removeQuestionAt(list, idx, label) {
+        if (!list || idx < 0 || idx >= list.length) return;
+        var target = list[idx];
+        if (target && target._imported) {
+          ElMessage.warning('该题已导入库，无法在此删除');
+          return;
+        }
+        var self = this;
+        ElMessageBox.confirm(
+          '确定删除第 ' + (idx + 1) + ' 题吗？删除后其余题目序号会自动重排。',
+          '删除题目',
+          { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+        ).then(function () {
+          list.splice(idx, 1);
+          ElMessage.success('已删除' + label + '第 ' + (idx + 1) + ' 题，剩余 ' + list.length + ' 题');
+          void self;
+        }).catch(function () { /* 取消删除，不做任何改动 */ });
+      },
+      handleDeleteParsedQuestion(idx) {
+        this._removeQuestionAt(this.state.parsedDocsQuestions, idx, '');
+      },
+
+      /**
+       * 预览态为某道题添加图片（题干或指定选项）。
+       * 预览态题目尚未落库，后端改写的是 QuestionImportRecord.preview_data，
+       * 因此成功后仅就地更新本地题目对象，**不重新拉取整个预览** ——
+       * 否则会覆盖教师已经做过的答案/解析编辑。
+       * @param payload {idx, target:'content'|'option', optionKey, file}
+       */
+      async handleAttachImage(payload) {
+        if (!payload || !payload.file) return;
+        var idx = payload.idx;
+        var importId = this.state.importId;
+        var self = this;
+        if (!importId) {
+          ElMessage.error('缺少导入记录 ID，无法添加图片');
+          this._finishAttach();
+          return;
+        }
+        var q = this.state.parsedDocsQuestions[idx];
+        if (!q) { this._finishAttach(); return; }
+
+        try {
+          var fd = new FormData();
+          fd.append('file', payload.file);
+          fd.append('target', payload.target || 'content');
+          if (payload.optionKey) fd.append('option_key', payload.optionKey);
+          fd.append('question_index', String(idx));
+
+          var res = await fetch(
+            '/api/questions/import/records/' + importId + '/attach-image',
+            { method: 'POST', headers: this.getAuthHeaders(), body: fd }
+          );
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok) {
+            throw new Error(this._extractErrorMessage(data, '图片添加失败 (HTTP ' + res.status + ')'));
+          }
+
+          var tag = '<img src="' + data.url + '" class="q-img" loading="lazy" />';
+          if ((payload.target || 'content') === 'content') {
+            q.question_content = (q.question_content || '') + tag;
+            ElMessage.success('已为该题题干添加图片');
+          } else {
+            var opts = q.options || [];
+            var hit = false;
+            for (var i = 0; i < opts.length; i++) {
+              if (opts[i] && opts[i].key === payload.optionKey) {
+                opts[i].value = (opts[i].value || '') + tag;
+                hit = true;
+                break;
+              }
+            }
+            if (!hit) throw new Error('未找到选项 ' + payload.optionKey);
+            // 触发 Vue 响应式更新
+            this.state.parsedDocsQuestions[idx] = Object.assign({}, q, { options: opts });
+            ElMessage.success('已为选项 ' + payload.optionKey + ' 添加图片');
+          }
+        } catch (e) {
+          ElMessage.error(this.handleFetchError(e, '图片添加'));
+        } finally {
+          this._finishAttach();
+        }
+      },
+      _finishAttach() {
+        var ref = this.$refs && this.$refs.previewListRef;
+        if (Array.isArray(ref)) ref = ref[0];
+        if (ref && typeof ref.finishAttach === 'function') ref.finishAttach();
+      },
+      handleDeleteOcrQuestion(idx) {
+        this._removeQuestionAt(this.state.ocrQuestions, idx, '图片识别');
+      },
       reVerifyQuestion(idx) {
         var q = this.state.parsedDocsQuestions[idx];
         if (!q) return;
@@ -2470,7 +2675,10 @@ import QuestionPreviewList from './question_preview_list.vue';
           ElMessage.info('正在验证题目类型...');
           for (let i = 0; i < pending.length; i++) {
             const q = pending[i];
-            q.question_type_detail = this.detectQuestionType(q.question_content, q.options, q.answer);
+            // P0-3：仅在后端未给出题型时才用前端兜底规则，不再无条件覆盖
+            q.question_type_detail = this.detectQuestionType(
+              q.question_content, q.options, q.answer, q.question_type_detail
+            );
             this.state.importProgress = Math.floor((i + 1) / pending.length * 50);
           }
           
@@ -2762,6 +2970,12 @@ import QuestionPreviewList from './question_preview_list.vue';
     overflow: hidden;
     margin: 0;
   }
+  .import-progress-phase {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #8899aa;
+    line-height: 1.5;
+  }
   .import-progress-fill {
     height: 100%;
     background: linear-gradient(90deg, #c41e3a, #e8384f);
@@ -2990,7 +3204,11 @@ import QuestionPreviewList from './question_preview_list.vue';
     font-weight: 700;
     color: #c41e3a;
   }
-  .preview-text { color: #b0b8c4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* P0-3：预览项改走 v-html 后需要允许换行与图片显示。
+   原样式 `white-space: nowrap` 会把渲染后的 HTML 压成一行并截断，
+   现改为多行自适应 + 给 img 设定尺寸约束。 */
+.preview-text { color: #b0b8c4; overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.7; }
+.preview-text :deep(img), .preview-text img { max-width: 100%; max-height: 220px; height: auto; object-fit: contain; display: block; margin: 6px 0; border-radius: 6px; }
   .raw-text {
     width: 100%;
     max-height: 400px;
@@ -3408,6 +3626,18 @@ import QuestionPreviewList from './question_preview_list.vue';
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
+  }
+  /* 申论阻断提示：这是数据正确性告警，不是普通提示，必须醒目。
+     用警示色 + 左侧竖条，避免被当作可忽略的灰色小字。 */
+  .blocked-hint {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-left: 3px solid #f56c6c;
+    background: rgba(245, 108, 108, 0.08);
+    color: #f56c6c;
+    font-size: 13px;
+    line-height: 1.6;
+    border-radius: 2px;
   }
 
 </style>

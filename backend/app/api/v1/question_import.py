@@ -4,6 +4,7 @@
 import asyncio
 import base64
 import hashlib
+import io
 import ipaddress
 import json
 import logging
@@ -11,6 +12,7 @@ import os
 import re
 import shutil
 import socket
+import uuid
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Optional, List, Dict, Any
@@ -50,6 +52,7 @@ from ...services.text_parser import (
     ContentCleaner,
     normalize_type_name,
     canonical_answer,
+    _essay_norm_fp,
     _extract_options,
     _detect_question_type,
     detect_answer_conflicts,
@@ -75,6 +78,165 @@ SUBJECT_NAME_MAP = {
 # (删除本地 TYPE_MAP，使用 normalize_type_name 代替 _normalize_type_name)
 
 # ============ 工具函数 ============
+
+# ============ 难度唯一收口（P0-5） ============
+# 背景：前端下拉用中文（简单/较易/中等/较难/困难），数据库列是 INTEGER。
+#       历史代码存在两处解析：_normalize_question 内的 `int(diff_raw)`（有 try 兜底）
+#       与 _upsert_question_core 内的 `int(question_data.get('difficulty', 3))`（**无任何保护**），
+#       后者在用户于导入预览页编辑难度为"中等"后触发
+#       `ValueError: invalid literal for int() with base 10: '中等'`，
+#       导致整批导入在该题失败、试卷缺失题目。
+# 原则：导入是批量作业，单题字段异常不得中断整批 —— 该函数**永不抛异常**。
+_DIFFICULTY_NAME_MAP = {
+    '简单': 1, '容易': 1, '入门': 1,
+    '较易': 2, '一般': 2, '容易题': 2,
+    '中等': 3, '普通': 3, '适中': 3,
+    '较难': 4, '偏难': 4,
+    '困难': 5, '难': 5, '较难题': 5,
+}
+
+# 题型守卫：主观题（无标准答案选项）在教师端不参与客观题难度筛选时的默认值
+DEFAULT_DIFFICULTY = 3
+
+# P3b：题型判定置信度低于此阈值即标记 need_review，交教师人工复核。
+# 0.95 = 硬规则命中（选项/答案形态决定）；0.85/0.90 = 关键词命中；
+# 0.70 = 缺答案时的关键词降级；0.40 = 纯兜底。
+# 取 0.60：把「缺答案降级」与「纯兜底」纳入复核，关键词命中与硬规则不放进复核。
+NEED_REVIEW_CONFIDENCE = 0.60
+
+
+def coerce_difficulty(raw: Any, default: int = DEFAULT_DIFFICULTY) -> int:
+    """把任意形态的难度值归一化为 1..5 的 int。**永不抛异常。**
+
+    接受：None / '' / 3 / '3' / 3.0 / '中等' / '较难' / '难度4' / True 等。
+
+    设计要点：
+    - 唯一收口：所有 difficulty 入库点必须走本函数，禁止再散落 int() 强转
+    - 名称→数字映射集中在 _DIFFICULTY_NAME_MAP，前端文案调整只改一处
+    - 数字优先于名称："难度4" 抽出 4；纯名称走映射表；都无法识别落 default
+    """
+    if raw is None:
+        return default
+    # bool 是 int 的子类，但 True/False 显然是脏数据，按 default 处理
+    if isinstance(raw, bool):
+        return default
+    if isinstance(raw, int):
+        return max(1, min(5, raw))
+    if isinstance(raw, float):
+        try:
+            return max(1, min(5, int(round(raw))))
+        except (ValueError, OverflowError):
+            return default
+    # 容器类型（dict/list/tuple/set）走 str() 会捞出无关数字，纯属脏数据 → default
+    if isinstance(raw, (dict, list, tuple, set)):
+        return default
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            raw = raw.decode('utf-8')
+        except (UnicodeDecodeError, AttributeError):
+            return default
+    s = str(raw).strip()
+    if not s:
+        return default
+    if s in _DIFFICULTY_NAME_MAP:
+        return _DIFFICULTY_NAME_MAP[s]
+    # 先尝试直接整数，再从混合串里抽数字（"难度4" / "第3题" / "3-中等"）
+    try:
+        return max(1, min(5, int(s)))
+    except ValueError:
+        pass
+    m = re.search(r'\d+', s)
+    if m:
+        return max(1, min(5, int(m.group())))
+    return default
+
+
+def coerce_score(raw: Any, default: float = 1.0) -> float:
+    """分值收口：接受 1 / '1' / 1.5 / None，恒返回 >0 的 float。**永不抛异常。**
+
+    与 coerce_difficulty 同理：导入是批量作业，脏字段不得中断整批。
+    """
+    if raw is None or raw == '':
+        return default
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        m = re.search(r'\d+(?:\.\d+)?', str(raw))
+        if not m:
+            return default
+        try:
+            v = float(m.group())
+        except ValueError:
+            return default
+    return v if v > 0 else default
+
+
+def dump_json_once(value: Any) -> Optional[str]:
+    """把对象序列化为**单层** JSON 字符串（P0-6：修 preview_data 双重编码）。
+
+    历史事故：preview_data 列存的是 `json.dumps(json.dumps(obj))` 的结果
+    （数据库里长成 `"{\\"items\\": ...` 这种带转义引号的外层字符串），
+    前端回读时只能拿到字符串而非对象，编辑结果无法落库。
+
+    实现：循环剥离 JSON 字符串外层，直到不再能解析出字符串为止（上限 5 层，
+    防构造性嵌套导致死循环），再统一序列化一次。
+    对已正确的单层 JSON 输入是幂等的（不改变结果）。
+    """
+    if value is None:
+        return None
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            value = value.decode('utf-8')
+        except UnicodeDecodeError:
+            return None
+    # 循环解包：处理历史双重/多重编码
+    for _ in range(5):
+        if not isinstance(value, str):
+            break
+        try:
+            decoded = json.loads(value)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            break  # 不是 JSON 字符串，原样保留
+        if isinstance(decoded, str):
+            value = decoded   # 又剥掉一层，继续
+            continue
+        value = decoded       # 剥到真实对象了，停止
+        break
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return json.dumps(str(value), ensure_ascii=False)
+
+
+def load_json_lenient(raw: Any) -> Any:
+    """P0-6 读取端：兼容单层与历史多重编码的 JSON 字段。
+
+    `question_import_record.preview_data` / `error_messages` 历史上存在双重编码，
+    前端回读时需要能取到真实对象而不是字符串。读取失败一律返回 None，不抛异常。
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            raw = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            return None
+    if not isinstance(raw, str):
+        return raw
+    for _ in range(5):
+        s = raw.strip()
+        if not s:
+            return None
+        try:
+            raw = json.loads(s)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+        if not isinstance(raw, str):
+            return raw
+    return None
+
 
 # 各科目合法子科目名（与 question_classifier.SUB_CATEGORY_IDS 保持一致，用于校验显式子科目）
 VALID_SUBCATEGORY_NAMES = {
@@ -368,7 +530,8 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     # 题型：通用'选择题'或缺失 → 用关键词工程细分单选/多选（避免'选择题'被归一化为单选）
     if not raw_type or raw_type in ('选择题',):
-        type_name = _detect_question_type(content, options, answer)
+        # ★ 返回的是 (type_name, confidence) 元组，必须解包
+        type_name, _conf0 = _detect_question_type(content, options, answer)
     else:
         type_name = raw_type
 
@@ -378,13 +541,9 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if norm:
             answer = norm
 
-    difficulty_map = {'简单': 1, '较易': 2, '中等': 3, '较难': 4, '困难': 5}
-    diff_raw = row.get('难度') or row.get('difficulty') or '3'
-    try:
-        difficulty = int(diff_raw)
-    except ValueError:
-        difficulty = difficulty_map.get(diff_raw, 3)
-    difficulty = max(1, min(5, difficulty))
+    # 难度：走唯一收口 coerce_difficulty（不再用会抛 ValueError 的裸 int()）
+    diff_raw = row.get('难度') or row.get('difficulty')
+    difficulty = coerce_difficulty(diff_raw)
 
     try:
         score = float(row.get('分值') or row.get('score') or 1.0)
@@ -677,8 +836,83 @@ def _extract_text_from_docx(buf: bytes) -> str:
     return '\n'.join(parts)
 
 
-def _extract_text_from_pdf(buf: bytes) -> str:
+def _norm_for_dedup(s: str) -> str:
+    """归一化文本用于重复比对：去除所有空白与表格分隔符。
+
+    pdfplumber 的 ``extract_text()`` 与 ``extract_tables()`` 对同一批内容的
+    呈现不同：前者用换行分隔单元格，后者用 ``' | '`` 连接。直接字符串比较
+    必然漏判，因此两侧统一去空白与分隔符后再比对，才能稳定识别「已存在」的内容。
+    """
+    return re.sub(r'[\s|\u3000]+', '', s or '')
+
+
+# PDF 图片占位符提取所需常量（2026-09-29）
+# 行首题号：用于判定图片归属的哪一道题
+_PDF_QN_LINE = re.compile(r'^\s*(\d{1,3})\s*[．.、]')
+# 页面噪声行：页眉/页脚/水印，占位符绝不能挂在这些行上（会被清洗整行删掉）
+_PDF_NOISE_LINE = re.compile(
+    r'^\s*第\s*\d+\s*页'                       # 页脚/页码
+    r'|^[\s\w\u4e00-\u9fff]{0,6}(?:小绵羊上岸店|上岸店)'  # 水印
+    r'|^\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?\S*国家公务员'  # 页眉标题
+)
+# PDF 色彩空间 → (PIL mode, 通道数)
+# 键为「去非字母数字后小写」的形式：pdfminer 返回的名称形如 /'DeviceRGB'
+# （斜杠后带 PDF 名引号），直接 strip("'") 剥不掉内层引号，必须先清洗再查表。
+_PDF_CS_SPEC = {
+    'devicergb': ('RGB', 3), 'rgb': ('RGB', 3),
+    'devicegray': ('L', 1), 'g': ('L', 1), 'calgray': ('L', 1),
+    'devicecmyk': ('CMYK', 4), 'cmyk': ('CMYK', 4),
+}
+# 图片最小边长：过滤碎片。实测目标 PDF 第 11 页含 4 张 14x11 的无效碎片
+_PDF_MIN_IMG_DIM = 40
+
+
+def _pdf_image_to_png(im) -> Optional[bytes]:
+    """把 PDF 内嵌图片的原始像素封装为 PNG 字节；不支持/异常返回 None。
+
+    pdfplumber 的 ``stream.get_data()`` 返回的是**未编码**的原始采样值
+    （实测 DeviceRGB 8bit 图像恰好等于 w*h*3 字节），并非可直接保存的图片文件，
+    因此必须按色彩空间与位深还原成像素数组后再由 PIL 编码为 PNG。
+    ``get_rawdata()`` 仅对 JPEG(DCTDecode) 流有效，此处不可用。
+    """
+    try:
+        cs = im.get('colorspace')
+        if not cs:
+            return None
+        # pdfminer 返回形如 /'DeviceRGB'（斜杠 + PDF 名引号），先清洗为 devicergb 再查表
+        key = re.sub(r'[^A-Za-z0-9]', '', str(cs[0])).lower()
+        spec = _PDF_CS_SPEC.get(key)
+        if not spec:
+            logger.debug(f"[pdf-images] 暂不支持的色彩空间 {cs[0]!r} -> {key}，跳过该图")
+            return None
+        if im.get('bits') != 8:
+            logger.debug(f"[pdf-images] 暂不支持的位深 {im.get('bits')}，跳过该图")
+            return None
+        srcsize = im.get('srcsize') or (0, 0)
+        sw, sh = int(srcsize[0]), int(srcsize[1])
+        if sw < _PDF_MIN_IMG_DIM or sh < _PDF_MIN_IMG_DIM:
+            logger.debug(f"[pdf-images] 碎片图 {sw}x{sh} 低于 {_PDF_MIN_IMG_DIM}px，跳过")
+            return None
+        mode, nch = spec
+        data = im['stream'].get_data()
+        if len(data) != sw * sh * nch:
+            logger.debug(f"[pdf-images] 数据长度 {len(data)} != {sw}x{sh}x{nch}，跳过该图")
+            return None
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.frombytes(mode, (sw, sh), data).save(buf, format='PNG')
+        return buf.getvalue()
+    except Exception as e:
+        logger.debug(f"[pdf-images] 图片转换失败: {type(e).__name__}: {e}")
+        return None
+
+
+def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
     """从 PDF 提取纯文本（优先使用 pdfplumber，支持表格提取；扫描件自动OCR）
+
+    ``progress_cb(page_no, total_pages, images_on_page)`` 为可选进度回调，
+    在**每页处理完后**同步触发，用于让前端展示真实递增的进度而非定时器伪造。
+    回调内部异常会被吞掉——进度只是观测手段，绝不能因此中断解析。
 
     提取文本缓存（P0 提速）：本函数是 buf → text 的**纯函数**（无落盘等副作用），
     因此可按文件内容 md5 缓存提取结果。实测扫描件 OCR 需 260s/份，
@@ -693,6 +927,12 @@ def _extract_text_from_pdf(buf: bytes) -> str:
     # ===== 提取文本缓存：命中即返回（纯加速层，异常已在 text_cache 内降级） =====
     _cached = text_cache.get(buf)
     if _cached is not None:
+        if progress_cb:
+            # 缓存命中：无逐页过程可报，直接告知「文本提取已完成」
+            try:
+                progress_cb(1, 1, 0)
+            except Exception:  # noqa: BLE001
+                pass
         return _cached
 
     def _finish(text: str, engine: str) -> str:
@@ -705,20 +945,132 @@ def _extract_text_from_pdf(buf: bytes) -> str:
         import pdfplumber
         with pdfplumber.open(io.BytesIO(buf)) as pdf:
             parts = []
-            for page in pdf.pages:
-                # 提取文本
-                text = page.extract_text()
+            # ===== PDF 图片占位符（2026-09-29 新增）=====
+            # 与 DOCX 产出同构的 [IMAGE:{hex}_{题号}_{序号}] 占位符，并暂存为
+            # {key}.png 到 static/questions/，从而 100% 复用既有下游
+            # _extract_and_save_images（压缩落盘 + question_content/options 回填）。
+            session_hex = uuid.uuid4().hex[:8]  # 8 位十六进制，匹配 marker_pattern 的 [a-f0-9]+
+            stage_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                'static', 'questions')
+            try:
+                os.makedirs(stage_dir, exist_ok=True)
+            except Exception as e:
+                logger.warning(f"[pdf-images] 无法创建暂存目录，跳过图片提取: {e}")
+                stage_dir = ''
+            img_seq: Dict[int, int] = {}
+            cur_qn = 0   # 跨页延续的当前题号（图片可能落在题干跨页的续页上）
+
+            for page_no, page in enumerate(pdf.pages, 1):
+                # --- 取带坐标的行：既能按垂直位置定位题号，也便于按行索引插入占位符
+                try:
+                    tlines = page.extract_text_lines() or []
+                except Exception:
+                    tlines = []
+                if tlines:
+                    page_lines = [str(l.get('text', '')) for l in tlines]
+                    line_tops = [float(l.get('top', 0.0) or 0.0) for l in tlines]
+                else:
+                    page_lines = (page.extract_text() or '').split('\n')
+                    line_tops = [0.0] * len(page_lines)
+
+                # --- 逐行建立「该行属于哪道题」映射 ---
+                # 必须对每一页都执行（而非只在有图的页里做）：题号可能出现在
+                # 没有图片的页上，而下一��的图片却属于那道跨页的题。
+                # 实测漏修此点会丢掉第 6 页的两张图（其题号 40 在第 5 页）。
+                carry_in_qn = cur_qn
+                qn_at: Dict[int, int] = {}
+                run_qn = carry_in_qn
+                for i, lp in enumerate(page_lines):
+                    m = _PDF_QN_LINE.match(lp)
+                    if m:
+                        run_qn = int(m.group(1))
+                    qn_at[i] = run_qn
+                cur_qn = run_qn      # 供下一页延续
+
+                # --- 图片 → 占位符 ---
+                # 归属题号 = 图片上方最近一行的所属题号。
+                # 关键：占位符绝不能挂在页眉/水印/页脚行上——那些行会被
+                # ContentCleaner 判为噪声整行删除，占位符随之消失导致图片静默丢失。
+                for im in (getattr(page, 'images', None) or []):
+                    if not stage_dir:
+                        break
+                    try:
+                        top = float(im.get('top', 0.0) or 0.0)
+                    except Exception:
+                        top = 0.0
+                    anchor = -1
+                    qn = 0
+                    for i, lt in enumerate(line_tops):
+                        if lt <= top:
+                            anchor = i
+                            qn = qn_at.get(i, 0)
+                    if qn <= 0:
+                        qn = carry_in_qn or cur_qn
+                    if anchor < 0 or qn <= 0:
+                        continue
+                    # 上方最近一行是噪声行（页眉/水印/页脚）时，改挂到首个非噪声行
+                    if _PDF_NOISE_LINE.match(page_lines[anchor].strip()):
+                        for i, lp in enumerate(page_lines):
+                            s = lp.strip()
+                            if not s or _PDF_NOISE_LINE.match(s):
+                                continue
+                            anchor = i
+                            break
+                    blob = _pdf_image_to_png(im)
+                    if not blob:
+                        continue
+                    seq = img_seq.get(qn, 0)
+                    img_seq[qn] = seq + 1
+                    key = f'{session_hex}_{qn}_{seq}'
+                    try:
+                        with open(os.path.join(stage_dir, f'{key}.png'), 'wb') as fh:
+                            fh.write(blob)
+                    except Exception as e:
+                        logger.warning(f"[pdf-images] 暂存 {key} 失败: {e}")
+                        continue
+                    page_lines[anchor] = page_lines[anchor] + f' [IMAGE:{key}]'
+
+                # 去重基准必须用 extract_text() 的原始结果：extract_text_lines()
+                # 的行拼接与之存在细微空白差异，若拿它做 page_norm 会让下方的
+                # 「表格行是否已在文本中」判定失效，重复内容回流（实测 +3300 字符、
+                # 题号 70→84）。行坐标只用于插占位符，不参与去重。
+                text_raw = page.extract_text()
+                text = '\n'.join(page_lines)   # 含图片占位符的最终页文本
                 if text:
                     parts.append(text)
                 # 提取表格
+                # 2026-09-29 修复（致命缺陷）：当 pdfplumber 因版面把本页判定为表格时，
+                # extract_tables() 会把已由 extract_text() 输出的同一批单元格文本
+                # **再输出一遍**，导致全文精确翻倍。实测目标 PDF：14,436 → 28,873 字符、
+                # 行首题号 70 → 140（每个题号各出现 2 次），进而使 extract_question_numbers
+                # 的单调性过滤丢弃重复题号却把重复文本留在题块内 → 重复题 + 串题。
+                # 修复：仅在文本层为空（真表格页/扫描页）时全量采纳表格行；
+                # 否则只补充「本页文本中确实不存在」的单元格行。
+                # 关键约束：不能直接禁用 extract_tables()，否则真正的表格题会丢内容。
+                page_norm = _norm_for_dedup(text_raw) if text_raw else None
                 tables = page.extract_tables()
                 for table in tables:
                     for row in table:
                         if row:
                             row_texts = [str(c) if c else '' for c in row]
                             row_text = ' | '.join(t for t in row_texts if t)
-                            if row_text:
-                                parts.append(row_text)
+                            if not row_text:
+                                continue
+                            if page_norm and _norm_for_dedup(row_text) in page_norm:
+                                # 本页文本已包含该单元格内容，跳过以消除重复
+                                continue
+                            parts.append(row_text)
+
+                # 逐页上报真实进度：长文档（扫描件 OCR 可达 260s+）时前端能看到
+                # 进度平滑爬升，而不是卡在某个数字再突然跳到 100。
+                if progress_cb:
+                    try:
+                        progress_cb(page_no, len(pdf.pages),
+                                    len(getattr(page, 'images', None) or []))
+                    except Exception:  # noqa: BLE001
+                        pass
+
             if parts:
                 return _finish('\n'.join(parts), 'pdfplumber')
     except ImportError:
@@ -1512,6 +1864,19 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                                         f'<img src="{rel_path}" class="q-img" loading="lazy" />'
                                     )
 
+                # ★ 同时回写答案解析：申论答案区大量使用思维导图/答案结构图
+                #   （全语料实测 118 份文档有图，绝大多数在答案区）。
+                #   旧实现只回写 question_content 与 options，导致答案里的
+                #   [IMAGE:xxx] 占位符原样留在库中，前端显示不出图
+                #   （用户实测截图里残留 [[IMAGE:f4419932_2_0]]）。
+                if question_obj is not None and getattr(question_obj, 'answer_analysis', None):
+                    question_obj.answer_analysis = (
+                        question_obj.answer_analysis or ''
+                    ).replace(
+                        f'[IMAGE:{marker_key}]',
+                        f'<img src="{rel_path}" class="q-img" loading="lazy" />'
+                    )
+
                 # 删除临时扁平文件，避免冗余
                 try:
                     os.remove(src_file)
@@ -1522,8 +1887,12 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                 # 文件不存在，移除占位符避免前端显示 broken image
                 if question_obj is not None:
                     question_obj.question_content = (question_obj.question_content or '').replace(
-                        f'[IMAGE:{marker_key}]', ''
-                    )
+                        f'[IMAGE:{marker_key}]', '')
+                    # 答案解析里的同一占位符也必须清掉，否则前端照样显示原始文本
+                    if getattr(question_obj, 'answer_analysis', None):
+                        question_obj.answer_analysis = (
+                            question_obj.answer_analysis or ''
+                        ).replace(f'[IMAGE:{marker_key}]', '')
         except Exception as e:
             logger.warning(f"[images] docx图片{idx}({marker_key})保存失败: {e}")
             continue
@@ -1532,6 +1901,84 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
 
 
 # ============ API 端点 ============
+
+def _normalize_requirements(raw: Any) -> str:
+    """把解析器给的「题目要求」统一成 TEXT 落库。
+
+    解析器实测会产出两种形态，必须都支持：
+      · list —— 带编号分点的要求，如 ['（1）紧扣资料，内容全面；', '（2）不超过500 字']
+      · str  —— 纯文本要求，如 '全面、准确、有条理。不超过250 字。'
+    另有 None / 空数组 / 非预期结构。
+
+    统一按换行拼接：既保住分点结构（可检索、可比对），又不丢原始分点符号。
+    空值一律返回空串 —— 缺要求就留空，绝不伪造。
+    """
+    if raw is None:
+        return ''
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, (list, tuple)):
+        parts = []
+        for item in raw:
+            if item is None:
+                continue
+            text = item if isinstance(item, str) else str(item)
+            text = text.strip()
+            if text:
+                parts.append(text)
+        return '\n'.join(parts)
+    # 非预期结构：尽力转字符串，但不猜测语义
+    return str(raw).strip()
+
+
+def _get_or_create_shenlun_material_group(db: Session, material: str,
+                                         subject_name: str,
+                                         source_tag: str) -> Optional[int]:
+    """申论「给定材料」落 question_groups，返回 group_id（无材料则 None）。
+
+    为什么必须去重复用而不是每题建组：
+      申论一份卷的「给定资料1..N」是**所有小题共享**的上下文。若逐题建组，
+      同一份材料会被复制 N 份，题库检索时材料无法跨题复用，且体积翻倍。
+      故用材料内容指纹（SHA1 前 16 位）做幂等键：同一份材料只建一行，
+      各小题通过 question_bank.group_id 指向它。
+
+    指纹只取归一化文本（去空白），避免 PDF 换行差异导致同一材料被当成多份。
+    """
+    text = (material or '').strip()
+    if not text:
+        return None
+    digest = hashlib.sha1(re.sub(r'\s+', '', text).encode('utf-8')).hexdigest()[:16]
+
+    # 同批导入里重复查库代价高，先在本次请求内缓存
+    cache_key = 'shenlun_group_' + digest
+    cached = _SHENLUN_GROUP_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # 跨批复用：库内已存在同指纹材料则直接挂上去
+    existing = db.query(QuestionGroup).filter(
+        QuestionGroup.shared_content.like('%' + text[:60] + '%')
+    ).first() if text[:60] else None
+    if existing is not None and text[:60] in (existing.shared_content or ''):
+        _SHENLUN_GROUP_CACHE[cache_key] = existing.id
+        return existing.id
+
+    group = QuestionGroup(
+        group_type='shenlun_material',
+        shared_content=text,
+        title=(subject_name + ' 给定材料')[:200],
+        subject=subject_name or '申论',
+        source=source_tag or '',
+    )
+    db.add(group)
+    db.flush()
+    _SHENLUN_GROUP_CACHE[cache_key] = group.id
+    return group.id
+
+
+# 同一批导入内多题共享同一份材料，避免重复 flush
+_SHENLUN_GROUP_CACHE: Dict[str, int] = {}
+
 
 def _upsert_question_core(db: Session, current_user: SysUser,
                           question_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1545,6 +1992,20 @@ def _upsert_question_core(db: Session, current_user: SysUser,
     content = question_data.get('question_content', '').strip()
     answer = question_data.get('answer', '').strip()
     import_mode = question_data.get('import_mode', 'combined')
+
+    # ★ 阻断闸门：解析器判定为 blocked 的题块一律拒绝入库。
+    #   解析器会在下列情况置 blocked：
+    #     · missing_score —— 题号行邻近找不到「（N分）」，题号可能误切
+    #     · answer_block_count_mismatch —— 答案段数与题目数不等，按序硬配必然错配
+    #   用户硬约束：宁可阻断报错交人工，也不允许静默丢题或按序盲配。
+    #   必须在最前面拦：一旦入库，错配数据已经污染题库，事后无法区分。
+    if question_data.get('blocked'):
+        reasons = question_data.get('block_reasons') or ['unknown']
+        raise HTTPException(
+            status_code=400,
+            detail='题目解析存在阻断问题，已拒绝导入（原因：%s）。'
+                   '请人工核对原卷后重新导入。' % '、'.join(str(r) for r in reasons))
+
     if not content:
         raise HTTPException(status_code=400, detail="题目内容不能为空")
     if not answer and import_mode != 'separate':
@@ -1610,20 +2071,77 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         }
 
     # 题型
-    type_name = question_data.get('question_type_detail', '选择题')
+    options = question_data.get('options')
+    # ★ '选择题' 是历史遗留的"泛型桶"（前端 Excel 默认值），它会让单选/多选无法区分。
+    #   这里交给 text_parser 的规则优先级分类器做一次判定（P3 单一事实来源）。
+    type_name = question_data.get('question_type_detail') or ''
+    if not type_name or type_name == '选择题':
+        type_name, _conf = _detect_question_type(content, options or [], answer or '')
     qtype = _get_or_create_type(db, type_name, subject.subject_id)
 
+    # P3b：题型判定置信度不足 → need_review=1，交教师在「题目管理 → 待复核」确认。
+    # ★ 申论豁免：_detect_question_type 是选择题分类器，申论是长文本主观题，
+    #   拿它打分必然 <0.60 → 每道申论题都被标 need_review=1，
+    #   前端弹「低置信度题目(建议人工核对): 第1,2,3,4题」，逼用户逐题人工确认。
+    #   申论题型由解析器的体例判定直接给出（简答题/论述题），无需再猜。
+    _is_essay = (question_data.get('format') == 'essay')
+    if _is_essay:
+        type_name = type_name or '简答题'
+    need_review = 0
+    if _is_essay:
+        need_review = 0
+    else:
+        try:
+            _t, _c = _detect_question_type(content, options or [], answer or '')
+            if _c < NEED_REVIEW_CONFIDENCE:
+                need_review = 1
+        except Exception:  # noqa: BLE001 — 判定失败不能阻塞入库
+            need_review = 1
+
     # 创建题目
-    difficulty = max(1, min(5, int(question_data.get('difficulty', 3))))
-    score = float(question_data.get('score', 1.0))
-    options = question_data.get('options')
+    # ★ 难度必须走 coerce_difficulty：前端导入预览页用中文下拉（简单/较易/中等/较难/困难），
+    #   直接 int() 会抛 `invalid literal for int() with base 10: '中等'` 并让整批导入失败。
+    difficulty = coerce_difficulty(question_data.get('difficulty'))
+    try:
+        score = float(question_data.get('score') or 1.0)
+    except (TypeError, ValueError):
+        score = 1.0
+    if score <= 0:
+        score = 1.0
 
     _xingce_sc, _shenlun_sc, _gongzhuan_sc = _subcategory_tuple(
         subject.subject_id, content, type_name,
         question_data.get('subcategory') or question_data.get('子科目') or ''
     )
     # content 已在函数入口统一清洗（与去重同口径），直接入库
+    # 申论「给定材料」落 question_groups 并回填 group_id：同一份材料由所有小题共享，
+    # helper 内部按内容指纹去重，保证一份卷只建一行材料。
+    _shenlun_gid = 0
+    # ★ 键名对齐：解析器实际产出的是 `material_text`（整份给定资料正文）与
+    #   `material_titles`（['材料1','材料2',...]），**不是** `material`。
+    #   实测误接 `material` 导致 group_id 恒为 0、材料整份丢失。
+    #   这里同时兼容 material（Excel/手工导入路径）与 material_text（解析器路径）。
+    _material = (question_data.get('material_text')
+                 or question_data.get('material') or '')
+    if _material:
+        _shenlun_gid = (_get_or_create_shenlun_material_group(
+            db,
+            _material,
+            subject_name,
+            question_data.get('source', ''),
+        ) or 0)
+    # 解析器已给出的题号/层级/组序，直接沿用；缺失时给安全默认值
+    _group_id = _shenlun_gid or int(question_data.get('group_id') or 0)
+    _qno = question_data.get('question_number')
+    _qno = str(_qno).strip() if _qno not in (None, '') else None
+    _qlevel = int(question_data.get('question_level') or 0) or 1
+    _sort = int(question_data.get('sort_order') or 0)
     question = QuestionBank(
+        group_id=_group_id,
+        parent_id=int(question_data.get('parent_id') or 0),
+        question_level=_qlevel,
+        sort_order=_sort,
+        question_number=_qno,
         subject_id=subject.subject_id,
         type_id=qtype.type_id,
         question_content=content,
@@ -1631,6 +2149,7 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         answer=answer,
         answer_analysis=question_data.get('answer_analysis', ''),
         difficulty=difficulty,
+        need_review=need_review,
         score=score,
         year=question_data.get('exam_year') or question_data.get('year'),
         source=question_data.get('source', ''),
@@ -1640,14 +2159,28 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         xingce_subcategory=_xingce_sc,
         shenlun_subcategory=_shenlun_sc,
         gongzhuan_subcategory=_gongzhuan_sc,
+        # 申论题目要求落库。解析器可能给 list（带编号分点）或 str（纯文本），
+        # 统一按换行拼接成 TEXT 存储，检索与展示都不丢分点结构。
+        requirements=_normalize_requirements(question_data.get('requirements')),
     )
     db.add(question)
     db.flush()
 
     # 图片提取与保存（异常不回滚整题，仅跳过图片）
     try:
+        # ★ 扫描范围必须含答案与解析。
+        #   实测 254 份申论语料中 118 份含真实图片，且**绝大多数在答案区**
+        #   （答案逻辑思维导图 / 答案结构图）。旧实现只扫题干+选项，
+        #   导致答案区的 [IMAGE:xxx] 占位符既不会被发现、也不会被替换，
+        #   前端只能看到裸占位符 —— 用户实测截图里残留 [[IMAGE:f4419932_2_0]]。
+        _img_scope = ' '.join([
+            question_data.get('question_content') or '',
+            str(question_data.get('options') or ''),
+            question_data.get('answer') or '',
+            question_data.get('answer_analysis') or question_data.get('analysis') or '',
+        ])
         images = _extract_and_save_images(
-            question_data.get('question_content', '') + ' ' + str(question_data.get('options', '')),
+            _img_scope,
             question.question_id,
             question_obj=question
         )
@@ -1655,6 +2188,8 @@ def _upsert_question_core(db: Session, current_user: SysUser,
             db.add(QuestionImage(
                 question_id=question.question_id,
                 image_path=img_path,
+                # 沿用既有'题干图'类型语义不变（公专/行测既有链路依赖它），
+                # 答案/解析图片同样归入该类型，避免改枚举破坏既有数据
                 image_type='题干图',
                 image_order=img_order
             ))
@@ -1865,6 +2400,87 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
     return groups_created, members_linked
 
 
+def _build_preview_groups(preview_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把预览题目按「给定材料」聚合成题组，供前端渲染复合题总题干。
+
+    背景（用户实测缺陷 D1）
+    ----------------------
+    申论是**复合题结构**：一份「给定资料1..N」被多道小题共享。
+    旧预览把每道小题渲染成独立卡片，用户只能看到孤立的小题，
+    完全看不到总题干，无从判断小题在问什么（用户原话：
+    「缺失总题干信息，针对复合题目请设计好怎么在导入匹配后总体预览的题目排版」）。
+
+    分组规则
+    --------
+    · 有``material_text`` 的题按材料内容归为同一组（一份材料只存一次）
+    · 无材料的单选题**各自成组**，``material_length=0``，
+      前端据此不渲染材料头，行为与旧版完全一致（零回归）
+    · 组内题目保持原有题号顺序
+
+    返回结构::
+
+        [{'group_key','material_text','material_titles','material_length',
+          'question_count','questions':[...]}, ...]
+    """
+    groups: List[Dict[str, Any]] = []
+    by_key: Dict[str, Dict[str, Any]] = {}
+    # ★ 先扫一遍取「文档级材料」。
+    #   解析器为省内存**只把 material_text 挂在第一题上**（实测安徽A卷：
+    #   Q1 带 7402 字材料，Q2/Q3/Q4 全空）。若按逐题是否有材料分组，
+    #   4 道共享同一份给定资料的小题会被拆成 4 组（实测 groups=4，qcount 均为1），
+    #   总题干就又看不见了 —— 用户缺陷 D1 直接复发。
+    #   同一份 PDF 里的申论小题共享同一份「给定资料1..N」，故文档级材料即全卷通用。
+    doc_mat = ''
+    doc_titles: List[str] = []
+    for it in preview_items or []:
+        m = (it.get('material_text') or '').strip()
+        if m and not doc_mat:
+            doc_mat = m
+            doc_titles = it.get('material_titles') or []
+    doc_key = ''
+    if doc_mat:
+        doc_key = 'm_' + hashlib.sha1(
+            re.sub(r'\s+', '', doc_mat).encode('utf-8')).hexdigest()[:16]
+
+    for item in preview_items or []:
+        mat = (item.get('material_text') or '').strip()
+        is_essay = (item.get('format') == 'essay')
+        if not mat and doc_mat and is_essay:
+            # 同卷申论小题继承文档级材料（Q2..QN）
+            mat = doc_mat
+            if not item.get('material_titles') and doc_titles:
+                item['material_titles'] = list(doc_titles)
+        if mat:
+            # 归一化后取指纹，避免同一份材料因换行差异被拆成多组
+            key = 'm_' + hashlib.sha1(
+                re.sub(r'\s+', '', mat).encode('utf-8')).hexdigest()[:16]
+        else:
+            # 无材料：按题号独立成组，绝不把不相干的题凑成一组
+            key = 'q_%s' % (item.get('question_number')
+                            or item.get('sort_order') or len(groups))
+        grp = by_key.get(key)
+        if grp is None:
+            grp = {
+                'group_key': key,
+                'material_text': mat,
+                'material_titles': item.get('material_titles') or [],
+                'material_length': len(mat),
+                'question_count': 0,
+                'questions': [],
+            }
+            by_key[key] = grp
+            groups.append(grp)
+        grp['questions'].append(item)
+        grp['question_count'] += 1
+        # 同组内后续题若未带材料信息，以首题为准补齐
+        if not grp['material_text'] and mat:
+            grp['material_text'] = mat
+            grp['material_length'] = len(mat)
+        if not grp['material_titles'] and item.get('material_titles'):
+            grp['material_titles'] = item['material_titles']
+    return groups
+
+
 @router.post("/single", summary="单题导入")
 async def import_single_question(
     question_data: Dict[str, Any],
@@ -1906,6 +2522,23 @@ async def import_single_question(
         )
         db.add(record)
         db.commit()
+
+        # 单题录入完成后同样广播同步事件（与批量导入一致），通知三端刷新。
+        # 只含统计信息，不含题目正文；广播失败不阻断返回。
+        try:
+            from ...services.scheduler import _broadcast_sync
+            _broadcast_sync(
+                "题目更新",
+                {
+                    "scope": "question_bank",
+                    "action": "import_single",
+                    "count": 1,
+                    "subject_id": question_data.get('subject_id') or None,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"[import] 广播单题导入完成事件失败(非阻断): {e}")
+
         return result
     except HTTPException:
         raise
@@ -2382,7 +3015,35 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             logger.error(f"[import-async] 记录不存在 import_id={import_id}")
             return
 
+        # ---------- 进度上报（2026-09-29 新增）----------
+        # 写入 record.progress_percent / record.current_phase，
+        # 由 GET /records/{id}/status 原样返回给前端轮询。
+        # 写进度本身绝不能影响解析：任何异常都吞掉并回滚。
+        def _set_progress(percent: int, phase: str) -> None:
+            """写入真实进度，单调守卫：绝不让进度值倒退。
+
+            进度条回跳比不动更糟（用户会以为解析出错），因此这里显式夹住下界。
+            前端 GET /records/{id}/status 原样返回这两个字段。
+            写进度本身绝不能影响解析：任何异常都吞掉并回滚。
+            """
+            try:
+                target = max(0, min(100, int(percent)))
+                current = record.progress_percent or 0
+                if target < current:
+                    target = current
+                record.progress_percent = target
+                record.current_phase = phase
+                db.commit()
+            except Exception as e:  # noqa: BLE001
+                try:
+                    db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                logger.debug(f"[import-async] 进度写入失败(忽略) {phase}: {e}")
+
         # ---------- 1) 提取文本 / 原始行 ----------
+        _set_progress(5, 'READING')
+        _progress_img_counter = {'n': 0}   # 跨页累计已发现图片数，驱动 45→60 段
         raw_questions = []
         text = ''
         if ext in ('.xlsx', '.xls'):
@@ -2390,10 +3051,34 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
         elif ext == '.csv':
             raw_questions = _parse_csv_buffer(buf)
         elif ext == '.docx':
+            _set_progress(10, 'EXTRACTING')
             text = _extract_text_from_docx(buf)
+            _set_progress(45, 'IMAGES')
             raw_questions = [{'type': 'docx_text', 'content': text}]
         elif ext == '.pdf':
-            text = _extract_text_from_pdf(buf)   # 含 md5 提取缓存
+            _set_progress(10, 'EXTRACTING')
+
+            def _on_page(page_no: int, total_pages: int, images_on_page: int) -> None:
+                """逐页真实进度，**每页只写一个单调递增的值**（10→60）。
+
+                为什么不再分别上报「文本百分比」和「图片计数」两个指标：
+                二者独立推进会互相回跳（实测出现 12→45→14→45→16→47 的锯齿），
+                进度条倒退会让用户误以为解析出错。页循环内文本与图片是同一次
+                推进完成的，因此按页序折算单一完成度才是真实度量。
+
+                长文档（扫描件 OCR 可达 260s+）时前端能看到进度平滑爬升，
+                而不是卡在某个数字后突然跳到 100。
+                """
+                ratio = (page_no / total_pages) if total_pages else 1.0
+                imgs = _progress_img_counter['n'] + images_on_page
+                _progress_img_counter['n'] = imgs
+                logger.debug(
+                    f"[import-async] 页 {page_no}/{total_pages} 完成，"
+                    f"累计图片 {imgs} 张")
+                _set_progress(10 + int(ratio * 50), 'EXTRACTING')
+
+            text = _extract_text_from_pdf(buf, progress_cb=_on_page)   # 含 md5 提取缓存
+            _set_progress(60, 'IMAGES')
             raw_questions = [{'type': 'pdf_text', 'content': text}]
 
         # ---------- 2) 构建预览 ----------
@@ -2436,23 +3121,56 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             record.duplicate_count = duplicate_count
         else:
             from ...services.text_parser import extract_question_blocks
+            _set_progress(60, 'SPLITTING')
             parsed_blocks = extract_question_blocks(text)
+            _set_progress(75, 'MATCHING')
             auto_tags = _auto_detect_tags(filename, text)
             detected_subject = auto_tags.get('subject_category', '行测')
 
             preview_items = []
-            for block in parsed_blocks:
+            for idx, block in enumerate(parsed_blocks):
                 if block.get('content'):
                     qtype = block.get('question_type', '选择题')
+                    _fmt = block.get('format')
+                    # ★ 申论题：科目必须显式定为「申论」。
+                    #   _auto_detect_tags 的启发式对「给定资料」长文本常误判成行测/公专，
+                    #   科目错了 → requirements 语义全错、题型表挂到错误 subject 下。
+                    _subj = detected_subject
+                    if _fmt == 'essay':
+                        _subj = '申论'
                     preview_items.append({
                         'question_content': block['content'],
                         'options': block.get('options', []),
                         'answer': block.get('answer', ''),
+                        # ★键名对齐：/confirm 读的是 answer_analysis，
+                        #   这里原来只写 'analysis'，导致申论解析整段丢失。
                         'analysis': block.get('analysis', ''),
+                        'answer_analysis': block.get('analysis', ''),
                         'question_type_detail': qtype, 'type_name': qtype,
-                        'subject_name': detected_subject, 'status': 'NEW',
-                        'is_duplicate': False, 'difficulty': 3, 'score': 1,
+                        'subject_name': _subj, 'status': 'NEW',
+                        'is_duplicate': False,
+                        'difficulty': 3,
+                        # ★ 分值不能硬编码 1：申论每题 15/20/25/40 分，
+                        #   硬编码会把全部申论题记成 1 分，题库排序与统计全错。
+                        'score': block.get('score') or 1,
+                        # 串题检测结果透传给前端，供预览卡片高亮「疑似串题」
+                        'suspicious': bool(block.get('suspicious')),
+                        'suspicious_reason': block.get('suspicious_reason', ''),
+                        # ★ 以下为申论必需字段，缺一个前端就渲染不出/入库丢数据
+                        'format': _fmt,
+                        'requirements': block.get('requirements', []),
+                        'blocked': bool(block.get('blocked')),
+                        'block_reasons': block.get('block_reasons', []),
+                        'material_text': block.get('material_text', ''),
+                        'material_titles': block.get('material_titles', []),
+                        'question_number': block.get('question_number'),
+                        'question_level': block.get('question_level'),
+                        'sort_order': block.get('sort_order'),
                     })
+                # 逐题推进 75→90：大文档（数百题）时进度同样是平滑的
+                if parsed_blocks and (idx % 20 == 0 or idx == len(parsed_blocks) - 1):
+                    _set_progress(75 + int((idx + 1) / max(len(parsed_blocks), 1) * 15), 'MATCHING')
+            _set_progress(90, 'BUILDING')
 
             total = len(preview_items)
             is_scanned = (ext == '.pdf' and len(preview_items) == 0 and _pdf_has_images_only(buf))
@@ -2460,13 +3178,18 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
                 'total_questions': total, 'success_count': total, 'failed_count': 0,
                 'duplicate_count': 0, 'questions': preview_items,
+                # ★ groups：按「给定材料」聚合的复合题组，供前端渲染总题干。
+                #   保留顶层 questions 不变，旧前端逻辑零回归。
+                'groups': _build_preview_groups(preview_items),
                 'raw_text_preview': text[:1000000] if text else '',
                 'auto_detected_tags': auto_tags, 'scanned_pdf': is_scanned,
                 'ocr_hint': ('该PDF为扫描件（无文本层），请使用"图片导入"标签页上传，'
                              '或先通过OCR工具转换为文本格式') if is_scanned else None,
             }
             stored = {'items': preview_items, 'raw_text': text[:1000000],
-                      'auto_detected_tags': auto_tags, '_response': response_payload}
+                      'auto_detected_tags': auto_tags,
+                      'groups': _build_preview_groups(preview_items),
+                      '_response': response_payload}
             record.total_questions = total
             record.success_count = total
             record.failed_count = 0
@@ -2474,7 +3197,11 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
 
         # ---------- 3) 落库为 PREVIEW ----------
         record.import_status = 'PREVIEW'
-        record.preview_data = json.dumps(stored, ensure_ascii=False)
+        # 用 dump_json_once 保证单层编码（历史代码在别处曾造成双重编码）
+        record.preview_data = dump_json_once(stored)
+        # 进度收尾：与 PREVIEW 状态同一次提交落库，前端轮询到 100 即停止
+        record.progress_percent = 100
+        record.current_phase = 'DONE'
         db.commit()
         logger.info(f"[import-async] import_id={import_id} 解析完成 → PREVIEW（{total} 题）")
 
@@ -2602,15 +3329,18 @@ async def get_import_parse_status(
         'success_count': record.success_count or 0,
         'failed_count': record.failed_count or 0,
         'duplicate_count': record.duplicate_count or 0,
+        # 2026-09-29 新增：真实解析进度。前端据此渲染进度条，
+        # 不再自己用定时器伪造百分比（那会造成「突然就完成」的错觉）。
+        # 旧记录这两列为 NULL，回落为 0 / None，前端按未开始处理。
+        'progress_percent': record.progress_percent or 0,
+        'current_phase': record.current_phase,
     }
 
     if record.import_status == 'FAILED':
-        errs = record.error_messages
-        if isinstance(errs, str):
-            try:
-                errs = json.loads(errs)
-            except Exception:  # noqa: BLE001
-                errs = [{'error': errs}]
+        # load_json_lenient 兼容历史双重编码记录
+        errs = load_json_lenient(record.error_messages)
+        if errs is None and record.error_messages:
+            errs = [{'error': str(record.error_messages)[:500]}]
         msg = ''
         if isinstance(errs, list) and errs:
             first = errs[0]
@@ -2619,12 +3349,12 @@ async def get_import_parse_status(
         return payload
 
     if record.import_status == 'PREVIEW':
-        data = record.preview_data
-        if isinstance(data, str):
-            try:
-                data = json.loads(data)
-            except Exception:  # noqa: BLE001
-                data = {}
+        # ★ P0-6 关键修复：历史记录存在双重编码，单次 json.loads 只能剥一层，
+        #   拿到的是字符串而非 dict，导致 `isinstance(data, dict)` 恒假、
+        #   预览页拿不到 _response → 用户"编辑后无法导入"。
+        data = load_json_lenient(record.preview_data)
+        if not isinstance(data, dict):
+            data = {}
         if isinstance(data, dict):
             result = data.get('_response')
             if isinstance(result, dict):
@@ -2646,6 +3376,150 @@ async def get_import_parse_status(
 
     # PARSING / CONFIRMED / COMPLETED —— 调用方按需处理
     return payload
+
+
+@router.post("/records/{import_id}/attach-image", summary="预览态为指定题目添加图片")
+async def attach_image_to_preview_question(
+    import_id: int,
+    file: UploadFile = File(...),
+    target: str = Form('content'),
+    option_key: Optional[str] = Form(None),
+    question_index: int = Form(...),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """在「识别匹配」后的预览态，为某一道题追加图片（题干或某个选项）。
+
+    为什么改 preview_data 而不是 question_bank
+    ------------------------------------------
+    预览态的题目尚未落库，整份预览数据存在 ``QuestionImportRecord.preview_data``
+    里（``items`` 与 ``_response['questions']`` 为 JSON 往返后的两份独立副本，
+    必须同步更新，否则状态端点返回的 result 与 items 会不一致）。
+
+    落盘与安全
+    ----------
+    不自行写文件，而是把上传内容包成 base64 data URI 交给既有的
+    ``_extract_and_save_images``，从而完整复用其尺寸上限、无关图过滤、
+    压缩与路径安全等防护，避免引入第二套图片写入逻辑。
+    """
+    record = db.query(QuestionImportRecord).filter(
+        QuestionImportRecord.import_id == import_id
+    ).first()
+    if record is None:
+        raise HTTPException(status_code=404, detail="导入记录不存在")
+
+    # 权限：与状态接口保持一致
+    user_role = getattr(current_user, 'user_type', '') or getattr(current_user, 'role', '')
+    if user_role not in ('admin', 'teacher') and record.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="无权操作该导入记录")
+
+    if record.import_status != 'PREVIEW':
+        raise HTTPException(
+            status_code=400,
+            detail=f"仅预览状态可编辑题目图片，当前状态为 {record.import_status}")
+
+    if target not in ('content', 'option'):
+        raise HTTPException(status_code=400, detail="target 必须是 content 或 option")
+    if target == 'option' and not option_key:
+        raise HTTPException(status_code=400, detail="target=option 时必须提供 option_key")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(raw) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=400, detail=f"图片超过大小限制（{len(raw)} > {MAX_IMAGE_SIZE} 字节）")
+    ext = (file.filename or '').rsplit('.', 1)[-1].lower() if file.filename else 'png'
+    if ext not in ('jpg', 'jpeg', 'png', 'gif', 'webp'):
+        raise HTTPException(status_code=400, detail=f"不支持的图片类型：{ext}")
+
+    data_uri = f'data:image/{ext};base64,{base64.b64encode(raw).decode("ascii")}'
+    try:
+        stored = _extract_and_save_images(f'<img src="{data_uri}">', import_id) or []
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[attach-image] import_id={import_id} 保存失败: {e}")
+        raise HTTPException(status_code=500, detail="图片保存失败")
+    if not stored:
+        raise HTTPException(
+            status_code=400, detail="图片未通过安全校验（可能被判定为无关图片或超过限制）")
+
+    img_tag = f'<img src="{stored[0]}" class="q-img" loading="lazy" />'
+
+    data = load_json_lenient(record.preview_data)
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="预览数据损坏，无法编辑")
+
+    result = data.get('_response')
+    items = data.get('items')
+    if not isinstance(items, list):
+        items = result.get('questions') if isinstance(result, dict) else None
+    if not isinstance(items, list) or not (0 <= question_index < len(items)):
+        raise HTTPException(status_code=400, detail="question_index 超出范围")
+
+    item = items[question_index]
+    if not isinstance(item, dict):
+        raise HTTPException(status_code=400, detail="题目数据结构异常")
+
+    if target == 'content':
+        item['question_content'] = (item.get('question_content') or '') + img_tag
+    else:
+        opts = item.get('options')
+        if isinstance(opts, str):
+            try:
+                opts = json.loads(opts)
+            except Exception:  # noqa: BLE001
+                raise HTTPException(status_code=400, detail="选项数据损坏")
+        if not isinstance(opts, list):
+            raise HTTPException(status_code=400, detail="该题没有可添加图片的选项")
+        hit = False
+        for o in opts:
+            if isinstance(o, dict) and o.get('key') == option_key:
+                o['value'] = (o.get('value') or '') + img_tag
+                hit = True
+                break
+        if not hit:
+            raise HTTPException(status_code=400, detail=f"未找到选项 {option_key}")
+        item['options'] = opts
+
+    # 同步两份副本，保持 items 与 _response['questions'] 一致
+    if isinstance(items, list):
+        data['items'] = items
+    if isinstance(result, dict):
+        result['questions'] = items
+        data['_response'] = result
+
+    record.preview_data = dump_json_once(data)
+    db.commit()
+    logger.info(
+        f"[attach-image] import_id={import_id} idx={question_index} "
+        f"target={target} key={option_key} -> {stored[0]}")
+
+    return {
+        'success': True,
+        'import_id': import_id,
+        'question_index': question_index,
+        'target': target,
+        'option_key': option_key,
+        'url': stored[0],
+    }
+
+
+def detected_subject_hint(item: Dict[str, Any]) -> str:
+    """推断入库科目：优先申论标记，其次前端显式值，最后才回退行测。
+
+    为什么不能沿用旧的 `item.get('subject_name', '行测')` 默认值：
+      该默认值只在 key 完全缺失时生效，而前端**总是**会传 subject_name
+      （值来自 _auto_detect_tags 的启发式）。申论长文本「给定资料…」很容易被
+      启发式判成行测/公专，于是申论题被挂到错误科目下 —— requirements 语义
+      全错、题型表也挂错。这是「前端申论导入不稳定」的直接原因之一。
+
+    判定顺序刻意让 format=essay 压过 subject_name：解析器已经确证了这是申论，
+    比任何文本启发式都可靠。
+    """
+    if (item or {}).get('format') == 'essay':
+        return '申论'
+    name = (item or {}).get('subject_name')
+    return name if name else '行测'
 
 
 @router.post("/confirm", summary="确认批量导入")
@@ -2677,10 +3551,13 @@ async def confirm_batch_import(
         raise HTTPException(status_code=400, detail=f"当前状态 {record.import_status} 不允许确认")
 
     try:
-        preview_data = record.preview_data
-        if isinstance(preview_data, str):
-            preview_data = json.loads(preview_data)
-        items = preview_data.get('items', [])
+        # ★ P0-6：历史记录 preview_data 为双重编码，单次 json.loads 只剥一层会返回 str，
+        #   紧接着 .get() 会抛 AttributeError: 'str' object has no attribute 'get'。
+        #   load_json_lenient 会循环剥到真实对象，并对脏数据返回 {}。
+        preview_data = load_json_lenient(record.preview_data)
+        if not isinstance(preview_data, dict):
+            preview_data = {}
+        items = preview_data.get('items', []) or []
 
         imported = 0
         skipped = 0
@@ -2696,6 +3573,19 @@ async def confirm_batch_import(
                 failed += 1
                 errors.append({'error': item.get('reason', '数据不完整'), 'raw': item.get('raw', {})})
                 continue
+            # ★ 阻断闸门：解析器判定为 blocked 的题块拒绝入库。
+            #   /confirm 是前端的**主入库路径**，若不在这里拦，
+            #   requirements/答案错配的数据会绕过 /single 与 /batch-parsed 直接进库，
+            #   前端禁用按钮也挡不住直接调 API。用户硬约束：宁可阻断，不许错配入库。
+            if item.get('blocked'):
+                failed += 1
+                _rs = item.get('block_reasons') or []
+                errors.append({
+                    'error': '解析阻断：%s' % ('、'.join(str(r) for r in _rs) or '未知原因'),
+                    'question_content': item.get('question_content', '')[:120],
+                    'block_reasons': _rs,
+                })
+                continue
 
             try:
                 # 清洗题目内容：去除推广/无关字段
@@ -2704,7 +3594,7 @@ async def confirm_batch_import(
                 raw_analysis = item.get('answer_analysis', '')
                 cleaned_analysis = ContentCleaner.clean_question_content(raw_analysis)
 
-                subject = _get_or_create_subject(db, item.get('subject_name', '行测'))
+                subject = _get_or_create_subject(db, item.get('subject_name') or detected_subject_hint(item))
 
                 options = item.get('options')
                 # 直接赋值给JSON列，不调用json.dumps（避免双重编码）
@@ -2714,12 +3604,31 @@ async def confirm_batch_import(
                 if not str(answer_val).strip():
                     answer_val = '待补充'
 
-                # 题型：通用'选择题'或缺失 → 关键词工程细分单选/多选
+                # 题型：通用'选择题'或缺失 → 走 text_parser 规则优先级分类器（P3 单一事实来源）
+                # ★ 修复：_detect_question_type 返回 (type_name, confidence) **元组**，
+                #   旧代码 `final_type_name = _detect_question_type(...)` 把元组整体
+                #   塞进了 final_type_name，随后 _get_or_create_type 用元组去匹配 type_name
+                #   必然查不到 → 每导入一题就新建一条垃圾题型行。
+                #   这是 question_type 表被撑脏的机制之一。
                 raw_type_name = (item.get('type_name') or '').strip()
-                if not raw_type_name or raw_type_name == '选择题':
-                    final_type_name = _detect_question_type(cleaned_content, options, answer_val)
+                _is_essay_item = (item.get('format') == 'essay')
+                if _is_essay_item:
+                    # 申论豁免选择题置信度校验：_detect_question_type 是选择题分类器，
+                    # 拿它给长文本主观题打分必然 <0.60 → 每题都 need_review=1，
+                    # 前端弹「低置信度题目(建议人工核对)」逼用户逐题确认。
+                    final_type_name = raw_type_name or '简答题'
+                    need_review = 0
                 else:
-                    final_type_name = raw_type_name
+                    if not raw_type_name or raw_type_name == '选择题':
+                        final_type_name, _tconf = _detect_question_type(
+                            cleaned_content, options, answer_val)
+                    else:
+                        final_type_name = raw_type_name
+                        # 用户/前端显式指定题型时，仍按真实内容复核置信度
+                        _, _tconf = _detect_question_type(
+                            cleaned_content, options, answer_val)
+                    # P3b：置信度不足 → 标记待复核，教师在「题目管理 → 待复核」确认
+                    need_review = 1 if (_tconf or 0) < NEED_REVIEW_CONFIDENCE else 0
                 # 客观选择题答案归一化（A、B → AB；对/错 → A/B），论述/写作保留原文
                 if final_type_name in ('单选题', '多选题', '判断题', '选择题'):
                     _norm = canonical_answer(answer_val)
@@ -2732,6 +3641,15 @@ async def confirm_batch_import(
                     subject.subject_id, cleaned_content, final_type_name,
                     item.get('subcategory') or item.get('子科目') or ''
                 )
+                # ★ 材料落库：申论「给定资料」上万字，不能塞进题干。
+                #   按内容指纹去重复用同一 question_groups 行，各小题 group_id 指向它。
+                _gid = 0
+                _mt = item.get('material_text') or item.get('material') or ''
+                if _mt:
+                    _gid = (_get_or_create_shenlun_material_group(
+                        db, _mt, subject.subject_name,
+                        item.get('source', '')) or 0)
+                _qno = item.get('question_number')
                 question = QuestionBank(
                     subject_id=subject.subject_id,
                     type_id=qtype.type_id,
@@ -2739,8 +3657,9 @@ async def confirm_batch_import(
                     options=options,
                     answer=answer_val,
                     answer_analysis=cleaned_analysis,
-                    difficulty=item.get('difficulty', 3),
-                    score=item.get('score', 1.0),
+                    difficulty=coerce_difficulty(item.get('difficulty')),
+                    need_review=need_review,
+                    score=coerce_score(item.get('score')),
                     year=item.get('year'),
                     source=item.get('source', ''),
                     tags=item.get('tags', ''),
@@ -2749,6 +3668,12 @@ async def confirm_batch_import(
                     xingce_subcategory=_xingce_sc,
                     shenlun_subcategory=_shenlun_sc,
                     gongzhuan_subcategory=_gongzhuan_sc,
+                    # ★ 申论四要素：要求/题号/层级/组序，缺任一项题库都无法正确呈现
+                    requirements=_normalize_requirements(item.get('requirements')),
+                    group_id=_gid,
+                    question_number=str(_qno).strip() if _qno not in (None, '') else None,
+                    question_level=int(item.get('question_level') or 0) or 1,
+                    sort_order=int(item.get('sort_order') or 0),
                 )
                 db.add(question)
                 db.flush()
@@ -2765,8 +3690,19 @@ async def confirm_batch_import(
 
                 # 图片提取与保存（失败时清除已刷新的题目，避免孤儿行）
                 try:
+                    # ★ 与 /single 保持一致：扫描范围必须含答案与解析。
+                    #   实测 254 份申论语料 118 份含真实图片，绝大多数在答案区。
+                    #   /confirm 是前端的**主入库路径**，若只扫题干+选项，
+                    #   答案区的 [IMAGE:xxx] 占位符不会被发现也不会被替换
+                    #   （用户截图残留 [[IMAGE:f4419932_2_0]] 即由此而来）。
+                    _confirm_scope = ' '.join([
+                        item.get('question_content') or '',
+                        str(item.get('options') or ''),
+                        item.get('answer') or '',
+                        item.get('answer_analysis') or item.get('analysis') or '',
+                    ])
                     images = _extract_and_save_images(
-                        item.get('question_content', '') + ' ' + str(item.get('options', '')),
+                        _confirm_scope,
                         question.question_id,
                         question_obj=question
                     )
@@ -2793,7 +3729,7 @@ async def confirm_batch_import(
         record.import_status = 'COMPLETED'
         record.complete_time = datetime.now()
         if errors:
-            record.error_messages = json.dumps(errors, ensure_ascii=False)
+            record.error_messages = dump_json_once(errors)
         _link_knowledge_points(db, new_questions)
         db.commit()
 
@@ -2845,6 +3781,23 @@ async def confirm_batch_import(
             except Exception as e:
                 logger.warning(f"[import] 关联题目到试卷失败(非阻断): {e}")
 
+        # 题目导入完成后广播同步事件，通知三端（手机/平板/电脑）刷新题库。
+        # 只广播统计信息（数量/科目），不含题目正文，避免信息泄露。
+        # 用 try/except 完全隔离：广播失败绝不能影响导入结果返回。
+        try:
+            from ...services.scheduler import _broadcast_sync
+            _broadcast_sync(
+                "题目更新",
+                {
+                    "scope": "question_bank",
+                    "action": "import",
+                    "count": imported,
+                    "subject_id": preview_data.get('auto_detected_subject') or None,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"[import] 广播导入完成事件失败(非阻断): {e}")
+
         return {
             'success_count': imported,
             'failed_count': failed,
@@ -2858,6 +3811,160 @@ async def confirm_batch_import(
         db.rollback()
         logger.error(f"确认导入失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+
+
+def _separate_match_essay(db: Session, payload: Dict[str, Any],
+                          q_blocks: List[Dict[str, Any]],
+                          a_blocks: List[Dict[str, Any]],
+                          subject_name: str = '') -> Dict[str, Any]:
+    """申论分离导入的匹配响应（题号+分值+题干指纹三方交叉校验后）。
+
+    与原 `separate_match_endpoint` 的返回结构保持一致，前端无需分支：
+      status / match_rate / matched_count / total_questions / questions /
+      unmatched_question_numbers / extra_answer_numbers / strategy_used / details / message
+    额外附 `essay_report` 承载三方校验明细，便于前端展示阻断原因。
+    """
+    merged = _essay_cross_validate(q_blocks, a_blocks)
+    qs = merged['questions']
+    report = merged['report']
+
+    if not subject_name:
+        subject_name = '申论'
+    subject = _get_or_create_subject(db, subject_name)
+
+    # 去重检测：与原链路同口径
+    for q in qs:
+        content = q.get('content') or ''
+        dup_info = _get_duplicate_info(db, content, q.get('answer') or '',
+                                       subject.subject_id)
+        q['is_duplicate'] = dup_info['is_duplicate']
+        q['similarity'] = dup_info['similarity']
+        if dup_info['is_duplicate']:
+            q['existing_id'] = dup_info['existing_id']
+
+    total = report['question_count']
+    ok_cnt = total - report['blocked_count']
+    rate = (ok_cnt / total * 100) if total else 0.0
+    return {
+        'status': 'success',
+        'match_rate': round(rate, 1),
+        'matched_count': ok_cnt,
+        'total_questions': total,
+        'questions': qs,
+        'unmatched_question_numbers': report['only_in_answers'],
+        'extra_answer_numbers': report['only_in_answers'],
+        'analysis_count': sum(1 for q in qs if (q.get('analysis') or '').strip()),
+        'strategy_used': 'essay_triple_cross_validate',
+        'auto_detected_subject': subject_name,
+        'details': report['details'],
+        'essay_report': report,
+        'message': ('三方交叉校验完成：%s%%（%d/%d 通过）'
+                    % (round(rate, 1), ok_cnt, total)),
+    }
+
+
+def _essay_cross_validate(q_blocks: List[Dict[str, Any]],
+                          a_blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """分离导入的申论三方交叉校验：题号 + 分值 + 题干指纹。
+
+    用户硬约束：「题目数=正确答案段数」**仅是必要条件**，必须逐题校验，
+    禁止计数相等但错配。因此这里逐题比对三项，任何一项不一致即置 blocked，
+    绝不按序盲配。
+
+    为什么要三方而不是只比题号：
+      安徽/国考的答案 PDF **自带完整题干与要求**，因此可以把答案文档里的
+      题干指纹与题目文档的题干指纹直接比对。实测两者逐字一致，
+      一旦不一致就说明两份文档不是同一套卷（例如上传错了年份或卷别），
+      按序配对会把A 卷答案贴到 B 卷题目上 —— 这类错配计数完全正常，
+      只靠数量校验抓不住。
+
+    返回: {'questions': [...], 'report': {...}}
+    """
+    q_by_no = {}
+    for b in q_blocks:
+        if b.get('format') != 'essay':
+            continue
+        q_by_no[str(b.get('question_number'))] = b
+    a_by_no = {}
+    for b in a_blocks:
+        if b.get('format') != 'essay':
+            continue
+        a_by_no[str(b.get('question_number'))] = b
+
+    merged: List[Dict[str, Any]] = []
+    details: List[Dict[str, Any]] = []
+
+    for qno, qb in sorted(q_by_no.items(), key=lambda kv: int(kv[0] or 0)):
+        out = dict(qb)
+        reasons: List[str] = list(qb.get('block_reasons') or [])
+        ab = a_by_no.get(qno)
+
+        if ab is None:
+            # 题目卷有这道题，答案卷没有 → 绝不能留空后放行，那会让用户拿到无答案题
+            reasons.append('answer_missing_for_question')
+            out['answer'] = ''
+            out['analysis'] = ''
+            details.append({'question_number': qno, 'ok': False,
+                            'reason': '答案卷缺少该题号'})
+        else:
+            # ① 题干指纹
+            fp_q = _essay_norm_fp(qb.get('content') or '')
+            fp_a = _essay_norm_fp(ab.get('content') or '')
+            if fp_q and fp_a and fp_q != fp_a:
+                reasons.append('stem_fingerprint_mismatch')
+            # ② 分值
+            sq, sa = qb.get('score'), ab.get('score')
+            if sq and sa and abs(float(sq) - float(sa)) > 0.01:
+                reasons.append('score_mismatch')
+            # ③ 题号本身必须存在且已对齐（走到这里说明 qno 是双方共有的）
+            out['answer'] = ab.get('answer') or ''
+            out['analysis'] = ab.get('analysis') or ''
+            # 答案卷若带更准的要求，以题目卷为准（题目卷是权威来源）
+            if not out.get('requirements') and ab.get('requirements'):
+                out['requirements'] = ab.get('requirements')
+            details.append({
+                'question_number': qno,
+                'ok': not reasons,
+                'stem_match': fp_q == fp_a,
+                'score_q': sq, 'score_a': sa,
+                'answer_len': len(out['answer'] or ''),
+            })
+
+        out['block_reasons'] = reasons
+        out['blocked'] = bool(reasons)
+        merged.append(out)
+
+    only_q = sorted(set(q_by_no) - set(a_by_no), key=lambda x: int(x or 0))
+    only_a = sorted(set(a_by_no) - set(q_by_no), key=lambda x: int(x or 0))
+
+    # 材料传播：解析器只在**第一题**挂 material_text（省内存，避免每题存一份
+    # 上万字的同份材料），但落库时每道题都要通过 group_id 指向同一份材料。
+    # 故在此把整批共享的材料补齐到每一题，否则 Q2..QN 会group_id=0 且材料丢失。
+    # 实测漏掉这一步的后果：材料只进第 1 题，其余 3 题在题库里查不到给定资料。
+    _shared_material = ''
+    _shared_titles = None
+    for b in q_blocks:
+        if b.get('material_text'):
+            _shared_material = b.get('material_text') or ''
+            _shared_titles = b.get('material_titles')
+            break
+    if _shared_material:
+        for m in merged:
+            if not m.get('material_text'):
+                m['material_text'] = _shared_material
+            if not m.get('material_titles') and _shared_titles:
+                m['material_titles'] = _shared_titles
+
+    report = {
+        'question_count': len(q_by_no),
+        'answer_count': len(a_by_no),
+        'matched': len(set(q_by_no) & set(a_by_no)),
+        'only_in_questions': only_q,
+        'only_in_answers': only_a,
+        'blocked_count': sum(1 for m in merged if m.get('blocked')),
+        'details': details,
+    }
+    return {'questions': merged, 'report': report}
 
 
 @router.post("/separate-match", summary="分离导入智能匹配")
@@ -2889,6 +3996,19 @@ async def separate_match_endpoint(
         raise HTTPException(status_code=400, detail="题目文件文本为空")
     if not answers_text:
         raise HTTPException(status_code=400, detail="答案文件文本为空")
+
+    # ★ 申论专用三方交叉校验（题号 + 分值 + 题干指纹）
+    #   仅当**两份文档都判定为申论**才启用；否则一律走原
+    #   smart_match_questions_answers，保证公专/行测链路零回归。
+    #   申论不能按序硬配：答案段数与题目数相等也可能整卷配错年份/卷别，
+    #   而安徽/国考答案卷自带完整题干，指纹一比就能抓出来。
+    _q_blocks = extract_question_blocks(questions_text)
+    _a_blocks = extract_question_blocks(answers_text)
+    _q_is_essay = bool(_q_blocks) and _q_blocks[0].get('format') == 'essay'
+    _a_is_essay = bool(_a_blocks) and _a_blocks[0].get('format') == 'essay'
+    if _q_is_essay and _a_is_essay:
+        return _separate_match_essay(db, payload, _q_blocks, _a_blocks,
+                                     subject_name=payload.get('subject_category', ''))
 
     try:
         # 调用智能匹配引擎
@@ -2981,25 +4101,56 @@ async def unified_parse(
     extra_answer_numbers = []
     strategy_used = ''
     auto_detected_subject = subject_category
+    # 预初始化：申论路径不经过 smart_match，result 不存在；非 separate 分支也不走它
+    result = None
+    essay_prebuilt = None
 
     try:
         if mode == 'separate' and answers_text:
-            # ===== 分离导入：智能匹配 =====
-            result = smart_match_questions_answers(questions_text, answers_text, paper_name)
-            match_rate = round(result.match_rate * 100, 1)
-            matched_count = result.matched_count
-            total_questions = result.total_questions
-            unmatched_numbers = result.unmatched_question_numbers
-            extra_answer_numbers = result.extra_answer_numbers
-            analysis_count = result.analysis_count
-            strategy_used = result.strategy_used
+            # ===== 分离导入 =====
+            # ★ 申论优先：两份文档都判定为申论时走「题号+分值+题干指纹」三方交叉校验。
+            #   smart_match_questions_answers 是选择题匹配器（按选项字母/答案长度比对），
+            #   对申论长文本答案必然匹配失败 → match_rate 0%
+            #   → 前端弹「匹配率偏低（0%）。请使用手动匹配界面进行人工匹配」，
+            #   逼用户逐题手工匹配。申论的正确判据是三方交叉校验，不是选项匹配。
+            _sq = extract_question_blocks(questions_text)
+            _sa = extract_question_blocks(answers_text)
+            _essay_sep = (bool(_sq) and _sq[0].get('format') == 'essay'
+                          and bool(_sa) and _sa[0].get('format') == 'essay')
+            if _essay_sep:
+                merged = _essay_cross_validate(_sq, _sa)
+                _qs = merged['questions']
+                _rep = merged['report']
+                total_questions = _rep['question_count']
+                matched_count = total_questions - _rep['blocked_count']
+                match_rate = round((matched_count * 100 / total_questions)
+                                   if total_questions else 0.0, 1)
+                unmatched_numbers = _rep['only_in_answers']
+                extra_answer_numbers = _rep['only_in_answers']
+                analysis_count = sum(1 for q in _qs if (q.get('analysis') or '').strip())
+                strategy_used = 'essay_triple_cross_validate'
+                auto_detected_subject = auto_detected_subject or '申论'
+                # 申论块已是完整结构，直接复用 combined 分支的统一转换逻辑
+                essay_prebuilt = _qs
+            else:
+                result = smart_match_questions_answers(
+                    questions_text, answers_text, paper_name)
+                match_rate = round(result.match_rate * 100, 1)
+                matched_count = result.matched_count
+                total_questions = result.total_questions
+                unmatched_numbers = result.unmatched_question_numbers
+                extra_answer_numbers = result.extra_answer_numbers
+                analysis_count = result.analysis_count
+                strategy_used = result.strategy_used
+                essay_prebuilt = None
 
             if not auto_detected_subject:
                 all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
                 auto_detected_subject, _ = detect_subject_category(all_content)
 
             # 转换为 ParsedQuestion
-            for block in result.questions:
+            for block in (essay_prebuilt if essay_prebuilt is not None
+                          else result.questions):
                 q_num = block.get('question_number', 0)
                 content = block.get('content', '')
                 answer = block.get('answer', '') or '待补充'
@@ -3193,7 +4344,10 @@ def _fallback_loose_parse(text: str) -> List[Dict[str, Any]]:
         extracted = extract_answer_from_lines(content_lines)
         answer = extracted.get('answer') if extracted else None
         analysis = extracted.get('analysis') if extracted else None
-        qtype = _detect_question_type('\n'.join(content_lines), options, answer or '')
+        # ★ 返回的是 (type_name, confidence) 元组，必须解包
+        _qtype_name, _conf1 = _detect_question_type(
+            '\n'.join(content_lines), options, answer or '')
+        qtype = _get_or_create_type(db, _qtype_name, subject.subject_id)
 
         # 移除选项行
         content = '\n'.join(content_lines)
@@ -3375,7 +4529,9 @@ async def import_from_image(
 
         # 自动检测题型（传入从文本提取的选项与答案，避免选择/多选被误判为论述题）
         ocr_options = _extract_options(ocr_text.split('\n'))
-        detected_type = _detect_question_type(ocr_text, ocr_options, detected_answer or '')
+        # ★ 返回的是 (type_name, confidence) 元组，必须解包
+        detected_type, _conf2 = _detect_question_type(
+            ocr_text, ocr_options, detected_answer or '')
         qtype = _get_or_create_type(db, detected_type, subject.subject_id)
 
         content = ocr_text[:100000]
@@ -3520,7 +4676,9 @@ async def _import_structured_from_ocr(
             continue
 
         try:
-            detected_type = _detect_question_type(content, q_data.get('options', []), answer or '')
+            # ★ 返回的是 (type_name, confidence) 元组，必须解包
+            detected_type, _conf3 = _detect_question_type(
+                content, q_data.get('options', []), answer or '')
             qtype = _get_or_create_type(db, detected_type, subject.subject_id)
             # 客观选择题：答案归一化（A、B → AB；对/错 → A/B），论述/写作保留原文
             if detected_type in ('单选题', '多选题'):
@@ -3540,8 +4698,9 @@ async def _import_structured_from_ocr(
                 options=q_data.get('options') if q_data.get('options') else None,
                 answer=stored_answer,
                 answer_analysis=clean_analysis,
-                difficulty=q_data.get('difficulty', 3),
-                score=float(q_data.get('score', 1.0)),
+                    difficulty=coerce_difficulty(q_data.get('difficulty')),
+                    score=coerce_score(q_data.get('score')),
+
                 year=payload.get('exam_year'),
                 source=payload.get('source', '图片OCR导入'),
                 tags=payload.get('tags', 'OCR导入'),
@@ -3572,8 +4731,15 @@ async def _import_structured_from_ocr(
 
             # 图片提取与保存（失败时清除已刷新的题目，避免孤儿行）
             try:
+                # ★ 第三处入库路径，扫描范围同样补上答案与解析（与前两处一致）
+                _ocr_scope = ' '.join([
+                    content,
+                    str(q_data.get('options') or ''),
+                    q_data.get('answer') or '',
+                    q_data.get('answer_analysis') or q_data.get('analysis') or '',
+                ])
                 images = _extract_and_save_images(
-                    content + ' ' + str(q_data.get('options', '')),
+                    _ocr_scope,
                     question.question_id,
                     question_obj=question
                 )
