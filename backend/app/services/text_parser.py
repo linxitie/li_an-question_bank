@@ -2225,9 +2225,58 @@ _ESSAY_HALF_NUM_RE = re.compile(r'^[ \t　]*(\d{1,2})\s*[.．、](?![\d])[ \t　
 # 全角阿拉伯题号：国考体
 _ESSAY_FULL_NUM_RE = re.compile(r'^[ \t　]*[（(]\s*(\d{1,2})\s*[）)][ \t　]*\S')
 # 全角中文数字题号：2018 地市级等卷的「（一）（二）」体例
-_ESSAY_CN_NUM_RE = re.compile(r'^[ \t　]*[（(]\s*([一二三四五六七八九十]+)\s*[）)][ \t　]*\S')
+# 中文数字题号。同时支持两种形态：
+#   ① 带圆括号：2018 地市级卷 `（一）…`
+#   ② 裸数字 + 顿号：2022 国考副省级卷 `一、根据"给定资料 1"，…（10 分）`
+#      该卷题目区用 `一、`~`五、`，答案区同样用 `一、(10 分)`，
+#      两区靠分值窗口 + monotonic（题目区先命中且必须连续）区分。
+#      ⚠️ 答案正文里也有 `一、全流域"一盘棋"。…` 这类分点，由分值窗口排除。
+# 捕获组统一包住两种形态，保证 `m.group(1)` 在所有调用点一致可用；
+# `_essay_cn_to_int` 负责剥离括号/顿号。
+_ESSAY_CN_NUM_RE = re.compile(
+    r'^[ \t　]*((?:[（(]\s*[一二三四五六七八九十]+\s*[）)]'
+    r'|[一二三四五六七八九十]+\s*[、．.、]))[ \t　]*\S'
+)
 # 「问题一：」体例：2022 国考行政执法卷等
-_ESSAY_WORD_NUM_RE = re.compile(r'^[ \t　]*问\s*题\s*([一二三四五六七八九十]+)\s*[：:][ \t　]*\S')
+# 「问题一」体例。实测存在两种写法，故两种都要认：
+#   ① 带冒号同行正文：2022 国考行政执法卷 `问题一："给定资料1"反映了…`
+#   ② 裸标记独占一行：2023 国考副省卷   `问题一`  ← 换行，无冒号、无正文
+# ② 的判据严格性：正文行不可能以「问题 + 中文数字」开头且行尾为空。
+#   实测该卷全文仅 10 处匹配，且 rest 全为空，恰好是题目区 5 个 + 答案区 5 个，
+#   正文零误命中 —— 故允许「冒号+正文」或「行尾为空」二者之一即可。
+_ESSAY_WORD_NUM_RE = re.compile(
+    r'^[ \t　]*问\s*题\s*([一二三四五六七八九十]+)\s*'
+    r'(?:[：:][ \t　]*\S|[ \t　]*$)'
+)
+# 裸标记形态：`问题一` 独占一行、行尾无正文。
+# 与「同行带正文」的 `问题一："给定资料1"…` 区分开 —— 二者的分值距离不同。
+_ESSAY_BARE_WORD_RE = re.compile(
+    r'^[ \t　]*问\s*题\s*[一二三四五六七八九十]+\s*[：:]?\s*$'
+)
+
+
+def _essay_score_scope(lines: List[str], i: int, s: str, strict: bool) -> str:
+    """取该候选题号行的「分值判定作用域」。
+
+    ★ 窗口宽度必须按标记形态区分，否则两头出错：
+
+    形态 A —— 题号与题干同行（`1. 请根据…`、`问题一："给定资料1"…`）：
+        分值在本行或紧邻下一行，2 行窗口足够。
+        ⚠️ 不可放宽到 5 行：实测 2025 辽宁B卷答案里，答案正文分点
+        `5.强化新农人服务。…` 后 5 行内能看到下一题的 `（20分）`
+        → 分点被误收 → monotonic 被污染 → 真题被丢弃（少切 17%）。
+
+    形态 B —— 裸标记独占一行（`问题一` 后换行写题干，实测 2023 国考副省卷）：
+        分值在下方第 2~3 行，2 行窗口会漏。实测该卷五题分值距离为
+        2/2/2/3/3 行，故取 4 行。
+        该形态放宽是安全的：其题号标记 `问题X` 不会与答案正文分点混淆
+        （答案分点是 `1.` `2.`，命中的是 half 正则而非 word 正则）。
+    """
+    if strict:
+        return lines[i]
+    if _ESSAY_BARE_WORD_RE.match(s):
+        return '\n'.join(lines[i:i + 4])
+    return '\n'.join(lines[i:i + 2])
 _CN_DIGITS = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
 # 要求特征词（用于全角体下把"要求子项"从"题号"里排除）
 _ESSAY_REQ_WORDS = (
@@ -2251,8 +2300,15 @@ def _essay_find_score(seg: str):
 
 
 def _essay_cn_to_int(s: str) -> int:
-    """中文数字转阿拉伯（仅需 1..10，申论题号不会更大）。"""
-    s = (s or '').strip()
+    """中文数字转阿拉伯（仅需 1..10，申论题号不会更大）。
+
+    ⚠️ 入参可能是**带包装**的形态，不能直接按长度判断：
+        `（一）`（带圆括号，2018 地市级卷）
+        `一、`（裸数字 + 顿号，2022 国考副省级卷）
+    故先剥离括号/顿号等非中文数字字符，再做长度分派。
+    """
+    # 只保留中文数字字符，剥离 `（）`、`、`、`．`、`.` 等包装
+    s = ''.join(ch for ch in (s or '') if ch in _CN_DIGITS or ch == '十')
     if not s:
         return 0
     if s == '十':
@@ -2323,17 +2379,18 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
             s = lines[idx].strip()
             if not s:
                 continue
+            # ★ 章节标题不算题号证据（与 _essay_split_questions 保持一致）。
+            #   实测 2022 国考副省级卷 line 198 `三、作答要求` 会被 cn 正则
+            #   命中，若计票则抬高 cn 票数并污染首个候选。
+            if _ESSAY_SECTION_HEAD_RE.match(s):
+                continue
             if strict:
                 scope = lines[idx]          # 仅本行
             else:
-                # ★ 宽松级窗口同样收紧为 2 行，必须与 _essay_split_questions 一致。
-                # 真实故障（实测 2025 国考副省级题目卷，生产路径 pdfplumber）：
-                #   题号是半角 `1.`，分值在隔行处 → 严格级一个都没命中；
-                #   而要求子项 `（1）紧扣资料，内容全面；` 在 5 行窗口内能看到
-                #   下一题分值，于是被计为「全角体」证据 → 体例误判成 full
-                #   → 用全角正则切题切出 0 道 → 整份卷不进申论分支。
-                #   两处窗口必须同步放宽/收紧，否则体例判定与切题口径分裂。
-                scope = '\n'.join(lines[idx:idx + 2])
+                # ★ 窗口按标记形态区分，详见 _essay_score_scope 的 docstring。
+                #   裸「问题X」独占一行 → 4 行窗口（分值在下方 2~3 行）
+                #   题号与题干同行     → 2 行窗口（放宽会重演少切 17% 的回归）
+                scope = _essay_score_scope(lines, idx, s, False)
             if not _ESSAY_SCORE_RE.search(scope):
                 continue
             for style, rx in res.items():
@@ -2351,6 +2408,12 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
         return max(tally.items(), key=lambda kv: kv[1])[0]
     tally = _scan(False)
     return max(tally.items(), key=lambda kv: kv[1])[0] if max(tally.values()) > 0 else None
+
+
+_ESSAY_SECTION_HEAD_RE = re.compile(
+    r'^[ \t　]*[（(]?\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s*[）)]?\s*[、.．]?\s*'
+    r'(?:作答要求|给定材料|参考答案|答题要求|材料)'
+)
 
 
 def _essay_split_questions(lines: List[str], style: str):
@@ -2389,8 +2452,15 @@ def _essay_split_questions(lines: List[str], style: str):
         m = num_re.match(lines[i])
         if not m:
             continue
-        # ★ 收紧为 2 行窗口：本行 + 紧邻下一行
-        window = '\n'.join(lines[i:i + 2])
+        # ★ 章节标题不是题号。实测 2022 国考副省级卷：
+        #     198 | '三、作答要求'   ← 被 cn 正则当成 num=3 的候选
+        #     199 | '一、根据"给定资料 1"，…（10 分）'  ← 真题 1
+        #   若不排除，首个候选是 3 而非 1 → monotonic 守卫整批判废 → 卷子解析失败。
+        if _ESSAY_SECTION_HEAD_RE.match(lines[i].strip()):
+            continue
+        # ★ 窗口按标记形态区分（与 _detect_essay_numbering 共用同一 helper，
+        #   两处口径必须一致，否则体例判定与切题会分裂）。
+        window = _essay_score_scope(lines, i, lines[i].strip(), False)
         if not _ESSAY_SCORE_RE.search(window):
             continue
         if style in ('cn', 'word'):
