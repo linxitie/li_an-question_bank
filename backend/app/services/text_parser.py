@@ -4455,3 +4455,137 @@ class NumberFormatNormalizer:
         # 标准数字提取
         m = re.match(r'(\d+)', text)
         return int(m.group(1)) if m else None
+
+
+# ============================================================================
+# 行测分节路由（任务 7 新增）
+# ============================================================================
+#
+# 设计契约（红线，违反即回归公专/申论链路）
+# ------------------------------------------------
+# 1. **纯增量**：本区块全部为新增符号，不修改本文件任何既有函数体。
+#    `extract_question_blocks` / `ContentCleaner` / `_mark_and_split_suspected`
+#    等一律保持字节级不变。接入点在任务 11 的独立端点，不在此处埋入。
+# 2. **>=2 锚点安全门槛**：仅当同时命中 **2 个及以上**行测分节锚点才返回非 None，
+#    否则返回 None 由调用方走原路径。仿申论 `_route_sections` 的同款门槛，
+#    是保证 2,583 道公专题零回归的唯一保险。
+# 3. **分区身份只取词表，不取序号**：实测同一分区在不同卷里序号不同
+#    （`常识判断` 出现过 `一、` `二、` `四、`；`资料分析` 出现过 `五、` `六、` `七、`），
+#    故 ordinal 仅作呈现，name 才是身份。
+# 4. **锚点须有终止符**：分节头必须以全角冒号结尾或独占一行，
+#    以免把「一、资料分析显示…」这类正文首句误判为分节头。
+#    这是前序铁律「行级正则必须处理标记与内容同行的常态；锚定 $ 是脆弱假设」
+#    与本条「但也不能无终止符」的折中：终止符 = 冒号 or 行尾。
+#
+# 实测依据（题库/行测 85 套全量，170/170 PDF）
+# ------------------------------------------------
+#   - 分节头命中率 100%（85/85 题本、85/85 答案解析）
+#   - 分节序列：5 节 57 套 / 6 节 27 套 / 7 节 1 套
+#   - 词表：言语理解与表达 85 / 数量关系 85 / 判断推理 85 / 资料分析 85 /
+#           常识判断 84 / 政治理论 25 / 科学推理 4 / 常识 1
+#   - 资料分析材料锚点：`（一）（二）…` 全角括号独占行，共 364 块，85/85 覆盖
+#   - 同一分节头的两种实测形态：`一、 政治理论：`（冒号式）与 `四、 常识判断`（独占行式）
+
+XINGCE_SECTION_NAMES = (
+    "政治理论",
+    "常识判断",
+    "常识",
+    "言语理解与表达",
+    "数量关系",
+    "判断推理",
+    "科学推理",
+    "资料分析",
+)
+
+# 终止符 = 全角/半角冒号 或 行尾（re.M 下 $ 即行尾）
+_XINGCE_SEC_ALT = "|".join(XINGCE_SECTION_NAMES)
+XINGCE_SECTION_PATTERN = re.compile(
+    r"^[ \t]*([一二三四五六七八九十]{1,3})[、.．][ \t]*"
+    r"(" + _XINGCE_SEC_ALT + r")"
+    r"[ \t]*(?:[：:]|$)",
+    re.M,
+)
+
+# 资料分析材料锚点：全角括号独占行。
+# 与申论的「材料1 / 给定资料N」、公专的「情境材料」是**不同形态**，不可复用。
+XINGCE_MATERIAL_PATTERN = re.compile(
+    r"^[ \t]*（([一二三四五六七八九十]{1,3})）[ \t]*$", re.M
+)
+
+# 安全门槛：命中多少个分节才算「这是行测试卷」
+XINGCE_MIN_SECTION_HITS = 2
+
+
+def route_xingce_sections(text: str) -> Optional[dict]:
+    """识别行测试卷的分节结构与资料分析材料锚点。
+
+    与申论 `_route_sections` 同款设计：一个模型同时适配「合并本」与「分离型」，
+    不产生第二套体系。
+
+    Args:
+        text: 试卷全文（题本或答案解析均可——实测两者携带**完全相同**的分节头，
+              这是行测配对安全网的地基）。
+
+    Returns:
+        命中 >=2 个分节锚点时返回::
+
+            {
+              'sections': [
+                  {'ordinal': '一', 'name': '政治理论', 'start': 31, 'end': 4032},
+                  ...
+              ],
+              'section_names': ['政治理论', '常识判断', ...],
+              'materials': [{'ordinal': '一', 'start': 22039, 'end': 22600}, ...],
+              'material_count': 4,
+            }
+
+        否则返回 ``None`` —— 调用方必须据此走原路径（公专/申论链路的安全门）。
+    """
+    if not text:
+        return None
+
+    hits = list(XINGCE_SECTION_PATTERN.finditer(text))
+    if len(hits) < XINGCE_MIN_SECTION_HITS:
+        return None
+
+    sections = []
+    for i, m in enumerate(hits):
+        sections.append({
+            'ordinal': m.group(1),
+            'name': m.group(2),
+            'start': m.start(),
+            'end': hits[i + 1].start() if i + 1 < len(hits) else len(text),
+        })
+
+    # 材料锚点：行测**全分节通用**，实测分布 资料分析 299 / 言语理解与表达 39 /
+    # 判断推理 19 / 常识判断 7 = 364（85 套题本全量）。
+    #   - 言语理解：「（一）以下是略有删节的公文部分内容，阅读之后回答51—55题」→ 多篇文章
+    #   - 判断推理：「（一）6天休假期间，单位需要每天安排一人值班…」→ 情景材料
+    #   - 常识判断：「（一）2017年9月，党中央、国务院批复的《北京城市总体规划》…」→ 材料
+    # 故**不得**限定在资料分析内 —— 限定会丢弃 65 个材料块（364 → 299）。
+    # 每个材料块标注所属分节，供任务 9 映射 question_groups.group_type。
+    materials = []
+    for i, m in enumerate(XINGCE_MATERIAL_PATTERN.finditer(text)):
+        owner = ''
+        for sec in sections:
+            if sec['start'] <= m.start() < sec['end']:
+                owner = sec['name']
+                break
+        nxt = XINGCE_MATERIAL_PATTERN.search(text, m.end())
+        materials.append({
+            'ordinal': m.group(1),
+            'start': m.start(),
+            'end': nxt.start() if nxt else len(text),
+            'section': owner,
+        })
+
+    return {
+        'sections': sections,
+        'section_names': [s['name'] for s in sections],
+        'materials': materials,
+        'material_count': len(materials),
+        'materials_by_section': {
+            name: sum(1 for x in materials if x['section'] == name)
+            for name in sorted({x['section'] for x in materials})
+        },
+    }
