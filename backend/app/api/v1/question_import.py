@@ -4631,11 +4631,22 @@ def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
         return {'import_status': 'BLOCKED', 'question_id': None,
                 'message': '存在阻断问题：%s' % '、'.join(str(r) for r in reasons)}
 
-    content = (data.get('question_content') or '').strip()
-    if not content:
-        return {'import_status': 'SKIPPED', 'question_id': None,
-                'message': '题干为空'}
-    content = clean_question_text(content) or content
+    raw_content = (data.get('question_content') or '').strip()
+    options = data.get('options') or []
+    # 空题干不丢弃：数量关系/图形推理的公式与图形在原PDF 中以矢量或图片渲染，
+    # 文本层只剩题号与选项骨架（实测 q31='31. \nA.13\nB.14…'、q33 题干选项皆空）。
+    # 按既定口径「图片题切图入库、人工补文字」+「低质量题入库并标记待复核」，
+    # 这类题须入库并强制待复核；只有连选项骨架都没有的空壳才真正拒收。
+    # 绝不编造题干——占位文本明确标注来源缺失，交人工补录。
+    force_review = False
+    if not raw_content:
+        if not options:
+            return {'import_status': 'SKIPPED', 'question_id': None,
+                    'message': '题干与选项均为空，无可识别内容'}
+        raw_content = '【待补录：原PDF题干为图形/公式，文本层缺失】'
+        force_review = True
+    content = clean_question_text(raw_content) or raw_content
+    need_review = 1 if (data.get('need_review') or force_review) else 0
     answer = (data.get('answer') or '').strip() or '待补充'
 
     subject_id = SUBJECT_NAME_MAP.get('行测', 1)
@@ -4694,7 +4705,7 @@ def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
         source=source,
         creator_id=user.user_id,
         audit_status=1,
-        need_review=1 if data.get('need_review') else 0,
+        need_review=need_review,
         xingce_subcategory=data.get('subcategory') or '无',
     )
     db.add(q)

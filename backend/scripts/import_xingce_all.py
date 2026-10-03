@@ -146,7 +146,8 @@ def import_paper(db, user, folder, year, variant, qfile, afile, kp):
             qno_to_gid[int(qno)] = (qg.id, g['member_qnums'].index(int(qno)) + 1)
 
     # ── 逐题入库 ──────────────────────────────────────────────
-    inserted = dup = nr = ko = 0
+    inserted = dup = nr = ko = norec = 0
+    norec_list = []
     for q in prev['questions']:
         qno = q.get('question_number')
         try:
@@ -185,9 +186,12 @@ def import_paper(db, user, folder, year, variant, qfile, afile, kp):
                     'total': prev['total_questions'], 'inserted': inserted}
         qid = res.get('question_id')
         if not qid:
-            return {'paper': paper_name, 'year': year, 'variant': variant,
-                    'ok': False, 'reason': '落库被拒: %s' % res.get('message'),
-                    'total': prev['total_questions'], 'inserted': inserted}
+            # 单题无可识别内容（题干与选项皆空）不再中止整卷：
+            # 计为待人工补录并继续，避免「一题空壳拖垮整卷」。
+            # 仍逐题显式计数上报，不静默吞掉。
+            norec += 1
+            norec_list.append(qno if qno is not None else '?')
+            continue
         if res.get('import_status') == 'DUPLICATE':
             dup += 1
         else:
@@ -211,6 +215,7 @@ def import_paper(db, user, folder, year, variant, qfile, afile, kp):
             'total': prev['total_questions'], 'inserted': inserted,
             'duplicate': dup, 'need_review': nr, 'kao_links': ko,
             'material_groups': groups_made,
+            'no_recognisable': norec, 'no_recognisable_qnos': norec_list[:20],
             'province': meta.get('exam_province'), 'exam_type': meta.get('exam_type'),
             'paper_variant': meta.get('paper_variant')}
 
@@ -265,13 +270,14 @@ def main():
                     batch['inserted'] += st.get('inserted', 0)
                 else:
                     batch['fail'] += 1
-                print('  [%s] %s %s%s  题%d 入库%d dup%d 待复核%d 组%d 考点%d  %.1fs'
+                print('  [%s] %s %s%s  题%d 入库%d dup%d 待复核%d 组%d 考点%d 待补录%d %.1fs'
                       % ('OK ' if st['ok'] else 'FAIL',
                          year, variant or '-', '',
                          st['total'], st.get('inserted', 0),
                          st.get('duplicate', 0), st.get('need_review', 0),
                          st.get('material_groups', 0),
-                         st.get('kao_links', 0), st['sec']))
+                         st.get('kao_links', 0),
+                         st.get('no_recognisable', 0), st['sec']))
                 if not st['ok']:
                     print('       原因: %s' % st['reason'])
             if args.dry_run:
