@@ -2411,6 +2411,10 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
                     continue
                 if style == 'cn' and not _essay_cn_to_int(m.group(1)):
                     break
+                # ★ 与 _essay_split_questions 同一道题干实质内容守卫，
+                #   两处口径必须一致，否则体例判定与切题会分裂。
+                if style == 'cn' and _essay_cn_body_len(s) < 8:
+                    break
                 tally[style] += 1
                 break
         return tally
@@ -2426,6 +2430,19 @@ _ESSAY_SECTION_HEAD_RE = re.compile(
     r'^[ \t　]*[（(]?\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s*[）)]?\s*[、.．]?\s*'
     r'(?:作答要求|给定材料|参考答案|答题要求|材料)'
 )
+
+
+def _essay_cn_body_len(s: str) -> int:
+    """题号行剥掉「题号 + 分值 + 标点」后的**实质题干长度**。
+
+    用于把真题目行与答案区标记区分开：
+      真题目   `一、根据"给定资料 1"，请你谈谈…（10 分）` → 剩 20+ 字
+      答案标记 `一、(15 分)`                          → 剩 0 字
+    只数实义字符，标点与空白一律不计。
+    """
+    body = _ESSAY_CN_NUM_RE.sub('', s or '', count=1)
+    body = _ESSAY_SCORE_RE.sub('', body)
+    return len(re.sub(r'[\s、.．:：,，。;；()（）「」“”"\'《》]', '', body))
 
 
 def _essay_split_questions(lines: List[str], style: str):
@@ -2469,6 +2486,14 @@ def _essay_split_questions(lines: List[str], style: str):
         #     199 | '一、根据"给定资料 1"，…（10 分）'  ← 真题 1
         #   若不排除，首个候选是 3 而非 1 → monotonic 守卫整批判废 → 卷子解析失败。
         if _ESSAY_SECTION_HEAD_RE.match(lines[i].strip()):
+            continue
+        # ★ 题干实质内容守卫：题号行不能「只有分值、没有题干」。
+        #   实测 2022 行政执法卷答案区 line 259+ 是 `一、(15 分)` —— 裸数字+分值、
+        #   零题干。若把它当题号，题目区会被答案区顶替，产出 content 为空、
+        #   score=1 的**废块**，比被阻断更糟（虚增解析成功数）。
+        #   真实题目行去掉题号与分值后仍有大量题干
+        #   （`一、根据"给定资料 1"，请你谈谈…（10 分）` → 剩 20+ 字）。
+        if style == 'cn' and _essay_cn_body_len(lines[i].strip()) < 8:
             continue
         # ★ 窗口按标记形态区分（与 _detect_essay_numbering 共用同一 helper，
         #   两处口径必须一致，否则体例判定与切题会分裂）。
