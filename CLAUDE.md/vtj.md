@@ -429,7 +429,7 @@ VTJ 生成的 `.vue` 文件使用 `defineComponent` + `setup()` 返回 `useProvi
 用户需求
   │
   ├── 涉及 UI 结构变更？
-  │   └── YES → 用户在 VTJ 设计器（http://localhost:5173/__vtj__/）拖拽修改
+  │   └── YES → 用户在 VTJ 设计器（http://localhost:9527/__vtj__/）拖拽修改
   │             → 设计器保存 → 更新 .vtj/files/*.json
   │             → 出码 → 更新 .vtj/vue/*.vue
   │             → Claude 在 <script> 中补充业务逻辑
@@ -750,7 +750,7 @@ Vue defineComponent → 挂载渲染
 ### 5.4 阶段一：Vite 开发服务器启动
 
 `vite.config.ts` 中的 `createDevTools()` 插件提供：
-- 实时设计器预览（`http://localhost:5173/__vtj__/`）
+- 实时设计器预览（`http://localhost:9527/__vtj__/`）
 - `$vtj/` 路径别名解析（映射到 `.vtj/` 目录）
 - 低代码组件编译（将 DSL 编译为 Vue SFC）
 - 热重载支持
@@ -971,7 +971,7 @@ const routes = [
 | Vite 插件 | `createDevTools()` 启用 | **必须移除** `createDevTools()` |
 | 物料 | 本地 `node_modules` | 部署到 CDN |
 | 更新 | 热重载 | `autoUpdate()` 自动检测新版本 |
-| 设计器 | `http://localhost:5173/__vtj__/` | 不可访问 |
+| 设计器 | `http://localhost:9527/__vtj__/` | 不可访问 |
 | 错误处理 | 设计模式全局错误处理器 | 标准 Vue 错误处理 |
 
 ---
@@ -1236,7 +1236,7 @@ VTJ 生成的组件是异步加载的，`<Suspense>` 提供加载状态处理、
 
 ### D.3 前后端分离部署
 
-- 开发环境：Vite Dev Server (port 5173) → proxy → FastAPI (port 8000)
+- 开发环境：Vite Dev Server (port 9527) → proxy → FastAPI (port 8000)
 - 代理配置：`/api` → `http://localhost:8000`，启用 WebSocket 代理
 - 前端使用 Hash 路由模式 (`createWebHashHistory`)
 
@@ -1304,23 +1304,41 @@ VTJ 生成的组件是异步加载的，`<Suspense>` 提供加载状态处理、
 
 ## 附录F：开发工作流补充（§3.6 增强）
 
-### 修改 .vue 后的强制同步步骤
+### 修改 .vue 后的同步步骤（勘误 2026-10-03）
 
-每次 Claude Code 修改 VTJ 生成页面的 `<script>` 部分（methods/state/lifeCycles/computed）后，**必须**同步更新对应的 `.vtj/files/*.json`：
+> ⚠️ **本节原标题为「修改 .vue 后的强制同步步骤」，该表述已作废。**
+> 原文要求「每次修改 .vue 后**必须**同步 `.vtj/files/*.json`」，与实测事实冲突。
 
-1. **方法同步**：在 JSON 的 `methods` 中添加方法声明（`type` + `params`），不需要完整函数体
-2. **状态同步**：在 JSON 的 `state` 中更新字段列表和初始值
-3. **生命周期同步**：在 JSON 的 `lifeCycles` 中添加 `mounted`/`beforeUnmount` 声明
-4. **版本同步**：保持 JSON 的 `__VERSION__` 与 .vue 中 `useProvider({ version })` 一致
+**`raw: true` 的页面禁止同步 DSL。**
+
+前序会话用实证证明同步工具有损：`question_import.vue` 共 48 个方法，
+同步工具连 `_pollImportStatus` 都提取不到——即同步会**丢方法**，
+且设计器再保存时会把丢失的部分反向覆盖到手写代码上。
+
+**判定流程**
 
 ```
 修改 .vtj/vue/xxx.vue 的 <script>
   │
-  ├── 步骤1：提取修改的 methods/state/lifeCycles 签名
-  ├── 步骤2：更新 .vtj/files/xxx.json 对应字段
-  ├── 步骤3：确认 __VERSION__ 一致
-  └── 步骤4：清理 Vite 缓存 + 重启验证
+  ├── 查 .vtj/projects/*.json 中该页 "raw": true ?
+  │     │
+  │     ├── 是（raw 手写页，如 question_import）
+  │     │     └── ✅ 禁止同步 .vtj/files/*.json
+  │     │         只改 <script>；UI 结构变更回 http://localhost:9527/__vtj__/ 设计器
+  │     │
+  │     └── 否（设计器管理页）
+  │           └── 按原流程同步 methods / state / lifeCycles / __VERSION__
 ```
+
+**`raw: true` 页面改动前后自检**
+
+```powershell
+git diff --stat -- .vtj/files/xxx.json     # 必须为空
+Select-String -Path .vtj/vue/xxx.vue -Pattern 'useProvider\(\{'   # version 不得变更
+```
+
+> 依据：`.vtj/projects/linxitie.policy-exam-bank.json` 中 `question_import`
+> 标记 `"raw": true`，设计器不覆盖，故可安全手改 `<script>`。
 
 ### 新增页面到路由的步骤
 
