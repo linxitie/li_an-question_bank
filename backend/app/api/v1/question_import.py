@@ -2055,7 +2055,27 @@ def _upsert_question_core(db: Session, current_user: SysUser,
     subject = _get_or_create_subject(db, subject_name)
 
     # 模糊去重检测
-    existing = _detect_duplicate(db, content, answer, subject.subject_id)
+    # ── 行测专用口径（opt-in，纯增量；不传该键时行为逐字节不变）────────
+    # 行测的去重主键是**题号 + 来源**，不是文本相似度。实测「国考 2023 副省级」
+    # 单套131 题中有 7 题 question_content 完全相同（4 题共用「选择最合适的一个
+    # 填入问号处…」、3 题共用「把下面的六个图形分为两类…」），最短 6 条是 5~9 字的
+    # 类比短语如「花海：书山」。图形推理的区分信息在**图片**里，文本层只有共用
+    # 指令句或碎片，故 80% 文本相似度会把不同题判成同题 —— 实测 60% 被误判重复，
+    # 且**静默丢弃、不报错**（预览层 match_rate 100%、blocked 0 完全拦不住）。
+    # 行测题号在卷内唯一，故按 (question_number, source) 判定既精确又不会误杀。
+    _dedup_scope = question_data.get('dedup_scope')
+    if _dedup_scope == 'qno_in_source':
+        _qno_d = str(question_data.get('question_number') or '').strip()
+        _src_d = str(question_data.get('source') or '').strip()
+        existing = None
+        if _qno_d and _src_d:
+            existing = db.query(QuestionBank).filter(
+                QuestionBank.question_number == _qno_d,
+                QuestionBank.source == _src_d,
+                QuestionBank.status != 0
+            ).first()
+    else:
+        existing = _detect_duplicate(db, content, answer, subject.subject_id)
     if existing:
         # ===== A2 回填式重导入 =====
         # 已存题缺字段而新导入数据有 → 补空不覆盖（绝不破坏已有非空值）。

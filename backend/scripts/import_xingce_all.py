@@ -174,6 +174,11 @@ def import_paper(db, user, folder, year, variant, qfile, afile, kp):
             'import_mode': 'separate',
             'blocked': q.get('blocked'),
             'block_reasons': q.get('block_reasons') or [],
+            # ★ 行测专用去重口径（任务 16）：按 (题号, 来源) 而非文本相似度。
+            # 图形推理的区分信息在图片里，文本层只有共用指令句/5~9 字类比短语，
+            # 80% 文本相似度会把不同题判成同题并静默丢弃（实测单套 60% 误判）。
+            # 行测题号在卷内唯一，故此口径既精确又不会误杀，且天然实现「仅同卷去重」。
+            'dedup_scope': 'qno_in_source',
         }
         try:
             res = _upsert_question_core(db, user, payload)
