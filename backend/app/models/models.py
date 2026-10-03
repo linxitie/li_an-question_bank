@@ -185,9 +185,12 @@ class QuestionBank(Base):
     exam_frequency = Column(Integer, default=0, comment="考试频率")
     
     # 子科目分类（行测/申论/公专）
+    # 注：科学推理 为实测补充（4 套卷以「科学推理」替代「数量关系」：广东/河南等）。
+    # 实测 SQLite 侧为 VARCHAR(7) 且无 CHECK 约束（SQLAlchemy 2.0 Enum.create_constraint
+    # 默认 False），故补该值**无需 DB 结构迁移**。
     xingce_subcategory = Column(Enum(
         "政治理论", "常识判断", "言语理解与表达", "数量关系",
-        "判断推理", "资料分析", "知觉速度与准确性",
+        "判断推理", "资料分析", "知觉速度与准确性", "科学推理",
         "常识", "速度与知觉训练", "语言理解与表达", "无"  # 旧值兼容
     ), default="无", comment="行测细分类型")
     shenlun_subcategory = Column(Enum(
@@ -947,9 +950,12 @@ class QuestionDetailCategory(Base):
     question_id = Column(BigInteger, ForeignKey("question_bank.question_id"), nullable=False, comment="题目ID")
     
     # 行测细分类
+    # 注：科学推理 为实测补充（4 套卷以「科学推理」替代「数量关系」）。
+    # 本处必须与 QuestionBank.xingce_subcategory 保持一致 —— 前序 README 根因表
+    # 第 1 条即「两处事实来源分裂导致 122 道题型错位」，故两处同步修改。
     xingce_subcategory = Column(Enum(
         "政治理论", "常识判断", "言语理解与表达", "数量关系",
-        "判断推理", "资料分析", "知觉速度与准确性",
+        "判断推理", "资料分析", "知觉速度与准确性", "科学推理",
         "常识", "速度与知觉训练", "语言理解与表达", "无"
     ), default="无", comment="行测细分类型")
 
