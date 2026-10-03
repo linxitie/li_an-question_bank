@@ -2148,20 +2148,43 @@ import { renderQuestionContent } from '@/utils/questionRender';
         }
         return result;
       },
+      // ========== 行测科目探测（分离导入分流用） ==========
+      // 关键：`state.form.subject_category` 的**默认值是「公专」**（state 初始化），
+      // 因此**绝不能**依赖表单值判断是否行测 —— 否则行测会被误送到通用端点。
+      // 必须从题本正文探测。判据取行测分节头，命中任一即可判为行测；
+      // 申论与公专正文不会出现这些分节头（实测申论按「第一题/材料一」组织，
+      // 公专为单题块无行测分节）。
+      _detectXingceSubject() {
+        var text = this.state.separateQuestionsRawText || this.state.separateAnswersRawText || '';
+        if (!text) return '';
+        var head = text.slice(0, 8000);
+        var XINGCE_SECTIONS = ['言语理解与表达', '判断推理', '资料分析', '数量关系',
+          '常识判断', '知觉速度与准确性', '科学推理', '政治理论'];
+        for (var i = 0; i < XINGCE_SECTIONS.length; i++) {
+          if (head.indexOf(XINGCE_SECTIONS[i]) !== -1) return '行测';
+        }
+        return '';
+      },
       // ========== 分离导入：后端智能匹配（策略0） ==========
       async _backendSmartMatch() {
         if (!this.state.separateQuestionsRawText || !this.state.separateAnswersRawText) {
           return null;
         }
         try {
-          var res = await this.fetchWithRetry('/api/questions/import/separate-match', {
+          // 行测走**专用端点**（任务 11）：配对依据是分节区间安全网而非按序硬配；
+          // 申论/公专**仍走原端点**，既有分支逻辑零改动。
+          var detectedXingce = this._detectXingceSubject();
+          var matchEndpoint = detectedXingce === '行测'
+            ? '/api/questions/import/separate-match-xingce'
+            : '/api/questions/import/separate-match';
+          var res = await this.fetchWithRetry(matchEndpoint, {
             method: 'POST',
             headers: this.getJsonHeaders(),
             body: JSON.stringify({
               questions_text: this.state.separateQuestionsRawText,
               answers_text: this.state.separateAnswersRawText,
               paper_name: this.state.batchPaperName || '',
-              subject_category: this.state.form.subject_category
+              subject_category: detectedXingce || this.state.form.subject_category
             })
           }, 30000, 1);
           if (res.ok) {
@@ -2171,12 +2194,18 @@ import { renderQuestionContent } from '@/utils/questionRender';
               var converted = [];
               for (var i = 0; i < data.questions.length; i++) {
                 var q = data.questions[i];
-                converted.push({
+converted.push({
                   question_number: q.question_number || (i + 1),
-                  question_content: q.content || q.question_content || '',
+                  question_content: q.question_content || q.content || '',
                   content: q.content || '',
-                  options: (q.options || []).map(function(o, oi) {
-                    return { key: String.fromCharCode(65 + oi), value: typeof o === 'string' ? o : o };
+                  // 行测实测 options 为 [{key,value}] 对象数组（130/130），
+                  // 原映射 `typeof o === 'string' ? o : o` 对对象是空操作，
+                  // 会把整个 {key,value} 当成选项文本。这里统一取出 value。
+                  options: (q.options || []).map(function (o, oi) {
+                    if (o && typeof o === 'object') {
+                      return { key: o.key || String.fromCharCode(65 + oi), value: o.value || '' };
+                    }
+                    return { key: String.fromCharCode(65 + oi), value: String(o == null ? '' : o) };
                   }),
                   answer: q.answer || '待补充',
                   analysis: q.analysis || '',
@@ -2186,7 +2215,16 @@ import { renderQuestionContent } from '@/utils/questionRender';
                   _is_duplicate: q.is_duplicate || false,
                   _similarity: q.similarity || 0,
                   _existing_id: q.existing_id || null,
-                  _imported: false
+                  _imported: false,
+                  // ↓ 行测专用：必须透传，否则 blockedQuestionList() 读不到，
+                  //   「存在阻断问题，无法入库」的禁用与提示会完全失效。
+                  blocked: q.blocked === true || q.blocked === 1 || q.blocked === 'true',
+                  block_reasons: q.block_reasons || [],
+                  need_review: q.need_review === 1 || q.need_review === true ? 1 : 0,
+                  review_reasons: q.review_reasons || [],
+                  xingce_subcategory: q.xingce_subcategory || '',
+                  kao_points: q.kao_points_normalized || q.kao_points || [],
+                  material_group: q.material_group || null
                 });
               }
               return {
