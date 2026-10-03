@@ -13,6 +13,7 @@
 import re
 import os
 import logging
+import unicodedata
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
@@ -2297,7 +2298,7 @@ def _essay_score_scope(lines: List[str], i: int, s: str, strict: bool) -> str:
     """
     if strict:
         return lines[i]
-    if _ESSAY_BARE_WORD_RE.match(s):
+    if _ESSAY_BARE_WORD_RE.match(s) or _ESSAY_ORDINAL_Q_RE.match(s):
         return '\n'.join(lines[i:i + 4])
     return '\n'.join(lines[i:i + 2])
 
@@ -2392,7 +2393,31 @@ def _essay_num_to_int(raw: str) -> int:
     return _essay_cn_to_int(s)
 
 
+def _essay_norm_kangxi(s: str) -> str:
+    """把 PDF 提取出的**康熙部首**还原为标准汉字。
+
+    实测 2023 国考行政执法卷题号行是 `第⼀题`，其中 ⼀ 是 U+2F00
+    KANGXI RADICAL ONE，而不是 U+4E00 CJK 汉字「一」——
+    正则里的 `[一二三四五六七八九十]` 完全匹配不到，整卷掉进选择题分支。
+    仅对 U+2F00~U+2FDF 区段做 NFKC 还原，不对全文做 NFKC
+    （全文归一化会把全角括号等一并改写，影响面不可控）。
+    """
+    if not s or not any('\u2f00' <= ch <= '\u2fdf' for ch in s):
+        return s
+    return ''.join(unicodedata.normalize('NFKC', ch) if '\u2f00' <= ch <= '\u2fdf' else ch
+                   for ch in s)
+
+
+# 第 7 种题号形态：`第一题` / `第1题`（2023 国考行政执法卷），标记独占一行，
+# 题干在下方 1~3 行、分值再往后 —— 与裸「问题X」同属「标记独占行」形态。
+_ESSAY_ORDINAL_Q_RE = re.compile(
+    r'^[ \t　]*第\s*(\d{1,2}|[一二三四五六七八九十]{1,3})\s*题(?![ \t　]*[：:]?[ \t　]*\S)'
+    r'[ \t　]*$'
+)
+
+
 _ESSAY_NUM_RES = {
+    'ordinal': _ESSAY_ORDINAL_Q_RE,
     'half': _ESSAY_HALF_NUM_RE,
     'full': _ESSAY_FULL_NUM_RE,
     'cn': _ESSAY_CN_NUM_RE,
@@ -2663,9 +2688,9 @@ def _parse_essay_document(text: str) -> Optional[List[Dict[str, Any]]]:
       blocked         是否存在阻断性问题（映射不可信）
       block_reasons   阻断原因列表
     """
-    # ★ 先抹掉纯页码残留行（置空不删行，保住行号），否则跨行分值会被劈开：
-    #   实测 2018 地市级卷 `…（10` / `- 4 -` / `分）`，分值正则永不匹配 → 整卷阻断。
-    lines = _essay_strip_page_marks(text.split('\n'))
+    # ★ 先把康熙部首还原为标准汉字（`第⼀题` → `第一题`），再抹掉纯页码残留行
+    #   （置空不删行，保住行号），否则跨行分值会被分页符劈开。
+    lines = _essay_strip_page_marks([_essay_norm_kangxi(l) for l in text.split('\n')])
     style = _detect_essay_numbering(lines)
     if style is None:
         return None
