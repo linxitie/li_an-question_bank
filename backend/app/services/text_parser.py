@@ -2349,11 +2349,31 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
 def _essay_split_questions(lines: List[str], style: str):
     """按判定出的题号样式切出 (题号, 行号, 卷别标记) 列表。
 
-    两道硬约束：
-      1) 分值校验（严格级：题号同行含分值；本函数沿用宽松窗口，
-         但由于体例已由严格级确定，误判概率大幅降低）
-      2) 题号必须严格递增（monotonic）—— 申论题号天然 1..N 递增，
-         任何重复或回退都说明该候选不是真题号
+    ★ 分值窗口从 5 行收紧为 2 行（题号行 + 紧邻下一行）——这是 P0 修复。
+    真实故障（实测 2025 辽宁B卷答案，生产路径 pdfplumber）：
+        答案正文里的编号分点被 pdfplumber 去掉行首缩进后变成行首数字：
+            '1.培训选择多样。结合实际，细分培训类别…'
+            '2.全产业链培训。定位优势产业…'   …共 5 条
+        它们被半角题号正则命中，而 5 行窗口能「看到」下一题的`（20分）`
+        → 分点被误收 → monotonic 的 last 被抬到 5
+        → 后面真正的第 2/3/4 题因「非递增」被全部丢弃。
+        对照：同一文件裸 pymupdf 切 [1,2,3,4]（缩进保留，分点不以数字开头），
+              pdfplumber 切 [1,2,5]。
+
+    为什么 2 行够用（已逐份核对真实行文）：
+        · 同行型：`1. 请根据"给定资料1"，…（15分）`      → 本行命中
+        · 隔行型：`3. 市有关部门来M县…拟写一份基层治理情况汇报提`
+                  `纲。（25分）`                → 下一行命中
+        · 分点型：`5.强化新农人服务。出台实用人才职称评审办法…`
+                  其后 2 行内**无分值**                → 被正确排除
+    ⚠️ 不要再放宽回5 行。历史上正是「宽松窗口」导致要求子项
+       `（1）准确全面；`被误判为题号（安徽B卷 4 块→3 块真���全丢）。
+
+    monotonic 抗污染加固：
+        ① 首个候选必须为 1（申论题号必然从 1 开始；分点若被误收，
+           首个候选会是某个 >1 的分点号，据此可整体判废）
+        ② 剪枝后再校验「题号集合必须连续」，不连续说明判据被污染，
+           宁可少切也不产出错位数据（交由 blocked 机制阻断）
     """
     num_re = _ESSAY_NUM_RES.get(style, _ESSAY_HALF_NUM_RE)
     floor = _essay_questions_floor(lines)
@@ -2362,7 +2382,8 @@ def _essay_split_questions(lines: List[str], style: str):
         m = num_re.match(lines[i])
         if not m:
             continue
-        window = '\n'.join(lines[i:i + 5])
+        # ★ 收紧为 2 行窗口：本行 + 紧邻下一行
+        window = '\n'.join(lines[i:i + 2])
         if not _ESSAY_SCORE_RE.search(window):
             continue
         if style in ('cn', 'word'):
@@ -2377,12 +2398,31 @@ def _essay_split_questions(lines: List[str], style: str):
             variant = mv.group(1).upper()
         raw.append((qno, i, variant))
 
+    # ① 首个候选必须为 1：申论题号从 1 起。若首个候选 >1，
+    #    说明命中的第一个是答案分点而非真题号，整批判废。
+    if not raw or raw[0][0] != 1:
+        return []
+
     pruned: List[Tuple[int, int, str]] = []
     last = 0
     for qno, idx, variant in raw:
         if qno > last:
             pruned.append((qno, idx, variant))
             last = qno
+
+    # ② 连续性校验：题号必须构成 1..N。出现跳号说明分值窗口仍被污染，
+    #    此时宁可少切也不要错位数据 —— 调用方会因段数不等而 blocked。
+    if pruned:
+        nums = [q for q, _, _ in pruned]
+        if nums != list(range(1, len(nums) + 1)):
+            #跳号：退回「只保留题号 <= 已确认最大连续值」的部分
+            contiguous: List[Tuple[int, int, str]] = []
+            expect = 1
+            for item in pruned:
+                if item[0] == expect:
+                    contiguous.append(item)
+                    expect += 1
+            pruned = contiguous
     return pruned
 
 
