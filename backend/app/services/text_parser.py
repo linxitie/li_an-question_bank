@@ -2289,6 +2289,37 @@ def _essay_score_scope(lines: List[str], i: int, s: str, strict: bool) -> str:
     if _ESSAY_BARE_WORD_RE.match(s):
         return '\n'.join(lines[i:i + 4])
     return '\n'.join(lines[i:i + 2])
+
+
+def _essay_score_scope_to_boundary(lines: List[str], i: int, style: str) -> str:
+    """取候选题号行直到「下一个同形态标记行 / 答案锚点」为止的作用域。
+
+    ★ 为什么必须有它：固定行数窗口在申论上两头堵死。
+      - 窗口太紧（2 行）→ 长题干题的分值落在题号行下第 3 行，题号被判废：
+        实测 2020 省级卷 line 215 `（4）…`，分值 `（25分）` 在 line 217；
+        2019 省级卷 `（5）` 分值在 188；2022 地市级卷 `5.` 分值在 256。
+        三卷分别漏检 2/1/1 题 → trailing_segments 与题数不等 → 整卷被阻断。
+      - 窗口太松（历史 5 行）→ 要求子项与题号同为 `（N）` 形态，会"看到"
+        下一题的分值而被误判为题号，这正是先前丢失 17% 的机制。
+
+    本函数以「下一个同形态标记」为边界而非固定行数，与窗口宽度解耦：
+      真题     `（4）调研结束后…`    分值在下 3 行，下一 `（1）` 在更后面 → 收到分值
+      要求子项 `（1）问题梳理全面、准确；` 下一 `（2）` 紧邻其后        → 收不到分值
+
+    ⚠️ 仅用于**放宽**判定（与既有窗口取或），绝不用于收紧，避免回退已有成果。
+    """
+    own = _ESSAY_NUM_RES.get(style)
+    for j in range(i + 1, len(lines)):
+        t = (lines[j] or '').strip()
+        if not t:
+            continue
+        if _ESSAY_FULL_NUM_RE.match(t) or _essay_is_ans_anchor(t):
+            return '\n'.join(lines[i:j])
+        if own is not None and style != 'full' and own.match(t):
+            return '\n'.join(lines[i:j])
+    return '\n'.join(lines[i:])
+
+
 _CN_DIGITS = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
 # 要求特征词（用于全角体下把"要求子项"从"题号"里排除）
 _ESSAY_REQ_WORDS = (
@@ -2403,8 +2434,6 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
                 #   裸「问题X」独占一行 → 4 行窗口（分值在下方 2~3 行）
                 #   题号与题干同行     → 2 行窗口（放宽会重演少切 17% 的回归）
                 scope = _essay_score_scope(lines, idx, s, False)
-            if not _ESSAY_SCORE_RE.search(scope):
-                continue
             for style, rx in res.items():
                 m = rx.match(s)
                 if not m:
@@ -2415,8 +2444,16 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
                 #   两处口径必须一致，否则体例判定与切题会分裂。
                 if style == 'cn' and _essay_cn_body_len(s) < 8:
                     break
-                tally[style] += 1
-                break
+                # ★ 分值判定：既有窗口 **或** 「下一个同形态标记为边界」作用域，
+                #   二者取或 —— 纯放宽，不收紧。边界作用域依赖 style，故必须在
+                #   体例循环内判定。strict 模式保持「仅本行」，不受放宽影响。
+                if _ESSAY_SCORE_RE.search(scope):
+                    tally[style] += 1
+                    break
+                if not strict and _ESSAY_SCORE_RE.search(
+                        _essay_score_scope_to_boundary(lines, idx, style)):
+                    tally[style] += 1
+                    break
         return tally
 
     tally = _scan(True)
@@ -2498,7 +2535,12 @@ def _essay_split_questions(lines: List[str], style: str):
         # ★ 窗口按标记形态区分（与 _detect_essay_numbering 共用同一 helper，
         #   两处口径必须一致，否则体例判定与切题会分裂）。
         window = _essay_score_scope(lines, i, lines[i].strip(), False)
-        if not _ESSAY_SCORE_RE.search(window):
+        # ★ 分值判定：既有窗口 **或** 「下一个同形态标记为边界」作用域，二者取或
+        #   —— 纯放宽，不收紧。边界作用域让长题干题（分值落在题号行下第 3 行）
+        #   不再漏检，同时要求子项因紧邻下一 `（N）` 而收不到分值、被正确排除。
+        #   与 _detect_essay_numbering._scan 同一口径，两处必须一致。
+        if not _ESSAY_SCORE_RE.search(window) and not _ESSAY_SCORE_RE.search(
+                _essay_score_scope_to_boundary(lines, i, style)):
             continue
         if style in ('cn', 'word'):
             qno = _essay_cn_to_int(m.group(1))
