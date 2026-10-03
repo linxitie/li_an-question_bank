@@ -1,0 +1,53 @@
+# Task 11 证据 A — 经 Vite 代理（9527）实请求
+
+日期：2026-10-03
+
+## 结论：**未通过，但根因是环境而非代码**。不得据此声称 G8 通过。
+
+## 实测
+
+```
+端口 8000 : True   http://localhost:8000/docs -> 200
+端口 9527 : True   http://localhost:9527/     -> 200
+
+POST http://localhost:9527/api/questions/import/separate-match-xingce
+  -> HTTP 502（2.1s，31 字节）
+无 token 同端点
+  -> HTTP 405
+```
+
+## 根因（已定位，非推测）
+
+查询运行中后端的 OpenAPI：
+
+```
+$ GET http://localhost:8000/openapi.json
+  含 separate-match 的路径:
+    /api/questions/import/separate-match
+  >> 缺少 /api/questions/import/separate-match-xingce
+```
+
+**运行中的 8000 进程启动于本次代码改动之前，且未启用 `--reload`**，
+因此它服务的仍是改动前的代码，新端点根本不存在。
+Vite 代理把请求转发给一个不认识该路由的后端，故 502/405。
+
+对照：同一端点经 `TestClient`（真实 ASGI 栈 + 真实 `Depends(get_current_user)`
++ 真实 SQLite + 真实 PDF）已 **27/27 项断言通过**，详见
+`task-11-endpoint.txt` 与 `task-11-auth-validation.txt`。
+
+## 为何不擅自重启后端
+
+重启用户正在运行的后端服务属于影响外部环境的操作，且不清楚其原始启动方式
+（是否带 `--reload`、是否有其他依赖进程）。已停止在此并上报，等待确认。
+
+## 待办（解除阻塞后即可通过）
+
+1. 以 `--reload` 重启 8000 后端，或重启现有进程
+2. 重跑 `python scripts/verify_task11_vite.py`
+3. 预期：200 + 12 字段 + match_rate 100 + 材料组 3 + 经代理鉴权仍 401
+
+## 复现命令
+
+```
+python backend/scripts/verify_task11_vite.py
+```

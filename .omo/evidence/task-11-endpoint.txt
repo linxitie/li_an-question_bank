@@ -1,0 +1,122 @@
+# Task 11 证据 D — 端点功能验证（真实语料 + 真实 DB）
+
+日期：2026-10-03
+脚本：`backend/scripts/verify_task11_endpoint.py`
+**RESULT = PASS  失败 0 项（共 20 项断言）**
+
+## 1. 路由注册与返回契约
+
+```
+[PASS] /separate-match-xingce 已注册
+       -> /api/questions/import/separate-match
+       -> /api/questions/import/separate-match-xingce
+既有端点顶层键(12): analysis_count, auto_detected_subject, details,
+  extra_answer_numbers, match_rate, matched_count, message, questions,
+  status, strategy_used, total_questions, unmatched_question_numbers
+[PASS] 既有 12 字段全部存在  -> 缺 set()
+[PASS] 仅新增 xingce_report  -> 多出 {'xingce_report'}
+```
+
+返回契约与既有 `separate-match` **逐字段一致**，前端无需分支（计划的 Q3 克制原则）。
+
+## 2. 安徽 2023 配对正确性
+
+```
+[PASS] match_rate >= 99        -> 100.0
+[PASS] total_questions = 110   -> 110
+[PASS] matched_count = 110     -> 110
+[PASS] blocked_count = 0       -> 0
+[PASS] X-1 分节序列全等
+[PASS] X-2 分节区间一致
+[PASS] strategy_used = xingce_section_cross_validate
+```
+
+分区落位分布（全部落在 `models.py:191-194` 枚举内）：
+```
+常识判断 20 / 数量关系 15 / 言语理解与表达 25 / 判断推理 35 / 资料分析 15 = 110
+[PASS] 全部题目落在枚举内
+```
+
+### ★ 端到端修复证明：101-110 已归位
+
+```
+[PASS] 材料组数 = 3
+材料成员题号: [96,97,98,99,100,101,102,103,104,105,106,107,108,109,110]
+```
+
+**101-110 正是任务 1 定位的、被伪题号 780 吞掉的那 10 题。**
+现正确归属材料（二）（三）—— 任务 7+8+9+11 串联后缺陷被端到端修复。
+
+## 3. 省级私有考点归一（江苏 2023 A类）
+
+```
+total=135 matched=135 blocked=0
+原始含「特色」token 数 = 40
+   例: (116,'江苏特色-文字资料') (116,'江苏特色-简单加减计算') (117,'江苏特色-文字资料')
+归一后仍含「特色」数 = 0
+[PASS] 江苏存在省级私有 token（证明测试非空过）  -> 40
+[PASS] 归一后全部剥离前缀
+```
+
+**该断言曾一度是假通过**：首版清单路径少了一次 `dirname`（得到
+`backend/app/data/...`），清单读不到而归一静默降级为原样返回；
+安徽 2023 恰好无省级 token，故断言空过。修正路径后改用江苏复测，
+40 → 0 才是真实有效。
+
+## 4. 错配年份阻断（计划指定 2025题本 + 2024答案）
+
+```
+题本 = 2025年安徽省公务员录用考试《行测》题（网友回忆版）题本.pdf
+答案 = 2024年安徽省公务员录用考试《行测》题（网友回忆版）答案解析.pdf
+blocked_count = 125    preview_confirmable = False
+[PASS] blocked_count > 0            -> 125
+[PASS] preview_confirmable = False
+```
+
+## 5. 固有边界（如实记录，须进 F1 审计）
+
+**2023题本 + 2024答案 → blocked_count = 0**，因为安徽这两卷分节区间**完全相同**：
+
+```
+常识判断      1-20  (20题)
+数量关系     21-35  (15题)
+言语理解与表达 36-60  (25题)
+判断推理     61-95  (35题)
+资料分析     96-110 (15题)
+```
+
+分节区间安全网按**结构**而非**身份**校验，故对「结构相同、仅年份不同」的错配
+无力识别。这是该机制的固有边界，不是本任务的实现缺陷 ——
+但意味着**同省同年份结构雷同的试卷错配需要其他手段**（如题干指纹，
+即申论 v4 已用的三方校验思路）才能覆盖。计划未要求，故本任务未实现，
+在此明确记录以免后续误以为已覆盖。
+
+## 6. 状态落库
+
+```
+[PASS] 已写 question_import_record 且未 commit -> import_id=1377
+```
+
+`import_status='PREVIEW'` / `progress_percent=100` / `current_phase='DONE'`，
+仅 `db.add()` + `db.flush()`，**不 commit** —— 沿用「preview 不落库、
+confirm 才落库」两阶段约定。
+
+## 7. G1 公专门禁（零回归）
+
+```
+题目块总数        : 2899
+**被污染题块数**  : 0   PASS
+题型分布          : {'单选题': 2534, '多选题': 249, '判断题': 80, '简答题': 36}
+选项数分布        : {'4': 2796, '1': 13, '2': 14, '0': 73, '3': 3}
+验收结论: PASS     G1_EXIT=0
+```
+
+**逐项与基线完全一致。**
+
+## 复现命令
+
+```
+python backend/scripts/verify_task11_endpoint.py
+python backend/scripts/verify_task11_auth.py
+python backend/scripts/verify_task11_vite.py   （需先以 --reload 重启后端）
+```

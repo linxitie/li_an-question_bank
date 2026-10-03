@@ -4051,6 +4051,271 @@ async def separate_match_endpoint(
         raise HTTPException(status_code=500, detail=f"智能匹配失败: {str(e)}")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# 行测专用分离导入端点（任务 11）
+#
+# 设计红线：**绝不改动共享 dispatch**。既有 `separate_match_endpoint`
+# (:3970-4051) 被公专/申论/行测三科目共用，其分流逻辑在 :4005-4011。
+# 改动它 = 给 2,583 道公专题 + 申论链路引入回归风险。本端点是**独立新增**
+# 的兄弟路由，前端按科目路由，共享链路保持字节级不变。
+#
+# 与既有端点的唯一差别是把行测专属的「分节区间安全网」接进来：
+#   既有：按序硬配 smart_match_questions_answers（申论另走三方交叉校验）
+#   本端：xingce_cross_validate（分节头全等 + 区间一致 + 答案锚点 + 考点覆盖）
+#
+# 插入位置刻意选在 :4052 之后 —— 若插在既有端点之前，它与共享 dispatch
+# 的行号会整体位移，F1 审计断言「dispatch :4005-4011 零改动」将无法用
+# 行号定位验证。
+# ══════════════════════════════════════════════════════════════════════
+
+# 与 models.py:191-194 的 xingce_subcategory 枚举逐值对齐。
+# 分节头命中即落位，未命中一律 '无'（枚举默认值），绝不写入枚举外的值。
+_XINGCE_SUB_CATEGORIES = frozenset((
+    "政治理论", "常识判断", "言语理解与表达", "数量关系",
+    "判断推理", "资料分析", "知觉速度与准确性", "科学推理",
+    "常识", "速度与知觉训练", "语言理解与表达", "无",
+))
+
+_XINGCE_KAO_MAP = None  # 懒加载缓存：raw token -> 归一名
+
+
+def _xingce_kao_normalize_map() -> Dict[str, str]:
+    """行测考点 token → 归一名（任务 5 清单 / 任务 10 落库）。
+
+    省级私有值必须剥离前缀（``江苏特色-综合资料`` → ``综合资料``），否则
+    24 个省会各自产生一套互不相同的知识点。这里直接读任务 5 产出的**数据**
+    清单，而不是复制一份前缀正则 —— 正则的单一事实来源在
+    ``scripts/build_xingce_kao_points.py``，重复实现必然随省份清单演进而漂移。
+
+    仅做归一，不解析 knowledge_point 主键：ID 解析需要完整 path 上下文，
+    属于 confirm 阶段的 `_link_knowledge_points()` 职责。
+    """
+    global _XINGCE_KAO_MAP
+    if _XINGCE_KAO_MAP is None:
+        _XINGCE_KAO_MAP = {}
+        inv_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))))),
+            'data', 'xingce_kao_points.json')
+        try:
+            with open(inv_path, encoding='utf-8') as f:
+                inv = json.load(f)
+            for it in inv.get('items', []):
+                _XINGCE_KAO_MAP[it['token']] = it['normalized']
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            # 清单缺失不应让端点 500：归一降级为原样返回，confirm 阶段仍会拦截
+            logger.warning('行测考点清单读取失败，考点归一降级为原样: %s', e)
+    return _XINGCE_KAO_MAP
+
+
+def _separate_match_xingce(db: Session, payload: Dict[str, Any],
+                           questions_text: str, answers_text: str,
+                           user_id: int, subject_name: str = '') -> Dict[str, Any]:
+    """行测分离导入的匹配响应（分节区间安全网校验后）。
+
+    与 `separate_match_endpoint` 的返回结构保持一致，前端无需分支：
+      status / match_rate / matched_count / total_questions / questions /
+      unmatched_question_numbers / extra_answer_numbers / analysis_count /
+      strategy_used / auto_detected_subject / details / message
+    额外附 `xingce_report` 承载分节区间与五项校验明细，便于前端展示阻断原因。
+    """
+    # 延迟导入：本文件既有惯例（:2281 / :2664 / :3123）。刻意**不**放到文件
+    # 顶部——那会使 `separate_match_endpoint` 与共享 dispatch 的行号整体位移，
+    # 红线断言「dispatch :4005-4011 零改动」将无法用行号定位验证。
+    # 共享 dispatch 链路不引用任何行测符号，公专/申论零影响。
+    from ...services.text_parser import (
+        route_xingce_sections,
+        xingce_cross_validate,
+        XINGCE_QNUM_PATTERN,
+    )
+    from ...services.composite_matcher import match_xingce_material_groups
+
+    # ① 分节路由（题本坐标系）—— 材料块只在题本侧，答案解析不重复材料。
+    #    必须与题号位置同坐标系，跨文档混用偏移量会把成员划分彻底搅乱。
+    sec_info = route_xingce_sections(questions_text) or {}
+    sections = sec_info.get('sections') or []
+    materials = sec_info.get('materials') or []
+
+    # ② 配对安全网：内含 extract_question_blocks 双侧切分 + route_xingce_sections
+    #    双侧分节 + 答案锚点切分，此处一次调用即完成计划步骤 1-3。
+    merged = xingce_cross_validate(questions_text, answers_text)
+    qs = merged['questions']
+    report = merged['report']
+
+    # ③ 材料 → 小题归组。题号位置取自题本，且用 XINGCE_QNUM_PATTERN（已排除
+    #    「780.9毫米」这类小数伪题号），与任务 9 实测口径一致。
+    qno_positions = []
+    for m in XINGCE_QNUM_PATTERN.finditer(questions_text):
+        sec_name = ''
+        for s in sections:
+            if s['start'] <= m.start() < s['end']:
+                sec_name = s['name']
+                break
+        qno_positions.append((int(m.group(1)), m.start(), sec_name))
+    qno_positions.sort(key=lambda t: t[1])
+    groups = match_xingce_material_groups(materials, qno_positions, sections)
+
+    qno_to_group = {}
+    for g in groups:
+        for qno in g['member_qnums']:
+            qno_to_group[qno] = g
+
+    # ④ 分区落位 + 考点归一 + 材料关联
+    kao_map = _xingce_kao_normalize_map()
+    for q in qs:
+        sec_name = q.get('section_name') or ''
+        q['xingce_subcategory'] = (sec_name if sec_name in _XINGCE_SUB_CATEGORIES
+                                   else '无')
+        raw_kao = q.get('kao_points') or []
+        q['kao_points_normalized'] = [kao_map.get(k, k) for k in raw_kao]
+        g = qno_to_group.get(_as_int(q.get('question_number')))
+        q['material_group'] = ({
+            'ordinal': g['ordinal'],
+            'group_type': g['group_type'],
+            'section': g['section'],
+            'sort_order': g['member_qnums'].index(
+                _as_int(q.get('question_number'))) + 1,
+        } if g else None)
+
+    if not subject_name:
+        subject_name = '行测'
+    subject = _get_or_create_subject(db, subject_name)
+
+    # ⑤ 去重检测：与既有链路同口径
+    dup_cnt = 0
+    for q in qs:
+        content = q.get('content') or ''
+        dup_info = _get_duplicate_info(db, content, q.get('answer') or '',
+                                       subject.subject_id)
+        q['is_duplicate'] = dup_info['is_duplicate']
+        q['similarity'] = dup_info['similarity']
+        if dup_info['is_duplicate']:
+            q['existing_id'] = dup_info['existing_id']
+            dup_cnt += 1
+
+    total = report.get('question_count') or 0
+    blocked_count = report.get('blocked_count') or 0
+    ok_cnt = total - blocked_count
+    rate = (ok_cnt / total * 100) if total else 0.0
+
+    # ⑥ blocked 语义：存在 blocked 题即**不生成可确认入库的预览**
+    #    （对齐申论 v4 §T8）。preview_confirmable=False 时前端必须禁用确认入库。
+    preview_confirmable = blocked_count == 0
+
+    # ⑦ 状态落库：只 add + flush 取 import_id，**不 commit**。
+    #    沿用既有「preview 不落库、confirm 才落库」的两阶段约定。
+    record = QuestionImportRecord(
+        user_id=user_id,
+        original_filename=payload.get('paper_name') or '行测分离导入',
+        file_type='PDF',
+        total_questions=total,
+        success_count=ok_cnt,
+        failed_count=blocked_count,
+        duplicate_count=dup_cnt,
+        import_status='PREVIEW',
+        progress_percent=100,
+        current_phase='DONE',
+        preview_data={
+            'strategy': 'xingce_section_cross_validate',
+            'match_rate': round(rate, 1),
+            'matched': report.get('matched'),
+            'blocked_count': blocked_count,
+        },
+        import_time=datetime.now(),
+    )
+    db.add(record)
+    try:
+        db.flush()
+        import_id = record.import_id
+    except Exception:
+        db.rollback()
+        import_id = None
+
+    xingce_report = dict(report)
+    xingce_report.update({
+        'section_names': sec_info.get('section_names') or [],
+        'section_intervals_q': (report.get('section_intervals') or {}).get('q', []),
+        'material_count': sec_info.get('material_count', 0),
+        'materials_by_section': sec_info.get('materials_by_section') or {},
+        'material_groups': groups,
+        'preview_confirmable': preview_confirmable,
+        'import_id': import_id,
+        'kao_coverage': report.get('kao_coverage'),
+    })
+
+    return {
+        'status': 'success',
+        'match_rate': round(rate, 1),
+        'matched_count': ok_cnt,
+        'total_questions': total,
+        'questions': qs,
+        'unmatched_question_numbers': report.get('only_in_answers') or [],
+        'extra_answer_numbers': report.get('spurious_question_numbers') or [],
+        'analysis_count': sum(1 for q in qs if (q.get('analysis') or '').strip()),
+        'strategy_used': 'xingce_section_cross_validate',
+        'auto_detected_subject': subject_name,
+        'details': report.get('details'),
+        'xingce_report': xingce_report,
+        'message': ('行测分节区间校验完成：%s%%（%d/%d 通过）%s'
+                    % (round(rate, 1), ok_cnt, total,
+                       '' if preview_confirmable
+                       else '；存在 %d 题被阻断，不可确认入库' % blocked_count)),
+    }
+
+
+def _as_int(v):
+    """题号在 block 里可能是 str 或 int（实测首条为 '1'），统一为 int 便于匹配。"""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+@router.post("/separate-match-xingce", summary="行测分离导入智能匹配（专用端点）")
+async def separate_match_xingce_endpoint(
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    接收行测题目文本与答案解析文本，做分节区间安全网校验后返回匹配结果。
+
+    与 `/separate-match` 的区别：仅在**科目为行测**时走本端点，且配对依据是
+    分节头序列与分区题号区间，而非按序硬配。共享 dispatch 未被改动，
+    公专与申论仍走原端点。
+
+    参数：
+    - questions_text: 题本全文（必填）
+    - answers_text: 答案解析全文（必填）
+    - paper_name: 试卷名称（可选）
+    - subject_category: 科目（可选，缺省「行测」）
+
+    返回：
+    - 与 `/separate-match` 完全一致的 12 个字段，外加 `xingce_report`
+    - `xingce_report.preview_confirmable=False` 表示存在被阻断题目，
+      此时**不得**确认入库
+    """
+    questions_text = (payload.get('questions_text') or '').strip()
+    answers_text = (payload.get('answers_text') or '').strip()
+
+    if not questions_text:
+        raise HTTPException(status_code=400, detail="题目文件文本为空")
+    if not answers_text:
+        raise HTTPException(status_code=400, detail="答案文件文本为空")
+
+    try:
+        return _separate_match_xingce(
+            db, payload, questions_text, answers_text,
+            user_id=current_user.user_id,
+            subject_name=payload.get('subject_category', ''))
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"行测分离导入匹配失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"行测智能匹配失败: {str(e)}")
+
+
 @router.get('/mineru-health', summary='MinerU引擎健康巡检')
 async def mineru_health():
     """探测独立venv中MinerU是否可用（结果缓存10分钟）。

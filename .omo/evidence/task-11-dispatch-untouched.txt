@@ -1,0 +1,62 @@
+# Task 11 证据 B — 共享 dispatch 零改动（红线）
+
+日期：2026-10-03
+
+## 结论：**PASS**。三项断言全部满足。
+
+## 断言 1：删除行数 = 0
+
+```
+$ git diff -U0 -- backend/app/api/v1/question_import.py | Select-String '^-'（排除 ---）
+  删除行数 = 0
+```
+
+## 断言 2：唯一 hunk 为纯增量插入，且在 :4053 之后
+
+```
+$ git diff -U0 -- backend/app/api/v1/question_import.py
+  @@ -4053,0 +4054,265 @@ async def separate_match_endpoint(
+```
+
+单个 hunk，语义为「在 4053 行后插入 265 行」，**4053 行以上零触碰**。
+
+## 断言 3：关键行号未位移
+
+```
+3971: async def separate_match_endpoint(          ← 与计划断言「仍为 3971」一致
+4005:     _q_blocks = extract_question_blocks(questions_text)   ← dispatch 首行
+4010:     return _separate_match_essay(db, payload, _q_blocks, _a_blocks,   ← dispatch 分派
+4274: @router.post("/separate-match-xingce", ...)  ← 新端点注册位置
+```
+
+计划要求「`separate_match_endpoint` 的行号未变（仍为 3971）」
+与「dispatch :4005-4011 零改动」——**均满足**。
+
+## 为何行号得以保持：一次被拦下的设计失误
+
+首版实现把 4 个 xingce 符号加进文件顶部的 `text_parser` 导入块。
+LSP 报错数未增，看起来无害，但实测发现：
+
+```
+加入顶部导入后 → LSP 报错行号整体 +9（480→489, 1336→1345, 1963→1972）
+                 separate_match_endpoint 与 dispatch 全部位移
+                 → 红线断言「仍为 3971」「:4005-4011」失效
+```
+
+若非逐条比对 LSP 报错的**行号**（而非仅看数量），这次位移会被漏掉。
+
+**改为函数内延迟导入**，沿用本文件既有惯例（`:2281`、`:2664`、`:3123`
+均如此），行号随即回到基线，且共享 dispatch 链路不引用任何行测符号。
+
+## 隔离性
+
+新端点仅引用 `route_xingce_sections` / `xingce_cross_validate` /
+`XINGCE_QNUM_PATTERN` / `match_xingce_material_groups` 四个行测符号，
+且全部为函数内延迟导入 —— 公专与申论的执行路径**不可能加载**它们。
+
+## 复现命令
+
+```
+git diff -U0 -- backend/app/api/v1/question_import.py
+grep -n "separate_match_endpoint\|extract_question_blocks(questions_text)\|separate-match-xingce" backend/app/api/v1/question_import.py
+```
