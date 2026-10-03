@@ -4589,3 +4589,299 @@ def route_xingce_sections(text: str) -> Optional[dict]:
             for name in sorted({x['section'] for x in materials})
         },
     }
+
+
+# ============================================================================
+# 行测分离配对（任务 8 新增）
+# ============================================================================
+#
+# 为何必须有独立的安全网（方案立论）
+# ------------------------------------
+# 申论有「题号 + 分值 + 题干指纹」三重判据；行测答案解析**既不重复题干、也无分值**，
+# 三重判据只剩 1/3。若上传 2024 题本 + 2025 答案解析，**计数相等也照样全卷配错，
+# 且无任何机制能察觉**。
+#
+# 行测专属替代安全网：**分节边界对齐**。题本与答案解析携带**完全相同的分节头**
+# （实测 170/170 命中，85 对分节序列逐套全等），故「每节题号区间必须逐一相等」
+# 在信息论上等价于申论的「分值锚点 + 题干指纹」的合成替代物，**且成本为零**。
+#
+# 为何必须按「答案锚点」切分（任务 1 实测的缺陷）
+# --------------------------------------------------
+# 行测资料分析解析中密集出现「小数 + 单位」文本（`780.9毫米` / `42.3、64.1` /
+# `77.01元/公斤`）。PDF 拆行使数字落在行首，既有 `QuestionNumberRecognizer`
+# 的 `^\s*(\d+)\.\s*` 会把它当成题号：
+#   - 42 / 77 是**倒退**的 → 被既有 monotonic 过滤挡下（但仍会错误切断相邻题解析）
+#   - **780 是前进的** → 单调性挡不住 → 切断块边界 → 安徽 101~110 共 10 题
+#     的解析被吞进一个编号 780 的块 → `110 − 100 − 1 = 101`（与 DB 记录吻合）
+#
+# 而 `N. 正确答案：X` 锚点**不受影响**：`780.9毫米` 后面不跟「正确答案」，
+# 故不会被误判为块边界。实测锚点切分在 85 套上**伪题号归零**、题号集合精确等于
+# `1..N`（无缺失、无重复）。
+
+# 答案锚点：行首 `N. 正确答案：X`，X 支持 `A` / `AC` / `A,C` / `A、C`
+XINGCE_ANSWER_ANCHOR_PATTERN = re.compile(
+    r"^[ \t]*(\d{1,3})[ \t]*[.．、][ \t]*"
+    r"(?:本题)?正确答案[：:][ \t]*"
+    r"([A-H](?:[ \t]*[、,，]?[ \t]*[A-H])*)",
+    re.M,
+)
+
+
+def split_xingce_answer_blocks(text: str) -> List[Dict[str, Any]]:
+    """按**答案锚点** `N. 正确答案：X` 切分行测答案解析。
+
+    与 ``extract_question_blocks`` 的区别：后者以裸题号 `N.` 切分，会被资料分析
+    解析中的「小数+单位」误伤；本函数只认「题号 + 正确答案」这一权威形态。
+
+    Returns:
+        ``[{'question_number': int, 'answer_raw': str, 'answer': str,
+           'analysis': str, 'kao_points': List[str], 'start': int, 'end': int}, ...]``
+
+        ``answer`` 已经过 :func:`canonical_answer` 归一化（唯一归一化入口）。
+    """
+    if not text:
+        return []
+    hits = list(XINGCE_ANSWER_ANCHOR_PATTERN.finditer(text))
+    if not hits:
+        return []
+
+    # 分节边界优先于下一个锚点：答案块不跨分节
+    sec = route_xingce_sections(text)
+    sec_bounds = [s['start'] for s in sec['sections']] if sec else []
+
+    def _next_limit(pos: int, fallback: int) -> int:
+        for b in sec_bounds:
+            if b > pos:
+                return b
+        return fallback
+
+    out: List[Dict[str, Any]] = []
+    for i, m in enumerate(hits):
+        start = m.start()
+        nxt = hits[i + 1].start() if i + 1 < len(hits) else len(text)
+        end = min(nxt, _next_limit(start, len(text)))
+        body = text[m.end():end]
+
+        # 【考点】→ 考点列表（本字段只存在于行测答案解析）
+        kao: List[str] = []
+        km = re.search(r"【考点】[ \t]*\r?\n?([^\n【]{1,160})", body)
+        if km:
+            kao = [t.strip() for t in re.split(r"[,，、;；/／]+", km.group(1)) if t.strip()]
+
+        # 解析正文 = 去掉「解析：」标记与考点段
+        analysis = body
+        analysis = re.sub(r"^[ \t]*(?:本题)?解析[：:][ \t]*", "", analysis, count=1)
+        if km:
+            analysis = analysis[: km.start()]
+
+        out.append({
+            'question_number': int(m.group(1)),
+            'answer_raw': m.group(2),
+            'answer': canonical_answer(m.group(2)),
+            'analysis': analysis.strip(),
+            'kao_points': kao,
+            'start': start,
+            'end': end,
+        })
+    return out
+
+
+# 行测题号（**排除小数形态**）
+#
+# 行测资料分析中密集出现「小数 + 单位」文本（`780.9毫米` / `5.2万亿元` / `42.3`）。
+# PDF 拆行使其数字落在行首；`^\s*(\d{1,3})\s*[.．、]\s*\S` 会把 `780.9毫米` 中的
+# `780` 当成题号（分隔点后是 `\s`，不匹配 `(?!\d)`），进而错误切断块边界。
+#
+# 关键约束：**分隔点后不得紧跟数字** —— `(?!\d)`。
+#   - `780.9毫米` → `.` 后是 `9` → 排除 ✔
+#   - `60.` + 空格 + `。`（填横线题） → `.` 后是空格 → 保留 ✔
+#
+# 实测：安徽 2023 题本旧正则得 111 个题号（多 1，即小数误命中），
+# 排除小数后得 110，与答案锚点数精确相等；五个分节区间与答案侧逐项全等。
+XINGCE_QNUM_PATTERN = re.compile(r"^[ \t]*(\d{1,3})[ \t]*[.．、](?!\d)", re.M)
+
+
+def _xingce_section_intervals(text: str, qnum_of) -> List[Dict[str, Any]]:
+    """每个分节内的题号区间 —— 安全网 X-2 的断言对象。"""
+    sec = route_xingce_sections(text)
+    if not sec:
+        return []
+    out = []
+    for s in sec['sections']:
+        nums = qnum_of(text[s['start']:s['end']])
+        out.append({
+            'name': s['name'],
+            'min': min(nums) if nums else None,
+            'max': max(nums) if nums else None,
+            'count': len(nums),
+        })
+    return out
+
+
+def _xingce_anchor_nums(seg: str) -> List[int]:
+    return [int(m.group(1)) for m in XINGCE_ANSWER_ANCHOR_PATTERN.finditer(seg)]
+
+
+def _xingce_clean_qnums(seg: str) -> List[int]:
+    return [int(m.group(1)) for m in XINGCE_QNUM_PATTERN.finditer(seg)]
+
+
+def xingce_cross_validate(question_text: str, answer_text: str) -> Dict[str, Any]:
+    """行测「题本 + 答案解析」配对 + 五项安全网校验（任务 8 核心）。
+
+    校验项
+    ------
+    ======  ====================================  ==========================
+    编号    判据                                   不一致时
+    ======  ====================================  ==========================
+    X-1     分节头序列全等（题本 == 答案解析）      整卷 blocked
+    X-2     分节→答案锚点区间全等                  整卷 blocked
+    X-3     题号连续、无跳号/无重复                该题 answer_missing
+    X-4     锚点数 == 题本块数                     **不单独阻断**，输出差集
+    X-5     canonical_answer 归一化 ∈ 合法集该题 blocked
+    ======  ====================================  ==========================
+
+    「区间全等」在信息论上等价于申论的「分值锚点 + 题干指纹」：两卷各自携带相同分节头，
+    分节边界一旦错位（错年份/错卷别），区间立刻不等 → 被拦截。
+
+    **禁止按序盲配**：若答案卷缺某题号，绝不拿相邻题的答案兜底
+    （前序 `_essay_cross_validate` 教训：按序配对会把 A 卷答案贴到 B 卷题目上）。
+    """
+    q_sec = route_xingce_sections(question_text or '')
+    a_sec = route_xingce_sections(answer_text or '')
+    q_blocks = extract_question_blocks(question_text or '')
+    a_blocks = split_xingce_answer_blocks(answer_text or '')
+
+    report: Dict[str, Any] = {
+        'question_count': len(q_blocks),
+        'answer_count': len(a_blocks),
+        'block_reasons': [],
+        'only_in_questions': [],
+        'only_in_answers': [],
+        'missing_answer': [],
+        'section_intervals': {'q': [], 'a': []},
+    }
+
+    # ── 前置：两份文档都必须能被识别为行测试卷 ──
+    if q_sec is None:
+        report['block_reasons'].append('question_not_xingce')
+    if a_sec is None:
+        report['block_reasons'].append('answer_not_xingce')
+    if q_sec is None or a_sec is None:
+        report['blocked'] = True
+        return {'questions': [], 'report': report}
+    # 显式标注非 Optional：守卫之上已排除 None，此处只为让类型检查器收窄
+    q_sec_map: Dict[str, Any] = q_sec
+    a_sec_map: Dict[str, Any] = a_sec
+
+    # ── X-1 分节头序列全等 ──
+    q_names = [s['name'] for s in q_sec_map['sections']]
+    a_names = [s['name'] for s in a_sec_map['sections']]
+    x1_ok = (q_names == a_names)
+    if not x1_ok:
+        report['block_reasons'].append('section_sequence_mismatch')
+
+    # ── X-2 分节→区间全等 ──
+    # 题本侧必须用**排除小数**的清洁题号（`780.9毫米` 的 `780` 不是题号）；
+    # 答案侧用锚点题号（权威）。两侧口径不同，但正因如此才能互为校验。
+    q_iv = _xingce_section_intervals(question_text, _xingce_clean_qnums)
+    a_iv = _xingce_section_intervals(answer_text, _xingce_anchor_nums)
+    report['section_intervals'] = {'q': q_iv, 'a': a_iv}
+    key = lambda iv: (iv['name'], iv['min'], iv['max'])
+    x2_ok = ([key(x) for x in q_iv] == [key(x) for x in a_iv])
+    if not x2_ok:
+        report['block_reasons'].append('section_interval_mismatch')
+
+    # ── 逐题配对（题号 join，绝不按序）──
+    a_by_no: Dict[int, Dict[str, Any]] = {}
+    for b in a_blocks:
+        a_by_no.setdefault(b['question_number'], b)
+
+    questions: List[Dict[str, Any]] = []
+    seen: List[int] = []
+    blocked = not (x1_ok and x2_ok)
+
+    # 题本伪题号过滤：小数形态（`469.9亿美元` / `176.0亿元` / `213.4万辆`）被
+    # `extract_question_blocks` 当成题号 469/176/213。这些数字**相对前题是前向跳跃**，
+    # 故既有 monotonic 过滤挡不住，会凭空多出「缺答案」的题。
+    # 实测：清洁题号集（`(?!\d)`）与答案锚点集精确相等（135/110/120），
+    # 故以清洁题号集为权威，剔除不在其中的块。
+    clean_qnums = set(_xingce_clean_qnums(question_text or ''))
+    spurious: List[int] = []
+
+    for qb in q_blocks:
+        qno = qb.get('question_number')
+        if qno is None:
+            continue
+        try:
+            qno_i = int(qno)
+        except (TypeError, ValueError):
+            continue
+        # 剔除小数伪题号（见上方注释）
+        if clean_qnums and qno_i not in clean_qnums:
+            spurious.append(qno_i)
+            continue
+        reasons: List[str] = []
+
+        # 分节归属：以**答案锚点在答案解析中的位置**为准（权威且精确）。
+        # 不可用题本块的位置 —— `extract_question_blocks` 不返回位置字段，
+        # 退化为 `s['start']` 会让所有块都落进第一个分节。
+        sec_name = ''
+        ab = a_by_no.get(qno_i)
+        if ab is not None:
+            for s in a_sec_map['sections']:
+                if s['start'] <= ab['start'] < s['end']:
+                    sec_name = s['name']
+                    break
+        if not sec_name and q_sec_map['sections']:
+            sec_name = q_sec_map['sections'][0]['name']
+
+        out = dict(qb)
+        out['section_name'] = sec_name
+
+        if ab is None:
+            reasons.append('answer_missing_for_question')
+            out['answer'] = ''
+            out['analysis'] = ''
+            out['kao_points'] = []
+            report['missing_answer'].append(qno_i)
+        else:
+            out['answer'] = ab['answer']
+            out['analysis'] = ab['analysis']
+            out['kao_points'] = ab['kao_points']
+            # X-5 答案合理性
+            if not ab['answer'] or not re.fullmatch(r'[A-Z]{1,4}', ab['answer'] or ''):
+                reasons.append('invalid_answer')
+
+        out['block_reasons'] = reasons
+        # 防御深度：卷级 blocked（X-1/X-2 失败）时，**每道题也必须 blocked**。
+        # 否则若调用方只看questions 列表而忽略 report['blocked']，
+        # 错年份配对的答案就会被当作正常结果落库 —— 这正是安全网要防的事故。
+        if blocked:
+            for r_code in report['block_reasons']:
+                if r_code not in reasons:
+                    reasons.append(r_code)
+        out['blocked'] = bool(reasons)
+        out['need_review'] = bool(reasons) or not (out.get('options') or [])
+        questions.append(out)
+        seen.append(qno_i)
+
+    # ── X-3 题号连续性（题本侧）──
+    ordered = sorted(set(seen))
+    if ordered:
+        expect = list(range(ordered[0], ordered[0] + len(ordered)))
+        if ordered != expect:
+            report['block_reasons'].append('question_number_not_contiguous')
+
+    # ── X-4 计数与差集（不单独阻断）──
+    only_q = sorted(set(seen) - set(a_by_no))
+    only_a = sorted(set(a_by_no) - set(seen))
+    report['only_in_questions'] = only_q
+    report['only_in_answers'] = only_a
+
+    report['blocked'] = blocked
+    report['blocked_count'] = sum(1 for q in questions if q.get('blocked'))
+    report['matched'] = len(set(seen) & set(a_by_no))
+    report['spurious_question_numbers'] = sorted(set(spurious))
+    report['x'] = {'x1_section_sequence': x1_ok, 'x2_section_intervals': x2_ok}
+    return {'questions': questions, 'report': report}
