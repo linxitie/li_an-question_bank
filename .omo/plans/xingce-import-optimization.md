@@ -2143,7 +2143,7 @@ Max Concurrent：6（Wave 1）
   - Message：`test(xingce): pilot 6 papers and freeze as regression corpus`
   - Files：门禁语料目录、试点配置
 
-- [ ] 16. 全量 85 套导入
+- [x] 16. 全量 85 套导入
 
   **What to do**：
   - 按**省份分批**（24 批）而非一次性 85 套，便于定位问题与回滚
