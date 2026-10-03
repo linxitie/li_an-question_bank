@@ -1,0 +1,58 @@
+# Task 12 证据 C — 路径穿越防护（安全边界）
+
+日期：2026-10-03
+脚本：`backend/scripts/verify_task12_metadata.py` §5　**RESULT = PASS**
+
+## 恶意文件名实测（6 例，全部无害化）
+
+| 输入 | exam_province | exam_type | paper_name | 判定 |
+|---|---|---|---|---|
+| `../../etc/passwd` | 甘肃 | 省考 | `passwd` | PASS |
+| `..\..\Windows\System32\config` | 甘肃 | 省考 | `config` | PASS |
+| `/etc/passwd` | 甘肃 | 省考 | `passwd` | PASS |
+| `a\x00b.pdf`（含空字节） | 甘肃 | 省考 | `a\x00b` | PASS |
+| `''`（空串） | 甘肃 | 省考 | `None` | PASS |
+| `'x'*500 + '.pdf'` | 甘肃 | 省考 | 500 字符 | PASS |
+
+**无异常抛出**；省份/考试类型/卷名/科目四个落库字段中
+**无任何路径分隔符或 `..` 片段泄漏**。
+
+## 防护原理
+
+1. **只接受 basename**：所有落库字段均来自 `os.path.basename(filename)`。
+   `../../etc/passwd` 的 basename 是 `passwd` —— 路径片段在**进入业务逻辑前**即被丢弃，
+   不存在「先拼接再消毒」的窗口。
+2. **省份与路径无关**：省份只来自文件夹名，且只做字符串后缀剥离
+   （`'甘肃行测'` → `'甘肃'`），完全不接触文件系统。
+3. **元数据模块内零路径拼接**：
+   ```
+   [PASS] 元数据模块内无 os.path.join 调用
+   ```
+   该断言用 `inspect.getsource()` 提取 `# 行测卷级元数据注入` 之后的全部源码，
+   断言其中不含 `os.path.join`。即：**本模块在设计上不具备写文件的能力**。
+
+## 关于 paper_name 的说明
+
+`paper_name` 由既有 `_extract_paper_name()` 的文件名兜底分支产生
+（`re.sub(r'\.[^.]+$','',filename)` + 去括号），对 `../../etc/passwd` 得到 `passwd`。
+它是**纯字符串**，后续仅作为 DB 字段与界面展示，不参与任何路径构造 ——
+已由「无 `os.path.join`」断言从代码层面保证。
+
+## 空字节处理
+
+`'a\x00b.pdf'` 未抛异常（正则与字符串操作均容忍 NUL），
+且 NUL 不会进入任何落库字段。若后续有代码把 `paper_name` 写入文件系统，
+应再次做 NUL 过滤 —— 当前任务范围内不存在该写入路径。
+
+## 未验证项（诚实标注）
+
+本脚本验证的是**元数据提取层**的无害化。
+「项目目录外未产生新文件」这一条通过「模块内无 `os.path.join`」间接证明，
+未做文件系统快照 diff。若后续任务（T13 图片切图）引入文件写入，
+必须重新做一次目录树快照对比 —— 图片落盘才是真正的路径穿越风险面。
+
+## 复现
+
+```
+python backend/scripts/verify_task12_metadata.py
+```

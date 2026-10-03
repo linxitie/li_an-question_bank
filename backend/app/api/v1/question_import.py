@@ -4316,6 +4316,185 @@ async def separate_match_xingce_endpoint(
         raise HTTPException(status_code=500, detail=f"行测智能匹配失败: {str(e)}")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# 行测卷级元数据注入（任务 12）
+#
+# 核心决策：**省份只能来自文件夹名**。实测 170 份文件名里的省份写法极不可靠
+# —— 2025 年安徽/河南/山西/陕西/黑龙江全部缺「省」字，甘肃 3 个年份全省缺「省」，
+# 广西写「区考」；而 24 个省级文件夹名干净一致。
+# 故本模块把文件夹名作为**显式覆盖**置于 `_auto_detect_tags()` 推断**之前**，
+# 且不修改 `_auto_detect_tags()` 一行（公专/申论在用）。
+#
+# 文件名**只**用于提取年份与卷别，绝不用于省份。
+# 全部推导均为实时正则/字符串运算，不硬编码 85 套映射表。
+# ══════════════════════════════════════════════════════════════════════
+
+# 卷别实测全集（顺序敏感：长标识在前，避免 '乡镇' 抢先命中 '区级及以上卷'）
+_XINGCE_PAPER_VARIANTS = (
+    ('副省级', '副省级'),
+    ('地市级', '地市级'),
+    ('行政执法', '行政执法卷'),
+    ('区级及以上', '区级及以上卷'),
+    ('乡镇', '乡镇卷'),
+    ('县级', '县级卷'),
+)
+# 江苏 A/B/C 类，形如 （A类）
+_XINGCE_ABC_RE = re.compile(r'[（(]\s*([ABC])\s*类\s*[）)]')
+# 文件名中的年份
+_XINGCE_YEAR_RE = re.compile(r'(20\d{2})')
+# 题本角色的全部命名变体：题本 / 题干(国考2025地市级冒充) / 试题(山东) / 题目
+_XINGCE_Q_ROLE = ('题本', '题干', '试题', '题目')
+
+
+def _xingce_folder_province(folder_name: str) -> Optional[str]:
+    """从**文件夹名**取省份 —— 行测唯一的可靠省份来源。
+
+    只做 basename 语义上的字符串剥离，不做任何路径拼接。
+    国考/全国卷无省份归属，返回 None。
+    """
+    name = (folder_name or '').strip()
+    for suf in ('行测', '申论', '公专'):
+        if name.endswith(suf):
+            name = name[:-len(suf)]
+            break
+    name = name.strip()
+    if not name or name in ('国考', '国家', '中央', '全国'):
+        return None
+    return name
+
+
+def _xingce_doc_role(filename: str) -> str:
+    """判定单个 PDF 的角色：'questions' / 'answers' / 'unknown'。
+
+    覆盖 5 类命名异常中的两类：
+      - `题干.pdf`（国考 2025 地市级，唯一一处「文件名不含题本」）
+      - `试题`（山东 2022-2024 用「试题」而非「题」）
+    """
+    base = os.path.basename(filename or '')
+    if '答案' in base:
+        return 'answers'
+    for token in _XINGCE_Q_ROLE:
+        if token in base:
+            return 'questions'
+    return 'unknown'
+
+
+def _xingce_paper_variant(filename: str) -> Optional[str]:
+    """从文件名提取卷别。无卷别者返回 None（实测 22 省均无卷别标记）。"""
+    base = os.path.basename(filename or '')
+    m = _XINGCE_ABC_RE.search(base)
+    if m:
+        return m.group(1) + '类'
+    for key, label in _XINGCE_PAPER_VARIANTS:
+        if key in base:
+            return label
+    return None
+
+
+def _resolve_xingce_paper_metadata(folder_name: str, filename: str,
+                                   text: str = '',
+                                   paper_name: str = '') -> Dict[str, Any]:
+    """行测卷级元数据：**显式覆盖 > 既有推断**。
+
+    传给 `_auto_detect_tags()` 的一律是 `os.path.basename()`，
+    绝不让文件夹路径或用户输入进入任何文件路径拼接。
+    """
+    base = os.path.basename(filename or '')
+    tags = _auto_detect_tags(base, text or '')
+
+    # 年份：文件名优先（实测 170/170 均含 20d{2}），回退既有推断
+    ym = _XINGCE_YEAR_RE.search(base)
+    if ym:
+        tags['exam_year'] = int(ym.group(1))
+
+    # 省份：**只**认文件夹名。既有按文件名/正文推断的结果一律丢弃 ——
+    # 计划的硬约束是「禁止用文件名推断省份」，实测文件名省份写法不可靠
+    #（2025 安徽/河南/山西/陕西/黑龙江缺「省」，甘肃全年缺「省」，广西写「区考」）。
+    prov = _xingce_folder_province(folder_name)
+    if prov:
+        tags['exam_province'] = prov
+    elif (folder_name or '').strip() in ('国考行测', '国考'):
+        tags['exam_province'] = '国考'      # 全国卷：显式标注，非省份
+    else:
+        # 无文件夹名 → 宁缺勿滥，绝不退化为按文件名猜省份
+        tags['exam_province'] = None
+
+    # 考试类型：国考卷 vs 省考卷（含广西「区考」归入省考口径）
+    tags['exam_type'] = '国考' if (folder_name or '').strip() in ('国考行测', '国考') \
+        else '省考'
+    tags['subject_category'] = '行测'
+    tags['paper_variant'] = _xingce_paper_variant(base)
+    tags['doc_role'] = _xingce_doc_role(base)
+    if paper_name:
+        tags['paper_name'] = paper_name
+    return tags
+
+
+def _upsert_xingce_paper(db: Session, user, meta: Dict[str, Any],
+                         paper_name: str, question_count: int,
+                         is_complete: Optional[bool] = None):
+    """行测试卷 + 标签的**幂等**落库（复用既有查重与 ENDED→DRAFT 复活逻辑）。
+
+    与 `_get_or_create_import_paper()` 的区别：**绝不 commit** —— 既有函数在
+    `:1624` 有 `db.commit()`，会破坏「preview 不落库、confirm 才落库」两阶段约定。
+
+    Returns: (paper, created_flag)
+    """
+    from ...models.models import ExamPaper, ExamPaperTag
+    from .paper_generation import generate_paper_code
+
+    if question_count < 5:      # 与既有阈值一致
+        return None, False
+
+    # 查重：同名 + 同创建者 → 复用（前序 P2.2 已验证）
+    existing = db.query(ExamPaper).filter(
+        ExamPaper.paper_name == paper_name,
+        ExamPaper.creator_id == user.user_id
+    ).first()
+    created = False
+    if existing:
+        if existing.paper_type == 'ENDED':       # P2.2 复活
+            existing.paper_type = 'DRAFT'
+        paper = existing
+    else:
+        paper = ExamPaper(
+            paper_name=paper_name,
+            paper_code=generate_paper_code(),
+            subject_id=SUBJECT_NAME_MAP.get('行测', 1),
+            composition_method='IMPORT',
+            creator_id=user.user_id,
+            duration=120,
+            total_score=100,
+            difficulty=3,
+            exam_type='SIMULATION',
+            paper_type='DRAFT',
+            question_count=0,
+        )
+        db.add(paper)
+        db.flush()
+        created = True
+
+    # 标签幂等 upsert：同一 paper 只保留一行，逐字段刷新
+    tag = db.query(ExamPaperTag).filter(
+        ExamPaperTag.paper_id == paper.paper_id).first()
+    if tag is None:
+        tag = ExamPaperTag(paper_id=paper.paper_id)
+        db.add(tag)
+    tag.exam_year = meta.get('exam_year')
+    tag.exam_province = meta.get('exam_province')
+    tag.exam_type = meta.get('exam_type')
+    tag.subject_category = '行测'
+    # 修正既有 is_complete=0 的行测失败痕迹（实测 paper_id 14/15）。
+    # 调用方可显式覆盖：行测题本+答案解析配对成功即完整卷，而
+    # `_detect_complete_paper()` 在文本为空时会返回 False（它要求≥200 字
+    # 且能匹配答案区），故需要一个不依赖文本的显式入口。
+    if is_complete is None:
+        is_complete = bool(meta.get('is_complete_paper'))
+    tag.is_complete = 1 if is_complete else 0
+    db.flush()
+    return paper, created
+
+
 @router.get('/mineru-health', summary='MinerU引擎健康巡检')
 async def mineru_health():
     """探测独立venv中MinerU是否可用（结果缓存10分钟）。
