@@ -217,7 +217,6 @@
                 <QuestionPreviewList
                   :questions="state.parsedDocsQuestions"
                   :groups="state.previewGroups || []"
-                  <!-- 复合题组总题干：按给定材料聚合，缺省为空数组时行为与旧版完全一致 -->
                   :mode="'combined'"
                   @import-one="importSingleParsedQuestion"
                   @import-all="importAllParsedQuestions"
@@ -308,7 +307,6 @@
               <QuestionPreviewList
                 :questions="state.parsedDocsQuestions"
                 :groups="state.previewGroups || []"
-                <!-- 复合题组总题干：按给定材料聚合，缺省为空数组时行为与旧版完全一致 -->
                 :mode="'separate'"
                 @import-one="importSingleParsedQuestion"
                 @import-all="importAllParsedQuestions"
@@ -396,7 +394,6 @@
             <QuestionPreviewList
               :questions="state.ocrQuestions"
               :groups="state.previewGroups || []"
-              <!-- 复合题组总题干：按给定材料聚合，缺省为空数组时行为与旧版完全一致 -->
               :mode="'image'"
               @import-one="importSingleOcrQuestion"
               @import-all="importAllOcrQuestionsConfirmed"
