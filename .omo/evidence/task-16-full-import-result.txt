@@ -42,3 +42,19 @@ T16 全量导入结果（85 套 / 24 批）  —  2026-10-03
 【提交】
   cebf506 方案B：行测专用落库函数，dry-run 零写入已独立进程验证
   ad4dd68 修复 need_review 日志计数恒显 0
+【追加：根因收敛（诚实记录，含诊断未竟说明）】
+  分节路由层面，失败卷与正常卷结构一致，差异不在此处：
+    失败 广东2024  materials=4  materials_by_section={资料分析:4}  sections=6（含「科学推理」）
+    正常 山东2024  materials=4  materials_by_section={资料分析:4}  sections=5
+    失败 辽宁2024  materials=4  materials_by_section={资料分析:1}
+    失败 黑龙江2024 materials=3  materials_by_section={资料分析:1}
+  故 materials 识别与分节路由均正常，失败发生在其后的「题目块提取」环节：
+  材料题的正文未被组装进 question_content，闸门以「题干为空」拒绝。
+
+  未竟事项（如实说明）：尝试直接调用 match_xingce_material_groups 复现时，
+  因该函数签名与假设不符（抛 AttributeError: 'str' object has no attribute 'get'），
+  未能完成归组器级别的对比复现。定位需先读该函数真实签名，
+  再比对两卷传入的 sections 元素结构。此项未完成，不作进一步断言。
+
+  结论仅限已验证范围：153 题缺口真实存在且已显式上报（符合铁律），
+  具体版式差异待下一步定位后再定「修解析器」或「转人工补录」。
