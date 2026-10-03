@@ -34,7 +34,7 @@ from sqlalchemy import text
 
 from app.api.v1.question_import import (
     _separate_match_xingce,
-    _upsert_question_core,
+    _upsert_xingce_question,
     _upsert_xingce_paper,
     _resolve_xingce_paper_metadata,
     _xingce_doc_role,
@@ -174,34 +174,24 @@ def import_paper(db, user, folder, year, variant, qfile, afile, kp):
             'import_mode': 'separate',
             'blocked': q.get('blocked'),
             'block_reasons': q.get('block_reasons') or [],
-            # ★ 行测专用去重口径（任务 16）：按 (题号, 来源) 而非文本相似度。
-            # 图形推理的区分信息在图片里，文本层只有共用指令句/5~9 字类比短语，
-            # 80% 文本相似度会把不同题判成同题并静默丢弃（实测单套 60% 误判）。
-            # 行测题号在卷内唯一，故此口径既精确又不会误杀，且天然实现「仅同卷去重」。
-            'dedup_scope': 'qno_in_source',
+            # T13 的待复核标记（答案/解析/选项/材料缺失 + 题型存疑）
+            'need_review': 1 if _xingce_review_flags(q) else 0,
         }
         try:
-            res = _upsert_question_core(db, user, payload)
+            res = _upsert_xingce_question(db, user, payload)
         except Exception as e:
             return {'paper': paper_name, 'year': year, 'variant': variant,
                     'ok': False, 'reason': '入库异常 %s: %s' % (type(e).__name__, e),
                     'total': prev['total_questions'], 'inserted': inserted}
         qid = res.get('question_id')
         if not qid:
-            continue
+            return {'paper': paper_name, 'year': year, 'variant': variant,
+                    'ok': False, 'reason': '落库被拒: %s' % res.get('message'),
+                    'total': prev['total_questions'], 'inserted': inserted}
         if res.get('import_status') == 'DUPLICATE':
             dup += 1
         else:
             inserted += 1
-
-        # T13 的待复核原因（_upsert_question_core 只按题型置信度置位）
-        flags = _xingce_review_flags(q)
-        if flags:
-            db.execute(
-                text('update question_bank set need_review=1'
-                     ' where question_id=:i'),
-                {'i': qid})
-            nr += 1
 
         # 考点关联
         for nm in (q.get('kao_points_normalized') or []):

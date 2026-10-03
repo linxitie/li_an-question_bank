@@ -4607,6 +4607,101 @@ def _xingce_review_flags(q: Dict[str, Any]) -> List[str]:
     return reasons
 
 
+def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
+    """行测题目落库（任务 16 方案 B）——**全程不 commit**，事务边界归调用方。
+
+    为何不复用 `_upsert_question_core`：它内部调用 `_get_or_create_subject`
+    （`:393` 有 `db.commit()`）与 `_get_or_create_type`（同样含 commit）。
+    这两个 helper 是公专/申论链路的**隐式提交点**，动它们属红线；
+    而复用它们会让驱动脚本的 `rollback()` 被中途提交抵消 ——
+    实测导致「dry-run」真实写库（74 行残留），并使计划要求的
+    「每 N 题 commit + 批次隔离」不可达。
+
+    本函数因此**只组合纯函数 + 只读查询**：
+      - 科目：行测 `subject_id` 固定为 1（`SUBJECT_NAME_MAP` 实测映射），直接取
+      - 题型：只**查询**已有行测题型；缺失时 insert + flush（仍不 commit）
+      - 去重：按 `(question_number, source)` 精确匹配
+    与既有链路的清洗口径一致（`clean_question_text`），保证指纹可比。
+
+    Returns: ``{'import_status': 'SUCCESS'|'DUPLICATE', 'question_id': int, ...}``
+    """
+    # ── 阻断闸门（与既有链路同口径，blocked 与 need_review 是两套语义）──
+    if data.get('blocked'):
+        reasons = data.get('block_reasons') or ['unknown']
+        return {'import_status': 'BLOCKED', 'question_id': None,
+                'message': '存在阻断问题：%s' % '、'.join(str(r) for r in reasons)}
+
+    content = (data.get('question_content') or '').strip()
+    if not content:
+        return {'import_status': 'SKIPPED', 'question_id': None,
+                'message': '题干为空'}
+    content = clean_question_text(content) or content
+    answer = (data.get('answer') or '').strip() or '待补充'
+
+    subject_id = SUBJECT_NAME_MAP.get('行测', 1)
+    qno = str(data.get('question_number') or '').strip() or None
+    source = (data.get('source') or '').strip()
+
+    # ── 去重：行测主键是 (题号, 来源)，不是文本相似度 ──
+    existing = None
+    if qno and source:
+        existing = db.query(QuestionBank).filter(
+            QuestionBank.question_number == qno,
+            QuestionBank.source == source,
+            QuestionBank.status != 0
+        ).first()
+    if existing:
+        # 回填式重导入：只补空，绝不覆盖既有非空值（沿用既有语义）
+        backfilled = []
+        new_an = (data.get('answer_analysis') or '').strip()
+        if new_an and not (existing.answer_analysis or '').strip():
+            existing.answer_analysis = new_an
+            backfilled.append('answer_analysis')
+        if answer and (existing.answer or '').strip() in ('', '待补充'):
+            existing.answer = answer
+            backfilled.append('answer')
+        if backfilled:
+            db.flush()
+        return {'import_status': 'DUPLICATE', 'question_id': existing.question_id,
+                'backfilled_fields': backfilled}
+
+    # ── 题型：只查询，缺失才插入（均不 commit）──
+    type_name = (data.get('question_type_detail') or '').strip() or '单选题'
+    qtype = db.query(QuestionType).filter(
+        QuestionType.type_name == type_name,
+        QuestionType.subject_id == subject_id).first()
+    if qtype is None:
+        qtype = QuestionType(type_name=type_name, subject_id=subject_id)
+        db.add(qtype)
+        db.flush()
+
+    gid = int(data.get('group_id') or 0)
+    q = QuestionBank(
+        group_id=gid,
+        parent_id=int(data.get('parent_id') or 0),
+        question_level=int(data.get('question_level') or 0) or (2 if gid else 1),
+        sort_order=int(data.get('sort_order') or 0),
+        question_number=qno,
+        subject_id=subject_id,
+        type_id=qtype.type_id,
+        question_content=content,
+        options=data.get('options') or [],
+        answer=answer,
+        answer_analysis=data.get('answer_analysis') or '',
+        difficulty=coerce_difficulty(data.get('difficulty')),
+        score=1.0,
+        year=data.get('exam_year') or None,
+        source=source,
+        creator_id=user.user_id,
+        audit_status=1,
+        need_review=1 if data.get('need_review') else 0,
+        xingce_subcategory=data.get('subcategory') or '无',
+    )
+    db.add(q)
+    db.flush()
+    return {'import_status': 'SUCCESS', 'question_id': q.question_id}
+
+
 @router.get('/mineru-health', summary='MinerU引擎健康巡检')
 async def mineru_health():
     """探测独立venv中MinerU是否可用（结果缓存10分钟）。
