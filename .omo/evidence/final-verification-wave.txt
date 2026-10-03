@@ -1,0 +1,80 @@
+F1–F4 最终验证波结果  —  2026-10-03
+=============================================================
+后台代理空转（4 个均只收到 prompt 未执行实质工作），改由主代理直接执行可自动化部分。
+
+=== F1 方案合规审计：APPROVE ===
+Must Have 核验（证据文件均存在且非空，21 份）：
+  分节/配对/考点树/材料组/元数据/图片/前端/门禁/试点/全量 —— 见 task-9 至 task-16 证据
+
+Must NOT Have 逐项（4 处初判告警全部澄清为误报）：
+  CREATE TABLE 新建表                CLEAN
+  新解析器/归一器/题型判定            CLEAN
+  @ts-ignore / type: ignore          误报：命中的是证据文档内的审查清单文本，非代码
+  改 <template>                     误报：.vue 全部改动落在 L2151+ 且均在 <script>
+                                    （行测分流 _detectXingceSubject 等）；@@ 块无一带 < 标签
+  同步 .vtj/files/*.json             CLEAN（diff --name-only 空）
+  移动端/平板页面                     CLEAN
+  触碰公专数据                       误报：subject_id=3 命中均为只读 SELECT 断言计数，
+                                    无任何 UPDATE/DELETE
+  312 条 import 记录未动              误报：20 处命中在计划文档、1 处证据、1 处验证脚本，
+                                    全库无对该表的 DELETE/UPDATE
+  DB 备份未清理 / 未以 pytest 全绿为判据 / block_accepts_letter_answer 未撤销 —— 均未触发
+
+VTJ 版本一致性：useProvider 与 __VERSION__ 保持一致，全程未同步 DSL JSON ✅
+后端路由完整性：/api/questions/import/separate-match-xingce 已注册于 OpenAPI；
+                前端调用路径与后端注册路径逐字符匹配 ✅
+编造内容核查：3 处占位行内容为明示缺失的占位文本，无任何编造题干 ✅
+
+=== F2 代码质量评审：APPROVE ===
+pytest 基线一致    [PASS]  16 failed / 168 passed / 52 errors —— 与基线逐项精确一致
+LSP 无新增错误     [PASS]  question_import.py 108 项、import_xingce_all.py 3 项，均为既有
+                            Column/int SQLAlchemy typing 噪声，未因本次改动增加
+代码整洁           [0 issues]  as any/@ts-ignore/type:ignore/空except/except Exception:pass/
+                            TODO/FIXME/HACK/console.log 全无命中
+幂等性             [PASS]  去重口径 (question_number, source)；重跑实测 dup 精确命中、零重复入库
+SQL 参数化        [PASS]  新增代码 db.execute(text(...)) 均用 :具名参数
+
+=== F3 真实手工 QA：APPROVE（附 1 项 BLOCKED）===
+浏览器实请求（非 curl）：
+  教师端登录态有效（ycc5678），#/teacher/dashboard 题目总数 12649 —— 印证导入生效
+  题目管理列表可见行测题，「⚠ 待复核」徽标已渲染并带 tooltip
+     「导入时题型判定置信度不足，请人工确认」
+  /question-import 导入页正常渲染；科目下拉含 行测/申论/公专/其他，公专为默认选中；
+     试卷名 placeholder 为「如：2024 国考行测真题」
+  控制台错误 0；Network 无 4xx/5xx
+  截图：.omo/evidence/final-qa/f3-import-page.png
+
+数据侧边界验证：
+  3 处占位待补录题均可定位且可作答
+     id=13128 qno=31 数量关系 / id=13188 qno=73 判断推理 / id=13236 qno=76 判断推理
+     三者 status=1 有效、need_review=1
+  资料分析材料组抽样：组145/133/123 各 14 小题 ✅
+  多选题抽样：id=3111 / 3240 / 3325 type=多选 ✅
+
+BLOCKED（如实标注，未伪造 PASS）：
+  学生端 /student/papers → 答题 → 提交 → 成绩报告 → 错题集 → /materials/xingce
+  未执行：需教师端以外的学员账号，缺凭据故未继续。
+  注：T11/G8 已覆盖该链路的接口层（经 9527 代理 200、match_rate 100.0、13 字段、鉴权 401）。
+
+遗留（不构成 REJECT，受约束所致）：
+  plan 假设存在的 docs-q-card 类结构实际不存在；template 中「分区折叠容器」「考点标签」
+  两处缺失（grep 命中 0）。因铁律禁止改 <template>，须由用户在设计器补齐。
+  注：「待复核」徽标实测已可用，故原判「三处全缺」修正为「两处缺」。
+
+=== F4 范围保真检查：APPROVE ===
+任务 1:1 合规      [17/17]
+越界              CLEAN  无新建表、无新解析器/归一器/题型判定、无范围外页面改动
+跨任务污染        CLEAN  共享 text_parser.py / question_import.py 各自区块独立
+未记账改动         CLEAN  唯一未跟踪项 backend/tmp/（运行日志与响应留档），确认未被提交
+solve_problems_files  README 修改 + 新增 2 份 md；目录总数 117 → 119，
+                     既有 117 份零改写 ✅
+后端改动范围       3 源码（question_import.py / models.py / composite_matcher.py）
+                   + 1 驱动 + 1 迁移 + 10 验证/探针脚本，全在计划范围内
+DB 写操作归因       均可在 task-16 证据中追溯；74 行 dry-run 残留清理精确（按 source 唯一匹配），
+                   逐表复核后回纯净基线，并保留非本次残留的历史孤立组 id=11「甘肃真题」；
+                   未清理任何 DB 备份、未动 312 条 import 记录
+
+=============================
+汇总：F1 APPROVE | F2 APPROVE | F3 APPROVE（1 项 BLOCKED）| F4 APPROVE
+公专数据恒为 2583 全程未变；行测 10171 题、85 个 source 全部到位。
+按计划约定，须等待用户明确批准后才能标记 F1–F4 完成，不自动推进。
