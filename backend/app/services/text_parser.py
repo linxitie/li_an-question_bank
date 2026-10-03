@@ -2168,6 +2168,18 @@ def _essay_looks_like_question_number(line: str, style: str) -> bool:
     s = (line or '').strip()
     if not s or _essay_is_analysis_mark(s) or _essay_is_ans_anchor(s):
         return False
+    # ★ 裸「问题X」独占一行时，无需分值即可判定为新题号边界。
+    #   实测 2023 副省/地市卷答案区（line 244/258/269/288…）：
+    #     参考答案
+    #     问题一        ← 裸标记，答案本身不含分值
+    #     1.巧在景观优美。…
+    #     问题二        ← 若仍要求分值 → 段尾兜底失效
+    #   → trailing_segments 只切出 1 段 ≠ 5 段 → 整卷 5 题全被阻断。
+    #   `_ESSAY_BARE_WORD_RE` 以 `$` 锚定整行，故它只会匹配「独占一行的裸标记」。
+    #   安全边界：答案正文分点形如 `1.经济价值。` `一、全流域…`，绝不会是裸「问题X」，
+    #   故此例外不会把答案分点误判为新题号，分值要求对该场景仍然生效。
+    if _ESSAY_BARE_WORD_RE.match(s):
+        return True
     m = _ESSAY_NUM_RES.get(style, _ESSAY_HALF_NUM_RE).match(s)
     if not m:
         return False
