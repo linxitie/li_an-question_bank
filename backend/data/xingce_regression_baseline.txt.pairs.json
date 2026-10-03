@@ -1,0 +1,1074 @@
+{
+ "内蒙古行测::2022年内蒙古公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 115,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "内蒙古行测::2023年内蒙古公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 120,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "内蒙古行测::2025年内蒙古公务员录用考试《行测》题": {
+  "an_blocks": 119,
+  "an_sec": 6,
+  "answer_anchor": 125,
+  "bogus": [
+   248,
+   352
+  ],
+  "kao": 123,
+  "material": 4,
+  "qb_blocks": 125,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "北京行测::2021年北京市公务员录用考试《行测》题（乡镇卷）": {
+  "an_blocks": 130,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 124,
+  "material": 10,
+  "qb_blocks": 130,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "北京行测::2021年北京市公务员录用考试《行测》题（区级及以上卷）": {
+  "an_blocks": 135,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 134,
+  "material": 12,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "北京行测::2022年北京市公务员录用考试《行测》题": {
+  "an_blocks": 135,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 133,
+  "material": 12,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "北京行测::2023年北京市公务员录用考试《行测》题": {
+  "an_blocks": 135,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 132,
+  "material": 10,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": true,
+  "seq_ok": true
+ },
+ "吉林行测::2022年吉林省公务员录用考试《行测》题": {
+  "an_blocks": 100,
+  "an_sec": 5,
+  "answer_anchor": 100,
+  "bogus": [],
+  "kao": 97,
+  "material": 2,
+  "qb_blocks": 94,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "吉林行测::2023年吉林省公务员录用考试《行测》题": {
+  "an_blocks": 100,
+  "an_sec": 5,
+  "answer_anchor": 100,
+  "bogus": [],
+  "kao": 97,
+  "material": 3,
+  "qb_blocks": 100,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "吉林行测::2024年吉林省公务员录用考试《行测》题": {
+  "an_blocks": 100,
+  "an_sec": 5,
+  "answer_anchor": 100,
+  "bogus": [],
+  "kao": 99,
+  "material": 4,
+  "qb_blocks": 100,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2023年国家公务员录用考试《行测》题（副省级网友回忆版）": {
+  "an_blocks": 132,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 134,
+  "material": 6,
+  "qb_blocks": 131,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2023年国家公务员录用考试《行测》题（地市级网友回忆版）": {
+  "an_blocks": 126,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 126,
+  "material": 5,
+  "qb_blocks": 130,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2023年国家公务员录用考试《行测》题（行政执法卷网友回忆版）": {
+  "an_blocks": 130,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 127,
+  "material": 5,
+  "qb_blocks": 126,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2024年国家公务员录用考试《行测》题（副省级网友回忆版）": {
+  "an_blocks": 135,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 131,
+  "material": 6,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2024年国家公务员录用考试《行测》题（地市级网友回忆版）": {
+  "an_blocks": 130,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 128,
+  "material": 5,
+  "qb_blocks": 130,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2024年国家公务员录用考试《行测》题（行政执法卷网友回忆版）": {
+  "an_blocks": 130,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 128,
+  "material": 5,
+  "qb_blocks": 130,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2025年国家公务员录用考试《行测》题（副省级网友回忆版）": {
+  "an_blocks": 87,
+  "an_sec": 6,
+  "answer_anchor": 135,
+  "bogus": [
+   549
+  ],
+  "kao": 135,
+  "material": 6,
+  "qb_blocks": 132,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "国考行测::2025年国家公务员录用考试《行测》题（地市级网友回忆版）": {
+  "an_blocks": 93,
+  "an_sec": 6,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 128,
+  "material": 5,
+  "qb_blocks": 130,
+  "qb_sec": 6,
+  "rng_ok": true,
+  "seq_ok": true
+ },
+ "国考行测::2025年国家公务员录用考试《行测》题（行政执法卷网友回忆版）": {
+  "an_blocks": 93,
+  "an_sec": 6,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 126,
+  "material": 5,
+  "qb_blocks": 126,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "宁夏行测::2023年宁夏公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 119,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "宁夏行测::2024年宁夏公务员录用考试《行测》题": {
+  "an_blocks": 114,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [
+   327,
+   480
+  ],
+  "kao": 118,
+  "material": 4,
+  "qb_blocks": 116,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "宁夏行测::2025年宁夏公务员录用考试《行测》题": {
+  "an_blocks": 81,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 117,
+  "material": 4,
+  "qb_blocks": 111,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "安徽行测::2023年安徽省公务员录用考试《行测》题": {
+  "an_blocks": 101,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [
+   780
+  ],
+  "kao": 108,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "安徽行测::2024年安徽省公务员录用考试《行测》题": {
+  "an_blocks": 110,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [],
+  "kao": 108,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "安徽行测::2025年安徽省公务员录用考试《行测》题": {
+  "an_blocks": 95,
+  "an_sec": 6,
+  "answer_anchor": 125,
+  "bogus": [],
+  "kao": 123,
+  "material": 4,
+  "qb_blocks": 125,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "山东行测::2022年山东省公务员录用考试《行测》试题": {
+  "an_blocks": 87,
+  "an_sec": 5,
+  "answer_anchor": 90,
+  "bogus": [
+   713
+  ],
+  "kao": 89,
+  "material": 3,
+  "qb_blocks": 90,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "山东行测::2023年山东省公务员录用考试《行测》试题": {
+  "an_blocks": 90,
+  "an_sec": 5,
+  "answer_anchor": 90,
+  "bogus": [],
+  "kao": 86,
+  "material": 3,
+  "qb_blocks": 90,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "山东行测::2024年山东省公务员录用考试《行测》试题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "山西行测::2023年山西省公务员录用考试《行测》题": {
+  "an_blocks": 116,
+  "an_sec": 5,
+  "answer_anchor": 125,
+  "bogus": [
+   780
+  ],
+  "kao": 123,
+  "material": 3,
+  "qb_blocks": 125,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "山西行测::2024年山西省公务员录用考试《行测》题": {
+  "an_blocks": 125,
+  "an_sec": 5,
+  "answer_anchor": 125,
+  "bogus": [],
+  "kao": 123,
+  "material": 3,
+  "qb_blocks": 125,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "山西行测::2025年山西省公务员录用考试《行测》题": {
+  "an_blocks": 101,
+  "an_sec": 6,
+  "answer_anchor": 125,
+  "bogus": [],
+  "kao": 124,
+  "material": 3,
+  "qb_blocks": 125,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "广东行测::2023年广东省公务员录用考试《行测》题（乡镇卷）": {
+  "an_blocks": 92,
+  "an_sec": 6,
+  "answer_anchor": 100,
+  "bogus": [
+   955
+  ],
+  "kao": 99,
+  "material": 3,
+  "qb_blocks": 100,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "广东行测::2023年广东省公务员录用考试《行测》题（县级卷）": {
+  "an_blocks": 68,
+  "an_sec": 6,
+  "answer_anchor": 100,
+  "bogus": [],
+  "kao": 96,
+  "material": 3,
+  "qb_blocks": 100,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "广东行测::2024年广东省公务员录用考试《行测》题": {
+  "an_blocks": 90,
+  "an_sec": 6,
+  "answer_anchor": 90,
+  "bogus": [],
+  "kao": 88,
+  "material": 4,
+  "qb_blocks": 90,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "广东行测::2025年广东省公务员录用考试《行测》题": {
+  "an_blocks": 90,
+  "an_sec": 7,
+  "answer_anchor": 90,
+  "bogus": [],
+  "kao": 90,
+  "material": 4,
+  "qb_blocks": 90,
+  "qb_sec": 7,
+  "rng_ok": true,
+  "seq_ok": true
+ },
+ "广西行测::2023年广西区考公务员录用考试《行测》题": {
+  "an_blocks": 110,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [],
+  "kao": 107,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "广西行测::2024年广西区考公务员录用考试《行测》题": {
+  "an_blocks": 104,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [
+   327,
+   480
+  ],
+  "kao": 107,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "广西行测::2025年广西区考公务员录用考试《行测》题": {
+  "an_blocks": 108,
+  "an_sec": 6,
+  "answer_anchor": 110,
+  "bogus": [],
+  "kao": 108,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江苏行测::2023年江苏省公务员录用考试《行测》题（A类）": {
+  "an_blocks": 122,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [
+   884
+  ],
+  "kao": 133,
+  "material": 7,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江苏行测::2023年江苏省公务员录用考试《行测》题（B类）": {
+  "an_blocks": 132,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [
+   884
+  ],
+  "kao": 132,
+  "material": 7,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江苏行测::2024年江苏省公务员录用考试《行测》题（A类）": {
+  "an_blocks": 135,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 132,
+  "material": 7,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江苏行测::2024年江苏省公务员录用考试《行测》题（B类）": {
+  "an_blocks": 135,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 130,
+  "material": 7,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江苏行测::2024年江苏省公务员录用考试《行测》题（C类）": {
+  "an_blocks": 130,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 127,
+  "material": 6,
+  "qb_blocks": 130,
+  "qb_sec": 5,
+  "rng_ok": true,
+  "seq_ok": true
+ },
+ "江苏行测::2025年江苏省公务员录用考试《行测》题（A类）": {
+  "an_blocks": 133,
+  "an_sec": 6,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 133,
+  "material": 6,
+  "qb_blocks": 135,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江苏行测::2025年江苏省公务员录用考试《行测》题（B类）": {
+  "an_blocks": 133,
+  "an_sec": 6,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 133,
+  "material": 6,
+  "qb_blocks": 135,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江苏行测::2025年江苏省公务员录用考试《行测》题（C类）": {
+  "an_blocks": 128,
+  "an_sec": 6,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 130,
+  "material": 6,
+  "qb_blocks": 130,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江西行测::2023年江西省公务员录用考试《行测》题": {
+  "an_blocks": 136,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [
+   780
+  ],
+  "kao": 132,
+  "material": 4,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江西行测::2024年江西省公务员录用考试《行测》题": {
+  "an_blocks": 135,
+  "an_sec": 5,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 131,
+  "material": 4,
+  "qb_blocks": 135,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "江西行测::2025年江西省公务员录用考试《行测》题": {
+  "an_blocks": 93,
+  "an_sec": 6,
+  "answer_anchor": 135,
+  "bogus": [],
+  "kao": 134,
+  "material": 4,
+  "qb_blocks": 135,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "河北行测::2023年河北省公务员录用考试《行测》题": {
+  "an_blocks": 131,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [
+   780
+  ],
+  "kao": 129,
+  "material": 4,
+  "qb_blocks": 130,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "河北行测::2024年河北省公务员录用考试《行测》题": {
+  "an_blocks": 130,
+  "an_sec": 5,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 126,
+  "material": 4,
+  "qb_blocks": 130,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "河北行测::2025年河北省公务员录用考试《行测》题": {
+  "an_blocks": 88,
+  "an_sec": 6,
+  "answer_anchor": 130,
+  "bogus": [],
+  "kao": 128,
+  "material": 4,
+  "qb_blocks": 130,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "河南行测::2023年河南省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "河南行测::2024年河南省公务员录用考试《行测》题": {
+  "an_blocks": 113,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [
+   327,
+   480
+  ],
+  "kao": 119,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "河南行测::2025年河南省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 3,
+  "qb_blocks": 111,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "海南行测::2023年海南省公务员录用考试《行测》题": {
+  "an_blocks": 110,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [],
+  "kao": 106,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "海南行测::2024年海南省公务员录用考试《行测》题": {
+  "an_blocks": 104,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [
+   327,
+   480
+  ],
+  "kao": 109,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "海南行测::2025年海南省公务员录用考试《行测》题": {
+  "an_blocks": 72,
+  "an_sec": 6,
+  "answer_anchor": 110,
+  "bogus": [],
+  "kao": 107,
+  "material": 3,
+  "qb_blocks": 101,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "湖北行测::2023年湖北省公务员录用考试《行测》题": {
+  "an_blocks": 111,
+  "an_sec": 5,
+  "answer_anchor": 125,
+  "bogus": [
+   780
+  ],
+  "kao": 125,
+  "material": 4,
+  "qb_blocks": 125,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "湖北行测::2024年湖北省公务员录用考试《行测》题": {
+  "an_blocks": 125,
+  "an_sec": 5,
+  "answer_anchor": 125,
+  "bogus": [],
+  "kao": 124,
+  "material": 4,
+  "qb_blocks": 125,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "湖北行测::2025年湖北省公务员录用考试《行测》题": {
+  "an_blocks": 81,
+  "an_sec": 6,
+  "answer_anchor": 125,
+  "bogus": [],
+  "kao": 122,
+  "material": 4,
+  "qb_blocks": 125,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "湖南行测::2023年湖南省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 120,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "湖南行测::2024年湖南省公务员录用考试《行测》题": {
+  "an_blocks": 107,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [
+   327
+  ],
+  "kao": 115,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "湖南行测::2025年湖南省公务员录用考试《行测》题": {
+  "an_blocks": 73,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 117,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "甘肃行测::2023年甘肃公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 117,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "甘肃行测::2024年甘肃公务员录用考试《行测》题": {
+  "an_blocks": 118,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [
+   327
+  ],
+  "kao": 119,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "甘肃行测::2025年甘肃公务员录用考试《行测》题": {
+  "an_blocks": 82,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 117,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "福建行测::2023年福建省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 117,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "福建行测::2024年福建省公务员录用考试《行测》题": {
+  "an_blocks": 113,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [
+   327
+  ],
+  "kao": 116,
+  "material": 3,
+  "qb_blocks": 116,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "福建行测::2025年福建省公务员录用考试《行测》题": {
+  "an_blocks": 90,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 3,
+  "qb_blocks": 116,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "贵州行测::2023年贵州省公务员录用考试《行测》题": {
+  "an_blocks": 110,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [],
+  "kao": 109,
+  "material": 3,
+  "qb_blocks": 110,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "贵州行测::2024年贵州省公务员录用考试《行测》题": {
+  "an_blocks": 99,
+  "an_sec": 5,
+  "answer_anchor": 110,
+  "bogus": [
+   327,
+   480
+  ],
+  "kao": 108,
+  "material": 4,
+  "qb_blocks": 106,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "贵州行测::2025年贵州省公务员录用考试《行测》题": {
+  "an_blocks": 72,
+  "an_sec": 6,
+  "answer_anchor": 110,
+  "bogus": [],
+  "kao": 110,
+  "material": 4,
+  "qb_blocks": 101,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "辽宁行测::2023年辽宁省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "辽宁行测::2024年辽宁省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "辽宁行测::2025年辽宁省公务员录用考试《行测》题": {
+  "an_blocks": 115,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [
+   248,
+   352
+  ],
+  "kao": 117,
+  "material": 5,
+  "qb_blocks": 120,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "陕西行测::2023年陕西省公务员录用考试《行测》题": {
+  "an_blocks": 116,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [
+   780
+  ],
+  "kao": 116,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "陕西行测::2024年陕西省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 115,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "陕西行测::2025年陕西省公务员录用考试《行测》题": {
+  "an_blocks": 89,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "青海行测::2023年青海省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 117,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "青海行测::2024年青海省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "青海行测::2025年青海省公务员录用考试《行测》题": {
+  "an_blocks": 89,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 118,
+  "material": 4,
+  "qb_blocks": 120,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "黑龙江行测::2023年黑龙江省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 119,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "黑龙江行测::2024年黑龙江省公务员录用考试《行测》题": {
+  "an_blocks": 120,
+  "an_sec": 5,
+  "answer_anchor": 120,
+  "bogus": [],
+  "kao": 119,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 5,
+  "rng_ok": false,
+  "seq_ok": true
+ },
+ "黑龙江行测::2025年黑龙江公务员录用考试《行测》题": {
+  "an_blocks": 107,
+  "an_sec": 6,
+  "answer_anchor": 120,
+  "bogus": [
+   248,
+   352
+  ],
+  "kao": 116,
+  "material": 3,
+  "qb_blocks": 120,
+  "qb_sec": 6,
+  "rng_ok": false,
+  "seq_ok": true
+ }
+}
