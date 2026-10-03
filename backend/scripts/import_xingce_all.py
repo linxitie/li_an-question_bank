@@ -192,6 +192,10 @@ def import_paper(db, user, folder, year, variant, qfile, afile, kp):
             dup += 1
         else:
             inserted += 1
+            # need_review 已随 payload 落库，此处仅补日志计数
+            # （原计数语句随旧 UPDATE 一并移除，导致该列恒显 0）
+            if payload['need_review']:
+                nr += 1
 
         # 考点关联
         for nm in (q.get('kao_points_normalized') or []):
