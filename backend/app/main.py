@@ -34,10 +34,18 @@ import sys
 import io
 
 # 强制标准输出/错误流使用 UTF-8 编码
-if hasattr(sys.stdout, 'buffer'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-if hasattr(sys.stderr, 'buffer'):
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# 注意：必须用 reconfigure()，不能新建 TextIOWrapper 替换 sys.stdout/sys.stderr。
+# 新建 wrapper 时旧 wrapper 会被 GC，析构时会关闭其底层 binary buffer，
+# 新 wrapper 指向的正是已关闭的流，导致后续任何写入抛
+# "ValueError: I/O operation on closed file" 并在解释器退出时打印 "lost sys.stderr"。
+# 该缺陷会使 pytest 套件在收集阶段即崩溃且无任何输出。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except (ValueError, OSError):
+            # 流已被外部关闭或不支持重配置时保持原样，不能影响应用启动
+            pass
 
 
 
@@ -182,6 +190,17 @@ async def lifespan(app: FastAPI):
                         conn.execute(text(f"ALTER TABLE practice_record ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: practice_record 添加列 {col_name}")
+
+        # 检查 question_bank 表（P1/P3b：题型人工复核标记）
+        # need_review：导入时题型判定置信度不足的题目置 1，教师端「题目管理」可按此筛选复核。
+        if 'question_bank' in inspector.get_table_names():
+            qb_cols = [c['name'] for c in inspector.get_columns('question_bank')]
+            if 'need_review' not in qb_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE question_bank ADD COLUMN need_review INTEGER DEFAULT 0"))
+                    conn.commit()
+                logger.info("自动迁移: question_bank 添加列 need_review")
 
         # 检查 exam_paper 表(试卷管理完善:新增 publish_target 字段)
         if 'exam_paper' in inspector.get_table_names():

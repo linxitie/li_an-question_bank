@@ -476,22 +476,13 @@
                   }
                 }
                 if (!parsedOpts.length) parsedOpts = ['(暂无选项)'];
-                // 对选项文本也做IMAGE占位替换
+                // 题目内容统一走渲染真源 src/utils/questionRender.js
+                // 由其负责：[IMAGE:题号_序号] 标记转 <img>、白名单清洗、onerror 占位兜底
                 parsedOpts = parsedOpts.map(function(opt) {
-                  if (typeof opt === 'string') {
-                    return opt.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
-                      return '<img src="/static/questions/' + qn + '/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
-                    });
-                  }
-                  return opt;
+                  return typeof opt === 'string' ? renderQuestionContent(opt) : opt;
                 });
                 // 清理题干中嵌入的选项行 + 图片占位
-                var stem = q.question_content || '';
-                stem = stem.replace(/\n?\s*[A-H]\s*[.、．)）]\s*.+/g, '');
-                stem = stem.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function(m, qn, idx) {
-                  return '<img src="/static/questions/' + qn + '/' + qn + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
-                });
-                stem = stem.trim();
+                var stem = renderQuestionContent(q.question_content || '', { stripInlineOption: true }).trim();
                 return {
                   id: q.question_id,
                   group_id: q.group_id || 0,
@@ -598,16 +589,36 @@
         }
       }
     },
+    // ===== 三端实时同步：题目导入后仅提示，不打断作答 =====
+    // 关键约束：作答页绝不能重载题目或切换当前题，否则会清空用户
+    // 已填写的内容与进度。因此这里只弹一个非阻塞提示，由用户自行决定。
+    _syncTimer: null,
+    _onVTJSync(e) {
+      const d = e && e.detail && e.detail.data;
+      if (!d || d.scope !== 'question_bank') return;
+      if (this._syncTimer) clearTimeout(this._syncTimer);
+      this._syncTimer = setTimeout(() => {
+        this._syncTimer = null;
+        const n = d.count || 0;
+        ElMessage.info(n > 0 ? `题库已更新（新增 ${n} 题），本题不受影响` : '题库已更新');
+      }, 1500);
+    },
     mounted() {
       console.log('[AnswerPage] mounted v20260623 - VUE SOURCE loaded');
       this.loadQuestions();
       this.startTimer();
+      window.addEventListener('__VTJ_SYNC__', this._onVTJSync);
     },
     beforeUnmount() {
       if (this._timer) {
         clearInterval(this._timer);
         this._timer = null;
       }
+      if (this._syncTimer) {
+        clearTimeout(this._syncTimer);
+        this._syncTimer = null;
+      }
+      window.removeEventListener('__VTJ_SYNC__', this._onVTJSync);
     }
   })
 </script>

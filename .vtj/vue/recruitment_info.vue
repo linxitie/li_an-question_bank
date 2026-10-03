@@ -64,7 +64,7 @@
           </span>
 
           <!-- HTML 正文 -->
-          <div class="detail-content" v-html="item.content_html || item.content || ''"></div>
+          <div class="detail-content" v-html="sanitizeHtml(item.content_html || item.content || '')"></div>
 
           <!-- 纯文本正文（fallback） -->
           <div v-if="!item.content_html && item.content" class="detail-content-plain">
@@ -107,6 +107,7 @@ import { defineComponent, reactive, ref } from 'vue';
 import { XIcon } from '@vtj/ui';
 import { Opportunity } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+import { sanitizeHtml } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'RecruitmentInfo',
@@ -124,7 +125,7 @@ export default defineComponent({
     const scrollContainer = ref<HTMLElement | null>(null);
     const scrollSentinel = ref<HTMLElement | null>(null);
     let observer: IntersectionObserver | null = null;
-    return { state, props, provider, Opportunity, scrollContainer, scrollSentinel };
+    return { state, props, provider, Opportunity, scrollContainer, scrollSentinel, sanitizeHtml };
   },
   methods: {
     async fetchRecruitment() {

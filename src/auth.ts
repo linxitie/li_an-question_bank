@@ -246,10 +246,32 @@
       } catch (e) { /* 忽略非 JSON 消息 */ }
     };
 
-    _syncSocket.onclose = function () {
+    _syncSocket.onclose = function (ev) {
       _syncSocket = null;
       stopSyncHeartbeat();
       if (_syncReconnectTimer) clearTimeout(_syncReconnectTimer);
+      _syncReconnectTimer = null;
+
+      // 关闭码分流：鉴权类失败重连必然再次失败，属纯资源浪费，故不重连。
+      // 4001 缺少 token / 4002 token 类型错误 / 4003 载荷无效 / 4004 校验失败
+      var code = ev && ev.code;
+      if (code === 4001 || code === 4002 || code === 4003 || code === 4004) {
+        if (import.meta.env.DEV) {
+          console.warn('[auth] 同步连接鉴权失败(code=' + code + ')，不重连，需重新登录');
+        }
+        _reconnectDelay = 5000;
+        return;
+      }
+
+      // 页面处于隐藏态时不重连（息屏即断是手机端重连风暴的主因之一）
+      if (typeof document !== 'undefined' && document.hidden) {
+        if (import.meta.env.DEV) {
+          console.debug('[auth] 页面已隐藏，同步连接断开，等回到前台再重连');
+        }
+        _reconnectDelay = 5000;
+        return;
+      }
+
       _syncReconnectTimer = window.setTimeout(function () {
         if (isLoggedIn()) initSyncSocket();
       }, _reconnectDelay);
@@ -463,6 +485,22 @@
   // 页面加载时若已登录，自动建立同步连接
   if (isLoggedIn()) {
     initSyncSocket();
+  }
+
+  // ===== 移动端可见性感知 =====
+  // 手机息屏/切后台时系统会杀掉 socket，触发 onclose 重连；回到前台又再建一条。
+  // 反复横跳是手机端重连风暴的主因（PC 端基本不触发）。
+  // 处置：隐藏时主动断开，可见时立即重连，从源头消除无效重连。
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        closeSyncSocket();
+      } else if (isLoggedIn()) {
+        // 回到前台：重置退避并立即重连，避免用户等待首个退避周期
+        _reconnectDelay = 5000;
+        initSyncSocket();
+      }
+    });
   }
 
 })();

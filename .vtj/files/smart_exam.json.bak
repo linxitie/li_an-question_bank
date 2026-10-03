@@ -1,0 +1,119 @@
+{
+  "id": "smart_exam",
+  "__VERSION__": "1785854718491",
+  "__VTJ_BLOCK__": true,
+  "raw": true,
+  "name": "SmartExam",
+  "title": "智能组卷",
+  "icon": "EditPen",
+  "needLogin": true,
+  "nodes": [],
+  "css": "",
+  "emits": [],
+  "props": [],
+  "slots": [],
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "dataSources": {},
+  "state": {
+    "step": "1",
+    "generating": "false",
+    "gp_paperId": "null",
+    "gp_paperName": "''",
+    "gp_paperCode": "''",
+    "gp_questions": "'[]'",
+    "gp_totalScore": "0",
+    "gp_questionCount": "0",
+    "gp_difficultyEasy": "0",
+    "gp_difficultyMedium": "0",
+    "gp_difficultyHard": "0",
+    "gp_subjectBreakdown": "'{}'",
+    "gp_duration": "120",
+    "fm_subjectMode": "'xingce'",
+    "fm_yearRange": "'all'",
+    "fm_difficultyEasy": "20",
+    "fm_difficultyMedium": "50",
+    "fm_difficultyHard": "30",
+    "fm_xingceRatio": "60",
+    "fm_gongzhuanRatio": "40",
+    "fm_questionConfigs": "'[]'",
+    "expandedQuestion": "null",
+    "showReplaceDialog": "false",
+    "replaceLoading": "false",
+    "replaceQid": "null",
+    "replaceIdx": "-1"
+  },
+  "methods": {
+    "selectSubject": {
+      "type": "method",
+      "params": [
+        "mode"
+      ]
+    },
+    "doGenerate": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "toggleDetail": {
+      "type": "method",
+      "params": [
+        "qid"
+      ]
+    },
+    "openReplace": {
+      "type": "method",
+      "params": [
+        "q",
+        "idx"
+      ]
+    },
+    "closeReplace": {
+      "type": "method",
+      "params": []
+    },
+    "doReplace": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "regenerate": {
+      "type": "method",
+      "params": []
+    },
+    "confirmPaper": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "startAnswer": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "goBack": {
+      "type": "method",
+      "params": []
+    }
+  },
+  "computed": {
+    "questionConfigParsed": {
+      "type": "JSFunction"
+    },
+    "gp_questionsParsed": {
+      "type": "JSFunction"
+    },
+    "totalQuestions": {
+      "type": "JSFunction"
+    },
+    "totalScore": {
+      "type": "JSFunction"
+    },
+    "estimatedDuration": {
+      "type": "JSFunction"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  }
+}

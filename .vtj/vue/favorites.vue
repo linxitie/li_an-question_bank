@@ -87,7 +87,7 @@
         <div class="modal-meta">
           来源: {{ state.newsDetail.source }} | 分类: {{ state.newsDetail.category }} | 发布: {{ formatTime(state.newsDetail.publish_date) }}
         </div>
-        <div class="modal-body" v-html="state.newsDetail.content"></div>
+        <div class="modal-body" v-html="sanitizeHtml(state.newsDetail.content)"></div>
         <div class="modal-images" v-if="state.newsDetail.images && state.newsDetail.images.length">
           <img v-for="img in state.newsDetail.images" :key="img.order" :src="img.url" />
         </div>
@@ -141,7 +141,7 @@
   import { XIcon } from '@vtj/ui';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
-  import { renderQuestionContent } from '@/utils/questionRender';
+  import { renderQuestionContent, sanitizeHtml } from '@/utils/questionRender';
   export default defineComponent({
     name: 'Favorites',
     components: { NavBar, XIcon },
@@ -161,7 +161,7 @@
         showQuestionModal: false,
         questionDetail: {}
       });
-      return { state, props, provider, Star, renderQuestionContent };
+      return { state, props, provider, Star, renderQuestionContent, sanitizeHtml };
     },
     computed: {
       totalPages() {

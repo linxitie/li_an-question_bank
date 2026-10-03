@@ -28,7 +28,7 @@
       </div>
     </section>
 
-    <!-- 当前科目概览 -->
+    <!-- 当前科目概览 + 科目层混合练习 -->
     <section class="subject-overview" v-if="currentSubject">
       <div class="overview-row">
         <span class="overview-text">{{ currentSubject.subject_name }} · 已练 {{ currentDone }}/{{ currentTotal }} 题</span>
@@ -40,6 +40,12 @@
           :style="{ width: currentProgress + '%', background: (subjectMeta[currentSubject.subject_id] && subjectMeta[currentSubject.subject_id].color) || '#1A365D' }"
         ></div>
       </div>
+      <!-- 科目层混合练习：该科目下全部考点统一随机出题 -->
+      <button class="mixed-btn subject-mixed" @click="mixedPracticeSubject">
+        <XIcon :icon="Lightning" :size="16" color="#1A365D"></XIcon>
+        <span>本科目混合练习</span>
+        <span class="mixed-sub">{{ subjectAllKpIds.length }} 个考点</span>
+      </button>
     </section>
 
     <!-- 主内容区（可滚动） -->
@@ -76,6 +82,12 @@
 
       <!-- 状态1：知识点列表 -->
       <div v-else-if="viewState === 'knowledgePoints'">
+        <!-- 子科目级聚合混合练习：该子科目下全部知识点统一出题（每层仅此一个） -->
+        <button class="mixed-btn kp-mixed" @click="mixedPracticeCurrentSub">
+          <XIcon :icon="Lightning" :size="16" color="#1A365D"></XIcon>
+          <span>本知识点分类混合练习</span>
+          <span class="mixed-sub">{{ knowledgePoints.length }} 个知识点</span>
+        </button>
         <div
           v-for="kp in knowledgePoints"
           :key="kp.point_id"
@@ -98,6 +110,24 @@
           <span class="empty-desc">返回上级查看其他子科目</span>
         </div>
       </div>
+
+      <!-- 更多练题资源
+           决策 D2：底栏已移除「题库」tab，原题库页顶部的历年试卷 / 智能组卷 /
+           错题本等入口在此下沉，保证移除底栏后功能不丢失。 -->
+      <section class="more-resources">
+        <h4 class="more-title">更多练题资源</h4>
+        <div class="more-grid">
+          <div
+            v-for="item in moreResources"
+            :key="item.path"
+            class="more-item"
+            @click="goResource(item.path)"
+          >
+            <XIcon :icon="item.icon" :size="20" color="#1A365D"></XIcon>
+            <span class="more-name">{{ item.name }}</span>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- 练习模式 Bottom Sheet -->
@@ -133,37 +163,18 @@
       </div>
     </div>
 
-    <!-- 底部 Tab -->
-    <nav class="bottom-tab-bar">
-      <div :class="['tab-item', { active: activeTab === 'home' }]" @click="switchTab('home')">
-        <XIcon :icon="HomeFilled" :size="20" :color="activeTab === 'home' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">首页</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'question' }]" @click="switchTab('question')">
-        <XIcon :icon="Reading" :size="20" :color="activeTab === 'question' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">题库</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'practice' }]" @click="switchTab('practice')">
-        <XIcon :icon="Edit" :size="20" :color="activeTab === 'practice' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">练习</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'forum' }]" @click="switchTab('forum')">
-        <XIcon :icon="ChatLineRound" :size="20" :color="activeTab === 'forum' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">论坛</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'profile' }]" @click="switchTab('profile')">
-        <XIcon :icon="User" :size="20" :color="activeTab === 'profile' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">我的</span>
-      </div>
-    </nav>
+    <!-- 底部 Tab：统一使用单一真源组件 src/components/MobileTabBar.vue -->
+    <MobileTabBar active="practice" />
   </div>
 </template>
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted } from 'vue';
+import { defineComponent, ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
+import { ElMessage } from 'element-plus';
+import MobileTabBar from '@/components/MobileTabBar.vue';
 import {
   ArrowLeft,
   ArrowRight,
@@ -173,23 +184,17 @@ import {
   Lightning,
   CircleCheck,
   Warning,
-  HomeFilled,
   Reading,
-  Edit,
-  ChatLineRound,
-  User
+  Document
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 
 export default defineComponent({
   name: 'MobilePractice',
-  components: { XIcon },
+    components: { XIcon, MobileTabBar },
   setup() {
     const router = useRouter();
     const provider = useProvider({ id: 'mobile_practice', version: '1788919369989' });
-
-    // 当前底部 Tab
-    const activeTab = ref('practice');
 
     // 三科目元数据（图标/颜色前端硬编码，后端无此字段）
     const subjectMeta = {
@@ -205,6 +210,8 @@ export default defineComponent({
     const subModules = ref([]);      // 当前科目子科目（含嵌套 knowledge_points）
     const knowledgePoints = ref([]); // 当前子科目的知识点
     const viewState = ref('subModules'); // 'subModules' | 'knowledgePoints'
+    // 当前进入的子科目，供知识点列表顶部的聚合「混合练习」按钮确定出题范围
+    const currentSubCategory = ref<any>(null);
     const loaded = ref(false);
     const loading = ref(false);
     const loadError = ref(false);    // 子科目加载失败标记
@@ -312,6 +319,8 @@ export default defineComponent({
 
     function openSubModule(sc) {
       knowledgePoints.value = sc.knowledge_points || [];
+      // 记录当前进入的子科目，供知识点列表顶部的聚合「混合练习」按钮确定出题范围
+      currentSubCategory.value = sc;
       viewState.value = 'knowledgePoints';
     }
 
@@ -324,11 +333,63 @@ export default defineComponent({
       showModeSheet.value = false;
     }
 
+    // 当前科目的全部考点 ID（子科目层与科目层混合练习用）
+    const subjectAllKpIds = computed(() => {
+      const ids: number[] = [];
+      (subModules.value || []).forEach((sc) => {
+        ((sc as any).knowledge_points || []).forEach((kp: any) => {
+          if (kp && kp.point_id != null) ids.push(kp.point_id);
+        });
+      });
+      return ids;
+    });
+
+    function goAnswer(params: Record<string, any>) {
+      const qs = Object.keys(params)
+        .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : String(params[k])))
+        .join('&');
+      router.push('/mobile/answer?' + qs);
+    }
+
+    // ===== 混合练习：两个层级 =====
+    // 层级一（科目层）：见下方 mixedPracticeSubject
+    // 层级二（知识点分类列表顶部）：对该子科目下全部知识点统一出题。
+    // 原先在每个子科目/考点卡片内的逐项按钮已按需求移除，避免层层重复入口。
+    function mixedPracticeCurrentSub() {
+      const sc = currentSubCategory.value;
+      if (!sc || sc.id == null) {
+        ElMessage.info('该子科目暂无可练习题目');
+        return;
+      }
+      goAnswer({
+        knowledge_point_ids: sc.id,
+        bySubCategory: 'true',
+        mode: 'random',
+        subjectId: activeSubject.value,
+        level: 'subCategory'
+      });
+    }
+
+    // 科目层：汇总该科目下所有考点 ID，逗号分隔一次出题
+    function mixedPracticeSubject() {
+      const ids = subjectAllKpIds.value;
+      if (!ids.length) {
+        ElMessage.info('该科目下暂无考点，暂不能混合练习');
+        return;
+      }
+      goAnswer({
+        knowledge_point_ids: ids.join(','),
+        mode: 'random',
+        subjectId: activeSubject.value,
+        level: 'subject'
+      });
+    }
+
     function startPractice(mode) {
       const kp = currentKp.value;
       closeModeSheet();
       if (!kp) return;
-      router.push('/mobile/answer?kpIds=' + kp.point_id + '&mode=' + mode + '&subjectId=' + activeSubject.value);
+      router.push('/mobile/answer?knowledge_point_ids=' + kp.point_id + '&mode=' + mode + '&subjectId=' + activeSubject.value);
     }
 
     function handleBack() {
@@ -340,19 +401,47 @@ export default defineComponent({
       }
     }
 
-    function switchTab(tab) {
-      activeTab.value = tab;
-      const tabRoutes = {
-        home: '/mobile/home',
-        question: '/mobile/question-bank',
-        practice: '/mobile/practice',
-        forum: '/mobile/forum',
-        profile: '/mobile/profile',
-      };
-      router.push(tabRoutes[tab] || '/');
+    // ===== 更多练题资源 =====
+    // 决策 D2：底栏已移除「题库」tab，原题库页顶部的历年试卷 / 智能组卷 /
+    // 错题本 / 备考资料入口在此下沉，确保移除底栏后功能不丢失。
+    // 说明：历年试卷原先仅能从题库页进入，移除该 tab 后会成为孤链，故必须在此补齐。
+    // 「更多练题资源」仅保留与题库页不重复的入口。
+    // 历年试卷 / 智能组卷 / 错题本 统一由「题库练习」页承载，避免两处重复入口。
+    const moreResources = [
+      { name: '题库总览', path: '/mobile/question-bank', icon: Reading },
+      { name: '备考资料', path: '/mobile/materials', icon: Document }
+    ];
+
+    function goResource(path: string) {
+      router.push(path);
+    }
+
+    // ===== 三端实时同步：题目导入后刷新当前科目统计 =====
+    // 后端导入完成会广播 sync 事件，auth.ts 转发为 __VTJ_SYNC__。
+    // 只关心题库范围的事件；防抖 1.5s，避免批量导入时连续请求。
+    let syncTimer: number | null = null;
+    function onVTJSync(e: any) {
+      const d = e && e.detail && e.detail.data;
+      if (!d || d.scope !== 'question_bank') return;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = window.setTimeout(() => {
+        syncTimer = null;
+        loadSubjectStats();
+        if (activeSubject.value) {
+          switchSubject(activeSubject.value);
+        }
+      }, 1500) as any;
+    }
+    function offVTJSync() {
+      if (syncTimer) {
+        clearTimeout(syncTimer);
+        syncTimer = null;
+      }
+      window.removeEventListener('__VTJ_SYNC__', onVTJSync);
     }
 
     onMounted(async () => {
+      window.addEventListener('__VTJ_SYNC__', onVTJSync);
       await loadSubjects();
       loadSubjectStats();
       if (activeSubject.value) {
@@ -360,8 +449,9 @@ export default defineComponent({
       }
     });
 
+    onBeforeUnmount(offVTJSync);
+
     return {
-      activeTab,
       subjectMeta,
       subjects,
       subjectStats,
@@ -386,8 +476,10 @@ export default defineComponent({
       openModeSheet,
       closeModeSheet,
       startPractice,
+      subjectAllKpIds,
+      mixedPracticeSubject,
+      mixedPracticeCurrentSub,
       handleBack,
-      switchTab,
       ArrowLeft,
       ArrowRight,
       TrendCharts,
@@ -396,11 +488,10 @@ export default defineComponent({
       Lightning,
       CircleCheck,
       Warning,
-      HomeFilled,
       Reading,
-      Edit,
-      ChatLineRound,
-      User,
+      Document,
+      moreResources,
+      goResource,
     };
   },
 });
@@ -545,11 +636,56 @@ export default defineComponent({
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 16px 16px;
+  /* 底部预留 60px 底栏高度 + 安全区，使「更多练题资源」完整可见不被遮挡 */
+  padding: 4px 16px calc(76px + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
 }
 
 /* 子科目卡片（72px） */
+/* 混合练习按钮（科目层 / 子科目层 / 考点层通用） */
+.mixed-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: var(--touch-target-min, 36px);
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #f5f7fa;
+  border: 1px solid #e8ecf1;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1A365D;
+  cursor: pointer;
+  transition: background var(--duration-normal, 300ms) var(--easing-default, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.mixed-btn:active {
+  background: #e8ecf1;
+}
+
+.mixed-sub {
+  font-size: 11px;
+  color: #8899aa;
+}
+
+/* 科目层按钮位于进度条下方，视觉上更突出 */
+.subject-mixed {
+  margin-top: 12px;
+  background: #1A365D;
+  border-color: #1A365D;
+  color: #ffffff;
+}
+
+.subject-mixed .mixed-sub {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.subject-mixed:active {
+  background: #152c4a;
+}
+
 .sub-module-card {
   background: #ffffff;
   border-radius: 10px;
@@ -643,6 +779,51 @@ export default defineComponent({
 .empty-desc {
   font-size: 13px;
   color: #909399;
+}
+
+/* 更多练题资源（决策 D2：原题库页能力下沉入口） */
+.more-resources {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eef1f5;
+}
+
+.more-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1A365D;
+}
+
+.more-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.more-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--touch-target-min, 64px);
+  padding: 10px 6px;
+  background: #f5f7fa;
+  border: 1px solid #e8ecf1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background var(--duration-normal, 300ms) var(--easing-default, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.more-item:active {
+  background: #e8ecf1;
+}
+
+.more-name {
+  font-size: 12px;
+  color: #303133;
+  text-align: center;
 }
 
 .retry-btn {
@@ -765,32 +946,7 @@ export default defineComponent({
   to { transform: translateY(0); }
 }
 
-/* 底部 Tab（56px） */
-.bottom-tab-bar {
-  display: flex;
-  height: 56px;
-  background: #ffffff;
-  border-top: 1px solid #f0f2f5;
-  padding-bottom: env(safe-area-inset-bottom, 0);
-  flex-shrink: 0;
-  z-index: 100;
-}
-
-.tab-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.tab-label {
-  font-size: 10px;
-  font-weight: 500;
-  margin-top: 2px;
-}
+/* 底部 Tab 样式已收敛到单一真源组件 src/components/MobileTabBar.vue */
 
 @media (max-width: 375px) {
   .subject-card {

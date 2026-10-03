@@ -121,7 +121,7 @@
           </div>
         </div>
         <div class="se-actions">
-          <button class="se-btn back-btn" @click="regenerate">🔄 重新生成</button>
+          <button class="se-btn outline-btn" @click="regenerate">🔄 重新生成</button>
           <button class="se-btn outline-btn" @click="state.step = 1">📝 修改参数</button>
           <button class="se-btn generate-btn" @click="confirmPaper">✅ 确认生成</button>
         </div>
@@ -139,7 +139,7 @@
           </div>
           <div class="confirm-actions">
             <button class="se-btn outline-btn" @click="state.step = 2">📝 微调题目</button>
-            <button class="se-btn back-btn" @click="regenerate">🔄 重新生成</button>
+            <button class="se-btn outline-btn" @click="regenerate">🔄 重新生成</button>
           </div>
           <button class="start-answer-btn" @click="startAnswer">
             <span>🚀 开始答题</span>
@@ -416,7 +416,7 @@ export default defineComponent({
 .subject-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px; border: 2px solid #E8EAF0; border-radius: 14px; background: #FAFBFC; cursor: pointer; transition: all 0.25s; }
 .subject-btn:hover { border-color: #C41E3A; background: #FFF5F7; }
 .subject-btn.active { border-color: #C41E3A; background: linear-gradient(135deg, #FFF5F7, #FFEBEE); box-shadow: 0 2px 8px rgba(196,30,58,0.15); }
-.subject-icon { font-size: 24px; }
+.subject-icon { font-size: 20px; line-height: 1; display: inline-block; }
 .subject-label { font-size: 14px; font-weight: 700; color: #1A1A1A; }
 .mixed-ratio { margin-top: 16px; padding: 12px 16px; background: #FFF8E1; border-radius: 10px; display: flex; gap: 16px; align-items: center; }
 .mixed-ratio label { font-size: 13px; font-weight: 600; color: #1F3A60; }
@@ -464,7 +464,8 @@ export default defineComponent({
 .replace-tip { font-size: 13px; color: #5A6488; margin: 0 0 20px; }
 .replace-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .confirm-card { text-align: center; padding: 40px; }
-.confirm-icon { font-size: 48px; margin-bottom: 12px; animation: bounceIn 0.6s ease; }
+/* 48px 的 emoji 会溢出行盒导致「图标变形过大」，收敛到 32px 并锁定行高 */
+.confirm-icon { font-size: 32px; line-height: 1; display: inline-block; margin-bottom: 10px; animation: bounceIn 0.6s ease; }
 @keyframes bounceIn { 0% { transform: scale(0.3); opacity:0; } 50% { transform: scale(1.1); } 70% { transform: scale(0.9); } 100% { transform: scale(1); opacity:1; } }
 .confirm-card h2 { font-size: 22px; font-weight: 900; color: #1F3A60; margin: 0 0 24px; }
 .confirm-info { text-align: left; margin: 0 auto 24px; max-width: 400px; }

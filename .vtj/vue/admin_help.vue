@@ -14,7 +14,7 @@
           <span class="accordion-arrow" :class="{ 'open': openSections.includes(index) }">▼</span>
         </div>
         <div class="accordion-content" v-show="openSections.includes(index)">
-          <div v-html="section.content"></div>
+          <div v-html="sanitizeHtml(section.content)"></div>
         </div>
       </div>
     </div>
@@ -30,6 +30,7 @@
 // @ts-nocheck
 import { defineComponent, ref } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import { sanitizeHtml } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'AdminHelp',
@@ -215,7 +216,7 @@ export default defineComponent({
       }
     ];
 
-    return { provider, openSections, helpSections, toggleSection };
+    return { provider, openSections, helpSections, toggleSection, sanitizeHtml };
   }
 });
 </script>

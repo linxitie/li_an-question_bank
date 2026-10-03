@@ -26,6 +26,10 @@ class ClassifyResult(NamedTuple):
     knowledge_point_id: Optional[int]
     knowledge_point_name: str
     confidence: float  # 0.0 ~ 1.0
+    # 考点层（knowledge_point.level=3），可选以保持向后兼容：
+    # 既有按位置构造 6 字段的调用方无需改动。
+    exam_point_id: Optional[int] = None
+    exam_point_name: str = ""
 
 
 # ============================================================
@@ -141,6 +145,170 @@ SUB_CATEGORY_KP_MAP = {
 # 考点级关键词字典 (weighted)
 # 格式: { kp_name: [(keyword, weight), ...] }
 # ============================================================
+
+# 考点层（level=3）关键词字典 —— 第 1 批 5 个知识点下的 29 个考点
+# 格式: { 考点名(带所属知识点前缀): [(keyword, weight), ...] }
+# 复用既有的 CORE_WEIGHT / HIGH_WEIGHT / NORMAL_WEIGHT 权重体系，不新建机制。
+# ============================================================
+
+EXAM_POINT_KEYWORDS: Dict[str, List[Tuple[str, float]]] = {
+    # ---------- 公安机关性质与职能 (id=72) ----------
+    "公安机关的性质": [
+        ("公安机关的性质", CORE_WEIGHT), ("性质", HIGH_WEIGHT),
+        ("人民民主专政", CORE_WEIGHT), ("专政机关", HIGH_WEIGHT),
+        ("国家暴力机关", HIGH_WEIGHT), ("执法机关", NORMAL_WEIGHT),
+    ],
+    "公安机关的职能职责": [
+        ("职能", CORE_WEIGHT), ("职责", CORE_WEIGHT), ("职能职责", CORE_WEIGHT),
+        ("维护国家安全", HIGH_WEIGHT), ("社会治安秩序", HIGH_WEIGHT),
+        ("预防打击犯罪", HIGH_WEIGHT),
+    ],
+    "公安机关的权限": [
+        ("权限", CORE_WEIGHT), ("职权", HIGH_WEIGHT), ("权力", HIGH_WEIGHT),
+        ("侦查权", HIGH_WEIGHT), ("拘传", HIGH_WEIGHT), ("搜查", HIGH_WEIGHT),
+    ],
+    "公安机关的义务": [
+        ("义务", CORE_WEIGHT), ("职责要求", HIGH_WEIGHT),
+        ("依法履行", HIGH_WEIGHT), ("保障人民民主", NORMAL_WEIGHT),
+    ],
+    "公安机关的组织管理": [
+        ("组织管理", CORE_WEIGHT), ("组织体系", HIGH_WEIGHT),
+        ("公安机关负责人", HIGH_WEIGHT), ("内设机构", HIGH_WEIGHT),
+    ],
+    "公安机关与其他国家机关的关系": [
+        ("其他国家机关", CORE_WEIGHT), ("关系", HIGH_WEIGHT),
+        ("公安机关与", HIGH_WEIGHT), ("协作", NORMAL_WEIGHT),
+    ],
+    # ---------- 接警与处警 (id=88) ----------
+    "接警受理": [
+        ("接警", CORE_WEIGHT), ("受理", CORE_WEIGHT), ("接警受理", CORE_WEIGHT),
+        ("报警", HIGH_WEIGHT), ("警情", HIGH_WEIGHT),
+    ],
+    "指挥调度": [
+        ("指挥", CORE_WEIGHT), ("调度", CORE_WEIGHT), ("指挥调度", CORE_WEIGHT),
+        ("下达指令", HIGH_WEIGHT),
+    ],
+    "出警途中处置": [
+        ("出警途中", CORE_WEIGHT), ("途中", HIGH_WEIGHT), ("赶赴现场", HIGH_WEIGHT),
+    ],
+    "现场处置": [
+        ("现场处置", CORE_WEIGHT), ("现场", CORE_WEIGHT),
+        ("现场勘查", HIGH_WEIGHT), ("处置现场", HIGH_WEIGHT),
+    ],
+    "带回所处理": [
+        ("带回", CORE_WEIGHT), ("带回所", CORE_WEIGHT), ("带回公安机关", HIGH_WEIGHT),
+        ("传唤", HIGH_WEIGHT),
+    ],
+    "移交与反馈": [
+        ("移交", CORE_WEIGHT), ("反馈", CORE_WEIGHT), ("移交与反馈", CORE_WEIGHT),
+        ("移送", HIGH_WEIGHT), ("告知", NORMAL_WEIGHT),
+    ],
+    # ---------- 刑事执法基础知识 (id=71) ----------
+    "刑事立案": [
+        ("立案", CORE_WEIGHT), ("刑事立案", CORE_WEIGHT),
+        ("受案", HIGH_WEIGHT), ("不予立案", HIGH_WEIGHT),
+    ],
+    "侦查措施": [
+        ("侦查措施", CORE_WEIGHT), ("侦查", CORE_WEIGHT),
+        ("讯问", HIGH_WEIGHT), ("询问", HIGH_WEIGHT), ("勘验", HIGH_WEIGHT),
+    ],
+    "强制措施": [
+        ("强制措施", CORE_WEIGHT), ("拘传", CORE_WEIGHT),
+        ("取保候审", CORE_WEIGHT), ("监视居住", CORE_WEIGHT), ("拘留", HIGH_WEIGHT),
+    ],
+    "强制措施适用": [
+        ("适用", CORE_WEIGHT), ("强制措施的适用", CORE_WEIGHT),
+        ("条件", HIGH_WEIGHT), ("期限", HIGH_WEIGHT),
+    ],
+    "案件移送": [
+        ("移送", CORE_WEIGHT), ("案件移送", CORE_WEIGHT),
+        ("移送审查起诉", CORE_WEIGHT), ("起诉", HIGH_WEIGHT),
+    ],
+    "涉案财物管理": [
+        ("涉案财物", CORE_WEIGHT), ("扣押", CORE_WEIGHT),
+        ("冻结", HIGH_WEIGHT), ("保管", HIGH_WEIGHT), ("涉案", HIGH_WEIGHT),
+    ],
+    # ---------- 行政执法基础知识 (id=70) ----------
+    "行政处罚概述": [
+        ("行政处罚", CORE_WEIGHT), ("概述", NORMAL_WEIGHT),
+        ("行政处罚法", HIGH_WEIGHT),
+    ],
+    "行政处罚种类与设定": [
+        ("种类", CORE_WEIGHT), ("设定", CORE_WEIGHT),
+        ("警告", HIGH_WEIGHT), ("罚款", HIGH_WEIGHT), ("没收", HIGH_WEIGHT),
+        ("暂扣", HIGH_WEIGHT), ("吊销", HIGH_WEIGHT),
+    ],
+    "行政处罚程序": [
+        ("程序", CORE_WEIGHT), ("行政处罚程序", CORE_WEIGHT),
+        ("告知", HIGH_WEIGHT), ("听证", HIGH_WEIGHT), ("送达", HIGH_WEIGHT),
+    ],
+    "行政强制": [
+        ("行政强制", CORE_WEIGHT), ("强制执行", HIGH_WEIGHT),
+        ("查封", HIGH_WEIGHT), ("扣押", NORMAL_WEIGHT),
+    ],
+    "行政许可": [
+        ("行政许可", CORE_WEIGHT), ("许可", CORE_WEIGHT),
+        ("审批", HIGH_WEIGHT), ("颁发", NORMAL_WEIGHT),
+    ],
+    "行政复议": [
+        ("行政复议", CORE_WEIGHT), ("复议", CORE_WEIGHT),
+        ("复核", HIGH_WEIGHT), ("争议", HIGH_WEIGHT),
+    ],
+    # ---------- 巡逻 (id=87) ----------
+    "巡逻勤务规范": [
+        ("巡逻勤务", CORE_WEIGHT), ("勤务规范", CORE_WEIGHT),
+        ("巡逻", HIGH_WEIGHT),
+    ],
+    "巡逻方式与勤务安排": [
+        ("巡逻方式", CORE_WEIGHT), ("勤务安排", CORE_WEIGHT),
+        ("徒步巡逻", HIGH_WEIGHT), ("驾车巡逻", HIGH_WEIGHT), ("排班", NORMAL_WEIGHT),
+    ],
+    "巡逻重点与路线": [
+        ("巡逻重点", CORE_WEIGHT), ("巡逻路线", CORE_WEIGHT),
+        ("重点", HIGH_WEIGHT), ("路线", HIGH_WEIGHT),
+    ],
+    "巡逻装备": [
+        ("巡逻装备", CORE_WEIGHT), ("装备", CORE_WEIGHT),
+        ("警用装备", HIGH_WEIGHT), ("器械", HIGH_WEIGHT),
+    ],
+    "巡逻中的处置": [
+        ("巡逻中", CORE_WEIGHT), ("巡逻处置", CORE_WEIGHT),
+        ("发现可疑", HIGH_WEIGHT), ("盘查", HIGH_WEIGHT),
+    ],
+}
+
+# 考点 -> 所属知识点（用于反查 parent_id）
+EXAM_POINT_PARENT: Dict[str, str] = {
+    "公安机关的性质": "公安机关性质与职能",
+    "公安机关的职能职责": "公安机关性质与职能",
+    "公安机关的权限": "公安机关性质与职能",
+    "公安机关的义务": "公安机关性质与职能",
+    "公安机关的组织管理": "公安机关性质与职能",
+    "公安机关与其他国家机关的关系": "公安机关性质与职能",
+    "接警受理": "接警与处警",
+    "指挥调度": "接警与处警",
+    "出警途中处置": "接警与处警",
+    "现场处置": "接警与处警",
+    "带回所处理": "接警与处警",
+    "移交与反馈": "接警与处警",
+    "刑事立案": "刑事执法基础知识",
+    "侦查措施": "刑事执法基础知识",
+    "强制措施": "刑事执法基础知识",
+    "强制措施适用": "刑事执法基础知识",
+    "案件移送": "刑事执法基础知识",
+    "涉案财物管理": "刑事执法基础知识",
+    "行政处罚概述": "行政执法基础知识",
+    "行政处罚种类与设定": "行政执法基础知识",
+    "行政处罚程序": "行政执法基础知识",
+    "行政强制": "行政执法基础知识",
+    "行政许可": "行政执法基础知识",
+    "行政复议": "行政执法基础知识",
+    "巡逻勤务规范": "巡逻",
+    "巡逻方式与勤务安排": "巡逻",
+    "巡逻重点与路线": "巡逻",
+    "巡逻装备": "巡逻",
+    "巡逻中的处置": "巡逻",
+}
 
 KNOWLEDGE_POINT_KEYWORDS: Dict[str, List[Tuple[str, float]]] = {
     # ======================== 行测 ========================
@@ -793,7 +961,14 @@ class QuestionClassifier:
                 kp_id = kid
                 break
 
-        return ClassifyResult(subject_id, sc_id, sc_name, kp_id, kp_name or "无法分类", kp_confidence)
+        # 考点层（level=3）：仅在知识点已命中且属于已建考点层的 5 个知识点时生效，
+        # 否则返回空以保持三级结构的向后兼容。
+        ep_name, ep_confidence = self._detect_exam_point(text, kp_name or "")
+        ep_map = self._exam_point_id_map()
+        ep_id = ep_map.get((kp_name, ep_name)) if (kp_name and ep_name) else None
+
+        return ClassifyResult(subject_id, sc_id, sc_name, kp_id, kp_name or "无法分类",
+                              kp_confidence, ep_id, ep_name or "")
 
     def classify_with_db(self, content: str, subject_id: int, db_session) -> ClassifyResult:
         """
@@ -908,6 +1083,82 @@ class QuestionClassifier:
             confidence = 0.8 + min(best_score * 0.05, 0.2)
 
         return best, round(confidence, 3)
+
+    def _exam_point_id_map(self) -> Dict[Tuple[str, str], int]:
+        """
+        (知识点名, 考点名) -> point_id 映射，运行时从数据库读取。
+        不硬编码 ID，避免后续新增考点批次时 ID 漂移导致错挂。
+        带进程内缓存，避免每次分类都查库。
+        """
+        cached = getattr(self, "_ep_id_cache", None)
+        if cached is not None:
+            return cached
+        mapping: Dict[Tuple[str, str], int] = {}
+        try:
+            from ..models.models import KnowledgePoint
+            from ..core.database import SessionLocal
+            db = SessionLocal()
+            try:
+                rows = db.query(KnowledgePoint).filter(
+                    KnowledgePoint.level == 3
+                ).all()
+                for row in rows:
+                    parent = db.query(KnowledgePoint).filter(
+                        KnowledgePoint.point_id == row.parent_id
+                    ).first()
+                    if parent is not None:
+                        # 用 getattr 取值以规避 ORM Column 的静态类型收窄问题
+                        ep_name = getattr(parent, "point_name", None)
+                        ep_id = getattr(row, "point_id", None)
+                        if ep_name is not None and ep_id is not None:
+                            mapping[(str(ep_name), str(row.point_name))] = ep_id
+            finally:
+                db.close()
+        except Exception:
+            # 查库失败不应阻断分类，降级为空映射（考点层退化为不返回 ID）
+            mapping = {}
+        self._ep_id_cache = mapping
+        return mapping
+
+    def _detect_exam_point(self, text: str, kp_name: str) -> Tuple[Optional[str], float]:
+        """
+        考点层判定（level=3）：在已确定知识点后，再细分到该知识点下的考点。
+
+        仅对已建考点层的 5 个知识点生效，其余知识点返回 (None, 0.0)，
+        调用方据此回退到知识点级展示，保证向后兼容。
+
+        Returns:
+            (考点名, 置信度)；无匹配时考点名为 None。
+        """
+        if not kp_name:
+            return None, 0.0
+
+        # EXAM_POINT_PARENT 以「考点名」为键、值为「所属知识点名」，
+        # 因此这里不能用 kp_name 直接查表（那会恒为 None 导致方法永不生效），
+        # 正确做法是收集该知识点名下的所有考点。
+        target_points = [ep for ep, parent in EXAM_POINT_PARENT.items() if parent == kp_name]
+        if not target_points:
+            return None, 0.0
+
+        scores: Dict[str, float] = {}
+        for ep_name in target_points:
+            total = 0.0
+            for kw, weight in EXAM_POINT_KEYWORDS.get(ep_name, []):
+                if kw in text:
+                    total += weight
+            if total > 0:
+                scores[ep_name] = total
+
+        if not scores:
+            return None, 0.0
+
+        best = max(scores, key=lambda k: scores[k])
+        best_score = scores[best]
+        total_score = sum(scores.values())
+        confidence = min(best_score / max(total_score, 1), 1.0)
+        if confidence < self.MIN_CONFIDENCE:
+            return None, confidence
+        return best, confidence
 
     def _detect_knowledge_point(self, text: str, sc_name: str) -> Tuple[Optional[str], float]:
         """

@@ -1,3 +1,5 @@
+import type { User } from './entities'
+
 export interface ApiResponse<T> {
   code: number
   message: string
@@ -16,8 +18,16 @@ export interface LoginRequest {
   password: string
 }
 
+/**
+ * 登录响应。
+ * 字段严格对齐后端 LoginResponse（backend/app/api/v1/auth.py:206-211），
+ * 实际返回 access_token / refresh_token / token_type / user。
+ * 历史上此处误声明为 `token`，与实现不一致导致 typecheck 报错。
+ */
 export interface LoginResponse {
-  token: string
+  access_token: string
+  refresh_token: string
+  token_type: string
   user: User
 }
 

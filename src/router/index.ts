@@ -364,6 +364,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet' }
   },
   {
+    path: '/tablet/gold-purchase',
+    name: 'TabletGoldPurchase',
+    component: () => import('$vtj/vue/tablet_gold_purchase.vue'),
+    meta: { platform: 'tablet' }
+  },
+  {
     path: '/tablet/notifications',
     name: 'TabletNotifications',
     component: () => import('@/views/mobile_notifications.vue'),
@@ -471,6 +477,30 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/materials',
     name: 'MobileMaterials',
     component: () => import('@/views/mobile_materials.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/gold-purchase',
+    name: 'MobileGoldPurchase',
+    component: () => import('$vtj/vue/mobile_gold_purchase.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/achievements',
+    name: 'MobileAchievements',
+    component: () => import('@/views/mobile_achievements.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/feedback',
+    name: 'MobileFeedback',
+    component: () => import('@/views/mobile_feedback.vue'),
+    meta: { platform: 'mobile' }
+  },
+  {
+    path: '/mobile/help',
+    name: 'MobileHelp',
+    component: () => import('@/views/mobile_help.vue'),
     meta: { platform: 'mobile' }
   },
   {

@@ -21,12 +21,6 @@
     "currentKp": "null"
   },
   "methods": {
-    "switchTab": {
-      "type": "method",
-      "params": [
-        "tab"
-      ]
-    },
     "loadSubjects": {
       "type": "method",
       "params": []
@@ -63,7 +57,50 @@
         "mode"
       ]
     },
+    "goAnswer": {
+      "type": "method",
+      "params": [
+        "params: Record<string",
+        "any>"
+      ]
+    },
+    "mixedPracticeSubject": {
+      "type": "method",
+      "params": []
+    },
+    "mixedPracticeSubCategory": {
+      "type": "method",
+      "params": [
+        "sc: any"
+      ]
+    },
+    "mixedPracticeKp": {
+      "type": "method",
+      "params": [
+        "kp: any"
+      ]
+    },
     "handleBack": {
+      "type": "method",
+      "params": []
+    },
+    "goResource": {
+      "type": "method",
+      "params": [
+        "path: string"
+      ]
+    },
+    "onVTJSync": {
+      "type": "method",
+      "params": [
+        "e: any"
+      ]
+    },
+    "offVTJSync": {
+      "type": "method",
+      "params": []
+    },
+    "mixedPracticeCurrentSub": {
       "type": "method",
       "params": []
     }

@@ -23,7 +23,7 @@
               <span v-if="item.examFormat" class="cal-format-tag">{{ item.examFormat }}</span>
             </div>
             <div class="cal-meta">
-              <span v-if="item.registrationDisplay" class="cal-reg-time" v-html="item.registrationDisplay"></span>
+              <span v-if="item.registrationDisplay" class="cal-reg-time" v-html="sanitizeHtml(item.registrationDisplay)"></span>
               <span v-if="item.region" class="cal-region">{{ item.region }}</span>
             </div>
           </div>
@@ -40,12 +40,12 @@
           <button class="cal-modal-close" @click="closeModal">×</button>
         </div>
         <div class="cal-modal-meta">
-          <span v-if="state.selectedExam.registrationDisplay" class="cal-modal-reg" v-html="state.selectedExam.registrationDisplay"></span>
+          <span v-if="state.selectedExam.registrationDisplay" class="cal-modal-reg" v-html="sanitizeHtml(state.selectedExam.registrationDisplay)"></span>
           <span class="cal-modal-status" :style="{color: state.selectedExam.statusColor || '#10b981', background: (state.selectedExam.statusColor || '#10b981')+'18'}">{{ state.selectedExam.statusLabel || '报名中' }}</span>
           <span v-if="state.selectedExam.examFormat" class="cal-modal-format">{{ state.selectedExam.examFormat }}</span>
           <span v-if="state.selectedExam.recruitmentCount" class="cal-modal-count">{{ state.selectedExam.recruitmentCount }}人</span>
         </div>
-        <div class="cal-modal-body" v-html="state.selectedExam.contentHtml || '<p style=text-align:center;color:#8899aa>暂无详细内容</p>'"></div>
+        <div class="cal-modal-body" v-html="sanitizeHtml(state.selectedExam.contentHtml || '<p style=text-align:center;color:#8899aa>暂无详细内容</p>')"></div>
         <div class="cal-modal-footer">
           <button class="cal-modal-btn" @click="closeModal">关闭</button>
         </div>
@@ -59,13 +59,14 @@ import { defineComponent, reactive } from 'vue';
 import { XIcon } from '@vtj/ui';
 import { Calendar } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+import { sanitizeHtml } from '@/utils/questionRender';
 export default defineComponent({
   name: 'ExamCalendarBlock',
   components: { XIcon },
   setup(props: any) {
     const provider = useProvider({ id: 'exam_calendar_block', version: '1778917815278' });
     const state = reactive({ examList: [] as any[], currentMonth: '', loading: false, page: 1, hasMore: true, showModal: false, selectedExam: {} as any });
-    return { state, props, provider, Calendar };
+    return { state, props, provider, Calendar, sanitizeHtml };
   },
   methods: {
     async fetchExams(reset?: boolean) {

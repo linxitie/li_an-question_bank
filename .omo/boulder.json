@@ -1,0 +1,25 @@
+{
+  "active_plan": "D:/砺安题库/砺安题库/.omo/plans/三端数据统一与分类体系完善方案.md",
+  "plan_name": "三端数据统一与分类体系完善方案",
+  "started_at": "2026-09-29T19:00:00",
+  "session_ids": ["ses_current"],
+  "worktree_path": null,
+  "execution_policy": {
+    "agent_timeout_minutes": 5,
+    "on_timeout": "switch_to_main_agent",
+    "note": "用户明确要求：代理调用超5分钟无响应即切换主代理。鉴于本项目13次子代理调用全部超时(30分钟零产出)，全部任务由主代理直接执行，不派发子代理。"
+  },
+  "guards": {
+    "do_not_touch": [
+      ".vtj/vue/teacher_papers.vue",
+      ".vtj/files/teacher_papers.json",
+      "backend/app/api/v1/question_import.py",
+      ".vtj/vue/question_import.vue",
+      ".vtj/vue/notes.vue",
+      ".vtj/vue/question_preview_list.vue",
+      ".vtj/vue/teacher_questions.vue",
+      ".vtj/files/teacher_questions.json"
+    ],
+    "reason": "以上为他人在途未提交改动，与本方案无关，方案 §5.4 已明确划定不触碰边界。"
+  }
+}

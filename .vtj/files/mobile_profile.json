@@ -19,23 +19,72 @@
     "notesCount": "32"
   },
   "methods": {
-    "goBack": { "type": "method" },
-    "goToSettings": { "type": "method" },
-    "goToWrongQuestions": { "type": "method" },
-    "goToCollection": { "type": "method" },
-    "goToHistory": { "type": "method" },
-    "goToNotes": { "type": "method" },
-    "goToAchievements": { "type": "method" },
-    "goToDownloads": { "type": "method" },
-    "goToFeedback": { "type": "method" },
-    "goToHelp": { "type": "method" },
-    "goToAbout": { "type": "method" },
-    "handleLogout": { "type": "method" },
-    "switchTab": { "type": "method", "params": ["tab"] }
+    "goBack": {
+      "type": "method"
+    },
+    "goToSettings": {
+      "type": "method"
+    },
+    "goToWrongQuestions": {
+      "type": "method"
+    },
+    "goToCollection": {
+      "type": "method"
+    },
+    "goToHistory": {
+      "type": "method"
+    },
+    "goToNotes": {
+      "type": "method"
+    },
+    "goToAchievements": {
+      "type": "method"
+    },
+    "goToDownloads": {
+      "type": "method"
+    },
+    "goToScoreAnalysis": {
+      "type": "method"
+    },
+    "goToGoldPurchase": {
+      "type": "method"
+    },
+    "goToFeedback": {
+      "type": "method"
+    },
+    "goToHelp": {
+      "type": "method"
+    },
+    "goToAbout": {
+      "type": "method"
+    },
+    "handleLogout": {
+      "type": "method"
+    },
+    "openProfileEdit": {
+      "type": "asyncMethod"
+    },
+    "saveProfile": {
+      "type": "asyncMethod"
+    },
+    "openPwdEdit": {
+      "type": "method"
+    },
+    "savePassword": {
+      "type": "asyncMethod"
+    },
+    "loadGoalStats": {
+      "type": "asyncMethod"
+    },
+    "goToGoals": {
+      "type": "method"
+    }
   },
   "computed": {},
   "lifeCycles": {
-    "mounted": { "type": "method" }
+    "mounted": {
+      "type": "method"
+    }
   },
   "dataSources": {},
   "__VTJ_BLOCK__": true

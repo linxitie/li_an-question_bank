@@ -406,12 +406,24 @@ async def get_practice_trend(
             .count()
         )
 
+# 单日累计用时（秒）：PracticeRecord.time_spent 为整型秒数，缺失时按 0 计入
+        day_seconds = (
+            db.query(func.coalesce(func.sum(PracticeRecord.time_spent), 0))
+            .filter(
+                PracticeRecord.user_id == current_user.user_id,
+                func.DATE(PracticeRecord.practice_time) == date,
+            )
+            .scalar()
+            or 0
+        )
+
         daily_trend.append(
             {
                 "date": date.strftime("%Y-%m-%d"),
                 "questionsDone": day_count,
                 "correctCount": day_correct,
                 "accuracy": round(day_correct / day_count * 100, 1) if day_count > 0 else 0,
+                "timeSpent": int(day_seconds),
             }
         )
 

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>后台任务运行状态</title>
+<style>
+/* 深色运维面板：高信息密度、等宽字体。字体栈带 CJK 兜底，防中文乱码/缺字 */
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --line:#30363d;
+  --fg:#c9d1d9; --dim:#8b949e; --accent:#58a6ff;
+  --run:#3fb950; --slow:#d29922; --stall:#f85149; --fin:#6e7681;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font-family:"Cascadia Mono",Consolas,"Microsoft YaHei","PingFang SC",
+    "Hiragino Sans GB","Noto Sans CJK SC",monospace;
+  font-size:13px;line-height:1.5}
+header{padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel);
+  display:flex;flex-wrap:wrap;gap:14px;align-items:center;position:sticky;top:0;z-index:10}
+h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px}
+.spacer{flex:1}
+.pill{padding:3px 9px;border-radius:11px;font-size:12px;border:1px solid var(--line);
+  background:var(--panel2);white-space:nowrap}
+.pill b{font-weight:700}
+.pill.run b{color:var(--run)} .pill.slow b{color:var(--slow)}
+.pill.stall b{color:var(--stall)} .pill.fin b{color:var(--fin)}
+main{padding:16px 18px 40px;max-width:1400px;margin:0 auto}
+.banner{padding:10px 14px;border-radius:4px;margin-bottom:14px;border:1px solid;font-size:13px}
+.banner.takeover{border-color:var(--stall);background:rgba(248,81,73,.1);color:#ffb4ae}
+.banner.advance{border-color:var(--run);background:rgba(63,185,80,.1);color:#7ee787}
+.banner.wait{border-color:var(--line);background:var(--panel);color:var(--dim)}
+.banner b{letter-spacing:.5px}
+.err{padding:10px 14px;border-radius:4px;margin-bottom:14px;
+  border:1px solid var(--stall);background:rgba(248,81,73,.1);color:#ffb4ae}
+.card{border:1px solid var(--line);border-radius:5px;background:var(--panel);
+  padding:12px 14px;margin-bottom:11px;position:relative;overflow:hidden}
+.card.RUNNING{border-left:3px solid var(--run)}
+.card.SLOW{border-left:3px solid var(--slow)}
+.card.STALLED{border-left:3px solid var(--stall);animation:pulse 1.4s ease-in-out infinite}
+.card.FINISHED{border-left:3px solid var(--fin);opacity:.62}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,.45)}
+  50%{box-shadow:0 0 0 7px rgba(248,81,73,0)}}
+.card h2{font-size:13px;margin:0 0 8px;font-weight:600;word-break:break-all;
+  display:flex;gap:9px;align-items:flex-start}
+.badge{padding:1px 7px;border-radius:3px;font-size:11px;font-weight:700;flex-shrink:0;
+  letter-spacing:.4px}
+.badge.RUNNING{background:rgba(63,185,80,.16);color:var(--run)}
+.badge.SLOW{background:rgba(210,153,34,.16);color:var(--slow)}
+.badge.STALLED{background:rgba(248,81,73,.18);color:var(--stall)}
+.badge.FINISHED{background:rgba(110,118,129,.16);color:var(--fin)}
+.badge.UNKNOWN{background:rgba(88,166,255,.16);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:7px}
+.cell{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:5px 8px}
+.cell .k{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+.cell .v{font-size:13px;font-weight:600;margin-top:1px;word-break:break-all}
+.cell .v.warn{color:var(--stall)}
+.sid{color:var(--dim);font-size:10.5px;margin-top:7px;word-break:break-all}
+.tk{margin-top:7px;font-size:11.5px;color:#ffb4ae}
+.empty{text-align:center;padding:50px 18px;color:var(--dim);
+  border:1px dashed var(--line);border-radius:5px}
+footer{color:var(--dim);font-size:11px;padding:9px 18px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>后台任务运行状态</h1>
+  <span class="pill run">运行 <b id="sRun">-</b></span>
+  <span class="pill slow">变慢 <b id="sSlow">-</b></span>
+  <span class="pill stall">停滞 <b id="sStall">-</b></span>
+  <span class="pill fin">已结束 <b id="sFin">-</b></span>
+  <span class="spacer"></span>
+  <span class="pill">刷新 <b id="sTick">-</b></span>
+</header>
+<main>
+  <div id="banner" class="banner wait">加载中…</div>
+  <div id="err"></div>
+  <div id="list"></div>
+</main>
+<footer id="foot"></footer>
+
+<script>
+var TICK = 0;
+function ago(s){
+  if(s === null || s === undefined) return '-';
+  if(s < 60) return s + ' 秒前';
+  if(s < 3600) return Math.floor(s/60) + ' 分前';
+  if(s < 86400) return Math.floor(s/3600) + ' 小时前';
+  return Math.floor(s/86400) + ' 天前';
+}
+function num(n){
+  if(n === null || n === undefined) return '0';
+  if(n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if(n >= 1000) return (n/1000).toFixed(1) + 'k';
+  return String(n);
+}
+function esc(s){
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function cell(k,v,warn){
+  return '<div class="cell"><div class="k">'+esc(k)+'</div><div class="v'+
+    (warn?' warn':'')+'">'+esc(v)+'</div></div>';
+}
+function card(c){
+  var h = '<div class="card '+esc(c.status)+'">';
+  h += '<h2><span class="badge '+esc(c.status)+'">'+esc(c.status)+'</span>'+
+       '<span>'+esc(c.title || '(无标题)')+'</span></h2>';
+  h += '<div class="grid">';
+  h += cell('最后活动', ago(c.age_s), c.status === 'STALLED');
+  h += cell('静默时长', c.age_s === null || c.age_s === undefined ? '-' : c.age_s + 's',
+            c.status === 'STALLED');
+  h += cell('消息数', num(c.messages));
+  h += cell('片段数', num(c.parts));
+  h += cell('输出 token', num(c.tokens_out));
+  h += cell('推理 token', num(c.tokens_reasoning));
+  h += cell('Agent', c.agent || '-');
+  h += '</div>';
+  // 零产出信号：只有 1 条消息说明子代理只收到了任务，从未真正开工
+  if(c.status !== 'FINISHED' && c.messages <= 1){
+    h += '<div class="tk">⚠ 仅 1 条消息：任务已投递但没有任何执行痕迹，'+
+         '大概率已卡死或模型不可用，建议立即接管。</div>';
+  }
+  h += '<div class="sid">'+esc(c.session_id)+'</div>';
+  h += '</div>';
+  return h;
+}
+function render(d){
+  var err = document.getElementById('err');
+  if(d.error){ err.innerHTML = '<div class="err"><b>采集错误</b>：'+
+      esc(d.error)+'</div>'; }
+  else { err.innerHTML = ''; }
+
+  var s = d.summary || {};
+  document.getElementById('sRun').textContent   = s.running   || 0;
+  document.getElementById('sSlow').textContent   = s.slow      || 0;
+  document.getElementById('sStall').textContent = s.stalled   || 0;
+  document.getElementById('sFin').textContent   = s.finished  || 0;
+  TICK += 1;
+  document.getElementById('sTick').textContent = TICK + ' 次';
+
+  var b = document.getElementById('banner');
+  var na = d.next_action || 'wait';
+  b.className = 'banner ' + (na === 'takeover' ? 'takeover'
+                            : na === 'advance' ? 'advance' : 'wait');
+  var label = na === 'takeover' ? '应接管主代理'
+            : na === 'advance' ? '可推进下一步' : '继续等待';
+  b.innerHTML = '<b>next_action = ' + esc(na) + '</b> （' + esc(label) + '）：' +
+                esc(d.next_action_reason || '');
+  if((d.takeover_targets || []).length){
+    b.innerHTML += '<br>需接管：' + esc(d.takeover_targets.join(', '));
+  }
+
+  var list = document.getElementById('list');
+  if(!d.children || !d.children.length){
+    list.innerHTML = '<div class="empty">当前没有活跃的后台子任务。<br>'+
+      '派发 task(run_in_background=true) 后这里会出现卡片。</div>';
+  } else {
+    var h = '';
+    for(var i = 0; i < d.children.length; i++) h += card(d.children[i]);
+    list.innerHTML = h;
+  }
+
+  document.getElementById('foot').textContent =
+    '数据源：' + (d.db_path || '未找到') + '  ｜  采集时间：' +
+    (d.generated_at || '-') + '  ｜  红线：静默超过 7 分钟标记 STALLED 并建议接管' +
+    (d.error ? '' : '  ｜  opencode.db 只读访问');
+}
+function tick(){
+  fetch('/api/status', {cache:'no-store'})
+    .then(function(r){ return r.json(); })
+    .then(render)
+    .catch(function(e){
+      document.getElementById('banner').className = 'banner takeover';
+      document.getElementById('banner').textContent =
+        '无法连接状态服务：' + e + '（服务是否已停止？）';
+    });
+}
+tick();
+setInterval(tick, 2000);   // 2 秒轮询
+</script>
+</body>
+</html>

@@ -20,6 +20,7 @@ from ...models.models import (
     ExamPaper, PaperQuestionRelation, PaperApproval, PaperApprovalWorkflow,
     ExamRecord, ExamAnswerDetail, PracticeRecord, ScoreAnalysis,
     Banji, QuestionImportRecord, KnowledgePoint, QuestionImage,
+    QuestionDetailCategory, QuestionEditLog,
 )
 from ...schemas.teacher import (
     TeacherDashboardStats, TeacherDashboardResponse,
@@ -29,6 +30,7 @@ from ...schemas.teacher import (
     TeacherPaperCreate, TeacherPaperUpdate, PaperAddQuestions,
     AutoGenerateRequest, SubmitApprovalRequest, PublishPaperRequest,
     PaperQuestionScoreUpdate, PaperQuestionOrderUpdate,
+    PaperQuestionContentUpdate,
     ScoreOverviewResponse, ScoreDistribution, QuestionCorrectRate, StudentScoreItem,
     TeacherProfileResponse, TeacherProfileUpdate, ChangePasswordRequest,
     ClassItem, ClassDetailResponse, ClassCreateRequest, ClassStudentAdd,
@@ -73,6 +75,10 @@ def _format_question(q: QuestionBank) -> dict:
         "update_time": q.update_time.isoformat() if q.update_time else None,
         # B4: 题组标记（>0 表示复合题小题，前端据此显示题组徽标并拉取聚合详情）
         "group_id": q.group_id or 0,
+        # P3b: 待复核标记。1=题型判定置信度不足，需教师人工确认题型
+        "need_review": 1 if q.need_review else 0,
+        # P1c: 原题号（可追溯到源文档），列表「序号」列优先用它而非行号
+        "question_number": q.question_number or "",
     }
 
 
@@ -249,6 +255,8 @@ async def list_teacher_questions(
     type_name: Optional[str] = Query(None, description="题型名称（单选题/多选题/论述题/写作题）"),
     point_id: Optional[int] = Query(None, description="知识点ID"),
     difficulty: Optional[int] = Query(None),
+    need_review: Optional[int] = Query(
+        None, description="待复核标记：1=仅待复核 0=仅已确认 不传=不限"),
     audit_status: Optional[int] = Query(None),
     xingce_subcategory: Optional[str] = Query(None),
     shenlun_subcategory: Optional[str] = Query(None),
@@ -275,6 +283,12 @@ async def list_teacher_questions(
         ).filter(QuestionType.type_name == type_name)
     if difficulty:
         base_query = base_query.filter(QuestionBank.difficulty == difficulty)
+    # P3b：待复核筛选。导入时题型判定置信度 < 0.60 的题被置 need_review=1，
+    # 教师在这里集中确认后 need_review 归零。
+    if need_review is not None:
+        base_query = base_query.filter(
+            (QuestionBank.need_review == 1) if need_review
+            else (QuestionBank.need_review != 1))
     if point_id:
         base_query = base_query.filter(QuestionBank.point_id == point_id)
     if audit_status is not None:
@@ -857,6 +871,149 @@ async def update_paper_question_score(
     paper.total_score = total if total else 0
     db.commit()
     return {"success": True, "message": "分值已更新", "total_score": float(paper.total_score)}
+
+
+@router.put("/papers/{paper_id}/questions/{question_id}/content",
+            summary="P5 编辑试卷内题目内容（题干/选项/答案/解析/题型/难度/分值）")
+async def update_paper_question_content(
+    paper_id: int,
+    question_id: int,
+    data: PaperQuestionContentUpdate,
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """编辑试卷内某题的内容。
+
+    为什么需要这个端点
+    ------------------
+    步骤2 原本只能改分值/顺序/换一题/删除，**改不了题干与答案**，
+    教师发现导入错误时只能退回「题目管理」逐题改再回来重排，
+    这就是"试卷编辑无法对试卷进行增删改查"里"改"缺失的那一环。
+
+    设计要点
+    --------
+    1. 权限与状态：与改分值一致 —— 仅本人创建的 DRAFT 试卷可改。
+       已发布/已审批的试卷不允许就地改题，避免学生已作答的记录失真。
+    2. 题型走注册表：type_name 必须能在 question_type 中命中，
+       命中不到直接 400，不静默新建垃圾题型行（P1 修复过的老问题）。
+    3. 题型与 detail_category 同步写，保证双字段不再分裂。
+    4. 每次编辑写 question_edit_log（old_data/new_data 全量快照），
+       该表原本 0 行，P1 已建立审计基线，此处延续。
+    5. 人工确认题型即视为"已复核"：need_review 归零。
+    6. 分值改动后同步重算 paper.total_score（与改分值端点口径一致）。
+    """
+    paper = db.query(ExamPaper).filter(
+        ExamPaper.paper_id == paper_id,
+        ExamPaper.creator_id == current_user.user_id
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在或无权操作")
+    if paper.paper_type != "DRAFT":
+        raise HTTPException(status_code=400, detail="仅草稿状态可编辑题目内容")
+
+    rel = db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper_id,
+        PaperQuestionRelation.question_id == question_id
+    ).first()
+    if not rel:
+        raise HTTPException(status_code=404, detail="题目不在试卷中")
+
+    q = db.query(QuestionBank).filter(
+        QuestionBank.question_id == question_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="题目不存在")
+
+    payload = data.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+
+    # ---- 题型：必须在注册表里命中，禁止静默新建 ----
+    new_type_name = None
+    if payload.get('type_name'):
+        want = payload['type_name'].strip()
+        qtype = db.query(QuestionType).filter(
+            QuestionType.type_name == want).first()
+        if not qtype:
+            raise HTTPException(
+                status_code=400,
+                detail=f"题型「{want}」不存在，请先在题型设置中创建")
+        if qtype.type_id != q.type_id:
+            new_type_name = want
+
+    # ---- 审计快照（改前） ----
+    old_snapshot = {
+        'question_content': q.question_content,
+        'options': q.options,
+        'answer': q.answer,
+        'answer_analysis': q.answer_analysis,
+        'type_id': q.type_id,
+        'difficulty': q.difficulty,
+    }
+
+    if 'question_content' in payload and payload['question_content'] is not None:
+        new_c = str(payload['question_content']).strip()
+        if not new_c:
+            raise HTTPException(status_code=400, detail="题干不能为空")
+        q.question_content = new_c
+    if 'options' in payload:
+        q.options = payload['options']
+    if 'answer' in payload and payload['answer'] is not None:
+        q.answer = str(payload['answer']).strip()
+    if 'answer_analysis' in payload and payload['answer_analysis'] is not None:
+        q.answer_analysis = payload['answer_analysis']
+    if 'difficulty' in payload and payload['difficulty'] is not None:
+        q.difficulty = int(payload['difficulty'])
+    if new_type_name:
+        q.type_id = qtype.type_id
+        d = db.query(QuestionDetailCategory).filter(
+            QuestionDetailCategory.question_id == question_id).first()
+        if d is None:
+            d = QuestionDetailCategory(question_id=question_id)
+            db.add(d)
+        d.question_type_detail = new_type_name
+        # 教师人工确认题型 = 已复核
+        q.need_review = 0
+
+    # ---- 分值（试卷维度） ----
+    if 'score' in payload and payload['score'] is not None:
+        rel.question_score = float(payload['score'])
+
+    q.update_time = datetime.now()
+    db.flush()
+
+    if 'score' in payload and payload['score'] is not None:
+        total = db.query(func.sum(PaperQuestionRelation.question_score)).filter(
+            PaperQuestionRelation.paper_id == paper_id
+        ).scalar()
+        paper.total_score = total if total else 0
+
+    new_snapshot = {
+        'question_content': q.question_content,
+        'options': q.options,
+        'answer': q.answer,
+        'answer_analysis': q.answer_analysis,
+        'type_id': q.type_id,
+        'difficulty': q.difficulty,
+    }
+    changed = [k for k in old_snapshot if old_snapshot[k] != new_snapshot.get(k)]
+
+    db.add(QuestionEditLog(
+        question_id=question_id,
+        editor_id=current_user.user_id,
+        action_type='UPDATE',
+        old_data=old_snapshot,
+        new_data={**new_snapshot, 'changed_fields': changed,
+                  'score': float(rel.question_score)},
+        edit_time=datetime.now(),
+        remark=f"P5 试卷内编辑（paper_id={paper_id}）变更字段: {changed}"[:500],
+    ))
+    db.commit()
+    return {
+        "success": True,
+        "message": f"已保存（变更 {len(changed) + (1 if 'score' in payload else 0)} 项）",
+        "changed_fields": changed,
+        "total_score": float(paper.total_score) if paper.total_score else 0,
+    }
 
 
 @router.post("/papers/{paper_id}/questions/{question_id}/replace", summary="换一题")

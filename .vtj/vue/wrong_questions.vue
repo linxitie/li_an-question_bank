@@ -361,7 +361,7 @@
                 {{ r.is_correct ? '✓ 回答正确' : '✗ 回答错误' }}
               </span>
             </div>
-            <p class="result-q-stem" v-html="r.content"></p>
+            <p class="result-q-stem" v-html="renderImageMarkers(r.content, r.image_map)"></p>
             <div class="result-options" v-if="r.options && r.options.length">
               <div
                 v-for="(opt, oidx) in r.options"
@@ -371,7 +371,7 @@
                   wrong: isWrongOption(opt.key, r.user_answer, r.correct_answer)
                 }]">
                 <span class="option-letter">{{ opt.key || String.fromCharCode(65 + oidx) }}.</span>
-                <span class="option-text" v-html="opt.value || opt.text"></span>
+                <span class="option-text" v-html="renderImageMarkers(opt.value || opt.text, r.image_map)"></span>
               </div>
             </div>
             <div class="result-user-answer">
@@ -381,7 +381,7 @@
               <strong>正确答案：</strong><span class="correct-answer-text">{{ r.correct_answer }}</span>
             </div>
             <div class="result-analysis" v-if="r.analysis">
-              <strong>解析：</strong><span v-html="r.analysis"></span>
+              <strong>解析：</strong><span v-html="renderImageMarkers(r.analysis, r.image_map)"></span>
             </div>
           </div>
         </div>
@@ -416,6 +416,7 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+import { sanitizeHtml } from '@/utils/questionRender';
   export default defineComponent({
     name: 'WrongQuestionSet',
     components: { NavBar, XIcon },
@@ -1076,20 +1077,38 @@
       },
 
       // ========== 图片占位符替换 ==========
+      /**
+       * 把 [IMAGE:hash_seq] 标记替换为 <img>，再交由共享工具做白名单清洗。
+       *
+       * 保留本函数是因为错题本的标记格式为 [IMAGE:十六进制hash_序号]，
+       * 需要用 image_map 查表取真实图片路径，与共享工具的标记格式不同。
+       * 但清洗逻辑不再自行实现，统一委托 src/utils/questionRender.js 的
+       * sanitizeHtml（单一真源），避免出现第二套清洗语义。
+       */
       renderImageMarkers(html, imageMap) {
         if (!html) return '';
         var imgMap = imageMap || {};
-        return html.replace(/\[IMAGE:([a-fA-F0-9]+)_(\d+)\]/g, function(match, hash, seq) {
+        var replaced = String(html).replace(/\[IMAGE:([a-fA-F0-9]+)_(\d+)\]/g, function(match, hash, seq) {
           var key = hash + '_' + seq;
           var src = imgMap[key];
           if (!src) {
             // 无映射记录，尝试扁平路径格式
             src = '/static/questions/' + hash + '_' + seq + '.png';
           }
-          return '<img src="' + src + '" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" ' +
+          // 转义属性值，防止 image_map 中的数据破坏属性边界造成注入
+          var safeSrc = String(src)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          // javascript: 等危险协议一律降级为占位图
+          if (/^\s*javascript:/i.test(String(src))) safeSrc = '/static/images/placeholder.png';
+          return '<img src="' + safeSrc + '" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" ' +
                  'style="max-width:100%;height:auto;border:1px solid #e8eaf0;' +
                  'border-radius:8px;margin:4px 0;" alt="题目图片" />';
         });
+        // 交给单一真源做白名单清洗（丢弃 script/iframe/on* 等危险标签）
+        return sanitizeHtml(replaced);
       },
 
       // ========== 选项高亮判断 ==========

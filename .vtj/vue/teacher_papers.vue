@@ -81,8 +81,11 @@
           <!-- Step 2：添加题目 -->
           <div v-else-if="editStep === 2" class="add-q-layout">
             <div class="add-q-left">
+              <!-- P5：左栏语义澄清。它是"从题库挑选并加入本卷"的辅助区，
+                   不是本卷题目清单。原实现标题缺失导致用户误以为左栏才是本卷题目。 -->
+              <h4 class="panel-title">从题库添加题目</h4>
               <div class="add-q-search">
-                <input class="search-input" v-model="pkKeyword" placeholder="搜索题干关键词..." @keyup.enter="searchPicker" />
+                <input class="search-input" v-model="pkKeyword" placeholder="搜索题库题干关键词..." @keyup.enter="searchPicker" />
                 <button class="btn-search" @click="searchPicker">搜索</button>
               </div>
               <div class="add-q-filters">
@@ -107,20 +110,36 @@
               </div>
             </div>
             <div class="add-q-right">
-              <h4>已选题目 ({{ paperQuestions.length }})</h4>
-              <div class="selected-list">
-                <div v-for="(pq, idx) in paperQuestions" :key="pq.question_id" class="selected-item">
-                  <span class="sq-order">{{ idx + 1 }}</span>
-                  <span class="sq-content" @click="previewQuestionDetail(pq)" :title="pq.question_content">{{ truncate(pq.question_content, 40) }}</span>
-                  <input class="sq-score" type="number" :value="pq.question_score" @change="updateScore(pq.question_id, $event)" min="1" max="100" />
-                  <button class="sq-mini" @click="moveQuestion(idx, -1)" :disabled="idx === 0" title="上移">↑</button>
-                  <button class="sq-mini" @click="moveQuestion(idx, 1)" :disabled="idx === paperQuestions.length - 1" title="下移">↓</button>
-                  <button class="sq-mini" @click="replaceQuestion(pq.question_id)" title="换一题">🔄</button>
-                  <span class="sq-remove" @click="removeQuestion(pq.question_id)">✕</span>
-                </div>
-                <div v-if="paperQuestions.length === 0" class="empty-hint">尚未添加题目</div>
+              <!-- P5：本卷题目 = 主工作区。增(左栏添加)/删(✕)/改(编辑·分值·换一题)/查(筛选)/排序(↑↓) -->
+              <h4 class="panel-title">本卷题目 ({{ paperQuestions.length }})</h4>
+              <div class="pq-filter-bar">
+                <input class="search-input" v-model="pqKeyword" placeholder="在本卷内搜索题干/答案..." />
+                <select class="filter-select" v-model="pqType">
+                  <option value="">全部题型</option>
+                  <option v-for="t in questionTypes" :key="t.type_name" :value="t.type_name">{{ t.type_name }}</option>
+                </select>
+                <button class="btn-sm" @click="resetPqFilter">重置</button>
               </div>
-              <div class="add-q-total">题数: {{ paperQuestions.length }} / 总分: {{ paperTotalScore }}</div>
+              <div class="selected-list">
+                <div v-for="pq in filteredPaperQuestions" :key="pq.question_id" class="selected-item">
+                  <span class="sq-order">{{ paperQuestions.findIndex((x: any) => x.question_id === pq.question_id) + 1 }}</span>
+                  <span class="sq-content" @click="previewQuestionDetail(pq)" :title="pq.question_content">{{ truncate(pq.question_content, 40) }}</span>
+                  <span :class="['type-badge', 'sq-type', typeBadgeClass(pq.type_name)]">{{ pq.type_name || '-' }}</span>
+                  <input class="sq-score" type="number" :value="pq.question_score" @change="pqUpdateScore(pq, $event)" min="1" max="100" title="本卷分值" />
+                  <button class="sq-mini" @click="openPqEdit(pq)" title="编辑题干/答案/解析/题型">✎</button>
+                  <button class="sq-mini" :disabled="paperQuestions.findIndex((x: any) => x.question_id === pq.question_id) === 0" @click="moveQuestion(paperQuestions.findIndex((x: any) => x.question_id === pq.question_id), -1)" title="上移">↑</button>
+                  <button class="sq-mini" :disabled="paperQuestions.findIndex((x: any) => x.question_id === pq.question_id) === paperQuestions.length - 1" @click="moveQuestion(paperQuestions.findIndex((x: any) => x.question_id === pq.question_id), 1)" title="下移">↓</button>
+                  <button class="sq-mini" @click="replaceQuestion(pq.question_id)" title="换一题">🔄</button>
+                  <span class="sq-remove" @click="removeQuestion(pq.question_id)" title="从本卷移除">✕</span>
+                </div>
+                <div v-if="paperQuestions.length === 0" class="empty-hint">本卷暂无题目，请从左侧题库添加</div>
+                <div v-else-if="filteredPaperQuestions.length === 0" class="empty-hint">筛选条件无匹配题目</div>
+              </div>
+              <div class="add-q-total">
+                <span>题数: {{ paperQuestions.length }}</span>
+                <span> / 总分: {{ paperTotalScore }}</span>
+                <span v-if="filteredPaperQuestions.length !== paperQuestions.length" class="filter-note">（筛选中 {{ filteredPaperQuestions.length }}）</span>
+              </div>
             </div>
           </div>
 
@@ -136,9 +155,9 @@
               <div v-for="(q, idx) in paperQuestions" :key="q.question_id" class="preview-item">
                 <div class="preview-q-title">{{ idx + 1 }}. ({{ q.type_name }}，{{ q.question_score }}分) <span v-html="renderQuestionContent(q.question_content)"></span></div>
                 <div class="preview-options" v-if="q.options && q.options.length">
-                  <div v-for="opt in q.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</div>
+                  <div v-for="opt in q.options" :key="opt.key">{{ opt.key }}. <span v-html="renderQuestionContent(opt.value)"></span></div>
                 </div>
-                <div class="preview-answer">正确答案：{{ q.answer }}</div>
+                <div class="preview-answer">正确答案：<span v-html="renderQuestionContent(q.answer)"></span></div>
               </div>
               <div v-if="paperQuestions.length === 0" class="empty-hint">暂无题目，请返回上一步添加</div>
             </div>
@@ -232,9 +251,9 @@
                 </div>
                 <div class="ai-q-content" v-html="renderQuestionContent(q.question_content)"></div>
                 <div class="ai-q-options" v-if="q.options && q.options.length">
-                  <span v-for="opt in q.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</span>
+                  <span v-for="opt in q.options" :key="opt.key">{{ opt.key }}. <span v-html="renderQuestionContent(opt.value)"></span></span>
                 </div>
-                <div class="ai-q-answer">正确答案：{{ q.answer }}</div>
+                <div class="ai-q-answer">正确答案：<span v-html="renderQuestionContent(q.answer)"></span></div>
               </div>
               <div v-if="(currentAiPaper.questions || []).length === 0" class="empty-hint">该试卷暂无题目</div>
             </div>
@@ -324,12 +343,16 @@
         </div>
         <div class="preview-list" v-if="previewQuestions.length > 0">
           <div v-for="(q, idx) in previewQuestions" :key="q.question_id" class="preview-item">
-            <div class="preview-q-title">{{ idx + 1 }}. ({{ q.type_name }}，{{ q.question_score }}分) {{ q.question_content }}</div>
+            <!-- P0-1：题干/选项/解析统一走 renderQuestionContent。
+                 修复前此处用 {{ }} 文本插值，把 <img src="/static/questions/...">
+                 当普通文字打印出来 —— 这就是"预览无法查看图片、只显示图片路径"的根因。
+                 与下方"题目详情弹窗"（L346）保持同一渲染口径。 -->
+            <div class="preview-q-title">{{ idx + 1 }}. ({{ q.type_name }}，{{ q.question_score }}分) <span v-html="renderQuestionContent(q.question_content)"></span></div>
             <div class="preview-options" v-if="q.options && q.options.length">
-              <div v-for="opt in q.options" :key="opt.key">{{ opt.key }}. {{ opt.value }}</div>
+              <div v-for="opt in q.options" :key="opt.key">{{ opt.key }}. <span v-html="renderQuestionContent(opt.value)"></span></div>
             </div>
-            <div class="preview-answer">正确答案：{{ q.answer }}</div>
-            <div class="preview-analysis" v-if="q.answer_analysis">解析：{{ q.answer_analysis }}</div>
+            <div class="preview-answer">正确答案：<span v-html="renderQuestionContent(q.answer)"></span></div>
+            <div class="preview-analysis" v-if="q.answer_analysis"><strong>解析：</strong><span v-html="renderQuestionContent(q.answer_analysis)"></span></div>
           </div>
         </div>
         <div class="empty-hint" v-else-if="!previewLoading">该试卷暂无题目</div>
@@ -347,9 +370,93 @@
         <div class="preview-options" v-if="detailQuestion.options && detailQuestion.options.length">
           <div v-for="opt in detailQuestion.options" :key="opt.key">{{ opt.key }}. <span v-html="renderQuestionContent(opt.value)"></span></div>
         </div>
-        <div class="preview-answer">正确答案：{{ detailQuestion.answer }}</div>
+        <div class="preview-answer">正确答案：<span v-html="renderQuestionContent(detailQuestion.answer)"></span></div>
         <div class="preview-analysis" v-if="detailQuestion.answer_analysis">解析：<span v-html="renderQuestionContent(detailQuestion.answer_analysis)"></span></div>
         <button class="btn-primary" @click="showQuestionDetail = false">关闭</button>
+      </div>
+    </div>
+
+    <!-- P5：本卷题目编辑弹窗（改题干/选项/答案/解析/题型/难度/分值） -->
+    <div class="modal-overlay" v-if="showPqEdit" @click.self="closePqEdit">
+      <div class="modal-content preview-modal">
+        <h3>编辑本卷题目 #{{ pqEditForm.question_id }}</h3>
+        <p class="pq-edit-hint">
+          修改会保存到题库并写入编辑审计；人工确认题型后该题的「待复核」标记会自动清除。
+        </p>
+
+        <div class="form-group">
+          <label>题型</label>
+          <select class="form-input" v-model="pqEditForm.type_name">
+            <option value="">未设置</option>
+            <option v-for="t in questionTypes" :key="t.type_name" :value="t.type_name">{{ t.type_name }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>题干内容</label>
+          <textarea class="form-input form-textarea" v-model="pqEditForm.question_content" rows="4"
+            placeholder="请输入题干内容（支持 HTML / &lt;img&gt; 标签）"></textarea>
+          <div class="edit-preview-head">
+            <span>实时预览</span>
+            <label class="edit-preview-toggle">
+              <input type="checkbox" v-model="showPqPreview" />
+              <span>{{ showPqPreview ? '收起' : '展开' }}</span>
+            </label>
+          </div>
+          <div class="edit-preview-body" v-if="showPqPreview"
+            v-html="renderQuestionContent(pqEditForm.question_content)"></div>
+        </div>
+
+        <div class="form-group">
+          <label>选项</label>
+          <div class="option-edit-list">
+            <div v-for="(val, key) in pqEditForm.optionsParsed" :key="key" class="option-edit-item">
+              <span class="option-edit-key">{{ key }}.</span>
+              <input class="form-input option-edit-input" v-model="pqEditForm.optionsParsed[key]"
+                :placeholder="'选项 ' + key" />
+            </div>
+          </div>
+          <div class="option-actions">
+            <button class="btn-sm" @click="pqAddOption">+ 添加选项</button>
+            <button class="btn-sm btn-danger" @click="pqRemoveOption">- 删除选项</button>
+          </div>
+        </div>
+
+        <div class="pq-edit-row">
+          <div class="form-group">
+            <label>正确答案</label>
+            <input class="form-input" v-model="pqEditForm.answer" placeholder="如 A 或 AB（多选连写大写）" />
+          </div>
+          <div class="form-group">
+            <label>难度</label>
+            <select class="form-input" v-model.number="pqEditForm.difficulty">
+              <option :value="1">★ 简单</option>
+              <option :value="2">★★ 较易</option>
+              <option :value="3">★★★ 中等</option>
+              <option :value="4">★★★★ 较难</option>
+              <option :value="5">★★★★★ 困难</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>本卷分值</label>
+            <input class="form-input" type="number" v-model.number="pqEditForm.score" min="1" max="100" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>答案解析</label>
+          <textarea class="form-input form-textarea" v-model="pqEditForm.answer_analysis" rows="3"
+            placeholder="请输入答案解析（支持 HTML）"></textarea>
+          <div class="edit-preview-body" v-if="showPqPreview && pqEditForm.answer_analysis"
+            v-html="renderQuestionContent(pqEditForm.answer_analysis)"></div>
+        </div>
+
+        <div class="pq-edit-actions">
+          <button class="btn-sm" @click="closePqEdit" :disabled="pqEditSaving">取消</button>
+          <button class="btn-primary" @click="savePqEdit" :disabled="pqEditSaving">
+            {{ pqEditSaving ? '保存中...' : '保存' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -361,7 +468,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import TeacherNavHeader from './TeacherNavHeader.vue';
-import { renderQuestionContent } from '@/utils/questionRender';
+import { renderQuestionContent, renderQuestionSummary } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'TeacherPapers',
@@ -386,6 +493,139 @@ export default defineComponent({
     const publishChoice = ref('draft');
     const createForm = ref({ paper_name: '', year: new Date().getFullYear(), subject_id: 1, exam_type: 'SIMULATION', duration: 120, difficulty: 3, total_score: 100 });
     const paperQuestions: any = ref([]);
+
+    // ========== P5：本卷题目编辑器（增/删/改/查/排序） ==========
+    // 步骤2 原先左栏渲染的是「全库题库选题器」，右栏才是本卷题目，
+    // 左右语义颠倒 → 用户看到的"左栏没有实际意义"。
+    // 现在：
+    //   右栏 = 本卷题目（主工作区），支持 查/改/删/排序/改分
+    //   左栏 = 从题库添加（辅助功能），标题明确写出"添加到本卷"
+    const pqKeyword = ref('');       // 本卷题目题干关键词
+    const pqType = ref('');          // 本卷题型筛选
+    const showPqEdit = ref(false);   // 本卷题目编辑弹窗
+    const pqEditSaving = ref(false);
+    const pqEditForm: any = ref({
+      question_id: 0, question_content: '', answer: '', answer_analysis: '',
+      type_name: '', difficulty: 3, score: 1, optionsParsed: { A: '', B: '', C: '', D: '' },
+    });
+    const showPqPreview = ref(true); // 编辑弹窗内的实时预览开关
+
+    /** 本卷题目的筛选结果（"查"）。仅用于展示，不影响 question_order。 */
+    const filteredPaperQuestions = computed(() => {
+      const kw = pqKeyword.value.trim().toLowerCase();
+      const tn = pqType.value;
+      return paperQuestions.value.filter((q: any) => {
+        if (tn && q.type_name !== tn) return false;
+        if (!kw) return true;
+        const hay = String(q.question_content || '').toLowerCase();
+        const ans = String(q.answer || '').toLowerCase();
+        return hay.includes(kw) || ans.includes(kw);
+      });
+    });
+
+    function resetPqFilter() {
+      pqKeyword.value = '';
+      pqType.value = '';
+    }
+
+    /** 打开本卷题目的编辑弹窗 */
+    function openPqEdit(q: any) {
+      const parsed: Record<string, string> = { A: '', B: '', C: '', D: '', E: '', F: '' };
+      const arr = Array.isArray(q.options)
+        ? q.options
+        : (typeof q.options === 'string' && q.options
+          ? (() => { try { return JSON.parse(q.options); } catch (e) { return []; } })()
+          : []);
+      arr.forEach((o: any, i: number) => {
+        const k = String((o && o.key) || String.fromCharCode(65 + i));
+        parsed[k] = String((o && (o.value ?? o.text)) || '');
+      });
+      pqEditForm.value = {
+        question_id: q.question_id,
+        question_content: q.question_content || '',
+        answer: q.answer || '',
+        answer_analysis: q.answer_analysis || '',
+        type_name: q.type_name || '',
+        difficulty: q.difficulty || 3,
+        score: q.question_score || 1,
+        optionsParsed: parsed,
+      };
+      showPqPreview.value = true;
+      showPqEdit.value = true;
+    }
+
+    function closePqEdit() { showPqEdit.value = false; }
+
+    function pqAddOption() {
+      const keys = Object.keys(pqEditForm.value.optionsParsed).sort();
+      const last = keys[keys.length - 1] || 'A';
+      const next = String.fromCharCode(Math.min(90, last.charCodeAt(0) + 1));
+      if (next in pqEditForm.value.optionsParsed) return;
+      (pqEditForm.value.optionsParsed as any)[next] = '';
+    }
+    function pqRemoveOption() {
+      const p = pqEditForm.value.optionsParsed;
+      const keys = Object.keys(p).filter(k => p[k]).sort();
+      if (keys.length <= 2) { ElMessage.warning('至少保留 2 个选项'); return; }
+      delete p[keys[keys.length - 1]];
+    }
+
+    /** 保存本卷题目的内容修改 */
+    async function savePqEdit() {
+      const f = pqEditForm.value;
+      if (!String(f.question_content || '').trim()) { ElMessage.warning('题干不能为空'); return; }
+      const options = Object.keys(f.optionsParsed)
+        .filter(k => String(f.optionsParsed[k] || '').trim())
+        .sort()
+        .map(k => ({ key: k, value: String(f.optionsParsed[k]).trim() }));
+      pqEditSaving.value = true;
+      try {
+        const res = await apiFetch(
+          `/api/teacher/papers/${editorPaperId.value}/questions/${f.question_id}/content`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question_content: f.question_content,
+              options,
+              answer: f.answer,
+              answer_analysis: f.answer_analysis,
+              type_name: f.type_name || undefined,
+              difficulty: f.difficulty,
+              score: f.score,
+            }),
+          },
+        );
+        const data = await res.json();
+        if (data.success) {
+          ElMessage.success(data.message || '已保存');
+          showPqEdit.value = false;
+          await loadPaperQuestions(editorPaperId.value);
+        } else {
+          ElMessage.error(data.detail || data.message || '保存失败');
+        }
+      } catch (e: any) {
+        ElMessage.error('保存失败：' + (e?.message || '网络或服务异常'));
+      } finally {
+        pqEditSaving.value = false;
+      }
+    }
+
+    /** 行内快速改分（与 updateScore 共用后端分值端点，此处走 content 端点以统一口径） */
+    async function pqUpdateScore(q: any, ev: any) {
+      const s = Number(ev.target.value);
+      if (!s || s <= 0) return;
+      try {
+        const res = await apiFetch(
+          `/api/teacher/papers/${editorPaperId.value}/questions/${q.question_id}/content`,
+          { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: s }) },
+        );
+        const data = await res.json();
+        if (data.success) { await loadPaperQuestions(editorPaperId.value); }
+        else ElMessage.error(data.detail || '更新分值失败');
+      } catch (e) { ElMessage.error('更新分值失败'); }
+    }
 
     // 题目选择器
     const questionTypes: any = ref([]);
@@ -441,29 +681,15 @@ export default defineComponent({
     const showQuestionDetail = ref(false);
     const detailQuestion: any = ref({});
 
-    // 题目统计
-    const questionStats = ref({ total: 0, published: 0 });
-
     const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
     const paperTotalScore = computed(() => paperQuestions.value.reduce((s: number, q: any) => s + (Number(q.question_score) || 0), 0));
 
     onMounted(async () => {
-      await Promise.all([loadPapers(), loadQuestionTypes(), loadQuestionStats(), loadEndedCount()]);
+      await Promise.all([loadPapers(), loadQuestionTypes(), loadEndedCount()]);
     });
 
     function apiFetch(url: string, options?: any) {
       return auth.apiFetch(url, options);
-    }
-
-    // ========== 题目统计 ==========
-    async function loadQuestionStats() {
-      try {
-        const res = await apiFetch('/api/teacher/questions/stats');
-        const data = await res.json();
-        if (data.success) {
-          questionStats.value = { total: data.total, published: data.published };
-        }
-      } catch (e) { console.error('加载题目统计失败:', e); }
     }
 
     // ========== 回收站统计 ==========
@@ -500,7 +726,18 @@ export default defineComponent({
     }
     function subjectName(id: number) { const m: Record<number, string> = { 1: '行测', 2: '申论', 3: '公专' }; return m[id] || '-'; }
     function formatTime(t: string) { if (!t) return '-'; return t.substring(0, 16).replace('T', ' '); }
-    function truncate(text: string, len: number) { return text && text.length > len ? text.substring(0, len) + '...' : text || ''; }
+    /**
+     * 列表摘要截断。
+     * P0-1 修复：原实现直接 substring 原始 HTML，导致列表里出现
+     * `<img src="/static/questions/2726/img_docx_0_ae770c62.jpg" class="q-img"...`
+     * 这类裸露的图片路径文本。先过 renderQuestionSummary（剥标签、<img>→[图片]）再截断。
+     * 该函数同时服务于「题库选题列表」与「已选题目列表」两处调用点。
+     */
+    function truncate(text: string, len: number) {
+      if (!text) return '';
+      const clean = renderQuestionSummary(String(text));
+      return clean.length > len ? clean.substring(0, len) + '...' : clean;
+    }
     function typeBadgeClass(name: string) {
       const map: Record<string, string> = { '单选题': 'badge-single', '多选题': 'badge-multi', '判断题': 'badge-single', '填空题': 'badge-single', '论述题': 'badge-essay', '写作题': 'badge-writing', '情境题': 'badge-essay' };
       return map[name] || 'badge-single';
@@ -837,15 +1074,17 @@ export default defineComponent({
     return {
       provider, papers, filterStatus, page, pageSize, total, totalPages,
       endedCount,
-      questionStats,
       showEditModal, editStep, editorPaperId, creating, publishing, publishChoice, createForm, paperQuestions, paperTotalScore,
+      // P5：本卷题目编辑器
+      pqKeyword, pqType, showPqEdit, pqEditSaving, pqEditForm, showPqPreview, filteredPaperQuestions,
+      resetPqFilter, openPqEdit, closePqEdit, pqAddOption, pqRemoveOption, savePqEdit, pqUpdateScore,
       questionTypes, knowledgePoints, pkKeyword, pkSubject, pkType, pkDifficulty, pkPoint, pkChecked, pkSearched, availableQuestions,
       showAiModal, aiStep, aiGenerating, aiPublishing, aiPublishTarget, aiMockStartTime, aiMockDuration, aiResultPapers, aiResultIndex, currentAiPaper, aiForm,
       showSelfDesignModal, selfDesignSubmitting, selfDesignForm,
       showPublishModal, publishTarget, publishingPaperId,
       showPreviewModal, previewLoading, previewPaper, previewQuestions,
       showQuestionDetail, detailQuestion,
-      loadPapers, loadQuestionStats, loadEndedCount, prevPage, nextPage, statusLabel, statusClass, subjectName, formatTime, truncate, typeBadgeClass,
+      loadPapers, loadEndedCount, prevPage, nextPage, statusLabel, statusClass, subjectName, formatTime, truncate, typeBadgeClass,
       openCreate, openEdit, closeEdit, step1Next, finishCreate,
       loadQuestionTypes, onSubjectChange, searchPicker, toggleCheck, toggleAll, addChecked, loadPaperQuestions,
       removeQuestion, replaceQuestion, updateScore, moveQuestion, previewQuestionDetail,
@@ -936,6 +1175,33 @@ export default defineComponent({
 .add-q-total { margin: 10px 0; font-size: 14px; color: #666; font-weight: 600; }
 .empty-hint { padding: 30px; text-align: center; color: #909399; }
 
+/* ============ P5：本卷题目编辑器 ============ */
+.panel-title { color: #1A3C6D; font-size: 15px; margin: 0 0 10px; font-weight: 700; }
+.pq-filter-bar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.pq-filter-bar .search-input { flex: 1; min-width: 0; }
+.sq-type { font-size: 11px; padding: 2px 6px; flex-shrink: 0; }
+.filter-note { color: #E6A23C; font-weight: 400; font-size: 12px; }
+
+.pq-edit-hint { margin: -10px 0 16px; padding: 8px 12px; background: #f5f7fa; border-left: 3px solid #409EFF; border-radius: 4px; color: #666; font-size: 13px; line-height: 1.6; }
+.pq-edit-row { display: flex; gap: 12px; }
+.pq-edit-row .form-group { flex: 1; }
+.pq-edit-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid #ebeef5; }
+
+.form-textarea { resize: vertical; font-family: inherit; line-height: 1.6; }
+.option-edit-list { display: flex; flex-direction: column; gap: 6px; }
+.option-edit-item { display: flex; align-items: center; gap: 8px; }
+.option-edit-key { font-weight: 700; color: #1A3C6D; min-width: 20px; }
+.option-edit-input { flex: 1; }
+.option-actions { display: flex; gap: 8px; margin-top: 8px; }
+.btn-danger { border-color: #C41E3A; color: #C41E3A; }
+.btn-danger:hover { background: #fdf0f0; }
+
+/* 编辑弹窗内的实时渲染预览（P0 同款，图片可见） */
+.edit-preview-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f5f7fa; border: 1px solid #e8e8e8; border-bottom: none; border-radius: 8px 8px 0 0; font-size: 13px; color: #1A3C6D; font-weight: 600; }
+.edit-preview-toggle { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; color: #666; cursor: pointer; }
+.edit-preview-body { padding: 12px 14px; background: #fff; border: 1px solid #e8e8e8; border-radius: 0 0 8px 8px; line-height: 1.8; font-size: 14px; color: #333; max-height: 420px; overflow-y: auto; }
+.edit-preview-body :deep(img), .edit-preview-body img { max-width: 100%; max-height: 400px; height: auto; object-fit: contain; display: block; margin: 10px 0; border-radius: 6px; border: 1px solid #f0f0f0; background: #fff; }
+
 /* 发布 */
 .publish-modal { max-width: 420px; }
 .publish-desc { color: #666; margin: 0 0 12px; }
@@ -950,15 +1216,34 @@ export default defineComponent({
 .publish-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 
 /* 预览 */
-.preview-modal { max-width: 800px; }
+ /* P0-4：预览弹窗由 800px 扩到 1280px。
+    原因：含图表/情景材料的题目图片原始宽度常在 700~1100px，800px 容器内
+    `img{max-width:100%}` 会把图压到 300~500px 宽，表格类图片文字完全不可读。
+    1280px 可容纳原图 1:1 显示；配合 85vh 高度 + 内部滚动保证长试卷不撑破页面。 */
+.preview-modal { max-width: 1280px; width: 94vw; max-height: 85vh; }
 .preview-meta { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; color: #666; font-size: 13px; }
-.preview-list { max-height: 55vh; overflow-y: auto; border: 1px solid #e8e8e8; border-radius: 8px; padding: 12px; }
-.preview-item { padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+.preview-list { max-height: 66vh; overflow-y: auto; border: 1px solid #e8e8e8; border-radius: 8px; padding: 16px 20px; }
+.preview-item { padding: 14px 0; border-bottom: 1px solid #f0f0f0; }
 .preview-item:last-child { border-bottom: none; }
-.preview-q-title { font-weight: 600; color: #1A3C6D; margin-bottom: 6px; }
-.preview-options { color: #333; font-size: 14px; margin-bottom: 6px; }
-.preview-answer { color: #22c55e; font-size: 13px; font-weight: 600; }
-.preview-analysis { color: #909399; font-size: 13px; margin-top: 4px; }
+.preview-q-title { font-weight: 600; color: #1A3C6D; margin-bottom: 8px; font-size: 15px; line-height: 1.8; }
+.preview-options { color: #333; font-size: 14px; margin-bottom: 8px; line-height: 1.9; }
+.preview-answer { color: #22c55e; font-size: 13px; font-weight: 600; margin-top: 6px; }
+.preview-analysis { color: #909399; font-size: 13px; margin-top: 8px; line-height: 1.9; }
+
+/* P0-4：题目图片自适应（题干/选项/解析内的 img 均命中）。
+   object-fit:contain 保证图表类长图不被裁切；max-height 防止超长截图顶破弹窗。 */
+.preview-modal :deep(img),
+.preview-modal img {
+  max-width: 100%;
+  max-height: 460px;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 10px 0;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+  background: #fff;
+}
 
 .self-design-modal { max-width: 700px; }
 

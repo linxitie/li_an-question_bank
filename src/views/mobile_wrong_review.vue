@@ -43,7 +43,7 @@
           <span class="q-number">{{ current + 1 }}.</span>
           <span :class="['q-type-badge', typeClass(questions[current].type)]">{{ typeLabel(questions[current].type) }}</span>
         </div>
-        <p class="q-stem" v-html="questions[current].question_content"></p>
+        <p class="q-stem" v-html="renderQuestionContent(questions[current].question_content, { stripInlineOption: true })"></p>
         <div class="q-options">
           <div v-if="isMulti(questions[current].type)" class="multi-hint"><strong>多选题</strong> — 点击多个选项进行选择</div>
           <div
@@ -53,7 +53,7 @@
             @click="selectOption(questions[current].wrong_id, oidx, questions[current].type)"
           >
             <span :class="['option-label', { multi: isMulti(questions[current].type) }]">{{ letterOf(oidx) }}</span>
-            <span class="option-text" v-html="opt"></span>
+            <span class="option-text" v-html="renderQuestionContent(opt)"></span>
           </div>
         </div>
         <div class="nav-btns">
@@ -95,6 +95,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 const router = useRouter();
 const auth: any = (window as any).__VTJ_AUTH__;

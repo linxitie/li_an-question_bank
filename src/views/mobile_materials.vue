@@ -36,12 +36,54 @@
       <div v-if="!materials.length && !loading" class="empty">该科目暂无备考资料</div>
       <div v-if="loading" class="empty">加载中...</div>
     </main>
+
+    <!-- 资料详情弹层（页内展示；原实现跳 /materials/{subject}?id= 该路由不存在，必然 404） -->
+    <div v-if="detailVisible" class="modal-mask" @click="closeDetail">
+      <div class="modal" @click.stop>
+        <div class="modal-header">
+          <span class="modal-title">{{ detailData ? detailData.title : '' }}</span>
+          <button class="modal-close" @click="closeDetail" aria-label="关闭">✕</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="detailLoading" class="empty">加载中...</div>
+          <div v-else-if="detailError" class="empty">{{ detailError }}</div>
+          <template v-else-if="detailData">
+            <video
+              v-if="detailData.video_url"
+              class="detail-video"
+              :src="detailData.video_url"
+              controls
+              playsinline
+            ></video>
+            <img
+              v-if="detailData.cover_image"
+              class="detail-cover"
+              :src="detailData.cover_image"
+              alt="资料封面"
+            />
+            <div class="m-meta">
+              <span class="tag">{{ typeName(detailData.type) }}</span>
+              <span v-if="detailData.read_time" class="tag">阅读 {{ detailData.read_time }}分钟</span>
+            </div>
+            <p v-if="detailData.summary" class="summary">{{ detailData.summary }}</p>
+            <div class="detail-content" v-html="renderQuestionContent(detailData.content)"></div>
+            <div v-if="detailData.card_back" class="detail-card-back" v-html="renderQuestionContent(detailData.card_back)"></div>
+          </template>
+        </div>
+        <div class="modal-actions">
+          <button class="action-btn" @click="markStudied">标记已学</button>
+          <button class="action-btn" @click="closeDetail">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { renderQuestionContent } from '@/utils/questionRender';
+import { ElMessage } from 'element-plus';
 
 const router = useRouter();
 const subjects = [
@@ -53,6 +95,63 @@ const activeSubject = ref('xingce');
 const materials = ref<any[]>([]);
 const loading = ref(false);
 const expandedId = ref<number | null>(null);
+
+// ===== 资料详情弹层 =====
+// 后端 GET /api/materials/{material_id} 已存在（materials.py:173），
+// 原实现跳 /materials/{subject}?id= 该路由从未注册，必然 404。
+const detailVisible = ref(false);
+const detailLoading = ref(false);
+const detailError = ref('');
+const detailData = ref<any>(null);
+const currentMaterial = ref<any>(null);
+
+const closeDetail = () => {
+  detailVisible.value = false;
+  detailData.value = null;
+  detailError.value = '';
+  currentMaterial.value = null;
+};
+
+const loadDetail = async (id: number) => {
+  detailLoading.value = true;
+  detailError.value = '';
+  try {
+    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/materials/' + id);
+    if (res.ok) {
+      detailData.value = await res.json();
+    } else {
+      detailError.value = '资料加载失败（' + res.status + '）';
+    }
+  } catch (e) {
+    detailError.value = '资料加载失败，请检查网络后重试';
+  } finally {
+    detailLoading.value = false;
+  }
+};
+
+// 上报学习进度（POST /api/materials/progress，UPSERT）
+const markStudied = async () => {
+  const m = currentMaterial.value;
+  if (!m || m.id == null) return;
+  try {
+    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/materials/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ material_id: m.id, progress_percent: 100, is_studied: true })
+    });
+    if (res.ok) {
+      ElMessage.success('已标记为学完');
+      materials.value = materials.value.map((x) =>
+        x.id === m.id ? { ...x, is_studied: true, progress_percent: 100 } : x
+      );
+      closeDetail();
+    } else {
+      ElMessage.error('提交进度失败');
+    }
+  } catch (e) {
+    ElMessage.error('提交进度失败，请稍后重试');
+  }
+};
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -91,9 +190,17 @@ const fetchMaterials = async () => {
   }
 };
 
-const openDetail = (m: any) => {
-  // 资料详情暂用 PC 端页面，后续可做移动端详情页
-  router.push('/materials/' + m.subject + '?id=' + m.id);
+const openDetail = async (m: any) => {
+  // 原实现跳 /materials/{subject}?id=，该路由从未注册，必然 404。
+  // 改为调用已存在的 GET /api/materials/{material_id}（materials.py:173），页内弹层展示。
+  if (!m || m.id == null) {
+    ElMessage.info('该资料暂时无法打开');
+    return;
+  }
+  currentMaterial.value = m;
+  detailData.value = null;
+  detailVisible.value = true;
+  await loadDetail(m.id);
 };
 
 onMounted(fetchMaterials);
@@ -220,5 +327,115 @@ onMounted(fetchMaterials);
   text-align: center;
   color: #8899aa;
   padding: 40px 0;
+}
+
+/* ===== 资料详情弹层 ===== */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+}
+.modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef1f5;
+  flex-shrink: 0;
+}
+.modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2b5f;
+  line-height: 1.4;
+  padding-right: 8px;
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #8899aa;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+}
+.detail-video {
+  width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: #000;
+}
+.detail-cover {
+  width: 100%;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.summary {
+  font-size: 13px;
+  color: #5a6488;
+  line-height: 1.7;
+  margin: 10px 0;
+}
+.detail-content {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #1a2a3a;
+}
+.detail-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.detail-card-back {
+  margin-top: 14px;
+  padding: 12px;
+  background: #f8f9fc;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1a2b5f;
+  line-height: 1.7;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid #eef1f5;
+  flex-shrink: 0;
+}
+.action-btn {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid #1a2b5f;
+  background: #1a2b5f;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.action-btn:active {
+  opacity: 0.85;
 }
 </style>

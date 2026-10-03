@@ -94,7 +94,7 @@
               </div>
               <div class="recruit-modal-section" v-if="state.selectedRecruit.content_html">
                 <h4>招聘详情</h4>
-                <div class="detail-content-html" v-html="state.selectedRecruit.content_html || state.selectedRecruit.content || ''"></div>
+                <div class="detail-content-html" v-html="sanitizeHtml(state.selectedRecruit.content_html || state.selectedRecruit.content || '')"></div>
               </div>
               <div class="recruit-modal-section" v-else>
                 <h4>招聘详情</h4>
@@ -129,6 +129,7 @@
   </div>
 </template>
 <script lang="ts">
+import { sanitizeHtml } from '@/utils/questionRender';
   // @ts-nocheck
   import { defineComponent, reactive, ref } from 'vue';
   import { XIcon } from '@vtj/ui';
@@ -166,7 +167,7 @@
         showRecruitModal: false,
         selectedRecruit: {}
       });
-      return { state, props, provider, recruitListRefs, Briefcase, ArrowRight };
+      return { state, props, provider, recruitListRefs, Briefcase, ArrowRight, sanitizeHtml };
     },
     methods: {
       scrollToTop(cardItem) {

@@ -20,10 +20,10 @@
 
     <main class="list">
       <div v-for="item in filteredItems" :key="item.fav_id" class="card">
-        <div class="q-title">{{ item.question_content }}</div>
+        <div class="q-title">{{ renderQuestionSummary(item.question_content) }}</div>
         <div class="q-meta" v-if="item.subject_name">
           <span class="tag">{{ item.subject_name }}</span>
-          <span class="tag" v-if="item.sub_category">{{ item.sub_category }}</span>
+          <span class="tag" v-if="item.subcategory">{{ item.subcategory }}</span>
         </div>
         <div class="q-answer" v-if="item.answer">答案：{{ item.answer }}</div>
         <button class="unfav-btn" @click="removeFav(item)">取消收藏</button>
@@ -37,6 +37,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { renderQuestionSummary } from '@/utils/questionRender';
 
 const router = useRouter();
 const auth: any = (window as any).__VTJ_AUTH__;
@@ -71,7 +72,9 @@ const selectSubject = (sid: number) => {
 const fetchFavorites = async () => {
   loading.value = true;
   try {
-    const res = await auth.apiFetch('/api/questions/favorites?page=1&page_size=100');
+    // 使用 collection 专用列表端点（含完整题目信息），与电脑端 favorites.vue 保持一致。
+    // 原实现调用 /api/questions/favorites，返回字段不完整，导致收藏页内容异常。
+    const res = await auth.apiFetch('/api/collection/question-favorites?page=1&page_size=100');
     const data = await res.json();
     if (res.ok && data.items) items.value = data.items;
   } catch (e) {
@@ -83,8 +86,14 @@ const fetchFavorites = async () => {
 
 const removeFav = async (item: any) => {
   try {
-    await auth.apiFetch('/api/questions/' + item.question_id + '/favorite', { method: 'POST' });
-    items.value = items.value.filter((i) => i.fav_id !== item.fav_id);
+    // 后端 DELETE /api/collection/{fav_id} 要求复合 ID：q_{题目收藏ID} 或 n_{新闻收藏ID}
+    // （collection.py:139-150），传纯数字会返回 400「无效的收藏ID格式」。
+    const res = await auth.apiFetch('/api/collection/q_' + item.fav_id, { method: 'DELETE' });
+    if (res.ok) {
+      items.value = items.value.filter((i) => i.fav_id !== item.fav_id);
+    } else {
+      console.error('取消收藏失败:', res.status);
+    }
   } catch (e) {
     console.error('取消收藏失败:', e);
   }

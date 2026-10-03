@@ -145,6 +145,15 @@ async def record_practice(
         commit_with_retry(db)
 
     newly = _after_practice(current_user.user_id, db, 1, 1 if is_correct else 0)
+
+    # 目标进度自动追踪：按真实刷题量重算未完成目标（幂等，失败不影响刷题结果）
+    try:
+        from ...services.goal_progress import sync_goal_progress
+        sync_goal_progress(current_user.user_id, db)
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        print(f"[practice] 目标进度同步失败(非阻断): {e}")
+
     return {"status": "ok", "record_id": record.record_id, "newly_unlocked": newly}
 
 

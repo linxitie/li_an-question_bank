@@ -276,7 +276,7 @@
     "deletePaper": {
       "type": "method",
       "params": [
-        "id: number"
+        "p: any"
       ]
     },
     "restorePaper": {
@@ -302,6 +302,68 @@
       "params": [
         "url: string",
         "options?: any"
+      ]
+    },
+    "loadQuestionStats": {
+      "type": "method",
+      "params": []
+    },
+    "handleLogout": {
+      "type": "method",
+      "params": []
+    },
+    "aiReplaceQuestion": {
+      "type": "method",
+      "params": [
+        "q: any",
+        "idx: number"
+      ]
+    },
+    "aiRemoveQuestion": {
+      "type": "method",
+      "params": [
+        "idx: number"
+      ]
+    },
+    "doAiPublish": {
+      "type": "method",
+      "params": []
+    },
+    "loadEndedCount": {
+      "type": "method",
+      "params": []
+    },
+    "resetPqFilter": {
+      "type": "method",
+      "params": []
+    },
+    "openPqEdit": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "closePqEdit": {
+      "type": "method",
+      "params": []
+    },
+    "pqAddOption": {
+      "type": "method",
+      "params": []
+    },
+    "pqRemoveOption": {
+      "type": "method",
+      "params": []
+    },
+    "savePqEdit": {
+      "type": "method",
+      "params": []
+    },
+    "pqUpdateScore": {
+      "type": "method",
+      "params": [
+        "q: any",
+        "ev: any"
       ]
     }
   },

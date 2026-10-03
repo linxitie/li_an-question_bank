@@ -216,7 +216,7 @@
             </ul>
             <details open>
               <summary>渲染预览（{{ state.imp.result.word_count }} 字）</summary>
-              <div class="material-article preview" v-html="state.imp.result.html"></div>
+              <div class="material-article preview" v-html="sanitizeHtml(state.imp.result.html)"></div>
             </details>
           </template>
           <!-- Excel 列映射预览 -->
@@ -266,6 +266,7 @@
 import { defineComponent, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
+import { sanitizeHtml } from '@/utils/questionRender';
 
 const TYPE_LABEL = {
   video_intro: '入门视频', video_advanced: '进阶视频',
@@ -295,7 +296,7 @@ export default defineComponent({
                by_subject: { xingce: 0, shenlun: 0, gongzhuan: 0 },
                by_status: { published: 0, draft: 0 } }
     });
-    return { state, props, provider, TYPE_LABEL, SUBJECT_LABEL };
+    return { state, props, provider, TYPE_LABEL, SUBJECT_LABEL, sanitizeHtml };
   },
   computed: {
     impStep() {

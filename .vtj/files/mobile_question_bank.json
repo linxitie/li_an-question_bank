@@ -15,14 +15,39 @@
     "activeCategory": "'all'"
   },
   "methods": {
-    "goBack": { "type": "method" },
-    "toggleSearch": { "type": "method" },
-    "handleSearch": { "type": "method" },
-    "clearSearch": { "type": "method" },
-    "selectTopAction": { "type": "method", "params": ["key"] },
-    "selectCategory": { "type": "method", "params": ["key"] },
-    "startPractice": { "type": "method", "params": ["question"] },
-    "switchTab": { "type": "method", "params": ["tab"] }
+    "goBack": {
+      "type": "method"
+    },
+    "toggleSearch": {
+      "type": "method"
+    },
+    "handleSearch": {
+      "type": "method"
+    },
+    "clearSearch": {
+      "type": "method"
+    },
+    "selectTopAction": {
+      "type": "method",
+      "params": [
+        "key"
+      ]
+    },
+    "selectCategory": {
+      "type": "method",
+      "params": [
+        "key"
+      ]
+    },
+    "startPractice": {
+      "type": "method",
+      "params": [
+        "question"
+      ]
+    },
+    "loadSubjectStats": {
+      "type": "asyncMethod"
+    }
   },
   "computed": {},
   "lifeCycles": {},

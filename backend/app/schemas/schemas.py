@@ -56,6 +56,10 @@ class StudyGoalCreate(BaseModel):
     deadline: Optional[datetime] = Field(None, description="截止时间")
     priority: int = Field(1, ge=1, le=3, description="优先级 1低/2中/3高")
     base_reward: Optional[int] = Field(None, ge=1, description="基础奖励金币(缺省20)")
+    # 今日学习科目：0=混科，>0=单科 subject_id
+    subject_mode: int = Field(0, ge=0, description="今日学习科目 0混科/>0单科subject_id")
+    # 单日预期学习时长（分钟）
+    expected_minutes: int = Field(0, ge=0, le=1440, description="单日预期学习时长(分钟)")
 
 
 class StudyGoalUpdate(BaseModel):
@@ -67,6 +71,10 @@ class StudyGoalUpdate(BaseModel):
     deadline: Optional[datetime] = None
     priority: Optional[int] = Field(None, ge=1, le=3)
     is_completed: Optional[bool] = None
+    # 今日学习科目：0=混科，>0=单科 subject_id
+    subject_mode: Optional[int] = Field(None, ge=0, description="今日学习科目 0混科/>0单科subject_id")
+    # 单日预期学习时长（分钟）
+    expected_minutes: Optional[int] = Field(None, ge=0, le=1440, description="单日预期学习时长(分钟)")
 
 
 class StudyGoalResponse(BaseModel):
@@ -80,6 +88,8 @@ class StudyGoalResponse(BaseModel):
     goal_type: str
     target_count: int
     current_count: int
+    subject_mode: int
+    expected_minutes: int
     deadline: Optional[datetime]
     priority: int
     is_completed: bool

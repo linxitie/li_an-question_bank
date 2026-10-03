@@ -60,7 +60,7 @@
               </span>
               <span class="review-score" v-if="d.score_obtained !== undefined">+{{ d.score_obtained }}分</span>
             </div>
-            <p class="review-stem" v-html="d.question_content"></p>
+            <p class="review-stem" v-html="renderQuestionContent(d.question_content, { stripInlineOption: true })"></p>
 
             <!-- 选项回顾 -->
             <div class="review-options" v-if="d.options && d.options.length">
@@ -70,7 +70,7 @@
                   'is-user-wrong': isUserWrongAnswer(opt, oidx, d)
                 }]">
                 <span class="ro-marker">{{ String.fromCharCode(65 + oidx) }}.</span>
-                <span class="ro-text" v-html="opt"></span>
+                <span class="ro-text" v-html="renderQuestionContent(opt)"></span>
                 <span v-if="isCorrectAnswer(opt, d.correct_answer)" class="ro-tag correct-tag">✓ 正确答案</span>
                 <span v-if="isUserWrongAnswer(opt, oidx, d)" class="ro-tag wrong-tag">✗ 你的答案</span>
               </div>
@@ -113,6 +113,7 @@
 // @ts-nocheck
 import { defineComponent, reactive, onMounted } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'PaperResult',
@@ -127,7 +128,7 @@ export default defineComponent({
       accuracy: 0,
       expandedAnalysis: {},
     });
-    return { state, provider };
+    return { state, provider, renderQuestionContent };
   },
   methods: {
     formatTime(s) {

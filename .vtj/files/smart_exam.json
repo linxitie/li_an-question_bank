@@ -46,25 +46,74 @@
     "replaceIdx": "-1"
   },
   "methods": {
-    "selectSubject": { "type": "method", "params": ["mode"] },
-    "doGenerate": { "type": "asyncMethod", "params": [] },
-    "toggleDetail": { "type": "method", "params": ["qid"] },
-    "openReplace": { "type": "method", "params": ["q", "idx"] },
-    "closeReplace": { "type": "method", "params": [] },
-    "doReplace": { "type": "asyncMethod", "params": [] },
-    "regenerate": { "type": "method", "params": [] },
-    "confirmPaper": { "type": "asyncMethod", "params": [] },
-    "startAnswer": { "type": "asyncMethod", "params": [] },
-    "goBack": { "type": "method", "params": [] }
+    "selectSubject": {
+      "type": "method",
+      "params": [
+        "mode"
+      ]
+    },
+    "doGenerate": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "toggleDetail": {
+      "type": "method",
+      "params": [
+        "qid"
+      ]
+    },
+    "openReplace": {
+      "type": "method",
+      "params": [
+        "q",
+        "idx"
+      ]
+    },
+    "closeReplace": {
+      "type": "method",
+      "params": []
+    },
+    "doReplace": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "regenerate": {
+      "type": "method",
+      "params": []
+    },
+    "confirmPaper": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "startAnswer": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "goBack": {
+      "type": "method",
+      "params": []
+    }
   },
   "computed": {
-    "questionConfigParsed": { "type": "JSFunction" },
-    "gp_questionsParsed": { "type": "JSFunction" },
-    "totalQuestions": { "type": "JSFunction" },
-    "totalScore": { "type": "JSFunction" },
-    "estimatedDuration": { "type": "JSFunction" }
+    "questionConfigParsed": {
+      "type": "JSFunction"
+    },
+    "gp_questionsParsed": {
+      "type": "JSFunction"
+    },
+    "totalQuestions": {
+      "type": "JSFunction"
+    },
+    "totalScore": {
+      "type": "JSFunction"
+    },
+    "estimatedDuration": {
+      "type": "JSFunction"
+    }
   },
   "lifeCycles": {
-    "mounted": { "type": "method" }
+    "mounted": {
+      "type": "method"
+    }
   }
 }

@@ -27,7 +27,7 @@
               <span v-if="exam.exam_format" class="exam-format-badge">{{ exam.exam_format }}</span>
             </div>
             <div class="exam-meta-row">
-              <span v-if="exam.registration_display_html" class="exam-reg-time" v-html="exam.registration_display_html"></span>
+              <span v-if="exam.registration_display_html" class="exam-reg-time" v-html="sanitizeHtml(exam.registration_display_html)"></span>
               <span class="exam-province">{{ exam.province }}</span>
             </div>
           </div>
@@ -37,7 +37,7 @@
         </div>
         <!-- Accordion 展开详情 -->
         <div v-if="state.expandedId === index && (exam.content_html || exam.description)" class="exam-detail-expanded">
-          <div class="exam-detail-content" v-html="exam.content_html || exam.description"></div>
+          <div class="exam-detail-content" v-html="sanitizeHtml(exam.content_html || exam.description)"></div>
         </div>
       </div>
       <div v-if="state.loading" class="exam-loading">加载中...</div>
@@ -46,6 +46,7 @@
   </div>
 </template>
 <script lang="ts">
+import { sanitizeHtml } from '@/utils/questionRender';
   // @ts-nocheck
   import { defineComponent, reactive, ref, onMounted, nextTick } from 'vue';
   import { XIcon } from '@vtj/ui';
@@ -59,7 +60,7 @@
       const provider = useProvider({ id: 'exam_calendar', version: '1778915692038' });
       const state = reactive({ exams: [], loading: false, page: 1, hasMore: true, expandedId: -1 });
       const examList = ref(null);
-      return { state, props, provider, Calendar, DArrowRight, examList };
+      return { state, props, provider, Calendar, DArrowRight, examList, sanitizeHtml };
     },
     methods: {
       async fetchExams(reset) {

@@ -23,13 +23,13 @@
       <div class="detail-meta">{{ currentNews.source || '' }} · {{ formatTime(currentNews.publish_date) }}</div>
       <div class="detail-content" v-html="renderedContent"></div>
       <div
-        v-if="currentNews.images && currentNews.images.length && !hasInlineMarkers"
+        v-if="displayImages.length && !hasInlineMarkers"
         class="detail-images"
       >
         <img
-          v-for="(img, idx) in currentNews.images"
-          :key="idx"
-          :src="resolveImg(imageUrlOf(img))"
+          v-for="(src, idx) in displayImages"
+          :key="src + '-' + idx"
+          :src="src"
           :alt="'图片' + (idx + 1)"
         />
       </div>
@@ -109,6 +109,26 @@ const hasInlineMarkers = computed(() => {
   return !!c && /\[\[IMG:\d+\]\]/.test(c);
 });
 
+/**
+ * 去重后的图片列表。
+ * 采集端可能对同一张图重复入库（多条记录指向同一 URL），
+ * 原实现直接把 currentNews.images 全部渲染出来，
+ * 会出现「三张一模一样图片」。这里按解析后的 URL 去重并丢弃空值。
+ */
+const displayImages = computed(() => {
+  const list = (currentNews.value && currentNews.value.images) || [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const img of list) {
+    const url = resolveImg(imageUrlOf(img));
+    if (!url) continue;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+});
+
 const renderedContent = computed(() => renderContent(currentNews.value && currentNews.value.content));
 
 const goBack = () => {
@@ -129,7 +149,18 @@ const formatTime = (iso: string) => {
   return new Date(iso).toLocaleDateString();
 };
 
-const resolveImg = (url: string) => (url && url.startsWith('/') ? url : url);
+/**
+ * 归一化图片地址。
+ * 原实现是空操作（三元表达式两个分支都返回 url），协议相对地址 "//host/a.jpg"
+ * 在部分浏览器/环境会被当作路径解析而裂图，这里做最小必要归一化。
+ */
+const resolveImg = (url: string) => {
+  const u = (url || '').trim();
+  if (!u) return '';
+  // 协议相对地址补全为 https
+  if (u.startsWith('//')) return 'https:' + u;
+  return u;
+};
 
 const renderContent = (content: string) => {
   if (!content) return '';

@@ -29,16 +29,17 @@
       >全部</div>
       <div
         v-for="s in subjects"
-        :key="s.subject_id"
-        :class="['subj-tab', { active: currentSubject === s.subject_id }]"
-        @click="selectSubject(s.subject_id)"
-      >{{ s.subject_name }}</div>
+        :key="s.subject_id + '_' + s.subcategory"
+        :data-subcategory="s.subcategory"
+        :class="['subj-tab', { active: isSubjectTabActive(s) }]"
+        @click="selectSubject(s.subject_id, s.subcategory)"
+      >{{ s.subject_name }}·{{ s.subcategory }}</div>
     </div>
 
     <!-- 错题列表 -->
     <main class="list" v-if="activeTab === 'wrong'">
       <div v-for="item in items" :key="item.wrong_id" class="card" @click="toggleDetail(item)">
-        <div class="q-title">{{ item.question_content }}</div>
+        <div class="q-title">{{ renderQuestionSummary(item.question_content) }}</div>
         <div class="q-meta">
           <span class="tag">{{ item.subject_name || '未分类' }}</span>
           <span class="tag" v-if="item.sub_category">{{ item.sub_category }}</span>
@@ -47,7 +48,7 @@
         </div>
         <div v-if="expandedId === item.wrong_id" class="detail" @click.stop>
           <div class="detail-row"><b>答案：</b>{{ item.answer || '无' }}</div>
-          <div class="detail-row" v-if="item.answer_analysis"><b>解析：</b>{{ item.answer_analysis }}</div>
+          <div class="detail-row" v-if="item.answer_analysis"><b>解析：</b><span class="detail-html" v-html="renderQuestionContent(item.answer_analysis)"></span></div>
           <div class="detail-actions">
             <button class="chop-btn" @click="chopQuestion(item.wrong_id)">斩题（已掌握）</button>
             <button class="remove-btn" @click="removeWrong(item.wrong_id)">移出错题</button>
@@ -61,7 +62,7 @@
     <!-- 斩题记录 -->
     <main class="list" v-else>
       <div v-for="item in choppedItems" :key="item.wrong_id" class="card">
-        <div class="q-title">{{ item.question_content }}</div>
+        <div class="q-title">{{ renderQuestionSummary(item.question_content) }}</div>
         <div class="q-meta">
           <span class="tag">{{ item.subject_name || '未分类' }}</span>
           <span class="tag" :class="{ expiring: item.is_expiring }">{{ item.days_left }} 天后删除</span>
@@ -77,6 +78,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { renderQuestionContent, renderQuestionSummary } from '@/utils/questionRender';
 
 const router = useRouter();
 const auth: any = (window as any).__VTJ_AUTH__;
@@ -87,6 +89,7 @@ const loading = ref(false);
 const expandedId = ref<number | null>(null);
 const activeTab = ref<'wrong' | 'chopped'>('wrong');
 const currentSubject = ref(0);
+const currentSubcategory = ref('');
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -102,8 +105,16 @@ const switchTab = (tab: 'wrong' | 'chopped') => {
   if (tab === 'chopped') fetchChopped();
 };
 
-const selectSubject = (sid: number) => {
+// 分类 Tab 选中态：必须同时比较科目与子科目。
+// 后端 /wrong-questions/subcategories 的返回项 key 为 "{subject_id}_{subcategory}"，
+// 同一科目下可能有多个子科目，若只比 subject_id 会导致多个 Tab 同时高亮。
+const isSubjectTabActive = (s: any) =>
+  currentSubject.value === s.subject_id &&
+  currentSubcategory.value === (s.subcategory || '');
+
+const selectSubject = (sid: number, sc?: string) => {
   currentSubject.value = sid;
+  currentSubcategory.value = sc || '';
   fetchWrong();
 };
 
@@ -111,7 +122,13 @@ async function fetchWrong() {
   loading.value = true;
   try {
     let url = '/api/wrong-questions?page=1&page_size=100';
-    if (currentSubject.value > 0) url += '&subject_id=' + currentSubject.value;
+    if (currentSubject.value > 0) {
+      url += '&subject_id=' + currentSubject.value;
+      // 仅在指定了子科目时才追加，避免「全部」Tab 被误过滤
+      if (currentSubcategory.value) {
+        url += '&subcategory=' + encodeURIComponent(currentSubcategory.value);
+      }
+    }
     const res = await auth.apiFetch(url);
     const data = await res.json();
     if (res.ok && data.items) items.value = data.items;

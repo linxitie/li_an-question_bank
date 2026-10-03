@@ -61,6 +61,7 @@
             @click="selectCategory(cat.key)"
           >
             {{ cat.name }}
+            <span class="chip-count">{{ cat.count }}</span>
           </div>
         </div>
       </section>
@@ -118,34 +119,15 @@
     </main>
 
     <!-- 底部Tab栏 -->
-    <nav class="bottom-tab-bar">
-      <div :class="['tab-item', { active: activeTab === 'home' }]" @click="switchTab('home')">
-        <XIcon :icon="HomeFilled" :size="22" :color="activeTab === 'home' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">首页</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'question' }]" @click="switchTab('question')">
-        <XIcon :icon="Reading" :size="22" :color="activeTab === 'question' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">题库</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'practice' }]" @click="switchTab('practice')">
-        <XIcon :icon="Edit" :size="22" :color="activeTab === 'practice' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">练习</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'forum' }]" @click="switchTab('forum')">
-        <XIcon :icon="ChatLineRound" :size="22" :color="activeTab === 'forum' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">论坛</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'profile' }]" @click="switchTab('profile')">
-        <XIcon :icon="User" :size="22" :color="activeTab === 'profile' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">我的</span>
-      </div>
-    </nav>
+    <!-- 底部Tab栏：统一使用单一真源组件 src/components/MobileTabBar.vue -->
+    <!-- 决策 D2：底栏已移除「题库」tab，本页作为练习页下钻的二级页面，归属「练习」高亮 -->
+    <MobileTabBar active="practice" />
   </div>
 </template>
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted } from 'vue';
+import { defineComponent, ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
@@ -166,31 +148,30 @@ import {
   Cpu,
   Clock,
   Warning,
-  Trophy,
-  EditPen
+  Trophy
 } from '@vtj/icons';
+import MobileTabBar from '@/components/MobileTabBar.vue';
 import { useProvider } from '@vtj/renderer';
 
 export default defineComponent({
   name: 'MobileQuestionBank',
   components: {
-    XIcon
+    XIcon,
+    MobileTabBar
   },
   setup() {
     const router = useRouter();
     const provider = useProvider({ id: 'mobile_question_bank', version: '1788919369989' });
-    
-    // 当前Tab
-    const activeTab = ref('question');
-    
+
     // 搜索
     const showSearch = ref(false);
     const searchQuery = ref('');
     
     // 顶部操作
-    const activeTopAction = ref('quick');
+    // 已移除「快速练习」：它与下方三大科目分类入口职责重叠，
+    // 科目化练习统一走「练习」页的科目/子科目/知识点下钻。
+    const activeTopAction = ref('history');
     const topActions = ref([
-      { key: 'quick', name: '快速练习', icon: EditPen, tag: 'NEW' },
       { key: 'history', name: '历年试卷', icon: Clock, tag: '' },
       { key: 'smart', name: '智能组卷', icon: Cpu, tag: 'AI' },
       { key: 'ai', name: '联考小智', icon: Cpu, tag: '开发中' },
@@ -199,15 +180,39 @@ export default defineComponent({
     ]);
     
     // 分类
+    // key 必须与下方 fetchPapers 的 subjectMap 保持一致（xc/sw/jy），
+    // 否则点击该分类会筛不到任何内容，表现为「没有找到相关题目」。
+    // 政治理论 / 法律基础不再单列：二者在行测、公专的知识点下钻中已包含。
     const activeCategory = ref('all');
     const categories = ref([
-      { key: 'all', name: '全部' },
-      { key: 'xc', name: '行政职业能力' },
-      { key: 'sw', name: '申论' },
-      { key: 'jy', name: '公安专业科目' },
-      { key: 'zl', name: '政治理论' },
-      { key: 'fl', name: '法律基础' }
+      { key: 'all', name: '全部', count: 0 },
+      { key: 'xc', name: '行测', count: 0 },
+      { key: 'sw', name: '申论', count: 0 },
+      { key: 'jy', name: '公专', count: 0 }
     ]);
+
+    // 加载三科题量统计（真实数据来源：/api/questions/subcategory-stats）
+    const loadSubjectStats = async () => {
+      const auth = window.__VTJ_AUTH__;
+      if (!auth) return;
+      try {
+        const res = await fetch('/api/questions/subcategory-stats?_t=' + Date.now(), {
+          headers: auth.getAuthHeaders ? auth.getAuthHeaders() : {},
+          cache: 'no-cache'
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const sum = (arr) => (arr || []).reduce((acc, item) => acc + (item.count || 0), 0);
+        const map = { xc: sum(data.xingce), sw: sum(data.shenlun), jy: sum(data.gongzhuan) };
+        categories.value = categories.value.map((c) =>
+          c.key === 'all'
+            ? { ...c, count: data.total || 0 }
+            : { ...c, count: map[c.key] || 0 }
+        );
+      } catch (error) {
+        console.warn('加载科目题量统计失败:', error);
+      }
+    };
     
     // 题目列表
     const questions = ref([]);
@@ -232,7 +237,8 @@ export default defineComponent({
     });
     
     // 加载真实题库数据（已发布试卷，替换下方演示数据）
-    onMounted(async () => {
+    // 提取为具名方法，供 onMounted 与三端同步监听复用
+    const loadPaperList = async () => {
       try {
         const auth = window.__VTJ_AUTH__;
         if (auth && auth.isLoggedIn()) {
@@ -261,7 +267,38 @@ export default defineComponent({
       } catch (error) {
         console.error('加载题库失败:', error);
       }
+    };
+
+    onMounted(async () => {
+      window.addEventListener('__VTJ_SYNC__', onVTJSync);
+      // 科目题量统计与试卷列表并行加载
+      loadSubjectStats();
+      await loadPaperList();
     });
+
+    // ===== 三端实时同步：题目导入后刷新题量统计与试卷列表 =====
+    // 后端导入完成会广播 sync 事件，auth.ts 转发为 __VTJ_SYNC__。
+    // 只关心题库范围的事件；防抖 1.5s，避免批量导入时连续请求。
+    let syncTimer: any = null;
+    const onVTJSync = (e: any) => {
+      const d = e && e.detail && e.detail.data;
+      if (!d || d.scope !== 'question_bank') return;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        syncTimer = null;
+        loadSubjectStats();
+        loadPaperList();
+      }, 1500);
+    };
+    const offVTJSync = () => {
+      if (syncTimer) {
+        clearTimeout(syncTimer);
+        syncTimer = null;
+      }
+      window.removeEventListener('__VTJ_SYNC__', onVTJSync);
+    };
+
+    onBeforeUnmount(offVTJSync);
 
     // 方法
     const goBack = () => router.back();
@@ -281,9 +318,7 @@ export default defineComponent({
     
     const selectTopAction = (key: string) => {
       activeTopAction.value = key;
-      if (key === 'quick') {
-        router.push('/mobile/practice');
-      } else if (key === 'history') {
+      if (key === 'history') {
         router.push('/mobile/student-papers');
       } else if (key === 'smart') {
         router.push('/smart-exam');
@@ -304,21 +339,8 @@ export default defineComponent({
     const startPractice = (question: any) => {
       router.push('/mobile/answer');
     };
-    
-    const switchTab = (tab: string) => {
-      activeTab.value = tab;
-      const tabRoutes: Record<string, string> = {
-        home: '/mobile/home',
-        question: '/mobile/question-bank',
-        practice: '/mobile/practice',
-        forum: '/mobile/forum',
-        profile: '/mobile/profile'
-      };
-      router.push(tabRoutes[tab] || '/');
-    };
-    
+
     return {
-      activeTab,
       showSearch,
       searchQuery,
       activeTopAction,
@@ -333,7 +355,6 @@ export default defineComponent({
       selectTopAction,
       selectCategory,
       startPractice,
-      switchTab,
       ArrowLeft,
       ArrowRight,
       Search,
@@ -350,8 +371,7 @@ export default defineComponent({
       Cpu,
   Clock,
       Warning,
-      Trophy,
-      EditPen
+      Trophy
     };
   }
 });
@@ -531,6 +551,17 @@ export default defineComponent({
   color: #1A365D;
 }
 
+/* 分类 chip 上的真实题量（来自 /api/questions/subcategory-stats） */
+.chip-count {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.category-chip.active .chip-count {
+  opacity: 0.9;
+}
+
 /* 题目列表 */
 .question-list {
   display: flex;
@@ -623,46 +654,7 @@ export default defineComponent({
   margin: 16px 0 0;
 }
 
-/* 底部Tab栏 */
-.bottom-tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: #ffffff;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  border-top: 1px solid #f0f2f5;
-  padding-bottom: env(safe-area-inset-bottom, 0);
-  z-index: 100;
-}
-
-.tab-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  height: 100%;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-item.active {
-  color: #1A365D;
-}
-
-.tab-item:not(.active) {
-  color: #a0a4b8;
-}
-
-.tab-label {
-  font-size: 10px;
-  font-weight: 500;
-  margin-top: 2px;
-}
+/* 底部Tab栏样式已收敛到单一真源组件 src/components/MobileTabBar.vue */
 
 @media (max-width: 375px) {
   .action-btn {

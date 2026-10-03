@@ -32,7 +32,7 @@
           <span v-if="item.registration_end" class="date">截止 {{ item.registration_end }}</span>
         </div>
         <div v-if="expandedId === item.id" class="detail" @click.stop>
-          <div class="detail-content" v-html="item.content_html || item.content || ''"></div>
+          <div class="detail-content" v-html="renderContent(item.content_html || item.content || '')"></div>
           <div v-if="item.contact_info" class="contact">联系电话：{{ item.contact_info }}</div>
           <a v-if="item.url" :href="item.url" target="_blank" rel="noopener" class="origin-link">查看原文</a>
         </div>
@@ -46,8 +46,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 const router = useRouter();
+
+// 招聘正文来自服务端 HTML，此前直接 v-html 输出，缺少白名单清洗。
+// 统一收敛到 questionRender 的单一真源。
+const renderContent = (text: string) => renderQuestionContent(text);
 const categories = ref<string[]>([]);
 const items = ref<Record<string, any[]>>({});
 const activeCat = ref('');

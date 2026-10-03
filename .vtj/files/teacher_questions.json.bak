@@ -153,6 +153,19 @@
     "handleLogout": {
       "type": "method",
       "params": []
+    },
+    "editHasImage": {
+      "type": "method",
+      "params": [
+        "text: string"
+      ]
+    },
+    "handleImageError": {
+      "type": "method",
+      "params": [
+        "event: Event",
+        "questionId?: number"
+      ]
     }
   },
   "lifeCycles": {

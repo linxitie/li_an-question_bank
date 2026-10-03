@@ -108,7 +108,7 @@
                 <span class="q-type">{{ q.question_type || '未知题型' }}</span>
                 <span class="q-score">{{ q.score }}分</span>
               </div>
-              <div class="q-content" v-html="q.question_content || q.clean_content"></div>
+              <div class="q-content" v-html="renderQuestionContent(q.question_content || q.clean_content, { stripInlineOption: true })"></div>
               <div v-if="q.options && q.options.length" class="q-options">
                 <div v-for="opt in q.options" :key="opt.key || opt" class="q-option">
                   <span class="opt-key">{{ opt.key || opt }}.</span>
@@ -129,6 +129,7 @@ import { defineComponent, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'StudentPapers',
@@ -291,6 +292,7 @@ export default defineComponent({
       loadPapers, loadUserProgress, subjectName, examTypeLabel, examTypeClass,
       getPaperStatus, startExam, previewPaper,
       showPreviewModal, previewLoading, currentPreviewPaper, previewQuestions, closePreview,
+      renderQuestionContent,
     };
   }
 });

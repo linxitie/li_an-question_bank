@@ -106,7 +106,7 @@
     <!-- 文章阅读弹窗 -->
     <el-dialog v-model="state.articleDlg" :title="state.cur.title || '备考指南'"
                width="820px" top="4vh" destroy-on-close>
-      <div class="material-article" v-html="state.cur.content"></div>
+      <div class="material-article" v-html="sanitizeHtml(state.cur.content)"></div>
       <footer class="dlg-foot">
         <span v-if="state.cur.read_time">约 {{ state.cur.read_time }} 分钟阅读</span>
         <el-button size="small" round @click="toggleFav(state.cur)">
@@ -122,6 +122,7 @@
 import { defineComponent, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
+import { sanitizeHtml } from '@/utils/questionRender';
 
 const SUBJECT = 'xingce';
 
@@ -144,7 +145,7 @@ export default defineComponent({
       flipped: {},
       _lastReport: {}
     });
-    return { state, props, provider };
+    return { state, props, provider, sanitizeHtml };
   },
   methods: {
     sections() {

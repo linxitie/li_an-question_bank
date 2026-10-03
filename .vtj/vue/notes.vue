@@ -262,10 +262,9 @@
               const statsData = JSON.parse(text);
               this.state.stats = statsData;
             } catch(parseErr) {
-              const res2 = await fetch('http://localhost:8000/api/notes/stats', { headers: this.getJsonHeaders() });
-              if (res2.ok) {
-                this.state.stats = await res2.json();
-              }
+              // 响应非 JSON：不发起二次请求（原实现会回退到硬编码
+              // http://localhost:8000，该地址在生产环境不存在，必然失败）
+              console.warn('[notes] 统计响应不是合法 JSON:', parseErr);
             }
           }
         } catch(e) { console.warn('加载统计失败:', e); }
@@ -281,13 +280,9 @@
             try {
               data = JSON.parse(text);
             } catch(parseErr) {
-              const directUrl = 'http://localhost:8000/api/notes/' + this.state.activeTab + '?page=' + this.state.page + '&page_size=' + this.state.pageSize;
-              const res2 = await fetch(directUrl, { headers: this.getJsonHeaders() });
-              if (res2.ok) {
-                data = await res2.json();
-              } else {
-                throw new Error('Direct backend request failed: ' + res2.status);
-              }
+              // 响应非 JSON：抛出明确错误，不再回退到硬编码
+              // http://localhost:8000（该地址在生产环境不存在，必然失败）
+              throw new Error('笔记接口响应不是合法 JSON: ' + parseErr.message);
             }
             this.state.total = data.total || 0;
             if (this.state.activeTab === 'news') {
@@ -404,12 +399,9 @@
             try {
               this.state.questionDetail = JSON.parse(text);
             } catch(parseErr) {
-              const res2 = await fetch('http://localhost:8000/api/notes/question/' + questionId, {
-                headers: this.getJsonHeaders()
-              });
-              if (res2.ok) {
-                this.state.questionDetail = await res2.json();
-              }
+              // 响应非 JSON：不发起二次请求（原实现会回退到硬编码
+              // http://localhost:8000，该地址在生产环境不存在，必然失败）
+              console.warn('[notes] 题目详情响应不是合法 JSON:', parseErr);
             }
           } else {
             ElMessage.error('加载题目详情失败');

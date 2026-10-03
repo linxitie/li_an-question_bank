@@ -47,6 +47,9 @@ def to_response(goal: StudyGoal) -> dict:
         "goal_type": goal.goal_type,
         "target_count": goal.target_count,
         "current_count": goal.current_count,
+        # 今日学习科目与预期学习时长（供首页/金币购共用同一目标结构）
+        "subject_mode": goal.subject_mode,
+        "expected_minutes": goal.expected_minutes,
         "deadline": goal.deadline,
         "priority": goal.priority,
         "is_completed": bool(goal.is_completed),
@@ -120,6 +123,9 @@ async def create_goal(
         goal_type=goal_data.goal_type.value,
         target_count=goal_data.target_count,
         current_count=0,
+        # 今日学习科目与预期学习时长（0=混科/未设置）
+        subject_mode=goal_data.subject_mode,
+        expected_minutes=goal_data.expected_minutes,
         deadline=goal_data.deadline,
         priority=goal_data.priority,
         is_completed=0,
@@ -176,6 +182,12 @@ async def update_goal(
         goal.is_completed = 1
         if not goal.completed_time:
             goal.completed_time = datetime.now()
+    # 反向纠正：目标被调高到当前进度之上时，必须撤销「已完成」标记，
+    # 否则 is_completed 残留为 1，前端按 is_completed 过滤时会查不到该目标，
+    # 表现为「保存后刷新恢复成默认值」（今日目标丢失的直接原因）。
+    elif goal.is_completed and goal.target_count > 0 and goal.current_count < goal.target_count:
+        goal.is_completed = 0
+        goal.completed_time = None
 
     goal.update_time = datetime.now()
     commit_with_retry(db)

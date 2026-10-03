@@ -12,11 +12,30 @@
     "activeCategory": "'all'"
   },
   "methods": {
-    "goBack": { "type": "method" },
-    "selectTab": { "type": "method", "params": ["key"] },
-    "createPost": { "type": "method" },
-    "viewPost": { "type": "method", "params": ["post"] },
-    "switchTab": { "type": "method", "params": ["tab"] }
+    "goBack": {
+      "type": "method"
+    },
+    "selectTab": {
+      "type": "method",
+      "params": [
+        "key"
+      ]
+    },
+    "createPost": {
+      "type": "method"
+    },
+    "viewPost": {
+      "type": "method",
+      "params": [
+        "post"
+      ]
+    },
+    "onAvatarError": {
+      "type": "method",
+      "params": [
+        "post"
+      ]
+    }
   },
   "computed": {},
   "lifeCycles": {},

@@ -1,0 +1,21 @@
+﻿T3 进度列 + 幂等迁移 验证 (2026-09-29)
+文件: backend/app/models/models.py (QuestionImportRecord 新增两列)
+      backend/migrations/add_import_progress.py (新增幂等迁移脚本)
+
+注意: 本文件另有一个学习进度表的 progress_percent(Float)，与本任务无关，未触碰
+
+列定义(符合计划要求 Integer/String(50)，非 Float):
+  progress_percent  INTEGER  默认 0
+  current_phase     VARCHAR(50)
+
+迁移结果:
+  [1/3] 备份 -> backend/data/backups/pre_import_progress_20260929_200344/question_bank.db
+        SHA256 = 2440a66b7c95ce942c421cea7dd71a7ce1cdf460a2c0c0c968149353907b881e
+  [2/3] 第1次新增列 ['progress_percent','current_phase']
+        第2次新增列 无 / 已存在跳过 ['progress_percent','current_phase']  <- 幂等验证通过
+  [3/3] question_bank 行数 2484 -> 2484  一致 PASS
+        integrity_check = ok  PASS
+  两次执行退出码均为 0
+
+脚本要点: PRAGMA table_info 先判存在性再 ALTER；备份也过 integrity_check 才继续；
+          --no-backup 可跳过但不建议

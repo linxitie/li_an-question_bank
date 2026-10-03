@@ -28,6 +28,12 @@
           <option :value="4">★★★★</option>
           <option :value="5">★★★★★</option>
         </select>
+        <!-- P3b：待复核筛选（导入时题型判定置信度不足的题） -->
+        <select class="filter-select review-select" v-model="filterReview" @change="doSearch">
+          <option value="">全部状态</option>
+          <option value="1">⚠ 待复核</option>
+          <option value="0">已确认</option>
+        </select>
         <button class="btn-search" @click="doSearch">搜索</button>
         <div class="toolbar-spacer"></div>
         <button class="btn-import" @click="goImport">📤 题目导入</button>
@@ -41,7 +47,7 @@
               <th style="width:60px">序号</th>
               <th>题干摘要</th>
               <th style="width:70px">科目</th>
-              <th style="width:90px">题型</th>
+              <th style="width:110px">题型</th>
               <th style="width:80px">难度</th>
               <th style="width:90px">操作</th>
             </tr>
@@ -49,9 +55,12 @@
           <tbody>
             <tr v-for="(q, index) in questions" :key="q.question_id" :class="{ 'has-image': hasImage(q.question_content) }">
               <td class="td-seq">{{ (page - 1) * pageSize + index + 1 }}</td>
-              <td class="td-content" @click="showDetail(q)" v-html="renderSummary(q)"></td>
+              <td class="td-content" @click="showDetail(q)">{{ renderSummary(q) }}</td>
               <td>{{ subjectName(q.subject_id) }}</td>
               <td>
+                <!-- P3b：待复核徽标。题型判定置信度不足的题在此显式提示，
+                     避免教师以错误题型把它编入试卷。 -->
+                <span v-if="q.need_review" class="review-flag" title="导入时题型判定置信度不足，请人工确认">⚠ 待复核</span>
                 <span :class="['type-badge', typeBadgeClass(q.type_name)]">
                   {{ typeDisplayName(q.type_name) }}
                 </span>
@@ -112,7 +121,7 @@
             <div v-for="(opt, key) in parsedOptions(currentQuestion.options)" :key="key"
                  :class="['option-item', { 'correct-option': isCorrectOption(key, currentQuestion.answer) }]">
               <span class="option-key">{{ key }}.</span>
-              <span class="option-value" v-html="opt"></span>
+              <span class="option-value" v-html="renderQuestionContent(opt)"></span>
               <span v-if="isCorrectOption(key, currentQuestion.answer)" class="correct-mark">✅ 正确答案</span>
             </div>
           </div>
@@ -125,7 +134,7 @@
 
         <div class="detail-field">
           <strong>答案解析：</strong>
-          <div class="analysis-box" v-if="currentQuestion.answer_analysis" v-html="currentQuestion.answer_analysis"></div>
+          <div class="analysis-box" v-if="currentQuestion.answer_analysis" v-html="renderQuestionContent(currentQuestion.answer_analysis)"></div>
           <span v-else class="no-data">暂无解析</span>
         </div>
 
@@ -166,6 +175,21 @@
         <div class="form-group">
           <label>题干内容</label>
           <textarea class="form-input form-textarea" v-model="editForm.question_content" rows="4" placeholder="请输入题干内容（支持HTML）"></textarea>
+          <!-- P0-2 修复：编辑含图片题目时，textarea 里只能看到 <img src="/static/..."> 原文。
+               在输入框下方加实时渲染预览，教师可直接确认图片是否正确挂到该题。 -->
+          <div class="edit-preview-block" v-if="editForm.question_content">
+            <div class="edit-preview-head">
+              <span>实时预览</span>
+              <label class="edit-preview-toggle">
+                <input type="checkbox" v-model="editPreviewOpen" />
+                <span>{{ editPreviewOpen ? '收起' : '展开' }}</span>
+              </label>
+            </div>
+            <div class="edit-preview-body" v-if="editPreviewOpen" v-html="renderQuestionContent(editForm.question_content)"></div>
+          </div>
+          <div class="field-hint" v-if="!editHasImage(editForm.question_content)">
+            提示：题干若含图片，请确认下方预览能正常显示；若显示为红色占位图说明图片文件缺失。
+          </div>
         </div>
 
         <div class="form-group" v-if="showOptionFields">
@@ -190,6 +214,7 @@
         <div class="form-group">
           <label>答案解析</label>
           <textarea class="form-input form-textarea" v-model="editForm.answer_analysis" rows="3" placeholder="请输入答案解析（支持HTML）"></textarea>
+          <div class="edit-preview-body" v-if="editPreviewOpen && editForm.answer_analysis" v-html="renderQuestionContent(editForm.answer_analysis)"></div>
         </div>
 
         <div class="form-group">
@@ -215,6 +240,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import TeacherNavHeader from './TeacherNavHeader.vue';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'TeacherQuestions',
@@ -226,6 +252,8 @@ export default defineComponent({
     const keyword = ref('');
     const filterSubject = ref('');
     const filterType = ref('');
+    // P3b：待复核筛选。'' = 不限，'1' = 仅看待复核，'0' = 仅看已确认
+    const filterReview = ref('');
     const filterDifficulty = ref('');
     const questions: any = ref([]);
     const page = ref(1);
@@ -242,6 +270,8 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
     const showEditModal = ref(false);
     const saving = ref(false);
     const currentQuestionTypeName = ref('');
+    // P0-2：编辑弹窗内的实时渲染预览开关（默认展开，含图题目直接可见）
+    const editPreviewOpen = ref(true);
     const editForm: any = ref({
       question_id: null, subject_id: 1, type_id: 1,
       question_content: '', answer: '', answer_analysis: '',
@@ -269,6 +299,9 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       if (filterSubject.value) params.append('subject_id', filterSubject.value);
       if (filterType.value) params.append('type_name', filterType.value);
       if (filterDifficulty.value) params.append('difficulty', filterDifficulty.value);
+      // P3b：待复核筛选（need_review=1）。导入时题型判定置信度不足的题会被标记，
+      // 由教师在这里集中确认，避免它们以错误题型长期混在题库里。
+      if (filterReview.value !== '') params.append('need_review', filterReview.value);
       params.append('page', String(page.value));
       params.append('page_size', String(pageSize));
 
@@ -348,6 +381,11 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
     }
 
     // 新增：清洗HTML内容中的UTB ID，并修复图片路径（用于详情弹窗v-html显示）
+    // 题目正文渲染统一收敛到 src/utils/questionRender.js 这一单一真源。
+    // 修复点：此前本函数只做 UTB/题号/图片占位符处理，**完全没有白名单清洗**，
+    // 其输出被直接 v-html 渲染，题干中的 <script>/onerror 等可执行，形成 XSS 缺口。
+    // 现在保留教师侧特有的导入残留清理与图片路径纠正，
+    // 清洗、标记转换、onerror 兜底一律交给公共渲染器，避免两套实现再次分叉。
     function cleanHtmlContent(text: string) {
       if (!text) return '';
       let cleaned = text;
@@ -355,26 +393,12 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       cleaned = cleaned.replace(/UTB[a-f0-9]{8,}[-－]?\s*选项?[A-H]?[-－]?\d*/gi, '');
       // 移除题号前缀
       cleaned = cleaned.replace(/第\s*\d+\s*题[：:]\s*/g, '');
-      
-      // 修复 [IMAGE:hash_idx] 占位符为真实img标签（扁平路径格式）
-      cleaned = cleaned.replace(/\[IMAGE:([a-fA-F0-9]+)[_-](\d+)\]/g, function(_match: string, hash: string, idx: string) {
-        return '<img src="/static/questions/' + hash + '_' + idx + '.png" ' +
-          'class="question-img" loading="lazy" ' +
-          'onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
-      });
-      
-      // 修复已有的img标签，添加onerror兜底
-      cleaned = cleaned.replace(/<img\s+([^>]*?)(?:\s*\/?>|>)/g, function(match: string, attrs: string) {
-        // 如果已经有onerror，不重复添加
-        if (attrs.toLowerCase().includes('onerror')) return match;
-        // 修复路径：确保 /static/questions/ 格式
-        let fixedAttrs = attrs.replace(/src="(?!\/static\/|http)([^"]+)"/g, 'src="/static/questions/$1"');
-        return '<img ' + fixedAttrs + ' onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
-      });
-      
+      // 修复相对路径的既有 img 标签：确保 /static/questions/ 前缀
+      cleaned = cleaned.replace(/(<img\b[^>]*?\bsrc=")(?!\/static\/|https?:\/\/)([^"]+)"/gi, '$1/static/questions/$2"');
       // 合并多余空白
       cleaned = cleaned.replace(/\s+/g, ' ');
-      return cleaned.trim();
+      // 统一交给公共渲染器：白名单清洗 + [IMAGE:hash_idx] → <img> + onerror 兜底
+      return renderQuestionContent(cleaned.trim());
     }
 
     function truncate(text: string, len: number) {
@@ -387,6 +411,13 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
     function hasImage(text: string) {
       if (!text) return false;
       return /\[IMAGE:|<img/.test(text);
+    }
+
+    // P0-2：判断编辑框内容是否含图，用于给出"图片是否正常"的操作提示。
+    // 同时识别 [IMAGE:xxx] 占位符与 <img> 标签两种形态（导入管线两种都可能残留）。
+    function editHasImage(text: string) {
+      if (!text) return false;
+      return /\[IMAGE:[^\]]+\]|<img[\s>]/i.test(String(text));
     }
 
     // 图片加载失败处理 - 多级重试机制
@@ -618,16 +649,17 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 
     return {
       provider,
-      keyword, filterSubject, filterType, filterDifficulty,
+      keyword, filterSubject, filterType, filterDifficulty, filterReview,
       questions, page, pageSize, total, totalPages,
       showDetailModal, currentQuestion, groupInfo,
       showEditModal, saving, currentQuestionTypeName, editForm, showOptionFields, optionCount,
+      editPreviewOpen, editHasImage,
       doSearch, changePage, subjectName, typeDisplayName, typeBadgeClass,
       renderStars, truncate, stripPromoText, hasImage, renderSummary,
       hasOptions, parsedOptions, isCorrectOption,
       showDetail, openEdit, addOption, removeOption, saveEdit,
       deleteQuestion, goImport, handleLogout, cleanHtmlContent,
-      handleImageError,
+      handleImageError, renderQuestionContent,
     };
   }
 });
@@ -668,6 +700,9 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 /* 题型徽章 */
 .type-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 13px; font-weight: 500; color: #fff; }
 .type-badge-lg { padding: 4px 14px; font-size: 15px; }
+/* P3b：待复核徽标 */
+.review-flag { display: inline-block; margin-right: 4px; padding: 2px 6px; border-radius: 4px; background: #FEF0F0; color: #F56C6C; border: 1px solid #FBC4C4; font-size: 12px; line-height: 1.4; white-space: nowrap; }
+.review-select { border-color: #FBC4C4; }
 .badge-single { background: #409EFF; }
 .badge-multi { background: #67C23A; }
 .badge-judge { background: #8B5CF6; }
@@ -676,13 +711,22 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 
 /* 详情弹窗 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal-content { background: #fff; border-radius: 12px; padding: 28px; max-width: 1100px; width: 90%; max-height: 80vh; overflow-y: auto; }
+/* P0-4：1100px → 1280px / 80vh → 85vh。
+   含图表题的题干图片原始宽度常达 1000px+，1100px 容器内会被压到 900px 以下，
+   表格/流程图类图片文字不可读。 */
+.modal-content { background: #fff; border-radius: 12px; padding: 28px; max-width: 1280px; width: 94vw; max-height: 85vh; overflow-y: auto; }
 .modal-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .modal-header h3 { color: #1A3C6D; margin: 0; flex: 1; }
-.detail-modal { max-width: 1100px; }
+.detail-modal { max-width: 1280px; }
 .detail-field { margin-bottom: 14px; line-height: 1.8; }
 .detail-field strong { color: #1A3C6D; }
 .detail-content { margin-top: 6px; padding: 10px 14px; background: #f9fafb; border-radius: 8px; line-height: 1.8; }
+/* P0-2：编辑弹窗实时预览区 */
+.edit-preview-block { margin-top: 10px; border: 1px solid #e8e8e8; border-radius: 8px; overflow: hidden; }
+.edit-preview-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f5f7fa; border-bottom: 1px solid #e8e8e8; font-size: 13px; color: #1A3C6D; font-weight: 600; }
+.edit-preview-toggle { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; color: #666; cursor: pointer; }
+.edit-preview-body { padding: 12px 14px; background: #fff; line-height: 1.8; font-size: 14px; color: #333; max-height: 420px; overflow-y: auto; }
+.edit-preview-body :deep(img), .edit-preview-body img { max-width: 100%; max-height: 400px; height: auto; object-fit: contain; display: block; margin: 10px 0; border-radius: 6px; border: 1px solid #f0f0f0; background: #fff; }
 .detail-content img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
   .options-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
   .group-badge { margin-left: 6px; font-size: 12px; cursor: help; }
@@ -699,7 +743,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 .low-rate { color: #F56C6C; font-weight: 600; }
 
 /* 编辑弹窗 */
-.edit-modal { max-width: 1100px; }
+.edit-modal { max-width: 1280px; }
 .edit-modal h3 { color: #1A3C6D; margin: 0 0 20px; }
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #1A3C6D; font-size: 14px; }

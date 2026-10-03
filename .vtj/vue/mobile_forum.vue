@@ -18,7 +18,7 @@
         <div 
           v-for="(tab, index) in tabs" 
           :key="index"
-          :class="['tab-item', { active: activeTab === tab.key }]"
+          :class="['cat-tab', { active: activeCategory === tab.key }]"
           @click="selectTab(tab.key)"
         >
           {{ tab.name }}
@@ -40,7 +40,14 @@
           <div class="post-header">
             <div class="author-info">
               <div class="author-avatar" :style="{ background: post.avatarBg }">
-                <XIcon :icon="User" :size="16" color="#ffffff"></XIcon>
+                <img
+                  v-if="post.avatar && !post.avatarFailed"
+                  :src="post.avatar"
+                  class="avatar-img"
+                  alt="头像"
+                  @error="onAvatarError(post)"
+                />
+                <XIcon v-else :icon="User" :size="16" color="#ffffff"></XIcon>
               </div>
               <div class="author-detail">
                 <span class="author-name">{{ post.author }}</span>
@@ -104,29 +111,8 @@
       <XIcon :icon="Plus" :size="24" color="#ffffff"></XIcon>
     </div>
 
-    <!-- 底部Tab栏 -->
-    <nav class="bottom-tab-bar">
-      <div :class="['tab-item', { active: activeTab === 'home' }]" @click="switchTab('home')">
-        <XIcon :icon="HomeFilled" :size="22" :color="activeTab === 'home' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">首页</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'question' }]" @click="switchTab('question')">
-        <XIcon :icon="Reading" :size="22" :color="activeTab === 'question' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">题库</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'practice' }]" @click="switchTab('practice')">
-        <XIcon :icon="Edit" :size="22" :color="activeTab === 'practice' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">练习</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'forum' }]" @click="switchTab('forum')">
-        <XIcon :icon="ChatLineRound" :size="22" :color="activeTab === 'forum' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">论坛</span>
-      </div>
-      <div :class="['tab-item', { active: activeTab === 'profile' }]" @click="switchTab('profile')">
-        <XIcon :icon="User" :size="22" :color="activeTab === 'profile' ? '#1A365D' : '#a0a4b8'"></XIcon>
-        <span class="tab-label">我的</span>
-      </div>
-    </nav>
+    <!-- 底部Tab栏：统一使用单一真源组件 src/components/MobileTabBar.vue -->
+    <MobileTabBar active="forum" />
   </div>
 </template>
 
@@ -135,6 +121,7 @@
 import { defineComponent, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
+import MobileTabBar from '@/components/MobileTabBar.vue';
 import {
   ArrowLeft,
   Plus,
@@ -152,16 +139,14 @@ import { useProvider } from '@vtj/renderer';
 
 export default defineComponent({
   name: 'MobileForum',
-  components: {
-    XIcon
-  },
+    components: {
+      XIcon,
+      MobileTabBar
+    },
   setup() {
     const router = useRouter();
     const provider = useProvider({ id: 'mobile_forum', version: '1788919369989' });
-    
-    // 当前Tab
-    const activeTab = ref('forum');
-    
+
     // 分类标签
     const activeCategory = ref('all');
     const tabs = ref([
@@ -262,7 +247,11 @@ export default defineComponent({
     // 加载真实帖子数据（替换下方演示数据）
     onMounted(async () => {
       try {
-        const res = await fetch('/api/forum/posts');
+        // 补认证头：缺失时后端只会返回公开数据，私有/审核态字段与用户信息会缺失
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await fetch('/api/forum/posts', {
+          headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.posts && data.posts.length) {
@@ -288,6 +277,9 @@ export default defineComponent({
                 excerpt: p.content || '',
                 author: (p.user && p.user.nickname) || '匿名',
                 time,
+                // 后端 forum.py 在 user 存在时返回 avatar 字段（forum.py:72/99）
+                avatar: (p.user && p.user.avatar) || '',
+                avatarFailed: false,
                 avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
                 tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
                 tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
@@ -305,6 +297,11 @@ export default defineComponent({
       }
     });
 
+    // 头像加载失败时降级为默认人形图标，避免出现破图
+    const onAvatarError = (post: any) => {
+      if (post) post.avatarFailed = true;
+    };
+
     // 方法
     const goBack = () => router.back();
     
@@ -319,21 +316,8 @@ export default defineComponent({
     const viewPost = (post: any) => {
       router.push(`/mobile/forum/${post.id}`);
     };
-    
-    const switchTab = (tab: string) => {
-      activeTab.value = tab;
-      const tabRoutes: Record<string, string> = {
-        home: '/mobile/home',
-        question: '/mobile/question-bank',
-        practice: '/mobile/practice',
-        forum: '/mobile/forum',
-        profile: '/mobile/profile'
-      };
-      router.push(tabRoutes[tab] || '/');
-    };
-    
+
     return {
-      activeTab,
       activeCategory,
       tabs,
       filteredPosts,
@@ -341,7 +325,7 @@ export default defineComponent({
       selectTab,
       createPost,
       viewPost,
-      switchTab,
+      onAvatarError,
       ArrowLeft,
       Plus,
       User,
@@ -421,7 +405,7 @@ export default defineComponent({
   -webkit-overflow-scrolling: touch;
 }
 
-.tab-item {
+.cat-tab {
   padding: 8px 16px;
   border-radius: 20px;
   font-size: 14px;
@@ -433,12 +417,12 @@ export default defineComponent({
   white-space: nowrap;
 }
 
-.tab-item.active {
+.cat-tab.active {
   background: #1A365D;
   color: #ffffff;
 }
 
-.tab-item:hover:not(.active) {
+.cat-tab:hover:not(.active) {
   background: #e8ecf1;
 }
 
@@ -491,6 +475,17 @@ export default defineComponent({
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* 真实头像：铺满圆形容器，避免变形 */
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 
 .author-detail {
@@ -626,46 +621,7 @@ export default defineComponent({
   transform: scale(1.1);
 }
 
-/* 底部Tab栏 */
-.bottom-tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: #ffffff;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  border-top: 1px solid #f0f2f5;
-  padding-bottom: env(safe-area-inset-bottom, 0);
-  z-index: 100;
-}
-
-.tab-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  height: 100%;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-item.active {
-  color: #1A365D;
-}
-
-.tab-item:not(.active) {
-  color: #a0a4b8;
-}
-
-.tab-label {
-  font-size: 10px;
-  font-weight: 500;
-  margin-top: 2px;
-}
+/* 底部Tab栏样式已收敛到单一真源组件 src/components/MobileTabBar.vue */
 
 @media (max-width: 375px) {
   .post-card {

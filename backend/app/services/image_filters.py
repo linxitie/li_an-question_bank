@@ -217,8 +217,38 @@ _BLOCK_REASONS = {'qr_code', 'promo_banner'}
 _SUSPECT_REASONS = {'qr_likely', 'promo_likely', 'qr_pattern', 'tiny', 'extreme_ratio', 'blank'}
 
 
-def classify_image(img_data: bytes):
+def is_trailing_irrelevant(img_bytes: bytes, position_ratio: float) -> tuple:
+    """文末推广图/二维码的**位置规则**（与内容规则正交的第二道防线）。
+
+    position_ratio：图片在全文中的相对位置（0=开头，1=结尾）
+
+    真实事故：2019 新疆兵团卷末题尾部出现 `[IMAGE:72648561_90_0]`、
+    `[IMAGE:72648561_90_1]` 两张推广二维码。它们印刷模糊/带 logo，
+    OpenCV 解不出内容（`qr_code` 分支不命中），`qr_pattern` 又是"疑似"级，
+    于是 block 级规则全部漏过，二维码被当成题目图片入库。
+
+    本规则不看图片内容，**只看位置**：文末区间的图无论能否解码一律丢弃。
+    调用方（text_parser._strip_trailing_images）已在解析层做了结构级剥离，
+    本函数是导入侧的兜底，两者不冲突。
+
+    返回 (是否无关, 原因)；不抛异常。
+    """
+    try:
+        if position_ratio is None:
+            return False, ''
+        r = float(position_ratio)
+    except (TypeError, ValueError):
+        return False, ''
+    # 阈值 0.985：最后 1.5% 区域。真题配图位于题干内，位置不会贴到文末。
+    if r >= 0.985:
+        return True, f'trailing_zone(ratio={r:.4f}>=0.985)'
+    return False, ''
+
+
+def classify_image(img_data: bytes, position_ratio: 'float | None' = None):
     """P2-1 三级判定：返回 (decision, reason)。
+
+    position_ratio 可选，传入时启用"文末推广图"位置规则（见 is_trailing_irrelevant）。
 
     decision 取值：
       'block'   — 实锤无关图（QR 解码成功 / 黑名单 md5 命中），可自动拦截删除
@@ -228,6 +258,12 @@ def classify_image(img_data: bytes):
     与 is_irrelevant_image 的关系：本函数是其"分级"封装，供导入侧（block 拦截、
     suspect 标记）与存量清理脚本（仅 block 删除、suspect 列出）复用同一判定标准。
     """
+    # 位置规则优先：文末推广图无论内容如何一律 block（与内容规则正交）
+    if position_ratio is not None:
+        tail_hit, tail_reason = is_trailing_irrelevant(img_data, position_ratio)
+        if tail_hit:
+            return 'block', tail_reason
+
     hit, reason = is_irrelevant_image(img_data)
     if not hit:
         return 'keep', ''

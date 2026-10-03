@@ -1,0 +1,30 @@
+{
+  "id": "mobile_home",
+  "__VERSION__": "1788919369989",
+  "css": "",
+  "state": {
+    "userName": "同学",
+    "streakDays": "15",
+    "todayGoal": "40",
+    "todayCompleted": "30"
+  },
+  "methods": {
+    "openGoalEdit": {
+      "type": "method",
+      "params": []
+    },
+    "saveGoal": {
+      "type": "asyncMethod",
+      "params": []
+    },
+    "loadDailyGoal": {
+      "type": "asyncMethod",
+      "params": []
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    }
+  }
+}

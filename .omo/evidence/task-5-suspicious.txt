@@ -1,0 +1,32 @@
+﻿T5 串题检测: 标记可疑(主) + 自动二次切分(辅) 验证 (2026-09-29)
+文件: backend/app/services/text_parser.py
+实现: 新增 _INNER_QN_LINE + _mark_and_split_suspected()
+      在 extract_question_blocks 末尾调用，题块新增 suspicious / suspicious_reason /
+      split_into / recovered_from 字段
+
+策略(按用户决策5: 以标记可疑为主):
+  主: 块内出现除自身以外的题号 -> 一律打 suspicious=True 并写明混入的题号清单
+  辅: 仅当内部题号【严格递增且互不重复】且首行即本块题号时才自动二次切分
+      条件不满足则只标记、绝不改动内容 (宁可标记不错切)
+  明确不采用: 放宽 extract_question_numbers 的 monotonic 约束
+      (会重引入 2017国考第100题 幽灵题缺陷)
+
+踩坑记录:
+  _INNER_QN_LINE 初版漏 re.MULTILINE，导致 findall 的 ^ 只匹配整段开头，
+  3个真实污染块未被检出；已加 re.M 修正
+
+目标PDF 2023年1月7日(验收: 块内多题号=0):
+  题块 70 | 块内>=2题号 0 | suspicious 0 | 题号连续 1..70   PASS
+
+114 DOCX 回归:
+  A(改动前) 题块 10878 | 含多题号块 3
+  B(改动后) 题块 10878 | 含多题号块 3 | suspicious 3 | 已切分 0
+  题块不减少        PASS
+  误报检查          suspicious(3) == 真实污染(3) -> 零误报 PASS
+  未切分原因: 该3例内部题号为 97 之后跟 77/89/90，非严格递增，
+              按主策略保留内容仅标记，交教师在预览页用逐题删除处理
+
+样本(2021年12月12日江苏考):
+  question_number=97
+  suspicious=True
+  suspicious_reason='块内混入 3 个其他题号: [77, 89, 90]'

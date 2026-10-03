@@ -318,16 +318,26 @@ def _get_empty_quote() -> dict:
 
 @router.get("/random", summary="随机获取一条金句")
 async def get_random_quote(
+    exclude: Optional[str] = Query(None, description="排除的当前金句内容，保证「换一句」一定换掉"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    """随机获取一条金句：优先从 Obsidian 读取，回退到数据库"""
+    """随机获取一条金句：优先从 Obsidian 读取，回退到数据库
+
+    exclude 用于首页「换一句」交互：传入当前展示的句子，
+    从候选池中剔除它，避免随机到同一句导致「点了没反应」。
+    仅剩一条候选时不剔除，避免无可用结果。
+    """
     import random as _rnd
 
     # 1. 尝试从 Obsidian 随机读取
     obsidian_quotes = _read_obsidian_quotes()
     if obsidian_quotes:
-        selected = _rnd.choice(obsidian_quotes)
+        pool = [q for q in obsidian_quotes
+                if q.get('content', '').strip() != (exclude or '').strip()]
+        if not pool:
+            pool = obsidian_quotes
+        selected = _rnd.choice(pool)
         favorited = False
         if current_user:
             fav = db.query(QuoteFavorite).filter(
@@ -338,8 +348,10 @@ async def get_random_quote(
         return _format_obsidian_quote(selected, favorited)
 
     # 2. 回退到数据库
-    quote = db.query(EssayQuote).filter(EssayQuote.status == 1)\
-        .order_by(func.random()).first()
+    query = db.query(EssayQuote).filter(EssayQuote.status == 1)
+    if exclude:
+        query = query.filter(EssayQuote.content != exclude)
+    quote = query.order_by(func.random()).first()
 
     if not quote:
         return _get_empty_quote()

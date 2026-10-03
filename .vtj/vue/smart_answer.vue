@@ -44,7 +44,7 @@
                 <span :class="['q-type-badge', q.type === '多选题' ? 'multi' : q.type === '判断题' ? 'judge' : '']">{{ q.type === '多选题' ? '[多选]' : q.type === '判断题' ? '[判断]' : '[单选]' }}</span>
                 <span v-if="state.markedQuestions.includes(q.id)" class="mark-badge">已标记</span>
               </div>
-              <p class="q-stem" v-html="q.stem"></p>
+              <p class="q-stem" v-html="renderQuestionContent(q.stem, { stripInlineOption: true })"></p>
               <div class="q-options">
                 <div v-if="q.type === '多选题'" class="multi-hint"><strong>多选题</strong> — 点击多个选项</div>
                 <div v-if="q.type === '判断题'" class="judge-hint"><strong>判断题</strong> — 选择"对"或"错"</div>
@@ -52,7 +52,7 @@
                   :class="['option-item', { selected: isSelected(q.id, oidx), correct: state.showResult && state.optionLabels[oidx] === q.answer, wrong: state.showResult && isSelected(q.id, oidx) && state.optionLabels[oidx] !== q.answer }]"
                   @click="selectOption(q.id, oidx, q.type)">
                   <span :class="['option-label', { multi: q.type === '多选题' }]">{{ state.optionLabels[oidx] }}</span>
-                  <span class="option-text" v-html="opt"></span>
+                  <span class="option-text" v-html="renderQuestionContent(opt)"></span>
                 </div>
               </div>
               <div v-if="state.showResult" class="q-result">
@@ -103,6 +103,7 @@ import { XIcon } from '@vtj/ui';
 import { Grid, AlarmClock, CloseBold } from '@vtj/icons';
 import NavBar from './navbar.vue';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'SmartAnswer',
@@ -132,7 +133,7 @@ export default defineComponent({
       submitWrong: 0,
       submitTimeSpent: 0,
     });
-    return { state, props, provider, Grid, AlarmClock, CloseBold };
+    return { state, props, provider, Grid, AlarmClock, CloseBold, renderQuestionContent };
   },
   computed: {
     answeredCount() {

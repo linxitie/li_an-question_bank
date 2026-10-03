@@ -61,11 +61,16 @@ function devRuntimeSafety(): Plugin {
           const route = routeBySocket.get(socket) || 'http';
 
           if (EXPECTED_SOCKET_CODES.has(code)) {
+            // 鉴权类正常关闭（后端 close(4001..4004)）在 TCP 层表现为 ECONNRESET，
+            // 属预期行为，降为 debug，避免开发终端刷屏掩盖真实故障。
+            // 网络类真实异常仍用 warn，便于及时发现。
+            const isAuthClose = route === '/ws/connect' || route === '/';
+            const level = isAuthClose ? 'debug' : 'warn';
             const key = `${route}:${code}`;
             const now = Date.now();
 
             if (now - (lastLogAt.get(key) || 0) > 10_000) {
-              console.warn(
+              console[level](
                 `[vite:socket] ${route} 客户端连接中断(${code})，已安全关闭`
               );
               lastLogAt.set(key, now);

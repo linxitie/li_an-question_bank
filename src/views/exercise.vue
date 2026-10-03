@@ -95,7 +95,7 @@
             <span>📑 题组材料</span>
             <span class="material-arrow">{{ state.materialExpanded ? '▲' : '▼' }}</span>
           </button>
-          <div v-show="state.materialExpanded" class="ex-material-body" v-html="state.groupMaterial"></div>
+          <div v-show="state.materialExpanded" class="ex-material-body" v-html="renderContent(state.groupMaterial)"></div>
         </div>
         <div class="ex-q-content" v-html="renderContent(currentQ.question_content)"></div>
 
@@ -110,7 +110,7 @@
           >
             <input type="checkbox" :value="opt.key" v-model="multiAnswers" class="ex-checkbox" />
             <span class="opt-key">{{ opt.key }}</span>
-            <span class="opt-value" v-html="opt.value"></span>
+            <span class="opt-value" v-html="renderContent(opt.value)"></span>
           </label>
           <div
             v-else
@@ -121,7 +121,7 @@
             @click="selectAnswer(opt.key)"
           >
             <span class="opt-key">{{ opt.key }}</span>
-            <span class="opt-value" v-html="opt.value"></span>
+            <span class="opt-value" v-html="renderContent(opt.value)"></span>
           </div>
         </div>
       </div>
@@ -233,6 +233,7 @@
 
 <script>
 import { defineComponent, reactive, computed, watch } from 'vue';
+import { sanitizeHtml } from '@/utils/questionRender';
 
 var apiBase = '/api/questions';
 
@@ -457,7 +458,10 @@ export default defineComponent({
     // === 内容渲染（第9层防线：前端智能重试） ===
     renderContent(text) {
       if (!text) return '';
-      var html = text;
+      // 先白名单清洗服务端内容，再做占位符转换。
+      // 顺序很关键：清洗会剥掉内联 onerror，而本页面自建的 <img> 需要保留
+      // onerror="window.__retryImg(...)" 以实现多级重试，因此必须「先清洗、后转换」。
+      var html = sanitizeHtml(text);
       // 支持 uuid_x_y 和 x_y 两种 IMAGE 占位符格式
       html = html.replace(/\[?IMAGE:([a-f0-9]+_\d+_\d+|\d+_\d+)\]?/gi, function(match, marker) {
         // 初始 src 使用扁平路径，onerror 调用全局 __retryImg 智能重试

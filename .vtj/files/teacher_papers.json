@@ -328,6 +328,43 @@
     "doAiPublish": {
       "type": "method",
       "params": []
+    },
+    "loadEndedCount": {
+      "type": "method",
+      "params": []
+    },
+    "resetPqFilter": {
+      "type": "method",
+      "params": []
+    },
+    "openPqEdit": {
+      "type": "method",
+      "params": [
+        "q: any"
+      ]
+    },
+    "closePqEdit": {
+      "type": "method",
+      "params": []
+    },
+    "pqAddOption": {
+      "type": "method",
+      "params": []
+    },
+    "pqRemoveOption": {
+      "type": "method",
+      "params": []
+    },
+    "savePqEdit": {
+      "type": "method",
+      "params": []
+    },
+    "pqUpdateScore": {
+      "type": "method",
+      "params": [
+        "q: any",
+        "ev: any"
+      ]
     }
   },
   "lifeCycles": {

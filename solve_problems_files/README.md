@@ -26,6 +26,7 @@
 - [type_detection.md](./type_detection.md) — 题型判定机制设计与单一事实来源
 - [answer_normalization.md](./answer_normalization.md) — 答案归一化 canonical_answer
 - [data_repair.md](./data_repair.md) — 数据修复脚本与真实数据结论
+- [手机端问题优化完整解决方案_v1.md](./手机端问题优化完整解决方案_v1.md) — 手机端 14 项问题根因定位与分阶段实施方案
 
 ## 修改文件清单
 

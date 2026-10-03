@@ -1,7 +1,7 @@
 """
 教师端 Pydantic 验证模型
 """
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -183,6 +183,24 @@ class PaperQuestionScoreUpdate(BaseModel):
 class PaperQuestionOrderUpdate(BaseModel):
     """调整试卷题目顺序"""
     question_ids: List[int] = Field(..., description="有序的题目ID列表")
+
+
+class PaperQuestionContentUpdate(BaseModel):
+    """P5：试卷内题目内容编辑（改题干/选项/答案/解析/题型）
+
+    所有字段均为可选，只更新传入的字段；未传字段保持原值。
+    校验放在 Pydantic 层，避免脏数据进入库：
+      - content 长度上限 50000（与导入管线一致）
+      - answer 归一化到 20 字符以内
+      - type_name 只接受注册表里存在的题型名
+    """
+    question_content: Optional[str] = Field(None, max_length=50000, description="题干（含 HTML/img 标签）")
+    options: Optional[List[Dict[str, Any]]] = Field(None, description="选项列表 [{key,value}]")
+    answer: Optional[str] = Field(None, max_length=20, description="答案，如 A / ABC / 正确")
+    answer_analysis: Optional[str] = Field(None, max_length=50000, description="答案解析")
+    type_name: Optional[str] = Field(None, max_length=20, description="题型名")
+    difficulty: Optional[int] = Field(None, ge=1, le=5, description="难度 1..5")
+    score: Optional[float] = Field(None, gt=0, le=100, description="本卷分值")
 
 
 # ==================== 成绩管理 ====================

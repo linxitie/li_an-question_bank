@@ -4,6 +4,7 @@ APScheduler 定时任务管理
 """
 import logging
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -26,23 +27,34 @@ def set_main_loop(loop):
     _main_loop = loop
 
 
-def _broadcast_sync(message: str = "sync"):
-    """数据更新后广播同步事件，通知前端刷新（跨线程安全）"""
+def _broadcast_sync(message: str = "sync", data: Optional[dict] = None):
+    """数据更新后广播同步事件，通知前端刷新（跨线程安全）
+
+    Args:
+        message: 面向用户/前端的简短说明（如「题目更新」）
+        data: 可选的结构化补充信息（如 {"scope","subject_id","count"}）。
+              只应包含统计信息，禁止放入题目正文等敏感内容。
+              为 None 时保持既有行为（仅带 message），向后兼容。
+    """
     global _main_loop
     if _main_loop is None:
         return
     try:
         import asyncio
         from ..api.v1.websocket import ws_connection_manager
+        payload_data = {"message": message}
+        if data:
+            payload_data.update(data)
         payload = {
             "type": "sync",
-            "data": {"message": message},
+            "data": payload_data,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         asyncio.run_coroutine_threadsafe(
             ws_connection_manager.broadcast_all(payload), _main_loop
         )
     except Exception as e:
+        # 广播失败绝不影响主业务流程（如题目导入），仅记录告警
         logger.warning(f"广播同步事件失败: {e}")
 
 

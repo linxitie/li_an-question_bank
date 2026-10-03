@@ -1,0 +1,1583 @@
+# 手机端问题优化 — 完整解决方案 v1.0
+
+> **状态**：待人工审核（未经批准不得实施）
+> **产出日期**：2026-09-28
+> **问题来源**：`solve_problems_files/手机端问题呈现.md`
+> **归档目标**：实施时复制到 `solve_problems_files/手机端问题优化完整解决方案_v1.md`
+> （规划阶段受 markdown-only 约束只能写入 `.omo/plans/`，归档动作见任务 0.0）
+
+---
+
+## TL;DR
+
+> 手机端 14 项问题**已全部定位到精确根因**，绝大多数是**前端单点缺陷**（多个仅一行代码）。
+> **绝大部分功能模块的后端与页面其实早就建好了，只是没接上、没注册路由、或调错了参数名。**
+> 本方案以「复用既有机制」为第一原则，**不新建任何重复的算法或页面**。
+
+- 已确认根因 **13 个**：含 1 个致命参数名不匹配（练习页全空）、1 个 CSS 类名冲突（论坛 tab 隐形）、
+  1 个渲染真源缺失（图片被吞）、1 个路由未注册（金币购 404）
+- **后端零新增接口**（学生改密 `POST /api/auth/change-password` 早已存在）
+- 复用既有资产 **5 项**：`questionRender.js` 渲染真源、`quick_practice` 六接口、
+  `design-tokens` 设计令牌、`/api/collection` 收藏体系、`/api/goals` 目标体系
+- 预计改动：后端 2 处小改 + 前端 18 个文件；**无数据库结构变更；无新依赖**
+
+---
+
+## 用户已确认的决策
+
+| # | 议题 | 决策 |
+|---|------|------|
+| D1 | 实施载体（双轨制） | **现役 VTJ 工程修好 + 顺手清理 monorepo 骨架硬伤**；不迁移手机端到新骨架 |
+| D2 | 题库 / 练习 | **合并：底栏去掉「题库」，只留「练习」** → 底栏 4 项：首页/练习/论坛/我的 |
+| D3 | 手机端 / 平板端 | **同源共享 `src/views/mobile_*.vue` 并一并修复**；不复制文件、不加平台分支 |
+
+---
+
+## 第一部分：已确认根因总表
+
+> 全部经**亲自读码 + 读图**确认，非推测。`file:line` 可直接定位。
+
+| # | 问题 | 根因 | 层级 | 成本 |
+|---|------|------|------|------|
+| RC-1 | 论坛 tab 文字被颜色遮掩 | **CSS 类名冲突**：顶部分类胶囊与底部导航复用 `.tab-item`，`.tab-item.active` 冲突注入 `background:#1A365D`，深藏青底 + 深藏青字/图标 → 全隐形 | 前端 CSS | **1 行** |
+| RC-2 | 错题本三个"公专" | **取错字段**：模板渲染 `subject_name`，应渲染 `subcategory`（电脑端 L111 正确） | 前端模板 | **1 行** |
+| RC-2b | 错题本切 Tab 数据不变 | `selectSubject()` 只传 `subject_id`（三个 Tab 全是 3） | 前端逻辑 | 小 |
+| RC-3 | 手机端练习显示为空 | **参数名不匹配**：前端发 `kpIds`，后端收 `knowledge_point_ids`（必填）→ **422** | 前后端契约 | **1 行** |
+| RC-4 | 公专题目"没有找到相关题目" | **缺分类树接口**：手机端从未调 `/api/questions/subcategory-stats`，分类硬编码且 key 体系与后端不符 | 前端 | 中 |
+| RC-5 | 论坛头像不同步 | `fetch()` **漏传 auth 头** + 未调 `/api/forum/users/{id}/public` | 前端 | 小 |
+| RC-6 | 无法编辑手机号/学院/地址/密码 | 只 GET 不 PUT。`PUT /api/auth/profile`、`POST /api/auth/change-password` **早已存在** | 前端接线 | 中 |
+| RC-7 | 收藏显示"暂无收藏" | 用错端点：应 `/api/collection/question-favorites`，且未接 DELETE 取消 | 前端 | 中 |
+| RC-8 | 题目笔记点击 404 | 跳转到不存在的题目详情路由；应改用已存在的 `GET /api/notes/question/{id}` | 前端 | 中 |
+| RC-9 | 备考资料/成绩分析/金币购/小目标缺失 | **后端与页面全部已建好**，缺路由注册与入口 | 集成 | 小 |
+| RC-10 | 底部导航 5 份复制粘贴 | 每页内联一份，样式不一致（practice 连 `.active` 规则都没有），图标尺寸 20/22 不一 | 架构 | 中 |
+| RC-11 | 图片重复 / 图片被吞没 | **渲染真源缺失**：`[IMAGE:q_idx]` 转换只存在于电脑端内联正则；错题本用纯文本插值剥掉全部 HTML | 前端 | 中 |
+| RC-12 | 每日新闻三图重复 | `resolveImg()` 解析失败时多条 URL 返回同一占位图 | 前端 | 待定位 |
+
+**根因分布**：前端 13 · 后端 0 新增 · 架构 1。**没有任何一项需要新建算法或新页面。**
+
+---
+
+## 目录
+
+- [1.1 关键根因详解](#11-关键根因详解)
+- [第二部分：架构前提与既有机制复用清单](#第二部分架构前提与既有机制复用清单)
+- [第三部分：分阶段实施方案](#第三部分分阶段实施方案)
+- [第四部分：代码编写前的多角度论证](#第四部分代码编写前的多角度论证)
+- [第五部分：风险、回归与验收](#第五部分风险回归与验收)
+- [附录 A：文件级改动清单](#附录-a文件级改动清单)
+- [附录 B：待确认事项](#附录-b待确认事项)
+
+---
+
+## 1.1 关键根因详解
+
+### RC-1 论坛 tab 隐形（截图1 实证）
+
+`.vtj/vue/mobile_forum.vue`（**唯一存在该冲突的文件**）：
+
+| 位置 | 内容 |
+|------|------|
+| L19-24 顶部分类胶囊 | `:class="['tab-item', { active: activeTab === tab.key }]"` |
+| L109-127 底部导航 | `:class="['tab-item', { active: activeTab === 'xxx' }]"` |
+| L424-441 分类胶囊样式 | `.tab-item.active { background:#1A365D; color:#fff; }` ← **实心深藏青底** |
+| L645-660 底栏样式 | `.tab-item.active { color:#1A365D; }` ← 深藏青字 |
+| L122 图标绑定 | `:color="activeTab === 'forum' ? '#1A365D' : '#a0a4b8'"` |
+
+同一 `<style scoped>` 内两套 `.tab-item` 规则（**scoped 只加属性选择器，不按子树隔离**），
+两套规则同时命中底部导航项 → 深藏青底 + 深藏青图标 + 深藏青文字 → **全部不可见**，
+精确复现截图 1 的"实心深藏青方块、无图标无文字"。
+
+- 其它 4 页只有一套 `.tab-item` 规则 → 不复现
+- `mobile_practice.vue` 连 `.tab-item.active` 规则都没有 → 也不复现
+
+### RC-3 练习页全空（最关键）
+
+后端 `backend/app/api/v1/quick_practice.py:209-217`：
+
+```python
+@router.get("/questions", summary="获取练习题目")
+async def get_practice_questions(
+    knowledge_point_ids: str = Query(..., description="考点ID列表，逗号分隔"),  # ← 必填，无默认值
+    limit: int = Query(20, ge=1, le=100),
+    year: Optional[int] = Query(None),
+    by_sub_category: bool = Query(False, alias="bySubCategory"),
+    ...)
+```
+
+前端 `src/views/mobile_answer.vue:123-127`：
+
+```ts
+const kpIds = route.query.kpIds as string | undefined;
+if (kpIds) {
+  const res = await auth.apiFetch(`/api/quick-practice/questions?kpIds=${encodeURIComponent(kpIds)}&limit=20`);
+```
+
+**发的是 `kpIds`，后端要的是 `knowledge_point_ids`** → 必填参数缺失 → FastAPI 返回
+**422 Unprocessable Entity** → `res.ok === false` → 题目数组恒为空。
+
+> 这解释了"手机端和电脑端没有同步数据通信"的表象：**不是通信断层，是本地请求就 422 了。**
+
+### RC-11 图片被吞（错题本 / 答题卡 / 答卷）
+
+图片在题目内容里有两种形态：(a) 文本标记 `[IMAGE:题号_序号]`；(b) 已转好的 `<img>` 标签。
+
+- 电脑端 `.vtj/vue/answer_page.vue:482-483 / 491-492` **内联手写正则**做 (a)→(b) 转换
+- 共享真源 `src/utils/questionRender.js`：
+  - `renderQuestionSummary()` **L76 确实处理 `[IMAGE:...]` → `[图片]`** → 证明标记约定在数据中真实存在
+  - 但 `renderQuestionContent()` **不做转换**，且 **L61 `if (s.indexOf('<') === -1) return s;`
+    对"纯文本 + 标记"内容直接原样返回** → 标记永不转图
+
+| 位置 | 现状 | 后果 |
+|------|------|------|
+| `mobile_answer.vue:19` | `v-html="renderQuestionContent(shared_content)"` | ✅ 唯一正确用法 |
+| `mobile_answer.vue:24` | 裸 `v-html="current.question_content"` | (a) 显示字面量 `[IMAGE:1_2]`；(b) 缺 onerror 兜底 → **吞图** |
+| `mobile_answer.vue:36` | 裸 `v-html="opt"` | 选项内的图全丢 |
+| `mobile_wrong_questions.vue:41` | `{{ item.question_content }}` 纯文本插值 | **剥掉全部 HTML，图 100% 丢失** |
+
+🔒 **附带安全发现**：`questionRender.js` 的 `sanitizeHtml()` 注释声称"白名单"、
+定义了 `ALLOWED_TAGS`(L15-19) 却**从未使用**，实为黑名单剥离。题目内容走 `v-html` 直出
+= XSS 敏感面；注释与实现不符会造成虚假安全感。
+
+### 路由注册核查（`src/router/index.ts`，共 90 条）
+
+| 路由 | 状态 |
+|------|------|
+| `/mobile/gold-purchase` | ❌ **完全未注册** → 404（金币购页已接好 11 个接口却打不开） |
+| `/mobile/achievements` | ✅ 已注册 |
+| `/mobile/feedback` | ✅ 已注册 |
+| `/mobile/help` | ✅ 已注册 |
+| `/mobile/materials` | ✅ 已注册 |
+| `/mobile/score-analysis` | ✅ 已注册 |
+| `/mobile/question-bank` | ✅ 已注册 |
+
+→ 截图 2 的 404 **不是路由表缺项**，而是页面跳去了一个更具体的题目详情路径。
+正确做法：用已存在的 `GET /api/notes/question/{questionId}` 取数，页内弹层展示，不跳路由。
+
+### 附带发现
+
+- `backend/app/services/image_filters.py` 已存在（图片处理服务，含 `np`/`cv2`/`Image` 惰性导入），
+  → 图片相关需求应先看它，勿另建（遵守"去粗取精"）
+- `.vtj/vue/notes.vue:265/284/407` **硬编码 `http://localhost:8000`** → 生产环境必炸
+- 科目 key 约定不统一：错题本用 `1/2/3`；电脑端 `wrong_questions.vue:730` 用 `{1:'xc',2:'sl',3:'ga'}` + `q.subject`
+
+---
+
+## 第二部分：架构前提与既有机制复用清单
+
+### 2.1 双轨制定性（用户已决策 D1）
+
+| 轨道 | 内容 | 结论 |
+|------|------|------|
+| **A 现役** | 根目录 `vtj-web-template`（50 VTJ 页 + `src/views` 手写页 + 90 条路由 + FastAPI） | **本次全部修复落在此处** |
+| **B 骨架** | `packages/shared-*` + `linxitie.policy-exam-bank-mobile`（**仅 2 个文件**，无路由无视图） | 修其 5 处硬伤，**不迁移** |
+
+**轨道 B 已确认的 5 处硬伤**（顺手清理，防腐化）：
+
+| # | 位置 | 问题 |
+|---|------|------|
+| B1 | `shared-api/src/client.ts:3` + `shared-store/src/auth.ts:21` | `baseURL='/api'` + 路径又写 `'/api/auth/login'` → **双前缀 `/api/api/...`** |
+| B2 | `client.ts:35` + `auth.ts:24` | 拦截器已返回 `response.data`（`{code,message,data}`），却直接取 `res.access_token` → **少拆一层 `.data`** |
+| B3 | `shared-types/api.ts:19` + `auth.ts:24` | 类型声明 `LoginResponse{token,user}`，实现用 `res.access_token` → **typecheck 必挂** |
+| B4 | `auth.ts:20-22` | 发 `FormData` 却声明 `Content-Type: x-www-form-urlencoded` → **头体不匹配** |
+| B5 | `client.ts:39` | 401 跳 `window.location.href='/login'`，本项目是 **Hash 路由** → 应为 `/#/login` |
+
+### 2.2 既有机制复用清单（严禁另造）
+
+#### ★ 复用源 1：题目渲染真源 `src/utils/questionRender.js`（86 行，附 `.d.ts`）
+- 现有导出：`renderQuestionContent()` / `renderQuestionSummary()` / `sanitizeHtml()`
+- **本次扩展**（非新建文件）：把 `[IMAGE:题号_序号]` → `<img>` 转换下沉到此文件
+- 电脑端 `answer_page.vue:482/491` 的**内联重复正则随之删除** → 逻辑收敛为单一真源
+- 🔒 同步把 `sanitizeHtml()` 改为真白名单（启用已定义的 `ALLOWED_TAGS`）
+
+#### ★ 复用源 2：快速练习六接口 `backend/app/api/v1/quick_practice.py`（已完整存在）
+
+| 接口 | 行号 | 用途 |
+|------|------|------|
+| `GET /quick-practice/subjects` | 66 | 三科目（行测/申论/公专） |
+| `GET /quick-practice/sub-categories?subjectId=` | 93 | 子科目 + 考点 + 进度 |
+| `GET /quick-practice/knowledge-points?subCategoryId=` | 177 | 考点列表 |
+| `GET /quick-practice/questions?knowledge_point_ids=&bySubCategory=&limit=&year=` | 209 | **出题（混合练习靠它）** |
+| `POST /quick-practice/submit` | 332 | 提交 + 错题自动收录 |
+| `GET /practice/knowledge-progress` | — | 两级进度（薄弱优先排序） |
+
+> `knowledge_point_ids` 接受**逗号分隔多值**；`bySubCategory=true` 时传子科目 ID，
+> 后端 L234-239 自动展开为该子科目下全部考点 → **"混合练习"零新增后端**。
+
+#### ★ 复用源 3：设计令牌 `packages/design-tokens/src/variables.css`（104 行，零依赖）
+- 三科配色 `--color-xingce #3B82F6` / `--color-shenlun #10B981` / `--color-gongzhuan #F59E0B`
+  （与历史方案《手机端深度优化完善方案》L624 记录值**完全一致**，已成共识，勿另造）
+- 动画令牌 `--duration-normal 300ms` + `--easing-default cubic-bezier(0.4,0,0.2,1)`
+  → **直接用于解决"论坛 tab 点击特效与其它模块一致"**
+- `--touch-target-min: 44px` → 返回键 / 底部导航触控区
+- 断点 `--breakpoint-mobile 768` / `tablet 1024` / `desktop 1280`
+- 引入方式：全局 `<style>` 引入 `:root` 变量，页面用 `var()` 引用，**不逐页硬编码**
+
+#### ★ 复用源 4：收藏体系 `/api/collection/*`（电脑端 `favorites.vue` 已在用）
+- `/api/collection/stats`(L198) · `/api/collection/question-favorites`(L205) ·
+  `DELETE /api/collection/q_{favId}`(L295)
+- ⚠️ 系统内存在**两个**收藏列表端点（另有 `answer_page.vue:306` 用 `/api/questions/favorites`）
+  → 本次统一到 `/api/collection/question-favorites`，另一处登记为后续收敛项
+
+#### ★ 复用源 5：目标体系 `/api/goals/*`（`goal_card.vue` 已含完整 CRUD）
+- `GET /api/goals/` · `POST` · `PUT /api/goals/{id}` · `/progress?increment=1` · `/confirm-complete`
+- `GET /api/goals/stats/summary`（`mobile_home.vue:260` 已在用）
+- → "个人小目标"只需前端接线，**零后端**
+
+### 2.3 已存在、本次仅做接线的模块
+
+| 需求 | 后端 | 页面 | 缺什么 |
+|------|------|------|------|
+| 备考资料 | `/api/materials` · `/progress-summary` · `/progress` · `/{id}/favorite` | `materials_xingce/shenlun/gongzhuan.vue` **三页齐全** | 手机端路由指向手写 stub，需换真实页 |
+| 金币购 | `/api/coins/overview` · `/api/shop/products` · `/api/shop/exchange` · `/api/coins/transactions` · `/api/tasks/*` | `mobile_gold_purchase.vue` **已完整接全部 11 个接口** | **只缺 1 条路由** |
+| 成绩分析 | `/api/exam-records/{trend,stats,ai/analyze}` | `score_analysis.vue` 齐全 | 手机端入口 + 移动端适配 |
+| 学生改资料 | `PUT /api/auth/profile` | `navbar.vue:132` 在用 | 手机端补 PUT 调用 |
+| 学生改密码 | **`POST /api/auth/change-password`（auth.py:400 已存在）** | 无 | 手机端补 UI |
+| 错题三分类 | `GET /api/wrong-questions/subcategories` **已同时返回 `subject_name` + `subcategory`** | 电脑端正确使用 | 手机端取错字段 |
+
+### 2.4 三科下钻结构（历史方案已定，直接沿用）
+
+**行测（7 子模块）**：政治理论 / 常识判断 / 言语理解与表达 / 数量关系 / 判断推理 / 资料分析 / 知觉速度与准确性
+**申论（5 子模块）**：归纳概括 / 综合分析 / 提出对策 / 应用文写作 / 议论文写作
+**公专（3 子模块）**：职业素养 / 基础知识 / 基本警务能力
+
+> 来源：`solve_problems_files/手机端深度优化完善方案.md` L570-598（已完成的三级细分表）
+> 数据模型：`question_subject` → `sub_categories` → `knowledge_point` → `question_knowledge`
+
+---
+
+## 第三部分：分阶段实施方案
+
+> 每阶段可独立验证、独立提交。Phase 0 为 P0 止血，Phase 1 为主体，Phase 2 为新增功能，Phase 3 为骨架防腐化。
+> **任务标签使用裸编号（1.、2. …），与 `/start-work` 进度计数器格式一致。**
+
+---
+
+### Phase 0：P0 止血（一行级修复，当天可见效果）
+
+- [ ] 0. 归档本方案到 solve_problems_files
+
+  **What to do**: 将 `.omo/plans/mobile-problems.md` 复制为
+  `solve_problems_files/手机端问题优化完整解决方案_v1.md`（规划阶段受 markdown-only 限制无法直接写入）。
+  同步在 `solve_problems_files/README.md` 的文档索引中加一行链接。
+
+  **Must NOT do**: 不要改动 README 已有条目。
+
+  **Agent Profile**: Category `writing`
+  **Parallel**: NO（其余任务依赖本文件作为唯一事实来源）
+
+  **References**:
+  - `solve_problems_files/README.md` — 现有「文档索引」段落格式，照其样式追加
+
+  **Acceptance Criteria**:
+  - [ ] `solve_problems_files/手机端问题优化完整解决方案_v1.md` 存在且内容完整
+  - [ ] README 索引含该文件链接
+
+  **QA Scenarios**:
+  ```
+  Scenario: 归档文件存在且非空
+    Tool: Bash
+    Steps:
+      1. Test-Path "solve_problems_files\手机端问题优化完整解决方案_v1.md"  → 期望 True
+      2. (Get-Content <path> | Measure-Object -Line).Lines  → 期望 > 400
+    Evidence: .omo/evidence/task-0-archive.txt
+  ```
+
+- [ ] 1. 修复论坛 tab 隐形（RC-1）
+
+  **What to do**:
+  - `.vtj/vue/mobile_forum.vue`：把**顶部分类胶囊**的类名 `tab-item` 改为唯一名 `cat-tab`
+    （模板 L19-24 + 样式 L424-441 中的 `.tab-item`/`.tab-item.active`/`.tab-item:hover:not(.active)` 同步改名）
+  - 底部导航的 `.tab-item`(L645-660) 保持不变
+  - 5 个手机页底部导航统一加过渡：`transition: color var(--duration-normal, 300ms) var(--easing-default, cubic-bezier(0.4,0,0.2,1))`
+    并给激活态文字/图标用反色（白底 + `#1A365D`，**不得加实心深底**）
+  - 检查 `.vtj/vue/tablet_forum.vue` 是否有同样冲突，一并修
+
+  **Must NOT do**: 不得改底部导航的 `switchTab` 逻辑与路由映射；不得改 `.category-tabs` 布局。
+
+  **Agent Profile**: Category `quick`；Skills `[]`
+  - 无需 UI 技能：这是 CSS 类名解耦 + 过渡补齐，不改视觉结构
+
+  **Parallel**: Wave 1（与 2、3、4、5 并行）
+  **Blocked By**: None
+
+  **References**:
+  - `.vtj/vue/mobile_forum.vue:19-24` — 分类胶囊模板（改名的目标）
+  - `.vtj/vue/mobile_forum.vue:109-127` — 底部导航模板（**不能动**的对照）
+  - `.vtj/vue/mobile_forum.vue:424-441` — 分类胶囊样式（含冲突的 `background:#1A365D`）
+  - `.vtj/vue/mobile_forum.vue:645-660` — 底栏样式（正确参照）
+  - `packages/design-tokens/src/variables.css:89-94` — 动画令牌取值来源
+  - `solve_problems_files/手机端深度优化完善方案.md:635` — 44px 触控区要求
+
+  **Acceptance Criteria**:
+  - [ ] `.vtj/vue/mobile_forum.vue` 中 `.tab-item` 只剩底部导航一处使用
+  - [ ] 论坛页第 4 个底栏项显示**深藏青图标 + 深藏青文字于白底**，不再是实心方块
+  - [ ] 5 个页面底栏激活/未激活切换均有 300ms 过渡
+
+  **QA Scenarios**:
+  ```
+  Scenario: 论坛底栏激活项可见（happy path）
+    Tool: Playwright
+    Preconditions: 已登录；视口 390x844
+    Steps:
+      1. 导航到 /#/mobile/forum，等待网络空闲
+      2. 定位底栏第 4 项 .bottom-tab-bar > div:nth-child(4)
+      3. 断言该元素内 span.tab-label 文本 === "论坛"
+      4. 断言该元素计算样式 background-color === "rgba(0, 0, 0, 0)"（无实心底）
+      5. 断言 span.tab-label 计算 color === "rgb(26, 54, 93)"（#1A365D）
+      6. 截图
+    Evidence: .omo/evidence/task-1-forum-nav.png
+
+  Scenario: 分类胶囊仍保留实心底（防过度修复，negative）
+    Tool: Playwright
+    Steps:
+      1. 在 /#/mobile/forum 定位顶部 .category-tabs 内第 1 项
+      2. 断言其计算 background-color === "rgb(26, 54, 93)"（胶囊仍应有深底白字）
+    Expected Result: 证明只解耦了类名，胶囊视觉未被误改
+    Evidence: .omo/evidence/task-1-category-pill.png
+  ```
+
+  **Commit**: YES — `fix(mobile): 解耦论坛页 tab-item 类名冲突并统一底栏过渡`
+
+- [ ] 2. 修复练习页全空（RC-3）★ 最高价值
+
+  **What to do**:
+  - `src/views/mobile_answer.vue:123` `route.query.kpIds` → `route.query.knowledge_point_ids`
+  - `src/views/mobile_answer.vue:127` `?kpIds=` → `?knowledge_point_ids=`
+  - `.vtj/vue/mobile_practice.vue:331` 跳转参数名 `kpIds=` → `knowledge_point_ids=`
+  - 增加 422 可见化：若 `res.status === 422`，把后端 `detail` 显示出来并 `console.warn`，
+    避免以后再出现"静默为空"（运维可观测性）
+
+  **Must NOT do**: 不得改后端参数名（后端契约已定，前端单方面适配风险更大且会破坏电脑端）。
+
+  **Agent Profile**: Category `quick`；Skills `[]`
+
+  **Parallel**: Wave 1
+  **Blocked By**: None
+
+  **References**:
+  - `src/views/mobile_answer.vue:123-127` — 唯一出题调用，参数名错误点
+  - `backend/app/api/v1/quick_practice.py:209-217` — **后端契约权威定义**（`knowledge_point_ids` 必填）
+  - `backend/app/api/v1/quick_practice.py:226-231` — 格式校验与错误返回文案
+  - `.vtj/vue/mobile_practice.vue:331` — 跳转处的参数拼装
+
+  **Acceptance Criteria**:
+  - [ ] `/api/quick-practice/questions?knowledge_point_ids=1&limit=20` 返回 200 且 `items` 非空
+  - [ ] 手机端答题页能显示题目（题干 + 选项），非空白
+  - [ ] 422 时页面有可见报错，不再静默空白
+
+  **QA Scenarios**:
+  ```
+  Scenario: 答题页出题（happy path）
+    Tool: Playwright
+    Preconditions: 已登录；已知存在题目的考点
+    Steps:
+      1. 导航 /#/mobile/practice，等待 3 科 Tab 渲染
+      2. 点击第 1 科（行测）→ 点击任一子科目 → 点击任一考点 → 点击练习
+      3. 断言跳转到 /#/mobile/answer 且 URL 含 knowledge_point_ids=
+      4. 断言 .q-content 元素可见且 innerText 长度 > 10
+      5. 断言 .options 下 option 数量 >= 2
+      6. 截图
+    Evidence: .omo/evidence/task-2-answer-loaded.png
+
+  Scenario: 后端契约直连验证（negative / 回归护栏）
+    Tool: Bash (curl)
+    Steps:
+      1. 带 auth 头 curl ".../api/quick-practice/questions?kpIds=1&limit=20" → 期望 HTTP 422
+      2. 带 auth 头 curl ".../api/quick-practice/questions?knowledge_point_ids=1&limit=20"
+         → 期望 HTTP 200 且 body 含 "items"
+    Expected Result: 证明修复方向正确（错误参数名确实 422）
+    Evidence: .omo/evidence/task-2-contract-check.txt
+  ```
+
+  **Commit**: YES — `fix(mobile): 修正 quick-practice 出题参数名 kpIds→knowledge_point_ids`
+
+- [ ] 3. 修复错题本三个"公专"（RC-2 / RC-2b）
+
+  **What to do**（`src/views/mobile_wrong_questions.vue`）:
+  - L35 `{{ s.subject_name }}` → `{{ s.subject_name }}·{{ s.subcategory }}`
+  - L31-35 `v-for` 增加 `:data-subcategory="s.subcategory"`
+  - L34 `@click="selectSubject(s.subject_id)"` → `selectSubject(s.subject_id, s.subcategory)`
+  - L89 新增 `currentSubcategory` ref；L105-108 `selectSubject(sid, sc)` 存 sc
+  - L110-123 `fetchWrong()` 在 `currentSubject>0` 时追加 `&subcategory=encodeURIComponent(sc)`
+  - Tab 选中态判定同时比较 subject 与 subcategory（避免三 Tab 同 subject_id 时全部高亮）
+
+  **Must NOT do**: 不得改后端 `/subcategories`（其返回 `subject_name`+`subcategory` 是正确的）。
+
+  **Agent Profile**: Category `quick`；Skills `[]`
+
+  **Parallel**: Wave 1
+  **Blocked By**: None
+
+  **References**:
+  - `src/views/mobile_wrong_questions.vue:25-36` — 分类 Tab 模板（渲染字段错误点）
+  - `src/views/mobile_wrong_questions.vue:105-123` — `selectSubject` + `fetchWrong`（需加 subcategory 参数）
+  - `backend/app/api/v1/wrong_questions.py:299-331` — `/subcategories` 返回结构（`subject_name`+`subcategory`+`count`）
+  - `.vtj/vue/wrong_questions.vue:107-111` — **电脑端正确写法**（渲染 `sc.subcategory`），照此对齐
+  - `backend/app/api/v1/wrong_questions.py:338` — `subcategory` 查询参数已支持
+
+  **Acceptance Criteria**:
+  - [ ] 错题本 Tab 显示为「行测·政治理论」形式，同一科目的多个子科目 Tab 名称互不相同
+  - [ ] 点击不同 Tab 后列表内容不同（当前 bug 是完全相同）
+  - [ ] 「全部」Tab 仍能一次拉全部
+
+  **QA Scenarios**:
+  ```
+  Scenario: 三科 Tab 正确显示（happy path）
+    Tool: Playwright
+    Preconditions: 已登录；数据库存在三类科目的错题
+    Steps:
+      1. 导航 /#/mobile/wrong-questions
+      2. 定位 .subject-tabs 内所有 .subj-tab，收集文本 → 期望至少出现 "行测" "申论" "公专" 三种前缀
+      3. 断言不存在两个文本完全相同（去掉"全部"后）的 Tab
+      4. 截图
+    Evidence: .omo/evidence/task-3-subject-tabs.png
+
+  Scenario: 切换 Tab 数据确实变化（negative，守护 RC-2b）
+    Tool: Playwright
+    Steps:
+      1. 记录第 1 个科目 Tab 激活时的卡片数 N1
+      2. 点击另一个科目 Tab，等待列表刷新
+      3. 断言选中态唯一（仅 1 个 .subj-tab.active）
+      4. 断言列表内容与上一步不同（对比首个卡片的 q-title 文本）
+    Expected Result: 证明不再"切 Tab 数据不变"
+    Evidence: .omo/evidence/task-3-tab-switch.txt
+  ```
+
+  **Commit**: YES — `fix(mobile): 错题本改渲染 subcategory 并按科目+子科目过滤`
+
+- [ ] 4. 修复论坛头像不同步（RC-5）
+
+  **What to do**（`.vtj/vue/mobile_forum.vue`）:
+  - L265 `fetch('/api/forum/posts')` → 补 `{ headers: auth.getAuthHeaders() }`
+  - 参照电脑端 `forum.vue:663` 解析作者头像；失败时用占位图而非所有人形图标
+  - 若响应缺 avatar 字段，补 `/api/forum/users/{userId}/public` 兜底
+
+  **Must NOT do**: 不得新增论坛接口。
+
+  **Agent Profile**: Category `quick`；Skills `[]`
+
+  **Parallel**: Wave 1
+  **Blocked By**: None
+
+  **References**:
+  - `.vtj/vue/mobile_forum.vue:265` — 缺 auth 头的 fetch
+  - `.vtj/vue/forum.vue:524` — 电脑端正确写法（带 headers）
+  - `.vtj/vue/forum.vue:663` — `/api/forum/users/{userId}/public` 头像信息来源
+
+  **Acceptance Criteria**:
+  - [ ] 论坛列表每条帖子作者区域不再全部是同一人形占位图
+  - [ ] 请求头带 Authorization
+
+  **QA Scenarios**:
+  ```
+  Scenario: 论坛头像渲染（happy path）
+    Tool: Playwright
+    Steps:
+      1. 导航 /#/mobile/forum
+      2. 收集帖子卡内 img 的 src → 断言不全等于同一个占位图路径
+      3. 截图
+    Evidence: .omo/evidence/task-4-forum-avatar.png
+
+  Scenario: 断网时优雅降级（negative）
+    Tool: Playwright
+    Steps:
+      1. 通过 route 拦截 /api/forum/posts 返回 500
+      2. 断言页面显示错误提示而非白屏；不抛未捕获异常
+    Evidence: .omo/evidence/task-4-forum-error.png
+  ```
+
+  **Commit**: YES — `fix(mobile): 论坛请求补认证头并解析作者头像`
+
+- [ ] 5. 金币购路由补注册（RC-9）
+
+  **What to do**（`src/router/index.ts`）:
+  - 新增 `{ path: '/mobile/gold-purchase', component: () => import('$vtj/vue/mobile_gold_purchase.vue') }`
+  - 新增 `{ path: '/tablet/gold-purchase', component: () => import('$vtj/vue/tablet_gold_purchase.vue') }`
+  - 「我的」页加金币购入口（Phase 2 的入口一并加，避免两次改动同文件）
+
+  **Must NOT do**: 不得改动已有 90 条路由的任何一条；不得改 `needLogin` 语义。
+
+  **Agent Profile**: Category `quick`；Skills `[]`
+
+  **Parallel**: Wave 1
+  **Blocked By**: None
+
+  **References**:
+  - `.vtj/vue/mobile_gold_purchase.vue:147-216` — 已接全部 11 个接口的证明（无需改逻辑）
+  - `.vtj/vue/mobile_profile.vue:255-264` — 「我的」现有跳转入口集中处
+  - `src/router/index.ts` — 现有 `/mobile/*` 路由写法样板
+
+  **Acceptance Criteria**:
+  - [ ] `/mobile/gold-purchase` 与 `/tablet/gold-purchase` 可访问，不再 404
+  - [ ] 金币余额、商品列表、兑换记录均来自真实接口
+  - [ ] 「我的」页可见金币购入口
+
+  **QA Scenarios**:
+  ```
+  Scenario: 金币购可进入且数据真实（happy path）
+    Tool: Playwright
+    Steps:
+      1. 导航 /#/mobile/profile
+      2. 点击"金币购"入口 → 断言 URL 为 /#/mobile/gold-purchase
+      3. 断言页面无"404"/"页面未找到"文案
+      4. 断言商品列表容器内条目数 > 0
+      5. 截图
+    Evidence: .omo/evidence/task-5-gold-purchase.png
+
+  Scenario: 未登录时行为正确（negative）
+    Tool: Playwright
+    Preconditions: 清除登录态
+    Steps:
+      1. 导航 /#/mobile/gold-purchase
+      2. 断言跳登录页或显示登录引导，不白屏
+    Evidence: .omo/evidence/task-5-gold-unauth.png
+  ```
+
+  **Commit**: YES — `feat(mobile): 补注册金币购路由与我的页入口`
+
+---
+
+### Phase 1：P1 主体（渲染真源 + 数据对齐 + 导航去重）
+
+- [ ] 6. 题目渲染真源统一（RC-11）★ 最大复用价值
+
+  **What to do**:
+  - `src/utils/questionRender.js`：
+    1. 新增内部 `IMAGE_MARKER_RE = /\[?IMAGE:(\d+)_(\d+)\]?/gi`
+    2. `renderQuestionContent()` 内把标记转成
+       `<img src="/static/questions/{n}/{n}_{i}.png" class="q-img" loading="lazy">`
+    3. **修掉 L61 提前返回**：`if (s.indexOf('<') === -1) return s;`
+       → 改为「无 `<` 且无 `[IMAGE:` 才原样返回」
+    4. 保留既有 `attachImageFallback()` 的 onerror 占位图兜底
+    5. 顺带修题干内联选项剥离（对齐 `answer_page.vue:490` 的
+       `/\n?\s*[A-H]\s*[.、)）:：]\s*.+/g`），下沉到真源
+  - `src/utils/questionRender.d.ts`：补新签名说明
+  - 收敛调用方（**禁止新增裸 `v-html`**）：
+    | 文件 | 现状 | 改为 |
+    |------|------|------|
+    | `src/views/mobile_answer.vue:24` | 裸 `v-html="current.question_content"` | `v-html="renderQuestionContent(current.question_content)"` |
+    | `src/views/mobile_answer.vue:36` | 裸 `v-html="opt"` | 同上 |
+    | `src/views/mobile_wrong_questions.vue:41` | `{{ item.question_content }}` | 列表用 `renderQuestionSummary()`；展开详情用 `renderQuestionContent()` |
+    | `.vtj/vue/answer_page.vue:482/491` | 内联重复正则 | **删除**，改调真源 |
+
+  **Must NOT do**:
+  - 不得新建第二个渲染工具文件（违反"去粗取精"）
+  - 不得把 `sanitizeHtml` 拆出去（保持单一真源）
+
+  **Agent Profile**: Category `deep`；Skills `[]`
+  - 需同时改工具 + 4 个调用点并保证电脑端不回归，属跨文件收敛，值得 deep
+
+  **Parallel**: Wave 2（与 7 并行；8、9 依赖 6 完成）
+  **Blocks**: 8、9
+
+  **References**:
+  - `src/utils/questionRender.js:15-19` — `ALLOWED_TAGS`（任务 7 要用）
+  - `src/utils/questionRender.js:58-65` — `renderQuestionContent` 的提前返回 bug（L61）
+  - `src/utils/questionRender.js:72-80` — `renderQuestionSummary` L76 已处理 `[IMAGE:]`，是标记约定的铁证
+  - `.vtj/vue/answer_page.vue:482-483` — 选项标记转图正则（要下沉的那段）
+  - `.vtj/vue/answer_page.vue:490-492` — 题干标记转图 + 内联选项剥离
+  - `src/views/mobile_answer.vue:19` — **唯一正确用法样板**（照它改 24/36 行）
+
+  **Acceptance Criteria**:
+  - [ ] 含 `[IMAGE:n_i]` 标记的题目渲染出 `<img class="q-img">`，不再是字面量
+  - [ ] 已含 `<img>` 的题目仍显示，且带 onerror 占位兜底
+  - [ ] 纯文本题目（无标记无 HTML）显示不变，无回归
+  - [ ] `answer_page.vue` 内联正则已删除，电脑端答题无回归
+  - [ ] 全仓检索：题目内容相关 `v-html` 已无裸用
+
+  **QA Scenarios**:
+  ```
+  Scenario: 含图题目正常显示（happy path）
+    Tool: Playwright
+    Preconditions: 准备一道内容含 [IMAGE: 标记的题目
+    Steps:
+      1. 导航 /#/mobile/wrong-questions 找到该题并点击展开
+      2. 断言 .detail 内 img 元素存在且 naturalWidth > 0
+      3. 断言页面文本不包含字面量 "IMAGE:"
+      4. 截图
+    Evidence: .omo/evidence/task-6-image-render.png
+
+  Scenario: 坏图降级为占位图（negative）
+    Tool: Playwright
+    Steps:
+      1. 通过 route 把 /static/questions/** 全部返回 404
+      2. 断言图片 onerror 触发后 src 变为 /static/images/placeholder.png
+      3. 断言不出现浏览器默认"破图"图标
+    Evidence: .omo/evidence/task-6-image-fallback.png
+
+  Scenario: 电脑端无回归（跨端回归）
+    Tool: Playwright
+    Steps:
+      1. 桌面视口 1440x900 导航 /#/answer?knowledge_point_ids=<任一>
+      2. 断言题干与选项正常渲染、图片正常
+    Evidence: .omo/evidence/task-6-desktop-regression.png
+  ```
+
+  **Commit**: YES — `refactor(shared): 题目渲染真源下沉 IMAGE 标记转换并收敛调用方`
+
+- [ ] 7. 渲染白名单加固（安全）★
+
+  **What to do**（`src/utils/questionRender.js`）:
+  - `sanitizeHtml()` 真正启用 L15-19 已定义的 `ALLOWED_TAGS` 做**白名单**过滤：
+    不在名单内的标签被整体剥离
+  - 保留现有 3 层黑名单逻辑作为**补充**（`on*` 事件、`javascript:`）
+  - 把文件头注释改为与实现一致（当前谎称白名单实为黑名单）
+  - `questionRender.d.ts` 注释同步修正
+
+  **Why**: 题目内容经 `v-html` 直出，属 XSS 敏感面；注释与实现不符会造成虚假安全感，
+  后续维护者可能据此跳过审查。
+
+  **Must NOT do**: 不得在白名单中放开 `script`/`iframe`/`style`/`form`/`a` 的危险属性。
+
+  **Agent Profile**: Category `deep`；Skills `[]`
+  **Parallel**: Wave 2（与 6 并行）
+  **Blocks**: 8、9
+
+  **References**:
+  - `src/utils/questionRender.js:15-19` — 待启用的 `ALLOWED_TAGS`
+  - `src/utils/questionRender.js:28-45` — 现 `sanitizeHtml` 实现（黑名单）
+  - `src/utils/questionRender.js:1-12` — 待修正的头注释
+  - `src/views/mobile_answer.vue:24` — `v-html` 直出的调用面
+
+  **Acceptance Criteria**:
+  - [ ] `<script>alert(1)</script>` 入库内容被完全剥离，页面不执行
+  - [ ] `<img onerror=...>` 的 onerror 被移除
+  - [ ] `<a href="javascript:...">` 的 javascript: 被移除
+  - [ ] `<p> <b> <table> <img> <ul> <li>` 等正常保留
+  - [ ] 注释与实现一致
+
+  **QA Scenarios**:
+  ```
+  Scenario: XSS 注入被拦截（negative，安全护栏）
+    Tool: Bash (node REPL) + Playwright
+    Steps:
+      1. node -e 引入 questionRender，喂入 '<script>alert(1)</script><p>hi</p>'
+      2. 断言输出不含 '<script'，且含 '<p>hi</p>'
+      3. 喂入 '<img src=x onerror="alert(1)">'
+      4. 断言输出不含 'onerror="alert'
+    Evidence: .omo/evidence/task-7-sanitize-test.txt
+
+  Scenario: 正常题目内容不受影响（happy path，防过度过滤）
+    Tool: Playwright
+    Steps:
+      1. 导航 /#/mobile/wrong-questions 展开若干题
+      2. 断言题干文字、答案、解析均正常显示（未被误剥）
+    Evidence: .omo/evidence/task-7-no-over-filter.png
+  ```
+
+  **Commit**: YES — `fix(security): sanitizeHtml 改为真白名单并修正注释`
+
+- [ ] 8. 题库接入真实分类树（RC-4）
+
+  **What to do**（`.vtj/vue/mobile_question_bank.vue`）:
+  - 接入 `GET /api/questions/subcategory-stats`（电脑端 `question_bank.vue:686` 同款）
+  - **删除 L205-209 硬编码分类数组**（`xc`/`sw`/`zl`/`fl` key 体系与后端不符，是"没有找到相关题目"的直接原因）
+  - 补齐电脑端已有而手机端缺失的 4 个接口：
+    `/api/practice/stats-card`、`/api/practice/unified-stats`、
+    `/api/practice/knowledge-progress`、`/api/practice/recent-records`
+  - 按用户决策 **D2**：本页内容下沉为练习页内的入口卡片，
+    底栏去掉「题库」→ 所有指向 `/mobile/question-bank` 的链接改指 `/mobile/practice`
+  - 保留 `/mobile/question-bank` 路由作为**重定向**，避免旧链接 404
+
+  **Must NOT do**: 不得删除 `/mobile/question-bank` 路由（旧书签/外链会 404）。
+
+  **Agent Profile**: Category `unspecified-high`；Skills `[]`
+  **Parallel**: Wave 3（依赖 6 完成）
+  **Blocked By**: 6
+
+  **References**:
+  - `.vtj/vue/question_bank.vue:686` — `/api/questions/subcategory-stats` 正确调用样板
+  - `.vtj/vue/question_bank.vue:731/840/884/913` — 4 个待补接口的调用样板
+  - `.vtj/vue/mobile_question_bank.vue:205-209` — 待删除的硬编码分类数组
+  - `.vtj/vue/mobile_question_bank.vue:285-294` — 现有跳转（需按 D2 调整）
+  - `.vtj/vue/mobile_question_bank.vue:239` — 唯一的现有接口调用
+
+  **Acceptance Criteria**:
+  - [ ] 公专/申论/行测三科及其子科目**全部有真实题目数据**，不再显示"没有找到相关题目"
+  - [ ] 硬编码分类数组已删除
+  - [ ] 底栏 4 项（首页/练习/论坛/我的），无「题库」
+  - [ ] 旧路径 `/mobile/question-bank` 可访问（重定向到练习页）
+  - [ ] 电脑端题库页无回归
+
+  **QA Scenarios**:
+  ```
+  Scenario: 三科分类树有真实数据（happy path）
+    Tool: Playwright
+    Steps:
+      1. 导航 /#/mobile/practice
+      2. 断言科目 Tab 恰为 行测/申论/公专 三项
+      3. 点击「公专」→ 断言子科目列表渲染且每项题数 > 0
+      4. 断言页面不存在"没有找到相关题目"文案
+      5. 截图
+    Evidence: .omo/evidence/task-8-category-tree.png
+
+  Scenario: 旧链接不 404（negative，回归护栏）
+    Tool: Playwright
+    Steps:
+      1. 直接导航 /#/mobile/question-bank
+      2. 断言最终落地练习页，无 404 页
+    Evidence: .omo/evidence/task-8-legacy-redirect.txt
+  ```
+
+  **Commit**: YES — `feat(mobile): 题库接入真实分类树并按 D2 下沉为练习页入口`
+
+- [ ] 9. 混合练习能力接入（需求 二(2)）
+
+  **What to do**（**零新增后端**）:
+  - `src/views/mobile_answer.vue`：支持 `bySubCategory` 与多考点 ID
+  - `.vtj/vue/mobile_practice.vue`：三层各加「混合练习」按钮
+    - **科目层**：取该科目全部考点 ID，逗号拼接传 `knowledge_point_ids`
+    - **子科目层**：传子科目 ID + `bySubCategory=true`（后端 L234-239 自动展开）
+    - **考点层**：传该考点 ID
+  - 申论、公专同构支持
+  - 增加 `year` 筛选（近 3 年/近 5 年/不限）→ 后端已支持
+
+  **Must NOT do**: 不得在前端自行聚合各考点题目（后端已做去重与展开，前端再聚合会重复建设且性能更差）。
+
+  **Agent Profile**: Category `deep`；Skills `[]`
+  **Parallel**: Wave 3
+  **Blocked By**: 6
+
+  **References**:
+  - `backend/app/api/v1/quick_practice.py:209-253` — 出题接口**完整契约**（含 bySubCategory 展开逻辑）
+  - `backend/app/api/v1/quick_practice.py:66-176` — subjects / sub-categories（考点 ID 从哪来）
+  - `.vtj/vue/mobile_practice.vue:250/290` — 现有科目与子科目数据加载
+  - `solve_problems_files/手机端深度优化完善方案.md:606-613` — 六接口速查表
+
+  **Acceptance Criteria**:
+  - [ ] 科目层「混合练习」出题覆盖该科目全部考点
+  - [ ] 子科目层「混合练习」出题覆盖该子科目全部考点
+  - [ ] 考点层「混合练习」出题仅该考点
+  - [ ] 申论、公专同样可用三个层级
+  - [ ] 题目**无重复**（后端 L247 `distinct()` 保证，前端不再二次聚合）
+  - [ ] `year` 筛选生效
+
+  **QA Scenarios**:
+  ```
+  Scenario: 三层混合练习均可出题（happy path）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/practice 选「行测」→ 点科目层「混合练习」
+      2. 断言进入答题页且题目数 > 0
+      3. 返回，选某子科目 → 点子科目层「混合练习」→ 断言出题
+      4. 返回，选某考点 → 点考点层「混合练习」→ 断言出题
+      5. 重复验证「申论」「公专」
+      6. 截图各层
+    Evidence: .omo/evidence/task-9-mixed-{subject,subcat,kp}.png
+
+  Scenario: 无题目考点优雅降级（negative）
+    Tool: Playwright
+    Steps:
+      1. 构造一个题数为 0 的考点，点其「混合练习」
+      2. 断言显示"该考点下暂无题目"类提示（后端 L252 返回该文案），不白屏
+    Evidence: .omo/evidence/task-9-empty-kp.png
+  ```
+
+  **Commit**: YES — `feat(mobile): 三层级混合练习（复用 quick-practice 出题接口）`
+
+---
+
+- [x] 10. 底部导航单一真源（RC-10）
+
+  **What to do**:
+  - **优先路径（遵 VTJ 规范）**：在 VTJ 设计器把 5 页重复底栏抽为**公共区块**，
+    再在各页 `<script>` 侧只保留 `switchTab` 逻辑
+  - **备选路径**（设计器不便时）：新建 `src/components/MobileTabBar.vue`
+    （`src/components/` 属手写范畴，VTJ 规范允许自由使用 `<script setup>`）
+  - 统一内容：
+    - 图标尺寸（现 20/22 不一 → 统一 22）
+    - 触控区 `--touch-target-min: 44px`
+    - 过渡用设计令牌（已在任务 1 落地，此处收敛到组件内）
+    - 激活态：**白底 + `#1A365D` 文字/图标，不得实心深底**
+  - 按 **D2**：底栏 4 项 = 首页 / 练习 / 论坛 / 我的（去掉题库）
+
+  **Must NOT do**:
+  - 不得复制 5 份（那正是要消除的问题）
+  - 不得改各页 `switchTab` 的业务路由映射（除按 D2 去掉 question 项）
+
+  **Agent Profile**: Category `visual-engineering`；Skills `[]`
+  **Parallel**: Wave 3
+  **Blocked By**: 1（任务 1 已统一过渡，先做完再收敛组件避免返工）
+
+  **References**:
+  - `.vtj/vue/mobile_practice.vue:137-158` — 底栏模板样板（结构最规整）
+  - `.vtj/vue/mobile_question_bank.vue:121-142` — 底栏模板（:size="22" 版本）
+  - `.vtj/vue/mobile_forum.vue:109-129` — 底栏模板
+  - `.vtj/vue/mobile_profile.vue:127-148` — 底栏模板
+  - `.vtj/vue/mobile_home.vue:680-720` — 底栏样式（含 `.tab-item.active{color:#1A365D}` 正确写法）
+  - `packages/design-tokens/src/variables.css:82-94` — 触控区与动画令牌
+
+  **Acceptance Criteria**:
+    - [x] 底栏实现只有一处真源，5 页共用
+    - [x] 4 页底栏像素级一致（图标尺寸、间距、触控区）
+    - [x] 底栏恰为 4 项：首页/练习/论坛/我的
+    - [ ] 每页激活项正确高亮且可见
+    - [ ] 平板端 6 页底栏同样受益且无回归
+
+  **Implementation Notes (2026-09-28)**:
+  - 走**备选路径**：新建 `src/components/MobileTabBar.vue`（`<script setup>` + 4 项 tab）
+  - 5 页统一改为 `<MobileTabBar active="xxx" />`，并删除各页 `activeTab`/`switchTab`/
+    `tabRoutes` 与 `.bottom-tab-bar`/`.tab-item`/`.tab-label` 重复样式
+  - 组件内**修掉一处无效 `<script setup>` 导出**（`export { LEGACY_QUESTION_BANK }`，
+    `<script setup>` 不允许 ES 导出，会直接编译失败），并移除随之失效的 `Reading` 图标导入
+  - `mobile_question_bank.vue` 归属「练习」高亮（底栏已无题库 tab，题库为练习下钻二级页）
+  - **补齐 D2 移除底栏造成的能力丢失**：`/mobile/student-papers`（历年试卷）原先**仅**
+    由题库页链接，移除该 tab 后成为孤链。已在 `mobile_practice.vue` 内新增「更多练题资源」
+    区块，下沉 5 个入口：历年试卷 / 智能组卷 / 错题本 / 备考资料 / 题库总览，
+    5 条目标路由均已校验存在于 `src/router/index.ts`
+  - 同步 5 个 `.vtj/files/*.json` 的 methods（移除 `switchTab`、新增 `goResource`），
+    `__VERSION__` 与 `.vue` 一致；`vtj_check_consistency` 中 `mobile_practice` 为
+    `consistent`，其余 4 页的 `methods_extra_in_dsl` 属全仓既有基线特征
+    （73 个页面中 57 个同样如此，含本次未改动的 `notes`/`daily_news`/`question_import`）
+  - `lsp_diagnostics`：组件 + 5 页均 0 error
+
+  **QA Scenarios**:
+  ```
+  Scenario: 四页底栏一致且激活态正确（happy path）
+    Tool: Playwright
+    Steps:
+      1. 依次访问 /#/mobile/home、practice、forum、profile
+      2. 每页截图底栏区域
+      3. 断言每页有且仅有 1 个激活项
+      4. 断言激活项文本与其页面语义一致（home→首页 等）
+    Evidence: .omo/evidence/task-10-nav-*.png
+
+  Scenario: 触控区达标（negative，护栏）
+    Tool: Playwright
+    Steps:
+      1. 用 getBoundingClientRect 取每个底栏项尺寸
+      2. 断言 height >= 44px
+    Evidence: .omo/evidence/task-10-touch-target.txt
+  ```
+
+  **Commit**: YES — `refactor(mobile): 底部导航抽为单一真源并按 D2 收敛为 4 项`
+
+- [ ] 11. 我的：资料编辑接线（RC-6）
+
+  **What to do**（`.vtj/vue/mobile_profile.vue`）:
+  - 补资料编辑表单（手机号 / 学院 / 地址 / 邮箱等）
+  - 保存调用 `PUT /api/auth/profile`
+  - 补改密 UI，调用 `POST /api/auth/change-password`
+  - **安全要求**：
+    - 改密必须走专用端点（服务端校验旧密码）
+    - **严禁**在前端自行比对/存储/比较密码
+    - 新密码强度校验放前端仅作提示，**权威校验必须在服务端**
+    - 敏感字段输入框 `type="password"` + `autocomplete="new-password"`
+  - 保存成功后同步刷新本地 user 上下文
+
+  **Must NOT do**: 不得在 localStorage 存明文密码；不得绕过服务端改密。
+
+  **Agent Profile**: Category `unspecified-high`；Skills `[]`
+  **Parallel**: Wave 4
+
+  **References**:
+  - `.vtj/vue/mobile_profile.vue:216` — 现有 `GET /api/auth/profile`（表单初值来源）
+  - `.vtj/vue/mobile_profile.vue:286` — 现有头像上传（表单交互样板）
+  - `.vtj/vue/navbar.vue:132` — `PUT /api/auth/profile` 调用样板
+  - `backend/app/api/v1/auth.py:400` — `POST /api/auth/change-password`（**已存在**，确认字段名后再调）
+  - `.vtj/vue/admin_profile.vue:338` — 改密交互参考
+
+  **Acceptance Criteria**:
+  - [ ] 可编辑并保存手机号/学院/地址，刷新后仍生效
+  - [ ] 改密需输入旧密码；旧密码错误时给出明确错误且不修改
+  - [ ] 改密成功后旧密码失效、新密码可登录
+  - [ ] 前端与源码中无明文密码存储
+
+  **QA Scenarios**:
+  ```
+  Scenario: 资料编辑保存（happy path）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/profile 点击头像旁编辑按钮
+      2. 把"学院"改为"XX警察学院"并保存
+      3. 断言成功提示
+      4. 刷新页面，断言"学院"仍为新值
+    Evidence: .omo/evidence/task-11-profile-edit.png
+
+  Scenario: 改密校验旧密码（negative，安全护栏）
+    Tool: Playwright
+    Steps:
+      1. 打开改密表单，旧密码填错误值
+      2. 提交，断言报错且提示与旧密码相关
+      3. 用旧密码登录，断言仍能登录（未被误改）
+    Evidence: .omo/evidence/task-11-wrong-oldpwd.png
+  ```
+
+  **Commit**: YES — `feat(mobile): 我的页支持资料编辑与修改密码`
+
+- [ ] 12. 我的：收藏 / 笔记可用（RC-7 / RC-8）
+
+  **What to do**:
+  - **收藏**：`src/views/mobile_favorites.vue` + `.vtj/vue/favorites.vue`
+    → 列表改用 `GET /api/collection/question-favorites?page=&page_size=`
+    → 接 `DELETE /api/collection/q_{favId}` 实现取消收藏
+    → 列表摘要用 `renderQuestionSummary()`（依赖任务 6）
+  - **笔记**：`src/views/mobile_notes.vue`
+    → **不再跳路由**（那是截图 2 的 404 根因）
+    → 改用已存在的 `GET /api/notes/question/{questionId}` 取题目，**页内弹层**展示
+    → 补编辑（`PUT /api/notes/{id}`）与删除（`DELETE /api/notes/{id}`）
+
+  **Must NOT do**: 不得跳转到题目详情路由（不存在）；不得新增收藏/笔记后端接口。
+
+  **Agent Profile**: Category `unspecified-high`；Skills `[]`
+  **Parallel**: Wave 4
+  **Blocked By**: 6（需要 `renderQuestionSummary`）
+
+  **References**:
+  - `.vtj/vue/favorites.vue:198/205/295` — 收藏 stats / 列表 / 取消收藏三处样板
+  - `.vtj/vue/notes.vue:276/336/374/399` — 笔记列表 / 编辑 / 删除 / 取题目四处样板
+  - `src/views/mobile_favorites.vue` — 现状（118 行，需重写数据层）
+  - `src/views/mobile_notes.vue` — 现状（175 行，含 404 跳转）
+
+  **Acceptance Criteria**:
+  - [ ] 收藏页显示真实收藏内容，不显示"暂无收藏"
+  - [ ] 可取消收藏，取消后列表即时更新
+  - [ ] 笔记点题目能显示题目内容（**不 404**）
+  - [ ] 笔记可编辑、可删除
+  - [ ] 收藏/笔记题目摘要不撑爆列表（用 summary 而非完整 HTML）
+
+  **QA Scenarios**:
+  ```
+  Scenario: 收藏显示与取消（happy path）
+    Tool: Playwright
+    Preconditions: 账号已有收藏
+    Steps:
+      1. /#/mobile/profile 点「收藏」→ 断言进入收藏页且列表非空
+      2. 点某条「取消收藏」→ 断言该条消失且计数 -1
+      3. 刷新，断言已取消项未复现
+    Evidence: .omo/evidence/task-12-favorites.png
+
+  Scenario: 笔记点题目显示内容（happy path，守护 RC-8）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/notes 点击任一"题目笔记"
+      2. 断言弹层出现且含题目文字（长度 > 10）
+      3. 断言 URL 未跳转、页面未出现 404
+    Evidence: .omo/evidence/task-12-note-detail.png
+
+  Scenario: 空收藏态（negative，防回归）
+    Tool: Playwright
+    Preconditions: 使用无收藏的新账号
+    Steps:
+      1. 打开收藏页
+      2. 断言显示友好空态文案，不是报错
+    Evidence: .omo/evidence/task-12-favorites-empty.png
+  ```
+
+  **Commit**: YES — `fix(mobile): 收藏改用 collection 端点并支持取消；笔记改页内弹层展示`
+
+- [ ] 13. 成就 / 反馈 / 帮助 移动端壳层（需求 四(4)）
+
+  **What to do**:
+  - 新建 `src/views/mobile_achievements.vue`、`mobile_feedback.vue`、`mobile_help.vue`
+  - 每页：统一顶部栏（标题 + 返回键，触控区 ≥ 44px）+ 内容区
+  - 返回键统一逻辑：`window.history.length > 1 ? router.back() : router.push('/mobile/profile')`
+    （与 `mobile_wrong_questions.vue:91-94` 一致）
+  - 保留桌面端 `/achievements`、`/feedback`、`/help` 路由不变（电脑端仍用）
+  - 手机端入口改指新的 `/mobile/*` 路径
+
+  **Must NOT do**:
+  - 不得改动 `src/views/achievements.vue` 等电脑端页面（会影响电脑端用户）
+  - 不得直接改 `<template>` 之外的既有桌面页结构
+
+  **Agent Profile**: Category `visual-engineering`；Skills `[]`
+  **Parallel**: Wave 4
+
+  **References**:
+  - `src/views/achievements.vue` — 桌面基准（内容与数据来源）
+  - `src/views/mobile_wrong_questions.vue:4-8, 91-94, 195-209` — **移动端顶栏 + 返回键 + sticky 样板**
+  - `packages/design-tokens/src/variables.css:82, 24-27` — 触控区与配色令牌
+  - `.vtj/vue/mobile_profile.vue:260/262/263` — 现有三个跳转入口
+
+  **Acceptance Criteria**:
+  - [ ] 三页均有返回键，点击回到「我的」
+  - [ ] 三页**无电脑端顶栏残留**（无"警大砺安"深蓝导航）
+  - [ ] 直接访问（无历史）时返回键回落到 `/mobile/profile` 而非白屏
+  - [ ] 电脑端 `/achievements`、`/feedback`、`/help` 无回归
+
+  **QA Scenarios**:
+  ```
+  Scenario: 三页返回键可用（happy path）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/profile 依次点「我的成就」「意见反馈」「帮助中心」
+      2. 每页断言可见返回键 .back-btn（或等价选择器）
+      3. 点击返回 → 断言回到 /#/mobile/profile
+      4. 截图三页
+    Evidence: .omo/evidence/task-13-{achievements,feedback,help}.png
+
+  Scenario: 无历史时兜底（negative，护栏）
+    Tool: Playwright
+    Steps:
+      1. 新开标签页直接访问 /#/mobile/achievements
+      2. 点击返回键
+      3. 断言落地 /#/mobile/profile（而非空白/外部站点）
+    Evidence: .omo/evidence/task-13-back-fallback.txt
+  ```
+
+  **Commit**: YES — `feat(mobile): 新增成就/反馈/帮助移动端页并统一返回机制`
+
+- [ ] 14. 每日新闻重复图片（RC-12）
+
+  **What to do**（`src/views/mobile_news.vue`）:
+  - 定位 `resolveImg()` 实现
+  - 对解析失败的 URL **按序去重**（同一占位结果只保留一张）
+  - 核对 `imageMap`（L136-140 按 `img.order` 建映射）与 `[[IMG:n]]`（L147-151）下标是否对齐
+  - 占位图与真实图视觉可区分
+
+  **Must NOT do**: 不得改动后端图片服务（`backend/app/services/image_filters.py` 已存在，先读再动）。
+
+  **Agent Profile**: Category `deep`；Skills `[]`
+  **Parallel**: Wave 3
+
+  **References**:
+  - `src/views/mobile_news.vue:26-32` — 图片列表渲染
+  - `src/views/mobile_news.vue:90-91` — `imageUrlOf()`
+  - `src/views/mobile_news.vue:136-140` — `imageMap` 按 order 建映射
+  - `src/views/mobile_news.vue:147-151` — `[[IMG:n]]` 行内标记替换
+  - `src/utils/questionRender.js:72-80` — 列表摘要 `renderQuestionSummary`（`[图片]` 占位范式）
+  - `backend/app/services/image_filters.py` — **既有图片处理服务，复用前必读**
+
+  **Acceptance Criteria**:
+  - [ ] 新闻详情不出现 3 张相同图
+  - [ ] 正常图片正常显示
+  - [ ] 解析失败时显示占位图且**不重复堆叠**
+
+  **QA Scenarios**:
+  ```
+  Scenario: 无重复图片（happy path）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/news 打开任一含图新闻详情
+      2. 收集所有 img 的 src → 断言无连续重复
+      3. 截图
+    Evidence: .omo/evidence/task-14-news-images.png
+
+  Scenario: 图片 URL 全部失效（negative，降级护栏）
+    Tool: Playwright
+    Steps:
+      1. 拦截图片请求全部返回 404
+      2. 断言显示占位图，且占位图不重复出现 3 次
+    Evidence: .omo/evidence/task-14-news-fallback.png
+  ```
+
+  **Commit**: YES — `fix(mobile): 每日新闻去重重复图片并对齐行内标记映射`
+
+- [ ] 15. 顺带修生产隐患与文档登记
+
+  **What to do**:
+  - `.vtj/vue/notes.vue:265/284/407` 硬编码 `http://localhost:8000` → 改走 `apiFetch`（生产必炸）
+  - 科目 key 约定不统一（错题本 `1/2/3` vs 电脑端 `{1:'xc',2:'sl',3:'ga'}` + `q.subject`）
+    → **本次不改 schema**，仅在本方案登记为已知技术债并加注释指向
+  - 在 `CLAUDE.md/vtj.md` 附录 E「页面-API 对照表」补上手机端各页真实 API 现状（该表已严重过时）
+
+  **Must NOT do**: 不得在本任务内统一科目 key（属 schema 变更，需单独立项并做数据迁移评估）。
+
+  **Agent Profile**: Category `quick`；Skills `[]`
+
+  **Parallel**: Wave 4
+
+  **References**:
+  - `.vtj/vue/notes.vue:265/284/407` — 三处硬编码绝对地址
+  - `CLAUDE.md/vtj.md:1256-1301` — 附录 E 页面-API 对照表（待补手机端）
+  - `.vtj/vue/wrong_questions.vue:730` — 另一套科目 key 约定的来源
+
+  **Acceptance Criteria**:
+  - [ ] 源码中无硬编码 `http://localhost:8000`
+  - [ ] 笔记页在非 localhost 环境仍可加载
+  - [ ] 科目 key 技术债已登记
+
+  **QA Scenarios**:
+  ```
+  Scenario: 笔记页无硬编码地址（happy path）
+    Tool: Bash (grep) + Playwright
+    Steps:
+      1. grep -r "localhost:8000" .vtj/vue/notes.vue → 期望 0 命中
+      2. 访问 /#/mobile/notes 断言列表正常加载
+    Evidence: .omo/evidence/task-15-no-hardcode.txt
+  ```
+
+  **Commit**: YES — `fix(prod): 移除 notes.vue 硬编码绝对地址并登记科目 key 技术债`
+
+---
+
+### Phase 2：P2 新增功能接线（后端全部已建好）
+
+- [ ] 16. 备考资料（需求 五(1)）
+
+  **What to do**:
+  - 按 **D2**，入口**下沉到练习页内**（原「题库」位置）
+  - 三个**严格独立**模块：行测 / 申论 / 公专（用户明确要求，不得混排）
+  - 路由 `/mobile/materials` 改指向真实实现（现指向手写 stub `src/views/mobile_materials.vue`）
+  - 复用 `materials_xingce/shenlun/gongzhuan.vue` 的数据层：
+    `/api/materials?subject=&type=`、`/api/materials/progress-summary`、`/api/materials/{id}`、
+    `/api/materials/progress`、`/api/materials/{id}/favorite`
+  - 资料类型分组：文本资料 / 视频资料 / 记忆卡片
+  - 移动端排版：三科入口卡片 + 每科内二级分组 + 详情/学习进度
+
+  **Must NOT do**: 不得把三科混进一个下拉；不得新建资料后端（已齐全）。
+
+  **Agent Profile**: Category `visual-engineering`；Skills `[]`
+  **Parallel**: Wave 5
+  **Blocked By**: 8（需先有练习页入口位置）
+
+  **References**:
+  - `.vtj/vue/materials_xingce.vue:170/188/198/248/270` — **五处接口调用样板**（三页同构）
+  - `.vtj/vue/materials_shenlun.vue:170` / `materials_gongzhuan.vue:170` — 三科 SUBJECT 常量差异点
+  - `src/views/mobile_materials.vue` — 现状 stub（212 行）
+  - `packages/design-tokens/src/variables.css:20-22` — 三科配色令牌
+
+  **Acceptance Criteria**:
+  - [ ] 三个独立模块：行测备考资料 / 申论备考资料 / 公专备考资料
+  - [ ] 每科内容来自真实 `/api/materials`（非模拟数据）
+  - [ ] 资料按文本/视频/记忆卡片分组
+  - [ ] 可进入详情、可记录学习进度、可收藏
+
+  **QA Scenarios**:
+  ```
+  Scenario: 三科资料模块可用（happy path）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/practice 滚动到备考资料区
+      2. 断言存在三个独立入口：行测 / 申论 / 公专
+      3. 逐个进入，断言每科列表非空
+      4. 断言三科内容不重复（抽查前 3 条标题互不相同）
+      5. 截图
+    Evidence: .omo/evidence/task-16-materials-*.png
+
+  Scenario: 空科目降级（negative）
+    Tool: Playwright
+    Steps:
+      1. 拦截 /api/materials 返回空 items
+      2. 断言显示友好空态，不是白屏或报错
+    Evidence: .omo/evidence/task-16-materials-empty.png
+  ```
+
+  **Commit**: YES — `feat(mobile): 备考资料三科独立模块接入真实接口`
+
+- [ ] 17. 成绩分析（需求 五(2)）
+
+  **What to do**:
+  - 位置：「我的」→ 成绩分析（用户指定）
+  - 复用 `/api/exam-records/trend?exam_type=&limit=`、`/api/exam-records/stats`、
+    `/api/exam-records/{examType}`、`/api/exam-records/{recordId}/wrong-questions`、
+    `/api/exam-records/ai/analyze?record_id=`
+  - 移动端适配：图表改轻量渲染（`@vtj/charts` 已在依赖中）
+  - 提供**提升建议**（用户明确要求），数据源用 `/ai/analyze` + 知识点正确率聚合
+
+  **Must NOT do**: 不得新建成绩后端；不得把 AI 分析结果当成确定结论展示（需标注为建议）。
+
+  **Agent Profile**: Category `unspecified-high`；Skills `[]`
+  **Parallel**: Wave 5
+
+  **References**:
+  - `.vtj/vue/score_analysis.vue:371/393/416/446/466` — **五处接口调用样板**
+  - `src/views/mobile_score_analysis.vue` — 现状（233 行）
+  - `package.json:37` — `@vtj/charts` 依赖已存在
+
+  **Acceptance Criteria**:
+  - [ ] 「我的」可见成绩分析入口
+  - [ ] 展示趋势、统计、记录列表
+  - [ ] 可下钻单次考试的错题
+  - [ ] 给出提升建议且明确标注为 AI 建议
+
+  **QA Scenarios**:
+  ```
+  Scenario: 成绩分析可用（happy path）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/profile 点「成绩分析」→ 断言进入且有数据
+      2. 断言含趋势图、统计块、记录列表
+      3. 点击某条记录 → 断言可下钻错题
+      4. 断言存在"提升建议"区块且标注 AI 建议
+    Evidence: .omo/evidence/task-17-score-analysis.png
+
+  Scenario: 无考试记录（negative）
+    Tool: Playwright
+    Steps:
+      1. 使用无记录新账号
+      2. 断言显示"暂无考试记录"空态
+    Evidence: .omo/evidence/task-17-empty.png
+  ```
+
+  **Commit**: YES — `feat(mobile): 成绩分析接入真实接口并提供提升建议`
+
+- [ ] 18. 个人小目标（需求 五(4)）
+
+  **What to do**:
+  - **首页「今日目标」卡可编辑**（截图证实现有结构：问候语 + 连续学习 N 天 + 今日目标 40题 + 进度条）
+    → 改用 `PUT /api/goals/{id}` 允许编辑目标题数
+    → 问候语按时段动态（早/上午/中午/下午/晚/深夜）
+  - **「我的」增加目标统计记录**：`GET /api/goals/stats/summary` + `GET /api/goals/`
+  - 复用 `goal_card.vue:181-290` 的完整 CRUD 逻辑
+  - 完成动作：`POST /api/goals/{id}/complete`、`/progress?increment=1`、`/confirm-complete`
+
+  **Must NOT do**: 不得新建目标后端；不得把目标写死在前端（必须落库、多端一致）。
+
+  **Agent Profile**: Category `unspecified-high`；Skills `[]`
+  **Parallel**: Wave 5
+
+  **References**:
+  - `.vtj/vue/goal_card.vue:181/232/261/276/290` — **五处接口调用样板**（完整 CRUD）
+  - `.vtj/vue/mobile_home.vue:260` — `/api/goals/stats/summary` 现有调用
+  - `.vtj/vue/mobile_gold_purchase.vue:193-209` — 目标创建/完成的移动端既有样板
+  - `packages/shared-types/entities.ts:45-51` — `Note` 类型（对照目标类型可参考风格）
+
+  **Acceptance Criteria**:
+  - [ ] 首页目标卡可编辑目标题数并保存（刷新后仍生效）
+  - [ ] 问候语随时段变化
+  - [ ] 进度条随实际刷题数更新
+  - [ ] 「我的」可见目标历史与统计
+  - [ ] 多端一致（手机改、平板/电脑端可见）
+
+  **QA Scenarios**:
+  ```
+  Scenario: 目标可编辑并持久化（happy path）
+    Tool: Playwright
+    Steps:
+      1. /#/mobile/home 点击「今日目标」卡
+      2. 把目标改为 60 并保存
+      3. 断言卡片显示 60题、进度分母为 60
+      4. 刷新页面，断言仍为 60
+      5. 截图
+    Evidence: .omo/evidence/task-18-goal-edit.png
+
+  Scenario: 未登录时目标区（negative）
+    Tool: Playwright
+    Preconditions: 未登录
+    Steps:
+      1. 访问 /#/mobile/home
+      2. 断言目标卡显示登录引导，不报错
+    Evidence: .omo/evidence/task-18-goal-unauth.png
+  ```
+
+  **Commit**: YES — `feat(mobile): 首页目标卡可编辑并在我的中增加目标统计`
+
+---
+
+### Phase 3：P3 轨道 B 防腐化
+
+- [ ] 19. 修复 monorepo 骨架 5 处硬伤
+
+  **What to do**:
+  - B1 `shared-api/client.ts` + `shared-store/auth.ts` → 消除 `/api/api` 双前缀
+  - B2 统一响应拆包（拦截器已返回 `response.data`，调用方应取 `.data`）
+  - B3 修正 `LoginResponse` 类型与实现一致
+  - B4 修正 FormData 的 Content-Type
+  - B5 401 跳转为 Hash 路由 `/#/login`
+
+  **Must NOT do**: 不得把手机端迁到该骨架（骨架无路由无视图，无法承载）。
+
+  **Agent Profile**: Category `unspecified-high`；Skills `[]`
+  **Parallel**: Wave 5（与 Phase 2 互不依赖）
+
+  **References**:
+  - `packages/shared-api/src/client.ts:3/35/39` — B1/B2/B5
+  - `packages/shared-store/src/auth.ts:20-26` — B1/B2/B3/B4
+  - `packages/shared-types/src/api.ts:19-22` — B3 类型定义
+
+  **Acceptance Criteria**:
+  - [ ] 请求 URL 无 `/api/api` 双前缀
+  - [ ] 响应取值走 `.data` 一层
+  - [ ] `vue-tsc --noEmit` 对 packages 无类型错误
+  - [ ] FormData 请求头正确
+  - [ ] 401 跳 `/#/login`
+
+  **QA Scenarios**:
+  ```
+  Scenario: 骨架类型检查通过（happy path）
+    Tool: Bash
+    Steps:
+      1. 在 packages 下运行 tsc --noEmit
+      2. 断言退出码 0、无 TS 错误输出
+    Evidence: .omo/evidence/task-19-typecheck.txt
+  ```
+
+  **Commit**: YES — `fix(packages): 修复 shared-* 双前缀/拆包/类型/请求头/Hash 跳转 5 处硬伤`
+
+---
+
+## Final Verification Wave
+
+> 4 个 review agent **并行**执行。全部 APPROVE 后，向用户呈现结果并**等待用户明确认可**。
+> **未经用户认可不得勾选完成。**
+
+- [ ] F1. 计划符合性审计 — `oracle`
+  逐条核对本方案「Must Have」是否实现（读文件 / curl 接口）；核对「Must NOT Have」是否被违反
+  （grep 禁止模式）；检查证据文件是否存在于 `.omo/evidence/`。
+  输出：`Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT`
+
+- [ ] F2. 代码质量审查 — `unspecified-high`
+  跑 `vue-tsc --noEmit` + linter；检查 `as any` / `@ts-ignore` / 空 catch / 注释代码 / 未用导入；
+  检查是否引入裸 `v-html`、是否有多处重复的渲染逻辑。
+  输出：`Typecheck | Lint | Files | VERDICT`
+
+- [ ] F3. 真实手工 QA — `unspecified-high`（+ `playwright`）
+  从干净状态出发，**执行本方案每个任务的 QA 场景**并留证；
+  重点做**跨任务集成**验证（底栏 4 项跨 4 页、渲染真源跨电脑端/手机端/平板端）。
+  输出：`Scenarios [N/N] | Integration | VERDICT`
+
+- [ ] F4. 范围忠实度检查 — `deep`
+  逐任务比对「What to do」与 `git diff`；确认无漏做、无超范围、无跨任务污染。
+  输出：`Tasks [N/N] | Contamination | Unaccounted | VERDICT`
+
+---
+
+## 第四部分：代码编写前的多角度论证
+
+> 对应用户要求 #3。逐条回答"为什么这样写 / 好处 / 安全性 / 运维便利 / 文件位置是否正确 /
+> 后端字段与路由是否完整 / 前端能否显示 / VTJ 版本是否一致"。
+
+### 4.1 为什么是"改前端参数名"而不是"改后端参数名"？（任务 2）
+
+| 角度 | 结论 |
+|------|------|
+| **为什么** | 后端 `knowledge_point_ids` 是**已上线契约**，电脑端与历史脚本都在用；改它会连带破坏多处 |
+| **好处** | 前端单点适配，改动 3 行、零回归面；契约不动则未来其它客户端都安全 |
+| **安全性** | 纯参数名修正，不涉及权限与数据面；额外加 422 可见化反而**提升**可观测性 |
+| **运维便利** | 参数名统一后，"静默空白"这类问题会在日志中显形，不再需要翻日志猜 |
+| **文件位置对吗** | 对。出题调用只在 `mobile_answer.vue`；跳转拼参在 `mobile_practice.vue` |
+| **后端字段/路由全吗** | 全。`quick_practice.py` 5 个端点齐全，无需新增 |
+| **前端能看到效果吗** | 能。修完立即出题，是本次价值最高的单点修复 |
+| **VTJ 版本一致吗** | **已验证**：7 个 mobile 页 `.vue` 与 `.json` 的 `__VERSION__` 全部 MATCH，**本方案不涉及版本问题** |
+
+### 4.2 为什么修 `questionRender.js` 而不是新建工具文件？（任务 6）
+
+| 角度 | 结论 |
+|------|------|
+| **为什么** | 它已是**唯一真源**、有 `.d.ts`、已被 `mobile_answer.vue:19` 正确引用；新文件会制造第二真源 |
+| **好处** | 一处修改，电脑端/手机端/平板端/错题本/答题卡**同时受益** |
+| **安全性** | 同批把 `sanitizeHtml` 改为真白名单（任务 7）→ **修一处漏洞而非扩散** |
+| **运维便利** | 删除电脑端内联重复正则后，"图片规则"只有一处可改，杜绝两处逻辑漂移 |
+| **文件位置对吗** | 对。`src/utils/` 正是共享工具目录，符合项目既有组织 |
+| **后端字段全吗** | 不涉及。`[IMAGE:n_i]` 约定已由 `renderQuestionSummary:76` 与 `answer_page.vue:482` 双重佐证 |
+| **VTJ 版本一致吗** | `answer_page.vue` 的改动需同步其 `.vtj/files/answer_page.json` 的 `methods`，否则设计器保存会回退 |
+
+### 4.3 为什么底栏要抽单一真源？（任务 10）
+
+| 角度 | 结论 |
+|------|------|
+| **为什么** | 现状 5 份复制粘贴、样式不一致（`practice` 连 `.active` 规则都没有）、图标 20/22 不一 |
+| **好处** | RC-1 这类"改一处漏三处"的 bug 结构性消失 |
+| **安全性** | 纯前端重构，无接口面 |
+| **运维便利** | 一次改动全局生效；新端只需接组件 |
+| **VTJ 规范符合吗** | UI 结构归设计器 → **优先抽 VTJ 公共区块**；`<script>` 逻辑归脚本。备选的 `src/components/MobileTabBar.vue` 属手写范畴，规范允许 |
+
+### 4.4 为什么"错题本"改前端而不改后端？（任务 3）
+
+| 角度 | 结论 |
+|------|------|
+| **为什么** | 后端 `/subcategories` **同时正确返回** `subject_name` 与 `subcategory`；电脑端正是用后者且显示正常 |
+| **好处** | 改动集中在 1 个文件、约 6 行；后端零改动 = 零回归 |
+| **安全性** | 不涉及 |
+| **运维便利** | 顺带把「切 Tab 数据不变」一起修掉（传 subcategory），避免二次返工 |
+| **口径风险** | 电脑端只用 `subcategory`、手机端用 `subject_name+subcategory`，**显示文案会略有差异** → 已在附录 B 登记待用户确认 |
+
+### 4.5 为什么"混合练习"不新建接口？（任务 9）
+
+| 角度 | 结论 |
+|------|------|
+| **为什么** | `knowledge_point_ids` **本就支持逗号分隔多值**；`bySubCategory=true` **后端已实现考点展开**（L234-239） |
+| **好处** | 三层混合练习**零后端改动**；后端 `distinct()` 已去重（L247），不会出重复题 |
+| **安全性** | 不涉及；`limit` 上限 100 已有约束 |
+| **运维便利** | 不增接口 = 不增维护面、不增攻击面 |
+| **反例（不能怎么做）** | ❌ 前端先按考点各拉一次再合并——重复请求、数据量爆炸、且绕过后端去重 |
+
+### 4.6 金币购/备考资料/成绩分析/小目标为何只做"接线"？（任务 5/16/17/18）
+
+| 角度 | 结论 |
+|------|------|
+| **为什么** | 四者的后端与页面**早已建好**（金币购页已接 11 个接口），缺的只是路由与入口 |
+| **好处** | 零后端开发，风险与工期都最低 |
+| **安全性** | 沿用既有端点与鉴权，不新增攻击面 |
+| **运维便利** | 复用成熟链路，避免平行实现漂移 |
+| **文件位置对吗** | 对。路由加在 `src/router/index.ts`（共 90 条，已有样板）；入口加在 `mobile_profile.vue:255-264` 集中跳转区 |
+
+### 4.7 VTJ 版本一致性核查结论
+
+> 用户要求 #3 明确提到「vtj 版本是否一致」。
+
+**已逐一核对 7 个手机端页面**：
+
+| 页面 | `.vue` version | `.json` `__VERSION__` | 结论 |
+|------|---------------|----------------------|------|
+| mobile_forum | 1788919369989 | 1788919369989 | ✅ MATCH |
+| mobile_gold_purchase | 1778918740312 | 1778918740312 | ✅ MATCH |
+| mobile_home | 1788919369989 | 1788919369989 | ✅ MATCH |
+| mobile_login | 1788919369989 | 1788919369989 | ✅ MATCH |
+| mobile_practice | 1788919369989 | 1788919369989 | ✅ MATCH |
+| mobile_profile | 1788919369989 | 1788919369989 | ✅ MATCH |
+| mobile_question_bank | 1788919369989 | 1788919369989 | ✅ MATCH |
+
+**结论：VTJ 版本不是本次任何问题的根因。**
+但按 `CLAUDE.md/vtj.md` 附录 F，凡修改 `.vtj/vue/*.vue` 的 `methods`/`state`/`lifeCycles`，
+**必须同步更新 `.vtj/files/*.json` 并保持 `__VERSION__` 一致**，否则设计器保存会覆盖手写逻辑。
+→ 本方案所有涉及 `.vtj/vue/*.vue` 的任务（1、4、5、8、9、10、11、12、15）均含此同步步骤。
+
+---
+
+## 第五部分：风险、回归与验收
+
+### 5.1 风险登记
+
+| # | 风险 | 影响 | 缓解 |
+|---|------|------|------|
+| K1 | **D2 去掉「题库」tab 产生 404 旧链接** | 旧书签/外部链接失效 | 保留 `/mobile/question-bank` 作重定向（任务 8） |
+| K2 | **D3 手机端/平板端共享文件** → 一处改两端变 | 平板端 UI 同步变化 | 用户已决策接受；每个任务 QA 需**同时验证两端** |
+| K3 | 渲染真源改动影响**电脑端答题** | 电脑端回归 | 任务 6 专设「电脑端无回归」场景 |
+| K4 | 白名单过滤**过度**导致内容丢失 | 题干/表格消失 | 任务 7 专设「正常题目内容不受影响」场景 |
+| K5 | VTJ 设计器保存覆盖手写逻辑 | 代码丢失 | 每个 `.vtj/vue` 任务同步 `.json` + `__VERSION__` |
+| K6 | 底栏抽组件需动 VTJ 设计器 | 阻塞（非代码可解） | 备选 `src/components/MobileTabBar.vue`；若两者都不可行则**单独反馈用户** |
+| K7 | `resolveImg` 本次未定位到函数体 | 任务 14 需现场探查 | 已预留探查步骤，不阻塞其它任务 |
+| K8 | 采集类接口（`/ai/analyze`）结果不确定 | 建议不准 | 界面明确标注"AI 建议"，不作为结论 |
+
+### 5.2 回归底线（不可违反）
+
+- 电脑端题库/答题/错题本/收藏/笔记/论坛 **必须无回归**
+- 平板端 6 页必须可用
+- 现有 90 条路由**一条不删**
+- 数据库结构**零变更**；新增依赖**零**
+
+### 5.3 验证命令
+
+```powershell
+# 类型检查
+npm run typecheck:guarded
+
+# VTJ 渲染真源单测（任务 6/7 的验收依赖）
+node -e "import('./src/utils/questionRender.js').then(m=>{const h=m.renderQuestionContent('[IMAGE:12_1] 测试');console.log(h.includes('<img')?'OK':'FAIL')})"
+
+# 安全护栏（任务 7）
+node -e "import('./src/utils/questionRender.js').then(m=>{const o=m.sanitizeHtml('<script>alert(1)</script><p>hi</p>');console.log(o.includes('<script')?'FAIL':'OK')})"
+
+# 硬编码地址清零（任务 15）
+Select-String -Path ".vtj/vue/notes.vue" -Pattern "localhost:8000" | Measure-Object
+```
+
+### 5.4 成功标准
+
+- [ ] 根因总表 13 项全部修复且有 QA 证据
+- [ ] 4 张截图反映的问题全部消失：论坛 tab 可见、题目笔记不再 404、成就页有返回键、目标卡可编辑
+- [ ] 「Must NOT Have」零违反
+- [ ] 电脑端与平板端零回归
+- [ ] 方案归档至 `solve_problems_files/`
+
+### 5.5 Must NOT Have（硬性禁止）
+
+- ❌ 新建与 `questionRender.js` 并行的渲染工具
+- ❌ 新建与 `quick_practice` 并行的出题/混合练习接口
+- ❌ 复制 `mobile_*.vue` 造平板专属副本（违反 D3 与"去粗取精"）
+- ❌ 删除现有任何路由
+- ❌ 改数据库 schema / 科目 key 约定
+- ❌ 新增第三方依赖
+- ❌ 在前端比对或存储密码
+- ❌ 硬编码 `localhost:8000` 或任何绝对地址
+- ❌ 新增裸 `v-html` 渲染题目内容
+- ❌ 修改 `.vtj/files/*.json` 的 `__VERSION__` 却不改 `.vue`（或反之）
+
+---
+
+## 附录 A：文件级改动清单
+
+### 前端 — 现役工程
+
+| 文件 | 任务 | 改动性质 |
+|------|------|----------|
+| `src/utils/questionRender.js` | 6, 7 | 扩展 + 安全加固（**真源**） |
+| `src/utils/questionRender.d.ts` | 6, 7 | 签名与注释同步 |
+| `src/views/mobile_answer.vue` | 2, 6, 9 | 参数名 + 渲染 + 混合练习 |
+| `src/views/mobile_wrong_questions.vue` | 3, 6 | 字段 + 过滤 + 渲染 |
+| `src/views/mobile_favorites.vue` | 12 | 数据层重写 |
+| `src/views/mobile_notes.vue` | 12 | 去 404 + 编辑删除 |
+| `src/views/mobile_news.vue` | 14 | 图片去重 |
+| `src/views/mobile_materials.vue` | 16 | 指向真实实现 |
+| `src/views/mobile_score_analysis.vue` | 17 | 真实接口 + 建议 |
+| `src/views/mobile_achievements.vue`（新） | 13 | 移动端壳层 |
+| `src/views/mobile_feedback.vue`（新） | 13 | 移动端壳层 |
+| `src/views/mobile_help.vue`（新） | 13 | 移动端壳层 |
+| `src/components/MobileTabBar.vue`（新，备选） | 10 | 底栏单一真源 |
+| `src/router/index.ts` | 5, 8, 13, 16 | 路由注册/重定向 |
+| `src/style/`（全局） | 10 | 引入设计令牌 |
+| `.vtj/vue/mobile_forum.vue` + `.json` | 1, 4 | 类名解耦 + 头像 |
+| `.vtj/vue/tablet_forum.vue` + `.json` | 1 | 同类冲突排查 |
+| `.vtj/vue/mobile_question_bank.vue` + `.json` | 8, 10 | 分类树 + 底栏 |
+| `.vtj/vue/mobile_practice.vue` + `.json` | 2, 9, 10 | 参数名 + 混合练习 + 底栏 |
+| `.vtj/vue/mobile_profile.vue` + `.json` | 5, 10, 11, 16-18 | 入口 + 资料编辑 + 底栏 |
+| `.vtj/vue/mobile_home.vue` + `.json` | 10, 18 | 底栏 + 目标卡 |
+| `.vtj/vue/answer_page.vue` + `.json` | 6 | 删除内联正则，改真源 |
+| `.vtj/vue/favorites.vue` + `.json` | 12 | 收藏一致性 |
+| `.vtj/vue/notes.vue` + `.json` | 15 | 去硬编码 |
+
+### 前端 — 轨道 B 骨架
+
+| 文件 | 任务 |
+|------|------|
+| `packages/shared-api/src/client.ts` | 19 |
+| `packages/shared-store/src/auth.ts` | 19 |
+| `packages/shared-types/src/api.ts` | 19 |
+
+### 后端
+
+| 文件 | 任务 | 改动性质 |
+|------|------|----------|
+| — | — | **零改动**（本方案不新增/不修改任何后端文件） |
+
+> 后端只需**确认**（不改）：`quick_practice.py:209` 参数名、`auth.py:400` 改密字段名、
+> `wrong_questions.py:299` 返回结构、`/api/collection/*`、`/api/exam-records/*`、`/api/goals/*`
+
+### 文档
+
+| 文件 | 任务 |
+|------|------|
+| `solve_problems_files/手机端问题优化完整解决方案_v1.md`（新） | 0（归档） |
+| `solve_problems_files/README.md` | 0（索引） |
+| `CLAUDE.md/vtj.md` 附录 E | 15（补手机端 API 现状） |
+
+---
+
+## 附录 B：待确认事项
+
+> 实施中若遇到以下任一项，**停下询问用户**，不要自行假设。
+
+| # | 事项 | 现状 | 需确认 |
+|---|------|------|--------|
+| B1 | 错题本 Tab 显示文案口径 | 电脑端只显示 `subcategory`；本方案让手机端显示 `科目·子科目` | 两端文案是否需完全一致？ |
+| B2 | 底栏组件落地路径 | 优先 VTJ 公共区块；备选手写组件 | 设计器抽区块是否可行？不可行则用手写组件 |
+| B3 | 混合练习的 `limit` 与年份筛选默认值 | 后端默认 `limit=20`、`year=None` | 手机端默认题数与默认年份策略 |
+| B4 | 备考资料入口在练习页的具体位置 | 需先有练习页入口（任务 8） | 放在科目列表上方还是下方 |
+| B5 | 目标卡可编辑的交互形态 | 弹窗表单 vs 行内编辑 | 移动端行内编辑空间不足，倾向弹窗 |
+| B6 | 错题本「切 Tab 数据不变」的数据真相 | 三个 Tab 的 `subject_id` 是否真都是 3 | 若数据本身只有公专错题，需确认是数据问题还是展示问题 |
+| B7 | 任务 14 的 `resolveImg` 实现 | 本次未定位到函数体 | 实施时现场探查；若需改动后端图片服务，先确认 |
+| B8 | 科目 key 统一（`1/2/3` vs `xc/sl/ga`） | 已登记为技术债 | 是否单独立项（涉及数据迁移评估） |
+
+---
+
+## 执行波次总览
+
+```
+Wave 0  0  归档方案
+Wave 1  1  论坛 tab 隐形      ┐
+        2  练习页全空 ★      │ 全部无前置依赖，可完全并行
+        3  错题本三分类      │
+        4  论坛头像          │
+        5  金币购路由        ┘
+Wave 2  6  渲染真源统一 ★    ┐ 并行
+        7  白名单加固 ★      ┘
+Wave 3  8  题库分类树        ┐ 依赖 6
+        9  混合练习 ★        │
+        10 底栏单一真源      ┘ 依赖 1
+        14 每日新闻图片      ┘
+Wave 4  11 资料编辑          ┐
+        12 收藏/笔记         ┘ 依赖 6
+        13 成就/反馈/帮助    │
+        15 生产隐患与文档    ┘
+Wave 5  16 备考资料   ┐
+        17 成绩分析   │ 依赖 8
+        18 个人小目标 ┘
+        19 骨架硬伤   ┘ 无依赖
+Wave FINAL  F1 oracle / F2 quality / F3 QA / F4 scope  →  呈现用户 → 等认可
+```
+
+**关键路径**：2（练习页全空）→ 6（渲染真源）→ 8（分类树）→ 16（备考资料）→ F1-F4
+**预计净收益**：Phase 0 的 5 个任务多数为 1 行级修改，可在一次提交内完成并当天验证效果。
+

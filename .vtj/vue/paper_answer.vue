@@ -58,7 +58,7 @@
                 <span class="q-score">{{ q.score || 0 }}分</span>
                 <span v-if="markedParsed.includes(q.id)" class="mark-badge">🔖 已标记</span>
               </div>
-              <p class="q-stem" v-html="q.stem"></p>
+              <p class="q-stem" v-html="renderQuestionContent(q.stem, { stripInlineOption: true })"></p>
 
               <!-- 客观题：选项 -->
               <div v-if="getRenderMode(q.type) !== 'textarea'" class="q-options">
@@ -76,7 +76,7 @@
                     {{ getRenderMode(q.type) === 'checkbox' ? '☐' : '○' }}
                   </span>
                   <span class="option-label">{{ state.optionLabels[oidx] }}.</span>
-                  <span class="option-text" v-html="opt"></span>
+                  <span class="option-text" v-html="renderQuestionContent(opt)"></span>
                 </div>
               </div>
 
@@ -173,6 +173,7 @@
 // @ts-nocheck
 import { defineComponent, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'PaperAnswer',
@@ -202,7 +203,7 @@ export default defineComponent({
       submitWrong: 0,
       submitTimeSpent: 0,
     });
-    return { state, provider };
+    return { state, provider, renderQuestionContent };
   },
   computed: {
     questionsParsed() {

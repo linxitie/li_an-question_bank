@@ -341,18 +341,16 @@ export default defineComponent({
       return map[name] || 'badge-single';
     }
 
-    // 清洗 HTML：移除 UTB ID、题号前缀，修复图片路径（用于 v-html 展示）
+    // 清洗 HTML：移除 UTB ID、题号前缀（域内预处理），
+    // 最终清洗统一委托 src/utils/questionRender.js 的 renderQuestionContent（单一真源），
+    // 与 teacher_questions.vue 的 cleanHtmlContent 保持同一范式，避免出现第二套清洗语义。
     function cleanHtmlContent(text: string) {
       if (!text) return '';
       let cleaned = text;
       cleaned = cleaned.replace(/UTB[a-f0-9]{8,}[-－]?\s*选项?[A-H]?[-－]?\d*/gi, '');
       cleaned = cleaned.replace(/第\s*\d+\s*题[：:]\s*/g, '');
-      // 已有 img 标签添加 onerror 兜底，避免裂图
-      cleaned = cleaned.replace(/<img\s+([^>]*?)(?:\s*\/?>|>)/g, function(match: string, attrs: string) {
-        if (attrs.toLowerCase().includes('onerror')) return match;
-        return '<img ' + attrs + ' onerror="this.onerror=null;this.style.display=\'none\'" />';
-      });
-      return cleaned;
+      // 统一走共享渲染：负责 [IMAGE:标记] 转 <img>、白名单过滤与图片加载失败兜底
+      return renderQuestionContent(cleaned);
     }
 
     function renderSummary(q: any) {
