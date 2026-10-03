@@ -293,3 +293,99 @@ def semantic_grouping(questions: List[dict]) -> List[dict]:
         })
 
     return suggestions
+
+
+# ============================================================================
+# 行测材料块归组（任务 9 新增，纯增量）
+# ============================================================================
+#
+# 与既有层1 规则集的关系
+# ----------------------
+# 既有 4 条规则（material / scenario / passage / range）的触发词是
+# 「材料一」「根据以下情境」「阅读以下文章」「根据以下…回答X-Y题」，
+# **完全不命中行测**。行测的材料头是**全角括号独占行** `（一）（二）…`
+# （实测 85/85 覆盖、364 块，分布见下表），且其形态是**跨分节通用**的：
+#
+#   资料分析 299 / 言语理解与表达 39 / 判断推理 19 / 常识判断 7 = 364
+#
+# 为什么不新写材料正则：text_parser.route_xingce_sections（任务 7）已把
+# 材料块定位到 100% 准确率并**自带所属分节**。此处直接复用，
+# 符合本文件既定原则「复用 text_parser，禁止另写解析」。
+#
+# 隔离性
+# ------
+# 本函数只在 route_xingce_sections 返回非 None（即已通过 ≥2 分节锚点门槛）时
+# 才有输出，故公专/申论链路**不可能**触发。既有 4 条规则与 _MATERIAL_KEYWORDS
+# 一律未改动。
+
+# 行测分区 → question_groups.group_type（沿用既有语义；group_type 列注释已含这4 值）
+XINGCE_SECTION_GROUP_TYPE = {
+    '资料分析': 'data_analysis',      # 统计图表 + 4~5 小题
+    '言语理解与表达': 'passage',       # 多篇文章 + 阅读理解题
+    '判断推理': 'scenario',           # 情景材料 + 逻辑题
+    '常识判断': 'material',           # 材料 + 常识题
+}
+
+
+def match_xingce_material_groups(materials, qno_positions, sections=None):
+    """把行测材料块与小题题号关联，返回题组建议。
+
+    **纯识别，不碰数据库**（与本文件其余函数契约一致）；落库由调用方负责。
+
+    Args:
+        materials: :func:`text_parser.route_xingce_sections` 返回的 ``materials``，
+            每项含 ``ordinal`` / ``start`` / ``end`` / ``section``。
+        qno_positions: ``[(题号, 字符位置, 所属分节名), ...]``，需按位置升序。
+            位置取自 :func:`text_parser.split_xingce_answer_blocks` 的 ``start``
+            （锚点位置，权威）。
+        sections: route_xingce_sections 的 ``sections``，用于把每个材料块的上界
+            限制在**本分节末尾**，防止「常识判断」的材料吃掉后续分节的题。
+
+    Returns:
+        ``[{'ordinal', 'section', 'group_type', 'start', 'end',
+           'member_qnums': [...], 'member_count': int,
+           'confidence': float, 'reason': str}, ...]``
+
+        无材料块时返回 ``[]``（不抛异常）。
+    """
+    if not materials:
+        return []
+
+    sec_end: dict = {}
+    if sections:
+        for i, s in enumerate(sections):
+            sec_end[s['name']] = s['end'] if i + 1 < len(sections) else None
+
+    INF = float('inf')
+    out = []
+    for i, m in enumerate(materials):
+        section = m.get('section') or ''
+        gtype = XINGCE_SECTION_GROUP_TYPE.get(section, 'material')
+        upper = materials[i + 1]['start'] if i + 1 < len(materials) else INF
+        # 上界同时受「下一个材料块」与「本分节末尾」约束
+        se = sec_end.get(section)
+        if se is not None:
+            upper = min(upper, se)
+
+        members = [
+            qno for qno, pos, sec in qno_positions
+            if sec == section and m['start'] < pos < upper
+        ]
+        if not members:
+            continue
+
+        out.append({
+            'ordinal': m.get('ordinal'),
+            'section': section,
+            'group_type': gtype,
+            'start': m['start'],
+            'end': upper if upper != INF else -1,
+            'member_qnums': sorted(members),
+            'member_count': len(members),
+            # 材料块由 ≥2 分节锚点门槛 + 100% 可解析的分节头定位，
+            # 且成员是**位置区间内**的题（不是关键词猜测），故置信度给满
+            'confidence': 1.0,
+            'reason': 'xingce: （一）（二）材料锚点 + 分节边界限定位置区间',
+        })
+
+    return out
