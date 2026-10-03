@@ -319,7 +319,7 @@ Max Concurrent：6（Wave 1）
 > - 禁止同步 `.vtj/files/*.json`
 > - 每任务完成后更新本文件对应复选框
 
-- [ ] 1. 行测语料探针 + 110/101 差因诊断
+- [x] 1. 行测语料探针 + 110/101 差因诊断
 
   **为什么这个任务是第 1 个**：2026-10-03 13:01 的安徽行测试导入，题本解析出 **110** 块、答案解析 **101** 块，两者 `failed_count=0`、`current_phase='DONE'`，但从未确认入库。**9 题差额未解释**。若不先量化差因就设计配对内核，配对规则会建立在错误假设上 —— 这是整套方案唯一的真风险点。
 
@@ -433,7 +433,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): add read-only corpus probe and diagnose 110-vs-101 discrepancy`
   - Files：`backend/scripts/probe_xingce_corpus.py`
 
-- [ ] 2. 三重回归门禁基线快照 + 行测门禁脚本
+- [x] 2. 三重回归门禁基线快照 + 行测门禁脚本
 
   **为什么需要**：前序铁律 R-4 要求「验收判据是失败集合与基线完全一致」，但**行测从来没有过门禁**（行测全部是 2021–2025，恰在前序 P2 待办「剩余 2020–2025 纳入门禁」的门外）。没有行测门禁，本方案的每次改动都无法判断是否劣化。
 
@@ -552,7 +552,7 @@ Max Concurrent：6（Wave 1）
   - Message：`test(xingce): add xingce regression gate with section-interval assertions`
   - Files：`backend/scripts/verify_xingce_regression.py`、`backend/data/xingce_regression_baseline.txt`、`backend/data/shenlun_g3_baseline.txt`、`backend/data/pytest_baseline.txt`
 
-- [ ] 3. 行测题型主数据迁移（`question_type` subject_id=1）
+- [x] 3. 行测题型主数据迁移（`question_type` subject_id=1）
 
   **为什么这是硬阻塞**：`question_bank.type_id` 是 NOT NULL 外键。实测 `question_type` 表中 **subject_id=1（行测）零行**（现有 8 行属公专、6 行属申论）。不补这一项，行测题目**根本无法入库** —— 任何一条 INSERT 都会因找不到对应题型而失败或写入错误题型。
 
@@ -650,7 +650,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(db): add idempotent migration for xingce question types`
   - Files：`backend/scripts/migrate_xingce_question_types.py`、生成的 `.rollback.sql`
 
-  - [ ] 4. 行测分区枚举补全（`科学推理` × 2 处 Enum）
+  - [x] 4. 行测分区枚举补全（`科学推理` × 2 处 Enum）
 
   **为什么需要**：实测 170 份语料中 **3 套卷含 `科学推理` 分区**（广东/河南类以科学推理替代数量关系）。而 `models.py` 两处 `Column(Enum(...))` **均未声明该值**。不补则这 3 套卷的分区被静默丢成 `无`，且这 3 套卷无法通过 `VALID_SUBCATEGORY_NAMES` 的显式值校验。
 
@@ -745,7 +745,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): add 科学推理 to xingce subcategory enums (3 locations)`
   - Files：`backend/app/models/models.py`、`backend/app/api/v1/question_import.py`、`backend/app/services/question_classifier.py`
 
-- [ ] 5. 考点词表规范化规格 + 461 token 分类清单
+- [x] 5. 考点词表规范化规格 + 461 token 分类清单
 
   **为什么需要**：实测行测答案解析 **100% 覆盖** `【考点】`，共 **461 个不同 token、16,051 次实例**（均值 121/卷）。这是行测**独有的免费增值**（申论/公专答案解析均无此字段）。但它有两个必须先解决的问题，否则直接入库会污染知识点库：
   1. **层级化路径**：`中心理解题-关联词-转折` 是 3 层路径，现有 `knowledge_point` 表是平铺的
@@ -849,7 +849,7 @@ Max Concurrent：6（Wave 1）
   - Message：`docs(xingce): knowledge-point taxonomy spec for 461 tokens`
   - Files：`solve_problems_files/行测考点词表规范.md`、`backend/data/xingce_kao_points.json`
 
-- [ ] 6. 死代码与空目录清理（**已获用户额外授权**）+ 分层建议
+- [x] 6. 死代码与空目录清理（**已获用户额外授权**）+ 分层建议
 
   **授权状态（2026-10-03 用户已批准）**：用户 Q4 原定「只清理解析缓存与死代码，不碰业务数据」，现**额外授权执行「死代码 + 空目录」的清理**。
   **仍禁止**：DB 4 份备份（约 430MB）、活跃 DB、312 条卡死 import 记录、非空图片目录。
@@ -983,7 +983,7 @@ Max Concurrent：6（Wave 1）
   - Message：`chore(ops): remove dead MinerU artifacts, empty db placeholders and empty image dirs`
   - Files：`backend/data/audit/xingce_cleanup_report.md`（删除类文件不入 git）
 
-  - [ ] 7. `_route_xingce_sections()` — 行测分节路由（纯新增函数）
+  - [x] 7. `_route_xingce_sections()` — 行测分节路由（纯新增函数）
 
   **这是整套方案的地基**。行测的 5~7 个分区（`一、政治理论：` … `六、资料分析：`）是**分区落位、配对安全网、材料归属**三者的共同依据。实测 85/85 题本与 85/85 答案解析**都带分节头**（100% 命中），所以这个函数可以做到零成本、零猜测。
 
@@ -1116,7 +1116,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): add route_xingce_sections with >=2-anchor safety gate`
   - Files：`backend/app/services/text_parser.py`
 
-- [ ] 8. `_xingce_cross_validate()` — 行测分离配对安全网（本方案核心）
+- [x] 8. `_xingce_cross_validate()` — 行测分离配对安全网（本方案核心）
 
   **这是整套方案存在的理由**。现状：题本(110) 与答案解析(101) 被当作两个独立文档各产一份题目列表，**无配对**。而申论的三方交叉校验（题号+分值+题干指纹）在行测**只剩 1/3**——答案解析既不重复题干也无分值。若上传 2024 题本 + 2025 答案解析，**计数相等也照样全卷配错且无法察觉**。
 
@@ -1260,7 +1260,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): add section-interval cross-validation for question/answer pairing`
   - Files：`backend/app/services/text_parser.py`
 
-  - [ ] 9. 资料分析材料锚点 — `（一）（二）` → `question_groups`
+  - [x] 9. 资料分析材料锚点 — `（一）（二）` → `question_groups`
 
   **为什么需要**：行测资料分析是「1 段材料 + 4~5 道题」结构，实测 **85/85 全部存在、364 块**。但既有 `composite_matcher.py` 的 `data_analysis` 触发词是 **`图表`**，而行测材料锚点是**全角括号独占行 `（一）（二）`** → **既有规则完全不命中**。不补则资料分析题的材料丢失，学生答题时看不到给定资料。
 
@@ -1383,7 +1383,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): recognise 资料分析 material blocks via full-width paren anchors`
   - Files：`backend/app/services/composite_matcher.py`
 
-- [ ] 10. 考点抽取与层级化落库
+- [x] 10. 考点抽取与层级化落库
 
   **What to do**：
   - 从答案解析块抽取考点：锚点 `【考点】` 后至下一个 `【考点】` 或块尾；分隔符 `[,，、;；]`（实测三逗号并存）
@@ -1497,7 +1497,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): extract and hierarchically store 461 knowledge-point tokens`
   - Files：`backend/scripts/migrate_xingce_knowledge_points.py`、`backend/app/services/text_parser.py`（考点抽取函数区块）
 
-- [ ] 11. `POST /api/questions/import/separate-match-xingce` — 行测专用端点
+- [x] 11. `POST /api/questions/import/separate-match-xingce` — 行测专用端点
 
   **核心设计决策：绝不改动共享 dispatch。** 现有 `separate_match_endpoint`（`question_import.py:3971`）被公专/申论/行测三科目共用，其分流逻辑在 `:4005-4011`。改动它 = 给 2,583 道公专题 + 申论链路引入回归风险。本任务**新建独立端点**，前端按科目路由，共享 dispatch **保持字节级不变**。
 
@@ -1624,7 +1624,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): add dedicated separate-match-xingce endpoint (shared dispatch untouched)`
   - Files：`backend/app/api/v1/question_import.py`
 
-  - [ ] 12. 卷级元数据注入（省份 / 年份 / 卷别）
+  - [x] 12. 卷级元数据注入（省份 / 年份 / 卷别）
 
   **为什么需要**：实测 170 份文件名的省份写法**极不可靠**（2025 年安徽/河南/山西/陕西/黑龙江**全部缺「省」字**，甘肃**全省缺「省」字**，广西用「区考」）。而 **24 个省级文件夹名干净一致** —— 文件夹名是唯一可靠的省份标识。现有 `_auto_detect_tags()` 扫文件名+正文全文，行测语料会大面积误判省份。
 
@@ -1748,7 +1748,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): inject paper metadata from folder name (not filename)`
   - Files：`backend/app/api/v1/question_import.py`
 
-- [ ] 13. 纯图片题切图 + `need_review` 标记
+- [x] 13. 纯图片题切图 + `need_review` 标记
 
   **用户决策 Q1**：切图入库 + 人工补文字选项。**用户决策 Q2**：不达标题入库 + 标记待复核。
 
@@ -1879,7 +1879,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): tune image thresholds and flag incomplete questions for review`
   - Files：`backend/app/api/v1/question_import.py`、`backend/app/models/models.py`（注释）
 
-- [ ] 14. `question_import.vue` — `<script>` 强化（VTJ raw 页）
+- [x] 14. `question_import.vue` — `<script>` 强化（VTJ raw 页）
 
   **VTJ 铁律（违反即回归）**：该页 `"raw": true`（`.vtj/projects/linxitie.policy-exam-bank.json:437-439`）→ 设计器不覆盖，可安全手改。**但严禁改 `<template>`**（vtj.md §3.1：UI 结构变更必须回设计器）。**严禁同步 `.vtj/files/question_import.json`**（前序铁律 R-2：同步工具有损，48 方法中连 `_pollImportStatus` 都提取不到）。
 
@@ -2009,7 +2009,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): route xingce to dedicated endpoint and surface review markers in import preview`
   - Files：`.vtj/vue/question_import.vue`
 
-  - [ ] 15. 6 套试点导入 + 三重门禁回归
+  - [x] 15. 6 套试点导入 + 三重门禁回归
 
   **用户决策 Q5**：先试点 6 套验证 → 固化为回归语料 → 再全量。每套必覆盖至少一个结构/命名异常，**确保门禁语料从第一天就含方言**。
 
@@ -2255,7 +2255,7 @@ Max Concurrent：6（Wave 1）
   - Message：`feat(xingce): import all 85 xingce papers (24 province batches)`
   - Files：`backend/data/audit/xingce_import_report.md`
 
-- [ ] 17. 运维文档 + 方案归档 + `vtj.md` 勘误
+- [x] 17. 运维文档 + 方案归档 + `vtj.md` 勘误
 
   **What to do**：
   - **方案归档到 `solve_problems_files/`**（用户 G2 硬要求）：
