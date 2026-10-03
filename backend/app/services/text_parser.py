@@ -2326,7 +2326,14 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
             if strict:
                 scope = lines[idx]          # 仅本行
             else:
-                scope = '\n'.join(lines[idx:idx + 5])
+                # ★ 宽松级窗口同样收紧为 2 行，必须与 _essay_split_questions 一致。
+                # 真实故障（实测 2025 国考副省级题目卷，生产路径 pdfplumber）：
+                #   题号是半角 `1.`，分值在隔行处 → 严格级一个都没命中；
+                #   而要求子项 `（1）紧扣资料，内容全面；` 在 5 行窗口内能看到
+                #   下一题分值，于是被计为「全角体」证据 → 体例误判成 full
+                #   → 用全角正则切题切出 0 道 → 整份卷不进申论分支。
+                #   两处窗口必须同步放宽/收紧，否则体例判定与切题口径分裂。
+                scope = '\n'.join(lines[idx:idx + 2])
             if not _ESSAY_SCORE_RE.search(scope):
                 continue
             for style, rx in res.items():
