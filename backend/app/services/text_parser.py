@@ -2150,7 +2150,16 @@ def _essay_is_ans_anchor(ls: str) -> bool:
         #   H/F 是同一题的两套参考答案，不是新题。
         #   判据：段起点必须带**中文/阿拉伯题号**，且不得带 (H)/(F) 这类卷别后缀。
         return False
-    if re.match(r'^[ \t　]*[【\[]\s*(?:参考答案|答案)\s*[】\]]', ls):
+    if re.match(r'^[ \t　]*[【\[]\s*(?:参考答案|答案)\s*'
+                r'(?:[一二三四五六七八九十]{1,3}|\d{1,2})?\s*[】\]]', ls):
+        # ★ 括号形式**带序号**时同样不是段起点（序号可选，故并入本条）。
+        #   实测 2018 地市级卷第 1 题给了两套参考答案：
+        #     194 1、参考答案：      ← 段起点（题号1）
+        #     195 【参考答案一】    ← 同题内第 1 套，不是新题
+        #     201 【参考答案二】    ← 同题内第 2 套，不是新题
+        #     207 2、参考答案：    ← 段起点（题号2）
+        #   若把两个变体都当段起点，7 段去配 5 题 → answer_block_count_mismatch
+        #   → 整卷 5 题被阻断。序号表示「同一题的第几套答案」，不是题号。
         return False
     if _ESSAY_ANS_START_RE.match(ls) or _ESSAY_ANS_SEG_BRACKET_RE.match(ls):
         return True
@@ -2235,7 +2244,9 @@ _ESSAY_MATERIAL_BLOCK_RE = re.compile(r'^[ \t　]*材料\s*(\d+)[ \t　]*$')
 # 半角题号：安徽/多省联考体
 _ESSAY_HALF_NUM_RE = re.compile(r'^[ \t　]*(\d{1,2})\s*[.．、](?![\d])[ \t　]*\S')
 # 全角阿拉伯题号：国考体
-_ESSAY_FULL_NUM_RE = re.compile(r'^[ \t　]*[（(]\s*(\d{1,2})\s*[）)][ \t　]*\S')
+_ESSAY_FULL_NUM_RE = re.compile(
+    r'^[ \t　]*[（(]\s*(\d{1,2}|[一二三四五六七八九十]{1,3})\s*[）)][ \t　]*\S'
+)
 # 全角中文数字题号：2018 地市级等卷的「（一）（二）」体例
 # 中文数字题号。同时支持两种形态：
 #   ① 带圆括号：2018 地市级卷 `（一）…`
@@ -2365,6 +2376,20 @@ def _essay_cn_to_int(s: str) -> int:
     if len(s) == 3 and s[1] == '十':
         return _CN_DIGITS.get(s[0], 0) * 10 + _CN_DIGITS.get(s[2], 0)
     return 0
+
+
+def _essay_num_to_int(raw: str) -> int:
+    """题号文本统一转阿拉伯数字，**兼容 `5` 与 `五` 两种写法**。
+
+    申论真题会在同一份卷子里混用记法：实测 2019 国考地市级卷
+    Q1~Q4 用 `（1）（2）（3）（4）`，Q5 却用 `（五）`。
+    括号体例本质相同，必须都能认 —— 否则体例票数 4:1 压过 `（五）`，
+    该题被整批丢弃（4 题 ≠ 5 段答案 → 整卷answer_block_count_mismatch）。
+    """
+    s = (raw or '').strip()
+    if s.isdigit():
+        return int(s)
+    return _essay_cn_to_int(s)
 
 
 _ESSAY_NUM_RES = {
@@ -2542,10 +2567,7 @@ def _essay_split_questions(lines: List[str], style: str):
         if not _ESSAY_SCORE_RE.search(window) and not _ESSAY_SCORE_RE.search(
                 _essay_score_scope_to_boundary(lines, i, style)):
             continue
-        if style in ('cn', 'word'):
-            qno = _essay_cn_to_int(m.group(1))
-        else:
-            qno = int(m.group(1))
+        qno = _essay_num_to_int(m.group(1))
         if qno <= 0:
             continue
         variant = ''
@@ -2609,6 +2631,27 @@ def _essay_is_requirement_run(block_lines: List[str], start: int, style: str) ->
     return not _ESSAY_SCORE_RE.search(seg)
 
 
+# PDF 分页残留：整行只有一个「页码」标记，会把跨行的分值劈成两半。
+#   实测 2018 地市级卷 line 168~170：
+#     …分析他为什么感到压力很大。（10
+#     - 4 -                              ← 分页页码残留
+#     分）                ← 分值断成两半，`[（(]\s*\d+\s*分\s*[）)]` 永不匹配
+# 数字形式要求**两侧都有**短横线，避免把合法的正文行（如答案分点「4」）误抹。
+_ESSAY_PAGE_MARK_RE = re.compile(
+    r'^[ \t　]*(?:'
+    r'[-—–―=＝]{1,3}[ \t　]*\d{1,4}[ \t　]*[-—–―=＝]{1,3}'
+    r'|第[ \t　]*\d{1,4}[ \t　]*页(?:码)?'
+    r')[ \t　]*$'
+)
+
+
+def _essay_strip_page_marks(lines: List[str]) -> List[str]:
+    """把纯页码残留行置空（不删行，保持行号稳定，作用域拼接仍可跨行匹配）。"""
+    if not any(_ESSAY_PAGE_MARK_RE.match((l or '').strip()) for l in lines):
+        return lines
+    return ['' if _ESSAY_PAGE_MARK_RE.match((l or '').strip()) else l for l in lines]
+
+
 def _parse_essay_document(text: str) -> Optional[List[Dict[str, Any]]]:
     """申论文档 → 题目块列表；非申论体例返回 None。
 
@@ -2620,7 +2663,9 @@ def _parse_essay_document(text: str) -> Optional[List[Dict[str, Any]]]:
       blocked         是否存在阻断性问题（映射不可信）
       block_reasons   阻断原因列表
     """
-    lines = text.split('\n')
+    # ★ 先抹掉纯页码残留行（置空不删行，保住行号），否则跨行分值会被劈开：
+    #   实测 2018 地市级卷 `…（10` / `- 4 -` / `分）`，分值正则永不匹配 → 整卷阻断。
+    lines = _essay_strip_page_marks(text.split('\n'))
     style = _detect_essay_numbering(lines)
     if style is None:
         return None
