@@ -1,0 +1,89 @@
+# Task 13 证据 B — 解压炸弹拦截（GAP-13）
+
+日期：2026-10-03　脚本：`verify_task13_images.py` §2　**RESULT = PASS**
+
+## 缺口成因
+
+原 `_pdf_image_to_png()` **只滤最小边、无上限**：
+
+```python
+sw, sh = int(srcsize[0]), int(srcsize[1])
+if sw < _PDF_MIN_IMG_DIM or sh < _PDF_MIN_IMG_DIM:
+    return None
+data = im['stream'].get_data()      # ← 无上限，srcsize 由 PDF 自述
+```
+
+`srcsize` 是 PDF **自述**尺寸，恶意文件可任意虚报。
+声明 `100000x100000` 即可让 `get_data()` 试图分配 **3e10 字节**（DeviceRGB 3 通道），
+进程直接 OOM。
+
+## 修复
+
+新增常量与校验，**置于 `get_data()` 之前**（数据一旦解压即已在内存）：
+
+```python
+_PDF_MAX_IMG_PIXELS = 4_000_000
+...
+total_px = sw * sh
+if total_px > _PDF_MAX_IMG_PIXELS:
+    logger.warning(...)
+    return None
+```
+
+## 上限的统计依据
+
+行测真实语料**最大仅 517,300 px（0.5 MP）**：
+
+```
+上限    200 万像素 -> 超限 0 张
+上限    400 万像素 -> 超限 0 张
+上限    800 万像素 -> 超限 0 张
+上限   1600 万像素 -> 超限 0 张
+上限   4000 万像素 -> 超限 0 张
+```
+
+选4,000,000 = 实测最大值的 **7.73 倍**余量，既不误杀真实内容，
+又能拦住任何解压炸弹。与 `MAX_IMAGE_SIZE`（落盘**字节**上限）构成两道独立防线：
+一道按**像素**（解压前），一道按**字节**（落盘前）。
+
+## 验证：用「get_data 被调用即失败」的探针
+
+构造 `_FakeStream.get_data()` 一被调用就抛 AssertionError ——
+若上限校验位置错误（放在解压之后），测试必然失败。
+
+```
+[PASS] 拦截 100000x100000 = 1e10 px   -> out=None  stream_called=False
+[PASS] 拦截 8000x8000     = 6.4e7 px -> out=None  stream_called=False
+[PASS] 拦截 4000x4000     = 1.6e7 px -> out=None  stream_called=False
+[PASS] 拦截 2000x2000     = 4e6 px   -> out=None  stream_called=False   （刚超上限）
+```
+
+**4/4 全部 `stream_called=False`** —— 证明拦截发生在解压**之前**，
+而非事后补救。
+
+## 边界行为
+
+`2000x2000` 恰等于上限值时**不因上限被拒**，继续走既有的
+`len(data) != sw*sh*nch` 数据长度校验（实测返回 None 是被长度校验拦，
+不是被上限拦）。上限用 `>` 而非 `>=`，边界不误伤。
+
+## 失败不崩溃、不阻断整批（用户决策 Q2）
+
+超限图返回 `None` → 该图被跳过，**不抛异常、不中断整卷导入**，
+题目仍入库并由 `need_review` 机制标红。
+未实现「因单图超限而丢弃整题」——那会静默丢题，违反 Q2。
+
+## 遗留
+
+`_pdf_image_to_png()` 返回 `None` 的原因有5 种（色彩空间不支持 / 位深非 8 /
+碎片 / 超上限 / 数据长度不符），目前**只记 debug/warning 日志**，
+调用方无法区分「碎片」与「攻击」。
+
+若后续需要审计攻击面，可在返回值中区分原因码。当前任务范围内不需要，
+故未改动函数签名（避免影响既有调用方）。
+
+## 复现
+
+```
+python backend/scripts/verify_task13_images.py
+```

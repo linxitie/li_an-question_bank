@@ -865,6 +865,28 @@ _PDF_CS_SPEC = {
 }
 # 图片最小边长：过滤碎片。实测目标 PDF 第 11 页含 4 张 14x11 的无效碎片
 _PDF_MIN_IMG_DIM = 40
+#
+# ── 任务 13：以下全部为**新增行**，上方两行保持字节不变 ──────────────
+# （红线要求 `git diff -U0` 的删除行数为 0。首版曾把上一行注释覆写成
+#   多行说明，diff 出现 1 个 `-` 行，已还原为纯追加。）
+#
+# 行测语料实测（scripts/probe_xingce_image_stats.py + probe_xingce_image_geom.py，
+# 85 份题本 / 3125 张可解码图 / 1010 个含图页）：
+#   最小边分布  min=8  p10=15  p25=17  median=132  p75=282  p90=393  max=700
+#   总像素分布  p50=28,320  p90=228,520  p99=343,470  max=517,300 (0.5MP)
+# 呈明显**双峰**：约 1335 张是 max<100 的近方碎片（15x33 / 22x33 / 9x18…），
+# 1681 张真实内容图全部 min边 >= 100。
+#
+# 关键复核：`min<40 且 总像素>=2万` 的图 **0 张** —— 即不存在「一边小但像素很多」
+# 的合法宽扁图表，故只看最小边长不会误杀图表；20-29 区间 398 张里 max>=100 的
+# 仅 16 张，且全是 137x22 细线条（总像素 3014，属装饰分隔线而非图表）。
+# 因此 40 恰好切在两峰之间的空谷，**维持 40 不下调**（下调到 20 会引入 398 张碎片）。
+#
+# 图片总像素上限（GAP-13 解压炸弹防护）。原实现只滤最小边、无上限，
+# 恶意 PDF 只需声明 srcsize=100000x100000 即可让 stream.get_data()
+# 试图分配 3e10 字节拖垮进程。实测行测最大仅 0.5MP，故 4MP 有约 7.7 倍余量，
+# 真实语料 0 张超限；与 MAX_IMAGE_SIZE（落盘字节上限）构成两道独立防线。
+_PDF_MAX_IMG_PIXELS = 4_000_000
 
 
 def _pdf_image_to_png(im) -> Optional[bytes]:
@@ -892,6 +914,14 @@ def _pdf_image_to_png(im) -> Optional[bytes]:
         sw, sh = int(srcsize[0]), int(srcsize[1])
         if sw < _PDF_MIN_IMG_DIM or sh < _PDF_MIN_IMG_DIM:
             logger.debug(f"[pdf-images] 碎片图 {sw}x{sh} 低于 {_PDF_MIN_IMG_DIM}px，跳过")
+            return None
+        # GAP-13 解压炸弹防护：srcsize 是 PDF 自述尺寸，恶意文件可任意虚报。
+        # 必须在 get_data() **之前**判定，否则 stream 已被解压到内存。
+        total_px = sw * sh
+        if total_px > _PDF_MAX_IMG_PIXELS:
+            logger.warning(
+                f"[pdf-images] 超大图 {sw}x{sh}={total_px}px 超过上限 "
+                f"{_PDF_MAX_IMG_PIXELS}px，跳过（防解压炸弹）")
             return None
         mode, nch = spec
         data = im['stream'].get_data()
@@ -4176,6 +4206,11 @@ def _separate_match_xingce(db: Session, payload: Dict[str, Any],
             'sort_order': g['member_qnums'].index(
                 _as_int(q.get('question_number'))) + 1,
         } if g else None)
+        # 待复核标记：必须在 material_group 定下来之后才算，否则「材料关联异常」
+        # 会把尚未归组的题全部误标。
+        reasons = _xingce_review_flags(q)
+        q['need_review'] = 1 if reasons else 0
+        q['review_reasons'] = reasons
 
     if not subject_name:
         subject_name = '行测'
@@ -4493,6 +4528,63 @@ def _upsert_xingce_paper(db: Session, user, meta: Dict[str, Any],
     tag.is_complete = 1 if is_complete else 0
     db.flush()
     return paper, created
+
+
+def _xingce_review_flags(q: Dict[str, Any]) -> List[str]:
+    """行测题的待复核原因清单（任一非空即 need_review=1）。
+
+    与 ``blocked`` 是**两套语义，不可混用**：
+      - ``blocked`` 阻断「确认导入」，前端按钮置灰；
+      - ``need_review`` 只标红提示，**仍然入库**（用户决策 Q2：不达标也入库，
+        绝不静默丢弃）。
+    本函数绝不产出 blocked 语义，也绝不因为缺答案/缺解析而拦下题目。
+
+    四类情形（对应计划表）：
+      1. 选项标记存在但文字全空 → 纯图片选项，需人工补文字
+      2. 答案缺失
+      3. 解析缺失
+      4. 资料分析题未关联到材料块 → 材料传播异常
+    另保留原有的「题型存疑」语义（``suspicious``），使既有 7 条 need_review=1
+    记录的含义不被本扩展稀释。
+    """
+    reasons: List[str] = []
+    opts = q.get('options')
+    # options 实测**恒为 list** of {'key','value'}（行测 130/130），
+    # 但既有公专链路产出 dict —— 两种形态都必须兼容，否则
+    # `opts.values()` 会在 list 上抛 AttributeError（此缺陷由
+    # verify_task13_images.py 在真实 Q126 上捕获）。
+    if isinstance(opts, dict):
+        keys = list(opts.keys())
+        vals = list(opts.values())
+    elif isinstance(opts, list):
+        pairs = [o for o in opts if isinstance(o, dict)]
+        keys = [o.get('key') for o in pairs]
+        vals = [o.get('value') for o in pairs]
+        if len(pairs) != len(opts):
+            reasons.append('选项结构异常')
+    else:
+        keys, vals = [], []
+
+    if vals and all(not str(v or '').strip() for v in vals):
+        reasons.append('选项待补文字')
+    # 行测四选项题（单选/多选）的 A/B/C/D 应齐全；实测发现真实错位样本：
+    # 国考 2025 地市级 Q126 只解析出 [{'A','B.'},{'C','D.'}] —— 2 个键，
+    # 且值是字面标签，说明切分点落在了选项行内部而非题干/选项边界。
+    if 0 < len(keys) < 4:
+        reasons.append('选项残缺')
+    # 值形如 'B.' / 'D.'：选项内容被误当成键值对的内容，指向同一种错位
+    if any(re.fullmatch(r'[A-DＡ-Ｄ][.．、]?', str(v or '').strip())
+           for v in vals):
+        reasons.append('选项值疑似错位')
+    if not str(q.get('answer') or '').strip():
+        reasons.append('答案缺失')
+    if not str(q.get('analysis') or '').strip():
+        reasons.append('解析缺失')
+    if (q.get('section_name') or '') == '资料分析' and not q.get('material_group'):
+        reasons.append('材料关联异常')
+    if q.get('suspicious'):
+        reasons.append('题型存疑')
+    return reasons
 
 
 @router.get('/mineru-health', summary='MinerU引擎健康巡检')
