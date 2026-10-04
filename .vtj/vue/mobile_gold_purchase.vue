@@ -192,16 +192,67 @@
       async loadGoals() {
         try { const r = await window.__VTJ_AUTH__.apiFetch('/api/goals/'); const d = await r.json(); if (r.ok) this.state.goals = d.items || []; } catch (e) {}
       },
-      showCreateGoal() {
-        const title = window.prompt('目标标题'); if (!title) return;
-        const target = window.prompt('目标数量'); if (!target) return;
-        this.createGoal(title, parseInt(target, 10));
-      },
-      async createGoal(title, targetCount) {
+      // 今日学习科目：与首页共用同一来源 /api/quick-practice/subjects，0 = 混科
+      async fetchSubjectOptions() {
+        const fallback = [{ id: 0, name: '混科（不限科目）' }];
         try {
-          const r = await window.__VTJ_AUTH__.apiFetch('/api/goals/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, target_count: targetCount, goal_type: 'DAILY' }) });
+          const r = await window.__VTJ_AUTH__.apiFetch('/api/quick-practice/subjects');
           const d = await r.json();
-          if (r.ok) { ElMessage.success('已创建'); this.loadGoals(); } else ElMessage.warning(d.detail || '失败');
+          if (!r.ok || !d.items || !d.items.length) return fallback;
+          return fallback.concat(d.items.map((s) => ({ id: s.subject_id, name: s.subject_name })));
+        } catch (e) { return fallback; }
+      },
+      async showCreateGoal() {
+        const title = window.prompt('目标标题', '今日目标'); if (!title) return;
+        const target = window.prompt('今日完成题目数量（题）', '40');
+        if (!target) return;
+        const targetCount = parseInt(target, 10);
+        if (!targetCount || targetCount <= 0) { ElMessage.warning('请输入有效的题量'); return; }
+
+        const options = await this.fetchSubjectOptions();
+        const picked = window.prompt('今日学习科目（' + options.map((o) => o.name).join(' / ') + '）', options[0].name);
+        if (picked === null) return;
+        const hit = options.find((o) => o.name === picked);
+        const subjectMode = hit ? hit.id : 0;
+
+        const minutesRaw = window.prompt('单日预期学习时间（分钟，0 表示不限）', '30');
+        if (minutesRaw === null) return;
+        let expectedMinutes = parseInt(minutesRaw, 10);
+        if (isNaN(expectedMinutes) || expectedMinutes < 0) expectedMinutes = 0;
+        if (expectedMinutes > 1440) { ElMessage.warning('单日预期学习时间需在 0-1440 分钟之间'); return; }
+
+        // 本周目标默认按与首页相同的推导规则：今日目标 x 7，允许单独覆盖
+        const weeklyRaw = window.prompt('本周学习目标（题，留空则按今日目标 x 7 推导）', String(targetCount * 7));
+        if (weeklyRaw === null) return;
+        const weeklyCount = weeklyRaw ? parseInt(weeklyRaw, 10) : targetCount * 7;
+
+        await this.createGoal(title, targetCount, subjectMode, expectedMinutes, weeklyCount);
+      },
+      async createGoal(title, targetCount, subjectMode, expectedMinutes, weeklyCount) {
+        const auth = window.__VTJ_AUTH__;
+        const post = (body) => auth.apiFetch('/api/goals/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        try {
+          const r = await post({
+            title,
+            target_count: targetCount,
+            goal_type: 'DAILY',
+            subject_mode: subjectMode || 0,
+            expected_minutes: expectedMinutes || 0
+          });
+          const d = await r.json();
+          if (!r.ok) { ElMessage.warning(d.detail || '失败'); return; }
+          // 本周目标独立成 WEEKLY 记录（与首页一致，不折叠进标题文本）。
+          // 失败仅提示，不影响已保存的今日目标。
+          try {
+            const w = await post({ title: '本周目标', target_count: weeklyCount, goal_type: 'WEEKLY' });
+            if (!w.ok) console.warn('本周目标创建失败', w.status);
+          } catch (e2) { console.warn('本周目标创建异常', e2); }
+          ElMessage.success('已创建');
+          this.loadGoals();
         } catch (e) { ElMessage.error('失败'); }
       },
       async completeGoal(g) {

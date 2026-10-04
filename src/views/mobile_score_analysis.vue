@@ -6,8 +6,78 @@
       <span class="spacer"></span>
     </header>
 
-    <main class="body">
-      <!-- 统计卡片 2×2 -->
+    <!-- 三个数据域严格分离：自测成绩 / 模拟考成绩 / 历史记录（日常刷题） -->
+    <div class="tabs">
+      <div
+        v-for="t in TABS"
+        :key="t.key"
+        :class="['tab', { active: activeTab === t.key }]"
+        @click="switchTab(t.key)"
+      >{{ t.name }}</div>
+    </div>
+
+    <main class="body" v-if="activeTab !== 'history'">
+      <!-- 空态：按 tab 区分文案 -->
+      <div v-if="!loading && !examRecords.length" class="empty">{{ emptyText }}</div>
+      <div v-else-if="loading" class="empty">加载中...</div>
+
+      <template v-else>
+        <!-- 考试成绩统计：最高分 / 平均分 / 正确率 / 排名(模考)或场次(自测) -->
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-value">{{ examStats.highest_score || 0 }}</div>
+            <div class="stat-label">最高分</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ examStats.average_score || 0 }}</div>
+            <div class="stat-label">平均分</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ examStats.accuracy_rate || 0 }}%</div>
+            <div class="stat-label">正确率</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ fourthValue }}</div>
+            <div class="stat-label">{{ fourthLabel }}</div>
+          </div>
+        </div>
+
+        <!-- 成绩趋势 -->
+        <div class="trend-card" v-if="examTrend.length">
+          <div class="trend-title">
+            成绩趋势
+            <span class="trend-avg">平均 {{ examAvgScore }}</span>
+          </div>
+          <div class="bar-chart">
+            <div v-for="(d, i) in examTrend" :key="i" class="bar-col">
+              <div class="bar-wrap">
+                <div class="bar" :style="{ height: scoreBarHeight(d) + 'px' }"></div>
+              </div>
+              <div class="bar-count">{{ d.total_score }}</div>
+              <div class="bar-label">{{ shortDate(d.submit_time) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 成绩记录 -->
+        <div class="record-card">
+          <div class="record-title">{{ tabName }}记录</div>
+          <div v-for="r in examRecords" :key="r.record_id" class="record-row">
+            <div class="record-main">
+              <div class="record-name">{{ r.paper_name }}</div>
+              <div class="record-meta">{{ r.submit_time || '—' }} · 用时 {{ formatDuration(r.duration_used) }}</div>
+            </div>
+            <div class="record-score">
+              <div class="record-num">{{ r.total_score }}</div>
+              <div class="record-max">/{{ r.max_score }} · {{ r.accuracy }}%</div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </main>
+
+    <!-- 历史记录：日常刷题统计（非考试成绩） -->
+    <main class="body" v-else>
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-value">{{ stats.totalQuestions }}</div>
@@ -27,7 +97,6 @@
         </div>
       </div>
 
-      <!-- 练习趋势柱状图 -->
       <div class="trend-card">
         <div class="trend-title">近 7 天练习趋势</div>
         <div class="bar-chart">
@@ -39,13 +108,6 @@
             <div class="bar-count">{{ d.questionsDone }}</div>
           </div>
         </div>
-      </div>
-
-      <!-- 考试记录 -->
-      <div class="exam-card" v-if="stats.examCount">
-        <div class="exam-title">考试记录</div>
-        <div class="exam-row">参加考试：{{ stats.examCount }} 场</div>
-        <div class="exam-row" v-if="stats.examAvgScore">平均分：{{ stats.examAvgScore }}</div>
       </div>
 
       <!-- 提升建议（基于本页真实数据推导，非编造） -->
@@ -65,14 +127,57 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
+
+// ===== 数据域拆分 =====
+// 用户反馈「显示的是做题数量而非考试成绩」的根因：原页面只有刷题统计，
+// 完全没有 tab，也没有接入 exam-records 成绩体系。
+// 现严格按电脑端口径拆为三块，且互不混用：
+//   自测成绩   -> ExamRecord.exam_type = SELF_TEST（历年试卷 / 智能组卷产生）
+//   模拟考成绩 -> ExamRecord.exam_type = MOCK_EXAM
+//   历史记录   -> 日常刷题统计（原 /api/stats/ 数据源）
+const TABS = [
+  { key: 'self', name: '自测成绩' },
+  { key: 'mock', name: '模拟考成绩' },
+  { key: 'history', name: '历史记录' },
+] as const;
+
+type TabKey = 'self' | 'mock' | 'history';
+
+const activeTab = ref<TabKey>('self');
+const loading = ref(false);
+
+// 与电脑端一致：自测取最近 10 次，模考取最近 5 次
+const examTypeOf = (tab: TabKey) => (tab === 'mock' ? 'MOCK_EXAM' : 'SELF_TEST');
+const limitOf = (tab: TabKey) => (tab === 'mock' ? 5 : 10);
+
+const examStats = ref<any>({});
+const examTrend = ref<any[]>([]);
+const examRecords = ref<any[]>([]);
+const examAvgScore = ref(0);
+
+const tabName = computed(() => (activeTab.value === 'mock' ? '模拟考' : '自测'));
+const emptyText = computed(() =>
+  activeTab.value === 'mock' ? '还没有做过模考哦' : '还没有做过自测哦'
+);
+
+// 模考展示排名百分比（后端仅对 MOCK_EXAM 计算 rank_percent），自测展示考试场次
+const fourthValue = computed(() => {
+  if (activeTab.value === 'mock') {
+    const r = examStats.value.rank_percent;
+    return r === null || r === undefined ? '--' : '前' + r + '%';
+  }
+  return examStats.value.total_exams || 0;
+});
+const fourthLabel = computed(() =>
+  activeTab.value === 'mock' ? '排名' : '考试场次'
+);
+
+// ===== 历史记录（日常刷题） =====
 const stats = ref<any>({
-  totalQuestions: 0, accuracyRate: 0, totalStudyHours: 0,
-  streak: 0, examCount: 0, examAvgScore: 0
+  totalQuestions: 0, accuracyRate: 0, totalStudyHours: 0, streak: 0
 });
 const trend = ref<any[]>([]);
 
-// ===== 提升建议 =====
-// 依据本页已加载的真实统计与趋势推导，不编造数据、不依赖额外后端。
 const adviceList = computed(() => {
   const out: { text: string; level: string }[] = [];
   const acc = Number(stats.value.accuracyRate) || 0;
@@ -109,53 +214,97 @@ const goBack = () => {
   else router.push('/mobile/home');
 };
 
-const fetchStats = async () => {
+// ===== 数据加载 =====
+
+const auth = () => (window as any).__VTJ_AUTH__;
+
+/** 切换 tab 时按 exam_type 重新拉取该域的三份数据 */
+async function loadExamTab(tab: TabKey) {
+  const a = auth();
+  if (!a || !a.isLoggedIn()) return;
+  loading.value = true;
+  const t = examTypeOf(tab);
   try {
-    const auth = (window as any).__VTJ_AUTH__;
-    if (!auth || !auth.isLoggedIn()) return;
-    const res = await auth.apiFetch('/api/stats/');
-    const data = await res.json();
-    if (res.ok) {
+    const [trendRes, statsRes, listRes] = await Promise.all([
+      a.apiFetch(`/api/exam-records/trend?exam_type=${t}&limit=${limitOf(tab)}`),
+      a.apiFetch(`/api/exam-records/stats?exam_type=${t}`),
+      a.apiFetch(tab === 'mock' ? '/api/exam-records/mock?page=1&page_size=20' : '/api/exam-records/self?page=1&page_size=20'),
+    ]);
+    const [trendData, statsData, listData] = await Promise.all([
+      trendRes.json(), statsRes.json(), listRes.json(),
+    ]);
+    examTrend.value = trendRes.ok ? (trendData.trend || []) : [];
+    examAvgScore.value = trendRes.ok ? (trendData.avg_score || 0) : 0;
+    examStats.value = statsRes.ok ? (statsData || {}) : {};
+    examRecords.value = listRes.ok ? (listData.records || []) : [];
+  } catch (e) {
+    console.error('获取考试成绩失败:', e);
+    examTrend.value = [];
+    examStats.value = {};
+    examRecords.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+const loadHistory = async () => {
+  const a = auth();
+  if (!a || !a.isLoggedIn()) return;
+  try {
+    const [statsRes, trendRes] = await Promise.all([
+      a.apiFetch('/api/stats/'),
+      a.apiFetch('/api/stats/practice-trend?days=7'),
+    ]);
+    const [statsData, trendData] = await Promise.all([statsRes.json(), trendRes.json()]);
+    if (statsRes.ok) {
       stats.value = {
-        totalQuestions: data.totalQuestions || 0,
-        accuracyRate: data.accuracyRate || 0,
-        totalStudyHours: data.totalStudyHours || 0,
-        streak: data.streak || 0,
-        examCount: data.examCount || 0,
-        examAvgScore: data.examAvgScore || 0
+        totalQuestions: statsData.totalQuestions || 0,
+        accuracyRate: statsData.accuracyRate || 0,
+        totalStudyHours: statsData.totalStudyHours || 0,
+        streak: statsData.streak || 0,
       };
     }
+    if (trendRes.ok) trend.value = trendData.trend || [];
   } catch (e) {
-    console.error('获取统计失败:', e);
+    console.error('获取刷题统计失败:', e);
   }
 };
 
-const fetchTrend = async () => {
-  try {
-    const auth = (window as any).__VTJ_AUTH__;
-    if (!auth || !auth.isLoggedIn()) return;
-    const res = await auth.apiFetch('/api/stats/practice-trend?days=7');
-    const data = await res.json();
-    if (res.ok && data.trend) trend.value = data.trend;
-  } catch (e) {
-    console.error('获取趋势失败:', e);
-  }
-};
+function switchTab(tab: TabKey) {
+  if (activeTab.value === tab) return;
+  activeTab.value = tab;
+  if (tab === 'history') loadHistory();
+  else loadExamTab(tab);
+}
 
+// ===== 展示辅助 =====
 const barHeight = (count: number) => {
   const max = Math.max(...trend.value.map((d) => d.questionsDone || 0), 1);
   return Math.max(4, Math.round((count / max) * 100));
 };
 
+/** 成绩柱高按满分归一化，避免不同卷满分不同导致视觉失真 */
+const scoreBarHeight = (d: any) => {
+  const maxScore = Number(d.max_score) || 100;
+  const pct = (Number(d.total_score) || 0) / maxScore;
+  return Math.max(4, Math.round(pct * 100));
+};
+
 const shortDate = (date: string) => {
   if (!date) return '';
-  const parts = date.split('-');
-  return parts.length === 3 ? parts[1] + '/' + parts[2] : date;
+  const parts = String(date).split('-');
+  return parts.length === 3 ? parts[1] + '/' + parts[2] : String(date).slice(5, 10);
+};
+
+const formatDuration = (seconds: number) => {
+  const s = Number(seconds) || 0;
+  if (!s) return '—';
+  const m = Math.round(s / 60);
+  return m < 60 ? `${m} 分钟` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
 };
 
 onMounted(() => {
-  fetchStats();
-  fetchTrend();
+  loadExamTab('self');
 });
 </script>
 
@@ -196,6 +345,29 @@ onMounted(() => {
 .spacer {
   width: 32px;
 }
+
+.tabs {
+  display: flex;
+  margin: 12px 12px 0;
+  background: #fff;
+  border-radius: 10px;
+  padding: 4px;
+}
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  font-size: 14px;
+  color: #5a6488;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.tab.active {
+  background: #1A365D;
+  color: #fff;
+  font-weight: 600;
+}
+
 .body {
   flex: 1;
   padding: 12px;
@@ -235,6 +407,14 @@ onMounted(() => {
   font-weight: 600;
   color: #1a2b5f;
   margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.trend-avg {
+  font-size: 12px;
+  font-weight: 400;
+  color: #8899aa;
 }
 .bar-chart {
   display: flex;
@@ -267,25 +447,61 @@ onMounted(() => {
   font-size: 11px;
   color: #5a6488;
 }
-.exam-card {
+
+.record-card {
   background: #fff;
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
 }
-.exam-title {
+.record-title {
   font-size: 14px;
   font-weight: 600;
   color: #1a2b5f;
   margin-bottom: 10px;
 }
-.exam-row {
+.record-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid #f0f2f5;
+}
+.record-row:first-of-type {
+  border-top: none;
+}
+.record-main {
+  flex: 1;
+  min-width: 0;
+}
+.record-name {
   font-size: 13px;
-  color: #5a6488;
-  margin-bottom: 6px;
+  color: #1a2b5f;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.record-meta {
+  font-size: 11px;
+  color: #8899aa;
+  margin-top: 3px;
+}
+.record-score {
+  text-align: right;
+  flex-shrink: 0;
+}
+.record-num {
+  font-size: 17px;
+  font-weight: 700;
+  color: #c41e3a;
+}
+.record-max {
+  font-size: 11px;
+  color: #8899aa;
 }
 
-/* ===== 提升建议 ===== */
 .advice-card {
   background: #fff;
   border-radius: 12px;
@@ -323,5 +539,10 @@ onMounted(() => {
   margin-top: 10px;
   font-size: 11px;
   color: #8899aa;
+}
+.empty {
+  text-align: center;
+  color: #8899aa;
+  padding: 40px 0;
 }
 </style>

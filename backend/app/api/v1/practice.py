@@ -59,7 +59,8 @@ def _after_practice(user_id: int, db: Session, total: int, correct: int) -> list
         return []
 
 
-def _auto_record_wrong(user_id: int, question_id: int, subject_id: int, db: Session) -> str:
+def _auto_record_wrong(user_id: int, question_id: int, subject_id: int, db: Session,
+                       user_answer: str = '') -> str:
     """自动将错题收录到个人错题集（内部辅助函数）
 
     返回操作结果: 'new' | 'updated' | 'skipped' | 'error'
@@ -85,6 +86,10 @@ def _auto_record_wrong(user_id: int, question_id: int, subject_id: int, db: Sess
             existing.error_count = (existing.error_count or 0) + 1
             existing.last_review_time = datetime.now()
             existing.review_count = (existing.review_count or 0) + 1
+            # 记录最近一次错选：错题本据此把用户选错的选项标红。
+            # 用本次作答覆盖，保证反映的是最新一次错误而非陈旧值。
+            if user_answer:
+                existing.user_answer = user_answer
             return 'updated'
         else:
             db.add(WrongQuestionPersonal(
@@ -94,6 +99,8 @@ def _auto_record_wrong(user_id: int, question_id: int, subject_id: int, db: Sess
                 collection_type="WRONG",
                 error_count=1,
                 accuracy_rate=0.0,
+                # 首次收录即记下用户错选，错题本可直接标红
+                user_answer=user_answer or '',
                 add_time=datetime.now(),
                 last_review_time=datetime.now(),
                 review_count=1,
@@ -141,7 +148,8 @@ async def record_practice(
     # 自动收录错题
     if not is_correct and question_id:
         _auto_record_wrong(current_user.user_id, question_id,
-                          subject_id or (question.subject_id if question else None), db)
+                          subject_id or (question.subject_id if question else None), db,
+                          payload.get('user_answer', ''))
         commit_with_retry(db)
 
     newly = _after_practice(current_user.user_id, db, 1, 1 if is_correct else 0)
@@ -201,9 +209,22 @@ async def batch_record_practice(
         # 自动收录错题
         if not is_correct and question_id:
             _auto_record_wrong(current_user.user_id, question_id,
-                              subject_id or (question.subject_id if question else None), db)
+                              subject_id or (question.subject_id if question else None), db,
+                              item.get('user_answer', ''))
 
     commit_with_retry(db)
+
+    # 与 POST /record 保持一致：批量交卷同样要触发目标进度重算。
+    # 此前只在 /record 里挂了 sync_goal_progress，导致走批量端点的交卷
+    # （如电脑端整卷提交）不会推进今日/本周目标，也不会触发完成奖励。
+    # 放在 commit 之后：目标进度是按刚落库的练习记录重算的。
+    try:
+        from ...services.goal_progress import sync_goal_progress
+        sync_goal_progress(current_user.user_id, db)
+    except Exception as e:
+        # 目标进度同步失败不应让整卷交卷失败，记录告警即可
+        logger.warning(f"批量交卷后同步目标进度失败: {e}")
+
     correct = sum(1 for i in records_data if i.get("is_correct", False))
     newly = _after_practice(current_user.user_id, db, len(records_data), correct)
     return {"status": "ok", "count": count, "newly_unlocked": newly}

@@ -54,6 +54,9 @@
       <div v-if="mode === 'practice' && !allFinished && answered" class="mode-tip">
         做题模式：答完全部 {{ questions.length }} 题后统一显示答案与解析
       </div>
+      <div v-if="mode === 'memorize' && answered" class="mode-tip">
+        记背模式：选中选项即显示答案与解析
+      </div>
       <!-- 复合题共享材料（可折叠） -->
       <div v-if="groupInfo && groupInfo.shared_content" class="group-material-card">
         <div class="group-material-header" @click="groupCollapsed = !groupCollapsed">
@@ -94,9 +97,11 @@
       </div>
     </main>
 
+    <!-- 连续作答 + 末尾统一交卷：取消逐题「提交答案」 -->
     <footer class="action-bar" v-if="questions.length">
-      <button v-if="!answered" class="submit-btn" @click="submitAnswer" :disabled="selectedOptions.length === 0">提交答案</button>
-      <button v-else class="next-btn" @click="nextQuestion">{{ currentIndex < questions.length - 1 ? '下一题' : '完成' }}</button>
+      <button class="prev-btn" @click="prevQuestion" :disabled="currentIndex === 0">上一题</button>
+      <button class="next-btn" @click="nextQuestion" :disabled="currentIndex >= questions.length - 1">下一题</button>
+      <button class="submit-btn" @click="submitAll" :disabled="!allFinished">交卷</button>
     </footer>
   </div>
 </template>
@@ -110,9 +115,6 @@ const router = useRouter();
 const route = useRoute();
 const questions = ref<{ options?: string[]; [key: string]: any }[]>([]);
 const currentIndex = ref(0);
-const selectedOptions = ref<number[]>([]);
-const answered = ref(false);
-const isCorrect = ref(false);
 const loading = ref(false);
 // 出题失败原因（用于把 422 等后端校验错误显式呈现，避免静默空白）
 const fetchError = ref('');
@@ -127,8 +129,19 @@ const groupCollapsed = ref(false);
 const mode = ref<'practice' | 'memorize'>('practice');
 // 答题卡是否展开
 const sheetOpen = ref(false);
-// 逐题作答记录，索引即题号，用于答题卡标记与「是否全部完成」判定
-const answersRecord = ref<boolean[]>([]);
+// 逐题作答记录，索引即题号，用于答题卡标记与「是否全部完成」判定。
+// 元素由 boolean 升级为对象：既要记「是否作答」，也要记「选了什么」和
+// 「是否正确」。此前只存 boolean，导致切题回来无法回填选择痕迹。
+type AnswerRec = { selected: number[]; correct: boolean; reported: boolean };
+const answersRecord = ref<Array<AnswerRec | null>>([]);
+
+// 当前题的选择态 / 作答态 / 对错全部由 answersRecord 派生。
+// 这样切题时无需手动重置，也就不会再出现「状态与记录不一致」。
+const selectedOptions = computed<number[]>(
+  () => answersRecord.value[currentIndex.value]?.selected ?? []
+);
+const answered = computed(() => !!answersRecord.value[currentIndex.value]);
+const isCorrect = computed(() => !!answersRecord.value[currentIndex.value]?.correct);
 
 // 整体完成进度百分比
 const progressPercent = computed(() => {
@@ -146,22 +159,23 @@ const allFinished = computed(() => {
 // 答案与解析是否应当显示：记背模式立即显示；做题模式全部答完才显示
 const showResult = computed(() => answered.value && (mode.value === 'memorize' || allFinished.value));
 
-// 逐题对错记录，供最终成绩汇总使用
-const correctnessRecord = ref<boolean[]>([]);
-// 最终答对题数
-const correctCount = computed(() => correctnessRecord.value.filter(Boolean).length);
+// 最终答对题数：直接由逐题记录派生
+const correctCount = computed(
+  () => answersRecord.value.filter((r) => !!r && r.correct).length
+);
 // 最终正确率
 const summaryRate = computed(() => {
   if (!questions.value.length) return 0;
   return Math.round((correctCount.value / questions.value.length) * 100);
 });
 
-// 从答题卡跳转到指定题号
+// 从答题卡跳转到指定题号。
+// 关键修复：此前这里把 selectedOptions 清空并置 answered=false，
+// 等于把用户已作答的题当成未作答 —— 即「已答题回看无选择痕迹」的根因。
+// 现在 selectedOptions/answered 由 answersRecord 派生，切题无需任何重置。
 const jumpTo = (idx: number) => {
   if (idx < 0 || idx >= questions.value.length) return;
   currentIndex.value = idx;
-  selectedOptions.value = [];
-  answered.value = false;
   sheetOpen.value = false;
 };
 
@@ -180,7 +194,9 @@ watch(current, (q: any) => {
   }
 });
 
-const goBack = () => {
+// 提前离开时兜底上报，避免用户没点交卷就退出导致练习记录全部丢失
+const goBack = async () => {
+  await flushPending();
   if (window.history.length > 1) router.back();
   else router.push('/mobile/home');
 };
@@ -188,27 +204,42 @@ const goBack = () => {
 const isMulti = computed(() => (current.value.question_type_detail || '') === '多选题');
 
 const optionClass = (idx: number) => {
-  if (!answered.value) {
-    return { selected: selectedOptions.value.includes(idx) };
+  const isPicked = selectedOptions.value.includes(idx);
+  // 未到显示时机（做题模式且尚未全部答完）时只显示选中态，避免逐题泄露对错
+  if (!showResult.value) {
+    return { selected: isPicked };
   }
   const letter = letters[idx];
   const isRight = (current.value.answer || '').includes(letter);
-  const isPicked = selectedOptions.value.includes(idx);
   return {
+    selected: isPicked,
     correct: isRight,
     wrong: isPicked && !isRight
   };
 };
 
+// 答案归一化：兼容 "A" / "ABC" / "A,C" 等多种后端写法
+const normalizeAnswer = (v: any) =>
+  String(v || '').replace(/[^A-H]/g, '').toUpperCase().split('').sort().join('');
+
+const gradeSelection = (selected: number[]) =>
+  selected.map((i) => letters[i]).sort().join('');
+
+// 连续作答：选中即记录，无需再点「提交答案」。
+// 记背模式在这一刻即可显示答案解析 —— showResult 是派生值，无需额外状态。
 const toggleOption = (idx: number) => {
-  if (answered.value) return;
+  const prev = answersRecord.value[currentIndex.value]?.selected ?? [];
+  let next: number[];
   if (isMulti.value) {
-    const pos = selectedOptions.value.indexOf(idx);
-    if (pos >= 0) selectedOptions.value.splice(pos, 1);
-    else selectedOptions.value.push(idx);
+    next = prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx];
   } else {
-    selectedOptions.value = [idx];
+    next = [idx];
   }
+  answersRecord.value[currentIndex.value] = {
+    selected: next,
+    correct: gradeSelection(next) === normalizeAnswer(current.value.answer),
+    reported: false
+  };
 };
 
 /**
@@ -303,45 +334,55 @@ const fetchQuestions = async () => {
   }
 };
 
-const submitAnswer = async () => {
-  if (answered.value || selectedOptions.value.length === 0) return;
-  const q = current.value;
-  const userAnswer = selectedOptions.value.map((i) => letters[i]).sort().join('');
-  const correct = (q.answer || '').replace(/[^A-H]/g, '').split('').sort().join('');
-  // 记录本题作答，供答题卡标记与「全部完成」判定使用
-  answersRecord.value[currentIndex.value] = true;
-  correctnessRecord.value[currentIndex.value] = userAnswer === correct;
-  isCorrect.value = userAnswer === correct;
-  answered.value = true;
-
-  // 记录练习（自动收录错题）
-  try {
-    const auth = (window as any).__VTJ_AUTH__;
-    await auth.apiFetch('/api/practice/record', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question_id: q.question_id,
-        subject_id: q.subject_id,
-        is_correct: isCorrect.value,
-        user_answer: userAnswer,
-        source: '随机练习'
+// ===== 末尾统一上报 =====
+// 用 reported 标记做幂等：交卷与提前退出都可能触发，重复调用不会
+// 重复计入练习记录，也不会重复收录错题。
+const flushPending = async () => {
+  const auth = (window as any).__VTJ_AUTH__;
+  if (!auth) return;
+  const tasks: Array<Promise<any>> = [];
+  questions.value.forEach((q: any, i: number) => {
+    const rec = answersRecord.value[i];
+    if (!rec || rec.reported || !rec.selected.length) return;
+    rec.reported = true;
+    tasks.push(
+      auth.apiFetch('/api/practice/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question_id: q.question_id,
+          subject_id: q.subject_id,
+          is_correct: rec.correct,
+          user_answer: gradeSelection(rec.selected),
+          source: '随机练习'
+        })
       })
-    });
-  } catch (e) {
-    console.error('记录练习失败:', e);
+    );
+  });
+  if (!tasks.length) return;
+  // 单题上报失败不应中断整卷结算
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((r) => r.status === 'rejected').length;
+  if (failed) console.error('有', failed, '题的练习记录上报失败');
+};
+
+const submitAll = async () => {
+  if (!allFinished.value) {
+    // 未全部作答：定位到第一道未作答的题，避免用户误以为已交卷
+    const idx = questions.value.findIndex((_, i) => !answersRecord.value[i]);
+    if (idx >= 0) currentIndex.value = idx;
+    return;
   }
+  await flushPending();
+  goBack();
+};
+
+const prevQuestion = () => {
+  if (currentIndex.value > 0) currentIndex.value--;
 };
 
 const nextQuestion = () => {
-  if (currentIndex.value < questions.value.length - 1) {
-    currentIndex.value++;
-    selectedOptions.value = [];
-    answered.value = false;
-    isCorrect.value = false;
-  } else {
-    goBack();
-  }
+  if (currentIndex.value < questions.value.length - 1) currentIndex.value++;
 };
 
 onMounted(fetchQuestions);
@@ -687,10 +728,13 @@ onMounted(fetchQuestions);
   padding: 12px;
   background: #fff;
   border-top: 1px solid #e8ecf1;
+  display: flex;
+  gap: 8px;
 }
 .submit-btn,
-.next-btn {
-  width: 100%;
+.next-btn,
+.prev-btn {
+  flex: 1;
   min-height: 48px;
   border: none;
   border-radius: 10px;
@@ -705,7 +749,12 @@ onMounted(fetchQuestions);
 .next-btn {
   background: linear-gradient(135deg, #1A365D, #2a5298);
 }
-.submit-btn:disabled {
+.prev-btn {
+  background: #8899aa;
+}
+.submit-btn:disabled,
+.next-btn:disabled,
+.prev-btn:disabled {
   opacity: 0.5;
 }
 </style>

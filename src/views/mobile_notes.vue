@@ -21,6 +21,9 @@
           <span class="tag">{{ n.type === 'question' ? '题目' : '新闻' }}</span>
           <span v-if="n.subject" class="tag">{{ n.subject }}</span>
           <span class="time">{{ formatTime(n.update_time) }}</span>
+          <!-- 列表级删除：新闻笔记点击后会跳转新闻详情、永远进不了编辑弹层，
+               此前只有题目笔记且必须先点开才有机会删除 -->
+          <button class="note-del" @click.stop="deleteNote(n)">删除</button>
         </div>
       </div>
       <div v-if="!notes.length && !loading" class="empty">暂无笔记</div>
@@ -189,23 +192,29 @@ const loadQuestionDetail = async (questionId: number) => {
   }
 };
 
-const deleteCurrentNote = async () => {
-  const n = currentNote.value;
+/** 删除任意一条笔记并从列表移除。列表与详情弹层共用，确保新闻笔记也可删除。 */
+const deleteNote = async (n: any) => {
   if (!n || n.note_id == null) return;
   if (!window.confirm('确定删除这条笔记吗？')) return;
+  const inModal = !!currentNote.value && currentNote.value.note_id === n.note_id;
   try {
     const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/notes/' + n.note_id, {
       method: 'DELETE'
     });
     if (res.ok) {
-      closeDetail();
       notes.value = notes.value.filter((x) => x.note_id !== n.note_id);
-    } else {
+      // 删除的正是弹层当前笔记时顺势关闭，避免弹层里留着已删内容
+      if (inModal) closeDetail();
+    } else if (inModal) {
       detailError.value = '删除失败（' + res.status + '）';
     }
   } catch (e) {
-    detailError.value = '删除失败，请稍后重试';
+    if (inModal) detailError.value = '删除失败，请稍后重试';
   }
+};
+
+const deleteCurrentNote = async () => {
+  await deleteNote(currentNote.value);
 };
 
 const goBack = () => {
@@ -358,6 +367,16 @@ onMounted(fetchNotes);
 .time {
   font-size: 11px;
   color: #8899aa;
+}
+.note-del {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid #ffccc7;
+  background: #fff2f0;
+  color: #c41e3a;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
 }
 .empty {
   text-align: center;

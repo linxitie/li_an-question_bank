@@ -5,6 +5,7 @@
 反爬策略: Playwright Stealth伪装 + UA轮换 + 延迟随机化 + 重试机制
 多浏览器: 支持Chromium/Firefox/Edge，通过 .env 中 NEWS_BROWSER 配置
 """
+import hashlib
 import logging
 import os
 import re
@@ -218,11 +219,109 @@ def _extract_content_with_inline_images(soup):
         return "", []
 
 
-def _download_inline_images(news_id: int, ordered_images: list, page_url: str, db: Session, label: str = "") -> int:
-    """按 [[IMG:n]] 的 n 顺序下载内联图片，image_order 与标记严格一致"""
+# 段落去重时需要忽略的标点（含中英文），与前端 src/utils/newsRender.js 同一口径
+_PARA_DEDUPE_STRIP_RE = re.compile(r"""[\s，。、；：？！“”‘’（）《》【】,.;:?!"'()<>\[\]]""")
+_IMG_MARKER_LINE_RE = re.compile(r"^\[\[IMG:(\d+)\]\]$")
+
+
+def _para_dedupe_key(text: str) -> str:
+    """段落去重键：去掉所有空白与标点。
+
+    避免「近日，记者走访。」与「近日记者走访」被当成不同段落而漏掉重复。
+    """
+    return _PARA_DEDUPE_STRIP_RE.sub("", text or "")
+
+
+def _dedupe_adjacent_paragraphs(content: str) -> str:
+    """合并重复正文段落，并丢弃随之重复的图片标记。
+
+    与前端 newsRender.js 的 dropDuplicateBlocks 保持同一口径：
+    图片标记单独成行；重复正文即使被图片标记隔开（并非相邻）也必须合并。
+
+    为什么必须在「行」粒度上判定：
+      若先把被判重的 [[IMG:n]] 标记行删掉，原本被标记隔开的三段重复正文
+      会变成连续三行，再被合并成一个 block，去重键从「同一段」变成「三段连写」，
+      于是永远匹配不上 —— 重复数据会原样留在库里。
+
+    保留原有空行结构，仅吞掉因丢弃重复段落而产生的多余空行。
+    """
+    lines = (content or "").split("\n")
+    out = []
+    pending_imgs = []
+    last_text_key = None
+    swallow_blanks = False
+
+    for raw in lines:
+        s = raw.strip()
+        if not s:
+            if swallow_blanks:
+                continue  # 丢弃重复段落后残留的空行
+            out.extend(pending_imgs)
+            pending_imgs = []
+            out.append("")
+            continue
+        if _IMG_MARKER_LINE_RE.match(s):
+            pending_imgs.append(s)
+            swallow_blanks = False
+            continue
+        key = _para_dedupe_key(s)
+        if key and key == last_text_key:
+            # 重复正文：丢弃本行，并丢弃尚未输出的图片标记（重复下载的那批）
+            pending_imgs = []
+            swallow_blanks = True
+            continue
+        out.extend(pending_imgs)
+        pending_imgs = []
+        out.append(s)
+        last_text_key = key
+        swallow_blanks = False
+
+    out.extend(pending_imgs)
+    while out and not out[-1]:
+        out.pop()
+    return "\n".join(out)
+
+
+def _strip_dropped_image_markers(content: str, dropped: set) -> str:
+    """移除被判重跳过的 [[IMG:n]] 标记，并顺带清理重复段落。
+
+    调用方在 _download_inline_images 返回 dropped 后必须调用本函数，
+    否则正文里会残留解析不到图片的裸标记，前端表现为裂图。
+
+    顺序很关键：先合并重复段落（该步骤会连带丢弃被判重的那批标记），
+    再显式移除仍残留的 dropped 标记。反过来做会导致重复正文粘连、失去分隔。
+    幂等：dropped 为空时原样返回。
+    """
+    if not dropped:
+        return content or ""
+    merged = _dedupe_adjacent_paragraphs(content or "")
+    kept = []
+    for line in merged.split("\n"):
+        m = _IMG_MARKER_LINE_RE.match(line.strip())
+        if m and int(m.group(1)) in dropped:
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _download_inline_images(news_id: int, ordered_images: list, page_url: str, db: Session, label: str = "") -> tuple:
+    """按 [[IMG:n]] 的 n 顺序下载内联图片，image_order 与标记严格一致。
+
+    新增内容哈希判重：同一篇新闻内内容完全相同的图片只保留第一张。
+    实测历史数据 546/2125 篇存在此类重复（同一张图被下载成
+    img_0.jpg / img_1.jpg / img_2.jpg，路径不同但 MD5 相同），
+    前端无法按 URL 去重，必须在采集源头拦住。
+
+    返回 (saved, dropped_orders)：
+      saved          实际保存的图片数
+      dropped_orders 因内容重复被跳过的标记序号。调用方必须据此清理正文标记，
+                     否则正文残留无法解析的 [[IMG:n]]，表现为裂图。
+    """
     upload_dir = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "news", str(news_id))
     os.makedirs(upload_dir, exist_ok=True)
     saved = 0
+    seen_hash = set()
+    dropped = set()
     for order, src in ordered_images:
         if saved >= 10:
             break
@@ -247,6 +346,15 @@ def _download_inline_images(news_id: int, ordered_images: list, page_url: str, d
                 continue
             if len(r.content) < 100 or len(r.content) > 5 * 1024 * 1024:
                 continue
+            # 内容哈希判重：同一篇内内容相同的图片只保留第一张。
+            # 尺寸与 alt 关键词过滤（_should_skip_image）挡不住这种情况：
+            # 重复图片路径不同、内容一致，必须比对内容哈希。
+            content_hash = hashlib.md5(r.content).hexdigest()
+            if content_hash in seen_hash:
+                logger.info(f"[{label}] 图片内容重复，跳过: {src} (order={order})")
+                dropped.add(order)
+                continue
+            seen_hash.add(content_hash)
             content_type = r.headers.get("Content-Type", "")
             ext = ".jpg"
             if "png" in content_type:
@@ -272,7 +380,7 @@ def _download_inline_images(news_id: int, ordered_images: list, page_url: str, d
         except Exception as e:
             logger.warning(f"[{label}] 图片记录提交失败: {e}")
             db.rollback()
-    return saved
+    return saved, dropped
 
 
 def _download_images(soup, page_url: str, news_id: int, db: Session, label: str = "") -> int:
@@ -843,7 +951,12 @@ def scrape_cpd_news(db: Session) -> int:
             # 提取图片（内联有序下载，失败回退到原 _download_images）
             try:
                 if ordered_images:
-                    _download_inline_images(news_id, ordered_images, article_url, db, label="cpd")
+                    _, dropped_orders = _download_inline_images(news_id, ordered_images, article_url, db, label="cpd")
+                    # 判重跳过的图片必须连同正文标记与重复段落一起清理，
+                    # 否则正文残留无法解析的 [[IMG:n]]，前端表现为裂图。
+                    if dropped_orders:
+                        article.content = _strip_dropped_image_markers(article.content or "", dropped_orders)
+                        db.commit()
                 elif article_soup is not None:
                     _download_images(article_soup, article_url, news_id, db, label="cpd")
             except Exception as e:
@@ -984,7 +1097,10 @@ def scrape_people_news(db: Session) -> int:
             # 提取图片（有序下载，image_order 与内联标记一致）
             if image_urls:
                 try:
-                    _download_inline_images(news_id, image_urls, href, db, label="people")
+                    _, dropped_orders = _download_inline_images(news_id, image_urls, href, db, label="people")
+                    if dropped_orders:
+                        article.content = _strip_dropped_image_markers(article.content or "", dropped_orders)
+                        db.commit()
                 except Exception as e:
                     logger.warning(f"[people] 图片提取异常: {e}")
 

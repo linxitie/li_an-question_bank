@@ -66,6 +66,9 @@ async def get_wrong_questions(
             'question_type_detail': _get_question_type_detail(q, db),
             'options': q.options if q else None,
             'answer': q.answer if q else '',
+            # 移动端错题本需要用户自己的错选渲染红色选项；此前列表接口缺失，
+            # 只能拿到正确答案，无法区分「用户选错」与「用户未作答」。
+            'user_answer': wq.user_answer or '',
             'answer_analysis': q.answer_analysis if q else '',
             'subject_id': wq.subject_id,
             'subject_name': subj.subject_name if subj else '',

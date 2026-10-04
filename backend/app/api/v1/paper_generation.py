@@ -497,6 +497,74 @@ async def template_generate_paper(
 
 # ==================== 试卷管理 ====================
 
+@router.get("/list", response_model=PaperListResponse, summary="试卷列表查询")
+async def get_paper_list(
+        subject_id: Optional[int] = Query(None, description="科目ID"),
+        paper_type: Optional[str] = Query(None, description="试卷状态"),
+        exam_type: Optional[str] = Query(None, description="考试类型"),
+        composition_method: Optional[str] = Query(None, description="组卷方式"),
+        keyword: Optional[str] = Query(None, max_length=100, description="搜索关键词"),
+        page: int = Query(1, ge=1, description="页码"),
+        page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    分页查询试卷列表
+
+    **权限说明：**
+    - 普通用户：只能看到已发布的试卷
+    - 教师/管理员：可以看到自己创建的所有试卷
+    - 超级管理员：可以看到所有试卷
+    """
+    query = db.query(ExamPaper)
+
+    # 权限过滤
+    if current_user.role_level < 2:
+        # 普通用户只看发布的试卷
+        query = query.filter(ExamPaper.paper_type == "PUBLISHED")
+    elif current_user.role_level < 3:
+        # 教师看自己创建的或发布的
+        query = query.filter(
+            or_(
+                ExamPaper.creator_id == current_user.user_id,
+                ExamPaper.paper_type == "PUBLISHED"
+            )
+        )
+    # 管理员可以看到所有
+
+    # 条件过滤
+    if subject_id:
+        query = query.filter(ExamPaper.subject_id == subject_id)
+    if paper_type:
+        query = query.filter(ExamPaper.paper_type == paper_type)
+    if exam_type:
+        query = query.filter(ExamPaper.exam_type == exam_type)
+    if composition_method:
+        query = query.filter(ExamPaper.composition_method == composition_method)
+    if keyword:
+        query = query.filter(
+            or_(
+                ExamPaper.paper_name.like(f"%{keyword}%"),
+                ExamPaper.paper_code.like(f"%{keyword}%")
+            )
+        )
+
+    # 统计总数
+    total = query.count()
+
+    # 分页查询
+    papers = query.order_by(
+        ExamPaper.create_time.desc()
+    ).offset((page - 1) * page_size).limit(page_size).all()
+
+    return PaperListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=papers
+    )
+
 @router.get("/{paper_id}", response_model=PaperDetailResponse, summary="获取试卷详情")
 async def get_paper_detail(
         paper_id: int,
@@ -607,73 +675,6 @@ async def update_paper_info(
     return SuccessResponse(message="试卷更新成功")
 
 
-@router.get("/list", response_model=PaperListResponse, summary="试卷列表查询")
-async def get_paper_list(
-        subject_id: Optional[int] = Query(None, description="科目ID"),
-        paper_type: Optional[str] = Query(None, description="试卷状态"),
-        exam_type: Optional[str] = Query(None, description="考试类型"),
-        composition_method: Optional[str] = Query(None, description="组卷方式"),
-        keyword: Optional[str] = Query(None, max_length=100, description="搜索关键词"),
-        page: int = Query(1, ge=1, description="页码"),
-        page_size: int = Query(10, ge=1, le=100, description="每页数量"),
-        current_user: SysUser = Depends(get_current_user),
-        db: Session = Depends(get_db)
-):
-    """
-    分页查询试卷列表
-
-    **权限说明：**
-    - 普通用户：只能看到已发布的试卷
-    - 教师/管理员：可以看到自己创建的所有试卷
-    - 超级管理员：可以看到所有试卷
-    """
-    query = db.query(ExamPaper)
-
-    # 权限过滤
-    if current_user.role_level < 2:
-        # 普通用户只看发布的试卷
-        query = query.filter(ExamPaper.paper_type == "PUBLISHED")
-    elif current_user.role_level < 3:
-        # 教师看自己创建的或发布的
-        query = query.filter(
-            or_(
-                ExamPaper.creator_id == current_user.user_id,
-                ExamPaper.paper_type == "PUBLISHED"
-            )
-        )
-    # 管理员可以看到所有
-
-    # 条件过滤
-    if subject_id:
-        query = query.filter(ExamPaper.subject_id == subject_id)
-    if paper_type:
-        query = query.filter(ExamPaper.paper_type == paper_type)
-    if exam_type:
-        query = query.filter(ExamPaper.exam_type == exam_type)
-    if composition_method:
-        query = query.filter(ExamPaper.composition_method == composition_method)
-    if keyword:
-        query = query.filter(
-            or_(
-                ExamPaper.paper_name.like(f"%{keyword}%"),
-                ExamPaper.paper_code.like(f"%{keyword}%")
-            )
-        )
-
-    # 统计总数
-    total = query.count()
-
-    # 分页查询
-    papers = query.order_by(
-        ExamPaper.create_time.desc()
-    ).offset((page - 1) * page_size).limit(page_size).all()
-
-    return PaperListResponse(
-        total=total,
-        page=page,
-        page_size=page_size,
-        items=papers
-    )
 
 
 @router.post("/{paper_id}/publish", response_model=SuccessResponse, summary="发布试卷")

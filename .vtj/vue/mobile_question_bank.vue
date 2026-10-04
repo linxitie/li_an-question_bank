@@ -66,8 +66,14 @@
         </div>
       </section>
 
-      <!-- 题目列表 -->
+      <!-- 历年试卷列表：首屏直接呈现，无需二次点击。
+           顶部操作区原有「历年试卷」按钮与本区块内容完全重复，已移除；
+           本标题即该功能的唯一可达入口。 -->
       <section class="question-list">
+        <div class="list-header">
+          <span class="list-title">历年试卷</span>
+          <span class="list-sub">点击直接开始作答</span>
+        </div>
         <div 
           v-for="(question, index) in filteredQuestions" 
           :key="index"
@@ -114,7 +120,7 @@
       <!-- 空状态 -->
       <div v-if="filteredQuestions.length === 0" class="empty-state">
         <XIcon :icon="Search" :size="48" color="#e8ecf1"></XIcon>
-        <p>没有找到相关题目</p>
+        <p>{{ emptyText }}</p>
       </div>
     </main>
 
@@ -170,9 +176,12 @@ export default defineComponent({
     // 顶部操作
     // 已移除「快速练习」：它与下方三大科目分类入口职责重叠，
     // 科目化练习统一走「练习」页的科目/子科目/知识点下钻。
-    const activeTopAction = ref('history');
+    // 首屏没有任何「被选中」的操作项：所有按钮都是跳转或提示，
+    // 高亮其中之一会造成误导（原实现默认高亮「历年试卷」）。
+    const activeTopAction = ref('');
+    // 「历年试卷」按钮已移除：其内容就是下方首屏直出的试卷列表，
+    // 再摆一个跳转按钮属于重复入口，故只保留智能组卷/联考小智/错题本/模拟考试。
     const topActions = ref([
-      { key: 'history', name: '历年试卷', icon: Clock, tag: '' },
       { key: 'smart', name: '智能组卷', icon: Cpu, tag: 'AI' },
       { key: 'ai', name: '联考小智', icon: Cpu, tag: '开发中' },
       { key: 'wrong', name: '错题本', icon: Warning, tag: '' },
@@ -217,6 +226,15 @@ export default defineComponent({
     // 题目列表
     const questions = ref([]);
     
+    // 空态文案：本区块是「历年试卷」列表，为空通常是「还没有已发布的试卷」
+    // （get_paper_list 对普通用户只返回已发布试卷），
+    // 而非「搜索没匹配到」。原文案「没有找到相关题目」会让用户误以为题库为空。
+    const emptyText = computed(() => {
+      if (searchQuery.value) return '没有找到相关试卷';
+      if (activeCategory.value !== 'all') return '该科目下暂无已发布试卷';
+      return '暂无已发布试卷';
+    });
+
     // 过滤题目
     const filteredQuestions = computed(() => {
       let result = questions.value;
@@ -318,9 +336,7 @@ export default defineComponent({
     
     const selectTopAction = (key: string) => {
       activeTopAction.value = key;
-      if (key === 'history') {
-        router.push('/mobile/student-papers');
-      } else if (key === 'smart') {
+      if (key === 'smart') {
         router.push('/smart-exam');
       } else if (key === 'ai') {
         // 联考小智：功能还在开发中
@@ -348,6 +364,7 @@ export default defineComponent({
       activeCategory,
       categories,
       filteredQuestions,
+      emptyText,
       goBack,
       toggleSearch,
       handleSearch,
@@ -560,6 +577,23 @@ export default defineComponent({
 }
 .category-chip.active .chip-count {
   opacity: 0.9;
+}
+
+/* 历年试卷区块标题 */
+.list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 4px 10px;
+}
+.list-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1A365D;
+}
+.list-sub {
+  font-size: 12px;
+  color: #8899aa;
 }
 
 /* 题目列表 */
