@@ -190,6 +190,15 @@
           <div class="field-hint" v-if="!editHasImage(editForm.question_content)">
             提示：题干若含图片，请确认下方预览能正常显示；若显示为红色占位图说明图片文件缺失。
           </div>
+          <!-- 图片上传：教师可直接为题目补图，无需手写 <img> 原文 -->
+          <div class="img-upload-row">
+            <label class="img-upload-label">题目图片</label>
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp" class="form-input img-upload-input" @change="onPickImage" />
+            <button class="btn-sm" @click="doUploadImage" :disabled="uploadingImg || !pickedImage">
+              {{ uploadingImg ? '上传中...' : '上传图片' }}
+            </button>
+          </div>
+          <div class="field-hint" v-if="imgUploadMsg">{{ imgUploadMsg }}</div>
         </div>
 
         <div class="form-group" v-if="showOptionFields">
@@ -582,7 +591,58 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       editForm.value.optionsParsed = { ...opts };
     }
 
-    async function saveEdit() {
+    const pickedImage = ref<File | null>(null);
+const uploadingImg = ref(false);
+const imgUploadMsg = ref('');
+
+function onPickImage(e: any) {
+  pickedImage.value = (e.target && e.target.files && e.target.files[0]) || null;
+  imgUploadMsg.value = '';
+}
+
+async function doUploadImage() {
+  const f = pickedImage.value;
+  if (!f) {
+    ElMessage.warning('请先选择图片文件');
+    return;
+  }
+  uploadingImg.value = true;
+  imgUploadMsg.value = '';
+  try {
+    const auth = (window as any).__VTJ_AUTH__;
+    const fd = new FormData();
+    fd.append('file', f);
+    // FormData 不能设 Content-Type，交给浏览器自动带 boundary
+    const res = await auth.apiFetch(
+      `/api/questions/${editForm.value.question_id}/images`,
+      { method: 'POST', body: fd }
+    );
+    const data = await res.json();
+    if (data.success && data.data && data.data.url) {
+      const url = data.data.url;
+      // 后端已把 <img> 追加进 question_content，但随后 saveEdit 的 PUT 会以
+      // editForm.question_content 整体覆盖 —— 必须同步进本地表单，标签才不被抹掉。
+      if ((editForm.value.question_content || '').indexOf(url) < 0) {
+        const tag = `<img src="${url}" class="q-img" loading="lazy" />`;
+        const base = editForm.value.question_content || '';
+        editForm.value.question_content = base ? base + '\n' + tag : tag;
+      }
+      imgUploadMsg.value = '上传成功，图片已插入题干末尾；记得点「保存修改」持久化。';
+      pickedImage.value = null;
+      ElMessage.success('图片上传成功');
+    } else {
+      imgUploadMsg.value = data.detail || data.message || '上传失败';
+      ElMessage.error(imgUploadMsg.value);
+    }
+  } catch (e: any) {
+    imgUploadMsg.value = '上传异常：' + ((e && e.message) || e);
+    ElMessage.error(imgUploadMsg.value);
+  } finally {
+    uploadingImg.value = false;
+  }
+}
+
+async function saveEdit() {
       saving.value = true;
       try {
         const auth = (window as any).__VTJ_AUTH__;
@@ -753,6 +813,9 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 .option-edit-item { display: flex; align-items: center; gap: 8px; }
 .option-edit-key { font-weight: 700; color: #1A3C6D; min-width: 24px; }
 .option-edit-input { flex: 1; }
+.img-upload-row { margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.img-upload-label { font-size: 13px; color: #606266; white-space: nowrap; }
+.img-upload-input { flex: 1; min-width: 180px; padding: 4px 6px; font-size: 13px; }
 .option-actions { margin-top: 8px; display: flex; gap: 8px; }
 .star-picker { display: flex; gap: 4px; cursor: pointer; }
 .star-item { font-size: 24px; color: #d9d9d9; user-select: none; }
