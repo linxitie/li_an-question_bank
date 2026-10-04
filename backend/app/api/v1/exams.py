@@ -85,7 +85,7 @@ async def get_exams_list(
 
 
 
-@router.get("/{paper_id}", response_model=Dict[str, Any], summary="获取考试详情")
+@router.get("/{paper_id:int}", response_model=Dict[str, Any], summary="获取考试详情")
 async def get_exam_detail(
         paper_id: int,
         db: Session = Depends(get_db)
@@ -413,11 +413,33 @@ async def get_my_exam_records(
         ExamRecord.create_time.desc()
     ).offset((page - 1) * page_size).limit(page_size).all()
 
+    # 手动序列化，避免返回 SQLAlchemy ORM 对象导致 JSON 序列化 500
+    # （与上方 /list 同一处理。此前此处直塞 ORM 对象，学生端历年试卷页
+    #  loadUserProgress 拿到 500 后对错误对象调 forEach，抛 TypeError）
+    items = []
+    for r in records:
+        items.append({
+            "record_id": r.record_id,
+            "paper_id": r.paper_id,
+            "user_id": r.user_id,
+            "exam_type": r.exam_type,
+            "start_time": r.start_time.isoformat() if r.start_time else None,
+            "end_time": r.end_time.isoformat() if r.end_time else None,
+            "submit_time": r.submit_time.isoformat() if r.submit_time else None,
+            "create_time": r.create_time.isoformat() if r.create_time else None,
+            "duration_used": r.duration_used,
+            "total_score": float(r.total_score) if r.total_score is not None else 0,
+            "is_completed": r.is_completed,
+            "is_scored": r.is_scored,
+            "is_late": r.is_late,
+            "attempt_count": r.attempt_count,
+        })
+
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "data": records
+        "data": items
     }
 
 
