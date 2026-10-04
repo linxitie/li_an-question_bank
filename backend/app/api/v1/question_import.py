@@ -4647,6 +4647,35 @@ def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
         force_review = True
     content = clean_question_text(raw_content) or raw_content
     need_review = 1 if (data.get('need_review') or force_review) else 0
+
+    # ── 选项错位修复（行测专用）────────────────────────────────
+    # `_extract_options` 的 L2 段落回退用 `\s*` 吞并换行；当选项字母各占一行
+    # 且本无值时（图形/公式不在文本层），会把**下一个选项标记**当成当前值：
+    #     A.\nB.\nC.\nD.  ->  [{'A':'B.'}, {'C':'D.'}]
+    # 该形态已在库中实测 244 题，且这 244 题全部被误判为「简答题」。
+    # 行测里选项值形如 'B.' 只可能是这一错位产物（真实选项值不会是裸字母+点），
+    # 故按既定口径置「（见图）」占位并强制待复核，交人工补录——
+    # 绝不把选项字母当作选项内容呈现给考生。
+    # 只在行测落库路径生效；公专链路与 `_extract_options` 函数体一行未动。
+    if options:
+        _fixed_opts = []
+        _degraded = False
+        for _o in options:
+            _v = (_o.get('value') or '').strip()
+            # 分隔符**必需**：裸字母（如 'B'）是合法选项值，不能误判；
+            # 只有「字母+分隔点」且无实际内容才是换行吞并错位的产物。
+            if not _v:
+                _degraded = True
+                _fixed_opts.append({'key': _o.get('key'), 'value': '（见图）'})
+            elif re.fullmatch(r'[A-H]\s*[.、．)）]', _v):
+                _degraded = True
+                _fixed_opts.append({'key': _o.get('key'), 'value': '（见图）'})
+            else:
+                _fixed_opts.append(_o)
+        if _degraded:
+            options = _fixed_opts
+            need_review = 1
+
     answer = (data.get('answer') or '').strip() or '待补充'
 
     subject_id = SUBJECT_NAME_MAP.get('行测', 1)
@@ -4676,8 +4705,20 @@ def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
         return {'import_status': 'DUPLICATE', 'question_id': existing.question_id,
                 'backfilled_fields': backfilled}
 
-    # ── 题型：只查询，缺失才插入（均不 commit）──
+    # ── 题型：行测只有 单选 / 多选 / 判断 ──────────────────────
+    # 行测不存在简答、论述、写作。若被判为简答题却带着 ≥2 个选项，
+    # 说明题型判定因选项残缺而回退，按答案字母个数归位为单选/多选。
     type_name = (data.get('question_type_detail') or '').strip() or '单选题'
+    if type_name in ('简答题', '简述题', '论述题', '写作题', '文章写作'):
+        if len(options) >= 2:
+            _ans = (data.get('answer') or '').strip().upper()
+            type_name = ('多选题' if len(set(re.findall(r'[A-H]', _ans))) >= 2
+                         else '单选题')
+        else:
+            # 行测不存在简答/论述/写作；选项不足 2 个时无法判别单/多选，
+            # 归位为单选题并标记待复核，交人工确认。行测不得残留「简答题」。
+            type_name = '单选题'
+        need_review = 1
     qtype = db.query(QuestionType).filter(
         QuestionType.type_name == type_name,
         QuestionType.subject_id == subject_id).first()
@@ -4696,7 +4737,7 @@ def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
         subject_id=subject_id,
         type_id=qtype.type_id,
         question_content=content,
-        options=data.get('options') or [],
+        options=options,
         answer=answer,
         answer_analysis=data.get('answer_analysis') or '',
         difficulty=coerce_difficulty(data.get('difficulty')),
