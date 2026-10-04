@@ -52,7 +52,13 @@
         </button>
       </div>
     </div>
-    <div class="docs-q-card" v-for="(q, idx) in questions" :key="idx" :id="'qcard_' + idx" :class="{ 'docs-q-card-noans': !q.answer || q.answer === '待补充', 'docs-q-card-suspicious': q.suspicious }">
+    <template v-for="(q, idx) in questions" :key="idx">
+    <div class="docs-q-section-head" v-if="showSectionHead(idx)" @click="toggleSection(q.xingce_subcategory)">
+      <span class="docs-q-section-caret">{{ isSectionCollapsed(q.xingce_subcategory) ? '▸' : '▾' }}</span>
+      <span class="docs-q-section-name">{{ q.xingce_subcategory || '未分区' }}</span>
+      <span class="docs-q-section-count">{{ sectionCount(q.xingce_subcategory) }} 题</span>
+    </div>
+    <div class="docs-q-card" v-if="!isSectionCollapsed(q.xingce_subcategory)" :id="'qcard_' + idx" :class="{ 'docs-q-card-noans': !q.answer || q.answer === '待补充', 'docs-q-card-suspicious': q.suspicious }">
       <div class="docs-q-header">
         <span class="docs-q-num">第 {{ idx + 1 }} 题</span>
         <span class="docs-q-type">{{ q.question_type_detail || '单选题' }}</span>
@@ -74,6 +80,10 @@
       </div>
       <div class="docs-q-body">
         <div class="docs-q-content" v-html="renderQuestionContent(q.question_content)"></div>
+         <div class="docs-q-kao-tags" v-if="q.kao_points_normalized && q.kao_points_normalized.length">
+           <span class="docs-q-kao-label">考点：</span>
+           <span class="docs-q-kao-tag" v-for="(k, ki) in q.kao_points_normalized" :key="'k' + ki">{{ k }}</span>
+         </div>
         <div class="docs-q-requirements" v-if="q.requirements && q.requirements.length">
           <div class="docs-q-ans-label" style="margin-bottom:4px;">题目要求：</div>
           <div class="docs-q-req-text" style="white-space:pre-wrap;word-break:break-word;color:#b0b8c4;font-size:15px;line-height:1.7;"
@@ -99,7 +109,8 @@
         </div>
       </div>
     </div>
-    <div class="form-actions" style="justify-content:center;margin-top:16px;flex-wrap:wrap;">
+    </template>
+     <div class="form-actions" style="justify-content:center;margin-top:16px;flex-wrap:wrap;">
       <button class="btn-primary" @click="$emit('import-all')" :disabled="loading" style="min-width:200px;">
         {{ loading ? '导入中...' : '全部导入（' + questions.filter(function(q){return !q._imported && !q._is_duplicate}).length + ' 题）' }}
       </button>
@@ -326,6 +337,47 @@ export default defineComponent({
       expandedGroups.value = next;
     }
 
+    // ── 行测分区折叠 ──────────────────────────────────────
+    // 行测单卷 5 个分区、130 题，一屏铺开难以逐题核对，故按分区折叠。
+    // key 用分区名而非下标：题目顺序变化（含重导入）时展开态不会错位。
+    const collapsedSections = ref({});
+
+    // 无分区信息（如公专链路）一律不折叠，保持既有渲染完全不变
+    function isSectionCollapsed(sec) {
+      if (!sec) return false;
+      return collapsedSections.value[sec] === true;
+    }
+
+    function toggleSection(sec) {
+      if (!sec) return;
+      const next = {};
+      Object.keys(collapsedSections.value).forEach(function (k) {
+        next[k] = collapsedSections.value[k];
+      });
+      next[sec] = !collapsedSections.value[sec];
+      collapsedSections.value = next;
+    }
+
+    // 仅在该题所属分区与上一题不同处插入分区头；
+    // 题目无 xingce_subcategory 时返回 false，故公专预览不会多出「未分区」头
+    function showSectionHead(idx) {
+      const list = props.questions || [];
+      const cur = (list[idx] || {}).xingce_subcategory || '';
+      if (!cur) return false;
+      if (idx <= 0) return true;
+      const prev = (list[idx - 1] || {}).xingce_subcategory || '';
+      return cur !== prev;
+    }
+
+    function sectionCount(sec) {
+      const list = props.questions || [];
+      let n = 0;
+      for (let i = 0; i < list.length; i++) {
+        if (((list[i] || {}).xingce_subcategory || '') === (sec || '')) n++;
+      }
+      return n;
+    }
+
     // 组头数据：材料超过阈值时默认折叠，且附摘要与截断标记
     const groupHeads = computed(function () {
       const gs = props.groups || [];
@@ -380,8 +432,12 @@ export default defineComponent({
       // 复合题组总题干展示（用户实测缺陷 D1）
       groupHeads,
       expandedGroups,
-      toggleGroup,
-      pickImage,
+toggleGroup,
+    isSectionCollapsed,
+    toggleSection,
+    showSectionHead,
+    sectionCount,
+    pickImage,
       finishAttach,
       openEditDialog,
       closeEditDialog,
@@ -406,6 +462,44 @@ export default defineComponent({
   overflow-y: auto;
   padding-right: 4px;
 }
+.docs-q-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 8px;
+  padding: 7px 12px;
+  background: rgba(100, 120, 160, 0.14);
+  border-left: 3px solid #4a9eff;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  color: #e8eaf0;
+}
+.docs-q-section-head:hover { background: rgba(100, 120, 160, 0.24); }
+.docs-q-section-caret { color: #4a9eff; font-size: 13px; width: 12px; }
+.docs-q-section-name { font-weight: 600; }
+.docs-q-section-count { color: #98a2b3; font-size: 12px; margin-left: auto; }
+
+.docs-q-kao-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 2px;
+}
+.docs-q-kao-label { color: #98a2b3; font-size: 12px; }
+.docs-q-kao-tag {
+  font-size: 12px;
+  line-height: 18px;
+  color: #7cc3ff;
+  background: rgba(74, 158, 255, 0.14);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 9px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
 .docs-q-card {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.1);
