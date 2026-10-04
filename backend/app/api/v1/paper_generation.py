@@ -607,47 +607,6 @@ async def update_paper_info(
     return SuccessResponse(message="试卷更新成功")
 
 
-@router.delete("/{paper_id}", response_model=SuccessResponse, summary="删除试卷")
-async def delete_paper(
-        paper_id: int,
-        current_user: SysUser = Depends(require_teacher_or_admin),
-        db: Session = Depends(get_db)
-):
-    """
-    删除试卷（软删除）
-    """
-    paper = db.query(ExamPaper).filter(
-        ExamPaper.paper_id == paper_id
-    ).first()
-
-    if not paper:
-        raise HTTPException(status_code=404, detail="试卷不存在")
-
-    # 权限检查
-    if paper.creator_id != current_user.user_id and current_user.role_level < 3:
-        raise HTTPException(status_code=403, detail="无权删除此试卷")
-
-    # 检查是否有考试记录
-    from ...models.models import ExamRecord
-    has_records = db.query(ExamRecord).filter(
-        ExamRecord.paper_id == paper_id
-    ).first()
-
-    if has_records:
-        raise HTTPException(
-            status_code=400,
-            detail="该试卷已有考试记录，无法删除，建议改为归档状态"
-        )
-
-    # 软删除
-    paper.paper_type = "ENDED"
-    db.commit()
-
-    logger.info(f"用户 {current_user.username} 删除试卷 ID: {paper_id}")
-
-    return SuccessResponse(message="试卷删除成功")
-
-
 @router.get("/list", response_model=PaperListResponse, summary="试卷列表查询")
 async def get_paper_list(
         subject_id: Optional[int] = Query(None, description="科目ID"),
