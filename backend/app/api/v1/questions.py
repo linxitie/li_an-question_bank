@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import hashlib
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -9,15 +11,16 @@ from sqlalchemy import and_,or_,func
 
 from ...core.database import get_db
 from ...models.models import (QuestionBank as QuestionModel, QuestionSubject as SubjectModel,
-                      QuestionType, KnowledgePoint, QuestionEditLog,
-                      SysUser, QuestionSubject, QuestionBank, QuestionDetailCategory,
-                      QuestionGroup)
+                        QuestionType, KnowledgePoint, QuestionEditLog,
+                        SysUser, QuestionSubject, QuestionBank, QuestionDetailCategory,
+                        QuestionGroup, QuestionImage)
 from ...schemas.schemas import (QuestionCreate, QuestionUpdate, QuestionResponse,
                        QuestionListResponse,
                        BatchImportQuestionsRequest, BatchImportResponse,
                        RandomQuestionRequest, RandomQuestionResponse,
                        ErrorResponse, SuccessResponse, BatchImportQuestionItem)
-from ...services.image_service import sanitize_content_images, sanitize_options_images
+from ...services.image_service import (sanitize_content_images, sanitize_options_images,
+                                       compress_image, STATIC_IMG_ROOT)
 from ...services.option_utils import render_image_placeholder
 from ...services.text_parser import canonical_answer
 
@@ -763,6 +766,92 @@ async def delete_question(
     logger.info(f"用户 {current_user.username} 删除题目 ID: {question_id}")
 
     return SuccessResponse(message="题目删除成功")
+
+
+_ALLOWED_IMG_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB 上限，与 T13 解压炸弹防护口径一致
+
+
+@router.post("/{question_id}/images", response_model=SuccessResponse, summary="为题目上传图片")
+async def upload_question_image(
+    question_id: int,
+    file: UploadFile = File(..., description="图片文件"),
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db)
+):
+    """为已有题目补加图片（题目管理「添加图片」编辑操作的后端支撑）。
+
+    与导入链路保持同一落盘口径，三处同步：
+      1. 落盘 app/static/questions/{question_id}/img_{idx}_{hash8}.{ext}
+      2. question_image 表登记 image_path（供按表检索与重提取）
+      3. question_content 内嵌 <img> 标签（答题页直接渲染）
+
+    文件名用内容 hash 而非原始名，避免同名覆盖与路径穿越；
+    扩展名白名单 + 大小上限双重校验，拒绝非图片与超大文件。
+    """
+    question = db.query(QuestionBank).filter(
+        QuestionBank.question_id == question_id
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    if question.creator_id != current_user.user_id and current_user.role_level < 3:
+        raise HTTPException(status_code=403, detail="无权修改此题目")
+
+    raw_name = os.path.basename(file.filename or '')
+    ext = os.path.splitext(raw_name)[1].lower()
+    if ext not in _ALLOWED_IMG_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail="不支持的图片格式 %s，允许：%s" % (ext or '（无扩展名）',
+                                            '、'.join(sorted(_ALLOWED_IMG_EXT))))
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="图片超过 10MB 上限")
+
+    try:
+        # compress_image 返回 (bytes, ext)：既用于取真实扩展名，
+        # 也避免「原名 .png 实为 jpeg」这种文件名与内容不符的情况
+        img_data, out_ext = compress_image(data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="图片解析失败：%s" % e)
+    ext = '.' + (out_ext or 'png').lower().lstrip('.')
+
+    qid = int(question.question_id)
+    existing = db.query(QuestionImage).filter(
+        QuestionImage.question_id == qid
+    ).order_by(QuestionImage.image_order.desc()).first()
+    idx = (int(existing.image_order) + 1) if existing and existing.image_order is not None else 0
+    digest = hashlib.sha1(img_data).hexdigest()[:8]
+    fname = 'img_%d_%s%s' % (idx, digest, ext)
+
+    abs_dir = os.path.join(STATIC_IMG_ROOT, str(qid))
+    os.makedirs(abs_dir, exist_ok=True)
+    abs_path = os.path.join(abs_dir, fname)
+    with open(abs_path, 'wb') as fh:
+        fh.write(img_data)
+
+    url = '/static/questions/%d/%s' % (qid, fname)
+    db.add(QuestionImage(
+        question_id=qid, image_path=url, image_type='题干图',
+        image_order=idx, file_size=len(img_data),
+    ))
+
+    # 题干内嵌：有「（见图）」占位就替换掉，否则追加到末尾
+    content = question.question_content or ''
+    img_tag = '<img src="%s" class="q-img" loading="lazy" />' % url
+    if '（见图）' in content:
+        content = content.replace('（见图）', img_tag)
+    elif url not in content:
+        content = (content + '\n' + img_tag) if content else img_tag
+    question.question_content = content
+    question.update_time = datetime.now()
+    db.commit()
+
+    logger.info("用户 %s 为题目 %d 上传图片 %s", current_user.username, qid, url)
+    return SuccessResponse(message="图片上传成功", data={"url": url, "image_path": url})
 
 
 @router.post("/batch-import", response_model=BatchImportResponse, summary="批量导入题目")
