@@ -618,10 +618,13 @@ async def get_question_group(
             'question_type_detail': (detail_row.question_type_detail if detail_row else '选择题'),
             'difficulty': q.difficulty,
             'score': float(q.score) if q.score else 0,
+            'requirements': q.requirements or '',
+            'need_review': q.need_review or 0,
+            'parent_id': q.parent_id or 0,
         })
 
     shared = sanitize_content_images(
-        render_image_placeholder(group.shared_content or ''), 0, db)
+        render_image_placeholder(group.shared_content or '', owner='question-groups'), 0, db)
     return {
         'group': {
             'id': group.id,

@@ -601,13 +601,34 @@ import { renderQuestionContent } from '@/utils/questionRender';
       };
     },
     computed: {
+      // ★ RC-2 修复：单一事实来源 —— 合并 batchPreviewData 与 parsedDocsQuestions
+      //   按 question_content 前 80 字去重，保留 blocked/block_reasons/requirements/group_id 等字段
+      pendingQuestions() {
+        const a = this.state.batchPreviewData || [];
+        const b = this.state.parsedDocsQuestions || [];
+        const seen = {};
+        const merged = [];
+        for (const q of a.concat(b)) {
+          if (!q) continue;
+          const key = (q.question_content || '').substring(0, 80);
+          if (seen[key]) continue;
+          seen[key] = true;
+          merged.push(q);
+        }
+        // ★ 副作用：同步 batchPreviewData，使 template 中的 state.batchPreviewData.length 显示正确值
+        //   （template 不可改，故通过此方式桥接）
+        if (merged.length !== a.length || (b.length > 0 && a.length === 0)) {
+          this.state.batchPreviewData = merged;
+        }
+        return merged;
+      },
       // ★ 申论阻断检测
       //   后端解析器对「题号邻近找不到分值」「答案段数与题目数不等」的题块会置
       //   blocked=true。这类题一旦入库就是错配数据，事后无法与正确数据区分，
       //   因此前端必须在**提交前**拦住，而不是等后端 400。
       //   用户硬约束：宁可阻断报错交人工，也不允许把错配数据写进题库。
       blockedQuestionList() {
-        const list = this.state.batchPreviewData || [];
+        const list = this.pendingQuestions || [];
         return list.filter(function (q) {
           return q && (q.blocked === true || q.blocked === 1 || q.blocked === 'true');
         });
@@ -669,7 +690,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
         var lastError = null;
         for (var attempt = 0; attempt <= retries; attempt++) {
           var controller = new AbortController();
-          var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+          var timer = setTimeout(function() { controller.abort(new Error('client timeout: ' + timeoutMs + 'ms')); }, timeoutMs);
           try {
             var fetchOpts = Object.assign({}, options, { signal: controller.signal });
             var res = await fetch(url, fetchOpts);
@@ -685,7 +706,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
             }
             if (attempt < retries) {
               // 等待后重试
-              await new Promise(function(r) { setTimeout(r, 1000 * (attempt + 1)); });
+              await new Promise(function(r) { setTimeout(r, 800 * (attempt + 1) + Math.floor(Math.random() * 400)); });
             }
           }
         }
@@ -771,15 +792,25 @@ import { renderQuestionContent } from '@/utils/questionRender';
           await new Promise(function (r) { setTimeout(r, delay); });
           waited += delay;
           var res = await this.fetchWithRetry(
-            '/api/questions/import/records/' + importId + '/status',
+            '/api/questions/import/records/' + importId + '/status?light=true',
             { method: 'GET', headers: this.getAuthHeaders() },
-            10000, 0
+            30000, 2
           );
           var st = await res.json();
           if (!res.ok) {
             throw new Error(this._extractErrorMessage(st, '查询解析状态失败 (HTTP ' + res.status + ')'));
           }
-          if (st.status === 'PREVIEW') return st.result || st;
+          if (st.status === 'PREVIEW') {
+            // light=true 模式下 result 为空，需单独取完整预览数据
+            if (st.result) return st.result;
+            var fullRes = await this.fetchWithRetry(
+              '/api/questions/import/records/' + importId + '/status',
+              { method: 'GET', headers: this.getAuthHeaders() },
+              30000, 2
+            );
+            var fullSt = await fullRes.json();
+            return fullSt.result || fullSt;
+          }
           if (st.status === 'FAILED') throw new Error(this._extractErrorMessage(st, '解析失败'));
           // PARSING / CONFIRMED / COMPLETED：继续等
           if (onTick) onTick(st, waited);
@@ -801,7 +832,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
           method: 'POST',
           headers: this.getAuthHeaders(),
           body: formData
-        }, 60000, 0);
+        }, 180000, 1);
         var data = await upRes.json();
         if (!upRes.ok) {
           // 必须经 _extractErrorMessage 提取：后端 error 是对象，直接拼接会得到 [object Object]
@@ -973,7 +1004,11 @@ import { renderQuestionContent } from '@/utils/questionRender';
           ElMessage.warning('文件解析返回空内容。扫描件PDF已尝试MinerU高精度OCR仍无结果时，请改用"图片导入"标签页；Word文档请确认包含可选择文本。');
           callback('');
         } catch (e) {
-          ElMessage.error('文件上传异常：' + (e.message || '网络错误'));
+          if (e.name === 'AbortError' || (e.message && e.message.indexOf('timeout') !== -1)) {
+            ElMessage.error('解析仍在后台进行，请点「刷新预览」，不要重复上传');
+          } else {
+            ElMessage.error(this.handleFetchError(e, '文件上传'));
+          }
         }
       },
       async uploadBatchFile() {
@@ -1047,7 +1082,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
           );
           return;
         }
-        if (!this.state.batchPreviewData.length) {
+        if (!this.pendingQuestions.length) {
           ElMessage.warning('无可导入的题目数据');
           return;
         }
@@ -1059,7 +1094,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
             body: JSON.stringify({
               import_id: this.state.importId,
               paper_name: this.state.batchPaperName,
-              questions: this.state.batchPreviewData
+              questions: this.pendingQuestions
             })
           });
           const data = await res.json();
@@ -2739,7 +2774,14 @@ converted.push({
                   question_type_detail: q.question_type_detail || '单选题',
                   subject_category: q.subject_category,
                   score: q.score || 1,
-                  difficulty: q.difficulty || 3
+                  difficulty: q.difficulty || 3,
+                  requirements: q.requirements || '',
+                  group_id: q.group_id || 0,
+                  question_number: q.question_number || '',
+                  sort_order: q.sort_order || 0,
+                  need_review: q.need_review || 0,
+                  blocked: q.blocked || false,
+                  block_reasons: q.block_reasons || []
                 };
               })
             })

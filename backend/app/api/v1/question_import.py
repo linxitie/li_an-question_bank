@@ -1,4 +1,4 @@
-"""
+﻿"""
 题目导入API - 支持单题导入、批量文件导入、图片OCR导入、分离导入智能匹配
 """
 import asyncio
@@ -887,6 +887,7 @@ _PDF_MIN_IMG_DIM = 40
 # 试图分配 3e10 字节拖垮进程。实测行测最大仅 0.5MP，故 4MP 有约 7.7 倍余量，
 # 真实语料 0 张超限；与 MAX_IMAGE_SIZE（落盘字节上限）构成两道独立防线。
 _PDF_MAX_IMG_PIXELS = 4_000_000
+_last_extract_engine = 'unknown'  # ★ 记录最近一次文本提取使用的引擎
 
 
 def _pdf_image_to_png(im) -> Optional[bytes]:
@@ -968,6 +969,8 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
     def _finish(text: str, engine: str) -> str:
         """统一出口：成功产出才写缓存（空结果不写，避免固化偶发失败）"""
         text_cache.put(buf, text, {'engine': engine})
+        global _last_extract_engine
+        _last_extract_engine = engine
         return text
 
     # 优先使用 pdfplumber（更好的中文支持和表格提取）
@@ -1986,11 +1989,15 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
         return cached
 
     # 跨批复用：库内已存在同指纹材料则直接挂上去
-    existing = db.query(QuestionGroup).filter(
-        QuestionGroup.shared_content.like('%' + text[:60] + '%')
-    ).first() if text[:60] else None
-    if existing is not None and text[:60] in (existing.shared_content or ''):
-        _SHENLUN_GROUP_CACHE[cache_key] = existing.id
+    # ★ J-1-3 修复：用 SHA1 全文指纹替代 LIKE '%前60字%'，消除误合并
+    existing = None
+    for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == 'shenlun_material').all():
+        g_digest = hashlib.sha1(re.sub(r'\s+', '', (g.shared_content or '')).encode('utf-8')).hexdigest()[:16]
+        if g_digest == digest:
+            existing = g
+            break
+    if existing is not None:
+        _shenlun_cache_put(cache_key, existing.id)
         return existing.id
 
     group = QuestionGroup(
@@ -2002,12 +2009,22 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
     )
     db.add(group)
     db.flush()
-    _SHENLUN_GROUP_CACHE[cache_key] = group.id
+    _shenlun_cache_put(cache_key, group.id)
     return group.id
 
 
 # 同一批导入内多题共享同一份材料，避免重复 flush
+# ★ J-1-4 修复：限制缓存大小，防止无界增长
 _SHENLUN_GROUP_CACHE: Dict[str, int] = {}
+_SHENLUN_GROUP_CACHE_MAX = 256
+
+def _shenlun_cache_put(key: str, value: int):
+    if len(_SHENLUN_GROUP_CACHE) >= _SHENLUN_GROUP_CACHE_MAX:
+        # 淘汰最旧的一半
+        keys = list(_SHENLUN_GROUP_CACHE.keys())
+        for k in keys[:len(keys)//2]:
+            del _SHENLUN_GROUP_CACHE[k]
+    _SHENLUN_GROUP_CACHE[key] = value
 
 
 def _upsert_question_core(db: Session, current_user: SysUser,
@@ -2638,6 +2655,23 @@ async def batch_import_parsed(
     if len(items) > 500:
         raise HTTPException(status_code=400, detail="单次最多导入500题，请分批操作")
 
+    # ★ RC-5 修复：blocked 闸门 —— 任一题 blocked=true 则整批拒绝，零写入
+    _BLOCK_LABEL = {
+        'missing_score': '缺少分值信息',
+        'answer_block_count_mismatch': '答案段数与题目数不匹配',
+        'answer_missing_for_question': '答案卷缺少该题号',
+        'stem_fingerprint_mismatch': '题干与答案卷不匹配（可能传错文件）',
+        'score_mismatch': '题目与答案分值不一致',
+    }
+    for _q in items:
+        if _q.get('blocked'):
+            _reasons = _q.get('block_reasons') or []
+            _cn = [_BLOCK_LABEL.get(r, r) for r in _reasons]
+            raise HTTPException(
+                status_code=409,
+                detail=f"存在阻断问题，无法入库：{'；'.join(_cn)}。已阻断 {sum(1 for x in items if x.get('blocked'))} 题，请核对原卷后重新导入。"
+            )
+
     ok_ids: List[int] = []
     reused_ids: List[int] = []
     ok_items: List[Dict[str, Any]] = []  # 成功入库的原payload（用于缺答案/解析提示）
@@ -3233,6 +3267,7 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 'groups': _build_preview_groups(preview_items),
                 'raw_text_preview': text[:1000000] if text else '',
                 'auto_detected_tags': auto_tags, 'scanned_pdf': is_scanned,
+                'engine': _last_extract_engine,  # ★ 本次实际使用的识别引擎
                 'ocr_hint': ('该PDF为扫描件（无文本层），请使用"图片导入"标签页上传，'
                              '或先通过OCR工具转换为文本格式') if is_scanned else None,
             }
@@ -3308,8 +3343,11 @@ async def upload_file_for_import(
     if len(buf) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail=f"文件超过 {MAX_FILE_SIZE // 1024 // 1024}MB 限制")
 
-    file_type_map = {'.xlsx': 'EXCEL', '.xls': 'EXCEL', '.csv': 'EXCEL', '.docx': 'WORD', '.pdf': 'PDF'}
-    file_type = file_type_map.get(ext, 'EXCEL')
+    # ★ RC-6 修复：文件头嗅探，以真实文件类型为准
+    from ...services.question_ingest.magic import resolve_type
+    file_type, type_conflict = resolve_type(buf, file.filename or '')
+    if type_conflict:
+        logger.warning(f'[upload] 文件类型冲突: 扩展名={ext}, 文件头={file_type}, 文件={file.filename}')
 
     # 立即落库并提交 —— 必须先 commit，轮询方才能马上看到这条 PARSING 记录
     record = QuestionImportRecord(
@@ -3349,6 +3387,7 @@ async def upload_file_for_import(
 @router.get("/records/{import_id}/status", summary="查询异步导入解析状态")
 async def get_import_parse_status(
     import_id: int,
+    light: bool = False,
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -3358,6 +3397,7 @@ async def get_import_parse_status(
     duplicate_count, error, result}``
 
     ``status='PREVIEW'`` 时 ``result`` 为完整预览数据（与原同步 /upload 响应同构）。
+    ``light=true`` 时跳过 result 的 JSON 反序列化，仅返回元数据（轮询用）。
     """
     record = db.query(QuestionImportRecord).filter(
         QuestionImportRecord.import_id == import_id
@@ -3399,6 +3439,10 @@ async def get_import_parse_status(
         return payload
 
     if record.import_status == 'PREVIEW':
+        if light:
+            # ★ 轻量模式：跳过 JSON 反序列化，仅返回元数据
+            payload['has_result'] = True
+            return payload
         # ★ P0-6 关键修复：历史记录存在双重编码，单次 json.loads 只能剥一层，
         #   拿到的是字符串而非 dict，导致 `isinstance(data, dict)` 恒假、
         #   预览页拿不到 _response → 用户"编辑后无法导入"。
@@ -3604,16 +3648,23 @@ async def confirm_batch_import(
         # ★ P0-6：历史记录 preview_data 为双重编码，单次 json.loads 只剥一层会返回 str，
         #   紧接着 .get() 会抛 AttributeError: 'str' object has no attribute 'get'。
         #   load_json_lenient 会循环剥到真实对象，并对脏数据返回 {}。
-        preview_data = load_json_lenient(record.preview_data)
-        if not isinstance(preview_data, dict):
-            preview_data = {}
-        items = preview_data.get('items', []) or []
+        # ★ RC-3 修复：优先使用 payload.questions，preview_data 降级为历史快照
+        _payload_questions = payload.get('questions')
+        if _payload_questions and isinstance(_payload_questions, list) and len(_payload_questions) > 0:
+            items = _payload_questions
+        else:
+            logger.warning('[confirm] deprecated: 未传 questions，已回落到 preview_data 快照')
+            preview_data = load_json_lenient(record.preview_data)
+            if not isinstance(preview_data, dict):
+                preview_data = {}
+            items = preview_data.get('items', []) or []
 
         imported = 0
         skipped = 0
         failed = 0
         errors = []
         new_questions = []
+        confirmed_items = []  # ★ RC-4 修复：初始化 confirmed_items，供试卷关联使用
 
         for item in items:
             if item.get('status') == 'DUPLICATE' or item.get('is_duplicate'):
@@ -3728,6 +3779,7 @@ async def confirm_batch_import(
                 db.add(question)
                 db.flush()
                 new_questions.append(question)
+                confirmed_items.append({**item, 'question_id': question.question_id, 'score': item.get('score', 5.0)})
 
                 detail = QuestionDetailCategory(
                     question_id=question.question_id,

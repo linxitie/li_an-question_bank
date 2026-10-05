@@ -52,11 +52,13 @@ for _stream in (sys.stdout, sys.stderr):
 
 
 
+from logging.handlers import RotatingFileHandler
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(settings.LOG_FILE, encoding='utf-8'),
+        RotatingFileHandler(settings.LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'),
         logging.StreamHandler(sys.stdout)  # 使用已设置的UTF-8编码的stdout
     ]
 )

@@ -25,15 +25,20 @@ _IMG_RE = re.compile(r'\[?IMAGE:([a-f0-9]+_\d+_\d+|\d+_\d+)\]?', re.IGNORECASE)
 _STANDARD_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
 
 
-def render_image_placeholder(text: str) -> str:
-    """将 IMAGE:X_Y / IMAGE:uuid_X_Y 占位符转为 img 标签（已由 image_service 预检）"""
+def render_image_placeholder(text: str, owner: str = 'questions') -> str:
+    """将 IMAGE:X_Y / IMAGE:uuid_X_Y 占位符转为 img 标签（已由 image_service 预检）
+
+    Args:
+        text: 含占位符的文本
+        owner: 图片所属目录，'questions'（默认）或 'question-groups'
+    """
     if not text or not isinstance(text, str):
         return str(text) if text else ''
 
     def _replace(m):
         marker = m.group(1)
         # 统一使用扁平路径作为初始 src，由 image_service.sanitize_* 做存在性预检和兜底
-        return f'<img src="/static/questions/{marker}.png" class="q-img" loading="lazy" />'
+        return f'<img src="/static/{owner}/{marker}.png" class="q-img" loading="lazy" />'
 
     return _IMG_RE.sub(_replace, text)
 
