@@ -40,6 +40,37 @@
             <div class="stat"><span class="stat-val">{{ stats.totalStudyHours }}h</span><span class="stat-label">学习时长</span></div>
             <div class="stat"><span class="stat-val">{{ stats.streak }}</span><span class="stat-label">连续天数</span></div>
           </div>
+
+          <!-- 题型掌握度：进度条宽度绑定接口返回的真实正确率，不含任何硬编码百分比。
+               数据源 /api/stats/type-mastery（用户维度），与题库库存量统计无关。 -->
+          <div class="mastery">
+            <div class="mastery-head">
+              <span class="mastery-title">题型掌握度</span>
+              <span class="mastery-hint" v-if="typeMastery.length">
+                共 {{ typeMastery.length }} 个题型
+              </span>
+            </div>
+            <div v-if="!typeMastery.length" class="mastery-empty">
+              还没有练习记录，去练几道题后这里会显示各题型的掌握情况
+            </div>
+            <div v-else class="mastery-list">
+              <div v-for="(t, i) in typeMastery" :key="t.typeId ?? i" class="mastery-row">
+                <div class="mastery-row-head">
+                  <span class="mastery-name">{{ t.typeName }}</span>
+                  <span class="mastery-meta">{{ t.count }} 题 · {{ t.accuracy }}%</span>
+                </div>
+                <div class="mastery-track">
+                  <div
+                    class="mastery-fill"
+                    :style="{
+                      width: (Number(t.accuracy) || 0) + '%',
+                      background: masteryColor(t.accuracy),
+                    }"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -174,6 +205,18 @@ const earnedCount = ref(0);
 const earnedBadges = ref<any[]>([]);
 const devices = ref<any[]>([]);
 const coinRecords = ref<any[]>([]);
+// 题型掌握度：来自 /api/stats/type-mastery（用户维度按 type_id 聚合），
+// 与题库库存量统计是完全不同的东西，不可混用。
+const typeMastery = ref<any[]>([]);
+
+/** 掌握度进度条配色：低正确率偏红，高正确率偏绿，参照移动端金色主题 */
+function masteryColor(accuracy: number) {
+  const a = Number(accuracy) || 0;
+  if (a >= 80) return 'linear-gradient(90deg, #10b981, #34d399)';
+  if (a >= 60) return 'linear-gradient(90deg, #2a5298, #3b82f6)';
+  if (a >= 40) return 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+  return 'linear-gradient(90deg, #C91F37, #e8384f)';
+}
 const avatarInput = ref<HTMLInputElement | null>(null);
 
 const showEdit = ref(false);
@@ -189,24 +232,27 @@ async function apiGet(url: string) {
 // 练习/目标统计的加载逻辑抽成独立函数：既供首次挂载用，也供
 // __VTJ_SYNC__ 事件触发时重拉，避免两处重复实现。
 async function loadStudyData() {
-  const [s, c, l] = await Promise.all([
+  const [s, c, l, m] = await Promise.all([
     apiGet('/api/stats/'),
     apiGet('/api/coins/overview'),
     apiGet('/api/stats/level'),
+    apiGet('/api/stats/type-mastery'),
   ]);
   stats.value = s;
   coin.value = c;
   level.value = l;
+  typeMastery.value = Array.isArray(m) ? m : [];
 }
 
 onMounted(async () => {
   try {
-    const [p, s, c, l, a] = await Promise.all([
+    const [p, s, c, l, a, m] = await Promise.all([
       apiGet('/api/auth/profile'),
       apiGet('/api/stats/'),
       apiGet('/api/coins/overview'),
       apiGet('/api/stats/level'),
       apiGet('/api/achievements/earned'),
+      apiGet('/api/stats/type-mastery'),
     ]);
     user.value = p;
     stats.value = s;
@@ -214,6 +260,7 @@ onMounted(async () => {
     level.value = l;
     earnedCount.value = a.earned_count || 0;
     earnedBadges.value = (a.items || []).slice(0, 12);
+    typeMastery.value = Array.isArray(m) ? m : [];
   } catch (e) {
     console.error('加载个人中心数据失败', e);
   }
@@ -397,9 +444,21 @@ function handleLogout() {
 .btn-mini.danger-outline { background: transparent; color: #c41e3a; border: 1px solid #c41e3a; margin-top: 16px; width: 100%; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.stat { text-align: center; }
-.stat-val { display: block; font-size: 26px; font-weight: 800; color: #1a2b5f; }
-.stat-label { font-size: 12px; color: #8a8faa; }
+  .stat { text-align: center; }
+  .stat-val { display: block; font-size: 26px; font-weight: 800; color: #1a2b5f; }
+  .stat-label { font-size: 12px; color: #8a8faa; }
+  /* ===== 题型掌握度 ===== */
+  .mastery { margin-top: 18px; padding-top: 16px; border-top: 1px solid #eef1f6; }
+  .mastery-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .mastery-title { font-size: 14px; font-weight: 600; color: #1a2b5f; }
+  .mastery-hint { font-size: 12px; color: #8a8faa; }
+  .mastery-empty { font-size: 13px; color: #8a8faa; padding: 12px 0; line-height: 1.6; }
+  .mastery-list { display: flex; flex-direction: column; gap: 12px; }
+  .mastery-row-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; }
+  .mastery-name { font-size: 13px; color: #3a4260; }
+  .mastery-meta { font-size: 12px; color: #8a8faa; }
+  .mastery-track { height: 8px; background: #f0f2f5; border-radius: 4px; overflow: hidden; }
+  .mastery-fill { height: 100%; border-radius: 4px; transition: width 0.3s; min-width: 0; }
 
 .content-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .content-item { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px; background: #f8f9fc; border-radius: 12px; cursor: pointer; font-size: 13px; color: #1a2b5f; transition: all 0.2s; }
