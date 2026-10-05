@@ -209,6 +209,100 @@ async def get_weekly_stats(
     }
 
 
+@router.get("/all-time", response_model=Dict[str, Any], summary="全时段学习统计")
+async def get_all_time_stats(
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    获取**全部历史**的学习统计（不只是最近 7 天）
+
+    与 `/weekly` 的区别：weekly 只看近 7 天，本接口覆盖用户自注册以来的
+    全部练习记录，并按跨度自适应选择时间桶粒度，避免把几年的数据压进
+    一张图导致 x 轴标签糊成一片。
+
+    设计要点
+    --------
+    1. **按 practice_date 分桶，而非 DATE(practice_time)**：
+       practice_date 是入库时落库的纯 Date 字段（实测 100% 填充），
+       跨时区/夏令时场景下用 DATE(practice_time) 分组容易把凌晨记录
+       划到错误日期。与 goal_progress 的口径保持一致。
+    2. **粒度自适应**：跨度 ≤90 天按日、≤2 年按月、更长按年。
+    3. **单条 group by 查询**：不分 N 次查询，桶数上限即粒度数量。
+    4. **只返回聚合结果**，不含逐条记录，避免响应体随历史线性膨胀。
+    """
+    uid = current_user.user_id
+
+    # 先取跨度，用于决定粒度。min/max 走 idx_practice_date 索引。
+    span = db.query(
+        func.min(PracticeRecord.practice_date),
+        func.max(PracticeRecord.practice_date),
+        func.count(PracticeRecord.record_id),
+        func.sum(PracticeRecord.is_correct),
+        func.coalesce(func.sum(PracticeRecord.time_spent), 0),
+    ).filter(PracticeRecord.user_id == uid).one()
+
+    first_date, last_date, total, correct_sum, seconds_sum = span
+    total = int(total or 0)
+    correct_sum = int(correct_sum or 0)
+    seconds_sum = int(seconds_sum or 0)
+
+    total_minutes = round(seconds_sum / 60)
+    accuracy = round(correct_sum / total * 100, 1) if total > 0 else 0
+
+    base = {
+        "totalCount": total,
+        "correctCount": correct_sum,
+        "totalMinutes": total_minutes,
+        "totalHours": round(total_minutes / 60, 1),
+        "accuracy": accuracy,
+        "firstDate": first_date.isoformat() if first_date else None,
+        "lastDate": last_date.isoformat() if last_date else None,
+    }
+
+    # 无任何记录：返回明确的空桶结构，前端据此渲染空态而非报错
+    if not total or first_date is None or last_date is None:
+        base.update({"granularity": "day", "spanDays": 0, "buckets": []})
+        return base
+
+    span_days = (last_date - first_date).days
+    if span_days <= 90:
+        granularity, fmt = "day", "%Y-%m-%d"
+    elif span_days <= 730:
+        granularity, fmt = "month", "%Y-%m"
+    else:
+        granularity, fmt = "year", "%Y"
+
+    rows = db.query(
+        func.strftime(fmt, PracticeRecord.practice_date).label("period"),
+        func.count(PracticeRecord.record_id),
+        func.sum(PracticeRecord.is_correct),
+        func.coalesce(func.sum(PracticeRecord.time_spent), 0),
+    ).filter(
+        PracticeRecord.user_id == uid,
+        PracticeRecord.practice_date.isnot(None),
+    ).group_by("period").order_by("period").all()
+
+    buckets = [
+        {
+            "period": r[0],
+            "count": int(r[1] or 0),
+            "correct": int(r[2] or 0),
+            "accuracy": round(int(r[2] or 0) / int(r[1] or 1) * 100, 1) if r[1] else 0,
+            # 同时给出精确秒数与便于展示的分钟数。
+            # 只给 minutes 会出现「各桶分钟数之和对不上总分钟数」——
+            # 每个桶独立四舍五入会累积误差（60+120+30=210s 时分桶得 1+2+0=3，
+            # 而总量 round(3.5)=4）。前端若要合计请用 seconds。
+            "seconds": int(r[3] or 0),
+            "minutes": round(int(r[3] or 0) / 60),
+        }
+        for r in rows if r[0]
+    ]
+
+    base.update({"granularity": granularity, "spanDays": span_days, "buckets": buckets})
+    return base
+
+
 @router.get("/calendar", response_model=List[Dict[str, Any]], summary="考试日历")
 async def get_exam_calendar(
         db: Session = Depends(get_db)
