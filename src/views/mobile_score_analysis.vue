@@ -110,6 +110,50 @@
         </div>
       </div>
 
+      <!-- 全部学习情况：覆盖全部历史，而非上面的近 7 天。
+           数据源 /api/stats/all-time，x 轴标签由接口 buckets[].period 动态生成，
+           不在前端硬编码任何日期。 -->
+      <div class="alltime-card">
+        <div class="alltime-head">
+          <span class="alltime-title">全部学习情况</span>
+          <span class="alltime-span" v-if="allTime.spanDays > 0">
+            {{ allTime.firstDate }} ~ {{ allTime.lastDate }}
+          </span>
+        </div>
+
+        <div v-if="allTimeLoading" class="alltime-empty">加载中...</div>
+        <div v-else-if="!allTime.buckets.length" class="alltime-empty">
+          还没有学习记录，去练几道题吧
+        </div>
+        <template v-else>
+          <div class="alltime-stats">
+            <div class="alltime-stat">
+              <div class="alltime-value">{{ allTime.totalCount }}</div>
+              <div class="alltime-label">累计题数</div>
+            </div>
+            <div class="alltime-stat">
+              <div class="alltime-value">{{ formatMinutes(allTime.totalMinutes) }}</div>
+              <div class="alltime-label">累计时长</div>
+            </div>
+            <div class="alltime-stat">
+              <div class="alltime-value">{{ allTime.accuracy }}%</div>
+              <div class="alltime-label">总体正确率</div>
+            </div>
+            <div class="alltime-stat">
+              <div class="alltime-value">{{ allTime.buckets.length }}</div>
+              <div class="alltime-label">{{ granularityLabel }}</div>
+            </div>
+          </div>
+          <div class="alltime-chart">
+            <div ref="allTimeChartRef" class="alltime-canvas"></div>
+          </div>
+          <div class="alltime-legend">
+            <span><i class="dot-count"></i>题量</span>
+            <span><i class="dot-acc"></i>正确率</span>
+          </div>
+        </template>
+      </div>
+
       <!-- 提升建议（基于本页真实数据推导，非编造） -->
       <div class="advice-card" v-if="adviceList.length">
         <div class="advice-title">💡 提升建议</div>
@@ -123,8 +167,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import * as echarts from 'echarts';
 
 const router = useRouter();
 
@@ -247,6 +292,154 @@ async function loadExamTab(tab: TabKey) {
   }
 }
 
+// ===== 全部学习情况（全时段） =====
+// 与上面的「近 7 天」严格区分：这里覆盖用户全部历史，由后端按跨度
+// 自适应选择粒度（日/月/年），前端不假定任何粒度，也不硬编码日期。
+const allTime = ref<any>({
+  totalCount: 0,
+  totalMinutes: 0,
+  accuracy: 0,
+  firstDate: null,
+  lastDate: null,
+  spanDays: 0,
+  granularity: 'day',
+  buckets: [] as any[],
+});
+const allTimeLoading = ref(false);
+
+const granularityLabel = computed(() => {
+  const g = allTime.value.granularity;
+  return g === 'year' ? '统计年数' : g === 'month' ? '统计月数' : '统计天数';
+});
+
+/** 分钟数格式化：不足 1 小时直接显示分钟，超过则显示小时+分钟 */
+const formatMinutes = (minutes: number) => {
+  const m = Math.round(Number(minutes) || 0);
+  if (m <= 0) return '0 分钟';
+  if (m < 60) return `${m} 分钟`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest ? `${h} 小时 ${rest} 分` : `${h} 小时`;
+};
+
+/**
+ * 把接口返回的 period 转为简短标签。
+ * 只做「显示裁剪」，不生成任何日期 —— 日期本身来自后端 buckets[].period。
+ * day: 2026-10-05 -> 10-05；month: 2026-10 -> 10月；year: 2026 -> 2026
+ */
+const periodLabel = (period: string) => {
+  const p = String(period || '');
+  if (/^\d{4}$/.test(p)) return p;
+  if (/^\d{4}-\d{2}$/.test(p)) return p.slice(5) + '月';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return p.slice(5);
+  return p;
+};
+
+const allTimeChartRef = ref<HTMLElement | null>(null);
+let allTimeChart: any = null;
+
+function renderAllTimeChart() {
+  const el = allTimeChartRef.value;
+  if (!el || !allTime.value.buckets.length) return;
+  if (!allTimeChart) allTimeChart = echarts.init(el);
+  const buckets = allTime.value.buckets;
+  allTimeChart.setOption(
+    {
+      grid: { left: 34, right: 34, top: 28, bottom: 22 },
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: any) => {
+          const p = Array.isArray(params) ? params[0] : params;
+          const b = buckets[p.dataIndex] || {};
+          const mins = Number(b.seconds || 0) / 60;
+          const dur = mins >= 1 ? `${Math.round(mins)} 分钟` : '不足 1 分钟';
+          return [
+            `${p.name}`,
+            `题量：${b.count || 0} 题`,
+            `正确率：${b.accuracy ?? 0}%`,
+            `做题时长：${dur}`,
+          ].join('<br/>');
+        },
+      },
+      legend: { show: false },
+      xAxis: {
+        type: 'category',
+        data: buckets.map((b: any) => periodLabel(b.period)),
+        axisLabel: { fontSize: 10, color: '#5a6488' },
+      },
+      yAxis: [
+        { type: 'value', minInterval: 1, axisLabel: { fontSize: 10, color: '#5a6488' } },
+        {
+          type: 'value',
+          min: 0,
+          max: 100,
+          axisLabel: { fontSize: 10, color: '#5a6488', formatter: '{value}%' },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: '题量',
+          type: 'bar',
+          data: buckets.map((b: any) => b.count || 0),
+          barMaxWidth: 22,
+          itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] },
+        },
+        {
+          name: '正确率',
+          type: 'line',
+          yAxisIndex: 1,
+          data: buckets.map((b: any) => b.accuracy ?? 0),
+          smooth: true,
+          lineStyle: { color: '#f59e0b', width: 2 },
+          itemStyle: { color: '#f59e0b' },
+        },
+      ],
+    },
+    true
+  );
+}
+
+async function loadAllTime() {
+  const a = auth();
+  if (!a || !a.isLoggedIn()) return;
+  allTimeLoading.value = true;
+  try {
+    const res = await a.apiFetch('/api/stats/all-time');
+    if (!res.ok) {
+      allTime.value = { ...allTime.value, buckets: [] };
+      return;
+    }
+    const d = await res.json();
+    allTime.value = {
+      totalCount: Number(d.totalCount) || 0,
+      totalMinutes: Number(d.totalMinutes) || 0,
+      accuracy: Number(d.accuracy) || 0,
+      firstDate: d.firstDate || null,
+      lastDate: d.lastDate || null,
+      spanDays: Number(d.spanDays) || 0,
+      granularity: d.granularity || 'day',
+      buckets: Array.isArray(d.buckets) ? d.buckets : [],
+    };
+    // 等 DOM 挂载后再渲染，否则 canvas 容器还不存在
+    nextTick(() => renderAllTimeChart());
+  } catch (e) {
+    console.error('获取全部学习情况失败:', e);
+    allTime.value = { ...allTime.value, buckets: [] };
+  } finally {
+    allTimeLoading.value = false;
+  }
+}
+
+const onAllTimeResize = () => allTimeChart?.resize();
+
+// 页面卸载时释放图表实例与监听，避免内存泄漏与重复绑定
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onAllTimeResize);
+  allTimeChart?.dispose();
+  allTimeChart = null;
+});
+
 const loadHistory = async () => {
   const a = auth();
   if (!a || !a.isLoggedIn()) return;
@@ -268,6 +461,8 @@ const loadHistory = async () => {
   } catch (e) {
     console.error('获取刷题统计失败:', e);
   }
+  // 全时段与近 7 天一并加载，避免用户切到该 tab 还要再等一次请求
+  await loadAllTime();
 };
 
 function switchTab(tab: TabKey) {
@@ -305,6 +500,8 @@ const formatDuration = (seconds: number) => {
 
 onMounted(() => {
   loadExamTab('self');
+  // 全时段图表在窗口尺寸变化时必须重算，否则横屏/分屏后 canvas 会拉伸变形
+  window.addEventListener('resize', onAllTimeResize);
 });
 </script>
 
@@ -401,6 +598,94 @@ onMounted(() => {
   padding: 16px;
   box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
   margin-bottom: 12px;
+}
+
+/* ===== 全部学习情况（全时段） ===== */
+.alltime-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
+  margin-bottom: 12px;
+}
+.alltime-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.alltime-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a2b5f;
+}
+.alltime-span {
+  font-size: 11px;
+  color: #8899aa;
+}
+.alltime-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: #8899aa;
+  font-size: 13px;
+}
+.alltime-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.alltime-stat {
+  background: #f7f9fc;
+  border-radius: 10px;
+  padding: 10px 8px;
+  text-align: center;
+}
+.alltime-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a2b5f;
+  line-height: 1.3;
+  word-break: break-all;
+}
+.alltime-label {
+  font-size: 11px;
+  color: #5a6488;
+  margin-top: 2px;
+}
+/* 容器高度须与 .alltime-canvas 的 180px 自洽，
+ * 否则 canvas 会溢出卡片并盖住下方「提升建议」。
+ * overflow:hidden 作为防御。 */
+.alltime-chart {
+  height: 180px;
+  overflow: hidden;
+}
+.alltime-canvas {
+  width: 100%;
+  height: 180px;
+}
+.alltime-legend {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 10px;
+  font-size: 11px;
+  color: #5a6488;
+}
+.alltime-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.dot-count {
+  background: #2a5298;
+}
+.dot-acc {
+  background: #f59e0b;
+  border-radius: 50% !important;
 }
 .trend-title {
   font-size: 14px;
