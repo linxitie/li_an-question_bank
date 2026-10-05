@@ -254,6 +254,9 @@ async def get_all_time_stats(
     base = {
         "totalCount": total,
         "correctCount": correct_sum,
+        # 同时给出精确秒数与便于展示的分钟数：只有 minutes 时，
+        # 前端无法把各桶的 seconds 合计与总量对账（各桶独立四舍五入会累积误差）。
+        "totalSeconds": seconds_sum,
         "totalMinutes": total_minutes,
         "totalHours": round(total_minutes / 60, 1),
         "accuracy": accuracy,
