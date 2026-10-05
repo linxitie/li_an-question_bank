@@ -51,12 +51,6 @@
           @click="mode = 'memorize'"
         >记背模式</button>
       </div>
-      <div v-if="mode === 'practice' && !allFinished && answered" class="mode-tip">
-        做题模式：答完全部 {{ questions.length }} 题后统一显示答案与解析
-      </div>
-      <div v-if="mode === 'memorize' && answered" class="mode-tip">
-        记背模式：选中选项即显示答案与解析
-      </div>
       <!-- 复合题共享材料（可折叠） -->
       <div v-if="groupInfo && groupInfo.shared_content" class="group-material-card">
         <div class="group-material-header" @click="groupCollapsed = !groupCollapsed">
@@ -99,7 +93,12 @@
 
     <!-- 连续作答 + 末尾统一交卷：取消逐题「提交答案」 -->
     <footer class="action-bar" v-if="questions.length">
-      <button class="prev-btn" @click="prevQuestion" :disabled="currentIndex === 0">上一题</button>
+      <button
+        class="prev-btn"
+        :class="{ 'has-record': prevAnswered }"
+        @click="prevQuestion"
+        :disabled="currentIndex === 0"
+      ><span v-if="prevAnswered" class="prev-dot"></span>上一题</button>
       <button class="next-btn" @click="nextQuestion" :disabled="currentIndex >= questions.length - 1">下一题</button>
       <button class="submit-btn" @click="submitAll" :disabled="!allFinished">交卷</button>
     </footer>
@@ -156,8 +155,24 @@ const allFinished = computed(() => {
   return questions.value.every((_, i) => !!answersRecord.value[i]);
 });
 
-// 答案与解析是否应当显示：记背模式立即显示；做题模式全部答完才显示
-const showResult = computed(() => answered.value && (mode.value === 'memorize' || allFinished.value));
+// 当前题是否为末题。末题作答后立即展示答案与解析，
+// 无需用户再点「交卷」—— 此前必须全部答完才显示，导致最后一题
+// 明明已作答却看不到对错，用户以为没生效。
+const isLastQuestion = computed(
+  () => questions.value.length > 0 && currentIndex.value === questions.value.length - 1
+);
+
+// 上一题是否已作答：用于「上一题」按钮的状态高亮，
+// 让用户切回上一题前就能看出那一题做过。
+const prevAnswered = computed(() => {
+  const i = currentIndex.value - 1;
+  return i >= 0 && !!answersRecord.value[i];
+});
+
+// 答案与解析是否应当显示：记背模式立即显示；做题模式在末题或全部答完时显示
+const showResult = computed(
+  () => answered.value && (mode.value === 'memorize' || allFinished.value || isLastQuestion.value)
+);
 
 // 最终答对题数：直接由逐题记录派生
 const correctCount = computed(
@@ -525,15 +540,6 @@ onMounted(fetchQuestions);
   color: #fff;
   font-weight: 600;
 }
-.mode-tip {
-  background: #fff8e6;
-  border: 1px solid #ffe4a3;
-  border-radius: 8px;
-  color: #a06a00;
-  font-size: 13px;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-}
 /* 成绩汇总 */
 .summary {
   margin-top: 16px;
@@ -751,6 +757,19 @@ onMounted(fetchQuestions);
 }
 .prev-btn {
   background: #8899aa;
+}
+/* 上一题已作答：加深底色 + 浅蓝圆点，让用户切题前就知道那一题做过 */
+.prev-btn.has-record {
+  background: #5a7fb5;
+}
+.prev-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #cfe3ff;
+  vertical-align: middle;
 }
 .submit-btn:disabled,
 .next-btn:disabled,
