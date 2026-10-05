@@ -2,27 +2,10 @@
   "id": "mobile_gold_purchase",
   "__VERSION__": "1778918740312",
   "css": "",
-  "state": {
-    "balance": "0",
-    "activeTab": "'shop'",
-    "products": "[]",
-    "records": "[]",
-    "tasks": "{ checkin: {}",
-    "daily": "[]",
-    "random": "[]",
-    "weekly": "[] }",
-    "goals": "[]",
-    "achievements": "{ categories: {} }",
-    "detailVisible": "false",
-    "detailProduct": "null",
-    "exchanging": "false"
-  },
+  "state": {},
   "methods": {
     "switchTab": {
-      "type": "method",
-      "params": [
-        "key"
-      ]
+      "type": "method"
     },
     "loadRecords": {
       "type": "method"
