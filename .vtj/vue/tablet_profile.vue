@@ -160,6 +160,10 @@
         </div>
       </section>
 
+      <!-- 最近做题记录：三端共用同一组件 src/components/RecentPracticeRecords.vue，
+           排序与条数完全一致（后端已按 recency 倒序，前端不二次排序）。 -->
+      <RecentPracticeRecords :limit="5" />
+
       <!-- 右侧面板 -->
       <aside class="right-panel">
         <!-- 考试日历 -->
@@ -261,11 +265,14 @@ import {
   EditPen
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+// 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
+import RecentPracticeRecords from '@/components/RecentPracticeRecords.vue';
 
 export default defineComponent({
   name: 'TabletProfile',
   components: {
-    XIcon
+    XIcon,
+    RecentPracticeRecords
   },
   setup() {
     const router = useRouter();

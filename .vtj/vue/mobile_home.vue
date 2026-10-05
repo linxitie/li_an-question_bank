@@ -96,6 +96,10 @@
           </div>
         </div>
       </section>
+
+      <!-- 最近做题记录：三端共用同一组件 src/components/RecentPracticeRecords.vue，
+           排序与条数完全一致（后端已按 recency 倒序，前端不二次排序）。 -->
+      <RecentPracticeRecords :limit="5" />
     </main>
 
     <!-- 底部Tab栏：统一使用单一真源组件 src/components/MobileTabBar.vue -->
@@ -172,6 +176,8 @@ import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
 import MobileTabBar from '@/components/MobileTabBar.vue';
+// 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
+import RecentPracticeRecords from '@/components/RecentPracticeRecords.vue';
 import {
   ArrowLeft,
   ArrowRight,
@@ -201,7 +207,8 @@ export default defineComponent({
   name: 'MobileHome',
     components: {
       XIcon,
-      MobileTabBar
+      MobileTabBar,
+      RecentPracticeRecords
     },
   setup() {
     const router = useRouter();

@@ -82,6 +82,10 @@
             <div class="content-item" @click="go('/achievements')"><XIcon :icon="Trophy" :size="22" color="#8b5cf6" /><span>我的成就</span></div>
           </div>
         </div>
+
+        <!-- 最近做题记录：三端共用同一组件 src/components/RecentPracticeRecords.vue，
+             排序与条数完全一致（后端已按 recency 倒序，前端不二次排序）。 -->
+        <RecentPracticeRecords :limit="5" />
       </section>
 
       <!-- 右栏：成就 + 等级 + 设置 -->
@@ -193,6 +197,8 @@ import {
   Trophy, TrendCharts, Setting,
 } from '@vtj/icons';
 import NavBar from '$vtj/vue/navbar.vue';
+// 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
+import RecentPracticeRecords from '@/components/RecentPracticeRecords.vue';
 
 const router = useRouter();
 const auth: any = (window as any).__VTJ_AUTH__;
