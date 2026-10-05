@@ -524,6 +524,16 @@ class PracticeRecord(Base):
         Index("idx_question_id_practicerecord", question_id),
         Index("idx_practice_time", practice_time),
         Index("idx_practice_date", practice_date),
+        # 目标进度与全时段统计都按「某用户 + 某日期区间 + 某科目」聚合，
+        # 现有单列索引无法同时命中这三个条件，会退化为扫描 user_id 后再过滤。
+        # 该复合索引顺序与查询的等值/范围条件顺序一致（user_id 等值 →
+        # practice_date 范围 → subject_id 分组）。
+        Index(
+            "idx_user_date_subject_practicerecord",
+            user_id,
+            practice_date,
+            subject_id,
+        ),
     )
 
 class SmartExamRecord(Base):

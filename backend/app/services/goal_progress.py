@@ -51,17 +51,56 @@ def _week_start(today: date) -> date:
     return today - timedelta(days=today.weekday())
 
 
-def _count_practice(db: Session, user_id: int, target_date: date) -> int:
-    """统计指定日期的刷题数"""
-    return (
-        db.query(func.count(PracticeRecord.record_id))
+def _aggregate_by_subject(
+    db: Session, user_id: int, start_date: date, end_date: date
+) -> dict:
+    """一次查询聚合区间内**按科目分组**的刷题量与累计时长。
+
+    返回 ``{subject_id: (count, seconds)}``。
+
+    为什么按科目分组而不是逐目标查一次：
+    目标列表里可能有多个不同 ``subject_mode`` 的目标，若对每个目标单独
+    过滤一次就是 N+1 查询。这里改为「每个日期区间一条 group by 查询」，
+    区间内所有科目一次取回，循环内查表，SQL 数量与目标数无关。
+
+    ``subject_id`` 可能为 NULL（历史记录缺科目），SQLAlchemy 的
+    ``group_by`` 会把 NULL 归为独立一组，键即 ``None``，混科目标会把它
+    一并累加进去——这比静默丢弃这些记录更接近真实刷题量。
+    """
+    rows = (
+        db.query(
+            PracticeRecord.subject_id,
+            func.count(PracticeRecord.record_id),
+            func.coalesce(func.sum(PracticeRecord.time_spent), 0),
+        )
         .filter(
             PracticeRecord.user_id == user_id,
-            PracticeRecord.practice_date == target_date,
+            PracticeRecord.practice_date >= start_date,
+            PracticeRecord.practice_date <= end_date,
         )
-        .scalar()
-        or 0
+        .group_by(PracticeRecord.subject_id)
+        .all()
     )
+    return {r[0]: (int(r[1] or 0), int(r[2] or 0)) for r in rows}
+
+
+def _resolve_by_subject(table: dict, subject_mode: int) -> tuple:
+    """按目标的科目限定，从分组聚合结果中取出真实刷题量。
+
+    ``subject_mode == 0`` 表示混科、不限定科目，累加所有科目；
+    ``subject_mode > 0`` 表示仅统计该科目。
+
+    此前实现完全忽略 ``subject_mode``，导致「申论 20 题」的目标会被行测
+    的刷题量顶上去——这正是用户反馈「进度条不是真实的算法」的根因。
+
+    Returns:
+        ``(count, seconds)``
+    """
+    if subject_mode and int(subject_mode) > 0:
+        return table.get(int(subject_mode), (0, 0))
+    count = sum(v[0] for v in table.values())
+    seconds = sum(v[1] for v in table.values())
+    return count, seconds
 
 
 def _compute_reward(goal: StudyGoal) -> int:
@@ -91,6 +130,7 @@ def sync_goal_progress(user_id: int, db: Session) -> List[int]:
     """
     today = date.today()
     week_start = _week_start(today)
+    month_start = today.replace(day=1)
 
     goals = (
         db.query(StudyGoal)
@@ -104,37 +144,45 @@ def sync_goal_progress(user_id: int, db: Session) -> List[int]:
     if not goals:
         return []
 
-    # 一次查询当天与本周聚合，避免逐目标查询
-    today_count = _count_practice(db, user_id, today)
-    week_count = (
-        db.query(func.count(PracticeRecord.record_id))
-        .filter(
-            PracticeRecord.user_id == user_id,
-            PracticeRecord.practice_date >= week_start,
-            PracticeRecord.practice_date <= today,
-        )
-        .scalar()
-        or 0
-    )
+    # 每种目标类型对应一个统计区间。CUSTOM 与 DAILY 同为「按日推进」
+    # （沿用原实现的口径：与首页「今日目标」一致）。
+    ranges = {
+        "DAILY": (today, today),
+        "CUSTOM": (today, today),
+        "WEEKLY": (week_start, today),
+        # MONTHLY 此前被 continue 直接跳过，等于月度目标永不推进。
+        "MONTHLY": (month_start, today),
+    }
+
+    # 只为实际存在的目标类型发起查询，且每种类型仅一条 group by 语句，
+    # 因此 SQL 数量取决于类型数（≤4）而非目标数，无 N+1。
+    tables: dict = {}
+    for gtype in {g.goal_type for g in goals if g.goal_type in ranges}:
+        start, end = ranges[gtype]
+        tables[gtype] = _aggregate_by_subject(db, user_id, start, end)
 
     changed: List[int] = []
     for goal in goals:
         gtype = goal.goal_type
-        if gtype == "WEEKLY":
-            actual = week_count
-        elif gtype in ("DAILY", "CUSTOM"):
-            # CUSTOM 目标按日推进（与首页「今日目标」一致）
-            actual = today_count
-        else:
-            # MONTHLY 等暂不自动统计，保持原值由用户手动维护
+        if gtype not in ranges:
+            # 未知类型（如未来新增）保持原值，不臆造统计口径
             continue
 
+        count, seconds = _resolve_by_subject(tables[gtype], goal.subject_mode or 0)
+
+        # 进度口径说明：`target_count` 的语义是「题量」（前端 L210 校验题量、
+        # L79 以 current_count/target_count 展示），因此进度必须用题数。
+        # `expected_minutes` 是「单日预期学习时间」这一参考信息，
+        # 若拿它当完成判据会与题量目标单位错配（例如 20 分钟直接顶满
+        # 「20 题」的目标），故只记录实际用时，不参与达成判定。
+        actual = count
         new_count = min(actual, goal.target_count) if goal.target_count > 0 else actual
 
         if goal.current_count != new_count:
             logger.info(
-                "[goal_progress] 目标 %s(%s) 进度 %s -> %s",
-                goal.goal_id, gtype, goal.current_count, new_count,
+                "[goal_progress] 目标 %s(%s) 科目=%s 进度 %s -> %s（实际用时 %s 分钟）",
+                goal.goal_id, gtype, goal.subject_mode or 0,
+                goal.current_count, new_count, round(seconds / 60),
             )
             goal.current_count = new_count
 
