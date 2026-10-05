@@ -930,10 +930,13 @@ const loadDailyGoal = async () => {
   cursor: pointer;
 }
 
+/* 容器高度须与 .chart-canvas / .chart-empty 的 200px 自洽。
+ * 此前为 120px + flex 布局（旧 CSS 柱状图遗留），导致 200px 的 echarts
+ * canvas 向上溢出 80px，盖住 .section-header 内的「柱状/折线」切换按钮
+ * 并拦截其点击。echarts 场景下改为普通块级，overflow:hidden 作为防御。 */
 .trend-chart {
-  height: 120px;
-  display: flex;
-  align-items: flex-end;
+  height: 200px;
+  overflow: hidden;
 }
 
 .chart-bars {
