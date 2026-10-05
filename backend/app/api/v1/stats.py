@@ -13,7 +13,8 @@ from ...models.models import (
     DailyCheckin,
     StudyGoal,
     SysUser,
-    CoinRecord
+    CoinRecord,
+    QuestionType
 )
 
 from ...core.security import get_current_user, get_optional_user
@@ -301,6 +302,66 @@ async def get_all_time_stats(
 
     base.update({"granularity": granularity, "spanDays": span_days, "buckets": buckets})
     return base
+
+
+@router.get("/type-mastery", response_model=List[Dict[str, Any]], summary="题型维度掌握度")
+async def get_type_mastery(
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """
+    按题型统计**用户维度**的掌握情况。
+
+    与其他易混接口的区别（务必分清）：
+    - `/api/questions` 里的按题型计数：统计**题库库存量**（每个题型有多少道题），
+      与用户练没练过无关。
+    - `/api/practice/type-summary`：按**科目 + 子科目**统计（行测/申论/公专下的
+      二级分类进度），并非 type_id 维度。
+    - 本接口：**题型（type_id）** 维度上，用户**实际练过多少、正确多少**。
+
+    只返回用户实际练习过的题型；未练过的题型不占位，避免前端出现一排 0%。
+    """
+    rows = (
+        db.query(
+            PracticeRecord.type_id,
+            QuestionType.type_name,
+            QuestionType.sort_order,
+            func.count(PracticeRecord.record_id),
+            func.sum(PracticeRecord.is_correct),
+            func.coalesce(func.sum(PracticeRecord.time_spent), 0),
+            func.max(PracticeRecord.practice_date),
+        )
+        .join(QuestionType, PracticeRecord.type_id == QuestionType.type_id, isouter=True)
+        .filter(
+            PracticeRecord.user_id == current_user.user_id,
+            PracticeRecord.type_id.isnot(None),
+        )
+        .group_by(PracticeRecord.type_id, QuestionType.type_name, QuestionType.sort_order)
+        # 排序：先按 sort_order 升序；`is_(None)` 为真的行（历史记录关联到
+        # 已被删除的题型，outer join 后 sort_order 为 NULL）排到最后。
+        # 不加这一段的话 SQLite 把 NULL 视为最小值，孤儿题型会占据列表首位，
+        # 把真实题型全部挤到下面。
+        .order_by(QuestionType.sort_order.is_(None), QuestionType.sort_order)
+        .all()
+    )
+
+    items = []
+    for r in rows:
+        count = int(r[3] or 0)
+        correct = int(r[4] or 0)
+        items.append({
+            "typeId": r[0],
+            # 历史记录可能关联到已被删除的题型，outer join 下 type_name 为 NULL，
+            # 回退为可读占位而不是把该行丢掉（丢掉会让用户的练习量凭空消失）
+            "typeName": r[1] or f"未知题型({r[0]})",
+            "count": count,
+            "correct": correct,
+            "wrong": count - correct,
+            "accuracy": round(correct / count * 100, 1) if count > 0 else 0,
+            "minutes": round(int(r[5] or 0) / 60),
+            "lastPracticeDate": r[6].isoformat() if r[6] else None,
+        })
+    return items
 
 
 @router.get("/calendar", response_model=List[Dict[str, Any]], summary="考试日历")
