@@ -51,24 +51,7 @@
         </div>
       </section>
 
-      <!-- 分类筛选 -->
-      <section class="category-filter">
-        <div class="category-scroll">
-          <div 
-            v-for="(cat, index) in categories" 
-            :key="index"
-            :class="['category-chip', { active: activeCategory === cat.key }]"
-            @click="selectCategory(cat.key)"
-          >
-            {{ cat.name }}
-            <span class="chip-count">{{ cat.count }}</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- 历年试卷列表：首屏直接呈现，无需二次点击。
-           顶部操作区原有「历年试卷」按钮与本区块内容完全重复，已移除；
-           本标题即该功能的唯一可达入口。 -->
+      <!-- 历年试卷列表：首屏直接呈现，无需二次点击。 -->
       <section class="question-list">
         <div class="list-header">
           <span class="list-title">历年试卷</span>
@@ -179,50 +162,19 @@ export default defineComponent({
     // 首屏没有任何「被选中」的操作项：所有按钮都是跳转或提示，
     // 高亮其中之一会造成误导（原实现默认高亮「历年试卷」）。
     const activeTopAction = ref('');
-    // 「历年试卷」按钮已移除：其内容就是下方首屏直出的试卷列表，
-    // 再摆一个跳转按钮属于重复入口，故只保留智能组卷/联考小智/错题本/模拟考试。
+    // 「历年试卷」并回功能按钮行：其内容虽是下方首屏直出的列表，
+    // 但作为四大功能之一并列于此，入口更醒目、与其他功能视觉对齐。
     const topActions = ref([
+      { key: 'paper', name: '历年试卷', icon: Trophy, tag: '' },
       { key: 'smart', name: '智能组卷', icon: Cpu, tag: 'AI' },
       { key: 'ai', name: '联考小智', icon: Cpu, tag: '开发中' },
       { key: 'wrong', name: '错题本', icon: Warning, tag: '' },
       { key: 'mock', name: '模拟考试', icon: Trophy, tag: '' }
     ]);
-    
-    // 分类
-    // key 必须与下方 fetchPapers 的 subjectMap 保持一致（xc/sw/jy），
-    // 否则点击该分类会筛不到任何内容，表现为「没有找到相关题目」。
-    // 政治理论 / 法律基础不再单列：二者在行测、公专的知识点下钻中已包含。
-    const activeCategory = ref('all');
-    const categories = ref([
-      { key: 'all', name: '全部', count: 0 },
-      { key: 'xc', name: '行测', count: 0 },
-      { key: 'sw', name: '申论', count: 0 },
-      { key: 'jy', name: '公专', count: 0 }
-    ]);
 
-    // 加载三科题量统计（真实数据来源：/api/questions/subcategory-stats）
-    const loadSubjectStats = async () => {
-      const auth = window.__VTJ_AUTH__;
-      if (!auth) return;
-      try {
-        const res = await fetch('/api/questions/subcategory-stats?_t=' + Date.now(), {
-          headers: auth.getAuthHeaders ? auth.getAuthHeaders() : {},
-          cache: 'no-cache'
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const sum = (arr) => (arr || []).reduce((acc, item) => acc + (item.count || 0), 0);
-        const map = { xc: sum(data.xingce), sw: sum(data.shenlun), jy: sum(data.gongzhuan) };
-        categories.value = categories.value.map((c) =>
-          c.key === 'all'
-            ? { ...c, count: data.total || 0 }
-            : { ...c, count: map[c.key] || 0 }
-        );
-      } catch (error) {
-        console.warn('加载科目题量统计失败:', error);
-      }
-    };
-    
+    // 科目筛选行已按需求删除，其状态（activeCategory/categories）与
+    // 题量统计请求一并移除，避免留下永不出错的死逻辑与无谓网络开销。
+    // 科目维度的下钻仍保留在「练习」页的科目/子科目/知识点层级中。
     // 题目列表
     const questions = ref([]);
     
@@ -231,18 +183,13 @@ export default defineComponent({
     // 而非「搜索没匹配到」。原文案「没有找到相关题目」会让用户误以为题库为空。
     const emptyText = computed(() => {
       if (searchQuery.value) return '没有找到相关试卷';
-      if (activeCategory.value !== 'all') return '该科目下暂无已发布试卷';
       return '暂无已发布试卷';
     });
 
     // 过滤题目
     const filteredQuestions = computed(() => {
       let result = questions.value;
-      
-      if (activeCategory.value !== 'all') {
-        result = result.filter(q => q.category === activeCategory.value);
-      }
-      
+
       if (searchQuery.value) {
         const query = searchQuery.value.toLowerCase();
         result = result.filter(q => 
@@ -289,12 +236,10 @@ export default defineComponent({
 
     onMounted(async () => {
       window.addEventListener('__VTJ_SYNC__', onVTJSync);
-      // 科目题量统计与试卷列表并行加载
-      loadSubjectStats();
       await loadPaperList();
     });
 
-    // ===== 三端实时同步：题目导入后刷新题量统计与试卷列表 =====
+    // ===== 三端实时同步：题目导入后刷新试卷列表 =====
     // 后端导入完成会广播 sync 事件，auth.ts 转发为 __VTJ_SYNC__。
     // 只关心题库范围的事件；防抖 1.5s，避免批量导入时连续请求。
     let syncTimer: any = null;
@@ -304,7 +249,6 @@ export default defineComponent({
       if (syncTimer) clearTimeout(syncTimer);
       syncTimer = setTimeout(() => {
         syncTimer = null;
-        loadSubjectStats();
         loadPaperList();
       }, 1500);
     };
@@ -336,7 +280,12 @@ export default defineComponent({
     
     const selectTopAction = (key: string) => {
       activeTopAction.value = key;
-      if (key === 'smart') {
+      if (key === 'paper') {
+        // 历年试卷：列表就在本页首屏直出，滚到该区块即可，
+        // 不做路由跳转（跳转会产生一次无意义的 loading）。
+        const el = document.querySelector('.question-list');
+        if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (key === 'smart') {
         router.push('/smart-exam');
       } else if (key === 'ai') {
         // 联考小智：功能还在开发中
@@ -348,10 +297,6 @@ export default defineComponent({
       }
     };
     
-    const selectCategory = (key: string) => {
-      activeCategory.value = key;
-    };
-    
     const startPractice = (question: any) => {
       router.push('/mobile/answer');
     };
@@ -361,8 +306,6 @@ export default defineComponent({
       searchQuery,
       activeTopAction,
       topActions,
-      activeCategory,
-      categories,
       filteredQuestions,
       emptyText,
       goBack,
@@ -370,7 +313,6 @@ export default defineComponent({
       handleSearch,
       clearSearch,
       selectTopAction,
-      selectCategory,
       startPractice,
       ArrowLeft,
       ArrowRight,
@@ -530,53 +472,6 @@ export default defineComponent({
   padding: 2px 6px;
   border-radius: 4px;
   font-weight: 600;
-}
-
-/* 分类筛选 */
-.category-filter {
-  margin-bottom: 16px;
-}
-
-.category-scroll {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  -webkit-overflow-scrolling: touch;
-}
-
-.category-chip {
-  padding: 8px 16px;
-  background: #ffffff;
-  border: 1px solid #e8ecf1;
-  border-radius: 20px;
-  font-size: 13px;
-  color: #5a6488;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.category-chip.active {
-  background: #1A365D;
-  border-color: #1A365D;
-  color: #ffffff;
-}
-
-.category-chip:hover:not(.active) {
-  border-color: #1A365D;
-  color: #1A365D;
-}
-
-/* 分类 chip 上的真实题量（来自 /api/questions/subcategory-stats） */
-.chip-count {
-  display: inline-block;
-  margin-left: 4px;
-  font-size: 11px;
-  opacity: 0.75;
-}
-.category-chip.active .chip-count {
-  opacity: 0.9;
 }
 
 /* 历年试卷区块标题 */
