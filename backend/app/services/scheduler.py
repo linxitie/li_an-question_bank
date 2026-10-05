@@ -36,6 +36,31 @@ def _broadcast_sync(message: str = "sync", data: Optional[dict] = None):
               只应包含统计信息，禁止放入题目正文等敏感内容。
               为 None 时保持既有行为（仅带 message），向后兼容。
     """
+    _dispatch_sync(None, message, data)
+
+
+def _broadcast_personal_sync(user_id: int, message: str = "sync", data: Optional[dict] = None):
+    """定向广播同步事件给**单个用户**的所有连接（跨线程安全）
+
+    与 `_broadcast_sync` 的区别：练习记录、目标进度这类数据是**私有**的，
+    用 `broadcast_all` 会让全部在线用户都收到事件并各自重拉数据 ——
+    既浪费带宽，也会通过「谁在练习」的刷新行为泄露他人的活跃信号。
+
+    Args:
+        user_id: 目标用户 id
+        message: 面向前端的简短说明
+        data: 可选的结构化补充信息，只应含统计量（如 {"scope","count"}），
+              禁止放入题目正文等敏感内容。
+    """
+    _dispatch_sync(user_id, message, data)
+
+
+def _dispatch_sync(user_id: Optional[int], message: str, data: Optional[dict]):
+    """广播同步事件的共同实现
+
+    Args:
+        user_id: 为 None 时广播给所有人；为 int 时只发给该用户
+    """
     global _main_loop
     if _main_loop is None:
         return
@@ -50,11 +75,13 @@ def _broadcast_sync(message: str = "sync", data: Optional[dict] = None):
             "data": payload_data,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        asyncio.run_coroutine_threadsafe(
-            ws_connection_manager.broadcast_all(payload), _main_loop
-        )
+        if user_id is None:
+            coro = ws_connection_manager.broadcast_all(payload)
+        else:
+            coro = ws_connection_manager.send_personal_message(payload, user_id)
+        asyncio.run_coroutine_threadsafe(coro, _main_loop)
     except Exception as e:
-        # 广播失败绝不影响主业务流程（如题目导入），仅记录告警
+        # 广播失败绝不影响主业务流程（如题目导入、练习记录），仅记录告警
         logger.warning(f"广播同步事件失败: {e}")
 
 

@@ -153,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
@@ -186,6 +186,19 @@ async function apiGet(url: string) {
   return res.json();
 }
 
+// 练习/目标统计的加载逻辑抽成独立函数：既供首次挂载用，也供
+// __VTJ_SYNC__ 事件触发时重拉，避免两处重复实现。
+async function loadStudyData() {
+  const [s, c, l] = await Promise.all([
+    apiGet('/api/stats/'),
+    apiGet('/api/coins/overview'),
+    apiGet('/api/stats/level'),
+  ]);
+  stats.value = s;
+  coin.value = c;
+  level.value = l;
+}
+
 onMounted(async () => {
   try {
     const [p, s, c, l, a] = await Promise.all([
@@ -204,6 +217,26 @@ onMounted(async () => {
   } catch (e) {
     console.error('加载个人中心数据失败', e);
   }
+
+  // ===== 三端实时同步 =====
+  // 练习落库后后端会定向广播 sync 事件，auth.ts 转发为 __VTJ_SYNC__。
+  // 只关心练习范围，避免题目导入等事件触发无谓重拉。
+  // 防抖 800ms：连续答题会连发多个事件，合并为一次刷新。
+  let syncTimer: any = null;
+  const onVTJSync = (e: any) => {
+    const d = e && e.detail && e.detail.data;
+    if (d && d.scope && d.scope !== 'practice') return;
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      syncTimer = null;
+      loadStudyData().catch(() => { /* 静默：同步刷新失败不影响页面 */ });
+    }, 800);
+  };
+  window.addEventListener('__VTJ_SYNC__', onVTJSync);
+  onBeforeUnmount(() => {
+    window.removeEventListener('__VTJ_SYNC__', onVTJSync);
+    if (syncTimer) clearTimeout(syncTimer);
+  });
 });
 
 const TIER_COLORS: Record<number, string> = {

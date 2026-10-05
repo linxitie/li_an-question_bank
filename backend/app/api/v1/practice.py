@@ -162,6 +162,20 @@ async def record_practice(
         db.rollback()
         print(f"[practice] 目标进度同步失败(非阻断): {e}")
 
+    # 三端实时同步：练习记录是私有数据，必须定向广播给该用户，
+    # 而不是 broadcast_all —— 否则所有在线用户都会被触发重拉，
+    # 既浪费带宽，也会通过刷新行为泄露「谁在练习」。
+    # 事件体只含统计量，不含题目正文。广播失败不阻断答题。
+    try:
+        from ...services.scheduler import _broadcast_personal_sync
+        _broadcast_personal_sync(
+            current_user.user_id,
+            "练习记录已更新",
+            {"scope": "practice", "action": "record", "count": 1},
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[practice] 三端同步广播失败(非阻断): {e}")
+
     return {"status": "ok", "record_id": record.record_id, "newly_unlocked": newly}
 
 
@@ -227,6 +241,20 @@ async def batch_record_practice(
 
     correct = sum(1 for i in records_data if i.get("is_correct", False))
     newly = _after_practice(current_user.user_id, db, len(records_data), correct)
+
+    # 三端实时同步：整卷交卷（如电脑端提交）同样要让手机/平板刷新，
+    # 否则用户在手机上看到的进度会停在交卷之前。与 /record 一致，
+    # 定向广播给该用户，事件体只含条数等统计量。
+    try:
+        from ...services.scheduler import _broadcast_personal_sync
+        _broadcast_personal_sync(
+            current_user.user_id,
+            "练习记录已更新",
+            {"scope": "practice", "action": "batch_record", "count": count},
+        )
+    except Exception as e:
+        logger.warning(f"批量交卷后广播三端同步失败: {e}")
+
     return {"status": "ok", "count": count, "newly_unlocked": newly}
 
 

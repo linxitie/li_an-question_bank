@@ -234,7 +234,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted } from 'vue';
+    import { defineComponent, ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import {
@@ -374,6 +374,52 @@ export default defineComponent({
       } catch (error) {
         console.error('加载数据失败:', error);
       }
+    });
+
+    // ===== 三端实时同步 =====
+    // 练习落库后后端定向广播 sync 事件，auth.ts 转发为 __VTJ_SYNC__。
+    // 手机答题后平板不刷新就看不到新进度，这是此前缺失的环节。
+    // 只重拉练习相关的统计，避开头像/徽章等与练习无关的请求。
+    const loadPracticeStats = async () => {
+      const auth = window.__VTJ_AUTH__;
+      if (!auth || !auth.isLoggedIn()) return;
+      try {
+        const res = await auth.apiFetch('/api/stats/');
+        const data = await res.json();
+        totalQuestions.value = data.totalQuestions || 0;
+        accuracy.value = data.accuracyRate || 0;
+        streakDays.value = data.streak || 0;
+        historyCount.value = data.totalQuestions || 0;
+        const trend = await auth.apiFetch('/api/stats/practice-trend?days=7');
+        const trendData = await trend.json();
+        const t = trendData.trend || [];
+        if (t.length) {
+          weekData.value = t.map((d: any) => ({
+            label: (d.date || '').slice(5),
+            count: d.questionsDone || 0,
+          }));
+        }
+      } catch (e) {
+        // 静默：同步刷新失败不应影响页面已渲染的内容
+      }
+    };
+
+    // 防抖 800ms：连续答题会连发多个事件，合并为一次刷新
+    let syncTimer: any = null;
+    const onVTJSync = (e: any) => {
+      const d = e && e.detail && e.detail.data;
+      if (d && d.scope && d.scope !== 'practice') return;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        syncTimer = null;
+        loadPracticeStats();
+      }, 800);
+    };
+    window.addEventListener('__VTJ_SYNC__', onVTJSync);
+
+    onBeforeUnmount(() => {
+      window.removeEventListener('__VTJ_SYNC__', onVTJSync);
+      if (syncTimer) clearTimeout(syncTimer);
     });
     
     // 方法
