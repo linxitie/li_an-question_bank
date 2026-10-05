@@ -131,7 +131,7 @@ const sheetOpen = ref(false);
 // 逐题作答记录，索引即题号，用于答题卡标记与「是否全部完成」判定。
 // 元素由 boolean 升级为对象：既要记「是否作答」，也要记「选了什么」和
 // 「是否正确」。此前只存 boolean，导致切题回来无法回填选择痕迹。
-type AnswerRec = { selected: number[]; correct: boolean; reported: boolean };
+type AnswerRec = { selected: number[]; correct: boolean; reported: boolean; seconds: number };
 const answersRecord = ref<Array<AnswerRec | null>>([]);
 
 // 当前题的选择态 / 作答态 / 对错全部由 answersRecord 派生。
@@ -253,9 +253,36 @@ const toggleOption = (idx: number) => {
   answersRecord.value[currentIndex.value] = {
     selected: next,
     correct: gradeSelection(next) === normalizeAnswer(current.value.answer),
-    reported: false
+    reported: false,
+    // 每次切换选项都会重建本条记录，必须把已累计的停留时长带过去，
+    // 否则用户在多选题上来回勾选就会把耗时清零。
+    seconds: answersRecord.value[currentIndex.value]?.seconds ?? 0
   };
 };
+
+// ===== 逐题停留时长 =====
+// 用户反馈「学习时长不对」的根因：此前手机端上报体里根本没有 time_spent，
+// 后端 `payload.get('time_spent', 0)` 一律兜底为 0，于是手机端产生的
+// 练习记录时长恒为 0（电脑端 exercise.vue 有上报，所以只有手机端不对）。
+//
+// 这里按「进入题目的时刻 → 离开题目的时刻」累计，逐题落到 answersRecord[i].seconds，
+// 切题时统一结算。用 watch(currentIndex) 作为唯一钩子，可同时覆盖
+// nextQuestion / prevQuestion / jumpTo 三条切题路径，不会漏记。
+const qEnterAt = ref<number>(Date.now());
+
+/** 把当前题已停留的秒数结算进 answersRecord，然后重置计时起点 */
+function accumulateTime() {
+  const i = currentIndex.value;
+  const spent = Math.round((Date.now() - qEnterAt.value) / 1000);
+  const rec = answersRecord.value[i];
+  // 该题尚未作答（记录还没建）时不写入 —— 等作答时再从 0 起算，
+  // 避免「看过但没答」的题也计入时长。
+  if (rec) rec.seconds = (rec.seconds || 0) + Math.max(0, spent);
+  qEnterAt.value = Date.now();
+}
+
+// 切题即结算上一题。immediate 不加：首屏进入时还没有停留时长可言。
+watch(currentIndex, () => accumulateTime());
 
 /**
  * 选项归一化为纯文本数组。
@@ -355,6 +382,9 @@ const fetchQuestions = async () => {
 const flushPending = async () => {
   const auth = (window as any).__VTJ_AUTH__;
   if (!auth) return;
+  // 先结算当前题的停留时长。切题钩子只在切题时触发，而交卷/退出时
+  // 往往还停在某一题上（尤其是最后一题），不补这一次结算就会丢掉它。
+  accumulateTime();
   const tasks: Array<Promise<any>> = [];
   questions.value.forEach((q: any, i: number) => {
     const rec = answersRecord.value[i];
@@ -369,6 +399,9 @@ const flushPending = async () => {
           subject_id: q.subject_id,
           is_correct: rec.correct,
           user_answer: gradeSelection(rec.selected),
+          // 学习时长（秒）。此前手机端漏报该字段，后端一律兜底为 0，
+          // 导致手机端记录的时长恒为 0、「学习时长」统计失真。
+          time_spent: rec.seconds || 0,
           source: '随机练习'
         })
       })
