@@ -1,0 +1,23 @@
+{
+  "question_bank_total": 2583,
+  "question_bank_status1": 2478,
+  "question_bank_status0": 105,
+  "by_subject": {
+    "3": 2583
+  },
+  "question_groups": 21,
+  "questions_with_group_id": 20,
+  "requirements_nonempty": 0,
+  "need_review_1": 7,
+  "answer_analysis_empty": 4,
+  "question_image": 263,
+  "exam_paper": 29,
+  "import_record_by_status": {
+    "COMPLETED": 1064,
+    "FAILED": 1,
+    "PARSING": 1,
+    "PARTIAL": 6,
+    "PREVIEW": 429
+  },
+  "last_completed": "2026-09-29 21:42:56.806372"
+}

@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-10-05 00:02:44",
+  "results": [
+    {
+      "layer": "L0",
+      "status": "PASS",
+      "elapsed_s": 0.1
+    },
+    {
+      "layer": "L3",
+      "status": "PASS",
+      "elapsed_s": 6.1
+    },
+    {
+      "layer": "L1",
+      "status": "PASS",
+      "elapsed_s": 6.3
+    },
+    {
+      "layer": "L2",
+      "status": "FAIL",
+      "elapsed_s": 10.3
+    },
+    {
+      "layer": "L4",
+      "status": "PASS",
+      "elapsed_s": 2.4
+    },
+    {
+      "layer": "L5",
+      "status": "PASS",
+      "elapsed_s": 0.0
+    }
+  ]
+}

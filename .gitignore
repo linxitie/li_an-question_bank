@@ -52,7 +52,13 @@ __pycache__/
 
 # 运行时数据（新闻图片、上传资料、题目图片、SQLite 数据库）
 backend/uploads/
-backend/data/
+# 注意：此处必须用 backend/data/* 而非 backend/data/，否则 git 会跳过目录本身，
+# 导致下面的 !backend/data/gates/ 反选规则失效（gitignore 规则：被排除的目录无法被反选）。
+backend/data/*
+# 门禁基线必须入库：否则 L0/L1/L2 红线与基线无法在 CI 与其他机器上复现，
+# 门禁网会退化成「只在本机有效」。DB / 缓存 / 备份仍保持忽略。
+!backend/data/gates/
+!backend/data/gates/*.json
 backend/app/static/questions/
 *.db-wal
 *.db-shm

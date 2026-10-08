@@ -1,0 +1,410 @@
+[
+  {
+    "nodeid": "tests/test_materials_admin.py::TestBatchOperations::test_batch_delete_empty",
+    "type": "failed",
+    "category": "业务逻辑",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_monitoring.py::TestMetricsCollector::test_record_response_time",
+    "type": "failed",
+    "category": "监控",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_playwright_import.py::test_login_and_navigate",
+    "type": "failed",
+    "category": "依赖浏览器环境",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_playwright_import.py::test_single_pair_import",
+    "type": "failed",
+    "category": "依赖浏览器环境",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_playwright_import.py::test_all_seven_pairs",
+    "type": "failed",
+    "category": "依赖浏览器环境",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_playwright_import.py::test_api_separate_match",
+    "type": "failed",
+    "category": "依赖浏览器环境",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_question_import.py::TestScannedPdfMineruFallback::test_falls_back_to_paddleocr_path",
+    "type": "failed",
+    "category": "MinerU 回退测试",
+    "related_to_this_change": true
+  },
+  {
+    "nodeid": "tests/test_question_import.py::TestScannedPdfMineruFallback::test_falls_back_when_mineru_returns_none",
+    "type": "failed",
+    "category": "MinerU 回退测试",
+    "related_to_this_change": true
+  },
+  {
+    "nodeid": "tests/test_security.py::TestTokenManagement::test_create_access_token",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_security.py::TestTokenManagement::test_create_access_token_with_expiry",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_security.py::TestTokenManagement::test_create_refresh_token",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_security.py::TestLeakyBucketRateLimiter::test_bucket_overflows",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_security.py::TestCircuitBreaker::test_half_open_to_closed_on_success",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_security.py::TestPermissionSystem::test_check_permission_valid",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_security.py::TestPermissionSystem::test_check_permission_invalid",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_security.py::TestPermissionSystem::test_check_permission_invalid_user_type",
+    "type": "failed",
+    "category": "安全模块测试失败",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestHealthEndpoint::test_health_check",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestHealthEndpoint::test_root_endpoint",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestHealthEndpoint::test_docs_endpoint",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestHealthEndpoint::test_redoc_endpoint",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestHealthEndpoint::test_openapi_endpoint",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestMetricsEndpoint::test_get_metrics",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestMetricsEndpoint::test_get_endpoint_metrics",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestMetricsEndpoint::test_reset_metrics",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestMetricsEndpoint::test_get_system_metrics",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthEndpoints::test_login_without_credentials",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthEndpoints::test_register_without_credentials",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthEndpoints::test_get_current_user_without_token",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthEndpoints::test_login_with_invalid_user",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthEndpoints::test_register_with_existing_user",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestQuestionEndpoints::test_get_subjects",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestQuestionEndpoints::test_get_types",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestQuestionEndpoints::test_get_knowledge_points_without_subject",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestQuestionEndpoints::test_create_question_without_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestQuestionEndpoints::test_get_question_not_found",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestPaperEndpoints::test_get_papers_without_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestPaperEndpoints::test_create_paper_without_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestExamEndpoints::test_start_exam_without_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestExamEndpoints::test_get_exam_detail_without_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestWebSocketEndpoints::test_get_online_users_requires_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestWebSocketEndpoints::test_websocket_endpoint_exists",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthenticationMiddleware::test_request_without_authorization_header",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthenticationMiddleware::test_request_with_invalid_token",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthenticationMiddleware::test_request_with_valid_token",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_api.py::TestAuthenticationMiddleware::test_cors_preflight_request",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_batch_parsed_import.py::test_dual_track_and_idempotent_rerun",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": true
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestAuthAndValidation::test_unified_stats_requires_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestAuthAndValidation::test_knowledge_progress_requires_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestAuthAndValidation::test_recent_records_requires_auth",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestAuthAndValidation::test_recent_records_validates_params",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestEmptyData::test_empty_overview",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestEmptyData::test_empty_knowledge_progress",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestEmptyData::test_empty_recent_records",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestMixedSources::test_unified_stats_numbers_and_double_count_exclusion",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestMixedSources::test_knowledge_progress_values",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestMixedSources::test_recent_records_all_sources_and_jumps",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestMixedSources::test_recent_records_filters",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestMixedSources::test_recent_records_pagination",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_practice_unified.py::TestQpJumpSubjectKeyMapping::test_auto_code_maps_to_convention_key",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestDbQuoteFavorite::test_toggle_on_then_off",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestObsidianQuoteFavorite::test_favorite_inserts_row_with_obsidian_source",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestObsidianQuoteFavorite::test_unfavorite_removes_row",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestObsidianQuoteFavorite::test_unauthenticated_returns_401",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestObsidianQuoteFavorite::test_invalid_obsidian_source_returns_400",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestMergedFavorites::test_news_favorites_includes_obsidian_item",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestDailyQuote::test_daily_quote_returns_obsidian_fields",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestDailyQuote::test_daily_quote_reflects_favorite_state",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  },
+  {
+    "nodeid": "tests/test_quote_favorite.py::TestObsidianRecursiveScan::test_get_daily_quote_nested",
+    "type": "error",
+    "category": "数据库连接/fixture 错误",
+    "related_to_this_change": false
+  }
+]
