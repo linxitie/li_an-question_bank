@@ -35,6 +35,11 @@ from ...models.models import (
 from ...schemas.schemas import SuccessResponse, ParseRequest, ParseResult, ParsedQuestion, ImageRef
 from ...services.question_classifier import QuestionClassifier, detect_subcategory_enhanced
 from ...services import text_cache  # 文档提取文本缓存（P0 提速，260s→0.02s）
+from ...services.question_ingest.excel_reader import (  # J-3：列名容错 + 表头探测 + GBK 嗅探
+    get_field_value as _xlsx_field,          # 别名容忍的取值（同一列名多种写法）
+    parse_excel_buffer as _parse_excel_buffer,   # 多 sheet + 表头行探测
+    parse_csv_buffer as _parse_csv_buffer,       # utf-8-sig/gbk/gb18030/latin-1 嗅探
+)
 from ...services.mineru_service import (  # 扫描件三级回退链第一级（规格§5.2）
     extract_text_sync as mineru_extract_text_sync,
     is_enabled as mineru_is_enabled,
@@ -467,59 +472,39 @@ def _get_duplicate_info(db: Session, content: str, answer: str = '', subject_id:
     }
 
 
-def _parse_excel_buffer(buf: bytes, filename: str) -> List[Dict[str, Any]]:
-    """使用 openpyxl 解析 Excel 文件"""
-    import io
-    try:
-        import openpyxl
-    except ImportError:
-        raise HTTPException(status_code=500, detail="服务器缺少 openpyxl 库，请安装: pip install openpyxl")
-
-    wb = openpyxl.load_workbook(io.BytesIO(buf), read_only=True, data_only=True)
-    ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
-    if len(rows) < 2:
-        raise HTTPException(status_code=400, detail="Excel 文件至少需要标题行和一行数据")
-
-    headers = [str(h).strip() if h else '' for h in rows[0]]
-    questions = []
-    for row in rows[1:]:
-        if all(v is None or str(v).strip() == '' for v in row):
-            continue
-        row_dict = {}
-        for i, h in enumerate(headers):
-            val = row[i] if i < len(row) else None
-            row_dict[h] = str(val).strip() if val is not None else ''
-        questions.append(row_dict)
-    return questions
-
-
-def _parse_csv_buffer(buf: bytes) -> List[Dict[str, Any]]:
-    """解析 CSV 文件"""
-    import io, csv
-    text = buf.decode('utf-8-sig')
-    reader = csv.DictReader(io.StringIO(text))
-    return [dict(row) for row in reader]
-
-
 def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """将原始行数据标准化为题目标准格式"""
-    content = row.get('题目内容') or row.get('题干') or row.get('question') or row.get('题目') or ''
-    answer = row.get('答案') or row.get('正确答案') or row.get('answer') or row.get('标准答案') or ''
+    """将原始行数据标准化为题目标准格式（J-3：列名容错 + 丢行可追溯）
+
+    ★ 关键约束：返回值**必须保持 16 个键**且丢行时返回 None。
+      历史实现返回 year/tags/paper_name/exam_province/exam_type/subcategory，
+      若改用 excel_reader.normalize_question（仅 9 键、无题型判定、无答案归一化）
+      会造成静默字段丢失 —— 那是回归而非优化。
+      本函数只把「列名取值」换成容错查找，其余逻辑（题型判定 / canonical_answer /
+      coerce_difficulty / 选项解析）全部保留。
+    """
+    content = _xlsx_field(row, 'question_content')
+    answer = _xlsx_field(row, 'answer')
     if not content or not answer:
+        # 保留 None 契约：调用方据此记 failed_count 并给出可见原因
         return None
 
-    subject_name = row.get('科目') or row.get('科目大类') or row.get('subject') or '行测'
-    raw_type = (row.get('题型') or row.get('题目类型') or row.get('type') or '').strip()
+    subject_name = _xlsx_field(row, 'subject_name') or '行测'
+    raw_type = _xlsx_field(row, 'type_name')
 
     options = []
     for key in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
-        opt_val = row.get(f'选项{key}') or row.get(key) or ''
+        opt_val = ''
+        # 选项列容错：`选项A` / 裸 `A` 两种写法都认
+        for hdr, val in row.items():
+            from ...services.question_ingest.excel_reader import normalize_header as _nh
+            if _nh(hdr) in (_nh(f'选项{key}'), _nh(key)):
+                opt_val = str(val).strip() if val is not None else ''
+                break
         if opt_val:
             options.append({'key': key, 'value': opt_val})
 
     if not options:
-        opt_str = row.get('选项') or row.get('options') or ''
+        opt_str = _xlsx_field(row, 'options')
         if opt_str:
             try:
                 parsed = json.loads(opt_str)
@@ -542,16 +527,15 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             answer = norm
 
     # 难度：走唯一收口 coerce_difficulty（不再用会抛 ValueError 的裸 int()）
-    diff_raw = row.get('难度') or row.get('difficulty')
-    difficulty = coerce_difficulty(diff_raw)
+    difficulty = coerce_difficulty(_xlsx_field(row, 'difficulty'))
 
     try:
-        score = float(row.get('分值') or row.get('score') or 1.0)
+        score = float(_xlsx_field(row, 'score') or 1.0)
     except ValueError:
         score = 1.0
 
     try:
-        year = int(row.get('年份') or row.get('year') or 0) or None
+        year = int(_xlsx_field(row, 'year') or 0) or None
     except ValueError:
         year = None
 
@@ -561,17 +545,17 @@ def _normalize_question(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         'question_content': content,
         'options': options if options else None,
         'answer': answer,
-        'answer_analysis': row.get('解析') or row.get('答案解析') or row.get('analysis') or '',
+        'answer_analysis': _xlsx_field(row, 'answer_analysis'),
         'difficulty': difficulty,
         'score': score,
         'year': year,
-        'source': row.get('来源') or row.get('source') or '',
-        'tags': row.get('标签') or row.get('tags') or '',
-        'knowledge_point': row.get('知识点') or row.get('knowledge_point') or '',
-        'paper_name': row.get('试卷名称') or row.get('paper_name') or '',
-        'exam_province': row.get('省份') or row.get('exam_province') or '',
-        'exam_type': row.get('考试类型') or row.get('exam_type') or '',
-        'subcategory': row.get('子科目') or row.get('细分') or row.get('小类') or row.get('subcategory') or '',
+        'source': _xlsx_field(row, 'source'),
+        'tags': _xlsx_field(row, 'tags'),
+        'knowledge_point': _xlsx_field(row, 'knowledge_point'),
+        'paper_name': _xlsx_field(row, 'paper_name'),
+        'exam_province': _xlsx_field(row, 'exam_province'),
+        'exam_type': _xlsx_field(row, 'exam_type'),
+        'subcategory': _xlsx_field(row, 'subcategory'),
     }
 
 

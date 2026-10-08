@@ -4,12 +4,17 @@ import subprocess, sys, os, json, time
 
 GATES = [
     ('L0', 'scripts/gate_l0_redlines.py', []),
+    # L1-G 必须排在 L1 之前：它守「公专基线内 2583 题逐字段不变」这条最高红线，
+    # 且耗时 ~2s，故纳入 --quick。
+    ('L1-G', 'scripts/gate_l1g_field_fingerprint.py', []),
     ('L3', 'scripts/gate_l3_ingest.py', []),
     ('L1', 'scripts/gate_l1_parser.py', ['--subject', 'gongzhuan']),
     ('L2', 'scripts/gate_l2_matching.py', []),
     ('L4', 'scripts/gate_l4_api_contract.py', []),
     ('L5', 'scripts/gate_l5_frontend_contract.py', []),
 ]
+
+QUICK_GATES = ('L0', 'L1-G', 'L1')
 
 def main():
     quick = '--quick' in sys.argv
@@ -20,7 +25,7 @@ def main():
 
     results = []
     for name, script, args in GATES:
-        if quick and name not in ('L0', 'L1'):
+        if quick and name not in QUICK_GATES:
             continue
         if layer_filter and name != layer_filter:
             continue

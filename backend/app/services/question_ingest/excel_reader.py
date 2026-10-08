@@ -8,8 +8,13 @@ import re
 logger = logging.getLogger(__name__)
 
 # ★ J-3-1: 单一事实来源的列名容错字典
+# ★ 必须覆盖 question_import._normalize_question 原先读取的**全部**字段，
+#   否则接线会丢字段（year/tags/paper_name/... 曾因只保留 9 个键而回归）。
 COLUMN_ALIASES = {
-    'question_content': ['题目内容', '题干', 'question', '题目', '题目描述', '试题内容', '题干内容', 'content', '题目正文'],
+    'question_content': ['题目内容', '题干', 'question', '题目', '题目描述', '试题内容', '题干内容', 'content', '题目正文',
+                         # 带空格的英文写法：两侧都会被 normalize_header 去掉空白后比对，
+                         # 故 'Question Content' → 'questioncontent' 命中 'question content'
+                         'question content', 'question text', 'item content'],
     'answer': ['答案', '正确答案', 'answer', '标准答案', '参考答案', '正确选项', '答案选项', 'key'],
     'answer_analysis': ['解析', '答案解析', 'analysis', 'explanation', '解析说明', '答案说明', '详解', '解题思路'],
     'subject_name': ['科目', '科目大类', 'subject', '科目名称', '所属科目', '考试科目'],
@@ -19,6 +24,13 @@ COLUMN_ALIASES = {
     'source': ['来源', 'source', '出处', '题目来源', '考试来源'],
     'knowledge_point': ['知识点', '考点', 'knowledge_point', '知识点名称', '考点名称', '所属知识点'],
     'options': ['选项', 'options', '选项内容', '选项列表'],
+    # ↓ 以下为原实现已支持、本次必须保住的字段（接线时不得丢失）
+    'year': ['年份', 'year', '考试年份', '出题年份'],
+    'tags': ['标签', 'tags', 'tag', '题目标签'],
+    'paper_name': ['试卷名称', 'paper_name', '试卷', '试卷名'],
+    'exam_province': ['省份', 'exam_province', '省', '考试省份', '地区'],
+    'exam_type': ['考试类型', 'exam_type', '类型类型', '考试类别'],
+    'subcategory': ['子科目', '细分', '小类', 'subcategory', '细分类型'],
 }
 
 # 选项列的别名（A-H）
@@ -26,15 +38,22 @@ OPTION_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 
 def normalize_header(h: str) -> str:
-    """表头归一：去首尾空白 + 全角空格转半角 + 去换行制表 + 去尾部冒号 + 大小写不敏感 + 去括号备注"""
+    """表头归一：全角→半角、去换行制表、去尾部冒号、去括号备注、大小写不敏感、**移除所有内部空白**。
+
+    ★ 必须移除**内部**空白：真实题库 Excel 里普遍把中文表头排版成
+      「题 目 内 容」，英文表头写成「Question Content」。若只做首尾 strip，
+      这两种写法都无法与别名匹配 —— 容错字典等于失效。
+      移除全部空白后「选项 A」与「选项A」也会统一，不影响选项列解析。
+    """
     if not h:
         return ''
-    h = str(h).strip()
-    h = h.replace('　', ' ').replace('\n', '').replace('\t', '').replace('\r', '')
-    h = re.sub(r'[：:]\s*$', '', h)  # 去尾部冒号
-    h = re.sub(r'[（(].*?[）)]', '', h)  # 去括号备注
-    h = h.strip().lower()
-    return h
+    h = str(h)
+    h = h.replace('　', ' ')          # 全角空格 → 半角
+    h = h.replace('\n', '').replace('\t', ' ').replace('\r', '')
+    h = re.sub(r'[：:]\s*$', '', h)          # 去尾部冒号（须在去空白之前）
+    h = re.sub(r'[（(].*?[）)]', '', h)      # 去括号备注，如「难度(1-5)」
+    h = re.sub(r'\s+', '', h)                # ★ 移除所有内部空白
+    return h.lower()
 
 
 def detect_header_row(rows: list, max_scan: int = 5) -> int:

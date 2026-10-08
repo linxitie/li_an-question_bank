@@ -19,5 +19,18 @@
     "PARTIAL": 6,
     "PREVIEW": 429
   },
-  "last_completed": "2026-09-29 21:42:56.806372"
+  "last_completed": "2026-09-29 21:42:56.806372",
+  "_note": "question_bank_total 是「取快照当日」的值，不是回归判据。回归判据是 gongzhuan_field_fingerprint.json：基线内的 2583 个 id 必须逐字段一致。2026-10-08 用户通过 import_id=1510（JSON，creator_id=3，2021年北京市公务员考试《公安专业知识》试题）独立导入 100 题，question_id 3110-3209，库容由 2583 增至 2683 —— 这是用户行为，不是本次改动。",
+  "_current_check_2026_10_08": {
+    "question_bank_total": 2683,
+    "baseline_ids_unchanged": 2583,
+    "new_questions": 100,
+    "new_question_id_range": "3110-3209",
+    "source_import_id": 1510,
+    "source_file": "2021年北京市公务员考试《公安专业知识》试题",
+    "file_type": "JSON",
+    "creator_id": 3,
+    "created_at": "2026-10-08 08:32:42~08:32:57",
+    "import_record_delta": "COMPLETED 1064->1065, PREVIEW 429->437"
+  }
 }
