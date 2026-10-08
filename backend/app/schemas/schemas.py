@@ -267,7 +267,12 @@ class QuestionResponse(BaseModel):
     subject_id: int
     type_id: int
     question_content: str
-    options: Optional[dict] = None
+    # 存量 2683 题的 options 一律是 JSON **数组** [{key,value},...]，
+    # 原先误声明为 Optional[dict]，导致 FastAPI 响应校验失败：
+    # GET /api/questions/ 与 /api/questions/{id} 全线 500（题库页整个打不开）。
+    # 前端各处（favorites/notes/paper_result/answer_page…）也都是按数组消费
+    # （v-for、.length、Array.isArray），故此处必须与之一致。
+    options: Optional[List[QuestionOptionItem]] = None
     answer: str
     answer_analysis: Optional[str] = None
     question_type_detail: Optional[str] = None
