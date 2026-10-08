@@ -580,6 +580,12 @@ import os as _os
 _img_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'static', 'questions')
 _os.makedirs(_img_dir, exist_ok=True)
 app.mount("/static/questions", StaticFiles(directory=_img_dir), name="question_images")
+# 题组图片静态服务（申论「给定材料」等共享内容里的图）
+# ★ J-1-2：与 /static/questions 物理隔离 —— 题目图在 {qid}/ 下，题组图在 {gid}/ 下，
+#   两者互不覆盖。缺这个挂载会让 save_images_for_group 写出的图稳定 404（裂图）。
+_grp_img_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'static', 'question-groups')
+_os.makedirs(_grp_img_dir, exist_ok=True)
+app.mount("/static/question-groups", StaticFiles(directory=_grp_img_dir), name="question_group_images")
 # 图片加载失败兜底占位图（前端 onerror 统一指向此处）
 _images_dir = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'static', 'images')
 _os.makedirs(_images_dir, exist_ok=True)

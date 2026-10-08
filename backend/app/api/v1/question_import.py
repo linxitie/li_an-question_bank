@@ -1948,6 +1948,51 @@ def _normalize_requirements(raw: Any) -> str:
     return str(raw).strip()
 
 
+def _persist_group_images(group) -> None:
+    """题组图片落盘 + 回写 shared_content / shared_content_images（J-1-1）。
+
+    必须在 db.add() + db.flush() 之后调用 —— 图片要落到 {group.id}/ 子目录下。
+
+    为什么每个建组点都要调：
+      真实数据里 21 个题组全是 material/scenario，由
+      _detect_and_link_composite_groups 两层兜底创建；申论
+      _get_or_create_shenlun_material_group 目前一条都没建。
+      只接申论那条 = 接了个死路径，裂图照旧。
+
+    失败绝不阻塞建组：题组本身有价值，不能因为一张图回滚整批导入。
+    """
+    try:
+        from ...services.question_ingest.images import save_images_for_group
+        raw = group.shared_content or ''
+        if '[IMAGE:' not in raw:
+            return
+        new_text, urls = save_images_for_group(raw, group.id)
+        if new_text != raw:
+            group.shared_content = new_text
+        if urls:
+            import json as _json
+            group.shared_content_images = _json.dumps(urls, ensure_ascii=False)
+        logger.debug("[group-images] 题组#%s 图片回写 %d 张", group.id, len(urls))
+    except Exception as e:
+        logger.warning("[group-images] 题组#%s 图片落盘失败，不影响建组: %s",
+                       getattr(group, 'id', '?'), e)
+
+
+def _digest_for_group_dedup(text: str) -> str:
+    """题组幂等键用的规范化指纹 —— **对图片状态不敏感**。
+
+    为什么必须剥离图片标记（J-1-1 引入的坑）：
+      建组时 shared_content 里的 [IMAGE:x] 会被换成 <img src=...>，
+      若指纹算在替换之前、而库里存的是替换之后的文本，则下次导入同一份材料
+      时「读库重算指纹」与「本次算指纹」必然对不上 —— 同一份材料会重复建组。
+      故两侧统一先剥离 [IMAGE:...] 与 <img ...> 再取 SHA1。
+    """
+    normalized = re.sub(r'\[IMAGE:[^\]]+\]', '', text or '')
+    normalized = re.sub(r'<img[^>]*>', '', normalized)
+    normalized = re.sub(r'\s+', '', normalized)
+    return hashlib.sha1(normalized.encode('utf-8')).hexdigest()[:16]
+
+
 def _get_or_create_shenlun_material_group(db: Session, material: str,
                                          subject_name: str,
                                          source_tag: str) -> Optional[int]:
@@ -1964,7 +2009,7 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
     text = (material or '').strip()
     if not text:
         return None
-    digest = hashlib.sha1(re.sub(r'\s+', '', text).encode('utf-8')).hexdigest()[:16]
+    digest = _digest_for_group_dedup(text)
 
     # 同批导入里重复查库代价高，先在本次请求内缓存
     cache_key = 'shenlun_group_' + digest
@@ -1976,7 +2021,7 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
     # ★ J-1-3 修复：用 SHA1 全文指纹替代 LIKE '%前60字%'，消除误合并
     existing = None
     for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == 'shenlun_material').all():
-        g_digest = hashlib.sha1(re.sub(r'\s+', '', (g.shared_content or '')).encode('utf-8')).hexdigest()[:16]
+        g_digest = _digest_for_group_dedup(str(g.shared_content or ''))
         if g_digest == digest:
             existing = g
             break
@@ -1993,6 +2038,7 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
     )
     db.add(group)
     db.flush()
+    _persist_group_images(group)
     _shenlun_cache_put(cache_key, group.id)
     return group.id
 
@@ -2378,6 +2424,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         )
         db.add(group)
         db.flush()
+        _persist_group_images(group)
         groups_created += 1
 
         # 题号 → qid 映射（用于把 member_qnums 转为 qid）
@@ -2434,6 +2481,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             )
             db.add(group)
             db.flush()
+            _persist_group_images(group)
             groups_created += 1
 
             member_ids = [head_qid] + member_qids
