@@ -151,6 +151,89 @@ def _extract_marker_from_src(src: str) -> Optional[str]:
     return None
 
 
+_PLACEHOLDER_RE = re.compile(r'\[IMAGE:([a-f0-9]+_\d+_\d+|\d+_\d+)\]', re.IGNORECASE)
+
+
+def resolve_image_marker(marker: str, question_id: int = None, db=None) -> Optional[str]:
+    """把一个图片占位符 marker 解析成**磁盘上真实存在**的图片 URL。
+
+    为什么需要它（Wave 9 实测）
+    ------------------------
+    历史数据里 options / question_content 残留大量从未转换的
+    ``[IMAGE:marker]`` 裸占位符 —— 导入时选项图没走落盘通道，前端永远裂图。
+
+    而既有的 sanitize_content_images 只按 ``_IMG_TAG_RE`` 匹配**已成形的
+    <img> 标签**，压根不认裸占位符（实测 4 个占位符进、4 个出、0 个 <img>）。
+    option_utils.render_image_placeholder 虽会替换，但它只拼 URL 不校验文件，
+    于是输出一个必然 404 的地址。两侧各缺一半，故在此补齐唯一的解析入口。
+
+    查找顺序（复用既有约定，不新增第三种命名）：
+      1. ``{qid}/{marker}.png``      —— 题干侧现行子目录约定
+      2. ``{marker}.png``            —— docx 扁平暂存全名
+      3. ``{行号}_{序号}.png``        —— 历史扁平简名（去掉 uuid 段）
+      4. ``{qid}/`` 子目录内按 marker 子串匹配
+      5. question_image 表
+    全部失败返回 None，由调用方决定剔除占位符（宁可少图，不要裂图）。
+    """
+    if not marker:
+        return None
+
+    def _ok(rel: str) -> Optional[str]:
+        p = os.path.join(STATIC_IMG_ROOT, rel.replace('/', os.sep))
+        if os.path.isfile(p) and os.path.getsize(p) > 0:
+            return f'/static/questions/{rel}'
+        return None
+
+    qid = str(question_id) if question_id else None
+
+    if qid:
+        hit = _ok(f'{qid}/{marker}.png')
+        if hit:
+            return hit
+
+    hit = _ok(f'{marker}.png')
+    if hit:
+        return hit
+
+    parts = marker.split('_')
+    if len(parts) == 3:
+        hit = _ok('_'.join(parts[1:]) + '.png')
+        if hit:
+            return hit
+
+    if qid:
+        sub = _find_image_in_subdir(question_id, marker or '')
+        if sub and verify_image_exists(sub):
+            return sub
+
+    if qid and db is not None:
+        return _find_in_question_image_table(question_id, db)
+
+    return None
+
+
+def sanitize_image_placeholders(content: str, question_id: int = None, db=None) -> str:
+    """把裸 ``[IMAGE:marker]`` 占位符换成可访问的 <img>；查不到则剔除。
+
+    与 sanitize_content_images 的分工：
+      · 本函数处理**裸占位符**（导入侧漏转换的存量数据）
+      · sanitize_content_images 处理**已有 <img> 标签**的失效 src 修复
+    两者互补，都幂等：已是 <img> 的文本不会被本函数二次处理。
+    """
+    if not content or not isinstance(content, str) or '[IMAGE:' not in content:
+        return content or ''
+
+    def _sub(m):
+        url = resolve_image_marker(m.group(1), question_id, db)
+        if not url:
+            logger.warning('[image_service] 占位符图恢复失败，剔除: %s qid=%s',
+                           m.group(0), question_id)
+            return ''
+        return f'<img src="{url}" class="q-img" loading="lazy" />'
+
+    return _PLACEHOLDER_RE.sub(_sub, content)
+
+
 def sanitize_content_images(content: str, question_id: int = None, db=None) -> str:
     """清理 question_content 中的图片标签：先恢复、后兜底、末位移除
 

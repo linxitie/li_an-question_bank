@@ -20,6 +20,7 @@ from ...schemas.schemas import (QuestionCreate, QuestionUpdate, QuestionResponse
                        RandomQuestionRequest, RandomQuestionResponse,
                        ErrorResponse, SuccessResponse, BatchImportQuestionItem)
 from ...services.image_service import (sanitize_content_images, sanitize_options_images,
+                                     sanitize_image_placeholders,
                                        compress_image, STATIC_IMG_ROOT)
 from ...services.option_utils import render_image_placeholder
 from ...services.text_parser import canonical_answer
@@ -318,8 +319,11 @@ async def get_random_questions(
         _q_content = sanitize_content_images(_q_content, q.question_id, db)
         _opts = _normalize_options(q.options, q.question_content)
         _opts = [sanitize_content_images(render_image_placeholder(o), q.question_id, db) for o in _opts]
-        _analysis = sanitize_content_images(
-            render_image_placeholder(q.answer_analysis or ''), q.question_id, db
+        _opts = [sanitize_image_placeholders(o, q.question_id, db) for o in _opts]
+        _analysis = sanitize_image_placeholders(
+            sanitize_content_images(
+                render_image_placeholder(q.answer_analysis or ''), q.question_id, db),
+            q.question_id, db
         ) or '暂未提供解析，请参考题目来源'
         items.append({
             "question_id": q.question_id,
@@ -594,6 +598,7 @@ async def get_question_group(
     for q in members:
         _content = render_image_placeholder(q.question_content or '')
         _content = sanitize_content_images(_content, q.question_id, db)
+        _content = sanitize_image_placeholders(_content, q.question_id, db)
         _opts = q.options
         if isinstance(_opts, str):
             try:
@@ -601,9 +606,9 @@ async def get_question_group(
             except Exception:
                 _opts = []
         if isinstance(_opts, list):
-            _opts = [sanitize_content_images(
+            _opts = [sanitize_image_placeholders(sanitize_content_images(
                 render_image_placeholder(str(o.get('value', '')) if isinstance(o, dict) else str(o)),
-                q.question_id, db) if isinstance(o, dict) else o for o in _opts]
+                q.question_id, db), q.question_id, db) if isinstance(o, dict) else o for o in _opts]
         detail_row = db.query(QuestionDetailCategory).filter(
             QuestionDetailCategory.question_id == q.question_id).first()
         items.append({
@@ -613,8 +618,9 @@ async def get_question_group(
             'question_content': _content,
             'options': _opts,
             'answer': q.answer,
-            'answer_analysis': sanitize_content_images(
+            'answer_analysis': sanitize_image_placeholders(sanitize_content_images(
                 render_image_placeholder(q.answer_analysis or ''), q.question_id, db),
+                q.question_id, db),
             'question_type_detail': (detail_row.question_type_detail if detail_row else '选择题'),
             'difficulty': q.difficulty,
             'score': float(q.score) if q.score else 0,
@@ -659,7 +665,54 @@ async def get_question_detail(
     question.exam_frequency += 1
     db.commit()
 
-    return question
+    # ★ 图片占位符解析（Wave 9）
+    #   详情接口此前直接返回 ORM 对象，**完全没走任何图片处理**，
+    #   导致 options 里从未转换的 [IMAGE:xxx] 裸占位符原样吐给前端 → 裂图。
+    #   列表接口有 sanitize_*，详情接口没有，两条路径行为不一致。
+    #   这里不落库、只在响应前处理，与列表接口保持同一套解析逻辑。
+    try:
+        _q_content = sanitize_image_placeholders(
+            sanitize_content_images(
+                render_image_placeholder(question.question_content or ''),
+                question.question_id, db),
+            question.question_id, db)
+        _analysis = sanitize_image_placeholders(
+            sanitize_content_images(
+                render_image_placeholder(question.answer_analysis or ''),
+                question.question_id, db),
+            question.question_id, db)
+
+        _opts_raw = question.options
+        if isinstance(_opts_raw, str):
+            try:
+                _opts_raw = json.loads(_opts_raw)
+            except Exception:
+                _opts_raw = []
+        if isinstance(_opts_raw, list):
+            _opts_fixed = []
+            for o in _opts_raw:
+                if isinstance(o, dict):
+                    _n = dict(o)
+                    _n['value'] = sanitize_image_placeholders(
+                        sanitize_content_images(
+                            render_image_placeholder(str(o.get('value', ''))),
+                            question.question_id, db),
+                        question.question_id, db)
+                    _opts_fixed.append(_n)
+                else:
+                    _opts_fixed.append(o)
+            _opts_raw = _opts_fixed
+
+        # 不改 ORM 状态：构造独立响应，避免污染 session 中的实体
+        _resp = QuestionResponse.model_validate(question)
+        _resp.question_content = _q_content
+        _resp.answer_analysis = _analysis
+        if _opts_raw:
+            _resp.options = _opts_raw
+        return _resp
+    except Exception as e:
+        logger.warning('[questions] 详情图片解析失败 qid=%s: %s', question_id, e)
+        return question
 
 
 @router.put("/{question_id}", response_model=QuestionResponse,summary="更新题目")
