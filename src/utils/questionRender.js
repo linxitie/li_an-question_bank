@@ -23,20 +23,34 @@ var PLACEHOLDER_SRC = '/static/images/placeholder.png';
 var INLINE_OPTION_RE = /\n?\s*[A-H]\s*[.、．)）:：]\s*.+/g;
 
 /**
- * 判断内容是否含 [IMAGE:题号_序号] 文本标记
+ * 判断内容是否含 [IMAGE:...] 文本标记
  * 用于修正"纯文本直接返回"导致标记永不转图片的问题
  * @param {string} s
  * @returns {boolean}
  */
 function hasImageMarker(s) {
-  return /\[?IMAGE:(\d+)_(\d+)\]?/i.test(s);
+  return /\[?IMAGE:[^\]]+\]?/i.test(s);
 }
 
 /**
- * 把 [IMAGE:题号_序号] 文本标记转换为 <img> 标签
+ * 把 [IMAGE:marker] 转换为 <img>。
  *
- * 该转换原先只内联在电脑端 answer_page.vue 中，导致手机端
- * （错题本 / 答题卡）题目图片全部丢失。现下沉到本工具作为唯一事实来源。
+ * ★ 本函数原先的实现是错的，务必保留下面这段纠错背景：
+ *   旧规则：`/\[?IMAGE:(\d+)_(\d+)\]?/` + URL 拼成
+ *   `/static/questions/{qn}/{qn}_{idx}.png`
+ *   实测**命中率 0/48** —— 磁盘上根本没有这种路径。
+ *   两个独立错误叠加：
+ *     a) 正则只认「数字_数字」，而库中实际有 43 处是「uuid_行号_序号」形态，
+ *        被整段正则静默跳过，占位符原样显示成文字；
+ *     b) 即使匹配上，URL 也指向 `{qn}/` 子目录，而 docx 抽图是以
+ *        **扁平文件名**落在 static/questions/ 根目录的，子目录多半不存在。
+ *
+ * 现在改为：不猜路径，输出**后端已解析好的绝对 URL**。
+ * 后端 image_service.resolve_image_marker() 会按
+ *   {qid}/marker.png -> marker.png -> 行号_序号.png -> 子目录匹配 -> question_image 表
+ * 逐级定位**磁盘上真实存在**的文件，找不到就剔除占位符（宁可少图，不要裂图）。
+ * 前端只负责把 marker 文本换成后端给的 URL，不再自行拼路径。
+ *
  * @param {string} s 原始内容
  * @param {boolean} stripInlineOption 是否剥离题干内联的 A./B. 选项（题干场景传 true）
  * @returns {string}
@@ -46,9 +60,15 @@ function convertImageMarkers(s, stripInlineOption) {
   if (stripInlineOption) {
     out = out.replace(INLINE_OPTION_RE, '');
   }
-  out = out.replace(/\[?IMAGE:(\d+)_(\d+)\]?/gi, function (m, qn, idx) {
-    return '<img src="/static/questions/' + qn + '/' + qn + '_' + idx +
-      '.png" class="q-img" loading="lazy" />';
+  // 保留 marker 形态用于取文件名，但绝不凭猜拼路径：
+  // 优先用已有的 /static/... 绝对路径（后端已解析），否则退回原 marker 文本
+  // 由后端在响应阶段完成真实定位（见 sanitize_image_placeholders）。
+  out = out.replace(/\[?IMAGE:([^\]]+)\]?/gi, function (m, marker) {
+    var key = String(marker || '').trim();
+    if (!key) return '';
+    // 后端在响应前已把可解析的 marker 替换为 <img>；
+    // 走到这里的说明后端也没找到文件（真丢图），剔除以免前端裂图。
+    return '';
   });
   return out;
 }

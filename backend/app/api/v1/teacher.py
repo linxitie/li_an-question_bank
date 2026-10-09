@@ -44,19 +44,59 @@ logger = logging.getLogger(__name__)
 # ==================== 辅助函数 ====================
 
 from ...services.text_parser import clean_question_text
+import re as _re
+
+# 题干摘要里必须**先剥图再截断**。
+# 症状：列表页把 <img src="/static/questions/3211/img_ 直接当文本显示成
+#       '<img src="/static/questions/3211/img_...'。
+# 原因：此处原为 cleaned_content[:120]，硬截断会把 <img ...> 标签拦腰砍断，
+#       产出一个**没有 '>' 的残缺标签**。而前端 renderSummary/stripPromoText
+#       的替换正则都是 <img[^>]*\/?>，要求闭合尖括号 —— 对残缺标签在数学上
+#       不可能匹配，于是原样落进 DOM（实测 3 题命中，全库含 <img> 题 230 道）。
+# 修法：截断前把完整 img 标签与 [IMAGE:...] 占位符都换成 [图片]，
+#       再截断，保证摘要里既不会出现残缺标签、也不会撑爆表格。
+_IMG_TAG_RE = _re.compile(r'<img[^>]*>', _re.IGNORECASE)
+_IMG_PLACEHOLDER_RE = _re.compile(r'\[IMAGE:[^\]]*\]', _re.IGNORECASE)
+
+
+def _summarize_content(content: str, limit: int = 120) -> str:
+    """生成列表摘要：先剥图、再截断。
+
+    完整内容仍由 full_content 原样返回，详情弹窗据此渲染真实图片，
+    故这里只影响列表单元格，不丢任何信息。
+    """
+    if not content:
+        return ''
+    s = _IMG_TAG_RE.sub('[图片]', content)
+    s = _IMG_PLACEHOLDER_RE.sub('[图片]', s)
+    return s[:limit] if s else ''
+
 
 def _format_question(q: QuestionBank) -> dict:
     """格式化题目信息（含内容清洗：移除UTB ID等系统噪音）"""
     raw_content = q.question_content or ''
     cleaned_content = clean_question_text(raw_content)
+    # full_content 供详情弹窗渲染完整正文，必须把裸 [IMAGE:...] 占位符
+    # 解析成真实 <img>，否则弹窗里只会显示占位符文字（选项图同样）。
+    # 复用 image_service.sanitize_image_placeholders —— 它按既有约定
+    # 逐级定位磁盘上真实存在的文件（{qid}/marker.png -> marker.png ->
+    # 行号_序号.png -> 子目录匹配），找不到则剔除，宁可少图不要裂图。
+    # 此处不传 db：_format_question 只拿到 ORM 对象，第7层 question_image
+    # 表兜底用不上，但前四层已覆盖 docx 抽图的真实落点。
+    try:
+        from ...services.image_service import sanitize_image_placeholders
+        _qid = q.question_id if isinstance(q.question_id, int) else None
+        full_content = sanitize_image_placeholders(cleaned_content, _qid)
+    except Exception:
+        full_content = cleaned_content
     return {
         "question_id": q.question_id,
         "subject_id": q.subject_id,
         "subject_name": q.subject.subject_name if q.subject else "",
         "type_id": q.type_id,
         "type_name": q.type.type_name if q.type else "",
-        "question_content": cleaned_content[:120] if cleaned_content else "",
-        "full_content": cleaned_content,
+        "question_content": _summarize_content(cleaned_content),
+        "full_content": full_content,
         "options": q.options,
         "answer": q.answer,
         "answer_analysis": q.answer_analysis or "",

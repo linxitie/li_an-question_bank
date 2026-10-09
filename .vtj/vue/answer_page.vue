@@ -139,9 +139,7 @@
                 <span class="result-badge">
                   {{ isCorrect(q) ? '✓ 回答正确' : '✗ 回答错误' }}</span
                 >
-                <p v-if="q.explain" class="result-explain">
-                  {{ q.explain }}
-                </p>
+                <div v-if="q.explain" class="result-explain" v-html="q.explainHtml"></div>
               </div>
               <div class="q-actions">
                 <button
@@ -495,7 +493,12 @@
                   stem: stem || q.question_content || '',
                   options: parsedOpts,
                   answer: q.answer || '',
-                  explain: q.answer_analysis || '暂未提供解析'
+                  explain: q.answer_analysis || '暂未提供解析',
+                  // ★ 答案解析必须走公共渲染器：解析里可能含图片说明（申论思维导图等）。
+                  //   此前模板用 {{ q.explain }} 纯文本插值，<img> 会被当字面量显示成
+                  //   '<img src="/static/questions/...">' —— 用户看到的是一串路径。
+                  explainHtml: renderQuestionContent(
+                    q.answer_analysis || '暂未提供解析', { stripInlineOption: false })
                 };
               });
             }
