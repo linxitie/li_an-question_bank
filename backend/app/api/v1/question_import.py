@@ -3416,6 +3416,39 @@ async def upload_file_for_import(
     )
 
 
+def _sanitize_preview_images(result: dict, import_id: int, db) -> None:
+    """预览态返回前，把题目图片字段里的 [IMAGE:xxx] 裸占位符转成 <img>（或剔除）。
+
+    为什么需要（预览态图片实测）
+    --------------------------
+    preview_data 里的题目图片是**裸 [IMAGE:xxx] 占位符**（0 个 <img>、0 个 data:image），
+    而对应图片文件已暂存于扁平目录 app/static/questions/{marker}.png（实测 39/39 命中）。
+    若不在此转换，前端 renderQuestionContent 会把占位符整段剔除 → 图片消失或显示为路径文本。
+    question_id 传 import_id：resolve_image_marker 先查 {qid}/ 子目录，找不到再回落扁平目录，
+    最终命中扁平暂存文件。复用 image_service 的 10 层防线，不新建 sanitize 逻辑。
+    """
+    from ...services.image_service import sanitize_image_placeholders
+
+    questions = result.get('questions')
+    if not isinstance(questions, list):
+        return
+    for q in questions:
+        if not isinstance(q, dict):
+            continue
+        # 题目对象同时存在 analysis 与 answer_analysis 两个字段（历史兼容），都处理
+        for field in ('question_content', 'answer', 'analysis', 'answer_analysis'):
+            v = q.get(field)
+            if isinstance(v, str) and '[IMAGE:' in v:
+                q[field] = sanitize_image_placeholders(v, import_id, db)
+        opts = q.get('options')
+        if isinstance(opts, list):
+            for o in opts:
+                if isinstance(o, dict):
+                    v = o.get('value')
+                    if isinstance(v, str) and '[IMAGE:' in v:
+                        o['value'] = sanitize_image_placeholders(v, import_id, db)
+
+
 @router.get("/records/{import_id}/status", summary="查询异步导入解析状态")
 async def get_import_parse_status(
     import_id: int,
@@ -3484,6 +3517,8 @@ async def get_import_parse_status(
         if isinstance(data, dict):
             result = data.get('_response')
             if isinstance(result, dict):
+                # ★ 预览态图片 sanitize：裸 [IMAGE:xxx] → <img>（或剔除），避免前端显示路径文本
+                _sanitize_preview_images(result, import_id, db)
                 payload['result'] = result
             else:  # 兼容历史记录：没有 _response 时回落到 items/raw_text 拼装
                 payload['result'] = {
