@@ -99,12 +99,17 @@
         </div>
         <div class="docs-q-answer-row" :class="{ 'docs-q-answer-row-warn': !q.answer || q.answer === '待补充' }">
           <span class="docs-q-ans-label">题目答案：</span>
+          <button class="btn-mini-img" :disabled="attachingKey === (idx + ':answer')"
+                  @click="pickImage(idx, 'answer')" title="为该题答案添加图片">+答案图</button>
           <input v-if="isShortAnswer(q)" class="docs-q-ans-input" v-model="q.answer" :placeholder="isJudgeQuestion(q) ? '正确/错误' : 'A/B/C/D'" :maxlength="isJudgeQuestion(q) ? 8 : 4" />
           <div v-else class="docs-q-ans-text" style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:#b0b8c4;font-size:15px;line-height:1.7;" v-html="renderQuestionContent(q.answer || '')"></div>
           <span class="docs-q-ans-hint" v-if="!q.answer || q.answer === '待补充'">（必填 — {{ isJudgeQuestion(q) ? '判断题请填写 正确 或 错误' : '请输入选项字母' }}）</span>
         </div>
         <div class="docs-q-analysis">
-          <div class="docs-q-ans-label" style="margin-bottom:4px;">题目解析：</div>
+          <div class="docs-q-ans-label" style="margin-bottom:4px;">题目解析：
+            <button class="btn-mini-img" :disabled="attachingKey === (idx + ':analysis')"
+                    @click="pickImage(idx, 'analysis')" title="为该题解析添加图片">+解析图</button>
+          </div>
           <div class="docs-q-analysis-text" style="white-space:pre-wrap;word-break:break-word;line-height:1.7;" v-html="renderQuestionContent(q.analysis || '')"></div>
         </div>
       </div>
@@ -407,7 +412,7 @@ export default defineComponent({
         const f = input.files && input.files[0];
         if (input.parentNode) input.parentNode.removeChild(input);
         if (!f) return;
-        attachingKey.value = idx + ':' + (optionKey || 'content');
+        attachingKey.value = idx + ':' + (optionKey || target);
         emit('attach-image', { idx: idx, target: target, optionKey: optionKey || null, file: f });
       };
       // 用户取消选择时不会触发 onchange，需自行清理节点

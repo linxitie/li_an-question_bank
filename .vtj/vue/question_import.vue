@@ -2499,6 +2499,12 @@ converted.push({
           if ((payload.target || 'content') === 'content') {
             q.question_content = (q.question_content || '') + tag;
             ElMessage.success('已为该题题干添加图片');
+          } else if ((payload.target || 'content') === 'answer') {
+            q.answer = (q.answer || '') + tag;
+            ElMessage.success('已为该题答案添加图片');
+          } else if ((payload.target || 'content') === 'analysis') {
+            q.analysis = (q.analysis || '') + tag;
+            ElMessage.success('已为该题解析添加图片');
           } else {
             var opts = q.options || [];
             var hit = false;

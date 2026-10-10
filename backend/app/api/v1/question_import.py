@@ -3544,8 +3544,8 @@ async def attach_image_to_preview_question(
             status_code=400,
             detail=f"仅预览状态可编辑题目图片，当前状态为 {record.import_status}")
 
-    if target not in ('content', 'option'):
-        raise HTTPException(status_code=400, detail="target 必须是 content 或 option")
+    if target not in ('content', 'option', 'answer', 'analysis'):
+        raise HTTPException(status_code=400, detail="target 必须是 content/option/answer/analysis")
     if target == 'option' and not option_key:
         raise HTTPException(status_code=400, detail="target=option 时必须提供 option_key")
 
@@ -3588,6 +3588,10 @@ async def attach_image_to_preview_question(
 
     if target == 'content':
         item['question_content'] = (item.get('question_content') or '') + img_tag
+    elif target == 'answer':
+        item['answer'] = (item.get('answer') or '') + img_tag
+    elif target == 'analysis':
+        item['answer_analysis'] = (item.get('answer_analysis') or '') + img_tag
     else:
         opts = item.get('options')
         if isinstance(opts, str):
