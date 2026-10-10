@@ -340,6 +340,7 @@ async def get_random_questions(
             "year": q.year,
             "source": q.source,
             "tags": q.tags,
+            "requirements": q.requirements or '',
         })
 
     # 去重：移除内容高度相似的题目（>85%相似度）

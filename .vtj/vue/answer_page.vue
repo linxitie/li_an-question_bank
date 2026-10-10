@@ -109,6 +109,9 @@
                 >
               </div>
               <p class="q-stem" v-html="q.stem"></p>
+              <div v-if="q.requirements" class="q-requirements" style="margin:8px 0;padding:8px 12px;background:#f7f8fa;border-radius:6px;color:#666;font-size:14px;line-height:1.7;">
+                <strong style="color:#333;">题目要求：</strong><span v-html="renderQuestionContent(q.requirements)"></span>
+              </div>
               <div class="q-options">
                 <div v-if="q.type === '多选题' || q.type === '不定项' || q.type === '多选'" class="multi-hint">
                   <strong>多选题</strong> — 点击多个选项进行选择
@@ -494,6 +497,7 @@
                   options: parsedOpts,
                   answer: q.answer || '',
                   explain: q.answer_analysis || '暂未提供解析',
+                  requirements: q.requirements || '',
                   // ★ 答案解析必须走公共渲染器：解析里可能含图片说明（申论思维导图等）。
                   //   此前模板用 {{ q.explain }} 纯文本插值，<img> 会被当字面量显示成
                   //   '<img src="/static/questions/...">' —— 用户看到的是一串路径。
