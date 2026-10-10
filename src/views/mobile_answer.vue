@@ -63,6 +63,9 @@
       <div class="q-card">
         <div class="q-type">{{ current.type_label || '' }} · {{ current.question_type_detail || '单选题' }}</div>
         <div class="q-content" v-html="renderQuestionContent(current.question_content, { stripInlineOption: true })"></div>
+        <div v-if="current.requirements" class="q-requirements" style="margin:6px 0;padding:6px 10px;background:#f7f8fa;border-radius:6px;color:#666;font-size:13px;line-height:1.6;">
+          <strong style="color:#333;">题目要求：</strong><span v-html="renderQuestionContent(current.requirements)"></span>
+        </div>
       </div>
 
       <!-- 选项 -->

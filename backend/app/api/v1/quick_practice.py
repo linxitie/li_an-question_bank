@@ -323,6 +323,7 @@ async def get_practice_questions(
             "year": q.year,
             "source": q.source,
             "tags": q.tags,
+            "requirements": q.requirements or '',
             "images": valid_images,
         })
 
