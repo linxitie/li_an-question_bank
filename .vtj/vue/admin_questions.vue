@@ -138,6 +138,24 @@
             <h4>📖 题组材料</h4>
             <div class="preview-content group-material" v-html="renderQuestionContent(groupInfo.shared_content)"></div>
           </div>
+          <div class="preview-block" v-if="previewData.group_members && previewData.group_members.length">
+            <h4>📝 题组小题</h4>
+            <div v-for="(m, mi) in previewData.group_members" :key="mi"
+                 style="margin:8px 0;padding:10px;background:#f7f8fa;border-radius:6px;border:1px solid #eee;">
+              <div style="font-weight:600;color:#333;margin-bottom:6px;">
+                第 {{ m.question_number || (mi + 1) }} 题
+                <span v-if="m.question_type_detail" style="font-weight:400;color:#999;font-size:13px;margin-left:8px;">{{ m.question_type_detail }}</span>
+              </div>
+              <div style="color:#444;line-height:1.7;" v-html="renderQuestionContent(m.question_content)"></div>
+              <div v-if="m.options && m.options.length" style="color:#666;margin-top:4px;line-height:1.7;">
+                <div v-for="o in m.options" :key="o.key" style="margin-left:8px;">
+                  <span style="font-weight:600;">{{ o.key }}.</span> <span v-html="renderQuestionContent(o.value)"></span>
+                </div>
+              </div>
+              <div v-if="m.answer" style="margin-top:6px;color:#16a34a;"><strong>答案：</strong>{{ m.answer }}</div>
+              <div v-if="m.answer_analysis" style="margin-top:4px;color:#666;"><strong>解析：</strong><span v-html="renderQuestionContent(m.answer_analysis)"></span></div>
+            </div>
+          </div>
           <div class="preview-block">
             <h4>题目内容</h4>
             <div class="preview-content" v-html="cleanHtmlContent(previewData.full_content || previewData.question_content)"></div>
@@ -455,7 +473,12 @@ export default defineComponent({
       if (q.group_id) {
         auth().apiFetch('/api/questions/group/' + q.group_id)
           .then(function(r) { return r.json(); })
-          .then(function(d) { if (d && d.group) groupInfo.value = d.group; })
+          .then(function(d) {
+            if (d && d.group) {
+              groupInfo.value = d.group;
+              previewData.value.group_members = d.members || [];
+            }
+          })
           .catch(function() { /* 静默：材料加载失败不影响预览 */ });
       }
     }

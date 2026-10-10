@@ -110,6 +110,25 @@
           <div class="detail-content group-material" v-html="cleanHtmlContent(groupInfo.shared_content)"></div>
         </div>
 
+        <div class="detail-field" v-if="currentQuestion.group_members && currentQuestion.group_members.length">
+          <strong>📝 题组小题：</strong>
+          <div v-for="(m, mi) in currentQuestion.group_members" :key="mi"
+               style="margin:8px 0;padding:10px;background:#f7f8fa;border-radius:6px;border:1px solid #eee;">
+            <div style="font-weight:600;color:#333;margin-bottom:6px;">
+              第 {{ m.question_number || (mi + 1) }} 题
+              <span v-if="m.question_type_detail" style="font-weight:400;color:#999;font-size:13px;margin-left:8px;">{{ m.question_type_detail }}</span>
+            </div>
+            <div style="color:#444;line-height:1.7;" v-html="renderQuestionContent(m.question_content)"></div>
+            <div v-if="m.options && m.options.length" style="color:#666;margin-top:4px;line-height:1.7;">
+              <div v-for="o in m.options" :key="o.key" style="margin-left:8px;">
+                <span style="font-weight:600;">{{ o.key }}.</span> <span v-html="renderQuestionContent(o.value)"></span>
+              </div>
+            </div>
+            <div v-if="m.answer" style="margin-top:6px;color:#16a34a;"><strong>答案：</strong>{{ m.answer }}</div>
+            <div v-if="m.answer_analysis" style="margin-top:4px;color:#666;"><strong>解析：</strong><span v-html="renderQuestionContent(m.answer_analysis)"></span></div>
+          </div>
+        </div>
+
         <div class="detail-field">
           <strong>题干：</strong>
           <div class="detail-content" v-html="cleanHtmlContent(currentQuestion.full_content || currentQuestion.question_content)"></div>
