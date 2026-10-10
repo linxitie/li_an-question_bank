@@ -1023,7 +1023,16 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
                             anchor = i
                             qn = qn_at.get(i, 0)
                     if qn <= 0:
-                        qn = carry_in_qn or cur_qn
+                        # ★ J-2-3 修复：图片上方无题号 → 材料块图片（资料分析
+                        #   「材料在前、题目在后」版式），归属后继第一个题号；
+                        #   前瞻无后继题号时才回落 carry_in_qn（跨页延续）。
+                        next_qn = None
+                        for lp in page_lines[anchor + 1:]:
+                            m = _PDF_QN_LINE.match(lp.strip())
+                            if m:
+                                next_qn = int(m.group(1))
+                                break
+                        qn = next_qn if next_qn is not None else (carry_in_qn or cur_qn)
                     if anchor < 0 or qn <= 0:
                         continue
                     # 上方最近一行是噪声行（页眉/水印/页脚）时，改挂到首个非噪声行
@@ -1053,31 +1062,46 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
                 # 「表格行是否已在文本中」判定失效，重复内容回流（实测 +3300 字符、
                 # 题号 70→84）。行坐标只用于插占位符，不参与去重。
                 text_raw = page.extract_text()
-                text = '\n'.join(page_lines)   # 含图片占位符的最终页文本
-                if text:
-                    parts.append(text)
+                page_norm = _norm_for_dedup(text_raw) if text_raw else None
                 # 提取表格
                 # 2026-09-29 修复（致命缺陷）：当 pdfplumber 因版面把本页判定为表格时，
                 # extract_tables() 会把已由 extract_text() 输出的同一批单元格文本
                 # **再输出一遍**，导致全文精确翻倍。实测目标 PDF：14,436 → 28,873 字符、
-                # 行首题号 70 → 140（每个题号各出现 2 次），进而使 extract_question_numbers
-                # 的单调性过滤丢弃重复题号却把重复文本留在题块内 → 重复题 + 串题。
-                # 修复：仅在文本层为空（真表格页/扫描页）时全量采纳表格行；
-                # 否则只补充「本页文本中确实不存在」的单元格行。
-                # 关键约束：不能直接禁用 extract_tables()，否则真正的表格题会丢内容。
-                page_norm = _norm_for_dedup(text_raw) if text_raw else None
-                tables = page.extract_tables()
+                # 行首题号 70 → 140。修复：仅在文本层为空时全量采纳表格行；否则只补充
+                # 「本页文本中确实不存在」的单元格行。
+                # ★ J-2-1 修复：用 find_tables()（extract_tables 的底层，表格检测同源）
+                #   获取 Table 对象的 bbox 坐标，把表格行**原位插入** page_lines，
+                #   不再 parts.append 页尾追加——否则资料分析材料表内容会脱离所属材料块。
+                tables = page.find_tables()
                 for table in tables:
-                    for row in table:
-                        if row:
-                            row_texts = [str(c) if c else '' for c in row]
-                            row_text = ' | '.join(t for t in row_texts if t)
-                            if not row_text:
-                                continue
-                            if page_norm and _norm_for_dedup(row_text) in page_norm:
-                                # 本页文本已包含该单元格内容，跳过以消除重复
-                                continue
-                            parts.append(row_text)
+                    try:
+                        tbl_top = float(table.bbox[1])  # bbox = (x0, top, x1, bottom)
+                    except Exception:
+                        tbl_top = None
+                    for row in table.extract():
+                        if not row:
+                            continue
+                        row_texts = [str(c) if c else '' for c in row]
+                        row_text = ' | '.join(t for t in row_texts if t)
+                        if not row_text:
+                            continue
+                        if page_norm and _norm_for_dedup(row_text) in page_norm:
+                            # 本页文本已包含该单元格内容，跳过以消除重复
+                            continue
+                        if tbl_top is None:
+                            parts.append(row_text)  # 无坐标兜底：保持原页尾追加
+                            continue
+                        # 按 top 坐标把表格行插入到 page_lines 的正确位置
+                        insert_idx = len(page_lines)
+                        for i, lt in enumerate(line_tops):
+                            if lt <= tbl_top:
+                                insert_idx = i + 1
+                        page_lines.insert(insert_idx, row_text)
+                        line_tops.insert(insert_idx, tbl_top)
+
+                text = '\n'.join(page_lines)   # 含图片占位符 + 原位表格行的最终页文本
+                if text:
+                    parts.append(text)
 
                 # 逐页上报真实进度：长文档（扫描件 OCR 可达 260s+）时前端能看到
                 # 进度平滑爬升，而不是卡在某个数字再突然跳到 100。
