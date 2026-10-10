@@ -1,8 +1,11 @@
 {
-  "active_plan": "D:/\u7832\u5b89\u9898\u5e93/\u7832\u5b89\u9898\u5e93/.omo/plans/xingce-import-optimization.md",
-  "plan_name": "xingce-import-optimization",
-  "started_at": "2026-10-03T00:00:00",
-  "session_ids": ["ses_current"],
+  "active_plan": "D:/砺安题库/砺安题库/.omo/plans/question-import-full-repair-execution.md",
+  "plan_name": "question-import-full-repair-execution",
+  "started_at": "2026-10-04T00:00:00",
+  "session_ids": [
+    "opencode:ses_current",
+    "opencode:ses_eda5493deffejwJOrMtI8QHmCl"
+  ],
   "worktree_path": null,
   "execution_policy": {
     "agent_timeout_minutes": 60,
@@ -11,12 +14,42 @@
   },
   "guards": {
     "do_not_touch": [],
-    "reason": "2026-10-03 用户裁决 1.A：上一个方案（三端数据统一与分类体系完善方案，12 待办 0 完成）的 do_not_touch 守卫已随基线快照提交（commit 6d0126a）而失效——守卫存在的理由是「该文件有他人未提交改动」，现已固化为提交 6d0126a，越界风险已消除。故清空守卫，行测方案可正常修改 question_import.py 与 question_import.vue。",
-    "baseline_commit": "6d0126a",
-    "decisions_2026_10_03": {
-      "1.A": "解除 question_import.py / question_import.vue 的 do_not_touch 守卫（未提交改动已固化）",
-      "2.A": "恢复被删除的 469 张 backend/app/static/questions/ 图片至 HEAD 状态",
-      "3.A": "将全部未提交改动固化为基线快照提交 6d0126a（题库/ 141MB PDF 除外，待用户单独决定）"
+    "reason": "2026-10-04 用户裁决：启动题目导入模块全面修复与满血优化方案。基线提交 8eee113。",
+    "baseline_commit": "8eee113",
+    "decisions_2026_10_04": {
+      "1": "MinerU 分层主库（不做全局换血）",
+      "2": "docx 不走 MinerU，保持原生解析",
+      "3": "429 条 PREVIEW + 1 条 PARSING 本轮不动",
+      "4": "20+ 散落测试脚本直接删除（先写 manifest）",
+      "5": "同步拆分 + 先补齐三科门禁网（阶段1门禁→阶段3修复→阶段6下钻→阶段7拆分）",
+      "6": "学生端保持竖向滚动 + 材料可折叠",
+      "7": "I-6 单独 commit + 单独全套 E2E",
+      "8": "9 个代表性真实语料做 Playwright 抽样，禁止虚拟空文档"
     }
-  }
+  },
+  "session_origins": {
+    "opencode:ses_current": "direct"
+  },
+  "task_sessions": {},
+  "schema_version": 2,
+  "active_work_id": "question-import-full-repair-execution-legacy",
+  "works": {
+    "question-import-full-repair-execution-legacy": {
+      "work_id": "question-import-full-repair-execution-legacy",
+      "active_plan": "D:/砺安题库/砺安题库/.omo/plans/question-import-full-repair-execution.md",
+      "plan_name": "question-import-full-repair-execution",
+      "started_at": "2026-10-04T00:00:00",
+      "session_ids": [
+        "opencode:ses_current",
+        "opencode:ses_eda5493deffejwJOrMtI8QHmCl"
+      ],
+      "session_origins": {
+        "opencode:ses_current": "direct"
+      },
+      "agent": "atlas",
+      "worktree_path": null,
+      "task_sessions": {}
+    }
+  },
+  "agent": "atlas"
 }
