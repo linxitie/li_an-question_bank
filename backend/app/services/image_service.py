@@ -31,6 +31,9 @@ _CURRENT_FILE = os.path.abspath(__file__)  # backend/app/services/image_service.
 _SERVICES_DIR = os.path.dirname(_CURRENT_FILE)  # backend/app/services/
 _APP_DIR = os.path.dirname(_SERVICES_DIR)  # backend/app/
 STATIC_IMG_ROOT = os.path.join(_APP_DIR, 'static', 'questions')  # backend/app/static/questions/
+# 题组材料图片根目录：与题目图**物理隔离**（J-1-1 落地，main.py 已挂载
+# /static/question-groups）。save_images_for_group 写入 gid/ 子目录。
+GROUP_STATIC_ROOT = os.path.join(_APP_DIR, 'static', 'question-groups')
 
 # 兼容别名：迁移脚本和巡检脚本中使用 STATIC_DIR 名称导入
 STATIC_DIR = STATIC_IMG_ROOT
@@ -43,24 +46,38 @@ _IMG_TAG_RE = re.compile(
 
 
 def _resolve_abs_path(rel_path: str) -> str:
-    """将 /static/questions/xxx 形式的相对 URL 转为文件系统绝对路径"""
+    """将 /static/questions/xxx 或 /static/question-groups/xxx 转为文件系统绝对路径
+
+    ★ 题组材料图片走的是**独立目录** static/question-groups/{gid}/（J-1-1 落地），
+      与题目图片 static/questions/{qid}/ 物理隔离。原实现只认 questions 前缀，
+      题组 URL 一律返回 '' -> verify_image_exists 判失败 ->
+      sanitize_content_images 走「全部失败即移除」分支，把题组材料图片**静默删掉**。
+      实测 9 个题组的 10 张材料图全部消失，而库里占位符仍在（纯接口层丢失）。
+    """
     if not rel_path:
         return ''
     # 去除 query string
     path = rel_path.split('?')[0]
-    # 统一路径前缀
-    prefix = '/static/questions/'
-    if path.startswith(prefix):
-        rel = path[len(prefix):]
+    # 统一路径前缀（题组优先，避免与 questions 前缀混淆）
+    if path.startswith('/static/question-groups/'):
+        rel = path[len('/static/question-groups/'):]
+        root = GROUP_STATIC_ROOT
+    elif path.startswith('static/question-groups/'):
+        rel = path[len('static/question-groups/'):]
+        root = GROUP_STATIC_ROOT
+    elif path.startswith('/static/questions/'):
+        rel = path[len('/static/questions/'):]
+        root = STATIC_IMG_ROOT
     elif path.startswith('static/questions/'):
         rel = path[len('static/questions/'):]
+        root = STATIC_IMG_ROOT
     else:
         return ''
     # 防路径遍历
     rel = rel.replace('\\', '/').lstrip('/')
     if '..' in rel:
         return ''
-    return os.path.join(STATIC_IMG_ROOT, rel)
+    return os.path.join(root, rel)
 
 
 def verify_image_exists(rel_path: str) -> bool:

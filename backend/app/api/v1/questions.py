@@ -629,8 +629,9 @@ async def get_question_group(
             'parent_id': q.parent_id or 0,
         })
 
-    shared = sanitize_content_images(
-        render_image_placeholder(group.shared_content or '', owner='question-groups'), 0, db)
+    shared = sanitize_image_placeholders(
+        sanitize_content_images(group.shared_content or '', group.id, db),
+        group.id, db)
     return {
         'group': {
             'id': group.id,
