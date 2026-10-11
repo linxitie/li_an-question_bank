@@ -510,16 +510,14 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
         _shenlun_cache_put(cache_key, existing.id)
         return existing.id
 
-    group = QuestionGroup(
+    group = _upsert_question_group(
+        db,
         group_type='shenlun_material',
         shared_content=text,
-        title=(subject_name + ' 给定材料')[:200],
         subject=subject_name or '申论',
         source=source_tag or '',
+        title=(subject_name + ' 给定材料')[:200],   # 申论组标题是「科目名 + 给定材料」，非 shared_content 前 200 字
     )
-    db.add(group)
-    db.flush()
-    _persist_group_images(group)
     _shenlun_cache_put(cache_key, group.id)
     return group.id
 
@@ -549,6 +547,14 @@ from ...services.question_ingest.upsert import (
     _get_duplicate_info,                  # 去重详情（前端展示用）
     _upsert_question_core,                # 公专/申论单题入库核心（供 /single 与 /batch-parsed 复用）
     _upsert_xingce_question,              # 行测单题入库（全程不 commit，事务边界归调用方）
+)
+
+# I-8：题组建组单一入口（原 :513 / :641 / :698 三处 QuestionGroup(...) 收敛）
+# ★ 同款导入位置约束（**非逻辑变更**）：`groups.py` 反向依赖本文件的
+#   `_persist_group_images`（题组图片落盘 + 回写），故本 import 必须置于其定义之后 ——
+#   提到文件头会让 question_ingest 在 question_import 半初始化时 ImportError。
+from ...services.question_ingest.groups import (
+    _upsert_question_group,               # 唯一建组入口（add → flush → 图片落盘，参数化 group_type）
 )
 
 
@@ -638,16 +644,13 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             # 无小题可挂 → 不建组（避免空题组）
             continue
 
-        group = QuestionGroup(
+        group = _upsert_question_group(
+            db,
             group_type=group_type,
             shared_content=q.get('question_content') or '',
-            title=(q.get('question_content') or '')[:200],
             subject=subject_name or '公专',
             source=source_tag or q.get('paper_name', ''),
         )
-        db.add(group)
-        db.flush()
-        _persist_group_images(group)
         groups_created += 1
 
         # 题号 → qid 映射（用于把 member_qnums 转为 qid）
@@ -695,16 +698,13 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             if not member_qids:
                 continue
 
-            group = QuestionGroup(
+            group = _upsert_question_group(
+                db,
                 group_type=sug.get('group_type') or 'material',
                 shared_content=ok_items[head_idx].get('question_content') or '',
-                title=(ok_items[head_idx].get('question_content') or '')[:200],
                 subject=subject_name or '公专',
                 source=source_tag or ok_items[head_idx].get('paper_name', ''),
             )
-            db.add(group)
-            db.flush()
-            _persist_group_images(group)
             groups_created += 1
 
             member_ids = [head_qid] + member_qids
