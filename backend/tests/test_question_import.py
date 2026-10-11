@@ -272,14 +272,16 @@ class TestScannedPdfMineruFallback:
 
     def test_prefers_mineru_when_available(self, monkeypatch):
         import app.api.v1.question_import as qi
+        # I-6：实现已 pure move 到 pdf_reader，补丁须打在真正持有该函数的命名空间
+        from app.services.question_ingest import pdf_reader as pr
 
-        # 实现采用 from-import 直绑，故在 qi 命名空间打补丁
-        monkeypatch.setattr(qi, 'mineru_is_enabled', lambda: True)
-        monkeypatch.setattr(qi, 'mineru_extract_text_sync',
+        # 实现采用 from-import 直绑，故在 pr 命名空间打补丁
+        monkeypatch.setattr(pr, 'mineru_is_enabled', lambda: True)
+        monkeypatch.setattr(pr, 'mineru_extract_text_sync',
                             lambda buf: 'MinerU结构化文本')
         # 惰性间谍: 若旧路径被调用则记录（勿用 pytest.fail 急切求值——赋值即抛）
         fallback_calls = []
-        monkeypatch.setattr(qi, '_extract_text_from_scanned_pdf',
+        monkeypatch.setattr(pr, '_extract_text_from_scanned_pdf',
                             lambda buf: fallback_calls.append(1))
 
         result = qi._extract_text_from_pdf(b'%PDF-1.4 scanned-stub')
@@ -288,9 +290,11 @@ class TestScannedPdfMineruFallback:
 
     def test_falls_back_to_paddleocr_path(self, monkeypatch):
         import app.api.v1.question_import as qi
+        # I-6：实现已 pure move 到 pdf_reader，补丁须打在真正持有该函数的命名空间
+        from app.services.question_ingest import pdf_reader as pr
 
-        monkeypatch.setattr(qi, 'mineru_is_enabled', lambda: False)
-        monkeypatch.setattr(qi, '_extract_text_from_scanned_pdf',
+        monkeypatch.setattr(pr, 'mineru_is_enabled', lambda: False)
+        monkeypatch.setattr(pr, '_extract_text_from_scanned_pdf',
                             lambda buf: 'PADDLE_FALLBACK_TEXT')
 
         result = qi._extract_text_from_pdf(b'%PDF-1.4 scanned-stub')
@@ -299,10 +303,12 @@ class TestScannedPdfMineruFallback:
     def test_falls_back_when_mineru_returns_none(self, monkeypatch):
         """MinerU 启用但解析失败(None) → 必须继续走旧路径（三级链第②级）。"""
         import app.api.v1.question_import as qi
+        # I-6：实现已 pure move 到 pdf_reader，补丁须打在真正持有该函数的命名空间
+        from app.services.question_ingest import pdf_reader as pr
 
-        monkeypatch.setattr(qi, 'mineru_is_enabled', lambda: True)
-        monkeypatch.setattr(qi, 'mineru_extract_text_sync', lambda buf: None)
-        monkeypatch.setattr(qi, '_extract_text_from_scanned_pdf',
+        monkeypatch.setattr(pr, 'mineru_is_enabled', lambda: True)
+        monkeypatch.setattr(pr, 'mineru_extract_text_sync', lambda buf: None)
+        monkeypatch.setattr(pr, '_extract_text_from_scanned_pdf',
                             lambda buf: 'PADDLE_FALLBACK_TEXT')
 
         result = qi._extract_text_from_pdf(b'%PDF-1.4 scanned-stub')

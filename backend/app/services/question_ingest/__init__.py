@@ -19,3 +19,11 @@ from .images import (  # I-5：题目图提取/落盘 + 占位符协议（pure m
     _extract_and_save_images,
     save_images_for_group,
 )
+from .pdf_reader import (  # I-6：PDF 提取全套 + 三级回退（pure move 自 api/v1/question_import.py）
+    _pdf_image_to_png,
+    _extract_text_from_pdf,
+    _extract_text_from_scanned_pdf,
+    _extract_images_from_pdf_page,
+    _decode_pdf_image,
+    _pdf_has_images_only,
+)
