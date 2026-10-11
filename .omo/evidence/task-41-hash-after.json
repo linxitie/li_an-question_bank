@@ -1,0 +1,26 @@
+{
+  "cache_enabled": false,
+  "samples": {
+    "S6-xingce-tiben": {
+      "file": "题库\\行测\\内蒙古行测\\2022年内蒙古公务员录用考试《行测》题（网友回忆版）题本.pdf",
+      "bytes": 917091,
+      "chars": 23679,
+      "sha256": "a5ea58223239447fdbe2e1751be4c318bc814b787569ecd74bf418741753220d",
+      "image_placeholders": 20
+    },
+    "S2-xingce-answer": {
+      "file": "题库\\行测\\内蒙古行测\\2022年内蒙古公务员录用考试《行测》题（网友回忆版）答案解析.pdf",
+      "bytes": 1331409,
+      "chars": 49738,
+      "sha256": "f5ab4191f9094ad3fe8c409cf2a9d30dfb10df2e003642b30fb9fb0e74f05640",
+      "image_placeholders": 125
+    },
+    "S9-shenlun": {
+      "file": "题库\\申论\\2018年国家录用公务员考试《申论》真题卷及答案（副省级）【四次元自习室】.pdf",
+      "bytes": 230904,
+      "chars": 9936,
+      "sha256": "8824e223f6b361e9a64737d38bb7958269d99ff6686277711a7e869e46debcdd",
+      "image_placeholders": 0
+    }
+  }
+}

@@ -1,0 +1,36 @@
+Task 38 (I-3) 纯移动校验 — docx_reader 平移至 question_ingest
+=============================================================
+
+改动文件（3 个，显式 git add，无 git add -A）:
+  backend/app/services/question_ingest/docx_reader.py   (新建 274 行 = 15 行模块头 + 259 行移动体)
+  backend/app/services/question_ingest/__init__.py      (+8 行 re-export)
+  backend/app/api/v1/question_import.py                 (-261 行函数体, +7 行 import 块)
+
+移动的 5 个函数（原 question_import.py:562-820，顺序不变）:
+  _rels_base_dir / _sanitize_docx_rels / _extract_text_from_docx_raw_xml
+  / _open_docx_resilient / _extract_text_from_docx
+
+纯移动证据:
+  1) SHA256 逐字节比对:
+     旧块(HEAD question_import.py 562-820, CRLF->LF) = a8c0f104685cba8feb7f29c7c1b7e16175e9706e0ae2d22208bc0177b17daa03
+     新块(docx_reader.py 16-274)                     = a8c0f104685cba8feb7f29c7c1b7e16175e9706e0ae2d22208bc0177b17daa03
+     => 完全一致（仅行尾 CRLF->LF，纯空白差异）
+  2) git diff -U0: question_import.py 仅 +7 行 import / -261 行函数体；
+     docx_reader.py 纯新增；__init__.py 纯新增。无任何非空白字符的逻辑增删。
+  3) 移动后 question_import.py 中 5 个 def 全部消失，5 个名字经顶层 import 保留在
+     命名空间中；image_service.py / verify_parser_regression.py 的
+     from ...question_import import _extract_text_from_docx 零改动可用。
+
+图片存储路径等价性（行为不变的关键点）:
+  旧: backend/app/api/v1/question_import.py → 3 次 dirname → backend/app
+  新: backend/app/services/question_ingest/docx_reader.py → 3 次 dirname → backend/app
+  => img_dir = backend/app/static/questions 不变
+
+门禁（改前/改后各一次，全部全绿）:
+  gate_l0_redlines.py  6/6 PASS（改前、改后均 6/6）
+  gate_l3_ingest.py    10/10 PASS（改前、改后均 10/10）
+  gate_all.py --quick  3/3 PASS（L0 / L1-G / L1，改后）
+  pytest -k docx       1 passed, 296 deselected
+  py_compile           3 文件全部 OK
+
+参照: 任务 37 excel_reader 平移风格（顶层 import + __init__ re-export）。

@@ -1,0 +1,44 @@
+Task 40 (I-5) pure move verification — images.py -> question_ingest/images.py
+==========================================================================
+
+Scope: _extract_and_save_images / _compress_and_store / _check_size / nested
+_irrelevant_image / _safe_ext moved from backend/app/api/v1/question_import.py
+(~270 lines) to backend/app/services/question_ingest/images.py
+(alongside existing save_images_for_group). Pure move: function body one-to-one.
+
+Files changed:
+  + backend/app/services/question_ingest/images.py        (new block 270 lines,
+    + 5 missing imports: base64, ipaddress, shutil, socket, urlparse)
+  M backend/app/services/question_ingest/__init__.py    (re-export 4 lines:
+    _extract_and_save_images + save_images_for_group)
+  M backend/app/api/v1/question_import.py               (import 3 lines,
+    - _extract_and_save_images function body 272 lines)
+
+Byte-level diff inside moved block: only 2 lines differ
+  - from ...services.image_filters import  -->  from ..image_filters import
+  - from ...services.image_service import  -->  from ..image_service import
+Both resolve to the same target module app.services.* — no logic change.
+
+git diff -U0: function body removed from question_import.py, block appended to
+images.py. No non-whitespace logic additions or deletions. Line count conserved
+(270 -> 270 inside moved block).
+
+Gates (before-move baseline, after-move confirm):
+  gate_l0_redlines.py : 6/6 PASS  ->  6/6 PASS
+  gate_l3_ingest.py   : 10/10 PASS -> 10/10 PASS (assert-9: 题组图片落盘)
+
+Image-path regression check (plan scenario: 题目图片路径零回归):
+  - /static/questions/ file SHA256 map: identical before/after move
+  - 263 条 historical question_image 记录: all file paths unchanged
+  - New image落盘 uses same /static/questions/{qid}/ prefix
+  - Staging file consumption + os.remove(src_file) behaviour unchanged
+  - save_images_for_group (existing, task 30) unaffected
+
+Commit: 3135502 — `refactor(import): move images to question_ingest, pure move`
+Changed files: images.py + __init__.py + question_import.py
+
+Acceptance Criteria (plan 2366-2367):
+  - Pure move: ✅ (git diff shows only import-base adjustments, zero logic change)
+  - 263 条 question_image 路径: ✅ (SHA256 map identical, prefix unchanged)
+  - 组图片通道仍工作: ✅ (gate_l3 assert-9 PASS)
+  - gate_l0 + gate_l3 全绿: ✅ (6/6, 10/10)

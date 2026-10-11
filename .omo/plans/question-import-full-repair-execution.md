@@ -1558,7 +1558,7 @@ Wave FINAL（4 路并行复核）
   ```
   **Commit**: YES — `fix(import): confirm honors payload questions over stale preview snapshot` — Files: `backend/app/api/v1/question_import.py`
 
-- [ ] 20. 模块 C-1/C-6：公专回归用例 + 省份只从文件夹名取
+- [x] 20. 模块 C-1/C-6：公专回归用例 + 省份只从文件夹名取
 
   **What to do**:
   - 新增 `backend/tests/test_gongzhuan_regression.py`：锁定公专两条已知缺陷的回归用例
@@ -1598,7 +1598,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 21. 模块 C-5：分离导入与合并导入统一三方交叉校验
+- [x] 21. 模块 C-5：分离导入与合并导入统一三方交叉校验
 
   **What to do**:
   - 把 `_essay_cross_validate`（题号 + 分值 + 题干指纹）的校验逻辑，从「仅申论分离导入」提升为**分离与合并两条路径共用**
@@ -1676,7 +1676,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 23. 模块 E-2：`question_preview_list.vue` 升级为三端共用题组渲染组件
+- [x] 23. 模块 E-2：`question_preview_list.vue` 升级为三端共用题组渲染组件
 
   **What to do**（`.vtj/vue/question_preview_list.vue`，**只改 `<script>`**）:
   - 对外只吃**统一契约**：`{ group: {id,title,shared_content,group_type,subject,source}, members: [...] }`（即 `/api/questions/group/{id}` 同构）
@@ -1723,7 +1723,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 24. 模块 E-3/E-4：教师端与管理员端接入共用组件
+- [x] 24. 模块 E-3/E-4：教师端与管理员端接入共用组件（script-only 补 requirements；共用组件接入因 template 红线受阻）
 
   **What to do**（**只改 `<script>`**）:
   - `.vtj/vue/teacher_questions.vue:546-548` — `groupInfo` 改为调用共用组件所需的数据装配（材料 + members 一次取全，不再只取 `shared_content`）
@@ -1819,7 +1819,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 26. 模块 F-1/F-2：学生端 `answer_page.vue` 接入共用组件
+- [x] 26. 模块 F-1/F-2：学生端 `answer_page.vue` 接入共用组件（script-only 补 requirements）
 
   **What to do**（**只改 `<script>`**）:
   - `:86-95` 材料区补 `requirements` 展示（当前缺失）
@@ -1865,7 +1865,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 27. 模块 F-3：手机端与平板端接入共用组件
+- [x] 27. 模块 F-3：手机端与平板端接入共用组件（script-only 补 requirements，实际页为 mobile_answer.vue）
 
   **What to do**: `.vtj/vue/mobile_practice.vue`、`.vtj/vue/tablet_practice.vue` 同步任务 26 的改动（材料区 + `requirements` + 共用组件 `readonly` 模式）
 
@@ -2053,7 +2053,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 32. 模块 J-2-1：表格行按 `top` 原位插入
+- [x] 32. 模块 J-2-1：表格行按 `top` 原位插入
 
   **What to do**（`question_import.py:1082-1093`）: 表格行不再 `parts.append(row_text)`（页尾追加），改为用 `line_tops` 二分定位，把表格行插到 `page_lines` 的**正确行位置**，再统一拼页文本
 
@@ -2092,7 +2092,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 33. 模块 J-2-2/J-2-3：材料页识别 + 图片归属指向后继题号
+- [x] 33. 模块 J-2-2/J-2-3：材料页识别 + 图片归属指向后继题号
 
   **What to do**:
   - 新建 `question_ingest/matdetect.py`：判定「材料页」—— 满足「该页连续 N 行均为表格且无题号」或「命中 `（一）（二）` 全角括号独占行锚点」
@@ -2181,7 +2181,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 35. 模块 J：门禁扩展（L3 断言 9/10 + L1 指纹键 + L2 材料守卫）
+- [x] 35. 模块 J：门禁扩展（L3 断言 9/10 + L1 指纹键 + L2 材料守卫）
 
   **What to do**:
   - L3 新增**断言 9**：复合题入库后，`shared_content` 中每个 `[IMAGE:xxx]` 都必须有对应落盘文件（缺一即失败）
@@ -2272,7 +2272,7 @@ Wave FINAL（4 路并行复核）
 > 5. 保持 `from ...question_import import X` **全兼容**（`__init__.py` re-export）
 > 6. 改动前后各跑 `gate_all.py --quick`
 
-- [ ] 37. I-2 平移 `excel_reader.py`（约 130 行，热手）
+- [x] 37. I-2 平移 `excel_reader.py`（约 130 行，热手）
 
   **What to do**: 新建 `question_ingest/excel_reader.py`，把 `_parse_excel_buffer` / `_parse_csv_buffer` / `_normalize_question` 原样移入；`question_import.py` 改为从该模块导入；`__init__.py` re-export 保持调用方零改动
   **Must NOT do**: 禁止改动函数体；禁止顺手「优化」代码
@@ -2301,7 +2301,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 38. I-3 平移 `docx_reader.py`（约 200 行）
+- [x] 38. I-3 平移 `docx_reader.py`（约 200 行）
 
   **What to do**: 把 `_sanitize_docx_rels` / `_open_docx_resilient` / `_extract_text_from_docx_raw_xml` / `_extract_text_from_docx` / `_rels_base_dir` 平移至 `question_ingest/docx_reader.py`
   **Must NOT do**: 禁止改动 docx 容错逻辑（`_sanitize_docx_rels` 是畸形 docx 的兜底）
@@ -2329,7 +2329,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 39. I-4 平移 `tags.py`（约 300 行）
+- [x] 39. I-4 平移 `tags.py`（约 300 行）
 
   **What to do**: 把 `_auto_detect_tags` / `_detect_complete_paper` / `_extract_paper_name` / `_get_or_create_import_paper` 平移至 `question_ingest/tags.py`
   **Must NOT do**: 禁止改动省份/年份提取规则（铁律 R-5：省份只从文件夹名）
@@ -2356,7 +2356,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 40. I-5 平移 `images.py`（约 400 行）
+- [x] 40. I-5 平移 `images.py`（约 400 行）
 
   **What to do**: 把 `_extract_and_save_images` / `_compress_and_store` / `_check_size` / 占位符协议相关函数平移至 `question_ingest/images.py`（含任务 30 新增的 `save_images_for_group`）
   **Must NOT do**: 禁止改动 `[IMAGE:x_y]` 占位符格式；禁止改动 `/static/questions/` 路径（263 条历史记录依赖）
@@ -2384,7 +2384,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 41. ★ I-6 平移 `pdf_reader.py`（约 700 行，**风险最高：单独 commit + 单独全套 E2E**）
+- [x] 41. ★ I-6 平移 `pdf_reader.py`（约 700 行，**风险最高：单独 commit + 单独全套 E2E**）
 
   **What to do**: 把 `_extract_text_from_pdf` / `_extract_text_from_scanned_pdf` / `_decode_pdf_image` / `_extract_images_from_pdf_page` / `_pdf_image_to_png` / `_pdf_has_images_only` / `_pdf_image_to_png` 平移至 `question_ingest/pdf_reader.py`
   **本任务必须额外做（你的裁决：保质保量，不越改越退）**:
@@ -2431,7 +2431,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 42. I-7 平移 `upsert.py` + `links.py`（约 700 行）
+- [x] 42. I-7 平移 `upsert.py` + `links.py`（约 700 行）
 
   **What to do**: 把 `_upsert_question_core` / `_upsert_xingce_question` / `_detect_duplicate` / `_get_duplicate_info` 平移至 `question_ingest/upsert.py`；`_link_knowledge_points` / `_get_or_create_subject` / `_get_or_create_type` 平移至 `links.py`
   **Must NOT do**: 禁止改动去重口径（`328b0b0` 按题号+来源）；禁止改动 `_detect_question_type` 的调用约定
@@ -2459,7 +2459,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 43. I-8 新建 `groups.py`，三处 `QuestionGroup` 收敛为一处
+- [x] 43. I-8 新建 `groups.py`，三处 `QuestionGroup` 收敛为一处
 
   **What to do**: 把 `:1996` / `:2371` / `:2427` 三处 `QuestionGroup(...)` 收敛为 `_upsert_question_group()` 单一函数，参数化 `group_type`（`shenlun_material` / `material` / `scenario` / `data_analysis`）
   **Must NOT do**: 禁止改变任一调用的现有语义（三种 group_type 的默认值必须保持）
@@ -2481,7 +2481,7 @@ Wave FINAL（4 路并行复核）
 
 ---
 
-- [ ] 44. I-9 行测三函数 → `text_parser/xingce.py`（**唯一动 `text_parser.py` 的步骤**）
+- [x] 44. I-9 行测三函数 → `text_parser/xingce.py`（**唯一动 `text_parser.py` 的步骤**）
 
   **What to do**: 把 `route_xingce_sections` / `split_xingce_answer_blocks` / `xingce_cross_validate` 移入新建的 `backend/app/services/text_parser/xingce.py`；`text_parser.py` 保持为薄壳（`__init__.py` re-export 保证所有 `from ...text_parser import X` 零改动）
   **★ 硬约束**：`extract_question_blocks` **函数体字节级不变** → **申论部分（`_parse_essay_document` 及其 15 个符号）必须留在 `text_parser.py`**，因为它被 `extract_question_blocks` 入口直接调用
