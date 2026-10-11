@@ -1129,6 +1129,11 @@ CN_ANSWER_MAP = {
 
 # 科目检测关键词（三级权重：core=5, high=3, normal=1）
 # 设计原则：公专科目必须能从行测关键词中"突围"——核心词权重显著高于普通词
+#
+# 收敛说明（v3 方案 5.1）：
+# 这是全仓**唯一一份**科目级关键词字典。科目名不再硬编码在检测逻辑里，
+# 而是运行时从 question_subject 表读取（见 load_subject_keywords()），
+# 本字典只提供「关键词分组」，键名仅作为与 DB 科目名对应的兜底基准。
 SUBJECT_KEYWORDS = {
     '公专': {
         'core': ['公安专业', '公安基础知识', '警务实务', '公安专业知识', '警察执法',
@@ -1161,6 +1166,13 @@ SUBJECT_KEYWORDS = {
                    '中心理解', '词语理解', '语句表达']
     },
 }
+
+# 关键词档位权重（与字典注释一致：core=5, high=3, normal=1）
+SUBJECT_KEYWORD_WEIGHTS = {'core': 5, 'high': 3, 'normal': 1}
+# 理论最大权重（最高档），用于置信度归一化
+SUBJECT_MAX_KEYWORD_WEIGHT = 5
+# 置信度阈值：低于该值的科目建议由调用方标 need_review（用户已确认 0.5）
+SUBJECT_CONFIDENCE_THRESHOLD = 0.5
 
 
 # ============ 文本标准化（去重用） ============
@@ -4173,41 +4185,163 @@ def _extract_inline_answers(text: str, exclude_paren_bracket: bool = False) -> D
 
 # ============ 科目检测 ============
 
-def detect_subject_category(text: str) -> tuple[str, float]:
+class SubjectDetection(tuple):
+    """detect_subject_category() 的返回值。
+
+    形态是 2 元组 (subject_name, confidence)，使既有调用方
+    `name, confidence = detect_subject_category(text)` 完全不受影响；
+    同时把「命中关键词」挂在属性上，供前端展示建议依据。
+
+    - subject_name: 命中的科目名（与 question_subject.subject_name 一致）；
+      全 0 分（一个关键词都没命中）时为空字符串，表示「无可信建议」。
+     - confidence: 命中关键词加权和 / 理论最大加权和，取值 [0, 1]。
+    """
+
+    # 命中关键词列表（供前端展示「建议依据」）；不占 tuple 槽位，
+    # 以保证 `name, confidence = detect_subject_category(text)` 解包不变。
+    matched_keywords: List[str]
+
+    def __new__(cls, subject_name: str, confidence: float,
+                matched_keywords: Optional[List[str]] = None) -> 'SubjectDetection':
+        obj = super().__new__(cls, (subject_name, confidence))
+        obj.matched_keywords = list(matched_keywords or [])
+        return obj
+
+
+    @property
+    def subject_name(self) -> str:
+        return self[0]
+
+    @property
+    def confidence(self) -> float:
+        return self[1]
+
+    def __repr__(self) -> str:  # 便于日志与调试
+        return (f'SubjectDetection(subject_name={self[0]!r}, confidence={self[1]!r}, '
+                f'matched_keywords={self.matched_keywords!r})')
+
+
+# 进程内缓存：科目名 → 关键词分组。DB 为权威来源，失败时降级为字典键名。
+_subject_keywords_cache: Optional[Dict[str, Dict[str, List[str]]]] = None
+
+
+def load_subject_keywords() -> Dict[str, Dict[str, List[str]]]:
+    """
+    加载「科目名 → 关键词分组」映射（单一事实来源的读出口）。
+
+    - 科目名来自 question_subject 表（不再硬编码 3 个字符串）；
+    - 关键词分组来自 SUBJECT_KEYWORDS 这份唯一字典；
+    - DB 不可用/表为空时降级为字典自身的键名，保证纯文本场景仍可工作；
+    - 进程内缓存，避免每次分类都查库。
+    """
+    global _subject_keywords_cache
+    if _subject_keywords_cache is not None:
+        return _subject_keywords_cache
+
+    names: List[str] = []
+    try:
+        from ..models.models import QuestionSubject
+        from ..core.database import SessionLocal
+        db = SessionLocal()
+        try:
+            rows = db.query(QuestionSubject).order_by(
+                QuestionSubject.sort_order, QuestionSubject.subject_id
+            ).all()
+        finally:
+            db.close()
+        for row in rows:
+            name = getattr(row, 'subject_name', None)
+            status = getattr(row, 'status', None)
+            if not name:
+                continue
+            if status is not None and int(status) != 1:
+                continue  # 停用科目不参与识别
+            names.append(str(name))
+    except Exception as e:  # 查库失败不应阻断识别
+        logger.warning(f'读取 question_subject 失败，降级为内置科目名: {e}')
+
+    result: Dict[str, Dict[str, List[str]]] = {}
+    for name in (names or list(SUBJECT_KEYWORDS.keys())):
+        groups = SUBJECT_KEYWORDS.get(name)
+        if groups is None:
+            # DB 新增科目但暂无关键词分组：登记为「无词组」，不参与命中
+            logger.warning(f'科目 {name!r} 没有关键词分组（SUBJECT_KEYWORDS 未覆盖），不参与自动识别')
+            groups = {}
+        result[name] = groups
+
+    _subject_keywords_cache = result
+    return result
+
+
+def reset_subject_keywords_cache() -> None:
+    """清空科目关键词缓存（DB 科目变更后调用，测试用）。"""
+    global _subject_keywords_cache
+    _subject_keywords_cache = None
+
+
+def detect_subject_category(text: str) -> SubjectDetection:
     """
     从文本内容自动检测科目大类。
-    返回: (subject, confidence) - 如 ('公专', 0.85)
-    置信度 < 0.3 时回退默认 '行测'
+
+    返回 (subject_name, confidence)，并可通过 `.matched_keywords` 取命中关键词。
+
+    置信度 = 命中关键词加权和 / 理论最大加权和
+      分子：Σ 命中关键词出现次数 × 档位权重（core=5, high=3, normal=1）
+      分母：全科目命中关键词出现次数合计 × 最高档权重
+          —— 即「本文本理论上能达到的最大加权和」。所有科目共用同一个分母，
+          因此赢家选择与老的按原始加权分排序**完全一致**，只有置信度语义被修正。
+      区间 [0, 1]，且与文本长度基本无关（采样固定 3000 字）。
+
+    低置信度不再静默回退「行测」：
+      - 命中为空（全 0 分）→ 返回 ('', 0.0)，由调用方决定回退手选 + 标 need_review；
+      - 有命中但 confidence < SUBJECT_CONFIDENCE_THRESHOLD → 仍返回最匹配科目名，
+        由调用方自行标记 need_review。
     """
     if not text:
-        return '行测', 0.0
+        return SubjectDetection('', 0.0, [])
 
-    scores = {'行测': 0, '申论': 0, '公专': 0}
+    keywords_by_subject = load_subject_keywords()
+    if not keywords_by_subject:
+        return SubjectDetection('', 0.0, [])
+
     text_sample = text[:3000].lower()  # 扩大采样范围，转小写匹配
 
-    for subject, kw_groups in SUBJECT_KEYWORDS.items():
-        for kw in kw_groups.get('core', []):
-            count = text_sample.count(kw.lower())
-            scores[subject] += count * 5  # 核心词权重 5（从3提升）
-        for kw in kw_groups.get('high', []):
-            count = text_sample.count(kw.lower())
-            scores[subject] += count * 3  # 高权重词权重 3（从2提升）
-        for kw in kw_groups.get('normal', []):
-            count = text_sample.count(kw.lower())
-            scores[subject] += count * 1  # 普通词权重 1
+    matched_by_subject: Dict[str, List[str]] = {}
+    weighted_by_subject: Dict[str, int] = {}
+    counted_keywords = set()  # 同一关键词出现在多个科目字典时，总次数只计一次
+    total_occurrences = 0
 
-    best = max(scores, key=scores.get)
-    max_score = scores[best]
-    total = sum(scores.values())
+    for subject, kw_groups in keywords_by_subject.items():
+        matched: List[str] = []
+        weighted_sum = 0
+        for tier, keywords in kw_groups.items():
+            weight = SUBJECT_KEYWORD_WEIGHTS.get(tier, 1)
+            for kw in keywords:
+                if kw in matched:
+                    continue  # 同一关键词跨档位重复登记只计一次（取最高档）
+                count = text_sample.count(kw.lower())
+                if count <= 0:
+                    continue
+                matched.append(kw)
+                weighted_sum += count * weight
+                kw_lower = kw.lower()
+                if kw_lower not in counted_keywords:
+                    counted_keywords.add(kw_lower)
+                    total_occurrences += count
+        if matched:
+            matched_by_subject[subject] = matched
+            weighted_by_subject[subject] = weighted_sum
 
-    # 置信度归一化
-    confidence = min(max_score / max(total, 1), 1.0) if total > 0 else 0.0
+    if not matched_by_subject or total_occurrences <= 0:
+        # 全 0 分：无任何关键词命中，不静默错分
+        return SubjectDetection('', 0.0, [])
 
-    # 低置信度回退默认
-    if confidence < 0.3:
-        return '行测', confidence
+    # 理论最大加权和：假设全部命中词都属于该科目且都是最高档(core)权重
+    theoretical_max = SUBJECT_MAX_KEYWORD_WEIGHT * total_occurrences
+    best = max(weighted_by_subject, key=lambda s: weighted_by_subject[s])
+    confidence = min(weighted_by_subject[best] / theoretical_max, 1.0)
 
-    return best, round(confidence, 2)
+    return SubjectDetection(best, round(confidence, 2), matched_by_subject[best])
 
 
 # ============ 答案解析提取 ============

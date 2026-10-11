@@ -2418,6 +2418,12 @@ async def separate_match_endpoint(
             # 从题目文本自动检测科目
             all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
             subject_name, subject_confidence = detect_subject_category(all_content)
+        # W1-1：detect_subject_category 无关键词命中时返回空名（不再静默回退）。
+        # question_subject 已是前端科目下拉的唯一事实来源（/taxonomy），
+        # 落一条空名科目会污染字典表；W2-1 将改为「标 need_review + 教师手选」，
+        # 在此之前沿用历史默认值兜底。
+        if not subject_name:
+            subject_name = '行测'
         subject = _get_or_create_subject(db, subject_name)
 
         for q in result.questions:
@@ -3465,6 +3471,9 @@ async def import_from_image(
         subject_name = payload.get('subject_category', '')
         if not subject_name:
             subject_name, _ = detect_subject_category(ocr_text)
+        # 空名兜底：见上文 :2420 附近说明（W1-1，W2-1 前保留历史默认值）
+        if not subject_name:
+            subject_name = '行测'
         subject = _get_or_create_subject(db, subject_name)
 
         # 尝试从OCR文本提取题目结构
@@ -3605,6 +3614,9 @@ async def _import_structured_from_ocr(
     subject_name = payload.get('subject_category', '')
     if not subject_name:
         subject_name, _ = detect_subject_category(all_text)
+    # 空名兜底：见上文 :2420 附近说明（W1-1，W2-1 前保留历史默认值）
+    if not subject_name:
+        subject_name = '行测'
     subject = _get_or_create_subject(db, subject_name)
 
     for q_data in structured_questions:
