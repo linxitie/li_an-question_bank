@@ -66,6 +66,7 @@
         <span class="docs-q-dup-badge" v-if="q._is_duplicate" style="color:#f56c6c;font-size:15px;margin-right:6px;background:rgba(245,108,108,0.15);padding:2px 6px;border-radius:4px;" :title="'该题目已存在（相似度 ' + Math.round((q._similarity || 0) * 100) + '%），将自动跳过导入'">⚠ 该题目已存在</span>
         <span class="docs-q-ans-badge" v-if="q.answer && q.answer !== '待补充'" style="color:#4ade80;font-size:15px;margin-right:8px;" title="已匹配答案">已匹配答案 ✓</span>
         <span class="docs-q-ans-badge docs-q-ans-badge-warn" v-else style="color:#f59e0b;font-size:15px;margin-right:8px;" title="缺少答案，请在下方手动录入">⚠ 缺答案</span>
+        <span v-if="!q.analysis" class="docs-q-ans-badge" style="color:#e6a23c;font-size:15px;margin-right:8px;" title="缺少答案解析，请点击「+解析图」或「编辑」补充，避免误以为题目完整">⚠ 缺解析</span>
         <span class="docs-q-conf-badge" v-if="q.confidence !== undefined && q.confidence < 0.5" style="color:#f56c6c;font-size:13px;margin-right:6px;background:rgba(245,108,108,0.15);padding:2px 6px;border-radius:4px;" :title="'匹配置信度仅 ' + Math.round((q.confidence||0)*100) + '%，建议人工核对'">🔴 低置信度({{ Math.round((q.confidence||0)*100) }}%)</span>
         <span class="docs-q-suspicious-badge" v-if="q.suspicious" :title="q.suspicious_reason || '块内混入了其他题号，可能吞并了相邻题目，建议核对或删除'">⚠ 疑似串题</span>
         <button class="btn-mini-reverify" @click="$emit('reverify', idx)" title="重新校验选项分割">重检</button>
@@ -97,7 +98,7 @@
                     :title="'为选项 ' + opt.key + ' 添加图片'">+图</button>
           </span>
         </div>
-        <div class="docs-q-answer-row" :class="{ 'docs-q-answer-row-warn': !q.answer || q.answer === '待补充' }">
+        <div class="docs-q-answer-row" :class="{ 'docs-q-answer-row-warn': !q.answer || q.answer === '待补充' }" @paste="handlePaste(idx, 'answer', null, $event)" tabindex="0" title="点击此处后可直接 Ctrl+V 粘贴图片到答案">
           <span class="docs-q-ans-label">题目答案：</span>
           <button class="btn-mini-img" :disabled="attachingKey === (idx + ':answer')"
                   @click="pickImage(idx, 'answer')" title="为该题答案添加图片">+答案图</button>
@@ -105,12 +106,13 @@
           <div v-else class="docs-q-ans-text" style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:#b0b8c4;font-size:15px;line-height:1.7;" v-html="renderQuestionContent(q.answer || '')"></div>
           <span class="docs-q-ans-hint" v-if="!q.answer || q.answer === '待补充'">（必填 — {{ isJudgeQuestion(q) ? '判断题请填写 正确 或 错误' : '请输入选项字母' }}）</span>
         </div>
-        <div class="docs-q-analysis">
+        <div class="docs-q-analysis" @paste="handlePaste(idx, 'analysis', null, $event)" tabindex="0" title="点击此处后可直接 Ctrl+V 粘贴图片到解析">
           <div class="docs-q-ans-label" style="margin-bottom:4px;">题目解析：
             <button class="btn-mini-img" :disabled="attachingKey === (idx + ':analysis')"
                     @click="pickImage(idx, 'analysis')" title="为该题解析添加图片">+解析图</button>
           </div>
-          <div class="docs-q-analysis-text" style="white-space:pre-wrap;word-break:break-word;line-height:1.7;" v-html="renderQuestionContent(q.analysis || '')"></div>
+          <div v-if="q.analysis" class="docs-q-analysis-text" style="white-space:pre-wrap;word-break:break-word;line-height:1.7;" v-html="renderQuestionContent(q.analysis)"></div>
+          <div v-else class="docs-q-analysis-text" style="white-space:pre-wrap;word-break:break-word;line-height:1.7;color:#e6a23c;font-style:italic;padding:6px 0;">⚠ 暂无答案解析，请补充（点击上方「+解析图」添加图片解析，或点「编辑」补文字解析）</div>
         </div>
       </div>
     </div>
@@ -428,6 +430,24 @@ export default defineComponent({
       attachingKey.value = '';
     }
 
+    // 复制粘贴图片快捷添加：监听 paste 事件，从剪贴板取图片文件复用 attach-image 链路
+    function handlePaste(idx, target, optionKey, event) {
+      const cd = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
+      if (!cd || !cd.items) return;
+      for (let i = 0; i < cd.items.length; i++) {
+        const item = cd.items[i];
+        if (item.kind === 'file' && item.type.indexOf('image') === 0) {
+          const file = item.getAsFile();
+          if (file) {
+            attachingKey.value = idx + ':' + (optionKey || target);
+            emit('attach-image', { idx: idx, target: target, optionKey: optionKey || null, file: file });
+            event.preventDefault();
+            return;
+          }
+        }
+      }
+    }
+
     return {
       provider,
       editDialogVisible,
@@ -443,6 +463,7 @@ toggleGroup,
     showSectionHead,
     sectionCount,
     pickImage,
+      handlePaste,
       finishAttach,
       openEditDialog,
       closeEditDialog,
