@@ -207,7 +207,27 @@ watch(current, (q: any) => {
     const auth = (window as any).__VTJ_AUTH__;
     auth.apiFetch('/api/questions/group/' + q.group_id)
       .then(function(r: any) { return r.json(); })
-      .then(function(d: any) { if (d && d.group) groupInfo.value = d.group; })
+      .then(function(d: any) {
+        if (!d) return;
+        if (d.group) groupInfo.value = d.group;
+        // 复合题小题的「题目要求」：题组聚合的 members[] 是权威来源。
+        // 出题接口逐题返回 requirements，但历史题组存在成员行未回写的记录；
+        // 这里只在本地为空时补齐，绝不覆盖已有值。只改数据、不动布局，
+        // 手机 / 平板的一屏适配与底部 Tab 不受影响。
+        const members = d.members || [];
+        members.forEach(function(m: any) {
+          if (m.question_id == null) return;
+          const reqText = normalizeRequirements(m.requirements);
+          if (!reqText) return;
+          for (let i = 0; i < questions.value.length; i++) {
+            const t = questions.value[i];
+            if (!t.group_id || String(t.group_id) !== String(q.group_id)) continue;
+            if (String(t.question_id) === String(m.question_id) && !normalizeRequirements(t.requirements)) {
+              t.requirements = reqText;
+            }
+          }
+        });
+      })
       .catch(function() { /* 静默：材料加载失败不影响答题 */ });
   }
 });
@@ -327,6 +347,24 @@ return opts.map((o: any) => {
   });
 };
 
+// ===== 「题目要求」归一（手机 / 平板共用）=====
+// 后端 requirements 为 Text 列，可能是单字符串，也可能是 JSON 数组
+// （申论常有多条采分点依据，导入管线两形态都写过库）。
+// 模板的渲染位 v-html="renderQuestionContent(current.requirements)" 只消费
+// 字符串：数组直接传进去会被 String() 成 "a,b,c" 的粘合文本且换行全丢。
+// 这里把两形态统一成以 \n 拼接的单一字符串，内容语义不改写。
+const normalizeRequirements = (raw: any): string => {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw.trim();
+  if (Array.isArray(raw)) {
+    return raw
+      .map((r) => String(r == null ? '' : r).trim())
+      .filter((s) => !!s)
+      .join('\n');
+  }
+  return String(raw);
+};
+
 const fetchQuestions = async () => {
   loading.value = true;
   try {
@@ -369,7 +407,9 @@ const fetchQuestions = async () => {
       // 统一归一化选项，保证模板拿到的是纯文本数组
       questions.value = list.map((q: any) => ({
         ...q,
-        options: normalizeOptionsForDisplay(q.options)
+        options: normalizeOptionsForDisplay(q.options),
+        // 「题目要求」归一为单一字符串（string/array 两形态收口）
+        requirements: normalizeRequirements(q.requirements)
       }));
     }
   } catch (e) {

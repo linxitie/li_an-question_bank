@@ -338,6 +338,24 @@
           }).then(function(res) { return res.json(); }).then(function(data) {
             if (data && data.group) {
               self.state.groupMaterials[gid] = data.group;
+              // 复合题小题的「题目要求」：题组聚合的 members[] 是权威来源。
+              // 出题接口（/api/questions/random）逐题返回 requirements，但历史题组
+              // 存在成员行未回写的记录；这里只在本地为空时补齐，绝不覆盖已有值，
+              // 也不触碰 isGroupFirstOccurrence（材料仍只在组内首题渲染一次）。
+              if (data.members && data.members.length) {
+                data.members.forEach(function(m) {
+                  if (m.question_id == null) return;
+                  var reqText = self.normalizeRequirements(m.requirements);
+                  if (!reqText) return;
+                  for (var i = 0; i < self.state.questions.length; i++) {
+                    var t = self.state.questions[i];
+                    if (!t.group_id || String(t.group_id) !== String(gid)) continue;
+                    if (String(t.id) === String(m.question_id) && !self.normalizeRequirements(t.requirements)) {
+                      t.requirements = reqText;
+                    }
+                  }
+                });
+              }
             }
           }).catch(function() { /* 静默：材料加载失败不影响答题 */ });
         });
@@ -441,6 +459,22 @@
         }
         return firstIdx >= 0 && this.state.questions[firstIdx].id === qId;
       },
+      // 「题目要求」归一：后端 requirements 为 Text 列，可能是单字符串，
+      // 也可能是 JSON 数组（申论常有多条采分点依据，导入管线两形态都写过库）。
+      // 模板的 v-html 渲染位只消费字符串，数组直接交给 renderQuestionContent 会
+      // String() 成 "a,b,c" 之类的粘合文本，且换行全丢。这里两形态统一成
+      // 以 \n 拼接的单一字符串，保持原有内容语义而不改写内容本身。
+      normalizeRequirements(req) {
+        if (!req) return '';
+        if (typeof req !== 'string' && !Array.isArray(req)) return String(req);
+        if (Array.isArray(req)) {
+          return req
+            .map(function(r) { return String(r == null ? '' : r).trim(); })
+            .filter(function(s) { return !!s; })
+            .join('\n');
+        }
+        return req.trim();
+      },
       loadQuestions() {
         console.log('[AnswerPage] loadQuestions v20260623 - real API');
         this.state.questions = [];
@@ -497,7 +531,9 @@
                   options: parsedOpts,
                   answer: q.answer || '',
                   explain: q.answer_analysis || '暂未提供解析',
-                  requirements: q.requirements || '',
+                  // 「题目要求」归一为单一字符串（string/array 两形态都由
+                  // normalizeRequirements 收口），模板 v-html 位直接消费。
+                  requirements: this.normalizeRequirements(q.requirements),
                   // ★ 答案解析必须走公共渲染器：解析里可能含图片说明（申论思维导图等）。
                   //   此前模板用 {{ q.explain }} 纯文本插值，<img> 会被当字面量显示成
                   //   '<img src="/static/questions/...">' —— 用户看到的是一串路径。

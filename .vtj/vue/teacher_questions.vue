@@ -555,6 +555,45 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
       return normAnswer.includes(key.toUpperCase());
     }
 
+    // ========== 复合题「题目要求」注入（script-only） ==========
+    // 缺口：/api/questions/group/{id} 的 members[] 已带 requirements，
+    // 但题组小题的渲染位只有 v-html="renderQuestionContent(m.question_content)"
+    // 一处，requirements 此前完全没有出口 —— 教师端看不到申论「作答要求/采分点依据」。
+    // <template> 属设计器领地（raw:true 红线）不能改结构，故在脚本内把
+    // requirements 归一（string / array 两形态）后前置拼进 question_content。
+    // 材料（题组共享块）渲染在小题列表之上，故最终呈现顺序即
+    // 「材料 → 题目要求 → 题干 → 选项」，与三端约定一致。
+    // 安全性：requirements 原文直接拼接，整串最终仍由模板的 renderQuestionContent
+    // 走白名单清洗（见 src/utils/questionRender.js），与既有渲染链路同一道闸。
+    const REQUIREMENT_LABEL = '题目要求：';
+
+    function normalizeRequirements(req: any) {
+      if (!req) return '';
+      const list = Array.isArray(req) ? req : [req];
+      return list
+        .map((r: any) => String(r == null ? '' : r).trim())
+        .filter((s: string) => !!s)
+        .join('\n');
+    }
+
+    function requirementBlock(text: string) {
+      return '<div style="margin:0 0 8px;padding:6px 10px;background:#f7f8fa;'
+        + 'border-radius:6px;border-left:3px solid #409eff;color:#555;'
+        + 'font-size:13px;line-height:1.7;">'
+        + '<strong style="color:#1A3C6D;">' + REQUIREMENT_LABEL + '</strong> '
+        + text.replace(/\r?\n/g, '<br>')
+        + '</div>';
+    }
+
+    // 幂等：题干已含「题目要求：」时原样返回，重复打开详情不会叠加注入。
+    function withRequirements(member: any) {
+      const m = member || {};
+      const text = normalizeRequirements(m.requirements);
+      const content = String(m.question_content || '');
+      if (!text || !content || content.indexOf(REQUIREMENT_LABEL) >= 0) return m;
+      return { ...m, question_content: requirementBlock(text) + content };
+    }
+
     // ========== 详情弹窗 ==========
 
     function showDetail(q: any) {
@@ -569,7 +608,8 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
           .then((data: any) => {
             if (data && data.group) {
               groupInfo.value = data.group;
-              currentQuestion.value = { ...q, group_members: data.members || [] };
+              // members 的 requirements 前置拼进 question_content（见 withRequirements）
+              currentQuestion.value = { ...q, group_members: (data.members || []).map(withRequirements) };
             }
           })
           .catch((e: any) => console.error('题组详情加载失败:', e));

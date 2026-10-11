@@ -412,6 +412,41 @@ export default defineComponent({
       return {};
     }
 
+    // ========== 复合题「题目要求」注入（script-only） ==========
+    // 与 teacher_questions.vue 同源逻辑：/api/questions/group/{id} 的 members[]
+    // 已带 requirements，但题组小题的渲染位只有
+    // v-html="renderQuestionContent(m.question_content)" 一处，此前无出口。
+    // <template> 属设计器领地（raw:true 红线）不能改结构，故在脚本内归一后前置拼接。
+    // 安全性：整串最终仍由模板的 renderQuestionContent 走白名单清洗。
+    const REQUIREMENT_LABEL = '题目要求：';
+
+    function normalizeRequirements(req: any) {
+      if (!req) return '';
+      const list = Array.isArray(req) ? req : [req];
+      return list
+        .map(function (r: any) { return String(r == null ? '' : r).trim(); })
+        .filter(function (s: string) { return !!s; })
+        .join('\n');
+    }
+
+    function requirementBlock(text: string) {
+      return '<div style="margin:0 0 8px;padding:6px 10px;background:#f7f8fa;'
+        + 'border-radius:6px;border-left:3px solid #409eff;color:#555;'
+        + 'font-size:13px;line-height:1.7;">'
+        + '<strong style="color:#1a2b5f;">' + REQUIREMENT_LABEL + '</strong> '
+        + text.replace(/\r?\n/g, '<br>')
+        + '</div>';
+    }
+
+    // 幂等：题干已含「题目要求：」时原样返回，避免重复预览叠加注入。
+    function withRequirements(member: any) {
+      const m = member || {};
+      const text = normalizeRequirements(m.requirements);
+      const content = String(m.question_content || '');
+      if (!text || !content || content.indexOf(REQUIREMENT_LABEL) >= 0) return m;
+      return { ...m, question_content: requirementBlock(text) + content };
+    }
+
     onMounted(() => {
       load();
       loadStats();
@@ -476,7 +511,7 @@ export default defineComponent({
           .then(function(d) {
             if (d && d.group) {
               groupInfo.value = d.group;
-              previewData.value.group_members = d.members || [];
+              previewData.value.group_members = (d.members || []).map(withRequirements);
             }
           })
           .catch(function() { /* 静默：材料加载失败不影响预览 */ });
