@@ -1,0 +1,25 @@
+﻿python : C:\Users\21499\AppData\Roaming\Python\Python313\site-packages\pydantic\_internal\_config.py:386: UserWarning: Valid config keys have changed in V2:
+所在位置 行:1 字符: 286
++ ... L1 EXIT=$LASTEXITCODE"; python scripts/gate_l3_ingest.py 2>&1 | Out-S ...
++                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\21499\... changed in V2::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+* 'orm_mode' has been renamed to 'from_attributes'
+  warnings.warn(message, UserWarning)
+[batch-parsed] 题目0类型修正: →单选题 (置信度: 0.95, 答案: 'A')
+[batch-parsed] 题目1类型修正: →单选题 (置信度: 0.95, 答案: 'B')
+[batch-parsed] 题目2类型修正: →单选题 (置信度: 0.95, 答案: 'C')
+  ✅ PASS  断言1: N题入N题: 传入5题，库中5题
+  ✅ PASS  断言2: requirements落库: requirements=①全面准确；②不超过300字
+  ✅ PASS  断言3: group_id落库: group_id=1, group存在=True
+  ✅ PASS  断言4: blocked拒绝零写入: 拒绝入库，库中0题（期望0）
+  ✅ PASS  断言5: payload.questions优先: 已修复
+  ✅ PASS  断言6: 建卷不抛NameError: 已修复
+  ✅ PASS  断言7: batch-parsed blocked闸门: 已修复
+  ✅ PASS  断言8: 幂等去重: 第一次1题，第二次1题
+  ✅ PASS  断言9: 题组图片落盘: shared_content 含 2 个 IMAGE 标记但只有 2 个落盘文件；残留占位符0个，URL缺失0个
+  ✅ PASS  断言10: Excel行数守恒: 4行 → 入库3题，失败清单1条，解析列落库3条
+
+L3 落库链路门禁: 10/10 通过
+

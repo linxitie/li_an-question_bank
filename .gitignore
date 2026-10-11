@@ -59,6 +59,8 @@ backend/data/*
 # 门禁网会退化成「只在本机有效」。DB / 缓存 / 备份仍保持忽略。
 !backend/data/gates/
 !backend/data/gates/*.json
+# 门禁爬取的文本缓存（85 份 PDF 的提取产物，可随时重建，不入库）
+backend/data/gates/*_cache/
 backend/app/static/questions/
 *.db-wal
 *.db-shm
