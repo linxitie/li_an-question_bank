@@ -8,3 +8,10 @@ from .docx_reader import (  # I-3：畸形 docx 三级容错（pure move 自 api
     _open_docx_resilient,
     _extract_text_from_docx,
 )
+from .tags import (  # I-4：标签检测 + 自动建卷（pure move 自 api/v1/question_import.py）
+    _auto_detect_tags,
+    _detect_complete_paper,
+    _extract_paper_name,
+    _get_or_create_import_paper,
+    SUBJECT_NAME_MAP,
+)
