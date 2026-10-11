@@ -44,104 +44,220 @@ TEXT_SCAN_LENGTH = 800  # 扫描前800字符
 
 
 # ============================================================
-# 子科目ID映射（运行时从DB加载，此处为fallback常量）
+# 子科目ID映射（运行时从DB反查，此处为空容器）
+# 格式: (subject_id, name) → sub_categories.id
+# 唯一事实来源 = sub_categories 表；首次分类时由 _load_taxonomy() 填充。
+# 禁止再硬编码 id 数字（历史假ID教训：与真实 DB point_id 不符导致挂错考点）。
 # ============================================================
 
-# 格式: (subject_id, name) → 预期 sc.id
-# 实际运行时从 sub_categories 表查询
-SUB_CATEGORY_IDS = {
-    # 行测
-    (1, "政治理论"): 1,
-    (1, "常识判断"): 2,
-    (1, "言语理解与表达"): 3,
-    (1, "数量关系"): 4,
-    (1, "判断推理"): 5,
-    (1, "资料分析"): 6,
-    (1, "知觉速度与准确性"): 7,
-    (1, "科学推理"): 16,  # 实测 4 套卷以此替代「数量关系」（广东/河南等）
-    # 申论
-    (2, "归纳概括"): 8,
-    (2, "综合分析"): 9,
-    (2, "提出对策"): 10,
-    (2, "应用文写作"): 11,
-    (2, "议论文写作"): 12,
-    # 公专
-    (3, "职业素养"): 13,
-    (3, "基础知识"): 14,
-    (3, "基本警务能力"): 15,
-}
+SUB_CATEGORY_IDS: Dict[Tuple[int, str], int] = {}
 
-# 子科目名称 → 其下考点列表
-SUB_CATEGORY_KP_MAP = {
+# ============================================================
+# 知识点/考点ID映射（运行时从DB反查）
+#   _KP_ID_BY_SC     : (sub_category_id, 知识点名) → knowledge_point.point_id
+#   _KP_ID_BY_SUBJECT: (subject_id, 知识点名)      → knowledge_point.point_id
+#                      （子科目ID缺失时的窄范围回退）
+#   _EP_ID           : (父知识点名, 考点名)        → knowledge_point.point_id
+# 全部由 _load_taxonomy() 一次性从 knowledge_point 表填充，进程内缓存。
+# 关键：只索引 SUB_CATEGORY_KP_MAP / EXAM_POINT_PARENT 里出现的名称，
+# 避免语料中的同名噪声（如 35 条「其他」）抢占真实 taxonomy 考点。
+# ============================================================
+
+_KP_ID_BY_SC: Dict[Tuple[int, str], int] = {}
+_KP_ID_BY_SUBJECT: Dict[Tuple[int, str], int] = {}
+_EP_ID: Dict[Tuple[str, str], int] = {}
+_TAXONOMY_LOADED = False
+_TAXONOMY_ATTEMPTED = False
+
+UNCLASSIFIED = "无法分类"
+
+
+def _taxonomy_point_names() -> set:
+    """返回需要做 DB id 反查的受管名称集合（词表内名称，不含语料噪声）。"""
+    names = set()
+    for kp_list in SUB_CATEGORY_KP_MAP.values():
+        for kp_name in kp_list:
+            names.add(kp_name)
+    names.update(EXAM_POINT_PARENT.keys())
+    names.update(EXAM_POINT_PARENT.values())
+    return names
+
+
+def clear_id_caches() -> None:
+    """清空进程内 taxonomy ID 缓存。
+
+    当 taxonomy 表在进程生命周期内发生变化（seed/回填脚本、测试夹具）时调用，
+    强制下次分类重新从 DB 反查，保证 id 与权威表一致。
+    """
+    global _TAXONOMY_LOADED, _TAXONOMY_ATTEMPTED
+    SUB_CATEGORY_IDS.clear()
+    _KP_ID_BY_SC.clear()
+    _KP_ID_BY_SUBJECT.clear()
+    _EP_ID.clear()
+    _TAXONOMY_LOADED = False
+    _TAXONOMY_ATTEMPTED = False
+
+
+def _open_db():
+    """打开一个独立的 DB 会话（仅在调用方未提供 session 时使用）。"""
+    from ..core.database import SessionLocal
+    return SessionLocal()
+
+
+def _load_taxonomy(db_session=None) -> bool:
+    """从三张 taxonomy 表加载 ID 映射到进程内缓存。
+
+    Args:
+        db_session: 可选 SQLAlchemy session。传入时优先复用（可看到未提交数据），
+                    否则自建 session 并在用完后关闭。
+
+    Returns:
+        True 表示加载成功，False 表示查库失败（分类降级为「有名称、无 ID」，
+        但绝不再返回假 ID）。失败只尝试一次，避免每题重试拖慢导入链路。
+    """
+    global _TAXONOMY_LOADED, _TAXONOMY_ATTEMPTED
+    if _TAXONOMY_LOADED or _TAXONOMY_ATTEMPTED:
+        return _TAXONOMY_LOADED
+    _TAXONOMY_ATTEMPTED = True
+
+    from ..models.models import SubCategory, KnowledgePoint
+
+    own_session = db_session is None
+    db = None
+    try:
+        if own_session:
+            db = _open_db()
+        else:
+            db = db_session
+
+        # 1) 子科目 ID
+        for sc in db.query(SubCategory).all():
+            # getattr 取值规避 ORM Column 的静态类型收窄问题
+            SUB_CATEGORY_IDS[(int(getattr(sc, "subject_id")), str(getattr(sc, "name")))] = \
+                int(getattr(sc, "id"))
+
+        # 2) 知识点 / 考点 ID —— 只索引词表内名称
+        managed = _taxonomy_point_names()
+        candidates: Dict[Tuple[int, str], Tuple[int, int, Optional[int]]] = {}
+        for row in db.query(KnowledgePoint).all():
+            # getattr 取值规避 ORM Column 的静态类型收窄问题
+            nm = getattr(row, "point_name", None)
+            if nm is None or nm not in managed:
+                continue
+            subject_id = int(getattr(row, "subject_id"))
+            point_id = int(getattr(row, "point_id"))
+            sc_raw = getattr(row, "sub_category_id", None)
+            sc_id = int(sc_raw) if sc_raw is not None else None
+            key = (subject_id, nm)
+            # 排序优先级：有 sub_category_id 的 > 无 sub_category_id 的；point_id 小的 > 大的
+            rank = 0 if sc_id is not None else 1
+            entry = (rank, point_id, sc_id)
+            cur = candidates.get(key)
+            if cur is None or entry[:2] < cur[:2]:
+                candidates[key] = entry
+            # 考点层（level=3）反查父知识点名
+            if int(getattr(row, "level", 0)) == 3 and getattr(row, "parent_id", None):
+                parent = db.query(KnowledgePoint).filter(
+                    KnowledgePoint.point_id == row.parent_id
+                ).first()
+                if parent is not None:
+                    ep_name = getattr(parent, "point_name", None)
+                    if ep_name is not None:
+                        _EP_ID[(str(ep_name), str(nm))] = point_id
+
+        for (subject_id, nm), (_, pid, scid) in candidates.items():
+            _KP_ID_BY_SUBJECT[(subject_id, nm)] = pid
+            if scid is not None:
+                _KP_ID_BY_SC[(scid, nm)] = pid
+
+        _TAXONOMY_LOADED = True
+    except Exception as e:
+        # 查库失败不应阻断分类，降级为空映射（返回名称但 ID 为 None）
+        logger.debug(f"taxonomy ID 反查失败，分类将退化为无ID模式: {e}")
+    finally:
+        if own_session and db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+    return _TAXONOMY_LOADED
+
+# 子科目名称 → 其下考点名称列表（**不含 ID**）
+#
+# 方案 v3 W1-2（假 ID 治理）：原先这里是「假 kp id → 考点名」的硬编码表
+# （101~1519），与真实 DB `knowledge_point.point_id`（1~126）不符，调用方直接
+# 使用即挂错考点。现收敛为「子科目名 → 考点名列表」的纯名称表，
+# 真实 point_id 一律由 `_load_taxonomy()` 运行时从 DB 反查。
+SUB_CATEGORY_KP_MAP: Dict[str, List[str]] = {
     "政治理论": [
-        (101, "习近平新时代中国特色社会主义思想"),
-        (102, "党的二十大精神"),
-        (103, "马克思主义基本原理"),
-        (104, "党和国家方针政策"),
-        (105, "政治立场与政治敏锐性"),
+        "习近平新时代中国特色社会主义思想",
+        "党的二十大精神",
+        "马克思主义基本原理",
+        "党和国家方针政策",
+        "政治立场与政治敏锐性",
     ],
     "常识判断": [
-        (201, "经济常识"), (202, "文化常识"), (203, "社会常识"),
-        (204, "生态常识"), (205, "法律常识"), (206, "科技常识"), (207, "时政热点"),
+        "经济常识", "文化常识", "社会常识",
+        "生态常识", "法律常识", "科技常识", "时政热点",
     ],
     "言语理解与表达": [
-        (301, "逻辑填空"), (302, "片段阅读"), (303, "语句表达"),
-        (304, "中心理解"), (305, "词语理解"), (306, "态度意图"),
+        "逻辑填空", "片段阅读", "语句表达",
+        "中心理解", "词语理解", "态度意图",
     ],
     "数量关系": [
-        (401, "数字推理"), (402, "数学运算"),
+        "数字推理", "数学运算",
     ],
     "判断推理": [
-        (501, "图形推理"), (502, "逻辑判断"), (503, "类比推理"), (504, "定义判断"),
+        "图形推理", "逻辑判断", "类比推理", "定义判断",
     ],
     "资料分析": [
-        (601, "文字资料分析"), (602, "图形资料分析"), (603, "表格资料分析"),
-        (604, "混合型资料"), (605, "统计术语"), (606, "速算技巧"),
+        "文字资料分析", "图形资料分析", "表格资料分析",
+        "混合型资料", "统计术语", "速算技巧",
     ],
     "知觉速度与准确性": [
-        (701, "同符查找"), (702, "数字区间定位"), (703, "字符替换"), (704, "知觉准确性"),
+        "同符查找", "数字区间定位", "字符替换", "知觉准确性",
     ],
     # 科学推理：实测 4 套卷以「科学推理」替代「数量关系」（广东/河南等）。
     # 考点留空 —— 其考点将来自行测答案解析的【考点】字段（任务 5/10 建树），
     # 不在此处臆造，否则会与常识判断的「生物常识/科技常识」互抢。
     "科学推理": [],
     "归纳概括": [
-        (801, "问题概括"), (802, "原因概括"), (803, "影响概括"),
-        (804, "对策概括"), (805, "特点概括"), (806, "过程概括"),
+        "问题概括", "原因概括", "影响概括",
+        "对策概括", "特点概括", "过程概括",
     ],
     "综合分析": [
-        (901, "观点分析"), (902, "现象分析"), (903, "词句理解"),
-        (904, "评析辨析"), (905, "比较分析"),
+        "观点分析", "现象分析", "词句理解",
+        "评析辨析", "比较分析",
     ],
     "提出对策": [
-        (1001, "问题识别"), (1002, "对策建议"), (1003, "方案设计"),
-        (1004, "应急处理"), (1005, "长效机制"),
+        "问题识别", "对策建议", "方案设计",
+        "应急处理", "长效机制",
     ],
     "应用文写作": [
-        (1101, "公文写作"), (1102, "事务文书"), (1103, "案例分析"), (1104, "宣传文稿"),
+        "公文写作", "事务文书", "案例分析", "宣传文稿",
     ],
     "议论文写作": [
-        (1201, "命题作文"), (1202, "话题作文"), (1203, "材料作文"),
-        (1204, "政论文"), (1205, "策论文"),
+        "命题作文", "话题作文", "材料作文",
+        "政论文", "策论文",
     ],
     "职业素养": [
-        (1301, "政治立场与忠诚度"), (1302, "政治敏锐性与鉴别力"),
-        (1303, "人民警察核心价值观"), (1304, "人民警察职业道德"), (1305, "人民警察职业纪律"),
+        "政治立场与忠诚度", "政治敏锐性与鉴别力",
+        "人民警察核心价值观", "人民警察职业道德", "人民警察职业纪律",
     ],
     "基础知识": [
-        (1401, "中国特色社会主义法治理论"), (1402, "法学基础理论"),
-        (1403, "宪法基础知识"), (1404, "民法基础知识"), (1405, "人民警察法基础知识"),
-        (1406, "行政执法基础知识"), (1407, "刑事执法基础知识"),
-        (1408, "公安机关性质与职能"), (1409, "公安工作根本原则"),
-        (1410, "公安队伍建设"), (1411, "公安执法监督"),
+        "中国特色社会主义法治理论", "法学基础理论",
+        "宪法基础知识", "民法基础知识", "人民警察法基础知识",
+        "行政执法基础知识", "刑事执法基础知识",
+        "公安机关性质与职能", "公安工作根本原则",
+        "公安队伍建设", "公安执法监督",
     ],
     "基本警务能力": [
-        (1501, "宣传教育"), (1502, "沟通协调"), (1503, "组织动员"),
-        (1504, "服务群众"), (1505, "调查研究"), (1506, "纠纷化解"),
-        (1507, "风险识别"), (1508, "风险防范"), (1509, "信息收集"),
-        (1510, "信息分析"), (1511, "信息应用"), (1512, "巡逻"),
-        (1513, "接警与处警"), (1514, "安全检查"), (1515, "安全保护"),
-        (1516, "事态研判"), (1517, "信息上报"), (1518, "合理处置"), (1519, "善后恢复"),
+        "宣传教育", "沟通协调", "组织动员",
+        "服务群众", "调查研究", "纠纷化解",
+        "风险识别", "风险防范", "信息收集",
+        "信息分析", "信息应用", "巡逻",
+        "接警与处警", "安全检查", "安全保护",
+        "事态研判", "信息上报", "合理处置", "善后恢复",
     ],
 }
 
@@ -937,52 +1053,50 @@ class QuestionClassifier:
 
     def classify(self, content: str, subject_id: int) -> ClassifyResult:
         """
-        对单道题目进行完整三级分类。
+        对单道题目进行完整三级分类（方案 v3 W1-2：**一律返回真实 DB ID**）。
+
+        子科目 ID 与考点 ID 均由 `_load_taxonomy()` 运行时从 `sub_categories` /
+        `knowledge_point` 两表反查。**不再返回任何硬编码假 ID**；
+        若 DB 不可用，退化为「有名称、无 ID」而不是「挂错 ID」。
 
         Args:
             content: 题目内容文本
             subject_id: 科目ID (1=行测, 2=申论, 3=公专)
 
         Returns:
-            ClassifyResult: 包含子科目、考点和置信度
+            ClassifyResult: 包含子科目、考点和置信度，ID 均为真实 DB 值
         """
-        if not content:
-            return ClassifyResult(subject_id, None, "无法分类", None, "无法分类", 0.0)
+        sc_name, sc_confidence, kp_name, kp_confidence, ep_name = self._classify_names(
+            content, subject_id
+        )
 
-        # 预处理
-        text = content[:self.TEXT_SCAN_LENGTH]
-        text = self._normalize(text)
+        if sc_name is None:
+            return ClassifyResult(
+                subject_id, None, UNCLASSIFIED, None, UNCLASSIFIED, sc_confidence
+            )
 
-        # 二级分类：确定子科目
-        sc_name, sc_confidence = self._detect_subcategory(text, subject_id)
+        sc_id = self._sub_category_id(subject_id, sc_name)
+        kp_id = self._knowledge_point_id(subject_id, sc_id, kp_name)
 
-        if not sc_name or sc_confidence < self.MIN_CONFIDENCE:
-            return ClassifyResult(subject_id, None, sc_name or "无法分类", None, "无法分类", sc_confidence)
-
-        # 三级分类：确定考点
-        kp_name, kp_confidence = self._detect_knowledge_point(text, sc_name)
-
-        sc_id = SUB_CATEGORY_IDS.get((subject_id, sc_name))
-        kp_list = SUB_CATEGORY_KP_MAP.get(sc_name, [])
-        kp_id = None
-        for kid, kname in kp_list:
-            if kname == kp_name:
-                kp_id = kid
-                break
-
-        # 考点层（level=3）：仅在知识点已命中且属于已建考点层的 5 个知识点时生效，
+        # 考点层（level=3）：仅在知识点已命中且属于已建考点层的知识点时生效，
         # 否则返回空以保持三级结构的向后兼容。
-        ep_name, ep_confidence = self._detect_exam_point(text, kp_name or "")
-        ep_map = self._exam_point_id_map()
-        ep_id = ep_map.get((kp_name, ep_name)) if (kp_name and ep_name) else None
+        ep_id = self._exam_point_id(kp_name, ep_name)
 
-        return ClassifyResult(subject_id, sc_id, sc_name, kp_id, kp_name or "无法分类",
-                              kp_confidence, ep_id, ep_name or "")
+        return ClassifyResult(
+            subject_id, sc_id, sc_name, kp_id, kp_name or UNCLASSIFIED,
+            kp_confidence, ep_id, ep_name or ""
+        )
 
     def classify_with_db(self, content: str, subject_id: int, db_session) -> ClassifyResult:
         """
-        使用数据库查询真实的子科目和考点ID进行分类。
-        优先使用此方法，确保ID与数据库一致。
+        使用传入的 DB session 解析真实 ID（方案 v3 W1-2 与 `classify()` 语义合并）。
+
+        与 `classify()` 的唯一区别：ID 反查**优先通过调用方 session** 执行，
+        这样调用方在同一事务中未提交的新增 taxonomy 也能被识别；同时结果
+        会回填进程内缓存，供后续 `classify()` 无参调用复用。
+
+        返回值与 `classify()` 完全同构（8 字段，含 exam_point_*），
+        不再像旧版那样丢掉 exam_point_id / exam_point_name。
 
         Args:
             content: 题目内容
@@ -992,34 +1106,98 @@ class QuestionClassifier:
         Returns:
             ClassifyResult: 含真实DB ID的分类结果
         """
-        result = self.classify(content, subject_id)
+        sc_name, sc_confidence, kp_name, kp_confidence, ep_name = self._classify_names(
+            content, subject_id
+        )
 
-        # 从DB获取真实ID
-        from ..models.models import SubCategory, KnowledgePoint
+        if sc_name is None:
+            return ClassifyResult(
+                subject_id, None, UNCLASSIFIED, None, UNCLASSIFIED, sc_confidence
+            )
 
-        sc_id = None
-        if result.sub_category_name and result.sub_category_name != "无法分类":
-            sc = db_session.query(SubCategory).filter(
-                SubCategory.subject_id == subject_id,
-                SubCategory.name == result.sub_category_name
-            ).first()
-            if sc:
-                sc_id = sc.id
-
-        kp_id = None
-        if result.knowledge_point_name and result.knowledge_point_name != "无法分类" and sc_id:
-            kp = db_session.query(KnowledgePoint).filter(
-                KnowledgePoint.sub_category_id == sc_id,
-                KnowledgePoint.point_name == result.knowledge_point_name
-            ).first()
-            if kp:
-                kp_id = kp.point_id
+        sc_id = self._sub_category_id(subject_id, sc_name, db_session=db_session)
+        kp_id = self._knowledge_point_id(subject_id, sc_id, kp_name, db_session=db_session)
+        ep_id = self._exam_point_id(kp_name, ep_name, db_session=db_session)
 
         return ClassifyResult(
-            result.subject_id, sc_id,
-            result.sub_category_name, kp_id,
-            result.knowledge_point_name, result.confidence
+            subject_id, sc_id, sc_name, kp_id, kp_name or UNCLASSIFIED,
+            kp_confidence, ep_id, ep_name or ""
         )
+
+    def _classify_names(self, content: str, subject_id: int):
+        """分类的名称层判定（不含任何 ID）。
+
+        Returns:
+            (子科目名, 子科目置信度, 考点名, 考点置信度, 考点层名)
+            子科目名为 None 表示无法分类（空文本或置信度不足）。
+        """
+        if not content:
+            return None, 0.0, None, 0.0, None
+
+        # 预处理
+        text = content[:self.TEXT_SCAN_LENGTH]
+        text = self._normalize(text)
+
+        # 二级分类：确定子科目
+        sc_name, sc_confidence = self._detect_subcategory(text, subject_id)
+
+        if not sc_name or sc_confidence < self.MIN_CONFIDENCE:
+            return None, sc_confidence, None, 0.0, None
+
+        # 三级分类：确定考点
+        kp_name, kp_confidence = self._detect_knowledge_point(text, sc_name)
+
+        # 考点层（level=3）：仅在知识点已命中且属于已建考点层的知识点时生效，
+        # 否则返回空以保持三级结构的向后兼容。
+        ep_name, _ep_confidence = self._detect_exam_point(text, kp_name or "")
+
+        return sc_name, sc_confidence, kp_name, kp_confidence, ep_name
+
+    # ---------- ID 反查（单一事实来源 = taxonomy 三表） ----------
+
+    def _sub_category_id(self, subject_id: int, sc_name: Optional[str],
+                         db_session=None) -> Optional[int]:
+        """子科目名 → `sub_categories.id`（真实 DB ID，无则 None）。"""
+        if not sc_name or sc_name == UNCLASSIFIED:
+            return None
+        if _load_taxonomy(db_session):
+            return SUB_CATEGORY_IDS.get((subject_id, sc_name))
+        return None
+
+    def _knowledge_point_id(self, subject_id: int, sc_id: Optional[int],
+                            kp_name: Optional[str], db_session=None) -> Optional[int]:
+        """考点名 → `knowledge_point.point_id`（真实 DB ID，无则 None）。
+
+        优先按 (子科目ID, 考点名) 精确定位；子科目 ID 缺失时
+        （如 DB 里该考点尚未回填 sub_category_id）降级到
+        (科目ID, 考点名) 的窄范围回退。
+        """
+        if not kp_name or kp_name == UNCLASSIFIED:
+            return None
+        if not _load_taxonomy(db_session):
+            return None
+        if sc_id:
+            pid = _KP_ID_BY_SC.get((sc_id, kp_name))
+            if pid is not None:
+                return pid
+        return _KP_ID_BY_SUBJECT.get((subject_id, kp_name))
+
+    def _exam_point_id_map(self, db_session=None) -> Dict[Tuple[str, str], int]:
+        """(父知识点名, 考点名) → `knowledge_point.point_id`，运行时从 DB 反查。
+
+        带进程内缓存，避免每次分类都查库。
+        """
+        _load_taxonomy(db_session)
+        return _EP_ID
+
+    def _exam_point_id(self, kp_name: Optional[str], ep_name: Optional[str],
+                       db_session=None) -> Optional[int]:
+        """考点层名 → 真实 `knowledge_point.point_id`（无则 None）。"""
+        if not kp_name or not ep_name:
+            return None
+        if not _load_taxonomy(db_session):
+            return None
+        return _EP_ID.get((kp_name, ep_name))
 
     def _normalize(self, text: str) -> str:
         """预处理文本：全角转半角、折叠空白、拉丁字母大写（消除大小写敏感）"""
@@ -1064,7 +1242,7 @@ class QuestionClassifier:
             for sc_name in candidates:
                 kp_list = SUB_CATEGORY_KP_MAP.get(sc_name, [])
                 total_kp_score = 0.0
-                for kp_id, kp_name in kp_list:
+                for kp_name in kp_list:
                     kw_list = KNOWLEDGE_POINT_KEYWORDS.get(kp_name, [])
                     for kw, weight in kw_list:
                         if '.*' in kw:
@@ -1092,42 +1270,6 @@ class QuestionClassifier:
             confidence = 0.8 + min(best_score * 0.05, 0.2)
 
         return best, round(confidence, 3)
-
-    def _exam_point_id_map(self) -> Dict[Tuple[str, str], int]:
-        """
-        (知识点名, 考点名) -> point_id 映射，运行时从数据库读取。
-        不硬编码 ID，避免后续新增考点批次时 ID 漂移导致错挂。
-        带进程内缓存，避免每次分类都查库。
-        """
-        cached = getattr(self, "_ep_id_cache", None)
-        if cached is not None:
-            return cached
-        mapping: Dict[Tuple[str, str], int] = {}
-        try:
-            from ..models.models import KnowledgePoint
-            from ..core.database import SessionLocal
-            db = SessionLocal()
-            try:
-                rows = db.query(KnowledgePoint).filter(
-                    KnowledgePoint.level == 3
-                ).all()
-                for row in rows:
-                    parent = db.query(KnowledgePoint).filter(
-                        KnowledgePoint.point_id == row.parent_id
-                    ).first()
-                    if parent is not None:
-                        # 用 getattr 取值以规避 ORM Column 的静态类型收窄问题
-                        ep_name = getattr(parent, "point_name", None)
-                        ep_id = getattr(row, "point_id", None)
-                        if ep_name is not None and ep_id is not None:
-                            mapping[(str(ep_name), str(row.point_name))] = ep_id
-            finally:
-                db.close()
-        except Exception:
-            # 查库失败不应阻断分类，降级为空映射（考点层退化为不返回 ID）
-            mapping = {}
-        self._ep_id_cache = mapping
-        return mapping
 
     def _detect_exam_point(self, text: str, kp_name: str) -> Tuple[Optional[str], float]:
         """
@@ -1179,7 +1321,7 @@ class QuestionClassifier:
             return None, 0.0
 
         scores = {}
-        for kp_id, kp_name in kp_list:
+        for kp_name in kp_list:
             kw_list = KNOWLEDGE_POINT_KEYWORDS.get(kp_name, [])
             if not kw_list:
                 continue
@@ -1237,10 +1379,13 @@ def detect_subcategory_enhanced(subject_id: int, content: str, type_name: str = 
     增强版子科目检测（向后兼容旧接口）。
     返回子科目名称字符串。
     注意：'无法分类' 不在 question_bank ENUM 允许值中，必须回退为 '无'。
+
+    方案 v3 W1-2：内部转发到 `classify()`（现强制解析真实 DB ID），
+    但本函数只消费 `sub_category_name` 名称层，对外契约与返回字符串不变。
     """
     classifier = get_classifier()
     result = classifier.classify(content, subject_id)
     sc = result.sub_category_name
-    if not sc or sc == '无法分类':
+    if not sc or sc == UNCLASSIFIED:
         return '无'
     return sc
