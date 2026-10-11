@@ -3962,3 +3962,78 @@ def _essay_cross_validate_import(text: str, prefer_subject: str = '') -> Optiona
     if not q_blocks:
         return None
     return _essay_cross_validate(q_blocks, a_blocks)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# W1-5（方案 v3 §6.1）：taxonomy 字典的单一事实来源读出口
+#
+# 背景：前端科目下拉原本硬编码 4 选项（`question_import.vue:84-89`），
+# 与数据库 `question_subject` / `sub_categories` 形成**双事实来源分裂**——
+# 后台新增科目前端无感，教师只能选到 4 个中的 1 个。
+#
+# 本端点是 taxonomy 的**唯一读出口**：前端科目下拉、预览建议、编辑页
+# 统一消费它。只读三张既有表（question_subject / sub_categories /
+# knowledge_point），**不新增表**；本端点只读不写，建分类仍走各管理端点。
+#
+# 追加位置刻意选在本文件末尾：放在 `separate_match_endpoint` 之前会让
+# dispatch 红线的定位失效，绝不可行。`SubCategory` 走函数内延迟导入，
+# 沿用本文件 :2281/:2664/:3123 的既定惯例 —— 顶部 import 块禁止增行。
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/taxonomy", summary="科目/子科目/考点字典（下拉数据源）")
+async def get_taxonomy(
+    subject_id: Optional[int] = Query(None, description="可选：只返回该科目的子科目与考点（懒加载）"),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """科目 → 子科目 → 考点 三级字典，供前端下拉 / 预览建议 / 编辑页统一消费。
+
+    返回：
+        subjects:         全部启用科目（status=1），按 sort_order 排序
+        subcategories:    启用子科目（status=1），可按 subject_id 过滤
+        knowledge_points: 考点，可按 subject_id 过滤（懒加载场景）
+
+    不传 subject_id 时三个数组全量返回；传了则 subjects 仍是全量
+    （下拉要先渲染科目），后两个数组按科目收窄。
+    """
+    # 延迟导入：守住顶部 import 块行号红线（见上文说明）
+    from ...models.models import SubCategory
+
+    subjects = db.query(QuestionSubject)\
+        .filter(QuestionSubject.status == 1)\
+        .order_by(QuestionSubject.sort_order, QuestionSubject.subject_id)\
+        .all()
+
+    sub_query = db.query(SubCategory).filter(SubCategory.status == 1)
+    kp_query = db.query(KnowledgePoint)
+    if subject_id is not None:
+        sub_query = sub_query.filter(SubCategory.subject_id == subject_id)
+        kp_query = kp_query.filter(KnowledgePoint.subject_id == subject_id)
+
+    subcategories = sub_query\
+        .order_by(SubCategory.subject_id, SubCategory.sort_order, SubCategory.id)\
+        .all()
+    knowledge_points = kp_query\
+        .order_by(KnowledgePoint.subject_id, KnowledgePoint.sub_category_id, KnowledgePoint.point_name)\
+        .all()
+
+    return {
+        'subjects': [
+            {'id': s.subject_id, 'name': s.subject_name, 'code': s.subject_code}
+            for s in subjects
+        ],
+        'subcategories': [
+            {'id': s.id, 'subject_id': s.subject_id, 'name': s.name}
+            for s in subcategories
+        ],
+        'knowledge_points': [
+            {
+                'id': p.point_id,
+                'name': p.point_name,
+                'subject_id': p.subject_id,
+                'sub_category_id': p.sub_category_id,
+            }
+            for p in knowledge_points
+        ],
+    }
