@@ -191,18 +191,35 @@
 
 <script>
 // @ts-nocheck
-import { defineComponent, ref, reactive, computed } from 'vue';
+import { defineComponent, ref, reactive, computed, watch, onMounted, getCurrentInstance } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'QuestionPreviewList',
   props: {
+    // ===== 数据入口 A（向后兼容）：导入预览的扁平题目列表 =====
     questions: { type: Array, default: function() { return []; } },
     // 复合题组：后端按「给定材料」聚合，与 questions 并存（向后兼容，旧调用方不传即退化为旧渲染）
+    // 旧形态字段 material_length / material_titles / material_preview（即 material_text）保持不变
     groups: { type: Array, default: function() { return []; } },
+
+    // ===== 数据入口 B（统一契约）：与 GET /api/questions/group/{id} 同构 =====
+    // 三端（学生端 / 教师端 / 管理员端）共用本题组渲染组件时的唯一入口：
+    //   group   : { id, title, shared_content, group_type, subject, source }
+    //   members : [ { question_content, options, answer, answer_analysis,
+    //                 requirements, question_type_detail, difficulty,
+    //                 score, need_review, parent_id, ... } ]
+    // 入口 A 与入口 B 在脚本内归一到同一套渲染数据，模板无需分叉。
+    group: { type: Object, default: null },
+    members: { type: Array, default: function() { return []; } },
+
     mode: { type: String, default: 'combined' },
-    loading: { type: Boolean, default: false }
+    loading: { type: Boolean, default: false },
+
+    // 学生端只读开关：隐藏全部编辑/导入控件，并封死所有写事件与写方法。
+    // 教师端/管理员端与导入预览一律传 false（缺省即 false，行为与重构前一致）。
+    readonly: { type: Boolean, default: false }
   },
     emits: ['import-one', 'import-all', 'reverify', 'close', 'edit-question', 'delete-question', 'attach-image'],
   setup(props, { emit }) {
@@ -220,8 +237,9 @@ export default defineComponent({
       analysis: ''
     });
 
-    // 打开编辑对话框
+    // 打开编辑对话框（只读态直接拒绝：编辑弹窗由 editDialogVisible 控制，无需改模板即可隐藏）
     function openEditDialog(idx) {
+      if (isReadonly.value) return;
       const q = props.questions[idx];
       editIndex.value = idx;
       editForm.question_content = q.question_content || '';
@@ -246,6 +264,7 @@ export default defineComponent({
 
     // 保存编辑
     function saveEdit() {
+      if (isReadonly.value) return;
       // 必填字段验证
       if (!editForm.answer || editForm.answer === '待补充') {
         alert('请填写正确答案');
@@ -262,7 +281,7 @@ export default defineComponent({
       q.analysis = editForm.analysis;
       
       // 通知父组件
-      emit('edit-question', {
+      emitWrite('edit-question', {
         index: editIndex.value,
         data: {
           question_content: editForm.question_content,
@@ -309,6 +328,8 @@ export default defineComponent({
     // 第 124 行：纯文本直接原样返回），因此换行保留依赖 CSS white-space:pre-wrap。
     function isShortAnswer(q) {
       if (!q) return false;
+      // 学生端只读：答案一律走多行只读展示区，绝不出现可编辑输入框
+      if (isReadonly.value) return false;
       // 有选项的题（含判断/单选/多选）一律走短答案输入框
       if (q.options && q.options.length) return true;
       const t = String(q.question_type_detail || q.type_name || '');
@@ -324,15 +345,26 @@ export default defineComponent({
     // import_id 与 questions 数据源，本组件只负责选文件与发出事件。
     const attachingKey = ref('');
 
-    // ===== 复合题组总题干（用户实测缺陷 D1：预览缺总题干）=====
-    // 申论是复合题结构：一份「给定资料1..N」被多道小题共享。
-    // 旧渲染把每题画成独立卡片，用户看不到给定资料，无从判断小题在问什么。
-    // 后端 groups 已按材料聚合，这里只负责展示，不做数据判断。
-    const MATERIAL_FOLD_THRESHOLD = 800; // 超过 800 字自动折叠，避免上万字材料淹没首屏
+    // ============================================================
+    // 三端共用题组渲染（任务 23 / 模块 E-2）
+    // ============================================================
+    // 内部渲染顺序固定：材料（可折叠，默认展开）→ 题目要求 → 小题列表（每题带答案 + 解析）
+    //   · 材料      —— 题组共享上下文，来自 groups[].material_text 或 group.shared_content
+    //   · 题目要求  —— 小题的 requirements（string 与 array 两形态都支持）
+    //   · 小题列表  —— 每题答案（answer）与解析（answer_analysis）
+    // 两条数据入口归一后共用模板既有结构，不新增任何容器。
+    const MATERIAL_FOLD_THRESHOLD = 800; // 超过 800 字时提供「摘要 + 展开」形态，避免上万字材料淹没首屏
     const MATERIAL_CLIP_LEN = 600;       // 折叠态先给一段摘要
 
     // 哪些组处于展开态（key 而非下标，避免组顺序变化时展开错位）
+    // 规格要求材料「默认展开」：未显式折叠过的组一律视为展开。
+    // 必须把默认值真实写进 ref —— 模板里 `expandedGroups[gidx] ? '收起材料' : '展开材料'`
+    // 直接读原始 ref，靠读取时的兜底默认值会让按钮文案与实际显示状态自相矛盾。
     const expandedGroups = ref({});
+
+    function isGroupExpanded(gidx) {
+      return expandedGroups.value[String(gidx)] !== false;
+    }
 
     function toggleGroup(gidx) {
       const key = String(gidx);
@@ -340,7 +372,7 @@ export default defineComponent({
       Object.keys(expandedGroups.value).forEach(function (k) {
         next[k] = expandedGroups.value[k];
       });
-      next[key] = !expandedGroups.value[key];
+      next[key] = !isGroupExpanded(gidx);
       expandedGroups.value = next;
     }
 
@@ -385,15 +417,130 @@ export default defineComponent({
       return n;
     }
 
-    // 组头数据：材料超过阈值时默认折叠，且附摘要与截断标记
+    // ── 统一契约归一 ─────────────────────────────────────
+    // 入口 B 的 members[] 字段名与导入预览的 questions[] 不同（answer_analysis vs analysis），
+    // 这里只做「改名 + 缺省补齐」，绝不改写内容本身：
+    // 图片 <img> 已由后端净化，仍交由 renderQuestionContent 做白名单清洗。
+    const MATERIAL_TITLE_RE = /^[ \t\u3000]*(给定资料|资料|材料)[ \t\u3000]*[一二三四五六七八九十百\d]+[ \t\u3000]*[：:、.．]?[ \t\u3000]*(.*)$/gm;
+
+    // 契约只给 shared_content 一整块，没有 material_titles；从正文行首还原小标题，
+    // 让两个入口的材料呈现形态一致（旧入口的「给定资料1/2/3」小标签）。
+    function extractMaterialTitles(text) {
+      const out = [];
+      const s = String(text || '');
+      if (!s) return out;
+      MATERIAL_TITLE_RE.lastIndex = 0;
+      let m = MATERIAL_TITLE_RE.exec(s);
+      while (m !== null) {
+        const head = (m[1] + ' ' + (m[2] || '')).trim();
+        if (head && out.indexOf(head) < 0) out.push(head);
+        m = MATERIAL_TITLE_RE.exec(s);
+      }
+      return out;
+    }
+
+    // 兼容两种选项形态：{key,value} 对象（模板契约）或 "A. xxx" 裸字符串
+    function normalizeOptions(options) {
+      if (!Array.isArray(options)) return [];
+      return options.map(function (o) {
+        if (o && typeof o === 'object') return o;
+        const s = String(o == null ? '' : o);
+        const m = s.match(/^\s*([A-Ha-h])\s*[.、．)）:：]?\s*([\s\S]*)$/);
+        return m ? { key: m[1].toUpperCase(), value: m[2] } : { key: '', value: s };
+      });
+    }
+
+    // 统一契约 members[] → 组件内部题目形态（与入口 A 的 questions[] 同构）
+    function normalizeMember(src, idx, groupCtx) {
+      const m = src || {};
+      const g = groupCtx || {};
+      const req = m.requirements;
+      return {
+        question_id: m.question_id || m.id || 0,
+        question_number: m.question_number || '',
+        parent_id: m.parent_id || 0,
+        need_review: m.need_review || 0,
+        question_content: m.question_content || '',
+        options: normalizeOptions(m.options),
+        // 契约字段名为 answer_analysis，内部统一叫 analysis
+        answer: m.answer || '',
+        analysis: m.answer_analysis || m.analysis || '',
+        question_type_detail: m.question_type_detail || '选择题',
+        difficulty: m.difficulty || '中等',
+        score: m.score || 0,
+        // 题目要求：string 与 array 两形态都归一成数组，渲染层负责 join
+        requirements: Array.isArray(req) ? req.slice() : (req ? [req] : []),
+        // 考点标签：契约未强制返回时留空数组，模板 v-if 自然跳过
+        kao_points_normalized: Array.isArray(m.kao_points_normalized)
+          ? m.kao_points_normalized
+          : (Array.isArray(m.kao_points) ? m.kao_points : []),
+        subject_category: m.subject_category || m.subject || g.subject || '',
+        xingce_subcategory: m.xingce_subcategory || m.subcategory || '',
+        // 导入评审态：契约来自已入库数据，一律视为未导入、无重复
+        _imported: false,
+        _is_duplicate: false,
+        _qpl_index: idx
+      };
+    }
+
+    // 入口 B 归一：把 members[] 写进 questions，使模板的 v-for 直接消费同一份数据。
+    // 仅在本组件「拥有」该数组时改写 —— 入口 A（导入预览传 questions）时完全不介入，
+    // 因此 question_import.vue 的既有调用行为零变化。
+    const ownedQuestions = new Set();
+
+    function syncUnifiedMembers() {
+      const list = props.questions || [];
+      const incoming = props.members || [];
+      if (!incoming.length) return;
+      const owns = ownedQuestions.has(list) || (!list.length && !!props.group);
+      if (!owns) return;
+      const ctx = props.group || {};
+      const normalized = incoming.map(function (m, i) { return normalizeMember(m, i, ctx); });
+      list.splice(0, list.length);
+      Array.prototype.push.apply(list, normalized);
+      ownedQuestions.add(list);
+    }
+
+    // group 可能在 members 之后异步到位，故一并监听（members 内部变化也要重算）
+    watch(
+      function () { return [props.members, props.group]; },
+      syncUnifiedMembers,
+      { immediate: true, deep: true }
+    );
+
+    // 组头数据：两个入口归一到同一结构。
+    // 入口 A（groups[]）  material_length / material_titles / material_text  原样透传
+    // 入口 B（group）     shared_content 的长度即 material_length，小标题从正文还原
+    function buildUnifiedHead() {
+      const g = props.group;
+      if (!g || typeof g !== 'object') return null;
+      const text = String(g.shared_content || '');
+      const len = text.length;
+      const folded = len > MATERIAL_FOLD_THRESHOLD && !isGroupExpanded(0);
+      const count = (props.members || []).length || (props.questions || []).length;
+      return {
+        group_key: 'group_' + (g.id || 0),
+        title: g.title || '',
+        group_type: g.group_type || '',
+        source: g.source || '',
+        material_length: len,
+        material_titles: extractMaterialTitles(text),
+        question_count: count,
+        material_preview: folded ? text.slice(0, MATERIAL_CLIP_LEN) : text,
+        truncated: folded,
+        visible: len > 0 || count > 1
+      };
+    }
+
     const groupHeads = computed(function () {
-      const gs = props.groups || [];
-      return gs.map(function (g, i) {
+      const unified = buildUnifiedHead();
+      const legacy = (props.groups || []).map(function (g, i) {
         const len = g.material_length || 0;
         const text = g.material_text || '';
-        const folded = len > MATERIAL_FOLD_THRESHOLD && !expandedGroups.value[String(i)];
+        const folded = len > MATERIAL_FOLD_THRESHOLD && !isGroupExpanded(i);
         return {
           group_key: g.group_key,
+          title: g.title || '',
           material_length: len,
           material_titles: g.material_titles || [],
           question_count: g.question_count || 0,
@@ -403,9 +550,108 @@ export default defineComponent({
           visible: len > 0 || (g.question_count || 0) > 1
         };
       });
+      return unified ? [unified].concat(legacy) : legacy;
     });
 
+    // 组数变化时补齐默认展开态：新增组默认展开，用户已折叠过的组保持原状
+    watch(
+      function () { return groupHeads.value.length; },
+      function (n) {
+        const next = {};
+        Object.keys(expandedGroups.value).forEach(function (k) { next[k] = expandedGroups.value[k]; });
+        for (let i = 0; i < n; i++) {
+          if (!(String(i) in next)) next[String(i)] = true;
+        }
+        expandedGroups.value = next;
+      },
+      { immediate: true }
+    );
+
+    // 归一后的完整契约（便于调用方直接取用，也便于测试断言渲染顺序）
+    const normalizedContract = computed(function () {
+      const g = props.group || {};
+      const members = (props.members || []).map(function (m, i) {
+        return normalizeMember(m, i, g);
+      });
+      return {
+        group: {
+          id: g.id || 0,
+          title: g.title || '',
+          shared_content: g.shared_content || '',
+          group_type: g.group_type || '',
+          subject: g.subject || '',
+          source: g.source || ''
+        },
+        members: members,
+        total: members.length
+      };
+    });
+
+    const hasUnifiedContract = computed(function () {
+      return !!props.group && (props.members || []).length > 0;
+    });
+
+    // ============================================================
+    // 学生端只读（模块 E-2）
+    // ============================================================
+    // <template> 属设计器领地，禁止手改结构，故只读态的「隐藏编辑控件」在脚本内完成：
+    //   1) 写屏障 —— 封死一切写方法与写事件（openEditDialog / pickImage / handlePaste / saveEdit）
+    //   2) 运行期只读样式 —— 把编辑/导入控件 display:none（材料折叠按钮保留）
+    // 两条互为兜底：样式被外部覆盖时仍有脚本兜底，脚本路径被绕过时仍有样式兜底。
+    // 更彻底的方案是在设计器里给这些按钮加 `v-if="!readonly"`，属 UI 结构变更，回设计器操作。
+    const isReadonly = computed(function () { return props.readonly === true; });
+
+    const READONLY_STYLE_ID = 'qpl-readonly-style';
+    // 注意：.btn-mini-toggle / .btn-mini-expand（材料折叠）在名单之外，学生端仍需折叠材料
+    const READONLY_HIDDEN_SELECTORS = [
+      '.docs-list-topbar',        // 顶部统计 + 全部入库（导入评审视角）
+      '.form-actions',            // 底部全部导入 + 完成
+      '.btn-mini-edit',
+      '.btn-mini-import',
+      '.btn-mini-delete',
+      '.btn-mini-reverify',
+      '.btn-mini-img',            // +题干图 / 选项+图 / +答案图 / +解析图
+      '.docs-q-dup-badge',
+      '.docs-q-ans-badge',        // 已匹配答案 / 缺答案 / 缺解析
+      '.docs-q-suspicious-badge',
+      '.docs-q-conf-badge'
+    ];
+
+    // 只读标记打在组件根节点上，样式选择器据此收敛作用域，不污染其他页面
+    const instance = getCurrentInstance();
+
+    function ensureReadonlyStyle() {
+      if (typeof document === 'undefined') return;
+      if (document.getElementById(READONLY_STYLE_ID)) return;
+      const styleEl = document.createElement('style');
+      styleEl.id = READONLY_STYLE_ID;
+      styleEl.textContent = READONLY_HIDDEN_SELECTORS.map(function (sel) {
+        return '[data-qpl-readonly] ' + sel + ' { display: none !important; }';
+      }).join('\n');
+      document.head.appendChild(styleEl);
+    }
+
+    onMounted(function () {
+      const root = (instance && instance.proxy && instance.proxy.$el) || null;
+      if (root && root.nodeType === 1) root.setAttribute('data-qpl-readonly', '');
+    });
+
+    // 写事件闸门：只读态一律不外发。模板里直接 $emit 的那几处（导入/删除/重检/完成）
+    // 已被只读样式隐藏，这里只兜住脚本侧发出的 attach-image / edit-question。
+    function emitWrite(event, payload) {
+      if (isReadonly.value) return;
+      emit(event, payload);
+    }
+
+    watch(isReadonly, function (ro) {
+      if (!ro) return;
+      ensureReadonlyStyle();
+      attachingKey.value = '';
+      editDialogVisible.value = false;
+    }, { immediate: true });
+
     function pickImage(idx, target, optionKey) {
+      if (isReadonly.value) return;
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/png,image/jpeg,image/gif,image/webp';
@@ -415,7 +661,7 @@ export default defineComponent({
         if (input.parentNode) input.parentNode.removeChild(input);
         if (!f) return;
         attachingKey.value = idx + ':' + (optionKey || target);
-        emit('attach-image', { idx: idx, target: target, optionKey: optionKey || null, file: f });
+        emitWrite('attach-image', { idx: idx, target: target, optionKey: optionKey || null, file: f });
       };
       // 用户取消选择时不会触发 onchange，需自行清理节点
       input.addEventListener('cancel', function () {
@@ -432,6 +678,7 @@ export default defineComponent({
 
     // 复制粘贴图片快捷添加：监听 paste 事件，从剪贴板取图片文件复用 attach-image 链路
     function handlePaste(idx, target, optionKey, event) {
+      if (isReadonly.value) return;
       const cd = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
       if (!cd || !cd.items) return;
       for (let i = 0; i < cd.items.length; i++) {
@@ -440,7 +687,7 @@ export default defineComponent({
           const file = item.getAsFile();
           if (file) {
             attachingKey.value = idx + ':' + (optionKey || target);
-            emit('attach-image', { idx: idx, target: target, optionKey: optionKey || null, file: file });
+            emitWrite('attach-image', { idx: idx, target: target, optionKey: optionKey || null, file: file });
             event.preventDefault();
             return;
           }
@@ -448,7 +695,7 @@ export default defineComponent({
       }
     }
 
-    return {
+return {
       provider,
       editDialogVisible,
       editIndex,
@@ -457,12 +704,13 @@ export default defineComponent({
       // 复合题组总题干展示（用户实测缺陷 D1）
       groupHeads,
       expandedGroups,
-toggleGroup,
-    isSectionCollapsed,
-    toggleSection,
-    showSectionHead,
-    sectionCount,
-    pickImage,
+      isGroupExpanded,
+      toggleGroup,
+      isSectionCollapsed,
+      toggleSection,
+      showSectionHead,
+      sectionCount,
+      pickImage,
       handlePaste,
       finishAttach,
       openEditDialog,
@@ -472,7 +720,10 @@ toggleGroup,
       removeOption,
       isJudgeQuestion,
       isShortAnswer,
-      renderQuestionContent
+      renderQuestionContent,
+      readonly: isReadonly,
+      normalizedContract,
+      hasUnifiedContract
     };
   }
 });
