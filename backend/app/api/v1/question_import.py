@@ -832,7 +832,7 @@ def _norm_for_dedup(s: str) -> str:
 
 # PDF 图片占位符提取所需常量（2026-09-29）
 # 行首题号：用于判定图片归属的哪一道题
-_PDF_QN_LINE = re.compile(r'^\s*(\d{1,3})\s*[．.、]')
+_PDF_QN_LINE = re.compile(r'^\s*(\d{1,3})\s*[．.、](?!\d)')
 # 页面噪声行：页眉/页脚/水印，占位符绝不能挂在这些行上（会被清洗整行删掉）
 _PDF_NOISE_LINE = re.compile(
     r'^\s*第\s*\d+\s*页'                       # 页脚/页码
