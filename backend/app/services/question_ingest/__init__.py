@@ -15,3 +15,7 @@ from .tags import (  # I-4：标签检测 + 自动建卷（pure move 自 api/v1/
     _get_or_create_import_paper,
     SUBJECT_NAME_MAP,
 )
+from .images import (  # I-5：题目图提取/落盘 + 占位符协议（pure move 自 api/v1/question_import.py）
+    _extract_and_save_images,
+    save_images_for_group,
+)
