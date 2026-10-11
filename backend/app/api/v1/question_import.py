@@ -4497,6 +4497,21 @@ async def separate_match_xingce_endpoint(
     if not answers_text:
         raise HTTPException(status_code=400, detail="答案文件文本为空")
 
+    # ★ 任务 21（模块 C-5）：本端点与 `/separate-match` 共用**同一套**校验入口。
+    #   行测文档 → `xingce_cross_validate` 五项安全网（自身判据）；
+    #   若两份文档实为**申论**（例如用户在行测端点误传申论卷），
+    #   改走与 `/separate-match` 完全相同的 `_essay_cross_validate`，
+    #   绝不落到行测分节判据上被误判为「非行测试卷」而错配。
+    #   `_separate_match_essay` 返回的 12 个公共字段与本端点完全一致，前端无需分支。
+    _xq_blocks = extract_question_blocks(questions_text)
+    _xa_blocks = extract_question_blocks(answers_text)
+    _xq_is_essay = bool(_xq_blocks) and _xq_blocks[0].get('format') == 'essay'
+    _xa_is_essay = bool(_xa_blocks) and _xa_blocks[0].get('format') == 'essay'
+    if _xq_is_essay and _xa_is_essay:
+        return _separate_match_essay(
+            db, payload, _xq_blocks, _xa_blocks,
+            subject_name=payload.get('subject_category', ''))
+
     try:
         return _separate_match_xingce(
             db, payload, questions_text, answers_text,
@@ -5025,6 +5040,26 @@ async def unified_parse(
             cleaned_text = ContentCleaner.clean_text(questions_text)
             blocks = extract_question_blocks(cleaned_text)
 
+            # ★ 任务 21（模块 C-5）：合并导入与分离导入**共用同一套**三方交叉校验。
+            #   合订本（题+答在同一文档）的答案区常集中在文末，解析器按序配对
+            #   只校验「段数==题数」，一旦相等便整卷放行 —— 正是「计数相等但错配」。
+            #   这里把文档切成题目侧/答案侧，喂给与 /separate-match **完全相同**的
+            #   `_essay_cross_validate`，逐题比对题号+分值+题干指纹。
+            #   非申论文档、或无文末统一答案区（形态②③ 就地配对）→ 返回 None，
+            #   完全走既有逻辑，**公专/行测零影响**。
+            _essay_import = _essay_cross_validate_import(cleaned_text)
+            _essay_merged = _essay_import or {}
+            _essay_blocked_by_no = {}
+            if _essay_merged.get('report'):
+                _rep_combined = _essay_merged['report']
+                # 用校验后的块替换解析块：blocked 题的 answer 已被强制清空，
+                # 后续按序/就近填充答案的路径一律失效（禁止按序硬配）。
+                blocks = _essay_merged['questions'] or blocks
+                for _b in blocks:
+                    if _b.get('blocked'):
+                        _essay_blocked_by_no[str(_b.get('question_number'))] = \
+                            list(_b.get('block_reasons') or [])
+
             if not blocks:
                 # 回退：尝试用前端兼容的宽松解析（按行切分）
                 warnings.append('未检测到标准题号格式，已尝试宽松解析')
@@ -5042,6 +5077,8 @@ async def unified_parse(
                 analysis = block.get('analysis', '')
                 qtype = block.get('question_type', '单选题')
                 options = block.get('options', [])
+                # 三方交叉校验的阻断原因 → 映射为校验异常，让前端读出并阻止入库
+                _block_reasons = _essay_blocked_by_no.get(str(q_num)) or []
 
                 # 去重检测
                 dup_info = _get_duplicate_info(
@@ -5061,14 +5098,29 @@ async def unified_parse(
                     images=images,
                     question_type=qtype,
                     subject_category=auto_detected_subject,
+                    validation_errors=_block_reasons,
                 ))
 
             # 统计匹配结果
-            matched_count = sum(1 for q in questions if q.answer and q.answer != '待补充')
-            analysis_count = sum(1 for q in questions if q.analysis and len(q.analysis) > 10)
-            if total_questions > 0:
-                match_rate = round(matched_count * 100 / total_questions, 1)
-            strategy_used = '合并导入解析'
+            if _essay_merged.get('report'):
+                # 申论合并导入：通过率以「三方交叉校验」为准，blocked 题不计入通过
+                _blocked_cnt = _rep_combined['blocked_count']
+                matched_count = max(total_questions - _blocked_cnt, 0)
+                analysis_count = sum(1 for q in questions
+                                     if q.analysis and len(q.analysis) > 10)
+                match_rate = round(matched_count * 100 / total_questions, 1) \
+                    if total_questions else 0.0
+                strategy_used = 'essay_triple_cross_validate'
+                if _blocked_cnt:
+                    warnings.append(
+                        '三方交叉校验阻断 %d/%d 题（含题干与答案卷不匹配），'
+                        '请核对是否上传了错误年份/卷别' % (_blocked_cnt, total_questions))
+            else:
+                matched_count = sum(1 for q in questions if q.answer and q.answer != '待补充')
+                analysis_count = sum(1 for q in questions if q.analysis and len(q.analysis) > 10)
+                if total_questions > 0:
+                    match_rate = round(matched_count * 100 / total_questions, 1)
+                strategy_used = '合并导入解析'
 
         # 自动检测标签
         auto_tags = _auto_detect_tags(paper_name, questions_text[:2000])
@@ -5736,3 +5788,117 @@ async def get_import_stats(
             'complete_time': latest.complete_time.isoformat() if latest and latest.complete_time else None,
         } if latest else None,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 任务 21（模块 C-5）：分离与合并路径统一的申论三方校验入口
+#
+# 背景：`_essay_cross_validate(q_blocks, a_blocks)` 原先是**分离导入专用**，
+# 合并导入走 `extract_question_blocks` 后直接入库 —— 而解析器在形态①
+# （文末统一答案区）配对时是**按序硬配**（`_parse_essay_document` 的
+# `trailing_segments[k] → 第 k 题`）。一旦段数与题数相等（合订本常见），
+# 错配会被整卷放行，答案张冠李戴且不可逆。
+#
+# 本模块把同一套「题号 + 分值 + 题干指纹」校验提升为两条路径共用：
+#   分离路径：两份文档 → extract_question_blocks 两次 → _essay_cross_validate
+#   合并路径：单份文档 → 按答案区边界切成两半 → 同上
+# 判据**只有一份实现**，不做第二份。
+#
+# 插入位置刻意选在本文件末尾：放在 `separate_match_endpoint` 之前会让
+# dispatch 红线的行号定位失效，绝不可行。
+# ══════════════════════════════════════════════════════════════════════
+
+# 为什么用延迟导入：本文件顶部 import 块任何增行都会让下方所有函数整体下移，
+# 而 gate_l0 的 dispatch 块断言按**固定行号区间**取内容。为守住红线，
+# 本模块一律走函数内延迟导入（沿用本文件 :2281/:2664/:3123/:4315 的既有惯例）。
+
+
+def _essay_split_combined_text(text: str):
+    """把**合并**申论文档切成「题目侧 / 答案侧」两段文本。
+
+    判定口径与 `_parse_essay_document` 的形态①完全一致（复用其私有 helper，
+    绝不复刻一份正则）：先判体例 → 切题号 → 取最后一个题号行 → 找其后
+    第一个答案锚点，再**回退**到该答案块自带的题干行作为分界（合订本的
+    答案区第 1 个题块以「带题号的题干行」开头，该行在参考答案锚点之前；
+    不回退就会把复述题干整段丢掉，题干指纹无处可比）。
+
+    返回 `(question_text, answer_text)`；**无法判定为申论文档、或不存在
+    文末答案区**（形态②③ 就地配对）时返回 `(None, None)`，交由调用方按
+    既有逻辑处理 —— 绝不把普通文档硬塞进申论链路。
+    """
+    # 延迟导入：守住本文件顶部 import 块行号红线（见上文说明）
+    from ...services.text_parser import (
+        _essay_norm_kangxi,
+        _essay_strip_page_marks,
+        _detect_essay_numbering,
+        _essay_split_questions,
+        _essay_is_ans_anchor,
+        _essay_looks_like_question_number,
+    )
+    lines = _essay_strip_page_marks([_essay_norm_kangxi(l) for l in (text or '').split('\n')])
+    style = _detect_essay_numbering(lines)
+    if style is None:
+        return None, None
+    numbers = _essay_split_questions(lines, style)
+    if not numbers:
+        return None, None
+
+    last_q_line = numbers[-1][1]
+
+    # 形态②③（答案紧随每题、就地配对）：在最后一个题号之前就出现答案锚点。
+    # 这种情况没有「文末统一答案区」可切，直接退出，走既有解析逻辑。
+    def _first_anchor(from_line: int):
+        for i in range(from_line, len(lines)):
+            if _essay_is_ans_anchor(lines[i].strip()):
+                return i
+        return None
+
+    tail_anchor = _first_anchor(last_q_line)
+    if tail_anchor is None:
+        return None, None
+    if _first_anchor(0) is not None and _first_anchor(0) < last_q_line:
+        return None, None
+
+    # 答案区的第 1 个答案块以「自带题干的题号行」开头，该行在参考答案锚点**之前**。
+    # 从这里往回走到最近的同体例题号行作为分界，否则答案侧会从参考答案锚点起头，
+    # 复述题干整段丢失 → 题干指纹无处可比（实测安徽合订本即此形态）。
+    # 下界严格取 last_q_line+1：绝不允许把题目区最后一道题划进答案侧。
+    boundary = tail_anchor
+    for i in range(tail_anchor, last_q_line, -1):
+        if _essay_looks_like_question_number(lines[i], style):
+            boundary = i
+            break
+    if boundary <= last_q_line:
+        return None, None
+    return '\n'.join(lines[:boundary]), '\n'.join(lines[boundary:])
+
+
+def _essay_cross_validate_import(text: str, prefer_subject: str = '') -> Optional[Dict[str, Any]]:
+    """任务 21 的统一校验入口：**合并导入**的申论文档共享分离路径的三方校验。
+
+    与分离路径共用同一个 `_essay_cross_validate`（题号 + 分值 + 题干指纹），
+    判据只有一份实现：
+
+        combined: `_essay_split_combined_text` 切两半
+               → `extract_question_blocks` × 2
+               → `_essay_cross_validate(q_blocks, a_blocks)`
+
+    返回结构与 `_essay_cross_validate` 相同：
+        {'questions': [...], 'report': {...}}
+    每题带 `blocked` / `block_reasons`（含 `stem_fingerprint_mismatch`），
+    调用方必须据此阻断入库，**禁止按序硬配**。
+
+    非申论文档 / 无文末答案区 → 返回 None（调用方走既有解析逻辑）。
+    """
+    # 延迟导入：守住本文件顶部 import 块行号红线（见上文说明）
+    from ...services.text_parser import extract_question_blocks
+    if not (text or '').strip():
+        return None
+    q_text, a_text = _essay_split_combined_text(text)
+    if q_text is None or a_text is None:
+        return None
+    q_blocks = extract_question_blocks(q_text)
+    a_blocks = extract_question_blocks(a_text)
+    if not q_blocks:
+        return None
+    return _essay_cross_validate(q_blocks, a_blocks)
