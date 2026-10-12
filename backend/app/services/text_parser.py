@@ -964,6 +964,8 @@ QUESTION_NUMBER_PATTERNS = [
 ANSWER_PATTERNS = [
     # 【答案】C / 《答案》C / <答案>C / 答案:C
     ('chinese_bracket', re.compile(r'[【《<\[]?\s*答\s*案\s*[】》>\]：:：]\s*([A-Da-d对错正确错误是否、，,;；\s·]+)')),
+    # 【答案及解析】D / 答案及解析：D —— 公专答案 PDF 标签（答案后紧跟解析文本）
+    ('answer_with_analysis', re.compile(r'[【《<\[]?\s*(?:参考)?\s*答案及解析\s*[】》>\]：:：]\s*([A-Da-d对错正确错误是否、，,;；\s·]+)')),
     # 答案：C / 参考答案：C
     ('chinese_colon', re.compile(r'(?:参考)?答案\s*[：:：]\s*([A-Da-d对错正确错误是否、，,;；\s·]+)')),
     # 正确选项：C / 正确答案: C
@@ -1691,6 +1693,7 @@ def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
             analysis_parts = []
             answer_end = m.end()
             remaining = full_text[answer_end:].strip()
+            remaining = re.sub(r'^[。．.、，,；;：:]+', '', remaining).strip()
             if remaining and len(remaining) > 5:
                 # 截取到下一个答案标记或题号之前
                 next_break = re.search(r'(?:[【《<\[【]?\s*答\s*案|^\s*\d+\s*[.、．])',
@@ -1721,6 +1724,14 @@ def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
                     'analysis': full_text,
                     'format': f'embedded_{fmt_name}',
                 }
+
+    # 题号已剥离、首行只剩孤立字母 + 后续解析正文（无标签形态：1.D 换行解析）
+    if lines and len(lines) > 1:
+        first = lines[0].strip()
+        if re.match(r'^[A-Da-d]{1,4}$', first):
+            rest = '\n'.join(lines[1:]).strip()
+            if rest:
+                return {'answer': first.upper(), 'analysis': rest, 'format': 'header_letter_analysis'}
 
     # 兜底：最后一行如果是孤立的大写字母串，视为答案
     for line in reversed(lines):
