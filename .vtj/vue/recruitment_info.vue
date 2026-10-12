@@ -108,6 +108,7 @@ import { XIcon } from '@vtj/ui';
 import { Opportunity } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import { sanitizeHtml } from '@/utils/questionRender';
+import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
 
 export default defineComponent({
   name: 'RecruitmentInfo',
@@ -121,6 +122,8 @@ export default defineComponent({
       categories: ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'] as string[],
       allItems: [] as any[],
       displayCount: 10,
+      // 后端返回的元信息（更新时间 / 站点最新发布日期），P2 文案将消费
+      meta: null as any,
     });
     const scrollContainer = ref<HTMLElement | null>(null);
     const scrollSentinel = ref<HTMLElement | null>(null);
@@ -128,14 +131,20 @@ export default defineComponent({
     return { state, props, provider, Opportunity, scrollContainer, scrollSentinel, sanitizeHtml };
   },
   methods: {
-    async fetchRecruitment() {
+    async fetchRecruitment(ctx: any) {
       if (this.state.loading) return;
       this.state.loading = true;
       try {
-        const resp = await (window as any).__VTJ_AUTH__.apiFetch('/api/recruitment?limit=20');
+        // ctx 由刷新内核提供：signal 用于取消过期请求，ts 用于破缓存。
+        // 招考信息每日更新，任何层级缓存都会让用户看到旧内容，故强制 no-store。
+        const opts: any = { cache: 'no-store' };
+        if (ctx && ctx.signal) opts.signal = ctx.signal;
+        const url = '/api/recruitment?limit=20&_ts=' + ((ctx && ctx.ts) || Date.now());
+        const resp = await (window as any).__VTJ_AUTH__.apiFetch(url, opts);
         const data = await resp.json();
         if (data && data.items) {
           this.state.items = data.items;
+          this.state.meta = data.meta || null;
           // Flatten all items for accordion display
           const all: any[] = [];
           for (const cat of this.state.categories) {
@@ -148,6 +157,7 @@ export default defineComponent({
           this.state.displayCount = 10;
         }
       } catch (e: any) {
+        if (e && (e.name === 'AbortError' || e.__aborted)) return;
         console.warn('[RecruitmentInfo] fetchRecruitment failed:', e.message);
       } finally {
         this.state.loading = false;
@@ -186,12 +196,21 @@ export default defineComponent({
     },
   },
   mounted() {
-    this.fetchRecruitment();
+    // 统一刷新内核接管取数：首屏加载 + 后端广播 + 可见性/聚焦 + 跨日 + 15 分钟轮询
+    // + 登录态变化 + 手动刷新，全部收敛到一处，避免多套重复逻辑漏改。
+    this._recruitRefresher = createRecruitmentRefresher({
+      fetchFn: (ctx) => this.fetchRecruitment(ctx),
+      pollMs: 15 * 60 * 1000,
+    });
     this.$nextTick(() => {
       this.setupObserver();
     });
   },
   beforeUnmount() {
+    if (this._recruitRefresher) {
+      this._recruitRefresher.destroy();
+      this._recruitRefresher = null;
+    }
     if (this.observer) {
       this.observer.disconnect();
       this.observer = null;

@@ -130,6 +130,7 @@
 </template>
 <script lang="ts">
 import { sanitizeHtml } from '@/utils/questionRender';
+import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   // @ts-nocheck
   import { defineComponent, reactive, ref } from 'vue';
   import { XIcon } from '@vtj/ui';
@@ -165,7 +166,9 @@ import { sanitizeHtml } from '@/utils/questionRender';
         recruitCategories: [],
         recruitAllData: {},
         showRecruitModal: false,
-        selectedRecruit: {}
+        selectedRecruit: {},
+        // 后端元信息（本次更新时间 / 站点最新发布日期），P2 文案消费
+        recruitMeta: null,
       });
       return { state, props, provider, recruitListRefs, Briefcase, ArrowRight, sanitizeHtml };
     },
@@ -185,7 +188,7 @@ import { sanitizeHtml } from '@/utils/questionRender';
         this.state.showRecruitModal = false;
         this.state.selectedRecruit = {};
       },
-      async fetchRecruitment() {
+      async fetchRecruitment(ctx: any) {
         const categories = ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'];
         const icons = { '国考省考': '🏛️', '事业单位': '🏢', '教师招聘': '📚', '国企招聘': '🏭', '医疗卫生': '🏥', '三支一扶': '🌾' };
         const bgs = {
@@ -197,15 +200,21 @@ import { sanitizeHtml } from '@/utils/questionRender';
           '三支一扶': 'linear-gradient(135deg, #d1fae5, #a7f3d0)'
         };
         try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/recruitment?limit=20');
+          // ctx 由刷新内核提供：signal 取消过期请求，ts 破缓存（招考每日更新，须禁缓存）
+          const opts: any = { cache: 'no-store' };
+          if (ctx && ctx.signal) opts.signal = ctx.signal;
+          const res = await window.__VTJ_AUTH__.apiFetch(
+            '/api/recruitment?limit=20&_ts=' + ((ctx && ctx.ts) || Date.now()), opts);
           const data = await res.json();
           if (res.ok && data.items) {
             this.state.recruitAllData = data.items;
+            this.state.recruitMeta = data.meta || null;
             this.buildRecruitCards();
           } else {
             this.loadFallbackRecruit(categories, icons, bgs);
           }
         } catch (e) {
+          if (e && (e.name === 'AbortError' || e.__aborted)) return;
           this.loadFallbackRecruit(categories, icons, bgs);
         }
       },
@@ -254,7 +263,17 @@ import { sanitizeHtml } from '@/utils/questionRender';
       }
     },
     mounted() {
-      this.fetchRecruitment();
+      // 统一刷新内核接管取数（首屏/广播/可见性/聚焦/跨日/15分钟轮询/登录态/手动）
+      this._recruitRefresher = createRecruitmentRefresher({
+        fetchFn: (ctx) => this.fetchRecruitment(ctx),
+        pollMs: 15 * 60 * 1000,
+      });
+    },
+    beforeUnmount() {
+      if (this._recruitRefresher) {
+        this._recruitRefresher.destroy();
+        this._recruitRefresher = null;
+      }
     }
 
   })

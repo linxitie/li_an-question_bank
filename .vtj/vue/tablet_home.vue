@@ -219,7 +219,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted } from 'vue';
+import { defineComponent, ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import {
@@ -245,6 +245,7 @@ import {
   Refresh
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
 
 export default defineComponent({
   name: 'TabletHome',
@@ -291,12 +292,9 @@ export default defineComponent({
       { title: '申论命题方向调整', id: 3 }
     ]);
 
-    // 招考信息
-    const recruitList = ref([
-      { title: '2026年国家公务员考试', status: '报名中', statusColor: '#10b981', id: 1 },
-      { title: '北京市公务员考试', status: '即将开始', statusColor: '#f59e0b', id: 2 },
-      { title: '公安部直属单位招聘', status: '已结束', statusColor: '#8899aa', id: 3 }
-    ]);
+    // 招考信息（初始为空，由统一刷新内核填充真实数据；
+    // 此前内置的 3 条硬编码假数据会在接口失败时长期展示为"真实招考信息"，已移除）
+    const recruitList = ref<any[]>([]);
 
     // 考试日历
     const upcomingExams = ref([
@@ -336,18 +334,7 @@ export default defineComponent({
             newsList.value = n.items.map((it: any) => ({ title: it.title, id: it.id }));
           }
         }
-        // 招考信息（公开接口）
-        const rRes = await fetch('/api/recruitment');
-        if (rRes.ok) {
-          const r = await rRes.json();
-          if (r.items) {
-            const flat: any[] = [];
-            Object.values(r.items).forEach((arr: any) => { if (Array.isArray(arr)) flat.push(...arr); });
-            recruitList.value = flat.slice(0, 3).map((it: any) => ({
-              title: it.title, status: it.status_label, statusColor: it.status_color, id: it.id
-            }));
-          }
-        }
+        // 招考信息（公开接口）改由统一刷新内核负责，见 loadRecruitment
         // 考试日历（真实接口 /api/calendar/exams，替换原静态 /api/stats/calendar）
         const cRes = await fetch('/api/calendar/exams?limit=3');
         if (cRes.ok) {
@@ -369,6 +356,41 @@ export default defineComponent({
       } catch (error) {
         console.error('加载数据失败:', error);
       }
+    });
+
+    // ===== 招考信息：统一刷新内核 =====
+    // 平板端招考数据此前只在 onMounted 取一次，且用裸 fetch（不带认证、不破缓存）。
+    // 现统一走内核：首屏 + 后端广播 + 可见性/聚焦 + 跨日 + 15 分钟轮询 + 登录态 + 手动。
+    let recruitRefresher: any = null;
+    const recruitMeta = ref<any>(null);
+
+    const loadRecruitment = async (ctx: any) => {
+      const opts: any = { cache: 'no-store' };
+      if (ctx && ctx.signal) opts.signal = ctx.signal;
+      const auth = (window as any).__VTJ_AUTH__;
+      const url = '/api/recruitment?_ts=' + ((ctx && ctx.ts) || Date.now());
+      const r = auth && auth.apiFetch ? await auth.apiFetch(url, opts) : await fetch(url, opts);
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data && data.items) {
+        const flat: any[] = [];
+        Object.values(data.items).forEach((arr: any) => { if (Array.isArray(arr)) flat.push(...arr); });
+        recruitList.value = flat.slice(0, 3).map((it: any) => ({
+          title: it.title, status: it.status_label, statusColor: it.status_color, id: it.id
+        }));
+        recruitMeta.value = data.meta || null;
+      }
+    };
+
+    onMounted(() => {
+      recruitRefresher = createRecruitmentRefresher({
+        fetchFn: (ctx: any) => loadRecruitment(ctx),
+        pollMs: 15 * 60 * 1000,
+      });
+    });
+
+    onBeforeUnmount(() => {
+      if (recruitRefresher) { recruitRefresher.destroy(); recruitRefresher = null; }
     });
 
     // 导航方法
@@ -401,6 +423,8 @@ export default defineComponent({
       quoteAuthor,
       newsList,
       recruitList,
+    recruitMeta,
+    loadRecruitment,
       upcomingExams,
       goToNotifications,
       goToSettings,

@@ -44,9 +44,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
 
 const router = useRouter();
 
@@ -58,6 +59,7 @@ const items = ref<Record<string, any[]>>({});
 const activeCat = ref('');
 const loading = ref(false);
 const expandedId = ref<number | null>(null);
+const meta = ref<any>(null);
 
 const currentItems = computed(() => items.value[activeCat.value] || []);
 
@@ -70,24 +72,40 @@ const toggleDetail = (item: any) => {
   expandedId.value = expandedId.value === item.id ? null : item.id;
 };
 
-const fetchRecruitment = async () => {
+const fetchRecruitment = async (ctx?: any) => {
   loading.value = true;
   try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/recruitment?limit=20');
+    // ctx 由统一刷新内核提供：signal 取消过期请求，ts 破缓存（招考每日更新，须禁缓存）
+    const opts: any = { cache: 'no-store' };
+    if (ctx && ctx.signal) opts.signal = ctx.signal;
+    const url = '/api/recruitment?limit=20&_ts=' + ((ctx && ctx.ts) || Date.now());
+    const res = await (window as any).__VTJ_AUTH__.apiFetch(url, opts);
     const data = await res.json();
     if (res.ok && data.categories) {
       categories.value = data.categories;
       items.value = data.items || {};
+      meta.value = data.meta || null;
       if (!activeCat.value && categories.value.length) activeCat.value = categories.value[0];
     }
-  } catch (e) {
+  } catch (e: any) {
+    if (e && (e.name === 'AbortError' || e.__aborted)) return;
     console.error('获取招考信息失败:', e);
   } finally {
     loading.value = false;
   }
 };
 
-onMounted(fetchRecruitment);
+// 统一刷新内核：首屏 + 后端广播 + 可见性/聚焦 + 跨日 + 15 分钟轮询 + 登录态 + 手动
+let refresher: any = null;
+onMounted(() => {
+  refresher = createRecruitmentRefresher({
+    fetchFn: (ctx: any) => fetchRecruitment(ctx),
+    pollMs: 15 * 60 * 1000,
+  });
+});
+onBeforeUnmount(() => {
+  if (refresher) { refresher.destroy(); refresher = null; }
+});
 </script>
 
 <style scoped>
