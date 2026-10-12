@@ -3376,6 +3376,11 @@ _FILL_BLANK_KW = ('填空', '横线处', '划线处', '括号内', '内填写')
 _MULTI_KW = ('多选', '多项选择', '不定项', '正确的有', '错误的有',
              '正确的包括', '错误的包括', '至少两个', '至少两个以上', '两个以上')
 
+# 图表/流程图指示词（B-3）：题干含这些词且选项≥3 的题按图表单选/多选判定，
+# 防止答案被错位配对成「对/错」时误判为判断题（判断题只有 2 个选项，不冲突）
+_CHART_KW = ('如图', '下图', '图中', '下表', '上图', '图表', '示意图', '折线图',
+             '柱状图', '流程图', '图示', '看图', '统计图', '饼图')
+
 
 def _detect_question_type(content: str, options: List[str], answer: str = '',
                           section_hint: str = '') -> tuple[str, float]:
@@ -3406,7 +3411,7 @@ def _detect_question_type(content: str, options: List[str], answer: str = '',
     # （P2 已把它们从题干里剥离，这里是双保险：OCR/Excel 路径可能绕过 P2）
     clean_content = _SECTION_DIRECTIVE_RE.sub(' ', content_text)
     clean_content = re.sub(
-        r'(?:根据|阅读)(?:以下|下面)[^\n]{0,20}?回答[ \t]*\d+[ \t]*[-~\u2014\uff0d\u81f3][ \t]*\d+[ \t]*题',
+        r'(?:根据|阅读)(?:以下|下面)[^\n]{0,20}?回答[ \t]*(?:第)?\s*\d+[ \t]*[-~\u2014\uff0d\u81f3][ \t]*\d+[ \t]*题',
         ' ', clean_content)
 
     cleaned_options = []
@@ -3431,6 +3436,10 @@ def _detect_question_type(content: str, options: List[str], answer: str = '',
 
     # ---------- L1：有选项 → 答案字母数是唯一依据 ----------
     if opt_count >= 2:
+        # B-3：图表/流程图题优先。题干含图表指示词且选项≥3 时按答案字母
+        # 判单选/多选，不被错位答案的「对/错」信号误导成判断题。
+        if opt_count >= 3 and any(k in clean_content for k in _CHART_KW):
+            return ('多选题', 0.95) if n_letter >= 2 else ('单选题', 0.85)
         if is_judge_answer:
             return '判断题', 0.90
         if n_letter >= 2:
