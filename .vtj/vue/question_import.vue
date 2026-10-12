@@ -690,7 +690,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
         var lastError = null;
         for (var attempt = 0; attempt <= retries; attempt++) {
           var controller = new AbortController();
-          var timer = setTimeout(function() { controller.abort(new Error('client timeout: ' + timeoutMs + 'ms')); }, timeoutMs);
+          var timer = setTimeout(function() { controller.abort(new DOMException('client timeout: ' + timeoutMs + 'ms', 'TimeoutError')); }, timeoutMs);
           try {
             var fetchOpts = Object.assign({}, options, { signal: controller.signal });
             var res = await fetch(url, fetchOpts);
@@ -699,7 +699,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
           } catch (e) {
             clearTimeout(timer);
             lastError = e;
-            if (e.name === 'AbortError') {
+            if (e.name === 'AbortError' || e.name === 'TimeoutError') {
               console.warn('[fetchWithRetry] Timeout after ' + timeoutMs + 'ms, attempt ' + (attempt + 1) + '/' + (retries + 1));
             } else {
               console.warn('[fetchWithRetry] Error on attempt ' + (attempt + 1) + ': ' + (e.message || e));
@@ -721,7 +721,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
         if (msg.indexOf('Failed to fetch') !== -1 || msg.indexOf('NetworkError') !== -1) {
           return context + '失败：无法连接到服务器，请确认服务已启动 (npm run dev / python start.py)';
         }
-        if (e.name === 'AbortError' || msg.indexOf('abort') !== -1 || msg.indexOf('timeout') !== -1) {
+        if (e.name === 'AbortError' || e.name === 'TimeoutError' || msg.indexOf('abort') !== -1 || msg.indexOf('timeout') !== -1) {
           return context + '超时：服务器响应过慢，请稍后重试';
         }
         return context + '出错：' + msg;
@@ -794,7 +794,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
           var res = await this.fetchWithRetry(
             '/api/questions/import/records/' + importId + '/status?light=true',
             { method: 'GET', headers: this.getAuthHeaders() },
-            30000, 2
+            10000, 2
           );
           var st = await res.json();
           if (!res.ok) {
@@ -806,7 +806,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
             var fullRes = await this.fetchWithRetry(
               '/api/questions/import/records/' + importId + '/status',
               { method: 'GET', headers: this.getAuthHeaders() },
-              30000, 2
+              10000, 2
             );
             var fullSt = await fullRes.json();
             return fullSt.result || fullSt;

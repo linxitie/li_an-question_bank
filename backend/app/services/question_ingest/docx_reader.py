@@ -186,7 +186,9 @@ def _extract_text_from_docx(buf: bytes) -> str:
     REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 
     # 题号检测正则（search 支持段中题号）
-    qn_re = re.compile(r'(?:第\s*)?(\d+)\s*(?:[.、．)）\]】]|\s*题)')
+    # 负向后顾/前顾排除区间引用（如「第98~100题」）：数字两侧不得紧邻数字或 ~，
+    # 否则 100 会被误判为独立题号，导致图片归属错位。
+    qn_re = re.compile(r'(?:第\s*)?(?<![\d~])(\d+)(?![\d~])\s*(?:[.、．)）\]】]|\s*题)')
 
     # --- 辅助函数：从段落 lxml 元素中提取所有图片 rId ---
     def _extract_rids(p_elem):
@@ -258,8 +260,6 @@ def _extract_text_from_docx(buf: bytes) -> str:
             row_texts = []
             for cell in row.cells:
                 ct = cell.text.strip()
-                if ct:
-                    row_texts.append(ct)
                 for cp in cell.paragraphs:
                     for rId in _extract_rids(cp._p):
                         if current_qn is not None:
@@ -268,6 +268,11 @@ def _extract_text_from_docx(buf: bytes) -> str:
                             img_path = os.path.join(img_dir, f'{_session_id}_{current_qn}_{seq}.png')
                             with open(img_path, 'wb') as f:
                                 f.write(image_rel_map[rId])
+                            marker = f'[IMAGE:{_session_id}_{current_qn}_{seq}]'
+                            ct = f'{ct} {marker}'.strip() if ct else marker
+                            img_seq[current_qn] += 1
+                if ct:
+                    row_texts.append(ct)
             if row_texts:
                 parts.append(' | '.join(row_texts))
 

@@ -3381,6 +3381,10 @@ async def unified_parse(
                      else _parse_result.dict())
         _response['subject_suggestion'] = subject_suggestion
         _response['subcategory_suggestion'] = subcategory_suggestion
+        # A-2：与 /status 预览路径一致 —— 返回前 sanitize 裸 [IMAGE:xxx] 占位符，
+        # 否则前端 renderQuestionContent 会整段剔除导致图片消失。本端点无 import_id，
+        # 传 None：resolve_image_marker 回落扁平暂存目录（复用 /status 的同一 helper）。
+        _sanitize_preview_images(_response, None, db)
         return _response
 
     except Exception as e:
