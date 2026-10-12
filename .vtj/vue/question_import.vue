@@ -1565,7 +1565,9 @@ import { renderQuestionContent } from '@/utils/questionRender';
               answers_text: answersText || '',
               mode: mode,
               paper_name: paperName,
-              subject_category: this.state.form.subject_category || ''
+              subject_category: this.state.form.subject_category || '',
+              questions_filename: this.state.separateQuestionsFileName || '',
+              answers_filename: this.state.separateAnswersFileName || ''
             })
           }, 30000, 1);
           var data = await res.json();

@@ -1020,6 +1020,8 @@ class ParseRequest(BaseModel):
     mode: str = Field('combined', description="导入模式: combined(合并导入) | separate(分离导入) | ocr(图片OCR)")
     paper_name: Optional[str] = Field('', description="试卷名称（可选，用于自动标签提取）")
     subject_category: Optional[str] = Field('', description="科目大类（可选，自动检测）")
+    questions_filename: Optional[str] = Field('', description="题目文档文件名（分离导入配对信号）")
+    answers_filename: Optional[str] = Field('', description="答案文档文件名（分离导入配对信号）")
 
 
 class ParseResult(BaseModel):

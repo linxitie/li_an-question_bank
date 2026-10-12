@@ -3108,12 +3108,17 @@ async def unified_parse(
         detect_subject_category, ContentCleaner, _extract_options,
         extract_answer_from_lines, _detect_question_type,
     )
+    from ...services.question_ingest.pairing import (
+        filename_similarity, diagnose_filename_pair,
+    )
 
     mode = payload.mode or 'combined'
     questions_text = (payload.questions_text or '').strip()
     answers_text = (payload.answers_text or '').strip()
     paper_name = payload.paper_name or ''
     subject_category = payload.subject_category or ''
+    questions_filename = (payload.questions_filename or '').strip()
+    answers_filename = (payload.answers_filename or '').strip()
 
     if not questions_text:
         raise HTTPException(status_code=400, detail="题目文本为空")
@@ -3131,6 +3136,8 @@ async def unified_parse(
     # 预初始化：申论路径不经过 smart_match，result 不存在；非 separate 分支也不走它
     result = None
     essay_prebuilt = None
+    # C-2：文件名相似度信号（非 separate 分支保持 0.0）
+    _filename_sim = 0.0
     # W2-1：科目建议（追加字段，先初始化为空建议，分支内检测到后再填充）
     subject_suggestion = {'name': '', 'confidence': 0.0, 'matched_keywords': []}
 
@@ -3162,8 +3169,12 @@ async def unified_parse(
                 # 申论块已是完整结构，直接复用 combined 分支的统一转换逻辑
                 essay_prebuilt = _qs
             else:
+                # C-2：文件名配对信号 —— 相似度高时提升位置兜底匹配优先级（B 力度）
+                _filename_sim = filename_similarity(
+                    questions_filename, answers_filename) if (
+                    questions_filename and answers_filename) else 0.0
                 result = smart_match_questions_answers(
-                    questions_text, answers_text, paper_name)
+                    questions_text, answers_text, paper_name, _filename_sim)
                 match_rate = round(result.match_rate * 100, 1)
                 matched_count = result.matched_count
                 total_questions = result.total_questions
@@ -3172,6 +3183,11 @@ async def unified_parse(
                 analysis_count = result.analysis_count
                 strategy_used = result.strategy_used
                 essay_prebuilt = None
+                # C-2：文件名诊断提示（相似度高但匹配失败 / 相似度低）
+                _diag = diagnose_filename_pair(
+                    questions_filename, answers_filename, result.match_rate * 100)
+                if _diag:
+                    warnings.append(_diag)
 
             if not auto_detected_subject:
                 all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
@@ -3381,6 +3397,8 @@ async def unified_parse(
                      else _parse_result.dict())
         _response['subject_suggestion'] = subject_suggestion
         _response['subcategory_suggestion'] = subcategory_suggestion
+        # C-2：文件名相似度信号（前端可展示配对可信度）
+        _response['filename_similarity'] = _filename_sim
         # A-2：与 /status 预览路径一致 —— 返回前 sanitize 裸 [IMAGE:xxx] 占位符，
         # 否则前端 renderQuestionContent 会整段剔除导致图片消失。本端点无 import_id，
         # 传 None：resolve_image_marker 回落扁平暂存目录（复用 /status 的同一 helper）。

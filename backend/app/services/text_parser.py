@@ -3717,7 +3717,8 @@ def _merge_answer_entry(answer_map: Dict[int, Dict[str, Optional[str]]],
 def smart_match_questions_answers(
     questions_text: str,
     answers_text: str,
-    paper_name: str = ''
+    paper_name: str = '',
+    filename_hint: float = 0.0,
 ) -> MatchResult:
     """
     智能匹配题目和答案（分离导入主入口）。
@@ -3878,7 +3879,11 @@ def smart_match_questions_answers(
                         analysis_count += 1
 
     # ===== 策略6: 位置兜底匹配 =====
-    if matched_count == 0 and len(question_blocks) > 0:
+    # filename_hint >= 0.5（文件名配对确认同一套卷）且仍有未匹配题时，允许按位置
+    # 补配**未匹配**的题；不覆盖任何已有内容匹配结果（B 力度：提升优先级，不强制覆盖）。
+    allow_positional = matched_count == 0 or (
+        filename_hint >= 0.5 and matched_count < len(question_blocks))
+    if allow_positional and len(question_blocks) > 0:
         # 从答案文本中提取所有A-D字母
         all_answers = re.findall(r'\b([A-Da-d])\b', answers_text)
         all_answers = [a.upper() for a in all_answers]
