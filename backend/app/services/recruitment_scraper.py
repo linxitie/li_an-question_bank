@@ -518,6 +518,8 @@ def scrape_category(category: str, config: dict) -> list:
                         "images": detail.get("images", []),
                         "exam_format": detail.get("exam_format", ""),
                         "contact_info": detail.get("contact_info", ""),
+                        # 源站发布日期：详情页优先，列表页日期兜底
+                        "publish_date": detail.get("publish_date", "") or item.get("date", "") or "",
                     })
 
                     # 条间延迟（反爬）
@@ -557,6 +559,7 @@ def _replace_category(db: Session, category: str, records: list) -> int:
             images=rec_data.get("images", []),
             exam_format=rec_data.get("exam_format", ""),
             contact_info=rec_data.get("contact_info", ""),
+            publish_date=rec_data.get("publish_date", "") or "",
             status=1,
         )
         db.add(rec)

@@ -4,9 +4,11 @@ GET /api/recruitment — 获取招考信息列表（按分类）
 GET /api/recruitment/{id} — 获取招考详情
 """
 import logging
+import re
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
@@ -65,22 +67,45 @@ def _compute_status_color(label: str) -> str:
     return STATUS_COLORS.get(label, "#10b981")
 
 
+def _sort_key(x: dict):
+    """招考条目排序键：真实发布日期倒序 → 状态优先级 → 原次序
+
+    - 有 publish_date 的按日期**倒序**在前（取负数实现倒序）
+    - 无 publish_date 的（回填前的历史数据）统一沉底，不污染顶部
+    - 状态优先级仅在同一天内生效，不再压倒日期
+    """
+    pd = (x.get("publish_date") or "").strip()
+    if pd:
+        digits = re.sub(r"\D", "", pd)[:8]
+        return (0, -int(digits) if len(digits) == 8 else 0, x.get("_prio", 3), x.get("_ord", 0))
+    return (1, 0, x.get("_prio", 3), x.get("_ord", 0))
+
+
 @router.get("", summary="获取招考信息列表")
 async def get_recruitment(
     category: Optional[str] = Query(None, description="分类名称"),
     limit: int = Query(20, ge=1, le=50, description="返回数量"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    response: Response = None,
 ):
     """获取招考信息，支持按分类筛选。默认返回所有分类各10条（公开访问）"""
     items = {}
     cats_to_query = [category] if category else CATEGORIES
 
     for cat in cats_to_query:
+        # 真实发布日期优先。create_time 是爬取插入时间（同批次跨度仅微秒级），
+        # 单独用它排序等于"插入顺序的逆序"，会把最旧内容排在最前。
+        # 无发布日期的历史数据（回填前）统一沉底，不会污染顶部。
         records = db.query(RecruitmentInfo).filter(
             RecruitmentInfo.status == 1,
             RecruitmentInfo.category == cat
-        ).order_by(RecruitmentInfo.create_time.desc()).all()
+        ).order_by(
+            or_(RecruitmentInfo.publish_date.is_(None),
+                RecruitmentInfo.publish_date == "").asc(),
+            RecruitmentInfo.publish_date.desc(),
+            RecruitmentInfo.create_time.desc(),
+        ).all()
 
         cat_items = []
         for r in records:
@@ -106,16 +131,47 @@ async def get_recruitment(
                 "contact_info": r.contact_info or "",
                 "requirements": r.requirements or "",
                 "view_count": r.view_count or 0,
-                "create_time": r.create_time.isoformat() if r.create_time else None
+                "publish_date": r.publish_date or "",
+                "create_time": r.create_time.isoformat() if r.create_time else None,
+                # 内部排序键（响应输出前剔除）
+                "_prio": STATUS_PRIORITY.get(label, 3),
+                "_ord": len(cat_items),
             })
 
-        # 状态优先级排序：即将报名 > 正在报名 > 报名结束 > 其他（同状态保持 create_time 倒序）
-        cat_items.sort(key=lambda x: STATUS_PRIORITY.get(x["status_label"], 3))
+        # 排序主键：真实发布日期倒序 → 状态优先级 → 原始次序。
+        # 状态优先级降为次级键：仅在同一天内生效，避免像旧逻辑那样
+        # 把整月前的"即将报名"条目顶到最新内容之上。
+        cat_items.sort(key=_sort_key)
+        for x in cat_items:
+            x.pop("_prio", None)
+            x.pop("_ord", None)
         items[cat] = cat_items[:limit]
+
+    # ---- meta：让前端能自行判断"数据到底新不新"，而不必猜 ----
+    all_dates = [
+        d for lst in items.values() for d in
+        [r.get("publish_date") or "" for r in lst] if d
+    ]
+    latest_pd = max(all_dates) if all_dates else ""
+    last_updated = max(
+        (r.get("create_time") for lst in items.values() for r in lst if r.get("create_time")),
+        default=None,
+    )
+
+    # 禁缓存：招考信息每日更新，任何层级的缓存都会让用户看到旧内容
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
 
     return {
         "categories": CATEGORIES,
-        "items": items if not category else {category: items.get(category, [])}
+        "items": items if not category else {category: items.get(category, [])},
+        "meta": {
+            "last_updated": last_updated,
+            "latest_publish_date": latest_pd,
+            "total": sum(len(v) for v in items.values()),
+            "source": "rszk.net",
+            "sort_by": "publish_date",
+        },
     }
 
 

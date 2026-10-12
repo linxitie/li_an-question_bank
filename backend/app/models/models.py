@@ -1198,12 +1198,17 @@ class RecruitmentInfo(Base):
     view_count = Column(Integer, default=0, comment="浏览量")
     url = Column(String(500), comment="原始链接")
     status = Column(Integer, default=1, comment="状态")
-    create_time = Column(DateTime, default=datetime.now, comment="发布时间")
+    create_time = Column(DateTime, default=datetime.now, comment="入库时间(爬取时刻,非内容发布时间)")
+    # 源站真实发布日期。爬虫早已抓到该值但此前从未落库(表无此列)，
+    # 导致接口只能按 create_time 排序；而 create_time 是插入时间戳(同批次跨度仅微秒级)，
+    # 叠加爬虫按页码 1→5 插入，最终把最旧内容排在最前——即用户所见的"内容永不更新"。
+    publish_date = Column(String(20), comment="源站发布日期(YYYY-MM-DD)")
 
     __table_args__ = (
         Index("idx_category", category),
         Index("idx_region", region),
         Index("idx_create_time_recruitment", create_time),
+        Index("idx_publish_date_recruitment", publish_date),
     )
 
 # ------------------------------

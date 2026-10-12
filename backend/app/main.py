@@ -163,7 +163,7 @@ async def lifespan(app: FastAPI):
         # 检查 recruitment_info 表
         if 'recruitment_info' in inspector.get_table_names():
             rec_cols = [c['name'] for c in inspector.get_columns('recruitment_info')]
-            for col_name, col_type in [('url', 'VARCHAR(500)')]:
+            for col_name, col_type in [('url', 'VARCHAR(500)'), ('publish_date', 'VARCHAR(20)')]:
                 if col_name not in rec_cols:
                     with engine.connect() as conn:
                         conn.execute(text(f"ALTER TABLE recruitment_info ADD COLUMN {col_name} {col_type}"))
