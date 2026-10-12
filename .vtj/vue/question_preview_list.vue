@@ -695,6 +695,208 @@ export default defineComponent({
       }
     }
 
+    // ============================================================
+    // W3-1：科目/子科目建议展示 + 一键覆盖（仅脚本，DOM 注入既有渲染位）
+    // ============================================================
+    // 建议数据由父组件（question_import.vue）从后端响应体的
+    //   subject_suggestion { name, confidence, matched_keywords }
+    //   subcategory_suggestion { name, confidence }
+    // 逐题 stamp 到题目对象（q.subject_suggestion / q.subcategory_suggestion）。
+    // 本组件不新增 props、不改模板：在顶部统计区（.docs-list-topbar）末尾注入
+    // 「建议 + 置信度 + 命中关键词 + 采用建议/忽略」条，复用既有渲染位。
+    //   采用建议 → 把建议科目写入手选字段 subject_name（以及题卡展示字段
+    //   subject_category 与子科目 subcategory），后续 /confirm 走手选优先；
+    //   忽略 → 隐藏建议条并还原采用前的手选原值。
+    // 向后兼容：题目不带建议字段（null / 空名）时完全不入 DOM，旧预览零变化。
+    const SUGGESTION_UI_ID = 'qpl-suggestion-ui-' + (instance ? instance.uid : '0');
+
+    function sugPct(c) {
+      const n = Number(c);
+      return Number.isFinite(n) ? Math.round(n * 100) : 0;
+    }
+
+    // 从题目对象读出建议（缺省/空名 → null）
+    function suggestionOfQuestion(q) {
+      if (!q || typeof q !== 'object') return null;
+      const ss = q.subject_suggestion;
+      const sc = q.subcategory_suggestion;
+      const hasSs = !!(ss && ss.name);
+      const hasSc = !!(sc && sc.name);
+      if (!hasSs && !hasSc) return null;
+      return {
+        subject: hasSs ? {
+          name: String(ss.name),
+          confidence: sugPct(ss.confidence),
+          keywords: Array.isArray(ss.matched_keywords) ? ss.matched_keywords.slice() : []
+        } : null,
+        subcategory: hasSc ? {
+          name: String(sc.name),
+          confidence: sugPct(sc.confidence)
+        } : null
+      };
+    }
+
+    // 批次级建议状态：同一批题目 stamped 相同，取首个未忽略的
+    function suggestionState() {
+      const list = props.questions || [];
+      let sug = null;
+      let withSug = 0;
+      let ignored = 0;
+      let applied = 0;
+      for (let i = 0; i < list.length; i++) {
+        const s = suggestionOfQuestion(list[i]);
+        if (!s) continue;
+        withSug++;
+        if (!sug) sug = s;
+        if (list[i]._sug_ignored) ignored++;
+        else if (list[i]._sug_applied) applied++;
+      }
+      if (!sug || ignored >= withSug) return { visible: false, sug: null };
+      return { visible: true, sug: sug, appliedAll: applied >= withSug };
+    }
+
+    function removeSuggestionUI() {
+      if (typeof document === 'undefined') return;
+      const el = document.getElementById(SUGGESTION_UI_ID);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+
+    // 注入/更新建议条（幂等：内容未变不重建，避免丢事件与闪烁）
+    function renderSuggestionUI() {
+      if (typeof document === 'undefined') return;
+      if (isReadonly.value) { removeSuggestionUI(); return; }
+      const state = suggestionState();
+      if (!state.visible) { removeSuggestionUI(); return; }
+      const root = (instance && instance.proxy && instance.proxy.$el) || null;
+      if (!root || root.nodeType !== 1) return;
+      const topbar = root.querySelector('.docs-list-topbar');
+      if (!topbar) return;
+
+      const ss = state.sug.subject;
+      const sc = state.sug.subcategory;
+      const key = (ss ? ss.name + '|' + ss.confidence : '') +
+        (sc ? '|' + sc.name + '|' + sc.confidence : '') +
+        (state.appliedAll ? '|applied' : '|open');
+
+      const existing = document.getElementById(SUGGESTION_UI_ID);
+      if (existing && existing.parentNode === topbar &&
+          existing.getAttribute('data-sug-key') === key) return;
+      removeSuggestionUI();
+
+      const wrap = document.createElement('div');
+      wrap.id = SUGGESTION_UI_ID;
+      wrap.setAttribute('data-sug-key', key);
+      wrap.style.cssText =
+        'display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;' +
+        'font-size:12px;color:#7cc3ff;background:rgba(74,158,255,0.12);' +
+        'border:1px solid rgba(74,158,255,0.32);border-radius:9px;padding:4px 10px;';
+
+      let text = '💡 建议科目：' + (ss ? ss.name + '（' + ss.confidence + '%）' : '—');
+      if (ss && ss.keywords.length) {
+        text += ' · 命中：' + ss.keywords.slice(0, 4).join('、');
+      }
+      if (sc) text += ' · 建议子科目：' + sc.name + '（' + sc.confidence + '%）';
+      const label = document.createElement('span');
+      label.textContent = text;
+      wrap.appendChild(label);
+
+      if (state.appliedAll) {
+        const done = document.createElement('span');
+        done.textContent = '✅ 已采用';
+        done.style.cssText = 'color:#4ade80;font-weight:600;';
+        wrap.appendChild(done);
+      } else {
+        const applyBtn = document.createElement('button');
+        applyBtn.type = 'button';
+        applyBtn.textContent = '采用建议';
+        applyBtn.style.cssText =
+          'padding:3px 12px;border:none;border-radius:6px;cursor:pointer;' +
+          'background:linear-gradient(135deg,#c41e3a 0%,#e8384f 100%);' +
+          'color:#fff;font-size:12px;font-weight:600;';
+        applyBtn.onclick = function () { applySuggestion(); };
+        const ignoreBtn = document.createElement('button');
+        ignoreBtn.type = 'button';
+        ignoreBtn.textContent = '忽略';
+        ignoreBtn.style.cssText =
+          'padding:3px 12px;border:1px solid rgba(255,255,255,0.25);' +
+          'border-radius:6px;cursor:pointer;background:rgba(255,255,255,0.08);' +
+          'color:#b0b8c4;font-size:12px;';
+        ignoreBtn.onclick = function () { ignoreSuggestion(); };
+        wrap.appendChild(applyBtn);
+        wrap.appendChild(ignoreBtn);
+      }
+      topbar.appendChild(wrap);
+    }
+
+    // 采用建议：把建议值写入手选字段（/confirm 手选优先），并同步题卡展示字段
+    function applySuggestion() {
+      if (isReadonly.value) return;
+      const state = suggestionState();
+      if (!state.sug) return;
+      const list = props.questions || [];
+      const ss = state.sug.subject;
+      const sc = state.sug.subcategory;
+      let n = 0;
+      for (let i = 0; i < list.length; i++) {
+        const q = list[i];
+        if (!q || typeof q !== 'object' || q._sug_ignored) continue;
+        if (!suggestionOfQuestion(q)) continue;
+        if (!q._sug_backup) {
+          q._sug_backup = {
+            subject_name: q.subject_name,
+            subject_category: q.subject_category,
+            subcategory: q.subcategory
+          };
+        }
+        if (ss && ss.name) {
+          q.subject_name = ss.name;      // /confirm 手选优先读取
+          q.subject_category = ss.name;  // 题卡科目徽章同步展示
+        }
+        if (sc && sc.name) {
+          q.subcategory = sc.name;       // /confirm 子科目读取
+        }
+        q._sug_applied = true;
+        n++;
+      }
+      renderSuggestionUI();
+      if (n > 0) {
+        alert('已采用建议：' + (ss ? ss.name : '') +
+          (sc ? ' / ' + sc.name : '') + '（' + n + ' 题）。确认入库时将按手选值落库。');
+      }
+    }
+
+    // 忽略建议：还原采用前的手选原值并隐藏建议条
+    function ignoreSuggestion() {
+      if (isReadonly.value) return;
+      const list = props.questions || [];
+      for (let i = 0; i < list.length; i++) {
+        const q = list[i];
+        if (!q || typeof q !== 'object') continue;
+        if (q._sug_backup) {
+          const bk = q._sug_backup;
+          if (bk.subject_name === undefined) delete q.subject_name;
+          else q.subject_name = bk.subject_name;
+          if (bk.subject_category === undefined) delete q.subject_category;
+          else q.subject_category = bk.subject_category;
+          if (bk.subcategory === undefined) delete q.subcategory;
+          else q.subcategory = bk.subcategory;
+          delete q._sug_backup;
+        }
+        delete q._sug_applied;
+        q._sug_ignored = true;
+      }
+      renderSuggestionUI();
+    }
+
+    // 题目变化（重导入 / 编辑 / 采用写值）后，等 Vue 完成本轮 DOM patch 再幂等注入
+    watch(
+      function () { return props.questions; },
+      function () { renderSuggestionUI(); },
+      { deep: true }
+    );
+
+    onMounted(renderSuggestionUI);
+
 return {
       provider,
       editDialogVisible,

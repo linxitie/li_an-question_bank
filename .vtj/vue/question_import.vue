@@ -1039,6 +1039,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
             // Excel/CSV 返回结构化 questions 数组
             if (data.questions && data.questions.length > 0) {
               self.state.batchPreviewData = data.questions;
+              self._stampSuggestions(data.questions, data.subject_suggestion, data.subcategory_suggestion);
               self.state.previewGroups = data.groups || [];
               self.state.rawTextPreview = '';
               self.state.importId = data.import_id;
@@ -1054,6 +1055,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
               // 自动提取题目结构，直接显示导入按钮
               self.parseRawTextToQuestions();
               if (self.state.parsedDocsQuestions.length) {
+                self._stampSuggestions(self.state.parsedDocsQuestions, data.subject_suggestion, data.subcategory_suggestion);
                 self.setProgress(0, 100);
                 ElMessage.success('已自动提取 ' + self.state.parsedDocsQuestions.length + ' 道题目，可直接导入');
               } else {
@@ -1593,6 +1595,7 @@ import { renderQuestionContent } from '@/utils/questionRender';
           });
           this.state.parseResult = data;
           this.state.parsedDocsQuestions = questions;
+          this._stampSuggestions(questions, data.subject_suggestion, data.subcategory_suggestion);
           this.state.separateMatchRate = data.match_rate || 0;
           if (data.auto_detected_subject) {
             this.state.form.subject_category = data.auto_detected_subject;
@@ -2416,6 +2419,25 @@ converted.push({
       },
       onManualMatchCancel() {
         this.state.manualMatchVisible = false;
+      },
+      // ========== W3-1：科目/子科目建议透传（预览页「建议 + 置信度 + 一键覆盖」数据源） ==========
+      // 后端 /upload、/parse 等端点的响应体已追加 subject_suggestion /
+      // subcategory_suggestion（W2-1）。QuestionPreviewList 的 props 链路不带这两个字段
+      // （父模板前 493 行 SHA 锁定，不可新增绑定），故在这里把它们逐题 stamp 到题目对象：
+      //   q.subject_suggestion     = { name, confidence, matched_keywords }
+      //   q.subcategory_suggestion = { name, confidence }
+      // 仅追加展示用字段，不改动任何既有字段；缺省（null / 空名）时预览页不显示，零回归。
+      _stampSuggestions(list, subjectSuggestion, subcategorySuggestion) {
+        if (!Array.isArray(list)) return;
+        var ss = subjectSuggestion && subjectSuggestion.name ? subjectSuggestion : null;
+        var sc = subcategorySuggestion && subcategorySuggestion.name ? subcategorySuggestion : null;
+        if (!ss && !sc) return;
+        for (var i = 0; i < list.length; i++) {
+          var q = list[i];
+          if (!q || typeof q !== 'object') continue;
+          if (ss) q.subject_suggestion = ss;
+          if (sc) q.subcategory_suggestion = sc;
+        }
       },
       // 处理预览列表中的编辑操作（来自 question_preview_list 的 @edit-question 事件）
       handleEditQuestion(payload) {
