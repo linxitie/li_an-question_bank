@@ -1881,7 +1881,7 @@ _MATERIAL_HEAD_RE = re.compile(
     r'(?:^|\n)[ \t]*(?:[一二三四五六七八九十]+[ \t]*[、，．][ \t]*)?'
     r'(?:请)?(?:根据|阅读)(?:以下|下面)'
     r'(?:情境|情景)?(?:材料|资料|文章|图表|内容|案例)?'
-    r'[^\n]{0,20}?回答[ \t]*(\d+)[ \t]*[-～~—－至][ \t]*(\d+)[ \t]*题'
+    r'[^\n]{0,20}?回答[ \t]*(?:第)?\s*(\d+)[ \t]*[-～~—－至][ \t]*(\d+)[ \t]*题'
 )
 
 # 题号行 / 选项行 / 图片标记行（用于判定材料正文边界）
@@ -2935,17 +2935,21 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
 
         # ---- 步骤 2：剥离题干尾部粘连的分节标记（材料头 + 分节指令段）----
         # 返回 (保留行, 溢出行)。溢出的节首材料留给下一题。
-        block_lines, pending_spill = _strip_trailing_material(block_lines)
+        block_lines, spilled = _strip_trailing_material(block_lines)
 
         # ---- 步骤 3：由剥离后的行**重算**题干，再前置回吐内容 ----
         # ★ 必须在剥离之后重算 content_text。早期版本在步骤 1 就把 content_text
         #   定死，步骤 2 剥离后没有重算，导致 content_text 仍是未剥离的原文 ——
         #   分节指令段照样留在题干里，污染"看起来一点没变"。
+        # ★ 回吐语义修正（P4 材料串题）：pending_spill 存放的是**上一题**剥离出的
+        #   节首材料，属于本题，本轮作为前缀消费；本轮新剥离的 spilled 存入
+        #   pending_spill 留给下一题。旧实现把本轮溢出在同一迭代内前置到当前题，
+        #   这是把材料塞进上一题（第 97 题）的直接机制。
         content_text = '\n'.join(block_lines)
         spill_text = '\n'.join(pending_spill).strip()
-        pending_spill = []
         if spill_text:
             content_text = f'{spill_text}\n{content_text}'.strip()
+        pending_spill = spilled
         block_text = '\n'.join(block_lines)
 
         # 提取选项
