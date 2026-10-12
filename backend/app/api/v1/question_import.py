@@ -33,7 +33,9 @@ from ...models.models import (
     QuestionGroup,
 )
 from ...schemas.schemas import SuccessResponse, ParseRequest, ParseResult, ParsedQuestion, ImageRef
-from ...services.question_classifier import QuestionClassifier, detect_subcategory_enhanced
+from ...services.question_classifier import (
+    QuestionClassifier, detect_subcategory_enhanced, UNCLASSIFIED,
+)
 from ...services import text_cache  # 文档提取文本缓存（P0 提速，260s→0.02s）
 from ...services.question_ingest.excel_reader import (  # J-3：列名容错 + 表头探测 + GBK 嗅探
     get_field_value as _xlsx_field,          # 别名容忍的取值（同一列名多种写法）
@@ -297,6 +299,55 @@ def _subcategory_tuple(subject_id: int, content: str, type_name: str = '', expli
         sc if subject_id == 2 else '无',
         sc if subject_id == 3 else '无',
     )
+
+
+# ============ W2-1：科目/子科目建议（导入端点返回「建议 + 置信度」） ============
+# 计划 v3 6.2/6.3：自动识别只做「预填建议」，教师手选永远压过自动识别。
+# 用户已确认阈值：自动建议置信度 < 0.5 → 标 need_review 待人工复核。
+SUBJECT_SUGGESTION_THRESHOLD = 0.5
+
+
+def _build_subject_suggestion(text: str, manual: str = '') -> Dict[str, Any]:
+    """构建科目建议 ``{name, confidence, matched_keywords}``（W2-1）。
+
+    - ``manual`` 非空（教师手选/显式传参）→ **跳过自动识别**，置信度 1.0；
+    - 否则走 ``detect_subject_category()``（W1-1：DB 驱动 + 置信度修正）；
+    - 全 0 分（无关键词命中）→ ``name=''``、``confidence=0.0``，由调用方标
+      ``need_review``。
+    """
+    if manual:
+        return {'name': str(manual).strip(), 'confidence': 1.0, 'matched_keywords': []}
+    det = detect_subject_category(text)
+    return {
+        'name': det.subject_name,
+        'confidence': round(float(det.confidence), 2),
+        'matched_keywords': list(det.matched_keywords or []),
+    }
+
+
+def _build_subcategory_suggestion(subject_id: Optional[int], content: str,
+                                  manual: str = '') -> Dict[str, Any]:
+    """构建子科目建议 ``{name, confidence}``（W2-1）。
+
+    - ``manual`` 非空（前端显式子科目）→ 置信度 1.0；
+    - 否则走三级分类引擎 ``classify()``（W1-2 单一引擎，真实 DB ID）；
+    - 无法分类 → ``name=''``、``confidence=0.0``。
+    """
+    if manual:
+        return {'name': str(manual).strip(), 'confidence': 1.0}
+    if not subject_id:
+        return {'name': '', 'confidence': 0.0}
+    result = QuestionClassifier().classify(content, subject_id)
+    name = result.sub_category_name
+    if not name or name == UNCLASSIFIED:
+        return {'name': '', 'confidence': 0.0}
+    confidence = result.confidence
+    if confidence <= 0.0:
+        # classify() 成功分支的 confidence 承载考点置信度：子科目已命中但
+        # 考点未命中时为 0.0。给保守基线 0.5（恰好不触发 need_review，
+        # 又不虚高），定位是「建议预填 + 教师复核」。
+        confidence = 0.5
+    return {'name': name, 'confidence': round(float(confidence), 2)}
 
 
 # I-7：考点关联 + 科目/题型取建（pure move 自本文件，原 :302/:336/:374）
@@ -1446,11 +1497,21 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
 
             total = len(raw_questions[:MAX_BATCH_QUESTIONS])
             auto_tags = _auto_detect_tags(filename, str(preview_items[:5]) if preview_items else '')
+            # W2-1：科目/子科目建议（追加字段，不改既有字段）
+            _upload_sug_text = ' '.join(
+                (it.get('question_content') or '') for it in preview_items[:10])
+            subject_suggestion = _build_subject_suggestion(_upload_sug_text)
+            _upload_sub_id = SUBJECT_NAME_MAP.get(subject_suggestion.get('name') or '')
+            subcategory_suggestion = _build_subcategory_suggestion(
+                _upload_sub_id, _upload_sug_text) if _upload_sub_id else {
+                    'name': '', 'confidence': 0.0}
             response_payload = {
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
                 'total_questions': total, 'success_count': success_count,
                 'failed_count': failed_count, 'duplicate_count': duplicate_count,
                 'questions': preview_items, 'auto_detected_tags': auto_tags,
+                'subject_suggestion': subject_suggestion,
+                'subcategory_suggestion': subcategory_suggestion,
             }
             stored = {'items': preview_items, 'auto_detected_tags': auto_tags,
                       '_response': response_payload}
@@ -1513,6 +1574,12 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
 
             total = len(preview_items)
             is_scanned = (ext == '.pdf' and len(preview_items) == 0 and _pdf_has_images_only(buf))
+            # W2-1：科目/子科目建议（追加字段，不改既有字段）
+            subject_suggestion = _build_subject_suggestion(text)
+            _upload_sub_id = SUBJECT_NAME_MAP.get(subject_suggestion.get('name') or '')
+            subcategory_suggestion = _build_subcategory_suggestion(
+                _upload_sub_id, text) if _upload_sub_id else {
+                    'name': '', 'confidence': 0.0}
             response_payload = {
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
                 'total_questions': total, 'success_count': total, 'failed_count': 0,
@@ -1522,6 +1589,8 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 'groups': _build_preview_groups(preview_items),
                 'raw_text_preview': text[:1000000] if text else '',
                 'auto_detected_tags': auto_tags, 'scanned_pdf': is_scanned,
+                'subject_suggestion': subject_suggestion,
+                'subcategory_suggestion': subcategory_suggestion,
                 'engine': _pdf_reader._last_extract_engine,  # ★ 本次实际使用的识别引擎（I-6 起状态随平移迁至 pdf_reader）
                 'ocr_hint': ('该PDF为扫描件（无文本层），请使用"图片导入"标签页上传，'
                              '或先通过OCR工具转换为文本格式') if is_scanned else None,
@@ -1892,22 +1961,35 @@ async def attach_image_to_preview_question(
     }
 
 
-def detected_subject_hint(item: Dict[str, Any]) -> str:
-    """推断入库科目：优先申论标记，其次前端显式值，最后才回退行测。
+def _resolve_confirm_subject(item: Dict[str, Any]) -> tuple:
+    """W2-1 确认入库的科目解析：手选优先，自动识别仅作建议。
 
-    为什么不能沿用旧的 `item.get('subject_name', '行测')` 默认值：
-      该默认值只在 key 完全缺失时生效，而前端**总是**会传 subject_name
-      （值来自 _auto_detect_tags 的启发式）。申论长文本「给定资料…」很容易被
-      启发式判成行测/公专，于是申论题被挂到错误科目下 —— requirements 语义
-      全错、题型表也挂错。这是「前端申论导入不稳定」的直接原因之一。
+    返回 ``(subject_name, auto_detected, confidence)``：
 
-    判定顺序刻意让 format=essay 压过 subject_name：解析器已经确证了这是申论，
-    比任何文本启发式都可靠。
+    1. ``item.subject_name``（教师手选）存在 → **跳过自动识别**，confidence=1.0；
+    2. ``format=essay`` → '申论'（解析器确证，压过文本启发式，既有语义保留）；
+    3. 否则 ``detect_subject_category()`` 自动识别；全 0 分回退历史默认值
+       '行测'，confidence=0.0 → 调用方标 need_review。
+
+    为什么手选优先：
+      前端**总是**会传 subject_name（值来自 _auto_detect_tags 的启发式），
+      教师在下拉里改过的值必须原样落库，绝不能被自动识别二次覆盖；
+      只有未手选时才允许自动识别介入，并凭置信度提示人工复核。
     """
+    manual = str((item or {}).get('subject_name') or '').strip()
+    if manual:
+        return manual, False, 1.0
     if (item or {}).get('format') == 'essay':
-        return '申论'
-    name = (item or {}).get('subject_name')
-    return name if name else '行测'
+        return '申论', False, 1.0
+    det = detect_subject_category(
+        ' '.join([
+            (item or {}).get('question_content') or '',
+            str((item or {}).get('options') or ''),
+            (item or {}).get('answer') or '',
+        ]))
+    if det.subject_name:
+        return det.subject_name, True, det.confidence
+    return '行测', True, 0.0
 
 
 @router.post("/confirm", summary="确认批量导入")
@@ -1989,7 +2071,10 @@ async def confirm_batch_import(
                 raw_analysis = item.get('answer_analysis', '')
                 cleaned_analysis = ContentCleaner.clean_question_content(raw_analysis)
 
-                subject = _get_or_create_subject(db, item.get('subject_name') or detected_subject_hint(item))
+                # W2-1 手选优先：item.subject_name 存在 → 跳过自动识别；
+                # 不存在 → 自动识别 + 置信度 < 0.5 标 need_review（见下方）。
+                _subject_name, _subject_auto, _subject_conf = _resolve_confirm_subject(item)
+                subject = _get_or_create_subject(db, _subject_name)
 
                 options = item.get('options')
                 # 直接赋值给JSON列，不调用json.dumps（避免双重编码）
@@ -2024,6 +2109,9 @@ async def confirm_batch_import(
                             cleaned_content, options, answer_val)
                     # P3b：置信度不足 → 标记待复核，教师在「题目管理 → 待复核」确认
                     need_review = 1 if (_tconf or 0) < NEED_REVIEW_CONFIDENCE else 0
+                # W2-1：自动识别的科目置信度 < 0.5 → need_review（手选/申论确证时跳过）。
+                if _subject_auto and _subject_conf < SUBJECT_SUGGESTION_THRESHOLD:
+                    need_review = 1
                 # 客观选择题答案归一化（A、B → AB；对/错 → A/B），论述/写作保留原文
                 if final_type_name in ('单选题', '多选题', '判断题', '选择题'):
                     _norm = canonical_answer(answer_val)
@@ -2721,21 +2809,37 @@ async def separate_match_xingce_endpoint(
     _xq_is_essay = bool(_xq_blocks) and _xq_blocks[0].get('format') == 'essay'
     _xa_is_essay = bool(_xa_blocks) and _xa_blocks[0].get('format') == 'essay'
     if _xq_is_essay and _xa_is_essay:
-        return _separate_match_essay(
+        _response = _separate_match_essay(
             db, payload, _xq_blocks, _xa_blocks,
             subject_name=payload.get('subject_category', ''))
+    else:
+        try:
+            _response = _separate_match_xingce(
+                db, payload, questions_text, answers_text,
+                user_id=current_user.user_id,
+                subject_name=payload.get('subject_category', ''))
+        except HTTPException:
+            raise
+        except Exception as e:
+            db.rollback()
+            logger.error(f"行测分离导入匹配失败: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"行测智能匹配失败: {str(e)}")
 
-    try:
-        return _separate_match_xingce(
-            db, payload, questions_text, answers_text,
-            user_id=current_user.user_id,
-            subject_name=payload.get('subject_category', ''))
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"行测分离导入匹配失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"行测智能匹配失败: {str(e)}")
+    # W2-1：追加「科目建议 + 置信度」（不改既有字段，向后兼容）。
+    # 手选（subject_category）存在 → 建议即以手选为准；否则自动识别。
+    _x_sug_text = ' '.join(
+        (q.get('content') or '') for q in (_response.get('questions') or [])[:10])
+    if not _x_sug_text:
+        _x_sug_text = questions_text
+    subject_suggestion = _build_subject_suggestion(
+        _x_sug_text, payload.get('subject_category', ''))
+    _x_subject_id = SUBJECT_NAME_MAP.get(subject_suggestion.get('name') or '')
+    subcategory_suggestion = _build_subcategory_suggestion(
+        _x_subject_id, _x_sug_text) if _x_subject_id else {
+            'name': '', 'confidence': 0.0}
+    _response['subject_suggestion'] = subject_suggestion
+    _response['subcategory_suggestion'] = subcategory_suggestion
+    return _response
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -3027,6 +3131,8 @@ async def unified_parse(
     # 预初始化：申论路径不经过 smart_match，result 不存在；非 separate 分支也不走它
     result = None
     essay_prebuilt = None
+    # W2-1：科目建议（追加字段，先初始化为空建议，分支内检测到后再填充）
+    subject_suggestion = {'name': '', 'confidence': 0.0, 'matched_keywords': []}
 
     try:
         if mode == 'separate' and answers_text:
@@ -3069,7 +3175,14 @@ async def unified_parse(
 
             if not auto_detected_subject:
                 all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
-                auto_detected_subject, _ = detect_subject_category(all_content)
+                # W2-1：接上 SubjectDetection 的置信度与命中关键词（不再丢弃）
+                _subject_det = detect_subject_category(all_content)
+                auto_detected_subject = _subject_det.subject_name
+                subject_suggestion = {
+                    'name': _subject_det.subject_name,
+                    'confidence': _subject_det.confidence,
+                    'matched_keywords': list(_subject_det.matched_keywords or []),
+                }
 
             # 转换为 ParsedQuestion
             for block in (essay_prebuilt if essay_prebuilt is not None
@@ -3133,7 +3246,14 @@ async def unified_parse(
 
             if not auto_detected_subject:
                 all_content = ' '.join(b.get('content', '') for b in blocks[:10])
-                auto_detected_subject, _ = detect_subject_category(all_content)
+                # W2-1：接上 SubjectDetection 的置信度与命中关键词（不再丢弃）
+                _subject_det = detect_subject_category(all_content)
+                auto_detected_subject = _subject_det.subject_name
+                subject_suggestion = {
+                    'name': _subject_det.subject_name,
+                    'confidence': _subject_det.confidence,
+                    'matched_keywords': list(_subject_det.matched_keywords or []),
+                }
 
             total_questions = len(blocks)
             for block in blocks:
@@ -3188,6 +3308,22 @@ async def unified_parse(
                     match_rate = round(matched_count * 100 / total_questions, 1)
                 strategy_used = '合并导入解析'
 
+        # W2-1：科目建议手选优先 —— payload.subject_category 存在即跳过自动识别；
+        # 分支未触发自动识别（如申论 separate 强制 '申论'）时以 auto_detected_subject 为准。
+        if subject_category:
+            subject_suggestion = _build_subject_suggestion('', subject_category)
+        elif not subject_suggestion.get('name') and auto_detected_subject:
+            subject_suggestion = {
+                'name': auto_detected_subject, 'confidence': 1.0,
+                'matched_keywords': []}
+        # W2-1：子科目建议（基于建议科目；无科目建议时为空建议）
+        _suggested_subject_id = SUBJECT_NAME_MAP.get(subject_suggestion.get('name') or '')
+        subcategory_suggestion = (
+            _build_subcategory_suggestion(
+                _suggested_subject_id,
+                ' '.join((q.question_content or '') for q in questions[:10]))
+            if _suggested_subject_id else {'name': '', 'confidence': 0.0})
+
         # 自动检测标签
         auto_tags = _auto_detect_tags(paper_name, questions_text[:2000])
 
@@ -3224,7 +3360,7 @@ async def unified_parse(
         if invalid_answers:
             warnings.append(f'校验异常题目: 第{",".join(map(str, invalid_answers[:10]))}题')
 
-        return ParseResult(
+        _parse_result = ParseResult(
             status='success' if match_rate >= 80 or mode != 'separate' else 'partial',
             questions=questions,
             match_rate=match_rate,
@@ -3239,6 +3375,13 @@ async def unified_parse(
             warnings=warnings,
             raw_text_preview=questions_text[:100000],
         )
+        # W2-1：追加「科目建议 + 置信度」字段（不改既有字段，向后兼容）
+        _response = (_parse_result.model_dump()
+                     if hasattr(_parse_result, 'model_dump')
+                     else _parse_result.dict())
+        _response['subject_suggestion'] = subject_suggestion
+        _response['subcategory_suggestion'] = subcategory_suggestion
+        return _response
 
     except Exception as e:
         logger.error(f"统一解析失败: {e}", exc_info=True)
@@ -3392,6 +3535,15 @@ async def ocr_recognize(
         if not response['ocr_text'] and not response['formulas'] and not response['tables']:
             response['message'] = '未能识别到文字内容，请确认图片清晰度或手动输入'
 
+        # W2-1：追加「科目建议 + 置信度」（不改既有字段，向后兼容）
+        _ocr_sug_text = response.get('ocr_text') or ''
+        subject_suggestion = _build_subject_suggestion(_ocr_sug_text)
+        _ocr_sub_id = SUBJECT_NAME_MAP.get(subject_suggestion.get('name') or '')
+        subcategory_suggestion = _build_subcategory_suggestion(
+            _ocr_sub_id, _ocr_sug_text) if _ocr_sub_id else {
+                'name': '', 'confidence': 0.0}
+        response['subject_suggestion'] = subject_suggestion
+        response['subcategory_suggestion'] = subcategory_suggestion
         return response
 
     except RuntimeError as e:
@@ -3401,6 +3553,8 @@ async def ocr_recognize(
             'ocr_text': '',
             'formulas': [],
             'tables': [],
+            'subject_suggestion': {'name': '', 'confidence': 0.0, 'matched_keywords': []},
+            'subcategory_suggestion': {'name': '', 'confidence': 0.0},
             'message': 'OCR 服务暂不可用，请安装 PaddleOCR 依赖: pip install paddleocr paddlepaddle'
         }
     except Exception as e:
@@ -3464,17 +3618,21 @@ async def import_from_image(
         if not ocr_text or not ocr_text.strip():
             return {
                 'import_status': 'SKIPPED',
+                'subject_suggestion': {'name': '', 'confidence': 0.0, 'matched_keywords': []},
+                'subcategory_suggestion': {'name': '', 'confidence': 0.0},
                 'message': 'OCR未能识别到文字内容',
             }
 
-        # 自动检测科目
+        # 自动检测科目（W2-1：手选优先 + 接上置信度，不再丢弃）
         subject_name = payload.get('subject_category', '')
+        subject_suggestion = _build_subject_suggestion(ocr_text, subject_name)
         if not subject_name:
-            subject_name, _ = detect_subject_category(ocr_text)
+            subject_name = subject_suggestion.get('name') or ''
         # 空名兜底：见上文 :2420 附近说明（W1-1，W2-1 前保留历史默认值）
         if not subject_name:
             subject_name = '行测'
         subject = _get_or_create_subject(db, subject_name)
+        subcategory_suggestion = _build_subcategory_suggestion(subject.subject_id, ocr_text)
 
         # 尝试从OCR文本提取题目结构
         question_blocks = extract_question_blocks(ocr_text)
@@ -3513,6 +3671,8 @@ async def import_from_image(
                 'similarity': dup_info['similarity'],
                 'existing_id': dup_info['existing_id'],
                 'existing_content': dup_info.get('existing_content'),
+                'subject_suggestion': subject_suggestion,
+                'subcategory_suggestion': subcategory_suggestion,
                 'message': f'该题目已存在（相似度 {dup_info["similarity"]*100:.0f}%）',
             }
 
@@ -3582,6 +3742,8 @@ async def import_from_image(
             'auto_detected_subcategory': subcategory,
             'auto_detected_type': detected_type,
             'auto_detected_answer': detected_answer,
+            'subject_suggestion': subject_suggestion,
+            'subcategory_suggestion': subcategory_suggestion,
             'message': f'题目已导入至"{subject_name}-{subcategory}"分类，答案: {answer}',
         }
     except HTTPException:
@@ -3606,18 +3768,20 @@ async def _import_structured_from_ocr(
     results = []
     new_questions = []
 
-    # 自动检测科目
+    # 自动检测科目（W2-1：手选优先 + 接上置信度，不再丢弃）
     all_text = ' '.join(
         q.get('content', '') or q.get('question_content', '')
         for q in structured_questions[:5]
     )
     subject_name = payload.get('subject_category', '')
+    subject_suggestion = _build_subject_suggestion(all_text, subject_name)
     if not subject_name:
-        subject_name, _ = detect_subject_category(all_text)
+        subject_name = subject_suggestion.get('name') or ''
     # 空名兜底：见上文 :2420 附近说明（W1-1，W2-1 前保留历史默认值）
     if not subject_name:
         subject_name = '行测'
     subject = _get_or_create_subject(db, subject_name)
+    subcategory_suggestion = _build_subcategory_suggestion(subject.subject_id, all_text)
 
     for q_data in structured_questions:
         content = q_data.get('content') or q_data.get('question_content', '')
@@ -3752,6 +3916,8 @@ async def _import_structured_from_ocr(
     return {
         'import_status': 'SUCCESS' if imported > 0 else 'PARTIAL',
         'auto_detected_subject': subject_name,
+        'subject_suggestion': subject_suggestion,
+        'subcategory_suggestion': subcategory_suggestion,
         'total': len(structured_questions),
         'imported': imported,
         'duplicates': duplicates,
