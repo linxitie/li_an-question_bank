@@ -104,7 +104,7 @@ export default createViteConfig({
         clientPort: DEV_PORT,
       },
       watch: {
-        ignored: ['**/.worktrees/**'],
+        ignored: ['**/.worktrees/**', '**/backend/**'],
       },
       fs: {
         deny: [

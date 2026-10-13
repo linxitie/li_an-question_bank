@@ -788,33 +788,47 @@ import { renderQuestionContent } from '@/utils/questionRender';
         var deadline = Date.now() + (budgetMs || (this.PDF_OCR_TIMEOUT_MS || 960000));
         var delay = 1500;
         var waited = 0;
+        // ★ 轮询容错（2026-10-13 实测）：单次请求失败（超时/网络抖动/服务端重启间隙）
+        //   不立即终止整个导入——轮询本质是最终一致性，连续失败才说明链路真断。
+        //   失败上限 5 次 ≈ 75s，超出才报错；总预算 deadline 仍兜底。
+        var consecutiveFailures = 0;
         while (Date.now() < deadline) {
           await new Promise(function (r) { setTimeout(r, delay); });
           waited += delay;
-          var res = await this.fetchWithRetry(
-            '/api/questions/import/records/' + importId + '/status?light=true',
-            { method: 'GET', headers: this.getAuthHeaders() },
-            10000, 2
-          );
-          var st = await res.json();
-          if (!res.ok) {
-            throw new Error(this._extractErrorMessage(st, '查询解析状态失败 (HTTP ' + res.status + ')'));
-          }
-          if (st.status === 'PREVIEW') {
-            // light=true 模式下 result 为空，需单独取完整预览数据
-            if (st.result) return st.result;
-            var fullRes = await this.fetchWithRetry(
-              '/api/questions/import/records/' + importId + '/status',
-              { method: 'GET', headers: this.getAuthHeaders() },
-              10000, 2
+          try {
+            var res = await this.fetchWithRetry(
+              '/api/questions/import/records/' + importId + '/status?light=true',
+              { method: 'GET', headers: this.getAuthHeaders(), cache: 'no-store' },
+              15000, 1
             );
-            var fullSt = await fullRes.json();
-            return fullSt.result || fullSt;
+            var st = await res.json();
+            if (!res.ok) {
+              throw new Error(this._extractErrorMessage(st, '查询解析状态失败 (HTTP ' + res.status + ')'));
+            }
+            consecutiveFailures = 0;
+            if (st.status === 'PREVIEW') {
+              // light=true 模式下 result 为空，需单独取完整预览数据
+              if (st.result) return st.result;
+              var fullRes = await this.fetchWithRetry(
+                '/api/questions/import/records/' + importId + '/status',
+                { method: 'GET', headers: this.getAuthHeaders(), cache: 'no-store' },
+                15000, 1
+              );
+              var fullSt = await fullRes.json();
+              return fullSt.result || fullSt;
+            }
+            if (st.status === 'FAILED') throw new Error(this._extractErrorMessage(st, '解析失败'));
+            // PARSING / CONFIRMED / COMPLETED：继续等
+            if (onTick) onTick(st, waited);
+            delay = Math.min(Math.round(delay * 1.3), 8000);
+          } catch (e) {
+            consecutiveFailures++;
+            console.warn('[pollImportStatus] 第 ' + consecutiveFailures + ' 次查询失败: ' + (e.message || e) + '，继续轮询');
+            if (consecutiveFailures >= 5) {
+              throw new Error('查询解析状态连续失败 ' + consecutiveFailures + ' 次（' + this.handleFetchError(e, '') + '）。请检查服务是否运行，或刷新页面后重试。');
+            }
+            delay = Math.min(delay + 1000, 5000);
           }
-          if (st.status === 'FAILED') throw new Error(this._extractErrorMessage(st, '解析失败'));
-          // PARSING / CONFIRMED / COMPLETED：继续等
-          if (onTick) onTick(st, waited);
-          delay = Math.min(Math.round(delay * 1.3), 8000);
         }
         var mins = Math.round(waited / 60000);
         throw new Error('解析超时（已等待 ' + (mins > 0 ? mins + ' 分钟' : Math.round(waited / 1000) + ' 秒') +
