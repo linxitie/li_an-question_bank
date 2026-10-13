@@ -2042,6 +2042,100 @@ def _section_type_at(marks: List[Tuple[int, str]], line_idx: int) -> str:
     return ty
 
 
+def _count_stem_lines(text: str) -> int:
+    """统计「题干尾候选」行数——以（ ）/（ ）。结尾的行（无题号文档的题干锚点）。"""
+    cnt = 0
+    for line in (text or '').split('\n'):
+        if re.search(r'[（(]\s*[）)]\s*[。．.]?\s*$', line.strip()):
+            cnt += 1
+    return cnt
+
+
+def _extract_blocks_unnumbered(text: str) -> List[Dict[str, Any]]:
+    """A 修复：无题号/混合题号文档的自适应切分与解析。
+
+    锚点结构（2021 江苏卷实测）：题干尾行（「（ ）。」）→ 枚举行（①-⑤）→
+    选项行组（A-D，可能跨行内联）→ 下一题题干头。
+    切块后复用与主流程相同的后处理（选项提取/题型/答案/可疑标记）。
+    """
+    lines = text.split('\n')
+    chunks: List[List[str]] = []
+    cur: List[str] = []
+    has_opt = False
+    for line in lines:
+        s = line.strip()
+        if not s:
+            cur.append(line)
+            continue
+        # 选项行（含 A-D 标记，且非题干尾行）
+        if re.search(r'[A-D]\s*[.、．)）]', s) and not re.search(r'[（(]\s*[）)]', s):
+            cur.append(line)
+            has_opt = True
+            continue
+        # 枚举行（①-⑫）
+        if re.match(r'^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫]', s):
+            cur.append(line)
+            continue
+        # 括号行（题干尾折行）
+        if re.match(r'^[（(]', s):
+            cur.append(line)
+            continue
+        # 普通文本行：若当前块已有选项，则收块开新块（这是下一题题干头）
+        if has_opt:
+            chunks.append(cur)
+            cur = [line]
+            has_opt = False
+        else:
+            cur.append(line)
+    if cur and any(x.strip() for x in cur):
+        chunks.append(cur)
+
+    blocks: List[Dict[str, Any]] = []
+    for idx, chunk in enumerate(chunks):
+        block_lines = list(chunk)
+        content_text = '\n'.join(block_lines).strip()
+        if len(content_text) < 5:
+            continue
+        options = _extract_options(block_lines)
+        if len(options) < 4:
+            existing_keys = {o['key'] for o in options if isinstance(o, dict)}
+            fallback_re = re.compile(
+                r'(?:^|\n)\s*([A-D])\s*[.、．)）]\s*(.+?)(?=\n\s*[A-D]\s*[.、．)）]|\n\n|\n(?:[A-D]\s*[.、．)）])|$)',
+                re.DOTALL)
+            for fm in fallback_re.finditer(content_text):
+                k, v = fm.group(1), fm.group(2).strip()
+                if k in {'A', 'B', 'C', 'D'} and k not in existing_keys and len(v) > 1:
+                    v = re.sub(r'\s*[A-D]\s*[.、．)）]\s*.+$', '', v, flags=re.DOTALL).strip()
+                    if v:
+                        options.append({'key': k, 'value': v})
+                        existing_keys.add(k)
+                        if len(options) >= 4:
+                            break
+        # 移除题干中的选项行文本（位置索引）
+        for line in block_lines:
+            if re.match(r'^[A-D]\s*[.、．)）]', line.strip()):
+                i_pos = content_text.find(line)
+                if i_pos >= 0:
+                    content_text = content_text[:i_pos] + content_text[i_pos + len(line):]
+        content_text = re.sub(r'[\[（(]\s*(?:单选|多选|不定项)\s*[\]）)]', '', content_text)
+        content_text = re.sub(r'\n{3,}', '\n\n', content_text).strip()
+        extracted = extract_answer_from_lines(block_lines)
+        answer = extracted.get('answer') if extracted else None
+        analysis = extracted.get('analysis') if extracted else None
+        qtype, type_confidence = _detect_question_type(content_text, options, answer or '', '')
+        blocks.append({
+            'question_number': idx + 1,
+            'content': content_text,
+            'options': options,
+            'answer': answer,
+            'analysis': analysis,
+            'question_type': qtype,
+            'type_confidence': type_confidence,
+            'format': 'unnumbered',
+        })
+    return _mark_and_split_suspected(blocks)
+
+
 def _strip_unmarked_material(lines: List[str]) -> Tuple[List[str], List[str]]:
     """C 修复：剥离「无标记材料」——材料头与分节指令都没命中时兜底。
 
@@ -2992,7 +3086,13 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
     # 违反单调性，据此精准过滤。
     numbers = extract_question_numbers(text, monotonic=True)
     if not numbers:
-        return []
+        # A 修复：无题号文档自适应切分（「网友回忆版」等题目无题号前缀的文档）
+        return _extract_blocks_unnumbered(text)
+    # A 修复：混合形态——题号数远少于「题干尾候选」数（前半无题号+后半有题号）。
+    # 0.5 系数：正常有题号文档 stem≈题号数（不触发）；江苏卷 36 题号 vs 82 候选触发。
+    _stem_count = _count_stem_lines(text)
+    if _stem_count >= 5 and len(numbers) < _stem_count * 0.5:
+        return _extract_blocks_unnumbered(text)
 
     lines = text.split('\n')
     blocks = []
