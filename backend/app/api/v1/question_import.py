@@ -3206,6 +3206,18 @@ async def unified_parse(
                 if _diag:
                     warnings.append(_diag)
 
+                # C 修复：文档名科目强信号（提示但可覆盖——不强制改归类）
+                _name_hint = ''
+                for _kw, _subj in (('申论', '申论'), ('行政职业能力', '行测'),
+                                   ('行测', '行测'), ('公安', '公专'), ('招警', '公专')):
+                    if _kw in (paper_name or ''):
+                        _name_hint = _subj
+                        break
+                if _name_hint and auto_detected_subject and _name_hint != auto_detected_subject:
+                    warnings.append(
+                        f'文档名含「{_name_hint}」信号，但当前归类为「{auto_detected_subject}」。'
+                        f'如分类有误，请在上方手动选择科目后重新匹配。')
+
             if not auto_detected_subject:
                 all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
                 # W2-1：接上 SubjectDetection 的置信度与命中关键词（不再丢弃）

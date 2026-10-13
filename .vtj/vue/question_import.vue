@@ -1615,7 +1615,10 @@ import { renderQuestionContent } from '@/utils/questionRender';
               answers_text: answersText || '',
               mode: mode,
               paper_name: paperName,
-              subject_category: this.state.form.subject_category || '',
+              // C 修复：表单默认「公专」视为「未显式选择」→ 传空让后端自动检测；
+              // 用户显式切换过的科目照传（手选优先仍生效）
+              subject_category: this.state.form.subject_category === '公专'
+                ? '' : (this.state.form.subject_category || ''),
               questions_filename: this.state.separateQuestionsFileName || '',
               answers_filename: this.state.separateAnswersFileName || ''
             })
