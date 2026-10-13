@@ -136,7 +136,8 @@
         <div class="edit-dialog-body">
           <div class="edit-field">
             <label>题干：</label>
-            <textarea v-model="editForm.question_content" rows="4" placeholder="请输入题干内容"></textarea>
+            <textarea v-model="editForm.question_content" rows="4" placeholder="请输入题干内容（可 Ctrl+V 粘贴图片）"
+                      @paste="handleEditPaste('question_content', $event)"></textarea>
           </div>
           <div class="edit-field">
             <label>题型：</label>
@@ -176,7 +177,8 @@
           </div>
           <div class="edit-field" :class="{ 'field-warning': !editForm.analysis }">
             <label>答案解析：</label>
-            <textarea v-model="editForm.analysis" rows="3" placeholder="请输入答案解析（可选）"></textarea>
+            <textarea v-model="editForm.analysis" rows="3" placeholder="请输入答案解析（可选，可 Ctrl+V 粘贴图片）"
+                      @paste="handleEditPaste('analysis', $event)"></textarea>
             <span class="field-hint" v-if="!editForm.analysis">
               💡 建议补充解析，帮助学生理解
             </span>
@@ -265,6 +267,29 @@ export default defineComponent({
     }
 
     // 保存编辑
+    // F-7：编辑弹层内粘贴剪贴板图片 → data URI 插入对应字段。
+    // 入库时由后端 _extract_and_save_images 统一提取落盘（复用既有管线，不新增端点）。
+    function handleEditPaste(field, event) {
+      if (isReadonly.value) return;
+      const cd = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
+      if (!cd || !cd.items) return;
+      for (let i = 0; i < cd.items.length; i++) {
+        const item = cd.items[i];
+        if (item.kind === 'file' && item.type.indexOf('image') === 0) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          const reader = new FileReader();
+          reader.onload = function (ev) {
+            const tag = '<img src="' + ev.target.result + '" class="q-img" loading="lazy" />';
+            editForm[field] = (editForm[field] || '') + tag;
+          };
+          reader.readAsDataURL(file);
+          event.preventDefault();
+          return;
+        }
+      }
+    }
+
     function saveEdit() {
       if (isReadonly.value) return;
       // 必填字段验证
@@ -944,6 +969,8 @@ return {
       openEditDialog,
       closeEditDialog,
       saveEdit,
+      // F-7：编辑弹层内图片粘贴（题干/解析）
+      handleEditPaste,
       addOption,
       removeOption,
       isJudgeQuestion,
