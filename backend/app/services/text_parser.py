@@ -1668,6 +1668,26 @@ def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
                         'format': 'block_header',
                     }
 
+    # ===== 第零遍之三：行首字母答案（「N、X本题考查…」紧贴形态）=====
+    # 公专答案 PDF 高频形态：答案字母紧贴题号，无「答案」标签。
+    # 2024 国考解析 PDF 实测 99/100 题：剥题号后首行「X本题…」，X 即答案。
+    # 若走结论声明，正文里「故X正确」可能与行首矛盾（19 题行首 D 曾被抓成 A），
+    # 故本规则优先级高于结论声明。多选字母串（ACD）同吃。
+    if lines:
+        _first_line = lines[0].strip()
+        _m_inline = re.match(r'^([A-Da-d]{1,4})(?=本题)', _first_line)
+        if _m_inline:
+            _raw = _m_inline.group(1).upper()
+            if _raw and all(c in 'ABCD' for c in _raw) and len(_raw) <= 4:
+                _rest = _first_line[_m_inline.end():].strip()
+                _tail = '\n'.join(lines[1:]).strip()
+                _parts = [p for p in (_rest, _tail) if p]
+                return {
+                    'answer': _raw,
+                    'analysis': '\n'.join(_parts) or None,
+                    'format': 'inline_letter',
+                }
+
     # ===== 第零遍之二：结论声明（排除干扰项前缀） =====
     # 放在原有模式之前：逐项点评型解析里，"故正确答案为X"才是权威结论。
     concl = _pick_conclusion_answer(full_text)
@@ -1677,6 +1697,22 @@ def extract_answer_from_lines(lines: List[str]) -> Dict[str, Optional[str]]:
             'analysis': full_text,
             'format': 'conclusion',
         }
+
+    # ===== 第零遍之四：「故X正确」宽松结论兜底（无「答案」二字的结论形态）=====
+    # 2024 国考 81 题类：题号后无答案字母（「81.本题考查…」），答案藏在文末结论
+    # 「故BC错误，D正确」。取块内最后一个「故/因此/所以…X正确」；
+    # 「A项正确」无「故」前缀、「故表述正确」无字母，均不会误匹配。
+    # ★ 「正\s*确」容忍 PDF 提取换行切断（实测「D正\n确」）。
+    _concl_matches = list(re.finditer(
+        r'(?:故|因此|所以)[^。\n]{0,30}?([A-Da-d]{1,4})\s*正\s*确', full_text))
+    if _concl_matches:
+        _raw2 = _concl_matches[-1].group(1).upper()
+        if _raw2 and all(c in 'ABCD' for c in _raw2) and len(_raw2) <= 4:
+            return {
+                'answer': _raw2,
+                'analysis': full_text,
+                'format': 'conclusion_gu_x',
+            }
 
     # ===== 第一遍：标准答案格式 =====
     for fmt_name, pattern in ANSWER_PATTERNS:
