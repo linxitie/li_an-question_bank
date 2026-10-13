@@ -444,11 +444,9 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
                         f'<img src="{rel_path}" class="q-img" loading="lazy" />'
                     )
 
-                # 删除临时扁平文件，避免冗余
-                try:
-                    os.remove(src_file)
-                except Exception:
-                    pass
+                # F-2：**不再删除**扁平暂存文件。此前 os.remove 会在重复导入同一
+                # PDF 时（text_cache 命中、返回旧 marker）导致 sanitize 定位失败、
+                # 图片全灭。暂存文件改由 cleanup_stale_staged_images 按时间延迟清理。
             else:
                 logger.debug(f"[images] docx图片未找到: {marker_key}")
                 # 文件不存在，移除占位符避免前端显示 broken image
@@ -465,3 +463,41 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
             continue
 
     return images
+
+
+def cleanup_stale_staged_images(max_age_days: int = 7) -> int:
+    """按时间清理暂存扁平图（F-2 配套，挂调度器每天一次）。
+
+    只删除 ``_STAGING_DIR`` 根目录下、命名符合暂存形态（hex_题号_序号.png 或
+    题号_序号.png）且 mtime 超过 max_age_days 的文件。绝不触碰 {qid}/ 子目录
+    内的正式题目图——那是落库后的唯一副本。
+
+    返回删除文件数；任何异常吞掉并告警（清理失败不阻断任何业务）。
+    """
+    import time as _time
+
+    # 裸文件名形态（无 [IMAGE:] 包装）：hex_题号_序号 或 题号_序号
+    _staged_name_re = re.compile(r'(?:[a-f0-9]+_\d+_\d+|\d+_\d+)')
+    removed = 0
+    try:
+        cutoff = _time.time() - max_age_days * 86400
+        if not os.path.isdir(_STAGING_DIR):
+            return 0
+        for name in os.listdir(_STAGING_DIR):
+            path = os.path.join(_STAGING_DIR, name)
+            if not os.path.isfile(path) or not name.lower().endswith('.png'):
+                continue
+            if not _staged_name_re.fullmatch(name[:-4]):
+                continue
+            if os.path.getmtime(path) > cutoff:
+                continue
+            try:
+                os.remove(path)
+                removed += 1
+            except OSError:
+                pass
+        if removed:
+            logger.info(f"[images] 清理暂存图 {removed} 张（>={max_age_days} 天）")
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[images] 暂存图清理失败: {e}")
+    return removed

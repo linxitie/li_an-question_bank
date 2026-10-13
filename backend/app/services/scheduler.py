@@ -167,6 +167,20 @@ def init_scheduler():
         replace_existing=True
     )
 
+    # 每日 04:00 清理超期暂存图（F-2 配套：导入确认后暂存扁平图不再即时删除，
+    # 改为按时间延迟回收，避免重复导入同一文档时 text_cache 命中而图已删）
+    def cleanup_stale_staged():
+        from ..services.question_ingest.images import cleanup_stale_staged_images
+        cleanup_stale_staged_images(max_age_days=7)
+
+    scheduler.add_job(
+        cleanup_stale_staged,
+        trigger=CronTrigger(hour=4, minute=0, timezone=CST),
+        id="cleanup_staged_images",
+        name="每日清理超期暂存图",
+        replace_existing=True
+    )
+
     scheduler.start()
     logger.info("定时任务调度器已启动（每日 24:00 CST）")
 
