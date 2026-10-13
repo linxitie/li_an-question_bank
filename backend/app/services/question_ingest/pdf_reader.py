@@ -85,6 +85,7 @@ _PDF_MIN_IMG_DIM = 8
 # 真实语料 0 张超限；与 MAX_IMAGE_SIZE（落盘字节上限）构成两道独立防线。
 _PDF_MAX_IMG_PIXELS = 4_000_000
 _last_extract_engine = 'unknown'  # ★ 记录最近一次文本提取使用的引擎
+_last_ocr_failure = ''            # ★ 记录最近一次 OCR 失败的具体原因（供前端可操作提示）
 
 
 def _pdf_image_to_png(im) -> Optional[bytes]:
@@ -359,7 +360,10 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
         if mineru_text:
             logger.info(f"[mineru] 解析成功: {len(mineru_text)}字符，采用MinerU结果")
             return _finish(mineru_text, 'mineru')
+        _last_ocr_failure = 'MinerU 已启用但未产出有效文本（详见后端日志 [mineru]）'
         logger.warning("[mineru] 未返回有效文本，回退PaddleOCR逐页路径")
+    else:
+        _last_ocr_failure = 'MinerU 未启用或解释器路径无效（MINERU_ENABLED / MINERU_PYTHON）'
 
     # 第二级(保底): 原有 PyPDF2图片提取 + PaddleOCR逐页识别 —— 保持原逻辑一字不改
     ocr_text = _extract_text_from_scanned_pdf(buf)
@@ -447,6 +451,7 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
                     logger.warning(f"第{page_idx+1}页图片预处理失败: {e}")
 
         if saved == 0:
+            _last_ocr_failure = '扫描件无可提取图片（页面内容为空或图片格式不支持）'
             logger.info("扫描件PDF未提取到可OCR图片")
             return ''
 
@@ -470,12 +475,14 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
             cwd=backend_root,
         )
         if proc.returncode != 0:
+            _last_ocr_failure = 'PaddleOCR 子进程异常退出（环境不兼容或模型缺失）'
             logger.error(f"[ocr-worker] 子进程异常退出 code={proc.returncode}: "
                          f"{(proc.stderr or '')[-300:]}")
             return ''
         with open(out_json, encoding='utf-8') as f:
             result = json.load(f)
         if not result.get('ok'):
+            _last_ocr_failure = f"PaddleOCR 未识别出文字: {result.get('error') or '未知原因'}"
             logger.warning(f"[ocr-worker] 未得到文本: {result.get('error')}")
             return ''
         logger.info(f"[ocr-worker] 完成: 页OK={result.get('pages_ok')} "
@@ -483,10 +490,12 @@ def _extract_text_from_scanned_pdf(buf: bytes) -> str:
         return result.get('text', '')
 
     except subprocess.TimeoutExpired:
+        _last_ocr_failure = f'OCR 超时（>{settings.OCR_SUBPROCESS_TIMEOUT}s），请拆分后导入或启用 MinerU'
         logger.error(f"[ocr-worker] OCR超时（>{settings.OCR_SUBPROCESS_TIMEOUT}s），"
                      "已终止。建议：该PDF为高清扫描件，请拆分后导入或联系管理员启用MinerU通道")
         return ''
     except Exception as e:
+        _last_ocr_failure = f'扫描件处理失败: {type(e).__name__}'
         logger.error(f"扫描件PDF处理失败: {e}", exc_info=True)
         return ''
     finally:

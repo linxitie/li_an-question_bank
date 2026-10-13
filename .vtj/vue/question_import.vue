@@ -1005,7 +1005,10 @@ import { renderQuestionContent } from '@/utils/questionRender';
           }
           // 扫描件PDF特殊处理（此时系统已尝试MinerU高精度OCR + PaddleOCR逐页识别两级引擎）
           if (data.scanned_pdf) {
-            ElMessage.warning('检测到扫描件PDF，自动识别未产出内容。请确认扫描清晰度，或改用"图片导入"标签页；若多次失败请联系管理员检查MinerU服务状态。');
+            var ocrReason = data.ocr_failure_reason
+              ? '失败原因：' + data.ocr_failure_reason + '。'
+              : '';
+            ElMessage.warning('检测到扫描件PDF，自动识别未产出内容。' + ocrReason + '请确认扫描清晰度，或改用"图片导入"标签页；若多次失败请联系管理员检查MinerU服务状态。');
             callback('');
             return;
           }

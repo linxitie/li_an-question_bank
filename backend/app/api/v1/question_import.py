@@ -1594,6 +1594,8 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 'engine': _pdf_reader._last_extract_engine,  # ★ 本次实际使用的识别引擎（I-6 起状态随平移迁至 pdf_reader）
                 'ocr_hint': ('该PDF为扫描件（无文本层），请使用"图片导入"标签页上传，'
                              '或先通过OCR工具转换为文本格式') if is_scanned else None,
+                # F-6：OCR 失败的具体原因（供前端可操作提示，替代笼统的"解析失败"）
+                'ocr_failure_reason': _pdf_reader._last_ocr_failure or None,
             }
             stored = {'items': preview_items, 'raw_text': text[:1000000],
                       'auto_detected_tags': auto_tags,
