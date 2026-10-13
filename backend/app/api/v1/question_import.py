@@ -1728,7 +1728,7 @@ def _sanitize_preview_images(result: dict, import_id: int, db) -> None:
         if not isinstance(q, dict):
             continue
         # 题目对象同时存在 analysis 与 answer_analysis 两个字段（历史兼容），都处理
-        for field in ('question_content', 'answer', 'analysis', 'answer_analysis'):
+        for field in ('question_content', 'content', 'answer', 'analysis', 'answer_analysis'):
             v = q.get(field)
             if isinstance(v, str) and '[IMAGE:' in v:
                 q[field] = sanitize_image_placeholders(v, import_id, db)
@@ -1811,6 +1811,13 @@ async def get_import_parse_status(
             if isinstance(result, dict):
                 # ★ 预览态图片 sanitize：裸 [IMAGE:xxx] → <img>（或剔除），避免前端显示路径文本
                 _sanitize_preview_images(result, import_id, db)
+                # F-4：raw_text_preview 出口同步 sanitize —— 前端合并导入会用它做
+                # 本地解析，marker 残留会在前端被剥空导致图片消失。
+                _raw_preview = result.get('raw_text_preview')
+                if isinstance(_raw_preview, str) and '[IMAGE:' in _raw_preview:
+                    from ...services.image_service import sanitize_image_placeholders
+                    result['raw_text_preview'] = sanitize_image_placeholders(
+                        _raw_preview, import_id, db)
                 payload['result'] = result
             else:  # 兼容历史记录：没有 _response 时回落到 items/raw_text 拼装
                 payload['result'] = {
@@ -2522,7 +2529,7 @@ async def separate_match_endpoint(
             if dup_info['is_duplicate']:
                 q['existing_id'] = dup_info['existing_id']
 
-        return {
+        _response_payload = {
             'status': 'success',
             'match_rate': round(result.match_rate * 100, 1),
             'matched_count': result.matched_count,
@@ -2536,6 +2543,9 @@ async def separate_match_endpoint(
             'details': result.details,
             'message': f'匹配完成：{round(result.match_rate*100, 1)}%（{result.matched_count}/{result.total_questions}）'
         }
+        # F-1：与 /parse、/status 同口径 —— 返回前 sanitize 裸 [IMAGE:] 占位符
+        _sanitize_preview_images(_response_payload, None, db)
+        return _response_payload
     except Exception as e:
         logger.error(f"分离导入匹配失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"智能匹配失败: {str(e)}")
@@ -2839,6 +2849,9 @@ async def separate_match_xingce_endpoint(
             'name': '', 'confidence': 0.0}
     _response['subject_suggestion'] = subject_suggestion
     _response['subcategory_suggestion'] = subcategory_suggestion
+    # F-1：与 /parse、/status 同口径 —— 返回前 sanitize 裸 [IMAGE:] 占位符，
+    # 否则前端 renderQuestionContent 会把残留 marker 剥空导致图片消失。
+    _sanitize_preview_images(_response, None, db)
     return _response
 
 

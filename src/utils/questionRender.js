@@ -66,6 +66,12 @@ function convertImageMarkers(s, stripInlineOption) {
   out = out.replace(/\[?IMAGE:([^\]]+)\]?/gi, function (m, marker) {
     var key = String(marker || '').trim();
     if (!key) return '';
+    // F-5 保底：docx/PDF 暂存图的确切扁平命名（hex_题号_序号），
+    // 落盘路径与之一致（backend/app/static/questions/{marker}.png），
+    // 直连不属"猜路径"；后续 attachImageFallback 统一补 onerror 防裂图。
+    if (/^[a-f0-9]+_\d+_\d+$/i.test(key)) {
+      return '<img src="/static/questions/' + key + '.png" />';
+    }
     // 后端在响应前已把可解析的 marker 替换为 <img>；
     // 走到这里的说明后端也没找到文件（真丢图），剔除以免前端裂图。
     return '';
