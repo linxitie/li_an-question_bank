@@ -273,6 +273,10 @@ export default defineComponent({
       if (isReadonly.value) return;
       const cd = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
       if (!cd || !cd.items) return;
+      // 提前捕获目标元素与光标位置（reader 回调是异步的，晚取会丢）
+      const ta = event.target;
+      const selStart = (ta && typeof ta.selectionStart === 'number') ? ta.selectionStart : 0;
+      const selEnd = (ta && typeof ta.selectionEnd === 'number') ? ta.selectionEnd : selStart;
       for (let i = 0; i < cd.items.length; i++) {
         const item = cd.items[i];
         if (item.kind === 'file' && item.type.indexOf('image') === 0) {
@@ -281,7 +285,16 @@ export default defineComponent({
           const reader = new FileReader();
           reader.onload = function (ev) {
             const tag = '<img src="' + ev.target.result + '" class="q-img" loading="lazy" />';
-            editForm[field] = (editForm[field] || '') + tag;
+            // B-修复：在光标（或选区）位置插入，不再追加到文本末端
+            const cur = (editForm[field] || '');
+            editForm[field] = cur.slice(0, selStart) + tag + cur.slice(selEnd);
+            const newPos = selStart + tag.length;
+            if (ta) {
+              setTimeout(function () {
+                ta.selectionStart = ta.selectionEnd = newPos;
+                ta.focus();
+              }, 0);
+            }
           };
           reader.readAsDataURL(file);
           event.preventDefault();
