@@ -2042,6 +2042,53 @@ def _section_type_at(marks: List[Tuple[int, str]], line_idx: int) -> str:
     return ty
 
 
+def _strip_unmarked_material(lines: List[str]) -> Tuple[List[str], List[str]]:
+    """C 修复：剥离「无标记材料」——材料头与分节指令都没命中时兜底。
+
+    真实事故（2017 公安院校联考）：85-88 题组的材料没有任何「回答第X-Y题」
+    标记，直接出现在上一题（84）选项之后，被黏进 84 题题干。
+
+    判据（三重护栏，保守）：
+      1. 本题选项已齐全（≥2 个选项行）——材料只可能出现在选项之后；
+      2. 选项行之后、下一个题号/选项行之前，连续非空文本行 ≥ 3 行；
+      3. 该段不得以「答案/解析/参考答案」开头（防误剥题目自带答案解析）。
+
+    不满足任一条件则原样返回（零行为变化）。
+    """
+    opt_marks = 0
+    last_opt = -1
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if re.match(r'^\s*[A-H]\s*[.、．)）]', s):
+            # 独立选项行或单行内联多选项（「A、x    B、y    C、z    D、w」），
+            # 按标记数统计：4 个标记 = 选项齐全
+            opt_marks += len(re.findall(r'[A-H]\s*[.、．)）]', s))
+            last_opt = i
+    if opt_marks < 2 or last_opt < 0 or last_opt >= len(lines) - 1:
+        return lines, []
+
+    boundary = len(lines)
+    for idx in range(last_opt + 1, len(lines)):
+        s = lines[idx].strip()
+        if not s:
+            continue
+        if re.match(r'^\s*\d+\s*[.、．)）\]】]', s):
+            boundary = idx
+            break
+        if re.match(r'^\s*[A-H]\s*[.、．)）]', s):
+            boundary = idx
+            break
+        if re.match(r'^(?:【|\[)?\s*(?:参考答案|答案|解析)', s):
+            boundary = idx
+            break
+
+    content = [ln for ln in lines[last_opt + 1:boundary] if ln.strip()]
+    # 阈值：≥3 行，或单行长文本 ≥60 字（材料常被 docx/pdf 提取压成 1 行）
+    if len(content) < 3 and sum(len(x) for x in content) < 60:
+        return lines, []
+    return lines[:last_opt + 1], content
+
+
 def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
     """剥离题干块尾部粘连的「材料头」与「分节指令段」（分节残留）。
 
@@ -2077,7 +2124,8 @@ def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
             cut_idx, cut_char, cut_end = i, hit[0], hit[1]
             break
     if cut_idx is None:
-        return lines, []
+        # C 修复：无标记材料启发式剥离（材料头/分节指令未命中时）
+        return _strip_unmarked_material(lines)
 
     keep = list(lines[:cut_idx])
     prefix = lines[cut_idx][:cut_char].rstrip()
