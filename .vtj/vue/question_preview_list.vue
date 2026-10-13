@@ -60,7 +60,7 @@
       <span class="docs-q-section-name">{{ q.xingce_subcategory || '未分区' }}</span>
       <span class="docs-q-section-count">{{ sectionCount(q.xingce_subcategory) }} 题</span>
     </div>
-    <div class="docs-q-card" v-if="!isSectionCollapsed(q.xingce_subcategory)" :id="'qcard_' + idx" :class="{ 'docs-q-card-noans': !q.answer || q.answer === '待补充', 'docs-q-card-suspicious': q.suspicious }">
+    <div class="docs-q-card" v-if="!isSectionCollapsed(q.xingce_subcategory)" :id="'qcard_' + idx" :class="{ 'docs-q-card-noans': !q.answer || q.answer === '待补充', 'docs-q-card-suspicious': q.suspicious, 'docs-q-card-grouped': qnumInMultiGroup(q.question_number) }">
       <div class="docs-q-header">
         <span class="docs-q-num">第 {{ idx + 1 }} 题</span>
         <span class="docs-q-type">{{ q.question_type_detail || '单选题' }}</span>
@@ -629,6 +629,24 @@ export default defineComponent({
       return v === undefined ? -1 : v;
     }
 
+    // F-9c：题目 → 组归属（question_number → 组索引，仅计 question_count>1 的组）。
+    // 供模板把组内题目卡片渲染成「同一框架」（材料+各子题干+答案+解析不切割）。
+    const multiGroupByQnum = computed(function () {
+      const map = {};
+      (props.groups || []).forEach(function (g, gi) {
+        if ((g.question_count || 0) < 2) return;
+        (g.questions || []).forEach(function (m) {
+          const qn = m && m.question_number;
+          if (qn != null && !(String(qn) in map)) map[String(qn)] = gi;
+        });
+      });
+      return map;
+    });
+    function qnumInMultiGroup(qnum) {
+      if (qnum == null) return false;
+      return String(qnum) in multiGroupByQnum.value;
+    }
+
     // 归一后的完整契约（便于调用方直接取用，也便于测试断言渲染顺序）
     const normalizedContract = computed(function () {
       const g = props.group || {};
@@ -972,6 +990,8 @@ return {
       toggleGroup,
       // F-9b：组头内嵌到题目流（材料与子题同框）
       groupHeadIndex,
+      // F-9c：复合题组同框渲染（组内题目卡片视觉整合）
+      qnumInMultiGroup,
       isSectionCollapsed,
       toggleSection,
       showSectionHead,
@@ -1051,6 +1071,12 @@ return {
   border-radius: 12px;
   overflow: visible;
   transition: border-color 0.3s, box-shadow 0.3s;
+}
+/* F-9c：复合题组同框——组内题目卡片共享左侧色带，与组头连成同一框架 */
+.docs-q-card.docs-q-card-grouped {
+  border-left: 4px solid rgba(200,22,30,0.55);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 .docs-q-card:hover { border-color: rgba(200,22,30,0.4); box-shadow: 0 2px 16px rgba(200,22,30,0.12); }
 /* P0-3: 异常题定位高亮 */
