@@ -1058,7 +1058,40 @@ import { renderQuestionContent } from '@/utils/questionRender';
               self.state.batchPreviewData = data.questions;
               self._stampSuggestions(data.questions, data.subject_suggestion, data.subcategory_suggestion);
               self.state.previewGroups = data.groups || [];
-              self.state.rawTextPreview = '';
+              // F-9a: docx/pdf（带 raw_text_preview）同时挂到完整预览组件，
+              // 获得编辑/粘贴图片/复合题组渲染能力；Excel/CSV 保持原简单列表。
+              if (data.raw_text_preview) {
+                self.state.parsedDocsQuestions = data.questions.map(function(q, i) {
+                  return {
+                    question_number: q.question_number || (i + 1),
+                    question_content: q.question_content || '',
+                    options: q.options || [],
+                    answer: (q.answer && q.answer !== '待补充') ? q.answer : '待补充',
+                    analysis: q.answer_analysis || q.analysis || '',
+                    question_type_detail: q.question_type_detail || q.type_name || '单选题',
+                    subject_category: q.subject_name || q.subject_category || '公专',
+                    difficulty: q.difficulty,
+                    score: q.score,
+                    suspicious: q.suspicious,
+                    suspicious_reason: q.suspicious_reason,
+                    requirements: q.requirements,
+                    material_text: q.material_text,
+                    material_titles: q.material_titles,
+                    format: q.format,
+                    blocked: q.blocked,
+                    blocked_reasons: q.block_reasons,
+                    _imported: false,
+                    _is_duplicate: false,
+                    _similarity: 0,
+                    _existing_id: null,
+                    _source: 'backend_pipeline'
+                  };
+                });
+                self._stampSuggestions(self.state.parsedDocsQuestions, data.subject_suggestion, data.subcategory_suggestion);
+                self.state.rawTextPreview = data.raw_text_preview;
+              } else {
+                self.state.rawTextPreview = '';
+              }
               self.state.importId = data.import_id;
               self.stepDone(0); self.setProgress(0, 100);
               ElMessage.success('解析完成：' + (data.success_count || 0) + ' 题可导入，' + (data.failed_count || 0) + ' 题跳过');
@@ -1614,6 +1647,8 @@ import { renderQuestionContent } from '@/utils/questionRender';
           });
           this.state.parseResult = data;
           this.state.parsedDocsQuestions = questions;
+          // F-8：接收后端复合题组结构（组头内嵌渲染）
+          this.state.previewGroups = data.groups || [];
           this._stampSuggestions(questions, data.subject_suggestion, data.subcategory_suggestion);
           this.state.separateMatchRate = data.match_rate || 0;
           if (data.auto_detected_subject) {

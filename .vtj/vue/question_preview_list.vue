@@ -31,28 +31,30 @@
         <button class="btn-secondary btn-top-close" @click="$emit('close')">完成</button>
       </div>
     </div>
-    <!-- 复合题组总题干：仅在组内首题上方渲染一次，材料>800 字自动折叠 -->
-    <div class="docs-q-group-head" v-for="(gh, gidx) in groupHeads" :key="'gh_' + gidx"
-         v-show="gh.visible" :style="{ marginTop: gidx === 0 ? '0' : '18px' }">
+    <!-- F-9b：复合题组头内嵌到题目流——在组内首题上方渲染（材料与子题同框），
+         不再集中堆在列表顶部；材料>800 字自动折叠 -->
+    <template v-for="(q, idx) in questions" :key="idx">
+    <div class="docs-q-group-head" v-if="groupHeadIndex(q.question_number) !== -1
+         && groupHeads[groupHeadIndex(q.question_number)].visible"
+         :style="{ marginTop: idx === 0 ? '0' : '18px' }">
       <div class="docs-q-group-title">
-        <span class="docs-q-group-badge" v-if="gh.question_count > 1">复合题组</span>
-        <span class="docs-q-group-meta" v-if="gh.question_count > 1">
-          给定材料 {{ gh.material_length }} 字 · 共 {{ gh.question_count }} 道小题
+        <span class="docs-q-group-badge" v-if="groupHeads[groupHeadIndex(q.question_number)].question_count > 1">复合题组</span>
+        <span class="docs-q-group-meta" v-if="groupHeads[groupHeadIndex(q.question_number)].question_count > 1">
+          给定材料 {{ groupHeads[groupHeadIndex(q.question_number)].material_length }} 字 · 共 {{ groupHeads[groupHeadIndex(q.question_number)].question_count }} 道小题
         </span>
-        <button class="btn-mini-toggle" @click="toggleGroup(gidx)"
-                v-if="gh.material_length > 0">{{ expandedGroups[gidx] ? '收起材料' : '展开材料' }}</button>
+        <button class="btn-mini-toggle" @click="toggleGroup(groupHeadIndex(q.question_number))"
+                v-if="groupHeads[groupHeadIndex(q.question_number)].material_length > 0">{{ expandedGroups[groupHeadIndex(q.question_number)] ? '收起材料' : '展开材料' }}</button>
       </div>
-      <div class="docs-q-material" v-if="gh.material_length > 0 && expandedGroups[gidx]">
-        <div class="docs-q-material-titles" v-if="gh.material_titles && gh.material_titles.length">
-          <span class="docs-q-mt" v-for="(t, ti) in gh.material_titles" :key="ti">{{ t }}</span>
+      <div class="docs-q-material" v-if="groupHeads[groupHeadIndex(q.question_number)].material_length > 0 && expandedGroups[groupHeadIndex(q.question_number)]">
+        <div class="docs-q-material-titles" v-if="groupHeads[groupHeadIndex(q.question_number)].material_titles && groupHeads[groupHeadIndex(q.question_number)].material_titles.length">
+          <span class="docs-q-mt" v-for="(t, ti) in groupHeads[groupHeadIndex(q.question_number)].material_titles" :key="ti">{{ t }}</span>
         </div>
-        <div class="docs-q-material-text">{{ gh.material_preview }}</div>
-        <button class="btn-mini-expand" v-if="gh.truncated" @click="toggleGroup(gidx)">
-          [展开全部 {{ gh.material_length }} 字]
+        <div class="docs-q-material-text">{{ groupHeads[groupHeadIndex(q.question_number)].material_preview }}</div>
+        <button class="btn-mini-expand" v-if="groupHeads[groupHeadIndex(q.question_number)].truncated" @click="toggleGroup(groupHeadIndex(q.question_number))">
+          [展开全部 {{ groupHeads[groupHeadIndex(q.question_number)].material_length }} 字]
         </button>
       </div>
     </div>
-    <template v-for="(q, idx) in questions" :key="idx">
     <div class="docs-q-section-head" v-if="showSectionHead(idx)" @click="toggleSection(q.xingce_subcategory)">
       <span class="docs-q-section-caret">{{ isSectionCollapsed(q.xingce_subcategory) ? '▸' : '▾' }}</span>
       <span class="docs-q-section-name">{{ q.xingce_subcategory || '未分区' }}</span>
@@ -567,6 +569,28 @@ export default defineComponent({
       { immediate: true }
     );
 
+    // F-9b：题目 → 组头索引映射（按组内首题的 question_number 匹配），
+    // 供模板把组头渲染在「组内首题上方」，实现材料与子题同框（不再集中堆顶部）。
+    const groupHeadIndexByQnum = computed(function () {
+      const map = {};
+      (props.groups || []).forEach(function (g, gi) {
+        const members = g.questions || [];
+        for (let k = 0; k < members.length; k++) {
+          const qn = members[k] && members[k].question_number;
+          if (qn != null && !(String(qn) in map)) {
+            map[String(qn)] = gi;
+            break;
+          }
+        }
+      });
+      return map;
+    });
+    function groupHeadIndex(qnum) {
+      if (qnum == null) return -1;
+      const v = groupHeadIndexByQnum.value[String(qnum)];
+      return v === undefined ? -1 : v;
+    }
+
     // 归一后的完整契约（便于调用方直接取用，也便于测试断言渲染顺序）
     const normalizedContract = computed(function () {
       const g = props.group || {};
@@ -908,6 +932,8 @@ return {
       expandedGroups,
       isGroupExpanded,
       toggleGroup,
+      // F-9b：组头内嵌到题目流（材料与子题同框）
+      groupHeadIndex,
       isSectionCollapsed,
       toggleSection,
       showSectionHead,

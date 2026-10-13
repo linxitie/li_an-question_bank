@@ -3153,6 +3153,8 @@ async def unified_parse(
     essay_prebuilt = None
     # C-2：文件名相似度信号（非 separate 分支保持 0.0）
     _filename_sim = 0.0
+    # F-8：组聚合轻量字段（供 _build_preview_groups，默认空）
+    _group_items = []
     # W2-1：科目建议（追加字段，先初始化为空建议，分支内检测到后再填充）
     subject_suggestion = {'name': '', 'confidence': 0.0, 'matched_keywords': []}
 
@@ -3245,6 +3247,15 @@ async def unified_parse(
                     subject_category=auto_detected_subject,
                 ))
 
+                # F-8：收集组聚合所需的轻量字段（供 _build_preview_groups）
+                _group_items.append({
+                    'material_text': block.get('material_text', ''),
+                    'material_titles': block.get('material_titles', []),
+                    'format': block.get('format', ''),
+                    'question_number': block.get('question_number'),
+                    'sort_order': block.get('sort_order'),
+                })
+
         else:
             # ===== 合并导入 / OCR模式：提取题目块 =====
             cleaned_text = ContentCleaner.clean_text(questions_text)
@@ -3317,6 +3328,15 @@ async def unified_parse(
                     subject_category=auto_detected_subject,
                     validation_errors=_block_reasons,
                 ))
+
+                # F-8：收集组聚合所需的轻量字段（供 _build_preview_groups）
+                _group_items.append({
+                    'material_text': block.get('material_text', ''),
+                    'material_titles': block.get('material_titles', []),
+                    'format': block.get('format', ''),
+                    'question_number': block.get('question_number'),
+                    'sort_order': block.get('sort_order'),
+                })
 
             # 统计匹配结果
             if _essay_merged.get('report'):
@@ -3412,6 +3432,8 @@ async def unified_parse(
                      else _parse_result.dict())
         _response['subject_suggestion'] = subject_suggestion
         _response['subcategory_suggestion'] = subcategory_suggestion
+        # F-8：返回复合题组结构（与 /upload 预览同构），供前端按组同框渲染
+        _response['groups'] = _build_preview_groups(_group_items)
         # C-2：文件名相似度信号（前端可展示配对可信度）
         _response['filename_similarity'] = _filename_sim
         # A-2：与 /status 预览路径一致 —— 返回前 sanitize 裸 [IMAGE:xxx] 占位符，
