@@ -162,8 +162,9 @@
             <div class="edit-options-list">
               <div class="edit-option-item" v-for="(opt, optIdx) in editForm.options" :key="optIdx">
                 <span class="edit-option-key">{{ opt.key }}.</span>
-                <input v-model="opt.value" :placeholder="'选项' + opt.key" />
-                <button class="edit-option-delete" @click="removeOption(optIdx)" v-if="editForm.options.length > 2">×</button>
+                <input v-model="opt.value" :placeholder="'选项' + opt.key"
+                       @paste="handleEditPasteOption(optIdx, $event)" />
+                <button class="edit-option-delete" @click="removeOption(optIdx)">×</button>
               </div>
               <button class="edit-option-add" @click="addOption">+ 添加选项</button>
             </div>
@@ -339,15 +340,39 @@ export default defineComponent({
 
     // 添加选项
     function addOption() {
-      const keys = editForm.options.map(function(o) { return o.key; });
-      const nextKey = String.fromCharCode(Math.max.apply(null, keys.map(function(k) { return k.charCodeAt(0); })) + 1);
-      editForm.options.push({ key: nextKey, value: '' });
+      editForm.options.push({ key: String.fromCharCode(65 + editForm.options.length), value: '' });
     }
 
-    // 删除选项
+    // 删除选项（B 修复：可删至 0 项，删除后键序重排 A/B/C…连续，不再出现 A/C/D 错乱）
     function removeOption(idx) {
-      if (editForm.options.length > 2) {
-        editForm.options.splice(idx, 1);
+      editForm.options.splice(idx, 1);
+      editForm.options.forEach(function (o, i) {
+        o.key = String.fromCharCode(65 + i);
+      });
+    }
+
+    // B 修复：选项输入框粘贴剪贴板图片 → data URI 插入选项值
+    function handleEditPasteOption(optIdx, event) {
+      if (isReadonly.value) return;
+      const cd = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
+      if (!cd || !cd.items || !editForm.options[optIdx]) return;
+      const selStart = event.target && typeof event.target.selectionStart === 'number'
+        ? event.target.selectionStart : 0;
+      for (let i = 0; i < cd.items.length; i++) {
+        const item = cd.items[i];
+        if (item.kind === 'file' && item.type.indexOf('image') === 0) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          const reader = new FileReader();
+          reader.onload = function (ev) {
+            const tag = '<img src="' + ev.target.result + '" class="q-img" loading="lazy" />';
+            const cur = editForm.options[optIdx].value || '';
+            editForm.options[optIdx].value = cur.slice(0, selStart) + tag + cur.slice(selStart);
+          };
+          reader.readAsDataURL(file);
+          event.preventDefault();
+          return;
+        }
       }
     }
 
@@ -1005,6 +1030,8 @@ return {
       saveEdit,
       // F-7：编辑弹层内图片粘贴（题干/解析）
       handleEditPaste,
+      // B 修复：选项粘贴图片 + 键序重排
+      handleEditPasteOption,
       addOption,
       removeOption,
       isJudgeQuestion,
