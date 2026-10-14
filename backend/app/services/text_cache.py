@@ -52,8 +52,12 @@ def enabled() -> bool:
 
 
 def cache_key(buf: bytes) -> str:
-    """文件内容 md5（十六进制）。内容寻址 → 同内容不同文件名也能命中。"""
-    return hashlib.md5(buf or b"").hexdigest()
+    """文件内容 md5（十六进制），带版本前缀。
+
+    版本前缀（2026-10-13 SMask 修复）：提取算法升级后旧缓存必须整体失效——
+    旧缓存的 [IMAGE:marker] 指向修复前生成的黑图文件，命中即黑块再现。
+    """
+    return 'v3_' + hashlib.md5(buf or b"").hexdigest()
 
 
 def _paths(key: str):
