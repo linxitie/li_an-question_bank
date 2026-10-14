@@ -1227,7 +1227,21 @@ async def batch_import_parsed(
                 existing_rel_qids = {
                     r.question_id for r in db.query(PaperQuestionRelation).filter(
                         PaperQuestionRelation.paper_id == paper.paper_id).all()}
-                all_ids = ok_ids + reused_ids
+                # W1：同一份文档内若出现重复题目，第 1 次入库进 ok_ids，第 2 次会被
+                #   去重命中刚建的题而进 reused_ids —— 两者指向同一 question_id。
+                #   existing_rel_qids 只挡库内已有的，挡不住**批内**重复，于是
+                #   flush 时撞 UNIQUE(paper_id, question_id)，整卷 500 回滚
+                #   （实测卷#53「关联1题成功」后失败，关联行数=0）。
+                #   保序去重，不改变任何有效题目的顺序与内容。
+                _seen_qids: set = set()
+                all_ids = []
+                for _qid in ok_ids + reused_ids:
+                    if _qid in _seen_qids:
+                        logger.info('[batch-parsed] 试卷%s 跳过批内重复题 qid=%s',
+                                    paper.paper_id, _qid)
+                        continue
+                    _seen_qids.add(_qid)
+                    all_ids.append(_qid)
                 order_base = paper.question_count or 0
                 for pos, qid in enumerate(all_ids, start=order_base + 1):
                     if qid in existing_rel_qids:
