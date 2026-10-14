@@ -170,7 +170,8 @@
           </div>
           <div class="edit-field" :class="{ 'field-missing': !editForm.answer || editForm.answer === '待补充' }">
             <label>答案：<span class="required">*</span></label>
-            <input v-model="editForm.answer" placeholder="请输入答案（如：A、AB、ABCD）" />
+            <textarea v-model="editForm.answer" rows="1" placeholder="请输入答案（如：A、AB、ABCD）"
+                      class="edit-answer-textarea"></textarea>
             <span class="field-hint" v-if="!editForm.answer || editForm.answer === '待补充'">
               ⚠ 必填项
             </span>
@@ -1421,6 +1422,19 @@ return {
 .edit-field textarea {
   resize: vertical;
   min-height: 80px;
+}
+/* E 修复：编辑弹层答案框可伸缩（申论长答案可拖拽调高布局） */
+.edit-answer-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 34px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  font-size: 15px;
+  line-height: 1.6;
 }
 .edit-options-list {
   display: flex;
