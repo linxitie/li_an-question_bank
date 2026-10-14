@@ -104,6 +104,15 @@ def report(con: sqlite3.Connection) -> dict:
         "FROM question_bank WHERE status = 1 "
         "AND question_content LIKE '%[IMAGE:%' ORDER BY question_id").fetchall()
 
+    # 悬空引用：group_id 指向已不存在的题组。SQLite 默认不建外键，这类脏数据
+    # 不会报错，只会在教师端点开题目时变成 404。
+    r['dangling_refs'] = con.execute(
+        "SELECT b.group_id, COUNT(*) n, "
+        "       SUM(CASE WHEN b.status=1 THEN 1 ELSE 0 END) alive "
+        "FROM question_bank b WHERE b.group_id > 0 "
+        "AND NOT EXISTS (SELECT 1 FROM question_groups g WHERE g.id = b.group_id) "
+        "GROUP BY b.group_id ORDER BY b.group_id").fetchall()
+
     return r
 
 
@@ -166,6 +175,15 @@ def print_report(r: dict) -> None:
     for qid, sid, txt in r['img_residue']:
         print(f'  q{qid:<6} subject={sid}  {txt}')
 
+    print()
+    print(bar)
+    print('七、悬空 group_id 引用 —— --apply 时清理')
+    print(bar)
+    if not r['dangling_refs']:
+        print('  无')
+    for gid, n, alive in r['dangling_refs']:
+        print(f'  group_id={gid}: {n} 题指向已删除的题组（在用 {alive}）')
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description='复合题组存量数据修复（v8 Wave 4）')
@@ -194,18 +212,35 @@ def main() -> int:
         # 不删「材料==成员题干」的组：公专情境题的建模本就如此（见 print_report 第三项），
         # 与垃圾数据同形却性质相反，交人工判断。
         ids = sorted({row[0] for row in result['placeholder_groups']})
-        if not ids:
+        dangling = [row[0] for row in result['dangling_refs']]
+        if not ids and not dangling:
             print()
-            print('>>> 无占位符垃圾组，无需写入。')
+            print('>>> 无占位符垃圾组、无悬空引用，无需写入。')
             return 0
 
         bak = backup_db(con)
         print()
         print(f'>>> 已备份: {bak}')
         for gid in ids:
+            # 先清成员引用再删组：SQLite 默认不建外键，group_id 会静默变悬空。
+            # 悬空引用的题一旦从软删恢复，showDetail 会去请求不存在的题组 → 404。
+            freed = con.execute(
+                'UPDATE question_bank SET group_id = 0, question_level = 1, '
+                'sort_order = 0 WHERE group_id = ?', (gid,)).rowcount
             con.execute('DELETE FROM question_groups WHERE id = ?', (gid,))
+            print(f'    组{gid}: 已删除，释放成员引用 {freed} 题')
+
+        # 清理历史遗留的悬空引用（早期版本的删除未清成员导致）
+        for gid in dangling:
+            if gid in ids:
+                continue
+            freed = con.execute(
+                'UPDATE question_bank SET group_id = 0, question_level = 1, '
+                'sort_order = 0 WHERE group_id = ?', (gid,)).rowcount
+            print(f'    悬空 group_id={gid}: 已释放 {freed} 题引用')
+
         con.commit()
-        print(f'>>> 已删除占位符垃圾组 {ids}；其余项目仅报告未改动。')
+        print(f'>>> 删除占位符垃圾组 {ids}；其余项目仅报告未改动。')
         return 0
     finally:
         con.close()
