@@ -1848,6 +1848,22 @@ def parse_answer_sequence(text: str) -> Dict[int, Dict[str, Optional[str]]]:
     return result
 
 
+def _extract_answer_anchor_numbers(text: str) -> List[QuestionNumber]:
+    """提取「N. 正确答案」锚点题号（D 修复：行测答案卷的权威题号形态）。
+
+    答案解析正文里「数字.」引用（如 780.）会被 num_dot 误判为题号，
+    而「N. 正确答案：」锚点是答案卷的权威题号，不受正文干扰。
+    """
+    results: List[QuestionNumber] = []
+    for m in re.finditer(r'(?m)^\s*(\d{1,3})\s*[.．、]\s*正确答案[：:]?', text):
+        num = int(m.group(1))
+        if 0 < num <= 999:
+            results.append(QuestionNumber(
+                number=num, format_type='num_dot',
+                position=m.start(), line_index=text.count('\n', 0, m.start())))
+    return results
+
+
 def parse_answer_text_to_map(text: str) -> Dict[int, Dict[str, Optional[str]]]:
     """
     将答案文本解析为题号→答案的映射（主要策略）。
@@ -1862,6 +1878,13 @@ def parse_answer_text_to_map(text: str) -> Dict[int, Dict[str, Optional[str]]]:
     if not numbers:
         # 无题号时尝试连续序列解析
         return parse_answer_sequence(text)
+
+    # D 修复：答案锚点题号优先（「101. 正确答案：」形态）。
+    # 行测答案 PDF 解析正文含大量「数字.」引用（实测 780 等），num_dot 误判后
+    # 单调性过滤把末尾真实题号（101-110）误伤——锚点形态是答案卷的权威题号。
+    _anchor_nums = _extract_answer_anchor_numbers(text)
+    if len(_anchor_nums) >= 10 and len(_anchor_nums) >= len(numbers) * 0.8:
+        numbers = _anchor_nums
 
     lines = text.split('\n')
     result: Dict[int, Dict[str, Optional[str]]] = {}
