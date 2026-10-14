@@ -6,7 +6,7 @@ import logging
 from typing import Optional, List
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, case, text as sql_text
 
@@ -452,6 +452,60 @@ async def delete_question(
     db.commit()
 
     return {"success": True, "message": "题目已删除"}
+
+
+@router.post("/questions/batch-delete", summary="批量删除题目（教师端批量处理）")
+async def batch_delete_questions(
+    question_ids: List[int] = Body(..., embed=True),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """教师批量软删除题目（真实功能，非前端硬编码）。"""
+    if not question_ids or len(question_ids) > 500:
+        raise HTTPException(status_code=400, detail="题目ID列表无效（1~500 个）")
+    now = datetime.now()
+    cnt = db.query(QuestionBank).filter(
+        QuestionBank.question_id.in_(question_ids),
+        QuestionBank.status == 1,
+    ).update(
+        {QuestionBank.status: 0, QuestionBank.update_time: now},
+        synchronize_session=False,
+    )
+    db.commit()
+    return {"success": True, "deleted_count": cnt, "message": f"已删除 {cnt} 道题目"}
+
+
+@router.post("/questions/batch-reclassify", summary="批量修改科目分类（教师端批量处理）")
+async def batch_reclassify_questions(
+    question_ids: List[int] = Body(..., embed=True),
+    subject_id: int = Body(..., embed=True),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """教师批量修改题目科目（真实功能）。type_id 按题型名在新科目下重新解析，
+    解析不到则置空（前端编辑时再补）。"""
+    if not question_ids or len(question_ids) > 500:
+        raise HTTPException(status_code=400, detail="题目ID列表无效（1~500 个）")
+    subject = db.query(QuestionSubject).filter(QuestionSubject.subject_id == subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="科目不存在")
+    updated = 0
+    for qid in question_ids:
+        q = db.query(QuestionBank).filter(QuestionBank.question_id == qid).first()
+        if q is None or q.status != 1:
+            continue
+        q.subject_id = subject_id
+        if q.type_id:
+            tname = db.query(QuestionType.type_name).filter(
+                QuestionType.type_id == q.type_id).scalar()
+            new_tid = db.query(QuestionType.type_id).filter(
+                QuestionType.subject_id == subject_id,
+                QuestionType.type_name == tname).scalar() if tname else None
+            q.type_id = new_tid
+        q.update_time = datetime.now()
+        updated += 1
+    db.commit()
+    return {"success": True, "updated_count": updated, "message": f"已修改 {updated} 道题目科目"}
 
 
 @router.get("/questions/{question_id}/images", summary="获取题目图片列表")

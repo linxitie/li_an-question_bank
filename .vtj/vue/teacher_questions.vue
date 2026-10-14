@@ -36,7 +36,23 @@
         </select>
         <button class="btn-search" @click="doSearch">搜索</button>
         <div class="toolbar-spacer"></div>
+        <button class="btn-batch" :class="{ 'btn-batch-active': batchMode }" @click="toggleBatchMode">🗂 批量处理</button>
         <button class="btn-import" @click="goImport">📤 题目导入</button>
+      </div>
+
+      <!-- 批量操作条（批量模式显示） -->
+      <div class="batch-toolbar" v-if="batchMode">
+        <label class="batch-checkall"><input type="checkbox" :checked="allChecked" @change="toggleAll" /> 全选本页</label>
+        <span class="batch-count">已选 {{ selectedIds.length }} 题</span>
+        <select class="filter-select" v-model="batchSubjectId" style="width:120px;">
+          <option :value="0">改科目：</option>
+          <option :value="1">行测</option>
+          <option :value="2">申论</option>
+          <option :value="3">公专</option>
+        </select>
+        <button class="btn-mini-reclassify" :disabled="!selectedIds.length || !batchSubjectId" @click="batchReclassify">应用改分类</button>
+        <button class="btn-mini-danger" :disabled="!selectedIds.length" @click="batchDelete">删除选中</button>
+        <button class="btn-mini-cancel" @click="toggleBatchMode">取消</button>
       </div>
 
       <!-- 题目表格 -->
@@ -54,6 +70,7 @@
           </thead>
           <tbody>
             <tr v-for="(q, index) in questions" :key="q.question_id" :class="{ 'has-image': hasImage(q.question_content) }">
+              <td class="td-seq" v-if="batchMode"><input type="checkbox" :value="q.question_id" v-model="selectedIds" /></td>
               <td class="td-seq">{{ (page - 1) * pageSize + index + 1 }}</td>
               <td class="td-content" @click="showDetail(q)">{{ renderSummary(q) }}</td>
               <td>{{ subjectName(q.subject_id) }}</td>
@@ -789,6 +806,62 @@ async function saveEdit() {
       }
     }
 
+    // ========== 批量处理（真实功能：后端批量接口） ==========
+    const batchMode = ref(false);
+    const selectedIds: any = ref([]);
+    const batchSubjectId = ref(0);
+    const allChecked = computed(() => questions.value.length > 0
+      && selectedIds.value.length >= questions.value.length);
+
+    function toggleBatchMode() {
+      batchMode.value = !batchMode.value;
+      selectedIds.value = [];
+      batchSubjectId.value = 0;
+    }
+    function toggleAll(e: any) {
+      selectedIds.value = e.target.checked
+        ? questions.value.map((q: any) => q.question_id) : [];
+    }
+    async function batchDelete() {
+      if (!selectedIds.value.length) return;
+      if (!confirm(`确定删除选中的 ${selectedIds.value.length} 道题目吗？此操作不可恢复。`)) return;
+      const auth = (window as any).__VTJ_AUTH__;
+      try {
+        const res = await auth.apiFetch('/api/teacher/questions/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question_ids: selectedIds.value }),
+        });
+        const data = await res.json();
+        ElMessage.success(data.message || `已删除 ${data.deleted_count || selectedIds.value.length} 道题目`);
+        selectedIds.value = [];
+        await loadQuestions();
+      } catch (e) {
+        ElMessage.error('批量删除失败');
+      }
+    }
+    async function batchReclassify() {
+      if (!selectedIds.value.length || !batchSubjectId.value) return;
+      const auth = (window as any).__VTJ_AUTH__;
+      try {
+        const res = await auth.apiFetch('/api/teacher/questions/batch-reclassify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question_ids: selectedIds.value,
+            subject_id: batchSubjectId.value,
+          }),
+        });
+        const data = await res.json();
+        ElMessage.success(data.message || `已修改 ${data.updated_count} 道题目科目`);
+        selectedIds.value = [];
+        batchSubjectId.value = 0;
+        await loadQuestions();
+      } catch (e) {
+        ElMessage.error('批量改分类失败');
+      }
+    }
+
     // ========== 导航 ==========
 
     function goImport() { router.push('/question-import'); }
@@ -809,8 +882,9 @@ async function saveEdit() {
       renderStars, truncate, stripPromoText, hasImage, renderSummary,
       hasOptions, parsedOptions, isCorrectOption,
       showDetail, openEdit, addOption, removeOption, saveEdit,
-      handleEditPaste,
-      deleteQuestion, goImport, handleLogout, cleanHtmlContent,
+      handleEditPaste, deleteQuestion, goImport, handleLogout,
+      batchMode, selectedIds, batchSubjectId, allChecked,
+      toggleBatchMode, toggleAll, batchDelete,       batchReclassify, cleanHtmlContent,
       handleImageError, renderQuestionContent,
     };
   }
