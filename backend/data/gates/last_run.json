@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-10-14 21:20:44",
+  "timestamp": "2026-10-14 21:42:51",
   "results": [
     {
       "layer": "L0",
       "status": "PASS",
-      "elapsed_s": 0.2
+      "elapsed_s": 0.3
     },
     {
       "layer": "L1-G",
@@ -14,7 +14,7 @@
     {
       "layer": "L1",
       "status": "PASS",
-      "elapsed_s": 5.1
+      "elapsed_s": 7.8
     }
   ]
 }

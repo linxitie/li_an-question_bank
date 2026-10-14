@@ -29,12 +29,14 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import glob
 import io
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BACKEND_DIR)
 sys.stdout.reconfigure(encoding='utf-8')
 
 from app.services.composite_matcher import match_xingce_material_groups
@@ -130,6 +132,104 @@ def check_batch_dedup() -> None:
               f'无重复/无丢题/顺序不变')
 
 
+def check_batch_dedup_real_source() -> None:
+    """判据 3：直接执行 question_import.py 里**线上真实**的去重循环。
+
+    上一重判据测的是去重的重写版，无法发现线上源码被改坏。
+    这里用 AST 把真实循环及其前置初始化一并抽出执行，
+    证明 batch-parsed 因批内重复撞 UNIQUE(paper_id, question_id) 而整卷 500 的
+    根因，在**已发布的代码**中确已消除。
+    """
+    src_path = os.path.join(BACKEND_DIR, 'app', 'api', 'v1', 'question_import.py')
+    try:
+        with open(src_path, encoding='utf-8') as f:
+            src = f.read()
+        tree = ast.parse(src)
+    except Exception as exc:
+        record_fail(f'无法解析 question_import.py：{exc}')
+        return
+
+    loop_node = None
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.For)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == '_qid'
+                and isinstance(node.iter, ast.BinOp)
+                and isinstance(node.iter.op, ast.Add)):
+            loop_node = node
+            break
+    if loop_node is None:
+        record_fail('未在 question_import.py 中找到 W1 去重循环，源码结构已变更')
+        return
+
+    # 循环体引用了紧邻其前的 _seen_qids / all_ids 初始化，必须一并抽取；
+    # 若改用硬编码初始化，本检查会退化成又一次「测复刻版」，失去意义。
+    setup: list = []
+    for parent in ast.walk(tree):
+        for attr in ('body', 'orelse', 'finalbody'):
+            blk = getattr(parent, attr, None)
+            if not isinstance(blk, list):
+                continue
+            for idx, st in enumerate(blk):
+                if st is loop_node:
+                    setup = blk[max(0, idx - 2):idx]
+                    break
+            if setup:
+                break
+        if setup:
+            break
+    if not setup:
+        record_fail('未能定位去重循环的前置初始化语句，源码结构已变更')
+        return
+
+    mod = ast.Module(
+        body=list(setup) + [ast.For(target=loop_node.target, iter=loop_node.iter,
+                                    body=loop_node.body, orelse=[])],
+        type_ignores=[],
+    )
+    ast.fix_missing_locations(mod)
+
+    class _Stub:
+        paper_id = 0
+
+        def __getattr__(self, _name):
+            return lambda *a, **k: None
+
+    def run(ok_ids, reused_ids):
+        scope = {'ok_ids': list(ok_ids), 'reused_ids': list(reused_ids),
+                 'logger': _Stub(), 'paper': _Stub()}
+        exec(compile(mod, src_path, 'exec'), scope)
+        return scope['all_ids']
+
+    cases = [
+        ('复现卷#53：同一文档内第 2 次出现同一题',
+         [100, 101, 102], [100, 103], [100, 101, 102, 103]),
+        ('同一题连续出现 3 次', [7, 7, 7], [], [7]),
+        ('ok_ids 与 reused_ids 完全重叠', [1, 2], [1, 2], [1, 2]),
+        ('无重复：保持原序', [1, 2, 3], [4, 5], [1, 2, 3, 4, 5]),
+        ('空输入', [], [], []),
+    ]
+    problems = []
+    for name, ok_ids, reused_ids, expect in cases:
+        try:
+            got = run(ok_ids, reused_ids)
+        except Exception as exc:
+            problems.append(f'{name}：执行线上去重循环异常 {exc}')
+            continue
+        if len(got) != len(set(got)):
+            problems.append(f'{name}：线上源码去重后仍有重复 {got}，'
+                            f'UNIQUE(paper_id, question_id) 仍可能被违反')
+        if got != expect:
+            problems.append(f'{name}：结果 {got} != 期望 {expect}')
+
+    if problems:
+        for p in problems:
+            record_fail(p)
+    else:
+        print(f'  ok   线上源码去重（question_import.py:{loop_node.lineno}'
+              f'-{loop_node.end_lineno}）{len(cases)} 个场景全部无重复且保序')
+
+
 def check_real_corpus() -> None:
     """对生产缓存里的真实行测题本跑一遍（缓存缺失则跳过）。
 
@@ -199,6 +299,7 @@ def main() -> int:
 
     print('\n[1] 批内重复去重（v9 W1）')
     check_batch_dedup()
+    check_batch_dedup_real_source()
 
     print('\n[2] 材料不得吞子题（v9 W2）')
     check_no_question_in_material(FIXTURE, '内置夹具')
