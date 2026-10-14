@@ -3102,6 +3102,19 @@ async def mineru_health():
     return mineru_health_cached()
 
 
+def _subject_from_paper_name(paper_name: str) -> str:
+    """从试卷名称精确提取科目（B 修复：文档名强信号直接归类）。
+
+    仅精确匹配科目词；无信号返回空字符串（调用方走文本检测）。
+    """
+    name = paper_name or ''
+    for kw, subj in (('申论', '申论'), ('行政职业能力', '行测'), ('行测', '行测'),
+                     ('公安', '公专'), ('招警', '公专')):
+        if kw in name:
+            return subj
+    return ''
+
+
 @router.post("/parse", summary="统一文档解析（Pipeline入口）")
 async def unified_parse(
     payload: ParseRequest,
@@ -3219,15 +3232,23 @@ async def unified_parse(
                         f'如分类有误，请在上方手动选择科目后重新匹配。')
 
             if not auto_detected_subject:
-                all_content = ' '.join(q.get('content', '') for q in result.questions[:10])
-                # W2-1：接上 SubjectDetection 的置信度与命中关键词（不再丢弃）
-                _subject_det = detect_subject_category(all_content)
-                auto_detected_subject = _subject_det.subject_name
-                subject_suggestion = {
-                    'name': _subject_det.subject_name,
-                    'confidence': _subject_det.confidence,
-                    'matched_keywords': list(_subject_det.matched_keywords or []),
-                }
+                # B 修复：文档名强信号直接归类（文件名精确含科目词即归类），
+                # 无信号才用完整题目文本检测（此前用前10题切碎文本曾误判申论）
+                auto_detected_subject = _subject_from_paper_name(paper_name) or ''
+                if auto_detected_subject:
+                    subject_suggestion = {
+                        'name': auto_detected_subject, 'confidence': 1.0,
+                        'matched_keywords': ['文档名'],
+                    }
+                else:
+                    all_content = ' '.join(q.get('content', '') for q in result.questions)
+                    _subject_det = detect_subject_category(all_content)
+                    auto_detected_subject = _subject_det.subject_name
+                    subject_suggestion = {
+                        'name': _subject_det.subject_name,
+                        'confidence': _subject_det.confidence,
+                        'matched_keywords': list(_subject_det.matched_keywords or []),
+                    }
 
             # 转换为 ParsedQuestion
             for block in (essay_prebuilt if essay_prebuilt is not None
@@ -3299,15 +3320,22 @@ async def unified_parse(
                 blocks = _fallback_loose_parse(cleaned_text)
 
             if not auto_detected_subject:
-                all_content = ' '.join(b.get('content', '') for b in blocks[:10])
-                # W2-1：接上 SubjectDetection 的置信度与命中关键词（不再丢弃）
-                _subject_det = detect_subject_category(all_content)
-                auto_detected_subject = _subject_det.subject_name
-                subject_suggestion = {
-                    'name': _subject_det.subject_name,
-                    'confidence': _subject_det.confidence,
-                    'matched_keywords': list(_subject_det.matched_keywords or []),
-                }
+                # B 修复：文档名强信号直接归类，无信号才用完整题目文本检测
+                auto_detected_subject = _subject_from_paper_name(paper_name) or ''
+                if auto_detected_subject:
+                    subject_suggestion = {
+                        'name': auto_detected_subject, 'confidence': 1.0,
+                        'matched_keywords': ['文档名'],
+                    }
+                else:
+                    all_content = ' '.join(b.get('content', '') for b in blocks)
+                    _subject_det = detect_subject_category(all_content)
+                    auto_detected_subject = _subject_det.subject_name
+                    subject_suggestion = {
+                        'name': _subject_det.subject_name,
+                        'confidence': _subject_det.confidence,
+                        'matched_keywords': list(_subject_det.matched_keywords or []),
+                    }
 
             total_questions = len(blocks)
             for block in blocks:
