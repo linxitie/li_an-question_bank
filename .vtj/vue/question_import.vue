@@ -2866,7 +2866,11 @@ converted.push({
                   sort_order: q.sort_order || 0,
                   need_review: q.need_review || 0,
                   blocked: q.blocked || false,
-                  block_reasons: q.block_reasons || []
+                  block_reasons: q.block_reasons || [],
+                  // C 修复：申论材料透传，后端据此建组并回填 group_id（教师端材料展示）
+                  material_text: q.material_text || '',
+                  material_titles: q.material_titles || [],
+                  format: q.format || ''
                 };
               })
             })

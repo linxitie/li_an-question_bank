@@ -646,6 +646,39 @@ def _extract_first_qnum(content: str):
         return None
 
 
+def _link_shenlun_material_groups(db: Session, items: List[Dict[str, Any]],
+                                  id_map: Dict[int, int], subject_name: str,
+                                  source_tag: str) -> int:
+    """C 修复：申论「给定资料N」材料组建组并回填 group_id。
+
+    _detect_and_link_composite_groups 只认公专/行测材料头（「回答第X-Y题」），
+    申论材料（「给定资料1..N」）经 material_text 字段传来但无人建组，
+    导致教师端/学生端/管理员端的题组材料弹窗拿不到材料（图 5 缺失）。
+
+    复用 confirm 路径的 _get_or_create_shenlun_material_group（内容指纹幂等），
+    同一份材料只建一行，各小题 group_id 指向它。
+    返回挂载的小题数；任何异常由调用方兜底（不影响导入）。
+    """
+    from ...models.models import QuestionBank as _QB
+
+    linked = 0
+    for idx, item in enumerate(items or []):
+        mat = (item.get('material_text') or '').strip()
+        if len(mat) < 20:
+            continue
+        gid = _get_or_create_shenlun_material_group(db, mat, subject_name, source_tag)
+        if gid is None:
+            continue
+        qid = id_map.get(idx)
+        if qid is None:
+            continue
+        q = db.query(_QB).filter(_QB.question_id == qid).first()
+        if q is not None and q.group_id is None:
+            q.group_id = gid
+            linked += 1
+    return linked
+
+
 def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, source_tag=''):
     """批内复合题识别：返回 (groups_created, members_linked)。
 
@@ -1195,11 +1228,25 @@ async def batch_import_parsed(
         db.rollback()
         logger.warning(f"[composite] 题组识别失败（导入数据不受影响）: {ge}")
 
+    # ===== C 修复：申论材料组建（「给定资料N」材料组；复合题识别只认公专/行测材料头）=====
+    _shenlun_linked = 0
+    try:
+        _shenlun_linked = _link_shenlun_material_groups(
+            db, ok_items, dict(enumerate(ok_ids)),
+            default_subject or '公专', _inject_source)
+        if _shenlun_linked:
+            db.commit()
+    except Exception as se:  # noqa: BLE001 — 材料组建失败不影响导入结果
+        db.rollback()
+        logger.warning(f"[shenlun-group] 申论材料组建失败（导入数据不受影响）: {se}")
+
     msg = f"导入完成：新增 {len(ok_ids)} 题，复用 {len(reused_ids)} 题，失败 {len(failed_items)} 题"
     if backfill_count:
         msg += f"，回填缺失字段 {backfill_count} 题"
     if groups_created:
         msg += f"；识别复合题组 {groups_created} 组（{members_linked} 题挂组）"
+    if _shenlun_linked:
+        msg += f"；申论材料组挂载 {_shenlun_linked} 题"
     if paper_id:
         msg += f"；试卷 #{paper_id} 已保存到试卷管理（关联 {len(ok_ids)+len(reused_ids)} 题）"
     # 问题3-R2：分离导入明示缺答案/解析的题号（按提交顺序），避免静默缺失
