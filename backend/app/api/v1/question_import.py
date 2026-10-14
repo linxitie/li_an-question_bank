@@ -573,6 +573,43 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
     return group.id
 
 
+def _get_or_create_group_by_material(db: Session, material: str,
+                                     group_type: str, subject_name: str,
+                                     source_tag: str) -> Optional[int]:
+    """按材料内容指纹建组，返回 group_id。`_get_or_create_shenlun_material_group`
+    的行测/公专对应物：那份把 group_type 写死为 `shenlun_material`、标题写死为
+    「科目名 给定材料」，而行测资料分析的组类型来自
+    `XINGCE_SECTION_GROUP_TYPE`（data_analysis/passage/scenario/material），故需参数化。
+
+    去重口径与上者完全一致（SHA1 前 16 位归一化指纹），保证 N 道小题共享同一份
+    材料时只建一行 `question_groups`，不产生 N 份副本。
+    """
+    text = (material or '').strip()
+    if not text:
+        return None
+    digest = _digest_for_group_dedup(text)
+
+    cache_key = f'material_group_{group_type}_' + digest
+    cached = _SHENLUN_GROUP_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == group_type).all():
+        if _digest_for_group_dedup(str(g.shared_content or '')) == digest:
+            _shenlun_cache_put(cache_key, g.id)
+            return g.id
+
+    group = _upsert_question_group(
+        db,
+        group_type=group_type,
+        shared_content=text,
+        subject=subject_name or '',
+        source=source_tag or '',
+    )
+    _shenlun_cache_put(cache_key, group.id)
+    return group.id
+
+
 # 同一批导入内多题共享同一份材料，避免重复 flush
 # ★ J-1-4 修复：限制缓存大小，防止无界增长
 _SHENLUN_GROUP_CACHE: Dict[str, int] = {}
@@ -684,7 +721,9 @@ def _link_shenlun_material_groups(db: Session, items: List[Dict[str, Any]],
         if qid is None:
             continue
         q = db.query(_QB).filter(_QB.question_id == qid).first()
-        if q is not None and q.group_id is None:
+        # W1 修复：不可改回 `is None`——group_id 列默认值是 0（models.py:214），
+        # 全库 IS NULL 计数为 0，该判断会静默失效，使下方文档级材料继承永不生效。
+        if q is not None and not q.group_id:
             q.group_id = gid
             linked += 1
     return linked
@@ -739,6 +778,28 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             # 无小题可挂 → 不建组（避免空题组）
             continue
 
+        # 题号 → qid 映射（用于把 member_qnums 转为 qid）
+        qn_to_qid = {qn: jid for j, jid, qn in numbered if qn is not None}
+        member_ids = [head_qid]
+        for mqn in member_qnums:
+            jid = qn_to_qid.get(mqn)
+            if jid and jid not in claimed and jid not in member_ids:
+                member_ids.append(jid)
+
+        # W3：member_qnums 非空 ≠ 能挂上题——对应 qid 可能已被前面的组 claimed 掉，
+        # 结果只剩头题（实测公专 21 个组每组恰好 1 题）。这种组不携带任何信息：
+        # 其 shared_content 本就取自头题题干（:784），单成员时材料与题干重复，
+        # 不建组不会丢内容，而建组会让详情弹窗把同一段文字显示两遍。
+        # 跳过时也不写 claimed，这些题仍可被下面的层2 语义兜底接管。
+        if len(member_ids) < 2:
+            logger.info("[composite] 跳过单题组：头题 qid=%s 推断题号 %s 无可挂成员",
+                        head_qid, member_qnums[:10])
+            continue
+
+        claimed.add(i)
+        for jid in member_ids[1:]:
+            claimed.add(jid)
+
         group = _upsert_question_group(
             db,
             group_type=group_type,
@@ -748,15 +809,6 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         )
         groups_created += 1
 
-        # 题号 → qid 映射（用于把 member_qnums 转为 qid）
-        qn_to_qid = {qn: jid for j, jid, qn in numbered if qn is not None}
-        member_ids = [head_qid]
-        claimed.add(i)
-        for mqn in member_qnums:
-            jid = qn_to_qid.get(mqn)
-            if jid and jid not in claimed:
-                member_ids.append(jid)
-                claimed.add(jid)
         # 写入组字段（按题号升序排列）
         for sort_idx, mid in enumerate(sorted(member_ids, key=lambda mid_: qnum_map.get(mid_, 9999))):
             db.query(QuestionBank).filter(
@@ -2193,9 +2245,17 @@ async def confirm_batch_import(
                 )
                 # ★ 材料落库：申论「给定资料」上万字，不能塞进题干。
                 #   按内容指纹去重复用同一 question_groups 行，各小题 group_id 指向它。
+                #   W2：行测分离导入的题带 material_group（预览阶段已切片好材料正文），
+                #   组类型由 XINGCE_SECTION_GROUP_TYPE 决定，故走参数化的建组助手。
                 _gid = 0
                 _mt = item.get('material_text') or item.get('material') or ''
-                if _mt:
+                _mg = item.get('material_group') or {}
+                _mg_type = _mg.get('group_type') if isinstance(_mg, dict) else None
+                if _mt and _mg_type:
+                    _gid = (_get_or_create_group_by_material(
+                        db, _mt, _mg_type, subject.subject_name,
+                        item.get('source', '')) or 0)
+                elif _mt:
                     _gid = (_get_or_create_shenlun_material_group(
                         db, _mt, subject.subject_name,
                         item.get('source', '')) or 0)
@@ -2717,6 +2777,9 @@ def _separate_match_xingce(db: Session, payload: Dict[str, Any],
 
     qno_to_group = {}
     for g in groups:
+        # W2：把材料正文从题本文本切出来挂到组上。此前本函数只回传 start/end
+        # 字符区间，落库阶段拿不到 questions_text，材料永远无法入库（行测题组数为 0）。
+        g['material_text'] = questions_text[g['start']:g['end'] if g['end'] > 0 else None]
         for qno in g['member_qnums']:
             qno_to_group[qno] = g
 
@@ -2736,6 +2799,12 @@ def _separate_match_xingce(db: Session, payload: Dict[str, Any],
             'sort_order': g['member_qnums'].index(
                 _as_int(q.get('question_number'))) + 1,
         } if g else None)
+        if g:
+            # 落库侧 confirm_batch_import 直接读这两个字段建组并回填层级/组序，
+            # 不必在前端再解一次 material_group。
+            q['material_text'] = g.get('material_text') or ''
+            q['question_level'] = 2
+            q['sort_order'] = q['material_group']['sort_order']
         # 待复核标记：必须在 material_group 定下来之后才算，否则「材料关联异常」
         # 会把尚未归组的题全部误标。
         reasons = _xingce_review_flags(q)
@@ -2807,6 +2876,9 @@ def _separate_match_xingce(db: Session, payload: Dict[str, Any],
         'import_id': import_id,
         'kao_coverage': report.get('kao_coverage'),
     })
+
+    # 本端点无 db.commit()（get_db 只 yield 后 close），record 不会落库，
+    # 故分组元数据只能随 questions 逐题回传，不能挂到 record 上。
 
     return {
         'status': 'success',
