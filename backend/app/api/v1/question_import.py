@@ -662,8 +662,19 @@ def _link_shenlun_material_groups(db: Session, items: List[Dict[str, Any]],
     from ...models.models import QuestionBank as _QB
 
     linked = 0
+    # D 修复：文档级材料。申论整卷「给定资料1..N」只挂在第一题（解析器省内存设计），
+    # 同卷小题 material_text 为空——必须继承文档级材料建组，否则其他子题成为
+    # 「无头苍蝇」（教师端无材料可看）。
+    doc_mat = ''
+    for it in items or []:
+        _m = (it.get('material_text') or '').strip()
+        if _m and not doc_mat:
+            doc_mat = _m
     for idx, item in enumerate(items or []):
         mat = (item.get('material_text') or '').strip()
+        if not mat and doc_mat and (
+                item.get('format') == 'essay' or item.get('subject_category') == '申论'):
+            mat = doc_mat
         if len(mat) < 20:
             continue
         gid = _get_or_create_shenlun_material_group(db, mat, subject_name, source_tag)
