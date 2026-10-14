@@ -565,7 +565,6 @@ class ContentCleaner:
         (re.compile(r'^\s*\d{1,4}\s*$'), 'page_number'),            # 纯数字 → 页码
         (re.compile(r'^\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?\s*$'), 'date'),  # 日期
         (re.compile(r'^第\s*\d+\s*页\s*(?:共\s*\d+\s*页)?$'), 'page_label'),  # 第N页
-        (re.compile(r'^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]'), 'toc_marker'),   # 目录标记
         (re.compile(r'^\s*(?:版权所有|翻印必究|内部资料|机密|绝密|秘密)\s*$'), 'classification'),  # 密级标记
         (re.compile(r'^\s*(?:·\s*\d+\s*·|-\s*\d+\s*-)\s*$'), 'separator'),  # 分隔符 · 1 · / - 1 -
         (re.compile(r'^\s*_{3,}\s*$'), 'hr'),                      # 下划线分隔
