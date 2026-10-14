@@ -568,8 +568,6 @@ export default defineComponent({
       try {
         // 解析选项 JSON，转换失败则不传 options
         let options = null;
-        // 解析选项 JSON，转换失败则不传 options
-        let options = null;
         if (editForm.value.options_text && editForm.value.options_text.trim()) {
           try {
             options = JSON.parse(editForm.value.options_text);
