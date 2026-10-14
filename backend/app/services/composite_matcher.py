@@ -374,6 +374,22 @@ def match_xingce_material_groups(materials, qno_positions, sections=None):
         if not members:
             continue
 
+        # ★ W2 修正：材料必须止于本组**首个子题**，不能吞掉自己的子题。
+        #   原文排列是「材料 → N 道子题 →（下一个材料块）」，而上面的 upper 只取
+        #   「下一个材料块起点」与「分节末尾」，必然把中间 N 道子题的题干与选项
+        #   全部算进材料。真实语料实测误吞率 85% / 471%（见 v9 方案 §1.3）。
+        #   成员已经算出，首成员题位置即材料应有的终止点。
+        first_member_pos = min(
+            pos for qno, pos, sec in qno_positions
+            if sec == section and m['start'] < pos < upper and qno in members
+        )
+        if first_member_pos < upper:
+            logger.info(
+                "[xingce-material] 分节%s 材料块%s 上界由 %s 收紧至首成员题(%d字)",
+                section, m.get('ordinal'),
+                ('文末' if upper == INF else upper), upper - first_member_pos)
+            upper = first_member_pos
+
         out.append({
             'ordinal': m.get('ordinal'),
             'section': section,
