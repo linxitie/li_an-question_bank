@@ -208,7 +208,8 @@
         </div>
         <div class="fg">
           <label>题目内容</label>
-          <textarea class="fi textarea" v-model="editForm.question_content" rows="4"></textarea>
+          <textarea class="fi textarea" v-model="editForm.question_content" rows="4"
+                    @paste="handleEditPaste('question_content', $event)"></textarea>
         </div>
         <div class="fg">
           <label>选项（JSON 格式，如 [{"key":"A","value":"选项内容"}]）</label>
@@ -216,11 +217,12 @@
         </div>
         <div class="fg">
           <label>正确答案</label>
-          <input class="fi" v-model="editForm.answer"/>
+          <input class="fi" v-model="editForm.answer" @paste="handleEditPaste('answer', $event)"/>
         </div>
         <div class="fg">
           <label>答案解析</label>
-          <textarea class="fi textarea" v-model="editForm.answer_analysis" rows="3"></textarea>
+          <textarea class="fi textarea" v-model="editForm.answer_analysis" rows="3"
+                    @paste="handleEditPaste('answer_analysis', $event)"></textarea>
         </div>
         <div class="form-grid">
           <div class="fg">
@@ -533,8 +535,39 @@ export default defineComponent({
       showEditModal.value = true;
     }
 
+    // B 修复：编辑弹窗粘贴剪贴板图片 → data URI 插入字段
+    function handleEditPaste(field, event) {
+      const cd = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
+      if (!cd || !cd.items) return;
+      const ta = event.target;
+      const selStart = (ta && typeof ta.selectionStart === 'number') ? ta.selectionStart : 0;
+      for (let i = 0; i < cd.items.length; i++) {
+        const item = cd.items[i];
+        if (item.kind === 'file' && item.type.indexOf('image') === 0) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          const reader = new FileReader();
+          reader.onload = function (ev) {
+            const tag = '<img src="' + ev.target.result + '" class="q-img" loading="lazy" />';
+            const cur = editForm.value[field] || '';
+            editForm.value[field] = cur.slice(0, selStart) + tag + cur.slice(selStart);
+            if (ta) {
+              setTimeout(function () {
+                ta.selectionStart = ta.selectionEnd = selStart + tag.length;
+              }, 0);
+            }
+          };
+          reader.readAsDataURL(file);
+          event.preventDefault();
+          return;
+        }
+      }
+    }
+
     async function submitEdit() {
       try {
+        // 解析选项 JSON，转换失败则不传 options
+        let options = null;
         // 解析选项 JSON，转换失败则不传 options
         let options = null;
         if (editForm.value.options_text && editForm.value.options_text.trim()) {
@@ -635,7 +668,7 @@ export default defineComponent({
       stats, filters, typeOptions, msg, showPreviewModal, showEditModal, showRejectModal,
       previewData, groupInfo, editForm, rejectForm,
       load, resetFilter, changePage, previewQuestion, editQuestion,
-      submitEdit, auditPass, showRejectDialog, submitReject,
+      submitEdit, handleEditPaste, auditPass, showRejectDialog, submitReject,
       subjectName, typeDisplayName, typeBadgeClass, cleanHtmlContent, renderSummary,
       hasOptions, parsedOptions, renderQuestionContent
     };

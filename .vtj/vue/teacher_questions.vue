@@ -193,7 +193,8 @@
 
         <div class="form-group">
           <label>题干内容</label>
-          <textarea class="form-input form-textarea" v-model="editForm.question_content" rows="4" placeholder="请输入题干内容（支持HTML）"></textarea>
+          <textarea class="form-input form-textarea" v-model="editForm.question_content" rows="4" placeholder="请输入题干内容（支持HTML，可Ctrl+V粘贴图片）"
+                    @paste="handleEditPaste('question_content', $event)"></textarea>
           <!-- P0-2 修复：编辑含图片题目时，textarea 里只能看到 <img src="/static/..."> 原文。
                在输入框下方加实时渲染预览，教师可直接确认图片是否正确挂到该题。 -->
           <div class="edit-preview-block" v-if="editForm.question_content">
@@ -236,12 +237,14 @@
 
         <div class="form-group">
           <label>正确答案</label>
-          <input class="form-input" v-model="editForm.answer" :placeholder="showOptionFields ? '如: A 或 AB（多选用大写字母连写）' : '请输入正确答案'" />
+          <input class="form-input" v-model="editForm.answer" :placeholder="showOptionFields ? '如: A 或 AB（多选用大写字母连写）' : '请输入正确答案'"
+                 @paste="handleEditPaste('answer', $event)" />
         </div>
 
         <div class="form-group">
           <label>答案解析</label>
-          <textarea class="form-input form-textarea" v-model="editForm.answer_analysis" rows="3" placeholder="请输入答案解析（支持HTML）"></textarea>
+          <textarea class="form-input form-textarea" v-model="editForm.answer_analysis" rows="3" placeholder="请输入答案解析（支持HTML，可Ctrl+V粘贴图片）"
+                    @paste="handleEditPaste('answer_analysis', $event)"></textarea>
           <div class="edit-preview-body" v-if="editPreviewOpen && editForm.answer_analysis" v-html="renderQuestionContent(editForm.answer_analysis)"></div>
         </div>
 
@@ -701,6 +704,35 @@ async function doUploadImage() {
   }
 }
 
+// B 修复：编辑弹窗粘贴剪贴板图片 → data URI 插入字段（入库/保存时由后端提取落盘）
+function handleEditPaste(field: string, event: any) {
+  const cd = event.clipboardData || (event.originalEvent && event.originalEvent.clipboardData);
+  if (!cd || !cd.items) return;
+  const ta = event.target;
+  const selStart = (ta && typeof ta.selectionStart === 'number') ? ta.selectionStart : 0;
+  for (let i = 0; i < cd.items.length; i++) {
+    const item = cd.items[i];
+    if (item.kind === 'file' && item.type.indexOf('image') === 0) {
+      const file = item.getAsFile();
+      if (!file) continue;
+      const reader = new FileReader();
+      reader.onload = function (ev: any) {
+        const tag = '<img src="' + ev.target.result + '" class="q-img" loading="lazy" />';
+        const cur = (editForm.value as any)[field] || '';
+        (editForm.value as any)[field] = cur.slice(0, selStart) + tag + cur.slice(selStart);
+        if (ta) {
+          setTimeout(function () {
+            ta.selectionStart = ta.selectionEnd = selStart + tag.length;
+          }, 0);
+        }
+      };
+      reader.readAsDataURL(file);
+      event.preventDefault();
+      return;
+    }
+  }
+}
+
 async function saveEdit() {
       saving.value = true;
       try {
@@ -777,6 +809,7 @@ async function saveEdit() {
       renderStars, truncate, stripPromoText, hasImage, renderSummary,
       hasOptions, parsedOptions, isCorrectOption,
       showDetail, openEdit, addOption, removeOption, saveEdit,
+      handleEditPaste,
       deleteQuestion, goImport, handleLogout, cleanHtmlContent,
       handleImageError, renderQuestionContent,
     };
