@@ -70,8 +70,7 @@
           </thead>
           <tbody>
             <tr v-for="(q, index) in questions" :key="q.question_id" :class="{ 'has-image': hasImage(q.question_content) }">
-              <td class="td-seq" v-if="batchMode"><input type="checkbox" :value="q.question_id" v-model="selectedIds" /></td>
-              <td class="td-seq">{{ (page - 1) * pageSize + index + 1 }}</td>
+              <td class="td-seq"><input v-if="batchMode" type="checkbox" class="td-check" :value="q.question_id" v-model="selectedIds" />{{ (page - 1) * pageSize + index + 1 }}</td>
               <td class="td-content" @click="showDetail(q)">{{ renderSummary(q) }}</td>
               <td>{{ subjectName(q.subject_id) }}</td>
               <td>
@@ -901,6 +900,20 @@ async function saveEdit() {
 .btn-search { padding: 8px 20px; background: #1A3C6D; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
 .btn-import { padding: 8px 20px; background: #C41E3A; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
 .toolbar-spacer { flex: 1; }
+/* 批量处理：复用 admin_materials.vue 批量条规格 + 本页按钮 token，
+   此前 7 个类无任何 CSS 定义，导致浏览器默认样式破坏页面风格 */
+.btn-batch { padding: 8px 20px; background: #fff; color: #1A3C6D; border: 1px solid #1A3C6D; border-radius: 6px; cursor: pointer; font-size: 15px; }
+.btn-batch:hover { background: #eef3f9; }
+.btn-batch-active { background: #1A3C6D; color: #fff; }
+.batch-toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #f5f7fa; border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.batch-checkall { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #5a6b85; cursor: pointer; }
+.batch-count { font-size: 13px; color: #5a6b85; }
+.btn-mini-reclassify, .btn-mini-cancel { padding: 4px 10px; border: 1px solid #d9d9d9; background: #fff; border-radius: 4px; cursor: pointer; font-size: 13px; color: #606266; }
+.btn-mini-reclassify:hover, .btn-mini-cancel:hover { background: #f0f0f0; }
+.btn-mini-reclassify:disabled, .btn-mini-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-mini-danger { padding: 4px 10px; border: 1px solid #f5c6cb; background: #fff; border-radius: 4px; cursor: pointer; font-size: 13px; color: #C41E3A; }
+.btn-mini-danger:hover { background: #C41E3A; color: #fff; border-color: #C41E3A; }
+.td-check { margin-right: 6px; vertical-align: middle; cursor: pointer; }
 .table-wrap { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th { padding: 12px 14px; background: #fafafa; text-align: left; font-weight: 600; color: #1A3C6D; border-bottom: 2px solid #e8e8e8; font-size: 14px; white-space: nowrap; }
