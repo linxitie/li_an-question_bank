@@ -129,7 +129,30 @@ def _pdf_image_to_png(im) -> Optional[bytes]:
             return None
         from PIL import Image
         buf = io.BytesIO()
-        Image.frombytes(mode, (sw, sh), data).save(buf, format='PNG')
+        img = Image.frombytes(mode, (sw, sh), data)
+        # A 修复：SMask 软掩码合成。公式图（分数式等）是「透明底+黑字」，
+        # 主数据全黑、可见像素由 /SMask 掩码流定义；不合成则整图全黑。
+        # 掩码从底层 pdfminer PDFStream 的原始字典取（pdfplumber 剥离了 smask）。
+        try:
+            _smask_obj = None
+            _attrs = getattr(im['stream'], 'attrs', None)
+            if _attrs:
+                _smask_ref = _attrs.get('SMask')
+                if _smask_ref is not None:
+                    _smask_obj = (_smask_ref.resolve()
+                                  if hasattr(_smask_ref, 'resolve') else _smask_ref)
+            if _smask_obj is not None and hasattr(_smask_obj, 'get_data'):
+                _sdata = _smask_obj.get_data()
+                if _sdata and len(_sdata) >= sw * sh:
+                    _mask = Image.frombytes('L', (sw, sh), _sdata[:sw * sh])
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    _canvas = Image.new('RGB', (sw, sh), 'white')
+                    _canvas.paste(img, (0, 0), _mask)
+                    img = _canvas
+        except Exception as _sme:  # noqa: BLE001 — 掩码合成失败用原图
+            logger.debug(f"[pdf-images] SMask 合成失败: {_sme}")
+        img.save(buf, format='PNG')
         return buf.getvalue()
     except Exception as e:
         logger.debug(f"[pdf-images] 图片转换失败: {type(e).__name__}: {e}")
@@ -626,6 +649,25 @@ def _decode_pdf_image(xobj: dict) -> Optional[bytes]:
 
             if len(raw_data) >= expected:
                 img = PILImage.frombytes(mode, (width, height), raw_data[:expected])
+                # A 修复：SMask 软掩码合成。公式图（分数式等）是「透明底+黑字」，
+                # 主数据是全黑文字色、可见像素由 /SMask 掩码流定义。不合成则整图
+                # 全黑（前端深色背景显示黑块）。合成到白底 = 与 PDF 原文一致。
+                _smask_ref = xobj.get('/SMask')
+                if _smask_ref is not None:
+                    try:
+                        _smask_obj = (_smask_ref.get_object()
+                                      if hasattr(_smask_ref, 'get_object') else _smask_ref)
+                        _mask_data = _smask_obj.get_data() if hasattr(_smask_obj, 'get_data') else None
+                        if _mask_data and len(_mask_data) >= width * height:
+                            _mask = PILImage.frombytes(
+                                'L', (width, height), _mask_data[:width * height])
+                            if img.mode != 'RGB':
+                                img = img.convert('RGB')
+                            _canvas = PILImage.new('RGB', (width, height), 'white')
+                            _canvas.paste(img, (0, 0), _mask)
+                            img = _canvas
+                    except Exception as _sme:  # noqa: BLE001 — 掩码合成失败用原图
+                        logger.debug(f"[pdf-images] SMask 合成失败: {_sme}")
                 buf = _io.BytesIO()
                 img.save(buf, format='PNG')
                 return buf.getvalue()
