@@ -211,7 +211,15 @@ def main() -> int:
         # 时拼出来的假数据，无歧义。
         # 不删「材料==成员题干」的组：公专情境题的建模本就如此（见 print_report 第三项），
         # 与垃圾数据同形却性质相反，交人工判断。
-        ids = sorted({row[0] for row in result['placeholder_groups']})
+        ids = sorted({row[0] for row in result['placeholder_groups']}
+                     # 申论材料退化的判据：申论的「给定资料」是独立的上万字正文，
+                     # 语义上**绝不**可能等于某道小题的题干。命中即说明该组的
+                     # shared_content 只是复制进去的题干，不携带任何材料信息。
+                     # 公专不适用此规则——情境题的建模本就材料=题干（:784）。
+                     # 已核验组25：match_group_head 对其材料返回 None，说明它并非
+                     # 规则检测器的合法产出，而是回填脚本留下的垃圾。
+                     | {row[0] for row in result['stem_as_material']
+                        if row[1] == '申论'})
         dangling = [row[0] for row in result['dangling_refs']]
         if not ids and not dangling:
             print()
