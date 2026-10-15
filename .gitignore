@@ -50,6 +50,25 @@ __pycache__/
 # Playwright 测试临时快照
 .playwright-mcp/
 
+# AI 工具运行时目录（52 MB，含插件/技能/缓存；权威副本在 .agents/）
+.opencode/
+# 机器本地 AI 配置（权限白名单因机而异）
+.claude/settings.local.json
+# 技能已迁至 .agents/skills/，此处残留的空壳嵌套仓库（内含 .git，不可入库）
+.claude/skills/
+
+# Word 锁文件（多人/多机编辑时产生的 ~$*.docx）
+~$*.docx
+
+# 根目录临时产物
+git_diff_qi.txt
+frontend_run.err
+frontend_run.log
+
+# 一次性探测临时输出（探测脚本本体保留在 backend/scripts/probe/）
+backend/tmp/
+backend/_*.txt
+
 # 运行时数据（新闻图片、上传资料、题目图片、SQLite 数据库）
 backend/uploads/
 # 注意：此处必须用 backend/data/* 而非 backend/data/，否则 git 会跳过目录本身，

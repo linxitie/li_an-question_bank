@@ -6,7 +6,8 @@
   "main": "vtj-mcp-server.js",
   "scripts": {
     "start": "node vtj-mcp-server.js",
-    "setup": "npm install"
+    "setup": "npm install",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"

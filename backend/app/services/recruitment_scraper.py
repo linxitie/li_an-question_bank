@@ -68,6 +68,35 @@ NOISE_TITLE_KEYWORDS = [
 ATTACHMENT_EXTENSIONS = (
     ".xls", ".xlsx", ".doc", ".docx", ".pdf", ".zip", ".rar", ".et", ".wps",
 )
+
+
+def normalize_publish_date(raw: str) -> str:
+    """把源站发布日期归一为 YYYY-MM-DD（单一事实来源）。
+
+    源站 DETAIL_DATE 原文形如 '2026-05-25 15:48:03'，直接落库会造成
+    同一列混有两种格式（回填脚本写纯日期、爬虫写带时间戳），
+    导致 P2 展示格式化出错。此处为唯一真源，爬虫与回填脚本均调用。
+
+    覆盖：'2026-05-25' / '2026/05/25' / '2026年5月25日' / '05-25'（补当年）
+    """
+    if not raw:
+        return ""
+    text = str(raw).strip()
+
+    m = re.search(r"(20\d{2})\s*[-/年]\s*(\d{1,2})\s*[-/月]\s*(\d{1,2})", text)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+
+    # 仅有月日（如 '05-25'）→ 视为当年
+    m = re.search(r"(?<!\d)(\d{1,2})\s*[-/月]\s*(\d{1,2})(?!\d)", text)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{datetime.now().year:04d}-{mo:02d}-{d:02d}"
+
+    return ""
 # 附件链接锚文本关键词
 ATTACHMENT_ANCHOR_KEYWORDS = ("附件", "下载", "职位表", "附表", "表格")
 
@@ -249,10 +278,10 @@ def _parse_detail_page(html: str, url: str) -> dict:
                 result["title"] = t
                 break
 
-        # ---- 发布时间 ----
+        # ---- 发布时间（归一为 YYYY-MM-DD，避免与回填脚本写入的格式不一致）----
         date_span = soup.select_one(DETAIL_DATE)
         if date_span:
-            result["publish_date"] = date_span.get_text(strip=True)
+            result["publish_date"] = normalize_publish_date(date_span.get_text(strip=True))
 
         # ---- 正文 HTML ----
         body_div = soup.select_one(DETAIL_BODY)

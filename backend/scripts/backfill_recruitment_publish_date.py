@@ -42,35 +42,10 @@ from bs4 import BeautifulSoup
 from app.core.database import SessionLocal
 from app.models.models import RecruitmentInfo
 from app.services.scraper_utils import safe_request
-from app.services.recruitment_scraper import DETAIL_DATE
+from app.services.recruitment_scraper import DETAIL_DATE, normalize_publish_date
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-
-def normalize_date(raw: str) -> str:
-    """把源站各种日期写法归一为 YYYY-MM-DD；无法识别返回空串。
-
-    覆盖：'2026-05-25' / '2026/05/25' / '2026年5月25日' / '05-25'（补当年）
-    """
-    if not raw:
-        return ""
-    text = raw.strip()
-
-    m = re.search(r"(20\d{2})\s*[-/年]\s*(\d{1,2})\s*[-/月]\s*(\d{1,2})", text)
-    if m:
-        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"{y:04d}-{mo:02d}-{d:02d}"
-
-    # 仅有月日（如 '05-25'）→ 视为当年
-    m = re.search(r"(?<!\d)(\d{1,2})\s*[-/月]\s*(\d{1,2})(?!\d)", text)
-    if m:
-        mo, d = int(m.group(1)), int(m.group(2))
-        if 1 <= mo <= 12 and 1 <= d <= 31:
-            return f"{datetime.now().year:04d}-{mo:02d}-{d:02d}"
-
-    return ""
 
 
 def extract_publish_date(html: str) -> str:
@@ -79,7 +54,7 @@ def extract_publish_date(html: str) -> str:
         soup = BeautifulSoup(html, 'lxml')
         node = soup.select_one(DETAIL_DATE)
         if node:
-            return normalize_date(node.get_text(strip=True))
+            return normalize_publish_date(node.get_text(strip=True))
     except Exception as e:
         logger.debug(f"[backfill] 日期解析异常: {type(e).__name__}: {e}")
     return ""
@@ -165,10 +140,62 @@ def main():
         logger.warning("用户中断（已处理部分若为 --apply 模式已逐条提交）")
         db.commit()
     except Exception as e:
-        db.rollback()
-        logger.error(f"回填过程异常终止: {type(e).__name__}: {e}", exc_info=True)
+        # 单行写入异常不得中断整轮回填。
+        # 实测：定时爬虫的 _replace_category 会 DELETE+INSERT 同批行，
+        # 若本进程持有陈旧 ORM 对象，commit 会抛 StaleDataError
+        # （"expected to update 1 row(s); 0 were matched"）。
+        # 此时改为按主键做幂等 UPDATE，并以 SQLAlchemy UPDATE 的行数为判据，
+        # 目标行已消失时视为并发跳过，继续处理后续行。
+        logger.warning(f"回填过程异常（{type(e).__name__}: {e}）；切换为逐行幂等 UPDATE 重试模式")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        _resilient_pass(db, rows, args, mode)
     finally:
         db.close()
+
+
+def _resilient_pass(db, rows, args, mode: str) -> None:
+    """并发安全回补：按主键 UPDATE，目标行已被爬虫重建时自动跳过。"""
+    from sqlalchemy import text as _text
+    scanned = filled = failed = 0
+    for i, rec in enumerate(rows, 1):
+        scanned += 1
+        rec_id = rec.recruitment_id
+        pd = fetch_publish_date(rec.url or "")
+        if not pd:
+            failed += 1
+            logger.warning(f"[{i}/{len(rows)}] 未取到日期 (fail={failed}) {(rec.title or '')[:32]}")
+        else:
+            try:
+                if args.apply:
+                    res = db.execute(
+                        _text("UPDATE recruitment_info SET publish_date=:pd "
+                              "WHERE recruitment_id=:rid"),
+                        {"pd": pd, "rid": rec_id},
+                    )
+                    db.commit()
+                    if res.rowcount == 0:
+                        # 该行已被爬虫重建（DELETE+INSERT 换了主键），视为并发跳过
+                        logger.info(f"[{i}/{len(rows)}] {pd}  行已被爬虫重建，跳过 {(rec.title or '')[:28]}")
+                        continue
+                filled += 1
+                logger.info(f"[{i}/{len(rows)}] {pd}  {(rec.title or '')[:38]}")
+            except Exception as e2:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                failed += 1
+                logger.warning(f"[{i}/{len(rows)}] 写入失败 ({type(e2).__name__})，跳过")
+        time.sleep(args.delay + random.uniform(0, 1.0))
+
+    logger.info("=" * 60)
+    logger.info(f"回填完成(并发安全模式) — 扫描 {scanned} | 成功 {filled} | 失败 {failed}")
+    if not args.apply and filled:
+        logger.info("（本次为 DRY-RUN，未写入数据库）")
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

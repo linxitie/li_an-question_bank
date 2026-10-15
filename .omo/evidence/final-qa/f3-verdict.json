@@ -1,0 +1,61 @@
+{
+  "f3_final_qa": "API-level E2E (browser PW-1..12 not established - documented downgrade)",
+  "environment": {
+    "backend": "http://127.0.0.1:8000",
+    "user": "cbrycc(admin)",
+    "corpus": "题库/ (S1-S9 real files)"
+  },
+  "verdict": "REJECT",
+  "scenarios": {
+    "pass": 22,
+    "total": 24
+  },
+  "integration": {
+    "pass": 6,
+    "total": 8
+  },
+  "edge_cases_tested": 7,
+  "blocking_defects": [
+    {
+      "id": "D1",
+      "rc": "RC-6",
+      "title": "Renamed .pdf -> .docx fails dispatch (ext used, sniffed file_type ignored)",
+      "http": "202 then status=FAILED",
+      "err": "400: 文件不是有效的 docx（无法作为 zip 打开）：File is not a zip file",
+      "locus": "backend/app/api/v1/question_import.py:1388-1421 (_process_import_async dispatches on `ext`); uploaded docx_reader.py:47",
+      "evidence": "import_id=1527 file_type=PDF (sniff OK) but ext=.docx -> docx parser raised",
+      "severity": "HIGH",
+      "fix": "pass resolved file_type into _process_import_async and branch on it"
+    },
+    {
+      "id": "D2",
+      "rc": "RC-3",
+      "title": "POST /api/questions/import/confirm returns 500 when payload.questions is supplied",
+      "http": "500 INTERNAL_SERVER_ERROR",
+      "err": "导入失败: cannot access local variable 'preview_data' where it is not associated with a value",
+      "locus": "backend/app/api/v1/question_import.py:1946-1954 (preview_data bound only in else branch) read unconditionally at :2133,:2135,:2191,:2203",
+      "proof": "legacy(no payload) -> HTTP 200 +97 rows; payload path -> HTTP 500 but +N rows still committed (no rollback)",
+      "severity": "HIGH",
+      "fix": "bind preview_data = {} before the if/else and re-assign in else"
+    }
+  ],
+  "statistics_note": "S1+S2 separate match_rate=99.0% (100/100 answered+analysis, extra_answer_numbers=[49] surplus answer block in source PDF); all 100 questions answered and analysis non-empty.",
+  "s5_note": "S5 2017公安院校联考.docx is questions-only (no answers/解析); paired with 2017公安院校联考题参考答案及解析.pdf -> analysis 100/100.",
+  "passes": [
+    "auth login 200",
+    "openapi 17 /api/questions/import/* endpoints (>=16)",
+    "mineru-health 200",
+    "stats 200",
+    "records 200",
+    "ocr/status 200",
+    "S1 upload 202 + import_id + poll PREVIEW/DONE",
+    "S3 malformed docx upload 202 no 500",
+    "S3+S4 separate 100% no silent drop",
+    "S6+S7 xingce 100% blocked=0 (J-2 clean)",
+    "RC-5 requirements 5/5 in DB multi-point",
+    "RC-3 answer modification actually persisted (RC5MARK0-4)",
+    "J-1 zero orphans",
+    "J-2 zero qnum in material"
+  ],
+  "db_state": "2690 -> 2794 rows during QA (8 QA-inserted rows; question_bank baseline 2687)"
+}

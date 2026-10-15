@@ -1,0 +1,151 @@
+{
+  "pass": 27,
+  "total": 29,
+  "results": [
+    {
+      "name": "auth_login_200",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "api_16_import_endpoints",
+      "ok": true,
+      "detail": "count=17 paths=batch-answers,batch-parsed,confirm,image,mineru-health,ocr,ocr/status,parse,records,records/{import_id}/attach-image,records/{import_id}/status,separate-match,separate-match-xingce,single,stats,update-answer/{question_id},upload"
+    },
+    {
+      "name": "api_mineru_health_200",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "corpus_S1_found",
+      "ok": true,
+      "detail": "6639866 bytes 2020届公安院校公安专业联考考试《公安专业科目》真题.docx"
+    },
+    {
+      "name": "corpus_S2_found",
+      "ok": true,
+      "detail": "542485 bytes 2020届公安院校公安专业联考考试《公安专业科目》真题参考答案及解析.pdf"
+    },
+    {
+      "name": "corpus_S3_found",
+      "ok": true,
+      "detail": "97659 bytes 2016江西招警考试《人民警察基础知识》真题（部分）.docx"
+    },
+    {
+      "name": "corpus_S4_found",
+      "ok": true,
+      "detail": "418056 bytes 2016江西招警考试《人民警察基础知识》真题答案及解析（部分）.pdf"
+    },
+    {
+      "name": "corpus_S5_found",
+      "ok": true,
+      "detail": "4051218 bytes 2017年公安院校联考《公安专业科目》题.docx"
+    },
+    {
+      "name": "corpus_S6_found",
+      "ok": true,
+      "detail": "886167 bytes 2023年国家公务员录用考试《行测》题（副省级网友回忆版）题本.pdf"
+    },
+    {
+      "name": "corpus_S7_found",
+      "ok": true,
+      "detail": "1029378 bytes 2023年国家公务员录用考试《行测》题（副省级网友回忆版）答案解析.pdf"
+    },
+    {
+      "name": "corpus_S8_found",
+      "ok": true,
+      "detail": "259176 bytes 2019年国家公务员考试《申论》真题及答案（省级）（含解析）【四次元自习室】.pdf"
+    },
+    {
+      "name": "corpus_S9_found",
+      "ok": true,
+      "detail": "224449 bytes 2020年国家公务员考试《申论》真题及答案（地市级）【四次元自习室】.pdf"
+    },
+    {
+      "name": "s1_upload_202_no500",
+      "ok": true,
+      "detail": "status=202 body={\"import_id\":1525,\"status\":\"PARSING\",\"original_filename\":\"2020届公安院校公安专业联考考试《公安专业科目》真题.docx\",\"file_type\":\"WORD\""
+    },
+    {
+      "name": "s1_poll_final_state",
+      "ok": true,
+      "detail": "import_id=1525 status=PREVIEW phase=DONE http=200"
+    },
+    {
+      "name": "s1_poll_has_import_id",
+      "ok": true,
+      "detail": "import_id=1525"
+    },
+    {
+      "name": "s1s2_parse_200",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "s1s2_match_rate_100",
+      "ok": false,
+      "detail": "match_rate=99.0 total=100 matched=99 analysis=100 strat=题号分段解析 → 嵌入式答案提取(100题) → 连续答案序列"
+    },
+    {
+      "name": "s3_upload_no500",
+      "ok": true,
+      "detail": "status=202 body={\"import_id\":1526,\"status\":\"PARSING\",\"original_filename\":\"2016江西招警考试《人民警察基础知识》真题（部分）.docx\""
+    },
+    {
+      "name": "s3s4_parse_not500",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "s3s4_no_silent_drop",
+      "ok": true,
+      "detail": "total=97 matched=97 rate=100.0"
+    },
+    {
+      "name": "s5_parse_200",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "s5_answer_analysis_gt90",
+      "ok": false,
+      "detail": "rate=1.0% non_empty=1 total=100"
+    },
+    {
+      "name": "s6s7_xingce_200",
+      "ok": true,
+      "detail": "status=200 body={\"status\":\"success\",\"match_rate\":100.0,\"matched_count\":131,\"total_questions\":131,\"questions\":[{\"question_number\":1,\"cont"
+    },
+    {
+      "name": "s6s7_blocked_zero",
+      "ok": true,
+      "detail": "blocked=False match_rate=100.0 keys=['question_count', 'answer_count', 'block_reasons', 'only_in_questions', 'only_in_answers', 'missing_answer', 'section_intervals', 'blocked', 'blocked_count', 'matched', 'spurious_question_numbers', 'x', 'section_names', 'section_intervals_q', 'material_count', 'materials_by_section', 'material_groups', 'preview_confirmable', 'import_id', 'kao_coverage']"
+    },
+    {
+      "name": "rc6_renamed_no500",
+      "ok": true,
+      "detail": "status=202 body={\"import_id\":1527,\"status\":\"PARSING\",\"original_filename\":\"2023年国家公务员录用考试《行测》题（副省级网友回忆版）题本.pdf.rename"
+    },
+    {
+      "name": "rc6_renamed_parses",
+      "ok": true,
+      "detail": "id=1527 status=FAILED file_type=PDF"
+    },
+    {
+      "name": "api_stats_200",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "api_records_200",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "api_ocr_status_200",
+      "ok": true,
+      "detail": "status=200"
+    }
+  ]
+}

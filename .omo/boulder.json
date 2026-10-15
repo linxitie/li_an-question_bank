@@ -1,55 +1,35 @@
 {
-  "active_plan": "D:/砺安题库/砺安题库/.omo/plans/question-import-full-repair-execution.md",
-  "plan_name": "question-import-full-repair-execution",
-  "started_at": "2026-10-04T00:00:00",
-  "session_ids": [
-    "opencode:ses_current",
-    "opencode:ses_eda5493deffejwJOrMtI8QHmCl"
-  ],
-  "worktree_path": null,
-  "execution_policy": {
-    "agent_timeout_minutes": 60,
-    "on_timeout": "switch_to_main_agent",
-    "note": "本项目 subagent 委托在本环境多次 30min 零响应超时（6/6 explore + Metis 全失败）。execution_policy 已放宽至 60min；若仍超时则由主代理直接执行，不反复重试。"
-  },
-  "guards": {
-    "do_not_touch": [],
-    "reason": "2026-10-04 用户裁决：启动题目导入模块全面修复与满血优化方案。基线提交 8eee113。",
-    "baseline_commit": "8eee113",
-    "decisions_2026_10_04": {
-      "1": "MinerU 分层主库（不做全局换血）",
-      "2": "docx 不走 MinerU，保持原生解析",
-      "3": "429 条 PREVIEW + 1 条 PARSING 本轮不动",
-      "4": "20+ 散落测试脚本直接删除（先写 manifest）",
-      "5": "同步拆分 + 先补齐三科门禁网（阶段1门禁→阶段3修复→阶段6下钻→阶段7拆分）",
-      "6": "学生端保持竖向滚动 + 材料可折叠",
-      "7": "I-6 单独 commit + 单独全套 E2E",
-      "8": "9 个代表性真实语料做 Playwright 抽样，禁止虚拟空文档"
-    }
-  },
-  "session_origins": {
-    "opencode:ses_current": "direct"
-  },
-  "task_sessions": {},
   "schema_version": 2,
-  "active_work_id": "question-import-full-repair-execution-legacy",
+  "active_work_id": "question-import-full-repair-execution-e6ce05f4",
   "works": {
-    "question-import-full-repair-execution-legacy": {
-      "work_id": "question-import-full-repair-execution-legacy",
-      "active_plan": "D:/砺安题库/砺安题库/.omo/plans/question-import-full-repair-execution.md",
+    "question-import-full-repair-execution-e6ce05f4": {
+      "work_id": "question-import-full-repair-execution-e6ce05f4",
+      "active_plan": "D:\\砺安题库\\砺安题库\\.omo\\plans\\question-import-full-repair-execution.md",
       "plan_name": "question-import-full-repair-execution",
-      "started_at": "2026-10-04T00:00:00",
+      "status": "active",
+      "started_at": "2026-10-12T08:40:35.327Z",
+      "updated_at": "2026-10-12T08:40:35.327Z",
       "session_ids": [
-        "opencode:ses_current",
         "opencode:ses_eda5493deffejwJOrMtI8QHmCl"
       ],
       "session_origins": {
-        "opencode:ses_current": "direct"
+        "opencode:ses_eda5493deffejwJOrMtI8QHmCl": "direct"
       },
-      "agent": "atlas",
-      "worktree_path": null,
+      "agent": "sisyphus",
       "task_sessions": {}
     }
   },
-  "agent": "atlas"
+  "active_plan": "D:\\砺安题库\\砺安题库\\.omo\\plans\\question-import-full-repair-execution.md",
+  "started_at": "2026-10-12T08:40:35.327Z",
+  "status": "active",
+  "updated_at": "2026-10-12T08:40:35.327Z",
+  "session_ids": [
+    "opencode:ses_eda5493deffejwJOrMtI8QHmCl"
+  ],
+  "session_origins": {
+    "opencode:ses_eda5493deffejwJOrMtI8QHmCl": "direct"
+  },
+  "plan_name": "question-import-full-repair-execution",
+  "task_sessions": {},
+  "agent": "sisyphus"
 }
