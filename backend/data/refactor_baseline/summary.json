@@ -1,0 +1,93 @@
+{
+  "api_modules": 37,
+  "domain_assigned_modules": 36,
+  "domain_unassigned_modules": 1,
+  "total_endpoints": 343,
+  "orm_models": 71,
+  "db_tables": 72,
+  "per_domain": {
+    "UNASSIGNED": {
+      "files": 1,
+      "endpoints": 1
+    },
+    "catalog": {
+      "files": 6,
+      "endpoints": 78
+    },
+    "community": {
+      "files": 2,
+      "endpoints": 19
+    },
+    "content": {
+      "files": 3,
+      "endpoints": 13
+    },
+    "exam": {
+      "files": 6,
+      "endpoints": 54
+    },
+    "growth": {
+      "files": 3,
+      "endpoints": 19
+    },
+    "identity": {
+      "files": 3,
+      "endpoints": 16
+    },
+    "library": {
+      "files": 3,
+      "endpoints": 31
+    },
+    "personal": {
+      "files": 2,
+      "endpoints": 14
+    },
+    "platform": {
+      "files": 5,
+      "endpoints": 89
+    },
+    "reward": {
+      "files": 3,
+      "endpoints": 9
+    }
+  },
+  "modules_with_cross_import": {
+    "achievements.py": [
+      "services.achievement_service",
+      "services.services"
+    ],
+    "auth.py": [
+      "services.achievement_service"
+    ],
+    "collection.py": [
+      "services.achievement_service"
+    ],
+    "forum.py": [
+      "services.achievement_service"
+    ],
+    "goals.py": [
+      "services.services"
+    ],
+    "notes.py": [
+      "services.achievement_service"
+    ],
+    "practice.py": [
+      "services.achievement_service",
+      "services.services"
+    ],
+    "quotes.py": [
+      "services.achievement_service"
+    ],
+    "stats.py": [
+      "services.achievement_service",
+      "services.growth_service",
+      "services.services"
+    ],
+    "tasks.py": [
+      "services.services"
+    ],
+    "wrong_questions.py": [
+      "services.achievement_service"
+    ]
+  }
+}

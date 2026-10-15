@@ -1,0 +1,39 @@
+{
+  "achievements.py": [
+    "services.achievement_service",
+    "services.services"
+  ],
+  "auth.py": [
+    "services.achievement_service"
+  ],
+  "collection.py": [
+    "services.achievement_service"
+  ],
+  "forum.py": [
+    "services.achievement_service"
+  ],
+  "goals.py": [
+    "services.services"
+  ],
+  "notes.py": [
+    "services.achievement_service"
+  ],
+  "practice.py": [
+    "services.achievement_service",
+    "services.services"
+  ],
+  "quotes.py": [
+    "services.achievement_service"
+  ],
+  "stats.py": [
+    "services.achievement_service",
+    "services.growth_service",
+    "services.services"
+  ],
+  "tasks.py": [
+    "services.services"
+  ],
+  "wrong_questions.py": [
+    "services.achievement_service"
+  ]
+}

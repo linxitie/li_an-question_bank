@@ -1,0 +1,2356 @@
+{
+  "achievements.py": {
+    "domain": "growth",
+    "prefix": "/api/achievements",
+    "router_instances": 1,
+    "endpoint_count": 3,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "list_achievements",
+        "line": 61
+      },
+      {
+        "method": "GET",
+        "path": "/earned",
+        "fn": "earned_achievements",
+        "line": 105
+      },
+      {
+        "method": "GET",
+        "path": "/progress",
+        "fn": "progress_achievements",
+        "line": 133
+      }
+    ]
+  },
+  "admin.py": {
+    "domain": "platform",
+    "prefix": "/api/admin",
+    "router_instances": 1,
+    "endpoint_count": 26,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/dashboard",
+        "fn": "get_dashboard",
+        "line": 187
+      },
+      {
+        "method": "GET",
+        "path": "/users",
+        "fn": "list_users",
+        "line": 297
+      },
+      {
+        "method": "POST",
+        "path": "/users",
+        "fn": "create_user",
+        "line": 335
+      },
+      {
+        "method": "PUT",
+        "path": "/users/{user_id}",
+        "fn": "update_user",
+        "line": 376
+      },
+      {
+        "method": "PUT",
+        "path": "/users/{user_id}/disable",
+        "fn": "toggle_disable_user",
+        "line": 399
+      },
+      {
+        "method": "PUT",
+        "path": "/users/{user_id}/reset-password",
+        "fn": "reset_user_password",
+        "line": 424
+      },
+      {
+        "method": "GET",
+        "path": "/questions/stats",
+        "fn": "get_question_stats",
+        "line": 452
+      },
+      {
+        "method": "GET",
+        "path": "/questions",
+        "fn": "list_all_questions",
+        "line": 495
+      },
+      {
+        "method": "PUT",
+        "path": "/questions/{question_id}",
+        "fn": "update_question",
+        "line": 563
+      },
+      {
+        "method": "PUT",
+        "path": "/questions/{question_id}/audit",
+        "fn": "audit_question",
+        "line": 586
+      },
+      {
+        "method": "PUT",
+        "path": "/questions/{question_id}/archive",
+        "fn": "archive_question",
+        "line": 611
+      },
+      {
+        "method": "GET",
+        "path": "/announcements",
+        "fn": "list_announcements",
+        "line": 632
+      },
+      {
+        "method": "POST",
+        "path": "/announcements",
+        "fn": "create_announcement",
+        "line": 662
+      },
+      {
+        "method": "PUT",
+        "path": "/announcements/{announcement_id}",
+        "fn": "update_announcement",
+        "line": 686
+      },
+      {
+        "method": "DELETE",
+        "path": "/announcements/{announcement_id}",
+        "fn": "delete_announcement",
+        "line": 708
+      },
+      {
+        "method": "GET",
+        "path": "/logs",
+        "fn": "list_operation_logs",
+        "line": 729
+      },
+      {
+        "method": "GET",
+        "path": "/logs/errors",
+        "fn": "get_error_logs",
+        "line": 780
+      },
+      {
+        "method": "GET",
+        "path": "/logs/export",
+        "fn": "export_operation_logs",
+        "line": 806
+      },
+      {
+        "method": "GET",
+        "path": "/backup/stats",
+        "fn": "get_backup_stats",
+        "line": 862
+      },
+      {
+        "method": "POST",
+        "path": "/backup",
+        "fn": "create_backup",
+        "line": 909
+      },
+      {
+        "method": "GET",
+        "path": "/backups",
+        "fn": "list_backups",
+        "line": 970
+      },
+      {
+        "method": "POST",
+        "path": "/backups/{backup_id}/restore",
+        "fn": "restore_backup",
+        "line": 995
+      },
+      {
+        "method": "GET",
+        "path": "/settings",
+        "fn": "get_settings",
+        "line": 1022
+      },
+      {
+        "method": "PUT",
+        "path": "/settings",
+        "fn": "update_settings",
+        "line": 1039
+      },
+      {
+        "method": "GET",
+        "path": "/permissions",
+        "fn": "get_permissions",
+        "line": 1094
+      },
+      {
+        "method": "PUT",
+        "path": "/permissions",
+        "fn": "update_permissions",
+        "line": 1132
+      }
+    ]
+  },
+  "admin_approval.py": {
+    "domain": "platform",
+    "prefix": "/api/admin/approval",
+    "router_instances": 1,
+    "endpoint_count": 6,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/papers",
+        "fn": "list_approval_papers",
+        "line": 65
+      },
+      {
+        "method": "GET",
+        "path": "/papers/{paper_id}",
+        "fn": "get_approval_detail",
+        "line": 150
+      },
+      {
+        "method": "POST",
+        "path": "/papers/{paper_id}/approve",
+        "fn": "approve_paper",
+        "line": 229
+      },
+      {
+        "method": "POST",
+        "path": "/papers/{paper_id}/reject",
+        "fn": "reject_paper",
+        "line": 269
+      },
+      {
+        "method": "GET",
+        "path": "/papers/{paper_id}/logs",
+        "fn": "get_approval_logs",
+        "line": 311
+      },
+      {
+        "method": "GET",
+        "path": "/papers/{paper_id}/issues",
+        "fn": "get_paper_issues",
+        "line": 341
+      }
+    ]
+  },
+  "admin_shop.py": {
+    "domain": "reward",
+    "prefix": "/api/admin/shop",
+    "router_instances": 1,
+    "endpoint_count": 4,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/products",
+        "fn": "admin_list_products",
+        "line": 74
+      },
+      {
+        "method": "POST",
+        "path": "/products",
+        "fn": "admin_create_product",
+        "line": 104
+      },
+      {
+        "method": "PUT",
+        "path": "/products/{product_id}",
+        "fn": "admin_update_product",
+        "line": 131
+      },
+      {
+        "method": "DELETE",
+        "path": "/products/{product_id}",
+        "fn": "admin_delete_product",
+        "line": 151
+      }
+    ]
+  },
+  "auth.py": {
+    "domain": "identity",
+    "prefix": "/api/auth",
+    "router_instances": 1,
+    "endpoint_count": 9,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/login",
+        "fn": "login_for_access_token",
+        "line": 93
+      },
+      {
+        "method": "POST",
+        "path": "/register",
+        "fn": "register_user",
+        "line": 215
+      },
+      {
+        "method": "POST",
+        "path": "/sms-login",
+        "fn": "sms_login",
+        "line": 253
+      },
+      {
+        "method": "POST",
+        "path": "/refresh",
+        "fn": "refresh_access_token",
+        "line": 321
+      },
+      {
+        "method": "POST",
+        "path": "/logout",
+        "fn": "logout_user",
+        "line": 363
+      },
+      {
+        "method": "GET",
+        "path": "/profile",
+        "fn": "get_user_profile",
+        "line": 386
+      },
+      {
+        "method": "POST",
+        "path": "/change-password",
+        "fn": "change_password",
+        "line": 401
+      },
+      {
+        "method": "PUT",
+        "path": "/profile",
+        "fn": "update_user_profile",
+        "line": 422
+      },
+      {
+        "method": "POST",
+        "path": "/avatar",
+        "fn": "upload_avatar",
+        "line": 442
+      }
+    ]
+  },
+  "auth_qrcode.py": {
+    "domain": "identity",
+    "prefix": "/api/auth/qrcode",
+    "router_instances": 1,
+    "endpoint_count": 4,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/generate",
+        "fn": "generate_qrcode",
+        "line": 58
+      },
+      {
+        "method": "GET",
+        "path": "/{qr_uuid}/info",
+        "fn": "get_pc_info",
+        "line": 108
+      },
+      {
+        "method": "POST",
+        "path": "/{qr_uuid}/confirm",
+        "fn": "confirm_login",
+        "line": 121
+      },
+      {
+        "method": "GET",
+        "path": "/{qr_uuid}/status",
+        "fn": "check_status",
+        "line": 148
+      }
+    ]
+  },
+  "calendar.py": {
+    "domain": "content",
+    "prefix": "/api/calendar",
+    "router_instances": 1,
+    "endpoint_count": 2,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/exams",
+        "fn": "get_exams",
+        "line": 67
+      },
+      {
+        "method": "GET",
+        "path": "/latest",
+        "fn": "get_latest_exam",
+        "line": 100
+      }
+    ]
+  },
+  "coins.py": {
+    "domain": "reward",
+    "prefix": "/api/coins",
+    "router_instances": 1,
+    "endpoint_count": 2,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/overview",
+        "fn": "coins_overview",
+        "line": 19
+      },
+      {
+        "method": "GET",
+        "path": "/transactions",
+        "fn": "coins_transactions",
+        "line": 46
+      }
+    ]
+  },
+  "collection.py": {
+    "domain": "personal",
+    "prefix": "/api/collection",
+    "router_instances": 1,
+    "endpoint_count": 6,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "get_collection",
+        "line": 23
+      },
+      {
+        "method": "POST",
+        "path": "/favorite",
+        "fn": "toggle_favorite",
+        "line": 62
+      },
+      {
+        "method": "DELETE",
+        "path": "/{fav_id}",
+        "fn": "delete_favorite",
+        "line": 140
+      },
+      {
+        "method": "GET",
+        "path": "/news-favorites",
+        "fn": "get_news_favorites",
+        "line": 217
+      },
+      {
+        "method": "GET",
+        "path": "/question-favorites",
+        "fn": "get_question_favorites",
+        "line": 312
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fn": "get_collection_stats",
+        "line": 361
+      }
+    ]
+  },
+  "devices.py": {
+    "domain": "identity",
+    "prefix": "/api/auth/devices",
+    "router_instances": 1,
+    "endpoint_count": 3,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fn": "list_devices",
+        "line": 29
+      },
+      {
+        "method": "DELETE",
+        "path": "/{device_id}",
+        "fn": "remove_device",
+        "line": 47
+      },
+      {
+        "method": "POST",
+        "path": "/revoke-all",
+        "fn": "revoke_all_devices",
+        "line": 65
+      }
+    ]
+  },
+  "exam_records.py": {
+    "domain": "exam",
+    "prefix": "/api/exam-records",
+    "router_instances": 1,
+    "endpoint_count": 8,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/self",
+        "fn": "get_self_test_records",
+        "line": 28
+      },
+      {
+        "method": "GET",
+        "path": "/mock",
+        "fn": "get_mock_exam_records",
+        "line": 78
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fn": "get_exam_stats",
+        "line": 140
+      },
+      {
+        "method": "GET",
+        "path": "/trend",
+        "fn": "get_exam_trend",
+        "line": 211
+      },
+      {
+        "method": "GET",
+        "path": "/{record_id}/wrong-questions",
+        "fn": "get_wrong_questions",
+        "line": 264
+      },
+      {
+        "method": "GET",
+        "path": "/{record_id}/details",
+        "fn": "get_exam_record_details",
+        "line": 349
+      },
+      {
+        "method": "POST",
+        "path": "/ai/analyze",
+        "fn": "ai_analyze_wrong_questions",
+        "line": 410
+      },
+      {
+        "method": "GET",
+        "path": "/summary",
+        "fn": "get_exam_summary",
+        "line": 480
+      }
+    ]
+  },
+  "exams.py": {
+    "domain": "exam",
+    "prefix": "/api/exams",
+    "router_instances": 1,
+    "endpoint_count": 12,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/list",
+        "fn": "get_exams_list",
+        "line": 28
+      },
+      {
+        "method": "GET",
+        "path": "/{paper_id:int}",
+        "fn": "get_exam_detail",
+        "line": 89
+      },
+      {
+        "method": "GET",
+        "path": "/{paper_id}/questions",
+        "fn": "get_paper_questions",
+        "line": 125
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/start",
+        "fn": "start_exam",
+        "line": 198
+      },
+      {
+        "method": "POST",
+        "path": "/{record_id}/submit",
+        "fn": "submit_answers",
+        "line": 258
+      },
+      {
+        "method": "GET",
+        "path": "/records",
+        "fn": "get_my_exam_records",
+        "line": 398
+      },
+      {
+        "method": "GET",
+        "path": "/records/{record_id}",
+        "fn": "get_exam_record_detail",
+        "line": 447
+      },
+      {
+        "method": "GET",
+        "path": "/all",
+        "fn": "get_all_exam_records",
+        "line": 516
+      },
+      {
+        "method": "POST",
+        "path": "/start",
+        "fn": "start_exam_new",
+        "line": 552
+      },
+      {
+        "method": "POST",
+        "path": "/{exam_id}/submit",
+        "fn": "submit_exam_new",
+        "line": 570
+      },
+      {
+        "method": "PUT",
+        "path": "/{exam_id}/progress",
+        "fn": "save_exam_progress",
+        "line": 588
+      },
+      {
+        "method": "GET",
+        "path": "/preview/{paper_id}",
+        "fn": "preview_exam",
+        "line": 608
+      }
+    ]
+  },
+  "feedback.py": {
+    "domain": "platform",
+    "prefix": "/api/feedback",
+    "router_instances": 1,
+    "endpoint_count": 5,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/faq",
+        "fn": "get_faq",
+        "line": 51
+      },
+      {
+        "method": "POST",
+        "path": "",
+        "fn": "submit_feedback",
+        "line": 56
+      },
+      {
+        "method": "GET",
+        "path": "/my",
+        "fn": "my_feedback",
+        "line": 84
+      },
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "list_all_feedback",
+        "line": 104
+      },
+      {
+        "method": "POST",
+        "path": "/{feedback_id}/reply",
+        "fn": "reply_feedback",
+        "line": 130
+      }
+    ]
+  },
+  "forum.py": {
+    "domain": "community",
+    "prefix": "/api/forum",
+    "router_instances": 1,
+    "endpoint_count": 12,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/posts",
+        "fn": "get_forum_posts",
+        "line": 143
+      },
+      {
+        "method": "GET",
+        "path": "/posts/{post_id}",
+        "fn": "get_post_detail",
+        "line": 197
+      },
+      {
+        "method": "POST",
+        "path": "/posts",
+        "fn": "create_post",
+        "line": 231
+      },
+      {
+        "method": "DELETE",
+        "path": "/posts/{post_id}",
+        "fn": "delete_post",
+        "line": 306
+      },
+      {
+        "method": "POST",
+        "path": "/posts/{post_id}/like",
+        "fn": "toggle_post_like",
+        "line": 335
+      },
+      {
+        "method": "GET",
+        "path": "/posts/{post_id}/comments",
+        "fn": "get_post_comments",
+        "line": 385
+      },
+      {
+        "method": "POST",
+        "path": "/posts/{post_id}/comments",
+        "fn": "create_comment",
+        "line": 434
+      },
+      {
+        "method": "POST",
+        "path": "/comments/{comment_id}/like",
+        "fn": "toggle_comment_like",
+        "line": 507
+      },
+      {
+        "method": "POST",
+        "path": "/upload",
+        "fn": "upload_attachment",
+        "line": 552
+      },
+      {
+        "method": "GET",
+        "path": "/users/{user_id}/public",
+        "fn": "get_user_public",
+        "line": 610
+      },
+      {
+        "method": "GET",
+        "path": "/my-posts",
+        "fn": "get_my_posts",
+        "line": 655
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fn": "get_forum_stats",
+        "line": 684
+      }
+    ]
+  },
+  "goals.py": {
+    "domain": "growth",
+    "prefix": "/api/goals",
+    "router_instances": 1,
+    "endpoint_count": 13,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fn": "get_my_goals",
+        "line": 66
+      },
+      {
+        "method": "GET",
+        "path": "/{goal_id}",
+        "fn": "get_goal_detail",
+        "line": 93
+      },
+      {
+        "method": "POST",
+        "path": "/",
+        "fn": "create_goal",
+        "line": 112
+      },
+      {
+        "method": "PUT",
+        "path": "/{goal_id}",
+        "fn": "update_goal",
+        "line": 150
+      },
+      {
+        "method": "DELETE",
+        "path": "/{goal_id}",
+        "fn": "delete_goal",
+        "line": 202
+      },
+      {
+        "method": "POST",
+        "path": "/{goal_id}/progress",
+        "fn": "update_goal_progress",
+        "line": 229
+      },
+      {
+        "method": "POST",
+        "path": "/{goal_id}/confirm-complete",
+        "fn": "confirm_goal_complete",
+        "line": 274
+      },
+      {
+        "method": "POST",
+        "path": "/{goal_id}/complete",
+        "fn": "complete_goal",
+        "line": 346
+      },
+      {
+        "method": "POST",
+        "path": "/{goal_id}/undo-complete",
+        "fn": "undo_goal_complete",
+        "line": 423
+      },
+      {
+        "method": "POST",
+        "path": "/batch-confirm",
+        "fn": "batch_confirm_goals",
+        "line": 486
+      },
+      {
+        "method": "GET",
+        "path": "/status/completed",
+        "fn": "get_completed_goals",
+        "line": 553
+      },
+      {
+        "method": "GET",
+        "path": "/status/pending",
+        "fn": "get_pending_goals",
+        "line": 605
+      },
+      {
+        "method": "GET",
+        "path": "/stats/summary",
+        "fn": "get_goal_stats",
+        "line": 658
+      }
+    ]
+  },
+  "llm.py": {
+    "domain": "UNASSIGNED",
+    "prefix": "/api/llm",
+    "router_instances": 1,
+    "endpoint_count": 1,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/chat",
+        "fn": "llm_chat",
+        "line": 30
+      }
+    ]
+  },
+  "materials.py": {
+    "domain": "library",
+    "prefix": "/api/materials",
+    "router_instances": 1,
+    "endpoint_count": 20,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "list_materials",
+        "line": 46
+      },
+      {
+        "method": "GET",
+        "path": "/progress-summary",
+        "fn": "progress_summary",
+        "line": 76
+      },
+      {
+        "method": "GET",
+        "path": "/favorites",
+        "fn": "my_favorites",
+        "line": 95
+      },
+      {
+        "method": "POST",
+        "path": "/progress",
+        "fn": "report_progress",
+        "line": 113
+      },
+      {
+        "method": "POST",
+        "path": "/{material_id}/favorite",
+        "fn": "toggle_favorite",
+        "line": 151
+      },
+      {
+        "method": "GET",
+        "path": "/{material_id}",
+        "fn": "material_detail",
+        "line": 174
+      },
+      {
+        "method": "POST",
+        "path": "/admin/upload/image",
+        "fn": "upload_image",
+        "line": 313
+      },
+      {
+        "method": "GET",
+        "path": "/admin/list",
+        "fn": "admin_list",
+        "line": 345
+      },
+      {
+        "method": "POST",
+        "path": "/admin",
+        "fn": "admin_create",
+        "line": 373
+      },
+      {
+        "method": "PUT",
+        "path": "/admin/{material_id}",
+        "fn": "admin_update",
+        "line": 388
+      },
+      {
+        "method": "PUT",
+        "path": "/admin/{material_id}/status",
+        "fn": "admin_set_status",
+        "line": 406
+      },
+      {
+        "method": "DELETE",
+        "path": "/admin/{material_id}",
+        "fn": "admin_delete",
+        "line": 426
+      },
+      {
+        "method": "GET",
+        "path": "/admin/stats",
+        "fn": "admin_stats",
+        "line": 447
+      },
+      {
+        "method": "POST",
+        "path": "/admin/batch",
+        "fn": "admin_batch_create",
+        "line": 498
+      },
+      {
+        "method": "DELETE",
+        "path": "/admin/batch",
+        "fn": "admin_batch_delete",
+        "line": 527
+      },
+      {
+        "method": "GET",
+        "path": "/admin/import-records",
+        "fn": "admin_import_records",
+        "line": 554
+      },
+      {
+        "method": "POST",
+        "path": "/admin/import/upload",
+        "fn": "import_upload",
+        "line": 647
+      },
+      {
+        "method": "GET",
+        "path": "/admin/import/{import_id}/status",
+        "fn": "import_status",
+        "line": 769
+      },
+      {
+        "method": "GET",
+        "path": "/admin/import/{import_id}/preview",
+        "fn": "import_preview",
+        "line": 784
+      },
+      {
+        "method": "POST",
+        "path": "/admin/import/{import_id}/confirm",
+        "fn": "import_confirm",
+        "line": 800
+      }
+    ]
+  },
+  "media.py": {
+    "domain": "library",
+    "prefix": "/api/media",
+    "router_instances": 1,
+    "endpoint_count": 3,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/upload",
+        "fn": "upload_video",
+        "line": 14
+      },
+      {
+        "method": "POST",
+        "path": "/import",
+        "fn": "import_data",
+        "line": 44
+      },
+      {
+        "method": "GET",
+        "path": "/export",
+        "fn": "export_data",
+        "line": 71
+      }
+    ]
+  },
+  "news.py": {
+    "domain": "content",
+    "prefix": "/api/news",
+    "router_instances": 1,
+    "endpoint_count": 8,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "get_news",
+        "line": 26
+      },
+      {
+        "method": "GET",
+        "path": "/today",
+        "fn": "get_today_news",
+        "line": 83
+      },
+      {
+        "method": "POST",
+        "path": "/{news_id}/favorite",
+        "fn": "toggle_favorite",
+        "line": 139
+      },
+      {
+        "method": "GET",
+        "path": "/favorites",
+        "fn": "get_favorites",
+        "line": 159
+      },
+      {
+        "method": "GET",
+        "path": "/{news_id}",
+        "fn": "get_news_detail",
+        "line": 190
+      },
+      {
+        "method": "POST",
+        "path": "/{news_id}/note",
+        "fn": "save_note",
+        "line": 233
+      },
+      {
+        "method": "GET",
+        "path": "/{news_id}/notes",
+        "fn": "get_notes",
+        "line": 261
+      },
+      {
+        "method": "DELETE",
+        "path": "/notes/{note_id}",
+        "fn": "delete_note",
+        "line": 291
+      }
+    ]
+  },
+  "notes.py": {
+    "domain": "personal",
+    "prefix": "/api/notes",
+    "router_instances": 1,
+    "endpoint_count": 8,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "get_notes",
+        "line": 25
+      },
+      {
+        "method": "POST",
+        "path": "",
+        "fn": "create_or_update_note",
+        "line": 89
+      },
+      {
+        "method": "PUT",
+        "path": "/{note_id}",
+        "fn": "update_note",
+        "line": 192
+      },
+      {
+        "method": "DELETE",
+        "path": "/{note_id}",
+        "fn": "delete_note",
+        "line": 234
+      },
+      {
+        "method": "GET",
+        "path": "/news",
+        "fn": "get_news_notes",
+        "line": 285
+      },
+      {
+        "method": "GET",
+        "path": "/question",
+        "fn": "get_question_notes",
+        "line": 321
+      },
+      {
+        "method": "GET",
+        "path": "/question/{question_id}",
+        "fn": "get_question_detail",
+        "line": 440
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fn": "get_notes_stats",
+        "line": 537
+      }
+    ]
+  },
+  "paper_generation.py": {
+    "domain": "catalog",
+    "prefix": "/api/papers",
+    "router_instances": 1,
+    "endpoint_count": 8,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/auto-generate",
+        "fn": "auto_generate_paper",
+        "line": 104
+      },
+      {
+        "method": "POST",
+        "path": "/manual-generate",
+        "fn": "manual_generate_paper",
+        "line": 270
+      },
+      {
+        "method": "POST",
+        "path": "/template-generate",
+        "fn": "template_generate_paper",
+        "line": 388
+      },
+      {
+        "method": "GET",
+        "path": "/list",
+        "fn": "get_paper_list",
+        "line": 501
+      },
+      {
+        "method": "GET",
+        "path": "/{paper_id}",
+        "fn": "get_paper_detail",
+        "line": 569
+      },
+      {
+        "method": "PUT",
+        "path": "/{paper_id}",
+        "fn": "update_paper_info",
+        "line": 641
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/publish",
+        "fn": "publish_paper",
+        "line": 681
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/duplicate",
+        "fn": "duplicate_paper",
+        "line": 723
+      }
+    ]
+  },
+  "papers.py": {
+    "domain": "catalog",
+    "prefix": "/api/papers",
+    "router_instances": 1,
+    "endpoint_count": 11,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/",
+        "fn": "create_paper",
+        "line": 22
+      },
+      {
+        "method": "GET",
+        "path": "/{paper_id}",
+        "fn": "get_paper",
+        "line": 50
+      },
+      {
+        "method": "PUT",
+        "path": "/{paper_id}",
+        "fn": "update_paper",
+        "line": 72
+      },
+      {
+        "method": "DELETE",
+        "path": "/{paper_id}",
+        "fn": "delete_paper",
+        "line": 101
+      },
+      {
+        "method": "GET",
+        "path": "/{paper_id}/preview",
+        "fn": "preview_paper",
+        "line": 147
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fn": "get_paper_stats",
+        "line": 164
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/questions",
+        "fn": "add_questions_to_paper",
+        "line": 177
+      },
+      {
+        "method": "DELETE",
+        "path": "/{paper_id}/questions/{question_id}",
+        "fn": "remove_question_from_paper",
+        "line": 227
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/submit",
+        "fn": "submit_for_approval",
+        "line": 261
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/approve",
+        "fn": "approve_paper",
+        "line": 300
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/publish",
+        "fn": "publish_paper",
+        "line": 342
+      }
+    ]
+  },
+  "practice.py": {
+    "domain": "exam",
+    "prefix": "/api/practice",
+    "router_instances": 1,
+    "endpoint_count": 8,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/record",
+        "fn": "record_practice",
+        "line": 115
+      },
+      {
+        "method": "POST",
+        "path": "/batch-record",
+        "fn": "batch_record_practice",
+        "line": 183
+      },
+      {
+        "method": "GET",
+        "path": "/records",
+        "fn": "get_practice_records",
+        "line": 262
+      },
+      {
+        "method": "GET",
+        "path": "/type-summary",
+        "fn": "get_practice_type_summary",
+        "line": 319
+      },
+      {
+        "method": "GET",
+        "path": "/stats-card",
+        "fn": "get_practice_stats_card",
+        "line": 400
+      },
+      {
+        "method": "GET",
+        "path": "/unified-stats",
+        "fn": "get_unified_practice_stats",
+        "line": 505
+      },
+      {
+        "method": "GET",
+        "path": "/knowledge-progress",
+        "fn": "get_knowledge_progress",
+        "line": 655
+      },
+      {
+        "method": "GET",
+        "path": "/recent-records",
+        "fn": "get_recent_records",
+        "line": 762
+      }
+    ]
+  },
+  "question_actions.py": {
+    "domain": "catalog",
+    "prefix": "/api/questions",
+    "router_instances": 1,
+    "endpoint_count": 8,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/{question_id}/favorite",
+        "fn": "toggle_favorite",
+        "line": 22
+      },
+      {
+        "method": "GET",
+        "path": "/favorites",
+        "fn": "list_favorites",
+        "line": 52
+      },
+      {
+        "method": "POST",
+        "path": "/{question_id}/note",
+        "fn": "upsert_note",
+        "line": 97
+      },
+      {
+        "method": "GET",
+        "path": "/{question_id}/note",
+        "fn": "get_note",
+        "line": 135
+      },
+      {
+        "method": "DELETE",
+        "path": "/{question_id}/note",
+        "fn": "delete_note",
+        "line": 158
+      },
+      {
+        "method": "POST",
+        "path": "/{question_id}/marker",
+        "fn": "upsert_marker",
+        "line": 180
+      },
+      {
+        "method": "DELETE",
+        "path": "/{question_id}/marker",
+        "fn": "remove_marker",
+        "line": 222
+      },
+      {
+        "method": "GET",
+        "path": "/{question_id}/actions",
+        "fn": "get_question_actions",
+        "line": 244
+      }
+    ]
+  },
+  "question_import.py": {
+    "domain": "catalog",
+    "prefix": "/api/questions/import",
+    "router_instances": 1,
+    "endpoint_count": 18,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/single",
+        "fn": "import_single_question",
+        "line": 954
+      },
+      {
+        "method": "POST",
+        "path": "/batch-parsed",
+        "fn": "batch_import_parsed",
+        "line": 1021
+      },
+      {
+        "method": "PUT",
+        "path": "/update-answer/{question_id}",
+        "fn": "update_question_answer",
+        "line": 1359
+      },
+      {
+        "method": "POST",
+        "path": "/batch-answers",
+        "fn": "batch_import_answers",
+        "line": 1426
+      },
+      {
+        "method": "POST",
+        "path": "/upload",
+        "fn": "upload_file_for_import",
+        "line": 1765
+      },
+      {
+        "method": "GET",
+        "path": "/records/{import_id}/status",
+        "fn": "get_import_parse_status",
+        "line": 1871
+      },
+      {
+        "method": "POST",
+        "path": "/records/{import_id}/attach-image",
+        "fn": "attach_image_to_preview_question",
+        "line": 1968
+      },
+      {
+        "method": "POST",
+        "path": "/confirm",
+        "fn": "confirm_batch_import",
+        "line": 2129
+      },
+      {
+        "method": "POST",
+        "path": "/separate-match",
+        "fn": "separate_match_endpoint",
+        "line": 2596
+      },
+      {
+        "method": "POST",
+        "path": "/separate-match-xingce",
+        "fn": "separate_match_xingce_endpoint",
+        "line": 2926
+      },
+      {
+        "method": "GET",
+        "path": "/mineru-health",
+        "fn": "mineru_health",
+        "line": 3241
+      },
+      {
+        "method": "POST",
+        "path": "/parse",
+        "fn": "unified_parse",
+        "line": 3263
+      },
+      {
+        "method": "POST",
+        "path": "/ocr",
+        "fn": "ocr_recognize",
+        "line": 3719
+      },
+      {
+        "method": "GET",
+        "path": "/ocr/status",
+        "fn": "ocr_status",
+        "line": 3809
+      },
+      {
+        "method": "POST",
+        "path": "/image",
+        "fn": "import_from_image",
+        "line": 3819
+      },
+      {
+        "method": "GET",
+        "path": "/records",
+        "fn": "get_import_records",
+        "line": 4179
+      },
+      {
+        "method": "GET",
+        "path": "/stats",
+        "fn": "get_import_stats",
+        "line": 4226
+      },
+      {
+        "method": "GET",
+        "path": "/taxonomy",
+        "fn": "get_taxonomy",
+        "line": 4406
+      }
+    ]
+  },
+  "questions.py": {
+    "domain": "catalog",
+    "prefix": "/api/questions",
+    "router_instances": 1,
+    "endpoint_count": 21,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/",
+        "fn": "create_question",
+        "line": 36
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "fn": "get_questions",
+        "line": 133
+      },
+      {
+        "method": "GET",
+        "path": "/random",
+        "fn": "get_random_questions",
+        "line": 292
+      },
+      {
+        "method": "GET",
+        "path": "/count-by-category",
+        "fn": "count_questions_by_category",
+        "line": 380
+      },
+      {
+        "method": "GET",
+        "path": "/subcategory-stats",
+        "fn": "subcategory_stats",
+        "line": 387
+      },
+      {
+        "method": "GET",
+        "path": "/exercise/questions",
+        "fn": "get_exercise_questions",
+        "line": 451
+      },
+      {
+        "method": "GET",
+        "path": "/group/{group_id}",
+        "fn": "get_question_group",
+        "line": 577
+      },
+      {
+        "method": "GET",
+        "path": "/{question_id}",
+        "fn": "get_question_detail",
+        "line": 651
+      },
+      {
+        "method": "PUT",
+        "path": "/{question_id}",
+        "fn": "update_question",
+        "line": 721
+      },
+      {
+        "method": "DELETE",
+        "path": "/{question_id}",
+        "fn": "delete_question",
+        "line": 792
+      },
+      {
+        "method": "POST",
+        "path": "/{question_id}/images",
+        "fn": "upload_question_image",
+        "line": 834
+      },
+      {
+        "method": "POST",
+        "path": "/batch-import",
+        "fn": "batch_import_questions",
+        "line": 916
+      },
+      {
+        "method": "POST",
+        "path": "/random-draw",
+        "fn": "random_draw_questions",
+        "line": 1037
+      },
+      {
+        "method": "POST",
+        "path": "/file-import",
+        "fn": "import_questions_from_file",
+        "line": 1094
+      },
+      {
+        "method": "POST",
+        "path": "/{question_id}/reclassify",
+        "fn": "reclassify_question",
+        "line": 1168
+      },
+      {
+        "method": "POST",
+        "path": "/batch-reclassify",
+        "fn": "batch_reclassify",
+        "line": 1235
+      },
+      {
+        "method": "GET",
+        "path": "/unclassified",
+        "fn": "get_unclassified",
+        "line": 1296
+      },
+      {
+        "method": "PATCH",
+        "path": "/{question_id}/type",
+        "fn": "update_question_type",
+        "line": 1337
+      },
+      {
+        "method": "PATCH",
+        "path": "/batch-type",
+        "fn": "batch_update_question_type",
+        "line": 1385
+      },
+      {
+        "method": "PATCH",
+        "path": "/{question_id}/explanation",
+        "fn": "update_question_explanation",
+        "line": 1444
+      },
+      {
+        "method": "POST",
+        "path": "/batch-explanation",
+        "fn": "batch_add_explanation",
+        "line": 1479
+      }
+    ]
+  },
+  "quick_practice.py": {
+    "domain": "exam",
+    "prefix": "/api/quick-practice",
+    "router_instances": 1,
+    "endpoint_count": 5,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/subjects",
+        "fn": "get_subjects",
+        "line": 67
+      },
+      {
+        "method": "GET",
+        "path": "/sub-categories",
+        "fn": "get_sub_categories",
+        "line": 94
+      },
+      {
+        "method": "GET",
+        "path": "/knowledge-points",
+        "fn": "get_knowledge_points",
+        "line": 178
+      },
+      {
+        "method": "GET",
+        "path": "/questions",
+        "fn": "get_practice_questions",
+        "line": 210
+      },
+      {
+        "method": "POST",
+        "path": "/submit",
+        "fn": "submit_practice",
+        "line": 334
+      }
+    ]
+  },
+  "quotes.py": {
+    "domain": "community",
+    "prefix": "/api/quotes",
+    "router_instances": 1,
+    "endpoint_count": 7,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/quote/daily",
+        "fn": "get_daily_quote",
+        "line": 163
+      },
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "get_quotes",
+        "line": 236
+      },
+      {
+        "method": "GET",
+        "path": "/random",
+        "fn": "get_random_quote",
+        "line": 320
+      },
+      {
+        "method": "POST",
+        "path": "",
+        "fn": "create_quote",
+        "line": 370
+      },
+      {
+        "method": "POST",
+        "path": "/{quote_id}/favorite",
+        "fn": "toggle_quote_favorite",
+        "line": 404
+      },
+      {
+        "method": "POST",
+        "path": "/obsidian/{obsidian_source}/favorite",
+        "fn": "toggle_obsidian_quote_favorite",
+        "line": 442
+      },
+      {
+        "method": "GET",
+        "path": "/favorites",
+        "fn": "get_quote_favorites",
+        "line": 483
+      }
+    ]
+  },
+  "recruitment.py": {
+    "domain": "content",
+    "prefix": "/api/recruitment",
+    "router_instances": 1,
+    "endpoint_count": 3,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "get_recruitment",
+        "line": 85
+      },
+      {
+        "method": "GET",
+        "path": "/categories",
+        "fn": "get_recruitment_categories",
+        "line": 179
+      },
+      {
+        "method": "GET",
+        "path": "/{recruitment_id}",
+        "fn": "get_recruitment_detail",
+        "line": 187
+      }
+    ]
+  },
+  "shop.py": {
+    "domain": "reward",
+    "prefix": "/api/shop",
+    "router_instances": 1,
+    "endpoint_count": 3,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/products",
+        "fn": "list_products",
+        "line": 49
+      },
+      {
+        "method": "GET",
+        "path": "/products/{product_id}",
+        "fn": "get_product",
+        "line": 78
+      },
+      {
+        "method": "POST",
+        "path": "/exchange",
+        "fn": "exchange",
+        "line": 89
+      }
+    ]
+  },
+  "smart_exam.py": {
+    "domain": "exam",
+    "prefix": "/api/smart-exam",
+    "router_instances": 1,
+    "endpoint_count": 10,
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/generate",
+        "fn": "smart_generate_paper",
+        "line": 147
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/replace/{question_id}",
+        "fn": "replace_question",
+        "line": 408
+      },
+      {
+        "method": "GET",
+        "path": "/{paper_id}/preview",
+        "fn": "preview_paper",
+        "line": 521
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/confirm",
+        "fn": "confirm_paper",
+        "line": 589
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/start",
+        "fn": "start_smart_exam",
+        "line": 635
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/save-progress",
+        "fn": "save_progress",
+        "line": 725
+      },
+      {
+        "method": "POST",
+        "path": "/{paper_id}/submit",
+        "fn": "submit_smart_exam",
+        "line": 773
+      },
+      {
+        "method": "GET",
+        "path": "/records",
+        "fn": "get_smart_exam_records",
+        "line": 1004
+      },
+      {
+        "method": "GET",
+        "path": "/records/{record_id}",
+        "fn": "get_smart_exam_record_detail",
+        "line": 1054
+      },
+      {
+        "method": "DELETE",
+        "path": "/records/{record_id}",
+        "fn": "delete_smart_exam_record",
+        "line": 1117
+      }
+    ]
+  },
+  "stats.py": {
+    "domain": "exam",
+    "prefix": "/api/stats",
+    "router_instances": 1,
+    "endpoint_count": 11,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/",
+        "fn": "get_study_stats",
+        "line": 29
+      },
+      {
+        "method": "GET",
+        "path": "/level",
+        "fn": "get_level",
+        "line": 132
+      },
+      {
+        "method": "GET",
+        "path": "/weekly",
+        "fn": "get_weekly_stats",
+        "line": 141
+      },
+      {
+        "method": "GET",
+        "path": "/all-time",
+        "fn": "get_all_time_stats",
+        "line": 214
+      },
+      {
+        "method": "GET",
+        "path": "/type-mastery",
+        "fn": "get_type_mastery",
+        "line": 311
+      },
+      {
+        "method": "GET",
+        "path": "/calendar",
+        "fn": "get_exam_calendar",
+        "line": 371
+      },
+      {
+        "method": "GET",
+        "path": "/messages",
+        "fn": "get_system_messages",
+        "line": 397
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard",
+        "fn": "get_dashboard",
+        "line": 439
+      },
+      {
+        "method": "GET",
+        "path": "/practice-trend",
+        "fn": "get_practice_trend",
+        "line": 530
+      },
+      {
+        "method": "POST",
+        "path": "/auto-checkin",
+        "fn": "auto_checkin",
+        "line": 681
+      },
+      {
+        "method": "GET",
+        "path": "/weekly-checkin",
+        "fn": "get_weekly_checkin",
+        "line": 721
+      }
+    ]
+  },
+  "tasks.py": {
+    "domain": "growth",
+    "prefix": "/api/tasks",
+    "router_instances": 1,
+    "endpoint_count": 3,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/overview",
+        "fn": "overview",
+        "line": 167
+      },
+      {
+        "method": "POST",
+        "path": "/random/refresh",
+        "fn": "refresh_random",
+        "line": 213
+      },
+      {
+        "method": "POST",
+        "path": "/{task_id}/claim",
+        "fn": "claim_task",
+        "line": 276
+      }
+    ]
+  },
+  "teacher.py": {
+    "domain": "platform",
+    "prefix": "/api/teacher",
+    "router_instances": 1,
+    "endpoint_count": 48,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/dashboard",
+        "fn": "get_dashboard",
+        "line": 128
+      },
+      {
+        "method": "GET",
+        "path": "/question-types",
+        "fn": "list_question_types",
+        "line": 259
+      },
+      {
+        "method": "GET",
+        "path": "/knowledge-points",
+        "fn": "list_knowledge_points",
+        "line": 277
+      },
+      {
+        "method": "GET",
+        "path": "/questions",
+        "fn": "list_teacher_questions",
+        "line": 291
+      },
+      {
+        "method": "POST",
+        "path": "/questions",
+        "fn": "create_teacher_question",
+        "line": 365
+      },
+      {
+        "method": "PUT",
+        "path": "/questions/{question_id}",
+        "fn": "update_question",
+        "line": 415
+      },
+      {
+        "method": "DELETE",
+        "path": "/questions/{question_id}",
+        "fn": "delete_question",
+        "line": 440
+      },
+      {
+        "method": "POST",
+        "path": "/questions/batch-delete",
+        "fn": "batch_delete_questions",
+        "line": 458
+      },
+      {
+        "method": "POST",
+        "path": "/questions/batch-reclassify",
+        "fn": "batch_reclassify_questions",
+        "line": 479
+      },
+      {
+        "method": "GET",
+        "path": "/questions/{question_id}/images",
+        "fn": "get_question_images",
+        "line": 512
+      },
+      {
+        "method": "GET",
+        "path": "/papers",
+        "fn": "list_teacher_papers",
+        "line": 559
+      },
+      {
+        "method": "GET",
+        "path": "/papers/stats",
+        "fn": "paper_stats",
+        "line": 618
+      },
+      {
+        "method": "GET",
+        "path": "/papers/{paper_id}",
+        "fn": "get_teacher_paper_detail",
+        "line": 641
+      },
+      {
+        "method": "POST",
+        "path": "/papers",
+        "fn": "create_paper",
+        "line": 698
+      },
+      {
+        "method": "PUT",
+        "path": "/papers/{paper_id}",
+        "fn": "update_paper",
+        "line": 732
+      },
+      {
+        "method": "DELETE",
+        "path": "/papers/{paper_id}",
+        "fn": "delete_paper",
+        "line": 756
+      },
+      {
+        "method": "POST",
+        "path": "/papers/{paper_id}/restore",
+        "fn": "restore_paper",
+        "line": 781
+      },
+      {
+        "method": "DELETE",
+        "path": "/papers/{paper_id}/permanent",
+        "fn": "permanent_delete_paper",
+        "line": 803
+      },
+      {
+        "method": "POST",
+        "path": "/papers/{paper_id}/questions",
+        "fn": "add_questions_to_paper",
+        "line": 827
+      },
+      {
+        "method": "DELETE",
+        "path": "/papers/{paper_id}/questions/{question_id}",
+        "fn": "remove_question_from_paper",
+        "line": 871
+      },
+      {
+        "method": "PUT",
+        "path": "/papers/{paper_id}/questions/order",
+        "fn": "reorder_paper_questions",
+        "line": 908
+      },
+      {
+        "method": "PUT",
+        "path": "/papers/{paper_id}/questions/{question_id}",
+        "fn": "update_paper_question_score",
+        "line": 936
+      },
+      {
+        "method": "PUT",
+        "path": "/papers/{paper_id}/questions/{question_id}/content",
+        "fn": "update_paper_question_content",
+        "line": 972
+      },
+      {
+        "method": "POST",
+        "path": "/papers/{paper_id}/questions/{question_id}/replace",
+        "fn": "replace_paper_question",
+        "line": 1114
+      },
+      {
+        "method": "POST",
+        "path": "/papers/auto-generate",
+        "fn": "auto_generate_paper",
+        "line": 1165
+      },
+      {
+        "method": "POST",
+        "path": "/papers/{paper_id}/submit-approval",
+        "fn": "submit_for_approval",
+        "line": 1235
+      },
+      {
+        "method": "POST",
+        "path": "/papers/{paper_id}/publish",
+        "fn": "publish_teacher_paper",
+        "line": 1269
+      },
+      {
+        "method": "GET",
+        "path": "/scores/overview",
+        "fn": "get_score_overview",
+        "line": 1304
+      },
+      {
+        "method": "GET",
+        "path": "/scores/class/{class_id}",
+        "fn": "get_class_scores",
+        "line": 1399
+      },
+      {
+        "method": "GET",
+        "path": "/scores/student/{user_id}",
+        "fn": "get_student_score_detail",
+        "line": 1436
+      },
+      {
+        "method": "GET",
+        "path": "/scores/question-stats/{paper_id}",
+        "fn": "get_question_stats",
+        "line": 1474
+      },
+      {
+        "method": "GET",
+        "path": "/profile",
+        "fn": "get_teacher_profile",
+        "line": 1514
+      },
+      {
+        "method": "PUT",
+        "path": "/profile",
+        "fn": "update_teacher_profile",
+        "line": 1565
+      },
+      {
+        "method": "POST",
+        "path": "/profile/avatar",
+        "fn": "upload_avatar",
+        "line": 1581
+      },
+      {
+        "method": "POST",
+        "path": "/profile/change-password",
+        "fn": "change_password",
+        "line": 1604
+      },
+      {
+        "method": "GET",
+        "path": "/classes",
+        "fn": "list_teacher_classes",
+        "line": 1621
+      },
+      {
+        "method": "POST",
+        "path": "/classes",
+        "fn": "create_class",
+        "line": 1663
+      },
+      {
+        "method": "GET",
+        "path": "/classes/{class_id}",
+        "fn": "get_class_detail",
+        "line": 1685
+      },
+      {
+        "method": "DELETE",
+        "path": "/classes/{class_id}",
+        "fn": "delete_class",
+        "line": 1732
+      },
+      {
+        "method": "POST",
+        "path": "/classes/{class_id}/students",
+        "fn": "add_students_to_class",
+        "line": 1750
+      },
+      {
+        "method": "DELETE",
+        "path": "/classes/{class_id}/students/{user_id}",
+        "fn": "remove_student_from_class",
+        "line": 1775
+      },
+      {
+        "method": "GET",
+        "path": "/messages",
+        "fn": "list_teacher_messages",
+        "line": 1799
+      },
+      {
+        "method": "GET",
+        "path": "/messages/unread-count",
+        "fn": "get_unread_count",
+        "line": 1877
+      },
+      {
+        "method": "PUT",
+        "path": "/messages/{message_id}/read",
+        "fn": "mark_message_read",
+        "line": 1895
+      },
+      {
+        "method": "PUT",
+        "path": "/messages/read-all",
+        "fn": "mark_all_read",
+        "line": 1915
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/overview",
+        "fn": "get_analytics_overview",
+        "line": 1936
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/question-usage",
+        "fn": "get_question_usage",
+        "line": 2074
+      },
+      {
+        "method": "GET",
+        "path": "/analytics/knowledge-mastery",
+        "fn": "get_knowledge_mastery",
+        "line": 2106
+      }
+    ]
+  },
+  "videos.py": {
+    "domain": "library",
+    "prefix": "/api/video",
+    "router_instances": 1,
+    "endpoint_count": 8,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/list",
+        "fn": "get_video_list",
+        "line": 33
+      },
+      {
+        "method": "GET",
+        "path": "/{video_id}",
+        "fn": "get_video_info",
+        "line": 64
+      },
+      {
+        "method": "POST",
+        "path": "/upload",
+        "fn": "upload_video",
+        "line": 80
+      },
+      {
+        "method": "POST",
+        "path": "/upload/init",
+        "fn": "init_chunk_upload",
+        "line": 141
+      },
+      {
+        "method": "POST",
+        "path": "/upload/chunk",
+        "fn": "upload_chunk",
+        "line": 183
+      },
+      {
+        "method": "POST",
+        "path": "/upload/complete",
+        "fn": "complete_chunk_upload",
+        "line": 206
+      },
+      {
+        "method": "GET",
+        "path": "/{video_id}/stream",
+        "fn": "stream_video",
+        "line": 279
+      },
+      {
+        "method": "DELETE",
+        "path": "/{video_id}",
+        "fn": "delete_video",
+        "line": 342
+      }
+    ]
+  },
+  "websocket.py": {
+    "domain": "platform",
+    "prefix": "/ws",
+    "router_instances": 1,
+    "endpoint_count": 4,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/online_users",
+        "fn": "get_online_users",
+        "line": 244
+      },
+      {
+        "method": "GET",
+        "path": "/room/{room_name}",
+        "fn": "get_room_users",
+        "line": 249
+      },
+      {
+        "method": "POST",
+        "path": "/notify/{user_id}",
+        "fn": "send_user_notification",
+        "line": 257
+      },
+      {
+        "method": "POST",
+        "path": "/broadcast",
+        "fn": "broadcast_message",
+        "line": 274
+      }
+    ]
+  },
+  "wrong_questions.py": {
+    "domain": "catalog",
+    "prefix": "/api/wrong-questions",
+    "router_instances": 1,
+    "endpoint_count": 12,
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "",
+        "fn": "get_wrong_questions",
+        "line": 27
+      },
+      {
+        "method": "POST",
+        "path": "/collect",
+        "fn": "collect_wrong_question",
+        "line": 97
+      },
+      {
+        "method": "DELETE",
+        "path": "/{wrong_id}",
+        "fn": "delete_wrong_question",
+        "line": 168
+      },
+      {
+        "method": "PUT",
+        "path": "/{wrong_id}/mastery",
+        "fn": "update_mastery",
+        "line": 188
+      },
+      {
+        "method": "GET",
+        "path": "/subcategories",
+        "fn": "get_subcategories",
+        "line": 303
+      },
+      {
+        "method": "GET",
+        "path": "/review/queue",
+        "fn": "get_review_queue",
+        "line": 338
+      },
+      {
+        "method": "PUT",
+        "path": "/{wrong_id}/chop",
+        "fn": "chop_question",
+        "line": 391
+      },
+      {
+        "method": "GET",
+        "path": "/zhanti/list",
+        "fn": "get_zhanti_list",
+        "line": 427
+      },
+      {
+        "method": "GET",
+        "path": "/zhanti/expiring",
+        "fn": "get_zhanti_expiring",
+        "line": 487
+      },
+      {
+        "method": "GET",
+        "path": "/{wrong_id}/detail",
+        "fn": "get_wrong_question_detail",
+        "line": 510
+      },
+      {
+        "method": "POST",
+        "path": "/{wrong_id}/unchop",
+        "fn": "unchop_question",
+        "line": 594
+      },
+      {
+        "method": "POST",
+        "path": "/review/submit",
+        "fn": "submit_review",
+        "line": 616
+      }
+    ]
+  }
+}

@@ -1,0 +1,1519 @@
+{
+  "prod": "D:\\砺安题库\\砺安题库\\backend\\data\\question_bank.db",
+  "dbs": {
+    "question_bank.db": {
+      "size_mb": 292.2,
+      "tables": 72,
+      "schema": "81110c6fc91183f4",
+      "total_rows": 24014,
+      "schema_same_as_prod": true,
+      "more_rows_than_prod": {}
+    },
+    "question_bank.db.bak_20260826": {
+      "size_mb": 58.3,
+      "tables": 58,
+      "schema": "3dec2170775413f5",
+      "total_rows": 9891,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "sys_backup_record": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_20261001_191550": {
+      "size_mb": 113.2,
+      "tables": 72,
+      "schema": "77a7d7f8ac707e8f",
+      "total_rows": 20327,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5479,
+          "prod_rows": 5092,
+          "diff": 387
+        }
+      }
+    },
+    "question_bank.db.bak_flag_20261003_221110": {
+      "size_mb": 148.1,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 44515,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 127,
+          "prod_rows": 38,
+          "diff": 89
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        },
+        "question_bank": {
+          "backup_rows": 12601,
+          "prod_rows": 3353,
+          "diff": 9248
+        },
+        "question_groups": {
+          "backup_rows": 385,
+          "prod_rows": 23,
+          "diff": 362
+        },
+        "question_knowledge": {
+          "backup_rows": 14941,
+          "prod_rows": 2771,
+          "diff": 12170
+        }
+      }
+    },
+    "question_bank.db.bak_imgfix_20261008_201552": {
+      "size_mb": 149.6,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20688,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_import_20261004_184837": {
+      "size_mb": 148.6,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21417,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5728,
+          "prod_rows": 5092,
+          "diff": 636
+        }
+      }
+    },
+    "question_bank.db.bak_index_20261005_141222": {
+      "size_mb": 148.6,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20242,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_kpsub_20261011_191321": {
+      "size_mb": 177.8,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21426,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_calendar": {
+          "backup_rows": 12,
+          "prod_rows": 10,
+          "diff": 2
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_kpsub_20261012_100522": {
+      "size_mb": 177.8,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21426,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_calendar": {
+          "backup_rows": 12,
+          "prod_rows": 10,
+          "diff": 2
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_pre_wipe_20261004_102517": {
+      "size_mb": 148.5,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 45034,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 126,
+          "prod_rows": 38,
+          "diff": 88
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5708,
+          "prod_rows": 5092,
+          "diff": 616
+        },
+        "question_bank": {
+          "backup_rows": 12754,
+          "prod_rows": 3353,
+          "diff": 9401
+        },
+        "question_groups": {
+          "backup_rows": 451,
+          "prod_rows": 23,
+          "diff": 428
+        },
+        "question_knowledge": {
+          "backup_rows": 15152,
+          "prod_rows": 2771,
+          "diff": 12381
+        }
+      }
+    },
+    "question_bank.db.bak_preclean_20261003_213930": {
+      "size_mb": 120.3,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21458,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 43,
+          "prod_rows": 38,
+          "diff": 5
+        },
+        "exam_paper_tag": {
+          "backup_rows": 40,
+          "prod_rows": 39,
+          "diff": 1
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        },
+        "question_groups": {
+          "backup_rows": 27,
+          "prod_rows": 23,
+          "diff": 4
+        }
+      }
+    },
+    "question_bank.db.bak_preverify2_20261004_101518": {
+      "size_mb": 148.5,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 44972,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 127,
+          "prod_rows": 38,
+          "diff": 89
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5686,
+          "prod_rows": 5092,
+          "diff": 594
+        },
+        "question_bank": {
+          "backup_rows": 12754,
+          "prod_rows": 3353,
+          "diff": 9401
+        },
+        "question_groups": {
+          "backup_rows": 431,
+          "prod_rows": 23,
+          "diff": 408
+        },
+        "question_knowledge": {
+          "backup_rows": 15152,
+          "prod_rows": 2771,
+          "diff": 12381
+        }
+      }
+    },
+    "question_bank.db.bak_preverify_20261004_101250": {
+      "size_mb": 148.4,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 44927,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 127,
+          "prod_rows": 38,
+          "diff": 89
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        },
+        "question_bank": {
+          "backup_rows": 12754,
+          "prod_rows": 3353,
+          "diff": 9401
+        },
+        "question_groups": {
+          "backup_rows": 421,
+          "prod_rows": 23,
+          "diff": 398
+        },
+        "question_knowledge": {
+          "backup_rows": 15152,
+          "prod_rows": 2771,
+          "diff": 12381
+        }
+      }
+    },
+    "question_bank.db.bak_r8_20261014_202032": {
+      "size_mb": 279.7,
+      "tables": 72,
+      "schema": "81110c6fc91183f4",
+      "total_rows": 23526,
+      "schema_same_as_prod": true,
+      "more_rows_than_prod": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "question_groups": {
+          "backup_rows": 25,
+          "prod_rows": 23,
+          "diff": 2
+        }
+      }
+    },
+    "question_bank.db.bak_r8_20261014_202211": {
+      "size_mb": 279.7,
+      "tables": 72,
+      "schema": "81110c6fc91183f4",
+      "total_rows": 23525,
+      "schema_same_as_prod": true,
+      "more_rows_than_prod": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "question_groups": {
+          "backup_rows": 24,
+          "prod_rows": 23,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_r8_20261014_202434": {
+      "size_mb": 279.7,
+      "tables": 72,
+      "schema": "81110c6fc91183f4",
+      "total_rows": 23525,
+      "schema_same_as_prod": true,
+      "more_rows_than_prod": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "question_groups": {
+          "backup_rows": 24,
+          "prod_rows": 23,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_recruit_20261009_202527": {
+      "size_mb": 155.6,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20857,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    "question_bank.db.bak_sc_kexue_20261003_172156": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_shenlun_20261002_075647": {
+      "size_mb": 113.9,
+      "tables": 72,
+      "schema": "77a7d7f8ac707e8f",
+      "total_rows": 20413,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5535,
+          "prod_rows": 5092,
+          "diff": 443
+        }
+      }
+    },
+    "question_bank.db.bak_verify_20261004_112653": {
+      "size_mb": 148.6,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 22276,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5728,
+          "prod_rows": 5092,
+          "diff": 636
+        },
+        "question_groups": {
+          "backup_rows": 35,
+          "prod_rows": 23,
+          "diff": 12
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_full_20261003_205146": {
+      "size_mb": 120.1,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21152,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_183352": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_183716": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_183753": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_183802": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_183832": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_183930": {
+      "size_mb": 120.1,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21152,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_184052": {
+      "size_mb": 120.1,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21152,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_184121": {
+      "size_mb": 120.1,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 21152,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_kp_20261003_184136": {
+      "size_mb": 120.1,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20647,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_types_20261003_172820": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    "question_bank.db.bak_xingce_types_20261003_172829": {
+      "size_mb": 120.0,
+      "tables": 72,
+      "schema": "ab1118a43ae6bf97",
+      "total_rows": 20644,
+      "schema_same_as_prod": false,
+      "more_rows_than_prod": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    }
+  },
+  "tables_only_in_backups": {},
+  "lost_in_prod": [
+    {
+      "db": "question_bank.db.bak_20260826",
+      "detail": {
+        "sys_backup_record": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_20261001_191550",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5479,
+          "prod_rows": 5092,
+          "diff": 387
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_flag_20261003_221110",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 127,
+          "prod_rows": 38,
+          "diff": 89
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        },
+        "question_bank": {
+          "backup_rows": 12601,
+          "prod_rows": 3353,
+          "diff": 9248
+        },
+        "question_groups": {
+          "backup_rows": 385,
+          "prod_rows": 23,
+          "diff": 362
+        },
+        "question_knowledge": {
+          "backup_rows": 14941,
+          "prod_rows": 2771,
+          "diff": 12170
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_imgfix_20261008_201552",
+      "detail": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_import_20261004_184837",
+      "detail": {
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5728,
+          "prod_rows": 5092,
+          "diff": 636
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_index_20261005_141222",
+      "detail": {
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_kpsub_20261011_191321",
+      "detail": {
+        "exam_calendar": {
+          "backup_rows": 12,
+          "prod_rows": 10,
+          "diff": 2
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_kpsub_20261012_100522",
+      "detail": {
+        "exam_calendar": {
+          "backup_rows": 12,
+          "prod_rows": 10,
+          "diff": 2
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_pre_wipe_20261004_102517",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 126,
+          "prod_rows": 38,
+          "diff": 88
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5708,
+          "prod_rows": 5092,
+          "diff": 616
+        },
+        "question_bank": {
+          "backup_rows": 12754,
+          "prod_rows": 3353,
+          "diff": 9401
+        },
+        "question_groups": {
+          "backup_rows": 451,
+          "prod_rows": 23,
+          "diff": 428
+        },
+        "question_knowledge": {
+          "backup_rows": 15152,
+          "prod_rows": 2771,
+          "diff": 12381
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_preclean_20261003_213930",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 43,
+          "prod_rows": 38,
+          "diff": 5
+        },
+        "exam_paper_tag": {
+          "backup_rows": 40,
+          "prod_rows": 39,
+          "diff": 1
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        },
+        "question_groups": {
+          "backup_rows": 27,
+          "prod_rows": 23,
+          "diff": 4
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_preverify2_20261004_101518",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 127,
+          "prod_rows": 38,
+          "diff": 89
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5686,
+          "prod_rows": 5092,
+          "diff": 594
+        },
+        "question_bank": {
+          "backup_rows": 12754,
+          "prod_rows": 3353,
+          "diff": 9401
+        },
+        "question_groups": {
+          "backup_rows": 431,
+          "prod_rows": 23,
+          "diff": 408
+        },
+        "question_knowledge": {
+          "backup_rows": 15152,
+          "prod_rows": 2771,
+          "diff": 12381
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_preverify_20261004_101250",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 127,
+          "prod_rows": 38,
+          "diff": 89
+        },
+        "exam_paper_tag": {
+          "backup_rows": 124,
+          "prod_rows": 39,
+          "diff": 85
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        },
+        "question_bank": {
+          "backup_rows": 12754,
+          "prod_rows": 3353,
+          "diff": 9401
+        },
+        "question_groups": {
+          "backup_rows": 421,
+          "prod_rows": 23,
+          "diff": 398
+        },
+        "question_knowledge": {
+          "backup_rows": 15152,
+          "prod_rows": 2771,
+          "diff": 12381
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_r8_20261014_202032",
+      "detail": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "question_groups": {
+          "backup_rows": 25,
+          "prod_rows": 23,
+          "diff": 2
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_r8_20261014_202211",
+      "detail": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "question_groups": {
+          "backup_rows": 24,
+          "prod_rows": 23,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_r8_20261014_202434",
+      "detail": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "question_groups": {
+          "backup_rows": 24,
+          "prod_rows": 23,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_recruit_20261009_202527",
+      "detail": {
+        "exam_calendar": {
+          "backup_rows": 11,
+          "prod_rows": 10,
+          "diff": 1
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_sc_kexue_20261003_172156",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_shenlun_20261002_075647",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5535,
+          "prod_rows": 5092,
+          "diff": 443
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_verify_20261004_112653",
+      "detail": {
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5728,
+          "prod_rows": 5092,
+          "diff": 636
+        },
+        "question_groups": {
+          "backup_rows": 35,
+          "prod_rows": 23,
+          "diff": 12
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_full_20261003_205146",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_183352",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_183716",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_183753",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_183802",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_183832",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_183930",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_184052",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_184121",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_kp_20261003_184136",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_types_20261003_172820",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    },
+    {
+      "db": "question_bank.db.bak_xingce_types_20261003_172829",
+      "detail": {
+        "exam_paper": {
+          "backup_rows": 42,
+          "prod_rows": 38,
+          "diff": 4
+        },
+        "favorite_question": {
+          "backup_rows": 1,
+          "prod_rows": 0,
+          "diff": 1
+        },
+        "news_image": {
+          "backup_rows": 5665,
+          "prod_rows": 5092,
+          "diff": 573
+        }
+      }
+    }
+  ],
+  "prod_snapshot": {
+    "tables": 72,
+    "schema": "81110c6fc91183f4",
+    "counts": {
+      "achievement": 45,
+      "badge_name_bank": 0,
+      "badge_task": 14,
+      "badge_title": 3,
+      "banji": 0,
+      "coin_exchanges": 1,
+      "coin_record": 69,
+      "daily_checkin": 81,
+      "essay_quote": 10,
+      "exam_answer_detail": 0,
+      "exam_calendar": 10,
+      "exam_paper": 38,
+      "exam_paper_tag": 39,
+      "exam_record": 1,
+      "favorite_question": 0,
+      "file_resource": 0,
+      "forum_comment": 1,
+      "forum_like": 1,
+      "forum_post": 5,
+      "knowledge_point": 631,
+      "material_classification_rules": 0,
+      "material_duplicate_records": 0,
+      "material_import_record": 0,
+      "news_article": 2869,
+      "news_favorite": 2,
+      "news_image": 5092,
+      "news_note": 9,
+      "operation_logs": 1,
+      "paper_approval": 0,
+      "paper_approval_workflow": 0,
+      "paper_question_relation": 2221,
+      "practice_record": 157,
+      "question_bank": 3353,
+      "question_detail_category": 3251,
+      "question_edit_log": 330,
+      "question_groups": 23,
+      "question_image": 292,
+      "question_import_record": 1621,
+      "question_knowledge": 2771,
+      "question_marker": 0,
+      "question_note": 1,
+      "question_subject": 3,
+      "question_type": 19,
+      "quote_favorite": 1,
+      "recruitment_info": 788,
+      "school": 0,
+      "score_analysis": 0,
+      "shop_products": 5,
+      "smart_exam_record": 0,
+      "study_goal": 10,
+      "study_material": 0,
+      "sub_categories": 16,
+      "sys_announcement": 0,
+      "sys_backup_record": 0,
+      "sys_config": 9,
+      "sys_dict_data": 0,
+      "sys_dict_type": 0,
+      "sys_login_log": 0,
+      "sys_operation_log": 37,
+      "sys_user": 13,
+      "sys_version": 0,
+      "teacher_message": 0,
+      "user_achievement": 46,
+      "user_feedback": 2,
+      "user_material_progress": 0,
+      "user_task_progress": 17,
+      "user_title": 1,
+      "video_resource": 0,
+      "video_watch_record": 0,
+      "wrong_question_class": 0,
+      "wrong_question_personal": 105,
+      "year_paper": 0
+    },
+    "total_rows": 24014
+  }
+}

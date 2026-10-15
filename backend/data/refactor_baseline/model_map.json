@@ -1,0 +1,570 @@
+[
+  {
+    "class": "SysUser",
+    "table": null,
+    "line": 17,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysLoginLog",
+    "table": null,
+    "line": 86,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionSubject",
+    "table": null,
+    "line": 109,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionType",
+    "table": null,
+    "line": 124,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "KnowledgePoint",
+    "table": null,
+    "line": 143,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionBank",
+    "table": null,
+    "line": 166,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionGroup",
+    "table": null,
+    "line": 255,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionEditLog",
+    "table": null,
+    "line": 279,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ExamPaper",
+    "table": null,
+    "line": 305,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "PaperQuestionRelation",
+    "table": null,
+    "line": 358,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "PaperApproval",
+    "table": null,
+    "line": 378,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ExamRecord",
+    "table": null,
+    "line": 402,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ExamAnswerDetail",
+    "table": null,
+    "line": 433,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ScoreAnalysis",
+    "table": null,
+    "line": 462,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "PracticeRecord",
+    "table": null,
+    "line": 501,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SmartExamRecord",
+    "table": null,
+    "line": 539,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "WrongQuestionPersonal",
+    "table": null,
+    "line": 573,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "VideoWatchRecord",
+    "table": null,
+    "line": 606,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ForumPost",
+    "table": null,
+    "line": 633,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ForumComment",
+    "table": null,
+    "line": 663,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "CoinRecord",
+    "table": null,
+    "line": 690,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ShopProduct",
+    "table": null,
+    "line": 712,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "CoinExchange",
+    "table": null,
+    "line": 738,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "DailyCheckin",
+    "table": null,
+    "line": 765,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "StudyGoal",
+    "table": null,
+    "line": 794,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "VideoResource",
+    "table": null,
+    "line": 841,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "FileResource",
+    "table": null,
+    "line": 867,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysConfig",
+    "table": null,
+    "line": 893,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysOperationLog",
+    "table": null,
+    "line": 909,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ExamPaperTag",
+    "table": null,
+    "line": 939,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionDetailCategory",
+    "table": null,
+    "line": 964,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionImage",
+    "table": null,
+    "line": 1017,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionImportRecord",
+    "table": null,
+    "line": 1041,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "Banji",
+    "table": null,
+    "line": 1077,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ForumLike",
+    "table": null,
+    "line": 1100,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "WrongQuestionClass",
+    "table": null,
+    "line": 1126,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "YearPaper",
+    "table": null,
+    "line": 1151,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "RecruitmentInfo",
+    "table": null,
+    "line": 1178,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "ExamCalendar",
+    "table": null,
+    "line": 1218,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "StudyMaterial",
+    "table": null,
+    "line": 1248,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "UserMaterialProgress",
+    "table": null,
+    "line": 1282,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "MaterialImportRecord",
+    "table": null,
+    "line": 1302,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "NewsArticle",
+    "table": null,
+    "line": 1326,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "FavoriteQuestion",
+    "table": null,
+    "line": 1351,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionNote",
+    "table": null,
+    "line": 1370,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionMarker",
+    "table": null,
+    "line": 1390,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "School",
+    "table": null,
+    "line": 1414,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysAnnouncement",
+    "table": null,
+    "line": 1434,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysBackupRecord",
+    "table": null,
+    "line": 1462,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysVersion",
+    "table": null,
+    "line": 1488,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysDictType",
+    "table": null,
+    "line": 1513,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SysDictData",
+    "table": null,
+    "line": 1529,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "PaperApprovalWorkflow",
+    "table": null,
+    "line": 1553,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "NewsImage",
+    "table": null,
+    "line": 1583,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "NewsFavorite",
+    "table": null,
+    "line": 1595,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "SubCategory",
+    "table": null,
+    "line": 1615,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuestionKnowledge",
+    "table": null,
+    "line": 1635,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "NewsNote",
+    "table": null,
+    "line": 1653,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "EssayQuote",
+    "table": null,
+    "line": 1678,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "QuoteFavorite",
+    "table": null,
+    "line": 1695,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "OperationLog",
+    "table": null,
+    "line": 1718,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "MaterialClassificationRule",
+    "table": null,
+    "line": 1740,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "MaterialDuplicateRecord",
+    "table": null,
+    "line": 1753,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "Achievement",
+    "table": null,
+    "line": 1770,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "UserAchievement",
+    "table": null,
+    "line": 1795,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "BadgeNameBank",
+    "table": null,
+    "line": 1813,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "Task",
+    "table": null,
+    "line": 1835,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "UserTaskProgress",
+    "table": null,
+    "line": 1859,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "Title",
+    "table": null,
+    "line": 1882,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "UserTitle",
+    "table": null,
+    "line": 1899,
+    "bases": [
+      "Base"
+    ]
+  },
+  {
+    "class": "UserFeedback",
+    "table": null,
+    "line": 1916,
+    "bases": [
+      "Base"
+    ]
+  }
+]

@@ -1,0 +1,350 @@
+{
+  "SysUser": [
+    "achievements.py",
+    "admin.py",
+    "admin_approval.py",
+    "admin_shop.py",
+    "auth.py",
+    "auth_qrcode.py",
+    "calendar.py",
+    "coins.py",
+    "collection.py",
+    "devices.py",
+    "exam_records.py",
+    "exams.py",
+    "feedback.py",
+    "forum.py",
+    "goals.py",
+    "llm.py",
+    "materials.py",
+    "media.py",
+    "news.py",
+    "notes.py",
+    "paper_generation.py",
+    "papers.py",
+    "practice.py",
+    "question_actions.py",
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py",
+    "quotes.py",
+    "recruitment.py",
+    "shop.py",
+    "smart_exam.py",
+    "stats.py",
+    "tasks.py",
+    "teacher.py",
+    "videos.py",
+    "websocket.py",
+    "wrong_questions.py"
+  ],
+  "QuestionBank": [
+    "admin.py",
+    "admin_approval.py",
+    "collection.py",
+    "exam_records.py",
+    "exams.py",
+    "llm.py",
+    "notes.py",
+    "paper_generation.py",
+    "papers.py",
+    "practice.py",
+    "question_actions.py",
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py",
+    "smart_exam.py",
+    "teacher.py",
+    "videos.py",
+    "wrong_questions.py"
+  ],
+  "QuestionSubject": [
+    "collection.py",
+    "notes.py",
+    "paper_generation.py",
+    "practice.py",
+    "question_actions.py",
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py",
+    "smart_exam.py",
+    "teacher.py",
+    "wrong_questions.py"
+  ],
+  "ExamPaper": [
+    "admin.py",
+    "admin_approval.py",
+    "exam_records.py",
+    "exams.py",
+    "paper_generation.py",
+    "papers.py",
+    "practice.py",
+    "question_import.py",
+    "smart_exam.py",
+    "teacher.py"
+  ],
+  "QuestionType": [
+    "exams.py",
+    "paper_generation.py",
+    "practice.py",
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py",
+    "smart_exam.py",
+    "stats.py",
+    "teacher.py",
+    "wrong_questions.py"
+  ],
+  "ExamRecord": [
+    "admin.py",
+    "exam_records.py",
+    "exams.py",
+    "papers.py",
+    "practice.py",
+    "smart_exam.py",
+    "stats.py",
+    "teacher.py",
+    "websocket.py"
+  ],
+  "PracticeRecord": [
+    "admin.py",
+    "goals.py",
+    "notes.py",
+    "practice.py",
+    "quick_practice.py",
+    "smart_exam.py",
+    "stats.py",
+    "tasks.py",
+    "teacher.py"
+  ],
+  "PaperQuestionRelation": [
+    "admin_approval.py",
+    "exams.py",
+    "paper_generation.py",
+    "papers.py",
+    "question_import.py",
+    "smart_exam.py",
+    "teacher.py"
+  ],
+  "KnowledgePoint": [
+    "notes.py",
+    "paper_generation.py",
+    "practice.py",
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py",
+    "teacher.py"
+  ],
+  "ExamAnswerDetail": [
+    "exam_records.py",
+    "exams.py",
+    "papers.py",
+    "practice.py",
+    "smart_exam.py",
+    "teacher.py"
+  ],
+  "QuestionDetailCategory": [
+    "notes.py",
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py",
+    "teacher.py",
+    "wrong_questions.py"
+  ],
+  "CoinRecord": [
+    "coins.py",
+    "goals.py",
+    "shop.py",
+    "stats.py",
+    "tasks.py"
+  ],
+  "QuestionKnowledge": [
+    "notes.py",
+    "practice.py",
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py"
+  ],
+  "QuestionImage": [
+    "question_import.py",
+    "questions.py",
+    "quick_practice.py",
+    "teacher.py",
+    "wrong_questions.py"
+  ],
+  "SubCategory": [
+    "notes.py",
+    "practice.py",
+    "question_import.py",
+    "quick_practice.py"
+  ],
+  "FavoriteQuestion": [
+    "achievements.py",
+    "collection.py",
+    "question_actions.py"
+  ],
+  "QuestionNote": [
+    "achievements.py",
+    "notes.py",
+    "question_actions.py"
+  ],
+  "NewsNote": [
+    "achievements.py",
+    "news.py",
+    "notes.py"
+  ],
+  "QuoteFavorite": [
+    "achievements.py",
+    "collection.py",
+    "quotes.py"
+  ],
+  "SysOperationLog": [
+    "admin.py",
+    "forum.py",
+    "materials.py"
+  ],
+  "PaperApprovalWorkflow": [
+    "admin.py",
+    "admin_approval.py",
+    "teacher.py"
+  ],
+  "NewsArticle": [
+    "collection.py",
+    "news.py",
+    "notes.py"
+  ],
+  "WrongQuestionPersonal": [
+    "practice.py",
+    "smart_exam.py",
+    "wrong_questions.py"
+  ],
+  "Banji": [
+    "admin.py",
+    "teacher.py"
+  ],
+  "ShopProduct": [
+    "admin_shop.py",
+    "shop.py"
+  ],
+  "NewsFavorite": [
+    "collection.py",
+    "news.py"
+  ],
+  "EssayQuote": [
+    "collection.py",
+    "quotes.py"
+  ],
+  "StudyGoal": [
+    "goals.py",
+    "stats.py"
+  ],
+  "PaperApproval": [
+    "papers.py",
+    "teacher.py"
+  ],
+  "OperationLog": [
+    "papers.py",
+    "questions.py"
+  ],
+  "SmartExamRecord": [
+    "practice.py",
+    "smart_exam.py"
+  ],
+  "QuestionEditLog": [
+    "questions.py",
+    "teacher.py"
+  ],
+  "QuestionGroup": [
+    "question_import.py",
+    "questions.py"
+  ],
+  "QuestionImportRecord": [
+    "question_import.py",
+    "teacher.py"
+  ],
+  "DailyCheckin": [
+    "stats.py",
+    "tasks.py"
+  ],
+  "Achievement": [
+    "achievements.py"
+  ],
+  "UserAchievement": [
+    "achievements.py"
+  ],
+  "SysConfig": [
+    "admin.py"
+  ],
+  "SysAnnouncement": [
+    "admin.py"
+  ],
+  "SysBackupRecord": [
+    "admin.py"
+  ],
+  "SysVersion": [
+    "admin.py"
+  ],
+  "SysDictType": [
+    "admin.py"
+  ],
+  "SysDictData": [
+    "admin.py"
+  ],
+  "School": [
+    "admin.py"
+  ],
+  "ExamCalendar": [
+    "calendar.py"
+  ],
+  "UserFeedback": [
+    "feedback.py"
+  ],
+  "ForumPost": [
+    "forum.py"
+  ],
+  "ForumComment": [
+    "forum.py"
+  ],
+  "ForumLike": [
+    "forum.py"
+  ],
+  "StudyMaterial": [
+    "materials.py"
+  ],
+  "UserMaterialProgress": [
+    "materials.py"
+  ],
+  "MaterialImportRecord": [
+    "materials.py"
+  ],
+  "NewsImage": [
+    "news.py"
+  ],
+  "YearPaper": [
+    "practice.py"
+  ],
+  "QuestionMarker": [
+    "question_actions.py"
+  ],
+  "ExamPaperTag": [
+    "question_import.py"
+  ],
+  "RecruitmentInfo": [
+    "recruitment.py"
+  ],
+  "CoinExchange": [
+    "shop.py"
+  ],
+  "Task": [
+    "tasks.py"
+  ],
+  "UserTaskProgress": [
+    "tasks.py"
+  ],
+  "ScoreAnalysis": [
+    "teacher.py"
+  ],
+  "VideoResource": [
+    "videos.py"
+  ]
+}

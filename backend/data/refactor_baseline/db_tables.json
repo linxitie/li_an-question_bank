@@ -1,0 +1,290 @@
+[
+  {
+    "table": "achievement",
+    "rows": 45
+  },
+  {
+    "table": "badge_name_bank",
+    "rows": 0
+  },
+  {
+    "table": "badge_task",
+    "rows": 14
+  },
+  {
+    "table": "badge_title",
+    "rows": 3
+  },
+  {
+    "table": "banji",
+    "rows": 0
+  },
+  {
+    "table": "coin_exchanges",
+    "rows": 1
+  },
+  {
+    "table": "coin_record",
+    "rows": 69
+  },
+  {
+    "table": "daily_checkin",
+    "rows": 81
+  },
+  {
+    "table": "essay_quote",
+    "rows": 10
+  },
+  {
+    "table": "exam_answer_detail",
+    "rows": 0
+  },
+  {
+    "table": "exam_calendar",
+    "rows": 10
+  },
+  {
+    "table": "exam_paper",
+    "rows": 38
+  },
+  {
+    "table": "exam_paper_tag",
+    "rows": 39
+  },
+  {
+    "table": "exam_record",
+    "rows": 1
+  },
+  {
+    "table": "favorite_question",
+    "rows": 0
+  },
+  {
+    "table": "file_resource",
+    "rows": 0
+  },
+  {
+    "table": "forum_comment",
+    "rows": 1
+  },
+  {
+    "table": "forum_like",
+    "rows": 1
+  },
+  {
+    "table": "forum_post",
+    "rows": 5
+  },
+  {
+    "table": "knowledge_point",
+    "rows": 631
+  },
+  {
+    "table": "material_classification_rules",
+    "rows": 0
+  },
+  {
+    "table": "material_duplicate_records",
+    "rows": 0
+  },
+  {
+    "table": "material_import_record",
+    "rows": 0
+  },
+  {
+    "table": "news_article",
+    "rows": 2869
+  },
+  {
+    "table": "news_favorite",
+    "rows": 2
+  },
+  {
+    "table": "news_image",
+    "rows": 5092
+  },
+  {
+    "table": "news_note",
+    "rows": 9
+  },
+  {
+    "table": "operation_logs",
+    "rows": 1
+  },
+  {
+    "table": "paper_approval",
+    "rows": 0
+  },
+  {
+    "table": "paper_approval_workflow",
+    "rows": 0
+  },
+  {
+    "table": "paper_question_relation",
+    "rows": 2221
+  },
+  {
+    "table": "practice_record",
+    "rows": 157
+  },
+  {
+    "table": "question_bank",
+    "rows": 3353
+  },
+  {
+    "table": "question_detail_category",
+    "rows": 3251
+  },
+  {
+    "table": "question_edit_log",
+    "rows": 330
+  },
+  {
+    "table": "question_groups",
+    "rows": 23
+  },
+  {
+    "table": "question_image",
+    "rows": 292
+  },
+  {
+    "table": "question_import_record",
+    "rows": 1621
+  },
+  {
+    "table": "question_knowledge",
+    "rows": 2771
+  },
+  {
+    "table": "question_marker",
+    "rows": 0
+  },
+  {
+    "table": "question_note",
+    "rows": 1
+  },
+  {
+    "table": "question_subject",
+    "rows": 3
+  },
+  {
+    "table": "question_type",
+    "rows": 19
+  },
+  {
+    "table": "quote_favorite",
+    "rows": 1
+  },
+  {
+    "table": "recruitment_info",
+    "rows": 788
+  },
+  {
+    "table": "school",
+    "rows": 0
+  },
+  {
+    "table": "score_analysis",
+    "rows": 0
+  },
+  {
+    "table": "shop_products",
+    "rows": 5
+  },
+  {
+    "table": "smart_exam_record",
+    "rows": 0
+  },
+  {
+    "table": "study_goal",
+    "rows": 10
+  },
+  {
+    "table": "study_material",
+    "rows": 0
+  },
+  {
+    "table": "sub_categories",
+    "rows": 16
+  },
+  {
+    "table": "sys_announcement",
+    "rows": 0
+  },
+  {
+    "table": "sys_backup_record",
+    "rows": 0
+  },
+  {
+    "table": "sys_config",
+    "rows": 9
+  },
+  {
+    "table": "sys_dict_data",
+    "rows": 0
+  },
+  {
+    "table": "sys_dict_type",
+    "rows": 0
+  },
+  {
+    "table": "sys_login_log",
+    "rows": 0
+  },
+  {
+    "table": "sys_operation_log",
+    "rows": 37
+  },
+  {
+    "table": "sys_user",
+    "rows": 13
+  },
+  {
+    "table": "sys_version",
+    "rows": 0
+  },
+  {
+    "table": "teacher_message",
+    "rows": 0
+  },
+  {
+    "table": "user_achievement",
+    "rows": 46
+  },
+  {
+    "table": "user_feedback",
+    "rows": 2
+  },
+  {
+    "table": "user_material_progress",
+    "rows": 0
+  },
+  {
+    "table": "user_task_progress",
+    "rows": 17
+  },
+  {
+    "table": "user_title",
+    "rows": 1
+  },
+  {
+    "table": "video_resource",
+    "rows": 0
+  },
+  {
+    "table": "video_watch_record",
+    "rows": 0
+  },
+  {
+    "table": "wrong_question_class",
+    "rows": 0
+  },
+  {
+    "table": "wrong_question_personal",
+    "rows": 105
+  },
+  {
+    "table": "year_paper",
+    "rows": 0
+  }
+]
