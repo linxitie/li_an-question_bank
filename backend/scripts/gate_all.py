@@ -9,12 +9,16 @@ GATES = [
     ('L1-G', 'scripts/gate_l1g_field_fingerprint.py', []),
     ('L3', 'scripts/gate_l3_ingest.py', []),
     ('L1', 'scripts/gate_l1_parser.py', ['--subject', 'gongzhuan']),
+    # L1-H 排在 L1 之后：它校验的是解析器在行测材料题上的产出（分节、材料边界、
+    # 题组归属），须待 L1 解析层稳定后再判。带 --real 以覆盖生产缓存真实题本；
+    # 缓存缺失时该段记 SKIP 而非 FAIL，不会造成环境相关的误报。
+    ('L1-H', 'scripts/gate_l1h_composite_material.py', ['--real']),
     ('L2', 'scripts/gate_l2_matching.py', []),
     ('L4', 'scripts/gate_l4_api_contract.py', []),
     ('L5', 'scripts/gate_l5_frontend_contract.py', []),
 ]
 
-QUICK_GATES = ('L0', 'L1-G', 'L1')
+QUICK_GATES = ('L0', 'L1-G', 'L1', 'L1-H')
 
 def main():
     quick = '--quick' in sys.argv

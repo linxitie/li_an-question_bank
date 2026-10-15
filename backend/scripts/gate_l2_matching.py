@@ -249,7 +249,16 @@ def main():
          DEFAULT_ROOT, '--out', 'data/xingce_regression.txt'],
         capture_output=True, text=True, encoding='utf-8', errors='replace'
     )
-    print(r.stdout[-500:] if r.stdout else '')
+    # verify_xingce_regression.py 全部输出走 stderr（实测 stdout 长度为 0），
+    # 而原实现只 print(r.stdout)，导致 L2 失败时不给任何线索 —— 门禁一旦红了
+    # 无法定位，久而久之就会被当成常驻噪声忽略。失败时必须把 stderr 尾部摊开。
+    if r.stdout:
+        print(r.stdout[-2000:])
+    if r.returncode != 0:
+        print(f'\n[verify_xingce_regression 退出码 {r.returncode}] stderr 末 25 行：')
+        for line in (r.stderr or '').splitlines()[-25:]:
+            print('   ', line)
+        print('  完整结论见 data/xingce_regression.txt 的「最终结果」段')
 
     print('\n材料块守卫（真实题本语料，生产 _extract_text_from_pdf）')
     stats = material_guard_scan()
