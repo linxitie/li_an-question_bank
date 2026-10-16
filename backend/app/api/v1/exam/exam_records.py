@@ -10,15 +10,15 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
-from ...core.database import get_db
-from ...models.models import (
+from ....core.database import get_db
+from ....models.models import (
     ExamRecord,
     ExamAnswerDetail,
     ExamPaper,
     QuestionBank,
     SysUser
 )
-from ...core.security import get_current_user, get_optional_user
+from ....core.security import get_current_user, get_optional_user
 
 router = APIRouter(prefix="/api/exam-records", tags=["成绩记录"])
 logger = logging.getLogger(__name__)

@@ -147,7 +147,7 @@ def test_empty_and_non_str_inputs_are_safe():
 
 def test_dedup_digest_is_image_insensitive():
     """建组幂等键必须对图片状态不敏感，否则同材料会重复建组。"""
-    from app.api.v1.question_import import _digest_for_group_dedup
+    from app.api.v1.catalog.question_import import _digest_for_group_dedup
     a = '某派出所材料。[IMAGE:abc123_1_0] 内容。'
     b = '某派出所材料。<img src="/static/question-groups/1/img_0_deadbeef.png" />内容。'
     assert _digest_for_group_dedup(a) == _digest_for_group_dedup(b), \

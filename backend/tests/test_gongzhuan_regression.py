@@ -36,7 +36,7 @@ import pytest
 # 确保 backend 目录在 sys.path 中（与 tests/conftest.py 保持一致）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.api.v1.question_import import (  # noqa: E402
+from app.api.v1.catalog.question_import import (  # noqa: E402
     _auto_detect_tags,
     _normalize_requirements,
     _resolve_xingce_paper_metadata,

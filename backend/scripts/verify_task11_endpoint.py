@@ -30,13 +30,13 @@ def check(name, cond, detail=''):
 
 # ── 1. 路由注册 + 返回契约 ──────────────────────────────���───────────
 print('=== 1. 路由注册与返回契约 ===')
-from app.api.v1.question_import import router, _separate_match_xingce
+from app.api.v1.catalog.question_import import router, _separate_match_xingce
 paths = [r.path for r in router.routes]
 check('/separate-match-xingce 已注册',
       any('separate-match-xingce' in p for p in paths),
       [p for p in paths if 'separate-match' in p])
 
-from app.api.v1.question_import import separate_match_endpoint
+from app.api.v1.catalog.question_import import separate_match_endpoint
 import inspect
 src = inspect.getsource(separate_match_endpoint)
 # 既有端点返回的顶层键（从 return dict 字面量提取）

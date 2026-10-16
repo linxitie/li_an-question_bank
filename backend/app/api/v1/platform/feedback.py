@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ...core.database import get_db
-from ...core.security import get_current_user, require_teacher_or_admin
-from ...models.models import SysUser, UserFeedback
+from ....core.database import get_db
+from ....core.security import get_current_user, require_teacher_or_admin
+from ....models.models import SysUser, UserFeedback
 
 router = APIRouter(prefix="/api/feedback", tags=["意见反馈"])
 admin_router = APIRouter(prefix="/api/admin/feedback", tags=["反馈管理"])

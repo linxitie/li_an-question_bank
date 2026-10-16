@@ -13,18 +13,18 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc
 
-from ...core.database import get_db, engine
-from ...core.security import (
+from ....core.database import get_db, engine
+from ....core.security import (
     get_current_admin, get_current_super_admin, get_password_hash,
     check_permission, Permission
 )
-from ...models.models import (
+from ....models.models import (
     SysUser, SysOperationLog, SysConfig, SysAnnouncement,
     SysBackupRecord, SysVersion, SysDictType, SysDictData,
     School, QuestionBank, ExamPaper, ExamRecord, PracticeRecord,
     Banji, PaperApprovalWorkflow
 )
-from ...schemas.admin import (
+from ....schemas.admin import (
     DashboardStats, DashboardResponse, WeeklyActiveTrend,
     SubjectDistribution,
     UserCreate, UserUpdate, UserDisableRequest, UserResetPasswordRequest,
@@ -870,7 +870,7 @@ async def get_backup_stats(
     # 数据库文件大小（优先用 settings.SQLITE_PATH 配置，回退到 data/question_bank.db）
     db_size = 0
     try:
-        from ...core.config import settings
+        from ....core.config import settings
         sqlite_path = settings.SQLITE_PATH
         db_candidates = [os.path.join(backend_root, sqlite_path.lstrip("./")),
                          os.path.join(backend_root, "data", "question_bank.db"),
@@ -1096,7 +1096,7 @@ async def get_permissions(
     db: Session = Depends(get_db)
 ):
     """获取各角色权限配置（权限名中文化，优先读自定义配置）"""
-    from ...core.security import ROLE_PERMISSIONS, SUPER_ADMIN_PERMISSIONS
+    from ....core.security import ROLE_PERMISSIONS, SUPER_ADMIN_PERMISSIONS
     roles_config = {}
     for role, perms in ROLE_PERMISSIONS.items():
         perm_list = [p.value for p in perms]

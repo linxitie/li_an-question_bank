@@ -71,7 +71,7 @@ def load_text(path):
     with open(path, 'rb') as f:
         buf = f.read()
     try:
-        from app.api.v1.question_import import _extract_text_from_pdf
+        from app.api.v1.catalog.question_import import _extract_text_from_pdf
         text = _extract_text_from_pdf(buf)
         if text and text.strip():
             return text.replace('\r\n', '\n').replace('\r', '\n')

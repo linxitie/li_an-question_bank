@@ -37,7 +37,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from ...api.v1.question_import import _persist_group_images  # 反向依赖：见本模块 docstring
+from ...api.v1.catalog.question_import import _persist_group_images  # 反向依赖：见本模块 docstring
 from ...models.models import QuestionGroup
 
 logger = logging.getLogger(__name__)

@@ -13,27 +13,29 @@ from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
 from .core.redis_client import get_redis, close_redis
-from .api.v1 import questions, papers, exams, llm, stats, question_actions, practice, exam_records, wrong_questions, quick_practice, smart_exam
+from .api.v1.platform import llm
+from .api.v1.catalog import questions, papers, question_actions, wrong_questions
+from .api.v1.exam import exams, stats, practice, exam_records, quick_practice, smart_exam
 from .api.v1.library import videos, media
 from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
 from .api.v1.content import news, recruitment, calendar
-from .api.v1 import admin as admin_api
-from .api.v1 import teacher as teacher_api
-from .api.v1 import admin_approval
+from .api.v1.platform import admin as admin_api
+from .api.v1.platform import teacher as teacher_api
+from .api.v1.platform import admin_approval
 from .api.v1.community import quotes, forum
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
-from .api.v1 import feedback
+from .api.v1.platform import feedback
 from .api.v1.growth import achievements
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
-from .api.v1.websocket import router as websocket_router
-from .api.v1.paper_generation import router as paper_router
-from .api.v1.question_import import router as question_import_router
+from .api.v1.platform.websocket import router as websocket_router
+from .api.v1.catalog.paper_generation import router as paper_router
+from .api.v1.catalog.question_import import router as question_import_router
 from .core.exceptions import register_exception_handlers, ExceptionHandlers, create_error_response
 from .core.middleware import setup_middlewares, RequestLoggingMiddleware, RateLimitMiddleware, CircuitBreakerMiddleware
 from .core.monitoring import metrics_collector, get_system_metrics, PerformanceMonitor
@@ -455,7 +457,7 @@ async def lifespan(app: FastAPI):
 
     # 自动修复已有题目的子科目分类（将'无'重新检测分类）
     try:
-        from .api.v1.question_import import _detect_subcategory
+        from .api.v1.catalog.question_import import _detect_subcategory
         db = SessionLocal()
         try:
             from .models.models import QuestionBank

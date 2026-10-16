@@ -9,16 +9,16 @@ from datetime import datetime
 from fastapi import APIRouter, Depends,HTTPException
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...models.models import QuestionBank,SysUser
-from ...schemas.schemas import (
+from ....core.database import get_db
+from ....models.models import QuestionBank,SysUser
+from ....schemas.schemas import (
     SmartGradingRequest, SmartGradingResponse,
     GenerateAnalysisRequest, GenerateAnalysisResponse,
     DailyGoldenSentenceResponse, RecruitmentInfoResponse,
     RecruitmentInfoItem, SuccessResponse
 )
 
-from ...core.security import get_current_user
+from ....core.security import get_current_user
 
 
 

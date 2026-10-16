@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends,Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from ...core.database import get_db
-from ...models.models import (
+from ....core.database import get_db
+from ....models.models import (
     PracticeRecord,
     ExamRecord,
     DailyCheckin,
@@ -17,9 +17,9 @@ from ...models.models import (
     QuestionType
 )
 
-from ...core.security import get_current_user, get_optional_user
-from ...services import growth_service
-from ...services.growth_service import add_growth, get_level_info, GROWTH_RULES
+from ....core.security import get_current_user, get_optional_user
+from ....services import growth_service
+from ....services.growth_service import add_growth, get_level_info, GROWTH_RULES
 
 router = APIRouter(prefix="/api/stats",tags=["学习统计"])
 logger = logging.getLogger(__name__)
@@ -668,7 +668,7 @@ def ensure_daily_checkin(user_id: int, db: Session) -> bool:
 
     # 触发成就判定（学习坚持类）
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(user_id, "sign_in", db)
     except Exception as e:
         logger.warning(f"签到成就判定失败: {e}")

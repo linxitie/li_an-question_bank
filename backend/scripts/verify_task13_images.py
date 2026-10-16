@@ -9,7 +9,7 @@ import random
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.api.v1.question_import import (
+from app.api.v1.catalog.question_import import (
     _PDF_MIN_IMG_DIM, _PDF_MAX_IMG_PIXELS, _xingce_review_flags,
     _pdf_image_to_png, _separate_match_xingce,
 )

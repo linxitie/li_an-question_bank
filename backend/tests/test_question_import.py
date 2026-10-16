@@ -271,7 +271,7 @@ class TestScannedPdfMineruFallback:
         yield
 
     def test_prefers_mineru_when_available(self, monkeypatch):
-        import app.api.v1.question_import as qi
+        import app.api.v1.catalog.question_import as qi
         # I-6：实现已 pure move 到 pdf_reader，补丁须打在真正持有该函数的命名空间
         from app.services.question_ingest import pdf_reader as pr
 
@@ -289,7 +289,7 @@ class TestScannedPdfMineruFallback:
         assert not fallback_calls, 'MinerU可用时不应回退到旧PaddleOCR路径'
 
     def test_falls_back_to_paddleocr_path(self, monkeypatch):
-        import app.api.v1.question_import as qi
+        import app.api.v1.catalog.question_import as qi
         # I-6：实现已 pure move 到 pdf_reader，补丁须打在真正持有该函数的命名空间
         from app.services.question_ingest import pdf_reader as pr
 
@@ -302,7 +302,7 @@ class TestScannedPdfMineruFallback:
 
     def test_falls_back_when_mineru_returns_none(self, monkeypatch):
         """MinerU 启用但解析失败(None) → 必须继续走旧路径（三级链第②级）。"""
-        import app.api.v1.question_import as qi
+        import app.api.v1.catalog.question_import as qi
         # I-6：实现已 pure move 到 pdf_reader，补丁须打在真正持有该函数的命名空间
         from app.services.question_ingest import pdf_reader as pr
 

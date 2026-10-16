@@ -19,7 +19,7 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pymupdf
-from app.api.v1.question_import import (
+from app.api.v1.catalog.question_import import (
     _separate_match_xingce,
     _resolve_xingce_paper_metadata,
     _xingce_doc_role,

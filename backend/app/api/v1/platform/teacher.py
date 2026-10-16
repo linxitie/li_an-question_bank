@@ -10,19 +10,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, case, text as sql_text
 
-from ...core.database import get_db, engine
-from ...core.security import (
+from ....core.database import get_db, engine
+from ....core.security import (
     get_current_teacher, get_current_admin, get_password_hash,
     check_permission, Permission
 )
-from ...models.models import (
+from ....models.models import (
     SysUser, QuestionBank, QuestionSubject, QuestionType,
     ExamPaper, PaperQuestionRelation, PaperApproval, PaperApprovalWorkflow,
     ExamRecord, ExamAnswerDetail, PracticeRecord, ScoreAnalysis,
     Banji, QuestionImportRecord, KnowledgePoint, QuestionImage,
     QuestionDetailCategory, QuestionEditLog,
 )
-from ...schemas.teacher import (
+from ....schemas.teacher import (
     TeacherDashboardStats, TeacherDashboardResponse,
     PendingApprovalItem, RecentStudentActivity,
     PracticeTrend, SubjectAccuracyItem,
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== 辅助函数 ====================
 
-from ...services.text_parser import clean_question_text
+from ....services.text_parser import clean_question_text
 import re as _re
 
 # 题干摘要里必须**先剥图再截断**。
@@ -84,7 +84,7 @@ def _format_question(q: QuestionBank) -> dict:
     # 此处不传 db：_format_question 只拿到 ORM 对象，第7层 question_image
     # 表兜底用不上，但前四层已覆盖 docx 抽图的真实落点。
     try:
-        from ...services.image_service import sanitize_image_placeholders
+        from ....services.image_service import sanitize_image_placeholders
         _qid = q.question_id if isinstance(q.question_id, int) else None
         full_content = sanitize_image_placeholders(cleaned_content, _qid)
     except Exception:
@@ -384,7 +384,7 @@ async def create_teacher_question(
         db.flush()
 
     # 子科目归类：教师自建题也自动分类，避免落「无」
-    from ...services.question_classifier import detect_subcategory_enhanced
+    from ....services.question_classifier import detect_subcategory_enhanced
     _sc = detect_subcategory_enhanced(data.subject_id, data.question_content, data.type_name)
     question = QuestionBank(
         subject_id=data.subject_id,
@@ -540,7 +540,7 @@ async def get_question_images(
     
     # 检查 question_images 表
     try:
-        from ...models.models import QuestionImage
+        from ....models.models import QuestionImage
         db_images = db.query(QuestionImage).filter(
             QuestionImage.question_id == question_id
         ).all()
@@ -1607,7 +1607,7 @@ async def change_password(
     db: Session = Depends(get_db)
 ):
     """修改教师密码"""
-    from ...core.security import verify_password, get_password_hash
+    from ....core.security import verify_password, get_password_hash
     if not verify_password(data.old_password, current_user.password):
         raise HTTPException(status_code=400, detail="当前密码错误")
     current_user.password = get_password_hash(data.new_password)

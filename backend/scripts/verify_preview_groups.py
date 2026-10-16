@@ -15,7 +15,7 @@ import traceback
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from app.services.text_parser import extract_question_blocks
-from app.api.v1.question_import import _build_preview_groups
+from app.api.v1.catalog.question_import import _build_preview_groups
 
 BASE = r'D:\砺安题库\砺安题库\题库\申论\安徽申论'
 

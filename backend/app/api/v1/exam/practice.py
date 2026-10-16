@@ -11,14 +11,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, case, distinct
 
-from ...core.database import get_db, commit_with_retry
-from ...core.security import get_current_user
-from ...models.models import (
+from ....core.database import get_db, commit_with_retry
+from ....core.security import get_current_user
+from ....models.models import (
     PracticeRecord, QuestionBank, QuestionSubject, QuestionType, SysUser,
     WrongQuestionPersonal, SmartExamRecord, ExamRecord, ExamAnswerDetail,
     YearPaper, ExamPaper, KnowledgePoint, QuestionKnowledge, SubCategory
 )
-from ...services.growth_service import add_growth, GROWTH_RULES
+from ....services.growth_service import add_growth, GROWTH_RULES
 
 router = APIRouter(prefix="/api/practice", tags=["练习记录"])
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def _after_practice(user_id: int, db: Session, total: int, correct: int) -> list
 
     # 成就判定
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         return achievement_service.check_and_grant(
             user_id, "do_question", db, session={"total": total, "correct": correct}
         )
@@ -156,7 +156,7 @@ async def record_practice(
 
     # 目标进度自动追踪：按真实刷题量重算未完成目标（幂等，失败不影响刷题结果）
     try:
-        from ...services.goal_progress import sync_goal_progress
+        from ....services.goal_progress import sync_goal_progress
         sync_goal_progress(current_user.user_id, db)
     except Exception as e:  # noqa: BLE001
         db.rollback()
@@ -167,7 +167,7 @@ async def record_practice(
     # 既浪费带宽，也会通过刷新行为泄露「谁在练习」。
     # 事件体只含统计量，不含题目正文。广播失败不阻断答题。
     try:
-        from ...services.scheduler import _broadcast_personal_sync
+        from ....services.scheduler import _broadcast_personal_sync
         _broadcast_personal_sync(
             current_user.user_id,
             "练习记录已更新",
@@ -233,7 +233,7 @@ async def batch_record_practice(
     # （如电脑端整卷提交）不会推进今日/本周目标，也不会触发完成奖励。
     # 放在 commit 之后：目标进度是按刚落库的练习记录重算的。
     try:
-        from ...services.goal_progress import sync_goal_progress
+        from ....services.goal_progress import sync_goal_progress
         sync_goal_progress(current_user.user_id, db)
     except Exception as e:
         # 目标进度同步失败不应让整卷交卷失败，记录告警即可
@@ -246,7 +246,7 @@ async def batch_record_practice(
     # 否则用户在手机上看到的进度会停在交卷之前。与 /record 一致，
     # 定向广播给该用户，事件体只含条数等统计量。
     try:
-        from ...services.scheduler import _broadcast_personal_sync
+        from ....services.scheduler import _broadcast_personal_sync
         _broadcast_personal_sync(
             current_user.user_id,
             "练习记录已更新",

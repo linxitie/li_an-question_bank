@@ -7,14 +7,14 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...models.models import (
+from ....core.database import get_db
+from ....models.models import (
     ExamPaper, PaperQuestionRelation, QuestionBank, SysUser,
     PaperApproval, ExamRecord, ExamAnswerDetail
 )
-from ...schemas.schemas import PaperCreate, PaperUpdate, PaperDetailResponse, SuccessResponse
-from ...core.security import get_current_user, require_admin
-from ...cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
+from ....schemas.schemas import PaperCreate, PaperUpdate, PaperDetailResponse, SuccessResponse
+from ....core.security import get_current_user, require_admin
+from ....cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 
@@ -124,7 +124,7 @@ async def delete_paper(
     db.query(PaperApproval).filter(PaperApproval.paper_id == paper_id).delete()
     
     # 记录操作日志
-    from ...models.models import OperationLog
+    from ....models.models import OperationLog
     log = OperationLog(
         user_id=current_user.user_id,
         action="delete_paper",
@@ -152,7 +152,7 @@ async def preview_paper(
     """
     学生端预览试卷 - 仅显示题目，不含答案和解析
     """
-    from ...services.exam_service import ExamService
+    from ....services.exam_service import ExamService
     try:
         preview_data = ExamService.get_exam_preview(db, paper_id)
         return preview_data
@@ -168,7 +168,7 @@ async def get_paper_stats(
     """
     获取试卷/题目统计信息（按角色差异化）
     """
-    from ...services.question_stats import QuestionStatsService
+    from ....services.question_stats import QuestionStatsService
     stats = QuestionStatsService.get_stats(db, current_user)
     stats["paper_stats"] = QuestionStatsService.get_paper_stats(db, current_user)
     return stats

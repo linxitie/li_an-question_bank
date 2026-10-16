@@ -105,7 +105,7 @@ def test_current_impl_group_images_all_persisted():
     if not real_png:
         pytest.skip('磁盘上无真实暂存图（classify_image keep），不造假数据')
 
-    from app.api.v1.question_import import _persist_group_images
+    from app.api.v1.catalog.question_import import _persist_group_images
 
     staging = tempfile.mkdtemp(prefix='test_rev_stage_')
     group_root = tempfile.mkdtemp(prefix='test_rev_group_')
@@ -191,7 +191,7 @@ def test_current_impl_excel_three_rows_land_as_three_questions():
     from app.models.models import Base, QuestionBank, SysUser
     from gate_l3_ingest import build_probe_xlsx
     from app.services.question_ingest.excel_reader import parse_excel_buffer
-    from app.api.v1.question_import import (
+    from app.api.v1.catalog.question_import import (
         _normalize_question, batch_import_parsed)
 
     tmp_db = os.path.join(tempfile.gettempdir(), 'test_gate_l3_excel.db')

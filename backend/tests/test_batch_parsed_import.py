@@ -21,7 +21,7 @@ from app.models.models import (
     SysUser, ExamPaper, QuestionBank,
     PaperQuestionRelation, QuestionImportRecord, QuestionDetailCategory,
 )
-from app.api.v1.question_import import batch_import_parsed
+from app.api.v1.catalog.question_import import batch_import_parsed
 
 
 def _mk_user() -> SysUser:

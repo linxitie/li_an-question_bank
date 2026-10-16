@@ -66,7 +66,7 @@ def _dispatch_sync(user_id: Optional[int], message: str, data: Optional[dict]):
         return
     try:
         import asyncio
-        from ..api.v1.websocket import ws_connection_manager
+        from ..api.v1.platform.websocket import ws_connection_manager
         payload_data = {"message": message}
         if data:
             payload_data.update(data)

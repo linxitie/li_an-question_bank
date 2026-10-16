@@ -7,9 +7,9 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...core.security import get_current_user
-from ...models.models import (
+from ....core.database import get_db
+from ....core.security import get_current_user
+from ....models.models import (
     QuestionBank, FavoriteQuestion, QuestionNote, QuestionMarker, SysUser, QuestionSubject
 )
 

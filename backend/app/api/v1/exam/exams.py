@@ -5,20 +5,20 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...models.models import (
+from ....core.database import get_db
+from ....models.models import (
     ExamPaper,
     ExamRecord,
     ExamAnswerDetail,
     QuestionBank,
     SysUser
 )
-from ...schemas.schemas import (
+from ....schemas.schemas import (
     ExamRecordResponse,
     AnswerDetailResponse,
     SuccessResponse
 )
-from ...core.security import get_current_user,require_teacher_or_admin
+from ....core.security import get_current_user,require_teacher_or_admin
 
 router = APIRouter(prefix="/api/exams",tags=["考试执行"])
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ async def get_exams_list(
         query = query.filter(ExamPaper.paper_name.ilike(f"%{keyword}%"))
     if year:
         # 筛选包含该年份题目的试卷
-        from ...models.models import PaperQuestionRelation, QuestionBank
+        from ....models.models import PaperQuestionRelation, QuestionBank
         year_paper_ids = db.query(PaperQuestionRelation.paper_id).join(
             QuestionBank, PaperQuestionRelation.question_id == QuestionBank.question_id
         ).filter(QuestionBank.year == year).distinct().subquery()
@@ -558,7 +558,7 @@ async def start_exam_new(
     """
     开始考试（支持继续未完成的考试）
     """
-    from ...services.exam_service import ExamService
+    from ....services.exam_service import ExamService
     try:
         result = ExamService.start_exam(db, paper_id, current_user.user_id, exam_type)
         return result
@@ -576,7 +576,7 @@ async def submit_exam_new(
     """
     提交考试并自动评分
     """
-    from ...services.exam_service import ExamService
+    from ....services.exam_service import ExamService
     try:
         result = ExamService.submit_exam(db, exam_id, current_user.user_id, answers)
         return result
@@ -596,7 +596,7 @@ async def save_exam_progress(
     
     answers: [{"question_id": 123, "answer": "A", "time_spent": 45}, ...]
     """
-    from ...services.exam_service import ExamService
+    from ....services.exam_service import ExamService
     try:
         result = ExamService.save_progress(db, exam_id, answers, current_user.user_id)
         return result
@@ -613,7 +613,7 @@ async def preview_exam(
     """
     学生端预览试卷（不含答案）
     """
-    from ...services.exam_service import ExamService
+    from ....services.exam_service import ExamService
     try:
         result = ExamService.get_exam_preview(db, paper_id)
         return result

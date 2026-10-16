@@ -26,7 +26,7 @@ from collections import Counter
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BACKEND_DIR)
 
-from app.api.v1.question_import import _extract_text_from_docx  # noqa: E402
+from app.api.v1.catalog.question_import import _extract_text_from_docx  # noqa: E402
 from app.services.text_parser import (  # noqa: E402
     extract_question_blocks, _MATERIAL_HEAD_RE,
     _SECTION_DIRECTIVE_RE,

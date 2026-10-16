@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import SessionLocal
 from app.models.models import ExamPaper, ExamPaperTag, SysUser
-from app.api.v1.question_import import (
+from app.api.v1.catalog.question_import import (
     _upsert_xingce_paper, _resolve_xingce_paper_metadata,
 )
 

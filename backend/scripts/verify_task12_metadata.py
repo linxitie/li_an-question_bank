@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.api.v1.question_import import (
+from app.api.v1.catalog.question_import import (
     _resolve_xingce_paper_metadata,
     _xingce_doc_role,
     _xingce_paper_variant,
@@ -210,7 +210,7 @@ for ev in evil:
               '抛异常 %s: %s' % (type(e).__name__, e))
 
 # 新增代码不得含 os.path.join + 用户输入
-src = inspect.getsource(sys.modules['app.api.v1.question_import'])
+src = inspect.getsource(sys.modules['app.api.v1.catalog.question_import'])
 new_seg = src[src.index('# 行测卷级元数据注入'):]
 check('元数据模块内无 os.path.join 调用', 'os.path.join' not in new_seg,
       [l.strip() for l in new_seg.splitlines() if 'os.path.join' in l])

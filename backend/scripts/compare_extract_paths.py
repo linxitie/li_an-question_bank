@@ -54,7 +54,7 @@ def bare_pymupdf(path):
 
 
 def real_path(path):
-    from app.api.v1.question_import import _extract_text_from_pdf
+    from app.api.v1.catalog.question_import import _extract_text_from_pdf
     with open(path, 'rb') as f:
         return _extract_text_from_pdf(f.read())
 

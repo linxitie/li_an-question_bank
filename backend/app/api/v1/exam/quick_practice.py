@@ -13,15 +13,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct, text
 
-from ...core.database import get_db, commit_with_retry
-from ...core.security import get_current_user
-from ...models.models import (
+from ....core.database import get_db, commit_with_retry
+from ....core.security import get_current_user
+from ....models.models import (
     QuestionSubject, SubCategory, KnowledgePoint, QuestionBank,
     QuestionKnowledge, PracticeRecord, SysUser,
     QuestionDetailCategory, QuestionType, QuestionImage
 )
-from ...services.option_utils import normalize_options, render_image_placeholder
-from ...services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
+from ....services.option_utils import normalize_options, render_image_placeholder
+from ....services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
 
 router = APIRouter(prefix="/api/quick-practice", tags=["快速练习"])
 logger = logging.getLogger(__name__)

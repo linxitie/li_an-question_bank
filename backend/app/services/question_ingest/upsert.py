@@ -23,7 +23,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ...api.v1.question_import import (  # 反向依赖：见本模块 docstring
+from ...api.v1.catalog.question_import import (  # 反向依赖：见本模块 docstring
     NEED_REVIEW_CONFIDENCE,
     _get_or_create_shenlun_material_group,
     _normalize_requirements,

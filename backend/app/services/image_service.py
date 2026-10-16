@@ -386,10 +386,10 @@ def reextract_image_from_source(question_id: int, db) -> List[str]:
                                 buf = f.read()
                             # 根据文件类型提取
                             if fname.lower().endswith('.docx'):
-                                from ..api.v1.question_import import _extract_text_from_docx
+                                from ..api.v1.catalog.question_import import _extract_text_from_docx
                                 _extract_text_from_docx(buf)  # 提取图片到扁平目录
                                 # 然后通过 _extract_and_save_images 保存到子目录
-                                from ..api.v1.question_import import _extract_and_save_images
+                                from ..api.v1.catalog.question_import import _extract_and_save_images
                                 images = _extract_and_save_images(
                                     '', question_id, question_obj=question
                                 )

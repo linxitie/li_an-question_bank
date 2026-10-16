@@ -22,7 +22,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.services.text_parser import extract_question_blocks
-from app.api.v1.question_import import (
+from app.api.v1.catalog.question_import import (
     _essay_cross_validate,
     _essay_split_combined_text,
     _essay_cross_validate_import,
@@ -49,7 +49,7 @@ def _has_corpus():
 
 
 def _load_corpus():
-    from app.api.v1.question_import import _extract_text_from_pdf
+    from app.api.v1.catalog.question_import import _extract_text_from_pdf
     out = {}
     for key, name in _SL_CORPUS.items():
         with open(os.path.join(_SL_ROOT, name), 'rb') as f:

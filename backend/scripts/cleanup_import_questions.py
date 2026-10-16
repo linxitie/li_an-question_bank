@@ -114,7 +114,7 @@ def _normalize(s: Optional[str]) -> str:
 def targets_scope_jia(con) -> tuple:
     """甲：仅这 10 份 PDF 导入的题目（内容指纹口径）。"""
     import glob
-    from app.api.v1.question_import import _extract_text_from_pdf
+    from app.api.v1.catalog.question_import import _extract_text_from_pdf
     from app.services.text_parser import ContentCleaner, extract_question_blocks
 
     pdfs = [p for p in sorted(glob.glob(os.path.join(PDF_DIR, "*.pdf")))

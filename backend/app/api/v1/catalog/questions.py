@@ -9,24 +9,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query,UploadFile,File
 from sqlalchemy.orm import Session
 from sqlalchemy import and_,or_,func
 
-from ...core.database import get_db
-from ...models.models import (QuestionBank as QuestionModel, QuestionSubject as SubjectModel,
+from ....core.database import get_db
+from ....models.models import (QuestionBank as QuestionModel, QuestionSubject as SubjectModel,
                         QuestionType, KnowledgePoint, QuestionEditLog,
                         SysUser, QuestionSubject, QuestionBank, QuestionDetailCategory,
                         QuestionGroup, QuestionImage)
-from ...schemas.schemas import (QuestionCreate, QuestionUpdate, QuestionResponse,
+from ....schemas.schemas import (QuestionCreate, QuestionUpdate, QuestionResponse,
                        QuestionListResponse,
                        BatchImportQuestionsRequest, BatchImportResponse,
                        RandomQuestionRequest, RandomQuestionResponse,
                        ErrorResponse, SuccessResponse, BatchImportQuestionItem)
-from ...services.image_service import (sanitize_content_images, sanitize_options_images,
+from ....services.image_service import (sanitize_content_images, sanitize_options_images,
                                      sanitize_image_placeholders,
                                        compress_image, STATIC_IMG_ROOT)
-from ...services.option_utils import render_image_placeholder
-from ...services.text_parser import canonical_answer
+from ....services.option_utils import render_image_placeholder
+from ....services.text_parser import canonical_answer
 
 
-from ...core.security import get_current_user,require_teacher_or_admin
+from ....core.security import get_current_user,require_teacher_or_admin
 
 router = APIRouter(prefix="/api/questions",tags=["题库管理"])
 logger = logging.getLogger(__name__)
@@ -936,7 +936,7 @@ async def batch_import_questions(
         types = db.query(QuestionType).filter(QuestionType.type_id.in_(type_ids)).all()
         type_name_map = {t.type_id: t.type_name for t in types}
 
-    from ...services.question_classifier import detect_subcategory_enhanced
+    from ....services.question_classifier import detect_subcategory_enhanced
 
     for idx, q_data in enumerate(import_data.questions):
         try:
@@ -1171,7 +1171,7 @@ async def reclassify_question(
     db: Session = Depends(get_db)
 ):
     """对单道题目运行分类引擎，更新子科目和考点关联"""
-    from ...services.question_classifier import QuestionClassifier
+    from ....services.question_classifier import QuestionClassifier
 
     question = db.query(QuestionBank).filter(
         QuestionBank.question_id == question_id
@@ -1214,7 +1214,7 @@ async def reclassify_question(
             QuestionKnowledge.knowledge_point_id == result.knowledge_point_id
         ).first()
         if not existing:
-            from ...models.models import QuestionKnowledge
+            from ....models.models import QuestionKnowledge
             db.add(QuestionKnowledge(
                 question_id=question_id,
                 knowledge_point_id=result.knowledge_point_id
@@ -1239,7 +1239,7 @@ async def batch_reclassify(
     db: Session = Depends(get_db)
 ):
     """批量对题目运行分类引擎"""
-    from ...services.question_classifier import QuestionClassifier
+    from ....services.question_classifier import QuestionClassifier
 
     query = db.query(QuestionBank).filter(QuestionBank.status == 1)
     if subject_id:
@@ -1264,7 +1264,7 @@ async def batch_reclassify(
                 q.gongzhuan_subcategory = result.sub_category_name
 
         if result.knowledge_point_id:
-            from ...models.models import QuestionKnowledge
+            from ....models.models import QuestionKnowledge
             existing = db.query(QuestionKnowledge).filter(
                 QuestionKnowledge.question_id == q.question_id,
                 QuestionKnowledge.knowledge_point_id == result.knowledge_point_id
@@ -1301,7 +1301,7 @@ async def get_unclassified(
 ):
     """获取没有考点关联的题目列表"""
     # 查询没有 question_knowledge 关联的题目
-    from ...models.models import QuestionKnowledge
+    from ....models.models import QuestionKnowledge
     subquery = db.query(QuestionKnowledge.question_id).distinct().subquery()
 
     query = db.query(QuestionBank).filter(
@@ -1369,7 +1369,7 @@ async def update_question_type(
     db.add(log)
     
     # 更新详细分类表
-    from ...models.models import QuestionDetailCategory
+    from ....models.models import QuestionDetailCategory
     detail = db.query(QuestionDetailCategory).filter(
         QuestionDetailCategory.question_id == question_id
     ).first()
@@ -1416,7 +1416,7 @@ async def batch_update_question_type(
             db.add(log)
             
             # 更新详细分类表
-            from ...models.models import QuestionDetailCategory
+            from ....models.models import QuestionDetailCategory
             detail = db.query(QuestionDetailCategory).filter(
                 QuestionDetailCategory.question_id == qid
             ).first()
@@ -1426,7 +1426,7 @@ async def batch_update_question_type(
             updated += 1
     
     # 记录操作日志
-    from ...models.models import OperationLog
+    from ....models.models import OperationLog
     op_log = OperationLog(
         user_id=current_user.user_id,
         action="batch_update_type",
@@ -1509,7 +1509,7 @@ async def batch_add_explanation(
         updated += 1
     
     # 记录操作日志
-    from ...models.models import OperationLog
+    from ....models.models import OperationLog
     op_log = OperationLog(
         user_id=current_user.user_id,
         action="batch_add_explanation",

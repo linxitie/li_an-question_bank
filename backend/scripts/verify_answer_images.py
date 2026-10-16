@@ -43,7 +43,7 @@ def main():
                                        QuestionDetailCategory, QuestionImage,
                                        SysUser)
         from app.services.text_parser import extract_question_blocks
-        from app.api.v1 import question_import as QI
+from app.api.v1.catalog import question_import as QI
 
         # --- 选语料：钉死用已验证正常的「副省级答案」卷 ---
         # ⚠️ 踩过两次坑，按文件名匹配都会选错：

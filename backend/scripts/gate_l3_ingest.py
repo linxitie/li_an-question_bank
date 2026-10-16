@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """L3 落库链路门禁 — 10 条断言，用内存临时库，绝不触碰真实 DB。
 
 用法:
@@ -271,7 +271,7 @@ def run_assertions():
     seed_base_data(db)
 
     try:
-        from app.api.v1.question_import import _upsert_question_core
+        from app.api.v1.catalog.question_import import _upsert_question_core
     except ImportError as e:
         print(f'无法导入 _upsert_question_core: {e}')
         sys.exit(1)
@@ -339,7 +339,7 @@ def run_assertions():
         results.append(('断言4: blocked拒绝零写入', False, str(e)[:100]))
 
     # 读取 question_import.py 源码供断言 5/6/7 使用
-    qi_path = os.path.join(os.path.dirname(__file__), '..', 'app', 'api', 'v1', 'question_import.py')
+    qi_path = os.path.join(os.path.dirname(__file__), '..', 'app', 'api', 'v1', 'catalog', 'question_import.py')
     try:
         with open(qi_path, 'r', encoding='utf-8') as f:
             qi_src = f.read()
@@ -393,7 +393,7 @@ def run_assertions():
             results.append(('断言9: 题组图片落盘', False,
                             '磁盘上无真实暂存图（classify_image keep），跳过即失守'))
         else:
-            from app.api.v1.question_import import _persist_group_images
+            from app.api.v1.catalog.question_import import _persist_group_images
             staging_dir = tempfile.mkdtemp(prefix='gate_l3_stage_')
             group_root = tempfile.mkdtemp(prefix='gate_l3_group_')
             try:
@@ -429,7 +429,7 @@ def run_assertions():
     try:
         from app.services.question_ingest.excel_reader import (
             parse_excel_buffer, normalize_question as _er_normalize)
-        from app.api.v1.question_import import (
+        from app.api.v1.catalog.question_import import (
             _normalize_question, batch_import_parsed)
 
         xlsx_bytes = build_probe_xlsx()

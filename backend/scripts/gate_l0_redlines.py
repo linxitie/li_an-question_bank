@@ -55,7 +55,7 @@ def check_all() -> list[tuple[str, bool, str]]:
         results.append(('extract_question_blocks 函数体', ok, f'{"PASS" if ok else "FAIL"} (len={len(body)})'))
 
     # 2. dispatch 块 SHA256（按内容定位，不依赖行号）
-    qi_path = os.path.join(REPO_ROOT, 'backend', 'app', 'api', 'v1', 'question_import.py')
+    qi_path = os.path.join(REPO_ROOT, 'backend', 'app', 'api', 'v1', 'catalog', 'question_import.py')
     with open(qi_path, 'r', encoding='utf-8') as f:
         qi_lines = f.readlines()
     # 定位 dispatch 块：查找包含 "separate_match_endpoint" 的 def 行，其上方的 if/elif 分支块
@@ -143,7 +143,7 @@ def main():
         if body is None:
             print('ERROR: extract_question_blocks 函数未找到')
             sys.exit(1)
-        qi_path = os.path.join(REPO_ROOT, 'backend', 'app', 'api', 'v1', 'question_import.py')
+        qi_path = os.path.join(REPO_ROOT, 'backend', 'app', 'api', 'v1', 'catalog', 'question_import.py')
         with open(qi_path, 'r', encoding='utf-8') as f:
             qi_lines = f.readlines()
         dispatch_block = None

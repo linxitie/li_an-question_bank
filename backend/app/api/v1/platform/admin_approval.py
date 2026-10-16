@@ -13,13 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, desc
 
-from ...core.database import get_db
-from ...core.security import get_current_admin
-from ...models.models import (
+from ....core.database import get_db
+from ....core.security import get_current_admin
+from ....models.models import (
     ExamPaper, PaperApprovalWorkflow, PaperQuestionRelation, QuestionBank, SysUser,
 )
-from ...schemas.admin import PaperApproveRequest, PaperRejectRequest
-from ...services.paper_issue_detector import detect_paper_issues
+from ....schemas.admin import PaperApproveRequest, PaperRejectRequest
+from ....services.paper_issue_detector import detect_paper_issues
 
 router = APIRouter(prefix="/api/admin/approval", tags=["管理员端-试卷审批"])
 logger = logging.getLogger(__name__)

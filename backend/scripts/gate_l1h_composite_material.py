@@ -140,7 +140,7 @@ def check_batch_dedup_real_source() -> None:
     证明 batch-parsed 因批内重复撞 UNIQUE(paper_id, question_id) 而整卷 500 的
     根因，在**已发布的代码**中确已消除。
     """
-    src_path = os.path.join(BACKEND_DIR, 'app', 'api', 'v1', 'question_import.py')
+    src_path = os.path.join(BACKEND_DIR, 'app', 'api', 'v1', 'catalog', 'question_import.py')
     try:
         with open(src_path, encoding='utf-8') as f:
             src = f.read()

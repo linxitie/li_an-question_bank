@@ -10,11 +10,11 @@ from enum import Enum
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...models.models import SysUser, ExamRecord
-from ...core.security import get_current_user,Permission, require_permission
-from ...schemas.schemas import SuccessResponse
-from ...core.monitoring import metrics_collector
+from ....core.database import get_db
+from ....models.models import SysUser, ExamRecord
+from ....core.security import get_current_user,Permission, require_permission
+from ....schemas.schemas import SuccessResponse
+from ....core.monitoring import metrics_collector
 
 router = APIRouter(prefix="/ws", tags=["WebSocket通信"])
 
@@ -128,7 +128,7 @@ async def websocket_connect(
         return
 
     try:
-        from ...core.security import decode_token, TokenType
+        from ....core.security import decode_token, TokenType
         payload = decode_token(token)
 
         if payload.get("type") != TokenType.ACCESS.value:
@@ -206,7 +206,7 @@ async def handle_websocket_message(
             }, room)
 
 async def broadcast_exam_progress(user_id: int, record_id: int, room: Optional[str]) -> None:
-    from ...core.database import SessionLocal
+    from ....core.database import SessionLocal
 
     db = SessionLocal()
     try:

@@ -12,9 +12,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ...core.database import get_db, commit_with_retry
-from ...core.security import get_current_user
-from ...models.models import (
+from ....core.database import get_db, commit_with_retry
+from ....core.security import get_current_user
+from ....models.models import (
     WrongQuestionPersonal, QuestionBank, QuestionSubject, QuestionDetailCategory,
     QuestionType, QuestionImage, SysUser
 )
@@ -85,7 +85,7 @@ async def get_wrong_questions(
 
     # 触发「直面错误」成就（首次查看错题集）
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(current_user.user_id, "view_wrong", db)
     except Exception as e:
         logger.warning(f"查看错题成就判定失败: {e}")
@@ -415,7 +415,7 @@ async def chop_question(
 
     # 触发斩题成就
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(current_user.user_id, "chop", db)
     except Exception as e:
         logger.warning(f"斩题成就判定失败: {e}")
@@ -750,7 +750,7 @@ async def submit_review(
 
     # 触发错题重练成就
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(current_user.user_id, "review", db)
     except Exception as e:
         logger.warning(f"错题重练成就判定失败: {e}")

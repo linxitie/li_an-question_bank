@@ -162,7 +162,7 @@ def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: s
         - question_count >= 5: 正常创建试卷
     """
     from ...models.models import ExamPaper, ExamPaperTag
-    from ...api.v1.paper_generation import generate_paper_code
+    from ...api.v1.catalog.paper_generation import generate_paper_code
 
     # 阈值检查：少于5题不创建试卷
     MIN_QUESTION_COUNT = 5

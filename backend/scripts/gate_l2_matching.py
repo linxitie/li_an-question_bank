@@ -97,7 +97,7 @@ def cached_text(path: str, cache_dir: str = ''):
         if os.path.exists(cache_file):
             with io.open(cache_file, encoding='utf-8') as fh:
                 return fh.read(), True
-    from app.api.v1.question_import import _extract_text_from_pdf
+    from app.api.v1.catalog.question_import import _extract_text_from_pdf
     with open(path, 'rb') as fh:
         text = _extract_text_from_pdf(fh.read())
     if cache_dir:

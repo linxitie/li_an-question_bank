@@ -24,9 +24,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
-from ...core.database import get_db
-from ...core.security import get_current_user
-from ...models.models import (
+from ....core.database import get_db
+from ....core.security import get_current_user
+from ....models.models import (
     ExamPaper,
     PaperQuestionRelation,
     SmartExamRecord,
@@ -39,7 +39,7 @@ from ...models.models import (
     PracticeRecord,
     WrongQuestionPersonal,
 )
-from ...schemas.schemas import (
+from ....schemas.schemas import (
     SmartExamGenerateRequest,
     SmartExamGenerateResponse,
     SmartExamSubmitRequest,
@@ -965,7 +965,7 @@ async def submit_smart_exam(
 
     # 7. 自动签到
     try:
-        from ...api.v1.stats import ensure_daily_checkin
+        from ....api.v1.exam.stats import ensure_daily_checkin
         ensure_daily_checkin(current_user.user_id, db)
     except Exception as e:
         logger.warning(f"自动签到失败: {e}")

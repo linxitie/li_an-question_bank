@@ -12,8 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 
-from ...core.database import get_db
-from ...models.models import (
+from ....core.database import get_db
+from ....models.models import (
     ExamPaper,
     PaperQuestionRelation,
     QuestionBank,
@@ -22,7 +22,7 @@ from ...models.models import (
     QuestionType,
     KnowledgePoint
 )
-from ...schemas.schemas import (
+from ....schemas.schemas import (
     AutoGeneratePaperRequest,
     ManualGeneratePaperRequest,
     GeneratePaperResponse,
@@ -31,7 +31,7 @@ from ...schemas.schemas import (
     SuccessResponse,
     PaperUpdate
 )
-from ...core.security import get_current_user, require_teacher_or_admin
+from ....core.security import get_current_user, require_teacher_or_admin
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 logger = logging.getLogger(__name__)

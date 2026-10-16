@@ -471,7 +471,7 @@ async def get_question_detail(
     question_type = detail_row.question_type_detail if detail_row and detail_row.question_type_detail else '选择题'
 
     # 标准化选项 + 图片预检
-    from .questions import _normalize_options, _detect_multi_from_content
+    from .catalog.questions import _normalize_options, _detect_multi_from_content
     raw_opts = _normalize_options(q.options, q.question_content)
     raw_opts = [render_image_placeholder(o) for o in raw_opts]
     sanitized_opts = sanitize_options_images(raw_opts, question_id, db)
