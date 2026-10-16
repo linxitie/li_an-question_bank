@@ -34,7 +34,7 @@ from ...models.models import (
     ForumPost, ForumComment, ForumLike, SysUser, SysOperationLog
 )
 from ...services.sensitive_words import sensitive_filter, SensitiveLevel
-from ...exceptions import BusinessLogicError, ValidationError, ResourceNotFoundError
+from ...core.exceptions import BusinessLogicError, ValidationError, ResourceNotFoundError
 
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
 logger = logging.getLogger(__name__)

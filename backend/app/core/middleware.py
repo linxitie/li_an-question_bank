@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from .core.security import rate_limiter, circuit_breaker, TokenType, decode_token
+from .security import rate_limiter, circuit_breaker, TokenType, decode_token
 from .exceptions import create_error_response, RateLimitExceededError, CircuitBreakerOpenError
 
 logger = logging.getLogger(__name__)

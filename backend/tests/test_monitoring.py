@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 from sqlalchemy.util.concurrency import asyncio
 
-from app.monitoring import (
+from app.core.monitoring import (
     MetricsCollector, MetricData, MetricsContext,
     PerformanceMonitor, RequestTracker, AsyncRequestTracker,
     metrics_collector

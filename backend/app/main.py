@@ -26,9 +26,9 @@ from .api.v1 import shop, tasks, admin_shop
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
 from .api.v1.question_import import router as question_import_router
-from .exceptions import register_exception_handlers, ExceptionHandlers, create_error_response
-from .middleware import setup_middlewares, RequestLoggingMiddleware, RateLimitMiddleware, CircuitBreakerMiddleware
-from .monitoring import metrics_collector, get_system_metrics, PerformanceMonitor
+from .core.exceptions import register_exception_handlers, ExceptionHandlers, create_error_response
+from .core.middleware import setup_middlewares, RequestLoggingMiddleware, RateLimitMiddleware, CircuitBreakerMiddleware
+from .core.monitoring import metrics_collector, get_system_metrics, PerformanceMonitor
 
 import sys
 import io

@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
-from app.exceptions import (
+from app.core.exceptions import (
     BaseAPIException, AuthenticationError, AuthorizationError,
     ResourceNotFoundError, ValidationError, DuplicateResourceError,
     RateLimitExceededError, CircuitBreakerOpenError, BusinessLogicError,

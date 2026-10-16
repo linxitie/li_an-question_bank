@@ -14,7 +14,7 @@ from ...core.database import get_db
 from ...models.models import SysUser, ExamRecord
 from ...core.security import get_current_user,Permission, require_permission
 from ...schemas.schemas import SuccessResponse
-from ...monitoring import metrics_collector
+from ...core.monitoring import metrics_collector
 
 router = APIRouter(prefix="/ws", tags=["WebSocket通信"])
 
