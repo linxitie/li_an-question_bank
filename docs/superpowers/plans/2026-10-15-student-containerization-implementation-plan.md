@@ -1013,7 +1013,69 @@ gate_all 7/8                                  ← L2 仍为 P0.5 已确诊的判
 
 ---
 
-### [ ] P3B.1 ~ P3B.10 逐域搬迁
+### [x] P3B.1 ~ P3B.10 十域搬迁完成（提交 `3f45f84`）
+
+**37 个模块全部归位，`app/api/v1/` 平铺清零。**
+
+| 域 | 模块 | 域 | 模块 |
+|---|---:|---|---:|
+| `catalog` | 6 | `identity` | 3 |
+| `community` | 2 | `library` | 3 |
+| `content` | 3 | `personal` | 2 |
+| `exam` | 6 | `platform` | 6 |
+| `growth` | 3 | `reward` | 3 |
+
+新增迁移工具 `backend/scripts/migrate_domain.py`（`git mv` 保留历史 + 三类引用改写 + 残留检查）。
+
+#### 验证
+
+```
+/api 路由 339 个（与搬迁前一致）
+pytest   17 failed / 278 passed / 3 xfailed   ← 与搬迁前基线精确一致
+gate_all 7/8                                  ← L2 仍为 P0.5 已确诊的判据假阳性
+```
+
+#### 五类失效的引用形式（全部实测踩到并修复）
+
+| # | 形式 | 实例 |
+|---|---|---|
+| 1 | `app.api.v1.<mod>` 绝对路径 | 各 verify 脚本 |
+| 2 | `from .<mod>` 同目录相对 | `collection.py:193` |
+| 3 | `patch("app.api.v1.<mod>…")` 字符串目标 | `test_quote_favorite.py` 5 处 |
+| 4 | 模块内**跨域**相对导入随宿主再次下沉 | `personal/collection.py` 的 `from .community.quotes` → 须 `..community.quotes` |
+| 5 | `as` 别名的 from-import | `from .api.v1 import admin as admin_api` —— 拆分逻辑按 `admin as admin_api` 匹配，不等于 `admin`，**漏改致 gate_all 跌至 3/8** |
+
+> 第 5 类曾使 `gate_all` 从 7/8 跌至 **3/8**（`cannot import name 'admin'`）。
+> 教训：`from X import a as b` 的名字是整个 `a as b`，按别名做集合判定必然失效。
+
+#### ⚠️ 门禁脚本的硬编码路径（曾致 3 道门禁转红）
+
+三道门禁用 `os.path.join(..., 'app','api','v1','question_import.py')` **程序化拼接**旧路径，
+文件迁入 `catalog/` 后失效，L0 / L3 / L1-H 同时转红（`gate_all` 3/8）：
+
+| 脚本 | 处数 |
+|---|---:|
+| `gate_l0_redlines.py` | 2 |
+| `gate_l3_ingest.py` | 1 |
+| `gate_l1h_composite_material.py` | 1 |
+
+**只改路径，未动哈希基线本身** —— 门禁守护的是 `extract_question_blocks` 函数体，
+搬迁不改变其内容，基线必须保持原值。修正后 L0 / L3 / L1-H 全部恢复 PASS。
+
+> 教训：这类路径拼接不在 import 语句里，**任何基于 import 的检索都扫不到**。
+> 搬迁后必须单独核查门禁/校验脚本中的文件路径常量。
+
+#### 残留清理
+
+另用一次性脚本修正 7 个文件的两类残留形式（任意点前缀 `...api.v1.<mod>`、
+以及无前导点的 `from app.api.v1 import <mod> as X`），涉及
+`app/services/image_service.py`、`scheduler.py`、`question_ingest/*` 等
+**反向依赖导入链**的模块。
+
+**风险**：中。已用 pytest + 全部门禁 + 路由数三重验证回到精确基线，
+但本次改动面达 51 文件 5660 行，建议上线前再跑一次真实导入冒烟。
+
+---
 
 **顺序**：按端点数升序，先小后大。
 
