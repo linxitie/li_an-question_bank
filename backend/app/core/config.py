@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     MINERU_PYTHON: str = Field(r"C:\mineru_env\Scripts\python.exe", env="MINERU_PYTHON")
     MINERU_TIMEOUT: int = Field(600, env="MINERU_TIMEOUT")
     MINERU_BACKEND: str = Field("pipeline", env="MINERU_BACKEND")
+    # PARSER_URL：容器化后的 parser sidecar 地址（如 http://parser:8080）。
+    # 留空则沿用本地子进程路径，开发机工作方式完全不变。
+    # 配置了则优先走 HTTP sidecar，失败或超时时自动回落子进程。
+    PARSER_URL: str = Field("", env="PARSER_URL")
 
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）

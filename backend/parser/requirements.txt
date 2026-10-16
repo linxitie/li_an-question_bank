@@ -1,0 +1,9 @@
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+requests>=2.31.0
+# MinerU：扫描件 PDF → Markdown。其 Windows 支持上限为 Python 3.12，
+# 官方推荐 3.10/3.11，故 sidecar 单独锁 3.11，主后端不受牵连。
+mineru[core]
+# pdfplumber/pdfminer：MinerU 输出的兜底解析
+pdfplumber>=0.11.0

@@ -52,17 +52,91 @@ def _cfg(name: str, default=None):
         return default
 
 
+def _parser_url() -> str:
+    """parser sidecar 地址，未配置时返回空串。"""
+    return str(_cfg('PARSER_URL', '') or '').strip()
+
+
 def is_enabled() -> bool:
-    """双重校验：开关开启 且 解释器路径真实存在。
+    """双重校验：开关开启 且（解释器路径真实存在 或 已配置 parser sidecar）。
 
     任一不满足即视为禁用——调用方将直接走旧 PaddleOCR 路径（零行为变化）。
+
+    容器化后 MinerU 不在主进程内（Python 3.13 无法安装，Windows 上限 3.12），
+    故新增 PARSER_URL 分支：配置了 sidecar 地址即视为可用，
+    由 call_parser_http 承担实际调用。未配置时行为与改造前逐字节一致。
     """
     if not _cfg('MINERU_ENABLED', False):
         return False
+    if _parser_url():
+        return True
     py = _cfg('MINERU_PYTHON', '') or ''
     if not py or not os.path.isfile(py):
         return False
     return True
+
+
+def call_parser_http(buf: bytes) -> str | None:
+    """走 parser sidecar 的 HTTP 路径。
+
+    与 extract_text_sync 相同的失败契约：任何失败返回 None，调用方静默回退。
+    这里额外保留 GPU 串行锁 —— 锁虽已跨进程失效，但串行化请求仍能避免
+    sidecar 被并发推理请求打爆显存。
+    """
+    url = _parser_url()
+    if not url:
+        return None
+
+    timeout = int(_cfg('MINERU_TIMEOUT', 300) or 300)
+    endpoint = url.rstrip('/') + '/parse'
+
+    if not _sem.acquire(timeout=_SEM_WAIT_SECONDS):
+        logger.warning(
+            f'[mineru] GPU锁排队超过{_SEM_WAIT_SECONDS}s，放弃本次sidecar解析'
+            f'（将回退旧OCR路径）')
+        return None
+
+    try:
+        import requests  # 延迟导入：保持模块顶层 import 面最小
+    except ImportError as e:
+        logger.warning(f'[mineru] requests 不可用({e}) → 回退旧OCR路径')
+        _sem.release()
+        return None
+
+    try:
+        t0 = time.time()
+        resp = requests.post(
+            endpoint,
+            files={'file': ('input.pdf', buf, 'application/pdf')},
+            timeout=(15, timeout),
+        )
+        if resp.status_code != 200:
+            logger.warning(
+                f'[mineru] sidecar HTTP {resp.status_code} '
+                f'body={resp.text[:200]} → 回退旧OCR路径')
+            return None
+
+        try:
+            data = resp.json()
+        except ValueError:
+            logger.warning('[mineru] sidecar 返回非 JSON → 回退旧OCR路径')
+            return None
+
+        content = str(data.get('markdown') or '').strip()
+        if not content:
+            logger.warning('[mineru] sidecar markdown 为空 → 回退旧OCR路径')
+            return None
+
+        dur = time.time() - t0
+        logger.info(f'[mineru] sidecar success chars={len(content)} dur={dur:.1f}s')
+        return content
+
+    except Exception as e:  # noqa: BLE001 — 兜底契约：绝不上抛
+        logger.warning(
+            f'[mineru] sidecar 异常 {type(e).__name__}: {e} → 回退旧OCR路径')
+        return None
+    finally:
+        _sem.release()
 
 
 def health_check(force: bool = False) -> dict:
@@ -128,6 +202,14 @@ def extract_text_sync(buf: bytes) -> str | None:
     """
     if not is_enabled():
         return None
+
+    # 容器化路径：已配置 sidecar 时优先走 HTTP。未配置则此段整体跳过，
+    # 行为与改造前逐字节一致。
+    if _parser_url():
+        content = call_parser_http(buf)
+        if content:
+            return content
+        logger.info('[mineru] sidecar 未产出内容，改走本地子进程')
 
     timeout = int(_cfg('MINERU_TIMEOUT', 300) or 300)
     backend = str(_cfg('MINERU_BACKEND', 'pipeline') or 'pipeline')
