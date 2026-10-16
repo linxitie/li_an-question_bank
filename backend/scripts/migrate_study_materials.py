@@ -69,7 +69,7 @@ IDX_DDL = [
     "CREATE INDEX IF NOT EXISTS idx_subject_type ON study_material(subject, type)",
     "CREATE INDEX IF NOT EXISTS idx_status_sort ON study_material(status, sort_order)",
     "CREATE INDEX IF NOT EXISTS idx_progress_user ON user_material_progress(user_id)",
-    "CREATE INDEX IF NOT EXISTS idx_import_status ON material_import_record(parse_status)",
+    "CREATE INDEX IF NOT EXISTS idx_material_parse_status ON material_import_record(parse_status)",
 ]
 
 

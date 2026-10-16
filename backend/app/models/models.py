@@ -1316,7 +1316,11 @@ class MaterialImportRecord(Base):
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
-        Index("idx_import_status", parse_status),
+        # 索引名必须数据库全局唯一：原先与 QuestionImportRecord 的索引同名
+        # （均为 idx_import_status），SQLite 建表时第二张表即抛
+        # "index idx_import_status already exists"，导致 52 个测试 error，
+        # 且 migrate_study_materials.py 的 IF NOT EXISTS 静默跳过。
+        Index("idx_material_parse_status", parse_status),
     )
 
 # ------------------------------
