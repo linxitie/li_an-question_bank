@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/unauthorized',
     name: 'Unauthorized',
-    component: () => import('@/views/unauthorized.vue')
+    component: () => import('@/views/system/shared/unauthorized.vue')
   },
 
   // ==================== 学生端路由 ====================
@@ -48,13 +48,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/exercise',
     name: 'Exercise',
-    component: () => import('@/views/exercise.vue'),
+    component: () => import('@/views/student/shared/exercise.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/solution',
     name: 'Solution',
-    component: () => import('@/views/solution.vue'),
+    component: () => import('@/views/student/shared/solution.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
@@ -98,25 +98,25 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/profile',
     name: 'Profile',
-    component: () => import('@/views/profile.vue'),
+    component: () => import('@/views/student/shared/profile.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/achievements',
     name: 'Achievements',
-    component: () => import('@/views/achievements.vue'),
+    component: () => import('@/views/student/shared/achievements.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/feedback',
     name: 'Feedback',
-    component: () => import('@/views/feedback.vue'),
+    component: () => import('@/views/student/shared/feedback.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/help',
     name: 'Help',
-    component: () => import('@/views/help.vue'),
+    component: () => import('@/views/student/shared/help.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
 
@@ -312,55 +312,55 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/tablet/news',
     name: 'TabletNews',
-    component: () => import('@/views/mobile_news.vue'),
+    component: () => import('@/views/student/mobile/mobile_news.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/news/:id',
     name: 'TabletNewsDetail',
-    component: () => import('@/views/mobile_news.vue'),
+    component: () => import('@/views/student/mobile/mobile_news.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/wrong-questions',
     name: 'TabletWrongQuestions',
-    component: () => import('@/views/mobile_wrong_questions.vue'),
+    component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/favorites',
     name: 'TabletFavorites',
-    component: () => import('@/views/mobile_favorites.vue'),
+    component: () => import('@/views/student/mobile/mobile_favorites.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/score-analysis',
     name: 'TabletScoreAnalysis',
-    component: () => import('@/views/mobile_score_analysis.vue'),
+    component: () => import('@/views/student/mobile/mobile_score_analysis.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/student-papers',
     name: 'TabletStudentPapers',
-    component: () => import('@/views/mobile_student_papers.vue'),
+    component: () => import('@/views/student/mobile/mobile_student_papers.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/recruit',
     name: 'TabletRecruitment',
-    component: () => import('@/views/mobile_recruitment.vue'),
+    component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/calendar',
     name: 'TabletCalendar',
-    component: () => import('@/views/mobile_calendar.vue'),
+    component: () => import('@/views/student/mobile/mobile_calendar.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/materials',
     name: 'TabletMaterials',
-    component: () => import('@/views/mobile_materials.vue'),
+    component: () => import('@/views/student/mobile/mobile_materials.vue'),
     meta: { platform: 'tablet' }
   },
   {
@@ -372,31 +372,31 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/tablet/notifications',
     name: 'TabletNotifications',
-    component: () => import('@/views/mobile_notifications.vue'),
+    component: () => import('@/views/student/mobile/mobile_notifications.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/answer',
     name: 'TabletAnswer',
-    component: () => import('@/views/mobile_answer.vue'),
+    component: () => import('@/views/student/mobile/mobile_answer.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/notes',
     name: 'TabletNotes',
-    component: () => import('@/views/mobile_notes.vue'),
+    component: () => import('@/views/student/mobile/mobile_notes.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/forum/create',
     name: 'TabletForumCreate',
-    component: () => import('@/views/mobile_forum_create.vue'),
+    component: () => import('@/views/student/mobile/mobile_forum_create.vue'),
     meta: { platform: 'tablet' }
   },
   {
     path: '/tablet/forum/:id',
     name: 'TabletForumDetail',
-    component: () => import('@/views/mobile_forum_detail.vue'),
+    component: () => import('@/views/student/mobile/mobile_forum_detail.vue'),
     meta: { platform: 'tablet' }
   },
 
@@ -410,73 +410,73 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/mobile/scan',
     name: 'MobileScan',
-    component: () => import('@/views/mobile_scan.vue'),
+    component: () => import('@/views/student/mobile/mobile_scan.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/news',
     name: 'MobileNews',
-    component: () => import('@/views/mobile_news.vue'),
+    component: () => import('@/views/student/mobile/mobile_news.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/news/:id',
     name: 'MobileNewsDetail',
-    component: () => import('@/views/mobile_news.vue'),
+    component: () => import('@/views/student/mobile/mobile_news.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/wrong-questions',
     name: 'MobileWrongQuestions',
-    component: () => import('@/views/mobile_wrong_questions.vue'),
+    component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/favorites',
     name: 'MobileFavorites',
-    component: () => import('@/views/mobile_favorites.vue'),
+    component: () => import('@/views/student/mobile/mobile_favorites.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/wrong-review',
     name: 'MobileWrongReview',
-    component: () => import('@/views/mobile_wrong_review.vue'),
+    component: () => import('@/views/student/mobile/mobile_wrong_review.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/history',
     name: 'MobileHistory',
-    component: () => import('@/views/mobile_history.vue'),
+    component: () => import('@/views/student/mobile/mobile_history.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/score-analysis',
     name: 'MobileScoreAnalysis',
-    component: () => import('@/views/mobile_score_analysis.vue'),
+    component: () => import('@/views/student/mobile/mobile_score_analysis.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/student-papers',
     name: 'MobileStudentPapers',
-    component: () => import('@/views/mobile_student_papers.vue'),
+    component: () => import('@/views/student/mobile/mobile_student_papers.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/recruit',
     name: 'MobileRecruitment',
-    component: () => import('@/views/mobile_recruitment.vue'),
+    component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/calendar',
     name: 'MobileCalendar',
-    component: () => import('@/views/mobile_calendar.vue'),
+    component: () => import('@/views/student/mobile/mobile_calendar.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/materials',
     name: 'MobileMaterials',
-    component: () => import('@/views/mobile_materials.vue'),
+    component: () => import('@/views/student/mobile/mobile_materials.vue'),
     meta: { platform: 'mobile' }
   },
   {
@@ -488,19 +488,19 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/mobile/achievements',
     name: 'MobileAchievements',
-    component: () => import('@/views/mobile_achievements.vue'),
+    component: () => import('@/views/student/mobile/mobile_achievements.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/feedback',
     name: 'MobileFeedback',
-    component: () => import('@/views/mobile_feedback.vue'),
+    component: () => import('@/views/student/mobile/mobile_feedback.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/help',
     name: 'MobileHelp',
-    component: () => import('@/views/mobile_help.vue'),
+    component: () => import('@/views/student/mobile/mobile_help.vue'),
     meta: { platform: 'mobile' }
   },
   {
@@ -536,31 +536,31 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/mobile/notes',
     name: 'MobileNotes',
-    component: () => import('@/views/mobile_notes.vue'),
+    component: () => import('@/views/student/mobile/mobile_notes.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/answer',
     name: 'MobileAnswer',
-    component: () => import('@/views/mobile_answer.vue'),
+    component: () => import('@/views/student/mobile/mobile_answer.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/notifications',
     name: 'MobileNotifications',
-    component: () => import('@/views/mobile_notifications.vue'),
+    component: () => import('@/views/student/mobile/mobile_notifications.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/forum/create',
     name: 'MobileForumCreate',
-    component: () => import('@/views/mobile_forum_create.vue'),
+    component: () => import('@/views/student/mobile/mobile_forum_create.vue'),
     meta: { platform: 'mobile' }
   },
   {
     path: '/mobile/forum/:id',
     name: 'MobileForumDetail',
-    component: () => import('@/views/mobile_forum_detail.vue'),
+    component: () => import('@/views/student/mobile/mobile_forum_detail.vue'),
     meta: { platform: 'mobile' }
   },
 
@@ -568,7 +568,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: () => import('@/views/not-found.vue')
+    component: () => import('@/views/system/shared/not-found.vue')
   }
 ];
 
