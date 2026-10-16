@@ -1,7 +1,7 @@
 """
 公安联考题库系统 - FastAPI主应用入口（增强版）
-支持HTTP/HTTPS、WebSocket、gRPC协议
-"""
+  支持HTTP/HTTPS、WebSocket协议
+  """
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -471,25 +471,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"已有题目子科目修复跳过（可能表尚未创建）: {e}")
 
-    try:
-        from .grpc_service import setup_grpc_service
-        import time
-        # gRPC 端口绑定重试（处理快速重启端口未释放）
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                setup_grpc_service(app)
-                break
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    wait = (attempt + 1) * 2
-                    logger.warning(f"gRPC绑定失败，{wait}秒后重试({attempt+1}/{max_retries})...")
-                    time.sleep(wait)
-                else:
-                    raise
-    except Exception as e:
-        logger.warning(f"gRPC服务初始化失败（不影响 HTTP 服务）: {e}")
-
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(settings.LOG_FILE), exist_ok=True)
 
@@ -519,11 +500,6 @@ async def lifespan(app: FastAPI):
         shutdown_scheduler()
     except Exception:
         pass
-    try:
-        from .grpc_service import stop_grpc_service
-        stop_grpc_service()
-    except Exception:
-        pass
     # 关闭Redis连接
     try:
         await close_redis()
@@ -547,11 +523,10 @@ app = FastAPI(
 
 ## 协议支持
 
-- HTTP/HTTPS: 标准RESTful API
-- WebSocket: 实时通信、在线监考
-- gRPC: 高性能远程调用
+  - HTTP/HTTPS: 标准RESTful API
+  - WebSocket: 实时通信、在线监考
 
-## 认证方式
+  ## 认证方式
 
 - JWT Bearer Token
 - OAuth2.0 (支持密码模式、刷新令牌)
