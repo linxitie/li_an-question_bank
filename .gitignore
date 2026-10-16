@@ -74,6 +74,13 @@ backend/uploads/
 # 真实环境变量文件：含 JWT_SECRET_KEY 等凭据，禁止纳入 Git 跟踪。
 # 模板见 backend/.env.example（已入库）。历史泄露需 filter-repo 清理。
 backend/.env
+# 容器化下发的真实环境文件：同样含 JWT_SECRET_KEY，必须与 backend/.env 同等对待。
+# 模板 deploy/.env.example 已入库，可复制为下列任一文件后填写。
+deploy/.env.development
+deploy/.env.school
+# 防漏网：deploy/ 下任何 .env* 一律忽略，仅放行模板。
+deploy/.env*
+!deploy/.env.example
 # 注意：此处必须用 backend/data/* 而非 backend/data/，否则 git 会跳过目录本身，
 # 导致下面的 !backend/data/gates/ 反选规则失效（gitignore 规则：被排除的目录无法被反选）。
 backend/data/*
