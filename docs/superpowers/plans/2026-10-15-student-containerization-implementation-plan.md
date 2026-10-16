@@ -1332,6 +1332,14 @@ SHA-256 逐字节相同的 2 份（审计报告落于 `data/backup_dedup_report.
 删除前已核对 `env.json`/`env.local.json`/`env.sit.json`/`env.uat.json` 均为
 `{}` 空壳（3 字节），且全仓无引用——按计划删除，git 历史仍可恢复。
 
+#### R9 红线完好性核证（终验）
+
+| 项 | 实测 |
+|---|---|
+| `backend/data/audit/` | 存在，14 文件完好 ✓ |
+| `待推断题目清单_*.csv` | 2 份完好（`data/snapshots/待推断题目清单_{270,303}.csv`，56.5/59.3 KB）；从未被 Git 跟踪，P6.1 删除操作未触碰 ✓ |
+| 备份去重审计 | `data/backup_dedup_report.txt`：审计 9 份、唯一内容 7 组、删重复 2 份（释放 205.9 MB） |
+
 ### [ ] P6.2 L2 归档（不删除、不入库 Git）
 
 #### ⚠️ 实测评估：三项不可机械执行，一项可安全执行
