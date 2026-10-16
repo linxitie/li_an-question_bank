@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     DB_HOST: str = Field("localhost", env="DB_HOST")
     DB_PORT: int = Field(3306, env="DB_PORT")
     DB_USER: str = Field("root", env="DB_USER")
-    DB_PASSWORD: str = Field("123456", env="DB_PASSWORD")
+    DB_PASSWORD: Optional[str] = Field(None, env="DB_PASSWORD")
     DB_NAME: str = Field("police_exam", env="DB_NAME")
     DB_CHARSET: str = Field("utf8mb4", env="DB_CHARSET")
     

@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-> **快速摘要**: 将 DeepSeek API 密钥 `[REMOVED-DEEPSEEK-1]` 配置到 OpenCode 的 deepseek-v4-Pro 和 deepseek-v4-flash 模型中
+> **快速摘要**: 将 DeepSeek API 密钥 `<已吊销-勿复用-新密钥填入 .env 的 DEEP_SEEK_API_KEY>` 配置到 OpenCode 的 deepseek-v4-Pro 和 deepseek-v4-flash 模型中
 >
 > **交付物**:
 > - 更新 `auth.json` 中的 API 密钥
@@ -16,7 +16,7 @@
 ## 上下文
 
 ### 原始请求
-用户想要将 DeepSeek API 密钥 `[REMOVED-DEEPSEEK-1]` 配置到 OpenCode 的 deepseek-v4-Pro 和 deepseek-v4-flash 模型中。
+用户想要将 DeepSeek API 密钥 `<已吊销-勿复用-新密钥填入 .env 的 DEEP_SEEK_API_KEY>` 配置到 OpenCode 的 deepseek-v4-Pro 和 deepseek-v4-flash 模型中。
 
 ### 研究发现
 1. API 密钥存储在 `~/.local/share/opencode/auth.json` 中
@@ -40,7 +40,7 @@
 - [ ] 配置格式正确
 
 ### 必须包含
-- API 密钥: `[REMOVED-DEEPSEEK-1]`
+- API 密钥: `<已吊销-勿复用-新密钥填入 .env 的 DEEP_SEEK_API_KEY>`
 - 模型: `deepseek-v4-Pro` 和 `deepseek-v4-flash`
 - 正确的上下文窗口和输出限制
 
@@ -76,7 +76,7 @@ auth.json → opencode.jsonc
 
   **要做的事情**:
   - 编辑 `C:\Users\21499\.local\share\opencode\auth.json`
-  - 将 `key` 字段更新为 `[REMOVED-DEEPSEEK-1]`
+  - 将 `key` 字段更新为 `<已吊销-勿复用-新密钥填入 .env 的 DEEP_SEEK_API_KEY>`
 
   **不要做**:
   - 不修改其他字段
@@ -87,7 +87,7 @@ auth.json → opencode.jsonc
 
   **验收标准**:
   - [ ] auth.json 文件存在且可读
-  - [ ] `key` 字段值为 `[REMOVED-DEEPSEEK-1]`
+  - [ ] `key` 字段值为 `<已吊销-勿复用-新密钥填入 .env 的 DEEP_SEEK_API_KEY>`
 
   **QA 场景**:
   ```
@@ -97,7 +97,7 @@ auth.json → opencode.jsonc
     步骤:
       1. 读取 auth.json 文件内容
       2. 验证 deepseek.key 字段值
-    预期结果: key 字段值为 "[REMOVED-DEEPSEEK-1]"
+    预期结果: key 字段值为 "<已吊销-勿复用-新密钥填入 .env 的 DEEP_SEEK_API_KEY>"
     失败指标: key 字段值不匹配或文件不存在
   ```
 

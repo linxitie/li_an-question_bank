@@ -524,7 +524,7 @@ Wave FINAL (4 路并行审查):
   **What to do**:
   - 修改 `C:\Users\21499\.config\opencode\opencode.json`，一次性完成 4 项变更：
   - **变更 1 — API Key 环境变量化（P6）**：
-    - 第 22 行 `"apiKey": "[REMOVED-DEEPSEEK-2]"` → `"apiKey": "{env:DEEPSEEK_API_KEY}"`
+    - 第 22 行 `"apiKey": "<已吊销-勿复用-新密钥填入 .env 的 DEEP_SEEK_API_KEY>"` → `"apiKey": "{env:DEEPSEEK_API_KEY}"`
     - **同一次改动中，必须把真实 key 写入 Windows 用户环境变量** `DEEPSEEK_API_KEY`（用 `[Environment]::SetEnvironmentVariable('DEEPSEEK_API_KEY', '<原key>', 'User')`）
     - 若 `auth.json` 中已有可用的 `deepseek` 凭证，则确认其有效后可不再重复注入环境变量；两处并存时以 auth.json 为准，本变更的核心诉求是**配置文件里不留明文**
   - **变更 2 — fallback 链重建（P2）**：

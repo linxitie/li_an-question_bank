@@ -115,6 +115,21 @@ def check_all() -> list[tuple[str, bool, str]]:
                             break
     results.append(('extract_question_blocks 未外泄', not leaked, 'PASS' if not leaked else 'FAIL'))
 
+    # 7. 凭据泄露扫描
+    sys.path.insert(0, os.path.dirname(__file__))
+    try:
+        from check_secrets import check_secrets
+        ok, hits, scanned = check_secrets()
+        if ok:
+            results.append(('凭据泄露扫描', True, f'PASS (已扫 {scanned} 个文件)'))
+        else:
+            detail = '; '.join(f'{r}:{l} [{rule}]' for r, l, rule, _ in hits[:3])
+            if len(hits) > 3:
+                detail += f' 等 {len(hits)} 处'
+            results.append(('凭据泄露扫描', False, f'FAIL — {detail}'))
+    except Exception as exc:
+        results.append(('凭据泄露扫描', False, f'扫描器异常: {exc}'))
+
     return results
 
 
