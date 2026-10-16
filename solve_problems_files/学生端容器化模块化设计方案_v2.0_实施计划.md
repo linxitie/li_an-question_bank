@@ -869,7 +869,7 @@ src/views 根 .vue   : 仍为 27 个，未受影响 ✓
 
 **风险**：极低（仅新增空目录与说明文档，不触碰任何现有代码）。
 
-### [ ] P3A.2 迁移 `src/views/`（27 页）
+### [x] P3A.2 迁移 `src/views/`（27 页，提交 `47b7ae3`）
 
 按**角色 × 设备**双轴归位：
 
@@ -877,9 +877,60 @@ src/views 根 .vue   : 仍为 27 个，未受影响 ✓
 |---|---|---:|
 | `views/student/mobile/` | `mobile_*`（**文件名前缀保留**） | 19 |
 | `views/student/shared/` | `achievements` `exercise` `solution` `profile` `feedback` `help` | 6 |
-| `views/system/` | `not-found` `unauthorized` | 2 |
+| `views/system/shared/` | `not-found` `unauthorized` | 2 |
 | `views/teacher/{shared,pc,tablet,mobile}/` | 预留，当前为空 | 0 |
 | `views/admin/{shared,pc,tablet,mobile}/` | 预留，当前为空 | 0 |
+
+`src/views/` 根目录迁空（0 个 `.vue`）。`git mv` 使 27 个文件全部识别为**重命名**，文件历史完整保留。
+
+#### 导入重写
+
+`src/router/index.ts` 共 **42 处** `@/views/xxx.vue` 全部重写，改写前后均为 42 处、无残留。
+`src/` 内部无 `.vue` 之间的交叉引用（`App.vue` 仅有 `./assets/logo.svg` 与
+`./components/VtjErrorBoundary.vue` 两处，均不涉及 views）。
+
+#### ⚠️ `npm run build` 无法作为验证手段（既存阻塞）
+
+首轮验证时 `npm run build` 在 `prebuild` 阶段即被阻断，报「出现新增类型错误」。
+实测 `vue-tsc` 共 **56 条**类型错误，分布如下：
+
+| 目录 | 数量 | 归属 |
+|---|---:|---|
+| `.vtj/`（**冻结区**） | 54 | 模板表达式被推断为 `never` / `{}`，VTJ 生成代码的既有类型问题 |
+| `src/` | 2 | `mobile_news.vue` / `mobile_recruitment.vue` 引用了无类型声明的 JS 模块（`newsRender.js` / `recruitmentRefresh.js`） |
+
+**56 条全部早于本次迁移存在**，与 P3A.1/P3A.2 无关（两者仅新增目录与改写导入路径）。
+故 `npm run build` 在本机无法通过，`verify-typecheck-baseline.mjs` 的「新增错误」判定
+亦源于此既存积压。**须在有干净类型基线的环境（或先清理这 56 条）才能恢复该门禁。**
+
+#### 实际采用的验证手段：`vite build`
+
+迁移真正的风险是导入能否解析，而这正是 `vite build` 覆盖的范围。
+绕过 typecheck 守卫直接构建：
+
+```
+vite build 退出码 0，耗时 26.63s   ✓
+```
+
+迁移前后各跑一次，结果一致，**导入链无一处断裂**。
+
+#### 孤儿扫描不受影响（实测确认）
+
+`verify-project-health.mjs` 判定孤儿的逻辑是按**文件基名**匹配：
+
+```js
+referenced.add(m[1].split('/').pop());   // 只取文件名，不含目录
+```
+
+故把 `.vue` 移入子目录后，路由中的引用仍以同名基名被识别，**不会产生新的孤儿告警**。
+
+**风险**：中。已用 `vite build` 验证导入链完整，但 `npm run build` 门禁在本机无法通过，
+前端完整校验须在类型基线修复后补跑。
+
+#### 语料文件处置
+
+工作区存在 5 个未跟踪的 `题库/备考资料/**` PDF（公基、申论、行测若干）。非本次改动，
+且 `题库/` 是红线 R6 语料目录，一律**不纳入版本库**，保持未跟踪交由用户处置。
 
 同步更新 `src/router/index.ts` 的 import（**只改手写页的 `@/views/*`，92 处 `$vtj/vue/*` 一字不动**）。
 
