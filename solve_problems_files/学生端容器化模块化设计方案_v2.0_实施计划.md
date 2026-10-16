@@ -1239,23 +1239,32 @@ import 它、耦合归零」。实测存在 2 处**响应路径上的同步依�
 
 ## P6 · 目录清理与归档
 
-### [ ] P6.1 L1 删除（零风险）
+### [x] P6.1 L1 删除（零风险，提交 `96d8269`）
 
-| 项 | 数量/体积 |
-|---|---|
-| 77 份哈希冗余数据库文件 | 1,411.9 MB |
-| `mineru_verify_out/` | 5 文件 |
-| `backend/mineru_1787720560/` | 8 文件 |
-| `backend_pid.txt`、`backend_err/out/run.log` | 4 文件 |
-| `backend/_*.txt`（探测输出） | 5 文件 |
-| `git_diff_qi.txt`、`frontend_run.err`/`.log` | 3 文件 |
-| `src/router/index.ts.bak`、`src/.DS_Store` | 2 文件 |
-| `backend/scripts/题库.db` | 0 字节 |
-| `temp_pdf_images/`、`tmp/`、根 `uploads/` | 41 + 2 + 0 |
-| `backend/data/` 根散落 `xingce_regression_*` / `type_repair_*.log` | ~40 文件 |
-| `env.json` / `env.local.json` / `env.sit.json` / `env.uat.json` | 4 空壳 |
-| `test-question-render.mjs` | 1 文件 |
-| 26 个未登记的孤儿 `.vtj/files/*.json` | **删除前须确认无引用** |
+**已删 66 个文件（净删 97,789 行）**：14 项临时目录/空壳 + 5 份探测输出 +
+9 份 `type_repair_*.log` + 12 份 `xingce_regression_*` 散落历史 + 2 份字节级重复 `.db`
+备份（SHA-256 审计确认，释放 205.9 MB）。
+
+验证：应用 339 路由、pytest `17 failed / 278 passed / 3 xfailed` 精确基线、门禁 7/8。
+
+#### ⚠️ 计划与实测的两处偏差（已按红线保守处理）
+
+**1. 「77 份哈希冗余数据库文件」未删。**
+实测 `data/` 根有 **93 份 `.bak*`**（= 31 份主备份 + 62 个 0 字节 `-shm`/`-wal` 侧车），
+与计划所称「77 份冗余 + 41 份唯一」对不上账；且 `backup_audit_report.json` 是**库表对比**
+而非文件哈希清单——全仓**不存在**可证明「77 份互为重复」的哈希依据。
+R8 明令 `.bak*` 禁止清理，故主备份一个未动；仅删了 `data/backups/` 下
+SHA-256 逐字节相同的 2 份（审计报告落于 `data/backup_dedup_report.txt`）。
+
+**2. 「26 个未登记的孤儿 `.vtj/files/*.json`」未删。**
+`.vtj/` 属 R1 冻结区，计划自身也标注「删除前须确认无引用」。
+该确认须逐份比对 `src/router` 与 `.vtj/router` 的全部引用，属 R1 敏感操作，
+留给与 VTJ 设计器直接相关的专项处理。
+
+#### 更正：env.json 系列并非完全无引用风险
+
+删除前已核对 `env.json`/`env.local.json`/`env.sit.json`/`env.uat.json` 均为
+`{}` 空壳（3 字节），且全仓无引用——按计划删除，git 历史仍可恢复。
 
 ### [ ] P6.2 L2 归档（不删除、不入库 Git）
 
