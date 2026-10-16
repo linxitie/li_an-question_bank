@@ -105,8 +105,12 @@ def main() -> int:
     pat_sib = re.compile(r"(?m)^(\s*from\s+)\.(" + "|".join(moved) + r")\b")
     pat_from = re.compile(
         r"(?m)^(\s*from\s+\.api\.v1\s+import\s+)([^\n]+)$")
+    # from .api.v1.<mod> import X —— 第三种 from 形式，
+    # main.py 的 websocket 就是这么引的（from .api.v1.websocket import router）
+    pat_mod = re.compile(
+        r"(?m)^(\s*from\s+)\.api\.v1\.(" + "|".join(moved) + r")\b")
 
-    hits = {"abs": 0, "sib": 0, "from": 0}
+    hits = {"abs": 0, "sib": 0, "from": 0, "mod": 0}
     for sub in ROOTS:
         for path in iter_py(sub):
             rel = os.path.relpath(path, BACKEND)
@@ -116,6 +120,7 @@ def main() -> int:
             orig = read(path)
             t = pat_abs.sub(lambda m: f"app.api.v1.{domain}.{m.group(1)}", orig)
             t = pat_sib.sub(lambda m: f"{m.group(1)}.{domain}.{m.group(2)}", t)
+            t = pat_mod.sub(lambda m: f"{m.group(1)}.api.v1.{domain}.{m.group(2)}", t)
 
             def _from(mo):
                 names = [n.strip() for n in mo.group(2).split(",")]

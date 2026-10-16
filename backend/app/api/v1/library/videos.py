@@ -11,11 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ...core.config import settings
-from ...core.database import get_db
-from ...models.models import VideoResource, QuestionBank, SysUser
-from ...schemas.schemas import VideoResourceResponse, VideoListResponse, SuccessResponse
-from ...core.security import get_current_user, require_admin
+from ....core.config import settings
+from ....core.database import get_db
+from ....models.models import VideoResource, QuestionBank, SysUser
+from ....schemas.schemas import VideoResourceResponse, VideoListResponse, SuccessResponse
+from ....core.security import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/video", tags=["视频资源"])
 

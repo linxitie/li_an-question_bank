@@ -6,21 +6,21 @@ from typing import Dict, Any, List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...core.security import get_current_user
-from ...models.models import SysUser, Achievement, UserAchievement
-from ...services import achievement_service
+from ....core.database import get_db
+from ....core.security import get_current_user
+from ....models.models import SysUser, Achievement, UserAchievement
+from ....services import achievement_service
 
 router = APIRouter(prefix="/api/achievements", tags=["成就"])
 
 
 def _get_progress(user_id: int, db: Session) -> Dict[str, Any]:
     """计算各 condition_code 的当前进度值（供前端展示进度条）"""
-    from ...services.achievement_service import (
+    from ....services.achievement_service import (
         _count_practice, _total_review_count, _total_chop_count, _post_count,
         _total_likes, _single_post_likes, _subject_counts, _month_study_days,
     )
-    from ...models.models import FavoriteQuestion, QuestionNote, NewsNote, QuoteFavorite
+    from ....models.models import FavoriteQuestion, QuestionNote, NewsNote, QuoteFavorite
 
     user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
     fav = db.query(FavoriteQuestion).filter(FavoriteQuestion.user_id == user_id).count()

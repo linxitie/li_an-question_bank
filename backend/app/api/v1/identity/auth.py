@@ -11,11 +11,11 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db, commit_with_retry
-from ...models.models import SysUser
-from ...schemas.schemas import UserResponse, LoginResponse, TokenData
-from ...core.config import settings
-from ...core.security import (
+from ....core.database import get_db, commit_with_retry
+from ....models.models import SysUser
+from ....schemas.schemas import UserResponse, LoginResponse, TokenData
+from ....core.config import settings
+from ....core.security import (
     verify_password,
     get_password_hash,
     create_access_token,
@@ -145,7 +145,7 @@ async def login_for_access_token(
         )
 
     # 三端分离：JWT payload 含角色和权限，前端路由守卫依赖此信息
-    from ...core.security import get_user_permissions_with_db
+    from ....core.security import get_user_permissions_with_db
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -198,7 +198,7 @@ async def login_for_access_token(
 
     # 触发「初来乍到」成就（首次登录，幂等）
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(user.user_id, "sign_in", db)
     except Exception as e:
         logger.warning(f"首次登录成就判定失败: {e}")
@@ -298,7 +298,7 @@ async def sms_login(
         )
 
     # sms-login: JWT payload 含角色权限
-    from ...core.security import get_user_permissions_with_db as _get_perms_sms
+    from ....core.security import get_user_permissions_with_db as _get_perms_sms
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -345,7 +345,7 @@ async def refresh_access_token(
         )
 
     # refresh: JWT payload 含角色权限
-    from ...core.security import get_user_permissions_with_db as _get_perms_refresh
+    from ....core.security import get_user_permissions_with_db as _get_perms_refresh
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={

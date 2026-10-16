@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from sqlalchemy.orm import Session
 import os
 
-from ...core.database import get_db
-from ...models.models import SysUser as UserModel
-from ...core.security import get_current_user
-from ...schemas.schemas import UserBase
+from ....core.database import get_db
+from ....models.models import SysUser as UserModel
+from ....core.security import get_current_user
+from ....schemas.schemas import UserBase
 
 router = APIRouter(prefix="/api/media",tags=['论坛'])
 

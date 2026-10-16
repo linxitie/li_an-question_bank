@@ -11,10 +11,10 @@ from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...core.security import get_current_user, create_access_token
-from ...core.redis_client import QRCodeStore
-from ...models.models import SysUser
+from ....core.database import get_db
+from ....core.security import get_current_user, create_access_token
+from ....core.redis_client import QRCodeStore
+from ....models.models import SysUser
 
 router = APIRouter(prefix="/api/auth/qrcode", tags=["二维码登录"])
 

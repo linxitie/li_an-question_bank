@@ -13,19 +13,23 @@ from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
 from .core.redis_client import get_redis, close_redis
-from .api.v1 import auth, questions, papers, exams, videos, llm, goals, stats, media, question_actions, practice, exam_records, wrong_questions, quick_practice, smart_exam
+from .api.v1 import questions, papers, exams, llm, stats, question_actions, practice, exam_records, wrong_questions, quick_practice, smart_exam
+from .api.v1.library import videos, media
+from .api.v1.growth import goals
+from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
 from .api.v1.content import news, recruitment, calendar
 from .api.v1 import admin as admin_api
 from .api.v1 import teacher as teacher_api
 from .api.v1 import admin_approval
 from .api.v1.community import quotes, forum
-from .api.v1 import materials
-from .api.v1 import auth_qrcode
-from .api.v1 import devices
-from .api.v1 import achievements, feedback
+from .api.v1.library import materials
+from .api.v1.identity import auth_qrcode
+from .api.v1.identity import devices
+from .api.v1 import feedback
+from .api.v1.growth import achievements
 from .api.v1.reward import coins
-from .api.v1 import tasks
+from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router

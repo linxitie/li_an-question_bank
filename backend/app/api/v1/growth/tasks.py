@@ -15,12 +15,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...core.security import get_current_user
-from ...models.models import (
+from ....core.database import get_db
+from ....core.security import get_current_user
+from ....models.models import (
     SysUser, Task, UserTaskProgress, CoinRecord, DailyCheckin, PracticeRecord,
 )
-from ...services.growth_service import add_growth
+from ....services.growth_service import add_growth
 
 router = APIRouter(prefix="/api/tasks", tags=["任务中心"])
 logger = logging.getLogger(__name__)

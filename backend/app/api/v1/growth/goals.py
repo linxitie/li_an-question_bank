@@ -8,14 +8,14 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db, commit_with_retry
-from ...models.models import StudyGoal, SysUser, PracticeRecord, CoinRecord
-from ...schemas.schemas import (
+from ....core.database import get_db, commit_with_retry
+from ....models.models import StudyGoal, SysUser, PracticeRecord, CoinRecord
+from ....schemas.schemas import (
     StudyGoalCreate,
     StudyGoalUpdate,
     SuccessResponse
 )
-from ...core.security import get_current_user
+from ....core.security import get_current_user
 
 router = APIRouter(prefix="/api/goals", tags=["学习目标"])
 logger = logging.getLogger(__name__)
@@ -349,8 +349,8 @@ async def complete_goal(
         db: Session = Depends(get_db)
 ):
     """完成目标：按四维加权算法结算并发放金币（幂等：已完成直接返回已发奖励）"""
-    from ...services import goal_completion_service
-    from ...services.growth_service import add_growth
+    from ....services import goal_completion_service
+    from ....services.growth_service import add_growth
 
     goal = db.query(StudyGoal).filter(
         StudyGoal.goal_id == goal_id,

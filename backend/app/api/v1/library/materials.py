@@ -13,9 +13,9 @@ from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...core.security import get_current_user, get_optional_user
-from ...models.models import StudyMaterial, UserMaterialProgress, SysUser
+from ....core.database import get_db
+from ....core.security import get_current_user, get_optional_user
+from ....models.models import StudyMaterial, UserMaterialProgress, SysUser
 
 router = APIRouter(prefix="/api/materials", tags=["备考资料"])
 logger = logging.getLogger(__name__)
@@ -201,12 +201,12 @@ from pathlib import Path as _Path  # noqa: E402
 
 from fastapi import File, UploadFile  # noqa: E402
 
-from ...models.models import MaterialImportRecord, SysOperationLog  # noqa: E402
-from ...services.material_sanitizer import sanitize_html  # noqa: E402
-from ...services.material_classifier import classifier  # noqa: E402
-from ...services.material_deduplicator import deduplicator  # noqa: E402
-from ...services.material_sanitizer import content_cleaner  # noqa: E402
-from ...services.material_monitor import import_monitor  # noqa: E402
+from ....models.models import MaterialImportRecord, SysOperationLog  # noqa: E402
+from ....services.material_sanitizer import sanitize_html  # noqa: E402
+from ....services.material_classifier import classifier  # noqa: E402
+from ....services.material_deduplicator import deduplicator  # noqa: E402
+from ....services.material_sanitizer import content_cleaner  # noqa: E402
+from ....services.material_monitor import import_monitor  # noqa: E402
 
 UPLOAD_IMG_DIR = _Path("uploads/materials/images")
 UPLOAD_TMP_DIR = _Path("uploads/materials/tmp")
@@ -660,7 +660,7 @@ async def import_upload(background_tasks: BackgroundTasks,
 
     scanned = False
     if ext == ".pdf":
-        from ...services.material_parser import detect_scanned
+        from ....services.material_parser import detect_scanned
         try:
             scanned = detect_scanned(tmp_path)
         except Exception:
@@ -672,7 +672,7 @@ async def import_upload(background_tasks: BackgroundTasks,
 
     if ext == ".docx":
         try:
-            from ...services.material_parser import parse_docx
+            from ....services.material_parser import parse_docx
             out = parse_docx(tmp_path, image_dir=UPLOAD_TMP_DIR)
             out["_tmp"] = tmp_path
             rec.parse_mode = "sync"
@@ -685,7 +685,7 @@ async def import_upload(background_tasks: BackgroundTasks,
         db.commit()
     elif ext == ".xlsx":
         try:
-            from ...services.material_parser import parse_xlsx
+            from ....services.material_parser import parse_xlsx
             out = parse_xlsx(tmp_path)
             out["_tmp"] = tmp_path
             rec.parse_mode = "sync"
@@ -698,7 +698,7 @@ async def import_upload(background_tasks: BackgroundTasks,
         db.commit()
     elif ext == ".pdf":
         if scanned:
-            from ...services.mineru_material_service import (
+            from ....services.mineru_material_service import (
                 mineru_available, run_mineru, MineruError)
             if not mineru_available():
                 rec.parse_status = "failed"
@@ -714,7 +714,7 @@ async def import_upload(background_tasks: BackgroundTasks,
 
             def _ocr_job(import_id: int, path: str, workdir: str):
                 """后台线程：跑 OCR 并回写记录（自带独立 DB 会话）。"""
-                from ...core.database import SessionLocal
+                from ....core.database import SessionLocal
                 s = SessionLocal()
                 try:
                     r = run_mineru(path, _Path(workdir))
@@ -740,7 +740,7 @@ async def import_upload(background_tasks: BackgroundTasks,
                                       str(UPLOAD_TMP_DIR))
         else:
             try:
-                from ...services.material_parser import parse_pdf_text
+                from ....services.material_parser import parse_pdf_text
                 out = parse_pdf_text(tmp_path)
                 out["_tmp"] = tmp_path
                 rec.parse_mode = "sync"
@@ -824,7 +824,7 @@ async def import_confirm(import_id: int, body: dict,
                        if mapping.get("category") not in (None, "") else None)
         except (KeyError, TypeError, ValueError):
             raise HTTPException(400, "列映射不完整（正面列/背面列必填）")
-        from ...services.material_parser import build_cards, parse_xlsx
+        from ....services.material_parser import build_cards, parse_xlsx
         # preview 只回传前200行；confirm 从原始文件重读全量行
         full = parse_xlsx(result["_tmp"], max_rows=CARD_ROW_LIMIT) \
             if result.get("_tmp") and _Path(result["_tmp"]).exists() else result
