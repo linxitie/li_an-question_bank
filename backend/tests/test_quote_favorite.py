@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 from app.models.models import EssayQuote, QuoteFavorite
 from app.api.v1.community.quotes import _read_obsidian_quotes
-from app.api.v1.collection import _read_obsidian_quote_by_filename
+from app.api.v1.personal.collection import _read_obsidian_quote_by_filename
 
 
 @pytest.fixture
@@ -128,7 +128,7 @@ class TestMergedFavorites:
         ))
         db_session.commit()
 
-        with patch("app.api.v1.collection._read_obsidian_quote_by_filename", return_value={
+        with patch("app.api.v1.personal.collection._read_obsidian_quote_by_filename", return_value={
             "content": "忠诚是公安队伍代代相传的政治基因",
             "source": "人民公安报",
             "author": "",
