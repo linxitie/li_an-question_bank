@@ -113,6 +113,33 @@ async def is_available(force: bool = False) -> bool:
     return ok
 
 
+async def supports_streams() -> bool:
+    """本机 Redis 是否支持 Stream（XADD/XREAD，Redis 5.0+ 才有）。
+
+    不支持时事件总线自动改用 List 传输（LPUSH/BRPOP，Redis 2.0+ 全支持），
+    以 at-least-once 的队列语义替代消费者组语义。
+    """
+    now = time.time()
+    cached = _probe_cache.get("streams")
+    if cached and (now - cached[1]) < _PROBE_TTL_SECONDS:
+        return cached[0]
+    ok = False
+    try:
+        r = await _client()
+        ver = (await r.info("server")).get("redis_version") or "0"
+        major = int(str(ver).split(".")[0])
+        ok = major >= 5
+    except Exception as e:  # noqa: BLE001 — 探测失败退回 List 传输
+        logger.debug(f"[events] Redis 版本探测失败，按 List 传输处理: "
+                     f"{type(e).__name__}: {e}")
+    _probe_cache["streams"] = (ok, now)
+    return ok
+
+
+def _list_key(event_name: str) -> str:
+    return f"events:list:{event_name}"
+
+
 async def publish(event: Event) -> bool:
     """发布一条事件。Redis 缺席或失败时返回 ``False``，绝不抛出。"""
     if event.name not in ALL_EVENTS:
@@ -122,12 +149,18 @@ async def publish(event: Event) -> bool:
     event_id = uuid.uuid4().hex
     try:
         r = await _client()
-        await r.xadd(
-            f"events:{event.name}",
-            event.to_stream_fields(event_id),
-            maxlen=STREAM_MAXLEN,
-            approximate=True,
-        )
+        if await supports_streams():
+            await r.xadd(
+                f"events:{event.name}",
+                event.to_stream_fields(event_id),
+                maxlen=STREAM_MAXLEN,
+                approximate=True,
+            )
+        else:
+            payload = json.dumps(event.to_stream_fields(event_id),
+                                 ensure_ascii=False)
+            await r.lpush(_list_key(event.name), payload)
+            await r.ltrim(_list_key(event.name), 0, STREAM_MAXLEN - 1)
     except Exception as e:  # noqa: BLE001 — 事件丢失不得影响主业务事务
         logger.warning(f"[events] 发布 {event.name} 失败: {type(e).__name__}: {e}")
         return False
@@ -152,30 +185,58 @@ async def subscribe(
         return
     if not await is_available():
         return
-    streams = {f"events:{n}": "0-0" for n in wanted}
     try:
         r = await _client()
     except Exception as e:  # noqa: BLE001
         logger.warning(f"[events] 订阅初始化失败: {type(e).__name__}: {e}")
         return
+
+    async def _dispatch(fields: dict) -> None:
+        ev = Event.from_stream(fields)
+        if ev is None:
+            return
+        try:
+            await handler(ev)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[events] 处理 {ev.name} 失败: {type(e).__name__}: {e}")
+
+    if await supports_streams():
+        streams = {f"events:{n}": "0-0" for n in wanted}
+        while True:
+            try:
+                message = await r.xread(streams, block=idle_ms, count=10)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[events] 订阅中断: {type(e).__name__}: {e}")
+                return
+            for _stream, entries in message or []:
+                for _msg_id, fields in entries:
+                    await _dispatch(fields)
+        return
+
+    # List 传输：阻塞弹出最早的条目（多 key + timeout，Redis 2.0+ 即支持）。
+    # 超时压到数秒是刻意的 —— 阻塞过久会让 CancelledError 迟迟得不到响应，
+    # 服务关停时订阅协程会拖住退出。
+    keys = [_list_key(n) for n in wanted]
+    timeout_s = max(1, min(int(idle_ms / 1000) or 1, 5))
     while True:
         try:
-            message = await r.xread(streams, block=idle_ms, count=10)
+            popped = await r.blpop(keys, timeout=timeout_s)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
             logger.warning(f"[events] 订阅中断: {type(e).__name__}: {e}")
             return
-        for _stream, entries in message or []:
-            for _msg_id, fields in entries:
-                ev = Event.from_stream(fields)
-                if ev is None:
-                    continue
-                try:
-                    await handler(ev)
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        f"[events] 处理 {ev.name} 失败: {type(e).__name__}: {e}")
+        if not popped:
+            continue
+        _key, raw = popped[0], popped[1]
+        try:
+            fields = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(fields, dict):
+            await _dispatch(fields)
 
 
 def reset_probe_cache() -> None:
