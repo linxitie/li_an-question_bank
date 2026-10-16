@@ -502,9 +502,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"种子数据初始化失败（服务继续运行）: {e}")
 
+    # 事件消费者：P5.2 调用点改造完成前保持关闭（配置默认 False），
+    # 过早启动会与现有同步直调产生成就双写
+    consumer_task = None
+    if settings.EVENT_CONSUMER_ENABLED:
+        import asyncio as _consumer_asyncio
+        from .services.event_consumer import consume_user_actions
+        consumer_task = _consumer_asyncio.create_task(consume_user_actions())
+        logger.info("事件消费者已启动")
+
     yield
 
     logger.info("关闭公安联考题库系统服务...")
+    if consumer_task is not None:
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except Exception:
+            pass
     try:
         from .services.scheduler import shutdown_scheduler
         shutdown_scheduler()
