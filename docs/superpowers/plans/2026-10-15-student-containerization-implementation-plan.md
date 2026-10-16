@@ -824,6 +824,27 @@ HTTP 头 `Cache-Control`、局部函数 `cache_key`；`db_router` 0 处）。
 不随本任务一并搬迁。
 
 **风险**：低（已迁三者均被完整引用并逐一修正，回归基线逐项未变）。
+
+#### P2.2 遗留三项已补完（提交 `e9d2de0`）
+
+P3B 搬迁使全部导入链稳定后，先前推迟的三项得以安全执行：
+
+| 文件 | 去向 | 说明 |
+|---|---|---|
+| `app/seed.py` | `scripts/admin/seed.py` | 4 条跨包相对导入改为绝对 `app.*`；`main.py:500` 同步改指 |
+| `app/cache.py` | `app/core/cache.py` | **实测并非死代码** —— `catalog/papers.py:17` 有 4 点式导入引用它（首轮扫描漏判） |
+| `app/db_router.py` | `app/core/db_router.py` | 仅依赖 sqlalchemy，移动无影响 |
+
+**「cache 是死代码」的结论被推翻**：先前扫描的正则 `from\s+\.{1,2}(cache|db_router)\s+import`
+只匹配 1–2 个点，漏掉 `papers.py` 的 `from ....cache import`（4 点）。
+**教训：跨目录重构的检索必须覆盖任意点数的相对导入**，漏一个层级就会得出
+「零引用、可安全删除」的危险错误结论。已保留 `cache.py` 而非删除。
+
+`seed.py` 的静默失败风险经复核**低于预估**：`run_seed()` 首行即
+`if not settings.DEBUG: return`，生产环境（DEBUG=false）本就不执行，
+故该风险仅存在于开发期。
+
+验证：`/api` 路由 339 个、pytest `17 failed / 278 passed / 3 xfailed`、门禁 7/8。
 遗留的 `seed.py` 搬迁有静默失败风险，已在 P6 前置中标注。
 
 ---
