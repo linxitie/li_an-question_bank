@@ -830,15 +830,44 @@ HTTP 头 `Cache-Control`、局部函数 `cache_key`；`db_router` 0 处）。
 
 ## P3A · 前端 `src/` 目录分层
 
-### [ ] P3A.1 建立目录骨架
+### [x] P3A.1 建立目录骨架（提交 `2ac58d1`）
 
 ```
-src/views/{student,teacher,admin,system}/<shared|pc|tablet|mobile>/
-src/components/{common,mobile,domain}/
-src/services/api/
+src/views/{student,teacher,admin,system}/{shared,pc,tablet,mobile}/   ← 16 个
+src/components/{common,mobile,domain}/                               ← 3 个
+src/services/api/                                                     ← 1 个
 ```
 
-**说明**：`teacher/` 与 `admin/` 当前为空目录，属**为后续教师端/管理端手写页面预留的入口**——这两端的全部页面（`teacher_*` 8 个、`admin_*` 11 个）目前都在冻结区 `.vtj/vue/`，`src/` 中一个都没有。不预留则届时无处安放。
+另加 `src/views/README.md` 说明双轴语义与红线（R5 前缀不重命名、R12 不复制手机页、
+`.vtj/` 冻结 92 处导入）。
+
+**说明**：`teacher/` 与 `admin/` 当前为空目录，属**为后续教师端/管理端手写页面预留的入口**——
+这两端的全部页面（`teacher_*` 8 个、`admin_*` 11 个）目前都在冻结区 `.vtj/vue/`，
+`src/` 中一个都没有。不预留则届时无处安放。
+
+#### 实测的现状基线
+
+| 位置 | 现状 |
+|---|---|
+| `src/views/` 根 | **27 个 `.vue`**（待 P3A.2 迁移） |
+| `src/components/` | 4 个：`HelloWorld` `MobileTabBar` `RecentPracticeRecords` `VtjErrorBoundary` |
+| `src/services/` | 1 个：`NotificationService.ts` |
+
+#### 纯新增验证
+
+```
+既有文件被修改     : 0  ✓（纯新增，无任何改动）
+src/router/index.ts: 未动 ✓（92 处 $vtj 硬绑定完好）
+.vtj/              : 未动 ✓
+src/views 根 .vue   : 仍为 27 个，未受影响 ✓
+```
+
+提交时**刻意只 `git add src/views src/components src/services`**，
+因工作区另有一个未跟踪语料文件 `题库/备考资料/申论/申论各题型写作格式汇总.pdf`
+（0.46 MB）。该文件非本次改动，且 `题库/` 是红线 R6 语料目录，
+不应被顺手带入版本库——故保持未跟踪，交由用户处置。
+
+**风险**：极低（仅新增空目录与说明文档，不触碰任何现有代码）。
 
 ### [ ] P3A.2 迁移 `src/views/`（27 页）
 
