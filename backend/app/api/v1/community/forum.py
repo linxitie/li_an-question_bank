@@ -27,14 +27,14 @@ from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from ...core.database import get_db
-from ...core.config import settings
-from ...core.security import get_current_user, get_optional_user
-from ...models.models import (
+from ....core.database import get_db
+from ....core.config import settings
+from ....core.security import get_current_user, get_optional_user
+from ....models.models import (
     ForumPost, ForumComment, ForumLike, SysUser, SysOperationLog
 )
-from ...services.sensitive_words import sensitive_filter, SensitiveLevel
-from ...core.exceptions import BusinessLogicError, ValidationError, ResourceNotFoundError
+from ....services.sensitive_words import sensitive_filter, SensitiveLevel
+from ....core.exceptions import BusinessLogicError, ValidationError, ResourceNotFoundError
 
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
 logger = logging.getLogger(__name__)
@@ -293,7 +293,7 @@ async def create_post(
 
     # 触发社交成就
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(current_user.user_id, "post", db)
     except Exception as e:
         logger.warning(f"发帖成就判定失败: {e}")
@@ -371,7 +371,7 @@ async def toggle_post_like(
 
     # 触发社交成就（被点赞者：获赞/热门楼主）
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(post.user_id, "post", db)
     except Exception as e:
         logger.warning(f"点赞成就判定失败: {e}")
@@ -495,7 +495,7 @@ async def create_comment(
 
     # 触发社交成就（评论计数）
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(current_user.user_id, "post", db)
     except Exception as e:
         logger.warning(f"评论成就判定失败: {e}")
@@ -538,7 +538,7 @@ async def toggle_comment_like(
 
     # 触发社交成就（被点赞的评论作者）
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(comment.user_id, "post", db)
     except Exception as e:
         logger.warning(f"评论点赞成就判定失败: {e}")

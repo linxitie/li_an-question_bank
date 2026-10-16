@@ -15,7 +15,7 @@ import pytest
 from unittest.mock import patch
 
 from app.models.models import EssayQuote, QuoteFavorite
-from app.api.v1.quotes import _read_obsidian_quotes
+from app.api.v1.community.quotes import _read_obsidian_quotes
 from app.api.v1.collection import _read_obsidian_quote_by_filename
 
 
@@ -162,7 +162,7 @@ class TestDailyQuote:
                 "  - 忠诚\n"
             )
 
-        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", tmpdir):
+        with patch("app.api.v1.community.quotes.OBSIDIAN_QUOTE_DIR", tmpdir):
             r = client.get("/api/quotes/quote/daily", headers=auth_headers)
             assert r.status_code == 200
             data = r.json()
@@ -188,7 +188,7 @@ class TestDailyQuote:
         ))
         db_session.commit()
 
-        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", tmpdir):
+        with patch("app.api.v1.community.quotes.OBSIDIAN_QUOTE_DIR", tmpdir):
             r = client.get("/api/quotes/quote/daily", headers=auth_headers)
             assert r.status_code == 200
             assert r.json()["favorited"] is True
@@ -214,7 +214,7 @@ class TestObsidianRecursiveScan:
         """嵌套子目录中的金句文件应被递归扫描到"""
         self._create_nested_quote(tmp_path)
 
-        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
+        with patch("app.api.v1.community.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
             quotes = _read_obsidian_quotes()
 
         assert len(quotes) == 1
@@ -225,7 +225,7 @@ class TestObsidianRecursiveScan:
         """仅传文件名（不含路径）应能找到嵌套目录中的金句"""
         self._create_nested_quote(tmp_path)
 
-        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
+        with patch("app.api.v1.community.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
             quote = _read_obsidian_quote_by_filename("test-nested.md")
 
         assert quote is not None
@@ -235,8 +235,8 @@ class TestObsidianRecursiveScan:
         """嵌套目录中的金句应被每日金句接口选中"""
         self._create_nested_quote(tmp_path)
 
-        with patch("app.api.v1.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
-            with patch("app.api.v1.quotes.get_random_int", return_value=0):
+        with patch("app.api.v1.community.quotes.OBSIDIAN_QUOTE_DIR", str(tmp_path)):
+            with patch("app.api.v1.community.quotes.get_random_int", return_value=0):
                 r = client.get("/api/quotes/quote/daily", headers=auth_headers)
 
         assert r.status_code == 200

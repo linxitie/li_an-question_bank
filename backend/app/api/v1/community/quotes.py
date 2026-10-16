@@ -17,9 +17,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 
-from ...core.database import get_db
-from ...core.security import get_current_user, get_optional_user
-from ...models.models import EssayQuote, QuoteFavorite, SysUser
+from ....core.database import get_db
+from ....core.security import get_current_user, get_optional_user
+from ....models.models import EssayQuote, QuoteFavorite, SysUser
 
 router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
@@ -430,7 +430,7 @@ async def toggle_quote_favorite(
 
     # 触发金句收藏成就
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(current_user.user_id, "quote_favorite", db)
     except Exception as e:
         logger.warning(f"金句收藏成就判定失败: {e}")
@@ -471,7 +471,7 @@ async def toggle_obsidian_quote_favorite(
 
     # 触发金句收藏成就
     try:
-        from ...services import achievement_service
+        from ....services import achievement_service
         achievement_service.check_and_grant(current_user.user_id, "quote_favorite", db)
     except Exception as e:
         logger.warning(f"金句收藏成就判定失败: {e}")

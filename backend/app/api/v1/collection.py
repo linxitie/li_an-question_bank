@@ -190,7 +190,7 @@ def _get_subcategory(question) -> str:
 def _read_obsidian_quote_by_filename(filename: str) -> Optional[dict]:
     """根据文件名读取 Obsidian 金句"""
     import os
-    from .quotes import OBSIDIAN_QUOTE_DIR, _parse_obsidian_quote
+    from .community.quotes import OBSIDIAN_QUOTE_DIR, _parse_obsidian_quote
 
     if not filename or not os.path.exists(OBSIDIAN_QUOTE_DIR):
         return None
