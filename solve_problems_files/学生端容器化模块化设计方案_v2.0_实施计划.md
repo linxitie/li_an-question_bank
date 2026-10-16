@@ -1141,38 +1141,45 @@ python scripts/gate_all.py          # 期望：8 门禁全绿
 
 ## P4 · 契约改造
 
-### [ ] P4.1 建立边界检查器
+### [x] P4.1 建立边界检查器（提交 `b585acb` + `46e0fbc`）
 
 新建 `backend/scripts/check_module_boundary.py`（AST 扫描），命中即失败：
 
-- `modules/X/` 内 `from modules.Y.service import ...`
-- `modules/X/` 内 `from modules.Y.models import ...`
-- 跨域写入他域 ORM 表（白名单外）
+- 跨域模块导入：`app/api/v1/<域A>/` 内 import 了 `<域B>` 的模块
+- 跨域表写入：域 A 模块 import 的 ORM 模型被「他域独占使用」（依据
+  `table_usage.json` 表→使用模块矩阵 + 域模块映射）
 
-接入 `gate_all.py` 的 L4 / L5。
+接入 `gate_all.py` 的 **L4**（`gate_l4_api_contract.py` 末尾串联，保持 8 门禁口径）。
 
-### [ ] P4.2 改造 15 处 `check_and_grant`
+**基线机制**：首次运行生成 `data/refactor_baseline/boundary_baseline.json`，
+之后只要求「不新增违规」——存量违规单独登记逐步消化，避免一次把门禁压垮。
+基线文件已**强制入库**（`.gitignore` 的 `backend/data/*` 会挡住它；同目录四个
+既有基线文件是规则加入前入库的，新文件须 `git add -f`）。
 
-按 `refactor_baseline/table_usage.json` 定位的 15 处跨域写调用点逐点改造。
+**实测：当前违规 0 条**。与计划的偏差：计划写的是 `modules/X/` 路径，
+P3B 落地后实际布局为 `app/api/v1/<domain>/`，检查器按实测布局工作；
+且真实跨域耦合多走 `app/services/*` 共享服务层而非域间直接导入——
+共享服务的域归属划分属后续 P4.2/P5.2 的渐进改造范畴。
 
-示例（`goals.py:382`）：
+### [~] P4.2 改造跨域写调用点（首个已完成，提交 `2bd44da`）
 
-```python
-# 改造前：直接写他域表
-from ...models.models import CoinRecord
-CoinRecord(user_id=..., ...); db.add(...)
+按计划示例落地第一个改造：
 
-# 改造后：走公开契约
-from ..reward.contract import grant_coins
-grant_coins(db, user_id=user.id, amount=50, source="goal_completed")
-```
+| 项 | 改造前 | 改造后 |
+|---|---|---|
+| `growth/goals.py:380-390` | 直接实例化 `CoinRecord` 并改写 `total_coins` | `from ..reward.contract import grant_coins` |
 
-**验证**：
+新建 `reward/contract.py`，含 `grant_coins`（加币+流水，不 commit 随调用方事务）
+与 `spend_coins`（扣币，余额不足抛 `ValueError`）。
 
-```powershell
-python scripts/check_module_boundary.py   # 期望退出码 0
-python scripts/gate_all.py               # 期望 L4/L5 通过
-```
+验证：339 路由、pytest `17 failed / 278 passed / 3 xfailed` 精确基线、
+边界检查器 0 新增违规。
+
+**剩余调用点**：计划称「15 处 check_and_grant」——实测为 14 处
+`achievement_service.check_and_grant`（fire-and-forget 13 处 + `practice:54`
+返回给前端弹窗 1 处）加 `stats` 的同步读。它们与 P5.2 的待决策项
+（全异步 vs 折中）直接重叠，**须先定 P5.2 方案再统一改造**，避免
+P4.2/P5.2 各改一半互相冲突。已与此前 P5.2 分析合并为同一决策点。
 
 ---
 
