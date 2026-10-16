@@ -65,16 +65,29 @@ v1 草案基于**假设的系统形态**编写，而非实际代码。经三轮�
 | 页面数 | **47 个**（VTJ 项目配置登记），其中 **45 个 `raw: true` 手写页**、2 个生成页 |
 | DSL 文件 | `.vtj/files/*.json` 共 **73 个** → **26 个为孤儿**（未在项目配置中登记） |
 | `raw` 标记位置 | **不在 DSL JSON 中**，而在 VTJ 项目配置内（不可 grep DSL 获取） |
-| `.vtj/vue/` 磁盘文件 | 75 个 `.vue` |
+| `.vtj/vue/` 磁盘文件 | 75 个 `.vue`：**PC 端 61 / 平板端 7 / 手机端 7** |
 | **冻结证据（决定性）** | `src/router/index.ts` 共 628 行，含 **92 处** `import('$vtj/vue/<id>.vue')` 硬绑定 |
-| `src/views/` | **27 个**手写页（多为 `mobile_*`），**平铺、无功能域分组** |
-| `src/components/` | 4 个 |
+| `src/views/` | **27 个**手写页：**手机端 19 / 三端共用 8 / 平板端 0**；**平铺、无功能域分组** |
+| 三端共用页（8） | `achievements` `exercise` `solution` `profile` `feedback` `help` `not-found` `unauthorized` |
+| **设备识别** | `src/utils/device.ts` 的 `detectDevice()` 返回 `'pc' \| 'tablet' \| 'mobile'`；判定依据为 UA 正则 + 屏宽（`>=768 且 <=1024` 为平板、`<768` 为手机）+ `navigator.maxTouchPoints`（已兼容 iPadOS 桌面模式） |
+| **设备路由门控** | `src/router/index.ts` 已有 `meta: { platform: 'tablet' }` 等门控标记 |
+| **设备路径改写** | `resolveDevicePath()` + `DEVICE_ROUTE_MAP`：PC 路径按当前设备自动映射到 `/mobile/` 或 `/tablet/` 前缀 |
+| `src/components/` | 4 个，其中 `MobileTabBar.vue` 为设备专属组件（被 `packages/design-tokens` 引用） |
 | `src/utils/` | **7 个** |
 | `src/layouts/` | 2 个（`AdminLayout.vue`、`TeacherLayout.vue`） |
 | 角色权限 | `src/router/index.ts` 已按 学生端/教师端/管理端 分节，并已有 `meta: { roles: ['student'] }` 门控 |
 | 开发代理 | `proxy.config.ts` 代理 `/api`、`/ws`、`/static`、`/uploads` → `http://127.0.0.1:8000` |
 | 微前端 | **完全没有**——无 qiankun、无 Module Federation、无 wujie |
-| 同级空项目 | `linxitie.policy-exam-bank-mobile`、`linxitie.policy-exam-bank-tablet` 两个 VTJ 项目目录，**均为空（0 页面）** |
+| **共享包** | `packages/` 共 4 个：`design-tokens`（被 `MobileTabBar.vue:11,36` 引用）、`shared-api`（被 `src/auth.ts:3` 引用）、`shared-types`（被 `shared-api/src/client.ts:10`、`src/auth.ts:4` 引用）、`shared-store`（**零外部引用，疑似脚手架残留**） |
+| 同级项目 | `linxitie.policy-exam-bank-mobile`（4 文件，含 `src/App.vue` 与 `src/components/QRConfirmModal.vue`）、`linxitie.policy-exam-bank-tablet`（3 文件，含 `src/App.vue`）——均为**未注册页面的最小脚手架**，非空目录 |
+
+**关键结构性事实**：前端是 **角色轴 × 设备轴** 两个正交维度，不是单一的角色轴。
+
+| 端 | `.vtj/vue/` | `src/views/` | 说明 |
+|---|---:|---:|---|
+| PC（电脑端） | 61 | 8（三端共用） | `question_bank`、`gold_purchase`、`forum` 等主页面 |
+| 平板端 | 7 | 0 | `tablet_home` / `tablet_login` / `tablet_question_bank` / `tablet_practice` / `tablet_forum` / `tablet_profile` / `tablet_gold_purchase` |
+| 手机端 | 7 | **19** | 手写页占主体，含 `mobile_achievements` / `mobile_answer` / `mobile_wrong_review` / `mobile_scan` 等 |
 
 ### 2.3 v1 草案与实测的逐条对照
 
@@ -213,6 +226,28 @@ section_vocab={'言语理解与表达':85,'数量关系':85,'判断推理':85,'�
 | 5 | `DEBUG` 默认 `True` | `core/config.py:43` |
 | 6 | 系统级 `ffmpeg` 依赖 | `core/config.py:52` |
 | 7 | `NEWS_BROWSER="chromium"` 需 Playwright 浏览器 | `core/config.py:63` |
+
+#### 2.10.1 gRPC / Canal 僵尸功能（实测）
+
+| 项 | 实测 | 判定 |
+|---|---|---|
+| `grpcio` / `grpcio-tools` | `requirements.txt:46-47` **被注释掉** | 未安装 |
+| `main.py:475` | 调用 `setup_grpc_service(app)`，外层 `try/except` 包裹，重试 3 次 | 已接入 |
+| 实际行为 | 因 `grpcio` 未安装，**必然走 `main.py:490` 的 `except`，仅打一条 warning 后继续** | 🔴 **僵尸功能：写了、接了，但永远不生效** |
+| `main.py:522-525` | 关闭时调用 `stop_grpc_service()`，同样被 `except` 吞掉 | 同上 |
+| `canal_client.py` | **全仓库零引用** | 死代码 |
+| `exam_service_pb2_grpc.py` | 仅被自身引用 | 死代码 |
+| `main.py` 自述文档 | 「gRPC: 高性能远程调用」 | 文档与实际不符 |
+| 系统内是否有 gRPC 客户端 | 无 | 无使用方 |
+
+**处置（已获批准）**：删除。对系统运行、安全、性能、跨平台适配的影响均为零或正向——
+
+- 运行：零影响（本就从未成功启动过）
+- 安全：减少一处潜在端口暴露面
+- 性能：启动路径少两次异常捕获
+- 跨平台适配：零影响
+
+若后续确有 gRPC 需求，按 §4.1 的 `integration/` 层重新接入。
 
 `core/config.py` 注释进一步说明：MinerU 需要 **Python 3.11** 虚拟环境，OCR 需要 **<3.12**。因此 `python:3.13-slim` 镜像**无法在进程内承载**这两个解析器，必须保留既有的外部子进程设计。
 
@@ -366,26 +401,149 @@ backend/app/
 
 ### 4.2 前端目录
 
+**前提**：前端代码位于仓库根，`vite.config.ts` 有 `workspaceRoot` 强制校验，`proxy.config.ts`、`index.html`、`.vtj/router.js` 全部锚定根目录，**无法移入子目录**。因此前端分层只发生在 `src/` 内部。
+
 **仅重组 `src/`。`.vtj/` 完全冻结**——`src/router/index.ts` 中 92 处硬绑定 `import('$vtj/vue/<id>.vue')` 是不可逾越的约束。
 
 ```
 src/
-├── router/index.ts            # 主路由表（import 路径更新，API 不变）
+├── router/index.ts            # 主路由表（三端分节 + roles 门控 + platform 门控）
 ├── views/
-│   ├── student/               # 学生端手写页（现 27 个中的学生侧部分）
-│   ├── teacher/               # 教师端手写页
-│   ├── admin/                 # 管理端手写页
-│   └── shared/                # 三端共用
+│   ├── shared/                 # 三端共用 8 页
+│   │   └── {achievements, exercise, solution, profile, feedback, help, not-found, unauthorized}
+│   ├── pc/                     # PC 端手写扩展（当前为空，预留）
+│   ├── tablet/                 # 平板端扩展（当前手写页为 0，主要在 .vtj/vue）
+│   └── mobile/                 # 手机端 19 页
 ├── components/
-│   ├── common/                # 跨域通用组件
-│   └── domain/                # 域内专用组件
+│   ├── common/                 # HelloWorld / VtjErrorBoundary
+│   ├── mobile/                 # MobileTabBar（设备专属）
+│   └── domain/                 # RecentPracticeRecords 等域内组件
 ├── services/
-│   └── api/<domain>.ts        # 前端 API 调用按域归口
-├── layouts/                   # AdminLayout / TeacherLayout 保留
-└── utils/                     # 7 个工具
+│   └── api/<domain>.ts         # 前端 API 调用按域归口
+├── layouts/                    # AdminLayout / TeacherLayout 保留
+└── utils/                      # device.ts 等 7 个工具
 ```
 
-### 4.3 VTJ 纪律（不可违反）
+**命名保留约定**：`mobile_*` / `tablet_*` **文件名前缀不重命名**。理由——它们与 `.vtj/vue/mobile_*.vue`、`tablet_*.vue` 一一对应，前缀是与低代码页面建立对照关系的唯一线索；重命名会破坏该对照并增加后续三端改造的认知负担。**按目录归类，文件名前缀保持不变。**
+
+> **⚠️ `src/utils/device.ts` 与 `resolveDevicePath()` 属设备双轴的核心机制，重组时必须原样保留，不得移动或改名。** 它承载了 PC → mobile/tablet 的路径自动映射。
+
+### 4.3 根目录分层（现状 28 项 → 目标 6 类）
+
+**约束**：前端无法移入子目录（见 §4.2），故「VTJ 应用根」必须保留在根。其余全部归位。
+
+```
+/ 仓库根
+│
+├── 【A】VTJ 应用根 ── 冻结，不可重组
+│   ├── src/                 前端源码（内部按 §4.2 分层）
+│   ├── .vtj/                低代码资产（92 处 import 硬绑定）
+│   ├── public/              静态资源（favicon / logo）
+│   ├── packages/            前端共享包（已获批准：保持根目录，不并入 deploy/）
+│   ├── dist/                构建产物（已 gitignore）
+│   └── package.json  vite.config.ts  proxy.config.ts  tsconfig*.json  index.html
+│
+├── 【B】应用后端
+│   └── backend/             FastAPI + 运维脚本 + 测试 + 迁移
+│
+├── 【C】原始语料 ── 🚫 红线，禁动
+│   └── 题库/                662 MB PDF（行测重导依赖）
+│
+├── 【D】文档 ── 全部收归此处
+│   ├── docs/
+│   │   ├── design/          方案设计（按业务域）
+│   │   ├── plans/           实施计划
+│   │   ├── ops/             运维手册（门禁 / 备份 / 故障速查）
+│   │   ├── archive/         历史版本（题目导入 v1~v9 归此）
+│   │   └── ai-commands/     原 CLAUDE.md/ 目录改名而来
+│   └── README.md  CHANGELOG.md
+│
+├── 【E】工程化
+│   ├── deploy/              Dockerfile / docker-compose.yml / nginx.conf
+│   │                        / .env.development / .env.school / .env.example
+│   ├── parser/              MinerU + OCR sidecar（python:3.11）
+│   └── tools/               开发辅助工具（bg-monitor / sfc-check / git-hooks）
+│
+├── 【F】AI 工具记录 ── 归并为单一目录
+│   └── .agent/{skills,tools,plans}/ + README.md 索引
+│
+└── 构建缓存 ── 全部 gitignore
+    ├── node_modules/  .worktrees/  logs/  .pytest_cache/  .playwright-mcp/
+    └── .idea/  .vscode/  .sisyphus/  .omo/
+```
+
+**分层原则**：
+
+| # | 原则 |
+|---|---|
+| L1 | 按职责分层，不按历史堆积——每层职责单一，有 README 说明边界 |
+| L2 | 源码 / 数据 / 文档 / 工具 / 产物 五类物理分离——数据不入 Git，产物可重建，工具不混入源码 |
+| L3 | 命名统一：多词目录用 `kebab-case`，Python 模块用 `snake_case`，域目录用单个英文单词，脚本用 `{类别}_{对象}_{动作}.py` |
+| L4 | 冻结项显式标注，禁止「顺手整理」 |
+
+### 4.4 后端分层
+
+```
+backend/
+├── app/
+│   ├── main.py                  ★ 唯一入口，只做装配
+│   │
+│   ├── core/                    平台内核 ── 零业务
+│   │   ├── config.py  database.py  security.py  redis_client.py
+│   │   ├── events.py            【新】事件总线契约
+│   │   ├── contracts.py         【新】跨域公开契约注册
+│   │   ├── module_registry.py   【新】域清单一处声明
+│   │   ├── middleware.py        ← 从 app/ 根移入
+│   │   ├── monitoring.py        ← 从 app/ 根移入
+│   │   ├── exceptions.py        ← 从 app/ 根移入
+│   │   ├── cache.py             ← 从 app/ 根移入
+│   │   └── db_router.py         ← 从 app/ 根移入
+│   │
+│   ├── modules/                 【新】十域，各自自包含
+│   │   └── <domain>/{__init__, router, schema, models, service, contract}.py
+│   │
+│   ├── shared/                  【新】跨域基础件 ── 非业务
+│   │   └── parser/  ocr/  scraper/  image/  matcher/
+│   │
+│   ├── models/                  Base + 过渡期（P3 后仅留 Base）
+│   ├── schemas/                 平台级共享 schema
+│   ├── services/                过渡期（P2–P4 后按域迁入 modules/）
+│   ├── api/v1/                  过渡期（P3 后清空）
+│   │
+│   ├── static/                  题图 4.3 GB ── 卷，不入 Git 不入镜像
+│   └── uploads/                 702 MB ── 卷
+│
+├── scripts/                     运维脚本（6 类子目录，见 §7.5）
+│   └── gates/  migrate/  repair/  probe/  admin/  verify/
+├── tests/                       conftest.py + 用例
+├── migrations/                  SQL + Python 迁移
+├── data/                        SQLite + gates + audit + archive ── 卷
+├── logs/                        运行日志
+├── Dockerfile  .dockerignore
+├── .env  .env.example
+├── requirements.txt
+└── README.md  REPORTS.md
+```
+
+**`integration/` 层说明**：实测发现 gRPC 与 Canal 代码当前无任何使用方且从未生效（§2.10.1），经批准**予以删除**而非保留独立层。若后续确有外部系统集成需求，再按 `app/integration/{grpc,canal}/` 建立。
+
+### 4.5 数据目录分层
+
+```
+backend/data/                    全部不纳入 Git，容器化后为卷
+├── question_bank.db             生产库 292 MB（+ -wal / -shm）
+├── gates/                       门禁基线 ── 反选入库（CI 复现必需）
+├── audit/                       回填/去重审计流水（14 文件：.jsonl + .csv）── 数据变更追溯凭证
+├── archive/                     备份归档（41 份唯一内容，按「最近 7 天 + 每周一份」保留）
+├── text_cache/                  PDF 文本提取缓存（74 文件，可重建）
+├── xingce_cache/                行测探测缓存（170 文件，可重建）
+├── refactor_baseline/           重构基线 JSON（6 份）── force-add 入库
+└── backup_audit_report.json     备份审计报告 ── force-add 入库
+```
+
+**关键区分**：`audit/` 与 `snapshots/` 中的 `待推断题目清单_270.csv` / `_303.csv` 是**待人工处理的数据清单，不是垃圾**，禁止删除。
+
+### 4.6 VTJ 纪律（不可违反）
 
 | 规则 | 原因 |
 |---|---|
@@ -625,6 +783,12 @@ dst.close(); src.close()
 |---|---:|---|
 | 77 个哈希可证冗余的数据库文件 | **1,411.9 MB** | §2.7 五组重复 + 31 个空 `-wal` + 31 个 `-shm` |
 | `backend/data/` 散落 `xingce_regression_*` / `type_repair_*.log` | ~40 个 | 一次性产物 |
+| `backend/` 根 `backend_pid.txt`、`backend_err/out/run.log` | 4 文件 | 运行时 PID 与日志；容器化后由 Docker 管理 |
+| `backend/` 根 `_ans_hunan.txt` / `_ans_sample.txt` / `_q_2024gk.txt` / `_q_sample.txt` / `_badge_write_test.txt` | 5 文件 | 探测临时输出（已 gitignore） |
+| `backend/mineru_1787720560/` | 8 文件 | 时间戳命名的运行时临时目录 |
+| `mineru_verify_out/` | 5 文件 | MinerU 一次性验证产物 |
+| `test-question-render.mjs` | 1 文件 | 一次性题目渲染验证脚本（移入 `tools/` 或删除） |
+| `env.json` / `env.local.json` / `env.sit.json` / `env.uat.json` | 各 3 字节 | 空壳配置，合并入 `deploy/.env.*` 或删除 |
 | `temp_pdf_images/` | 26 MB | 41 个 PNG 临时提取图 |
 | `tmp/` | 1.2 MB | 语料探测产物 |
 | `git_diff_qi.txt` | 732 KB | 根目录临时 diff |
@@ -633,6 +797,7 @@ dst.close(); src.close()
 | `src/.DS_Store` | — | macOS 垃圾 |
 | `backend/scripts/题库.db` | 0 B | 空库 |
 | 26 个孤儿 `.vtj/files/*.json` | — | 未在 VTJ 项目配置登记（删除前须确认无引用） |
+| **gRPC / Canal 僵尸代码** | 4 文件 + `main.py` 两处块 | 见 §2.10.1：删除 `canal_client.py`、`exam_service.proto`、`exam_service_pb2.py`、`exam_service_pb2_grpc.py`、`grpc_service.py`，及 `main.py:474-491`、`:522-525` |
 
 ### 7.2 L2 · 归档而非删除
 
@@ -642,8 +807,14 @@ dst.close(); src.close()
 | `solve_problems_files/` 134 个平铺 md | 迁入 `docs/{design,plans,ops,archive}/`。规则：**同一主题只留终版在 `design/`，历史版本进 `archive/`**。仅题目导入 v1~v9 即有 11 份，按此规则收敛为 2 份 |
 | `backend/scripts/` 90 个平铺 | 按 §7.5 分类 |
 | 3 份重复 regroup 脚本 | 合并为 1 份 |
-| `.opencode/`(52.6 MB)、`.claude/`(17)、`.omo/`(152)、`.agents/`(63)、`.superpowers/`(12)、`.sisyphus/`(3) | 归入 `.agent/` 单一目录：`.agent/{skills,tools}/` + `README.md` 索引 |
+| `.opencode/`(52.6 MB)、`.claude/`(17)、`.omo/`(152)、`.agents/`(63)、`.superpowers/`(12)、`.sisyphus/`(3) | 归入 `.agent/` 单一目录：`.agent/{skills,tools,plans}/` + `README.md` 索引 |
+| `vtj-mcp-server/`（3,547 文件） | → `.agent/tools/vtj-mcp/` |
 | `CLAUDE.md/`（目录） | 重命名为 `docs/ai-commands/`，消除与工具约定文件名的冲突 |
+| `packages/`（4 个共享包，17 文件） | **保持根目录不动**（已获批准）；`shared-store` 零引用，是否删除待确认 |
+| `.pre-commit-config.yaml` + `scripts/git-hooks/pre-commit` | **保留并纳入方案**——已配置 2 个 VTJ 版本同步钩子与 black 格式化，移入 `scripts/` 分类 |
+| `backend/data/audit/`（14 文件） | **保留**，归入 `data/audit/`——回填/去重审计流水 |
+| `backend/data/text_cache/`（74）、`xingce_cache/`（170） | 保留（已 gitignore），纳入缓存治理；可重建但耗时 |
+| `solve_problems_files/wrong_questions_nodes_backup.json` | 归入 `docs/archive/`，作为错题集节点备份 |
 
 ### 7.3 L3 · 需用户明确授权
 
@@ -659,9 +830,14 @@ dst.close(); src.close()
 |---|---:|---|
 | `题库/` | 662 MB | 原始 PDF 语料，唯一事实来源；行测重导依赖它 |
 | `.vtj/` | — | 92 处路由硬绑定 + 45 个 raw 手写页 + 设计器按 id 读写 |
+| `src/utils/device.ts` | — | 设备双轴核心：PC → mobile/tablet 路径自动映射，重组时须原样保留 |
+| `packages/design-tokens`、`shared-api`、`shared-types` | — | 确有引用（`MobileTabBar.vue`、`src/auth.ts`、`shared-api/src/client.ts`），且已获批准保持根目录 |
 | `backend/app/static/` | 4.3 GB | 题图在库，删除即全站裂图 |
 | `backend/data/question_bank.db` | 292 MB | 生产库 |
 | `backend/data/gates/*.json` | 5.3 MB | 门禁基线，已 `.gitignore` 反选入库 |
+| `backend/data/audit/` | 14 文件 | 回填/去重审计流水，数据变更的追溯凭证 |
+| **`backend/data/snapshots/待推断题目清单_270.csv` / `_303.csv`** | 2 文件 | **待人工处理的数据清单，不是垃圾** |
+| `backend/data/text_cache.bak_20261001_200518` | — | 「全文翻倍」旧文本的证据，`题目导入模块全面修复与满血优化方案_v1.md` 标为禁止删除 |
 
 ### 7.5 `backend/scripts/` 分类
 
@@ -743,44 +919,55 @@ backend/scripts/
 
 > 以下 5 项**需用户决策或授权**，无法由实施方自行决定。
 
-### 9.1 🔴 DeepSeek API 密钥已泄露（最高优先级）
+### 9.1 🔴 DeepSeek API 密钥已泄露（已处理）
 
-**事实**：`.omo/plans/configure-deepseek-api.md` 含硬编码密钥 `sk-9a2e…`（已掩码），已随提交 `4a18f89` 进入 Git 历史，文件处于跟踪状态。`admin_token.txt` 亦被跟踪。
+**事实**：`.omo/plans/configure-deepseek-api.md` 含硬编码密钥（已掩码），已随提交 `4a18f89` 进入 Git 历史，文件处于跟踪状态。
 
-**请求**：
-1. **立即在 DeepSeek 控制台吊销该密钥并签发新密钥**——这是唯一彻底解法，可立即执行，与本项目无关；
-2. 是否将新密钥改写入配置而非文档；
-3. 是否授权用 `git filter-repo` 改写历史（影响所有协作者，需明示）；
-4. 是否授权将 `admin_token.txt` 移出 Git 跟踪并轮换其内容。
+**状态**：用户已于 2026-10-15 **完成吊销**。后续动作：清洗文档中的密钥、新建 `.env.example` 保留 `DEEP_SEEK_API_KEY=` 空字段供后期填写。
 
-**影响面**：一旦学校服务器部署且仓库被他人访问，密钥可被直接利用产生费用。
+### 9.1.1 🔴 `backend/.env` 中的 JWT 签名密钥已泄露（待轮换）
+
+**事实**：`backend/.env` **已被 Git 跟踪，且未被任何 `.gitignore` 规则覆盖**，其中 `JWT_SECRET_KEY` 为 48 位真实值，已跨 3+ 次提交进入历史。
+
+**危害**：持有仓库者即可用该密钥伪造任意用户的 JWT，**包括管理员身份**。
+
+**状态**：待用户执行轮换（见实施计划 P0.2-f）。密钥生成与填写由用户本人完成，不经过 AI。
 
 ### 9.2 🔴 默认密钥与调试开关必须覆盖
 
-`core/config.py` 的 `JWT_SECRET_KEY="your-secret-key-here-must-be-at-least-32-characters"`、`DB_PASSWORD="123456"`、`DEBUG=True` 均为**可直接利用的默认值**。任何人用默认密钥签发的 JWT 都能通过管理员鉴权。
+`core/config.py` 的 `DB_PASSWORD="123456"`、`DEBUG=True` 均为可直接利用的默认值。**但实测发现更严重的问题**：`backend/.env` 中的 `JWT_SECRET_KEY` 已是非默认的自定义值（48 位），却**已被 Git 跟踪并进入历史**——见 §9.1.1。
 
-**请求**：确认由 `.env.school` 强制覆盖，且 `DEBUG=False`。此项无需用户决策即可实施，但需确认学校服务器的密钥保管方式。
+三项覆盖的实测影响：
 
-### 9.3 🟠 MinerU 与 OCR 的 Windows 绝对路径
+| 项 | 实测影响 | 结论 |
+|---|---|---|
+| `DB_PASSWORD` | 仅 `config.py:127` 的 MySQL 分支引用，当前 `DB_TYPE=sqlite` **根本不生效** | 零风险 |
+| `DEBUG=False` | 全代码库仅 `seed.py:453` 一处读取，作用是**跳过自动种子数据** | 零风险 |
+| `JWT_SECRET_KEY` 轮换 | `security.py:229/240/245` 使用；轮换后 access token（有效期实测 **480 分钟**）与 refresh token 全部失效 | 全员登出一次，预期行为 |
 
-`MINERU_PYTHON=C:\mineru_env\Scripts\python.exe`、`OCR_PYTHON=D:\ocr-env\Scripts\python.exe` 在 Linux 容器内必然失效。且配置注释说明二者分别需 Python 3.11 与 <3.12，**无法在 `python:3.13-slim` 进程内承载**。
+**用户已确认全部覆盖。**
 
-**请求**（三选一）：
-- **A**：学校服务器不需要扫描件 PDF 解析 → `MINERU_ENABLED=false` 降级，OCR 同样关闭（最简）
-- **B**：需要 → 在服务器单独建两个 venv（Python 3.11 / 3.11），容器内通过 `MINERU_PYTHON`/`OCR_PYTHON` 指向其绝对路径
-- **C**：需要 → 将二者独立为两个容器（偏离「单容器」决策，需重新评估）
+### 9.3 🟠 MinerU 与 OCR 的 Windows 绝对路径（已定方案）
 
-### 9.4 🟠 行测题库重导进度 2.3%
+`MINERU_PYTHON=C:\mineru_env\Scripts\python.exe`、`OCR_PYTHON=D:\ocr-env\Scripts\python.exe` 在 Linux 容器内必然失效。配置注释说明二者分别需 Python 3.11 与 <3.12，**无法在 `python:3.13-slim` 进程内承载**。
 
-行测有效题 **233 道**，历史峰值为 **10,171 道**，缺口约 **9,900 道**。已确认 `题库/行测/` 原始 PDF 完整保留，可用新管线重导。
+**已批准方案（决策：采纳 CPU 隔离 + Python 版本隔离）**：建立**独立解析服务 sidecar 容器**（`python:3.11-slim` + MinerU 3.4.5 + PaddleOCR），主容器通过 HTTP `POST /parse` 调用。CPU 密集的解析任务与 Web 请求进程隔离。
 
-**请求**：行测重导**是否需要在本方案落地之前完成**？这决定学校服务器上线时的可用内容量。请注意：重导是**数据任务**，不是本次代码重构的一部分。
+保留**双路径**：容器内走 HTTP，开发机继续走现有 `subprocess` + `MINERU_PYTHON`——`mineru_service.py:55` 的 `is_enabled()` 降级逻辑保持不变。
 
-### 9.5 🟡 测试 fixture 幂等缺陷
+### 9.4 行测题库重导 —— 用户确认不需要
 
-52 个 error 同源于 `index idx_import_status already exists`（建索引未用 `IF NOT EXISTS`）。**在修复前，门禁的红绿信号不可信**。
+行测有效题 **233 道**，历史峰值 **10,171 道**。用户已确认**本次不重导**。
 
-**请求**：确认将此项修复排在重构之前（实施方建议如此，无异议则按此执行）。
+用户后续工作重点为**教师端题目导入功能改造**与**三端「导入—展示—通信」数据一致性**。该工作会同时触及 `catalog` 域与三端读路径，因此**必须在 P3B 十域搬迁完成后再启动**，否则与目录搬迁改动同一批文件，冲突不可控。
+
+### 9.5 🟡 测试索引同名冲突 —— 根因已定位
+
+**实测根因更正**：并非「fixture 建索引未用 `IF NOT EXISTS`」，而是 `models.py` 中**两张表声明了同名索引** `idx_import_status`（`:1069` 的 `question_import_record` 与 `:1319` 的 `material_import_record`）。SQLite 索引名是数据库全局的，第二张表建索引时抛 `index idx_import_status already exists`，致 52 个测试 error。
+
+**连带发现**：`scripts/migrate_study_materials.py:72` 因同名冲突而**静默失效**，生产库 `material_import_record` 实测零索引（该表当前 0 行，影响可控）。
+
+用户已确认**先修复**，作为 P0.1。
 
 ---
 
@@ -854,8 +1041,20 @@ backend/scripts/
 | **换用 PostgreSQL / MySQL** | 单容器部署下 SQLite 无损失；`DB_TYPE` 已预留出口 |
 | **引入微前端（qiankun 等）** | 收益远低于成本；改为 `src/` 内部分层 |
 | **`.vtj/` 目录重组** | 92 处路由硬绑定，物理不可行 |
-| **空的手机端/平板端项目目录处置** | 需用户单独确认去留 |
+| **空的手机端/平板端项目目录处置** | 非空——mobile 含 `QRConfirmModal.vue` 实际组件，去留待用户确认 |
 | **多副本 / 高可用** | 单机部署无此需求 |
+
+---
+
+## 13. 已批准的补充决策
+
+| # | 决策 | 内容 |
+|---|---|---|
+| 1 | **设备双轴**纳入设计 | 前端按「角色 × 设备」两轴组织；`src/views/` 分为 `shared` / `pc` / `tablet` / `mobile`；**`mobile_*`、`tablet_*` 文件名前缀保留不重命名**（与 `.vtj/vue/` 保持对照） |
+| 2 | **gRPC / Canal 僵尸代码删除** | 见 §2.10.1。对运行/安全/性能/跨平台适配零影响或正向 |
+| 3 | **`packages/` 保持根目录** | 4 个共享包确有引用，不并入 `deploy/` |
+| 4 | **P0~P6 阶段划分采纳** | 见实施计划 |
+| 5 | **行测重导不需要** | 用户确认；但教师端题目导入改造与三端「导入-展示-通信」数据一致性为后续重点，**必须在模块化重构（P3）完成后再动**，否则与目录搬迁冲突 |
 
 ---
 
