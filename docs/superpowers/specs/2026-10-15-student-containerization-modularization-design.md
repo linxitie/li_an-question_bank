@@ -68,7 +68,11 @@ v1 草案基于**假设的系统形态**编写，而非实际代码。经三轮�
 | `.vtj/vue/` 磁盘文件 | 75 个 `.vue`：**PC 端 61 / 平板端 7 / 手机端 7** |
 | **冻结证据（决定性）** | `src/router/index.ts` 共 628 行，含 **92 处** `import('$vtj/vue/<id>.vue')` 硬绑定 |
 | `src/views/` | **27 个**手写页：**手机端 19 / 三端共用 8 / 平板端 0**；**平铺、无功能域分组** |
-| 三端共用页（8） | `achievements` `exercise` `solution` `profile` `feedback` `help` `not-found` `unauthorized` |
+| 三端共用页（6） | `achievements` `exercise` `solution` `profile` `feedback` `help`（`meta.roles` 均为 `['student','teacher','admin']`）|
+| 系统页（2） | `not-found` `unauthorized`（后者 `meta.roles` 为 `[]`，无角色语义）|
+| **教师端页面** | `src/views/` 中 **0 个**；全部 **8 个** `teacher_*` 位于 `.vtj/vue/` |
+| **管理端页面** | `src/views/` 中 **0 个**；全部 **11 个** `admin_*` 位于 `.vtj/vue/` |
+| **设备路由复用** | `/tablet/` 21 条路由中，`tablet_news` 等**直接复用 `@/views/mobile_news.vue`**，同一组件经 `meta.platform` 区分设备 |
 | **设备识别** | `src/utils/device.ts` 的 `detectDevice()` 返回 `'pc' \| 'tablet' \| 'mobile'`；判定依据为 UA 正则 + 屏宽（`>=768 且 <=1024` 为平板、`<768` 为手机）+ `navigator.maxTouchPoints`（已兼容 iPadOS 桌面模式） |
 | **设备路由门控** | `src/router/index.ts` 已有 `meta: { platform: 'tablet' }` 等门控标记 |
 | **设备路径改写** | `resolveDevicePath()` + `DEVICE_ROUTE_MAP`：PC 路径按当前设备自动映射到 `/mobile/` 或 `/tablet/` 前缀 |
@@ -399,32 +403,95 @@ backend/app/
     grpc_service.py  middleware.py  monitoring.py  scheduler.py  seed.py
 ```
 
-### 4.2 前端目录
+### 4.2 前端目录（角色 × 设备 双轴）
 
 **前提**：前端代码位于仓库根，`vite.config.ts` 有 `workspaceRoot` 强制校验，`proxy.config.ts`、`index.html`、`.vtj/router.js` 全部锚定根目录，**无法移入子目录**。因此前端分层只发生在 `src/` 内部。
 
 **仅重组 `src/`。`.vtj/` 完全冻结**——`src/router/index.ts` 中 92 处硬绑定 `import('$vtj/vue/<id>.vue')` 是不可逾越的约束。
 
+#### 4.2.1 页面归属实测（决定目录结构的事实）
+
+| 事实 | 实测值 |
+|---|---|
+| `src/views/` 中教师端页面 | **0 个** |
+| `src/views/` 中管理端页面 | **0 个** |
+| 教师端页面实际位置 | `.vtj/vue/` 的 `teacher_*` **8 个**（`teacher_dashboard` / `teacher_questions` / `teacher_papers` / `teacher_scores` / `teacher_dashboard` 等） |
+| 管理端页面实际位置 | `.vtj/vue/` 的 `admin_*` **11 个**（`admin_dashboard` / `admin_users` / `admin_questions` / `admin_settings` / `admin_logs` / `admin_backup` / `admin_permissions` / `admin_materials` / `admin_shop` / `admin_approval` 等） |
+| `meta.roles` 为三角色通用的页面 | `exercise` `solution` `profile` `achievements` `feedback` `help`（6 页，均为 `['student','teacher','admin']`）|
+| `meta.roles` 为空的页面 | `unauthorized`（无角色语义） |
+| `/tablet/` 路由 | 21 条，其中 `tablet_news` 等**直接复用 `@/views/mobile_news.vue`** |
+| `/mobile/` 路由 | 27 条 |
+
+**结论**：教师端与管理端的全部页面当前都在冻结区 `.vtj/vue/`。`src/` 分层**必须同时容纳角色轴**，为后续教师端/管理端手写页面预留入口，否则届时无处安放。
+
+#### 4.2.2 目标结构
+
 ```
 src/
-├── router/index.ts            # 主路由表（三端分节 + roles 门控 + platform 门控）
+├── router/index.ts              # 主路由表（roles + platform 双重门控）
+│
 ├── views/
-│   ├── shared/                 # 三端共用 8 页
-│   │   └── {achievements, exercise, solution, profile, feedback, help, not-found, unauthorized}
-│   ├── pc/                     # PC 端手写扩展（当前为空，预留）
-│   ├── tablet/                 # 平板端扩展（当前手写页为 0，主要在 .vtj/vue）
-│   └── mobile/                 # 手机端 19 页
+│   ├── student/                 学生端
+│   │   ├── shared/              6 页（achievements exercise solution profile feedback help）
+│   │   ├── pc/                  PC 专属（当前 0，主要在 .vtj）
+│   │   ├── tablet/              平板专属（当前 0）
+│   │   └── mobile/              ★ 19 个 mobile_* 页全部归此
+│   │
+│   ├── teacher/                 教师端【预留】
+│   │   ├── shared/
+│   │   ├── pc/                  PC 专属（当前 0；教师端 8 页在 .vtj/vue）
+│   │   ├── tablet/              平板教师端（当前 0）
+│   │   └── mobile/              手机教师端（当前 0）
+│   │
+│   ├── admin/                   管理端【预留】
+│   │   ├── shared/
+│   │   ├── pc/                  ★ 管理端 11 页目前在 .vtj/vue
+│   │   ├── tablet/              平板管理端（当前 0）
+│   │   └── mobile/              手机管理端（当前 0）
+│   │
+│   └── system/                  无角色归属的系统页
+│       ├── not-found.vue
+│       └── unauthorized.vue
+│
 ├── components/
-│   ├── common/                 # HelloWorld / VtjErrorBoundary
-│   ├── mobile/                 # MobileTabBar（设备专属）
-│   └── domain/                 # RecentPracticeRecords 等域内组件
+│   ├── common/                  HelloWorld / VtjErrorBoundary（无角色无设备归属）
+│   ├── mobile/                  MobileTabBar（设备专属）
+│   └── domain/                  RecentPracticeRecords（域内）
+│
 ├── services/
-│   └── api/<domain>.ts         # 前端 API 调用按域归口
-├── layouts/                    # AdminLayout / TeacherLayout 保留
-└── utils/                      # device.ts 等 7 个工具
+│   └── api/<domain>.ts          # ★ 按十域归口，不按角色/设备
+│
+├── layouts/
+│   ├── AdminLayout.vue          管理端（位置已正确）
+│   └── TeacherLayout.vue        教师端（位置已正确）
+│
+└── utils/                       device.ts 等 7 个（原样保留）
 ```
 
-**命名保留约定**：`mobile_*` / `tablet_*` **文件名前缀不重命名**。理由——它们与 `.vtj/vue/mobile_*.vue`、`tablet_*.vue` 一一对应，前缀是与低代码页面建立对照关系的唯一线索；重命名会破坏该对照并增加后续三端改造的认知负担。**按目录归类，文件名前缀保持不变。**
+#### 4.2.3 分层规则
+
+| 轴 | 取值 | 判定来源 |
+|---|---|---|
+| **角色** | `student` / `teacher` / `admin` / `system` | `router/index.ts` 的 `meta.roles` |
+| **设备** | `pc` / `tablet` / `mobile` / `shared` | `meta.platform`；平板复用手机页时归 `mobile`（源码在前，适配在组件内） |
+
+**为什么 `shared/` 放在各角色目录下而非全局**：实测 `exercise`、`solution`、`profile`、`achievements`、`feedback`、`help` 六页的 `meta.roles` 均为 `['student','teacher','admin']`——它们是**每个角色各自拥有一份实例**，而非全局唯一。故归各角色自己的 `shared/`。
+
+**为什么 `system/` 单独承载**：`not-found`（404）与 `unauthorized`（403）对所有角色语义一致，且 `unauthorized` 的 `roles: []` 印证其无角色归属。
+
+**为什么 `services/api/` 按域而非按角色/设备**：与后端十域对齐（§3.2），保证端到端通信契约一致。
+
+#### 4.2.4 平板复用手机页的处理
+
+实测 `/tablet/news` 直接 `import('@/views/mobile_news.vue')`。因此：
+
+- 源码归 `views/student/mobile/mobile_news.vue`
+- 平板通过 `meta: { platform: 'tablet' }` + 同一组件实现
+- **不为平板新建重复文件**——这会制造双份维护成本，正是本方案要避免的「无理由切分」
+
+#### 4.2.5 命名保留约定
+
+`mobile_*` / `tablet_*` **文件名前缀不重命名**。理由——它们与 `.vtj/vue/mobile_*.vue`、`tablet_*.vue` 一一对应，前缀是与低代码页面建立对照关系的唯一线索；重命名会破坏该对照并增加后续三端改造的认知负担。**按目录归类，文件名前缀保持不变。**
 
 > **⚠️ `src/utils/device.ts` 与 `resolveDevicePath()` 属设备双轴的核心机制，重组时必须原样保留，不得移动或改名。** 它承载了 PC → mobile/tablet 的路径自动映射。
 

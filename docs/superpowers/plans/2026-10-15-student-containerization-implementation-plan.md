@@ -230,23 +230,32 @@ python scripts/gate_all.py                # 8 门禁全绿
 ### [ ] P3A.1 建立目录骨架
 
 ```
-src/views/{shared,pc,tablet,mobile}/
+src/views/{student,teacher,admin,system}/<shared|pc|tablet|mobile>/
 src/components/{common,mobile,domain}/
 src/services/api/
 ```
 
+**说明**：`teacher/` 与 `admin/` 当前为空目录，属**为后续教师端/管理端手写页面预留的入口**——这两端的全部页面（`teacher_*` 8 个、`admin_*` 11 个）目前都在冻结区 `.vtj/vue/`，`src/` 中一个都没有。不预留则届时无处安放。
+
 ### [ ] P3A.2 迁移 `src/views/`（27 页）
 
-| 目标目录 | 文件 |
-|---|---|
-| `views/shared/` | `achievements` `exercise` `solution` `profile` `feedback` `help` `not-found` `unauthorized`（8） |
-| `views/mobile/` | `mobile_*`（19，**文件名前缀保留**） |
-| `views/pc/` | 当前为空，预留 |
-| `views/tablet/` | 当前手写页为 0，预留 |
+按**角色 × 设备**双轴归位：
+
+| 目标目录 | 文件 | 数量 |
+|---|---|---:|
+| `views/student/mobile/` | `mobile_*`（**文件名前缀保留**） | 19 |
+| `views/student/shared/` | `achievements` `exercise` `solution` `profile` `feedback` `help` | 6 |
+| `views/system/` | `not-found` `unauthorized` | 2 |
+| `views/teacher/{shared,pc,tablet,mobile}/` | 预留，当前为空 | 0 |
+| `views/admin/{shared,pc,tablet,mobile}/` | 预留，当前为空 | 0 |
 
 同步更新 `src/router/index.ts` 的 import（**只改手写页的 `@/views/*`，92 处 `$vtj/vue/*` 一字不动**）。
 
-**约束**：`device.ts`、`resolveDevicePath()`、`DEVICE_ROUTE_MAP` 原样保留（C7）；`meta: { platform }` 与 `meta: { roles }` 门控保留。
+**约束**：
+- `device.ts`、`resolveDevicePath()`、`DEVICE_ROUTE_MAP` 原样保留（C7）
+- `meta: { platform }` 与 `meta: { roles }` 门控保留
+- `/tablet/news` 等路由复用 `@/views/mobile_news.vue` 的写法保留——**不为平板新建重复组件**（C5 同理，避免双份维护）
+- `AdminLayout.vue` / `TeacherLayout.vue` 位置已正确，不动
 
 ### [ ] P3A.3 迁移组件与服务层
 

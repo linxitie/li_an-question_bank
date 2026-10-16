@@ -76,6 +76,7 @@
 | R9 | **`backend/data/audit/` 与 `待推断题目清单_*.csv` 不是垃圾** | 数据变更追溯凭证 / 待人工处理的数据清单 |
 | R10 | **数据库备份禁用 `shutil.copy2`** | WAL 模式下只拷主库无法保证完整性，必须用 `sqlite3.backup()` API；回滚须同时删 `-wal` 与 `-shm` |
 | R11 | **API 路径 `/api/v1/...` 冻结** | 343 个端点已记录于 `backend/data/refactor_baseline/api_surface.json`，重构后须逐条比对一致 |
+| R12 | **不为平板新建手机页的重复副本** | `/tablet/news` 等 21 条平板路由中部分直接复用 `@/views/mobile_*.vue`，经 `meta.platform` 区分设备。复制一份会制造双份维护成本 |
 
 ---
 
@@ -86,6 +87,8 @@
 | 前端 | VTJ 低代码（`@vtj/cli` 0.12.19 / `@vtj/web` 0.16.35）、Vue 3.5.34、Vite 6.3.7、Element Plus 2.13.7、Pinia 3.0.4、**hash 路由** |
 | 前端布局 | 位于**仓库根**（`src/`、`.vtj/`、`dist/`、`package.json`）；`vite.config.ts` 有 `workspaceRoot` 强制校验，**不可移入子目录** |
 | 前端双轴 | **角色（student/teacher/admin）× 设备（pc/tablet/mobile）**；`.vtj/vue` 75 页 = PC 61 / 平板 7 / 手机 7 |
+| 前端页面归属 | **教师端 8 页、管理端 11 页全在 `.vtj/vue/`，`src/views/` 中为 0**。`src/` 分层须按角色 × 设备双轴（`views/<role>/<device>/`），为后续三端手写页预留入口 |
+| 前端设备复用 | `/tablet/` 21 条路由中部分直接复用 `@/views/mobile_*.vue`，经 `meta.platform` 区分，**不新建重复组件** |
 | 后端 | **单一 FastAPI 单体**，38 处 `include_router`，37 个 `api/v1` 模块，**343 个端点** |
 | 数据库 | **SQLite**（WAL，292 MB），**不是 PostgreSQL**；`DB_TYPE` 已预留 `mysql+pymysql` 出口 |
 | ORM | `models.py` 单文件 **1668 行 / 71 个模型**（P3B 阶段拆分） |
