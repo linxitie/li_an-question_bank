@@ -12,9 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...core.security import get_current_admin
-from ...models.models import SysUser, ShopProduct
+from ....core.database import get_db
+from ....core.security import get_current_admin
+from ....models.models import SysUser, ShopProduct
 
 router = APIRouter(prefix="/api/admin/shop", tags=["管理员端-金币商城"])
 logger = logging.getLogger(__name__)

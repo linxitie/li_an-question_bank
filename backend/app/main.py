@@ -21,8 +21,10 @@ from .api.v1.community import quotes, forum
 from .api.v1 import materials
 from .api.v1 import auth_qrcode
 from .api.v1 import devices
-from .api.v1 import coins, achievements, feedback
-from .api.v1 import shop, tasks, admin_shop
+from .api.v1 import achievements, feedback
+from .api.v1.reward import coins
+from .api.v1 import tasks
+from .api.v1.reward import shop, admin_shop
 from .api.v1.websocket import router as websocket_router
 from .api.v1.paper_generation import router as paper_router
 from .api.v1.question_import import router as question_import_router

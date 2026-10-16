@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from ...core.database import get_db
-from ...core.security import get_current_user
-from ...models.models import SysUser, CoinRecord
+from ....core.database import get_db
+from ....core.security import get_current_user
+from ....models.models import SysUser, CoinRecord
 
 router = APIRouter(prefix="/api/coins", tags=["金币"])
 
