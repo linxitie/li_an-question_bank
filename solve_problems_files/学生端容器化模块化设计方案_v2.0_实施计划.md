@@ -452,20 +452,75 @@ GET  /health  → 200 {"ok": true, "mineru": bool}
 **风险**：中。解析链路是导入核心。HTTP 路径与静默回退已实测，但 sidecar 镜像本身未构建过，
 `mineru[core]` 能否在 `python:3.11-slim` 上装成待验证。
 
-### [ ] P1.3 compose 与环境分离
+### [x] P1.3 compose 与环境分离（提交 `5891330`）
 
-新建 `docker-compose.yml`（nginx / backend / parser，Redis 未启用则删）、`deploy/nginx.conf`、`deploy/.env.development`、`deploy/.env.school`、`deploy/.env.example`。
+新增 `docker-compose.yml`、`deploy/nginx.conf`、`deploy/.env.example`；`.gitignore` 补环境下发排除规则。
 
-数据卷：`db_data`（SQLite + 归档）、`uploads`、`qimg`（4.3 GB 题图，**绝不进镜像**）。
+#### 与原计划的偏差
 
-**验证**：
+原计划要求创建 `deploy/.env.development` 与 `deploy/.env.school`。**实际未创建**：
+这两个文件按定义就要装真实 `JWT_SECRET_KEY`，一旦入库即构成新的凭据泄露
+（AGENTS.md §5：密钥由用户本人生成与填写）。改为只提交占位符模板
+`deploy/.env.example`，真实文件由使用者在部署机上复制生成，并已在 `.gitignore` 中排除。
 
-```powershell
-docker compose config
-docker compose up -d
-docker compose ps                            # 期望全部 healthy
-curl -f http://localhost:8000/health         # 期望 200
+#### 编排结构（实测）
+
 ```
+服务: backend, parser, nginx
+  backend: volumes=3  healthcheck=有  networks=['liankao']
+  parser:  volumes=1  healthcheck=有  networks=['liankao']
+  nginx:   volumes=2  healthcheck=有  networks=['liankao']
+卷: db_data, uploads, qimg, parser_cache
+```
+
+数据卷职责：
+
+| 卷 | 挂载点 | 说明 |
+|---|---|---|
+| `db_data` | `/app/data` | SQLite 主库 + WAL + 门禁基线 + 归档。**必须持久化**，不可用 tmpfs（R10） |
+| `uploads` | `/app/uploads` | 上传资料 |
+| `qimg` | `/app/app/static` | **R7：4.27 GB / 94814 个文件的题图库，绝不进镜像** |
+| `parser_cache` | `/root/.cache` | MinerU 权重缓存，重建镜像免重下数 GB |
+
+Redis 未启用故未编排；`REDIS_HOST` 留空即不启用，留待 P5 事件总线阶段接入。
+
+#### 校验结果
+
+| 项 | 结果 |
+|---|---|
+| compose YAML 解析 | PASS |
+| 三服务结构与 healthcheck | PASS |
+| **R7 断言**：`qimg` 卷已挂至 `/app/app/static` | PASS |
+| 四个新文件行尾符 | 纯 LF，CRLF=0 |
+| L0 凭据扫描（5441 文件，较上轮 +8） | **7/7 PASS** |
+
+#### 环境中发的 Git 隔离（实测）
+
+发现并修补一处安全缺口：`deploy/` 下文件原先**均未被忽略**，
+使用者一旦创建 `.env.development` 就会被直接提交。已补规则并验证：
+
+```
+可入库    deploy/.env.example        ← 模板须入库
+被忽略    deploy/.env.development    ← 真实凭据
+被忽略    deploy/.env.school         ← 真实凭据
+```
+
+判定用 `git add -n` 而非 `git check-ignore`：后者在反选命中时**同样返回 exit 0**，
+退出码不是有效判据，输出中的 `!` 前缀才是。（此坑已踩过一次，测试判据本身先错了。）
+
+#### nginx 要点
+
+- `/healthz` 由 nginx 直接应答，容器健康探针不穿透 backend
+- `/api/` 用不带 URI 部分的 `proxy_pass`，保证 `/api/v1/...` 原样透传（R11 冻结）
+- OCR 超时给到 900s（实测单份扫描件约 260s）
+- `client_max_body_size 200m`，覆盖扫描件上传
+
+#### ⚠️ 编排验证待补
+
+本机无 docker，`docker compose config` / `up -d` / `ps` 均**未执行**。
+已完成替代校验：YAML 解析、卷与服务结构断言、R7 挂载断言、凭据扫描、行尾符。
+
+**风险**：中。配置结构自洽，但整套编排从未真正拉起来过。
 
 ### [x] P1.4 备份与回滚脚本（提交 `d3f88d9`）
 
