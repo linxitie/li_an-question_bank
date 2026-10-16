@@ -627,6 +627,55 @@ WAL 模式下已提交数据可能仍只存在于 `-wal`，`shutil.copy2` 拷到
 
 ---
 
+## P1 · 阶段收尾（2026-10-16）
+
+### P1.2 服务端契约已补验（此前唯一缺口）
+
+此前只验了客户端侧（`mineru_service.call_parser_http`），sidecar 自身的 HTTP 契约
+未验。因无 docker，改用进程内 ASGI 客户端（`fastapi.testclient.TestClient`）
+直接加载 `parser/app.py` 验证。**16 项全 PASS**：
+
+| 分支 | 实测 |
+|---|---|
+| `GET /health` | 200 `{"ok":true,"mineru":false,"backend":"pipeline"}` |
+| 空文件 | 400 `{"error":"空文件"}` |
+| 缺 `file` 字段 | 422（FastAPI 校验） |
+| 超限 | 413 |
+| MinerU 缺失 | **502** 且带 `rc` 与 `stderr` 便于排障 |
+| 全部错误响应 | 均为 `application/json`，**绝不返回 HTML** |
+| 信号量 | 连续 3 次请求后 `_sem` 值仍为 1，**无泄漏** |
+
+> 加载 sidecar 必须按**文件路径**用 importlib，不能 `import app`——
+> 后端已有同名 `app` 包（`backend/app/__init__.py`），按模块名导入会解析到主后端，
+> 测试仍能跑但验证的是错误对象且不报错。
+
+### ⚠️ 镜像构建验证：本机物理不可执行
+
+已穷尽核查，非 PATH 问题：
+
+| 检查项 | 结果 |
+|---|---|
+| Docker Desktop 标准安装路径 | 无 `docker.exe` |
+| Podman / nerdctl | 无 |
+| Windows 服务 | 无任何 Docker 相关服务 |
+| WSL 发行版 | **无**（docker-desktop 后端亦不可能） |
+
+因此 `docker build`（backend / parser）与 `docker compose config / up -d / ps`
+均**未执行**，标注为环境阻塞，须在有 docker 的机器上补跑。
+
+**P1.2 唯一未验证的实质风险**：`mineru[core]` 能否在 `python:3.11-slim` 上安装成功。
+
+### P1 阶段结论
+
+| 任务 | 状态 |
+|---|---|
+| P1.1 后端镜像 | 文件就绪，静态校验全过；构建待 docker |
+| P1.2 MinerU sidecar | 客户端 + 服务端契约均实测通过；镜像构建待 docker |
+| P1.3 compose 与环境分离 | YAML 结构、R7 卷挂载、凭据隔离均校验通过；启动待 docker |
+| P1.4 备份与回滚脚本 | **完整实测**：回环 2 套 0 失败，`sqlite3.backup()` 证明捕获 WAL 独有数据 |
+
+---
+
 ## P2 · `core/` 内核抽离
 
 ### [ ] P2.1 新建三个内核文件
