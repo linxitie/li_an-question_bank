@@ -366,21 +366,91 @@ P1.1 的「验证」栏保持未勾选，待具备 docker 的机器补跑后再�
 
 **风险**：低（纯新增文件，未触碰任何现有代码与路由）。
 
-### [ ] P1.2 MinerU / OCR sidecar
+### [x] P1.2 MinerU / OCR sidecar（提交 `5bc9212`）
 
-新建 `parser/Dockerfile`（`python:3.11-slim`）+ `parser/app.py`（暴露 `POST /parse`）。
+新增 `backend/parser/{Dockerfile,app.py,requirements.txt}`；改造 `app/core/config.py` 与
+`app/services/mineru_service.py`。
 
-改造 `app/services/mineru_service.py`：新增 `call_parser_http()`，优先走 `PARSER_URL`；未配置或失败时**回落现有 subprocess 路径**——`is_enabled()`（`mineru_service.py:55`）的降级逻辑保持不变，开发机工作方式不受影响。
+**改造点**：
 
-**验证**：
+| 文件 | 改动 |
+|---|---|
+| `app/core/config.py` | 新增 `PARSER_URL: str = Field("", env="PARSER_URL")`（`.env.example` 早已预留该键，但 config 中缺字段） |
+| `mineru_service.py` | 新增 `_parser_url()`、`call_parser_http()`；`is_enabled()` 增加 sidecar 分支；`extract_text_sync()` 在配置了 sidecar 时优先走 HTTP |
 
-```powershell
-docker compose up -d parser
-curl -f http://localhost:8080/parse -X POST -F "file=@<扫描件.pdf>"    # HTTP 路径
-# 置空 PARSER_URL 重启，再测一次                                  # subprocess 回退路径
+#### 关键设计：开发机行为逐字节不变
+
+`extract_text_sync()` 开头仅插入「若 `_parser_url()` 非空则先试 HTTP」一段；
+`PARSER_URL` 未配置时该段整体跳过，走原有 subprocess 路径。
+`call_parser_http()` 与既有 `extract_text_sync()` 同样遵守「绝不抛异常、失败返回 `None`」的模块契约。
+
+`is_enabled()` 新增分支的必要性：容器内 MinerU 不在主进程（Python 3.13 装不了），
+若仍只认 `MINERU_PYTHON` 文件是否存在，sidecar 模式下会被误判为不可用。
+
+#### 实测：16 项检查，0 失败
+
+用真实 mock HTTP 服务覆盖四条路径（非桩断言，每类都校验「确实发出过请求」）：
+
+```
+=== A. PARSER_URL 未配置：开发机行为须与改造前一致 ===
+  PASS  _parser_url() 返回空串
+  PASS  未配置 sidecar 时绝不发起 HTTP        hits=0
+
+=== B. PARSER_URL 指向可用 sidecar ===
+  PASS  is_enabled() 为 True（无需本地 venv）
+  PASS  call_parser_http 取回 markdown         '# title\nbody text'
+  PASS  extract_text_sync 走通 sidecar
+  PASS  sidecar 成功后不再调子进程              hits=1
+
+=== C. sidecar 各类异常必须静默回落 ===
+  PASS  markdown 为空 → None      PASS 确实发过请求
+  PASS  返回非 JSON → None        PASS 确实发过请求
+  PASS  HTTP 500     → None       PASS 确实发过请求
+  PASS  JSON 无 markdown 键 → None  PASS 确实发过请求
+
+=== D. sidecar 完全不可达（连接被拒）===
+  PASS  返回 None 而非抛异常
 ```
 
-**风险**：中。解析链路是导入核心，两条路径都必须验证通过。
+#### 过程中发现并修复的一次真实回归
+
+首版在 `extract_text_sync()` 加了守卫 `if not py or not os.path.isfile(py): return None`，
+意在避免容器内对不存在的解释器发起子进程。**这打挂了 1 个原本通过的测试**：
+
+```
+tests/test_mineru_service.py::TestExtractTextSync::test_success_returns_md_content
+  AssertionError: assert None == '# 第1题 题干\nA. 选项'
+  [mineru] 无可用解析路径：sidecar 未产出且 MINERU_PYTHON 不存在(D:\mineru-env\Scripts\python.exe)
+```
+
+该测试 mock 了 `subprocess.run`，依赖原行为——`MINERU_PYTHON` 路径不必真实存在。
+守卫破坏了「行为与改造前逐字节一致」这条核心不变量，已移除。
+
+移除后的依据：`subprocess.run` 对不存在的解释器会立刻抛 `FileNotFoundError`，
+被既有 `except Exception` 捕获并返回 `None`，代价可忽略，本就无需守卫。
+
+**回归确认**：`17 failed / 278 passed / 3 xfailed`，与 P1.2 改动前基线完全一致。
+
+#### 侧车契约
+
+```
+POST /parse   multipart/form-data 字段 file（扫描件 PDF）
+              → 200 {"markdown": "...", "chars": N}
+              → 400 空文件 / 413 超限 / 502 未产出 / 503 队列满 / 504 超时 / 500 异常
+GET  /health  → 200 {"ok": true, "mineru": bool}
+```
+
+镜像用 `python:3.11-slim`（MinerU 支持上限 3.12）；模型缓存挂 `/root/.cache` 卷，
+避免每次重建镜像重新下载数 GB 权重。
+
+#### ⚠️ 镜像构建验证待补
+
+本机无 docker，`docker build -t liankao/parser:test backend/parser` 与
+`docker compose up -d parser` 均**未执行**。已完成替代静态校验：三个新文件行尾符纯 LF、
+`parser/app.py` 可正常导入、上述 16 项运行时行为实测通过。
+
+**风险**：中。解析链路是导入核心。HTTP 路径与静默回退已实测，但 sidecar 镜像本身未构建过，
+`mineru[core]` 能否在 `python:3.11-slim` 上装成待验证。
 
 ### [ ] P1.3 compose 与环境分离
 
