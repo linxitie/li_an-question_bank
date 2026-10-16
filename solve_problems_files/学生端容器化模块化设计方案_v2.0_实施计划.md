@@ -678,7 +678,7 @@ WAL 模式下已提交数据可能仍只存在于 `-wal`，`shutil.copy2` 拷到
 
 ## P2 · `core/` 内核抽离
 
-### [ ] P2.1 新建三个内核文件
+### [x] P2.1 新建三个内核文件（提交 `cc85e11`）
 
 | 文件 | 职责 |
 |---|---|
@@ -686,7 +686,71 @@ WAL 模式下已提交数据可能仍只存在于 `-wal`，`shutil.copy2` 拷到
 | `core/contracts.py` | 跨域公开契约的类型与注册 |
 | `core/module_registry.py` | 域清单：路由前缀 / 表 / 事件 / 契约 |
 
-**不改任何业务逻辑。**
+**不改任何业务逻辑** —— 已验证：pytest `17 failed / 278 passed / 3 xfailed`、
+`gate_all` **7/8**，与 P2.1 前基线逐项一致。
+
+#### 自检结果
+
+```
+module_registry.validate()    : PASS（无问题）
+contracts.validate_registry() : PASS（无问题）
+verify_against_app()          : PASS（与实测路由无差异）
+事件常量 8 个 | 契约 7 条 | 开放读 3 条
+```
+
+`verify_against_app()` 会实时加载 `app.main` 测量 `/api` 路由并与清单比对，
+两类差异都算问题：清单里有但应用中不存在（模块被搬走）、应用里有但无人认领（新增未登记）。
+P3B 搬迁后重跑此函数即可判定归属是否被破坏。
+
+#### 域清单实测：9/10 域与规格完全吻合
+
+实测 **339** 个 `/api` 路由。按规格十域表归并后：
+
+| 域 | 规格 | 实测 | |
+|---|---:|---:|---|
+| identity | 16 | 16 | ✅ |
+| catalog | 78 | 78 | ✅ |
+| exam | 54 | 54 | ✅ |
+| growth | 19 | 19 | ✅ |
+| community | 19 | 19 | ✅ |
+| library | 31 | 31 | ✅ |
+| content | 13 | 13 | ✅ |
+| personal | 14 | 14 | ✅ |
+| platform | 90 | 90 | ✅ |
+| **reward** | **9** | **5** | ❌ 差 4 |
+
+**`reward` 偏差已定位**：差额 4 来自 `admin_shop` —— 其路由物理挂载在 `/api/admin` 下，
+按前缀归属必然计入 `platform`（故 platform 实测 90 与规格 90 精确吻合）。
+故规格的 9 是「按职责算」，路由表上只有 5。清单以**实测归属**为准并就地标注，
+未擅自把 `admin_shop` 划归 reward —— 那会与 platform 的实测数冲突。
+（规格 343 与实测 339 的差额即此 4。）
+
+#### ⚠️ 关键发现：本机 Redis 3.0.504，不支持 Stream
+
+实测 `redis_version = 3.0.504`。**Redis Stream（XADD/XREAD）自 5.0 才引入**，
+本机实例执行 `XADD` 直接返回 `ResponseError: unknown command 'XADD'`。
+
+对本阶段的意义：
+
+- `events.py` 的降级契约**经实测有效**：`publish()` 在 Stream 不支持时返回 `False`
+  并记日志，**不抛异常**；`subscribe()` 快速退出而非挂死
+- 事件总线在此环境下不会误报成功，失败是显式可见的
+
+**对 P5 的约束**：P5 启用事件总线前必须二选一——
+升级 Redis 至 ≥5.0，或改用 Redis List / PubSub 承载事件（放弃 Stream 的消费者组语义）。
+设计规格 §「事件总线」一节需据此修订。
+
+#### 实现过程中自查并修正的三处缺陷
+
+1. `subscribe()` 原声明为 `AsyncIterator[None]` 但内部无 `yield`，实为协程 —— 类型标注错误，
+   且 `async for message in r.xread(...)` **未 `await` 就迭代**协程，运行时必然失败。已改为
+   `while True` 长驻协程并 `await r.xread(...)`，`streams` 改传 `dict{流名: 起始ID}`。
+2. `module_registry` 引用了 `events.py` 未注册的 `identity.user_updated`，且与实际常量
+   `identity.user.updated` 名称不一致 —— 已补注册常量并对齐名称。
+3. `events.py` 中 LSP 报 `await r.ping()` 「bool 不可等待」—— 经运行时验证
+   `ping`/`xadd`/`xread` **均返回协程**，`await` 写法正确，属 redis-py 存根误报，未改代码。
+
+**风险**：低。三个文件均为新增且不被任何业务代码 import，回归基线逐项未变。
 
 ### [ ] P2.2 `app/` 根文件归位
 
