@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db, commit_with_retry
-from ....models.models import StudyGoal, SysUser, PracticeRecord, CoinRecord
+from ....models.models import StudyGoal, SysUser, PracticeRecord
 from ....schemas.schemas import (
     StudyGoalCreate,
     StudyGoalUpdate,
@@ -377,17 +377,10 @@ async def complete_goal(
     result = goal_completion_service.evaluate(goal, current_user, db)
     reward = result["reward_coins"]
 
-    # 发币
-    current_user.total_coins = (current_user.total_coins or 0) + reward
-    db.add(CoinRecord(
-        user_id=current_user.user_id,
-        coin_change=reward,
-        current_balance=current_user.total_coins,
-        transaction_type="GAIN",
-        source_type="GOAL",
-        related_id=goal_id,
-        description=f"完成目标：{goal.title}",
-    ))
+    # 发币（跨域写入走公开契约，禁止直接实例化他域表）
+    from ..reward.contract import grant_coins
+    grant_coins(db, current_user, reward, source_type="GOAL",
+                related_id=goal_id, description=f"完成目标：{goal.title}")
 
     # 更新目标
     now = datetime.now()
