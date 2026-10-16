@@ -508,6 +508,30 @@ Redis 未启用故未编排；`REDIS_HOST` 留空即不启用，留待 P5 事件
 判定用 `git add -n` 而非 `git check-ignore`：后者在反选命中时**同样返回 exit 0**，
 退出码不是有效判据，输出中的 `!` 前缀才是。（此坑已踩过一次，测试判据本身先错了。）
 
+#### 凭据扫描把模板占位符判成真密钥（已修）
+
+`deploy/.env.example` 提交后 **L0 立刻转红**：
+
+```
+FAIL 凭据泄露扫描: deploy/.env.example:37 [JWT 签名密钥]
+JWT_SECRET_KEY=CHANGE_ME_generate_with_secrets_token_urlsafe_48
+```
+
+注意此前的 L0 扫描（同样 5441 个文件）还是绿的——**文件未提交时不触发，提交后才触发**。
+
+**修法选择**：不扩大 `EXEMPT_FILES` 豁免（那等于给整份文件开后门），
+而是把占位符改成扫描器 `ALLOW_PREFIX` 白名单已认可的 `your-` 前缀：
+
+```
+JWT_SECRET_KEY=your-secret-generate-with-secrets-token-urlsafe-48
+```
+
+`backend/app/core/config.py` 的 `"your-secret-key-here..."` 正是靠同一前缀通过扫描。
+**规则**：本项目所有模板文件里的密钥占位符必须以 `your-` 开头，
+否则 L0 变红。已在该行就地注释说明。
+
+`gate_all.py` 随即恢复 **7/8**（L2 为 P0.5 已确诊的判据假阳性）。
+
 #### nginx 要点
 
 - `/healthz` 由 nginx 直接应答，容器健康探针不穿透 backend
