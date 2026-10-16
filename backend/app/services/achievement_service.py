@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models.models import (
-    Achievement, UserAchievement, SysUser, CoinRecord, PracticeRecord,
+    Achievement, UserAchievement, SysUser, PracticeRecord,
     WrongQuestionPersonal, ForumPost, ForumComment, FavoriteQuestion,
     QuestionNote, NewsNote, QuoteFavorite, DailyCheckin,
 )
@@ -231,15 +231,10 @@ def _grant(user: SysUser, ach: Achievement, db: Session, tier: int = 1):
     db.add(UserAchievement(user_id=user.user_id, achievement_id=ach.achievement_id, tier=tier))
 
     if ach.reward_coins > 0:
-        user.total_coins = (user.total_coins or 0) + ach.reward_coins
-        db.add(CoinRecord(
-            user_id=user.user_id,
-            coin_change=ach.reward_coins,
-            current_balance=user.total_coins,
-            transaction_type="GAIN",
-            source_type="SYSTEM",  # 原生 ENUM 无 ACHIEVEMENT，用 SYSTEM + description 区分
-            description=f"获得成就：{ach.name}",
-        ))
+        # 跨域写入走 reward 契约（P4.2），禁止直接实例化他域表
+        from ..api.v1.reward.contract import grant_coins
+        grant_coins(db, user, ach.reward_coins, source_type="SYSTEM",
+                    description=f"获得成就：{ach.name}")
 
     add_growth(db, user, GROWTH_RULES["achievement"])
     logger.info(f"用户 {user.user_id} 获得成就「{ach.name}」tier={tier}，奖励 {ach.reward_coins} 金币")
