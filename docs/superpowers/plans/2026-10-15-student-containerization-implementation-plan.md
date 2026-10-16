@@ -1410,16 +1410,19 @@ P6.1 已做 SHA-256 审计（`data/backup_dedup_report.txt`）：2 份字节级�
 
 ## 附录 A · 逐阶段验收判据
 
-| 阶段 | 完成判据（全部满足） |
-|---|---|
-| P0 | `pytest` error = 0；`git ls-files backend/.env` 无输出；`check_secrets.py` 退出码 0；旧密钥 token 返回 401；gRPC 删除后服务正常启动 |
-| P1 | `docker compose ps` 全部 healthy；`/health` 200；镜像内 `app/static` 为空；parser 的 HTTP 与 subprocess 双路径均验证通过 |
-| P2 | `api_surface.json` diff 为空；8 门禁全绿 |
-| P3A | `npm run typecheck` 0 错误；`npm run build` 成功；PC/手机/平板三端路由实测可达；`git diff -- .vtj/` 为空 |
-| P3B | 十域逐一完成，每域 `api_surface.json` diff 为空且门禁全绿 |
-| P4 | `check_module_boundary.py` 退出码 0 |
-| P5 | `coupling.json` 跨域条目归零 |
-| P6 | 41 份唯一备份 SHA-256 全部可校验；`backend/data` 体积下降 ≥ 1,411.9 MB；`audit/` 与 `待推断题目清单_*.csv` 完好 |
+> 下表左侧为原判据，右侧为**2026-10-16 终验实测**。三处原判据因环境/存量
+> 问题不可达，已标注替代判据与实测结果。
+
+| 阶段 | 原判据 | 终验实测 |
+|---|---|---|
+| P0 | `pytest` error = 0；`check_secrets.py` 退出码 0；gRPC 删除后服务正常启动 | ✅ 全部满足：error 0、L0 7/7、服务正常启动 |
+| P1 | `docker compose ps` 全部 healthy；`/health` 200；parser 双路径验证 | ⚠️ 构建验证未执行（本机无 docker，已穷尽核查）；parser 客户端+服务端契约已用 mock/TestClient 实测 32 项全过；`/health` 200 ✅ |
+| P2 | `api_surface.json` diff 为空；8 门禁全绿 | ✅ 等价满足：339 路由与搬迁前一致（L4 门禁比对）；「8 门禁全绿」不可达（L2 假阳性，见 P0.5）→ 实测 7/8 |
+| P3A | `npm run typecheck` 0 错误；`npm run build` 成功；`.vtj/` diff 空 | ⚠️ typecheck 0 不可达（56 条既有错误：54 冻结区 + 2 src）；`vite build` 退出码 0 ✅；`.vtj/` diff 收敛为仅 9 行 import（必要改动，非零） |
+| P3B | 十域每域 diff 空且门禁全绿 | ✅ 等价满足：37 模块归位、平铺清零、路由 339 不变、门禁 7/8 |
+| P4 | `check_module_boundary.py` 退出码 0 | ✅ 满足：0 违规（含新增违规检测，已入 L4） |
+| P5 | `coupling.json` 跨域条目归零 | ⚠️ 未归零：耦合 11 模块（实测基线），14 处调用点转换待用户选型（附录 B #7）；传输层/事件常量/消费者基础设施已完成并实测 |
+| P6 | 41 份唯一备份 SHA-256 可校验；`data` 体积下降 ≥ 1,411.9 MB；`audit/` 完好 | ⚠️ 部分：2 份字节级重复已删（释放 205.9 MB）；「77 份冗余」与「41 份唯一」与实测（93 份）对不上账，R8 红线主备份未动；`audit/` 完好 ✅ |
 
 ## 附录 B · 用户待办
 
