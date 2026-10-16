@@ -1199,13 +1199,14 @@ P3B 落地后实际布局为 `app/api/v1/<domain>/`，检查器按实测布局�
 且真实跨域耦合多走 `app/services/*` 共享服务层而非域间直接导入——
 共享服务的域归属划分属后续 P4.2/P5.2 的渐进改造范畴。
 
-### [~] P4.2 改造跨域写调用点（首个已完成，提交 `2bd44da`）
+### [~] P4.2 改造跨域写调用点（两处已完成：`2bd44da` + `3ba1863`）
 
-按计划示例落地第一个改造：
+按计划示例落地直接跨域写改造：
 
 | 项 | 改造前 | 改造后 |
 |---|---|---|
 | `growth/goals.py:380-390` | 直接实例化 `CoinRecord` 并改写 `total_coins` | `from ..reward.contract import grant_coins` |
+| `services/achievement_service.py:234-238` | 同上（`_grant` 发放成就金币） | 走 `reward.contract.grant_coins`，并移除 `CoinRecord` 死导入 |
 
 新建 `reward/contract.py`，含 `grant_coins`（加币+流水，不 commit 随调用方事务）
 与 `spend_coins`（扣币，余额不足抛 `ValueError`）。
@@ -1213,11 +1214,14 @@ P3B 落地后实际布局为 `app/api/v1/<domain>/`，检查器按实测布局�
 验证：339 路由、pytest `17 failed / 278 passed / 3 xfailed` 精确基线、
 边界检查器 0 新增违规。
 
-**剩余调用点**：计划称「15 处 check_and_grant」——实测为 14 处
-`achievement_service.check_and_grant`（fire-and-forget 13 处 + `practice:54`
-返回给前端弹窗 1 处）加 `stats` 的同步读。它们与 P5.2 的待决策项
-（全异步 vs 折中）直接重叠，**须先定 P5.2 方案再统一改造**，避免
-P4.2/P5.2 各改一半互相冲突。已与此前 P5.2 分析合并为同一决策点。
+**直接跨域写改造已穷尽**：全仓检索 `CoinRecord(` 直接实例化与
+`total_coins =` 直接赋值，除 reward 域与 models 自身外已无残留——
+P4.2 的直接表写部分完成。
+
+**剩余调用点**：14 处 `achievement_service.check_and_grant`（13 fire-and-forget
++ `practice:54` 返回给前端弹窗 1 处）加 `stats` 的同步读。它们与 P5.2 的
+待决策项（全异步 vs 折中）直接重叠，**须先定 P5.2 方案再统一改造**，
+避免 P4.2/P5.2 各改一半互相冲突。已与此前 P5.2 分析合并为同一决策点。
 
 ---
 
