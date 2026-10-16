@@ -1276,13 +1276,26 @@ LPUSH 瞬间取走条目，llen=0）——改序为先无订阅验证落库、�
 
 #### 待选型：13 处调用点转换
 
-实测 14 处 `check_and_grant`（13 fire-and-forget + 1 返回值给前端弹窗）
+实测耦合基线（`refactor_baseline/coupling.json`，按模块）：
+
+| 模块 | 跨域耦合目标 |
+|---|---|
+| achievements / goals / tasks / practice / stats | `services.services`（内部互调） |
+| auth / collection / forum / notes / practice / quotes / stats / wrong_questions | `services.achievement_service` |
+| stats | `services.growth_service` |
+
+即 14 处 `check_and_grant`（13 fire-and-forget + 1 返回值给前端弹窗）
 + `stats` 2 处同步读。与 P4.2 余量合并为**单一决策点**（附录 B #7）：
 
 1. **全异步**：13 处改发事件 + 启用消费者；接受最终一致性；
    代价：Redis 不可用时成就静默丢失（现为事务内同步授予）
 2. **折中**：13 处改事件 + 同步兜底（publish 失败时直接调用）；
    保留 2 处同步依赖（practice 弹窗、stats 读）；耦合降至 2，不归零
+
+> ⚠️ 折中方案仍有残余风险：同步兜底只在 **publish 失败**时触发；
+> 若 publish 成功但消费者进程死亡，事件滞留队列、成就依然丢失。
+> 彻底消除该风险需消费者活性监控，复杂度不低——这正是需要用户
+> 选型的原因，而非纯粹技术取舍。
 
 验证方式不变：`refactor_baseline/coupling.json` 对比跨域条目。
 
