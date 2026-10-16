@@ -962,9 +962,56 @@ git diff --stat -- .vtj/     # 期望：空
 
 ## P3B · 后端十域逐个搬迁
 
-### [ ] P3B.0 搬迁前置
+### [x] P3B.0 试点：`community` 域（提交 `920dbd3`）
 
-新建 `scripts/collect_api_surface.py`（AST 提取端点，可重复执行，产物与 `refactor_baseline/api_surface.json` 比对）。
+以最小域先行，确立后续 9 个域可复制的迁移模式。
+
+`forum.py` + `quotes.py` → `app/api/v1/community/`，改动 6 个文件、25 处。
+
+#### 真实工作量不是「移文件」，而是重写导入层级
+
+实测 `app/api/v1/` 38 个模块的相对导入层级分布：
+
+| 层级 | 模块数 |
+|---|---:|
+| 3 点式（`from ...core.database` = `app.core.database`） | **37** |
+| 1 点式（`from .x` = 同目录） | 6 |
+| 2 点式 | 1 |
+
+移入子目录后 `.` 的基准从 `app.api.v1` 变为 `app.api.v1.community`，
+**全部 3 点式须改为 4 点式**。本次改写 forum 10 处、quotes 5 处。
+
+#### ⚠️ 两类漏检，均已踩坑并修正
+
+**第一类：同目录相对导入不被绝对路径检索命中。**
+首轮只检索了 `app.api.v1.quotes`（绝对路径），漏掉 `app/api/v1/collection.py:193`
+的 `from .quotes import ...`，导致 `test_quote_favorite` 失败。
+
+**第二类：`patch()` 的字符串目标按导入路径解析模块**，不随文件移动而更新，
+运行时直接失败。`tests/test_quote_favorite.py` 有 5 处
+`patch("app.api.v1.quotes.…")` 必须同步改写。
+
+> **规则**：每迁一域，必须同时检索三类引用 ——
+> ① `app.api.v1.<模块>` 绝对路径 ② `from .<模块>` 同目录相对 ③ `patch("app.api.v1.<模块>…")` 字符串目标。
+
+#### 验证
+
+```
+app.main 导入成功，/api 路由 339 个（与迁移前一致）
+pytest   17 failed / 278 passed / 3 xfailed   ← 与迁移前基线精确一致
+gate_all 7/8                                  ← L2 仍为 P0.5 已确诊的判据假阳性
+```
+
+两次返工（collection 同目录导入、patch 字符串目标）后回到精确基线，
+证明迁移本身行为中性。
+
+#### 关于 `collect_api_surface.py`
+
+原计划的 `scripts/collect_api_surface.py` **并不存在**，从未产出。
+权威的 API 契约校验手段是 `gate_l4_api_contract.py`（基线 `api_surface.json`
+按 37 个模块名为键），已随 `gate_all` 通过。本项作废，改用 L4 门禁。
+
+---
 
 ### [ ] P3B.1 ~ P3B.10 逐域搬迁
 
