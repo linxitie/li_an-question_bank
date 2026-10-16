@@ -275,7 +275,7 @@ import { defineComponent, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
-import MobileTabBar from '@/components/MobileTabBar.vue';
+import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
 import {
   ArrowLeft,
   ArrowRight,

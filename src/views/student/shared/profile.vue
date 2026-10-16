@@ -198,7 +198,7 @@ import {
 } from '@vtj/icons';
 import NavBar from '$vtj/vue/navbar.vue';
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
-import RecentPracticeRecords from '@/components/RecentPracticeRecords.vue';
+import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 
 const router = useRouter();
 const auth: any = (window as any).__VTJ_AUTH__;

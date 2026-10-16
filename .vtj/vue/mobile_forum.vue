@@ -121,7 +121,7 @@
 import { defineComponent, ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
-import MobileTabBar from '@/components/MobileTabBar.vue';
+import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
 import {
   ArrowLeft,
   Plus,

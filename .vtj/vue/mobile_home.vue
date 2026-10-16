@@ -175,9 +175,9 @@ import { defineComponent, ref, computed, onMounted, onBeforeUnmount, nextTick } 
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
-import MobileTabBar from '@/components/MobileTabBar.vue';
+import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
-import RecentPracticeRecords from '@/components/RecentPracticeRecords.vue';
+import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 import {
   ArrowLeft,
   ArrowRight,

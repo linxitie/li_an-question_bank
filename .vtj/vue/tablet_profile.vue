@@ -266,7 +266,7 @@ import {
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
-import RecentPracticeRecords from '@/components/RecentPracticeRecords.vue';
+import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 
 export default defineComponent({
   name: 'TabletProfile',

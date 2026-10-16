@@ -139,7 +139,7 @@ import {
   Warning,
   Trophy
 } from '@vtj/icons';
-import MobileTabBar from '@/components/MobileTabBar.vue';
+import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
 import { useProvider } from '@vtj/renderer';
 
 export default defineComponent({
