@@ -1006,6 +1006,13 @@ src 与 .vtj 旧路径残留引用     : 0 处
 .git diff --stat .vtj/         : 每文件 1-2 行，仅 import
 ```
 
+**VTJ 一致性检查核实**（`vtj_check_consistency`，73 页）：15 一致 / 58 不一致。
+58 处不一致**全部为既有方法签名漂移**（`methods_extra_in_dsl` /
+`methods_missing_in_dsl`），与本任务的 import 改动无关——检查器比对的是
+方法签名而非 import 语句，且提交后工作区对 HEAD 的 `.vtj` diff 为 0，
+证明 6 个被改文件除 import 行外逐字节未变。该漂移属 VTJ 设计器存量的
+既有问题，另立工单处理。
+
 **风险**：中（触碰冻结区脚本区，已按 R3 最小化并字节级验证）。
 
 **风险**：中。路由 import 改错会导致 404，故必须逐端实测。
