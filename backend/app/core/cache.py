@@ -9,7 +9,7 @@ from typing import Optional, Any
 import redis
 from functools import wraps
 
-from .core.config import settings
+from .config import settings
 
 # 连接Redis
 redis_client = redis.Redis(

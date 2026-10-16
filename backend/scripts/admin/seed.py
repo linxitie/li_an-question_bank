@@ -5,10 +5,10 @@ Seed 脚本 — 初始化模拟用户和系统配置
 import logging
 from datetime import datetime
 
-from .core.config import settings
-from .core.database import SessionLocal
-from .core.security import get_password_hash
-from .models.models import SysUser, SysConfig, SubCategory, KnowledgePoint, Title, ShopProduct, Task
+from app.core.config import settings
+from app.core.database import SessionLocal
+from app.core.security import get_password_hash
+from app.models.models import SysUser, SysConfig, SubCategory, KnowledgePoint, Title, ShopProduct, Task
 
 logger = logging.getLogger(__name__)
 
@@ -451,7 +451,7 @@ def run_seed():
 
     # 仅在 DEBUG 模式自动执行
     if not settings.DEBUG:
-        logger.info("Seed: 非 DEBUG 模式，跳过自动种子数据。手动执行: python -m app.seed")
+        logger.info("Seed: 非 DEBUG 模式，跳过自动种子数据。手动执行: python -m scripts.admin.seed")
         return
 
     seed_configs()

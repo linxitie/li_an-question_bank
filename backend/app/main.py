@@ -497,7 +497,7 @@ async def lifespan(app: FastAPI):
 
     # 执行种子数据初始化（模拟用户 + 默认配置）
     try:
-        from .seed import run_seed
+        from scripts.admin.seed import run_seed
         run_seed()
     except Exception as e:
         logger.warning(f"种子数据初始化失败（服务继续运行）: {e}")

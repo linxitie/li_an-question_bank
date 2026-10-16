@@ -14,7 +14,7 @@ from ....models.models import (
 )
 from ....schemas.schemas import PaperCreate, PaperUpdate, PaperDetailResponse, SuccessResponse
 from ....core.security import get_current_user, require_admin
-from ....cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
+from ....core.cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 
