@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-16 23:32:04",
+  "timestamp": "2026-10-16 23:33:51",
   "results": [
     {
       "layer": "L0",
@@ -14,12 +14,12 @@
     {
       "layer": "L3",
       "status": "PASS",
-      "elapsed_s": 6.7
+      "elapsed_s": 7.6
     },
     {
       "layer": "L1",
       "status": "PASS",
-      "elapsed_s": 2.9
+      "elapsed_s": 3.2
     },
     {
       "layer": "L1-H",
@@ -29,7 +29,7 @@
     {
       "layer": "L2",
       "status": "FAIL",
-      "elapsed_s": 10.8
+      "elapsed_s": 9.7
     },
     {
       "layer": "L4",
@@ -39,7 +39,7 @@
     {
       "layer": "L5",
       "status": "PASS",
-      "elapsed_s": 0.0
+      "elapsed_s": 0.1
     }
   ]
 }
