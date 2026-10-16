@@ -1,0 +1,60 @@
+# 构建上下文瘦身 + 红线防护
+#
+# R7：app/static/ 是 4.27 GB / 94814 个文件的题图库。
+#     本文件**必须**将其排除，任何时候都不得放进镜像。
+#     镜像内只留空目录，运行时由 qimg 卷挂载。
+#     若有人删除下面这行，构建上下文会暴涨到 4.3 GB —— L0 门禁不覆盖此项，
+#     改本文件前请先确认没有破坏该排除。
+
+# ── 大体积数据：全部走卷 ──────────────────────────────
+app/static/
+uploads/
+logs/
+*.log
+
+# data/ 全量排除，再按需放行两个纯 JSON 基线目录。
+# SQLite 主库（292 MB）、41 份 .bak* 备份、audit/、snapshots/、
+# text_cache/、xingce_cache/ 一律不进镜像。
+data/*
+!data/gates
+!data/refactor_baseline
+
+# ── 凭据（红线：.env 禁止纳入任何镜像或版本库）──────────
+.env
+.env.*
+!.env.example
+
+# ── 测试与门禁脚本（不进运行时镜像）────────────────────
+tests/
+scripts/gate_*.py
+scripts/verify_*.py
+pytest.ini
+conftest.py
+
+# ── 版本控制与缓存 ────────────────────────────────────
+.git/
+.gitignore
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── 容器与文档 ────────────────────────────────────────
+Dockerfile
+.dockerignore
+.docker-compose.yml
+docker-compose*.yml
+README.md
+*.md
+
+# ── 临时与备份残留 ────────────────────────────────────
+tmp/
+temp/
+*.bak
+*.tmp
+~$*
+Thumbs.db
+desktop.ini
