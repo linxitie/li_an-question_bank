@@ -1275,15 +1275,44 @@ SHA-256 逐字节相同的 2 份（审计报告落于 `data/backup_dedup_report.
 
 ### [ ] P6.2 L2 归档（不删除、不入库 Git）
 
-| 目标 | 归档位置 |
-|---|---|
-| 41 份唯一备份（5,089.6 MB） | `data/archive/`，按「最近 7 天 + 每周一份」 |
-| `solve_problems_files/` 134 md | `docs/{design,plans,archive}/`，同主题只留终版 |
-| `backend/scripts/` 90 个 | `scripts/{gates,migrate,repair,probe,admin,verify}/` |
-| 3 份重复 regroup 脚本 | 合并为 1 份 |
-| AI 工具目录 6 处 + `vtj-mcp-server/` | `.agent/{skills,tools,plans}/` + `README.md` 索引 |
-| `CLAUDE.md/`（目录） | `docs/ai-commands/` |
-| `scripts/git-hooks/pre-commit` | 随 `.pre-commit-config.yaml` 保留，移入 `scripts/` 分类 |
+#### ⚠️ 实测评估：三项不可机械执行，一项可安全执行
+
+**1. AI 工具目录归位 `.agent/`：不可执行（活动工具链耦合）。**
+
+计划称「AI 工具目录 6 处」，实测现状是**活动工具目录**而非待归档物料：
+
+| 目录 | 实测 | 依赖 |
+|---|---|---|
+| `vtj-mcp-server/` | 3547 文件（含 node_modules） | `package.json:32-34` 的 `mcp:setup`/`mcp:start`/`mcp:test` 三个脚本硬引用其路径 |
+| `.agents/` | 63 文件 | 本仓库 skill 加载入口（`ask-matt`、`diagnose` 等 24 个 skill） |
+| `.omo/` | 154 文件 | `run-continuation/` 在 `.gitignore` 内，属运行时会话数据 |
+| `.claude/` | 17 文件 | `资源优化skills` 在 `.gitignore` 内 |
+
+移动任一会破坏工具加载或需同步改 package.json——属「迁移项目」而非「归档动作」，
+须专项处理，不能当作收尾机械动作。
+
+**2. `backend/scripts/` 90→子目录重组：不可执行（P3B 同类风险）。**
+
+`gate_all.py` 的 GATES 列表有 **8 处**硬编码 `scripts/gate_*` 路径；95 个平铺脚本间
+还有大量相互调用（verify_* ← gate_*，migrate_domain ← 域目录）。P3B 已实测教训过
+「硬编码路径漏改 → gate_all 跌至 3/8」。重组的收益（目录好看）远低于风险（门禁网瘫痪）。
+
+**3. `solve_problems_files/` 134 md → `docs/`：可执行但须专项。**
+
+实测 136 个 md + README 索引。AGENTS.md §1.3 的自动归档规则**已内置两态判定**
+（solve_problems_files 存在→写本目录；不存在→写 docs/），迁移本身是安全的，
+但「同主题只留终版」需逐主题归并，属大机械操作，宜单独会话执行。
+
+**4. 备份归档策略（唯一可安全执行项）：已完成主体。**
+
+P6.1 已做 SHA-256 审计（`data/backup_dedup_report.txt`）：2 份字节级重复已删
+（释放 205.9 MB）；93 份 `.bak*` = 31 主备份 + 62 空侧车。计划所称
+「41 份唯一备份 5,089.6 MB」与实测对不上账（存在 **93 份 4,507 MB**）——
+按 R8 红线**主备份一个未动**，「最近 7 天 + 每周一份」的保留裁剪须
+先补齐可复核的哈希清单与用户确认，不得凭计划文字直接删。
+
+**P6.2 结论**：归档项 1/2/3 均须专项处理（工具链迁移 / 门禁路径重组 / 文档归并），
+不属本阶段可安全机械执行范围；已记录实测证据供后续决策。
 
 **`probe/` 必须保留且保证可复跑**——它是本方案全部实测结论的唯一来源。
 
