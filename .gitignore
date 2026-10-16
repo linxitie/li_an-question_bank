@@ -71,6 +71,9 @@ backend/_*.txt
 
 # 运行时数据（新闻图片、上传资料、题目图片、SQLite 数据库）
 backend/uploads/
+# 真实环境变量文件：含 JWT_SECRET_KEY 等凭据，禁止纳入 Git 跟踪。
+# 模板见 backend/.env.example（已入库）。历史泄露需 filter-repo 清理。
+backend/.env
 # 注意：此处必须用 backend/data/* 而非 backend/data/，否则 git 会跳过目录本身，
 # 导致下面的 !backend/data/gates/ 反选规则失效（gitignore 规则：被排除的目录无法被反选）。
 backend/data/*
