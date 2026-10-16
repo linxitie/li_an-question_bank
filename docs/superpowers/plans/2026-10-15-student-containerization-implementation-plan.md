@@ -1178,17 +1178,62 @@ python scripts/gate_all.py               # 期望 L4/L5 通过
 
 ## P5 · 事件总线落地
 
-### [ ] P5.1 定义事件
+### [x] P5.0 传输层：Stream 不可用时回落 List（提交 `62bc55b`）
 
-`user.action.v1`、`growth.awarded.v1`、`achievement.unlocked.v1`（字段只增不删）。
+实测本机 Redis **3.0.504**，`XADD` 直接报 `unknown command`（Stream 自 5.0 才引入）。
+`events.py` 因此增设能力探测 `supports_streams()`（解析 `INFO server` 的版本号，TTL 缓存），
+并按能力分支：
 
-### [ ] P5.2 改造 8 处跨域直调
+| 能力 | publish | subscribe |
+|---|---|---|
+| Stream（Redis ≥5.0） | `XADD` + `MAXLEN` | `XREAD` |
+| List（回落） | `LPUSH` + `LTRIM` | `BLPOP`（短超时轮询，保证 CancelledError 及时响应） |
 
-`auth`、`wrong_questions`、`practice`、`stats`、`forum`、`quotes`、`collection`、`notes` 改为发布 `user.action`。
+端到端实测（真实 Redis 3.0.504）**11 项全 PASS**：
 
-改造后 `growth` 域成为纯事件生产方，其余域不再 import 它。
+```
+supports_streams() = False（正确识别并回落 List）
+publish 返回 True；事件落在 List 键（无订阅者时 llen=1，且未误用 Stream 键）
+订阅方收到事件：名称/载荷/聚合 id 全部正确；消费后队列清空（BLPOP 语义）
+```
 
-**验证**：`refactor_baseline/coupling.json` 对比——跨域条目归零。
+修正过程：曾断言「事件落在 List 键」在**订阅任务已启动**时恒得假阴性（BLPOP 在
+LPUSH 瞬间取走条目，llen=0）——改序为先无订阅验证落库、再做往返。
+
+**P5 选型结论**：本机无需升级 Redis 即可启用事件总线（List 传输 at-least-once，
+牺牲消费者组语义）。Stream 语义在 Redis ≥5.0 的环境自动启用。
+
+### [x] P5.1 定义事件（提交 `f4dfcb8`）
+
+`user.action.v1`、`growth.awarded.v1`、`achievement.unlocked.v1` 已登记（字段只增不删）。
+`events.ALL_EVENTS` 现共 11 个：8 个既有基础设施事件 + 3 个 P5.1 用户行为事件。
+两套命名共存是有意为之：前者沿用既有 `domain.action.过去式` 格式，后者遵循计划契约
+`domain.action.version` 格式。
+
+### [~] P5.2 改造跨域直调（实测分析完成，实施待决策）
+
+实测 8 模块对 growth 域的耦合（原计划预期 8 处，实际 **14 处** `check_and_grant`
++ `practice`/`stats` 的 `growth_service` 同步调用）：
+
+| 形态 | 数量 | 处置 |
+|---|---:|---|
+| `check_and_grant` fire-and-forget（返回值被忽略） | 13 | 技术上可改事件，**但需后台消费者，否则成就逻辑静默停摆** |
+| `practice:54` 返回值 → 前端成就弹窗 | 1 | ❌ 必须保持同步 |
+| `stats` 的 `get_level_info`/`GROWTH_RULES` 响应渲染读 | 2 | ❌ 必须保持同步 |
+
+**计划假设与实测冲突**：原计划称「改造后 growth 域成为纯事件生产方、其余域不再
+import 它、耦合归零」。实测存在 2 处**响应路径上的同步依赖**（成就弹窗、等级渲染），
+无法改为异步事件而不改变产品行为。
+
+**待决策项**（二选一）：
+1. **全异步**：13 处 fire-and-forget 改发事件 + 新增后台消费者服务（应用 lifespan 启动）；
+   接受最终一致性；代价：Redis 不可用时成就静默丢失（现为事务内同步授予）
+2. **折中**：13 处改事件 + 同步兜底（publish 失败时直接调用），保留 2 处同步依赖；
+   耦合降至 2，不归零
+
+验证方式不变：`refactor_baseline/coupling.json` 对比跨域条目。
+
+**验证**：`refactor_baseline/coupling.json` 对比——跨域条目归零（若选折中方案则为降至 2）。
 
 ---
 
