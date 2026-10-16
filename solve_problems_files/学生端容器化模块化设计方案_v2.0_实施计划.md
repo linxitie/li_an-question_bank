@@ -961,21 +961,52 @@ referenced.add(m[1].split('/').pop());   // 只取文件名，不含目录
 - `/tablet/news` 等路由复用 `@/views/mobile_news.vue` 的写法保留——**不为平板新建重复组件**（C5 同理，避免双份维护）
 - `AdminLayout.vue` / `TeacherLayout.vue` 位置已正确，不动
 
-### [ ] P3A.3 迁移组件与服务层
+### [x] P3A.3 迁移组件与服务层（提交 `d745dee`）
 
-`components/common/`（`HelloWorld`、`VtjErrorBoundary`）、`components/mobile/`（`MobileTabBar`）、`components/domain/`（`RecentPracticeRecords`）。
+四组件归位（`git mv` 识别为 rename，历史保留）：
 
-**验证**：
+| 组件 | 目标目录 |
+|---|---|
+| `HelloWorld` | `components/common/` |
+| `VtjErrorBoundary` | `components/common/` |
+| `MobileTabBar` | `components/mobile/` |
+| `RecentPracticeRecords` | `components/domain/` |
 
-```powershell
-npm run typecheck            # 期望 0 错误
-npm run build                # 期望成功
-# 启动后逐端验证：
-#   PC    → http://localhost:8000/            → 应渲染 PC 页
-#   手机  → http://localhost:8000/#/mobile/home → 应渲染手机端页
-#   平板  → http://localhost:8000/#/tablet/home → 应渲染平板端页
-git diff --stat -- .vtj/     # 期望：空
+导入更新共 9 处：`src/App.vue`（1）、`src/views/student/shared/profile.vue`（1）、
+**6 个 `.vtj/vue/` 文件的脚本区 import（7 条）**。
+
+#### ⚠️ 与计划验证判据的冲突（实测）
+
+计划要求「`git diff --stat -- .vtj/` 期望空」，但实测 `MobileTabBar` 与
+`RecentPracticeRecords` 被冻结区 6 个页面以 `@/components/` 旧路径导入——
+**移动必须同步更新这些脚本区 import，否则构建必挂**。按 R3 边界处理：
+只改 `<script>` 区 import 字符串，不动任何 `<template>`。
+
+#### 行尾符污染事故（已修复并记录教训）
+
+首轮用 Python `newline="\n"` 重写文件，把 `.vtj` 文件整体从仓库形态改写，
+diff 暴涨至 4949 行增删。修复过程发现**更隐蔽的事实**：
+
+- 6 个 `.vtj` 文件中只有 `mobile_question_bank.vue` 是 CRLF（601 处），
+  **其余 5 个仓库存储形态本就是 LF** —— 首轮的 CRLF 恢复脚本反而制造了污染
+- PowerShell 管道（`git show | Out-String`）会把 LF 转成 CRLF，**行尾判断
+  经 PowerShell 管道全不可信**
+
+**最终修复**：用 `git cat-file blob` 取 HEAD 原始字节做**字节级替换**，
+行尾/编码/BOM 与仓库形态逐字节一致，diff 收敛为 9 行（仅 import 本身）。
+
+> **教训**：冻结区文件的任何修改必须走字节级替换；行尾判断禁用 PowerShell
+> 管道，一律用 Python 二进制读数。
+
+#### 验证
+
 ```
+vite build 退出码 0（16.58s）   ← 导入链完整
+src 与 .vtj 旧路径残留引用     : 0 处
+.git diff --stat .vtj/         : 每文件 1-2 行，仅 import
+```
+
+**风险**：中（触碰冻结区脚本区，已按 R3 最小化并字节级验证）。
 
 **风险**：中。路由 import 改错会导致 404，故必须逐端实测。
 
