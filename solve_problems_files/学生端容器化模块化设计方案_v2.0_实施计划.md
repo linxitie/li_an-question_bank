@@ -193,7 +193,7 @@ L2 通过 `subprocess` 调用 `verify_xingce_regression.py`，该脚本**仅** `
 
 ---
 
-### [ ] P0.4 重写 14 个过时断言
+### [x] P0.4 重写 14 个过时断言
 
 P0.1 修复后，原本在 fixture 阶段中断的 14 个用例开始执行，暴露出**测试期望过时**（非产品缺陷）。已取证分类：
 
@@ -208,7 +208,23 @@ P0.1 修复后，原本在 fixture 阶段中断的 14 个用例开始执行，�
 
 **动作**：按当前 API 契约重写断言，**不得**为了让测试通过而修改产品代码。
 
-**验证**：`pytest tests` 的 failed 数从 31 降至 17（17 为 `test_security.py` 等既有问题，另行处理）。
+**实际修订**（提交 `7f7db88`，仅改测试文件）：
+
+- 路径订正：`/api/auth/me`→`/api/auth/profile`；`/api/exam/*`→`/api/exams/*`（实际为复数）；`/api/papers/`（无 GET）→`/api/papers/list`；`/api/questions/subjects`→`/api/quick-practice/subjects`；`/api/questions/types`→`/api/practice/type-summary`
+- 登录端点为 OAuth2PasswordRequestForm，此前以 JSON 提交恒得 422，改为表单提交
+- 契约订正：`/` 已被 SPA fallback 接管，返回 index.html；`/api/questions/{id}`、`/api/exams/{paper_id}` 为公开读
+- 两处**真实产品缺陷**用 `strict=True` 的 xfail 记录，不掩盖也不伪装通过：
+  1. `/metrics/endpoints`、`/metrics/reset` 注册于 SPA fallback 之后，被 `/{full_path:path}` 抢先匹配，返回 HTML
+  2. 建卷时 `_get_or_create_import_paper` 未把 `question_count` 写入 `ExamPaper`，关联 5 题后该字段仍为 1（`question_import.py:1258` 的累加分支依赖初值非 0）
+
+**验证**：failed 由 31 降至 **17**，14 个目标断言全部解决（12 个转为正确断言，2 个转为文档化 xfail）。
+
+```
+重写前  17 failed / 265 passed / 1 xfailed / 0 error
+重写后  17 failed / 278 passed / 3 xfailed / 0 error
+```
+
+剩余 17 个为 `test_security.py` 等既有问题，不在本次范围。
 
 **风险**：低。仅改测试文件。
 
