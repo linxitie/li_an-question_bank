@@ -1338,9 +1338,14 @@ P6.1 已做 SHA-256 审计（`data/backup_dedup_report.txt`）：2 份字节级�
 | 1 | ~~DeepSeek 密钥吊销~~ | — | ✅ 已完成 |
 | 2 | 生成新 `JWT_SECRET_KEY` 并写入 `backend/.env` | P0.2-f | 🔴 |
 | 3 | 授权 `git filter-repo` 清除历史旧密钥 | P0.2-g | 🔴 |
-| 4 | 确认 `packages/shared-store`（零引用）去留 | P6 | 🟡 |
-| 5 | 确认 `linxitie.policy-exam-bank-mobile` / `-tablet` 去留 | P6 | 🟡 |
-| 6 | 后续重点：教师端题目导入改造 + 三端「导入-展示-通信」数据一致性——**必须在 P3B 完成后再动** | P3B 之后 | 🟠 |
+| 4 | 确认 `packages/shared-store` 去留（实测：仍存在，3 文件，**0 引用**） | P6 | 🟡 |
+| 5 | 确认 `linxitie.policy-exam-bank-mobile`（4 文件）/ `-tablet`（3 文件）去留 | P6 | 🟡 |
+| 6 | ~~后续重点：教师端题目导入改造 + 三端数据一致性——P3B 已完成，前置解除~~ | ✅ 前置已满足 | — |
+| 7 | **P4.2/P5.2 选型**：13 处 fire-and-forget 改事件（全异步，Redis 宕机成就静默丢失）vs 折中（事件+同步兜底，耦合降至 2） | P4/P5 | 🔴 |
+| 8 | **Redis 升级 ≥5.0**（否则事件总线走 List 传输，牺牲消费者组语义） | P5 | 🟡 |
+| 9 | **docker 环境补验**：P1.1/P1.2/P1.3 构建与启动验证（本机无 docker，已穷尽核查） | P1 | 🟠 |
+| 10 | 5 个未跟踪语料 PDF（`题库/备考资料/**`）处置 | P6 | 🟡 |
+| 11 | 第二处 DeepSeek 密钥（`.omo/plans/subagent-timeout-rootcause.md:527`）**吊销确认**——工作区已清洗，吊销未确认 | P0.2 | 🔴 |
 
 ---
 
