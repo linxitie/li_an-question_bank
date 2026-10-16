@@ -306,19 +306,65 @@ P0 以「除 L2 外全绿」结项，进入 P1 容器化落地。
 
 ## P1 · 容器化落地
 
-### [ ] P1.1 后端镜像
+### [x] P1.1 后端镜像（文件已就绪，构建验证待补）
 
-新建 `backend/Dockerfile`（`python:3.13-slim` + `ffmpeg`/`libgl1`/`libglib2.0-0`/`curl` + `playwright install --with-deps chromium`，COPY `app` 与 `data/gates`，`HEALTHCHECK` 复用既有 `/health`）。
+新增 `backend/Dockerfile`（`python:3.13-slim`，提交 `5a671c5`）。
 
-新建 `backend/.dockerignore`——排除 `data/`（除 gates）、`uploads/`、`static/`、`__pycache__/`、`.env`、`tests/`。
+**实测驱动的事实**（非照抄计划）：
 
-**验证**：
+| 事实 | 实测值 | 对镜像的影响 |
+|---|---|---|
+| 本机 Python | 3.13.5 | 基镜像定 `python:3.13-slim` |
+| `app/static/` | **94814 文件 / 4.27 GB** | R7 红线，必须排除，走 qimg 卷 |
+| playwright 使用位置 | `exam_scraper.py`、`news_scraper.py`、`recruitment_scraper.py` | **生产代码在用**，chromium 必须入镜像，非仅门禁需要 |
+| `/health` | `main.py:608` | HEALTHCHECK 复用，不另造端点 |
+| 启动命令 | `start.py:20` = `python -m uvicorn app.main:app --host 0.0.0.0 --port 8000` | 入口脚本沿用同一组参数 |
+
+**镜像要点**：
+
+- 依赖单独成层（业务代码频繁改动时可命中缓存）
+- 非 root 运行（`app` 用户）；`tini` 作 PID 1 保证 uvicorn 优雅退出
+- `HEALTHCHECK` 复用 `main.py:608` 的 `/health`，`curl` 为 slim 镜像显式安装
+- `.dockerignore` 排除 `data/*` 后放行 `data/gates`、`data/refactor_baseline`（纯 JSON 基线），
+  SQLite 主库、41 份 `.bak*`、`audit/`、`snapshots/`、`text_cache/`、`xingce_cache/` 一律不入镜像
+
+**编写过程中自查并修正的两处缺陷**：
+
+1. 入口脚本最初**未被 `COPY`**，`chmod +x` 会在文件缺失时失败导致构建中断 —— 已补 `COPY docker-entrypoint.sh`
+2. 最初声明了 `VOLUME [data, uploads, app/static]` —— 有害：`docker run` 未带 `-v` 时会生成匿名卷，
+   `app/static` 为空即全站裂图（R7 后果），且匿名卷静默堆积难回收 —— 已删除，改为仅由 compose 显式挂载
+
+**入口脚本职责**（`docker-entrypoint.sh`）：
+
+- **R10**：仅当「主库缺失但 `-wal`/`-shm` 存在」时清理孤儿 WAL；主库存在时一律保留 `-wal`/`-shm`（那是未落盘数据的正常状态）
+- R7 自检：`app/static` 为空时打印告警，提示题目图片将全部 404
+- 凭据自检：`.dockerignore` 已排除 `.env*`，入口只做存在性提醒，不打印任何值
+- 不做重启循环 —— 开发机的看门狗逻辑在容器里由 orchestrator 负责
+
+#### ⚠️ 构建验证未完成（环境阻塞，非代码问题）
+
+**本机未安装 docker**（`docker` 命令不存在），计划中的以下验证**无法执行**：
 
 ```powershell
-docker build -t liankao/backend:test backend
-docker images liankao/backend:test        # 期望体积不含 4.3 GB 题图
-docker run --rm liankao/backend:test sh -c "ls app/static | wc -l"   # 期望 0
+docker build -t liankao/backend:test backend          # 未执行
+docker images liankao/backend:test                   # 未执行
+docker run --rm liankao/backend:test sh -c "ls app/static | wc -l"   # 未执行
 ```
+
+已完成的替代静态校验（全部 PASS）：
+
+| 校验项 | 结果 |
+|---|---|
+| 三个文件行尾符 | 纯 LF，CRLF=0（Windows 下 CRLF 会导致脚本 `command not found`） |
+| `sh -n docker-entrypoint.sh` | PASS |
+| `COPY` 目标路径存在性 | `app` / `data/gates` / `data/refactor_baseline` / `requirements.txt` / `docker-entrypoint.sh` 均存在 |
+| `.gitignore` 误挡检查 | 三个新文件均未被排除 |
+| `.dockerignore` 关键规则 | `app/static/`、`data/*` + `!data/gates`、`\.env`、`tests/` 均在位 |
+
+**结论**：镜像文件已就绪且静态自洽，但**镜像体积与 `app/static` 为空两项只能在装有 docker 的环境上实测**。
+P1.1 的「验证」栏保持未勾选，待具备 docker 的机器补跑后再勾。
+
+**风险**：低（纯新增文件，未触碰任何现有代码与路由）。
 
 ### [ ] P1.2 MinerU / OCR sidecar
 
