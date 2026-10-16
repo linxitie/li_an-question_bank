@@ -13,7 +13,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
 from .core.redis_client import get_redis, close_redis
-from .api.v1 import auth, questions, papers, exams, videos, llm, goals, stats, media, news, recruitment, calendar, question_actions, practice, exam_records, wrong_questions, collection, notes, quick_practice, smart_exam
+from .api.v1 import auth, questions, papers, exams, videos, llm, goals, stats, media, question_actions, practice, exam_records, wrong_questions, quick_practice, smart_exam
+from .api.v1.personal import collection, notes
+from .api.v1.content import news, recruitment, calendar
 from .api.v1 import admin as admin_api
 from .api.v1 import teacher as teacher_api
 from .api.v1 import admin_approval

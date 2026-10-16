@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ...core.database import get_db, commit_with_retry
-from ...core.security import get_current_user
-from ...models.models import FavoriteQuestion, SysUser
+from ....core.database import get_db, commit_with_retry
+from ....core.security import get_current_user
+from ....models.models import FavoriteQuestion, SysUser
 
 router = APIRouter(prefix="/api/collection", tags=["收藏模块"])
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ async def get_collection(
     db: Session = Depends(get_db)
 ):
     """分页获取用户收藏列表"""
-    from ...models.models import QuestionBank, QuestionSubject, NewsArticle
+    from ....models.models import QuestionBank, QuestionSubject, NewsArticle
 
     items = []
     total = 0
@@ -65,7 +65,7 @@ async def toggle_favorite(
     db: Session = Depends(get_db)
 ):
     """添加或取消收藏"""
-    from ...models.models import QuestionBank, NewsArticle
+    from ....models.models import QuestionBank, NewsArticle
 
     fav_type = payload.get('type')  # question / news
     resource_id = payload.get('id')
@@ -99,7 +99,7 @@ async def toggle_favorite(
 
         # 触发收藏成就
         try:
-            from ...services import achievement_service
+            from ....services import achievement_service
             achievement_service.check_and_grant(current_user.user_id, "favorite", db)
         except Exception as e:
             logger.warning(f"收藏成就判定失败: {e}")
@@ -107,7 +107,7 @@ async def toggle_favorite(
         return {"favorited": True, "message": "已收藏", "fav_id": f"q_{fav.fav_id}"}
 
     elif fav_type == "news":
-        from ...models.models import NewsFavorite
+        from ....models.models import NewsFavorite
         news = db.query(NewsArticle).filter(NewsArticle.news_id == resource_id).first()
         if not news:
             raise HTTPException(status_code=404, detail="新闻不存在")
@@ -150,13 +150,13 @@ async def delete_favorite(
     fav_type, pk_id = parts[0], int(parts[1])
 
     if fav_type == "q":
-        from ...models.models import FavoriteQuestion
+        from ....models.models import FavoriteQuestion
         fav = db.query(FavoriteQuestion).filter(
             FavoriteQuestion.fav_id == pk_id,
             FavoriteQuestion.user_id == current_user.user_id
         ).first()
     elif fav_type == "n":
-        from ...models.models import NewsFavorite
+        from ....models.models import NewsFavorite
         fav = db.query(NewsFavorite).filter(
             NewsFavorite.fav_id == pk_id,
             NewsFavorite.user_id == current_user.user_id
@@ -190,7 +190,7 @@ def _get_subcategory(question) -> str:
 def _read_obsidian_quote_by_filename(filename: str) -> Optional[dict]:
     """根据文件名读取 Obsidian 金句"""
     import os
-    from .community.quotes import OBSIDIAN_QUOTE_DIR, _parse_obsidian_quote
+    from ..community.quotes import OBSIDIAN_QUOTE_DIR, _parse_obsidian_quote
 
     if not filename or not os.path.exists(OBSIDIAN_QUOTE_DIR):
         return None
@@ -222,7 +222,7 @@ async def get_news_favorites(
     db: Session = Depends(get_db)
 ):
     """合并查询金句收藏和新闻收藏"""
-    from ...models.models import QuoteFavorite, NewsFavorite, EssayQuote, NewsArticle
+    from ....models.models import QuoteFavorite, NewsFavorite, EssayQuote, NewsArticle
 
     all_items = []
 
@@ -317,7 +317,7 @@ async def get_question_favorites(
     db: Session = Depends(get_db)
 ):
     """查询用户收藏的题目列表，含完整题目信息用于弹窗展示"""
-    from ...models.models import QuestionBank, QuestionSubject
+    from ....models.models import QuestionBank, QuestionSubject
 
     query = db.query(FavoriteQuestion).filter(
         FavoriteQuestion.user_id == current_user.user_id
@@ -363,7 +363,7 @@ async def get_collection_stats(
     db: Session = Depends(get_db)
 ):
     """返回当前用户的收藏数量统计"""
-    from ...models.models import QuoteFavorite, NewsFavorite
+    from ....models.models import QuoteFavorite, NewsFavorite
 
     question_count = db.query(FavoriteQuestion).filter(
         FavoriteQuestion.user_id == current_user.user_id

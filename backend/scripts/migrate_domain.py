@@ -27,6 +27,23 @@ def run(*args: str) -> str:
                           text=True, encoding="utf-8", errors="replace").stdout
 
 
+# Windows 控制台默认 GBK，打印 ✓/→ 会抛 UnicodeEncodeError 而中断整个迁移。
+# 强制 stdout 走 UTF-8 并对无法编码的字符降级，避免收尾输出搞崩已完成的搬迁。
+_reconfigure = getattr(sys.stdout, "reconfigure", None)
+if _reconfigure is not None:
+    try:
+        _reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 — 降级失败不应阻断迁移
+        pass
+
+
+def existing_domains() -> list[str]:
+    """已建成的域目录名。用于识别「指向其它域」的跨域相对导入。"""
+    return sorted(d for d in os.listdir(V1)
+                  if os.path.isdir(os.path.join(V1, d))
+                  and d != "__pycache__")
+
+
 def read(p: str) -> str:
     with open(p, encoding="utf-8") as f:
         return f.read()
@@ -69,8 +86,18 @@ def main() -> int:
         t = read(p)
         n = len(re.findall(r"(?m)^\s*from\s+\.\.\.", t))
         t = re.sub(r"(?m)^(\s*from\s+)\.\.\.", r"\1....", t)
+        # 第四类：模块内部若已有指向**其它域**的单点相对导入
+        #（如 personal/collection.py 里的 from .community.quotes），
+        # 随宿主再次下沉后基准又深了一层，须一并提升为两点。
+        others = "|".join(x for x in existing_domains() if x != domain)
+        n2 = 0
+        if others:
+            pat = re.compile(rf"(?m)^(\s*from\s+)\.({others})\.")
+            n2 = len(pat.findall(t))
+            t = pat.sub(rf"\1..\2.", t)
         write(p, t)
-        print(f"  [迁移] {m}.py → {domain}/  3点式改4点式 {n} 处")
+        print(f"  [迁移] {m}.py -> {domain}/  3点式改4点式 {n} 处"
+              + (f"，跨域相对导入提升 {n2} 处" if n2 else ""))
 
     # ── 2. 三类引用改写 ────────────────────────────────────
     moved = set(mods)

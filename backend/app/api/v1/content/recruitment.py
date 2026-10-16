@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ...core.database import get_db
-from ...core.security import get_optional_user
-from ...models.models import RecruitmentInfo, SysUser
+from ....core.database import get_db
+from ....core.security import get_optional_user
+from ....models.models import RecruitmentInfo, SysUser
 
 router = APIRouter(prefix="/api/recruitment", tags=["招考信息"])
 logger = logging.getLogger(__name__)

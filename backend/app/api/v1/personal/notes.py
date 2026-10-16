@@ -13,9 +13,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from ...core.database import get_db, commit_with_retry
-from ...core.security import get_current_user
-from ...models.models import SysUser
+from ....core.database import get_db, commit_with_retry
+from ....core.security import get_current_user
+from ....models.models import SysUser
 
 router = APIRouter(prefix="/api/notes", tags=["笔记模块"])
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ async def get_notes(
     db: Session = Depends(get_db)
 ):
     """分页获取用户笔记列表"""
-    from ...models.models import QuestionNote, NewsNote, QuestionBank, NewsArticle, QuestionSubject
+    from ....models.models import QuestionNote, NewsNote, QuestionBank, NewsArticle, QuestionSubject
 
     items = []
     total = 0
@@ -92,7 +92,7 @@ async def create_or_update_note(
     db: Session = Depends(get_db)
 ):
     """创建或更新笔记（按 type+id 唯一）"""
-    from ...models.models import QuestionNote, NewsNote, QuestionBank, NewsArticle
+    from ....models.models import QuestionNote, NewsNote, QuestionBank, NewsArticle
 
     note_type = payload.get('type')  # question / news
     resource_id = payload.get('id')
@@ -135,7 +135,7 @@ async def create_or_update_note(
 
         # 触发笔记成就
         try:
-            from ...services import achievement_service
+            from ....services import achievement_service
             achievement_service.check_and_grant(current_user.user_id, "note", db)
         except Exception as e:
             logger.warning(f"笔记成就判定失败: {e}")
@@ -177,7 +177,7 @@ async def create_or_update_note(
 
         # 触发笔记成就
         try:
-            from ...services import achievement_service
+            from ....services import achievement_service
             achievement_service.check_and_grant(current_user.user_id, "note", db)
         except Exception as e:
             logger.warning(f"笔记成就判定失败: {e}")
@@ -196,7 +196,7 @@ async def update_note(
     db: Session = Depends(get_db)
 ):
     """更新笔记内容"""
-    from ...models.models import QuestionNote, NewsNote
+    from ....models.models import QuestionNote, NewsNote
 
     parts = note_id.split("_")
     if len(parts) != 2:
@@ -237,7 +237,7 @@ async def delete_note(
     db: Session = Depends(get_db)
 ):
     """删除笔记"""
-    from ...models.models import QuestionNote, NewsNote
+    from ....models.models import QuestionNote, NewsNote
 
     parts = note_id.split("_")
     if len(parts) != 2:
@@ -289,7 +289,7 @@ async def get_news_notes(
     db: Session = Depends(get_db)
 ):
     """返回当前用户的所有新闻笔记，包含划线原文、想法、来源新闻信息"""
-    from ...models.models import NewsNote, NewsArticle
+    from ....models.models import NewsNote, NewsArticle
     from sqlalchemy import func
 
     base_query = db.query(NewsNote).filter(NewsNote.user_id == current_user.user_id)
@@ -326,7 +326,7 @@ async def get_question_notes(
     db: Session = Depends(get_db)
 ):
     """返回当前用户的所有题目笔记，包含笔记内容、来源题目信息、知识点面包屑"""
-    from ...models.models import (
+    from ....models.models import (
         QuestionNote, QuestionBank, QuestionSubject,
         QuestionDetailCategory, QuestionKnowledge, KnowledgePoint,
         SubCategory, PracticeRecord
@@ -391,7 +391,7 @@ def _build_knowledge_path(db: Session, question) -> str:
         return ''
     parts = []
     # 1. 科目名
-    from ...models.models import QuestionSubject, QuestionKnowledge, KnowledgePoint, SubCategory
+    from ....models.models import QuestionSubject, QuestionKnowledge, KnowledgePoint, SubCategory
     subj = db.query(QuestionSubject).filter(
         QuestionSubject.subject_id == question.subject_id
     ).first()
@@ -445,12 +445,12 @@ async def get_question_detail(
     """返回题目完整详情（供笔记弹窗展示）：题干、选项（高亮正确答案）、解析、正确率。
     图片经过 sanitize_content_images 预检，确保前端稳定显示。
     """
-    from ...models.models import (
+    from ....models.models import (
         QuestionBank, QuestionSubject, QuestionDetailCategory,
         QuestionKnowledge, KnowledgePoint, SubCategory, PracticeRecord
     )
-    from ...services.image_service import sanitize_content_images, sanitize_options_images
-    from ...services.option_utils import render_image_placeholder
+    from ....services.image_service import sanitize_content_images, sanitize_options_images
+    from ....services.option_utils import render_image_placeholder
     from sqlalchemy import func
 
     q = db.query(QuestionBank).filter(
@@ -539,7 +539,7 @@ async def get_notes_stats(
     db: Session = Depends(get_db)
 ):
     """返回当前用户的笔记数量统计"""
-    from ...models.models import QuestionNote, NewsNote
+    from ....models.models import QuestionNote, NewsNote
 
     logger.warning(f"[DEBUG] /api/notes/stats 被调用, user_id={current_user.user_id}, username={current_user.username}")
 
