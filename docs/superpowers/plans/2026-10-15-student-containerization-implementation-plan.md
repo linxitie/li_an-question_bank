@@ -1248,26 +1248,30 @@ LPUSH 瞬间取走条目，llen=0）——改序为先无订阅验证落库、�
 两套命名共存是有意为之：前者沿用既有 `domain.action.过去式` 格式，后者遵循计划契约
 `domain.action.version` 格式。
 
-### [~] P5.2 改造跨域直调（实测分析完成，实施待决策）
+### [~] P5.2 改造跨域直调（消费者基础设施已落地，调用点转换待选型）
 
-实测 8 模块对 growth 域的耦合（原计划预期 8 处，实际 **14 处** `check_and_grant`
-+ `practice`/`stats` 的 `growth_service` 同步调用）：
+#### 已完成：消费者基础设施（提交 `2c5dc3e`）
 
-| 形态 | 数量 | 处置 |
-|---|---:|---|
-| `check_and_grant` fire-and-forget（返回值被忽略） | 13 | 技术上可改事件，**但需后台消费者，否则成就逻辑静默停摆** |
-| `practice:54` 返回值 → 前端成就弹窗 | 1 | ❌ 必须保持同步 |
-| `stats` 的 `get_level_info`/`GROWTH_RULES` 响应渲染读 | 2 | ❌ 必须保持同步 |
+- `app/services/event_consumer.py`：订阅 `user.action.v1` → 分发到
+  `achievement_service.check_and_grant`；每条事件独立 DB 会话、异常回滚不拖垮循环；
+  payload 契约 `{user_id:int, trigger_type:str, session:dict|null}`
+- `config.EVENT_CONSUMER_ENABLED`（默认 **False**）：调用点改造完成前保持关闭，
+  过早启动会与现有同步直调产生**成就双写**
+- `main.py` lifespan 接线：开关开启时 `create_task`，关停时 cancel + await
 
-**计划假设与实测冲突**：原计划称「改造后 growth 域成为纯事件生产方、其余域不再
-import 它、耦合归零」。实测存在 2 处**响应路径上的同步依赖**（成就弹窗、等级渲染），
-无法改为异步事件而不改变产品行为。
+端到端实测（真实 Redis 3.0.504，List 传输）**5 项全 PASS**：
+发布 user.action → 消费者取走（队列清空）；载荷不完整事件安全消费；
+消费者可干净取消退出。（用不存在的 user_id 验证管线贯通，零副作用。）
 
-**待决策项**（二选一）：
-1. **全异步**：13 处 fire-and-forget 改发事件 + 新增后台消费者服务（应用 lifespan 启动）；
-   接受最终一致性；代价：Redis 不可用时成就静默丢失（现为事务内同步授予）
-2. **折中**：13 处改事件 + 同步兜底（publish 失败时直接调用），保留 2 处同步依赖；
-   耦合降至 2，不归零
+#### 待选型：13 处调用点转换
+
+实测 14 处 `check_and_grant`（13 fire-and-forget + 1 返回值给前端弹窗）
++ `stats` 2 处同步读。与 P4.2 余量合并为**单一决策点**（附录 B #7）：
+
+1. **全异步**：13 处改发事件 + 启用消费者；接受最终一致性；
+   代价：Redis 不可用时成就静默丢失（现为事务内同步授予）
+2. **折中**：13 处改事件 + 同步兜底（publish 失败时直接调用）；
+   保留 2 处同步依赖（practice 弹窗、stats 读）；耦合降至 2，不归零
 
 验证方式不变：`refactor_baseline/coupling.json` 对比跨域条目。
 
