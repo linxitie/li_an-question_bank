@@ -752,17 +752,79 @@ P3B 搬迁后重跑此函数即可判定归属是否被破坏。
 
 **风险**：低。三个文件均为新增且不被任何业务代码 import，回归基线逐项未变。
 
-### [ ] P2.2 `app/` 根文件归位
+### [x] P2.2 `app/` 根文件归位（提交 `64101d5`，部分完成）
 
-`middleware.py`、`monitoring.py`、`exceptions.py`、`cache.py`、`db_router.py` 从 `app/` 根移入 `core/`；`seed.py` 移入 `scripts/admin/`。更新全部 import。
+#### 已完成：3 个文件迁入 `core/`
 
-**验证**：
+| 原位置 | 新位置 |
+|---|---|
+| `app/middleware.py` | `app/core/middleware.py` |
+| `app/monitoring.py` | `app/core/monitoring.py` |
+| `app/exceptions.py` | `app/core/exceptions.py` |
 
-```powershell
-cd backend
-python scripts/collect_api_surface.py     # 与基线 diff → 期望为空
-python scripts/gate_all.py                # 8 门禁全绿
+**修正 8 处 import**（`git mv` 保留了文件历史，git 识别为 rename 而非增删）：
+
+| 位置 | 改动 |
+|---|---|
+| `app/core/middleware.py:13` | `.core.security` → `.security`（**移动后必然失效**：否则解析为 `app.core.core.security`） |
+| `app/main.py:29/30/31` | `.exceptions` / `.middleware` / `.monitoring` → `.core.*` |
+| `app/api/v1/websocket.py:17` | `...monitoring` → `...core.monitoring` |
+| `app/api/v1/forum.py:37` | `...exceptions` → `...core.exceptions` |
+| `tests/test_exceptions.py:9` | `app.exceptions` → `app.core.exceptions` |
+| `tests/test_monitoring.py:11` | `app.monitoring` → `app.core.monitoring` |
+
+> `app/core/middleware.py:14` 的 `from .exceptions` **无需改动** —— 移入后正好成为同目录
+> 的 `app.core.exceptions`。
+
+**一处扫描教训**：首轮用 PowerShell 的 `app\**\*.py` glob 未覆盖 `api/v1/`，
+漏掉两处三点式相对导入，应用启动直接 `ModuleNotFoundError: app.exceptions`。
+改用能正确递归的检索工具后才发现。**教训：跨目录重构的引用扫描必须用递归检索工具，
+不可依赖 shell glob。**
+
+#### 验证
+
 ```
+app.main 导入成功，/api 路由 339 个（与搬迁前一致）
+core 三模块独立导入成功
+pytest   17 failed / 278 passed / 3 xfailed   ← 与搬迁前基线逐项一致
+gate_all 7/8                                  ← L2 仍为 P0.5 已确诊的判据假阳性
+```
+
+计划中引用的 `collect_api_surface.py` **并不存在**；权威的 API 契约门禁是
+`gate_l4_api_contract.py`（基线 `api_surface.json` 按 37 个模块名为键，
+与 `module_registry.ALL_MODULES` 精确吻合），已随 `gate_all` 通过。
+
+#### ⚠️ 三项刻意未做，理由如下
+
+**1. `seed.py` → `scripts/admin/`：存在静默失败模式，不宜机械搬迁**
+
+`main.py:490` 的调用被包在 `try/except Exception` 中，仅记 warning：
+
+```python
+try:
+    from .seed import run_seed
+    run_seed()
+except Exception as e:
+    logger.warning(f"种子数据初始化失败（服务继续运行）: {e}")
+```
+
+而 `seed.py` 内部有 4 条跨包相对导入（`.core.config` / `.core.database` /
+`.core.security` / `.models.models`），移出 `app/` 后全部失效。
+**一旦搬迁出错，应用照常启动、门禁全绿，但种子数据被静默跳过** ——
+这类失败不会在任何检查中暴露。须配合专项验证（比对库中种子记录数）才能安全搬迁。
+
+**2 & 3. `cache.py` 与 `db_router.py`：全仓零引用的死代码**
+
+实测两者**无任何 import 引用**（`cache` 的 6 处命中经核验全是假阳性：
+HTTP 头 `Cache-Control`、局部函数 `cache_key`；`db_router` 0 处）。
+移动死代码不产生任何收益，且 `cache.py:10` 的 `from .core.config import settings`
+在移入 `core/` 后会解析为 `app.core.core.config` 而失效。
+
+建议改为独立决策：**删除**，或**保留原位**并在 P6 目录清理阶段处理。
+不随本任务一并搬迁。
+
+**风险**：低（已迁三者均被完整引用并逐一修正，回归基线逐项未变）。
+遗留的 `seed.py` 搬迁有静默失败风险，已在 P6 前置中标注。
 
 ---
 
