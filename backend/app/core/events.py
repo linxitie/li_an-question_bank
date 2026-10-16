@@ -37,10 +37,15 @@ EV_COINS_AWARDED = "reward.coins.awarded"
 EV_GOAL_PROGRESSED = "growth.goal.progressed"
 EV_MATERIAL_PUBLISHED = "library.material.published"
 EV_USER_UPDATED = "identity.user.updated"
+# P5.1 用户行为事件（计划命名：domain.action.version，字段只增不删）
+EV_USER_ACTION = "user.action.v1"
+EV_GROWTH_AWARDED = "growth.awarded.v1"
+EV_ACHIEVEMENT_UNLOCKED = "achievement.unlocked.v1"
 
 ALL_EVENTS = (
     EV_QUESTION_IMPORTED, EV_PAPER_PUBLISHED, EV_EXAM_SUBMITTED, EV_EXAM_GRADED,
     EV_COINS_AWARDED, EV_GOAL_PROGRESSED, EV_MATERIAL_PUBLISHED, EV_USER_UPDATED,
+    EV_USER_ACTION, EV_GROWTH_AWARDED, EV_ACHIEVEMENT_UNLOCKED,
 )
 
 STREAM_MAXLEN = 1000
