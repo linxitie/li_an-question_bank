@@ -1259,7 +1259,35 @@ LPUSH 瞬间取走条目，llen=0）——改序为先无订阅验证落库、�
 两套命名共存是有意为之：前者沿用既有 `domain.action.过去式` 格式，后者遵循计划契约
 `domain.action.version` 格式。
 
-### [~] P5.2 改造跨域直调（消费者基础设施已落地，调用点转换待选型）
+### [x] P5.2 折中方案实施（提交 `2eae618`）
+
+**用户选型（2026-10-17）**：折中方案——保证系统正常高效运行、重要数据不丢失。
+
+#### 实施内容
+
+| 项 | 内容 |
+|---|---|
+| 13 处 fire-and-forget 调用点 | `achievement_service.check_and_grant(...)` → `await record_user_action(...)`（auth 1 / wrong_questions 3 / forum 4 / quotes 2 / collection 1 / notes 2） |
+| `practice.py:54` | **保持同步直调**（返回值给前端成就弹窗） |
+| `stats` 2 处同步读 | 保持不动（响应渲染依赖） |
+| 消费者 | `EVENT_CONSUMER_ENABLED` 默认 **True**；订阅循环带 5 秒重连 |
+| `record_user_action` | 发布成功返回 True（消费者异步授予，不阻塞请求）；Redis 宕机同步兜底直调返回 False（成就当场授予，数据不丢失） |
+
+#### 端到端实测（6 项全 PASS）
+
+```
+Redis 正常 → publish True，无兜底调用，事件入队
+Redis 不可达 → 同步兜底调用参数正确 (43, 'chop')
+```
+
+#### 过程中发现并修复的缺陷
+
+- **CancelledError 逃逸**：`except Exception` 捕获不到 `BaseException` 子类
+  `CancelledError`，消费者关停时 teardown 报错——补显式捕获
+- **asyncio 未导入**：main.py 关停块用局部导入别名规避
+
+验证：pytest `17 failed / 278 passed / 3 xfailed` 精确基线、gate_all **7/8**、
+边界检查 0 违规、339 路由。
 
 #### 已完成：消费者基础设施（提交 `2c5dc3e`）
 
@@ -1438,15 +1466,16 @@ P6.1 已做 SHA-256 审计（`data/backup_dedup_report.txt`）：2 份字节级�
 |---|---|---|:-:|
 | 1 | ~~DeepSeek 密钥吊销~~ | — | ✅ 已完成 |
 | 2 | ~~生成新 `JWT_SECRET_KEY` 并写入 `backend/.env`~~ | P0.2-f | ✅ 已完成（实测：`.env` 含 64 字符真实密钥，非占位符） |
-| 3 | 授权 `git filter-repo` 清除历史旧密钥 | P0.2-g | 🔴 |
+| 3 | ~~授权 `git filter-repo` 清除历史旧密钥~~ | P0.2-g | ✅ 已授权（2026-10-17），待执行 |
 | 4 | 确认 `packages/shared-store` 去留（实测：仍存在，3 文件，**0 引用**） | P6 | 🟡 |
 | 5 | 确认 `linxitie.policy-exam-bank-mobile`（4 文件）/ `-tablet`（3 文件）去留 | P6 | 🟡 |
 | 6 | ~~后续重点：教师端题目导入改造 + 三端数据一致性——P3B 已完成，前置解除~~ | ✅ 前置已满足 | — |
-| 7 | **P4.2/P5.2 选型**：13 处 fire-and-forget 改事件（全异步，Redis 宕机成就静默丢失）vs 折中（事件+同步兜底，耦合降至 2） | P4/P5 | 🔴 |
-| 8 | **Redis 升级 ≥5.0**（否则事件总线走 List 传输，牺牲消费者组语义） | P5 | 🟡 |
-| 9 | **docker 环境补验**：P1.1/P1.2/P1.3 构建与启动验证（本机无 docker，已穷尽核查） | P1 | 🟠 |
+| 7 | ~~P4.2/P5.2 选型~~ | P4/P5 | ✅ **已选折中方案并实施**（`2eae618`），保证数据不丢失 |
+| 8 | **Redis 升级 ≥5.0**（否则事件总线走 List 传输，牺牲消费者组语义） | P5 | 🔴 待执行 |
+| 9 | **docker 环境补验**：P1.1/P1.2/P1.3 构建与启动验证（本机无 docker，需先安装） | P1 | 🟠 待执行 |
 | 10 | ~~5 个未跟踪语料 PDF（`题库/备考资料/**`）处置~~ | P6 | ✅ 已由用户处置（实测：已无未跟踪语料文件） |
-| 11 | 第二处 DeepSeek 密钥（`.omo/plans/subagent-timeout-rootcause.md:527`）**吊销确认**——工作区已清洗，吊销未确认 | P0.2 | 🔴 |
+| 11 | ~~第二处 DeepSeek 密钥（`.omo/plans/subagent-timeout-rootcause.md:527`）吊销~~ | P0.2 | ✅ **已吊销（2026-10-17 用户确认）** |
+| 12 | **目录重整**（P6.2 归档：AI 工具目录 / scripts 分类 / solve_problems_files 迁 docs） | P6 | 🔴 待执行 |
 
 ---
 
