@@ -1466,7 +1466,7 @@ P6.1 已做 SHA-256 审计（`data/backup_dedup_report.txt`）：2 份字节级�
 |---|---|---|:-:|
 | 1 | ~~DeepSeek 密钥吊销~~ | — | ✅ 已完成 |
 | 2 | ~~生成新 `JWT_SECRET_KEY` 并写入 `backend/.env`~~ | P0.2-f | ✅ 已完成（实测：`.env` 含 64 字符真实密钥，非占位符） |
-| 3 | ~~授权 `git filter-repo` 清除历史旧密钥~~ | P0.2-g | ✅ 已授权（2026-10-17），待执行 |
+| 3 | ~~授权 `git filter-repo` 清除历史旧密钥~~ | P0.2-g | ✅ **已执行完成（2026-10-17）**：三密钥从全部历史清除、占位符 408 处、20 分支同步、本地对象库清理 |
 | 4 | 确认 `packages/shared-store` 去留（实测：仍存在，3 文件，**0 引用**） | P6 | 🟡 |
 | 5 | 确认 `linxitie.policy-exam-bank-mobile`（4 文件）/ `-tablet`（3 文件）去留 | P6 | 🟡 |
 | 6 | ~~后续重点：教师端题目导入改造 + 三端数据一致性——P3B 已完成，前置解除~~ | ✅ 前置已满足 | — |
@@ -1475,7 +1475,7 @@ P6.1 已做 SHA-256 审计（`data/backup_dedup_report.txt`）：2 份字节级�
 | 9 | **docker 环境补验**：P1.1/P1.2/P1.3 构建与启动验证（本机无 docker，需先安装） | P1 | 🟠 待执行 |
 | 10 | ~~5 个未跟踪语料 PDF（`题库/备考资料/**`）处置~~ | P6 | ✅ 已由用户处置（实测：已无未跟踪语料文件） |
 | 11 | ~~第二处 DeepSeek 密钥（`.omo/plans/subagent-timeout-rootcause.md:527`）吊销~~ | P0.2 | ✅ **已吊销（2026-10-17 用户确认）** |
-| 12 | **目录重整**（P6.2 归档：AI 工具目录 / scripts 分类 / solve_problems_files 迁 docs） | P6 | 🔴 待执行 |
+| 12 | ~~目录重整~~ | P6 | ✅ **已完成**：scripts 六类子目录（`56e431e`）、133 md 迁 docs/（`9ac6717`）、tools/ 归 .agent/（`f079cfb`）；vtj-mcp-server 被活跃进程锁定已文档化（`.agent/README.md`） |
 
 ---
 
