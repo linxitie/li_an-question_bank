@@ -24,14 +24,14 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..', 'scripts')))
 
-from gate_l3_ingest import (  # noqa: E402
+from gates.gate_l3_ingest import (  # noqa: E402
     GROUP_MARKER_RE,
     check_excel_row_conservation,
     check_group_image_persistence,
     patched_group_image_dirs,
     pick_real_staging_png,
 )
-from gate_l2_matching import guard_material_blocks  # noqa: E402
+from gates.gate_l2_matching import guard_material_blocks  # noqa: E402
 
 
 def _group(tmp_root, shared, has_images=False, gid=55500001):
@@ -189,7 +189,7 @@ def test_current_impl_excel_three_rows_land_as_three_questions():
     from sqlalchemy.orm import sessionmaker
 
     from app.models.models import Base, QuestionBank, SysUser
-    from gate_l3_ingest import build_probe_xlsx
+    from gates.gate_l3_ingest import build_probe_xlsx
     from app.services.question_ingest.excel_reader import parse_excel_buffer
     from app.api.v1.catalog.question_import import (
         _normalize_question, batch_import_parsed)
