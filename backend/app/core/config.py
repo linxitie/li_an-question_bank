@@ -76,9 +76,9 @@ class Settings(BaseSettings):
     # 配置了则优先走 HTTP sidecar，失败或超时时自动回落子进程。
     PARSER_URL: str = Field("", env="PARSER_URL")
     # EVENT_CONSUMER_ENABLED：事件消费者（user.action 成就授予）开关。
-    # P5.2 调用点改造完成前保持 False——消费者只在事件驱动路径启用时才有意义，
-    # 过早启动会与同步直调产生双写。
-    EVENT_CONSUMER_ENABLED: bool = Field(False, env="EVENT_CONSUMER_ENABLED")
+    # P5.2 折中方案已实施：13 处调用点改发事件，消费者必须运行才能兑现授予，
+    # 故默认 True。publish 失败时调用点有同步兜底，Redis 宕机也不丢成就。
+    EVENT_CONSUMER_ENABLED: bool = Field(True, env="EVENT_CONSUMER_ENABLED")
 
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）

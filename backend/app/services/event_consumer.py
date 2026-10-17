@@ -54,5 +54,43 @@ async def _dispatch(event: events.Event) -> None:
 
 async def consume_user_actions(idle_ms: int = 5000) -> None:
     """长驻订阅循环。Redis 不可用或 Stream 不支持时由 events 层自动降级，
-    此处无需关心传输细节。"""
-    await events.subscribe([events.EV_USER_ACTION], _dispatch, idle_ms=idle_ms)
+    此处无需关心传输细节。
+
+    消费者带重连：subscribe 因 Redis 断连返回后，等待重试间隔再次订阅，
+    避免 Redis 重启后消费者永久静默。
+    """
+    import asyncio
+
+    while True:
+        try:
+            await events.subscribe([events.EV_USER_ACTION], _dispatch,
+                                   idle_ms=idle_ms)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 — 订阅循环自身异常后重连
+            logger.warning(f"[consumer] 订阅循环异常，5 秒后重连: "
+                           f"{type(e).__name__}: {e}")
+        await asyncio.sleep(5)
+
+
+async def record_user_action(db, user_id: int, trigger_type: str,
+                             session=None) -> bool:
+    """发布 user.action 事件；Redis 不可用时同步兜底直调 check_and_grant。
+
+    折中方案（P5.2）：保证重要数据不丢失——
+    - publish 成功 → 消费者异步授予（不阻塞请求，系统无卡顿），返回 True
+    - publish 失败（Redis 宕机）→ 立即同步直调，成就当场授予，返回 False
+    """
+    ok = await events.publish(events.Event(
+        name=events.EV_USER_ACTION,
+        payload={"user_id": user_id, "trigger_type": trigger_type,
+                 "session": session if isinstance(session, dict) else None},
+        aggregate_id=f"u-{user_id}",
+    ))
+    if not ok:
+        from ..services import achievement_service
+        logger.warning(f"[consumer] Redis 不可用，同步兜底授予: "
+                       f"user={user_id} trigger={trigger_type}")
+        achievement_service.check_and_grant(user_id, trigger_type, db,
+                                            session=session)
+    return ok

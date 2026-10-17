@@ -515,9 +515,12 @@ async def lifespan(app: FastAPI):
 
     logger.info("关闭公安联考题库系统服务...")
     if consumer_task is not None:
+        import asyncio as _shutdown_asyncio
         consumer_task.cancel()
         try:
             await consumer_task
+        except _shutdown_asyncio.CancelledError:
+            pass
         except Exception:
             pass
     try:

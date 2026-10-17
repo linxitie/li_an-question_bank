@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import hashlib
+from ....services.event_consumer import record_user_action
 from typing import Optional
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -430,8 +431,7 @@ async def toggle_quote_favorite(
 
     # 触发金句收藏成就
     try:
-        from ....services import achievement_service
-        achievement_service.check_and_grant(current_user.user_id, "quote_favorite", db)
+        await record_user_action(db, current_user.user_id, "quote_favorite")
     except Exception as e:
         logger.warning(f"金句收藏成就判定失败: {e}")
 
@@ -471,8 +471,7 @@ async def toggle_obsidian_quote_favorite(
 
     # 触发金句收藏成就
     try:
-        from ....services import achievement_service
-        achievement_service.check_and_grant(current_user.user_id, "quote_favorite", db)
+        await record_user_action(db, current_user.user_id, "quote_favorite")
     except Exception as e:
         logger.warning(f"金句收藏成就判定失败: {e}")
 

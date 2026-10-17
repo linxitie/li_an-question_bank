@@ -6,6 +6,7 @@ DELETE /api/wrong-questions/{id}   - 删除错题
 PUT  /api/wrong-questions/{id}/mastery - 更新掌握度
 """
 import logging
+from ....services.event_consumer import record_user_action
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -85,8 +86,7 @@ async def get_wrong_questions(
 
     # 触发「直面错误」成就（首次查看错题集）
     try:
-        from ....services import achievement_service
-        achievement_service.check_and_grant(current_user.user_id, "view_wrong", db)
+        await record_user_action(db, current_user.user_id, "view_wrong")
     except Exception as e:
         logger.warning(f"查看错题成就判定失败: {e}")
 
@@ -415,8 +415,7 @@ async def chop_question(
 
     # 触发斩题成就
     try:
-        from ....services import achievement_service
-        achievement_service.check_and_grant(current_user.user_id, "chop", db)
+        await record_user_action(db, current_user.user_id, "chop")
     except Exception as e:
         logger.warning(f"斩题成就判定失败: {e}")
 
@@ -750,8 +749,7 @@ async def submit_review(
 
     # 触发错题重练成就
     try:
-        from ....services import achievement_service
-        achievement_service.check_and_grant(current_user.user_id, "review", db)
+        await record_user_action(db, current_user.user_id, "review")
     except Exception as e:
         logger.warning(f"错题重练成就判定失败: {e}")
 

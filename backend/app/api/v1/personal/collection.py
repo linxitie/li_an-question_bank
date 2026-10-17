@@ -5,6 +5,7 @@ POST   /api/collection/favorite     - 添加/取消收藏
 DELETE /api/collection/{fav_id}     - 删除收藏
 """
 import logging
+from ....services.event_consumer import record_user_action
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -99,8 +100,7 @@ async def toggle_favorite(
 
         # 触发收藏成就
         try:
-            from ....services import achievement_service
-            achievement_service.check_and_grant(current_user.user_id, "favorite", db)
+            await record_user_action(db, current_user.user_id, "favorite")
         except Exception as e:
             logger.warning(f"收藏成就判定失败: {e}")
 

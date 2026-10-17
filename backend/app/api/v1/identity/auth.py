@@ -1,3 +1,4 @@
+from ....services.event_consumer import record_user_action
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
@@ -198,8 +199,7 @@ async def login_for_access_token(
 
     # 触发「初来乍到」成就（首次登录，幂等）
     try:
-        from ....services import achievement_service
-        achievement_service.check_and_grant(user.user_id, "sign_in", db)
+        await record_user_action(db, user.user_id, "sign_in")
     except Exception as e:
         logger.warning(f"首次登录成就判定失败: {e}")
 

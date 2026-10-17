@@ -7,6 +7,7 @@ DELETE /api/notes/{note_id}    - 删除笔记
 """
 import logging
 import re
+from ....services.event_consumer import record_user_action
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -135,8 +136,7 @@ async def create_or_update_note(
 
         # 触发笔记成就
         try:
-            from ....services import achievement_service
-            achievement_service.check_and_grant(current_user.user_id, "note", db)
+            await record_user_action(db, current_user.user_id, "note")
         except Exception as e:
             logger.warning(f"笔记成就判定失败: {e}")
 
@@ -177,8 +177,7 @@ async def create_or_update_note(
 
         # 触发笔记成就
         try:
-            from ....services import achievement_service
-            achievement_service.check_and_grant(current_user.user_id, "note", db)
+            await record_user_action(db, current_user.user_id, "note")
         except Exception as e:
             logger.warning(f"笔记成就判定失败: {e}")
 
