@@ -39,21 +39,22 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import {
+  FORUM_SHARE_TYPE_OPTIONS,
+  useCommunityStore,
+  type ForumShareType
+} from '@/modules/community/store';
 
 const router = useRouter();
+const store = useCommunityStore();
 const title = ref('');
 const content = ref('');
-const shareType = ref('EXPERIENCE');
+const shareType = ref<ForumShareType>('EXPERIENCE');
 const submitting = ref(false);
 const message = ref('');
 const msgType = ref('');
 
-const types = [
-  { key: 'EXPERIENCE', name: '经验分享' },
-  { key: 'RESOURCE', name: '资料分享' },
-  { key: 'DISCUSSION', name: '学习讨论' },
-  { key: 'FEELING', name: '心情打卡' }
-];
+const types = FORUM_SHARE_TYPE_OPTIONS;
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -61,34 +62,19 @@ const goBack = () => {
 };
 
 const submitPost = async () => {
-  const t = title.value.trim();
-  const c = content.value.trim();
-  if (!t) { showMsg('请输入标题', 'error'); return; }
-  if (!c) { showMsg('请输入内容', 'error'); return; }
-
   submitting.value = true;
   message.value = '';
   try {
-    const auth = (window as any).__VTJ_AUTH__;
-    // 后端用 Form 表单接收，需用 application/x-www-form-urlencoded
-    const body = new URLSearchParams();
-    body.append('title', t);
-    body.append('content', c);
-    body.append('share_type', shareType.value);
-    const res = await auth.apiFetch('/api/forum/posts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
+    const created = await store.createPost({
+      title: title.value,
+      content: content.value,
+      shareType: shareType.value
     });
-    if (res.ok) {
-      showMsg('发布成功', 'success');
-      setTimeout(() => router.push('/mobile/forum'), 800);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      showMsg(data.detail || data.message || '发布失败', 'error');
-    }
+    if (!created) return;
+    showMsg('发布成功', 'success');
+    setTimeout(() => router.push('/mobile/forum'), 800);
   } catch (e) {
-    showMsg('网络异常，请重试', 'error');
+    showMsg(store.error || (e instanceof Error ? e.message : '发布失败'), 'error');
   } finally {
     submitting.value = false;
   }

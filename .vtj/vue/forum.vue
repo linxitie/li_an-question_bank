@@ -428,11 +428,13 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+  import { useCommunityStore } from '@/modules/community/store';
   export default defineComponent({
     name: 'Forum',
     components: { NavBar, XIcon },
     setup(props) {
       const provider = useProvider({ id: 'forum', version: '1785094400000' });
+      const community = useCommunityStore();
       const state = reactive({
         page: 1,
         pageSize: 8,
@@ -468,6 +470,7 @@
         state,
         props,
         provider,
+        community,
         ChatRound,
         EditPen,
         ChatLineRound,
@@ -513,36 +516,23 @@
       async loadPosts() {
         this.state.loading = true;
         try {
-          const auth = (window as any).__VTJ_AUTH__;
-          const headers: any = {};
-          // 已登录用户带上 token,以便返回 liked 状态
-          if (auth && auth.isLoggedIn()) {
-            const authHeaders = auth.getJsonHeaders();
-            Object.assign(headers, authHeaders);
-          }
-          const offset = (this.state.page - 1) * this.state.pageSize;
-          const res = await fetch(`/api/forum/posts?limit=${this.state.pageSize}&offset=${offset}`, { headers });
-          const data = await res.json();
-          this.state.posts = (data.posts || []).map((p: any) => this._mapPost(p));
-          this.state.total = data.total || 0;
-        } catch (e) {
-          console.error('加载帖子失败:', e);
-          ElMessage.error('加载帖子失败');
+          await this.community.loadPage(this.state.page, this.state.pageSize);
+          this.state.posts = this.community.posts.map((p: any) => this._mapPost(p));
+          this.state.total = this.community.total;
+          if (this.community.error) this._safeMsg('error', this.community.error);
         } finally {
           this.state.loading = false;
         }
       },
       async loadStats() {
-        try {
-          const res = await fetch('/api/forum/stats');
-          const data = await res.json();
+        await this.community.loadStats();
+        const stats = this.community.stats;
+        if (stats) {
           this.state.forumStats = {
-            posts: data.posts || 0,
-            users: data.users || 0,
-            online: data.online || 0
+            posts: stats.posts || 0,
+            users: stats.users || 0,
+            online: stats.online || 0
           };
-        } catch (e) {
-          /* 静默失败,使用默认值 */
         }
       },
       async submitPost() {
@@ -561,29 +551,17 @@
         }
         this.state.submitting = true;
         try {
-          // 使用 FormData 以匹配后端 Form 参数
-          const formData = new FormData();
-          formData.append('title', this.state.newPost.title.trim());
-          formData.append('content', this.state.newPost.content.trim());
-          formData.append('share_type', 'EXPERIENCE');
-          if (this.state.newPost.attachments.length) {
-            formData.append('attachments', JSON.stringify(this.state.newPost.attachments));
-          }
-          const res = await auth.apiFetch('/api/forum/posts', {
-            method: 'POST',
-            body: formData
+          const created = await this.community.createPost({
+            title: this.state.newPost.title,
+            content: this.state.newPost.content,
+            shareType: 'EXPERIENCE',
+            attachments: this.state.newPost.attachments.length
+              ? this.state.newPost.attachments
+              : undefined
           });
-          const data = await res.json();
-          if (!res.ok) {
-            if (data.code === 'SENSITIVE_CONTENT_BLOCKED') {
-              ElMessage.error(data.message || '内容包含违规词,请修改');
-            } else {
-              ElMessage.error(data.message || data.detail || '发布失败');
-            }
-            return;
-          }
+          if (!created) return;
           // 成功:unshift 到列表头(实时更新)
-          const mappedPost = this._mapPost(data);
+          const mappedPost = this._mapPost(created);
           this.state.posts.unshift(mappedPost);
           this.state.total += 1;
           // 同步刷新「我的帖子」卡片
@@ -593,8 +571,7 @@
           this.state.newPost = { title: '', content: '', attachments: [] };
           ElMessage.success('发布成功!');
         } catch (e) {
-          console.error('发布失败:', e);
-          ElMessage.error('网络错误,发布失败');
+          this._safeMsg('error', this.community.error || '发布失败,请稍后重试');
         } finally {
           this.state.submitting = false;
         }
@@ -645,11 +622,8 @@
           return;
         }
         try {
-          const res = await auth.apiFetch(`/api/forum/posts/${post.id}/like`, {
-            method: 'POST'
-          });
-          if (res.ok) {
-            const data = await res.json();
+          const data = await this.community.togglePostLike(post.id);
+          if (data) {
             post.liked = data.liked;
             post.likeCount = data.likeCount;
           }
@@ -659,18 +633,13 @@
       },
       async viewUser(userId: number) {
         if (!userId) return;
-        try {
-          const res = await fetch(`/api/forum/users/${userId}/public`);
-          if (!res.ok) {
-            ElMessage.error('获取用户信息失败');
-            return;
-          }
-          const data = await res.json();
-          this.state.userProfile = data;
-          this.state.showUserProfile = true;
-        } catch (e) {
-          ElMessage.error('获取用户信息失败');
+        const data = await this.community.loadUserPublic(userId);
+        if (!data) {
+          this._safeMsg('error', '获取用户信息失败');
+          return;
         }
+        this.state.userProfile = data;
+        this.state.showUserProfile = true;
       },
       viewPost(post: any) {
         this.openPostDetail(post);
@@ -721,18 +690,11 @@
         this.state.detailLoading = true;
         this.state.showPostDetail = true;
         try {
-          const auth = (window as any).__VTJ_AUTH__;
-          const headers: any = {};
-          if (auth && auth.isLoggedIn()) {
-            Object.assign(headers, auth.getJsonHeaders());
-          }
-          const res = await fetch(`/api/forum/posts/${post.id}`, { headers });
-          if (!res.ok) throw new Error('加载失败');
-          const data = await res.json();
-          this.state.currentPost = this._mapPost(data);
+          await this.community.loadPost(post.id);
+          if (!this.community.detail) throw new Error(this.community.error || '加载失败');
+          this.state.currentPost = this._mapPost(this.community.detail);
           await this.loadComments(post.id);
         } catch (e) {
-          console.error('加载帖子详情失败:', e);
           this._safeMsg('error', '加载帖子详情失败');
           this.state.showPostDetail = false;
         } finally {
@@ -760,38 +722,25 @@
         }
         if (!confirm('确定要删除这篇帖子吗？删除后不可恢复。')) return;
         try {
-          const res = await auth.apiFetch(`/api/forum/posts/${post.id}`, { method: 'DELETE' });
-          if (res.ok) {
-            this._safeMsg('success', '删除成功');
-            // 从列表中移除
-            const idx = this.state.posts.findIndex((p: any) => p.id === post.id);
-            if (idx >= 0) {
-              this.state.posts.splice(idx, 1);
-              this.state.total = Math.max(0, this.state.total - 1);
-            }
-            this.closePostDetail();
-          } else {
-            const data = await res.json();
-            this._safeMsg('error', data.message || '删除失败');
+          await this.community.deletePost(post.id);
+          this._safeMsg('success', '删除成功');
+          // 从列表中移除
+          const idx = this.state.posts.findIndex((p: any) => p.id === post.id);
+          if (idx >= 0) {
+            this.state.posts.splice(idx, 1);
+            this.state.total = Math.max(0, this.state.total - 1);
           }
+          this.closePostDetail();
         } catch (e) {
-          this._safeMsg('error', '网络错误,删除失败');
+          this._safeMsg('error', this.community.error || '删除失败');
         }
       },
       // ===== 评论系统 =====
       async loadComments(postId: number) {
         this.state.commentsLoading = true;
         try {
-          const auth = (window as any).__VTJ_AUTH__;
-          const headers: any = {};
-          if (auth && auth.isLoggedIn()) {
-            Object.assign(headers, auth.getJsonHeaders());
-          }
-          const res = await fetch(`/api/forum/posts/${postId}/comments?limit=200&offset=0`, { headers });
-          const data = await res.json();
-          this.state.comments = this.buildCommentTree(data.comments || []);
-        } catch (e) {
-          console.error('加载评论失败:', e);
+          await this.community.loadComments(postId);
+          this.state.comments = this.buildCommentTree(this.community.comments);
         } finally {
           this.state.commentsLoading = false;
         }
@@ -819,33 +768,21 @@
         if (!this.state.currentPost) return;
         this.state.commentSubmitting = true;
         try {
-          const formData = new FormData();
-          formData.append('content', this.state.newComment.trim());
-          if (this.state.replyTarget) {
-            formData.append('parent_comment_id', String(this.state.replyTarget.commentId));
+          await this.community.submitComment(this.state.currentPost.id, {
+            content: this.state.newComment,
+            parentCommentId: this.state.replyTarget
+              ? this.state.replyTarget.commentId
+              : undefined
+          });
+          this._safeMsg('success', '评论成功');
+          this.state.newComment = '';
+          this.state.replyTarget = null;
+          if (this.state.currentPost) {
+            this.state.currentPost.commentCount = (this.state.currentPost.commentCount || 0) + 1;
           }
-          const res = await auth.apiFetch(
-            `/api/forum/posts/${this.state.currentPost.id}/comments`,
-            { method: 'POST', body: formData }
-          );
-          if (res.ok) {
-            this._safeMsg('success', '评论成功');
-            this.state.newComment = '';
-            this.state.replyTarget = null;
-            if (this.state.currentPost) {
-              this.state.currentPost.commentCount = (this.state.currentPost.commentCount || 0) + 1;
-            }
-            await this.loadComments(this.state.currentPost.id);
-          } else {
-            const data = await res.json();
-            if (data.code === 'SENSITIVE_CONTENT_BLOCKED') {
-              this._safeMsg('error', data.message || '内容包含违规词,请修改');
-            } else {
-              this._safeMsg('error', data.message || data.detail || '评论失败');
-            }
-          }
+          await this.loadComments(this.state.currentPost.id);
         } catch (e) {
-          this._safeMsg('error', '网络错误,评论失败');
+          this._safeMsg('error', this.community.error || '评论失败');
         } finally {
           this.state.commentSubmitting = false;
         }
@@ -857,9 +794,8 @@
           return;
         }
         try {
-          const res = await auth.apiFetch(`/api/forum/comments/${comment.id}/like`, { method: 'POST' });
-          if (res.ok) {
-            const data = await res.json();
+          const data = await this.community.toggleCommentLike(comment.id);
+          if (data) {
             comment.liked = data.liked;
             comment.likeCount = data.likeCount;
           }
@@ -887,15 +823,10 @@
       async loadMyPosts() {
         const auth = (window as any).__VTJ_AUTH__;
         if (!auth || !auth.isLoggedIn()) return;
-        try {
-          const res = await auth.apiFetch('/api/forum/my-posts?limit=5&offset=0');
-          const data = await res.json();
-          this.state.myPosts = (data.posts || []).map((p: any) => this._mapPost(p));
-          this.state.myPostsTotal = data.total || 0;
-          this.state.myPostsLoaded = true;
-        } catch (e) {
-          /* 静默失败 */
-        }
+        await this.community.loadMyPosts({ limit: 5, offset: 0 });
+        this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p));
+        this.state.myPostsTotal = this.community.myPostsTotal;
+        this.state.myPostsLoaded = true;
       },
       async openMyPosts() {
         this.state.showMyPosts = true;
@@ -908,12 +839,12 @@
         this.state.myPostsLoading = true;
         try {
           const offset = (this.state.myPostsPage - 1) * this.state.myPostsPageSize;
-          const res = await auth.apiFetch(`/api/forum/my-posts?limit=${this.state.myPostsPageSize}&offset=${offset}`);
-          const data = await res.json();
-          this.state.myPosts = (data.posts || []).map((p: any) => this._mapPost(p));
-          this.state.myPostsTotal = data.total || 0;
-        } catch (e) {
-          /* 静默失败 */
+          await this.community.loadMyPosts({
+            limit: this.state.myPostsPageSize,
+            offset
+          });
+          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p));
+          this.state.myPostsTotal = this.community.myPostsTotal;
         } finally {
           this.state.myPostsLoading = false;
         }

@@ -41,16 +41,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useCommunityStore } from '@/modules/community/store';
 
 const route = useRoute();
 const router = useRouter();
-const post = ref<any>(null);
-const comments = ref<any[]>([]);
+const store = useCommunityStore();
 const commentText = ref('');
 
-const postId = route.params.id as string;
+const postId = Number(route.params.id);
+const post = computed(() => store.detail);
+const comments = computed(() => store.comments);
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -69,39 +71,14 @@ const formatTime = (iso: string) => {
   return new Date(iso).toLocaleDateString();
 };
 
-const fetchDetail = async () => {
-  try {
-    const auth = (window as any).__VTJ_AUTH__;
-    const res = await auth.apiFetch('/api/forum/posts/' + postId);
-    const data = await res.json();
-    if (res.ok) post.value = data;
-  } catch (e) {
-    console.error('获取帖子失败:', e);
-  }
-};
-
-const fetchComments = async () => {
-  try {
-    const auth = (window as any).__VTJ_AUTH__;
-    const res = await auth.apiFetch('/api/forum/posts/' + postId + '/comments');
-    const data = await res.json();
-    if (res.ok) comments.value = data.items || data.comments || [];
-  } catch (e) {
-    console.error('获取评论失败:', e);
-  }
+const load = async () => {
+  await store.loadPost(postId);
+  await store.loadComments(postId);
 };
 
 const toggleLike = async () => {
   try {
-    const auth = (window as any).__VTJ_AUTH__;
-    const res = await auth.apiFetch('/api/forum/posts/' + postId + '/like', { method: 'POST' });
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      if (post.value) {
-        post.value.liked = !post.value.liked;
-        post.value.likeCount = data.likeCount !== undefined ? data.likeCount : (post.value.likeCount || 0) + (post.value.liked ? 1 : -1);
-      }
-    }
+    await store.togglePostLike(postId);
   } catch (e) {
     console.error('点赞失败:', e);
   }
@@ -111,28 +88,14 @@ const submitComment = async () => {
   const c = commentText.value.trim();
   if (!c) return;
   try {
-    const auth = (window as any).__VTJ_AUTH__;
-    const body = new URLSearchParams();
-    body.append('content', c);
-    const res = await auth.apiFetch('/api/forum/posts/' + postId + '/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    });
-    if (res.ok) {
-      commentText.value = '';
-      await fetchComments();
-      if (post.value) post.value.commentCount = (post.value.commentCount || 0) + 1;
-    }
+    await store.submitComment(postId, { content: c });
+    commentText.value = '';
   } catch (e) {
     console.error('评论失败:', e);
   }
 };
 
-onMounted(() => {
-  fetchDetail();
-  fetchComments();
-});
+onMounted(load);
 </script>
 
 <style scoped>

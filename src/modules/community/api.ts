@@ -1,53 +1,370 @@
 /**
- * 论坛社区（community）域 API 封装外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 论坛社区（community）域 API 封装。
  *
- * 约束：
- *   1. 全域只允许使用 @/services/api/client 暴露的唯一 axios 实例，禁止自行 axios.create；
- *   2. 方法签名先按「列表 / 详情 / 刷新」三类占位，具体端点登记在 README「后端端点清单」；
- *   3. 方法体在 P2 阶段实现，当前调用会抛出明确的未实现错误。
+ * 后端端点挂在 `/api/forum`、`/api/quotes`（api_surface.json 冻结口径），
+ * 与客户端默认 baseURL `/api/v1` 不同，故请求层显式置空 baseURL。
+ * 全部请求走唯一 axios 实例，禁止自行 axios.create。
  */
 import { apiClient } from '@/services/api/client';
 
-/** 本域统一客户端引用：P2 阶段所有请求都经由此实例发起 */
 export const communityClient = apiClient;
 
-/** 分页查询参数（外壳占位，P2 阶段按真实端点收窄） */
-export interface CommunityListQuery {
+export const FORUM_SHARE_TYPES = [
+  'EXPERIENCE',
+  'RESOURCE',
+  'DISCUSSION',
+  'FEELING'
+] as const;
+
+export type ForumShareType = (typeof FORUM_SHARE_TYPES)[number];
+
+export interface ForumUserBrief {
+  id: number | null;
+  nickname: string;
+  avatar: string;
+  userType: string;
+}
+
+export interface ForumAttachment {
+  name: string;
+  url: string;
+  size?: number;
+  type?: string;
+}
+
+export interface ForumPostItem {
+  id: number;
+  title: string;
+  content: string;
+  shareType?: string;
+  tags?: string[];
+  attachments?: ForumAttachment[];
+  isTop?: boolean;
+  isEssence?: boolean;
+  likeCount: number;
+  commentCount: number;
+  viewCount: number;
+  createTime: string | null;
+  userId?: number;
+  liked: boolean;
+  user?: ForumUserBrief;
+}
+
+export interface ForumCommentItem {
+  id: number;
+  content: string;
+  likeCount: number;
+  createTime: string | null;
+  parentCommentId?: number | null;
+  liked: boolean;
+  user?: ForumUserBrief;
+}
+
+export interface ForumPostListQuery {
+  shareType?: ForumShareType | '';
+  limit?: number;
+  offset?: number;
+}
+
+export interface ForumPostListResult {
+  total: number;
+  limit: number;
+  offset: number;
+  posts: ForumPostItem[];
+}
+
+export interface ForumCommentListResult {
+  total: number;
+  limit: number;
+  offset: number;
+  comments: ForumCommentItem[];
+}
+
+export interface ForumStats {
+  posts: number;
+  users: number;
+  online: number;
+}
+
+export interface ForumUserPublic {
+  id: number;
+  nickname: string;
+  avatar: string;
+  userType: string;
+  school?: string | null;
+  department?: string | null;
+  className?: string | null;
+  createdAt?: string | null;
+  postCount: number;
+  likeReceived: number;
+}
+
+export interface ForumPostCreatePayload {
+  title: string;
+  content: string;
+  shareType?: ForumShareType;
+  tags?: string[];
+  attachments?: ForumAttachment[];
+}
+
+export interface ForumCommentCreatePayload {
+  content: string;
+  parentCommentId?: number | null;
+}
+
+export interface LikeToggleResult {
+  liked: boolean;
+  likeCount: number;
+}
+
+export interface QuoteItem {
+  quote_id: number;
+  obsidian_id?: string;
+  content: string;
+  source: string;
+  category: string;
+  author: string;
+  favorited: boolean;
+  source_type?: 'obsidian' | 'database';
+  obsidian_source?: string;
+  create_time?: string;
+}
+
+export interface QuoteListQuery {
+  category?: string;
   page?: number;
   pageSize?: number;
-  [key: string]: unknown;
 }
 
-/** 分页查询结果（外壳占位，P2 阶段按后端响应结构收窄） */
-export interface CommunityListResult<T = unknown> {
-  items: T[];
+export interface QuoteListResult {
   total: number;
+  page: number;
+  page_size: number;
+  items: QuoteItem[];
 }
 
-/**
- * 查询论坛社区列表。
- * P2 阶段实现：经由 communityClient 发起请求，端点见 README「后端端点清单」。
- */
-export async function fetchCommunityList(
-  query?: CommunityListQuery
-): Promise<CommunityListResult> {
-  throw new Error('fetchCommunityList 尚未实现（P2 阶段实现）');
+export interface QuoteFavoriteListResult {
+  total: number;
+  page: number;
+  page_size: number;
+  items: QuoteItem[];
 }
 
-/**
- * 查询论坛社区详情。
- * P2 阶段实现：按 id 调用对应只读端点，并复用 store 中的缓存。
- */
-export async function fetchCommunityDetail(
-  id: string | number
-): Promise<unknown> {
-  throw new Error('fetchCommunityDetail 尚未实现（P2 阶段实现）');
+export interface QuoteFavoriteResult {
+  favorited: boolean;
+  message: string;
 }
 
-/**
- * 刷新论坛社区缓存。
- * P2 阶段实现：调用 store 的 load()，并处理强制刷新参数。
- */
-export async function refreshCommunity(): Promise<void> {
-  throw new Error('refreshCommunity 尚未实现（P2 阶段实现）');
+interface CommunityRequestConfig {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  params?: Record<string, unknown>;
+  data?: unknown;
+}
+
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
+async function request<T>(config: CommunityRequestConfig): Promise<T> {
+  const response = await communityClient.request<T>({ ...config, baseURL: '' });
+  return response.data;
+}
+
+function normalizePage(page?: number): number {
+  return page && page > 0 ? Math.floor(page) : 1;
+}
+
+function normalizePageSize(size?: number): number {
+  if (!size || size < 1) return DEFAULT_PAGE_SIZE;
+  return Math.min(Math.floor(size), MAX_PAGE_SIZE);
+}
+
+function toFormData(payload: Record<string, unknown>): FormData {
+  const form = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    form.append(key, typeof value === 'string' ? value : JSON.stringify(value));
+  });
+  return form;
+}
+
+export async function fetchForumPosts(
+  query: ForumPostListQuery = {}
+): Promise<ForumPostListResult> {
+  const limit = normalizePageSize(query.limit);
+  const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
+  const params: Record<string, unknown> = { limit, offset };
+  if (query.shareType) params.share_type = query.shareType;
+
+  const data = await request<Partial<ForumPostListResult>>({
+    url: '/api/forum/posts',
+    method: 'GET',
+    params
+  });
+  return {
+    total: data.total ?? 0,
+    limit: data.limit ?? limit,
+    offset: data.offset ?? offset,
+    posts: data.posts ?? []
+  };
+}
+
+export function fetchForumPostDetail(postId: number): Promise<ForumPostItem> {
+  return request<ForumPostItem>({
+    url: `/api/forum/posts/${postId}`,
+    method: 'GET'
+  });
+}
+
+export function fetchForumComments(
+  postId: number,
+  query: { limit?: number; offset?: number } = {}
+): Promise<ForumCommentListResult> {
+  const limit = normalizePageSize(query.limit);
+  const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
+  return request<ForumCommentListResult>({
+    url: `/api/forum/posts/${postId}/comments`,
+    method: 'GET',
+    params: { limit, offset }
+  });
+}
+
+export function fetchForumStats(): Promise<ForumStats> {
+  return request<ForumStats>({ url: '/api/forum/stats', method: 'GET' });
+}
+
+export function fetchMyForumPosts(
+  query: { limit?: number; offset?: number } = {}
+): Promise<ForumPostListResult> {
+  const limit = normalizePageSize(query.limit);
+  const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
+  return request<ForumPostListResult>({
+    url: '/api/forum/my-posts',
+    method: 'GET',
+    params: { limit, offset }
+  });
+}
+
+export function fetchForumUserPublic(userId: number): Promise<ForumUserPublic> {
+  return request<ForumUserPublic>({
+    url: `/api/forum/users/${userId}/public`,
+    method: 'GET'
+  });
+}
+
+export function createForumPost(
+  payload: ForumPostCreatePayload
+): Promise<ForumPostItem> {
+  return request<ForumPostItem>({
+    url: '/api/forum/posts',
+    method: 'POST',
+    data: toFormData({
+      title: payload.title,
+      content: payload.content,
+      share_type: payload.shareType,
+      tags: payload.tags?.length ? payload.tags.join(',') : undefined,
+      attachments: payload.attachments?.length ? payload.attachments : undefined
+    })
+  });
+}
+
+export function deleteForumPost(postId: number): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>({
+    url: `/api/forum/posts/${postId}`,
+    method: 'DELETE'
+  });
+}
+
+export function toggleForumPostLike(postId: number): Promise<LikeToggleResult> {
+  return request<LikeToggleResult>({
+    url: `/api/forum/posts/${postId}/like`,
+    method: 'POST'
+  });
+}
+
+export function createForumComment(
+  postId: number,
+  payload: ForumCommentCreatePayload
+): Promise<ForumCommentItem> {
+  return request<ForumCommentItem>({
+    url: `/api/forum/posts/${postId}/comments`,
+    method: 'POST',
+    data: toFormData({
+      content: payload.content,
+      parent_comment_id: payload.parentCommentId
+    })
+  });
+}
+
+export function toggleForumCommentLike(
+  commentId: number
+): Promise<LikeToggleResult> {
+  return request<LikeToggleResult>({
+    url: `/api/forum/comments/${commentId}/like`,
+    method: 'POST'
+  });
+}
+
+export async function fetchQuotes(query: QuoteListQuery = {}): Promise<QuoteListResult> {
+  const page = normalizePage(query.page);
+  const pageSize = normalizePageSize(query.pageSize);
+  const params: Record<string, unknown> = { page, page_size: pageSize };
+  if (query.category) params.category = query.category;
+
+  const data = await request<Partial<QuoteListResult>>({
+    url: '/api/quotes',
+    method: 'GET',
+    params
+  });
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    page_size: data.page_size ?? pageSize,
+    items: data.items ?? []
+  };
+}
+
+export function fetchRandomQuote(exclude?: string): Promise<QuoteItem> {
+  return request<QuoteItem>({
+    url: '/api/quotes/random',
+    method: 'GET',
+    params: exclude ? { exclude } : undefined
+  });
+}
+
+export function fetchDailyQuote(): Promise<QuoteItem> {
+  return request<QuoteItem>({ url: '/api/quotes/quote/daily', method: 'GET' });
+}
+
+export function toggleQuoteFavorite(quoteId: number): Promise<QuoteFavoriteResult> {
+  return request<QuoteFavoriteResult>({
+    url: `/api/quotes/${quoteId}/favorite`,
+    method: 'POST'
+  });
+}
+
+export function toggleObsidianQuoteFavorite(
+  obsidianSource: string
+): Promise<QuoteFavoriteResult> {
+  return request<QuoteFavoriteResult>({
+    url: `/api/quotes/obsidian/${encodeURIComponent(obsidianSource)}/favorite`,
+    method: 'POST'
+  });
+}
+
+export async function fetchQuoteFavorites(
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE
+): Promise<QuoteFavoriteListResult> {
+  const data = await request<Partial<QuoteFavoriteListResult>>({
+    url: '/api/quotes/favorites',
+    method: 'GET',
+    params: { page: normalizePage(page), page_size: normalizePageSize(pageSize) }
+  });
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    page_size: data.page_size ?? pageSize,
+    items: data.items ?? []
+  };
 }

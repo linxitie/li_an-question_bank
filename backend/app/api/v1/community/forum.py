@@ -20,6 +20,7 @@ import os
 import json
 import uuid
 import logging
+from collections import OrderedDict
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -43,6 +44,60 @@ logger = logging.getLogger(__name__)
 
 
 # ============================== 辅助函数 ==============================
+
+# === E6 发帖事件去重（P2-28） ===
+# 统一上报 forum.posted，且按 post id 幂等：同一帖子的创建/回复/重复上报
+# 只计一次。仅发帖创建与回帖尝试上报（回复在帖子已上报后被去重），
+# 点赞/删除等只读或非创建行为一律不上报。
+_FORUM_POSTED_EVENT_IDS: "OrderedDict[int, None]" = OrderedDict()
+_FORUM_POSTED_EVENT_LIMIT = 4096
+
+
+def reset_forum_posted_events() -> None:
+    """清空 E6 去重缓存（测试隔离用）。"""
+    _FORUM_POSTED_EVENT_IDS.clear()
+
+
+def _claim_forum_posted_event(post_id: int) -> bool:
+    """抢占该帖子的 forum.posted 上报资格；已上报过返回 False。"""
+    if post_id in _FORUM_POSTED_EVENT_IDS:
+        return False
+    _FORUM_POSTED_EVENT_IDS[post_id] = None
+    while len(_FORUM_POSTED_EVENT_IDS) > _FORUM_POSTED_EVENT_LIMIT:
+        _FORUM_POSTED_EVENT_IDS.popitem(last=False)
+    return True
+
+
+def _release_forum_posted_event(post_id: int) -> None:
+    """上报失败时归还资格，允许后续重试。"""
+    _FORUM_POSTED_EVENT_IDS.pop(post_id, None)
+
+
+async def _publish_forum_posted(
+    db: Session,
+    user_id: int,
+    post_id: int,
+    *,
+    action: str = "created",
+) -> bool:
+    """按 post id 幂等上报 E6 ``forum.posted``。
+
+    - 只发一次：同一帖子的重复上报（回复 / 重试 / 并发重复）直接忽略；
+    - 上报异常不影响业务流程，但归还去重资格以便下次重试。
+    """
+    if not _claim_forum_posted_event(post_id):
+        logger.info("E6 事件已上报，跳过重复上报: post_id=%s action=%s", post_id, action)
+        return False
+
+    payload = {"post_id": post_id, "action": action}
+    try:
+        return await record_user_action(
+            db, user_id, TRIGGER_FORUM_POSTED, session=payload
+        )
+    except Exception as e:  # noqa: BLE001 —— 事件失败不影响发帖/回复主流程
+        logger.warning(f"发帖成就判定失败: {e}")
+        _release_forum_posted_event(post_id)
+        return False
 
 def _serialize_post(
     post: ForumPost,
@@ -293,11 +348,10 @@ async def create_post(
 
     logger.info(f"用户 {current_user.user_id} 发布帖子 {post.post_id}")
 
-    # 触发社交成就
-    try:
-        await record_user_action(db, current_user.user_id, TRIGGER_FORUM_POSTED)
-    except Exception as e:
-        logger.warning(f"发帖成就判定失败: {e}")
+    # 触发社交成就（按 post id 幂等，只会成功上报一次）
+    await _publish_forum_posted(
+        db, current_user.user_id, post.post_id, action="created"
+    )
 
     # 4. 返回完整数据(前端 unshift 到列表头)
     return _serialize_post(post, current_user, liked=False, content_full=True)
@@ -370,11 +424,7 @@ async def toggle_post_like(
 
     db.commit()
 
-    # 触发社交成就（被点赞者：获赞/热门楼主）
-    try:
-        await record_user_action(db, post.user_id, TRIGGER_FORUM_POSTED)
-    except Exception as e:
-        logger.warning(f"点赞成就判定失败: {e}")
+    # 点赞不是创建行为，不上报 E6 事件（P2-28）
 
     return {"liked": liked, "likeCount": post.like_count}
 
@@ -493,11 +543,10 @@ async def create_comment(
     db.commit()
     db.refresh(comment)
 
-    # 触发社交成就（评论计数）
-    try:
-        await record_user_action(db, current_user.user_id, TRIGGER_FORUM_POSTED)
-    except Exception as e:
-        logger.warning(f"评论成就判定失败: {e}")
+    # 回帖同样走 forum.posted；同一帖子只在首次创建时上报一次（P2-28）
+    await _publish_forum_posted(
+        db, current_user.user_id, post_id, action="commented"
+    )
 
     return _serialize_comment(comment, current_user, liked=False)
 
@@ -535,11 +584,7 @@ async def toggle_comment_like(
 
     db.commit()
 
-    # 触发社交成就（被点赞的评论作者）
-    try:
-        await record_user_action(db, comment.user_id, TRIGGER_FORUM_POSTED)
-    except Exception as e:
-        logger.warning(f"评论点赞成就判定失败: {e}")
+    # 点赞不是创建行为，不上报 E6 事件（P2-28）
 
     return {"liked": liked, "likeCount": comment.like_count}
 
