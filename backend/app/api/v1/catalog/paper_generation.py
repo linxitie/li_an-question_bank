@@ -726,14 +726,15 @@ async def publish_paper(
     paper.approver_id = current_user.user_id
     db.commit()
 
-    from ..platform.websocket import publish_data_changed, ws_connection_manager
-
-    await publish_data_changed(
-        ws_connection_manager.get_online_users(),
-        domain="exam",
-        type="paper.published",
-        id=paper_id,
-    )
+    # 纵向通信走事件总线（catalog 域不跨域 import platform）：
+    # EV_PAPER_PUBLISHED → 消费者推送 data-changed 到在线端。
+    from ....core import events
+    await events.publish(events.Event(
+        name=events.EV_PAPER_PUBLISHED,
+        payload={"paper_id": paper_id},
+        aggregate_id=f"p-{paper_id}",
+        source="catalog.paper_generation",
+    ))
 
     logger.info(f"用户 {current_user.username} 发布试卷 ID: {paper_id}")
 

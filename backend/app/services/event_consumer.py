@@ -70,6 +70,28 @@ async def _dispatch(event: events.Event) -> None:
         db.close()
 
 
+async def _dispatch_paper_published(event: events.Event) -> None:
+    """试卷发布 → 推送 data-changed 到在线端（纵向通信，事件加速器）。"""
+    paper_id = (event.payload or {}).get("paper_id")
+    if not isinstance(paper_id, (int, str)):
+        logger.warning(f"[consumer] 试卷发布载荷缺少 paper_id: {event.payload}")
+        return
+    try:
+        from ..api.v1.platform.websocket import (
+            publish_data_changed,
+            ws_connection_manager,
+        )
+        await publish_data_changed(
+            ws_connection_manager.get_online_users(),
+            domain="exam",
+            type="paper.published",
+            id=paper_id,
+        )
+    except Exception as e:  # noqa: BLE001 — 推送失败不阻断主流程
+        logger.warning(f"[consumer] 试卷发布推送失败 paper_id={paper_id}: "
+                       f"{type(e).__name__}: {e}")
+
+
 async def consume_user_actions(idle_ms: int = 5000) -> None:
     """长驻订阅循环。Redis 不可用或 Stream 不支持时由 events 层自动降级，
     此处无需关心传输细节。
@@ -79,16 +101,21 @@ async def consume_user_actions(idle_ms: int = 5000) -> None:
     """
     import asyncio
 
-    while True:
-        try:
-            await events.subscribe([events.EV_USER_ACTION], _dispatch,
-                                   idle_ms=idle_ms)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:  # noqa: BLE001 — 订阅循环自身异常后重连
-            logger.warning(f"[consumer] 订阅循环异常，5 秒后重连: "
-                           f"{type(e).__name__}: {e}")
-        await asyncio.sleep(5)
+    async def _loop(name, handler):
+        while True:
+            try:
+                await events.subscribe([name], handler, idle_ms=idle_ms)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 — 订阅循环自身异常后重连
+                logger.warning(f"[consumer] 订阅 {name} 异常，5 秒后重连: "
+                               f"{type(e).__name__}: {e}")
+            await asyncio.sleep(5)
+
+    await asyncio.gather(
+        _loop(events.EV_USER_ACTION, _dispatch),
+        _loop(events.EV_PAPER_PUBLISHED, _dispatch_paper_published),
+    )
 
 
 async def record_user_action(db, user_id: int, trigger_type: str,

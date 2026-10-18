@@ -111,16 +111,16 @@ def test_paper_state_machine_student_sees_only_published(
     assert _paper(db_session, paper_id).paper_type == "APPROVED"
 
     with patch(
-        "app.api.v1.platform.websocket.publish_data_changed",
-        new=AsyncMock(return_value=1),
-    ) as mocked_push:
+        "app.core.events.publish",
+        new=AsyncMock(return_value=True),
+    ) as mocked_publish:
         publish = client.post(f"/api/papers/{paper_id}/publish", headers=admin_headers)
         assert publish.status_code == 200, publish.text
-        mocked_push.assert_awaited_once()
-        _args, kwargs = mocked_push.await_args[0], mocked_push.await_args[1]
-        assert kwargs["domain"] == "exam"
-        assert kwargs["type"] == "paper.published"
-        assert kwargs["id"] == paper_id
+        mocked_publish.assert_awaited_once()
+        assert mocked_publish.await_args is not None
+        event = mocked_publish.await_args[0][0]
+        assert event.name == "catalog.paper.published"
+        assert event.payload["paper_id"] == paper_id
 
     assert _paper(db_session, paper_id).paper_type == "PUBLISHED"
 
@@ -146,12 +146,12 @@ def test_invalid_transitions_return_409_and_no_push(
     assert "DRAFT" in approve.json()["error"]["message"]
 
     with patch(
-        "app.api.v1.platform.websocket.publish_data_changed",
-        new=AsyncMock(return_value=1),
-    ) as mocked_push:
+        "app.core.events.publish",
+        new=AsyncMock(return_value=True),
+    ) as mocked_publish:
         publish = client.post(f"/api/papers/{paper_id}/publish", headers=admin_headers)
         assert publish.status_code == 409
-        mocked_push.assert_not_awaited()
+        mocked_publish.assert_not_awaited()
 
     student_create = client.post(
         "/api/papers/",
@@ -198,6 +198,7 @@ def test_smart_exam_submit_emits_paper_completed_once(
         )
         assert first.status_code == 200, first.text
         assert mocked_record.await_count == 1
+        assert mocked_record.await_args is not None
         call_args = mocked_record.await_args[0]
         assert call_args[1] == test_user.user_id
         assert call_args[2] == "paper.completed"

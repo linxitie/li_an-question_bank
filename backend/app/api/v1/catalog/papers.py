@@ -434,15 +434,14 @@ async def publish_paper(
     
     delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
 
-    from ....api.v1.platform.websocket import (
-        publish_data_changed,
-        ws_connection_manager,
-    )
-    await publish_data_changed(
-        ws_connection_manager.get_online_users(),
-        domain="exam",
-        type="paper.published",
-        id=paper_id,
-    )
+    # 纵向通信走事件总线（catalog 域不跨域 import platform）：
+    # EV_PAPER_PUBLISHED → 消费者推送 data-changed 到在线端。
+    from ....core import events
+    await events.publish(events.Event(
+        name=events.EV_PAPER_PUBLISHED,
+        payload={"paper_id": paper_id},
+        aggregate_id=f"p-{paper_id}",
+        source="catalog.papers",
+    ))
     
     return SuccessResponse(message="发布成功")
