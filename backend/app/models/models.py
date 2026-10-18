@@ -1348,6 +1348,30 @@ class NewsArticle(Base):
         Index("idx_publish_date_news", publish_date),
     )
 
+class NewsRead(Base):
+    """新闻阅读记录表（P2-32）
+
+    按 (user_id, news_id) 唯一。同一用户同一篇新闻只留一条，
+    是 ``news.read``（E7）事件「同篇不重复发」的持久化依据，
+    同时为前端提供后端权威的已读状态（不落 localStorage）。
+    """
+    __tablename__ = "news_read"
+
+    read_id = Column(Integer, primary_key=True, autoincrement=True, comment="阅读记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False, comment="新闻ID")
+    create_time = Column(DateTime, default=datetime.now, comment="首次阅读时间")
+
+    user = relationship("SysUser")
+    news = relationship("NewsArticle")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "news_id", name="uq_news_read_user_news"),
+        Index("idx_user_id_newsread", user_id),
+        Index("idx_news_id_newsread", news_id),
+    )
+
+
 # ------------------------------
 # 收藏/笔记/标记模型（新增）
 # ------------------------------

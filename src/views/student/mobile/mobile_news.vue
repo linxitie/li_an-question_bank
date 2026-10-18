@@ -80,15 +80,20 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { renderNewsContent, dedupeNewsImages } from '@/utils/newsRender';
+import { useNewsStore } from '@/modules/news/store';
+import type { NewsItem } from '@/modules/news/api';
 
 const route = useRoute();
 const router = useRouter();
+/** 每日新闻域 store：列表 / 详情 / 已读上报统一走本域，不直接摸 window.__VTJ_AUTH__ */
+const newsStore = useNewsStore();
 
-const newsList = ref<any[]>([]);
+/** 列表与详情均以后端数据为准（已读状态来自后端 is_read，不落 localStorage） */
+const newsList = computed<NewsItem[]>(() => newsStore.items);
+const loading = computed(() => newsStore.loading);
+
 interface NewsImage { url?: string; order?: number; [key: string]: any; }
-type NewsImageItem = string | NewsImage;
-const currentNews = ref<{ id?: any; images?: NewsImageItem[]; [key: string]: any } | null>(null);
-const loading = ref(false);
+const currentNews = computed<NewsItem | null>(() => newsStore.selected);
 const notes = ref<any[]>([]);
 /** 正文容器引用：划线时用于判定选区是否落在正文内 */
 const contentEl = ref<HTMLElement | null>(null);
@@ -133,8 +138,8 @@ const renderedContent = computed(() =>
 );
 
 const goBack = () => {
-  if (currentNews.value) {
-    currentNews.value = null;
+  if (newsStore.selected) {
+    newsStore.clearSelection();
     notes.value = [];
     selectionMenuVisible.value = false;
     selectedText.value = '';
@@ -147,7 +152,7 @@ const goBack = () => {
   }
 };
 
-const formatTime = (iso: string) => {
+const formatTime = (iso?: string | null) => {
   if (!iso) return '';
   const t = new Date(iso).getTime();
   if (isNaN(t)) return '';
@@ -155,32 +160,15 @@ const formatTime = (iso: string) => {
 };
 
 const fetchNews = async () => {
-  loading.value = true;
-  try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/news?limit=20');
-    const data = await res.json();
-    if (res.ok && data.items) newsList.value = data.items;
-  } catch (e) {
-    console.error('获取新闻失败:', e);
-  } finally {
-    loading.value = false;
-  }
+  // 列表只读，不上报阅读；已读标记由后端随列表返回
+  await newsStore.load({ limit: 20 });
 };
 
-const openDetail = async (item: any) => {
-  currentNews.value = item;
+const openDetail = async (item: NewsItem) => {
   notes.value = [];
-  // 若列表项已含完整 content 则直接用，否则请求详情
-  if (!item.content) {
-    try {
-      const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + item.id);
-      const data = await res.json();
-      if (res.ok) currentNews.value = data;
-    } catch (e) {
-      console.error('获取新闻详情失败:', e);
-    }
-  }
-  await fetchNotes(item.id);
+  // 详情接口即阅读上报入口：登录用户首次打开由后端记录已读并发布 news.read
+  const detail = await newsStore.openArticle(item.id, item);
+  await fetchNotes(detail ? detail.id : item.id);
 };
 
 /**
@@ -322,18 +310,10 @@ onMounted(() => {
   document.addEventListener('selectionchange', handleSelectionChange);
   const id = route.params.id;
   if (id) {
-    // 直接打开指定新闻详情
+    // 直接打开指定新闻详情（同样经详情端点上报阅读）
     (async () => {
-      try {
-        const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + id);
-        const data = await res.json();
-        if (res.ok) {
-          currentNews.value = data;
-          await fetchNotes(Number(id));
-        }
-      } catch (e) {
-        console.error('获取新闻失败:', e);
-      }
+      const detail = await newsStore.openArticle(String(id));
+      if (detail) await fetchNotes(detail.id);
     })();
   } else {
     fetchNews();

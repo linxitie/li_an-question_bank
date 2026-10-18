@@ -12,14 +12,51 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
-from ....models.models import NewsArticle, NewsFavorite, NewsNote, NewsImage, SysUser
+from ....core.trigger_types import TRIGGER_NEWS_READ
+from ....models.models import (
+    NewsArticle, NewsFavorite, NewsNote, NewsImage, NewsRead, SysUser,
+)
+from ....services.event_consumer import record_user_action
 
 router = APIRouter(prefix="/api/news", tags=["新闻资讯"])
 logger = logging.getLogger(__name__)
+
+
+def _read_ids(db: Session, user_id, news_ids) -> set:
+    """批量取该用户已读的新闻 ID，避免逐条查询。"""
+    if not news_ids:
+        return set()
+    rows = db.query(NewsRead.news_id).filter(
+        NewsRead.user_id == user_id,
+        NewsRead.news_id.in_(news_ids)
+    ).all()
+    return {row[0] for row in rows}
+
+
+def _mark_read(db: Session, user_id: int, news_id: int) -> bool:
+    """记录一次阅读，返回是否为首次阅读（幂等）。
+
+    (user_id, news_id) 唯一约束兜底并发重复写入：唯一冲突说明另一请求
+    已记录过，本次不视为首次阅读。
+    """
+    exists = db.query(NewsRead).filter(
+        NewsRead.user_id == user_id,
+        NewsRead.news_id == news_id
+    ).first()
+    if exists:
+        return False
+    db.add(NewsRead(user_id=user_id, news_id=news_id))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return False
+    return True
 
 
 @router.get("", summary="获取新闻列表")
@@ -58,6 +95,8 @@ async def get_news(
         ).all()
         favorite_ids = {f[0] for f in favs}
 
+    read_ids = _read_ids(db, current_user.user_id, news_ids) if current_user else set()
+
     return {
         "total": len(articles),
         "items": [
@@ -73,6 +112,7 @@ async def get_news(
                 "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order}
                            for img in images_by_news.get(a.news_id, [])],
                 "is_favorited": a.news_id in favorite_ids,
+                "is_read": a.news_id in read_ids,
             }
             for a in articles
         ]
@@ -110,6 +150,8 @@ async def get_today_news(
         ).all()
         favorite_ids = {f[0] for f in favs}
 
+    read_ids = _read_ids(db, current_user.user_id, news_ids) if current_user else set()
+
     return {
         "total": len(articles),
         "date": today.isoformat(),
@@ -125,6 +167,7 @@ async def get_today_news(
                 "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order}
                            for img in images_by_news.get(a.news_id, [])],
                 "is_favorited": a.news_id in favorite_ids,
+                "is_read": a.news_id in read_ids,
             }
             for a in articles
         ]
@@ -192,7 +235,12 @@ async def get_news_detail(
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    """获取单条新闻完整内容，供收藏弹窗展示"""
+    """获取单条新闻完整内容，供收藏弹窗展示。
+
+    详情接口即「阅读」动作：登录用户首次打开某篇新闻时记录已读并发布
+    一次 E7 ``news.read``；同篇再次打开只返回内容、不重复发事件。
+    列表类只读接口（/ 与 /today）不发事件。
+    """
     article = db.query(NewsArticle).filter(
         NewsArticle.news_id == news_id,
         NewsArticle.status == 1
@@ -205,11 +253,28 @@ async def get_news_detail(
     ).order_by(NewsImage.image_order).all()
 
     is_favorited = False
+    is_read = False
     if current_user:
         is_favorited = db.query(NewsFavorite).filter(
             NewsFavorite.user_id == current_user.user_id,
             NewsFavorite.news_id == news_id
         ).first() is not None
+
+        try:
+            first_read = _mark_read(db, current_user.user_id, news_id)
+        except Exception as e:  # noqa: BLE001 — 阅读记录失败不阻断正文返回
+            db.rollback()
+            logger.warning(f"记录新闻已读失败 news={news_id}: {e}")
+            first_read = False
+        is_read = True
+
+        if first_read:
+            try:
+                await record_user_action(
+                    db, current_user.user_id, TRIGGER_NEWS_READ
+                )
+            except Exception as e:  # noqa: BLE001 — 事件失败不影响阅读
+                logger.warning(f"新闻阅读事件发布失败 news={news_id}: {e}")
 
     return {
         "id": article.news_id,
@@ -222,6 +287,7 @@ async def get_news_detail(
         "content": article.content or "",
         "images": [{"url": '/' + img.image_path.lstrip('/'), "order": img.image_order} for img in images],
         "is_favorited": is_favorited,
+        "is_read": is_read,
     }
 
 

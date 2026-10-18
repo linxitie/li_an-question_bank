@@ -130,11 +130,13 @@
   import { defineComponent, reactive } from 'vue';
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
+  import { useNewsStore } from '@/modules/news/store';
   export default defineComponent({
     name: 'DailyNews',
     components: { NavBar },
     setup(props) {
       const provider = useProvider({ id: 'daily_news', version: '1778918000715' });
+      const newsStore = useNewsStore();
       const state = reactive({
         newsItems: [],
         loading: false,
@@ -157,7 +159,7 @@
         noteInputVisible: false,
         noteText: ''
       });
-      return { state, props, provider };
+      return { state, props, provider, newsStore };
     },
     methods: {
       async setSourceFilter(val) {
@@ -175,14 +177,17 @@
         await this.fetchNews();
       },
       async goPage(page) {
-        if (page < 1 || page > this.state.totalPages) return;
+        if (page < 1 || page > this.newsStore.totalPages) return;
         this.state.currentPage = page;
-        await this.fetchNews();
+        this.newsStore.goPage(page);
+        this.state.newsItems = this.newsStore.pageItems;
       },
-      openDetail(item) {
-        this.state.selectedNews = item;
+      async openDetail(item) {
+        // 详情端点即阅读上报入口：首次打开由后端记录已读并发布 news.read
+        const detail = await this.newsStore.openArticle(item.id, item);
+        this.state.selectedNews = detail || item;
         this.state.showDetailModal = true;
-        this.state.isFavorited = item.is_favorited || false;
+        this.state.isFavorited = this.state.selectedNews.is_favorited || false;
         this.state.notes = [];
         this.state.selectionMenuVisible = false;
         // 加载笔记
@@ -198,21 +203,28 @@
       async fetchNews() {
         this.state.loading = true;
         try {
-          let url = '/api/news?limit=50';
-          if (this.state.sourceFilter) url += '&source=' + this.state.sourceFilter;
-          if (this.state.categoryFilter) url += '&category=' + this.state.categoryFilter;
-          const res = await window.__VTJ_AUTH__.apiFetch(url);
-          const data = await res.json();
-          if (res.ok && data.items) {
-            this.state.totalItems = data.total;
-            const start = (this.state.currentPage - 1) * this.state.pageSize;
-            this.state.newsItems = data.items.slice(start, start + this.state.pageSize);
-            this.state.totalPages = Math.ceil(data.total / this.state.pageSize) || 1;
+          await this.newsStore.load({
+            source: this.state.sourceFilter,
+            category: this.state.categoryFilter,
+            limit: 50,
+            pageSize: this.state.pageSize,
+            page: this.state.currentPage
+          });
+          if (this.newsStore.error) {
+            console.error('获取新闻失败:', this.newsStore.error);
+            this.state.newsItems = [];
+            this.state.totalItems = 0;
+            this.state.totalPages = 1;
+            return;
           }
+          this.state.totalItems = this.newsStore.total;
+          this.state.totalPages = this.newsStore.totalPages;
+          this.state.currentPage = this.newsStore.page;
+          this.state.newsItems = this.newsStore.pageItems;
         } catch (e) {
           console.error('获取新闻失败:', e);
         } finally {
-          this.state.loading = false;
+          this.state.loading = this.newsStore.loading;
         }
       },
       resolveImgUrl(url) {

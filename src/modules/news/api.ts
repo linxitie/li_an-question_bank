@@ -1,53 +1,108 @@
 /**
- * 每日新闻（news）域 API 封装外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 每日新闻（news）域 API 封装（P2-33）。
  *
- * 约束：
- *   1. 全域只允许使用 @/services/api/client 暴露的唯一 axios 实例，禁止自行 axios.create；
- *   2. 方法签名先按「列表 / 详情 / 刷新」三类占位，具体端点登记在 README「后端端点清单」；
- *   3. 方法体在 P2 阶段实现，当前调用会抛出明确的未实现错误。
+ * 所有请求复用 @/services/api/client 的唯一 axios 实例。
+ * 后端新闻端点挂在 `/api/news`（api_surface.json 冻结口径），
+ * 与客户端默认 baseURL `/api/v1` 不同，故请求层显式置空 baseURL。
+ *
+ * 阅读上报：详情端点 `GET /api/news/{id}` 本身即「阅读」动作，
+ * 服务端按 (user_id, news_id) 去重后发布一次 E7 `news.read`；
+ * 列表端点不发布任何事件。
  */
 import { apiClient } from '@/services/api/client';
 
-/** 本域统一客户端引用：P2 阶段所有请求都经由此实例发起 */
+/** 本域统一客户端引用 */
 export const newsClient = apiClient;
 
-/** 分页查询参数（外壳占位，P2 阶段按真实端点收窄） */
+/** 新闻图片 */
+export interface NewsImage {
+  url?: string;
+  order?: number;
+}
+
+/** 列表 / 详情共用的新闻条目 */
+export interface NewsItem {
+  id: number;
+  title: string;
+  url: string;
+  source: string;
+  category: string | null;
+  publish_date: string | null;
+  summary: string | null;
+  content: string;
+  images: NewsImage[];
+  is_favorited: boolean;
+  /** 后端权威已读标记（不来自 localStorage） */
+  is_read: boolean;
+}
+
+/** 列表查询参数（page / pageSize 由 store 做客户端分页，不发给后端） */
 export interface NewsListQuery {
   page?: number;
   pageSize?: number;
-  [key: string]: unknown;
+  source?: string;
+  category?: string;
+  /** 后端单次返回上限 1..50 */
+  limit?: number;
 }
 
-/** 分页查询结果（外壳占位，P2 阶段按后端响应结构收窄） */
-export interface NewsListResult<T = unknown> {
-  items: T[];
+export interface NewsListResult {
+  items: NewsItem[];
   total: number;
 }
 
-/**
- * 查询每日新闻列表。
- * P2 阶段实现：经由 newsClient 发起请求，端点见 README「后端端点清单」。
- */
-export async function fetchNewsList(
-  query?: NewsListQuery
+interface NewsRequestConfig {
+  url: string;
+  method: 'GET';
+  params?: Record<string, unknown>;
+}
+
+async function request<T>(config: NewsRequestConfig): Promise<T> {
+  const response = await newsClient.request<T>({ ...config, baseURL: '' });
+  return response.data;
+}
+
+/** 查询新闻列表（只读，不上报阅读） */
+export function fetchNewsList(
+  query: NewsListQuery = {}
 ): Promise<NewsListResult> {
-  throw new Error('fetchNewsList 尚未实现（P2 阶段实现）');
+  return request<NewsListResult>({
+    url: '/api/news',
+    method: 'GET',
+    params: {
+      limit: query.limit ?? 20,
+      source: query.source || undefined,
+      category: query.category || undefined
+    }
+  });
+}
+
+/** 查询今日新闻（只读，不上报阅读） */
+export function fetchTodayNews(
+  limit = 20
+): Promise<NewsListResult & { date?: string }> {
+  return request<NewsListResult & { date?: string }>({
+    url: '/api/news/today',
+    method: 'GET',
+    params: { limit }
+  });
 }
 
 /**
- * 查询每日新闻详情。
- * P2 阶段实现：按 id 调用对应只读端点，并复用 store 中的缓存。
+ * 查询新闻详情。
+ * 副作用：登录用户首次打开即由后端记录已读并发布一次 `news.read`；
+ * 同篇再次请求不会再发事件。
  */
-export async function fetchNewsDetail(
-  id: string | number
-): Promise<unknown> {
-  throw new Error('fetchNewsDetail 尚未实现（P2 阶段实现）');
+export function fetchNewsDetail(id: string | number): Promise<NewsItem> {
+  return request<NewsItem>({
+    url: `/api/news/${id}`,
+    method: 'GET'
+  });
 }
 
-/**
- * 刷新每日新闻缓存。
- * P2 阶段实现：调用 store 的 load()，并处理强制刷新参数。
- */
-export async function refreshNews(): Promise<void> {
-  throw new Error('refreshNews 尚未实现（P2 阶段实现）');
+/** 刷新新闻列表（等同重新拉取，供页面「刷新」入口复用） */
+export function refreshNews(
+  query: NewsListQuery = {}
+): Promise<NewsListResult> {
+  return fetchNewsList(query);
 }
