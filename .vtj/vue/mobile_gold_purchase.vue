@@ -113,18 +113,20 @@
   import { defineComponent, reactive } from 'vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+  import { useRewardStore } from '@/modules/reward/store';
 
   export default defineComponent({
     name: 'MobileGoldPurchase',
     setup(props) {
       const provider = useProvider({ id: 'mobile_gold_purchase', version: '1778918740312' });
+      const rewardStore = useRewardStore();
       const state = reactive({
         balance: 0, activeTab: 'shop', products: [], records: [],
         tasks: { checkin: {}, daily: [], random: [], weekly: [] },
         goals: [], achievements: { categories: {} },
         detailVisible: false, detailProduct: null, exchanging: false
       });
-      return { state, props, provider };
+      return { state, props, provider, rewardStore };
     },
     computed: {
       tabs() {
@@ -144,10 +146,11 @@
       },
       formatTime(t) { return t ? String(t).replace('T', ' ').slice(5, 16) : ''; },
       async loadBalance() {
-        try { const r = await window.__VTJ_AUTH__.apiFetch('/api/coins/overview'); const d = await r.json(); if (r.ok) this.state.balance = d.balance || 0; } catch (e) {}
+        this.state.balance = await this.rewardStore.loadBalance();
       },
       async loadProducts() {
-        try { const r = await window.__VTJ_AUTH__.apiFetch('/api/shop/products?page_size=100'); const d = await r.json(); if (r.ok) this.state.products = d.items || []; } catch (e) {}
+        await this.rewardStore.load({ pageSize: 100 });
+        this.state.products = this.rewardStore.products;
       },
       openDetail(item) { this.state.detailProduct = item; this.state.detailVisible = true; },
       closeDetail() { this.state.detailVisible = false; this.state.detailProduct = null; },
@@ -157,19 +160,14 @@
         if (p.coin_price > this.state.balance) { ElMessage.warning('金币不足'); return; }
         this.state.exchanging = true;
         try {
-          const rid = 'ex-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-          const r = await window.__VTJ_AUTH__.apiFetch('/api/shop/exchange', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id: p.id, request_id: rid })
-          });
-          const d = await r.json();
-          if (r.ok) { ElMessage.success('兑换成功'); this.state.balance = d.balance; this.closeDetail(); }
-          else ElMessage.error(d.detail || '兑换失败');
-        } catch (e) { ElMessage.error('兑换失败'); }
-        finally { this.state.exchanging = false; }
+          const result = await this.rewardStore.exchange(p.id);
+          if (result) { ElMessage.success('兑换成功'); this.state.balance = result.balance; this.closeDetail(); }
+          else ElMessage.error(this.rewardStore.error || '兑换失败');
+        } finally { this.state.exchanging = false; }
       },
       async loadRecords() {
-        try { const r = await window.__VTJ_AUTH__.apiFetch('/api/coins/transactions?page_size=50'); const d = await r.json(); if (r.ok) this.state.records = d.items || []; } catch (e) {}
+        await this.rewardStore.loadRecords(1, 50);
+        this.state.records = this.rewardStore.records;
       },
       async loadTasks() {
         try { const r = await window.__VTJ_AUTH__.apiFetch('/api/tasks/overview'); const d = await r.json(); if (r.ok) this.state.tasks = d; } catch (e) {}

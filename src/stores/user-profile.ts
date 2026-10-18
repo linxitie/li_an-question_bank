@@ -9,7 +9,7 @@
  */
 import { computed, onScopeDispose, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { apiClient } from '@/services/api/client';
+import { fetchCoinsOverview } from '@/modules/reward/api';
 import { EVENT_NAMES, onEvent } from './event-bus';
 
 /** 用户档案快照（缺省字段允许为空，表示尚未拉取） */
@@ -19,26 +19,6 @@ export interface UserProfileSnapshot {
   coins?: number;
   role?: string | null;
   device?: string;
-}
-
-/**
- * reward 域余额只读路径。
- * 由 P2-42 注入正式实现时替换此常量即可，本 store 不承载业务写操作。
- */
-const REWARD_BALANCE_PATH = '/reward/balance';
-
-/** 从后端返回体中提取余额（兼容 number / coins / balance / data 包装） */
-function pickCoins(payload: unknown): number | null {
-  if (typeof payload === 'number' && Number.isFinite(payload)) return payload;
-  if (!payload || typeof payload !== 'object') return null;
-
-  const body = payload as Record<string, unknown>;
-  for (const key of ['coins', 'balance', 'coin_balance']) {
-    const value = body[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-  }
-  if (body.data && body.data !== payload) return pickCoins(body.data);
-  return null;
 }
 
 export const useUserProfileStore = defineStore('user-profile', () => {
@@ -76,10 +56,9 @@ export const useUserProfileStore = defineStore('user-profile', () => {
   async function refreshCoins(): Promise<number> {
     loading.value = true;
     try {
-      const response = await apiClient.get(REWARD_BALANCE_PATH);
-      const next = pickCoins(response?.data);
-      if (next !== null) {
-        coins.value = next;
+      const overview = await fetchCoinsOverview();
+      if (typeof overview?.balance === 'number') {
+        coins.value = overview.balance;
         coinsLoaded.value = true;
       }
     } catch {
@@ -110,6 +89,7 @@ export const useUserProfileStore = defineStore('user-profile', () => {
       coins.value += payload.delta;
       coinsLoaded.value = true;
     }
+    void refreshCoins();
   });
   onScopeDispose(offCoins);
 

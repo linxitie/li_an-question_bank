@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session
 
 from ....core.database import get_db, commit_with_retry
 from ....core.security import get_current_user
+from ....core.trigger_types import TRIGGER_SHOP_PURCHASED
 from ....models.models import SysUser, ShopProduct, CoinExchange, CoinRecord
 from ....services import deliverable_service
+from ....services.event_consumer import record_user_action
 
 router = APIRouter(prefix="/api/shop", tags=["金币商城"])
 logger = logging.getLogger(__name__)
@@ -147,6 +149,13 @@ async def exchange(
         # 触发权益发放（同一事务）
         deliverable_service.deliver(exchange_record, current_user, db)
 
+        # 事务提交前固化返回值，避免 commit 后属性过期再查询
+        exchange_id = exchange_record.id
+        balance_after = current_user.total_coins
+        product_id = product.id
+        product_name = product.name
+        coin_cost = product.coin_price
+
         commit_with_retry(db)
     except HTTPException:
         db.rollback()
@@ -156,11 +165,30 @@ async def exchange(
         logger.error(f"兑换失败 user={current_user.user_id} product={product.id}: {e}")
         raise HTTPException(status_code=500, detail="兑换失败，请稍后重试")
 
-    logger.info(f"用户 {current_user.user_id} 兑换 {product.name}，消耗 {product.coin_price} 金币")
+    # E9：仅在兑换事务成功提交后发布一次；失败路径已在上方抛出，不会到达此处
+    try:
+        await record_user_action(
+            db,
+            current_user.user_id,
+            TRIGGER_SHOP_PURCHASED,
+            session={
+                "exchange_id": exchange_id,
+                "product_id": product_id,
+                "product_name": product_name,
+                "coin_cost": coin_cost,
+                "balance": balance_after,
+            },
+        )
+    except Exception as e:  # noqa: BLE001 - 事件发布失败不得回滚已完成的兑换
+        logger.error(
+            f"兑换事件发布失败 user={current_user.user_id} exchange={exchange_id}: {e}"
+        )
+
+    logger.info(f"用户 {current_user.user_id} 兑换 {product_name}，消耗 {coin_cost} 金币")
     return {
-        "exchange_id": exchange_record.id,
-        "balance": current_user.total_coins,
-        "product_name": product.name,
-        "coin_cost": product.coin_price,
+        "exchange_id": exchange_id,
+        "balance": balance_after,
+        "product_name": product_name,
+        "coin_cost": coin_cost,
         "message": "兑换成功",
     }

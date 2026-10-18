@@ -1,29 +1,32 @@
 /**
- * 金币商城（reward）域事件契约外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 金币商城（reward）域事件契约（P2-43）
  *
- * 当前状态：仅登记计划，不建立任何订阅，也不触发任何事件（P2 阶段实现）。
- *
- * 约束：
- *   1. 前端事件常量一律在 @/stores/event-bus 的 EVENT_NAMES 登记，禁止手写事件名字面量；
- *   2. 本文件不建立订阅，P2 阶段在域入口调用 onEvent 并保留取消订阅函数；
- *   3. 跨域只走事件总线，同域内部直接调用函数，不绕事件。
+ * 本域发布 `reward:coins-changed`：兑换成功或金币余额变化后广播，
+ * 供 user-profile 只读快照刷新；本域不订阅其他域事件。
+ * 事件名一律取自 @/stores/event-bus 的 EVENT_NAMES，不手写字符串字面量。
+ * 后端行为 trigger_type `shop.purchased`（E9）由 API 在兑换事务提交后上报，
+ * 前端不重复上报，避免「前端事件 + 后端事件」双写。
  */
-import { EVENT_NAMES } from '@/stores/event-bus';
+import {
+  EVENT_NAMES,
+  emitEvent,
+  type RewardCoinsChangedPayload
+} from '@/stores/event-bus';
 
-/**
- * 本域计划发布的前端事件（仅登记常量，不触发）：
- * - REWARD_COINS_CHANGED：兑换成功或金币余额变化后发布
- */
 export const PUBLISHED_EVENTS = {
   REWARD_COINS_CHANGED: EVENT_NAMES.REWARD_COINS_CHANGED
 } as const;
 
-/** 本域不订阅前端事件。 */
 export const SUBSCRIBED_EVENTS = {} as const;
 
-/**
- * 本域向后端 record_user_action() 上报的 trigger_type（P2 阶段补齐调用点）：
- * - shop.purchased：商城兑换成功后上报（成就 E9）
- */
+export const REWARD_TRIGGER_TYPES = {
+  SHOP_PURCHASED: 'shop.purchased'
+} as const;
 
-/** 本域消费的后端行为 trigger_type：无。 */
+export const REWARD_SHOP_PURCHASED_TRIGGER =
+  REWARD_TRIGGER_TYPES.SHOP_PURCHASED;
+
+/** 广播金币余额变化（兑换成功、任务奖励等） */
+export function notifyCoinsChanged(payload: RewardCoinsChangedPayload): void {
+  emitEvent(EVENT_NAMES.REWARD_COINS_CHANGED, payload);
+}

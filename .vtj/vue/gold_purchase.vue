@@ -168,12 +168,14 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+  import { useRewardStore } from '@/modules/reward/store';
 
   export default defineComponent({
     name: 'GoldPurchase',
     components: { NavBar, XIcon },
     setup(props) {
       const provider = useProvider({ id: 'gold_purchase', version: '1778918740312' });
+      const rewardStore = useRewardStore();
       const state = reactive({
         balance: 0,
         activeTab: 'shop',
@@ -190,6 +192,7 @@
         state,
         props,
         provider,
+        rewardStore,
         ShoppingCartFull, Medal, Shop, GoldMedal, RefreshRight, CirclePlus
       };
     },
@@ -217,18 +220,11 @@
         return String(t).replace('T', ' ').slice(5, 16);
       },
       async loadBalance() {
-        try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/coins/overview');
-          const data = await res.json();
-          if (res.ok) this.state.balance = data.balance || 0;
-        } catch (e) { /* 静默 */ }
+        this.state.balance = await this.rewardStore.loadBalance();
       },
       async loadProducts() {
-        try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/shop/products?page_size=100');
-          const data = await res.json();
-          if (res.ok) this.state.products = data.items || [];
-        } catch (e) { /* 静默 */ }
+        await this.rewardStore.load({ pageSize: 100 });
+        this.state.products = this.rewardStore.products;
       },
       openDetail(item) {
         this.state.detailProduct = item;
@@ -247,33 +243,22 @@
         }
         this.state.exchanging = true;
         try {
-          const requestId = 'ex-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/shop/exchange', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_id: p.id, request_id: requestId })
-          });
-          const data = await res.json();
-          if (res.ok) {
+          const result = await this.rewardStore.exchange(p.id);
+          if (result) {
             ElMessage.success('兑换成功！');
-            this.state.balance = data.balance;
+            this.state.balance = result.balance;
             this.closeDetail();
             this.loadProducts();
           } else {
-            ElMessage.error(data.detail || '兑换失败');
+            ElMessage.error(this.rewardStore.error || '兑换失败');
           }
-        } catch (e) {
-          ElMessage.error('兑换失败');
         } finally {
           this.state.exchanging = false;
         }
       },
       async loadRecords() {
-        try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/coins/transactions?page_size=50');
-          const data = await res.json();
-          if (res.ok) this.state.records = data.items || [];
-        } catch (e) { /* 静默 */ }
+        await this.rewardStore.loadRecords(1, 50);
+        this.state.records = this.rewardStore.records;
       },
       async loadTasks() {
         try {
