@@ -11,9 +11,6 @@
  * 注意：本文件刻意不 import 认证 store（src/stores/auth.ts 在 setup 时访问
  * window.__VTJ_AUTH__），此处只测域外壳；环境为 node，无需 DOM。
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { apiClient } from '@/services/api/client';
@@ -43,10 +40,6 @@ const DOMAINS = [
 /** 每个域必须具备的四件套 */
 const REQUIRED_FILES = ['store.ts', 'api.ts', 'events.ts', 'README.md'] as const;
 
-/** 本测试文件所在目录：src/modules/__tests__ */
-const TEST_DIR = dirname(fileURLToPath(import.meta.url));
-const MODULES_DIR = resolve(TEST_DIR, '..');
-
 /** 全部合法事件名（常量表值集合） */
 const REGISTERED_EVENT_VALUES = new Set<string>(Object.values(EVENT_NAMES));
 
@@ -71,10 +64,15 @@ const eventModules = import.meta.glob('../*/events.ts', { eager: true }) as Reco
   string,
   Record<string, unknown>
 >;
+/** 原始文本加载（as: 'raw'），键形如 ../<domain>/README.md、../<domain>/api.ts */
+const rawModules = import.meta.glob(['../*/README.md', '../*/api.ts'], {
+  as: 'raw',
+  eager: true
+}) as Record<string, string>;
 
-/** 读取模块的文本内容（用于 lint 式断言） */
+/** 读取模块的文本内容（Vite 原生 raw glob，无 node:fs 依赖） */
 function readModuleFile(domain: string, file: string): string {
-  return readFileSync(resolve(MODULES_DIR, domain, file), 'utf-8');
+  return rawModules[`../${domain}/${file}`] ?? '';
 }
 
 /** 取模块导出：优先约定名，缺失时回退到唯一 use*Store 导出 */
@@ -100,7 +98,9 @@ beforeEach(() => {
 describe('17 个域外壳：目录四件套', () => {
   it.each(DOMAINS)('%s 域四件套齐备（store/api/events/README）', (domain) => {
     for (const file of REQUIRED_FILES) {
-      expect(existsSync(resolve(MODULES_DIR, domain, file)), `${domain}/${file} 缺失`).toBe(true);
+      const exists = file === 'README.md' ? rawModules[`../${domain}/${file}`] !== undefined
+        : (file === 'store.ts' ? storeModules : file === 'api.ts' ? apiModules : eventModules)[`../${domain}/${file}`] !== undefined;
+      expect(exists, `${domain}/${file} 缺失`).toBe(true);
     }
   });
 });
