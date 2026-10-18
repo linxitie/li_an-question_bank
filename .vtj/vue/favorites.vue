@@ -142,10 +142,12 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { renderQuestionContent, sanitizeHtml } from '@/utils/questionRender';
+  import { useNotesStore } from '@/modules/notes/store';
   export default defineComponent({
     name: 'Favorites',
     components: { NavBar, XIcon },
     setup(props) {
+      const notesStore = useNotesStore();
       const provider = useProvider({ id: 'favorites', version: '1785750000002' });
       const state = reactive({
         activeTab: 'news',
@@ -161,7 +163,7 @@
         showQuestionModal: false,
         questionDetail: {}
       });
-      return { state, props, provider, Star, renderQuestionContent, sanitizeHtml };
+      return { state, props, provider, notesStore, Star, renderQuestionContent, sanitizeHtml };
     },
     computed: {
       totalPages() {
@@ -195,23 +197,20 @@
       },
       async loadStats() {
         try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/collection/stats', { headers: this.getJsonHeaders() });
-          if (res.ok) { this.state.stats = await res.json(); }
+          await this.notesStore.loadCollectionStats();
+          if (this.notesStore.collectionStats) this.state.stats = this.notesStore.collectionStats;
         } catch(e) { console.warn('加载统计失败:', e); }
       },
       async loadFavorites() {
         this.state.loading = true;
         try {
-          var url = '/api/collection/' + (this.state.activeTab === 'news' ? 'news-favorites' : 'question-favorites') + '?page=' + this.state.page + '&page_size=' + this.state.pageSize;
-          const res = await window.__VTJ_AUTH__.apiFetch(url, { headers: this.getJsonHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            this.state.total = data.total || 0;
-            if (this.state.activeTab === 'news') {
-              this.state.newsFavorites = data.items || [];
-            } else {
-              this.state.questionFavorites = data.items || [];
-            }
+          await this.notesStore.loadFavorites(this.state.page);
+          if (this.state.activeTab === 'news') {
+            this.state.newsFavorites = this.notesStore.newsFavorites;
+            this.state.total = this.notesStore.newsFavorites.length;
+          } else {
+            this.state.questionFavorites = this.notesStore.questionFavorites;
+            this.state.total = this.notesStore.questionFavorites.length;
           }
         } catch(e) { console.warn('加载收藏失败:', e); }
         finally { this.state.loading = false; }
@@ -286,13 +285,12 @@
         } catch(e) { console.warn('取消收藏失败:', e); }
       },
       async removeQuestionFavorite(favId) {
-        // favId 类型与空值校验，避免构造出非法请求路径
         if (favId === null || favId === undefined || favId === '') {
           console.warn('取消收藏失败：无效的收藏ID', favId);
           return;
         }
         try {
-          await window.__VTJ_AUTH__.apiFetch('/api/collection/q_' + favId, { method: 'DELETE', headers: this.getJsonHeaders() });
+          await this.notesStore.removeFavorite(favId, 'question');
           this.state.showQuestionModal = false;
           this.loadFavorites();
           this.loadStats();

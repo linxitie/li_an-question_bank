@@ -1,53 +1,292 @@
 /**
- * 笔记与收藏（notes）域 API 封装外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 笔记与收藏（notes）域 API 封装。
  *
- * 约束：
- *   1. 全域只允许使用 @/services/api/client 暴露的唯一 axios 实例，禁止自行 axios.create；
- *   2. 方法签名先按「列表 / 详情 / 刷新」三类占位，具体端点登记在 README「后端端点清单」；
- *   3. 方法体在 P2 阶段实现，当前调用会抛出明确的未实现错误。
+ * 后端端点挂在 `/api/notes`、`/api/collection`（api_surface.json 冻结口径），
+ * 与客户端默认 baseURL `/api/v1` 不同，故请求层显式置空 baseURL。
  */
 import { apiClient } from '@/services/api/client';
 
-/** 本域统一客户端引用：P2 阶段所有请求都经由此实例发起 */
 export const notesClient = apiClient;
 
-/** 分页查询参数（外壳占位，P2 阶段按真实端点收窄） */
-export interface NotesListQuery {
+export type NoteType = 'all' | 'question' | 'news';
+export type NoteResourceType = 'question' | 'news';
+export type FavoriteKind = 'question' | 'news';
+
+export interface NoteListQuery {
+  noteType?: NoteType;
   page?: number;
   pageSize?: number;
-  [key: string]: unknown;
 }
 
-/** 分页查询结果（外壳占位，P2 阶段按后端响应结构收窄） */
-export interface NotesListResult<T = unknown> {
-  items: T[];
+export interface NoteItem {
+  note_id: string;
+  type: NoteResourceType;
+  note_text: string;
+  title?: string;
+  subject?: string;
+  question_id?: number;
+  news_id?: number;
+  quote_text?: string;
+  color?: string;
+  line_style?: string;
+  create_time?: string | null;
+  update_time?: string | null;
+}
+
+export interface NoteListResult {
+  total: number;
+  page: number;
+  page_size: number;
+  items: NoteItem[];
+}
+
+export interface NotesStats {
+  question_notes: number;
+  news_notes: number;
   total: number;
 }
 
-/**
- * 查询笔记与收藏列表。
- * P2 阶段实现：经由 notesClient 发起请求，端点见 README「后端端点清单」。
- */
-export async function fetchNotesList(
-  query?: NotesListQuery
-): Promise<NotesListResult> {
-  throw new Error('fetchNotesList 尚未实现（P2 阶段实现）');
+export interface QuestionNoteDetailOption {
+  text: string;
+  letter: string;
+  is_correct: boolean;
 }
 
-/**
- * 查询笔记与收藏详情。
- * P2 阶段实现：按 id 调用对应只读端点，并复用 store 中的缓存。
- */
-export async function fetchNotesDetail(
-  id: string | number
-): Promise<unknown> {
-  throw new Error('fetchNotesDetail 尚未实现（P2 阶段实现）');
+export interface QuestionNoteDetail {
+  question_id: number;
+  subject_name: string;
+  question_type: string;
+  question_content: string;
+  options: QuestionNoteDetailOption[];
+  answer: string;
+  answer_analysis: string;
+  knowledge_path: string;
+  difficulty: number;
+  correct_rate: number;
+  source?: string;
+  year?: number | null;
 }
 
-/**
- * 刷新笔记与收藏缓存。
- * P2 阶段实现：调用 store 的 load()，并处理强制刷新参数。
- */
-export async function refreshNotes(): Promise<void> {
-  throw new Error('refreshNotes 尚未实现（P2 阶段实现）');
+export interface NoteCreatePayload {
+  type: NoteResourceType;
+  id: number;
+  note_text: string;
+  quote_text?: string;
+  color?: string;
+  line_style?: string;
+}
+
+export interface NoteCreateResult {
+  note_id: string;
+  message: string;
+  created?: boolean;
+  updated?: boolean;
+}
+
+export interface FavoriteTogglePayload {
+  type: FavoriteKind;
+  id: number;
+}
+
+export interface FavoriteToggleResult {
+  favorited: boolean;
+  message: string;
+  fav_id?: string;
+}
+
+export interface NewsFavoriteItem {
+  fav_type: 'news' | 'quote';
+  fav_id: number;
+  news_id?: number;
+  title?: string;
+  content: string;
+  source?: string;
+  category?: string;
+  summary?: string;
+  create_time?: string;
+  quote_id?: number;
+  obsidian_source?: string;
+}
+
+export interface QuestionFavoriteItem {
+  fav_id: number;
+  question_id: number;
+  question_content: string;
+  options: unknown;
+  answer: string;
+  answer_analysis: string;
+  difficulty: number;
+  accuracy_rate: number;
+  subject_id: number | null;
+  subject_name: string;
+  subcategory: string;
+  create_time?: string;
+}
+
+export interface FavoritesListResult<T> {
+  total: number;
+  page: number;
+  page_size: number;
+  items: T[];
+}
+
+export interface CollectionStats {
+  question_favorites: number;
+  news_favorites: number;
+  quote_favorites: number;
+  news_quote_total: number;
+  total: number;
+}
+
+interface NotesRequestConfig {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  params?: Record<string, unknown>;
+  data?: unknown;
+}
+
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
+async function request<T>(config: NotesRequestConfig): Promise<T> {
+  const response = await notesClient.request<T>({ ...config, baseURL: '' });
+  return response.data;
+}
+
+function normalizePage(page?: number): number {
+  return page && page > 0 ? Math.floor(page) : 1;
+}
+
+function normalizePageSize(size?: number): number {
+  if (!size || size < 1) return DEFAULT_PAGE_SIZE;
+  return Math.min(Math.floor(size), MAX_PAGE_SIZE);
+}
+
+export async function fetchNotes(query: NoteListQuery = {}): Promise<NoteListResult> {
+  const page = normalizePage(query.page);
+  const pageSize = normalizePageSize(query.pageSize);
+  const data = await request<Partial<NoteListResult>>({
+    url: '/api/notes',
+    method: 'GET',
+    params: { note_type: query.noteType ?? 'all', page, page_size: pageSize }
+  });
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    page_size: data.page_size ?? pageSize,
+    items: data.items ?? []
+  };
+}
+
+export async function fetchNotesStats(): Promise<NotesStats> {
+  const data = await request<Partial<NotesStats>>({
+    url: '/api/notes/stats',
+    method: 'GET'
+  });
+  return {
+    question_notes: data.question_notes ?? 0,
+    news_notes: data.news_notes ?? 0,
+    total: data.total ?? 0
+  };
+}
+
+export function fetchQuestionNoteDetail(
+  questionId: number
+): Promise<QuestionNoteDetail> {
+  return request<QuestionNoteDetail>({
+    url: `/api/notes/question/${questionId}`,
+    method: 'GET'
+  });
+}
+
+export function createNote(payload: NoteCreatePayload): Promise<NoteCreateResult> {
+  return request<NoteCreateResult>({
+    url: '/api/notes',
+    method: 'POST',
+    data: payload
+  });
+}
+
+export async function updateNote(
+  noteId: string,
+  noteText: string
+): Promise<{ message: string }> {
+  return request<{ message: string }>({
+    url: `/api/notes/${noteId}`,
+    method: 'PUT',
+    data: { note_text: noteText }
+  });
+}
+
+export async function deleteNote(noteId: string): Promise<{ message: string }> {
+  return request<{ message: string }>({
+    url: `/api/notes/${noteId}`,
+    method: 'DELETE'
+  });
+}
+
+export async function fetchNewsFavorites(
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE
+): Promise<FavoritesListResult<NewsFavoriteItem>> {
+  const data = await request<Partial<FavoritesListResult<NewsFavoriteItem>>>({
+    url: '/api/collection/news-favorites',
+    method: 'GET',
+    params: { type: 'news', page: normalizePage(page), page_size: normalizePageSize(pageSize) }
+  });
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    page_size: data.page_size ?? pageSize,
+    items: data.items ?? []
+  };
+}
+
+export async function fetchQuestionFavorites(
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE
+): Promise<FavoritesListResult<QuestionFavoriteItem>> {
+  const data = await request<Partial<FavoritesListResult<QuestionFavoriteItem>>>({
+    url: '/api/collection/question-favorites',
+    method: 'GET',
+    params: { page: normalizePage(page), page_size: normalizePageSize(pageSize) }
+  });
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    page_size: data.page_size ?? pageSize,
+    items: data.items ?? []
+  };
+}
+
+export function fetchCollectionStats(): Promise<CollectionStats> {
+  return request<CollectionStats>({
+    url: '/api/collection/stats',
+    method: 'GET'
+  });
+}
+
+export function toggleFavorite(
+  payload: FavoriteTogglePayload
+): Promise<FavoriteToggleResult> {
+  return request<FavoriteToggleResult>({
+    url: '/api/collection/favorite',
+    method: 'POST',
+    data: payload
+  });
+}
+
+export async function removeFavorite(
+  favId: string | number,
+  kind: FavoriteKind
+): Promise<{ message: string }> {
+  const composite = `${kind === 'news' ? 'n' : 'q'}_${favId}`;
+  return request<{ message: string }>({
+    url: `/api/collection/${composite}`,
+    method: 'DELETE'
+  });
+}
+
+export async function refreshNotes(): Promise<NoteListResult> {
+  return fetchNotes();
 }

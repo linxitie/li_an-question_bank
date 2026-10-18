@@ -98,14 +98,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { useNotesStore, validateNoteText } from '@/modules/notes/store';
 
 const router = useRouter();
-const noteType = ref('all');
-const notes = ref<any[]>([]);
-const loading = ref(false);
+const store = useNotesStore();
+const noteType = computed(() => store.noteType);
+const notes = computed(() => store.notes);
+const loading = computed(() => store.loading);
 
 // ===== 题目笔记详情弹层 =====
 // 原实现跳转到 /mobile/notes-question/{id}，该路由从未注册，必然 404。
@@ -148,28 +150,19 @@ const saveCurrentNote = async () => {
   const n = currentNote.value;
   if (!n || n.note_id == null || savingNote.value) return;
   const text = (editText.value || '').trim();
-  if (!text) {
-    detailError.value = '笔记内容不能为空';
+  const validation = validateNoteText(text);
+  if (validation) {
+    detailError.value = validation;
     return;
   }
   savingNote.value = true;
   try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/notes/' + n.note_id, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ note_text: text })
-    });
-    if (res.ok) {
-      // 就地更新：详情弹层与列表保持一致，无需整页刷新
-      n.note_text = text;
-      notes.value = notes.value.map((x) => (x.note_id === n.note_id ? { ...x, note_text: text } : x));
-      isEditing.value = false;
-      editText.value = '';
-    } else {
-      detailError.value = '保存失败（' + res.status + '）';
-    }
+    await store.updateNote(String(n.note_id), text);
+    n.note_text = text;
+    isEditing.value = false;
+    editText.value = '';
   } catch (e) {
-    detailError.value = '保存失败，请稍后重试';
+    detailError.value = store.error || '保存失败，请稍后重试';
   } finally {
     savingNote.value = false;
   }
@@ -179,12 +172,7 @@ const loadQuestionDetail = async (questionId: number) => {
   detailLoading.value = true;
   detailError.value = '';
   try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/notes/question/' + questionId);
-    if (res.ok) {
-      detailData.value = await res.json();
-    } else {
-      detailError.value = '题目加载失败（' + res.status + '）';
-    }
+    detailData.value = await store.loadQuestionDetail(questionId);
   } catch (e) {
     detailError.value = '题目加载失败，请检查网络后重试';
   } finally {
@@ -198,18 +186,10 @@ const deleteNote = async (n: any) => {
   if (!window.confirm('确定删除这条笔记吗？')) return;
   const inModal = !!currentNote.value && currentNote.value.note_id === n.note_id;
   try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/notes/' + n.note_id, {
-      method: 'DELETE'
-    });
-    if (res.ok) {
-      notes.value = notes.value.filter((x) => x.note_id !== n.note_id);
-      // 删除的正是弹层当前笔记时顺势关闭，避免弹层里留着已删内容
-      if (inModal) closeDetail();
-    } else if (inModal) {
-      detailError.value = '删除失败（' + res.status + '）';
-    }
+    await store.deleteNote(String(n.note_id));
+    if (inModal) closeDetail();
   } catch (e) {
-    if (inModal) detailError.value = '删除失败，请稍后重试';
+    if (inModal) detailError.value = store.error || '删除失败，请稍后重试';
   }
 };
 
@@ -222,13 +202,13 @@ const goBack = () => {
   else router.push('/mobile/home');
 };
 
-const formatTime = (iso: string) => {
+const formatTime = (iso?: string | null) => {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString();
 };
 
-const switchType = (t: string) => {
-  noteType.value = t;
+const switchType = (t: 'all' | 'question' | 'news') => {
+  store.setNoteType(t);
   fetchNotes();
 };
 
@@ -249,16 +229,8 @@ const openNote = async (n: any) => {
 };
 
 const fetchNotes = async () => {
-  loading.value = true;
-  try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/notes?note_type=' + noteType.value);
-    const data = await res.json();
-    if (res.ok && data.items) notes.value = data.items;
-  } catch (e) {
-    console.error('获取笔记失败:', e);
-  } finally {
-    loading.value = false;
-  }
+  await store.load();
+  if (store.error) console.error('获取笔记失败:', store.error);
 };
 
 onMounted(fetchNotes);

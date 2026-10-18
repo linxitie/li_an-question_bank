@@ -38,11 +38,12 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { renderQuestionSummary } from '@/utils/questionRender';
+import { useNotesStore } from '@/modules/notes/store';
 
 const router = useRouter();
-const auth: any = (window as any).__VTJ_AUTH__;
+const store = useNotesStore();
 
-const loading = ref(false);
+const loading = computed(() => store.loading);
 const currentType = ref<'news' | 'question' | 'all'>('all');
 
 // 新闻收藏与典题收藏是后端两张不同的表，字段结构也不同，
@@ -58,8 +59,32 @@ type FavItem = {
   createTime: string;
 };
 
-const newsItems = ref<FavItem[]>([]);
-const questionItems = ref<FavItem[]>([]);
+const newsItems = computed<FavItem[]>(() =>
+  store.newsFavorites
+    .filter((it) => it.fav_type === 'news')
+    .map((it) => ({
+      key: 'n_' + it.fav_id,
+      type: 'news' as const,
+      typeLabel: '新闻',
+      favId: it.fav_id,
+      title: it.title || it.content || '未命名新闻',
+      metaTags: [it.source, it.category].filter(Boolean) as string[],
+      createTime: it.create_time || '',
+    }))
+);
+
+const questionItems = computed<FavItem[]>(() =>
+  store.questionFavorites.map((it) => ({
+    key: 'q_' + it.fav_id,
+    type: 'question' as const,
+    typeLabel: '典题',
+    favId: it.fav_id,
+    title: renderQuestionSummary(it.question_content),
+    metaTags: [it.subject_name, it.subcategory].filter(Boolean) as string[],
+    answer: it.answer || '',
+    createTime: it.create_time || '',
+  }))
+);
 
 const TYPE_TABS = [
   { key: 'news', name: '新闻收藏' },
@@ -90,72 +115,20 @@ const selectType = (key: 'news' | 'question' | 'all') => {
   currentType.value = key;
 };
 
-async function fetchNewsFavorites() {
-  // type=news 只取新闻收藏；金句收藏(fav_type='quote')不属于本页分类维度，故不拉取。
-  const res = await auth.apiFetch('/api/collection/news-favorites?type=news&page=1&page_size=100');
-  const data = await res.json();
-  if (!res.ok || !data.items) return;
-  newsItems.value = data.items
-    .filter((it: any) => it.fav_type === 'news')
-    .map((it: any) => ({
-      key: 'n_' + it.fav_id,
-      type: 'news' as const,
-      typeLabel: '新闻',
-      favId: it.fav_id,
-      title: it.title || it.content || '未命名新闻',
-      metaTags: [it.source, it.category].filter(Boolean),
-      createTime: it.create_time || '',
-    }));
-}
-
-async function fetchQuestionFavorites() {
-  // 与电脑端 favorites.vue 一致：使用 collection 专用端点，字段才完整。
-  const res = await auth.apiFetch('/api/collection/question-favorites?page=1&page_size=100');
-  const data = await res.json();
-  if (!res.ok || !data.items) return;
-  questionItems.value = data.items.map((it: any) => ({
-    key: 'q_' + it.fav_id,
-    type: 'question' as const,
-    typeLabel: '典题',
-    favId: it.fav_id,
-    title: renderQuestionSummary(it.question_content),
-    metaTags: [it.subject_name, it.subcategory].filter(Boolean),
-    answer: it.answer || '',
-    createTime: it.create_time || it.add_time || '',
-  }));
-}
-
 const fetchFavorites = async () => {
-  loading.value = true;
   try {
-    // 两类收藏互不依赖，并行拉取；任一失败不影响另一类展示
-    const results = await Promise.allSettled([fetchNewsFavorites(), fetchQuestionFavorites()]);
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    if (failed) console.error('有', failed, '类收藏加载失败');
+    await store.loadFavorites();
+    if (store.error) console.error('获取收藏失败:', store.error);
   } catch (e) {
     console.error('获取收藏失败:', e);
-  } finally {
-    loading.value = false;
   }
 };
 
 const removeFav = async (item: FavItem) => {
   try {
-    // 后端 DELETE /api/collection/{fav_id} 要求复合 ID（collection.py:139-150），
-    // 纯数字会返回 400「无效的收藏ID格式」，故必须带 q_ / n_ 前缀。
-    const prefix = item.type === 'news' ? 'n_' : 'q_';
-    const res = await auth.apiFetch('/api/collection/' + prefix + item.favId, { method: 'DELETE' });
-    if (res.ok) {
-      if (item.type === 'news') {
-        newsItems.value = newsItems.value.filter((i) => i.favId !== item.favId);
-      } else {
-        questionItems.value = questionItems.value.filter((i) => i.favId !== item.favId);
-      }
-    } else {
-      console.error('取消收藏失败:', res.status);
-    }
+    await store.removeFavorite(item.favId, item.type);
   } catch (e) {
-    console.error('取消收藏失败:', e);
+    console.error('取消收藏失败:', store.error || e);
   }
 };
 

@@ -198,10 +198,12 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { renderQuestionContent } from '@/utils/questionRender';
+  import { useNotesStore } from '@/modules/notes/store';
   export default defineComponent({
     name: 'Notes',
     components: { NavBar, XIcon },
     setup(props) {
+      const notesStore = useNotesStore();
       const provider = useProvider({ id: 'notes', version: '1785754700000' });
       const state = reactive({
         activeTab: 'news',
@@ -219,7 +221,7 @@
         detailDialogVisible: false,
         questionDetail: null
       });
-      return { state, props, provider, Edit, renderQuestionContent };
+      return { state, props, provider, notesStore, Edit, renderQuestionContent };
     },
     computed: {
       totalPages() {
@@ -255,41 +257,23 @@
       },
       async loadStats() {
         try {
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/notes/stats', { headers: this.getJsonHeaders() });
-          if (res.ok) {
-            const text = await res.text();
-            try {
-              const statsData = JSON.parse(text);
-              this.state.stats = statsData;
-            } catch(parseErr) {
-              // 响应非 JSON：不发起二次请求（原实现会回退到硬编码
-              // http://localhost:8000，该地址在生产环境不存在，必然失败）
-              console.warn('[notes] 统计响应不是合法 JSON:', parseErr);
-            }
-          }
+          await this.notesStore.loadStats();
+          if (this.notesStore.stats) this.state.stats = this.notesStore.stats;
         } catch(e) { console.warn('加载统计失败:', e); }
       },
       async loadNotes() {
         this.state.loading = true;
         try {
-          var url = '/api/notes/' + this.state.activeTab + '?page=' + this.state.page + '&page_size=' + this.state.pageSize;
-          const res = await window.__VTJ_AUTH__.apiFetch(url, { headers: this.getJsonHeaders() });
-          if (res.ok) {
-            const text = await res.text();
-            let data;
-            try {
-              data = JSON.parse(text);
-            } catch(parseErr) {
-              // 响应非 JSON：抛出明确错误，不再回退到硬编码
-              // http://localhost:8000（该地址在生产环境不存在，必然失败）
-              throw new Error('笔记接口响应不是合法 JSON: ' + parseErr.message);
-            }
-            this.state.total = data.total || 0;
-            if (this.state.activeTab === 'news') {
-              this.state.newsNotes = data.items || [];
-            } else {
-              this.state.questionNotes = data.items || [];
-            }
+          await this.notesStore.load({
+            noteType: this.state.activeTab,
+            page: this.state.page,
+            pageSize: this.state.pageSize
+          });
+          this.state.total = this.notesStore.notesTotal;
+          if (this.state.activeTab === 'news') {
+            this.state.newsNotes = this.notesStore.notes;
+          } else {
+            this.state.questionNotes = this.notesStore.notes;
           }
         } catch(e) { console.warn('加载笔记失败:', e); }
         finally { this.state.loading = false; }
