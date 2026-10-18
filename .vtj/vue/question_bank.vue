@@ -361,6 +361,8 @@
   import NavBar from './navbar.vue';
   import GoalCard from './goal_card.vue';
   import { useProvider } from '@vtj/renderer';
+  // P2-73：题库浏览域（② catalog）store 接入；仅只读列表/筛选/详情，不涉及 ⑱⑲⑳
+  import { useCatalogStore } from '@/modules/catalog/store';
 
   // 子科目 Emoji 和背景色映射（静态视觉配置）
   const SUBCARD_STYLES = {
@@ -404,6 +406,8 @@
     components: { NavBar, XIcon, GoalCard },
     setup(props) {
       const provider = useProvider({ id: 'question_bank', version: '1787547281992' });
+      // ② 题库浏览域：只读列表数据（题目列表 / 筛选 / 详情）
+      const catalogStore = useCatalogStore();
       const state = reactive({
         practiceLog: { today: 0, week: 0, total: 0 },
         practiceRecords: null,
@@ -478,6 +482,7 @@
         state,
         props,
         provider,
+        catalogStore,
         Timer, Monitor, Search, ArrowRightBold, ArrowDown, DataLine,
         DocumentDelete, Edit, StarFilled, DataAnalysis, ShoppingCartFull
       };
@@ -485,6 +490,8 @@
     mounted() {
       this.loadStats();
       this.loadUnifiedData();
+      // P2-73：oMounted 等价入口（Options API mounted）拉取题库浏览第一页
+      this.catalogStore.load();
       // 检查是否有来自导入页面的刷新通知
       this.checkImportRefreshFlag();
       // 检查是否有来自练习结果页的刷新标记
