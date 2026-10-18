@@ -1,18 +1,20 @@
-<!-- 我的成就页（三端响应式） -->
+<!-- 我的成就页（三端响应式，P2-55 接入 growth store） -->
 <template>
   <div class="achievements-page">
     <NavBar />
     <main class="ach-main">
       <header class="ach-header">
         <h2><XIcon :icon="Trophy" :size="26" color="#f59e0b" /> 我的成就</h2>
-        <span class="ach-progress">已获得 {{ data.earned_count }} / {{ data.total }}</span>
+        <span class="ach-progress">已获得 {{ store.earnedCount }} / {{ store.total }}</span>
       </header>
 
-      <div v-for="(items, category) in data.categories" :key="category" class="cat-section">
-        <h3 class="cat-title">{{ categoryLabel(category) }}</h3>
+      <div v-if="store.error" class="ach-error">{{ store.error }}</div>
+
+      <div v-for="group in store.achievementGroups" :key="group.category" class="cat-section">
+        <h3 class="cat-title">{{ group.label }}</h3>
         <div class="ach-grid">
           <div
-            v-for="a in items"
+            v-for="a in group.items"
             :key="a.achievement_id"
             :class="['ach-card', { earned: a.earned, locked: !a.earned }]"
             :style="a.earned ? { borderColor: tierColor(a.tier) } : {}"
@@ -27,68 +29,47 @@
               <div class="ach-name">{{ isHidden(a) ? '神秘成就' : a.name }}</div>
               <div class="ach-desc">{{ isHidden(a) ? '继续探索解锁' : a.condition_desc }}</div>
               <div class="ach-progress-bar" v-if="!a.earned && a.threshold > 0 && !isHidden(a)">
-                <div class="ach-progress-fill" :style="{ width: Math.min(100, (a.current / a.threshold) * 100) + '%' }"></div>
+                <div class="ach-progress-fill" :style="{ width: a.progressPercent + '%' }"></div>
               </div>
               <div class="ach-reward">🪙 {{ a.reward_coins }}</div>
             </div>
           </div>
         </div>
       </div>
+
+      <div v-if="store.loading" class="ach-empty">加载中...</div>
+      <div v-else-if="store.initialized && !store.achievementGroups.length" class="ach-empty">
+        暂无成就数据
+      </div>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
 import { XIcon } from '@vtj/ui';
 import { Trophy } from '@vtj/icons';
 import NavBar from '$vtj/vue/navbar.vue';
+import { useGrowthStore, tierColor, tierLabel } from '@/modules/growth/store';
+import { subscribeGrowthEvents } from '@/modules/growth/events';
 
-const auth: any = (window as any).__VTJ_AUTH__;
-const data = reactive<any>({ total: 0, earned_count: 0, categories: {} });
+const store = useGrowthStore();
+let unsubscribe: (() => void) | null = null;
 
-const CATEGORY_LABEL: Record<string, string> = {
-  '坚持': '🔥 学习坚持',
-  '数量': '📝 做题数量',
-  '正确率': '🎯 正确率',
-  '错题': '❌ 错题管理',
-  '社交': '💬 社交互动',
-  '综合': '🏆 综合成就',
-  '联考特色': '🎖️ 联考特色',
-  '隐藏': '🔒 隐藏成就',
-  '赛季限定': '🏅 赛季限定',
-};
-
-const TIER_COLORS: Record<number, string> = {
-  1: '#b87333', 2: '#c0c0c0', 3: '#ffd700', 4: '#e5e4e2', 5: '#b9f2ff',
-};
-const TIER_LABELS: Record<number, string> = {
-  1: '铜', 2: '银', 3: '金', 4: '铂金', 5: '钻石',
-};
-
-function categoryLabel(cat: any) {
-  return CATEGORY_LABEL[cat] || cat;
-}
-function tierColor(tier: number) {
-  return TIER_COLORS[tier] || '#b87333';
-}
-function tierLabel(tier: number) {
-  return TIER_LABELS[tier] || '铜';
-}
-function isHidden(a: any) {
-  return (a.is_hidden === 1) && !a.earned;
+function isHidden(a: { is_hidden?: number; earned?: boolean }) {
+  return a.is_hidden === 1 && !a.earned;
 }
 
 onMounted(async () => {
-  try {
-    const res = await auth.apiFetch('/api/achievements');
-    const d = await res.json();
-    data.total = d.total || 0;
-    data.earned_count = d.earned_count || 0;
-    data.categories = d.categories || {};
-  } catch (e) {
-    console.error('加载成就失败', e);
-  }
+  await store.load();
+  unsubscribe = subscribeGrowthEvents(() => {
+    void store.refreshAchievements();
+  });
+});
+
+onUnmounted(() => {
+  unsubscribe?.();
+  unsubscribe = null;
 });
 </script>
 
@@ -119,6 +100,8 @@ onMounted(async () => {
   margin: 0;
 }
 .ach-progress { font-size: 14px; color: #8a8faa; }
+.ach-error { margin-bottom: 16px; color: #dc2626; font-size: 13px; }
+.ach-empty { padding: 24px; text-align: center; color: #8a8faa; font-size: 14px; }
 
 .cat-section { margin-bottom: 28px; }
 .cat-title { font-size: 16px; font-weight: 700; color: #1a2b5f; margin: 0 0 14px; }
@@ -155,7 +138,6 @@ onMounted(async () => {
 .ach-progress-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #d97706); border-radius: 3px; }
 .ach-reward { font-size: 12px; color: #b45309; font-weight: 600; }
 
-/* 响应式 */
 @media (max-width: 1024px) {
   .ach-grid { grid-template-columns: repeat(2, 1fr); }
 }

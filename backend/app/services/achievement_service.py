@@ -20,7 +20,7 @@ from ..models.models import (
     QuestionNote, NewsNote, QuoteFavorite, DailyCheckin,
 )
 from ..core.trigger_types import LEGACY_TRIGGER_ALIASES
-from .growth_service import add_growth, get_level_info, GROWTH_RULES
+from .growth_service import get_level_info
 
 logger = logging.getLogger(__name__)
 
@@ -146,12 +146,17 @@ def _trigger_candidates(trigger_type: str) -> List[str]:
     return list(dict.fromkeys([trigger_type, *aliases, "general"]))
 
 
-def check_and_grant(user_id: int, trigger_type: str, db: Session,
-                    session: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """
-    判定并发放成就。session 仅 do_question 触发时传入：
-    { 'total': int, 'correct': int }（一次练习/交卷会话）
-    返回 newly_unlocked 列表，供前端弹窗。
+def evaluate_unlocks(user_id: int, trigger_type: str, db: Session,
+                     session: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """纯判定：返回可解锁 / 可升档的成就决策，**不发奖**。
+
+    每个决策形如::
+
+        {"achievement": Achievement, "tier": int, "upgraded": bool}
+
+    P2-51 判据引擎与 ``check_and_grant`` 共用本函数，保证「判定」与
+    「发奖」彻底分离：判定只看历史与本次 session，发奖只经
+    ``achievement_reward`` 单点。
     """
     user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
     if not user:
@@ -170,7 +175,7 @@ def check_and_grant(user_id: int, trigger_type: str, db: Session,
         Achievement.trigger_type.in_(_trigger_candidates(trigger_type))
     ).all()
 
-    newly: List[Dict[str, Any]] = []
+    decisions: List[Dict[str, Any]] = []
     for ach in candidates:
         try:
             tier_times = ach.tier_times or []
@@ -181,23 +186,57 @@ def check_and_grant(user_id: int, trigger_type: str, db: Session,
                     continue
                 target_tier = _tier_for_value(ach.threshold, current, tier_times)
                 if ach.achievement_id not in obtained_map:
-                    _grant(user, ach, db, tier=target_tier)
-                    newly.append(_newly_item(ach, target_tier, upgraded=False))
-                else:
-                    existing_tier = obtained_map[ach.achievement_id]
-                    if target_tier > existing_tier:
-                        _upgrade_tier(user, ach, db, target_tier)
-                        newly.append(_newly_item(ach, target_tier, upgraded=True))
+                    decisions.append(
+                        {"achievement": ach, "tier": target_tier, "upgraded": False}
+                    )
+                elif target_tier > obtained_map[ach.achievement_id]:
+                    decisions.append(
+                        {"achievement": ach, "tier": target_tier, "upgraded": True}
+                    )
             else:
                 # 不升档成就：仅判定新获得
                 if ach.achievement_id in obtained_map:
                     continue
                 if _check_condition(user, ach, db, session):
-                    _grant(user, ach, db, tier=1)
-                    newly.append(_newly_item(ach, 1, upgraded=False))
-        except Exception as e:
+                    decisions.append(
+                        {"achievement": ach, "tier": 1, "upgraded": False}
+                    )
+        except Exception as e:  # noqa: BLE001 — 单条判据异常不拖垮其余成就
             db.rollback()
             logger.error(f"成就判定异常 user={user_id} ach={ach.name}: {e}")
+
+    return decisions
+
+
+def check_and_grant(user_id: int, trigger_type: str, db: Session,
+                    session: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """兼容入口：判定 + 经 reward 单点发奖。
+
+    - 判定逻辑复用 :func:`evaluate_unlocks`；
+    - 发奖只调用 :mod:`achievement_reward`，本模块不再直接写
+      ``user_achievement`` / 金币 / 成长值；
+    - ``session`` 仅练习类触发传入：``{'total': int, 'correct': int}``。
+    """
+    decisions = evaluate_unlocks(user_id, trigger_type, db, session=session)
+    if not decisions:
+        return []
+
+    user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
+    if not user:
+        return []
+
+    from . import achievement_reward
+
+    newly: List[Dict[str, Any]] = []
+    for decision in decisions:
+        if achievement_reward.grant_unlock(
+            db,
+            user,
+            decision["achievement"],
+            tier=decision["tier"],
+            upgraded=decision["upgraded"],
+        ):
+            newly.append(newly_item(decision))
 
     if newly:
         try:
@@ -210,14 +249,16 @@ def check_and_grant(user_id: int, trigger_type: str, db: Session,
     return newly
 
 
-def _newly_item(ach: Achievement, tier: int, upgraded: bool) -> Dict[str, Any]:
+def newly_item(decision: Dict[str, Any]) -> Dict[str, Any]:
+    """把判定决策转换为前端弹窗用的 ``newly_unlocked`` 条目。"""
+    ach = decision["achievement"]
     return {
         "achievement_id": ach.achievement_id,
         "name": ach.name,
         "icon": ach.icon,
         "reward_coins": ach.reward_coins,
-        "tier": tier,
-        "upgraded": upgraded,
+        "tier": decision["tier"],
+        "upgraded": decision["upgraded"],
     }
 
 
@@ -230,31 +271,6 @@ def _obtained_ids(user_id: int, db: Session) -> set:
         UserAchievement.user_id == user_id
     ).all()
     return {r[0] for r in rows}
-
-
-def _grant(user: SysUser, ach: Achievement, db: Session, tier: int = 1):
-    """发放成就（同一事务）：插入成就 + 加金币 + 写流水 + 加成长值"""
-    db.add(UserAchievement(user_id=user.user_id, achievement_id=ach.achievement_id, tier=tier))
-
-    if ach.reward_coins > 0:
-        # 跨域写入走 reward 契约（P4.2），禁止直接实例化他域表
-        from ..api.v1.reward.contract import grant_coins
-        grant_coins(db, user, ach.reward_coins, source_type="SYSTEM",
-                    description=f"获得成就：{ach.name}")
-
-    add_growth(db, user, GROWTH_RULES["achievement"])
-    logger.info(f"用户 {user.user_id} 获得成就「{ach.name}」tier={tier}，奖励 {ach.reward_coins} 金币")
-
-
-def _upgrade_tier(user: SysUser, ach: Achievement, db: Session, tier: int):
-    """升级成就档位（tier 只增不减）"""
-    ua = db.query(UserAchievement).filter(
-        UserAchievement.user_id == user.user_id,
-        UserAchievement.achievement_id == ach.achievement_id
-    ).first()
-    if ua and (ua.tier or 1) < tier:
-        ua.tier = tier
-        logger.info(f"用户 {user.user_id} 成就「{ach.name}」升级到 tier {tier}")
 
 
 def _current_value(user: SysUser, ach: Achievement, db: Session) -> int:

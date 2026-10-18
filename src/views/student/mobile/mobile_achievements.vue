@@ -1,4 +1,4 @@
-<!-- 手机端我的成就（独立移动端壳层：含返回键，不复用电脑端 NavBar） -->
+<!-- 手机端我的成就（独立移动端壳层，P2-55 接入 growth store） -->
 <template>
   <div class="page">
     <header class="topbar">
@@ -9,14 +9,16 @@
 
     <div class="summary">
       <span class="summary-icon">🏆</span>
-      <span class="summary-text">已获得 {{ data.earned_count }} / {{ data.total }}</span>
+      <span class="summary-text">已获得 {{ store.earnedCount }} / {{ store.total }}</span>
     </div>
 
     <main class="list">
-      <template v-for="(items, category) in data.categories" :key="category">
-        <h3 class="cat-title">{{ categoryLabel(category) }}</h3>
+      <div v-if="store.error" class="error">{{ store.error }}</div>
+
+      <template v-for="group in store.achievementGroups" :key="group.category">
+        <h3 class="cat-title">{{ group.label }}</h3>
         <div
-          v-for="a in items"
+          v-for="a in group.items"
           :key="a.achievement_id"
           :class="['ach-card', { earned: a.earned, locked: !a.earned }]"
           :style="a.earned ? { borderColor: tierColor(a.tier) } : {}"
@@ -34,77 +36,49 @@
               class="ach-progress-bar"
               v-if="!a.earned && a.threshold > 0 && !isHidden(a)"
             >
-              <div
-                class="ach-progress-fill"
-                :style="{ width: Math.min(100, (a.current / a.threshold) * 100) + '%' }"
-              ></div>
+              <div class="ach-progress-fill" :style="{ width: a.progressPercent + '%' }"></div>
             </div>
             <div class="ach-reward">🪙 {{ a.reward_coins }}</div>
           </div>
         </div>
       </template>
 
-      <div v-if="loading" class="empty">加载中...</div>
+      <div v-if="store.loading" class="empty">加载中...</div>
       <div v-else-if="!hasAny" class="empty">暂无成就数据</div>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, ref, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useGrowthStore, tierColor, tierLabel } from '@/modules/growth/store';
+import { subscribeGrowthEvents } from '@/modules/growth/events';
 
 const router = useRouter();
-const auth: any = (window as any).__VTJ_AUTH__;
-const data = reactive<any>({ total: 0, earned_count: 0, categories: {} });
-const loading = ref(false);
+const store = useGrowthStore();
+let unsubscribe: (() => void) | null = null;
 
-const CATEGORY_LABEL: Record<string, string> = {
-  '坚持': '🔥 学习坚持',
-  '数量': '📝 做题数量',
-  '正确率': '🎯 正确率',
-  '错题': '❌ 错题管理',
-  '社交': '💬 社交互动',
-  '综合': '🏆 综合成就',
-  '联考特色': '🎖️ 联考特色',
-  '隐藏': '🔒 隐藏成就',
-  '赛季限定': '🏅 赛季限定',
-};
-const TIER_COLORS: Record<number, string> = {
-  1: '#b87333', 2: '#c0c0c0', 3: '#ffd700', 4: '#e5e4e2', 5: '#b9f2ff',
-};
-const TIER_LABELS: Record<number, string> = {
-  1: '铜', 2: '银', 3: '金', 4: '铂金', 5: '钻石',
-};
+const hasAny = computed(() => store.achievementGroups.length > 0);
 
-const hasAny = computed(() => Object.keys(data.categories || {}).length > 0);
+const isHidden = (a: { is_hidden?: number; earned?: boolean }) =>
+  a.is_hidden === 1 && !a.earned;
 
-const categoryLabel = (cat: any) => CATEGORY_LABEL[cat] || cat;
-const tierColor = (tier: number) => TIER_COLORS[tier] || '#b87333';
-const tierLabel = (tier: number) => TIER_LABELS[tier] || '铜';
-const isHidden = (a: any) => (a.is_hidden === 1) && !a.earned;
-
-// 统一返回机制：有历史则回退，无历史则回「我的」，避免退到空白页
 const goBack = () => {
   if (window.history.length > 1) router.back();
   else router.push('/mobile/profile');
 };
 
 onMounted(async () => {
-  loading.value = true;
-  try {
-    const res = await auth.apiFetch('/api/achievements');
-    if (res.ok) {
-      const d = await res.json();
-      data.total = d.total || 0;
-      data.earned_count = d.earned_count || 0;
-      data.categories = d.categories || {};
-    }
-  } catch (e) {
-    console.error('加载成就失败', e);
-  } finally {
-    loading.value = false;
-  }
+  await store.load();
+  unsubscribe = subscribeGrowthEvents(() => {
+    void store.refreshAchievements();
+  });
+});
+
+onUnmounted(() => {
+  unsubscribe?.();
+  unsubscribe = null;
 });
 </script>
 
@@ -153,6 +127,7 @@ onMounted(async () => {
 
 .list { flex: 1; padding: 12px 12px 24px; }
 .cat-title { font-size: 15px; font-weight: 700; color: #1a2b5f; margin: 16px 0 10px; }
+.error { color: #dc2626; font-size: 13px; padding: 8px 4px; }
 
 .ach-card {
   position: relative;
