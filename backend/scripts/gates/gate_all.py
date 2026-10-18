@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
-"""gate_all.py — 一键执行 L0-L5，聚合退出码"""
+"""gate_all.py — 一键执行 L0-L6，聚合退出码"""
 import subprocess, sys, os, json, time
+
+BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+WORKSPACE_ROOT = os.path.abspath(os.path.join(BACKEND_ROOT, '..'))
+
+# L6 是 Node 脚本（模块化约束），其余层均为 Python；L6 须以 workspace root 为 cwd。
+NODE_GATES = ('L6',)
 
 GATES = [
     ('L0', 'scripts/gates/gate_l0_redlines.py', []),
@@ -16,6 +22,9 @@ GATES = [
     ('L2', 'scripts/gates/gate_l2_matching.py', []),
     ('L4', 'scripts/gates/gate_l4_api_contract.py', []),
     ('L5', 'scripts/gates/gate_l5_frontend_contract.py', []),
+    # L6：模块化约束（VTJ 版本锁定 / 92 处路由动态 import 目标 / 跨域 import）。
+    # 脚本自身由文件位置推导仓库根，此处仍按要求以 workspace root 为 cwd。
+    ('L6', 'scripts/verify-modularization-constraints.mjs', []),
 ]
 
 QUICK_GATES = ('L0', 'L1-G', 'L1', 'L1-H')
@@ -34,10 +43,11 @@ def main():
         if layer_filter and name != layer_filter:
             continue
         t0 = time.time()
+        is_node = name in NODE_GATES
         r = subprocess.run(
-            [sys.executable, script] + args,
+            (['node'] if is_node else [sys.executable]) + [script] + args,
             capture_output=True, text=True, encoding='utf-8', errors='replace',
-            cwd=os.path.join(os.path.dirname(__file__), '..', '..')
+            cwd=WORKSPACE_ROOT if is_node else BACKEND_ROOT
         )
         elapsed = time.time() - t0
         status = 'PASS' if r.returncode == 0 else 'FAIL'
