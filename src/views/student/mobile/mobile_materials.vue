@@ -81,74 +81,59 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { ElMessage } from 'element-plus';
+import { useLibraryStore } from '@/modules/library/store';
 
 const router = useRouter();
+const library = useLibraryStore();
+const { items: materials, loading, selected: detailData } = storeToRefs(library);
+
 const subjects = [
   { key: 'xingce', name: '行测' },
   { key: 'shenlun', name: '申论' },
   { key: 'gongzhuan', name: '公专' }
-];
-const activeSubject = ref('xingce');
-const materials = ref<any[]>([]);
-const loading = ref(false);
+] as const;
+const activeSubject = ref<'xingce' | 'shenlun' | 'gongzhuan'>('xingce');
 const expandedId = ref<number | null>(null);
 
 // ===== 资料详情弹层 =====
-// 后端 GET /api/materials/{material_id} 已存在（materials.py:173），
-// 原实现跳 /materials/{subject}?id= 该路由从未注册，必然 404。
 const detailVisible = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
-const detailData = ref<any>(null);
 const currentMaterial = ref<any>(null);
 
 const closeDetail = () => {
   detailVisible.value = false;
-  detailData.value = null;
   detailError.value = '';
   currentMaterial.value = null;
+  library.clearSelection();
 };
 
 const loadDetail = async (id: number) => {
   detailLoading.value = true;
   detailError.value = '';
   try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/materials/' + id);
-    if (res.ok) {
-      detailData.value = await res.json();
-    } else {
-      detailError.value = '资料加载失败（' + res.status + '）';
+    const detail = await library.openMaterial(id);
+    if (!detail) {
+      detailError.value = library.error || '资料加载失败，请检查网络后重试';
     }
-  } catch (e) {
-    detailError.value = '资料加载失败，请检查网络后重试';
   } finally {
     detailLoading.value = false;
   }
 };
 
-// 上报学习进度（POST /api/materials/progress，UPSERT）
+// 上报学习进度（进度只存后端，不写 localStorage）
 const markStudied = async () => {
   const m = currentMaterial.value;
   if (!m || m.id == null) return;
-  try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/materials/progress', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ material_id: m.id, progress_percent: 100, is_studied: true })
-    });
-    if (res.ok) {
-      ElMessage.success('已标记为学完');
-      materials.value = materials.value.map((x) =>
-        x.id === m.id ? { ...x, is_studied: true, progress_percent: 100 } : x
-      );
-      closeDetail();
-    } else {
-      ElMessage.error('提交进度失败');
-    }
-  } catch (e) {
+  const ok = await library.reportProgress(m.id, 100, true);
+  if (ok) {
+    ElMessage.success('已标记为学完');
+    closeDetail();
+  } else {
     ElMessage.error('提交进度失败，请稍后重试');
   }
 };
@@ -167,7 +152,7 @@ const typeName = (t: string) => {
   }[t] || '资料';
 };
 
-const switchSubject = (key: string) => {
+const switchSubject = (key: 'xingce' | 'shenlun' | 'gongzhuan') => {
   activeSubject.value = key;
   expandedId.value = null;
   fetchMaterials();
@@ -178,27 +163,19 @@ const toggleDetail = (m: any) => {
 };
 
 const fetchMaterials = async () => {
-  loading.value = true;
-  try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/materials?subject=' + activeSubject.value + '&page=1&page_size=50');
-    const data = await res.json();
-    if (res.ok && data.items) materials.value = data.items;
-  } catch (e) {
-    console.error('获取备考资料失败:', e);
-  } finally {
-    loading.value = false;
-  }
+  await library.load({
+    subject: activeSubject.value,
+    page: 1,
+    pageSize: 50
+  });
 };
 
 const openDetail = async (m: any) => {
-  // 原实现跳 /materials/{subject}?id=，该路由从未注册，必然 404。
-  // 改为调用已存在的 GET /api/materials/{material_id}（materials.py:173），页内弹层展示。
   if (!m || m.id == null) {
     ElMessage.info('该资料暂时无法打开');
     return;
   }
   currentMaterial.value = m;
-  detailData.value = null;
   detailVisible.value = true;
   await loadDetail(m.id);
 };

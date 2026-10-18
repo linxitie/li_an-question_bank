@@ -11,11 +11,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
+from ....core.trigger_types import TRIGGER_MATERIAL_OPENED
 from ....models.models import StudyMaterial, UserMaterialProgress, SysUser
+from ....services.event_consumer import record_user_action
 
 router = APIRouter(prefix="/api/materials", tags=["备考资料"])
 logger = logging.getLogger(__name__)
@@ -170,6 +173,29 @@ async def toggle_favorite(material_id: int,
     return {"is_favorite": new_val}
 
 
+def _mark_opened(db: Session, user_id: int, material_id: int) -> bool:
+    """记录一次资料打开，返回是否为该用户对该资料的首次打开。
+
+    复用 ``user_material_progress`` 的 ``(user_id, material_id)`` 唯一约束做去重：
+    没有进度行说明从未打开过，插入一行作为「已打开」标记并发布事件；
+    已有进度行（打开 / 学习 / 收藏任一途径建立）则不再重复发布。
+    """
+    exists = db.query(UserMaterialProgress).filter(
+        UserMaterialProgress.user_id == user_id,
+        UserMaterialProgress.material_id == material_id).first()
+    if exists:
+        return False
+    db.add(UserMaterialProgress(user_id=user_id, material_id=material_id,
+                                status=1, progress_percent=0))
+    try:
+        db.commit()
+    except IntegrityError:
+        # 并发下另一个请求先写入：唯一约束兜底，视为非首次
+        db.rollback()
+        return False
+    return True
+
+
 @router.get("/{material_id}", summary="资料详情(游客可访问)")
 async def material_detail(material_id: int,
                           current_user: Optional[SysUser] = Depends(get_optional_user),
@@ -178,13 +204,34 @@ async def material_detail(material_id: int,
         StudyMaterial.material_id == material_id, StudyMaterial.status == 1).first()
     if not m:
         raise HTTPException(404, "资料不存在或已下架")
+
+    first_open = False
+    if current_user:
+        try:
+            first_open = _mark_opened(db, current_user.user_id, material_id)
+        except Exception as e:  # noqa: BLE001 — 打开记录失败不阻断详情返回
+            db.rollback()
+            logger.warning("[materials] 记录打开失败 material=%s: %s", material_id, e)
+
     m.view_count = (m.view_count or 0) + 1
     db.commit()
+
     prog = None
     if current_user:
         prog = db.query(UserMaterialProgress).filter(
             UserMaterialProgress.user_id == current_user.user_id,
             UserMaterialProgress.material_id == material_id).first()
+
+    # E8：同资料二次打开不重复发布（_mark_opened 去重）
+    if first_open:
+        try:
+            await record_user_action(
+                db, current_user.user_id, TRIGGER_MATERIAL_OPENED
+            )
+        except Exception as e:  # noqa: BLE001 — 事件失败不影响详情返回
+            logger.warning("[materials] 学习行为事件发布失败 material=%s: %s",
+                           material_id, e)
+
     d = _item_brief(m, prog)
     d.update({"content": m.content or "", "card_back": m.card_back or "",
               "video_url": f"/api/video/{m.video_id}/stream" if m.video_id else ""})

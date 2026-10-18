@@ -123,6 +123,7 @@ import { defineComponent, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import { sanitizeHtml } from '@/utils/questionRender';
+import { useLibraryStore } from '@/modules/library/store';
 
 const SUBJECT = 'xingce';
 
@@ -131,6 +132,7 @@ export default defineComponent({
   components: {},
   setup(props) {
     const provider = useProvider({ id: 'materials_xingce', version: '20260825001' });
+    const library = useLibraryStore();
     const state = reactive({
       loggedIn: false,
       showFav: false,
@@ -145,7 +147,7 @@ export default defineComponent({
       flipped: {},
       _lastReport: {}
     });
-    return { state, props, provider, sanitizeHtml };
+    return { state, props, provider, sanitizeHtml, library };
   },
   methods: {
     sections() {
@@ -167,10 +169,7 @@ export default defineComponent({
     async fetchAll() {
       for (const sec of this.sections()) {
         try {
-          const r = await window.__VTJ_AUTH__.apiFetch(
-            `/api/materials?subject=${SUBJECT}&type=${sec.key}&page_size=50`);
-          const d = await r.json();
-          this.state.data[sec.key] = d.items || [];
+          this.state.data[sec.key] = await this.library.loadSection(sec.key, SUBJECT);
         } catch (e) {
           console.warn('[MatPage] load failed:', sec.key, e && e.message);
         } finally {
@@ -185,9 +184,8 @@ export default defineComponent({
         const auth = window.__VTJ_AUTH__ || {};
         this.state.loggedIn = !!(auth.isLoggedIn && auth.isLoggedIn());
         if (!this.state.loggedIn) return;
-        const r = await window.__VTJ_AUTH__.apiFetch(
-          `/api/materials/progress-summary?subject=${SUBJECT}`);
-        if (r.ok) this.state.summary = await r.json();
+        const summary = await this.library.loadProgressSummary(SUBJECT);
+        if (summary) this.state.summary = summary;
       } catch (e) {
         console.warn('[MatPage] summary failed:', e && e.message);
       }
@@ -196,10 +194,9 @@ export default defineComponent({
       // 列表接口不含 content/card_back/video_url，弹窗前拉详情补全
       if (item._detailLoaded) return item;
       try {
-        const r = await window.__VTJ_AUTH__.apiFetch(`/api/materials/${item.id}`);
-        if (r.ok) {
-          const d = await r.json();
-          Object.assign(item, d);
+        const detail = await this.library.openMaterial(item.id);
+        if (detail) {
+          Object.assign(item, detail);
           item._detailLoaded = true;
         }
       } catch (e) {
@@ -246,13 +243,8 @@ export default defineComponent({
                   Math.abs(pct - (last.pct || 0)) >= 20;
       if (!done && !due) return;
       this.state._lastReport[item.id] = { ts: now, pct };
-      window.__VTJ_AUTH__.apiFetch('/api/materials/progress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          material_id: item.id, progress_percent: pct, completed: !!done })
-      }).then(r => r.json()).then(d => {
-        if (d && d.completed) {
+      this.library.reportProgress(item.id, pct, !!done).then(ok => {
+        if (ok && done) {
           item.is_studied = true;
           this.fetchSummary();
         }
@@ -267,11 +259,10 @@ export default defineComponent({
         return;
       }
       try {
-        const r = await window.__VTJ_AUTH__.apiFetch(
-          `/api/materials/${it.id}/favorite`, { method: 'POST' });
-        const d = await r.json();
-        it.is_favorite = !!d.is_favorite;
-        ElMessage.success(d.is_favorite ? '已收藏' : '已取消收藏');
+        const result = await this.library.toggleFavorite(it.id);
+        if (!result) throw new Error('收藏失败');
+        it.is_favorite = result.is_favorite;
+        ElMessage.success(result.is_favorite ? '已收藏' : '已取消收藏');
       } catch (e) {
         console.warn('[MatPage] fav failed:', e && e.message);
       }
