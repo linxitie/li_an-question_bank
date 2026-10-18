@@ -7,13 +7,12 @@ GET  /api/quick-practice/questions?kpIds=&limit=    — 按考点筛选题目
 POST /api/quick-practice/submit                     — 提交练习结果
 """
 import logging
-from datetime import datetime, date
 from typing import Optional, List
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct, text
 
-from ....core.database import get_db, commit_with_retry
+from ....core.database import get_db
 from ....core.security import get_current_user
 from ....models.models import (
     QuestionSubject, SubCategory, KnowledgePoint, QuestionBank,
@@ -22,6 +21,7 @@ from ....models.models import (
 )
 from ....services.option_utils import normalize_options, render_image_placeholder
 from ....services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
+from ....services.practice_grading import submit_answers
 
 router = APIRouter(prefix="/api/quick-practice", tags=["快速练习"])
 logger = logging.getLogger(__name__)
@@ -356,55 +356,31 @@ async def submit_practice(
     if not records_data:
         return {"status": "ok", "count": 0}
 
-    today = date.today()
-    now = datetime.now()
     subject_id = payload.get("subject_id")
-    count = 0
-    wrong_stats = {'new': 0, 'updated': 0, 'skipped': 0}
+    normalized = [{
+        "question_id": item.get("question_id"),
+        "subject_id": item.get("subject_id"),
+        "user_answer": item.get("user_answer", ""),
+        "is_correct": item.get("is_correct", False),
+        "time_spent": item.get("time_spent", 0),
+        "source": "快速练习",
+    } for item in records_data]
 
-    for item in records_data:
-        question_id = item.get("question_id")
-        is_correct = item.get("is_correct", False)
-
-        question = None
-        if question_id:
-            question = db.query(QuestionBank).filter(
-                QuestionBank.question_id == question_id
-            ).first()
-
-        record = PracticeRecord(
-            user_id=current_user.user_id,
-            question_id=question_id,
-            subject_id=subject_id or (question.subject_id if question else None),
-            type_id=question.type_id if question else None,
-            is_correct=1 if is_correct else 0,
-            time_spent=int(item.get("time_spent", 0)),
-            answer=item.get("user_answer", ""),
-            practice_date=today,
-            practice_time=now,
+    try:
+        result = await submit_answers(
+            db, current_user.user_id, normalized,
             source_type="快速练习",
+            subject_id=subject_id,
+            session_id=payload.get("session_id"),
         )
-        db.add(record)
-        if not is_correct:
-            from .practice import _auto_record_wrong
-            result = _auto_record_wrong(current_user.user_id, question_id, subject_id or (question.subject_id if question else None), db)
-            if result == 'new':
-                wrong_stats['new'] += 1
-            elif result == 'updated':
-                wrong_stats['updated'] += 1
-        count += 1
-
-    commit_with_retry(db)
-
-    # 计算正确率
-    correct_count = sum(1 for r in records_data if r.get("is_correct"))
-    accuracy = round(correct_count * 100 / max(len(records_data), 1), 1)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return {
         "status": "ok",
-        "count": count,
-        "correct": correct_count,
-        "total": len(records_data),
-        "accuracy": accuracy,
-        "wrong_question_stats": wrong_stats,
+        "count": result["count"],
+        "correct": result["correct"],
+        "total": result["total"],
+        "accuracy": result["accuracy"],
+        "wrong_question_stats": result["wrong_question_stats"],
     }

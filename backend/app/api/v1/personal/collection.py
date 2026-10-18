@@ -6,6 +6,7 @@ DELETE /api/collection/{fav_id}     - 删除收藏
 """
 import logging
 from ....services.event_consumer import record_user_action
+from ....core.trigger_types import TRIGGER_FAVORITE_ADDED
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -100,7 +101,7 @@ async def toggle_favorite(
 
         # 触发收藏成就
         try:
-            await record_user_action(db, current_user.user_id, "favorite")
+            await record_user_action(db, current_user.user_id, TRIGGER_FAVORITE_ADDED)
         except Exception as e:
             logger.warning(f"收藏成就判定失败: {e}")
 

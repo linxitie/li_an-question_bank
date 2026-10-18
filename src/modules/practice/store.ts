@@ -1,23 +1,35 @@
 /**
- * 答题练习（practice）域 Store 外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 答题练习（practice）域 Store。
  *
- * 状态契约为最小公共骨架，字段与 README.md「store 状态契约」保持一致；
- * 本文件只提供可实例化的空签名，业务逻辑与真实数据加载在 P2 阶段实现。
+ * 状态契约：loading / error / initialized / ready 为公共骨架；
+ * records / dailyStats / stats / submitting / lastResult 为本域业务状态。
+ * 不写 localStorage；事件只做增量刷新加速，页面 onMounted 仍须主动 load()。
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { EVENT_NAMES, onEvent } from '@/stores/event-bus';
+import {
+  fetchPracticeRecords,
+  fetchPracticeStats,
+  fetchPracticeTypeSummary,
+  submitPracticeAnswer,
+  submitPracticeBatch,
+  submitQuickPractice,
+  type PracticeDailyStat,
+  type PracticeRecordItem,
+  type PracticeRecordsQuery,
+  type PracticeStatsResult,
+  type PracticeSubmitItem,
+  type PracticeSubmitResult,
+  type PracticeTypeSummaryItem
+} from './api';
 
-/** 本域状态契约（外壳字段） */
 export interface PracticeState {
-  /** 是否正在加载数据 */
   loading: boolean;
-  /** 最近一次错误信息（无错误为 null） */
   error: string | null;
-  /** 是否已完成首次初始化 */
   initialized: boolean;
 }
 
-/** 生成初始状态，保证 reset() 与首次加载口径一致 */
 export function createPracticeInitialState(): PracticeState {
   return {
     loading: false,
@@ -26,28 +38,142 @@ export function createPracticeInitialState(): PracticeState {
   };
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '请求失败，请稍后重试';
+}
+
 export const usePracticeStore = defineStore('practice', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const initialized = ref(false);
 
-  /** 只读派生：本域是否可用（已完成初始化且无错误） */
-  const ready = computed(() => initialized.value && error.value === null);
+  const records = ref<PracticeRecordItem[]>([]);
+  const dailyStats = ref<PracticeDailyStat[]>([]);
+  const total = ref(0);
+  const stats = ref<PracticeStatsResult | null>(null);
+  const typeSummary = ref<PracticeTypeSummaryItem[]>([]);
+  const submitting = ref(false);
+  const lastResult = ref<PracticeSubmitResult | null>(null);
 
-  /** 重置为初始状态（外壳实现，P2 阶段按需扩展） */
+  const ready = computed(() => initialized.value && error.value === null);
+  const isEmpty = computed(
+    () => initialized.value && !loading.value && records.value.length === 0
+  );
+  const hasNewWrong = computed(() => Boolean(lastResult.value?.has_new_wrong));
+
+  async function load(query: PracticeRecordsQuery = {}): Promise<void> {
+    loading.value = true;
+    error.value = null;
+    try {
+      const result = await fetchPracticeRecords(query);
+      records.value = result.items ?? [];
+      dailyStats.value = result.daily_stats ?? [];
+      total.value = result.total ?? 0;
+    } catch (e) {
+      error.value = errorMessage(e);
+      records.value = [];
+      dailyStats.value = [];
+      total.value = 0;
+    } finally {
+      loading.value = false;
+      initialized.value = true;
+    }
+  }
+
+  async function loadStats(): Promise<void> {
+    try {
+      stats.value = await fetchPracticeStats();
+    } catch (e) {
+      error.value = errorMessage(e);
+    }
+  }
+
+  async function loadTypeSummary(): Promise<void> {
+    try {
+      const result = await fetchPracticeTypeSummary();
+      typeSummary.value = result.types ?? [];
+    } catch (e) {
+      error.value = errorMessage(e);
+      typeSummary.value = [];
+    }
+  }
+
+  async function submit(
+    item: PracticeSubmitItem & { session_id?: string }
+  ): Promise<PracticeSubmitResult | null> {
+    if (submitting.value) return null;
+    submitting.value = true;
+    error.value = null;
+    try {
+      const result = await submitPracticeAnswer(item);
+      lastResult.value = result;
+      return result;
+    } catch (e) {
+      error.value = errorMessage(e);
+      throw e;
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  async function submitBatch(
+    items: PracticeSubmitItem[],
+    options: { subjectId?: number; sessionId?: string; source?: string } = {}
+  ): Promise<PracticeSubmitResult | null> {
+    if (submitting.value) return null;
+    submitting.value = true;
+    error.value = null;
+    try {
+      const result = await submitPracticeBatch(items, options);
+      lastResult.value = result;
+      return result;
+    } catch (e) {
+      error.value = errorMessage(e);
+      throw e;
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  async function submitQuick(
+    items: PracticeSubmitItem[],
+    options: { subjectId?: number; sessionId?: string } = {}
+  ): Promise<PracticeSubmitResult | null> {
+    if (submitting.value) return null;
+    submitting.value = true;
+    error.value = null;
+    try {
+      const result = await submitQuickPractice(items, options);
+      lastResult.value = result;
+      return result;
+    } catch (e) {
+      error.value = errorMessage(e);
+      throw e;
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  function bindWrongQuestionsRefresh(): () => void {
+    return onEvent(EVENT_NAMES.WRONG_QUESTIONS_CHANGED, () => {
+      void load();
+    });
+  }
+
   function reset(): void {
     const initial = createPracticeInitialState();
     loading.value = initial.loading;
     error.value = initial.error;
     initialized.value = initial.initialized;
-  }
-
-  /**
-   * 加载本域数据。
-   * P2 阶段实现：调用 api.ts 中的封装方法，成功后置 initialized 为 true。
-   */
-  async function load(): Promise<void> {
-    throw new Error('practice 域 load() 尚未实现（P2 阶段实现）');
+    records.value = [];
+    dailyStats.value = [];
+    total.value = 0;
+    stats.value = null;
+    typeSummary.value = [];
+    submitting.value = false;
+    lastResult.value = null;
   }
 
   return {
@@ -55,7 +181,22 @@ export const usePracticeStore = defineStore('practice', () => {
     error,
     initialized,
     ready,
+    records,
+    dailyStats,
+    total,
+    stats,
+    typeSummary,
+    submitting,
+    lastResult,
+    isEmpty,
+    hasNewWrong,
     reset,
-    load
+    load,
+    loadStats,
+    loadTypeSummary,
+    submit,
+    submitBatch,
+    submitQuick,
+    bindWrongQuestionsRefresh
   };
 });

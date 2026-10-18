@@ -8,6 +8,7 @@ DELETE /api/notes/{note_id}    - 删除笔记
 import logging
 import re
 from ....services.event_consumer import record_user_action
+from ....core.trigger_types import TRIGGER_NOTE_CREATED
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -136,7 +137,7 @@ async def create_or_update_note(
 
         # 触发笔记成就
         try:
-            await record_user_action(db, current_user.user_id, "note")
+            await record_user_action(db, current_user.user_id, TRIGGER_NOTE_CREATED)
         except Exception as e:
             logger.warning(f"笔记成就判定失败: {e}")
 
@@ -177,7 +178,7 @@ async def create_or_update_note(
 
         # 触发笔记成就
         try:
-            await record_user_action(db, current_user.user_id, "note")
+            await record_user_action(db, current_user.user_id, TRIGGER_NOTE_CREATED)
         except Exception as e:
             logger.warning(f"笔记成就判定失败: {e}")
 

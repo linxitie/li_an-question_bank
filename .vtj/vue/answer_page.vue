@@ -199,6 +199,7 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { renderQuestionContent } from '@/utils/questionRender';
+  import { emitWrongQuestionsChanged } from '@/modules/practice/events';
   export default defineComponent({
     name: 'AnswerPage',
     components: { NavBar, XIcon, Transition },
@@ -222,7 +223,11 @@
         // P1-2: 题组聚合材料缓存 { [group_id]: { title, shared_content, group_type } }
         groupMaterials: {},
         // P1-2: 材料折叠状态 { [group_id]: boolean }（默认展开）
-        groupCollapsed: {}
+        groupCollapsed: {},
+        // 练习提交状态：防重复提交 + 会话拉取结果
+        submitting: false,
+        sessionId: null,
+        sessionStats: null
       });
       return { state, props, provider, Grid, AlarmClock, CloseBold, renderQuestionContent };
     },
@@ -364,58 +369,69 @@
       toggleGroupCollapse(gid) {
         this.state.groupCollapsed[gid] = !this.state.groupCollapsed[gid];
       },
-      handleSubmit() {
+      async handleSubmit() {
+        if (this.state.submitting || this.state.showResult) return;
+        this.state.submitting = true;
         this.state.showResult = true;
         ElMessage.success('试卷已提交');
-        // 提交练习记录
-        this.submitPracticeRecords();
+        await this.submitPracticeRecords();
+        this.state.submitting = false;
         // 触发自动签到
         this.triggerCheckin();
       },
-      submitPracticeRecords() {
+      async submitPracticeRecords() {
         var self = this;
-        var questions = this.state.questions;
-        var wrongList = [];  // 收集错题用于自动收录
+        var questions = this.state.questions || [];
+        var records = [];
         for (var i = 0; i < questions.length; i++) {
           var q = questions[i];
           var userAns = this.state.answers[q.id];
           if (userAns === undefined) continue;
-          // 多选题：数组 → 字母串
           var userLetter;
           if (Array.isArray(userAns)) {
             userLetter = userAns.map(function(idx) { return self.state.optionLabels[idx]; }).sort().join('');
           } else {
             userLetter = self.state.optionLabels[userAns] || '';
           }
-          var correct = (q.type === '多选题') ?
-            (userLetter.split('').sort().join('') === (q.answer || '').split('').sort().join('')) :
-            (userLetter === q.answer);
-          // 收集错题
-          if (!correct) {
-            wrongList.push({ question_id: q.id, subject_id: q.subject_id || null, is_correct: false });
-          }
-          window.__VTJ_AUTH__.apiFetch('/api/practice/record', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              question_id: q.id,
-              subject_id: q.subject_id || null,
-              is_correct: correct,
-              time_spent: 0,
-              user_answer: userLetter,
-              source: '随机练习'
-            })
-          }).catch(function() { /* 静默 */ });
-        }
-        // 自动收录错题（fire-and-forget）
-        if (wrongList.length) {
-          wrongList.forEach(function(w) {
-            window.__VTJ_AUTH__.apiFetch('/api/wrong-questions/collect', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(w)
-            }).catch(function() { /* 静默 */ });
+          records.push({
+            question_id: q.id,
+            subject_id: q.subject_id || null,
+            user_answer: userLetter,
+            time_spent: 0,
+            source: '随机练习'
           });
+        }
+        if (!records.length) return;
+        try {
+          var res = await window.__VTJ_AUTH__.apiFetch('/api/practice/batch-record', {
+            method: 'POST',
+            headers: this.getJsonHeaders(),
+            body: JSON.stringify({ records: records, session_id: this.state.sessionId })
+          });
+          var data = await res.json();
+          if (!res.ok) throw new Error(data.detail || data.message || '提交失败');
+          this.state.sessionStats = data;
+          var stats = data.wrong_question_stats || {};
+          if (data.has_new_wrong || (stats.new || 0) > 0 || (stats.updated || 0) > 0) {
+            emitWrongQuestionsChanged({ action: 'added', source: 'practice' });
+          }
+        } catch (e) {
+          console.warn('练习记录提交失败:', e);
+          ElMessage.error('练习记录提交失败，请稍后重试');
+        }
+      },
+      async loadPracticeSession() {
+        var query = (this.$route && this.$route.query) || {};
+        if (query.session_id) {
+          this.state.sessionId = String(query.session_id);
+        }
+        try {
+          var res = await window.__VTJ_AUTH__.apiFetch('/api/practice/stats-card');
+          if (res.ok) {
+            this.state.sessionStats = await res.json();
+          }
+        } catch (e) {
+          /* 会话拉取失败不阻断答题 */
         }
       },
       triggerCheckin() {
@@ -649,6 +665,7 @@
     mounted() {
       console.log('[AnswerPage] mounted v20260623 - VUE SOURCE loaded');
       this.loadQuestions();
+      this.loadPracticeSession();
       this.startTimer();
       window.addEventListener('__VTJ_SYNC__', this._onVTJSync);
     },

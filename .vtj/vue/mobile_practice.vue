@@ -175,6 +175,8 @@ import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
+import { usePracticeStore } from '@/modules/practice/store';
+import { onWrongQuestionsChanged } from '@/modules/practice/events';
 import {
   ArrowLeft,
   ArrowRight,
@@ -194,6 +196,8 @@ export default defineComponent({
     components: { XIcon, MobileTabBar },
   setup() {
     const router = useRouter();
+    const practiceStore = usePracticeStore();
+    let offWrongQuestionsChanged = null;
     const provider = useProvider({ id: 'mobile_practice', version: '1788919369989' });
 
     // 三科目元数据（图标/颜色前端硬编码，后端无此字段）
@@ -268,19 +272,16 @@ export default defineComponent({
     }
 
     async function loadSubjectStats() {
-      // 用 type-summary 聚合科目级进度（done/total）
+      // 用 practice store 的 type-summary 聚合科目级进度（done/total）
       try {
-        const res = await auth().apiFetch('/api/practice/type-summary');
-        if (res.ok) {
-          const data = await res.json();
-          const agg = {};
-          (data.types || []).forEach((t) => {
-            if (!agg[t.subject_id]) agg[t.subject_id] = { done: 0, total: 0 };
-            agg[t.subject_id].done += t.done_count || 0;
-            agg[t.subject_id].total += t.total_questions || 0;
-          });
-          subjectStats.value = agg;
-        }
+        await practiceStore.loadTypeSummary();
+        const agg = {};
+        (practiceStore.typeSummary || []).forEach((t) => {
+          if (!agg[t.subject_id]) agg[t.subject_id] = { done: 0, total: 0 };
+          agg[t.subject_id].done += t.done_count || 0;
+          agg[t.subject_id].total += t.total_questions || 0;
+        });
+        subjectStats.value = agg;
       } catch (e) {
         console.error('加载科目进度失败:', e);
       }
@@ -442,6 +443,9 @@ export default defineComponent({
 
     onMounted(async () => {
       window.addEventListener('__VTJ_SYNC__', onVTJSync);
+      offWrongQuestionsChanged = onWrongQuestionsChanged(() => {
+        loadSubjectStats();
+      });
       await loadSubjects();
       loadSubjectStats();
       if (activeSubject.value) {
@@ -449,7 +453,13 @@ export default defineComponent({
       }
     });
 
-    onBeforeUnmount(offVTJSync);
+    onBeforeUnmount(() => {
+      offVTJSync();
+      if (offWrongQuestionsChanged) {
+        offWrongQuestionsChanged();
+        offWrongQuestionsChanged = null;
+      }
+    });
 
     return {
       subjectMeta,

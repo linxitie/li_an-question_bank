@@ -1,53 +1,192 @@
 /**
- * 答题练习（practice）域 API 封装外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 答题练习（practice）域 API 封装。
  *
- * 约束：
- *   1. 全域只允许使用 @/services/api/client 暴露的唯一 axios 实例，禁止自行 axios.create；
- *   2. 方法签名先按「列表 / 详情 / 刷新」三类占位，具体端点登记在 README「后端端点清单」；
- *   3. 方法体在 P2 阶段实现，当前调用会抛出明确的未实现错误。
+ * 所有请求复用 @/services/api/client 的唯一 axios 实例。
+ * 后端练习端点挂在 `/api/...`（api_surface.json 冻结口径），
+ * 与客户端默认 baseURL `/api/v1` 不同，故请求层显式置空 baseURL。
  */
 import { apiClient } from '@/services/api/client';
 
-/** 本域统一客户端引用：P2 阶段所有请求都经由此实例发起 */
 export const practiceClient = apiClient;
 
-/** 分页查询参数（外壳占位，P2 阶段按真实端点收窄） */
-export interface PracticeListQuery {
-  page?: number;
-  pageSize?: number;
-  [key: string]: unknown;
+interface PracticeRequestConfig {
+  url: string;
+  method: 'GET' | 'POST';
+  data?: unknown;
+  params?: Record<string, unknown>;
 }
 
-/** 分页查询结果（外壳占位，P2 阶段按后端响应结构收窄） */
-export interface PracticeListResult<T = unknown> {
-  items: T[];
+export interface PracticeSubmitItem {
+  question_id: number;
+  user_answer?: string;
+  is_correct?: boolean;
+  time_spent?: number;
+  subject_id?: number;
+  source?: string;
+}
+
+export interface PracticeWrongStats {
+  new: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface PracticeSubmitResult {
+  status: string;
+  record_id?: number | null;
+  newly_unlocked?: unknown[];
+  count?: number;
+  correct?: number;
+  total?: number;
+  accuracy?: number;
+  wrong_question_stats?: PracticeWrongStats;
+  has_new_wrong?: boolean;
+}
+
+export interface PracticeRecordItem {
+  record_id: number;
+  question_id: number | null;
+  subject_id: number | null;
+  type_id: number | null;
+  is_correct: boolean;
+  time_spent: number;
+  user_answer: string;
+  question_content: string;
+  correct_answer: string;
+  practice_date: string | null;
+  practice_time: string | null;
+  source: string | null;
+}
+
+export interface PracticeDailyStat {
+  date: string | null;
   total: number;
+  correct: number;
+  accuracy: number;
 }
 
-/**
- * 查询答题练习列表。
- * P2 阶段实现：经由 practiceClient 发起请求，端点见 README「后端端点清单」。
- */
-export async function fetchPracticeList(
-  query?: PracticeListQuery
-): Promise<PracticeListResult> {
-  throw new Error('fetchPracticeList 尚未实现（P2 阶段实现）');
+export interface PracticeRecordsResult {
+  total: number;
+  items: PracticeRecordItem[];
+  daily_stats: PracticeDailyStat[];
 }
 
-/**
- * 查询答题练习详情。
- * P2 阶段实现：按 id 调用对应只读端点，并复用 store 中的缓存。
- */
-export async function fetchPracticeDetail(
-  id: string | number
-): Promise<unknown> {
-  throw new Error('fetchPracticeDetail 尚未实现（P2 阶段实现）');
+export interface PracticeRecordsQuery {
+  limit?: number;
+  offset?: number;
+  subjectId?: number;
 }
 
-/**
- * 刷新答题练习缓存。
- * P2 阶段实现：调用 store 的 load()，并处理强制刷新参数。
- */
-export async function refreshPractice(): Promise<void> {
-  throw new Error('refreshPractice 尚未实现（P2 阶段实现）');
+export interface PracticeStatsBucket {
+  count: number;
+  correct: number;
+  accuracy: number;
+  time_spent_minutes: number;
+}
+
+export interface PracticeStatsResult {
+  today: PracticeStatsBucket;
+  week: PracticeStatsBucket;
+  total: PracticeStatsBucket;
+  daily_trend: Array<{
+    date: string;
+    weekday: string;
+    count: number;
+    correct: number;
+    accuracy: number;
+  }>;
+}
+
+export interface PracticeTypeSummaryItem {
+  subject_id: number;
+  subject_name: string;
+  subject_code: string;
+  subcategory: string;
+  total_questions: number;
+  done_count: number;
+  is_completed: boolean;
+  completion_rate: number;
+}
+
+export interface PracticeTypeSummaryResult {
+  total_types: number;
+  types: PracticeTypeSummaryItem[];
+}
+
+async function request<T>(config: PracticeRequestConfig): Promise<T> {
+  const response = await practiceClient.request<T>({ ...config, baseURL: '' });
+  return response.data;
+}
+
+export function submitPracticeAnswer(
+  payload: PracticeSubmitItem & { session_id?: string }
+): Promise<PracticeSubmitResult> {
+  return request<PracticeSubmitResult>({
+    url: '/api/practice/record',
+    method: 'POST',
+    data: payload
+  });
+}
+
+export function submitPracticeBatch(
+  records: PracticeSubmitItem[],
+  options: { subjectId?: number; sessionId?: string; source?: string } = {}
+): Promise<PracticeSubmitResult> {
+  return request<PracticeSubmitResult>({
+    url: '/api/practice/batch-record',
+    method: 'POST',
+    data: {
+      records,
+      subject_id: options.subjectId,
+      session_id: options.sessionId,
+      source: options.source
+    }
+  });
+}
+
+export function submitQuickPractice(
+  records: PracticeSubmitItem[],
+  options: { subjectId?: number; sessionId?: string } = {}
+): Promise<PracticeSubmitResult> {
+  return request<PracticeSubmitResult>({
+    url: '/api/quick-practice/submit',
+    method: 'POST',
+    data: {
+      records,
+      subject_id: options.subjectId,
+      session_id: options.sessionId
+    }
+  });
+}
+
+export function fetchPracticeRecords(
+  query: PracticeRecordsQuery = {}
+): Promise<PracticeRecordsResult> {
+  return request<PracticeRecordsResult>({
+    url: '/api/practice/records',
+    method: 'GET',
+    params: {
+      limit: query.limit,
+      offset: query.offset,
+      subject_id: query.subjectId
+    }
+  });
+}
+
+export function fetchPracticeStats(): Promise<PracticeStatsResult> {
+  return request<PracticeStatsResult>({
+    url: '/api/practice/stats-card',
+    method: 'GET'
+  });
+}
+
+export function fetchPracticeTypeSummary(): Promise<PracticeTypeSummaryResult> {
+  return request<PracticeTypeSummaryResult>({
+    url: '/api/practice/type-summary',
+    method: 'GET'
+  });
+}
+
+export async function refreshPractice(): Promise<PracticeRecordsResult> {
+  return fetchPracticeRecords();
 }

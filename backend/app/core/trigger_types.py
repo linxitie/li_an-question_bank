@@ -71,6 +71,36 @@ TRIGGER_SHOP_PURCHASED = "shop.purchased"
 TRIGGER_CHECKIN_DONE = "checkin.done"
 
 
+# ---------------------------------------------------------------------------
+# 历史值（早于 E1–E10 规范化）
+# ---------------------------------------------------------------------------
+# 这些字符串是 achievement_service 成就目录的既有建档值。可映射到 E1–E10
+# 的调用点改用上方常量；无法映射的历史值保留原值，并在成就判定侧通过
+# LEGACY_TRIGGER_ALIASES 与新常量对齐，确保历史语义与徽章发放行为不变。
+#
+# add-only 同样适用：禁止修改以下字符串值。
+TRIGGER_LEGACY_VIEW_WRONG = "view_wrong"
+TRIGGER_LEGACY_CHOP = "chop"
+TRIGGER_LEGACY_REVIEW = "review"
+TRIGGER_LEGACY_POST = "post"
+TRIGGER_LEGACY_QUOTE_FAVORITE = "quote_favorite"
+TRIGGER_LEGACY_SIGN_IN = "sign_in"
+TRIGGER_LEGACY_FAVORITE = "favorite"
+TRIGGER_LEGACY_NOTE = "note"
+TRIGGER_LEGACY_DO_QUESTION = "do_question"
+
+#: 新常量 -> 既有历史值。成就判定同时匹配两者，避免 P2-01 改名后
+#: 历史徽章（按历史值建档）漏发；该映射只增不删。
+LEGACY_TRIGGER_ALIASES = {
+    TRIGGER_PRACTICE_SUBMIT: (TRIGGER_LEGACY_DO_QUESTION,),
+    TRIGGER_WRONG_REVIEWED: (TRIGGER_LEGACY_REVIEW,),
+    TRIGGER_NOTE_CREATED: (TRIGGER_LEGACY_NOTE,),
+    TRIGGER_FAVORITE_ADDED: (TRIGGER_LEGACY_FAVORITE,),
+    TRIGGER_FORUM_POSTED: (TRIGGER_LEGACY_POST,),
+    TRIGGER_CHECKIN_DONE: (TRIGGER_LEGACY_SIGN_IN,),
+}
+
+
 #: 全部合法 trigger_type 字符串值（10 个，E5 两个值）。
 #: add-only：仅允许在末尾追加，禁止修改/删除既有元素。
 ALL_TRIGGER_TYPES = (

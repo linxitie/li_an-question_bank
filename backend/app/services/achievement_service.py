@@ -15,10 +15,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models.models import (
-    Achievement, UserAchievement, SysUser, PracticeRecord,
+    SysUser, UserAchievement, Achievement, PracticeRecord,
     WrongQuestionPersonal, ForumPost, ForumComment, FavoriteQuestion,
     QuestionNote, NewsNote, QuoteFavorite, DailyCheckin,
 )
+from ..core.trigger_types import LEGACY_TRIGGER_ALIASES
 from .growth_service import add_growth, get_level_info, GROWTH_RULES
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,11 @@ def seed_achievements(db: Session) -> int:
 # 主入口
 # ---------------------------------------------------------------------------
 
+def _trigger_candidates(trigger_type: str) -> List[str]:
+    aliases = LEGACY_TRIGGER_ALIASES.get(trigger_type, ())
+    return list(dict.fromkeys([trigger_type, *aliases, "general"]))
+
+
 def check_and_grant(user_id: int, trigger_type: str, db: Session,
                     session: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """
@@ -159,9 +165,9 @@ def check_and_grant(user_id: int, trigger_type: str, db: Session,
         ).all()
     }
 
-    # 匹配触发类型 + 综合类（general 全触发）
+    # 匹配触发类型 + 综合类（general 全触发）；新常量同时匹配历史建档值
     candidates = db.query(Achievement).filter(
-        Achievement.trigger_type.in_([trigger_type, "general"])
+        Achievement.trigger_type.in_(_trigger_candidates(trigger_type))
     ).all()
 
     newly: List[Dict[str, Any]] = []

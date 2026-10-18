@@ -7,7 +7,7 @@ GET /api/practice/type-summary — 按题目类型统计完成/未完成状态
 import logging
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, case, distinct
 
@@ -15,10 +15,11 @@ from ....core.database import get_db, commit_with_retry
 from ....core.security import get_current_user
 from ....models.models import (
     PracticeRecord, QuestionBank, QuestionSubject, QuestionType, SysUser,
-    WrongQuestionPersonal, SmartExamRecord, ExamRecord, ExamAnswerDetail,
+    SmartExamRecord, ExamRecord, ExamAnswerDetail,
     YearPaper, ExamPaper, KnowledgePoint, QuestionKnowledge, SubCategory
 )
 from ....services.growth_service import add_growth, GROWTH_RULES
+from ....services.practice_grading import submit_answers, upsert_wrong_question
 
 router = APIRouter(prefix="/api/practice", tags=["练习记录"])
 logger = logging.getLogger(__name__)
@@ -61,51 +62,10 @@ def _after_practice(user_id: int, db: Session, total: int, correct: int) -> list
 
 def _auto_record_wrong(user_id: int, question_id: int, subject_id: int, db: Session,
                        user_answer: str = '') -> str:
-    """自动将错题收录到个人错题集（内部辅助函数）
-
-    返回操作结果: 'new' | 'updated' | 'skipped' | 'error'
-    """
+    """兼容既有调用方的错题收录入口，实际写入由 practice_grading 承担。"""
     try:
-        # 兜底处理：subject_id 为 None 时从 QuestionBank 反查
-        if not subject_id:
-            q = db.query(QuestionBank).filter(
-                QuestionBank.question_id == question_id
-            ).first()
-            if q:
-                subject_id = q.subject_id
-            else:
-                logger.warning(f"自动收录错题失败(qid={question_id}): 题目不存在")
-                return 'skipped'
-
-        existing = db.query(WrongQuestionPersonal).filter(
-            WrongQuestionPersonal.user_id == user_id,
-            WrongQuestionPersonal.question_id == question_id,
-            WrongQuestionPersonal.collection_type == "WRONG"
-        ).first()
-        if existing:
-            existing.error_count = (existing.error_count or 0) + 1
-            existing.last_review_time = datetime.now()
-            existing.review_count = (existing.review_count or 0) + 1
-            # 记录最近一次错选：错题本据此把用户选错的选项标红。
-            # 用本次作答覆盖，保证反映的是最新一次错误而非陈旧值。
-            if user_answer:
-                existing.user_answer = user_answer
-            return 'updated'
-        else:
-            db.add(WrongQuestionPersonal(
-                user_id=user_id,
-                question_id=question_id,
-                subject_id=subject_id,
-                collection_type="WRONG",
-                error_count=1,
-                accuracy_rate=0.0,
-                # 首次收录即记下用户错选，错题本可直接标红
-                user_answer=user_answer or '',
-                add_time=datetime.now(),
-                last_review_time=datetime.now(),
-                review_count=1,
-            ))
-            return 'new'
+        return upsert_wrong_question(
+            db, user_id, question_id, subject_id, user_answer)
     except Exception as e:
         logger.warning(f"自动收录错题失败(qid={question_id}): {e}")
         return 'error'
@@ -119,40 +79,29 @@ async def record_practice(
 ):
     """记录每次答题练习"""
     question_id = payload.get('question_id')
-    subject_id = payload.get('subject_id')
-    is_correct = payload.get('is_correct', False)
-    time_spent = payload.get('time_spent', 0)  # 秒
+    if question_id is None:
+        raise HTTPException(status_code=400, detail="question_id 不能为空")
 
-    # 获取题目信息（若未传 subject_id 则从题目推断）
-    question = None
-    if question_id:
-        question = db.query(QuestionBank).filter(
-            QuestionBank.question_id == question_id
-        ).first()
+    source = payload.get('source') or '随机练习'
+    records = [{
+        "question_id": question_id,
+        "subject_id": payload.get('subject_id'),
+        "is_correct": payload.get('is_correct', False),
+        "time_spent": payload.get('time_spent', 0),
+        "user_answer": payload.get('user_answer', ''),
+        "source": source,
+    }]
+    try:
+        result = await submit_answers(
+            db, current_user.user_id, records,
+            source_type=source,
+            session_id=payload.get('session_id'),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    record = PracticeRecord(
-        user_id=current_user.user_id,
-        question_id=question_id,
-        subject_id=subject_id or (question.subject_id if question else None),
-        type_id=question.type_id if question else None,
-        is_correct=1 if is_correct else 0,
-        time_spent=int(time_spent) if time_spent else 0,
-        answer=payload.get('user_answer', ''),
-        practice_date=date.today(),
-        practice_time=datetime.now(),
-        source_type=payload.get('source', '随机练习'),
-    )
-    db.add(record)
-    commit_with_retry(db)
-
-    # 自动收录错题
-    if not is_correct and question_id:
-        _auto_record_wrong(current_user.user_id, question_id,
-                          subject_id or (question.subject_id if question else None), db,
-                          payload.get('user_answer', ''))
-        commit_with_retry(db)
-
-    newly = _after_practice(current_user.user_id, db, 1, 1 if is_correct else 0)
+    newly = _after_practice(
+        current_user.user_id, db, result["total"], result["correct"])
 
     # 目标进度自动追踪：按真实刷题量重算未完成目标（幂等，失败不影响刷题结果）
     try:
@@ -176,7 +125,14 @@ async def record_practice(
     except Exception as e:  # noqa: BLE001
         print(f"[practice] 三端同步广播失败(非阻断): {e}")
 
-    return {"status": "ok", "record_id": record.record_id, "newly_unlocked": newly}
+    record_id = result["results"][0]["record_id"] if result["results"] else None
+    return {
+        "status": "ok",
+        "record_id": record_id,
+        "newly_unlocked": newly,
+        "has_new_wrong": result["has_new_wrong"],
+        "wrong_question_stats": result["wrong_question_stats"],
+    }
 
 
 @router.post("/batch-record", summary="批量记录练习行为")
@@ -190,43 +146,23 @@ async def batch_record_practice(
     if not records_data:
         return {"status": "ok", "count": 0}
 
-    today = date.today()
-    now = datetime.now()
-    count = 0
-
-    for item in records_data:
-        question_id = item.get('question_id')
-        is_correct = item.get('is_correct', False)
-        subject_id = item.get('subject_id')
-
-        question = None
-        if question_id:
-            question = db.query(QuestionBank).filter(
-                QuestionBank.question_id == question_id
-            ).first()
-
-        record = PracticeRecord(
-            user_id=current_user.user_id,
-            question_id=question_id,
-            subject_id=subject_id or (question.subject_id if question else None),
-            type_id=question.type_id if question else None,
-            is_correct=1 if is_correct else 0,
-            time_spent=int(item.get('time_spent', 0)),
-            answer=item.get('user_answer', ''),
-            practice_date=today,
-            practice_time=now,
-            source_type=item.get('source', '随机练习'),
+    normalized = [{
+        "question_id": item.get('question_id'),
+        "subject_id": item.get('subject_id'),
+        "is_correct": item.get('is_correct', False),
+        "time_spent": item.get('time_spent', 0),
+        "user_answer": item.get('user_answer', ''),
+        "source": item.get('source') or '随机练习',
+    } for item in records_data]
+    source = payload.get('source') or '随机练习'
+    try:
+        result = await submit_answers(
+            db, current_user.user_id, normalized,
+            source_type=source,
+            session_id=payload.get('session_id'),
         )
-        db.add(record)
-        count += 1
-
-        # 自动收录错题
-        if not is_correct and question_id:
-            _auto_record_wrong(current_user.user_id, question_id,
-                              subject_id or (question.subject_id if question else None), db,
-                              item.get('user_answer', ''))
-
-    commit_with_retry(db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # 与 POST /record 保持一致：批量交卷同样要触发目标进度重算。
     # 此前只在 /record 里挂了 sync_goal_progress，导致走批量端点的交卷
@@ -239,8 +175,9 @@ async def batch_record_practice(
         # 目标进度同步失败不应让整卷交卷失败，记录告警即可
         logger.warning(f"批量交卷后同步目标进度失败: {e}")
 
-    correct = sum(1 for i in records_data if i.get("is_correct", False))
-    newly = _after_practice(current_user.user_id, db, len(records_data), correct)
+    newly = _after_practice(
+        current_user.user_id, db, result["total"], result["correct"])
+    count = result["count"]
 
     # 三端实时同步：整卷交卷（如电脑端提交）同样要让手机/平板刷新，
     # 否则用户在手机上看到的进度会停在交卷之前。与 /record 一致，
@@ -255,7 +192,13 @@ async def batch_record_practice(
     except Exception as e:
         logger.warning(f"批量交卷后广播三端同步失败: {e}")
 
-    return {"status": "ok", "count": count, "newly_unlocked": newly}
+    return {
+        "status": "ok",
+        "count": count,
+        "newly_unlocked": newly,
+        "has_new_wrong": result["has_new_wrong"],
+        "wrong_question_stats": result["wrong_question_stats"],
+    }
 
 
 @router.get("/records", summary="查询练习记录")

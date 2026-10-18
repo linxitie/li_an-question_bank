@@ -1,4 +1,5 @@
 from ....services.event_consumer import record_user_action
+from ....core.trigger_types import TRIGGER_CHECKIN_DONE
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
@@ -199,7 +200,7 @@ async def login_for_access_token(
 
     # 触发「初来乍到」成就（首次登录，幂等）
     try:
-        await record_user_action(db, user.user_id, "sign_in")
+        await record_user_action(db, user.user_id, TRIGGER_CHECKIN_DONE)
     except Exception as e:
         logger.warning(f"首次登录成就判定失败: {e}")
 

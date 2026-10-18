@@ -35,6 +35,7 @@ from ....models.models import (
 )
 from ....services.sensitive_words import sensitive_filter, SensitiveLevel
 from ....services.event_consumer import record_user_action
+from ....core.trigger_types import TRIGGER_FORUM_POSTED
 from ....core.exceptions import BusinessLogicError, ValidationError, ResourceNotFoundError
 
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
@@ -294,7 +295,7 @@ async def create_post(
 
     # 触发社交成就
     try:
-        await record_user_action(db, current_user.user_id, "post")
+        await record_user_action(db, current_user.user_id, TRIGGER_FORUM_POSTED)
     except Exception as e:
         logger.warning(f"发帖成就判定失败: {e}")
 
@@ -371,7 +372,7 @@ async def toggle_post_like(
 
     # 触发社交成就（被点赞者：获赞/热门楼主）
     try:
-        await record_user_action(db, post.user_id, "post")
+        await record_user_action(db, post.user_id, TRIGGER_FORUM_POSTED)
     except Exception as e:
         logger.warning(f"点赞成就判定失败: {e}")
 
@@ -494,7 +495,7 @@ async def create_comment(
 
     # 触发社交成就（评论计数）
     try:
-        await record_user_action(db, current_user.user_id, "post")
+        await record_user_action(db, current_user.user_id, TRIGGER_FORUM_POSTED)
     except Exception as e:
         logger.warning(f"评论成就判定失败: {e}")
 
@@ -536,7 +537,7 @@ async def toggle_comment_like(
 
     # 触发社交成就（被点赞的评论作者）
     try:
-        await record_user_action(db, comment.user_id, "post")
+        await record_user_action(db, comment.user_id, TRIGGER_FORUM_POSTED)
     except Exception as e:
         logger.warning(f"评论点赞成就判定失败: {e}")
 

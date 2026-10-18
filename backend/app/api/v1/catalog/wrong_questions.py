@@ -7,6 +7,11 @@ PUT  /api/wrong-questions/{id}/mastery - 更新掌握度
 """
 import logging
 from ....services.event_consumer import record_user_action
+from ....core.trigger_types import (
+    TRIGGER_LEGACY_CHOP,
+    TRIGGER_LEGACY_VIEW_WRONG,
+    TRIGGER_WRONG_REVIEWED,
+)
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -86,7 +91,7 @@ async def get_wrong_questions(
 
     # 触发「直面错误」成就（首次查看错题集）
     try:
-        await record_user_action(db, current_user.user_id, "view_wrong")
+        await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_VIEW_WRONG)
     except Exception as e:
         logger.warning(f"查看错题成就判定失败: {e}")
 
@@ -415,7 +420,7 @@ async def chop_question(
 
     # 触发斩题成就
     try:
-        await record_user_action(db, current_user.user_id, "chop")
+        await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_CHOP)
     except Exception as e:
         logger.warning(f"斩题成就判定失败: {e}")
 
@@ -749,7 +754,7 @@ async def submit_review(
 
     # 触发错题重练成就
     try:
-        await record_user_action(db, current_user.user_id, "review")
+        await record_user_action(db, current_user.user_id, TRIGGER_WRONG_REVIEWED)
     except Exception as e:
         logger.warning(f"错题重练成就判定失败: {e}")
 
