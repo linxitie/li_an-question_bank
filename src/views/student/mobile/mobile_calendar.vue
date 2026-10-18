@@ -40,10 +40,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
+import { useCalendarStore } from '@/modules/calendar/store';
 
 const router = useRouter();
-const exams = ref<any[]>([]);
-const loading = ref(false);
+const calendarStore = useCalendarStore();
+// 模板沿用 exams / loading 命名，数据与加载态统一由 calendar 域 store 提供
+const { items: exams, loading } = storeToRefs(calendarStore);
 const expandedId = ref<number | null>(null);
 
 const goBack = () => {
@@ -55,20 +58,10 @@ const toggleDetail = (item: any) => {
   expandedId.value = expandedId.value === item.id ? null : item.id;
 };
 
-const fetchExams = async () => {
-  loading.value = true;
-  try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/calendar/exams?limit=30');
-    const data = await res.json();
-    if (res.ok && data.items) exams.value = data.items;
-  } catch (e) {
-    console.error('获取考试日历失败:', e);
-  } finally {
-    loading.value = false;
-  }
-};
-
-onMounted(fetchExams);
+onMounted(() => {
+  // P2-64：页面主动拉取，calendar 域无事件进出
+  calendarStore.load({ limit: 30 });
+});
 </script>
 
 <style scoped>

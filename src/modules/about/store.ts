@@ -1,19 +1,22 @@
 /**
- * 关于砺安题库（about）域 Store 外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 关于砺安题库（about）域 Store（P2-69）。
  *
- * 状态契约为最小公共骨架，字段与 README.md「store 状态契约」保持一致；
- * 本文件只提供可实例化的空签名，业务逻辑与真实数据加载在 P2 阶段实现。
+ * 只读消费通用配置：版本号 / 服务名来自 `GET /health`，
+ * 联系方式来自 api.ts 静态常量（本域无专属端点）。
+ * 无写接口、无事件进出、不写 localStorage。
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import {
+  fetchAboutProfile,
+  type AboutAppInfo,
+  type AboutContact
+} from './api';
 
-/** 本域状态契约（外壳字段） */
+/** 公共状态骨架 */
 export interface AboutState {
-  /** 是否正在加载数据 */
   loading: boolean;
-  /** 最近一次错误信息（无错误为 null） */
   error: string | null;
-  /** 是否已完成首次初始化 */
   initialized: boolean;
 }
 
@@ -26,35 +29,68 @@ export function createAboutInitialState(): AboutState {
   };
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '请求失败，请稍后重试';
+}
+
 export const useAboutStore = defineStore('about', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const initialized = ref(false);
 
+  const info = ref<AboutAppInfo | null>(null);
+  const contact = ref<AboutContact | null>(null);
+
   /** 只读派生：本域是否可用（已完成初始化且无错误） */
   const ready = computed(() => initialized.value && error.value === null);
 
-  /** 重置为初始状态（外壳实现，P2 阶段按需扩展） */
+  /** 版本号（通用配置只读消费） */
+  const version = computed(() => info.value?.version ?? '');
+
+  /** 服务名 */
+  const service = computed(() => info.value?.service ?? '');
+
+  /**
+   * 加载关于页配置。
+   * 失败进入错误态（保留静态联系方式可用性由页面决定）。
+   */
+  async function load(): Promise<void> {
+    loading.value = true;
+    error.value = null;
+    try {
+      const profile = await fetchAboutProfile();
+      info.value = profile.info;
+      contact.value = profile.contact;
+    } catch (e) {
+      error.value = errorMessage(e);
+      info.value = null;
+    } finally {
+      loading.value = false;
+      initialized.value = true;
+    }
+  }
+
+  /** 重置为初始状态 */
   function reset(): void {
     const initial = createAboutInitialState();
     loading.value = initial.loading;
     error.value = initial.error;
     initialized.value = initial.initialized;
-  }
-
-  /**
-   * 加载本域数据。
-   * P2 阶段实现：调用 api.ts 中的封装方法，成功后置 initialized 为 true。
-   */
-  async function load(): Promise<void> {
-    throw new Error('about 域 load() 尚未实现（P2 阶段实现）');
+    info.value = null;
+    contact.value = null;
   }
 
   return {
     loading,
     error,
     initialized,
+    info,
+    contact,
     ready,
+    version,
+    service,
     reset,
     load
   };

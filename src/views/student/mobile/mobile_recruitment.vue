@@ -46,22 +46,26 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
+import { useRecruitmentStore } from '@/modules/recruitment/store';
 
 const router = useRouter();
+const recruitmentStore = useRecruitmentStore();
 
 // 招聘正文来自服务端 HTML，此前直接 v-html 输出，缺少白名单清洗。
 // 统一收敛到 questionRender 的单一真源。
 const renderContent = (text: string) => renderQuestionContent(text);
-const categories = ref<string[]>([]);
-const items = ref<Record<string, any[]>>({});
-const activeCat = ref('');
-const loading = ref(false);
-const expandedId = ref<number | null>(null);
-const meta = ref<any>(null);
 
-const currentItems = computed(() => items.value[activeCat.value] || []);
+// 列表 / 分类 / 加载态统一由 recruitment 域 store 提供
+const { categories, currentItems, loading } = storeToRefs(recruitmentStore);
+// 分类 Tab 沿用 activeCat 命名；写入走 store.setCategory（本地筛选，不重新请求）
+const activeCat = computed({
+  get: () => recruitmentStore.activeCategory,
+  set: (value: string) => recruitmentStore.setCategory(value)
+});
+const expandedId = ref<number | null>(null);
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -73,26 +77,12 @@ const toggleDetail = (item: any) => {
 };
 
 const fetchRecruitment = async (ctx?: any) => {
-  loading.value = true;
-  try {
-    // ctx 由统一刷新内核提供：signal 取消过期请求，ts 破缓存（招考每日更新，须禁缓存）
-    const opts: any = { cache: 'no-store' };
-    if (ctx && ctx.signal) opts.signal = ctx.signal;
-    const url = '/api/recruitment?limit=20&_ts=' + ((ctx && ctx.ts) || Date.now());
-    const res = await (window as any).__VTJ_AUTH__.apiFetch(url, opts);
-    const data = await res.json();
-    if (res.ok && data.categories) {
-      categories.value = data.categories;
-      items.value = data.items || {};
-      meta.value = data.meta || null;
-      if (!activeCat.value && categories.value.length) activeCat.value = categories.value[0];
-    }
-  } catch (e: any) {
-    if (e && (e.name === 'AbortError' || e.__aborted)) return;
-    console.error('获取招考信息失败:', e);
-  } finally {
-    loading.value = false;
-  }
+  // ctx 由统一刷新内核提供：signal 取消过期请求，ts 破缓存（招考每日更新，须禁缓存）
+  await recruitmentStore.load({
+    limit: 20,
+    signal: ctx?.signal,
+    ts: ctx?.ts
+  });
 };
 
 // 统一刷新内核：首屏 + 后端广播 + 可见性/聚焦 + 跨日 + 15 分钟轮询 + 登录态 + 手动
