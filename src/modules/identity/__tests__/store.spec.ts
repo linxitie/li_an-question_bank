@@ -193,6 +193,7 @@ describe('设备与档案写操作', () => {
   it('saveProfile 成功后回写档案并同步 user-profile 快照', async () => {
     mockedUpdateProfile.mockResolvedValue({
       success: true,
+      message: 'ok',
       user: seedProfile({ username: 'newname', avatar: '/a.png' })
     });
     const store = useIdentityStore();
