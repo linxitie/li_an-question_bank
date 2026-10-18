@@ -417,11 +417,14 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
 import { sanitizeHtml } from '@/utils/questionRender';
+import { useWrongbookStore } from '@/modules/wrongbook/store';
+import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wrongbook/events';
   export default defineComponent({
     name: 'WrongQuestionSet',
     components: { NavBar, XIcon },
     setup(props) {
       const provider = useProvider({ id: 'wrong_questions', version: '1785754600000' });
+      const wrongbookStore = useWrongbookStore();
       const state = reactive({
         filter: { time: 'all', knowledge: 'all' },
         activeNav: 'xc',
@@ -473,6 +476,7 @@ import { sanitizeHtml } from '@/utils/questionRender';
         state,
         props,
         provider,
+        wrongbookStore,
         EditPen,
         Document,
         Reading,
@@ -572,53 +576,48 @@ import { sanitizeHtml } from '@/utils/questionRender';
       loadData() {
         this.state.allQuestions = [];
         var self = this;
+        this.wrongbookStore.reset();
         this.ensureLogin().then(function() {
-          var headers = self.getJsonHeaders();
-          // 调用正确的错题API（非全部题目API）
-          window.__VTJ_AUTH__.apiFetch('/api/wrong-questions?page_size=100', { headers: headers })
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-              var items = data.items || [];
-              if (items.length) {
-                self.state.allQuestions = items.map(function(item) {
-                  // 用 subject_id 精确映射科目
-                  var subjectIdMap = { 1: 'xc', 2: 'sl', 3: 'ga' };
-                  var subjectKey = subjectIdMap[item.subject_id] || 'ga';
-                  var optionsArr = [];
-                  try {
-                    optionsArr = item.options ? (typeof item.options === 'string' ? JSON.parse(item.options) : item.options) : [];
-                  } catch(e) {}
+          return self.wrongbookStore.load({ pageSize: 100 });
+        }).then(function() {
+          var items = self.wrongbookStore.items || [];
+          if (items.length) {
+            self.state.allQuestions = items.map(function(item) {
+              // 用 subject_id 精确映射科目
+              var subjectIdMap = { 1: 'xc', 2: 'sl', 3: 'ga' };
+              var subjectKey = subjectIdMap[item.subject_id] || 'ga';
+              var optionsArr = [];
+              try {
+                optionsArr = item.options ? (typeof item.options === 'string' ? JSON.parse(item.options) : item.options) : [];
+              } catch(e) {}
+              return {
+                id: item.question_id,
+                wrong_id: item.wrong_id,
+                subject: subjectKey,
+                type: item.question_type_detail || '单选题',
+                date: item.add_time || '',
+                title: item.question_content || '',
+                tags: item.sub_category ? [item.sub_category] : [],
+                status: item.is_cut ? 'chopped' : (item.mastery_level === 'MASTERED' ? 'mastered' : 'needs-review'),
+                statusText: item.is_cut ? '已斩题' : (item.mastery_level === 'MASTERED' ? '已掌握' : '待复习'),
+                options: Array.isArray(optionsArr) ? optionsArr.map(function(o, i) {
                   return {
-                    id: item.question_id,
-                    wrong_id: item.wrong_id,
-                    subject: subjectKey,
-                    type: item.question_type_detail || '单选题',
-                    date: item.add_time || '',
-                    title: item.question_content || '',
-                    tags: item.sub_category ? [item.sub_category] : [],
-                    status: item.is_cut ? 'chopped' : (item.mastery_level === 'MASTERED' ? 'mastered' : 'needs-review'),
-                    statusText: item.is_cut ? '已斩题' : (item.mastery_level === 'MASTERED' ? '已掌握' : '待复习'),
-                    options: Array.isArray(optionsArr) ? optionsArr.map(function(o, i) {
-                      return {
-                        value: o.key || String.fromCharCode(65+i),
-                        text: o.value || o.text || o
-                      };
-                    }) : [],
-                    correctAnswer: item.answer || '',
-                    analysis: item.answer_analysis || '',
-                    difficulty: item.difficulty || 3,
-                    masteryLevel: item.mastery_level === 'MASTERED' ? 100 : (item.mastery_level === 'PARTIAL' ? 50 : 0),
-                    chopped: !!item.is_cut,
-                    errorCount: item.error_count || 1,
-                    category: item.subject_name || ''
+                    value: o.key || String.fromCharCode(65+i),
+                    text: o.value || o.text || o
                   };
-                });
-              }
-            }).catch(function() {
-              console.warn('WrongQuestionSet: 无法连接后端，请检查网络');
+                }) : [],
+                correctAnswer: item.answer || '',
+                analysis: item.answer_analysis || '',
+                difficulty: 3,
+                masteryLevel: item.mastery_level === 'MASTERED' ? 100 : (item.mastery_level === 'PARTIAL' ? 50 : 0),
+                chopped: !!item.is_cut,
+                errorCount: item.error_count || 1,
+                category: item.subject_name || ''
+              };
             });
+          }
         }).catch(function() {
-          console.warn('WrongQuestionSet: 登录验证失败');
+          console.warn('WrongQuestionSet: 无法加载错题集，请检查网络');
         });
         this.state.zhantiList = [];
         this.state.zhantiExpiringNotice = false;
@@ -957,6 +956,7 @@ import { sanitizeHtml } from '@/utils/questionRender';
           });
           if (res.ok) {
             this.state.currentQuestion.chopped = true;
+            emitWrongQuestionsChanged({ action: 'removed' });
             ElMessage.success('已斩题，10天后自动删除');
           }
         } catch(e) {
@@ -1234,6 +1234,7 @@ import { sanitizeHtml } from '@/utils/questionRender';
           }
           const data = await res.json();
           this.state.reviewResult = data;
+          emitWrongQuestionsChanged({ action: 'reviewed' });
           this.state.showReviewResult = true;
           this.state.inReviewMode = false;
           if (data.auto_chopped && data.auto_chopped.length) {
@@ -1514,6 +1515,7 @@ import { sanitizeHtml } from '@/utils/questionRender';
             var idx = this.state.allQuestions.indexOf(q);
             if (idx >= 0) {
               this.state.allQuestions.splice(idx, 1);
+            emitWrongQuestionsChanged({ action: 'removed' });
             }
             ElMessage.success('已斩题，10天后自动删除');
             this.loadZhantiList();
@@ -1540,6 +1542,7 @@ import { sanitizeHtml } from '@/utils/questionRender';
           if (res.ok) {
             q.chopped = false;
             q.status = 'needs-review';
+            emitWrongQuestionsChanged({ action: 'added' });
             q.statusText = '待复习';
             ElMessage.success('题目已恢复到错题列表');
             this.loadZhantiList();
@@ -1607,9 +1610,20 @@ import { sanitizeHtml } from '@/utils/questionRender';
       }
     },
     mounted() {
+      var self = this;
       this.loadData();
       this.loadZhantiList();
       this.loadZhantiExpiring();
+      this._offWrongbookChanged = onWrongQuestionsChanged(function(payload) {
+        if (payload && payload.source === 'wrongbook') return;
+        self.loadData();
+      });
+    },
+    beforeUnmount() {
+      if (this._offWrongbookChanged) {
+        this._offWrongbookChanged();
+        this._offWrongbookChanged = null;
+      }
     }
   })
 </script>

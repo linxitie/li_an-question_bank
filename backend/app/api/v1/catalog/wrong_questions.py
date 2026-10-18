@@ -6,6 +6,7 @@ DELETE /api/wrong-questions/{id}   - 删除错题
 PUT  /api/wrong-questions/{id}/mastery - 更新掌握度
 """
 import logging
+from collections import OrderedDict
 from ....services.event_consumer import record_user_action
 from ....core.trigger_types import (
     TRIGGER_LEGACY_CHOP,
@@ -27,6 +28,72 @@ from ....models.models import (
 
 router = APIRouter(prefix="/api/wrong-questions", tags=["错题集"])
 logger = logging.getLogger(__name__)
+
+
+# === E4「错题复习」事件去重（P2-13） ===
+# 同一错题只上报一次：重复流转 / 幂等重放不再发事件。
+# 键为 (user_id, wrong_id)，有界 LRU 防止内存无限增长。
+_REVIEWED_EVENT_KEYS: "OrderedDict[tuple, None]" = OrderedDict()
+_REVIEWED_EVENT_LIMIT = 4096
+
+
+def reset_reviewed_events() -> None:
+    """清空 E4 去重缓存（测试与调试用）。"""
+    _REVIEWED_EVENT_KEYS.clear()
+
+
+def _claim_reviewed_event(user_id: int, wrong_id: int) -> bool:
+    """抢占「该错题已发布 E4」标记；已发布过返回 False。"""
+    key = (user_id, wrong_id)
+    if key in _REVIEWED_EVENT_KEYS:
+        return False
+    _REVIEWED_EVENT_KEYS[key] = None
+    while len(_REVIEWED_EVENT_KEYS) > _REVIEWED_EVENT_LIMIT:
+        _REVIEWED_EVENT_KEYS.popitem(last=False)
+    return True
+
+
+def _release_reviewed_event(user_id: int, wrong_id: int) -> None:
+    """发布失败时归还标记，允许后续流转重试。"""
+    _REVIEWED_EVENT_KEYS.pop((user_id, wrong_id), None)
+
+
+async def _publish_wrong_reviewed(
+    db: Session,
+    user_id: int,
+    wq: WrongQuestionPersonal,
+    *,
+    previous_mastery: Optional[str],
+    previous_cut: Optional[int],
+) -> bool:
+    """E4：错题「未掌握 → 已掌握」流转成功后发布一次 ``wrong.reviewed``。
+
+    - 只读端点（列表 / 详情 / 队列 / 斩题列表）一律不调用；
+    - 同一错题重复流转（含幂等重放）不再发布，事件与状态变更保持 1:1。
+    """
+    if previous_mastery == "MASTERED" and previous_cut:
+        logger.info("错题已处于已掌握状态，跳过重复 E4 事件: wrong_id=%s", wq.wrong_id)
+        return False
+    if not _claim_reviewed_event(user_id, wq.wrong_id):
+        logger.info("错题 E4 事件已发布过，跳过幂等重放: wrong_id=%s", wq.wrong_id)
+        return False
+
+    payload = {
+        "wrong_id": wq.wrong_id,
+        "question_id": wq.question_id,
+        "subject_id": wq.subject_id,
+        "mastery_level": wq.mastery_level,
+        "error_count": int(wq.error_count or 0),
+        "action": "mastered",
+    }
+    try:
+        return await record_user_action(
+            db, user_id, TRIGGER_WRONG_REVIEWED, session=payload
+        )
+    except Exception as e:  # noqa: BLE001 — 事件失败不阻断已提交的状态流转
+        logger.warning("错题掌握事件发布失败(非阻断): %s", e)
+        _release_reviewed_event(user_id, wq.wrong_id)
+        return False
 
 
 @router.get("", summary="获取错题列表")
@@ -210,11 +277,23 @@ async def update_mastery(
     if not wq:
         raise HTTPException(status_code=404, detail="错题记录不存在")
 
+    previous_mastery = wq.mastery_level
+    previous_cut = wq.is_cut
+
     wq.mastery_level = mastery_level
     if mastery_level == 'MASTERED':
         wq.is_cut = 1
         wq.cut_time = datetime.now()
     commit_with_retry(db)
+
+    if mastery_level == 'MASTERED':
+        await _publish_wrong_reviewed(
+            db,
+            current_user.user_id,
+            wq,
+            previous_mastery=previous_mastery,
+            previous_cut=previous_cut,
+        )
 
     return {"message": "掌握度已更新", "mastery_level": mastery_level}
 
@@ -407,6 +486,9 @@ async def chop_question(
     if not wq:
         raise HTTPException(status_code=404, detail="错题记录不存在")
 
+    previous_mastery = wq.mastery_level
+    previous_cut = wq.is_cut
+
     wq.is_cut = 1
     wq.cut_time = datetime.now()
     wq.mastery_level = "MASTERED"
@@ -417,6 +499,15 @@ async def chop_question(
     from datetime import timedelta
     wq.auto_delete_time = datetime.now() + timedelta(days=10)
     commit_with_retry(db)
+
+    # E4：斩题属于「消灭错题」，与掌握度流转共用同一去重口径
+    await _publish_wrong_reviewed(
+        db,
+        current_user.user_id,
+        wq,
+        previous_mastery=previous_mastery,
+        previous_cut=previous_cut,
+    )
 
     # 触发斩题成就
     try:

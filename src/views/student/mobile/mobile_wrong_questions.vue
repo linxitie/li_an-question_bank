@@ -95,15 +95,19 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { renderQuestionContent, renderQuestionSummary } from '@/utils/questionRender';
+import { useWrongbookStore } from '@/modules/wrongbook/store';
+import { emitWrongQuestionsChanged } from '@/modules/wrongbook/events';
 
 const router = useRouter();
 const auth: any = (window as any).__VTJ_AUTH__;
-const items = ref<any[]>([]);
+const wrongbook = useWrongbookStore();
+const items = computed<any[]>(() => wrongbook.visibleItems);
 const choppedItems = ref<any[]>([]);
 const loading = ref(false);
 const expandedId = ref<number | null>(null);
 const activeTab = ref<'wrong' | 'chopped'>('wrong');
 const currentSubject = ref(0);
+let offWrongbookRefresh: (() => void) | null = null;
 
 // 固定三科分类。不再使用「科目·子科目」组合 tab：
 // 子科目来自 /wrong-questions/subcategories，会随错题内容漂移，
@@ -241,15 +245,11 @@ const stopTicker = () => {
 async function fetchWrong() {
   loading.value = true;
   try {
-    let url = '/api/wrong-questions?page=1&page_size=100';
-    if (currentSubject.value > 0) url += '&subject_id=' + currentSubject.value;
-    const res = await auth.apiFetch(url);
-    const data = await res.json();
-    if (res.ok && data.items) items.value = data.items;
-    else items.value = [];
+    await wrongbook.setFilters({
+      subjectId: currentSubject.value > 0 ? currentSubject.value : null
+    });
   } catch (e) {
     console.error('获取错题失败:', e);
-    items.value = [];
   } finally {
     loading.value = false;
   }
@@ -274,14 +274,9 @@ async function fetchChopped() {
 
 const chopQuestion = async (wrongId: number) => {
   try {
-    const res = await auth.apiFetch('/api/wrong-questions/' + wrongId + '/chop', { method: 'PUT' });
-    if (!res.ok) {
-      ElMessage.error('斩题失败，请稍后重试');
-      return;
-    }
+    await wrongbook.chop(wrongId);
     ElMessage.success('已斩题，10天后自动删除');
     expandedId.value = null;
-    await fetchWrong();
   } catch (e) {
     console.error('斩题失败:', e);
     ElMessage.error('斩题失败，请稍后重试');
@@ -296,6 +291,7 @@ const unchop = async (wrongId: number) => {
       return;
     }
     ElMessage.success('已恢复到错题列表');
+    emitWrongQuestionsChanged({ action: 'added' });
     await fetchChopped();
   } catch (e) {
     console.error('恢复失败:', e);
@@ -309,10 +305,15 @@ const goReview = () => {
 
 onMounted(() => {
   fetchWrong();
+  offWrongbookRefresh = wrongbook.bindRefresh();
   startTicker();
 });
 
 onBeforeUnmount(() => {
+  if (offWrongbookRefresh) {
+    offWrongbookRefresh();
+    offWrongbookRefresh = null;
+  }
   stopTicker();
 });
 </script>

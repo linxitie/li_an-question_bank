@@ -96,9 +96,15 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
+import {
+  fetchWrongbookReviewQueue,
+  submitWrongbookReview
+} from '@/modules/wrongbook/api';
+import { useWrongbookStore } from '@/modules/wrongbook/store';
+import { emitWrongQuestionsChanged } from '@/modules/wrongbook/events';
 
 const router = useRouter();
-const auth: any = (window as any).__VTJ_AUTH__;
+const wrongbook = useWrongbookStore();
 
 const modes = [
   { key: 'knowledge', icon: '📚', name: '按知识点', desc: '同类知识点集中攻克' },
@@ -177,9 +183,7 @@ function selectOption(qid: number, oidx: number, type: string) {
 async function startReview(m: string) {
   mode.value = m;
   try {
-    const res = await auth.apiFetch('/api/wrong-questions/review/queue?mode=' + m + '&limit=50');
-    const data = await res.json();
-    questions.value = data.items || [];
+    questions.value = await fetchWrongbookReviewQueue({ mode: m as any, limit: 50 });
     current.value = 0;
   } catch (e) {
     console.error('加载复习队列失败:', e);
@@ -187,25 +191,17 @@ async function startReview(m: string) {
 }
 
 async function submitReview() {
-  const payload = {
-    mode: mode.value,
-    answers: questions.value
-      .filter((q) => answers.value[q.wrong_id] !== undefined)
-      .map((q) => {
-        const ans = answers.value[q.wrong_id];
-        const letters = (Array.isArray(ans) ? ans : [ans]).map((i) => letterOf(i)).join(',');
-        return { wrong_id: q.wrong_id, question_id: q.question_id, user_answer: letters };
-      }),
-  };
-  try {
-    const res = await auth.apiFetch('/api/wrong-questions/review/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+  const answers = questions.value
+    .filter((q) => answers.value[q.wrong_id] !== undefined)
+    .map((q) => {
+      const ans = answers.value[q.wrong_id];
+      const letters = (Array.isArray(ans) ? ans : [ans]).map((i) => letterOf(i)).join(',');
+      return { wrong_id: q.wrong_id, question_id: q.question_id, user_answer: letters };
     });
-    const data = await res.json();
-    result.value = data;
+  try {
+    result.value = await submitWrongbookReview(answers, mode.value || 'mixed');
     submitted.value = true;
+    emitWrongQuestionsChanged({ action: 'reviewed' });
   } catch (e) {
     console.error('提交复习失败:', e);
   }
@@ -220,7 +216,9 @@ function resetReview() {
   result.value = { total: 0, correct_count: 0, wrong_count: 0, results: [], auto_chopped: [] };
 }
 
-onMounted(() => {});
+onMounted(() => {
+  void wrongbook.load();
+});
 </script>
 
 <style scoped>

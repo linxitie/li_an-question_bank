@@ -1,23 +1,33 @@
 /**
- * 错题集（wrongbook）域 Store 外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 错题集（wrongbook）域 Store。
  *
- * 状态契约为最小公共骨架，字段与 README.md「store 状态契约」保持一致；
- * 本文件只提供可实例化的空签名，业务逻辑与真实数据加载在 P2 阶段实现。
+ * 状态契约：loading / error / initialized / ready 为公共骨架；
+ * items / total / filters 为本域业务状态。
+ * 不写 localStorage；事件只做增量刷新加速，页面 onMounted 仍须主动 load()。
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import {
+  applyWrongbookFilters,
+  buildWrongbookRetryTarget,
+  chopWrongbook,
+  fetchWrongbookList,
+  findWrongbookItem,
+  updateWrongbookMastery,
+  type MasteryLevel,
+  type WrongbookFilters,
+  type WrongQuestionItem,
+  type WrongbookListQuery,
+  type WrongbookRetryTarget
+} from './api';
+import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from './events';
 
-/** 本域状态契约（外壳字段） */
 export interface WrongbookState {
-  /** 是否正在加载数据 */
   loading: boolean;
-  /** 最近一次错误信息（无错误为 null） */
   error: string | null;
-  /** 是否已完成首次初始化 */
   initialized: boolean;
 }
 
-/** 生成初始状态，保证 reset() 与首次加载口径一致 */
 export function createWrongbookInitialState(): WrongbookState {
   return {
     loading: false,
@@ -26,36 +36,218 @@ export function createWrongbookInitialState(): WrongbookState {
   };
 }
 
+const DEFAULT_PAGE_SIZE = 20;
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '请求失败，请稍后重试';
+}
+
 export const useWrongbookStore = defineStore('wrongbook', () => {
   const loading = ref(false);
+  const loadingMore = ref(false);
   const error = ref<string | null>(null);
   const initialized = ref(false);
 
-  /** 只读派生：本域是否可用（已完成初始化且无错误） */
-  const ready = computed(() => initialized.value && error.value === null);
+  const items = ref<WrongQuestionItem[]>([]);
+  const total = ref(0);
+  const pageSize = ref(DEFAULT_PAGE_SIZE);
+  const filters = ref<WrongbookFilters>({});
 
-  /** 重置为初始状态（外壳实现，P2 阶段按需扩展） */
+  let pendingRefresh: Promise<void> | null = null;
+
+  const ready = computed(() => initialized.value && error.value === null);
+  const visibleItems = computed(() =>
+    applyWrongbookFilters(items.value, filters.value)
+  );
+  const isEmpty = computed(
+    () => initialized.value && !loading.value && visibleItems.value.length === 0
+  );
+  const hasMore = computed(() => items.value.length < total.value);
+  const loadedPages = computed(() =>
+    Math.max(1, Math.ceil(items.value.length / pageSize.value))
+  );
+
+  function buildQuery(page: number): WrongbookListQuery {
+    return {
+      page,
+      pageSize: pageSize.value,
+      subjectId: filters.value.subjectId ?? undefined
+    };
+  }
+
+  function remember(itemsToMerge: WrongQuestionItem[]): void {
+    const merged = new Map<number, WrongQuestionItem>();
+    items.value.forEach((item) => merged.set(item.wrong_id, item));
+    itemsToMerge.forEach((item) => merged.set(item.wrong_id, item));
+    items.value = Array.from(merged.values());
+  }
+
+  async function fetchPages(pages: number[]): Promise<WrongQuestionItem[]> {
+    const results = await Promise.all(
+      pages.map((page) => fetchWrongbookList(buildQuery(page)))
+    );
+    total.value = results.reduce((acc, r) => Math.max(acc, r.total), 0);
+    return results.flatMap((r) => r.items);
+  }
+
+  async function load(query: WrongbookListQuery = {}): Promise<void> {
+    loading.value = true;
+    error.value = null;
+    if (query.pageSize) pageSize.value = query.pageSize;
+    if (query.subjectId !== undefined) {
+      filters.value = { ...filters.value, subjectId: query.subjectId };
+    }
+    try {
+      const result = await fetchWrongbookList(buildQuery(1));
+      items.value = result.items;
+      total.value = result.total;
+    } catch (e) {
+      error.value = errorMessage(e);
+      items.value = [];
+      total.value = 0;
+    } finally {
+      loading.value = false;
+      initialized.value = true;
+    }
+  }
+
+  async function loadMore(): Promise<void> {
+    if (loading.value || loadingMore.value || !hasMore.value) return;
+    loadingMore.value = true;
+    error.value = null;
+    try {
+      const nextPage = loadedPages.value + 1;
+      const result = await fetchWrongbookList(buildQuery(nextPage));
+      remember(result.items);
+      total.value = result.total;
+    } catch (e) {
+      error.value = errorMessage(e);
+    } finally {
+      loadingMore.value = false;
+    }
+  }
+
+  async function setFilters(next: WrongbookFilters): Promise<void> {
+    filters.value = { ...filters.value, ...next };
+    await load();
+  }
+
+  function patchItem(
+    wrongId: number,
+    patch: Partial<WrongQuestionItem>
+  ): void {
+    items.value = items.value.map((item) =>
+      item.wrong_id === wrongId ? { ...item, ...patch } : item
+    );
+  }
+
+  async function markMastered(wrongId: number): Promise<void> {
+    await updateMastery(wrongId, 'MASTERED');
+  }
+
+  async function updateMastery(
+    wrongId: number,
+    masteryLevel: MasteryLevel
+  ): Promise<void> {
+    error.value = null;
+    try {
+      await updateWrongbookMastery(wrongId, masteryLevel);
+      const patch: Partial<WrongQuestionItem> = { mastery_level: masteryLevel };
+      if (masteryLevel === 'MASTERED') patch.is_cut = true;
+      patchItem(wrongId, patch);
+      emitWrongQuestionsChanged({ action: 'mastered' });
+    } catch (e) {
+      error.value = errorMessage(e);
+      throw e;
+    }
+  }
+
+  async function chop(wrongId: number): Promise<void> {
+    error.value = null;
+    try {
+      await chopWrongbook(wrongId);
+      patchItem(wrongId, { mastery_level: 'MASTERED', is_cut: true });
+      emitWrongQuestionsChanged({ action: 'removed' });
+    } catch (e) {
+      error.value = errorMessage(e);
+      throw e;
+    }
+  }
+
+  function retryTarget(item: WrongQuestionItem): WrongbookRetryTarget {
+    return buildWrongbookRetryTarget(item);
+  }
+
+  async function refresh(): Promise<void> {
+    const pages = Array.from(
+      { length: loadedPages.value },
+      (_, index) => index + 1
+    );
+    const fresh = await fetchPages(pages);
+    items.value = fresh;
+  }
+
+  async function refreshIncrement(): Promise<void> {
+    if (pendingRefresh) return pendingRefresh;
+    pendingRefresh = (async () => {
+      try {
+        await refresh();
+      } catch (e) {
+        error.value = errorMessage(e);
+      } finally {
+        pendingRefresh = null;
+      }
+    })();
+    return pendingRefresh;
+  }
+
+  function bindRefresh(): () => void {
+    return onWrongQuestionsChanged((payload) => {
+      if (payload.source === 'wrongbook') return;
+      void refreshIncrement();
+    });
+  }
+
   function reset(): void {
     const initial = createWrongbookInitialState();
     loading.value = initial.loading;
+    loadingMore.value = false;
     error.value = initial.error;
     initialized.value = initial.initialized;
-  }
-
-  /**
-   * 加载本域数据。
-   * P2 阶段实现：调用 api.ts 中的封装方法，成功后置 initialized 为 true。
-   */
-  async function load(): Promise<void> {
-    throw new Error('wrongbook 域 load() 尚未实现（P2 阶段实现）');
+    items.value = [];
+    total.value = 0;
+    pageSize.value = DEFAULT_PAGE_SIZE;
+    filters.value = {};
+    pendingRefresh = null;
   }
 
   return {
     loading,
+    loadingMore,
     error,
     initialized,
     ready,
+    items,
+    visibleItems,
+    total,
+    pageSize,
+    filters,
+    isEmpty,
+    hasMore,
+    loadedPages,
     reset,
-    load
+    load,
+    loadMore,
+    setFilters,
+    updateMastery,
+    markMastered,
+    chop,
+    retryTarget,
+    refresh,
+    refreshIncrement,
+    bindRefresh,
+    findItem: findWrongbookItem
   };
 });

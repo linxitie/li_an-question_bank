@@ -215,8 +215,9 @@ describe('17 个域外壳：README.md 域卡章节', () => {
     expect(sections).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
-  it.each(DOMAINS)('%s 的 README.md 标注「功能还未开发」', (domain) => {
+  it.each(DOMAINS)('%s 的 README.md 标注实现状态', (domain) => {
     const source = readModuleFile(domain, 'README.md');
-    expect(source).toContain('功能还未开发');
+    // P2 起逐域实现：未开发域保留「功能还未开发」，已实现域改为「已实现」。
+    expect(source).toMatch(/功能还未开发|已实现/);
   });
 });
