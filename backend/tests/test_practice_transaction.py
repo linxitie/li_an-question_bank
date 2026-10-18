@@ -76,10 +76,14 @@ def test_submit_grades_and_writes_same_transaction(
     assert wrong.error_count == 1
     assert wrong.user_answer == "B"
 
-    assert len(events) == 1
-    assert events[0][1] == "practice.submit"
-    assert events[0][2]["total"] == 2
-    assert events[0][2]["correct"] == 1
+    submit_events = [e for e in events if e[1] == "practice.submit"]
+    record_events = [e for e in events if e[1] == "practice.record.created"]
+    assert len(submit_events) == 1
+    assert submit_events[0][2]["total"] == 2
+    assert submit_events[0][2]["correct"] == 1
+    assert len(record_events) == 1
+    assert len(record_events[0][2]["record_ids"]) == 2
+    assert record_events[0][2]["time_spent"] == 20
 
 
 def test_rollback_leaves_no_writes_and_no_event(

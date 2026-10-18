@@ -1,53 +1,179 @@
 /**
- * 练习记录（records）域 API 封装外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 练习记录（records）域 API 封装。
  *
- * 约束：
- *   1. 全域只允许使用 @/services/api/client 暴露的唯一 axios 实例，禁止自行 axios.create；
- *   2. 方法签名先按「列表 / 详情 / 刷新」三类占位，具体端点登记在 README「后端端点清单」；
- *   3. 方法体在 P2 阶段实现，当前调用会抛出明确的未实现错误。
+ * 记录由 ③ 答题练习写入，④ 只读展示；本域不参与判分。
+ * 后端记录与统计端点挂在 `/api/...`（api_surface.json 冻结口径），
+ * 与客户端默认 baseURL `/api/v1` 不同，故请求层显式置空 baseURL。
  */
 import { apiClient } from '@/services/api/client';
 
-/** 本域统一客户端引用：P2 阶段所有请求都经由此实例发起 */
 export const recordsClient = apiClient;
 
-/** 分页查询参数（外壳占位，P2 阶段按真实端点收窄） */
-export interface RecordsListQuery {
-  page?: number;
-  pageSize?: number;
-  [key: string]: unknown;
+export interface RecordsItem {
+  record_id: number;
+  question_id: number | null;
+  subject_id: number | null;
+  type_id: number | null;
+  is_correct: boolean;
+  time_spent: number;
+  user_answer: string;
+  question_content: string;
+  correct_answer: string;
+  practice_date: string | null;
+  practice_time: string | null;
+  source: string | null;
 }
 
-/** 分页查询结果（外壳占位，P2 阶段按后端响应结构收窄） */
-export interface RecordsListResult<T = unknown> {
-  items: T[];
+export interface RecordsDailyStat {
+  date: string | null;
   total: number;
+  correct: number;
+  accuracy: number;
 }
 
-/**
- * 查询练习记录列表。
- * P2 阶段实现：经由 recordsClient 发起请求，端点见 README「后端端点清单」。
- */
+export interface RecordsListQuery {
+  limit?: number;
+  offset?: number;
+  subjectId?: number;
+}
+
+export interface RecordsListResult {
+  total: number;
+  items: RecordsItem[];
+  dailyStats: RecordsDailyStat[];
+}
+
+export interface RecordsFilters {
+  subjectId?: number | null;
+  isCorrect?: boolean | null;
+  source?: string | null;
+  keyword?: string;
+}
+
+export interface RecordsStats {
+  todayQuestions: number;
+  weeklyQuestions: number;
+  monthlyQuestions: number;
+  totalQuestions: number;
+  accuracyRate: number;
+  totalStudyHours: number;
+  streak: number;
+}
+
+export interface RecordsTrendPoint {
+  date: string;
+  questionsDone: number;
+  correctCount: number;
+  accuracy: number;
+  timeSpent: number;
+}
+
+interface RecordsRequestConfig {
+  url: string;
+  method: 'GET';
+  params?: Record<string, unknown>;
+}
+
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 50;
+const DETAIL_SCAN_PAGES = 10;
+
+interface RawRecordsList {
+  total?: number;
+  items?: RecordsItem[];
+  daily_stats?: RecordsDailyStat[];
+}
+
+async function request<T>(config: RecordsRequestConfig): Promise<T> {
+  const response = await recordsClient.request<T>({ ...config, baseURL: '' });
+  return response.data;
+}
+
+function normalizeLimit(limit?: number): number {
+  if (!limit || limit < 1) return DEFAULT_LIMIT;
+  return Math.min(Math.floor(limit), MAX_LIMIT);
+}
+
 export async function fetchRecordsList(
-  query?: RecordsListQuery
+  query: RecordsListQuery = {}
 ): Promise<RecordsListResult> {
-  throw new Error('fetchRecordsList 尚未实现（P2 阶段实现）');
+  const data = await request<RawRecordsList>({
+    url: '/api/practice/records',
+    method: 'GET',
+    params: {
+      limit: normalizeLimit(query.limit),
+      offset: query.offset ?? 0,
+      subject_id: query.subjectId
+    }
+  });
+  return {
+    total: data.total ?? 0,
+    items: data.items ?? [],
+    dailyStats: data.daily_stats ?? []
+  };
 }
 
 /**
- * 查询练习记录详情。
- * P2 阶段实现：按 id 调用对应只读端点，并复用 store 中的缓存。
+ * 练习记录没有独立详情端点：列表项本身携带题目、答案与解析字段。
+ * 这里按 record_id 翻页查找，找不到返回 null。
  */
 export async function fetchRecordsDetail(
   id: string | number
-): Promise<unknown> {
-  throw new Error('fetchRecordsDetail 尚未实现（P2 阶段实现）');
+): Promise<RecordsItem | null> {
+  const target = Number(id);
+  if (!Number.isFinite(target)) return null;
+
+  for (let page = 0; page < DETAIL_SCAN_PAGES; page += 1) {
+    const result = await fetchRecordsList({
+      limit: MAX_LIMIT,
+      offset: page * MAX_LIMIT
+    });
+    const hit = result.items.find((item) => item.record_id === target);
+    if (hit) return hit;
+    if (result.items.length < MAX_LIMIT) return null;
+  }
+  return null;
 }
 
-/**
- * 刷新练习记录缓存。
- * P2 阶段实现：调用 store 的 load()，并处理强制刷新参数。
- */
-export async function refreshRecords(): Promise<void> {
-  throw new Error('refreshRecords 尚未实现（P2 阶段实现）');
+export function fetchRecordsStats(): Promise<RecordsStats> {
+  return request<RecordsStats>({
+    url: '/api/stats/',
+    method: 'GET'
+  });
+}
+
+export async function fetchRecordsTrend(days = 7): Promise<RecordsTrendPoint[]> {
+  const data = await request<{ trend?: RecordsTrendPoint[] }>({
+    url: '/api/stats/practice-trend',
+    method: 'GET',
+    params: { days }
+  });
+  return data.trend ?? [];
+}
+
+export async function refreshRecords(): Promise<RecordsListResult> {
+  return fetchRecordsList();
+}
+
+export function applyRecordsFilters(
+  items: RecordsItem[],
+  filters: RecordsFilters = {}
+): RecordsItem[] {
+  const keyword = filters.keyword?.trim().toLowerCase() ?? '';
+  return items.filter((item) => {
+    if (filters.subjectId != null && item.subject_id !== filters.subjectId) {
+      return false;
+    }
+    if (filters.isCorrect != null && item.is_correct !== filters.isCorrect) {
+      return false;
+    }
+    if (filters.source && item.source !== filters.source) {
+      return false;
+    }
+    if (keyword) {
+      const haystack = `${item.question_content} ${item.source ?? ''}`.toLowerCase();
+      if (!haystack.includes(keyword)) return false;
+    }
+    return true;
+  });
 }

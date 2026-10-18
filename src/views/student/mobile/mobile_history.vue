@@ -58,33 +58,40 @@
           <div class="detail-row"><b>正确答案：</b>{{ r.correct_answer || '无' }}</div>
         </div>
       </div>
-      <div v-if="!records.length && !loading" class="empty">暂无练习记录</div>
+      <div v-if="error" class="empty">{{ error }}</div>
+      <div v-else-if="!records.length && !loading" class="empty">暂无练习记录</div>
       <div v-if="loading" class="empty">加载中...</div>
-      <button v-if="records.length < total" class="load-more" @click="loadMore">加载更多</button>
+      <button v-if="hasMore" class="load-more" @click="loadMore">加载更多</button>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
 import * as echarts from 'echarts';
+import { useRecordsStore } from '@/modules/records/store';
 
 const router = useRouter();
-const auth: any = (window as any).__VTJ_AUTH__;
 
-const stats = ref<any>({ totalQuestions: 0, accuracyRate: 0, totalStudyHours: 0 });
-const trendDays = ref(7);
-const records = ref<any[]>([]);
-const total = ref(0);
-const offset = ref(0);
-const loading = ref(false);
+const recordsStore = useRecordsStore();
+const { loading, error, filteredRecords, hasMore, stats: recordStats, trend, trendDays } = storeToRefs(recordsStore);
+const records = filteredRecords;
+
+const stats = computed(() => ({
+  totalQuestions: recordStats.value?.totalQuestions ?? 0,
+  accuracyRate: recordStats.value?.accuracyRate ?? 0,
+  totalStudyHours: recordStats.value?.totalStudyHours ?? 0
+}));
+
 const expandedId = ref<number | null>(null);
 
 const lineChart = ref<HTMLDivElement | null>(null);
 const barChart = ref<HTMLDivElement | null>(null);
 let lineInstance: any = null;
 let barInstance: any = null;
+let offRefresh: (() => void) | null = null;
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -95,61 +102,25 @@ const toggleDetail = (id: number) => {
   expandedId.value = expandedId.value === id ? null : id;
 };
 
-async function fetchStats() {
-  try {
-    const res = await auth.apiFetch('/api/stats/');
-    const data = await res.json();
-    stats.value = data;
-  } catch (e) {
-    console.error('加载统计失败:', e);
-  }
-}
-
-async function fetchRecords(reset = true) {
-  loading.value = true;
-  try {
-    if (reset) offset.value = 0;
-    const res = await auth.apiFetch(`/api/practice/records?limit=20&offset=${offset.value}`);
-    const data = await res.json();
-    total.value = data.total || 0;
-    if (reset) records.value = data.items || [];
-    else records.value = records.value.concat(data.items || []);
-  } catch (e) {
-    console.error('加载记录失败:', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
 function loadMore() {
-  offset.value += 20;
-  fetchRecords(false);
+  void recordsStore.loadMore();
 }
 
 async function loadTrend(days: number) {
-  trendDays.value = days;
-  try {
-    const res = await auth.apiFetch(`/api/stats/practice-trend?days=${days}`);
-    const data = await res.json();
-    const trend = data.trend || [];
-    renderLineChart(trend);
-    if (days === 7) renderBarChart(trend);
-  } catch (e) {
-    console.error('加载趋势失败:', e);
-  }
+  await recordsStore.loadTrend(days);
 }
 
-function renderLineChart(trend: any[]) {
+function renderLineChart(points: any[]) {
   if (!lineChart.value) return;
   if (!lineInstance) lineInstance = echarts.init(lineChart.value);
   lineInstance.setOption({
     grid: { left: 36, right: 12, top: 20, bottom: 24 },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: trend.map((t: any) => (t.date || '').slice(5)), axisLabel: { fontSize: 10 } },
+    xAxis: { type: 'category', data: points.map((t: any) => (t.date || '').slice(5)), axisLabel: { fontSize: 10 } },
     yAxis: { type: 'value', minInterval: 1 },
     series: [{
       type: 'line',
-      data: trend.map((t: any) => t.questionsDone || 0),
+      data: points.map((t: any) => t.questionsDone || 0),
       smooth: true,
       lineStyle: { color: '#1A365D', width: 2 },
       itemStyle: { color: '#1A365D' },
@@ -158,17 +129,17 @@ function renderLineChart(trend: any[]) {
   });
 }
 
-function renderBarChart(trend: any[]) {
+function renderBarChart(points: any[]) {
   if (!barChart.value) return;
   if (!barInstance) barInstance = echarts.init(barChart.value);
   barInstance.setOption({
     grid: { left: 36, right: 12, top: 20, bottom: 24 },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: trend.map((t: any) => (t.date || '').slice(5)), axisLabel: { fontSize: 10 } },
+    xAxis: { type: 'category', data: points.map((t: any) => (t.date || '').slice(5)), axisLabel: { fontSize: 10 } },
     yAxis: { type: 'value', minInterval: 1 },
     series: [{
       type: 'bar',
-      data: trend.map((t: any) => t.questionsDone || 0),
+      data: points.map((t: any) => t.questionsDone || 0),
       barWidth: '50%',
       itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] },
     }],
@@ -180,15 +151,26 @@ function handleResize() {
   barInstance?.resize();
 }
 
+watch(trend, (points) => {
+  renderLineChart(points);
+  if (trendDays.value === 7) renderBarChart(points);
+});
+
 onMounted(async () => {
   await nextTick();
-  fetchStats();
-  fetchRecords();
-  await loadTrend(7);
+  await Promise.all([
+    recordsStore.load(),
+    recordsStore.loadStats(),
+    recordsStore.loadTrend(7)
+  ]);
+  renderLineChart(trend.value);
+  renderBarChart(trend.value);
+  offRefresh = recordsStore.bindRecordsRefresh();
   window.addEventListener('resize', handleResize);
 });
 
 onBeforeUnmount(() => {
+  offRefresh?.();
   window.removeEventListener('resize', handleResize);
   lineInstance?.dispose();
   barInstance?.dispose();
