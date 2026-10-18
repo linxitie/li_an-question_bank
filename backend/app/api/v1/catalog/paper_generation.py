@@ -32,6 +32,7 @@ from ....schemas.schemas import (
     PaperUpdate
 )
 from ....core.security import get_current_user, require_teacher_or_admin
+from .papers import apply_weakpoint_recommendation
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 logger = logging.getLogger(__name__)
@@ -504,6 +505,7 @@ async def get_paper_list(
         exam_type: Optional[str] = Query(None, description="考试类型"),
         composition_method: Optional[str] = Query(None, description="组卷方式"),
         keyword: Optional[str] = Query(None, max_length=100, description="搜索关键词"),
+        recommend: bool = Query(False, description="推荐位：按用户薄弱考点筛选，无薄弱点时返回全量"),
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(10, ge=1, le=100, description="每页数量"),
         current_user: SysUser = Depends(get_current_user),
@@ -549,6 +551,10 @@ async def get_paper_list(
                 ExamPaper.paper_code.like(f"%{keyword}%")
             )
         )
+
+    # E13：推荐位复用成绩分析域的薄弱点服务（只读），无薄弱点或参数为空时退化为全量
+    if recommend:
+        query = apply_weakpoint_recommendation(query, db, current_user.user_id)
 
     # 统计总数
     total = query.count()

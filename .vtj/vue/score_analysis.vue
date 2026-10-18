@@ -223,12 +223,14 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { renderQuestionContent } from '@/utils/questionRender';
+  import { useAnalyticsStore } from '@/modules/analytics/store';
 
   export default defineComponent({
     name: 'ScoreAnalysis',
     components: { NavBar, XIcon, XChart },
     setup(props) {
       const provider = useProvider({ id: 'score_analysis', version: '1778918611112' });
+      const analytics = useAnalyticsStore();
 
       const state = reactive({
         // 标签页
@@ -263,7 +265,7 @@
         refreshTimer: null
       });
 
-      return { state, props, provider, renderQuestionContent };
+      return { state, props, provider, renderQuestionContent, analytics };
     },
     computed: {
       chartOption() {
@@ -535,6 +537,8 @@
       }
     },
     mounted() {
+      // API 兜底：页面首次进入必须主动拉取一次，事件仅用于已打开页面增量刷新
+      this.analytics.load({ examType: this.state.activeTab === 'mock' ? 'MOCK_EXAM' : 'SELF_TEST' });
       this.loadData();
       this.startMonitoring();
     },

@@ -18,7 +18,7 @@ from ....models.models import (
 )
 
 from ....core.security import get_current_user, get_optional_user
-from ....services import growth_service
+from ....services import growth_service, weakpoint_reader
 from ....services.growth_service import add_growth, get_level_info, GROWTH_RULES
 
 router = APIRouter(prefix="/api/stats",tags=["学习统计"])
@@ -449,7 +449,9 @@ async def get_dashboard(
         return {"todayQuestions": 0, "weeklyQuestions": 0, "monthlyQuestions": 0,
                 "totalQuestions": 0, "accuracyRate": 0, "totalStudyHours": 0,
                 "streak": 0, "examCount": 0, "examAvgScore": 0,
-                "totalGoals": 0, "completedGoals": 0, "goalCompletionRate": 0}
+                "totalGoals": 0, "completedGoals": 0, "goalCompletionRate": 0,
+                # 薄弱点为附加字段，未登录时返回空集合而不是报错（E13 读链路兜底）
+                "weakPoints": []}
 
     now = datetime.now()
     today = now.date()
@@ -523,6 +525,9 @@ async def get_dashboard(
         "accuracyRate": accuracy_rate,
         "monthDays": month_days,
         "streakDays": streak_days,
+        # ⑧ 薄弱点唯一输出口径；⑤ 推荐位不 import 本 api 模块，而是复用同一个
+        # weakpoint_reader 服务（E13 是读依赖，不是写依赖）。
+        "weakPoints": weakpoint_reader.get_weakpoints(db, current_user.user_id),
     }
 
 

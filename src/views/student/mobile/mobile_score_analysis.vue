@@ -170,8 +170,10 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import * as echarts from 'echarts';
+import { useAnalyticsStore } from '@/modules/analytics/store';
 
 const router = useRouter();
+const analytics = useAnalyticsStore();
 
 // ===== 数据域拆分 =====
 // 用户反馈「显示的是做题数量而非考试成绩」的根因：原页面只有刷题统计，
@@ -499,6 +501,8 @@ const formatDuration = (seconds: number) => {
 };
 
 onMounted(() => {
+  // API 兜底：首次进入主动拉取本域快照；事件只负责已打开页面的增量刷新
+  analytics.load({ examType: 'SELF_TEST' });
   loadExamTab('self');
   // 全时段图表在窗口尺寸变化时必须重算，否则横屏/分屏后 canvas 会拉伸变形
   window.addEventListener('resize', onAllTimeResize);

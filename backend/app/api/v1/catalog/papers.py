@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
@@ -15,8 +16,24 @@ from ....models.models import (
 from ....schemas.schemas import PaperCreate, PaperUpdate, PaperDetailResponse, SuccessResponse
 from ....core.security import get_current_user, require_admin
 from ....core.cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
+from ....services import weakpoint_reader
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
+
+
+def apply_weakpoint_recommendation(query, db: Session, user_id: int):
+    """E13：按用户薄弱考点的题型筛选试卷；无薄弱点时原样返回全量查询。"""
+    type_ids = weakpoint_reader.get_weakpoint_type_ids(db, user_id)
+    if not type_ids:
+        return query
+
+    paper_ids = (
+        db.query(PaperQuestionRelation.paper_id)
+        .join(QuestionBank, PaperQuestionRelation.question_id == QuestionBank.question_id)
+        .filter(QuestionBank.type_id.in_(type_ids))
+        .subquery()
+    )
+    return query.filter(ExamPaper.paper_id.in_(select(paper_ids.c.paper_id)))
 
 
 def _require_staff(current_user: SysUser) -> None:

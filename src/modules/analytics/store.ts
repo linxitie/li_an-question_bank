@@ -1,23 +1,29 @@
 /**
- * 成绩分析（analytics）域 Store 外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 成绩分析（analytics）域 Store（P2-59）。
  *
- * 状态契约为最小公共骨架，字段与 README.md「store 状态契约」保持一致；
- * 本文件只提供可实例化的空签名，业务逻辑与真实数据加载在 P2 阶段实现。
+ * `load()` 一次拉取趋势、掌握度、薄弱点三块快照；任一请求失败即记录错误并
+ * 回到空态，避免半截数据被当成完整成绩分析展示。
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import {
+  fetchKnowledgeMastery,
+  fetchScoreTrend,
+  fetchWeakPoints,
+  refreshAnalytics,
+  type ExamType,
+  type KnowledgeMasteryItem,
+  type ScoreTrend,
+  type ScoreTrendQuery,
+  type WeakPoint
+} from './api';
 
-/** 本域状态契约（外壳字段） */
 export interface AnalyticsState {
-  /** 是否正在加载数据 */
   loading: boolean;
-  /** 最近一次错误信息（无错误为 null） */
   error: string | null;
-  /** 是否已完成首次初始化 */
   initialized: boolean;
 }
 
-/** 生成初始状态，保证 reset() 与首次加载口径一致 */
 export function createAnalyticsInitialState(): AnalyticsState {
   return {
     loading: false,
@@ -26,36 +32,112 @@ export function createAnalyticsInitialState(): AnalyticsState {
   };
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '成绩分析加载失败，请稍后重试';
+}
+
+const EMPTY_TREND: ScoreTrend = { examType: 'SELF_TEST', trend: [], avgScore: 0 };
+
 export const useAnalyticsStore = defineStore('analytics', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const initialized = ref(false);
 
-  /** 只读派生：本域是否可用（已完成初始化且无错误） */
-  const ready = computed(() => initialized.value && error.value === null);
+  const trend = ref<ScoreTrend>({ ...EMPTY_TREND });
+  const mastery = ref<KnowledgeMasteryItem[]>([]);
+  const weakPoints = ref<WeakPoint[]>([]);
 
-  /** 重置为初始状态（外壳实现，P2 阶段按需扩展） */
+  const ready = computed(() => initialized.value && error.value === null);
+  const hasWeakPoints = computed(() => weakPoints.value.length > 0);
+  const weakPointNames = computed(() =>
+    weakPoints.value.map((item) => item.knowledge_point)
+  );
+  const weakestPoint = computed(() => weakPoints.value[0] ?? null);
+
+  const masteryAverage = computed(() => {
+    const total = mastery.value.reduce((sum, item) => sum + item.count, 0);
+    if (total <= 0) return 0;
+    const correct = mastery.value.reduce((sum, item) => sum + item.correct, 0);
+    return Math.round((correct / total) * 1000) / 10;
+  });
+
+  const trendDelta = computed(() => {
+    const scores = trend.value.trend.map((point) => point.accuracy);
+    if (scores.length < 2) return 0;
+    return Math.round((scores[scores.length - 1] - scores[0]) * 10) / 10;
+  });
+
+  const isEmpty = computed(
+    () =>
+      trend.value.trend.length === 0 &&
+      mastery.value.length === 0 &&
+      weakPoints.value.length === 0
+  );
+
+  async function load(query: ScoreTrendQuery = {}): Promise<void> {
+    loading.value = true;
+    error.value = null;
+    try {
+      const result = await refreshAnalytics(query);
+      trend.value = result.trend;
+      mastery.value = result.mastery;
+      weakPoints.value = result.weakPoints;
+    } catch (e) {
+      error.value = errorMessage(e);
+      trend.value = { ...EMPTY_TREND };
+      mastery.value = [];
+      weakPoints.value = [];
+    } finally {
+      loading.value = false;
+      initialized.value = true;
+    }
+  }
+
+  async function loadSection(
+    section: 'trend' | 'mastery' | 'weakPoints',
+    examType: ExamType = 'SELF_TEST'
+  ): Promise<void> {
+    try {
+      if (section === 'trend') {
+        trend.value = await fetchScoreTrend({ examType });
+      } else if (section === 'mastery') {
+        mastery.value = await fetchKnowledgeMastery();
+      } else {
+        weakPoints.value = await fetchWeakPoints();
+      }
+    } catch (e) {
+      error.value = errorMessage(e);
+    }
+  }
+
   function reset(): void {
     const initial = createAnalyticsInitialState();
     loading.value = initial.loading;
     error.value = initial.error;
     initialized.value = initial.initialized;
-  }
-
-  /**
-   * 加载本域数据。
-   * P2 阶段实现：调用 api.ts 中的封装方法，成功后置 initialized 为 true。
-   */
-  async function load(): Promise<void> {
-    throw new Error('analytics 域 load() 尚未实现（P2 阶段实现）');
+    trend.value = { ...EMPTY_TREND };
+    mastery.value = [];
+    weakPoints.value = [];
   }
 
   return {
     loading,
     error,
     initialized,
+    trend,
+    mastery,
+    weakPoints,
     ready,
-    reset,
-    load
+    hasWeakPoints,
+    weakPointNames,
+    weakestPoint,
+    masteryAverage,
+    trendDelta,
+    isEmpty,
+    load,
+    loadSection,
+    reset
   };
 });
