@@ -147,6 +147,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   import StudyMaterialsEntry from './study_materials.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+  import { useCheckinStore } from '@/modules/checkin/store';
   export default defineComponent({
     name: 'HomePage',
     components: {
@@ -162,6 +163,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
     setup(props) {
       const provider = useProvider({ id: 'home_page', version: '1785750000100' });
       const recruitListRefs = ref({} as Record<string, HTMLElement>);
+      const checkinStore = useCheckinStore();
       const state = reactive({
         recruitCategories: [],
         recruitAllData: {},
@@ -170,7 +172,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
         // 后端元信息（本次更新时间 / 站点最新发布日期），P2 文案消费
         recruitMeta: null,
       });
-      return { state, props, provider, recruitListRefs, Briefcase, ArrowRight, sanitizeHtml };
+      return { state, props, provider, recruitListRefs, checkinStore, Briefcase, ArrowRight, sanitizeHtml };
     },
     methods: {
       scrollToTop(cardItem) {
@@ -268,6 +270,8 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
         fetchFn: (ctx) => this.fetchRecruitment(ctx),
         pollMs: 15 * 60 * 1000,
       });
+      // 签到入口：进入首页即向后端查询今日状态（不做本地布尔缓存）
+      this.checkinStore.load();
     },
     beforeUnmount() {
       if (this._recruitRefresher) {

@@ -1,53 +1,59 @@
 /**
- * 每日签到（checkin）域 API 封装外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 每日签到（checkin）域 API（P2-48）。
  *
- * 约束：
- *   1. 全域只允许使用 @/services/api/client 暴露的唯一 axios 实例，禁止自行 axios.create；
- *   2. 方法签名先按「列表 / 详情 / 刷新」三类占位，具体端点登记在 README「后端端点清单」；
- *   3. 方法体在 P2 阶段实现，当前调用会抛出明确的未实现错误。
+ * 端点为本域新增的 `/api/v1/growth/checkin`：
+ *   - POST /growth/checkin          签到（一天一次，后端幂等）
+ *   - GET  /growth/checkin/status   今日状态（每次实时查询，不做本地缓存）
+ *
+ * `apiClient` 的 baseURL 已是 `/api/v1`，故此处使用相对路径；
+ * 全域仅经此唯一 axios 实例发请求。
  */
 import { apiClient } from '@/services/api/client';
 
-/** 本域统一客户端引用：P2 阶段所有请求都经由此实例发起 */
 export const checkinClient = apiClient;
 
-/** 分页查询参数（外壳占位，P2 阶段按真实端点收窄） */
-export interface CheckinListQuery {
-  page?: number;
-  pageSize?: number;
-  [key: string]: unknown;
+export interface CheckinReward {
+  coins: number;
+  growth: number;
 }
 
-/** 分页查询结果（外壳占位，P2 阶段按后端响应结构收窄） */
-export interface CheckinListResult<T = unknown> {
-  items: T[];
-  total: number;
+/** 今日签到状态（后端权威快照） */
+export interface CheckinStatus {
+  date: string;
+  checked_in: boolean;
+  continuous_days: number;
+  /** 今日已获得的金币（未签到为 0） */
+  today_reward: number;
+  /** 下次签到可获得的奖励 */
+  next_reward: CheckinReward;
 }
 
-/**
- * 查询每日签到列表。
- * P2 阶段实现：经由 checkinClient 发起请求，端点见 README「后端端点清单」。
- */
-export async function fetchCheckinList(
-  query?: CheckinListQuery
-): Promise<CheckinListResult> {
-  throw new Error('fetchCheckinList 尚未实现（P2 阶段实现）');
+/** 签到结果；is_today_first=false 表示今日已签、本次未发奖 */
+export interface CheckinResult {
+  date: string;
+  checked_in: boolean;
+  is_today_first: boolean;
+  continuous_days: number;
+  today_reward: number;
+  reward_growth: number;
+  message: string;
 }
 
-/**
- * 查询每日签到详情。
- * P2 阶段实现：按 id 调用对应只读端点，并复用 store 中的缓存。
- */
-export async function fetchCheckinDetail(
-  id: string | number
-): Promise<unknown> {
-  throw new Error('fetchCheckinDetail 尚未实现（P2 阶段实现）');
+/** 查询今日签到状态（只读，不发布行为事件） */
+export function fetchTodayStatus(): Promise<CheckinStatus> {
+  return checkinClient
+    .get<CheckinStatus>('/growth/checkin/status')
+    .then((response) => response.data);
 }
 
-/**
- * 刷新每日签到缓存。
- * P2 阶段实现：调用 store 的 load()，并处理强制刷新参数。
- */
-export async function refreshCheckin(): Promise<void> {
-  throw new Error('refreshCheckin 尚未实现（P2 阶段实现）');
+/** 执行签到；幂等由后端唯一约束保证 */
+export function submitCheckin(): Promise<CheckinResult> {
+  return checkinClient
+    .post<CheckinResult>('/growth/checkin')
+    .then((response) => response.data);
+}
+
+/** 刷新今日状态（等同重新查询） */
+export function refreshCheckin(): Promise<CheckinStatus> {
+  return fetchTodayStatus();
 }

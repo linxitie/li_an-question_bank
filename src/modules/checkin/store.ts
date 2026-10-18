@@ -1,23 +1,27 @@
 /**
- * 每日签到（checkin）域 Store 外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 每日签到（checkin）域 Store（P2-48）。
  *
- * 状态契约为最小公共骨架，字段与 README.md「store 状态契约」保持一致；
- * 本文件只提供可实例化的空签名，业务逻辑与真实数据加载在 P2 阶段实现。
+ * - 今日状态每次 `load()` 都向后端查询，不做本地持久化或布尔缓存；
+ * - 签到中重复点击直接拒绝，避免并发重复请求（后端仍以唯一约束兜底）；
+ * - 成功签到后广播 `reward:coins-changed`，供「我的」与商城余额快照刷新；
+ * - 重复签到（is_today_first=false）不发事件。
  */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import {
+  fetchTodayStatus,
+  submitCheckin,
+  type CheckinResult,
+  type CheckinStatus
+} from './api';
+import { notifyCoinsChanged } from './events';
 
-/** 本域状态契约（外壳字段） */
 export interface CheckinState {
-  /** 是否正在加载数据 */
   loading: boolean;
-  /** 最近一次错误信息（无错误为 null） */
   error: string | null;
-  /** 是否已完成首次初始化 */
   initialized: boolean;
 }
 
-/** 生成初始状态，保证 reset() 与首次加载口径一致 */
 export function createCheckinInitialState(): CheckinState {
   return {
     loading: false,
@@ -26,36 +30,93 @@ export function createCheckinInitialState(): CheckinState {
   };
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return '请求失败，请稍后重试';
+}
+
 export const useCheckinStore = defineStore('checkin', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const initialized = ref(false);
 
-  /** 只读派生：本域是否可用（已完成初始化且无错误） */
-  const ready = computed(() => initialized.value && error.value === null);
+  const status = ref<CheckinStatus | null>(null);
+  const checkingIn = ref(false);
+  const lastResult = ref<CheckinResult | null>(null);
 
-  /** 重置为初始状态（外壳实现，P2 阶段按需扩展） */
+  const ready = computed(() => initialized.value && error.value === null);
+  const checkedInToday = computed(() => status.value?.checked_in === true);
+
+  async function load(): Promise<void> {
+    loading.value = true;
+    error.value = null;
+    try {
+      status.value = await fetchTodayStatus();
+    } catch (e) {
+      error.value = errorMessage(e);
+    } finally {
+      loading.value = false;
+      initialized.value = true;
+    }
+  }
+
+  async function checkin(): Promise<CheckinResult | null> {
+    if (checkingIn.value) return null;
+    if (status.value?.checked_in) return null;
+
+    checkingIn.value = true;
+    error.value = null;
+    try {
+      const result = await submitCheckin();
+      lastResult.value = result;
+      status.value = {
+        date: result.date,
+        checked_in: true,
+        continuous_days: result.continuous_days,
+        today_reward: result.today_reward,
+        next_reward: status.value?.next_reward ?? { coins: 0, growth: 0 }
+      };
+      if (result.is_today_first) {
+        notifyCoinsChanged({
+          delta: result.today_reward,
+          reason: 'checkin.done'
+        });
+      }
+      return result;
+    } catch (e) {
+      error.value = errorMessage(e);
+      return null;
+    } finally {
+      checkingIn.value = false;
+      initialized.value = true;
+    }
+  }
+
   function reset(): void {
     const initial = createCheckinInitialState();
     loading.value = initial.loading;
     error.value = initial.error;
     initialized.value = initial.initialized;
-  }
-
-  /**
-   * 加载本域数据。
-   * P2 阶段实现：调用 api.ts 中的封装方法，成功后置 initialized 为 true。
-   */
-  async function load(): Promise<void> {
-    throw new Error('checkin 域 load() 尚未实现（P2 阶段实现）');
+    status.value = null;
+    checkingIn.value = false;
+    lastResult.value = null;
   }
 
   return {
     loading,
     error,
     initialized,
+    status,
+    checkingIn,
+    lastResult,
     ready,
+    checkedInToday,
     reset,
-    load
+    load,
+    checkin
   };
 });

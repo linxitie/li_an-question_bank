@@ -29,7 +29,7 @@ from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
 from .api.v1.platform import feedback
-from .api.v1.growth import achievements
+from .api.v1.growth import achievements, checkin
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
@@ -630,6 +630,7 @@ app.include_router(shop.router, tags=["金币商城"])
 app.include_router(tasks.router, tags=["任务中心"])
 app.include_router(admin_shop.router, tags=["管理员端-金币商城"])
 app.include_router(achievements.router, tags=["成就"])
+app.include_router(checkin.router, tags=["每日签到"])
 app.include_router(feedback.router, tags=["意见反馈"])
 app.include_router(feedback.admin_router, tags=["反馈管理"])
 
