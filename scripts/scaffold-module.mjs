@@ -266,7 +266,9 @@ function renderEvents(domain, label) {
   }
   lines.push(
     ' * 约束：',
-    ' *   1. 前端事件常量一律在 @/stores/event-bus 的 EVENT_NAMES 登记，禁止手写事件名字面量；',
+    hasFrontend
+      ? ' *   1. 前端事件常量一律在 @/stores/event-bus 的 EVENT_NAMES 登记，禁止手写事件名字面量；'
+      : ' *   1. 本域不接入前端事件总线，不引用任何事件常量；',
     ' *   2. 本文件不建立订阅，P2 阶段在域入口调用 onEvent 并保留取消订阅函数；',
     ' *   3. 跨域只走事件总线，同域内部直接调用函数，不绕事件。',
     ' */'
