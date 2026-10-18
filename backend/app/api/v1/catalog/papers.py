@@ -18,6 +18,30 @@ from ....core.cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFI
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 
+
+def _require_staff(current_user: SysUser) -> None:
+    """组卷属于教师/管理员职责，学生不得建卷或改卷。"""
+    if current_user.user_type not in ("teacher", "admin"):
+        raise HTTPException(status_code=403, detail="仅教师或管理员可以管理试卷")
+
+
+def _require_admin_role(current_user: SysUser) -> None:
+    """审批与发布只能由管理员执行（role_level>=2 的教师不算管理员）。"""
+    if current_user.user_type != "admin" or current_user.role_level < 2:
+        raise HTTPException(status_code=403, detail="仅管理员可以审批或发布试卷")
+
+
+def _reject_transition(paper: ExamPaper, action: str, allowed: str) -> None:
+    """非法状态流转统一返回 409，并在 detail 中附当前状态与允许的前置状态。"""
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"当前试卷状态为 {paper.paper_type}，不允许{action}；"
+            f"仅 {allowed} 状态可以{action}"
+        ),
+    )
+
+
 @router.post("/", response_model=PaperDetailResponse, summary="创建试卷")
 async def create_paper(
     paper_data: PaperCreate,
@@ -26,7 +50,12 @@ async def create_paper(
 ):
     """
     创建试卷
+
+    教师建卷固定落为 DRAFT（草稿），必须经「提交审批」进入 PENDING 后，
+    由管理员审批（APPROVED / 退回 DRAFT），再发布为 PUBLISHED。
     """
+    _require_staff(current_user)
+
     # 检查试卷编号是否已存在
     existing = db.query(ExamPaper).filter(ExamPaper.paper_code == paper_data.paper_code).first()
     if existing:
@@ -34,7 +63,8 @@ async def create_paper(
     
     paper = ExamPaper(
         **paper_data.dict(),
-        creator_id=current_user.user_id
+        creator_id=current_user.user_id,
+        paper_type="DRAFT"  # 建卷一律草稿，禁止直接落审批/发布态
     )
     
     db.add(paper)
@@ -49,23 +79,33 @@ async def create_paper(
 @router.get("/{paper_id}", response_model=PaperDetailResponse, summary="获取试卷详情")
 async def get_paper(
     paper_id: int,
+    current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     获取试卷详情
+
+    学生（role_level < 2）只能读取 PUBLISHED 试卷；草稿/待审批试卷一律按不存在处理，
+    避免通过详情端点探测未公开试卷。教师/管理员按原有权限读取。
     """
-    cache_key = f"{PAPER_CACHE_PREFIX}{paper_id}"
-    cached = get_cache(cache_key)
-    if cached:
-        return cached
-    
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
-    
+
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
-    
-    set_cache(cache_key, paper.__dict__)
-    
+
+    if current_user.role_level < 2 and paper.paper_type != "PUBLISHED":
+        raise HTTPException(status_code=404, detail="试卷不存在")
+
+    cache_key = f"{PAPER_CACHE_PREFIX}{paper_id}"
+    # 只缓存已发布试卷，避免草稿内容经缓存泄漏给学生
+    if paper.paper_type == "PUBLISHED":
+        cached = get_cache(cache_key)
+        if cached:
+            return cached
+
+    if paper.paper_type == "PUBLISHED":
+        set_cache(cache_key, paper.__dict__)
+
     return paper
 
 @router.put("/{paper_id}", response_model=PaperDetailResponse, summary="更新试卷")
@@ -78,14 +118,19 @@ async def update_paper(
     """
     更新试卷
     """
+    _require_staff(current_user)
+
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
     
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
     
     # 只有管理员或创建者可以更新
-    if current_user.role_level < 2 and paper.creator_id != current_user.user_id:
+    if current_user.user_type != "admin" and paper.creator_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="无权修改此试卷")
+
+    if paper.paper_type != "DRAFT":
+        _reject_transition(paper, "编辑", "DRAFT")
     
     for key, value in paper_data.dict(exclude_unset=True).items():
         setattr(paper, key, value)
@@ -152,6 +197,12 @@ async def preview_paper(
     """
     学生端预览试卷 - 仅显示题目，不含答案和解析
     """
+    paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在")
+    if current_user.role_level < 2 and paper.paper_type != "PUBLISHED":
+        raise HTTPException(status_code=404, detail="试卷不存在")
+
     from ....services.exam_service import ExamService
     try:
         preview_data = ExamService.get_exam_preview(db, paper_id)
@@ -271,11 +322,11 @@ async def submit_for_approval(
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
     
-    if paper.creator_id != current_user.user_id:
+    if current_user.user_type != "admin" and paper.creator_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="只有创建者可以提交审批")
     
     if paper.paper_type != "DRAFT":
-        raise HTTPException(status_code=400, detail="只能提交草稿状态的试卷")
+        _reject_transition(paper, "提交审批", "DRAFT")
     
     if paper.question_count == 0:
         raise HTTPException(status_code=400, detail="试卷不能为空")
@@ -308,13 +359,15 @@ async def approve_paper(
     审批试卷
     - **approval_result**: APPROVED/REJECTED
     """
+    _require_admin_role(current_user)
+
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
     
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
     
     if paper.paper_type != "PENDING":
-        raise HTTPException(status_code=400, detail="试卷状态不是待审批")
+        _reject_transition(paper, "审批", "PENDING")
     
     if approval_result == "APPROVED":
         paper.paper_type = "APPROVED"
@@ -347,18 +400,32 @@ async def publish_paper(
     """
     发布试卷
     """
+    _require_admin_role(current_user)
+
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
     
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
     
     if paper.paper_type != "APPROVED":
-        raise HTTPException(status_code=400, detail="只有已审批通过的试卷才能发布")
+        _reject_transition(paper, "发布", "APPROVED")
     
     paper.paper_type = "PUBLISHED"
     paper.publish_time = datetime.now()
+    paper.approver_id = current_user.user_id
     db.commit()
     
     delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
+
+    from ....api.v1.platform.websocket import (
+        publish_data_changed,
+        ws_connection_manager,
+    )
+    await publish_data_changed(
+        ws_connection_manager.get_online_users(),
+        domain="exam",
+        type="paper.published",
+        id=paper_id,
+    )
     
     return SuccessResponse(message="发布成功")

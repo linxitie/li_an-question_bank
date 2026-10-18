@@ -1,53 +1,110 @@
 /**
- * 组卷与历年试卷（papers）域 API 封装外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 组卷与历年试卷（papers）域 API 封装。
  *
- * 约束：
- *   1. 全域只允许使用 @/services/api/client 暴露的唯一 axios 实例，禁止自行 axios.create；
- *   2. 方法签名先按「列表 / 详情 / 刷新」三类占位，具体端点登记在 README「后端端点清单」；
- *   3. 方法体在 P2 阶段实现，当前调用会抛出明确的未实现错误。
+ * 后端组卷端点挂在 `/api/papers`（api_surface.json 冻结口径），
+ * 与客户端默认 baseURL `/api/v1` 不同，故请求层显式置空 baseURL。
+ * 学生端列表强制 `paper_type=PUBLISHED`，未发布试卷不出现在本域。
  */
 import { apiClient } from '@/services/api/client';
 
-/** 本域统一客户端引用：P2 阶段所有请求都经由此实例发起 */
 export const papersClient = apiClient;
 
-/** 分页查询参数（外壳占位，P2 阶段按真实端点收窄） */
+export interface PaperItem {
+  paper_id: number;
+  paper_name: string;
+  paper_code: string;
+  subject_id: number;
+  subject_name?: string;
+  exam_type?: string;
+  paper_type?: string;
+  question_count?: number;
+  duration?: number;
+  total_score?: number;
+  difficulty?: number;
+  create_time?: string | null;
+  publish_time?: string | null;
+}
+
 export interface PapersListQuery {
   page?: number;
   pageSize?: number;
-  [key: string]: unknown;
+  subjectId?: number | null;
+  examType?: string | null;
+  keyword?: string | null;
 }
 
-/** 分页查询结果（外壳占位，P2 阶段按后端响应结构收窄） */
-export interface PapersListResult<T = unknown> {
-  items: T[];
+export interface PapersListResult {
+  items: PaperItem[];
   total: number;
+  page: number;
+  pageSize: number;
 }
 
-/**
- * 查询组卷与历年试卷列表。
- * P2 阶段实现：经由 papersClient 发起请求，端点见 README「后端端点清单」。
- */
+export interface PapersFilters {
+  subjectId?: number | null;
+  examType?: string | null;
+  keyword?: string | null;
+}
+
+interface PapersRequestConfig {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  params?: Record<string, unknown>;
+  data?: unknown;
+}
+
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
+async function request<T>(config: PapersRequestConfig): Promise<T> {
+  const response = await papersClient.request<T>({ ...config, baseURL: '' });
+  return response.data;
+}
+
+function normalizePageSize(size?: number): number {
+  if (!size || size < 1) return DEFAULT_PAGE_SIZE;
+  return Math.min(Math.floor(size), MAX_PAGE_SIZE);
+}
+
 export async function fetchPapersList(
-  query?: PapersListQuery
+  query: PapersListQuery = {}
 ): Promise<PapersListResult> {
-  throw new Error('fetchPapersList 尚未实现（P2 阶段实现）');
+  const page = query.page && query.page > 0 ? Math.floor(query.page) : 1;
+  const pageSize = normalizePageSize(query.pageSize);
+  const data = await request<{
+    total?: number;
+    page?: number;
+    page_size?: number;
+    items?: PaperItem[];
+  }>({
+    url: '/api/papers/list',
+    method: 'GET',
+    params: {
+      page,
+      page_size: pageSize,
+      paper_type: 'PUBLISHED',
+      subject_id: query.subjectId ?? undefined,
+      exam_type: query.examType ?? undefined,
+      keyword: query.keyword?.trim() || undefined
+    }
+  });
+  return {
+    total: data.total ?? 0,
+    page: data.page ?? page,
+    pageSize: data.page_size ?? pageSize,
+    items: data.items ?? []
+  };
 }
 
-/**
- * 查询组卷与历年试卷详情。
- * P2 阶段实现：按 id 调用对应只读端点，并复用 store 中的缓存。
- */
-export async function fetchPapersDetail(
+export function fetchPapersDetail(
   id: string | number
-): Promise<unknown> {
-  throw new Error('fetchPapersDetail 尚未实现（P2 阶段实现）');
+): Promise<PaperItem> {
+  return request<PaperItem>({
+    url: `/api/papers/${id}`,
+    method: 'GET'
+  });
 }
 
-/**
- * 刷新组卷与历年试卷缓存。
- * P2 阶段实现：调用 store 的 load()，并处理强制刷新参数。
- */
 export async function refreshPapers(): Promise<void> {
-  throw new Error('refreshPapers 尚未实现（P2 阶段实现）');
+  await fetchPapersList({ page: 1 });
 }

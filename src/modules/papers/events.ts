@@ -1,22 +1,38 @@
 /**
- * 组卷与历年试卷（papers）域事件契约外壳 —— scripts/scaffold-module.mjs 生成（P1-13）
+ * 组卷与历年试卷（papers）域事件契约。
  *
- * 当前状态：仅登记计划，不建立任何订阅，也不触发任何事件（P2 阶段实现）。
- *
- * 约束：
- *   1. 前端事件常量一律在 @/stores/event-bus 的 EVENT_NAMES 登记，禁止手写事件名字面量；
- *   2. 本文件不建立订阅，P2 阶段在域入口调用 onEvent 并保留取消订阅函数；
- *   3. 跨域只走事件总线，同域内部直接调用函数，不绕事件。
+ * 后端在试卷发布后推送 `data-changed`（domain=exam, type=paper.published, id=paper_id）；
+ * 前端桥接为 `papers:data-changed`，本域订阅后做增量刷新。
+ * 事件只是加速器：页面 onMounted 仍须主动 load()，事件丢失不影响正确性。
  */
-/** 本域不发布前端事件。 */
+import {
+  EVENT_NAMES,
+  emitEvent,
+  onEvent,
+  type PapersDataChangedPayload
+} from '@/stores/event-bus';
+
 export const PUBLISHED_EVENTS = {} as const;
 
-/** 本域不订阅前端事件。 */
-export const SUBSCRIBED_EVENTS = {} as const;
+export const SUBSCRIBED_EVENTS = {
+  PAPERS_DATA_CHANGED: EVENT_NAMES.PAPERS_DATA_CHANGED
+} as const;
 
-/**
- * 本域向后端 record_user_action() 上报的 trigger_type（P2 阶段补齐调用点）：
- * - paper.completed：整卷完成后上报（成就 E3）
- */
+export const PAPERS_TRIGGER_TYPES = {
+  COMPLETED: 'paper.completed'
+} as const;
 
-/** 本域消费的后端行为 trigger_type：无。 */
+export function emitPapersDataChanged(
+  payload: PapersDataChangedPayload = {}
+): void {
+  emitEvent(EVENT_NAMES.PAPERS_DATA_CHANGED, {
+    source: 'papers',
+    ...payload
+  });
+}
+
+export function onPapersDataChanged(
+  handler: (payload: PapersDataChangedPayload) => void
+): () => void {
+  return onEvent(EVENT_NAMES.PAPERS_DATA_CHANGED, handler);
+}

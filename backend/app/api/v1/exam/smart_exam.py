@@ -39,6 +39,8 @@ from ....models.models import (
     PracticeRecord,
     WrongQuestionPersonal,
 )
+from ....core.trigger_types import TRIGGER_PAPER_COMPLETED
+from ....services.event_consumer import record_user_action
 from ....schemas.schemas import (
     SmartExamGenerateRequest,
     SmartExamGenerateResponse,
@@ -813,7 +815,16 @@ async def submit_smart_exam(
         db.flush()
 
     if smart_record.status == "completed":
-        raise HTTPException(status_code=400, detail="该试卷已提交，不能重复提交")
+        return {
+            "message": "该试卷已提交，本次重复回调已忽略",
+            "record_id": smart_record.id,
+            "exam_record_id": smart_record.exam_record_id,
+            "paper_id": paper_id,
+            "paper_name": smart_record.paper_name,
+            "earned_score": float(smart_record.earned_score or 0),
+            "duplicate": True,
+            "synced_to_analysis": True,
+        }
 
     # 2. 获取试卷和题目
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
@@ -971,6 +982,22 @@ async def submit_smart_exam(
         logger.warning(f"自动签到失败: {e}")
 
     db.commit()
+
+    try:
+        await record_user_action(
+            db,
+            current_user.user_id,
+            TRIGGER_PAPER_COMPLETED,
+            session={
+                "paper_id": paper_id,
+                "record_id": smart_record.id,
+                "exam_record_id": exam_record.record_id,
+                "total_score": total_score,
+                "max_score": float(paper.total_score or 0),
+            },
+        )
+    except Exception as e:
+        logger.warning(f"整卷完成事件发布失败(paper={paper_id}): {e}")
 
     # 计算正确率
     accuracy = round(correct_count / max(scored_count, 1) * 100, 1)

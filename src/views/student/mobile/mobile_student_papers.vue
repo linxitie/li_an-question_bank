@@ -23,12 +23,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { usePapersStore } from '@/modules/papers/store';
 
 const router = useRouter();
-const papers = ref<any[]>([]);
-const loading = ref(false);
+const papersStore = usePapersStore();
+const papers = computed(() => papersStore.items);
+const loading = computed(() => papersStore.loading);
+let unbindRefresh: (() => void) | null = null;
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -44,18 +47,9 @@ const examTypeName = (t: string) => {
 };
 
 const fetchPapers = async () => {
-  loading.value = true;
-  try {
-    const auth = (window as any).__VTJ_AUTH__;
-    if (!auth || !auth.isLoggedIn()) return;
-    const res = await auth.apiFetch('/api/papers/list?page=1&page_size=50');
-    const data = await res.json();
-    if (res.ok && data.items) papers.value = data.items;
-  } catch (e) {
-    console.error('获取试卷失败:', e);
-  } finally {
-    loading.value = false;
-  }
+  const auth = (window as any).__VTJ_AUTH__;
+  if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) return;
+  await papersStore.load({ pageSize: 50 });
 };
 
 const startPaper = (p: any) => {
@@ -63,7 +57,14 @@ const startPaper = (p: any) => {
   router.push('/answer?paper_id=' + p.paper_id);
 };
 
-onMounted(fetchPapers);
+onMounted(async () => {
+  await fetchPapers();
+  unbindRefresh = papersStore.bindRefresh();
+});
+
+onUnmounted(() => {
+  if (unbindRefresh) unbindRefresh();
+});
 </script>
 
 <style scoped>

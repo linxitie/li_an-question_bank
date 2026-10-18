@@ -125,17 +125,20 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted } from 'vue';
+import { defineComponent, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { usePapersStore } from '@/modules/papers/store';
 
 export default defineComponent({
   name: 'StudentPapers',
   setup() {
     const provider = useProvider({ id: 'student_papers', version: '1785407000000' });
     const router = useRouter();
+    const papersStore = usePapersStore();
+    let unbindRefresh: (() => void) | null = null;
     const username = ref('');
     const papers: any = ref([]);
     const filterSubject = ref('');
@@ -156,32 +159,24 @@ export default defineComponent({
       const auth = (window as any).__VTJ_AUTH__;
       if (auth) username.value = auth.getUsername() || '';
       await loadPapers();
+      unbindRefresh = papersStore.bindRefresh();
       await loadUserProgress();
     });
 
+    onUnmounted(() => {
+      if (unbindRefresh) unbindRefresh();
+    });
+
     async function loadPapers() {
-      const auth = (window as any).__VTJ_AUTH__;
-      const params = new URLSearchParams();
-      if (filterSubject.value) params.append('subject_id', filterSubject.value);
-      if (filterExamType.value) params.append('exam_type', filterExamType.value);
-      if (filterYear.value) params.append('year', filterYear.value);
-      if (searchKeyword.value) params.append('keyword', searchKeyword.value);
-      params.append('page_size', '50');
-      try {
-        const res = await auth.apiFetch('/api/exams/list?' + params.toString());
-        const data = await res.json();
-        if (data.data) {
-          papers.value = data.data || [];
-        } else if (data.items) {
-          papers.value = data.items || [];
-        } else {
-          papers.value = [];
-        }
-        loaded.value = true;
-      } catch (e) {
-        console.error('加载试卷失败:', e);
-        loaded.value = true;
-      }
+      loaded.value = false;
+      await papersStore.load({
+        pageSize: 50,
+        subjectId: filterSubject.value ? Number(filterSubject.value) : undefined,
+        examType: filterExamType.value || undefined,
+        keyword: searchKeyword.value.trim() || undefined,
+      });
+      papers.value = papersStore.items;
+      loaded.value = true;
     }
 
     async function loadUserProgress() {

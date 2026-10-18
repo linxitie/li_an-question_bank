@@ -4,7 +4,7 @@ WebSocket通信模块 - 支持实时问答、考试监控、消息推送
 import json
 import asyncio
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Iterable
 from enum import Enum
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
@@ -32,6 +32,7 @@ class MessageType(str, Enum):
     IMPORT_QUESTION = "import_question"
     IMPORT_COMPLETED = "import_completed"
     IMPORT_FAILED = "import_failed"
+    DATA_CHANGED = "data-changed"
 
 class ConnectionManager:
     def __init__(self):
@@ -113,6 +114,30 @@ class ConnectionManager:
         return self.user_rooms.get(room, [])
 
 ws_connection_manager = ConnectionManager()
+
+
+async def publish_data_changed(
+    user_ids: Iterable[int],
+    domain: str,
+    type: str,
+    id: int | str,
+) -> int:
+    """向指定在线用户推送 `data-changed` 通知。
+
+    载荷只携带 `{domain, type, id}`，接收端按 id 自行回源拉取最新数据，
+    避免事件通道成为第二份业务数据源。
+    """
+    message = {
+        "type": MessageType.DATA_CHANGED.value,
+        "data": {"domain": domain, "type": type, "id": id},
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    delivered = 0
+    for user_id in dict.fromkeys(user_ids):
+        if await ws_connection_manager.send_personal_message(message, user_id):
+            delivered += 1
+    return delivered
+
 
 @router.websocket("/connect")
 async def websocket_connect(

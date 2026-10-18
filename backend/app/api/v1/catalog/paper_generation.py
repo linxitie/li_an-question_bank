@@ -693,13 +693,18 @@ async def publish_paper(
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
 
-    # 权限检查
-    if paper.creator_id != current_user.user_id and current_user.role_level < 3:
-        raise HTTPException(status_code=403, detail="无权发布此试卷")
+    if current_user.user_type != "admin" or current_user.role_level < 2:
+        raise HTTPException(status_code=403, detail="仅管理员可以发布试卷")
 
     # 状态检查：仅已审批通过的试卷可发布（封堵教师绕过审批直发草稿）
     if paper.paper_type != "APPROVED":
-        raise HTTPException(status_code=400, detail="只有已审批通过的试卷才能发布")
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"当前试卷状态为 {paper.paper_type}，不允许发布；"
+                f"仅 APPROVED 状态可以发布"
+            ),
+        )
 
     # 检查是否有题目
     question_count = db.query(PaperQuestionRelation).filter(
@@ -712,7 +717,17 @@ async def publish_paper(
     # 发布
     paper.paper_type = "PUBLISHED"
     paper.publish_time = datetime.now()
+    paper.approver_id = current_user.user_id
     db.commit()
+
+    from ..platform.websocket import publish_data_changed, ws_connection_manager
+
+    await publish_data_changed(
+        ws_connection_manager.get_online_users(),
+        domain="exam",
+        type="paper.published",
+        id=paper_id,
+    )
 
     logger.info(f"用户 {current_user.username} 发布试卷 ID: {paper_id}")
 
