@@ -14,6 +14,7 @@ import {
 } from '@vtj/web';
 import { useTitle } from '@vueuse/core';
 import { createApp } from 'vue';
+import { createPinia } from 'pinia';
 import router from './router';
 import App from './App.vue';
 import { vtj, name } from '../package.json';
@@ -25,6 +26,7 @@ import { registerImageRetry } from './image-retry';  // 第9层防线：图片�
 registerImageRetry();
 
 const app = createApp(App);
+const pinia = createPinia();
 const adapter = createAdapter({ loading, notify, Startup, useTitle });
 const service = new LocalService(createServiceRequest(notify));
 const { provider, onReady } = createProvider({
@@ -47,6 +49,7 @@ const { provider, onReady } = createProvider({
 });
 
 onReady(async () => {
+  app.use(pinia);
   app.use(router);
   app.use(provider);
   app.use(IconsPlugin);
