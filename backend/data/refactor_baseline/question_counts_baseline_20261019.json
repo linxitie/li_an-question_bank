@@ -1,0 +1,214 @@
+{
+  "generated_at": "2026-10-19T21:36:50+08:00",
+  "db_path": "D:\\砺安题库\\砺安题库\\backend\\data\\question_bank.db",
+  "db_file_size_bytes": 317038592,
+  "db_file_mtime": "2026-10-19T19:47:24+08:00",
+  "mode": "baseline",
+  "metrics": {
+    "question_bank": {
+      "total": 3357,
+      "status_1_total": 3122,
+      "status_0_total": 235,
+      "status_other_total": 0,
+      "status_distribution": {
+        "0": 235,
+        "1": 3122
+      },
+      "audit_status_distribution": {
+        "1": 3357
+      }
+    },
+    "per_subject": {
+      "1": {
+        "subject_name": "行测",
+        "visible_total": 229,
+        "all_total": 235,
+        "status0_total": 6,
+        "subcategory_classified_counts": {
+          "判断推理": 52,
+          "常识判断": 12,
+          "政治理论": 20,
+          "数量关系": 9,
+          "知觉速度与准确性": 2,
+          "言语理解与表达": 41,
+          "资料分析": 14
+        },
+        "subcategory_classified_sum": 150,
+        "subcategory_unclassified": 79,
+        "subcategory_sum_incl_unclassified": 229,
+        "knowledge_linked_distinct_questions": 137,
+        "knowledge_unlinked_questions": 92,
+        "knowledge_linked_exceeds_visible": false,
+        "distinct_question_content": 229
+      },
+      "2": {
+        "subject_name": "申论",
+        "visible_total": 16,
+        "all_total": 37,
+        "status0_total": 21,
+        "subcategory_classified_counts": {
+          "应用文写作": 2,
+          "归纳概括": 4,
+          "提出对策": 2,
+          "综合分析": 3,
+          "议论文写作": 5
+        },
+        "subcategory_classified_sum": 16,
+        "subcategory_unclassified": 0,
+        "subcategory_sum_incl_unclassified": 16,
+        "knowledge_linked_distinct_questions": 16,
+        "knowledge_unlinked_questions": 0,
+        "knowledge_linked_exceeds_visible": false,
+        "distinct_question_content": 16
+      },
+      "3": {
+        "subject_name": "公专",
+        "visible_total": 2877,
+        "all_total": 3085,
+        "status0_total": 208,
+        "subcategory_classified_counts": {
+          "基本警务能力": 698,
+          "基础知识": 1739,
+          "职业素养": 124
+        },
+        "subcategory_classified_sum": 2561,
+        "subcategory_unclassified": 316,
+        "subcategory_sum_incl_unclassified": 2877,
+        "knowledge_linked_distinct_questions": 2431,
+        "knowledge_unlinked_questions": 446,
+        "knowledge_linked_exceeds_visible": false,
+        "distinct_question_content": 2864
+      }
+    },
+    "knowledge_point": {
+      "total": 631,
+      "distinct_point_name": 577,
+      "rows_point_name_qita": 35,
+      "duplicate_name_count": 18,
+      "duplicate_row_excess": 54
+    },
+    "question_knowledge": {
+      "total": 2775,
+      "distinct_knowledge_point_id": 72,
+      "distinct_question_id": 2774
+    },
+    "point_id_population": {
+      "non_null": 0,
+      "non_null_non_zero": 0
+    },
+    "shenlun_visible": {
+      "total": 16,
+      "options_empty_or_null": 16,
+      "group_id_gt_0": 8,
+      "group_id_eq_0": 8
+    },
+    "question_groups": {
+      "total": 23,
+      "groups_with_visible_member": 21,
+      "groups_with_0_visible_members": 2,
+      "groups_with_0_members_all_statuses": 1
+    },
+    "group_24": {
+      "exists": true,
+      "group_id": 24,
+      "member_count": 12,
+      "distinct_source_count": 1,
+      "group_source": "联考",
+      "group_subject": "申论",
+      "group_type": "material",
+      "shared_content_length": 6000,
+      "shared_content_head80": "给定材料\n材料1\n走进A市政务服务中心一楼大厅，首先映入眼帘的便是一块大屏幕。屏幕上有一张类似地铁运行图的线路表，各\n个站点闪烁着指示灯，“行驶”其间的，并非列"
+    },
+    "group_1": {
+      "exists": true,
+      "group_id": 1,
+      "member_count": 1,
+      "distinct_source_count": 1,
+      "group_source": "真题",
+      "group_subject": "公专",
+      "group_type": "material",
+      "shared_content_length": 394,
+      "shared_content_head80": "某派出所为解决广场舞引起的噪声扰民问题，通过摸索，总结出一套以“多元善治、合作共治、民主自治”为主要内容的“三治”工作法，并将其推广到其他非对抗性社会矛盾的治理"
+    }
+  },
+  "checks": [
+    {
+      "id": "subject_1_subcategory_sum_equals_visible",
+      "description": "行测 子分类计数之和（含未分类）== 可见总数",
+      "actual": 229,
+      "expected": 229,
+      "status": "pass"
+    },
+    {
+      "id": "subject_1_knowledge_linked_plus_unlinked_equals_visible",
+      "description": "行测 关联题数 + 未关联题数 == 可见总数",
+      "actual": 229,
+      "expected": 229,
+      "status": "pass"
+    },
+    {
+      "id": "subject_1_distinct_content_le_visible",
+      "description": "行测 去重题干数 <= 可见总数",
+      "actual": 229,
+      "expected": "<= 229",
+      "status": "pass"
+    },
+    {
+      "id": "subject_2_subcategory_sum_equals_visible",
+      "description": "申论 子分类计数之和（含未分类）== 可见总数",
+      "actual": 16,
+      "expected": 16,
+      "status": "pass"
+    },
+    {
+      "id": "subject_2_knowledge_linked_plus_unlinked_equals_visible",
+      "description": "申论 关联题数 + 未关联题数 == 可见总数",
+      "actual": 16,
+      "expected": 16,
+      "status": "pass"
+    },
+    {
+      "id": "subject_2_distinct_content_le_visible",
+      "description": "申论 去重题干数 <= 可见总数",
+      "actual": 16,
+      "expected": "<= 16",
+      "status": "pass"
+    },
+    {
+      "id": "subject_3_subcategory_sum_equals_visible",
+      "description": "公专 子分类计数之和（含未分类）== 可见总数",
+      "actual": 2877,
+      "expected": 2877,
+      "status": "pass"
+    },
+    {
+      "id": "subject_3_knowledge_linked_plus_unlinked_equals_visible",
+      "description": "公专 关联题数 + 未关联题数 == 可见总数",
+      "actual": 2877,
+      "expected": 2877,
+      "status": "pass"
+    },
+    {
+      "id": "subject_3_distinct_content_le_visible",
+      "description": "公专 去重题干数 <= 可见总数",
+      "actual": 2864,
+      "expected": "<= 2877",
+      "status": "pass"
+    },
+    {
+      "id": "point_id_populated",
+      "description": "question_bank.point_id 非空且非零的行数 > 0",
+      "actual": 0,
+      "expected": "> 0",
+      "status": "fail"
+    },
+    {
+      "id": "three_end_default_counts_equal",
+      "description": "三端默认口径计数一致",
+      "actual": null,
+      "expected": null,
+      "status": "not_evaluated",
+      "note": "API-level check deferred to P1"
+    }
+  ]
+}
