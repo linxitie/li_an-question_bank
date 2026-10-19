@@ -1,10 +1,10 @@
 /**
- * 17 个域外壳冒烟测试（P1-33）
+ * 20 个域外壳冒烟测试（P1-33）
  *
  * 覆盖范围（对齐实施计划 P1-33 验收标准）：
- *   1. 17 个域目录四件套齐备（store.ts / api.ts / events.ts / README.md）；
- *   2. 17 个 store.ts 均可在全新 createPinia + setActivePinia 下实例化，且状态契约可用；
- *   3. 17 个 api.ts 均引用 @/services/api/client 的唯一 apiClient，禁止自建 axios 实例；
+ *   1. 20 个域目录四件套齐备（store.ts / api.ts / events.ts / README.md）；
+ *   2. 20 个 store.ts 均可在全新 createPinia + setActivePinia 下实例化，且状态契约可用；
+ *   3. 20 个 api.ts 均引用 @/services/api/client 的唯一 apiClient，禁止自建 axios 实例；
  *   4. events.ts 的 PUBLISHED_EVENTS / SUBSCRIBED_EVENTS 与 EVENT_NAMES 常量表一致；
  *   5. README.md 具备 7 个域卡章节。
  *
@@ -16,7 +16,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { apiClient } from '@/services/api/client';
 import { EVENT_NAMES } from '@/stores/event-bus';
 
-/** 17 个业务域（顺序与实施计划一致） */
+/** 20 个业务域（顺序与实施计划一致） */
 const DOMAINS = [
   'identity',
   'catalog',
@@ -34,7 +34,10 @@ const DOMAINS = [
   'library',
   'growth',
   'reward',
-  'checkin'
+  'checkin',
+  'ai-assistant',
+  'mock-exam',
+  'mini-exam'
 ] as const;
 
 /** 每个域必须具备的四件套 */
@@ -95,7 +98,7 @@ beforeEach(() => {
   setActivePinia(createPinia());
 });
 
-describe('17 个域外壳：目录四件套', () => {
+describe('20 个域外壳：目录四件套', () => {
   it.each(DOMAINS)('%s 域四件套齐备（store/api/events/README）', (domain) => {
     for (const file of REQUIRED_FILES) {
       const exists = file === 'README.md' ? rawModules[`../${domain}/${file}`] !== undefined
@@ -105,7 +108,7 @@ describe('17 个域外壳：目录四件套', () => {
   });
 });
 
-describe('17 个域外壳：store.ts 可实例化', () => {
+describe('20 个域外壳：store.ts 可实例化', () => {
   it.each(DOMAINS)('%s 的 setup store 可实例化且状态契约可用', (domain) => {
     const module = storeModules[`../${domain}/store.ts`];
     expect(module, `${domain}/store.ts 未被加载`).toBeTruthy();
@@ -153,7 +156,7 @@ describe('17 个域外壳：store.ts 可实例化', () => {
   });
 });
 
-describe('17 个域外壳：api.ts 引用统一客户端', () => {
+describe('20 个域外壳：api.ts 引用统一客户端', () => {
   it.each(DOMAINS)('%s 的 api.ts 导出同一个 apiClient 实例', (domain) => {
     const module = apiModules[`../${domain}/api.ts`];
     expect(module, `${domain}/api.ts 未被加载`).toBeTruthy();
@@ -178,7 +181,7 @@ describe('17 个域外壳：api.ts 引用统一客户端', () => {
   });
 });
 
-describe('17 个域外壳：events.ts 与常量表一致', () => {
+describe('20 个域外壳：events.ts 与常量表一致', () => {
   it('EVENT_NAMES 的事件名无重复', () => {
     const values = Object.values(EVENT_NAMES);
     expect(new Set(values).size).toBe(values.length);
@@ -208,7 +211,7 @@ describe('17 个域外壳：events.ts 与常量表一致', () => {
   });
 });
 
-describe('17 个域外壳：README.md 域卡章节', () => {
+describe('20 个域外壳：README.md 域卡章节', () => {
   it.each(DOMAINS)('%s 的 README.md 具备 7 个章节', (domain) => {
     const source = readModuleFile(domain, 'README.md');
     const sections = Array.from(source.matchAll(/^##\s+([1-7])\.\s+/gm)).map((m) => Number(m[1]));

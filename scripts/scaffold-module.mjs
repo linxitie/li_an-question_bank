@@ -27,7 +27,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const MODULES_DIR = path.join(ROOT, 'src', 'modules');
 
-/** 规划中的 17 个业务域及其中文名 */
+/** 规划中的 20 个业务域及其中文名（⑱⑲⑳ 未开发占位） */
 const DOMAIN_NAMES = {
   identity: '认证与个人中心',
   catalog: '题库浏览',
@@ -45,7 +45,10 @@ const DOMAIN_NAMES = {
   library: '备考资料',
   growth: '成就成长',
   reward: '金币商城',
-  checkin: '每日签到'
+  checkin: '每日签到',
+  'ai-assistant': '联考小智',
+  'mock-exam': '模拟上机考试',
+  'mini-exam': '小模考'
 };
 
 /**
@@ -179,6 +182,15 @@ const DOMAIN_EVENTS = {
     reportBackend: [
       { name: 'checkin.done', note: '签到成功后上报（成就 E10）' }
     ]
+  },
+  'ai-assistant': {
+    note: '功能还未开发：不发布、不订阅前端事件，不接入成就链路；后续独立子项目实现。'
+  },
+  'mock-exam': {
+    note: '功能还未开发：不发布、不订阅前端事件，不接入成就链路；后续独立子项目实现。'
+  },
+  'mini-exam': {
+    note: '功能还未开发：不发布、不订阅前端事件，不接入成就链路；后续独立子项目实现。'
   }
 };
 
@@ -555,7 +567,7 @@ function main() {
 
   if (!Object.prototype.hasOwnProperty.call(DOMAIN_NAMES, domain)) {
     process.stderr.write(
-      `[scaffold-module] 提示：${domain} 不在 17 个规划域中，将按通用外壳生成。\n`
+      `[scaffold-module] 提示：${domain} 不在 20 个规划域中，将按通用外壳生成。\n`
     );
   }
 
