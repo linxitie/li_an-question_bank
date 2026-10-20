@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-20",
+  "plan": "docs/plans/三端数据流一致性修复方案_v1.md",
+  "source_note": "5 个真实案例 + 1 个 not_found；未使用合成案例。",
+  "cases": [
+    {
+      "id": "case_01_q85_tail_material",
+      "status": "found",
+      "raw_file": "raw/case_01_q85_tail_material.txt",
+      "raw_bytes": 2888,
+      "raw_lines": 37,
+      "raw_sha256": "01a877f629651993cf9a4998bf40bee09d240f10e92408cc29411c038f162035",
+      "source_path": "backend/data/text_cache.bak_20261001_200518/c52398a3400d554b34a1f3b5a9b7cc84.txt",
+      "source_type": "text_cache",
+      "source_md5": "a08e580399b8dcc4039bb5c867706913",
+      "provenance": {
+        "cache_key_md5": "c52398a3400d554b34a1f3b5a9b7cc84",
+        "original_pdf": "题库/公安题目（打印）/2025多省联考公安《公安专业》.pdf",
+        "original_pdf_md5": "c52398a3400d554b34a1f3b5a9b7cc84"
+      },
+      "locator": {
+        "line_start": 461,
+        "line_end": 497
+      },
+      "material_start": 477,
+      "material_end": 486,
+      "question_qnums": [
+        85,
+        86,
+        87
+      ],
+      "expected": {
+        "question_content_excludes": [
+          "五、根据以下情境材料"
+        ],
+        "material_text_includes": [
+          "五、根据以下情境材料",
+          "2024年11月26日8时15分"
+        ],
+        "analysis_excludes": [
+          "五、根据以下情境材料"
+        ],
+        "material_owner_qnums": [
+          86,
+          87,
+          88,
+          89
+        ]
+      },
+      "confidence": "high",
+      "notes": "Q85 的选项结束后出现材料头；目标是材料归 86-89，不得进入 Q85 的 content/analysis。"
+    },
+    {
+      "id": "case_02_2017_unmarked_material",
+      "status": "found",
+      "raw_file": "raw/case_02_2017_unmarked_material.txt",
+      "raw_bytes": 3363,
+      "raw_lines": 26,
+      "raw_sha256": "bd0974bb92a72f43f6bee4710aa38d67c3df979e4824675d4c7120ef47197984",
+      "source_path": "题库/公安题目（打印）/2017年公安院校联考《公安专业科目》题.docx",
+      "source_type": "docx",
+      "source_md5": "b503fee1bf77b4330d485f74880f7bc5",
+      "locator": {
+        "paragraph_start": 255,
+        "paragraph_end": 280
+      },
+      "material_start": 269,
+      "material_end": 269,
+      "question_qnums": [
+        85,
+        86,
+        87,
+        88
+      ],
+      "expected": {
+        "question_content_excludes": [
+          "某日，有群众报警，称本市六盘岭街道无言路8号"
+        ],
+        "material_text_includes": [
+          "某日，有群众报警，称本市六盘岭街道无言路8号"
+        ],
+        "analysis_excludes": [
+          "某日，有群众报警，称本市六盘岭街道无言路8号"
+        ],
+        "material_owner_qnums": [
+          85,
+          86,
+          87,
+          88
+        ]
+      },
+      "confidence": "high",
+      "notes": "段 256-257 是 Q81-84 的已标记材料；段 269 是 Q85-88 的无标记材料，必须按位置归属而不是只认材料头。"
+    },
+    {
+      "id": "case_03_material_after_analysis",
+      "status": "not_found",
+      "raw_file": null,
+      "source_path": null,
+      "source_type": null,
+      "source_md5": null,
+      "locator": null,
+      "material_start": null,
+      "material_end": null,
+      "question_qnums": [],
+      "expected": null,
+      "confidence": "high",
+      "search_scope": {
+        "gongzhuan_docx": 37,
+        "gongzhuan_pdf": 10,
+        "answer_pdf": 46,
+        "shenlun_pdf": 254,
+        "fields_checked": [
+          "text_cache",
+          "answer_analysis",
+          "parser reports"
+        ]
+      },
+      "reason": "未找到材料出现在答案解析之后的真实语料；现有 254 份申论 PDF、46 份答案解析 PDF、37 份公专 docx、10 份公专 PDF 均无该形态。",
+      "notes": "按计划要求不使用合成案例；P0-4 对该案例 skip，并在 P3 前继续寻找 2023-2025 真题或由用户提供真实样本。"
+    },
+    {
+      "id": "case_04_material_after_last_qnum",
+      "status": "found",
+      "raw_file": "raw/case_04_material_after_last_qnum.txt",
+      "raw_bytes": 1748,
+      "raw_lines": 16,
+      "raw_sha256": "05e63324e54e9c6a64d4cd744a3b0049e916d2acc7319886d0c91e2473018b57",
+      "source_path": "题库/公安题目（打印）/2021年12月12日江苏省公务员考试《公安专业科目》试题（网友回忆版）.docx",
+      "source_type": "docx",
+      "source_md5": "709342d1aab7e9941eadfd9b8f3c4ec5",
+      "locator": {
+        "paragraph_start": 448,
+        "paragraph_end": 464
+      },
+      "material_start": 460,
+      "material_end": 462,
+      "question_qnums": [
+        97,
+        98,
+        99,
+        100
+      ],
+      "expected": {
+        "question_content_excludes": [
+          "（十）",
+          "98－100"
+        ],
+        "material_text_includes": [
+          "（十）",
+          "98－100"
+        ],
+        "analysis_excludes": [
+          "（十）",
+          "98－100"
+        ],
+        "material_owner_qnums": [
+          98,
+          99,
+          100
+        ],
+        "orphan_material": true
+      },
+      "confidence": "medium",
+      "notes": "Q97 后出现（十）和 98－100 题材料头，但 98-100 题正文缺失；目标是把材料留在 orphan/next-group，不并入 Q97。"
+    },
+    {
+      "id": "case_05_essay_material_before_q1",
+      "status": "found",
+      "raw_file": "raw/case_05_essay_material_before_q1.txt",
+      "raw_bytes": 23740,
+      "raw_lines": 188,
+      "raw_sha256": "d3b8ce820a7e9e64e180c37b6a592e3ca04a3cafd0a53c5f824e834b1dba77c1",
+      "source_path": "backend/data/text_cache/3ea32a348611770b9ed35329f8f7ff81.txt",
+      "source_type": "text_cache",
+      "source_md5": "f29a1119ac22241ae6444fd60719a8f2",
+      "provenance": {
+        "cache_key_md5": "3ea32a348611770b9ed35329f8f7ff81",
+        "original_pdf": "题库/申论/安徽申论/2024年公务员多省联考《申论》题（安徽A、普通选调卷）.pdf",
+        "original_pdf_md5": "3ea32a348611770b9ed35329f8f7ff81"
+      },
+      "locator": {
+        "line_start": 1,
+        "line_end": 188
+      },
+      "material_start": 1,
+      "material_end": 182,
+      "question_qnums": [
+        1,
+        2
+      ],
+      "expected": {
+        "question_content_excludes": [
+          "梨子成为范家塘村招商引资的招牌"
+        ],
+        "material_text_includes": [
+          "梨子成为范家塘村招商引资的招牌"
+        ],
+        "analysis_excludes": [
+          "梨子成为范家塘村招商引资的招牌"
+        ],
+        "material_owner_qnums": [
+          1,
+          2
+        ]
+      },
+      "confidence": "high",
+      "notes": "申论材料 1-182 行，Q1 从 183 行开始；目标是把材料写到文档级 doc_material，而不是塞进 Q1 content。"
+    },
+    {
+      "id": "case_06_unnumbered_doc_material",
+      "status": "found",
+      "raw_file": "raw/case_06_unnumbered_doc_material.txt",
+      "raw_bytes": 22882,
+      "raw_lines": 215,
+      "raw_sha256": "2559df42997a0a34f82860077409e8f459bc45beab31bb9dce6665631c0f7525",
+      "source_path": "题库/申论/2022年国家公考《申论》真题（副省级）及参考答案 【四次元自习室】.pdf",
+      "source_type": "pdf_text",
+      "source_md5": "68cae1fea80dbb4d6813f17f9a3345c2",
+      "locator": {
+        "line_start": 1,
+        "line_end": 215
+      },
+      "material_start": 11,
+      "material_end": 202,
+      "question_qnums": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "expected": {
+        "question_content_excludes": [
+          "W 公司是我国一家著名的装备制造企业"
+        ],
+        "material_text_includes": [
+          "材料1",
+          "材料5",
+          "W 公司是我国一家著名的装备制造企业"
+        ],
+        "analysis_excludes": [
+          "W 公司是我国一家著名的装备制造企业"
+        ],
+        "material_owner_qnums": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "confidence": "medium",
+      "notes": "文档用“材料1..材料5”分节、题目用“一、二、三”且无题号；目标是 _extract_blocks_unnumbered 识别文档级材料，而不是把材料并入 Q1。"
+    }
+  ]
+}
