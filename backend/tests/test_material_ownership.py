@@ -137,3 +137,9 @@ def test_golden_case(case):
 
     else:  # pragma: no cover - manifest guard
         pytest.fail(f"unhandled case id: {case_id}")
+
+
+def test_material_ownership_v2_default_false():
+    from app.core.config import settings
+
+    assert settings.MATERIAL_OWNERSHIP_V2 is False

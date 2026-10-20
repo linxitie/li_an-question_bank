@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")
 
+    # ==================== 材料归属 V2（三端数据流一致性修复 P0-5）====================
+    # 关闭时保留旧解析/建组行为；打开后走 material_text / 文档级材料等新逻辑。
+    # P3 验收通过后改为默认 True，保留一个版本周期便于回滚。
+    MATERIAL_OWNERSHIP_V2: bool = Field(False, env="MATERIAL_OWNERSHIP_V2")
+
     # ==================== 扫描件OCR子进程（P1.1 进程隔离）====================
     # OCR 在独立子进程执行：子进程崩溃/超时被强杀，主后端进程无恙。
     # 背景：本机 Python 3.13 超出 PaddleOCR 官方支持（≤3.12），进程内 OCR 会硬崩。
