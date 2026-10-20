@@ -22,6 +22,7 @@ from ....models.models import (
 from ....services.option_utils import normalize_options, render_image_placeholder
 from ....services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
 from ....services.practice_grading import submit_answers
+from ....services.question_stats import QuestionStatsService
 
 router = APIRouter(prefix="/api/quick-practice", tags=["快速练习"])
 logger = logging.getLogger(__name__)
@@ -57,6 +58,52 @@ def _count_questions_by_kp(db: Session, kp_id: int) -> int:
     return db.query(func.count(QuestionKnowledge.id)).filter(
         QuestionKnowledge.knowledge_point_id == kp_id
     ).scalar() or 0
+
+
+def _subject_subcategory_col(subject_id: int):
+    """返回科目对应的 question_bank 子科目列"""
+    return {
+        1: QuestionBank.xingce_subcategory,
+        2: QuestionBank.shenlun_subcategory,
+        3: QuestionBank.gongzhuan_subcategory,
+    }.get(subject_id)
+
+
+def _normalize_subcategory_name(value) -> str:
+    """子科目名归一化：空值/「无」统一归入「未分类」"""
+    text = (value or "").strip()
+    return "未分类" if text in ("", "无") else text
+
+
+def _visible_question_ids_by_subcategory(db: Session, subject_id: int,
+                                         subcat_col) -> dict:
+    """按归一化子科目名收集可见题目ID（status=1 且 audit_status=1）"""
+    rows = QuestionStatsService.visible_query(db).with_entities(
+        QuestionBank.question_id, subcat_col
+    ).filter(QuestionBank.subject_id == subject_id).all()
+    grouped = {}
+    for question_id, raw_name in rows:
+        grouped.setdefault(_normalize_subcategory_name(raw_name), []).append(question_id)
+    return grouped
+
+
+def _visible_kp_question_ids(db: Session, kp_ids: List[int]) -> dict:
+    """按考点收集可见题目ID（status=1 且 audit_status=1）"""
+    if not kp_ids:
+        return {}
+    rows = db.query(
+        QuestionKnowledge.knowledge_point_id, QuestionKnowledge.question_id
+    ).join(
+        QuestionBank, QuestionKnowledge.question_id == QuestionBank.question_id
+    ).filter(
+        QuestionKnowledge.knowledge_point_id.in_(kp_ids),
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
+    ).all()
+    grouped = {}
+    for point_id, question_id in rows:
+        grouped.setdefault(point_id, []).append(question_id)
+    return grouped
 
 
 # ============================================================
@@ -106,44 +153,60 @@ async def get_sub_categories(
         SubCategory.status == 1
     ).order_by(SubCategory.sort_order).all()
 
+    base_query = QuestionStatsService.visible_query(db)
+    subcat_col = _subject_subcategory_col(subject_id)
+
+    counts = {}
+    if subcat_col is not None:
+        rows = base_query.with_entities(
+            subcat_col, func.count(QuestionBank.question_id)
+        ).filter(
+            QuestionBank.subject_id == subject_id
+        ).group_by(subcat_col).all()
+        for raw_name, cnt in rows:
+            name = _normalize_subcategory_name(raw_name)
+            counts[name] = counts.get(name, 0) + int(cnt)
+
+    question_ids_by_name = _visible_question_ids_by_subcategory(
+        db, subject_id, subcat_col
+    ) if subcat_col is not None else {}
+
     result = []
     for sc in sub_cats:
-        # 获取该子科目下的所有考点
         kps = db.query(KnowledgePoint).filter(
             KnowledgePoint.sub_category_id == sc.id,
         ).order_by(KnowledgePoint.sort_order).all()
 
-        # 收集该子科目下所有题目ID（按 question_bank 子科目列统计，与 /exercise/questions 同口径）
-        subcat_col = {
-            1: QuestionBank.xingce_subcategory,
-            2: QuestionBank.shenlun_subcategory,
-            3: QuestionBank.gongzhuan_subcategory,
-        }.get(subject_id)
-        sub_question_ids = []
-        if subcat_col is not None:
-            sub_rows = db.query(QuestionBank.question_id).filter(
-                QuestionBank.status == 1,
-                QuestionBank.subject_id == subject_id,
-                subcat_col == sc.name
-            ).all()
-            sub_question_ids = [r[0] for r in sub_rows]
-
-        sub_total = len(sub_question_ids)
+        sc_name = _normalize_subcategory_name(sc.name)
+        sub_question_ids = question_ids_by_name.get(sc_name, [])
+        sub_total = counts.get(sc_name, 0)
         sub_done = _get_user_done_counts(db, current_user.user_id, sub_question_ids)
         sub_correct = _get_user_correct_counts(db, current_user.user_id, sub_question_ids)
         sub_accuracy = round(sub_correct * 100 / max(sub_done, 1), 1) if sub_done else 0
 
-        # 构建考点列表
+        kp_ids = [kp.point_id for kp in kps]
+        kp_counts = {}
+        if kp_ids:
+            kp_rows = db.query(
+                QuestionKnowledge.knowledge_point_id,
+                func.count(QuestionKnowledge.id)
+            ).join(
+                QuestionBank, QuestionKnowledge.question_id == QuestionBank.question_id
+            ).filter(
+                QuestionKnowledge.knowledge_point_id.in_(kp_ids),
+                QuestionBank.status == 1,
+                QuestionBank.audit_status == 1,
+            ).group_by(QuestionKnowledge.knowledge_point_id).all()
+            for point_id, cnt in kp_rows:
+                kp_counts[point_id] = int(cnt)
+        kp_question_ids = _visible_kp_question_ids(db, kp_ids)
+
         point_items = []
         for kp in kps:
-            kp_question_ids = [
-                r[0] for r in db.query(QuestionKnowledge.question_id).filter(
-                    QuestionKnowledge.knowledge_point_id == kp.point_id
-                ).all()
-            ]
-            kp_total = len(kp_question_ids)
-            kp_done = _get_user_done_counts(db, current_user.user_id, kp_question_ids)
-            kp_correct = _get_user_correct_counts(db, current_user.user_id, kp_question_ids)
+            kp_questions = kp_question_ids.get(kp.point_id, [])
+            kp_total = kp_counts.get(kp.point_id, 0)
+            kp_done = _get_user_done_counts(db, current_user.user_id, kp_questions)
+            kp_correct = _get_user_correct_counts(db, current_user.user_id, kp_questions)
             kp_accuracy = round(kp_correct * 100 / max(kp_done, 1), 1) if kp_done else 0
 
             point_items.append({
@@ -165,6 +228,27 @@ async def get_sub_categories(
             "correct_count": sub_correct,
             "accuracy": sub_accuracy,
             "knowledge_points": point_items,
+            "is_unclassified": False,
+        })
+
+    # 仅当存在未归类题目时才追加合成「未分类」项
+    unclassified_total = counts.get("未分类", 0)
+    if unclassified_total > 0:
+        unclassified_ids = question_ids_by_name.get("未分类", [])
+        unc_done = _get_user_done_counts(db, current_user.user_id, unclassified_ids)
+        unc_correct = _get_user_correct_counts(db, current_user.user_id, unclassified_ids)
+        unc_accuracy = round(unc_correct * 100 / max(unc_done, 1), 1) if unc_done else 0
+        result.append({
+            "id": 0,
+            "name": "未分类",
+            "description": "未归入任何子科目的题目",
+            "sort_order": 999,
+            "total_questions": unclassified_total,
+            "done_count": unc_done,
+            "correct_count": unc_correct,
+            "accuracy": unc_accuracy,
+            "knowledge_points": [],
+            "is_unclassified": True,
         })
 
     return {
