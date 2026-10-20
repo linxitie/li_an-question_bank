@@ -8,73 +8,67 @@ from ..models.models import QuestionBank, SysUser
 
 class QuestionStatsService:
     """题目统计服务 - 统一各端统计口径"""
-    
+
+    @classmethod
+    def visible_query(cls, db: Session, include_offline: bool = False,
+                      include_pending: bool = False):
+        """题目可见性统一入口：默认只看正常状态 + 审核通过。
+
+        Args:
+            include_offline: True 时不限制 status（含禁用/草稿等）
+            include_pending: True 时不限制 audit_status（含未审核）
+        """
+        query = db.query(QuestionBank)
+        if not include_offline:
+            query = query.filter(QuestionBank.status == 1)
+        if not include_pending:
+            query = query.filter(QuestionBank.audit_status == 1)
+        return query
+
     @staticmethod
-    def get_stats(db: Session, user: SysUser) -> Dict:
+    def get_stats(db: Session, user: SysUser, include_offline: bool = False,
+                  include_pending: bool = False, mine: bool = False) -> Dict:
         """
         获取题目统计信息
-        
+
         Args:
             db: 数据库会话
             user: 当前用户
-            
+            include_offline: 是否包含非正常状态题目
+            include_pending: 是否包含未审核题目
+            mine: 教师端是否只看自己创建的题目
+
         Returns:
             {
-                "total": int,           # 总数（按角色过滤）
-                "by_subject": dict,     # 按科目分布
-                "by_type": dict,        # 按题型分布
-                "by_difficulty": dict,  # 按难度分布
-                "by_status": dict,      # 按状态分布
+                "total": int,             # 总数（按可见性/角色过滤）
+                "by_subject": dict,       # 按科目分布
+                "by_type": dict,          # 按题型分布
+                "by_difficulty": dict,    # 按难度分布
+                "by_status": dict,        # 按状态分布
+                "visible_total": int,     # 默认可见题目数（学生口径）
+                "my_total": int,          # 教师创建的全部题目数（仅教师）
                 "student_available": int  # 学生可练习数（仅教师/管理员可见）
             }
         """
         role = str(user.user_type)
         user_id = int(user.user_id)
-        
-        if role == "student":
-            # 学生端：只看已发布、可用的题目
-            base_query = db.query(QuestionBank).filter(
-                QuestionBank.status == 1,  # 正常状态
-                QuestionBank.audit_status == 1,  # 审核通过
-            )
-            total = base_query.count()
-            student_available = total
-            
-        elif role == "teacher":
-            # 教师端：看自己创建的所有题目 + 学生可练习题目数
-            my_questions = db.query(QuestionBank).filter(
-                QuestionBank.creator_id == user_id
-            )
-            total = my_questions.count()
-            
-            # 学生可练习数（供对比显示）
-            student_available = db.query(QuestionBank).filter(
-                QuestionBank.status == 1,
-                QuestionBank.audit_status == 1,
-            ).count()
-            
-        else:  # admin
-            # 管理员端：看所有题目
-            base_query = db.query(QuestionBank)
-            total = base_query.count()
-            student_available = db.query(QuestionBank).filter(
-                QuestionBank.status == 1,
-                QuestionBank.audit_status == 1,
-            ).count()
-        
-        # 通用分布查询（根据角色调整基础查询）
-        if role == "student":
-            dist_query = db.query(QuestionBank).filter(
-                QuestionBank.status == 1,
-                QuestionBank.audit_status == 1,
-            )
-        elif role == "teacher":
-            dist_query = db.query(QuestionBank).filter(
-                QuestionBank.creator_id == user_id
-            )
-        else:
-            dist_query = db.query(QuestionBank)
-        
+
+        # 学生口径（永远只看正常 + 审核通过）
+        visible_total = QuestionStatsService.visible_query(db).count()
+
+        # 统计基础查询：默认与学生口径一致
+        base_query = QuestionStatsService.visible_query(
+            db,
+            include_offline=include_offline,
+            include_pending=include_pending,
+        )
+
+        if role == "teacher" and mine:
+            base_query = base_query.filter(QuestionBank.creator_id == user_id)
+
+        total = base_query.count()
+        dist_query = base_query
+
         # 按科目分布
         subject_dist = dist_query.join(
             QuestionBank.subject
@@ -128,12 +122,17 @@ class QuestionStatsService:
             "by_type": by_type,
             "by_difficulty": by_difficulty,
             "by_status": by_status,
+            "visible_total": visible_total,
         }
-        
-        # 教师/管理员额外显示学生可用数
+
+        if role == "teacher":
+            result["my_total"] = db.query(QuestionBank).filter(
+                QuestionBank.creator_id == user_id
+            ).count()
+
         if role in ["teacher", "admin"]:
-            result["student_available"] = student_available
-        
+            result["student_available"] = visible_total
+
         return result
     
     @staticmethod
@@ -190,13 +189,8 @@ class QuestionStatsService:
         Args:
             for_student: 是否为学生视角（自动加上 status=1, audit_status=1）
         """
-        query = db.query(QuestionBank)
-        
-        if for_student:
-            query = query.filter(
-                QuestionBank.status == 1,
-                QuestionBank.audit_status == 1,
-            )
+        query = QuestionStatsService.visible_query(db) if for_student \
+            else db.query(QuestionBank)
         
         if subject_id:
             query = query.filter(QuestionBank.subject_id == subject_id)
