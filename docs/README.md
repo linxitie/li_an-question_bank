@@ -459,6 +459,27 @@ git diff --name-only ORIG_HEAD..HEAD
 
 ###### 每次完成自己模块的预期目标或者效果一定一定要合并并推送至github中否则会出现内容过多，项目冗余的情况，严重会破坏整个项目(可以手动进行分支合并和推送，也可以让AI执行命令合并推送)
 
+### 9.3.1附加手动实现分支合并并推送
+- 第一步 保存并提交自己的代码
+  # 查看自己改了哪些文件
+  git status
+  # 添加并提交（注意：一定要确认没有把 .db、.env 等无用文件加进去）
+  git add .
+  git commit -m "feat: 完成功能设计与测试"
+- 第二步 切回主干，拉取你的最新代码（极其关键）
+  为了防止他推送时覆盖掉你刚写的代码，他必须先同步你的最新进度。
+  # 1. 切回主干
+  git checkout main
+  # 2. 拉取你（负责人）在 GitHub 上的最新代码
+  git pull origin main
+- 第三步 将分支合并进主干
+  # 把 feat/my-feature 合并进当前的 main 分支
+  git merge feat/my-feature
+  **如果成功：终端会显示 Merge made by...。直接进入第四步。**
+  **如果有冲突：终端会报错 CONFLICT。让他立刻停止，并通知你。让他用 VS Code 解决完冲突，执行 git add . 和 git commit 后再继续。**
+- 第四步 推送到 GitHub
+  git push origin main
+
 
 ### 9.4 数据库有变更时：先备份，再启动
 
