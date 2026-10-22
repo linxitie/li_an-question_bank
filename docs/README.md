@@ -204,7 +204,7 @@ src/
 
 ## 7. 启动系统（首次与日常）
 
-> 先下载项目内容："npm install"；前端依赖应在**仓库根**安装。按 7.1 → 7.6 的顺序执行，不要先跑前端再装后端。
+# > 先下载项目内容："npm install"；前端依赖应在**仓库根**安装。按 7.1 → 7.6 的顺序执行，不要先跑前端再装后端。
 
 ### 7.1 环境要求与检查
 
@@ -239,19 +239,19 @@ git log --oneline -5
 
 **下载项目内容完毕后**
 
-```powershell
-cd D:\砺安题库\砺安题库\backend
-输入命令"python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",entre即可
-```
+# ```powershell
+# cd D:\砺安题库\砺安题库\backend
+# 输入命令"python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",entre即可
+# ```
 
 ### 7.4 启动前端（Vite + VTJ）
 
 **必须从仓库根启动**（`vite.config.ts` 有 `workspaceRoot` 强制校验，不能从 `backend/` 或子目录启动）：
 
-```powershell
-cd D:\砺安题库\砺安题库
-npm run dev
-```
+# ```powershell
+# cd D:\砺安题库\砺安题库
+# npm run dev
+# ```
 
 -
 - `npm run dev` 实际执行 `cross-env ENV_TYPE=local vite`，端口 **9527**，`host: '0.0.0.0'`，手机/平板可通过局域网访问。
@@ -300,11 +300,11 @@ docker compose logs -f backend
 - 卷：`db_data`（SQLite + 门禁基线）、`uploads`、`qimg`（题图）、`parser_cache`（MinerU 权重）。**不要执行 `docker compose down -v`**，否则会删除数据库、上传文件和题图。
 - `qimg` 卷首次需要导入 `backend/app/static/` 的题图（约 4.3 GB）；不导入会全站裂图。
 - `deploy/.env.development` / `.env.school` 含真实密钥，已被 `.gitignore` 排除，禁止提交；仓库只保留 `deploy/.env.example`。
-
+ -->
 **进行项目克隆完毕之后**
-打开自己最适合最常用的AI编码工具（推荐使用claude终端版、opencode终端版、gpt、cursor等等） -->
+# 打开自己最适合最常用的AI编码工具（推荐使用claude终端版、opencode终端版、gpt、cursor等等） ,并进行所有提前配置完毕后再进行具体项目设计（后面一一提及，大大和大大大的字体就是要特别关注的）
 
-## 8.进行分支独立设计的提示词约束：
+# 8.进行分支独立设计的提示词约束：
 ```
 ## 分支拓扑约定（必须严格遵守）
 
@@ -457,23 +457,23 @@ git diff --stat ORIG_HEAD..HEAD
 git diff --name-only ORIG_HEAD..HEAD
 ```
 
-###### 每次完成自己模块的预期目标或者效果一定一定要合并并推送至github中否则会出现内容过多，项目冗余的情况，严重会破坏整个项目(可以手动进行分支合并和推送，也可以让AI执行命令合并推送)
+# 每次完成自己模块的预期目标或者效果一定一定要合并并推送至github中否则会出现内容过多，项目冗余的情况，严重会破坏整个项目(可以手动进行分支合并和推送，也可以让AI执行命令合并推送)
 
 ### 9.3.1附加手动实现分支合并并推送
 - 第一步 保存并提交自己的代码
-  # 查看自己改了哪些文件
+  ### 查看自己改了哪些文件
   git status
-  # 添加并提交（注意：一定要确认没有把 .db、.env 等无用文件加进去）
+  ### 添加并提交（注意：一定要确认没有把 .db、.env 等无用文件加进去）
   git add .
   git commit -m "feat: 完成功能设计与测试"
 - 第二步 切回主干，拉取你的最新代码（极其关键）
   为了防止他推送时覆盖掉你刚写的代码，他必须先同步你的最新进度。
-  # 1. 切回主干
+  ### 1. 切回主干
   git checkout main
-  # 2. 拉取你（负责人）在 GitHub 上的最新代码
+  ### 2. 拉取你（负责人）在 GitHub 上的最新代码
   git pull origin main
 - 第三步 将分支合并进主干
-  # 把 feat/my-feature 合并进当前的 main 分支
+  ### 把 feat/my-feature 合并进当前的 main 分支
   git merge feat/my-feature
   **如果成功：终端会显示 Merge made by...。直接进入第四步。**
   **如果有冲突：终端会报错 CONFLICT。让他立刻停止，并通知你。让他用 VS Code 解决完冲突，执行 git add . 和 git commit 后再继续。**
@@ -566,7 +566,7 @@ npm run dev -- --force
 
 这些数据**不通过 Git 共享**。换机器/多人协作时用移动硬盘、内网共享、`rsync` 或对象存储；Docker 部署用命名卷持久化。
 
-### 10.3 Docker 下的数据库
+####  10.3 Docker 下的数据库
 
 `docker-compose.yml` 把数据挂到命名卷：
 
