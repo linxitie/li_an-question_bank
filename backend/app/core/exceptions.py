@@ -99,6 +99,7 @@ def create_error_response(
 ) -> Dict[str, Any]:
     return {
         "success": False,
+        "detail": message,
         "error": {
             "code": code or get_error_code(status_code),
             "message": message,

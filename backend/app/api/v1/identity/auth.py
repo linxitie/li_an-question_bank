@@ -87,7 +87,7 @@ class RegisterForm(BaseModel):
     password: str
     email: Optional[str] = None
     phone: str
-    user_no: str
+    user_no: Optional[str] = None
     user_type: str = "student"
 
 
@@ -218,10 +218,20 @@ async def register_user(
         db: Session = Depends(get_db)
 ):
     """用户注册接口"""
+    username = (form.username or "").strip()
+    phone = (form.phone or "").strip()
+    user_no = (form.user_no or username).strip()
+
+    if not username or not phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名和手机号不能为空"
+        )
+
     existing = db.query(SysUser).filter(
-        (SysUser.username == form.username) |
-        (SysUser.user_no == form.user_no) |
-        (SysUser.phone == form.phone)
+        (SysUser.username == username) |
+        (SysUser.user_no == user_no) |
+        (SysUser.phone == phone)
     ).first()
 
     if existing:
@@ -232,11 +242,11 @@ async def register_user(
 
     hashed_password = get_password_hash(form.password)
     new_user = SysUser(
-        username=form.username,
+        username=username,
         password=hashed_password,
         email=form.email,
-        phone=form.phone,
-        user_no=form.user_no,
+        phone=phone,
+        user_no=user_no,
         # 安全策略：注册仅创建学生账号，教师/管理员由管理员后台创建
         user_type="student",
         role_level=0,

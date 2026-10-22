@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     DB_CHARSET: str = Field("utf8mb4", env="DB_CHARSET")
     
     # SQLite配置
-    SQLITE_PATH: str = Field("./data/example_db.sqlite", env="SQLITE_PATH")
+    SQLITE_PATH: str = Field("./data/question_bank.db", env="SQLITE_PATH")
     
     # Redis配置
     REDIS_HOST: str = Field("localhost", env="REDIS_HOST")
