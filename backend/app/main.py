@@ -24,11 +24,11 @@ from .api.v1.content import news, recruitment, calendar
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
-from .api.v1.community import quotes, forum
+from .api.v1.community import quotes, forum, practice_admin
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
-from .api.v1.platform import feedback
+from .api.v1.platform import feedback, notifications
 from .api.v1.growth import achievements, checkin
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
@@ -242,6 +242,38 @@ async def lifespan(app: FastAPI):
                     ))
                     conn.commit()
                 logger.info("自动迁移: forum_like 添加列 reaction_code")
+
+        # 检查 user_feedback 表(反馈工单化: P0 新增字段)
+        if 'user_feedback' in inspector.get_table_names():
+            fb_cols = [c['name'] for c in inspector.get_columns('user_feedback')]
+            fb_new_cols = [
+                ('ticket_no', 'VARCHAR(24)'),
+                ('feedback_type', 'VARCHAR(32)'),
+                ('question_id', 'BIGINT'),
+                ('practice_record_id', 'BIGINT'),
+                ('attachments', 'JSON'),
+                ('priority', "VARCHAR(10) DEFAULT 'normal'"),
+                ('handler_id', 'BIGINT'),
+                ('claimed_at', 'DATETIME'),
+                ('first_response_at', 'DATETIME'),
+                ('resolved_at', 'DATETIME'),
+                ('source', "VARCHAR(20) DEFAULT 'form'"),
+                ('forum_post_id', 'BIGINT'),
+                ('subject_id', 'INTEGER'),
+                ('merged_into', 'BIGINT'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in fb_new_cols:
+                    if col_name not in fb_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE user_feedback ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: user_feedback 添加列 {col_name}")
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_ticket_unique "
+                    "ON user_feedback(ticket_no)"
+                ))
+                conn.commit()
 
         # 检查 knowledge_point 表(快速练习三级分类:新增 sub_category_id 字段)
         if 'knowledge_point' in inspector.get_table_names():
@@ -646,6 +678,10 @@ app.include_router(achievements.router, tags=["成就"])
 app.include_router(checkin.router, tags=["每日签到"])
 app.include_router(feedback.router, tags=["意见反馈"])
 app.include_router(feedback.admin_router, tags=["反馈管理"])
+app.include_router(practice_admin.router)
+app.include_router(practice_admin.admin_router)
+app.include_router(practice_admin.teacher_router)
+app.include_router(notifications.router)
 
 @app.get("/health", tags=["系统"])
 async def health_check():

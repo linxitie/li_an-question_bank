@@ -32,12 +32,18 @@ from ....core.database import get_db
 from ....core.config import settings
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import (
-    ForumPost, ForumComment, ForumLike, ForumSticker, SysUser, SysOperationLog
+    ForumPost, ForumComment, ForumLike, ForumSticker, ForumReport,
+    SysUser, SysOperationLog
 )
 from ....services.sensitive_words import sensitive_filter, SensitiveLevel
 from ....services.event_consumer import record_user_action
 from ....core.trigger_types import TRIGGER_FORUM_POSTED
-from ....core.exceptions import BusinessLogicError, ValidationError, ResourceNotFoundError
+from ....core.exceptions import (
+    BusinessLogicError,
+    DuplicateResourceError,
+    ValidationError,
+    ResourceNotFoundError,
+)
 
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
 logger = logging.getLogger(__name__)
@@ -1148,3 +1154,74 @@ async def get_forum_stats(
         "users": users_total,
         "online": total_users,
     }
+
+
+# ============================== 举报（P0） ==============================
+
+REPORT_TARGET_TYPES = {"POST", "COMMENT", "USER"}
+REPORT_REASON_CODES = {"spam", "abuse", "illegal", "other"}
+
+
+@router.post("/reports", summary="举报帖子/评论/用户")
+async def create_forum_report(
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    target_type = str(payload.get("target_type") or "").upper()
+    if target_type not in REPORT_TARGET_TYPES:
+        raise ValidationError("举报目标类型不合法")
+    try:
+        target_id = int(payload.get("target_id"))
+    except (TypeError, ValueError):
+        raise ValidationError("举报目标ID不合法")
+
+    reason_code = str(payload.get("reason_code") or "").lower()
+    if reason_code not in REPORT_REASON_CODES:
+        raise ValidationError("举报原因不合法")
+    reason_text = (payload.get("reason_text") or "").strip()[:200] or None
+
+    # 校验目标存在，并禁止举报自己的内容
+    if target_type == "POST":
+        target = db.query(ForumPost).filter(ForumPost.post_id == target_id).first()
+        owner_id = target.user_id if target else None
+    elif target_type == "COMMENT":
+        target = (
+            db.query(ForumComment)
+            .filter(ForumComment.comment_id == target_id)
+            .first()
+        )
+        owner_id = target.user_id if target else None
+    else:
+        target = db.query(SysUser).filter(SysUser.user_id == target_id).first()
+        owner_id = target_id if target else None
+
+    if not target:
+        raise ResourceNotFoundError("举报目标", target_id)
+    if owner_id == current_user.user_id:
+        raise BusinessLogicError("不能举报自己")
+
+    exists = (
+        db.query(ForumReport)
+        .filter(
+            ForumReport.reporter_id == current_user.user_id,
+            ForumReport.target_type == target_type,
+            ForumReport.target_id == target_id,
+        )
+        .first()
+    )
+    if exists:
+        raise DuplicateResourceError("举报记录")
+
+    report = ForumReport(
+        reporter_id=current_user.user_id,
+        target_type=target_type,
+        target_id=target_id,
+        reason_code=reason_code,
+        reason_text=reason_text,
+        status="PENDING",
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return {"success": True, "report_id": report.report_id}

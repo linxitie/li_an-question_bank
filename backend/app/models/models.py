@@ -1969,14 +1969,30 @@ class UserFeedback(Base):
 
     feedback_id = Column(Integer, primary_key=True, autoincrement=True, comment="反馈ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="提交人ID")
-    category = Column(String(32), nullable=False, comment="分类: 功能异常/内容错误/意见建议/其他")
+    category = Column(String(32), nullable=False, comment="分类: 功能异常/数据错误/界面问题/其他")
     content = Column(Text, nullable=False, comment="反馈内容")
     contact = Column(String(100), comment="联系方式(可选)")
-    status = Column(String(20), default="pending", comment="状态: pending/processing/replied/closed")
-    reply = Column(Text, comment="管理员/教师回复")
+    status = Column(String(20), default="pending", comment="状态: pending/claimed/replied/resolved/rejected/merged")
+    reply = Column(Text, comment="管理员/教师回复（兼容旧字段）")
     reply_by = Column(BigInteger, comment="回复人ID")
     replied_at = Column(DateTime, comment="回复时间")
     created_at = Column(DateTime, default=datetime.now, comment="提交时间")
+
+    # === 工单化扩展（P0） ===
+    ticket_no = Column(String(24), unique=True, comment="工单号 FBYYYYMMDD-000001")
+    feedback_type = Column(String(32), comment="类型: question_content/answer/analysis/function/other")
+    question_id = Column(BigInteger, comment="关联题目ID")
+    practice_record_id = Column(BigInteger, comment="关联练习记录ID")
+    attachments = Column(JSON, comment="截图列表 JSON")
+    priority = Column(String(10), default="normal", comment="优先级 low/normal/high")
+    handler_id = Column(BigInteger, comment="处理人ID")
+    claimed_at = Column(DateTime, comment="认领时间")
+    first_response_at = Column(DateTime, comment="首次响应时间（SLA 24h）")
+    resolved_at = Column(DateTime, comment="解决/驳回时间（SLA 72h）")
+    source = Column(String(20), default="form", comment="来源 form/forum/practice")
+    forum_post_id = Column(BigInteger, comment="来源论坛帖子ID")
+    subject_id = Column(Integer, comment="科目ID（用于范围分配）")
+    merged_into = Column(BigInteger, comment="合并到的主工单ID")
 
     user = relationship("SysUser")
 
@@ -1984,4 +2000,108 @@ class UserFeedback(Base):
         Index("idx_feedback_user", user_id),
         Index("idx_feedback_status", status),
         Index("idx_feedback_created", created_at),
+        Index("idx_feedback_ticket", ticket_no),
+        Index("idx_feedback_handler", handler_id),
+        Index("idx_feedback_question", question_id),
+    )
+
+
+class FeedbackReply(Base):
+    """反馈工单的多轮回复。"""
+    __tablename__ = "feedback_reply"
+
+    reply_id = Column(Integer, primary_key=True, autoincrement=True, comment="回复ID")
+    feedback_id = Column(Integer, ForeignKey("user_feedback.feedback_id"), nullable=False, comment="工单ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="回复人ID")
+    role = Column(String(20), comment="回复人角色 student/practice_admin/teacher/admin")
+    content = Column(Text, nullable=False, comment="回复内容")
+    attachments = Column(JSON, comment="附件 JSON")
+    created_at = Column(DateTime, default=datetime.now, comment="回复时间")
+
+    __table_args__ = (
+        Index("idx_feedback_reply_feedback", feedback_id, created_at),
+    )
+class UserCapability(Base):
+    """按用户授予的能力包（练习管理员等）。
+
+    与角色权限分离：角色决定基础能力，能力包决定额外授权与范围。
+    scope_type: global / subject / class；scope_id 对应科目或班级标识。
+    """
+    __tablename__ = "user_capability"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="被授权用户")
+    capability_code = Column(String(32), nullable=False, comment="能力码: practice_admin_teacher/practice_admin_student")
+    scope_type = Column(String(16), nullable=False, default="subject", comment="范围: global/subject/class")
+    scope_id = Column(Integer, comment="科目ID（scope_type=subject 时使用）")
+    scope_key = Column(String(64), comment="范围键（scope_type=class 时存班级名）")
+    status = Column(String(16), nullable=False, default="active", comment="状态: active/revoked")
+    granted_by = Column(BigInteger, comment="授权人ID")
+    granted_at = Column(DateTime, default=datetime.now, comment="授权时间")
+    revoked_at = Column(DateTime, comment="撤销时间")
+    note = Column(String(255), comment="任命说明")
+
+    user = relationship("SysUser", foreign_keys=[user_id])
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "capability_code", "scope_type", "scope_id", name="uk_user_capability"),
+        Index("idx_capability_user_status", user_id, status),
+        Index("idx_capability_scope", capability_code, scope_type, scope_id),
+    )
+
+
+class ForumReport(Base):
+    """论坛举报（帖子/评论/用户）。"""
+    __tablename__ = "forum_report"
+
+    report_id = Column(Integer, primary_key=True, autoincrement=True, comment="举报ID")
+    reporter_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="举报人")
+    target_type = Column(String(10), nullable=False, comment="目标类型: POST/COMMENT/USER")
+    target_id = Column(BigInteger, nullable=False, comment="目标ID")
+    reason_code = Column(String(20), nullable=False, comment="原因: spam/abuse/illegal/other")
+    reason_text = Column(String(200), comment="补充说明")
+    status = Column(String(16), nullable=False, default="PENDING", comment="PENDING/ACCEPTED/REJECTED")
+    handled_by = Column(BigInteger, comment="处理人")
+    handled_at = Column(DateTime, comment="处理时间")
+    created_at = Column(DateTime, default=datetime.now, comment="举报时间")
+
+    __table_args__ = (
+        UniqueConstraint("reporter_id", "target_type", "target_id", name="uk_forum_report_once"),
+        Index("idx_forum_report_status", status, created_at),
+        Index("idx_forum_report_target", target_type, target_id),
+    )
+
+
+class ForumMention(Base):
+    """论坛 @提及。"""
+    __tablename__ = "forum_mention"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键")
+    post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), comment="帖子ID")
+    comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="评论ID")
+    mentioned_user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="被提及用户")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_forum_mention_user", mentioned_user_id, created_at),
+    )
+
+
+class UserNotification(Base):
+    """统一站内信（学生/教师/管理员共用）。"""
+    __tablename__ = "user_notification"
+
+    notification_id = Column(Integer, primary_key=True, autoincrement=True, comment="通知ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="接收人")
+    type = Column(String(20), nullable=False, default="system", comment="feedback/forum/mention/system")
+    title = Column(String(200), nullable=False, comment="标题")
+    content = Column(Text, comment="正文")
+    link = Column(String(300), comment="前端路由")
+    related_type = Column(String(20), comment="关联类型")
+    related_id = Column(BigInteger, comment="关联ID")
+    is_read = Column(Integer, default=0, comment="0未读/1已读")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_notification_user_read", user_id, is_read, created_at),
     )

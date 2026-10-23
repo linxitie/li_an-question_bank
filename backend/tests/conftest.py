@@ -72,6 +72,25 @@ def test_user(db_session):
     return user
 
 @pytest.fixture
+def test_teacher(db_session):
+    teacher = SysUser(
+        user_no="teacher001",
+        username="教师甲",
+        password=get_password_hash("teacher123"),
+        phone="13700137000",
+        user_type="teacher",
+        role_level=1,
+        status=1,
+        class_name="一班",
+        department="法学",
+    )
+    db_session.add(teacher)
+    db_session.commit()
+    db_session.refresh(teacher)
+    return teacher
+
+
+@pytest.fixture
 def test_admin(db_session):
     admin = SysUser(
         user_no="admin001",
@@ -116,12 +135,22 @@ def auth_token(test_user):
     return create_access_token(data={"user_id": test_user.user_id, "user_no": test_user.user_no})
 
 @pytest.fixture
+def teacher_token(test_teacher):
+    return create_access_token(data={"user_id": test_teacher.user_id, "user_no": test_teacher.user_no})
+
+
+@pytest.fixture
 def admin_token(test_admin):
     return create_access_token(data={"user_id": test_admin.user_id, "user_no": test_admin.user_no})
 
 @pytest.fixture
 def auth_headers(auth_token):
     return {"Authorization": f"Bearer {auth_token}"}
+
+@pytest.fixture
+def teacher_headers(teacher_token):
+    return {"Authorization": f"Bearer {teacher_token}"}
+
 
 @pytest.fixture
 def admin_headers(admin_token):
