@@ -47,7 +47,7 @@
                   alt="头像"
                   @error="onAvatarError(post)"
                 />
-                <XIcon v-else :icon="User" :size="16" color="#ffffff"></XIcon>
+                <span v-else class="avatar-text">{{ avatarInitial(post.author) }}</span>
               </div>
               <div class="author-detail">
                 <span class="author-name">{{ post.author }}</span>
@@ -62,7 +62,7 @@
           <!-- 帖子内容 -->
           <div class="post-content">
             <h3 class="post-title">{{ post.title }}</h3>
-            <p class="post-excerpt">{{ post.excerpt }}</p>
+            <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
           </div>
           
           <!-- 帖子图片 -->
@@ -136,12 +136,15 @@ import {
   ChatLineRound
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+import { avatarInitial } from '@/modules/community/avatar';
+import ForumContent from '@/components/forum/ForumContent.vue';
 
 export default defineComponent({
   name: 'MobileForum',
     components: {
       XIcon,
-      MobileTabBar
+      MobileTabBar,
+      ForumContent
     },
   setup() {
     const router = useRouter();
@@ -149,12 +152,14 @@ export default defineComponent({
 
     // 分类标签
     const activeCategory = ref('all');
+    // key 必须与后端 forum_post.share_type 枚举一致
     const tabs = ref([
       { key: 'all', name: '全部' },
-      { key: 'discuss', name: '学习讨论' },
-      { key: 'share', name: '经验分享' },
-      { key: 'question', name: '答疑解惑' },
-      { key: 'resource', name: '资料分享' }
+      { key: 'DISCUSSION', name: '学习讨论' },
+      { key: 'EXPERIENCE', name: '经验分享' },
+      { key: 'QUESTION', name: '答疑解惑' },
+      { key: 'RESOURCE', name: '资料分享' },
+      { key: 'FEELING', name: '心情打卡' }
     ]);
     
     // 帖子列表（只使用接口数据，禁止内置演示帖）
@@ -168,22 +173,20 @@ export default defineComponent({
       return posts.value.filter(p => p.category === activeCategory.value);
     });
     
-    // 加载真实帖子数据
-    const loadPosts = async () => {
+    // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
+    const loadPosts = async (categoryKey: string = activeCategory.value) => {
       try {
         // 补认证头：缺失时后端只会返回公开数据，私有/审核态字段与用户信息会缺失
         const auth = (window as any).__VTJ_AUTH__;
-        const res = await fetch('/api/forum/posts', {
+        const params = new URLSearchParams({ limit: '50' });
+        if (categoryKey && categoryKey !== 'all') {
+          params.set('share_type', categoryKey);
+        }
+        const res = await fetch(`/api/forum/posts?${params.toString()}`, {
           headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const typeMap: Record<string, string> = {
-          DISCUSSION: 'discuss',
-          EXPERIENCE: 'share',
-          RESOURCE: 'resource',
-          FEELING: 'discuss'
-        };
         posts.value = (data.posts || []).map((p: any) => {
           const t = new Date(p.createTime).getTime();
           const diff = Date.now() - t;
@@ -208,7 +211,7 @@ export default defineComponent({
             views: p.viewCount || 0,
             comments: p.commentCount || 0,
             likes: p.likeCount || 0,
-            category: typeMap[p.shareType] || 'discuss',
+            category: p.shareType || 'DISCUSSION',
             images: []
           };
         });
@@ -228,8 +231,10 @@ export default defineComponent({
     // 方法
     const goBack = () => router.back();
     
-    const selectTab = (key: string) => {
+    const selectTab = async (key: string) => {
+      if (activeCategory.value === key) return;
       activeCategory.value = key;
+      await loadPosts(key);
     };
     
     const createPost = () => {
@@ -241,6 +246,7 @@ export default defineComponent({
     };
 
     return {
+      avatarInitial,
       activeCategory,
       tabs,
       filteredPosts,
@@ -400,6 +406,12 @@ export default defineComponent({
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.avatar-text {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 /* 真实头像：铺满圆形容器，避免变形 */

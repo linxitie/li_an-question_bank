@@ -65,6 +65,7 @@ export const FORUM_SHARE_TYPE_OPTIONS: ReadonlyArray<{
   { key: 'EXPERIENCE', name: '经验分享' },
   { key: 'RESOURCE', name: '资料分享' },
   { key: 'DISCUSSION', name: '学习讨论' },
+  { key: 'QUESTION', name: '答疑解惑' },
   { key: 'FEELING', name: '心情打卡' }
 ];
 

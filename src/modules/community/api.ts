@@ -13,7 +13,8 @@ export const FORUM_SHARE_TYPES = [
   'EXPERIENCE',
   'RESOURCE',
   'DISCUSSION',
-  'FEELING'
+  'FEELING',
+  'QUESTION'
 ] as const;
 
 export type ForumShareType = (typeof FORUM_SHARE_TYPES)[number];

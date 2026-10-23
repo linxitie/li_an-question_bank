@@ -243,7 +243,7 @@ def _log_violation(
 
 @router.get("/posts", summary="获取论坛帖子列表")
 async def get_forum_posts(
-    share_type: Optional[str] = Query(None, description="分享类型: EXPERIENCE/RESOURCE/DISCUSSION/FEELING"),
+    share_type: Optional[str] = Query(None, description="分享类型: EXPERIENCE/RESOURCE/DISCUSSION/FEELING/QUESTION"),
     sort_by: Literal["time", "likes", "comments", "views"] = Query("time", description="排序字段"),
     order: Literal["asc", "desc"] = Query("desc", description="排序方向"),
     limit: int = Query(20, ge=1, le=50, description="返回数量"),
@@ -410,7 +410,7 @@ async def create_post(
         user_id=current_user.user_id,
         title=title.strip(),
         content=final_content,
-        share_type=share_type if share_type in ("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING") else "EXPERIENCE",
+        share_type=share_type if share_type in ("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION") else "EXPERIENCE",
         tags=tags,
         attachments=parsed_attachments,
         status="NORMAL",

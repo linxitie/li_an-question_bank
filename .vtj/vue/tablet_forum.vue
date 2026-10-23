@@ -46,7 +46,6 @@
             >
               <XIcon :icon="cat.icon" :size="18" color="currentColor"></XIcon>
               <span class="category-name">{{ cat.name }}</span>
-              <span class="category-count">{{ cat.count }}</span>
             </div>
           </div>
         </div>
@@ -100,7 +99,13 @@
             <div class="post-header">
               <div class="author-info">
                 <div class="author-avatar" :style="{ background: post.avatarBg }">
-                  <XIcon :icon="User" :size="16" color="#ffffff"></XIcon>
+                  <img
+                    v-if="post.avatar"
+                    :src="post.avatar"
+                    class="avatar-img"
+                    alt="头像"
+                    @error="post.avatar = ''" />
+                  <span v-else class="avatar-text">{{ avatarInitial(post.author) }}</span>
                 </div>
                 <div class="author-detail">
                   <span class="author-name">{{ post.author }}</span>
@@ -250,6 +255,7 @@ import {
   Refresh
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+import { avatarInitial } from '@/modules/community/avatar';
 
 export default defineComponent({
   name: 'TabletForum',
@@ -262,12 +268,14 @@ export default defineComponent({
     
     // 分类
     const activeCategory = ref('all');
+    // key 必须与后端 forum_post.share_type 枚举一致
     const categories = ref([
-      { key: 'all', name: '全部帖子', icon: Grid, count: 256 },
-      { key: 'discuss', name: '学习讨论', icon: ChatDotRound, count: 128 },
-      { key: 'share', name: '经验分享', icon: Star, count: 64 },
-      { key: 'question', name: '答疑解惑', icon: User, count: 45 },
-      { key: 'resource', name: '资料分享', icon: PriceTag, count: 19 }
+      { key: 'all', name: '全部帖子', icon: Grid },
+      { key: 'DISCUSSION', name: '学习讨论', icon: ChatDotRound },
+      { key: 'EXPERIENCE', name: '经验分享', icon: Star },
+      { key: 'QUESTION', name: '答疑解惑', icon: User },
+      { key: 'RESOURCE', name: '资料分享', icon: PriceTag },
+      { key: 'FEELING', name: '心情打卡', icon: ChatDotRound }
     ]);
     
     // 筛选
@@ -300,21 +308,19 @@ export default defineComponent({
       return posts.value.filter(p => p.category === activeCategory.value);
     });
     
-    // 加载真实帖子数据
-    onMounted(async () => {
+    // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
+    const loadPosts = async (categoryKey: string = activeCategory.value) => {
       try {
         const auth = (window as any).__VTJ_AUTH__;
-        const res = await fetch('/api/forum/posts', {
+        const params = new URLSearchParams({ limit: '50' });
+        if (categoryKey && categoryKey !== 'all') {
+          params.set('share_type', categoryKey);
+        }
+        const res = await fetch(`/api/forum/posts?${params.toString()}`, {
           headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const typeMap: Record<string, string> = {
-          DISCUSSION: 'discuss',
-          EXPERIENCE: 'share',
-          RESOURCE: 'resource',
-          FEELING: 'discuss'
-        };
         posts.value = (data.posts || []).map((p: any) => {
           const t = new Date(p.createTime).getTime();
           const diff = Date.now() - t;
@@ -330,6 +336,7 @@ export default defineComponent({
             title: p.title,
             excerpt: p.content || '',
             author: (p.user && p.user.nickname) || '匿名',
+            avatar: (p.user && p.user.avatar) || '',
             time,
             avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
             tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
@@ -337,31 +344,27 @@ export default defineComponent({
             views: p.viewCount || 0,
             comments: p.commentCount || 0,
             likes: p.likeCount || 0,
-            category: typeMap[p.shareType] || 'discuss',
+            category: p.shareType || 'DISCUSSION',
             images: []
           };
         });
-        // 分类数量由真实帖子统计，不使用演示计数
-        categories.value = categories.value.map((c: any) => ({
-          ...c,
-          count:
-            c.key === 'all'
-              ? posts.value.length
-              : posts.value.filter((item: any) => item.category === c.key).length
-        }));
       } catch (error) {
         console.error('加载帖子失败:', error);
         posts.value = [];
       }
-    });
+    };
+
+    onMounted(() => loadPosts());
 
     // 方法
     const goToNotifications = () => router.push('/tablet/notifications');
     const goToSettings = () => router.push('/tablet/profile');
     const goToProfile = () => router.push('/tablet/profile');
     
-    const selectCategory = (key: string) => {
+    const selectCategory = async (key: string) => {
+      if (activeCategory.value === key) return;
       activeCategory.value = key;
+      await loadPosts(key);
     };
     
     const selectFilter = (key: string) => {
@@ -381,6 +384,7 @@ export default defineComponent({
     };
     
     return {
+      avatarInitial,
       activeCategory,
       categories,
       activeFilter,
@@ -700,6 +704,20 @@ export default defineComponent({
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.author-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.author-avatar .avatar-text {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .author-detail {

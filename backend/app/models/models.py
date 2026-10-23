@@ -640,7 +640,7 @@ class ForumPost(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="发帖人ID")
     title = Column(String(200), nullable=False, comment="标题")
     content = Column(Text, nullable=False, comment="内容")
-    share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING"), default="EXPERIENCE", comment="分享类型")
+    share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION"), default="EXPERIENCE", comment="分享类型")
     tags = Column(String(500), comment="标签")
     is_top = Column(Integer, default=0, comment="是否置顶")
     is_essence = Column(Integer, default=0, comment="是否精华")

@@ -15,6 +15,15 @@
       </div>
       <div class="forum-body">
         <div class="forum-left">
+          <div class="category-bar">
+            <button
+              v-for="cat in categoryTabs"
+              :key="cat.key"
+              :class="['category-chip', { active: state.activeCategory === cat.key }]"
+              @click="selectCategory(cat.key)">
+              {{ cat.name }}
+            </button>
+          </div>
           <div class="post-list" v-if="state.posts.length">
             <div
               v-for="(post, index) in filteredPosts"
@@ -27,11 +36,11 @@
                   class="avatar-img"
                   alt="头像"
                   @error="onAvatarError"/>
-                <span v-else class="avatar-text">{{ (post.author || '匿').charAt(0) }}</span>
+                <span v-else class="avatar-text">{{ avatarInitial(post.author) }}</span>
               </div>
               <div class="post-content" @click="viewPost(post)">
                 <h4 class="post-title">{{ post.title }}</h4>
-                <p class="post-excerpt">{{ post.content }}</p>
+                <p class="post-excerpt"><ForumContent :content="post.content" /></p>
                 <div class="post-attachments" v-if="post.attachments && post.attachments.length">
                   <span
                     v-for="(att, idx) in post.attachments"
@@ -309,7 +318,7 @@
                         <span class="comment-author" @click.stop="viewUser(comment.user?.id)">{{ comment.user?.nickname }}</span>
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
-                      <div class="comment-text">{{ comment.content }}</div>
+                      <div class="comment-text"><ForumContent :content="comment.content" /></div>
                       <div class="comment-actions">
                         <span @click="toggleCommentLike(comment)" class="comment-action">
                           <XIcon
@@ -344,7 +353,7 @@
                             <span class="comment-author" @click.stop="viewUser(child.user?.id)">{{ child.user?.nickname }}</span>
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
-                          <div class="comment-text">{{ child.content }}</div>
+                          <div class="comment-text"><ForumContent :content="child.content" /></div>
                           <div class="comment-actions">
                             <span @click="toggleCommentLike(child)" class="comment-action">
                               <XIcon
@@ -365,6 +374,20 @@
                 <div v-if="state.replyTarget" class="reply-hint">
                   回复 @{{ state.replyTarget.username }}
                   <span class="cancel-reply" @click="cancelReply">× 取消</span>
+                </div>
+                <div v-if="state.showCommentPicker" class="comment-picker">
+                  <EmojiStickerPicker
+                    @select="insertCommentEmoji"
+                    @close="state.showCommentPicker = false" />
+                </div>
+                <div class="comment-toolbar">
+                  <button
+                    class="emoji-btn"
+                    title="表情 / 表情包"
+                    @click="state.showCommentPicker = !state.showCommentPicker">
+                    😀
+                  </button>
+                  <span class="comment-toolbar-tip">支持 emoji 与自定义表情包</span>
                 </div>
                 <textarea
                   v-model="state.newComment"
@@ -448,15 +471,23 @@
     reactionTotal
   } from '@/modules/community/reactions';
   import { avatarInitial } from '@/modules/community/avatar';
+  import {
+    FORUM_CATEGORY_TABS,
+    toShareTypeParam
+  } from '@/modules/community/categories';
+  import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
+  import ForumContent from '@/components/forum/ForumContent.vue';
   export default defineComponent({
     name: 'Forum',
-    components: { NavBar, XIcon },
+    components: { NavBar, XIcon, EmojiStickerPicker, ForumContent },
     setup(props) {
       const provider = useProvider({ id: 'forum', version: '1785094400000' });
       const community = useCommunityStore();
       const state = reactive({
         page: 1,
         pageSize: 8,
+        activeCategory: 'all',
+        showCommentPicker: false,
         posts: [] as any[],
         total: 0,
         loading: false,
@@ -499,6 +530,7 @@
         avatarInitial,
         avatarFailed,
         markAvatarFailed,
+        categoryTabs: FORUM_CATEGORY_TABS,
         ChatRound,
         EditPen,
         ChatLineRound,
@@ -553,6 +585,19 @@
         } finally {
           this.state.loading = false;
         }
+      },
+      async selectCategory(key: string) {
+        if (this.state.activeCategory === key) return;
+        this.state.activeCategory = key;
+        this.state.page = 1;
+        this.state.showCommentPicker = false;
+        this.community.setShareType(toShareTypeParam(key));
+        await this.loadPosts();
+      },
+      insertCommentEmoji(payload: { type: 'emoji' | 'sticker'; value: string }) {
+        const text =
+          payload.type === 'emoji' ? payload.value : `[[sticker:${payload.value}]]`;
+        this.state.newComment = `${this.state.newComment || ''}${text}`;
       },
       async refreshSilently() {
         if (this.community.loading) return;
@@ -751,6 +796,7 @@
         this.state.comments = [];
         this.state.newComment = '';
         this.state.replyTarget = null;
+        this.state.showCommentPicker = false;
         this.state.detailLoading = false;
       },
       async deletePost() {
@@ -932,6 +978,7 @@
           viewCount: p?.viewCount ?? 0,
           liked: p?.liked ?? false,
           attachments: p?.attachments ?? [],
+          shareType: p?.shareType ?? '',
           userId: p?.user?.id ?? null,
           isTop: p?.isTop ?? false,
           isEssence: p?.isEssence ?? false
@@ -939,6 +986,9 @@
       }
     },
     mounted() {
+      // 分类状态以当前页面为准，避免 store 里残留上次的分类筛选
+      this.state.activeCategory = 'all';
+      this.community.setShareType('');
       this.loadPosts();
       this.loadStats();
       this.loadMyPosts();
@@ -1019,6 +1069,31 @@
     border-radius: 16px;
     padding: 20px;
     box-shadow: 0 2px 12px rgba(26, 43, 95, 0.04);
+  }
+  .category-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .category-chip {
+    border: 1px solid #e4e8f0;
+    background: #f7f9fc;
+    color: #4a5578;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .category-chip:hover {
+    border-color: #c41e3a;
+    color: #c41e3a;
+  }
+  .category-chip.active {
+    background: #c41e3a;
+    border-color: #c41e3a;
+    color: #ffffff;
   }
   .post-list {
     display: flex;
@@ -1712,6 +1787,36 @@
     margin-top: 16px;
     padding-top: 12px;
     border-top: 1px solid #f0f2f5;
+    position: relative;
+  }
+  .comment-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .emoji-btn {
+    border: 1px solid #e4e8f0;
+    background: #f7f9fc;
+    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .emoji-btn:hover {
+    border-color: #c41e3a;
+    background: #fff5f6;
+  }
+  .comment-toolbar-tip {
+    font-size: 12px;
+    color: #8a8faa;
+  }
+  .comment-picker {
+    position: relative;
+    z-index: 20;
   }
   .reply-hint {
     background: #f0f4ff;
