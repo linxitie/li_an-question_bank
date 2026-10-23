@@ -22,7 +22,6 @@ from ....core.capabilities import (
 from ....core.security import (
     Permission,
     assert_scope_covers,
-    get_effective_permissions,
     require_permission,
 )
 from ....models.models import SysUser, UserCapability
@@ -181,7 +180,18 @@ async def list_student_practice_admins(
         .order_by(UserCapability.granted_at.desc())
         .all()
     )
-    return {"items": [_serialize_capability(row, None) for row in rows]}
+    user_ids = {row.user_id for row in rows}
+    users = (
+        db.query(SysUser).filter(SysUser.user_id.in_(user_ids)).all()
+        if user_ids
+        else []
+    )
+    user_map = {u.user_id: u for u in users}
+    return {
+        "items": [
+            _serialize_capability(row, user_map.get(row.user_id)) for row in rows
+        ]
+    }
 
 
 @teacher_router.post("", summary="任命本班学生骨干为练习管理员")
