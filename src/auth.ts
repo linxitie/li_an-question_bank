@@ -451,6 +451,13 @@
   }
 
   /**
+   * 获取当前用户权限列表（供路由守卫使用）
+   */
+  function getPermissions() {
+    return parseUserInfo().permissions;
+  }
+
+  /**
    * 获取用户角色级别 (0=学生, 1=教师, 2=管理员, 3=超级管理员)
    */
   function getRoleLevel() {
@@ -475,6 +482,7 @@
     getUserRole: getUserRole,
     hasRole: hasRole,
     hasPermission: hasPermission,
+    getPermissions: getPermissions,
     getRoleLevel: getRoleLevel,
     parseUserInfo: parseUserInfo,
     // 三端实时同步

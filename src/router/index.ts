@@ -3,6 +3,7 @@
  */
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
+import { canAccess } from './access';
 
 const routes: RouteRecordRaw[] = [
   // ==================== 公共路由 ====================
@@ -589,6 +590,12 @@ router.beforeEach((to, _from, next) => {
     if (role && role !== 'student') {
       return next('/unauthorized?reason=mobile_student_only');
     }
+    if (role) {
+      const permissions = auth?.getPermissions ? auth.getPermissions() : [];
+      if (!canAccess(to.meta as any, role, permissions)) {
+        return next('/unauthorized');
+      }
+    }
     return next();
   }
 
@@ -623,19 +630,11 @@ router.beforeEach((to, _from, next) => {
     return next(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
   }
 
-  // 检查路由元数据中的角色限制
-  const allowedRoles = to.meta?.roles as string[] | undefined;
-  if (allowedRoles && allowedRoles.length > 0) {
-    const userRole = auth.getUserRole();
-
-    // admin 角色可访问所有路由
-    if (userRole === 'admin') {
-      return next();
-    }
-
-    if (!allowedRoles.includes(userRole)) {
-      return next('/unauthorized');
-    }
+  // 检查路由元数据中的角色与权限限制
+  const currentRole = auth.getUserRole();
+  const currentPermissions = auth.getPermissions ? auth.getPermissions() : [];
+  if (!canAccess(to.meta as any, currentRole, currentPermissions)) {
+    return next('/unauthorized');
   }
 
   // ===== 角色仪表盘重定向（三端分离） =====
