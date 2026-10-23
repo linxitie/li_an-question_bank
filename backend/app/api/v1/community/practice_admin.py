@@ -197,8 +197,12 @@ async def grant_student(
         raise HTTPException(status_code=404, detail="用户不存在")
     if student.user_type != "student":
         raise HTTPException(status_code=400, detail="只能任命学生")
-    if not current_user.class_name or student.class_name != current_user.class_name:
+    if not current_user.class_name:
+        raise HTTPException(status_code=403, detail="当前教师未绑定班级")
+    if payload.class_name != current_user.class_name:
         raise HTTPException(status_code=403, detail="只能任命本班学生")
+    if student.class_name != current_user.class_name:
+        raise HTTPException(status_code=403, detail="学生不属于本班")
 
     exists = (
         db.query(UserCapability)
@@ -219,10 +223,10 @@ async def grant_student(
                 user_id=payload.user_id,
                 capability_code=CAPABILITY_STUDENT_PRACTICE_ADMIN,
                 scope_type="class",
-                scope_key=payload.class_name,
+                scope_key=current_user.class_name,
                 status="active",
                 granted_by=current_user.user_id,
-                note=payload.note or payload.class_name,
+                note=payload.note or current_user.class_name,
             )
         )
     db.commit()
