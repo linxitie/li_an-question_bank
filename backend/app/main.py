@@ -232,6 +232,17 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 logger.info("自动迁移: forum_post 添加列 attachments")
 
+        # 检查 forum_like 表(点赞表情:新增 reaction_code 字段)
+        if 'forum_like' in inspector.get_table_names():
+            like_cols = [c['name'] for c in inspector.get_columns('forum_like')]
+            if 'reaction_code' not in like_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE forum_like ADD COLUMN reaction_code VARCHAR(16) DEFAULT 'like'"
+                    ))
+                    conn.commit()
+                logger.info("自动迁移: forum_like 添加列 reaction_code")
+
         # 检查 knowledge_point 表(快速练习三级分类:新增 sub_category_id 字段)
         if 'knowledge_point' in inspector.get_table_names():
             kp_cols = [c['name'] for c in inspector.get_columns('knowledge_point')]
@@ -312,6 +323,8 @@ async def lifespan(app: FastAPI):
                 ('created_by', 'BIGINT', None),
                 ('school_id', 'INTEGER', None),
                 ('device_sessions', 'JSON', None),
+                ('nickname', 'VARCHAR(50)', None),
+                ('signature', 'VARCHAR(200)', None),
             ]:
                 if col_name not in user_cols:
                     default_clause = f"DEFAULT {col_default}" if col_default else ""

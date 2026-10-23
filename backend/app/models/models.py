@@ -26,6 +26,8 @@ class SysUser(Base):
     phone = Column(String(20), nullable=False, comment="手机号")
     avatar = Column(String(500), comment="头像URL")
     avatar_frame = Column(String(50), comment="头像框标识(金币购商城兑换)")
+    nickname = Column(String(50), comment="论坛昵称(为空时回退username)")
+    signature = Column(String(200), comment="个性签名")
     gender = Column(Enum("男", "女", "未知"), default="未知", comment="性别")
     user_type = Column(Enum("student", "teacher", "admin"), nullable=False, comment="用户类型")
     department = Column(String(100), comment="学院/部门")
@@ -1105,6 +1107,7 @@ class ForumLike(Base):
     post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), comment="帖子ID")
     comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="评论ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    reaction_code = Column(String(16), default="like", comment="表情反应码: like/love/haha/wow/sad/angry")
     create_time = Column(DateTime, default=datetime.now, comment="点赞时间")
     
     post = relationship("ForumPost")
@@ -1117,6 +1120,25 @@ class ForumLike(Base):
         Index("idx_post_id_forumlike", post_id),
         Index("idx_comment_id_forumlike", comment_id),
         Index("idx_user_id_forumlike", user_id),
+    )
+
+
+class ForumSticker(Base):
+    """论坛表情包（系统内置 + 用户自定义）"""
+    __tablename__ = "forum_sticker"
+
+    sticker_id = Column(Integer, primary_key=True, autoincrement=True, comment="表情包ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="上传者ID; NULL=系统内置")
+    name = Column(String(50), nullable=False, comment="表情包名称")
+    url = Column(String(500), nullable=False, comment="图片URL")
+    category = Column(String(16), default="sticker", comment="分类: emoji/sticker")
+    sort_order = Column(Integer, default=0, comment="排序")
+    enabled = Column(Integer, default=1, comment="是否启用")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_forum_sticker_user", user_id),
+        Index("idx_forum_sticker_enabled", enabled),
     )
 
 # ------------------------------

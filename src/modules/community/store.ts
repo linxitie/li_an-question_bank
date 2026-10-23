@@ -8,6 +8,8 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import {
+  clearForumCommentReaction,
+  clearForumPostReaction,
   createForumComment,
   createForumPost,
   deleteForumPost as deletePostRequest,
@@ -21,19 +23,26 @@ import {
   fetchQuoteFavorites,
   fetchQuotes,
   fetchRandomQuote,
+  setForumCommentReaction,
+  setForumPostReaction,
   toggleForumCommentLike,
   toggleForumPostLike,
   toggleObsidianQuoteFavorite,
   toggleQuoteFavorite,
   type ForumCommentCreatePayload,
   type ForumCommentItem,
+  type ForumCommentSortBy,
   type ForumPostCreatePayload,
   type ForumPostItem,
   type ForumPostListQuery,
+  type ForumPostSortBy,
+  type ForumReactionCode,
   type ForumShareType,
+  type ForumSortOrder,
   type ForumStats,
   type ForumUserPublic,
   type LikeToggleResult,
+  type ReactionResult,
   type QuoteFavoriteResult,
   type QuoteItem,
   type QuoteListQuery
@@ -113,6 +122,10 @@ export const useCommunityStore = defineStore('community', () => {
   const page = ref(1);
   const pageSize = ref(8);
   const shareType = ref<ForumShareType | ''>('');
+  const postSortBy = ref<ForumPostSortBy>('time');
+  const postSortOrder = ref<ForumSortOrder>('desc');
+  const commentSortBy = ref<ForumCommentSortBy>('time');
+  const commentSortOrder = ref<ForumSortOrder>('asc');
 
   const myPosts = ref<ForumPostItem[]>([]);
   const myPostsTotal = ref(0);
@@ -174,8 +187,24 @@ export const useCommunityStore = defineStore('community', () => {
     target.likeCount = result.likeCount;
   }
 
+  function applyReactionResult(
+    target:
+      | { liked: boolean; likeCount: number; myReaction?: ForumReactionCode | null; reactions?: Record<string, number> }
+      | null
+      | undefined,
+    result: ReactionResult
+  ): void {
+    if (!target) return;
+    target.myReaction = result.myReaction;
+    target.reactions = result.reactions;
+    target.likeCount = result.reactionCount;
+    target.liked = result.myReaction !== null;
+  }
+
   async function load(query: ForumPostListQuery = {}): Promise<void> {
     if (query.shareType !== undefined) shareType.value = query.shareType;
+    if (query.sortBy) postSortBy.value = query.sortBy;
+    if (query.order) postSortOrder.value = query.order;
     if (query.limit) pageSize.value = query.limit;
     page.value = 1;
 
@@ -184,6 +213,8 @@ export const useCommunityStore = defineStore('community', () => {
     try {
       const result = await fetchForumPosts({
         shareType: shareType.value,
+        sortBy: postSortBy.value,
+        order: postSortOrder.value,
         limit: pageSize.value,
         offset: 0
       });
@@ -208,6 +239,8 @@ export const useCommunityStore = defineStore('community', () => {
     try {
       const result = await fetchForumPosts({
         shareType: shareType.value,
+        sortBy: postSortBy.value,
+        order: postSortOrder.value,
         limit: pageSize.value,
         offset: (safePage - 1) * pageSize.value
       });
@@ -232,6 +265,8 @@ export const useCommunityStore = defineStore('community', () => {
     try {
       const result = await fetchForumPosts({
         shareType: shareType.value,
+        sortBy: postSortBy.value,
+        order: postSortOrder.value,
         limit: pageSize.value,
         offset: offset.value
       });
@@ -270,10 +305,17 @@ export const useCommunityStore = defineStore('community', () => {
     }
   }
 
-  async function loadComments(postId: number): Promise<void> {
+  async function loadComments(
+    postId: number,
+    options: { sortBy?: ForumCommentSortBy; order?: ForumSortOrder } = {}
+  ): Promise<void> {
+    if (options.sortBy) commentSortBy.value = options.sortBy;
+    if (options.order) commentSortOrder.value = options.order;
     try {
       const result = await fetchForumComments(postId, {
-        limit: 200,
+        sortBy: commentSortBy.value,
+        order: commentSortOrder.value,
+        limit: 100,
         offset: 0
       });
       comments.value = result.comments;
@@ -415,6 +457,64 @@ export const useCommunityStore = defineStore('community', () => {
     }
   }
 
+  async function reactToPost(
+    postId: number,
+    reaction: ForumReactionCode
+  ): Promise<ReactionResult | null> {
+    const key = `react-post:${postId}`;
+    if (!beginWrite(key)) return null;
+
+    error.value = null;
+    try {
+      const current =
+        detail.value?.id === postId
+          ? detail.value.myReaction
+          : posts.value.find((item) => item.id === postId)?.myReaction;
+      const result =
+        current === reaction
+          ? await clearForumPostReaction(postId)
+          : await setForumPostReaction(postId, reaction);
+
+      applyReactionResult(
+        posts.value.find((item) => item.id === postId),
+        result
+      );
+      if (detail.value && detail.value.id === postId) {
+        applyReactionResult(detail.value, result);
+      }
+      return result;
+    } catch (e) {
+      error.value = errorMessage(e);
+      throw e;
+    } finally {
+      endWrite(key);
+    }
+  }
+
+  async function reactToComment(
+    commentId: number,
+    reaction: ForumReactionCode
+  ): Promise<ReactionResult | null> {
+    const key = `react-comment:${commentId}`;
+    if (!beginWrite(key)) return null;
+
+    error.value = null;
+    try {
+      const target = comments.value.find((item) => item.id === commentId);
+      const result =
+        target?.myReaction === reaction
+          ? await clearForumCommentReaction(commentId)
+          : await setForumCommentReaction(commentId, reaction);
+      applyReactionResult(target, result);
+      return result;
+    } catch (e) {
+      error.value = errorMessage(e);
+      throw e;
+    } finally {
+      endWrite(key);
+    }
+  }
+
   async function loadMyPosts(
     query: { limit?: number; offset?: number } = {}
   ): Promise<void> {
@@ -538,6 +638,23 @@ export const useCommunityStore = defineStore('community', () => {
     page.value = 1;
   }
 
+  function setPostSort(
+    sortBy: ForumPostSortBy,
+    order: ForumSortOrder = 'desc'
+  ): void {
+    postSortBy.value = sortBy;
+    postSortOrder.value = order;
+    page.value = 1;
+  }
+
+  function setCommentSort(
+    sortBy: ForumCommentSortBy,
+    order: ForumSortOrder = 'asc'
+  ): void {
+    commentSortBy.value = sortBy;
+    commentSortOrder.value = order;
+  }
+
   function reset(): void {
     const initial = createCommunityInitialState();
     loading.value = initial.loading;
@@ -547,6 +664,10 @@ export const useCommunityStore = defineStore('community', () => {
     total.value = 0;
     page.value = 1;
     shareType.value = '';
+    postSortBy.value = 'time';
+    postSortOrder.value = 'desc';
+    commentSortBy.value = 'time';
+    commentSortOrder.value = 'asc';
     myPosts.value = [];
     myPostsTotal.value = 0;
     detail.value = null;
@@ -580,6 +701,10 @@ export const useCommunityStore = defineStore('community', () => {
     page,
     pageSize,
     shareType,
+    postSortBy,
+    postSortOrder,
+    commentSortBy,
+    commentSortOrder,
     myPosts,
     myPostsTotal,
     detail,
@@ -607,8 +732,10 @@ export const useCommunityStore = defineStore('community', () => {
     createPost,
     deletePost,
     togglePostLike,
+    reactToPost,
     submitComment,
     toggleCommentLike,
+    reactToComment,
     loadMyPosts,
     loadUserPublic,
     loadQuotes,
@@ -616,6 +743,8 @@ export const useCommunityStore = defineStore('community', () => {
     loadDailyQuote,
     loadRandomQuote,
     toggleFavorite,
-    setShareType
+    setShareType,
+    setPostSort,
+    setCommentSort
   };
 });

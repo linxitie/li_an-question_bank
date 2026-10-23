@@ -18,10 +18,26 @@ export const FORUM_SHARE_TYPES = [
 
 export type ForumShareType = (typeof FORUM_SHARE_TYPES)[number];
 
+export type ForumReactionCode = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
+
+export type ForumSortOrder = 'asc' | 'desc';
+
+export type ForumPostSortBy = 'time' | 'likes' | 'comments' | 'views';
+
+export type ForumCommentSortBy = 'time' | 'likes' | 'replies';
+
+export interface ReactionResult {
+  myReaction: ForumReactionCode | null;
+  reactions: Record<string, number>;
+  reactionCount: number;
+}
+
 export interface ForumUserBrief {
   id: number | null;
   nickname: string;
   avatar: string;
+  avatarFrame?: string | null;
+  signature?: string | null;
   userType: string;
 }
 
@@ -47,6 +63,8 @@ export interface ForumPostItem {
   createTime: string | null;
   userId?: number;
   liked: boolean;
+  myReaction?: ForumReactionCode | null;
+  reactions?: Record<string, number>;
   user?: ForumUserBrief;
 }
 
@@ -56,12 +74,24 @@ export interface ForumCommentItem {
   likeCount: number;
   createTime: string | null;
   parentCommentId?: number | null;
+  replyCount?: number;
   liked: boolean;
+  myReaction?: ForumReactionCode | null;
+  reactions?: Record<string, number>;
   user?: ForumUserBrief;
 }
 
 export interface ForumPostListQuery {
   shareType?: ForumShareType | '';
+  sortBy?: ForumPostSortBy;
+  order?: ForumSortOrder;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ForumCommentListQuery {
+  sortBy?: ForumCommentSortBy;
+  order?: ForumSortOrder;
   limit?: number;
   offset?: number;
 }
@@ -115,6 +145,14 @@ export interface ForumCommentCreatePayload {
 export interface LikeToggleResult {
   liked: boolean;
   likeCount: number;
+}
+
+export interface ForumSticker {
+  id: number;
+  name: string;
+  url: string;
+  category: string;
+  ownerId?: number | null;
 }
 
 export interface QuoteItem {
@@ -195,6 +233,8 @@ export async function fetchForumPosts(
   const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
   const params: Record<string, unknown> = { limit, offset };
   if (query.shareType) params.share_type = query.shareType;
+  if (query.sortBy) params.sort_by = query.sortBy;
+  if (query.order) params.order = query.order;
 
   const data = await request<Partial<ForumPostListResult>>({
     url: '/api/forum/posts',
@@ -218,14 +258,17 @@ export function fetchForumPostDetail(postId: number): Promise<ForumPostItem> {
 
 export function fetchForumComments(
   postId: number,
-  query: { limit?: number; offset?: number } = {}
+  query: ForumCommentListQuery = {}
 ): Promise<ForumCommentListResult> {
   const limit = normalizePageSize(query.limit);
   const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
+  const params: Record<string, unknown> = { limit, offset };
+  if (query.sortBy) params.sort_by = query.sortBy;
+  if (query.order) params.order = query.order;
   return request<ForumCommentListResult>({
     url: `/api/forum/posts/${postId}/comments`,
     method: 'GET',
-    params: { limit, offset }
+    params
   });
 }
 
@@ -302,6 +345,65 @@ export function toggleForumCommentLike(
   return request<LikeToggleResult>({
     url: `/api/forum/comments/${commentId}/like`,
     method: 'POST'
+  });
+}
+
+export function setForumPostReaction(
+  postId: number,
+  reaction: ForumReactionCode
+): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/posts/${postId}/reactions/${reaction}`,
+    method: 'POST'
+  });
+}
+
+export function clearForumPostReaction(postId: number): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/posts/${postId}/reactions`,
+    method: 'DELETE'
+  });
+}
+
+export function setForumCommentReaction(
+  commentId: number,
+  reaction: ForumReactionCode
+): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/comments/${commentId}/reactions/${reaction}`,
+    method: 'POST'
+  });
+}
+
+export function clearForumCommentReaction(commentId: number): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/comments/${commentId}/reactions`,
+    method: 'DELETE'
+  });
+}
+
+export function fetchForumStickers(): Promise<{ stickers: ForumSticker[] }> {
+  return request<{ stickers: ForumSticker[] }>({
+    url: '/api/forum/stickers',
+    method: 'GET'
+  });
+}
+
+export function uploadForumSticker(file: File, name?: string): Promise<ForumSticker> {
+  const form = new FormData();
+  form.append('file', file);
+  if (name) form.append('name', name);
+  return request<ForumSticker>({
+    url: '/api/forum/stickers',
+    method: 'POST',
+    data: form
+  });
+}
+
+export function deleteForumSticker(stickerId: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>({
+    url: `/api/forum/stickers/${stickerId}`,
+    method: 'DELETE'
   });
 }
 
