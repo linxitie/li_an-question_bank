@@ -202,6 +202,31 @@ def test_comment_reaction_and_nested_reply(client, auth_headers, db_session):
     assert parent_row["reactions"] == {"love": 1}
 
 
+def test_comment_response_includes_user_avatar(client, auth_headers, test_user, db_session):
+    test_user.avatar = "/uploads/avatars/avatar_test.jpg"
+    db_session.add(test_user)
+    db_session.commit()
+
+    post_id = _create_post(client, auth_headers).json()["id"]
+    parent = client.post(
+        f"/api/forum/posts/{post_id}/comments",
+        headers=auth_headers,
+        data={"content": "带头像的评论"},
+    ).json()
+    reply = client.post(
+        f"/api/forum/posts/{post_id}/comments",
+        headers=auth_headers,
+        data={"content": "带头像的回复", "parent_comment_id": parent["id"]},
+    ).json()
+
+    comments = client.get(f"/api/forum/posts/{post_id}/comments").json()["comments"]
+    parent_row = next(c for c in comments if c["id"] == parent["id"])
+    reply_row = next(c for c in comments if c["id"] == reply["id"])
+
+    assert parent_row["user"]["avatar"] == "/uploads/avatars/avatar_test.jpg"
+    assert reply_row["user"]["avatar"] == "/uploads/avatars/avatar_test.jpg"
+
+
 def test_comment_rejects_empty_content(client, auth_headers):
     post_id = _create_post(client, auth_headers).json()["id"]
     response = client.post(

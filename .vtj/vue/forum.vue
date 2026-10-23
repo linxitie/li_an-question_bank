@@ -295,7 +295,14 @@
                 <div v-for="comment in state.comments" :key="comment.id" class="comment-item">
                   <div class="comment-main">
                     <div class="comment-avatar" @click.stop="viewUser(comment.user?.id)">
-                      <span class="avatar-text-sm">{{ (comment.user?.nickname || '匿').charAt(0) }}</span>
+                      <img
+                        v-if="comment.user?.avatar && !avatarFailed['comment-' + comment.id]"
+                        :src="comment.user.avatar"
+                        class="avatar-img-sm"
+                        alt=""
+                        @error="markAvatarFailed('comment-' + comment.id)"
+                      />
+                      <span v-else class="avatar-text-sm">{{ avatarInitial(comment.user?.nickname) }}</span>
                     </div>
                     <div class="comment-body">
                       <div class="comment-meta">
@@ -323,7 +330,14 @@
                     <div v-for="child in comment.children" :key="child.id" class="comment-item child">
                       <div class="comment-main">
                         <div class="comment-avatar" @click.stop="viewUser(child.user?.id)">
-                          <span class="avatar-text-sm">{{ (child.user?.nickname || '匿').charAt(0) }}</span>
+                          <img
+                            v-if="child.user?.avatar && !avatarFailed['reply-' + child.id]"
+                            :src="child.user.avatar"
+                            class="avatar-img-sm"
+                            alt=""
+                            @error="markAvatarFailed('reply-' + child.id)"
+                          />
+                          <span v-else class="avatar-text-sm">{{ avatarInitial(child.user?.nickname) }}</span>
                         </div>
                         <div class="comment-body">
                           <div class="comment-meta">
@@ -433,6 +447,7 @@
     formatReactionSummary,
     reactionTotal
   } from '@/modules/community/reactions';
+  import { avatarInitial } from '@/modules/community/avatar';
   export default defineComponent({
     name: 'Forum',
     components: { NavBar, XIcon },
@@ -472,11 +487,18 @@
         _refreshTimer: null as any,
         _visibilityHandler: null as any
       });
+      const avatarFailed = reactive<Record<string, boolean>>({});
+      const markAvatarFailed = (key: string) => {
+        avatarFailed[key] = true;
+      };
       return {
         state,
         props,
         provider,
         community,
+        avatarInitial,
+        avatarFailed,
+        markAvatarFailed,
         ChatRound,
         EditPen,
         ChatLineRound,
@@ -1625,6 +1647,12 @@
   }
   .comment-avatar:hover {
     box-shadow: 0 0 0 2px #c41e3a;
+  }
+  .avatar-img-sm {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
   }
   .avatar-text-sm {
     font-size: 14px;
