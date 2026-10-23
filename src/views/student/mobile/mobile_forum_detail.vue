@@ -18,8 +18,13 @@
         <h2 class="post-title">{{ post.title }}</h2>
         <div class="post-author">
           <div class="avatar" :class="{ 'has-frame': post.user && post.user.avatarFrame }">
-            <img v-if="post.user && post.user.avatar" :src="post.user.avatar" alt="" />
-            <span v-else>{{ initial(post.user && post.user.nickname) }}</span>
+            <img
+              v-if="post.user && post.user.avatar && !avatarFailed['post-' + post.id]"
+              :src="post.user.avatar"
+              alt=""
+              @error="markAvatarFailed('post-' + post.id)"
+            />
+            <span v-else>{{ avatarInitial(post.user && post.user.nickname) }}</span>
           </div>
           <div class="author-meta">
             <span class="author">{{ post.user && post.user.nickname }}</span>
@@ -67,8 +72,13 @@
         <div v-for="c in rootComments" :key="c.id" class="comment-item">
           <div class="comment-row">
             <div class="avatar small">
-              <img v-if="c.user && c.user.avatar" :src="c.user.avatar" alt="" />
-              <span v-else>{{ initial(c.user && c.user.nickname) }}</span>
+              <img
+                v-if="c.user && c.user.avatar && !avatarFailed['comment-' + c.id]"
+                :src="c.user.avatar"
+                alt=""
+                @error="markAvatarFailed('comment-' + c.id)"
+              />
+              <span v-else>{{ avatarInitial(c.user && c.user.nickname) }}</span>
             </div>
             <div class="comment-main">
               <div class="comment-user">
@@ -95,8 +105,13 @@
           <div v-if="repliesOf(c.id).length" class="replies">
             <div v-for="r in repliesOf(c.id)" :key="r.id" class="reply-item">
               <div class="avatar tiny">
-                <img v-if="r.user && r.user.avatar" :src="r.user.avatar" alt="" />
-                <span v-else>{{ initial(r.user && r.user.nickname) }}</span>
+                <img
+                  v-if="r.user && r.user.avatar && !avatarFailed['reply-' + r.id]"
+                  :src="r.user.avatar"
+                  alt=""
+                  @error="markAvatarFailed('reply-' + r.id)"
+                />
+                <span v-else>{{ avatarInitial(r.user && r.user.nickname) }}</span>
               </div>
               <div class="comment-main">
                 <div class="comment-user">{{ r.user && r.user.nickname }}</div>
@@ -147,6 +162,7 @@ import { useCommunityStore } from '@/modules/community/store';
 import { useAuthStore } from '@/stores/auth';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
+import { avatarInitial } from '@/modules/community/avatar';
 import type {
   ForumCommentItem,
   ForumCommentSortBy,
@@ -181,6 +197,10 @@ const showPicker = ref(false);
 const sortBy = ref<ForumCommentSortBy>('time');
 const order = ref<ForumSortOrder>('asc');
 const loadError = ref('');
+const avatarFailed = ref<Record<string, boolean>>({});
+const markAvatarFailed = (key: string) => {
+  avatarFailed.value[key] = true;
+};
 
 const insertEmoji = (payload: { type: 'emoji' | 'sticker'; value: string; name?: string }) => {
   commentText.value +=
@@ -207,8 +227,6 @@ const repliesOf = (commentId: number) =>
       const bt = b.createTime ? new Date(b.createTime).getTime() : 0;
       return at - bt;
     });
-
-const initial = (name?: string | null) => (name ? name.slice(0, 1) : '?');
 
 const reactionCount = (
   target: Pick<ForumPostItem, 'reactions'> | Pick<ForumCommentItem, 'reactions'>,
