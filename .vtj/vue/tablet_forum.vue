@@ -120,7 +120,16 @@
             <!-- 帖子内容 -->
             <div class="post-content">
               <h3 class="post-title">{{ post.title }}</h3>
-              <p class="post-excerpt">{{ post.excerpt }}</p>
+              <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
+              <div v-if="post.images && post.images.length" class="post-images">
+                <img
+                  v-for="(img, imgIndex) in post.images"
+                  :key="imgIndex"
+                  :src="img"
+                  alt="帖子图片"
+                  loading="lazy"
+                  @error="$event.target.style.display = 'none'" />
+              </div>
             </div>
             
             <!-- 帖子底部 -->
@@ -256,11 +265,13 @@ import {
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import { avatarInitial } from '@/modules/community/avatar';
+import ForumContent from '@/components/forum/ForumContent.vue';
 
 export default defineComponent({
   name: 'TabletForum',
   components: {
-    XIcon
+    XIcon,
+    ForumContent
   },
   setup() {
     const router = useRouter();
@@ -321,6 +332,7 @@ export default defineComponent({
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
         posts.value = (data.posts || []).map((p: any) => {
           const t = new Date(p.createTime).getTime();
           const diff = Date.now() - t;
@@ -331,6 +343,9 @@ export default defineComponent({
           else if (min < 1440) time = Math.floor(min / 60) + '小时前';
           else if (min < 43200) time = Math.floor(min / 1440) + '天前';
           else time = new Date(p.createTime).toLocaleDateString();
+          const images = (Array.isArray(p.attachments) ? p.attachments : [])
+            .map((att: any) => (att && typeof att.url === 'string' ? att.url : ''))
+            .filter((url: string) => IMAGE_PATTERN.test(url));
           return {
             id: p.id,
             title: p.title,
@@ -345,7 +360,7 @@ export default defineComponent({
             comments: p.commentCount || 0,
             likes: p.likeCount || 0,
             category: p.shareType || 'DISCUSSION',
-            images: []
+            images
           };
         });
       } catch (error) {
@@ -764,6 +779,21 @@ export default defineComponent({
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.post-images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.post-images img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f2f5fa;
 }
 
 .post-footer {
