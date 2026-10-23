@@ -10,7 +10,8 @@
             <img v-if="user.avatar" :src="user.avatar" class="avatar-img" alt="头像" />
             <XIcon v-else :icon="UserFilled" :size="40" color="#fff" />
           </div>
-          <h2 class="name">{{ user.username || '同学' }}</h2>
+          <h2 class="name">{{ user.nickname || user.username || '同学' }}</h2>
+          <p v-if="user.signature" class="signature">{{ user.signature }}</p>
           <p class="meta">{{ user.user_no || '' }}</p>
           <p class="meta">{{ user.class_name || '公安联考备考学员' }}</p>
           <button class="btn-edit" @click="openEditProfile">编辑资料</button>
@@ -144,6 +145,8 @@
             @change="handleAvatarChange"
           />
         </div>
+        <div class="form-row"><label>昵称</label><input v-model="editForm.nickname" maxlength="20" placeholder="2-20 字，留空则显示用户名" /></div>
+        <div class="form-row"><label>个性签名</label><input v-model="editForm.signature" maxlength="60" placeholder="一句话介绍自己" /></div>
         <div class="form-row"><label>手机号</label><input v-model="editForm.phone" /></div>
         <div class="form-row"><label>邮箱</label><input v-model="editForm.email" /></div>
         <div class="form-row"><label>性别</label>
@@ -339,6 +342,8 @@ function go(path: string) {
 }
 
 function openEditProfile() {
+  editForm.nickname = user.value.nickname || '';
+  editForm.signature = user.value.signature || '';
   editForm.phone = user.value.phone || '';
   editForm.email = user.value.email || '';
   editForm.gender = user.value.gender || '未知';
@@ -437,6 +442,7 @@ function handleLogout() {
 .avatar-img { width: 100%; height: 100%; object-fit: cover; }
 .name { font-size: 20px; font-weight: 800; color: #1a2b5f; margin: 0 0 4px; }
 .meta { font-size: 13px; color: #8a8faa; margin: 2px 0; }
+.signature { font-size: 13px; color: #5a6488; margin: 4px 0 2px; max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .btn-edit { margin-top: 16px; padding: 8px 20px; background: linear-gradient(135deg, #1a2b5f, #1e3470); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
 
 .coin-balance { font-size: 30px; font-weight: 900; color: #b45309; font-family: 'DIN Alternate', sans-serif; }

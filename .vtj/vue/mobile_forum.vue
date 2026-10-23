@@ -157,84 +157,8 @@ export default defineComponent({
       { key: 'resource', name: '资料分享' }
     ]);
     
-    // 帖子列表
-    const posts = ref([
-      {
-        id: 1,
-        title: '公安联考行测备考经验分享',
-        excerpt: '作为一名成功上岸的学姐，分享一下我的行测备考经验，希望能帮助到正在备考的同学们...',
-        author: '上岸学姐',
-        time: '2小时前',
-        avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
-        tag: '精华',
-        tagColor: '#c41e3a',
-        views: 1234,
-        comments: 89,
-        likes: 256,
-        category: 'share',
-        images: []
-      },
-      {
-        id: 2,
-        title: '申论写作如何拿高分？求指导',
-        excerpt: '申论写作一直是我的弱项，每次写都觉得无话可说，有没有大佬能指点一下？',
-        author: '备考小白',
-        time: '5小时前',
-        avatarBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        tag: '',
-        tagColor: '',
-        views: 567,
-        comments: 45,
-        likes: 78,
-        category: 'question',
-        images: []
-      },
-      {
-        id: 3,
-        title: '2025年公安联考真题回忆版',
-        excerpt: '刚考完，趁记忆还热乎，分享一下我能记住的真题，供大家参考...',
-        author: '刚考完',
-        time: '1天前',
-        avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        tag: '热门',
-        tagColor: '#f59e0b',
-        views: 3456,
-        comments: 156,
-        likes: 512,
-        category: 'discuss',
-        images: []
-      },
-      {
-        id: 4,
-        title: '政治理论重点知识整理',
-        excerpt: '整理了一份政治理论的重点知识，包括习近平新时代中国特色社会主义思想的核心要点...',
-        author: '学霸笔记',
-        time: '2天前',
-        avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-        tag: '资料',
-        tagColor: '#10b981',
-        views: 2345,
-        comments: 67,
-        likes: 432,
-        category: 'resource',
-        images: []
-      },
-      {
-        id: 5,
-        title: '每日打卡：第30天',
-        excerpt: '坚持每天做题，今天是第30天，感觉进步很大，继续加油！',
-        author: '坚持打卡',
-        time: '3天前',
-        avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        tag: '',
-        tagColor: '',
-        views: 890,
-        comments: 34,
-        likes: 156,
-        category: 'discuss',
-        images: []
-      }
-    ]);
+    // 帖子列表（只使用接口数据，禁止内置演示帖）
+    const posts = ref<any[]>([]);
     
     // 过滤帖子
     const filteredPosts = computed(() => {
@@ -244,58 +168,57 @@ export default defineComponent({
       return posts.value.filter(p => p.category === activeCategory.value);
     });
     
-    // 加载真实帖子数据（替换下方演示数据）
-    onMounted(async () => {
+    // 加载真实帖子数据
+    const loadPosts = async () => {
       try {
         // 补认证头：缺失时后端只会返回公开数据，私有/审核态字段与用户信息会缺失
         const auth = (window as any).__VTJ_AUTH__;
         const res = await fetch('/api/forum/posts', {
           headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.posts && data.posts.length) {
-            const typeMap: Record<string, string> = {
-              DISCUSSION: 'discuss',
-              EXPERIENCE: 'share',
-              RESOURCE: 'resource',
-              FEELING: 'discuss'
-            };
-            posts.value = data.posts.map((p: any) => {
-              const t = new Date(p.createTime).getTime();
-              const diff = Date.now() - t;
-              const min = Math.floor(diff / 60000);
-              let time = '';
-              if (min < 1) time = '刚刚';
-              else if (min < 60) time = min + '分钟前';
-              else if (min < 1440) time = Math.floor(min / 60) + '小时前';
-              else if (min < 43200) time = Math.floor(min / 1440) + '天前';
-              else time = new Date(p.createTime).toLocaleDateString();
-              return {
-                id: p.id,
-                title: p.title,
-                excerpt: p.content || '',
-                author: (p.user && p.user.nickname) || '匿名',
-                time,
-                // 后端 forum.py 在 user 存在时返回 avatar 字段（forum.py:72/99）
-                avatar: (p.user && p.user.avatar) || '',
-                avatarFailed: false,
-                avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
-                tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
-                tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
-                views: p.viewCount || 0,
-                comments: p.commentCount || 0,
-                likes: p.likeCount || 0,
-                category: typeMap[p.shareType] || 'discuss',
-                images: []
-              };
-            });
-          }
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const typeMap: Record<string, string> = {
+          DISCUSSION: 'discuss',
+          EXPERIENCE: 'share',
+          RESOURCE: 'resource',
+          FEELING: 'discuss'
+        };
+        posts.value = (data.posts || []).map((p: any) => {
+          const t = new Date(p.createTime).getTime();
+          const diff = Date.now() - t;
+          const min = Math.floor(diff / 60000);
+          let time = '';
+          if (min < 1) time = '刚刚';
+          else if (min < 60) time = min + '分钟前';
+          else if (min < 1440) time = Math.floor(min / 60) + '小时前';
+          else if (min < 43200) time = Math.floor(min / 1440) + '天前';
+          else time = new Date(p.createTime).toLocaleDateString();
+          return {
+            id: p.id,
+            title: p.title,
+            excerpt: p.content || '',
+            author: (p.user && p.user.nickname) || '匿名',
+            time,
+            avatar: (p.user && p.user.avatar) || '',
+            avatarFailed: false,
+            avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
+            tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
+            tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
+            views: p.viewCount || 0,
+            comments: p.commentCount || 0,
+            likes: p.likeCount || 0,
+            category: typeMap[p.shareType] || 'discuss',
+            images: []
+          };
+        });
       } catch (error) {
         console.error('加载帖子失败:', error);
+        posts.value = [];
       }
-    });
+    };
+
+    onMounted(loadPosts);
 
     // 头像加载失败时降级为默认人形图标，避免出现破图
     const onAvatarError = (post: any) => {

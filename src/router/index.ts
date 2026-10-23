@@ -601,8 +601,12 @@ router.beforeEach((to, _from, next) => {
     }
   }
 
-  // 3) PC 设备：公开路由直接放行
-  if (to.path === '/login' || to.path === '/unauthorized') {
+  // 3) PC 设备：公开路由直接放行（论坛允许游客浏览，互动仍由接口校验登录）
+  if (
+    to.path === '/login' ||
+    to.path === '/unauthorized' ||
+    to.path === '/forum'
+  ) {
     return next();
   }
 

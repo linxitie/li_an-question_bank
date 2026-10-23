@@ -429,6 +429,10 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCommunityStore } from '@/modules/community/store';
+  import {
+    formatReactionSummary,
+    reactionTotal
+  } from '@/modules/community/reactions';
   export default defineComponent({
     name: 'Forum',
     components: { NavBar, XIcon },
@@ -464,7 +468,9 @@
         showMyPosts: false,
         myPostsPage: 1,
         myPostsPageSize: 20,
-        myPostsLoading: false
+        myPostsLoading: false,
+        _refreshTimer: null as any,
+        _visibilityHandler: null as any
       });
       return {
         state,
@@ -493,7 +499,7 @@
       },
       hotPosts(): any[] {
         return [...this.state.posts]
-          .sort((a, b) => (b.likeCount + b.commentCount * 2) - (a.likeCount + a.commentCount * 2))
+          .sort((a, b) => (b.reactionTotal + b.commentCount * 2) - (a.reactionTotal + a.commentCount * 2))
           .slice(0, 5)
           .map((p, i) => ({ ...p, rank: i + 1 }));
       },
@@ -513,16 +519,26 @@
       }
     },
     methods: {
-      async loadPosts() {
+      async loadPosts(silent = false) {
         this.state.loading = true;
         try {
           await this.community.loadPage(this.state.page, this.state.pageSize);
           this.state.posts = this.community.posts.map((p: any) => this._mapPost(p));
           this.state.total = this.community.total;
-          if (this.community.error) this._safeMsg('error', this.community.error);
+          if (this.community.error && !silent) {
+            this._safeMsg('error', this.community.error);
+          }
         } finally {
           this.state.loading = false;
         }
+      },
+      async refreshSilently() {
+        if (this.community.loading) return;
+        if (this.state.showNewPost || this.state.showPostDetail) return;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          return;
+        }
+        await this.loadPosts(true);
       },
       async loadStats() {
         await this.community.loadStats();
@@ -561,11 +577,10 @@
           });
           if (!created) return;
           // 成功:unshift 到列表头(实时更新)
-          const mappedPost = this._mapPost(created);
-          this.state.posts.unshift(mappedPost);
+          this.state.posts.unshift(this._mapPost(created));
           this.state.total += 1;
-          // 同步刷新「我的帖子」卡片
-          this.state.myPosts.unshift(mappedPost);
+          // 同步刷新「我的帖子」卡片,该区域展示数字
+          this.state.myPosts.unshift(this._mapPost(created, false));
           this.state.myPostsTotal = (this.state.myPostsTotal || 0) + 1;
           this.state.showNewPost = false;
           this.state.newPost = { title: '', content: '', attachments: [] };
@@ -622,10 +637,14 @@
           return;
         }
         try {
-          const data = await this.community.togglePostLike(post.id);
+          const data = await this.community.reactToPost(post.id, 'like');
           if (data) {
-            post.liked = data.liked;
-            post.likeCount = data.likeCount;
+            post.myReaction = data.myReaction;
+            post.reactions = data.reactions;
+            post.reactionTotal = data.reactionCount;
+            post.liked = data.myReaction !== null;
+            post.likeCount =
+              formatReactionSummary(data.reactions) || String(data.reactionCount);
           }
         } catch (e) {
           /* 静默 */
@@ -824,9 +843,9 @@
         const auth = (window as any).__VTJ_AUTH__;
         if (!auth || !auth.isLoggedIn()) return;
         await this.community.loadMyPosts({ limit: 5, offset: 0 });
-        this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p));
-        this.state.myPostsTotal = this.community.myPostsTotal;
-        this.state.myPostsLoaded = true;
+          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p, false));
+          this.state.myPostsTotal = this.community.myPostsTotal;
+          this.state.myPostsLoaded = true;
       },
       async openMyPosts() {
         this.state.showMyPosts = true;
@@ -843,7 +862,7 @@
             limit: this.state.myPostsPageSize,
             offset
           });
-          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p));
+          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p, false));
           this.state.myPostsTotal = this.community.myPostsTotal;
         } finally {
           this.state.myPostsLoading = false;
@@ -872,7 +891,10 @@
           console.log(`[forum] ${type}: ${msg}`);
         }
       },
-      _mapPost(p: any): any {
+      _mapPost(p: any, withSummary = true): any {
+        const reactions = p?.reactions ?? {};
+        const total = reactionTotal(reactions);
+        const summary = formatReactionSummary(reactions);
         return {
           id: p?.id ?? 0,
           title: p?.title ?? '',
@@ -880,7 +902,10 @@
           author: (p?.user && p.user.nickname) || '匿名',
           avatar: (p?.user && p.user.avatar) || '',
           date: this.formatTime(p?.createTime),
-          likeCount: p?.likeCount ?? 0,
+          likeCount: withSummary ? summary || String(total) : total,
+          reactionTotal: total,
+          reactions,
+          myReaction: p?.myReaction ?? null,
           commentCount: p?.commentCount ?? 0,
           viewCount: p?.viewCount ?? 0,
           liked: p?.liked ?? false,
@@ -895,6 +920,23 @@
       this.loadPosts();
       this.loadStats();
       this.loadMyPosts();
+      this.state._visibilityHandler = () => {
+        if (document.visibilityState === 'visible') this.refreshSilently();
+      };
+      this.state._refreshTimer = setInterval(() => this.refreshSilently(), 15000);
+      window.addEventListener('focus', this.state._visibilityHandler);
+      document.addEventListener('visibilitychange', this.state._visibilityHandler);
+    },
+    beforeUnmount() {
+      if (this.state._refreshTimer) {
+        clearInterval(this.state._refreshTimer);
+        this.state._refreshTimer = null;
+      }
+      if (this.state._visibilityHandler) {
+        window.removeEventListener('focus', this.state._visibilityHandler);
+        document.removeEventListener('visibilitychange', this.state._visibilityHandler);
+        this.state._visibilityHandler = null;
+      }
     }
   })
 </script>

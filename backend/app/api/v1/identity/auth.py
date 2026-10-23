@@ -377,6 +377,8 @@ class ProfileUpdateForm(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     avatar: Optional[str] = None
+    nickname: Optional[str] = None
+    signature: Optional[str] = None
     gender: Optional[str] = None
     department: Optional[str] = None
     class_name: Optional[str] = None
@@ -427,6 +429,28 @@ async def update_user_profile(
 ):
     """当前用户编辑自己的个人信息（不可修改用户名/角色等敏感字段）"""
     update_data = form.dict(exclude_unset=True)
+
+    for field, max_len, label in (
+        ("nickname", 20, "昵称"),
+        ("signature", 60, "个性签名"),
+    ):
+        if field not in update_data:
+            continue
+        value = (update_data[field] or "").strip()
+        if len(value) > max_len:
+            raise HTTPException(status_code=400, detail=f"{label}不能超过 {max_len} 字")
+        update_data[field] = value or None
+
+    text_to_check = " ".join(
+        v for v in (update_data.get("nickname"), update_data.get("signature")) if v
+    )
+    if text_to_check:
+        from ....services.sensitive_words import sensitive_filter, SensitiveLevel
+
+        result = sensitive_filter.detect(text_to_check)
+        if result["level"] == SensitiveLevel.BLOCKED:
+            raise HTTPException(status_code=400, detail="昵称或签名包含违规词，请修改后重试")
+
     for key, value in update_data.items():
         setattr(current_user, key, value)
     commit_with_retry(db)
