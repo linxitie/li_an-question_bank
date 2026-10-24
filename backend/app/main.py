@@ -16,7 +16,7 @@ from .core.redis_client import get_redis, close_redis
 from .api.v1.platform import llm
 from .api.v1.catalog import questions, papers, question_actions, wrong_questions
 from .api.v1.exam import exams, stats, practice, exam_records, quick_practice, smart_exam
-from .api.v1.library import videos, media
+from .api.v1.library import videos, media, image_media
 from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
@@ -651,6 +651,7 @@ app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
+app.include_router(image_media.router)
 app.include_router(websocket_router)
 app.include_router(news.router)
 app.include_router(recruitment.router)
