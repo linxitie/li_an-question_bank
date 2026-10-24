@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Taxonomy migration helpers (T-02 alias CSV, T-03 canonical tree, T-04 aliases).
+"""Taxonomy migration helpers (T-02 alias CSV, T-03 tree, T-04 aliases, T-05 relations).
 
-Three commands:
+Four commands:
 
 ``make-aliases`` (T-02, read-only)    Build ``backend/data/audit/taxonomy_alias_review.csv`` for the 505 legacy
     PDF points. Opens ``backend/data/question_bank.db`` with ``mode=ro`` and
@@ -24,6 +24,15 @@ Three commands:
     database unless a future ``--allow-production`` flag is passed (not used).
     ``alias_of`` is only touched through raw SQL.
 
+``migrate-relations`` (T-05)
+    Dry-run by default: read-only, prints (optionally writes) a JSON report.
+    With ``--apply --db <path>`` it remaps ``question_knowledge`` rows from
+    hidden legacy points to their canonical ``alias_of`` target (or a documented
+    manual canonical L3), deduplicates ``(question_id, point_id)`` pairs and
+    keeps unmapped relations in place as ``unmigrated``, all in one transaction.
+    ``--apply`` refuses the production database unless a future
+    ``--allow-production`` flag is passed (not used).
+
 The canonical tree is read from ``KNOWLEDGE_TREE_V2`` in
 ``backend/scripts/admin/seed.py`` via AST literal parsing, so the script does
 not import application modules or touch settings / sessions.
@@ -37,6 +46,9 @@ Usage:
     python backend/scripts/migrate/build_taxonomy_v2.py apply-aliases [--db <path>]
     python backend/scripts/migrate/build_taxonomy_v2.py apply-aliases \
         --apply --db <path> --csv <path> [--report <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py migrate-relations [--db <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py migrate-relations \
+        --apply --db <path> [--report <path>]
 
 Output:
     backend/data/audit/taxonomy_alias_review.csv   (make-aliases)
@@ -1179,6 +1191,393 @@ def run_apply_aliases(
         conn.close()
 
 
+class RelationMappingError(RuntimeError):
+    """A T-05 question_knowledge relation cannot be mapped safely."""
+
+
+# Legacy hidden points without ``alias_of`` that have a documented canonical L3.
+# Targets are resolved by (subject_id, sub_category_id, L3 name); ids are never
+# hardcoded here. 124/125/126 are subcategory-wide placeholders and intentionally
+# have no entry: their relations stay put and are reported as unmigrated.
+MANUAL_TARGET_L3 = {
+    17: "词句理解",
+    18: "意图判断",
+    25: "文字资料",
+    26: "图形资料",
+}
+
+
+def _is_visible_canonical(row) -> bool:
+    return row.get("status") == 1 and row.get("alias_of") is None
+
+
+def _load_relation_inputs(conn: sqlite3.Connection):
+    """Load knowledge_point rows and question_knowledge relations."""
+    kp_columns = {
+        r["name"] for r in conn.execute("PRAGMA table_info(knowledge_point)")
+    }
+    if "status" not in kp_columns:
+        raise RuntimeError("knowledge_point.status is missing from the database")
+    alias_expr = "alias_of" if "alias_of" in kp_columns else "NULL AS alias_of"
+    points = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT point_id, point_name, subject_id, sub_category_id, parent_id, "
+            f"level, status, {alias_expr} FROM knowledge_point"
+        )
+    ]
+
+    relation_columns = {
+        r["name"] for r in conn.execute("PRAGMA table_info(question_knowledge)")
+    }
+    if not {"question_id", "knowledge_point_id"} <= relation_columns:
+        raise RuntimeError(
+            "question_knowledge is missing question_id/knowledge_point_id"
+        )
+    has_id = "id" in relation_columns
+    id_expr = "id" if has_id else "NULL AS id"
+    relations = [
+        dict(r)
+        for r in conn.execute(
+            f"SELECT {id_expr}, question_id, knowledge_point_id "
+            "FROM question_knowledge ORDER BY question_id, knowledge_point_id"
+        )
+    ]
+    return points, relations, has_id, "alias_of" in kp_columns
+
+
+def relation_metrics(points, relations) -> dict:
+    """Count relation totals and hidden-point usage for the current rows."""
+    by_id = {int(p["point_id"]): p for p in points}
+    pairs: set[tuple] = set()
+    alias_nonnull = 0
+    hidden_null = 0
+    hidden_counter: Counter = Counter()
+    for rel in relations:
+        point_id = int(rel["knowledge_point_id"])
+        row = by_id.get(point_id)
+        if row is None:
+            raise RelationMappingError(
+                f"relation {rel.get('id')}: unknown knowledge point {point_id}"
+            )
+        pairs.add((rel["question_id"], point_id))
+        if _is_visible_canonical(row):
+            continue
+        if row.get("alias_of") is not None:
+            alias_nonnull += 1
+        else:
+            hidden_null += 1
+            hidden_counter[point_id] += 1
+    by_point = [
+        {
+            "point_id": point_id,
+            "point_name": by_id[point_id]["point_name"],
+            "count": count,
+        }
+        for point_id, count in sorted(
+            hidden_counter.items(), key=lambda item: (-item[1], item[0])
+        )
+    ]
+    return {
+        "relations": len(relations),
+        "distinct_pairs": len(pairs),
+        "duplicate_pairs": len(relations) - len(pairs),
+        "relations_to_alias_nonnull": alias_nonnull,
+        "relations_to_hidden_null": hidden_null,
+        "unmigrated_by_point": by_point,
+    }
+
+
+def plan_relation_migration(points, relations, canonical_index=None) -> dict:
+    """Map legacy relations onto canonical points and deduplicate the result.
+
+    Only canonical visible rows are left untouched. Hidden rows follow
+    ``alias_of``; hidden rows without an alias are resolved through
+    ``MANUAL_TARGET_L3`` when the canonical index is available, otherwise they
+    are kept and counted as unmigrated. A remapped relation whose canonical
+    pair already exists is deleted.
+    """
+    by_id = {int(p["point_id"]): p for p in points}
+    for rel in relations:
+        if int(rel["knowledge_point_id"]) not in by_id:
+            raise RelationMappingError(
+                f"relation {rel.get('id')}: unknown knowledge point "
+                f"{rel['knowledge_point_id']}"
+            )
+
+    resolved_manual: dict[int, int] = {}
+    manual_targets: dict[str, dict] = {}
+    if canonical_index is not None:
+        for old_id, l3_name in MANUAL_TARGET_L3.items():
+            row = by_id.get(old_id)
+            if row is None or _is_visible_canonical(row):
+                continue
+            if row.get("alias_of") is not None:
+                continue
+            hits = canonical_index["exact"].get(
+                (row["subject_id"], row["sub_category_id"], l3_name), []
+            )
+            if len(hits) != 1:
+                raise RelationMappingError(
+                    f"old point {old_id} ({row['point_name']!r}): expected "
+                    f"exactly one canonical L3 {l3_name!r} under subject "
+                    f"{row['subject_id']}/sub_category {row['sub_category_id']}, "
+                    f"found {len(hits)}: {hits}"
+                )
+            target = canonical_index["by_id"].get(hits[0])
+            if target is None or not _is_visible_canonical(target):
+                raise RelationMappingError(
+                    f"old point {old_id}: manual target {hits[0]} is not a "
+                    f"visible canonical point"
+                )
+            resolved_manual[old_id] = hits[0]
+            manual_targets[str(old_id)] = {"id": hits[0], "name": l3_name}
+
+    target_cache: dict[int, int | None] = {}
+
+    def target_for(point_id: int) -> int | None:
+        if point_id in target_cache:
+            return target_cache[point_id]
+        row = by_id[point_id]
+        if _is_visible_canonical(row):
+            target: int | None = point_id
+        elif row.get("alias_of") is not None:
+            alias_id = int(row["alias_of"])
+            alias_row = by_id.get(alias_id)
+            if alias_row is None or not _is_visible_canonical(alias_row):
+                raise RelationMappingError(
+                    f"point {point_id}: alias_of {alias_id} is not a visible "
+                    f"canonical point"
+                )
+            target = alias_id
+        else:
+            target = resolved_manual.get(point_id)
+        target_cache[point_id] = target
+        return target
+
+    before = relation_metrics(points, relations)
+    live_pairs: set[tuple] = set()
+    for rel in relations:
+        live_pairs.add((rel["question_id"], int(rel["knowledge_point_id"])))
+
+    actions: list[dict] = []
+    migrated = deduped = unmigrated = 0
+    unmigrated_counter: Counter = Counter()
+
+    for rel in sorted(
+        relations,
+        key=lambda r: (
+            r.get("id") if r.get("id") is not None else -1,
+            r["question_id"],
+            r["knowledge_point_id"],
+        ),
+    ):
+        old_id = int(rel["knowledge_point_id"])
+        target_id = target_for(old_id)
+        if target_id is None:
+            unmigrated += 1
+            unmigrated_counter[old_id] += 1
+            continue
+        if target_id == old_id:
+            continue
+
+        question_id = rel["question_id"]
+        live_pairs.discard((question_id, old_id))
+        action = {
+            "id": rel.get("id"),
+            "question_id": question_id,
+            "old_point_id": old_id,
+            "target_id": target_id,
+        }
+        if (question_id, target_id) in live_pairs:
+            actions.append({**action, "kind": "delete"})
+            deduped += 1
+        else:
+            actions.append({**action, "kind": "update"})
+            live_pairs.add((question_id, target_id))
+            migrated += 1
+
+    relations_after = len(relations) - deduped
+    unmigrated_by_point = [
+        {
+            "point_id": point_id,
+            "point_name": by_id[point_id]["point_name"],
+            "count": count,
+        }
+        for point_id, count in sorted(
+            unmigrated_counter.items(), key=lambda item: (-item[1], item[0])
+        )
+    ]
+    return {
+        "actions": actions,
+        "relations_before": before["relations"],
+        "distinct_pairs_before": before["distinct_pairs"],
+        "duplicates_before": before["duplicate_pairs"],
+        "migrated": migrated,
+        "deduped": deduped,
+        "unmigrated": unmigrated,
+        "relations_after": relations_after,
+        "distinct_pairs_after": len(live_pairs),
+        "duplicate_pairs_after": relations_after - len(live_pairs),
+        "relations_to_alias_nonnull": 0,
+        "relations_to_hidden_null": unmigrated,
+        "manual_targets": manual_targets,
+        "unmigrated_by_point": unmigrated_by_point,
+    }
+
+
+def apply_relation_actions(
+    conn: sqlite3.Connection, actions: list[dict], has_id: bool
+) -> None:
+    """Write delete/update actions in one transaction."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for action in actions:
+            if action["kind"] == "delete":
+                if has_id and action["id"] is not None:
+                    conn.execute(
+                        "DELETE FROM question_knowledge WHERE id=?",
+                        (action["id"],),
+                    )
+                else:
+                    conn.execute(
+                        "DELETE FROM question_knowledge WHERE question_id=? "
+                        "AND knowledge_point_id=?",
+                        (action["question_id"], action["old_point_id"]),
+                    )
+            else:
+                if has_id and action["id"] is not None:
+                    conn.execute(
+                        "UPDATE question_knowledge SET knowledge_point_id=? WHERE id=?",
+                        (action["target_id"], action["id"]),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE question_knowledge SET knowledge_point_id=? "
+                        "WHERE question_id=? AND knowledge_point_id=?",
+                        (
+                            action["target_id"],
+                            action["question_id"],
+                            action["old_point_id"],
+                        ),
+                    )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def build_relation_report(mode: str, db_path: Path, plan: dict) -> dict:
+    return {
+        "mode": mode,
+        "db": str(db_path),
+        "relations_before": plan["relations_before"],
+        "distinct_pairs_before": plan["distinct_pairs_before"],
+        "duplicates_before": plan["duplicates_before"],
+        "migrated": plan["migrated"],
+        "deduped": plan["deduped"],
+        "unmigrated": plan["unmigrated"],
+        "relations_after": plan["relations_after"],
+        "distinct_pairs_after": plan["distinct_pairs_after"],
+        "duplicate_pairs_after": plan["duplicate_pairs_after"],
+        "relations_to_alias_nonnull": plan["relations_to_alias_nonnull"],
+        "relations_to_hidden_null": plan["relations_to_hidden_null"],
+        "manual_targets": plan["manual_targets"],
+        "unmigrated_by_point": plan["unmigrated_by_point"],
+    }
+
+
+def build_relation_readiness_report(db_path: Path, points, relations) -> dict:
+    """Read-only report for a DB without the canonical tree (e.g. production)."""
+    metrics = relation_metrics(points, relations)
+    return {
+        "mode": "dry-run",
+        "db": str(db_path),
+        "relations_before": metrics["relations"],
+        "distinct_pairs_before": metrics["distinct_pairs"],
+        "duplicates_before": metrics["duplicate_pairs"],
+        "migrated": 0,
+        "deduped": 0,
+        "unmigrated": metrics["relations_to_hidden_null"],
+        "relations_after": metrics["relations"],
+        "distinct_pairs_after": metrics["distinct_pairs"],
+        "duplicate_pairs_after": metrics["duplicate_pairs"],
+        "relations_to_alias_nonnull": metrics["relations_to_alias_nonnull"],
+        "relations_to_hidden_null": metrics["relations_to_hidden_null"],
+        "manual_targets": {},
+        "unmigrated_by_point": metrics["unmigrated_by_point"],
+    }
+
+
+def run_migrate_relations(
+    apply: bool,
+    db_path: str | None = None,
+    report_path: str | None = None,
+    allow_production: bool = False,
+) -> int:
+    target = Path(db_path).resolve() if db_path else DB_PATH.resolve()
+
+    if apply:
+        if not db_path:
+            raise SystemExit(
+                "migrate-relations --apply requires an explicit --db <path>"
+            )
+        if target == DB_PATH.resolve() and not allow_production:
+            raise SystemExit(
+                "refusing to write the production database; pass a temp --db path"
+            )
+        if not target.exists():
+            raise SystemExit(f"database not found: {target}")
+        conn = sqlite3.connect(str(target))
+        conn.row_factory = sqlite3.Row
+        conn.isolation_level = None
+    else:
+        if not target.exists():
+            raise FileNotFoundError(f"database not found: {target}")
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+
+    try:
+        points, relations, has_id, has_alias = _load_relation_inputs(conn)
+        if apply and not has_alias:
+            raise SystemExit(
+                "database has no alias_of column; run build-tree --apply on it first"
+            )
+
+        canonical_index = build_canonical_index(points)
+        if len(canonical_index["visible"]) != CANONICAL_TOTAL:
+            if apply:
+                raise SystemExit(
+                    f"expected {CANONICAL_TOTAL} visible canonical rows, found "
+                    f"{len(canonical_index['visible'])}; run build-tree --apply first"
+                )
+            report = build_relation_readiness_report(target, points, relations)
+            emit_report(report, report_path)
+            return 0
+
+        plan = plan_relation_migration(points, relations, canonical_index)
+        if apply:
+            apply_relation_actions(conn, plan["actions"], has_id)
+            points, relations, _has_id, _has_alias = _load_relation_inputs(conn)
+            metrics = relation_metrics(points, relations)
+            report = build_relation_report("apply", target, plan)
+            report["relations_after"] = metrics["relations"]
+            report["distinct_pairs_after"] = metrics["distinct_pairs"]
+            report["duplicate_pairs_after"] = metrics["duplicate_pairs"]
+            report["relations_to_alias_nonnull"] = metrics[
+                "relations_to_alias_nonnull"
+            ]
+            report["relations_to_hidden_null"] = metrics["relations_to_hidden_null"]
+        else:
+            report = build_relation_report("dry-run", target, plan)
+
+        emit_report(report, report_path)
+        return 0
+    finally:
+        conn.close()
+
+
 def hidden_result(old_id, name, subject, sub_category, note, confidence=0.1):
     return {
         "old_id": old_id,
@@ -1901,7 +2300,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["make-aliases", "build-tree", "apply-aliases"],
+        choices=[
+            "make-aliases",
+            "build-tree",
+            "apply-aliases",
+            "migrate-relations",
+        ],
         help="command to run (aliases: --make-aliases)",
     )
     parser.add_argument(
@@ -1913,12 +2317,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="build-tree/apply-aliases: write to --db instead of dry-run",
+        help="build-tree/apply-aliases/migrate-relations: write to --db instead of dry-run",
     )
     parser.add_argument(
         "--db",
         default=None,
-        help="build-tree/apply-aliases: database path (required with --apply)",
+        help="build-tree/apply-aliases/migrate-relations: database path (required with --apply)",
     )
     parser.add_argument(
         "--csv",
@@ -1928,7 +2332,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--report",
         default=None,
-        help="build-tree/apply-aliases: also write the JSON report to this path",
+        help="build-tree/apply-aliases/migrate-relations: also write the JSON report to this path",
     )
     parser.add_argument(
         "--allow-production",
@@ -1954,6 +2358,14 @@ def main(argv: list[str] | None = None) -> int:
             apply=args.apply,
             db_path=args.db,
             csv_path=args.csv,
+            report_path=args.report,
+            allow_production=args.allow_production,
+        )
+
+    if args.command == "migrate-relations":
+        return run_migrate_relations(
+            apply=args.apply,
+            db_path=args.db,
             report_path=args.report,
             allow_production=args.allow_production,
         )
