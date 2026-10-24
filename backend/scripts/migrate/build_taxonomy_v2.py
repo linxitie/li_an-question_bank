@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Taxonomy migration helpers (T-02 alias CSV, T-03 tree, T-04 aliases, T-05 relations, T-06 point ids).
+"""Taxonomy migration helpers (T-02 alias CSV, T-03 tree, T-04 aliases, T-05 relations, T-06 point ids, T-08b L2 normalization).
 
-Five commands:
+Six commands:
 
 ``make-aliases`` (T-02, read-only)    Build ``backend/data/audit/taxonomy_alias_review.csv`` for the 505 legacy
     PDF points. Opens ``backend/data/question_bank.db`` with ``mode=ro`` and
@@ -42,6 +42,17 @@ Five commands:
     an alias and unknown ids are cleared. ``--apply`` refuses the production
     database unless a future ``--allow-production`` flag is passed (not used).
 
+``normalize-l2-relations`` (T-08b)
+    Dry-run by default: read-only, prints (optionally writes) a JSON report.
+    With ``--apply --db <path>`` it normalizes direct canonical-L2 references to
+    the L2's canonical ``其他`` L3 in one transaction: L2
+    ``question_knowledge`` rows move to that L3 (or are deleted when the target
+    pair already exists) and ``question_bank.point_id`` values on canonical L2
+    follow the question's projected canonical L3 relations (smallest id), else
+    the L2's ``其他``. L2s without an ``其他`` leaf are reported and left
+    unchanged. ``--apply`` refuses the production database unless
+    ``--allow-production`` is passed (never used for T-08b).
+
 The canonical tree is read from ``KNOWLEDGE_TREE_V2`` in
 ``backend/scripts/admin/seed.py`` via AST literal parsing, so the script does
 not import application modules or touch settings / sessions.
@@ -60,6 +71,9 @@ Usage:
         --apply --db <path> [--report <path>]
     python backend/scripts/migrate/build_taxonomy_v2.py backfill-point-id [--db <path>]
     python backend/scripts/migrate/build_taxonomy_v2.py backfill-point-id \
+        --apply --db <path> [--report <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py normalize-l2-relations [--db <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py normalize-l2-relations \
         --apply --db <path> [--report <path>]
 
 Output:
@@ -1804,6 +1818,389 @@ def run_backfill_point_id(
         conn.close()
 
 
+def _load_l2_points(conn: sqlite3.Connection) -> list[dict]:
+    """Load visible canonical points used by the T-08b L2 normalization."""
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(knowledge_point)")}
+    if "status" not in columns:
+        raise RuntimeError("knowledge_point.status is missing from the database")
+    if "alias_of" in columns:
+        alias_expr = "alias_of"
+        where = "WHERE status=1 AND alias_of IS NULL"
+    else:
+        alias_expr = "NULL AS alias_of"
+        where = "WHERE status=1"
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT point_id, point_name, parent_id, level, status, "
+            f"{alias_expr} FROM knowledge_point {where}"
+        )
+    ]
+
+
+def _load_relations(conn: sqlite3.Connection):
+    """Load ``question_knowledge`` rows and whether they have an ``id`` column."""
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(question_knowledge)")}
+    if not {"question_id", "knowledge_point_id"} <= columns:
+        raise RuntimeError(
+            "question_knowledge is missing question_id/knowledge_point_id"
+        )
+    has_id = "id" in columns
+    id_expr = "id" if has_id else "NULL AS id"
+    relations = [
+        dict(r)
+        for r in conn.execute(
+            f"SELECT {id_expr}, question_id, knowledge_point_id "
+            "FROM question_knowledge ORDER BY question_id, knowledge_point_id"
+        )
+    ]
+    return relations, has_id
+
+
+def _canonical_indexes(points) -> tuple[dict, set[int], set[int], dict[int, int]]:
+    """Return canonical points, L1/L2/L3 ids and the L2 -> ``其他`` L3 map."""
+    canonical = {
+        int(p["point_id"]): p
+        for p in points
+        if p.get("status") == 1 and p.get("alias_of") is None
+    }
+    l2_ids = {
+        point_id
+        for point_id, row in canonical.items()
+        if int(row.get("level") or 0) == 2
+    }
+    l3_ids = {
+        point_id
+        for point_id, row in canonical.items()
+        if int(row.get("level") or 0) == 3
+    }
+    other_by_parent: dict[int, int] = {}
+    for point_id, row in canonical.items():
+        if int(row.get("level") or 0) != 3 or row.get("point_name") != OTHER_LEAF:
+            continue
+        parent_id = row.get("parent_id")
+        if parent_id is None:
+            continue
+        parent_id = int(parent_id)
+        if parent_id in l2_ids:
+            other_by_parent[parent_id] = point_id
+    return canonical, l2_ids, l3_ids, other_by_parent
+
+
+def plan_l2_relation_normalization(points, relations, questions) -> dict:
+    """Project direct canonical-L2 references onto canonical ``其他`` L3 leaves.
+
+    Relations are remapped per row (duplicate target pairs delete the L2 source
+    row). ``question_bank.point_id`` values on a canonical L2 follow the
+    question's projected canonical L3 targets, preferring the smallest id and
+    falling back to the L2's ``其他`` leaf. Nothing is written here.
+    """
+    canonical, l2_ids, l3_ids, other_by_parent = _canonical_indexes(points)
+
+    live_pairs: set[tuple] = {
+        (int(rel["question_id"]), int(rel["knowledge_point_id"]))
+        for rel in relations
+    }
+
+    relation_updates: list[dict] = []
+    relation_deletes: list[dict] = []
+    moved = deduped = unmigrated = 0
+    l2_relations_before = 0
+    missing_relation: Counter = Counter()
+
+    ordered = sorted(
+        relations,
+        key=lambda rel: (
+            rel.get("id") if rel.get("id") is not None else -1,
+            int(rel["question_id"]),
+            int(rel["knowledge_point_id"]),
+        ),
+    )
+    for rel in ordered:
+        question_id = int(rel["question_id"])
+        old_id = int(rel["knowledge_point_id"])
+        if old_id not in l2_ids:
+            continue
+        l2_relations_before += 1
+
+        target_id = other_by_parent.get(old_id)
+        if target_id is None:
+            unmigrated += 1
+            missing_relation[old_id] += 1
+            continue
+
+        live_pairs.discard((question_id, old_id))
+        if (question_id, target_id) in live_pairs:
+            relation_deletes.append(
+                {
+                    "id": rel.get("id"),
+                    "question_id": question_id,
+                    "knowledge_point_id": old_id,
+                }
+            )
+            deduped += 1
+        else:
+            relation_updates.append(
+                {
+                    "id": rel.get("id"),
+                    "question_id": question_id,
+                    "old_knowledge_point_id": old_id,
+                    "new_knowledge_point_id": target_id,
+                }
+            )
+            live_pairs.add((question_id, target_id))
+            moved += 1
+
+    projected: dict[int, set[int]] = defaultdict(set)
+    for question_id, point_id in live_pairs:
+        projected[question_id].add(point_id)
+
+    question_updates: list[dict] = []
+    question_points_l2_before = 0
+    question_points_l2_after = 0
+    question_points_cleared = 0
+    missing_question: Counter = Counter()
+
+    for question in questions:
+        question_id = int(question["question_id"])
+        current = (
+            int(question["point_id"]) if question["point_id"] is not None else None
+        )
+        if current is None or current not in l2_ids:
+            continue
+        question_points_l2_before += 1
+
+        targets = sorted(
+            point_id
+            for point_id in projected.get(question_id, ())
+            if point_id in l3_ids
+        )
+        if targets:
+            new_point_id = targets[0]
+        else:
+            other_id = other_by_parent.get(current)
+            if other_id is not None:
+                new_point_id = other_id
+            else:
+                new_point_id = None
+                question_points_cleared += 1
+                missing_question[current] += 1
+
+        if new_point_id != current:
+            question_updates.append(
+                {
+                    "question_id": question_id,
+                    "old_point_id": current,
+                    "new_point_id": new_point_id,
+                }
+            )
+        if new_point_id in l2_ids:
+            question_points_l2_after += 1
+
+    missing_other: list[dict] = []
+    for point_id, count in sorted(missing_relation.items()):
+        missing_other.append(
+            {
+                "scope": "relation",
+                "point_id": point_id,
+                "point_name": canonical[point_id]["point_name"],
+                "count": count,
+            }
+        )
+    for point_id, count in sorted(missing_question.items()):
+        missing_other.append(
+            {
+                "scope": "question",
+                "point_id": point_id,
+                "point_name": canonical[point_id]["point_name"],
+                "count": count,
+            }
+        )
+
+    return {
+        "relations_total": len(relations),
+        "l2_relations_before": l2_relations_before,
+        "moved": moved,
+        "deduped": deduped,
+        "unmigrated": unmigrated,
+        "relations_after": len(relations) - deduped,
+        "question_points_l2_before": question_points_l2_before,
+        "question_points_updated": len(question_updates),
+        "question_points_cleared": question_points_cleared,
+        "question_points_l2_after": question_points_l2_after,
+        "missing_other": missing_other,
+        "relation_updates": relation_updates,
+        "relation_deletes": relation_deletes,
+        "question_updates": question_updates,
+        "changed": len(relation_updates) + len(relation_deletes) + len(question_updates),
+    }
+
+
+def apply_l2_relation_actions(
+    conn: sqlite3.Connection,
+    relation_updates: list[dict],
+    relation_deletes: list[dict],
+    question_updates: list[dict],
+    has_id: bool,
+) -> None:
+    """Delete duplicates, remap relations and update question points atomically."""
+    if not (relation_updates or relation_deletes or question_updates):
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for delete in relation_deletes:
+            if has_id and delete["id"] is not None:
+                conn.execute(
+                    "DELETE FROM question_knowledge WHERE id=?", (delete["id"],)
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM question_knowledge WHERE question_id=? "
+                    "AND knowledge_point_id=?",
+                    (delete["question_id"], delete["knowledge_point_id"]),
+                )
+        for update in relation_updates:
+            if has_id and update["id"] is not None:
+                conn.execute(
+                    "UPDATE question_knowledge SET knowledge_point_id=? WHERE id=?",
+                    (update["new_knowledge_point_id"], update["id"]),
+                )
+            else:
+                conn.execute(
+                    "UPDATE question_knowledge SET knowledge_point_id=? "
+                    "WHERE question_id=? AND knowledge_point_id=?",
+                    (
+                        update["new_knowledge_point_id"],
+                        update["question_id"],
+                        update["old_knowledge_point_id"],
+                    ),
+                )
+        for update in question_updates:
+            conn.execute(
+                "UPDATE question_bank SET point_id=? WHERE question_id=?",
+                (update["new_point_id"], update["question_id"]),
+            )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def count_l2_relation_refs(conn: sqlite3.Connection) -> int:
+    """Count ``question_knowledge`` rows whose point is a visible canonical L2."""
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) FROM question_knowledge qk "
+            "JOIN knowledge_point kp ON kp.point_id = qk.knowledge_point_id "
+            "WHERE kp.status = 1 AND kp.alias_of IS NULL AND kp.level = 2"
+        ).fetchone()[0]
+    )
+
+
+def count_l2_question_refs(conn: sqlite3.Connection) -> int:
+    """Count ``question_bank.point_id`` values on a visible canonical L2."""
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) FROM question_bank qb "
+            "JOIN knowledge_point kp ON kp.point_id = qb.point_id "
+            "WHERE qb.point_id IS NOT NULL AND kp.status = 1 "
+            "AND kp.alias_of IS NULL AND kp.level = 2"
+        ).fetchone()[0]
+    )
+
+
+def assert_no_l2_refs(conn: sqlite3.Connection, allow_unmigrated: bool = False) -> tuple:
+    """Fail when canonical L2 references remain after apply."""
+    relations_bad = count_l2_relation_refs(conn)
+    questions_bad = count_l2_question_refs(conn)
+    if (relations_bad or questions_bad) and not allow_unmigrated:
+        raise RuntimeError(
+            f"{relations_bad} question_knowledge rows and {questions_bad} "
+            "question_bank rows still point to canonical L2 points"
+        )
+    return relations_bad, questions_bad
+
+
+def build_l2_relation_report(mode: str, db_path: Path, plan: dict) -> dict:
+    return {
+        "mode": mode,
+        "db": str(db_path),
+        "changed": plan["changed"],
+        "relations_total": plan["relations_total"],
+        "l2_relations_before": plan["l2_relations_before"],
+        "moved": plan["moved"],
+        "deduped": plan["deduped"],
+        "unmigrated": plan["unmigrated"],
+        "relations_after": plan["relations_after"],
+        "question_points_l2_before": plan["question_points_l2_before"],
+        "question_points_updated": plan["question_points_updated"],
+        "question_points_cleared": plan["question_points_cleared"],
+        "question_points_l2_after": plan["question_points_l2_after"],
+        "missing_other": plan["missing_other"],
+        "relation_updates": plan["relation_updates"],
+        "relation_deletes": plan["relation_deletes"],
+        "question_updates": plan["question_updates"],
+    }
+
+
+def run_normalize_l2_relations(
+    apply: bool,
+    db_path: str | None = None,
+    report_path: str | None = None,
+    allow_production: bool = False,
+) -> int:
+    target = Path(db_path).resolve() if db_path else DB_PATH.resolve()
+
+    if apply:
+        if not db_path:
+            raise SystemExit(
+                "normalize-l2-relations --apply requires an explicit --db <path>"
+            )
+        if target == DB_PATH.resolve() and not allow_production:
+            raise SystemExit(
+                "refusing to write the production database; pass a temp --db path"
+            )
+        if not target.exists():
+            raise SystemExit(f"database not found: {target}")
+        conn = sqlite3.connect(str(target))
+        conn.row_factory = sqlite3.Row
+        conn.isolation_level = None
+    else:
+        if not target.exists():
+            raise FileNotFoundError(f"database not found: {target}")
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+
+    try:
+        points = _load_l2_points(conn)
+        relations, has_id = _load_relations(conn)
+        questions = _load_question_points(conn)
+        plan = plan_l2_relation_normalization(points, relations, questions)
+
+        if apply:
+            apply_l2_relation_actions(
+                conn,
+                plan["relation_updates"],
+                plan["relation_deletes"],
+                plan["question_updates"],
+                has_id,
+            )
+            assert_no_l2_refs(conn, allow_unmigrated=bool(plan["missing_other"]))
+            plan["relations_after"] = int(
+                conn.execute("SELECT COUNT(*) FROM question_knowledge").fetchone()[0]
+            )
+            plan["question_points_l2_after"] = count_l2_question_refs(conn)
+
+        report = build_l2_relation_report(
+            "apply" if apply else "dry-run", target, plan
+        )
+        emit_report(report, report_path)
+        return 0
+    finally:
+        conn.close()
+
+
 def hidden_result(old_id, name, subject, sub_category, note, confidence=0.1):
     return {
         "old_id": old_id,
@@ -2532,6 +2929,7 @@ def main(argv: list[str] | None = None) -> int:
             "apply-aliases",
             "migrate-relations",
             "backfill-point-id",
+            "normalize-l2-relations",
         ],
         help="command to run (aliases: --make-aliases)",
     )
@@ -2544,12 +2942,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="build-tree/apply-aliases/migrate-relations/backfill-point-id: write to --db instead of dry-run",
+        help="build-tree/apply-aliases/migrate-relations/backfill-point-id/normalize-l2-relations: write to --db instead of dry-run",
     )
     parser.add_argument(
         "--db",
         default=None,
-        help="build-tree/apply-aliases/migrate-relations/backfill-point-id: database path (required with --apply)",
+        help="build-tree/apply-aliases/migrate-relations/backfill-point-id/normalize-l2-relations: database path (required with --apply)",
     )
     parser.add_argument(
         "--csv",
@@ -2559,7 +2957,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--report",
         default=None,
-        help="build-tree/apply-aliases/migrate-relations/backfill-point-id: also write the JSON report to this path",
+        help="build-tree/apply-aliases/migrate-relations/backfill-point-id/normalize-l2-relations: also write the JSON report to this path",
     )
     parser.add_argument(
         "--allow-production",
@@ -2599,6 +2997,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "backfill-point-id":
         return run_backfill_point_id(
+            apply=args.apply,
+            db_path=args.db,
+            report_path=args.report,
+            allow_production=args.allow_production,
+        )
+
+    if args.command == "normalize-l2-relations":
+        return run_normalize_l2_relations(
             apply=args.apply,
             db_path=args.db,
             report_path=args.report,
