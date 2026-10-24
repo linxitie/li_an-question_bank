@@ -93,6 +93,16 @@
               />
               <div class="comment-actions">
                 <button class="text-btn" @click="startReply(c)">回复</button>
+                <button v-if="isPostAuthor" class="text-btn" @click="togglePin(c)">
+                  {{ c.isPinned ? '取消置顶' : '置顶' }}
+                </button>
+                <button
+                  v-if="c.user && c.user.id !== authStore.userId"
+                  class="text-btn"
+                  @click="reportComment(c)"
+                >
+                  举报
+                </button>
                 <button
                   v-for="r in REACTIONS"
                   :key="r.code"
@@ -128,6 +138,13 @@
                 />
                 <div class="comment-actions">
                   <button class="text-btn" @click="startReply(c, r)">回复</button>
+                  <button
+                    v-if="r.user && r.user.id !== authStore.userId"
+                    class="text-btn"
+                    @click="reportComment(r)"
+                  >
+                    举报
+                  </button>
                   <button
                     v-for="reaction in REACTIONS"
                     :key="reaction.code"
@@ -179,12 +196,14 @@ import ImageGrid from '@/components/forum/ImageGrid.vue';
 import ImageUploader from '@/components/forum/ImageUploader.vue';
 import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 import { avatarInitial } from '@/modules/community/avatar';
-import type {
-  ForumCommentItem,
-  ForumCommentSortBy,
-  ForumPostItem,
-  ForumReactionCode,
-  ForumSortOrder
+import {
+  pinForumComment,
+  reportForumTarget,
+  type ForumCommentItem,
+  type ForumCommentSortBy,
+  type ForumPostItem,
+  type ForumReactionCode,
+  type ForumSortOrder
 } from '@/modules/community/api';
 
 const REACTIONS: ReadonlyArray<{ code: ForumReactionCode; emoji: string; label: string }> = [
@@ -235,6 +254,31 @@ const canDelete = computed(() => {
 });
 const comments = computed(() => store.comments);
 const rootComments = computed(() => comments.value.filter((c) => !c.parentCommentId));
+const isPostAuthor = computed(
+  () => !!post.value && post.value.userId === authStore.userId
+);
+
+const togglePin = async (comment: ForumCommentItem) => {
+  await pinForumComment(comment.id, !comment.isPinned);
+  await loadComments();
+};
+
+const reportComment = async (comment: ForumCommentItem) => {
+  const reason = window.prompt('举报原因（spam/abuse/illegal/other）', 'abuse');
+  if (!reason) return;
+  const allowed = ['spam', 'abuse', 'illegal', 'other'];
+  const reasonCode = (allowed.includes(reason) ? reason : 'other') as
+    | 'spam'
+    | 'abuse'
+    | 'illegal'
+    | 'other';
+  await reportForumTarget({
+    targetType: 'COMMENT',
+    targetId: comment.id,
+    reasonCode
+  });
+  window.alert('举报已提交');
+};
 
 const repliesOf = (commentId: number) =>
   comments.value

@@ -47,10 +47,29 @@
               <span class="fb-time">{{ (f.replied_at || '').slice(0, 10) }}</span>
             </div>
             <div class="fb-time">{{ (f.created_at || '').slice(0, 10) }}</div>
+            <button class="fb-detail-btn" @click="openDetail(f.feedback_id)">查看详情</button>
           </div>
         </section>
       </div>
     </main>
+
+    <div v-if="showDetail" class="fb-modal" @click.self="showDetail = false">
+      <div class="fb-modal-card">
+        <button class="fb-modal-close" @click="showDetail = false">×</button>
+        <h3>工单详情</h3>
+        <p class="fb-ticket-line" v-if="detail?.ticket_no">工单号：{{ detail.ticket_no }}</p>
+        <p class="fb-detail-content">{{ detail?.content }}</p>
+        <div class="fb-timeline">
+          <div v-for="r in detail?.replies || []" :key="r.reply_id" class="fb-reply-row">
+            <span class="fb-reply-role">{{ r.role }}</span>
+            <span>{{ r.content }}</span>
+          </div>
+          <p v-if="!(detail?.replies || []).length" class="empty">暂无回复</p>
+        </div>
+        <textarea v-model="replyText" rows="3" class="fb-modal-textarea" placeholder="追加说明…"></textarea>
+        <button class="btn-submit" :disabled="!replyText.trim()" @click="submitReply">追加回复</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -64,6 +83,35 @@ import NavBar from '$vtj/vue/navbar.vue';
 const auth: any = (window as any).__VTJ_AUTH__;
 const form = reactive<any>({ category: '功能异常', content: '', contact: '' });
 const list = ref<any[]>([]);
+const showDetail = ref(false);
+const detail = ref<any>(null);
+const replyText = ref('');
+
+async function openDetail(feedbackId: number) {
+  try {
+    const res = await auth.apiFetch(`/api/feedback/${feedbackId}`);
+    detail.value = await res.json();
+    showDetail.value = true;
+  } catch (e) {
+    ElMessage.error('加载工单详情失败');
+  }
+}
+
+async function submitReply() {
+  if (!detail.value || !replyText.value.trim()) return;
+  try {
+    await auth.apiFetch(`/api/feedback/${detail.value.feedback_id}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: replyText.value.trim() })
+    });
+    replyText.value = '';
+    await openDetail(detail.value.feedback_id);
+    ElMessage.success('已追加');
+  } catch (e) {
+    ElMessage.error('追加失败');
+  }
+}
 
 function statusLabel(s: string) {
   return ({ pending: '待处理', processing: '处理中', replied: '已回复', closed: '已关闭' } as any)[s] || s;
@@ -130,6 +178,16 @@ onMounted(loadMy);
 .fb-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .fb-cat { font-size: 12px; color: #1A365D; background: #1A365D12; padding: 2px 8px; border-radius: 10px; }
 .fb-ticket { font-size: 11px; color: #6b7896; margin-left: 6px; }
+.fb-detail-btn { margin-top: 6px; border: none; background: none; color: #1A365D; font-size: 12px; cursor: pointer; padding: 0; }
+.fb-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(8,12,24,.45); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.fb-modal-card { position: relative; width: min(520px, 94vw); max-height: 86vh; overflow-y: auto; background: #fff; border-radius: 16px; padding: 22px; }
+.fb-modal-close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 22px; color: #8a94ad; cursor: pointer; }
+.fb-ticket-line { color: #6b7896; font-size: 12px; margin: 4px 0 12px; }
+.fb-detail-content { color: #1a2b5f; font-size: 14px; line-height: 1.6; }
+.fb-timeline { margin: 14px 0; display: flex; flex-direction: column; gap: 8px; }
+.fb-reply-row { display: flex; gap: 8px; font-size: 13px; color: #3b4a6b; }
+.fb-reply-role { flex-shrink: 0; color: #6b7896; font-size: 11px; }
+.fb-modal-textarea { width: 100%; box-sizing: border-box; border: 1px solid #d9e1ee; border-radius: 8px; padding: 8px; font-family: inherit; }
 .fb-status { font-size: 12px; }
 .st-pending { color: #f59e0b; }
 .st-processing { color: #1890ff; }
