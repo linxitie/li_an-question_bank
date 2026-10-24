@@ -175,6 +175,7 @@ async def get_sub_categories(
     for sc in sub_cats:
         kps = db.query(KnowledgePoint).filter(
             KnowledgePoint.sub_category_id == sc.id,
+            KnowledgePoint.status == 1,
         ).order_by(KnowledgePoint.sort_order).all()
 
         sc_name = _normalize_subcategory_name(sc.name)
@@ -267,6 +268,7 @@ async def get_knowledge_points(
     """返回指定子科目下的所有考点，含题目统计"""
     kps = db.query(KnowledgePoint).filter(
         KnowledgePoint.sub_category_id == sub_category_id,
+        KnowledgePoint.status == 1,
     ).order_by(KnowledgePoint.sort_order).all()
 
     items = []
@@ -318,7 +320,8 @@ async def get_practice_questions(
     if by_sub_category:
         sc_id = raw_ids[0]
         kp_rows = db.query(KnowledgePoint.point_id).filter(
-            KnowledgePoint.sub_category_id == sc_id
+            KnowledgePoint.sub_category_id == sc_id,
+            KnowledgePoint.status == 1,
         ).all()
         kp_ids = [r[0] for r in kp_rows]
         if not kp_ids:

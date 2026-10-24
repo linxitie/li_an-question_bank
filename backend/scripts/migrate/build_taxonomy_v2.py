@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Taxonomy migration helpers (T-02 alias CSV, T-03 canonical tree build).
+"""Taxonomy migration helpers (T-02 alias CSV, T-03 canonical tree, T-04 aliases).
 
-Two commands:
+Three commands:
 
-``make-aliases`` (T-02, read-only)
-    Build ``backend/data/audit/taxonomy_alias_review.csv`` for the 505 legacy
+``make-aliases`` (T-02, read-only)    Build ``backend/data/audit/taxonomy_alias_review.csv`` for the 505 legacy
     PDF points. Opens ``backend/data/question_bank.db`` with ``mode=ro`` and
     ``PRAGMA query_only=ON``; never writes.
 
@@ -16,6 +15,15 @@ Two commands:
     legacy ``其他`` rows. ``--apply`` refuses the production database unless a
     future ``--allow-production`` flag is passed (not used in T-03).
 
+``apply-aliases`` (T-04)
+    Dry-run by default: read-only, prints (optionally writes) a JSON report.
+    With ``--apply --db <path> --csv <path>`` it writes the 505 legacy alias
+    rows in one transaction: ``status=0``, ``alias_of`` pointing at the
+    canonical L3/其他 leaf (or ``NULL`` for hidden noise), and aligns
+    ``sub_category_id`` for mapped rows. ``--apply`` refuses the production
+    database unless a future ``--allow-production`` flag is passed (not used).
+    ``alias_of`` is only touched through raw SQL.
+
 The canonical tree is read from ``KNOWLEDGE_TREE_V2`` in
 ``backend/scripts/admin/seed.py`` via AST literal parsing, so the script does
 not import application modules or touch settings / sessions.
@@ -26,6 +34,9 @@ Usage:
     python backend/scripts/migrate/build_taxonomy_v2.py build-tree
     python backend/scripts/migrate/build_taxonomy_v2.py build-tree \
         --apply --db <path> [--report <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py apply-aliases [--db <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py apply-aliases \
+        --apply --db <path> --csv <path> [--report <path>]
 
 Output:
     backend/data/audit/taxonomy_alias_review.csv   (make-aliases)
@@ -39,7 +50,7 @@ import csv
 import json
 import sqlite3
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -776,6 +787,398 @@ def make_resolver(all_rows, subcat_names, l2_index):
     return resolve
 
 
+class AliasMappingError(RuntimeError):
+    """A T-04 alias row cannot be mapped to exactly one canonical target."""
+
+
+def is_canonical_point(point_id: int) -> bool:
+    """Canonical rows are reused seed rows plus rows inserted after 631."""
+    return point_id <= SEED_MAX or point_id > LEGACY_MAX
+
+
+def build_canonical_index(rows) -> dict:
+    """Index the visible canonical tree for alias mapping.
+
+    ``rows`` accepts sqlite3.Row or dict rows with ``point_id``, ``point_name``,
+    ``subject_id``, ``sub_category_id``, ``parent_id``, ``level``, ``status``
+    and ``alias_of``. Only canonical rows with ``status=1 AND alias_of IS NULL``
+    participate.
+    """
+    visible: list[dict] = []
+    exact: dict[tuple, list[int]] = defaultdict(list)
+    l2_by_name: dict[tuple[int, str], int] = {}
+    l3_by_parent: dict[tuple, list[int]] = defaultdict(list)
+    by_id: dict[int, dict] = {}
+
+    for raw in rows:
+        row = dict(raw)
+        point_id = row["point_id"]
+        if not is_canonical_point(point_id):
+            continue
+        if row.get("status") != 1 or row.get("alias_of") is not None:
+            continue
+        visible.append(row)
+        by_id[point_id] = row
+        if row["level"] == 3:
+            exact[
+                (row["subject_id"], row["sub_category_id"], row["point_name"])
+            ].append(point_id)
+            l3_by_parent[
+                (row["subject_id"], row["parent_id"], row["point_name"])
+            ].append(point_id)
+        elif row["level"] == 2:
+            key = (row["subject_id"], row["point_name"])
+            existing = l2_by_name.get(key)
+            if existing is not None and existing != point_id:
+                raise AliasMappingError(
+                    f"duplicate canonical L2 {key}: {existing} and {point_id}"
+                )
+            l2_by_name[key] = point_id
+
+    return {
+        "visible": visible,
+        "by_id": by_id,
+        "exact": exact,
+        "l2_by_name": l2_by_name,
+        "l3_by_parent": l3_by_parent,
+    }
+
+
+def find_exact_target(
+    index: dict,
+    old_id: int,
+    subject_id: int,
+    sub_category_id: int | None,
+    new_name: str,
+) -> dict:
+    """Return the single canonical L3 matching (subject, sub-category, name)."""
+    if not new_name:
+        raise AliasMappingError(
+            f"old_id {old_id}: exact/alias row has an empty new_name"
+        )
+    hits = index["exact"].get((subject_id, sub_category_id, new_name), [])
+    if len(hits) != 1:
+        raise AliasMappingError(
+            f"old_id {old_id}: expected exactly one canonical L3 {new_name!r} "
+            f"under subject {subject_id}/sub_category {sub_category_id}, "
+            f"found {len(hits)}: {hits}"
+        )
+    return index["by_id"][hits[0]]
+
+
+def find_other_target(index: dict, old_id: int, subject_id: int, l2_name: str) -> dict:
+    """Return the canonical ``其他`` L3 leaf owned by the given canonical L2."""
+    l2_id = index["l2_by_name"].get((subject_id, l2_name))
+    if l2_id is None:
+        raise AliasMappingError(
+            f"old_id {old_id}: no canonical L2 {l2_name!r} under subject {subject_id}"
+        )
+    hits = index["l3_by_parent"].get((subject_id, l2_id, OTHER_LEAF), [])
+    if len(hits) != 1:
+        raise AliasMappingError(
+            f"old_id {old_id}: expected one canonical 其他 leaf under L2 "
+            f"{l2_name!r} ({l2_id}), found {len(hits)}: {hits}"
+        )
+    return index["by_id"][hits[0]]
+
+
+def read_alias_csv(csv_path: str | Path) -> list[dict]:
+    path = Path(csv_path)
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames != CSV_COLUMNS:
+            raise RuntimeError(
+                f"unexpected CSV columns in {path}: {reader.fieldnames!r}"
+            )
+        rows = list(reader)
+    if len(rows) != EXPECTED_LEGACY:
+        raise RuntimeError(
+            f"expected {EXPECTED_LEGACY} CSV rows in {path}, found {len(rows)}"
+        )
+    return rows
+
+
+def plan_alias_updates(
+    csv_rows: list[dict],
+    legacy_rows: dict[int, dict],
+    all_rows: dict[int, dict],
+    subcat_names: dict[int, str],
+    l2_index: dict,
+    canonical_index: dict,
+) -> tuple[list[dict], Counter, list[int]]:
+    """Turn T-02 CSV rows into ``status`` / ``alias_of`` updates.
+
+    Rules mirror ``make-aliases``: exact/alias point at the canonical L3,
+    ``subcategory_other`` points at the resolved L2's 其他 leaf, hidden rows get
+    ``alias_of=NULL``. Any unmappable row fails loudly with its old_id.
+    """
+    resolve = make_resolver(all_rows, subcat_names, l2_index)
+    updates: list[dict] = []
+    match_counts: Counter = Counter()
+    unresolved: list[int] = []
+
+    for csv_row in csv_rows:
+        try:
+            old_id = int(csv_row["old_id"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AliasMappingError(f"invalid old_id in CSV row: {csv_row!r}") from exc
+
+        match_type = csv_row.get("match_type") or ""
+        match_counts[match_type] += 1
+        legacy = legacy_rows.get(old_id)
+        if legacy is None:
+            raise AliasMappingError(f"old_id {old_id}: not a legacy row in the database")
+
+        target: dict | None = None
+        if match_type == "hidden":
+            pass
+        elif match_type in ("exact", "alias"):
+            target = find_exact_target(
+                canonical_index,
+                old_id,
+                legacy["subject_id"],
+                legacy["sub_category_id"],
+                csv_row.get("new_name") or "",
+            )
+        elif match_type == "subcategory_other":
+            l2, _source, _detail = resolve(old_id)
+            if l2 is None and legacy["point_name"] == OTHER_LEAF:
+                parent_id = legacy["parent_id"]
+                if parent_id and parent_id in all_rows:
+                    l2, _source, _detail = resolve(parent_id)
+            if l2 is None:
+                unresolved.append(old_id)
+                continue
+            target = find_other_target(
+                canonical_index, old_id, legacy["subject_id"], l2
+            )
+        else:
+            raise AliasMappingError(
+                f"old_id {old_id}: unknown match_type {match_type!r}"
+            )
+
+        updates.append(
+            {
+                "old_id": old_id,
+                "match_type": match_type,
+                "status": 0,
+                "alias_of": target["point_id"] if target is not None else None,
+                "sub_category_id": (
+                    target["sub_category_id"]
+                    if target is not None
+                    else legacy["sub_category_id"]
+                ),
+            }
+        )
+
+    if unresolved:
+        raise AliasMappingError(
+            f"subcategory_other rows without a canonical L2 target: {unresolved}"
+        )
+    return updates, match_counts, unresolved
+
+
+def project_alias_rows(rows: list[dict], updates: list[dict]) -> list[dict]:
+    """Return a copy of ``rows`` with the planned updates applied in memory."""
+    projected = [dict(row) for row in rows]
+    by_id = {row["point_id"]: row for row in projected}
+    for update in updates:
+        row = by_id[update["old_id"]]
+        row["status"] = 0
+        row["alias_of"] = update["alias_of"]
+        row["sub_category_id"] = update["sub_category_id"]
+    return projected
+
+
+def apply_alias_updates(
+    conn: sqlite3.Connection, updates: list[dict], canonical_index: dict
+) -> None:
+    """Write every alias update inside one transaction."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for update in updates:
+            target_id = update["alias_of"]
+            if target_id is not None:
+                target = canonical_index["by_id"].get(target_id)
+                if (
+                    target is None
+                    or target["status"] != 1
+                    or target.get("alias_of") is not None
+                ):
+                    raise AliasMappingError(
+                        f"old_id {update['old_id']}: target {target_id} is not a "
+                        f"visible canonical point"
+                    )
+            conn.execute(
+                "UPDATE knowledge_point SET status=0, alias_of=?, sub_category_id=? "
+                "WHERE point_id=?",
+                (
+                    update["alias_of"],
+                    update["sub_category_id"],
+                    update["old_id"],
+                ),
+            )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def build_alias_report(
+    mode: str,
+    db_path: Path,
+    rows: list[dict],
+    updates: list[dict],
+    csv_count: int,
+    match_counts: Counter,
+) -> dict:
+    legacy = [r for r in rows if LEGACY_MIN <= r["point_id"] <= LEGACY_MAX]
+    return {
+        "mode": mode,
+        "db": str(db_path),
+        "csv_rows": csv_count,
+        "mapped": sum(1 for u in updates if u["alias_of"] is not None),
+        "hidden": match_counts.get("hidden", 0),
+        "alias_nonnull": sum(1 for r in legacy if r["alias_of"] is not None),
+        "alias_null": sum(1 for r in legacy if r["alias_of"] is None),
+        "status_zero_total": sum(1 for r in rows if r["status"] == 0),
+        "visible_canonical": sum(
+            1
+            for r in rows
+            if is_canonical_point(r["point_id"])
+            and r["status"] == 1
+            and r["alias_of"] is None
+        ),
+        "legacy_visible": sum(1 for r in legacy if r["status"] == 1),
+        "total_rows": len(rows),
+        "unresolved": [],
+        "match_type_counts": dict(sorted(match_counts.items())),
+    }
+
+
+def _load_alias_rows(conn: sqlite3.Connection) -> tuple[list[dict], set[str]]:
+    columns = {
+        r["name"] for r in conn.execute("PRAGMA table_info(knowledge_point)")
+    }
+    if "status" not in columns:
+        raise RuntimeError("knowledge_point.status is missing from the database")
+    alias_expr = "alias_of" if "alias_of" in columns else "NULL AS alias_of"
+    rows = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT point_id, point_name, subject_id, sub_category_id, parent_id, "
+            f"level, sort_order, status, {alias_expr} FROM knowledge_point"
+        )
+    ]
+    return rows, columns
+
+
+def run_apply_aliases(
+    apply: bool,
+    db_path: str | None = None,
+    csv_path: str | None = None,
+    report_path: str | None = None,
+    allow_production: bool = False,
+) -> int:
+    target = Path(db_path).resolve() if db_path else DB_PATH.resolve()
+
+    if apply:
+        if not db_path:
+            raise SystemExit("apply-aliases --apply requires an explicit --db <path>")
+        if target == DB_PATH.resolve() and not allow_production:
+            raise SystemExit(
+                "refusing to write the production database; pass a temp --db path"
+            )
+        if not target.exists():
+            raise SystemExit(f"database not found: {target}")
+        conn = sqlite3.connect(str(target))
+        conn.row_factory = sqlite3.Row
+        conn.isolation_level = None
+    else:
+        if not target.exists():
+            raise FileNotFoundError(f"database not found: {target}")
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+
+    try:
+        rows, columns = _load_alias_rows(conn)
+        if apply and "alias_of" not in columns:
+            raise SystemExit(
+                "database has no alias_of column; run build-tree --apply on it first"
+            )
+
+        csv_rows = read_alias_csv(csv_path or OUT_PATH)
+        tree = load_canonical_tree()
+        l2_index, _l3_index = build_indexes(tree)
+        subcat_names = {
+            r["id"]: r["name"]
+            for r in conn.execute("SELECT id, name FROM sub_categories")
+        }
+        all_rows = {r["point_id"]: r for r in rows}
+        legacy_rows = {
+            pid: r
+            for pid, r in all_rows.items()
+            if LEGACY_MIN <= pid <= LEGACY_MAX
+        }
+        if len(legacy_rows) != EXPECTED_LEGACY:
+            raise RuntimeError(
+                f"expected {EXPECTED_LEGACY} legacy rows, found {len(legacy_rows)}"
+            )
+
+        canonical_index = build_canonical_index(rows)
+        canonical_visible = len(canonical_index["visible"])
+        if canonical_visible != CANONICAL_TOTAL:
+            if apply:
+                raise RuntimeError(
+                    f"expected {CANONICAL_TOTAL} visible canonical rows, found "
+                    f"{canonical_visible}; run build-tree --apply first"
+                )
+            # Read-only readiness report for a DB that has no canonical tree yet
+            # (e.g. production). No writes, no fabricated target ids.
+            match_counts = Counter(
+                (row.get("match_type") or "") for row in csv_rows
+            )
+            unresolved = [
+                int(row["old_id"])
+                for row in csv_rows
+                if row.get("match_type") != "hidden"
+            ]
+            report = build_alias_report(
+                "dry-run", target, rows, [], len(csv_rows), match_counts
+            )
+            report["unresolved"] = unresolved
+            emit_report(report, report_path)
+            return 0
+
+        updates, match_counts, unresolved = plan_alias_updates(
+            csv_rows, legacy_rows, all_rows, subcat_names, l2_index, canonical_index
+        )
+        if unresolved:
+            raise AliasMappingError(
+                f"subcategory_other rows without a canonical L2 target: {unresolved}"
+            )
+
+        if apply:
+            apply_alias_updates(conn, updates, canonical_index)
+            rows, _columns = _load_alias_rows(conn)
+        else:
+            rows = project_alias_rows(rows, updates)
+
+        report = build_alias_report(
+            "apply" if apply else "dry-run",
+            target,
+            rows,
+            updates,
+            len(csv_rows),
+            match_counts,
+        )
+        emit_report(report, report_path)
+        return 0
+    finally:
+        conn.close()
+
+
 def hidden_result(old_id, name, subject, sub_category, note, confidence=0.1):
     return {
         "old_id": old_id,
@@ -1490,12 +1893,15 @@ def run_make_aliases() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Taxonomy helpers: T-02 alias review CSV and T-03 canonical tree build."
+        description=(
+            "Taxonomy helpers: T-02 alias review CSV, T-03 canonical tree build, "
+            "T-04 legacy alias hide."
+        )
     )
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["make-aliases", "build-tree"],
+        choices=["make-aliases", "build-tree", "apply-aliases"],
         help="command to run (aliases: --make-aliases)",
     )
     parser.add_argument(
@@ -1507,17 +1913,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="build-tree only: write to --db instead of dry-run",
+        help="build-tree/apply-aliases: write to --db instead of dry-run",
     )
     parser.add_argument(
         "--db",
         default=None,
-        help="build-tree only: database path (required with --apply)",
+        help="build-tree/apply-aliases: database path (required with --apply)",
+    )
+    parser.add_argument(
+        "--csv",
+        default=None,
+        help=f"apply-aliases: alias review CSV (default {OUT_PATH})",
     )
     parser.add_argument(
         "--report",
         default=None,
-        help="build-tree only: also write the JSON report to this path",
+        help="build-tree/apply-aliases: also write the JSON report to this path",
     )
     parser.add_argument(
         "--allow-production",
@@ -1534,6 +1945,15 @@ def main(argv: list[str] | None = None) -> int:
         return run_build_tree(
             apply=args.apply,
             db_path=args.db,
+            report_path=args.report,
+            allow_production=args.allow_production,
+        )
+
+    if args.command == "apply-aliases":
+        return run_apply_aliases(
+            apply=args.apply,
+            db_path=args.db,
+            csv_path=args.csv,
             report_path=args.report,
             allow_production=args.allow_production,
         )

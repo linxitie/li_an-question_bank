@@ -152,6 +152,7 @@ class KnowledgePoint(Base):
     level = Column(Integer, default=1, comment="层级")
     description = Column(String(500), comment="知识点描述")
     sort_order = Column(Integer, default=1, comment="排序")
+    status = Column(Integer, default=1, comment="状态：1正常/0隐藏")
 
     subject = relationship("QuestionSubject")
     sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
