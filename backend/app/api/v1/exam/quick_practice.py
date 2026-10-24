@@ -17,7 +17,7 @@ from ....core.security import get_current_user
 from ....models.models import (
     QuestionSubject, SubCategory, KnowledgePoint, QuestionBank,
     QuestionKnowledge, PracticeRecord, SysUser,
-    QuestionDetailCategory, QuestionType, QuestionImage
+    QuestionDetailCategory, QuestionType, QuestionImage, QuestionGroup
 )
 from ....services.option_utils import normalize_options, render_image_placeholder
 from ....services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
@@ -352,36 +352,40 @@ async def get_practice_questions(
     if not raw_ids:
         return {"error": "请至少选择一个考点或子科目", "items": [], "total": 0}
 
-    # 如果是按子科目查询，先查出该子科目下所有考点
-    if by_sub_category:
-        sc_id = raw_ids[0]
-        kp_rows = db.query(KnowledgePoint.point_id).filter(
-            KnowledgePoint.sub_category_id == sc_id,
-            KnowledgePoint.status == 1,
-        ).all()
-        kp_ids = [r[0] for r in kp_rows]
-        if not kp_ids:
-            return {"total": 0, "items": [], "message": "该子科目下暂无考点"}
-    else:
-        kp_ids = raw_ids
-
-    # 通过 question_knowledge 关联表获取题目ID
-    qid_rows = db.query(QuestionKnowledge.question_id).filter(
-        QuestionKnowledge.knowledge_point_id.in_(kp_ids)
-    ).distinct().all()
-    question_ids = [r[0] for r in qid_rows]
-
-    if not question_ids:
-        return {"total": 0, "items": [], "message": "该考点下暂无题目"}
-
-    # 构建题目查询 - 按题干内容去重（保留 question_id 最小的）
     from sqlalchemy import func as sql_func
-    sub = db.query(
-        sql_func.min(QuestionBank.question_id).label('min_id')
-    ).filter(
-        QuestionBank.question_id.in_(question_ids),
-        QuestionBank.status == 1
-    ).group_by(QuestionBank.question_content).subquery()
+
+    if by_sub_category:
+        # P1-3 直查：按 question_bank.sub_category_id 取可见题，不依赖
+        # question_knowledge，未挂知识点的题也能练。
+        sc_id = raw_ids[0]
+        visible_query = QuestionStatsService.visible_query(db).filter(
+            QuestionBank.sub_category_id == sc_id
+        )
+        if visible_query.count() == 0:
+            return {"total": 0, "items": [], "message": "该子科目下暂无题目"}
+
+        # 按题干内容去重（保留 question_id 最小的）
+        sub = visible_query.with_entities(
+            sql_func.min(QuestionBank.question_id).label('min_id')
+        ).group_by(QuestionBank.question_content).subquery()
+    else:
+        # P1-8 待处理：旧路径仍走 考点 -> question_knowledge 反查
+        kp_ids = raw_ids
+        qid_rows = db.query(QuestionKnowledge.question_id).filter(
+            QuestionKnowledge.knowledge_point_id.in_(kp_ids)
+        ).distinct().all()
+        question_ids = [r[0] for r in qid_rows]
+
+        if not question_ids:
+            return {"total": 0, "items": [], "message": "该考点下暂无题目"}
+
+        # 构建题目查询 - 按题干内容去重（保留 question_id 最小的）
+        sub = db.query(
+            sql_func.min(QuestionBank.question_id).label('min_id')
+        ).filter(
+            QuestionBank.question_id.in_(question_ids),
+            QuestionBank.status == 1
+        ).group_by(QuestionBank.question_content).subquery()
 
     query = db.query(QuestionBank).filter(
         QuestionBank.question_id.in_(db.query(sub.c.min_id))
@@ -398,7 +402,17 @@ async def get_practice_questions(
     questions = query.order_by(func.random()).limit(limit).all()
 
     items = []
+    type_cache = {}
+    group_cache = {}
     for q in questions:
+        qtype = None
+        if q.type_id:
+            if q.type_id not in type_cache:
+                type_cache[q.type_id] = db.query(QuestionType).filter(
+                    QuestionType.type_id == q.type_id
+                ).first()
+            qtype = type_cache[q.type_id]
+
         # 获取题型详情
         qtype_name = '选择题'
         detail_row = db.query(QuestionDetailCategory).filter(
@@ -406,10 +420,16 @@ async def get_practice_questions(
         ).first()
         if detail_row and detail_row.question_type_detail:
             qtype_name = str(detail_row.question_type_detail)
-        elif q.type_id:
-            qt = db.query(QuestionType).filter(QuestionType.type_id == q.type_id).first()
-            if qt:
-                qtype_name = qt.type_name or '选择题'
+        elif qtype:
+            qtype_name = qtype.type_name or '选择题'
+
+        group = None
+        if q.group_id:
+            if q.group_id not in group_cache:
+                group_cache[q.group_id] = db.query(QuestionGroup).filter(
+                    QuestionGroup.id == q.group_id
+                ).first()
+            group = group_cache[q.group_id]
 
         # 统一规范化options（自动处理双编码JSON、补全、排序、IMAGE转换）
         normalized_opts = normalize_options(q.options, q.question_content or '')
@@ -447,6 +467,14 @@ async def get_practice_questions(
             "source": q.source,
             "tags": q.tags,
             "requirements": q.requirements or '',
+            "score": float(q.score or 0),
+            "group_id": q.group_id or 0,
+            "shared_content": (group.shared_content or '') if group else '',
+            "shared_content_images": group.shared_content_images if group else None,
+            "is_subjective": bool(qtype is not None and qtype.is_objective == 0),
+            "question_type_name": (
+                qtype.type_name if qtype and qtype.type_name else qtype_name
+            ),
             "images": valid_images,
         })
 
