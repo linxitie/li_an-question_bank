@@ -149,3 +149,22 @@ def test_keyword_filter(client, auth_headers):
     assert resp.status_code == 200
     titles = [p["title"] for p in resp.json()["posts"]]
     assert "独一无二的关键词ABC" in titles
+
+
+def test_comment_can_carry_images(client, auth_headers):
+    import json
+
+    post = _create_post(client, auth_headers)
+    images = [
+        {"name": "a.png", "url": "/uploads/forum/202610/a.png"},
+        {"name": "b.png", "url": "/uploads/forum/202610/b.png"},
+    ]
+    resp = client.post(
+        f"/api/forum/posts/{post['id']}/comments",
+        headers=auth_headers,
+        data={"content": "带图评论", "attachments": json.dumps(images)},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["attachments"]) == 2
+    assert body["attachments"][0]["url"].endswith("a.png")

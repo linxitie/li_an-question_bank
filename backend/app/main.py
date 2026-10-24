@@ -249,6 +249,7 @@ async def lifespan(app: FastAPI):
             comment_new_cols = [
                 ('is_pinned', 'INTEGER DEFAULT 0'),
                 ('reply_to_user_id', 'BIGINT'),
+                ('attachments', 'JSON'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in comment_new_cols:

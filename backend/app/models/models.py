@@ -683,6 +683,7 @@ class ForumComment(Base):
     # === P1 评论区扩展 ===
     is_pinned = Column(Integer, default=0, comment="是否置顶 0否/1是")
     reply_to_user_id = Column(BigInteger, comment="回复目标用户ID")
+    attachments = Column(JSON, comment="评论图片 JSON:[{name,url,size,type}]")
     create_time = Column(DateTime, default=datetime.now, comment="评论时间")
     
     post = relationship("ForumPost")

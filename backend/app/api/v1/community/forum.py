@@ -186,6 +186,7 @@ def _serialize_comment(
         "parentCommentId": comment.parent_comment_id,
         "isPinned": bool(comment.is_pinned),
         "replyToUserId": comment.reply_to_user_id,
+        "attachments": comment.attachments or [],
         "liked": liked or my_reaction is not None,
         "myReaction": my_reaction,
         "reactions": reactions or {},
@@ -645,6 +646,7 @@ async def create_comment(
     content: str = Form(..., max_length=2000),
     parent_comment_id: Optional[int] = Form(None),
     reply_to_user_id: Optional[int] = Form(None),
+    attachments: Optional[str] = Form(None, description="评论图片 JSON 字符串"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -694,12 +696,22 @@ async def create_comment(
     elif filter_result["level"] == SensitiveLevel.REVIEWED:
         _log_violation(db, current_user.user_id, request, filter_result, "reviewed", content)
 
+    parsed_attachments = None
+    if attachments:
+        try:
+            parsed_attachments = json.loads(attachments)
+            if not isinstance(parsed_attachments, list):
+                raise ValueError("attachments 必须是数组")
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ValidationError(f"评论图片格式错误: {exc}")
+
     # 创建评论
     comment = ForumComment(
         post_id=post_id,
         user_id=current_user.user_id,
         parent_comment_id=parent_comment_id,
         reply_to_user_id=reply_to_user_id,
+        attachments=parsed_attachments,
         content=final_content,
         status=1,
     )
