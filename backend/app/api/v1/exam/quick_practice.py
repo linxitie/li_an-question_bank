@@ -19,7 +19,9 @@ from ....models.models import (
     QuestionKnowledge, PracticeRecord, SysUser,
     QuestionDetailCategory, QuestionType, QuestionImage, QuestionGroup
 )
-from ....services.option_utils import normalize_options, render_image_placeholder
+from ....services.option_utils import (
+    is_subjective_question, normalize_options, render_image_placeholder
+)
 from ....services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
 from ....services.practice_grading import submit_answers
 from ....services.question_stats import QuestionStatsService
@@ -432,13 +434,18 @@ async def get_practice_questions(
             group = group_cache[q.group_id]
 
         # 统一规范化options（自动处理双编码JSON、补全、排序、IMAGE转换）
-        normalized_opts = normalize_options(q.options, q.question_content or '')
+        # 主观题以 question_type.is_objective=0 为准：不补全、不渲染占位选项
+        is_subjective = is_subjective_question(q, qtype)
+        if is_subjective:
+            cleaned_options = []
+        else:
+            normalized_opts = normalize_options(q.options, q.question_content or '')
+            cleaned_options = sanitize_options_images(normalized_opts, q.question_id, db)
 
         # 图片预检+恢复（先转换 IMAGE 占位符为 img 标签，再 sanitize 预检）
         cleaned_content = sanitize_content_images(
             render_image_placeholder(q.question_content or ''), q.question_id, db
         )
-        cleaned_options = sanitize_options_images(normalized_opts, q.question_id, db)
         cleaned_analysis = sanitize_content_images(
             render_image_placeholder(q.answer_analysis or ''), q.question_id, db
         )

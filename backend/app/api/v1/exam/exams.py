@@ -19,6 +19,7 @@ from ....schemas.schemas import (
     SuccessResponse
 )
 from ....core.security import get_current_user,require_teacher_or_admin
+from ....services.option_utils import is_subjective_question
 
 router = APIRouter(prefix="/api/exams",tags=["考试执行"])
 logger = logging.getLogger(__name__)
@@ -168,15 +169,17 @@ async def get_paper_questions(
             QuestionType.type_id == q.type_id
         ).first()
         type_name = qtype.type_name if qtype else "单选题"
+        is_subjective = is_subjective_question(q, qtype)
 
         paper_questions.append({
             "question_id": q.question_id,
             "question_order": relation.question_order,
             "question_score": float(relation.question_score),
             "question_content": q.question_content,
-            "options": q.options,
+            "options": [] if is_subjective else q.options,
             "type_name": type_name,
             "type_id": q.type_id,
+            "is_subjective": is_subjective,
             "difficulty": q.difficulty,
             "subject_id": q.subject_id,
             "year": q.year,
