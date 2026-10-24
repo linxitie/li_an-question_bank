@@ -29,6 +29,11 @@
       </div>
 
       <div class="field">
+        <label class="label">标题颜色</label>
+        <TitleColorPicker v-model="titleColor" />
+      </div>
+
+      <div class="field">
         <label class="label">内容</label>
         <textarea v-model="content" class="textarea" placeholder="分享你的经验、资料或心得..." rows="10"></textarea>
         <div class="composer-actions">
@@ -37,6 +42,10 @@
         </div>
         <div v-if="showPicker" class="picker-wrap">
           <EmojiStickerPicker @select="insertEmoji" @close="showPicker = false" />
+        </div>
+        <div class="image-field">
+          <label class="label">图片（不限张数）</label>
+          <ImageUploader v-model="images" />
         </div>
         <div v-if="content" class="content-preview">
           <label class="label">预览</label>
@@ -57,6 +66,9 @@ import {
 import type { ForumShareType } from '@/modules/community/api';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
+import ImageUploader from '@/components/forum/ImageUploader.vue';
+import TitleColorPicker from '@/components/forum/TitleColorPicker.vue';
+import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 
 const router = useRouter();
 const store = useCommunityStore();
@@ -64,6 +76,8 @@ const title = ref('');
 const content = ref('');
 const showPicker = ref(false);
 const shareType = ref<ForumShareType>('EXPERIENCE');
+const titleColor = ref('default');
+const images = ref<ForumImageAttachment[]>([]);
 const submitting = ref(false);
 const message = ref('');
 const msgType = ref('');
@@ -90,7 +104,9 @@ const submitPost = async () => {
     const created = await store.createPost({
       title: title.value,
       content: content.value,
-      shareType: shareType.value
+      shareType: shareType.value,
+      titleColor: titleColor.value,
+      attachments: images.value.length ? images.value : undefined
     });
     if (!created) {
       showMsg(store.error || '发布失败，请稍后重试', 'error');

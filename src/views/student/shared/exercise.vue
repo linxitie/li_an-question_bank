@@ -87,7 +87,17 @@
               <svg width="16" height="16" viewBox="0 0 24 24" :fill="currentActions.hasMarker ? '#e8384f' : 'none'" :stroke="currentActions.hasMarker ? '#e8384f' : '#8899aa'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
               <span>{{ currentActions.markerLabel || '标记' }}</span>
             </button>
+            <button class="ex-action-btn" @click="state.showFeedback = true" title="题目报错">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8899aa" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>报错</span>
+            </button>
           </div>
+          <FeedbackDrawer
+            :visible="state.showFeedback"
+            :question-id="currentQ.question_id"
+            source="practice"
+            @close="state.showFeedback = false"
+          />
         </div>
         <!-- B4: 复合题材料（可折叠，仅 group_id>0 时显示） -->
         <div v-if="currentQ.group_id" class="ex-group-material">
@@ -234,11 +244,13 @@
 <script>
 import { defineComponent, reactive, computed, watch } from 'vue';
 import { sanitizeHtml } from '@/utils/questionRender';
+import FeedbackDrawer from '@/components/forum/FeedbackDrawer.vue';
 
 var apiBase = '/api/questions';
 
 export default defineComponent({
   name: 'ExercisePage',
+  components: { FeedbackDrawer },
   setup() {
     var state = reactive({
       questions: [],
@@ -256,6 +268,8 @@ export default defineComponent({
       noteText: '',
       // 标记选择
       showMarkerPopup: false,
+      // 题目报错/反馈
+      showFeedback: false,
       // B4: 复合题材料（可折叠）
       materialExpanded: true,
       groupMaterial: '',       // 当前题组共享材料（HTML）

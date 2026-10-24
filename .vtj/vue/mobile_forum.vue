@@ -187,6 +187,7 @@ export default defineComponent({
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
         posts.value = (data.posts || []).map((p: any) => {
           const t = new Date(p.createTime).getTime();
           const diff = Date.now() - t;
@@ -212,7 +213,9 @@ export default defineComponent({
             comments: p.commentCount || 0,
             likes: p.likeCount || 0,
             category: p.shareType || 'DISCUSSION',
-            images: []
+            images: (Array.isArray(p.attachments) ? p.attachments : [])
+              .map((att: any) => (att && typeof att.url === 'string' ? att.url : ''))
+              .filter((url: string) => IMAGE_PATTERN.test(url))
           };
         });
       } catch (error) {

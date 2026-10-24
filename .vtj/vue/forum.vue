@@ -39,8 +39,9 @@
                 <span v-else class="avatar-text">{{ avatarInitial(post.author) }}</span>
               </div>
               <div class="post-content" @click="viewPost(post)">
-                <h4 class="post-title">{{ post.title }}</h4>
+                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
                 <p class="post-excerpt"><ForumContent :content="post.content" /></p>
+                <ImageGrid v-if="post.imageUrls && post.imageUrls.length" :images="post.imageUrls" mode="post" />
                 <div class="post-attachments" v-if="post.attachments && post.attachments.length">
                   <span
                     v-for="(att, idx) in post.attachments"
@@ -161,12 +162,20 @@
             class="modal-input"
             placeholder="请输入标题..."
             maxlength="200"/>
+          <div class="post-color-row">
+            <span class="post-color-label">标题颜色</span>
+            <TitleColorPicker v-model="state.newPost.titleColor" />
+          </div>
           <textarea
             v-model="state.newPost.content"
             rows="6"
             class="modal-textarea"
             placeholder="请输入内容(分享观点、学习经验...)"
             maxlength="10000"></textarea>
+          <div class="post-image-upload">
+            <label class="post-color-label">图片（不限张数）</label>
+            <ImageUploader v-model="state.newPost.images" />
+          </div>
           <div class="upload-area">
             <input
               type="file"
@@ -265,7 +274,14 @@
               <button v-if="canDeleteCurrentPost" class="delete-post-btn" @click="deletePost">删除</button>
             </div>
             <!-- 帖子正文 -->
-            <div class="detail-content">{{ state.currentPost.content }}</div>
+            <h3 class="detail-title" :style="{ color: titleColorValue(state.currentPost.titleColor) }">
+              {{ state.currentPost.title }}
+            </h3>
+            <div class="detail-content"><ForumContent :content="state.currentPost.content" /></div>
+            <ImageGrid
+              v-if="state.currentPost.imageUrls && state.currentPost.imageUrls.length"
+              :images="state.currentPost.imageUrls"
+              mode="post" />
             <!-- 附件 -->
             <div v-if="state.currentPost.attachments && state.currentPost.attachments.length" class="detail-attachments">
               <span
@@ -319,6 +335,10 @@
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
                       <div class="comment-text"><ForumContent :content="comment.content" /></div>
+                      <ImageGrid
+                        v-if="comment.attachments && comment.attachments.length"
+                        :images="comment.attachments.map((a: any) => a.url)"
+                        mode="comment" />
                       <div class="comment-actions">
                         <span @click="toggleCommentLike(comment)" class="comment-action">
                           <XIcon
@@ -354,6 +374,10 @@
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
                           <div class="comment-text"><ForumContent :content="child.content" /></div>
+                          <ImageGrid
+                            v-if="child.attachments && child.attachments.length"
+                            :images="child.attachments.map((a: any) => a.url)"
+                            mode="comment" />
                           <div class="comment-actions">
                             <span @click="toggleCommentLike(child)" class="comment-action">
                               <XIcon
@@ -388,6 +412,9 @@
                     😀
                   </button>
                   <span class="comment-toolbar-tip">支持 emoji 与自定义表情包</span>
+                </div>
+                <div class="comment-image-upload">
+                  <ImageUploader v-model="state.newCommentImages" />
                 </div>
                 <textarea
                   v-model="state.newComment"
@@ -477,9 +504,23 @@
   } from '@/modules/community/categories';
   import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
   import ForumContent from '@/components/forum/ForumContent.vue';
+  import ImageGrid from '@/components/forum/ImageGrid.vue';
+  import ImageUploader from '@/components/forum/ImageUploader.vue';
+  import TitleColorPicker from '@/components/forum/TitleColorPicker.vue';
+  import { titleColorValue } from '@/components/forum/titleColors';
+  import { isImageUrl } from '@/components/forum/imageUtils';
+  import type { ForumImageAttachment } from '@/components/forum/imageUtils';
   export default defineComponent({
     name: 'Forum',
-    components: { NavBar, XIcon, EmojiStickerPicker, ForumContent },
+    components: {
+      NavBar,
+      XIcon,
+      EmojiStickerPicker,
+      ForumContent,
+      ImageGrid,
+      ImageUploader,
+      TitleColorPicker
+    },
     setup(props) {
       const provider = useProvider({ id: 'forum', version: '1785094400000' });
       const community = useCommunityStore();
@@ -495,7 +536,14 @@
         showNewPost: false,
         showUserProfile: false,
         userProfile: {} as any,
-        newPost: { title: '', content: '', attachments: [] as any[] },
+        newPost: {
+          title: '',
+          content: '',
+          titleColor: 'default',
+          images: [] as ForumImageAttachment[],
+          attachments: [] as any[]
+        },
+        newCommentImages: [] as ForumImageAttachment[],
         forumStats: { posts: 0, users: 0, online: 0 },
         // === 帖子详情 ===
         showPostDetail: false,
@@ -530,6 +578,7 @@
         avatarInitial,
         avatarFailed,
         markAvatarFailed,
+        titleColorValue,
         categoryTabs: FORUM_CATEGORY_TABS,
         ChatRound,
         EditPen,
@@ -634,13 +683,16 @@
         }
         this.state.submitting = true;
         try {
+          const allAttachments = [
+            ...this.state.newPost.images,
+            ...this.state.newPost.attachments
+          ];
           const created = await this.community.createPost({
             title: this.state.newPost.title,
             content: this.state.newPost.content,
             shareType: 'EXPERIENCE',
-            attachments: this.state.newPost.attachments.length
-              ? this.state.newPost.attachments
-              : undefined
+            titleColor: this.state.newPost.titleColor,
+            attachments: allAttachments.length ? allAttachments : undefined
           });
           if (!created) return;
           // 成功:unshift 到列表头(实时更新)
@@ -650,7 +702,13 @@
           this.state.myPosts.unshift(this._mapPost(created, false));
           this.state.myPostsTotal = (this.state.myPostsTotal || 0) + 1;
           this.state.showNewPost = false;
-          this.state.newPost = { title: '', content: '', attachments: [] };
+          this.state.newPost = {
+            title: '',
+            content: '',
+            titleColor: 'default',
+            images: [],
+            attachments: []
+          };
           ElMessage.success('发布成功!');
         } catch (e) {
           this._safeMsg('error', this.community.error || '发布失败,请稍后重试');
@@ -795,6 +853,7 @@
         this.state.currentPost = null;
         this.state.comments = [];
         this.state.newComment = '';
+        this.state.newCommentImages = [];
         this.state.replyTarget = null;
         this.state.showCommentPicker = false;
         this.state.detailLoading = false;
@@ -859,10 +918,14 @@
             content: this.state.newComment,
             parentCommentId: this.state.replyTarget
               ? this.state.replyTarget.commentId
+              : undefined,
+            attachments: this.state.newCommentImages.length
+              ? this.state.newCommentImages
               : undefined
           });
           this._safeMsg('success', '评论成功');
           this.state.newComment = '';
+          this.state.newCommentImages = [];
           this.state.replyTarget = null;
           if (this.state.currentPost) {
             this.state.currentPost.commentCount = (this.state.currentPost.commentCount || 0) + 1;
@@ -978,6 +1041,11 @@
           viewCount: p?.viewCount ?? 0,
           liked: p?.liked ?? false,
           attachments: p?.attachments ?? [],
+          imageUrls: (Array.isArray(p?.attachments) ? p.attachments : [])
+            .map((att: any) => att?.url)
+            .filter((url: any) => typeof url === 'string' && isImageUrl(url)),
+          titleColor: p?.titleColor ?? 'default',
+          isLocked: !!p?.isLocked,
           shareType: p?.shareType ?? '',
           userId: p?.user?.id ?? null,
           isTop: p?.isTop ?? false,
@@ -1153,6 +1221,27 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .detail-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 14px 0 8px;
+  }
+  .post-color-row,
+  .post-image-upload,
+  .comment-image-upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+  }
+  .post-color-label {
+    font-size: 13px;
+    color: #6b7896;
+    white-space: nowrap;
+  }
+  .post-image-upload {
+    align-items: flex-start;
   }
   .post-excerpt {
     font-size: 15px;

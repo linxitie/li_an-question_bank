@@ -38,6 +38,7 @@
           <div v-for="f in list" :key="f.feedback_id" class="fb-item">
             <div class="fb-head">
               <span class="fb-cat">{{ f.category }}</span>
+              <span v-if="f.ticket_no" class="fb-ticket">{{ f.ticket_no }}</span>
               <span :class="['fb-status', 'st-' + f.status]">{{ statusLabel(f.status) }}</span>
             </div>
             <div class="fb-content">{{ f.content }}</div>
@@ -128,6 +129,7 @@ onMounted(loadMy);
 .fb-item { border-bottom: 1px solid #f0f2f5; padding: 14px 0; }
 .fb-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .fb-cat { font-size: 12px; color: #1A365D; background: #1A365D12; padding: 2px 8px; border-radius: 10px; }
+.fb-ticket { font-size: 11px; color: #6b7896; margin-left: 6px; }
 .fb-status { font-size: 12px; }
 .st-pending { color: #f59e0b; }
 .st-processing { color: #1890ff; }

@@ -86,6 +86,11 @@
                 <span v-if="c.user && c.user.signature" class="signature">{{ c.user.signature }}</span>
               </div>
               <div class="comment-content"><ForumContent :content="c.content" /></div>
+              <ImageGrid
+                v-if="c.attachments && c.attachments.length"
+                :images="c.attachments.map((a) => a.url)"
+                mode="comment"
+              />
               <div class="comment-actions">
                 <button class="text-btn" @click="startReply(c)">回复</button>
                 <button
@@ -116,6 +121,11 @@
               <div class="comment-main">
                 <div class="comment-user">{{ r.user && r.user.nickname }}</div>
                 <div class="comment-content"><ForumContent :content="r.content" /></div>
+                <ImageGrid
+                  v-if="r.attachments && r.attachments.length"
+                  :images="r.attachments.map((a) => a.url)"
+                  mode="comment"
+                />
                 <div class="comment-actions">
                   <button class="text-btn" @click="startReply(c, r)">回复</button>
                   <button
@@ -139,6 +149,9 @@
 
     <footer v-if="post" class="comment-bar">
       <button v-if="replyTo" class="reply-hint" @click="cancelReply">回复 {{ replyToName }} ×</button>
+      <div class="comment-image-bar">
+        <ImageUploader v-model="commentImages" />
+      </div>
       <div v-if="showPicker" class="comment-picker">
         <EmojiStickerPicker @select="insertEmoji" @close="showPicker = false" />
       </div>
@@ -162,6 +175,9 @@ import { useCommunityStore } from '@/modules/community/store';
 import { useAuthStore } from '@/stores/auth';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
+import ImageGrid from '@/components/forum/ImageGrid.vue';
+import ImageUploader from '@/components/forum/ImageUploader.vue';
+import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 import { avatarInitial } from '@/modules/community/avatar';
 import type {
   ForumCommentItem,
@@ -191,6 +207,7 @@ const router = useRouter();
 const store = useCommunityStore();
 const authStore = useAuthStore();
 const commentText = ref('');
+const commentImages = ref<ForumImageAttachment[]>([]);
 const replyTo = ref<number | null>(null);
 const replyToName = ref('');
 const showPicker = ref(false);
@@ -312,8 +329,13 @@ const submitComment = async () => {
   const c = commentText.value.trim();
   if (!c) return;
   try {
-    await store.submitComment(postId, { content: c, parentCommentId: replyTo.value });
+    await store.submitComment(postId, {
+      content: c,
+      parentCommentId: replyTo.value,
+      attachments: commentImages.value.length ? commentImages.value : undefined
+    });
     commentText.value = '';
+    commentImages.value = [];
     cancelReply();
   } catch (e) {
     console.error('评论失败:', e);
@@ -680,10 +702,14 @@ onMounted(() => {
 .comment-bar {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 10px 12px;
   background: #fff;
   border-top: 1px solid #e8ecf1;
+}
+.comment-image-bar {
+  width: 100%;
 }
 .reply-hint {
   position: absolute;

@@ -58,6 +58,11 @@ export interface ForumPostItem {
   attachments?: ForumAttachment[];
   isTop?: boolean;
   isEssence?: boolean;
+  isLocked?: boolean;
+  titleColor?: string;
+  questionId?: number | null;
+  lastActivityTime?: string | null;
+  updateTime?: string | null;
   likeCount: number;
   commentCount: number;
   viewCount: number;
@@ -75,6 +80,9 @@ export interface ForumCommentItem {
   likeCount: number;
   createTime: string | null;
   parentCommentId?: number | null;
+  isPinned?: boolean;
+  replyToUserId?: number | null;
+  attachments?: ForumAttachment[];
   replyCount?: number;
   liked: boolean;
   myReaction?: ForumReactionCode | null;
@@ -134,6 +142,8 @@ export interface ForumPostCreatePayload {
   title: string;
   content: string;
   shareType?: ForumShareType;
+  titleColor?: string;
+  questionId?: number | null;
   tags?: string[];
   attachments?: ForumAttachment[];
 }
@@ -141,6 +151,8 @@ export interface ForumPostCreatePayload {
 export interface ForumCommentCreatePayload {
   content: string;
   parentCommentId?: number | null;
+  replyToUserId?: number | null;
+  attachments?: ForumAttachment[];
 }
 
 export interface LikeToggleResult {
@@ -306,6 +318,8 @@ export function createForumPost(
       title: payload.title,
       content: payload.content,
       share_type: payload.shareType,
+      title_color: payload.titleColor,
+      question_id: payload.questionId,
       tags: payload.tags?.length ? payload.tags.join(',') : undefined,
       attachments: payload.attachments?.length ? payload.attachments : undefined
     })
@@ -316,6 +330,61 @@ export function deleteForumPost(postId: number): Promise<{ success: boolean; mes
   return request<{ success: boolean; message: string }>({
     url: `/api/forum/posts/${postId}`,
     method: 'DELETE'
+  });
+}
+
+export function updateForumPost(
+  postId: number,
+  payload: Partial<ForumPostCreatePayload>
+): Promise<ForumPostItem> {
+  return request<ForumPostItem>({
+    url: `/api/forum/posts/${postId}`,
+    method: 'PUT',
+    data: {
+      title: payload.title,
+      content: payload.content,
+      title_color: payload.titleColor,
+      tags: payload.tags?.length ? payload.tags.join(',') : undefined,
+      attachments: payload.attachments
+    }
+  });
+}
+
+export function pinForumComment(
+  commentId: number,
+  pinned: boolean
+): Promise<{ success: boolean; isPinned: boolean }> {
+  return request<{ success: boolean; isPinned: boolean }>({
+    url: `/api/forum/comments/${commentId}/pin`,
+    method: 'PUT',
+    data: { pinned }
+  });
+}
+
+export function deleteForumComment(
+  commentId: number
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>({
+    url: `/api/forum/comments/${commentId}`,
+    method: 'DELETE'
+  });
+}
+
+export function reportForumTarget(payload: {
+  targetType: 'POST' | 'COMMENT' | 'USER';
+  targetId: number;
+  reasonCode: 'spam' | 'abuse' | 'illegal' | 'other';
+  reasonText?: string;
+}): Promise<{ success: boolean; report_id: number }> {
+  return request<{ success: boolean; report_id: number }>({
+    url: '/api/forum/reports',
+    method: 'POST',
+    data: {
+      target_type: payload.targetType,
+      target_id: payload.targetId,
+      reason_code: payload.reasonCode,
+      reason_text: payload.reasonText
+    }
   });
 }
 
@@ -335,7 +404,9 @@ export function createForumComment(
     method: 'POST',
     data: toFormData({
       content: payload.content,
-      parent_comment_id: payload.parentCommentId
+      parent_comment_id: payload.parentCommentId,
+      reply_to_user_id: payload.replyToUserId,
+      attachments: payload.attachments?.length ? payload.attachments : undefined
     })
   });
 }
