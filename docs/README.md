@@ -22,10 +22,11 @@
 | `plans/学生端模块化基线快照_v1.md` | v1 | ✅ 已定稿（2026-10-18） | P1-01 实测基线：75 页/73 JSON/343 端点/pytest 278-17-3/门禁 7-8/13 调用点 |
 | `plans/学生端模块化_P3手工验收核对表_v1.md` | v1 | 📋 待用户执行 | P3-01~07 真机手工验收执行清单：17 域逐项勾选 + 事件观测记录位 + 三设备一致性/WS 兜底演练步骤 + 缺陷记录区 |
 | `plans/三端数据流一致性修复方案_v1.md` | v1 | 🚧 执行中（P0 ✅；P1-1 ✅；P1-2 ✅；P1-3~P1-9 待执行） | 6 项三端数据流一致性问题的根因+修复方案：统一可见性/计数口径、主观题渲染、考点 canonical 展示、材料归属与教师编辑、存量修复与验收；P0-P4 分阶段，含 7 个待拍板决策 |
-| `plans/三端数据流一致性修复方案_v2.md` | v2 | 🚧 执行中（已批准；T-01 ✅ 2bd7d6e；T-02 ✅ 32c1cdb；T-03 ✅ f1c402b；T-04 ✅ f1bc4bb；T-05 ✅ 995e971；T-06 ✅ e42b3c8；T-07 ✅ 4cd6079；T-08 ✅ 0726184；T-08b ✅ 447988e；T-09~T-12 进行中） | v1 的完整替代/增强版：覆盖 6 个问题的逐项方案；新增 91 L2/427 L3/518 节点分类树、505 别名隐藏、583 未分类回填、`sub_category_id`、P1/P2/P3 任务表、VTJ 9 页落地、验收/回滚/commit 计划；新增 §14 RT 富文本统一展示/编辑（答题卡/教师端/导入/管理员端，图片/文字/HTML/链接，双端清洗）；含“主代理直接落盘、未经子代理独立审查”说明 |
+| `plans/三端数据流一致性修复方案_v2.md` | v2 | 🚧 执行中（已批准；T-01 ✅ 2bd7d6e；T-02 ✅ 32c1cdb；T-03 ✅ f1c402b；T-04 ✅ f1bc4bb；T-05 ✅ 995e971；T-06 ✅ e42b3c8；T-07 ✅ 4cd6079；T-08 ✅ 0726184；T-08b ✅ 447988e；T-09 ✅ 8fb5f56；T-10~T-12 进行中） | v1 的完整替代/增强版：覆盖 6 个问题的逐项方案；新增 91 L2/427 L3/518 节点分类树、505 别名隐藏、583 未分类回填、`sub_category_id`、P1/P2/P3 任务表、VTJ 9 页落地、验收/回滚/commit 计划；新增 §14 RT 富文本统一展示/编辑（答题卡/教师端/导入/管理员端，图片/文字/HTML/链接，双端清洗）；含“主代理直接落盘、未经子代理独立审查”说明 |
 
 ## 变更记录
 
+- 2026-10-24：Phase A 进展：T-09 完成（commits `0c1ef0a` + `8fb5f56`，`/sub-categories` 返回 L2 + `children` L3，隐藏 0/0 与 status=0，`/knowledge-points` 只返回有题 L3；32 passed/1 xfailed；实库 A3/A4：229=150+79、16=16+0、2877=2561+316）。
 - 2026-10-24：Phase A 进展：T-08b 完成（commit `447988e`，新增 `normalize-l2-relations` + 9 个测试；t08 临时库把 2127 条 L2 关系归一为 L2 的“其他”L3、2126 条 `point_id` 同步到 L3，第二次 apply `changed=0`，relation_to_l2=0、question_bank_to_l2=0、integrity ok；未触碰生产库）。
 - 2026-10-24：Phase A 进展：T-08 完成（commit `0726184`，新增 `question_bank.sub_category_id` 列映射、回填脚本与 13 个测试；t08 临时库首次 apply 2940 非空/417 NULL，未关联题 583（166 有文本、417 无文本/无 point），第二次 apply `changed=0`，列/索引/坏引用/integrity 均通过；生产库只读未写；**风险**：生产库仍无该列，T-11 迁移前不要启动/部署后端）。
 - 2026-10-24：Phase A 进展：T-07 完成（commit `4cd6079`，新增部分唯一索引 `uq_knowledge_point_sibling_visible`（`WHERE status=1`）+ 7 个测试，taxonomy 合计 49 passed；t06→t07 用 sqlite backup 复制，0 可见同级重复、重复可见插入 IntegrityError、隐藏同名插入允许、重复执行幂等、integrity ok；生产库只读未写：631 行、已有 status 列、无该索引、integrity ok；22 行 sub_category_id NULL，SQLite 唯一索引不约束 NULL）；T-08~T-12 进行中。
