@@ -25,6 +25,7 @@ from ....models.models import (
     Banji, PaperApprovalWorkflow
 )
 from ....services.question_stats import QuestionStatsService
+from ....services.question_ingest.groups import upsert_question_material
 from ....schemas.admin import (
     DashboardStats, DashboardResponse, WeeklyActiveTrend,
     SubjectDistribution,
@@ -569,11 +570,29 @@ async def update_question(
     if not q:
         raise HTTPException(status_code=404, detail="题目不存在")
 
-    update_data = data.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(q, key, value)
-    q.update_time = datetime.now()
-    db.commit()
+    update_data = data.model_dump(exclude_unset=True)
+    material_keys = ("group_id", "shared_content", "shared_content_images")
+    material_data = {k: update_data.pop(k) for k in material_keys if k in update_data}
+    try:
+        for key, value in update_data.items():
+            setattr(q, key, value)
+        if material_data:
+            upsert_question_material(
+                db,
+                q,
+                group_id=material_data.get("group_id"),
+                shared_content=material_data.get("shared_content"),
+                shared_content_images=material_data.get("shared_content_images"),
+                current_user=current_user,
+            )
+        q.update_time = datetime.now()
+        db.commit()
+    except PermissionError:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="无权修改此题目材料")
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(e))
 
     record_operation(db, current_user, "UPDATE", "题库管理",
                      f"编辑题目 {question_id}")

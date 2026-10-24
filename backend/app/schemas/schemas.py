@@ -241,6 +241,9 @@ class QuestionCreate(BaseModel):
     source: Optional[str] = Field(None, max_length=200, description="题目来源")
     tags: Optional[str] = Field(None, max_length=500, description="标签")
     video_url: Optional[str] = Field(None, max_length=500, description="讲解视频URL")
+    group_id: Optional[int] = Field(None, description="题组ID（0/None=非题组）")
+    shared_content: Optional[str] = Field(None, description="题组共享材料")
+    shared_content_images: Optional[str] = Field(None, description="题组材料图片（JSON串）")
 
 
 class QuestionUpdate(BaseModel):
@@ -258,6 +261,9 @@ class QuestionUpdate(BaseModel):
     tags: Optional[str] = None
     video_url: Optional[str] = None
     audit_status: Optional[AuditStatusEnum] = None
+    group_id: Optional[int] = None
+    shared_content: Optional[str] = None
+    shared_content_images: Optional[str] = None
 
 
 class QuestionResponse(BaseModel):
@@ -292,6 +298,9 @@ class QuestionResponse(BaseModel):
     update_time: Optional[datetime] = None
     status: int = 1
     version: int = 1
+    group_id: Optional[int] = 0
+    shared_content: Optional[str] = None
+    shared_content_images: Optional[str] = None
 
 
 class QuestionListQuery(BaseModel):

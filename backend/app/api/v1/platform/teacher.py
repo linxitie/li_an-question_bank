@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 from ....services.text_parser import clean_question_text
 from ....services.question_stats import QuestionStatsService
+from ....services.question_ingest.groups import upsert_question_material
 import re as _re
 
 # 题干摘要里必须**先剥图再截断**。
@@ -437,12 +438,29 @@ async def update_question(
         raise HTTPException(status_code=404, detail="题目不存在")
 
     try:
-        update_data = data.dict(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True)
+        material_keys = ("group_id", "shared_content", "shared_content_images")
+        material_data = {k: update_data.pop(k) for k in material_keys if k in update_data}
         for key, value in update_data.items():
             setattr(q, key, value)
+        if material_data:
+            upsert_question_material(
+                db,
+                q,
+                group_id=material_data.get("group_id"),
+                shared_content=material_data.get("shared_content"),
+                shared_content_images=material_data.get("shared_content_images"),
+                current_user=current_user,
+            )
         q.update_time = datetime.now()
         db.commit()
         return {"success": True, "message": "题目已更新", "question": _format_question(q)}
+    except PermissionError:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="无权修改此题目材料")
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"更新题目 {question_id} 失败: {e}", exc_info=True)
         db.rollback()
