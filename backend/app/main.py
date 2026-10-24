@@ -223,14 +223,41 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 logger.info("自动迁移: exam_paper 添加列 publish_target")
 
-        # 检查 forum_post 表(论坛模块完善:新增 attachments 字段)
+        # 检查 forum_post 表(论坛模块完善 + P1 个性化字段)
         if 'forum_post' in inspector.get_table_names():
             forum_cols = [c['name'] for c in inspector.get_columns('forum_post')]
-            if 'attachments' not in forum_cols:
-                with engine.connect() as conn:
-                    conn.execute(text("ALTER TABLE forum_post ADD COLUMN attachments JSON"))
-                    conn.commit()
-                logger.info("自动迁移: forum_post 添加列 attachments")
+            forum_new_cols = [
+                ('attachments', 'JSON'),
+                ('title_color', "VARCHAR(16) DEFAULT 'default'"),
+                ('is_locked', 'INTEGER DEFAULT 0'),
+                ('question_id', 'BIGINT'),
+                ('feedback_id', 'BIGINT'),
+                ('last_activity_time', 'DATETIME'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in forum_new_cols:
+                    if col_name not in forum_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE forum_post ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: forum_post 添加列 {col_name}")
+                conn.commit()
+
+        # 检查 forum_comment 表(P1 评论区扩展)
+        if 'forum_comment' in inspector.get_table_names():
+            comment_cols = [c['name'] for c in inspector.get_columns('forum_comment')]
+            comment_new_cols = [
+                ('is_pinned', 'INTEGER DEFAULT 0'),
+                ('reply_to_user_id', 'BIGINT'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in comment_new_cols:
+                    if col_name not in comment_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE forum_comment ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: forum_comment 添加列 {col_name}")
+                conn.commit()
 
         # 检查 forum_like 表(点赞表情:新增 reaction_code 字段)
         if 'forum_like' in inspector.get_table_names():

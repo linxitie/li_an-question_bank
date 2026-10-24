@@ -650,7 +650,13 @@ class ForumPost(Base):
     collect_count = Column(Integer, default=0, comment="收藏数")
     status = Column(Enum("NORMAL", "DELETED", "BLOCKED"), default="NORMAL", comment="状态")
     attachments = Column(JSON, comment="附件列表JSON:[{name,url,size,type}]")
-    create_time = Column(DateTime, default=datetime.now, comment="发布时间")
+    # === P1 个性化/互动扩展 ===
+    title_color = Column(String(16), default="default", comment="标题颜色 token")
+    is_locked = Column(Integer, default=0, comment="是否关闭评论 0否/1是")
+    question_id = Column(BigInteger, comment="关联题目ID")
+    feedback_id = Column(BigInteger, comment="关联反馈工单ID")
+    last_activity_time = Column(DateTime, default=datetime.now, comment="最后活跃时间")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     user = relationship("SysUser")
@@ -660,6 +666,7 @@ class ForumPost(Base):
         Index("idx_create_time", create_time),
         Index("idx_status_forumpost", status),
         Index("idx_status_top_time", status, is_top, create_time),
+        Index("idx_post_activity", status, last_activity_time),
     )
 
 class ForumComment(Base):
@@ -672,7 +679,10 @@ class ForumComment(Base):
     parent_comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="父评论ID")
     content = Column(Text, nullable=False, comment="评论内容")
     like_count = Column(Integer, default=0, comment="点赞数")
-    status = Column(Integer, default=1, comment="状态")
+    status = Column(Integer, default=1, comment="状态 1正常/0删除/2隐藏")
+    # === P1 评论区扩展 ===
+    is_pinned = Column(Integer, default=0, comment="是否置顶 0否/1是")
+    reply_to_user_id = Column(BigInteger, comment="回复目标用户ID")
     create_time = Column(DateTime, default=datetime.now, comment="评论时间")
     
     post = relationship("ForumPost")

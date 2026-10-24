@@ -46,6 +46,8 @@ from ....core.exceptions import (
 )
 
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
+
+TITLE_COLORS = {"default", "red", "gold", "blue", "green", "purple"}
 logger = logging.getLogger(__name__)
 
 # 点赞表情白名单：只接受固定码，避免任意文本/图片进入
@@ -149,10 +151,16 @@ def _serialize_post(
         "attachments": post.attachments or [],
         "isTop": bool(post.is_top),
         "isEssence": bool(post.is_essence),
+        "isLocked": bool(post.is_locked),
+        "titleColor": post.title_color or "default",
+        "questionId": post.question_id,
+        "feedbackId": post.feedback_id,
+        "lastActivityTime": post.last_activity_time.isoformat() if post.last_activity_time else None,
         "likeCount": post.like_count or 0,
         "commentCount": post.comment_count or 0,
         "viewCount": post.view_count or 0,
         "createTime": post.create_time.isoformat() if post.create_time else None,
+        "updateTime": post.update_time.isoformat() if post.update_time else None,
         "userId": post.user_id,
         "liked": liked or my_reaction is not None,
         "myReaction": my_reaction,
@@ -176,6 +184,8 @@ def _serialize_comment(
         "likeCount": comment.like_count or 0,
         "createTime": comment.create_time.isoformat() if comment.create_time else None,
         "parentCommentId": comment.parent_comment_id,
+        "isPinned": bool(comment.is_pinned),
+        "replyToUserId": comment.reply_to_user_id,
         "liked": liked or my_reaction is not None,
         "myReaction": my_reaction,
         "reactions": reactions or {},
@@ -252,6 +262,8 @@ async def get_forum_posts(
     share_type: Optional[str] = Query(None, description="分享类型: EXPERIENCE/RESOURCE/DISCUSSION/FEELING/QUESTION"),
     sort_by: Literal["time", "likes", "comments", "views"] = Query("time", description="排序字段"),
     order: Literal["asc", "desc"] = Query("desc", description="排序方向"),
+    keyword: Optional[str] = Query(None, description="标题/正文关键词"),
+    sort: Optional[Literal["new", "hot"]] = Query(None, description="快捷排序: new/hot"),
     limit: int = Query(20, ge=1, le=50, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
@@ -268,15 +280,27 @@ async def get_forum_posts(
 
     if share_type:
         query = query.filter(ForumPost.share_type == share_type)
+    if keyword:
+        like = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(ForumPost.title.like(like), ForumPost.content.like(like))
+        )
 
     total = query.count()
-    sort_field = {
-        "time": ForumPost.create_time,
-        "likes": ForumPost.like_count,
-        "comments": ForumPost.comment_count,
-        "views": ForumPost.view_count,
-    }[sort_by]
-    sort_expr = sort_field.asc() if order == "asc" else sort_field.desc()
+    if sort == "hot":
+        sort_expr = (
+            ForumPost.like_count * 2 + ForumPost.comment_count * 3
+        ).desc()
+    elif sort == "new":
+        sort_expr = ForumPost.create_time.desc()
+    else:
+        sort_field = {
+            "time": ForumPost.create_time,
+            "likes": ForumPost.like_count,
+            "comments": ForumPost.comment_count,
+            "views": ForumPost.view_count,
+        }[sort_by]
+        sort_expr = sort_field.asc() if order == "asc" else sort_field.desc()
     posts = query.order_by(
         ForumPost.is_top.desc(),
         sort_expr,
@@ -364,6 +388,8 @@ async def create_post(
     share_type: str = Form("EXPERIENCE"),
     tags: Optional[str] = Form(None),
     attachments: Optional[str] = Form(None, description="附件列表 JSON 字符串"),
+    title_color: str = Form("default", description="标题颜色 token"),
+    question_id: Optional[int] = Form(None, description="关联题目ID"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -412,6 +438,8 @@ async def create_post(
             raise ValidationError(f"附件格式错误: {e}")
 
     # 3. 创建帖子
+    if title_color not in TITLE_COLORS:
+        title_color = "default"
     post = ForumPost(
         user_id=current_user.user_id,
         title=title.strip(),
@@ -419,6 +447,9 @@ async def create_post(
         share_type=share_type if share_type in ("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION") else "EXPERIENCE",
         tags=tags,
         attachments=parsed_attachments,
+        title_color=title_color,
+        question_id=question_id,
+        last_activity_time=datetime.now(),
         status="NORMAL",
     )
     db.add(post)
@@ -613,6 +644,7 @@ async def create_comment(
     request: Request,
     content: str = Form(..., max_length=2000),
     parent_comment_id: Optional[int] = Form(None),
+    reply_to_user_id: Optional[int] = Form(None),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -632,6 +664,8 @@ async def create_comment(
     ).first()
     if not post:
         raise ResourceNotFoundError("帖子", post_id)
+    if post.is_locked:
+        raise BusinessLogicError("该帖子已关闭评论")
 
     # 校验父评论是否存在且属于同一帖子
     if parent_comment_id:
@@ -641,6 +675,8 @@ async def create_comment(
         ).first()
         if not parent:
             raise ValidationError("父评论不存在或不属于该帖子")
+        if not reply_to_user_id:
+            reply_to_user_id = parent.user_id
 
     # 关键词过滤
     filter_result = sensitive_filter.detect(content)
@@ -663,13 +699,15 @@ async def create_comment(
         post_id=post_id,
         user_id=current_user.user_id,
         parent_comment_id=parent_comment_id,
+        reply_to_user_id=reply_to_user_id,
         content=final_content,
         status=1,
     )
     db.add(comment)
 
-    # 帖子评论数 +1
+    # 帖子评论数 +1，并刷新最后活跃时间
     post.comment_count = (post.comment_count or 0) + 1
+    post.last_activity_time = datetime.now()
 
     db.commit()
     db.refresh(comment)
@@ -1225,3 +1263,126 @@ async def create_forum_report(
     db.commit()
     db.refresh(report)
     return {"success": True, "report_id": report.report_id}
+
+
+# ============================== P1 编辑/置顶/删除 ==============================
+
+def _can_moderate_forum(user: SysUser, db: Session) -> bool:
+    from ....core.security import Permission, get_effective_permissions
+
+    if user.role_level >= 2:
+        return True
+    return Permission.FORUM_MODERATE in get_effective_permissions(user, db)
+
+
+@router.put("/posts/{post_id}", summary="编辑帖子（作者30分钟内）")
+async def update_post(
+    post_id: int,
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = db.query(ForumPost).filter(
+        ForumPost.post_id == post_id,
+        ForumPost.status == "NORMAL",
+    ).first()
+    if not post:
+        raise ResourceNotFoundError("帖子", post_id)
+
+    is_author = post.user_id == current_user.user_id
+    within_window = (
+        post.create_time is not None
+        and (datetime.now() - post.create_time).total_seconds() <= 30 * 60
+    )
+    if not (current_user.role_level >= 2 or (is_author and within_window)):
+        raise BusinessLogicError("只能编辑自己 30 分钟内发布的帖子")
+
+    title = (payload.get("title") or post.title or "").strip()
+    content = (payload.get("content") or post.content or "").strip()
+    if not title or not content:
+        raise ValidationError("标题和正文不能为空")
+
+    title_filter = sensitive_filter.detect(title)
+    content_filter = sensitive_filter.detect(content)
+    if (
+        title_filter["level"] == SensitiveLevel.BLOCKED
+        or content_filter["level"] == SensitiveLevel.BLOCKED
+    ):
+        blocked = (
+            title_filter
+            if title_filter["level"] == SensitiveLevel.BLOCKED
+            else content_filter
+        )
+        _log_violation(db, current_user.user_id, None, blocked, "rejected", title)
+        raise BusinessLogicError("内容包含违规词，无法发布")
+    if title_filter["level"] == SensitiveLevel.MASKED:
+        title = title_filter.get("masked_text") or title
+    if content_filter["level"] == SensitiveLevel.MASKED:
+        content = content_filter.get("masked_text") or content
+
+    title_color = payload.get("title_color", post.title_color or "default")
+    if title_color not in TITLE_COLORS:
+        title_color = "default"
+
+    post.title = title
+    post.content = content
+    post.title_color = title_color
+    if payload.get("tags") is not None:
+        post.tags = payload.get("tags")
+    if payload.get("attachments") is not None:
+        if not isinstance(payload["attachments"], list):
+            raise ValidationError("attachments 必须是数组")
+        post.attachments = payload["attachments"]
+    post.last_activity_time = datetime.now()
+    db.commit()
+    db.refresh(post)
+    return _serialize_post(post, current_user, content_full=True)
+
+
+@router.put("/comments/{comment_id}/pin", summary="置顶/取消置顶评论")
+async def pin_comment(
+    comment_id: int,
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(ForumComment).filter(
+        ForumComment.comment_id == comment_id,
+        ForumComment.status == 1,
+    ).first()
+    if not comment:
+        raise ResourceNotFoundError("评论", comment_id)
+    post = db.query(ForumPost).filter(ForumPost.post_id == comment.post_id).first()
+    if not post:
+        raise ResourceNotFoundError("帖子", comment.post_id)
+
+    if post.user_id != current_user.user_id and not _can_moderate_forum(current_user, db):
+        raise BusinessLogicError("只有楼主或管理员可以置顶评论")
+
+    comment.is_pinned = 1 if payload.get("pinned") else 0
+    db.commit()
+    return {"success": True, "isPinned": bool(comment.is_pinned)}
+
+
+@router.delete("/comments/{comment_id}", summary="删除评论（软删除）")
+async def delete_comment(
+    comment_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(ForumComment).filter(
+        ForumComment.comment_id == comment_id,
+        ForumComment.status == 1,
+    ).first()
+    if not comment:
+        raise ResourceNotFoundError("评论", comment_id)
+
+    if comment.user_id != current_user.user_id and not _can_moderate_forum(current_user, db):
+        raise BusinessLogicError("无权删除该评论")
+
+    comment.status = 0
+    post = db.query(ForumPost).filter(ForumPost.post_id == comment.post_id).first()
+    if post:
+        post.comment_count = max(0, (post.comment_count or 0) - 1)
+    db.commit()
+    return {"success": True}
