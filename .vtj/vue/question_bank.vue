@@ -117,19 +117,32 @@
                 </div>
                 <XIcon :icon="state.expandedSubCategory === sub.key ? ArrowDown : ArrowRightBold" :size="14" :color="state.expandedSubCategory === sub.key ? '#1a2b5f' : '#d1d5db'"></XIcon>
               </div>
-              <!-- 展开的考点列表 -->
+              <!-- 展开的考点列表（L2 二级 / L3 三级） -->
               <div class="kp-list" v-if="state.expandedSubCategory === sub.key">
                 <div class="kp-empty" v-if="!sub.knowledge_points || !sub.knowledge_points.length">
                   <span>暂无考点数据</span>
                 </div>
-                <div
-                  v-for="kp in sub.knowledge_points"
-                  :key="kp.point_id"
-                  class="kp-row"
-                  @click.stop="startKnowledgePractice(sub.key, kp)">
-                  <span class="kp-name">{{ kp.point_name }}</span>
-                  <span class="kp-badge">{{ kp.done_count || 0 }}/{{ kp.total_questions || 0 }}</span>
-                </div>
+                <template v-for="l2 in sub.knowledge_points" :key="l2.point_id">
+                  <div class="kp-l2" v-if="(l2.total_questions || 0) > 0">
+                    <div class="kp-row kp-l2-row" @click.stop="toggleL2(sub.key, l2.point_id)">
+                      <span class="kp-name">{{ l2.point_name }}</span>
+                      <span class="kp-badge">{{ l2.done_count || 0 }}/{{ l2.total_questions || 0 }}</span>
+                      <XIcon :icon="isL2Expanded(sub.key, l2.point_id) ? ArrowDown : ArrowRightBold" :size="12" color="#8899aa"></XIcon>
+                    </div>
+                    <div class="kp-l3-list" v-if="isL2Expanded(sub.key, l2.point_id)">
+                      <template v-for="l3 in l2.children" :key="l3.point_id">
+                        <div
+                          class="kp-row kp-l3-row"
+                          v-if="(l3.total_questions || 0) > 0"
+                          @click.stop="startKnowledgePractice(sub.key, l3)">
+                          <span class="kp-name">{{ l3.point_name }}</span>
+                          <span class="kp-badge">{{ l3.done_count || 0 }}/{{ l3.total_questions || 0 }}</span>
+                        </div>
+                      </template>
+                      <div class="kp-empty" v-if="!l2.children || !l2.children.length">暂无下级考点</div>
+                    </div>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -434,6 +447,8 @@
         gongzhuanStats: {},
         // 快速练习 — 展开/收起
         expandedSubCategory: null,
+        // 快速练习 — L2 考点展开状态，key = subKey + ':' + l2PointId
+        expandedL2: {},
         // 快速练习 — 子科目+考点数据缓存
         quickPracticeData: { 1: [], 2: [], 3: [] },
         // 自定义刷题配置
@@ -1039,6 +1054,7 @@
       switchCategory(key) {
         this.state.activeCategory = key;
         this.state.expandedSubCategory = null;
+        this.state.expandedL2 = {};
         // 切换到非自定义Tab时，加载快速练习数据
         if (key !== 'custom') {
           this.fetchQuickPracticeData(key);
@@ -1093,10 +1109,16 @@
       toggleSubCategory(subKey) {
         if (this.state.expandedSubCategory === subKey) {
           this.state.expandedSubCategory = null;
+          this.state.expandedL2 = {};
         } else {
           this.state.expandedSubCategory = subKey;
         }
       },
+      toggleL2(subKey, l2Id) {
+        var key = subKey + ':' + l2Id;
+        this.state.expandedL2 = Object.assign({}, this.state.expandedL2, { [key]: !this.state.expandedL2[key] });
+      },
+      isL2Expanded(subKey, l2Id) { return !!this.state.expandedL2[subKey + ':' + l2Id]; },
       startKnowledgePractice(subKey, kp) {
         if (!kp || !kp.point_id) return;
         var catKey = this.state.activeCategory;
@@ -1513,6 +1535,14 @@
   .kp-row:hover { background: #f0f4ff; }
   .kp-name { font-size: 13px; color: #1a2b5f; font-weight: 500; flex: 1; }
   .kp-badge { font-size: 11px; color: #5a6488; background: #e8ecf2; padding: 2px 8px; border-radius: 8px; font-weight: 600; min-width: 48px; text-align: center; flex-shrink: 0; margin-left: 8px; }
+  /* 考点二级 / 三级层级 */
+  .kp-l2-row { font-weight: 600; gap: 8px; }
+  .kp-l2-row .kp-name { font-weight: 600; }
+  .kp-l3-list { background: #fff; border-top: 1px solid #f0f2f5; }
+  .kp-l3-row { padding: 8px 16px 8px 34px; background: #fff; }
+  .kp-l3-row .kp-name { font-size: 12px; color: #5a6488; font-weight: 400; }
+  .kp-l3-row .kp-badge { font-size: 10px; min-width: 42px; }
+  .kp-l3-row:last-child { border-bottom: none; }
   /* 自定义刷题卡片 */
   .custom-practice-card { background: #fff; border-radius: 16px; padding: 28px 32px; box-shadow: 0 2px 12px rgba(26,43,95,0.06); max-width: 620px; margin: 0 auto; }
   .custom-header { font-size: 18px; font-weight: 700; color: #1a2b5f; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #f0f2f5; }

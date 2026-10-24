@@ -1,0 +1,129 @@
+{
+  "id": "mobile_practice",
+  "__VERSION__": "1788919369989",
+  "name": "MobilePractice",
+  "css": ".mobile-practice-page{min-height:100vh;background:#f5f7fa;font-family:'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;display:flex;flex-direction:column}.top-nav{display:flex;align-items:center;justify-content:space-between;height:56px;padding:0 16px;background:#ffffff;border-bottom:1px solid #f0f2f5;position:sticky;top:0;z-index:100}.nav-left,.nav-right{width:40px;display:flex;align-items:center;justify-content:center}.nav-back,.nav-icon{cursor:pointer;transition:opacity 0.2s}.nav-back:hover,.nav-icon:hover{opacity:0.7}.nav-title{font-size:18px;font-weight:700;color:#1A365D;margin:0}.main-content{flex:1;padding:16px;overflow-y:auto;padding-bottom:80px}.stats-section{margin-bottom:20px}.stats-card{display:flex;align-items:center;justify-content:space-around;background:#ffffff;border-radius:16px;padding:20px 16px;box-shadow:0 2px 8px rgba(26,54,95,0.04)}.stat-item{display:flex;align-items:center;gap:12px}.stat-icon{width:48px;height:48px;background:#f5f7fa;border-radius:12px;display:flex;align-items:center;justify-content:center}.stat-info{display:flex;flex-direction:column}.stat-value{font-size:20px;font-weight:700;color:#1A365D}.stat-label{font-size:12px;color:#8899aa}.stat-divider{width:1px;height:40px;background:#f0f2f5}.quick-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}.action-card{display:flex;flex-direction:column;align-items:center;padding:20px 12px;background:#ffffff;border-radius:16px;box-shadow:0 2px 8px rgba(26,54,95,0.04);cursor:pointer;transition:all 0.3s ease}.action-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(26,54,95,0.1)}.action-icon{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:12px}.action-icon.quick{background:linear-gradient(135deg,#1A365D 0%,#2a5298 100%)}.action-icon.weak{background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%)}.action-icon.smart{background:linear-gradient(135deg,#10b981 0%,#059669 100%)}.action-icon.mock{background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%)}.action-name{font-size:15px;font-weight:600;color:#1a2b5f;margin-bottom:4px}.action-desc{font-size:12px;color:#8899aa}.recent-section{margin-bottom:20px}.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.section-title{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;color:#1a2b5f;margin:0}.section-action{font-size:13px;color:#1890ff;cursor:pointer}.recent-list{display:flex;flex-direction:column;gap:12px}.recent-item{display:flex;align-items:center;gap:12px;padding:16px;background:#ffffff;border-radius:12px;box-shadow:0 2px 8px rgba(26,54,95,0.04);cursor:pointer;transition:all 0.3s ease}.recent-item:hover{box-shadow:0 4px 16px rgba(26,54,95,0.1)}.recent-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}.recent-info{flex:1;display:flex;flex-direction:column;gap:4px}.recent-name{font-size:15px;font-weight:600;color:#1a2b5f}.recent-desc{font-size:12px;color:#8899aa}.goal-section{margin-bottom:20px}.goal-card{background:#ffffff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(26,54,95,0.04)}.goal-header{display:flex;align-items:center;gap:8px;margin-bottom:16px}.goal-title{font-size:15px;font-weight:600;color:#1a2b5f}.progress-info{display:flex;justify-content:space-between;font-size:13px;color:#5a6488;margin-bottom:8px}.progress-percent{font-weight:600;color:#1A365D}.progress-bar{height:8px;background:#f0f2f5;border-radius:4px;overflow:hidden}.progress-fill{height:100%;background:linear-gradient(90deg,#1A365D 0%,#2a5298 100%);border-radius:4px;transition:width 0.3s ease}.bottom-tab-bar{position:fixed;bottom:0;left:0;right:0;height:60px;background:#ffffff;display:flex;justify-content:space-around;align-items:center;border-top:1px solid #f0f2f5;padding-bottom:env(safe-area-inset-bottom,0);z-index:100}.tab-item{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;height:100%;cursor:pointer;transition:all 0.2s}.tab-item.active{color:#1A365D}.tab-item:not(.active){color:#a0a4b8}.tab-label{font-size:10px;font-weight:500;margin-top:2px}@media(max-width:375px){.stats-card{padding:16px 12px}.stat-icon{width:40px;height:40px}.stat-value{font-size:18px}.action-card{padding:16px 8px}.action-icon{width:56px;height:56px}}",
+  "emits": [],
+  "nodes": [],
+  "props": [],
+  "slots": [],
+  "state": {
+    "activeTab": "'practice'",
+    "subjects": "[]",
+    "subjectStats": "{}",
+    "activeSubject": "1",
+    "subModules": "[]",
+    "knowledgePoints": "[]",
+    "viewState": "'subModules'",
+    "loaded": "false",
+    "loading": "false",
+    "showModeSheet": "false",
+    "currentKp": "null"
+  },
+  "methods": {
+    "loadSubjects": {
+      "type": "method",
+      "params": []
+    },
+    "loadSubjectStats": {
+      "type": "method",
+      "params": []
+    },
+    "switchSubject": {
+      "type": "method",
+      "params": [
+        "subjectId"
+      ]
+    },
+    "openSubModule": {
+      "type": "method",
+      "params": [
+        "sc"
+      ]
+    },
+    "openModeSheet": {
+      "type": "method",
+      "params": [
+        "kp"
+      ]
+    },
+    "closeModeSheet": {
+      "type": "method",
+      "params": []
+    },
+    "startPractice": {
+      "type": "method",
+      "params": [
+        "mode"
+      ]
+    },
+    "goAnswer": {
+      "type": "method",
+      "params": [
+        "params: Record<string",
+        "any>"
+      ]
+    },
+    "mixedPracticeSubject": {
+      "type": "method",
+      "params": []
+    },
+    "mixedPracticeSubCategory": {
+      "type": "method",
+      "params": [
+        "sc: any"
+      ]
+    },
+    "mixedPracticeKp": {
+      "type": "method",
+      "params": [
+        "kp: any"
+      ]
+    },
+    "handleBack": {
+      "type": "method",
+      "params": []
+    },
+    "goResource": {
+      "type": "method",
+      "params": [
+        "path: string"
+      ]
+    },
+    "onVTJSync": {
+      "type": "method",
+      "params": [
+        "e: any"
+      ]
+    },
+    "offVTJSync": {
+      "type": "method",
+      "params": []
+    },
+    "mixedPracticeCurrentSub": {
+      "type": "method",
+      "params": []
+    }
+  },
+  "computed": {
+    "currentSubject": {
+      "type": "JSExpression",
+      "value": "this.subjects.find((s) => s.subject_id === this.activeSubject)"
+    },
+    "currentDone": {
+      "type": "JSExpression",
+      "value": "this.subjectStats[this.activeSubject]?.done || 0"
+    },
+    "currentTotal": {
+      "type": "JSExpression",
+      "value": "this.subjectStats[this.activeSubject]?.total || 0"
+    },
+    "currentProgress": {
+      "type": "JSExpression",
+      "value": "this.currentTotal ? Math.round((this.currentDone * 100) / this.currentTotal) : 0"
+    }
+  },
+  "lifeCycles": {},
+  "dataSources": {},
+  "__VTJ_BLOCK__": true
+}
