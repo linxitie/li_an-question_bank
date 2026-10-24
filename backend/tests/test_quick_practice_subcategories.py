@@ -1,4 +1,4 @@
-"""P1-2 快速练习子科目计数：可见口径与未分类桶。"""
+"""快速练习子科目计数：canonical L2 节点 + 可见口径 + 未分类桶。"""
 from app.models.models import (
     KnowledgePoint,
     QuestionBank,
@@ -7,7 +7,8 @@ from app.models.models import (
 )
 
 
-def _seed_question(db_session, user, content, subcategory, status=1, audit_status=1):
+def _seed_question(db_session, user, content, subcategory,
+                   sub_category_id=None, status=1, audit_status=1):
     question = QuestionBank(
         subject_id=1,
         type_id=1,
@@ -17,6 +18,7 @@ def _seed_question(db_session, user, content, subcategory, status=1, audit_statu
         difficulty=1,
         score=2,
         xingce_subcategory=subcategory,
+        sub_category_id=sub_category_id,
         creator_id=user.user_id,
         status=status,
         audit_status=audit_status,
@@ -38,17 +40,21 @@ def test_sub_categories_count_visible_and_bucket_unclassified(
     db_session.refresh(sub_category)
 
     visible_matched = _seed_question(
-        db_session, test_user, "可见判断推理题", "判断推理"
+        db_session, test_user, "可见判断推理题", "判断推理",
+        sub_category_id=sub_category.id,
     )
     _seed_question(db_session, test_user, "未归类题", "无")
     _seed_question(
-        db_session, test_user, "隐藏判断推理题", "判断推理", status=0, audit_status=1
+        db_session, test_user, "隐藏判断推理题", "判断推理",
+        sub_category_id=sub_category.id, status=0, audit_status=1,
     )
 
     knowledge_point = KnowledgePoint(
         point_name="逻辑判断",
         subject_id=1,
         sub_category_id=sub_category.id,
+        level=2,
+        parent_id=0,
         sort_order=1,
     )
     db_session.add(knowledge_point)
@@ -71,11 +77,22 @@ def test_sub_categories_count_visible_and_bucket_unclassified(
 
     assert items["判断推理"]["total_questions"] == 1
     assert items["判断推理"]["is_unclassified"] is False
+    assert items["判断推理"]["unclassified_count"] == 0
     assert items["未分类"]["total_questions"] == 1
     assert items["未分类"]["is_unclassified"] is True
+    assert items["未分类"]["unclassified_count"] == 1
+    assert items["未分类"]["knowledge_points"] == []
+    assert items["未分类"]["children"] == []
     assert sum(item["total_questions"] for item in data["items"]) == 2
     assert data["total"] == 2
 
     point_items = items["判断推理"]["knowledge_points"]
     assert len(point_items) == 1
+    assert point_items[0]["point_id"] == knowledge_point.point_id
+    assert point_items[0]["point_name"] == "逻辑判断"
+    assert point_items[0]["level"] == 2
     assert point_items[0]["total_questions"] == 1
+    assert point_items[0]["done_count"] == 0
+    assert point_items[0]["correct_count"] == 0
+    assert point_items[0]["accuracy"] == 0
+    assert point_items[0]["children"] == []
