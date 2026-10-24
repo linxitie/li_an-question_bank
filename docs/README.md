@@ -22,10 +22,11 @@
 | `plans/学生端模块化基线快照_v1.md` | v1 | ✅ 已定稿（2026-10-18） | P1-01 实测基线：75 页/73 JSON/343 端点/pytest 278-17-3/门禁 7-8/13 调用点 |
 | `plans/学生端模块化_P3手工验收核对表_v1.md` | v1 | 📋 待用户执行 | P3-01~07 真机手工验收执行清单：17 域逐项勾选 + 事件观测记录位 + 三设备一致性/WS 兜底演练步骤 + 缺陷记录区 |
 | `plans/三端数据流一致性修复方案_v1.md` | v1 | 🚧 执行中（P0 ✅；P1-1 ✅；P1-2 ✅；P1-3~P1-9 待执行） | 6 项三端数据流一致性问题的根因+修复方案：统一可见性/计数口径、主观题渲染、考点 canonical 展示、材料归属与教师编辑、存量修复与验收；P0-P4 分阶段，含 7 个待拍板决策 |
-| `plans/三端数据流一致性修复方案_v2.md` | v2 | 🚧 执行中（已批准；T-01 ✅ 2bd7d6e；T-02 ✅ 32c1cdb；T-03 ✅ f1c402b；T-04 ✅ f1bc4bb；T-05~T-12 进行中） | v1 的完整替代/增强版：覆盖 6 个问题的逐项方案；新增 91 L2/427 L3/518 节点分类树、505 别名隐藏、583 未分类回填、`sub_category_id`、P1/P2/P3 任务表、VTJ 9 页落地、验收/回滚/commit 计划；新增 §14 RT 富文本统一展示/编辑（答题卡/教师端/导入/管理员端，图片/文字/HTML/链接，双端清洗）；含“主代理直接落盘、未经子代理独立审查”说明 |
+| `plans/三端数据流一致性修复方案_v2.md` | v2 | 🚧 执行中（已批准；T-01 ✅ 2bd7d6e；T-02 ✅ 32c1cdb；T-03 ✅ f1c402b；T-04 ✅ f1bc4bb；T-05 ✅ 995e971；T-06~T-12 进行中） | v1 的完整替代/增强版：覆盖 6 个问题的逐项方案；新增 91 L2/427 L3/518 节点分类树、505 别名隐藏、583 未分类回填、`sub_category_id`、P1/P2/P3 任务表、VTJ 9 页落地、验收/回滚/commit 计划；新增 §14 RT 富文本统一展示/编辑（答题卡/教师端/导入/管理员端，图片/文字/HTML/链接，双端清洗）；含“主代理直接落盘、未经子代理独立审查”说明 |
 
 ## 变更记录
 
+- 2026-10-24：Phase A 进展：T-05 完成（commit `995e971`，`migrate-relations` + 6 个新测试，taxonomy 合计 32 passed；人工映射 17→692、18→689、25→736、26→737，124/125/126 保留为 unmigrated；temp 连续两次 apply 幂等：relations 2775、distinct pairs 2775、duplicate 0、migrated 5、deduped 0、unmigrated 643、relations_to_alias_nonnull 0、relations_to_hidden_null 643、integrity ok；生产库 dry-run 未写：631 行、无 alias_of、relations 2775、integrity ok）；T-06~T-12 进行中。
 - 2026-10-24：Phase A 进展：T-04 完成（commit `f1bc4bb`，`apply-aliases` + 6 个新测试，taxonomy 合计 26 passed；temp 连续两次 apply 幂等：1049 行、canonical 518、status=0 531、legacy visible 0、alias_of 464/41、坏目标 0；生产库仍 631 行、status=0 0、无 alias_of、integrity ok；models 加 `KnowledgePoint.status`，树 API 三处加 `status=1`；`alias_of` 暂不入 ORM，待 T-11 迁移后补）；T-05~T-12 进行中。
 - 2026-10-24：Phase A 进展：T-03 完成（commit `f1c402b`，`build-tree` + 3 个新测试，taxonomy 合计 20 passed；生产 dry-run 631 行未写；temp 连续两次 apply 幂等：1049 行、canonical 518、status=0 61、待 T-04 470、旧“其他”合并 32、未决 `[401,571,592]`、同级重名 0；7 个被 648 条关系使用的旧 seed 仍待 T-05 人工映射）；T-04~T-12 进行中。
 - 2026-10-24：Phase A 进展：T-02 完成（commit `32c1cdb`，`build_taxonomy_v2.py` + 505 行别名 CSV + 9 tests passed；exact 35 / alias 133 / subcategory_other 296 / hidden 41；只读 DB，未写库）；T-03~T-12 进行中。
