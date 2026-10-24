@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 # ==================== 辅助函数 ====================
 
 from ....services.text_parser import clean_question_text
+from ....services.question_stats import QuestionStatsService
 import re as _re
 
 # 题干摘要里必须**先剥图再截断**。
@@ -305,11 +306,15 @@ async def list_teacher_questions(
     sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    include_offline: bool = Query(False, description="包含禁用/草稿题目"),
+    include_pending: bool = Query(False, description="包含待审核题目"),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
     """按多条件筛选题目列表"""
-    base_query = db.query(QuestionBank).filter(QuestionBank.status == 1)
+    base_query = QuestionStatsService.visible_query(
+        db, include_offline=include_offline, include_pending=include_pending
+    )
 
     if keyword:
         base_query = base_query.filter(QuestionBank.question_content.contains(keyword))
