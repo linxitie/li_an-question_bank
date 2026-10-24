@@ -280,9 +280,17 @@ async def list_knowledge_points(
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """返回某科目的知识点列表（供题目选择器知识点下拉）"""
+    """返回某科目的 canonical L3 知识点列表（仅含有可见题目的考点）"""
+    visible_point_ids = db.query(QuestionBank.point_id).filter(
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
+        QuestionBank.point_id.isnot(None),
+    ).distinct()
     kps = db.query(KnowledgePoint).filter(
-        KnowledgePoint.subject_id == subject_id
+        KnowledgePoint.subject_id == subject_id,
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+        KnowledgePoint.point_id.in_(visible_point_ids),
     ).order_by(KnowledgePoint.sort_order).all()
     items = [{"point_id": kp.point_id, "point_name": kp.point_name} for kp in kps]
     return {"success": True, "total": len(items), "items": items}
@@ -2115,17 +2123,21 @@ async def get_knowledge_mastery(
 ):
     """获取知识点掌握度统计"""
     # 获取知识点列表
-    kp_query = db.query(KnowledgePoint)
+    kp_query = db.query(KnowledgePoint).filter(
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+    )
     if subject_id:
         kp_query = kp_query.filter(KnowledgePoint.subject_id == subject_id)
     knowledge_points = kp_query.all()
 
     items = []
     for kp in knowledge_points:
-        # 统计该知识点下的答题情况
+        # 统计该知识点下的答题情况（canonical point_id 单一归属）
         questions = db.query(QuestionBank.question_id).filter(
             QuestionBank.point_id == kp.point_id,
-            QuestionBank.status == 1
+            QuestionBank.status == 1,
+            QuestionBank.audit_status == 1,
         ).all()
         qids = [q[0] for q in questions]
 
@@ -2135,6 +2147,9 @@ async def get_knowledge_mastery(
         total = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
             ExamAnswerDetail.question_id.in_(qids)
         ).scalar() or 0
+
+        if total <= 0:
+            continue
 
         correct = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
             ExamAnswerDetail.question_id.in_(qids),
