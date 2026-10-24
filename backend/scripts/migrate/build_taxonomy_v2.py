@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Taxonomy migration helpers (T-02 alias CSV, T-03 tree, T-04 aliases, T-05 relations).
+"""Taxonomy migration helpers (T-02 alias CSV, T-03 tree, T-04 aliases, T-05 relations, T-06 point ids).
 
-Four commands:
+Five commands:
 
 ``make-aliases`` (T-02, read-only)    Build ``backend/data/audit/taxonomy_alias_review.csv`` for the 505 legacy
     PDF points. Opens ``backend/data/question_bank.db`` with ``mode=ro`` and
@@ -33,6 +33,15 @@ Four commands:
     ``--apply`` refuses the production database unless a future
     ``--allow-production`` flag is passed (not used).
 
+``backfill-point-id`` (T-06)
+    Dry-run by default: read-only, prints (optionally writes) a JSON report.
+    With ``--apply --db <path>`` it fills ``question_bank.point_id`` from the
+    canonical ``question_knowledge`` targets in one transaction: one target is
+    used directly, multiple targets pick the lowest id and are reported as
+    ambiguous, current aliases follow ``alias_of``, current hidden rows without
+    an alias and unknown ids are cleared. ``--apply`` refuses the production
+    database unless a future ``--allow-production`` flag is passed (not used).
+
 The canonical tree is read from ``KNOWLEDGE_TREE_V2`` in
 ``backend/scripts/admin/seed.py`` via AST literal parsing, so the script does
 not import application modules or touch settings / sessions.
@@ -48,6 +57,9 @@ Usage:
         --apply --db <path> --csv <path> [--report <path>]
     python backend/scripts/migrate/build_taxonomy_v2.py migrate-relations [--db <path>]
     python backend/scripts/migrate/build_taxonomy_v2.py migrate-relations \
+        --apply --db <path> [--report <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py backfill-point-id [--db <path>]
+    python backend/scripts/migrate/build_taxonomy_v2.py backfill-point-id \
         --apply --db <path> [--report <path>]
 
 Output:
@@ -1578,6 +1590,220 @@ def run_migrate_relations(
         conn.close()
 
 
+def _load_question_points(conn: sqlite3.Connection) -> list[dict]:
+    """Load ``question_bank.question_id`` and ``point_id``."""
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(question_bank)")}
+    if "point_id" not in columns:
+        raise RuntimeError("question_bank.point_id is missing from the database")
+    return [
+        {"question_id": int(r["question_id"]), "point_id": r["point_id"]}
+        for r in conn.execute(
+            "SELECT question_id, point_id FROM question_bank ORDER BY question_id"
+        )
+    ]
+
+
+def canonical_relation_targets(points, relations) -> dict[int, set[int]]:
+    """Distinct canonical ``knowledge_point`` ids per question."""
+    canonical = {int(p["point_id"]) for p in points if p.get("status") == 1}
+    targets: dict[int, set[int]] = defaultdict(set)
+    for rel in relations:
+        point_id = int(rel["knowledge_point_id"])
+        if point_id in canonical:
+            targets[int(rel["question_id"])].add(point_id)
+    return targets
+
+
+def plan_point_id_backfill(questions, points, canonical_targets) -> dict:
+    """Project ``question_bank.point_id`` values without writing."""
+    by_id = {int(p["point_id"]): p for p in points}
+    updates: list[dict] = []
+    ambiguous: list[dict] = []
+    invalid: list[dict] = []
+    counts: Counter = Counter()
+    nonnull_before = 0
+    null_before = 0
+    after_nonnull = 0
+
+    for question in questions:
+        question_id = int(question["question_id"])
+        current = (
+            int(question["point_id"]) if question["point_id"] is not None else None
+        )
+        if current is None:
+            null_before += 1
+            targets = sorted(canonical_targets.get(question_id, ()))
+            if len(targets) == 1:
+                new_point = targets[0]
+                counts["filled_from_relation"] += 1
+            elif len(targets) > 1:
+                new_point = targets[0]
+                counts["filled_ambiguous"] += 1
+                ambiguous.append(
+                    {
+                        "question_id": question_id,
+                        "chosen_point_id": new_point,
+                        "candidate_point_ids": targets,
+                    }
+                )
+            else:
+                new_point = None
+                counts["no_canonical_relation"] += 1
+        else:
+            nonnull_before += 1
+            point = by_id.get(current)
+            if point is None:
+                new_point = None
+                counts["cleared_invalid"] += 1
+                invalid.append({"question_id": question_id, "point_id": current})
+            elif point.get("status") == 1:
+                new_point = current
+                counts["already_canonical"] += 1
+            elif point.get("alias_of") is not None:
+                new_point = int(point["alias_of"])
+                counts["mapped_from_alias"] += 1
+            else:
+                new_point = None
+                counts["cleared_hidden"] += 1
+
+        if new_point != current:
+            updates.append(
+                {
+                    "question_id": question_id,
+                    "old_point_id": current,
+                    "new_point_id": new_point,
+                }
+            )
+        if new_point is not None:
+            after_nonnull += 1
+
+    return {
+        "questions_total": len(questions),
+        "point_id_nonnull_before": nonnull_before,
+        "point_id_null_before": null_before,
+        "filled_from_relation": counts["filled_from_relation"],
+        "filled_ambiguous": counts["filled_ambiguous"],
+        "mapped_from_alias": counts["mapped_from_alias"],
+        "cleared_hidden": counts["cleared_hidden"],
+        "cleared_invalid": counts["cleared_invalid"],
+        "already_canonical": counts["already_canonical"],
+        "no_canonical_relation": counts["no_canonical_relation"],
+        "unchanged_null": counts["no_canonical_relation"],
+        "updated_rows": len(updates),
+        "after_nonnull": after_nonnull,
+        "after_null": len(questions) - after_nonnull,
+        "ambiguous_questions": ambiguous,
+        "invalid_current_points": invalid,
+        "updates": updates,
+    }
+
+
+def apply_point_id_updates(conn: sqlite3.Connection, updates: list[dict]) -> None:
+    """Write changed ``question_bank.point_id`` values in one transaction."""
+    if not updates:
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for update in updates:
+            conn.execute(
+                "UPDATE question_bank SET point_id=? WHERE question_id=?",
+                (update["new_point_id"], update["question_id"]),
+            )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def assert_no_hidden_point_refs(conn: sqlite3.Connection) -> None:
+    """Fail if any non-null ``question_bank.point_id`` references a hidden point."""
+    bad = conn.execute(
+        "SELECT COUNT(*) FROM question_bank qb JOIN knowledge_point kp "
+        "ON kp.point_id = qb.point_id "
+        "WHERE qb.point_id IS NOT NULL AND kp.status = 0"
+    ).fetchone()[0]
+    if bad:
+        raise RuntimeError(
+            f"{bad} question_bank rows still point to hidden knowledge points"
+        )
+
+
+def build_point_id_report(mode: str, db_path: Path, plan: dict) -> dict:
+    return {
+        "mode": mode,
+        "db": str(db_path),
+        "questions_total": plan["questions_total"],
+        "point_id_nonnull_before": plan["point_id_nonnull_before"],
+        "point_id_null_before": plan["point_id_null_before"],
+        "filled_from_relation": plan["filled_from_relation"],
+        "filled_ambiguous": plan["filled_ambiguous"],
+        "mapped_from_alias": plan["mapped_from_alias"],
+        "cleared_hidden": plan["cleared_hidden"],
+        "cleared_invalid": plan["cleared_invalid"],
+        "already_canonical": plan["already_canonical"],
+        "no_canonical_relation": plan["no_canonical_relation"],
+        "unchanged_null": plan["unchanged_null"],
+        "updated_rows": plan["updated_rows"],
+        "after_nonnull": plan["after_nonnull"],
+        "after_null": plan["after_null"],
+        "ambiguous_questions": plan["ambiguous_questions"],
+        "invalid_current_points": plan["invalid_current_points"],
+    }
+
+
+def run_backfill_point_id(
+    apply: bool,
+    db_path: str | None = None,
+    report_path: str | None = None,
+    allow_production: bool = False,
+) -> int:
+    target = Path(db_path).resolve() if db_path else DB_PATH.resolve()
+
+    if apply:
+        if not db_path:
+            raise SystemExit(
+                "backfill-point-id --apply requires an explicit --db <path>"
+            )
+        if target == DB_PATH.resolve() and not allow_production:
+            raise SystemExit(
+                "refusing to write the production database; pass a temp --db path"
+            )
+        if not target.exists():
+            raise SystemExit(f"database not found: {target}")
+        conn = sqlite3.connect(str(target))
+        conn.row_factory = sqlite3.Row
+        conn.isolation_level = None
+    else:
+        if not target.exists():
+            raise FileNotFoundError(f"database not found: {target}")
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+
+    try:
+        points, relations, _has_id, _has_alias = _load_relation_inputs(conn)
+        questions = _load_question_points(conn)
+        plan = plan_point_id_backfill(
+            questions, points, canonical_relation_targets(points, relations)
+        )
+        if apply:
+            apply_point_id_updates(conn, plan["updates"])
+            assert_no_hidden_point_refs(conn)
+            total, nonnull = conn.execute(
+                "SELECT COUNT(*), COUNT(point_id) FROM question_bank"
+            ).fetchone()
+            plan["after_nonnull"] = nonnull
+            plan["after_null"] = total - nonnull
+
+        report = build_point_id_report(
+            "apply" if apply else "dry-run", target, plan
+        )
+        emit_report(report, report_path)
+        return 0
+    finally:
+        conn.close()
+
+
 def hidden_result(old_id, name, subject, sub_category, note, confidence=0.1):
     return {
         "old_id": old_id,
@@ -2294,7 +2520,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Taxonomy helpers: T-02 alias review CSV, T-03 canonical tree build, "
-            "T-04 legacy alias hide."
+            "T-04 legacy alias hide, T-05 relation migration, T-06 point id backfill."
         )
     )
     parser.add_argument(
@@ -2305,6 +2531,7 @@ def main(argv: list[str] | None = None) -> int:
             "build-tree",
             "apply-aliases",
             "migrate-relations",
+            "backfill-point-id",
         ],
         help="command to run (aliases: --make-aliases)",
     )
@@ -2317,12 +2544,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="build-tree/apply-aliases/migrate-relations: write to --db instead of dry-run",
+        help="build-tree/apply-aliases/migrate-relations/backfill-point-id: write to --db instead of dry-run",
     )
     parser.add_argument(
         "--db",
         default=None,
-        help="build-tree/apply-aliases/migrate-relations: database path (required with --apply)",
+        help="build-tree/apply-aliases/migrate-relations/backfill-point-id: database path (required with --apply)",
     )
     parser.add_argument(
         "--csv",
@@ -2332,7 +2559,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--report",
         default=None,
-        help="build-tree/apply-aliases/migrate-relations: also write the JSON report to this path",
+        help="build-tree/apply-aliases/migrate-relations/backfill-point-id: also write the JSON report to this path",
     )
     parser.add_argument(
         "--allow-production",
@@ -2364,6 +2591,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "migrate-relations":
         return run_migrate_relations(
+            apply=args.apply,
+            db_path=args.db,
+            report_path=args.report,
+            allow_production=args.allow_production,
+        )
+
+    if args.command == "backfill-point-id":
+        return run_backfill_point_id(
             apply=args.apply,
             db_path=args.db,
             report_path=args.report,
