@@ -99,8 +99,28 @@
         </div>
         <div class="ex-q-content" v-html="renderContent(currentQ.question_content)"></div>
 
-        <!-- 选项 -->
-        <div class="ex-options">
+        <!-- P1-6: 主观题作答区（无选项，纯文本作答） -->
+        <div v-if="currentQ.is_subjective" class="ex-subjective">
+          <div class="ex-subjective-meta" v-if="hasSubjectiveMeta">
+            <span v-if="currentQ.score !== null && currentQ.score !== undefined && currentQ.score !== ''" class="ex-subjective-score">
+              分值：{{ currentQ.score }} 分
+            </span>
+            <span v-if="currentQ.requirements" class="ex-subjective-req">
+              <strong>作答要求：</strong>
+              <span v-html="renderContent(currentQ.requirements)"></span>
+            </span>
+          </div>
+          <textarea
+            v-model="subjectiveAnswer"
+            class="ex-subjective-input"
+            rows="10"
+            placeholder="请在此作答..."
+          ></textarea>
+          <div class="ex-subjective-count">已写 {{ subjectiveWordCount }} 字</div>
+        </div>
+
+        <!-- 选项（主观题不渲染选项） -->
+        <div class="ex-options" v-if="!currentQ.is_subjective">
           <label
             v-if="isMultiSelect(currentQ)"
             class="ex-option"
@@ -296,7 +316,28 @@ export default defineComponent({
         this.state.userAnswers[this.state.currentIndex] = val;
       }
     },
+    // P1-6: 主观题作答文本（存于 userAnswers，与客观题同一容器，切题自动保留）
+    subjectiveAnswer: {
+      get() {
+        var ans = this.state.userAnswers[this.state.currentIndex];
+        return typeof ans === 'string' ? ans : '';
+      },
+      set(val) {
+        this.state.userAnswers[this.state.currentIndex] = val;
+      }
+    },
+    // 字数统计：非空白字符数
+    subjectiveWordCount() {
+      return (this.subjectiveAnswer || '').replace(/\s/g, '').length;
+    },
+    hasSubjectiveMeta() {
+      var q = this.currentQ || {};
+      var hasScore = q.score !== null && q.score !== undefined && q.score !== '';
+      return !!(hasScore || q.requirements);
+    },
     parsedOptions() {
+      // P1-6: 主观题没有选项，直接返回空数组，避免补全 A-D「待补充」
+      if (this.currentQ.is_subjective) return [];
       var raw = this.currentQ.options;
       var opts = [];
 
@@ -791,7 +832,8 @@ export default defineComponent({
       var subjectId = subjectMap[routeSubject] || null;
 
       details.forEach(function(d) {
-        if (!d.is_correct && d.question_id) {
+        // P1-6: 主观题不自动判分（is_correct=null），不收录为错题
+        if (d.is_correct === false && d.question_id) {
           var fetchFn = self.getFetch();
           fetchFn('/api/wrong-questions/collect', {
             method: 'POST',
@@ -850,23 +892,48 @@ export default defineComponent({
       var unanswered = 0;
       var questions = this.state.questions;
       for (var i = 0; i < questions.length; i++) {
-        if (!this.state.userAnswers[i]) unanswered++;
+        var ans = this.state.userAnswers[i];
+        if (questions[i].is_subjective) {
+          if (!ans || !String(ans).trim()) unanswered++;
+        } else if (!ans) {
+          unanswered++;
+        }
       }
       if (unanswered > 0) {
         if (!confirm('还有 ' + unanswered + ' 道题未作答，确定交卷吗？')) return;
       }
       var correct = 0;
       var wrong = 0;
+      var objectiveTotal = 0;
       var details = [];
       for (var j = 0; j < questions.length; j++) {
+        var q = questions[j];
         var rawAns = this.state.userAnswers[j];
+        // P1-6: 主观题不自动判分，不计入正确/错误，也不进错题集
+        if (q.is_subjective) {
+          var text = typeof rawAns === 'string' ? rawAns.trim() : '';
+          details.push({
+            question_id: q.question_id,
+            question_content: q.question_content,
+            options: [],
+            user_answer: text || '未答',
+            correct_answer: q.answer || '',
+            is_correct: null,
+            is_subjective: true,
+            answer_analysis: q.answer_analysis || '',
+            question_type_detail: q.question_type_detail || '主观题',
+            difficulty: q.difficulty || 3,
+          });
+          continue;
+        }
+        objectiveTotal++;
         var userAns;
         if (Array.isArray(rawAns)) {
           userAns = rawAns.length ? rawAns.sort().join('') : '未答';
         } else {
           userAns = rawAns || '未答';
         }
-        var correctAns = questions[j].answer || '';
+        var correctAns = q.answer || '';
         // 多选题/数组答案：排序后比较字母串
         var isCorrect;
         if (Array.isArray(rawAns) && correctAns.length > 1) {
@@ -878,18 +945,20 @@ export default defineComponent({
         }
         if (isCorrect) correct++; else wrong++;
         details.push({
-          question_id: questions[j].question_id,
-          question_content: questions[j].question_content,
-          options: questions[j].options,
+          question_id: q.question_id,
+          question_content: q.question_content,
+          options: q.options,
           user_answer: userAns,
           correct_answer: correctAns,
           is_correct: isCorrect,
-          answer_analysis: questions[j].answer_analysis || '',
-          question_type_detail: questions[j].question_type_detail || '选择题',
-          difficulty: questions[j].difficulty || 3,
+          is_subjective: false,
+          answer_analysis: q.answer_analysis || '',
+          question_type_detail: q.question_type_detail || '选择题',
+          difficulty: q.difficulty || 3,
         });
       }
-      var score = Math.round((correct / questions.length) * 100);
+      // 得分分母只计客观题；全为主观题时记 0 分，避免除零
+      var score = objectiveTotal ? Math.round((correct / objectiveTotal) * 100) : 0;
       var result = {
         total: questions.length,
         correct: correct,
@@ -1202,6 +1271,46 @@ export default defineComponent({
   line-height: 1.6;
   padding-top: 4px;
 }
+/* ===== P1-6: 主观题作答区 ===== */
+.ex-subjective {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ex-subjective-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 20px;
+  padding: 10px 14px;
+  background: #f8f9fc;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #555876;
+  word-break: break-word;
+}
+.ex-subjective-score { color: #c41e3a; font-weight: 700; flex-shrink: 0; }
+.ex-subjective-req { flex: 1; min-width: 200px; }
+.ex-subjective-req strong { color: #1a2b5f; }
+.ex-subjective-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1.5px solid #e8ecf2;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #33375a;
+  font-family: inherit;
+  background: #fafbfd;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.ex-subjective-input:focus { border-color: #c41e3a; background: #ffffff; }
+.ex-subjective-count { text-align: right; font-size: 13px; color: #8899aa; }
 /* 底部操作 */
 .ex-actions {
   display: flex;
@@ -1386,6 +1495,10 @@ export default defineComponent({
   color: #43a047;
   font-weight: 600;
   margin-top: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cell-dot { color: #ccc; font-size: 12px; }
 
