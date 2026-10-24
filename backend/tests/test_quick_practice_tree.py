@@ -10,7 +10,8 @@ from app.models.models import (
 )
 
 
-def _seed_question(db, user, content, sub_category_id=None, status=1):
+def _seed_question(db, user, content, sub_category_id=None, status=1,
+                   point_id=None):
     question = QuestionBank(
         subject_id=1,
         type_id=1,
@@ -20,6 +21,7 @@ def _seed_question(db, user, content, sub_category_id=None, status=1):
         difficulty=1,
         score=2,
         sub_category_id=sub_category_id,
+        point_id=point_id,
         creator_id=user.user_id,
         status=status,
         audit_status=1,
@@ -91,26 +93,34 @@ def tree(db_session, test_user, test_question_type):
     )
 
     q_l3 = _seed_question(
-        db_session, test_user, "翻译推理题", sub_category_id=sub_category.id
+        db_session, test_user, "翻译推理题", sub_category_id=sub_category.id,
+        point_id=l3_translate.point_id,
     )
     q_other = _seed_question(
-        db_session, test_user, "其他题", sub_category_id=sub_category.id
+        db_session, test_user, "其他题", sub_category_id=sub_category.id,
+        point_id=l3_other.point_id,
     )
     q_direct = _seed_question(
-        db_session, test_user, "直挂L2题", sub_category_id=sub_category.id
+        db_session, test_user, "直挂L2题", sub_category_id=sub_category.id,
+        point_id=l2_a.point_id,
     )
     q_unlinked = _seed_question(
-        db_session, test_user, "无关系题", sub_category_id=sub_category.id
+        db_session, test_user, "无关系题", sub_category_id=sub_category.id,
+        point_id=None,
     )
     q_global = _seed_question(
-        db_session, test_user, "全局未分类题", sub_category_id=None
+        db_session, test_user, "全局未分类题", sub_category_id=None,
+        point_id=None,
     )
     q_hidden = _seed_question(
-        db_session, test_user, "下架题", sub_category_id=sub_category.id, status=0
+        db_session, test_user, "下架题", sub_category_id=sub_category.id,
+        status=0, point_id=l3_translate.point_id,
     )
 
     _link(db_session, q_l3, l3_translate)
     _link(db_session, q_other, l3_other)
+    # 关系表多挂一个 L3：计数必须以 point_id 为准，不能被关系表带偏
+    _link(db_session, q_other, l3_translate)
     _link(db_session, q_direct, l2_a)
     _link(db_session, q_hidden, l3_translate)
 
@@ -179,6 +189,8 @@ def test_sub_categories_return_canonical_tree(client, auth_headers, tree):
     assert child_map["其他"]["correct_count"] == 0
     assert child_map["其他"]["accuracy"] == 0
 
+    assert l2["total_questions"] + card["unclassified_count"] == card["total_questions"]
+
     returned_ids = {l2["point_id"]} | {child["point_id"] for child in children}
     assert tree["l2_zero"].point_id not in returned_ids
     assert tree["l2_hidden"].point_id not in returned_ids
@@ -222,3 +234,34 @@ def test_knowledge_points_returns_only_nonzero_l3(client, auth_headers, tree):
     assert item_map["翻译推理"]["accuracy"] == 100.0
     assert item_map["其他"]["total_questions"] == 1
     assert item_map["其他"]["correct_count"] == 0
+
+
+def test_primary_point_wins_over_multiple_relations(
+    client, auth_headers, db_session, test_user, tree
+):
+    q_multi = _seed_question(
+        db_session, test_user, "双关系题",
+        sub_category_id=tree["sub_category"].id,
+        point_id=tree["l3_translate"].point_id,
+    )
+    _link(db_session, q_multi, tree["l3_translate"])
+    _link(db_session, q_multi, tree["l3_other"])
+
+    response = client.get(
+        "/api/quick-practice/sub-categories?subjectId=1", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+
+    data = response.json()
+    items = {item["name"]: item for item in data["items"]}
+    card = items["判断推理"]
+
+    assert card["total_questions"] == 5
+    assert card["unclassified_count"] == 1
+
+    l2 = card["knowledge_points"][0]
+    children = {child["point_name"]: child for child in l2["children"]}
+    assert children["翻译推理"]["total_questions"] == 2
+    assert children["其他"]["total_questions"] == 1
+    assert l2["total_questions"] == 4
+    assert l2["total_questions"] + card["unclassified_count"] == card["total_questions"]

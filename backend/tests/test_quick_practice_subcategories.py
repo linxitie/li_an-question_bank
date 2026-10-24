@@ -8,7 +8,8 @@ from app.models.models import (
 
 
 def _seed_question(db_session, user, content, subcategory,
-                   sub_category_id=None, status=1, audit_status=1):
+                   sub_category_id=None, status=1, audit_status=1,
+                   point_id=None):
     question = QuestionBank(
         subject_id=1,
         type_id=1,
@@ -19,6 +20,7 @@ def _seed_question(db_session, user, content, subcategory,
         score=2,
         xingce_subcategory=subcategory,
         sub_category_id=sub_category_id,
+        point_id=point_id,
         creator_id=user.user_id,
         status=status,
         audit_status=audit_status,
@@ -60,6 +62,9 @@ def test_sub_categories_count_visible_and_bucket_unclassified(
     db_session.add(knowledge_point)
     db_session.commit()
     db_session.refresh(knowledge_point)
+
+    visible_matched.point_id = knowledge_point.point_id
+    db_session.commit()
 
     db_session.add(QuestionKnowledge(
         question_id=visible_matched.question_id,

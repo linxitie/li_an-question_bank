@@ -68,18 +68,19 @@ def _accuracy(correct: int, done: int):
 
 
 def _visible_question_ids_by_point(db: Session, point_ids) -> dict:
-    """按考点收集可见题目ID（统一走 QuestionStatsService.visible_query）"""
+    """按「主考点」收集可见题目ID（统一走 QuestionStatsService.visible_query）
+
+    以 question_bank.point_id 为准（T-06/T-08b 的单一主 canonical 考点），
+    不使用 question_knowledge 关系表——一道题挂多个 L2/L3 时关系表会重复计数，
+    破坏「ΣL2 + 未分类 = 子科目总数」的精确性。
+    """
     ids = {int(pid) for pid in point_ids if pid is not None}
     if not ids:
         return {}
-    visible_ids = QuestionStatsService.visible_query(db).with_entities(
-        QuestionBank.question_id
-    )
-    rows = db.query(
-        QuestionKnowledge.knowledge_point_id, QuestionKnowledge.question_id
+    rows = QuestionStatsService.visible_query(db).with_entities(
+        QuestionBank.point_id, QuestionBank.question_id
     ).filter(
-        QuestionKnowledge.knowledge_point_id.in_(ids),
-        QuestionKnowledge.question_id.in_(visible_ids),
+        QuestionBank.point_id.in_(ids)
     ).all()
     grouped = {}
     for point_id, question_id in rows:
@@ -159,17 +160,22 @@ async def get_sub_categories(
     ).order_by(SubCategory.sort_order).all()
 
     visible_rows = QuestionStatsService.visible_query(db).with_entities(
-        QuestionBank.question_id, QuestionBank.sub_category_id
+        QuestionBank.question_id,
+        QuestionBank.sub_category_id,
+        QuestionBank.point_id,
     ).filter(
         QuestionBank.subject_id == subject_id
     ).all()
 
     question_ids_by_subcat = {}
     global_unclassified_ids = set()
+    question_point_ids = {}
     all_visible_ids = []
-    for question_id, sc_id in visible_rows:
+    for question_id, sc_id, point_id in visible_rows:
         qid = int(question_id)
         all_visible_ids.append(qid)
+        if point_id is not None:
+            question_point_ids[qid] = int(point_id)
         if sc_id is None:
             global_unclassified_ids.add(qid)
         else:
@@ -196,7 +202,11 @@ async def get_sub_categories(
         elif point.level == 3:
             l3_by_parent.setdefault(point.parent_id, []).append(point)
 
-    point_question_ids = _visible_question_ids_by_point(db, seen_point_ids)
+    # 按「主考点」分组：question_bank.point_id 决定唯一归属，关系表不参与计数
+    question_ids_by_point = {}
+    for qid, pid in question_point_ids.items():
+        if pid in seen_point_ids:
+            question_ids_by_point.setdefault(pid, set()).add(qid)
 
     result = []
     for sc in sub_cats:
@@ -216,7 +226,7 @@ async def get_sub_categories(
                 if child.sub_category_id == sc.id
             ]
             for l3 in _dedupe_children_by_name(raw_children):
-                l3_question_ids = point_question_ids.get(l3.point_id, set())
+                l3_question_ids = question_ids_by_point.get(l3.point_id, set()) & sub_question_ids
                 if not l3_question_ids:
                     continue  # 0 题 L3（含 0 题的「其他」）不返回
                 children.append(
@@ -224,8 +234,10 @@ async def get_sub_categories(
                 )
                 child_question_ids |= l3_question_ids
 
-            # L2 = 直挂题 + 所有 L3 子节点题的并集（防御历史直挂 L2 关系）
-            l2_question_ids = point_question_ids.get(l2.point_id, set()) | child_question_ids
+            # L2 = 直挂 L2 题（primary point_id == L2）+ 其 L3 子节点题
+            l2_question_ids = (
+                question_ids_by_point.get(l2.point_id, set()) & sub_question_ids
+            ) | child_question_ids
             if not l2_question_ids:
                 continue  # 0 题 L2 不返回
 
