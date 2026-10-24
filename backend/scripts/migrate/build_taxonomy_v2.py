@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
-"""Build the T-02 taxonomy alias review CSV for the 505 legacy PDF points.
+"""Taxonomy migration helpers (T-02 alias CSV, T-03 canonical tree build).
 
-Scope: T-02 only (read-only audit artifact). This script never writes to the
-database. It opens ``backend/data/question_bank.db`` with ``mode=ro`` and sets
-``PRAGMA query_only=ON`` before reading anything.
+Two commands:
+
+``make-aliases`` (T-02, read-only)
+    Build ``backend/data/audit/taxonomy_alias_review.csv`` for the 505 legacy
+    PDF points. Opens ``backend/data/question_bank.db`` with ``mode=ro`` and
+    ``PRAGMA query_only=ON``; never writes.
+
+``build-tree`` (T-03)
+    Dry-run by default: reads the production DB read-only and prints (optionally
+    writes) a JSON report. With ``--apply --db <path>`` it materialises the
+    canonical ``KNOWLEDGE_TREE_V2`` tree (518 nodes) in that database inside a
+    single transaction, hides the 26 obsolete seed nodes and merges the 35
+    legacy ``其他`` rows. ``--apply`` refuses the production database unless a
+    future ``--allow-production`` flag is passed (not used in T-03).
 
 The canonical tree is read from ``KNOWLEDGE_TREE_V2`` in
 ``backend/scripts/admin/seed.py`` via AST literal parsing, so the script does
@@ -12,15 +23,20 @@ not import application modules or touch settings / sessions.
 Usage:
     python backend/scripts/migrate/build_taxonomy_v2.py make-aliases
     python backend/scripts/migrate/build_taxonomy_v2.py --make-aliases
+    python backend/scripts/migrate/build_taxonomy_v2.py build-tree
+    python backend/scripts/migrate/build_taxonomy_v2.py build-tree \
+        --apply --db <path> [--report <path>]
 
 Output:
-    backend/data/audit/taxonomy_alias_review.csv
+    backend/data/audit/taxonomy_alias_review.csv   (make-aliases)
+    stdout JSON (build-tree), plus --report <path> when given
 """
 from __future__ import annotations
 
 import argparse
 import ast
 import csv
+import json
 import sqlite3
 import sys
 from collections import Counter
@@ -34,6 +50,14 @@ OUT_PATH = BACKEND_DIR / "data" / "audit" / "taxonomy_alias_review.csv"
 LEGACY_MIN = 127
 LEGACY_MAX = 631
 EXPECTED_LEGACY = 505
+
+SEED_MAX = 126
+EXPECTED_SEED = 126
+EXPECTED_OTHER_ROWS = 35
+CANONICAL_L2 = 91
+CANONICAL_L3 = 427
+CANONICAL_TOTAL = 518
+OTHER_LEAF = "其他"
 
 CSV_COLUMNS = [
     "old_id",
@@ -917,6 +941,522 @@ def write_csv(results: list[dict]) -> None:
         writer.writerows(results)
 
 
+def node_key(node: dict) -> tuple:
+    return (
+        node["subject_id"],
+        node["sub_category_id"],
+        node["level"],
+        node["parent_name"],
+        node["name"],
+    )
+
+
+def row_key(row, parent_names: dict) -> tuple:
+    parent_name = None
+    if row["level"] != 2 and row["parent_id"]:
+        parent_name = parent_names.get(row["parent_id"])
+    return (
+        row["subject_id"],
+        row["sub_category_id"],
+        row["level"],
+        parent_name,
+        row["point_name"],
+    )
+
+
+def flatten_canonical(tree: dict, subject_map: dict, subcat_map: dict) -> list[dict]:
+    nodes: list[dict] = []
+    for subject, groups in tree.items():
+        if subject not in subject_map:
+            raise RuntimeError(f"subject missing from question_subject: {subject!r}")
+        subject_id = subject_map[subject]
+        for group, l2s in groups.items():
+            if group not in subcat_map:
+                raise RuntimeError(f"sub_category missing from sub_categories: {group!r}")
+            subcat_id = subcat_map[group]
+            for l2_order, (l2, l3s) in enumerate(l2s.items(), start=1):
+                nodes.append(
+                    {
+                        "subject_id": subject_id,
+                        "sub_category_id": subcat_id,
+                        "level": 2,
+                        "parent_name": None,
+                        "name": l2,
+                        "sort_order": l2_order,
+                        "subject": subject,
+                        "group": group,
+                    }
+                )
+                for l3_order, l3 in enumerate(l3s, start=1):
+                    nodes.append(
+                        {
+                            "subject_id": subject_id,
+                            "sub_category_id": subcat_id,
+                            "level": 3,
+                            "parent_name": l2,
+                            "name": l3,
+                            "sort_order": l3_order,
+                            "subject": subject,
+                            "group": group,
+                        }
+                    )
+    return nodes
+
+
+def validate_canonical(nodes: list[dict]) -> dict:
+    l2s = [n for n in nodes if n["level"] == 2]
+    l3s = [n for n in nodes if n["level"] == 3]
+    if (len(l2s), len(l3s), len(nodes)) != (CANONICAL_L2, CANONICAL_L3, CANONICAL_TOTAL):
+        raise RuntimeError(
+            f"canonical tree counts mismatch: L2={len(l2s)} L3={len(l3s)} "
+            f"total={len(nodes)} (expected {CANONICAL_L2}/{CANONICAL_L3}/{CANONICAL_TOTAL})"
+        )
+    duplicates = [k for k, c in Counter(node_key(n) for n in nodes).items() if c > 1]
+    if duplicates:
+        raise RuntimeError(f"duplicate canonical sibling names: {duplicates}")
+
+    l2_names = {(n["subject_id"], n["sub_category_id"], n["name"]) for n in l2s}
+    if any(name == OTHER_LEAF for _s, _c, name in l2_names):
+        raise RuntimeError("canonical tree must not contain an L2 named 其他")
+
+    other_counts = Counter(
+        (n["subject_id"], n["sub_category_id"], n["parent_name"])
+        for n in l3s
+        if n["name"] == OTHER_LEAF
+    )
+    missing = [key for key in l2_names if other_counts.get(key, 0) != 1]
+    extra = [key for key in other_counts if key not in l2_names]
+    if missing or extra:
+        raise RuntimeError(f"其他 leaf rule violated: missing={missing} extra={extra}")
+
+    by_subject = Counter(n["level"] for n in nodes)
+    per_subject = {}
+    for n in nodes:
+        bucket = per_subject.setdefault(n["subject"], {2: 0, 3: 0})
+        bucket[n["level"]] += 1
+    return {
+        "l2": len(l2s),
+        "l3": len(l3s),
+        "total": len(nodes),
+        "by_subject": {k: dict(v) for k, v in per_subject.items()},
+        "level_totals": dict(by_subject),
+    }
+
+
+def unique_alias_key(row, nodes: list[dict]) -> tuple | None:
+    hits = [
+        node_key(n)
+        for n in nodes
+        if n["subject_id"] == row["subject_id"]
+        and n["sub_category_id"] == row["sub_category_id"]
+        and n["name"] == row["point_name"]
+    ]
+    return hits[0] if len(hits) == 1 else None
+
+
+def classify_seed_rows(seed_rows, parent_names: dict, nodes: list[dict]):
+    by_key = {node_key(n): n for n in nodes}
+    reused: list[tuple] = []
+    obsolete: list[dict] = []
+    for row in seed_rows:
+        key = row_key(row, parent_names)
+        if key in by_key:
+            reused.append((row, by_key[key]))
+        else:
+            obsolete.append(
+                {
+                    "point_id": row["point_id"],
+                    "point_name": row["point_name"],
+                    "subject_id": row["subject_id"],
+                    "sub_category_id": row["sub_category_id"],
+                    "level": row["level"],
+                    "alias_key": unique_alias_key(row, nodes),
+                }
+            )
+    return reused, obsolete
+
+
+def plan_legacy_others(other_rows, all_rows, subcat_names, l2_index) -> list[dict]:
+    resolve = make_resolver(all_rows, subcat_names, l2_index)
+    plans: list[dict] = []
+    for row in other_rows:
+        plan = {
+            "point_id": row["point_id"],
+            "subject_id": row["subject_id"],
+            "parent_id": row["parent_id"],
+            "l2": None,
+            "reason": "",
+        }
+        if row["level"] == 2 or not row["parent_id"] or row["parent_id"] not in all_rows:
+            plan["reason"] = "not an L3/L4 row with a resolvable parent"
+            plans.append(plan)
+            continue
+        l2, _source, _detail = resolve(row["parent_id"])
+        if l2 is None:
+            plan["reason"] = "parent has no canonical L2 within its old sub_category"
+            plans.append(plan)
+            continue
+        plan["l2"] = l2
+        plans.append(plan)
+    return plans
+
+
+def canonical_other_index(nodes: list[dict], ids: dict) -> dict:
+    out = {}
+    for n in nodes:
+        if n["level"] != 3 or n["name"] != OTHER_LEAF:
+            continue
+        key = (n["subject_id"], n["parent_name"])
+        out[key] = {"node": n, "id": ids.get(node_key(n))}
+    return out
+
+
+def build_tree_report(
+    mode: str,
+    db_path: Path,
+    counts: dict,
+    reused: int,
+    inserted: int,
+    obsolete: list[dict],
+    other_plans: list[dict],
+    metrics: dict,
+) -> dict:
+    unresolved = sorted(p["point_id"] for p in other_plans if p["l2"] is None)
+    merged = sum(1 for p in other_plans if p["l2"] is not None)
+    return {
+        "mode": mode,
+        "db": str(db_path),
+        "canonical_counts": counts,
+        "reused_seed": reused,
+        "inserted": inserted,
+        "obsolete_seed_hidden": len(obsolete),
+        "obsolete_seed": [
+            {
+                "point_id": o["point_id"],
+                "point_name": o["point_name"],
+                "level": o["level"],
+                "alias_of": metrics["obsolete_alias"].get(o["point_id"]),
+            }
+            for o in obsolete
+        ],
+        "legacy_other_total": len(other_plans),
+        "legacy_other_merged": merged,
+        "legacy_other_unresolved_ids": unresolved,
+        "status_zero_total": metrics["status_zero_total"],
+        "visible_canonical": metrics["visible_canonical"],
+        "pending_t04_legacy": metrics["pending_t04_legacy"],
+        "total_rows": metrics["total_rows"],
+        "duplicate_canonical_siblings": metrics["duplicate_canonical_siblings"],
+    }
+
+
+def _load_tree_inputs(conn: sqlite3.Connection):
+    tree = load_canonical_tree()
+    l2_index, _l3_index = build_indexes(tree)
+    subject_map = {
+        r["subject_name"]: r["subject_id"]
+        for r in conn.execute("SELECT subject_name, subject_id FROM question_subject")
+    }
+    subcat_map = {
+        r["name"]: r["id"] for r in conn.execute("SELECT id, name FROM sub_categories")
+    }
+    return tree, l2_index, subject_map, subcat_map
+
+
+def apply_tree(
+    conn: sqlite3.Connection,
+    nodes: list[dict],
+    reused: list[tuple],
+    obsolete: list[dict],
+    other_plans: list[dict],
+) -> dict:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        columns = {r["name"] for r in conn.execute("PRAGMA table_info(knowledge_point)")}
+        if "alias_of" not in columns:
+            conn.execute("ALTER TABLE knowledge_point ADD COLUMN alias_of INTEGER")
+
+        ids: dict[tuple, int] = {
+            node_key(node): row["point_id"] for row, node in reused
+        }
+        l2_ids: dict[tuple, int] = {}
+        inserted = 0
+        for node in nodes:
+            key = node_key(node)
+            if node["level"] == 2:
+                parent_id = 0
+            else:
+                parent_id = l2_ids[(node["subject_id"], node["parent_name"])]
+            point_id = ids.get(key)
+            if point_id is None:
+                point_id = _find_existing_canonical(conn, node)
+            if point_id is None:
+                cur = conn.execute(
+                    "INSERT INTO knowledge_point (point_name, subject_id, parent_id, level, "
+                    "description, sort_order, sub_category_id, status, alias_of) "
+                    "VALUES (?, ?, ?, ?, NULL, ?, ?, 1, NULL)",
+                    (
+                        node["name"],
+                        node["subject_id"],
+                        parent_id,
+                        node["level"],
+                        node["sort_order"],
+                        node["sub_category_id"],
+                    ),
+                )
+                if cur.lastrowid is None:
+                    raise RuntimeError(f"insert did not return an id for {key}")
+                point_id = int(cur.lastrowid)
+                inserted += 1
+            else:
+                conn.execute(
+                    "UPDATE knowledge_point SET parent_id=?, level=?, sort_order=?, "
+                    "sub_category_id=?, status=1, alias_of=NULL WHERE point_id=?",
+                    (
+                        parent_id,
+                        node["level"],
+                        node["sort_order"],
+                        node["sub_category_id"],
+                        point_id,
+                    ),
+                )
+            ids[key] = point_id
+            if node["level"] == 2:
+                l2_ids[(node["subject_id"], node["name"])] = point_id
+
+        obsolete_alias: dict[int, int | None] = {}
+        for item in obsolete:
+            alias_id = ids.get(item["alias_key"]) if item["alias_key"] else None
+            obsolete_alias[item["point_id"]] = alias_id
+            conn.execute(
+                "UPDATE knowledge_point SET status=0, alias_of=? WHERE point_id=?",
+                (alias_id, item["point_id"]),
+            )
+
+        other_index = canonical_other_index(nodes, ids)
+        for plan in other_plans:
+            if plan["l2"] is None:
+                conn.execute(
+                    "UPDATE knowledge_point SET status=0, alias_of=NULL WHERE point_id=?",
+                    (plan["point_id"],),
+                )
+                continue
+            target = other_index.get((plan["subject_id"], plan["l2"]))
+            if target is None or target["id"] is None:
+                raise RuntimeError(
+                    f"canonical 其他 leaf missing for {plan['subject_id']}/{plan['l2']!r}"
+                )
+            conn.execute(
+                "UPDATE knowledge_point SET status=0, alias_of=?, sub_category_id=? "
+                "WHERE point_id=?",
+                (target["id"], target["node"]["sub_category_id"], plan["point_id"]),
+            )
+
+        report = collect_apply_metrics(conn, ids, obsolete, other_plans, inserted)
+        conn.execute("COMMIT")
+        return {"inserted": inserted, "ids": ids, "obsolete_alias": obsolete_alias, **report}
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def _find_existing_canonical(conn: sqlite3.Connection, node: dict) -> int | None:
+    rows = conn.execute(
+        "SELECT kp.point_id, p.point_name AS parent_name FROM knowledge_point kp "
+        "LEFT JOIN knowledge_point p ON p.point_id = kp.parent_id "
+        "WHERE kp.point_id > ? AND kp.subject_id=? AND kp.sub_category_id=? "
+        "AND kp.level=? AND kp.point_name=?",
+        (
+            LEGACY_MAX,
+            node["subject_id"],
+            node["sub_category_id"],
+            node["level"],
+            node["name"],
+        ),
+    ).fetchall()
+    candidates = [
+        r["point_id"]
+        for r in rows
+        if node["level"] == 2 or r["parent_name"] == node["parent_name"]
+    ]
+    if len(candidates) > 1:
+        raise RuntimeError(
+            f"ambiguous existing canonical rows for {node_key(node)}: {candidates}"
+        )
+    return candidates[0] if candidates else None
+
+
+def collect_apply_metrics(
+    conn: sqlite3.Connection,
+    ids: dict,
+    obsolete: list[dict],
+    other_plans: list[dict],
+    inserted: int,
+) -> dict:
+    canonical_ids = set(ids.values())
+    rows = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT point_id, point_name, subject_id, sub_category_id, parent_id, "
+            "level, status, alias_of FROM knowledge_point"
+        )
+    ]
+    visible = [
+        r
+        for r in rows
+        if r["point_id"] in canonical_ids and r["status"] == 1 and r["alias_of"] is None
+    ]
+    dup = Counter(
+        (r["subject_id"], r["sub_category_id"], r["parent_id"], r["point_name"])
+        for r in visible
+    )
+    other_ids = {p["point_id"] for p in other_plans}
+    by_id = {r["point_id"]: r for r in rows}
+    return {
+        "status_zero_total": sum(1 for r in rows if r["status"] == 0),
+        "visible_canonical": len(visible),
+        "pending_t04_legacy": sum(
+            1
+            for r in rows
+            if LEGACY_MIN <= r["point_id"] <= LEGACY_MAX
+            and r["status"] == 1
+            and r["point_id"] not in other_ids
+        ),
+        "total_rows": len(rows),
+        "duplicate_canonical_siblings": sum(1 for c in dup.values() if c > 1),
+        "inserted": inserted,
+        "obsolete_alias": {
+            o["point_id"]: by_id[o["point_id"]]["alias_of"] for o in obsolete
+        },
+        "legacy_other_merged": sum(
+            1 for pid in other_ids if by_id[pid]["alias_of"] is not None
+        ),
+    }
+
+
+def run_build_tree(
+    apply: bool,
+    db_path: str | None = None,
+    report_path: str | None = None,
+    allow_production: bool = False,
+) -> int:
+    target = Path(db_path).resolve() if db_path else DB_PATH.resolve()
+    if apply:
+        if not db_path:
+            raise SystemExit("build-tree --apply requires an explicit --db <path>")
+        if target == DB_PATH.resolve() and not allow_production:
+            raise SystemExit(
+                "refusing to write the production database; pass a temp --db path"
+            )
+        if not target.exists():
+            raise SystemExit(f"database not found: {target}")
+        conn = sqlite3.connect(str(target))
+        conn.row_factory = sqlite3.Row
+        conn.isolation_level = None
+    else:
+        if not target.exists():
+            raise FileNotFoundError(f"database not found: {target}")
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+
+    try:
+        tree, l2_index, subject_map, subcat_map = _load_tree_inputs(conn)
+        subcat_names = {sid: name for name, sid in subcat_map.items()}
+        nodes = flatten_canonical(tree, subject_map, subcat_map)
+        counts = validate_canonical(nodes)
+
+        all_rows = {
+            r["point_id"]: dict(r)
+            for r in conn.execute(
+                "SELECT point_id, point_name, subject_id, sub_category_id, level, "
+                "parent_id, sort_order, status FROM knowledge_point"
+            )
+        }
+        parent_names = {pid: r["point_name"] for pid, r in all_rows.items()}
+        seed_rows = [r for pid, r in all_rows.items() if pid <= SEED_MAX]
+        if len(seed_rows) != EXPECTED_SEED:
+            raise RuntimeError(
+                f"expected {EXPECTED_SEED} seed rows, found {len(seed_rows)}"
+            )
+        seed_rows.sort(key=lambda r: r["point_id"])
+        other_rows = [
+            r
+            for pid, r in sorted(all_rows.items())
+            if r["point_name"] == OTHER_LEAF and LEGACY_MIN <= pid <= LEGACY_MAX
+        ]
+        if len(other_rows) != EXPECTED_OTHER_ROWS:
+            raise RuntimeError(
+                f"expected {EXPECTED_OTHER_ROWS} legacy 其他 rows, found {len(other_rows)}"
+            )
+
+        reused, obsolete = classify_seed_rows(seed_rows, parent_names, nodes)
+        other_plans = plan_legacy_others(
+            other_rows, all_rows, subcat_names, l2_index
+        )
+    except Exception:
+        conn.close()
+        raise
+
+    if not apply:
+        conn.close()
+        inserted = len(nodes) - len(reused)
+        metrics = project_dry_run_metrics(
+            all_rows, nodes, obsolete, other_plans, inserted
+        )
+        report = build_tree_report(
+            "dry-run", target, counts, len(reused), inserted, obsolete, other_plans, metrics
+        )
+        emit_report(report, report_path)
+        return 0
+
+    result = apply_tree(conn, nodes, reused, obsolete, other_plans)
+    conn.close()
+    report = build_tree_report(
+        "apply",
+        target,
+        counts,
+        len(reused),
+        result["inserted"],
+        obsolete,
+        other_plans,
+        result,
+    )
+    emit_report(report, report_path)
+    return 0
+
+
+def project_dry_run_metrics(all_rows, nodes, obsolete, other_plans, inserted) -> dict:
+    other_ids = {p["point_id"] for p in other_plans}
+    obsolete_ids = {o["point_id"] for o in obsolete}
+    status_zero = 0
+    pending_t04 = 0
+    total = len(all_rows) + inserted
+    for pid, row in all_rows.items():
+        hide = pid in other_ids or pid in obsolete_ids
+        status_zero += 1 if (row["status"] == 0 or hide) else 0
+        if LEGACY_MIN <= pid <= LEGACY_MAX and row["status"] == 1 and pid not in other_ids:
+            pending_t04 += 1
+    return {
+        "status_zero_total": status_zero,
+        "visible_canonical": len(nodes),
+        "pending_t04_legacy": pending_t04,
+        "total_rows": total,
+        "duplicate_canonical_siblings": 0,
+        "inserted": inserted,
+        "obsolete_alias": {o["point_id"]: None for o in obsolete},
+    }
+
+
+def emit_report(report: dict, report_path: str | None) -> None:
+    text = json.dumps(report, ensure_ascii=False, indent=2)
+    print(text)
+    if report_path:
+        path = Path(report_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text + "\n", encoding="utf-8")
+
+
 def run_make_aliases() -> int:
     tree = load_canonical_tree()
     l2_index, _l3_index = build_indexes(tree)
@@ -950,12 +1490,12 @@ def run_make_aliases() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="T-02: build the 505-row taxonomy alias review CSV (read-only)."
+        description="Taxonomy helpers: T-02 alias review CSV and T-03 canonical tree build."
     )
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["make-aliases"],
+        choices=["make-aliases", "build-tree"],
         help="command to run (aliases: --make-aliases)",
     )
     parser.add_argument(
@@ -964,10 +1504,39 @@ def main(argv: list[str] | None = None) -> int:
         dest="make_aliases_flag",
         help="alias for the make-aliases command",
     )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="build-tree only: write to --db instead of dry-run",
+    )
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="build-tree only: database path (required with --apply)",
+    )
+    parser.add_argument(
+        "--report",
+        default=None,
+        help="build-tree only: also write the JSON report to this path",
+    )
+    parser.add_argument(
+        "--allow-production",
+        action="store_true",
+        dest="allow_production",
+        help="reserved: allow --apply against the production database (unused in T-03)",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "make-aliases" or args.make_aliases_flag:
         return run_make_aliases()
+
+    if args.command == "build-tree":
+        return run_build_tree(
+            apply=args.apply,
+            db_path=args.db,
+            report_path=args.report,
+            allow_production=args.allow_production,
+        )
 
     parser.print_help(sys.stderr)
     return 2
