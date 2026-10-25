@@ -191,7 +191,9 @@ async function startReview(m: string) {
 }
 
 async function submitReview() {
-  const answers = questions.value
+  // 局部变量不能再叫 answers：初始化表达式里的 answers.value 会指向自身，
+  // TS 判为「隐式 any 自引用」（TS7022）。改名后指向外层 answers ref。
+  const reviewPayload = questions.value
     .filter((q) => answers.value[q.wrong_id] !== undefined)
     .map((q) => {
       const ans = answers.value[q.wrong_id];
@@ -199,7 +201,7 @@ async function submitReview() {
       return { wrong_id: q.wrong_id, question_id: q.question_id, user_answer: letters };
     });
   try {
-    result.value = await submitWrongbookReview(answers, mode.value || 'mixed');
+    result.value = await submitWrongbookReview(reviewPayload, mode.value || 'mixed');
     submitted.value = true;
     emitWrongQuestionsChanged({ action: 'reviewed' });
   } catch (e) {

@@ -492,7 +492,9 @@ export default defineComponent({
     const publishing = ref(false);
     const publishChoice = ref('draft');
     const createForm = ref({ paper_name: '', year: new Date().getFullYear(), subject_id: 1, exam_type: 'SIMULATION', duration: 120, difficulty: 3, total_score: 100 });
-    const paperQuestions: any = ref([]);
+    // 用 ref<any[]> 而非 ref<any>：后者会让模板 v-for 的索引推断成 string|number，
+    // 导致 `idx + 1` 报 TS2365。元素类型保留 any（题库行结构随科目演进）。
+    const paperQuestions = ref<any[]>([]);
 
     // ========== P5：本卷题目编辑器（增/删/改/查/排序） ==========
     // 步骤2 原先左栏渲染的是「全库题库选题器」，右栏才是本卷题目，
@@ -647,9 +649,19 @@ export default defineComponent({
     const aiPublishTarget = ref('draft');
     const aiMockStartTime = ref('');
     const aiMockDuration = ref(120);
-    const aiResultPapers: any = ref([]);
+    const aiResultPapers = ref<any[]>([]);
     const aiResultIndex = ref(0);
-    const currentAiPaper = computed(() => aiResultPapers.value[aiResultIndex.value] || null);
+    // 显式声明返回结构：源数据是 any 时，模板 v-for 的索引会被推断成 string|number，
+    // `idx + 1` 与把 idx 传给 number 形参都会报错。questions 定为数组即可收窄。
+    interface AiPaper {
+      questions?: any[];
+      total_score?: number;
+      [key: string]: any;
+    }
+    // 返回类型写 AiPaper 而非 AiPaper|null：模板里该值只在 `v-if="currentAiPaper"`
+    // 的分支内被解引用，运行时一定非空；但 vue-tsc 不跨分支收窄，标成可空会报 TS18047。
+    // 用 as 断言保留原有「取不到就为 null」的运行时语义，不改模板。
+    const currentAiPaper = computed<AiPaper>(() => (aiResultPapers.value[aiResultIndex.value] || null) as AiPaper);
     const aiForm = ref({
       paper_name: '', subject_id: 1, source: 'all', total_score: 100, duration: 120,
       easy_pct: 20, medium_pct: 60, hard_pct: 20,
@@ -675,7 +687,8 @@ export default defineComponent({
     const showPreviewModal = ref(false);
     const previewLoading = ref(false);
     const previewPaper: any = ref({});
-    const previewQuestions: any = ref([]);
+    // 同 paperQuestions：ref<any> 会让模板 v-for 索引变成 string|number
+    const previewQuestions = ref<any[]>([]);
 
     // 题目详情
     const showQuestionDetail = ref(false);

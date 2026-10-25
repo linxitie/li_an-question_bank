@@ -39,6 +39,10 @@ import {
   type QuoteListQuery
 } from './api';
 
+// 帖子类型是多处（含 mobile_forum_create.vue）共用的公开类型，
+// 从 store 透出，避免调用方绕过 store 直接依赖 api 层。
+export type { ForumShareType };
+
 export interface CommunityState {
   loading: boolean;
   error: string | null;
