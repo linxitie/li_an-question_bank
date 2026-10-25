@@ -49,13 +49,24 @@ def main(images_dir: str, out_json: str):
             # paddle 3.x 推理默认启用 OneDNN 且在本机损坏
             # (NotFound) OneDnnContext does not have the input Filter → 运行时关闭
             paddle.set_flags({'FLAGS_use_mkldnn': 0})
+            # CPU-only 环境（实测 is_compiled_with_cuda=False）：按核数放开线程，
+            # 默认 1 线程时 24 页答案卷要跑数分钟，是导入链最大的时间黑洞。
+            try:
+                paddle.set_num_threads(max(2, min(8, (os.cpu_count() or 2) - 1)))
+            except Exception:
+                pass
         except Exception:
             pass
         try:
-            ocr = PaddleOCR(lang='ch', enable_mkldnn=False)
+            # 试卷扫描件都是正向排版：关掉方向分类可显著提速（每页少一次模型推理）
+            ocr = PaddleOCR(lang='ch', enable_mkldnn=False,
+                            use_angle_cls=False, show_log=False)
         except Exception as e:
-            print(f"[ocr_worker] enable_mkldnn=False 初始化失败，回退: {e}", file=sys.stderr)
-            ocr = PaddleOCR(lang='ch')
+            print(f"[ocr_worker] 参数化初始化失败，回退最小参数集: {e}", file=sys.stderr)
+            try:
+                ocr = PaddleOCR(lang='ch', enable_mkldnn=False)
+            except Exception:
+                ocr = PaddleOCR(lang='ch')
 
         parts = []
         for img_path in images:
