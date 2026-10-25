@@ -1,4 +1,4 @@
-﻿"""
+"""
 公安联考题库系统 - FastAPI主应用入口（增强版）
   支持HTTP/HTTPS、WebSocket协议
   """
