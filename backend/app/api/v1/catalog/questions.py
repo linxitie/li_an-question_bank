@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import hashlib
+import uuid
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -949,6 +951,62 @@ async def upload_question_image(
 
     logger.info("用户 %s 为题目 %d 上传图片 %s", current_user.username, qid, url)
     return SuccessResponse(message="图片上传成功", data={"url": url, "image_path": url})
+
+
+# RT-8：题组材料图片上传。目录口径与 question_ingest/images.py 的
+# GROUP_IMG_ROOT 一致（app/static/question-groups/{gid}/），但这里用
+# __file__ 定位，避免依赖启动 cwd。
+_GROUP_IMG_ROOT = Path(__file__).resolve().parents[3] / "static" / "question-groups"
+_GROUP_IMG_URL = "/static/question-groups"
+_GROUP_IMG_TYPES = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+_GROUP_IMG_MAX_BYTES = 10 * 1024 * 1024
+_GROUP_IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+@router.post("/group/{group_id}/images", summary="为题组材料上传图片")
+async def upload_group_image(
+    group_id: int,
+    file: UploadFile = File(..., description="图片文件"),
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    group = db.query(QuestionGroup.id).filter(
+        QuestionGroup.id == group_id
+    ).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="题组不存在")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in _GROUP_IMG_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="不支持的图片类型 %s" % (content_type or "（无）"),
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(data) > _GROUP_IMG_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="图片超过 10MB 上限")
+
+    ext = os.path.splitext(os.path.basename(file.filename or ""))[1].lower()
+    if ext not in _GROUP_IMG_EXTS:
+        ext = _GROUP_IMG_TYPES[content_type]
+    filename = "%s%s" % (uuid.uuid4().hex, ext)
+
+    group_dir = _GROUP_IMG_ROOT / str(group_id)
+    group_dir.mkdir(parents=True, exist_ok=True)
+    (group_dir / filename).write_bytes(data)
+
+    url = "%s/%d/%s" % (_GROUP_IMG_URL, group_id, filename)
+    logger.info("用户 %s 为题组 %d 上传图片 %s", current_user.username, group_id, url)
+    return {"success": True, "url": url, "filename": filename}
 
 
 @router.post("/batch-import", response_model=BatchImportResponse, summary="批量导入题目")

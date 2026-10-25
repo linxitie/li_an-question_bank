@@ -39,6 +39,7 @@ from typing import Optional, Union
 from sqlalchemy.orm import Session
 
 from ...models.models import QuestionGroup
+from ..rich_text import sanitize_rich_text
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,11 @@ def upsert_question_material(
 
     if isinstance(shared_content_images, (list, dict)):
         shared_content_images = json.dumps(shared_content_images, ensure_ascii=False)
+
+    # RT-7：题组材料是唯一写入口，落库前统一过浏览器信任边界清洗。
+    # 只清共享材料；题干/选项/解析的清洗属 RT-7 其它写路径，不在本模块处理。
+    if shared_content is not None:
+        shared_content = sanitize_rich_text(shared_content)
 
     if not group_id:
         if not shared_content:
