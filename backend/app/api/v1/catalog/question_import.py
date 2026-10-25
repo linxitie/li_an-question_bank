@@ -755,10 +755,27 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         numbered.append((i, qid, qn))
     qnum_map = {qid: (qn if qn is not None else 9999) for _, qid, qn in numbered}
 
+    def _group_shared_content(q: Dict[str, Any]) -> str:
+        """题组材料优先取解析器切出的 material_text / shared_content。
+
+        旧实现固定取头题 `question_content`：材料正文已经被 text_parser 剥离到
+        `material_text`，再用题干当组材料，会让「材料+题干」在详情里重复显示，
+        而真正的材料在多题共享时又会串到别的组（P3-9）。
+        """
+        return (q.get('material_text') or q.get('shared_content')
+                or q.get('question_content') or '')
+
     groups_created, members_linked = 0, 0
-    claimed = set()
+    # ★ P3-9：claimed 必须拆成两个集合。旧实现把「批内下标 i」与「题目ID jid」
+    #   塞进同一个 set —— 两者值域重叠（内存库 qid 从 1 递增，正是下标值域），
+    #   于是 `if i in claimed` 会把「下标恰好等于前一组某成员 qid」的合法组头
+    #   当成已认领而跳过，第二组凭空消失；`jid not in claimed` 又漏掉用下标
+    #   记录的认领，可能让同一题被挂进两个组。故：
+    #   · claimed_indices 只存批内下标；claimed_ids 只存 question_id。
+    claimed_indices = set()
+    claimed_ids = set()
     for i, q in enumerate(ok_items):
-        if i in claimed:
+        if i in claimed_indices:
             continue
         head_hit = match_group_head(q.get('question_content') or '')
         if not head_hit:
@@ -767,12 +784,16 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         head_qid = qid_by_index.get(i)
         if not head_qid:
             continue
+        # 组头本身已被前一组认领 → 它是子题，不能再开新组，否则会把它从
+        # 前一组抢走，破坏「一个子题只属于一个组」。
+        if head_qid in claimed_ids:
+            continue
         head_qn = qnum_map.get(head_qid)
         head_qn = None if head_qn == 9999 else head_qn
 
-        # 候选小题：批内其他未挂组的题号
+        # 候选小题：批内其他未挂组的题号（按 qid 判重，不能用下标）
         candidate_qnums = [qn for j, jid, qn in numbered
-                           if j != i and jid not in claimed and qn is not None]
+                           if j != i and jid not in claimed_ids and qn is not None]
         member_qnums = infer_member_qnums(head_qn, candidate_qnums, qnum_range)
         if not member_qnums:
             # 无小题可挂 → 不建组（避免空题组）
@@ -783,7 +804,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         member_ids = [head_qid]
         for mqn in member_qnums:
             jid = qn_to_qid.get(mqn)
-            if jid and jid not in claimed and jid not in member_ids:
+            if jid and jid not in claimed_ids and jid not in member_ids:
                 member_ids.append(jid)
 
         # W3：member_qnums 非空 ≠ 能挂上题——对应 qid 可能已被前面的组 claimed 掉，
@@ -796,14 +817,15 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
                         head_qid, member_qnums[:10])
             continue
 
-        claimed.add(i)
+        claimed_indices.add(i)
+        claimed_ids.add(head_qid)
         for jid in member_ids[1:]:
-            claimed.add(jid)
+            claimed_ids.add(jid)
 
         group = _upsert_question_group(
             db,
             group_type=group_type,
-            shared_content=q.get('question_content') or '',
+            shared_content=_group_shared_content(q),
             subject=subject_name or '公专',
             source=source_tag or q.get('paper_name', ''),
         )
@@ -822,7 +844,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
                     f"(type={group_type}, 题号 {member_qnums[:10]})")
 
     # ===== 层2 语义增强兜底：对层1 未命中的题目做分组（无显式标识的复合题）=====
-    unclaimed = [(i, q) for i, q in enumerate(ok_items) if i not in claimed]
+    unclaimed = [(i, q) for i, q in enumerate(ok_items) if i not in claimed_indices]
     if unclaimed:
         unclaimed_questions = [q for _, q in unclaimed]
         suggestions = semantic_grouping(unclaimed_questions)
@@ -848,7 +870,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             group = _upsert_question_group(
                 db,
                 group_type=sug.get('group_type') or 'material',
-                shared_content=ok_items[head_idx].get('question_content') or '',
+                shared_content=_group_shared_content(ok_items[head_idx]),
                 subject=subject_name or '公专',
                 source=source_tag or ok_items[head_idx].get('paper_name', ''),
             )
@@ -2154,6 +2176,9 @@ async def confirm_batch_import(
         raise HTTPException(status_code=400, detail=f"当前状态 {record.import_status} 不允许确认")
 
     try:
+        # payload.questions 是主路径；未回落 preview_data 快照时保持空字典，
+        # 否则下方 preview_data.get(...) 会因未绑定变量抛 UnboundLocalError。
+        preview_data: Dict[str, Any] = {}
         # ★ P0-6：历史记录 preview_data 为双重编码，单次 json.loads 只剥一层会返回 str，
         #   紧接着 .get() 会抛 AttributeError: 'str' object has no attribute 'get'。
         #   load_json_lenient 会循环剥到真实对象，并对脏数据返回 {}。
@@ -2174,6 +2199,7 @@ async def confirm_batch_import(
         errors = []
         new_questions = []
         confirmed_items = []  # ★ RC-4 修复：初始化 confirmed_items，供试卷关联使用
+        group_stats = {'groups': 0, 'members': 0, 'materials': 0}
 
         for item in items:
             if item.get('status') == 'DUPLICATE' or item.get('is_duplicate'):
@@ -2358,6 +2384,34 @@ async def confirm_batch_import(
         _link_knowledge_points(db, new_questions)
         db.commit()
 
+        # ★ P3-11：主入库路径接建组。题目已提交后再挂组，失败只丢组关系不丢题。
+        if confirmed_items:
+            try:
+                id_map = {i: it['question_id'] for i, it in enumerate(confirmed_items)}
+                _group_subject = ''
+                for it in confirmed_items:
+                    _sn = str(it.get('subject_name') or '').strip()
+                    if _sn:
+                        _group_subject = _sn
+                        break
+                if not _group_subject and new_questions:
+                    _group_subject = (new_questions[0].subject.subject_name or '')
+                _group_source = record.original_filename or ''
+                _n_groups, _n_members = _detect_and_link_composite_groups(
+                    db, confirmed_items, id_map, _group_subject, _group_source)
+                _n_materials = _link_shenlun_material_groups(
+                    db, confirmed_items, id_map, _group_subject or '申论', _group_source)
+                group_stats['groups'] = _n_groups
+                group_stats['members'] = _n_members
+                group_stats['materials'] = _n_materials
+                if _n_groups or _n_members or _n_materials:
+                    db.commit()
+                    logger.info("[confirm] 建组完成: groups=%d members=%d materials=%d",
+                                _n_groups, _n_members, _n_materials)
+            except Exception as e:
+                db.rollback()
+                logger.warning(f"[confirm] 建组失败(非阻断，题目已入库): {e}")
+
         # N1: 确认导入阶段创建试卷（延迟创建策略）
         if imported > 0 and preview_data.get('auto_detected_tags'):
             try:
@@ -2423,6 +2477,10 @@ async def confirm_batch_import(
         except Exception as e:
             logger.warning(f"[import] 广播导入完成事件失败(非阻断): {e}")
 
+        message = f'导入完成：成功 {imported}，失败 {failed}，跳过 {skipped}'
+        if group_stats['groups'] or group_stats['materials']:
+            message += (f'；题组 {group_stats["groups"]}（成员 {group_stats["members"]}），'
+                        f'材料组 {group_stats["materials"]}')
         return {
             'success_count': imported,
             'failed_count': failed,
@@ -2430,7 +2488,8 @@ async def confirm_batch_import(
             'errors': errors,
             'paper_id': record.paper_id,
             'match_rate': preview_data.get('match_rate', 0),
-            'message': f'导入完成：成功 {imported}，失败 {failed}，跳过 {skipped}',
+            'group_stats': group_stats,
+            'message': message,
         }
     except Exception as e:
         db.rollback()
