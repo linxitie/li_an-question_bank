@@ -9,7 +9,7 @@ from datetime import datetime, date
 from app.models.models import (
     QuestionSubject, SubCategory, KnowledgePoint, QuestionKnowledge,
     PracticeRecord, SmartExamRecord, ExamPaper, ExamRecord, ExamAnswerDetail,
-    YearPaper,
+    YearPaper, QuestionBank,
 )
 
 
@@ -73,12 +73,25 @@ class TestMixedSources:
         subcat = SubCategory(name="政治理论", subject_id=subj.subject_id, status=1, sort_order=1)
         db_session.add(subcat); db_session.commit(); db_session.refresh(subcat)
 
+        # level=3 / status=1 必须有：/knowledge-progress 只取 level==3 且 status==1 的考点
+        # （实测库内 level 分布 2:516 / 3:526 / 4:7，status 0:531 / 1:518，两列都参与筛选）
         kp = KnowledgePoint(point_name="政治立场与忠诚度", subject_id=subj.subject_id,
-                            sub_category_id=subcat.id, sort_order=1)
+                            sub_category_id=subcat.id, sort_order=1, level=3, status=1)
         db_session.add(kp); db_session.commit(); db_session.refresh(kp)
 
         for qid in (90001, 90002):
             db_session.add(QuestionKnowledge(question_id=qid, knowledge_point_id=kp.point_id))
+        db_session.commit()
+
+        # 题目本体必须落库并带 point_id：/knowledge-progress 的统计口径走 question_bank.point_id
+        # （实测库内 point_id 非 0 有 2131 行，是该端点的既有实现；question_knowledge 是并行的多对多表，
+        #  两者在真实数据里相差 1 行，属已知口径分歧，已记入 docs/design/题库领域词表_v1.md §8）
+        for qid in (90001, 90002):
+            db_session.add(QuestionBank(
+                question_id=qid, subject_id=subj.subject_id, type_id=1,
+                question_content=f"考点进度测试题 {qid}", answer="A", creator_id=uid,
+                point_id=kp.point_id, status=1, audit_status=1,
+            ))
         db_session.commit()
 
         # ── 来源1 快速练习: 今天2题(对1错1)，每题60秒 ──

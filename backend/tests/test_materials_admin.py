@@ -26,7 +26,8 @@ class TestBatchOperations:
         assert resp.status_code in (400, 401, 403)
 
     def test_batch_delete_empty(self, client):
-        resp = client.delete("/api/materials/admin/batch", json={"ids": []})
+        # httpx 0.28 起 TestClient.delete() 不再接受 json=；用 request() 显式指定方法
+        resp = client.request("DELETE", "/api/materials/admin/batch", json={"ids": []})
         assert resp.status_code in (400, 401, 403)
 
 
