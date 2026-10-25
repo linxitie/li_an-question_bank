@@ -1,4 +1,4 @@
-﻿<!-- 题库整体模块 -->
+<!-- 题库整体模块 -->
 <template>
   <div class="question-bank">
     <NavBar></NavBar>

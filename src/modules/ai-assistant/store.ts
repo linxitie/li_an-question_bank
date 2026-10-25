@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 联考小智（ai-assistant）域 Store —— 模块⑦「联考小智」实现
  *
  * 状态契约继承外壳（loading/error/initialized/ready），并扩展会话业务状态。

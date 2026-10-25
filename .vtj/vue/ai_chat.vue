@@ -1,4 +1,4 @@
-﻿<!-- 联考小智 - AI 聊天页 -->
+<!-- 联考小智 - AI 聊天页 -->
 <template>
   <div class="ai-layout" :class="{ drawer_open: drawerOpen }">
     <!-- 左侧历史会话栏 -->

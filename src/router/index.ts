@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 砺安题库 - 路由配置（三端分离）
  */
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
