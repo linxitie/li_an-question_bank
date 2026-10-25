@@ -27,9 +27,11 @@
 | `plans/三端数据流一致性修复方案_v2.md` | v2 | 🚧 执行中（已批准；T-01~T-12 ✅；P1/P2/P3 完成；RT-1~RT-9 ✅，RT-10 手工验收待执行） | v1 的完整替代版：6 问题全覆盖 + 91 L2/427 L3/518 节点树 + 别名隐藏 + `sub_category_id` + §14 RT 富文本 |
 | `superpowers/specs/三端数据流一致性修复方案_v2_验收报告_20261024.md` | v2 | ✅ 已生成（T-12） | 生产迁移前后计数、51 项验收、回滚演练、A1~A10 状态与遗留 |
 | `plans/dsh-optimization-master-plan.md` | v1 | ✅ 已落盘（2026-10-25） | dsh×DeepInfer 联合执行总方案：角色↔subagent 矩阵、Token 节流、R1–R12 与五步法、CTC 十问、阶段阻断；含实测校正与本次落地 |
+| `superpowers/specs/数据库静默回落事故_报告_20261025.md` | v1 | ✅ 已修复（2026-10-25） | `.env` 缺失→默认库指向 `example_db.sqlite`（旧 schema、0 题、4 账号）导致全站 500/登录失败；真库 3357 题完好；新增启动期 db-guard 与 6 项测试 |
 
 ## 变更记录
 
+- 2026-10-25：**数据库静默回落修复**：`backend/.env` 缺失使 `SQLITE_PATH` 回落 `example_db.sqlite`（旧 schema、0 题），全站 500/登录失败；合入 main 的默认库修复 + 新增 `app/core/db_guard.py` 启动校验（路径/关键列/行数），重启后 `/api/questions/` 200（total=3122）。事故报告已归档。
 - 2026-10-25：`build:prod` 恢复：58 条 typecheck 错误清零，`.vtj` 页仅动 `<script>`；`verify:health` 阻断 0、`test:unit` 331 passed、构建 25.75s。
 - 2026-10-25：dsh 侧能力就绪：`.dsh/skills` 联接 20 个项目技能（33→53 条）；`mcp-vtj` 19 工具免重启可用；`gate_all.py` 修复 GBK 假 FAIL 与落盘路径。
 - 2026-10-24：T-12 完成：新增 `docs/superpowers/specs/三端数据流一致性修复方案_v2_验收报告_20261024.md`；生产迁移 KP 1049 / 题 3357 / 关系 2775，51 项验收全绿。
