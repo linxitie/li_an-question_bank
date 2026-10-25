@@ -6,35 +6,71 @@
 export type DeviceType = 'pc' | 'tablet' | 'mobile';
 
 /**
- * 检测当前设备类型
+ * 判定所需的原始信号。抽成参数是为了让判定逻辑可被单测覆盖
+ * （`detectDevice()` 直接读 window，无法在 node 环境下稳定构造）。
  */
-export function detectDevice(): DeviceType {
-  const userAgent = navigator.userAgent.toLowerCase();
-  const screenWidth = window.innerWidth;
-  // 触摸能力：navigator.maxTouchPoints 比 'ontouchstart' in window 更可靠
-  // （iPadOS 桌面模式 UA 下 maxTouchPoints 仍 > 0）
-  const touchable =
-    'ontouchstart' in window ||
-    (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 0);
+export interface DeviceSignals {
+  /** 已转小写的 userAgent */
+  userAgent: string;
+  /** window.innerWidth */
+  width: number;
+  /** 'ontouchstart' in window || navigator.maxTouchPoints > 0 */
+  touchable: boolean;
+  /** matchMedia('(pointer: coarse)').matches */
+  coarsePointer: boolean;
+  /** matchMedia('(hover: hover)').matches */
+  hoverable: boolean;
+}
 
-  // 平板设备检测（UA 优先，宽度+触摸为辅）
-  if (
-    /(ipad|tablet|(android(?!.*mobi))|(windows(?!.*phone)(.*touch)))/.test(userAgent) ||
-    (screenWidth >= 768 && screenWidth <= 1024 && touchable)
-  ) {
+const TABLET_UA = /(ipad|tablet|(android(?!.*mobi))|(windows(?!.*phone)(.*touch)))/;
+const MOBILE_UA = /iphone|ipod|android.*mobi|windows phone|blackberry|opera mini|iemobile/;
+
+/**
+ * 纯函数判定设备类型。
+ *
+ * 顺序不能换：
+ * 1. UA 平板特征，或「768~1024 且有触摸」（原有规则）
+ * 2. 粗指针且不可悬停且宽度 ≥768 —— 覆盖「桌面版网站」UA 的平板与宽屏平板。
+ *    必须排除 UA 含 mobile 的机型，否则安卓手机横屏会被误判成平板。
+ * 3. UA 手机特征，或宽度 <768
+ * 4. 其余为 PC
+ */
+export function detectDeviceFrom(signals: DeviceSignals): DeviceType {
+  const { userAgent, width, touchable, coarsePointer, hoverable } = signals;
+
+  if (TABLET_UA.test(userAgent)) return 'tablet';
+  if (width >= 768 && width <= 1024 && touchable && !/mobile/.test(userAgent)) return 'tablet';
+
+  if (coarsePointer && !hoverable && width >= 768 && !/mobile/.test(userAgent)) {
     return 'tablet';
   }
 
-  // 手机设备检测
-  if (
-    /iphone|ipod|android.*mobi|windows phone|blackberry|opera mini|iemobile/.test(userAgent) ||
-    screenWidth < 768
-  ) {
-    return 'mobile';
-  }
+  if (MOBILE_UA.test(userAgent) || width < 768) return 'mobile';
 
-  // PC设备
   return 'pc';
+}
+
+/**
+ * 检测当前设备类型
+ */
+export function detectDevice(): DeviceType {
+  const matches = (query: string) => {
+    try {
+      return typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
+    } catch {
+      return false;
+    }
+  };
+
+  return detectDeviceFrom({
+    userAgent: navigator.userAgent.toLowerCase(),
+    width: window.innerWidth,
+    touchable:
+      'ontouchstart' in window ||
+      (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 0),
+    coarsePointer: matches('(pointer: coarse)'),
+    hoverable: matches('(hover: hover)')
+  });
 }
 
 /**
