@@ -35,6 +35,7 @@
           <span v-if="post.isEssence" class="badge">精华</span>
         </div>
         <div class="post-content"><ForumContent :content="post.content" /></div>
+        <ImageGrid v-if="postImages.length" :images="postImages" mode="post" />
         <div class="reaction-bar">
           <button
             v-for="r in REACTIONS"
@@ -193,7 +194,7 @@ import ForumContent from '@/components/forum/ForumContent.vue';
 import ImageGrid from '@/components/forum/ImageGrid.vue';
 import ImageUploader from '@/components/forum/ImageUploader.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
-import type { ForumImageAttachment } from '@/components/forum/imageUtils';
+import { isImageUrl, type ForumImageAttachment } from '@/components/forum/imageUtils';
 import { avatarInitial } from '@/modules/community/avatar';
 import {
   pinForumComment,
@@ -244,6 +245,11 @@ const insertEmoji = (payload: { type: 'emoji' | 'sticker'; value: string; name?:
 
 const postId = Number(route.params.id);
 const post = computed(() => store.detail);
+const postImages = computed(() =>
+  (post.value?.attachments || [])
+    .map((att) => att.url)
+    .filter((url) => isImageUrl(url))
+);
 const canDelete = computed(() => {
   if (!post.value) return false;
   return (

@@ -42,9 +42,9 @@
                 <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
                 <p class="post-excerpt"><ForumContent :content="post.content" /></p>
                 <ImageGrid v-if="post.imageUrls && post.imageUrls.length" :images="post.imageUrls" mode="post" />
-                <div class="post-attachments" v-if="post.attachments && post.attachments.length">
+                <div class="post-attachments" v-if="post.fileAttachments && post.fileAttachments.length">
                   <span
-                    v-for="(att, idx) in post.attachments"
+                    v-for="(att, idx) in post.fileAttachments"
                     :key="idx"
                     class="attachment-chip"
                     @click.stop="downloadAttachment(att)">
@@ -283,9 +283,9 @@
               :images="state.currentPost.imageUrls"
               mode="post" />
             <!-- 附件 -->
-            <div v-if="state.currentPost.attachments && state.currentPost.attachments.length" class="detail-attachments">
+            <div v-if="state.currentPost.fileAttachments && state.currentPost.fileAttachments.length" class="detail-attachments">
               <span
-                v-for="(att, idx) in state.currentPost.attachments"
+                v-for="(att, idx) in state.currentPost.fileAttachments"
                 :key="idx"
                 class="attachment-chip"
                 @click="downloadAttachment(att)">
@@ -772,9 +772,15 @@
         this.state.newPost.attachments.splice(index, 1);
       },
       downloadAttachment(att: any) {
-        if (att.url) {
-          window.open(att.url, '_blank');
-        }
+        if (!att.url) return;
+        // 同页下载，避免新开标签页；图片已由 ImageGrid 在页内预览
+        const link = document.createElement('a');
+        link.href = att.url;
+        link.download = att.name || '';
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       },
       async toggleLike(post: any) {
         const auth = (window as any).__VTJ_AUTH__;
@@ -1091,6 +1097,13 @@
         const reactions = p?.reactions ?? {};
         const total = reactionTotal(reactions);
         const summary = formatReactionSummary(reactions);
+        const attachments = Array.isArray(p?.attachments) ? p.attachments : [];
+        const imageUrls = attachments
+          .map((att: any) => att?.url)
+          .filter((url: any) => typeof url === 'string' && isImageUrl(url));
+        const fileAttachments = attachments.filter(
+          (att: any) => !isImageUrl(att?.url || '')
+        );
         return {
           id: p?.id ?? 0,
           title: p?.title ?? '',
@@ -1105,10 +1118,9 @@
           commentCount: p?.commentCount ?? 0,
           viewCount: p?.viewCount ?? 0,
           liked: p?.liked ?? false,
-          attachments: p?.attachments ?? [],
-          imageUrls: (Array.isArray(p?.attachments) ? p.attachments : [])
-            .map((att: any) => att?.url)
-            .filter((url: any) => typeof url === 'string' && isImageUrl(url)),
+          attachments,
+          imageUrls,
+          fileAttachments,
           titleColor: p?.titleColor ?? 'default',
           isLocked: !!p?.isLocked,
           shareType: p?.shareType ?? '',
