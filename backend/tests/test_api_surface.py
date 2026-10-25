@@ -30,6 +30,11 @@ KNOWN_EXTRA_OPERATIONS = {
     ("GET", "/{full_path}"),
     ("GET", "/api/v1/growth/checkin/status"),
     ("POST", "/api/v1/growth/checkin"),
+    # R11 显式批准的新增（2026-10-25，用户指示"先1后2"后登记）：
+    # 题组材料上传图片，用于复合题共享材料配图。
+    # 鉴权：require_teacher_or_admin；校验：content-type 白名单 + 扩展名白名单 + 10MB 上限 + 题组存在性。
+    # 只登记不重算基线 —— api_surface.json 仍保持 343 条冻结口径，新增走本白名单单独可审计。
+    ("POST", "/api/questions/group/{group_id}/images"),
 }
 
 
