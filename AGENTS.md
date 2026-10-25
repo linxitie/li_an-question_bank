@@ -91,7 +91,7 @@
 | 前端设备复用 | `/tablet/` 21 条路由中部分直接复用 `@/views/mobile_*.vue`，经 `meta.platform` 区分，**不新建重复组件** |
 | 后端 | **单一 FastAPI 单体**，38 处 `include_router`，37 个 `api/v1` 模块，**343 个端点** |
 | 数据库 | **SQLite**（WAL，292 MB），**不是 PostgreSQL**；`DB_TYPE` 已预留 `mysql+pymysql` 出口 |
-| ORM | `models.py` 单文件 **1668 行 / 71 个模型**（P3B 阶段拆分） |
+| ORM | `backend/app/models/models.py` **1689 行 / 72 个模型**（P3B 已拆出 `models/` 目录，勿再按「单文件 1668 行」描述） |
 | 健康检查 | `/health`（`main.py:633`）与 `lifespan` **已存在**，勿重复实现 |
 | 门禁 | **9 层**脚本（L0 / L1-G / L1 / L1-H / L2 / L3 / L4 / L5 / L6），由 `backend/scripts/gates/gate_all.py` 编排；`--quick` 只跑 L0/L1-G/L1/L1-H |
 
@@ -131,7 +131,7 @@
 
 **当前已知两处已泄露（须处理）**：
 1. `.omo/plans/configure-deepseek-api.md` — DeepSeek 密钥（✅ 已吊销）
-2. `backend/.env` — `JWT_SECRET_KEY` 48 位真实值，跨 3+ 提交（🔴 待轮换，可伪造管理员身份）
+2. `backend/.env` — `JWT_SECRET_KEY` 48 位真实值，跨 3+ 提交（✅ 已于 2026-10-25 由用户本人轮换为 64 字符新值；实测非占位符。旧值仍在 Git 历史中——轮换即为终局处置，改写历史只是附加项）
 
 ---
 
@@ -172,3 +172,24 @@ vtj 工具仍会读写本仓库，不需要时把该行 `disabled` 改为 `true`
 New-Item -ItemType Directory -Force .dsh | Out-Null
 New-Item -ItemType Junction -Path .dsh\skills -Target (Resolve-Path .opencode\skills)
 ```
+
+---
+
+## 8. 题库设计模式 QBDM（2026-10-25 起生效）
+
+任何涉及题库功能模块的设计 / 编码 / 测试 / 归档任务，**开工前先戴帽**，再动手。
+
+| 项 | 位置 | 说明 |
+|---|---|---|
+| 全文（权威） | `docs/superpowers/specs/题库设计模式_v1.md` | 九角色、Q0–Q6、五零指标、分支细则、门禁矩阵、13 条反模式 |
+| 角色卡（热加载） | `docs/superpowers/specs/题库设计模式_角色卡_v1.md` | **每任务只读这个**（3.8KB）即可完成角色切换 |
+| 技能（自动触发） | `qbdm-role-switch`（`.opencode/skills/qbdm-role-switch/SKILL.md`） | 已实测被 dsh 即时发现；因 `.opencode/` 在 `.gitignore` 中，**技能正文不纳入 Git**，缺失去从角色卡文档重建 |
+| 装载预算闸 | `scripts/qbdm/ctx_budget.py` | 装载前估算 token 并对照 T0–T3 预算（Z4 可测） |
+
+**最少记住 4 条**：
+1. 九角色 = ARCH / PM / DATA / BE / API / FE / SEC / QA / DOC，**一次只戴一顶帽子**；仲裁链 `SEC > API > ARCH > PM > DATA > BE ≈ FE > QA > DOC`。
+2. 流程 Q0→Q6，**Q2/Q3/Q4/Q5/Q6 不可跳**；方案须用户批准后才进入实施。
+3. 五零指标：Z1 重复读=0、Z2 未验证断言=0、Z3 返工=0、Z4 超预算=0、Z5 归档遗漏=0。
+4. 没有门禁输出的"完成"一律判为未完成（与 `completion-verifier` 一致）。
+
+> 与第 7 节的关系：第 7 节讲**工具怎么接**，本节讲**任务怎么跑**，两者不重叠。
