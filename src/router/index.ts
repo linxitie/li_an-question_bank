@@ -409,7 +409,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/tablet/forum/:id',
     name: 'TabletForumDetail',
-    component: () => import('@/views/student/mobile/mobile_forum_detail.vue'),
+    component: () => import('@/views/student/tablet/tablet_forum_detail.vue'),
     meta: { platform: 'tablet' }
   },
 
