@@ -119,15 +119,10 @@
             <div class="post-content">
               <h3 class="post-title">{{ post.title }}</h3>
               <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
-              <div v-if="post.images && post.images.length" class="post-images">
-                <img
-                  v-for="(img, imgIndex) in post.images"
-                  :key="imgIndex"
-                  :src="img"
-                  alt="帖子图片"
-                  loading="lazy"
-                  @error="$event.target.style.display = 'none'" />
-              </div>
+              <AttachmentList
+                v-if="post.attachments && post.attachments.length"
+                :attachments="post.attachments"
+                mode="post" />
             </div>
             
             <!-- 帖子底部 -->
@@ -265,13 +260,15 @@ import { useProvider } from '@vtj/renderer';
 import { avatarInitial } from '@/modules/community/avatar';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
+import AttachmentList from '@/components/forum/AttachmentList.vue';
 
 export default defineComponent({
   name: 'TabletForum',
   components: {
     XIcon,
     ForumContent,
-    UserBadge
+    UserBadge,
+    AttachmentList
   },
   setup() {
     const router = useRouter();
@@ -360,6 +357,7 @@ export default defineComponent({
             comments: p.commentCount || 0,
             likes: p.likeCount || 0,
             category: p.shareType || 'DISCUSSION',
+            attachments: Array.isArray(p.attachments) ? p.attachments : [],
             images
           };
         });

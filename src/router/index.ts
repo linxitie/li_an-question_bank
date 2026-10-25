@@ -171,6 +171,12 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['teacher', 'admin'] }
   },
   {
+    path: '/teacher/forum',
+    name: 'TeacherForum',
+    component: () => import('@/views/teacher/teacher_forum.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
     path: '/teacher/profile',
     name: 'TeacherProfile',
     component: () => import('$vtj/vue/teacher_profile.vue'),
@@ -245,6 +251,12 @@ const routes: RouteRecordRaw[] = [
         path: 'papers',
         name: 'AdminPapers',
         component: () => import('$vtj/vue/paper_approval.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'forum',
+        name: 'AdminForum',
+        component: () => import('@/views/admin/admin_forum.vue'),
         meta: { roles: ['admin'] }
       },
       {

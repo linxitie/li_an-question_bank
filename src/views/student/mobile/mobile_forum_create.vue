@@ -45,7 +45,7 @@
         </div>
         <div class="image-field">
           <label class="label">图片（不限张数）</label>
-          <ImageUploader v-model="images" />
+          <FileUploader v-model="images" :max-docs="10" />
         </div>
         <div v-if="content" class="content-preview">
           <label class="label">预览</label>
@@ -66,7 +66,7 @@ import {
 import type { ForumShareType } from '@/modules/community/api';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
-import ImageUploader from '@/components/forum/ImageUploader.vue';
+import FileUploader from '@/components/forum/FileUploader.vue';
 import TitleColorPicker from '@/components/forum/TitleColorPicker.vue';
 import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 

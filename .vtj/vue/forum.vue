@@ -41,7 +41,10 @@
               <div class="post-content" @click="viewPost(post)">
                 <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
                 <p class="post-excerpt"><ForumContent :content="post.content" /></p>
-                <ImageGrid v-if="post.imageUrls && post.imageUrls.length" :images="post.imageUrls" mode="post" />
+                <AttachmentList
+                  v-if="post.attachments && post.attachments.length"
+                  :attachments="post.attachments"
+                  mode="post" />
                 <div class="post-attachments" v-if="post.fileAttachments && post.fileAttachments.length">
                   <span
                     v-for="(att, idx) in post.fileAttachments"
@@ -174,7 +177,7 @@
             maxlength="10000"></textarea>
           <div class="post-image-upload">
             <label class="post-color-label">图片（不限张数）</label>
-            <ImageUploader v-model="state.newPost.images" />
+            <FileUploader v-model="state.newPost.images" :max-docs="10" />
           </div>
           <div class="upload-area">
             <input
@@ -278,21 +281,11 @@
               {{ state.currentPost.title }}
             </h3>
             <div class="detail-content"><ForumContent :content="state.currentPost.content" /></div>
-            <ImageGrid
-              v-if="state.currentPost.imageUrls && state.currentPost.imageUrls.length"
-              :images="state.currentPost.imageUrls"
+            <!-- 图片 + 文档附件 -->
+            <AttachmentList
+              v-if="state.currentPost.attachments && state.currentPost.attachments.length"
+              :attachments="state.currentPost.attachments"
               mode="post" />
-            <!-- 附件 -->
-            <div v-if="state.currentPost.fileAttachments && state.currentPost.fileAttachments.length" class="detail-attachments">
-              <span
-                v-for="(att, idx) in state.currentPost.fileAttachments"
-                :key="idx"
-                class="attachment-chip"
-                @click="downloadAttachment(att)">
-                <XIcon :icon="Document" :size="12" color="#1a2b5f"></XIcon>
-                <span> {{ att.name }}</span>
-              </span>
-            </div>
             <!-- 帖子互动数据 -->
             <div class="detail-stats">
               <span class="stat-action" @click="toggleLike(state.currentPost)">
@@ -314,6 +307,13 @@
             <!-- 评论区域 -->
             <div class="comment-section">
               <h4>评论 ({{ state.currentPost.commentCount }})</h4>
+              <div class="comment-sort-row">
+                <CommentSortBar
+                  :sort-by="state.commentSortBy"
+                  :order="state.commentOrder"
+                  @update:sortBy="changeCommentSort"
+                  @update:order="changeCommentOrder" />
+              </div>
               <div v-if="state.commentsLoading" class="empty-tip-mini">加载评论中...</div>
               <div v-else-if="!state.comments.length" class="empty-tip-mini">暂无评论，抢个沙发吧!</div>
               <div v-else class="comment-list">
@@ -335,9 +335,9 @@
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
                       <div class="comment-text"><ForumContent :content="comment.content" /></div>
-                      <ImageGrid
+                      <AttachmentList
                         v-if="comment.attachments && comment.attachments.length"
-                        :images="comment.attachments.map((a: any) => a.url)"
+                        :attachments="comment.attachments"
                         mode="comment" />
                       <div class="comment-actions">
                         <span @click="toggleCommentLike(comment)" class="comment-action">
@@ -386,9 +386,9 @@
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
                           <div class="comment-text"><ForumContent :content="child.content" /></div>
-                          <ImageGrid
+                          <AttachmentList
                             v-if="child.attachments && child.attachments.length"
-                            :images="child.attachments.map((a: any) => a.url)"
+                            :attachments="child.attachments"
                             mode="comment" />
                           <div class="comment-actions">
                             <span @click="toggleCommentLike(child)" class="comment-action">
@@ -432,7 +432,7 @@
                   <span class="comment-toolbar-tip">支持 emoji 与自定义表情包</span>
                 </div>
                 <div class="comment-image-upload">
-                  <ImageUploader v-model="state.newCommentImages" />
+                  <FileUploader v-model="state.newCommentImages" :max-docs="3" />
                 </div>
                 <textarea
                   v-model="state.newComment"
@@ -524,6 +524,9 @@
   import ForumContent from '@/components/forum/ForumContent.vue';
   import ImageGrid from '@/components/forum/ImageGrid.vue';
   import ImageUploader from '@/components/forum/ImageUploader.vue';
+  import FileUploader from '@/components/forum/FileUploader.vue';
+  import AttachmentList from '@/components/forum/AttachmentList.vue';
+  import CommentSortBar from '@/components/forum/CommentSortBar.vue';
   import TitleColorPicker from '@/components/forum/TitleColorPicker.vue';
   import UserBadge from '@/components/forum/UserBadge.vue';
   import { pinForumComment, reportForumTarget } from '@/modules/community/api';
@@ -539,6 +542,9 @@
       ForumContent,
       ImageGrid,
       ImageUploader,
+      FileUploader,
+      AttachmentList,
+      CommentSortBar,
       TitleColorPicker,
       UserBadge
     },
@@ -565,6 +571,8 @@
           attachments: [] as any[]
         },
         newCommentImages: [] as ForumImageAttachment[],
+        commentSortBy: 'time',
+        commentOrder: 'desc',
         forumStats: { posts: 0, users: 0, online: 0 },
         // === 帖子详情 ===
         showPostDetail: false,
@@ -912,11 +920,22 @@
       async loadComments(postId: number) {
         this.state.commentsLoading = true;
         try {
-          await this.community.loadComments(postId);
+          await this.community.loadComments(postId, {
+            sortBy: this.state.commentSortBy,
+            order: this.state.commentOrder
+          });
           this.state.comments = this.buildCommentTree(this.community.comments);
         } finally {
           this.state.commentsLoading = false;
         }
+      },
+      async changeCommentSort(key: string) {
+        this.state.commentSortBy = key;
+        if (this.state.currentPost) await this.loadComments(this.state.currentPost.id);
+      },
+      async changeCommentOrder(order: string) {
+        this.state.commentOrder = order;
+        if (this.state.currentPost) await this.loadComments(this.state.currentPost.id);
       },
       buildCommentTree(flatList: any[]): any[] {
         const map: any = {};

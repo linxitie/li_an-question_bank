@@ -184,6 +184,7 @@ export default defineComponent({
       { key: 'classes', label: '班级管理', path: '/teacher/classes' },
       { key: 'analytics', label: '数据分析', path: '/teacher/analytics' },
       { key: 'messages', label: '消息中心', path: '/teacher/messages' },
+      { key: 'forum', label: '论坛', path: '/teacher/forum' },
     ];
 
     const avatarText = computed(() => {

@@ -35,7 +35,7 @@
           <span v-if="post.isEssence" class="badge">精华</span>
         </div>
         <div class="post-content"><ForumContent :content="post.content" /></div>
-        <ImageGrid v-if="postImages.length" :images="postImages" mode="post" />
+        <AttachmentList v-if="post.attachments && post.attachments.length" :attachments="post.attachments" mode="post" />
         <div class="reaction-bar">
           <button
             v-for="r in REACTIONS"
@@ -86,9 +86,9 @@
                 <span v-if="c.user && c.user.signature" class="signature">{{ c.user.signature }}</span>
               </div>
               <div class="comment-content"><ForumContent :content="c.content" /></div>
-              <ImageGrid
+              <AttachmentList
                 v-if="c.attachments && c.attachments.length"
-                :images="c.attachments.map((a) => a.url)"
+                :attachments="c.attachments"
                 mode="comment"
               />
               <div class="comment-actions">
@@ -130,9 +130,9 @@
               <div class="comment-main">
                 <div class="comment-user">{{ r.user && r.user.nickname }}</div>
                 <div class="comment-content"><ForumContent :content="r.content" /></div>
-                <ImageGrid
+                <AttachmentList
                   v-if="r.attachments && r.attachments.length"
-                  :images="r.attachments.map((a) => a.url)"
+                  :attachments="r.attachments"
                   mode="comment"
                 />
                 <div class="comment-actions">
@@ -166,7 +166,7 @@
     <footer v-if="post" class="comment-bar">
       <button v-if="replyTo" class="reply-hint" @click="cancelReply">回复 {{ replyToName }} ×</button>
       <div class="comment-image-bar">
-        <ImageUploader v-model="commentImages" />
+        <FileUploader v-model="commentImages" :max-docs="3" />
       </div>
       <div v-if="showPicker" class="comment-picker">
         <EmojiStickerPicker @select="insertEmoji" @close="showPicker = false" />
@@ -191,10 +191,10 @@ import { useCommunityStore } from '@/modules/community/store';
 import { useAuthStore } from '@/stores/auth';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
-import ImageGrid from '@/components/forum/ImageGrid.vue';
-import ImageUploader from '@/components/forum/ImageUploader.vue';
+import AttachmentList from '@/components/forum/AttachmentList.vue';
+import FileUploader from '@/components/forum/FileUploader.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
-import { isImageUrl, type ForumImageAttachment } from '@/components/forum/imageUtils';
+import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 import { avatarInitial } from '@/modules/community/avatar';
 import {
   pinForumComment,
@@ -245,11 +245,6 @@ const insertEmoji = (payload: { type: 'emoji' | 'sticker'; value: string; name?:
 
 const postId = Number(route.params.id);
 const post = computed(() => store.detail);
-const postImages = computed(() =>
-  (post.value?.attachments || [])
-    .map((att) => att.url)
-    .filter((url) => isImageUrl(url))
-);
 const canDelete = computed(() => {
   if (!post.value) return false;
   return (

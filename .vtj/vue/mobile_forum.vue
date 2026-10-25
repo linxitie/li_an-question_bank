@@ -62,16 +62,11 @@
             <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
           </div>
           
-          <!-- 帖子图片 -->
-          <div v-if="post.images && post.images.length > 0" class="post-images">
-            <div 
-              v-for="(img, imgIndex) in post.images.slice(0, 3)" 
-              :key="imgIndex"
-              class="post-image"
-            >
-              <img :src="img" alt="" />
-            </div>
-          </div>
+          <!-- 帖子图片/文件 -->
+          <AttachmentList
+            v-if="post.attachments && post.attachments.length"
+            :attachments="post.attachments"
+            mode="post" />
           
           <!-- 帖子底部 -->
           <div class="post-footer">
@@ -136,6 +131,7 @@ import { useProvider } from '@vtj/renderer';
 import { avatarInitial } from '@/modules/community/avatar';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
+import AttachmentList from '@/components/forum/AttachmentList.vue';
 
 export default defineComponent({
   name: 'MobileForum',
@@ -143,7 +139,8 @@ export default defineComponent({
       XIcon,
       MobileTabBar,
       ForumContent,
-      UserBadge
+      UserBadge,
+      AttachmentList
     },
   setup() {
     const router = useRouter();
@@ -212,6 +209,7 @@ export default defineComponent({
             comments: p.commentCount || 0,
             likes: p.likeCount || 0,
             category: p.shareType || 'DISCUSSION',
+            attachments: Array.isArray(p.attachments) ? p.attachments : [],
             images: (Array.isArray(p.attachments) ? p.attachments : [])
               .map((att: any) => (att && typeof att.url === 'string' ? att.url : ''))
               .filter((url: string) => IMAGE_PATTERN.test(url))
