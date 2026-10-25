@@ -3,11 +3,10 @@
 """
 import pytest
 from datetime import timedelta
-from jose import jwt
 
 from app.core.security import (
     verify_password, get_password_hash, create_access_token,
-    create_refresh_token, decode_token, TokenType,
+    create_refresh_token, decode_token, decode_token_unverified, TokenType,
     TokenManager, RateLimiter, LeakyBucketRateLimiter, CircuitBreaker,
     check_permission, UserRole, Permission, ROLE_PERMISSIONS
 )
@@ -36,7 +35,7 @@ class TestTokenManagement:
         assert token is not None
         assert isinstance(token, str)
 
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = decode_token_unverified(token)
         assert payload["user_id"] == 1
         assert payload["user_no"] == "test001"
         assert payload["type"] == TokenType.ACCESS.value
@@ -47,7 +46,7 @@ class TestTokenManagement:
 
         assert token is not None
 
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = decode_token_unverified(token)
         assert "exp" in payload
 
     def test_create_refresh_token(self):
@@ -56,7 +55,7 @@ class TestTokenManagement:
 
         assert token is not None
 
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = decode_token_unverified(token)
         assert payload["type"] == TokenType.REFRESH.value
 
     def test_decode_valid_token(self):
@@ -187,12 +186,15 @@ class TestCircuitBreaker:
         assert cb.state == "HALF_OPEN"
 
     def test_half_open_to_closed_on_success(self):
-        cb = CircuitBreaker(failure_threshold=2, half_max=2)
+        # recovery_timeout=0 才能立刻从 OPEN 进入 HALF_OPEN；默认 60s 下
+        # is_available() 只返回 False 且不改状态（原测试漏了这个前提）
+        cb = CircuitBreaker(failure_threshold=2, recovery_timeout=0, half_max=2)
 
         cb.record_failure()
         cb.record_failure()
-
-        cb.is_available()
+        assert cb.state == "OPEN"
+        assert cb.is_available() is True
+        assert cb.state == "HALF_OPEN"
 
         cb.record_success()
         cb.record_success()
@@ -218,13 +220,13 @@ class TestPermissionSystem:
         assert Permission.PAPER_APPROVE in admin_perms
 
     def test_check_permission_valid(self):
-        user = type('User', (), {'user_type': 'student'})()
+        user = type('User', (), {'user_type': 'student', 'status': 1, 'role_level': 0})()
         assert check_permission(user, Permission.QUESTION_VIEW) is True
 
     def test_check_permission_invalid(self):
-        user = type('User', (), {'user_type': 'student'})()
+        user = type('User', (), {'user_type': 'student', 'status': 1, 'role_level': 0})()
         assert check_permission(user, Permission.USER_MANAGE) is False
 
     def test_check_permission_invalid_user_type(self):
-        user = type('User', (), {'user_type': 'unknown'})()
+        user = type('User', (), {'user_type': 'unknown', 'status': 1, 'role_level': 0})()
         assert check_permission(user, Permission.QUESTION_VIEW) is False
