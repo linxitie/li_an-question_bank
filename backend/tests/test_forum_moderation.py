@@ -168,3 +168,29 @@ def test_admin_recycle_and_restore(client, db_session, test_teacher, admin_heade
     db_session.expire_all()
     row = db_session.query(ForumPost).filter_by(post_id=post.post_id).first()
     assert row.status == "NORMAL"
+
+
+def test_recycle_audit_counts_and_logs(client, db_session, admin_headers):
+    from app.services.forum_audit import collect_forum_recycle_stats, run_forum_recycle_audit
+
+    student = _student(db_session, "mod005", "一班")
+    post = _post(db_session, student)
+    comment = _comment(db_session, post, student)
+    post.status = "DELETED"
+    comment.status = 2
+    db_session.commit()
+
+    stats = collect_forum_recycle_stats(db_session)
+    assert stats["deleted_posts"] >= 1
+    assert stats["hidden_comments"] >= 1
+
+    run_forum_recycle_audit(db_session)
+    from app.models.models import SysOperationLog
+
+    log = (
+        db_session.query(SysOperationLog)
+        .filter(SysOperationLog.operation_type == "论坛回收站审计")
+        .order_by(SysOperationLog.log_id.desc())
+        .first()
+    )
+    assert log is not None

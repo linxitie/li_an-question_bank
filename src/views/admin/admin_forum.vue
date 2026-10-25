@@ -33,12 +33,22 @@
       <div v-else class="af-list">
         <article v-for="post in posts" :key="post.id" class="af-card">
           <div class="af-row">
+            <UserBadge
+              size="sm"
+              :src="post.authorAvatar"
+              :name="post.author"
+              :user-id="post.id"
+              :user-type="post.authorType || 'student'" />
             <span class="af-status" :class="`st-${post.status}`">{{ statusLabel(post.status) }}</span>
             <b>{{ post.title }}</b>
-            <span class="af-meta">{{ post.author }} · {{ post.authorClass || '未分班' }}</span>
+            <span class="af-meta">{{ post.authorClass || '未分班' }}</span>
             <span v-if="post.moderationStatus" class="af-meta">复核：{{ post.moderationStatus }}</span>
           </div>
-          <p class="af-content">{{ post.content }}</p>
+          <p class="af-content"><ForumContent :content="post.content" /></p>
+          <AttachmentList
+            v-if="post.attachments && post.attachments.length"
+            :attachments="post.attachments"
+            mode="post" />
           <div class="af-actions">
             <button class="af-link" @click="openPost(post)">查看评论</button>
             <button class="af-danger" @click="askDeletePost(post)">删除帖子</button>
@@ -65,6 +75,15 @@
     </section>
 
     <section v-else>
+      <div v-if="audit" class="af-audit">
+        <span>已删帖子 {{ audit.deleted_posts }}</span>
+        <span>隐藏帖子 {{ audit.hidden_posts }}</span>
+        <span>已删评论 {{ audit.deleted_comments }}</span>
+        <span>隐藏评论 {{ audit.hidden_comments }}</span>
+        <span>待复核 {{ audit.pending_moderation }}</span>
+        <span :class="{ danger: audit.stale_pending > 0 }">超 7 天未复核 {{ audit.stale_pending }}</span>
+        <span v-if="!isSuperAdmin" class="af-hint">仅超级管理员可彻底删除</span>
+      </div>
       <div class="af-list">
         <article v-for="post in recycle.posts" :key="`p-${post.id}`" class="af-card">
           <div class="af-row">
@@ -74,7 +93,7 @@
           </div>
           <div class="af-actions">
             <button class="af-btn" @click="restorePost(post)">恢复</button>
-            <button class="af-danger" @click="purgePost(post)">彻底删除</button>
+            <button v-if="isSuperAdmin" class="af-danger" @click="purgePost(post)">彻底删除</button>
           </div>
         </article>
         <article v-for="comment in recycle.comments" :key="`c-${comment.id}`" class="af-card">
@@ -85,7 +104,7 @@
           </div>
           <div class="af-actions">
             <button class="af-btn" @click="restoreComment(comment)">恢复</button>
-            <button class="af-danger" @click="purgeComment(comment)">彻底删除</button>
+            <button v-if="isSuperAdmin" class="af-danger" @click="purgeComment(comment)">彻底删除</button>
           </div>
         </article>
         <p v-if="!recycle.posts.length && !recycle.comments.length" class="af-empty">回收站为空</p>
@@ -96,12 +115,26 @@
       <div class="af-modal-card">
         <button class="af-close" @click="detail = null">×</button>
         <h2>{{ detail.title }}</h2>
-        <p class="af-content">{{ detail.content }}</p>
+        <p class="af-content"><ForumContent :content="detail.content" /></p>
+        <AttachmentList
+          v-if="detail.attachments && detail.attachments.length"
+          :attachments="detail.attachments"
+          mode="post" />
         <h3>评论（{{ comments.length }}）</h3>
         <p v-if="!comments.length" class="af-empty">暂无评论</p>
         <div v-for="c in comments" :key="c.id" class="af-comment">
-          <span class="af-meta">{{ c.user?.nickname }} · {{ c.user?.className || '未分班' }} · 状态 {{ c.status }}</span>
-          <p>{{ c.content }}</p>
+          <UserBadge
+            size="sm"
+            :src="c.user?.avatar"
+            :name="c.user?.nickname"
+            :user-id="c.user?.id"
+            :user-type="c.user?.userType || 'student'" />
+          <span class="af-meta">{{ c.user?.className || '未分班' }} · 状态 {{ c.status }}</span>
+          <p><ForumContent :content="c.content" /></p>
+          <AttachmentList
+            v-if="c.attachments && c.attachments.length"
+            :attachments="c.attachments"
+            mode="comment" />
           <button class="af-danger" @click="deleteComment(c)">删除评论</button>
         </div>
       </div>
@@ -123,6 +156,9 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import ModerationReasonDialog from '@/components/forum/ModerationReasonDialog.vue';
+import UserBadge from '@/components/forum/UserBadge.vue';
+import ForumContent from '@/components/forum/ForumContent.vue';
+import AttachmentList from '@/components/forum/AttachmentList.vue';
 import {
   adminForumApi,
   type ModerationComment,
@@ -148,6 +184,10 @@ const detail = ref<ModerationPost | null>(null);
 const loading = ref(false);
 const keyword = ref('');
 const statusFilter = ref('');
+const audit = ref<any>(null);
+const isSuperAdmin = ref(
+  (((window as any).__VTJ_AUTH__?.parseUserInfo?.() || {}).roleLevel || 0) >= 3
+);
 
 const dialog = reactive({
   visible: false,
@@ -186,6 +226,7 @@ const loadRecycle = async () => {
   const data = await adminForumApi.recycle();
   recycle.posts = data.posts;
   recycle.comments = data.comments;
+  audit.value = await adminForumApi.recycleAudit();
 };
 
 const switchTab = async (key: string) => {
@@ -296,6 +337,9 @@ onMounted(loadPosts);
 .af-filters input, .af-filters select { padding: 8px 10px; border: 1px solid #d9e1ee; border-radius: 8px; font-size: 13px; }
 .af-btn { border: none; border-radius: 8px; background: #1a365d; color: #fff; padding: 8px 14px; cursor: pointer; }
 .af-list { display: flex; flex-direction: column; gap: 10px; }
+.af-audit { display: flex; flex-wrap: wrap; gap: 12px; background: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #3b4a6b; }
+.af-audit .danger { color: #c41e3a; font-weight: 700; }
+.af-hint { margin-left: auto; color: #b45309; }
 .af-card { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 2px 10px rgba(26,43,95,.05); }
 .af-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: #1a2b5f; }
 .af-meta { color: #8a94ad; font-size: 12px; }

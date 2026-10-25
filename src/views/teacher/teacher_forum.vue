@@ -16,16 +16,29 @@
         <button class="tf-btn" @click="loadPosts">查询</button>
       </section>
 
+      <p v-if="!canModerate" class="tf-warn">
+        当前账号未绑定班级，暂不能隐藏本班学生内容。请先在「班级管理」中创建/绑定班级，并让学生填写班级。
+      </p>
       <p v-if="loading" class="tf-empty">加载中…</p>
       <p v-else-if="!posts.length" class="tf-empty">暂无帖子</p>
       <div v-else class="tf-list">
         <article v-for="post in posts" :key="post.id" class="tf-card">
           <div class="tf-card-head">
+            <UserBadge
+              size="sm"
+              :src="post.authorAvatar"
+              :name="post.author"
+              :user-id="post.id"
+              :user-type="post.authorType || 'student'" />
             <span class="tf-status" :class="`st-${post.status}`">{{ statusLabel(post.status) }}</span>
             <span class="tf-title">{{ post.title }}</span>
-            <span class="tf-meta">{{ post.author }} · {{ post.authorClass || '未分班' }}</span>
+            <span class="tf-meta">{{ post.authorClass || '未分班' }}</span>
           </div>
-          <p class="tf-content">{{ post.content }}</p>
+          <p class="tf-content"><ForumContent :content="post.content" /></p>
+          <AttachmentList
+            v-if="post.attachments && post.attachments.length"
+            :attachments="post.attachments"
+            mode="post" />
           <div class="tf-actions">
             <button class="tf-link" @click="openPost(post)">查看评论</button>
             <button v-if="post.canDelete" class="tf-danger" @click="askHidePost(post)">隐藏帖子</button>
@@ -38,12 +51,26 @@
           <button class="tf-close" @click="detail = null">×</button>
           <h2>{{ detail.title }}</h2>
           <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
-          <p class="tf-content">{{ detail.content }}</p>
+          <p class="tf-content"><ForumContent :content="detail.content" /></p>
+          <AttachmentList
+            v-if="detail.attachments && detail.attachments.length"
+            :attachments="detail.attachments"
+            mode="post" />
           <h3>评论（{{ comments.length }}）</h3>
           <p v-if="!comments.length" class="tf-empty">暂无评论</p>
           <div v-for="c in comments" :key="c.id" class="tf-comment">
-            <span class="tf-meta">{{ c.user?.nickname }} · {{ c.user?.className || '未分班' }}</span>
-            <p>{{ c.content }}</p>
+            <UserBadge
+              size="sm"
+              :src="c.user?.avatar"
+              :name="c.user?.nickname"
+              :user-id="c.user?.id"
+              :user-type="c.user?.userType || 'student'" />
+            <span class="tf-meta">{{ c.user?.className || '未分班' }}</span>
+            <p><ForumContent :content="c.content" /></p>
+            <AttachmentList
+              v-if="c.attachments && c.attachments.length"
+              :attachments="c.attachments"
+              mode="comment" />
             <button
               v-if="c.canDelete && c.status === 1"
               class="tf-danger small"
@@ -73,6 +100,9 @@ import { ElMessage } from 'element-plus';
 
 import TeacherNavHeader from '$vtj/vue/TeacherNavHeader.vue';
 import ModerationReasonDialog from '@/components/forum/ModerationReasonDialog.vue';
+import UserBadge from '@/components/forum/UserBadge.vue';
+import ForumContent from '@/components/forum/ForumContent.vue';
+import AttachmentList from '@/components/forum/AttachmentList.vue';
 import {
   teacherForumApi,
   type ModerationComment,
@@ -86,6 +116,8 @@ const loading = ref(false);
 const keyword = ref('');
 const className = ref('');
 const classOptions = ref<string[]>([]);
+const teacherClasses = ref<string[]>([]);
+const canModerate = ref(true);
 
 const reasonDialog = reactive({
   visible: false,
@@ -108,6 +140,8 @@ const loadPosts = async () => {
       limit: 50
     });
     posts.value = data.items;
+    teacherClasses.value = data.teacherClasses || [];
+    canModerate.value = data.canModerate !== false;
     const names = new Set<string>();
     data.items.forEach((item) => {
       if (item.authorClass) names.add(item.authorClass);
@@ -197,6 +231,7 @@ onMounted(loadPosts);
 .tf-danger { color: #c41e3a; }
 .tf-danger.small { font-size: 12px; }
 .tf-empty { color: #8a94ad; text-align: center; padding: 30px; }
+.tf-warn { background: #fff7e6; color: #b45309; border: 1px solid #fbe0b0; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0 0 14px; }
 .tf-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(8,12,24,.45); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .tf-modal-card { position: relative; width: min(720px, 94vw); max-height: 86vh; overflow-y: auto; background: #fff; border-radius: 14px; padding: 22px; }
 .tf-close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 22px; color: #8a94ad; cursor: pointer; }

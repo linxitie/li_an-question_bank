@@ -15,12 +15,14 @@ from sqlalchemy.orm import Session
 from ....core.database import get_db
 from ....core.security import get_current_user, require_admin, require_teacher_or_admin
 from ....models.models import (
+    Banji,
     ForumComment,
     ForumModeration,
     ForumPost,
     SysOperationLog,
     SysUser,
 )
+from ....services.forum_audit import collect_forum_recycle_stats
 from .forum import _serialize_comment, _serialize_post, _user_brief
 
 teacher_router = APIRouter(prefix="/api/teacher/forum", tags=["教师端-论坛"])
@@ -58,13 +60,26 @@ def _audit(
     )
 
 
-def _is_my_student(teacher: SysUser, author: Optional[SysUser]) -> bool:
-    return bool(
-        author
-        and author.user_type == "student"
-        and teacher.class_name
-        and author.class_name == teacher.class_name
+def _teacher_class_names(db: Session, teacher: SysUser) -> set[str]:
+    """教师可管理的班级：SysUser.class_name + Banji.teacher_id 关联班级。"""
+    names: set[str] = set()
+    if teacher.class_name:
+        names.add(teacher.class_name)
+    rows = (
+        db.query(Banji.class_name)
+        .filter(Banji.teacher_id == teacher.user_id)
+        .all()
     )
+    for (name,) in rows:
+        if name:
+            names.add(name)
+    return names
+
+
+def _is_my_student(db: Session, teacher: SysUser, author: Optional[SysUser]) -> bool:
+    if not author or author.user_type != "student" or not author.class_name:
+        return False
+    return author.class_name in _teacher_class_names(db, teacher)
 
 
 def _post_item(
@@ -83,6 +98,8 @@ def _post_item(
             "deletedAt": post.deleted_at.isoformat() if post.deleted_at else None,
             "moderationStatus": moderation_status,
             "canDelete": can_delete,
+            "author": (author.nickname or author.username) if author else "匿名",
+            "authorAvatar": author.avatar if author else "",
             "authorClass": author.class_name if author else None,
             "authorType": author.user_type if author else None,
         }
@@ -106,6 +123,8 @@ def _comment_item(
             "deletedAt": comment.deleted_at.isoformat() if comment.deleted_at else None,
             "moderationStatus": moderation_status,
             "canDelete": can_delete,
+            "author": (author.nickname or author.username) if author else "匿名",
+            "authorAvatar": author.avatar if author else "",
             "authorClass": author.class_name if author else None,
             "authorType": author.user_type if author else None,
         }
@@ -166,18 +185,26 @@ async def teacher_posts(
     users = db.query(SysUser).filter(SysUser.user_id.in_(user_ids)).all() if user_ids else []
     user_map = {u.user_id: u for u in users}
 
+    class_names = sorted(_teacher_class_names(db, current_user))
+    admin_view = current_user.user_type == "admin"
+    can_moderate = admin_view or bool(class_names)
+
     items = []
     for post in rows:
         author = user_map.get(post.user_id)
-        admin_view = current_user.user_type == "admin"
         items.append(
             _post_item(
                 post,
                 author,
-                can_delete=admin_view or _is_my_student(current_user, author),
+                can_delete=admin_view or _is_my_student(db, current_user, author),
             )
         )
-    return {"total": total, "items": items}
+    return {
+        "total": total,
+        "teacherClasses": class_names,
+        "canModerate": can_moderate,
+        "items": items,
+    }
 
 
 @teacher_router.get("/posts/{post_id}/comments", summary="教师端评论列表")
@@ -209,7 +236,7 @@ async def teacher_comments(
                 c,
                 user_map.get(c.user_id),
                 can_delete=current_user.user_type == "admin"
-                or _is_my_student(current_user, user_map.get(c.user_id)),
+                or _is_my_student(db, current_user, user_map.get(c.user_id)),
             )
             for c in rows
         ]
@@ -220,7 +247,7 @@ def _hide_post(db: Session, post: ForumPost, user: SysUser, reason: str):
     if post.status != "NORMAL":
         raise HTTPException(status_code=400, detail="该帖子已不是正常状态")
     author = db.query(SysUser).filter(SysUser.user_id == post.user_id).first()
-    if user.user_type != "admin" and not _is_my_student(user, author):
+    if user.user_type != "admin" and not _is_my_student(db, user, author):
         raise HTTPException(status_code=403, detail="只能处理本班学生的帖子")
 
     post.status = "BLOCKED"
@@ -245,7 +272,7 @@ def _hide_comment(db: Session, comment: ForumComment, user: SysUser, reason: str
     if comment.status != 1:
         raise HTTPException(status_code=400, detail="该评论已不是正常状态")
     author = db.query(SysUser).filter(SysUser.user_id == comment.user_id).first()
-    if user.user_type != "admin" and not _is_my_student(user, author):
+    if user.user_type != "admin" and not _is_my_student(db, user, author):
         raise HTTPException(status_code=403, detail="只能处理本班学生的评论")
 
     comment.status = 2
@@ -556,6 +583,14 @@ async def reject_moderation(
     _audit(db, current_user, "复核驳回恢复", f"moderation_id={moderation_id}")
     db.commit()
     return {"success": True}
+
+
+@admin_router.get("/recycle/audit", summary="回收站审计统计")
+async def recycle_audit(
+    _: SysUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return collect_forum_recycle_stats(db)
 
 
 @admin_router.get("/recycle", summary="回收站")

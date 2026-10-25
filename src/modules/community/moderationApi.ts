@@ -23,7 +23,8 @@ export interface ModerationPost {
   title: string;
   content: string;
   status: string;
-  author: string;
+  author?: string;
+  authorAvatar?: string;
   authorClass?: string | null;
   authorType?: string | null;
   canDelete?: boolean;
@@ -38,7 +39,9 @@ export interface ModerationComment {
   id: number;
   content: string;
   status: number;
-  user?: { nickname?: string; className?: string | null; userType?: string };
+  user?: { id?: number; nickname?: string; avatar?: string; className?: string | null; userType?: string };
+  author?: string;
+  authorAvatar?: string;
   canDelete?: boolean;
   deletedReason?: string | null;
   moderationStatus?: string | null;
@@ -58,7 +61,12 @@ export interface ModerationRecord {
 
 export const teacherForumApi = {
   posts: (params: Record<string, unknown>) =>
-    get<{ total: number; items: ModerationPost[] }>('/api/teacher/forum/posts', params),
+    get<{
+      total: number;
+      teacherClasses: string[];
+      canModerate: boolean;
+      items: ModerationPost[];
+    }>('/api/teacher/forum/posts', params),
   comments: (postId: number) =>
     get<{ items: ModerationComment[] }>(`/api/teacher/forum/posts/${postId}/comments`),
   hidePost: (postId: number, reason: string) =>
@@ -84,6 +92,15 @@ export const adminForumApi = {
     post<{ success: boolean }>(`/api/admin/forum/moderation/${id}/reject`, { note }),
   recycle: () =>
     get<{ posts: ModerationPost[]; comments: ModerationComment[] }>('/api/admin/forum/recycle'),
+  recycleAudit: () =>
+    get<{
+      deleted_posts: number;
+      hidden_posts: number;
+      deleted_comments: number;
+      hidden_comments: number;
+      pending_moderation: number;
+      stale_pending: number;
+    }>('/api/admin/forum/recycle/audit'),
   restorePost: (postId: number) =>
     post<{ success: boolean }>(`/api/admin/forum/posts/${postId}/restore`),
   restoreComment: (commentId: number) =>
