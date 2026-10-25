@@ -376,7 +376,7 @@ onMounted(load);
 }
 
 .content {
-  padding: 24px;
+  padding: 24px 24px 220px;
 }
 
 .detail-card {
@@ -600,8 +600,11 @@ onMounted(load);
 }
 
 .composer {
-  position: sticky;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 0;
+  width: min(920px, calc(100% - 48px));
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -609,7 +612,9 @@ onMounted(load);
   padding: 14px 32px;
   background: #fff;
   border-top: 1px solid #eef2f7;
-  border-radius: 0 0 12px 12px;
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -2px 12px rgba(26, 54, 93, 0.08);
+  z-index: 30;
 }
 
 .composer-uploader {
