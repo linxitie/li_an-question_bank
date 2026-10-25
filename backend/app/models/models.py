@@ -656,6 +656,9 @@ class ForumPost(Base):
     question_id = Column(BigInteger, comment="关联题目ID")
     feedback_id = Column(BigInteger, comment="关联反馈工单ID")
     last_activity_time = Column(DateTime, default=datetime.now, comment="最后活跃时间")
+    deleted_by = Column(BigInteger, comment="删除人ID")
+    deleted_reason = Column(String(200), comment="删除原因")
+    deleted_at = Column(DateTime, comment="删除时间")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
@@ -683,7 +686,10 @@ class ForumComment(Base):
     # === P1 评论区扩展 ===
     is_pinned = Column(Integer, default=0, comment="是否置顶 0否/1是")
     reply_to_user_id = Column(BigInteger, comment="回复目标用户ID")
-    attachments = Column(JSON, comment="评论图片 JSON:[{name,url,size,type}]")
+    attachments = Column(JSON, comment="评论附件 JSON:[{name,url,size,type}]")
+    deleted_by = Column(BigInteger, comment="删除/隐藏操作人ID")
+    deleted_reason = Column(String(200), comment="删除/隐藏原因")
+    deleted_at = Column(DateTime, comment="删除/隐藏时间")
     create_time = Column(DateTime, default=datetime.now, comment="评论时间")
     
     post = relationship("ForumPost")
@@ -2115,4 +2121,30 @@ class UserNotification(Base):
 
     __table_args__ = (
         Index("idx_notification_user_read", user_id, is_read, created_at),
+    )
+
+
+class ForumModeration(Base):
+    """论坛内容删除/复核记录。
+
+    action: TEACHER_HIDE / ADMIN_DELETE / RESTORE
+    status: PENDING / APPROVED / REJECTED / RESTORED
+    """
+    __tablename__ = "forum_moderation"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键")
+    target_type = Column(String(10), nullable=False, comment="POST/COMMENT")
+    target_id = Column(BigInteger, nullable=False, comment="目标ID")
+    action = Column(String(20), nullable=False, comment="TEACHER_HIDE/ADMIN_DELETE/RESTORE")
+    reason = Column(String(200), comment="原因")
+    actor_id = Column(BigInteger, comment="操作人")
+    status = Column(String(16), nullable=False, default="PENDING", comment="PENDING/APPROVED/REJECTED/RESTORED")
+    reviewed_by = Column(BigInteger, comment="复核人")
+    reviewed_at = Column(DateTime, comment="复核时间")
+    review_note = Column(String(200), comment="复核意见")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_moderation_status", status, created_at),
+        Index("idx_moderation_target", target_type, target_id),
     )

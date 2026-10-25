@@ -128,6 +128,9 @@ def _user_brief(user: Optional[SysUser], fallback_id: Optional[int] = None) -> D
         "avatarFrame": user.avatar_frame,
         "signature": user.signature,
         "userType": user.user_type,
+        "className": user.class_name,
+        "school": user.school,
+        "department": user.department,
     }
 
 
@@ -555,7 +558,7 @@ async def toggle_post_like(
 async def get_post_comments(
     post_id: int,
     sort_by: Literal["time", "likes", "replies"] = Query("time", description="排序字段"),
-    order: Literal["asc", "desc"] = Query("asc", description="排序方向"),
+    order: Literal["asc", "desc"] = Query("desc", description="排序方向（默认最新在前）"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: Optional[SysUser] = Depends(get_optional_user),
@@ -596,7 +599,11 @@ async def get_post_comments(
             ForumComment.post_id == post_id,
             ForumComment.status == 1,
         )
-        .order_by(sort_expr, ForumComment.create_time.desc())
+        .order_by(
+            ForumComment.is_pinned.desc(),
+            sort_expr,
+            ForumComment.create_time.desc(),
+        )
         .offset(offset)
         .limit(limit)
         .all()
@@ -1041,30 +1048,52 @@ async def upload_attachment(
     - 大小限制 20MB
     - UUID 重命名 + 独立目录 uploads/forum/
     """
-    # 1. 白名单校验(扩展名 + MIME 双重校验)
-    ALLOWED_EXT = {".doc", ".docx", ".pdf", ".xls", ".xlsx"}
+    # 1. 白名单校验(扩展名 + MIME / 文件头)
+    ALLOWED_EXT = {
+        ".doc", ".docx", ".pdf", ".xls", ".xlsx",
+        ".ppt", ".pptx", ".txt", ".csv", ".zip", ".rar", ".7z",
+    }
     ALLOWED_MIME = {
         "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/pdf",
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/plain",
+        "text/csv",
+        "application/csv",
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/vnd.rar",
+        "application/x-rar-compressed",
+        "application/x-7z-compressed",
+        "application/octet-stream",
+    }
+    ARCHIVE_MAGIC = {
+        ".zip": (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
+        ".rar": (b"Rar!\x1a\x07",),
+        ".7z": (b"7z\xbc\xaf\x27\x1c",),
     }
 
     original_name = file.filename or ""
     ext = os.path.splitext(original_name)[1].lower()
 
     if ext not in ALLOWED_EXT:
-        raise ValidationError(f"仅支持 Word/PDF/Excel 文件, 不允许 {ext} 格式")
-
-    if file.content_type not in ALLOWED_MIME:
-        raise ValidationError(f"文件 MIME 类型不合法: {file.content_type}")
+        raise ValidationError(f"不支持的文件格式: {ext}")
 
     # 2. 大小校验(< 20MB)
     MAX_SIZE = 20 * 1024 * 1024
     contents = await file.read()
     if len(contents) > MAX_SIZE:
         raise ValidationError("文件大小不能超过 20MB")
+
+    if ext in ARCHIVE_MAGIC:
+        if not any(contents.startswith(sig) for sig in ARCHIVE_MAGIC[ext]):
+            raise ValidationError("压缩包文件头校验失败")
+    elif file.content_type not in ALLOWED_MIME:
+        raise ValidationError(f"文件 MIME 类型不合法: {file.content_type}")
 
     # 3. 安全存储(UUID 重命名)
     filename = f"{uuid.uuid4().hex}{ext}"

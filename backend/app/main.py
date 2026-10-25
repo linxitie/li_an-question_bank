@@ -24,7 +24,7 @@ from .api.v1.content import news, recruitment, calendar
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
-from .api.v1.community import quotes, forum, practice_admin
+from .api.v1.community import quotes, forum, practice_admin, forum_moderation
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
@@ -233,6 +233,9 @@ async def lifespan(app: FastAPI):
                 ('question_id', 'BIGINT'),
                 ('feedback_id', 'BIGINT'),
                 ('last_activity_time', 'DATETIME'),
+                ('deleted_by', 'BIGINT'),
+                ('deleted_reason', 'VARCHAR(200)'),
+                ('deleted_at', 'DATETIME'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in forum_new_cols:
@@ -250,6 +253,9 @@ async def lifespan(app: FastAPI):
                 ('is_pinned', 'INTEGER DEFAULT 0'),
                 ('reply_to_user_id', 'BIGINT'),
                 ('attachments', 'JSON'),
+                ('deleted_by', 'BIGINT'),
+                ('deleted_reason', 'VARCHAR(200)'),
+                ('deleted_at', 'DATETIME'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in comment_new_cols:
@@ -711,6 +717,8 @@ app.include_router(practice_admin.router)
 app.include_router(practice_admin.admin_router)
 app.include_router(practice_admin.teacher_router)
 app.include_router(notifications.router)
+app.include_router(forum_moderation.teacher_router)
+app.include_router(forum_moderation.admin_router)
 
 @app.get("/health", tags=["系统"])
 async def health_check():
