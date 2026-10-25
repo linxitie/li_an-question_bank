@@ -17,7 +17,7 @@ from ....core.security import get_current_user
 from ....models.models import (
     QuestionSubject, SubCategory, KnowledgePoint, QuestionBank,
     QuestionKnowledge, PracticeRecord, SysUser,
-    QuestionDetailCategory, QuestionType, QuestionImage, QuestionGroup
+    QuestionDetailCategory, QuestionType, QuestionImage
 )
 from ....services.option_utils import (
     is_subjective_question, normalize_options, render_image_placeholder
@@ -25,6 +25,7 @@ from ....services.option_utils import (
 from ....services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
 from ....services.practice_grading import submit_answers
 from ....services.question_stats import QuestionStatsService
+from ....services.question_material import get_question_group
 
 router = APIRouter(prefix="/api/quick-practice", tags=["快速练习"])
 logger = logging.getLogger(__name__)
@@ -428,9 +429,7 @@ async def get_practice_questions(
         group = None
         if q.group_id:
             if q.group_id not in group_cache:
-                group_cache[q.group_id] = db.query(QuestionGroup).filter(
-                    QuestionGroup.id == q.group_id
-                ).first()
+                group_cache[q.group_id] = get_question_group(db, q.group_id)
             group = group_cache[q.group_id]
 
         # 统一规范化options（自动处理双编码JSON、补全、排序、IMAGE转换）
