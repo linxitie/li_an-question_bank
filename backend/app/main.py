@@ -88,11 +88,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Redis连接初始化失败（二维码登录功能将不可用）: {e}")
 
+    # 启动期数据库守卫（2026-10-25 事故复盘）：backend/.env 缺失时 SQLITE_PATH
+    # 会回落到默认值，若该默认指向旧/空库，create_all 会照常建表，表现为
+    # 「题目与账号凭空消失」。这里在建表前打印真实路径并在异常时 ERROR，
+    # 建表后校验关键列与行数。DB_GUARD_STRICT=1 时异常直接拒绝启动。
+    from .core.db_guard import preflight as db_preflight, verify as db_verify
+    db_preflight(logger, settings.DB_TYPE, settings.SQLITE_PATH)
+
     # 自动创建数据库表
     from .core.database import engine, Base, SessionLocal
     from .models import models  # 确保所有模型被导入
     Base.metadata.create_all(bind=engine)
     logger.info("数据库表初始化完成")
+    db_verify(engine, logger)
 
     # 初始化成就目录（幂等）
     try:
