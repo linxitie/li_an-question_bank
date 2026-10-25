@@ -1,10 +1,9 @@
-"""材料归属 golden corpus（P0-4）。
+"""材料归属 golden corpus（P0-4 / P3-13）。
 
 语料来自 P0-3 入库的 5 个真实案例 + 1 个 not_found 记录：
 `backend/tests/fixtures/material_ownership/manifest.json`。
 
-本文件只锁定 P3 目标行为，不修改解析器。P3 未落地前，5 个 found 案例
-以 `xfail(strict=True)` 记录；P3-13 验收时应移除 xfail 标记并确保全绿。
+P3 已落地（P3-1~P3-7），5 个 found 案例全部通过，xfail 标记已移除。
 """
 import hashlib
 import json
@@ -20,11 +19,6 @@ MANIFEST = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 CASES = MANIFEST["cases"]
 FOUND_CASES = [case for case in CASES if case["status"] == "found"]
 NOT_FOUND_CASES = [case for case in CASES if case["status"] == "not_found"]
-
-_MATERIAL_LEAK_XFAIL = pytest.mark.xfail(
-    strict=True,
-    reason="P3 MATERIAL_OWNERSHIP_V2 target; remove at P3-13",
-)
 
 
 def _read_raw(case: dict) -> str:
@@ -95,7 +89,6 @@ def test_case_03_not_found_is_documented():
 
 
 @pytest.mark.parametrize("case", FOUND_CASES, ids=[case["id"] for case in FOUND_CASES])
-@_MATERIAL_LEAK_XFAIL
 def test_golden_case(case):
     blocks = _blocks(case)
     material = _all_material(blocks)
