@@ -8,15 +8,21 @@ import { useCommunityStore } from '@/modules/community/store';
 import TabletForumDetail from '../tablet_forum_detail.vue';
 
 const h = vi.hoisted(() => ({
-  routeState: { id: '4' },
   back: vi.fn(),
   push: vi.fn()
 }));
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { id: h.routeState.id } }),
-  useRouter: () => ({ back: h.back, push: h.push })
-}));
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue');
+  const params = reactive({ id: '4' });
+  (globalThis as any).__routeParams = params;
+  return {
+    useRoute: () => ({ params }),
+    useRouter: () => ({ back: h.back, push: h.push })
+  };
+});
+
+const routeParams = () => (globalThis as any).__routeParams;
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }
@@ -61,7 +67,7 @@ const mountPage = () =>
 describe('TabletForumDetail 骨架', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    h.routeState.id = '4';
+    routeParams().id = '4';
     h.back.mockClear();
     h.push.mockClear();
   });
@@ -95,7 +101,7 @@ describe('TabletForumDetail 骨架', () => {
   });
 
   it('帖子 id 非数字时显示错误态且不请求接口', async () => {
-    h.routeState.id = 'abc';
+    routeParams().id = 'abc';
     const store = useCommunityStore();
     const spy = vi.spyOn(store, 'loadPost').mockResolvedValue(null);
 
@@ -110,7 +116,7 @@ describe('TabletForumDetail 骨架', () => {
 describe('TabletForumDetail 帖子区', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    h.routeState.id = '4';
+    routeParams().id = '4';
     h.back.mockClear();
     h.push.mockClear();
   });
@@ -173,7 +179,7 @@ describe('TabletForumDetail 评论区', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia());
-    h.routeState.id = '4';
+    routeParams().id = '4';
     h.back.mockClear();
     h.push.mockClear();
   });
@@ -224,7 +230,7 @@ describe('TabletForumDetail 评论区', () => {
 describe('TabletForumDetail 评论输入栏', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    h.routeState.id = '4';
+    routeParams().id = '4';
     h.back.mockClear();
     h.push.mockClear();
   });
@@ -291,3 +297,29 @@ describe('TabletForumDetail 评论输入栏', () => {
     expect((wrapper.find('.comment-input').element as HTMLInputElement).value).toBe('不能丢的内容');
   });
 });
+
+describe('TabletForumDetail 路由参数变化', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeParams().id = '4';
+    h.back.mockClear();
+    h.push.mockClear();
+  });
+
+  it('id 变化后重新加载对应帖子', async () => {
+    const store = useCommunityStore();
+    const spy = vi.spyOn(store, 'loadPost').mockResolvedValue(SAMPLE_POST as any);
+    vi.spyOn(store, 'loadComments').mockResolvedValue(undefined);
+
+    const wrapper = mountPage();
+    await flushPromises();
+    expect(spy).toHaveBeenCalledWith(4);
+
+    routeParams().id = '5';
+    await flushPromises();
+
+    expect(spy).toHaveBeenCalledWith(5);
+  });
+});
+
+

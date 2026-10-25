@@ -1,4 +1,4 @@
-<!-- 平板端论坛帖子详情页：独立整页，版式对齐 PC 详情卡 -->
+﻿<!-- 平板端论坛帖子详情页：独立整页，版式对齐 PC 详情卡 -->
 <template>
   <div class="tablet-forum-detail">
     <header class="topbar">
@@ -156,7 +156,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 
@@ -182,7 +182,7 @@ const route = useRoute();
 const router = useRouter();
 const store = useCommunityStore();
 
-const postId = Number(route.params.id);
+const postId = ref(Number(route.params.id));
 const post = computed(() => store.detail);
 const loading = ref(true);
 const loadError = ref('');
@@ -206,7 +206,7 @@ const formatTime = (iso: string | null | undefined) => {
 
 const reactToPost = async (reaction: ForumReactionCode) => {
   try {
-    await store.reactToPost(postId, reaction);
+    await store.reactToPost(postId.value, reaction);
   } catch (e) {
     console.error('点赞失败:', e);
   }
@@ -230,7 +230,7 @@ const repliesOf = (commentId: number) =>
     });
 
 const loadComments = async () => {
-  await store.loadComments(postId, { sortBy: sortBy.value, order: order.value });
+  await store.loadComments(postId.value, { sortBy: sortBy.value, order: order.value });
 };
 
 const changeSort = async (key: ForumCommentSortBy) => {
@@ -293,7 +293,7 @@ const submitComment = async () => {
   const content = commentText.value.trim();
   if (!content) return;
   try {
-    await store.submitComment(postId, {
+    await store.submitComment(postId.value, {
       content,
       parentCommentId: replyTo.value,
       attachments: commentImages.value.length ? commentImages.value : undefined
@@ -309,16 +309,17 @@ const submitComment = async () => {
 };
 
 const load = async () => {
+  postId.value = Number(route.params.id);
   loading.value = true;
   loadError.value = '';
 
-  if (!Number.isFinite(postId) || postId <= 0) {
+  if (!Number.isFinite(postId.value) || postId.value <= 0) {
     loadError.value = '帖子不存在或已被删除';
     loading.value = false;
     return;
   }
 
-  const detail = await store.loadPost(postId);
+  const detail = await store.loadPost(postId.value);
   if (!detail) {
     loadError.value = '帖子不存在或已被删除';
     loading.value = false;
@@ -330,6 +331,7 @@ const load = async () => {
 };
 
 onMounted(load);
+watch(() => route.params.id, () => { void load(); });
 </script>
 
 <style scoped>
@@ -682,3 +684,4 @@ onMounted(load);
   cursor: not-allowed;
 }
 </style>
+
