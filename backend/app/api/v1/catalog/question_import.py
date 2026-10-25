@@ -1673,9 +1673,17 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             record.failed_count = failed_count
             record.duplicate_count = duplicate_count
         else:
-            from ....services.text_parser import extract_question_blocks
+            from ....services.text_parser import (
+                extract_question_blocks,
+                looks_like_answer_document,
+                extract_answer_entries,
+            )
             _set_progress(60, 'SPLITTING')
-            parsed_blocks = extract_question_blocks(text)
+            # ★ 答案卷不能套用题干切块器（2026-10-25 事故）：
+            #   实测「题本 125 块 / 答案解析 95 块」，前端据此显示"答案对不上"；
+            #   按题号锚点解析答案卷恰好 125 条，与题本同口径。
+            is_answer_doc = looks_like_answer_document(text, filename)
+            parsed_blocks = [] if is_answer_doc else extract_question_blocks(text)
             _set_progress(75, 'MATCHING')
             auto_tags = _auto_detect_tags(filename, text)
             detected_subject = auto_tags.get('subject_category', '行测')
@@ -1725,6 +1733,32 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                     _set_progress(75 + int((idx + 1) / max(len(parsed_blocks), 1) * 15), 'MATCHING')
             _set_progress(90, 'BUILDING')
 
+            # 答案卷：预览条目 = 题号/答案/解析，不计入"题目"，但题号集合与题本可比对。
+            if is_answer_doc:
+                answer_entries = extract_answer_entries(text)
+                preview_items = [{
+                    # 答案卷条目没有题干；用「第N题」占位，避免预览出现空白卡片，
+                    # 但 is_answer_doc 会阻断 /confirm 把它当题目入库。
+                    'question_content': '第%d题' % e['number'],
+                    'role_label': '答案',
+                    'options': [],
+                    'answer': e['answer'],
+                    'analysis': e['analysis'],
+                    'answer_analysis': e['analysis'],
+                    'question_number': e['number'],
+                    'question_type_detail': '答案',
+                    'type_name': '答案',
+                    'subject_name': '答案',
+                    'status': 'ANSWER_ONLY',
+                    'is_answer_doc': True,
+                    'is_duplicate': False,
+                    'difficulty': 3,
+                    'score': 0,
+                } for e in answer_entries]
+                logger.info(
+                    f"[import-async] 识别为答案卷 {filename}："
+                    f"{len(preview_items)} 条答案锚点")
+
             total = len(preview_items)
             is_scanned = (ext == '.pdf' and len(preview_items) == 0 and _pdf_has_images_only(buf))
             # W2-1：科目/子科目建议（追加字段，不改既有字段）
@@ -1735,6 +1769,8 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                     'name': '', 'confidence': 0.0}
             response_payload = {
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
+                # file_role 让前端/教师一眼区分「题目卷 / 答案卷」，答案卷不再按题目数展示
+                'file_role': 'answer' if is_answer_doc else 'question',
                 'total_questions': total, 'success_count': total, 'failed_count': 0,
                 'duplicate_count': 0, 'questions': preview_items,
                 # ★ groups：按「给定材料」聚合的复合题组，供前端渲染总题干。
@@ -2215,6 +2251,15 @@ async def confirm_batch_import(
             if item.get('status') == 'SKIPPED':
                 failed += 1
                 errors.append({'error': item.get('reason', '数据不完整'), 'raw': item.get('raw', {})})
+                continue
+            # 答案卷条目不是题目：必须走「分离导入」与题本匹配后再入库，
+            # 否则 /confirm 会把「第N题」当成 125 道新题写进题库（数据污染）。
+            if item.get('is_answer_doc') or item.get('status') == 'ANSWER_ONLY':
+                failed += 1
+                errors.append({
+                    'error': '该文件被识别为答案卷，不能作为题目直接入库；请使用「分离导入」与题本匹配',
+                    'question_number': item.get('question_number'),
+                })
                 continue
             # ★ 阻断闸门：解析器判定为 blocked 的题块拒绝入库。
             #   /confirm 是前端的**主入库路径**，若不在这里拦，
