@@ -120,6 +120,35 @@
               </div>
             </div>
           </section>
+
+          <footer class="composer">
+            <div v-if="replyTo" class="reply-hint" @click="cancelReply">
+              回复 {{ replyToName }} ×
+            </div>
+
+            <div class="composer-uploader">
+              <FileUploader v-model="commentImages" :max-docs="3" />
+            </div>
+
+            <div v-if="showPicker" class="composer-picker">
+              <EmojiStickerPicker @select="insertEmoji" @close="showPicker = false" />
+            </div>
+
+            <button class="emoji-btn" type="button" title="表情 / 表情包" @click="showPicker = !showPicker">
+              😊
+            </button>
+
+            <input
+              v-model="commentText"
+              class="comment-input"
+              type="text"
+              :placeholder="replyTo ? `回复 ${replyToName}...` : '写下你的评论...'"
+              @keyup.enter="submitComment" />
+
+            <button class="send-btn" type="button" :disabled="!commentText.trim()" @click="submitComment">
+              发送
+            </button>
+          </footer>
         </div>
       </article>
     </main>
@@ -129,12 +158,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import CommentSortBar from '@/components/forum/CommentSortBar.vue';
+import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
+import FileUploader from '@/components/forum/FileUploader.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
+import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 import {
   pinForumComment,
   reportForumTarget,
@@ -245,6 +278,34 @@ const reportComment = async (comment: ForumCommentItem) => {
     | 'other';
   await reportForumTarget({ targetType: 'COMMENT', targetId: comment.id, reasonCode });
   window.alert('举报已提交');
+};
+
+const commentText = ref('');
+const commentImages = ref<ForumImageAttachment[]>([]);
+const showPicker = ref(false);
+
+const insertEmoji = (payload: { type: 'emoji' | 'sticker'; value: string; name?: string }) => {
+  commentText.value +=
+    payload.type === 'emoji' ? payload.value : `[[sticker:${payload.value}]]`;
+};
+
+const submitComment = async () => {
+  const content = commentText.value.trim();
+  if (!content) return;
+  try {
+    await store.submitComment(postId, {
+      content,
+      parentCommentId: replyTo.value,
+      attachments: commentImages.value.length ? commentImages.value : undefined
+    });
+    commentText.value = '';
+    commentImages.value = [];
+    cancelReply();
+    ElMessage.success('评论成功');
+  } catch (e) {
+    console.error('评论失败:', e);
+    ElMessage.warning('发送失败，请先登录或稍后重试');
+  }
 };
 
 const load = async () => {
@@ -536,5 +597,83 @@ onMounted(load);
 
 .comment-replies .comment-item {
   padding: 10px 0;
+}
+
+.composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 32px;
+  background: #fff;
+  border-top: 1px solid #eef2f7;
+  border-radius: 0 0 12px 12px;
+}
+
+.composer-uploader {
+  width: 100%;
+}
+
+.composer-picker {
+  position: absolute;
+  left: 32px;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+}
+
+.reply-hint {
+  width: 100%;
+  font-size: 12px;
+  color: #3b5b8c;
+  background: #eef2f8;
+  border-radius: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.emoji-btn {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e8ecf1;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.comment-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #e8ecf1;
+  border-radius: 20px;
+  padding: 10px 16px;
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+}
+
+.comment-input:focus {
+  border-color: #b9c9e0;
+}
+
+.send-btn {
+  flex: none;
+  min-height: 40px;
+  padding: 0 22px;
+  border: none;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #c91f37, #e8384f);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

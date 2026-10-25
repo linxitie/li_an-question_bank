@@ -18,6 +18,10 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ back: h.back, push: h.push })
 }));
 
+vi.mock('element-plus', () => ({
+  ElMessage: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }
+}));
+
 const STUBS = {
   UserBadge: {
     name: 'UserBadge',
@@ -217,3 +221,73 @@ describe('TabletForumDetail 评论区', () => {
   });
 });
 
+describe('TabletForumDetail 评论输入栏', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    h.routeState.id = '4';
+    h.back.mockClear();
+    h.push.mockClear();
+  });
+
+  const prepare = () => {
+    const store = useCommunityStore();
+    vi.spyOn(store, 'loadPost').mockResolvedValue(SAMPLE_POST as any);
+    vi.spyOn(store, 'loadComments').mockResolvedValue(undefined);
+    store.detail = SAMPLE_POST as any;
+    store.comments = [] as any;
+    return store;
+  };
+
+  it('选择 emoji 写入输入框，表情包写 sticker 标记', async () => {
+    prepare();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.find('.emoji-btn').trigger('click');
+    wrapper.findComponent({ name: 'EmojiStickerPicker' }).vm.$emit('select', { type: 'emoji', value: '🥰' });
+    await flushPromises();
+    expect((wrapper.find('.comment-input').element as HTMLInputElement).value).toBe('🥰');
+
+    wrapper.findComponent({ name: 'EmojiStickerPicker' }).vm.$emit('select', {
+      type: 'sticker',
+      value: '/uploads/stickers/a.png'
+    });
+    await flushPromises();
+    expect((wrapper.find('.comment-input').element as HTMLInputElement).value).toBe(
+      '🥰[[sticker:/uploads/stickers/a.png]]'
+    );
+  });
+
+  it('空内容不发送，有内容时提交', async () => {
+    const store = prepare();
+    const spy = vi.spyOn(store, 'submitComment').mockResolvedValue(undefined as any);
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.find('.send-btn').trigger('click');
+    expect(spy).not.toHaveBeenCalled();
+
+    await wrapper.find('.comment-input').setValue('你好');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect(spy).toHaveBeenCalledWith(4, {
+      content: '你好',
+      parentCommentId: null,
+      attachments: undefined
+    });
+  });
+
+  it('发送失败时保留输入内容', async () => {
+    const store = prepare();
+    vi.spyOn(store, 'submitComment').mockRejectedValue(new Error('未登录'));
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.find('.comment-input').setValue('不能丢的内容');
+    await wrapper.find('.send-btn').trigger('click');
+    await flushPromises();
+
+    expect((wrapper.find('.comment-input').element as HTMLInputElement).value).toBe('不能丢的内容');
+  });
+});
