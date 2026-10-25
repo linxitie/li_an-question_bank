@@ -9,6 +9,7 @@
 |---|---|
 | `design/` | 历史设计方案（91 份，含 v1 旧版容器化方案等） |
 | `plans/` | 实施计划与当前活跃设计 |
+| `ops/` | 使用/运维手册（环境、启动、拉取更新、数据库、共享、排错） |
 | `archive/` | 已归档的历史文档（37 份） |
 | `superpowers/` | Superpowers 工作流产物（specs/plans 子目录） |
 
@@ -19,36 +20,23 @@
 | `plans/学生端模块化设计方案_v1.md` | v1 | ✅ 已定稿（2026-10-18，已修订） | 学生端 20 业务模块化（⑱⑲⑳ 未开发）：星型横向数据流（成就成长枢纽）、三角色+三设备纵向通信、一人一分支协作规范、VTJ 红线守护 |
 | `plans/学生端模块化设计方案_v1_实施计划.md` | v1 | 🚧 执行中（P1✅ P2✅ P3 手工验收待执行） | 三阶段 123 任务：基础设施 33 ✅ + 逐域改造 82 ✅ + 验收 8（P3-01~07 真机手工验收待用户执行）；⑱⑲⑳ 排除 |
 | `plans/分支使用说明书_v1.md` | v1 | ✅ 已定稿（2026-10-18） | 多人协作独立文档：红线速查+环境准备+一人一分支+20 模块所有权映射+域卡模板+跨域通信规则+合并验收+冲突处置 |
+| `ops/整体系统使用和结构说明_v1.md` | v1 | ✅ 现行（2026-10-22） | 系统目录结构、克隆与启动、分支拉取更新、设计完成收尾、SQLite 存储/备份/恢复、多人共享、验收与排错 |
 | `plans/学生端模块化基线快照_v1.md` | v1 | ✅ 已定稿（2026-10-18） | P1-01 实测基线：75 页/73 JSON/343 端点/pytest 278-17-3/门禁 7-8/13 调用点 |
 | `plans/学生端模块化_P3手工验收核对表_v1.md` | v1 | 📋 待用户执行 | P3-01~07 真机手工验收执行清单：17 域逐项勾选 + 事件观测记录位 + 三设备一致性/WS 兜底演练步骤 + 缺陷记录区 |
-| `plans/三端数据流一致性修复方案_v1.md` | v1 | 🚧 执行中（P0 ✅；P1-1 ✅；P1-2 ✅；P1-3~P1-9 待执行） | 6 项三端数据流一致性问题的根因+修复方案：统一可见性/计数口径、主观题渲染、考点 canonical 展示、材料归属与教师编辑、存量修复与验收；P0-P4 分阶段，含 7 个待拍板决策 |
-| `plans/三端数据流一致性修复方案_v2.md` | v2 | 🚧 执行中（已批准；T-01 ✅ 2bd7d6e；T-02 ✅ 32c1cdb；T-03 ✅ f1c402b；T-04 ✅ f1bc4bb；T-05 ✅ 995e971；T-06 ✅ e42b3c8；T-07 ✅ 4cd6079；T-08 ✅ 0726184；T-08b ✅ 447988e；T-09 ✅ 8fb5f56；T-10 ✅ 6487b33/e1dfa1e；T-11 🟡 生产树迁移完成，A2/A3/A4/A7/A10 通过；T-12 ✅；P1 ✅ 7e5eb4d/cfd66fd/dd70cf4/9ce1a68/ec10cfb/5941284；P2 ✅ e4956af/f4e9dc1；P3 ✅ fb5e2c4/2be26b0/c7cf8e7；RT-1~RT-9 ✅ 83c7887/247d9fe/35a821d/fa24c2b；RT-10 手工验收待执行） | v1 的完整替代/增强版：覆盖 6 个问题的逐项方案；新增 91 L2/427 L3/518 节点分类树、505 别名隐藏、583 未分类回填、`sub_category_id`、P1/P2/P3 任务表、VTJ 9 页落地、验收/回滚/commit 计划；新增 §14 RT 富文本统一展示/编辑（答题卡/教师端/导入/管理员端，图片/文字/HTML/链接，双端清洗）；含“主代理直接落盘、未经子代理独立审查”说明 |
-| `superpowers/specs/三端数据流一致性修复方案_v2_验收报告_20261024.md` | v2 | ✅ 已生成（T-12） | 生产迁移前后计数、51 项验收、回滚演练、A1~A10 状态与遗留（643 隐藏关系/417 未分类/q162）；A2/A3/A4/A7/A10 通过，A1/A5/A6/A8/A9 待 P1/P2/P3 |
-| `plans/dsh-optimization-master-plan.md` | v1 | ✅ 已落盘（2026-10-25），待用户决策 DeepInfer 与 L2 口径 | dsh×DeepInfer 联合执行总方案：角色↔subagent 矩阵、Token 节流、R1–R12 与五步法、CTC 十问、阶段阻断；含**实测校正**（分支实为 `feat/fix-bug`、门禁 9 层且入口在 `scripts/gates/`、DeepInfer 无证据）与本次落地（`.dsh/skills` 联接、`mcp-vtj` 行、`gate_all.py` 编码修复） |
+| `plans/三端数据流一致性修复方案_v1.md` | v1 | 🚧 执行中（P0 ✅；P1-1 ✅；P1-2~P1-9 待执行） | 6 项三端数据流一致性问题的根因+修复方案：统一可见性/计数口径、主观题渲染、考点 canonical 展示、材料归属与教师编辑、存量修复与验收；P0-P4 分阶段，含 7 个待拍板决策 |
+| `plans/三端数据流一致性修复方案_v2.md` | v2 | 🚧 执行中（已批准；T-01~T-12 ✅；P1/P2/P3 完成；RT-1~RT-9 ✅，RT-10 手工验收待执行） | v1 的完整替代版：6 问题全覆盖 + 91 L2/427 L3/518 节点树 + 别名隐藏 + `sub_category_id` + §14 RT 富文本 |
+| `superpowers/specs/三端数据流一致性修复方案_v2_验收报告_20261024.md` | v2 | ✅ 已生成（T-12） | 生产迁移前后计数、51 项验收、回滚演练、A1~A10 状态与遗留 |
+| `plans/dsh-optimization-master-plan.md` | v1 | ✅ 已落盘（2026-10-25） | dsh×DeepInfer 联合执行总方案：角色↔subagent 矩阵、Token 节流、R1–R12 与五步法、CTC 十问、阶段阻断；含实测校正与本次落地 |
 
 ## 变更记录
 
-- 2026-10-25：**`build:prod` 恢复**：58 条 typecheck 错误清零（`home_page` 47 / `teacher_papers` 5 / `mobile_*` 6），改法为类型标注与 re-export，`.vtj` 页仅动 `<script>`（hunk 全部 ≥133 行，`<template>` 零改动，raw 页未做 DSL 同步）；`.typecheck-baseline.json` 8→0 项。验证：`typecheck:guarded` 零新增、`test:unit` 331 passed、`verify:health` 阻断 0、`build:prod` ✓ 25.75s。
-- 2026-10-25：dsh 侧能力就绪：`.dsh/skills` → `.opencode/skills` 目录联接使 20 个项目技能进入 dsh 技能目录（33→53 条）；`~/.dsh/profiles/desktop/cordis.patch.yml` 增 `mcp-vtj` 行，`mcp__vtj__*` 19 工具免重启可用；`gate_all.py` 修复 Windows GBK 下 `UnicodeEncodeError` 假 FAIL（子进程强制 UTF-8）。新增 `plans/dsh-optimization-master-plan.md`。
-- 2026-10-25：RT-1~RT-9 完成（83c7887 后端清洗/图片上传，247d9fe 前端 Viewer/Editor，35a821d 学生/教师管理员接入，a24c2b 导入预览接入）；vitest 12 passed、后端 33 passed、vite build 25.39s；gate_all.py 6/9（L4 服务未启动，L0/L2 既有 FAIL）。RT-10 手工验收待执行。
-- 2026-10-25：P3 完成（`fb5e2c4` + `2be26b0` + `c7cf8e7`）：材料归属六案例 8 passed（xfail 移除）、解析器 15 passed、导入 19 passed（缓存关闭）；复合题 claimed 修复、`/confirm` 建组、申论文档级材料、重复题 group 回填、灰度开关默认 true；复合材料/题组图片/开关 19 passed，导入+解析器 26 passed。RT-1~RT-10 仍未完成。
-- 2026-10-25：P3-1~P3-13 完成（`fb5e2c4` + `2be26b0`）：材料归属六案例 8 passed（xfail 移除）、解析器 15 passed、导入 19 passed（`TEXT_CACHE_ENABLED=false`）；复合题 claimed 修复、`/confirm` 建组、申论文档级材料、重复题 group 回填；新增复合材料测试 17 passed。P3-14 灰度门控与 RT-1~RT-10 未完成。
-- 2026-10-24：P1/P2 完成：P1-3~P1-6/P1-8/P1-9（直查、可见性、主观题、答题卡、point_id、计数/API 守门）与 P2-1~P2-7（材料 schema/upsert/三端点/教师管理员材料区/37 题补录 CSV）已提交；P1 16 tests、P2 34 passed/1 xfailed，vite build 15.62s。P3（导入/复合题；5 xfailed 仍待修）与 RT（富文本）未完成。
-- 2026-10-24：T-12 完成：新增验收报告 `docs/superpowers/specs/三端数据流一致性修复方案_v2_验收报告_20261024.md`（归档 `solve_problems_files/三端数据流一致性修复方案_v2_验收报告.md`），迁移报告/验收 JSON 落盘；README 索引更新。生产迁移：KP 1049（518 canonical/531 hidden）、题 3357、sub_category_id 2940/417、point_id 2131/1226、关系 2775（hidden 643）、index 已建、integrity ok；验收 51 checks 全绿；回滚副本 631 KP/3357 题可恢复。A2/A3/A4/A7/A10 通过；A1/A5/A6/A8/A9 待后续。
-- 2026-10-24：T-10 完成（commits `6487b33` + `e1dfa1e`）：PC/手机/平板题库页 canonical L2/L3 树；平板新增“考点树”；vite build 通过 16.15s；`npm run build` 仍被既有 typecheck 基线阻断（非本次引入）；VTJ 一致性为既有 DSL 漂移，未 sync。
-- 2026-10-24：Phase A 进展：T-09 完成（commits `0c1ef0a` + `8fb5f56`，`/sub-categories` 返回 L2 + `children` L3，隐藏 0/0 与 status=0，`/knowledge-points` 只返回有题 L3；32 passed/1 xfailed；实库 A3/A4：229=150+79、16=16+0、2877=2561+316）。
-- 2026-10-24：Phase A 进展：T-08b 完成（commit `447988e`，新增 `normalize-l2-relations` + 9 个测试；t08 临时库把 2127 条 L2 关系归一为 L2 的“其他”L3、2126 条 `point_id` 同步到 L3，第二次 apply `changed=0`，relation_to_l2=0、question_bank_to_l2=0、integrity ok；未触碰生产库）。
-- 2026-10-24：Phase A 进展：T-08 完成（commit `0726184`，新增 `question_bank.sub_category_id` 列映射、回填脚本与 13 个测试；t08 临时库首次 apply 2940 非空/417 NULL，未关联题 583（166 有文本、417 无文本/无 point），第二次 apply `changed=0`，列/索引/坏引用/integrity 均通过；生产库只读未写；**风险**：生产库仍无该列，T-11 迁移前不要启动/部署后端）。
-- 2026-10-24：Phase A 进展：T-07 完成（commit `4cd6079`，新增部分唯一索引 `uq_knowledge_point_sibling_visible`（`WHERE status=1`）+ 7 个测试，taxonomy 合计 49 passed；t06→t07 用 sqlite backup 复制，0 可见同级重复、重复可见插入 IntegrityError、隐藏同名插入允许、重复执行幂等、integrity ok；生产库只读未写：631 行、已有 status 列、无该索引、integrity ok；22 行 sub_category_id NULL，SQLite 唯一索引不约束 NULL）；T-08~T-12 进行中。
-- 2026-10-24：Phase A 进展：T-06 完成（commit `e42b3c8`，`backfill-point-id` + 10 个新测试，taxonomy 合计 42 passed；temp 首次 apply：filled_from_relation 2130、filled_ambiguous 1、no_canonical_relation 1226、updated_rows 2131、after_nonnull 2131、after_null 1226；歧义题 162 在 68/71 中取最小 68；第二次 apply updated_rows 0 幂等；非空 point_id 指向 status=0 的行 0；隐藏点 124/125/126 的 643 条关系保留且未被引用；生产库只读未写：631 行、无 alias_of、3357 题 point_id 全 NULL、integrity ok）；T-07~T-12 进行中。
-- 2026-10-24：Phase A 进展：T-05 完成（commit `995e971`，`migrate-relations` + 6 个新测试，taxonomy 合计 32 passed；人工映射 17→692、18→689、25→736、26→737，124/125/126 保留为 unmigrated；temp 连续两次 apply 幂等：relations 2775、distinct pairs 2775、duplicate 0、migrated 5、deduped 0、unmigrated 643、relations_to_alias_nonnull 0、relations_to_hidden_null 643、integrity ok；生产库 dry-run 未写：631 行、无 alias_of、relations 2775、integrity ok）；T-06~T-12 进行中。
-- 2026-10-24：Phase A 进展：T-04 完成（commit `f1bc4bb`，`apply-aliases` + 6 个新测试，taxonomy 合计 26 passed；temp 连续两次 apply 幂等：1049 行、canonical 518、status=0 531、legacy visible 0、alias_of 464/41、坏目标 0；生产库仍 631 行、status=0 0、无 alias_of、integrity ok；models 加 `KnowledgePoint.status`，树 API 三处加 `status=1`；`alias_of` 暂不入 ORM，待 T-11 迁移后补）；T-05~T-12 进行中。
-- 2026-10-24：Phase A 进展：T-03 完成（commit `f1c402b`，`build-tree` + 3 个新测试，taxonomy 合计 20 passed；生产 dry-run 631 行未写；temp 连续两次 apply 幂等：1049 行、canonical 518、status=0 61、待 T-04 470、旧“其他”合并 32、未决 `[401,571,592]`、同级重名 0；7 个被 648 条关系使用的旧 seed 仍待 T-05 人工映射）；T-04~T-12 进行中。
-- 2026-10-24：Phase A 进展：T-02 完成（commit `32c1cdb`，`build_taxonomy_v2.py` + 505 行别名 CSV + 9 tests passed；exact 35 / alias 133 / subcategory_other 296 / hidden 41；只读 DB，未写库）；T-03~T-12 进行中。
-- 2026-10-23：Phase A 启动进展：T-01 完成（commit `2bd7d6e`，`KNOWLEDGE_TREE_V2` + 8 tests passed；91/427/518 计数、每 L2 一个“其他”、无同级重名）；T-02~T-12 按计划推进中，未写库。
-- 2026-10-23：用户批准 v2 全部 1~10 项（含 RT 富文本）；进入 Phase A（T-01~T-07）dry-run，未写库。
-- 2026-10-23：`plans/三端数据流一致性修复方案_v2.md` 追加 §14 RT 富文本统一展示/编辑（答题卡/教师端/导入/管理员端；图片/文字/HTML/链接；后端 bleach + 前端 DOMPurify；§14.9 五项待确认）；v2 状态仍为“待用户批准”。
-- 2026-10-23：新增 `plans/三端数据流一致性修复方案_v2.md`（6 个三端数据流问题全覆盖；91 L2/427 L3/518 节点分类树；505 别名隐藏、583 未分类回填、`sub_category_id`、P1/P2/P3 任务表、VTJ 9 页落地、验收/回滚/commit 计划；待用户批准后实施）。同步修正 v1 索引状态为 P1-2 ✅。
+- 2026-10-25：`build:prod` 恢复：58 条 typecheck 错误清零，`.vtj` 页仅动 `<script>`；`verify:health` 阻断 0、`test:unit` 331 passed、构建 25.75s。
+- 2026-10-25：dsh 侧能力就绪：`.dsh/skills` 联接 20 个项目技能（33→53 条）；`mcp-vtj` 19 工具免重启可用；`gate_all.py` 修复 GBK 假 FAIL 与落盘路径。
+- 2026-10-24：T-12 完成：新增 `docs/superpowers/specs/三端数据流一致性修复方案_v2_验收报告_20261024.md`；生产迁移 KP 1049 / 题 3357 / 关系 2775，51 项验收全绿。
+- 2026-10-23：新增 `plans/三端数据流一致性修复方案_v2.md` 并追加 §14 RT 富文本（答题卡/教师端/导入/管理员端）。
+- 2026-10-22：合并远端“题库设计前必看”内容，保留文档索引。
+- 2026-10-22：恢复《整体系统使用和结构说明》10.4、11–15 节，同步根目录、`docs/ops`、归档三份副本（818 行）；补充数据流一致性报告图片附件。
+- 2026-10-22：新增 `ops/整体系统使用和结构说明_v1.md`（系统目录结构、克隆与启动、拉取更新、设计收尾、SQLite 存储/备份/恢复、多人共享、验收与排错）；同步根目录 `整体系统使用和结构说明.md`。
 - 2026-10-20：三端修复 P0 全部完成：P0-3 解析门禁基线（公专 L1 PASS；行测 L1 既有 FAIL，材料指纹 364/1.0 与基线一致）；5 个真实案例入库（commit `a634820`），第 3 类“材料在答案解析之后”标 `not_found`，未使用合成案例；P0-4 golden corpus（commit `4f291ed`）；P0-5 `MATERIAL_OWNERSHIP_V2=False` 灰度开关（commit `54de949`）。
 - 2026-10-20：三端修复 P1-1 完成：`QuestionStatsService.visible_query` 统一三端默认可见性为 `status=1 AND audit_status=1`，新增 `visible_total`、教师 `my_total`、管理端 `include_offline/include_pending`；`backend/tests/test_question_stats_service.py` 4 passed（commit `fa3683a`）。
 - 2026-10-19：新增 `plans/三端数据流一致性修复方案_v1.md`（三端数据流一致性 6 问题修复方案；数据库实测 + 代码逐行核对；待用户审批后实施）。
@@ -57,3 +45,616 @@
 - 2026-10-18：新增 `plans/学生端模块化设计方案_v1.md`（学生端功能模块化设计终稿，用户已批准）。
 - 2026-10-18：新增 `plans/学生端模块化设计方案_v1_实施计划.md`（123 个原子任务；P1 33 任务、P2 82 任务已全部完成并逐任务双提交；P3 真机手工验收待执行）。
 - 2026-10-18：新增 `plans/分支使用说明书_v1.md` 与 `plans/学生端模块化基线快照_v1.md`。
+
+---
+
+## 附：题库设计前必看（远端新增）
+
+### 一、系统目录结构分层说明
+
+## 1.根目录分层
+```
+/ 仓库根
+│
+├── 【A】VTJ 应用根 ── 冻结，不可重组
+│   ├── src/                 前端源码（内部按 §4.2 分层）
+│   ├── .vtj/                低代码资产（92 处 import 硬绑定）
+│   ├── public/              静态资源（favicon / logo）
+│   ├── packages/            前端共享包（已获批准：保持根目录，不并入 deploy/）
+│   ├── dist/                构建产物（已 gitignore）
+│   └── package.json  vite.config.ts  proxy.config.ts  tsconfig*.json  index.html
+│
+├── 【B】应用后端
+│   └── backend/             FastAPI + 运维脚本 + 测试 + 迁移
+│
+├── 【C】原始语料 ── 🚫 红线，禁动
+│   └── 题库/                662 MB PDF（行测重导依赖）
+│
+├── 【D】文档 ── 全部收归此处
+│   ├── docs/
+│   │   ├── design/          方案设计（按业务域）
+│   │   ├── plans/           实施计划
+│   │   ├── ops/             使用/运维手册（环境 / 启动 / 拉取更新 / 数据库 / 共享 / 排错）
+│   │   ├── archive/         历史版本（题目导入 v1~v9 归此）
+│   │   └── ai-commands/     原 CLAUDE.md/ 目录改名而来
+│   └── README.md  CHANGELOG.md
+│
+├── 【E】工程化
+│   ├── deploy/              Dockerfile / docker-compose.yml / nginx.conf
+│   │                        / .env.development / .env.school / .env.example
+│   ├── parser/              MinerU + OCR sidecar（python:3.11）
+│   └── tools/               开发辅助工具（bg-monitor / sfc-check / git-hooks）
+│
+├── 【F】AI 工具记录 ── 归并为单一目录
+│   └── .agent/{skills,tools,plans}/ + README.md 索引
+│
+└── 构建缓存 ── 全部 gitignore
+    ├── node_modules/  .worktrees/  logs/  .pytest_cache/  .playwright-mcp/
+    └── .idea/  .vscode/  .sisyphus/  .omo/
+```
+## 2.后端分层
+
+```
+backend/
+├── app/
+│   ├── main.py                  ★ 唯一入口，只做装配
+│   │
+│   ├── core/                    平台内核 ── 零业务
+│   │   ├── config.py  database.py  security.py  redis_client.py
+│   │   ├── events.py            【新】事件总线契约
+│   │   ├── contracts.py         【新】跨域公开契约注册
+│   │   ├── module_registry.py   【新】域清单一处声明
+│   │   ├── middleware.py        ← 从 app/ 根移入
+│   │   ├── monitoring.py        ← 从 app/ 根移入
+│   │   ├── exceptions.py        ← 从 app/ 根移入
+│   │   ├── cache.py             ← 从 app/ 根移入
+│   │   └── db_router.py         ← 从 app/ 根移入
+│   │
+│   ├── modules/                 【新】十域，各自自包含
+│   │   └── <domain>/{__init__, router, schema, models, service, contract}.py
+│   │
+│   ├── shared/                  【新】跨域基础件 ── 非业务
+│   │   └── parser/  ocr/  scraper/  image/  matcher/
+│   │
+│   ├── models/                  Base + 过渡期（P3 后仅留 Base）
+│   ├── schemas/                 平台级共享 schema
+│   ├── services/                过渡期（P2–P4 后按域迁入 modules/）
+│   ├── api/v1/                  过渡期（P3 后清空）
+│   │
+│   ├── static/                  题图 4.3 GB ── 卷，不入 Git 不入镜像
+│   └── uploads/                 702 MB ── 卷
+│
+├── scripts/                     运维脚本（6 类子目录，见 §7.5）
+│   └── gates/  migrate/  repair/  probe/  admin/  verify/
+├── tests/                       conftest.py + 用例
+├── migrations/                  SQL + Python 迁移
+├── data/                        SQLite + gates + audit + archive ── 卷
+├── logs/                        运行日志
+├── Dockerfile  .dockerignore
+├── .env  .env.example
+├── requirements.txt
+└── README.md  REPORTS.md
+```
+
+## 3.数据目录分层
+```
+backend/data/                    全部不纳入 Git，容器化后为卷
+├── question_bank.db             生产库 292 MB（+ -wal / -shm）
+├── gates/                       门禁基线 ── 反选入库（CI 复现必需）
+├── audit/                       回填/去重审计流水（14 文件：.jsonl + .csv）── 数据变更追溯凭证
+├── archive/                     备份归档（41 份唯一内容，按「最近 7 天 + 每周一份」保留）
+├── text_cache/                  PDF 文本提取缓存（74 文件，可重建）
+├── xingce_cache/                行测探测缓存（170 文件，可重建）
+├── refactor_baseline/           重构基线 JSON（6 份）── force-add 入库
+└── backup_audit_report.json     备份审计报告 ── force-add 入库
+```
+
+## 4.前端目录分层
+```
+src/
+├── router/index.ts              # 主路由表（roles + platform 双重门控）
+│
+├── views/
+│   ├── student/                 学生端
+│   │   ├── shared/              6 页（achievements exercise solution profile feedback help）
+│   │   ├── pc/                  PC 专属（当前 0，主要在 .vtj）
+│   │   ├── tablet/              平板专属（当前 0）
+│   │   └── mobile/              ★ 19 个 mobile_* 页全部归此
+│   │
+│   ├── teacher/                 教师端【预留】
+│   │   ├── shared/
+│   │   ├── pc/                  PC 专属（当前 0；教师端 8 页在 .vtj/vue）
+│   │   ├── tablet/              平板教师端（当前 0）
+│   │   └── mobile/              手机教师端（当前 0）
+│   │
+│   ├── admin/                   管理端【预留】
+│   │   ├── shared/
+│   │   ├── pc/                  ★ 管理端 11 页目前在 .vtj/vue
+│   │   ├── tablet/              平板管理端（当前 0）
+│   │   └── mobile/              手机管理端（当前 0）
+│   │
+│   └── system/                  无角色归属的系统页
+│       ├── not-found.vue
+│       └── unauthorized.vue
+│
+├── components/
+│   ├── common/                  HelloWorld / VtjErrorBoundary（无角色无设备归属）
+│   ├── mobile/                  MobileTabBar（设备专属）
+│   └── domain/                  RecentPracticeRecords（域内）
+│
+├── services/
+│   └── api/<domain>.ts          # ★ 按十域归口，不按角色/设备
+│
+├── layouts/
+│   ├── AdminLayout.vue          管理端（位置已正确）
+│   └── TeacherLayout.vue        教师端（位置已正确）
+│
+└── utils/                       device.ts 等 7 个（原样保留）
+```
+## 5.前端模块化目录分层
+```
+src/
+├── modules/                     # 新增：20 个模块外壳
+│   ├── identity/                ##  认证 + 个人中心
+│   │   ├── store.ts             # 域内状态
+│   │   ├── api.ts               # 域内 HTTP 封装
+│   │   ├── events.ts            # 本域发布/订阅的事件声明
+│   │   └── README.md            # 域卡（见 7.4）
+│   ├── catalog/                 ## 题库浏览
+│   ├── practice/                ## 答题练习
+│   ├── records/                 ## 练习记录
+│   ├── papers/                  ## 智能组卷 + 历年试卷
+│   ├── wrongbook/               ## 错题集
+│   ├── notes/                   ## 笔记 + 收藏
+│   ├── analytics/               ## 成绩分析
+│   ├── community/               ## 论坛社区
+│   ├── news/                    ## 每日新闻
+│   ├── calendar/                ## 考试日历
+│   ├── recruitment/             ## 招考信息
+│   ├── about/                   ## 关于砺安题库
+│   ├── library/                 ## 备考资料
+│   ├── growth/                  ## 成就成长（枢纽）
+│   ├── reward/                  ## 金币商城
+|   ├── mini-exam                ## 小模考
+|   ├── mock-exam                ## 模拟上机考试
+|   ├── ai-assistant             ## 联考小智
+│   └── checkin/                 ## 每日签到
+|
+├── stores/                      # 新增：全局共享层
+│   ├── auth.ts                  # 登录态、当前用户、角色
+│   ├── user-profile.ts          # 跨域只读的用户画像快照
+│   └── event-bus.ts             # mitt 实例 + 事件常量表
+├── services/
+│   └── api/                     # 激活：统一 axios 实例与拦截器
+│       ├── client.ts            # baseURL、超时、重试
+│       ├── interceptors.ts      # 鉴权头、401 跳转、错误归一化
+│       └── types.ts             # 通用响应外壳类型
+├── utils/
+│   └── device.ts                # 原样保留（R4）
+└── router/
+    └── index.ts                 # 原样保留 92 处 .vtj 动态 import（R1）
+```
+
+
+### 二、拉取项目并打开项目的一般步骤
+## 1.打开 VS Code，按下 Ctrl+Shift+P（Mac 为 Cmd+Shift+P）打开命令面板。
+
+## 2.输入 gitcl，选择 Git: Clone 命令。
+
+## 3.选择 Clone from GitHub，VS Code 会引导你登录 GitHub 账户进行授权。
+
+## 4.在仓库 URL 输入框中，粘贴 GitHub 项目的链接（就是这个项目--https://github.com/linxitie/li_an-question_bank.git）。
+
+## 5.选择一个本地文件夹作为项目的保存位置，然后点击 Select as Repository Destination。
+
+## 6.克隆完成后，VS Code 会询问你是否打开该项目，点击 Open 即可。
+
+## 7. 启动系统（首次与日常）
+
+# > 先下载项目内容："npm install"；前端依赖应在**仓库根**安装。按 7.1 → 7.6 的顺序执行，不要先跑前端再装后端。
+
+### 7.1 环境要求与检查
+
+| 组件 | 要求 | 检查命令 |
+|---|---|---|
+| Windows | 10/11 64 位 | `winver` |
+| PowerShell | 5.1 及以上 | `$PSVersionTable.PSVersion` |
+| Node.js | ≥ 20（本机实测 v24.14.0） | `node -v` |
+| npm | ≥ 10 | `npm -v` |
+| Python | ≥ 3.10（本机实测 3.13.5） | `python --version` |
+| Git | 2.40 及以上 | `git --version` |
+| 磁盘 | 建议 ≥ 15 GB 空闲 | `Get-PSDrive D` |
+
+建议把仓库放在**不含空格**的路径；本项目当前路径含中文可以运行，但 PowerShell 日志可能出现编码乱码，执行前可先设 UTF-8：
+
+```powershell
+$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
+$env:PYTHONIOENCODING = 'utf-8'
+```
+
+### 7.2 克隆后确认
+
+克隆步骤见本节 1–6。完成后在仓库根执行：
+
+```powershell
+git status
+git branch -a
+git log --oneline -5
+```
+
+### 7.3 启动后端（FastAPI）
+
+**下载项目内容完毕后**
+
+# ```powershell
+# cd D:\砺安题库\砺安题库\backend
+# 输入命令"python -m uvicorn app.main:app --host 0.0.0.0 --port 8000",entre即可
+# ```
+
+### 7.4 启动前端（Vite + VTJ）
+
+**必须从仓库根启动**（`vite.config.ts` 有 `workspaceRoot` 强制校验，不能从 `backend/` 或子目录启动）：
+
+# ```powershell
+# cd D:\砺安题库\砺安题库
+# npm run dev
+# ```
+
+-
+- `npm run dev` 实际执行 `cross-env ENV_TYPE=local vite`，端口 **9527**，`host: '0.0.0.0'`，手机/平板可通过局域网访问。
+- 打开：
+  - 前端：`http://localhost:9527`
+  - VTJ 设计器：`http://localhost:9527/__vtj__/`
+- Vite 代理默认把 `/api` 转发到 `http://127.0.0.1:8000`；需要连别的后端时设：
+  ```powershell
+  $env:DEV_BACKEND_ORIGIN = "http://192.168.1.10:8000"
+  npm run dev
+  ```
+- 后端没起来时，前端会收到 `503/502` 和 `BACKEND_UNAVAILABLE`，先回去启动 7.3，不要先怀疑前端页面。
+- 端口被占用：
+  ```powershell
+  netstat -ano | findstr :9527
+  taskkill /PID <PID> /F
+  ```
+
+### 7.5 手机端 / 平板端访问
+
+1. 电脑和手机连同一个 Wi-Fi/局域网。
+2. 在 PowerShell 执行 `ipconfig`，找到“无线局域网适配器 WLAN”的 IPv4 地址（如 `10.213.3.206`）。
+3. 手机浏览器访问：`http://10.213.3.206:9527`（英文冒号）。
+4. 打不开时依次检查：Windows 防火墙是否放行 Node.js；是否连错 Wi-Fi；IP 是否变化；Vite 是否仍在运行。
+5. 前端页面走 9527，API 由 Vite 代理转发；一般不需要在手机上单独访问 8000。
+
+<!-- ### 7.6 Docker 部署（可选，生产/演示）
+
+> 实际编排文件是**仓库根**的 `docker-compose.yml`，不是 `deploy/docker-compose.yml`（后者不存在）。
+
+```powershell
+# 1. 准备环境变量（真实密钥只写在本地，不提交）
+Copy-Item deploy\.env.example deploy\.env.development
+# 编辑 deploy\.env.development，至少填写 JWT_SECRET_KEY
+
+# 2. 构建前端产物（nginx 挂载仓库根 dist/）
+npm run build:prod
+
+# 3. 启动
+docker compose --env-file deploy\.env.development up -d --build
+docker compose ps
+docker compose logs -f backend
+```
+
+- 服务：`nginx`（80）、`backend`（127.0.0.1:8000）、`parser`（127.0.0.1:8080）。
+- 卷：`db_data`（SQLite + 门禁基线）、`uploads`、`qimg`（题图）、`parser_cache`（MinerU 权重）。**不要执行 `docker compose down -v`**，否则会删除数据库、上传文件和题图。
+- `qimg` 卷首次需要导入 `backend/app/static/` 的题图（约 4.3 GB）；不导入会全站裂图。
+- `deploy/.env.development` / `.env.school` 含真实密钥，已被 `.gitignore` 排除，禁止提交；仓库只保留 `deploy/.env.example`。
+ -->
+**进行项目克隆完毕之后**
+# 打开自己最适合最常用的AI编码工具（推荐使用claude终端版、opencode终端版、gpt、cursor等等） ,并进行所有提前配置完毕后再进行具体项目设计（后面一一提及，大大和大大大的字体就是要特别关注的）
+
+# 8.进行分支独立设计的提示词约束：
+```
+## 分支拓扑约定（必须严格遵守）
+
+当前项目使用“模块工作域 + 子分支”的链式分支模型：
+
+main（稳定基线）
+ └── feature/<模块名>        ← 模块工作域（父分支），只接受经过测试的子分支合并
+      └── feature/<模块名>/<子任务>  ← 子分支，每次只做一件优化/测试任务
+
+## 你的当前工作域
+
+- 你当前所在的分支：feature/<模块名>/<子任务>
+- 该分支的父分支：feature/<模块名>
+- 禁止直接从当前分支向 main 发起合并或 PR。
+- 所有代码修改、测试、提交，都只在你当前所在的子分支中进行。
+
+## 操作规则
+
+1. **拉取与同步**：开始工作前，先 `git pull` 当前子分支；如果子分支尚未创建，从 `feature/<模块名>` 拉出，命名格式为 `feature/<模块名>/<子任务简述>`。
+2. **只做一件事**：当前子分支只负责一个具体的优化或测试任务。不要在其中混合无关的改动。
+3. **测试先行或并行**：每次提交前，至少运行与当前模块相关的测试命令（如果项目有测试套件）。如果测试失败，先修复，再提交；不要提交测试失败的代码。
+4. **提交粒度**：一个逻辑变更一个提交，提交信息使用 `feat/fix/test/refactor: <简述>` 格式。
+5. **合并回父分支**：当前子任务完成且测试通过后，只向 `feature/<模块名>` 发起合并/PR，不要直接向 main 操作。
+6. **如果父分支有更新**：在子分支中 `git rebase feature/<模块名>`（或 merge），解决冲突后再继续，保持子分支建立在父分支最新状态之上。
+
+## 合并顺序（链式分支专用）
+
+如果存在多层嵌套（例如孙分支），合并顺序必须是：
+- 孙分支 → 子分支 → 模块工作域 → main。
+- 永远从最外层向内合并，不得跳层
+```
+**不同的编码AI的内置技能不同：**
+# 1.Trae
+利用“工作树”做隔离，提示词侧重“任务边界”
+Trae 内置了工作树（Worktree） 模式，可以为每个任务自动创建独立的分支和目录，并在任务完成后通过“AI 合并”将代码合回目标分支。这意味着你不需要在提示词里让 AI 手动执行 git checkout -b，而是在 Trae 中启动任务时选择工作树模式，然后让提示词聚焦于“这个工作树里做什么”：
+
+text
+你当前在一个独立的工作树中，对应分支 feature/<模块名>/<子任务>。
+你的任务：<具体优化或测试目标>。
+约束：
+- 只修改与该目标直接相关的文件。
+- 完成后，将变更合并回父分支 feature/<模块名>，不要合并到 main。
+- 如果测试失败，在当前工作树中继续修复，不要标记任务完成。
+
+# 2.opencode
+用 opencode-worktree 插件自动管理子分支
+OpenCode 可以通过 opencode-worktree 插件为每个任务自动创建 agent/<task> 格式的子分支，并在退出时自动合回父分支。提示词需要让 AI 理解 agent/ 分支是“临时执行分支”，它的生命周期绑定于当前任务：
+
+text
+你正在一个由 opencode-worktree 创建的隔离工作树中，当前分支为 agent/<task>。
+该分支的父分支是 feature/<模块名>。
+你的任务：<目标>。
+规则：
+- 所有改动只提交到当前 agent 分支。
+- 任务完成后，通过工作树机制合回父分支；如果合并不需要保留，直接退出即可。
+- 在退出/合并前，运行相关测试并确认通过。
+
+# 3.Claude
+原生 Git 操作，提示词需明确“禁止直接碰 main”
+Claude Code 具备原生 Git 提交能力，也可以被 MCP Git 工具赋予分支、rebase 等完整操作权限。它的风险在于权限较大，可能直接执行 git push origin main。因此提示词必须包含一条硬性禁止：
+
+text
+严禁直接向 main 分支执行 push、merge 或创建 PR。
+你只被允许在 feature/<模块名>/<子任务> 分支上提交和推送。
+完成子任务后，只向 feature/<模块名> 发起合并请求（PR 或本地 merge）。
+
+- 其他的我没有深入使用，不太了解
+
+---
+
+## 9. 后期拉取分支更新后的操作步骤
+
+> 这一节解决“别人合并了新代码/新设计，我本地怎么安全跟上”的问题。完整的多人协作规则见 `docs/plans/分支使用说明书_v1.md`，这里只给拉取前后必须执行的动作。
+
+### 9.1 拉取前：先保证工作区干净
+
+```powershell
+cd D:\砺安题库\砺安题库
+git status --short
+git branch --show-current
+```
+
+- 有未提交改动时，先提交到当前功能分支；不想提交就暂存：
+  ```powershell
+  git stash push -u -m "wip: 拉取更新前暂存"
+  git stash list
+  ```
+- **不要**用 `git reset --hard`、`git clean -fd` 清工作区；这会直接丢代码和未跟踪文档。
+- 确认当前分支：`main` 只做同步，不直接开发；开发在 `feature/<模块>` 或 `feature/<模块>/<子任务>`。
+
+### 9.2 拉取 main 与模块分支
+
+**情况 A：只更新 main**
+
+```powershell
+git switch main
+git fetch origin --prune
+git pull --ff-only origin main
+```
+
+`--ff-only` 失败说明本地 main 与远端分叉了，不要强行 merge；先看：
+
+```powershell
+git log --oneline --left-right main...origin/main
+```
+
+把本地多出来的提交移到功能分支，或找维护者确认后再处理。
+
+**情况 B：更新模块父分支**
+
+```powershell
+git switch feature/<模块名>
+git fetch origin --prune
+git merge origin/main
+git push origin feature/<模块名>
+```
+
+**情况 C：更新自己的子分支（最常用）**
+
+```powershell
+git switch feature/<模块名>/<子任务>
+git fetch origin --prune
+git merge origin/feature/<模块名>
+git merge origin/main
+git push origin feature/<模块名>/<子任务>
+```
+
+先合父分支，再合 main；不要反过来。合并冲突时：
+
+```powershell
+git status
+# 手工编辑冲突文件，确认没有残留 <<<<<<< ======= >>>>>>>
+git add <冲突文件>
+git commit
+```
+
+想放弃这次合并、回到合并前：
+
+```powershell
+git merge --abort
+```
+
+冲突处置细节（保留谁、怎么验证）见 `docs/plans/分支使用说明书_v1.md` 第 7 章。
+
+### 9.3 拉取后：先看“变了什么”，再启动
+
+```powershell
+git log --oneline --graph --decorate -20
+git diff --stat ORIG_HEAD..HEAD
+git diff --name-only ORIG_HEAD..HEAD
+```
+
+# 每次完成自己模块的预期目标或者效果一定一定要合并并推送至github中否则会出现内容过多，项目冗余的情况，严重会破坏整个项目(可以手动进行分支合并和推送，也可以让AI执行命令合并推送)
+
+### 9.3.1附加手动实现分支合并并推送
+- 第一步 保存并提交自己的代码
+  ### 查看自己改了哪些文件
+  git status
+  ### 添加并提交（注意：一定要确认没有把 .db、.env 等无用文件加进去）
+  git add .
+  git commit -m "feat: 完成功能设计与测试"
+- 第二步 切回主干，拉取你的最新代码（极其关键）
+  为了防止他推送时覆盖掉你刚写的代码，他必须先同步你的最新进度。
+  ### 1. 切回主干
+  git checkout main
+  ### 2. 拉取你（负责人）在 GitHub 上的最新代码
+  git pull origin main
+- 第三步 将分支合并进主干
+  ### 把 feat/my-feature 合并进当前的 main 分支
+  git merge feat/my-feature
+  **如果成功：终端会显示 Merge made by...。直接进入第四步。**
+  **如果有冲突：终端会报错 CONFLICT。让他立刻停止，并通知你。让他用 VS Code 解决完冲突，执行 git add . 和 git commit 后再继续。**
+- 第四步 推送到 GitHub
+  git push origin main
+
+
+### 9.4 数据库有变更时：先备份，再启动
+
+```powershell
+cd D:\砺安题库\砺安题库\backend
+python scripts/admin/backup_db.py --label 拉取更新前
+python start.py
+```
+
+
+### 9.5 前端依赖与缓存
+
+```powershell
+cd D:\砺安题库\砺安题库
+npm ci
+npm run dev -- --force
+```
+
+- `--force` 让 Vite 重新预构建依赖；也可以删除 `node_modules/.vite` 后重启。
+- **不要随手执行 `npm run clean`**：该脚本会删除 `node_modules`、`dist`、`package-lock.json`、`pnpm-lock.yaml`，不是普通的清缓存。
+- 浏览器用 `Ctrl+F5` 强刷；设计器页面同样要强刷，避免旧 chunk 缓存。
+
+### 9.6 设计完成后的收尾（合并前）
+
+1. **文档**：设计/方案写入 `docs/plans/` 或 `docs/superpowers/specs/`；更新 `docs/README.md` 索引；按 `AGENTS.md` 归档规则留档。
+2. **计划**：把实施计划里的任务勾选、状态、验证结果更新掉；代码提交与计划状态提交分开。
+3. **VTJ**：`.vtj/` 不移动、不改名、不删除；`raw: true` 页面禁止 `vtj_sync_vue_to_dsl`；`.vtj/vue/*.vue` 的 `<template>` 只能由设计器改，AI 只改 `<script>` 且先 `dryRun: true`。
+4. **验证**：
+   ```powershell
+   cd D:\砺安题库\砺安题库
+   npm run typecheck
+   npm run build
+   npm run test:unit
+
+   cd backend
+   python -m pytest tests -q
+   python scripts/gates/gate_all.py --quick
+   ```
+   全量门禁用 `python scripts/gates/gate_all.py`；行测 L1 等既有 FAIL 以基线为准，**新增失败必须修复**。
+5. **提交**：一个逻辑变更一个提交，提交信息用 `feat/fix/test/refactor: <简述>` 或模块前缀（如 `wrongbook: ...`）。
+6. **合并顺序**：子分支 → 模块父分支 → `main`，禁止跳层，禁止直接 push `main`；合并前必须再合一次最新 `origin/main` 并重跑门禁。
+7. **合并后**：删除已合并的临时分支，切回 main `git pull --ff-only`，确认远端与本地一致。
+
+### 9.7 不要提交的东西 【必须要看和注意】
+
+- `backend/data/question_bank.db`、`-wal`、`-shm`、`backend/data/*.bak*`、`backend/data/backups/`
+- `backend/uploads/`、`backend/app/static/` 的题图、`题库/` 原始 PDF
+- `.env`、`deploy/.env.development`、`deploy/.env.school`、`.obsidian_mcp.json`、`admin_token.txt`
+- `node_modules/`、`dist/`、`backend/logs/`、`.vtj/logs/`、`.vtj/histories/`
+
+---
+
+## 10. 数据库数据的存储说明
+
+### 10.1 默认数据库：SQLite（WAL）
+
+| 项 | 实际值 |
+|---|---|
+| 类型 | SQLite，`DB_TYPE=sqlite`（默认） |
+| 主库 | `backend/data/question_bank.db`（当前约 302.7 MB） |
+| WAL | `backend/data/question_bank.db-wal`（当前约 5.4 MB） |
+| 共享内存 | `backend/data/question_bank.db-shm` |
+| 日志模式 | WAL；已提交数据可能还在 `-wal` 里，**不能只拷主库** |
+| 连接串 | 由 `backend/app/core/config.py` 的 `DATABASE_URL` 生成；`start.py` 会先切到 `backend/`，所以相对路径以 `backend/` 为基准 |
+
+`backend/data/` 不是普通缓存目录，里面同时有：
+
+- `backups/`：`backup_db.py` 的新备份
+- `audit/`：数据变更追溯凭证（R9，不是垃圾）
+- `gates/`：门禁基线与 `last_run.json`
+- `refactor_baseline/`：API/模型/耦合/表使用基线
+- `snapshots/`、`text_cache/`、`xingce_cache/`：解析缓存与快照
+- `question_bank.db.bak_*`：历史备份（R8，禁止清理）
+
+### 10.2 大体积数据放在哪里
+
+| 数据 | 位置 | 体量（实测口径） | 是否进 Git |
+|---|---|---|---|
+| 原始 PDF 语料 | `题库/` | 约 662 MB | 否（R6，禁止删除/移动） |
+| 题图 | `backend/app/static/` | 约 4.3–5.5 GB | 否（R7，禁止删除；新题图已忽略） |
+| 用户上传 | `backend/uploads/` | 约 0.8 GB | 否 |
+| SQLite 主库 + 备份 | `backend/data/` | 主库约 300 MB，备份数十份 | 否 |
+| 示例库 | `backend/data/example_db.sqlite` | 约 13 MB | 否（本地示例库，已被 `.gitignore` 忽略） |
+
+这些数据**不通过 Git 共享**。换机器/多人协作时用移动硬盘、内网共享、`rsync` 或对象存储；Docker 部署用命名卷持久化。
+
+####  10.3 Docker 下的数据库
+
+`docker-compose.yml` 把数据挂到命名卷：
+
+- `db_data:/app/data`：SQLite 主库、WAL/SHM、备份、门禁基线
+- `uploads:/app/uploads`：用户上传
+- `qimg:/app/app/static`：题图（约 4.3 GB，必须单独导入）
+- `parser_cache:/root/.cache`：MinerU 模型权重
+
+**不要 `docker compose down -v`**，否则上述卷会被删除。备份要在容器内执行，再把备份文件取出：
+
+```powershell
+docker compose exec backend python scripts/admin/backup_db.py --label docker
+docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_docker.db
+```
+
+
+### 三、项目的必须认识内容
+
+## 1. 前端设计器
+由于前端是由VTJ页面设计的，但是该网页需要额外充钱使用，所以我制定了一个D:\砺安题库\砺安题库\vtj-mcp-server的设计器；到时候使用时需要进行前端页面修改时需要进行提示词约束（后面我会将几个关键约束提示词提供）
+
+## 2.MCP-SERVER和skills、工作流
+（1）vtj-mcp-server,不再赘述
+（2）playwright-MCP--用于模拟人的行为进行查看浏览器内容，可以用来让AI测试前端设计效果、也可以用来进行爬虫应对反爬机制等等
+（3）superpower（skills）--主要使用模块是其brainstorm、writting-plans，它是用一套可组合的“工程纪律”技能，保证设计的可靠性、多维、多方面、全方位的思考要求。
+强制让AI走完思考 → 计划 → 编码 → 验证 → 审查的完整工程闭环
+（4）工作流--大家可以去多问一下其他AI（deepseek、千问、智普等等），让他们来设计针对你使用的AI设计你相应的功能模块的必须工作流，保证使用时可以按照工作流的内容设计、不至于让其胡思乱下、偷工减料、出现AI幻觉等（这个可能需要在不断地测试，摸索之后才有点头绪）
+（5）大家若有其他好的skills、MCP-server、工作流或者其他的能够高效使用AI的方法都可以交流分享
+
+## 3.我自己一般使用的约束提示词（大家参考着用吧，可以天马行空的想其他的约束词，高效能用就是好的）
+全局规则：
+  1.深度分析以上问题和要求，设计出完整的解决方案同时支持我可以对方案进行更深层次要求的提出，设计的方案需要考虑细节、内容下钻、方案可落地性、内容的可靠性等，
+  2.将完整方案经过我的审核批准后才能进行具体设计，将解决方案呈现出来并统一存档在D:\砺安题库\砺安题库\docs\plans文件夹（这个路径需要大家复制自己保存的文件夹的路径中的\plans即可）
+  3.涉及具体代码编写时请在编写的前一步多角度的思考为什么这样编写代码？这样编写代码有什么好处？这样写代码会不会存在安全问题？这样编写代码能不能为后期的运维提供便利？怎样编写代码才能将系统的未来运维管理等更加便捷？将代码编写在此文件中是否正确是否能保证修改后前端能显示出修改效果？修改的代码所处的文件是否正确，能否达到提示词所预期的效果？后端字段是否完善？后端路由是否注册和调用和接口是否完整？前端显示是否能达到预期效果？vtj版本是否一致？
+  4.严格遵照VTJ中设计器--D:\砺安题库\砺安题库\vtj-mcp-server（这个路径需要大家复制自己保存的文件夹的路径中的\vtj-mcp-server即可）
+  5.每次执行命令时请严格遵循该工作流D:\砺安题库\砺安题库\.opencode\skills\li-an-workflow\SKILL.md（同4和1）
+
+## 4.用户账号和手机端、平板端的登录查看
+- 1.学生账号：202516001；test123456
+- 2.教师账号：ycc5678；ycc5678
+- 3.管理员账号：cbrycc；cbrycc
+
+**手机端登录**（平板端同理）
+在cmd终端中输入“ipconfig”，查看“无线局域网适配器 WLAN的IPv4地址”，输入到手机浏览器中再加上“:9527”，比如我的是（10.213.3.206:9527）【英文冒号】
