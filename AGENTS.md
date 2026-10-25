@@ -91,7 +91,7 @@
 | 前端设备复用 | `/tablet/` 21 条路由中部分直接复用 `@/views/mobile_*.vue`，经 `meta.platform` 区分，**不新建重复组件** |
 | 后端 | **单一 FastAPI 单体**，38 处 `include_router`，37 个 `api/v1` 模块，**343 个端点** |
 | 数据库 | **SQLite**（WAL，292 MB），**不是 PostgreSQL**；`DB_TYPE` 已预留 `mysql+pymysql` 出口 |
-| ORM | `backend/app/models/models.py` **1689 行 / 72 个模型**（P3B 已拆出 `models/` 目录，勿再按「单文件 1668 行」描述） |
+| ORM | `backend/app/models/models.py` **1969 行（含 280 空行；非空 1689）/ 72 个模型**（P3B 已拆出 `models/` 目录，勿再按「单文件 1668 行」描述） |
 | 健康检查 | `/health`（`main.py:633`）与 `lifespan` **已存在**，勿重复实现 |
 | 门禁 | **9 层**脚本（L0 / L1-G / L1 / L1-H / L2 / L3 / L4 / L5 / L6），由 `backend/scripts/gates/gate_all.py` 编排；`--quick` 只跑 L0/L1-G/L1/L1-H |
 
