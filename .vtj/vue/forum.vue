@@ -1545,6 +1545,13 @@
     justify-content: center;
     z-index: 2000;
   }
+  /* 用户信息卡片必须盖在帖子详情之上：两者默认同为 z-index 2000，
+     由 DOM 顺序决定，用户卡片节点在详情之前，会被详情压住 */
+  @supports selector(:has(*)) {
+    .modal-overlay:has(.profile-card) {
+      z-index: 2100;
+    }
+  }
   .modal-card {
     background: #ffffff;
     border-radius: 16px;
@@ -1579,6 +1586,9 @@
     min-height: 120px;
   }
   .upload-area {
+    /* 与新 FileUploader 重复，且 accept 只含 doc/docx/pdf/xls/xlsx(不含 png)，
+       容易让用户以为不能传图片；隐藏后历史附件回显不受影响 */
+    display: none;
     margin-bottom: 14px;
   }
   .upload-btn {
@@ -1972,7 +1982,14 @@
     margin-top: 16px;
     padding-top: 12px;
     border-top: 1px solid #f0f2f5;
-    position: relative;
+    /* 吸底：详情弹窗(.post-detail-card)是滚动容器，输入区常驻可视底部，
+       否则上传/表情/发送位于内容末尾(2100px+)，用户看不到 */
+    position: sticky;
+    bottom: 0;
+    background: #ffffff;
+    z-index: 5;
+    padding-bottom: 4px;
+    box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.05);
   }
   .comment-toolbar {
     display: flex;
