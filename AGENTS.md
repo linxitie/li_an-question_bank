@@ -93,7 +93,7 @@
 | 数据库 | **SQLite**（WAL，292 MB），**不是 PostgreSQL**；`DB_TYPE` 已预留 `mysql+pymysql` 出口 |
 | ORM | `models.py` 单文件 **1668 行 / 71 个模型**（P3B 阶段拆分） |
 | 健康检查 | `/health`（`main.py:633`）与 `lifespan` **已存在**，勿重复实现 |
-| 门禁 | 8 个脚本，由 `backend/scripts/gate_all.py` 编排（L0 / L1-G / L1 / L1-H / L2 / L3 / L4 / L5） |
+| 门禁 | **9 层**脚本（L0 / L1-G / L1 / L1-H / L2 / L3 / L4 / L5 / L6），由 `backend/scripts/gates/gate_all.py` 编排；`--quick` 只跑 L0/L1-G/L1/L1-H |
 
 **重要**：旧方案文档 `学生端容器化模块化设计方案_v1.md` 的 9 条主张中 **8 条与系统实际不符**（容器数、数据库类型、拆分必要性、badge 服务、健康检查等）。**以 v2.0 为准，勿以 v1 为据。**
 
@@ -143,5 +143,32 @@
 
 阶段：`P0 测试修复+凭据` → `P1 容器化` → `P2 core 抽离` → `P3A 前端分层` → `P3B 十域搬迁` → `P4 契约改造` → `P5 事件总线` → `P6 目录清理`
 
+> 实测（2026-10-25）：当前检出分支为 `feat/fix-bug`，与上文分支名不一致。
+> **P3B 是否完成以提交记录为准，不得只凭分支名判断**。
+
 ⚠️ 用户后续的**教师端题目导入改造**与**三端「导入—展示—通信」数据一致性**工作，
 必须在 **P3B 完成后再启动**，否则会与目录搬迁改动同一批文件，冲突不可控。
+
+---
+
+## 7. dsh（DeepSeek Harness）接入现状
+
+本仓库同时被 OpenCode / Claude Code / dsh 使用。dsh 侧配置在一次会话中已实测生效，
+改动前请先确认下列位置，避免重复搭建或误删：
+
+| 项 | 位置 | 说明 |
+|---|---|---|
+| 项目技能根 | `.dsh/skills` → `.opencode/skills`（Windows 目录联接 / junction） | dsh 按 `project-dsh` 根（rank 100）扫描；项目自有 20 个技能（`li-an-workflow`、`vtj-frontend`、`plan-first-workflow`、`completion-verifier`、`scope-guard`、`token-optimization` 等）**正文仍只存放在 `.opencode/skills`**，该目录已在 `.gitignore` 中 |
+| 联接的 Git 处理 | `.gitignore` 中 `.dsh/skills` | 若不加，git 会穿过 junction 把 20 个技能重复登记为未跟踪文件（实测 21 条） |
+| MCP 桥接 | `~/.dsh/profiles/desktop/cordis.patch.yml` 的 `mcp-vtj` 行 | `@deepseek-ai/dsh-mcp-client` + `vtj-mcp-server`，工具名 `mcp__vtj__*`（19 个） |
+| 门禁编码 | `backend/scripts/gates/gate_all.py` | 子进程强制 `PYTHONIOENCODING=utf-8`；否则 Windows GBK 控制台下子脚本打印 `✅/ℹ` 会抛 `UnicodeEncodeError`，被误判为 FAIL |
+
+**注意**：MCP 行是**宿主级**配置，`cwd` 固定指向本仓库。在 dsh 里打开其它工作区时
+vtj 工具仍会读写本仓库，不需要时把该行 `disabled` 改为 `true` 后重启 dsh。
+
+重建技能联接（换机 / 误删后）：
+
+```powershell
+New-Item -ItemType Directory -Force .dsh | Out-Null
+New-Item -ItemType Junction -Path .dsh\skills -Target (Resolve-Path .opencode\skills)
+```

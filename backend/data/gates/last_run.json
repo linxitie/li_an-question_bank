@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-17 20:45:08",
+  "timestamp": "2026-10-25 09:56:20",
   "results": [
     {
       "layer": "L0",
@@ -9,17 +9,17 @@
     {
       "layer": "L1-G",
       "status": "PASS",
-      "elapsed_s": 0.1
+      "elapsed_s": 0.2
     },
     {
       "layer": "L3",
       "status": "PASS",
-      "elapsed_s": 8.3
+      "elapsed_s": 16.4
     },
     {
       "layer": "L1",
       "status": "PASS",
-      "elapsed_s": 3.3
+      "elapsed_s": 4.4
     },
     {
       "layer": "L1-H",
@@ -29,17 +29,22 @@
     {
       "layer": "L2",
       "status": "FAIL",
-      "elapsed_s": 11.6
+      "elapsed_s": 16.7
     },
     {
       "layer": "L4",
       "status": "PASS",
-      "elapsed_s": 3.0
+      "elapsed_s": 2.9
     },
     {
       "layer": "L5",
       "status": "PASS",
-      "elapsed_s": 0.0
+      "elapsed_s": 0.1
+    },
+    {
+      "layer": "L6",
+      "status": "PASS",
+      "elapsed_s": 0.1
     }
   ]
 }

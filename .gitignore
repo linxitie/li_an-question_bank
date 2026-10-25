@@ -95,8 +95,17 @@ backend/app/static/questions/
 *.db-shm
 *.db.backup
 
+# 根目录环境变量文件（含 DeepSeek 等凭据，禁止入库）
+.env
+
 # 运行时/会话元数据与嵌套技能仓库（不纳入版本控制）
 .omo/run-continuation/
 .claude/资源优化skills
 backend/backend_pid.txt
 backend/_badge_write_test.txt
+
+# dsh（DeepSeek Harness）项目级技能根：.dsh/skills 是指向 .opencode/skills 的
+# 目录联接（Windows junction），仅为让 dsh 按 project-dsh 根发现项目技能。
+# 真实技能正文仍在 .opencode/skills（已忽略）；若不忽略本路径，git 会穿过联接
+# 把 20 个技能重复登记为未跟踪文件。
+.dsh/skills
