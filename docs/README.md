@@ -23,9 +23,13 @@
 | `plans/学生端模块化_P3手工验收核对表_v1.md` | v1 | 📋 待用户执行 | P3-01~07 真机手工验收执行清单：17 域逐项勾选 + 事件观测记录位 + 三设备一致性/WS 兜底演练步骤 + 缺陷记录区 |
 | `plans/三端数据流一致性修复方案_v1.md` | v1 | 🚧 执行中（P0 ✅；P1-1 ✅；P1-2~P1-9 待执行） | 6 项三端数据流一致性问题的根因+修复方案：统一可见性/计数口径、主观题渲染、考点 canonical 展示、材料归属与教师编辑、存量修复与验收；P0-P4 分阶段，含 7 个待拍板决策 |
 | `plans/论坛三端架构与评论头像修复及AI工具链集成_v0.1.md` | v0.1 | 待审批（2026-10-22） | 论坛三端/三角色现状与目标差距；PC 评论头像根因与修复；vtj/Playwright/superpowers 接入；分支隔离与验证方案 |
+| `superpowers/specs/平板论坛帖子详情页_v1.md` | v1 | ✅ 已批准（2026-10-25，卡片 920px） | 平板 `/tablet/forum/:id` 改为独立整页详情（对齐 PC 详情卡）：新增 `src/views/student/tablet/tablet_forum_detail.vue`，逻辑复用 store 与 `src/components/forum/*`，手机端与 VTJ 页面不动；含 R12 取舍留痕 |
+| `superpowers/plans/平板论坛帖子详情页_v1_实施计划.md` | v1 | 📋 待执行（2026-10-25） | 5 个任务 + 逐任务 vitest 断言 + Playwright 平板验收；先骨架与路由，再帖子区、评论区、输入栏，最后回归 |
 
 ## 变更记录
 
+- 2026-10-25：新增 `superpowers/plans/平板论坛帖子详情页_v1_实施计划.md`（5 个任务，含测试断言与验收命令；待执行）。归档副本 `solve_problems_files/平板论坛帖子详情页_v1_实施计划.md`。
+- 2026-10-25：新增 `superpowers/specs/平板论坛帖子详情页_v1.md`（平板论坛详情页方案；用户已批准，卡片宽度 920px）。归档副本 `solve_problems_files/平板论坛帖子详情页_v1.md`。
 - 2026-10-22：新增 `plans/论坛三端架构与评论头像修复及AI工具链集成_v0.1.md`（论坛三端架构、评论头像修复与 AI 工具链集成方案；待用户审批，未执行）。
 
 - 2026-10-20：三端修复 P0 全部完成：P0-3 解析门禁基线（公专 L1 PASS；行测 L1 既有 FAIL，材料指纹 364/1.0 与基线一致）；5 个真实案例入库（commit `a634820`），第 3 类“材料在答案解析之后”标 `not_found`，未使用合成案例；P0-4 golden corpus（commit `4f291ed`）；P0-5 `MATERIAL_OWNERSHIP_V2=False` 灰度开关（commit `54de949`）。
