@@ -184,6 +184,7 @@ New-Item -ItemType Junction -Path .dsh\skills -Target (Resolve-Path .opencode\sk
 | 全文（权威） | `docs/superpowers/specs/题库设计模式_v1.md` | 九角色、Q0–Q6、五零指标、分支细则、门禁矩阵、13 条反模式 |
 | 角色卡（热加载） | `docs/superpowers/specs/题库设计模式_角色卡_v1.md` | **每任务只读这个**（3.8KB）即可完成角色切换 |
 | 技能（自动触发） | `qbdm-role-switch`（`.opencode/skills/qbdm-role-switch/SKILL.md`） | 已实测被 dsh 即时发现；因 `.opencode/` 在 `.gitignore` 中，**技能正文不纳入 Git**，缺失去从角色卡文档重建 |
+| 模式入口 CLI | `python scripts/qbdm/qbdm.py role <CODE> / gate --role <CODE> [--run] / status` | 把九角色与门禁矩阵变成可执行清单；`status` 自检模式资产是否齐全 |
 | 装载预算闸 | `scripts/qbdm/ctx_budget.py` | 装载前估算 token 并对照 T0–T3 预算（Z4 可测） |
 
 **最少记住 4 条**：
