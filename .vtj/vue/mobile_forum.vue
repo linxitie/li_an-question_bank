@@ -39,16 +39,13 @@
           <!-- 帖子头部 -->
           <div class="post-header">
             <div class="author-info">
-              <div class="author-avatar" :style="{ background: post.avatarBg }">
-                <img
-                  v-if="post.avatar && !post.avatarFailed"
-                  :src="post.avatar"
-                  class="avatar-img"
-                  alt="头像"
-                  @error="onAvatarError(post)"
-                />
-                <span v-else class="avatar-text">{{ avatarInitial(post.author) }}</span>
-              </div>
+              <UserBadge
+                class="author-avatar"
+                avatar-only
+                size="sm"
+                :src="post.avatar"
+                :name="post.author"
+                :user-id="post.id" />
               <div class="author-detail">
                 <span class="author-name">{{ post.author }}</span>
                 <span class="post-time">{{ post.time }}</span>
@@ -138,13 +135,15 @@ import {
 import { useProvider } from '@vtj/renderer';
 import { avatarInitial } from '@/modules/community/avatar';
 import ForumContent from '@/components/forum/ForumContent.vue';
+import UserBadge from '@/components/forum/UserBadge.vue';
 
 export default defineComponent({
   name: 'MobileForum',
     components: {
       XIcon,
       MobileTabBar,
-      ForumContent
+      ForumContent,
+      UserBadge
     },
   setup() {
     const router = useRouter();

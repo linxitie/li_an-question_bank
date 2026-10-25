@@ -29,15 +29,15 @@
               v-for="(post, index) in filteredPosts"
               :key="post.id"
               class="post-item">
-              <div class="post-avatar" @click.stop="viewUser(post.userId)">
-                <img
-                  v-if="post.avatar"
-                  :src="post.avatar"
-                  class="avatar-img"
-                  alt="头像"
-                  @error="onAvatarError"/>
-                <span v-else class="avatar-text">{{ avatarInitial(post.author) }}</span>
-              </div>
+              <UserBadge
+                class="post-avatar"
+                avatar-only
+                clickable
+                size="md"
+                :src="post.avatar"
+                :name="post.author"
+                :user-id="post.userId"
+                @click="viewUser(post.userId)" />
               <div class="post-content" @click="viewPost(post)">
                 <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
                 <p class="post-excerpt"><ForumContent :content="post.content" /></p>
@@ -258,15 +258,15 @@
             </div>
             <!-- 作者信息 -->
             <div class="detail-author">
-              <div class="post-avatar" @click.stop="viewUser(state.currentPost.userId)">
-                <img
-                  v-if="state.currentPost.avatar"
-                  :src="state.currentPost.avatar"
-                  class="avatar-img"
-                  alt="头像"
-                  @error="onAvatarError"/>
-                <span v-else class="avatar-text">{{ (state.currentPost.author || '匿').charAt(0) }}</span>
-              </div>
+              <UserBadge
+                class="post-avatar"
+                avatar-only
+                clickable
+                size="md"
+                :src="state.currentPost.avatar"
+                :name="state.currentPost.author"
+                :user-id="state.currentPost.userId"
+                @click="viewUser(state.currentPost.userId)" />
               <div class="author-info">
                 <span class="author-name" @click.stop="viewUser(state.currentPost.userId)">{{ state.currentPost.author }}</span>
                 <span class="author-time">{{ state.currentPost.date }}</span>
@@ -319,16 +319,16 @@
               <div v-else class="comment-list">
                 <div v-for="comment in state.comments" :key="comment.id" class="comment-item">
                   <div class="comment-main">
-                    <div class="comment-avatar" @click.stop="viewUser(comment.user?.id)">
-                      <img
-                        v-if="comment.user?.avatar && !avatarFailed['comment-' + comment.id]"
-                        :src="comment.user.avatar"
-                        class="avatar-img-sm"
-                        alt=""
-                        @error="markAvatarFailed('comment-' + comment.id)"
-                      />
-                      <span v-else class="avatar-text-sm">{{ avatarInitial(comment.user?.nickname) }}</span>
-                    </div>
+                    <UserBadge
+                      class="comment-avatar"
+                      avatar-only
+                      clickable
+                      size="sm"
+                      :src="comment.user?.avatar"
+                      :name="comment.user?.nickname"
+                      :user-id="comment.user?.id"
+                      :user-type="comment.user?.userType"
+                      @click="viewUser(comment.user?.id)" />
                     <div class="comment-body">
                       <div class="comment-meta">
                         <span class="comment-author" @click.stop="viewUser(comment.user?.id)">{{ comment.user?.nickname }}</span>
@@ -351,6 +351,18 @@
                           <XIcon :icon="ChatLineRound" :size="12" color="#8a8faa"></XIcon>
                           <span> 回复</span>
                         </span>
+                        <span
+                          v-if="canPinComment(comment)"
+                          class="comment-action"
+                          @click="togglePinComment(comment)">
+                          {{ comment.isPinned ? '取消置顶' : '置顶' }}
+                        </span>
+                        <span
+                          v-if="canReportComment(comment)"
+                          class="comment-action"
+                          @click="reportComment(comment)">
+                          举报
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -358,16 +370,16 @@
                   <div v-if="comment.children && comment.children.length" class="comment-children">
                     <div v-for="child in comment.children" :key="child.id" class="comment-item child">
                       <div class="comment-main">
-                        <div class="comment-avatar" @click.stop="viewUser(child.user?.id)">
-                          <img
-                            v-if="child.user?.avatar && !avatarFailed['reply-' + child.id]"
-                            :src="child.user.avatar"
-                            class="avatar-img-sm"
-                            alt=""
-                            @error="markAvatarFailed('reply-' + child.id)"
-                          />
-                          <span v-else class="avatar-text-sm">{{ avatarInitial(child.user?.nickname) }}</span>
-                        </div>
+                        <UserBadge
+                          class="comment-avatar"
+                          avatar-only
+                          clickable
+                          size="sm"
+                          :src="child.user?.avatar"
+                          :name="child.user?.nickname"
+                          :user-id="child.user?.id"
+                          :user-type="child.user?.userType"
+                          @click="viewUser(child.user?.id)" />
                         <div class="comment-body">
                           <div class="comment-meta">
                             <span class="comment-author" @click.stop="viewUser(child.user?.id)">{{ child.user?.nickname }}</span>
@@ -385,6 +397,12 @@
                                 :size="12"
                                 :color="child.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
                               <span> {{ child.likeCount }}</span>
+                            </span>
+                            <span
+                              v-if="canReportComment(child)"
+                              class="comment-action"
+                              @click="reportComment(child)">
+                              举报
                             </span>
                           </div>
                         </div>
@@ -507,6 +525,8 @@
   import ImageGrid from '@/components/forum/ImageGrid.vue';
   import ImageUploader from '@/components/forum/ImageUploader.vue';
   import TitleColorPicker from '@/components/forum/TitleColorPicker.vue';
+  import UserBadge from '@/components/forum/UserBadge.vue';
+  import { pinForumComment, reportForumTarget } from '@/modules/community/api';
   import { titleColorValue } from '@/components/forum/titleColors';
   import { isImageUrl } from '@/components/forum/imageUtils';
   import type { ForumImageAttachment } from '@/components/forum/imageUtils';
@@ -519,7 +539,8 @@
       ForumContent,
       ImageGrid,
       ImageUploader,
-      TitleColorPicker
+      TitleColorPicker,
+      UserBadge
     },
     setup(props) {
       const provider = useProvider({ id: 'forum', version: '1785094400000' });
@@ -935,6 +956,50 @@
           this._safeMsg('error', this.community.error || '评论失败');
         } finally {
           this.state.commentSubmitting = false;
+        }
+      },
+      _currentUserId() {
+        const auth = (window as any).__VTJ_AUTH__;
+        const info = auth && auth.parseUserInfo ? auth.parseUserInfo() : null;
+        return info && info.userId ? info.userId : null;
+      },
+      canPinComment(comment: any) {
+        const uid = this._currentUserId();
+        if (!uid) return false;
+        const roleLevel =
+          ((window as any).__VTJ_AUTH__?.parseUserInfo?.() || {}).roleLevel || 0;
+        return uid === this.state.currentPost?.userId || roleLevel >= 2;
+      },
+      canReportComment(comment: any) {
+        return comment.user?.id !== this._currentUserId();
+      },
+      async togglePinComment(comment: any) {
+        try {
+          await pinForumComment(comment.id, !comment.isPinned);
+          if (this.state.currentPost) {
+            await this.loadComments(this.state.currentPost.id);
+          }
+          this._safeMsg('success', comment.isPinned ? '已取消置顶' : '已置顶');
+        } catch (e) {
+          this._safeMsg('error', '操作失败');
+        }
+      },
+      async reportComment(comment: any) {
+        const reason = window.prompt(
+          '举报原因：spam（广告）/ abuse（辱骂）/ illegal（违法）/ other（其他）',
+          'abuse'
+        );
+        if (!reason) return;
+        const allowed = ['spam', 'abuse', 'illegal', 'other'];
+        try {
+          await reportForumTarget({
+            targetType: 'COMMENT',
+            targetId: comment.id,
+            reasonCode: (allowed.includes(reason) ? reason : 'other') as any
+          });
+          this._safeMsg('success', '举报已提交');
+        } catch (e) {
+          this._safeMsg('error', '举报失败');
         }
       },
       async toggleCommentLike(comment: any) {

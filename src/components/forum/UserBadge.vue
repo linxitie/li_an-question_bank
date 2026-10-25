@@ -10,7 +10,7 @@
       <img v-if="src && !failed" :src="src" :alt="name || '头像'" @error="failed = true" />
       <span v-else class="ub-initial">{{ initial }}</span>
     </span>
-    <span class="ub-main">
+    <span v-if="!avatarOnly" class="ub-main">
       <span class="ub-name">{{ name || '匿名' }}</span>
       <span v-if="badges.length || level" class="ub-meta">
         <span v-for="badge in shownBadges" :key="badge" class="ub-chip">{{ badge }}</span>
@@ -36,8 +36,9 @@ const props = withDefaults(
     badges?: string[];
     size?: 'sm' | 'md' | 'lg';
     clickable?: boolean;
+    avatarOnly?: boolean;
   }>(),
-  { size: 'md', clickable: false, badges: () => [] }
+  { size: 'md', clickable: false, avatarOnly: false, badges: () => [] }
 );
 
 const emit = defineEmits<{ (event: 'click'): void }>();

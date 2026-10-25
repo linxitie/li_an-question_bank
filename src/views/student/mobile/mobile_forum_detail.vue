@@ -71,15 +71,14 @@
         </div>
         <div v-for="c in rootComments" :key="c.id" class="comment-item">
           <div class="comment-row">
-            <div class="avatar small">
-              <img
-                v-if="c.user && c.user.avatar && !avatarFailed['comment-' + c.id]"
-                :src="c.user.avatar"
-                alt=""
-                @error="markAvatarFailed('comment-' + c.id)"
-              />
-              <span v-else>{{ avatarInitial(c.user && c.user.nickname) }}</span>
-            </div>
+            <UserBadge
+              class="avatar small"
+              avatar-only
+              size="sm"
+              :src="c.user && c.user.avatar"
+              :name="c.user && c.user.nickname"
+              :user-id="c.user && c.user.id"
+              :user-type="c.user && c.user.userType" />
             <div class="comment-main">
               <div class="comment-user">
                 {{ c.user && c.user.nickname }}
@@ -119,15 +118,14 @@
 
           <div v-if="repliesOf(c.id).length" class="replies">
             <div v-for="r in repliesOf(c.id)" :key="r.id" class="reply-item">
-              <div class="avatar tiny">
-                <img
-                  v-if="r.user && r.user.avatar && !avatarFailed['reply-' + r.id]"
-                  :src="r.user.avatar"
-                  alt=""
-                  @error="markAvatarFailed('reply-' + r.id)"
-                />
-                <span v-else>{{ avatarInitial(r.user && r.user.nickname) }}</span>
-              </div>
+              <UserBadge
+                class="avatar tiny"
+                avatar-only
+                size="sm"
+                :src="r.user && r.user.avatar"
+                :name="r.user && r.user.nickname"
+                :user-id="r.user && r.user.id"
+                :user-type="r.user && r.user.userType" />
               <div class="comment-main">
                 <div class="comment-user">{{ r.user && r.user.nickname }}</div>
                 <div class="comment-content"><ForumContent :content="r.content" /></div>
@@ -194,6 +192,7 @@ import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import ImageGrid from '@/components/forum/ImageGrid.vue';
 import ImageUploader from '@/components/forum/ImageUploader.vue';
+import UserBadge from '@/components/forum/UserBadge.vue';
 import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 import { avatarInitial } from '@/modules/community/avatar';
 import {

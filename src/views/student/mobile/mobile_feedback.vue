@@ -46,6 +46,7 @@
         <div v-for="f in list" :key="f.feedback_id" class="fb-item">
           <div class="fb-head">
             <span class="fb-cat">{{ f.category }}</span>
+            <span v-if="f.ticket_no" class="fb-ticket">{{ f.ticket_no }}</span>
             <span :class="['fb-status', 'st-' + f.status]">{{ statusLabel(f.status) }}</span>
           </div>
           <div class="fb-content">{{ f.content }}</div>
@@ -54,9 +55,28 @@
             <span class="fb-time">{{ (f.replied_at || '').slice(0, 10) }}</span>
           </div>
           <div class="fb-time">{{ (f.created_at || '').slice(0, 10) }}</div>
+          <button class="fb-detail-btn" @click="openDetail(f.feedback_id)">查看详情</button>
         </div>
       </section>
     </main>
+
+    <div v-if="showDetail" class="fb-modal" @click.self="showDetail = false">
+      <div class="fb-modal-card">
+        <button class="fb-modal-close" @click="showDetail = false">×</button>
+        <h3>工单详情</h3>
+        <p class="fb-ticket-line" v-if="detail?.ticket_no">工单号：{{ detail.ticket_no }}</p>
+        <p class="fb-detail-content">{{ detail?.content }}</p>
+        <div class="fb-timeline">
+          <div v-for="r in detail?.replies || []" :key="r.reply_id" class="fb-reply-row">
+            <span class="fb-reply-role">{{ r.role }}</span>
+            <span>{{ r.content }}</span>
+          </div>
+          <p v-if="!(detail?.replies || []).length" class="empty">暂无回复</p>
+        </div>
+        <textarea v-model="replyText" rows="3" class="field-input" placeholder="追加说明…"></textarea>
+        <button class="btn-submit" :disabled="!replyText.trim()" @click="submitReply">追加回复</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -71,6 +91,35 @@ const form = reactive<any>({ category: '功能异常', content: '', contact: '' 
 const list = ref<any[]>([]);
 const loading = ref(false);
 const submitting = ref(false);
+const showDetail = ref(false);
+const detail = ref<any>(null);
+const replyText = ref('');
+
+const openDetail = async (feedbackId: number) => {
+  try {
+    const res = await auth.apiFetch(`/api/feedback/${feedbackId}`);
+    detail.value = await res.json();
+    showDetail.value = true;
+  } catch (e) {
+    ElMessage.error('加载工单详情失败');
+  }
+};
+
+const submitReply = async () => {
+  if (!detail.value || !replyText.value.trim()) return;
+  try {
+    await auth.apiFetch(`/api/feedback/${detail.value.feedback_id}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: replyText.value.trim() })
+    });
+    replyText.value = '';
+    await openDetail(detail.value.feedback_id);
+    ElMessage.success('已追加');
+  } catch (e) {
+    ElMessage.error('追加失败');
+  }
+};
 
 const statusLabel = (s: string) =>
   ({ pending: '待处理', processing: '处理中', replied: '已回复', closed: '已关闭' } as any)[s] || s;
@@ -218,4 +267,14 @@ textarea.field-input { min-height: 96px; resize: vertical; }
   margin: 8px 0;
 }
 .fb-time { font-size: 11px; color: #8899aa; }
+.fb-ticket { font-size: 10px; color: #6b7896; margin-left: 6px; }
+.fb-detail-btn { margin-top: 6px; border: none; background: none; color: #1a2b5f; font-size: 12px; padding: 0; }
+.fb-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(8,12,24,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.fb-modal-card { position: relative; width: 100%; max-height: 86vh; overflow-y: auto; background: #fff; border-radius: 14px; padding: 18px; }
+.fb-modal-close { position: absolute; top: 6px; right: 10px; border: none; background: none; font-size: 20px; color: #8899aa; }
+.fb-ticket-line { font-size: 12px; color: #6b7896; margin: 4px 0 10px; }
+.fb-detail-content { font-size: 14px; color: #1a2b5f; line-height: 1.6; }
+.fb-timeline { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.fb-reply-row { display: flex; gap: 6px; font-size: 13px; color: #333; }
+.fb-reply-role { flex-shrink: 0; font-size: 11px; color: #6b7896; }
 </style>
