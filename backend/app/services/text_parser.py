@@ -5048,3 +5048,107 @@ def _strip_answer_header(region: str, number: int) -> str:
     while lines and (not lines[0].strip() or header.match(lines[0])):
         lines.pop(0)
     return '\n'.join(lines).strip()
+
+
+# ======================================================================
+# 行测资料分析「材料–小题」绑定（2026-10-25）
+#
+# 实测：解析器只在每组材料的第一题挂 material_text，235 道入库行测题
+# 因此全部 group_id=0 —— 前端每题单看，材料与小题断裂。
+#
+# 组边界在原文里是稳定的：`（一）（二）（三）…` 独占一行
+# （22/22 套 2024 真题命中，每组 1~6 个标记，资料分析每组 5 题）。
+# 按标记切段 → 段内重新切题 → 把段首材料挂到该段全部小题。
+# 申论走自己的文档级材料链路，这里直接跳过，避免双重挂载。
+# ======================================================================
+
+_XINGCE_SET_MARKER = re.compile(r'(?m)^[ \t]*（[一二三四五六七八九十]{1,3}）[ \t]*$')
+# 题号行必须排除「小数+单位」：`40.2%。` 会被朴素正则认成第 40 题（实测甘肃教材）。
+_QNUM_LINE_START = re.compile(r'(?m)^[ \t]*(\d{1,3})[ \t]*[.．、](?!\d)')
+_SECTION_HEAD_LINE = re.compile(r'^[ \t]*第[一二三四五六七八九十]+部分.*$')
+_MIN_MATERIAL_CHARS = 30
+
+
+def _clean_material_header(header: str) -> str:
+    """去掉材料头里的分段标题与材料序号行，保证同组各题指纹一致。
+
+    实测：组内第一题的材料头会带上「第五部分 资料分析」「（一）」，
+    而后续题不带 → 按内容哈希分组时会被拆成多组，材料又变成只见一题。
+    """
+    lines = []
+    for ln in str(header or '').split('\n'):
+        if _XINGCE_SET_MARKER.match(ln) or _SECTION_HEAD_LINE.match(ln):
+            continue
+        lines.append(ln)
+    return '\n'.join(lines).strip()
+
+
+def extract_question_blocks_with_material_sets(text: str) -> list:
+    """行测：按 `（一）（二）…` 材料标记切段，把材料绑定到段内所有小题。
+
+    实现要点：**不重新切题**（重切会多出 2~3 个幻影题块），而是在
+    原题块基础上按题号区间回填 material_text，题块数量与题号完全不变。
+
+    - 无标记 / 申论文档 → 原样返回（零回归）
+    - 段区间 = [段内首个题号, 下一段首个题号 - 1]，最后一段到最后
+    """
+    blocks = extract_question_blocks(text)
+    if not blocks:
+        return blocks
+    if any((b.get('format') == 'essay') for b in blocks):
+        return blocks
+
+    marks = list(_XINGCE_SET_MARKER.finditer(text))
+    if not marks:
+        return blocks
+
+    # 只在「资料分析」分段内绑定材料：`（一）（二）` 在言语/判断等分段里
+    # 也会出现（实测国考 4 个标记里只有资料分析内的属于材料组），
+    # 不加分段约束会把 68 道无关题挂到同一份材料上。
+    sec_start, sec_end = 0, len(text)
+    try:
+        routing = route_xingce_sections(text) or {}
+        for sec in routing.get('sections') or []:
+            if '资料分析' in str(sec.get('name') or ''):
+                sec_start, sec_end = int(sec['start']), int(sec['end'])
+                break
+    except Exception:  # noqa: BLE001 — 分段失败就退回全文，不阻断导入
+        pass
+
+    marks = [m for m in marks if sec_start <= m.start() < sec_end]
+    if not marks:
+        return blocks
+
+    # 每段：标记位置 → (段首材料, 该段首个题号)
+    segments = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else sec_end
+        chunk = text[m.end():end]
+        qm = _QNUM_LINE_START.search(chunk)
+        if not qm:
+            continue
+        first_num = int(qm.group(1))
+        header = _XINGCE_SET_MARKER.sub('', chunk[:qm.start()], count=1)
+        header = _clean_material_header(header)
+        segments.append((first_num, header))
+
+    if not segments:
+        return blocks
+
+    for idx, (first_num, header) in enumerate(segments):
+        last_num = segments[idx + 1][0] - 1 if idx + 1 < len(segments) else 10 ** 6
+        if len(header) < _MIN_MATERIAL_CHARS:
+            continue
+        # 资料分析每组 4~5 题（实测 22 套）。若区间内题数超出 [2,6]，说明
+        # 漏检了组边界（如江苏/辽宁），此时**宁可不挂**也不把 10~19 道题
+        # 挂到同一份材料上 —— 错挂比缺材料更难被教师发现。
+        in_range = [b for b in blocks
+                    if b.get('question_number') is not None
+                    and first_num <= int(b['question_number']) <= last_num]
+        if not (2 <= len(in_range) <= 6):
+            continue
+        for block in in_range:
+            # 覆盖题块自带的 material_text：它常带「第五部分/（一）」前缀，
+            # 与同组后续题不一致，会导致按内容哈希分组时被拆成多组。
+            block['material_text'] = header
+    return blocks

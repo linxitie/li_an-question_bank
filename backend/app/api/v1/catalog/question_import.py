@@ -1675,6 +1675,7 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
         else:
             from ....services.text_parser import (
                 extract_question_blocks,
+                extract_question_blocks_with_material_sets,
                 looks_like_answer_document,
                 extract_answer_entries,
             )
@@ -1683,7 +1684,10 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             #   实测「题本 125 块 / 答案解析 95 块」，前端据此显示"答案对不上"；
             #   按题号锚点解析答案卷恰好 125 条，与题本同口径。
             is_answer_doc = looks_like_answer_document(text, filename)
-            parsed_blocks = [] if is_answer_doc else extract_question_blocks(text)
+            # ★ 行测资料分析：按（一）（二）材料标记把材料绑定到段内 4~5 道小题，
+            #   否则只有每组第一题带材料，前端必然"材料与小题断裂"。
+            parsed_blocks = ([] if is_answer_doc
+                             else extract_question_blocks_with_material_sets(text))
             _set_progress(75, 'MATCHING')
             auto_tags = _auto_detect_tags(filename, text)
             detected_subject = auto_tags.get('subject_category', '行测')
