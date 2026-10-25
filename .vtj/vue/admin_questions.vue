@@ -212,8 +212,7 @@
             题组材料
             <span class="material-group-hint" v-if="editForm.group_id > 0">（当前题组 #{{ editForm.group_id }}）</span>
           </label>
-          <textarea class="fi textarea material-textarea" v-model="editForm.shared_content" rows="6"
-                    placeholder="粘贴/编辑题组共享材料（纯文本或 HTML）"></textarea>
+          <RichTextEditor v-model="editForm.shared_content" :group-id="editForm.group_id" placeholder="题组材料：支持加粗/链接/图片/表格" />
           <div class="material-preview" v-if="editForm.shared_content">{{ editForm.shared_content }}</div>
           <div class="material-actions">
             <button type="button" class="btn-secondary" @click="clearMaterial">清除材料</button>
@@ -290,10 +289,12 @@
 // @ts-nocheck
 import { defineComponent, ref, onMounted } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'AdminQuestions',
+  components: { RichTextEditor },
   setup() {
     const provider = useProvider({ id: 'admin_questions', version: '1' });
     const loading = ref(true);

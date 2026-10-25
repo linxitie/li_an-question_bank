@@ -108,7 +108,7 @@
                   已标记</span
                 >
               </div>
-              <p class="q-stem" v-html="q.stem"></p>
+              <p class="q-stem" v-html="renderQuestionContent(q.stem)"></p>
               <div v-if="q.requirements" class="q-requirements" style="margin:8px 0;padding:8px 12px;background:#f7f8fa;border-radius:6px;color:#666;font-size:14px;line-height:1.7;">
                 <strong style="color:#333;">题目要求：</strong><span v-html="renderQuestionContent(q.requirements)"></span>
               </div>
@@ -135,7 +135,7 @@
                     {{ state.optionLabels[oidx] }}
                     <span v-if="isOptionSelected(q.id, oidx) && (q.type === '多选题' || q.type === '不定项' || q.type === '多选')" class="check-icon">&#10003;</span>
                   </span>
-                  <span class="option-text" v-html="opt"></span>
+                  <span class="option-text" v-html="renderQuestionContent(opt)"></span>
                 </div>
               </div>
               <div v-if="state.showResult" class="q-result">
