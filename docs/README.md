@@ -29,9 +29,11 @@
 | `plans/dsh-optimization-master-plan.md` | v1 | ✅ 已落盘（2026-10-25） | dsh×DeepInfer 联合执行总方案：角色↔subagent 矩阵、Token 节流、R1–R12 与五步法、CTC 十问、阶段阻断；含实测校正与本次落地 |
 | `superpowers/specs/数据库静默回落事故_报告_20261025.md` | v1 | ✅ 已修复（2026-10-25） | `.env` 缺失→默认库指向 `example_db.sqlite`（旧 schema、0 题、4 账号）导致全站 500/登录失败；真库 3357 题完好；新增启动期 db-guard 与 6 项测试 |
 | `superpowers/specs/导入配对与答案卷识别_报告_20261025.md` | v1 | ✅ 已修复（2026-10-25） | 答案卷被按题干切块导致 125 vs 95 计数不一致；新增答案卷识别 + 题号锚点解析（125 条对齐），`/confirm` 增加答案卷闸门；22 套实测 19 套对齐 |
+| `superpowers/specs/OCR链路恢复_报告_20261025.md` | v1 | ✅ 已恢复（2026-10-25） | MinerU 3.4.5 / PaddleOCR 2.7 均可用但被参数拖死：固定 600s 超时 vs 71.2s/页、OCR 仅 8 页、缓存跨引擎污染。改为按页超时、30 页上限、CPU 线程/免方向分类、缓存引擎隔离 |
 
 ## 变更记录
 
+- 2026-10-25：**OCR 链路恢复**：MinerU 超时改按页放大（75s/页、封顶 3600s），Paddle 页数上限 8→30、超时 240→600s，Paddle 按核数开线程并关方向分类；文本缓存键加引擎作用域（MinerU/Paddle 互不污染，2 个长期失败用例清零）。26 passed。
 - 2026-10-25：**行测资料分析材料绑定**：按 `（一）（二）` 材料段把 material_text 回填给段内 4~5 道小题（22 套 blocks 2603 零漂移，76 组/272 题绑定，原仅 64 题）；限「资料分析」分段 + 题数 [2,6] 安全阈值，漏检边界宁可不挂。**前向生效**，存量 235 题仍需重导或回填。
 - 2026-10-25：**导入配对修复**：答案 PDF 不再按题干切块，改为题号锚点解析（安徽 2025 实测 125→125 对齐）；预览新增 `file_role=answer` 与 `ANSWER_ONLY`，`/confirm` 禁止答案卷入库；新增探针 `scripts/probe/probe_import_match_quality.py`（行测 10 套匹配率 100%）。
 - 2026-10-25：**数据库静默回落修复**：`backend/.env` 缺失使 `SQLITE_PATH` 回落 `example_db.sqlite`（旧 schema、0 题），全站 500/登录失败；合入 main 的默认库修复 + 新增 `app/core/db_guard.py` 启动校验（路径/关键列/行数），重启后 `/api/questions/` 200（total=3122）。事故报告已归档。

@@ -38,6 +38,32 @@ _health_cache = {'ts': 0.0, 'data': None}
 _HEALTH_TTL_SECONDS = 600.0
 
 
+def _pdf_page_count(buf: bytes) -> int:
+    """快速页数（失败返回 0，用于按页估算超时，不影响解析）"""
+    try:
+        import io
+        import PyPDF2
+        return len(PyPDF2.PdfReader(io.BytesIO(buf)).pages)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def compute_timeout_seconds(pages: int) -> int:
+    """按页数估算 MinerU 超时预算。
+
+    为什么不能固定 600s（2026-10-25 实测复盘）：
+      MinerU CPU pipeline 实测 **71.2s/页**（部署日志），24 页答案卷需 ~1700s，
+      固定 600s 必然超时 → MinerU 永远被跳过，等于"配了也用不上"。
+    规则：`max(MINERU_TIMEOUT, 120 + 75*页数)`，上限 MINERU_TIMEOUT_MAX。
+    """
+    base = int(_cfg('MINERU_TIMEOUT', 600) or 600)
+    if not pages or pages <= 0:
+        return base
+    per_page = int(_cfg('MINERU_SECONDS_PER_PAGE', 75) or 75)
+    cap = int(_cfg('MINERU_TIMEOUT_MAX', 3600) or 3600)
+    return min(cap, max(base, 120 + per_page * int(pages)))
+
+
 def _cfg(name: str, default=None):
     """读取 MINERU_* 配置。
 
@@ -211,9 +237,10 @@ def extract_text_sync(buf: bytes) -> str | None:
             return content
         logger.info('[mineru] sidecar 未产出内容，改走本地子进程')
 
-    timeout = int(_cfg('MINERU_TIMEOUT', 300) or 300)
+    timeout = compute_timeout_seconds(_pdf_page_count(buf))
     backend = str(_cfg('MINERU_BACKEND', 'pipeline') or 'pipeline')
     py = str(_cfg('MINERU_PYTHON', '') or '')
+    logger.info(f'[mineru] 开始解析 pages={_pdf_page_count(buf)} timeout={timeout}s backend={backend}')
 
     # GPU 串行锁：并发扫描件上传时排队；等待超限直接放弃，避免请求堆积雪崩
     if not _sem.acquire(timeout=_SEM_WAIT_SECONDS):

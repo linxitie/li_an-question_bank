@@ -244,6 +244,17 @@ class TestScannedPdfMineruFallback:
     """
 
     @pytest.fixture(autouse=True)
+    def _disable_text_cache(self, monkeypatch):
+        """关闭提取文本缓存。
+
+        事故：三个用例共用同一份 buf 字节，第一个用例把 MinerU 结果写进 md5 缓存，
+        后两个用例直接命中缓存 → 断言拿到的仍是 MinerU 文本（"回退没生效"）。
+        缓存是纯加速层，测试里关掉才能确定性地验证分支选择。
+        """
+        from app.services import text_cache
+        monkeypatch.setattr(text_cache, 'enabled', lambda: False)
+
+    @pytest.fixture(autouse=True)
     def _stub_parsers(self, monkeypatch):
         # --- pdfplumber 存根: open() 返回无页面上下文 ---
         fake_plumber = types.ModuleType('pdfplumber')

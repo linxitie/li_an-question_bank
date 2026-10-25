@@ -69,7 +69,12 @@ class Settings(BaseSettings):
     # C:\mineru_env（FastText 无法加载非 ANSI 路径）；模型源 MINERU_MODEL_SOURCE=modelscope。
     MINERU_ENABLED: bool = Field(True, env="MINERU_ENABLED")
     MINERU_PYTHON: str = Field(r"C:\mineru_env\Scripts\python.exe", env="MINERU_PYTHON")
+    # 超时按页数动态估算：MinerU CPU pipeline 实测 71.2s/页（部署日志），
+    # 固定 600s 会让 24 页答案卷必然超时 → MinerU 永远被跳过。
+    # 实际预算 = max(MINERU_TIMEOUT, 120 + MINERU_SECONDS_PER_PAGE*页数)，封顶 MAX。
     MINERU_TIMEOUT: int = Field(600, env="MINERU_TIMEOUT")
+    MINERU_SECONDS_PER_PAGE: int = Field(75, env="MINERU_SECONDS_PER_PAGE")
+    MINERU_TIMEOUT_MAX: int = Field(3600, env="MINERU_TIMEOUT_MAX")
     MINERU_BACKEND: str = Field("pipeline", env="MINERU_BACKEND")
     # PARSER_URL：容器化后的 parser sidecar 地址（如 http://parser:8080）。
     # 留空则沿用本地子进程路径，开发机工作方式完全不变。
@@ -95,8 +100,11 @@ class Settings(BaseSettings):
     # OCR_PYTHON：独立 OCR 环境的解释器（须为 ≤3.12 的 Python，如 D:\ocr-env）；
     # 留空则用主进程解释器（3.13 下 Paddle 推理会崩，仅作降级）。
     OCR_PYTHON: str = Field(r"D:\ocr-env\Scripts\python.exe", env="OCR_PYTHON")
-    OCR_MAX_PAGES: int = Field(8, env="OCR_MAX_PAGES")
-    OCR_SUBPROCESS_TIMEOUT: int = Field(240, env="OCR_SUBPROCESS_TIMEOUT")
+    # 2026-10-25：原上限 8 页会把 20~30 页的答案解析卷截断（后半答案识别不到，
+    # 直接表现为"答案对不上题号"）。答案卷实测 24~30 页，故放宽到 30 页；
+    # 超时按 20s/页（CPU Paddle）留足余量，仍由子进程硬超时兜底。
+    OCR_MAX_PAGES: int = Field(30, env="OCR_MAX_PAGES")
+    OCR_SUBPROCESS_TIMEOUT: int = Field(600, env="OCR_SUBPROCESS_TIMEOUT")
 
     # ==================== 题目图片压缩配置（P2-2 存储量最小）====================
     # 压缩开关：开启后导入题目图片统一缩放长边 + 转 WebP/JPEG 质量压缩
