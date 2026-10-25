@@ -4953,3 +4953,98 @@ from app.services.text_parser_xingce import (  # noqa: E402  (文件末尾 re-ex
     split_xingce_answer_blocks,
     xingce_cross_validate,
 )
+
+
+# ======================================================================
+# 答案文档专项解析（2026-10-25）
+#
+# 事故：教师上传「题本.pdf + 答案解析.pdf」后，两个文件各自按
+# `extract_question_blocks()` 切块。题本 125 块、答案卷只有 95 块，
+# 前端因此显示「题目 125 / 答案 95」，教师判定为"答案对不上"。
+# 实测答案卷按题号锚点解析（parse_answer_text_to_map）恰好 125 条。
+#
+# 结论：答案卷不是"题目文档"，不能复用题干切块器。这里提供
+#   ① looks_like_answer_document  —— 判定文件角色
+#   ② extract_answer_entries       —— 答案卷 → 题号/答案/解析条目
+# 供导入预览使用，保证两侧计数同口径（题号集合可比对）。
+# ======================================================================
+
+_ANSWER_DOC_NAME_RE = re.compile(r'(答案|解析|参考答案|answer|key)', re.IGNORECASE)
+_ANSWER_LINE_RE = re.compile(
+    r'(?m)^\s*(\d{1,3})\s*[.．、]?\s*(?:[A-DＡ-Ｄ]{1,4}|正确|错误|对|错)\s*$')
+_ANSWER_MARKER_RE = re.compile(r'正确答案|参考答案|【答案】|答案[:：]')
+_OPTION_LINE_RE = re.compile(r'(?m)^\s*[A-DＡ-Ｄ]\s*[.．、]')
+
+
+def looks_like_answer_document(text: str, filename: str = '') -> bool:
+    """判断上传文件是否为「答案/解析」文档。
+
+    只做角色判定，不解析内容。文件名命中即认为答案卷（教师命名惯例最可靠）；
+    否则看正文信号：答案短行远多于选项行，或大量"正确答案/参考答案"标记。
+    """
+    if filename and _ANSWER_DOC_NAME_RE.search(filename):
+        return True
+    if not text:
+        return False
+    head = text[:20000]
+    answer_lines = len(_ANSWER_LINE_RE.findall(head))
+    markers = len(_ANSWER_MARKER_RE.findall(head))
+    option_lines = len(_OPTION_LINE_RE.findall(head))
+    if markers >= 10 and answer_lines >= 5:
+        return True
+    return answer_lines >= 5 and option_lines < answer_lines
+
+
+def extract_answer_entries(text: str) -> list:
+    """把答案/解析文档解析成条目列表（按题号升序）。
+
+    与 `smart_match_questions_answers` 使用同一组答案映射来源
+    （题号锚点 → 嵌入式答案 → 连续序列），因此两侧题号集合可比对。
+    返回：[{'number': int, 'answer': str, 'analysis': str}]
+    """
+    if not text or not text.strip():
+        return []
+
+    answer_map: Dict[int, Dict[str, Optional[str]]] = {}
+    for num, data in (parse_answer_text_to_map(text) or {}).items():
+        _merge_answer_entry(answer_map, num, data)
+    try:
+        embedded = _extract_embedded_answers(text) or {}
+    except Exception:  # noqa: BLE001 — 兜底策略失败不能拖垮整份文档
+        embedded = {}
+    for num, data in embedded.items():
+        _merge_answer_entry(answer_map, num, data)
+    try:
+        seq = parse_answer_sequence(text) or {}
+    except Exception:  # noqa: BLE001
+        seq = {}
+    for num, data in seq.items():
+        _merge_answer_entry(answer_map, num, data)
+
+    entries = []
+    for num in sorted(answer_map.keys(), key=lambda x: int(x)):
+        data = answer_map[num] or {}
+        answer = str(data.get('answer') or '').strip()
+        analysis = str(data.get('analysis') or '').strip()
+        # 解析缺失时按题号回取原文段落（首题的解析常被标题行/页眉截断）
+        if not analysis:
+            analysis = _strip_answer_header(answer_region_for(text, num), int(num))
+        else:
+            analysis = _strip_answer_header(analysis, int(num))
+        entries.append({
+            'number': int(num),
+            'answer': answer,
+            'analysis': analysis,
+        })
+    return entries
+
+
+def _strip_answer_header(region: str, number: int) -> str:
+    """去掉答案段落开头的「题号 + 答案字母」行与空行，只留解析正文。"""
+    if not region:
+        return ''
+    lines = [ln for ln in str(region).split('\n')]
+    header = re.compile(r'^\s*%d\s*[.．、]?\s*(?:[A-DＡ-Ｄ]{1,4})?\s*$' % int(number))
+    while lines and (not lines[0].strip() or header.match(lines[0])):
+        lines.pop(0)
+    return '\n'.join(lines).strip()
