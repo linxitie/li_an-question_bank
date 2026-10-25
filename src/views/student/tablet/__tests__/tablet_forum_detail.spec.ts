@@ -114,6 +114,7 @@ describe('TabletForumDetail 帖子区', () => {
   it('渲染标题、作者头像与附件', async () => {
     const store = useCommunityStore();
     vi.spyOn(store, 'loadPost').mockResolvedValue(SAMPLE_POST as any);
+    vi.spyOn(store, 'loadComments').mockResolvedValue(undefined);
     store.detail = SAMPLE_POST as any;
 
     const wrapper = mountPage();
@@ -131,6 +132,7 @@ describe('TabletForumDetail 帖子区', () => {
     const store = useCommunityStore();
     const spy = vi.spyOn(store, 'reactToPost').mockResolvedValue(undefined as any);
     vi.spyOn(store, 'loadPost').mockResolvedValue(SAMPLE_POST as any);
+    vi.spyOn(store, 'loadComments').mockResolvedValue(undefined);
     store.detail = SAMPLE_POST as any;
 
     const wrapper = mountPage();
@@ -140,3 +142,78 @@ describe('TabletForumDetail 帖子区', () => {
     expect(spy).toHaveBeenCalledWith(4, 'like');
   });
 });
+
+describe('TabletForumDetail 评论区', () => {
+  const SAMPLE_COMMENTS = [
+    {
+      id: 21,
+      content: '.',
+      parentCommentId: null,
+      user: { id: 3, nickname: '闲者', avatar: '/uploads/avatars/avatar_3_aca778e0.jpg' },
+      attachments: [],
+      likeCount: 1,
+      reactions: {},
+      createTime: '2026-10-25T11:02:29.272368'
+    },
+    {
+      id: 22,
+      content: '回复内容',
+      parentCommentId: 21,
+      user: { id: 3, nickname: '闲者', avatar: '/uploads/avatars/avatar_3_aca778e0.jpg' },
+      attachments: [],
+      likeCount: 0,
+      reactions: {},
+      createTime: '2026-10-25T11:03:29.272368'
+    }
+  ];
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    h.routeState.id = '4';
+    h.back.mockClear();
+    h.push.mockClear();
+  });
+
+  const prepare = () => {
+    const store = useCommunityStore();
+    vi.spyOn(store, 'loadPost').mockResolvedValue(SAMPLE_POST as any);
+    vi.spyOn(store, 'loadComments').mockResolvedValue(undefined);
+    store.detail = SAMPLE_POST as any;
+    store.comments = SAMPLE_COMMENTS as any;
+    return store;
+  };
+
+  it('根评论与回复分两层渲染，评论头像透传', async () => {
+    prepare();
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.findAll('.comment-list > .comment-item')).toHaveLength(1);
+    expect(wrapper.findAll('.comment-replies .comment-item')).toHaveLength(1);
+    expect(wrapper.find('.comment-item .stub-user-badge').exists()).toBe(true);
+  });
+
+  it('切换排序会重新加载评论', async () => {
+    const store = prepare();
+    const spy = vi.spyOn(store, 'loadComments').mockResolvedValue(undefined);
+    const wrapper = mountPage();
+    await flushPromises();
+
+    wrapper.findComponent({ name: 'CommentSortBar' }).vm.$emit('update:sortBy', 'likes');
+    await flushPromises();
+
+    expect(spy).toHaveBeenLastCalledWith(4, { sortBy: 'likes', order: 'asc' });
+  });
+
+  it('评论点赞调用 reactToComment', async () => {
+    const store = prepare();
+    const spy = vi.spyOn(store, 'reactToComment').mockResolvedValue(undefined as any);
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.find('.comment-like').trigger('click');
+
+    expect(spy).toHaveBeenCalledWith(21, 'like');
+  });
+});
+

@@ -51,6 +51,75 @@
             <span class="stat">💬 {{ post.commentCount }}</span>
             <span class="stat">👁 {{ post.viewCount }}</span>
           </footer>
+
+          <section class="comments">
+            <div class="comments-head">
+              <h3 class="comments-title">评论 ({{ comments.length }})</h3>
+              <CommentSortBar
+                :sort-by="sortBy"
+                :order="order"
+                @update:sortBy="changeSort"
+                @update:order="toggleOrder" />
+            </div>
+
+            <div v-if="!rootComments.length" class="comments-empty">暂无评论，抢个沙发</div>
+
+            <div class="comment-list">
+              <div v-for="c in rootComments" :key="c.id" class="comment-item">
+                <UserBadge
+                  avatar-only
+                  size="sm"
+                  clickable
+                  :src="c.user?.avatar"
+                  :name="c.user?.nickname"
+                  :user-id="c.user?.id"
+                  :user-type="c.user?.userType" />
+                <div class="comment-body">
+                  <div class="comment-meta">
+                    <span class="comment-author">{{ c.user?.nickname || '匿名' }}</span>
+                    <span class="comment-time">{{ formatTime(c.createTime) }}</span>
+                  </div>
+                  <div class="comment-text"><ForumContent :content="c.content" /></div>
+                  <AttachmentList
+                    v-if="c.attachments && c.attachments.length"
+                    :attachments="c.attachments"
+                    mode="comment" />
+                  <div class="comment-actions">
+                    <button class="comment-like" type="button" @click="reactToComment(c, 'like')">
+                      👍 {{ c.likeCount }}
+                    </button>
+                    <button class="comment-reply" type="button" @click="startReply(c)">回复</button>
+                    <button class="comment-pin" type="button" @click="togglePin(c)">
+                      {{ c.isPinned ? '取消置顶' : '置顶' }}
+                    </button>
+                    <button class="comment-report" type="button" @click="reportComment(c)">举报</button>
+                  </div>
+
+                  <div v-if="repliesOf(c.id).length" class="comment-replies">
+                    <div v-for="r in repliesOf(c.id)" :key="r.id" class="comment-item">
+                      <UserBadge
+                        avatar-only
+                        size="sm"
+                        :src="r.user?.avatar"
+                        :name="r.user?.nickname"
+                        :user-id="r.user?.id" />
+                      <div class="comment-body">
+                        <div class="comment-meta">
+                          <span class="comment-author">{{ r.user?.nickname || '匿名' }}</span>
+                          <span class="comment-time">{{ formatTime(r.createTime) }}</span>
+                        </div>
+                        <div class="comment-text"><ForumContent :content="r.content" /></div>
+                        <AttachmentList
+                          v-if="r.attachments && r.attachments.length"
+                          :attachments="r.attachments"
+                          mode="comment" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </article>
     </main>
@@ -62,10 +131,18 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import AttachmentList from '@/components/forum/AttachmentList.vue';
+import CommentSortBar from '@/components/forum/CommentSortBar.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
-import type { ForumReactionCode } from '@/modules/community/api';
+import {
+  pinForumComment,
+  reportForumTarget,
+  type ForumCommentItem,
+  type ForumCommentSortBy,
+  type ForumReactionCode,
+  type ForumSortOrder
+} from '@/modules/community/api';
 import { useCommunityStore } from '@/modules/community/store';
 
 const route = useRoute();
@@ -102,6 +179,74 @@ const reactToPost = async (reaction: ForumReactionCode) => {
   }
 };
 
+const sortBy = ref<ForumCommentSortBy>('time');
+const order = ref<ForumSortOrder>('asc');
+const replyTo = ref<number | null>(null);
+const replyToName = ref('');
+
+const comments = computed(() => store.comments);
+const rootComments = computed(() => comments.value.filter((c) => !c.parentCommentId));
+
+const repliesOf = (commentId: number) =>
+  comments.value
+    .filter((c) => c.parentCommentId === commentId)
+    .sort((a, b) => {
+      const at = a.createTime ? new Date(a.createTime).getTime() : 0;
+      const bt = b.createTime ? new Date(b.createTime).getTime() : 0;
+      return at - bt;
+    });
+
+const loadComments = async () => {
+  await store.loadComments(postId, { sortBy: sortBy.value, order: order.value });
+};
+
+const changeSort = async (key: ForumCommentSortBy) => {
+  if (sortBy.value === key) return;
+  sortBy.value = key;
+  await loadComments();
+};
+
+const toggleOrder = async () => {
+  order.value = order.value === 'asc' ? 'desc' : 'asc';
+  await loadComments();
+};
+
+const reactToComment = async (comment: ForumCommentItem, reaction: ForumReactionCode) => {
+  try {
+    await store.reactToComment(comment.id, reaction);
+  } catch (e) {
+    console.error('评论点赞失败:', e);
+  }
+};
+
+const startReply = (comment: ForumCommentItem) => {
+  replyTo.value = comment.id;
+  replyToName.value = comment.user?.nickname ?? '该用户';
+};
+
+const cancelReply = () => {
+  replyTo.value = null;
+  replyToName.value = '';
+};
+
+const togglePin = async (comment: ForumCommentItem) => {
+  await pinForumComment(comment.id, !comment.isPinned);
+  await loadComments();
+};
+
+const reportComment = async (comment: ForumCommentItem) => {
+  const reason = window.prompt('举报原因（spam/abuse/illegal/other）', 'abuse');
+  if (!reason) return;
+  const allowed = ['spam', 'abuse', 'illegal', 'other'];
+  const reasonCode = (allowed.includes(reason) ? reason : 'other') as
+    | 'spam'
+    | 'abuse'
+    | 'illegal'
+    | 'other';
+  await reportForumTarget({ targetType: 'COMMENT', targetId: comment.id, reasonCode });
+  window.alert('举报已提交');
+};
+
 const load = async () => {
   loading.value = true;
   loadError.value = '';
@@ -113,7 +258,13 @@ const load = async () => {
   }
 
   const detail = await store.loadPost(postId);
-  if (!detail) loadError.value = '帖子不存在或已被删除';
+  if (!detail) {
+    loadError.value = '帖子不存在或已被删除';
+    loading.value = false;
+    return;
+  }
+
+  await loadComments();
   loading.value = false;
 };
 
@@ -286,5 +437,104 @@ onMounted(load);
 
 .like-btn:hover {
   background: #eef2f8;
+}
+
+.comments {
+  margin-top: 12px;
+  border-top: 1px solid #eef2f7;
+  padding-top: 16px;
+}
+
+.comments-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.comments-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2b5f;
+  margin: 0;
+}
+
+.comments-empty {
+  text-align: center;
+  color: #8899aa;
+  font-size: 13px;
+  padding: 24px 0;
+}
+
+.comment-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f2f5f9;
+}
+
+.comment-item:last-child {
+  border-bottom: none;
+}
+
+.comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.comment-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a2b5f;
+}
+
+.comment-time {
+  font-size: 12px;
+  color: #9aa8bb;
+}
+
+.comment-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #2b3a55;
+  word-break: break-word;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.comment-actions button {
+  border: none;
+  background: none;
+  padding: 2px 0;
+  font-size: 12px;
+  color: #8899aa;
+  cursor: pointer;
+}
+
+.comment-actions button:hover {
+  color: #1a2b5f;
+}
+
+.comment-replies {
+  margin-top: 10px;
+  margin-left: 32px;
+  padding-left: 14px;
+  border-left: 2px solid #eef2f7;
+}
+
+.comment-replies .comment-item {
+  padding: 10px 0;
 }
 </style>
