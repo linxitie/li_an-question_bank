@@ -2115,6 +2115,16 @@ def _extract_blocks_unnumbered(text: str) -> List[Dict[str, Any]]:
     if cur and any(x.strip() for x in cur):
         chunks.append(cur)
 
+    # 无题号兜底只对"有结构信号"的文档生效：选项标记(A-D)、枚举行(①-⑫)或括号折行。
+    # 为什么加：整段说明文字（既无选项也无枚举）原先会被切成 1 个题块，导入后变成 1 道幽灵题；
+    # 0 题文档应当解析出 0 个块（test_gongzhuan_regression 已固化为回归用例）。
+    if not (
+        re.search(r'[A-D]\s*[.、．)）]', text)
+        or re.search(r'[①②③④⑤⑥⑦⑧⑨⑩⑪⑫]', text)
+        or re.search(r'^[（(]', text, re.M)
+    ):
+        return []
+
     blocks: List[Dict[str, Any]] = []
     for idx, chunk in enumerate(chunks):
         block_lines = list(chunk)
