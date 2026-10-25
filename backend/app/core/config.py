@@ -1,4 +1,4 @@
-"""
+﻿"""
 数据库配置 - 支持SQLite作为开发环境备选方案
 """
 import os
@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     # 大模型配置
     LLM_API_URL: str = Field("http://localhost:8080/api/v1/chat", env="LLM_API_URL")
     LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
+    # 模型名（OpenAI Chat Completions 兼容协议）
+    LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
+    # 单次调用超时（秒）
+    LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
+    # 多轮会话携带的最大历史条数
+    LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
     
     # 日志配置
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")

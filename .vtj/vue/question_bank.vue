@@ -1,4 +1,4 @@
-<!-- 题库整体模块 -->
+﻿<!-- 题库整体模块 -->
 <template>
   <div class="question-bank">
     <NavBar></NavBar>
@@ -1033,7 +1033,7 @@
         } else if (key === 'smart') {
           this.$router.push('/smart-exam');
         } else if (key === 'ai') {
-          ElMessage.info('联考小智功能开发中');
+          this.$router.push('/ai-assistant');
         }
       },
       switchCategory(key) {

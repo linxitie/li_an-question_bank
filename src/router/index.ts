@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 砺安题库 - 路由配置（三端分离）
  */
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
@@ -74,6 +74,12 @@ const routes: RouteRecordRaw[] = [
     name: 'SmartAnswer',
     component: () => import('$vtj/vue/smart_answer.vue'),
     meta: { roles: ['student'] }
+  },
+  {
+    path: '/ai-assistant',
+    name: 'AiAssistant',
+    component: () => import('$vtj/vue/ai_chat.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/student/papers',

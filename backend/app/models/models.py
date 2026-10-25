@@ -1,4 +1,4 @@
-"""
+﻿"""
 数据库模型定义
 """
 from datetime import datetime
@@ -1962,4 +1962,42 @@ class UserFeedback(Base):
         Index("idx_feedback_user", user_id),
         Index("idx_feedback_status", status),
         Index("idx_feedback_created", created_at),
+    )
+
+
+class ChatSession(Base):
+    """联考小智 - 对话会话表"""
+    __tablename__ = "chat_session"
+
+    session_id = Column(Integer, primary_key=True, autoincrement=True, comment="会话ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    title = Column(String(100), nullable=False, default="新会话", comment="会话标题")
+    scene = Column(String(20), default="qa", comment="场景: psychological/qa/advice")
+    status = Column(Integer, default=1, comment="状态 1正常/0删除")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_chat_session_user", user_id),
+        Index("idx_chat_session_update", update_time),
+    )
+
+
+class ChatMessage(Base):
+    """联考小智 - 对话消息表"""
+    __tablename__ = "chat_message"
+
+    message_id = Column(Integer, primary_key=True, autoincrement=True, comment="消息ID")
+    session_id = Column(Integer, ForeignKey("chat_session.session_id"), nullable=False, comment="会话ID")
+    role = Column(String(10), nullable=False, comment="角色: user/assistant")
+    content = Column(Text, nullable=False, comment="消息内容")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    session = relationship("ChatSession")
+
+    __table_args__ = (
+        Index("idx_chat_message_session", session_id),
+        Index("idx_chat_message_create", create_time),
     )
