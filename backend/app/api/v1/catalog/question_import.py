@@ -698,6 +698,10 @@ def _link_shenlun_material_groups(db: Session, items: List[Dict[str, Any]],
     """
     from ....models.models import QuestionBank as _QB
 
+    # P3-14 灰度开关：关闭时保留旧的解析/建组行为（不建组、不挂 group_id）。
+    if not settings.MATERIAL_OWNERSHIP_V2:
+        return 0
+
     linked = 0
     # D 修复：文档级材料。申论整卷「给定资料1..N」只挂在第一题（解析器省内存设计），
     # 同卷小题 material_text 为空——必须继承文档级材料建组，否则其他子题成为
@@ -740,6 +744,9 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
     """
     from ....services.composite_matcher import match_group_head, infer_member_qnums, semantic_grouping
 
+    # P3-14 灰度开关：关闭时保留旧的解析/建组行为（不建组、不挂 group_id）。
+    if not settings.MATERIAL_OWNERSHIP_V2:
+        return 0, 0
     if not settings.COMPOSITE_QUESTION_ENABLED:
         return 0, 0
     if not ok_items:

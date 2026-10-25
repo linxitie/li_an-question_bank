@@ -132,7 +132,69 @@ def test_golden_case(case):
         pytest.fail(f"unhandled case id: {case_id}")
 
 
-def test_material_ownership_v2_default_false():
+def test_material_ownership_v2_default_true():
     from app.core.config import settings
 
-    assert settings.MATERIAL_OWNERSHIP_V2 is False
+    assert settings.MATERIAL_OWNERSHIP_V2 is True
+
+
+def test_link_shenlun_disabled_when_switch_off(
+        monkeypatch, db_session, test_user, test_subject, test_question_type):
+    """P3-14：开关关闭时旧行为——不建组、不挂 group_id。"""
+    from app.api.v1.catalog.question_import import (
+        _link_shenlun_material_groups,
+        _SHENLUN_GROUP_CACHE,
+    )
+    from app.core.config import settings
+    from app.models.models import QuestionBank, QuestionGroup
+
+    _SHENLUN_GROUP_CACHE.clear()
+    monkeypatch.setattr(settings, "MATERIAL_OWNERSHIP_V2", False)
+
+    material = '给定资料1：某市推进基层治理现代化，通过网格化管理提升服务效能。'
+    q = QuestionBank(
+        subject_id=test_subject.subject_id,
+        type_id=test_question_type.type_id,
+        question_content='1. 根据给定资料1，概括该市基层治理的主要做法。',
+        answer='参考答案',
+        audit_status=1,
+        status=1,
+        creator_id=test_user.user_id,
+    )
+    db_session.add(q)
+    db_session.commit()
+
+    linked = _link_shenlun_material_groups(
+        db_session,
+        [{'material_text': material, 'format': 'essay'}],
+        {0: q.question_id},
+        subject_name='申论',
+        source_tag='test-disabled',
+    )
+    db_session.commit()
+    db_session.expire_all()
+
+    assert linked == 0
+    assert db_session.query(QuestionGroup).count() == 0
+    refreshed = db_session.query(QuestionBank).filter(
+        QuestionBank.question_id == q.question_id).first()
+    assert not refreshed.group_id
+    _SHENLUN_GROUP_CACHE.clear()
+
+
+def test_detect_composite_groups_disabled_when_switch_off(monkeypatch, db_session):
+    """P3-14：开关关闭时复合题建组返回 (0, 0)。"""
+    from app.api.v1.catalog.question_import import (
+        _detect_and_link_composite_groups,
+    )
+    from app.core.config import settings
+    from app.models.models import QuestionGroup
+
+    monkeypatch.setattr(settings, "MATERIAL_OWNERSHIP_V2", False)
+
+    ok_items = [{'question_number': 1, 'question_content': '（一）回答第1-2题。'}]
+    groups_created, members_linked = _detect_and_link_composite_groups(
+        db_session, ok_items, {}, subject_name='公安专业科目', source_tag='test-disabled')
+
+    assert (groups_created, members_linked) == (0, 0)
+    assert db_session.query(QuestionGroup).count() == 0
