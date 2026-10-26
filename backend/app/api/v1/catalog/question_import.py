@@ -59,6 +59,7 @@ from ....services.question_ingest.tags import (  # I-4：标签检测 + 自动�
 from ....services.question_ingest.images import (  # I-5：题目图提取/落盘 + [IMAGE:x_y] 占位符协议（pure move 自本文件）
     _extract_and_save_images,         # <img>/base64/[IMAGE:x_y] -> static/questions/{qid}/；SSRF + 路径穿越 + 大小防护
 )
+from ....foundation.validation import ReferenceCache, ensure_valid
 from ....services.question_ingest.pdf_reader import (  # I-6：PDF 提取全套（pure move 自本文件）
     _pdf_image_to_png,                # PDF 内嵌图片原始像素 -> PNG 字节（色彩空间/位深/尺寸/解压炸弹四道过滤）
     _extract_text_from_pdf,           # pdfplumber 主干（[IMAGE:x_y] 占位符 + 原位表格行）-> MinerU -> PaddleOCR 三级回退
@@ -1001,6 +1002,8 @@ async def import_single_question(
     实现：核心入库逻辑已抽取为 _upsert_question_core（与 /batch-parsed 共享），
     本端点仅负责单题导入记录与事务提交。
     """
+    # F2 写入守卫：导入链的科目/题型由服务端解析，故只校验确定性字段
+    ensure_valid(question_data, db, require_ids=False)
     try:
         result = _upsert_question_core(db, current_user, question_data)
         if result.get('import_status') == 'DUPLICATE':
@@ -1138,6 +1141,8 @@ async def batch_import_parsed(
         p for p in (auto_tags.get('exam_province', ''), auto_tags.get('exam_type', '')) if p
     )
     _inject_year = auto_tags.get('exam_year')
+    # F2 写入守卫：参考表在本请求内只加载一次
+    _vrefs = ReferenceCache(session=db)
 
     for idx, q in enumerate(items):
         if not isinstance(q, dict):
@@ -1188,6 +1193,7 @@ async def batch_import_parsed(
             q['question_type_detail'] = detected_type
         
         try:
+            ensure_valid(q, db, require_ids=False, cache=_vrefs)
             r = _upsert_question_core(db, current_user, q)
             qid = r['question_id']
             if r['import_status'] == 'DUPLICATE':
@@ -2247,6 +2253,8 @@ async def confirm_batch_import(
         new_questions = []
         confirmed_items = []  # ★ RC-4 修复：初始化 confirmed_items，供试卷关联使用
         group_stats = {'groups': 0, 'members': 0, 'materials': 0}
+        # F2 写入守卫：确认入库是主路径，坏数据必须在此逐条拒绝（不阻断整批）
+        _confirm_refs = ReferenceCache(session=db)
 
         for item in items:
             if item.get('status') == 'DUPLICATE' or item.get('is_duplicate'):
@@ -2280,6 +2288,7 @@ async def confirm_batch_import(
                 continue
 
             try:
+                ensure_valid(item, db, require_ids=False, cache=_confirm_refs)
                 # 清洗题目内容：去除推广/无关字段
                 raw_content = item['question_content']
                 cleaned_content = ContentCleaner.clean_question_content(raw_content)

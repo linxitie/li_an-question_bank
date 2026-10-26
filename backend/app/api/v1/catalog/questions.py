@@ -27,6 +27,7 @@ from ....services.image_service import (sanitize_content_images, sanitize_option
 from ....services.option_utils import render_image_placeholder
 from ....services.text_parser import canonical_answer
 from ....services.question_ingest.groups import upsert_question_material
+from ....foundation.validation import ensure_valid
 
 
 from ....core.security import get_current_user,require_teacher_or_admin
@@ -72,6 +73,9 @@ async def create_question(
         ).first()
         if not point:
             raise HTTPException(status_code=404, detail="知识点不存在")
+
+    # F2 写入守卫：长度/JSON/FK/编码在写库前拦截，422 带字段级明细
+    ensure_valid(question_data.model_dump(), db)
 
     # 转换选项为JSON
     options_json = None
@@ -753,6 +757,9 @@ async def update_question(
         "content": (question.question_content or "")[:100],
         "answer": question.answer
     }
+
+    # F2 写入守卫：PUT 只校验实际出现的字段（partial）
+    ensure_valid(payload.model_dump(exclude_unset=True), db, partial=True, require_ids=False)
 
     # 更新字段
     update_data = payload.model_dump(exclude_unset=True)

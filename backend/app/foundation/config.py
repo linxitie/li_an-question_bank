@@ -19,6 +19,8 @@ def _bool(name: str, default: bool) -> bool:
 FOUNDATION_ENABLED = _bool("FOUNDATION_ENABLED", True)
 FOUNDATION_DISPATCH_MS = int(os.environ.get("FOUNDATION_DISPATCH_MS", "500") or 500)
 FOUNDATION_MAX_ATTEMPTS = int(os.environ.get("FOUNDATION_MAX_ATTEMPTS", "8") or 8)
+# 写入守卫总开关：false 时 6 类校验整体短路，回到 F1 行为（回滚开关）。
+FOUNDATION_VALIDATION_ENABLED = _bool("FOUNDATION_VALIDATION_ENABLED", True)
 
 
 def sqlite_path() -> Path:
