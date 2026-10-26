@@ -1758,6 +1758,9 @@
     max-width: 95vw;
     max-height: 85vh;
     overflow-y: auto;
+    /* 底部不留内边距：吸底输入区要贴到卡片底边，
+       否则滚动内容会从 28px 的底部内边距里露出来 */
+    padding-bottom: 0;
   }
   .detail-header {
     display: flex;
@@ -1979,17 +1982,19 @@
     margin-top: 4px;
   }
   .comment-input-area {
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid #f0f2f5;
     /* 吸底：详情弹窗(.post-detail-card)是滚动容器，输入区常驻可视底部，
-       否则上传/表情/发送位于内容末尾(2100px+)，用户看不到 */
+       否则上传/表情/发送位于内容末尾(2100px+)，用户看不到。
+       负外边距抵消 .modal-card 的 28px 内边距，让吸底条铺到卡片底边与两侧，
+       否则下方会露出 28px 的滚动内容。 */
+    margin: 16px -28px 0;
+    padding: 12px 28px 20px;
+    border-top: 1px solid #f0f2f5;
     position: sticky;
     bottom: 0;
     background: #ffffff;
     z-index: 5;
-    padding-bottom: 4px;
     box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.05);
+    border-radius: 0 0 16px 16px;
   }
   .comment-toolbar {
     display: flex;
