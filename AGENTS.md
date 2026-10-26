@@ -158,8 +158,8 @@
 
 | 项 | 位置 | 说明 |
 |---|---|---|
-| 项目技能根 | `.dsh/skills` → `.opencode/skills`（Windows 目录联接 / junction） | dsh 按 `project-dsh` 根（rank 100）扫描；项目自有 20 个技能（`li-an-workflow`、`vtj-frontend`、`plan-first-workflow`、`completion-verifier`、`scope-guard`、`token-optimization` 等）**正文仍只存放在 `.opencode/skills`**，该目录已在 `.gitignore` 中 |
-| 联接的 Git 处理 | `.gitignore` 中 `.dsh/skills` | 若不加，git 会穿过 junction 把 20 个技能重复登记为未跟踪文件（实测 21 条） |
+| 项目技能根 | `.dsh/skills` → `.opencode/skills`（Windows 目录联接 / junction） | dsh 按 `project-dsh` 根（rank 100）扫描；项目自有 **22** 个技能（`li-an-workflow`、`vtj-frontend`、`plan-first-workflow`、`completion-verifier`、`scope-guard`、`token-optimization`、`qbdm-design-mode` 等）**正文仍只存放在 `.opencode/skills`**，该目录已在 `.gitignore` 中 |
+| 联接的 Git 处理 | `.gitignore` 中 `.dsh/skills` | 若不加，git 会穿过 junction 把 22 个技能重复登记为未跟踪文件（实测） |
 | MCP 桥接 | `~/.dsh/profiles/desktop/cordis.patch.yml` 的 `mcp-vtj` 行 | `@deepseek-ai/dsh-mcp-client` + `vtj-mcp-server`，工具名 `mcp__vtj__*`（19 个） |
 | 门禁编码 | `backend/scripts/gates/gate_all.py` | 子进程强制 `PYTHONIOENCODING=utf-8`；否则 Windows GBK 控制台下子脚本打印 `✅/ℹ` 会抛 `UnicodeEncodeError`，被误判为 FAIL |
 
@@ -182,15 +182,21 @@ New-Item -ItemType Junction -Path .dsh\skills -Target (Resolve-Path .opencode\sk
 | 项 | 位置 | 说明 |
 |---|---|---|
 | 全文（权威） | `docs/superpowers/specs/题库设计模式_v1.md` | 九角色、Q0–Q6、五零指标、分支细则、门禁矩阵、13 条反模式 |
-| 角色卡（热加载） | `docs/superpowers/specs/题库设计模式_角色卡_v1.md` | **每任务只读这个**（3.8KB）即可完成角色切换 |
+| **模块层（v2）** | `docs/superpowers/specs/题库设计模式_v2.md` | 25 模块台账、**设计 D1–D10 / 优化 O1–O8 / 测试 T1–T8**、影响面五步、A14–A20 |
+| **「题库设计」模式（v3）** | `docs/superpowers/specs/题库设计模式_v3.md` | 会话执行版：标准/创造/PTC 分层、九角色落地形态、设计/测试/优化三态、技能+MCP+工作流绑定、A21–A26 |
+| 角色卡（热加载） | `docs/superpowers/specs/题库设计模式_角色卡_v1.md` | **换角色只读这个**（3.8KB） |
+| **模块作战卡（热加载）** | `docs/superpowers/specs/题库设计模式_模块作战卡_v1.md` | **领到模块任务只读这个**（一屏） |
+| **模块台账** | `docs/design/题库模块台账_v1.md` + `.json` | 25 模块 × 端点/页面/测试/事件，由 `gen_module_ledger.py` 实测生成，勿手改 |
 | 技能（自动触发） | `qbdm-role-switch`（`.opencode/skills/qbdm-role-switch/SKILL.md`） | 已实测被 dsh 即时发现；因 `.opencode/` 在 `.gitignore` 中，**技能正文不纳入 Git**，缺失去从角色卡文档重建 |
-| 模式入口 CLI | `python scripts/qbdm/qbdm.py role <CODE> / gate --role <CODE> [--run] / status` | 把九角色与门禁矩阵变成可执行清单；`status` 自检模式资产是否齐全 |
+| 模式入口 CLI | `python scripts/qbdm/qbdm.py role <CODE> / gate --role <CODE> [--run] / modules / module <id> / design <id> --state design\|test\|optimize / status` | 角色、门禁、模块三段清单、**三态多角色管线**一条命令可查；`status` 自检模式资产 |
 | 装载预算闸 | `scripts/qbdm/ctx_budget.py` | 装载前估算 token 并对照 T0–T3 预算（Z4 可测） |
 
-**最少记住 4 条**：
+**最少记住 5 条**：
 1. 九角色 = ARCH / PM / DATA / BE / API / FE / SEC / QA / DOC，**一次只戴一顶帽子**；仲裁链 `SEC > API > ARCH > PM > DATA > BE ≈ FE > QA > DOC`。
 2. 流程 Q0→Q6，**Q2/Q3/Q4/Q5/Q6 不可跳**；方案须用户批准后才进入实施。
 3. 五零指标：Z1 重复读=0、Z2 未验证断言=0、Z3 返工=0、Z4 超预算=0、Z5 归档遗漏=0。
 4. 没有门禁输出的"完成"一律判为未完成（与 `completion-verifier` 一致）。
+5. 模块任务先跑 `python scripts/qbdm/qbdm.py module <id>`：端点/页面/测试/门禁一次看全；台账漂移用 `gen_module_ledger.py --check` 发现。
+6. 整套「题库设计」模式用 `python scripts/qbdm/qbdm.py design <id> --state design|test|optimize`：三态管线、技能、MCP、门禁一次打印；模式全文见 v3。
 
 > 与第 7 节的关系：第 7 节讲**工具怎么接**，本节讲**任务怎么跑**，两者不重叠。
