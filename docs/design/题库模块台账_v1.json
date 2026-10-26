@@ -1,0 +1,1030 @@
+{
+  "version": "v1",
+  "generated_at": "2026-10-25 16:19:54",
+  "source": "scripts/qbdm/gen_module_ledger.py",
+  "note": "端点以 api_surface.json 为准；页面/测试为登记口径+候选口径，候选需人工确认",
+  "totals": {
+    "modules": 25,
+    "endpoints": 343,
+    "api_files": 37,
+    "api_files_unassigned": [],
+    "pages_assigned": 95,
+    "pages_unassigned": {
+      "app_navigation": ".vtj/vue/app_navigation.vue",
+      "download_client": ".vtj/vue/download_client.vue",
+      "footer_info": ".vtj/vue/footer_info.vue",
+      "navbar": ".vtj/vue/navbar.vue",
+      "TeacherNavHeader": ".vtj/vue/TeacherNavHeader.vue",
+      "not-found": "src/views/system/shared/not-found.vue",
+      "unauthorized": "src/views/system/shared/unauthorized.vue"
+    },
+    "card_gaps": [
+      "identity",
+      "practice"
+    ],
+    "stub_cards": [
+      "checkin",
+      "ai-assistant",
+      "mock-exam",
+      "mini-exam"
+    ],
+    "modules_without_tests": []
+  },
+  "modules": [
+    {
+      "no": "①",
+      "id": "identity",
+      "name": "认证 + 个人中心",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/identity",
+      "card": "src/modules/identity/README.md",
+      "card_filled": false,
+      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**已实现**（P2-76~80 认证+个人中心域改造完成）。",
+      "api_domains": [
+        "identity",
+        "platform"
+      ],
+      "api_files": [
+        "auth.py",
+        "auth_qrcode.py",
+        "devices.py",
+        "feedback.py"
+      ],
+      "endpoint_count": 21,
+      "endpoint_prefixes": [
+        "/api/auth",
+        "/api/auth/devices",
+        "/api/auth/qrcode",
+        "/api/feedback"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [
+        ".vtj/vue/login.vue",
+        ".vtj/vue/mobile_login.vue",
+        ".vtj/vue/tablet_login.vue",
+        "src/views/student/shared/profile.vue",
+        ".vtj/vue/mobile_profile.vue",
+        ".vtj/vue/tablet_profile.vue",
+        ".vtj/vue/home_page.vue",
+        ".vtj/vue/mobile_home.vue",
+        ".vtj/vue/tablet_home.vue",
+        "src/views/student/shared/help.vue",
+        "src/views/student/mobile/mobile_help.vue",
+        "src/views/student/shared/feedback.vue",
+        "src/views/student/mobile/mobile_feedback.vue",
+        "src/views/student/mobile/mobile_notifications.vue",
+        "src/views/student/mobile/mobile_scan.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_identity_module.py",
+        "src/modules/identity/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"identity|auth|device|feedback\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "②",
+      "id": "catalog",
+      "name": "题库浏览",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/catalog",
+      "card": "src/modules/catalog/README.md",
+      "card_filled": true,
+      "card_status_line": "P2-71 ~ P2-75 已完成：**已实现**（题目列表 / 筛选 / 详情，只读）。",
+      "api_domains": [
+        "catalog"
+      ],
+      "api_files": [
+        "questions.py",
+        "question_actions.py"
+      ],
+      "endpoint_count": 29,
+      "endpoint_prefixes": [
+        "/api/questions"
+      ],
+      "card_endpoint_count": 2,
+      "pages": [
+        ".vtj/vue/question_bank.vue",
+        ".vtj/vue/mobile_question_bank.vue",
+        ".vtj/vue/tablet_question_bank.vue",
+        ".vtj/vue/question_preview_list.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_catalog_module.py",
+        "backend/tests/test_platform_question_visibility.py",
+        "backend/tests/test_question_stats_service.py",
+        "src/modules/catalog/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"catalog|question_visibility|question_stats\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "③",
+      "id": "practice",
+      "name": "答题练习",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/practice",
+      "card": "src/modules/practice/README.md",
+      "card_filled": false,
+      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**外壳，功能还未开发**。",
+      "api_domains": [
+        "exam"
+      ],
+      "api_files": [
+        "practice.py",
+        "quick_practice.py"
+      ],
+      "endpoint_count": 13,
+      "endpoint_prefixes": [
+        "/api/practice",
+        "/api/quick-practice"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [
+        ".vtj/vue/answer_page.vue",
+        "src/views/student/shared/exercise.vue",
+        "src/views/student/mobile/mobile_answer.vue",
+        ".vtj/vue/mobile_practice.vue",
+        ".vtj/vue/tablet_practice.vue",
+        "src/views/student/shared/solution.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_answer_doc_role.py",
+        "backend/tests/test_practice_transaction.py",
+        "backend/tests/test_practice_unified.py",
+        "backend/tests/test_quick_practice_consistency.py",
+        "backend/tests/test_quick_practice_subcategories.py",
+        "backend/tests/test_quick_practice_tree.py",
+        "src/modules/practice/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"practice|quick_practice|answer_doc\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "④",
+      "id": "records",
+      "name": "练习记录",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/records",
+      "card": "src/modules/records/README.md",
+      "card_filled": true,
+      "card_status_line": "状态：**P2-09..P2-12 已实现**。记录由 ③ 答题练习写入，本域只读展示、筛选与统计，不参与判分。",
+      "api_domains": [
+        "exam"
+      ],
+      "api_files": [
+        "exam_records.py"
+      ],
+      "endpoint_count": 8,
+      "endpoint_prefixes": [
+        "/api/exam-records"
+      ],
+      "card_endpoint_count": 4,
+      "pages": [
+        "src/views/student/mobile/mobile_history.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [
+        "src/modules/records/__tests__/store.spec.ts"
+      ],
+      "tests_candidates": [
+        "backend/tests/test_exam_records_module.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"exam_records|history\"",
+      "events_publish": [],
+      "events_subscribe": [
+        "wrong-questions:changed"
+      ]
+    },
+    {
+      "no": "⑤",
+      "id": "papers",
+      "name": "智能组卷 + 历年试卷",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/papers",
+      "card": "src/modules/papers/README.md",
+      "card_filled": true,
+      "card_status_line": "状态：**P2-17..P2-23 已实现**。教师建卷 → 提交审批 → 管理员发布 → 学生可见；学生端强制只读已发布试卷。",
+      "api_domains": [
+        "catalog",
+        "exam"
+      ],
+      "api_files": [
+        "smart_exam.py",
+        "papers.py",
+        "paper_generation.py"
+      ],
+      "endpoint_count": 29,
+      "endpoint_prefixes": [
+        "/api/papers",
+        "/api/smart-exam"
+      ],
+      "card_endpoint_count": 10,
+      "pages": [
+        ".vtj/vue/smart_exam.vue",
+        ".vtj/vue/smart_answer.vue",
+        ".vtj/vue/student_papers.vue",
+        "src/views/student/mobile/mobile_student_papers.vue",
+        ".vtj/vue/smart_recommend.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_paper_publish_flow.py",
+        "src/modules/papers/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"paper|smart_exam\"",
+      "events_publish": [
+        "paper.completed"
+      ],
+      "events_subscribe": [
+        "papers:data-changed"
+      ]
+    },
+    {
+      "no": "⑥",
+      "id": "wrongbook",
+      "name": "错题集",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/wrongbook",
+      "card": "src/modules/wrongbook/README.md",
+      "card_filled": true,
+      "card_status_line": "状态：**P2-13..P2-16 已实现**。错题由 ③ 答题练习（E12）写入，本域负责列表、掌握度流转、重练与斩题。",
+      "api_domains": [
+        "catalog"
+      ],
+      "api_files": [
+        "wrong_questions.py"
+      ],
+      "endpoint_count": 12,
+      "endpoint_prefixes": [
+        "/api/wrong-questions"
+      ],
+      "card_endpoint_count": 12,
+      "pages": [
+        ".vtj/vue/wrong_questions.vue",
+        "src/views/student/mobile/mobile_wrong_questions.vue",
+        "src/views/student/mobile/mobile_wrong_review.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_wrongbook_module.py",
+        "src/modules/wrongbook/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"wrong\"",
+      "events_publish": [
+        "wrong-questions:changed",
+        "wrong.reviewed"
+      ],
+      "events_subscribe": [
+        "wrong-questions:changed"
+      ]
+    },
+    {
+      "no": "⑦",
+      "id": "notes",
+      "name": "笔记 + 收藏",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/notes",
+      "card": "src/modules/notes/README.md",
+      "card_filled": true,
+      "card_status_line": "状态：**已实现**（P2-24~27 笔记+收藏域改造完成）。",
+      "api_domains": [
+        "personal"
+      ],
+      "api_files": [
+        "notes.py",
+        "collection.py"
+      ],
+      "endpoint_count": 14,
+      "endpoint_prefixes": [
+        "/api/collection",
+        "/api/notes"
+      ],
+      "card_endpoint_count": 14,
+      "pages": [
+        ".vtj/vue/notes.vue",
+        "src/views/student/mobile/mobile_notes.vue",
+        ".vtj/vue/favorites.vue",
+        "src/views/student/mobile/mobile_favorites.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_notes_collection_module.py",
+        "backend/tests/test_quote_favorite.py",
+        "src/modules/notes/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"notes|collection|favorite\"",
+      "events_publish": [
+        "note.created",
+        "favorite.added"
+      ],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑧",
+      "id": "analytics",
+      "name": "成绩分析",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/analytics",
+      "card": "src/modules/analytics/README.md",
+      "card_filled": true,
+      "card_status_line": "状态：**已实现**（P2-57~P2-62）。本域只读，无成就入边；E13 向 ⑤ 提供薄弱点读能力。",
+      "api_domains": [
+        "exam"
+      ],
+      "api_files": [
+        "stats.py"
+      ],
+      "endpoint_count": 11,
+      "endpoint_prefixes": [
+        "/api/stats"
+      ],
+      "card_endpoint_count": 4,
+      "pages": [
+        ".vtj/vue/score_analysis.vue",
+        "src/views/student/mobile/mobile_score_analysis.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_analytics_module.py",
+        "backend/tests/test_three_end_counts.py",
+        "src/modules/analytics/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"analytics|three_end_counts\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑨",
+      "id": "community",
+      "name": "论坛社区",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/community",
+      "card": "src/modules/community/README.md",
+      "card_filled": true,
+      "card_status_line": "状态：**P2-28 ~ P2-31 已实现**。覆盖帖子列表/详情/发帖/回帖/点赞、金句列表与收藏。",
+      "api_domains": [
+        "community"
+      ],
+      "api_files": [
+        "forum.py",
+        "quotes.py"
+      ],
+      "endpoint_count": 19,
+      "endpoint_prefixes": [
+        "/api/forum",
+        "/api/quotes"
+      ],
+      "card_endpoint_count": 17,
+      "pages": [
+        ".vtj/vue/forum.vue",
+        ".vtj/vue/mobile_forum.vue",
+        ".vtj/vue/tablet_forum.vue",
+        "src/views/student/mobile/mobile_forum_create.vue",
+        "src/views/student/mobile/mobile_forum_detail.vue",
+        ".vtj/vue/daily_quote.vue",
+        ".vtj/vue/quote_banner.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_community_module.py",
+        "backend/tests/test_quote_favorite.py",
+        "src/modules/community/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"community|forum|quote\"",
+      "events_publish": [
+        "forum.posted"
+      ],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑩",
+      "id": "news",
+      "name": "每日新闻",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/news",
+      "card": "src/modules/news/README.md",
+      "card_filled": true,
+      "card_status_line": "P2-33 / P2-34 已完成：**已实现**（列表 / 详情 / 已读标记 / 阅读上报）。",
+      "api_domains": [
+        "content"
+      ],
+      "api_files": [
+        "news.py"
+      ],
+      "endpoint_count": 8,
+      "endpoint_prefixes": [
+        "/api/news"
+      ],
+      "card_endpoint_count": 8,
+      "pages": [
+        ".vtj/vue/daily_news.vue",
+        "src/views/student/mobile/mobile_news.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_news_module.py",
+        "src/modules/news/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"news\"",
+      "events_publish": [
+        "news.read"
+      ],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑪",
+      "id": "calendar",
+      "name": "考试日历",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/calendar",
+      "card": "src/modules/calendar/README.md",
+      "card_filled": true,
+      "card_status_line": "P2-63 ~ P2-65 已完成：**已实现**（列表 / 省份筛选 / 月份分组派生 / 空态）。",
+      "api_domains": [
+        "content"
+      ],
+      "api_files": [
+        "calendar.py"
+      ],
+      "endpoint_count": 2,
+      "endpoint_prefixes": [
+        "/api/calendar"
+      ],
+      "card_endpoint_count": 2,
+      "pages": [
+        ".vtj/vue/exam_calendar.vue",
+        ".vtj/vue/exam_calendar_block.vue",
+        "src/views/student/mobile/mobile_calendar.vue",
+        ".vtj/vue/countdown_block.vue",
+        ".vtj/vue/countdown_timer.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "src/modules/calendar/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"calendar\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑫",
+      "id": "recruitment",
+      "name": "招考信息",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/recruitment",
+      "card": "src/modules/recruitment/README.md",
+      "card_filled": true,
+      "card_status_line": "P2-66 ~ P2-68 已完成：**已实现**（分类列表 / 分类筛选 / 详情 / 空态）。",
+      "api_domains": [
+        "content"
+      ],
+      "api_files": [
+        "recruitment.py"
+      ],
+      "endpoint_count": 3,
+      "endpoint_prefixes": [
+        "/api/recruitment"
+      ],
+      "card_endpoint_count": 3,
+      "pages": [
+        ".vtj/vue/recruitment_info.vue",
+        "src/views/student/mobile/mobile_recruitment.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "src/modules/recruitment/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"recruitment\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑬",
+      "id": "about",
+      "name": "关于砺安题库",
+      "scope": "学生端",
+      "status": "已实现（页面接入待 P3）",
+      "dir": "src/modules/about",
+      "card": "src/modules/about/README.md",
+      "card_filled": true,
+      "card_status_line": "P2-69 ~ P2-70 已完成：**已实现**（版本号 / 服务名 / 联系方式只读消费）。",
+      "api_domains": [],
+      "api_files": [],
+      "endpoint_count": 0,
+      "endpoint_prefixes": [],
+      "card_endpoint_count": 1,
+      "pages": [
+        ".vtj/vue/about.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "src/modules/about/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"about\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑭",
+      "id": "library",
+      "name": "备考资料",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/library",
+      "card": "src/modules/library/README.md",
+      "card_filled": true,
+      "card_status_line": "P2-36 ~ P2-39 已完成：**已实现**（列表 / 详情 / 视频学习进度 / 收藏 / 打开上报）。",
+      "api_domains": [
+        "library"
+      ],
+      "api_files": [
+        "materials.py",
+        "videos.py",
+        "media.py"
+      ],
+      "endpoint_count": 31,
+      "endpoint_prefixes": [
+        "/api/materials",
+        "/api/media",
+        "/api/video"
+      ],
+      "card_endpoint_count": 8,
+      "pages": [
+        ".vtj/vue/materials_gongzhuan.vue",
+        ".vtj/vue/materials_shenlun.vue",
+        ".vtj/vue/materials_xingce.vue",
+        ".vtj/vue/study_materials.vue",
+        "src/views/student/mobile/mobile_materials.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_composite_material_groups.py",
+        "backend/tests/test_gongzhuan_regression.py",
+        "backend/tests/test_library_module.py",
+        "backend/tests/test_material_ownership.py",
+        "backend/tests/test_material_parser.py",
+        "backend/tests/test_materials_admin.py",
+        "backend/tests/test_question_material.py",
+        "backend/tests/test_xingce_material_sets.py",
+        "src/modules/library/__tests__/api.spec.ts",
+        "src/modules/library/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"library|material|gongzhuan\"",
+      "events_publish": [
+        "material.opened"
+      ],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑮",
+      "id": "growth",
+      "name": "成就成长（枢纽）",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/growth",
+      "card": "src/modules/growth/README.md",
+      "card_filled": true,
+      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**已实现**（P2-51~56）。",
+      "api_domains": [
+        "growth"
+      ],
+      "api_files": [
+        "achievements.py",
+        "goals.py",
+        "tasks.py"
+      ],
+      "endpoint_count": 19,
+      "endpoint_prefixes": [
+        "/api/achievements",
+        "/api/goals",
+        "/api/tasks"
+      ],
+      "card_endpoint_count": 5,
+      "pages": [
+        "src/views/student/shared/achievements.vue",
+        "src/views/student/mobile/mobile_achievements.vue",
+        ".vtj/vue/goal_card.vue",
+        ".vtj/vue/personal_goal.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [
+        "src/modules/growth/__tests__/store.spec.ts"
+      ],
+      "tests_candidates": [
+        "backend/tests/test_achievement_judge.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"achievement|goal|task\"",
+      "events_publish": [
+        "growth:achievement-unlocked"
+      ],
+      "events_subscribe": [
+        "wrong-questions:changed",
+        "practice.submit",
+        "paper.completed",
+        "wrong.reviewed",
+        "note.created",
+        "favorite.added",
+        "forum.posted",
+        "news.read",
+        "material.opened",
+        "shop.purchased",
+        "checkin.done"
+      ]
+    },
+    {
+      "no": "⑯",
+      "id": "reward",
+      "name": "金币商城",
+      "scope": "学生端",
+      "status": "已实现",
+      "dir": "src/modules/reward",
+      "card": "src/modules/reward/README.md",
+      "card_filled": true,
+      "card_status_line": "状态：**已实现**（P2-40 ~ P2-44）。商品 / 兑换 / 流水走 reward 域封装；余额以后端为唯一事实来源。",
+      "api_domains": [
+        "reward"
+      ],
+      "api_files": [
+        "shop.py",
+        "coins.py"
+      ],
+      "endpoint_count": 5,
+      "endpoint_prefixes": [
+        "/api/coins",
+        "/api/shop"
+      ],
+      "card_endpoint_count": 5,
+      "pages": [
+        ".vtj/vue/gold_purchase.vue",
+        ".vtj/vue/mobile_gold_purchase.vue",
+        ".vtj/vue/tablet_gold_purchase.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_reward_module.py",
+        "src/modules/reward/__tests__/store.spec.ts",
+        "src/modules/reward/__tests__/user-profile.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"reward|coin|shop\"",
+      "events_publish": [
+        "reward:coins-changed",
+        "shop.purchased"
+      ],
+      "events_subscribe": [
+        "reward:coins-changed"
+      ]
+    },
+    {
+      "no": "⑰",
+      "id": "checkin",
+      "name": "每日签到",
+      "scope": "学生端",
+      "status": "未开发（复用 badge_task）",
+      "dir": "src/modules/checkin",
+      "card": "src/modules/checkin/README.md",
+      "card_filled": false,
+      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**已实现**（P2-45~50 每日签到域改造完成）。",
+      "api_domains": [],
+      "api_files": [],
+      "endpoint_count": 0,
+      "endpoint_prefixes": [],
+      "card_endpoint_count": 0,
+      "pages": [
+        ".vtj/vue/signin_card.vue",
+        ".vtj/vue/signin_status.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_checkin_module.py",
+        "src/modules/checkin/__tests__/store.spec.ts"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"checkin|signin\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑱",
+      "id": "ai-assistant",
+      "name": "联考小智",
+      "scope": "学生端",
+      "status": "未开发（端点已预留）",
+      "dir": "src/modules/ai-assistant",
+      "card": "src/modules/ai-assistant/README.md",
+      "card_filled": false,
+      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**外壳，功能还未开发**。",
+      "api_domains": [
+        "UNASSIGNED"
+      ],
+      "api_files": [
+        "llm.py"
+      ],
+      "endpoint_count": 1,
+      "endpoint_prefixes": [
+        "/api/llm"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [],
+      "test_command": "",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑲",
+      "id": "mock-exam",
+      "name": "模拟上机考试",
+      "scope": "学生端",
+      "status": "未开发",
+      "dir": "src/modules/mock-exam",
+      "card": "src/modules/mock-exam/README.md",
+      "card_filled": false,
+      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**外壳，功能还未开发**。",
+      "api_domains": [],
+      "api_files": [],
+      "endpoint_count": 0,
+      "endpoint_prefixes": [],
+      "card_endpoint_count": 0,
+      "pages": [],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [],
+      "test_command": "",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "⑳",
+      "id": "mini-exam",
+      "name": "小模考",
+      "scope": "学生端",
+      "status": "未开发（复用 /api/exams）",
+      "dir": "src/modules/mini-exam",
+      "card": "src/modules/mini-exam/README.md",
+      "card_filled": false,
+      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**外壳，功能还未开发**。",
+      "api_domains": [],
+      "api_files": [],
+      "endpoint_count": 0,
+      "endpoint_prefixes": [],
+      "card_endpoint_count": 0,
+      "pages": [],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [],
+      "test_command": "",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "㉑",
+      "id": "question-import",
+      "name": "题目导入",
+      "scope": "跨端",
+      "status": "已实现",
+      "dir": null,
+      "card": null,
+      "card_filled": false,
+      "card_status_line": "",
+      "api_domains": [
+        "catalog"
+      ],
+      "api_files": [
+        "question_import.py"
+      ],
+      "endpoint_count": 18,
+      "endpoint_prefixes": [
+        "/api/questions/import"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [
+        ".vtj/vue/question_import.vue",
+        ".vtj/vue/manual_match_dialog.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_batch_parsed_import.py",
+        "backend/tests/test_composite_material_groups.py",
+        "backend/tests/test_intelligent_matcher.py",
+        "backend/tests/test_material_ownership.py",
+        "backend/tests/test_material_parser.py",
+        "backend/tests/test_materials_admin.py",
+        "backend/tests/test_mineru_service.py",
+        "backend/tests/test_mineru_timeout.py",
+        "backend/tests/test_playwright_import.py",
+        "backend/tests/test_question_import.py",
+        "backend/tests/test_question_material.py",
+        "backend/tests/test_question_recognizer.py",
+        "backend/tests/test_rich_text.py",
+        "backend/tests/test_similarity.py",
+        "backend/tests/test_structure_matcher.py",
+        "backend/tests/test_subjective_options.py",
+        "backend/tests/test_taxonomy_alias_review.py",
+        "backend/tests/test_taxonomy_apply_aliases.py",
+        "backend/tests/test_taxonomy_backfill_point_id.py",
+        "backend/tests/test_taxonomy_build_tree.py",
+        "backend/tests/test_taxonomy_migrate_relations.py",
+        "backend/tests/test_taxonomy_normalize_l2_relations.py",
+        "backend/tests/test_taxonomy_unique_sibling_index.py",
+        "backend/tests/test_text_cache_scope.py",
+        "backend/tests/test_text_preprocessor.py",
+        "backend/tests/test_xingce_material_sets.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"import|parser|recognizer|mineru|material|taxonomy|text_|rich_text|subjective|similarity|matcher\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "㉒",
+      "id": "teacher",
+      "name": "教师端",
+      "scope": "平台端",
+      "status": "已实现",
+      "dir": null,
+      "card": null,
+      "card_filled": false,
+      "card_status_line": "",
+      "api_domains": [
+        "platform"
+      ],
+      "api_files": [
+        "teacher.py"
+      ],
+      "endpoint_count": 48,
+      "endpoint_prefixes": [
+        "/api/teacher"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [
+        ".vtj/vue/teacher_dashboard.vue",
+        ".vtj/vue/teacher_questions.vue",
+        ".vtj/vue/teacher_papers.vue",
+        ".vtj/vue/teacher_scores.vue",
+        ".vtj/vue/teacher_classes.vue",
+        ".vtj/vue/teacher_messages.vue",
+        ".vtj/vue/teacher_analytics.vue",
+        ".vtj/vue/teacher_profile.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_paper_publish_flow.py",
+        "backend/tests/test_platform_question_visibility.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"teacher|paper_publish|platform_question\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "㉓",
+      "id": "admin",
+      "name": "管理端",
+      "scope": "平台端",
+      "status": "已实现",
+      "dir": null,
+      "card": null,
+      "card_filled": false,
+      "card_status_line": "",
+      "api_domains": [
+        "platform",
+        "reward"
+      ],
+      "api_files": [
+        "admin.py",
+        "admin_approval.py",
+        "admin_shop.py"
+      ],
+      "endpoint_count": 36,
+      "endpoint_prefixes": [
+        "/api/admin",
+        "/api/admin/approval",
+        "/api/admin/shop"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [
+        ".vtj/vue/admin_dashboard.vue",
+        ".vtj/vue/admin_questions.vue",
+        ".vtj/vue/admin_users.vue",
+        ".vtj/vue/admin_logs.vue",
+        ".vtj/vue/admin_backup.vue",
+        ".vtj/vue/admin_settings.vue",
+        ".vtj/vue/admin_permissions.vue",
+        ".vtj/vue/admin_materials.vue",
+        ".vtj/vue/admin_shop.vue",
+        ".vtj/vue/admin_help.vue",
+        ".vtj/vue/admin_profile.vue",
+        ".vtj/vue/paper_approval.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_materials_admin.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"admin|approval|materials_admin\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "㉔",
+      "id": "exams",
+      "name": "考试与答卷",
+      "scope": "跨端",
+      "status": "已实现",
+      "dir": null,
+      "card": null,
+      "card_filled": false,
+      "card_status_line": "",
+      "api_domains": [
+        "exam"
+      ],
+      "api_files": [
+        "exams.py"
+      ],
+      "endpoint_count": 12,
+      "endpoint_prefixes": [
+        "/api/exams"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [
+        ".vtj/vue/paper_answer.vue",
+        ".vtj/vue/paper_result.vue"
+      ],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_exam_records_module.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"exam\"",
+      "events_publish": [],
+      "events_subscribe": []
+    },
+    {
+      "no": "㉕",
+      "id": "realtime",
+      "name": "实时通知通道",
+      "scope": "平台端",
+      "status": "已实现",
+      "dir": null,
+      "card": null,
+      "card_filled": false,
+      "card_status_line": "",
+      "api_domains": [
+        "platform"
+      ],
+      "api_files": [
+        "websocket.py"
+      ],
+      "endpoint_count": 4,
+      "endpoint_prefixes": [
+        "/ws"
+      ],
+      "card_endpoint_count": 0,
+      "pages": [],
+      "pages_missing": [],
+      "tests_registered": [],
+      "tests_candidates": [
+        "backend/tests/test_cross_domain_flows.py",
+        "backend/tests/test_monitoring.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"websocket|monitoring|cross_domain\"",
+      "events_publish": [],
+      "events_subscribe": []
+    }
+  ]
+}

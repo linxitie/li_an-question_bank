@@ -1,0 +1,336 @@
+{
+  "mode": "题库设计",
+  "version": "v1",
+  "updated": "2026-10-25",
+  "purpose": "把标准模式、既有题库设计事实、项目技能、vtj MCP 与工作流绑成一条可执行的多角色管线，用于设计/测试/优化题库功能模块。",
+  "llm_modes": [
+    {
+      "id": "standard",
+      "name": "标准模式",
+      "use": "常规设计、测试用例、契约比对、文档归档",
+      "routing": "ctx.llm.stream + llm-retry",
+      "token": "compaction + session 缓存 + 非关键请求本地兜底",
+      "default": true
+    },
+    {
+      "id": "creative",
+      "name": "创造模式",
+      "use": "系统架构、新页面、组卷/判题算法等复杂设计",
+      "routing": "高 reasoning effort + 多提供商 fallback",
+      "token": "仅设计阶段启用，产出即归档",
+      "default": false
+    },
+    {
+      "id": "ptc",
+      "name": "PTC 模式",
+      "use": "试题批量处理、题图索引、统计、压测",
+      "routing": "本地沙箱执行",
+      "token": "大文件只传统计结果，不进上下文",
+      "default": false
+    }
+  ],
+  "roles": {
+    "ARCH": {
+      "name": "系统架构师",
+      "dsh": "Lead agent",
+      "can": "定边界、分层、依赖方向，出 ADR",
+      "veto": "跨域直连、新建第 38 个 API 模块",
+      "skills": ["brainstorming", "codebase-design"],
+      "gates": ["check_module_boundary"]
+    },
+    "PM": {
+      "name": "项目管理师",
+      "dsh": "Lead / PM",
+      "can": "拆任务、控范围、管分支",
+      "veto": "无验收命令的任务行、一分支两件事",
+      "skills": ["li-an-workflow", "plan-first-workflow", "scope-guard", "writing-plans"],
+      "gates": []
+    },
+    "DATA": {
+      "name": "数据建模师",
+      "dsh": "teammate",
+      "can": "表/字段/索引/迁移/计数口径",
+      "veto": "破坏 R10、无迁移加字段",
+      "skills": ["domain-modeling", "fact-guard"],
+      "gates": ["field_fingerprint", "db_guard"]
+    },
+    "BE": {
+      "name": "后端建模师",
+      "dsh": "teammate",
+      "can": "端点 + ORM",
+      "veto": "裸 SQL、跨域 import api 层",
+      "skills": ["tdd", "completion-verifier"],
+      "gates": ["api_contract", "module_boundary"]
+    },
+    "API": {
+      "name": "接口建模师",
+      "dsh": "teammate",
+      "can": "保 343 端点契约",
+      "veto": "未批准的端点增删改",
+      "skills": ["fact-guard"],
+      "gates": ["api_contract"]
+    },
+    "FE": {
+      "name": "前端建模师",
+      "dsh": "teammate",
+      "can": "只改 <script>，走 VTJ 工具",
+      "veto": "直改 <template>、raw 页同步",
+      "skills": ["vtj-frontend", "agent-browser"],
+      "gates": ["frontend_contract"]
+    },
+    "SEC": {
+      "name": "网络安全检测与保障员",
+      "dsh": "teammate（只读）",
+      "can": "凭据/越权/注入/脱敏",
+      "veto": "密钥入 .md/源码/提交信息",
+      "skills": ["enterprise-compliance-checker", "license-checker"],
+      "gates": ["secrets"]
+    },
+    "QA": {
+      "name": "系统测试与问题反馈员",
+      "dsh": "teammate",
+      "can": "用命令证明能/不能用",
+      "veto": "无证据的完成声明",
+      "skills": ["completion-verifier", "systematic-debugging"],
+      "gates": ["quick", "sweep"]
+    },
+    "DOC": {
+      "name": "归档与索引官",
+      "dsh": "teammate",
+      "can": "落盘、双写、更新索引",
+      "veto": "只展示不落盘",
+      "skills": ["context-rollup", "token-optimization"],
+      "gates": []
+    }
+  },
+  "states": {
+    "design": {
+      "name": "设计态",
+      "goal": "从需求到已批准的方案与可执行计划",
+      "steps": [
+        {
+          "id": "D0",
+          "roles": ["PM"],
+          "action": "复述需求、划边界、定预算与分支",
+          "skills": ["instruction-source-guard", "scope-guard", "intent-clarifier"],
+          "mcp": [],
+          "output": "任务边界卡（做什么/不做什么/预算档/分支名）",
+          "gate": "python scripts/qbdm/qbdm.py module <id>",
+          "exit": "用户确认范围"
+        },
+        {
+          "id": "D1",
+          "roles": ["ARCH", "DATA"],
+          "action": "测绘影响面：端点/页面/测试/事件/表",
+          "skills": ["context-minimal-loader", "fact-guard"],
+          "mcp": ["vtj_get_project_info", "vtj_list_pages", "vtj_get_routing_info", "vtj_get_page_structure"],
+          "output": "影响面表（文件/类型/归属模块/跨模块/验证方式）",
+          "gate": "python scripts/qbdm/gen_module_ledger.py --check",
+          "exit": "影响文件清单确定"
+        },
+        {
+          "id": "D2",
+          "roles": ["ARCH"],
+          "action": "≥2 方案对比，出 ADR",
+          "skills": ["brainstorming", "codebase-design"],
+          "mcp": ["vtj_read_dsl_file", "vtj_read_vue_file"],
+          "output": "ADR（现状证据/方案≥2/选定+代价/不做什么）",
+          "gate": "方案落盘 docs/superpowers/specs/",
+          "exit": "用户批准"
+        },
+        {
+          "id": "D3",
+          "roles": ["DATA", "API", "SEC"],
+          "action": "冻结契约：迁移单、端点差集、安全五问",
+          "skills": ["domain-modeling", "license-checker"],
+          "mcp": ["vtj_get_component_detail", "vtj_get_material_catalog"],
+          "output": "契约比对表 + 迁移单/零迁移结论 + SEC 五问",
+          "gate": "python backend/scripts/gates/gate_l4_api_contract.py",
+          "exit": "端点差集=∅ 或已批准；SEC 无阻断"
+        },
+        {
+          "id": "D4",
+          "roles": ["PM"],
+          "action": "拆任务表，每行带验收命令",
+          "skills": ["plan-first-workflow", "writing-plans"],
+          "mcp": [],
+          "output": "实施计划（ID|动作|文件|验收命令|依赖|预算|角色）",
+          "gate": "计划自检：每行可执行验收",
+          "exit": "用户批准后进入实施"
+        },
+        {
+          "id": "D5",
+          "roles": ["BE", "FE"],
+          "action": "一文件一改一验证；FE 先 dryRun",
+          "skills": ["tdd", "vtj-frontend"],
+          "mcp": ["vtj_write_vue_script", "vtj_write_dsl_file", "vtj_check_consistency", "vtj_add_route"],
+          "output": "代码 + dryRun 记录 + 路由注册证据",
+          "gate": "python backend/scripts/gates/gate_all.py --quick",
+          "exit": "每文件自检通过"
+        },
+        {
+          "id": "D6",
+          "roles": ["QA", "DOC"],
+          "action": "门禁+域测，落盘归档",
+          "skills": ["completion-verifier", "context-rollup"],
+          "mcp": ["vtj_check_consistency"],
+          "output": "验收报告 + 归档路径 + 索引更新",
+          "gate": "python scripts/qbdm/test_sweep.py --suite backend/tests --timeout 90",
+          "exit": "退出码 0 且未覆盖项已列"
+        }
+      ]
+    },
+    "test": {
+      "name": "测试态",
+      "goal": "用命令证明模块能用/不能用，给出可复现报告",
+      "steps": [
+        {
+          "id": "T0",
+          "roles": ["QA"],
+          "action": "按台账选测试矩阵（T1–T8），列未覆盖项",
+          "skills": ["completion-verifier", "context-minimal-loader"],
+          "mcp": ["vtj_check_consistency"],
+          "output": "测试矩阵（层/命令/通过标准）",
+          "gate": "python scripts/qbdm/qbdm.py module <id>",
+          "exit": "矩阵确定"
+        },
+        {
+          "id": "T1",
+          "roles": ["QA", "API"],
+          "action": "契约、边界、数据三层",
+          "skills": ["completion-verifier"],
+          "mcp": [],
+          "output": "三层结果（命令/退出码/关键行）",
+          "gate": "gate_l4 + check_module_boundary + db_tables 差异",
+          "exit": "全部 PASS 或差异可解释"
+        },
+        {
+          "id": "T2",
+          "roles": ["QA", "BE", "FE"],
+          "action": "域测 + 前端 spec",
+          "skills": ["tdd", "completion-verifier"],
+          "mcp": [],
+          "output": "pytest / vitest 输出",
+          "gate": "cd backend; python -m pytest tests -q -k \"<模块关键字>\"",
+          "exit": "全 PASS / 无 HANG"
+        },
+        {
+          "id": "T3",
+          "roles": ["QA", "FE"],
+          "action": "页面可开与三端手工",
+          "skills": ["agent-browser", "vtj-frontend"],
+          "mcp": ["vtj_list_pages", "vtj_get_page_structure", "vtj_check_consistency"],
+          "output": "页面自测记录 + 三端勾选",
+          "gate": "gate_l5 + 设计器可开",
+          "exit": "三端记录齐全"
+        },
+        {
+          "id": "T4",
+          "roles": ["QA"],
+          "action": "事件回归与幂等重放",
+          "skills": ["systematic-debugging"],
+          "mcp": [],
+          "output": "重复事件数 / 计数差异",
+          "gate": "python -m pytest backend/tests/test_cross_domain_flows.py -q",
+          "exit": "重复=0、差异=0"
+        },
+        {
+          "id": "T5",
+          "roles": ["DOC"],
+          "action": "报告落盘并双写",
+          "skills": ["context-rollup"],
+          "mcp": [],
+          "output": "验收报告（结论/证据/未覆盖/归档路径）",
+          "gate": "python scripts/qbdm/qbdm.py status",
+          "exit": "索引更新"
+        }
+      ]
+    },
+    "optimize": {
+      "name": "优化态",
+      "goal": "先量后改，改完复量，达标线可验收",
+      "steps": [
+        {
+          "id": "O0",
+          "roles": ["DATA", "QA"],
+          "action": "取基线：P95/计数差异/重复事件/三态可达性",
+          "skills": ["fact-guard", "completion-verifier"],
+          "mcp": [],
+          "output": "基线数字（优化前）",
+          "gate": "相关命令输出入档",
+          "exit": "数字可复现"
+        },
+        {
+          "id": "O1",
+          "roles": ["ARCH", "BE"],
+          "action": "选一条优化点，写明收益与代价",
+          "skills": ["codebase-design", "redundancy-cleaner"],
+          "mcp": [],
+          "output": "优化单（现状/改法/预期数字/回滚）",
+          "gate": "用户批准",
+          "exit": "一条一改，不夹带"
+        },
+        {
+          "id": "O2",
+          "roles": ["BE", "FE"],
+          "action": "实施并逐文件验证",
+          "skills": ["tdd", "vtj-frontend"],
+          "mcp": ["vtj_write_vue_script", "vtj_check_consistency"],
+          "output": "代码 + 单文件验证",
+          "gate": "gate_all.py --quick",
+          "exit": "自检通过"
+        },
+        {
+          "id": "O3",
+          "roles": ["QA"],
+          "action": "复量并对比基线",
+          "skills": ["completion-verifier"],
+          "mcp": [],
+          "output": "优化后数字 + 回归结论",
+          "gate": "同 O0 命令 + 回归子集",
+          "exit": "达标线满足或如实报未达标"
+        },
+        {
+          "id": "O4",
+          "roles": ["DOC"],
+          "action": "优化报告归档",
+          "skills": ["context-rollup"],
+          "mcp": [],
+          "output": "优化报告（前后对比/风险/回滚）",
+          "gate": "python scripts/qbdm/qbdm.py status",
+          "exit": "索引更新"
+        }
+      ]
+    }
+  },
+  "mcp": {
+    "server": "vtj",
+    "tools": [
+      "vtj_add_route", "vtj_check_consistency", "vtj_create_page_scaffold",
+      "vtj_get_component_detail", "vtj_get_material_catalog", "vtj_get_page_structure",
+      "vtj_get_project_info", "vtj_get_routing_info", "vtj_list_apis", "vtj_list_blocks",
+      "vtj_list_pages", "vtj_read_dsl_file", "vtj_read_vue_file", "vtj_sync_vue_to_dsl",
+      "vtj_write_dsl_file", "vtj_write_vue_full", "vtj_write_vue_script",
+      "vtj_write_vue_style", "vtj_write_vue_template"
+    ],
+    "resources": [
+      "vtj://project/config", "vtj://project/routing", "vtj://materials/catalog"
+    ],
+    "redlines": [
+      "raw 页面禁止 vtj_sync_vue_to_dsl（R2）",
+      "禁止用 MCP 直接改 .vtj 页面的 <template>（R3）",
+      "写前先 dryRun:true，写完读回校验版本号一致",
+      "MCP 是宿主级配置，cwd 固定本仓库"
+    ]
+  },
+  "notes": [
+    "Windows 控制台 GBK：脚本子进程必须 PYTHONIOENCODING=utf-8，否则 ✅ 打印抛 UnicodeEncodeError 被误判 FAIL",
+    "全量 pytest 会挂起：用 test_sweep.py 拿 OK/FAIL/HANG 三态，别硬等",
+    "工作区 ACL 曾使沙箱 grantWrite 抛 Win32 5：会话需 full access，或用 diagnose-windows-sandbox-acl 修复",
+    "343 端点冻结：任何增删改先对 api_surface.json 出差集并经用户批准（R11）",
+    "事件 trigger_type 只增不改，幂等键必须定义（A19）",
+    "备份只能用 sqlite3.backup()，禁止 shutil.copy2（R10）",
+    "题库/ 662MB、static/ 4.3GB 禁止读取内容，只统计（v1 §6.4）",
+    "默认模型 deepseek-flash + low：架构讨论切创造模式，批量数据走 PTC"
+  ]
+}
