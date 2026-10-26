@@ -93,6 +93,55 @@
             </div>
           </div>
         </div>
+
+        <!-- 考点树 -->
+        <div class="tree-card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <XIcon :icon="Reading" :size="18" color="#1A365D"></XIcon>
+              考点树
+            </h3>
+          </div>
+          <div class="tree-tabs">
+            <div
+              v-for="sub in treeSubjects"
+              :key="sub.id"
+              :class="['tree-tab', { active: activeTreeSubject === sub.id }]"
+              @click="loadTree(sub.id)"
+            >
+              {{ sub.name }}
+            </div>
+          </div>
+          <div class="tree-body">
+            <div class="tree-state" v-if="treeLoading">加载中...</div>
+            <div class="tree-state" v-else-if="treeError">{{ treeError }}</div>
+            <div class="tree-state" v-else-if="!treeData.length">暂无考点数据</div>
+            <template v-else>
+              <template v-for="sc in treeData" :key="sc.id">
+                <div class="tree-sc" v-if="(sc.knowledge_points || []).length">
+                  <template v-for="l2 in sc.knowledge_points" :key="l2.point_id">
+                    <div class="tree-l2" v-if="(l2.total_questions || 0) > 0">
+                      <div class="tree-l2-row" @click="toggleTreeL2(sc.id, l2.point_id)">
+                        <span>{{ l2.point_name }}</span>
+                        <span class="tree-count">{{ l2.done_count || 0 }}/{{ l2.total_questions || 0 }}</span>
+                        <XIcon :icon="isTreeL2Expanded(sc.id, l2.point_id) ? ArrowDown : ArrowRight" :size="12" color="#8899aa"></XIcon>
+                      </div>
+                      <div class="tree-l3-list" v-if="isTreeL2Expanded(sc.id, l2.point_id)">
+                        <template v-for="l3 in l2.children" :key="l3.point_id">
+                          <div class="tree-l3-row" v-if="(l3.total_questions || 0) > 0" @click="startTreePractice(sc, l2, l3)">
+                            <span>{{ l3.point_name }}</span>
+                            <span class="tree-count">{{ l3.done_count || 0 }}/{{ l3.total_questions || 0 }}</span>
+                          </div>
+                        </template>
+                        <div class="tree-empty" v-if="!l2.children || !l2.children.length">暂无下级考点</div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </template>
+          </div>
+        </div>
       </aside>
 
       <!-- 中间内容区 -->
@@ -262,6 +311,7 @@ import {
   Setting,
   UserFilled,
   ArrowRight,
+  ArrowDown,
   EditPen,
   Cpu,
   Warning,
@@ -402,6 +452,57 @@ export default defineComponent({
       }
     ]);
     
+    // 考点树
+    const treeSubjects = [
+      { id: 1, name: '行测' },
+      { id: 2, name: '申论' },
+      { id: 3, name: '公专' }
+    ];
+    const activeTreeSubject = ref(1);
+    const treeData = ref<any[]>([]);
+    const treeLoading = ref(false);
+    const treeError = ref('');
+    const expandedL2 = ref<Record<string, boolean>>({});
+
+    const loadTree = async (subjectId: number) => {
+      activeTreeSubject.value = subjectId;
+      treeLoading.value = true;
+      treeError.value = '';
+      expandedL2.value = {};
+      try {
+        const auth = window.__VTJ_AUTH__;
+        let res: any;
+        if (auth && auth.apiFetch) {
+          res = await auth.apiFetch('/api/quick-practice/sub-categories?subjectId=' + subjectId);
+        } else {
+          const headers: Record<string, string> = {};
+          if (auth && auth.getAuthHeaders) {
+            Object.assign(headers, auth.getAuthHeaders() || {});
+          }
+          res = await fetch('/api/quick-practice/sub-categories?subjectId=' + subjectId, { headers });
+        }
+        if (!res || !res.ok) throw new Error('bad response');
+        const data = await res.json();
+        treeData.value = data.items || [];
+      } catch (error) {
+        treeError.value = '考点树加载失败';
+        treeData.value = [];
+      } finally {
+        treeLoading.value = false;
+      }
+    };
+
+    const toggleTreeL2 = (scId: any, l2Id: any) => {
+      const key = scId + ':' + l2Id;
+      expandedL2.value = Object.assign({}, expandedL2.value, { [key]: !expandedL2.value[key] });
+    };
+
+    const isTreeL2Expanded = (scId: any, l2Id: any) => !!expandedL2.value[scId + ':' + l2Id];
+
+    const startTreePractice = (sc: any, l2: any, l3: any) => {
+      router.push('/tablet/answer?knowledge_point_ids=' + l3.point_id + '&mode=random&subjectId=' + activeTreeSubject.value);
+    };
+
     // 最近练习
     const recentList = ref([
       { id: 1, name: '2025年行测真题精选', desc: '正确率 75%' },
@@ -430,6 +531,7 @@ export default defineComponent({
     
     // 加载真实题库数据（已发布试卷，替换下方演示数据）
     onMounted(async () => {
+      loadTree(1);
       try {
         const auth = window.__VTJ_AUTH__;
         if (auth && auth.isLoggedIn()) {
@@ -507,6 +609,16 @@ export default defineComponent({
       streakDays,
       filteredQuestions,
       recentList,
+      treeSubjects,
+      activeTreeSubject,
+      treeData,
+      treeLoading,
+      treeError,
+      expandedL2,
+      loadTree,
+      toggleTreeL2,
+      isTreeL2Expanded,
+      startTreePractice,
       goToNotifications,
       goToSettings,
       goToProfile,
@@ -526,6 +638,7 @@ export default defineComponent({
       Setting,
       UserFilled,
       ArrowRight,
+      ArrowDown,
       EditPen,
       Cpu,
       Warning,
@@ -774,6 +887,137 @@ export default defineComponent({
 
 .category-item.active .category-count {
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* 考点树 */
+.tree-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
+  min-width: 0;
+}
+
+.tree-card .card-header {
+  margin-bottom: 10px;
+}
+
+.tree-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tree-tab {
+  flex: 1;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5a6488;
+  background: #f5f7fa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tree-tab:hover {
+  background: #eef2f8;
+}
+
+.tree-tab.active {
+  background: #1A365D;
+  color: #ffffff;
+}
+
+.tree-body {
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.tree-state,
+.tree-empty {
+  padding: 10px 4px;
+  font-size: 12px;
+  color: #8899aa;
+  text-align: center;
+}
+
+.tree-empty {
+  text-align: left;
+  padding: 6px 4px 2px 20px;
+  color: #a0a8bd;
+}
+
+.tree-sc + .tree-sc {
+  margin-top: 8px;
+}
+
+.tree-l2 {
+  border-radius: 6px;
+}
+
+.tree-l2-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tree-l2-row:hover {
+  background: #f8f9fc;
+}
+
+.tree-l2-row span:first-child {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a2b5f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #8899aa;
+}
+
+.tree-l3-list {
+  border-top: 1px dashed #ebEEF5;
+  margin-top: 2px;
+  padding-top: 2px;
+  overflow: hidden;
+}
+
+.tree-l3-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tree-l3-row:hover {
+  background: #f8f9fc;
+}
+
+.tree-l3-row span:first-child {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #5a6488;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 中间内容区 */

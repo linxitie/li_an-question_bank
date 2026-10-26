@@ -32,13 +32,14 @@
   包初始化时会撞上「半初始化的 question_import」而 ImportError
   —— 与 `upsert.py` 的同款约束，参见 `question_ingest/__init__.py` 注释。
 """
+import json
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 from sqlalchemy.orm import Session
 
-from ...api.v1.catalog.question_import import _persist_group_images  # 反向依赖：见本模块 docstring
 from ...models.models import QuestionGroup
+from ..rich_text import sanitize_rich_text
 
 logger = logging.getLogger(__name__)
 
@@ -89,5 +90,82 @@ def _upsert_question_group(
     )
     db.add(group)
     db.flush()
+    from ...api.v1.catalog.question_import import _persist_group_images
     _persist_group_images(group)
     return group
+
+
+def upsert_question_material(
+    db: Session,
+    question,
+    *,
+    group_id: Optional[int] = None,
+    shared_content: Optional[str] = None,
+    shared_content_images: Optional[Union[str, list, dict]] = None,
+    current_user=None,
+) -> Optional[QuestionGroup]:
+    """按需建组/改组/清空题组材料；不 commit，事务归调用方。
+
+    三种生效分支：有 ``group_id`` 改组；无 ``group_id`` 但有材料新建组并回填
+    ``question.group_id``；``group_id`` 与材料都为空时把题目解绑（``group_id=0``），
+    旧组保留给其它成员继续使用。三个参数全为 ``None`` 时视为未修改材料。
+    """
+    if group_id is None and shared_content is None and shared_content_images is None:
+        return _current_group(db, question)
+
+    if current_user is not None:
+        same_creator = question.creator_id == getattr(current_user, 'user_id', None)
+        if not same_creator and (getattr(current_user, 'role_level', 0) or 0) < 3:
+            raise PermissionError("无权修改此题目材料")
+
+    if isinstance(shared_content_images, (list, dict)):
+        shared_content_images = json.dumps(shared_content_images, ensure_ascii=False)
+
+    # RT-7：题组材料是唯一写入口，落库前统一过浏览器信任边界清洗。
+    # 只清共享材料；题干/选项/解析的清洗属 RT-7 其它写路径，不在本模块处理。
+    if shared_content is not None:
+        shared_content = sanitize_rich_text(shared_content)
+
+    if not group_id:
+        if not shared_content:
+            question.group_id = 0
+            return None
+
+        subject_name = ''
+        subject = getattr(question, 'subject', None)
+        if subject is not None:
+            subject_name = subject.subject_name or ''
+        if not subject_name:
+            subject_id = getattr(question, 'subject_id', None)
+            subject_name = f"科目{subject_id}" if subject_id else ""
+
+        group = _upsert_question_group(
+            db,
+            group_type="material",
+            shared_content=shared_content,
+            subject=subject_name,
+            source=question.source or "",
+            title=shared_content[:200],
+        )
+        if shared_content_images is not None:
+            group.shared_content_images = shared_content_images
+        question.group_id = group.id
+        return group
+
+    group = db.query(QuestionGroup).filter(QuestionGroup.id == group_id).first()
+    if group is None:
+        raise ValueError("题组不存在")
+
+    if shared_content is not None:
+        group.shared_content = shared_content
+    if shared_content_images is not None:
+        group.shared_content_images = shared_content_images
+    question.group_id = group.id
+    return group
+
+
+def _current_group(db: Session, question) -> Optional[QuestionGroup]:
+    gid = getattr(question, 'group_id', None) or 0
+    if not gid:
+        return None
+    return db.query(QuestionGroup).filter(QuestionGroup.id == gid).first()

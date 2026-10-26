@@ -80,31 +80,38 @@
         </div>
       </div>
 
-      <!-- 状态1：知识点列表 -->
+      <!-- 状态1：知识点列表（L2 二级分类 / L3 三级考点） -->
       <div v-else-if="viewState === 'knowledgePoints'">
         <!-- 子科目级聚合混合练习：该子科目下全部知识点统一出题（每层仅此一个） -->
         <button class="mixed-btn kp-mixed" @click="mixedPracticeCurrentSub">
           <XIcon :icon="Lightning" :size="16" color="#1A365D"></XIcon>
           <span>本知识点分类混合练习</span>
-          <span class="mixed-sub">{{ knowledgePoints.length }} 个知识点</span>
+          <span class="mixed-sub">{{ currentL3Count }} 个知识点</span>
         </button>
-        <div
-          v-for="kp in knowledgePoints"
-          :key="kp.point_id"
-          class="kp-item"
-          @click="openModeSheet(kp)"
-        >
-          <div class="kp-row">
-            <span class="kp-name">{{ kp.point_name }}</span>
-            <span class="kp-stat">{{ kp.done_count }}/{{ kp.total_questions }} · {{ kp.accuracy ?? 0 }}%</span>
+        <template v-for="l2 in knowledgePoints" :key="l2.point_id">
+          <div class="kp-item" v-if="(l2.total_questions || 0) > 0">
+            <div class="kp-row" @click="toggleL2(l2.point_id)">
+              <span class="kp-name">{{ l2.point_name }}</span>
+              <span class="kp-stat">{{ l2.done_count || 0 }}/{{ l2.total_questions || 0 }} · {{ l2.accuracy ?? 0 }}%</span>
+              <XIcon :icon="isL2Expanded(l2.point_id) ? ArrowDown : ArrowRight" :size="14" color="#8899aa"></XIcon>
+            </div>
+            <div class="progress-bar">
+              <div
+                class="progress-fill"
+                :style="{ width: calcPct(l2.done_count, l2.total_questions) + '%', background: progressColor(calcPct(l2.done_count, l2.total_questions)) }"
+              ></div>
+            </div>
+            <div class="l3-list" v-if="isL2Expanded(l2.point_id)">
+              <template v-for="l3 in l2.children" :key="l3.point_id">
+                <div class="l3-row" v-if="(l3.total_questions || 0) > 0" @click.stop="openModeSheet(l3)">
+                  <span class="l3-name">{{ l3.point_name }}</span>
+                  <span class="l3-stat">{{ l3.done_count || 0 }}/{{ l3.total_questions || 0 }}</span>
+                </div>
+              </template>
+              <div class="empty-l3" v-if="!l2.children || !l2.children.length">暂无下级考点</div>
+            </div>
           </div>
-          <div class="progress-bar">
-            <div
-              class="progress-fill"
-              :style="{ width: calcPct(kp.done_count, kp.total_questions) + '%', background: progressColor(calcPct(kp.done_count, kp.total_questions)) }"
-            ></div>
-          </div>
-        </div>
+        </template>
         <div v-if="!knowledgePoints.length" class="empty-state">
           <span class="empty-title">该子科目暂无知识点</span>
           <span class="empty-desc">返回上级查看其他子科目</span>
@@ -180,6 +187,7 @@ import { onWrongQuestionsChanged } from '@/modules/practice/events';
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowDown,
   TrendCharts,
   EditPen,
   Trophy,
@@ -212,7 +220,9 @@ export default defineComponent({
     const subjectStats = ref({});    // subject_id -> {done, total}
     const activeSubject = ref(1);    // 当前选中科目
     const subModules = ref([]);      // 当前科目子科目（含嵌套 knowledge_points）
-    const knowledgePoints = ref([]); // 当前子科目的知识点
+    const knowledgePoints = ref([]); // 当前子科目的知识点（L2，children 为 L3）
+    // L2 展开状态：point_id -> boolean
+    const expandedL2 = ref<Record<number, boolean>>({});
     const viewState = ref('subModules'); // 'subModules' | 'knowledgePoints'
     // 当前进入的子科目，供知识点列表顶部的聚合「混合练习」按钮确定出题范围
     const currentSubCategory = ref<any>(null);
@@ -292,6 +302,7 @@ export default defineComponent({
       activeSubject.value = subjectId;
       viewState.value = 'subModules';
       knowledgePoints.value = [];
+      expandedL2.value = {};
       loading.value = true;
       loadError.value = false;
       try {
@@ -322,7 +333,16 @@ export default defineComponent({
       knowledgePoints.value = sc.knowledge_points || [];
       // 记录当前进入的子科目，供知识点列表顶部的聚合「混合练习」按钮确定出题范围
       currentSubCategory.value = sc;
+      expandedL2.value = {};
       viewState.value = 'knowledgePoints';
+    }
+
+    function toggleL2(id) {
+      expandedL2.value = Object.assign({}, expandedL2.value, { [id]: !expandedL2.value[id] });
+    }
+
+    function isL2Expanded(id) {
+      return !!expandedL2.value[id];
     }
 
     function openModeSheet(kp) {
@@ -334,15 +354,26 @@ export default defineComponent({
       showModeSheet.value = false;
     }
 
-    // 当前科目的全部考点 ID（子科目层与科目层混合练习用）
+    // 当前科目的全部考点 ID（子科目层与科目层混合练习用）：仅取 L3 叶子节点
     const subjectAllKpIds = computed(() => {
       const ids: number[] = [];
       (subModules.value || []).forEach((sc) => {
-        ((sc as any).knowledge_points || []).forEach((kp: any) => {
-          if (kp && kp.point_id != null) ids.push(kp.point_id);
+        ((sc as any).knowledge_points || []).forEach((l2: any) => {
+          (l2.children || []).forEach((l3: any) => {
+            if (l3?.point_id != null) ids.push(l3.point_id);
+          });
         });
       });
-      return ids;
+      return Array.from(new Set(ids));
+    });
+
+    // 当前子科目下 L3 叶子考点总数（混合练习按钮展示用）
+    const currentL3Count = computed(() => {
+      let n = 0;
+      (knowledgePoints.value || []).forEach((l2: any) => {
+        n += (l2.children || []).length;
+      });
+      return n;
     });
 
     function goAnswer(params: Record<string, any>) {
@@ -397,6 +428,7 @@ export default defineComponent({
       if (viewState.value === 'knowledgePoints') {
         viewState.value = 'subModules';
         knowledgePoints.value = [];
+        expandedL2.value = {};
       } else {
         router.back();
       }
@@ -468,6 +500,10 @@ export default defineComponent({
       activeSubject,
       subModules,
       knowledgePoints,
+      currentL3Count,
+      expandedL2,
+      toggleL2,
+      isL2Expanded,
       viewState,
       loaded,
       loading,
@@ -492,6 +528,7 @@ export default defineComponent({
       handleBack,
       ArrowLeft,
       ArrowRight,
+      ArrowDown,
       TrendCharts,
       EditPen,
       Trophy,
@@ -770,6 +807,52 @@ export default defineComponent({
   font-size: 12px;
   color: #8899aa;
   flex-shrink: 0;
+  margin-right: 6px;
+}
+
+/* L2 展开后的 L3 考点列表（缩进，不横向溢出） */
+.l3-list {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #ebEEF5;
+  overflow: hidden;
+}
+
+.l3-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 4px 8px 18px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.l3-row:active {
+  background: #f5f7fa;
+}
+
+.l3-name {
+  font-size: 13px;
+  color: #5a6488;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.l3-stat {
+  font-size: 11px;
+  color: #a0a8bd;
+  flex-shrink: 0;
+}
+
+.empty-l3 {
+  padding: 8px 4px 4px 18px;
+  font-size: 12px;
+  color: #a0a8bd;
 }
 
 /* 空态 */

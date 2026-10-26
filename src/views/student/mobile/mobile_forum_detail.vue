@@ -59,7 +59,8 @@ const goBack = () => {
   else router.push('/mobile/forum');
 };
 
-const formatTime = (iso: string) => {
+// createTime 由后端返回，帖子未加载/字段缺省时为 null，故入参允许空值
+const formatTime = (iso?: string | null) => {
   if (!iso) return '';
   const t = new Date(iso).getTime();
   const diff = Date.now() - t;

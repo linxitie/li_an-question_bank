@@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
 # ==================== 辅助函数 ====================
 
 from ....services.text_parser import clean_question_text
+from ....services.question_stats import QuestionStatsService
+from ....services.question_ingest.groups import upsert_question_material
 import re as _re
 
 # 题干摘要里必须**先剥图再截断**。
@@ -279,9 +281,17 @@ async def list_knowledge_points(
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """返回某科目的知识点列表（供题目选择器知识点下拉）"""
+    """返回某科目的 canonical L3 知识点列表（仅含有可见题目的考点）"""
+    visible_point_ids = db.query(QuestionBank.point_id).filter(
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
+        QuestionBank.point_id.isnot(None),
+    ).distinct()
     kps = db.query(KnowledgePoint).filter(
-        KnowledgePoint.subject_id == subject_id
+        KnowledgePoint.subject_id == subject_id,
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+        KnowledgePoint.point_id.in_(visible_point_ids),
     ).order_by(KnowledgePoint.sort_order).all()
     items = [{"point_id": kp.point_id, "point_name": kp.point_name} for kp in kps]
     return {"success": True, "total": len(items), "items": items}
@@ -305,11 +315,15 @@ async def list_teacher_questions(
     sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    include_offline: bool = Query(False, description="包含禁用/草稿题目"),
+    include_pending: bool = Query(False, description="包含待审核题目"),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
     """按多条件筛选题目列表"""
-    base_query = db.query(QuestionBank).filter(QuestionBank.status == 1)
+    base_query = QuestionStatsService.visible_query(
+        db, include_offline=include_offline, include_pending=include_pending
+    )
 
     if keyword:
         base_query = base_query.filter(QuestionBank.question_content.contains(keyword))
@@ -424,12 +438,29 @@ async def update_question(
         raise HTTPException(status_code=404, detail="题目不存在")
 
     try:
-        update_data = data.dict(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True)
+        material_keys = ("group_id", "shared_content", "shared_content_images")
+        material_data = {k: update_data.pop(k) for k in material_keys if k in update_data}
         for key, value in update_data.items():
             setattr(q, key, value)
+        if material_data:
+            upsert_question_material(
+                db,
+                q,
+                group_id=material_data.get("group_id"),
+                shared_content=material_data.get("shared_content"),
+                shared_content_images=material_data.get("shared_content_images"),
+                current_user=current_user,
+            )
         q.update_time = datetime.now()
         db.commit()
         return {"success": True, "message": "题目已更新", "question": _format_question(q)}
+    except PermissionError:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="无权修改此题目材料")
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"更新题目 {question_id} 失败: {e}", exc_info=True)
         db.rollback()
@@ -2110,17 +2141,21 @@ async def get_knowledge_mastery(
 ):
     """获取知识点掌握度统计"""
     # 获取知识点列表
-    kp_query = db.query(KnowledgePoint)
+    kp_query = db.query(KnowledgePoint).filter(
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+    )
     if subject_id:
         kp_query = kp_query.filter(KnowledgePoint.subject_id == subject_id)
     knowledge_points = kp_query.all()
 
     items = []
     for kp in knowledge_points:
-        # 统计该知识点下的答题情况
+        # 统计该知识点下的答题情况（canonical point_id 单一归属）
         questions = db.query(QuestionBank.question_id).filter(
             QuestionBank.point_id == kp.point_id,
-            QuestionBank.status == 1
+            QuestionBank.status == 1,
+            QuestionBank.audit_status == 1,
         ).all()
         qids = [q[0] for q in questions]
 
@@ -2130,6 +2165,9 @@ async def get_knowledge_mastery(
         total = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
             ExamAnswerDetail.question_id.in_(qids)
         ).scalar() or 0
+
+        if total <= 0:
+            continue
 
         correct = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
             ExamAnswerDetail.question_id.in_(qids),

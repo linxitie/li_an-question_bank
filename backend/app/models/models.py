@@ -152,6 +152,7 @@ class KnowledgePoint(Base):
     level = Column(Integer, default=1, comment="层级")
     description = Column(String(500), comment="知识点描述")
     sort_order = Column(Integer, default=1, comment="排序")
+    status = Column(Integer, default=1, comment="状态：1正常/0隐藏")
 
     subject = relationship("QuestionSubject")
     sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
@@ -175,6 +176,7 @@ class QuestionBank(Base):
     answer = Column(Text, nullable=False, comment="正确答案")
     answer_analysis = Column(Text, comment="答案解析")
     point_id = Column(BigInteger, ForeignKey("knowledge_point.point_id"), comment="知识点ID")
+    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True, comment="归一化子科目ID（NULL=未分类）")
     difficulty = Column(Integer, default=3, comment="难度")
     score = Column(DECIMAL(5, 2), default=0.00, comment="题目分值")
     year = Column(Integer, comment="考试年份")
@@ -236,6 +238,7 @@ class QuestionBank(Base):
     subject = relationship("QuestionSubject")
     type = relationship("QuestionType")
     point = relationship("KnowledgePoint")
+    sub_category = relationship("SubCategory")
     creator = relationship("SysUser", foreign_keys=[creator_id])
     auditor = relationship("SysUser", foreign_keys=[auditor_id])
 
@@ -243,6 +246,7 @@ class QuestionBank(Base):
         Index("idx_subject", subject_id),
         Index("idx_type", type_id),
         Index("idx_point", point_id),
+        Index("idx_question_sub_category", sub_category_id),
         Index("idx_difficulty", difficulty),
         Index("idx_audit_status", audit_status),
         Index("idx_creator_questionbank", creator_id),

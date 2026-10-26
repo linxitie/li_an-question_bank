@@ -94,6 +94,9 @@ class TeacherQuestionUpdate(BaseModel):
     subject_id: Optional[int] = None
     type_id: Optional[int] = None
     point_id: Optional[int] = None
+    group_id: Optional[int] = None
+    shared_content: Optional[str] = None
+    shared_content_images: Optional[str] = None
 
 
 class TeacherQuestionCreate(BaseModel):
@@ -110,6 +113,9 @@ class TeacherQuestionCreate(BaseModel):
     source: Optional[str] = None
     tags: Optional[str] = None
     point_id: Optional[int] = None
+    group_id: Optional[int] = None
+    shared_content: Optional[str] = None
+    shared_content_images: Optional[str] = None
 
 
 # ==================== 试卷管理 ====================

@@ -41,6 +41,7 @@ from ....models.models import (
 )
 from ....core.trigger_types import TRIGGER_PAPER_COMPLETED
 from ....services.event_consumer import record_user_action
+from ....services.option_utils import is_subjective_question
 from ....schemas.schemas import (
     SmartExamGenerateRequest,
     SmartExamGenerateResponse,
@@ -360,6 +361,7 @@ async def smart_generate_paper(
         # 获取题型名称
         qtype = db.query(QuestionType).filter(QuestionType.type_id == q.type_id).first()
         type_name = qtype.type_name if qtype else "未知"
+        is_subjective = is_subjective_question(q, qtype)
 
         # 获取子科目
         subcat = cfg.get("subcategory") or ""
@@ -377,7 +379,7 @@ async def smart_generate_paper(
             question_type=qtype.type_code if qtype else "",
             type_name=type_name,
             difficulty=q.difficulty,
-            options=q.options,
+            options=[] if is_subjective else q.options,
             answer=None,  # 预览不显示答案（客户端可点击展开查看）
             answer_analysis=None,
             subcategory=subcat,
@@ -557,6 +559,7 @@ async def preview_paper(
             continue
 
         qtype = db.query(QuestionType).filter(QuestionType.type_id == q.type_id).first()
+        is_subjective = is_subjective_question(q, qtype)
 
         questions_list.append({
             "question_id": q.question_id,
@@ -565,7 +568,8 @@ async def preview_paper(
             "question_type": qtype.type_code if qtype else "",
             "type_name": qtype.type_name if qtype else "",
             "difficulty": q.difficulty,
-            "options": q.options,
+            "options": [] if is_subjective else q.options,
+            "is_subjective": is_subjective,
             "answer": q.answer if show_answer else None,
             "answer_analysis": q.answer_analysis if show_answer else None,
             "score": float(r.question_score),

@@ -698,6 +698,10 @@ def _link_shenlun_material_groups(db: Session, items: List[Dict[str, Any]],
     """
     from ....models.models import QuestionBank as _QB
 
+    # P3-14 灰度开关：关闭时保留旧的解析/建组行为（不建组、不挂 group_id）。
+    if not settings.MATERIAL_OWNERSHIP_V2:
+        return 0
+
     linked = 0
     # D 修复：文档级材料。申论整卷「给定资料1..N」只挂在第一题（解析器省内存设计），
     # 同卷小题 material_text 为空——必须继承文档级材料建组，否则其他子题成为
@@ -740,6 +744,9 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
     """
     from ....services.composite_matcher import match_group_head, infer_member_qnums, semantic_grouping
 
+    # P3-14 灰度开关：关闭时保留旧的解析/建组行为（不建组、不挂 group_id）。
+    if not settings.MATERIAL_OWNERSHIP_V2:
+        return 0, 0
     if not settings.COMPOSITE_QUESTION_ENABLED:
         return 0, 0
     if not ok_items:
@@ -755,10 +762,27 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         numbered.append((i, qid, qn))
     qnum_map = {qid: (qn if qn is not None else 9999) for _, qid, qn in numbered}
 
+    def _group_shared_content(q: Dict[str, Any]) -> str:
+        """题组材料优先取解析器切出的 material_text / shared_content。
+
+        旧实现固定取头题 `question_content`：材料正文已经被 text_parser 剥离到
+        `material_text`，再用题干当组材料，会让「材料+题干」在详情里重复显示，
+        而真正的材料在多题共享时又会串到别的组（P3-9）。
+        """
+        return (q.get('material_text') or q.get('shared_content')
+                or q.get('question_content') or '')
+
     groups_created, members_linked = 0, 0
-    claimed = set()
+    # ★ P3-9：claimed 必须拆成两个集合。旧实现把「批内下标 i」与「题目ID jid」
+    #   塞进同一个 set —— 两者值域重叠（内存库 qid 从 1 递增，正是下标值域），
+    #   于是 `if i in claimed` 会把「下标恰好等于前一组某成员 qid」的合法组头
+    #   当成已认领而跳过，第二组凭空消失；`jid not in claimed` 又漏掉用下标
+    #   记录的认领，可能让同一题被挂进两个组。故：
+    #   · claimed_indices 只存批内下标；claimed_ids 只存 question_id。
+    claimed_indices = set()
+    claimed_ids = set()
     for i, q in enumerate(ok_items):
-        if i in claimed:
+        if i in claimed_indices:
             continue
         head_hit = match_group_head(q.get('question_content') or '')
         if not head_hit:
@@ -767,12 +791,16 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         head_qid = qid_by_index.get(i)
         if not head_qid:
             continue
+        # 组头本身已被前一组认领 → 它是子题，不能再开新组，否则会把它从
+        # 前一组抢走，破坏「一个子题只属于一个组」。
+        if head_qid in claimed_ids:
+            continue
         head_qn = qnum_map.get(head_qid)
         head_qn = None if head_qn == 9999 else head_qn
 
-        # 候选小题：批内其他未挂组的题号
+        # 候选小题：批内其他未挂组的题号（按 qid 判重，不能用下标）
         candidate_qnums = [qn for j, jid, qn in numbered
-                           if j != i and jid not in claimed and qn is not None]
+                           if j != i and jid not in claimed_ids and qn is not None]
         member_qnums = infer_member_qnums(head_qn, candidate_qnums, qnum_range)
         if not member_qnums:
             # 无小题可挂 → 不建组（避免空题组）
@@ -783,7 +811,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         member_ids = [head_qid]
         for mqn in member_qnums:
             jid = qn_to_qid.get(mqn)
-            if jid and jid not in claimed and jid not in member_ids:
+            if jid and jid not in claimed_ids and jid not in member_ids:
                 member_ids.append(jid)
 
         # W3：member_qnums 非空 ≠ 能挂上题——对应 qid 可能已被前面的组 claimed 掉，
@@ -796,14 +824,15 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
                         head_qid, member_qnums[:10])
             continue
 
-        claimed.add(i)
+        claimed_indices.add(i)
+        claimed_ids.add(head_qid)
         for jid in member_ids[1:]:
-            claimed.add(jid)
+            claimed_ids.add(jid)
 
         group = _upsert_question_group(
             db,
             group_type=group_type,
-            shared_content=q.get('question_content') or '',
+            shared_content=_group_shared_content(q),
             subject=subject_name or '公专',
             source=source_tag or q.get('paper_name', ''),
         )
@@ -822,7 +851,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
                     f"(type={group_type}, 题号 {member_qnums[:10]})")
 
     # ===== 层2 语义增强兜底：对层1 未命中的题目做分组（无显式标识的复合题）=====
-    unclaimed = [(i, q) for i, q in enumerate(ok_items) if i not in claimed]
+    unclaimed = [(i, q) for i, q in enumerate(ok_items) if i not in claimed_indices]
     if unclaimed:
         unclaimed_questions = [q for _, q in unclaimed]
         suggestions = semantic_grouping(unclaimed_questions)
@@ -848,7 +877,7 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             group = _upsert_question_group(
                 db,
                 group_type=sug.get('group_type') or 'material',
-                shared_content=ok_items[head_idx].get('question_content') or '',
+                shared_content=_group_shared_content(ok_items[head_idx]),
                 subject=subject_name or '公专',
                 source=source_tag or ok_items[head_idx].get('paper_name', ''),
             )
@@ -1644,9 +1673,21 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             record.failed_count = failed_count
             record.duplicate_count = duplicate_count
         else:
-            from ....services.text_parser import extract_question_blocks
+            from ....services.text_parser import (
+                extract_question_blocks,
+                extract_question_blocks_with_material_sets,
+                looks_like_answer_document,
+                extract_answer_entries,
+            )
             _set_progress(60, 'SPLITTING')
-            parsed_blocks = extract_question_blocks(text)
+            # ★ 答案卷不能套用题干切块器（2026-10-25 事故）：
+            #   实测「题本 125 块 / 答案解析 95 块」，前端据此显示"答案对不上"；
+            #   按题号锚点解析答案卷恰好 125 条，与题本同口径。
+            is_answer_doc = looks_like_answer_document(text, filename)
+            # ★ 行测资料分析：按（一）（二）材料标记把材料绑定到段内 4~5 道小题，
+            #   否则只有每组第一题带材料，前端必然"材料与小题断裂"。
+            parsed_blocks = ([] if is_answer_doc
+                             else extract_question_blocks_with_material_sets(text))
             _set_progress(75, 'MATCHING')
             auto_tags = _auto_detect_tags(filename, text)
             detected_subject = auto_tags.get('subject_category', '行测')
@@ -1696,6 +1737,32 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                     _set_progress(75 + int((idx + 1) / max(len(parsed_blocks), 1) * 15), 'MATCHING')
             _set_progress(90, 'BUILDING')
 
+            # 答案卷：预览条目 = 题号/答案/解析，不计入"题目"，但题号集合与题本可比对。
+            if is_answer_doc:
+                answer_entries = extract_answer_entries(text)
+                preview_items = [{
+                    # 答案卷条目没有题干；用「第N题」占位，避免预览出现空白卡片，
+                    # 但 is_answer_doc 会阻断 /confirm 把它当题目入库。
+                    'question_content': '第%d题' % e['number'],
+                    'role_label': '答案',
+                    'options': [],
+                    'answer': e['answer'],
+                    'analysis': e['analysis'],
+                    'answer_analysis': e['analysis'],
+                    'question_number': e['number'],
+                    'question_type_detail': '答案',
+                    'type_name': '答案',
+                    'subject_name': '答案',
+                    'status': 'ANSWER_ONLY',
+                    'is_answer_doc': True,
+                    'is_duplicate': False,
+                    'difficulty': 3,
+                    'score': 0,
+                } for e in answer_entries]
+                logger.info(
+                    f"[import-async] 识别为答案卷 {filename}："
+                    f"{len(preview_items)} 条答案锚点")
+
             total = len(preview_items)
             is_scanned = (ext == '.pdf' and len(preview_items) == 0 and _pdf_has_images_only(buf))
             # W2-1：科目/子科目建议（追加字段，不改既有字段）
@@ -1706,6 +1773,8 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                     'name': '', 'confidence': 0.0}
             response_payload = {
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
+                # file_role 让前端/教师一眼区分「题目卷 / 答案卷」，答案卷不再按题目数展示
+                'file_role': 'answer' if is_answer_doc else 'question',
                 'total_questions': total, 'success_count': total, 'failed_count': 0,
                 'duplicate_count': 0, 'questions': preview_items,
                 # ★ groups：按「给定材料」聚合的复合题组，供前端渲染总题干。
@@ -2154,6 +2223,9 @@ async def confirm_batch_import(
         raise HTTPException(status_code=400, detail=f"当前状态 {record.import_status} 不允许确认")
 
     try:
+        # payload.questions 是主路径；未回落 preview_data 快照时保持空字典，
+        # 否则下方 preview_data.get(...) 会因未绑定变量抛 UnboundLocalError。
+        preview_data: Dict[str, Any] = {}
         # ★ P0-6：历史记录 preview_data 为双重编码，单次 json.loads 只剥一层会返回 str，
         #   紧接着 .get() 会抛 AttributeError: 'str' object has no attribute 'get'。
         #   load_json_lenient 会循环剥到真实对象，并对脏数据返回 {}。
@@ -2174,6 +2246,7 @@ async def confirm_batch_import(
         errors = []
         new_questions = []
         confirmed_items = []  # ★ RC-4 修复：初始化 confirmed_items，供试卷关联使用
+        group_stats = {'groups': 0, 'members': 0, 'materials': 0}
 
         for item in items:
             if item.get('status') == 'DUPLICATE' or item.get('is_duplicate'):
@@ -2182,6 +2255,15 @@ async def confirm_batch_import(
             if item.get('status') == 'SKIPPED':
                 failed += 1
                 errors.append({'error': item.get('reason', '数据不完整'), 'raw': item.get('raw', {})})
+                continue
+            # 答案卷条目不是题目：必须走「分离导入」与题本匹配后再入库，
+            # 否则 /confirm 会把「第N题」当成 125 道新题写进题库（数据污染）。
+            if item.get('is_answer_doc') or item.get('status') == 'ANSWER_ONLY':
+                failed += 1
+                errors.append({
+                    'error': '该文件被识别为答案卷，不能作为题目直接入库；请使用「分离导入」与题本匹配',
+                    'question_number': item.get('question_number'),
+                })
                 continue
             # ★ 阻断闸门：解析器判定为 blocked 的题块拒绝入库。
             #   /confirm 是前端的**主入库路径**，若不在这里拦，
@@ -2358,6 +2440,34 @@ async def confirm_batch_import(
         _link_knowledge_points(db, new_questions)
         db.commit()
 
+        # ★ P3-11：主入库路径接建组。题目已提交后再挂组，失败只丢组关系不丢题。
+        if confirmed_items:
+            try:
+                id_map = {i: it['question_id'] for i, it in enumerate(confirmed_items)}
+                _group_subject = ''
+                for it in confirmed_items:
+                    _sn = str(it.get('subject_name') or '').strip()
+                    if _sn:
+                        _group_subject = _sn
+                        break
+                if not _group_subject and new_questions:
+                    _group_subject = (new_questions[0].subject.subject_name or '')
+                _group_source = record.original_filename or ''
+                _n_groups, _n_members = _detect_and_link_composite_groups(
+                    db, confirmed_items, id_map, _group_subject, _group_source)
+                _n_materials = _link_shenlun_material_groups(
+                    db, confirmed_items, id_map, _group_subject or '申论', _group_source)
+                group_stats['groups'] = _n_groups
+                group_stats['members'] = _n_members
+                group_stats['materials'] = _n_materials
+                if _n_groups or _n_members or _n_materials:
+                    db.commit()
+                    logger.info("[confirm] 建组完成: groups=%d members=%d materials=%d",
+                                _n_groups, _n_members, _n_materials)
+            except Exception as e:
+                db.rollback()
+                logger.warning(f"[confirm] 建组失败(非阻断，题目已入库): {e}")
+
         # N1: 确认导入阶段创建试卷（延迟创建策略）
         if imported > 0 and preview_data.get('auto_detected_tags'):
             try:
@@ -2423,6 +2533,10 @@ async def confirm_batch_import(
         except Exception as e:
             logger.warning(f"[import] 广播导入完成事件失败(非阻断): {e}")
 
+        message = f'导入完成：成功 {imported}，失败 {failed}，跳过 {skipped}'
+        if group_stats['groups'] or group_stats['materials']:
+            message += (f'；题组 {group_stats["groups"]}（成员 {group_stats["members"]}），'
+                        f'材料组 {group_stats["materials"]}')
         return {
             'success_count': imported,
             'failed_count': failed,
@@ -2430,7 +2544,8 @@ async def confirm_batch_import(
             'errors': errors,
             'paper_id': record.paper_id,
             'match_rate': preview_data.get('match_rate', 0),
-            'message': f'导入完成：成功 {imported}，失败 {failed}，跳过 {skipped}',
+            'group_stats': group_stats,
+            'message': message,
         }
     except Exception as e:
         db.rollback()

@@ -139,3 +139,12 @@ admin_token.txt
 # R6：只停止跟踪，不删除/移动 题库/ 目录。
 # 题库/备考资料/ 为参考 PDF（约 190 MB），本地保留，不再入库。
 题库/备考资料/
+
+# ---------- dsh 项目技能联接 ----------
+# .dsh/skills 是指向 .opencode/skills 的 Windows 目录联接，仅为让 dsh 按
+# project-dsh 根发现项目技能。不忽略会让 git 穿过联接把 20 个技能重复登记。
+.dsh/skills
+
+# ---------- 本地运行时残留 ----------
+backend/backend_pid.txt
+backend/_badge_write_test.txt

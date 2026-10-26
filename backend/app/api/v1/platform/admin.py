@@ -24,6 +24,8 @@ from ....models.models import (
     School, QuestionBank, ExamPaper, ExamRecord, PracticeRecord,
     Banji, PaperApprovalWorkflow
 )
+from ....services.question_stats import QuestionStatsService
+from ....services.question_ingest.groups import upsert_question_material
 from ....schemas.admin import (
     DashboardStats, DashboardResponse, WeeklyActiveTrend,
     SubjectDistribution,
@@ -450,37 +452,30 @@ async def reset_user_password(
 
 @router.get("/questions/stats", summary="题目统计")
 async def get_question_stats(
+    include_offline: bool = Query(False, description="包含禁用/草稿题目"),
+    include_pending: bool = Query(False, description="包含待审核题目"),
     current_user: SysUser = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """获取题目统计数据"""
+    base_query = QuestionStatsService.visible_query(
+        db, include_offline=include_offline, include_pending=include_pending
+    )
+
     # 总题目数
-    total = db.query(func.count(QuestionBank.question_id)).filter(
-        QuestionBank.status == 1
-    ).scalar()
-    
+    total = base_query.count()
+
     # 各科目题目数
-    xingce = db.query(func.count(QuestionBank.question_id)).filter(
-        QuestionBank.subject_id == 1,
-        QuestionBank.status == 1
-    ).scalar()
-    
-    shenlun = db.query(func.count(QuestionBank.question_id)).filter(
-        QuestionBank.subject_id == 2,
-        QuestionBank.status == 1
-    ).scalar()
-    
-    gongzhuan = db.query(func.count(QuestionBank.question_id)).filter(
-        QuestionBank.subject_id == 3,
-        QuestionBank.status == 1
-    ).scalar()
-    
+    xingce = base_query.filter(QuestionBank.subject_id == 1).count()
+    shenlun = base_query.filter(QuestionBank.subject_id == 2).count()
+    gongzhuan = base_query.filter(QuestionBank.subject_id == 3).count()
+
     # 待审核数
     pending = db.query(func.count(QuestionBank.question_id)).filter(
         QuestionBank.audit_status == 0,
         QuestionBank.status == 1
     ).scalar()
-    
+
     return {
         "success": True,
         "total": total,
@@ -499,11 +494,15 @@ async def list_all_questions(
     audit_status: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    include_offline: bool = Query(False, description="包含禁用/草稿题目"),
+    include_pending: bool = Query(False, description="包含待审核题目"),
     current_user: SysUser = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """管理员查看全部题目（含审核状态）"""
-    base_query = db.query(QuestionBank)
+    """管理员查看全部题目（默认与学生端同口径，开关放宽）"""
+    base_query = QuestionStatsService.visible_query(
+        db, include_offline=include_offline, include_pending=include_pending
+    )
     if keyword:
         base_query = base_query.filter(QuestionBank.question_content.contains(keyword))
     if subject_id:
@@ -571,11 +570,29 @@ async def update_question(
     if not q:
         raise HTTPException(status_code=404, detail="题目不存在")
 
-    update_data = data.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(q, key, value)
-    q.update_time = datetime.now()
-    db.commit()
+    update_data = data.model_dump(exclude_unset=True)
+    material_keys = ("group_id", "shared_content", "shared_content_images")
+    material_data = {k: update_data.pop(k) for k in material_keys if k in update_data}
+    try:
+        for key, value in update_data.items():
+            setattr(q, key, value)
+        if material_data:
+            upsert_question_material(
+                db,
+                q,
+                group_id=material_data.get("group_id"),
+                shared_content=material_data.get("shared_content"),
+                shared_content_images=material_data.get("shared_content_images"),
+                current_user=current_user,
+            )
+        q.update_time = datetime.now()
+        db.commit()
+    except PermissionError:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="无权修改此题目材料")
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(e))
 
     record_operation(db, current_user, "UPDATE", "题库管理",
                      f"编辑题目 {question_id}")

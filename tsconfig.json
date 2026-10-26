@@ -3,6 +3,10 @@
   "compilerOptions": {
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    // @vtj/cli 的基础 tsconfig 只声明 vite/client 与 vitest/globals，缺 node 类型，
+    // 使 src/main.ts 与 @vtj/web 源码里的 process.env 报 TS2591（构建被 typecheck 阻断）。
+    // 这里显式补齐三者，属配置层消除噪音，不改业务代码。
+    "types": ["vite/client", "vitest/globals", "node"],
     "paths": {
       "@/*": ["./src/*"],
       "$vtj/*": ["./.vtj/*"]

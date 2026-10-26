@@ -131,7 +131,8 @@ const highlights = computed(() =>
 /** 正文渲染统一走 newsRender.js（其内部复用 questionRender.js 的 sanitizeHtml） */
 const renderedContent = computed(() =>
   renderNewsContent(
-    currentNews.value && currentNews.value.content,
+    // content 缺失时传空串：renderNewsContent 首行会按空内容返回 ''，避免 string|null 入参
+    (currentNews.value && currentNews.value.content) || '',
     (currentNews.value && currentNews.value.images) || [],
     highlights.value
   )

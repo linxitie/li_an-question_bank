@@ -207,6 +207,20 @@
           <span class="field-hint">题型在导入时确定，不可修改</span>
         </div>
 
+        <!-- P2-5：题组共享材料编辑 -->
+        <div class="form-group material-section">
+          <label>
+            题组材料
+            <span class="material-group-hint" v-if="editForm.group_id > 0">（当前题组 #{{ editForm.group_id }}）</span>
+          </label>
+          <RichTextEditor v-model="editForm.shared_content" :group-id="editForm.group_id" placeholder="题组材料：支持加粗/链接/图片/表格" />
+          <div class="material-preview" v-if="editForm.shared_content">{{ editForm.shared_content }}</div>
+          <div class="material-actions">
+            <button type="button" class="btn-sm" @click="clearMaterial">清除材料</button>
+            <span class="field-hint">清空材料并解除题组关联，保存后生效</span>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>题干内容</label>
           <textarea class="form-input form-textarea" v-model="editForm.question_content" rows="4" placeholder="请输入题干内容（支持HTML，可Ctrl+V粘贴图片）"
@@ -287,11 +301,12 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import TeacherNavHeader from './TeacherNavHeader.vue';
+import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'TeacherQuestions',
-  components: { TeacherNavHeader },
+  components: { TeacherNavHeader, RichTextEditor },
   setup() {
     const provider = useProvider({ id: 'teacher_questions', version: '2' });
     const router = useRouter();
@@ -322,7 +337,9 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
     const editForm: any = ref({
       question_id: null, subject_id: 1, type_id: 1,
       question_content: '', answer: '', answer_analysis: '',
-      difficulty: 3, optionsParsed: { A: '', B: '', C: '', D: '' }
+      difficulty: 3, optionsParsed: { A: '', B: '', C: '', D: '' },
+      // P2-5：题组共享材料（保存时随 PUT 一起提交，后端事务化 upsert question_groups）
+      group_id: 0, shared_content: '', shared_content_images: ''
     });
 
     // 题型选项（需后台查询映射，这里用静态映射）
@@ -648,8 +665,34 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
         answer_analysis: q.answer_analysis || '',
         difficulty: q.difficulty || 3,
         optionsParsed: Object.keys(opts).length > 0 ? { ...opts } : { A: '', B: '', C: '', D: '' },
+        group_id: q.group_id || 0,
+        shared_content: q.shared_content || '',
+        shared_content_images: q.shared_content_images || '',
       };
       showEditModal.value = true;
+      hydrateMaterialFromDetail(q.question_id);
+    }
+
+    // P2-5：列表接口不保证返回题组材料，编辑时按题目详情补齐；
+    // 切换题目后旧请求返回时用 question_id 守卫，避免污染当前表单。
+    function hydrateMaterialFromDetail(qid: any) {
+      if (!qid) return;
+      const auth = (window as any).__VTJ_AUTH__;
+      auth.apiFetch(`/api/questions/${qid}`)
+        .then((res: any) => res.json())
+        .then((data: any) => {
+          if (!data || editForm.value.question_id !== qid) return;
+          editForm.value.group_id = data.group_id || 0;
+          editForm.value.shared_content = data.shared_content || '';
+          editForm.value.shared_content_images = data.shared_content_images || '';
+        })
+        .catch((e: any) => console.error('题组材料详情加载失败:', e));
+    }
+
+    function clearMaterial() {
+      editForm.value.shared_content = '';
+      editForm.value.shared_content_images = '';
+      editForm.value.group_id = 0;
     }
 
     function addOption() {
@@ -759,6 +802,10 @@ async function saveEdit() {
           answer: editForm.value.answer,
           answer_analysis: editForm.value.answer_analysis,
           difficulty: editForm.value.difficulty,
+          // P2-5：题组材料随保存一起提交；清空后传 0/'' 以便后端解除关联
+          group_id: editForm.value.group_id || 0,
+          shared_content: editForm.value.shared_content || '',
+          shared_content_images: editForm.value.shared_content_images || '',
         };
         // 如果有选项数据，打包为数组格式
         if (showOptionFields.value) {
@@ -778,6 +825,12 @@ async function saveEdit() {
           ElMessage.success('题目已更新');
           showEditModal.value = false;
           await loadQuestions();
+          // P2-5：保存后按详情回填材料，确保再次打开编辑时显示的是已持久化内容
+          if (data.data && data.data.question_id) {
+            hydrateMaterialFromDetail(data.data.question_id);
+          } else {
+            hydrateMaterialFromDetail(editForm.value.question_id);
+          }
         } else if (data.detail) {
           ElMessage.error('保存失败: ' + data.detail);
         } else {
@@ -880,7 +933,7 @@ async function saveEdit() {
       doSearch, changePage, subjectName, typeDisplayName, typeBadgeClass,
       renderStars, truncate, stripPromoText, hasImage, renderSummary,
       hasOptions, parsedOptions, isCorrectOption,
-      showDetail, openEdit, addOption, removeOption, saveEdit,
+      showDetail, openEdit, addOption, removeOption, saveEdit, clearMaterial,
       handleEditPaste, deleteQuestion, goImport, handleLogout,
       batchMode, selectedIds, batchSubjectId, allChecked,
       toggleBatchMode, toggleAll, batchDelete,       batchReclassify, cleanHtmlContent,
@@ -988,6 +1041,13 @@ async function saveEdit() {
 .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #1A3C6D; font-size: 14px; }
 .form-input { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 15px; box-sizing: border-box; }
 .form-textarea { resize: vertical; font-family: inherit; line-height: 1.6; }
+/* P2-5：题组共享材料编辑区 */
+.material-section { padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+.material-section label { color: #1A3C6D; }
+.material-group-hint { font-weight: 400; color: #909399; font-size: 13px; }
+.material-textarea { min-height: 120px; }
+.material-preview { margin-top: 8px; padding: 10px 12px; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; background: #fff; border: 1px dashed #cbd5e1; border-radius: 6px; color: #475569; line-height: 1.7; font-size: 13px; }
+.material-actions { margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .option-edit-list { display: flex; flex-direction: column; gap: 6px; }
 .option-edit-item { display: flex; align-items: center; gap: 8px; }
 .option-edit-key { font-weight: 700; color: #1A3C6D; min-width: 24px; }

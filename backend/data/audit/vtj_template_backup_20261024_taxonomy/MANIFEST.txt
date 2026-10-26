@@ -1,0 +1,11 @@
+﻿# VTJ template backup - T-10a (2026-10-24)
+# git rev-parse HEAD: d801468d56c41c2903770fd8fe7084d70031ea4f
+# branch: feat/fix-bug
+
+file	bytes	sha256
+mobile_practice.json	6952	1aac2f16b5f0abd6d82c238a795ef15913b27363c7b485270c83ebcd80360a1c
+mobile_practice.vue	26373	001e5c9fbdba4d07bf7e7ef4002c0642a6c0a77451d67179055d5aba486053cb
+question_bank.json	62208	bb2cb13446e0cea08ff02b0fbe803ba611b3c0a3223c33d05f4dbd02a6384b3c
+question_bank.vue	68131	4f806d118ae4671871bc8fd4ac925a62c4b8bc9cc172efdcf5d72313889d0758
+tablet_question_bank.json	6525	f801933850c4569246c115362ff6a8319e9faaf6c68278cf58d6ded35c3008d9
+tablet_question_bank.vue	25529	df83a360584cd41a6609efd1a7298fa6b49b878431a2fe2644e78601d54bb3ee

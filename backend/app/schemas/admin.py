@@ -143,6 +143,9 @@ class QuestionUpdateRequest(BaseModel):
     answer_analysis: Optional[str] = None
     difficulty: Optional[int] = None
     source: Optional[str] = None
+    group_id: Optional[int] = None
+    shared_content: Optional[str] = None
+    shared_content_images: Optional[str] = None
 
 
 # ==================== 试卷审批 ====================

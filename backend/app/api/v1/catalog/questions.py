@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import hashlib
+import uuid
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -24,6 +26,7 @@ from ....services.image_service import (sanitize_content_images, sanitize_option
                                        compress_image, STATIC_IMG_ROOT)
 from ....services.option_utils import render_image_placeholder
 from ....services.text_parser import canonical_answer
+from ....services.question_ingest.groups import upsert_question_material
 
 
 from ....core.security import get_current_user,require_teacher_or_admin
@@ -709,6 +712,13 @@ async def get_question_detail(
         _resp = QuestionResponse.model_validate(question)
         _resp.question_content = _q_content
         _resp.answer_analysis = _analysis
+        _resp.group_id = question.group_id or 0
+        if _resp.group_id:
+            _group = db.query(QuestionGroup).filter(
+                QuestionGroup.id == _resp.group_id).first()
+            if _group:
+                _resp.shared_content = _group.shared_content
+                _resp.shared_content_images = _group.shared_content_images
         if _opts_raw:
             _resp.options = _opts_raw
         return _resp
@@ -720,10 +730,10 @@ async def get_question_detail(
 @router.put("/{question_id}", response_model=QuestionResponse,summary="更新题目")
 async def update_question(
     question_id: int,
-    question: QuestionUpdate,
+    payload: QuestionUpdate,
     current_user: SysUser = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db)
-, question_data=None):
+):
     """更新题目信息"""
     question = db.query(QuestionBank).filter(
         QuestionBank.question_id == question_id
@@ -740,15 +750,20 @@ async def update_question(
     old_data = {
         "subject_id": question.subject_id,
         "type_id": question.type_id,
-        "content": question.question_content[:100],
+        "content": (question.question_content or "")[:100],
         "answer": question.answer
     }
 
     # 更新字段
-    update_data = question_data.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
+    material_keys = ("group_id", "shared_content", "shared_content_images")
+    material_data = {k: update_data.pop(k) for k in material_keys if k in update_data}
 
     if "options" in update_data and update_data["options"]:
-        update_data["options"] = [opt.dict() for opt in update_data["options"]]
+        update_data["options"] = [
+            opt.model_dump() if hasattr(opt, "model_dump") else opt
+            for opt in update_data["options"]
+        ]
 
     if "difficulty" in update_data:
         update_data["difficulty"] = (
@@ -759,6 +774,24 @@ async def update_question(
 
     for key, value in update_data.items():
         setattr(question, key, value)
+
+    material_group = None
+    if material_data:
+        try:
+            material_group = upsert_question_material(
+                db,
+                question,
+                group_id=material_data.get("group_id"),
+                shared_content=material_data.get("shared_content"),
+                shared_content_images=material_data.get("shared_content_images"),
+                current_user=current_user,
+            )
+        except PermissionError:
+            db.rollback()
+            raise HTTPException(status_code=403, detail="无权修改此题目材料")
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=404, detail=str(exc))
 
     question.update_time = datetime.now()
     question.version += 1
@@ -777,7 +810,10 @@ async def update_question(
         editor_id=current_user.user_id,
         action_type="UPDATE",
         old_data=old_data,
-        new_data={k: str(v)[:100] for k, v in update_data.items()},
+        new_data={
+            **{k: str(v)[:100] for k, v in update_data.items()},
+            **{k: str(v)[:100] for k, v in material_data.items()},
+        },
         remark="更新题目"
     )
     db.add(edit_log)
@@ -785,7 +821,12 @@ async def update_question(
 
     logger.info(f"用户 {current_user.username} 更新题目 ID: {question_id}")
 
-    return question
+    _resp = QuestionResponse.model_validate(question)
+    _resp.group_id = question.group_id or 0
+    if material_group is not None:
+        _resp.shared_content = material_group.shared_content
+        _resp.shared_content_images = material_group.shared_content_images
+    return _resp
 
 
 @router.delete("/{question_id}")
@@ -910,6 +951,62 @@ async def upload_question_image(
 
     logger.info("用户 %s 为题目 %d 上传图片 %s", current_user.username, qid, url)
     return SuccessResponse(message="图片上传成功", data={"url": url, "image_path": url})
+
+
+# RT-8：题组材料图片上传。目录口径与 question_ingest/images.py 的
+# GROUP_IMG_ROOT 一致（app/static/question-groups/{gid}/），但这里用
+# __file__ 定位，避免依赖启动 cwd。
+_GROUP_IMG_ROOT = Path(__file__).resolve().parents[3] / "static" / "question-groups"
+_GROUP_IMG_URL = "/static/question-groups"
+_GROUP_IMG_TYPES = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+_GROUP_IMG_MAX_BYTES = 10 * 1024 * 1024
+_GROUP_IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+@router.post("/group/{group_id}/images", summary="为题组材料上传图片")
+async def upload_group_image(
+    group_id: int,
+    file: UploadFile = File(..., description="图片文件"),
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    group = db.query(QuestionGroup.id).filter(
+        QuestionGroup.id == group_id
+    ).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="题组不存在")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in _GROUP_IMG_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="不支持的图片类型 %s" % (content_type or "（无）"),
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="上传文件为空")
+    if len(data) > _GROUP_IMG_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="图片超过 10MB 上限")
+
+    ext = os.path.splitext(os.path.basename(file.filename or ""))[1].lower()
+    if ext not in _GROUP_IMG_EXTS:
+        ext = _GROUP_IMG_TYPES[content_type]
+    filename = "%s%s" % (uuid.uuid4().hex, ext)
+
+    group_dir = _GROUP_IMG_ROOT / str(group_id)
+    group_dir.mkdir(parents=True, exist_ok=True)
+    (group_dir / filename).write_bytes(data)
+
+    url = "%s/%d/%s" % (_GROUP_IMG_URL, group_id, filename)
+    logger.info("用户 %s 为题组 %d 上传图片 %s", current_user.username, group_id, url)
+    return {"success": True, "url": url, "filename": filename}
 
 
 @router.post("/batch-import", response_model=BatchImportResponse, summary="批量导入题目")

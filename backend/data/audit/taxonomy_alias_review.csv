@@ -1,0 +1,506 @@
+﻿old_id,old_name,subject,sub_category,new_id,new_name,match_type,confidence,note
+127,词的辨析,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '词的辨析' under L2 '逻辑填空'; fallback to 其他
+128,综合资料,行测,资料分析,,混合资料,alias,0.85,alias matched: 综合资料 -> 混合资料
+129,前后呼应,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '前后呼应' under L2 '语句表达'; fallback to 其他
+130,中心理解题,行测,言语理解与表达,,主旨概括,alias,0.85,alias matched: 中心理解题 -> 主旨概括
+131,实词填空,行测,言语理解与表达,,实词填空,exact,0.95,
+132,混搭填空,行测,言语理解与表达,,混搭填空,exact,0.95,
+133,文字资料,行测,资料分析,,文字资料,exact,0.95,
+134,成语填空,行测,言语理解与表达,,成语填空,exact,0.95,
+135,关联关系,行测,言语理解与表达,,关联词,alias,0.85,alias matched: 关联关系 -> 关联词
+136,分述句特征,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '分述句特征' under L2 '片段阅读'; fallback to 其他
+137,重要文件,行测,政治理论,,重要文件,exact,0.95,
+138,常规解题方法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '常规解题方法' under L2 '数学运算'; fallback to 其他
+139,经济建设,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '经济建设' under L2 '党和国家方针政策'; fallback to 其他
+140,综合分析,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+141,重大会议及讲话,行测,政治理论,,重大会议及讲话,exact,0.95,
+142,现期比重,行测,资料分析,,比重,alias,0.85,alias matched: 现期比重 -> 比重
+143,补充论据,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '补充论据' under L2 '逻辑判断'; fallback to 其他
+144,一般增长率,行测,资料分析,,增长率,alias,0.85,alias matched: 一般增长率 -> 增长率
+145,和差倍比问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '和差倍比问题' under L2 '数学运算'; fallback to 其他
+146,常规问法,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+147,统计表,行测,资料分析,,表格资料,alias,0.85,alias matched: 统计表 -> 表格资料
+148,定义,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '定义' under L2 '定义判断'; fallback to 其他
+149,普通篇章,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '普通篇章' under L2 '片段阅读'; fallback to 其他
+150,平面几何,行测,数量关系,,几何问题,alias,0.85,alias matched: 平面几何 -> 几何问题
+151,削弱论点,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '削弱论点' under L2 '逻辑判断'; fallback to 其他
+152,平面图形（新）,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '平面图形（新）' under L2 '图形推理'; fallback to 其他
+153,单定义,行测,判断推理,,单定义,exact,0.95,
+154,种属关系,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 种属关系 -> 逻辑关系
+155,契合文段中心,行测,言语理解与表达,,主旨概括,alias,0.85,alias matched: 契合文段中心 -> 主旨概括
+156,反对关系,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 反对关系 -> 逻辑关系
+157,社会建设,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '社会建设' under L2 '党和国家方针政策'; fallback to 其他
+158,赋值法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '赋值法' under L2 '数学运算'; fallback to 其他
+159,基础排列组合,行测,数量关系,,排列组合,alias,0.85,alias matched: 基础排列组合 -> 排列组合
+160,中国历史,行测,常识判断,,中国历史,exact,0.95,
+161,其他法律法规,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '其他法律法规' under L2 '法律常识'; fallback to 其他
+162,对应,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '对应' under L2 '类比推理'; fallback to 其他
+163,生物常识,行测,常识判断,,生物,alias,0.85,alias matched: 生物常识 -> 生物
+164,语义关系,行测,判断推理,,语义关系,exact,0.95,
+165,生活常识,行测,常识判断,,生活科技,alias,0.85,alias matched: 生活常识 -> 生活科技
+166,现期平均数,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '现期平均数' under L2 '数学运算'; fallback to 其他
+167,物理常识,行测,常识判断,,物理,alias,0.85,alias matched: 物理常识 -> 物理
+168,细节判断题,行测,言语理解与表达,,细节判断,alias,0.85,alias matched: 细节判断题 -> 细节判断
+169,简单加减计算,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '简单加减计算' under L2 '速算技巧'; fallback to 其他
+170,代入排除法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '代入排除法' under L2 '数学运算'; fallback to 其他
+171,增长量计算,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '增长量计算' under L2 '统计术语'; fallback to 其他
+172,党的建设,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '党的建设' under L2 '党和国家方针政策'; fallback to 其他
+173,承上启下,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '承上启下' under L2 '语句表达'; fallback to 其他
+174,立体几何,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '立体几何' under L2 '图形推理'; fallback to 其他
+175,基期计算,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '基期计算' under L2 '统计术语'; fallback to 其他
+176,直接找数,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '直接找数' under L2 '速算技巧'; fallback to 其他
+177,搭桥,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '搭桥' under L2 '逻辑判断'; fallback to 其他
+178,原因结果,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '原因结果' under L2 '逻辑判断'; fallback to 其他
+179,政治建设,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '政治建设' under L2 '党和国家方针政策'; fallback to 其他
+180,自然常识,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '自然常识' under L2 '科技常识'; fallback to 其他
+181,统计图,行测,资料分析,,图形资料,alias,0.85,alias matched: 统计图 -> 图形资料
+182,普通考法,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+183,立体图形（新）,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '立体图形（新）' under L2 '图形推理'; fallback to 其他
+184,因果,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '因果' under L2 '片段阅读'; fallback to 其他
+185,特殊问法,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+186,理论与政策,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '理论与政策' under L2 '党和国家方针政策'; fallback to 其他
+187,根据尾句确定答案,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '根据尾句确定答案' under L2 '语句表达'; fallback to 其他
+188,给情况求概率,行测,数量关系,,概率问题,alias,0.85,alias matched: 给情况求概率 -> 概率问题
+189,大前提,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '大前提' under L2 '逻辑判断'; fallback to 其他
+190,现期倍数,行测,资料分析,,倍数,alias,0.85,alias matched: 现期倍数 -> 倍数
+191,经济利润问题,行测,数量关系,,经济利润,alias,0.85,alias matched: 经济利润问题 -> 经济利润
+192,拆分,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '拆分' under L2 '类比推理'; fallback to 其他
+193,增长量比较,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '增长量比较' under L2 '统计术语'; fallback to 其他
+194,黑白块类,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '黑白块类' under L2 '图形推理'; fallback to 其他
+195,指代词,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '指代词' under L2 '语句表达'; fallback to 其他
+196,文学常识,行测,常识判断,,文学常识,exact,0.95,
+197,并列,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '并列' under L2 '片段阅读'; fallback to 其他
+198,六面体,行测,判断推理,,空间重构,alias,0.85,alias matched: 六面体 -> 空间重构
+199,科技理论与成就,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '科技理论与成就' under L2 '科技常识'; fallback to 其他
+200,辩证法,行测,政治理论,,辩证法,exact,0.95,
+201,必要条件,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '必要条件' under L2 '逻辑判断'; fallback to 其他
+202,民法,行测,常识判断,,民法,exact,0.95,
+203,逻辑关系,行测,判断推理,,逻辑关系,exact,0.95,
+204,位置规律,行测,判断推理,,位置规律,exact,0.95,
+205,相似图形（新）,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '相似图形（新）' under L2 '图形推理'; fallback to 其他
+206,元素的种类,行测,判断推理,,数量规律,alias,0.85,alias matched: 元素的种类 -> 数量规律
+207,个数,行测,判断推理,,数量规律,alias,0.85,alias matched: 个数 -> 数量规律
+208,观点+解释说明,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '观点+解释说明' under L2 '片段阅读'; fallback to 其他
+209,倍数特性法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '倍数特性法' under L2 '数学运算'; fallback to 其他
+210,两期比重,行测,资料分析,,比重,alias,0.85,alias matched: 两期比重 -> 比重
+211,勾股定理（新）,行测,数量关系,,几何问题,alias,0.85,alias matched: 勾股定理（新） -> 几何问题
+212,日常结论,行测,判断推理,,日常结论,exact,0.95,
+213,常规类平移,行测,判断推理,,位置规律,alias,0.85,alias matched: 常规类平移 -> 位置规律
+214,基期比重,行测,资料分析,,比重,alias,0.85,alias matched: 基期比重 -> 比重
+215,热点事件,行测,常识判断,,社会热点,alias,0.85,alias matched: 热点事件 -> 社会热点
+216,笔画数,行测,判断推理,,数量规律,alias,0.85,alias matched: 笔画数 -> 数量规律
+217,类比,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '类比' under L2 '类比推理'; fallback to 其他
+218,常规翻译,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '常规翻译' under L2 '逻辑判断'; fallback to 其他
+219,组成关系,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 组成关系 -> 逻辑关系
+220,拆词,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '拆词' under L2 '类比推理'; fallback to 其他
+221,普通行程,行测,数量关系,,行程问题,alias,0.85,alias matched: 普通行程 -> 行程问题
+222,三视图,行测,判断推理,,空间重构,alias,0.85,alias matched: 三视图 -> 空间重构
+223,文化建设,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '文化建设' under L2 '文化常识'; fallback to 其他
+224,公共点,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '公共点' under L2 '图形推理'; fallback to 其他
+225,拆桥,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '拆桥' under L2 '逻辑判断'; fallback to 其他
+226,相遇追及,行测,数量关系,,行程问题,alias,0.85,alias matched: 相遇追及 -> 行程问题
+227,给效率比例型,行测,数量关系,,工程问题,alias,0.85,alias matched: 给效率比例型 -> 工程问题
+228,给概率求概率,行测,数量关系,,概率问题,alias,0.85,alias matched: 给概率求概率 -> 概率问题
+229,法治建设,行测,政治理论,,全面依法治国,alias,0.85,alias matched: 法治建设 -> 全面依法治国
+230,部分数,行测,判断推理,,数量规律,alias,0.85,alias matched: 部分数 -> 数量规律
+231,变形考法,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+232,非典型最值问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '非典型最值问题' under L2 '数学运算'; fallback to 其他
+233,行文逻辑,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '行文逻辑' under L2 '片段阅读'; fallback to 其他
+234,功能,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '功能' under L2 '类比推理'; fallback to 其他
+235,宏观经济与调控政策,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '宏观经济与调控政策' under L2 '党和国家方针政策'; fallback to 其他
+236,面积相关（新）,行测,数量关系,,几何问题,alias,0.85,alias matched: 面积相关（新） -> 几何问题
+237,原材料,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '原材料' under L2 '类比推理'; fallback to 其他
+238,工艺与成品,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '工艺与成品' under L2 '类比推理'; fallback to 其他
+239,总结前文,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '总结前文' under L2 '语句表达'; fallback to 其他
+240,枚举法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '枚举法' under L2 '数学运算'; fallback to 其他
+241,判断缺失题,行测,判断推理,,,hidden,0.1,"noise/meta: 缺失题 placeholder, not a real knowledge point"
+242,基期和差,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '基期和差' under L2 '统计术语'; fallback to 其他
+243,空间类,行测,判断推理,,空间重构,alias,0.85,alias matched: 空间类 -> 空间重构
+244,常识缺失题,行测,常识判断,,,hidden,0.1,"noise/meta: 缺失题 placeholder, not a real knowledge point"
+245,加强选非题,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '加强选非题' under L2 '逻辑判断'; fallback to 其他
+246,言语缺失题,行测,言语理解与表达,,,hidden,0.1,"noise/meta: 缺失题 placeholder, not a real knowledge point"
+247,一拖五,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '一拖五' under L2 '逻辑判断'; fallback to 其他
+248,生态文明建设,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '生态文明建设' under L2 '党和国家方针政策'; fallback to 其他
+249,削弱论据,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '削弱论据' under L2 '逻辑判断'; fallback to 其他
+250,概括后文,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '概括后文' under L2 '语句表达'; fallback to 其他
+251,立体拼合,行测,判断推理,,空间重构,alias,0.85,alias matched: 立体拼合 -> 空间重构
+252,语句填空题,行测,言语理解与表达,,语句填空,alias,0.85,alias matched: 语句填空题 -> 语句填空
+253,国情社情,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '国情社情' under L2 '社会常识'; fallback to 其他
+254,综合全文确定答案,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '综合全文确定答案' under L2 '片段阅读'; fallback to 其他
+255,年龄问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '年龄问题' under L2 '数学运算'; fallback to 其他
+256,削弱选非题,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '削弱选非题' under L2 '逻辑判断'; fallback to 其他
+257,标题填入题,行测,言语理解与表达,,标题填入,alias,0.85,alias matched: 标题填入题 -> 标题填入
+258,碎片类,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '碎片类' under L2 '图形推理'; fallback to 其他
+259,语法关系,行测,判断推理,,语法关系,exact,0.95,
+260,和平外交建设,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '和平外交建设' under L2 '党和国家方针政策'; fallback to 其他
+261,化学常识,行测,常识判断,,化学,alias,0.85,alias matched: 化学常识 -> 化学
+262,主客体,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '主客体' under L2 '类比推理'; fallback to 其他
+263,年均增长量,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '年均增长量' under L2 '统计术语'; fallback to 其他
+264,对称性的区分,行测,判断推理,,属性规律,alias,0.85,alias matched: 对称性的区分 -> 属性规律
+265,横线为尾句中的分句,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '横线为尾句中的分句' under L2 '语句表达'; fallback to 其他
+266,三角形基础（新）,行测,数量关系,,几何问题,alias,0.85,alias matched: 三角形基础（新） -> 几何问题
+267,行政法,行测,常识判断,,行政法,exact,0.95,
+268,从确定信息开始推或其他（材料）,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '从确定信息开始推或其他（材料）' under L2 '逻辑判断'; fallback to 其他
+269,机械划分,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '机械划分' under L2 '图形推理'; fallback to 其他
+270,材料,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+271,市场,行测,政治理论,,,hidden,0.1,noise/ambiguous token: '市场' has no stable canonical mapping
+272,数列问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '数列问题' under L2 '数字推理'; fallback to 其他
+273,给具体单位型,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '给具体单位型' under L2 '数学运算'; fallback to 其他
+274,新思想总论,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '新思想总论' under L2 '习近平新时代中国特色社会主义思想'; fallback to 其他
+275,矛盾关系,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 矛盾关系 -> 逻辑关系
+276,现期计算,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '现期计算' under L2 '统计术语'; fallback to 其他
+277,属性规律,行测,判断推理,,属性规律,exact,0.95,
+278,日常逻辑,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '日常逻辑' under L2 '逻辑判断'; fallback to 其他
+279,面数量,行测,判断推理,,数量规律,alias,0.85,alias matched: 面数量 -> 数量规律
+280,排序类,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '排序类' under L2 '逻辑判断'; fallback to 其他
+281,相对绝对项,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '相对绝对项' under L2 '图形推理'; fallback to 其他
+282,找相同元素,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '找相同元素' under L2 '图形推理'; fallback to 其他
+283,原因解释,行测,判断推理,,原因解释,exact,0.95,
+284,比例法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '比例法' under L2 '数学运算'; fallback to 其他
+285,统筹规划问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '统筹规划问题' under L2 '数学运算'; fallback to 其他
+286,资料缺失题,行测,资料分析,,,hidden,0.1,"noise/meta: 缺失题 placeholder, not a real knowledge point"
+287,假设,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '假设' under L2 '逻辑判断'; fallback to 其他
+288,平均数的增长率,行测,资料分析,,增长率,alias,0.85,alias matched: 平均数的增长率 -> 增长率
+289,接语选择题,行测,言语理解与表达,,接语选择,alias,0.85,alias matched: 接语选择题 -> 接语选择
+290,文字,行测,资料分析,,文字资料,alias,0.85,alias matched: 文字 -> 文字资料
+291,字母,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '字母' under L2 '图形推理'; fallback to 其他
+292,数字类,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '数字类' under L2 '数字推理'; fallback to 其他
+293,公文篇章,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '公文篇章' under L2 '片段阅读'; fallback to 其他
+294,从确定信息开始推或其他,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '从确定信息开始推或其他' under L2 '逻辑判断'; fallback to 其他
+295,形象表达,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '形象表达' under L2 '逻辑填空'; fallback to 其他
+296,平均数的增长量,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '平均数的增长量' under L2 '统计术语'; fallback to 其他
+297,构造数列,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '构造数列' under L2 '数字推理'; fallback to 其他
+298,比值计算,行测,资料分析,,比重,alias,0.85,alias matched: 比值计算 -> 比重
+299,年均增长率,行测,资料分析,,增长率,alias,0.85,alias matched: 年均增长率 -> 增长率
+300,几何小题型（新）,行测,数量关系,,几何问题,alias,0.85,alias matched: 几何小题型（新） -> 几何问题
+301,动作,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+302,状态先后顺序,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '状态先后顺序' under L2 '逻辑判断'; fallback to 其他
+303,普通不定方程,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '普通不定方程' under L2 '数学运算'; fallback to 其他
+304,属性,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '属性' under L2 '图形推理'; fallback to 其他
+305,黑白运算,行测,判断推理,,样式规律,alias,0.85,alias matched: 黑白运算 -> 样式规律
+306,实词,行测,言语理解与表达,,实词填空,alias,0.85,alias matched: 实词 -> 实词填空
+307,补充“没A没B”的对照组加强,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '补充“没A没B”的对照组加强' under L2 '逻辑判断'; fallback to 其他
+308,画图法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '画图法' under L2 '数学运算'; fallback to 其他
+309,下定义,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '下定义' under L2 '定义判断'; fallback to 其他
+310,列表法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '列表法' under L2 '数学运算'; fallback to 其他
+311,集合推理,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '集合推理' under L2 '逻辑判断'; fallback to 其他
+312,解释说明,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '解释说明' under L2 '片段阅读'; fallback to 其他
+313,数量+属性,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '数量+属性' under L2 '图形推理'; fallback to 其他
+314,位置等,行测,判断推理,,位置规律,alias,0.85,alias matched: 位置等 -> 位置规律
+315,细节主旨化,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '细节主旨化' under L2 '片段阅读'; fallback to 其他
+316,从最大信息开始推,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '从最大信息开始推' under L2 '逻辑判断'; fallback to 其他
+317,主题词,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '主题词' under L2 '片段阅读'; fallback to 其他
+318,相交于线,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '相交于线' under L2 '图形推理'; fallback to 其他
+319,论证结构,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '论证结构' under L2 '逻辑判断'; fallback to 其他
+320,直线数,行测,判断推理,,数量规律,alias,0.85,alias matched: 直线数 -> 数量规律
+321,公倍数与公约数问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '公倍数与公约数问题' under L2 '数学运算'; fallback to 其他
+322,求异,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '求异' under L2 '逻辑判断'; fallback to 其他
+323,相减,行测,判断推理,,样式规律,alias,0.85,alias matched: 相减 -> 样式规律
+324,相邻问题,行测,判断推理,,,hidden,0.1,ambiguous: 可能是图形相邻面，也可能是数量相邻排列；隐藏
+325,劳动法,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '劳动法' under L2 '法律常识'; fallback to 其他
+326,曲线数,行测,判断推理,,数量规律,alias,0.85,alias matched: 曲线数 -> 数量规律
+327,北京时政,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '北京时政' under L2 '时政热点'; fallback to 其他
+328,逻辑填空题,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '逻辑填空题' under L2 '逻辑填空'; fallback to 其他
+329,推理形式,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '推理形式' under L2 '逻辑判断'; fallback to 其他
+330,对称轴的方向,行测,判断推理,,属性规律,alias,0.85,alias matched: 对称轴的方向 -> 属性规律
+331,数量,行测,数量关系,,,hidden,0.1,noise/ambiguous token: '数量' has no stable canonical mapping
+332,排除法（材料）,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '排除法（材料）' under L2 '逻辑判断'; fallback to 其他
+333,两期平均数比较,行测,资料分析,,平均数,alias,0.85,alias matched: 两期平均数比较 -> 平均数
+334,两真两假,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '两真两假' under L2 '逻辑判断'; fallback to 其他
+335,部分面,行测,判断推理,,数量规律,alias,0.85,alias matched: 部分面 -> 数量规律
+336,民事诉讼法,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '民事诉讼法' under L2 '法律常识'; fallback to 其他
+337,实验主体没有代表性,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '实验主体没有代表性' under L2 '逻辑判断'; fallback to 其他
+338,代入法（材料）,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '代入法（材料）' under L2 '数学运算'; fallback to 其他
+339,关联词的后半部分,行测,言语理解与表达,,关联词,alias,0.85,alias matched: 关联词的后半部分 -> 关联词
+340,对比实验起点不一致,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '对比实验起点不一致' under L2 '逻辑判断'; fallback to 其他
+341,分数数列,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '分数数列' under L2 '数字推理'; fallback to 其他
+342,相邻比较,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '相邻比较' under L2 '图形推理'; fallback to 其他
+343,宪法,行测,常识判断,,宪法,exact,0.95,
+344,计算问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '计算问题' under L2 '数学运算'; fallback to 其他
+345,行政管理,行测,常识判断,,公共管理,alias,0.85,alias matched: 行政管理 -> 公共管理
+346,刑法,行测,常识判断,,刑法,exact,0.95,
+347,三集合,行测,判断推理,,,hidden,0.1,cross-domain: 集合计数属于数量关系，但旧 sub_category 是判断推理；隐藏
+348,纯常识,行测,常识判断,,,hidden,0.1,noise/ambiguous token: '纯常识' has no stable canonical mapping
+349,句子,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '句子' under L2 '语句表达'; fallback to 其他
+350,余数和同余问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '余数和同余问题' under L2 '数学运算'; fallback to 其他
+351,曲直交点,行测,判断推理,,数量规律,alias,0.85,alias matched: 曲直交点 -> 数量规律
+352,多级数列,行测,数量关系,,多级数列,exact,0.95,
+353,基期倍数,行测,资料分析,,倍数,alias,0.85,alias matched: 基期倍数 -> 倍数
+354,比值比较,行测,资料分析,,比重,alias,0.85,alias matched: 比值比较 -> 比重
+355,唯物论,行测,政治理论,,唯物论,exact,0.95,
+356,对策,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '对策' under L2 '片段阅读'; fallback to 其他
+357,基期平均数,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '基期平均数' under L2 '数学运算'; fallback to 其他
+358,多材料篇章（如北京3材料篇章等）,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '多材料篇章（如北京3材料篇章等）' under L2 '片段阅读'; fallback to 其他
+359,不相邻问题,行测,判断推理,,,hidden,0.1,ambiguous: 可能是图形相邻面，也可能是数量相邻排列；隐藏
+360,星期日期问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '星期日期问题' under L2 '数学运算'; fallback to 其他
+361,间隔基期,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '间隔基期' under L2 '统计术语'; fallback to 其他
+362,条件,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '条件' under L2 '逻辑判断'; fallback to 其他
+363,现期追赶,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '现期追赶' under L2 '统计术语'; fallback to 其他
+364,实验过程有问题,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '实验过程有问题' under L2 '逻辑判断'; fallback to 其他
+365,时间不够长等,行测,判断推理,,,hidden,0.1,noise/ambiguous token: '时间不够长等' has no stable canonical mapping
+366,元素运算,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '元素运算' under L2 '图形推理'; fallback to 其他
+367,换算,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+368,平均数问题,行测,资料分析,,平均数,alias,0.85,alias matched: 平均数问题 -> 平均数
+369,反向种属,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '反向种属' under L2 '类比推理'; fallback to 其他
+370,组成,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '组成' under L2 '类比推理'; fallback to 其他
+371,线段法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '线段法' under L2 '数学运算'; fallback to 其他
+372,两集合,行测,判断推理,,,hidden,0.1,cross-domain: 集合计数属于数量关系，但旧 sub_category 是判断推理；隐藏
+373,间隔增长率,行测,资料分析,,增长率,alias,0.85,alias matched: 间隔增长率 -> 增长率
+374,假设（材料）,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '假设（材料）' under L2 '逻辑判断'; fallback to 其他
+375,最大,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+376,小面,行测,判断推理,,数量规律,alias,0.85,alias matched: 小面 -> 数量规律
+377,包容,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 包容 -> 逻辑关系
+378,比赛问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '比赛问题' under L2 '数学运算'; fallback to 其他
+379,奇偶特性法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '奇偶特性法' under L2 '数学运算'; fallback to 其他
+380,黑白块面积,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '黑白块面积' under L2 '图形推理'; fallback to 其他
+381,短语填空（5字以上成语,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '短语填空（5字以上成语' under L2 '逻辑填空'; fallback to 其他
+382,4字以上实词等）,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '4字以上实词等）' under L2 '逻辑填空'; fallback to 其他
+383,语句排序题,行测,言语理解与表达,,语句排序,alias,0.85,alias matched: 语句排序题 -> 语句排序
+384,语句填空题混合题型,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '语句填空题混合题型' under L2 '语句表达'; fallback to 其他
+385,几何其他题型（新）,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '几何其他题型（新）' under L2 '数学运算'; fallback to 其他
+386,他因削弱,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '他因削弱' under L2 '逻辑判断'; fallback to 其他
+387,真假推理,行测,判断推理,,真假推理,exact,0.95,
+388,混合增长率,行测,资料分析,,增长率,alias,0.85,alias matched: 混合增长率 -> 增长率
+389,词句理解题,行测,言语理解与表达,,词句理解,alias,0.85,alias matched: 词句理解题 -> 词句理解
+390,给完工时间型,行测,数量关系,,工程问题,alias,0.85,alias matched: 给完工时间型 -> 工程问题
+391,工程问题,行测,数量关系,,工程问题,exact,0.95,
+392,提出对策,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '提出对策' under L2 '片段阅读'; fallback to 其他
+393,论证评价,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '论证评价' under L2 '逻辑判断'; fallback to 其他
+394,问题+对策,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '问题+对策' under L2 '片段阅读'; fallback to 其他
+395,其他（如选项为图片的细节判断题等）,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '其他（如选项为图片的细节判断题等）' under L2 '片段阅读'; fallback to 其他
+396,方阵问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '方阵问题' under L2 '数学运算'; fallback to 其他
+397,流水行船,行测,数量关系,,行程问题,alias,0.85,alias matched: 流水行船 -> 行程问题
+398,环境常识,行测,常识判断,,环境保护,alias,0.85,alias matched: 环境常识 -> 环境保护
+399,不定方程组,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '不定方程组' under L2 '数学运算'; fallback to 其他
+400,科学推理,行测,科学推理,,,hidden,0.1,noise/ambiguous token: '科学推理' has no stable canonical mapping
+401,其他,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+402,法理学,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '法理学' under L2 '法律常识'; fallback to 其他
+403,横线为首句中的分句,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '横线为首句中的分句' under L2 '语句表达'; fallback to 其他
+404,对比项,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+405,配套,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+406,国防和军队建设,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '国防和军队建设' under L2 '党和国家方针政策'; fallback to 其他
+407,最不利构造,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '最不利构造' under L2 '数学运算'; fallback to 其他
+408,转折,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '转折' under L2 '片段阅读'; fallback to 其他
+409,毛泽东思想,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '毛泽东思想' under L2 '马克思主义基本原理'; fallback to 其他
+410,递推数列,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '递推数列' under L2 '数字推理'; fallback to 其他
+411,因果倒置,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '因果倒置' under L2 '逻辑判断'; fallback to 其他
+412,确定捆绑,行测,判断推理,,,hidden,0.1,cross-domain: 语句排序术语出现在判断推理；隐藏
+413,哲学,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '哲学' under L2 '马克思主义基本原理'; fallback to 其他
+414,表述与实际不符项,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '表述与实际不符项' under L2 '片段阅读'; fallback to 其他
+415,代词,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '代词' under L2 '语句表达'; fallback to 其他
+416,交点数,行测,判断推理,,数量规律,alias,0.85,alias matched: 交点数 -> 数量规律
+417,公务员法,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '公务员法' under L2 '法律常识'; fallback to 其他
+418,指代不清的指代词,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '指代不清的指代词' under L2 '语句表达'; fallback to 其他
+419,图形间关系,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '图形间关系' under L2 '图形推理'; fallback to 其他
+420,排列组合问题,行测,数量关系,,排列组合,alias,0.85,alias matched: 排列组合问题 -> 排列组合
+421,词性,行测,判断推理,,语法关系,alias,0.85,alias matched: 词性 -> 语法关系
+422,虚词填空,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '虚词填空' under L2 '逻辑填空'; fallback to 其他
+423,广东时政,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '广东时政' under L2 '时政热点'; fallback to 其他
+424,切点,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '切点' under L2 '图形推理'; fallback to 其他
+425,数量缺失题,行测,数量关系,,,hidden,0.1,"noise/meta: 缺失题 placeholder, not a real knowledge point"
+426,平面拼合,行测,判断推理,,空间重构,alias,0.85,alias matched: 平面拼合 -> 空间重构
+427,两溶液混合,行测,科学推理,,溶液,alias,0.85,alias matched: 两溶液混合 -> 溶液
+428,唯物史观,行测,政治理论,,唯物史观,exact,0.95,
+429,四面体,行测,判断推理,,空间重构,alias,0.85,alias matched: 四面体 -> 空间重构
+430,火车过桥,行测,数量关系,,行程问题,alias,0.85,alias matched: 火车过桥 -> 行程问题
+431,横,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+432,竖,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+433,斜线,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '斜线' under L2 '图形推理'; fallback to 其他
+434,启下,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '启下' under L2 '语句表达'; fallback to 其他
+435,基期比较,行测,资料分析,,其他,subcategory_other,0.5,heuristic: keyword routing placed '基期比较' under L2 '统计术语'; fallback to 其他
+436,故事类,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '故事类' under L2 '片段阅读'; fallback to 其他
+437,提问+回答,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '提问+回答' under L2 '片段阅读'; fallback to 其他
+438,生动形象,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '生动形象' under L2 '逻辑填空'; fallback to 其他
+439,时间脉络,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '时间脉络' under L2 '语句表达'; fallback to 其他
+440,数量+数量,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '数量+数量' under L2 '图形推理'; fallback to 其他
+441,感情色彩,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '感情色彩' under L2 '逻辑填空'; fallback to 其他
+442,山东时政,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '山东时政' under L2 '时政热点'; fallback to 其他
+443,周期余数问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '周期余数问题' under L2 '数学运算'; fallback to 其他
+444,框架题,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+445,电路分析,行测,科学推理,,电学,alias,0.85,alias matched: 电路分析 -> 电学
+446,企业管理,行测,政治理论,,,hidden,0.1,noise/ambiguous token: '企业管理' has no stable canonical mapping
+447,作商数列,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '作商数列' under L2 '数字推理'; fallback to 其他
+448,周期问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '周期问题' under L2 '数学运算'; fallback to 其他
+449,语法多元考查,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+450,相加,行测,判断推理,,样式规律,alias,0.85,alias matched: 相加 -> 样式规律
+451,语义,行测,判断推理,,语义关系,alias,0.85,alias matched: 语义 -> 语义关系
+452,外框,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '外框' under L2 '图形推理'; fallback to 其他
+453,内部图案遍历,行测,判断推理,,样式规律,alias,0.85,alias matched: 内部图案遍历 -> 样式规律
+454,钟表问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '钟表问题' under L2 '数学运算'; fallback to 其他
+455,经济法,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '经济法' under L2 '法律常识'; fallback to 其他
+456,行动顺序,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '行动顺序' under L2 '逻辑判断'; fallback to 其他
+457,溶液问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '溶液问题' under L2 '数学运算'; fallback to 其他
+458,对称轴与图形的关系,行测,判断推理,,属性规律,alias,0.85,alias matched: 对称轴与图形的关系 -> 属性规律
+459,平均速度,行测,数量关系,,行程问题,alias,0.85,alias matched: 平均速度 -> 行程问题
+460,背景引入,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '背景引入' under L2 '片段阅读'; fallback to 其他
+461,代入法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '代入法' under L2 '数学运算'; fallback to 其他
+462,商品与货币,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '商品与货币' under L2 '马克思主义基本原理'; fallback to 其他
+463,科学社会主义,行测,政治理论,,其他,subcategory_other,0.5,heuristic: keyword routing placed '科学社会主义' under L2 '马克思主义基本原理'; fallback to 其他
+464,多个等腰图形组合,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '多个等腰图形组合' under L2 '图形推理'; fallback to 其他
+465,盈亏法,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '盈亏法' under L2 '数学运算'; fallback to 其他
+466,多重数列,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '多重数列' under L2 '数字推理'; fallback to 其他
+467,牛吃草问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '牛吃草问题' under L2 '数学运算'; fallback to 其他
+468,自转与公转,行测,科学推理,,地球运动,alias,0.85,alias matched: 自转与公转 -> 地球运动
+469,基本概念,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+470,光现象,行测,科学推理,,光学,alias,0.85,alias matched: 光现象 -> 光学
+471,运动图像,行测,科学推理,,运动学,alias,0.85,alias matched: 运动图像 -> 运动学
+472,因数分解数列,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '因数分解数列' under L2 '数字推理'; fallback to 其他
+473,图形数阵,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '图形数阵' under L2 '图形推理'; fallback to 其他
+474,素,行测,判断推理,,数量规律,alias,0.85,alias matched: 素 -> 数量规律
+475,标记线,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '标记线' under L2 '图形推理'; fallback to 其他
+476,关键词,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+477,函数最值问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '函数最值问题' under L2 '数学运算'; fallback to 其他
+478,相交于点,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '相交于点' under L2 '图形推理'; fallback to 其他
+479,遍历,行测,判断推理,,样式规律,alias,0.85,alias matched: 遍历 -> 样式规律
+480,公文常识题,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '公文常识题' under L2 '文化常识'; fallback to 其他
+481,认识论,行测,政治理论,,认识论,exact,0.95,
+482,对比实验起点一致,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '对比实验起点一致' under L2 '逻辑判断'; fallback to 其他
+483,直角数,行测,判断推理,,数量规律,alias,0.85,alias matched: 直角数 -> 数量规律
+484,提出观点,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '提出观点' under L2 '片段阅读'; fallback to 其他
+485,公文写作,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '公文写作' under L2 '文化常识'; fallback to 其他
+486,混合比重,行测,资料分析,,比重,alias,0.85,alias matched: 混合比重 -> 比重
+487,粉笔,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+488,先加减同异,行测,判断推理,,样式规律,alias,0.85,alias matched: 先加减同异 -> 样式规律
+489,后位置,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '后位置' under L2 '图形推理'; fallback to 其他
+490,黑白运算+位置,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '黑白运算+位置' under L2 '图形推理'; fallback to 其他
+491,连线,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '连线' under L2 '图形推理'; fallback to 其他
+492,行程问题,行测,数量关系,,行程问题,exact,0.95,
+493,框上,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '框上' under L2 '图形推理'; fallback to 其他
+494,框内,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '框内' under L2 '图形推理'; fallback to 其他
+495,框外交点,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '框外交点' under L2 '图形推理'; fallback to 其他
+496,对称性,行测,判断推理,,属性规律,alias,0.85,alias matched: 对称性 -> 属性规律
+497,光合与呼吸,行测,科学推理,,光合与呼吸,exact,0.95,
+498,压强,行测,科学推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '压强' under L2 '物理'; fallback to 其他
+499,细胞,行测,科学推理,,细胞,exact,0.95,
+500,水和溶液,行测,科学推理,,溶液,alias,0.85,alias matched: 水和溶液 -> 溶液
+501,排除法,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '排除法' under L2 '逻辑判断'; fallback to 其他
+502,特殊题型,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+503,7句,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '7句' under L2 '语句表达'; fallback to 其他
+504,植树问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '植树问题' under L2 '数学运算'; fallback to 其他
+505,物质的性质,行测,科学推理,,物质性质,alias,0.85,alias matched: 物质的性质 -> 物质性质
+506,多溶液混合,行测,科学推理,,溶液,alias,0.85,alias matched: 多溶液混合 -> 溶液
+507,加强,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '加强' under L2 '逻辑判断'; fallback to 其他
+508,散文等,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '散文等' under L2 '片段阅读'; fallback to 其他
+509,陕西时政,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '陕西时政' under L2 '时政热点'; fallback to 其他
+510,政府职能,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '政府职能' under L2 '社会常识'; fallback to 其他
+511,加减同异,行测,判断推理,,样式规律,alias,0.85,alias matched: 加减同异 -> 样式规律
+512,补充“没A有B”的对照组削弱,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '补充“没A有B”的对照组削弱' under L2 '逻辑判断'; fallback to 其他
+513,语句多元考查,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '语句多元考查' under L2 '语句表达'; fallback to 其他
+514,偏正,行测,判断推理,,语法关系,alias,0.85,alias matched: 偏正 -> 语法关系
+515,翻译推理,行测,判断推理,,翻译推理,exact,0.95,
+516,综合分析粉笔,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+517,线,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '线' under L2 '图形推理'; fallback to 其他
+518,基础数列,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '基础数列' under L2 '数字推理'; fallback to 其他
+519,力学综合,行测,科学推理,,力学,alias,0.85,alias matched: 力学综合 -> 力学
+520,家庭电路,行测,科学推理,,电学,alias,0.85,alias matched: 家庭电路 -> 电学
+521,生态系统,行测,科学推理,,生态系统,exact,0.95,
+522,地形地貌,行测,科学推理,,地形地貌,exact,0.95,
+523,受力分析,行测,科学推理,,力学,alias,0.85,alias matched: 受力分析 -> 力学
+524,功和能,行测,科学推理,,力学,alias,0.85,alias matched: 功和能 -> 力学
+525,概述,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '概述' under L2 '片段阅读'; fallback to 其他
+526,幂次数列,行测,数量关系,,幂次数列,exact,0.95,
+527,求同,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '求同' under L2 '逻辑判断'; fallback to 其他
+528,先位置,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '先位置' under L2 '图形推理'; fallback to 其他
+529,后加减同异,行测,判断推理,,样式规律,alias,0.85,alias matched: 后加减同异 -> 样式规律
+530,能指出,行测,言语理解与表达,,,hidden,0.1,noise/ambiguous token: '能指出' has no stable canonical mapping
+531,摩擦力,行测,科学推理,,力学,alias,0.85,alias matched: 摩擦力 -> 力学
+532,气候与气象,行测,科学推理,,气候气象,alias,0.85,alias matched: 气候与气象 -> 气候气象
+533,上海时政,行测,常识判断,,其他,subcategory_other,0.5,heuristic: keyword routing placed '上海时政' under L2 '时政热点'; fallback to 其他
+534,平行线,行测,判断推理,,其他,subcategory_other,0.5,heuristic: keyword routing placed '平行线' under L2 '图形推理'; fallback to 其他
+535,常识判断,行测,常识判断,,,hidden,0.1,noise/ambiguous token: '常识判断' has no stable canonical mapping
+536,虚词,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '虚词' under L2 '逻辑填空'; fallback to 其他
+537,成语混搭填空,行测,言语理解与表达,,混搭填空,alias,0.85,alias matched: 成语混搭填空 -> 混搭填空
+538,非首句特征,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '非首句特征' under L2 '语句表达'; fallback to 其他
+539,病句,行测,言语理解与表达,,病句辨析,alias,0.85,alias matched: 病句 -> 病句辨析
+540,分段计算问题,行测,数量关系,,其他,subcategory_other,0.5,heuristic: keyword routing placed '分段计算问题' under L2 '数学运算'; fallback to 其他
+541,搭配对象,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '词的辨析' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+542,关联词,行测,言语理解与表达,,关联词,exact,0.95,
+543,主题词,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '中心理解题' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+544,并列关系,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '关联关系' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+545,方式目的,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '定义' resolved to L2 '定义判断'; fallback to its 其他 leaf
+546,其他句式,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '单定义' resolved to L2 '定义判断'; fallback to its 其他 leaf
+547,引入铺垫,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '分述句特征' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+548,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '对应' resolved to L2 '类比推理'; fallback to its 其他 leaf
+549,程度轻重,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '词的辨析' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+550,转折关系,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '关联关系' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+551,词义侧重,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '词的辨析' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+552,其他,行测,政治理论,,其他,subcategory_other,0.6,heuristic: parent '理论与政策' resolved to L2 '党和国家方针政策'; fallback to its 其他 leaf
+553,近义关系,行测,判断推理,,语义关系,alias,0.85,alias matched: 近义关系 -> 语义关系
+554,多角度论述,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '分述句特征' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+555,举例子,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '分述句特征' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+556,感情色彩,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '词的辨析' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+557,二级辨析,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '并列' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+558,因果关系,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '关联关系' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+559,方式目的,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '类比' resolved to L2 '类比推理'; fallback to its 其他 leaf
+560,公共边,行测,判断推理,,空间重构,alias,0.85,alias matched: 公共边 -> 空间重构
+561,其他,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '行文逻辑' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+562,交叉关系,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 交叉关系 -> 逻辑关系
+563,其他,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '分述句特征' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+564,相同小方块类,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '立体拼合' resolved to L2 '图形推理'; fallback to its 其他 leaf
+565,反义关系,行测,判断推理,,语义关系,alias,0.85,alias matched: 反义关系 -> 语义关系
+566,语义,行测,判断推理,,语义关系,alias,0.85,alias matched: 语义 -> 语义关系
+567,逻辑,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 逻辑 -> 逻辑关系
+568,特殊问法,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '中心理解题' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+569,部分数,行测,判断推理,,数量规律,alias,0.85,alias matched: 部分数 -> 数量规律
+570,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '语法关系' resolved to L2 '类比推理'; fallback to its 其他 leaf
+571,其他,行测,,,,hidden,0.1,old sub_category is NULL or has no canonical L2 mapping; hidden without inventing a parent
+572,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '日常逻辑' resolved to L2 '逻辑判断'; fallback to its 其他 leaf
+573,截面图,行测,判断推理,,空间重构,alias,0.85,alias matched: 截面图 -> 空间重构
+574,相同小方块类,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '三视图' resolved to L2 '图形推理'; fallback to its 其他 leaf
+575,综合,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '位置规律' resolved to L2 '图形推理'; fallback to its 其他 leaf
+576,旋转,行测,判断推理,,位置规律,alias,0.85,alias matched: 旋转 -> 位置规律
+577,特殊问法,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '接语选择题' resolved to L2 '语句表达'; fallback to its 其他 leaf
+578,曲直性,行测,判断推理,,属性规律,alias,0.85,alias matched: 曲直性 -> 属性规律
+579,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '三视图' resolved to L2 '图形推理'; fallback to its 其他 leaf
+580,全同关系,行测,判断推理,,逻辑关系,alias,0.85,alias matched: 全同关系 -> 逻辑关系
+581,程度词,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '中心理解题' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+582,多面体折叠,行测,判断推理,,空间重构,alias,0.85,alias matched: 多面体折叠 -> 空间重构
+583,比喻象征义,行测,判断推理,,语义关系,alias,0.85,alias matched: 比喻象征义 -> 语义关系
+584,翻转,行测,判断推理,,位置规律,alias,0.85,alias matched: 翻转 -> 位置规律
+585,对称性,行测,判断推理,,属性规律,alias,0.85,alias matched: 对称性 -> 属性规律
+586,二级辨析,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '包容' resolved to L2 '类比推理'; fallback to its 其他 leaf
+587,画边法,行测,判断推理,,空间重构,alias,0.85,alias matched: 画边法 -> 空间重构
+588,黑白块面积,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '黑白块类' resolved to L2 '图形推理'; fallback to its 其他 leaf
+589,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '真假推理' resolved to L2 '逻辑判断'; fallback to its 其他 leaf
+590,其他,行测,数量关系,,其他,subcategory_other,0.6,heuristic: parent '工程问题' resolved to L2 '数学运算'; fallback to its 其他 leaf
+591,连接方式,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '黑白块类' resolved to L2 '图形推理'; fallback to its 其他 leaf
+592,其他,行测,判断推理,,,hidden,0.1,heuristic unavailable: cannot resolve a canonical L2 within old sub_category '判断推理'; hidden
+593,其他,行测,政治理论,,其他,subcategory_other,0.6,heuristic: parent '哲学' resolved to L2 '马克思主义基本原理'; fallback to its 其他 leaf
+594,相邻比较,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '黑白块类' resolved to L2 '图形推理'; fallback to its 其他 leaf
+595,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '图形间关系' resolved to L2 '图形推理'; fallback to its 其他 leaf
+596,开闭性,行测,判断推理,,属性规律,alias,0.85,alias matched: 开闭性 -> 属性规律
+597,其他,行测,数量关系,,其他,subcategory_other,0.6,heuristic: parent '排列组合问题' resolved to L2 '数学运算'; fallback to its 其他 leaf
+598,生物,行测,科学推理,,其他,subcategory_other,0.6,heuristic: legacy node name equals canonical L2 '生物'; collapsed into its 其他 leaf
+599,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '平面拼合' resolved to L2 '图形推理'; fallback to its 其他 leaf
+600,语法,行测,判断推理,,语法关系,alias,0.85,alias matched: 语法 -> 语法关系
+601,相对面,行测,判断推理,,空间重构,alias,0.85,alias matched: 相对面 -> 空间重构
+602,其他,行测,数量关系,,其他,subcategory_other,0.6,heuristic: parent '周期问题' resolved to L2 '数学运算'; fallback to its 其他 leaf
+603,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '语义' resolved to L2 '类比推理'; fallback to its 其他 leaf
+604,二级辨析,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '语法关系' resolved to L2 '类比推理'; fallback to its 其他 leaf
+605,其他,行测,常识判断,,其他,subcategory_other,0.6,heuristic: parent '时政热点' resolved to L2 '时政热点'; fallback to its 其他 leaf
+606,其他,行测,数量关系,,其他,subcategory_other,0.6,heuristic: parent '溶液问题' resolved to L2 '数学运算'; fallback to its 其他 leaf
+607,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '图形推理' resolved to L2 '图形推理'; fallback to its 其他 leaf
+608,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '素' resolved to L2 '图形推理'; fallback to its 其他 leaf
+609,画边法,行测,判断推理,,空间重构,alias,0.85,alias matched: 画边法 -> 空间重构
+610,其他,行测,数量关系,,其他,subcategory_other,0.6,heuristic: parent '数学运算' resolved to L2 '数学运算'; fallback to its 其他 leaf
+611,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '遍历' resolved to L2 '图形推理'; fallback to its 其他 leaf
+612,其他,行测,数量关系,,其他,subcategory_other,0.6,heuristic: parent '行程问题' resolved to L2 '数学运算'; fallback to its 其他 leaf
+613,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '对称性' resolved to L2 '图形推理'; fallback to its 其他 leaf
+614,物理,行测,科学推理,,其他,subcategory_other,0.6,heuristic: legacy node name equals canonical L2 '物理'; collapsed into its 其他 leaf
+615,4句,行测,言语理解与表达,,其他,subcategory_other,0.5,heuristic: keyword routing placed '4句' under L2 '语句表达'; fallback to 其他
+616,公共边,行测,判断推理,,空间重构,alias,0.85,alias matched: 公共边 -> 空间重构
+617,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '加强' resolved to L2 '逻辑判断'; fallback to its 其他 leaf
+618,文言文,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '中心理解题' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+619,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '加减同异' resolved to L2 '图形推理'; fallback to its 其他 leaf
+620,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '翻译推理' resolved to L2 '逻辑判断'; fallback to its 其他 leaf
+621,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '线' resolved to L2 '图形推理'; fallback to its 其他 leaf
+622,数据资料,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '分述句特征' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+623,其他,行测,判断推理,,其他,subcategory_other,0.6,heuristic: parent '六面体' resolved to L2 '图形推理'; fallback to its 其他 leaf
+624,其他,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '非首句特征' resolved to L2 '语句表达'; fallback to its 其他 leaf
+625,对策,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '关联词' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+626,并列,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '关联词' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+627,转折,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '关联词' resolved to L2 '逻辑填空'; fallback to its 其他 leaf
+628,其他,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '特殊问法' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+629,其他,行测,科学推理,,其他,subcategory_other,0.6,heuristic: parent '生物' resolved to L2 '生物'; fallback to its 其他 leaf
+630,主题词,行测,言语理解与表达,,其他,subcategory_other,0.6,heuristic: parent '特殊问法' resolved to L2 '片段阅读'; fallback to its 其他 leaf
+631,其他,行测,科学推理,,其他,subcategory_other,0.6,heuristic: parent '物理' resolved to L2 '物理'; fallback to its 其他 leaf
