@@ -37,6 +37,7 @@ from ....services.question_classifier import (
     QuestionClassifier, detect_subcategory_enhanced, UNCLASSIFIED,
 )
 from ....services import text_cache  # 文档提取文本缓存（P0 提速，260s→0.02s）
+from ....services.paper_stats import recount_paper_questions, next_question_order
 from ....services.question_ingest.excel_reader import (  # J-3：列名容错 + 表头探测 + GBK 嗅探
     get_field_value as _xlsx_field,          # 别名容忍的取值（同一列名多种写法）
     parse_excel_buffer as _parse_excel_buffer,   # 多 sheet + 表头行探测
@@ -1277,20 +1278,22 @@ async def batch_import_parsed(
                         continue
                     _seen_qids.add(_qid)
                     all_ids.append(_qid)
-                order_base = paper.question_count or 0
-                for pos, qid in enumerate(all_ids, start=order_base + 1):
+                order_base = next_question_order(db, paper.paper_id)
+                for pos, qid in enumerate(all_ids, start=order_base):
                     if qid in existing_rel_qids:
                         continue
-                    item_score = items[min(pos - order_base - 1, len(items) - 1)].get('score')
+                    item_score = items[min(pos - order_base, len(items) - 1)].get('score')
                     db.add(PaperQuestionRelation(
                         paper_id=paper.paper_id,
                         question_id=qid,
-                    question_order=pos,
-                    question_score=float(item_score) if item_score else 5.0,
-                ))
-                linked += 1
-            if linked:
-                paper.question_count = (paper.question_count or 0) + linked
+                        question_order=pos,
+                        question_score=float(item_score) if item_score else 5.0,
+                    ))
+                    linked += 1
+            # P1-3：question_count 改为「关联行实际数量」重算，不再增量累加。
+            # 原写法 linked 在循环外只 +1，且依赖 question_count 初值非 0，
+            # 实测 110 题的试卷被记成 1 题。
+            paper.question_count = recount_paper_questions(db, paper)
             paper_id = paper.paper_id
             logger.info(f"[batch-parsed] 试卷#{paper_id} 关联{linked}题 "
                         f"(累计{paper.question_count})")
@@ -2499,6 +2502,7 @@ async def confirm_batch_import(
             try:
                 paper = db.query(ExamPaper).filter(ExamPaper.paper_id == record.paper_id).first()
                 if paper:
+                    order_base = next_question_order(db, paper.paper_id)
                     linked_count = 0
                     for item in confirmed_items:
                         qid = item.get('question_id')
@@ -2514,12 +2518,13 @@ async def confirm_batch_import(
                         relation = PaperQuestionRelation(
                             paper_id=paper.paper_id,
                             question_id=qid,
-                            question_order=paper.question_count + linked_count + 1,
+                            question_order=order_base + linked_count,
                             question_score=item.get('score', 5.0)
                         )
                         db.add(relation)
                         linked_count += 1
-                    paper.question_count = (paper.question_count or 0) + linked_count
+                    # P1-3：与批量导入一致，question_count 以关联行实际数量重算
+                    paper.question_count = recount_paper_questions(db, paper)
                     db.commit()
                     logger.info(f"[import] 题目已关联到试卷: paper_id={paper.paper_id} linked={linked_count}")
             except Exception as e:

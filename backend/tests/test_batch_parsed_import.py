@@ -155,13 +155,6 @@ def test_dual_track_and_idempotent_rerun(db_session):
     db_session.commit()
 
 
-@pytest.mark.xfail(
-    reason="疑似产品缺陷：建卷时 _get_or_create_import_paper 未把 question_count "
-           "写入 ExamPaper，关联 5 题后该字段仍为 1。"
-           "question_import.py:1258 的累加分支依赖初值非 0，实际未生效。"
-           "修复需改产品代码，超出 P0.4（仅重写测试断言）范围",
-    strict=True,
-)
 def test_paper_question_count_tracks_linked_questions(db_session):
     run_marker = uuid.uuid4().hex[:8]
     r1 = asyncio.run(batch_import_parsed(_mk_payload(run_marker), _mk_user(), db_session))

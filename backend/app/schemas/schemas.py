@@ -678,9 +678,9 @@ class ExamRecordResponse(ExamRecordBase):
     is_scored: bool
     submit_time: Optional[datetime]
     create_time: datetime
-    
-    class Config:
-        orm_mode = True
+
+    # Pydantic v2：orm_mode 已移除，必须用 from_attributes 才能从 ORM 对象读取属性
+    model_config = ConfigDict(from_attributes=True)
 
 class AnswerDetailBase(BaseModel):
     question_id: int = Field(..., description="题目ID")
@@ -752,9 +752,8 @@ class ForumUserPublic(BaseModel):
     createdAt: Optional[str] = None
     postCount: int = 0
     likeReceived: int = 0
-    
-    class Config:
-        orm_mode = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 # ------------------------------
 # 视频资源相关Schema

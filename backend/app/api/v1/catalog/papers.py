@@ -17,6 +17,7 @@ from ....schemas.schemas import PaperCreate, PaperUpdate, PaperDetailResponse, S
 from ....core.security import get_current_user, require_admin
 from ....core.cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
 from ....services import weakpoint_reader
+from ....services.paper_stats import next_question_order, recount_paper_questions
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 
@@ -259,8 +260,9 @@ async def add_questions_to_paper(
     if paper.paper_type != "DRAFT":
         raise HTTPException(status_code=400, detail="只有草稿状态的试卷才能添加题目")
     
-    order = paper.question_count
-    
+    order_base = next_question_order(db, paper_id)
+    added = 0
+
     for question_id in question_ids:
         # 检查题目是否已存在
         existing = db.query(PaperQuestionRelation).filter(
@@ -278,18 +280,19 @@ async def add_questions_to_paper(
         relation = PaperQuestionRelation(
             paper_id=paper_id,
             question_id=question_id,
-            question_order=order + 1,
+            question_order=order_base + added,
             question_score=question.score
         )
         db.add(relation)
-        order += 1
-    
-    paper.question_count = order
+        added += 1
+
+    # P1-3：以关联行实际数量重算，杜绝与既有漂移值叠加
+    paper.question_count = recount_paper_questions(db, paper)
     db.commit()
     
     delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
     
-    return SuccessResponse(message=f"成功添加 {order - paper.question_count} 道题目")
+    return SuccessResponse(message=f"成功添加 {added} 道题目")
 
 @router.delete("/{paper_id}/questions/{question_id}", response_model=SuccessResponse, summary="从试卷移除题目")
 async def remove_question_from_paper(
@@ -318,7 +321,8 @@ async def remove_question_from_paper(
         raise HTTPException(status_code=404, detail="题目不在该试卷中")
     
     db.delete(relation)
-    paper.question_count -= 1
+    # P1-3：删题后同样以关联行重算，避免 -1 叠加在漂移值上
+    paper.question_count = recount_paper_questions(db, paper)
     db.commit()
     
     delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")

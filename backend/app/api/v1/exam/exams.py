@@ -11,6 +11,8 @@ from ....models.models import (
     ExamRecord,
     ExamAnswerDetail,
     QuestionBank,
+    PaperQuestionRelation,
+    QuestionType,
     SysUser
 )
 from ....schemas.schemas import (
@@ -50,7 +52,6 @@ async def get_exams_list(
         query = query.filter(ExamPaper.paper_name.ilike(f"%{keyword}%"))
     if year:
         # 筛选包含该年份题目的试卷
-        from ....models.models import PaperQuestionRelation, QuestionBank
         year_paper_ids = db.query(PaperQuestionRelation.paper_id).join(
             QuestionBank, PaperQuestionRelation.question_id == QuestionBank.question_id
         ).filter(QuestionBank.year == year).distinct().subquery()
@@ -319,7 +320,6 @@ async def submit_answers(
         score_obtained = 0.0
 
         # 客观题自动评分
-        from ..models import QuestionType
         qtype = db.query(QuestionType).filter(
             QuestionType.type_id == question.type_id
         ).first()
