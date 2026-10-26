@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """L7 底座一致性门禁 — 15 项检查（F1 落地版）。
 
-严重度约定（来自已批准的 F1 实施计划）：
-  1-5  FAIL —— 底座结构/契约被破坏，必须阻断；
-  6-15 WARN —— 依赖环境与后续阶段（F2/F3）的软检查，先观察后升级。
+严重度约定：
+  1-5、8 FAIL —— 底座结构/契约/路由可见性被破坏，必须阻断；
+  6-7、9-15 WARN —— 依赖环境与后续阶段（F3）的软检查，先观察后升级。
 
 设计原则：只读、不做任何写入（唯一例外：--update-baseline 显式更新基线）。
 检查 15 复用 scripts/audit/content_integrity.py 的既有实现，避免两套口径。
@@ -234,17 +234,103 @@ def check_reconcile() -> None:
          f'{run_id} status={status} 报告={report_path or "(无)"}', 'WARN')
 
 
+# 公共路由：不需要登录/角色即可访问，故不要求 roles
+ROUTE_WHITELIST = {'/login', '/scan', '/unauthorized', '/:pathMatch(.*)*'}
+MOBILE_PREFIXES = ('/tablet', '/mobile')
+_ROLES_RE = re.compile(r'\broles\s*:\s*\[([^\]]*)\]')
+_PATH_RE = re.compile(r'\bpath\s*:\s*[\'"]([^\'"]+)[\'"]')
+
+
+def _routes_array(text: str) -> str:
+    """截取 const routes 的数组字面量，避免把守卫里的 next({path}) 计入。"""
+    decl = text.find('const routes')
+    if decl < 0:
+        return ''
+    assign = text.find('=', decl)
+    if assign < 0:
+        return ''
+    start = text.find('[', assign)
+    depth = 0
+    quote = ''
+    for i in range(start, len(text)):
+        ch = text[i]
+        if quote:
+            if ch == quote and text[i - 1] != '\\':
+                quote = ''
+            continue
+        if ch in ('\'', '"', '`'):
+            quote = ch
+        elif ch == '[':
+            depth += 1
+        elif ch == ']':
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return ''
+
+
+def parse_route_records(text: str) -> list[dict]:
+    """按对象括号解析路由记录；子路由继承父级 roles（与 vue-router meta 合并一致）。"""
+    array = _routes_array(text)
+    records: list[dict] = []
+    stack: list[int] = []
+    quote = ''
+    i = 0
+    while i < len(array):
+        ch = array[i]
+        if quote:
+            if ch == quote and array[i - 1] != '\\':
+                quote = ''
+            i += 1
+            continue
+        if ch in ('\'', '"', '`'):
+            quote = ch
+        elif ch == '{':
+            stack.append(i)
+        elif ch == '}' and stack:
+            start = stack.pop()
+            body = array[start:i + 1]
+            path_match = _PATH_RE.search(body)
+            if path_match is None:
+                i += 1
+                continue
+            own = _ROLES_RE.search(body)
+            roles = ([x.strip('\'"') for x in own.group(1).split(',') if x.strip()]
+                     if own else [])
+            if not roles:
+                for parent in reversed(stack):
+                    pm = _ROLES_RE.search(array[parent:i + 1])
+                    if pm:
+                        roles = [x.strip('\'"') for x in pm.group(1).split(',') if x.strip()]
+                        break
+            records.append({
+                'path': path_match.group(1),
+                'roles': roles,
+                'has_component': bool(re.search(r'\bcomponent\s*:', body)),
+            })
+        i += 1
+    return records
+
+
 def check_routes_roles() -> None:
     router = WORKSPACE_ROOT / 'src' / 'router' / 'index.ts'
     if not router.exists():
-        _add(8, '路由 roles 声明', False, 'src/router/index.ts 不存在', 'WARN')
+        _add(8, '路由 roles 声明', False, 'src/router/index.ts 不存在', 'FAIL')
         return
-    text = router.read_text(encoding='utf-8')
-    paths = len(re.findall(r'\bpath\s*:', text))
-    roles = len(re.findall(r'\broles\s*:', text))
-    missing = max(paths - roles, 0)
-    _add(8, '路由 roles 声明', missing == 0,
-         f'{missing}/{paths} 条路由未声明 roles（F1 先 WARN，补全后升 FAIL）', 'WARN')
+    records = parse_route_records(router.read_text(encoding='utf-8'))
+    pages = [r for r in records if r['has_component']]
+    missing = [r['path'] for r in pages
+               if r['path'] not in ROUTE_WHITELIST and not r['roles']]
+    bad_device = [r['path'] for r in pages
+                  if r['path'].startswith(MOBILE_PREFIXES) and r['roles'] != ['student']]
+    ok = not missing and not bad_device
+    detail = (f'{len(missing)}/{len(pages)} 条页面路由未声明 roles；'
+              f'mobile/tablet 违规 {len(bad_device)} 条')
+    if missing:
+        detail += '；未声明：' + ', '.join(missing[:5])
+    if bad_device:
+        detail += '；违规：' + ', '.join(bad_device[:5])
+    _add(8, '路由 roles 声明', ok, detail, 'FAIL')
 
 
 def check_table_suffix() -> None:
