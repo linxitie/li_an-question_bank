@@ -117,7 +117,7 @@
             
             <!-- 帖子内容 -->
             <div class="post-content">
-              <h3 class="post-title">{{ post.title }}</h3>
+              <h3 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h3>
               <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
               <AttachmentList
                 v-if="post.attachments && post.attachments.length"
@@ -182,7 +182,7 @@
             >
               <span class="hot-rank" :class="{ top: index < 3 }">{{ index + 1 }}</span>
               <div class="hot-info">
-                <span class="hot-title">{{ post.title }}</span>
+                <span class="hot-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
                 <span class="hot-views">{{ post.views }} 浏览</span>
               </div>
             </div>
@@ -258,6 +258,7 @@ import {
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import { avatarInitial } from '@/modules/community/avatar';
+import { titleColorValue } from '@/components/forum/titleColors';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
@@ -346,6 +347,7 @@ export default defineComponent({
           return {
             id: p.id,
             title: p.title,
+            titleColor: p.titleColor || 'default',
             excerpt: p.content || '',
             author: (p.user && p.user.nickname) || '匿名',
             avatar: (p.user && p.user.avatar) || '',
@@ -398,6 +400,7 @@ export default defineComponent({
     
     return {
       avatarInitial,
+      titleColorValue,
       activeCategory,
       categories,
       activeFilter,

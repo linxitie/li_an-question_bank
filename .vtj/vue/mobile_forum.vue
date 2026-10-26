@@ -58,7 +58,7 @@
           
           <!-- 帖子内容 -->
           <div class="post-content">
-            <h3 class="post-title">{{ post.title }}</h3>
+            <h3 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h3>
             <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
           </div>
           
@@ -129,6 +129,7 @@ import {
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import { avatarInitial } from '@/modules/community/avatar';
+import { titleColorValue } from '@/components/forum/titleColors';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
@@ -197,6 +198,7 @@ export default defineComponent({
           return {
             id: p.id,
             title: p.title,
+            titleColor: p.titleColor || 'default',
             excerpt: p.content || '',
             author: (p.user && p.user.nickname) || '匿名',
             time,
@@ -247,6 +249,7 @@ export default defineComponent({
 
     return {
       avatarInitial,
+      titleColorValue,
       activeCategory,
       tabs,
       filteredPosts,
