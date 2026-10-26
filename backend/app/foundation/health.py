@@ -12,9 +12,9 @@ from app.foundation.schema import FOUNDATION_TABLES
 LAG_WARN_SECONDS = 300
 
 
-def snapshot(engine) -> dict:
+def snapshot(engine, relay: dict | None = None) -> dict:
     if not FOUNDATION_ENABLED:
-        return {"status": "disabled", "enabled": False, "projection": PROJECTION_NAME}
+        return {"status": "disabled", "enabled": False, "projection": PROJECTION_NAME, "relay": relay}
 
     with engine.connect() as conn:
         tables = {
@@ -65,6 +65,7 @@ def snapshot(engine) -> dict:
             "status": last_run[0], "finished_at": last_run[1],
         },
         "dispatch_interval_ms": FOUNDATION_DISPATCH_MS,
+        "relay": relay,
     }
 
 

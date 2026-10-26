@@ -92,6 +92,15 @@ class Settings(BaseSettings):
     FOUNDATION_DISPATCH_MS: int = Field(500, env="FOUNDATION_DISPATCH_MS")
     FOUNDATION_MAX_ATTEMPTS: int = Field(8, env="FOUNDATION_MAX_ATTEMPTS")
 
+    # ==================== F2 通信统一（WS 中继 / 心跳 / 写入守卫）====================
+    # WS_RELAY=redis 时跨 worker 经 Redis pub/sub 扇出；留空为单进程本地扇出。
+    # WEB_CONCURRENCY>1 且未开中继时 lifespan 直接拒绝启动（见 ws_relay.validate_worker_config）。
+    WS_RELAY: str = Field("", env="WS_RELAY")
+    # 超过该秒数未收到任何消息（含心跳）的连接视为掉线并关闭（码 4008）。
+    WS_HEARTBEAT_TIMEOUT_SECONDS: int = Field(90, env="WS_HEARTBEAT_TIMEOUT_SECONDS")
+    # 写库前 6 类守卫的总开关；false 时回退到 F1 行为。
+    FOUNDATION_VALIDATION_ENABLED: bool = Field(True, env="FOUNDATION_VALIDATION_ENABLED")
+
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")

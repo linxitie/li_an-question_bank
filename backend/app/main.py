@@ -102,6 +102,13 @@ async def lifespan(app: FastAPI):
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
+    # F2 通信统一：多 worker 无中继直接拒绝启动（fail-fast，避免「有时收不到」）；
+    # 中继本身不可用只降级为本地扇出，不影响业务读写。
+    from .foundation.ws_relay import validate_worker_config, ws_relay
+    validate_worker_config(int(os.environ.get('WEB_CONCURRENCY', '1') or '1'), settings.WS_RELAY)
+    ws_relay.configure(settings.WS_RELAY, settings.REDIS_URL)
+    await ws_relay.start(settings.WS_RELAY, settings.REDIS_URL)
+
     # F1 一致性内核：幂等建 7 张 foundation 表 + 启动投递器。
     # FOUNDATION_ENABLED=false 时整段跳过，行为与 F0 完全一致（回滚开关）。
     dispatcher_task = None
@@ -548,6 +555,10 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("关闭公安联考题库系统服务...")
+    try:
+        await ws_relay.stop()
+    except Exception as e:
+        logger.warning(f"WS 中继关闭异常: {e}")
     if dispatcher_task is not None:
         import asyncio as _stop_asyncio
         dispatcher_task.cancel()
@@ -693,8 +704,9 @@ async def foundation_health():
     """F1 一致性内核健康：outbox 积压/死信/投影延迟/最近对账（只读）。"""
     from .core.database import engine
     from .foundation.health import snapshot
+    from .foundation.ws_relay import ws_relay
 
-    return snapshot(engine)
+    return snapshot(engine, ws_relay.health())
 
 @app.get("/metrics", tags=["系统"])
 async def get_metrics():
