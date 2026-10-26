@@ -2,8 +2,10 @@
 """L7 底座一致性门禁 — 15 项检查（F1 落地版）。
 
 严重度约定：
-  1-5、8 FAIL —— 底座结构/契约/路由可见性被破坏，必须阻断；
-  6-7、9-15 WARN —— 依赖环境与后续阶段（F3）的软检查，先观察后升级。
+  1-5、8、13、14 FAIL —— 底座结构/契约/路由可见性/通信协议被破坏，必须阻断；
+  6-7、9-12 WARN —— 依赖环境与后续阶段（F3）的软检查，先观察后升级；
+  15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL。
+  L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
 设计原则：只读、不做任何写入（唯一例外：--update-baseline 显式更新基线）。
 检查 15 复用 scripts/audit/content_integrity.py 的既有实现，避免两套口径。
@@ -13,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import sqlite3
 import sys
 import time
@@ -416,28 +419,66 @@ def check_preview_volume() -> None:
         _add(12, 'preview_data 体积', True, f'{mb:.1f} MB，无超期 PREVIEW', 'WARN')
 
 
+def _redis_reachable() -> bool:
+    host = os.environ.get('REDIS_HOST') or 'localhost'
+    try:
+        port = int(os.environ.get('REDIS_PORT') or '6379')
+    except ValueError:
+        port = 6379
+    try:
+        with socket.create_connection((host, port), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
 def check_ws_relay() -> None:
     try:
         workers = int(os.environ.get('WEB_CONCURRENCY', '1') or '1')
     except ValueError:
         workers = 1
     relay = (os.environ.get('WS_RELAY') or '').strip().lower()
-    ok = workers <= 1 or relay == 'redis'
-    _add(13, '多 worker 必须 Redis 中继', ok,
-         f'WEB_CONCURRENCY={workers} WS_RELAY={relay or "(未设置)"}', 'WARN')
+    label = f'WEB_CONCURRENCY={workers} WS_RELAY={relay or "(未设置)"}'
+    if workers <= 1:
+        _add(13, '多 worker 必须 Redis 中继', True, label, 'FAIL')
+    elif relay != 'redis':
+        _add(13, '多 worker 必须 Redis 中继', False,
+             label + '（多 worker 未开中继，启动会 fail-fast）', 'FAIL')
+    elif not _redis_reachable():
+        # 已正确配置，仅当前环境探测不到 Redis：不阻断，但必须可见
+        _add(13, '多 worker 必须 Redis 中继', False,
+             label + '（Redis 当前不可达，启动后自动重连）', 'WARN')
+    else:
+        _add(13, '多 worker 必须 Redis 中继', True, label + '（Redis 可达）', 'FAIL')
 
 
 def check_data_changed_contract() -> None:
+    """契约分两层：publish_data_changed 传 domain/type/scope；ws_protocol 统一补 seq。
+
+    不能只在 publish_data_changed 里 grep "seq": 该字段由中继协议统一注入，
+    否则每个业务调用点都要自己数序号，跨 worker 必然不单调。
+    """
     src_path = BACKEND_ROOT / 'app' / 'api' / 'v1' / 'platform' / 'websocket.py'
     src = src_path.read_text(encoding='utf-8')
     start = src.find('async def publish_data_changed(')
     end = src.find('\nasync def ', start + 1) if start >= 0 else -1
     body = src[start:end if end > start else len(src)] if start >= 0 else src
-    required = ('seq', 'domain', 'type', 'scope')
-    missing = [k for k in required if not re.search(rf'["\']{k}["\']\s*:', body)]
+    protocol_path = BACKEND_ROOT / 'app' / 'foundation' / 'ws_protocol.py'
+    protocol = protocol_path.read_text(encoding='utf-8') if protocol_path.exists() else ''
+    missing = []
+    if 'ws_relay.emit(' not in body:
+        missing.append('统一出口 ws_relay.emit')
+    for key in ('domain', 'type', 'id'):
+        if not re.search(rf'["\']{key}["\']\s*:', body):
+            missing.append(f'data.{key}')
+    if 'scope=' not in body:
+        missing.append('scope 参数')
+    for key in ('seq', 'scope'):
+        if not re.search(rf'["\']{key}["\']\s*:', protocol):
+            missing.append(f'envelope.{key}')
     _add(14, 'data-changed 契约', not missing,
-         '缺字段：' + ', '.join(missing) + '（F2 补 seq/scope）' if missing else 'seq/domain/type/scope 齐全',
-         'WARN')
+         '缺：' + ', '.join(missing) if missing else 'domain/type/id/scope 经统一出口，seq/scope 由协议补齐',
+         'FAIL')
 
 
 def check_content_integrity() -> None:
@@ -466,7 +507,8 @@ def check_content_integrity() -> None:
     detail = f"PASS={summary.get('PASS', 0)} WARN={len(warns)} FAIL={len(fails)}"
     if fails:
         detail += '；FAIL=' + ', '.join(fails)
-    _add(15, '内容完整性', ok, detail, 'WARN')
+    # D17：内容完整性新增缺失一票否决；只有已登记存量缺陷走 WARN
+    _add(15, '内容完整性', ok, detail, 'WARN' if ok else 'FAIL')
 
 
 def _db_path() -> Path:
