@@ -20,6 +20,7 @@
 | `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（2026-10-26，用户确认 D1–D16 + D17） | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（15 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
 | `superpowers/plans/F1一致性内核_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 1–7 完成，tag `foundation-v1-f1`） | F1：7 表 + Outbox→投递→投影→对账 + `content_integrity.py`/`db_inventory.py` + L7 门禁；21 文件、7 步、每步独立验证与回滚；不改 `api/v1`/`models`/`.vtj` |
 | `superpowers/specs/预览数据治理与容量回收_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | 571 行 / 257.76 MB 超期预览外置 gzip 后置摘要，`auto_vacuum=INCREMENTAL` + VACUUM，主库 **303.17 → 46.52 MB**；四表行数与指纹不变，`integrity_check=ok` |
+| `superpowers/plans/F2通信统一与写入守卫_实施计划_v1.md` | v1 | 🟡 待批准（2026-10-26） | F2：WS 协议 v2（seq/scope）+ Redis 中继 + 多 worker fail-fast + 前端 data-changed 消费/重连重同步 + 57 条路由 roles + 写入守卫 6 类；7 步、26 文件、无迁移、无新表 |
 | `superpowers/specs/F1一致性内核_报告_20261026.md` | v1 | ✅ 已交付（2026-10-26，tag `foundation-v1-f1`） | F1 7 表 + Outbox/投递/投影/对账 + `/health/foundation` + L7 15 项；26 测试通过；13 条验收 10 PASS / 2 PARTIAL / 1 环境项；F0 内容指纹口径修正（以备份库重算，四表 MATCH）；性能增幅未达 5% 与 6 类坏数据校验移交 F2 |
 | `superpowers/specs/F0基线冻结与内容完整性_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | F0：tag `foundation-v1`@`2ec9cc7`、`sqlite3.backup()` 备份（303.17 MB，integrity ok，四表指纹一致）、`gate_all --quick` 4/4 PASS；内容完整性基线：复合题 33 题挂组、组 11 空、293 图片行中 13 行文件缺失、10 个 `[IMAGE:]` 令牌未解析、申论 24 题未挂组（只登记不删） |
 | `superpowers/specs/题库设计模式_v3.md` | v3.0 | ✅ 生效（2026-10-25） | **「题库设计」模式（会话执行版）**：标准/创造/PTC 分层、九角色落地形态（subagent 等价 agent-team）、设计/测试/优化三态管线、声明头扩展、技能+MCP+工作流绑定、12 条实测坑、A21–A26 |
@@ -45,6 +46,7 @@
 
 ## 变更记录
 
+- 2026-10-26：**F2 实施计划落盘（待批准）**：WS 协议 v2（seq/scope）、Redis 中继与多 worker fail-fast、前端 `data-changed` 消费与重连重同步、57 条路由 roles 补全、写入守卫 6 类；21 个文件 + 7 步 + 13 条验收；无新表、无迁移。
 - 2026-10-26：**F1 一致性内核交付完成**：7 表 + 事务 Outbox + 投递/投影 + 对账 + `/health/foundation` + L7 门禁 15 项；26 个测试通过，L7 PASS=13/WARN=2/FAIL=0，tag `foundation-v1-f1`；新增交付报告（含 F0 指纹口径修正：以受 R8 保护的备份库重算，四表与主库 MATCH）。
 - 2026-10-26：**F1 实施计划落盘（待批准）**：21 文件 / 7 步 / CTC 十问 / §9.2.1 13 条验收映射；`gc_previews.py` 归档路径统一为 `scripts/audit/`。
 - 2026-10-26：**预览数据治理完成**：571 行 / 257.76 MB 超期预览 gzip 外置（571 个文件 / 36.76 MB）并置摘要；主库 303.17 MB → 46.52 MB（−84.7%），`auto_vacuum=INCREMENTAL`、`freelist=0`、`integrity_check=ok`；四表指纹与 F0 基线一致。新脚本 `backend/scripts/audit/gc_previews.py`（默认 dry-run，`--baseline-db` 强制基线比对）。
