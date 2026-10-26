@@ -119,6 +119,32 @@ class WsRelay:
                 logger.warning("关闭 WS 中继 Redis 连接失败", exc_info=True)
 
     # ---------- 发送 ----------
+    def emit(
+        self,
+        message_type: str,
+        *,
+        data: Optional[Dict[str, Any]] = None,
+        domain: Optional[str] = None,
+        entity: Optional[str] = None,
+        entity_id: Any = None,
+        scope: Optional[str] = None,
+        user_ids: Optional[Iterable[int]] = None,
+        room: Optional[str] = None,
+    ) -> bool:
+        """构造 v2 信封后投递；业务侧只描述「发生了什么」，不碰 seq/scope。"""
+        from app.foundation.ws_protocol import build_envelope
+
+        envelope = build_envelope(
+            message_type,
+            seq=self._seq.next(),
+            data=data,
+            domain=domain,
+            entity=entity,
+            entity_id=entity_id,
+            scope=scope,
+        )
+        return self.deliver(envelope, user_ids=user_ids, room=room)
+
     def deliver(
         self,
         message: Dict[str, Any],

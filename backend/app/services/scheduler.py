@@ -61,25 +61,19 @@ def _dispatch_sync(user_id: Optional[int], message: str, data: Optional[dict]):
     Args:
         user_id: 为 None 时广播给所有人；为 int 时只发给该用户
     """
-    global _main_loop
-    if _main_loop is None:
-        return
     try:
-        import asyncio
-        from ..api.v1.platform.websocket import ws_connection_manager
+        from ..foundation.ws_relay import ws_relay
         payload_data = {"message": message}
         if data:
             payload_data.update(data)
-        payload = {
-            "type": "sync",
-            "data": payload_data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        if user_id is None:
-            coro = ws_connection_manager.broadcast_all(payload)
-        else:
-            coro = ws_connection_manager.send_personal_message(payload, user_id)
-        asyncio.run_coroutine_threadsafe(coro, _main_loop)
+        # v2：scope 由 data.scope 给出（缺省 global），便于前端按作用域去重；
+        # 发送经 ws_relay，多 worker 时可跨进程送达。
+        ws_relay.emit(
+            "sync",
+            data=payload_data,
+            scope=payload_data.get("scope") or "global",
+            user_ids=None if user_id is None else [user_id],
+        )
     except Exception as e:
         # 广播失败绝不影响主业务流程（如题目导入、练习记录），仅记录告警
         logger.warning(f"广播同步事件失败: {e}")

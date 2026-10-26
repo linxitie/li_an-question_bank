@@ -109,6 +109,13 @@ async def lifespan(app: FastAPI):
     ws_relay.configure(settings.WS_RELAY, settings.REDIS_URL)
     await ws_relay.start(settings.WS_RELAY, settings.REDIS_URL)
 
+    # WS 心跳巡检：超过阈值无消息的连接关闭（码 4008），客户端重连后全量重同步。
+    from .api.v1.platform.websocket import ws_connection_manager
+    import asyncio as _ws_asyncio
+    ws_watchdog_task = _ws_asyncio.create_task(
+        ws_connection_manager.watchdog(settings.WS_HEARTBEAT_TIMEOUT_SECONDS)
+    )
+
     # F1 一致性内核：幂等建 7 张 foundation 表 + 启动投递器。
     # FOUNDATION_ENABLED=false 时整段跳过，行为与 F0 完全一致（回滚开关）。
     dispatcher_task = None
@@ -555,6 +562,15 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("关闭公安联考题库系统服务...")
+    if ws_watchdog_task is not None:
+        import asyncio as _stop_ws_asyncio
+        ws_watchdog_task.cancel()
+        try:
+            await ws_watchdog_task
+        except _stop_ws_asyncio.CancelledError:
+            logger.debug("WS 心跳巡检已停止")
+        except Exception as e:
+            logger.warning(f"WS 心跳巡检关闭异常: {e}")
     try:
         await ws_relay.stop()
     except Exception as e:

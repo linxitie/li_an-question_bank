@@ -3,6 +3,8 @@ WebSocket通信模块 - 支持实时问答、考试监控、消息推送
 """
 import json
 import asyncio
+import logging
+import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Iterable
 from enum import Enum
@@ -17,6 +19,7 @@ from ....schemas.schemas import SuccessResponse
 from ....core.monitoring import metrics_collector
 
 router = APIRouter(prefix="/ws", tags=["WebSocket通信"])
+logger = logging.getLogger(__name__)
 
 class MessageType(str, Enum):
     HEARTBEAT = "heartbeat"
@@ -38,6 +41,8 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[int, Dict[str, WebSocket]] = {}
         self.user_rooms: Dict[str, List[int]] = {}
+        # 用于心跳超时判定：记录每条连接最后一次收/发消息的单调时钟
+        self.last_seen: Dict[WebSocket, float] = {}
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, user_id: int, room: Optional[str] = None) -> None:
@@ -48,6 +53,7 @@ class ConnectionManager:
 
             connection_id = f"{user_id}_{datetime.now().timestamp()}"
             self.active_connections[user_id][connection_id] = websocket
+            self.last_seen[websocket] = time.monotonic()
 
             if room:
                 if room not in self.user_rooms:
@@ -65,6 +71,8 @@ class ConnectionManager:
 
                 if not self.active_connections[user_id]:
                     del self.active_connections[user_id]
+
+            self.last_seen.pop(websocket, None)
 
             if room and room in self.user_rooms:
                 if user_id in self.user_rooms[room]:
@@ -107,6 +115,37 @@ class ConnectionManager:
 
         return count
 
+    def touch(self, websocket: WebSocket) -> None:
+        """收到任何客户端消息（含心跳）即刷新活跃时间。"""
+        self.last_seen[websocket] = time.monotonic()
+
+    async def close_idle(self, timeout_seconds: float) -> int:
+        """关闭超过 timeout_seconds 无消息的连接（码 4008，客户端自动重连）。"""
+        now = time.monotonic()
+        async with self._lock:
+            stale = [
+                (user_id, websocket)
+                for user_id, connections in self.active_connections.items()
+                for websocket in connections.values()
+                if now - self.last_seen.get(websocket, now) > timeout_seconds
+            ]
+        for user_id, websocket in stale:
+            try:
+                await websocket.close(code=4008, reason="heartbeat timeout")
+            except Exception as exc:  # 对端已断开时 close 也会抛，照常清理
+                logger.debug("关闭空闲 WS 连接失败: %s", exc)
+            await self.disconnect(websocket, user_id)
+        return len(stale)
+
+    async def watchdog(self, timeout_seconds: float, interval: float = 30.0) -> None:
+        """长驻巡检：每 interval 秒清理一次空闲连接。"""
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await self.close_idle(timeout_seconds)
+            except Exception as exc:  # 单轮失败不能中断后续巡检
+                logger.warning("WS 心跳巡检失败: %s", exc)
+
     def get_online_users(self) -> List[int]:
         return list(self.active_connections.keys())
 
@@ -124,19 +163,22 @@ async def publish_data_changed(
 ) -> int:
     """向指定在线用户推送 `data-changed` 通知。
 
-    载荷只携带 `{domain, type, id}`，接收端按 id 自行回源拉取最新数据，
-    避免事件通道成为第二份业务数据源。
+    载荷仍只携带 `{domain, type, id}`，接收端按 id 回源拉取；v2 追加
+    `seq/scope` 供客户端去重，旧字段位置不变。发送统一走 ws_relay，
+    多 worker 时由 Redis 中继转发到其他进程的连接。
     """
-    message = {
-        "type": MessageType.DATA_CHANGED.value,
-        "data": {"domain": domain, "type": type, "id": id},
-        "timestamp": datetime.utcnow().isoformat(),
-    }
-    delivered = 0
-    for user_id in dict.fromkeys(user_ids):
-        if await ws_connection_manager.send_personal_message(message, user_id):
-            delivered += 1
-    return delivered
+    from ....foundation.ws_relay import ws_relay
+
+    sent = ws_relay.emit(
+        MessageType.DATA_CHANGED.value,
+        data={"domain": domain, "type": type, "id": id},
+        domain=domain,
+        entity=type,
+        entity_id=id,
+        scope=f"{domain}.{type}",
+        user_ids=user_ids,
+    )
+    return 1 if sent else 0
 
 
 @router.websocket("/connect")
@@ -182,6 +224,7 @@ async def websocket_connect(
 
         while True:
             data = await websocket.receive_json()
+            ws_connection_manager.touch(websocket)
             await handle_websocket_message(websocket, user_id, data, room)
 
     except WebSocketDisconnect:
