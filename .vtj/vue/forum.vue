@@ -1995,7 +1995,62 @@
     z-index: 5;
     box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.05);
     border-radius: 0 0 16px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
   }
+  /* 紧凑两行：输入框独占第一行，控件排第二行（DOM 顺序不变，仅改视觉顺序） */
+  .comment-input-area textarea {
+    order: 1;
+    flex: 0 0 100%;
+    height: 44px;
+    min-height: 44px;
+    max-height: 160px;
+    resize: vertical;
+  }
+  .comment-input-area .comment-toolbar { order: 2; margin: 0; }
+  .comment-input-area .comment-image-upload { order: 3; margin: 0; }
+  .comment-input-area .modal-actions { order: 4; margin: 0 0 0 auto; }
+  .comment-input-area .reply-hint,
+  .comment-input-area .comment-picker { order: 0; flex: 0 0 100%; }
+  /* 表情面板浮在输入区上方，不把整条吸底区顶高 */
+  .comment-input-area .comment-picker {
+    position: absolute;
+    left: 28px;
+    bottom: calc(100% + 8px);
+    flex: 0 0 auto;
+  }
+  .comment-toolbar-tip { display: none; }
+  /* 关闭按钮隐藏而非删除：删 DOM 要改 <template>（R3）；弹窗仍可点遮罩/Esc 关闭 */
+  .comment-input-area .cancel-btn { display: none; }
+
+  /* 上传：76×76 虚线框 → 36×36 圆形「＋」；原文字视觉隐藏，读屏仍可读 */
+  .comment-input-area :deep(.fu-add) {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+    position: relative;
+  }
+  .comment-input-area :deep(.fu-add::before) {
+    content: '+';
+    font-size: 20px;
+    line-height: 1;
+    color: #1a2b5f;
+  }
+  .comment-input-area :deep(.fu-add span) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .comment-input-area :deep(.fu-thumb) { width: 40px; height: 40px; }
+  .comment-input-area :deep(.fu-doc) { max-width: 140px; padding: 6px 8px; font-size: 12px; }
+  .comment-input-area .confirm-btn { padding: 8px 16px; font-size: 13px; }
   .comment-toolbar {
     display: flex;
     align-items: center;
