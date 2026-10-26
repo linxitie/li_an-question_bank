@@ -102,6 +102,32 @@ async def lifespan(app: FastAPI):
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
+    # F1 一致性内核：幂等建 7 张 foundation 表 + 启动投递器。
+    # FOUNDATION_ENABLED=false 时整段跳过，行为与 F0 完全一致（回滚开关）。
+    dispatcher_task = None
+    if settings.FOUNDATION_ENABLED:
+        try:
+            import asyncio as _foundation_asyncio
+
+            from .foundation.dispatcher import Dispatcher
+            from .foundation.schema import ensure_schema
+
+            _raw = engine.raw_connection()
+            try:
+                _conn = getattr(_raw, "driver_connection", _raw)
+                created = ensure_schema(_conn)
+            finally:
+                _raw.close()
+            if created:
+                logger.info(f"foundation 表已创建: {created}")
+            _foundation_stop = _foundation_asyncio.Event()
+            dispatcher_task = _foundation_asyncio.create_task(
+                Dispatcher(SessionLocal).run_forever(_foundation_stop)
+            )
+            logger.info("一致性内核投递器已启动")
+        except Exception as e:
+            logger.warning(f"一致性内核启动失败（服务继续运行）: {e}")
+
     # 初始化成就目录（幂等）
     try:
         from .services import achievement_service
@@ -522,6 +548,15 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("关闭公安联考题库系统服务...")
+    if dispatcher_task is not None:
+        import asyncio as _stop_asyncio
+        dispatcher_task.cancel()
+        try:
+            await dispatcher_task
+        except _stop_asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
     if consumer_task is not None:
         import asyncio as _shutdown_asyncio
         consumer_task.cancel()
@@ -652,6 +687,14 @@ async def health_check():
         "service": "公安联考题库系统",
         "version": "1.0.0"
     }
+
+@app.get("/health/foundation", tags=["系统"])
+async def foundation_health():
+    """F1 一致性内核健康：outbox 积压/死信/投影延迟/最近对账（只读）。"""
+    from .core.database import engine
+    from .foundation.health import snapshot
+
+    return snapshot(engine)
 
 @app.get("/metrics", tags=["系统"])
 async def get_metrics():

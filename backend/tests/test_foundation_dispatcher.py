@@ -7,7 +7,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.foundation import schema as fs
+from app.foundation import reconcile
 from app.foundation.dispatcher import Dispatcher
+from app.foundation.health import snapshot
 from app.foundation.outbox import emit
 from app.foundation.projection import LocalProjection, payload_checksum
 
@@ -118,6 +120,41 @@ def test_out_of_order_v5_wins_and_v3_cannot_downgrade(factory):
         ).one()
     assert row.source_version == 5
     assert row.checksum == payload_checksum({"v": 5})
+
+
+def test_reconcile_detects_drift_and_rebuild_repairs(factory):
+    _emit_many(factory, 5)
+    Dispatcher(factory).run_once()
+    with factory() as s:
+        s.execute(text("UPDATE foundation_projection_state SET checksum='tampered'"))
+        s.commit()
+
+    with factory() as s:
+        run = reconcile.sample(s)
+        reconcile.record(s, run)
+    assert run.status == "drift" and run.drifted == 5
+
+    with factory() as s:
+        repaired = reconcile.rebuild(s)
+        assert repaired.repaired == 5
+    with factory() as s:
+        assert reconcile.sample(s).drifted == 0
+
+    with factory() as s:
+        assert s.execute(text("SELECT status FROM foundation_reconcile_run")).scalar_one() == "drift"
+
+
+def test_health_snapshot_ok_and_degraded(factory):
+    _emit_many(factory, 3)
+    Dispatcher(factory).run_once()
+    engine = factory.kw["bind"]
+    ok = snapshot(engine)
+    assert ok["status"] == "ok" and ok["dead"] == 0 and ok["schema"] == "ok"
+
+    with factory() as s:
+        s.execute(text("UPDATE foundation_outbox SET status='dead' WHERE id=1"))
+        s.commit()
+    assert snapshot(engine)["status"] == "degraded"
 
 
 def test_permanent_failure_goes_dead_with_jsonl(factory, tmp_path):

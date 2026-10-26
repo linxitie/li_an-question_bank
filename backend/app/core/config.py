@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     # 故默认 True。publish 失败时调用点有同步兜底，Redis 宕机也不丢成就。
     EVENT_CONSUMER_ENABLED: bool = Field(True, env="EVENT_CONSUMER_ENABLED")
 
+    # ==================== F1 一致性内核（Outbox / 投影 / 对账）====================
+    # FOUNDATION_ENABLED=false 时不建表、不启动投递器，行为与 F0 完全一致（可一键回滚）。
+    FOUNDATION_ENABLED: bool = Field(True, env="FOUNDATION_ENABLED")
+    # 单轮投递间隔与最大尝试次数；超限进 dead + jsonl，人工重放。
+    FOUNDATION_DISPATCH_MS: int = Field(500, env="FOUNDATION_DISPATCH_MS")
+    FOUNDATION_MAX_ATTEMPTS: int = Field(8, env="FOUNDATION_MAX_ATTEMPTS")
+
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")
