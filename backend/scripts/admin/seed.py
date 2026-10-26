@@ -598,7 +598,7 @@ def run_seed():
     logger.info("模拟用户:")
     logger.info("  教师端: ycc5678 / ycc5678 (teacher, role_level=1)")
     logger.info("  管理员端: cbrycc / cbrycc (admin, role_level=3)")
-    logger.info("  学生端：202516001/test123456(student,role_lelvel=0)")
+    logger.info("  学生端:202516001/test123456(student,role_lelvel=0)")
     logger.info("=" * 50)
 
 
