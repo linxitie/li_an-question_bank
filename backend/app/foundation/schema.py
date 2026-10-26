@@ -49,6 +49,17 @@ def read_ddl(path: Path | None = None) -> str:
     return target.read_text(encoding="utf-8")
 
 
+def ddl_statements(path: Path | None = None) -> list[str]:
+    """把 DDL 文件拆成单条语句（供 SQLAlchemy exec_driver_sql 使用）。"""
+    raw = read_ddl(path).split(";")
+    statements = []
+    for chunk in raw:
+        body = [ln for ln in chunk.splitlines() if ln.strip() and not ln.strip().startswith("--")]
+        if body:
+            statements.append("\n".join(ln for ln in chunk.splitlines() if ln.strip()))
+    return statements
+
+
 def ensure_schema(conn: sqlite3.Connection, path: Path | None = None) -> list[str]:
     """幂等建表，返回本次真正新建的表名（第二次调用应为空列表）。"""
     existing = _table_names(conn)
