@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, case, text as sql_text
 
 from ....core.database import get_db, engine
+from ....services import media_service
 from ....core.security import (
     get_current_teacher, get_current_admin, get_password_hash,
     check_permission, Permission
@@ -1608,26 +1609,64 @@ async def update_teacher_profile(
     return {"success": True, "message": "个人信息已更新"}
 
 
+_TEACHER_AVATAR_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+_TEACHER_AVATAR_MAX = 2 * 1024 * 1024
+
+
 @router.post("/profile/avatar", summary="上传头像")
 async def upload_avatar(
     file: UploadFile = File(...),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """上传教师头像图片"""
+    """上传教师头像图片（与学生端同样的白名单/大小/文件头校验）"""
     import uuid
-    ext = os.path.splitext(file.filename)[1] if file.filename else '.jpg'
-    filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
     from app.core.config import settings
-    upload_dir = os.path.join(settings.UPLOAD_DIR, 'avatars')
-    os.makedirs(upload_dir, exist_ok=True)
-    filepath = os.path.join(upload_dir, filename)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _TEACHER_AVATAR_EXT:
+        raise HTTPException(400, "仅支持 jpg/jpeg/png/gif/webp 格式")
     content = await file.read()
-    with open(filepath, 'wb') as f:
-        f.write(content)
-    avatar_url = f"/uploads/avatars/{filename}"
-    current_user.avatar = avatar_url
-    db.commit()
+    if not content:
+        raise HTTPException(400, "文件内容为空")
+    if len(content) > _TEACHER_AVATAR_MAX:
+        raise HTTPException(400, "头像大小不能超过 2MB")
+    if not media_service.image_magic_ok(ext, content):
+        raise HTTPException(400, "文件实际格式与扩展名不符")
+
+    if settings.MEDIA_STORE_ENABLED:
+        try:
+            asset = media_service.store_bytes(
+                db,
+                content,
+                kind="avatar",
+                original_name=file.filename or f"avatar{ext}",
+                created_by=current_user.user_id,
+                max_bytes=_TEACHER_AVATAR_MAX,
+            )
+        except media_service.MediaTooLarge:
+            raise HTTPException(400, "头像大小不能超过 2MB")
+        except media_service.MediaValidationError as exc:
+            raise HTTPException(400, str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "头像存储暂不可用，请稍后重试")
+
+        old_url = current_user.avatar
+        avatar_url = f"/media/{asset.asset_id}"
+        current_user.avatar = avatar_url
+        media_service.retire_url(db, old_url)
+        db.commit()
+    else:
+        # 回滚分支：保留原 uploads 写路径。
+        filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
+        upload_dir = os.path.join(settings.UPLOAD_DIR, 'avatars')
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, 'wb') as f:
+            f.write(content)
+        avatar_url = f"/uploads/avatars/{filename}"
+        current_user.avatar = avatar_url
+        db.commit()
     return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}
 
 

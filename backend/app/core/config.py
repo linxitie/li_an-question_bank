@@ -101,6 +101,21 @@ class Settings(BaseSettings):
     # 写库前 6 类守卫的总开关；false 时回退到 F1 行为。
     FOUNDATION_VALIDATION_ENABLED: bool = Field(True, env="FOUNDATION_VALIDATION_ENABLED")
 
+    # ==================== F3 对象存储与媒体资产 ====================
+    # 关闭后新上传回退旧 uploads 写路径；/media 读路由仍保留，已写 URL 不裂。
+    MEDIA_STORE_ENABLED: bool = Field(True, env="MEDIA_STORE_ENABLED")
+    OBJECT_STORE_BACKEND: str = Field("local", env="OBJECT_STORE_BACKEND")
+    OBJECT_STORE_ROOT: str = Field("./data/foundation/objects", env="OBJECT_STORE_ROOT")
+    MINIO_ENDPOINT: str = Field("", env="MINIO_ENDPOINT")
+    MINIO_BUCKET: str = Field("", env="MINIO_BUCKET")
+    MINIO_ACCESS_KEY: str = Field("", env="MINIO_ACCESS_KEY")
+    MINIO_SECRET_KEY: str = Field("", env="MINIO_SECRET_KEY")
+    MINIO_SECURE: bool = Field(False, env="MINIO_SECURE")
+    MINIO_REGION: str = Field("us-east-1", env="MINIO_REGION")
+    # true 时 MinIO 不可达直接拒绝启动；默认 false，开发机无 MinIO 也能启动。
+    MEDIA_STRICT_BACKEND: bool = Field(False, env="MEDIA_STRICT_BACKEND")
+    MEDIA_ORPHAN_GRACE_DAYS: int = Field(7, env="MEDIA_ORPHAN_GRACE_DAYS")
+
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")

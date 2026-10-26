@@ -24,13 +24,14 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from ....core.database import get_db
 from ....core.config import settings
 from ....core.security import get_current_user, get_optional_user
+from ....services import media_service
 from ....models.models import (
     ForumPost, ForumComment, ForumLike, SysUser, SysOperationLog
 )
@@ -628,7 +629,36 @@ async def upload_attachment(
     if len(contents) > MAX_SIZE:
         raise ValidationError("文件大小不能超过 20MB")
 
-    # 3. 安全存储(UUID 重命名)
+    if settings.MEDIA_STORE_ENABLED:
+        # F3：附件字节进对象存储，URL 走稳定代理；MIME 由服务端按扩展名决定。
+        try:
+            asset = media_service.store_bytes(
+                db,
+                contents,
+                kind="forum",
+                original_name=original_name,
+                created_by=current_user.user_id,
+                max_bytes=MAX_SIZE,
+            )
+        except media_service.MediaTooLarge:
+            raise ValidationError("文件大小不能超过 20MB")
+        except media_service.MediaValidationError as exc:
+            raise ValidationError(str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "附件存储暂不可用，请稍后重试")
+        db.commit()
+        logger.info(
+            "用户 %s 上传附件 %s → /media/%s",
+            current_user.user_id, original_name, asset.asset_id,
+        )
+        return {
+            "name": original_name,
+            "url": f"/media/{asset.asset_id}",
+            "size": len(contents),
+            "type": ext.lstrip(".")
+        }
+
+    # 回滚分支：保留原 uploads 写路径。
     filename = f"{uuid.uuid4().hex}{ext}"
     save_dir = os.path.join(settings.UPLOAD_DIR, "forum")
     os.makedirs(save_dir, exist_ok=True)

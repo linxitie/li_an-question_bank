@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""L7 底座一致性门禁 — 15 项检查（F1 落地版）。
+"""L7 底座一致性门禁 — 16 项检查（F1/F3 落地版）。
 
 严重度约定：
-  1-5、8、13、14 FAIL —— 底座结构/契约/路由可见性/通信协议被破坏，必须阻断；
-  6-7、9-12 WARN —— 依赖环境与后续阶段（F3）的软检查，先观察后升级；
-  15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL。
+  1-5、8、13、14、16 表缺失 FAIL —— 底座结构/契约/路由/媒体表被破坏，必须阻断；
+  6-7、9-12 WARN —— 依赖环境与后续阶段的软检查，先观察后升级；
+  15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL；
+  16 的存储不可达/对账过期/孤儿只 WARN，不阻断离线开发。
   L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
 设计原则：只读、不做任何写入（唯一例外：--update-baseline 显式更新基线）。
@@ -30,11 +31,16 @@ BASELINE_PATH = Path(__file__).resolve().parent / 'l7_baseline.json'
 # 迁移文件一经提交即视为历史事实；改动必须走人工评审并同步更新此常量。
 FOUNDATION_DDL_SHA256 = '0abfd2887b62aa251ef2952cab9352b425456415fe753b040707eeb5cd4e08f9'
 FOUNDATION_DDL = BACKEND_ROOT / 'migrations' / '20261027_001_foundation_core.sql'
+MEDIA_DDL = BACKEND_ROOT / 'migrations' / '20261027_002_media_assets.sql'
+MEDIA_DDL_SHA256 = '455cf727d076fe67dd760cfc430da521c6dd7aa5c41024d4b9a50250028cc21f'
 FOUNDATION_TABLES = (
     'foundation_outbox', 'foundation_projection_cursor', 'foundation_inbox',
     'foundation_projection_state', 'foundation_reconcile_run',
     'foundation_backfill_state', 'foundation_preview_ref',
 )
+MEDIA_TABLES = ('media_assets',)
+MEDIA_INDEXES = ('ix_media_assets_sha256', 'ix_media_assets_status',
+                 'ix_media_assets_created_by')
 ROLE_SUFFIX_RE = re.compile(r'_(mobile|tablet|pc|teacher|admin)$', re.I)
 MAIN_DB_WARN_BYTES = 512 * 1024 * 1024
 MAIN_DB_FAIL_BYTES = 1024 * 1024 * 1024
@@ -173,6 +179,12 @@ def check_migrations() -> None:
         digest = hashlib.sha256(FOUNDATION_DDL.read_bytes()).hexdigest()
         if digest != FOUNDATION_DDL_SHA256:
             problems.append(f'DDL checksum 不符：{digest[:16]}…（历史迁移被改动？）')
+    if not MEDIA_DDL.exists():
+        problems.append(f'缺少 {MEDIA_DDL.name}')
+    else:
+        digest = hashlib.sha256(MEDIA_DDL.read_bytes()).hexdigest()
+        if digest != MEDIA_DDL_SHA256:
+            problems.append(f'media DDL checksum 不符：{digest[:16]}…')
     groups: dict[str, list[int]] = {}
     for p in sorted((BACKEND_ROOT / 'migrations').glob('*.sql')):
         m = re.match(r'^(\d{8})_(\d{3})_', p.name)
@@ -511,6 +523,89 @@ def check_content_integrity() -> None:
     _add(15, '内容完整性', ok, detail, 'WARN' if ok else 'FAIL')
 
 
+def check_media_store() -> None:
+    """L7-16：媒体表/索引是硬结构；存储 health、对账新鲜度、孤儿只做软告警。"""
+    db = _db_path()
+    if not db.exists():
+        _add(16, '媒体表与对象存储', False, f'数据库不存在：{db}', 'FAIL')
+        return
+    con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+    try:
+        names = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        missing = [t for t in MEDIA_TABLES if t not in names]
+        idx = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'")}
+        miss_idx = [i for i in MEDIA_INDEXES if i not in idx]
+        active = 0
+        if not missing:
+            active = con.execute(
+                "SELECT COUNT(*) FROM media_assets WHERE status='active'").fetchone()[0]
+        row = None
+        if 'foundation_reconcile_run' in names:
+            row = con.execute(
+                "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                "WHERE scope='media' ORDER BY finished_at DESC LIMIT 1").fetchone()
+    finally:
+        con.close()
+    if missing or miss_idx:
+        _add(16, '媒体表与对象存储', False,
+             f'缺表={missing} 缺索引={miss_idx}', 'FAIL')
+        return
+
+    warnings: list[str] = []
+    enabled = os.environ.get('MEDIA_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    try:
+        sys.path.insert(0, str(BACKEND_ROOT))
+        from app.foundation.stores.object import build_object_store
+
+        health = build_object_store().health()
+        if not health.ok or health.degraded:
+            warnings.append(f'对象存储 {health.backend} 不可用：{health.detail}')
+        else:
+            store_detail = f'{health.backend}=ok'
+    except Exception as exc:  # 门禁不能因开发机无 MinIO 直接崩溃
+        warnings.append(f'对象存储检查失败：{type(exc).__name__}: {exc}')
+        store_detail = 'unknown'
+
+    if row is None:
+        warnings.append('还没有媒体对账记录（运行 media_inventory.py --record）')
+    else:
+        finished_at, status, report_path = row
+        try:
+            from datetime import datetime
+
+            finished = datetime.fromisoformat(str(finished_at))
+            if finished.tzinfo is None:
+                finished = finished.astimezone()
+            age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+            if age_days > 7:
+                warnings.append(f'媒体对账已过期 {age_days:.1f} 天')
+        except (TypeError, ValueError):
+            warnings.append('媒体对账时间无法解析')
+        if str(status) == 'drift':
+            warnings.append('最近一次媒体对账有漂移')
+        if report_path:
+            try:
+                rp = Path(report_path)
+                if not rp.is_absolute():
+                    rp = BACKEND_ROOT / rp
+                report = json.loads(rp.read_text(encoding='utf-8'))
+                orphans = int(report.get('orphans') or 0)
+                if orphans:
+                    warnings.append(f'孤儿对象 {orphans} 个（GC 默认 dry-run）')
+            except (OSError, ValueError):
+                pass
+
+    if warnings:
+        _add(16, '媒体表与对象存储', False,
+             f'表/索引齐全 active={active}；' + '；'.join(warnings), 'WARN')
+    else:
+        _add(16, '媒体表与对象存储', True,
+             f'表/索引齐全 active={active} {store_detail} enabled={enabled}', 'WARN')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -522,6 +617,7 @@ CHECKS = (
     check_migrations, check_health_switch, check_reconcile, check_routes_roles,
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
+    check_media_store,
 )
 
 

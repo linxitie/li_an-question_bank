@@ -254,6 +254,8 @@ from ....services.material_classifier import classifier  # noqa: E402
 from ....services.material_deduplicator import deduplicator  # noqa: E402
 from ....services.material_sanitizer import content_cleaner  # noqa: E402
 from ....services.material_monitor import import_monitor  # noqa: E402
+from ....core.config import settings  # noqa: E402
+from ....services import media_service  # noqa: E402
 
 UPLOAD_IMG_DIR = _Path("uploads/materials/images")
 UPLOAD_TMP_DIR = _Path("uploads/materials/tmp")
@@ -340,7 +342,8 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         logger.warning("[materials] audit log failed: %s", e)
 
 
-def _safe_image_upload(file: UploadFile) -> str:
+def _safe_image_upload(file: UploadFile, db: Session | None = None,
+                       user_id: int | None = None) -> str:
     ext = _os.path.splitext(file.filename or "")[1].lower()
     if ext not in (".png", ".jpg", ".jpeg", ".webp"):
         raise HTTPException(400, "仅支持 png/jpg/webp 图片")
@@ -350,6 +353,24 @@ def _safe_image_upload(file: UploadFile) -> str:
     magic = MAGIC_BYTES.get(".jpg" if ext == ".jpeg" else ext)
     if magic and not content.startswith(magic):
         raise HTTPException(400, "文件实际格式与扩展名不符")
+
+    if settings.MEDIA_STORE_ENABLED:
+        if db is None:
+            raise HTTPException(500, "媒体存储缺少数据库会话")
+        try:
+            asset = media_service.store_bytes(
+                db, content, kind="material_image",
+                original_name=file.filename or f"image{ext}",
+                created_by=user_id, max_bytes=5 * 1024 * 1024,
+            )
+        except media_service.MediaTooLarge:
+            raise HTTPException(400, "图片不能超过 5MB")
+        except media_service.MediaValidationError as exc:
+            raise HTTPException(400, str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "图片存储暂不可用，请稍后重试")
+        return f"/media/{asset.asset_id}"
+
     UPLOAD_IMG_DIR.mkdir(parents=True, exist_ok=True)
     name = f"{_uuid.uuid4().hex}{ext}"
     (UPLOAD_IMG_DIR / name).write_bytes(content)
@@ -361,7 +382,7 @@ async def upload_image(file: UploadFile = File(...),
                        current_user: SysUser = Depends(get_current_user),
                        db: Session = Depends(get_db)):
     _require_admin(current_user)
-    url = _safe_image_upload(file)
+    url = _safe_image_upload(file, db=db, user_id=current_user.user_id)
     _audit(db, current_user, "upload_image", url)
     db.commit()
     return {"url": url}
@@ -664,29 +685,52 @@ def _load_result(rec: MaterialImportRecord) -> dict:
         return {}
 
 
-def _migrate_images(import_id: int, result: dict) -> None:
-    """把 parse_result.images 的临时图片迁入正式目录并改写 html 引用。"""
+def _migrate_images(import_id: int, result: dict, db: Session | None = None,
+                    user_id: int | None = None) -> None:
+    """把 parse_result.images 的临时图片迁入正式存储并改写 html 引用。
+
+    F3 开启时写入对象存储，HTML 改写为 /media/{asset_id}；关闭时保留原
+    uploads/materials/images/ 目录行为。图片字节只在确认入库时固化。
+    """
     html = result.get("html") or ""
     dest_dir = UPLOAD_IMG_DIR / f"import_{import_id}"
+    use_media = bool(settings.MEDIA_STORE_ENABLED and db is not None)
+
+    def _persist(src: _Path, original_name: str) -> str:
+        if use_media:
+            try:
+                with open(src, "rb") as fh:
+                    asset = media_service.store_file(
+                        db, fh, kind="material_image",
+                        original_name=original_name, created_by=user_id,
+                    )
+            except media_service.MediaValidationError as exc:
+                raise HTTPException(400, f"导入图片格式不支持: {exc}")
+            except media_service.ObjectStoreUnavailable:
+                raise HTTPException(503, "图片存储暂不可用，请稍后重试")
+            src.unlink(missing_ok=True)
+            return f"/media/{asset.asset_id}"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / original_name
+        _shutil.move(str(src), str(dest))
+        return f"/uploads/materials/images/import_{import_id}/{dest.name}"
+
     for img in result.get("images", []):
+        if not isinstance(img, dict):
+            continue
         src = _Path(img.get("src_path", ""))
         if not src.exists():
             continue
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / img.get("name", src.name)
-        _shutil.move(str(src), str(dest))
-        old_ref = f"/uploads/materials/tmp/{src.name}"
-        new_ref = f"/uploads/materials/images/import_{import_id}/{dest.name}"
-        html = html.replace(old_ref, new_ref)
+        name = img.get("name", src.name)
+        new_ref = _persist(src, name)
+        html = html.replace(f"/uploads/materials/tmp/{src.name}", new_ref)
     # Word 内嵌图引用同样从 tmp 迁移
     for name in result.get("images", []):
         if isinstance(name, str):
             src = UPLOAD_TMP_DIR / name
             if src.exists():
-                dest_dir.mkdir(parents=True, exist_ok=True)
-                _shutil.move(str(src), str(dest_dir / name))
-                html = html.replace(f"/uploads/materials/tmp/{name}",
-                                    f"/uploads/materials/images/import_{import_id}/{name}")
+                new_ref = _persist(src, name)
+                html = html.replace(f"/uploads/materials/tmp/{name}", new_ref)
     result["html"] = sanitize_html(html)
 
 
@@ -911,7 +955,7 @@ async def import_confirm(import_id: int, body: dict,
         mtype = body.get("type")
         if mtype not in ("article",):
             raise HTTPException(400, "文档类素材入库类型只能是 article")
-        _migrate_images(import_id, result)
+        _migrate_images(import_id, result, db=db, user_id=current_user.user_id)
         word_count = result.get("word_count", 0)
         # 内容清洗
         raw_content = result.get("html") or ""

@@ -33,6 +33,7 @@ from .api.v1.growth import achievements, checkin
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
+from .api import media_assets as media_assets_api
 from .api.v1.platform.websocket import router as websocket_router
 from .api.v1.catalog.paper_generation import router as paper_router
 from .api.v1.catalog.question_import import router as question_import_router
@@ -116,6 +117,21 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
+
+    # F3 媒体资产表：无论 MEDIA_STORE_ENABLED 真假都幂等建表，
+    # 保证关闭写入开关后 /media 读路由仍能服务已写 URL。
+    try:
+        from .foundation.media_schema import ensure_media_schema
+        _raw_media = engine.raw_connection()
+        try:
+            _conn_media = getattr(_raw_media, "driver_connection", _raw_media)
+            _media_created = ensure_media_schema(_conn_media)
+        finally:
+            _raw_media.close()
+        if _media_created:
+            logger.info(f"media_assets 表已创建: {_media_created}")
+    except Exception as e:
+        logger.warning(f"media_assets 建表失败（/media 读路由将不可用）: {e}")
 
     # F2 通信统一：多 worker 无中继直接拒绝启动（fail-fast，避免「有时收不到」）；
     # 中继本身不可用只降级为本地扇出，不影响业务读写。
@@ -691,6 +707,7 @@ app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
+app.include_router(media_assets_api.router)
 app.include_router(websocket_router)
 app.include_router(news.router)
 app.include_router(recruitment.router)
@@ -735,9 +752,15 @@ async def foundation_health():
     """F1 一致性内核健康：outbox 积压/死信/投影延迟/最近对账（只读）。"""
     from .core.database import engine
     from .foundation.health import snapshot
+    from .foundation.media_health import snapshot as media_snapshot
     from .foundation.ws_relay import ws_relay
 
-    return snapshot(engine, ws_relay.health())
+    result = snapshot(engine, ws_relay.health())
+    try:
+        result["media"] = media_snapshot(engine)
+    except Exception as exc:  # noqa: BLE001 - F3 健康不得影响 F1 健康返回
+        result["media"] = {"status": "degraded", "detail": str(exc)}
+    return result
 
 @app.get("/metrics", tags=["系统"])
 async def get_metrics():
