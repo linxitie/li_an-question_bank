@@ -11,6 +11,9 @@
  *   fetch('/api/...', { headers }).then(...)
  */
 
+import { bridgeWsMessageToPapers } from '@/modules/papers/events';
+import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/utils/wsMessage';
+
 (function () {
   'use strict';
 
@@ -211,6 +214,7 @@
   var _syncReconnectTimer: number | null = null;
   var _syncHeartbeatTimer: number | null = null;
   var _reconnectDelay = 5000; // 重连延迟，指数退避，封顶 60s
+  var _syncConnected = false; // 是否已成功连接过：重连时需补一次全量同步
 
   /**
    * 建立 WebSocket 同步连接（三端实时同步）
@@ -233,17 +237,39 @@
     }
 
     _syncSocket.onopen = function () {
+      var isReconnect = _syncConnected;
+      _syncConnected = true;
       _reconnectDelay = 5000; // 连接成功，重置退避
       startSyncHeartbeat();
+      if (isReconnect) {
+        // 重连后 seq 可能回退：清空去重表，并补一次全量同步（R19：不服务端补发）
+        resetSeq();
+        window.setTimeout(function () {
+          window.dispatchEvent(
+            new CustomEvent('__VTJ_SYNC__', {
+              detail: { type: 'sync', data: { reason: 'ws-reconnect' } }
+            })
+          );
+        }, 0);
+      }
     };
 
     _syncSocket.onmessage = function (ev: any) {
-      try {
-        var msg = JSON.parse(ev.data);
-        if (msg && msg.type === 'sync') {
-          window.dispatchEvent(new CustomEvent('__VTJ_SYNC__', { detail: msg }));
-        }
-      } catch (e) { /* 忽略非 JSON 消息 */ }
+      var msg = parseWsMessage(ev.data);
+      if (!msg) return;
+      var kind = classify(msg);
+      if (kind === 'other') return;
+      // 同 scope 的旧 seq 直接丢弃，避免重放/乱序导致页面重复刷新
+      if (!acceptSeq(deriveScope(msg), msg.seq)) return;
+
+      if (kind === 'sync') {
+        window.dispatchEvent(new CustomEvent('__VTJ_SYNC__', { detail: msg }));
+        return;
+      }
+
+      // data-changed：旧页面靠 __VTJ_SYNC__ 兼容刷新，试卷域额外走类型化事件
+      window.dispatchEvent(new CustomEvent('__VTJ_SYNC__', { detail: msg }));
+      bridgeWsMessageToPapers(msg);
     };
 
     _syncSocket.onclose = function (ev) {
@@ -296,6 +322,8 @@
 
   function closeSyncSocket() {
     if (_syncReconnectTimer) { clearTimeout(_syncReconnectTimer); _syncReconnectTimer = null; }
+    _syncConnected = false;
+    resetSeq();
     stopSyncHeartbeat();
     if (_syncSocket) {
       try { _syncSocket.close(); } catch (e) {}
