@@ -744,13 +744,41 @@ onMounted(() => {
   font-size: 13px;
 }
 .comment-bar {
-  position: relative;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   background: #fff;
   border-top: 1px solid #e8ecf1;
+}
+
+/* 底栏改为 fixed 后脱离文档流：正文底部留出让位，避免最后一条评论被遮 */
+.page {
+  padding-bottom: 88px;
+}
+
+/* 单行：😊 → ＋ → 输入框 → 发送（DOM 顺序不变，仅改视觉顺序） */
+.comment-bar .emoji-btn {
+  order: 1;
+}
+.comment-bar .comment-image-bar {
+  order: 2;
+  width: auto;
+  flex: 0 0 auto;
+}
+.comment-bar .comment-input {
+  order: 3;
+  flex: 1;
+  min-width: 0;
+}
+.comment-bar .send-btn {
+  order: 4;
 }
 .comment-image-bar {
   width: 100%;
@@ -805,5 +833,34 @@ onMounted(() => {
 }
 .send-btn:disabled {
   opacity: 0.5;
+}
+
+/* 上传按钮缩成 36×36 圆形「＋」；原文字视觉隐藏保留给读屏。
+   依赖 FileUploader 的 .fu-add / .fu-thumb 类名，改组件时需同步。 */
+.comment-bar :deep(.fu-add) {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+  position: relative;
+}
+.comment-bar :deep(.fu-add::before) {
+  content: '+';
+  font-size: 20px;
+  line-height: 1;
+  color: #1a2b5f;
+}
+.comment-bar :deep(.fu-add span) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.comment-bar :deep(.fu-thumb) {
+  width: 36px;
+  height: 36px;
 }
 </style>

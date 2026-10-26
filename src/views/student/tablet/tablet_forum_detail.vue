@@ -378,7 +378,7 @@ watch(() => route.params.id, () => { void load(); });
 }
 
 .content {
-  padding: 24px 24px 220px;
+  padding: 24px 24px 120px;
 }
 
 .detail-card {
@@ -620,7 +620,42 @@ watch(() => route.params.id, () => { void load(); });
 }
 
 .composer-uploader {
-  width: 100%;
+  order: 2;
+  width: auto;
+  flex: 0 0 auto;
+}
+/* 单行：😊 → ＋ → 输入框 → 发送 */
+.composer .emoji-btn { order: 1; }
+.composer .comment-input { order: 3; }
+.composer .send-btn { order: 4; }
+
+/* 上传按钮缩成 36×36 圆形「＋」；原文字视觉隐藏保留给读屏。
+   依赖 FileUploader 的 .fu-add / .fu-thumb 类名，改组件时需同步。 */
+.composer :deep(.fu-add) {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+  position: relative;
+}
+.composer :deep(.fu-add::before) {
+  content: '+';
+  font-size: 20px;
+  line-height: 1;
+  color: #1a2b5f;
+}
+.composer :deep(.fu-add span) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.composer :deep(.fu-thumb) {
+  width: 36px;
+  height: 36px;
 }
 
 .composer-picker {

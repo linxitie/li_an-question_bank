@@ -1756,11 +1756,11 @@
   .post-detail-card {
     width: 680px;
     max-width: 95vw;
+    height: 85vh;          /* 固定高度，底部固定条才能与弹窗底边精确对齐 */
     max-height: 85vh;
     overflow-y: auto;
-    /* 底部不留内边距：吸底输入区要贴到卡片底边，
-       否则滚动内容会从 28px 的底部内边距里露出来 */
-    padding-bottom: 0;
+    /* 底部留出固定输入区的高度，最后一条评论仍可滚到可见位置 */
+    padding-bottom: 90px;
   }
   .detail-header {
     display: flex;
@@ -1986,31 +1986,39 @@
        否则上传/表情/发送位于内容末尾(2100px+)，用户看不到。
        负外边距抵消 .modal-card 的 28px 内边距，让吸底条铺到卡片底边与两侧，
        否则下方会露出 28px 的滚动内容。 */
-    margin: 16px -28px 0;
-    padding: 12px 28px 20px;
+    margin: 0;
+    padding: 12px 28px;
     border-top: 1px solid #f0f2f5;
-    position: sticky;
-    bottom: 0;
+    /* 弹窗高度固定为 85vh 且垂直居中，所以其底边恒在 92.5vh；
+       固定条贴同一条线，打开即在视口内，不依赖滚动 */
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 7.5vh;
+    width: 680px;
+    max-width: 95vw;
     background: #ffffff;
-    z-index: 5;
-    box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.05);
+    z-index: 2100;
+    box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.06);
     border-radius: 0 0 16px 16px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
   }
-  /* 紧凑两行：输入框独占第一行，控件排第二行（DOM 顺序不变，仅改视觉顺序） */
+  /* 单行：😊 → ＋ → 输入框 → 发表评论（DOM 顺序不变，仅改视觉顺序） */
   .comment-input-area textarea {
-    order: 1;
-    flex: 0 0 100%;
-    height: 44px;
-    min-height: 44px;
-    max-height: 160px;
+    order: 3;
+    flex: 1 1 0;
+    width: auto;          /* 覆盖 .modal-textarea 的 width:100%，否则整行被占满导致换行 */
+    min-width: 120px;
+    height: 40px;
+    min-height: 40px;
+    max-height: 120px;
     resize: vertical;
   }
-  .comment-input-area .comment-toolbar { order: 2; margin: 0; }
-  .comment-input-area .comment-image-upload { order: 3; margin: 0; }
+  .comment-input-area .comment-toolbar { order: 1; margin: 0; }
+  .comment-input-area .comment-image-upload { order: 2; margin: 0; }
   .comment-input-area .modal-actions { order: 4; margin: 0 0 0 auto; }
   .comment-input-area .reply-hint,
   .comment-input-area .comment-picker { order: 0; flex: 0 0 100%; }
