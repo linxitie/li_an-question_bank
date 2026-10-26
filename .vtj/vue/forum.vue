@@ -8,10 +8,20 @@
           <XIcon :icon="ChatRound" :size="24" color="#c41e3a"></XIcon>
           <span> 备考论坛</span>
         </h2>
-        <button class="post-btn" @click="openNewPost">
-          <XIcon :icon="EditPen" :size="16" color="#ffffff"></XIcon>
-          <span> 发布新帖</span>
-        </button>
+        <div class="forum-header-actions">
+          <button class="post-btn ghost" @click="openFavorites('favorites')">
+            <XIcon :icon="Star" :size="16" color="#c41e3a"></XIcon>
+            <span> 我的收藏</span>
+          </button>
+          <button class="post-btn ghost" @click="openFavorites('likes')">
+            <XIcon :icon="StarFilled" :size="16" color="#c41e3a"></XIcon>
+            <span> 我的喜欢</span>
+          </button>
+          <button class="post-btn" @click="openNewPost">
+            <XIcon :icon="EditPen" :size="16" color="#ffffff"></XIcon>
+            <span> 发布新帖</span>
+          </button>
+        </div>
       </div>
       <div class="forum-body">
         <div class="forum-left">
@@ -203,6 +213,33 @@
             <button class="confirm-btn" :disabled="state.submitting" @click="submitPost">
               {{ state.submitting ? '发布中...' : '发布' }}
             </button>
+          </div>
+        </div>
+      </div>
+      <!-- 我的收藏 / 我的喜欢（P2 为空态外壳，列表数据在 P3 接入） -->
+      <div
+        v-if="state.showFavorites"
+        class="modal-overlay"
+        @click.self="closeFavorites">
+        <div class="modal-card fav-modal">
+          <h3>{{ state.favoriteTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
+          <div class="fav-tabs">
+            <button
+              :class="['fav-tab', { active: state.favoriteTab === 'favorites' }]"
+              @click="switchFavoritesTab('favorites')">
+              我的收藏
+            </button>
+            <button
+              :class="['fav-tab', { active: state.favoriteTab === 'likes' }]"
+              @click="switchFavoritesTab('likes')">
+              我的喜欢
+            </button>
+          </div>
+          <div class="fav-empty">
+            {{ state.favoriteTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
+          </div>
+          <div class="modal-actions">
+            <button class="cancel-btn" @click="closeFavorites">关闭</button>
           </div>
         </div>
       </div>
@@ -589,6 +626,9 @@
         myPostsLoaded: false,
         myPostsTotal: 0,
         showMyPosts: false,
+        // === 我的收藏 / 我的喜欢（P2 仅外壳，数据 P3 接入）===
+        showFavorites: false,
+        favoriteTab: 'favorites' as 'favorites' | 'likes',
         myPostsPage: 1,
         myPostsPageSize: 20,
         myPostsLoading: false,
@@ -1068,6 +1108,16 @@
           this.state.myPostsTotal = this.community.myPostsTotal;
           this.state.myPostsLoaded = true;
       },
+      openFavorites(tab?: 'favorites' | 'likes') {
+        this.state.favoriteTab = tab || 'favorites';
+        this.state.showFavorites = true;
+      },
+      closeFavorites() {
+        this.state.showFavorites = false;
+      },
+      switchFavoritesTab(tab: 'favorites' | 'likes') {
+        this.state.favoriteTab = tab;
+      },
       async openMyPosts() {
         this.state.showMyPosts = true;
         this.state.myPostsPage = 1;
@@ -1236,6 +1286,48 @@
   .post-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 18px rgba(196, 30, 58, 0.4);
+  }
+  /* P2：我的收藏 / 我的喜欢。几何尺寸完全继承 .post-btn（不改 padding/border/字体），
+     仅用 inset box-shadow 画描边，保证三个按钮同高同宽 */
+  .forum-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .post-btn.ghost {
+    background: #ffffff;
+    color: #c41e3a;
+    box-shadow: inset 0 0 0 1px #f0c4cc;
+  }
+  .post-btn.ghost:hover {
+    background: #fff5f7;
+    box-shadow: inset 0 0 0 1px #f0c4cc, 0 4px 12px rgba(196, 30, 58, 0.12);
+  }
+  .fav-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 16px;
+  }
+  .fav-tab {
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid #e3e8ef;
+    background: #ffffff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .fav-tab.active {
+    background: #fdf2f4;
+    border-color: #f0c4cc;
+    color: #c41e3a;
+  }
+  .fav-empty {
+    padding: 40px 0;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 14px;
   }
   .forum-body {
     display: grid;
