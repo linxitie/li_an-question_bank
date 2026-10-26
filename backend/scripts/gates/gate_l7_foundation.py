@@ -287,10 +287,11 @@ def check_capacity() -> None:
     wal_size = wal.stat().st_size if wal.exists() else 0
     mb = size / 1024 / 1024
     if size > MAIN_DB_FAIL_BYTES:
+        # 硬顶按方案 §17.2：>1 GB 阻断，不再只是提醒。
         _add(11, '主库/WAL 容量', False,
-             f'主库 {mb:.1f} MB 超过 1 GB 硬顶（应切 MySQL）', 'WARN')
-    elif size > MAIN_DB_WARN_BYTES:
-        _add(11, '主库/WAL 容量', False, f'主库 {mb:.1f} MB 超过 512 MB 预警线', 'WARN')
+             f'主库 {mb:.1f} MB 超过 1 GB 硬顶（应切 MySQL）', 'FAIL')
+    elif size >= MAIN_DB_WARN_BYTES:
+        _add(11, '主库/WAL 容量', False, f'主库 {mb:.1f} MB 达到 512 MB 预警线', 'WARN')
     elif wal_size > WAL_WARN_BYTES:
         _add(11, '主库/WAL 容量', False,
              f'WAL {wal_size / 1024 / 1024:.1f} MB 超过 64 MB', 'WARN')
@@ -320,7 +321,7 @@ def check_preview_volume() -> None:
         con.close()
     mb = total / 1024 / 1024
     if total > PREVIEW_FAIL_BYTES:
-        _add(12, 'preview_data 体积', False, f'{mb:.1f} MB 超过 200 MB 硬顶', 'WARN')
+        _add(12, 'preview_data 体积', False, f'{mb:.1f} MB 超过 200 MB 硬顶', 'FAIL')
     elif total > PREVIEW_WARN_BYTES:
         _add(12, 'preview_data 体积', False, f'{mb:.1f} MB 超过 50 MB 预警线', 'WARN')
     elif expired:
