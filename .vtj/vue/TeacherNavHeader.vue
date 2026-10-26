@@ -372,7 +372,20 @@ export default defineComponent({
 
     function handleLogout() {
       showUserMenu.value = false;
+      // 组件内自兜底：教师端 8 个页面并非都监听 @logout，仅 emit 会变成无响应
+      const auth: any = (window as any).__VTJ_AUTH__;
+      try {
+        if (auth && typeof auth.logout === 'function') auth.logout();
+      } catch (e) {
+        console.warn('logout failed', e);
+      }
+      try {
+        localStorage.removeItem('__VTJ_AUTH_STATE__');
+      } catch (e) {
+        /* ignore */
+      }
       emit('logout');
+      router.push('/login');
     }
 
     return {

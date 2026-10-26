@@ -1,4 +1,4 @@
-/** 教师端 / 管理员端论坛管理接口。 */
+﻿/** 教师端 / 管理员端论坛管理接口。 */
 import { apiClient } from '@/services/api/client';
 
 const client = apiClient;
@@ -21,6 +21,7 @@ async function del<T>(url: string, params?: Record<string, unknown>): Promise<T>
 export interface ModerationPost {
   id: number;
   title: string;
+  titleColor?: string | null;
   content: string;
   status: string;
   author?: string;
@@ -110,3 +111,4 @@ export const adminForumApi = {
   purgeComment: (commentId: number) =>
     del<{ success: boolean }>(`/api/admin/forum/comments/${commentId}/purge`)
 };
+

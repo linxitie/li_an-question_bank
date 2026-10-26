@@ -15,7 +15,7 @@
       </div>
 
       <div v-if="post" class="post-card">
-        <h2 class="post-title">{{ post.title }}</h2>
+        <h2 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h2>
         <div class="post-author">
           <div class="avatar" :class="{ 'has-frame': post.user && post.user.avatarFrame }">
             <img
@@ -196,6 +196,7 @@ import FileUploader from '@/components/forum/FileUploader.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 import { avatarInitial } from '@/modules/community/avatar';
+import { titleColorValue } from '@/components/forum/titleColors';
 import {
   pinForumComment,
   reportForumTarget,

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="tf-page">
     <TeacherNavHeader active-nav="forum" />
     <main class="tf-main">
@@ -31,7 +31,7 @@
               :user-id="post.id"
               :user-type="post.authorType || 'student'" />
             <span class="tf-status" :class="`st-${post.status}`">{{ statusLabel(post.status) }}</span>
-            <span class="tf-title">{{ post.title }}</span>
+            <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
             <span class="tf-meta">{{ post.authorClass || '未分班' }}</span>
           </div>
           <p class="tf-content"><ForumContent :content="post.content" /></p>
@@ -49,7 +49,7 @@
       <div v-if="detail" class="tf-modal" @click.self="detail = null">
         <div class="tf-modal-card">
           <button class="tf-close" @click="detail = null">×</button>
-          <h2>{{ detail.title }}</h2>
+          <h2 :style="{ color: titleColorValue(detail.titleColor) }">{{ detail.title }}</h2>
           <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
           <p class="tf-content"><ForumContent :content="detail.content" /></p>
           <AttachmentList
@@ -103,6 +103,7 @@ import ModerationReasonDialog from '@/components/forum/ModerationReasonDialog.vu
 import UserBadge from '@/components/forum/UserBadge.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
+import { titleColorValue } from '@/components/forum/titleColors';
 import {
   teacherForumApi,
   type ModerationComment,
@@ -235,5 +236,33 @@ onMounted(loadPosts);
 .tf-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(8,12,24,.45); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .tf-modal-card { position: relative; width: min(720px, 94vw); max-height: 86vh; overflow-y: auto; background: #fff; border-radius: 14px; padding: 22px; }
 .tf-close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 22px; color: #8a94ad; cursor: pointer; }
-.tf-comment { border-top: 1px solid #eef1f7; padding-top: 8px; margin-top: 8px; }
+.tf-modal-card h3 { margin: 20px 0 4px; font-size: 15px; color: #1a2b5f; }
+.tf-modal-card > h2 { margin: 0 0 6px; }
+/* 评论布局：首行「头像 昵称 班级 … 隐藏评论」，正文与附件缩进对齐昵称 */
+.tf-comment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  border-top: 1px solid #eef1f7;
+  padding: 14px 0;
+}
+.tf-comment > .tf-danger { order: 1; margin-left: auto; }
+.tf-comment > p,
+.tf-comment :deep(.attachment-list) {
+  order: 2;
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  padding-left: 38px;   /* 28px 头像 + 10px 间距 */
+  margin: 0;
+  line-height: 1.6;
+  color: #3b4a6b;
+  font-size: 14px;
+}
 </style>
+
+
+
+
+

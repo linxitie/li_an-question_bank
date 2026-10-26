@@ -1178,7 +1178,11 @@
 </script>
 <style lang="css" scoped>
   .forum-page {
-    min-height: 100vh;
+    /* 自己成为滚动容器：VTJ 外壳存在 overflow 祖先，sticky 绑不到视口 */
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);
     font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     /* 全局字体统一 15px */
@@ -1188,12 +1192,22 @@
     max-width: 1300px;
     margin: 0 auto;
     padding: 24px 32px 40px;
+    width: 100%;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .forum-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 24px;
+    /* 滚动容器是 .forum-main，这里贴其顶部常驻 */
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 12px 0;
+    background: #f8f9fc;
   }
   .forum-header h2 {
     display: flex;
@@ -1446,6 +1460,14 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    /* grid 子项默认 stretch 会被拉成与左栏等高（实测 2552px），
+       align-self: start 才能让 sticky 有可粘空间 */
+    position: sticky;
+    top: 72px;
+    align-self: start;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .right-card {
     background: #ffffff;
