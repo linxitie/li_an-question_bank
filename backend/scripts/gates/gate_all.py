@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""gate_all.py — 一键执行 L0-L6，聚合退出码"""
+"""gate_all.py — 一键执行 L0-L7，聚合退出码"""
 import subprocess, sys, os, json, time
 
 BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -25,6 +25,9 @@ GATES = [
     # L6：模块化约束（VTJ 版本锁定 / 92 处路由动态 import 目标 / 跨域 import）。
     # 脚本自身由文件位置推导仓库根，此处仍按要求以 workspace root 为 cwd。
     ('L6', 'scripts/verify-modularization-constraints.mjs', []),
+    # L7：底座一致性（7 表/事件只增/越界引用/迁移/对账/路由角色/容量/内容完整性）。
+    # 15 项中 1-5 为 FAIL，6-15 先 WARN，随 F2/F3 逐步升级（方案 §11.2）。
+    ('L7', 'scripts/gates/gate_l7_foundation.py', []),
 ]
 
 QUICK_GATES = ('L0', 'L1-G', 'L1', 'L1-H')

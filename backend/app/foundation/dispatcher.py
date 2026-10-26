@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,6 +23,8 @@ from app.foundation.stores.base import OutboxEvent
 from app.foundation.stores.local import SqliteCursorStore, SqliteOutboxStore
 
 DEFAULT_DEAD_LETTER_DIR = BACKEND_DIR / "data" / "reports" / "dead_letters"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -114,16 +117,16 @@ class Dispatcher:
             }
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(line, ensure_ascii=False) + "\n")
-        except OSError:
-            # 文件写失败不影响 dead 状态；L7-3 会报 dead 非 0
-            pass
+        except OSError as exc:
+            # 文件写失败不影响 dead 状态；L7-7 会报 dead 非 0，此处必须留痕。
+            logger.warning("dead letter 落盘失败: %s", exc)
 
     async def run_forever(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
             try:
                 self.run_once()
-            except Exception:  # noqa: BLE001 - 后台任务不得因单轮异常退出
-                pass
+            except Exception as exc:  # noqa: BLE001 - 后台任务不得因单轮异常退出
+                logger.warning("dispatcher 单轮异常: %s", exc)
             try:
                 await asyncio.wait_for(stop.wait(), timeout=self.interval_ms / 1000)
             except asyncio.TimeoutError:
