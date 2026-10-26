@@ -18,7 +18,7 @@
 | 文档 | 版本 | 状态 | 说明 |
 |---|---|---|---|
 | `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（2026-10-26，用户确认 D1–D16 + D17） | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（15 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
-| `superpowers/plans/F1一致性内核_实施计划_v1.md` | v1 | 🟡 待批准（2026-10-26） | F1：7 表 + Outbox→投递→投影→对账 + `content_integrity.py`/`db_inventory.py` + L7 门禁；21 文件、7 步、每步独立验证与回滚；不改 `api/v1`/`models`/`.vtj` |
+| `superpowers/plans/F1一致性内核_实施计划_v1.md` | v1 | ✅ 已批准（2026-10-26，执行中） | F1：7 表 + Outbox→投递→投影→对账 + `content_integrity.py`/`db_inventory.py` + L7 门禁；21 文件、7 步、每步独立验证与回滚；不改 `api/v1`/`models`/`.vtj` |
 | `superpowers/specs/预览数据治理与容量回收_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | 571 行 / 257.76 MB 超期预览外置 gzip 后置摘要，`auto_vacuum=INCREMENTAL` + VACUUM，主库 **303.17 → 46.52 MB**；四表行数与指纹不变，`integrity_check=ok` |
 | `superpowers/specs/F0基线冻结与内容完整性_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | F0：tag `foundation-v1`@`2ec9cc7`、`sqlite3.backup()` 备份（303.17 MB，integrity ok，四表指纹一致）、`gate_all --quick` 4/4 PASS；内容完整性基线：复合题 33 题挂组、组 11 空、293 图片行中 13 行文件缺失、10 个 `[IMAGE:]` 令牌未解析、申论 24 题未挂组（只登记不删） |
 | `superpowers/specs/题库设计模式_v3.md` | v3.0 | ✅ 生效（2026-10-25） | **「题库设计」模式（会话执行版）**：标准/创造/PTC 分层、九角色落地形态（subagent 等价 agent-team）、设计/测试/优化三态管线、声明头扩展、技能+MCP+工作流绑定、12 条实测坑、A21–A26 |
