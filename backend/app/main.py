@@ -64,13 +64,28 @@ for _stream in (sys.stdout, sys.stderr):
 
 from logging.handlers import RotatingFileHandler
 
+# P1-1：LOG_FILE 所在目录可能不存在（首次部署的 ./logs/ 很常见）。
+# RotatingFileHandler 在打开文件时直接抛 FileNotFoundError，会让 app 模块导入即崩，
+# 表现为「服务起不来」。先建目录；任何文件日志失败都降级为纯 stdout，保证可启动。
+_log_handlers = [logging.StreamHandler(sys.stdout)]  # 使用已设置的UTF-8编码的stdout
+try:
+    _log_dir = os.path.dirname(os.path.abspath(settings.LOG_FILE)) if settings.LOG_FILE else ''
+    if _log_dir:
+        os.makedirs(_log_dir, exist_ok=True)
+    if settings.LOG_FILE:
+        _log_handlers.insert(
+            0,
+            RotatingFileHandler(
+                settings.LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'
+            ),
+        )
+except OSError as _log_err:  # 只读文件系统、权限不足等
+    print(f"[logging] 文件日志不可用，已降级为 stdout：{_log_err}", file=sys.stderr)
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        RotatingFileHandler(settings.LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)  # 使用已设置的UTF-8编码的stdout
-    ]
+    handlers=_log_handlers
 )
 
 logger = logging.getLogger(__name__)
