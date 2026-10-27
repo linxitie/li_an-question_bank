@@ -529,6 +529,7 @@
           { key: 'quick', name: '快速练习', icon: '⚡', tag: 'NEW' },
           { key: 'history', name: '历年试卷', icon: '📋' },
           { key: 'smart', name: '智能组卷', icon: '🤖' },
+          { key: 'plan', name: '学习计划', icon: '📅' },
           { key: 'ai', name: '联考小智', icon: '🧠', tag: 'AI' },
         ];
         // 题目导入仅教师和管理员可见
@@ -1047,6 +1048,8 @@
           this.$router.push('/student/papers');
         } else if (key === 'smart') {
           this.$router.push('/smart-exam');
+        } else if (key === 'plan') {
+          this.$router.push('/study-plan');
         } else if (key === 'ai') {
           this.$router.push('/ai-assistant');
         }

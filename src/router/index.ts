@@ -84,6 +84,12 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/study-plan',
+    name: 'StudyPlan',
+    component: () => import('$vtj/vue/study_plan.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/student/papers',
     name: 'StudentPapers',
     component: () => import('$vtj/vue/student_papers.vue'),

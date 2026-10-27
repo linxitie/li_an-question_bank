@@ -162,6 +162,13 @@ class Settings(BaseSettings):
     MATERIAL_CLASSIFIER_ENABLED: bool = Field(True, env="MATERIAL_CLASSIFIER_ENABLED")
     # 去重检测开关
     MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
+
+    # ==================== 大模型配置（联考小智/学习计划） ====================
+    LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
+    LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
+    LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
+    LLM_TIMEOUT: int = Field(60, env="LLM_TIMEOUT")
+    LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
     
     @property
     def DATABASE_URL(self) -> str:

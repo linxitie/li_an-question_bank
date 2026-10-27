@@ -828,6 +828,11 @@ class StudyGoal(Base):
     baseline_accuracy = Column(Float, default=0.0, comment="基线正确率(创建时快照)")
     baseline_count = Column(Integer, default=0, comment="基线做题量(创建时快照)")
 
+    # === 学习计划（模块4）：AI 生成的计划归属与排序 ===
+    plan_id = Column(Integer, default=None, comment="所属学习计划ID（AI生成，同一计划共享）")
+    sort_order = Column(Integer, default=0, comment="计划内任务排序")
+    plan_meta = Column(Text, comment="计划元数据JSON(summary/phases/tips)")
+
     user = relationship("SysUser")
 
     __table_args__ = (
@@ -835,6 +840,7 @@ class StudyGoal(Base):
         Index("idx_goal_type", goal_type),
         Index("idx_is_completed_studygoal", is_completed),
         Index("idx_deadline", deadline),
+        Index("idx_plan_id", plan_id),
     )
 
 
@@ -1967,6 +1973,7 @@ class UserFeedback(Base):
         Index("idx_feedback_status", status),
         Index("idx_feedback_created", created_at),
     )
+<<<<<<< HEAD
 
 
 class ChatSession(Base):
@@ -2005,3 +2012,4 @@ class ChatMessage(Base):
         Index("idx_chat_message_session", session_id),
         Index("idx_chat_message_create", create_time),
     )
+

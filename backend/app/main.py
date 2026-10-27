@@ -30,6 +30,7 @@ from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
 from .api.v1.platform import feedback
 from .api.v1.growth import achievements, checkin
+from .api.v1.growth import study_plan
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
@@ -319,6 +320,8 @@ async def lifespan(app: FastAPI):
         if 'study_goal' in inspector.get_table_names():
             sg_cols = [c['name'] for c in inspector.get_columns('study_goal')]
             for col_name, col_type in [
+                ('subject_mode', 'INTEGER DEFAULT 0'),
+                ('expected_minutes', 'INTEGER DEFAULT 0'),
                 ('base_reward', 'INTEGER DEFAULT 20'),
                 ('reward_coins', 'INTEGER DEFAULT 0'),
                 ('difficulty_factor', 'FLOAT DEFAULT 1.0'),
@@ -327,6 +330,10 @@ async def lifespan(app: FastAPI):
                 ('improvement_score', 'FLOAT DEFAULT 0.0'),
                 ('baseline_accuracy', 'FLOAT DEFAULT 0.0'),
                 ('baseline_count', 'INTEGER DEFAULT 0'),
+                # 学习计划（模块4）：AI 生成的计划归属字段
+                ('plan_id', 'INTEGER'),
+                ('sort_order', 'INTEGER DEFAULT 0'),
+                ('plan_meta', 'TEXT'),
             ]:
                 if col_name not in sg_cols:
                     with engine.connect() as conn:
@@ -687,6 +694,7 @@ app.include_router(question_import_router)
 app.include_router(exams.router)
 app.include_router(videos.router)
 app.include_router(llm.router)
+app.include_router(study_plan.router)
 app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
