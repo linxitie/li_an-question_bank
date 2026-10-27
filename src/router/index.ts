@@ -611,9 +611,11 @@ router.beforeEach((to, _from, next) => {
     return next();
   }
 
-  // 2) 移动设备（手机/平板）访问 PC 路径 → 映射到对应端
-  //    关键修复：登录页也区分设备，手机访问 /login 会映射到 /mobile/login
-  if (device !== 'pc') {
+  // 2) 仅「手机」访问 PC 路径 → 映射到手机端
+  //    2026-10-26 用户决定：平板与电脑端使用同一套页面，因此平板不再自动跳 /tablet/*
+  //    （平板版仍可通过显式 URL 访问，如 /#/tablet/login、/#/tablet/forum/4）
+  //    保留原「登录页也区分设备」的行为：手机访问 /login 仍映射到 /mobile/login
+  if (device === 'mobile') {
     const target = resolveDevicePath(to.path, device);
     if (target) {
       return next({ path: target, replace: true });
