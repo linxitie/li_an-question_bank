@@ -1,0 +1,18 @@
+# .gitattributes —— 换行/编码策略（最小集，只解决实测到的问题）
+#
+# 背景（C2 工程债，2026-10-27 实测）：
+#   本机 git core.autocrlf = true，仓库此前无 .gitattributes，
+#   于是检出时 LF 会被转成 CRLF（每行 +1 字节）。
+#   而 backend/tests/fixtures/material_ownership/manifest.json 里记录了每个 fixture 的
+#   raw_bytes 与 raw_sha256，测试按字节精确比对 →
+#   5 个 fixture 的字节差精确等于换行数（37/26/16/188/215），test_manifest_integrity 必失败。
+#
+# 处置：测试 fixtures 一律按字节原样保存（-text 关闭任何换行转换）。
+# 影响面：仅 backend/tests/fixtures/**（当前 6 个文件），不影响源码与用户级 autocrlf 配置。
+#
+# 约束：若将来需要用 CRLF 编辑 fixture，请同时更新 manifest 的 raw_bytes / raw_sha256，
+#       否则测试会直接失败——这是刻意的保护，不是缺陷。
+
+backend/tests/fixtures/** -text
+# 本文件自身保持 LF，避免每次检出都报换行告警
+.gitattributes text eol=lf
