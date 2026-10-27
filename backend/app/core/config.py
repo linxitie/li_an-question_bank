@@ -130,6 +130,17 @@ class Settings(BaseSettings):
     DOC_STORE_MONGO_PREFIX: str = Field("", env="DOC_STORE_MONGO_PREFIX")
     DOC_STORE_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="DOC_STORE_RECONCILE_MAX_AGE_DAYS")
 
+    # ==================== F5 图投影 ====================
+    # 关闭后图回填/查询短路；默认 local，不要求 Neo4j 容器。
+    GRAPH_STORE_ENABLED: bool = Field(True, env="GRAPH_STORE_ENABLED")
+    GRAPH_BACKEND: str = Field("local", env="GRAPH_BACKEND")
+    GRAPH_NEO4J_URI: str = Field("http://localhost:7474", env="GRAPH_NEO4J_URI")
+    GRAPH_NEO4J_USER: str = Field("neo4j", env="GRAPH_NEO4J_USER")
+    GRAPH_NEO4J_PASSWORD: str = Field("", env="GRAPH_NEO4J_PASSWORD")
+    GRAPH_NEO4J_DATABASE: str = Field("neo4j", env="GRAPH_NEO4J_DATABASE")
+    GRAPH_QUERY_MAX_DEPTH: int = Field(5, env="GRAPH_QUERY_MAX_DEPTH")
+    GRAPH_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="GRAPH_RECONCILE_MAX_AGE_DAYS")
+
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")

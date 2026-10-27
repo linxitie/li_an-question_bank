@@ -7,6 +7,8 @@ MIGRATIONS_DIR = BACKEND_DIR / "migrations"
 DDL_FILE = MIGRATIONS_DIR / "20261027_001_foundation_core.sql"
 # F3 媒体资产表：独立 DDL，不混入 F1 的 7 表定义。
 MEDIA_DDL_FILE = MIGRATIONS_DIR / "20261027_002_media_assets.sql"
+# F5 图投影表：独立 DDL，不混入 F1/F3 定义。
+GRAPH_DDL_FILE = MIGRATIONS_DIR / "20261027_003_graph_projection.sql"
 DEFAULT_SQLITE_PATH = BACKEND_DIR / "data" / "question_bank.db"
 
 
@@ -59,6 +61,19 @@ DOC_STORE_RECONCILE_MAX_AGE_DAYS = int(
     os.environ.get("DOC_STORE_RECONCILE_MAX_AGE_DAYS", "7") or 7
 )
 
+
+# ==================== F5 图投影 ====================
+# 关闭后图回填/查询短路，现有业务零影响（回滚开关）。
+GRAPH_STORE_ENABLED = _bool("GRAPH_STORE_ENABLED", True)
+GRAPH_BACKEND = (os.environ.get("GRAPH_BACKEND") or "local").strip().lower()
+GRAPH_NEO4J_URI = (os.environ.get("GRAPH_NEO4J_URI") or "http://localhost:7474").strip()
+GRAPH_NEO4J_USER = (os.environ.get("GRAPH_NEO4J_USER") or "neo4j").strip()
+GRAPH_NEO4J_PASSWORD = os.environ.get("GRAPH_NEO4J_PASSWORD") or ""
+GRAPH_NEO4J_DATABASE = (os.environ.get("GRAPH_NEO4J_DATABASE") or "neo4j").strip()
+GRAPH_QUERY_MAX_DEPTH = int(os.environ.get("GRAPH_QUERY_MAX_DEPTH", "5") or 5)
+GRAPH_RECONCILE_MAX_AGE_DAYS = int(
+    os.environ.get("GRAPH_RECONCILE_MAX_AGE_DAYS", "7") or 7
+)
 
 def sqlite_path() -> Path:
     """与 app.core.config 同源：SQLITE_PATH 相对路径按 backend/ 解析。"""

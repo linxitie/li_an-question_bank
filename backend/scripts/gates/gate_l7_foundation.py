@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""L7 底座一致性门禁 — 19 项检查（F1/F2b/F3/F4 落地版）。
+"""L7 底座一致性门禁 — 20 项检查（F1/F2b/F3/F4/F5 落地版）。
 
 严重度约定：
   1-5、8、13、14、16 表缺失 FAIL —— 底座结构/契约/路由/媒体表被破坏，必须阻断；
@@ -8,6 +8,7 @@
   17 事件同事务化/定向路由契约缺失 FAIL，调用点数量不足只 WARN；
   18 断线补发后端契约缺失 FAIL；前端 useDataSync/typed 事件缺失只 WARN；
   19 文档投影后端契约/local 文档库不可用 FAIL；Mongo 不可用、对账过期、漂移只 WARN；
+  20 图投影契约/图投影表/本地图存储不可用 FAIL；Neo4j 不可用、对账过期、漂移只 WARN；
   16 的存储不可达/对账过期/孤儿只 WARN，不阻断离线开发。
   L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
@@ -36,6 +37,8 @@ FOUNDATION_DDL_SHA256 = '0abfd2887b62aa251ef2952cab9352b425456415fe753b040707eeb
 FOUNDATION_DDL = BACKEND_ROOT / 'migrations' / '20261027_001_foundation_core.sql'
 MEDIA_DDL = BACKEND_ROOT / 'migrations' / '20261027_002_media_assets.sql'
 MEDIA_DDL_SHA256 = '455cf727d076fe67dd760cfc430da521c6dd7aa5c41024d4b9a50250028cc21f'
+GRAPH_DDL = BACKEND_ROOT / 'migrations' / '20261027_003_graph_projection.sql'
+GRAPH_DDL_SHA256 = '525ffc8225f505ad0855d69e18f30956696b9df94216abf2c0cc2d6bb14b5c46'
 FOUNDATION_TABLES = (
     'foundation_outbox', 'foundation_projection_cursor', 'foundation_inbox',
     'foundation_projection_state', 'foundation_reconcile_run',
@@ -44,6 +47,8 @@ FOUNDATION_TABLES = (
 MEDIA_TABLES = ('media_assets',)
 MEDIA_INDEXES = ('ix_media_assets_sha256', 'ix_media_assets_status',
                  'ix_media_assets_created_by')
+GRAPH_TABLES = ('foundation_graph_node', 'foundation_graph_edge')
+GRAPH_INDEXES = ('ix_graph_edge_src', 'ix_graph_edge_dst')
 ROLE_SUFFIX_RE = re.compile(r'_(mobile|tablet|pc|teacher|admin)$', re.I)
 MAIN_DB_WARN_BYTES = 512 * 1024 * 1024
 MAIN_DB_FAIL_BYTES = 1024 * 1024 * 1024
@@ -188,6 +193,12 @@ def check_migrations() -> None:
         digest = hashlib.sha256(MEDIA_DDL.read_bytes()).hexdigest()
         if digest != MEDIA_DDL_SHA256:
             problems.append(f'media DDL checksum 不符：{digest[:16]}…')
+    if not GRAPH_DDL.exists():
+        problems.append(f'缺少 {GRAPH_DDL.name}')
+    else:
+        digest = hashlib.sha256(GRAPH_DDL.read_bytes()).hexdigest()
+        if digest != GRAPH_DDL_SHA256:
+            problems.append(f'graph DDL checksum 不符：{digest[:16]}…')
     groups: dict[str, list[int]] = {}
     for p in sorted((BACKEND_ROOT / 'migrations').glob('*.sql')):
         m = re.match(r'^(\d{8})_(\d{3})_', p.name)
@@ -841,6 +852,131 @@ def check_document_store() -> None:
          '；'.join(missing) if missing else detail, 'FAIL')
 
 
+def check_graph_store() -> None:
+    """L7-20：图投影契约与 GraphStore 健康（F5）。
+
+    图投影表/本地图存储不可用会阻断图查询，记 FAIL；Neo4j 只是可选后端，
+    未启动/未配置只 WARN。对账过期/漂移/孤儿同样只 WARN，交给巡检处理。
+    """
+    missing: list[str] = []
+    warnings: list[str] = []
+    required = (
+        ('app/foundation/stores/graph.py', ('LABELS', 'build_graph_store')),
+        ('app/foundation/stores/local_graph.py', ('class LocalGraphStore',)),
+        ('app/foundation/stores/neo4j_graph.py', ('class Neo4jGraphStore',)),
+        ('app/foundation/graph_schema.py', ('GRAPH_TABLE_SPECS', 'verify_graph_schema')),
+        ('app/foundation/graph_builder.py', ('build_graph', 'apply_plan')),
+        ('app/foundation/graph_query.py', ('def prerequisites',)),
+        ('app/foundation/graph_reconcile.py', ('def inspect', 'SCOPE = "graph"')),
+        ('app/foundation/config.py', ('GRAPH_STORE_ENABLED', 'GRAPH_BACKEND')),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    db = _db_path()
+    if not db.exists():
+        missing.append(f'数据库不存在：{db}')
+    else:
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            names = {r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            miss_tables = [t for t in GRAPH_TABLES if t not in names]
+            idx = {r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'")}
+            miss_idx = [i for i in GRAPH_INDEXES if i not in idx]
+            if miss_tables or miss_idx:
+                missing.append(f'图投影缺表={miss_tables} 缺索引={miss_idx}')
+        finally:
+            con.close()
+
+    backend = os.environ.get('GRAPH_BACKEND', 'local').strip().lower() or 'local'
+    enabled = os.environ.get('GRAPH_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    store_detail = 'disabled'
+    counts: dict | None = None
+    if enabled:
+        try:
+            if str(BACKEND_ROOT) not in sys.path:
+                sys.path.insert(0, str(BACKEND_ROOT))
+            from app.foundation.stores.graph import build_graph_store
+
+            store = build_graph_store()
+            health = store.health()
+            store_detail = f'{health.backend}={"ok" if health.ok else "down"}'
+            if health.ok:
+                counts = store.counts()
+            if not health.ok or health.degraded:
+                message = f'图存储 {health.backend} 不可用：{health.detail}'
+                if str(health.backend).lower() == 'neo4j' or backend == 'neo4j':
+                    warnings.append(message)
+                else:
+                    missing.append(message)
+        except Exception as exc:  # 门禁不能因开发机未启动 Neo4j 直接崩溃
+            message = f'图存储检查失败：{type(exc).__name__}: {exc}'
+            if backend == 'neo4j':
+                warnings.append(message)
+            else:
+                missing.append(message)
+
+    row = None
+    if db.exists():
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='foundation_reconcile_run'").fetchone()
+            if exists:
+                row = con.execute(
+                    "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                    "WHERE scope='graph' ORDER BY finished_at DESC LIMIT 1").fetchone()
+        finally:
+            con.close()
+    if row is None:
+        warnings.append('还没有图对账记录（运行 graph_inventory.py --record）')
+    else:
+        finished_at, status, report_path = row
+        try:
+            from datetime import datetime
+
+            finished = datetime.fromisoformat(str(finished_at))
+            if finished.tzinfo is None:
+                finished = finished.astimezone()
+            age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+            if age_days > 7:
+                warnings.append(f'图对账已过期 {age_days:.1f} 天')
+        except (TypeError, ValueError):
+            warnings.append('图对账时间无法解析')
+        if str(status) == 'drift':
+            warnings.append('最近一次图对账有漂移')
+        if report_path:
+            try:
+                rp = Path(report_path)
+                if not rp.is_absolute():
+                    rp = BACKEND_ROOT / rp
+                report = json.loads(rp.read_text(encoding='utf-8'))
+                orphan = int(report.get('orphan') or 0)
+                if orphan:
+                    warnings.append(f'图投影孤儿 {orphan} 个')
+            except (OSError, ValueError):
+                pass
+
+    detail = f'backend={backend} enabled={enabled} {store_detail}'
+    if counts:
+        detail += f" nodes={counts.get('nodes')} edges={counts.get('edges')}"
+    if warnings:
+        detail += '；' + '；'.join(warnings)
+    _add(20, '图投影与 GraphStore', not missing,
+         '；'.join(missing) if missing else detail, 'FAIL')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -853,6 +989,7 @@ CHECKS = (
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
     check_media_store, check_f2b_events, check_sync_replay, check_document_store,
+    check_graph_store,
 )
 
 
