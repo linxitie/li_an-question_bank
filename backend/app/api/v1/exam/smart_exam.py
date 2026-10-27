@@ -985,23 +985,21 @@ async def submit_smart_exam(
     except Exception as e:
         logger.warning(f"自动签到失败: {e}")
 
+    # F2b：整卷记录、练习明细与完成事件同一事务提交。
+    db.flush()
+    await record_user_action(
+        db,
+        current_user.user_id,
+        TRIGGER_PAPER_COMPLETED,
+        session={
+            "paper_id": paper_id,
+            "record_id": smart_record.id,
+            "exam_record_id": exam_record.record_id,
+            "total_score": total_score,
+            "max_score": float(paper.total_score or 0),
+        },
+    )
     db.commit()
-
-    try:
-        await record_user_action(
-            db,
-            current_user.user_id,
-            TRIGGER_PAPER_COMPLETED,
-            session={
-                "paper_id": paper_id,
-                "record_id": smart_record.id,
-                "exam_record_id": exam_record.record_id,
-                "total_score": total_score,
-                "max_score": float(paper.total_score or 0),
-            },
-        )
-    except Exception as e:
-        logger.warning(f"整卷完成事件发布失败(paper={paper_id}): {e}")
 
     # 计算正确率
     accuracy = round(correct_count / max(scored_count, 1) * 100, 1)

@@ -197,13 +197,10 @@ async def login_for_access_token(
         user.device_sessions = sessions
 
     user.last_login = datetime.now()
-    commit_with_retry(db)
 
-    # 触发「初来乍到」成就（首次登录，幂等）
-    try:
-        await record_user_action(db, user.user_id, TRIGGER_CHECKIN_DONE)
-    except Exception as e:
-        logger.warning(f"首次登录成就判定失败: {e}")
+    # F2b：事件与 last_login 同一事务；emit 失败则登录整体回滚，不再静默丢事件。
+    await record_user_action(db, user.user_id, TRIGGER_CHECKIN_DONE)
+    commit_with_retry(db)
 
     return LoginResponse(
         access_token=access_token,

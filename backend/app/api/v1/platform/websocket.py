@@ -41,11 +41,19 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[int, Dict[str, WebSocket]] = {}
         self.user_rooms: Dict[str, List[int]] = {}
+        # F2b：角色 -> 在线用户。用于 data-changed 按角色定向（教师/管理员看板）。
+        self.user_roles: Dict[str, set[int]] = {}
         # 用于心跳超时判定：记录每条连接最后一次收/发消息的单调时钟
         self.last_seen: Dict[WebSocket, float] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, user_id: int, room: Optional[str] = None) -> None:
+    async def connect(
+        self,
+        websocket: WebSocket,
+        user_id: int,
+        room: Optional[str] = None,
+        role: Optional[str] = None,
+    ) -> None:
         # 连接已在 websocket_connect 中 accept，此处仅做注册
         async with self._lock:
             if user_id not in self.active_connections:
@@ -54,6 +62,9 @@ class ConnectionManager:
             connection_id = f"{user_id}_{datetime.now().timestamp()}"
             self.active_connections[user_id][connection_id] = websocket
             self.last_seen[websocket] = time.monotonic()
+
+            if role:
+                self.user_roles.setdefault(role, set()).add(user_id)
 
             if room:
                 if room not in self.user_rooms:
@@ -73,6 +84,13 @@ class ConnectionManager:
                     del self.active_connections[user_id]
 
             self.last_seen.pop(websocket, None)
+
+            # 同一用户可能多端连接，只有全部断开才移出角色索引。
+            if user_id not in self.active_connections:
+                for role, users in list(self.user_roles.items()):
+                    users.discard(user_id)
+                    if not users:
+                        del self.user_roles[role]
 
             if room and room in self.user_rooms:
                 if user_id in self.user_rooms[room]:
@@ -152,20 +170,27 @@ class ConnectionManager:
     def get_room_users(self, room: str) -> List[int]:
         return self.user_rooms.get(room, [])
 
+    def get_online_users_by_roles(self, roles: Iterable[str]) -> List[int]:
+        """按角色取在线用户（去重）；角色索引可能在并发连接时变化，先快照。"""
+        users: set[int] = set()
+        for role in roles:
+            users.update(tuple(self.user_roles.get(role, ())))
+        return [user_id for user_id in users if user_id in self.active_connections]
+
 ws_connection_manager = ConnectionManager()
 
 
-async def publish_data_changed(
-    user_ids: Iterable[int],
+def publish_data_changed_sync(
+    user_ids: Optional[Iterable[int]],
     domain: str,
     type: str,
     id: int | str,
+    roles: Optional[Iterable[str]] = None,
 ) -> int:
-    """向指定在线用户推送 `data-changed` 通知。
+    """同步入口：Outbox handler 在事件循环线程里调用，不能 await。
 
-    载荷仍只携带 `{domain, type, id}`，接收端按 id 回源拉取；v2 追加
-    `seq/scope` 供客户端去重，旧字段位置不变。发送统一走 ws_relay，
-    多 worker 时由 Redis 中继转发到其他进程的连接。
+    接收者 = user_ids ∪ roles 对应的在线用户；两者都为空时不广播。
+    载荷仍只携带 `{domain, type, id}`，接收端按 id 回源拉取。
     """
     from ....foundation.ws_relay import ws_relay
 
@@ -177,8 +202,20 @@ async def publish_data_changed(
         entity_id=id,
         scope=f"{domain}.{type}",
         user_ids=user_ids,
+        roles=roles,
     )
     return 1 if sent else 0
+
+
+async def publish_data_changed(
+    user_ids: Optional[Iterable[int]],
+    domain: str,
+    type: str,
+    id: int | str,
+    roles: Optional[Iterable[str]] = None,
+) -> int:
+    """异步兼容入口；实际发送逻辑在 publish_data_changed_sync。"""
+    return publish_data_changed_sync(user_ids, domain, type, id, roles=roles)
 
 
 @router.websocket("/connect")
@@ -211,7 +248,7 @@ async def websocket_connect(
         await websocket.close(code=4004, reason="Token validation failed")
         return
 
-    await ws_connection_manager.connect(websocket, user_id, room)
+    await ws_connection_manager.connect(websocket, user_id, room, payload.get("user_type"))
 
     metrics_collector.increment_counter("websocket_connections_total", tags={"room": room or "default"})
 

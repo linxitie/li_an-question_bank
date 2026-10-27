@@ -17,7 +17,7 @@
 
 | 文档 | 版本 | 状态 | 说明 |
 |---|---|---|---|
-| `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（D1–D17）；F0–F2 已执行（2026-10-26） | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（15 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
+| `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（D1–D17）；F0–F3 与 F2b-1 已执行 | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（当前 17 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
 | `superpowers/specs/main分支启动阻断与考试链路修复_报告_20261026.md` | v1 | ✅ 已合并 main（2026-10-26） | main 报告 P0-1/2/3 + P1-1 + P1-3 + P3-1 修复：Pydantic v2 `ConfigDict`、考试路由导入收敛、日志目录自建+降级、`question_count` 以关联行数为唯一口径（含存量修复脚本）；3 条新回归测试 + 真机烟测 health/login/取题/开考/交卷全 200；全量 650 passed（8 失败均为既有环境项） |
 | `superpowers/plans/F1一致性内核_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 1–7 完成，tag `foundation-v1-f1`） | F1：7 表 + Outbox→投递→投影→对账 + `content_integrity.py`/`db_inventory.py` + L7 门禁；21 文件、7 步、每步独立验证与回滚；不改 `api/v1`/`models`/`.vtj` |
 | `superpowers/specs/预览数据治理与容量回收_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | 571 行 / 257.76 MB 超期预览外置 gzip 后置摘要，`auto_vacuum=INCREMENTAL` + VACUUM，主库 **303.17 → 46.52 MB**；四表行数与指纹不变，`integrity_check=ok` |
@@ -25,6 +25,8 @@
 | `superpowers/specs/F2通信统一与写入守卫_报告_20261026.md` | v1 | ✅ 已交付（2026-10-26，tag `foundation-v1-f2`） | F2 交付报告：协议/中继/fail-fast/前端去重/路由 roles/6 类写入守卫；L7 15/15、全量门禁 9/10（L2 既有基线）、62 后端 + 342 前端测试；Redis 双客户端各 1 条无重复；明确 F2b 未做 |
 | `superpowers/plans/F3对象存储与媒体资产_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 0–8 完成，tag `foundation-v1-f3`） | F3：6 个用户媒体新写入口切 `media_assets` + ObjectStore（local 默认 / MinIO 可选）+ `/media/{asset_id}` 只读代理；只接新增、存量 static/uploads 零搬迁；sha256 物理去重、tombstone、对账/GC、L7-16；37 文件 / 9 步 / A1–A16 全 PASS / 开关回滚 |
 | `superpowers/specs/F3对象存储与媒体资产_报告_20261026.md` | v1 | ✅ 已交付（2026-10-26，tag `foundation-v1-f3`） | F3 交付报告：`media_assets` + local/MinIO 对象存储 + `/media/{asset_id}`；A1–A16 逐条证据；42 个 F3 专项测试、后端 695 passed、前端 342、L7 15 PASS/1 既有 WARN、gate_all 9/10（L2 既有）；存量 141321 static 文件字节零变化；遗留与回滚 |
+| `superpowers/plans/F2b-1事件总线同事务化_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-27，Step 0–9 完成，tag `foundation-v1-f2b1`） | F2b-1：20 个 `record_user_action` + 2 个 `events.publish` 迁入 Outbox 同事务；Dispatcher 文件锁单写者 + `foundation_inbox` 幂等 + 按用户/角色定向 `data-changed` + L7-17；35 文件；F2b-2（useDataSync/9 组合/?since）未开始 |
+| `superpowers/specs/F2b-1事件总线同事务化_报告_20261027.md` | v1 | ✅ 已交付（2026-10-27，tag `foundation-v1-f2b1`） | F2b-1 交付报告：20+2 调用点同事务、文件锁单写者、inbox 幂等、roles 定向；A1–A16 逐条证据；后端 705 passed、前端 342、L7 16P/1W、gate_all 9/10（L2 既有）；明确 A2/A5–A7 服务/协议级限制，F2b-2 未开始 |
 | `superpowers/specs/F1一致性内核_报告_20261026.md` | v1 | ✅ 已交付（2026-10-26，tag `foundation-v1-f1`） | F1 7 表 + Outbox/投递/投影/对账 + `/health/foundation` + L7 15 项；26 测试通过；13 条验收 10 PASS / 2 PARTIAL / 1 环境项；F0 内容指纹口径修正（以备份库重算，四表 MATCH）；性能增幅未达 5% 与 6 类坏数据校验移交 F2 |
 | `superpowers/specs/F0基线冻结与内容完整性_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | F0：tag `foundation-v1`@`2ec9cc7`、`sqlite3.backup()` 备份（303.17 MB，integrity ok，四表指纹一致）、`gate_all --quick` 4/4 PASS；内容完整性基线：复合题 33 题挂组、组 11 空、293 图片行中 13 行文件缺失、10 个 `[IMAGE:]` 令牌未解析、申论 24 题未挂组（只登记不删） |
 | `superpowers/specs/题库设计模式_v3.md` | v3.0 | ✅ 生效（2026-10-25） | **「题库设计」模式（会话执行版）**：标准/创造/PTC 分层、九角色落地形态（subagent 等价 agent-team）、设计/测试/优化三态管线、声明头扩展、技能+MCP+工作流绑定、12 条实测坑、A21–A26 |
@@ -50,6 +52,8 @@
 
 ## 变更记录
 
+- 2026-10-27：**F2b-1 事件总线同事务化执行完成**：20 个 `record_user_action` + 2 个 `events.publish` 迁入 Outbox 同事务；Dispatcher 文件锁单写者 + `foundation_inbox` 幂等 + 按用户/角色定向 `data-changed`；L7 16→17；后端 705 passed/2 xfailed、前端 342/typecheck 0、L7 16P/1W、gate_all 9/10（仅 L2 既有）；main 单提交 + tag `foundation-v1-f2b1`；F2b-2 未开始。报告见 `superpowers/specs/F2b-1事件总线同事务化_报告_20261027.md`
+- 2026-10-27：**F2b-1 实施计划获批并开始执行**：20 个 `record_user_action` + 2 个 `events.publish` 迁入 `foundation_outbox` 同事务；Dispatcher 文件锁单写者 + `foundation_inbox` 幂等 + 按用户/角色定向 `data-changed` + L7-17；不改 API 出入参、不新增表/迁移/依赖、前端零改动；F2b-2（useDataSync、9 组合、?since）另立计划；执行结果见上一条。
 - 2026-10-26：**F3 对象存储与媒体资产执行完成**：37 文件（19 改 + 18 新增）单提交 main，tag `foundation-v1-f3`；`media_assets` 1 表 + ObjectStore（local/MinIO，零新依赖）+ `/media/{asset_id}` 代理；6 个 /uploads 新写入口接线；存量 static 141321 文件与 uploads 5673 文件字节零变化；A1–A16 全 PASS；后端 695 passed、前端 342 passed、L7 15 PASS/1 既有 WARN、gate_all 9/10（L2 既有）；报告见 `superpowers/specs/F3对象存储与媒体资产_报告_20261026.md`
 - 2026-10-27：**F3 对象存储与媒体资产实施计划已批准并开始执行**：新增 `docs/superpowers/plans/F3对象存储与媒体资产_实施计划_v1.md`；范围限定 6 个 /uploads 新写入口，`media_assets` 1 表 + ObjectStore(local/MinIO) + `/media/{asset_id}` 代理，存量 static 4.3 GB 与旧 uploads 零搬迁；物理 sha256 去重、tombstone、对账/GC、L7 15→16、A1–A16 验收与开关回滚。
 - 2026-10-26：**F2 通信统一与写入守卫交付完成**：WS 协议 v2（seq/scope）、Redis 中继与多 worker fail-fast、统一 `ws_relay.emit` 出口、前端 `data-changed` 消费/seq 去重/重连重同步、92 条路由 roles 补全、写入守卫 6 类；L7 PASS=15/WARN=0/FAIL=0，全量门禁 9/10（L2 既有基线），62 后端 + 342 前端测试通过，tag `foundation-v1-f2`；新增交付报告并明确 **F2b（13 个写调用点迁 Outbox / Redis Stream / 定向派生）未做**。

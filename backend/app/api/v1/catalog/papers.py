@@ -18,6 +18,12 @@ from ....core.security import get_current_user, require_admin
 from ....core.cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
 from ....services import weakpoint_reader
 from ....services.paper_stats import next_question_order, recount_paper_questions
+from ....services.event_consumer import (
+    outbox_mode_enabled,
+    publish_paper_published_legacy,
+)
+from ....foundation.outbox import emit as outbox_emit
+from ....core.events import EV_PAPER_PUBLISHED
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 
@@ -434,18 +440,24 @@ async def publish_paper(
     paper.paper_type = "PUBLISHED"
     paper.publish_time = datetime.now()
     paper.approver_id = current_user.user_id
-    db.commit()
-    
-    delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
 
     # 纵向通信走事件总线（catalog 域不跨域 import platform）：
     # EV_PAPER_PUBLISHED → 消费者推送 data-changed 到在线端。
-    from ....core import events
-    await events.publish(events.Event(
-        name=events.EV_PAPER_PUBLISHED,
-        payload={"paper_id": paper_id},
-        aggregate_id=f"p-{paper_id}",
-        source="catalog.papers",
-    ))
-    
+    # F2b：开启 Outbox 时状态与事件同一事务；关闭时保留旧的 commit 后直发。
+    if outbox_mode_enabled():
+        outbox_emit(
+            db,
+            event_name=EV_PAPER_PUBLISHED,
+            aggregate_type="paper",
+            aggregate_id=f"p-{paper_id}",
+            payload={"paper_id": paper_id},
+            producer="catalog.papers",
+        )
+        db.commit()
+    else:
+        db.commit()
+        await publish_paper_published_legacy(paper_id, "catalog.papers")
+
+    delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
+
     return SuccessResponse(message="发布成功")

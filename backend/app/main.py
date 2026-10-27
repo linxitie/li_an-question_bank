@@ -156,6 +156,7 @@ async def lifespan(app: FastAPI):
 
             from .foundation.dispatcher import Dispatcher
             from .foundation.schema import ensure_schema
+            from .services.event_handlers import build_handlers
 
             _raw = engine.raw_connection()
             try:
@@ -167,7 +168,7 @@ async def lifespan(app: FastAPI):
                 logger.info(f"foundation 表已创建: {created}")
             _foundation_stop = _foundation_asyncio.Event()
             dispatcher_task = _foundation_asyncio.create_task(
-                Dispatcher(SessionLocal).run_forever(_foundation_stop)
+                Dispatcher(SessionLocal, handlers=build_handlers()).run_forever(_foundation_stop)
             )
             logger.info("一致性内核投递器已启动")
         except Exception as e:
@@ -581,10 +582,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"种子数据初始化失败（服务继续运行）: {e}")
 
-    # 事件消费者：P5.2 调用点改造完成前保持关闭（配置默认 False），
-    # 过早启动会与现有同步直调产生成就双写
+    # 事件消费者：F2b 开启 Outbox 后由 Dispatcher 接管，旧 Stream 消费者必须停用，
+    # 否则同一事件会被判成就两次。仅当 Outbox 不可用时回退旧路径。
     consumer_task = None
-    if settings.EVENT_CONSUMER_ENABLED:
+    _outbox_mode = settings.FOUNDATION_ENABLED and settings.EVENT_OUTBOX_ENABLED
+    if settings.EVENT_CONSUMER_ENABLED and not _outbox_mode:
         import asyncio as _consumer_asyncio
         from .services.event_consumer import consume_user_actions
         consumer_task = _consumer_asyncio.create_task(consume_user_actions())

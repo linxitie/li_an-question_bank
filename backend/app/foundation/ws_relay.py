@@ -130,6 +130,7 @@ class WsRelay:
         scope: Optional[str] = None,
         user_ids: Optional[Iterable[int]] = None,
         room: Optional[str] = None,
+        roles: Optional[Iterable[str]] = None,
     ) -> bool:
         """构造 v2 信封后投递；业务侧只描述「发生了什么」，不碰 seq/scope。"""
         from app.foundation.ws_protocol import build_envelope
@@ -143,7 +144,7 @@ class WsRelay:
             entity_id=entity_id,
             scope=scope,
         )
-        return self.deliver(envelope, user_ids=user_ids, room=room)
+        return self.deliver(envelope, user_ids=user_ids, room=room, roles=roles)
 
     def deliver(
         self,
@@ -151,20 +152,28 @@ class WsRelay:
         *,
         user_ids: Optional[Iterable[int]] = None,
         room: Optional[str] = None,
+        roles: Optional[Iterable[str]] = None,
     ) -> bool:
         """同步入口：发布给其他 worker，并在本 worker 本地扇出一次。"""
         ids = sorted({int(u) for u in user_ids}) if user_ids is not None else None
+        role_list = sorted({str(r) for r in roles}) if roles is not None else None
         envelope = dict(message)
         envelope["origin"] = self.worker_id
         if self._mode == RELAY_MODE_REDIS:
-            body = {"origin": self.worker_id, "users": ids, "room": room, "message": envelope}
+            body = {
+                "origin": self.worker_id,
+                "users": ids,
+                "roles": role_list,
+                "room": room,
+                "message": envelope,
+            }
             try:
                 self._sync_client().publish(CHANNEL, json.dumps(body, ensure_ascii=False))
             except Exception as exc:
                 self._state = "degraded"
                 self._last_error = str(exc)
                 logger.warning("WS 中继发布失败，仅本地投递: %s", exc)
-        self._dispatch_local(envelope, ids, room)
+        self._dispatch_local(envelope, ids, room, role_list)
         return True
 
     async def _send_local(
@@ -172,13 +181,17 @@ class WsRelay:
         message: Dict[str, Any],
         user_ids: Optional[Iterable[int]] = None,
         room: Optional[str] = None,
+        roles: Optional[Iterable[str]] = None,
     ) -> int:
         manager = self._get_manager()
         if manager is None:
             return 0
-        if user_ids is not None:
+        if user_ids is not None or roles is not None:
+            targets = {int(u) for u in (user_ids or ())}
+            if roles:
+                targets.update(manager.get_online_users_by_roles(roles))
             delivered = 0
-            for user_id in dict.fromkeys(int(u) for u in user_ids):
+            for user_id in sorted(targets):
                 if await manager.send_personal_message(message, user_id):
                     delivered += 1
             return delivered
@@ -191,8 +204,9 @@ class WsRelay:
         message: Dict[str, Any],
         user_ids: Optional[Iterable[int]],
         room: Optional[str],
+        roles: Optional[Iterable[str]] = None,
     ) -> None:
-        coro = self._send_local(message, user_ids, room)
+        coro = self._send_local(message, user_ids, room, roles)
         loop = self._loop
         if loop is None or not loop.is_running():
             try:
@@ -212,7 +226,12 @@ class WsRelay:
             if body is None or not self.should_apply(body):
                 continue
             try:
-                await self._send_local(body.get("message") or {}, body.get("users"), body.get("room"))
+                await self._send_local(
+                    body.get("message") or {},
+                    body.get("users"),
+                    body.get("room"),
+                    body.get("roles"),
+                )
             except Exception:
                 logger.warning("WS 中继消息本地扇出失败", exc_info=True)
 

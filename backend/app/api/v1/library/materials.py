@@ -173,12 +173,14 @@ async def toggle_favorite(material_id: int,
     return {"is_favorite": new_val}
 
 
-def _mark_opened(db: Session, user_id: int, material_id: int) -> bool:
+def _mark_opened(db: Session, user_id: int, material_id: int, *,
+                 commit: bool = True) -> bool:
     """记录一次资料打开，返回是否为该用户对该资料的首次打开。
 
     复用 ``user_material_progress`` 的 ``(user_id, material_id)`` 唯一约束做去重：
     没有进度行说明从未打开过，插入一行作为「已打开」标记并发布事件；
     已有进度行（打开 / 学习 / 收藏任一途径建立）则不再重复发布。
+    commit=False 时只 flush，由调用方与事件同事务提交。
     """
     exists = db.query(UserMaterialProgress).filter(
         UserMaterialProgress.user_id == user_id,
@@ -188,11 +190,13 @@ def _mark_opened(db: Session, user_id: int, material_id: int) -> bool:
     db.add(UserMaterialProgress(user_id=user_id, material_id=material_id,
                                 status=1, progress_percent=0))
     try:
-        db.commit()
+        db.flush()
     except IntegrityError:
         # 并发下另一个请求先写入：唯一约束兜底，视为非首次
         db.rollback()
         return False
+    if commit:
+        db.commit()
     return True
 
 
@@ -208,12 +212,20 @@ async def material_detail(material_id: int,
     first_open = False
     if current_user:
         try:
-            first_open = _mark_opened(db, current_user.user_id, material_id)
+            first_open = _mark_opened(
+                db, current_user.user_id, material_id, commit=False
+            )
         except Exception as e:  # noqa: BLE001 — 打开记录失败不阻断详情返回
             db.rollback()
             logger.warning("[materials] 记录打开失败 material=%s: %s", material_id, e)
 
     m.view_count = (m.view_count or 0) + 1
+
+    # F2b：首次打开记录、浏览量、E8 事件同一事务提交。
+    if first_open:
+        await record_user_action(
+            db, current_user.user_id, TRIGGER_MATERIAL_OPENED
+        )
     db.commit()
 
     prog = None
@@ -221,16 +233,6 @@ async def material_detail(material_id: int,
         prog = db.query(UserMaterialProgress).filter(
             UserMaterialProgress.user_id == current_user.user_id,
             UserMaterialProgress.material_id == material_id).first()
-
-    # E8：同资料二次打开不重复发布（_mark_opened 去重）
-    if first_open:
-        try:
-            await record_user_action(
-                db, current_user.user_id, TRIGGER_MATERIAL_OPENED
-            )
-        except Exception as e:  # noqa: BLE001 — 事件失败不影响详情返回
-            logger.warning("[materials] 学习行为事件发布失败 material=%s: %s",
-                           material_id, e)
 
     d = _item_brief(m, prog)
     d.update({"content": m.content or "", "card_back": m.card_back or "",

@@ -23,6 +23,10 @@ FOUNDATION_DISPATCH_MS = int(os.environ.get("FOUNDATION_DISPATCH_MS", "500") or 
 FOUNDATION_MAX_ATTEMPTS = int(os.environ.get("FOUNDATION_MAX_ATTEMPTS", "8") or 8)
 # 写入守卫总开关：false 时 6 类校验整体短路，回到 F1 行为（回滚开关）。
 FOUNDATION_VALIDATION_ENABLED = _bool("FOUNDATION_VALIDATION_ENABLED", True)
+# F2b：业务事件写入 Outbox（同事务）。false 时回到 F2 的 events.publish + 同步兜底。
+EVENT_OUTBOX_ENABLED = _bool("EVENT_OUTBOX_ENABLED", True)
+# 同机多 worker 的 Dispatcher 单写者锁；相对路径按 backend/ 解析。
+DISPATCHER_LOCK_PATH = os.environ.get("DISPATCHER_LOCK_PATH") or "./data/foundation/dispatcher.lock"
 
 # ==================== F3 对象存储 ====================
 # 与 app.core.config 同源；脚本可只导入本模块，避免拉起 pydantic Settings。
@@ -43,6 +47,11 @@ def sqlite_path() -> Path:
     """与 app.core.config 同源：SQLITE_PATH 相对路径按 backend/ 解析。"""
     raw = os.environ.get("SQLITE_PATH") or str(DEFAULT_SQLITE_PATH)
     path = Path(raw)
+    return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
+
+
+def dispatcher_lock_path() -> Path:
+    path = Path(DISPATCHER_LOCK_PATH)
     return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
 
 

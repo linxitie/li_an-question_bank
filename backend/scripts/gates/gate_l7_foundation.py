@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""L7 底座一致性门禁 — 16 项检查（F1/F3 落地版）。
+"""L7 底座一致性门禁 — 17 项检查（F1/F2b/F3 落地版）。
 
 严重度约定：
   1-5、8、13、14、16 表缺失 FAIL —— 底座结构/契约/路由/媒体表被破坏，必须阻断；
   6-7、9-12 WARN —— 依赖环境与后续阶段的软检查，先观察后升级；
   15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL；
+  17 事件同事务化/定向路由契约缺失 FAIL，调用点数量不足只 WARN；
   16 的存储不可达/对账过期/孤儿只 WARN，不阻断离线开发。
   L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
@@ -472,7 +473,8 @@ def check_data_changed_contract() -> None:
     """
     src_path = BACKEND_ROOT / 'app' / 'api' / 'v1' / 'platform' / 'websocket.py'
     src = src_path.read_text(encoding='utf-8')
-    start = src.find('async def publish_data_changed(')
+    # F2b 起 async 版本只做转调，真正的 data/scope 组装在 sync 版本里。
+    start = src.find('def publish_data_changed_sync(')
     end = src.find('\nasync def ', start + 1) if start >= 0 else -1
     body = src[start:end if end > start else len(src)] if start >= 0 else src
     protocol_path = BACKEND_ROOT / 'app' / 'foundation' / 'ws_protocol.py'
@@ -606,6 +608,57 @@ def check_media_store() -> None:
              f'表/索引齐全 active={active} {store_detail} enabled={enabled}', 'WARN')
 
 
+def check_f2b_events() -> None:
+    """L7-17：事件同事务化与定向路由契约（F2b-1）。"""
+    missing: list[str] = []
+    api_root = BACKEND_ROOT / 'app' / 'api' / 'v1'
+    published = []
+    for py in api_root.rglob('*.py'):
+        text = py.read_text(encoding='utf-8')
+        if 'events.publish' in text:
+            published.append(str(py.relative_to(BACKEND_ROOT)))
+    if published:
+        missing.append('api/v1 仍有 events.publish：' + ', '.join(published))
+
+    handlers = (BACKEND_ROOT / 'app' / 'services' / 'event_handlers.py').read_text(
+        encoding='utf-8')
+    for name in ('EV_USER_ACTION', 'EV_PAPER_PUBLISHED'):
+        if name not in handlers:
+            missing.append(f'event_handlers 未注册 {name}')
+
+    triggers = _module_constants(BACKEND_ROOT / 'app' / 'core' / 'trigger_types.py')
+    all_triggers = triggers.get('ALL_TRIGGER_TYPES', [])
+    if str(BACKEND_ROOT) not in sys.path:
+        sys.path.insert(0, str(BACKEND_ROOT))
+    from app.foundation.event_routes import missing_triggers
+    absent = missing_triggers()
+    if absent:
+        missing.append('event_routes 缺少 trigger：' + ', '.join(absent))
+
+    for rel_path, needles in (
+        ('app/foundation/dispatcher.py', ('DispatcherLock', 'run_forever')),
+        ('app/services/event_handlers.py', ('claim(',)),
+        ('app/foundation/config.py', ('EVENT_OUTBOX_ENABLED',)),
+    ):
+        body = (BACKEND_ROOT / rel_path).read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    refs = 0
+    for base in (api_root, BACKEND_ROOT / 'app' / 'services'):
+        for py in base.rglob('*.py'):
+            refs += py.read_text(encoding='utf-8').count('record_user_action(')
+    detail = f'triggers={len(all_triggers)} record_user_action引用={refs}'
+    if missing:
+        _add(17, 'F2b 事件同事务化契约', False, '；'.join(missing), 'FAIL')
+    elif refs < 20:
+        _add(17, 'F2b 事件同事务化契约', False,
+             detail + '（调用点少于 20，确认是否漏迁）', 'WARN')
+    else:
+        _add(17, 'F2b 事件同事务化契约', True, detail, 'FAIL')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -617,7 +670,7 @@ CHECKS = (
     check_migrations, check_health_switch, check_reconcile, check_routes_roles,
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
-    check_media_store,
+    check_media_store, check_f2b_events,
 )
 
 

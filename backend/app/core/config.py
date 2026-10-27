@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     # 单轮投递间隔与最大尝试次数；超限进 dead + jsonl，人工重放。
     FOUNDATION_DISPATCH_MS: int = Field(500, env="FOUNDATION_DISPATCH_MS")
     FOUNDATION_MAX_ATTEMPTS: int = Field(8, env="FOUNDATION_MAX_ATTEMPTS")
+    # F2b：业务事件与业务写同事务进入 Outbox；false 回到 F2 的 events.publish + 同步兜底。
+    EVENT_OUTBOX_ENABLED: bool = Field(True, env="EVENT_OUTBOX_ENABLED")
+    # 同机多 worker 的 Dispatcher 单写者锁（相对路径按 backend/ 解析）。
+    DISPATCHER_LOCK_PATH: str = Field("./data/foundation/dispatcher.lock", env="DISPATCHER_LOCK_PATH")
 
     # ==================== F2 通信统一（WS 中继 / 心跳 / 写入守卫）====================
     # WS_RELAY=redis 时跨 worker 经 Redis pub/sub 扇出；留空为单进程本地扇出。

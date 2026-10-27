@@ -33,6 +33,12 @@ from ....schemas.schemas import (
 )
 from ....core.security import get_current_user, require_teacher_or_admin
 from .papers import apply_weakpoint_recommendation
+from ....services.event_consumer import (
+    outbox_mode_enabled,
+    publish_paper_published_legacy,
+)
+from ....foundation.outbox import emit as outbox_emit
+from ....core.events import EV_PAPER_PUBLISHED
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 logger = logging.getLogger(__name__)
@@ -724,17 +730,25 @@ async def publish_paper(
     paper.paper_type = "PUBLISHED"
     paper.publish_time = datetime.now()
     paper.approver_id = current_user.user_id
-    db.commit()
 
     # 纵向通信走事件总线（catalog 域不跨域 import platform）：
     # EV_PAPER_PUBLISHED → 消费者推送 data-changed 到在线端。
-    from ....core import events
-    await events.publish(events.Event(
-        name=events.EV_PAPER_PUBLISHED,
-        payload={"paper_id": paper_id},
-        aggregate_id=f"p-{paper_id}",
-        source="catalog.paper_generation",
-    ))
+    # F2b：开启 Outbox 时状态与事件同一事务；关闭时保留旧的 commit 后直发。
+    if outbox_mode_enabled():
+        outbox_emit(
+            db,
+            event_name=EV_PAPER_PUBLISHED,
+            aggregate_type="paper",
+            aggregate_id=f"p-{paper_id}",
+            payload={"paper_id": paper_id},
+            producer="catalog.paper_generation",
+        )
+        db.commit()
+    else:
+        db.commit()
+        await publish_paper_published_legacy(
+            paper_id, "catalog.paper_generation"
+        )
 
     logger.info(f"用户 {current_user.username} 发布试卷 ID: {paper_id}")
 

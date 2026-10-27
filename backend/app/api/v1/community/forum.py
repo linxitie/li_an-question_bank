@@ -36,7 +36,7 @@ from ....models.models import (
     ForumPost, ForumComment, ForumLike, SysUser, SysOperationLog
 )
 from ....services.sensitive_words import sensitive_filter, SensitiveLevel
-from ....services.event_consumer import record_user_action
+from ....services.event_consumer import outbox_mode_enabled, record_user_action
 from ....core.trigger_types import TRIGGER_FORUM_POSTED
 from ....core.exceptions import BusinessLogicError, ValidationError, ResourceNotFoundError
 
@@ -95,9 +95,11 @@ async def _publish_forum_posted(
         return await record_user_action(
             db, user_id, TRIGGER_FORUM_POSTED, session=payload
         )
-    except Exception as e:  # noqa: BLE001 —— 事件失败不影响发帖/回复主流程
-        logger.warning(f"发帖成就判定失败: {e}")
+    except Exception as e:  # noqa: BLE001 —— 关闭 Outbox 时事件失败不影响主流程
         _release_forum_posted_event(post_id)
+        if outbox_mode_enabled():
+            raise
+        logger.warning(f"发帖成就判定失败: {e}")
         return False
 
 def _serialize_post(
@@ -344,8 +346,8 @@ async def create_post(
         status="NORMAL",
     )
     db.add(post)
-    db.commit()
-    db.refresh(post)
+    # F2b：先 flush 拿 post_id，事件与帖子同一事务提交。
+    db.flush()
 
     logger.info(f"用户 {current_user.user_id} 发布帖子 {post.post_id}")
 
@@ -353,6 +355,8 @@ async def create_post(
     await _publish_forum_posted(
         db, current_user.user_id, post.post_id, action="created"
     )
+    db.commit()
+    db.refresh(post)
 
     # 4. 返回完整数据(前端 unshift 到列表头)
     return _serialize_post(post, current_user, liked=False, content_full=True)
@@ -541,13 +545,15 @@ async def create_comment(
     # 帖子评论数 +1
     post.comment_count = (post.comment_count or 0) + 1
 
-    db.commit()
-    db.refresh(comment)
+    # F2b：评论与帖子计数、事件同一事务提交（先 flush 拿 comment_id）。
+    db.flush()
 
     # 回帖同样走 forum.posted；同一帖子只在首次创建时上报一次（P2-28）
     await _publish_forum_posted(
         db, current_user.user_id, post_id, action="commented"
     )
+    db.commit()
+    db.refresh(comment)
 
     return _serialize_comment(comment, current_user, liked=False)
 
