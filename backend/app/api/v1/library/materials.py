@@ -890,13 +890,12 @@ async def import_confirm(import_id: int, body: dict,
             if dup_check["is_duplicate"]:
                 import_monitor.record_duplicate_match()
                 continue  # 跳过重复内容
-            # 智能分类
-            classification = classifier.classify(
-                ".xlsx", content=combined, title=card_front
-            )
+            # 类型由「正/背面双列」这一输入契约唯一确定，不再交给启发式分类器：
+            # 分类器只看扩展名+标题关键词，卡片正文短会判成 article，导致卡片
+            # 落入文章区、翻卡 UI 永不触发（D1）。此处只按业务事实写 card。
             content_hash = content_cleaner.calculate_content_hash(combined)
             m = StudyMaterial(
-                subject=subject, type=classification["type"],
+                subject=subject, type="card",
                 category=c["category"] or category,
                 title=card_front, card_front=card_front,
                 card_back=card_back,
