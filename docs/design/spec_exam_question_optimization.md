@@ -12,7 +12,7 @@
 - **前端**: VTJ (Vue 3 + TypeScript + Vite)，低代码设计器生成页面
 - **后端**: Python FastAPI + SQLite/MySQL
 - **认证**: 共享模块 `window.__VTJ_AUTH__` + JWT
-- **部署**: Vite Dev Server (5173) → Proxy → FastAPI (8000)
+- **部署**: Vite Dev Server (9527) → Proxy → FastAPI (8000)
 
 ### 1.2 核心目标
 解决试卷管理和题目管理模块的 7 个核心问题，提升数据准确性、用户体验和功能完整性。
