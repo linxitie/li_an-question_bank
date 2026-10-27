@@ -736,6 +736,17 @@ def _migrate_images(import_id: int, result: dict, db: Session | None = None,
     result["html"] = sanitize_html(html)
 
 
+def _commit_material_import(db: Session, rec: MaterialImportRecord) -> None:
+    """业务行与文档投影事件同事务提交，避免文档库与导入记录漂移。"""
+    db.flush()
+    from ....foundation.document_events import emit_import_snapshot
+    emit_import_snapshot(
+        db, "material_import_record", rec.import_id,
+        producer="library.materials",
+    )
+    db.commit()
+
+
 @router.post("/admin/import/upload", summary="上传素材并解析(docx/xlsx/文字pdf同步；扫描pdf异步)")
 async def import_upload(background_tasks: BackgroundTasks,
                         file: UploadFile = File(...),
@@ -748,7 +759,7 @@ async def import_upload(background_tasks: BackgroundTasks,
         file_size=_os.path.getsize(tmp_path), parse_status="pending",
         uploader_id=current_user.user_id)
     db.add(rec)
-    db.commit()
+    _commit_material_import(db, rec)
     db.refresh(rec)
 
     scanned = False
@@ -760,7 +771,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_status = "failed"
             rec.error_message = "PDF 已加密或损坏，请解除密码后重新上传"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-            db.commit()
+            _commit_material_import(db, rec)
             raise HTTPException(400, rec.error_message)
 
     if ext == ".docx":
@@ -775,7 +786,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_status = "failed"
             rec.error_message = f"Word 文档损坏或格式不受支持: {e}"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-        db.commit()
+        _commit_material_import(db, rec)
     elif ext == ".xlsx":
         try:
             from ....services.material_parser import parse_xlsx
@@ -788,7 +799,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_status = "failed"
             rec.error_message = f"Excel 解析失败（空表或损坏）: {e}"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-        db.commit()
+        _commit_material_import(db, rec)
     elif ext == ".pdf":
         if scanned:
             from ....services.mineru_material_service import (
@@ -798,12 +809,12 @@ async def import_upload(background_tasks: BackgroundTasks,
                 rec.error_message = ("该 PDF 为扫描图片版且系统 OCR 组件未就绪，"
                                      "请转存为文字版 Word 后重新上传")
                 rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-                db.commit()
+                _commit_material_import(db, rec)
                 raise HTTPException(400, rec.error_message)
             rec.parse_mode = "async(mineru)"
             rec.parse_status = "processing"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-            db.commit()
+            _commit_material_import(db, rec)
 
             def _ocr_job(import_id: int, path: str, workdir: str):
                 """后台线程：跑 OCR 并回写记录（自带独立 DB 会话）。"""
@@ -819,12 +830,12 @@ async def import_upload(background_tasks: BackgroundTasks,
                                    "_seconds": r["seconds"]})
                     row.parse_status = "success"
                     row.parse_result = _json.dumps(result, ensure_ascii=False)
-                    s.commit()
+                    _commit_material_import(s, row)
                 except Exception as e:
                     row = s.query(MaterialImportRecord).get(import_id)
                     row.parse_status = "failed"
                     row.error_message = f"OCR 失败({type(e).__name__}): 可点击重试或转存 Word"
-                    s.commit()
+                    _commit_material_import(s, row)
                 finally:
                     s.close()
 
@@ -843,7 +854,7 @@ async def import_upload(background_tasks: BackgroundTasks,
                 rec.parse_status = "failed"
                 rec.error_message = f"PDF 解析失败: {e}"
                 rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-            db.commit()
+            _commit_material_import(db, rec)
 
     resp = {"import_id": rec.import_id, "parse_status": rec.parse_status}
     if rec.error_message:

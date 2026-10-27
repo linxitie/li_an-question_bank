@@ -188,6 +188,7 @@ def test_current_impl_excel_three_rows_land_as_three_questions():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from app.foundation.schema import ddl_statements
     from app.models.models import Base, QuestionBank, SysUser
     from gates.gate_l3_ingest import build_probe_xlsx
     from app.services.question_ingest.excel_reader import parse_excel_buffer
@@ -203,6 +204,10 @@ def test_current_impl_excel_three_rows_land_as_three_questions():
             table.create(engine, checkfirst=True)
         except Exception:
             pass
+    # F4 起导入成功会在同一事务写 foundation_outbox；临时库需自建该表。
+    with engine.begin() as conn:
+        for statement in ddl_statements():
+            conn.exec_driver_sql(statement)
     db = sessionmaker(bind=engine)()
 
     try:

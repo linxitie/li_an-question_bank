@@ -17,7 +17,7 @@
 
 | 文档 | 版本 | 状态 | 说明 |
 |---|---|---|---|
-| `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（D1–D17）；F0–F3、F2b-1 与 F2b-2 已执行 | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（当前 18 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
+| `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（D1–D17）；F0–F4、F2b-1 与 F2b-2 已执行 | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（当前 19 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
 | `superpowers/specs/main分支启动阻断与考试链路修复_报告_20261026.md` | v1 | ✅ 已合并 main（2026-10-26） | main 报告 P0-1/2/3 + P1-1 + P1-3 + P3-1 修复：Pydantic v2 `ConfigDict`、考试路由导入收敛、日志目录自建+降级、`question_count` 以关联行数为唯一口径（含存量修复脚本）；3 条新回归测试 + 真机烟测 health/login/取题/开考/交卷全 200；全量 650 passed（8 失败均为既有环境项） |
 | `superpowers/plans/F1一致性内核_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 1–7 完成，tag `foundation-v1-f1`） | F1：7 表 + Outbox→投递→投影→对账 + `content_integrity.py`/`db_inventory.py` + L7 门禁；21 文件、7 步、每步独立验证与回滚；不改 `api/v1`/`models`/`.vtj` |
 | `superpowers/specs/预览数据治理与容量回收_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | 571 行 / 257.76 MB 超期预览外置 gzip 后置摘要，`auto_vacuum=INCREMENTAL` + VACUUM，主库 **303.17 → 46.52 MB**；四表行数与指纹不变，`integrity_check=ok` |
@@ -29,6 +29,8 @@
 | `superpowers/specs/F2b-1事件总线同事务化_报告_20261027.md` | v1 | ✅ 已交付（2026-10-27，tag `foundation-v1-f2b1`） | F2b-1 交付报告：20+2 调用点同事务、文件锁单写者、inbox 幂等、roles 定向；A1–A16 逐条证据；后端 705 passed、前端 342、L7 16P/1W、gate_all 9/10（L2 既有）；明确 A2/A5–A7 服务/协议级限制，F2b-2 未开始 |
 | `superpowers/plans/F2b-2断线重连增量补发与前端useDataSync_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-27，Step 0–8 完成，tag `foundation-v1-f2b2`） | F2b-2：`data-changed` 带 Outbox 游标 `oid`；重连发 WS `sync{since}`，服务端按用户/角色补发可见事件；超 200 条/超 24h/开关关闭一律 `truncated` 回退一次全量；新增 `useDataSync` 接 2 个手写页，75 个 VTJ 页模板零改动；L7 17→18；无新表/迁移/依赖；A1–A18 与 9×3 协议矩阵 |
 | `superpowers/specs/F2b-2断线重连增量补发_报告_20261027.md` | v1 | ✅ 已交付（2026-10-27，tag `foundation-v1-f2b2`） | F2b-2 交付报告：`oid` 游标、WS `sync{since}` 可见性补发、24h/200 条截断、`useDataSync` 两页接入；A1–A18 证据与 27 行 9×3 协议矩阵（协议级，非真机）；后端 725、前端 354、L7 17P/1W、gate_all 9/10（L2 既有）；明确未做 9 个真实浏览器 |
+| `superpowers/plans/F4文档投影与DocumentStore_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-27，Step 0–8 完成，tag `foundation-v1-f4`） | F4：local/Mongo DocumentStore + 3 集合（exam_resources/import_snapshots/forum_contents）+ Outbox 投影 + 回填/对账/双读日志 + L7-19；单文档 8 MiB 上限、pymongo 可选、默认 local；不改读路径/API/.vtj；A1–A18、D1–D9 |
+| `superpowers/specs/F4文档投影与DocumentStore_报告_20261027.md` | v1 | ✅ 已交付（2026-10-27，tag `foundation-v1-f4`） | F4 交付报告：DocumentStore 三实现/3 集合/4 事件/回填 1675 条/对账 drift=0/双读 500 条零差异；A1–A18 逐条证据；后端 789 passed、前端 354、L7 18P/1W、gate_all 8/10（L2 既有、L4 服务未启）；偏差与限制见第 6 节 |
 | `ops/外部数据库与中间件手动下载清单_v1.md` | v1 | ✅ 已落盘（2026-10-27） | 明确“当前不需要下载任何外部库”；列出 SQLite/Redis/MinIO/MongoDB/Neo4j/Milvus/PG/MySQL 的用途、F4–F6 前置、官方入口、建议版本、Windows/Docker 安装、端口、许可、自检、凭据与回滚；含本机实测与用户手动勾选清单 |
 | `superpowers/specs/F1一致性内核_报告_20261026.md` | v1 | ✅ 已交付（2026-10-26，tag `foundation-v1-f1`） | F1 7 表 + Outbox/投递/投影/对账 + `/health/foundation` + L7 15 项；26 测试通过；13 条验收 10 PASS / 2 PARTIAL / 1 环境项；F0 内容指纹口径修正（以备份库重算，四表 MATCH）；性能增幅未达 5% 与 6 类坏数据校验移交 F2 |
 | `superpowers/specs/F0基线冻结与内容完整性_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | F0：tag `foundation-v1`@`2ec9cc7`、`sqlite3.backup()` 备份（303.17 MB，integrity ok，四表指纹一致）、`gate_all --quick` 4/4 PASS；内容完整性基线：复合题 33 题挂组、组 11 空、293 图片行中 13 行文件缺失、10 个 `[IMAGE:]` 令牌未解析、申论 24 题未挂组（只登记不删） |
@@ -55,6 +57,9 @@
 
 ## 变更记录
 
+- 2026-10-27：**F4 文档投影与 DocumentStore 执行完成**：local/Mongo DocumentStore + 3 集合（exam_resources/import_snapshots/forum_contents）+ 4 个 Outbox 事件同事务接入（试卷发布/更新、题目/资料导入、论坛发帖/删帖/评论）+ 回填/对账/双读抽样 + L7-19；生产回填 1675 条、二次 apply 全 0，对账 drift=0，双读 500 条零差异；后端 789 passed、前端 354/typecheck 0、L7 18P/1W、gate_all 8/10（L2 既有、L4 服务未启）；无新表/迁移/依赖、无 .vtj 改动；main 单提交 + tag `foundation-v1-f4`；报告见 `superpowers/specs/F4文档投影与DocumentStore_报告_20261027.md`
+- 2026-10-27：**F4 文档投影实施计划落盘（待批准）**：新增 `superpowers/plans/F4文档投影与DocumentStore_实施计划_v1.md`；范围限定 local/Mongo DocumentStore、3 个文档集合、4 个 Outbox 事件、回填/对账/双读日志与 L7-19；现有读路径/API/表结构/.vtj 零改动，pymongo 可选，默认 local；D1–D9 待用户批准
+- 2026-10-27：**前端端口统一 9527**：删除 5173 引用（12 个文档 + Playwright 用例），`vite.config.ts` 显式固定 dev/preview 端口 9527；Playwright 导入用例默认跳过，仅 `RUN_PLAYWRIGHT_E2E=1` 且 9527/8000 就绪时运行；全量后端 755 passed/4 skipped/2 xfailed；main 单提交 `f0d9ea5`
 - 2026-10-27：**F2b-2 断线重连增量补发执行完成**：`data-changed` 带 Outbox 游标 `oid`；WS 重连 `sync{since}` 按用户/角色补发可见事件；超 200 条/超 24h/开关关闭回 `truncated` 并全量兜底；新增 `useDataSync` 并接 `RecentPracticeRecords` 与 `profile.vue`，75 个 VTJ 页模板零改动；L7 17→18；后端 725 passed、前端 354 passed/typecheck 0；main 单提交 + tag `foundation-v1-f2b2`；报告见 `superpowers/specs/F2b-2断线重连增量补发_报告_20261027.md`
 - 2026-10-27：**F2b-2 实施计划落盘（待批准）**：`data-changed` 增加 Outbox 游标 `oid`；WS 重连 `sync{since}` 增量补发，服务端按用户/角色过滤；超 200 条/超 24h/开关关闭回 `truncated` 并全量兜底；新增 `useDataSync`，只接 `RecentPracticeRecords` 与 `profile.vue`，75 个 VTJ 页模板零改动；L7 17→18；无新表/迁移/依赖；计划见 `superpowers/plans/F2b-2断线重连增量补发与前端useDataSync_实施计划_v1.md`
 - 2026-10-27：**外部数据库与中间件手动下载清单落盘**：明确当前不需要下载任何外部库；给出 SQLite/Redis/MinIO/MongoDB/Neo4j/Milvus/PG/MySQL 的 F4–F6 前置、官方入口、建议版本、Windows/Docker、端口、许可、自检、凭据规则与回滚；含本机实测与用户勾选清单；见 `ops/外部数据库与中间件手动下载清单_v1.md`

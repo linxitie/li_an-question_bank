@@ -159,6 +159,8 @@ async def update_paper(
     for key, value in paper_data.dict(exclude_unset=True).items():
         setattr(paper, key, value)
     
+    from ....foundation.document_events import emit_exam_snapshot
+    emit_exam_snapshot(db, paper_id, producer="catalog.papers.update")
     db.commit()
     db.refresh(paper)
     
@@ -440,6 +442,10 @@ async def publish_paper(
     paper.paper_type = "PUBLISHED"
     paper.publish_time = datetime.now()
     paper.approver_id = current_user.user_id
+
+    # 文档投影：发布态试卷进 exam_resources，题干正文不进入文档库。
+    from ....foundation.document_events import emit_exam_snapshot
+    emit_exam_snapshot(db, paper_id, producer="catalog.papers.publish")
 
     # 纵向通信走事件总线（catalog 域不跨域 import platform）：
     # EV_PAPER_PUBLISHED → 消费者推送 data-changed 到在线端。

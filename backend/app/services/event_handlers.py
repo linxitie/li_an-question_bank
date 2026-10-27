@@ -98,7 +98,17 @@ def handle_paper_published(session: Session, event: OutboxEvent) -> None:
 
 
 def build_handlers() -> dict[str, object]:
+    from app.foundation import document_projection
+
     return {
         events.EV_USER_ACTION: handle_user_action,
         events.EV_PAPER_PUBLISHED: handle_paper_published,
+        events.EV_PAPER_SNAPSHOT: document_projection.handle_exam_snapshot,
+        events.EV_QUESTION_IMPORT_SNAPSHOT: (
+            document_projection.handle_question_import_snapshot
+        ),
+        events.EV_MATERIAL_IMPORT_SNAPSHOT: (
+            document_projection.handle_material_import_snapshot
+        ),
+        events.EV_FORUM_CONTENT_CHANGED: document_projection.handle_forum_changed,
     }

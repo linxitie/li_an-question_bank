@@ -1325,6 +1325,13 @@ async def batch_import_parsed(
     )
     db.add(summary_record)
     try:
+        # flush 拿到 import_id 后写投影事件，再与业务行同一次 commit 提交。
+        db.flush()
+        from ....foundation.document_events import emit_import_snapshot
+        emit_import_snapshot(
+            db, 'question_import_record', summary_record.import_id,
+            producer='catalog.question_import.batch',
+        )
         db.commit()
     except Exception as ce:  # noqa: BLE001
         db.rollback()
@@ -1815,6 +1822,12 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
         # 进度收尾：与 PREVIEW 状态同一次提交落库，前端轮询到 100 即停止
         record.progress_percent = 100
         record.current_phase = 'DONE'
+        db.flush()
+        from ....foundation.document_events import emit_import_snapshot
+        emit_import_snapshot(
+            db, 'question_import_record', import_id,
+            producer='catalog.question_import.parse',
+        )
         db.commit()
         logger.info(f"[import-async] import_id={import_id} 解析完成 → PREVIEW（{total} 题）")
 
@@ -1829,6 +1842,12 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 record.import_status = 'FAILED'
                 record.error_messages = [{'stage': 'parse', 'error': str(e)[:500]}]
                 record.complete_time = datetime.now()
+                db.flush()
+                from ....foundation.document_events import emit_import_snapshot
+                emit_import_snapshot(
+                    db, 'question_import_record', import_id,
+                    producer='catalog.question_import.parse',
+                )
                 db.commit()
         except Exception:  # noqa: BLE001 — 连失败状态都写不回时只能放弃，绝不抛出
             logger.error(f"[import-async] import_id={import_id} 写入 FAILED 状态亦失败", exc_info=True)
@@ -1886,6 +1905,7 @@ async def upload_file_for_import(
         import_time=datetime.now(),
     )
     db.add(record)
+    # PARSING 是过渡态，不投文档事件；等 PREVIEW/FAILED 终态再写快照。
     db.commit()
     try:
         db.refresh(record)

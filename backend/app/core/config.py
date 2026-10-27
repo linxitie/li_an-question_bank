@@ -120,6 +120,16 @@ class Settings(BaseSettings):
     MEDIA_STRICT_BACKEND: bool = Field(False, env="MEDIA_STRICT_BACKEND")
     MEDIA_ORPHAN_GRACE_DAYS: int = Field(7, env="MEDIA_ORPHAN_GRACE_DAYS")
 
+    # ==================== F4 文档投影 ====================
+    DOC_STORE_ENABLED: bool = Field(True, env="DOC_STORE_ENABLED")
+    DOC_STORE_BACKEND: str = Field("local", env="DOC_STORE_BACKEND")
+    DOC_STORE_ROOT: str = Field("./data/foundation/docs", env="DOC_STORE_ROOT")
+    DOC_STORE_MAX_BYTES: int = Field(8388608, env="DOC_STORE_MAX_BYTES")
+    DOC_STORE_MONGO_URI: str = Field("", env="DOC_STORE_MONGO_URI")
+    DOC_STORE_MONGO_DB: str = Field("li_an_foundation", env="DOC_STORE_MONGO_DB")
+    DOC_STORE_MONGO_PREFIX: str = Field("", env="DOC_STORE_MONGO_PREFIX")
+    DOC_STORE_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="DOC_STORE_RECONCILE_MAX_AGE_DAYS")
+
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")

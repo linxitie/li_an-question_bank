@@ -46,6 +46,19 @@ MINIO_REGION = (os.environ.get("MINIO_REGION") or "us-east-1").strip()
 MEDIA_STRICT_BACKEND = _bool("MEDIA_STRICT_BACKEND", False)
 MEDIA_ORPHAN_GRACE_DAYS = int(os.environ.get("MEDIA_ORPHAN_GRACE_DAYS", "7") or 7)
 
+# ==================== F4 文档投影 ====================
+# 关闭后投影 handler 直接跳过，现有读路径零影响（回滚开关）。
+DOC_STORE_ENABLED = _bool("DOC_STORE_ENABLED", True)
+DOC_STORE_BACKEND = (os.environ.get("DOC_STORE_BACKEND") or "local").strip().lower()
+DOC_STORE_ROOT = os.environ.get("DOC_STORE_ROOT") or "./data/foundation/docs"
+DOC_STORE_MAX_BYTES = int(os.environ.get("DOC_STORE_MAX_BYTES", "8388608") or 8388608)
+DOC_STORE_MONGO_URI = os.environ.get("DOC_STORE_MONGO_URI") or ""
+DOC_STORE_MONGO_DB = os.environ.get("DOC_STORE_MONGO_DB") or "li_an_foundation"
+DOC_STORE_MONGO_PREFIX = os.environ.get("DOC_STORE_MONGO_PREFIX") or ""
+DOC_STORE_RECONCILE_MAX_AGE_DAYS = int(
+    os.environ.get("DOC_STORE_RECONCILE_MAX_AGE_DAYS", "7") or 7
+)
+
 
 def sqlite_path() -> Path:
     """与 app.core.config 同源：SQLITE_PATH 相对路径按 backend/ 解析。"""
@@ -62,4 +75,10 @@ def dispatcher_lock_path() -> Path:
 def object_store_root() -> Path:
     """local 根目录；相对路径按 backend/ 解析，与 SQLITE_PATH 一致。"""
     path = Path(OBJECT_STORE_ROOT)
+    return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
+
+
+def document_store_root() -> Path:
+    """local 文档根目录；相对路径按 backend/ 解析。"""
+    path = Path(DOC_STORE_ROOT)
     return path if path.is_absolute() else (BACKEND_DIR / path).resolve()

@@ -355,6 +355,8 @@ async def create_post(
     await _publish_forum_posted(
         db, current_user.user_id, post.post_id, action="created"
     )
+    from ....foundation.document_events import emit_forum_content
+    emit_forum_content(db, post.post_id, producer="community.forum.create")
     db.commit()
     db.refresh(post)
 
@@ -385,6 +387,8 @@ async def delete_post(
 
     # 软删除
     post.status = "DELETED"
+    from ....foundation.document_events import emit_forum_content
+    emit_forum_content(db, post_id, producer="community.forum.delete")
     db.commit()
 
     logger.info(f"用户 {current_user.user_id} 删除帖子 {post_id} (is_admin={is_admin})")
@@ -552,6 +556,8 @@ async def create_comment(
     await _publish_forum_posted(
         db, current_user.user_id, post_id, action="commented"
     )
+    from ....foundation.document_events import emit_forum_content
+    emit_forum_content(db, post_id, producer="community.forum.comment")
     db.commit()
     db.refresh(comment)
 

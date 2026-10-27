@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""L7 底座一致性门禁 — 18 项检查（F1/F2b/F3 落地版）。
+"""L7 底座一致性门禁 — 19 项检查（F1/F2b/F3/F4 落地版）。
 
 严重度约定：
   1-5、8、13、14、16 表缺失 FAIL —— 底座结构/契约/路由/媒体表被破坏，必须阻断；
@@ -7,6 +7,7 @@
   15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL；
   17 事件同事务化/定向路由契约缺失 FAIL，调用点数量不足只 WARN；
   18 断线补发后端契约缺失 FAIL；前端 useDataSync/typed 事件缺失只 WARN；
+  19 文档投影后端契约/local 文档库不可用 FAIL；Mongo 不可用、对账过期、漂移只 WARN；
   16 的存储不可达/对账过期/孤儿只 WARN，不阻断离线开发。
   L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
@@ -713,6 +714,133 @@ def check_sync_replay() -> None:
         _add(18, '断线补发与前端增量刷新', True, detail, 'FAIL')
 
 
+def check_document_store() -> None:
+    """L7-19：文档投影契约与 DocumentStore 健康（F4）。
+
+    后端契约/local 库不可用会直接阻断文档投影，记 FAIL；Mongo 仅是可选后端，
+    未安装 pymongo 或服务未起只 WARN。对账过期/漂移同样只 WARN，交给巡检处理。
+    """
+    missing: list[str] = []
+    warnings: list[str] = []
+    required = (
+        ('app/foundation/stores/document.py', ('COLLECTIONS', 'build_document_store')),
+        ('app/foundation/stores/local_document.py', ('class LocalDocumentStore',)),
+        ('app/foundation/stores/mongo_document.py', ('class MongoDocumentStore',)),
+        ('app/foundation/document_schema.py',
+         ('build_exam_resource', 'build_forum_content', 'build_import_snapshot')),
+        ('app/foundation/document_projection.py',
+         ('handle_exam_snapshot', 'handle_forum_changed')),
+        ('app/foundation/document_events.py', ('emit_exam_snapshot', 'emit_import_snapshot')),
+        ('app/services/event_handlers.py', ('document_projection',)),
+        ('app/foundation/config.py', ('DOC_STORE_ENABLED', 'DOC_STORE_MAX_BYTES')),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    events = (BACKEND_ROOT / 'app' / 'core' / 'events.py').read_text(encoding='utf-8')
+    for name in ('EV_PAPER_SNAPSHOT', 'EV_QUESTION_IMPORT_SNAPSHOT',
+                 'EV_MATERIAL_IMPORT_SNAPSHOT', 'EV_FORUM_CONTENT_CHANGED'):
+        if name not in events:
+            missing.append(f'events.py 缺少 {name}')
+
+    emit_refs = 0
+    for rel_path in (
+        'app/api/v1/catalog/papers.py',
+        'app/api/v1/catalog/question_import.py',
+        'app/api/v1/library/materials.py',
+        'app/api/v1/community/forum.py',
+    ):
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        if 'document_events' not in body and 'emit_exam_snapshot' not in body:
+            missing.append(f'{rel_path} 未接入文档事件')
+        emit_refs += body.count('emit_')
+
+    backend = os.environ.get('DOC_STORE_BACKEND', 'local').strip().lower() or 'local'
+    enabled = os.environ.get('DOC_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    store_detail = 'disabled'
+    if enabled:
+        try:
+            if str(BACKEND_ROOT) not in sys.path:
+                sys.path.insert(0, str(BACKEND_ROOT))
+            from app.foundation.stores.document import build_document_store
+
+            health = build_document_store().health()
+            store_detail = f'{health.backend}={"ok" if health.ok else "down"}'
+            if not health.ok or health.degraded:
+                message = f'文档库 {health.backend} 不可用：{health.detail}'
+                if str(health.backend).lower() == 'mongo' or backend == 'mongo':
+                    warnings.append(message)
+                else:
+                    missing.append(message)
+        except Exception as exc:  # 门禁不能因开发机未装可选后端直接崩溃
+            message = f'文档库检查失败：{type(exc).__name__}: {exc}'
+            if backend == 'mongo':
+                warnings.append(message)
+            else:
+                missing.append(message)
+
+    row = None
+    db = _db_path()
+    if db.exists():
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='foundation_reconcile_run'").fetchone()
+            if exists:
+                row = con.execute(
+                    "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                    "WHERE scope='document' ORDER BY finished_at DESC LIMIT 1").fetchone()
+        finally:
+            con.close()
+    if row is None:
+        warnings.append('还没有文档对账记录（运行 document_inventory.py --record）')
+    else:
+        finished_at, status, report_path = row
+        try:
+            from datetime import datetime
+
+            finished = datetime.fromisoformat(str(finished_at))
+            if finished.tzinfo is None:
+                finished = finished.astimezone()
+            age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+            if age_days > 7:
+                warnings.append(f'文档对账已过期 {age_days:.1f} 天')
+        except (TypeError, ValueError):
+            warnings.append('文档对账时间无法解析')
+        if str(status) == 'drift':
+            warnings.append('最近一次文档对账有漂移')
+        if report_path:
+            try:
+                rp = Path(report_path)
+                if not rp.is_absolute():
+                    rp = BACKEND_ROOT / rp
+                report = json.loads(rp.read_text(encoding='utf-8'))
+                orphan = int(report.get('orphan') or 0)
+                if orphan:
+                    warnings.append(f'文档库孤儿 {orphan} 个')
+            except (OSError, ValueError):
+                pass
+
+    detail = f'backend={backend} enabled={enabled} {store_detail} emit引用={emit_refs}'
+    if warnings:
+        detail += '；' + '；'.join(warnings)
+    _add(19, '文档投影与 DocumentStore', not missing,
+         '；'.join(missing) if missing else detail, 'FAIL')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -724,7 +852,7 @@ CHECKS = (
     check_migrations, check_health_switch, check_reconcile, check_routes_roles,
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
-    check_media_store, check_f2b_events, check_sync_replay,
+    check_media_store, check_f2b_events, check_sync_replay, check_document_store,
 )
 
 
