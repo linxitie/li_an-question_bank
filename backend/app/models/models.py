@@ -1973,7 +1973,6 @@ class UserFeedback(Base):
         Index("idx_feedback_status", status),
         Index("idx_feedback_created", created_at),
     )
-<<<<<<< HEAD
 
 
 class ChatSession(Base):
