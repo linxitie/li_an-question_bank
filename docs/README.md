@@ -45,9 +45,11 @@
 | `superpowers/specs/数据库静默回落事故_报告_20261025.md` | v1 | ✅ 已修复（2026-10-25） | `.env` 缺失→默认库指向 `example_db.sqlite`（旧 schema、0 题、4 账号）导致全站 500/登录失败；真库 3357 题完好；新增启动期 db-guard 与 6 项测试 |
 | `superpowers/specs/导入配对与答案卷识别_报告_20261025.md` | v1 | ✅ 已修复（2026-10-25） | 答案卷被按题干切块导致 125 vs 95 计数不一致；新增答案卷识别 + 题号锚点解析（125 条对齐），`/confirm` 增加答案卷闸门；22 套实测 19 套对齐 |
 | `superpowers/specs/OCR链路恢复_报告_20261025.md` | v1 | ✅ 已恢复（2026-10-25） | MinerU 3.4.5 / PaddleOCR 2.7 均可用但被参数拖死：固定 600s 超时 vs 71.2s/页、OCR 仅 8 页、缓存跨引擎污染。改为按页超时、30 页上限、CPU 线程/免方向分类、缓存引擎隔离 |
+| `plans/备考资料模块总体方案_v1.md` | v1 | 🟡 待用户审批（2026-10-27） | 备考资料 6 项需求的总方案。实测结论：**后端家底已厚**（`study_material` 23 列已含 `card_front/card_back/cover_image/badge`、`material_classification_rules` 规则骨架、18 个 `/api/materials/*` 端点、`achievement`45/`badge_task`14/`badge_name_bank`/`coin_record` 奖励引擎齐备），真正缺口是**前端视觉（卡片/翻页/3D/三端）、格式规范与自动分类、AI 视频（外部阻塞）、奖励接线**。含 6 子分支依赖图、R3（template 由设计器拖拽）/R11（3 个新端点待批）落地规程、分阶段验收、K1–K6 风险、D1–D8 待拍板 |
 
 ## 变更记录
 
+- 2026-10-27：新增 `plans/备考资料模块总体方案_v1.md`（待审批）。六项需求拆成 6 条交付线并给出依赖顺序（doc-content → card → multi-device → growth-link → upload-format → ai-lecturer），父分支 `feat/Study-Material-Management`、子分支 `feat/Study-Material-Management-<子任务>`（因 Git 分支名不能同时是目录）。关键取舍：科目说明复用 `study_material` 的 `type='GUIDE'`（零新表）；卡片分类由 `material_classification_rules` 驱动而非前端硬编码；三端差异在同页按 `meta.platform` 适配（R12 禁复制页）；3D 用 CSS 视差并强制降级；AI 讲评只落契约 + 501 占位（无可用服务前不写实现）；奖励复用 `achievement.condition_code` + 幂等 `coin_record` 防刷。
 - 2026-10-26：**F2 通信统一与写入守卫交付完成**：WS 协议 v2（seq/scope）、Redis 中继与多 worker fail-fast、统一 `ws_relay.emit` 出口、前端 `data-changed` 消费/seq 去重/重连重同步、92 条路由 roles 补全、写入守卫 6 类；L7 PASS=15/WARN=0/FAIL=0，全量门禁 9/10（L2 既有基线），62 后端 + 342 前端测试通过，tag `foundation-v1-f2`；新增交付报告并明确 **F2b（13 个写调用点迁 Outbox / Redis Stream / 定向派生）未做**。
 - 2026-10-26：**F2 实施计划落盘（待批准）**：WS 协议 v2（seq/scope）、Redis 中继与多 worker fail-fast、前端 `data-changed` 消费与重连重同步、57 条路由 roles 补全、写入守卫 6 类；21 个文件 + 7 步 + 13 条验收；无新表、无迁移。
 - 2026-10-26：**F1 一致性内核交付完成**：7 表 + 事务 Outbox + 投递/投影 + 对账 + `/health/foundation` + L7 门禁 15 项；26 个测试通过，L7 PASS=13/WARN=2/FAIL=0，tag `foundation-v1-f1`；新增交付报告（含 F0 指纹口径修正：以受 R8 保护的备份库重算，四表与主库 MATCH）。
