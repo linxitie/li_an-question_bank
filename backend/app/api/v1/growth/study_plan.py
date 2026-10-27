@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/plan", tags=["学习计划"])
 
 VALID_SUBJECTS = {"行测", "申论", "公专"}
+# 前端展示名 → 后端规范名的别名映射（前端用"公安专业科目"，后端统一存"公专"）
+SUBJECT_ALIASES = {"公安专业科目": "公专", "公安专业知识": "公专"}
 VALID_LEVELS = {"零基础", "有基础", "冲刺"}
 MAX_TASKS = 200
 
@@ -46,6 +48,7 @@ class GenerateRequest(BaseModel):
             raise ValueError(f"薄弱科目最多选择 {len(VALID_SUBJECTS)} 个")
         cleaned: List[str] = []
         for s in v:
+            s = SUBJECT_ALIASES.get(s, s)  # 归一化前端展示名（如"公安专业科目"→"公专"）
             if not isinstance(s, str) or s not in VALID_SUBJECTS:
                 raise ValueError(f"科目必须是 {'/'.join(sorted(VALID_SUBJECTS))} 之一")
             if s not in cleaned:
