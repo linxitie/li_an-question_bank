@@ -1,14 +1,16 @@
 """
 联考小智 - 大模型客户端封装
 
-统一处理与大模型后端的通信：鉴权、超时、重试、异常分级。
+统一处理与大模型后端的通信：鉴权、超时、重试（瞬态错误重试 1 次）、异常分级。
 请求格式按 OpenAI Chat Completions 兼容协议：
     POST {LLM_API_URL}/chat/completions
     Authorization: Bearer {LLM_API_KEY}
     { "model": ..., "messages": [{"role":..., "content":...}] }
+
+日志安全：任何日志不回显 LLM 响应原文（避免把大模型生成内容/敏感输入打进日志）。
 """
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import httpx
 
@@ -62,6 +64,10 @@ PLAN_SYSTEM_PROMPT = (
     "总天数根据考试日期合理拆分；难度跟考生水平匹配。"
 )
 
+# 瞬态错误（可重试）：超时 / 连接失败。业务性错误（非200、解析失败）不重试。
+_RETRYABLE_EXC = (httpx.TimeoutException, httpx.ConnectError)
+_RETRY_TIMES = 2  # 首次 + 重试 1 次
+
 
 class LLMClientError(Exception):
     """大模型调用异常基类"""
@@ -72,12 +78,81 @@ class LLMClientError(Exception):
         super().__init__(message)
 
 
+async def _post(
+    messages: List[Dict[str, str]],
+    temperature: float,
+    prompt_name: str,
+) -> str:
+    """
+    统一发送 chat/completions 请求并返回回复文本。
+
+    - 超时/连接失败重试 1 次（瞬态错误）；
+    - 非 200、解析失败立即抛 LLMClientError（不重试，重试无意义）；
+    - 日志不回显响应原文与请求内容。
+    """
+    url = settings.LLM_API_URL.rstrip("/") + "/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings.LLM_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": settings.LLM_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": False,
+    }
+
+    for attempt in range(1, _RETRY_TIMES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+
+            if resp.status_code != 200:
+                logger.error(
+                    "%s 返回非200: status=%s content_length=%s",
+                    prompt_name, resp.status_code, len(resp.content),
+                )
+                raise LLMClientError(
+                    f"大模型返回错误（{resp.status_code}）", "llm_bad_status"
+                )
+
+            try:
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+                if not isinstance(content, str) or not content.strip():
+                    raise LLMClientError("大模型返回内容为空", "llm_empty")
+                return content.strip()
+            except LLMClientError:
+                raise
+            except (KeyError, IndexError, ValueError) as e:
+                logger.error("%s 响应解析失败（不记录原文）", prompt_name)
+                raise LLMClientError("大模型响应格式异常", "llm_bad_response") from e
+
+        except LLMClientError:
+            raise  # 业务性错误不重试
+        except _RETRYABLE_EXC as e:
+            logger.warning(
+                "%s 第%s次尝试失败: %s，%s",
+                prompt_name, attempt, type(e).__name__,
+                "重试中" if attempt < _RETRY_TIMES else "放弃",
+            )
+            if attempt == _RETRY_TIMES:
+                if isinstance(e, httpx.TimeoutException):
+                    raise LLMClientError("大模型响应超时，请稍后重试", "llm_timeout") from e
+                raise LLMClientError("无法连接到大模型服务", "llm_unreachable") from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("%s 调用异常", prompt_name)
+            raise LLMClientError("大模型服务暂时不可用", "llm_error") from e
+
+    raise LLMClientError("大模型服务暂时不可用", "llm_error")  # pragma: no cover
+
+
 async def chat(
     messages: List[Dict[str, str]],
     scene: str = "qa",
 ) -> str:
     """
-    调用大模型，返回回复文本。
+    调用大模型，返回回复文本（超时/连接失败自动重试 1 次）。
 
     :param messages: 完整消息列表（含 system / 历史 user+assistant / 当前 user）
     :param scene: 场景 psychological / qa / advice
@@ -86,86 +161,18 @@ async def chat(
     """
     system_prompt = SCENE_SYSTEM_PROMPTS.get(scene, DEFAULT_SYSTEM_PROMPT)
     payload_messages = [{"role": "system", "content": system_prompt}, *messages]
-
-    url = settings.LLM_API_URL.rstrip("/") + "/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {settings.LLM_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": settings.LLM_MODEL,
-        "messages": payload_messages,
-        "temperature": 0.7,
-        "stream": False,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-    except httpx.TimeoutException:
-        logger.warning("LLM 调用超时: url=%s", url)
-        raise LLMClientError("大模型响应超时，请稍后重试", "llm_timeout")
-    except httpx.ConnectError:
-        logger.error("LLM 连接失败: url=%s", url)
-        raise LLMClientError("无法连接到大模型服务", "llm_unreachable")
-    except Exception as e:  # noqa: BLE001
-        logger.exception("LLM 调用异常")
-        raise LLMClientError("大模型服务暂时不可用", "llm_error") from e
-
-    if resp.status_code != 200:
-        logger.error("LLM 返回非 200: status=%s body=%s", resp.status_code, resp.text[:300])
-        raise LLMClientError(f"大模型返回错误（{resp.status_code}）", "llm_bad_status")
-
-    try:
-        data = resp.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, ValueError) as e:
-        logger.error("LLM 响应解析失败: %s", resp.text[:300])
-        raise LLMClientError("大模型响应格式异常", "llm_bad_response") from e
+    return await _post(payload_messages, temperature=0.7, prompt_name="chat")
 
 
 async def chat_plan(user_input: str) -> str:
     """
     生成学习计划，返回原始 JSON 文本（由路由层解析并校验）。
-    user_input 是学生填的表单信息汇总。
 
+    user_input 是学生填的表单信息汇总。
     :raises LLMClientError: 网络/超时/上游错误
     """
     payload_messages = [
         {"role": "system", "content": PLAN_SYSTEM_PROMPT},
         {"role": "user", "content": user_input},
     ]
-    url = settings.LLM_API_URL.rstrip("/") + "/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {settings.LLM_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": settings.LLM_MODEL,
-        "messages": payload_messages,
-        "temperature": 0.5,
-        "stream": False,
-    }
-    try:
-        async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-    except httpx.TimeoutException:
-        logger.warning("chat_plan 调用超时: url=%s", url)
-        raise LLMClientError("学习计划生成超时，请稍后重试", "llm_timeout")
-    except httpx.ConnectError:
-        logger.error("chat_plan 连接失败: url=%s", url)
-        raise LLMClientError("无法连接到大模型服务", "llm_unreachable")
-    except Exception as e:  # noqa: BLE001
-        logger.exception("chat_plan 调用异常")
-        raise LLMClientError("学习计划生成失败", "llm_error") from e
-
-    if resp.status_code != 200:
-        logger.error("chat_plan 非200: status=%s body=%s", resp.status_code, resp.text[:300])
-        raise LLMClientError("学习计划生成失败", "llm_bad_status")
-
-    try:
-        data = resp.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, ValueError) as e:
-        logger.error("chat_plan 响应解析失败: %s", resp.text[:300])
-        raise LLMClientError("学习计划生成失败", "llm_bad_response") from e
+    return await _post(payload_messages, temperature=0.5, prompt_name="chat_plan")

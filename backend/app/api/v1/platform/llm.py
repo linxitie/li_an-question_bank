@@ -144,18 +144,27 @@ async def chat(
 async def list_sessions(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0,
 ):
+    """会话列表，按更新时间倒序；limit 上限 100，默认 50（分页）"""
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    base = db.query(ChatSession).filter(
+        ChatSession.user_id == current_user.user_id,
+        ChatSession.status == 1,
+    )
+    total = base.count()
     rows = (
-        db.query(ChatSession)
-        .filter(
-            ChatSession.user_id == current_user.user_id,
-            ChatSession.status == 1,
-        )
-        .order_by(ChatSession.update_time.desc())
+        base.order_by(ChatSession.update_time.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return {
-        "total": len(rows),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
         "items": [
             {
                 "session_id": s.session_id,

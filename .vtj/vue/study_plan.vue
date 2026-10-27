@@ -83,6 +83,8 @@
 
       <!-- 结果 -->
       <div v-else class="result-area">
+        <!-- 操作错误提示（任务勾选等失败时显示） -->
+        <div v-if="state.error" class="error-tip" style="margin-bottom:12px">{{ state.error }}</div>
         <!-- 阶段卡片 -->
         <div v-if="state.plan.phases && state.plan.phases.length" class="phase-grid">
           <div v-for="(p, i) in state.plan.phases" :key="i" class="phase-card"
@@ -177,7 +179,7 @@
         error: '',
         plan: null,
         daysLeft: 0,
-        streak: 3,
+        streak: 0,
         showAsk: false,
         askText: '',
         askReply: '',
@@ -247,8 +249,8 @@
           const data = await res.json();
           if (res.ok) {
             state.plan = data;
-            const exam = new Date(state.form.exam_date);
-            state.daysLeft = Math.ceil((exam - new Date()) / 86400000);
+            // 用后端返回的剩余天数（向下取整口径），避免 Math.ceil 多算一天
+            state.daysLeft = data.days_left !== undefined ? data.days_left : 0;
           } else {
             state.error = data.detail || '生成失败，请重试';
           }
@@ -268,8 +270,13 @@
             const done = state.plan.tasks.filter(x => x.is_completed === 1).length;
             state.plan.progress.done = done;
             state.plan.progress.percent = Math.round(done / total * 100);
+            state.error = '';
+          } else {
+            state.error = (data && data.detail) || '操作失败，请稍后重试';
           }
-        } catch (e) {}
+        } catch (e) {
+          state.error = '网络异常，操作未生效';
+        }
       }
 
       function reset() {
@@ -316,11 +323,16 @@
           const data = await res.json();
           if (res.ok && data.has_plan) {
             state.plan = data;
-            // 用后端返回的实际考试日期算剩余天数
-            if (data.exam_date) {
-              const exam = new Date(data.exam_date);
-              state.daysLeft = Math.ceil((exam - new Date()) / 86400000);
-            }
+            // 剩余天数以后端计算口径为准
+            state.daysLeft = data.days_left !== undefined ? data.days_left : 0;
+          }
+        } catch (e) {}
+        // 连续打卡：拉真实签到数据（不再硬编码假数据）
+        try {
+          const ck = await window.__VTJ_AUTH__.apiFetch('/api/v1/growth/checkin/status');
+          const ckData = await ck.json();
+          if (ck.ok && ckData && typeof ckData.continuous_days === 'number') {
+            state.streak = ckData.continuous_days;
           }
         } catch (e) {}
       });

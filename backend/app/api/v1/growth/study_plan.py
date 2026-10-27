@@ -126,20 +126,19 @@ async def generate_plan(
     if not isinstance(tips, str):
         tips = ""
 
-    # 5. 重新生成时清理该用户的旧计划（软删，避免脏数据累积）
+    # 5+6+7. 同一事务：软删旧计划 → 生成 plan_id → 批量写新任务 → 统一提交
     db.query(StudyGoal).filter(
         StudyGoal.user_id == current_user.user_id,
         StudyGoal.plan_id.isnot(None),
         StudyGoal.status == 1,
     ).update({StudyGoal.status: 0})
-    db.commit()
 
-    # 6. plan_id：秒级时间戳，冲突则顺延
+    # plan_id：秒级时间戳，冲突则顺延
     plan_id = int(datetime.now().timestamp())
     while db.query(StudyGoal.goal_id).filter(StudyGoal.plan_id == plan_id).first():
         plan_id += 1
 
-    # 7. 批量写 StudyGoal（description 统一存 summary；元数据存 plan_meta）
+    # 元数据统一存 plan_meta；description 存任务原文（不再重复存 summary）
     plan_meta = json.dumps({
         "summary": summary,
         "phases": phases,
@@ -152,7 +151,7 @@ async def generate_plan(
         goal = StudyGoal(
             user_id=current_user.user_id,
             title=f"[{task_time}] {task_name}" if task_time else task_name,
-            description=summary[:500],
+            description=str(t.get("task", ""))[:500],
             goal_type="CUSTOM",
             target_count=1,
             current_count=0,
@@ -228,12 +227,14 @@ async def current_plan(
     exam_date = None
     if tasks and tasks[0].deadline:
         exam_date = tasks[0].deadline.strftime("%Y-%m-%d")
+    days_left = max((tasks[0].deadline - datetime.now()).days, 0) if tasks and tasks[0].deadline else 0
 
     done = sum(1 for t in tasks if t.is_completed == 1)
     return {
         "has_plan": True,
         "plan_id": row.plan_id,
         "exam_date": exam_date,
+        "days_left": days_left,
         "summary": meta.get("summary", ""),
         "phases": meta.get("phases", []),
         "tips": meta.get("tips", ""),
@@ -280,6 +281,55 @@ async def toggle_task(
         goal.current_count = 0
     db.commit()
     return {"goal_id": goal.goal_id, "is_completed": goal.is_completed}
+
+
+@router.get("/{plan_id}/tasks", summary="某计划下所有任务")
+async def plan_tasks(
+    plan_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """按 docstring 承诺实现：读取指定计划的所有任务（含进度与考试日期）"""
+    tasks = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.plan_id == plan_id,
+            StudyGoal.status == 1,
+        )
+        .order_by(StudyGoal.sort_order.asc())
+        .all()
+    )
+    if not tasks:
+        raise HTTPException(status_code=404, detail="计划不存在")
+    meta = {}
+    try:
+        meta = json.loads(tasks[0].plan_meta or "{}")
+    except (json.JSONDecodeError, TypeError):
+        meta = {}
+    exam_date = tasks[0].deadline.strftime("%Y-%m-%d") if tasks[0].deadline else None
+    done = sum(1 for t in tasks if t.is_completed == 1)
+    return {
+        "plan_id": plan_id,
+        "exam_date": exam_date,
+        "summary": meta.get("summary", ""),
+        "phases": meta.get("phases", []),
+        "tips": meta.get("tips", ""),
+        "progress": {
+            "done": done,
+            "total": len(tasks),
+            "percent": round(done / len(tasks) * 100) if tasks else 0,
+        },
+        "tasks": [
+            {
+                "goal_id": t.goal_id,
+                "title": t.title,
+                "is_completed": t.is_completed,
+                "sort_order": t.sort_order,
+            }
+            for t in tasks
+        ],
+    }
 
 
 @router.delete("/{plan_id}", summary="删除整个计划")

@@ -94,6 +94,9 @@
         </div>
       </div>
 
+      <!-- 操作提示（加载/删除失败时显示，发送后自动消失） -->
+      <div v-if="state.notice" class="notice-bar">{{ state.notice }}</div>
+
       <!-- 输入区 -->
       <div class="input-area">
         <div class="input-card">
@@ -126,13 +129,14 @@
     name: 'AiAssistant',
     components: { XIcon },
     setup() {
-      const provider = useProvider({ id: 'ai_chat', version: '20261019004' });
+      const provider = useProvider({ id: 'ai_chat', version: '20261027001' });
       const state = reactive({
         scene: 'qa',
         input: '',
         messages: [],
         sessionId: null,
         loading: false,
+        notice: '',
       });
       const sessions = ref([]);
       const drawerOpen = ref(false);
@@ -190,7 +194,10 @@
           const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/sessions');
           const data = await res.json();
           if (res.ok && data.items) sessions.value = data.items;
-        } catch (e) {}
+          else state.notice = '历史会话加载失败，请稍后刷新';
+        } catch (e) {
+          state.notice = '网络异常，历史会话暂不可用';
+        }
       }
 
       async function loadMessages(sid) {
@@ -200,8 +207,12 @@
           if (hRes.ok && hData.items) {
             state.messages = hData.items.map((m) => ({ role: m.role, content: m.content }));
             scrollToBottom();
+          } else {
+            state.notice = '对话记录加载失败';
           }
-        } catch (e) {}
+        } catch (e) {
+          state.notice = '网络异常，对话记录暂不可用';
+        }
       }
 
       async function openSession(s) {
@@ -229,10 +240,16 @@
       async function removeSession(s) {
         if (!confirm('删除这条对话记录？')) return;
         try {
-          await window.__VTJ_AUTH__.apiFetch(`/api/llm/sessions/${s.session_id}`, { method: 'DELETE' });
+          const r = await window.__VTJ_AUTH__.apiFetch(`/api/llm/sessions/${s.session_id}`, { method: 'DELETE' });
+          if (!r.ok) {
+            state.notice = '删除失败，请稍后重试';
+            return;
+          }
           sessions.value = sessions.value.filter((x) => x.session_id !== s.session_id);
           if (state.sessionId === s.session_id) newChat();
-        } catch (e) {}
+        } catch (e) {
+          state.notice = '网络异常，删除未生效';
+        }
       }
 
       async function typewriter(fullText) {
@@ -257,6 +274,7 @@
       async function send() {
         const text = state.input.trim();
         if (!text || state.loading) return;
+        state.notice = '';
         state.messages.push({ role: 'user', content: text });
         state.input = '';
         state.loading = true;
@@ -527,6 +545,11 @@
   .send-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,42,74,0.3); }
   .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .input-tip { text-align: center; font-size: 11px; color: #aab4c0; margin-top: 6px; }
+  .notice-bar {
+    margin: 0 16px 8px; padding: 8px 12px;
+    background: #fff3f3; color: #c8161e; border-radius: 8px;
+    font-size: 12px;
+  }
   /* 隐藏 VTJ 开发态浮窗按钮 */
   #vtjLink { display: none !important; }
 

@@ -167,7 +167,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
     LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
     LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
-    LLM_TIMEOUT: int = Field(60, env="LLM_TIMEOUT")
+    LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
     LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
     
     @property
