@@ -705,6 +705,6 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 | **资料卡片三端视觉 v2** | `docs/plans/备考资料_资料卡片视觉_细案_v2.md` | PC/平板/手机布局、设计令牌、R3 分工 |
 | **资料卡片导入缺陷报告** | `docs/superpowers/specs/资料卡片导入缺陷_报告_v1.md` | 8 个缺陷（D1 阻断级）+ 实测证据 + 修复顺序 |
 | 预期效果图（科目说明） | `docs/plans/assets/备考资料_科目说明/` | 3 张：PC 列表页 / 弹窗 / 手机端 |
-| 预期效果图（卡片） | `docs/plans/assets/备考资料_卡片/` | 6 张：翻转 / 翻页堆叠 / 字号三档 / PC / 平板 / 手机 |
+| 预期效果图（卡片） | `docs/plans/assets/备考资料_卡片/` | 5 张：翻转 / 翻页堆叠 / 字号三档 / PC / 手机（平板复用手机页，不单独出图） |
 
 > 归档规则见 `AGENTS.md` §1；`solve_problems_files/` 已不存在，故统一归档至 `docs/`。
