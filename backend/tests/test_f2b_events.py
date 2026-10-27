@@ -110,6 +110,7 @@ def test_handler_claims_once_and_pushes_targeted(session, monkeypatch):
     assert users == [7]
     assert kw["domain"] == "exam"
     assert kw["roles"] == ("teacher", "admin")
+    assert kw["outbox_id"] == event.id
 
 
 def test_paper_handler_broadcasts_all_roles(session, monkeypatch):
@@ -128,7 +129,7 @@ def test_paper_handler_broadcasts_all_roles(session, monkeypatch):
     event_handlers.handle_paper_published(session, event)
     session.commit()
     assert calls == [(None, {"domain": "exam", "type": "paper.published",
-                              "id": 42, "roles": ALL_ROLES})]
+                              "id": 42, "roles": ALL_ROLES, "outbox_id": event.id})]
 
 
 def test_record_user_action_writes_outbox_within_caller_transaction(session, monkeypatch):

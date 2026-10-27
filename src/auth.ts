@@ -12,7 +12,15 @@
  */
 
 import { bridgeWsMessageToPapers } from '@/modules/papers/events';
-import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/utils/wsMessage';
+import {
+  acceptSeq,
+  classify,
+  deriveScope,
+  extractOid,
+  extractSyncReply,
+  parseWsMessage,
+  resetSeq
+} from '@/utils/wsMessage';
 
 (function () {
   'use strict';
@@ -178,6 +186,7 @@ import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/ut
         username: username,
         loginTime: Date.now()
       });
+      resetSyncCursor();
       initSyncSocket();
       return { success: true, message: '登录成功' };
     } catch (e: any) {
@@ -197,6 +206,7 @@ import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/ut
       username: username || '',
       loginTime: Date.now()
     });
+    resetSyncCursor();
     initSyncSocket();
     return { success: true, message: '登录成功' };
   }
@@ -215,6 +225,62 @@ import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/ut
   var _syncHeartbeatTimer: number | null = null;
   var _reconnectDelay = 5000; // 重连延迟，指数退避，封顶 60s
   var _syncConnected = false; // 是否已成功连接过：重连时需补一次全量同步
+  var _lastOutboxId: number | null = null; // 已处理到的 Outbox 游标；只存在内存，刷新后首屏即全量
+  var _syncReplayTimer: number | null = null; // sync 补发无回包时的全量兜底定时器
+
+  function clearSyncReplayTimer() {
+    if (_syncReplayTimer) { clearTimeout(_syncReplayTimer); _syncReplayTimer = null; }
+  }
+
+  function resetSyncCursor() {
+    clearSyncReplayTimer();
+    _lastOutboxId = null;
+  }
+
+  function dispatchLegacySync(reason: string) {
+    window.dispatchEvent(
+      new CustomEvent('__VTJ_SYNC__', {
+        detail: { type: 'sync', data: { reason: reason } }
+      })
+    );
+  }
+
+  function dispatchTypedDataChanged(domain: string, type: string, id?: number | string) {
+    window.dispatchEvent(
+      new CustomEvent('__VTJ_DATA_CHANGED__', {
+        detail: { type: 'data-changed', domain: domain, entity: type, id: id }
+      })
+    );
+  }
+
+  /** 只在收到更大的 oid 时推进，乱序/重复不会让游标回退 */
+  function advanceCursor(oid: number | null) {
+    if (oid === null) return;
+    if (_lastOutboxId === null || oid > _lastOutboxId) _lastOutboxId = oid;
+  }
+
+  /** 处理重连补发回复：truncated 全量一次；有事件则兼容旧页 + 逐条 typed；空只推进游标 */
+  function handleSyncReplay(msg: any) {
+    clearSyncReplayTimer();
+    var reply = extractSyncReply(msg);
+    if (!reply) {
+      // 结构非法时按旧服务端处理，避免页面停在过期数据上
+      dispatchLegacySync('ws-reconnect');
+      return;
+    }
+    if (reply.latestOid > 0) advanceCursor(reply.latestOid);
+    if (reply.truncated || reply.reason === 'error' || reply.reason === 'disabled') {
+      dispatchLegacySync('ws-reconnect');
+      return;
+    }
+    if (reply.events.length === 0) return;
+    // 旧页面只认 __VTJ_SYNC__；新页面通过 typed 事件按域刷新
+    dispatchLegacySync('ws-reconnect');
+    for (var i = 0; i < reply.events.length; i++) {
+      var item = reply.events[i];
+      dispatchTypedDataChanged(item.domain, item.type, item.id);
+    }
+  }
 
   /**
    * 建立 WebSocket 同步连接（三端实时同步）
@@ -241,16 +307,24 @@ import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/ut
       _syncConnected = true;
       _reconnectDelay = 5000; // 连接成功，重置退避
       startSyncHeartbeat();
-      if (isReconnect) {
-        // 重连后 seq 可能回退：清空去重表，并补一次全量同步（R19：不服务端补发）
-        resetSeq();
-        window.setTimeout(function () {
-          window.dispatchEvent(
-            new CustomEvent('__VTJ_SYNC__', {
-              detail: { type: 'sync', data: { reason: 'ws-reconnect' } }
-            })
-          );
-        }, 0);
+      if (!isReconnect) return;
+      // 重连后 seq 可能回退，必须先清空去重表
+      resetSeq();
+      if (_lastOutboxId === null) {
+        // 没有游标（首次连接/新登录）与 F2 完全一致：直接一次全量
+        window.setTimeout(function () { dispatchLegacySync('ws-reconnect'); }, 0);
+        return;
+      }
+      // 有游标则请求增量补发；旧服务端不识别 sync，2.5s 后全量兜底
+      try {
+        _syncSocket!.send(JSON.stringify({ type: 'sync', data: { since: _lastOutboxId, limit: 200 } }));
+        clearSyncReplayTimer();
+        _syncReplayTimer = window.setTimeout(function () {
+          _syncReplayTimer = null;
+          dispatchLegacySync('ws-reconnect');
+        }, 2500);
+      } catch (e) {
+        dispatchLegacySync('ws-reconnect');
       }
     };
 
@@ -258,18 +332,20 @@ import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/ut
       var msg = parseWsMessage(ev.data);
       if (!msg) return;
       var kind = classify(msg);
+      // sync 是对点补发回复，不参与广播 seq 去重
+      if (kind === 'sync') {
+        handleSyncReplay(msg);
+        return;
+      }
       if (kind === 'other') return;
       // 同 scope 的旧 seq 直接丢弃，避免重放/乱序导致页面重复刷新
       if (!acceptSeq(deriveScope(msg), msg.seq)) return;
 
-      if (kind === 'sync') {
-        window.dispatchEvent(new CustomEvent('__VTJ_SYNC__', { detail: msg }));
-        return;
-      }
-
       // data-changed：旧页面靠 __VTJ_SYNC__ 兼容刷新，试卷域额外走类型化事件
+      advanceCursor(extractOid(msg));
       window.dispatchEvent(new CustomEvent('__VTJ_SYNC__', { detail: msg }));
       bridgeWsMessageToPapers(msg);
+      if (msg.domain && msg.entity) dispatchTypedDataChanged(msg.domain, msg.entity, msg.id);
     };
 
     _syncSocket.onclose = function (ev) {
@@ -323,6 +399,7 @@ import { acceptSeq, classify, deriveScope, parseWsMessage, resetSeq } from '@/ut
   function closeSyncSocket() {
     if (_syncReconnectTimer) { clearTimeout(_syncReconnectTimer); _syncReconnectTimer = null; }
     _syncConnected = false;
+    resetSyncCursor();
     resetSeq();
     stopSyncHeartbeat();
     if (_syncSocket) {

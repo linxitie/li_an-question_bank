@@ -68,6 +68,7 @@ def handle_user_action(session: Session, event: OutboxEvent) -> None:
             type=route.type,
             id=event.event_id,
             roles=roles,
+            outbox_id=event.id,
         )
     except Exception as exc:  # noqa: BLE001 - 推送失败不影响成就事实
         logger.warning("[f2b] data-changed 推送失败 trigger=%s: %s", trigger_type, exc)
@@ -90,6 +91,7 @@ def handle_paper_published(session: Session, event: OutboxEvent) -> None:
             type="paper.published",
             id=paper_id,
             roles=("student", "teacher", "admin"),
+            outbox_id=event.id,
         )
     except Exception as exc:  # noqa: BLE001 - 推送失败不回滚发布事实
         logger.warning("[f2b] 试卷发布推送失败 paper_id=%s: %s", paper_id, exc)

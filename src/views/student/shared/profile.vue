@@ -188,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
@@ -199,6 +199,7 @@ import {
 import NavBar from '$vtj/vue/navbar.vue';
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
+import { useDataSync } from '@/composables/useDataSync';
 
 const router = useRouter();
 const auth: any = (window as any).__VTJ_AUTH__;
@@ -235,61 +236,41 @@ async function apiGet(url: string) {
   return res.json();
 }
 
-// 练习/目标统计的加载逻辑抽成独立函数：既供首次挂载用，也供
-// __VTJ_SYNC__ 事件触发时重拉，避免两处重复实现。
+// 统计/金币/等级/勋章/掌握度的加载逻辑抽成独立函数：首屏与增量同步共用。
 async function loadStudyData() {
-  const [s, c, l, m] = await Promise.all([
+  const [s, c, l, a, m] = await Promise.all([
     apiGet('/api/stats/'),
     apiGet('/api/coins/overview'),
     apiGet('/api/stats/level'),
+    apiGet('/api/achievements/earned'),
     apiGet('/api/stats/type-mastery'),
   ]);
   stats.value = s;
   coin.value = c;
   level.value = l;
+  earnedCount.value = a.earned_count || 0;
+  earnedBadges.value = (a.items || []).slice(0, 12);
   typeMastery.value = Array.isArray(m) ? m : [];
 }
 
+// ===== 三端实时同步 =====
+// 只订阅会改变个人统计的域；题目导入、资讯发布等事件不再触发整页重拉。
+// 防抖 500ms：连续答题会连发事件，合并为一次刷新。
+useDataSync({
+  domains: ['exam', 'wrong', 'note', 'favorite', 'community', 'news', 'library', 'reward', 'growth', 'user'],
+  debounceMs: 500,
+  handler: () => {
+    loadStudyData().catch(() => { /* 静默：同步刷新失败不影响页面 */ });
+  }
+});
+
 onMounted(async () => {
   try {
-    const [p, s, c, l, a, m] = await Promise.all([
-      apiGet('/api/auth/profile'),
-      apiGet('/api/stats/'),
-      apiGet('/api/coins/overview'),
-      apiGet('/api/stats/level'),
-      apiGet('/api/achievements/earned'),
-      apiGet('/api/stats/type-mastery'),
-    ]);
+    const [p] = await Promise.all([apiGet('/api/auth/profile'), loadStudyData()]);
     user.value = p;
-    stats.value = s;
-    coin.value = c;
-    level.value = l;
-    earnedCount.value = a.earned_count || 0;
-    earnedBadges.value = (a.items || []).slice(0, 12);
-    typeMastery.value = Array.isArray(m) ? m : [];
   } catch (e) {
     console.error('加载个人中心数据失败', e);
   }
-
-  // ===== 三端实时同步 =====
-  // 练习落库后后端会定向广播 sync 事件，auth.ts 转发为 __VTJ_SYNC__。
-  // 只关心练习范围，避免题目导入等事件触发无谓重拉。
-  // 防抖 800ms：连续答题会连发多个事件，合并为一次刷新。
-  let syncTimer: any = null;
-  const onVTJSync = (e: any) => {
-    const d = e && e.detail && e.detail.data;
-    if (d && d.scope && d.scope !== 'practice') return;
-    if (syncTimer) clearTimeout(syncTimer);
-    syncTimer = setTimeout(() => {
-      syncTimer = null;
-      loadStudyData().catch(() => { /* 静默：同步刷新失败不影响页面 */ });
-    }, 800);
-  };
-  window.addEventListener('__VTJ_SYNC__', onVTJSync);
-  onBeforeUnmount(() => {
-    window.removeEventListener('__VTJ_SYNC__', onVTJSync);
-    if (syncTimer) clearTimeout(syncTimer);
-  });
 });
 
 const TIER_COLORS: Record<number, string> = {

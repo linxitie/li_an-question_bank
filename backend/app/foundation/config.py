@@ -25,6 +25,10 @@ FOUNDATION_MAX_ATTEMPTS = int(os.environ.get("FOUNDATION_MAX_ATTEMPTS", "8") or 
 FOUNDATION_VALIDATION_ENABLED = _bool("FOUNDATION_VALIDATION_ENABLED", True)
 # F2b：业务事件写入 Outbox（同事务）。false 时回到 F2 的 events.publish + 同步兜底。
 EVENT_OUTBOX_ENABLED = _bool("EVENT_OUTBOX_ENABLED", True)
+# F2b-2：WS 重连增量补发。false 时服务端明确回 truncated，前端回退全量同步。
+WS_SYNC_REPLAY_ENABLED = _bool("WS_SYNC_REPLAY_ENABLED", True)
+WS_SYNC_MAX_EVENTS = int(os.environ.get("WS_SYNC_MAX_EVENTS", "200") or 200)
+WS_SYNC_MAX_AGE_HOURS = int(os.environ.get("WS_SYNC_MAX_AGE_HOURS", "24") or 24)
 # 同机多 worker 的 Dispatcher 单写者锁；相对路径按 backend/ 解析。
 DISPATCHER_LOCK_PATH = os.environ.get("DISPATCHER_LOCK_PATH") or "./data/foundation/dispatcher.lock"
 

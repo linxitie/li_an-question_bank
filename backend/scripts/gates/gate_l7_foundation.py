@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""L7 底座一致性门禁 — 17 项检查（F1/F2b/F3 落地版）。
+"""L7 底座一致性门禁 — 18 项检查（F1/F2b/F3 落地版）。
 
 严重度约定：
   1-5、8、13、14、16 表缺失 FAIL —— 底座结构/契约/路由/媒体表被破坏，必须阻断；
   6-7、9-12 WARN —— 依赖环境与后续阶段的软检查，先观察后升级；
   15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL；
   17 事件同事务化/定向路由契约缺失 FAIL，调用点数量不足只 WARN；
+  18 断线补发后端契约缺失 FAIL；前端 useDataSync/typed 事件缺失只 WARN；
   16 的存储不可达/对账过期/孤儿只 WARN，不阻断离线开发。
   L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
@@ -659,6 +660,59 @@ def check_f2b_events() -> None:
         _add(17, 'F2b 事件同事务化契约', True, detail, 'FAIL')
 
 
+def check_sync_replay() -> None:
+    """L7-18：断线重连补发契约（F2b-2）。
+
+    后端契约是协议正确性的前提，缺失直接 FAIL；前端接入只影响刷新体验，
+    缺失记 WARN，避免尚未升级的部署被门禁阻断。
+    """
+    missing: list[str] = []
+    soft: list[str] = []
+
+    required = (
+        ('app/foundation/ws_sync.py', ('def replay(', 'latest_oid', 'truncated')),
+        ('app/api/v1/platform/websocket.py',
+         ('SYNC = "sync"', 'handle_sync_request', 'outbox_id')),
+        ('app/services/event_handlers.py', ('outbox_id=event.id',)),
+        ('app/foundation/config.py', ('WS_SYNC_REPLAY_ENABLED',)),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    frontend = (
+        ('src/composables/useDataSync.ts', ('createDataSyncListener', 'useDataSync')),
+        ('src/utils/wsMessage.ts', ('extractSyncReply', 'SyncReplay')),
+        ('src/auth.ts', ('_lastOutboxId', '__VTJ_DATA_CHANGED__')),
+    )
+    for rel_path, needles in frontend:
+        path = WORKSPACE_ROOT / rel_path
+        if not path.exists():
+            soft.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                soft.append(f'{rel_path} 缺少 {needle}')
+
+    detail = '后端补发契约完整'
+    if soft:
+        detail += '；前端：' + '；'.join(soft)
+    if missing:
+        _add(18, '断线补发与前端增量刷新', False,
+             '；'.join(missing) + ('；前端：' + '；'.join(soft) if soft else ''), 'FAIL')
+    elif soft:
+        _add(18, '断线补发与前端增量刷新', False, detail, 'WARN')
+    else:
+        _add(18, '断线补发与前端增量刷新', True, detail, 'FAIL')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -670,7 +724,7 @@ CHECKS = (
     check_migrations, check_health_switch, check_reconcile, check_routes_roles,
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
-    check_media_store, check_f2b_events,
+    check_media_store, check_f2b_events, check_sync_replay,
 )
 
 
