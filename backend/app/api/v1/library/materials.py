@@ -840,7 +840,13 @@ async def import_preview(import_id: int,
         raise HTTPException(409, f"尚未解析成功: {rec.parse_status}")
     result = _load_result(rec)
     result.pop("_tmp", None)   # 不向前端泄露服务器路径
-    return {"file_type": rec.file_type, "result": result}
+    payload = {"file_type": rec.file_type, "result": result}
+    # D3 澄清：parse_xlsx 已把表头拆进 headers，rows 只含数据行；
+    # 这里回传 headers/row_count，管理员可确认表头是否被正确识别。
+    if rec.file_type == "xlsx":
+        payload["headers"] = result.get("headers") or []
+        payload["row_count"] = len(result.get("rows") or [])
+    return payload
 
 
 @router.post("/admin/import/{import_id}/confirm", summary="确认入库(status=0下架态)")
@@ -861,6 +867,8 @@ async def import_confirm(import_id: int, body: dict,
     badge = body.get("badge")
     result = _load_result(rec)
     created_ids = []
+    skipped: list = []          # D4：重复/无效行明细，回传给前端
+    publish = bool(body.get("publish"))   # D2：导入即上线（默认 false）
 
     if rec.file_type == "xlsx":
         mapping = body.get("column_mapping") or {}
@@ -875,7 +883,14 @@ async def import_confirm(import_id: int, body: dict,
         # preview 只回传前200行；confirm 从原始文件重读全量行
         full = parse_xlsx(result["_tmp"], max_rows=CARD_ROW_LIMIT) \
             if result.get("_tmp") and _Path(result["_tmp"]).exists() else result
-        cards = build_cards(full.get("rows", []), col_front, col_back, col_cat,
+        raw_rows = list(full.get("rows") or [])
+        # D5：build_cards 会静默丢弃正面或背面为空的行，这里先算出来回报
+        invalid_rows = [
+            i for i, r in enumerate(raw_rows, start=1)
+            if not (r[col_front].strip() if col_front < len(r) else "")
+            or not (r[col_back].strip() if col_back < len(r) else "")
+        ]
+        cards = build_cards(raw_rows, col_front, col_back, col_cat,
                             limit=CARD_ROW_LIMIT)
         if not cards:
             raise HTTPException(400, "按当前列映射未得到有效卡片（正反面均不能为空）")
@@ -889,6 +904,7 @@ async def import_confirm(import_id: int, body: dict,
             dup_check = deduplicator.check_duplicate(combined, db)
             if dup_check["is_duplicate"]:
                 import_monitor.record_duplicate_match()
+                skipped.append({"row": idx, "reason": "duplicate"})
                 continue  # 跳过重复内容
             # 类型由「正/背面双列」这一输入契约唯一确定，不再交给启发式分类器：
             # 分类器只看扩展名+标题关键词，卡片正文短会判成 article，导致卡片
@@ -900,7 +916,7 @@ async def import_confirm(import_id: int, body: dict,
                 title=card_front, card_front=card_front,
                 card_back=card_back,
                 content_hash=content_hash,
-                sort_order=idx, status=0,
+                sort_order=idx, status=(1 if publish else 0),
                 creator_id=current_user.user_id)
             db.add(m)
             db.flush()          # 立即取自增主键，避免 commit 前为 None
@@ -949,4 +965,11 @@ async def import_confirm(import_id: int, body: dict,
     _audit(db, current_user, "import_confirm", f"import:{import_id}",
            f"导入 {len(created_ids)} 条资料")
     db.commit()
-    return {"created": len(created_ids), "material_ids": created_ids}
+    resp = {"created": len(created_ids), "material_ids": created_ids,
+            "type": ("card" if rec.file_type == "xlsx" else "article"),
+            "published": publish}
+    if rec.file_type == "xlsx":
+        resp["invalid_rows"] = invalid_rows
+        resp["skipped"] = skipped
+        resp["skipped_count"] = len(skipped) + len(invalid_rows)
+    return JSONResponse(resp)
