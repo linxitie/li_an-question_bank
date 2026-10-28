@@ -711,3 +711,15 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 | 预期效果图（卡片） | `docs/plans/assets/备考资料_卡片/` | 5 张：翻转 / 翻页堆叠 / 字号三档 / PC / 手机（平板复用手机页，不单独出图） |
 
 > 归档规则见 `AGENTS.md` §1；`solve_problems_files/` 已不存在，故统一归档至 `docs/`。
+
+---
+
+## 备考资料模块 · 卡片与分享 方案索引（2026-10-27）
+
+| 文档 | 位置 | 说明 |
+|---|---|---|
+| **卡片与分享 总体解决方案 v1** | `docs/superpowers/specs/备考资料_卡片与分享_总体解决方案_v1.md` | 六批次路线（B1 个人库→B2 分享→B3 配图→B4 手机栈→B5 PC 页→B6 内容）、写码前 11 问自检、风险 R-1~R-6、待决 Q1–Q10 |
+| 卡片 v5 设计 | `docs/plans/备考资料_卡片v5_堆叠3D与分享_设计方案_v1.md` | 堆叠口径修正、3D 视差、配图上传、分享表设计 |
+| 卡片 v5 效果图 | `docs/plans/assets/备考资料_卡片_v5/` | 2 张：5 层堆叠+配图卡、3D 视差说明 |
+| 卡片 v4 效果图 | `docs/plans/assets/备考资料_卡片_v4/` | 7 张：三端进入页、行测 TAB、申论长文本、公专配图、动效四阶段 |
+| 导入缺陷与修复 | `docs/superpowers/specs/资料卡片导入缺陷_报告_v1.md`、`…D2-D5修复_报告_20261027.md` | D1–D8 台账（D3 已勘误）、D2/D4/D5 修复 |

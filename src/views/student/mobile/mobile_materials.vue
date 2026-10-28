@@ -18,6 +18,51 @@
       </div>
     </div>
 
+      <!-- 卡片栈（B4）：5 层堆叠 + 3D 翻转 + 上一张/下一张 + 字号三档 -->
+      <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
+        <div class="stack" :class="{ 'is-flipped': flipped }">
+          <div
+            v-for="(c, i) in stackCards"
+            :key="c.id"
+            class="stack-card"
+            :class="'lv' + i"
+            :style="layerStyle(i)"
+            @click="i === 0 && flip()"
+          >
+            <div class="card-inner">
+              <div class="card-face front">
+                <div class="card-head">
+                  <span class="tag">{{ c.category || '资料卡' }}</span>
+                  <span class="idx">{{ cardIndex + 1 }} / {{ cardItems.length }}</span>
+                </div>
+                <h3 class="card-title">{{ c.title }}</h3>
+                <p class="card-text">{{ c.card_front || c.title }}</p>
+                <div class="card-foot"><span class="hint">点击卡片翻转看要点</span></div>
+              </div>
+              <div class="card-face back">
+                <div class="card-head">
+                  <span class="tag">要点</span>
+                  <span class="idx">背面</span>
+                </div>
+                <p class="card-text">{{ c.card_back || '暂无背面内容' }}</p>
+                <div class="card-foot"><span class="hint">点击翻回正面</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="stack-bar">
+          <button :disabled="cardIndex <= 0" @click="prevCard">上一张</button>
+          <button class="primary" @click="flip">{{ flipped ? '再翻一遍' : '翻转看要点' }}</button>
+          <button :disabled="cardIndex >= cardItems.length - 1" @click="nextCard">下一张</button>
+        </div>
+        <div class="font-row">
+          <span>字号</span>
+          <button :class="{ on: fontScale === 0.9 }" @click="setScale(0.9)">A-</button>
+          <button :class="{ on: fontScale === 1 }" @click="setScale(1)">A</button>
+          <button :class="{ on: fontScale === 1.15 }" @click="setScale(1.15)">A+</button>
+        </div>
+      </section>
+
     <main class="list">
       <div v-for="m in materials" :key="m.id" class="card" @click="toggleDetail(m)">
         <div class="m-title">{{ m.title }}</div>
@@ -80,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
@@ -179,6 +224,44 @@ const openDetail = async (m: any) => {
   detailVisible.value = true;
   await loadDetail(m.id);
 };
+
+// ===== B4 卡片栈：5 层堆叠 + 翻转 + 切换 + 字号 =====
+const STACK_LAYERS = 5;
+const cardIndex = ref(0);
+const flipped = ref(false);
+const fontScale = ref(1);
+
+const cardItems = computed(() =>
+  (materials.value as any[]).filter((m) => m.type === 'card' && m.card_front)
+);
+const stackCards = computed(() =>
+  cardItems.value.slice(cardIndex.value, cardIndex.value + STACK_LAYERS)
+);
+const flip = () => {
+  if (cardItems.value.length) flipped.value = !flipped.value;
+};
+const nextCard = () => {
+  if (cardIndex.value < cardItems.value.length - 1) {
+    flipped.value = false;
+    cardIndex.value += 1;
+  }
+};
+const prevCard = () => {
+  if (cardIndex.value > 0) {
+    flipped.value = false;
+    cardIndex.value -= 1;
+  }
+};
+const setScale = (v: number) => {
+  fontScale.value = v;
+};
+// 后层：逐层上移 15px、右移 11px、缩放 -1.2%，投影在 CSS 里按层号递减
+const layerStyle = (i: number) => ({
+  transform: `translate(${i * 11}px, ${-i * 15}px) scale(${1 - 0.012 * i})`,
+  zIndex: 10 - i,
+  opacity: 1 - i * 0.04
+});
+const stackStyle = computed(() => ({ '--sm-font-scale': String(fontScale.value) }));
 
 onMounted(fetchMaterials);
 </script>
@@ -415,4 +498,57 @@ onMounted(fetchMaterials);
 .action-btn:active {
   opacity: 0.85;
 }
+
+/* ===== B4 卡片栈：5 层堆叠 + 3D 翻转 + 字号变量 ===== */
+.stack-wrap { padding: 14px 16px 4px; }
+.stack { position: relative; height: 252px; perspective: 1200px; }
+.stack-card {
+  position: absolute; left: 0; right: 0; top: 22px; height: 230px;
+  border-radius: 16px; background: #fff; border: 1px solid #eef1f6;
+  box-shadow: 0 6px 18px rgba(26, 42, 74, 0.10);
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+}
+.stack-card.lv1 { box-shadow: 0 5px 14px rgba(26, 42, 74, 0.07); background: #fdfdff; }
+.stack-card.lv2 { box-shadow: 0 4px 12px rgba(26, 42, 74, 0.05); background: #fbfcff; }
+.stack-card.lv3 { box-shadow: 0 3px 10px rgba(26, 42, 74, 0.04); background: #f9fbff; }
+.stack-card.lv4 { box-shadow: 0 2px 8px rgba(26, 42, 74, 0.03); background: #f8faff; }
+.stack-card.lv0 { cursor: pointer; }
+.card-inner {
+  position: relative; width: 100%; height: 100%;
+  transition: transform 0.4s ease; transform-style: preserve-3d;
+}
+.stack.is-flipped .stack-card.lv0 .card-inner { transform: rotateY(180deg); }
+.card-face {
+  position: absolute; inset: 0; padding: 14px 16px;
+  display: flex; flex-direction: column;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  border-radius: 16px;
+}
+.card-face.back { transform: rotateY(180deg); background: #f7fbff; }
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.idx { font-size: 11px; color: #66738a; }
+.card-title {
+  font-size: calc(17px * var(--sm-font-scale, 1)); font-weight: 700;
+  color: #1a2a4a; margin: 0 0 8px; line-height: 1.4;
+}
+.card-text {
+  font-size: calc(13px * var(--sm-font-scale, 1)); line-height: 1.65;
+  color: #4a5a75; margin: 0; flex: 1; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.card-foot { margin-top: 8px; }
+.hint { font-size: 11px; color: #3b82f6; }
+.stack-bar { display: flex; gap: 10px; margin-top: 12px; }
+.stack-bar button {
+  flex: 1; height: 44px; border-radius: 10px; border: 1px solid #eef1f6;
+  background: #fff; color: #5a6b85; font-size: 13px;
+}
+.stack-bar button.primary { background: #3b82f6; border-color: #3b82f6; color: #fff; font-weight: 600; }
+.stack-bar button:disabled { opacity: 0.45; }
+.font-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-size: 12px; color: #8899aa; }
+.font-row button {
+  height: 30px; min-width: 44px; border-radius: 8px;
+  border: 1px solid #eef1f6; background: #fff; color: #5a6b85;
+}
+.font-row button.on { border-color: #3b82f6; color: #3b82f6; }
 </style>

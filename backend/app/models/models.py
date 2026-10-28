@@ -1273,6 +1273,7 @@ class StudyMaterial(Base):
     view_count = Column(Integer, default=0, comment="浏览量")
     study_count = Column(Integer, default=0, comment="完成人数")
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="创建人")
+    source_material_id = Column(BigInteger, comment="领取来源卡片ID(自建为空)")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
     content_hash = Column(String(64), comment="内容MD5哈希(去重用)")
@@ -1966,4 +1967,38 @@ class UserFeedback(Base):
         Index("idx_feedback_user", user_id),
         Index("idx_feedback_status", status),
         Index("idx_feedback_created", created_at),
+    )
+
+class MaterialShare(Base):
+    """资料卡分享记录（B2）：一张卡同时最多一条分享。"""
+
+    __tablename__ = "material_share"
+
+    share_id = Column(Integer, primary_key=True, autoincrement=True)
+    material_id = Column(BigInteger, nullable=False, comment="源卡片ID")
+    owner_id = Column(BigInteger, nullable=False, comment="分享者ID")
+    scope = Column(String(20), default="public", comment="public/org")
+    status = Column(Integer, default=1, comment="1可领取/0已撤回")
+    adopted_count = Column(Integer, default=0, comment="被领取次数")
+    create_time = Column(DateTime, default=datetime.now, comment="分享时间")
+
+    __table_args__ = (
+        Index("ux_material_share_material", material_id, unique=True),
+        Index("idx_material_share_owner", owner_id),
+    )
+
+
+class MaterialAdoptLog(Base):
+    """领取记录（B2）：每人每分享仅一次。"""
+
+    __tablename__ = "material_adopt_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    share_id = Column(Integer, nullable=False, comment="分享ID")
+    user_id = Column(BigInteger, nullable=False, comment="领取人")
+    created_id = Column(BigInteger, nullable=False, comment="复制出的新卡ID")
+    create_time = Column(DateTime, default=datetime.now, comment="领取时间")
+
+    __table_args__ = (
+        Index("ux_adopt_share_user", share_id, user_id, unique=True),
     )
