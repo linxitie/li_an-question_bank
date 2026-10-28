@@ -15,6 +15,7 @@ from .core.config import settings
 from .core.redis_client import get_redis, close_redis
 from .api.v1.platform import llm
 from .api.v1 import agent
+from .api.v1 import knowledge
 from .api.v1.catalog import questions, papers, question_actions, wrong_questions
 from .api.v1.exam import exams, stats, practice, exam_records, quick_practice, smart_exam
 from .api.v1.library import videos, media
@@ -713,6 +714,7 @@ app.include_router(videos.router)
 app.include_router(llm.router)
 app.include_router(study_plan.router)
 app.include_router(agent.router)
+app.include_router(knowledge.router)
 app.include_router(profile.router)
 app.include_router(goals.router)
 app.include_router(stats.router)

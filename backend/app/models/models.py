@@ -2057,6 +2057,42 @@ class UserMemory(Base):
     )
 
 
+class KnowledgeNode(Base):
+    """模块7 Phase3 - 知识库节点（Obsidian 自生长知识库入库后的图谱节点）"""
+    __tablename__ = "knowledge_node"
+
+    node_id = Column(Integer, primary_key=True, autoincrement=True, comment="节点ID")
+    title = Column(String(200), nullable=False, comment="节点标题")
+    category = Column(String(30), default="exam_point", comment="分类: law/recruit/exam_point/wrong")
+    content = Column(Text, comment="节点内容（Markdown）")
+    source = Column(String(200), comment="来源（vault 路径/链接）")
+    status = Column(String(20), default="pending", comment="状态: pending/approved")
+    submitter_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=True, comment="提交人")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        Index("idx_knowledge_category", category),
+        Index("idx_knowledge_status", status),
+    )
+
+
+class KnowledgeRelation(Base):
+    """模块7 Phase3 - 知识图谱关系（轻量边）"""
+    __tablename__ = "knowledge_relation"
+
+    rel_id = Column(Integer, primary_key=True, autoincrement=True, comment="关系ID")
+    from_node = Column(Integer, ForeignKey("knowledge_node.node_id"), nullable=False, comment="源节点")
+    to_node = Column(Integer, ForeignKey("knowledge_node.node_id"), nullable=False, comment="目标节点")
+    rel_type = Column(String(30), default="related", comment="关系: related/contains/leads_to")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_knowledge_rel_from", from_node),
+        Index("idx_knowledge_rel_to", to_node),
+    )
+
+
 class UserProfile(Base):
     """模块4 v2 - 用户备考画像表（注册/画像问卷采集，供 PlanAgent 推理）"""
     __tablename__ = "user_profile"
