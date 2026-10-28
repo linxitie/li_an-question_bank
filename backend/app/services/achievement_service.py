@@ -18,6 +18,7 @@ from ..models.models import (
     SysUser, UserAchievement, Achievement, PracticeRecord,
     WrongQuestionPersonal, ForumPost, ForumComment, FavoriteQuestion,
     QuestionNote, NewsNote, QuoteFavorite, DailyCheckin,
+    UserMaterialProgress,
 )
 from ..core.trigger_types import LEGACY_TRIGGER_ALIASES
 from .growth_service import get_level_info

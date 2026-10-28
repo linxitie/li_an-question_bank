@@ -155,10 +155,13 @@ def _grant_read_rewards(db: Session, user: SysUser, material: StudyMaterial) -> 
     try:
         from ....services.achievement_service import check_and_grant
         for d in check_and_grant(user.user_id, "material", db) or []:
-            ach = d.get("achievement")
-            unlocked.append({"name": getattr(ach, "name", ""),
-                             "tier": d.get("tier", 1),
-                             "coins": getattr(ach, "reward_coins", 0)})
+            # check_and_grant 的返回结构随版本而异：兼容 {achievement: obj} 与扁平字典
+            ach = d.get("achievement") if isinstance(d, dict) else None
+            name = getattr(ach, "name", None) or (d.get("name") if isinstance(d, dict) else "") or ""
+            coins = (getattr(ach, "reward_coins", None)
+                     or (d.get("coins") if isinstance(d, dict) else 0) or 0)
+            unlocked.append({"name": name, "tier": d.get("tier", 1) if isinstance(d, dict) else 1,
+                             "coins": coins})
     except Exception as e:  # 成就失败不影响阅读
         logger.warning("[materials] achievement trigger failed: %s", repr(e))
 
