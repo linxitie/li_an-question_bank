@@ -60,6 +60,10 @@
             <span>{{ s.label }}</span>
           </div>
         </div>
+        <div v-if="state.agentName" class="agent-bar">
+          <span class="agent-dot"></span>
+          <span class="agent-label">当前顾问：{{ state.agentName }}</span>
+        </div>
       </div>
 
       <!-- 消息流 -->
@@ -137,6 +141,7 @@
         sessionId: null,
         loading: false,
         notice: '',
+        agentName: '', // 模块7 v2：当前路由命中的专业 Agent
       });
       const sessions = ref([]);
       const drawerOpen = ref(false);
@@ -290,6 +295,7 @@
           state.loading = false;
           if (res.ok && data.reply) {
             state.sessionId = data.session_id;
+            state.agentName = data.agent_name || '';
             await typewriter(data.reply);
             loadSessions();
           } else {
@@ -466,6 +472,13 @@
     cursor: pointer; transition: all 0.2s;
   }
   .scene-tab.active { background: #c8161e; border-color: #c8161e; color: #fff; box-shadow: 0 4px 10px rgba(200,22,30,0.35); }
+  .agent-bar {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+    padding: 4px 12px; border-radius: 14px; font-size: 12px;
+    background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.16); width: fit-content;
+  }
+  .agent-dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; }
 
   .message-list { flex: 1; overflow-y: auto; padding: 18px; }
   .welcome-card {

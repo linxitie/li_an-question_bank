@@ -109,9 +109,29 @@ async def chat(
     # 3. 加载历史（含刚写入的用户消息）
     history = _load_history(session.session_id, db)
 
-    # 4. 调大模型
+    # 4. 多 Agent 路由 + 档案上下文装配（模块7 v2；心理场景直接走心理 Agent）
+    from ....services.agent_router import route_agent, agent_system_prompt, assemble_context, extract_memories
+
+    agent_id, agent_name, route_score = route_agent(req.message)
+    if req.scene == "psychological" or agent_id == "psychology":
+        agent_id = "psychology"
+        agent_name = "心理辅导"
+    extra_parts = []
+    agent_prompt = agent_system_prompt(agent_id)
+    if agent_prompt:
+        extra_parts.append(agent_prompt)
     try:
-        reply = await llm_client.chat(messages=history, scene=req.scene)
+        ctx = assemble_context(current_user.user_id, db)
+        if ctx:
+            extra_parts.append(ctx)
+        extract_memories(current_user.user_id, db)  # 画像 → 长期记忆（幂等）
+    except Exception as e:
+        logger.warning("档案上下文装配失败: %s", e)
+    extra_system = "\n\n".join(extra_parts)
+
+    # 5. 调大模型
+    try:
+        reply = await llm_client.chat(messages=history, scene=req.scene, extra_system=extra_system)
     except llm_client.LLMClientError as e:
         logger.warning("联考小智调用失败: %s", e.message)
         # 回滚已持久化的用户消息，避免留下"无回复的悬空消息"
@@ -137,6 +157,8 @@ async def chat(
         "reply": reply,
         "session_id": session.session_id,
         "scene": session.scene,
+        "agent": agent_id,
+        "agent_name": agent_name,
     }
 
 
@@ -237,3 +259,41 @@ async def delete_session(
     session.update_time = datetime.now()
     db.commit()
     return {"message": "会话已删除"}
+
+
+@router.get("/context/assemble", summary="档案上下文预览（带着档案来对话）")
+async def assemble_context_api(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回装配好的档案上下文块 + 长期记忆清单（前端可展示'我的档案'）"""
+    from ....services.agent_router import assemble_context, extract_memories
+    from ....models.models import UserMemory
+
+    ctx = ""
+    try:
+        ctx = assemble_context(current_user.user_id, db)
+        extract_memories(current_user.user_id, db)
+    except Exception as e:
+        logger.warning("档案上下文装配失败: %s", e)
+
+    memories = (
+        db.query(UserMemory)
+        .filter(UserMemory.user_id == current_user.user_id)
+        .order_by(UserMemory.create_time.desc())
+        .all()
+    )
+    return {
+        "has_profile": bool(ctx),
+        "context": ctx,
+        "memories": [
+            {
+                "memory_id": m.memory_id,
+                "memory_type": m.memory_type,
+                "content": m.content,
+                "source": m.source,
+                "update_time": m.update_time.isoformat() if m.update_time else None,
+            }
+            for m in memories
+        ],
+    }

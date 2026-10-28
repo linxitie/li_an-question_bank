@@ -2037,6 +2037,26 @@ class UserNotify(Base):
     )
 
 
+class UserMemory(Base):
+    """模块7 v2 - 长期记忆表（关键事实：目标分数/弱项/承诺行动/里程碑等）"""
+    __tablename__ = "user_memory"
+
+    memory_id = Column(Integer, primary_key=True, autoincrement=True, comment="记忆ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    memory_type = Column(String(30), default="fact", comment="类型: goal_score/weak_subject/daily_hours/exam_date/grade/action/milestone")
+    content = Column(String(500), nullable=False, comment="记忆内容")
+    source = Column(String(30), default="profile", comment="来源: profile/plan/agent/manual")
+    expire_at = Column(DateTime, nullable=True, comment="过期时间（可空=长期有效）")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_memory_user_type", user_id, memory_type),
+    )
+
+
 class UserProfile(Base):
     """模块4 v2 - 用户备考画像表（注册/画像问卷采集，供 PlanAgent 推理）"""
     __tablename__ = "user_profile"

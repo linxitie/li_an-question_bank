@@ -150,16 +150,20 @@ async def _post(
 async def chat(
     messages: List[Dict[str, str]],
     scene: str = "qa",
+    extra_system: str = "",
 ) -> str:
     """
     调用大模型，返回回复文本（超时/连接失败自动重试 1 次）。
 
     :param messages: 完整消息列表（含 system / 历史 user+assistant / 当前 user）
     :param scene: 场景 psychological / qa / advice
+    :param extra_system: 附加 system 内容（如 Agent 路由提示 + 档案上下文），拼在场景提示之后
     :return: 大模型回复文本
     :raises LLMClientError: 网络/超时/上游错误
     """
     system_prompt = SCENE_SYSTEM_PROMPTS.get(scene, DEFAULT_SYSTEM_PROMPT)
+    if extra_system:
+        system_prompt = system_prompt + "\n\n" + extra_system
     payload_messages = [{"role": "system", "content": system_prompt}, *messages]
     return await _post(payload_messages, temperature=0.7, prompt_name="chat")
 
