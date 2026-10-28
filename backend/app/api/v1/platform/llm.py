@@ -133,6 +133,26 @@ async def chat(
             extra_parts.append(kb)
     except Exception as e:
         logger.warning("知识库检索失败: %s", e)
+    # 对话自动记忆（长期陪伴：意向地区/时间投入/目标分数规则提取，幂等）
+    try:
+        from ....services.agent_router import extract_chat_memory
+        extract_chat_memory(current_user.user_id, db, req.message)
+    except Exception as e:
+        logger.warning("对话记忆提取失败: %s", e)
+    # 选岗对话：岗位库实时数据注入
+    if agent_id == "choose_post":
+        try:
+            from ....models.models import PolicePost
+            pq = db.query(PolicePost).filter(PolicePost.status == 1).limit(8)
+            posts = pq.all()
+            if posts:
+                lines = [
+                    f"{p.region} · {p.post_type} · 招{p.plan_count}人 · 竞争比{p.ratio or '待公布'} · 学历{p.education} · 专业{p.profession}"
+                    for p in posts
+                ]
+                extra_parts.append("【岗位库实时数据】命中岗位（以官方公告为准）：\n" + "\n".join(lines))
+        except Exception as e:
+            logger.warning("岗位库检索失败: %s", e)
     extra_system = "\n\n".join(extra_parts)
 
     # 5. 调大模型

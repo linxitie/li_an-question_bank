@@ -866,6 +866,29 @@ class PlanAdjustment(Base):
     )
 
 
+class PolicePost(Base):
+    """模块7 v2 - 公安联考岗位库（选岗顾问数据支撑）"""
+    __tablename__ = "police_post"
+
+    post_id = Column(Integer, primary_key=True, autoincrement=True, comment="岗位ID")
+    region = Column(String(60), comment="招录地区/单位")
+    post_type = Column(String(30), comment="岗位类型：综合/执法/技术")
+    profession = Column(String(120), comment="专业要求（可含多个，顿号分隔）")
+    education = Column(String(30), comment="学历要求")
+    sex_require = Column(String(20), comment="性别要求：不限/男/女")
+    plan_count = Column(Integer, default=0, comment="招录人数")
+    ratio = Column(String(30), comment="竞争比（如 1:12）")
+    source = Column(String(200), comment="数据来源（官方公告等）")
+    status = Column(Integer, default=1, comment="1有效/0停用")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_post_region", region),
+        Index("idx_post_type", post_type),
+        Index("idx_post_education", education),
+    )
+
+
 # ------------------------------
 # 媒体资源模型
 # ------------------------------

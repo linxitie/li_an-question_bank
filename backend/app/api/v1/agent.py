@@ -67,6 +67,9 @@ AGENT_TASKS: List[Dict] = [
         "desc": "结合你的画像档案，给出岗位筛选思路与竞争分析建议",
         "fields": [
             {"key": "region", "label": "意向地区（选填）", "type": "text", "required": False, "placeholder": "如：山东、北京"},
+            {"key": "profession", "label": "专业（选填）", "type": "text", "required": False, "placeholder": "如：数据警务技术"},
+            {"key": "education", "label": "学历（选填）", "type": "select", "required": False,
+             "options": ["不限", "本科", "硕士", "博士"]},
         ],
     },
 ]
@@ -239,6 +242,34 @@ async def run_agent_task(
             extra = extra + "\n\n" + kb
     except Exception as e:
         logger.warning("知识库检索失败: %s", e)
+
+    # 选岗任务：岗位库数据支撑（按意向地区/专业/学历筛选真实岗位）
+    if task["task_id"] == "choose_post_advice":
+        try:
+            from ...models.models import PolicePost
+            pq = db.query(PolicePost).filter(PolicePost.status == 1)
+            region = req.params.get("region", "")
+            profession = req.params.get("profession", "")
+            education = req.params.get("education", "")
+            if region:
+                pq = pq.filter(PolicePost.region.like(f"%{region}%"))
+            if profession and profession != "不限":
+                pq = pq.filter(PolicePost.profession.like(f"%{profession}%"))
+            if education and education != "不限":
+                pq = pq.filter(PolicePost.education.like(f"%{education}%"))
+            posts = pq.order_by(PolicePost.plan_count.desc()).limit(8).all()
+            if posts:
+                lines = []
+                for p in posts:
+                    lines.append(
+                        f"{p.region} · {p.post_type} · 招{p.plan_count}人 · "
+                        f"竞争比{p.ratio or '待公布'} · 学历{p.education} · 专业{p.profession} · 性别{p.sex_require}"
+                    )
+                extra = extra + "\n\n【岗位库实时数据】当前筛选命中 {n} 条（以官方公告为准）：\n{rows}".format(
+                    n=len(posts), rows="\n".join(lines)
+                )
+        except Exception as e:
+            logger.warning("岗位库检索失败: %s", e)
 
     try:
         reply = await llm_client.chat(

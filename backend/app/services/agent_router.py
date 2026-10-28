@@ -345,6 +345,51 @@ def extract_memories(user_id: int, db):
     return written
 
 
+def extract_chat_memory(user_id: int, db, message: str) -> int:
+    """
+    对话自动记忆（长期陪伴）：从用户消息中规则提取稳定偏好/目标写入 UserMemory。
+    零 LLM、幂等（同内容不重复写）。返回本次写入条数。
+    覆盖：意向地区/岗位、每周每天可投入时间、目标分数调整。
+    """
+    import re
+    from ..models.models import UserMemory
+
+    if not message or not message.strip():
+        return 0
+    msg = message.strip()[:200]
+    patterns = [
+        # 意向地区/城市/岗位
+        (r"(意向|想|打算|希望)(去|在|考)?(地区|城市|岗位|工作)?(是|为|定在|在)?[：:\s]*(山东|北京|上海|天津|河北|河南|山西|江苏|浙江|安徽|福建|江西|湖南|湖北|广东|广西|海南|四川|重庆|贵州|云南|西藏|陕西|甘肃|青海|宁夏|新疆|内蒙古|辽宁|吉林|黑龙江|廊坊|济南|青岛|烟台|潍坊|石家庄|唐山|保定|邯郸|郑州|洛阳|开封|南京|苏州|无锡|徐州|杭州|宁波|温州|嘉兴|福州|厦门|广州|深圳|珠海|武汉|长沙|成都|西安|兰州|西宁|银川|乌鲁木齐|呼和浩特|沈阳|大连|长春|哈尔滨)", "意向地区"),
+        # 每周/每天可学时间
+        (r"(每周|每天|每日|一天|一天能)\s*(能|可)?\s*(学|学习|复习|刷题|安排|投入)?\s*(\d+)\s*(小时|分钟)", "时间投入"),
+        # 目标分数调整
+        (r"(目标|想考)(分数|总分|分)\s*(到|为|在)?\s*(\d+)", "目标分数"),
+        # 想考的岗位类型
+        (r"(想|意向|打算)(考|报)?\s*(综合|执法|技术|网安|技侦|经侦|刑侦|治安|特警|交警|监所|文职)\s*(岗|职位|岗位)?", "岗位意向"),
+    ]
+    written = 0
+    for pattern, tag in patterns:
+        m = re.search(pattern, msg)
+        if not m:
+            continue
+        content = f"{tag}：{m.group(0)[:40]}"
+        exists = (
+            db.query(UserMemory)
+            .filter(UserMemory.user_id == user_id, UserMemory.content == content)
+            .first()
+        )
+        if exists:
+            continue
+        db.add(UserMemory(
+            user_id=user_id, memory_type="pref", content=content,
+            source="chat-auto",
+        ))
+        written += 1
+    if written:
+        db.commit()
+    return written
+
+
 # ==================== 知识库检索（Phase3 自生长知识库接入） ====================
 # 从 approved 知识节点按关键词打分召回，只取摘要（控制 token），带出处
 
