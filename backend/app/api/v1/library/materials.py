@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
 from ....core.trigger_types import TRIGGER_MATERIAL_OPENED
-from ....models.models import StudyMaterial, UserMaterialProgress, SysUser
+from ....models.models import (StudyMaterial, UserMaterialProgress, SysUser,
+                               MaterialShare, MaterialAdoptLog)
 from ....services.event_consumer import record_user_action
 
 router = APIRouter(prefix="/api/materials", tags=["备考资料"])
@@ -305,6 +306,150 @@ async def batch_image(files: List[UploadFile] = File(...),
     _audit(db, current_user, "batch_image", f"count:{len(images)}", None)
     db.commit()
     return {"images": images, "count": len(images)}
+
+
+
+
+# ==================== 分享与领取（B2：复制语义） ====================
+_SHARE_COPY_FIELDS = ("subject", "type", "category", "title", "summary", "content",
+                      "card_front", "card_back", "cover_image", "video_id",
+                      "duration", "read_time", "difficulty", "badge", "sort_order")
+
+
+def _get_share(material_id: int, db: Session):
+    return db.query(MaterialShare).filter(
+        MaterialShare.material_id == material_id).first()
+
+
+@router.get("/shared", summary="共享区(可领取的卡片)")
+async def shared_list(subject: str = "", type: str = "", page: int = 1,
+                      page_size: int = 20,
+                      current_user: SysUser = Depends(get_current_user),
+                      db: Session = Depends(get_db)):
+    q = (db.query(MaterialShare, StudyMaterial)
+         .join(StudyMaterial, StudyMaterial.material_id == MaterialShare.material_id)
+         .filter(MaterialShare.status == 1, StudyMaterial.status >= 0))
+    if subject:
+        q = q.filter(StudyMaterial.subject == subject)
+    if type:
+        q = q.filter(StudyMaterial.type == type)
+    total = q.count()
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    rows = (q.order_by(MaterialShare.share_id.desc())
+            .offset((page - 1) * page_size).limit(page_size).all())
+
+    owners = {r[0]: r[1] for r in db.query(SysUser.user_id, SysUser.username)
+              .filter(SysUser.user_id.in_({sh.owner_id for sh, _ in rows})).all()} if rows else {}
+    adopted = {r[0] for r in db.query(MaterialAdoptLog.share_id)
+               .filter(MaterialAdoptLog.user_id == current_user.user_id,
+                       MaterialAdoptLog.share_id.in_({sh.share_id for sh, _ in rows})).all()} if rows else []
+
+    items = []
+    for sh, m in rows:
+        item = _item_brief(m)
+        item.update({
+            "share_id": sh.share_id,
+            "owner_id": sh.owner_id,
+            "owner_name": owners.get(sh.owner_id),
+            "adopted_count": sh.adopted_count or 0,
+            "is_mine": sh.owner_id == current_user.user_id,
+            "is_adopted": sh.share_id in adopted,
+        })
+        items.append(item)
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.post("/{material_id}/share", summary="分享卡片到共享区")
+async def share_material(material_id: int,
+                         current_user: SysUser = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id,
+        StudyMaterial.status >= 0).first()
+    if not m:
+        raise HTTPException(404, "资料不存在")
+    if m.creator_id != current_user.user_id and not _own_or_admin(current_user):
+        raise HTTPException(403, "只能分享自己创建的资料")
+
+    sh = _get_share(material_id, db)
+    if sh is None:
+        sh = MaterialShare(material_id=material_id,
+                           owner_id=current_user.user_id, status=1)
+        db.add(sh)
+    else:
+        sh.status = 1
+        sh.owner_id = current_user.user_id
+    m.status = 1                     # 分享即公开
+    db.commit()
+    _audit(db, current_user, "share", f"material:{material_id}", m.title)
+    db.commit()
+    return {"ok": True, "material_id": material_id, "status": 1}
+
+
+@router.post("/{material_id}/unshare", summary="撤回分享")
+async def unshare_material(material_id: int,
+                           current_user: SysUser = Depends(get_current_user),
+                           db: Session = Depends(get_db)):
+    sh = _get_share(material_id, db)
+    if not sh or sh.status != 1:
+        raise HTTPException(404, "该卡片未在共享区")
+    if sh.owner_id != current_user.user_id and not _own_or_admin(current_user):
+        raise HTTPException(403, "只能撤回自己分享的资料")
+    sh.status = 0
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id).first()
+    if m and m.status == 1:
+        m.status = 2                 # 回私有
+    db.commit()
+    _audit(db, current_user, "unshare", f"material:{material_id}", None)
+    db.commit()
+    return {"ok": True, "material_id": material_id, "status": 0}
+
+
+@router.post("/{material_id}/adopt", summary="收进我的库(复制一份)")
+async def adopt_material(material_id: int,
+                         current_user: SysUser = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    sh = _get_share(material_id, db)
+    if not sh or sh.status != 1:
+        raise HTTPException(404, "该卡片未分享或已撤回")
+    src = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id,
+        StudyMaterial.status >= 0).first()
+    if not src:
+        raise HTTPException(404, "源卡片不存在或已删除")
+    if src.creator_id == current_user.user_id:
+        raise HTTPException(400, "不能领取自己分享的卡片")
+    dup = db.query(MaterialAdoptLog).filter(
+        MaterialAdoptLog.share_id == sh.share_id,
+        MaterialAdoptLog.user_id == current_user.user_id).first()
+    if dup:
+        raise HTTPException(409, "你已经领取过这张卡片")
+
+    from ....services.material_sanitizer import sanitize_html
+
+    data = {f: getattr(src, f) for f in _SHARE_COPY_FIELDS}
+    if data.get("content"):
+        data["content"] = sanitize_html(data["content"])   # 源卡可能来自低权限用户
+    combined = (data.get("card_front") or "") + (data.get("card_back") or "") + (data.get("content") or "")
+    new = StudyMaterial(**data,
+                        creator_id=current_user.user_id,
+                        status=2,
+                        source_material_id=material_id,
+                        content_hash=(content_cleaner.calculate_content_hash(combined)
+                                      if combined else None))
+    db.add(new)
+    db.flush()
+    db.add(MaterialAdoptLog(share_id=sh.share_id,
+                            user_id=current_user.user_id,
+                            created_id=new.material_id))
+    sh.adopted_count = (sh.adopted_count or 0) + 1
+    db.commit()
+    _audit(db, current_user, "adopt", f"material:{material_id}",
+           f"复制为 {new.material_id}")
+    db.commit()
+    return {"ok": True, "id": new.material_id, "source_material_id": material_id}
 
 
 
