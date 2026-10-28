@@ -58,17 +58,24 @@ export default defineComponent({
     return { state, props, provider, ReadingLamp };
   },
   methods: {
+    // 统一取数：__VTJ_AUTH__ 未注入（未登录/引导未完成）时退回原生 fetch，
+    // 否则 undefined.apiFetch 会抛错被 catch 吞掉，计数永远停在 0。
+    async _apiGet(url) {
+      const auth = window.__VTJ_AUTH__;
+      if (auth && typeof auth.apiFetch === 'function') return auth.apiFetch(url);
+      return fetch(url, { credentials: 'include' });
+    },
     async fetchCounts() {
       for (const s of this.state.subjects) {
         try {
-          const resp = await window.__VTJ_AUTH__.apiFetch(
+          const resp = await this._apiGet(
             `/api/materials?subject=${s.key}&page_size=1`);
           const data = await resp.json();
           if (data && typeof data.total === 'number') {
             this.state.counts[s.key] = data.total;
           }
         } catch (e) {
-          console.warn('[StudyMaterials] count failed:', e && e.message);
+          console.warn('[StudyMaterials] count failed:', s.key, e && e.message);
         }
       }
     },
@@ -82,7 +89,7 @@ export default defineComponent({
       if (!this.state.loggedIn) return;
       for (const s of this.state.subjects) {
         try {
-          const resp = await window.__VTJ_AUTH__.apiFetch(
+          const resp = await this._apiGet(
             `/api/materials/progress-summary?subject=${s.key}`);
           if (resp.ok) {
             const d = await resp.json();
