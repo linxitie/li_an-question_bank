@@ -15,7 +15,7 @@ from ...core.database import get_db
 from ...core.security import get_current_user
 from ...models.models import SysUser, StudyGoal
 from ...services import llm_client
-from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge, AGENT_META
+from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge, build_trajectory, AGENT_META
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["联考小智-工作模式"])
@@ -129,6 +129,19 @@ async def import_to_today(
         "coin_reward": goal.coin_reward,
         "message": f"已写入今日任务，完成可领取 {goal.coin_reward} 金币",
     }
+
+
+@router.get("/trajectory", summary="备考轨迹（长期陪伴：进度/打卡/里程碑）")
+async def agent_trajectory(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        text = build_trajectory(current_user.user_id, db)
+    except Exception as e:
+        logger.warning("轨迹读取失败: %s", e)
+        text = ""
+    return {"trajectory": text, "has_trajectory": bool(text)}
 
 
 @router.get("/tasks", summary="工作模式任务清单")

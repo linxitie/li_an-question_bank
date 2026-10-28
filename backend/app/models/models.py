@@ -849,6 +849,23 @@ class StudyGoal(Base):
     )
 
 
+class PlanAdjustment(Base):
+    """模块4 v2 - AI 调整计划记录（可干预：调整原因+调整内容+应用状态）"""
+    __tablename__ = "plan_adjustment"
+
+    adjust_id = Column(Integer, primary_key=True, autoincrement=True, comment="调整记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    plan_id = Column(Integer, nullable=True, comment="被调整计划ID")
+    reason = Column(String(300), comment="调整原因（用户指令）")
+    adjustment = Column(Text, comment="调整内容（JSON: summary+adjustments）")
+    apply_flag = Column(Integer, default=1, comment="是否已应用到计划 1是/0否")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_adjust_user_plan", user_id, plan_id),
+    )
+
+
 # ------------------------------
 # 媒体资源模型
 # ------------------------------

@@ -203,9 +203,97 @@ def assemble_context(user_id: int, db) -> str:
     if study_parts:
         parts.append("【学情】" + "；".join(study_parts) + "。")
 
+    # 4. 备考轨迹（长期陪伴：进度/打卡/里程碑）
+    try:
+        traj = build_trajectory(user_id, db)
+        if traj:
+            parts.append(traj)
+    except Exception as e:
+        logger.warning("轨迹装配失败: %s", e)
+
     if not parts:
         return ""
     return "以下为该考生的档案摘要，回答时请自然结合（不要复述整段）：\n" + "\n".join(parts)
+
+
+def build_trajectory(user_id: int, db) -> str:
+    """
+    备考轨迹（长期陪伴）：计划总进度 / 连续打卡 / 阶段进展 / 里程碑记忆。
+    零 LLM、纯统计，token 受限。无数据返回空串。
+    """
+    from datetime import datetime
+    from sqlalchemy import func
+    from ..models.models import StudyGoal, UserMemory
+
+    plan = (
+        db.query(StudyGoal)
+        .filter(StudyGoal.user_id == user_id, StudyGoal.status == 1, StudyGoal.plan_id.isnot(None))
+        .order_by(StudyGoal.create_time.desc())
+        .first()
+    )
+    if not plan:
+        return ""
+
+    total = (
+        db.query(StudyGoal)
+        .filter(StudyGoal.user_id == user_id, StudyGoal.plan_id == plan.plan_id, StudyGoal.status == 1)
+        .count()
+    )
+    done = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == user_id,
+            StudyGoal.plan_id == plan.plan_id,
+            StudyGoal.status == 1,
+            StudyGoal.is_completed == 1,
+        )
+        .count()
+    )
+    parts = []
+    if total:
+        pct = round(done / total * 100)
+        parts.append(f"备考总进度 {done}/{total}（{pct}%）")
+    streak = 0
+    cursor = datetime.now().date()
+    while True:
+        day = cursor.strftime("%Y-%m-%d")
+        cnt = (
+            db.query(StudyGoal)
+            .filter(StudyGoal.user_id == user_id, StudyGoal.status == 1, StudyGoal.task_date == day)
+            .count()
+        )
+        dcnt = (
+            db.query(StudyGoal)
+            .filter(
+                StudyGoal.user_id == user_id,
+                StudyGoal.status == 1,
+                StudyGoal.task_date == day,
+                StudyGoal.is_completed == 1,
+            )
+            .count()
+        )
+        if cnt == 0:
+            break  # 该日无任务，视为断点
+        if dcnt == 0:
+            break  # 该日有任务但未完成，断点
+        streak += 1
+        cursor -= __import__("datetime").timedelta(days=1)
+        if streak > 365:
+            break
+    if streak:
+        parts.append(f"连续打卡 {streak} 天")
+    milestones = (
+        db.query(UserMemory)
+        .filter(UserMemory.user_id == user_id, UserMemory.memory_type == "milestone")
+        .order_by(UserMemory.create_time.desc())
+        .limit(3)
+        .all()
+    )
+    if milestones:
+        parts.append("备考里程碑：" + "；".join((m.content or "")[:40] for m in milestones))
+    if not parts:
+        return ""
+    return "【备考轨迹】" + "；".join(parts) + "。"
 
 
 def extract_memories(user_id: int, db):

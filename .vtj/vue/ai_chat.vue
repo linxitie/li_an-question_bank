@@ -44,6 +44,7 @@
             <div class="header-title-row">
               <span class="header-title">联考小智</span>
               <span class="online-dot"><i></i>在线</span>
+              <a class="kb-entry" href="/#/knowledge" title="自生长知识库">📚 知识库</a>
             </div>
             <div class="header-sub">你的公安联考专属备考伙伴</div>
           </div>
@@ -607,6 +608,12 @@
   .header-meta { flex: 1; }
   .header-title-row { display: flex; align-items: center; gap: 10px; }
   .header-title { font-size: 17px; font-weight: 700; }
+  .kb-entry {
+    margin-left: 4px; padding: 2px 10px; font-size: 11px; font-weight: 600;
+    color: #fff; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 999px; text-decoration: none; line-height: 18px;
+  }
+  .kb-entry:hover { background: rgba(255,255,255,0.28); }
   .online-dot { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #9fe6b0; }
   .online-dot i { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; box-shadow: 0 0 6px #4ade80; }
   .header-sub { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px; }

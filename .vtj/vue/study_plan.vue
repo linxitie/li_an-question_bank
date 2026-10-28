@@ -334,19 +334,27 @@
         if (!state.askText.trim()) return;
         const q = state.askText;
         state.askText = '';
+        state.askReply = '';
         try {
-          // 带上当前计划上下文，让 AI 的建议更有针对性
-          const planCtx = state.plan
-            ? `我当前的学习计划：${(state.plan.summary || '').slice(0, 300)}，共 ${state.plan.tasks.length} 条任务，已完成 ${state.plan.progress.done} 条。`
-            : '我还没有生成学习计划。';
-          const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/chat', {
+          // 走 /api/plan/adjust：LLM 生成调整 + 落 PlanAdjustment + 应用更新计划摘要
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/adjust', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scene: 'advice', message: (planCtx + '关于我的复习计划调整：' + q).slice(0, 2000) }),
+            body: JSON.stringify({ instruction: q }),
           });
           const data = await res.json();
-          if (res.ok) state.askReply = data.reply || data.message || '收到，按你的情况调整啦';
-          else state.askReply = data.detail || '调整失败，请稍后再试';
+          if (res.ok) {
+            const dots = (data.adjustments || []).map((a) => '· ' + a).join('\n');
+            state.askReply = '✅ 已应用调整：' + (data.summary || '计划已更新') + (dots ? '\n' + dots : '');
+            // 刷新计划摘要（plan_meta 已更新）
+            try {
+              const r2 = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
+              const d2 = await r2.json();
+              if (r2.ok && d2.has_plan !== false) state.plan = d2;
+            } catch (e) { /* 刷新失败不阻塞提示 */ }
+          } else {
+            state.askReply = data.detail || '调整失败，请稍后再试';
+          }
         } catch (e) {
           state.askReply = '网络异常';
         }

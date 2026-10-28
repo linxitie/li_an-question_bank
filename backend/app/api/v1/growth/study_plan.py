@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user
-from ....models.models import StudyGoal, SysUser, UserProfile, UserNotify
+from ....models.models import StudyGoal, SysUser, UserProfile, UserNotify, PlanAdjustment
 from ....services import llm_client
 from ....services import plan_agent
 
@@ -32,6 +32,10 @@ VALID_SUBJECTS = {"行测", "申论", "公专"}
 SUBJECT_ALIASES = {"公安专业科目": "公专", "公安专业知识": "公专"}
 VALID_LEVELS = {"零基础", "入门", "有基础", "冲刺"}
 MAX_TASKS = 200
+
+
+class AdjustRequest(BaseModel):
+    instruction: str = Field(..., min_length=1, max_length=300, description="调整要求（如：多留时间给公专）")
 
 
 class GenerateRequest(BaseModel):
@@ -218,6 +222,119 @@ async def generate_plan(
             }
             for g in created
         ],
+    }
+
+
+@router.post("/adjust", summary="AI 调整计划（可干预）")
+async def adjust_plan(
+    req: AdjustRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """读取当前计划+今日任务+画像 → LLM 生成调整建议 → 落 PlanAdjustment + 更新 plan_meta.summary"""
+    instruction = req.instruction
+    if not instruction or not instruction.strip():
+        raise HTTPException(status_code=400, detail="请说明你想怎么调整")
+
+    # 1. 取当前计划（最新 plan_id）
+    row = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.plan_id.isnot(None),
+            StudyGoal.status == 1,
+        )
+        .order_by(StudyGoal.plan_id.desc())
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="还没有学习计划，请先生成")
+
+    plan_id = row.plan_id
+    try:
+        meta = json.loads(row.plan_meta or "{}")
+    except (ValueError, TypeError):
+        meta = {}
+
+    # 2. 今日任务 + 完成情况
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_rows = (
+        db.query(StudyGoal)
+        .filter(StudyGoal.user_id == current_user.user_id, StudyGoal.task_date == today, StudyGoal.status == 1)
+        .all()
+    )
+    done = sum(1 for t in today_rows if t.is_completed == 1)
+    today_titles = [t.title for t in today_rows[:10]]
+
+    # 3. 画像摘要
+    profile = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == current_user.user_id)
+        .first()
+    )
+    profile_line = ""
+    if profile:
+        profile_line = (
+            f"画像：目标分数{profile.target_score}、薄弱科目{profile.subject_weaknesses or '无'}、"
+            f"每日{profile.daily_hours}小时"
+        )
+
+    # 4. 拼 prompt → LLM
+    adjust_input = (
+        f"现有备考计划摘要：{meta.get('summary', '')}\n"
+        f"阶段规划：{json.dumps(meta.get('phases', []), ensure_ascii=False)[:300]}\n"
+        f"今日任务（{len(today_rows)}项，已完成{done}项）：{'；'.join(today_titles)}\n"
+        f"{profile_line}\n"
+        f"用户要求调整：{instruction}\n"
+        "请给出调整后的计划。只输出 JSON：{\"summary\": \"调整后的计划摘要（100字内）\", "
+        "\"adjustments\": [\"具体调整点1\", \"调整点2\", ...]}。调整要具体可落地。"
+    )
+    try:
+        raw = await llm_client.chat_plan(adjust_input)
+    except llm_client.LLMClientError as e:
+        raise HTTPException(status_code=503, detail=e.message)
+
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:]
+    try:
+        plan = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("调整 LLM 返回非 JSON: %s", raw[:300])
+        raise HTTPException(status_code=502, detail="AI 调整失败，请重试")
+    if not isinstance(plan, dict):
+        raise HTTPException(status_code=502, detail="AI 返回格式异常，请重试")
+    new_summary = str(plan.get("summary", ""))[:200]
+    adjustments = plan.get("adjustments", [])
+    if not isinstance(adjustments, list):
+        adjustments = []
+    adjustments = [str(a)[:200] for a in adjustments[:10]]
+
+    # 5. 落 PlanAdjustment + 应用到计划（更新 summary）
+    record = PlanAdjustment(
+        user_id=current_user.user_id,
+        plan_id=plan_id,
+        reason=instruction.strip()[:300],
+        adjustment=json.dumps({"summary": new_summary, "adjustments": adjustments}, ensure_ascii=False),
+        apply_flag=1,
+    )
+    db.add(record)
+    if new_summary:
+        meta["summary"] = new_summary
+        meta["adjust_times"] = int(meta.get("adjust_times", 0)) + 1
+        db.query(StudyGoal).filter(
+            StudyGoal.plan_id == plan_id, StudyGoal.status == 1
+        ).update({StudyGoal.plan_meta: json.dumps(meta, ensure_ascii=False)})
+    db.commit()
+    db.refresh(record)
+
+    return {
+        "adjust_id": record.adjust_id,
+        "summary": new_summary,
+        "adjustments": adjustments,
+        "message": "已按你的要求调整计划并应用" if new_summary else "调整建议已生成",
     }
 
 
@@ -469,12 +586,67 @@ async def claim_task_coin(
     goal.coin_claimed = 1
     goal.update_time = datetime.now()
     db.commit()
+
+    # 里程碑记忆（长期陪伴）：计划总完成率跨过 1/3、2/3、100% 时写一条
+    try:
+        _write_milestone(current_user.user_id, goal.plan_id, db)
+    except Exception as e:
+        logger.warning("里程碑写入失败: %s", e)
+
     return {
         "goal_id": goal.goal_id,
         "coin_reward": coin,
         "balance": current_user.total_coins,
         "message": f"领取成功，+{coin} 金币",
     }
+
+
+def _write_milestone(user_id: int, plan_id, db: Session):
+    """完成率首次跨过 1/3/2/3/100% 时写入 UserMemory(milestone)，幂等。"""
+    from sqlalchemy import func
+    from ....models.models import UserMemory
+
+    if plan_id is None:
+        return
+    total = (
+        db.query(func.count(StudyGoal.goal_id))
+        .filter(StudyGoal.user_id == user_id, StudyGoal.plan_id == plan_id, StudyGoal.status == 1)
+        .scalar()
+    )
+    done = (
+        db.query(func.count(StudyGoal.goal_id))
+        .filter(
+            StudyGoal.user_id == user_id,
+            StudyGoal.plan_id == plan_id,
+            StudyGoal.status == 1,
+            StudyGoal.is_completed == 1,
+        )
+        .scalar()
+    )
+    if not total:
+        return
+    pct = round(done / total * 100)
+    for threshold, label in ((33, "完成计划 1/3"), (66, "完成计划 2/3"), (100, "完成全部计划")):
+        if pct < threshold:
+            continue
+        content = f"备考里程碑：{label}（{done}/{total}）"
+        exists = (
+            db.query(UserMemory)
+            .filter(UserMemory.user_id == user_id, UserMemory.content == content)
+            .first()
+        )
+        if exists:
+            continue
+        db.add(
+            UserMemory(
+                user_id=user_id,
+                memory_type="milestone",
+                content=content,
+                source="milestone-auto",
+                expire_at=None,
+            )
+        )
+        db.commit()
 
 
 @router.get("/notifies", summary="站内提醒列表（未完成任务提醒等）")
