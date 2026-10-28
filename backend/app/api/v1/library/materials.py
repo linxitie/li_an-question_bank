@@ -297,12 +297,22 @@ async def batch_image(files: List[UploadFile] = File(...),
     if len(files) > 9:
         raise HTTPException(400, "一次最多 9 张图片")
     images = []
+    written = []          # B3：本批已落盘 URL，失败时回收
     try:
         for fh in files:
             url = _safe_image_upload(fh)      # 复用白名单+魔数+uuid 重命名
             images.append({"url": url})
+            written.append(url)
     except HTTPException:
-        raise                              # 整批不落库：已落盘文件由运维清理
+        # B3：整批拒绝时回收本批已落盘文件，避免孤儿文件
+        for u in written:
+            p = UPLOAD_IMG_DIR / _os.path.basename(u)
+            try:
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
+        raise                          # 整批拒绝，不落库
     _audit(db, current_user, "batch_image", f"count:{len(images)}", None)
     db.commit()
     return {"images": images, "count": len(images)}
@@ -615,13 +625,14 @@ def _safe_image_upload(file: UploadFile) -> str:
 
 @router.post("/admin/upload/image", summary="上传封面/文章插图(管理员)")
 async def upload_image(file: UploadFile = File(...),
+                       purpose: str = Query("inline", description="cover|inline"),
                        current_user: SysUser = Depends(get_current_user),
                        db: Session = Depends(get_db)):
     _require_admin(current_user)
     url = _safe_image_upload(file)
-    _audit(db, current_user, "upload_image", url)
+    _audit(db, current_user, "upload_image", f"{purpose}:{url}")
     db.commit()
-    return {"url": url}
+    return {"url": url, "purpose": purpose}
 
 
 def _validate_material_body(body: dict, partial: bool = False) -> dict:
