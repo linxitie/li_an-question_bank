@@ -21,18 +21,18 @@ import json
 import uuid
 import logging
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session, aliased
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_, String
 
 from ....core.database import get_db
 from ....core.config import settings
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import (
-    ForumPost, ForumComment, ForumLike, ForumSticker, ForumReport,
+    ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
     SysUser, SysOperationLog
 )
 from ....services.sensitive_words import sensitive_filter, SensitiveLevel
@@ -141,6 +141,8 @@ def _serialize_post(
     content_full: bool = False,
     reactions: Optional[Dict[str, int]] = None,
     my_reaction: Optional[str] = None,
+    favorite_count: int = 0,
+    favorited: bool = False,
 ) -> Dict[str, Any]:
     """序列化帖子为响应字典"""
     return {
@@ -168,8 +170,82 @@ def _serialize_post(
         "liked": liked or my_reaction is not None,
         "myReaction": my_reaction,
         "reactions": reactions or {},
+        # === P3：收藏（五角星）与可见范围 ===
+        "favoriteCount": favorite_count or 0,
+        "favorited": bool(favorited),
+        "visibility": post.visibility or "ALL",
+        "visibleClasses": post.visible_classes or [],
         "user": _user_brief(user, post.user_id),
     }
+
+
+def _apply_visibility_filter(query, current_user: Optional[SysUser]):
+    """按可见范围过滤帖子（唯一事实来源，列表/详情/我的收藏都必须走这里）。
+
+    - 教师 / 管理员：不过滤
+    - 游客：只能看 ALL
+    - 学生：ALL，或 CLASSES 且本人 class_name 在 visible_classes 里
+    - 学生没填班级：按 ALL 处理（否则他自己的帖子会谁都看不到）
+    """
+    if current_user is not None and current_user.user_type in ("teacher", "admin"):
+        return query
+    if current_user is None:
+        return query.filter(
+            or_(ForumPost.visibility == "ALL", ForumPost.visibility.is_(None))
+        )
+
+    cls = (current_user.class_name or "").strip()
+    if not cls:
+        return query.filter(
+            or_(ForumPost.visibility == "ALL", ForumPost.visibility.is_(None))
+        )
+
+    # SQLite 下 JSON 列以文本存储。注意 json.dumps 默认 ensure_ascii=True，
+    # 中文班级名会存成 "\u4e00\u73ed" 这种转义形式，因此两种编码都要匹配。
+    raw_pattern = f'%"{cls}"%'
+    ascii_pattern = "%" + json.dumps(cls, ensure_ascii=True)[1:-1] + "%"
+    classes_text = func.cast(ForumPost.visible_classes, String)
+    return query.filter(
+        or_(
+            ForumPost.visibility == "ALL",
+            ForumPost.visibility.is_(None),
+            and_(
+                ForumPost.visibility == "CLASSES",
+                ForumPost.visible_classes.isnot(None),
+                or_(
+                    classes_text.like(raw_pattern),
+                    classes_text.like(ascii_pattern),
+                ),
+            ),
+        )
+    )
+
+
+def _load_favorite_stats(db: Session, post_ids: List[int], user_id: Optional[int] = None):
+    """批量取收藏数 + 当前用户是否收藏（避免 N+1）。"""
+    if not post_ids:
+        return {}, set()
+
+    count_rows = (
+        db.query(ForumFavorite.post_id, func.count(ForumFavorite.favorite_id))
+        .filter(ForumFavorite.post_id.in_(post_ids))
+        .group_by(ForumFavorite.post_id)
+        .all()
+    )
+    counts = {post_id: int(cnt or 0) for post_id, cnt in count_rows}
+
+    mine = set()
+    if user_id:
+        mine_rows = (
+            db.query(ForumFavorite.post_id)
+            .filter(
+                ForumFavorite.post_id.in_(post_ids),
+                ForumFavorite.user_id == user_id,
+            )
+            .all()
+        )
+        mine = {row[0] for row in mine_rows}
+    return counts, mine
 
 
 def _serialize_comment(
@@ -268,6 +344,8 @@ async def get_forum_posts(
     order: Literal["asc", "desc"] = Query("desc", description="排序方向"),
     keyword: Optional[str] = Query(None, description="标题/正文关键词"),
     sort: Optional[Literal["new", "hot"]] = Query(None, description="快捷排序: new/hot"),
+    date_from: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD（含当天）"),
+    date_to: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD（含当天）"),
     limit: int = Query(20, ge=1, le=50, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
@@ -281,6 +359,8 @@ async def get_forum_posts(
     - 返回当前用户点赞状态
     """
     query = db.query(ForumPost).filter(ForumPost.status == "NORMAL")
+    # P3：可见范围（教师/管理员不过滤；学生仅本校班级或全校；游客仅全校）
+    query = _apply_visibility_filter(query, current_user)
 
     if share_type:
         query = query.filter(ForumPost.share_type == share_type)
@@ -289,6 +369,18 @@ async def get_forum_posts(
         query = query.filter(
             or_(ForumPost.title.like(like), ForumPost.content.like(like))
         )
+    # P3：日期区间（两端都含当天）
+    if date_from:
+        try:
+            query = query.filter(ForumPost.create_time >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            raise ValidationError("date_from 格式应为 YYYY-MM-DD")
+    if date_to:
+        try:
+            _end = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            raise ValidationError("date_to 格式应为 YYYY-MM-DD")
+        query = query.filter(ForumPost.create_time < _end)
 
     total = query.count()
     if sort == "hot":
@@ -326,6 +418,12 @@ async def get_forum_posts(
         post_ids,
         user_id=current_user.user_id if current_user else None,
     )
+    # P3：批量取收藏统计（避免 N+1）
+    fav_counts, my_favs = _load_favorite_stats(
+        db,
+        post_ids,
+        user_id=current_user.user_id if current_user else None,
+    )
 
     return {
         "total": total,
@@ -338,8 +436,11 @@ async def get_forum_posts(
                 p.post_id in my_reactions,
                 reactions=reaction_counts.get(p.post_id, {}),
                 my_reaction=my_reactions.get(p.post_id),
+                favorite_count=fav_counts.get(p.post_id, 0),
+                favorited=p.post_id in my_favs,
             )
             for p in posts
+
         ]
     }
 
@@ -358,6 +459,17 @@ async def get_post_detail(
     if not post:
         raise ResourceNotFoundError("帖子", post_id)
 
+    # P3：可见范围校验（不可见时按不存在处理，避免泄露"存在但你看不到"）
+    visible = _apply_visibility_filter(
+        db.query(ForumPost).filter(
+            ForumPost.post_id == post_id,
+            ForumPost.status == "NORMAL",
+        ),
+        current_user,
+    ).first()
+    if not visible:
+        raise ResourceNotFoundError("帖子", post_id)
+
     # 浏览量 +1(原子操作,即使失败也不影响读取)
     try:
         post.view_count = (post.view_count or 0) + 1
@@ -373,6 +485,11 @@ async def get_post_detail(
         [post_id],
         user_id=current_user.user_id if current_user else None,
     )
+    fav_counts, my_favs = _load_favorite_stats(
+        db,
+        [post_id],
+        user_id=current_user.user_id if current_user else None,
+    )
 
     return _serialize_post(
         post,
@@ -381,6 +498,8 @@ async def get_post_detail(
         content_full=True,
         reactions=reaction_counts.get(post_id, {}),
         my_reaction=my_reactions.get(post_id),
+        favorite_count=fav_counts.get(post_id, 0),
+        favorited=post_id in my_favs,
     )
 
 
@@ -394,6 +513,8 @@ async def create_post(
     attachments: Optional[str] = Form(None, description="附件列表 JSON 字符串"),
     title_color: str = Form("default", description="标题颜色 token"),
     question_id: Optional[int] = Form(None, description="关联题目ID"),
+    visibility: Optional[str] = Form(None, description="可见范围: ALL 全校 | CLASSES 本班/指定班级"),
+    visible_classes: Optional[str] = Form(None, description="班级名 JSON 数组，visibility=CLASSES 时生效"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -441,7 +562,31 @@ async def create_post(
         except (json.JSONDecodeError, ValueError) as e:
             raise ValidationError(f"附件格式错误: {e}")
 
-    # 3. 创建帖子
+    # 3. 可见范围（P3，决策：学生默认本班、可改全校；教师/管理员默认全校；不设上限）
+    is_staff = current_user.user_type in ("teacher", "admin")
+    classes = None
+    if visible_classes:
+        try:
+            classes = json.loads(visible_classes)
+            if not isinstance(classes, list):
+                raise ValueError("visible_classes 必须是数组")
+            classes = [str(c).strip() for c in classes if str(c).strip()]
+        except (json.JSONDecodeError, ValueError) as e:
+            raise ValidationError(f"可见班级格式错误: {e}")
+
+    if visibility not in ("ALL", "CLASSES"):
+        visibility = "ALL" if is_staff else "CLASSES"
+    if visibility == "CLASSES":
+        if not classes:
+            own_class = (current_user.class_name or "").strip()
+            classes = [own_class] if own_class else []
+        if not classes:
+            # 没有可指定的班级 → 退回全校，避免帖子谁都看不到
+            visibility = "ALL"
+    if visibility != "CLASSES":
+        classes = None
+
+    # 4. 创建帖子
     if title_color not in TITLE_COLORS:
         title_color = "default"
     post = ForumPost(
@@ -455,6 +600,8 @@ async def create_post(
         question_id=question_id,
         last_activity_time=datetime.now(),
         status="NORMAL",
+        visibility=visibility,
+        visible_classes=classes,
     )
     db.add(post)
     db.commit()
@@ -549,6 +696,163 @@ async def toggle_post_like(
         "likeCount": post.like_count,
         "myReaction": mine.get(post_id),
         "reactions": counts.get(post_id, {}),
+    }
+
+
+# ============================== 收藏 / 我的喜欢（P3） ==============================
+
+@router.post("/posts/{post_id}/favorite", summary="收藏/取消收藏（五角星）")
+async def toggle_post_favorite(
+    post_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """收藏切换（幂等）：已收藏则取消，未收藏则收藏。
+
+    与 /api/collection（题目/新闻收藏）互不相干；本接口只服务论坛帖子。
+    同步维护 forum_post.collect_count 作为展示计数。
+    """
+    post = db.query(ForumPost).filter(
+        ForumPost.post_id == post_id,
+        ForumPost.status == "NORMAL",
+    ).first()
+    if not post:
+        raise ResourceNotFoundError("帖子", post_id)
+
+    existing = db.query(ForumFavorite).filter(
+        ForumFavorite.post_id == post_id,
+        ForumFavorite.user_id == current_user.user_id,
+    ).first()
+
+    if existing:
+        db.delete(existing)
+        post.collect_count = max(0, (post.collect_count or 0) - 1)
+        favorited = False
+    else:
+        db.add(ForumFavorite(post_id=post_id, user_id=current_user.user_id))
+        post.collect_count = (post.collect_count or 0) + 1
+        favorited = True
+
+    db.commit()
+    db.refresh(post)
+
+    counts, _ = _load_favorite_stats(db, [post_id])
+    return {
+        "favorited": favorited,
+        "favoriteCount": counts.get(post_id, post.collect_count or 0),
+    }
+
+
+@router.get("/my-favorites", summary="我的收藏（五角星）")
+async def get_my_favorites(
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """只返回本人收藏且仍正常的帖子；不可见范围同样生效（单一事实来源）。"""
+    base = (
+        db.query(ForumPost)
+        .join(ForumFavorite, ForumFavorite.post_id == ForumPost.post_id)
+        .filter(
+            ForumFavorite.user_id == current_user.user_id,
+            ForumPost.status == "NORMAL",
+        )
+    )
+    base = _apply_visibility_filter(base, current_user)
+    total = base.count()
+    posts = (
+        base.order_by(ForumFavorite.create_time.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    post_ids = [p.post_id for p in posts]
+    user_map = {}
+    if post_ids:
+        users = db.query(SysUser).filter(SysUser.user_id.in_({p.user_id for p in posts})).all()
+        user_map = {u.user_id: u for u in users}
+    fav_counts, my_favs = _load_favorite_stats(
+        db, post_ids, user_id=current_user.user_id
+    )
+    reaction_counts, my_reactions = _load_reaction_stats(
+        db, post_ids, user_id=current_user.user_id
+    )
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "posts": [
+            _serialize_post(
+                p,
+                user_map.get(p.user_id),
+                p.post_id in my_reactions,
+                reactions=reaction_counts.get(p.post_id, {}),
+                my_reaction=my_reactions.get(p.post_id),
+                favorite_count=fav_counts.get(p.post_id, 0),
+                favorited=p.post_id in my_favs,
+            )
+            for p in posts
+        ],
+    }
+
+
+@router.get("/my-likes", summary="我的喜欢（爱心）")
+async def get_my_likes(
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """基于 forum_like.reaction_code='like'，只返回本人点过爱心的帖子。"""
+    base = (
+        db.query(ForumPost)
+        .join(ForumLike, ForumLike.post_id == ForumPost.post_id)
+        .filter(
+            ForumLike.user_id == current_user.user_id,
+            ForumLike.reaction_code == "like",
+            ForumPost.status == "NORMAL",
+        )
+    )
+    base = _apply_visibility_filter(base, current_user)
+    total = base.count()
+    posts = (
+        base.order_by(ForumLike.create_time.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    post_ids = [p.post_id for p in posts]
+    user_map = {}
+    if post_ids:
+        users = db.query(SysUser).filter(SysUser.user_id.in_({p.user_id for p in posts})).all()
+        user_map = {u.user_id: u for u in users}
+    fav_counts, my_favs = _load_favorite_stats(
+        db, post_ids, user_id=current_user.user_id
+    )
+    reaction_counts, my_reactions = _load_reaction_stats(
+        db, post_ids, user_id=current_user.user_id
+    )
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "posts": [
+            _serialize_post(
+                p,
+                user_map.get(p.user_id),
+                p.post_id in my_reactions,
+                reactions=reaction_counts.get(p.post_id, {}),
+                my_reaction=my_reactions.get(p.post_id),
+                favorite_count=fav_counts.get(p.post_id, 0),
+                favorited=p.post_id in my_favs,
+            )
+            for p in posts
+        ],
     }
 
 
