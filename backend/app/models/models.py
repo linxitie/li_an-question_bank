@@ -655,6 +655,9 @@ class ForumPost(Base):
     is_locked = Column(Integer, default=0, comment="是否关闭评论 0否/1是")
     question_id = Column(BigInteger, comment="关联题目ID")
     feedback_id = Column(BigInteger, comment="关联反馈工单ID")
+    # === P3 可见范围（2026-10-26）===
+    visibility = Column(String(16), default="ALL", comment="可见范围: ALL 全校 | CLASSES 指定班级")
+    visible_classes = Column(JSON, comment="可见班级名列表 JSON，visibility=CLASSES 时生效")
     last_activity_time = Column(DateTime, default=datetime.now, comment="最后活跃时间")
     deleted_by = Column(BigInteger, comment="删除人ID")
     deleted_reason = Column(String(200), comment="删除原因")
@@ -1137,6 +1140,29 @@ class ForumLike(Base):
         Index("idx_post_id_forumlike", post_id),
         Index("idx_comment_id_forumlike", comment_id),
         Index("idx_user_id_forumlike", user_id),
+    )
+
+
+class ForumFavorite(Base):
+    """论坛收藏表（P3，2026-10-26）
+
+    与 /api/collection（题目/新闻收藏）互不相干：本表只服务于论坛帖子收藏。
+    一个用户对同一帖子只能收藏一次，取消即删除行。
+    """
+    __tablename__ = "forum_favorite"
+
+    favorite_id = Column(Integer, primary_key=True, autoincrement=True, comment="收藏ID")
+    post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), nullable=False, comment="帖子ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    create_time = Column(DateTime, default=datetime.now, comment="收藏时间")
+
+    post = relationship("ForumPost")
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("post_id", "user_id", name="uk_post_user_favorite"),
+        Index("idx_user_id_forumfavorite", user_id),
+        Index("idx_post_id_forumfavorite", post_id),
     )
 
 

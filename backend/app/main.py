@@ -236,6 +236,9 @@ async def lifespan(app: FastAPI):
                 ('deleted_by', 'BIGINT'),
                 ('deleted_reason', 'VARCHAR(200)'),
                 ('deleted_at', 'DATETIME'),
+                # P3 可见范围（2026-10-26）
+                ('visibility', "VARCHAR(16) DEFAULT 'ALL'"),
+                ('visible_classes', 'JSON'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in forum_new_cols:
