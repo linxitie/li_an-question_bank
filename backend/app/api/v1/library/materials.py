@@ -36,6 +36,7 @@ def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -
         "duration": m.duration or 0, "read_time": m.read_time or 0,
         "difficulty": m.difficulty or 1, "view_count": m.view_count or 0,
         "card_front": m.card_front, "sort_order": m.sort_order or 0,
+        "card_back": m.card_back,
     }
     if prog is not None:
         d.update({
