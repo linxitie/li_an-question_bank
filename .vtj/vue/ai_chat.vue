@@ -44,6 +44,7 @@
             <div class="header-title-row">
               <span class="header-title">联考小智</span>
               <span class="online-dot"><i></i>在线</span>
+              <a class="kb-entry" href="/#/memories" title="长期记忆管理">🧠 记忆</a>
               <a class="kb-entry" href="/#/knowledge" title="自生长知识库">📚 知识库</a>
             </div>
             <div class="header-sub">你的公安联考专属备考伙伴</div>
@@ -784,5 +785,7 @@
       background: rgba(0,0,0,0.4); z-index: 99;
     }
     .hamburger { display: inline-flex; }
+    .header-title-row { flex-wrap: wrap; }
+    .kb-entry { padding: 1px 8px; font-size: 10px; }
   }
 </style>

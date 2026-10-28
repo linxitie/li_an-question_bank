@@ -131,6 +131,52 @@ async def import_to_today(
     }
 
 
+@router.get("/memories", summary="长期记忆列表（记忆管理）")
+async def agent_memories(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from ...models.models import UserMemory
+    items = (
+        db.query(UserMemory)
+        .filter(UserMemory.user_id == current_user.user_id)
+        .order_by(UserMemory.create_time.desc())
+        .limit(100)
+        .all()
+    )
+    return {
+        "memories": [
+            {
+                "memory_id": m.memory_id,
+                "memory_type": m.memory_type,
+                "content": m.content,
+                "source": m.source,
+                "create_time": m.create_time.isoformat() if m.create_time else None,
+            }
+            for m in items
+        ]
+    }
+
+
+@router.delete("/memory/{memory_id}", summary="删除一条长期记忆")
+async def agent_memory_delete(
+    memory_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from ...models.models import UserMemory
+    row = (
+        db.query(UserMemory)
+        .filter(UserMemory.memory_id == memory_id, UserMemory.user_id == current_user.user_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="记忆不存在")
+    db.delete(row)
+    db.commit()
+    return {"message": "已删除该记忆"}
+
+
 @router.get("/trajectory", summary="备考轨迹（长期陪伴：进度/打卡/里程碑）")
 async def agent_trajectory(
     current_user: SysUser = Depends(get_current_user),

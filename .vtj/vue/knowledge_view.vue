@@ -30,7 +30,13 @@
 
       <!-- 提交表单 -->
       <div class="kb-submit">
-        <div class="kb-submit-head">➕ 提交新知识（待审批入库）</div>
+        <div class="kb-submit-head">
+          <span>➕ 提交新知识（待审批入库）</span>
+          <button class="kb-btn ghost" :disabled="state.importing" @click="importVault()">
+            {{ state.importing ? '导入中…' : '📥 从 Vault 导入' }}
+          </button>
+        </div>
+        <div v-if="state.importMsg" class="import-msg">{{ state.importMsg }}</div>
         <div class="kb-form">
           <input v-model="state.form.title" class="kb-input" placeholder="标题（2-200字）" />
           <select v-model="state.form.category" class="kb-input kb-sel">
@@ -98,7 +104,7 @@
   export default defineComponent({
     name: 'KnowledgeView',
     setup() {
-      const provider = useProvider({ id: 'knowledge_view', version: '20261028001' });
+      const provider = useProvider({ id: 'knowledge_view', version: '20261028002' });
 
       const catTabs = [
         { key: '', name: '全部' },
@@ -121,6 +127,8 @@
         graph: { nodes: [], relations: [] },
         loading: false,
         submitting: false,
+        importing: false,
+        importMsg: '',
         notice: '',
         form: { title: '', category: 'law', content: '' },
       });
@@ -197,6 +205,30 @@
         else loadNodes();
       }
 
+      async function importVault() {
+        state.importing = true;
+        state.importMsg = '';
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/knowledge/vault/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          const d = await res.json();
+          if (res.ok) {
+            state.importMsg = d.message;
+            if (d.imported > 0 && state.status !== 'pending') state.status = 'pending';
+            loadNodes();
+          } else {
+            state.importMsg = d.detail || '导入失败';
+          }
+        } catch (e) {
+          state.importMsg = '网络异常，导入失败';
+        } finally {
+          state.importing = false;
+        }
+      }
+
       async function submitNode() {
         const title = state.form.title.trim();
         const content = state.form.content.trim();
@@ -263,7 +295,7 @@
         graphNodes, graphRels,
         nodePos, catShort, shortTitle,
         goBack, switchCat, switchStatus,
-        submitNode, approveNode, rejectNode,
+        submitNode, approveNode, rejectNode, importVault,
         fmtTime,
       };
     },

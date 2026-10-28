@@ -228,6 +228,73 @@ def init_scheduler():
         replace_existing=True
     )
 
+    # 每周日 20:30 复盘提醒（长期陪伴：统计本周完成 + 提示复盘调整下周计划）
+    def _weekly_review_remind():
+        from ..models.models import StudyGoal, UserNotify
+        from ..core.database import SessionLocal
+        from datetime import datetime as _dt, timedelta as _td
+        db = SessionLocal()
+        try:
+            now = _dt.now()
+            monday = (now - _td(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+            week_key = monday.strftime("%Y-%m-%d")
+            users_with_tasks = (
+                db.query(StudyGoal.user_id)
+                .filter(StudyGoal.status == 1, StudyGoal.task_date >= week_key)
+                .distinct()
+                .all()
+            )
+            for (uid,) in users_with_tasks:
+                done = (
+                    db.query(StudyGoal)
+                    .filter(
+                        StudyGoal.user_id == uid,
+                        StudyGoal.status == 1,
+                        StudyGoal.task_date >= week_key,
+                        StudyGoal.is_completed == 1,
+                    )
+                    .count()
+                )
+                total = (
+                    db.query(StudyGoal)
+                    .filter(
+                        StudyGoal.user_id == uid,
+                        StudyGoal.status == 1,
+                        StudyGoal.task_date >= week_key,
+                    )
+                    .count()
+                )
+                existing = (
+                    db.query(UserNotify)
+                    .filter(
+                        UserNotify.user_id == uid,
+                        UserNotify.notify_type == "weekly_review",
+                        UserNotify.create_time >= monday,
+                    )
+                    .first()
+                )
+                if existing:
+                    continue
+                db.add(UserNotify(
+                    user_id=uid,
+                    content=f"【本周复盘】本周共 {total} 个任务，完成 {done} 个。周日花 30 分钟总结薄弱点，可让联考小智帮你调整下周计划。",
+                    notify_type="weekly_review",
+                ))
+            db.commit()
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).warning("每周复盘提醒失败: %s", _e)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _weekly_review_remind,
+        trigger=CronTrigger(day_of_week="sun", hour=20, minute=30, timezone=CST),
+        id="weekly_review",
+        name="每周复盘提醒",
+        replace_existing=True
+    )
+
     scheduler.start()
     logger.info("定时任务调度器已启动（每日 24:00 CST）")
 
