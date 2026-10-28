@@ -48,7 +48,11 @@
             <div class="header-sub">你的公安联考专属备考伙伴</div>
           </div>
         </div>
-        <div class="scene-tabs">
+        <div class="mode-tabs">
+          <div class="mode-tab" :class="{ active: !state.workMode }" @click="switchMode(false)">💬 对话</div>
+          <div class="mode-tab" :class="{ active: state.workMode }" @click="switchMode(true)">🧰 工作台</div>
+        </div>
+        <div v-if="!state.workMode" class="scene-tabs">
           <div
             v-for="s in sceneOptions"
             :key="s.value"
@@ -68,7 +72,48 @@
 
       <!-- 消息流 -->
       <div class="message-list" ref="messageList">
-        <div v-if="state.messages.length === 0" class="welcome-card">
+        <!-- 工作台模式：任务清单 + 表单 + 结果 -->
+        <div v-if="state.workMode" class="work-panel">
+          <div class="work-head">
+            <div class="work-title">工作台 · 结构化备考任务</div>
+            <div class="work-sub">点选任务 → 填参数 → 生成可直接用的结果</div>
+          </div>
+          <div class="work-tasks">
+            <div
+              v-for="t in state.workTasks"
+              :key="t.task_id"
+              class="work-task"
+              :class="{ open: state.activeTask && state.activeTask.task_id === t.task_id }"
+              @click="selectTask(t)"
+            >
+              <div class="wt-row">
+                <span class="wt-title">{{ t.title }}</span>
+                <span class="wt-agent">{{ agentLabel(t.agent) }}</span>
+              </div>
+              <div class="wt-desc">{{ t.desc }}</div>
+              <div v-if="state.activeTask && state.activeTask.task_id === t.task_id" class="wt-form" @click.stop>
+                <div v-for="f in t.fields" :key="f.key" class="wf-row">
+                  <label class="wf-label">{{ f.label }}{{ f.required ? ' *' : '' }}</label>
+                  <select v-if="f.type === 'select'" v-model="state.workParams[f.key]" class="wf-input">
+                    <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
+                  </select>
+                  <input v-else v-model="state.workParams[f.key]" class="wf-input"
+                    :placeholder="f.placeholder || '选填'" />
+                </div>
+                <button class="wf-run" :disabled="state.workRunning" @click="runWorkTask(t)">
+                  {{ state.workRunning ? '生成中…' : '运行任务' }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div v-if="state.workReply" class="work-reply">
+            <div class="wr-head">📋 {{ state.workTitle }} 结果</div>
+            <div class="wr-body" v-html="renderMd(state.workReply)"></div>
+          </div>
+          <div v-if="state.workNotice" class="work-notice">{{ state.workNotice }}</div>
+        </div>
+
+        <div v-if="!state.workMode && state.messages.length === 0" class="welcome-card">
           <div class="welcome-emoji">🎯</div>
           <p class="welcome-title">你好，我是联考小智</p>
           <p class="welcome-sub">选个场景，从下面挑一个问题开始问我</p>
@@ -133,7 +178,7 @@
     name: 'AiAssistant',
     components: { XIcon },
     setup() {
-      const provider = useProvider({ id: 'ai_chat', version: '20261027001' });
+      const provider = useProvider({ id: 'ai_chat', version: '20261028001' });
       const state = reactive({
         scene: 'qa',
         input: '',
@@ -142,6 +187,15 @@
         loading: false,
         notice: '',
         agentName: '', // 模块7 v2：当前路由命中的专业 Agent
+        // 工作台模式（模块7 v2）
+        workMode: false,
+        workTasks: [],
+        activeTask: null,
+        workParams: {},
+        workRunning: false,
+        workReply: '',
+        workTitle: '',
+        workNotice: '',
       });
       const sessions = ref([]);
       const drawerOpen = ref(false);
@@ -320,6 +374,57 @@
         newChat();
       }
 
+      const AGENT_LABELS = {
+        choose_post: '选岗顾问', interview: '面试教练', psychology: '心理辅导',
+        shenlun: '申论教练', xingce: '行测讲师', gongzhuan: '公专导师', qa: '联考小智',
+      };
+      function agentLabel(a) { return AGENT_LABELS[a] || '联考小智'; }
+
+      async function switchMode(work) {
+        if (state.workMode === work) return;
+        state.workMode = work;
+        if (work && state.workTasks.length === 0) {
+          try {
+            const res = await window.__VTJ_AUTH__.apiFetch('/api/agent/tasks');
+            if (res.ok) {
+              const d = await res.json();
+              state.workTasks = d.tasks || [];
+            }
+          } catch (e) {}
+        }
+      }
+
+      function selectTask(t) {
+        state.activeTask = (state.activeTask && state.activeTask.task_id === t.task_id) ? null : t;
+        state.workParams = {};
+        state.workNotice = '';
+        state.workReply = '';
+      }
+
+      async function runWorkTask(t) {
+        state.workRunning = true;
+        state.workNotice = '';
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/agent/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: t.task_id, params: state.workParams }),
+          });
+          const d = await res.json();
+          if (res.ok && d.reply) {
+            state.workReply = d.reply;
+            state.workTitle = d.title;
+            state.agentName = d.agent_name || '';
+          } else {
+            state.workNotice = d.detail || '任务执行失败，请稍后重试';
+          }
+        } catch (e) {
+          state.workNotice = '网络异常，任务未执行';
+        } finally {
+          state.workRunning = false;
+        }
+      }
+
       onMounted(() => {
         state.__listEl = document.querySelector('.ai-chat-page .message-list');
         loadSessions();
@@ -333,6 +438,7 @@
         send, quickAsk, switchScene, newChat, goBack,
         openSession, removeSession,
         sceneLabel, fmtTime, renderMd,
+        agentLabel, switchMode, selectTask, runWorkTask,
         Plus, Menu, Promotion,
       };
     },
@@ -479,6 +585,54 @@
     border: 1px solid rgba(255,255,255,0.16); width: fit-content;
   }
   .agent-dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; }
+  .mode-tabs { display: flex; gap: 8px; margin-top: 6px; }
+  .mode-tab {
+    padding: 5px 14px; border-radius: 18px; font-size: 13px; cursor: pointer;
+    color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.18); transition: all 0.2s;
+  }
+  .mode-tab.active { background: #1a2a4a; border-color: #1a2a4a; color: #fff; }
+
+  /* 工作台 */
+  .work-panel { padding: 2px 0 16px; }
+  .work-head { margin-bottom: 12px; }
+  .work-title { font-size: 15px; font-weight: 700; color: #1a2a4a; }
+  .work-sub { font-size: 12px; color: #8899aa; margin-top: 2px; }
+  .work-tasks { display: flex; flex-direction: column; gap: 8px; }
+  .work-task {
+    background: #fff; border: 1px solid #e6ebf2; border-radius: 12px;
+    padding: 12px 14px; cursor: pointer; transition: all 0.2s;
+  }
+  .work-task:hover { border-color: #c8161e; }
+  .work-task.open { border-color: #c8161e; box-shadow: 0 4px 12px rgba(200,22,30,0.08); }
+  .wt-row { display: flex; justify-content: space-between; align-items: center; }
+  .wt-title { font-size: 14px; font-weight: 600; color: #2c3e50; }
+  .wt-agent {
+    font-size: 11px; color: #c8161e; background: #fdecec; border-radius: 10px;
+    padding: 2px 8px;
+  }
+  .wt-desc { font-size: 12px; color: #8899aa; margin-top: 4px; }
+  .wt-form { margin-top: 10px; border-top: 1px dashed #e6ebf2; padding-top: 10px; }
+  .wf-row { margin-bottom: 8px; }
+  .wf-label { display: block; font-size: 12px; color: #5a6a7a; margin-bottom: 4px; }
+  .wf-input {
+    width: 100%; padding: 7px 10px; border: 1px solid #dce3ec; border-radius: 8px;
+    font-size: 13px; outline: none; box-sizing: border-box;
+  }
+  .wf-run {
+    width: 100%; padding: 9px; border: none; border-radius: 8px; cursor: pointer;
+    background: #c8161e; color: #fff; font-size: 13px; font-weight: 600;
+    transition: all 0.2s;
+  }
+  .wf-run:hover { background: #a81218; }
+  .wf-run:disabled { background: #e6b0b3; cursor: not-allowed; }
+  .work-reply {
+    margin-top: 12px; background: #fff; border: 1px solid #e6ebf2; border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .wr-head { font-size: 13px; font-weight: 600; color: #1a2a4a; margin-bottom: 8px; }
+  .wr-body { font-size: 13px; color: #2c3e50; line-height: 1.6; }
+  .work-notice { margin-top: 10px; font-size: 12px; color: #c8161e; }
 
   .message-list { flex: 1; overflow-y: auto; padding: 18px; }
   .welcome-card {
