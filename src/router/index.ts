@@ -96,6 +96,12 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/knowledge',
+    name: 'KnowledgeView',
+    component: () => import('$vtj/vue/knowledge_view.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/student/papers',
     name: 'StudentPapers',
     component: () => import('$vtj/vue/student_papers.vue'),
