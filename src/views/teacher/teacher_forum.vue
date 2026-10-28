@@ -2,8 +2,12 @@
   <div class="tf-page">
     <TeacherNavHeader active-nav="forum" />
     <main class="tf-main">
+      <div class="tf-left">
       <header class="tf-head">
-        <h1>论坛管理</h1>
+        <div class="tf-head-row">
+          <h1>论坛管理</h1>
+          <button class="tf-post-btn" @click="openPostForm">发布新帖</button>
+        </div>
         <p class="tf-sub">全校帖子可见；只能隐藏本班学生的内容，需填写原因并提交管理员复核。</p>
       </header>
 
@@ -90,7 +94,77 @@
         @close="reasonDialog.visible = false"
         @confirm="submitReason"
       />
+      </div>
+
+      <aside class="tf-side">
+        <section class="tf-mini-card">
+          <h3>热门帖子</h3>
+          <p v-if="!hotPosts.length" class="tf-mini-empty">暂无数据</p>
+          <ul v-else>
+            <li v-for="h in hotPosts" :key="h.id" @click="openPost(h)">
+              <span class="tf-mini-title" :style="{ color: titleColorValue(h.titleColor) }">{{ h.title }}</span>
+              <span class="tf-mini-num">❤ {{ h.likeCount }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="tf-mini-card">
+          <h3>论坛活跃</h3>
+          <div class="tf-stats">
+            <div><b>{{ stats.posts }}</b><span>帖子</span></div>
+            <div><b>{{ stats.users }}</b><span>用户</span></div>
+            <div><b>{{ stats.online }}</b><span>在线</span></div>
+          </div>
+        </section>
+
+        <section class="tf-mini-card">
+          <h3>我的帖子</h3>
+          <p v-if="!myPosts.length" class="tf-mini-empty">还没有发过帖</p>
+          <ul v-else>
+            <li v-for="m in myPosts" :key="m.id" @click="openPost(m)">
+              <span class="tf-mini-title">{{ m.title }}</span>
+              <span class="tf-mini-num">💬 {{ m.commentCount }}</span>
+            </li>
+          </ul>
+        </section>
+      </aside>
     </main>
+    <!-- P3-07：教师发帖（含可见范围） -->
+    <div v-if="postForm.visible" class="tf-modal" @click.self="postForm.visible = false">
+      <div class="tf-modal-card">
+        <h3>发布新帖</h3>
+        <input v-model="postForm.title" class="tf-input" placeholder="请输入标题…" maxlength="200" />
+        <div class="tf-color-row">
+          <span class="tf-label">标题颜色</span>
+          <select v-model="postForm.titleColor" class="tf-select">
+            <option value="default">默认</option>
+            <option value="red">红</option>
+            <option value="gold">金</option>
+            <option value="blue">蓝</option>
+            <option value="green">绿</option>
+            <option value="purple">紫</option>
+          </select>
+        </div>
+        <textarea v-model="postForm.content" class="tf-textarea" rows="6" placeholder="请输入内容…"></textarea>
+        <div class="tf-visibility">
+          <span class="tf-label">可见范围</span>
+          <label><input type="radio" value="ALL" v-model="postForm.visibility" /> 全校</label>
+          <label><input type="radio" value="CLASSES" v-model="postForm.visibility" /> 自己班级</label>
+        </div>
+        <div v-if="postForm.visibility === 'CLASSES'" class="tf-classes">
+          <label v-for="c in classOptions" :key="c" class="tf-class-chip">
+            <input type="checkbox" :value="c" v-model="postForm.classes" /> {{ c }}
+          </label>
+          <p v-if="!classOptions.length" class="tf-mini-empty">未查到可管理班级，请先绑定班级</p>
+        </div>
+        <div class="tf-modal-actions">
+          <button class="tf-btn ghost" @click="postForm.visible = false">取消</button>
+          <button class="tf-btn" :disabled="postForm.submitting" @click="submitPost">
+            {{ postForm.submitting ? '发布中…' : '发布' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -104,6 +178,12 @@ import UserBadge from '@/components/forum/UserBadge.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
+import {
+  createForumPostWithVisibility,
+  fetchForumPosts,
+  fetchForumStats,
+  fetchMyForumPosts
+} from '@/modules/community/api';
 import {
   teacherForumApi,
   type ModerationComment,
@@ -120,6 +200,20 @@ const classOptions = ref<string[]>([]);
 const teacherClasses = ref<string[]>([]);
 const canModerate = ref(true);
 
+// P3-07：侧栏三卡 + 发帖弹窗
+const hotPosts = ref<any[]>([]);
+const stats = reactive({ posts: 0, users: 0, online: 0 });
+const myPosts = ref<any[]>([]);
+const postForm = reactive({
+  visible: false,
+  submitting: false,
+  title: '',
+  titleColor: 'default',
+  content: '',
+  visibility: 'ALL' as 'ALL' | 'CLASSES',
+  classes: [] as string[]
+});
+
 const reasonDialog = reactive({
   visible: false,
   title: '',
@@ -131,6 +225,55 @@ const reasonDialog = reactive({
 const statusLabel = (status: string) =>
   ({ NORMAL: '正常', BLOCKED: '待复核隐藏', DELETED: '已删除' } as Record<string, string>)[status] ||
   status;
+
+const openPostForm = () => {
+  postForm.visible = true;
+};
+
+const loadSideCards = async () => {
+  try {
+    const hot: any = await fetchForumPosts({ sortBy: 'likes', limit: 5 });
+    hotPosts.value = (hot && hot.posts) || [];
+  } catch (e) { hotPosts.value = []; }
+  try {
+    const s: any = await fetchForumStats();
+    if (s) { stats.posts = s.posts || 0; stats.users = s.users || 0; stats.online = s.online || 0; }
+  } catch (e) { /* 忽略 */ }
+  try {
+    const mine: any = await fetchMyForumPosts({ limit: 5 });
+    myPosts.value = (mine && mine.posts) || [];
+  } catch (e) { myPosts.value = []; }
+};
+
+const submitPost = async () => {
+  if (!postForm.title.trim() || !postForm.content.trim()) {
+    ElMessage.warning('标题和正文不能为空');
+    return;
+  }
+  if (postForm.visibility === 'CLASSES' && !postForm.classes.length) {
+    ElMessage.warning('请选择可见班级');
+    return;
+  }
+  postForm.submitting = true;
+  try {
+    await createForumPostWithVisibility({
+      title: postForm.title.trim(),
+      content: postForm.content.trim(),
+      titleColor: postForm.titleColor,
+      visibility: postForm.visibility,
+      visibleClasses: postForm.visibility === 'CLASSES' ? postForm.classes : undefined
+    });
+    ElMessage.success('发布成功');
+    postForm.visible = false;
+    postForm.title = '';
+    postForm.content = '';
+    await Promise.all([loadPosts(), loadSideCards()]);
+  } catch (e: any) {
+    ElMessage.error(e && e.message ? e.message : '发布失败');
+  } finally {
+    postForm.submitting = false;
+  }
+};
 
 const loadPosts = async () => {
   loading.value = true;
@@ -204,6 +347,7 @@ const submitReason = async (reason: string) => {
   }
 };
 
+onMounted(loadSideCards);
 onMounted(loadPosts);
 </script>
 
@@ -260,6 +404,33 @@ onMounted(loadPosts);
   color: #3b4a6b;
   font-size: 14px;
 }
+/* P3-07：两列布局 + 侧栏三卡 + 发帖弹窗 */
+.tf-main { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+.tf-left { min-width: 0; }
+.tf-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tf-post-btn { padding: 10px 18px; border: none; border-radius: 10px; background: #c41e3a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.tf-side { display: flex; flex-direction: column; gap: 14px; }
+.tf-mini-card { background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 12px rgba(15,23,42,.06); }
+.tf-mini-card h3 { margin: 0 0 10px; font-size: 15px; color: #1a2b5f; }
+.tf-mini-card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tf-mini-card li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; cursor: pointer; }
+.tf-mini-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-mini-num { color: #94a3b8; flex: 0 0 auto; }
+.tf-mini-empty { color: #94a3b8; font-size: 13px; margin: 0; }
+.tf-stats { display: flex; gap: 16px; }
+.tf-stats div { display: flex; flex-direction: column; align-items: center; }
+.tf-stats b { font-size: 18px; color: #c41e3a; }
+.tf-stats span { font-size: 12px; color: #94a3b8; }
+.tf-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 2200; }
+.tf-modal-card { width: 560px; max-width: 92vw; background: #fff; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.tf-modal-card h3 { margin: 0; font-size: 17px; color: #1a2b5f; }
+.tf-input, .tf-textarea, .tf-select { width: 100%; padding: 10px 12px; border: 1px solid #e3e8ef; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
+.tf-color-row, .tf-visibility { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #475569; }
+.tf-label { color: #1a2b5f; font-weight: 600; }
+.tf-classes { display: flex; flex-wrap: wrap; gap: 8px; }
+.tf-class-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.tf-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.tf-btn.ghost { background: #fff; color: #475569; border: 1px solid #e3e8ef; }
 </style>
 
 

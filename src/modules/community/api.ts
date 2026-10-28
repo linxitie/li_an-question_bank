@@ -338,6 +338,31 @@ export function deleteForumPost(postId: number): Promise<{ success: boolean; mes
   });
 }
 
+/** 教师端发帖：支持可见范围（P3-07）。学生默认本班由后端决定，这里只透传。 */
+export function createForumPostWithVisibility(payload: {
+  title: string;
+  content: string;
+  titleColor?: string;
+  shareType?: string;
+  visibility?: 'ALL' | 'CLASSES';
+  visibleClasses?: string[];
+}): Promise<ForumPostItem> {
+  const data = new FormData();
+  data.append('title', payload.title);
+  data.append('content', payload.content);
+  data.append('share_type', payload.shareType || 'DISCUSSION');
+  if (payload.titleColor) data.append('title_color', payload.titleColor);
+  if (payload.visibility) data.append('visibility', payload.visibility);
+  if (payload.visibleClasses && payload.visibleClasses.length) {
+    data.append('visible_classes', JSON.stringify(payload.visibleClasses));
+  }
+  return request<ForumPostItem>({
+    url: '/api/forum/posts',
+    method: 'POST',
+    data
+  });
+}
+
 export function updateForumPost(
   postId: number,
   payload: Partial<ForumPostCreatePayload>
