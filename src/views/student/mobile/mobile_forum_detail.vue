@@ -37,16 +37,15 @@
         <div class="post-content"><ForumContent :content="post.content" /></div>
         <AttachmentList v-if="post.attachments && post.attachments.length" :attachments="post.attachments" mode="post" />
         <div class="reaction-bar">
+          <!-- P3-08：反应收敛为单个爱心（喜欢） -->
           <button
-            v-for="r in REACTIONS"
-            :key="r.code"
-            class="reaction-btn"
-            :class="{ active: post.myReaction === r.code }"
-            :title="r.label"
-            @click="reactToPost(r.code)"
+            class="reaction-btn heart-only"
+            :class="{ active: post.liked }"
+            title="喜欢"
+            @click="reactToPost('like')"
           >
-            <span class="reaction-emoji">{{ r.emoji }}</span>
-            <span v-if="reactionCount(post, r.code)" class="reaction-count">{{ reactionCount(post, r.code) }}</span>
+            <span class="reaction-emoji">{{ post.liked ? '❤' : '♡' }}</span>
+            <span v-if="post.likeCount" class="reaction-count">{{ post.likeCount }}</span>
           </button>
           <span class="action-count">💬 {{ post.commentCount || 0 }}</span>
         </div>
@@ -104,13 +103,12 @@
                   举报
                 </button>
                 <button
-                  v-for="r in REACTIONS"
-                  :key="r.code"
                   class="mini-reaction"
-                  :class="{ active: c.myReaction === r.code }"
-                  @click="reactToComment(c.id, r.code)"
+                  :class="{ active: c.liked }"
+                  title="喜欢"
+                  @click="reactToComment(c.id, 'like')"
                 >
-                  {{ r.emoji }}<span v-if="reactionCount(c, r.code)">{{ reactionCount(c, r.code) }}</span>
+                  {{ c.liked ? '❤' : '♡' }}<span v-if="c.likeCount">{{ c.likeCount }}</span>
                 </button>
               </div>
               <div class="comment-time">{{ formatTime(c.createTime) }}</div>
@@ -145,13 +143,12 @@
                     举报
                   </button>
                   <button
-                    v-for="reaction in REACTIONS"
-                    :key="reaction.code"
                     class="mini-reaction"
-                    :class="{ active: r.myReaction === reaction.code }"
-                    @click="reactToComment(r.id, reaction.code)"
+                    :class="{ active: r.liked }"
+                    title="喜欢"
+                    @click="reactToComment(r.id, 'like')"
                   >
-                    {{ reaction.emoji }}<span v-if="reactionCount(r, reaction.code)">{{ reactionCount(r, reaction.code) }}</span>
+                    {{ r.liked ? '❤' : '♡' }}<span v-if="r.likeCount">{{ r.likeCount }}</span>
                   </button>
                 </div>
                 <div class="comment-time">{{ formatTime(r.createTime) }}</div>
