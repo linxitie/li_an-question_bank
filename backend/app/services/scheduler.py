@@ -131,6 +131,59 @@ def init_scheduler():
         replace_existing=True
     )
 
+    # 模块4 v2：每日 20:00 站内提醒——今日任务未完成的用户
+    def _remind_unfinished_tasks():
+        from ..models.models import StudyGoal, UserNotify
+        from ..core.database import SessionLocal
+        from datetime import datetime as _dt
+        db = SessionLocal()
+        try:
+            today = _dt.now().strftime("%Y-%m-%d")
+            rows = (
+                db.query(StudyGoal)
+                .filter(
+                    StudyGoal.status == 1,
+                    StudyGoal.task_date == today,
+                    StudyGoal.is_completed == 0,
+                )
+                .all()
+            )
+            users = {}
+            for r in rows:
+                users.setdefault(r.user_id, 0)
+                users[r.user_id] += 1
+            for uid, n in users.items():
+                existing = (
+                    db.query(UserNotify)
+                    .filter(
+                        UserNotify.user_id == uid,
+                        UserNotify.notify_type == "task_remind",
+                        UserNotify.create_time >= _dt.now().replace(hour=0, minute=0, second=0, microsecond=0),
+                    )
+                    .first()
+                )
+                if existing:
+                    continue  # 当日已提醒过，不重复打扰
+                db.add(UserNotify(
+                    user_id=uid,
+                    content=f"今天还有 {n} 个学习任务未完成，快去完成并领取金币吧！",
+                    notify_type="task_remind",
+                ))
+            db.commit()
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).warning("每日任务提醒失败: %s", _e)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _remind_unfinished_tasks,
+        trigger=CronTrigger(hour=20, minute=0, timezone=CST),
+        id="task_remind",
+        name="每日任务未完成提醒",
+        replace_existing=True
+    )
+
     # 每日 03:00 清理过期斩题记录
     def cleanup_expired_zhanti():
         """清理过期的斩题记录（auto_delete_time < now 的记录物理删除）"""

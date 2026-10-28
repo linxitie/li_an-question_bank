@@ -833,6 +833,11 @@ class StudyGoal(Base):
     sort_order = Column(Integer, default=0, comment="计划内任务排序")
     plan_meta = Column(Text, comment="计划元数据JSON(summary/phases/tips)")
 
+    # === 模块4 v2 每日任务闭环 ===
+    task_date = Column(String(10), nullable=True, comment="任务归属日期 YYYY-MM-DD（按日滚动）")
+    coin_reward = Column(Integer, default=0, comment="完成可领取金币（生成时按规则分配）")
+    coin_claimed = Column(Integer, default=0, comment="金币领取状态 0未领/1已领")
+
     user = relationship("SysUser")
 
     __table_args__ = (
@@ -2010,6 +2015,25 @@ class ChatMessage(Base):
     __table_args__ = (
         Index("idx_chat_message_session", session_id),
         Index("idx_chat_message_create", create_time),
+    )
+
+
+class UserNotify(Base):
+    """模块4 v2 - 站内提醒表（每日任务未完成提醒等）"""
+    __tablename__ = "user_notify"
+
+    notify_id = Column(Integer, primary_key=True, autoincrement=True, comment="提醒ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    content = Column(String(500), nullable=False, comment="提醒内容")
+    notify_type = Column(String(20), default="task_remind", comment="类型: task_remind/system")
+    read_flag = Column(Integer, default=0, comment="已读 0未读/1已读")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_notify_user", user_id),
+        Index("idx_notify_read", read_flag),
     )
 
 

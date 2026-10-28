@@ -127,15 +127,24 @@
         <div class="section">
           <div class="section-head">
             <span class="section-title">📌 今日任务</span>
-            <span class="section-hint">点击勾选完成</span>
+            <span class="section-hint">完成勾选 → 领取金币</span>
           </div>
+          <div v-if="state.coinNotice" class="coin-notice">{{ state.coinNotice }}</div>
           <div class="task-list">
-            <div v-for="t in state.plan.tasks" :key="t.goal_id"
-              class="task-item" :class="{ done: t.is_completed }"
-              @click="toggleTask(t)">
-              <span class="checkbox">{{ t.is_completed ? '✓' : '' }}</span>
-              <span class="task-title">{{ t.title }}</span>
-            </div>
+            <template v-if="state.today && state.today.tasks.length">
+              <div v-for="t in state.today.tasks" :key="t.goal_id"
+                class="task-item" :class="{ done: t.is_completed }">
+                <div class="task-main" @click="toggleTask(t)">
+                  <span class="checkbox">{{ t.is_completed ? '✓' : '' }}</span>
+                  <span class="task-title">{{ t.title }}</span>
+                  <span class="coin-badge" :class="{ dim: t.coin_claimed }">🪙 {{ t.coin_reward || 0 }}</span>
+                </div>
+                <button v-if="t.is_completed === 1 && t.coin_claimed === 0" class="claim-btn"
+                  @click.stop="claimCoin(t)">领取</button>
+                <span v-else-if="t.coin_claimed === 1" class="claimed-tag">已领取</span>
+              </div>
+            </template>
+            <div v-else class="task-empty">今日暂无任务，先重新生成学习计划吧</div>
           </div>
         </div>
 
@@ -178,8 +187,10 @@
         loading: false,
         error: '',
         plan: null,
+        today: null,
         daysLeft: 0,
         streak: 0,
+        coinNotice: '',
         showAsk: false,
         askText: '',
         askReply: '',
@@ -251,6 +262,7 @@
             state.plan = data;
             // 用后端返回的剩余天数（向下取整口径），避免 Math.ceil 多算一天
             state.daysLeft = data.days_left !== undefined ? data.days_left : 0;
+            await loadToday();
           } else {
             state.error = data.detail || '生成失败，请重试';
           }
@@ -259,6 +271,16 @@
         } finally {
           state.loading = false;
         }
+      }
+
+      async function loadToday() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/today');
+          if (res.ok) {
+            state.today = await res.json();
+            state.error = '';
+          }
+        } catch (e) { /* 今日面板加载失败不影响主流程 */ }
       }
 
       async function toggleTask(t) {
@@ -272,10 +294,28 @@
             state.plan.progress.percent = Math.round(done / total * 100);
             state.error = '';
           } else {
+            const data = await res.json().catch(() => ({}));
             state.error = (data && data.detail) || '操作失败，请稍后重试';
           }
         } catch (e) {
           state.error = '网络异常，操作未生效';
+        }
+      }
+
+      async function claimCoin(t) {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch(`/api/plan/task/${t.goal_id}/claim`, { method: 'POST' });
+          if (res.ok) {
+            const data = await res.json();
+            t.coin_claimed = 1;
+            state.coinNotice = data.message || `领取成功，+${data.coin_reward} 金币`;
+            state.error = '';
+          } else {
+            const data = await res.json().catch(() => ({}));
+            state.error = (data && data.detail) || '领取失败，请稍后重试';
+          }
+        } catch (e) {
+          state.error = '网络异常，领取未生效';
         }
       }
 
@@ -327,6 +367,7 @@
             state.daysLeft = data.days_left !== undefined ? data.days_left : 0;
           }
         } catch (e) {}
+        loadToday();
         // 连续打卡：拉真实签到数据（不再硬编码假数据）
         try {
           const ck = await window.__VTJ_AUTH__.apiFetch('/api/v1/growth/checkin/status');
@@ -339,7 +380,7 @@
 
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, reset, askAI, sendAsk, goBack,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
       };
     },
   });
@@ -444,10 +485,11 @@
   .section-hint { font-size: 11px; color: #aab4c0; }
   .task-list { background: #f8fafc; border-radius: 10px; overflow: hidden; }
   .task-item {
-    display: flex; align-items: center; gap: 10px; padding: 12px;
-    border-bottom: 1px solid #eef2f6; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; padding: 12px;
+    border-bottom: 1px solid #eef2f6;
   }
   .task-item:last-child { border-bottom: none; }
+  .task-main { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; min-width: 0; }
   .task-item.done .task-title { text-decoration: line-through; color: #aab4c0; }
   .checkbox {
     width: 20px; height: 20px; border: 2px solid #c8d0da; border-radius: 50%;
@@ -456,7 +498,24 @@
     transition: all 0.2s;
   }
   .task-item.done .checkbox { background: #c8161e; border-color: #c8161e; }
-  .task-title { font-size: 14px; color: #2c3e50; }
+  .task-title { font-size: 14px; color: #2c3e50; flex: 1; }
+  .coin-badge {
+    font-size: 12px; color: #b8860b; background: #fff8e6; border-radius: 20px;
+    padding: 2px 8px; white-space: nowrap; flex-shrink: 0;
+  }
+  .coin-badge.dim { color: #aab4c0; background: #f1f5f9; }
+  .claim-btn {
+    padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: none; background: #16a34a; color: #fff; cursor: pointer; flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .claim-btn:hover { background: #15803d; }
+  .claimed-tag { font-size: 12px; color: #aab4c0; flex-shrink: 0; }
+  .coin-notice {
+    margin-bottom: 8px; padding: 8px 12px; border-radius: 8px;
+    background: #f0fdf4; color: #16a34a; font-size: 12px;
+  }
+  .task-empty { padding: 16px; text-align: center; font-size: 13px; color: #aab4c0; }
 
   /* Tips */
   .tips-card {

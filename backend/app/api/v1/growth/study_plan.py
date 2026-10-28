@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user
-from ....models.models import StudyGoal, SysUser, UserProfile
+from ....models.models import StudyGoal, SysUser, UserProfile, UserNotify
 from ....services import llm_client
 from ....services import plan_agent
 
@@ -163,10 +163,20 @@ async def generate_plan(
         "phases": phases,
         "tips": tips,
     }, ensure_ascii=False)
+
+    # 每日任务闭环：金币按规则分配（10 基础 + 弱项科目 +5）；任务按顺序每 4 个滚动到后续日期
+    _weak_set = set(req.weak_subjects)
+    _TASKS_PER_DAY = 4
+    _today = datetime.now().strftime("%Y-%m-%d")
+    from datetime import timedelta
+
     created = []
     for i, t in enumerate(tasks):
         task_name = str(t.get("task", "未命名任务"))[:100]
         task_time = str(t.get("time", ""))[:20]
+        task_subject = str(t.get("subject", ""))[:20]
+        task_date = (datetime.now() + timedelta(days=i // _TASKS_PER_DAY)).strftime("%Y-%m-%d")
+        coin = 10 + (5 if task_subject in _weak_set else 0)
         goal = StudyGoal(
             user_id=current_user.user_id,
             title=f"[{task_time}] {task_name}" if task_time else task_name,
@@ -180,6 +190,9 @@ async def generate_plan(
             plan_id=plan_id,
             sort_order=i,
             plan_meta=plan_meta,
+            task_date=task_date,
+            coin_reward=coin,
+            coin_claimed=0,
         )
         db.add(goal)
         created.append(goal)
@@ -200,6 +213,8 @@ async def generate_plan(
                 "title": g.title,
                 "is_completed": g.is_completed,
                 "sort_order": g.sort_order,
+                "task_date": g.task_date,
+                "coin_reward": g.coin_reward,
             }
             for g in created
         ],
@@ -372,3 +387,138 @@ async def delete_plan(
         t.status = 0
     db.commit()
     return {"deleted": len(tasks)}
+
+
+# ==================== 模块4 v2 每日任务闭环 ====================
+
+def _task_summary(g: StudyGoal) -> dict:
+    return {
+        "goal_id": g.goal_id,
+        "title": g.title,
+        "description": g.description,
+        "is_completed": g.is_completed,
+        "completed_time": g.completed_time.isoformat() if g.completed_time else None,
+        "sort_order": g.sort_order,
+        "task_date": g.task_date,
+        "coin_reward": g.coin_reward or 0,
+        "coin_claimed": g.coin_claimed or 0,
+    }
+
+
+@router.get("/today", summary="今日任务面板（含金币领取状态）")
+async def today_tasks(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    today = datetime.now().strftime("%Y-%m-%d")
+    tasks = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.status == 1,
+            StudyGoal.task_date == today,
+        )
+        .order_by(StudyGoal.sort_order.asc())
+        .all()
+    )
+    total = len(tasks)
+    done = sum(1 for t in tasks if t.is_completed == 1)
+    claimed = sum(1 for t in tasks if t.coin_claimed == 1)
+    total_coins = sum(t.coin_reward or 0 for t in tasks)
+    return {
+        "date": today,
+        "total": total,
+        "done": done,
+        "claimed": claimed,
+        "total_coins": total_coins,
+        "tasks": [_task_summary(t) for t in tasks],
+    }
+
+
+@router.post("/task/{goal_id}/claim", summary="完成任务后领取金币（完成才可领）")
+async def claim_task_coin(
+    goal_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    goal = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.goal_id == goal_id,
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.status == 1,
+        )
+        .first()
+    )
+    if not goal:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if goal.is_completed != 1:
+        raise HTTPException(status_code=400, detail="任务尚未完成，完成后才可领取金币")
+    if goal.coin_claimed == 1:
+        raise HTTPException(status_code=400, detail="金币已领取，请勿重复领取")
+    coin = goal.coin_reward or 0
+    if coin <= 0:
+        raise HTTPException(status_code=400, detail="该任务无金币奖励")
+
+    # 跨域写入走公开契约发币（禁止直接实例化他域表）
+    from ..reward.contract import grant_coins
+    grant_coins(
+        db, current_user, coin, source_type="TASK",
+        related_id=goal.goal_id, description=f"完成每日任务：{goal.title}",
+    )
+    goal.coin_claimed = 1
+    goal.update_time = datetime.now()
+    db.commit()
+    return {
+        "goal_id": goal.goal_id,
+        "coin_reward": coin,
+        "balance": current_user.total_coins,
+        "message": f"领取成功，+{coin} 金币",
+    }
+
+
+@router.get("/notifies", summary="站内提醒列表（未完成任务提醒等）")
+async def get_notifies(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    items = (
+        db.query(UserNotify)
+        .filter(UserNotify.user_id == current_user.user_id)
+        .order_by(UserNotify.create_time.desc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "notifies": [
+            {
+                "notify_id": n.notify_id,
+                "content": n.content,
+                "notify_type": n.notify_type,
+                "read_flag": n.read_flag,
+                "create_time": n.create_time.isoformat() if n.create_time else None,
+            }
+            for n in items
+        ]
+    }
+
+
+@router.post("/notify/{notify_id}/read", summary="标记提醒已读")
+async def mark_notify_read(
+    notify_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    n = (
+        db.query(UserNotify)
+        .filter(
+            UserNotify.notify_id == notify_id,
+            UserNotify.user_id == current_user.user_id,
+        )
+        .first()
+    )
+    if not n:
+        raise HTTPException(status_code=404, detail="提醒不存在")
+    n.read_flag = 1
+    db.commit()
+    return {"notify_id": n.notify_id, "read_flag": 1}

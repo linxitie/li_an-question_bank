@@ -335,12 +335,27 @@ async def lifespan(app: FastAPI):
                 ('plan_id', 'INTEGER'),
                 ('sort_order', 'INTEGER DEFAULT 0'),
                 ('plan_meta', 'TEXT'),
+                # 模块4 v2 每日任务闭环
+                ('task_date', 'VARCHAR(10)'),
+                ('coin_reward', 'INTEGER DEFAULT 0'),
+                ('coin_claimed', 'INTEGER DEFAULT 0'),
             ]:
                 if col_name not in sg_cols:
                     with engine.connect() as conn:
                         conn.execute(text(f"ALTER TABLE study_goal ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: study_goal 添加列 {col_name}")
+
+            # 模块4 v2：存量计划任务回填 task_date（按创建日 + 每4个滚动一天），金币统一 10
+            with engine.connect() as conn:
+                backfilled = conn.execute(text(
+                    "UPDATE study_goal SET task_date = date(create_time, '+' || CAST(sort_order / 4 AS INTEGER) || ' days'), "
+                    "coin_reward = COALESCE(coin_reward, 0) "
+                    "WHERE plan_id IS NOT NULL AND task_date IS NULL"
+                )).rowcount
+                if backfilled:
+                    logger.info(f"自动迁移: study_goal 回填 {backfilled} 条存量任务的 task_date")
+                conn.commit()
 
         # 检查并修复双编码JSON options（99条历史数据）
         if 'question_bank' in inspector.get_table_names():
