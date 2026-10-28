@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user, require_admin, require_teacher_or_admin
+from ....services.class_scope import teacher_class_names, is_my_student  # 班级范围下沉 services（边界门禁）
 from ....models.models import (
-    Banji,
     ForumComment,
     ForumModeration,
     ForumPost,
@@ -60,26 +60,8 @@ def _audit(
     )
 
 
-def _teacher_class_names(db: Session, teacher: SysUser) -> set[str]:
-    """教师可管理的班级：SysUser.class_name + Banji.teacher_id 关联班级。"""
-    names: set[str] = set()
-    if teacher.class_name:
-        names.add(teacher.class_name)
-    rows = (
-        db.query(Banji.class_name)
-        .filter(Banji.teacher_id == teacher.user_id)
-        .all()
-    )
-    for (name,) in rows:
-        if name:
-            names.add(name)
-    return names
-
-
-def _is_my_student(db: Session, teacher: SysUser, author: Optional[SysUser]) -> bool:
-    if not author or author.user_type != "student" or not author.class_name:
-        return False
-    return author.class_name in _teacher_class_names(db, teacher)
+# 班级范围查询已下沉：from ....services.class_scope import teacher_class_names, is_my_student
+# 原因：本文件此前直接 import platform 域的 Banji 模型，触发边界门禁 cross_write 违规。
 
 
 def _post_item(
@@ -185,7 +167,7 @@ async def teacher_posts(
     users = db.query(SysUser).filter(SysUser.user_id.in_(user_ids)).all() if user_ids else []
     user_map = {u.user_id: u for u in users}
 
-    class_names = sorted(_teacher_class_names(db, current_user))
+    class_names = sorted(teacher_class_names(db, current_user))
     admin_view = current_user.user_type == "admin"
     can_moderate = admin_view or bool(class_names)
 
@@ -196,7 +178,7 @@ async def teacher_posts(
             _post_item(
                 post,
                 author,
-                can_delete=admin_view or _is_my_student(db, current_user, author),
+                can_delete=admin_view or is_my_student(db, current_user, author),
             )
         )
     return {
@@ -236,7 +218,7 @@ async def teacher_comments(
                 c,
                 user_map.get(c.user_id),
                 can_delete=current_user.user_type == "admin"
-                or _is_my_student(db, current_user, user_map.get(c.user_id)),
+                or is_my_student(db, current_user, user_map.get(c.user_id)),
             )
             for c in rows
         ]
@@ -247,7 +229,7 @@ def _hide_post(db: Session, post: ForumPost, user: SysUser, reason: str):
     if post.status != "NORMAL":
         raise HTTPException(status_code=400, detail="该帖子已不是正常状态")
     author = db.query(SysUser).filter(SysUser.user_id == post.user_id).first()
-    if user.user_type != "admin" and not _is_my_student(db, user, author):
+    if user.user_type != "admin" and not is_my_student(db, user, author):
         raise HTTPException(status_code=403, detail="只能处理本班学生的帖子")
 
     post.status = "BLOCKED"
@@ -272,7 +254,7 @@ def _hide_comment(db: Session, comment: ForumComment, user: SysUser, reason: str
     if comment.status != 1:
         raise HTTPException(status_code=400, detail="该评论已不是正常状态")
     author = db.query(SysUser).filter(SysUser.user_id == comment.user_id).first()
-    if user.user_type != "admin" and not _is_my_student(db, user, author):
+    if user.user_type != "admin" and not is_my_student(db, user, author):
         raise HTTPException(status_code=403, detail="只能处理本班学生的评论")
 
     comment.status = 2
