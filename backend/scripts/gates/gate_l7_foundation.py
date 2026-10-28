@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""L7 底座一致性门禁 — 20 项检查（F1/F2b/F3/F4/F5 落地版）。
+"""L7 底座一致性门禁 — 21 项检查（F1/F2b/F3/F4/F5/F6 落地版）。
 
 严重度约定：
   1-5、8、13、14、16 表缺失 FAIL —— 底座结构/契约/路由/媒体表被破坏，必须阻断；
-  6-7、9-12 WARN —— 依赖环境与后续阶段的软检查，先观察后升级；
+  6-7、9-12、21 的 Milvus/对账部分 WARN —— 依赖环境与后续阶段的软检查，先观察后升级；
   15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL；
   17 事件同事务化/定向路由契约缺失 FAIL，调用点数量不足只 WARN；
   18 断线补发后端契约缺失 FAIL；前端 useDataSync/typed 事件缺失只 WARN；
   19 文档投影后端契约/local 文档库不可用 FAIL；Mongo 不可用、对账过期、漂移只 WARN；
   20 图投影契约/图投影表/本地图存储不可用 FAIL；Neo4j 不可用、对账过期、漂移只 WARN；
+  21 向量投影契约/local 向量库不可用 FAIL；Milvus 不可用、对账过期、漂移/孤儿只 WARN，
+     向量/Embedding 关闭时 PASS disabled；
   16 的存储不可达/对账过期/孤儿只 WARN，不阻断离线开发。
   L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
@@ -977,6 +979,140 @@ def check_graph_store() -> None:
          '；'.join(missing) if missing else detail, 'FAIL')
 
 
+def check_vector_store() -> None:
+    """L7-21：向量投影契约与 VectorStore 健康（F6）。
+
+    协议/本地向量/构建/对账/检索文件缺失，或 local 后端不可用会阻断向量
+    检索，记 FAIL；Milvus 是可选的远程后端，未启动/未安装只 WARN；开关
+    关闭时 PASS disabled。对账过期/漂移/孤儿同样只 WARN。
+    """
+    missing: list[str] = []
+    warnings: list[str] = []
+    required = (
+        ('app/foundation/ports/ai.py', ('EmbeddingPort', 'build_embedding_port')),
+        ('app/foundation/stores/vector.py', ('build_vector_store', 'VectorStore')),
+        ('app/foundation/stores/local_vector.py', ('class LocalVectorStore',)),
+        ('app/foundation/stores/milvus_vector.py', ('class MilvusVectorStore',)),
+        ('app/foundation/vector_builder.py', ('def expected_records', 'def apply_plan')),
+        ('app/foundation/vector_reconcile.py', ('SCOPE = "vector"', 'def inspect')),
+        ('app/foundation/retrieval.py', ('def search_questions',)),
+        ('scripts/foundation/backfill_vectors.py', ('--verify', '--apply')),
+        ('scripts/audit/vector_inventory.py', ('def main',)),
+        ('scripts/audit/vector_parity.py', ('def main',)),
+        ('app/foundation/config.py', ('VECTOR_STORE_ENABLED', 'VECTOR_BACKEND',
+                                      'VECTOR_DIM', 'EMBEDDING_PROVIDER')),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    backend = os.environ.get('VECTOR_BACKEND', 'off').strip().lower() or 'off'
+    enabled = os.environ.get('VECTOR_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    embedding_enabled = os.environ.get(
+        'EMBEDDING_ENABLED', 'false').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    embedding_provider = os.environ.get('EMBEDDING_PROVIDER', 'off').strip().lower()
+    if not enabled or backend in ('off', ''):
+        _add(21, '向量投影与 VectorStore', not missing,
+             '；'.join(missing) if missing else
+             f'backend={backend} enabled={enabled} disabled', 'FAIL')
+        return
+    if embedding_enabled and embedding_provider not in ('off', 'hash', 'http'):
+        warnings.append(f'未知 EMBEDDING_PROVIDER={embedding_provider}')
+
+    store_detail = 'disabled'
+    counts: dict | None = None
+    if enabled and backend not in ('off', ''):
+        try:
+            if str(BACKEND_ROOT) not in sys.path:
+                sys.path.insert(0, str(BACKEND_ROOT))
+            from app.foundation.stores.vector import build_vector_store
+
+            store = build_vector_store()
+            health = store.health()
+            store_detail = f'{health.backend}={"ok" if health.ok else "down"}'
+            if health.ok:
+                try:
+                    collection = os.environ.get('VECTOR_COLLECTION', 'text_questions')
+                    counts = {'count': store.count(collection)}
+                except Exception:
+                    counts = None
+            if not health.ok or health.degraded:
+                message = f'向量存储 {health.backend} 不可用：{health.detail}'
+                if str(health.backend).lower() == 'milvus' or backend == 'milvus':
+                    warnings.append(message)
+                else:
+                    missing.append(message)
+        except Exception as exc:  # 门禁不能因开发机未启动 Milvus 直接崩溃
+            message = f'向量存储检查失败：{type(exc).__name__}: {exc}'
+            if backend == 'milvus':
+                warnings.append(message)
+            else:
+                missing.append(message)
+
+    db = _db_path()
+    if db.exists():
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='foundation_reconcile_run'").fetchone()
+            if exists:
+                row = con.execute(
+                    "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                    "WHERE scope='vector' ORDER BY finished_at DESC LIMIT 1").fetchone()
+            else:
+                row = None
+        finally:
+            con.close()
+        if row is None:
+            warnings.append('还没有向量对账记录（运行 vector_inventory.py --record）')
+        else:
+            finished_at, status, report_path = row
+            try:
+                from datetime import datetime
+
+                finished = datetime.fromisoformat(str(finished_at))
+                if finished.tzinfo is None:
+                    finished = finished.astimezone()
+                age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+                if age_days > 7:
+                    warnings.append(f'向量对账已过期 {age_days:.1f} 天')
+            except (TypeError, ValueError):
+                warnings.append('向量对账时间无法解析')
+            if str(status) == 'drift':
+                warnings.append('最近一次向量对账有漂移')
+            if report_path:
+                try:
+                    rp = Path(report_path)
+                    if not rp.is_absolute():
+                        rp = BACKEND_ROOT / rp
+                    report = json.loads(rp.read_text(encoding='utf-8'))
+                    orphan = int(report.get('orphan') or 0)
+                    if orphan:
+                        warnings.append(f'向量投影孤儿 {orphan} 个')
+                except (OSError, ValueError):
+                    pass
+    else:
+        warnings.append(f'数据库不存在，跳过向量对账记录：{db}')
+
+    detail = (f'backend={backend} enabled={enabled} embedding='
+              f'{embedding_enabled}/{embedding_provider} {store_detail}')
+    if counts:
+        detail += f" count={counts.get('count')}"
+    if warnings:
+        detail += '；' + '；'.join(warnings)
+    _add(21, '向量投影与 VectorStore', not missing,
+         '；'.join(missing) if missing else detail, 'FAIL')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -989,7 +1125,7 @@ CHECKS = (
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
     check_media_store, check_f2b_events, check_sync_replay, check_document_store,
-    check_graph_store,
+    check_graph_store, check_vector_store,
 )
 
 

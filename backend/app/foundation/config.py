@@ -75,6 +75,31 @@ GRAPH_RECONCILE_MAX_AGE_DAYS = int(
     os.environ.get("GRAPH_RECONCILE_MAX_AGE_DAYS", "7") or 7
 )
 
+
+# ==================== F6 向量投影与 AI 端口 ====================
+# 默认全关：没有模型时不静默生成伪语义向量；local/milvus 需显式开启。
+VECTOR_STORE_ENABLED = _bool("VECTOR_STORE_ENABLED", True)
+VECTOR_BACKEND = (os.environ.get("VECTOR_BACKEND") or "off").strip().lower()
+VECTOR_DIM = int(os.environ.get("VECTOR_DIM", "1024") or 1024)
+VECTOR_COLLECTION = (os.environ.get("VECTOR_COLLECTION") or "text_questions").strip()
+VECTOR_LOCAL_ROOT = os.environ.get("VECTOR_LOCAL_ROOT") or "./data/foundation/vectors"
+VECTOR_MILVUS_URI = (os.environ.get("VECTOR_MILVUS_URI") or "http://localhost:19530").strip()
+VECTOR_MILVUS_TOKEN = os.environ.get("VECTOR_MILVUS_TOKEN") or ""
+VECTOR_MILVUS_PREFIX = (os.environ.get("VECTOR_MILVUS_PREFIX") or "li_an_").strip()
+VECTOR_SEARCH_TOP_K_MAX = int(os.environ.get("VECTOR_SEARCH_TOP_K_MAX", "100") or 100)
+VECTOR_RECONCILE_MAX_AGE_DAYS = int(
+    os.environ.get("VECTOR_RECONCILE_MAX_AGE_DAYS", "7") or 7
+)
+EMBEDDING_ENABLED = _bool("EMBEDDING_ENABLED", False)
+EMBEDDING_PROVIDER = (os.environ.get("EMBEDDING_PROVIDER") or "off").strip().lower()
+EMBEDDING_BASE_URL = (os.environ.get("EMBEDDING_BASE_URL") or "").strip()
+EMBEDDING_MODEL = (os.environ.get("EMBEDDING_MODEL") or "").strip()
+EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY") or ""
+EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", str(VECTOR_DIM)) or VECTOR_DIM)
+EMBEDDING_TIMEOUT_SECONDS = float(os.environ.get("EMBEDDING_TIMEOUT_SECONDS", "30") or 30)
+EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE", "32") or 32)
+
+
 def sqlite_path() -> Path:
     """与 app.core.config 同源：SQLITE_PATH 相对路径按 backend/ 解析。"""
     raw = os.environ.get("SQLITE_PATH") or str(DEFAULT_SQLITE_PATH)
@@ -96,4 +121,10 @@ def object_store_root() -> Path:
 def document_store_root() -> Path:
     """local 文档根目录；相对路径按 backend/ 解析。"""
     path = Path(DOC_STORE_ROOT)
+    return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
+
+
+def vector_store_root() -> Path:
+    """local 向量根目录；相对路径按 backend/ 解析。"""
+    path = Path(VECTOR_LOCAL_ROOT)
     return path if path.is_absolute() else (BACKEND_DIR / path).resolve()

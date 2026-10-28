@@ -141,6 +141,27 @@ class Settings(BaseSettings):
     GRAPH_QUERY_MAX_DEPTH: int = Field(5, env="GRAPH_QUERY_MAX_DEPTH")
     GRAPH_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="GRAPH_RECONCILE_MAX_AGE_DAYS")
 
+    # ==================== F6 向量投影与 AI 端口 ====================
+    # 默认关闭；local/milvus 显式开启。没有真实模型时哈希向量只用于验证。
+    VECTOR_STORE_ENABLED: bool = Field(True, env="VECTOR_STORE_ENABLED")
+    VECTOR_BACKEND: str = Field("off", env="VECTOR_BACKEND")
+    VECTOR_DIM: int = Field(1024, env="VECTOR_DIM")
+    VECTOR_COLLECTION: str = Field("text_questions", env="VECTOR_COLLECTION")
+    VECTOR_LOCAL_ROOT: str = Field("./data/foundation/vectors", env="VECTOR_LOCAL_ROOT")
+    VECTOR_MILVUS_URI: str = Field("http://localhost:19530", env="VECTOR_MILVUS_URI")
+    VECTOR_MILVUS_TOKEN: Optional[str] = Field(None, env="VECTOR_MILVUS_TOKEN")
+    VECTOR_MILVUS_PREFIX: str = Field("li_an_", env="VECTOR_MILVUS_PREFIX")
+    VECTOR_SEARCH_TOP_K_MAX: int = Field(100, env="VECTOR_SEARCH_TOP_K_MAX")
+    VECTOR_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="VECTOR_RECONCILE_MAX_AGE_DAYS")
+    EMBEDDING_ENABLED: bool = Field(False, env="EMBEDDING_ENABLED")
+    EMBEDDING_PROVIDER: str = Field("off", env="EMBEDDING_PROVIDER")
+    EMBEDDING_BASE_URL: str = Field("", env="EMBEDDING_BASE_URL")
+    EMBEDDING_MODEL: str = Field("", env="EMBEDDING_MODEL")
+    EMBEDDING_API_KEY: Optional[str] = Field(None, env="EMBEDDING_API_KEY")
+    EMBEDDING_DIM: int = Field(1024, env="EMBEDDING_DIM")
+    EMBEDDING_TIMEOUT_SECONDS: float = Field(30.0, env="EMBEDDING_TIMEOUT_SECONDS")
+    EMBEDDING_BATCH_SIZE: int = Field(32, env="EMBEDDING_BATCH_SIZE")
+
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）
     COMPOSITE_QUESTION_ENABLED: bool = Field(True, env="COMPOSITE_QUESTION_ENABLED")
