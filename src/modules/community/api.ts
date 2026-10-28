@@ -248,6 +248,11 @@ export async function fetchForumPosts(
   if (query.shareType) params.share_type = query.shareType;
   if (query.sortBy) params.sort_by = query.sortBy;
   if (query.order) params.order = query.order;
+  // P3：搜索与日期筛选（类型未定义时按可选字段透传）
+  const extra = query as Record<string, any>;
+  if (extra.keyword) params.keyword = String(extra.keyword).trim();
+  if (extra.dateFrom) params.date_from = extra.dateFrom;
+  if (extra.dateTo) params.date_to = extra.dateTo;
 
   const data = await request<Partial<ForumPostListResult>>({
     url: '/api/forum/posts',

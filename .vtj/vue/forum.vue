@@ -34,6 +34,18 @@
               {{ cat.name }}
             </button>
           </div>
+          <div class="forum-search-bar">
+            <input
+              v-model="state.searchKeyword"
+              class="search-input"
+              placeholder="搜索帖子标题或内容…"
+              @keyup.enter="applySearch" />
+            <input v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
+            <span class="search-tilde">~</span>
+            <input v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
+            <button class="search-btn" @click="applySearch">搜索</button>
+            <button class="search-reset" @click="resetSearch">重置</button>
+          </div>
           <div class="post-list" v-if="state.posts.length">
             <div
               v-for="(post, index) in filteredPosts"
@@ -586,7 +598,8 @@
   import {
     toggleForumFavorite,
     fetchMyForumFavorites,
-    fetchMyForumLikes
+    fetchMyForumLikes,
+    fetchForumPosts
   } from '@/modules/community/api';
   import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
   import ForumContent from '@/components/forum/ForumContent.vue';
@@ -623,6 +636,10 @@
         page: 1,
         pageSize: 8,
         activeCategory: 'all',
+        // P3：搜索与日期筛选
+        searchKeyword: '',
+        searchDateFrom: '',
+        searchDateTo: '',
         showCommentPicker: false,
         posts: [] as any[],
         total: 0,
@@ -725,6 +742,33 @@
       }
     },
     methods: {
+      /** 搜索：关键词 + 日期区间（复用 GET /api/forum/posts 的 keyword/date_from/date_to） */
+      async applySearch() {
+        this.state.loading = true;
+        try {
+          const res: any = await fetchForumPosts({
+            limit: this.state.pageSize,
+            offset: (this.state.page - 1) * this.state.pageSize,
+            shareType: toShareTypeParam(this.state.activeCategory),
+            keyword: this.state.searchKeyword || undefined,
+            dateFrom: this.state.searchDateFrom || undefined,
+            dateTo: this.state.searchDateTo || undefined
+          });
+          this.state.posts = (res.posts || []).map((p: any) => this._mapPost(p));
+          this.state.total = res.total || 0;
+        } catch (e) {
+          this._safeMsg('error', '搜索失败，请稍后重试');
+        } finally {
+          this.state.loading = false;
+        }
+      },
+      resetSearch() {
+        this.state.searchKeyword = '';
+        this.state.searchDateFrom = '';
+        this.state.searchDateTo = '';
+        this.state.page = 1;
+        this.loadPosts();
+      },
       async loadPosts(silent = false) {
         this.state.loading = true;
         try {
@@ -1260,7 +1304,8 @@
           author: (p?.user && p.user.nickname) || '匿名',
           avatar: (p?.user && p.user.avatar) || '',
           date: this.formatTime(p?.createTime),
-          likeCount: withSummary ? summary || String(total) : total,
+          // 只用数字：原先用 formatReactionSummary 会显示 "👍1"，与爱心图标重复
+          likeCount: total,
           reactionTotal: total,
           reactions,
           myReaction: p?.myReaction ?? null,
@@ -1405,6 +1450,61 @@
     background: #fdf2f4;
     border-color: #f0c4cc;
     color: #c41e3a;
+  }
+  /* P3：搜索栏 */
+  .forum-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    background: #ffffff;
+    border-radius: 12px;
+  }
+  .search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+  }
+  .search-input:focus {
+    border-color: #c41e3a;
+  }
+  .search-date {
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid #e3e8ef;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #475569;
+  }
+  .search-tilde {
+    color: #94a3b8;
+  }
+  .search-btn {
+    height: 34px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 8px;
+    background: #c41e3a;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .search-reset {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 8px;
+    background: #fff;
+    color: #475569;
+    font-size: 13px;
+    cursor: pointer;
   }
   /* P3：爱心（喜欢）/ 五角星（收藏）/ 收藏弹窗列表 */
   .heart-icon {
