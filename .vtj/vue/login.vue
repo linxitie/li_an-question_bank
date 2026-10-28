@@ -521,8 +521,14 @@ export default defineComponent({
           const result = await window.__VTJ_AUTH__.login(username, password);
           if (result.success) {
             setTimeout(function() {
-              if (this.$router) this.$router.push(this.getDashboardPath());
-              else window.location.href = this.getDashboardPath();
+              // v2 画像引导：新注册用户先完成备考画像，再做学习计划
+              if (this.state.activeTab === 'register') {
+                if (this.$router) this.$router.push('/profile-quiz');
+                else window.location.hash = '#/profile-quiz';
+              } else {
+                if (this.$router) this.$router.push(this.getDashboardPath());
+                else window.location.href = this.getDashboardPath();
+              }
             }.bind(this), 1000);
           }
         } else {

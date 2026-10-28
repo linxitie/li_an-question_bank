@@ -2012,3 +2012,30 @@ class ChatMessage(Base):
         Index("idx_chat_message_create", create_time),
     )
 
+
+class UserProfile(Base):
+    """模块4 v2 - 用户备考画像表（注册/画像问卷采集，供 PlanAgent 推理）"""
+    __tablename__ = "user_profile"
+
+    profile_id = Column(Integer, primary_key=True, autoincrement=True, comment="画像ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, unique=True, comment="用户ID")
+    grade = Column(String(20), nullable=True, comment="年级: 大一/大二/大三/大四/应届")
+    target_score = Column(String(30), nullable=True, comment="目标分数（如 220/行测70/公专85）")
+    self_level = Column(String(20), nullable=True, comment="水平自评: 零基础/入门/有基础/冲刺")
+    daily_hours = Column(Float, nullable=True, comment="每日可学时长 1-8 小时")
+    subject_strengths = Column(Text, nullable=True, comment="强项科目 JSON 数组")
+    subject_weaknesses = Column(Text, nullable=True, comment="弱项科目 JSON 数组")
+    exam_date = Column(String(10), nullable=True, comment="备考截止日期 YYYY-MM-DD")
+    target_region = Column(String(50), nullable=True, comment="岗位意向地区")
+    target_post = Column(String(100), nullable=True, comment="岗位意向/方向")
+    profile_status = Column(Integer, default=0, comment="画像完成度 0未完成/1已完成")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_profile_user", user_id),
+        Index("idx_profile_status", profile_status),
+    )
+

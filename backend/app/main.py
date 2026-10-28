@@ -31,6 +31,7 @@ from .api.v1.identity import devices
 from .api.v1.platform import feedback
 from .api.v1.growth import achievements, checkin
 from .api.v1.growth import study_plan
+from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
@@ -695,6 +696,7 @@ app.include_router(exams.router)
 app.include_router(videos.router)
 app.include_router(llm.router)
 app.include_router(study_plan.router)
+app.include_router(profile.router)
 app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])

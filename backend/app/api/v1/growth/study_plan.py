@@ -19,8 +19,9 @@ from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user
-from ....models.models import StudyGoal, SysUser
+from ....models.models import StudyGoal, SysUser, UserProfile
 from ....services import llm_client
+from ....services import plan_agent
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ router = APIRouter(prefix="/api/plan", tags=["学习计划"])
 VALID_SUBJECTS = {"行测", "申论", "公专"}
 # 前端展示名 → 后端规范名的别名映射（前端用"公安专业科目"，后端统一存"公专"）
 SUBJECT_ALIASES = {"公安专业科目": "公专", "公安专业知识": "公专"}
-VALID_LEVELS = {"零基础", "有基础", "冲刺"}
+VALID_LEVELS = {"零基础", "入门", "有基础", "冲刺"}
 MAX_TASKS = 200
 
 
@@ -86,6 +87,24 @@ async def generate_plan(
         f"当前水平：{req.level}\n"
         "请生成复习计划。"
     )
+
+    # 2. PlanAgent 画像推理增强：有画像则注入推理结论，无画像走原有表单参数
+    profile_row = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == current_user.user_id)
+        .first()
+    )
+    if profile_row:
+        profile_data = plan_agent.profile_from_row(profile_row)
+        if profile_data:
+            reasoning = plan_agent.reason(profile_data, days_left)
+            user_input += "\n" + plan_agent.build_prompt_extra(reasoning)
+            logger.info(
+                "PlanAgent 推理注入: user=%s total_hours=%s weights=%s",
+                current_user.user_id,
+                reasoning["total_hours"],
+                reasoning["subject_weights"],
+            )
 
     # 2. 调 LLM
     try:
