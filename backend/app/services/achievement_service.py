@@ -290,6 +290,8 @@ def _current_value(user: SysUser, ach: Achievement, db: Session) -> int:
         return _post_count(user.user_id, db)
     if code == "total_likes":
         return _total_likes(user.user_id, db)
+    if code == "material_read_count":
+        return _material_read_count(user.user_id, db)
     if code == "favorite_count":
         return db.query(FavoriteQuestion).filter(FavoriteQuestion.user_id == user.user_id).count()
     if code == "note_count":
@@ -305,6 +307,9 @@ def _check_condition(user: SysUser, ach: Achievement, db: Session,
     """按 condition_code 分发判定"""
     code = ach.condition_code
     th = ach.threshold
+
+    if code == "material_read_count":
+        return _material_read_count(user.user_id, db) >= th
 
     if code == "first_login":
         return True  # 有用户即已登录过，幂等保证只发一次
@@ -533,3 +538,12 @@ def _three_subject_accuracy(user_id: int, db: Session, threshold: int) -> bool:
         if total <= 0 or (correct / total * 100) < threshold:
             return False
     return True
+
+def _material_read_count(user_id: int, db: Session) -> int:
+    """累计读完的资料卡篇数（user_material_progress.status == 2）。"""
+    return (
+        db.query(UserMaterialProgress)
+        .filter(UserMaterialProgress.user_id == user_id,
+                UserMaterialProgress.status == 2)
+        .count()
+    )
