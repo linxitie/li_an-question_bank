@@ -70,12 +70,17 @@
                   <span class="meta-dot"> ·</span>
                   <span class="meta-date">{{ post.date }}</span>
                   <span class="meta-dot"> ·</span>
-                  <span class="meta-likes" @click.stop="toggleLike(post)">
-                    <XIcon
-                      :icon="post.liked ? StarFilled : Star"
-                      :size="13"
-                      :color="post.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+                  <span class="meta-likes" @click.stop="toggleHeart(post)" title="喜欢">
+                    <span class="heart-icon" :class="{ active: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                     <span> {{ post.likeCount }}</span>
+                  </span>
+                  <span class="meta-dot"> ·</span>
+                  <span class="meta-favs" @click.stop="toggleFavorite(post)" title="收藏">
+                    <XIcon
+                      :icon="post.favorited ? StarFilled : Star"
+                      :size="13"
+                      :color="post.favorited ? '#f59e0b' : '#8a8faa'"></XIcon>
+                    <span> {{ post.favoriteCount }}</span>
                   </span>
                   <span class="meta-dot"> ·</span>
                   <span class="meta-comments">
@@ -235,8 +240,28 @@
               我的喜欢
             </button>
           </div>
-          <div class="fav-empty">
+          <div v-if="state.favoriteLoading" class="fav-empty">加载中...</div>
+          <div v-else-if="!state.favoriteList.length" class="fav-empty">
             {{ state.favoriteTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
+          </div>
+          <div v-else class="fav-list">
+            <div
+              v-for="fp in state.favoriteList"
+              :key="fp.id"
+              class="fav-item"
+              @click="openPostDetail(fp)">
+              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }">{{ fp.title }}</span>
+              <span class="fav-item-meta">
+                <span class="heart-icon" :class="{ active: fp.liked }">{{ fp.liked ? '❤' : '♡' }}</span>
+                <span>{{ fp.likeCount }}</span>
+                <span class="fav-sep">·</span>
+                <XIcon
+                  :icon="StarFilled"
+                  :size="12"
+                  color="#f59e0b"></XIcon>
+                <span>{{ fp.favoriteCount }}</span>
+              </span>
+            </div>
           </div>
           <div class="modal-actions">
             <button class="cancel-btn" @click="closeFavorites">关闭</button>
@@ -557,6 +582,12 @@
     FORUM_CATEGORY_TABS,
     toShareTypeParam
   } from '@/modules/community/categories';
+  // P3：收藏（五角星）/ 我的喜欢（爱心）
+  import {
+    toggleForumFavorite,
+    fetchMyForumFavorites,
+    fetchMyForumLikes
+  } from '@/modules/community/api';
   import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
   import ForumContent from '@/components/forum/ForumContent.vue';
   import ImageGrid from '@/components/forum/ImageGrid.vue';
@@ -629,6 +660,9 @@
         // === 我的收藏 / 我的喜欢（P2 仅外壳，数据 P3 接入）===
         showFavorites: false,
         favoriteTab: 'favorites' as 'favorites' | 'likes',
+        favoriteList: [] as any[],
+        favoriteTotal: 0,
+        favoriteLoading: false,
         myPostsPage: 1,
         myPostsPageSize: 20,
         myPostsLoading: false,
@@ -1111,12 +1145,58 @@
       openFavorites(tab?: 'favorites' | 'likes') {
         this.state.favoriteTab = tab || 'favorites';
         this.state.showFavorites = true;
+        this.loadFavoriteTab();
       },
       closeFavorites() {
         this.state.showFavorites = false;
       },
       switchFavoritesTab(tab: 'favorites' | 'likes') {
         this.state.favoriteTab = tab;
+        this.loadFavoriteTab();
+      },
+      async loadFavoriteTab() {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth || !auth.isLoggedIn()) {
+          this.state.favoriteList = [];
+          this.state.favoriteTotal = 0;
+          return;
+        }
+        this.state.favoriteLoading = true;
+        try {
+          const isFav = this.state.favoriteTab === 'favorites';
+          const res = isFav
+            ? await fetchMyForumFavorites(20, 0)
+            : await fetchMyForumLikes(20, 0);
+          const list = (res && res.posts) || [];
+          this.state.favoriteList = list.map((p: any) => this._mapPost(p));
+          this.state.favoriteTotal = (res && res.total) || list.length;
+        } catch (e) {
+          this.state.favoriteList = [];
+          this.state.favoriteTotal = 0;
+        } finally {
+          this.state.favoriteLoading = false;
+        }
+      },
+      /** 爱心：喜欢（复用点赞接口，reaction 固定 like） */
+      toggleHeart(post: any) {
+        return this.toggleLike(post);
+      },
+      /** 五角星：收藏 */
+      async toggleFavorite(post: any) {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth || !auth.isLoggedIn()) {
+          ElMessage.warning('请先登录后收藏');
+          return;
+        }
+        try {
+          const res = await toggleForumFavorite(post.id);
+          if (res) {
+            post.favorited = res.favorited;
+            post.favoriteCount = res.favoriteCount;
+          }
+        } catch (e) {
+          /* 静默 */
+        }
       },
       async openMyPosts() {
         this.state.showMyPosts = true;
@@ -1187,6 +1267,9 @@
           commentCount: p?.commentCount ?? 0,
           viewCount: p?.viewCount ?? 0,
           liked: p?.liked ?? false,
+          // P3：收藏（五角星）状态与计数
+          favorited: p?.favorited ?? false,
+          favoriteCount: p?.favoriteCount ?? 0,
           attachments,
           imageUrls,
           fileAttachments,
@@ -1322,6 +1405,60 @@
     background: #fdf2f4;
     border-color: #f0c4cc;
     color: #c41e3a;
+  }
+  /* P3：爱心（喜欢）/ 五角星（收藏）/ 收藏弹窗列表 */
+  .heart-icon {
+    font-size: 13px;
+    line-height: 1;
+    color: #8a8faa;
+  }
+  .heart-icon.active {
+    color: #e5484d;
+  }
+  .meta-favs {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .meta-favs:hover {
+    color: #b8860b;
+  }
+  .fav-list {
+    max-height: 380px;
+    overflow-y: auto;
+    margin: 8px 0;
+  }
+  .fav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .fav-item:hover {
+    background: #f5f7fb;
+  }
+  .fav-item-title {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fav-item-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #8a8faa;
+    font-size: 12px;
+    flex: 0 0 auto;
+  }
+  .fav-sep {
+    color: #d5d9e5;
   }
   .fav-empty {
     padding: 40px 0;

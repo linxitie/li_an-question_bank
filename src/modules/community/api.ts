@@ -395,6 +395,38 @@ export function toggleForumPostLike(postId: number): Promise<LikeToggleResult> {
   });
 }
 
+/** 收藏（五角星）切换：已收藏则取消 */
+export function toggleForumFavorite(
+  postId: number
+): Promise<{ favorited: boolean; favoriteCount: number }> {
+  return request<{ favorited: boolean; favoriteCount: number }>({
+    url: `/api/forum/posts/${postId}/favorite`,
+    method: 'POST'
+  });
+}
+
+/** 我的收藏（五角星） */
+export function fetchMyForumFavorites(
+  limit = 20,
+  offset = 0
+): Promise<{ total: number; limit: number; offset: number; posts: ForumPostItem[] }> {
+  return request({
+    url: `/api/forum/my-favorites?limit=${limit}&offset=${offset}`,
+    method: 'GET'
+  });
+}
+
+/** 我的喜欢（爱心） */
+export function fetchMyForumLikes(
+  limit = 20,
+  offset = 0
+): Promise<{ total: number; limit: number; offset: number; posts: ForumPostItem[] }> {
+  return request({
+    url: `/api/forum/my-likes?limit=${limit}&offset=${offset}`,
+    method: 'GET'
+  });
+}
+
 export function createForumComment(
   postId: number,
   payload: ForumCommentCreatePayload
