@@ -4,6 +4,7 @@
 点选任务 → 收集参数 → 对应 Agent + 档案上下文 → LLM 生成结构化结果
 """
 import logging
+from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security import get_current_user
-from ...models.models import SysUser
+from ...models.models import SysUser, StudyGoal
 from ...services import llm_client
 from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, AGENT_META
 
@@ -74,6 +75,60 @@ AGENT_TASKS: List[Dict] = [
 class AgentRunRequest(BaseModel):
     task_id: str
     params: Optional[Dict[str, str]] = Field(default_factory=dict)
+
+
+class ImportTodayRequest(BaseModel):
+    title: str = Field(..., min_length=2, max_length=200)
+    content: Optional[str] = Field(None, max_length=500)
+    coin_reward: int = Field(10, ge=0, le=100)
+
+
+@router.post("/import-today", summary="工作台结果一键写入今日任务（模块4联动）")
+async def import_to_today(
+    req: ImportTodayRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """把工作台生成的结果写入学习计划今日任务：完成可领金币，进入模块4每日闭环"""
+    today = date.today().isoformat()
+    # 当日任务排序：取当日最大 sort_order + 1
+    max_sort = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.task_date == today,
+            StudyGoal.status == 1,
+        )
+        .order_by(StudyGoal.sort_order.desc())
+        .first()
+    )
+    sort_order = (max_sort.sort_order + 1) if max_sort and max_sort.sort_order else 0
+
+    goal = StudyGoal(
+        user_id=current_user.user_id,
+        title=req.title.strip(),
+        description=(req.content or "").strip(),
+        goal_type="DAILY",
+        target_count=1,
+        current_count=0,
+        subject_mode=0,
+        is_completed=0,
+        status=1,
+        task_date=today,
+        coin_reward=req.coin_reward,
+        coin_claimed=0,
+        sort_order=sort_order,
+    )
+    db.add(goal)
+    db.commit()
+    db.refresh(goal)
+    return {
+        "goal_id": goal.goal_id,
+        "task_date": today,
+        "title": goal.title,
+        "coin_reward": goal.coin_reward,
+        "message": f"已写入今日任务，完成可领取 {goal.coin_reward} 金币",
+    }
 
 
 @router.get("/tasks", summary="工作模式任务清单")

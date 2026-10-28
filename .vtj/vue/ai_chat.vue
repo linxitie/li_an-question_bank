@@ -107,7 +107,17 @@
             </div>
           </div>
           <div v-if="state.workReply" class="work-reply">
-            <div class="wr-head">📋 {{ state.workTitle }} 结果</div>
+            <div class="wr-head">
+              <span>📋 {{ state.workTitle }} 结果</span>
+              <button
+                v-if="state.workTaskId === 'shenlun_week'"
+                class="wi-btn"
+                :disabled="state.workImporting || state.workImportDone"
+                @click="importToToday()"
+              >
+                {{ state.workImportDone ? '已写入✓' : (state.workImporting ? '写入中…' : '一键写入今日任务') }}
+              </button>
+            </div>
             <div class="wr-body" v-html="renderMd(state.workReply)"></div>
           </div>
           <div v-if="state.workNotice" class="work-notice">{{ state.workNotice }}</div>
@@ -178,7 +188,7 @@
     name: 'AiAssistant',
     components: { XIcon },
     setup() {
-      const provider = useProvider({ id: 'ai_chat', version: '20261028001' });
+      const provider = useProvider({ id: 'ai_chat', version: '20261028002' });
       const state = reactive({
         scene: 'qa',
         input: '',
@@ -195,6 +205,9 @@
         workRunning: false,
         workReply: '',
         workTitle: '',
+        workTaskId: '',
+        workImporting: false,
+        workImportDone: false,
         workNotice: '',
       });
       const sessions = ref([]);
@@ -414,6 +427,8 @@
           if (res.ok && d.reply) {
             state.workReply = d.reply;
             state.workTitle = d.title;
+            state.workTaskId = t.task_id;
+            state.workImportDone = false;
             state.agentName = d.agent_name || '';
           } else {
             state.workNotice = d.detail || '任务执行失败，请稍后重试';
@@ -422,6 +437,33 @@
           state.workNotice = '网络异常，任务未执行';
         } finally {
           state.workRunning = false;
+        }
+      }
+
+      async function importToToday() {
+        state.workImporting = true;
+        state.workNotice = '';
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/agent/import-today', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: state.workTitle || '申论计划·今日任务',
+              content: (state.workReply || '').slice(0, 500),
+              coin_reward: 10,
+            }),
+          });
+          const d = await res.json();
+          if (res.ok && d.goal_id) {
+            state.workImportDone = true;
+            state.workNotice = d.message;
+          } else {
+            state.workNotice = d.detail || '写入失败，请稍后重试';
+          }
+        } catch (e) {
+          state.workNotice = '网络异常，写入失败';
+        } finally {
+          state.workImporting = false;
         }
       }
 
@@ -438,7 +480,7 @@
         send, quickAsk, switchScene, newChat, goBack,
         openSession, removeSession,
         sceneLabel, fmtTime, renderMd,
-        agentLabel, switchMode, selectTask, runWorkTask,
+        agentLabel, switchMode, selectTask, runWorkTask, importToToday,
         Plus, Menu, Promotion,
       };
     },
@@ -630,7 +672,9 @@
     margin-top: 12px; background: #fff; border: 1px solid #e6ebf2; border-radius: 12px;
     padding: 12px 14px;
   }
-  .wr-head { font-size: 13px; font-weight: 600; color: #1a2a4a; margin-bottom: 8px; }
+  .wr-head { font-size: 13px; font-weight: 600; color: #1a2a4a; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .wi-btn { font-size: 12px; padding: 3px 10px; border-radius: 12px; border: 1px solid #d33; color: #d33; background: #fff; cursor: pointer; }
+  .wi-btn:disabled { border-color: #999; color: #999; cursor: default; }
   .wr-body { font-size: 13px; color: #2c3e50; line-height: 1.6; }
   .work-notice { margin-top: 10px; font-size: 12px; color: #c8161e; }
 
