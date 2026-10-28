@@ -255,3 +255,60 @@ def extract_memories(user_id: int, db):
             written += 1
     db.commit()
     return written
+
+
+# ==================== 知识库检索（Phase3 自生长知识库接入） ====================
+# 从 approved 知识节点按关键词打分召回，只取摘要（控制 token），带出处
+
+CATEGORY_KEYWORDS: Dict[str, List[str]] = {
+    "law": ["法", "治安", "警察", "刑法", "处罚", "拘留", "传唤", "条例", "公安", "法条", "违法", "执法", "处罚法"],
+    "recruit": ["报考", "岗位", "联考", "报名", "招录", "选岗", "公告", "生源地", "职位", "时间线"],
+    "exam_point": ["行测", "申论", "公专", "资料分析", "考点", "技巧", "题", "速算", "公式", "作答"],
+    "wrong": ["错题", "薄弱", "复盘", "易错", "陷阱", "笔记"],
+}
+_IGNORE_CHARS = set("的了吗呢是在我你有没个" "：")
+
+
+def retrieve_knowledge(user_id: int, db, message: str, limit: int = 3, max_chars: int = 120) -> str:
+    """
+    按用户消息关键词从已入库(approved)知识节点召回 TopN，返回带出处的摘要块。
+    零 LLM 调用；单次召回 token 上限约 limit*max_chars。
+    """
+    from ..models.models import KnowledgeNode
+
+    if not message or not message.strip():
+        return ""
+    nodes = (
+        db.query(KnowledgeNode)
+        .filter(KnowledgeNode.status == "approved")
+        .all()
+    )
+    if not nodes:
+        return ""
+
+    scored: List[Tuple[int, KnowledgeNode]] = []
+    for n in nodes:
+        s = 0
+        text = f"{n.title} {n.content or ''}"
+        for k in CATEGORY_KEYWORDS.get(n.category, []):
+            if k and k in message:
+                s += 3 if k in text else 2
+        # 标题/内容里的实词命中
+        for ch in set(n.title):
+            if ch in message and ch not in _IGNORE_CHARS:
+                s += 1
+        for ch in set(n.content or ""):
+            if ch in message and ch not in _IGNORE_CHARS and s < 99:
+                pass
+        if s > 0:
+            scored.append((s, n))
+
+    if not scored:
+        return ""
+    scored.sort(key=lambda x: -x[0])
+    top = [n for _, n in scored[:limit]]
+    lines = []
+    for n in top:
+        body = (n.content or "")[:max_chars].replace("\n", " ")
+        lines.append(f"- [{n.title}]({n.category}) {body}")
+    return "【知识库参考（已入库，引用时注明出处，涉法条以现行有效法条为准）】\n" + "\n".join(lines) + "\n"

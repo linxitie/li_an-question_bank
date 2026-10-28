@@ -110,7 +110,7 @@ async def chat(
     history = _load_history(session.session_id, db)
 
     # 4. 多 Agent 路由 + 档案上下文装配（模块7 v2；心理场景直接走心理 Agent）
-    from ....services.agent_router import route_agent, agent_system_prompt, assemble_context, extract_memories
+    from ....services.agent_router import route_agent, agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge
 
     agent_id, agent_name, route_score = route_agent(req.message)
     if req.scene == "psychological" or agent_id == "psychology":
@@ -127,6 +127,12 @@ async def chat(
         extract_memories(current_user.user_id, db)  # 画像 → 长期记忆（幂等）
     except Exception as e:
         logger.warning("档案上下文装配失败: %s", e)
+    try:
+        kb = retrieve_knowledge(current_user.user_id, db, req.message)
+        if kb:
+            extra_parts.append(kb)
+    except Exception as e:
+        logger.warning("知识库检索失败: %s", e)
     extra_system = "\n\n".join(extra_parts)
 
     # 5. 调大模型

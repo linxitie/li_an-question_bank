@@ -15,7 +15,7 @@ from ...core.database import get_db
 from ...core.security import get_current_user
 from ...models.models import SysUser, StudyGoal
 from ...services import llm_client
-from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, AGENT_META
+from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge, AGENT_META
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["联考小智-工作模式"])
@@ -172,6 +172,14 @@ async def run_agent_task(
         f"用户提供的参数：{params_text}\n"
         "请按任务要求给出结构化、可落地的结果；需要分点时分点；涉及法条注明'以现行有效法条为准'。"
     )
+
+    # 知识库参考（Phase3 自生长知识库）
+    try:
+        kb = retrieve_knowledge(current_user.user_id, db, user_prompt)
+        if kb:
+            extra = extra + "\n\n" + kb
+    except Exception as e:
+        logger.warning("知识库检索失败: %s", e)
 
     try:
         reply = await llm_client.chat(
