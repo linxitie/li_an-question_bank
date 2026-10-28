@@ -1273,6 +1273,7 @@ class StudyMaterial(Base):
     view_count = Column(Integer, default=0, comment="浏览量")
     study_count = Column(Integer, default=0, comment="完成人数")
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="创建人")
+    source_material_id = Column(BigInteger, comment="领取来源卡片ID(自建为空)")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
     content_hash = Column(String(64), comment="内容MD5哈希(去重用)")
