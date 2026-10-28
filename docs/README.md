@@ -19,6 +19,7 @@
 |---|---|---|---|
 | `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（D1–D17）；F0–F6、F2b-1 与 F2b-2 已执行 | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（当前 21 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
 | `superpowers/specs/main分支启动阻断与考试链路修复_报告_20261026.md` | v1 | ✅ 已合并 main（2026-10-26） | main 报告 P0-1/2/3 + P1-1 + P1-3 + P3-1 修复：Pydantic v2 `ConfigDict`、考试路由导入收敛、日志目录自建+降级、`question_count` 以关联行数为唯一口径（含存量修复脚本）；3 条新回归测试 + 真机烟测 health/login/取题/开考/交卷全 200；全量 650 passed（8 失败均为既有环境项） |
+| `superpowers/specs/资料卡片导入D1类型覆盖缺陷修复_报告_20261027.md` | v1 | ✅ 已修复（2026-10-27，分支 `fix/D1-import-card-type`） | D1 阻断缺陷：xlsx 卡片导入的 `type` 被启发式分类器覆盖成 `article`，卡片进文章区、翻卡 UI 永不触发。修复：卡片分支按输入契约直写 `type='card'` 并删除多余 classify 调用；新增 2 条回归测试（xlsx→card、长 docx→article），资料域 39 passed；附存量清洗 SQL 与 D2–D8 交接说明 |
 | `superpowers/plans/F1一致性内核_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 1–7 完成，tag `foundation-v1-f1`） | F1：7 表 + Outbox→投递→投影→对账 + `content_integrity.py`/`db_inventory.py` + L7 门禁；21 文件、7 步、每步独立验证与回滚；不改 `api/v1`/`models`/`.vtj` |
 | `superpowers/specs/预览数据治理与容量回收_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | 571 行 / 257.76 MB 超期预览外置 gzip 后置摘要，`auto_vacuum=INCREMENTAL` + VACUUM，主库 **303.17 → 46.52 MB**；四表行数与指纹不变，`integrity_check=ok` |
 | `superpowers/plans/F2通信统一与写入守卫_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 1–7 完成，tag `foundation-v1-f2`） | F2：WS 协议 v2（seq/scope）+ Redis 中继 + 多 worker fail-fast + 前端 data-changed 消费/重连重同步 + 92 条路由 roles + 写入守卫 6 类；7 步、无迁移、无新表；F2b 写调用点迁移未做 |
