@@ -733,3 +733,5 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 - [学生端退出登录_方案B_设计与效果图_v1.md](plans/学生端退出登录_方案B_设计与效果图_v1.md) — 全局悬浮退出按钮：可行性、位置比选、三态与验收
 
 - [PC详情页外观v2_方案与效果图_v1.md](plans/PC详情页外观v2_方案与效果图_v1.md) — 题干灰底块/三列信息/两行列表：字段映射、边界处理、V1–V8 验收
+
+- [徽章设计_风格与数量_v1.md](plans/徽章设计_风格与数量_v1.md) — 四类形状×三档品质、总量 72 枚规划、badge_name_bank 命名依赖
