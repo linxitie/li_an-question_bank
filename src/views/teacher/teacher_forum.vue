@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="tf-page">
     <TeacherNavHeader active-nav="forum" />
     <main class="tf-main">
@@ -81,6 +81,22 @@
               @click="askHideComment(c)"
             >
               隐藏评论
+            </button>
+          </div>
+
+          <!-- 教师评论输入（与学生端一致：文字 + 发送） -->
+          <div class="tf-comment-input">
+            <textarea
+              v-model="commentDraft"
+              class="tf-comment-textarea"
+              rows="2"
+              placeholder="写下你的评论… Ctrl+Enter 发送"
+              @keyup.ctrl.enter="submitComment" />
+            <button
+              class="tf-btn"
+              :disabled="commentSubmitting || !commentDraft.trim()"
+              @click="submitComment">
+              {{ commentSubmitting ? '发送中…' : '发送' }}
             </button>
           </div>
         </div>
@@ -178,6 +194,7 @@ import UserBadge from '@/components/forum/UserBadge.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
+import { createForumComment } from '@/modules/community/api';
 import {
   createForumPostWithVisibility,
   fetchForumPosts,
@@ -199,6 +216,8 @@ const className = ref('');
 const classOptions = ref<string[]>([]);
 const teacherClasses = ref<string[]>([]);
 const canModerate = ref(true);
+const commentDraft = ref('');
+const commentSubmitting = ref(false);
 
 // P3-07：侧栏三卡 + 发帖弹窗
 const hotPosts = ref<any[]>([]);
@@ -272,6 +291,22 @@ const submitPost = async () => {
     ElMessage.error(e && e.message ? e.message : '发布失败');
   } finally {
     postForm.submitting = false;
+  }
+};
+
+const submitComment = async () => {
+  const text = commentDraft.value.trim();
+  if (!text || !detail.value) return;
+  commentSubmitting.value = true;
+  try {
+    await createForumComment(detail.value.id, { content: text });
+    ElMessage.success('评论已发送');
+    commentDraft.value = '';
+    await openPost(detail.value);
+  } catch (e: any) {
+    ElMessage.error(e && e.message ? e.message : '评论失败');
+  } finally {
+    commentSubmitting.value = false;
   }
 };
 
@@ -431,6 +466,8 @@ onMounted(loadPosts);
 .tf-class-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
 .tf-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .tf-btn.ghost { background: #fff; color: #475569; border: 1px solid #e3e8ef; }
+.tf-comment-input { display:flex; gap:8px; align-items:flex-end; margin-top:14px; padding-top:12px; border-top:1px solid #eef1f6; }
+.tf-comment-textarea { flex:1 1 auto; min-width:0; padding:10px 12px; border:1px solid #e3e8ef; border-radius:10px; font-size:14px; resize:vertical; }
 </style>
 
 
