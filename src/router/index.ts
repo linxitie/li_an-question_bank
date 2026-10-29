@@ -265,6 +265,12 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== 备考资料（学生端公开页） ====================
   {
+    path: '/badge-preview',
+    name: 'BadgePreview',
+    component: () => import('@/views/dev/BadgePreview.vue'),
+    meta: { title: '徽章预览', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/materials/detail',
     name: 'MaterialDetail',
     component: () => import('@/views/pc/material_detail.vue'),
@@ -619,6 +625,11 @@ router.beforeEach((to, _from, next) => {
   }
 
   // 3) PC 设备：公开路由直接放行
+  // 徽章 SVG 预览页：纯静态演示、不触达任何数据，允许未登录查看
+  if (to.path === '/badge-preview') {
+    return next();
+  }
+
   if (to.path === '/login' || to.path === '/unauthorized') {
     return next();
   }
