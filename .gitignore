@@ -65,6 +65,11 @@ venv/
 .coverage
 htmlcov/
 *.egg-info/
+# 临时排查/种子脚本与旧版平铺路由副本（已归档 _archive_cleanup_A，不入库）
+backend/_*.py
+backend/run_demo.py
+# 运行错误输出（*.log 已忽略，补 *.err）
+*.err
 
 # ---------- 数据库 / 运行时数据 ----------
 *.db
