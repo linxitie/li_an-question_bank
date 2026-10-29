@@ -38,9 +38,9 @@
             v-for="(c, i) in stack"
             :key="c.id"
             class="md-card"
-            :class="'lv' + i"
+            :class="['lv' + i, { lift: i === 0 && lifting, leaving: i === 0 && leaving }]"
             :style="layerStyle(i)"
-            @click="i === 0 && (flipped = !flipped)"
+            @click="i === 0 && flip()"
           >
             <div class="md-inner">
               <section class="md-face front">
@@ -66,7 +66,7 @@
 
         <div class="md-actions">
           <button :disabled="index <= 0" @click="prev">上一张</button>
-          <button class="primary" @click="flipped = !flipped">
+          <button class="primary" :disabled="busy" @click="flip">
             {{ flipped ? '再翻一遍' : '翻转看要点' }}
           </button>
           <button :disabled="index >= cards.length - 1" @click="next">下一张</button>
@@ -112,6 +112,9 @@ const router = useRouter();
 const subject = ref<string>((route.query.subject as string) || 'xingce');
 const index = ref(0);
 const flipped = ref(false);
+const lifting = ref(false);   // 阶段 A
+const leaving = ref(false);   // 阶段 D
+const busy = ref(false);      // 动画中禁止连点
 const scale = ref(1);
 const loading = ref(true);
 const cards = ref<Card[]>([]);
@@ -129,11 +132,15 @@ const modules = computed(() => {
   return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
 });
 
-const layerStyle = (i: number) => ({
-  transform: `translate(${i * 11}px, ${-i * 15}px) scale(${1 - 0.012 * i})`,
-  zIndex: 10 - i,
-  opacity: 1 - i * 0.04
-});
+const layerStyle = (i: number) => {
+  // 第 1 层（i=0）不写 transform，交给 CSS 的 lift/leaving 控制，避免内联样式覆盖动画
+  if (i === 0) return { zIndex: 10 };
+  return {
+    transform: `translate(${i * 11}px, ${-i * 15}px) scale(${1 - 0.012 * i})`,
+    zIndex: 10 - i,
+    opacity: 1 - i * 0.04
+  };
+};
 
 const load = async () => {
   loading.value = true;
@@ -167,14 +174,41 @@ const pickModule = (name: string) => {
   }
 };
 
-const next = () => {
-  if (index.value < cards.value.length - 1) {
-    index.value += 1;
-    flipped.value = false; // 直接切换 + 复位翻转
-    activeModule.value = cards.value[index.value]?.category || activeModule.value;
+// A 上浮(0.25s) → B 翻转(0.40s) → C 背面停留（无自动切卡）
+const flip = () => {
+  if (!cards.value.length || busy.value) return;
+  if (flipped.value) {
+    // 已翻到背面：反向翻回（C → B 反向）
+    busy.value = true;
+    flipped.value = false;
+    window.setTimeout(() => { busy.value = false; }, 400);
+    return;
   }
+  busy.value = true;
+  lifting.value = true;                       // A
+  window.setTimeout(() => {
+    flipped.value = true;                     // B
+    lifting.value = false;
+    window.setTimeout(() => { busy.value = false; }, 400);   // C 停留起点
+  }, 250);
+};
+
+// D 沉底换卡：当前卡右下方飞出 → 新卡补位
+const next = () => {
+  if (busy.value) return;
+  if (index.value >= cards.value.length - 1) return;
+  leaving.value = true;
+  busy.value = true;
+  window.setTimeout(() => {
+    index.value += 1;
+    flipped.value = false;
+    leaving.value = false;
+    busy.value = false;
+    activeModule.value = cards.value[index.value]?.category || activeModule.value;
+  }, 350);
 };
 const prev = () => {
+  if (busy.value) return;
   if (index.value > 0) {
     index.value -= 1;
     flipped.value = false;
@@ -277,4 +311,26 @@ onMounted(load);
 .md-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 .md-tip { margin-top: 14px; font-size: 13px; color: #8091a8; }
 .md-empty { padding: 80px 0; color: #8091a8; }
+
+/* ===== 四段动效（A 上浮 / B 翻转 / C 停留 / D 沉底） ===== */
+.md-card.lv0 {
+  transition: transform 0.25s ease-out, box-shadow 0.25s ease-out, opacity 0.35s ease-in-out;
+}
+.md-card.lv0.lift {
+  transform: translate(-20px, 30px) rotate(5deg) scale(1.02);
+  box-shadow: 0 26px 60px rgba(26, 42, 74, 0.18);
+}
+.md-card.lv0.leaving {
+  transform: translate(60px, 380px) scale(0.86);
+  opacity: 0.35;
+  transition: transform 0.35s ease-in-out, opacity 0.35s ease-in-out;
+}
+.md-inner {
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-card.lv0.lift,
+  .md-card.lv0.leaving { transform: none; opacity: 1; }
+  .md-inner { transition: none; }
+}
 </style>
