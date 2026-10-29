@@ -804,6 +804,11 @@ async def admin_create(body: dict,
                        db: Session = Depends(get_db)):
     _require_admin(current_user)
     data = _validate_material_body(body)
+    if not data.get("category"):
+        auto = _auto_classify(db, data.get("subject"), data.get("title"),
+                              data.get("card_front"), data.get("card_back"))
+        if auto:
+            data["category"] = auto
     m = StudyMaterial(**data, creator_id=current_user.user_id)
     db.add(m)
     db.commit()
