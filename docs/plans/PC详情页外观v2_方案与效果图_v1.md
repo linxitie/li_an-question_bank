@@ -2,7 +2,8 @@
 
 > 分支：`feat/Study-Material-Management-pc-appearance`（基于父分支 `1bea805`）
 > 效果图：`docs/plans/assets/备考资料_PCv2/PC详情页v2_正面.png`、`PC详情页v2_改动与映射.png`
-> 状态：**方案阶段（未写代码）**，等你批准后实施
+> 状态：**已实施（2026-10-29）**
+> 用户批复：难度用「入门 / 中等 / 进阶」；用时显示「约 N 分钟 · 估」；**题型列 category 优先**
 
 ---
 
@@ -98,9 +99,19 @@ V8 | 主题 | 申论绿 / 公专红下，灰底块保持中性、难度保持绿
 
 ---
 
-## 6. 待你确认
+## 6. 用户批复（已定）
 
-1. 难度三级文案用 **入门 / 中等 / 进阶** 还是 **易 / 中 / 难**？
-2. 建议用时估算规则（300 字/分钟）是否接受？或者你想**不显示**用时（避免"估"字）？
-3. 「题型」列取 `badge`（现值"要点"）还是取 `category`（如"言语理解与表达"）？
-   —— 当前方案是 `badge` 优先、缺失回退 `category`。
+1. 难度文案：**入门 / 中等 / 进阶** ✅
+2. 建议用时：**显示「约 N 分钟 · 估」**（300 字/分钟估算）；`read_time > 0` 时用真值且不带「估」✅
+3. 题型列：**`category` 优先**，缺失回退 `badge`，再回退「资料卡」✅
+   —— 与方案初稿（badge 优先）相反，按用户批复执行。
+
+## 7. 实施记录（2026-10-29，提交 f5ec345）
+
+| 项 | 内容 |
+|---|---|
+新增模块 | `src/utils/materialCardMeta.ts`（typeLabel / difficultyLabel / estimateMinutes / timeLabel） |
+新增测试 | `src/utils/__tests__/materialCardMeta.spec.ts`（14 项） |
+页面改动 | `src/views/pc/material_detail.vue`：`.md-quote` 灰底块、`.md-meta` 三列、右列表 3px 主题竖条、≤1180px 两行堆叠 |
+自查 bug | `Number(null) === 0` 会把"缺失难度"误判成「入门」，已改为**先判空再转数字**（由单测捕获） |
+验证 | 前端全量 **374 项通过**（26 文件）；Vite 200、模块含 `md-quote`、无编译错误；后端 healthy |
