@@ -403,7 +403,11 @@ onMounted(loadPosts);
 </script>
 
 <style scoped>
-.tf-page { min-height: 100vh; background: #f5f7fb; }
+.tf-page { min-height: 100vh; background: #f5f7fb; 
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .tf-main { max-width: 1080px; margin: 0 auto; padding: 24px; }
 .tf-head h1 { margin: 0 0 6px; color: #1a2b5f; }
 .tf-sub { margin: 0 0 16px; color: #6b7896; font-size: 13px; }
@@ -460,7 +464,18 @@ onMounted(loadPosts);
 .tf-left { min-width: 0; }
 .tf-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .tf-post-btn { padding: 10px 18px; border: none; border-radius: 10px; background: #c41e3a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
-.tf-side { display: flex; flex-direction: column; gap: 14px; }
+/* 右侧三卡固定：与学生端 PC 右栏同款做法（sticky + align-self:start） */
+.tf-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .tf-mini-card { background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 2px 12px rgba(15,23,42,.06); }
 .tf-mini-card h3 { margin: 0 0 10px; font-size: 15px; color: #1a2b5f; }
 .tf-mini-card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
