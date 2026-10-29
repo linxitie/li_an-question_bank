@@ -26,7 +26,11 @@
       <p v-if="loading" class="tf-empty">加载中…</p>
       <p v-else-if="!posts.length" class="tf-empty">暂无帖子</p>
       <div v-else class="tf-list">
-        <article v-for="post in posts" :key="post.id" class="tf-card">
+        <article
+          v-for="post in posts"
+          :key="post.id"
+          class="tf-card tf-card-clickable"
+          @click="openPost(post)">
           <div class="tf-card-head">
             <UserBadge
               size="sm"
@@ -44,8 +48,8 @@
             :attachments="post.attachments"
             mode="post" />
           <div class="tf-actions">
-            <button class="tf-link" @click="openPost(post)">查看评论</button>
-            <button v-if="post.canDelete" class="tf-danger" @click="askHidePost(post)">隐藏帖子</button>
+            <button class="tf-link" @click.stop="openPost(post)">查看评论</button>
+            <button v-if="post.canDelete" class="tf-danger" @click.stop="askHidePost(post)">隐藏帖子</button>
           </div>
         </article>
       </div>
@@ -53,6 +57,7 @@
       <div v-if="detail" class="tf-modal" @click.self="detail = null">
         <div class="tf-modal-card">
           <button class="tf-close" @click="detail = null">×</button>
+          <div class="tf-modal-scroll">
           <h2 :style="{ color: titleColorValue(detail.titleColor) }">{{ detail.title }}</h2>
           <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
           <p class="tf-content"><ForumContent :content="detail.content" /></p>
@@ -82,6 +87,8 @@
             >
               隐藏评论
             </button>
+          </div>
+
           </div>
 
           <!-- 教师评论输入（与学生端一致：文字 + 发送） -->
@@ -402,7 +409,7 @@ onMounted(loadPosts);
 .tf-empty { color: #8a94ad; text-align: center; padding: 30px; }
 .tf-warn { background: #fff7e6; color: #b45309; border: 1px solid #fbe0b0; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0 0 14px; }
 .tf-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(8,12,24,.45); display: flex; align-items: center; justify-content: center; padding: 20px; }
-.tf-modal-card { position: relative; width: min(720px, 94vw); max-height: 86vh; overflow-y: auto; background: #fff; border-radius: 14px; padding: 22px; }
+.tf-modal-card { position: relative; display: flex; flex-direction: column; width: min(720px, 94vw); max-height: 86vh; overflow: hidden; background: #fff; border-radius: 14px; padding: 22px; }
 .tf-close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 22px; color: #8a94ad; cursor: pointer; }
 .tf-modal-card h3 { margin: 20px 0 4px; font-size: 15px; color: #1a2b5f; }
 .tf-modal-card > h2 { margin: 0 0 6px; }
@@ -455,6 +462,9 @@ onMounted(loadPosts);
 .tf-class-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
 .tf-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .tf-btn.ghost { background: #fff; color: #475569; border: 1px solid #e3e8ef; }
+.tf-modal-scroll { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding-right: 4px; }
+.tf-card-clickable { cursor: pointer; }
+.tf-card-clickable:hover { background: #fafbfe; }
 .tf-comment-input { display:flex; gap:8px; align-items:flex-end; margin-top:14px; padding-top:12px; border-top:1px solid #eef1f6; }
 .tf-comment-textarea { flex:1 1 auto; min-width:0; padding:10px 12px; border:1px solid #e3e8ef; border-radius:10px; font-size:14px; resize:vertical; }
 </style>
