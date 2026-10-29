@@ -114,6 +114,60 @@ async def my_favorites(current_user: SysUser = Depends(get_current_user),
     return {"total": len(rows), "items": items}
 
 
+
+
+# ==================== 读卡奖励（金币 + 成就接线） ====================
+READ_COIN = 2          # 每次首次读完一篇
+READ_COIN_DAILY_CAP = 20
+
+
+def _grant_read_rewards(db: Session, user: SysUser, material: StudyMaterial) -> dict:
+    """首次读完一篇：发金币（幂等 + 日封顶）并触发成就判定。
+
+    幂等键：coin_record(user_id, source_type='MATERIAL', related_id=material_id)
+    """
+    from datetime import date, datetime as _dt
+
+    from ....models.models import CoinRecord
+    from ..reward.contract import grant_coins
+
+    already = (db.query(CoinRecord)
+               .filter(CoinRecord.user_id == user.user_id,
+                       CoinRecord.source_type == "MATERIAL",
+                       CoinRecord.related_id == material.material_id)
+               .first())
+    coins = 0
+    if already is None:
+        today = _dt.combine(date.today(), _dt.min.time())
+        got = (db.query(func.coalesce(func.sum(CoinRecord.coin_change), 0))
+               .filter(CoinRecord.user_id == user.user_id,
+                       CoinRecord.source_type == "MATERIAL",
+                       CoinRecord.transaction_time >= today)
+               .scalar() or 0)
+        if got < READ_COIN_DAILY_CAP:
+            coins = min(READ_COIN, READ_COIN_DAILY_CAP - int(got))
+            grant_coins(db, user, coins, source_type="MATERIAL",
+                        related_id=material.material_id,
+                        description=f"阅读资料：{material.title}")
+            db.commit()          # 金币独立提交：不依赖调用方事务
+
+    unlocked = []
+    try:
+        from ....services.achievement_service import check_and_grant
+        for d in check_and_grant(user.user_id, "material", db) or []:
+            # check_and_grant 的返回结构随版本而异：兼容 {achievement: obj} 与扁平字典
+            ach = d.get("achievement") if isinstance(d, dict) else None
+            name = getattr(ach, "name", None) or (d.get("name") if isinstance(d, dict) else "") or ""
+            coins = (getattr(ach, "reward_coins", None)
+                     or (d.get("coins") if isinstance(d, dict) else 0) or 0)
+            unlocked.append({"name": name, "tier": d.get("tier", 1) if isinstance(d, dict) else 1,
+                             "coins": coins})
+    except Exception as e:  # 成就失败不影响阅读
+        logger.warning("[materials] achievement trigger failed: %s", repr(e))
+
+    return {"coins": coins, "achievements": unlocked}
+
+
 @router.post("/progress", summary="上报学习进度(登录, UPSERT幂等)")
 async def report_progress(body: dict,
                           current_user: SysUser = Depends(get_current_user),
@@ -148,8 +202,10 @@ async def report_progress(body: dict,
     db.execute(stmt)
     if first_complete:
         m.study_count = (m.study_count or 0) + 1
+        rewards = _grant_read_rewards(db, current_user, m)
     db.commit()
-    return {"ok": True, "completed": completed, "progress_percent": pct}
+    return {"ok": True, "completed": completed, "progress_percent": pct,
+            "rewards": locals().get("rewards", {"coins": 0, "achievements": []})}
 
 
 @router.post("/{material_id}/favorite", summary="收藏切换(登录)")
