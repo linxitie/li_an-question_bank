@@ -1,5 +1,5 @@
 <template>
-  <div class="md-page">
+  <div class="md-page" :class="'theme-' + subject">
     <header class="md-top">
       <button class="md-back" @click="goBack">← 返回</button>
       <h1 class="md-title">{{ current ? current.title : '资料卡片' }}</h1>
@@ -227,7 +227,16 @@ onMounted(load);
 </script>
 
 <style scoped>
-.md-page { min-height: 100vh; background: #f5f7fb; color: #1a2a4a; }
+.md-page {
+  min-height: 100vh; background: #f5f7fb; color: #1a2a4a;
+  /* 主题色：默认行测蓝 */
+  --brand: #3b82f6;
+  --brand-soft: #eef4ff;
+  --brand-deep: #1d4ed8;
+}
+.md-page.theme-xingce    { --brand: #3b82f6; --brand-soft: #eef4ff; --brand-deep: #1d4ed8; }
+.md-page.theme-shenlun   { --brand: #10b981; --brand-soft: #e9f9f2; --brand-deep: #047857; }
+.md-page.theme-gongzhuan { --brand: #e11d48; --brand-soft: #fdeaef; --brand-deep: #9f1239; }
 .md-top {
   display: flex; align-items: center; gap: 16px;
   height: 62px; padding: 0 36px; background: #fff; border-bottom: 1px solid #eef1f6;
@@ -247,7 +256,7 @@ onMounted(load);
   padding: 9px 10px; border-radius: 10px; cursor: pointer; font-size: 14px;
 }
 .md-mod:hover, .md-other:hover { background: #f7faff; }
-.md-mod.on, .md-other.on { background: #eef4ff; color: #3b82f6; font-weight: 600; }
+.md-mod.on, .md-other.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 .md-mod-count, .md-other-cat { font-size: 12px; color: #8091a8; font-weight: 400; }
 .md-other { flex-direction: column; align-items: flex-start; gap: 2px; }
 .md-other-title { font-size: 14px; }
@@ -257,7 +266,7 @@ onMounted(load);
   flex: 1; height: 34px; border-radius: 9px; border: 1px solid #eef1f6;
   background: #fff; color: #5a6b85; cursor: pointer;
 }
-.md-fs button.on { border-color: #3b82f6; color: #3b82f6; }
+.md-fs button.on { border-color: var(--brand); color: var(--brand); }
 
 .md-stage { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; }
 .md-stack { position: relative; width: min(600px, 100%); height: 552px; perspective: 1200px; }
@@ -288,10 +297,10 @@ onMounted(load);
   display: flex; flex-direction: column; backface-visibility: hidden;
   -webkit-backface-visibility: hidden; background: #fff;
 }
-.md-face.back { transform: rotateY(180deg); background: #f7fbff; }
+.md-face.back { transform: rotateY(180deg); background: #fbfdff; }
 .md-face-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .md-chip {
-  font-size: 11px; color: #3b82f6; background: #eef4ff;
+  font-size: 11px; color: var(--brand); background: var(--brand-soft);
   border-radius: 10px; padding: 4px 10px;
 }
 .md-idx { font-size: 12px; color: #66738a; }
@@ -301,14 +310,14 @@ onMounted(load);
   color: #4a5a75; margin: 0; flex: 1; overflow-y: auto;
 }
 .md-face-foot { margin-top: 12px; }
-.md-hint { font-size: 12px; color: #3b82f6; }
+.md-hint { font-size: 12px; color: var(--brand); }
 
 .md-actions { display: flex; gap: 18px; margin-top: 22px; }
 .md-actions button {
   width: 170px; height: 46px; border-radius: 12px; border: 1px solid #eef1f6;
   background: #fff; color: #5a6b85; font-size: 14px; cursor: pointer;
 }
-.md-actions button.primary { background: #3b82f6; border-color: #3b82f6; color: #fff; font-weight: 600; }
+.md-actions button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
 .md-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 .md-tip { margin-top: 14px; font-size: 13px; color: #8091a8; }
 .md-empty { padding: 80px 0; color: #8091a8; }
