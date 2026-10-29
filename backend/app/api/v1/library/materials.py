@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -269,6 +269,11 @@ async def my_create(body: dict,
     publish=true 时直接公开（status=1）——Q6 已确认学生建卡免审批。
     """
     data = _validate_material_body(body)
+    if not data.get("category"):
+        auto = _auto_classify(db, data.get("subject"), data.get("title"),
+                              data.get("card_front"), data.get("card_back"))
+        if auto:
+            data["category"] = auto
     m = StudyMaterial(**data, creator_id=current_user.user_id,
                       status=(1 if body.get("publish") else 2))
     db.add(m)
@@ -706,11 +711,312 @@ def _validate_material_body(body: dict, partial: bool = False) -> dict:
             raise HTTPException(400, "标题必填")
         if data["type"] == "card" and not (data["card_front"] or "").strip():
             raise HTTPException(400, "卡片正面内容必填")
+        _check_card_text(data.get("card_front"), data.get("card_back"))
         if data["content"]:
             data["content"] = sanitize_html(data["content"])
     elif data.get("content"):
         data["content"] = sanitize_html(data["content"])
     return {k: v for k, v in data.items() if v is not None}
+
+
+# ========== B：卡片文本格式校验 + 关键词自动分类（专利主张 (3) 的落地部件） ==========
+CARD_FRONT_MAX = 120
+CARD_BACK_MAX = 600
+_DANGEROUS_TAGS = ("<script", "<iframe", "<object", "<embed", "<style")
+
+
+def _check_card_text(front, back) -> None:
+    """卡片文本格式校验：长度上限 + 禁止脚本类标签。不合规直接 400。"""
+    for label, val, cap in (("卡片正面", front, CARD_FRONT_MAX),
+                            ("卡片背面", back, CARD_BACK_MAX)):
+        if not val:
+            continue
+        if len(val) > cap:
+            raise HTTPException(400, f"{label}超过 {cap} 字（当前 {len(val)} 字）")
+        low = str(val).lower()
+        for tag in _DANGEROUS_TAGS:
+            if tag in low:
+                raise HTTPException(400, f"{label}含不允许的标签（script/iframe/object/embed/style）")
+
+
+def _auto_classify(db, subject, title, front, back):
+    """按 material_classification_rules 判定子类；无匹配返回 None。
+
+    匹配策略（v2）：标题优先 + 命中数计分。
+    - 第一轮只比标题：标题里的词最能代表这张卡讲什么；
+    - 第二轮才比「标题+正面+背面」：避免正文里的偶发词（如「辨词义」）把卡带偏；
+    - 同一轮内按命中数排序，命中数相同再比 priority。
+    """
+    from ....models.models import MaterialClassificationRule  # 局部导入
+
+    title = title or ""
+    whole = " ".join(x for x in (title, front, back) if x)
+    if not whole.strip():
+        return None
+
+    rules = (db.query(MaterialClassificationRule)
+             .filter(MaterialClassificationRule.enabled == 1,
+                     MaterialClassificationRule.rule_type == "keyword")
+             .order_by(MaterialClassificationRule.priority.desc()).all())
+    if not rules:
+        return None
+
+    def _cfg(r):
+        try:
+            c = r.rule_config or {}
+            if isinstance(c, str):
+                c = _json.loads(c)
+            return c if isinstance(c, dict) else None
+        except Exception:
+            return None
+
+    def _hits(cfg, text):
+        kws = [k for k in (cfg.get("keywords") or []) if k]
+        return sum(1 for k in kws if k in text)
+
+    # 第一轮：只看标题
+    best, best_key = None, (0, 0)
+    for r in rules:
+        cfg = _cfg(r)
+        if not cfg or (cfg.get("subject") and cfg["subject"] != subject):
+            continue
+        h = _hits(cfg, title)
+        if h <= 0:
+            continue
+        key = (h, r.priority or 0)
+        if key > best_key:
+            best, best_key = cfg.get("category"), key
+
+    # 第二轮：标题未命中时，再看全文
+    if not best:
+        for r in rules:
+            cfg = _cfg(r)
+            if not cfg or (cfg.get("subject") and cfg["subject"] != subject):
+                continue
+            h = _hits(cfg, whole)
+            if h <= 0:
+                continue
+            key = (h, r.priority or 0)
+            if key > best_key:
+                best, best_key = cfg.get("category"), key
+
+    return best
+
+
+def _resolve_card_category(db, subject, front, back, explicit=None):
+    """卡片分类三级优先：显式分类（表格分类列/请求体）> 关键词自动分类 > 空。
+
+    导入场景里 title 就是卡片正面（import_confirm 用 card_front 当 title），
+    因此标题优先的匹配策略等价于「先看正面，再看正+背面」。
+    """
+    if explicit:
+        return explicit
+    return _auto_classify(db, subject, front, front, back)
+
+
+# ============ 分类规则后台维护（管理员，4 端点） ============
+_RULE_SUBJECTS = ("xingce", "shenlun", "gongzhuan")
+
+
+def _rule_cfg(r) -> dict:
+    """rule_config 取成 dict（JSON 列可能是 dict，也可能是历史字符串）。"""
+    cfg = r.rule_config or {}
+    if isinstance(cfg, str):
+        try:
+            cfg = _json.loads(cfg)
+        except Exception:
+            cfg = {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _rule_to_dict(r) -> dict:
+    cfg = _rule_cfg(r)
+    return {
+        "id": r.rule_id,
+        "name": r.rule_name,
+        "type": r.rule_type,
+        "subject": cfg.get("subject"),
+        "category": cfg.get("category"),
+        "keywords": cfg.get("keywords") or [],
+        "priority": r.priority or 0,
+        "enabled": int(r.enabled or 0),
+        "created_at": str(r.created_at) if getattr(r, "created_at", None) else None,
+    }
+
+
+def _validate_rule_body(body: dict, partial: bool = False) -> dict:
+    """校验规则入参：名称唯一、科目合法、分类非空、关键词不能为空列表。"""
+    name = (body.get("name") or body.get("rule_name") or "").strip()
+    type_ = (body.get("type") or body.get("rule_type") or "keyword").strip()
+    subject = (body.get("subject") or "").strip()
+    category = (body.get("category") or "").strip()
+    keywords = body.get("keywords")
+    priority = body.get("priority")
+    enabled = body.get("enabled")
+
+    if not partial or name:
+        if not name:
+            raise HTTPException(400, "规则名称必填")
+        if len(name) > 100:
+            raise HTTPException(400, "规则名称超过 100 字")
+    if type_ not in ("keyword",):
+        raise HTTPException(400, "目前仅支持 keyword 类型规则")
+    if not partial or subject:
+        if subject and subject not in _RULE_SUBJECTS:
+            raise HTTPException(400, "无效科目（xingce/shenlun/gongzhuan）")
+    if not partial or category:
+        if not category:
+            raise HTTPException(400, "目标分类（category）必填")
+    if not partial or keywords is not None:
+        if not isinstance(keywords, list) or not keywords:
+            raise HTTPException(400, "关键词至少 1 个（数组）")
+        cleaned = []
+        for k in keywords:
+            k = str(k or "").strip()
+            if not k:
+                raise HTTPException(400, "关键词不能包含空字符串")
+            if len(k) > 30:
+                raise HTTPException(400, f"关键词过长（≤30 字）：{k[:10]}…")
+            cleaned.append(k)
+        keywords = cleaned
+    if priority is not None:
+        try:
+            priority = int(priority)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "priority 必须是整数")
+        if not (0 <= priority <= 100):
+            raise HTTPException(400, "priority 取值范围 0–100")
+
+    out = {"name": name, "type": type_}
+    if subject or not partial:
+        out["subject"] = subject
+    if category:
+        out["category"] = category
+    if keywords is not None:
+        out["keywords"] = keywords
+    if priority is not None:
+        out["priority"] = priority
+    if enabled is not None:
+        out["enabled"] = 1 if enabled else 0
+    return out
+
+
+def _rule_config_of(data: dict) -> str:
+    cfg = {}
+    if data.get("subject"):
+        cfg["subject"] = data["subject"]
+    if data.get("category"):
+        cfg["category"] = data["category"]
+    if data.get("keywords") is not None:
+        cfg["keywords"] = data["keywords"]
+    return _json.dumps(cfg, ensure_ascii=False)
+
+
+@router.get("/admin/rules", summary="分类规则列表(管理员)")
+async def admin_rule_list(page: int = Query(1, ge=1),
+                          page_size: int = Query(20, ge=1, le=200),
+                          enabled: int = Query(-1),
+                          keyword: str = Query(""),
+                          current_user: SysUser = Depends(get_current_user),
+                          db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule  # 局部导入
+
+    q = db.query(MaterialClassificationRule)
+    if enabled in (0, 1):
+        q = q.filter(MaterialClassificationRule.enabled == enabled)
+    if keyword.strip():
+        q = q.filter(MaterialClassificationRule.rule_name.like(f"%{keyword.strip()}%"))
+    total = q.count()
+    rows = (q.order_by(MaterialClassificationRule.priority.desc(),
+                       MaterialClassificationRule.rule_id.asc())
+            .offset((page - 1) * page_size).limit(page_size).all())
+    return {"total": total, "items": [_rule_to_dict(r) for r in rows]}
+
+
+@router.post("/admin/rules", summary="新增分类规则(管理员)")
+async def admin_rule_create(body: dict,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule
+
+    data = _validate_rule_body(body)
+    exists = (db.query(MaterialClassificationRule)
+              .filter(MaterialClassificationRule.rule_name == data["name"]).first())
+    if exists:
+        raise HTTPException(409, f"规则名称已存在：{data['name']}")
+    r = MaterialClassificationRule(
+        rule_name=data["name"], rule_type=data["type"],
+        rule_config=_rule_config_of(data),
+        priority=data.get("priority", 50),
+        enabled=data.get("enabled", 1))
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    _audit(db, current_user, "rule_create", f"rule:{r.rule_id}", r.rule_name)
+    db.commit()
+    return _rule_to_dict(r)
+
+
+@router.put("/admin/rules/{rule_id}", summary="更新分类规则(管理员)")
+async def admin_rule_update(rule_id: int, body: dict,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule
+
+    r = (db.query(MaterialClassificationRule)
+         .filter(MaterialClassificationRule.rule_id == rule_id).first())
+    if not r:
+        raise HTTPException(404, "规则不存在")
+    data = _validate_rule_body(body, partial=True)
+
+    if data.get("name") and data["name"] != r.rule_name:
+        dup = (db.query(MaterialClassificationRule)
+               .filter(MaterialClassificationRule.rule_name == data["name"],
+                       MaterialClassificationRule.rule_id != rule_id).first())
+        if dup:
+            raise HTTPException(409, f"规则名称已存在：{data['name']}")
+        r.rule_name = data["name"]
+    if data.get("type"):
+        r.rule_type = data["type"]
+    merged = dict(_rule_cfg(r))
+    for k in ("subject", "category", "keywords"):
+        if k in data:
+            merged[k] = data[k]
+    r.rule_config = _json.dumps(merged, ensure_ascii=False)
+    if "priority" in data:
+        r.priority = data["priority"]
+    if "enabled" in data:
+        r.enabled = data["enabled"]
+    db.commit()
+    db.refresh(r)
+    _audit(db, current_user, "rule_update", f"rule:{rule_id}", r.rule_name)
+    db.commit()
+    return _rule_to_dict(r)
+
+
+@router.patch("/admin/rules/{rule_id}/toggle", summary="启用/停用分类规则(管理员)")
+async def admin_rule_toggle(rule_id: int, body: dict,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule
+
+    r = (db.query(MaterialClassificationRule)
+         .filter(MaterialClassificationRule.rule_id == rule_id).first())
+    if not r:
+        raise HTTPException(404, "规则不存在")
+    enabled = body.get("enabled")
+    if enabled is None:
+        enabled = 0 if int(r.enabled or 0) == 1 else 1
+    r.enabled = 1 if enabled else 0
+    db.commit()
+    _audit(db, current_user, "rule_toggle", f"rule:{rule_id}",
+           f"{r.rule_name} enabled={r.enabled}")
+    db.commit()
+    return {"id": rule_id, "enabled": int(r.enabled)}
 
 
 @router.get("/admin/list", summary="管理列表(含下架)")
@@ -720,6 +1026,7 @@ async def admin_list(subject: Optional[str] = Query(None),
                      page: int = Query(1, ge=1),
                      page_size: int = Query(20, ge=1, le=100),
                      current_user: SysUser = Depends(get_current_user),
+                     keyword: str = Query(""),
                      db: Session = Depends(get_db)):
     _require_admin(current_user)
     q = db.query(StudyMaterial)
@@ -729,6 +1036,12 @@ async def admin_list(subject: Optional[str] = Query(None),
         q = q.filter(StudyMaterial.type == type)
     if status is not None:
         q = q.filter(StudyMaterial.status == status)
+    # 标题 / 分类 模糊搜索（前端 admin_materials 搜索框传 keyword）
+    kw = (keyword or "").strip()
+    if kw:
+        like = f"%{kw}%"
+        q = q.filter(or_(StudyMaterial.title.like(like),
+                         StudyMaterial.category.like(like)))
     total = q.count()
     rows = (q.order_by(StudyMaterial.material_id.desc())
              .offset((page - 1) * page_size).limit(page_size).all())
@@ -747,6 +1060,11 @@ async def admin_create(body: dict,
                        db: Session = Depends(get_db)):
     _require_admin(current_user)
     data = _validate_material_body(body)
+    if not data.get("category"):
+        auto = _auto_classify(db, data.get("subject"), data.get("title"),
+                              data.get("card_front"), data.get("card_back"))
+        if auto:
+            data["category"] = auto
     m = StudyMaterial(**data, creator_id=current_user.user_id)
     db.add(m)
     db.commit()
@@ -1235,9 +1553,13 @@ async def import_confirm(import_id: int, body: dict,
             # 分类器只看扩展名+标题关键词，卡片正文短会判成 article，导致卡片
             # 落入文章区、翻卡 UI 永不触发（D1）。此处只按业务事实写 card。
             content_hash = content_cleaner.calculate_content_hash(combined)
+            # 分类三级优先：表格分类列 > 关键词自动分类 > 请求体 category
+            card_category = _resolve_card_category(
+                db, subject, card_front, card_back,
+                c.get("category") or category)
             m = StudyMaterial(
                 subject=subject, type="card",
-                category=c["category"] or category,
+                category=card_category,
                 title=card_front, card_front=card_front,
                 card_back=card_back,
                 content_hash=content_hash,
