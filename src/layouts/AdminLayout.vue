@@ -108,6 +108,7 @@ export default defineComponent({
       { label: '用户管理', path: '/admin/users', icon: '👥' },
       { label: '题库管理', path: '/admin/questions', icon: '📋' },
       { label: '资料管理', path: '/admin/materials', icon: '📚' },
+  { label: '分类规则', path: '/admin/material-rules', icon: '🏷️' },
       { label: '试卷审批', path: '/admin/papers', icon: '📝' },
       { label: '系统设置', path: '/admin/settings', icon: '⚙️' },
       { label: '日志审计', path: '/admin/logs', icon: '📋' },
