@@ -13,39 +13,32 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
-from ....models.models import Achievement, Title, UserAchievement, SysUser
+from ....models.models import SysUser
+from ..growth import contract as growth_contract
 from ....services import badge_service
 from ....core.security import get_current_user
 
 router = APIRouter(prefix="/api/badges", tags=["badges"])
 
 
-def _achievement_item(a: Achievement) -> dict:
-    return {
-        "kind": "achievement",
-        "id": a.achievement_id,
-        "name": a.name,
-        "category": a.category,
-        "icon": a.icon,
-        "shape": badge_service.shape_of(a.category),
-        "condition_desc": a.condition_desc,
-        "reward_coins": a.reward_coins or 0,
-        "threshold": a.threshold or 0,
-        "hidden": bool(a.is_hidden),
-    }
+def _achievement_item(a) -> dict:
+    f = growth_contract.achievement_fields(a)
+    f.update({"kind": "achievement", "shape": badge_service.shape_of(f.get("category"))})
+    return f
 
 
-def _title_item(t: Title) -> dict:
+def _title_item(t) -> dict:
+    f = growth_contract.title_fields(t)
     return {
         "kind": "title",
-        "id": t.title_id,
-        "name": t.name,
+        "id": f["id"],
+        "name": f["name"],
         "category": "称号",
         "icon": None,
         "shape": "ribbon",
-        "condition_desc": t.description or f"达到 {t.unlock_level} 级解锁",
+        "condition_desc": f["description"] or f"达到 {f['unlock_level']} 级解锁",
         "reward_coins": 0,
-        "threshold": t.unlock_level or 0,
+        "threshold": f["unlock_level"],
         "hidden": False,
     }
 
@@ -59,14 +52,10 @@ async def badge_catalog(
 ):
     items = []
     if kind in ("", "achievement"):
-        q = db.query(Achievement)
-        if category:
-            q = q.filter(Achievement.category == category)
         items += [_achievement_item(a) for a in
-                  q.order_by(Achievement.sort_order.asc(), Achievement.achievement_id.asc()).all()]
+                  growth_contract.list_achievements(db, category or None)]
     if kind in ("", "title") and (not category or category == "称号"):
-        titles = db.query(Title).order_by(Title.sort_order.asc()).all()
-        items += [_title_item(t) for t in titles]
+        items += [_title_item(t) for t in growth_contract.list_titles(db)]
     return {"total": len(items), "items": items}
 
 
@@ -78,9 +67,9 @@ async def badge_summary(
     score = badge_service.total_score(db, current_user.user_id)
     tier = badge_service.tier_of(score)
     progress = badge_service.progress_to_next(score)
-    owned = (db.query(UserAchievement)
-             .filter(UserAchievement.user_id == current_user.user_id).count())
-    total = db.query(Achievement).count() + db.query(Title).count()
+    owned = growth_contract.count_user_achievements(db, current_user.user_id)
+    total = (growth_contract.count_achievements(db)
+             + growth_contract.count_titles(db))
     return {
         "score": score,
         "tier": tier,
@@ -106,24 +95,16 @@ async def my_badges(
     tier = badge_service.tier_of(score)
     progress = badge_service.progress_to_next(score)
 
-    rows = (db.query(UserAchievement)
-            .filter(UserAchievement.user_id == current_user.user_id).all())
+    rows = growth_contract.list_user_achievements(db, current_user.user_id)
     obtained = {r.achievement_id: r for r in rows}
 
-    # 稀有度：每个成就的获得人数 + 全站用户数（一次聚合）
-    counts = dict(
-        db.query(UserAchievement.achievement_id, func.count(UserAchievement.id))
-        .group_by(UserAchievement.achievement_id).all()
-    )
-    total_users = db.query(func.count(SysUser.user_id)).scalar() or 0
+    # 稀有度：每个成就的获得人数 + 全站用户数（一次聚合，经由 growth 契约）
+    counts = growth_contract.achievement_owner_counts(db)
+    total_users = growth_contract.total_users(db)
 
     items = []
     if kind in ("", "achievement"):
-        q = db.query(Achievement)
-        if category:
-            q = q.filter(Achievement.category == category)
-        for a in q.order_by(Achievement.sort_order.asc(),
-                            Achievement.achievement_id.asc()).all():
+        for a in growth_contract.list_achievements(db, category or None):
             it = _achievement_item(a)
             rec = obtained.get(a.achievement_id)
             cnt = int(counts.get(a.achievement_id, 0))
@@ -141,7 +122,7 @@ async def my_badges(
             items.append(it)
 
     if kind in ("", "title") and (not category or category == "称号"):
-        for t in db.query(Title).order_by(Title.sort_order.asc()).all():
+        for t in growth_contract.list_titles(db):
             it = _title_item(t)
             it.update({"owned": False, "obtained_at": None,
                        "snapshot_tier": None, "current_tier": tier["label"]})
@@ -183,23 +164,16 @@ async def badge_wall(
     score = badge_service.total_score(db, current_user.user_id)
     tier = badge_service.tier_of(score)
 
-    rows = (db.query(UserAchievement)
-            .filter(UserAchievement.user_id == current_user.user_id)
-            .order_by(UserAchievement.obtained_at.desc())
-            .limit(limit * 3).all())
+    rows = growth_contract.list_user_achievements(db, current_user.user_id)[: limit * 3]
     if not rows:
         return {"items": [], "score": score, "tier": tier}
 
     ids = [r.achievement_id for r in rows]
-    achs = {a.achievement_id: a for a in
-            db.query(Achievement).filter(Achievement.achievement_id.in_(ids)).all()}
+    achs = {a.achievement_id: a for a in growth_contract.list_achievements(db)
+            if a.achievement_id in ids}
 
-    counts = dict(
-        db.query(UserAchievement.achievement_id, func.count(UserAchievement.id))
-        .filter(UserAchievement.achievement_id.in_(ids))
-        .group_by(UserAchievement.achievement_id).all()
-    )
-    total_users = db.query(func.count(SysUser.user_id)).scalar() or 0
+    counts = growth_contract.achievement_owner_counts(db, ids)
+    total_users = growth_contract.total_users(db)
 
     items = []
     for rec in rows:

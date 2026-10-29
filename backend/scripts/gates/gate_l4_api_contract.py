@@ -1,10 +1,13 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """L4 API 契约门禁 — OpenAPI 快照 + 端点存在性"""
 import subprocess, sys, os, json, urllib.request
 
 def main():
+    # 默认 8000（历史约定）；可用环境变量指向实际后端端口，例如 8010
+    OPENAPI_URL = os.environ.get(
+        'OPENAPI_URL', 'http://127.0.0.1:8000/openapi.json')
     try:
-        r = urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=10)
+        r = urllib.request.urlopen(OPENAPI_URL, timeout=10)
         spec = json.loads(r.read())
         paths = list(spec.get('paths', {}).keys())
         required = [

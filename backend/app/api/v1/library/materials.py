@@ -128,22 +128,15 @@ def _grant_read_rewards(db: Session, user: SysUser, material: StudyMaterial) -> 
     """
     from datetime import date, datetime as _dt
 
-    from ....models.models import CoinRecord
-    from ..reward.contract import grant_coins
+    from ..reward.contract import grant_coins, has_grant, sum_granted
 
-    already = (db.query(CoinRecord)
-               .filter(CoinRecord.user_id == user.user_id,
-                       CoinRecord.source_type == "MATERIAL",
-                       CoinRecord.related_id == material.material_id)
-               .first())
+    already = None if not has_grant(
+        db, user.user_id, source_type="MATERIAL",
+        related_id=material.material_id) else True
     coins = 0
     if already is None:
         today = _dt.combine(date.today(), _dt.min.time())
-        got = (db.query(func.coalesce(func.sum(CoinRecord.coin_change), 0))
-               .filter(CoinRecord.user_id == user.user_id,
-                       CoinRecord.source_type == "MATERIAL",
-                       CoinRecord.transaction_time >= today)
-               .scalar() or 0)
+        got = sum_granted(db, user.user_id, source_type="MATERIAL", since=today)
         if got < READ_COIN_DAILY_CAP:
             coins = min(READ_COIN, READ_COIN_DAILY_CAP - int(got))
             grant_coins(db, user, coins, source_type="MATERIAL",

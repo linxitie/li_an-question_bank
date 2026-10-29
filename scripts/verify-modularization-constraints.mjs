@@ -4,7 +4,7 @@
  *
  * 三项检查：
  *   1. package.json 中 8 个 VTJ 包版本必须等于锁定值。
- *   2. src/router/index.ts 中所有动态 import 目标必须存在（92 处），
+ *   2. src/router/index.ts 中所有动态 import 目标必须存在（97 处），
  *      其中 `$vtj/vue/<id>.vue` 映射到 `.vtj/vue/<id>.vue`，
  *      `@/...` 映射到 `src/...`。
  *   3. src/modules/<域>/** 中禁止出现 `@/modules/<其他域>` 的跨域 import。
@@ -32,7 +32,9 @@ const VTJ_LOCKED_VERSIONS = {
   '@vtj/cli': '0.12.19',
 };
 
-const EXPECTED_DYNAMIC_IMPORTS = 92;
+// 97 = 92（原基线）+ 5（徽章体系新增：
+//   /materials/detail、/admin/material-rules、/badges、/badge-preview、/badges-demo）
+const EXPECTED_DYNAMIC_IMPORTS = 97;
 
 const violations = [];
 

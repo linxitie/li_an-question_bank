@@ -170,7 +170,9 @@ def check_migrations() -> None:
     if not FOUNDATION_DDL.exists():
         problems.append(f'缺少 {FOUNDATION_DDL.name}')
     else:
-        digest = hashlib.sha256(FOUNDATION_DDL.read_bytes()).hexdigest()
+        # 规范化换行再算哈希：Windows 检出默认 CRLF，会让同一文件产生不同摘要
+        _raw_bytes = FOUNDATION_DDL.read_bytes().replace(b'\r\n', b'\n')
+        digest = hashlib.sha256(_raw_bytes).hexdigest()
         if digest != FOUNDATION_DDL_SHA256:
             problems.append(f'DDL checksum 不符：{digest[:16]}…（历史迁移被改动？）')
     groups: dict[str, list[int]] = {}
