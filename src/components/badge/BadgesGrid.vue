@@ -3,7 +3,7 @@
     <div v-if="!items.length" class="bg-empty">没有符合筛选条件的徽章</div>
 
     <ul v-else class="bg-grid">
-      <li v-for="it in items" :key="`${it.kind}-${it.id}`" class="bg-card" :class="{ 'is-locked': !it.owned }">
+      <li v-for="it in items" :key="`${it.kind}-${it.id}`" class="bg-card" :class="{ 'is-locked': !it.owned }" @click="$emit('select', it)">
         <BadgeIcon
           :shape="(it.shape as BadgeShape) || 'shield'"
           :tier="tierIndexOf(it)"
@@ -27,6 +27,8 @@
 import BadgeIcon from './BadgeIcon.vue';
 import { type BadgeShape, tierByScore } from './badgePalette';
 import type { BadgeItem } from '@/views/student/badgesLogic';
+
+defineEmits<{ (e: 'select', item: BadgeItem): void }>();
 
 const props = withDefaults(
   defineProps<{
@@ -76,6 +78,7 @@ const stateClass = (it: BadgeItem): string => (it.owned ? 'is-owned' : 'is-todo'
   list-style: none;
 }
 .bg-card {
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;

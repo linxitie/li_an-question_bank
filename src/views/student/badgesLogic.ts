@@ -103,3 +103,34 @@ export function tierPercent(score: number, threshold: number, nextThreshold: num
   if (span <= 0) return 100;
   return Math.round(Math.min(100, Math.max(0, ((s - threshold) / span) * 100)) * 10) / 10;
 }
+
+/**
+ * 最近获得排序：已获得按获得时间倒序在前，未获得保持原顺序在后。
+ * 用于「我的徽章」按最近获得浏览，以及主页徽章墙取数。
+ */
+export function sortByRecent(items: BadgeItem[]): BadgeItem[] {
+  const owned = items.filter((i) => i.owned);
+  const rest = items.filter((i) => !i.owned);
+  owned.sort((a, b) => String(b.obtained_at || "").localeCompare(String(a.obtained_at || "")));
+  return [...owned, ...rest];
+}
+
+/** 主页徽章墙：只取已获得，最多 limit 枚（默认 6） */
+export function wallItems(items: BadgeItem[], limit = 6): BadgeItem[] {
+  return sortByRecent(items).filter((i) => i.owned).slice(0, Math.max(1, limit));
+}
+
+/** 稀有度文案：有统计才显示；0 人或无统计返回空串（不编造数字） */
+export function rarityText(ownedCount?: number | null, ownedPercent?: number | null): string {
+  const n = Number(ownedCount ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const p = Number(ownedPercent ?? 0);
+  const pct = Number.isFinite(p) && p > 0 ? `（${p.toFixed(1)}%）` : "";
+  return `${n} 人已获得${pct}`;
+}
+
+/** 获得时间只显示日期部分 */
+export function dateOnly(iso?: string | null): string {
+  if (!iso) return "";
+  return String(iso).slice(0, 10);
+}

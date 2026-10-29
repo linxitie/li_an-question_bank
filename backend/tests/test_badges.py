@@ -152,3 +152,44 @@ class TestBadgeApi:
         items = r.json()["items"]
         assert items, "坚持类应有徽章"
         assert all(i["category"] == "坚持" for i in items)
+
+class TestBadgeWallAndSort:
+    """S4：个人主页徽章墙（最近获得）+ 排序/截断 + 稀有度字段"""
+
+    def test_wall_未登录被拒(self):
+        from app.main import app
+
+        r = TestClient(app).get("/api/badges/wall")
+        assert r.status_code in (401, 403)
+
+    def test_wall_只返回已获得且不超过limit(self, client_with_admin):
+        r = client_with_admin.get("/api/badges/wall", params={"limit": 6})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert len(d["items"]) <= 6
+        assert all(i["owned"] is True for i in d["items"]), "徽章墙只能出现已获得徽章"
+        assert "score" in d and "tier" in d
+
+    def test_wall_含稀有度字段(self, client_with_admin):
+        d = client_with_admin.get("/api/badges/wall", params={"limit": 6}).json()
+        if not d["items"]:
+            pytest.skip("该账号暂无已获得徽章")
+        it = d["items"][0]
+        assert it["owned_count"] >= 1
+        assert 0 <= it["owned_percent"] <= 100
+
+    def test_my_sort_recent_已获得排在前(self, client_with_admin):
+        d = client_with_admin.get("/api/badges/my", params={"sort": "recent", "limit": 6}).json()
+        assert d["returned"] == len(d["items"])
+        if d["owned"]:
+            assert d["items"][0]["owned"] is True, "recent 排序应让已获得徽章排在最前"
+
+    def test_my_limit_截断生效(self, client_with_admin):
+        d = client_with_admin.get("/api/badges/my", params={"limit": 3}).json()
+        assert d["returned"] == 3
+        assert len(d["items"]) == 3
+        assert d["total"] >= 3, "total 仍应报告总数"
+
+    def test_my_limit_0_表示不限制(self, client_with_admin):
+        d = client_with_admin.get("/api/badges/my", params={"limit": 0}).json()
+        assert d["returned"] == d["total"]

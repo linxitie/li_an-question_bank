@@ -40,7 +40,17 @@
       </div>
     </section>
 
-    <BadgesGrid :items="pageItems" :current-tier-index="tierIndex" />
+    <BadgeWall
+      class="bd-wall"
+      :items="wall"
+      :current-tier-index="tierIndex"
+      @select="openDetail"
+      @view-all="() => {}"
+    />
+
+    <BadgesGrid :items="pageItems" :current-tier-index="tierIndex" @select="openDetail" />
+
+    <BadgeDetailModal :item="detailItem" :current-tier-index="tierIndex" @close="detailItem = null" />
 
     <footer class="bd-pager">
       <button class="bd-page-btn" :disabled="page <= 1" @click="goPage(page - 1)">上一页</button>
@@ -54,6 +64,8 @@
 import { computed, reactive, ref } from 'vue';
 import BadgeTierCard from '@/components/badge/BadgeTierCard.vue';
 import BadgesGrid from '@/components/badge/BadgesGrid.vue';
+import BadgeWall from '@/components/badge/BadgeWall.vue';
+import BadgeDetailModal from '@/components/badge/BadgeDetailModal.vue';
 import { BADGE_TIERS } from '@/components/badge/badgePalette';
 import {
   filterBadges,
@@ -64,7 +76,8 @@ import {
   type BadgeItem,
   type KindFilter,
   type StateFilter,
-  type TierFilter
+  type TierFilter,
+  wallItems
 } from '@/views/student/badgesLogic';
 
 const PAGE_SIZE = 15;
@@ -94,7 +107,13 @@ const items: BadgeItem[] = NAMES.map(([name, category, isOwned], i) => ({
   obtained_at: isOwned ? `2026-10-${(i % 27) + 1}` : null,
   snapshot_tier: isOwned ? '黄金' : null,
   current_tier: '黄金',
-  threshold: isOwned ? 0 : (i % 5) * 10
+  threshold: isOwned ? 0 : (i % 5) * 10,
+  condition_desc: isOwned
+    ? '达成对应学习条件后自动解锁（演示数据）'
+    : '再完成 ' + ((i % 5) * 5 + 5) + ' 次对应行为即可解锁',
+  reward_coins: [10, 30, 80, 150, 300][i % 5],
+  owned_count: 120 + i * 37,
+  owned_percent: Math.round(((120 + i * 37) / 1204) * 1000) / 10
 }));
 
 const kind = ref<KindFilter>('all');
@@ -126,9 +145,20 @@ const filtered = computed(() => {
 const filteredTotal = computed(() => filtered.value.length);
 const maxPage = computed(() => maxPageOf(filteredTotal.value, PAGE_SIZE));
 const pageItems = computed(() => paginate(filtered.value, page.value, PAGE_SIZE));
+const wall = computed(() => wallItems(items, 6));
+const detailItem = ref<BadgeItem | null>(null);
+const openDetail = (item: BadgeItem) => {
+  detailItem.value = item;
+};
+
 const goPage = (p: number) => {
   page.value = Math.min(Math.max(1, Math.round(p)), maxPage.value);
 };
+
+// ?modal=1 时自动打开第一枚，便于截图预览详情弹层
+if (window.location.hash.includes('modal=1')) {
+  detailItem.value = wall.value[0] || items[0] || null;
+}
 </script>
 
 <style scoped>
@@ -154,6 +184,7 @@ const goPage = (p: number) => {
   background: #fff; color: #5c6b80; font-size: 12px; cursor: pointer;
 }
 .bd-chip.is-active { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600; }
+.bd-wall { margin-bottom: 18px; }
 .bd-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; }
 .bd-page-btn {
   height: 32px; padding: 0 16px; border: 1px solid #e6ecf5; border-radius: 10px;

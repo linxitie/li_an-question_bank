@@ -64,7 +64,7 @@
     <div v-if="loading" class="bd-empty">加载中…</div>
 
     <template v-else>
-      <BadgesGrid :items="pageItems" :current-tier-index="tierIndex" />
+      <BadgesGrid :items="pageItems" :current-tier-index="tierIndex" @select="openDetail" />
 
       <footer class="bd-pager" v-if="maxPage > 1">
         <button class="bd-page-btn" :disabled="page <= 1" @click="goPage(page - 1)">上一页</button>
@@ -73,6 +73,12 @@
       </footer>
       <p v-else-if="filteredTotal" class="bd-page-info bd-page-single">共 {{ filteredTotal }} 枚</p>
     </template>
+
+    <BadgeDetailModal
+      :item="detailItem"
+      :current-tier-index="tierIndex"
+      @close="detailItem = null"
+    />
   </div>
 </template>
 
@@ -80,6 +86,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import BadgeTierCard from '@/components/badge/BadgeTierCard.vue';
 import BadgesGrid from '@/components/badge/BadgesGrid.vue';
+import BadgeDetailModal from '@/components/badge/BadgeDetailModal.vue';
 import { BADGE_TIERS } from '@/components/badge/badgePalette';
 import {
   DEFAULT_FILTERS,
@@ -110,6 +117,11 @@ const total = ref(0);
 const loading = ref(true);
 const error = ref('');
 const page = ref(1);
+const detailItem = ref<BadgeItem | null>(null);
+
+const openDetail = (item: BadgeItem) => {
+  detailItem.value = item;
+};
 const filters = reactive<BadgeFilters>({ ...DEFAULT_FILTERS });
 
 const KIND_OPTIONS: { value: KindFilter; label: string }[] = [
