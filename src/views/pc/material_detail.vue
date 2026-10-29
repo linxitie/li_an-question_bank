@@ -44,9 +44,10 @@
           >
             <div class="md-inner">
               <section class="md-face front">
-                <div class="md-face-head">
-                  <span class="md-chip">{{ c.category || activeModule || '资料卡' }}</span>
-                  <span class="md-idx">{{ index + i + 1 }} / {{ cards.length }}</span>
+                <!-- 科目渐变封面带：行测蓝 / 申论绿 / 公专红，与主页三色一致 -->
+                <div class="md-cover" :class="'cover-' + subject">
+                  <span class="md-chip-light">{{ c.category || activeModule || '资料卡' }}</span>
+                  <span class="md-idx-light">{{ index + i + 1 }} / {{ cards.length }}</span>
                 </div>
                 <h3 class="md-card-title">{{ c.title }}</h3>
                 <p class="md-card-text">{{ c.card_front || c.title }}</p>
@@ -333,4 +334,22 @@ onMounted(load);
   .md-card.lv0.leaving { transform: none; opacity: 1; }
   .md-inner { transition: none; }
 }
+
+/* ===== 科目渐变封面带（与主页三色一致） ===== */
+.md-cover {
+  height: 128px; margin: -22px -22px 16px -22px;
+  border-radius: 18px 18px 0 0;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 16px 20px; box-sizing: border-box;
+}
+.cover-xingce    { background: linear-gradient(160deg, #3b82f6 0%, #93c5fd 62%, #ffffff 100%); }
+.cover-shenlun   { background: linear-gradient(160deg, #10b981 0%, #6ee7b7 62%, #ffffff 100%); }
+.cover-gongzhuan { background: linear-gradient(160deg, #e11d48 0%, #fda4af 62%, #ffffff 100%); }
+.md-chip-light {
+  font-size: 12px; color: #fff; background: rgba(255,255,255,0.22);
+  border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; padding: 5px 12px;
+  backdrop-filter: blur(2px);
+}
+.md-idx-light { font-size: 12px; color: #ffffff; opacity: 0.92; }
+@media (prefers-reduced-motion: reduce) { .md-cover { transition: none; } }
 </style>
