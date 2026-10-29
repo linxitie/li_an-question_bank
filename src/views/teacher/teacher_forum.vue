@@ -150,17 +150,6 @@
       <div class="tf-modal-card">
         <h3>发布新帖</h3>
         <input v-model="postForm.title" class="tf-input" placeholder="请输入标题…" maxlength="200" />
-        <div class="tf-color-row">
-          <span class="tf-label">标题颜色</span>
-          <select v-model="postForm.titleColor" class="tf-select">
-            <option value="default">默认</option>
-            <option value="red">红</option>
-            <option value="gold">金</option>
-            <option value="blue">蓝</option>
-            <option value="green">绿</option>
-            <option value="purple">紫</option>
-          </select>
-        </div>
         <textarea v-model="postForm.content" class="tf-textarea" rows="6" placeholder="请输入内容…"></textarea>
         <div class="tf-visibility">
           <span class="tf-label">可见范围</span>

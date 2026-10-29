@@ -28,10 +28,7 @@
         </div>
       </div>
 
-      <div class="field">
-        <label class="label">标题颜色</label>
-        <TitleColorPicker v-model="titleColor" />
-      </div>
+
 
       <div class="field">
         <label class="label">内容</label>
@@ -67,7 +64,6 @@ import type { ForumShareType } from '@/modules/community/api';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import FileUploader from '@/components/forum/FileUploader.vue';
-import TitleColorPicker from '@/components/forum/TitleColorPicker.vue';
 import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 
 const router = useRouter();

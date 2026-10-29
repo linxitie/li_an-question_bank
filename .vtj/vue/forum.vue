@@ -192,10 +192,7 @@
             class="modal-input"
             placeholder="请输入标题..."
             maxlength="200"/>
-          <div class="post-color-row">
-            <span class="post-color-label">标题颜色</span>
-            <TitleColorPicker v-model="state.newPost.titleColor" />
-          </div>
+
           <textarea
             v-model="state.newPost.content"
             rows="6"
@@ -608,7 +605,6 @@
   import FileUploader from '@/components/forum/FileUploader.vue';
   import AttachmentList from '@/components/forum/AttachmentList.vue';
   import CommentSortBar from '@/components/forum/CommentSortBar.vue';
-  import TitleColorPicker from '@/components/forum/TitleColorPicker.vue';
   import UserBadge from '@/components/forum/UserBadge.vue';
   import { pinForumComment, reportForumTarget } from '@/modules/community/api';
   import { titleColorValue } from '@/components/forum/titleColors';
@@ -626,7 +622,6 @@
       FileUploader,
       AttachmentList,
       CommentSortBar,
-      TitleColorPicker,
       UserBadge
     },
     setup(props) {
