@@ -6,7 +6,11 @@
       <header class="tf-head">
         <div class="tf-head-row">
           <h1>论坛管理</h1>
-          <button class="tf-post-btn" @click="openPostForm">发布新帖</button>
+          <div class="tf-head-actions">
+            <button class="tf-btn ghost" @click="openFav('favorites')">⭐ 我的收藏</button>
+            <button class="tf-btn ghost" @click="openFav('likes')">❤ 我的喜欢</button>
+            <button class="tf-post-btn" @click="openPostForm">发布新帖</button>
+          </div>
         </div>
         <p class="tf-sub">全校帖子可见；只能隐藏本班学生的内容，需填写原因并提交管理员复核。</p>
       </header>
@@ -166,6 +170,30 @@
         </section>
       </aside>
     </main>
+    <!-- T4：我的收藏 / 我的喜欢 -->
+    <div v-if="favVisible" class="tf-modal" @click.self="favVisible = false">
+      <div class="tf-modal-card tf-fav-card">
+        <h3>{{ favTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
+        <div class="tf-fav-tabs">
+          <button :class="['tf-fav-tab', { on: favTab === 'favorites' }]" @click="favTab = 'favorites'; loadFavTab()">我的收藏</button>
+          <button :class="['tf-fav-tab', { on: favTab === 'likes' }]" @click="favTab = 'likes'; loadFavTab()">我的喜欢</button>
+        </div>
+        <p v-if="favLoading" class="tf-empty">加载中…</p>
+        <p v-else-if="!favList.length" class="tf-empty">
+          {{ favTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
+        </p>
+        <div v-else class="tf-fav-list">
+          <div v-for="p in favList" :key="p.id" class="tf-fav-item" @click="openPost(p)">
+            <span class="tf-fav-title" :style="{ color: titleColorValue(p.titleColor) }">{{ p.title }}</span>
+            <span class="tf-fav-num">❤ {{ p.likeCount || 0 }} · ⭐ {{ p.favoriteCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="tf-modal-actions">
+          <button class="tf-btn ghost" @click="favVisible = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <!-- P3-07：教师发帖（含可见范围） -->
     <div v-if="postForm.visible" class="tf-modal" @click.self="postForm.visible = false">
       <div class="tf-modal-card">
@@ -210,6 +238,7 @@ import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
 import { createForumComment } from '@/modules/community/api';
 import { toggleForumPostLike, toggleForumFavorite } from '@/modules/community/api';
+import { fetchMyForumFavorites, fetchMyForumLikes } from '@/modules/community/api';
 import FileUploader from '@/components/forum/FileUploader.vue';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import {
@@ -254,6 +283,12 @@ const postForm = reactive({
 });
 const commentAttachments = ref<any[]>([]);
 const showCommentEmoji = ref(false);
+
+// T4：我的收藏 / 我的喜欢
+const favVisible = ref(false);
+const favTab = ref<'favorites' | 'likes'>('favorites');
+const favList = ref<any[]>([]);
+const favLoading = ref(false);
 const onEmojiSelect = (p: { value: string }) => {
   commentDraft.value += p.value;
   showCommentEmoji.value = false;
@@ -335,6 +370,26 @@ const toggleFavorite = async (post: any) => {
     const r: any = await toggleForumFavorite(post.id);
     if (r) { post.favorited = r.favorited; post.favoriteCount = r.favoriteCount; }
   } catch (e) { /* 静默 */ }
+};
+
+/** T4：打开收藏/喜欢弹窗并拉数据 */
+const openFav = async (tab: 'favorites' | 'likes') => {
+  favTab.value = tab;
+  favVisible.value = true;
+  await loadFavTab();
+};
+const loadFavTab = async () => {
+  favLoading.value = true;
+  try {
+    const res: any = favTab.value === 'favorites'
+      ? await fetchMyForumFavorites(20, 0)
+      : await fetchMyForumLikes(20, 0);
+    favList.value = (res && res.posts) || [];
+  } catch (e) {
+    favList.value = [];
+  } finally {
+    favLoading.value = false;
+  }
 };
 
 const submitComment = async () => {
@@ -549,6 +604,15 @@ onMounted(loadPosts);
 .tf-ico.on { color:#c41e3a; border-color:#f0c4cc; background:#fff5f7; }
 .tf-date { height: 40px; padding: 0 10px; border: 1px solid #e3e8ef; border-radius: 10px; font-size: 13px; color: #475569; }
 .tf-tilde { color: #94a3b8; }
+.tf-head-actions { display: flex; align-items: center; gap: 10px; }
+.tf-fav-tabs { display: flex; gap: 8px; margin: 10px 0 14px; }
+.tf-fav-tab { padding: 8px 16px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #475569; font-size: 13px; cursor: pointer; }
+.tf-fav-tab.on { background: #fdf2f4; border-color: #f0c4cc; color: #c41e3a; font-weight: 600; }
+.tf-fav-list { max-height: 380px; overflow-y: auto; }
+.tf-fav-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; }
+.tf-fav-item:hover { background: #f7f9fc; }
+.tf-fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
 </style>
 
 
