@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -1026,6 +1026,7 @@ async def admin_list(subject: Optional[str] = Query(None),
                      page: int = Query(1, ge=1),
                      page_size: int = Query(20, ge=1, le=100),
                      current_user: SysUser = Depends(get_current_user),
+                     keyword: str = Query(""),
                      db: Session = Depends(get_db)):
     _require_admin(current_user)
     q = db.query(StudyMaterial)
@@ -1035,6 +1036,12 @@ async def admin_list(subject: Optional[str] = Query(None),
         q = q.filter(StudyMaterial.type == type)
     if status is not None:
         q = q.filter(StudyMaterial.status == status)
+    # 标题 / 分类 模糊搜索（前端 admin_materials 搜索框传 keyword）
+    kw = (keyword or "").strip()
+    if kw:
+        like = f"%{kw}%"
+        q = q.filter(or_(StudyMaterial.title.like(like),
+                         StudyMaterial.category.like(like)))
     total = q.count()
     rows = (q.order_by(StudyMaterial.material_id.desc())
              .offset((page - 1) * page_size).limit(page_size).all())
