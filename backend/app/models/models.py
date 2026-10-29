@@ -1782,6 +1782,13 @@ class EssayQuote(Base):
     author = Column(String(100), comment="作者")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     status = Column(Integer, default=1, comment="状态 1正常/0禁用")
+    # 内容知识中枢 R0（v3.0 §6.2）
+    quote_uid = Column(String(40), unique=True, index=True, comment="稳定ID")
+    normalized_hash = Column(String(64), index=True, comment="归一化内容哈希")
+    review_status = Column(String(20), nullable=False, default="published", index=True, comment="审核状态")
+    source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True, comment="主来源")
+    quality_score = Column(Float, comment="质量分 0-100")
+    deleted_at = Column(DateTime, comment="软删除时间")
 
     __table_args__ = (
         Index("idx_category_essayquote", category),
@@ -2134,6 +2141,107 @@ class ForumMention(Base):
     )
 
 
+# ------------------------------
+# 内容知识中枢（R0）
+# ------------------------------
+
+class Topic(Base):
+    """主题字典：theme（主题）/ exam_type（考试类型）"""
+    __tablename__ = "topic"
+
+    topic_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, comment="主题名")
+    slug = Column(String(100), nullable=False, unique=True, comment="稳定标识")
+    kind = Column(String(20), nullable=False, default="theme", comment="theme/exam_type")
+    parent_id = Column(Integer, ForeignKey("topic.topic_id"), nullable=True)
+    description = Column(String(500))
+    aliases = Column(JSON, comment="别名数组")
+    status = Column(Integer, default=1)
+    sort_order = Column(Integer, default=1)
+
+    __table_args__ = (
+        Index("idx_topic_kind", kind),
+    )
+
+
+class KgRelationType(Base):
+    """关系类型注册表：新增关系只加一行"""
+    __tablename__ = "kg_relation_type"
+
+    relation = Column(String(40), primary_key=True)
+    description = Column(String(200))
+    directed = Column(Integer, default=1)
+    src_types = Column(Text, comment="JSON 数组")
+    dst_types = Column(Text, comment="JSON 数组")
+
+
+class KgEdge(Base):
+    """薄图边：只存 (type,id) 指针，不复制正文"""
+    __tablename__ = "kg_edge"
+
+    edge_id = Column(Integer, primary_key=True, autoincrement=True)
+    src_type = Column(String(20), nullable=False)
+    src_id = Column(BigInteger, nullable=False)
+    dst_type = Column(String(20), nullable=False)
+    dst_id = Column(BigInteger, nullable=False)
+    relation = Column(String(40), nullable=False)
+    weight = Column(Float, default=1.0)
+    confidence = Column(Float, default=1.0)
+    origin = Column(String(20), default="rule", comment="rule/llm/human")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("src_type", "src_id", "dst_type", "dst_id", "relation",
+                         name="uq_kg_edge"),
+        Index("idx_kg_src", src_type, src_id, relation),
+        Index("idx_kg_dst", dst_type, dst_id, relation),
+    )
+
+
+class ContentSource(Base):
+    """统一来源：金句/新闻/招考共用"""
+    __tablename__ = "content_source"
+
+    source_id = Column(Integer, primary_key=True, autoincrement=True)
+    content_type = Column(String(20), nullable=False, comment="quote/news/recruitment")
+    content_id = Column(BigInteger, nullable=False)
+    source_type = Column(String(20), nullable=False, comment="obsidian/rss/web/official/manual")
+    url = Column(String(1000), nullable=False, default="")
+    publisher = Column(String(200))
+    author = Column(String(200))
+    published_at = Column(String(40))
+    fetched_at = Column(DateTime)
+    trust_level = Column(Integer, default=50)
+    content_hash = Column(String(64))
+    snapshot_path = Column(String(500))
+    license = Column(String(200))
+
+    __table_args__ = (
+        UniqueConstraint("content_type", "content_id", "url", name="uq_content_source"),
+        Index("idx_source_content", content_type, content_id),
+    )
+
+
+class ContentEvidence(Base):
+    """多模态证据：图片/PDF/二维码等"""
+    __tablename__ = "content_evidence"
+
+    evidence_id = Column(Integer, primary_key=True, autoincrement=True)
+    content_type = Column(String(20), nullable=False)
+    content_id = Column(BigInteger, nullable=False)
+    media_type = Column(String(20), nullable=False, comment="image/pdf/audio/video")
+    path = Column(String(500), nullable=False)
+    sha256 = Column(String(64), index=True)
+    ocr_text = Column(Text)
+    caption = Column(String(500))
+    source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("idx_evidence_content", content_type, content_id),
+    )
+
+
 class UserNotification(Base):
     """统一站内信（学生/教师/管理员共用）。"""
     __tablename__ = "user_notification"
@@ -2178,3 +2286,4 @@ class ForumModeration(Base):
         Index("idx_moderation_status", status, created_at),
         Index("idx_moderation_target", target_type, target_id),
     )
+

@@ -115,6 +115,12 @@ async def lifespan(app: FastAPI):
     from .core.database import engine, Base, SessionLocal
     from .models import models  # 确保所有模型被导入
     Base.metadata.create_all(bind=engine)
+    try:
+        from .core.content_hub_schema import ensure_content_hub_schema
+        ensure_content_hub_schema(engine)
+        logger.info("内容中枢 Schema 就绪")
+    except Exception as e:
+        logger.warning(f"内容中枢 Schema 初始化失败: {e}")
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
