@@ -219,6 +219,12 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       },
       {
+        path: 'material-rules',
+        name: 'AdminMaterialRules',
+        component: () => import('@/views/admin/material_rules.vue'),
+        meta: { title: '分类规则', roles: ['admin'] }
+      },
+      {
         path: 'materials',
         name: 'AdminMaterials',
         component: () => import('$vtj/vue/admin_materials.vue'),
