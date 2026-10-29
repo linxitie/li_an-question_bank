@@ -500,10 +500,17 @@ onMounted(loadPosts);
 .tf-modal-scroll { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding-right: 4px; }
 .tf-card-clickable { cursor: pointer; }
 .tf-card-clickable:hover { background: #fafbfe; }
-.tf-comment-input { display:flex; gap:8px; align-items:flex-end; margin-top:14px; padding-top:12px; border-top:1px solid #eef1f6; }
-.tf-comment-textarea { flex:1 1 auto; min-width:0; padding:10px 12px; border:1px solid #e3e8ef; border-radius:10px; font-size:14px; resize:vertical; }
+.tf-comment-input { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:14px; padding-top:12px; border-top:1px solid #eef1f6; }
+/* 输入框独占一行；工具与发送在第二行 */
+.tf-comment-textarea { flex:1 0 100%; min-width:0; height:40px; min-height:40px; padding:8px 12px; border:1px solid #e3e8ef; border-radius:10px; font-size:14px; resize:vertical; }
 .tf-upload-row { display: flex; flex-direction: column; gap: 6px; }
-.tf-icon-btn { height: 36px; width: 36px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; cursor: pointer; flex: 0 0 auto; }
+.tf-icon-btn { height: 40px; width: 40px; border: 1px solid #e3e8ef; border-radius: 10px; background: #fff; cursor: pointer; flex: 0 0 auto; }
+.tf-comment-input .tf-btn { height: 40px; margin-left: auto; }
+/* FileUploader 内部元素，需 :deep() 穿透 scoped（依赖 .fu-add 类名） */
+.tf-comment-input :deep(.fu-add) { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 0; }
+.tf-comment-input :deep(.fu-add::before) { content: '+'; font-size: 18px; line-height: 1; color: #1a2b5f; }
+.tf-comment-input :deep(.fu-add span) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tf-comment-input :deep(.fu-thumb) { width: 40px; height: 40px; }
 .tf-comment-uploader { flex: 0 0 auto; }
 .tf-emoji-pop { position: absolute; bottom: 64px; left: 12px; z-index: 20; background: #fff; border: 1px solid #eef1f6; border-radius: 12px; box-shadow: 0 8px 24px rgba(15,23,42,.12); }
 </style>
