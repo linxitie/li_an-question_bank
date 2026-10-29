@@ -1369,7 +1369,7 @@
   .forum-main {
     max-width: 1300px;
     margin: 0 auto;
-    padding: 24px 32px 40px;
+    padding: 0 32px 40px;
     width: 100%;
     flex: 1;
     overflow-y: auto;
