@@ -384,6 +384,18 @@
             state.streak = ckData.continuous_days;
           }
         } catch (e) {}
+        // 桌面通知：请求授权 + 今日任务未完成/周日复盘提醒（模块4/7 v2）
+        try {
+          const dn = await import('../../src/utils/desktopNotify.ts');
+          dn.ensurePermission().then(() => {
+            dn.startTodayReminderPolling(async () => {
+              const r = await window.__VTJ_AUTH__.apiFetch('/api/plan/today');
+              if (!r.ok) return [];
+              const d = await r.json();
+              return d && d.today ? d.today : (d.items || []);
+            });
+          });
+        } catch (e) {}
       });
 
       return {

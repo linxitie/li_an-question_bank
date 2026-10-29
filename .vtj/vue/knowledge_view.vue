@@ -67,6 +67,27 @@
           </g>
         </svg>
         <div v-if="graphNodes.length === 0" class="kb-empty">图谱为空：先把笔记提交并通过审批</div>
+
+        <!-- 关系管理：自动推荐 + 关系列表 -->
+        <div class="kb-rel-panel">
+          <div class="kb-rel-head">
+            <span>关系管理</span>
+            <button class="kb-btn mini ok" @click="suggestRelations" :disabled="state.suggesting">💡 推荐关系{{ state.suggesting ? '…' : '' }}</button>
+          </div>
+          <div v-if="state.suggestions.length" class="kb-rel-sugs">
+            <div v-for="(s, i) in state.suggestions" :key="'s' + i" class="kb-rel-sug">
+              <span class="kb-rel-line">{{ s.from_title }} → {{ s.to_title }}</span>
+              <button class="kb-btn mini ok" @click="addRelation(s)">添加</button>
+            </div>
+          </div>
+          <div v-if="state.relList.length" class="kb-rel-list">
+            <div v-for="(r, i) in state.relList" :key="'r' + i" class="kb-rel-item">
+              <span class="kb-rel-line">{{ r.from_title }} → {{ r.to_title }} <em class="kb-rel-type">{{ r.type }}</em></span>
+              <button class="kb-btn mini no" @click="delRelation(r)">删除</button>
+            </div>
+          </div>
+          <div v-else-if="!state.suggestions.length" class="kb-rel-empty">暂无关系：点“推荐关系”自动发现，或手动添加（开发中）</div>
+        </div>
       </div>
 
       <!-- 节点列表 -->
@@ -130,6 +151,9 @@
         importing: false,
         importMsg: '',
         notice: '',
+        suggestions: [],
+        suggesting: false,
+        relList: [],
         form: { title: '', category: 'law', content: '' },
       });
 
@@ -229,6 +253,63 @@
         }
       }
 
+      // ==================== 图谱关系管理（自动推荐 + 手动确认/删除） ====================
+      async function loadRelations() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/knowledge/relations');
+          const d = await res.json();
+          if (res.ok) state.relList = d.items || [];
+        } catch (e) { /* 静默 */ }
+      }
+
+      async function suggestRelations() {
+        state.suggesting = true;
+        state.notice = '';
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/knowledge/relation/suggest', { method: 'POST' });
+          const d = await res.json();
+          if (res.ok) {
+            state.suggestions = d.items || [];
+            state.notice = state.suggestions.length ? `发现 ${state.suggestions.length} 条候选关系，点“添加”确认` : '暂无可推荐的关系';
+          } else {
+            state.notice = d.detail || '推荐失败';
+          }
+        } catch (e) {
+          state.notice = '网络异常，推荐失败';
+        } finally {
+          state.suggesting = false;
+        }
+      }
+
+      async function addRelation(s) {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/knowledge/relation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from_node: s.from, to_node: s.to, rel_type: s.type || 'related' }),
+          });
+          const d = await res.json();
+          state.notice = d.message || '添加失败';
+          state.suggestions = state.suggestions.filter((x) => !(x.from === s.from && x.to === s.to));
+          loadGraph();
+          loadRelations();
+        } catch (e) {
+          state.notice = '网络异常，添加失败';
+        }
+      }
+
+      async function delRelation(r) {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/knowledge/relation/' + r.rel_id, { method: 'DELETE' });
+          const d = await res.json();
+          state.notice = d.message || '删除失败';
+          loadGraph();
+          loadRelations();
+        } catch (e) {
+          state.notice = '网络异常，删除失败';
+        }
+      }
+
       async function submitNode() {
         const title = state.form.title.trim();
         const content = state.form.content.trim();
@@ -288,6 +369,7 @@
 
       onMounted(() => {
         loadNodes();
+        loadRelations();
       });
 
       return {
@@ -296,6 +378,7 @@
         nodePos, catShort, shortTitle,
         goBack, switchCat, switchStatus,
         submitNode, approveNode, rejectNode, importVault,
+        loadRelations, suggestRelations, addRelation, delRelation,
         fmtTime,
       };
     },
@@ -347,4 +430,11 @@
   .kb-card-ops { margin-left: auto; display: flex; gap: 8px; }
   .kb-empty { text-align: center; color: #99a; font-size: 13px; padding: 28px 0; background: #fff; border-radius: 10px; border: 1px dashed #dbe0ea; }
   .kb-notice { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: #fdf3e3; color: #7a5a10; font-size: 12px; }
+  .kb-rel-panel { margin-top: 12px; border-top: 1px dashed #dbe0ea; padding-top: 10px; }
+  .kb-rel-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: #1a2a4a; }
+  .kb-rel-sugs, .kb-rel-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .kb-rel-sug, .kb-rel-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #f7f9fc; border-radius: 8px; padding: 6px 10px; font-size: 12px; color: #445; }
+  .kb-rel-line { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kb-rel-type { font-style: normal; color: #8aa0c8; margin-left: 6px; font-size: 11px; }
+  .kb-rel-empty { color: #99a; font-size: 12px; padding: 10px 0 2px; }
 </style>

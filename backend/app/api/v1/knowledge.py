@@ -170,6 +170,125 @@ async def knowledge_graph(
     }
 
 
+# ==================== 知识图谱关系管理（自生长：手动建边 + 自动推荐） ====================
+
+
+class RelationCreate(BaseModel):
+    from_node: int
+    to_node: int
+    rel_type: str = "related"
+
+
+@router.post("/relation", summary="手动建立知识关系（幂等）")
+async def create_relation(
+    req: RelationCreate,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if req.from_node == req.to_node:
+        raise HTTPException(status_code=400, detail="不能建立自环关系")
+    nodes = db.query(KnowledgeNode).filter(
+        KnowledgeNode.node_id.in_([req.from_node, req.to_node]),
+        KnowledgeNode.status == "approved",
+    ).count()
+    if nodes != 2:
+        raise HTTPException(status_code=404, detail="关系节点不存在或未入库")
+    if req.rel_type not in ("related", "contains", "leads_to"):
+        raise HTTPException(status_code=400, detail="关系类型不合法")
+    dup = db.query(KnowledgeRelation).filter(
+        KnowledgeRelation.from_node == req.from_node,
+        KnowledgeRelation.to_node == req.to_node,
+    ).first()
+    if dup:
+        return {"created": 0, "rel_id": dup.rel_id, "message": "关系已存在"}
+    rel = KnowledgeRelation(from_node=req.from_node, to_node=req.to_node, rel_type=req.rel_type)
+    db.add(rel)
+    db.commit()
+    return {"created": 1, "rel_id": rel.rel_id, "message": "关系已建立"}
+
+
+@router.get("/relations", summary="关系列表（含节点标题）")
+async def list_relations(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rels = db.query(KnowledgeRelation).order_by(KnowledgeRelation.create_time.desc()).limit(200).all()
+    out = []
+    for r in rels:
+        src = db.get(KnowledgeNode, r.from_node)
+        dst = db.get(KnowledgeNode, r.to_node)
+        out.append({
+            "rel_id": r.rel_id,
+            "from": r.from_node,
+            "to": r.to_node,
+            "from_title": src.title if src else f"节点{r.from_node}",
+            "to_title": dst.title if dst else f"节点{r.to_node}",
+            "type": r.rel_type,
+            "create_time": r.create_time.strftime("%Y-%m-%d %H:%M") if r.create_time else "",
+        })
+    return {"total": len(out), "items": out}
+
+
+@router.delete("/relation/{rel_id}", summary="删除关系")
+async def delete_relation(
+    rel_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rel = db.get(KnowledgeRelation, rel_id)
+    if not rel:
+        raise HTTPException(status_code=404, detail="关系不存在")
+    db.delete(rel)
+    db.commit()
+    return {"deleted": 1, "message": "关系已删除"}
+
+
+@router.post("/relation/suggest", summary="自动推荐关系（标题相似/关键词共现，零 LLM）")
+async def suggest_relations(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """已入库节点两两打分：同分类 + 标题/内容关键词共现 → 推荐 top10 未建关系。"""
+    nodes = db.query(KnowledgeNode).filter(KnowledgeNode.status == "approved").all()
+    existing = set(
+        (r.from_node, r.to_node) for r in db.query(KnowledgeRelation).all()
+    )
+    existing |= set((b, a) for a, b in existing)  # 无向去重
+
+    def tokens(text: str):
+        return set(str(text or "").replace("（", "").replace("）", "").replace("，", " ").replace("、", " ").split())
+
+    cands = []
+    for i in range(len(nodes)):
+        for j in range(i + 1, len(nodes)):
+            a, b = nodes[i], nodes[j]
+            if (a.node_id, b.node_id) in existing:
+                continue
+            score = 0
+            if a.category == b.category:
+                score += 1
+            ta, tb = tokens(a.title), tokens(b.title)
+            inter = ta & tb
+            score += min(len(inter), 3)
+            if score >= 2:
+                cands.append((score, a, b))
+    cands.sort(key=lambda x: -x[0])
+    return {
+        "total": len(cands[:10]),
+        "items": [
+            {
+                "from": a.node_id,
+                "to": b.node_id,
+                "from_title": a.title,
+                "to_title": b.title,
+                "type": "related",
+                "score": s,
+            }
+            for s, a, b in cands[:10]
+        ],
+    }
+
+
 @router.get("/vault", summary="Obsidian Vault 工作流说明")
 async def vault_info(
     current_user: SysUser = Depends(get_current_user),

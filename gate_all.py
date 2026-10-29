@@ -23,6 +23,7 @@ GATE_SCRIPTS = [
     "verify_efg.py",          # E/F/G 综合（入口/轨迹/里程碑）
     "verify_hi.py",           # H/I 记忆管理+周复盘+vault 导入(幂等/穿越防护)
     "verify_kl.py",           # K/L 岗位库+选岗注入+对话自动记忆
+    "verify_nop.py",          # N/O/P 学情+错题接入对话 + 桌面通知模块 + 知识图谱关系管理
 ]
 
 

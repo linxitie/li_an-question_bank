@@ -8,7 +8,10 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ==================== Agent 定义与 system prompt ====================
 # 每个 Agent 独立 system prompt（简洁，控制 token）
@@ -170,7 +173,7 @@ def assemble_context(user_id: int, db) -> str:
             plan_parts.append(f"阶段规划：{'；'.join(str(x.get('name', '')) for x in meta['phases'][:3])}")
         parts.append("【学习计划】" + "；".join(plan_parts) + "。")
 
-    # 3. 学情统计：做题量 / 正确率 / 错题分布 / 最近错题 Top3
+    # 3. 学情统计：做题量 / 正确率 / 错题分布 / 最近错题 Top3 / 模考成绩
     practice_total = db.query(PracticeRecord).filter(PracticeRecord.user_id == user_id).count()
     practice_correct = (
         db.query(PracticeRecord)
@@ -191,6 +194,33 @@ def assemble_context(user_id: int, db) -> str:
         study_parts.append(f"累计做题 {practice_total} 题，正确率 {acc}%")
     if wrong_total:
         study_parts.append(f"错题本 {wrong_total} 题")
+    # 错题科目分布 Top3 + 掌握度
+    try:
+        from sqlalchemy import func
+        from ..models.models import QuestionSubject
+        subj_rows = (
+            db.query(QuestionSubject.subject_name, db.func.count(WrongQuestionPersonal.wrong_id))
+            .join(QuestionSubject, WrongQuestionPersonal.subject_id == QuestionSubject.subject_id)
+            .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
+            .group_by(QuestionSubject.subject_name)
+            .order_by(db.func.count(WrongQuestionPersonal.wrong_id).desc())
+            .limit(3)
+            .all()
+        )
+        if subj_rows:
+            study_parts.append("薄弱科目：" + "、".join(f"{name}({cnt}题)" for name, cnt in subj_rows))
+        mastery = (
+            db.query(WrongQuestionPersonal.mastery_level, db.func.count(WrongQuestionPersonal.wrong_id))
+            .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
+            .group_by(WrongQuestionPersonal.mastery_level)
+            .all()
+        )
+        if mastery:
+            mdesc = {m: c for m, c in mastery}
+            parts_m = [f"{m}({c})" for m, c in mastery]
+            study_parts.append("错题掌握度：" + "、".join(parts_m))
+    except Exception as e:
+        logger.warning("错题分布统计失败: %s", e)
     if recent_wrong:
         names = []
         for w in recent_wrong:
@@ -200,6 +230,31 @@ def assemble_context(user_id: int, db) -> str:
             names.append(nm)
         if names:
             study_parts.append(f"最近错题：{'、'.join(names)}")
+    # 模考成绩（最近3条已评分）
+    try:
+        from ..models.models import ExamRecord, ExamPaper
+        exams = (
+            db.query(ExamRecord, ExamPaper.paper_name)
+            .join(ExamPaper, ExamRecord.paper_id == ExamPaper.paper_id)
+            .filter(
+                ExamRecord.user_id == user_id,
+                ExamRecord.is_scored == 1,
+                ExamRecord.is_completed == 1,
+            )
+            .order_by(ExamRecord.submit_time.desc())
+            .limit(3)
+            .all()
+        )
+        if exams:
+            score_parts = []
+            for rec, title in exams:
+                t = rec.submit_time or rec.create_time
+                score_parts.append(
+                    f"{title or '模考'}:{rec.total_score}分({t.strftime('%m-%d') if t else '-'})"
+                )
+            study_parts.append("模考成绩：" + "；".join(score_parts))
+    except Exception as e:
+        logger.warning("模考成绩统计失败: %s", e)
     if study_parts:
         parts.append("【学情】" + "；".join(study_parts) + "。")
 
