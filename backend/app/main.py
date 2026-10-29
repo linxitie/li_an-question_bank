@@ -20,7 +20,7 @@ from .api.v1.library import videos, media, image_media
 from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
-from .api.v1.content import news, recruitment, calendar
+from .api.v1.content import news, recruitment, calendar, kg
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
@@ -802,6 +802,7 @@ app.include_router(websocket_router)
 app.include_router(news.router)
 app.include_router(recruitment.router)
 app.include_router(calendar.router)
+app.include_router(kg.router)
 app.include_router(practice.router)
 app.include_router(quick_practice.router)
 app.include_router(smart_exam.router)
