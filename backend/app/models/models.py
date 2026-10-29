@@ -1834,6 +1834,7 @@ class UserAchievement(Base):
     achievement_id = Column(Integer, ForeignKey("achievement.achievement_id"), nullable=False, comment="成就ID")
     obtained_at = Column(DateTime, default=datetime.now, comment="获得时间")
     tier = Column(Integer, default=1, comment="徽章档位: 1铜/2银/3金/4铂金/5钻石")
+    tier_snapshot = Column(Integer, comment="获得时的档位索引 0-4（与 badge_service.TIERS 对齐）")
 
     user = relationship("SysUser")
 
