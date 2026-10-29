@@ -48,6 +48,12 @@
             :attachments="post.attachments"
             mode="post" />
           <div class="tf-actions">
+            <button class="tf-ico" :class="{ on: post.liked }" @click.stop="toggleLike(post)" title="喜欢">
+              {{ post.liked ? '❤' : '♡' }} {{ post.likeCount || 0 }}
+            </button>
+            <button class="tf-ico" :class="{ on: post.favorited }" @click.stop="toggleFavorite(post)" title="收藏">
+              {{ post.favorited ? '★' : '☆' }} {{ post.favoriteCount || 0 }}
+            </button>
             <button class="tf-link" @click.stop="openPost(post)">查看评论</button>
             <button v-if="post.canDelete" class="tf-danger" @click.stop="askHidePost(post)">隐藏帖子</button>
           </div>
@@ -200,6 +206,7 @@ import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
 import { createForumComment } from '@/modules/community/api';
+import { toggleForumPostLike, toggleForumFavorite } from '@/modules/community/api';
 import FileUploader from '@/components/forum/FileUploader.vue';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import {
@@ -307,6 +314,22 @@ const submitPost = async () => {
   } finally {
     postForm.submitting = false;
   }
+};
+
+/** 喜欢（爱心）：复用 /api/forum/posts/{id}/like */
+const toggleLike = async (post: any) => {
+  try {
+    const r: any = await toggleForumPostLike(post.id);
+    if (r) { post.liked = r.liked; post.likeCount = r.likeCount; }
+  } catch (e) { /* 静默 */ }
+};
+
+/** 收藏（五角星）：复用 /api/forum/posts/{id}/favorite */
+const toggleFavorite = async (post: any) => {
+  try {
+    const r: any = await toggleForumFavorite(post.id);
+    if (r) { post.favorited = r.favorited; post.favoriteCount = r.favoriteCount; }
+  } catch (e) { /* 静默 */ }
 };
 
 const submitComment = async () => {
@@ -513,6 +536,10 @@ onMounted(loadPosts);
 .tf-comment-input :deep(.fu-thumb) { width: 40px; height: 40px; }
 .tf-comment-uploader { flex: 0 0 auto; }
 .tf-emoji-pop { position: absolute; bottom: 64px; left: 12px; z-index: 20; background: #fff; border: 1px solid #eef1f6; border-radius: 12px; box-shadow: 0 8px 24px rgba(15,23,42,.12); }
+.tf-ico { display:inline-flex; align-items:center; gap:4px; padding:6px 10px; border:1px solid #e3e8ef;
+  border-radius:8px; background:#fff; color:#6b7280; font-size:13px; cursor:pointer; }
+.tf-ico:hover { background:#f7f9fc; }
+.tf-ico.on { color:#c41e3a; border-color:#f0c4cc; background:#fff5f7; }
 </style>
 
 

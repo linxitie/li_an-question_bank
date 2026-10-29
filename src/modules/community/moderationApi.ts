@@ -32,6 +32,10 @@ export interface ModerationPost {
   deletedReason?: string | null;
   moderationStatus?: string | null;
   commentCount?: number;
+  likeCount?: number;
+  liked?: boolean;
+  favoriteCount?: number;
+  favorited?: boolean;
   createTime?: string | null;
   attachments?: Array<{ name: string; url: string; size?: number; type?: string }>;
 }
