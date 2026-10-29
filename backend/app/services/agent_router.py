@@ -30,10 +30,20 @@ AGENT_META: Dict[str, Dict[str, str]] = {
         "name": "面试教练",
         "prompt": (
             "你是'砺安小智'的面试教练。考生会问公安联考结构化面试怎么准备、要一道面试题、答题框架、模拟追问等。"
-            "回答要点：给出结构化面试常见题型（综合分析/应急处突/组织管理/人际沟通）与答题框架（表态-分析-对策）；"
-            "可出一道模拟题并给示范要点。回答 300 字内，条理清晰。"
+            "回答要点：先给结构化面试常见题型与答题框架（见下方面试题库框架）；"
+            "出模拟题时附示范要点和一个追问；表达用'第一/第二/第三'条理作答，结合公安岗位实际，不空喊口号。"
+            "回答 300 字内，条理清晰。"
         ),
-        "keywords": [("面试", 3), ("结构化", 3), ("答题框架", 3), ("模拟", 2), ("考官", 2), ("自我介绍", 2), ("应急处突", 3), ("综合分析", 3), ("组织管理", 3), ("人际沟通", 3), ("追问", 3)],
+        "keywords": [("面试", 3), ("结构化", 3), ("答题框架", 3), ("模拟", 2), ("考官", 2), ("自我介绍", 2), ("应急处突", 3), ("综合分析", 3), ("组织管理", 3), ("人际沟通", 3), ("追问", 3), ("答题思路", 2), ("上岸面试", 2)],
+        # 结构化面试四类题型答题框架（命中面试教练时随 system prompt 注入，token 受控）
+        "bank_frame": (
+            "【结构化面试四类题型答题框架】"
+            "①综合分析（现象/政策/观点）：亮明表态→分析原因与正反影响→提出对策或结合自身践行；"
+            "②应急处突（群众冲突/执法现场/突发事件）：控制现场保安全→快速研判分轻重缓急处置→善后汇报与长效防范；"
+            "③组织管理（宣传/培训/调研/活动）：明确目的意义→事前定方案（人员物资流程预案）→事中协调推进→事后总结复盘归档；"
+            "④人际沟通（与同事/群众/领导的矛盾）：换位思考稳定情绪→主动沟通澄清事实→就事论事解决问题→反思改进维护关系。"
+            "通用要求：开头扣题表态，主体分点，结尾落到公安岗位做法；不背模板空话。"
+        ),
     },
     "psychology": {
         "name": "心理辅导",
@@ -108,7 +118,105 @@ def route_agent(message: str) -> Tuple[str, str, int]:
 def agent_system_prompt(agent_id: str) -> str:
     if agent_id == GENERAL_AGENT_ID or agent_id not in AGENT_META:
         return GENERAL_SYSTEM_PROMPT
-    return AGENT_META[agent_id]["prompt"]
+    meta = AGENT_META[agent_id]
+    parts = [meta["prompt"]]
+    if meta.get("bank_frame"):
+        parts.append(meta["bank_frame"])
+    return "\n".join(parts)
+
+
+# ==================== 结构化面试示例题库（可扩展，零 LLM 取题） ====================
+# 每个题型 2 道典型题 + 答题要点；模拟任务按题型抽取注入，避免一次性塞满上下文。
+INTERVIEW_BANK: Dict[str, List[Dict[str, List[str]]]] = {
+    "综合分析": [
+        {
+            "question": "有人说“基层民警既要会破案办案，也要会做群众工作”，谈谈你的理解。",
+            "points": [
+                "破题：执法办案与群众工作相辅相成，群众路线是公安工作的根本路线。",
+                "办案维护社会治安与法律权威；群众工作获取线索、化解矛盾、提升执法公信力。",
+                "践行：熟练执法业务的同时主动下沉社区、倾听诉求、用群众听得懂的话普法服务。",
+            ],
+        },
+        {
+            "question": "现在很多社区推行“警民议事会”制度，你怎么看？",
+            "points": [
+                "表态：是枫桥经验与共建共治的落地，值得肯定。",
+                "意义：提前化解邻里与治安隐患，密切警民关系，降低接处警成本。",
+                "完善建议：固定议事周期、形成问题清单闭环办理、结果向居民反馈。",
+            ],
+        },
+    ],
+    "应急处突": [
+        {
+            "question": "你在巡逻时发现两名群众因摊位争执升级为肢体冲突，周围有不少围观群众，你如何处置？",
+            "points": [
+                "第一时间上前分开双方、控制现场，确认有无人员受伤并报告指挥中心。",
+                "分别询问起因、调取周边监控，依法依规调解，防止二次冲突和舆情围观。",
+                "事后登记信息、跟进调解结果，必要时移交属地派出所，向周边商户做安全提示。",
+            ],
+        },
+        {
+            "question": "接到群众报警称辖区楼道有疑似易燃易爆物品，你作为先期到场民警怎么办？",
+            "points": [
+                "划定警戒范围、疏散群众、严禁明火与电子设备靠近，立即上报并请求专业排爆力量。",
+                "核实物品来源与危险性，配合专业人员处置，保护现场物证。",
+                "事后排查楼道堆物隐患、开展安全宣传，形成处置记录归档。",
+            ],
+        },
+    ],
+    "组织管理": [
+        {
+            "question": "单位让你牵头组织一次辖区反诈宣传进校园活动，你怎么组织？",
+            "points": [
+                "目的：提升学生反诈意识，压发电信网络诈骗案件。",
+                "事前：对接学校确定时间场地与人数，准备案例短片、宣传册与互动问答，分工明确、留应急预案。",
+                "事中：讲解常见套路（刷单、冒充客服、游戏交易），现场答疑与扫码测试，维持秩序。",
+                "事后：收集反馈、留存照片台账，联合学校持续推送提醒，总结经验固化做法。",
+            ],
+        },
+        {
+            "question": "领导安排你调研辖区夜间治安状况，你如何开展？",
+            "points": [
+                "明确调研目标：掌握高发时段、地段与警情类型，指导布控。",
+                "准备：整理近三个月接处警数据，设计访谈与蹲点路线，分两组配合社区民警。",
+                "实施：实地查看夜市、公交站等重点部位，访谈商户与居民，记录问题。",
+                "汇总：形成数据图表与问题清单，提出巡逻布控和宣传建议报领导参考。",
+            ],
+        },
+    ],
+    "人际沟通": [
+        {
+            "question": "你和老民警搭档出警，对方经验丰富但不采纳你的建议，你怎么办？",
+            "points": [
+                "摆正心态：尊重老同志经验，不急于争辩，先配合把任务完成。",
+                "选合适时机委婉说明建议依据，倾听其顾虑，求同存异。",
+                "事后复盘请教、取长补短，在协作中建立信任、共同提升。",
+            ],
+        },
+        {
+            "question": "群众对你的处理结果不满意，当场情绪激动指责你偏袒一方，你如何应对？",
+            "points": [
+                "先稳定对方情绪、请其到安静场所沟通，避免在街头激化围观。",
+                "耐心倾听诉求，对照法定程序与证据说明处理依据，不激化矛盾。",
+                "对符合复议申诉途径的告知权利，确有不足的及时上报纠正，事后反思沟通方式。",
+            ],
+        },
+    ],
+}
+
+INTERVIEW_QTYPES = list(INTERVIEW_BANK.keys())
+
+
+def interview_sample(qtype: str = "", index: int = 0) -> str:
+    """按题型取一道示例题与答题要点；题型为空或越界时回退综合分析首题。返回可注入文本。"""
+    qtype = (qtype or "").strip()
+    if qtype not in INTERVIEW_BANK:
+        qtype = "综合分析"
+    bank = INTERVIEW_BANK[qtype]
+    item = bank[index % len(bank)]
+    lines = [f"【示例·{qtype}】题目：{item['question']}", "答题要点："]
+    lines += [f"{i + 1}. {p}" for i, p in enumerate(item["points"])]
+    return "\n".join(lines)
 
 
 def assemble_context(user_id: int, db) -> str:
@@ -182,13 +290,6 @@ def assemble_context(user_id: int, db) -> str:
     )
     acc = round(practice_correct / practice_total * 100) if practice_total else None
     wrong_total = db.query(WrongQuestionPersonal).filter(WrongQuestionPersonal.user_id == user_id).count()
-    recent_wrong = (
-        db.query(WrongQuestionPersonal)
-        .filter(WrongQuestionPersonal.user_id == user_id)
-        .order_by(WrongQuestionPersonal.add_time.desc())
-        .limit(3)
-        .all()
-    )
     study_parts = []
     if practice_total:
         study_parts.append(f"累计做题 {practice_total} 题，正确率 {acc}%")
@@ -199,18 +300,18 @@ def assemble_context(user_id: int, db) -> str:
         from sqlalchemy import func
         from ..models.models import QuestionSubject
         subj_rows = (
-            db.query(QuestionSubject.subject_name, db.func.count(WrongQuestionPersonal.wrong_id))
+            db.query(QuestionSubject.subject_name, func.count(WrongQuestionPersonal.wrong_id))
             .join(QuestionSubject, WrongQuestionPersonal.subject_id == QuestionSubject.subject_id)
             .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
             .group_by(QuestionSubject.subject_name)
-            .order_by(db.func.count(WrongQuestionPersonal.wrong_id).desc())
+            .order_by(func.count(WrongQuestionPersonal.wrong_id).desc())
             .limit(3)
             .all()
         )
         if subj_rows:
             study_parts.append("薄弱科目：" + "、".join(f"{name}({cnt}题)" for name, cnt in subj_rows))
         mastery = (
-            db.query(WrongQuestionPersonal.mastery_level, db.func.count(WrongQuestionPersonal.wrong_id))
+            db.query(WrongQuestionPersonal.mastery_level, func.count(WrongQuestionPersonal.wrong_id))
             .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
             .group_by(WrongQuestionPersonal.mastery_level)
             .all()
@@ -221,15 +322,33 @@ def assemble_context(user_id: int, db) -> str:
             study_parts.append("错题掌握度：" + "、".join(parts_m))
     except Exception as e:
         logger.warning("错题分布统计失败: %s", e)
-    if recent_wrong:
-        names = []
-        for w in recent_wrong:
-            q = getattr(w, "question", None)
-            content = getattr(q, "question_content", None) if q else None
-            nm = (content or "")[:40] if content else (w.user_answer or "")[:40]
-            names.append(nm)
-        if names:
-            study_parts.append(f"最近错题：{'、'.join(names)}")
+    # B：错题明细（最近3条 WRONG：科目/题干摘要/我的错选/正解/掌握度；
+    # 每条限长，防 token 爆炸；无关联题目时 outerjoin 兜底不报错）
+    try:
+        from ..models.models import QuestionBank
+        wrong_details = (
+            db.query(WrongQuestionPersonal, QuestionBank, QuestionSubject.subject_name)
+            .outerjoin(QuestionBank, WrongQuestionPersonal.question_id == QuestionBank.question_id)
+            .outerjoin(QuestionSubject, WrongQuestionPersonal.subject_id == QuestionSubject.subject_id)
+            .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
+            .order_by(WrongQuestionPersonal.add_time.desc())
+            .limit(3)
+            .all()
+        )
+        if wrong_details:
+            mastery_cn = {"UNMASTERED": "未掌握", "PARTIAL": "部分掌握", "MASTERED": "已掌握"}
+            detail_parts = []
+            for w, q, subj_name in wrong_details:
+                stem = (getattr(q, "question_content", None) or (w.user_answer or "无题面记录"))[:30]
+                mine = (w.user_answer or "未记录")[:12]
+                right = (getattr(q, "answer", None) or "缺正解")[:12]
+                mastery = mastery_cn.get(w.mastery_level, w.mastery_level or "")
+                detail_parts.append(
+                    f"[{subj_name or '未分科'}] {stem}｜错选:{mine}｜正解:{right}｜{mastery}"
+                )
+            study_parts.append("错题明细：" + "；".join(detail_parts))
+    except Exception as e:
+        logger.warning("错题明细装配失败: %s", e)
     # 模考成绩（最近3条已评分）
     try:
         from ..models.models import ExamRecord, ExamPaper

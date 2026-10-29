@@ -15,7 +15,7 @@ from ...core.database import get_db
 from ...core.security import get_current_user
 from ...models.models import SysUser, StudyGoal
 from ...services import llm_client
-from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge, build_trajectory, AGENT_META
+from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge, build_trajectory, AGENT_META, interview_sample
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["联考小智-工作模式"])
@@ -242,6 +242,11 @@ async def run_agent_task(
             extra = extra + "\n\n" + kb
     except Exception as e:
         logger.warning("知识库检索失败: %s", e)
+
+    # 面试模拟任务：按题型抽取示例题与答题要点（零 LLM 题库支撑）
+    if task["task_id"] == "interview_sim":
+        qtype = req.params.get("qtype", "")
+        extra = extra + "\n\n" + interview_sample(qtype, index=0)
 
     # 选岗任务：岗位库数据支撑（按意向地区/专业/学历筛选真实岗位）
     if task["task_id"] == "choose_post_advice":
