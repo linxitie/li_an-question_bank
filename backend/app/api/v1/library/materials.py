@@ -269,6 +269,11 @@ async def my_create(body: dict,
     publish=true 时直接公开（status=1）——Q6 已确认学生建卡免审批。
     """
     data = _validate_material_body(body)
+    if not data.get("category"):
+        auto = _auto_classify(db, data.get("subject"), data.get("title"),
+                              data.get("card_front"), data.get("card_back"))
+        if auto:
+            data["category"] = auto
     m = StudyMaterial(**data, creator_id=current_user.user_id,
                       status=(1 if body.get("publish") else 2))
     db.add(m)
@@ -706,11 +711,63 @@ def _validate_material_body(body: dict, partial: bool = False) -> dict:
             raise HTTPException(400, "标题必填")
         if data["type"] == "card" and not (data["card_front"] or "").strip():
             raise HTTPException(400, "卡片正面内容必填")
+        _check_card_text(data.get("card_front"), data.get("card_back"))
         if data["content"]:
             data["content"] = sanitize_html(data["content"])
     elif data.get("content"):
         data["content"] = sanitize_html(data["content"])
     return {k: v for k, v in data.items() if v is not None}
+
+
+# ========== B：卡片文本格式校验 + 关键词自动分类（专利主张 (3) 的落地部件） ==========
+CARD_FRONT_MAX = 120
+CARD_BACK_MAX = 600
+_DANGEROUS_TAGS = ("<script", "<iframe", "<object", "<embed", "<style")
+
+
+def _check_card_text(front, back) -> None:
+    """卡片文本格式校验：长度上限 + 禁止脚本类标签。不合规直接 400。"""
+    for label, val, cap in (("卡片正面", front, CARD_FRONT_MAX),
+                            ("卡片背面", back, CARD_BACK_MAX)):
+        if not val:
+            continue
+        if len(val) > cap:
+            raise HTTPException(400, f"{label}超过 {cap} 字（当前 {len(val)} 字）")
+        low = str(val).lower()
+        for tag in _DANGEROUS_TAGS:
+            if tag in low:
+                raise HTTPException(400, f"{label}含不允许的标签（script/iframe/object/embed/style）")
+
+
+def _auto_classify(db, subject, title, front, back):
+    """按 material_classification_rules 的 keyword 规则判定子类；无匹配返回 None。
+
+    规则来自表（可后台维护）；跨科目规则不参与匹配，避免「逻辑填空」这类
+    行测词把申论卡误分类。
+    """
+    from ....models.models import MaterialClassificationRule  # 局部导入
+
+    text = " ".join(x for x in (title, front, back) if x)
+    if not text:
+        return None
+    rules = (db.query(MaterialClassificationRule)
+             .filter(MaterialClassificationRule.enabled == 1,
+                     MaterialClassificationRule.rule_type == "keyword")
+             .order_by(MaterialClassificationRule.priority.desc()).all())
+    for r in rules:
+        try:
+            cfg = r.rule_config or {}
+            if isinstance(cfg, str):          # 兼容存字符串的历史数据
+                cfg = _json.loads(cfg)
+            if not isinstance(cfg, dict):
+                continue
+        except Exception:
+            continue
+        if cfg.get("subject") and cfg["subject"] != subject:
+            continue
+        if any(k and k in text for k in (cfg.get("keywords") or [])):
+            return cfg.get("category")
+    return None
 
 
 @router.get("/admin/list", summary="管理列表(含下架)")
