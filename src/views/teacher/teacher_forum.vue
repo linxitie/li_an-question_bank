@@ -99,6 +99,11 @@
               rows="2"
               placeholder="写下你的评论… Ctrl+Enter 发送"
               @keyup.ctrl.enter="submitComment" />
+            <button class="tf-icon-btn" title="表情" @click="showCommentEmoji = !showCommentEmoji">😊</button>
+            <FileUploader v-model="commentAttachments" :max-docs="0" class="tf-comment-uploader" />
+            <div v-if="showCommentEmoji" class="tf-emoji-pop">
+              <EmojiStickerPicker @select="onEmojiSelect" @close="showCommentEmoji = false" />
+            </div>
             <button
               class="tf-btn"
               :disabled="commentSubmitting || !commentDraft.trim()"
@@ -158,6 +163,10 @@
         <h3>发布新帖</h3>
         <input v-model="postForm.title" class="tf-input" placeholder="请输入标题…" maxlength="200" />
         <textarea v-model="postForm.content" class="tf-textarea" rows="6" placeholder="请输入内容…"></textarea>
+        <div class="tf-upload-row">
+          <span class="tf-label">附件（不限个数，单个 ≤20MB）</span>
+          <FileUploader v-model="postForm.attachments" :max-docs="0" />
+        </div>
         <div class="tf-visibility">
           <span class="tf-label">可见范围</span>
           <label><input type="radio" value="ALL" v-model="postForm.visibility" /> 全校</label>
@@ -191,6 +200,8 @@ import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
 import { createForumComment } from '@/modules/community/api';
+import FileUploader from '@/components/forum/FileUploader.vue';
+import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import {
   createForumPostWithVisibility,
   fetchForumPosts,
@@ -226,8 +237,15 @@ const postForm = reactive({
   titleColor: 'default',
   content: '',
   visibility: 'ALL' as 'ALL' | 'CLASSES',
-  classes: [] as string[]
+  classes: [] as string[],
+  attachments: [] as any[]
 });
+const commentAttachments = ref<any[]>([]);
+const showCommentEmoji = ref(false);
+const onEmojiSelect = (p: { value: string }) => {
+  commentDraft.value += p.value;
+  showCommentEmoji.value = false;
+};
 
 const reasonDialog = reactive({
   visible: false,
@@ -276,6 +294,7 @@ const submitPost = async () => {
       content: postForm.content.trim(),
       titleColor: postForm.titleColor,
       visibility: postForm.visibility,
+      attachments: postForm.attachments,
       visibleClasses: postForm.visibility === 'CLASSES' ? postForm.classes : undefined
     });
     ElMessage.success('发布成功');
@@ -295,9 +314,10 @@ const submitComment = async () => {
   if (!text || !detail.value) return;
   commentSubmitting.value = true;
   try {
-    await createForumComment(detail.value.id, { content: text });
+    await createForumComment(detail.value.id, { content: text, attachments: commentAttachments.value });
     ElMessage.success('评论已发送');
     commentDraft.value = '';
+    commentAttachments.value = [];
     await openPost(detail.value);
   } catch (e: any) {
     ElMessage.error(e && e.message ? e.message : '评论失败');
@@ -467,6 +487,10 @@ onMounted(loadPosts);
 .tf-card-clickable:hover { background: #fafbfe; }
 .tf-comment-input { display:flex; gap:8px; align-items:flex-end; margin-top:14px; padding-top:12px; border-top:1px solid #eef1f6; }
 .tf-comment-textarea { flex:1 1 auto; min-width:0; padding:10px 12px; border:1px solid #e3e8ef; border-radius:10px; font-size:14px; resize:vertical; }
+.tf-upload-row { display: flex; flex-direction: column; gap: 6px; }
+.tf-icon-btn { height: 36px; width: 36px; border: 1px solid #e3e8ef; border-radius: 8px; background: #fff; cursor: pointer; flex: 0 0 auto; }
+.tf-comment-uploader { flex: 0 0 auto; }
+.tf-emoji-pop { position: absolute; bottom: 64px; left: 12px; z-index: 20; background: #fff; border: 1px solid #eef1f6; border-radius: 12px; box-shadow: 0 8px 24px rgba(15,23,42,.12); }
 </style>
 
 

@@ -344,6 +344,7 @@ export function createForumPostWithVisibility(payload: {
   content: string;
   titleColor?: string;
   shareType?: string;
+  attachments?: any[];
   visibility?: 'ALL' | 'CLASSES';
   visibleClasses?: string[];
 }): Promise<ForumPostItem> {
@@ -352,6 +353,9 @@ export function createForumPostWithVisibility(payload: {
   data.append('content', payload.content);
   data.append('share_type', payload.shareType || 'DISCUSSION');
   if (payload.titleColor) data.append('title_color', payload.titleColor);
+  if (payload.attachments && payload.attachments.length) {
+    data.append('attachments', JSON.stringify(payload.attachments));
+  }
   if (payload.visibility) data.append('visibility', payload.visibility);
   if (payload.visibleClasses && payload.visibleClasses.length) {
     data.append('visible_classes', JSON.stringify(payload.visibleClasses));
