@@ -27,7 +27,7 @@ _CONTENT_HUB_COLUMNS: dict[str, list[tuple[str, str]]] = {
 }
 
 # 关系类型初始数据（relation, description, directed, src_types, dst_types）
-_RELATION_SEED: tuple[tuple[str, str, int, str, str], ...] = (
+RELATION_SEED: tuple[tuple[str, str, int, str, str], ...] = (
     ("covers", "内容覆盖考点", 1, '["quote","news","recruitment"]', '["knowledge_point"]'),
     ("has_topic", "内容归属主题", 1, '["quote","news","recruitment"]', '["topic"]'),
     ("derived_from", "内容来源", 1, '["quote","news","recruitment"]', '["source"]'),
@@ -61,7 +61,7 @@ def ensure_content_hub_schema(engine: Engine) -> None:
                 conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {ddl}'))
 
     with engine.begin() as conn:
-        for relation, description, directed, src_types, dst_types in _RELATION_SEED:
+        for relation, description, directed, src_types, dst_types in RELATION_SEED:
             conn.execute(
                 text(
                     "INSERT OR IGNORE INTO kg_relation_type "
