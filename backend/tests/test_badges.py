@@ -193,3 +193,32 @@ class TestBadgeWallAndSort:
     def test_my_limit_0_表示不限制(self, client_with_admin):
         d = client_with_admin.get("/api/badges/my", params={"limit": 0}).json()
         assert d["returned"] == d["total"]
+
+class TestSnapshotOnGrant:
+    """S5：发放时写入「获得时档位快照」"""
+
+    def test_新用户首次登录后快照非空(self):
+        """登录会触发「初来乍到」成就；发放时应写入 tier_snapshot（中文档位）"""
+        import uuid
+
+        from app.main import app
+
+        c = TestClient(app)
+        no = "T9" + uuid.uuid4().hex[:8]
+        reg = c.post("/api/auth/register", json={
+            "username": no, "password": "Test123456",
+            "phone": "139" + uuid.uuid4().hex[:8], "user_no": no, "user_type": "student"
+        })
+        if reg.status_code != 200:
+            pytest.skip(f"注册不可用：{reg.status_code}")
+        login = c.post("/api/auth/login", data={"username": no, "password": "Test123456"})
+        if login.status_code != 200:
+            pytest.skip("登录失败")
+        c.headers.update({"Authorization": f"Bearer {login.json()['access_token']}"})
+
+        d = c.get("/api/badges/my", params={"only_owned": "true"}).json()
+        assert d["owned"] >= 1, "首次登录应解锁「初来乍到」"
+        owned = [i for i in d["items"] if i["owned"]]
+        assert owned, "应有已获得徽章"
+        snap = owned[0]["snapshot_tier"]
+        assert snap in ("黑铁", "青铜", "白银", "黄金", "钻石"), f"快照应为中文档位，实际 {snap!r}"

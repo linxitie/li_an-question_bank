@@ -22,6 +22,7 @@ import './style/index.scss';
 import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
 import { registerImageRetry } from './image-retry';  // 第9层防线：图片智能重试
 import { installGlobalLogout } from './utils/globalLogout';  // 学生端全局退出按钮（方案B）
+import { installBadgeEntry } from './utils/badgeEntry';  // 学生端「我的徽章」入口（脚本注入）
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
@@ -57,6 +58,7 @@ onReady(async () => {
   app.mount('#app');
   // 学生端无退出入口（R3 禁改模板）→ 注入全局悬浮退出按钮
   installGlobalLogout();
+  installBadgeEntry();
 });
 
 if (process.env.NODE_ENV === 'production') {
