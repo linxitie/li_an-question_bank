@@ -7,8 +7,7 @@
         <div class="tf-head-row">
           <h1>论坛管理</h1>
           <div class="tf-head-actions">
-            <button class="tf-btn ghost" @click="openFav('favorites')">⭐ 我的收藏</button>
-            <button class="tf-btn ghost" @click="openFav('likes')">❤ 我的喜欢</button>
+            <button class="tf-star-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
             <button class="tf-post-btn" @click="openPostForm">发布新帖</button>
           </div>
         </div>
@@ -613,6 +612,9 @@ onMounted(loadPosts);
 .tf-fav-item:hover { background: #f7f9fc; }
 .tf-fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tf-fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
+/* 单个五角星入口，避免窄屏换行 */
+.tf-star-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
 </style>
 
 

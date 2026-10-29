@@ -8,7 +8,7 @@
       </div>
       <h1 class="nav-title">学习论坛</h1>
       <div class="nav-right">
-        <button class="nav-fav-btn" @click="openFav('favorites')">⭐ 收藏/喜欢</button>
+        <button class="nav-fav-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
       </div>
     </header>
 
@@ -656,7 +656,9 @@ export default defineComponent({
     right: 16px;
   }
 }
-.nav-fav-btn { padding: 6px 12px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #1a2b5f; font-size: 13px; cursor: pointer; }
+/* 单个五角星按钮：固定 36x36 圆形，避免文字换行把导航挤乱 */
+.nav-fav-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border: none; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
 .heart-ico { font-size: 15px; color: #8899aa; }
 .heart-ico.on { color: #e5484d; }
 .fav-mask { position: fixed; inset: 0; background: rgba(8,12,24,.45); z-index: 300; display: flex; align-items: flex-end; }
