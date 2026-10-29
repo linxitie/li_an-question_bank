@@ -97,16 +97,34 @@ def similarity(item_text: str, row_text: str) -> float:
     return SequenceMatcher(None, left, right).ratio()
 
 
-def load_preview(import_id: int) -> Tuple[Optional[dict], Optional[dict]]:
+def load_preview(import_id: int, db=None) -> Tuple[Optional[dict], Optional[dict]]:
+    """优先读磁盘预览；磁盘缺失时回退 question_import_record.preview_data。
+
+    实测 1633（2021 北京乡镇卷题本）只在库里内联了 preview_data，
+    没有 import_previews/*.json.gz；旧实现直接跳过，导致该卷永远无法回填。
+    """
     pattern = os.path.join(PREVIEW_ROOT, '*', f'{import_id}.json.gz')
     paths = glob.glob(pattern)
-    if not paths:
-        return None, None
-    with open(paths[0], 'rb') as handle:
-        obj = json.loads(gzip.decompress(handle.read()).decode('utf-8'))
-    if isinstance(obj, str):
-        obj = json.loads(obj)
-    return obj, {'path': paths[0]}
+    if paths:
+        with open(paths[0], 'rb') as handle:
+            obj = json.loads(gzip.decompress(handle.read()).decode('utf-8'))
+        if isinstance(obj, str):
+            obj = json.loads(obj)
+        return obj, {'path': paths[0]}
+    if db is not None:
+        row = db.execute(
+            text('SELECT preview_data FROM question_import_record WHERE import_id=:import_id'),
+            {'import_id': import_id},
+        ).first()
+        if row and row[0]:
+            try:
+                obj = json.loads(row[0])
+                if isinstance(obj, str):
+                    obj = json.loads(obj)
+                return obj, {'source': 'question_import_record.preview_data'}
+            except (TypeError, ValueError) as exc:
+                print(f'[{import_id}] 内联 preview_data 解析失败: {exc}')
+    return None, None
 
 
 def load_import_record(db, import_id: int) -> Optional[dict]:
@@ -323,8 +341,11 @@ def plan_xingce(import_id: int, filename: str, matched: List[Tuple[dict, Questio
         except (TypeError, ValueError):
             continue
         material = (blocks.get(qn) or '').strip()
-        key = norm_text(material)
-        if material and key == current_key:
+        # 关键：key 不能走 norm_text —— 它会把 [IMAGE:] 剥成空串，
+        # 于是“纯图片材料”与“无材料”同为 ''，q111–120 会被并成一个
+        # 10 题缓冲区（2026-10-29 实测 2021 北京乡镇卷漏建两组）。
+        key = _WS_RE.sub('', material)
+        if material and key and key == current_key:
             buffer.append((item, row))
             continue
         flush()
@@ -337,7 +358,7 @@ def plan_xingce(import_id: int, filename: str, matched: List[Tuple[dict, Questio
 
 
 def analyze_preview(db, import_id: int, year: Optional[int] = None) -> Optional[PreviewPlan]:
-    preview, meta = load_preview(import_id)
+    preview, meta = load_preview(import_id, db)
     record = load_import_record(db, import_id)
     if not preview or not record:
         print(f'[{import_id}] 预览或导入记录不存在，跳过')

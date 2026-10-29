@@ -5206,7 +5206,12 @@ def extract_question_blocks_with_material_sets(text: str) -> list:
 
     for idx, (first_num, header) in enumerate(segments):
         last_num = segments[idx + 1][0] - 1 if idx + 1 < len(segments) else 10 ** 6
-        if len(header) < _MIN_MATERIAL_CHARS:
+        # 纯图片材料（如 2021 北京乡镇卷“（一） [IMAGE:…]”）清洗后只剩
+        # 20~30 字符的占位符，旧规则会按“材料过短”整组跳过，导致
+        # q111–115 / q116–120 两道资料分析组完全没有材料。有图片 token 时
+        # 长度不再是拒绝条件，题数区间检查仍保留，避免把图片误当组边界。
+        has_set_image = bool(_SET_IMAGE_RE.search(header))
+        if len(header) < _MIN_MATERIAL_CHARS and not has_set_image:
             continue
         # 资料分析每组 4~5 题（实测 22 套）。若区间内题数超出 [2,6]，说明
         # 漏检了组边界（如江苏/辽宁），此时**宁可不挂**也不把 10~19 道题

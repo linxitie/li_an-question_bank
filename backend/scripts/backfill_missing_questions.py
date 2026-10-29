@@ -40,10 +40,25 @@ _ANSWER_HEAD = re.compile(r'(?m)^\s*(\d{1,3})\s*[.．、]\s*正确答案\s*[：:
 
 def load_preview(import_id: int) -> dict:
     paths = glob.glob(os.path.join(PREVIEW_ROOT, '*', f'{import_id}.json.gz'))
-    if not paths:
+    if paths:
+        with open(paths[0], 'rb') as handle:
+            obj = json.loads(gzip.decompress(handle.read()).decode('utf-8'))
+        if isinstance(obj, str):
+            obj = json.loads(obj)
+        return obj
+    # 2021 北京等卷只在 question_import_record.preview_data 内联预览，
+    # 磁盘 import_previews 已被清理；直接按库回退，避免补题脚本空转。
+    con = sqlite3.connect(os.path.join(BACKEND_DIR, 'data', 'question_bank.db'))
+    try:
+        row = con.execute(
+            'SELECT preview_data FROM question_import_record WHERE import_id=?',
+            (import_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    if not row or not row[0]:
         raise SystemExit(f'预览不存在: {import_id}')
-    with open(paths[0], 'rb') as handle:
-        obj = json.loads(gzip.decompress(handle.read()).decode('utf-8'))
+    obj = json.loads(row[0])
     if isinstance(obj, str):
         obj = json.loads(obj)
     return obj
