@@ -723,3 +723,7 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 | 卡片 v5 效果图 | `docs/plans/assets/备考资料_卡片_v5/` | 2 张：5 层堆叠+配图卡、3D 视差说明 |
 | 卡片 v4 效果图 | `docs/plans/assets/备考资料_卡片_v4/` | 7 张：三端进入页、行测 TAB、申论长文本、公专配图、动效四阶段 |
 | 导入缺陷与修复 | `docs/superpowers/specs/资料卡片导入缺陷_报告_v1.md`、`…D2-D5修复_报告_20261027.md` | D1–D8 台账（D3 已勘误）、D2/D4/D5 修复 |
+
+### 运维手册
+
+- [备考资料_部署与数据初始化_v1.md](ops/备考资料_部署与数据初始化_v1.md) — 部署/初始化/自检/回滚/故障对照
