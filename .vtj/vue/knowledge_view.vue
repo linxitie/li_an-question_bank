@@ -51,22 +51,62 @@
 
       <!-- 图谱视图 -->
       <div v-if="state.view === 'graph'" class="kb-graph">
+        <div class="kb-graph-stats">
+          <span class="gs-item">入库节点 <b>{{ state.stats.node_total }}</b></span>
+          <span class="gs-item">关系 <b>{{ state.stats.relation_total }}</b></span>
+          <span class="gs-item">待审批 <b>{{ state.stats.pending_total }}</b></span>
+        </div>
+        <div class="kb-legend">
+          <span v-for="c in state.stats.by_category" :key="c.key" class="lg-cat">
+            <i :style="{ background: c.color }"></i>{{ c.name }} {{ c.count }}
+          </span>
+          <span class="lg-sep"></span>
+          <span v-for="r in state.stats.by_relation_type" :key="r.key" class="lg-rel"
+            :class="'lg-' + r.key"><i></i>{{ r.name }} {{ r.count }}</span>
+        </div>
         <svg :viewBox="'0 0 640 320'" class="kb-svg">
           <line
             v-for="(r, i) in graphRels"
             :key="'l' + i"
             :x1="nodePos(r.from).x" :y1="nodePos(r.from).y"
             :x2="nodePos(r.to).x" :y2="nodePos(r.to).y"
-            stroke="#8aa0c8" stroke-width="1" stroke-dasharray="4 3"
+            :stroke="relStyle(r.type).color"
+            :stroke-width="relStyle(r.type).width"
+            :stroke-dasharray="relStyle(r.type).dash"
           />
-          <g v-for="(n, i) in graphNodes" :key="'n' + i">
-            <circle :cx="nodePos(n.node_id).x" :cy="nodePos(n.node_id).y" r="22" fill="#1a2a4a" opacity="0.92" />
+          <g v-for="(n, i) in graphNodes" :key="'n' + i" class="kb-node" @click="openNode(n)">
+            <circle :cx="nodePos(n.node_id).x" :cy="nodePos(n.node_id).y" r="22"
+              :fill="catColor(n.category)" opacity="0.92" />
             <text :x="nodePos(n.node_id).x" :y="nodePos(n.node_id).y" text-anchor="middle" dominant-baseline="central"
               fill="#fff" font-size="11">{{ catShort(n.category) }}</text>
             <text :x="nodePos(n.node_id).x" :y="nodePos(n.node_id).y + 34" text-anchor="middle" font-size="10" fill="#334" class="kb-node-title">{{ shortTitle(n.title) }}</text>
           </g>
         </svg>
         <div v-if="graphNodes.length === 0" class="kb-empty">图谱为空：先把笔记提交并通过审批</div>
+
+        <!-- 节点详情抽屉 -->
+        <div v-if="state.detail" class="kb-drawer-mask" @click="closeDetail">
+          <div class="kb-drawer" @click.stop>
+            <div class="kb-drawer-head">
+              <span class="kb-drawer-title">{{ state.detail.title }}</span>
+              <button class="kb-btn mini no" @click="closeDetail">关闭</button>
+            </div>
+            <div class="kb-drawer-meta">
+              <span class="kb-card-tag" :class="state.detail.category">{{ state.detail.category_name }}</span>
+              <span v-if="state.detail.source" class="kb-card-src">来源：{{ state.detail.source }}</span>
+            </div>
+            <div class="kb-drawer-content">{{ state.detail.content }}</div>
+            <div v-if="state.detail.neighbors.length" class="kb-drawer-neighbors">
+              <div class="dn-title">关联节点（{{ state.detail.neighbors.length }}）</div>
+              <div v-for="nb in state.detail.neighbors" :key="nb.rel_id" class="dn-item">
+                <span class="dn-dir">{{ nb.dir === 'out' ? '→' : '←' }}</span>
+                <span class="dn-name">{{ nb.title }}</span>
+                <em class="kb-rel-type">{{ nb.type_name }}</em>
+              </div>
+            </div>
+            <div v-else class="kb-rel-empty">暂无关联节点，可在下方“推荐关系”中建立</div>
+          </div>
+        </div>
 
         <!-- 关系管理：自动推荐 + 关系列表 -->
         <div class="kb-rel-panel">
@@ -155,7 +195,18 @@
         suggesting: false,
         relList: [],
         form: { title: '', category: 'law', content: '' },
+        // D：图谱深化——统计 / 图例配色 / 节点详情抽屉
+        stats: { node_total: 0, pending_total: 0, relation_total: 0, by_category: [], by_relation_type: [] },
+        detail: null,
+        detailLoading: false,
       });
+
+      const CAT_COLORS = { law: '#2a6bb8', recruit: '#2e8b57', exam_point: '#c98a2b', wrong: '#c0392b' };
+      const REL_STYLE = {
+        related: { name: '关联对照', dash: '4 3', width: 1, color: '#8aa0c8' },
+        contains: { name: '包含归属', dash: '0', width: 1.6, color: '#2e8b57' },
+        leads_to: { name: '前置延伸', dash: '2 2', width: 1, color: '#c98a2b' },
+      };
 
       function fmtTime(t) {
         if (!t) return '';
@@ -194,7 +245,36 @@
         } catch (e) {
           state.notice = '网络异常，图谱加载失败';
         }
+        loadStats();
       }
+
+      async function loadStats() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/knowledge/stats');
+          const d = await res.json();
+          if (res.ok) state.stats = d;
+        } catch (e) { /* 统计缺失不阻断图谱 */ }
+      }
+
+      function catColor(c) { return CAT_COLORS[c] || '#1a2a4a'; }
+      function relStyle(t) { return REL_STYLE[t] || REL_STYLE.related; }
+
+      async function openNode(n) {
+        state.detailLoading = true;
+        state.detail = null;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/knowledge/nodes/' + n.node_id + '/detail');
+          const d = await res.json();
+          if (res.ok) state.detail = d;
+          else state.notice = d.detail || '详情加载失败';
+        } catch (e) {
+          state.notice = '网络异常，详情加载失败';
+        } finally {
+          state.detailLoading = false;
+        }
+      }
+
+      function closeDetail() { state.detail = null; }
 
       const graphNodes = computed(() => state.graph.nodes || []);
       const graphRels = computed(() => state.graph.relations || []);
@@ -375,7 +455,8 @@
       return {
         state, catTabs, statusTabs,
         graphNodes, graphRels,
-        nodePos, catShort, shortTitle,
+        nodePos, catShort, shortTitle, catColor, relStyle,
+        openNode, closeDetail,
         goBack, switchCat, switchStatus,
         submitNode, approveNode, rejectNode, importVault,
         loadRelations, suggestRelations, addRelation, delRelation,
@@ -437,4 +518,28 @@
   .kb-rel-line { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kb-rel-type { font-style: normal; color: #8aa0c8; margin-left: 6px; font-size: 11px; }
   .kb-rel-empty { color: #99a; font-size: 12px; padding: 10px 0 2px; }
+  /* D 图谱深化：统计条 / 图例 / 节点配色 / 详情抽屉 */
+  .kb-graph-stats { display: flex; gap: 16px; font-size: 12px; color: #556; margin-bottom: 8px; }
+  .kb-graph-stats b { color: #1a2a4a; font-size: 14px; margin-left: 2px; }
+  .kb-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 11px; color: #556; margin-bottom: 8px; }
+  .lg-cat { display: inline-flex; align-items: center; gap: 4px; }
+  .lg-cat i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .lg-sep { width: 1px; height: 12px; background: #dbe0ea; }
+  .lg-rel { display: inline-flex; align-items: center; gap: 4px; }
+  .lg-rel i { width: 18px; height: 0; border-top: 1.5px solid #8aa0c8; display: inline-block; }
+  .lg-contains i { border-top: 2px solid #2e8b57; }
+  .lg-leads_to i { border-top: 1.5px dashed #c98a2b; }
+  .kb-node { cursor: pointer; }
+  .kb-node:hover circle { opacity: 1; stroke: #fff; stroke-width: 1.5; }
+  .kb-drawer-mask { position: fixed; inset: 0; background: rgba(20,30,50,.42); z-index: 30; display: flex; justify-content: center; align-items: flex-end; }
+  .kb-drawer { background: #fff; width: 100%; max-width: 560px; max-height: 72vh; overflow-y: auto; border-radius: 14px 14px 0 0; padding: 14px 16px 20px; }
+  .kb-drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .kb-drawer-title { font-size: 15px; font-weight: 600; color: #1a2a4a; }
+  .kb-drawer-meta { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 11px; color: #99a; flex-wrap: wrap; }
+  .kb-drawer-content { font-size: 13px; color: #334; line-height: 1.7; white-space: pre-wrap; background: #f7f9fc; border-radius: 8px; padding: 10px 12px; }
+  .kb-drawer-neighbors { margin-top: 12px; }
+  .dn-title { font-size: 12px; font-weight: 600; color: #1a2a4a; margin-bottom: 6px; }
+  .dn-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #445; padding: 5px 8px; background: #f7f9fc; border-radius: 8px; margin-bottom: 5px; }
+  .dn-dir { color: #8aa0c8; }
+  .dn-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

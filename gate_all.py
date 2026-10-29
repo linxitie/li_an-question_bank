@@ -24,6 +24,9 @@ GATE_SCRIPTS = [
     "verify_hi.py",           # H/I 记忆管理+周复盘+vault 导入(幂等/穿越防护)
     "verify_kl.py",           # K/L 岗位库+选岗注入+对话自动记忆
     "verify_nop.py",          # N/O/P 学情+错题接入对话 + 桌面通知模块 + 知识图谱关系管理
+    "verify_b.py",            # B 错题明细（科目/题干/错选/正解/掌握度）接入对话上下文
+    "verify_c.py",            # C 多Agent身份路由 + 面试教练结构化题库（框架+示例题抽取）
+    "verify_d.py",            # D 知识图谱深化：统计端点 + 节点详情 + graph摘要配色/关系中文名
 ]
 
 

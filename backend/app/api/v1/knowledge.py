@@ -25,6 +25,21 @@ CATEGORIES = {
     "wrong": "错题经验",
 }
 
+# 关系类型中文名（图谱图例与详情展示用；复用既有三类型，不新增表字段）
+REL_TYPE_NAMES = {
+    "related": "关联对照",
+    "contains": "包含归属",
+    "leads_to": "前置延伸",
+}
+
+# 图谱分类配色（与前端卡片配色保持一致）
+CATEGORY_COLORS = {
+    "law": "#2a6bb8",
+    "recruit": "#2e8b57",
+    "exam_point": "#c98a2b",
+    "wrong": "#c0392b",
+}
+
 
 class KnowledgeSubmitRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
@@ -156,6 +171,9 @@ async def knowledge_graph(
                 "node_id": n.node_id,
                 "title": n.title,
                 "category": n.category,
+                "category_name": CATEGORIES.get(n.category, n.category),
+                "color": CATEGORY_COLORS.get(n.category, "#1a2a4a"),
+                "summary": (n.content or "").strip().replace("\n", " ")[:80],
             }
             for n in nodes
         ],
@@ -164,9 +182,90 @@ async def knowledge_graph(
                 "from": r.from_node,
                 "to": r.to_node,
                 "type": r.rel_type,
+                "type_name": REL_TYPE_NAMES.get(r.rel_type, r.rel_type),
             }
             for r in rels
         ],
+    }
+
+
+@router.get("/stats", summary="知识图谱统计（分类计数/关系类型分布/待审批数）")
+async def knowledge_stats(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import func
+    approved = db.query(KnowledgeNode).filter(KnowledgeNode.status == "approved").all()
+    pending = db.query(KnowledgeNode).filter(KnowledgeNode.status == "pending").count()
+    rels = db.query(KnowledgeRelation).all()
+    by_cat = {k: 0 for k in CATEGORIES}
+    for n in approved:
+        by_cat[n.category] = by_cat.get(n.category, 0) + 1
+    by_type = {k: 0 for k in REL_TYPE_NAMES}
+    for r in rels:
+        by_type[r.rel_type] = by_type.get(r.rel_type, 0) + 1
+    return {
+        "node_total": len(approved),
+        "pending_total": pending,
+        "relation_total": len(rels),
+        "by_category": [
+            {"key": k, "name": CATEGORIES[k], "count": v,
+             "color": CATEGORY_COLORS[k]}
+            for k, v in by_cat.items()
+        ],
+        "by_relation_type": [
+            {"key": k, "name": v, "count": by_type.get(k, 0)}
+            for k, v in REL_TYPE_NAMES.items()
+        ],
+    }
+
+
+@router.get("/nodes/{node_id}/detail", summary="节点详情（含邻居关系）")
+async def node_detail(
+    node_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    node = db.query(KnowledgeNode).filter(KnowledgeNode.node_id == node_id).first()
+    if not node:
+        raise HTTPException(status_code=404, detail="节点不存在")
+    # 出边 + 入边邻居（含对端标题与关系名）
+    neighbor_map = {}
+    out_rels = db.query(KnowledgeRelation).filter(KnowledgeRelation.from_node == node_id).all()
+    in_rels = db.query(KnowledgeRelation).filter(KnowledgeRelation.to_node == node_id).all()
+    neighbors = []
+    for r in out_rels:
+        target = db.get(KnowledgeNode, r.to_node)
+        neighbors.append({
+            "dir": "out",
+            "rel_id": r.rel_id,
+            "node_id": r.to_node,
+            "title": target.title if target else f"节点{r.to_node}",
+            "type": r.rel_type,
+            "type_name": REL_TYPE_NAMES.get(r.rel_type, r.rel_type),
+        })
+    for r in in_rels:
+        source = db.get(KnowledgeNode, r.from_node)
+        neighbors.append({
+            "dir": "in",
+            "rel_id": r.rel_id,
+            "node_id": r.from_node,
+            "title": source.title if source else f"节点{r.from_node}",
+            "type": r.rel_type,
+            "type_name": REL_TYPE_NAMES.get(r.rel_type, r.rel_type),
+        })
+    return {
+        "node_id": node.node_id,
+        "title": node.title,
+        "category": node.category,
+        "category_name": CATEGORIES.get(node.category, node.category),
+        "color": CATEGORY_COLORS.get(node.category, "#1a2a4a"),
+        "content": node.content or "",
+        "source": node.source,
+        "status": node.status,
+        "create_time": node.create_time.isoformat() if node.create_time else None,
+        "update_time": node.update_time.isoformat() if node.update_time else None,
+        "neighbors": neighbors,
     }
 
 
