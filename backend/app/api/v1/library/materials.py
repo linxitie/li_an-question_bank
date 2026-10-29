@@ -803,6 +803,17 @@ def _auto_classify(db, subject, title, front, back):
     return best
 
 
+def _resolve_card_category(db, subject, front, back, explicit=None):
+    """卡片分类三级优先：显式分类（表格分类列/请求体）> 关键词自动分类 > 空。
+
+    导入场景里 title 就是卡片正面（import_confirm 用 card_front 当 title），
+    因此标题优先的匹配策略等价于「先看正面，再看正+背面」。
+    """
+    if explicit:
+        return explicit
+    return _auto_classify(db, subject, front, front, back)
+
+
 @router.get("/admin/list", summary="管理列表(含下架)")
 async def admin_list(subject: Optional[str] = Query(None),
                      type: Optional[str] = Query(None),
@@ -1330,9 +1341,13 @@ async def import_confirm(import_id: int, body: dict,
             # 分类器只看扩展名+标题关键词，卡片正文短会判成 article，导致卡片
             # 落入文章区、翻卡 UI 永不触发（D1）。此处只按业务事实写 card。
             content_hash = content_cleaner.calculate_content_hash(combined)
+            # 分类三级优先：表格分类列 > 关键词自动分类 > 请求体 category
+            card_category = _resolve_card_category(
+                db, subject, card_front, card_back,
+                c.get("category") or category)
             m = StudyMaterial(
                 subject=subject, type="card",
-                category=c["category"] or category,
+                category=card_category,
                 title=card_front, card_front=card_front,
                 card_back=card_back,
                 content_hash=content_hash,

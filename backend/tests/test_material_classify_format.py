@@ -18,6 +18,7 @@ from app.api.v1.library.materials import (  # noqa: E402
     CARD_FRONT_MAX,
     _auto_classify,
     _check_card_text,
+    _resolve_card_category,
 )
 from app.core.database import SessionLocal  # noqa: E402
 
@@ -81,6 +82,24 @@ class TestAutoClassify:
         got = _auto_classify(db, "xingce", "综合练习A",
                              "增长率与比重的计算", None)
         assert got == "资料分析"
+
+    def test_explicit_wins(self, db):
+        # 表格分类列有值时不覆盖
+        got = _resolve_card_category(db, "xingce", "图形推理", "先看元素组成", "方法技巧")
+        assert got == "方法技巧"
+
+    def test_auto_when_empty(self, db):
+        # 无分类列时自动判定
+        got = _resolve_card_category(db, "xingce", "图形推理-加强削弱", "先看元素组成", None)
+        assert got == "判断推理"
+
+    def test_empty_string_treated_as_absent(self, db):
+        # build_cards 在无分类列时给的是空串，应视为"未分类"
+        got = _resolve_card_category(db, "shenlun", "归纳概括要点合并", "", "")
+        assert got == "归纳概括"
+
+    def test_none_when_no_match(self, db):
+        assert _resolve_card_category(db, "xingce", "QWERTYUIOP", None, None) is None
 
     def test_cross_subject_not_misclassified(self, db):
         # 「逻辑填空」属行测；若声明 subject=shenlun 不应被判成 xingce 的子类
