@@ -814,6 +814,211 @@ def _resolve_card_category(db, subject, front, back, explicit=None):
     return _auto_classify(db, subject, front, front, back)
 
 
+# ============ 分类规则后台维护（管理员，4 端点） ============
+_RULE_SUBJECTS = ("xingce", "shenlun", "gongzhuan")
+
+
+def _rule_cfg(r) -> dict:
+    """rule_config 取成 dict（JSON 列可能是 dict，也可能是历史字符串）。"""
+    cfg = r.rule_config or {}
+    if isinstance(cfg, str):
+        try:
+            cfg = _json.loads(cfg)
+        except Exception:
+            cfg = {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _rule_to_dict(r) -> dict:
+    cfg = _rule_cfg(r)
+    return {
+        "id": r.rule_id,
+        "name": r.rule_name,
+        "type": r.rule_type,
+        "subject": cfg.get("subject"),
+        "category": cfg.get("category"),
+        "keywords": cfg.get("keywords") or [],
+        "priority": r.priority or 0,
+        "enabled": int(r.enabled or 0),
+        "created_at": str(r.created_at) if getattr(r, "created_at", None) else None,
+    }
+
+
+def _validate_rule_body(body: dict, partial: bool = False) -> dict:
+    """校验规则入参：名称唯一、科目合法、分类非空、关键词不能为空列表。"""
+    name = (body.get("name") or body.get("rule_name") or "").strip()
+    type_ = (body.get("type") or body.get("rule_type") or "keyword").strip()
+    subject = (body.get("subject") or "").strip()
+    category = (body.get("category") or "").strip()
+    keywords = body.get("keywords")
+    priority = body.get("priority")
+    enabled = body.get("enabled")
+
+    if not partial or name:
+        if not name:
+            raise HTTPException(400, "规则名称必填")
+        if len(name) > 100:
+            raise HTTPException(400, "规则名称超过 100 字")
+    if type_ not in ("keyword",):
+        raise HTTPException(400, "目前仅支持 keyword 类型规则")
+    if not partial or subject:
+        if subject and subject not in _RULE_SUBJECTS:
+            raise HTTPException(400, "无效科目（xingce/shenlun/gongzhuan）")
+    if not partial or category:
+        if not category:
+            raise HTTPException(400, "目标分类（category）必填")
+    if not partial or keywords is not None:
+        if not isinstance(keywords, list) or not keywords:
+            raise HTTPException(400, "关键词至少 1 个（数组）")
+        cleaned = []
+        for k in keywords:
+            k = str(k or "").strip()
+            if not k:
+                raise HTTPException(400, "关键词不能包含空字符串")
+            if len(k) > 30:
+                raise HTTPException(400, f"关键词过长（≤30 字）：{k[:10]}…")
+            cleaned.append(k)
+        keywords = cleaned
+    if priority is not None:
+        try:
+            priority = int(priority)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "priority 必须是整数")
+        if not (0 <= priority <= 100):
+            raise HTTPException(400, "priority 取值范围 0–100")
+
+    out = {"name": name, "type": type_}
+    if subject or not partial:
+        out["subject"] = subject
+    if category:
+        out["category"] = category
+    if keywords is not None:
+        out["keywords"] = keywords
+    if priority is not None:
+        out["priority"] = priority
+    if enabled is not None:
+        out["enabled"] = 1 if enabled else 0
+    return out
+
+
+def _rule_config_of(data: dict) -> str:
+    cfg = {}
+    if data.get("subject"):
+        cfg["subject"] = data["subject"]
+    if data.get("category"):
+        cfg["category"] = data["category"]
+    if data.get("keywords") is not None:
+        cfg["keywords"] = data["keywords"]
+    return _json.dumps(cfg, ensure_ascii=False)
+
+
+@router.get("/admin/rules", summary="分类规则列表(管理员)")
+async def admin_rule_list(page: int = Query(1, ge=1),
+                          page_size: int = Query(20, ge=1, le=200),
+                          enabled: int = Query(-1),
+                          keyword: str = Query(""),
+                          current_user: SysUser = Depends(get_current_user),
+                          db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule  # 局部导入
+
+    q = db.query(MaterialClassificationRule)
+    if enabled in (0, 1):
+        q = q.filter(MaterialClassificationRule.enabled == enabled)
+    if keyword.strip():
+        q = q.filter(MaterialClassificationRule.rule_name.like(f"%{keyword.strip()}%"))
+    total = q.count()
+    rows = (q.order_by(MaterialClassificationRule.priority.desc(),
+                       MaterialClassificationRule.rule_id.asc())
+            .offset((page - 1) * page_size).limit(page_size).all())
+    return {"total": total, "items": [_rule_to_dict(r) for r in rows]}
+
+
+@router.post("/admin/rules", summary="新增分类规则(管理员)")
+async def admin_rule_create(body: dict,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule
+
+    data = _validate_rule_body(body)
+    exists = (db.query(MaterialClassificationRule)
+              .filter(MaterialClassificationRule.rule_name == data["name"]).first())
+    if exists:
+        raise HTTPException(409, f"规则名称已存在：{data['name']}")
+    r = MaterialClassificationRule(
+        rule_name=data["name"], rule_type=data["type"],
+        rule_config=_rule_config_of(data),
+        priority=data.get("priority", 50),
+        enabled=data.get("enabled", 1))
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    _audit(db, current_user, "rule_create", f"rule:{r.rule_id}", r.rule_name)
+    db.commit()
+    return _rule_to_dict(r)
+
+
+@router.put("/admin/rules/{rule_id}", summary="更新分类规则(管理员)")
+async def admin_rule_update(rule_id: int, body: dict,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule
+
+    r = (db.query(MaterialClassificationRule)
+         .filter(MaterialClassificationRule.rule_id == rule_id).first())
+    if not r:
+        raise HTTPException(404, "规则不存在")
+    data = _validate_rule_body(body, partial=True)
+
+    if data.get("name") and data["name"] != r.rule_name:
+        dup = (db.query(MaterialClassificationRule)
+               .filter(MaterialClassificationRule.rule_name == data["name"],
+                       MaterialClassificationRule.rule_id != rule_id).first())
+        if dup:
+            raise HTTPException(409, f"规则名称已存在：{data['name']}")
+        r.rule_name = data["name"]
+    if data.get("type"):
+        r.rule_type = data["type"]
+    merged = dict(_rule_cfg(r))
+    for k in ("subject", "category", "keywords"):
+        if k in data:
+            merged[k] = data[k]
+    r.rule_config = _json.dumps(merged, ensure_ascii=False)
+    if "priority" in data:
+        r.priority = data["priority"]
+    if "enabled" in data:
+        r.enabled = data["enabled"]
+    db.commit()
+    db.refresh(r)
+    _audit(db, current_user, "rule_update", f"rule:{rule_id}", r.rule_name)
+    db.commit()
+    return _rule_to_dict(r)
+
+
+@router.patch("/admin/rules/{rule_id}/toggle", summary="启用/停用分类规则(管理员)")
+async def admin_rule_toggle(rule_id: int, body: dict,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import MaterialClassificationRule
+
+    r = (db.query(MaterialClassificationRule)
+         .filter(MaterialClassificationRule.rule_id == rule_id).first())
+    if not r:
+        raise HTTPException(404, "规则不存在")
+    enabled = body.get("enabled")
+    if enabled is None:
+        enabled = 0 if int(r.enabled or 0) == 1 else 1
+    r.enabled = 1 if enabled else 0
+    db.commit()
+    _audit(db, current_user, "rule_toggle", f"rule:{rule_id}",
+           f"{r.rule_name} enabled={r.enabled}")
+    db.commit()
+    return {"id": rule_id, "enabled": int(r.enabled)}
+
+
 @router.get("/admin/list", summary="管理列表(含下架)")
 async def admin_list(subject: Optional[str] = Query(None),
                      type: Optional[str] = Query(None),

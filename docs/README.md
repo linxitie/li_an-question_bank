@@ -727,3 +727,5 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 ### 运维手册
 
 - [备考资料_部署与数据初始化_v1.md](ops/备考资料_部署与数据初始化_v1.md) — 部署/初始化/自检/回滚/故障对照
+
+- [分类规则维护页_设计器拖拽清单_v1.md](plans/分类规则维护页_设计器拖拽清单_v1.md) — R3 合规：容器/类名清单 + 接口契约，用户拖模板、AI 写 script
