@@ -259,6 +259,12 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== 备考资料（学生端公开页） ====================
   {
+    path: '/materials/detail',
+    name: 'MaterialDetail',
+    component: () => import('@/views/pc/material_detail.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/materials/xingce',
     name: 'MaterialsXingce',
     component: () => import('$vtj/vue/materials_xingce.vue'),

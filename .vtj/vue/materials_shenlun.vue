@@ -290,6 +290,24 @@ export default defineComponent({
     }
   },
   mounted() {
+// 【跳转钩子】列表=浏览，详情=学习：点卡片进详情页（仅 script，未改 template）
+if (!this._detailHookInstalled) {
+  this._detailHook = (e) => {
+    const el = e.target && e.target.closest ? e.target.closest('.card-grid .flip') : null;
+    if (!el) return;
+    const grid = el.closest('.card-grid');
+    const flips = grid ? Array.from(grid.querySelectorAll('.flip')) : [];
+    const idx = flips.indexOf(el);
+    const arr = (this.state.data && this.state.data.card) || [];
+    const item = arr[idx];
+    if (!item) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.$router.push('/materials/detail?subject=shenlun&id=' + item.id);
+  };
+  document.addEventListener('click', this._detailHook, true);
+  this._detailHookInstalled = true;
+}
     this.fetchAll();
     this.fetchSummary();
   }
