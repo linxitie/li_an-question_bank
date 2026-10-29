@@ -61,8 +61,11 @@
 | `superpowers/specs/导入配对与答案卷识别_报告_20261025.md` | v1 | ✅ 已修复（2026-10-25） | 答案卷被按题干切块导致 125 vs 95 计数不一致；新增答案卷识别 + 题号锚点解析（125 条对齐），`/confirm` 增加答案卷闸门；22 套实测 19 套对齐 |
 | `superpowers/specs/OCR链路恢复_报告_20261025.md` | v1 | ✅ 已恢复（2026-10-25） | MinerU 3.4.5 / PaddleOCR 2.7 均可用但被参数拖死：固定 600s 超时 vs 71.2s/页、OCR 仅 8 页、缓存跨引擎污染。改为按页超时、30 页上限、CPU 线程/免方向分类、缓存引擎隔离 |
 
+| `superpowers/specs/多人协作Git网络稳定方案_v1.md` | v1 | ✅ 已定稿（2026-10-29） | 同伴 ghproxy 镜像停服导致 pull 失败：清镜像改写 + canonical/SSH-443 回退 + 过滤克隆（`.git` 917 MB → 1.1 MB）+ bundle 离线交接 + 一任务一分支规约；配套 `scripts/dev/git-collab-doctor.ps1` |
+
 ## 变更记录
 
+- 2026-10-29：**多人协作 Git 网络稳定方案落盘**：同伴 `git pull` 报 `Failed to connect to mirror.ghproxy.com port 443`，实测为客户端 remote/`url.insteadOf` 指向已停服镜像（`mirror.ghproxy.com` DNS 已不解析），叠加 `.git` 917 MB 全量传输超时被误判为网络故障；方案含清镜像改写、canonical/SSH-443 三级回退、过滤克隆（实测 23.7 s / `.git` 1.1 MB）、bundle 离线交接、一任务一分支 + rebase 规约与验收清单；新增 `scripts/dev/git-collab-doctor.ps1`（诊断 / `-Fix` / `-Bundle` / `-FromBundle`）；报告见 `superpowers/specs/多人协作Git网络稳定方案_v1.md`
 - 2026-10-29：**做题/背题、图片渲染、三端材料吸顶、智能组卷交互、交卷与重考修复（待提交）**：新增 `src/utils/questionRender.js` 统一还原 `<img>/[IMAGE:]/&lt;img&gt;` 三种形态并统一 `paper_result/exercise/solution` 渲染；`exercise.vue` 增加做题/背题切换与交卷内联成绩条；新增 `src/utils/materialDock.js` 供学生/教师/管理三端材料吸顶共用（raw 页零模板改动）；`smart_exam.vue` 修正题型预设 ID、内联超配提示/组统计/题组徽标，`smart_exam.py` 支持整组替换并返回 `group_id`；`paper_answer.vue` 交卷请求体改为整映射，修复 422；新增并执行 `backend/scripts/migrate/migrate_exam_record_drop_unique.py` 移除历史库 `uk_paper_user`，`start_exam` 复用未完成记录；targeted 18 passed、typecheck 0 错误、build:prod 成功、quick 门禁 4/4
 - 2026-10-28：**复合题材料、P5 防丢组、整组超配提示、答题页吸顶材料已完成并提交（`7505e13`）**：解析器支持“（三）[IMAGE:…]”图片材料并新增回归测试；存量重建组 24–32、挂组题 69（2024 申论 16、2025 行测 20，组 31 含 2 图）；exam API 返回组字段；新增 `paper_group_selector.py` 并接入三处组卷整组抽样；P5 在缺材料时仍建组保留子题关联并标 `need_review`，预览/导入显式警告；组卷响应带 `over_quota/over_quota_reason` 并前端提示；`paper_answer.vue` 仅改 script 实现工具栏 fixed、滚动↔索引↔吸顶材料面板联动、材料一/资料 2 分层高亮、图片去重；真实 2025 安徽行测 PDF 与浏览器 paper 54/55 验收通过；残余风险：纯图片材料整段丢失且题干无组头文本时规则警告抓不到；targeted 16 passed、quick 门禁 4/4，已提交
 - 2026-10-28：**复合题材料与答题页滚动修复方案落盘（待批准）**：新增 `superpowers/plans/复合题材料与答题页滚动修复方案_v1.md`；实测 2024/2025 申论与 2025 行测 `group_id` 全为 0，`exam` 取题不返回组字段，`auto_generate_paper` 扁平抽题拆组，`paper_answer` 滚动不更新索引；方案按 P0 备份→P1 解析器（含图片材料）→P2 存量修复→P3 API/智能组卷→P4 script-only 滚动+材料注入→P5 导入防丢组→P6 验收，零 raw 模板改动
