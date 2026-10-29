@@ -8,7 +8,7 @@
       </div>
       <h1 class="nav-title">学习论坛</h1>
       <div class="nav-right">
-        <XIcon :icon="Plus" :size="22" color="#1A365D" class="nav-icon" @click="createPost"></XIcon>
+        <button class="nav-fav-btn" @click="openFav('favorites')">⭐ 收藏/喜欢</button>
       </div>
     </header>
 
@@ -79,9 +79,13 @@
                 <XIcon :icon="ChatDotRound" :size="16" color="#8899aa"></XIcon>
                 {{ post.comments }}
               </span>
-              <span class="stat-item">
-                <XIcon :icon="Star" :size="16" color="#8899aa"></XIcon>
+              <span class="stat-item" @click.stop="toggleLike(post)">
+                <span class="heart-ico" :class="{ on: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                 {{ post.likes }}
+              </span>
+              <span class="stat-item" @click.stop="toggleFavorite(post)">
+                <XIcon :icon="Star" :size="16" :color="post.favorited ? '#f59e0b' : '#8899aa'"></XIcon>
+                {{ post.favoriteCount || 0 }}
               </span>
             </div>
             <div class="post-actions">
@@ -106,6 +110,28 @@
     <!-- 底部Tab栏：统一使用单一真源组件 src/components/MobileTabBar.vue -->
     <MobileTabBar active="forum" />
   </div>
+
+  <!-- T5：我的收藏 / 我的喜欢 -->
+  <div v-if="favVisible" class="fav-mask" @click.self="favVisible = false">
+    <div class="fav-sheet">
+      <div class="fav-head">
+        <button :class="['fav-tab', { on: favTab === 'favorites' }]" @click="favTab = 'favorites'; loadFavTab()">我的收藏</button>
+        <button :class="['fav-tab', { on: favTab === 'likes' }]" @click="favTab = 'likes'; loadFavTab()">我的喜欢</button>
+        <span class="fav-close" @click="favVisible = false">✕</span>
+      </div>
+      <div v-if="favLoading" class="fav-empty">加载中…</div>
+      <div v-else-if="!favList.length" class="fav-empty">
+        {{ favTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
+      </div>
+      <div v-else class="fav-list">
+        <div v-for="p in favList" :key="p.id" class="fav-item" @click="goToDetail(p)">
+          <span class="fav-title" :style="{ color: titleColorValue(p.titleColor) }">{{ p.title }}</span>
+          <span class="fav-num">❤ {{ p.likeCount || 0 }} · ★ {{ p.favoriteCount || 0 }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </template>
 
 <script lang="ts">
@@ -129,6 +155,12 @@ import {
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import { avatarInitial } from '@/modules/community/avatar';
+import {
+  toggleForumPostLike,
+  toggleForumFavorite,
+  fetchMyForumFavorites,
+  fetchMyForumLikes
+} from '@/modules/community/api';
 import { titleColorValue } from '@/components/forum/titleColors';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
@@ -210,6 +242,9 @@ export default defineComponent({
             views: p.viewCount || 0,
             comments: p.commentCount || 0,
             likes: p.likeCount || 0,
+            liked: p.liked ?? false,
+            favorited: p.favorited ?? false,
+            favoriteCount: p.favoriteCount || 0,
             category: p.shareType || 'DISCUSSION',
             attachments: Array.isArray(p.attachments) ? p.attachments : [],
             images: (Array.isArray(p.attachments) ? p.attachments : [])
@@ -239,6 +274,42 @@ export default defineComponent({
       await loadPosts(key);
     };
     
+    // T5：收藏/喜欢
+    const favVisible = ref(false);
+    const favTab = ref<'favorites' | 'likes'>('favorites');
+    const favList = ref<any[]>([]);
+    const favLoading = ref(false);
+    const loadFavTab = async () => {
+      favLoading.value = true;
+      try {
+        const res: any = favTab.value === 'favorites'
+          ? await fetchMyForumFavorites(20, 0)
+          : await fetchMyForumLikes(20, 0);
+        favList.value = (res && res.posts) || [];
+      } catch (e) {
+        favList.value = [];
+      } finally {
+        favLoading.value = false;
+      }
+    };
+    const openFav = async (tab: 'favorites' | 'likes') => {
+      favTab.value = tab;
+      favVisible.value = true;
+      await loadFavTab();
+    };
+    const toggleLike = async (post: any) => {
+      try {
+        const r: any = await toggleForumPostLike(post.id);
+        if (r) { post.liked = r.liked; post.likes = r.likeCount; }
+      } catch (e) { /* 静默 */ }
+    };
+    const toggleFavorite = async (post: any) => {
+      try {
+        const r: any = await toggleForumFavorite(post.id);
+        if (r) { post.favorited = r.favorited; post.favoriteCount = r.favoriteCount; }
+      } catch (e) { /* 静默 */ }
+    };
+
     const createPost = () => {
       router.push('/mobile/forum/create');
     };
@@ -256,6 +327,14 @@ export default defineComponent({
       goBack,
       selectTab,
       createPost,
+      favVisible,
+      favTab,
+      favList,
+      favLoading,
+      openFav,
+      loadFavTab,
+      toggleLike,
+      toggleFavorite,
       viewPost,
       onAvatarError,
       ArrowLeft,
@@ -577,4 +656,18 @@ export default defineComponent({
     right: 16px;
   }
 }
+.nav-fav-btn { padding: 6px 12px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #1a2b5f; font-size: 13px; cursor: pointer; }
+.heart-ico { font-size: 15px; color: #8899aa; }
+.heart-ico.on { color: #e5484d; }
+.fav-mask { position: fixed; inset: 0; background: rgba(8,12,24,.45); z-index: 300; display: flex; align-items: flex-end; }
+.fav-sheet { width: 100%; max-height: 70vh; background: #fff; border-radius: 16px 16px 0 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.fav-head { display: flex; align-items: center; gap: 8px; }
+.fav-tab { padding: 8px 14px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #475569; font-size: 13px; }
+.fav-tab.on { background: #fdf2f4; border-color: #f0c4cc; color: #c41e3a; font-weight: 600; }
+.fav-close { margin-left: auto; color: #94a3b8; font-size: 16px; padding: 4px 8px; }
+.fav-list { overflow-y: auto; }
+.fav-item { display: flex; justify-content: space-between; gap: 10px; padding: 12px 4px; border-bottom: 1px solid #f2f4f8; }
+.fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
+.fav-empty { color: #94a3b8; font-size: 13px; padding: 24px 0; text-align: center; }
 </style>
