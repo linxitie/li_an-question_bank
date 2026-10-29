@@ -32,7 +32,6 @@ class SysUser(Base):
     user_type = Column(Enum("student", "teacher", "admin"), nullable=False, comment="用户类型")
     department = Column(String(100), comment="学院/部门")
     class_name = Column(String(100), comment="班级")
-    team_name = Column(String(100), comment="队（四级可见范围：校/院/队/班）")
     school = Column(String(100), default="中国人民警察大学", comment="学校")
     nianji = Column(String(50), comment="年级")
     id_card = Column(String(20), comment="身份证号")
@@ -1096,29 +1095,6 @@ class QuestionImportRecord(Base):
 # ------------------------------
 # 班级模型（新增）
 # ------------------------------
-
-class TeacherScope(Base):
-    """教师管辖范围（四级可见范围 2026-10-26）
-
-    一条记录 = 一个可管辖范围（学院 / 队 / 班任一级）。
-    比给 Banji 加列更耐用：一个教师可持有多条，跨学院/跨队都能表达。
-
-    为什么不用字符串权限表：范围要参与 SQL 过滤与发帖校验，必须是可索引的行。
-    """
-    __tablename__ = "teacher_scope"
-
-    scope_id = Column(Integer, primary_key=True, autoincrement=True, comment="范围ID")
-    teacher_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="教师ID")
-    level = Column(String(16), nullable=False, comment="级别: COLLEGE 学院 | TEAM 队 | CLASS 班")
-    scope_name = Column(String(100), nullable=False, comment="范围名称（学院名/队名/班名）")
-    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
-    status = Column(Integer, default=1, comment="状态 1启用 0停用")
-
-    __table_args__ = (
-        UniqueConstraint("teacher_id", "level", "scope_name", name="uk_teacher_scope"),
-        Index("idx_teacher_scope_teacher", teacher_id),
-    )
-
 
 class Banji(Base):
     """班级表"""
