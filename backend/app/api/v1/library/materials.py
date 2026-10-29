@@ -740,34 +740,67 @@ def _check_card_text(front, back) -> None:
 
 
 def _auto_classify(db, subject, title, front, back):
-    """按 material_classification_rules 的 keyword 规则判定子类；无匹配返回 None。
+    """按 material_classification_rules 判定子类；无匹配返回 None。
 
-    规则来自表（可后台维护）；跨科目规则不参与匹配，避免「逻辑填空」这类
-    行测词把申论卡误分类。
+    匹配策略（v2）：标题优先 + 命中数计分。
+    - 第一轮只比标题：标题里的词最能代表这张卡讲什么；
+    - 第二轮才比「标题+正面+背面」：避免正文里的偶发词（如「辨词义」）把卡带偏；
+    - 同一轮内按命中数排序，命中数相同再比 priority。
     """
     from ....models.models import MaterialClassificationRule  # 局部导入
 
-    text = " ".join(x for x in (title, front, back) if x)
-    if not text:
+    title = title or ""
+    whole = " ".join(x for x in (title, front, back) if x)
+    if not whole.strip():
         return None
+
     rules = (db.query(MaterialClassificationRule)
              .filter(MaterialClassificationRule.enabled == 1,
                      MaterialClassificationRule.rule_type == "keyword")
              .order_by(MaterialClassificationRule.priority.desc()).all())
-    for r in rules:
+    if not rules:
+        return None
+
+    def _cfg(r):
         try:
-            cfg = r.rule_config or {}
-            if isinstance(cfg, str):          # 兼容存字符串的历史数据
-                cfg = _json.loads(cfg)
-            if not isinstance(cfg, dict):
-                continue
+            c = r.rule_config or {}
+            if isinstance(c, str):
+                c = _json.loads(c)
+            return c if isinstance(c, dict) else None
         except Exception:
+            return None
+
+    def _hits(cfg, text):
+        kws = [k for k in (cfg.get("keywords") or []) if k]
+        return sum(1 for k in kws if k in text)
+
+    # 第一轮：只看标题
+    best, best_key = None, (0, 0)
+    for r in rules:
+        cfg = _cfg(r)
+        if not cfg or (cfg.get("subject") and cfg["subject"] != subject):
             continue
-        if cfg.get("subject") and cfg["subject"] != subject:
+        h = _hits(cfg, title)
+        if h <= 0:
             continue
-        if any(k and k in text for k in (cfg.get("keywords") or [])):
-            return cfg.get("category")
-    return None
+        key = (h, r.priority or 0)
+        if key > best_key:
+            best, best_key = cfg.get("category"), key
+
+    # 第二轮：标题未命中时，再看全文
+    if not best:
+        for r in rules:
+            cfg = _cfg(r)
+            if not cfg or (cfg.get("subject") and cfg["subject"] != subject):
+                continue
+            h = _hits(cfg, whole)
+            if h <= 0:
+                continue
+            key = (h, r.priority or 0)
+            if key > best_key:
+                best, best_key = cfg.get("category"), key
+
+    return best
 
 
 @router.get("/admin/list", summary="管理列表(含下架)")

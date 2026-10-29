@@ -70,6 +70,18 @@ class TestAutoClassify:
     def test_no_match_returns_none(self, db):
         assert _auto_classify(db, "xingce", "QWERTYUIOP ASDF", None, None) is None
 
+    def test_title_beats_body_keywords(self, db):
+        # 标题「图形推理」应压过正文里的「辨词义」（言语理解的关键词）
+        got = _auto_classify(db, "xingce", "图形推理-加强削弱专练",
+                             "图形推理要点", "先判语境再辨词义")
+        assert got == "判断推理"
+
+    def test_body_only_still_works(self, db):
+        # 标题无关键词时，仍可由正文命中
+        got = _auto_classify(db, "xingce", "综合练习A",
+                             "增长率与比重的计算", None)
+        assert got == "资料分析"
+
     def test_cross_subject_not_misclassified(self, db):
         # 「逻辑填空」属行测；若声明 subject=shenlun 不应被判成 xingce 的子类
         got = _auto_classify(db, "shenlun", "逻辑填空", None, None)
