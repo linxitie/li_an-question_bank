@@ -541,7 +541,7 @@ export default defineComponent({
   display: grid;
   grid-template-columns: 260px 1fr 280px;
   gap: 20px;
-  padding: 20px;
+  padding: 0 20px 20px;
   overflow: hidden;
 }
 
