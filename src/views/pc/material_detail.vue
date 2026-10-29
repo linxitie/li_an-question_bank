@@ -50,7 +50,16 @@
                   <span class="md-idx-light">{{ index + i + 1 }} / {{ cards.length }}</span>
                 </div>
                 <h3 class="md-card-title">{{ c.title }}</h3>
-                <p class="md-card-text">{{ c.card_front || c.title }}</p>
+                <!-- 题干：浅灰圆角块，超长时块内滚动（不撑破卡片） -->
+                <div class="md-quote">
+                  <p class="md-quote-text">{{ c.card_front || c.title }}</p>
+                </div>
+                <!-- 信息三列：题型（category 优先）/ 难度 / 建议用时 -->
+                <div class="md-meta">
+                  <span class="md-meta-item"><em>题型</em>{{ typeLabel(c) }}</span>
+                  <span class="md-meta-item md-meta-diff"><em>难度</em>{{ difficultyLabel(c.difficulty) }}</span>
+                  <span class="md-meta-item md-meta-time"><em>建议用时</em>{{ timeLabel(c) }}</span>
+                </div>
                 <div class="md-face-foot"><span class="md-hint">点击卡片翻转看要点</span></div>
               </section>
               <section class="md-face back">
@@ -97,11 +106,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { difficultyLabel, timeLabel, typeLabel } from '@/utils/materialCardMeta';
 
 type Card = {
   id: number;
   title: string;
   category?: string | null;
+  badge?: string | null;
+  difficulty?: number | null;
+  read_time?: number | null;
   card_front?: string | null;
   card_back?: string | null;
   subject?: string;
@@ -361,4 +374,50 @@ onMounted(load);
 }
 .md-idx-light { font-size: 12px; color: #ffffff; opacity: 0.92; }
 @media (prefers-reduced-motion: reduce) { .md-cover { transition: none; } }
+
+/* ===== v2：题干灰底块 + 三列信息 ===== */
+.md-quote {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 210px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #f7f9fc;
+  border: 1px solid #eef2f9;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.md-quote-text {
+  margin: 0;
+  font-size: calc(14px * var(--sm-font-scale, 1));
+  line-height: 1.75;
+  color: #3d4d66;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.md-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding-top: 10px;
+  border-top: 1px solid #eef2f9;
+  font-size: 13px;
+  color: #3d4d66;
+}
+.md-meta-item { display: inline-flex; align-items: baseline; gap: 6px; }
+.md-meta-item em { font-style: normal; color: #8493a8; }
+.md-meta-diff { font-weight: 600; color: #12a150; }
+.md-meta-diff em { color: #8493a8; font-weight: 400; }
+.md-meta-time { margin-left: auto; }
+@media (max-width: 1180px) {
+  .md-meta { flex-wrap: wrap; gap: 6px 16px; }
+  .md-meta-time { margin-left: 0; }
+}
+/* 右侧列表当前项：左侧主题竖条，与左栏选中态一致 */
+.md-other.on {
+  padding-left: 7px;
+  border-left: 3px solid var(--brand);
+  border-radius: 4px 10px 10px 4px;
+}
 </style>
