@@ -201,9 +201,9 @@ onMounted(load);
 .md-title { flex: 1; font-size: 18px; font-weight: 700; margin: 0; }
 .md-progress { font-size: 13px; color: #66738a; }
 
-.md-body { display: flex; gap: 20px; padding: 20px 36px; align-items: flex-start; }
-.md-side { width: 240px; background: #fff; border: 1px solid #eef1f6; border-radius: 16px; padding: 18px; }
-.md-side-right { width: 300px; }
+.md-body { display: flex; gap: 16px; padding: 20px 28px; align-items: flex-start; }
+.md-side { flex: 0 0 212px; width: 212px; background: #fff; border: 1px solid #eef1f6; border-radius: 16px; padding: 16px; }
+.md-side-right { flex: 0 0 236px; width: 236px; }
 .md-side-title { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
 .md-fs-title { margin-top: 18px; }
 .md-mods, .md-others { list-style: none; margin: 0; padding: 0; }
@@ -224,8 +224,15 @@ onMounted(load);
 }
 .md-fs button.on { border-color: #3b82f6; color: #3b82f6; }
 
-.md-stage { flex: 1; display: flex; flex-direction: column; align-items: center; }
-.md-stack { position: relative; width: 620px; height: 560px; perspective: 1200px; }
+.md-stage { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.md-stack { position: relative; width: min(600px, 100%); height: 552px; perspective: 1200px; }
+@media (max-width: 1360px) {
+  .md-side-right { flex: 0 0 196px; width: 196px; }
+}
+@media (max-width: 1180px) {
+  .md-side { flex: 0 0 184px; width: 184px; }
+  .md-side-right { flex: 0 0 172px; width: 172px; }
+}
 .md-card {
   position: absolute; inset: 0; border-radius: 18px; background: #fff;
   border: 1px solid #eef1f6; box-shadow: 0 6px 18px rgba(26, 42, 74, 0.1);
