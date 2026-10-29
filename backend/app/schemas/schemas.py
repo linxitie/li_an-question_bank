@@ -391,6 +391,11 @@ class GeneratePaperResponse(BaseModel):
     question_count: int
     total_score: float
     message: str
+    # 题组整组展开后实际题数可能大于配置数，显式回传给前端提示
+    requested_count: int = 0
+    actual_count: int = 0
+    over_quota: bool = False
+    over_quota_reason: str = ""
 
 # ------------------------------
 # 智能组卷相关Schema
@@ -457,6 +462,11 @@ class SmartExamGenerateResponse(BaseModel):
     subject_breakdown: dict = {}
     duration: Optional[int] = None
     message: str = "生成成功"
+    # 题组整组展开后实际题数可能大于配置数，显式回传给前端提示
+    requested_count: int = 0
+    actual_count: int = 0
+    over_quota: bool = False
+    over_quota_reason: str = ""
 
 
 class SmartExamSubmitRequest(BaseModel):

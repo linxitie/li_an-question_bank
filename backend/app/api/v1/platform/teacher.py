@@ -12,6 +12,10 @@ from sqlalchemy import func, and_, or_, desc, case, text as sql_text
 
 from ....core.database import get_db, engine
 from ....services import media_service
+from ....services.paper_group_selector import (
+    select_questions_with_groups,
+    summarize_group_selection,
+)
 from ....core.security import (
     get_current_teacher, get_current_admin, get_password_hash,
     check_permission, Permission
@@ -1222,8 +1226,11 @@ async def auto_generate_paper(
     db.flush()
 
     # 按题型配置抽取题目
+    # 题组感知：命中 group_id>0 的复合题时整组带入，避免资料分析/申论材料题被拆散。
     order = 0
     total_questions = 0
+    requested_questions = sum(int(c) for c in data.question_config.values())
+    selected_ids = set()
     for type_name, count in data.question_config.items():
         # 根据题型名称找到type_id
         type_obj = db.query(QuestionType).filter(
@@ -1232,13 +1239,22 @@ async def auto_generate_paper(
         if not type_obj:
             continue
 
-        questions = db.query(QuestionBank).filter(
+        query = db.query(QuestionBank).filter(
             QuestionBank.subject_id == data.subject_id,
             QuestionBank.type_id == type_obj.type_id,
             QuestionBank.difficulty == data.difficulty,
             QuestionBank.status == 1,
             QuestionBank.audit_status == 1,
-        ).order_by(func.random()).limit(count).all()
+        )
+        if selected_ids:
+            query = query.filter(~QuestionBank.question_id.in_(selected_ids))
+
+        questions, selected_ids = select_questions_with_groups(
+            db=db,
+            query=query,
+            count=count,
+            selected_ids=selected_ids,
+        )
 
         for q in questions:
             order += 1
@@ -1246,20 +1262,33 @@ async def auto_generate_paper(
                 paper_id=paper.paper_id,
                 question_id=q.question_id,
                 question_order=order,
-                question_score=float(data.total_score) / sum(data.question_config.values()) if data.question_config else 5.0,
+                question_score=0,  # 先占位，组卷完成后按实际题数统一均分
             ))
             total_questions += 1
+
+    # 组展开后实际题数可能多于配置数，总分按实际题数均分，避免总分超发
+    per_score = round(float(data.total_score) / total_questions, 2) if total_questions else 5.0
+    for rel in db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper.paper_id
+    ).all():
+        rel.question_score = per_score
 
     paper.question_count = total_questions
     db.commit()
     db.refresh(paper)
 
+    quota = summarize_group_selection(requested_questions, total_questions)
+    message = f"智能组卷完成，共 {total_questions} 道题目"
+    if quota["over_quota"]:
+        message += f"（{quota['over_quota_reason']}，请核对后再发布）"
+
     return {
         "success": True,
-        "message": f"智能组卷完成，共 {total_questions} 道题目",
+        "message": message,
         "paper_id": paper.paper_id,
         "paper_code": paper_code,
         "question_count": total_questions,
+        **quota,
     }
 
 

@@ -314,6 +314,10 @@ export default defineComponent({
         this.state.gp_difficultyMedium = data.difficulty_distribution ? (data.difficulty_distribution.medium || 0) : 0;
         this.state.gp_difficultyHard = data.difficulty_distribution ? (data.difficulty_distribution.hard || 0) : 0;
         this.state.gp_duration = data.duration || 120;
+        // 复合题整组展开会超出配置题数，进入预览前显式提醒
+        if (data.over_quota) {
+          alert(data.message || data.over_quota_reason || '复合题整组展开，实际题数超过配置数，请核对后再发布');
+        }
         this.state.step = 2;
       } catch (err) {
         alert('生成失败: ' + (err.message || '网络错误'));

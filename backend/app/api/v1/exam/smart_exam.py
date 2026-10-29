@@ -42,6 +42,10 @@ from ....models.models import (
 from ....core.trigger_types import TRIGGER_PAPER_COMPLETED
 from ....services.event_consumer import record_user_action
 from ....services.option_utils import is_subjective_question
+from ....services.paper_group_selector import (
+    select_questions_with_groups,
+    summarize_group_selection,
+)
 from ....schemas.schemas import (
     SmartExamGenerateRequest,
     SmartExamGenerateResponse,
@@ -269,11 +273,15 @@ async def smart_generate_paper(
             else:
                 query = query.filter(QuestionBank.difficulty.in_([4, 5]))
 
-            # 随机抽取
-            questions = query.order_by(func.random()).limit(need_count).all()
+            # 随机抽取（题组感知：命中复合题整组展开，材料与子题不拆散）
+            questions, selected_question_ids = select_questions_with_groups(
+                db=db,
+                query=query,
+                count=need_count,
+                selected_ids=selected_question_ids,
+            )
 
             for q in questions:
-                selected_question_ids.add(q.question_id)
                 selected_questions.append({
                     "question": q,
                     "config": config,
@@ -392,6 +400,11 @@ async def smart_generate_paper(
         f"题目数: {len(selected_questions)}, 总分: {total_score_calculated}"
     )
 
+    quota = summarize_group_selection(total_questions, len(selected_questions))
+    message = "智能组卷生成成功"
+    if quota["over_quota"]:
+        message += f"；{quota['over_quota_reason']}，请核对后再发布"
+
     return SmartExamGenerateResponse(
         paper_id=new_paper.paper_id,
         paper_name=paper_name,
@@ -402,7 +415,8 @@ async def smart_generate_paper(
         difficulty_distribution=difficulty_stats,
         subject_breakdown=subject_stats,
         duration=duration,
-        message="智能组卷生成成功",
+        message=message,
+        **quota,
     )
 
 

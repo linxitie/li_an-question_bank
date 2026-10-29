@@ -98,3 +98,89 @@ def test_materials_are_distinct_per_set():
     texts = list(groups.keys())
     assert '城镇居民' in texts[0]
     assert '粮食总产量' in texts[1]
+
+
+# 2026-10-28 实测事故：2025 安徽行测资料三的标记行是
+# “（三） [IMAGE:7900c602_115_0] [IMAGE:7900c602_115_1]”，图片与标记同行。
+# 旧正则只认独占一行的标记 → 资料三漏检 → 资料二区间被撑到 10 题，
+# 触发 [2,6] 保护而整组跳过，结果资料二、资料三都没有材料。
+PAPER_WITH_IMAGE_MATERIAL = """第五部分 资料分析
+
+（二）
+2023年，全国著作权登记总量同比增长显著，其中作品著作权登记量占比最高；
+计算机软件著作权登记量保持两位数增长。
+
+111. 2023年全国著作权登记总量同比增速约为（ ）
+A. 5%
+B. 10%
+C. 15%
+D. 20%
+
+112. 2023年作品著作权登记量占比约为（ ）
+A. 40%
+B. 50%
+C. 60%
+D. 70%
+
+113. 2023年计算机软件著作权登记量同比增速约为（ ）
+A. 5%
+B. 10%
+C. 15%
+D. 20%
+
+114. 下列说法正确的是（ ）
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+
+115. 下列说法错误的是（ ）
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+
+（三） [IMAGE:7900c602_115_0] [IMAGE:7900c602_115_1]
+
+116. 根据资料三，下列说法正确的是（ ）
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+
+117. 根据资料三，下列说法错误的是（ ）
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+
+118. 根据资料三，下列数值最大的是（ ）
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+
+119. 根据资料三，下列数值最小的是（ ）
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+
+120. 根据资料三，可以推出的是（ ）
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+"""
+
+
+def test_image_only_material_marker_does_not_swallow_next_set():
+    """图片材料标记必须被识别，且不能把资料二撑成 10 题。"""
+    blocks = extract_question_blocks_with_material_sets(PAPER_WITH_IMAGE_MATERIAL)
+    groups = _material_groups(blocks)
+    assert sorted(len(v) for v in groups.values()) == [5, 5], groups
+    image_mats = [m for m in groups if '[IMAGE:' in m]
+    assert len(image_mats) == 1
+    assert '7900c602_115_0' in image_mats[0]
+    assert '7900c602_115_1' in image_mats[0]
+    assert all(n and 111 <= n <= 120 for members in groups.values() for n in members)

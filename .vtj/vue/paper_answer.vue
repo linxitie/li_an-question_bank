@@ -274,11 +274,23 @@ export default defineComponent({
         this.state.timeLeft = this.state.totalDuration;
 
         // 转换题目格式
+        // 复合题：同一 group_id 的连续子题共用一份材料，只在每组第一题挂载材料块。
+        // 材料由后端 exam API 随题目返回（group_id/shared_content/shared_content_images），
+        // 前端不再自行拼接，避免与导入时建立的材料-子题关系脱节。
+        var prevGroupId = 0;
         var questions = (data.questions || []).map(function(q) {
           var opts = this.parseOptions(q.options);
           // IMAGE占位替换
           var stem = this.replaceImages(q.question_content || '');
           opts = opts.map(function(o) { return this.replaceImages(o); }.bind(this));
+
+          var gid = parseInt(q.group_id || 0, 10) || 0;
+          var materialHtml = '';
+          if (gid > 0 && gid !== prevGroupId) {
+            materialHtml = this.buildGroupMaterial(q);
+          }
+          // 连续组只挂一次；组被打断时（理论上不应出现）重新挂载，保证材料不缺
+          prevGroupId = gid;
 
           return {
             id: q.question_id,
@@ -289,6 +301,8 @@ export default defineComponent({
             explain: '',  // 考试模式不含答案
             answer: '',   // 考试模式不含答案
             subject_id: q.subject_id,
+            groupId: gid,
+            materialHtml: materialHtml,
           };
         }.bind(this));
 
@@ -296,6 +310,8 @@ export default defineComponent({
 
         // 恢复localStorage进度
         this.restoreProgress();
+        // 等 v-for 渲染完成后，把材料块插到每组首题的题干上方
+        this.$nextTick(this.mountGroupMaterials);
       } catch(e) {
         console.error('[PaperAnswer] 加载题目失败:', e);
       } finally {
@@ -328,10 +344,382 @@ export default defineComponent({
     },
 
     // IMAGE占位替换（复用answer_page逻辑）
+    // 兼容两种 marker：{hash}_{行号} 与 {hash}_{行号}_{序号}。
+    // 旧正则只能匹配两段，三段 marker 会被截成 "115_0.png" 导致裂图。
     replaceImages(text) {
       if (!text) return '';
-      return String(text).replace(/\[?IMAGE:([a-fA-F0-9]+)_(\d+)\]?/gi, function(m, hash, idx) {
-        return '<img src="/static/questions/' + hash + '_' + idx + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
+      return String(text).replace(/\[?IMAGE:([a-fA-F0-9]+_\d+(?:_\d+)?)\]?/gi, function(m, marker) {
+        return '<img src="/static/questions/' + marker + '.png" class="q-img" loading="lazy" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" />';
+      });
+    },
+
+    // 组装题组材料 HTML（仅用于组内首题）
+    buildGroupMaterial(q) {
+      var parts = [];
+      var shared = q.shared_content ? String(q.shared_content) : '';
+      if (shared) parts.push(shared);
+
+      // shared_content_images 是 JSON 数组：可能是 URL，也可能是 [IMAGE:] marker
+      var imgs = q.shared_content_images;
+      if (typeof imgs === 'string' && imgs) {
+        try { imgs = JSON.parse(imgs); } catch (e) { imgs = []; }
+      }
+      if (Array.isArray(imgs)) {
+        imgs.forEach(function(item) {
+          var s = String(item || '').trim();
+          if (!s) return;
+          // 组材料正文里已经渲染过的图片不能再追加一次，否则一图两遍。
+          // 历史数据里 shared_content 与 shared_content_images 同时存在是常态。
+          if (shared && shared.indexOf(s) >= 0) return;
+          if (s.indexOf('<img') === 0) parts.push(s);
+          else if (s.indexOf('[IMAGE:') === 0) parts.push(this.replaceImages(s));
+          else parts.push('<img src="' + s + '" class="q-img" />');
+        }.bind(this));
+      }
+
+      if (!parts.length) return '';
+      // 复用统一渲染入口：白名单清洗 + [IMAGE:] 转 <img> + onerror 兜底
+      return this.renderQuestionContent(parts.join(''), { stripInlineOption: false });
+    },
+
+    // ===== 吸顶材料面板（script-only，遵守 raw 页 template 红线）=====
+    // 目标：滚动到组内任意一题时，本组材料始终固定在顶栏下方，可独立滚动/收起；
+    // 组首题的内联材料块隐藏，避免同一份材料在首题处出现两遍。
+    getTopOffset() {
+      var toolbar = this.$el && this.$el.querySelector ? this.$el.querySelector('.pa-toolbar') : null;
+      var h = (toolbar && toolbar.offsetHeight) || 56;
+      var panel = this._materialPanel;
+      if (panel && panel.style.display !== 'none') {
+        h += panel.offsetHeight || 0;
+      }
+      return h + 8;
+    },
+
+    getCurrentMaterialQuestion() {
+      var qs = this.questionsParsed || [];
+      if (!qs.length) return null;
+      var idx = Math.max(0, Math.min(this.state.currentIndex || 0, qs.length - 1));
+      var cur = qs[idx];
+      var curGid = parseInt((cur && cur.groupId) || 0, 10);
+      // 独立题没有组材料；不能沿用上一组的材料面板。
+      if (curGid <= 0) return null;
+      if (cur.materialHtml) return cur;
+      // 材料只挂在组首题：先在当前题之前、且仍属同一组的连续区间内回溯。
+      for (var i = idx - 1; i >= 0; i--) {
+        var prev = qs[i];
+        if (parseInt((prev && prev.groupId) || 0, 10) !== curGid) break;
+        if (prev.materialHtml) return prev;
+      }
+      // 题组跨页/乱序时再按 groupId 全局兜底，但不跨组。
+      for (var j = 0; j < qs.length; j++) {
+        var q = qs[j];
+        if (parseInt((q && q.groupId) || 0, 10) === curGid && q.materialHtml) return q;
+      }
+      return null;
+    },
+
+    // 材料分层：把「材料一：」「资料2、」等标注渲染成高亮胶囊，
+    // 用块级间距把多则材料分开。只处理文本节点，不碰 img/table。
+    formatMaterialBody(root) {
+      if (!root) return;
+      root.style.whiteSpace = 'pre-wrap';
+      root.style.wordBreak = 'break-word';
+      // 标注可能写作「材料一：」「材料1\n」「给定资料2」，冒号可有可无；
+      // 只认行首，避免把正文中的“资料3份”当成分段标题。
+      var pattern = /(^|\n)[ \t]*((?:材料|给定资料|资料)[ \t]*[0-9一二三四五六七八九十]+)[ \t]*[：:]?/g;
+      var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      var textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+      textNodes.forEach(function(node) {
+        var text = node.nodeValue || '';
+        if (!pattern.test(text)) return;
+        pattern.lastIndex = 0;
+        var frag = document.createDocumentFragment();
+        var last = 0;
+        var m;
+        var first = true;
+        while ((m = pattern.exec(text))) {
+          if (m.index > last) {
+            frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          }
+          var label = document.createElement('span');
+          label.textContent = m[2];
+          // block + fit-content：标注独占一行，材料一则与材料二之间才有真正的垂直间距
+          label.style.cssText = 'display:block;width:fit-content;max-width:100%;margin:' +
+            (first ? '0' : '18px') + ' 0 8px;padding:2px 10px;border-radius:999px;' +
+            'background:#E8F0FB;color:#1A3C6D;font-weight:700;font-size:13px;line-height:1.6;';
+          frag.appendChild(label);
+          last = m.index + m[0].length;
+          first = false;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        node.parentNode.replaceChild(frag, node);
+      });
+      var tables = root.querySelectorAll('table');
+      for (var t = 0; t < tables.length; t++) {
+        tables[t].style.maxWidth = '100%';
+        tables[t].style.borderCollapse = 'collapse';
+      }
+      var images = root.querySelectorAll('img');
+      for (var k = 0; k < images.length; k++) {
+        images[k].style.maxWidth = '100%';
+        images[k].style.height = 'auto';
+      }
+    },
+
+    initMaterialPanel() {
+      if (!this.$el || !document.body || this._materialPanel) return;
+      var toolbar = this.$el.querySelector('.pa-toolbar');
+      var top = (toolbar && toolbar.offsetHeight) || 56;
+
+      var panel = document.createElement('div');
+      panel.className = 'pa-material-dock';
+      panel.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);' +
+        'width:min(960px,100%);z-index:950;background:#fff;border-bottom:1px solid #E5EAF2;' +
+        'box-shadow:0 4px 14px rgba(15,23,42,.08);box-sizing:border-box;display:none;';
+
+      var head = document.createElement('div');
+      head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;' +
+        'gap:12px;padding:8px 16px;background:#F7F9FC;border-bottom:1px solid #EDF1F7;';
+      var title = document.createElement('div');
+      title.textContent = '📄 本组材料';
+      title.style.cssText = 'font-size:14px;font-weight:700;color:#1A3C6D;';
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.textContent = '收起';
+      toggle.style.cssText = 'border:1px solid #D8E0EC;background:#fff;color:#1A3C6D;' +
+        'border-radius:999px;padding:3px 12px;font-size:12px;cursor:pointer;';
+      head.appendChild(title);
+      head.appendChild(toggle);
+
+      var body = document.createElement('div');
+      body.style.cssText = 'padding:12px 16px;max-height:30vh;overflow:auto;' +
+        'overscroll-behavior:contain;line-height:1.8;color:#333;font-size:14px;';
+
+      panel.appendChild(head);
+      panel.appendChild(body);
+      // 挂在页面根节点内，和顶栏处于同一 stacking context，避免被遮罩层压住
+      this.$el.appendChild(panel);
+
+      this._materialPanel = panel;
+      this._materialBody = body;
+      this._materialTitle = title;
+      this._materialToggle = toggle;
+      this._matCollapsed = false;
+      var self = this;
+      toggle.onclick = function() {
+        self._matCollapsed = !self._matCollapsed;
+        self.applyMaterialPanelLayout();
+      };
+      this.applyMaterialPanelLayout();
+    },
+
+    applyMaterialPanelLayout() {
+      var panel = this._materialPanel;
+      if (!panel) return;
+      var toolbar = this.$el && this.$el.querySelector ? this.$el.querySelector('.pa-toolbar') : null;
+      var top = (toolbar && toolbar.offsetHeight) || 56;
+      panel.style.top = top + 'px';
+      if (this._materialBody) {
+        this._materialBody.style.display = this._matCollapsed ? 'none' : 'block';
+      }
+      if (this._materialToggle) {
+        this._materialToggle.textContent = this._matCollapsed ? '展开' : '收起';
+      }
+      var main = this.$el ? this.$el.querySelector('.pa-main') : null;
+      if (main) {
+        var extra = panel.style.display === 'none' ? 0 : (panel.offsetHeight || 0);
+        main.style.paddingTop = (top + extra) + 'px';
+      }
+    },
+
+    syncMaterialPanel() {
+      if (!this._materialPanel) this.initMaterialPanel();
+      var panel = this._materialPanel;
+      if (!panel) return;
+      var q = this.getCurrentMaterialQuestion();
+      if (!q) {
+        panel.style.display = 'none';
+        this.applyMaterialPanelLayout();
+        return;
+      }
+      panel.style.display = 'block';
+      var gid = String(q.groupId || '');
+      if (panel.getAttribute('data-group-id') !== gid) {
+        panel.setAttribute('data-group-id', gid);
+        if (this._materialBody) {
+          this._materialBody.innerHTML = q.materialHtml;
+          this.formatMaterialBody(this._materialBody);
+          this._materialBody.scrollTop = 0;
+        }
+        if (this._materialTitle) {
+          var qs = this.questionsParsed || [];
+          var first = -1, last = -1;
+          for (var i = 0; i < qs.length; i++) {
+            if (String(qs[i].groupId || '') === gid) {
+              if (first < 0) first = i;
+              last = i;
+            }
+          }
+          this._materialTitle.textContent = '📄 本组材料' +
+            (first >= 0 && last > first ? ' · 第 ' + (first + 1) + '–' + (last + 1) + ' 题' : '');
+        }
+      }
+      this.applyMaterialPanelLayout();
+    },
+
+    // 把材料块插入到每组首题的题干之前（不改模板，遵守 raw 页 template 红线）
+    mountGroupMaterials() {
+      if (!this.$el || !this.$el.querySelectorAll) return;
+      var qs = this.questionsParsed;
+      var blocks = this.$el.querySelectorAll('.question-block');
+      if (!blocks.length) return;
+
+      for (var i = 0; i < qs.length && i < blocks.length; i++) {
+        var q = qs[i];
+        var block = blocks[i];
+        var existing = block.querySelector('.pa-group-material');
+        if (!q.materialHtml) {
+          if (existing) existing.parentNode.removeChild(existing);
+          continue;
+        }
+        if (existing && existing.getAttribute('data-group-id') === String(q.groupId)) continue;
+        if (existing) existing.parentNode.removeChild(existing);
+
+        var box = document.createElement('div');
+        box.className = 'pa-group-material';
+        box.setAttribute('data-group-id', String(q.groupId));
+        // 内联样式：避免改动 raw 页的 <style> 与 <template>
+        box.style.cssText = 'margin:0 0 16px;padding:14px 16px;background:#f7f9fc;' +
+          'border-left:3px solid #1A3C6D;border-radius:6px;line-height:1.8;color:#333;' +
+          'word-break:break-word;overflow-x:auto;';
+
+        var label = document.createElement('div');
+        label.textContent = '材料';
+        label.style.cssText = 'font-weight:700;color:#1A3C6D;margin-bottom:8px;font-size:14px;';
+        box.appendChild(label);
+
+        var body = document.createElement('div');
+        body.innerHTML = q.materialHtml;
+        // 表格/图片在窄屏下不撑破卡片
+        var tables = body.querySelectorAll('table');
+        for (var t = 0; t < tables.length; t++) {
+          tables[t].style.maxWidth = '100%';
+          tables[t].style.borderCollapse = 'collapse';
+        }
+        var images = body.querySelectorAll('img');
+        for (var k = 0; k < images.length; k++) {
+          images[k].style.maxWidth = '100%';
+          images[k].style.height = 'auto';
+        }
+        box.appendChild(body);
+
+        var stem = block.querySelector('.q-stem');
+        if (stem) block.insertBefore(box, stem);
+        else block.insertBefore(box, block.firstChild);
+      }
+
+      // 组首内联材料在吸顶面板中出现一次即可，避免同屏重复两遍；
+      // 面板收起时仍可通过固定栏“展开”重新查看。
+      var inlines = this.$el.querySelectorAll('.pa-group-material');
+      for (var m = 0; m < inlines.length; m++) inlines[m].style.display = 'none';
+      this.initMaterialPanel();
+      this.syncMaterialPanel();
+    },
+
+    // 顶栏固定在视口顶部：XMask 内容区常带 overflow:hidden，
+    // 原生 position:sticky 会失效（实测滚动后工具栏消失）。改由脚本设 fixed，
+    // 并给主体补同高 padding，避免第一题被遮住。
+    ensureToolbarFixed() {
+      if (!this.$el || !this.$el.querySelector) return;
+      var toolbar = this.$el.querySelector('.pa-toolbar');
+      if (!toolbar) return;
+      var height = toolbar.offsetHeight || 56;
+      toolbar.style.position = 'fixed';
+      toolbar.style.top = '0';
+      toolbar.style.left = '0';
+      toolbar.style.right = '0';
+      toolbar.style.width = '100%';
+      toolbar.style.zIndex = '1000';
+      toolbar.style.boxSizing = 'border-box';
+      var main = this.$el.querySelector('.pa-main');
+      if (main) main.style.paddingTop = height + 'px';
+      // 吸顶材料面板若已创建，padding 需同时让出面板高度
+      this.applyMaterialPanelLayout();
+    },
+
+    // ===== 滚动联动 =====
+    // 找到题块所在的可滚动祖先（XMask 内容区通常是内部滚动容器，不是 window）
+    getScrollParent(el) {
+      var node = el && el.parentElement;
+      while (node && node !== document.body && node !== document.documentElement) {
+        var style = window.getComputedStyle(node);
+        var oy = style.overflowY;
+        if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+            node.scrollHeight > node.clientHeight + 2) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    },
+
+    // 主动滚动到第 idx 题；顶部留出吸顶工具栏高度
+    scrollToIndex(idx, smooth) {
+      var qs = this.questionsParsed;
+      if (idx < 0 || idx >= qs.length) return;
+      var ref = this.$refs['q_' + qs[idx].id];
+      var el = Array.isArray(ref) ? ref[0] : ref;
+      if (!el || !el.getBoundingClientRect) return;
+
+      this._scrollLockUntil = Date.now() + 900; // 平滑滚动期间忽略 scroll 回写
+      var scroller = this.getScrollParent(el);
+      var offset = this.getTopOffset(); // 工具栏 + 吸顶材料面板高度 + 间距
+      if (scroller) {
+        var top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top +
+          scroller.scrollTop - offset;
+        scroller.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+      } else {
+        var winTop = el.getBoundingClientRect().top + (window.pageYOffset || 0) - offset;
+        window.scrollTo({ top: Math.max(0, winTop), behavior: smooth ? 'smooth' : 'auto' });
+      }
+    },
+
+    // 滚动时反推当前题号：取最后一个已到达顶部阈值（72px 工具栏下方）的题块
+    onScroll() {
+      if (this._scrollRaf) return;
+      var self = this;
+      this._scrollRaf = requestAnimationFrame(function() {
+        self._scrollRaf = null;
+        if (Date.now() < (self._scrollLockUntil || 0)) return;
+        if (!self.$el || !self.$el.querySelectorAll) return;
+        var blocks = self.$el.querySelectorAll('.question-block');
+        if (!blocks.length) return;
+
+        var threshold = self.getTopOffset() + 4;
+        var idx = 0;
+        for (var i = 0; i < blocks.length; i++) {
+          if (blocks[i].getBoundingClientRect().top <= threshold) idx = i;
+          else break;
+        }
+        // 滚到底部时，最后几题可能永远到不了阈值，直接判为最后一题
+        var scroller = self.getScrollParent(blocks[0]);
+        if (scroller && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4) {
+          idx = blocks.length - 1;
+        } else if (!scroller) {
+          var doc = document.documentElement;
+          if ((window.pageYOffset || 0) + window.innerHeight >= doc.scrollHeight - 4) {
+            idx = blocks.length - 1;
+          }
+        }
+
+        if (idx !== self.state.currentIndex) {
+          self._syncingFromScroll = true;
+          self.state.currentIndex = idx;
+          self.$nextTick(function() {
+            setTimeout(function() { self._syncingFromScroll = false; }, 50);
+          });
+        }
       });
     },
 
@@ -430,15 +818,17 @@ export default defineComponent({
 
     // ===== 导航 =====
     jumpTo(idx) {
-      this.state.currentIndex = idx;
       var qs = this.questionsParsed;
-      if (idx >= 0 && idx < qs.length) {
-        this.state.sheetVisible = false;
-        var el = this.$refs['q_' + qs[idx].id];
-        if (el && el[0]) {
-          el[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }
+      if (idx < 0 || idx >= qs.length) return;
+      this.state.sheetVisible = false;
+      // 本方法自己负责滚动，屏蔽 currentIndex watcher 的二次滚动
+      this._suppressScrollWatch = true;
+      this.state.currentIndex = idx;
+      var self = this;
+      this.$nextTick(function() {
+        self.scrollToIndex(idx, true);
+        setTimeout(function() { self._suppressScrollWatch = false; }, 100);
+      });
     },
 
     toggleSheet() {
@@ -536,6 +926,28 @@ export default defineComponent({
   },
 
   mounted() {
+    // 上一题/下一题按钮直接改 state.currentIndex，模板不能改，
+    // 因此用 watcher 把题号变化接到滚动上；滚动反推题号时用 _syncingFromScroll 防回环。
+    var self = this;
+    this._unwatchIndex = this.$watch(
+      function() { return self.state.currentIndex; },
+      function(nv, ov) {
+        if (nv === ov) return;
+        // 题号先变、滚动后到：材料面板必须先跟随题号切换，
+        // 即使是滚动反推的题号也要更新面板，否则组间滚动时材料会滞后一题。
+        self.syncMaterialPanel();
+        if (self._suppressScrollWatch || self._syncingFromScroll) return;
+        self.scrollToIndex(nv, true);
+      }
+    );
+    this._onScroll = this.onScroll.bind(this);
+    // capture=true：滚动事件不冒泡，但捕获阶段能收到内部滚动容器的事件
+    window.addEventListener('scroll', this._onScroll, true);
+
+    this.ensureToolbarFixed();
+    this._onResize = this.ensureToolbarFixed.bind(this);
+    window.addEventListener('resize', this._onResize);
+
     this.loadQuestions();
     this.startTimer();
     this.startAutoSave();
@@ -544,6 +956,23 @@ export default defineComponent({
   beforeUnmount() {
     if (this._timer) { clearInterval(this._timer); this._timer = null; }
     if (this._autoSave) { clearInterval(this._autoSave); this._autoSave = null; }
+    if (this._scrollRaf) { cancelAnimationFrame(this._scrollRaf); this._scrollRaf = null; }
+    if (this._unwatchIndex) { this._unwatchIndex(); this._unwatchIndex = null; }
+    if (this._onScroll) {
+      window.removeEventListener('scroll', this._onScroll, true);
+      this._onScroll = null;
+    }
+    if (this._onResize) {
+      window.removeEventListener('resize', this._onResize);
+      this._onResize = null;
+    }
+    if (this._materialPanel && this._materialPanel.parentNode) {
+      this._materialPanel.parentNode.removeChild(this._materialPanel);
+    }
+    this._materialPanel = null;
+    this._materialBody = null;
+    this._materialTitle = null;
+    this._materialToggle = null;
     this.saveProgress();
   },
 });
