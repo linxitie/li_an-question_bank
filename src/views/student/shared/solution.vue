@@ -50,6 +50,11 @@
             <span class="stat-num">{{ result.total }}</span>
             <span class="stat-label">总计</span>
           </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-num">{{ accuracy }}%</span>
+            <span class="stat-label">正确率</span>
+          </div>
         </div>
         <div class="score-time">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8899aa" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -80,24 +85,24 @@
                 {{ d.is_correct ? '正确' : '错误' }}
               </span>
             </div>
-            <div class="sol-q-content">{{ d.question_content }}</div>
+            <div class="sol-q-content" v-html="renderContent(d.question_content)"></div>
             <div class="sol-q-options" v-if="d.options && d.options.length">
               <span class="sol-opt" v-for="opt in d.options" :key="opt.key"
                 :class="{ 'opt-right': opt.key === d.correct_answer, 'opt-user-wrong': opt.key === d.user_answer && !d.is_correct }">
-                {{ opt.key }}. {{ opt.value }}
+                {{ opt.key }}. <span v-html="renderContent(opt.value)"></span>
               </span>
             </div>
             <div class="sol-q-answers">
               <span class="sol-ans-row">
-                你的答案：<strong :class="d.is_correct ? 'ans-ok' : 'ans-fail'">{{ d.user_answer }}</strong>
+                你的答案：<strong :class="d.is_correct ? 'ans-ok' : 'ans-fail'">{{ d.is_subjective ? (d.user_answer || '未答') : d.user_answer }}</strong>
               </span>
-              <span class="sol-ans-row" v-if="!d.is_correct">
+              <span class="sol-ans-row" v-if="d.correct_answer">
                 正确答案：<strong class="ans-ok">{{ d.correct_answer }}</strong>
               </span>
             </div>
-            <div class="sol-q-analysis" v-if="d.answer_analysis && !d.is_correct">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f5a623" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-              <span>{{ d.answer_analysis }}</span>
+            <div class="sol-q-analysis" v-if="d.answer_analysis">
+              <div class="analysis-title">📖 答案解析</div>
+              <div class="analysis-body" v-html="renderContent(d.answer_analysis)"></div>
             </div>
           </div>
         </div>
@@ -114,6 +119,7 @@
 
 <script>
 import { defineComponent, reactive, computed } from 'vue';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'SolutionPage',
@@ -142,6 +148,12 @@ export default defineComponent({
       } catch(e) {
         return null;
       }
+    },
+    accuracy() {
+      if (!this.result) return 0;
+      var total = (this.result.correct || 0) + (this.result.wrong || 0);
+      if (!total) return 0;
+      return Math.round(((this.result.correct || 0) / total) * 100);
     },
     formattedTime() {
       if (!this.result) return '00:00';
@@ -176,7 +188,11 @@ export default defineComponent({
     },
     backToBank() {
       sessionStorage.setItem('refresh_practice', '1');
-      this.$router.push('/');
+      // 题库页在 VTJ 动态路由 /page/question_bank；'/' 在学生端是首页
+      this.$router.push('/page/question_bank');
+    },
+    renderContent(text) {
+      return renderQuestionContent(text);
     },
     getSolTypeLabel(type) {
       if (!type) return '[单选]';
@@ -348,14 +364,33 @@ export default defineComponent({
 .sol-q-answers { display: flex; gap: 24px; margin-bottom: 8px; font-size: 18px; color: #8899aa; }
 .ans-ok { color: #22c55e; }
 .ans-fail { color: #e8384f; }
+/* 图片统一约束：题干/选项/解析内的题图自适应卡片宽度 */
+.sol-q-content :deep(img),
+.sol-opt :deep(img),
+.analysis-body :deep(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+.analysis-title {
+  font-weight: 700;
+  color: #8b6b3f;
+  margin-bottom: 6px;
+}
+.analysis-body {
+  line-height: 1.75;
+  color: #6b5a44;
+  overflow-x: auto;
+}
 .sol-q-analysis {
-  display: flex;
-  align-items: flex-start;
+  display: block;
   gap: 8px;
   padding: 12px 14px;
   background: rgba(245,166,35,0.05);
   border-radius: 8px;
-  font-size: 18px;
+  font-size: 16px;
   color: #8b7355;
   line-height: 1.6;
 }

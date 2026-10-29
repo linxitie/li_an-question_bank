@@ -155,7 +155,20 @@ export default defineComponent({
     const currentPreviewPaper: any = ref({});
     const previewQuestions: any = ref([]);
 
+    // raw 页模板由设计器维护：这里用脚本接管“题库/返回题库”两个入口，
+    // 修复原先 push('/') 跳到学生端首页、而非题库页的问题。
+    let backGuard: any = null;
     onMounted(async () => {
+      backGuard = function (e: any) {
+        const el = e.target && e.target.closest && e.target.closest('.nav-logo, .btn-back, .nav-tab');
+        if (!el) return;
+        const text = String(el.textContent || '').trim();
+        if (!el.classList.contains('nav-logo') && !el.classList.contains('btn-back') && text !== '题库') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        router.push('/page/question_bank');
+      };
+      document.addEventListener('click', backGuard, true);
       const auth = (window as any).__VTJ_AUTH__;
       if (auth) username.value = auth.getUsername() || '';
       await loadPapers();
@@ -165,6 +178,7 @@ export default defineComponent({
 
     onUnmounted(() => {
       if (unbindRefresh) unbindRefresh();
+      if (backGuard) document.removeEventListener('click', backGuard, true);
     });
 
     async function loadPapers() {

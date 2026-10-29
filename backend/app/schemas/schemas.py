@@ -445,6 +445,8 @@ class QuestionPreviewItem(BaseModel):
     subcategory: Optional[str] = None
     year: Optional[int] = None
     score: float = 0
+    # 复合题题组 ID（0 表示独立题）；前端据此显示题组徽标，避免误拆整组
+    group_id: int = 0
 
     class Config:
         from_attributes = True

@@ -878,7 +878,8 @@ export default defineComponent({
         var res = await window.__VTJ_AUTH__.apiFetch('/api/exams/' + this.state.recordId + '/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answers: submitAnswers }),
+          // 后端 /api/exams/{record_id}/submit 的请求体就是 {题目ID: 答案}，不能再包一层 answers
+          body: JSON.stringify(submitAnswers),
         });
         if (!res.ok) {
           var e = await res.json();

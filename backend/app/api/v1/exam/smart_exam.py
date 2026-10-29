@@ -372,7 +372,7 @@ async def smart_generate_paper(
         is_subjective = is_subjective_question(q, qtype)
 
         # 获取子科目
-        subcat = cfg.get("subcategory") or ""
+        subcat = getattr(cfg, "subcategory", "") or ""
         if not subcat:
             if q.subject_id == 1:
                 subcat = q.xingce_subcategory or ""
@@ -393,6 +393,7 @@ async def smart_generate_paper(
             subcategory=subcat,
             year=q.year,
             score=cfg.score_per_question,
+            group_id=int(q.group_id or 0),
         ))
 
     logger.info(
@@ -449,6 +450,106 @@ async def replace_question(
     ).first()
     if not current_question:
         raise HTTPException(status_code=404, detail="题目不存在")
+
+    # 复合题成员不能单独替换：整组换入另一个完整题组，避免材料与子题被拆散
+    old_gid = int(current_question.group_id or 0)
+    if old_gid > 0:
+        import random
+        old_relations = db.query(PaperQuestionRelation).join(
+            QuestionBank, QuestionBank.question_id == PaperQuestionRelation.question_id
+        ).filter(
+            PaperQuestionRelation.paper_id == paper_id,
+            QuestionBank.group_id == old_gid,
+        ).order_by(PaperQuestionRelation.question_order).all()
+        if not old_relations:
+            raise HTTPException(status_code=404, detail="题目不在试卷中")
+
+        existing_ids = {
+            r[0] for r in db.query(PaperQuestionRelation.question_id).filter(
+                PaperQuestionRelation.paper_id == paper_id
+            ).all()
+        }
+        old_start = min(r.question_order for r in old_relations)
+        old_score = sum(float(r.question_score) for r in old_relations) / max(len(old_relations), 1)
+
+        # 候选题组：同科目同题型、整组成员都可用，且与当前试卷无交集
+        cand_gids = [row[0] for row in db.query(QuestionBank.group_id).filter(
+            QuestionBank.status == 1,
+            QuestionBank.audit_status == 1,
+            QuestionBank.group_id > 0,
+            QuestionBank.group_id != old_gid,
+            QuestionBank.subject_id == current_question.subject_id,
+            QuestionBank.type_id == current_question.type_id,
+        ).distinct().limit(200).all()]
+        candidate_groups = []
+        for gid in cand_gids:
+            members = db.query(QuestionBank).filter(
+                QuestionBank.group_id == gid,
+                QuestionBank.status == 1,
+                QuestionBank.audit_status == 1,
+            ).order_by(QuestionBank.sort_order.asc(), QuestionBank.question_id.asc()).all()
+            if len(members) < 2:
+                continue
+            if any(m.question_id in existing_ids for m in members):
+                continue
+            if any(m.subject_id != current_question.subject_id or m.type_id != current_question.type_id for m in members):
+                continue
+            candidate_groups.append(members)
+        if not candidate_groups:
+            raise HTTPException(
+                status_code=400,
+                detail="没有可替换的完整复合题组；为避免拆散材料与子题，请返回参数页调整题量或科目",
+            )
+        new_members = random.choice(candidate_groups)
+
+        for r in old_relations:
+            db.delete(r)
+        db.flush()
+
+        order = old_start
+        for m in new_members:
+            db.add(PaperQuestionRelation(
+                paper_id=paper_id,
+                question_id=m.question_id,
+                question_order=order,
+                question_score=round(old_score, 2),
+            ))
+            order += 1
+        db.flush()
+
+        # 重新连续编号，避免整组题数变化后出现空洞或重复序号
+        all_relations = db.query(PaperQuestionRelation).filter(
+            PaperQuestionRelation.paper_id == paper_id
+        ).order_by(PaperQuestionRelation.question_order, PaperQuestionRelation.relation_id).all()
+        for idx, r in enumerate(all_relations, 1):
+            r.question_order = idx
+        paper.question_count = len(all_relations)
+        paper.total_score = sum(float(r.question_score) for r in all_relations)
+        db.commit()
+
+        first = new_members[0]
+        qtype = db.query(QuestionType).filter(QuestionType.type_id == first.type_id).first()
+        logger.info(
+            f"用户 {current_user.username} 整组替换: paper={paper_id}, group={old_gid}→{first.group_id}, "
+            f"{len(old_relations)}→{len(new_members)} 题"
+        )
+        return {
+            "message": "复合题已整组替换，材料与子题保持完整",
+            "old_question_id": question_id,
+            "new_question_id": first.question_id,
+            "group_replaced": True,
+            "new_group_id": int(first.group_id or 0),
+            "question_count": len(all_relations),
+            "total_score": float(paper.total_score),
+            "new_question": {
+                "question_id": first.question_id,
+                "question_content": first.question_content[:200] + "..." if first.question_content and len(first.question_content) > 200 else (first.question_content or ""),
+                "difficulty": first.difficulty,
+                "type_name": qtype.type_name if qtype else "",
+                "year": first.year,
+                "group_id": int(first.group_id or 0),
+            },
+        }
 
     # 获取试卷已有题目ID
     existing_relations = db.query(PaperQuestionRelation).filter(
@@ -529,6 +630,7 @@ async def replace_question(
             "difficulty": new_question.difficulty,
             "type_name": qtype.type_name if qtype else "",
             "year": new_question.year,
+            "group_id": int(new_question.group_id or 0),
         }
     }
 
@@ -588,6 +690,7 @@ async def preview_paper(
             "answer_analysis": q.answer_analysis if show_answer else None,
             "score": float(r.question_score),
             "year": q.year,
+            "group_id": int(q.group_id or 0),
         })
 
     return {

@@ -6,7 +6,7 @@
 - 开始考试返回 ORM 对象，但 `ExamRecordResponse` 用 Pydantic v1 的 `orm_mode`，
   v2 下等于没有 `from_attributes`，序列化即 500。
 """
-from app.models.models import ExamPaper, PaperQuestionRelation, QuestionBank
+from app.models.models import ExamPaper, ExamRecord, PaperQuestionRelation, QuestionBank
 
 
 def _make_published_paper(db_session, subject_id, type_id, creator_id, count=2):
@@ -115,3 +115,48 @@ def test_submit_answers_scores_objective_questions(client, db_session, test_subj
     assert data["record_id"] == record_id
     assert data["total_score"] == 10.0  # 第 1 题答对，第 2 题答错
     assert data["scored_count"] == 2
+
+def test_start_exam_resumes_unfinished_record(client, db_session, test_subject,
+                                              test_question_type, auth_headers,
+                                              test_user):
+    """未完成的考试再次进入应复用同一记录，不重复 INSERT。"""
+    paper, _ = _make_published_paper(
+        db_session, test_subject.subject_id, test_question_type.type_id,
+        test_user.user_id
+    )
+
+    first = client.post(f"/api/exams/{paper.paper_id}/start", headers=auth_headers)
+    second = client.post(f"/api/exams/{paper.paper_id}/start", headers=auth_headers)
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert second.json()["record_id"] == first.json()["record_id"]
+
+
+def test_start_exam_allows_retake_after_submit(client, db_session, test_subject,
+                                               test_question_type, auth_headers,
+                                               test_user):
+    """交卷后重考应创建新记录（历史库 uk_paper_user 已由迁移移除）。"""
+    paper, question_ids = _make_published_paper(
+        db_session, test_subject.subject_id, test_question_type.type_id,
+        test_user.user_id
+    )
+    first = client.post(f"/api/exams/{paper.paper_id}/start", headers=auth_headers)
+    assert first.status_code == 200, first.text
+    first_id = first.json()["record_id"]
+
+    submit = client.post(
+        f"/api/exams/{first_id}/submit",
+        headers=auth_headers,
+        json={str(question_ids[0]): "A"},
+    )
+    assert submit.status_code == 200, submit.text
+
+    second = client.post(f"/api/exams/{paper.paper_id}/start", headers=auth_headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["record_id"] != first_id
+
+    record = db_session.query(ExamRecord).filter(
+        ExamRecord.record_id == second.json()["record_id"]
+    ).one()
+    assert record.attempt_count == 2

@@ -296,13 +296,14 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted, computed } from 'vue';
+import { defineComponent, ref, onMounted, computed, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import TeacherNavHeader from './TeacherNavHeader.vue';
 import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { mountMaterialDock, removeMaterialDock } from '@/utils/materialDock';
 
 export default defineComponent({
   name: 'TeacherQuestions',
@@ -635,6 +636,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
     function showDetail(q: any) {
       currentQuestion.value = q;
       showDetailModal.value = true;
+      removeMaterialDock(document.querySelector('.detail-modal'), 'tq-material-dock');
       // B4: 复合题小题 → 拉取题组聚合（共享材料+同组成员）
       groupInfo.value = null;
       if (q.group_id) {
@@ -646,6 +648,16 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
               groupInfo.value = data.group;
               // members 的 requirements 前置拼进 question_content（见 withRequirements）
               currentQuestion.value = { ...q, group_members: (data.members || []).map(withRequirements) };
+              // 材料吸顶：教师查看长材料/多小题时始终可见；脚本挂载，避免改 raw 模板
+              nextTick(function () {
+                var host = document.querySelector('.detail-modal');
+                if (!host || !data.group.shared_content) return;
+                mountMaterialDock(host, {
+                  html: cleanHtmlContent(data.group.shared_content),
+                  title: '📄 本组材料 · 第 ' + (q.question_number || '') + ' 题',
+                  dockClass: 'tq-material-dock'
+                });
+              });
             }
           })
           .catch((e: any) => console.error('题组详情加载失败:', e));

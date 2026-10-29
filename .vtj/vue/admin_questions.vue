@@ -287,10 +287,11 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted } from 'vue';
+import { defineComponent, ref, onMounted, nextTick } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { mountMaterialDock, removeMaterialDock } from '@/utils/materialDock';
 
 export default defineComponent({
   name: 'AdminQuestions',
@@ -525,6 +526,7 @@ export default defineComponent({
     function previewQuestion(q: any) {
       previewData.value = { ...q };
       groupInfo.value = null;
+      removeMaterialDock(document.querySelector('.modal-xlarge'), 'aq-material-dock');
       showPreviewModal.value = true;
       // P1-2: 复合题小题 → 拉取题组聚合（共享材料）
       if (q.group_id) {
@@ -534,6 +536,16 @@ export default defineComponent({
             if (d && d.group) {
               groupInfo.value = d.group;
               previewData.value.group_members = (d.members || []).map(withRequirements);
+              // 材料吸顶：管理端预览长材料时保持可见；脚本挂载，避免改 raw 模板
+              nextTick(function () {
+                var host = document.querySelector('.modal-xlarge');
+                if (!host || !d.group.shared_content) return;
+                mountMaterialDock(host, {
+                  html: cleanHtmlContent(d.group.shared_content),
+                  title: q.question_number ? ('📄 本组材料 · 第 ' + q.question_number + ' 题') : '📄 本组材料',
+                  dockClass: 'aq-material-dock'
+                });
+              });
             }
           })
           .catch(function() { /* 静默：材料加载失败不影响预览 */ });

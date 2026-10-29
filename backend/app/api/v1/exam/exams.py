@@ -256,16 +256,28 @@ async def start_exam(
     if paper.end_time and now > paper.end_time:
         raise HTTPException(status_code=400, detail="考试已结束")
 
+    # 未完成记录直接复用：刷新/重新进入时继续原考试，避免一次答题产生多条记录
+    # （exam_record 历史库仍有 uk_paper_user 唯一约束时，重复 INSERT 会 500）
+    in_progress = db.query(ExamRecord).filter(
+        ExamRecord.paper_id == paper_id,
+        ExamRecord.user_id == current_user.user_id,
+        ExamRecord.is_completed == 0,
+    ).order_by(ExamRecord.record_id.desc()).first()
+    if in_progress:
+        return in_progress
+
     # 检查答题次数
     attempt_count = db.query(ExamRecord).filter(
         ExamRecord.paper_id == paper_id,
         ExamRecord.user_id == current_user.user_id
     ).count()
 
-    if attempt_count >= paper.max_attempts:
+    # max_attempts 为 NULL 时视为不限次数，避免教师手工建的试卷无法开始
+    max_attempts = paper.max_attempts
+    if max_attempts is not None and attempt_count >= max_attempts:
         raise HTTPException(
             status_code=400,
-            detail=f"已达到最大答题次数({paper.max_attempts}次)"
+            detail=f"已达到最大答题次数({max_attempts}次)"
         )
 
     # 创建考试记录
