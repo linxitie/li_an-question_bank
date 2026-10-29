@@ -194,17 +194,37 @@ def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False) -
         mat = _LOCAL_MATERIAL_RE.findall(qb_text)
 
         # 分节 → 题号区间（安全网的核心断言对象）
-        def intervals(text, secs):
+        #
+        # 判据修正（2026-10-30）：原实现用裸正则 ^\s*(\d{1,3})\s*[.．、] 取题号，
+        # 解析文本里 "0.5倍""10.5%""352.…" 落在行首时会被误判为题号，把该节
+        # min/max 拉偏（85 套仅 4 套区间全等；脚本自身统计的「伪题号」即此来源）。
+        # 现改为：
+        #   1) 上界取**题目块题号**的最大值（生产解析器结果），超出即视为伪题号；
+        #   2) 排除 0；排除 "10.5" 这类小数（句点后紧跟数字）；
+        #   3) 句点与顿号分别匹配，避免把 "106、" 当小数。
+        def intervals(text, secs, blocks, anchors=None):
+            block_nums = qnums_of(blocks)
+            hi = max(block_nums) if block_nums else 0
             out = []
             for name, s, e in secs:
                 seg = text[s:e]
-                nums = [int(m.group(1)) for m in
-                        re.finditer(r"(?m)^\s*(\d{1,3})\s*[.．、]", seg)]
+                nums = []
+                # 1. 顿号/全角点结尾："1、" "1．"
+                nums += [int(m.group(1)) for m in
+                         re.finditer(r"(?m)^\s*(\d{1,3})\s*[．、]", seg)]
+                # 2. ASCII 句点结尾，且后面不接数字（排除 "10.5"）
+                nums += [int(m.group(1)) for m in
+                         re.finditer(r"(?m)^\s*(\d{1,3})\.(?!\d)", seg)]
+                nums = [n for n in nums if n > 0 and (hi == 0 or n <= hi)]
+                if anchors is not None:
+                    # 解析侧：只认有【答案】锚点的编号，挡掉图形/小标题编号（2. 6. …）
+                    nums = [n for n in nums if n in anchors]
                 out.append((name, min(nums) if nums else None,
                             max(nums) if nums else None, len(nums)))
             return out
 
-        qi, ai = intervals(qb_text, qsec), intervals(an_text, asec)
+        qi = intervals(qb_text, qsec, qb_blocks)
+        ai = intervals(an_text, asec, an_blocks, an_anchor)
         seq_ok = [x[0] for x in qi] == [x[0] for x in ai]
         rng_ok = [(x[0], x[1], x[2]) for x in qi] == [(x[0], x[1], x[2]) for x in ai]
 
