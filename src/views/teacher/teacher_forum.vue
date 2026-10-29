@@ -13,6 +13,9 @@
 
       <section class="tf-filters">
         <input v-model="keyword" placeholder="搜索标题/内容" @keyup.enter="loadPosts" />
+        <input v-model="dateFrom" type="date" class="tf-date" title="开始日期" />
+        <span class="tf-tilde">~</span>
+        <input v-model="dateTo" type="date" class="tf-date" title="结束日期" />
         <select v-model="className">
           <option value="">全部班级</option>
           <option v-for="name in classOptions" :key="name" :value="name">{{ name }}</option>
@@ -227,6 +230,8 @@ const detail = ref<ModerationPost | null>(null);
 const loading = ref(false);
 const keyword = ref('');
 const className = ref('');
+const dateFrom = ref('');
+const dateTo = ref('');
 const classOptions = ref<string[]>([]);
 const teacherClasses = ref<string[]>([]);
 const canModerate = ref(true);
@@ -355,6 +360,8 @@ const loadPosts = async () => {
     const data = await teacherForumApi.posts({
       keyword: keyword.value || undefined,
       class_name: className.value || undefined,
+      dateFrom: dateFrom.value || undefined,
+      dateTo: dateTo.value || undefined,
       limit: 50
     });
     posts.value = data.items;
@@ -540,6 +547,8 @@ onMounted(loadPosts);
   border-radius:8px; background:#fff; color:#6b7280; font-size:13px; cursor:pointer; }
 .tf-ico:hover { background:#f7f9fc; }
 .tf-ico.on { color:#c41e3a; border-color:#f0c4cc; background:#fff5f7; }
+.tf-date { height: 40px; padding: 0 10px; border: 1px solid #e3e8ef; border-radius: 10px; font-size: 13px; color: #475569; }
+.tf-tilde { color: #94a3b8; }
 </style>
 
 

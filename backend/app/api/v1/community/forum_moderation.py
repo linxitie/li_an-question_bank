@@ -4,7 +4,7 @@
 - 管理员：删除任意角色内容、复核教师删除、回收站恢复/彻底删除。
 所有动作软删除 + 审计。
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -134,6 +134,8 @@ async def teacher_posts(
     keyword: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     class_name: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD（含当天）"),
+    date_to: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD（含当天）"),
     limit: int = Query(20, ge=1, le=50),
     offset: int = Query(0, ge=0),
     current_user: SysUser = Depends(require_teacher_or_admin),
@@ -155,6 +157,19 @@ async def teacher_posts(
             .all()
         ]
         query = query.filter(ForumPost.user_id.in_(user_ids or [-1]))
+
+    # P3：日期区间（两端含当天，与 /api/forum/posts 口径一致）
+    if date_from:
+        try:
+            query = query.filter(ForumPost.create_time >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            raise ValidationError("date_from 格式应为 YYYY-MM-DD")
+    if date_to:
+        try:
+            _end = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            raise ValidationError("date_to 格式应为 YYYY-MM-DD")
+        query = query.filter(ForumPost.create_time < _end)
 
     total = query.count()
     rows = (
