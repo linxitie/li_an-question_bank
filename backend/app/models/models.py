@@ -1838,12 +1838,31 @@ class UserAchievement(Base):
     obtained_at = Column(DateTime, default=datetime.now, comment="获得时间")
     tier = Column(Integer, default=1, comment="徽章档位: 1铜/2银/3金/4铂金/5钻石")
     tier_snapshot = Column(Integer, comment="获得时的档位索引 0-4（与 badge_service.TIERS 对齐）")
+    snapshot_estimated = Column(Integer, default=0,
+                                comment="1=档位快照为回填估算（2026-10-30 前获得的历史数据）")
 
     user = relationship("SysUser")
 
     __table_args__ = (
         UniqueConstraint("user_id", "achievement_id", name="uk_user_achievement"),
         Index("idx_user_achievement_user", user_id),
+    )
+
+
+class UserBadgeTop(Base):
+    """用户手动精选徽章（个人主页墙优先展示，最多 6 枚）"""
+    __tablename__ = "user_badge_top"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    badge_kind = Column(String(16), nullable=False, comment="achievement / title")
+    badge_id = Column(Integer, nullable=False, comment="成就ID或称号ID")
+    sort = Column(Integer, default=0, comment="展示顺序，越小越靠前")
+    created_at = Column(DateTime, default=datetime.now, comment="设置时间")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "badge_kind", "badge_id", name="uk_user_badge_top"),
+        Index("idx_user_badge_top", user_id, sort),
     )
 
 

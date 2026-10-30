@@ -8,17 +8,30 @@
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
-from ....models.models import SysUser
+from ....models.models import SysUser, UserBadgeTop
 from ..growth import contract as growth_contract
 from ....services import badge_service
 from ....core.security import get_current_user
 
 router = APIRouter(prefix="/api/badges", tags=["badges"])
+
+TOP_MAX = 6
+
+
+def _top_rows(db: Session, user_id: int):
+    return (db.query(UserBadgeTop)
+            .filter(UserBadgeTop.user_id == user_id)
+            .order_by(UserBadgeTop.sort, UserBadgeTop.id).all())
+
+
+def _top_keys(db: Session, user_id: int):
+    """已精选的 (kind, id) 列表，按 sort 顺序。"""
+    return [(r.badge_kind, r.badge_id) for r in _top_rows(db, user_id)]
 
 
 def _achievement_item(a) -> dict:
@@ -76,6 +89,8 @@ async def badge_summary(
         "progress": progress,
         "owned": owned,
         "total": total,
+        # T5：金币购只读入口用（不改造商城，只展示余额与跳转）
+        "coins": int(current_user.total_coins or 0),
         "tiers": [{"code": c, "label": l, "threshold": lo}
                   for (lo, c, l) in badge_service.TIERS],
     }
@@ -116,6 +131,9 @@ async def my_badges(
                 "badge_tier": it.get("badge_tier") or "青铜",
                 "snapshot_tier": badge_service.tier_label_by_index(
                     getattr(rec, "tier_snapshot", None)) if rec else None,
+                # T4：历史回填的快照标「估算」，避免与真实记录混淆
+                "snapshot_estimated": bool(
+                    rec is not None and getattr(rec, "snapshot_estimated", 0)),
                 # 稀有度只做文字：全服多少人拿到（相对量，随时间变，不参与颜色）
                 "rarity_text": (f"全服 {round(cnt / total_users * 100, 1)}% 获得"
                                 if total_users else ""),
@@ -169,42 +187,122 @@ async def badge_wall(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """返回最近获得的 N 枚徽章（默认 6），供个人主页展示。
+    """返回主页墙展示的 N 枚徽章（默认 6）。
 
-    只返回已获得徽章；未获得不占位（避免空槽观感）。
+    T2 起排序规则：**手动精选优先**（按 sort）→ 不足部分用最近获得补齐。
+    只返回已获得徽章；未获得不占位。
     """
     score = badge_service.total_score(db, current_user.user_id)
     tier = badge_service.tier_of(score)
 
-    rows = growth_contract.list_user_achievements(db, current_user.user_id)[: limit * 3]
+    rows = growth_contract.list_user_achievements(db, current_user.user_id)
     if not rows:
-        return {"items": [], "score": score, "tier": tier}
+        return {"items": [], "score": score, "tier": tier, "top": []}
 
-    ids = [r.achievement_id for r in rows]
-    achs = {a.achievement_id: a for a in growth_contract.list_achievements(db)
-            if a.achievement_id in ids}
-
-    counts = growth_contract.achievement_owner_counts(db, ids)
+    rec_map = {r.achievement_id: r for r in rows}
+    achs = {a.achievement_id: a for a in growth_contract.list_achievements(db)}
+    counts = growth_contract.achievement_owner_counts(db)
     total_users = growth_contract.total_users(db)
 
-    items = []
-    for rec in rows:
-        a = achs.get(rec.achievement_id)
-        if not a:
-            continue
-        it = _achievement_item(a)
+    def _item(a, rec, pinned: bool):
         cnt = int(counts.get(a.achievement_id, 0))
+        it = _achievement_item(a)
         it.update({
             "owned": True,
             "obtained_at": rec.obtained_at.isoformat() if rec.obtained_at else None,
+            "badge_tier": it.get("badge_tier") or "青铜",
             "snapshot_tier": badge_service.tier_label_by_index(
                 getattr(rec, "tier_snapshot", None)),
-            "current_tier": tier["label"],
+            "snapshot_estimated": bool(getattr(rec, "snapshot_estimated", 0)),
+            "rarity_text": (f"全服 {round(cnt / total_users * 100, 1)}% 获得"
+                            if total_users else ""),
             "owned_count": cnt,
             "owned_percent": round(cnt / total_users * 100, 1) if total_users else 0.0,
+            "pinned": pinned,
         })
-        items.append(it)
+        return it
+
+    items, used = [], set()
+    # 1) 精选优先
+    for kind, bid in _top_keys(db, current_user.user_id):
+        if kind != "achievement" or bid not in rec_map or bid in used:
+            continue
+        a = achs.get(bid)
+        if not a:
+            continue
+        items.append(_item(a, rec_map[bid], True))
+        used.add(bid)
         if len(items) >= limit:
             break
+    # 2) 最近获得补齐
+    if len(items) < limit:
+        rest = sorted((r for r in rows if r.achievement_id not in used),
+                      key=lambda r: r.obtained_at or 0, reverse=True)
+        for rec in rest:
+            a = achs.get(rec.achievement_id)
+            if not a:
+                continue
+            items.append(_item(a, rec, False))
+            if len(items) >= limit:
+                break
 
-    return {"items": items, "score": score, "tier": tier}
+    return {"items": items, "score": score, "tier": tier,
+            "top": [bid for k, bid in _top_keys(db, current_user.user_id)
+                    if k == "achievement"]}
+
+
+@router.get("/top", summary="我的精选徽章（主页墙顺序）")
+async def get_top(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = _top_rows(db, current_user.user_id)
+    return {"max": TOP_MAX,
+            "items": [{"kind": r.badge_kind, "id": r.badge_id, "sort": r.sort}
+                      for r in rows]}
+
+
+@router.put("/top", summary="设置精选徽章（≤6 枚，需已获得）")
+async def set_top(
+    body: dict = Body(...),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """整体替换精选列表；顺序即展示顺序。
+
+    - 只接受 achievement 类型（称号暂不参与墙展示）
+    - 必须已获得，否则 400
+    - 超过 6 枚 → 400
+    """
+    raw = body.get("items") or []
+    if not isinstance(raw, list):
+        raise HTTPException(400, "items 必须是数组")
+    if len(raw) > TOP_MAX:
+        raise HTTPException(400, f"最多精选 {TOP_MAX} 枚")
+    obtained = {r.achievement_id
+                for r in growth_contract.list_user_achievements(db, current_user.user_id)}
+    cleaned, seen = [], set()
+    for idx, it in enumerate(raw):
+        kind = (it or {}).get("kind") or "achievement"
+        try:
+            bid = int((it or {}).get("id"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "每一项需要整数 id")
+        if kind != "achievement":
+            raise HTTPException(400, "目前仅支持精选成就徽章")
+        if bid not in obtained:
+            raise HTTPException(400, f"徽章 {bid} 尚未获得，不能精选")
+        if bid in seen:
+            continue
+        seen.add(bid)
+        cleaned.append((kind, bid, idx))
+
+    with db.begin_nested():
+        db.query(UserBadgeTop).filter(
+            UserBadgeTop.user_id == current_user.user_id).delete(synchronize_session=False)
+        for kind, bid, idx in cleaned:
+            db.add(UserBadgeTop(user_id=current_user.user_id, badge_kind=kind,
+                                badge_id=bid, sort=idx))
+    db.commit()
+    return {"ok": True, "count": len(cleaned),
+            "items": [{"kind": k, "id": b, "sort": s} for k, b, s in cleaned]}
