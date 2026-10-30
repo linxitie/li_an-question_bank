@@ -153,32 +153,9 @@ backend/_badge_write_test.txt
 docs/README.md
 solve_problems_files/
 
-# ================= 2026-10-30 用户指令：以下内容一律不入库 =================
-# 1) 数据库文件（体积大，会导致仓库膨胀）
+# ===== 2026-10-30：数据库与日志不入库（体积大）=====
 *.sqlite-wal
 *.sqlite-shm
 backend/data/*.sqlite*
 backend/data/*.db*
 
-# 2) 测试/门禁日志与临时产物
-
-# 3) 工具、IDE 与运行时目录
-.agent/
-.agents/
-.claude/
-.dsh/
-.sisyphus/
-.vscode/
-
-# 4) 根目录标记文件（用户指定不入库）
-校徽.png
-整体系统使用和结构说明.md
-AGENTS.md
-docker-compose.yml
-start_system.bat
-.mcp.json
-.npmrc
-.pre-commit-config.yaml
-.prettierrc
-.typecheck-baseline.json
-# ================= 指令结束 =================

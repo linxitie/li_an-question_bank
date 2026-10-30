@@ -1,0 +1,107 @@
+# 学生端容器化编排 —— nginx / backend / parser
+#
+# 红线（R7）：app/static 是 4.27 GB / 94814 个文件的题图库，
+#             绝不进镜像，由 qimg 卷在运行时挂载到 /app/app/static。
+# 红线（R10）：SQLite 处于 WAL 模式，db_data 卷需持久化；
+#             备份/恢复走 sqlite3.backup()，见 backend/scripts/{backup,restore}_db.py。
+#
+# 启动：docker compose --env-file deploy/.env.development up -d
+# 校验：docker compose config
+#
+# 说明：本机未安装 docker，本文件仅做过 YAML 结构校验与配置自洽性检查，
+#       尚未执行过 docker compose config / up。
+
+name: liankao
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: liankao/backend:${TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ./deploy/.env.${DEPLOY_ENV:-development}
+    environment:
+      # 容器内服务名解析。sidecar 优先；未启用 parser 时留空即回落本地子进程。
+      PARSER_URL: ${PARSER_URL:-}
+      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    volumes:
+      # SQLite 主库 + 门禁基线 + 归档。WAL 的 -wal/-shm 也在此卷内，
+      # 故该卷必须持久化，绝不可用 tmpfs。
+      - db_data:/app/data
+      - uploads:/app/uploads
+      # R7：题图卷。见 .dockerignore —— app/static 已被排除出构建上下文。
+      - qimg:/app/app/static
+    ports:
+      # 默认不对宿主暴露，仅供 nginx 内网访问。
+      # 需要直连调试时取消注释。
+      # - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      parser:
+        condition: service_started
+    healthcheck:
+      # 复用 main.py:608 既有 /health，不另造端点
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks: [liankao]
+
+  parser:
+    build:
+      context: ./backend/parser
+      dockerfile: Dockerfile
+    image: liankao/parser:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-modelscope}
+      MINERU_BACKEND: ${MINERU_BACKEND:-pipeline}
+      MINERU_TIMEOUT: ${MINERU_TIMEOUT:-600}
+      # MinerU 首次运行会下载数 GB 权重。挂缓存卷，重建镜像无需重新下载。
+      HF_HOME: /root/.cache
+      MODELSCOPE_CACHE: /root/.cache
+    volumes:
+      - parser_cache:/root/.cache
+    ports:
+      - "127.0.0.1:${PARSER_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # 首启需拉模型权重，给足预热窗口
+      start_period: 180s
+    networks: [liankao]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # 前端产物。仓库根的 dist/ 由前端构建生成，不入任何镜像。
+      - ./dist:/usr/share/nginx/html:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [liankao]
+
+volumes:
+  db_data:
+  uploads:
+  qimg:
+  parser_cache:
+
+networks:
+  liankao:
+    driver: bridge
