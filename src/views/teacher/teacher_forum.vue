@@ -80,25 +80,29 @@
           <h3>评论（{{ comments.length }}）</h3>
           <p v-if="!comments.length" class="tf-empty">暂无评论</p>
           <div v-for="c in comments" :key="c.id" class="tf-comment">
-            <UserBadge
-              size="sm"
-              :src="c.user?.avatar"
-              :name="c.user?.nickname"
-              :user-id="c.user?.id"
-              :user-type="c.user?.userType || 'student'" />
-            <span class="tf-meta">{{ c.user?.className || '未分班' }}</span>
-            <p><ForumContent :content="c.content" /></p>
-            <AttachmentList
-              v-if="c.attachments && c.attachments.length"
-              :attachments="c.attachments"
-              mode="comment" />
-            <button
-              v-if="c.canDelete && c.status === 1"
-              class="tf-danger small"
-              @click="askHideComment(c)"
-            >
-              隐藏评论
-            </button>
+            <div class="tf-comment-head">
+              <UserBadge
+                size="sm"
+                :src="c.user?.avatar"
+                :name="c.user?.nickname"
+                :user-id="c.user?.id"
+                :user-type="c.user?.userType || 'student'" />
+              <span class="tf-meta">{{ c.user?.className || '未分班' }}</span>
+              <button
+                v-if="c.canDelete && c.status === 1"
+                class="tf-danger small tf-comment-hide"
+                @click.stop="askHideComment(c)"
+              >
+                隐藏评论
+              </button>
+            </div>
+            <div class="tf-comment-body">
+              <p><ForumContent :content="c.content" /></p>
+              <AttachmentList
+                v-if="c.attachments && c.attachments.length"
+                :attachments="c.attachments"
+                mode="comment" />
+            </div>
           </div>
 
           </div>
@@ -615,6 +619,13 @@ onMounted(loadPosts);
 /* 单个五角星入口，避免窄屏换行 */
 .tf-star-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+/* 评论：头部一行 + 正文独立；隐藏按钮靠右，附件 chip 统一换行 */
+.tf-comment-head { display: flex; align-items: center; gap: 8px; }
+.tf-comment-head .tf-meta { color: #8a94ad; font-size: 12px; }
+.tf-comment-hide { margin-left: auto; }
+.tf-comment-body { padding-left: 44px; display: flex; flex-direction: column; gap: 6px; }
+.tf-comment-body :deep(img) { max-width: 220px; border-radius: 10px; }
+.tf-comment { display: block; }
 </style>
 
 
