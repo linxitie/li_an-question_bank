@@ -32,9 +32,9 @@ const VTJ_LOCKED_VERSIONS = {
   '@vtj/cli': '0.12.19',
 };
 
-// 97 = 92（原基线）+ 5（徽章体系新增：
-//   /materials/detail、/admin/material-rules、/badges、/badge-preview、/badges-demo）
-const EXPECTED_DYNAMIC_IMPORTS = 97;
+// 98 = 92（原基线）+ 5（徽章体系：/materials/detail、/admin/material-rules、/badges、
+//   /badge-preview、/badges-demo）+ 1（P3 内容验收预览 /materials-preview）
+const EXPECTED_DYNAMIC_IMPORTS = 98;
 
 const violations = [];
 
