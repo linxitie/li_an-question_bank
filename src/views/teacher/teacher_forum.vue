@@ -3,6 +3,7 @@
     <div class="tf-nav-sticky"><TeacherNavHeader active-nav="forum" /></div>
     <main class="tf-main">
       <div class="tf-left">
+      <div class="tf-topbar">
       <header class="tf-head">
         <div class="tf-head-row">
           <h1>论坛管理</h1>
@@ -25,6 +26,7 @@
         </select>
         <button class="tf-btn" @click="loadPosts">查询</button>
       </section>
+      </div>
 
       <p v-if="!canModerate" class="tf-warn">
         当前账号未绑定班级，暂不能隐藏本班学生内容。请先在「班级管理」中创建/绑定班级，并让学生填写班级。
@@ -500,9 +502,9 @@ onMounted(loadPosts);
 .tf-head h1 { margin: 0 0 6px; color: #1a2b5f; }
 .tf-sub { margin: 0 0 16px; color: #6b7896; font-size: 13px; }
 /* 三层吸顶：导航（TeacherLayout）→ 标题行 → 筛选栏 */
-.tf-head { position: sticky; top: var(--tf-nav-h, 56px); z-index: 30; background: #f5f7fb;
+.tf-head { position: static; background: #f5f7fb;
   padding: 4px 0 10px; box-shadow: 0 8px 8px -10px rgba(15,23,42,.3); }
-.tf-filters { position: sticky; top: calc(var(--tf-nav-h, 56px) + var(--tf-head-h, 104px)); z-index: 29;
+.tf-filters { position: static;
   display: flex; gap: 8px; margin-bottom: 0; background: #f5f7fb;
   padding: 8px 0 12px; box-shadow: 0 8px 8px -10px rgba(15,23,42,.3); }
 .tf-filters input, .tf-filters select {
@@ -632,6 +634,13 @@ onMounted(loadPosts);
 .tf-comment-body :deep(img) { max-width: 220px; border-radius: 10px; }
 .tf-comment { display: block; }
 .tf-nav-sticky { position: sticky; top: 0; z-index: 100; }
+/* 标题行 + 筛选栏合并为一层吸顶，中间不留缝 */
+.tf-topbar { position: sticky; top: var(--tf-nav-h, 56px); z-index: 30;
+  background: #f5f7fb; padding: 4px 0 12px;
+  box-shadow: 0 8px 10px -12px rgba(15,23,42,.45); }
+.tf-head { margin: 0; padding-bottom: 6px; }
+.tf-sub { margin: 0 0 10px; }
+.tf-filters { margin-bottom: 0; }
 </style>
 
 

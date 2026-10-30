@@ -110,6 +110,11 @@ def get_media(asset_id: str, request: Request, db: Session = Depends(get_db)):
 
     etag = _etag(asset.sha256)
     headers = _base_headers(asset, etag)
+    # 2026-10-30：?download=1 强制下载（前端预览被拦截时的兜底）
+    if request.query_params.get("download") == "1" and asset.original_name:
+        headers["Content-Disposition"] = (
+            "attachment; filename*=UTF-8''" + quote(asset.original_name, safe="")
+        )
     if _not_modified(request, etag):
         return Response(status_code=304, headers=headers)
 

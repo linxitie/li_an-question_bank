@@ -7,6 +7,7 @@
       :href="file.url"
       :download="canPreview(file.name) ? undefined : file.name"
       :target="canPreview(file.name) ? '_blank' : undefined"
+      @click="onOpen($event, file)"
       rel="noopener"
     >
       <span class="fl-icon">{{ fileIcon(file.name) }}</span>
@@ -26,6 +27,14 @@ defineProps<{ files: ForumImageAttachment[] }>();
 const PREVIEW_EXT = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.txt'];
 const canPreview = (name: string) =>
   PREVIEW_EXT.some((ext) => (name || '').toLowerCase().endsWith(ext));
+
+/** 可预览类型：显式新标签打开；被拦截时退回下载（?download=1 强制 attachment） */
+const onOpen = (e: MouseEvent, file: ForumImageAttachment) => {
+  if (!canPreview(file.name)) return; // office/压缩包：交给原生 download 属性
+  e.preventDefault();
+  const win = window.open(file.url, '_blank', 'noopener');
+  if (!win) window.location.href = file.url + (file.url.includes('?') ? '&' : '?') + 'download=1';
+};
 </script>
 
 <style scoped>
