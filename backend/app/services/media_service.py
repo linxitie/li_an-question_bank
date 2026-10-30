@@ -27,7 +27,16 @@ from app.models.media_asset import MediaAsset
 
 logger = logging.getLogger(__name__)
 
-KINDS = {"avatar", "forum", "material_image", "video"}
+KINDS = {
+    "avatar",
+    "forum",
+    "material_image",
+    "video",
+    "question_stem",
+    "question_option",
+    "question_analysis",
+    "group_material",
+}
 ASSET_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 _IMAGE_TYPES = {
@@ -103,6 +112,10 @@ def content_type_for(kind: str, original_name: str | None) -> str:
         "material_image": _IMAGE_TYPES,
         "forum": _FORUM_TYPES,
         "video": _VIDEO_TYPES,
+        "question_stem": _IMAGE_TYPES,
+        "question_option": _IMAGE_TYPES,
+        "question_analysis": _IMAGE_TYPES,
+        "group_material": _IMAGE_TYPES,
     }[kind]
     mime = table.get(ext)
     if not mime:

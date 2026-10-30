@@ -184,3 +184,53 @@ def test_image_only_material_marker_does_not_swallow_next_set():
     assert '7900c602_115_0' in image_mats[0]
     assert '7900c602_115_1' in image_mats[0]
     assert all(n and 111 <= n <= 120 for members in groups.values() for n in members)
+
+
+# 2026-10-29 实测事故：2021 北京乡镇卷资料分析第一/二组的标记行分别是
+# “（一） [IMAGE:04108529_110_0]”“（二） [IMAGE:04108529_115_1]”，
+# 每组只有一张图（token 长度 < 30）→ 旧规则按“材料过短”跳过整组，
+# q111–115 / q116–120 两道复合题组在库中完全没有材料。
+PAPER_WITH_SINGLE_IMAGE_MATERIAL = """第五部分 资料分析
+
+（一） [IMAGE:04108529_110_0]
+
+111. 2014年该地区私有云市场规模和公有云市场规模之比最接近以下哪一项？
+A. 1：4
+B. 4：1
+C. 1：3
+D. 3：1
+
+112. 根据预测，2021年该地区云计算整体市场规模最接近以下哪个数字？
+A. 1300亿元
+B. 1700亿元
+C. 2300亿元
+D. 2900亿元
+
+113. 2014-2022年间该地区公有云市场规模同比增速超过 10% 的年份有几个？
+A. 6
+B. 5
+C. 4
+D. 3
+
+114. 根据预测，2022年该地区云计算市场整体规模同比增长：
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+
+115. 根据材料中所给数据和预测，能够从上述资料中推出的是：
+A. 甲
+B. 乙
+C. 丙
+D. 丁
+"""
+
+
+def test_single_image_only_material_is_not_dropped_by_length_guard():
+    """单张图片材料（token < 30 字）也必须挂满整组，而不是整组留空。"""
+    blocks = extract_question_blocks_with_material_sets(PAPER_WITH_SINGLE_IMAGE_MATERIAL)
+    groups = _material_groups(blocks)
+    assert len(groups) == 1, groups
+    (material, members), = groups.items()
+    assert '[IMAGE:04108529_110_0]' in material
+    assert sorted(members) == [111, 112, 113, 114, 115]

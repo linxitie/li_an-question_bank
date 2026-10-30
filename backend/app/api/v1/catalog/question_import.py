@@ -512,6 +512,13 @@ def _persist_group_images(group) -> None:
                        getattr(group, 'id', '?'), e)
 
 
+def _material_text_without_images(text: str) -> str:
+    """材料去掉图片标记/标签后的纯文本；为空说明是纯图片材料。"""
+    normalized = re.sub(r'\[IMAGE:[^\]]+\]', '', text or '')
+    normalized = re.sub(r'<img[^>]*>', '', normalized)
+    return re.sub(r'\s+', '', normalized)
+
+
 def _digest_for_group_dedup(text: str) -> str:
     """题组幂等键用的规范化指纹 —— **对图片状态不敏感**。
 
@@ -543,22 +550,28 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
     text = (material or '').strip()
     if not text:
         return None
+    # 纯图片材料没有稳定文本指纹：剥离图片后 SHA1 全是空串，
+    # 不同材料会被误并成同一组（2026-10-29 实测 2021 北京两组
+    # 图片材料被并进 2025 安徽的 group 31）。这类材料不走去重，直接新建。
+    image_only = not _material_text_without_images(text)
     digest = _digest_for_group_dedup(text)
 
     # 同批导入里重复查库代价高，先在本次请求内缓存
     cache_key = 'shenlun_group_' + digest
-    cached = _SHENLUN_GROUP_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+    if not image_only:
+        cached = _SHENLUN_GROUP_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
 
     # 跨批复用：库内已存在同指纹材料则直接挂上去
     # ★ J-1-3 修复：用 SHA1 全文指纹替代 LIKE '%前60字%'，消除误合并
     existing = None
-    for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == 'shenlun_material').all():
-        g_digest = _digest_for_group_dedup(str(g.shared_content or ''))
-        if g_digest == digest:
-            existing = g
-            break
+    if not image_only:
+        for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == 'shenlun_material').all():
+            g_digest = _digest_for_group_dedup(str(g.shared_content or ''))
+            if g_digest == digest:
+                existing = g
+                break
     if existing is not None:
         _shenlun_cache_put(cache_key, existing.id)
         return existing.id
@@ -571,7 +584,8 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
         source=source_tag or '',
         title=(subject_name + ' 给定材料')[:200],   # 申论组标题是「科目名 + 给定材料」，非 shared_content 前 200 字
     )
-    _shenlun_cache_put(cache_key, group.id)
+    if not image_only:
+        _shenlun_cache_put(cache_key, group.id)
     return group.id
 
 
@@ -589,17 +603,22 @@ def _get_or_create_group_by_material(db: Session, material: str,
     text = (material or '').strip()
     if not text:
         return None
+    # 纯图片材料剥离图片后指纹为空，不能参与内容去重（否则不同图片组
+    # 会因空串指纹互相合并，实测 2021 北京 q111–120 被塞进 2025 安徽 group 31）。
+    image_only = not _material_text_without_images(text)
     digest = _digest_for_group_dedup(text)
 
     cache_key = f'material_group_{group_type}_' + digest
-    cached = _SHENLUN_GROUP_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+    if not image_only:
+        cached = _SHENLUN_GROUP_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
 
-    for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == group_type).all():
-        if _digest_for_group_dedup(str(g.shared_content or '')) == digest:
-            _shenlun_cache_put(cache_key, g.id)
-            return g.id
+    if not image_only:
+        for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == group_type).all():
+            if _digest_for_group_dedup(str(g.shared_content or '')) == digest:
+                _shenlun_cache_put(cache_key, g.id)
+                return g.id
 
     group = _upsert_question_group(
         db,
@@ -608,7 +627,8 @@ def _get_or_create_group_by_material(db: Session, material: str,
         subject=subject_name or '',
         source=source_tag or '',
     )
-    _shenlun_cache_put(cache_key, group.id)
+    if not image_only:
+        _shenlun_cache_put(cache_key, group.id)
     return group.id
 
 

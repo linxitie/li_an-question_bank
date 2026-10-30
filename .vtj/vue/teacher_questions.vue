@@ -296,7 +296,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted, computed, nextTick } from 'vue';
+import { defineComponent, ref, onMounted, computed, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
@@ -304,6 +304,7 @@ import TeacherNavHeader from './TeacherNavHeader.vue';
 import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { mountMaterialDock, removeMaterialDock } from '@/utils/materialDock';
+import { findEditModalRoot, refreshEditPreviews } from '@/utils/editPreview';
 
 export default defineComponent({
   name: 'TeacherQuestions',
@@ -570,16 +571,31 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 
     function parsedOptions(opts: any) {
       if (!opts) return {};
+      // 关键：选项数组必须尊重 o.key。2021 北京行测 q130 的入库顺序是 B/A/C/D，
+      // 旧实现按数组下标重新编号，导致 A 位显示 B 的文字、B 位显示 A 的图片，
+      // 正确答案与选项内容整体错位。统一按 key 排序后再返回。
+      function sortByKey(input: Record<string, string>) {
+        const sorted: Record<string, string> = {};
+        Object.keys(input).sort().forEach((k) => { sorted[k] = input[k]; });
+        return sorted;
+      }
       if (Array.isArray(opts)) {
         const result: Record<string, string> = {};
         opts.forEach((o: any, i: number) => {
-          const key = String.fromCharCode(65 + i);
-          if (typeof o === 'object') result[key] = o.value || o.text || '';
-          else result[key] = String(o);
+          if (o && typeof o === 'object') {
+            const key = String(o.key || String.fromCharCode(65 + i)).toUpperCase();
+            result[key] = o.value || o.text || '';
+          } else {
+            result[String.fromCharCode(65 + i)] = String(o);
+          }
         });
-        return result;
+        return sortByKey(result);
       }
-      if (typeof opts === 'object') return opts;
+      if (typeof opts === 'object') {
+        const result: Record<string, string> = {};
+        Object.keys(opts).forEach((k) => { result[k] = opts[k]; });
+        return sortByKey(result);
+      }
       if (typeof opts === 'string') {
         try { return parsedOptions(JSON.parse(opts)); } catch(e) { return {}; }
       }
@@ -682,8 +698,28 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
         shared_content_images: q.shared_content_images || '',
       };
       showEditModal.value = true;
+      nextTick(refreshEditPreview);
       hydrateMaterialFromDetail(q.question_id);
     }
+
+    // raw 页不能改 <template>：在脚本里把编辑弹窗的题组材料、选项、解析补成富文本预览。
+    // 统一走 refreshEditPreviews -> renderQuestionContent，图片/表格/转义 HTML 都能正常显示。
+    function refreshEditPreview() {
+      const root = findEditModalRoot();
+      if (!root) return;
+      const opts = editForm.value.optionsParsed || {};
+      refreshEditPreviews(root, {
+        material: editForm.value.shared_content || '',
+        question: editForm.value.question_content || '',
+        options: Object.keys(opts).map((k) => ({ key: k, value: opts[k] })),
+        analysis: editForm.value.answer_analysis || '',
+      });
+    }
+
+    // 表单任何字段变化后刷新预览；nextTick 保证 DOM 已挂载、素材请求已回填。
+    watch(editForm, function () {
+      nextTick(refreshEditPreview);
+    }, { deep: true });
 
     // P2-5：列表接口不保证返回题组材料，编辑时按题目详情补齐；
     // 切换题目后旧请求返回时用 question_id 守卫，避免污染当前表单。
@@ -697,6 +733,7 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
           editForm.value.group_id = data.group_id || 0;
           editForm.value.shared_content = data.shared_content || '';
           editForm.value.shared_content_images = data.shared_content_images || '';
+          nextTick(refreshEditPreview);
         })
         .catch((e: any) => console.error('题组材料详情加载失败:', e));
     }
