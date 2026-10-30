@@ -76,5 +76,6 @@ playwright-stealth>=1.0.6
 python-docx
 openpyxl
 pdfplumber
+PyPDF2>=3.0.0  # pdf_reader 扫描件回退与图片提取显式 import PyPDF2；缺包会让无文本层 PDF 在 OCR 前误报 500
 bleach
 Pillow

@@ -58,6 +58,13 @@ class TestIsEnabled:
         from app.services import mineru_service as ms
         assert ms.is_enabled() is False
 
+    def test_enabled_by_parser_url_even_without_local_python(self, monkeypatch):
+        """容器化：PARSER_URL 可用即启用，不再要求本地 MINERU_PYTHON 存在。"""
+        _cfg(monkeypatch, MINERU_ENABLED=True, MINERU_PYTHON='',
+             PARSER_URL='http://parser:8080')
+        from app.services import mineru_service as ms
+        assert ms.is_enabled() is True
+
 
 class TestHealthCheck:
     def setup_method(self):
@@ -198,3 +205,100 @@ class TestExtractTextSync:
         monkeypatch.setattr(ms, '_SEM_WAIT_SECONDS', 0.05)  # 缩短测试等待
         with ms._sem:  # 模拟另一份文档正在占用GPU
             assert ms.extract_text_sync(self._buf()) is None
+
+
+class TestSidecarHealth:
+    """容器化 P3：健康检查必须探测 sidecar，而不是本地 MINERU_PYTHON。
+
+    回归背景：旧实现只跑本地解释器 --version；PARSER_URL 已配置时，
+    sidecar 正常也会被误报为不可用，运维会误判 OCR 不可用。
+    """
+
+    def setup_method(self):
+        from app.services import mineru_service as ms
+        ms._health_cache['ts'] = 0.0
+        ms._health_cache['data'] = None
+
+    def test_sidecar_ok_marks_available(self, monkeypatch):
+        _cfg(monkeypatch, MINERU_ENABLED=True, MINERU_PYTHON='',
+             PARSER_URL='http://parser:8080')
+        from app.services import mineru_service as ms
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {'ok': True, 'mineru': True, 'backend': 'pipeline'}
+
+        with patch('requests.get', return_value=_Resp()) as m:
+            r = ms.health_check(force=True)
+        assert r['available'] is True
+        assert r['version'] == 'sidecar:pipeline'
+        assert 'parser:8080/health' in m.call_args.args[0]
+
+    def test_sidecar_down_marks_unavailable_not_raise(self, monkeypatch):
+        _cfg(monkeypatch, MINERU_ENABLED=True, MINERU_PYTHON='',
+             PARSER_URL='http://parser:8080')
+        from app.services import mineru_service as ms
+        with patch('requests.get', side_effect=ConnectionError('refused')):
+            r = ms.health_check(force=True)
+        assert r['available'] is False
+        assert 'ConnectionError' in r['message']
+
+
+class TestSidecarImages:
+    """P3：扫描件图片必须从 sidecar 回传并落盘，否则前端只能看到 images/<sha>.jpg。"""
+
+    def test_materialize_sidecar_images_writes_staging(self, monkeypatch, tmp_path):
+        import base64
+        from app.services import mineru_service as ms
+        from app.services.question_ingest import images as img_mod
+
+        _cfg(monkeypatch, MINERU_ENABLED=True, MINERU_PYTHON='',
+             PARSER_URL='http://parser:8080')
+        monkeypatch.setattr(img_mod, '_STAGING_DIR', str(tmp_path))
+        png = b'\x89PNG\r\n\x1a\n' + b'0' * 32
+        payload = {
+            'markdown': '题干\n![](images/abcdef1234567890.jpg)\nA. 选项',
+            'images': {'abcdef1234567890.jpg': base64.b64encode(png).decode('ascii')},
+        }
+        with patch.object(ms, 'call_parser_http_payload', return_value=payload):
+            text = ms.extract_text_sync(b'x')
+
+        assert text == '题干\n[IMAGE:abcdef1234567890_0_0]\nA. 选项'
+        assert (tmp_path / 'abcdef1234567890_0_0.png').read_bytes() == png
+
+    def test_jpeg_sidecar_image_is_stored_as_real_png(self, monkeypatch, tmp_path):
+        """MinerU 输出 JPEG；暂存协议只认 .png，必须转码而不是改扩展名。"""
+        import base64
+        import io
+        from PIL import Image
+        from app.services import mineru_service as ms
+        from app.services.question_ingest import images as img_mod
+
+        _cfg(monkeypatch, MINERU_ENABLED=True, MINERU_PYTHON='',
+             PARSER_URL='http://parser:8080')
+        monkeypatch.setattr(img_mod, '_STAGING_DIR', str(tmp_path))
+        buf = io.BytesIO()
+        Image.new('RGB', (2, 2), (255, 0, 0)).save(buf, format='JPEG')
+        payload = {
+            'markdown': '![](images/abcdef1234567890.jpg)',
+            'images': {'abcdef1234567890.jpg': base64.b64encode(buf.getvalue()).decode('ascii')},
+        }
+        with patch.object(ms, 'call_parser_http_payload', return_value=payload):
+            assert ms.extract_text_sync(b'x') == '[IMAGE:abcdef1234567890_0_0]'
+
+        stored = (tmp_path / 'abcdef1234567890_0_0.png').read_bytes()
+        assert stored.startswith(bytes([137, 80, 78, 71, 13, 10, 26, 10]))
+        with Image.open(io.BytesIO(stored)) as im:
+            assert im.format == 'PNG'
+
+    def test_sidecar_failure_without_local_python_does_not_spawn(self, monkeypatch):
+        from app.services import mineru_service as ms
+        _cfg(monkeypatch, MINERU_ENABLED=True, MINERU_PYTHON='',
+             PARSER_URL='http://parser:8080')
+        with patch.object(ms, 'call_parser_http_payload', return_value=None), \
+             patch.object(ms.subprocess, 'run') as m_run:
+            assert ms.extract_text_sync(b'x') is None
+            m_run.assert_not_called()
