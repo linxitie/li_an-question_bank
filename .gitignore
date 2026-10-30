@@ -108,6 +108,10 @@ backend/app/static/questions/
 # ---------- 容器化 staging 运行时数据 ----------
 # deploy/preflight.sh 与 docker compose 的 staging 数据目录；绝不入库。
 deploy/runtime/
+# TLS 证书与私钥不入库（保留 README 与生成脚本）
+deploy/certs/*.crt
+deploy/certs/*.key
+deploy/certs/*.pem
 
 # ---------- 凭据 ----------
 # 真实环境变量文件一律不入库；模板 *.env.example 放行。
