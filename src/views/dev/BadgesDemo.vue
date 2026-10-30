@@ -97,6 +97,8 @@ const NAMES: Array<[string, string, boolean]> = [
   ['宗师', '称号', false], ['砺安之星', '称号', true], ['公考达人', '称号', false]
 ];
 
+const TIER_LABELS = ['黑铁', '青铜', '白银', '黄金', '钻石'];
+
 const items: BadgeItem[] = NAMES.map(([name, category, isOwned], i) => ({
   kind: category === '称号' ? 'title' : 'achievement',
   id: i + 1,
@@ -104,9 +106,13 @@ const items: BadgeItem[] = NAMES.map(([name, category, isOwned], i) => ({
   category,
   shape: SHAPES[category] || 'shield',
   owned: isOwned,
+  // 演示页刻意铺满 5 档，且已获得/未获得交替，便于一次看全新样式
+  badge_tier: TIER_LABELS[i % 5],
   obtained_at: isOwned ? `2026-10-${(i % 27) + 1}` : null,
-  snapshot_tier: isOwned ? '黄金' : null,
+  snapshot_tier: TIER_LABELS[i % 5],
   current_tier: '黄金',
+  rarity_text: `全服 ${Math.round(((120 + i * 37) / 1204) * 1000) / 10}% 获得`,
+  is_first_owner: isOwned && i % 7 === 1,
   threshold: isOwned ? 0 : (i % 5) * 10,
   condition_desc: isOwned
     ? '达成对应学习条件后自动解锁（演示数据）'

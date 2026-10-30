@@ -15,6 +15,10 @@
         <span class="bg-name">{{ it.name }}</span>
         <span class="bg-meta">{{ it.category }} · {{ tierLabelOf(it) }}</span>
 
+        <!-- 稀有度：只做文字（灰色小字），不参与颜色 -->
+        <span v-if="it.owned && it.rarity_text" class="bg-rarity">{{ it.rarity_text }}</span>
+        <span v-if="it.is_first_owner" class="bg-first">全服首个获得</span>
+
         <span class="bg-state" :class="stateClass(it)">
           {{ stateText(it) }}
         </span>
@@ -40,7 +44,7 @@ const props = withDefaults(
 );
 
 /** 徽章档位：优先"获得时快照"的中文，其次用当前档位 */
-const tierLabelOf = (it: BadgeItem): string => it.snapshot_tier || it.current_tier || tierByScore(0).label;
+const tierLabelOf = (it: BadgeItem): string => it.badge_tier || it.current_tier || tierByScore(0).label;
 
 /** BadgeIcon 需要索引：由中文反查，找不到就用当前档位 */
 const LABEL_TO_INDEX: Record<string, number> = { 黑铁: 0, 青铜: 1, 白银: 2, 黄金: 3, 钻石: 4 };
@@ -131,5 +135,19 @@ const stateClass = (it: BadgeItem): string => (it.owned ? 'is-owned' : 'is-todo'
   .bg-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+}
+
+.bg-rarity {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+.bg-first {
+  font-size: 10.5px;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-top: 3px;
 }
 </style>

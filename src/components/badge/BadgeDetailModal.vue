@@ -20,6 +20,9 @@
             <span v-if="item.kind === 'title'" class="dm-chip dm-chip-title">称号</span>
           </div>
           <p class="dm-cond">{{ item.condition_desc || '达成条件未记录' }}</p>
+          <p v-if="item.owned && item.rarity_text" class="dm-rarity">
+            {{ item.rarity_text }}<span v-if="item.is_first_owner" class="dm-first">全服首个获得</span>
+          </p>
           <p class="dm-time" v-if="item.owned">获得于 {{ dateOnly(item.obtained_at) || '未记录' }}</p>
           <p class="dm-time dm-time-todo" v-else>尚未获得</p>
         </div>
@@ -28,7 +31,7 @@
       <div class="dm-rows">
         <div class="dm-row">
           <span>获得时档位</span>
-          <b>{{ item.snapshot_tier || '未记录' }}</b>
+          <b>{{ item.badge_tier || '未记录' }}</b>
         </div>
         <div class="dm-row">
           <span>当前档位</span>
@@ -77,7 +80,7 @@ defineEmits<{ (e: 'close'): void }>();
 const copied = ref(false);
 const LABEL_TO_INDEX: Record<string, number> = { 黑铁: 0, 青铜: 1, 白银: 2, 黄金: 3, 钻石: 4 };
 
-const tierLabel = computed(() => props.item?.snapshot_tier || props.item?.current_tier || '黑铁');
+const tierLabel = computed(() => props.item?.badge_tier || props.item?.current_tier || '黑铁');
 const tier = computed(() => tierByIndex(LABEL_TO_INDEX[tierLabel.value] ?? props.currentTierIndex));
 const tierIndex = computed(() => LABEL_TO_INDEX[tierLabel.value] ?? props.currentTierIndex);
 const rarity = computed(() =>
@@ -224,5 +227,19 @@ const onShare = async () => {
   text-align: right;
   font-size: 12px;
   color: #12a150;
+}
+
+.dm-rarity {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 4px 0 0;
+}
+.dm-first {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 1px 6px;
 }
 </style>
