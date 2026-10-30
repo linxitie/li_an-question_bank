@@ -12,6 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_DIR="$ROOT/deploy"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
+to_win() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 
 fail() {
   echo "[preflight] ❌ $*" >&2
@@ -38,9 +39,12 @@ for name in IMAGE_TAG DATA_ROOT STATIC_ROOT UPLOAD_ROOT LOG_ROOT JWT_SECRET_KEY 
   eval "value=\${$name:-}"
   [ -n "$value" ] || fail "缺少必填变量：$name"
 done
-[ "$IMAGE_TAG" != "latest" ] || fail "IMAGE_TAG 禁止 latest，请用提交号或版本号"
+case "$IMAGE_TAG" in
+  latest) fail "IMAGE_TAG 禁止 latest，请用提交号或版本号" ;;
+  CHANGE_ME*|REPLACE_*) fail "IMAGE_TAG 仍是模板占位符，请填写真实版本号" ;;
+esac
 case "$JWT_SECRET_KEY" in
-  your-*) fail "JWT_SECRET_KEY 仍是示例占位符，请由用户本人生成并填写" ;;
+  your-*|CHANGE_ME*|REPLACE_*) fail "JWT_SECRET_KEY 仍是示例占位符，请由用户本人生成并填写" ;;
 esac
 [ "${#JWT_SECRET_KEY}" -ge 32 ] || fail "JWT_SECRET_KEY 长度必须 ≥32"
 [ "$DB_TYPE" = "sqlite" ] || fail "当前只支持 DB_TYPE=sqlite（本阶段不迁 PostgreSQL）"
@@ -103,7 +107,7 @@ fi
 command -v docker >/dev/null 2>&1 || fail "未找到 docker"
 docker info >/dev/null 2>&1 || fail "Docker daemon 不可用"
 docker compose version >/dev/null 2>&1 || fail "未找到 docker compose v2"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" config --quiet \
+docker compose -f "$(to_win "$COMPOSE_FILE")" --env-file "$(to_win "$ENV_FILE")" config --quiet \
   || fail "docker compose config 校验失败"
 ok "Docker daemon 可用；compose config 通过"
 
