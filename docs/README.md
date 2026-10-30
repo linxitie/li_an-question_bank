@@ -743,3 +743,5 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 - [门禁红灯根因分析_L1G与L2_v1.md](plans/门禁红灯根因分析_L1G与L2_v1.md) — L1-G 数据事故（本机备份不可用）+ L2 判据 bug（4/85→65/85）
 
 - [P0-P3缺陷处置总体方案_v1.md](plans/P0-P3缺陷处置总体方案_v1.md) — 题库恢复三方案/ L2 白名单 / P1-P3 逐项设计与波次计划（待批准）
+
+- [备考资料模块_后续工作流程_v2.md](plans/备考资料模块_后续工作流程_v2.md) — 题库不上线前提下的 A–E 五阶段工作流（门禁收口/内容/徽章/专利/交付）
