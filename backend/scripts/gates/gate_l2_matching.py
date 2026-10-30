@@ -246,7 +246,10 @@ def fingerprint(stats: dict) -> dict:
 def main():
     r = subprocess.run(
         [sys.executable, 'scripts/verify/verify_xingce_regression.py',
-         DEFAULT_ROOT, '--out', 'data/xingce_regression.txt'],
+         DEFAULT_ROOT, '--out', 'data/xingce_regression.txt',
+         # 文本提取缓存（按 路径+大小+mtime 命中）：L2 全量扫 85 套 PDF，
+         # 无缓存时每次数分钟；缓存只影响速度，不影响判据。
+         '--cache-dir', 'data/xingce_cache'],
         capture_output=True, text=True, encoding='utf-8', errors='replace'
     )
     # verify_xingce_regression.py 全部输出走 stderr（实测 stdout 长度为 0），

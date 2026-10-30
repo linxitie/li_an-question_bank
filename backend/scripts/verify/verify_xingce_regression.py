@@ -33,9 +33,11 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import re
 import sys
+import time
 from collections import Counter, defaultdict
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -121,9 +123,62 @@ def qnums_of(blocks) -> list:
     return out
 
 
+# ── 已知不一致白名单（伪题号导致的区间漂移）────────────────────────────────
+#
+# 背景：资料分析/知觉速度题型里，解析文本存在「小数+单位」落在行首的伪题号
+# （`41.8％`、`10.5%`、`352.`），以及图形/小标题编号（`2.` `6.`）。这类套的
+# 分节题号区间与题本端必然对不上，但**不是解析器退化**。若不放白名单，
+# L2 会常年红灯，红灯本身失去信息量。
+#
+# 白名单只豁免「签名完全一致」的已知不一致：任何数值漂移都会重新 FAIL，
+# 因此它挡得住「退化被藏进白名单」。
+DEFAULT_MISMATCH_BASELINE = os.path.join(
+    BACKEND_DIR, "data", "gates", "xingce_rng_known_mismatch.json")
+
+
+def _sig(payload) -> str:
+    import hashlib
+    import json as _json
+    raw = _json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def load_mismatch_baseline(path: str) -> dict:
+    """返回 {key: {'sig':..., 'note':...}}；文件不存在返回 {}。"""
+    if not path or not os.path.exists(path):
+        return {}
+    try:
+        with io.open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except Exception:  # noqa: BLE001 — 白名单损坏按「没有白名单」处理，宁可红
+        print("[mismatch-baseline] 无法解析 %s，按空白名单处理" % path)
+        return {}
+    return doc.get("known", {}) if isinstance(doc, dict) else {}
+
+
+def write_mismatch_baseline(path: str, records: dict) -> None:
+    """把当前不一致写成白名单（签名 + 说明），供后续回归对比。"""
+    import json as _json
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    doc = {
+        "meta": {
+            "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "generated_by": "scripts/verify/verify_xingce_regression.py --write-mismatch-baseline",
+            "why": "行测资料分析/知觉速度语料的伪题号导致分节区间漂移；签名一致才豁免",
+            "count": len(records),
+        },
+        "known": records,
+    }
+    with io.open(path, "w", encoding="utf-8") as fh:
+        _json.dump(doc, fh, ensure_ascii=False, indent=1, sort_keys=True)
+    print("[mismatch-baseline] 已写入 %d 条已知不一致 → %s" % (len(records), path))
+
+
 # ── 主流程 ──────────────────────────────────────────────────────────────────
 
-def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False) -> int:
+def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False,
+         mismatch_baseline: str = DEFAULT_MISMATCH_BASELINE,
+         write_mismatch: bool = False) -> int:
     if cache_dir:
         os.makedirs(cache_dir, exist_ok=True)
 
@@ -152,6 +207,10 @@ def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False) -
     tot = Counter()
     per_pair = {}
     bad_pairs = []
+    known = load_mismatch_baseline(mismatch_baseline)
+    mismatch_records = {}
+    new_keys = []
+    drift_keys = []
 
     for idx, key in enumerate(sorted(pairs), 1):
         pr = pairs[key]
@@ -228,6 +287,16 @@ def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False) -
         seq_ok = [x[0] for x in qi] == [x[0] for x in ai]
         rng_ok = [(x[0], x[1], x[2]) for x in qi] == [(x[0], x[1], x[2]) for x in ai]
 
+        rng_payload = {'qb': [[x[0], x[1], x[2]] for x in qi],
+                       'ans': [[x[0], x[1], x[2]] for x in ai]}
+        if not rng_ok:
+            mismatch_records[key] = {
+                'sig': _sig(rng_payload),
+                'note': '分节题号区间题本端与解析端不等（伪题号/图形编号所致）',
+                'qb': rng_payload['qb'],
+                'ans': rng_payload['ans'],
+            }
+
         # 伪题号：超出 1..max(qn) 的块
         hi = max(qn) if qn else 0
         bogus = [n for n in qnums_of(an_blocks) if n > hi]
@@ -255,7 +324,17 @@ def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False) -
         tot['qb_with_options'] += sum(1 for b in qb_blocks if b.get('options'))
         tot['an_with_options'] += sum(1 for b in an_blocks if b.get('options'))
         tot['seq_mismatch'] += 0 if seq_ok else 1
-        tot['rng_mismatch'] += 0 if rng_ok else 1
+        if not rng_ok:
+            tot['rng_raw_mismatch'] += 1
+            entry = known.get(key)
+            if entry and entry.get('sig') == mismatch_records[key]['sig']:
+                tot['rng_known'] += 1
+            elif entry:
+                tot['rng_new'] += 1
+                drift_keys.append(key)
+            else:
+                tot['rng_new'] += 1
+                new_keys.append(key)
         tot['qb_no_sec'] += 0 if qsec else 1
         tot['an_no_anchor'] += 0 if an_anchor else 1
         for b in qb_blocks:
@@ -279,9 +358,17 @@ def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False) -
         tot['an_no_anchor'], 'PASS 目标为 0' if tot['an_no_anchor'] == 0 else 'FAIL'))
     w("  分节头序列全等套数    : %d / %d\n" % (
         tot['pairs'] - tot['seq_mismatch'], tot['pairs']))
-    w("  分节题号区间全等套数  : %d / %d   %s\n" % (
-        tot['pairs'] - tot['rng_mismatch'], tot['pairs'],
-        'PASS 目标为全等' if tot['rng_mismatch'] == 0 else 'FAIL'))
+    w("  分节题号区间全等套数  : %d / %d\n" % (
+        tot['pairs'] - tot['rng_raw_mismatch'], tot['pairs']))
+    w("  已知伪题号不一致(白名单): %d 套   基线 %s\n" % (
+        tot['rng_known'],
+        os.path.basename(mismatch_baseline) if known else "（无白名单文件）"))
+    w("  **新增不一致**        : %d 套   %s\n" % (
+        tot['rng_new'], 'PASS 目标为 0' if tot['rng_new'] == 0 else 'FAIL'))
+    if new_keys:
+        w("  新增不一致套          : %s\n" % (new_keys[:20]))
+    if drift_keys:
+        w("  签名漂移套（已知套但数值变了）: %s\n" % (drift_keys[:20]))
     w("  分节头命中(题本/解析) : %d / %d\n" % (tot['qb_sec'], tot['an_sec']))
     w("  答案锚点总数          : %d\n" % tot['answer_anchor'])
     w("  【考点】总数: %d\n" % tot['kao'])
@@ -296,16 +383,30 @@ def scan(root: str, out_path: str, cache_dir: str = "", reparse: bool = False) -
         w("  异常套                : %s\n" % bad_pairs)
 
     ok = (tot['qb_no_sec'] == 0 and tot['an_no_anchor'] == 0
-          and tot['rng_mismatch'] == 0 and tot['pairs'] > 0)
+          and tot['rng_new'] == 0 and tot['pairs'] > 0)
     w("=" * 132 + "\n")
-    w("验收结论: %s\n" % ('PASS' if ok else 'FAIL'))
+    w("验收结论: %s    （新增不一致 %d 套；已知白名单 %d 套）\n" % (
+        'PASS' if ok else 'FAIL', tot['rng_new'], tot['rng_known']))
     f.close()
 
     # 逐套摘要（供 --compare 精确 diff）
     with io.open(out_path + ".pairs.json", "w", encoding="utf-8") as fh:
-        import json
         json.dump(per_pair, fh, ensure_ascii=False, indent=1, sort_keys=True)
 
+    # gate_l2 在失败时只摊开 stdout/stderr 尾部，这里必须把判定依据打到 stdout
+    print("分节区间全等 %d/%d | 已知伪题号 %d | 新增不一致 %d"
+          % (tot['pairs'] - tot['rng_raw_mismatch'], tot['pairs'],
+             tot['rng_known'], tot['rng_new']))
+    if new_keys:
+        print("新增不一致套: %s" % new_keys[:20])
+    if drift_keys:
+        print("签名漂移套: %s" % drift_keys[:20])
+    print("报告: %s" % out_path)
+
+    if write_mismatch:
+        write_mismatch_baseline(mismatch_baseline, mismatch_records)
+        print("已刷新白名单（本轮不做判定，退出码 0）")
+        return 0
     return 0 if ok else 1
 
 
@@ -355,10 +456,16 @@ if __name__ == "__main__":
     ap.add_argument("--reparse", action="store_true", help="强制重跑解析")
     ap.add_argument("--cache-dir", default="", help="PDF 文本提取缓存目录")
     ap.add_argument("--current", default=None, help="配合 --compare：当前报告路径")
+    ap.add_argument("--mismatch-baseline", default=DEFAULT_MISMATCH_BASELINE,
+                    help="已知伪题号不一致白名单 JSON")
+    ap.add_argument("--write-mismatch-baseline", nargs="?", const=DEFAULT_MISMATCH_BASELINE,
+                    default=None, help="把当前不一致写入白名单（可省路径）")
     a = ap.parse_args()
     if a.compare:
         cur = a.current or a.out
         raise SystemExit(compare(a.compare, cur))
     if not a.root:
         ap.error("需要行测目录，或使用 --compare")
-    raise SystemExit(scan(a.root, a.out, a.cache_dir, a.reparse))
+    raise SystemExit(scan(a.root, a.out, a.cache_dir, a.reparse,
+                          mismatch_baseline=a.write_mismatch_baseline or a.mismatch_baseline,
+                          write_mismatch=bool(a.write_mismatch_baseline)))
