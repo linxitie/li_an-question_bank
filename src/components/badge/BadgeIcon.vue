@@ -80,11 +80,8 @@
             :fill="`url(#${uid}-inner)`" opacity="0.55" />
     </g>
 
-    <!-- 档位工艺层：青铜铆钉 / 白银双环 / 黄金放射 / 钻石棱镜碎面 -->
-    <g v-if="!locked && tier.index === 1" fill="#5b2f12" opacity="0.5">
-      <circle cx="28" cy="30" r="2.6" /><circle cx="72" cy="30" r="2.6" />
-      <circle cx="28" cy="70" r="2.6" /><circle cx="72" cy="70" r="2.6" />
-    </g>
+    <!-- 档位工艺层：白银双环 / 黄金放射 / 钻石棱镜碎面
+         （青铜不放铆钉：用户明确要求去掉四角悬浮点） -->
     <path v-if="!locked && tier.index === 2" d="M18 62 C30 82 70 82 82 62"
           fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.55" />
     <g v-if="!locked && tier.index === 3">
