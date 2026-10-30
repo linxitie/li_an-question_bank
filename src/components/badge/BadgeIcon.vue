@@ -72,6 +72,35 @@
       <line x1="22" y1="78" x2="12" y2="88" />
     </g>
 
+    <!-- 形状族：星（准确率） -->
+    <g v-else-if="shape === 'star'">
+      <path d="M50 6 L61 37 H94 L67 56 L77 88 L50 69 L23 88 L33 56 L6 37 H39 Z"
+            :fill="`url(#${uid}-outer)`" />
+      <path d="M50 22 L56 40 H75 L60 51 L66 70 L50 58 L34 70 L40 51 L25 40 H44 Z"
+            :fill="`url(#${uid}-inner)`" opacity="0.55" />
+    </g>
+
+    <!-- 档位工艺层：青铜铆钉 / 白银双环 / 黄金放射 / 钻石棱镜碎面 -->
+    <g v-if="!locked && tier.index === 1" fill="#5b2f12" opacity="0.5">
+      <circle cx="28" cy="30" r="2.6" /><circle cx="72" cy="30" r="2.6" />
+      <circle cx="28" cy="70" r="2.6" /><circle cx="72" cy="70" r="2.6" />
+    </g>
+    <path v-if="!locked && tier.index === 2" d="M18 62 C30 82 70 82 82 62"
+          fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.55" />
+    <g v-if="!locked && tier.index === 3">
+      <rect v-for="i in 12" :key="`ray-${i}`" x="49" y="4" width="2" height="11"
+            fill="#fff8d0" opacity="0.75" :transform="`rotate(${(i - 1) * 30} 50 50)`" />
+    </g>
+    <g v-if="!locked && tier.index === 4">
+      <path d="M50 14 L66 38 L58 62 L42 62 L34 38 Z" fill="#ffffff" opacity="0.22" />
+      <path d="M34 38 L42 62 L22 56 Z" fill="#67e8f9" opacity="0.28" />
+      <path d="M66 38 L78 56 L58 62 Z" fill="#f0abfc" opacity="0.28" />
+    </g>
+
+    <!-- 未获得：灰阶花纹之上标注档位文字（黑铁–钻石） -->
+    <text v-if="locked" x="50" y="99" text-anchor="middle"
+          font-size="13" font-weight="600" fill="#6b7280">{{ tier.label }}</text>
+
     <!-- 锁定：遮罩 + 锁形 -->
     <g v-if="locked" class="badge-lock">
       <path :d="SHIELD_OUTER" fill="rgba(244,246,251,0.62)" />
@@ -84,6 +113,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import {
+  LOCKED_PAINT,
   SHAPE_LABELS,
   tierByIndex,
   nextBadgeUid,
@@ -92,7 +122,7 @@ import {
 
 const props = withDefaults(
   defineProps<{
-    shape?: BadgeShape;
+    shape?: BadgeShape | 'star';
     /** 档位索引 0–4 */
     tier?: number;
     /** 像素尺寸（正方形） */
@@ -106,7 +136,14 @@ const props = withDefaults(
 );
 
 const uid = nextBadgeUid('badge');
-const tier = computed(() => tierByIndex(props.tier));
+const baseTier = computed(() => tierByIndex(props.tier));
+/** 未获得：同形状同花纹，但整体换成更深灰阶（不是简单降透明度，花纹仍可见） */
+const tier = computed(() =>
+  props.locked
+    ? { ...baseTier.value, outer: LOCKED_PAINT.outer, inner: LOCKED_PAINT.inner,
+        text: LOCKED_PAINT.text, special: false }
+    : baseTier.value
+);
 const ariaLabel = computed(
   () => props.label || `${SHAPE_LABELS[props.shape]}徽章 · ${tier.value.label}${props.locked ? '（未获得）' : ''}`
 );
@@ -139,8 +176,8 @@ const ROSETTE_OUTER = (() => {
   overflow: visible;
 }
 .badge-icon.is-locked {
-  filter: grayscale(0.92);
-  opacity: 0.62;
+  filter: grayscale(0.15);
+  opacity: 1;
 }
 .badge-icon:not(.is-locked) {
   filter: drop-shadow(0 2px 6px rgba(22, 35, 59, 0.12));

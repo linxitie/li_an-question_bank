@@ -88,11 +88,12 @@ export function needToNext(score: number | null | undefined): { need: number; ma
 }
 
 /** 形状中文名（用于 aria-label / 提示） */
-export const SHAPE_LABELS: Record<BadgeShape, string> = {
+export const SHAPE_LABELS: Record<BadgeShape | 'star', string> = {
   shield: '成就',
   ribbon: '称号',
   rosette: '科目',
-  gem: '稀有'
+  gem: '稀有',
+  star: '准确率'
 };
 
 /** 生成唯一渐变 id（同一页面多个徽章不能共用 id，否则渐变会互相覆盖） */
@@ -100,4 +101,23 @@ let uidSeq = 0;
 export function nextBadgeUid(prefix = 'bdg'): string {
   uidSeq += 1;
   return `${prefix}-${uidSeq}`;
+}
+
+/** 未获得态配色：通体灰阶（比旧版更深，轮廓清楚），仍保留形状与花纹 */
+export const LOCKED_PAINT = {
+  outer: ['#c3c8d2', '#d1d5db'] as [string, string],
+  inner: ['#eef0f4', '#d1d5db'] as [string, string],
+  text: '#6b7280'
+};
+
+/**
+ * 形状族映射（v3 定稿）：盾=坚持/成长，圆章=做题量/斩题，星=准确率，菱形=社交/综合。
+ * 称号（kind=title）继续用 ribbon。
+ */
+export function shapeOfCategory(category: string | null | undefined): BadgeShape | 'star' {
+  const c = String(category || '');
+  if (/(坚持|连续|成长|学习|早|夜)/.test(c)) return 'shield';
+  if (/(做题|刷题|斩题|题目|题量|练习)/.test(c)) return 'rosette';
+  if (/(准确|正确|命中|精度)/.test(c)) return 'star';
+  return 'gem';
 }
