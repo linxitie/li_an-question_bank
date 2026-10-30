@@ -39,6 +39,9 @@ TOPIC_SEED: tuple[tuple[str, str, str], ...] = (
     ("国际视野", "global-perspective", "theme"),
     ("职业规划", "career-planning", "theme"),
     ("备考方法", "exam-prep-methods", "theme"),
+    ("哲理思辨", "philosophical-thinking", "theme"),
+    ("治国理政", "statecraft", "theme"),
+    ("品德修养", "moral-cultivation", "theme"),
     # 6 个 exam_type（招考分类映射）
     ("国考省考", "national-provincial-exam", "exam_type"),
     ("教师招聘", "teacher-recruitment", "exam_type"),

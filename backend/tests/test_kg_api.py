@@ -1,6 +1,6 @@
 """R0 知识图谱 API 测试。"""
 from app.models.models import EssayQuote, Topic
-from app.services.kg_seed import seed_topics
+from app.services.kg_seed import TOPIC_SEED, seed_topics
 from app.services.kg_service import create_edge, seed_relation_types
 
 
@@ -11,8 +11,8 @@ def test_topics_endpoint(client, db_session):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["total"] == 36
-    assert len(payload["items"]) == 36
+    assert payload["total"] == len(TOPIC_SEED)
+    assert len(payload["items"]) == len(TOPIC_SEED)
 
 
 def test_node_and_subgraph_endpoints(client, db_session):
