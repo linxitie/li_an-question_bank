@@ -1,6 +1,6 @@
 <template>
   <div class="tf-page">
-    <TeacherNavHeader active-nav="forum" />
+    <div class="tf-nav-sticky"><TeacherNavHeader active-nav="forum" /></div>
     <main class="tf-main">
       <div class="tf-left">
       <header class="tf-head">
@@ -491,8 +491,8 @@ onMounted(loadPosts);
 </script>
 
 <style scoped>
-.tf-page { --tf-nav-h: 64px; min-height: calc(100vh - var(--tf-nav-h)); background: #f5f7fb; 
-  height: calc(100vh - var(--tf-nav-h));
+.tf-page { min-height: 100vh; background: #f5f7fb; 
+  height: 100vh;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -500,9 +500,9 @@ onMounted(loadPosts);
 .tf-head h1 { margin: 0 0 6px; color: #1a2b5f; }
 .tf-sub { margin: 0 0 16px; color: #6b7896; font-size: 13px; }
 /* 三层吸顶：导航（TeacherLayout）→ 标题行 → 筛选栏 */
-.tf-head { position: sticky; top: 0; z-index: 30; background: #f5f7fb;
+.tf-head { position: sticky; top: var(--tf-nav-h, 56px); z-index: 30; background: #f5f7fb;
   padding: 4px 0 10px; box-shadow: 0 8px 8px -10px rgba(15,23,42,.3); }
-.tf-filters { position: sticky; top: var(--tf-head-h, 104px); z-index: 29;
+.tf-filters { position: sticky; top: calc(var(--tf-nav-h, 56px) + var(--tf-head-h, 104px)); z-index: 29;
   display: flex; gap: 8px; margin-bottom: 0; background: #f5f7fb;
   padding: 8px 0 12px; box-shadow: 0 8px 8px -10px rgba(15,23,42,.3); }
 .tf-filters input, .tf-filters select {
@@ -631,6 +631,7 @@ onMounted(loadPosts);
 .tf-comment-body { padding-left: 44px; display: flex; flex-direction: column; gap: 6px; }
 .tf-comment-body :deep(img) { max-width: 220px; border-radius: 10px; }
 .tf-comment { display: block; }
+.tf-nav-sticky { position: sticky; top: 0; z-index: 100; }
 </style>
 
 
