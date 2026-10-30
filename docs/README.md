@@ -63,9 +63,12 @@
 | `superpowers/specs/OCR链路恢复_报告_20261025.md` | v1 | ✅ 已恢复（2026-10-25） | MinerU 3.4.5 / PaddleOCR 2.7 均可用但被参数拖死：固定 600s 超时 vs 71.2s/页、OCR 仅 8 页、缓存跨引擎污染。改为按页超时、30 页上限、CPU 线程/免方向分类、缓存引擎隔离 |
 
 | `superpowers/specs/多人协作Git网络稳定方案_v1.md` | v1 | ✅ 已定稿（2026-10-29） | 同伴 ghproxy 镜像停服导致 pull 失败：清镜像改写 + canonical/SSH-443 回退 + 过滤克隆（`.git` 917 MB → 1.1 MB）+ bundle 离线交接 + 一任务一分支规约；配套 `scripts/dev/git-collab-doctor.ps1` |
+| `superpowers/specs/容器化部署方案_v2.0.md` | v2.0 | 📋 设计稿（待用户批准；P0–P6 未执行） | **纯容器化版**：web + backend 两容器核心，SQLite 不容器化；parser/Redis/MinIO/Neo4j/Milvus 全部 profile 可选；四库映射的挂载/备份/可重建边界；七条硬约束（安全左移、资源生命周期、状态有家、网络可控、不可变镜像、可观测、协作变更）；旧 compose 12 项缺陷 C1–C12；迁移/备份/恢复、P0–P6 路线、DoD 与风险 K1–K12；Compose 片段明确标注未 build/up |
+| `ops/GitHub协作与容器化交付手册_v1.md` | v1 | ✅ 已落盘（2026-10-30） | 面向同伴与学校运维的操作层：Git remote 清理/canonical/SSH-443、过滤克隆、一任务一分支、提交与 PR、禁止入库清单、容器镜像发布/服务器更新/备份/烟测/回滚、常见故障排查与检查清单 |
 
 ## 变更记录
 
+- 2026-10-30：**容器化部署方案 v2.0 与 GitHub 交付手册落盘**：新增 `superpowers/specs/容器化部署方案_v2.0.md`（33.9 KB / 1219 行）与 `ops/GitHub协作与容器化交付手册_v1.md`（10.4 KB / 588 行）；结论为“现在只做部署态容器化，不迁开发环境”；目标拓扑 web + backend 两容器，SQLite 不容器化，parser/Redis/MinIO/Neo4j/Milvus 均 profile 可选；逐条落实安全左移/资源生命周期/状态有家/网络可控/不可变镜像/可观测/协作变更；旧 v1 方案的 13 服务设计与现有 compose 的 12 项缺陷全部登记；明确 Compose 片段尚未 build/up，不得当作已验证
 - 2026-10-30：**四库 P1 图片资产登记已实施**：新增 `backend/app/services/question_media.py`、`backend/scripts/register_question_media.py`、`backend/tests/test_question_media.py`；`media_service.KINDS` 增加题干图/选项图/解析图/组材料图四类；扫描 1171 条引用，登记 937 条资产（active 896 + missing 41），对象存储 896 个文件 27.7 MB；显式引用可解析率 99.2%，32 条 bare legacy marker 与 9 条缺失文件全部标 missing；二次 `--apply` inserted=0 验证幂等；真实库执行前已用 `sqlite3.backup()` 备份（`question_bank_pre_media_register_20261030_153622.db`）；未改题目数据与 `/static` 原文件
 - 2026-10-29：**题目入库知识图谱与四库映射设计落盘**：新增 `superpowers/specs/题目入库知识图谱与四库映射_v1.md`；实测 3489 题/103 挂组/38 组/`media_assets` 0 行，定位“四库底座已有、题目域本体缺失”；定义 QuestionGroup/Question/MediaAsset/ImportBatch 节点与 HAS_MEMBER/HAS_*_IMAGE/IMPORTED 边、`question_documents`/`group_documents` 文档集合、`text_materials` 向量集合、图片资产登记与 G0–G8 入库闸门；分 P0–P5 实施，D1–D6 待用户拍板；同轮教师/管理端编辑弹窗图片预览与 2021/2023 复合题回填补齐已提交 `9fe62a5`
 - 2026-10-29：**多人协作 Git 网络稳定方案落盘**：同伴 `git pull` 报 `Failed to connect to mirror.ghproxy.com port 443`，实测为客户端 remote/`url.insteadOf` 指向已停服镜像（`mirror.ghproxy.com` DNS 已不解析），叠加 `.git` 917 MB 全量传输超时被误判为网络故障；方案含清镜像改写、canonical/SSH-443 三级回退、过滤克隆（实测 23.7 s / `.git` 1.1 MB）、bundle 离线交接、一任务一分支 + rebase 规约与验收清单；新增 `scripts/dev/git-collab-doctor.ps1`（诊断 / `-Fix` / `-Bundle` / `-FromBundle`）；报告见 `superpowers/specs/多人协作Git网络稳定方案_v1.md`
