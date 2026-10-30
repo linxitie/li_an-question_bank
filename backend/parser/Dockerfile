@@ -40,11 +40,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py ./app.py
 
-# 模型缓存挂载点。MinerU 默认把模型拉到 ~/.cache，
+# 非 root 运行（R-01 最小权限）。uid/gid 固定为 10001，compose 用同一数值，
+# 避免 named volume 初始化后属主漂移导致模型缓存不可写。
+RUN groupadd -g 10001 parser \
+    && useradd -u 10001 -g parser -d /home/parser -m parser \
+    && mkdir -p /home/parser/.cache \
+    && chown -R parser:parser /home/parser
+
+# 模型缓存挂载点。MinerU 默认把模型拉到 HOME 下的 .cache，
 # 挂成卷可避免每次重建镜像都重新下载数 GB 权重。
-ENV MINERU_MODEL_SOURCE=modelscope
-RUN mkdir -p /root/.cache
-VOLUME ["/root/.cache"]
+ENV MINERU_MODEL_SOURCE=modelscope \
+    HOME=/home/parser \
+    HF_HOME=/home/parser/.cache \
+    MODELSCOPE_CACHE=/home/parser/.cache
+VOLUME ["/home/parser/.cache"]
+
+USER 10001:10001
 
 EXPOSE 8080
 

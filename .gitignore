@@ -105,6 +105,10 @@ backend/data/gates/last_run.json
 # 如需彻底瘦身需单独迁移，勿直接删除 backend/app/static/（R7）。
 backend/app/static/questions/
 
+# ---------- 容器化 staging 运行时数据 ----------
+# deploy/preflight.sh 与 docker compose 的 staging 数据目录；绝不入库。
+deploy/runtime/
+
 # ---------- 凭据 ----------
 # 真实环境变量文件一律不入库；模板 *.env.example 放行。
 .env

@@ -1,0 +1,178 @@
+# 砺安题库 —— 部署态容器编排（v2 设计 P1）
+#
+# 设计稿：docs/superpowers/specs/容器化部署方案_v2.0.md
+#
+# 核心约束：
+#   - web + backend 是核心；parser 仅在 ocr profile 下启动。
+#   - SQLite 是唯一事实源，不容器化；DB/static/uploads/logs 全部 bind 到宿主。
+#   - backend 固定单 worker（SQLite 单写者），不发布 8000。
+#   - 禁止 docker compose down -v：业务数据在宿主，不在命名卷。
+#
+# 使用：
+#   cp deploy/.env.example deploy/.env.development
+#   # 由用户本人填写 JWT_SECRET_KEY 与 *_ROOT
+#   bash deploy/preflight.sh
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env.development up -d
+#
+# 说明：本文件已在 staging 双容器验证（登录/题目/题图/开考/交卷/重启持久化）；
+#       生产切换前仍需按 preflight 准备数据目录与真实密钥。
+
+name: ${COMPOSE_PROJECT_NAME:-liankao}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  web:
+    image: ${IMAGE_PREFIX:-ghcr.io/linxitie/li_an-question_bank}-web:${IMAGE_TAG:-dev}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [edge]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/cache/nginx:size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+          pids: 128
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+
+  backend:
+    image: ${IMAGE_PREFIX:-ghcr.io/linxitie/li_an-question_bank}-backend:${IMAGE_TAG:-dev}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        # 生产镜像保留 Chromium；staging/CI 可置 0 跳过 191MB 浏览器层
+        INSTALL_PLAYWRIGHT_BROWSERS: ${INSTALL_PLAYWRIGHT_BROWSERS:-1}
+    restart: unless-stopped
+    env_file:
+      - path: ${APP_ENV_FILE:-./.env.development}
+        required: true
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      SQLITE_PATH: /app/data/question_bank.db
+      UPLOAD_DIR: /app/uploads
+      OBJECT_STORE_ROOT: /app/data/foundation/objects
+      DOC_STORE_ROOT: /app/data/foundation/docs
+      VECTOR_LOCAL_ROOT: /app/data/foundation/vectors
+      PARSER_URL: "${PARSER_URL:-}"
+      WEB_CONCURRENCY: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      UVICORN_LOG_LEVEL: ${UVICORN_LOG_LEVEL:-info}
+      HOME: /tmp
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    volumes:
+      - type: bind
+        source: ${DATA_ROOT:?DATA_ROOT required}
+        target: /app/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${STATIC_ROOT:?STATIC_ROOT required}
+        target: /app/app/static
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${UPLOAD_ROOT:?UPLOAD_ROOT required}
+        target: /app/uploads
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${LOG_ROOT:?LOG_ROOT required}/backend
+        target: /app/logs
+        bind:
+          create_host_path: false
+    expose: ["8000"]
+    networks: [edge, app, egress]
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.00"
+          memory: 2G
+          pids: 512
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+
+  parser:
+    profiles: ["ocr"]
+    image: ${IMAGE_PREFIX:-ghcr.io/linxitie/li_an-question_bank}-parser:${IMAGE_TAG:-dev}
+    build:
+      context: ../backend/parser
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-modelscope}
+      MINERU_BACKEND: ${MINERU_BACKEND:-pipeline}
+      MINERU_TIMEOUT: "${MINERU_TIMEOUT:-600}"
+      HF_HOME: /home/parser/.cache
+      MODELSCOPE_CACHE: /home/parser/.cache
+    user: "10001:10001"
+    volumes:
+      - parser_cache:/home/parser/.cache
+    expose: ["8080"]
+    networks: [app]
+    read_only: true
+    tmpfs:
+      - /tmp:size=4g,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.00"
+          memory: 4G
+          pids: 512
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    logging: *default-logging
+
+volumes:
+  parser_cache:
+
+networks:
+  edge:
+    driver: bridge
+  app:
+    driver: bridge
+    internal: true
+  egress:
+    driver: bridge
