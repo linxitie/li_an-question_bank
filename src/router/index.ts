@@ -283,6 +283,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '徽章预览', roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/materials-preview',
+    name: 'MaterialsPreview',
+    component: () => import('@/views/dev/MaterialsPreview.vue'),
+    meta: { title: '资料内容验收', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/materials/detail',
     name: 'MaterialDetail',
     component: () => import('@/views/pc/material_detail.vue'),
@@ -644,6 +650,11 @@ router.beforeEach((to, _from, next) => {
   }
 
   if (to.path === '/badge-preview') {
+    return next();
+  }
+
+  // 资料内容验收页：只读公开接口（/api/materials 游客可访问），允许未登录查看
+  if (to.path === '/materials-preview') {
     return next();
   }
 
