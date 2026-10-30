@@ -142,8 +142,9 @@ class TestBadgeApi:
         assert d["total"] >= 51
         assert isinstance(d["owned"], int)
         sample = d["items"][0]
-        for k in ("kind", "name", "shape", "owned", "current_tier"):
+        for k in ("kind", "name", "shape", "owned", "badge_tier", "rarity_text"):
             assert k in sample, f"缺字段 {k}"
+        assert sample.get("badge_tier") in ("黑铁", "青铜", "白银", "黄金", "钻石")
         assert any(i["owned"] for i in d["items"]), "测试账号应至少拥有 1 枚成就徽章"
 
     def test_按类别过滤(self, client_with_admin):

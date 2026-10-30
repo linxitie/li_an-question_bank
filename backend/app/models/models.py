@@ -1820,6 +1820,7 @@ class Achievement(Base):
     is_hidden = Column(Integer, default=0, comment="是否隐藏成就: 1=条件对学生隐藏(仅剪影)")
     style_params = Column(JSON, comment="徽章视觉参数JSON(shape/material/palette/icon等)")
     tier_times = Column(JSON, comment="五档升级阈值倍数数组如[1,2,4,8,16]; NULL=不升档")
+    badge_tier = Column(String(20), comment="固定成色(黑铁/青铜/白银/黄金/钻石)，按获取难度定，不随玩家基数变")
 
     __table_args__ = (
         Index("idx_achievement_category", category),

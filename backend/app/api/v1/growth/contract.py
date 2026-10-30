@@ -43,12 +43,14 @@ def achievement_fields(a: Achievement) -> Dict[str, object]:
     """把成长域模型投影成中性 dict（其他域只依赖这个结构）。"""
     return {
         "id": a.achievement_id,
+        "achievement_id": a.achievement_id,
         "name": a.name,
         "category": a.category,
         "icon": a.icon,
         "condition_desc": a.condition_desc,
         "reward_coins": a.reward_coins or 0,
         "threshold": a.threshold or 0,
+        "badge_tier": getattr(a, "badge_tier", None),
         "hidden": bool(a.is_hidden),
     }
 

@@ -111,9 +111,13 @@ async def my_badges(
             it.update({
                 "owned": rec is not None,
                 "obtained_at": rec.obtained_at.isoformat() if rec and rec.obtained_at else None,
+                # 成色 = 徽章自身固定档位（按获取难度），与玩家分数/基数无关
+                "badge_tier": it.get("badge_tier") or "青铜",
                 "snapshot_tier": badge_service.tier_label_by_index(
                     getattr(rec, "tier_snapshot", None)) if rec else None,
-                "current_tier": tier["label"],
+                # 稀有度只做文字：全服多少人拿到（相对量，随时间变，不参与颜色）
+                "rarity_text": (f"全服 {round(cnt / total_users * 100, 1)}% 获得"
+                                if total_users else ""),
                 "owned_count": cnt,
                 "owned_percent": round(cnt / total_users * 100, 1) if total_users else 0.0,
             })
