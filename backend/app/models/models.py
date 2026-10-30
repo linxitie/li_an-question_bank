@@ -1256,7 +1256,9 @@ class StudyMaterial(Base):
     material_id = Column(Integer, primary_key=True, autoincrement=True, comment="资料ID")
     subject = Column(String(20), nullable=False, comment="科目: xingce/shenlun/gongzhuan")
     type = Column(String(20), nullable=False, comment="类型: video_intro/video_advanced/article/card")
-    category = Column(String(50), comment="分类标签")
+    category = Column(String(50), comment="分类标签(必须是 sub_categories 子类名)")
+    point_id = Column(Integer, ForeignKey("knowledge_point.point_id"),
+                      comment="考点ID(分类法第三层: 子类→考点→资料)")
     title = Column(String(200), nullable=False, comment="标题")
     summary = Column(String(500), comment="摘要")
     content = Column(Text, comment="文章HTML(bleach消毒后)；卡片时为背面详述")

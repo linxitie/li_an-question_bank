@@ -104,6 +104,13 @@ def ensure_migrations(con: sqlite3.Connection, dry: bool) -> list[str]:
             con.execute("CREATE INDEX IF NOT EXISTS idx_material_owner ON study_material(creator_id, status)")
         done.append("补列 study_material.source_material_id + idx_material_owner")
 
+    # P2.2：分类法第三层（资料 → 考点）
+    if "point_id" not in cols:
+        if not dry:
+            con.execute("ALTER TABLE study_material ADD COLUMN point_id INTEGER")
+            con.execute("CREATE INDEX IF NOT EXISTS idx_material_point ON study_material(point_id)")
+        done.append("补列 study_material.point_id + idx_material_point")
+
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "material_share" not in tables:
         if not dry:

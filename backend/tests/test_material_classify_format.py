@@ -84,9 +84,16 @@ class TestAutoClassify:
         assert got == "资料分析"
 
     def test_explicit_wins(self, db):
-        # 表格分类列有值时不覆盖
-        got = _resolve_card_category(db, "xingce", "图形推理", "先看元素组成", "方法技巧")
-        assert got == "方法技巧"
+        # 表格分类列有值且合法时不被自动分类覆盖
+        got = _resolve_card_category(db, "xingce", "图形推理", "先看元素组成", "数量关系")
+        assert got == "数量关系"
+
+    def test_invalid_explicit_rejected(self, db):
+        # P2.1：分类必须是 sub_categories 词表内的子类，否则 400
+        with pytest.raises(HTTPException) as ei:
+            _resolve_card_category(db, "xingce", "图形推理", "先看元素组成", "方法技巧")
+        assert ei.value.status_code == 400
+        assert "方法技巧" in str(ei.value.detail)
 
     def test_auto_when_empty(self, db):
         # 无分类列时自动判定

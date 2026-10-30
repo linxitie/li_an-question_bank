@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
 from ....core.trigger_types import TRIGGER_MATERIAL_OPENED
+from ....api.v1.catalog import contract as taxonomy   # 分类法只读契约（P4.1 跨域约定）
 from ....models.models import (StudyMaterial, UserMaterialProgress, SysUser,
                                MaterialShare, MaterialAdoptLog)
 from ....services.event_consumer import record_user_action
@@ -31,7 +32,8 @@ TYPES = {"video_intro", "video_advanced", "article", "card"}
 def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -> dict:
     d = {
         "id": m.material_id, "subject": m.subject, "type": m.type,
-        "category": m.category, "title": m.title, "summary": m.summary,
+        "category": m.category, "point_id": m.point_id,
+        "title": m.title, "summary": m.summary,
         "badge": m.badge, "cover_image": m.cover_image,
         "duration": m.duration or 0, "read_time": m.read_time or 0,
         "difficulty": m.difficulty or 1, "view_count": m.view_count or 0,
@@ -262,11 +264,7 @@ async def my_create(body: dict,
     publish=true 时直接公开（status=1）——Q6 已确认学生建卡免审批。
     """
     data = _validate_material_body(body)
-    if not data.get("category"):
-        auto = _auto_classify(db, data.get("subject"), data.get("title"),
-                              data.get("card_front"), data.get("card_back"))
-        if auto:
-            data["category"] = auto
+    _finalize_classification(db, data)
     m = StudyMaterial(**data, creator_id=current_user.user_id,
                       status=(1 if body.get("publish") else 2))
     db.add(m)
@@ -313,6 +311,12 @@ async def my_update(material_id: int, body: dict,
     if m.creator_id != current_user.user_id and not _own_or_admin(current_user):
         raise HTTPException(403, "只能修改自己创建的资料")
     data = _validate_material_body(body, partial=True)
+    if "category" in data or "point_id" in data:
+        subj = data.get("subject") or m.subject
+        if "category" in data:
+            data["category"] = _validate_category(db, subj, data["category"])
+        if "point_id" in data:
+            data["point_id"] = _validate_point(db, subj, data["point_id"])
     for k, v in data.items():
         setattr(m, k, v)
     if isinstance(body.get("publish"), bool):
@@ -691,7 +695,7 @@ async def upload_image(file: UploadFile = File(...),
 
 
 def _validate_material_body(body: dict, partial: bool = False) -> dict:
-    keys = ("subject", "type", "category", "title", "summary", "content",
+    keys = ("subject", "type", "category", "point_id", "title", "summary", "content",
             "card_front", "card_back", "cover_image", "video_id",
             "duration", "read_time", "difficulty", "badge", "sort_order")
     data = {k: body.get(k) for k in keys}
@@ -803,8 +807,203 @@ def _resolve_card_category(db, subject, front, back, explicit=None):
     因此标题优先的匹配策略等价于「先看正面，再看正+背面」。
     """
     if explicit:
-        return explicit
+        return _validate_category(db, subject, explicit)
     return _auto_classify(db, subject, front, front, back)
+
+
+# ========== B2：分类法三层贯通（子类词表 → 考点 → 资料）==========
+# 2026-10-30 实测：sub_categories 16 条（行测 8 / 申论 5 / 公专 3），
+# knowledge_point 94 条（level=2、parent_id=0，是**扁平考点表**），
+# 但 study_material 只挂子类、考点层没有任何资料；category 也从未校验过词表，
+# 于是出现「方法技巧」这类游离类目（行测 12 张卡）。
+# 这里补上第三层：point_id 落库 + 两级自动分类 + 子类词表校验。
+SUBJECT_IDS = taxonomy.SUBJECT_IDS
+
+
+def _category_names(db, subject) -> List[str]:
+    return taxonomy.category_names(db, subject)
+
+
+def _validate_category(db, subject, category):
+    """分类必须是 sub_categories 里的合法子类；非法 → 400 并提示最近词。"""
+    cat = (category or "").strip()
+    if not cat:
+        return None
+    names = _category_names(db, subject)
+    if not names or cat in names:
+        # 词表空（新科目尚未配置）时不阻断，保持向前兼容
+        return cat
+    import difflib
+    close = difflib.get_close_matches(cat, names, n=1, cutoff=0.3)
+    hint = (f"是否想用「{close[0]}」？" if close else "可选：" + "、".join(names))
+    raise HTTPException(400, f"分类「{cat}」不在 {subject} 的子类词表内，{hint}")
+
+
+def _point_map(db, subject) -> dict:
+    """考点名 → KnowledgePoint 行（经 catalog 契约）。"""
+    return taxonomy.point_map(db, subject)
+
+
+def _validate_point(db, subject, point_id) -> int:
+    try:
+        pid = int(point_id)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "point_id 必须是整数")
+    if not taxonomy.point_belongs_to(db, subject, pid):
+        raise HTTPException(400, f"考点 {pid} 不在 {subject} 的考点表内")
+    return pid
+
+
+def _point_row(db, subject, point_id):
+    return taxonomy.point_by_id(db, subject, point_id)
+
+
+def _point_id_by_name(db, subject, name):
+    return taxonomy.point_id_by_name(db, subject, name)
+
+
+def _category_of_point(db, subject, point_id) -> Optional[str]:
+    return taxonomy.category_of_point(db, subject, point_id)
+
+
+def _auto_classify_ex(db, subject, title, front, back):
+    """两级自动分类：子类 + 考点。
+
+    规则形态（material_classification_rules.rule_config）：
+        {"subject": "xingce", "category": "判断推理", "keywords": [...]}          # 子类级
+        {"subject": "xingce", "category": "判断推理", "point": "图形推理",
+         "keywords": [...]}                                                      # 考点级
+
+    计分沿用 v2：标题优先 → 全文兜底；同级内 (命中数, priority) 取大。
+    返回 {'category', 'point_name', 'point_id'} 或 None。
+    """
+    from ....models.models import MaterialClassificationRule  # 局部导入
+
+    title = title or ""
+    whole = " ".join(x for x in (title, front, back) if x)
+    if not whole.strip():
+        return None
+
+    rules = (db.query(MaterialClassificationRule)
+             .filter(MaterialClassificationRule.enabled == 1,
+                     MaterialClassificationRule.rule_type == "keyword")
+             .order_by(MaterialClassificationRule.priority.desc()).all())
+    if not rules:
+        return None
+
+    def _cfg(r):
+        try:
+            c = r.rule_config or {}
+            if isinstance(c, str):
+                c = _json.loads(c)
+            return c if isinstance(c, dict) else None
+        except Exception:
+            return None
+
+    cfgs = [(r, _cfg(r)) for r in rules]
+    cfgs = [(r, c) for r, c in cfgs
+            if c and (not c.get("subject") or c["subject"] == subject)]
+
+    def _hits(cfg, text):
+        return sum(1 for k in (cfg.get("keywords") or []) if k and k in text)
+
+    best_cat, best_cat_key = None, (0, 0)
+    best_pt, best_pt_key, best_pt_cat = None, (0, 0), None
+
+    # 第一轮：只看标题（标题最能代表这张卡讲什么）
+    for r, cfg in cfgs:
+        h = _hits(cfg, title)
+        if h <= 0:
+            continue
+        key = (h, r.priority or 0)
+        if cfg.get("category") and key > best_cat_key:
+            best_cat, best_cat_key = cfg["category"], key
+        if cfg.get("point") and key > best_pt_key:
+            best_pt, best_pt_key, best_pt_cat = cfg["point"], key, cfg.get("category")
+
+    # 第二轮：标题未命中的那一级，用全文兜底
+    if not best_cat or not best_pt:
+        for r, cfg in cfgs:
+            h = _hits(cfg, whole)
+            if h <= 0:
+                continue
+            key = (h, r.priority or 0)
+            if not best_cat and cfg.get("category") and key > best_cat_key:
+                best_cat, best_cat_key = cfg["category"], key
+            if not best_pt and cfg.get("point") and key > best_pt_key:
+                best_pt, best_pt_key, best_pt_cat = cfg["point"], key, cfg.get("category")
+
+    if not best_cat and not best_pt:
+        return None
+
+    out = {"category": best_cat, "point_name": best_pt, "point_id": None}
+    if best_pt:
+        out["point_id"] = _point_id_by_name(db, subject, best_pt)
+        if not out["category"] and best_pt_cat:
+            out["category"] = best_pt_cat
+        if not out["category"] and out["point_id"]:
+            out["category"] = _category_of_point(db, subject, out["point_id"])
+    return out
+
+
+def _resolve_classification(db, subject, title, front, back,
+                            explicit_category=None, explicit_point=None,
+                            strict: bool = True) -> dict:
+    """分类收敛：显式 > 自动；返回 {'category','point_id','point_name'}。
+
+    strict=True（交互式建卡/改卡）：显式分类不在词表内 → 400，让用户当场改；
+    strict=False（批量导入）：非法显式分类不中断，回退自动分类并在
+    `rejected_category` 里回报，由调用方写进行级 warnings。
+    """
+    out = {"category": None, "point_id": None, "point_name": None,
+           "rejected_category": None}
+    if explicit_point not in (None, ""):
+        try:
+            out["point_id"] = _validate_point(db, subject, explicit_point)
+        except HTTPException:
+            if strict:
+                raise
+            out["rejected_point"] = explicit_point
+        if out["point_id"]:
+            row = _point_row(db, subject, out["point_id"])
+            out["point_name"] = (row.point_name or "").strip() if row else None
+    if explicit_category:
+        try:
+            out["category"] = _validate_category(db, subject, explicit_category)
+        except HTTPException:
+            if strict:
+                raise
+            out["rejected_category"] = (explicit_category or "").strip()
+
+    if not (out["category"] and out["point_id"]):
+        auto = _auto_classify_ex(db, subject, title, front, back)
+        if auto:
+            out["category"] = out["category"] or auto.get("category")
+            out["point_id"] = out["point_id"] or auto.get("point_id")
+            out["point_name"] = out["point_name"] or auto.get("point_name")
+
+    if out["point_id"] and not out["point_name"]:
+        row = _point_row(db, subject, out["point_id"])
+        out["point_name"] = (row.point_name or "").strip() if row else None
+    if out["point_id"] and not out["category"]:
+        out["category"] = _category_of_point(db, subject, out["point_id"])
+    return out
+
+
+def _finalize_classification(db, data: dict) -> dict:
+    """建卡/建资料前统一收敛分类字段（原地改 data）。"""
+    subject = data.get("subject")
+    resolved = _resolve_classification(
+        db, subject,
+        data.get("title"), data.get("card_front") or data.get("title"),
+        data.get("card_back") or data.get("content"),
+        explicit_category=data.get("category"), explicit_point=data.get("point_id"))
+    if resolved.get("category"):
+        data["category"] = resolved["category"]
+    if resolved.get("point_id"):
+        data["point_id"] = resolved["point_id"]
+    return data
+
 
 
 # ============ 分类规则后台维护（管理员，4 端点） ============
@@ -1053,11 +1252,7 @@ async def admin_create(body: dict,
                        db: Session = Depends(get_db)):
     _require_admin(current_user)
     data = _validate_material_body(body)
-    if not data.get("category"):
-        auto = _auto_classify(db, data.get("subject"), data.get("title"),
-                              data.get("card_front"), data.get("card_back"))
-        if auto:
-            data["category"] = auto
+    _finalize_classification(db, data)
     m = StudyMaterial(**data, creator_id=current_user.user_id)
     db.add(m)
     db.commit()
@@ -1077,6 +1272,12 @@ async def admin_update(material_id: int, body: dict,
     if not m:
         raise HTTPException(404, "资料不存在")
     data = _validate_material_body(body, partial=True)
+    if "category" in data or "point_id" in data:
+        subj = data.get("subject") or m.subject
+        if "category" in data:
+            data["category"] = _validate_category(db, subj, data["category"])
+        if "point_id" in data:
+            data["point_id"] = _validate_point(db, subj, data["point_id"])
     for k, v in data.items():
         setattr(m, k, v)
     db.commit()
@@ -1195,6 +1396,7 @@ async def admin_batch_create(
     created_ids = []
     for item in items:
         data = _validate_material_body(item)
+        _finalize_classification(db, data)   # P2.4：批量建卡同样走两级自动分类
         m = StudyMaterial(**data, creator_id=current_user.user_id)
         db.add(m)
         db.flush()
@@ -1504,6 +1706,7 @@ async def import_confirm(import_id: int, body: dict,
     result = _load_result(rec)
     created_ids = []
     skipped: list = []          # D4：重复/无效行明细，回传给前端
+    warnings: list = []         # P2.5：分类列/考点列非法但已回退自动分类的行
     publish = bool(body.get("publish"))   # D2：导入即上线（默认 false）
 
     if rec.file_type == "xlsx":
@@ -1513,6 +1716,8 @@ async def import_confirm(import_id: int, body: dict,
             col_back = int(mapping["back"])
             col_cat = (int(mapping["category"])
                        if mapping.get("category") not in (None, "") else None)
+            col_point = (int(mapping["point"])
+                         if mapping.get("point") not in (None, "") else None)
         except (KeyError, TypeError, ValueError):
             raise HTTPException(400, "列映射不完整（正面列/背面列必填）")
         from ....services.material_parser import build_cards, parse_xlsx
@@ -1527,7 +1732,7 @@ async def import_confirm(import_id: int, body: dict,
             or not (r[col_back].strip() if col_back < len(r) else "")
         ]
         cards = build_cards(raw_rows, col_front, col_back, col_cat,
-                            limit=CARD_ROW_LIMIT)
+                            limit=CARD_ROW_LIMIT, col_point=col_point)
         if not cards:
             raise HTTPException(400, "按当前列映射未得到有效卡片（正反面均不能为空）")
         base_title = _os.path.splitext(rec.file_name)[0]
@@ -1546,13 +1751,24 @@ async def import_confirm(import_id: int, body: dict,
             # 分类器只看扩展名+标题关键词，卡片正文短会判成 article，导致卡片
             # 落入文章区、翻卡 UI 永不触发（D1）。此处只按业务事实写 card。
             content_hash = content_cleaner.calculate_content_hash(combined)
-            # 分类三级优先：表格分类列 > 关键词自动分类 > 请求体 category
-            card_category = _resolve_card_category(
-                db, subject, card_front, card_back,
-                c.get("category") or category)
+            # 分类三级优先：表格分类列 > 关键词自动分类 > 请求体 category；
+            # P2.2：同时解析考点列（表头「考点」），落 point_id
+            # 导入是批量场景：非法分类不中断，回退自动分类并记 warning（P2.5 错误行回报）
+            cls = _resolve_classification(
+                db, subject, card_front, card_front, card_back,
+                explicit_category=c.get("category") or category,
+                explicit_point=_point_id_by_name(db, subject, c.get("point")),
+                strict=False)
+            for bad, kind in ((cls.get("rejected_category"), "category"),
+                              (cls.get("rejected_point"), "point")):
+                if bad:
+                    warnings.append({"row": idx, "kind": kind,
+                                     "value": str(bad)[:60],
+                                     "replaced_by": cls.get("category") or ""})
             m = StudyMaterial(
                 subject=subject, type="card",
-                category=card_category,
+                category=cls["category"],
+                point_id=cls["point_id"],
                 title=card_front, card_front=card_front,
                 card_back=card_back,
                 content_hash=content_hash,
@@ -1612,4 +1828,5 @@ async def import_confirm(import_id: int, body: dict,
         resp["invalid_rows"] = invalid_rows
         resp["skipped"] = skipped
         resp["skipped_count"] = len(skipped) + len(invalid_rows)
+        resp["warnings"] = warnings
     return JSONResponse(resp)
