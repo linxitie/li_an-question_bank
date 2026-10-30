@@ -231,4 +231,21 @@ async function submit() {
 .mu-skip-list { margin: 0; padding-left: 18px; font-size: 12.5px; color: #374151; }
 .mu-skip-list li { line-height: 1.8; }
 .mu-warn .mu-skip-title { color: #b45309; }
+
+/* P4：窄屏适配（手机 ≤600px / 平板 ≤900px），修横向溢出 */
+@media (max-width: 900px) {
+  .mu-quota { flex-wrap: wrap; gap: 12px; }
+  .mu-quota-tip { margin-left: 0; max-width: none; width: 100%; }
+}
+@media (max-width: 600px) {
+  .mu-page { padding: 16px 12px 40px; }
+  .mu-quota { gap: 10px 16px; padding: 10px 12px; }
+  .mu-quota-num { font-size: 18px; }
+  .mu-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .mu-lab { width: auto; }
+  .mu-seg { flex-wrap: wrap; }
+  .mu-drop { min-height: 84px; padding: 8px; }
+  .mu-actions { flex-direction: column; align-items: stretch; gap: 8px; }
+  .mu-btn { width: 100%; }
+}
 </style>
