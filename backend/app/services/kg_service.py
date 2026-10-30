@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from ..core.content_hub_schema import RELATION_SEED
@@ -156,6 +156,87 @@ def list_topics(db: Session, kind: str | None = None) -> list[Topic]:
     if kind:
         query = query.filter(Topic.kind == kind)
     return query.order_by(Topic.sort_order, Topic.topic_id).all()
+
+
+def list_topics_with_counts(db: Session, kind: str | None = None) -> list[dict[str, Any]]:
+    """主题列表 + 关联内容计数（API 展示用）。"""
+    topics = list_topics(db, kind)
+    counts = dict(
+        db.query(KgEdge.dst_id, func.count(KgEdge.edge_id))
+        .filter(KgEdge.dst_type == "topic")
+        .group_by(KgEdge.dst_id)
+        .all()
+    )
+    return [
+        {
+            "topic_id": topic.topic_id,
+            "name": topic.name,
+            "slug": topic.slug,
+            "kind": topic.kind,
+            "parent_id": topic.parent_id,
+            "count": counts.get(topic.topic_id, 0),
+        }
+        for topic in topics
+    ]
+
+
+def search_nodes(
+    db: Session,
+    q: str,
+    node_type: str | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """按关键词检索主题/金句/新闻/招考节点。"""
+    pattern = f"%{q}%"
+    items: list[dict[str, Any]] = []
+
+    if node_type in (None, "topic"):
+        rows = (
+            db.query(Topic)
+            .filter(or_(Topic.name.like(pattern), Topic.slug.like(pattern)))
+            .limit(limit)
+            .all()
+        )
+        items.extend(
+            {
+                "type": "topic",
+                "id": row.topic_id,
+                "label": row.name,
+                "url": f"/topics/{row.slug}",
+            }
+            for row in rows
+        )
+
+    if node_type in (None, "quote"):
+        rows = db.query(EssayQuote).filter(EssayQuote.content.like(pattern)).limit(limit).all()
+        items.extend(filter(None, (resolve_node(db, "quote", row.quote_id) for row in rows)))
+
+    if node_type in (None, "news"):
+        rows = db.query(NewsArticle).filter(NewsArticle.title.like(pattern)).limit(limit).all()
+        items.extend(filter(None, (resolve_node(db, "news", row.news_id) for row in rows)))
+
+    if node_type in (None, "recruitment"):
+        rows = (
+            db.query(RecruitmentInfo)
+            .filter(RecruitmentInfo.title.like(pattern))
+            .limit(limit)
+            .all()
+        )
+        items.extend(
+            filter(None, (resolve_node(db, "recruitment", row.recruitment_id) for row in rows))
+        )
+
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for item in items:
+        key = (item["type"], item["id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+        if len(deduped) >= limit:
+            break
+    return deduped
 
 
 def resolve_node(db: Session, node_type: str, node_id: int) -> dict[str, Any] | None:
