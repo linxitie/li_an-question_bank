@@ -148,3 +148,7 @@ admin_token.txt
 # ---------- 本地运行时残留 ----------
 backend/backend_pid.txt
 backend/_badge_write_test.txt
+
+# 2026-10-29：本地文档索引与归档目录不纳入版本控制（用户决定）
+docs/README.md
+solve_problems_files/

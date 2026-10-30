@@ -26,6 +26,8 @@ class SysUser(Base):
     phone = Column(String(20), nullable=False, comment="手机号")
     avatar = Column(String(500), comment="头像URL")
     avatar_frame = Column(String(50), comment="头像框标识(金币购商城兑换)")
+    nickname = Column(String(50), comment="论坛昵称(为空时回退username)")
+    signature = Column(String(200), comment="个性签名")
     gender = Column(Enum("男", "女", "未知"), default="未知", comment="性别")
     user_type = Column(Enum("student", "teacher", "admin"), nullable=False, comment="用户类型")
     department = Column(String(100), comment="学院/部门")
@@ -642,7 +644,7 @@ class ForumPost(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="发帖人ID")
     title = Column(String(200), nullable=False, comment="标题")
     content = Column(Text, nullable=False, comment="内容")
-    share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING"), default="EXPERIENCE", comment="分享类型")
+    share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION"), default="EXPERIENCE", comment="分享类型")
     tags = Column(String(500), comment="标签")
     is_top = Column(Integer, default=0, comment="是否置顶")
     is_essence = Column(Integer, default=0, comment="是否精华")
@@ -652,7 +654,19 @@ class ForumPost(Base):
     collect_count = Column(Integer, default=0, comment="收藏数")
     status = Column(Enum("NORMAL", "DELETED", "BLOCKED"), default="NORMAL", comment="状态")
     attachments = Column(JSON, comment="附件列表JSON:[{name,url,size,type}]")
-    create_time = Column(DateTime, default=datetime.now, comment="发布时间")
+    # === P1 个性化/互动扩展 ===
+    title_color = Column(String(16), default="default", comment="标题颜色 token")
+    is_locked = Column(Integer, default=0, comment="是否关闭评论 0否/1是")
+    question_id = Column(BigInteger, comment="关联题目ID")
+    feedback_id = Column(BigInteger, comment="关联反馈工单ID")
+    # === P3 可见范围（2026-10-26）===
+    visibility = Column(String(16), default="ALL", comment="可见范围: ALL 全校 | CLASSES 指定班级")
+    visible_classes = Column(JSON, comment="可见班级名列表 JSON，visibility=CLASSES 时生效")
+    last_activity_time = Column(DateTime, default=datetime.now, comment="最后活跃时间")
+    deleted_by = Column(BigInteger, comment="删除人ID")
+    deleted_reason = Column(String(200), comment="删除原因")
+    deleted_at = Column(DateTime, comment="删除时间")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     user = relationship("SysUser")
@@ -662,6 +676,7 @@ class ForumPost(Base):
         Index("idx_create_time", create_time),
         Index("idx_status_forumpost", status),
         Index("idx_status_top_time", status, is_top, create_time),
+        Index("idx_post_activity", status, last_activity_time),
     )
 
 class ForumComment(Base):
@@ -674,7 +689,14 @@ class ForumComment(Base):
     parent_comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="父评论ID")
     content = Column(Text, nullable=False, comment="评论内容")
     like_count = Column(Integer, default=0, comment="点赞数")
-    status = Column(Integer, default=1, comment="状态")
+    status = Column(Integer, default=1, comment="状态 1正常/0删除/2隐藏")
+    # === P1 评论区扩展 ===
+    is_pinned = Column(Integer, default=0, comment="是否置顶 0否/1是")
+    reply_to_user_id = Column(BigInteger, comment="回复目标用户ID")
+    attachments = Column(JSON, comment="评论附件 JSON:[{name,url,size,type}]")
+    deleted_by = Column(BigInteger, comment="删除/隐藏操作人ID")
+    deleted_reason = Column(String(200), comment="删除/隐藏原因")
+    deleted_at = Column(DateTime, comment="删除/隐藏时间")
     create_time = Column(DateTime, default=datetime.now, comment="评论时间")
     
     post = relationship("ForumPost")
@@ -1109,6 +1131,7 @@ class ForumLike(Base):
     post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), comment="帖子ID")
     comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="评论ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    reaction_code = Column(String(16), default="like", comment="表情反应码: like/love/haha/wow/sad/angry")
     create_time = Column(DateTime, default=datetime.now, comment="点赞时间")
     
     post = relationship("ForumPost")
@@ -1121,6 +1144,48 @@ class ForumLike(Base):
         Index("idx_post_id_forumlike", post_id),
         Index("idx_comment_id_forumlike", comment_id),
         Index("idx_user_id_forumlike", user_id),
+    )
+
+
+class ForumFavorite(Base):
+    """论坛收藏表（P3，2026-10-26）
+
+    与 /api/collection（题目/新闻收藏）互不相干：本表只服务于论坛帖子收藏。
+    一个用户对同一帖子只能收藏一次，取消即删除行。
+    """
+    __tablename__ = "forum_favorite"
+
+    favorite_id = Column(Integer, primary_key=True, autoincrement=True, comment="收藏ID")
+    post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), nullable=False, comment="帖子ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    create_time = Column(DateTime, default=datetime.now, comment="收藏时间")
+
+    post = relationship("ForumPost")
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("post_id", "user_id", name="uk_post_user_favorite"),
+        Index("idx_user_id_forumfavorite", user_id),
+        Index("idx_post_id_forumfavorite", post_id),
+    )
+
+
+class ForumSticker(Base):
+    """论坛表情包（系统内置 + 用户自定义）"""
+    __tablename__ = "forum_sticker"
+
+    sticker_id = Column(Integer, primary_key=True, autoincrement=True, comment="表情包ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="上传者ID; NULL=系统内置")
+    name = Column(String(50), nullable=False, comment="表情包名称")
+    url = Column(String(500), nullable=False, comment="图片URL")
+    category = Column(String(16), default="sticker", comment="分类: emoji/sticker")
+    sort_order = Column(Integer, default=0, comment="排序")
+    enabled = Column(Integer, default=1, comment="是否启用")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_forum_sticker_user", user_id),
+        Index("idx_forum_sticker_enabled", enabled),
     )
 
 # ------------------------------
@@ -1951,14 +2016,30 @@ class UserFeedback(Base):
 
     feedback_id = Column(Integer, primary_key=True, autoincrement=True, comment="反馈ID")
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="提交人ID")
-    category = Column(String(32), nullable=False, comment="分类: 功能异常/内容错误/意见建议/其他")
+    category = Column(String(32), nullable=False, comment="分类: 功能异常/数据错误/界面问题/其他")
     content = Column(Text, nullable=False, comment="反馈内容")
     contact = Column(String(100), comment="联系方式(可选)")
-    status = Column(String(20), default="pending", comment="状态: pending/processing/replied/closed")
-    reply = Column(Text, comment="管理员/教师回复")
+    status = Column(String(20), default="pending", comment="状态: pending/claimed/replied/resolved/rejected/merged")
+    reply = Column(Text, comment="管理员/教师回复（兼容旧字段）")
     reply_by = Column(BigInteger, comment="回复人ID")
     replied_at = Column(DateTime, comment="回复时间")
     created_at = Column(DateTime, default=datetime.now, comment="提交时间")
+
+    # === 工单化扩展（P0） ===
+    ticket_no = Column(String(24), unique=True, comment="工单号 FBYYYYMMDD-000001")
+    feedback_type = Column(String(32), comment="类型: question_content/answer/analysis/function/other")
+    question_id = Column(BigInteger, comment="关联题目ID")
+    practice_record_id = Column(BigInteger, comment="关联练习记录ID")
+    attachments = Column(JSON, comment="截图列表 JSON")
+    priority = Column(String(10), default="normal", comment="优先级 low/normal/high")
+    handler_id = Column(BigInteger, comment="处理人ID")
+    claimed_at = Column(DateTime, comment="认领时间")
+    first_response_at = Column(DateTime, comment="首次响应时间（SLA 24h）")
+    resolved_at = Column(DateTime, comment="解决/驳回时间（SLA 72h）")
+    source = Column(String(20), default="form", comment="来源 form/forum/practice")
+    forum_post_id = Column(BigInteger, comment="来源论坛帖子ID")
+    subject_id = Column(Integer, comment="科目ID（用于范围分配）")
+    merged_into = Column(BigInteger, comment="合并到的主工单ID")
 
     user = relationship("SysUser")
 
@@ -1966,4 +2047,134 @@ class UserFeedback(Base):
         Index("idx_feedback_user", user_id),
         Index("idx_feedback_status", status),
         Index("idx_feedback_created", created_at),
+        Index("idx_feedback_ticket", ticket_no),
+        Index("idx_feedback_handler", handler_id),
+        Index("idx_feedback_question", question_id),
+    )
+
+
+class FeedbackReply(Base):
+    """反馈工单的多轮回复。"""
+    __tablename__ = "feedback_reply"
+
+    reply_id = Column(Integer, primary_key=True, autoincrement=True, comment="回复ID")
+    feedback_id = Column(Integer, ForeignKey("user_feedback.feedback_id"), nullable=False, comment="工单ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="回复人ID")
+    role = Column(String(20), comment="回复人角色 student/practice_admin/teacher/admin")
+    content = Column(Text, nullable=False, comment="回复内容")
+    attachments = Column(JSON, comment="附件 JSON")
+    created_at = Column(DateTime, default=datetime.now, comment="回复时间")
+
+    __table_args__ = (
+        Index("idx_feedback_reply_feedback", feedback_id, created_at),
+    )
+class UserCapability(Base):
+    """按用户授予的能力包（练习管理员等）。
+
+    与角色权限分离：角色决定基础能力，能力包决定额外授权与范围。
+    scope_type: global / subject / class；scope_id 对应科目或班级标识。
+    """
+    __tablename__ = "user_capability"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="被授权用户")
+    capability_code = Column(String(32), nullable=False, comment="能力码: practice_admin_teacher/practice_admin_student")
+    scope_type = Column(String(16), nullable=False, default="subject", comment="范围: global/subject/class")
+    scope_id = Column(Integer, comment="科目ID（scope_type=subject 时使用）")
+    scope_key = Column(String(64), comment="范围键（scope_type=class 时存班级名）")
+    status = Column(String(16), nullable=False, default="active", comment="状态: active/revoked")
+    granted_by = Column(BigInteger, comment="授权人ID")
+    granted_at = Column(DateTime, default=datetime.now, comment="授权时间")
+    revoked_at = Column(DateTime, comment="撤销时间")
+    note = Column(String(255), comment="任命说明")
+
+    user = relationship("SysUser", foreign_keys=[user_id])
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "capability_code", "scope_type", "scope_id", name="uk_user_capability"),
+        Index("idx_capability_user_status", user_id, status),
+        Index("idx_capability_scope", capability_code, scope_type, scope_id),
+    )
+
+
+class ForumReport(Base):
+    """论坛举报（帖子/评论/用户）。"""
+    __tablename__ = "forum_report"
+
+    report_id = Column(Integer, primary_key=True, autoincrement=True, comment="举报ID")
+    reporter_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="举报人")
+    target_type = Column(String(10), nullable=False, comment="目标类型: POST/COMMENT/USER")
+    target_id = Column(BigInteger, nullable=False, comment="目标ID")
+    reason_code = Column(String(20), nullable=False, comment="原因: spam/abuse/illegal/other")
+    reason_text = Column(String(200), comment="补充说明")
+    status = Column(String(16), nullable=False, default="PENDING", comment="PENDING/ACCEPTED/REJECTED")
+    handled_by = Column(BigInteger, comment="处理人")
+    handled_at = Column(DateTime, comment="处理时间")
+    created_at = Column(DateTime, default=datetime.now, comment="举报时间")
+
+    __table_args__ = (
+        UniqueConstraint("reporter_id", "target_type", "target_id", name="uk_forum_report_once"),
+        Index("idx_forum_report_status", status, created_at),
+        Index("idx_forum_report_target", target_type, target_id),
+    )
+
+
+class ForumMention(Base):
+    """论坛 @提及。"""
+    __tablename__ = "forum_mention"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键")
+    post_id = Column(BigInteger, ForeignKey("forum_post.post_id"), comment="帖子ID")
+    comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="评论ID")
+    mentioned_user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="被提及用户")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_forum_mention_user", mentioned_user_id, created_at),
+    )
+
+
+class UserNotification(Base):
+    """统一站内信（学生/教师/管理员共用）。"""
+    __tablename__ = "user_notification"
+
+    notification_id = Column(Integer, primary_key=True, autoincrement=True, comment="通知ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="接收人")
+    type = Column(String(20), nullable=False, default="system", comment="feedback/forum/mention/system")
+    title = Column(String(200), nullable=False, comment="标题")
+    content = Column(Text, comment="正文")
+    link = Column(String(300), comment="前端路由")
+    related_type = Column(String(20), comment="关联类型")
+    related_id = Column(BigInteger, comment="关联ID")
+    is_read = Column(Integer, default=0, comment="0未读/1已读")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_notification_user_read", user_id, is_read, created_at),
+    )
+
+
+class ForumModeration(Base):
+    """论坛内容删除/复核记录。
+
+    action: TEACHER_HIDE / ADMIN_DELETE / RESTORE
+    status: PENDING / APPROVED / REJECTED / RESTORED
+    """
+    __tablename__ = "forum_moderation"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="主键")
+    target_type = Column(String(10), nullable=False, comment="POST/COMMENT")
+    target_id = Column(BigInteger, nullable=False, comment="目标ID")
+    action = Column(String(20), nullable=False, comment="TEACHER_HIDE/ADMIN_DELETE/RESTORE")
+    reason = Column(String(200), comment="原因")
+    actor_id = Column(BigInteger, comment="操作人")
+    status = Column(String(16), nullable=False, default="PENDING", comment="PENDING/APPROVED/REJECTED/RESTORED")
+    reviewed_by = Column(BigInteger, comment="复核人")
+    reviewed_at = Column(DateTime, comment="复核时间")
+    review_note = Column(String(200), comment="复核意见")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_moderation_status", status, created_at),
+        Index("idx_moderation_target", target_type, target_id),
     )

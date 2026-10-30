@@ -13,6 +13,7 @@
           :theme="themeSwitchable"></XMask>
       </VtjErrorBoundary>
     </Suspense>
+    <BackToTop />
   </ElConfigProvider>
 </template>
 <script setup lang="ts">
@@ -30,6 +31,7 @@ import {
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import _logo from './assets/logo.svg';
 import VtjErrorBoundary from './components/common/VtjErrorBoundary.vue';
+import BackToTop from './components/common/BackToTop.vue';
 const { disabled, title, menus, logo, themeSwitchable, pure } = useMask();
 
 const actions: ActionBarItems = [

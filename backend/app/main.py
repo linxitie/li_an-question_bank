@@ -16,7 +16,7 @@ from .core.redis_client import get_redis, close_redis
 from .api.v1.platform import llm
 from .api.v1.catalog import questions, papers, question_actions, wrong_questions
 from .api.v1.exam import exams, stats, practice, exam_records, quick_practice, smart_exam
-from .api.v1.library import videos, media
+from .api.v1.library import videos, media, image_media
 from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
@@ -24,11 +24,11 @@ from .api.v1.content import news, recruitment, calendar
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
-from .api.v1.community import quotes, forum
+from .api.v1.community import quotes, forum, practice_admin, forum_moderation
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
-from .api.v1.platform import feedback
+from .api.v1.platform import feedback, notifications
 from .api.v1.growth import achievements, checkin
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
@@ -303,14 +303,94 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 logger.info("自动迁移: exam_paper 添加列 publish_target")
 
-        # 检查 forum_post 表(论坛模块完善:新增 attachments 字段)
+        # 检查 forum_post 表(论坛模块完善 + P1 个性化字段)
         if 'forum_post' in inspector.get_table_names():
             forum_cols = [c['name'] for c in inspector.get_columns('forum_post')]
-            if 'attachments' not in forum_cols:
+            forum_new_cols = [
+                ('attachments', 'JSON'),
+                ('title_color', "VARCHAR(16) DEFAULT 'default'"),
+                ('is_locked', 'INTEGER DEFAULT 0'),
+                ('question_id', 'BIGINT'),
+                ('feedback_id', 'BIGINT'),
+                ('last_activity_time', 'DATETIME'),
+                ('deleted_by', 'BIGINT'),
+                ('deleted_reason', 'VARCHAR(200)'),
+                ('deleted_at', 'DATETIME'),
+                # P3 可见范围（2026-10-26）
+                ('visibility', "VARCHAR(16) DEFAULT 'ALL'"),
+                ('visible_classes', 'JSON'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in forum_new_cols:
+                    if col_name not in forum_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE forum_post ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: forum_post 添加列 {col_name}")
+                conn.commit()
+
+        # 检查 forum_comment 表(P1 评论区扩展)
+        if 'forum_comment' in inspector.get_table_names():
+            comment_cols = [c['name'] for c in inspector.get_columns('forum_comment')]
+            comment_new_cols = [
+                ('is_pinned', 'INTEGER DEFAULT 0'),
+                ('reply_to_user_id', 'BIGINT'),
+                ('attachments', 'JSON'),
+                ('deleted_by', 'BIGINT'),
+                ('deleted_reason', 'VARCHAR(200)'),
+                ('deleted_at', 'DATETIME'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in comment_new_cols:
+                    if col_name not in comment_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE forum_comment ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: forum_comment 添加列 {col_name}")
+                conn.commit()
+
+        # 检查 forum_like 表(点赞表情:新增 reaction_code 字段)
+        if 'forum_like' in inspector.get_table_names():
+            like_cols = [c['name'] for c in inspector.get_columns('forum_like')]
+            if 'reaction_code' not in like_cols:
                 with engine.connect() as conn:
-                    conn.execute(text("ALTER TABLE forum_post ADD COLUMN attachments JSON"))
+                    conn.execute(text(
+                        "ALTER TABLE forum_like ADD COLUMN reaction_code VARCHAR(16) DEFAULT 'like'"
+                    ))
                     conn.commit()
-                logger.info("自动迁移: forum_post 添加列 attachments")
+                logger.info("自动迁移: forum_like 添加列 reaction_code")
+
+        # 检查 user_feedback 表(反馈工单化: P0 新增字段)
+        if 'user_feedback' in inspector.get_table_names():
+            fb_cols = [c['name'] for c in inspector.get_columns('user_feedback')]
+            fb_new_cols = [
+                ('ticket_no', 'VARCHAR(24)'),
+                ('feedback_type', 'VARCHAR(32)'),
+                ('question_id', 'BIGINT'),
+                ('practice_record_id', 'BIGINT'),
+                ('attachments', 'JSON'),
+                ('priority', "VARCHAR(10) DEFAULT 'normal'"),
+                ('handler_id', 'BIGINT'),
+                ('claimed_at', 'DATETIME'),
+                ('first_response_at', 'DATETIME'),
+                ('resolved_at', 'DATETIME'),
+                ('source', "VARCHAR(20) DEFAULT 'form'"),
+                ('forum_post_id', 'BIGINT'),
+                ('subject_id', 'INTEGER'),
+                ('merged_into', 'BIGINT'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in fb_new_cols:
+                    if col_name not in fb_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE user_feedback ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: user_feedback 添加列 {col_name}")
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_ticket_unique "
+                    "ON user_feedback(ticket_no)"
+                ))
+                conn.commit()
 
         # 检查 knowledge_point 表(快速练习三级分类:新增 sub_category_id 字段)
         if 'knowledge_point' in inspector.get_table_names():
@@ -392,6 +472,8 @@ async def lifespan(app: FastAPI):
                 ('created_by', 'BIGINT', None),
                 ('school_id', 'INTEGER', None),
                 ('device_sessions', 'JSON', None),
+                ('nickname', 'VARCHAR(50)', None),
+                ('signature', 'VARCHAR(200)', None),
             ]:
                 if col_name not in user_cols:
                     default_clause = f"DEFAULT {col_default}" if col_default else ""
@@ -737,6 +819,12 @@ app.include_router(achievements.router, tags=["成就"])
 app.include_router(checkin.router, tags=["每日签到"])
 app.include_router(feedback.router, tags=["意见反馈"])
 app.include_router(feedback.admin_router, tags=["反馈管理"])
+app.include_router(practice_admin.router)
+app.include_router(practice_admin.admin_router)
+app.include_router(practice_admin.teacher_router)
+app.include_router(notifications.router)
+app.include_router(forum_moderation.teacher_router)
+app.include_router(forum_moderation.admin_router)
 
 @app.get("/health", tags=["系统"])
 async def health_check():

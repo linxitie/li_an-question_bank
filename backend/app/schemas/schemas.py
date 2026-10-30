@@ -142,6 +142,9 @@ class UserResponse(BaseModel):
     email: Optional[str] = None
     phone: str = ''
     avatar: Optional[str] = None
+    avatar_frame: Optional[str] = None
+    nickname: Optional[str] = None
+    signature: Optional[str] = None
     gender: str = ''
     user_type: str = 'student'
     department: Optional[str] = None
@@ -758,6 +761,8 @@ class ForumUserPublic(BaseModel):
     id: int
     nickname: str
     avatar: str
+    avatarFrame: Optional[str] = None
+    signature: Optional[str] = None
     userType: str
     school: Optional[str] = None
     department: Optional[str] = None

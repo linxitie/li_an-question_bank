@@ -72,6 +72,17 @@ class Permission(str, Enum):
     # 论坛权限（新增）
     FORUM_POST = "forum:post"
     FORUM_MANAGE = "forum:manage"
+    FORUM_MODERATE = "forum:moderate"
+    FORUM_REPORT_HANDLE = "forum:report_handle"
+
+    # 练习反馈权限（新增）
+    FEEDBACK_READ = "feedback:read"
+    FEEDBACK_HANDLE = "feedback:handle"
+    FEEDBACK_STATS = "feedback:stats"
+
+    # 练习管理员任命权限（新增）
+    PRACTICE_ADMIN_GRANT_TEACHER = "practice_admin:grant_teacher"
+    PRACTICE_ADMIN_GRANT_STUDENT = "practice_admin:grant_student"
 
     # LLM 授权
     LLM_USE = "llm:use"
@@ -140,6 +151,13 @@ ROLE_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.LOG_AUDIT,
         Permission.FORUM_POST,
         Permission.FORUM_MANAGE,
+        Permission.FORUM_MODERATE,
+        Permission.FORUM_REPORT_HANDLE,
+        Permission.FEEDBACK_READ,
+        Permission.FEEDBACK_HANDLE,
+        Permission.FEEDBACK_STATS,
+        Permission.PRACTICE_ADMIN_GRANT_TEACHER,
+        Permission.PRACTICE_ADMIN_GRANT_STUDENT,
         Permission.LLM_USE,
     ],
 }
@@ -200,7 +218,29 @@ def get_user_permissions_with_db(user: SysUser, db: Session) -> List[Permission]
         for p in SUPER_ADMIN_PERMISSIONS:
             if p not in perms:
                 perms.append(p)
+
+    # 4) 叠加按用户授予的能力包（练习管理员等）
+    try:
+        from .capabilities import get_capability_permission_values
+
+        for value in get_capability_permission_values(user.user_id, db):
+            try:
+                permission = Permission(value)
+            except ValueError:
+                continue
+            if permission not in perms:
+                perms.append(permission)
+    except Exception:
+        # 能力包表尚未创建或查询失败时，不影响基础权限
+        pass
+
     return perms
+
+
+def get_effective_permissions(user: SysUser, db: Session) -> List[Permission]:
+    """用户最终权限 = 角色权限 ∪ 能力包权限（对外统一入口）。"""
+    return get_user_permissions_with_db(user, db)
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
@@ -364,17 +404,52 @@ def check_any_permission(user: SysUser, *permissions: Permission) -> bool:
     return any(p in user_perms for p in permissions)
 
 def require_permission(permission: Permission):
-    """需要指定权限的装饰器"""
+    """需要指定权限的依赖（角色权限 ∪ 能力包权限）。"""
     async def permission_checker(
-        current_user: SysUser = Depends(get_current_user)
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db),
     ) -> SysUser:
-        if not check_permission(current_user, permission):
+        if getattr(current_user, 'is_disabled', 0) == 1 or current_user.status == 0:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="账号已被禁用",
+            )
+        if permission not in get_effective_permissions(current_user, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"缺少必要权限: {permission.value}",
             )
         return current_user
     return permission_checker
+
+
+def assert_scope_covers(
+    grantor_scopes: List[Dict[str, Any]],
+    target_scope_type: str,
+    target_scope_id: Optional[int] = None,
+) -> None:
+    """校验授权人的范围是否覆盖目标范围；不足抛 403。
+
+    grantor_scopes 形如 [{"scope_type": "subject", "scope_id": 3}, ...]。
+    global 覆盖一切；subject/class 必须类型与 ID 同时匹配。
+    """
+    if target_scope_type == "global":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有管理员可以授予全校范围",
+        )
+    for scope in grantor_scopes:
+        if scope.get("scope_type") == "global":
+            return
+        if (
+            scope.get("scope_type") == target_scope_type
+            and scope.get("scope_id") == target_scope_id
+        ):
+            return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="授权范围不足",
+    )
 
 def require_role(*roles: UserRole):
     """需要指定角色的装饰器"""

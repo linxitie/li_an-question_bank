@@ -109,6 +109,7 @@ export default defineComponent({
       { label: '题库管理', path: '/admin/questions', icon: '📋' },
       { label: '资料管理', path: '/admin/materials', icon: '📚' },
       { label: '试卷审批', path: '/admin/papers', icon: '📝' },
+      { label: '论坛管理', path: '/admin/forum', icon: '💬' },
       { label: '系统设置', path: '/admin/settings', icon: '⚙️' },
       { label: '日志审计', path: '/admin/logs', icon: '📋' },
       { label: '数据备份', path: '/admin/backup', icon: '💾' },
