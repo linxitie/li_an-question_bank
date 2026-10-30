@@ -31,11 +31,14 @@
       <div class="dm-rows">
         <div class="dm-row">
           <span>获得时档位</span>
-          <b>{{ item.badge_tier || '未记录' }}</b>
+          <b>
+            {{ item.snapshot_tier || item.badge_tier || '未记录' }}
+            <span v-if="item.snapshot_estimated" class="dm-est">（估算）</span>
+          </b>
         </div>
         <div class="dm-row">
-          <span>当前档位</span>
-          <b>{{ item.current_tier || tierLabel }}</b>
+          <span>徽章成色</span>
+          <b>{{ item.badge_tier || tierLabel }}</b>
         </div>
         <div class="dm-row">
           <span>奖励</span>
@@ -52,6 +55,11 @@
       </div>
 
       <div class="dm-actions">
+        <button
+          v-if="item.owned && item.kind === 'achievement'"
+          class="dm-btn dm-btn-pin"
+          @click="$emit('toggle-pin', item)"
+        >{{ item.pinned ? '取消精选' : '设为精选' }}</button>
         <button class="dm-btn" @click="$emit('close')">关闭</button>
         <button class="dm-btn dm-btn-primary" @click="onShare">复制徽章文案</button>
       </div>
@@ -75,7 +83,7 @@ const props = withDefaults(
   { item: null, currentTierIndex: 0 }
 );
 
-defineEmits<{ (e: 'close'): void }>();
+defineEmits<{ (e: 'close'): void; (e: 'toggle-pin', item: BadgeItem): void }>();
 
 const copied = ref(false);
 const LABEL_TO_INDEX: Record<string, number> = { 黑铁: 0, 青铜: 1, 白银: 2, 黄金: 3, 钻石: 4 };
@@ -242,4 +250,5 @@ const onShare = async () => {
   border-radius: 6px;
   padding: 1px 6px;
 }
+.dm-est { font-size: 11px; color: #94a3b8; font-weight: 400; }
 </style>

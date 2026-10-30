@@ -18,6 +18,8 @@
         <!-- 稀有度：只做文字（灰色小字），不参与颜色 -->
         <span v-if="it.owned && it.rarity_text" class="bg-rarity">{{ it.rarity_text }}</span>
         <span v-if="it.is_first_owner" class="bg-first">全服首个获得</span>
+        <span v-if="it.pinned" class="bg-pinned">精选</span>
+        <span v-if="it.owned && it.snapshot_estimated" class="bg-est">档位（估算）</span>
 
         <span class="bg-state" :class="stateClass(it)">
           {{ stateText(it) }}
@@ -146,6 +148,22 @@ const stateClass = (it: BadgeItem): string => (it.owned ? 'is-owned' : 'is-todo'
   font-size: 10.5px;
   color: #64748b;
   border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-top: 3px;
+}
+.bg-pinned {
+  font-size: 10.5px;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-top: 3px;
+}
+.bg-est {
+  font-size: 10.5px;
+  color: #94a3b8;
+  border: 1px dashed #cbd5e1;
   border-radius: 6px;
   padding: 0 5px;
   margin-top: 3px;

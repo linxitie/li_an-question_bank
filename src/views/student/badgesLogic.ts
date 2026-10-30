@@ -22,6 +22,10 @@ export interface BadgeItem {
   owned: boolean;
   obtained_at?: string | null;
   snapshot_tier?: string | null;
+  snapshot_estimated?: boolean;
+  pinned?: boolean;
+  owned_count?: number;
+  owned_percent?: number;
   current_tier?: string;
 }
 
