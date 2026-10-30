@@ -1573,6 +1573,11 @@ async def import_upload(background_tasks: BackgroundTasks,
             from ....services.material_parser import parse_xlsx
             out = parse_xlsx(tmp_path)
             out["_tmp"] = tmp_path
+            # P2-B：文件级格式校验。上传阶段还不知道科目（confirm 时才选），
+            # 所以这里只查结构（缺列/空值/超长/重复/超行数/危险标签）。
+            from ....services.material_format_validator import validate_rows
+            out["validation"] = validate_rows(out.get("headers") or [],
+                                              out.get("rows") or [])
             rec.parse_mode = "sync"
             rec.parse_status = "success"
             rec.parse_result = _json.dumps(out, ensure_ascii=False)
@@ -1725,12 +1730,34 @@ async def import_confirm(import_id: int, body: dict,
         full = parse_xlsx(result["_tmp"], max_rows=CARD_ROW_LIMIT) \
             if result.get("_tmp") and _Path(result["_tmp"]).exists() else result
         raw_rows = list(full.get("rows") or [])
+        # P2-B：入库前做一次带词表的全量校验。
+        # 整表不可用（缺列/超行数）→ 400；行级问题（空值/超长/重复/危险标签）→ 跳过该行并回报
+        from ....services.material_format_validator import (
+            BLOCKING_CODES, ROW_CODES, validate_rows)
+        full_rows = list(raw_rows)
+        _val = validate_rows(full.get("headers") or [], raw_rows,
+                             category_names=_category_names(db, subject),
+                             point_names=list(taxonomy.point_map(db, subject).keys()),
+                             category_as_warning=True)
+        _blocking = [e for e in _val["errors"] if e["code"] in BLOCKING_CODES]
+        if _blocking:
+            head = "；".join(
+                f"第{e['row']}行 {e['column']}：{e['message']}" if e["row"]
+                else f"{e['column']}：{e['message']}" for e in _blocking[:5])
+            raise HTTPException(
+                400, f"表格格式校验未通过（共 {_val['stats']['error_count']} 处）：{head}")
+        _bad_rows = {e["row"] for e in _val["errors"] if e["code"] in ROW_CODES}
+        if _bad_rows:
+            raw_rows = [r for i, r in enumerate(raw_rows, start=1)
+                        if i not in _bad_rows]
+        warnings.extend(_val.get("warnings") or [])
         # D5：build_cards 会静默丢弃正面或背面为空的行，这里先算出来回报
         invalid_rows = [
-            i for i, r in enumerate(raw_rows, start=1)
+            i for i, r in enumerate(full_rows, start=1)
             if not (r[col_front].strip() if col_front < len(r) else "")
             or not (r[col_back].strip() if col_back < len(r) else "")
         ]
+        invalid_rows = sorted(set(invalid_rows) | set(_bad_rows))
         cards = build_cards(raw_rows, col_front, col_back, col_cat,
                             limit=CARD_ROW_LIMIT, col_point=col_point)
         if not cards:
