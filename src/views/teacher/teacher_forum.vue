@@ -491,15 +491,20 @@ onMounted(loadPosts);
 </script>
 
 <style scoped>
-.tf-page { min-height: 100vh; background: #f5f7fb; 
-  height: 100vh;
+.tf-page { --tf-nav-h: 64px; min-height: calc(100vh - var(--tf-nav-h)); background: #f5f7fb; 
+  height: calc(100vh - var(--tf-nav-h));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 .tf-main { max-width: 1080px; margin: 0 auto; padding: 24px; }
 .tf-head h1 { margin: 0 0 6px; color: #1a2b5f; }
 .tf-sub { margin: 0 0 16px; color: #6b7896; font-size: 13px; }
-.tf-filters { display: flex; gap: 8px; margin-bottom: 16px; }
+/* 三层吸顶：导航（TeacherLayout）→ 标题行 → 筛选栏 */
+.tf-head { position: sticky; top: 0; z-index: 30; background: #f5f7fb;
+  padding: 4px 0 10px; box-shadow: 0 8px 8px -10px rgba(15,23,42,.3); }
+.tf-filters { position: sticky; top: var(--tf-head-h, 104px); z-index: 29;
+  display: flex; gap: 8px; margin-bottom: 0; background: #f5f7fb;
+  padding: 8px 0 12px; box-shadow: 0 8px 8px -10px rgba(15,23,42,.3); }
 .tf-filters input, .tf-filters select {
   padding: 8px 10px; border: 1px solid #d9e1ee; border-radius: 8px; font-size: 13px;
 }

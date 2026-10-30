@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/media", tags=["媒体资产"])
 
 _CACHE = "public, max-age=31536000, immutable"
+# 浏览器原生可渲染、允许内联预览的类型（其余一律下载）
+_INLINE_MIMES = {
+    "application/pdf",
+    "image/png", "image/jpeg", "image/gif", "image/webp",
+    "text/plain",
+}
 
 
 def _etag(sha256: str) -> str:
@@ -34,8 +40,13 @@ def _base_headers(asset, etag: str) -> dict:
         "X-Content-Type-Options": "nosniff",
     }
     if asset.kind == "forum" and asset.original_name:
+        # 2026-10-30：可预览类型走 inline（PDF/图片/文本），其余仍强制下载。
+        # 平板/浏览器无内置阅读器时，前端会退化为下载（?download=1 也可强制下载）。
+        name = quote(asset.original_name, safe="")
         headers["Content-Disposition"] = (
-            "attachment; filename*=UTF-8''" + quote(asset.original_name, safe="")
+            "inline; filename*=UTF-8''" + name
+            if asset.content_type in _INLINE_MIMES
+            else "attachment; filename*=UTF-8''" + name
         )
     return headers
 

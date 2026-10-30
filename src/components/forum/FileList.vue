@@ -5,7 +5,8 @@
       :key="file.url"
       class="fl-item"
       :href="file.url"
-      :download="file.name"
+      :download="canPreview(file.name) ? undefined : file.name"
+      :target="canPreview(file.name) ? '_blank' : undefined"
       rel="noopener"
     >
       <span class="fl-icon">{{ fileIcon(file.name) }}</span>
@@ -20,6 +21,11 @@ import { fileIcon, formatFileSize } from './fileUtils';
 import type { ForumImageAttachment } from './imageUtils';
 
 defineProps<{ files: ForumImageAttachment[] }>();
+
+// 2026-10-30：PDF / 图片 / 文本用浏览器内联打开；Office/压缩包仍走下载
+const PREVIEW_EXT = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.txt'];
+const canPreview = (name: string) =>
+  PREVIEW_EXT.some((ext) => (name || '').toLowerCase().endsWith(ext));
 </script>
 
 <style scoped>
