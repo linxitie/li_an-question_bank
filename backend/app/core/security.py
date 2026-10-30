@@ -291,6 +291,20 @@ def decode_token(token: str) -> Dict[str, Any]:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+def decode_token_unverified(token: str) -> Dict[str, Any]:
+    """不校验签名地解出令牌载荷（仅限测试与排障）。
+
+    为什么单独封装而不是让调用方自己拼参数：
+        本项目用 python-jose，其 jwt.decode 必须显式传 key；散落在测试里会重复密钥细节，
+        将来换库（PyJWT / python-jose 新版）也没有统一收敛点。这里是唯一入口。
+    """
+    return jwt.decode(
+        token,
+        settings.JWT_SECRET_KEY,
+        algorithms=[settings.JWT_ALGORITHM],
+        options={"verify_signature": False},
+    )
+
 async def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
@@ -664,7 +678,11 @@ class LeakyBucketRateLimiter:
             bucket["water"] = max(0, bucket["water"] - elapsed * self.leak_rate)
             bucket["last_check"] = current_time
 
-            if bucket["water"] < self.capacity:
+            # 先判断"加水后是否会溢出"再加水。
+            # 为什么不能写成 water < capacity 再 +=1：每次调用会先按 elapsed*leak_rate 漏水，
+            # 亚秒级间隔下漏掉的量是 1e-6 级，water 永远差一点点到不了 capacity，
+            # 结果比标的容量多放 1 个请求（实测 capacity=2 时放行了 3 个）。
+            if bucket["water"] + 1 <= self.capacity:
                 bucket["water"] += 1
                 return True
             return False

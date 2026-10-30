@@ -33,6 +33,7 @@ from .api.v1.growth import achievements, checkin
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
+from .api import media_assets as media_assets_api
 from .api.v1.platform.websocket import router as websocket_router
 from .api.v1.catalog.paper_generation import router as paper_router
 from .api.v1.catalog.question_import import router as question_import_router
@@ -64,13 +65,28 @@ for _stream in (sys.stdout, sys.stderr):
 
 from logging.handlers import RotatingFileHandler
 
+# P1-1：LOG_FILE 所在目录可能不存在（首次部署的 ./logs/ 很常见）。
+# RotatingFileHandler 在打开文件时直接抛 FileNotFoundError，会让 app 模块导入即崩，
+# 表现为「服务起不来」。先建目录；任何文件日志失败都降级为纯 stdout，保证可启动。
+_log_handlers = [logging.StreamHandler(sys.stdout)]  # 使用已设置的UTF-8编码的stdout
+try:
+    _log_dir = os.path.dirname(os.path.abspath(settings.LOG_FILE)) if settings.LOG_FILE else ''
+    if _log_dir:
+        os.makedirs(_log_dir, exist_ok=True)
+    if settings.LOG_FILE:
+        _log_handlers.insert(
+            0,
+            RotatingFileHandler(
+                settings.LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'
+            ),
+        )
+except OSError as _log_err:  # 只读文件系统、权限不足等
+    print(f"[logging] 文件日志不可用，已降级为 stdout：{_log_err}", file=sys.stderr)
+
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        RotatingFileHandler(settings.LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)  # 使用已设置的UTF-8编码的stdout
-    ]
+    handlers=_log_handlers
 )
 
 logger = logging.getLogger(__name__)
@@ -88,11 +104,75 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Redis连接初始化失败（二维码登录功能将不可用）: {e}")
 
+    # 启动期数据库守卫（2026-10-25 事故复盘）：backend/.env 缺失时 SQLITE_PATH
+    # 会回落到默认值，若该默认指向旧/空库，create_all 会照常建表，表现为
+    # 「题目与账号凭空消失」。这里在建表前打印真实路径并在异常时 ERROR，
+    # 建表后校验关键列与行数。DB_GUARD_STRICT=1 时异常直接拒绝启动。
+    from .core.db_guard import preflight as db_preflight, verify as db_verify
+    db_preflight(logger, settings.DB_TYPE, settings.SQLITE_PATH)
+
     # 自动创建数据库表
     from .core.database import engine, Base, SessionLocal
     from .models import models  # 确保所有模型被导入
     Base.metadata.create_all(bind=engine)
     logger.info("数据库表初始化完成")
+    db_verify(engine, logger)
+
+    # F3 媒体资产表：无论 MEDIA_STORE_ENABLED 真假都幂等建表，
+    # 保证关闭写入开关后 /media 读路由仍能服务已写 URL。
+    try:
+        from .foundation.media_schema import ensure_media_schema
+        _raw_media = engine.raw_connection()
+        try:
+            _conn_media = getattr(_raw_media, "driver_connection", _raw_media)
+            _media_created = ensure_media_schema(_conn_media)
+        finally:
+            _raw_media.close()
+        if _media_created:
+            logger.info(f"media_assets 表已创建: {_media_created}")
+    except Exception as e:
+        logger.warning(f"media_assets 建表失败（/media 读路由将不可用）: {e}")
+
+    # F2 通信统一：多 worker 无中继直接拒绝启动（fail-fast，避免「有时收不到」）；
+    # 中继本身不可用只降级为本地扇出，不影响业务读写。
+    from .foundation.ws_relay import validate_worker_config, ws_relay
+    validate_worker_config(int(os.environ.get('WEB_CONCURRENCY', '1') or '1'), settings.WS_RELAY)
+    ws_relay.configure(settings.WS_RELAY, settings.REDIS_URL)
+    await ws_relay.start(settings.WS_RELAY, settings.REDIS_URL)
+
+    # WS 心跳巡检：超过阈值无消息的连接关闭（码 4008），客户端重连后全量重同步。
+    from .api.v1.platform.websocket import ws_connection_manager
+    import asyncio as _ws_asyncio
+    ws_watchdog_task = _ws_asyncio.create_task(
+        ws_connection_manager.watchdog(settings.WS_HEARTBEAT_TIMEOUT_SECONDS)
+    )
+
+    # F1 一致性内核：幂等建 7 张 foundation 表 + 启动投递器。
+    # FOUNDATION_ENABLED=false 时整段跳过，行为与 F0 完全一致（回滚开关）。
+    dispatcher_task = None
+    if settings.FOUNDATION_ENABLED:
+        try:
+            import asyncio as _foundation_asyncio
+
+            from .foundation.dispatcher import Dispatcher
+            from .foundation.schema import ensure_schema
+            from .services.event_handlers import build_handlers
+
+            _raw = engine.raw_connection()
+            try:
+                _conn = getattr(_raw, "driver_connection", _raw)
+                created = ensure_schema(_conn)
+            finally:
+                _raw.close()
+            if created:
+                logger.info(f"foundation 表已创建: {created}")
+            _foundation_stop = _foundation_asyncio.Event()
+            dispatcher_task = _foundation_asyncio.create_task(
+                Dispatcher(SessionLocal, handlers=build_handlers()).run_forever(_foundation_stop)
+            )
+            logger.info("一致性内核投递器已启动")
+        except Exception as e:
+            logger.warning(f"一致性内核启动失败（服务继续运行）: {e}")
 
     # 初始化成就目录（幂等）
     try:
@@ -584,10 +664,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"种子数据初始化失败（服务继续运行）: {e}")
 
-    # 事件消费者：P5.2 调用点改造完成前保持关闭（配置默认 False），
-    # 过早启动会与现有同步直调产生成就双写
+    # 事件消费者：F2b 开启 Outbox 后由 Dispatcher 接管，旧 Stream 消费者必须停用，
+    # 否则同一事件会被判成就两次。仅当 Outbox 不可用时回退旧路径。
     consumer_task = None
-    if settings.EVENT_CONSUMER_ENABLED:
+    _outbox_mode = settings.FOUNDATION_ENABLED and settings.EVENT_OUTBOX_ENABLED
+    if settings.EVENT_CONSUMER_ENABLED and not _outbox_mode:
         import asyncio as _consumer_asyncio
         from .services.event_consumer import consume_user_actions
         consumer_task = _consumer_asyncio.create_task(consume_user_actions())
@@ -596,6 +677,28 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("关闭公安联考题库系统服务...")
+    if ws_watchdog_task is not None:
+        import asyncio as _stop_ws_asyncio
+        ws_watchdog_task.cancel()
+        try:
+            await ws_watchdog_task
+        except _stop_ws_asyncio.CancelledError:
+            logger.debug("WS 心跳巡检已停止")
+        except Exception as e:
+            logger.warning(f"WS 心跳巡检关闭异常: {e}")
+    try:
+        await ws_relay.stop()
+    except Exception as e:
+        logger.warning(f"WS 中继关闭异常: {e}")
+    if dispatcher_task is not None:
+        import asyncio as _stop_asyncio
+        dispatcher_task.cancel()
+        try:
+            await dispatcher_task
+        except _stop_asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
     if consumer_task is not None:
         import asyncio as _shutdown_asyncio
         consumer_task.cancel()
@@ -688,7 +791,7 @@ app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
-app.include_router(image_media.router)
+app.include_router(media_assets_api.router)
 app.include_router(websocket_router)
 app.include_router(news.router)
 app.include_router(recruitment.router)
@@ -733,6 +836,21 @@ async def health_check():
         "service": "公安联考题库系统",
         "version": "1.0.0"
     }
+
+@app.get("/health/foundation", tags=["系统"])
+async def foundation_health():
+    """F1 一致性内核健康：outbox 积压/死信/投影延迟/最近对账（只读）。"""
+    from .core.database import engine
+    from .foundation.health import snapshot
+    from .foundation.media_health import snapshot as media_snapshot
+    from .foundation.ws_relay import ws_relay
+
+    result = snapshot(engine, ws_relay.health())
+    try:
+        result["media"] = media_snapshot(engine)
+    except Exception as exc:  # noqa: BLE001 - F3 健康不得影响 F1 健康返回
+        result["media"] = {"status": "degraded", "detail": str(exc)}
+    return result
 
 @app.get("/metrics", tags=["系统"])
 async def get_metrics():

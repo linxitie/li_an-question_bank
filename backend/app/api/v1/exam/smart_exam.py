@@ -41,6 +41,11 @@ from ....models.models import (
 )
 from ....core.trigger_types import TRIGGER_PAPER_COMPLETED
 from ....services.event_consumer import record_user_action
+from ....services.option_utils import is_subjective_question
+from ....services.paper_group_selector import (
+    select_questions_with_groups,
+    summarize_group_selection,
+)
 from ....schemas.schemas import (
     SmartExamGenerateRequest,
     SmartExamGenerateResponse,
@@ -268,11 +273,15 @@ async def smart_generate_paper(
             else:
                 query = query.filter(QuestionBank.difficulty.in_([4, 5]))
 
-            # 随机抽取
-            questions = query.order_by(func.random()).limit(need_count).all()
+            # 随机抽取（题组感知：命中复合题整组展开，材料与子题不拆散）
+            questions, selected_question_ids = select_questions_with_groups(
+                db=db,
+                query=query,
+                count=need_count,
+                selected_ids=selected_question_ids,
+            )
 
             for q in questions:
-                selected_question_ids.add(q.question_id)
                 selected_questions.append({
                     "question": q,
                     "config": config,
@@ -360,9 +369,10 @@ async def smart_generate_paper(
         # 获取题型名称
         qtype = db.query(QuestionType).filter(QuestionType.type_id == q.type_id).first()
         type_name = qtype.type_name if qtype else "未知"
+        is_subjective = is_subjective_question(q, qtype)
 
         # 获取子科目
-        subcat = cfg.get("subcategory") or ""
+        subcat = getattr(cfg, "subcategory", "") or ""
         if not subcat:
             if q.subject_id == 1:
                 subcat = q.xingce_subcategory or ""
@@ -377,18 +387,24 @@ async def smart_generate_paper(
             question_type=qtype.type_code if qtype else "",
             type_name=type_name,
             difficulty=q.difficulty,
-            options=q.options,
+            options=[] if is_subjective else q.options,
             answer=None,  # 预览不显示答案（客户端可点击展开查看）
             answer_analysis=None,
             subcategory=subcat,
             year=q.year,
             score=cfg.score_per_question,
+            group_id=int(q.group_id or 0),
         ))
 
     logger.info(
         f"用户 {current_user.username} 智能组卷成功: {paper_code}, "
         f"题目数: {len(selected_questions)}, 总分: {total_score_calculated}"
     )
+
+    quota = summarize_group_selection(total_questions, len(selected_questions))
+    message = "智能组卷生成成功"
+    if quota["over_quota"]:
+        message += f"；{quota['over_quota_reason']}，请核对后再发布"
 
     return SmartExamGenerateResponse(
         paper_id=new_paper.paper_id,
@@ -400,7 +416,8 @@ async def smart_generate_paper(
         difficulty_distribution=difficulty_stats,
         subject_breakdown=subject_stats,
         duration=duration,
-        message="智能组卷生成成功",
+        message=message,
+        **quota,
     )
 
 
@@ -433,6 +450,106 @@ async def replace_question(
     ).first()
     if not current_question:
         raise HTTPException(status_code=404, detail="题目不存在")
+
+    # 复合题成员不能单独替换：整组换入另一个完整题组，避免材料与子题被拆散
+    old_gid = int(current_question.group_id or 0)
+    if old_gid > 0:
+        import random
+        old_relations = db.query(PaperQuestionRelation).join(
+            QuestionBank, QuestionBank.question_id == PaperQuestionRelation.question_id
+        ).filter(
+            PaperQuestionRelation.paper_id == paper_id,
+            QuestionBank.group_id == old_gid,
+        ).order_by(PaperQuestionRelation.question_order).all()
+        if not old_relations:
+            raise HTTPException(status_code=404, detail="题目不在试卷中")
+
+        existing_ids = {
+            r[0] for r in db.query(PaperQuestionRelation.question_id).filter(
+                PaperQuestionRelation.paper_id == paper_id
+            ).all()
+        }
+        old_start = min(r.question_order for r in old_relations)
+        old_score = sum(float(r.question_score) for r in old_relations) / max(len(old_relations), 1)
+
+        # 候选题组：同科目同题型、整组成员都可用，且与当前试卷无交集
+        cand_gids = [row[0] for row in db.query(QuestionBank.group_id).filter(
+            QuestionBank.status == 1,
+            QuestionBank.audit_status == 1,
+            QuestionBank.group_id > 0,
+            QuestionBank.group_id != old_gid,
+            QuestionBank.subject_id == current_question.subject_id,
+            QuestionBank.type_id == current_question.type_id,
+        ).distinct().limit(200).all()]
+        candidate_groups = []
+        for gid in cand_gids:
+            members = db.query(QuestionBank).filter(
+                QuestionBank.group_id == gid,
+                QuestionBank.status == 1,
+                QuestionBank.audit_status == 1,
+            ).order_by(QuestionBank.sort_order.asc(), QuestionBank.question_id.asc()).all()
+            if len(members) < 2:
+                continue
+            if any(m.question_id in existing_ids for m in members):
+                continue
+            if any(m.subject_id != current_question.subject_id or m.type_id != current_question.type_id for m in members):
+                continue
+            candidate_groups.append(members)
+        if not candidate_groups:
+            raise HTTPException(
+                status_code=400,
+                detail="没有可替换的完整复合题组；为避免拆散材料与子题，请返回参数页调整题量或科目",
+            )
+        new_members = random.choice(candidate_groups)
+
+        for r in old_relations:
+            db.delete(r)
+        db.flush()
+
+        order = old_start
+        for m in new_members:
+            db.add(PaperQuestionRelation(
+                paper_id=paper_id,
+                question_id=m.question_id,
+                question_order=order,
+                question_score=round(old_score, 2),
+            ))
+            order += 1
+        db.flush()
+
+        # 重新连续编号，避免整组题数变化后出现空洞或重复序号
+        all_relations = db.query(PaperQuestionRelation).filter(
+            PaperQuestionRelation.paper_id == paper_id
+        ).order_by(PaperQuestionRelation.question_order, PaperQuestionRelation.relation_id).all()
+        for idx, r in enumerate(all_relations, 1):
+            r.question_order = idx
+        paper.question_count = len(all_relations)
+        paper.total_score = sum(float(r.question_score) for r in all_relations)
+        db.commit()
+
+        first = new_members[0]
+        qtype = db.query(QuestionType).filter(QuestionType.type_id == first.type_id).first()
+        logger.info(
+            f"用户 {current_user.username} 整组替换: paper={paper_id}, group={old_gid}→{first.group_id}, "
+            f"{len(old_relations)}→{len(new_members)} 题"
+        )
+        return {
+            "message": "复合题已整组替换，材料与子题保持完整",
+            "old_question_id": question_id,
+            "new_question_id": first.question_id,
+            "group_replaced": True,
+            "new_group_id": int(first.group_id or 0),
+            "question_count": len(all_relations),
+            "total_score": float(paper.total_score),
+            "new_question": {
+                "question_id": first.question_id,
+                "question_content": first.question_content[:200] + "..." if first.question_content and len(first.question_content) > 200 else (first.question_content or ""),
+                "difficulty": first.difficulty,
+                "type_name": qtype.type_name if qtype else "",
+                "year": first.year,
+                "group_id": int(first.group_id or 0),
+            },
+        }
 
     # 获取试卷已有题目ID
     existing_relations = db.query(PaperQuestionRelation).filter(
@@ -513,6 +630,7 @@ async def replace_question(
             "difficulty": new_question.difficulty,
             "type_name": qtype.type_name if qtype else "",
             "year": new_question.year,
+            "group_id": int(new_question.group_id or 0),
         }
     }
 
@@ -557,6 +675,7 @@ async def preview_paper(
             continue
 
         qtype = db.query(QuestionType).filter(QuestionType.type_id == q.type_id).first()
+        is_subjective = is_subjective_question(q, qtype)
 
         questions_list.append({
             "question_id": q.question_id,
@@ -565,11 +684,13 @@ async def preview_paper(
             "question_type": qtype.type_code if qtype else "",
             "type_name": qtype.type_name if qtype else "",
             "difficulty": q.difficulty,
-            "options": q.options,
+            "options": [] if is_subjective else q.options,
+            "is_subjective": is_subjective,
             "answer": q.answer if show_answer else None,
             "answer_analysis": q.answer_analysis if show_answer else None,
             "score": float(r.question_score),
             "year": q.year,
+            "group_id": int(q.group_id or 0),
         })
 
     return {
@@ -981,23 +1102,21 @@ async def submit_smart_exam(
     except Exception as e:
         logger.warning(f"自动签到失败: {e}")
 
+    # F2b：整卷记录、练习明细与完成事件同一事务提交。
+    db.flush()
+    await record_user_action(
+        db,
+        current_user.user_id,
+        TRIGGER_PAPER_COMPLETED,
+        session={
+            "paper_id": paper_id,
+            "record_id": smart_record.id,
+            "exam_record_id": exam_record.record_id,
+            "total_score": total_score,
+            "max_score": float(paper.total_score or 0),
+        },
+    )
     db.commit()
-
-    try:
-        await record_user_action(
-            db,
-            current_user.user_id,
-            TRIGGER_PAPER_COMPLETED,
-            session={
-                "paper_id": paper_id,
-                "record_id": smart_record.id,
-                "exam_record_id": exam_record.record_id,
-                "total_score": total_score,
-                "max_score": float(paper.total_score or 0),
-            },
-        )
-    except Exception as e:
-        logger.warning(f"整卷完成事件发布失败(paper={paper_id}): {e}")
 
     # 计算正确率
     accuracy = round(correct_count / max(scored_count, 1) * 100, 1)

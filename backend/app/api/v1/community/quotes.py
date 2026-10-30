@@ -428,13 +428,10 @@ async def toggle_quote_favorite(
         quote_id=quote_id,
     )
     db.add(fav)
-    db.commit()
 
-    # 触发金句收藏成就
-    try:
-        await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_QUOTE_FAVORITE)
-    except Exception as e:
-        logger.warning(f"金句收藏成就判定失败: {e}")
+    # F2b：收藏行与成就事件同一事务。
+    await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_QUOTE_FAVORITE)
+    db.commit()
 
     return {"favorited": True, "message": "已收藏"}
 
@@ -468,13 +465,10 @@ async def toggle_obsidian_quote_favorite(
         obsidian_source=obsidian_source,
     )
     db.add(fav)
-    db.commit()
 
-    # 触发金句收藏成就
-    try:
-        await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_QUOTE_FAVORITE)
-    except Exception as e:
-        logger.warning(f"金句收藏成就判定失败: {e}")
+    # F2b：收藏行与成就事件同一事务。
+    await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_QUOTE_FAVORITE)
+    db.commit()
 
     return {"favorited": True, "message": "已收藏"}
 

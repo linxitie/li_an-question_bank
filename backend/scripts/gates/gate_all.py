@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""gate_all.py — 一键执行 L0-L6，聚合退出码"""
+"""gate_all.py — 一键执行 L0-L7，聚合退出码"""
 import subprocess, sys, os, json, time
 
 BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -25,11 +25,23 @@ GATES = [
     # L6：模块化约束（VTJ 版本锁定 / 92 处路由动态 import 目标 / 跨域 import）。
     # 脚本自身由文件位置推导仓库根，此处仍按要求以 workspace root 为 cwd。
     ('L6', 'scripts/verify-modularization-constraints.mjs', []),
+    # L7：底座一致性（7 表/事件只增/越界引用/迁移/对账/路由角色/容量/内容完整性）。
+    # 15 项中 1-5 为 FAIL，6-15 先 WARN，随 F2/F3 逐步升级（方案 §11.2）。
+    ('L7', 'scripts/gates/gate_l7_foundation.py', []),
 ]
 
 QUICK_GATES = ('L0', 'L1-G', 'L1', 'L1-H')
 
 def main():
+    # Windows 控制台默认 GBK：门禁脚本会打印 ✅/ℹ 等字符，子进程直接写 GBK 管道时
+    # 抛 UnicodeEncodeError 被误判成 FAIL，本进程再打印含 U+FFFD 的结果又会二次崩溃。
+    # 因此强制子进程 UTF-8，并让本进程输出永不因编码失败。
+    child_env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, ValueError):
+        pass
+
     quick = '--quick' in sys.argv
     layer_filter = None
     if '--layer' in sys.argv:
@@ -47,7 +59,8 @@ def main():
         r = subprocess.run(
             (['node'] if is_node else [sys.executable]) + [script] + args,
             capture_output=True, text=True, encoding='utf-8', errors='replace',
-            cwd=WORKSPACE_ROOT if is_node else BACKEND_ROOT
+            cwd=WORKSPACE_ROOT if is_node else BACKEND_ROOT,
+            env=child_env,
         )
         elapsed = time.time() - t0
         status = 'PASS' if r.returncode == 0 else 'FAIL'
@@ -57,9 +70,12 @@ def main():
             for line in r.stdout.strip().split('\n')[-3:]:
                 print(f'       {line}')
 
-    # 写 last_run.json
-    os.makedirs('data/gates', exist_ok=True)
-    with open('data/gates/last_run.json', 'w', encoding='utf-8') as f:
+    # 写 last_run.json：必须锚定 BACKEND_ROOT。原先用相对路径 'data/gates'，
+    # 从仓库根调用时会写出一个与 backend/data/gates 无关的根级 data/ 目录，
+    # 门禁结果既不进基线、又污染工作树。
+    out_dir = os.path.join(BACKEND_ROOT, 'data', 'gates')
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, 'last_run.json'), 'w', encoding='utf-8') as f:
         json.dump({'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'), 'results': results}, f, ensure_ascii=False, indent=2)
 
     failed = sum(1 for r in results if r['status'] == 'FAIL')

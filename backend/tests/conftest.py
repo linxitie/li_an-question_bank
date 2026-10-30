@@ -12,6 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import Base, get_db
+from app.foundation.schema import ddl_statements, FOUNDATION_TABLES
 from app.main import app
 from app.models.models import SysUser, QuestionSubject, QuestionType
 from app.core.security import get_password_hash, create_access_token
@@ -33,10 +34,20 @@ def override_get_db():
     finally:
         db.close()
 
+def _reset_foundation_tables():
+    """F2b 的 Outbox 写入需要 foundation 表；内存库不经过启动期迁移。"""
+    with engine.begin() as conn:
+        for table in FOUNDATION_TABLES:
+            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {table}")
+        for statement in ddl_statements():
+            conn.exec_driver_sql(statement)
+
+
 @pytest.fixture(scope="function")
 def db_session():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    _reset_foundation_tables()
     db = TestingSessionLocal()
     yield db
     db.close()

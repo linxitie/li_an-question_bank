@@ -24,19 +24,20 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Literal
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, or_, and_, String
 
 from ....core.database import get_db
 from ....core.config import settings
 from ....core.security import get_current_user, get_optional_user
+from ....services import media_service
 from ....models.models import (
     ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
     SysUser, SysOperationLog
 )
 from ....services.sensitive_words import sensitive_filter, SensitiveLevel
-from ....services.event_consumer import record_user_action
+from ....services.event_consumer import outbox_mode_enabled, record_user_action
 from ....core.trigger_types import TRIGGER_FORUM_POSTED
 from ....core.exceptions import (
     BusinessLogicError,
@@ -105,9 +106,11 @@ async def _publish_forum_posted(
         return await record_user_action(
             db, user_id, TRIGGER_FORUM_POSTED, session=payload
         )
-    except Exception as e:  # noqa: BLE001 —— 事件失败不影响发帖/回复主流程
-        logger.warning(f"发帖成就判定失败: {e}")
+    except Exception as e:  # noqa: BLE001 —— 关闭 Outbox 时事件失败不影响主流程
         _release_forum_posted_event(post_id)
+        if outbox_mode_enabled():
+            raise
+        logger.warning(f"发帖成就判定失败: {e}")
         return False
 
 def _user_brief(user: Optional[SysUser], fallback_id: Optional[int] = None) -> Dict[str, Any]:
@@ -604,8 +607,8 @@ async def create_post(
         visible_classes=classes,
     )
     db.add(post)
-    db.commit()
-    db.refresh(post)
+    # F2b：先 flush 拿 post_id，事件与帖子同一事务提交。
+    db.flush()
 
     logger.info(f"用户 {current_user.user_id} 发布帖子 {post.post_id}")
 
@@ -613,6 +616,10 @@ async def create_post(
     await _publish_forum_posted(
         db, current_user.user_id, post.post_id, action="created"
     )
+    from ....foundation.document_events import emit_forum_content
+    emit_forum_content(db, post.post_id, producer="community.forum.create")
+    db.commit()
+    db.refresh(post)
 
     # 4. 返回完整数据(前端 unshift 到列表头)
     return _serialize_post(post, current_user, liked=False, content_full=True)
@@ -641,6 +648,8 @@ async def delete_post(
 
     # 软删除
     post.status = "DELETED"
+    from ....foundation.document_events import emit_forum_content
+    emit_forum_content(db, post_id, producer="community.forum.delete")
     db.commit()
 
     logger.info(f"用户 {current_user.user_id} 删除帖子 {post_id} (is_admin={is_admin})")
@@ -1032,13 +1041,17 @@ async def create_comment(
     post.comment_count = (post.comment_count or 0) + 1
     post.last_activity_time = datetime.now()
 
-    db.commit()
-    db.refresh(comment)
+    # F2b：评论与帖子计数、事件同一事务提交（先 flush 拿 comment_id）。
+    db.flush()
 
     # 回帖同样走 forum.posted；同一帖子只在首次创建时上报一次（P2-28）
     await _publish_forum_posted(
         db, current_user.user_id, post_id, action="commented"
     )
+    from ....foundation.document_events import emit_forum_content
+    emit_forum_content(db, post_id, producer="community.forum.comment")
+    db.commit()
+    db.refresh(comment)
 
     return _serialize_comment(comment, current_user, liked=False)
 
@@ -1393,6 +1406,36 @@ async def upload_attachment(
     if len(contents) > MAX_SIZE:
         raise ValidationError("文件大小不能超过 20MB")
 
+    if settings.MEDIA_STORE_ENABLED:
+        # F3：附件字节进对象存储，URL 走稳定代理；MIME 由服务端按扩展名决定。
+        try:
+            asset = media_service.store_bytes(
+                db,
+                contents,
+                kind="forum",
+                original_name=original_name,
+                created_by=current_user.user_id,
+                max_bytes=MAX_SIZE,
+            )
+        except media_service.MediaTooLarge:
+            raise ValidationError("文件大小不能超过 20MB")
+        except media_service.MediaValidationError as exc:
+            raise ValidationError(str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "附件存储暂不可用，请稍后重试")
+        db.commit()
+        logger.info(
+            "用户 %s 上传附件 %s → /media/%s",
+            current_user.user_id, original_name, asset.asset_id,
+        )
+        return {
+            "name": original_name,
+            "url": f"/media/{asset.asset_id}",
+            "size": len(contents),
+            "type": ext.lstrip(".")
+        }
+
+    # 回滚分支：保留原 uploads 写路径。
     if ext in ARCHIVE_MAGIC:
         if not any(contents.startswith(sig) for sig in ARCHIVE_MAGIC[ext]):
             raise ValidationError("压缩包文件头校验失败")

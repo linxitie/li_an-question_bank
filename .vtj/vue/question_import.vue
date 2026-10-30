@@ -114,7 +114,7 @@
           </div>
           <div class="form-item">
             <label>题干内容 <span class="required">*</span></label>
-            <textarea v-model="state.form.question_content" rows="3" placeholder="输入题目内容（必填）"></textarea>
+            <RichTextEditor v-model="state.form.question_content" placeholder="输入题目内容（必填，支持加粗/图片/表格）" />
           </div>
           <div class="form-item">
             <label>选项</label>
@@ -139,7 +139,7 @@
           </div>
           <div class="form-item">
             <label>答案解析</label>
-            <textarea v-model="state.form.analysis" rows="2" placeholder="答案解析（可空）"></textarea>
+            <RichTextEditor v-model="state.form.analysis" placeholder="答案解析（可空，支持加粗/图片/表格）" />
           </div>
           <div class="form-actions">
             <button class="btn-secondary" @click="resetForm">重置</button>
@@ -186,7 +186,7 @@
                   <span class="preview-idx">{{ idx + 1 }}</span>
                   <!-- P0-3 修复：原用 {{ }} 文本插值，把 <img src="/static/questions/..."> 当文字打印。
                        改走 renderQuestionContent 统一渲染口径（与试卷管理/题目管理一致）。 -->
-                  <span class="preview-text" v-html="renderQuestionContent(q.question_content || q.题目内容 || '')"></span>
+                  <RichTextViewer class="preview-text" :content="q.question_content || q.题目内容 || ''" />
                 </div>
               </div>
               <button class="btn-primary" @click="confirmBatchImport" :disabled="state.loading || hasBlockedQuestions">
@@ -500,10 +500,12 @@ import { UploadFilled, ArrowLeft, Delete, Upload, Check, PictureFilled, List } f
 import { useProvider } from '@vtj/renderer';
 import ManualMatchDialog from './manual_match_dialog.vue';
 import QuestionPreviewList from './question_preview_list.vue';
+import RichTextViewer from '@/components/rich-text/RichTextViewer.vue';
+import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
   export default defineComponent({
     name: 'QuestionImport',
-    components: { XIcon, QuestionPreviewList, ManualMatchDialog },
+    components: { XIcon, QuestionPreviewList, ManualMatchDialog, RichTextViewer, RichTextEditor },
   setup(props) {
     const provider = useProvider({ id: 'question_import', version: '1790329880372' });
     // PDF 扫描件 OCR 超时预算（ms）——单一事实来源，勿在别处硬编码
@@ -1095,6 +1097,15 @@ import { renderQuestionContent } from '@/utils/questionRender';
               self.state.importId = data.import_id;
               self.stepDone(0); self.setProgress(0, 100);
               ElMessage.success('解析完成：' + (data.success_count || 0) + ' 题可导入，' + (data.failed_count || 0) + ' 题跳过');
+              // P5：复合题识别到题组但缺材料时，后端通过 warnings 返回，必须展示
+              if (data.warnings && data.warnings.length) {
+                data.warnings.slice(0, 5).forEach(function(w) {
+                  ElMessage.warning({ message: String(w), duration: 6000 });
+                });
+                if (data.warnings.length > 5) {
+                  ElMessage.warning('另有 ' + (data.warnings.length - 5) + ' 条材料缺失提示，请检查待复核题组');
+                }
+              }
             }
             // Word/PDF 返回 raw_text_preview → 自动智能提取题目
             else if (data.raw_text_preview) {
@@ -3373,7 +3384,7 @@ converted.push({
   /* P0-3：预览项改走 v-html 后需要允许换行与图片显示。
    原样式 `white-space: nowrap` 会把渲染后的 HTML 压成一行并截断，
    现改为多行自适应 + 给 img 设定尺寸约束。 */
-.preview-text { color: #b0b8c4; overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.7; }
+.preview-text { flex: 1; min-width: 0; color: #b0b8c4; overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.7; }
 .preview-text :deep(img), .preview-text img { max-width: 100%; max-height: 220px; height: auto; object-fit: contain; display: block; margin: 6px 0; border-radius: 6px; }
   .raw-text {
     width: 100%;

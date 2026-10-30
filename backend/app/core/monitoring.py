@@ -66,8 +66,11 @@ class MetricsCollector:
                 self._counters["errors:4xx"] += 1
 
     def record_response_time(self, endpoint: str, duration: float):
+        # 直方图统一以"名字"为键，不再加 response_time: 前缀。
+        # 为什么改：get_histogram_stats(name) 是按名字查表的，加了前缀就永远 miss（实测 count=0）；
+        # get_metrics_summary 又不得不 replace 掉前缀，两处口径互相打架。以名字为唯一键后三处一致。
         with self._lock:
-            self._histograms[f"response_time:{endpoint}"].append(duration)
+            self._histograms[endpoint].append(duration)
 
     def increment_counter(self, name: str, value: int = 1, tags: Optional[Dict[str, str]] = None):
         with self._lock:
@@ -123,7 +126,7 @@ class MetricsCollector:
             }
 
             for key in self._histograms.keys():
-                summary["histograms"][key] = self.get_histogram_stats(key.replace("response_time:", ""))
+                summary["histograms"][key] = self.get_histogram_stats(key)
 
             return summary
 

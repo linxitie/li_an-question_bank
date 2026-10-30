@@ -1,0 +1,168 @@
+{
+  "id": "answer_page",
+  "css": ".answer-page {\n  min-height: 100vh;\n  background: #f1f3f8;\n  font-family: \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n}\n.ap-main {\n  max-width: 1200px;\n  margin: 0 auto;\n  padding: 16px 32px 40px;\n}\n/* 工具栏 */\n.ap-toolbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  background: #ffffff;\n  border-radius: 14px;\n  padding: 12px 20px;\n  box-shadow: 0 2px 12px rgba(26, 43, 95, 0.06);\n  margin-bottom: 16px;\n  position: sticky;\n  top: 80px;\n  z-index: 50;\n}\n.toolbar-left {\n  display: flex;\n  align-items: center;\n  gap: 16px;\n}\n.tool-btn {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 8px 16px;\n  border: 1px solid #e8eaf0;\n  border-radius: 10px;\n  background: #f8f9fc;\n  cursor: pointer;\n  font-size: 13px;\n  font-weight: 600;\n  color: #1a2b5f;\n  transition: all 0.3s;\n  position: relative;\n}\n.tool-btn:hover {\n  background: #f0f2f5;\n}\n.tool-indicator {\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  background: #c41e3a;\n  position: absolute;\n  top: 6px;\n  right: 6px;\n}\n.progress-text {\n  font-size: 14px;\n  font-weight: 700;\n  color: #1a2b5f;\n}\n.toolbar-right {\n  display: flex;\n  align-items: center;\n  gap: 16px;\n}\n.timer-display {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 8px 16px;\n  background: #f8f9fc;\n  border-radius: 10px;\n}\n.timer-text {\n  font-size: 18px;\n  font-weight: 900;\n  color: #1a2b5f;\n  font-family: \"SF Mono\", \"DIN Alternate\", \"Menlo\", monospace;\n  letter-spacing: 1px;\n}\n.timer-text.urgent {\n  color: #c41e3a;\n  animation: pulse 1s ease-in-out infinite;\n}\n@keyframes pulse {\n  0%, 100% {\n    opacity: 1;\n  }\n  50% {\n    opacity: 0.6;\n  }\n}\n.exit-btn {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 8px 18px;\n  border: none;\n  border-radius: 10px;\n  background: linear-gradient(135deg, #c41e3a, #e8384f);\n  color: #fff;\n  font-size: 13px;\n  font-weight: 600;\n  cursor: pointer;\n  transition: all 0.3s;\n}\n.exit-btn:hover {\n  transform: scale(1.03);\n  box-shadow: 0 2px 10px rgba(196, 30, 58, 0.3);\n}\n.ap-body {\n  display: flex;\n  gap: 20px;\n  position: relative;\n}\n/* 答题卡面板 */\n.answer-sheet-panel {\n  width: 240px;\n  flex-shrink: 0;\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 20px;\n  box-shadow: 0 2px 14px rgba(26, 43, 95, 0.08);\n  align-self: flex-start;\n  position: sticky;\n  top: 160px;\n}\n.sheet-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  margin-bottom: 12px;\n}\n.sheet-header h4 {\n  font-size: 15px;\n  font-weight: 700;\n  color: #1a2b5f;\n  margin: 0;\n}\n.sheet-close {\n  font-size: 16px;\n  color: #8a8faa;\n  cursor: pointer;\n}\n.sheet-stats {\n  display: flex;\n  gap: 16px;\n  margin-bottom: 16px;\n  font-size: 12px;\n  color: #5a6488;\n}\n.sheet-stats b {\n  color: #1a2b5f;\n}\n.sheet-grid {\n  display: grid;\n  grid-template-columns: repeat(5, 1fr);\n  gap: 8px;\n  margin-bottom: 16px;\n}\n.sheet-num {\n  width: 36px;\n  height: 36px;\n  border: 1px solid #e8eaf0;\n  border-radius: 8px;\n  background: #f8f9fc;\n  font-size: 12px;\n  font-weight: 700;\n  color: #5a6488;\n  cursor: pointer;\n  transition: all 0.2s;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.sheet-num.active {\n  border-color: #1a2b5f;\n  box-shadow: 0 0 0 2px rgba(26, 43, 95, 0.3);\n}\n.sheet-num.answered {\n  background: #e6f7ec;\n  border-color: #22c55e;\n  color: #15803d;\n}\n.sheet-num.marked {\n  border-color: #f59e0b;\n  background: #fffbeb;\n}\n.submit-btn {\n  width: 100%;\n  padding: 10px;\n  border: none;\n  border-radius: 10px;\n  background: linear-gradient(135deg, #1a2b5f, #1e3470);\n  color: #fff;\n  font-size: 14px;\n  font-weight: 700;\n  cursor: pointer;\n  transition: all 0.3s;\n}\n.submit-btn:hover {\n  background: linear-gradient(135deg, #c41e3a, #e8384f);\n}\n.sheet-slide-enter-active, .sheet-slide-leave-active {\n  transition: all 0.3s ease;\n}\n.sheet-slide-enter-from, .sheet-slide-leave-to {\n  opacity: 0;\n  transform: translateX(-20px);\n}\n/* 题目区域 */\n.question-area {\n  flex: 1;\n  min-width: 0;\n}\n.question-scroll {\n  display: flex;\n  flex-direction: column;\n  gap: 20px;\n}\n.question-block {\n  background: #ffffff;\n  border-radius: 16px;\n  padding: 28px;\n  box-shadow: 0 2px 14px rgba(26, 43, 95, 0.05);\n}\n.q-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 16px;\n}\n.q-number {\n  font-size: 18px;\n  font-weight: 900;\n  color: #1a2b5f;\n}\n.q-type-badge {\n  font-size: 11px;\n  padding: 3px 10px;\n  border-radius: 8px;\n  background: #eff6ff;\n  color: #3b82f6;\n  font-weight: 600;\n}\n.mark-badge {\n  font-size: 11px;\n  padding: 3px 10px;\n  border-radius: 8px;\n  background: #fffbeb;\n  color: #b45309;\n  font-weight: 600;\n}\n.q-stem {\n  font-size: 15px;\n  line-height: 1.8;\n  color: #1a2b5f;\n  margin: 0 0 20px;\n  font-weight: 500;\n}\n.q-options {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n.option-item {\n  display: flex;\n  align-items: center;\n  gap: 12px;\n  padding: 14px 16px;\n  border: 2px solid #e8eaf0;\n  border-radius: 12px;\n  cursor: pointer;\n  transition: all 0.2s;\n  font-size: 14px;\n  color: #333;\n}\n.option-item:hover {\n  border-color: #cbd5e0;\n  background: #f8f9fc;\n}\n.option-item.selected {\n  border-color: #1a2b5f;\n  background: #f0f4ff;\n  color: #1a2b5f;\n  font-weight: 600;\n}\n.option-item.correct {\n  border-color: #22c55e;\n  background: #f0fdf4;\n}\n.option-item.wrong {\n  border-color: #ef4444;\n  background: #fef2f2;\n}\n.option-label {\n  width: 32px;\n  height: 32px;\n  border-radius: 50%;\n  background: #f8f9fc;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  font-weight: 700;\n  font-size: 14px;\n  flex-shrink: 0;\n  color: #5a6488;\n}\n.option-item.selected .option-label {\n  background: #1a2b5f;\n  color: #fff;\n}\n.option-item.correct .option-label {\n  background: #22c55e;\n  color: #fff;\n}\n.option-item.wrong .option-label {\n  background: #ef4444;\n  color: #fff;\n}\n.q-result {\n  margin-top: 16px;\n  padding: 12px 16px;\n  background: #f8f9fc;\n  border-radius: 10px;\n}\n.result-badge {\n  display: inline-block;\n  padding: 4px 12px;\n  border-radius: 8px;\n  font-size: 12px;\n  font-weight: 700;\n  margin-bottom: 8px;\n}\n.result-badge.correct {\n  background: #d1fae5;\n  color: #065f46;\n}\n.result-badge.incorrect {\n  background: #fee2e2;\n  color: #991b1b;\n}\n.result-explain {\n  font-size: 13px;\n  color: #5a6488;\n  line-height: 1.6;\n  margin: 0;\n}\n.q-actions {\n  margin-top: 16px;\n  display: flex;\n  justify-content: flex-end;\n}\n.mark-btn {\n  padding: 6px 16px;\n  border: 1px solid #e8eaf0;\n  border-radius: 8px;\n  background: #fff;\n  font-size: 12px;\n  color: #5a6488;\n  cursor: pointer;\n  transition: all 0.2s;\n}\n.mark-btn.marked {\n  background: #fffbeb;\n  border-color: #f59e0b;\n  color: #b45309;\n}",
+  "name": "AnswerPage",
+  "emits": [],
+  "nodes": [],
+  "props": [],
+  "slots": [],
+  "state": {
+    "2": "题组聚合材料缓存 { [group_id]: { title",
+    "answers": "{}",
+    "timeLeft": "7200",
+    "questions": "[]",
+    "showResult": "false",
+    "currentIndex": "0",
+    "optionLabels": "['A'",
+    "sheetVisible": "false",
+    "markedQuestions": "[]",
+    "showNoteEditor": "false",
+    "noteText": "''",
+    "currentNoteQuestionId": "null",
+    "favorites": "{}",
+    "groupMaterials": "{}"
+  },
+  "watch": [],
+  "expose": [],
+  "inject": [],
+  "locked": false,
+  "methods": {
+    "isCorrect": {
+      "type": "method",
+      "params": [
+        "q"
+      ]
+    },
+    "formatTime": {
+      "type": "method",
+      "params": [
+        "seconds"
+      ]
+    },
+    "handleExit": {
+      "type": "method"
+    },
+    "startTimer": {
+      "type": "method"
+    },
+    "toggleMark": {
+      "type": "method",
+      "params": [
+        "qId"
+      ]
+    },
+    "handleSubmit": {
+      "type": "method"
+    },
+    "submitPracticeRecords": {
+      "type": "asyncMethod"
+    },
+    "triggerCheckin": {
+      "type": "asyncMethod"
+    },
+    "selectOption": {
+      "type": "method",
+      "params": [
+        "qId",
+        "oidx",
+        "type"
+      ]
+    },
+    "loadQuestions": {
+      "type": "asyncMethod"
+    },
+    "ensureLogin": {
+      "type": "asyncMethod"
+    },
+    "getAuthHeaders": {
+      "type": "method"
+    },
+    "getJsonHeaders": {
+      "type": "method"
+    },
+    "jumpToQuestion": {
+      "type": "method",
+      "params": [
+        "idx"
+      ]
+    },
+    "isOptionSelected": {
+      "type": "method",
+      "params": [
+        "qId",
+        "oidx"
+      ]
+    },
+    "toggleAnswerSheet": {
+      "type": "method"
+    },
+    "openNoteEditor": {
+      "type": "method",
+      "params": [
+        "qId"
+      ]
+    },
+    "closeNoteEditor": {
+      "type": "method"
+    },
+    "saveNote": {
+      "type": "asyncMethod"
+    },
+    "deleteNote": {
+      "type": "asyncMethod"
+    },
+    "getTypeLabel": {
+      "type": "method",
+      "params": [
+        "type"
+      ]
+    },
+    "getTypeClass": {
+      "type": "method",
+      "params": [
+        "type"
+      ]
+    },
+    "if": {
+      "type": "method",
+      "params": [
+        "q.type === '多选题'"
+      ]
+    },
+    "map": {
+      "type": "method",
+      "params": [
+        "function(idx"
+      ]
+    }
+  },
+  "computed": {
+    "answeredCount": {
+      "type": "JSFunction",
+      "value": "() => {\n  return Object.keys(this.state.answers).length;\n}"
+    }
+  },
+  "lifeCycles": {
+    "mounted": {
+      "type": "method"
+    },
+    "beforeUnmount": {
+      "type": "method"
+    }
+  },
+  "__VERSION__": "1778918968644",
+  "dataSources": {
+    "questions": {
+      "type": "api",
+      "url": "/api/questions/random",
+      "params": {
+        "count": 20
+      }
+    },
+    "images": {
+      "type": "api",
+      "url": "/api/questions/{id}/images"
+    }
+  },
+  "__VTJ_BLOCK__": true
+}

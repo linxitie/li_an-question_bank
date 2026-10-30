@@ -10,6 +10,7 @@
 6. 位置兜底匹配
 7. 智能匹配主入口（用于分离导入）
 """
+import json
 import re
 import os
 import logging
@@ -1336,12 +1337,52 @@ def _compute_option_similarity(text_a: str, text_b: str) -> float:
     return SequenceMatcher(None, struct_a, struct_b).ratio()
 
 
+def _options_fingerprint(options) -> set:
+    """把结构化选项归一化成可比较的内容集合（忽略 A/B/C/D 标签）。
+
+    用于“共用题干、选项不同”的行测题去重判定：题干完全相同不等于同题，
+    图形/资料分析常有多题共用同一句问法。
+    """
+    if not options:
+        return set()
+    if isinstance(options, str):
+        try:
+            options = json.loads(options)
+        except (TypeError, ValueError):
+            return set()
+    if isinstance(options, dict):
+        options = list(options.values())
+    if not isinstance(options, (list, tuple)):
+        return set()
+    values = set()
+    for item in options:
+        if isinstance(item, dict):
+            raw = item.get('value') or item.get('content') or item.get('text') or ''
+        else:
+            raw = item
+        normalized = normalize_text_for_comparison(str(raw))
+        if normalized:
+            values.add(normalized)
+    return values
+
+
+def _options_conflict(options_a, options_b) -> bool:
+    """两份选项内容集合是否明显不同（重合率 < 1/3）。"""
+    set_a = _options_fingerprint(options_a)
+    set_b = _options_fingerprint(options_b)
+    if not set_a or not set_b:
+        return False
+    overlap = len(set_a & set_b) / max(len(set_a), len(set_b))
+    return overlap < 0.34
+
+
 def fuzzy_detect_duplicate(
     db_session,
     content: str,
     answer: str = '',
     subject_id: Optional[int] = None,
-    threshold: float = DEDUP_SIMILARITY_THRESHOLD
+    threshold: float = DEDUP_SIMILARITY_THRESHOLD,
+    options=None,
 ) -> Tuple[bool, Optional[Any], float]:
     """
     增强版模糊去重检测。
@@ -1384,6 +1425,11 @@ def fuzzy_detect_duplicate(
             QuestionBank.question_content == content,
             QuestionBank.status != 0
         ).first()
+    # 题干完全相同但选项内容明显不同 → 不是同一题。
+    # 行测资料分析大量题目共用“能够从上述资料中推出的是：”这类问法，
+    # 旧逻辑在此直接返回重复，导致 q120/q125 被静默丢弃（实测 2025 安徽行测少 2 题）。
+    if exact and _options_conflict(options, exact.options):
+        exact = None
     if exact:
         return True, exact, 1.0
 
@@ -1950,7 +1996,7 @@ _MATERIAL_HEAD_RE = re.compile(
     r'(?:^|\n)[ \t]*(?:[一二三四五六七八九十]+[ \t]*[、，．][ \t]*)?'
     r'(?:请)?(?:根据|阅读)(?:以下|下面)'
     r'(?:情境|情景)?(?:材料|资料|文章|图表|内容|案例)?'
-    r'[^\n]{0,20}?回答[ \t]*(?:第)?\s*(\d+)[ \t]*[-～~—－至][ \t]*(\d+)[ \t]*题'
+    r'[^\n]{0,20}?回答[ \t]*(?:第)?\s*(\d+)[ \t]*\\?[-～~—－至][ \t]*(\d+)[ \t]*题'
 )
 
 # 题号行 / 选项行 / 图片标记行（用于判定材料正文边界）
@@ -2115,6 +2161,16 @@ def _extract_blocks_unnumbered(text: str) -> List[Dict[str, Any]]:
     if cur and any(x.strip() for x in cur):
         chunks.append(cur)
 
+    # 无题号兜底只对"有结构信号"的文档生效：选项标记(A-D)、枚举行(①-⑫)或括号折行。
+    # 为什么加：整段说明文字（既无选项也无枚举）原先会被切成 1 个题块，导入后变成 1 道幽灵题；
+    # 0 题文档应当解析出 0 个块（test_gongzhuan_regression 已固化为回归用例）。
+    if not (
+        re.search(r'[A-D]\s*[.、．)）]', text)
+        or re.search(r'[①②③④⑤⑥⑦⑧⑨⑩⑪⑫]', text)
+        or re.search(r'^[（(]', text, re.M)
+    ):
+        return []
+
     blocks: List[Dict[str, Any]] = []
     for idx, chunk in enumerate(chunks):
         block_lines = list(chunk)
@@ -2208,14 +2264,16 @@ def _strip_unmarked_material(lines: List[str]) -> Tuple[List[str], List[str]]:
     return lines[:last_opt + 1], content
 
 
-def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
+def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str], str]:
     """剥离题干块尾部粘连的「材料头」与「分节指令段」（分节残留）。
 
-    返回 (保留的行, 溢出到下一题块的首行)：
+    返回 (保留的行, 溢出行, 溢出类型)：
     - 保留的行：属于本题的行
-    - 溢出行：分节指令段之后、下一个题号行之前的"节首材料"（如情景分析的图表说明），
-      它属于**下一节的第一题**，必须回吐给下一题块，否则下一题题干残缺。
-      这正是"判断题整节消失"与"下一节首题只剩选项没有题干"的成因。
+    - 溢出行：材料头/无标记材料之后的正文，或分节指令段之后的"节首材料"
+    - 溢出类型：'material' 表示溢出行是共享材料，P3-2 起落到 material_text，
+      不再拼回下一题 content；'section' 表示它属于**下一节的第一题**，
+      必须按原行为回吐给下一题块，否则下一题题干残缺
+      （"判断题整节消失"与"下一节首题只剩选项没有题干"的成因）。
 
     真实案例 1（材料头）：第85题尾部混入"五、根据以下情境材料，回答86-89题。新生派出所位于老城区…"
     真实案例 2（分节指令）：第70题尾部混入"三、情景分析题，…（一）下图为甲县公安局的机构设置图。[IMAGE]"
@@ -2224,12 +2282,13 @@ def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
     保护复合题/题组题自身的开头材料句。
     """
     if not lines:
-        return lines, []
+        return lines, [], ''
 
     # ---- 定位首个分节标记（材料头 或 分节指令段），跳过首行（首行是题号行）----
     cut_idx = None      # 该行从 cut_char 起全部剥离
     cut_char = None
     cut_end = None      # 指令行保留 [cut_end:] 部分（同行材料）
+    cut_kind = 'section'
     for i in range(1, len(lines)):
         m = _MATERIAL_HEAD_RE.search(lines[i])
         if m:
@@ -2237,6 +2296,7 @@ def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
             cut_char = m.start() + (1 if m.group(0).startswith('\n') else 0)
             # 材料头：整行剩余部分视为材料正文
             cut_end = cut_char
+            cut_kind = 'material'
             break
         hit = _find_section_directive(lines[i])
         if hit:
@@ -2244,7 +2304,8 @@ def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
             break
     if cut_idx is None:
         # C 修复：无标记材料启发式剥离（材料头/分节指令未命中时）
-        return _strip_unmarked_material(lines)
+        keep, spill = _strip_unmarked_material(lines)
+        return keep, spill, ('material' if spill else '')
 
     keep = list(lines[:cut_idx])
     prefix = lines[cut_idx][:cut_char].rstrip()
@@ -2268,7 +2329,7 @@ def _strip_trailing_material(lines: List[str]) -> Tuple[List[str], List[str]]:
         spill.pop(0)
     while spill and not spill[-1].strip():
         spill.pop()
-    return keep, spill
+    return keep, spill, (cut_kind if spill else '')
 
 
 # ==================== 申论（Essay / 主观题）解析 ====================
@@ -2465,7 +2526,9 @@ def _essay_split_answer_analysis(seg_lines: List[str]) -> Tuple[List[str], List[
 _ESSAY_ANS_NUMBERED_RE = re.compile(r'^[一二三四五六七八九十]+\s*、\s*参考答案\s*[（(]?\s*([HFhf])?\s*[）)]?', re.M)
 _ESSAY_ANSNOTE_RE = re.compile(r'参考答案说明\s*[:：]?')
 _ESSAY_MATERIAL_ANCHOR_RE = re.compile(
-    r'^[ \t　]*(?:[一二三四五六七八九十]+\s*、\s*)?给定(?:材料|资料)[ \t　]*$')
+    # P3-6：「材料」二字可能重复、且材料块编号会粘在标题行尾
+    # （实测 2022 国考副省级卷 line 11：`二、给定材料材料1`）。
+    r'^[ \t　]*(?:[一二三四五六七八九十]+\s*、\s*)?给定(?:材料|资料)+(?:[ \t　]*\d{1,2})?[ \t　]*$')
 _ESSAY_NOISE_RE = re.compile(r'^[ \t　]*(?:[一二三四五六七八九十]+\s*、\s*)?注意事项[ \t　]*$')
 _ESSAY_MATERIAL_BLOCK_RE = re.compile(r'^[ \t　]*材料\s*(\d+)[ \t　]*$')
 # 半角题号：安徽/多省联考体
@@ -2744,6 +2807,12 @@ _ESSAY_SECTION_HEAD_RE = re.compile(
     r'(?:作答要求|给定材料|参考答案|答题要求|材料)'
 )
 
+# 作答要求区起点：该区内的题目可能因分页/截断丢失分值标记，
+# 但仍是真题（P3-6 锚点修复）。
+_ESSAY_REQUIREMENTS_HEAD_RE = re.compile(
+    r'^[ \t　]*[一二三四五六七八九十]{1,3}\s*[、.．]\s*(?:作答要求|答题要求)[ \t　]*$'
+)
+
 
 def _essay_cn_body_len(s: str) -> int:
     """题号行剥掉「题号 + 分值 + 标点」后的**实质题干长度**。
@@ -2789,6 +2858,11 @@ def _essay_split_questions(lines: List[str], style: str):
     """
     num_re = _ESSAY_NUM_RES.get(style, _ESSAY_HALF_NUM_RE)
     floor = _essay_questions_floor(lines)
+    req_start = None
+    for _i, _ln in enumerate(lines):
+        if _ESSAY_REQUIREMENTS_HEAD_RE.match(_ln.strip()):
+            req_start = _i
+            break
     raw = []
     for i in range(floor, len(lines)):
         m = num_re.match(lines[i])
@@ -2808,6 +2882,9 @@ def _essay_split_questions(lines: List[str], style: str):
         #   （`一、根据"给定资料 1"，请你谈谈…（10 分）` → 剩 20+ 字）。
         if style == 'cn' and _essay_cn_body_len(lines[i].strip()) < 8:
             continue
+        qno = _essay_num_to_int(m.group(1))
+        if qno <= 0:
+            continue
         # ★ 窗口按标记形态区分（与 _detect_essay_numbering 共用同一 helper，
         #   两处口径必须一致，否则体例判定与切题会分裂）。
         window = _essay_score_scope(lines, i, lines[i].strip(), False)
@@ -2815,12 +2892,16 @@ def _essay_split_questions(lines: List[str], style: str):
         #   —— 纯放宽，不收紧。边界作用域让长题干题（分值落在题号行下第 3 行）
         #   不再漏检，同时要求子项因紧邻下一 `（N）` 而收不到分值、被正确排除。
         #   与 _detect_essay_numbering._scan 同一口径，两处必须一致。
-        if not _ESSAY_SCORE_RE.search(window) and not _ESSAY_SCORE_RE.search(
-                _essay_score_scope_to_boundary(lines, i, style)):
-            continue
-        qno = _essay_num_to_int(m.group(1))
-        if qno <= 0:
-            continue
+        has_score = (
+            _ESSAY_SCORE_RE.search(window)
+            or _ESSAY_SCORE_RE.search(_essay_score_scope_to_boundary(lines, i, style))
+        )
+        if not has_score:
+            # 作答要求区内被分页/截断吞掉分值的题：仅当它严格接续已确认题号
+            # （raw[-1] + 1）时放行，避免把答案区分点当题目（P3-6）。
+            if not (req_start is not None and i > req_start and raw
+                    and qno == raw[-1][0] + 1):
+                continue
         variant = ''
         mv = re.search(r'[（(]\s*([HFhf])\s*[）)]', lines[i])
         if mv:
@@ -3062,7 +3143,7 @@ def _parse_essay_document(text: str) -> Optional[List[Dict[str, Any]]]:
         if trailing_block and len(trailing_segments) != len(numbers):
             reasons.append('answer_block_count_mismatch')
         blk: Dict[str, Any] = {
-            'question_number': str(qno),
+            'question_number': int(qno),
             'content': stem,
             'options': [],
             'answer': answer_txt,
@@ -3089,6 +3170,46 @@ def _parse_essay_document(text: str) -> Optional[List[Dict[str, Any]]]:
     return blocks
 
 
+_INLINE_QNUM_BREAK_RE = re.compile(
+    r'(?<=[\u4e00-\u9fff）)】」”"])\s*(\d{2,3})\s*[.．、]\s*(?=[\u4e00-\u9fff“（(])'
+)
+
+
+def _repair_inline_question_breaks(
+    text: str, numbers: List[QuestionNumber]
+) -> Tuple[str, List[QuestionNumber]]:
+    """把被 PDF 抽取吞掉换行的行内题号前补换行（P3-1）。
+
+    实测 2025 多省联考公安卷：Q84 的 D 选项行尾直接粘连
+    `…从轻或者减轻处罚85.水岩派出所…`，85 不在行首 → num_dot 不命中 →
+    Q85/Q86 整块消失。只在**已确认题号存在间隔**且行内题号严格等于
+    「前一题号+1」时动作，避免把正文数字误切。
+    """
+    if len(numbers) < 2:
+        return text, numbers
+    lines = text.split('\n')
+    changed = False
+    for k in range(len(numbers) - 1):
+        cur, nxt = numbers[k], numbers[k + 1]
+        if nxt.number - cur.number <= 1:
+            continue
+        expect = cur.number + 1
+        for li in range(cur.line_index, min(nxt.line_index, len(lines))):
+            for m in _INLINE_QNUM_BREAK_RE.finditer(lines[li]):
+                if int(m.group(1)) != expect:
+                    continue
+                lines[li] = lines[li][:m.start(1)] + '\n' + lines[li][m.start(1):]
+                changed = True
+                expect += 1
+                break
+            if expect >= nxt.number:
+                break
+    if not changed:
+        return text, numbers
+    repaired = '\n'.join(lines)
+    return repaired, extract_question_numbers(repaired, monotonic=True)
+
+
 def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
     """
     将文本分割为题目块，每个块包含：
@@ -3113,6 +3234,7 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
     if not numbers:
         # A 修复：无题号文档自适应切分（「网友回忆版」等题目无题号前缀的文档）
         return _extract_blocks_unnumbered(text)
+    text, numbers = _repair_inline_question_breaks(text, numbers)
     # A 修复：混合形态——题号数远少于「题干尾候选」数（前半无题号+后半有题号）。
     # 0.5 系数：正常有题号文档 stem≈题号数（不触发）；江苏卷 36 题号 vs 82 候选触发。
     _stem_count = _count_stem_lines(text)
@@ -3123,6 +3245,8 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
     blocks = []
     # P2 回吐缓冲区：上一题剥离出的"节首材料"暂存于此，下一轮作为本题前缀
     pending_spill: List[str] = []
+    # P3-2 材料缓冲区：上一题剥离出的共享材料落到本题 material_text
+    pending_material: List[str] = []
     # 分节题型索引：必须在循环外预扫描。分节标题行会被 P2 从上一题尾部剥离，
     # 循环内取不到；而"无选项题"的题型判定又恰恰只能依赖它。
     section_marks = _build_section_index(lines)
@@ -3154,8 +3278,9 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
             block_lines = list(raw_block)
 
         # ---- 步骤 2：剥离题干尾部粘连的分节标记（材料头 + 分节指令段）----
-        # 返回 (保留行, 溢出行)。溢出的节首材料留给下一题。
-        block_lines, spilled = _strip_trailing_material(block_lines)
+        # 返回 (保留行, 溢出行, 溢出类型)。材料留给下一题 material_text，
+        # 分节指令后的节首材料留给下一题题干前缀。
+        block_lines, spilled, spill_kind = _strip_trailing_material(block_lines)
 
         # ---- 步骤 3：由剥离后的行**重算**题干，再前置回吐内容 ----
         # ★ 必须在剥离之后重算 content_text。早期版本在步骤 1 就把 content_text
@@ -3169,7 +3294,9 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         spill_text = '\n'.join(pending_spill).strip()
         if spill_text:
             content_text = f'{spill_text}\n{content_text}'.strip()
-        pending_spill = spilled
+        pending_spill = spilled if spill_kind == 'section' else []
+        material_text = '\n'.join(pending_material).strip()
+        pending_material = spilled if spill_kind == 'material' else []
         block_text = '\n'.join(block_lines)
 
         # 提取选项
@@ -3244,7 +3371,7 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
         if i == len(numbers) - 1:
             content_text = _strip_trailing_images(content_text)
 
-        blocks.append({
+        block = {
             'question_number': qn.number,
             'content': content_text.strip(),
             'options': options,
@@ -3253,7 +3380,19 @@ def extract_question_blocks(text: str) -> List[Dict[str, Any]]:
             'question_type': qtype,
             'type_confidence': type_confidence,
             'format': qn.format_type,
-        })
+        }
+        if material_text:
+            block['material_text'] = material_text
+        blocks.append(block)
+
+    # 末题之后出现的材料头/材料段没有后继题可挂，作为 orphan 材料留在末题上，
+    # 不能随循环结束丢弃（case_04：Q97 后的「（十）/98－100」）。
+    if pending_material and blocks:
+        orphan = '\n'.join(pending_material).strip()
+        existing = blocks[-1].get('material_text')
+        blocks[-1]['material_text'] = (
+            f'{existing}\n{orphan}' if existing else orphan
+        )
 
     return _mark_and_split_suspected(blocks)
 
@@ -4870,3 +5009,215 @@ from app.services.text_parser_xingce import (  # noqa: E402  (文件末尾 re-ex
     split_xingce_answer_blocks,
     xingce_cross_validate,
 )
+
+
+# ======================================================================
+# 答案文档专项解析（2026-10-25）
+#
+# 事故：教师上传「题本.pdf + 答案解析.pdf」后，两个文件各自按
+# `extract_question_blocks()` 切块。题本 125 块、答案卷只有 95 块，
+# 前端因此显示「题目 125 / 答案 95」，教师判定为"答案对不上"。
+# 实测答案卷按题号锚点解析（parse_answer_text_to_map）恰好 125 条。
+#
+# 结论：答案卷不是"题目文档"，不能复用题干切块器。这里提供
+#   ① looks_like_answer_document  —— 判定文件角色
+#   ② extract_answer_entries       —— 答案卷 → 题号/答案/解析条目
+# 供导入预览使用，保证两侧计数同口径（题号集合可比对）。
+# ======================================================================
+
+_ANSWER_DOC_NAME_RE = re.compile(r'(答案|解析|参考答案|answer|key)', re.IGNORECASE)
+_ANSWER_LINE_RE = re.compile(
+    r'(?m)^\s*(\d{1,3})\s*[.．、]?\s*(?:[A-DＡ-Ｄ]{1,4}|正确|错误|对|错)\s*$')
+_ANSWER_MARKER_RE = re.compile(r'正确答案|参考答案|【答案】|答案[:：]')
+_OPTION_LINE_RE = re.compile(r'(?m)^\s*[A-DＡ-Ｄ]\s*[.．、]')
+
+
+def looks_like_answer_document(text: str, filename: str = '') -> bool:
+    """判断上传文件是否为「答案/解析」文档。
+
+    只做角色判定，不解析内容。文件名命中即认为答案卷（教师命名惯例最可靠）；
+    否则看正文信号：答案短行远多于选项行，或大量"正确答案/参考答案"标记。
+    """
+    if filename and _ANSWER_DOC_NAME_RE.search(filename):
+        return True
+    if not text:
+        return False
+    head = text[:20000]
+    answer_lines = len(_ANSWER_LINE_RE.findall(head))
+    markers = len(_ANSWER_MARKER_RE.findall(head))
+    option_lines = len(_OPTION_LINE_RE.findall(head))
+    if markers >= 10 and answer_lines >= 5:
+        return True
+    return answer_lines >= 5 and option_lines < answer_lines
+
+
+def extract_answer_entries(text: str) -> list:
+    """把答案/解析文档解析成条目列表（按题号升序）。
+
+    与 `smart_match_questions_answers` 使用同一组答案映射来源
+    （题号锚点 → 嵌入式答案 → 连续序列），因此两侧题号集合可比对。
+    返回：[{'number': int, 'answer': str, 'analysis': str}]
+    """
+    if not text or not text.strip():
+        return []
+
+    answer_map: Dict[int, Dict[str, Optional[str]]] = {}
+    for num, data in (parse_answer_text_to_map(text) or {}).items():
+        _merge_answer_entry(answer_map, num, data)
+    try:
+        embedded = _extract_embedded_answers(text) or {}
+    except Exception:  # noqa: BLE001 — 兜底策略失败不能拖垮整份文档
+        embedded = {}
+    for num, data in embedded.items():
+        _merge_answer_entry(answer_map, num, data)
+    try:
+        seq = parse_answer_sequence(text) or {}
+    except Exception:  # noqa: BLE001
+        seq = {}
+    for num, data in seq.items():
+        _merge_answer_entry(answer_map, num, data)
+
+    entries = []
+    for num in sorted(answer_map.keys(), key=lambda x: int(x)):
+        data = answer_map[num] or {}
+        answer = str(data.get('answer') or '').strip()
+        analysis = str(data.get('analysis') or '').strip()
+        # 解析缺失时按题号回取原文段落（首题的解析常被标题行/页眉截断）
+        if not analysis:
+            analysis = _strip_answer_header(answer_region_for(text, num), int(num))
+        else:
+            analysis = _strip_answer_header(analysis, int(num))
+        entries.append({
+            'number': int(num),
+            'answer': answer,
+            'analysis': analysis,
+        })
+    return entries
+
+
+def _strip_answer_header(region: str, number: int) -> str:
+    """去掉答案段落开头的「题号 + 答案字母」行与空行，只留解析正文。"""
+    if not region:
+        return ''
+    lines = [ln for ln in str(region).split('\n')]
+    header = re.compile(r'^\s*%d\s*[.．、]?\s*(?:[A-DＡ-Ｄ]{1,4})?\s*$' % int(number))
+    while lines and (not lines[0].strip() or header.match(lines[0])):
+        lines.pop(0)
+    return '\n'.join(lines).strip()
+
+
+# ======================================================================
+# 行测资料分析「材料–小题」绑定（2026-10-25）
+#
+# 实测：解析器只在每组材料的第一题挂 material_text，235 道入库行测题
+# 因此全部 group_id=0 —— 前端每题单看，材料与小题断裂。
+#
+# 组边界在原文里是稳定的：`（一）（二）（三）…` 独占一行
+# （22/22 套 2024 真题命中，每组 1~6 个标记，资料分析每组 5 题）。
+# 按标记切段 → 段内重新切题 → 把段首材料挂到该段全部小题。
+# 申论走自己的文档级材料链路，这里直接跳过，避免双重挂载。
+# ======================================================================
+
+# 材料标记行：允许行尾跟纯图片材料（实测 2025 安徽行测“（三） [IMAGE:x_0] [IMAGE:x_1]”）。
+# 用零宽前瞻而非吞掉图片 token：m.end() 停在图片前，后续 chunk 仍能把图片收进材料。
+_XINGCE_SET_MARKER = re.compile(
+    r'(?m)^[ \t]*（[一二三四五六七八九十]{1,3}）[ \t]*'
+    r'(?=(?:\[IMAGE:[^\]]+\][ \t]*)*$)'
+)
+_SET_IMAGE_RE = re.compile(r'\[IMAGE:[^\]]+\]')
+# 题号行必须排除「小数+单位」：`40.2%。` 会被朴素正则认成第 40 题（实测甘肃教材）。
+_QNUM_LINE_START = re.compile(r'(?m)^[ \t]*(\d{1,3})[ \t]*[.．、](?!\d)')
+_SECTION_HEAD_LINE = re.compile(r'^[ \t]*第[一二三四五六七八九十]+部分.*$')
+_MIN_MATERIAL_CHARS = 30
+
+
+def _clean_material_header(header: str) -> str:
+    """去掉材料头里的分段标题与材料序号行，保证同组各题指纹一致。
+
+    实测：组内第一题的材料头会带上「第五部分 资料分析」「（一）」，
+    而后续题不带 → 按内容哈希分组时会被拆成多组，材料又变成只见一题。
+    """
+    lines = []
+    for ln in str(header or '').split('\n'):
+        if _XINGCE_SET_MARKER.match(ln):
+            # 纯图片材料（“（三） [IMAGE:…]”）去掉序号行时必须留下占位符，
+            # 否则整行被清洗掉，题组最终拿不到任何材料（2026-10-28 实测）。
+            images = _SET_IMAGE_RE.findall(ln)
+            if images:
+                lines.append(' '.join(images))
+            continue
+        if _SECTION_HEAD_LINE.match(ln):
+            continue
+        lines.append(ln)
+    return '\n'.join(lines).strip()
+
+
+def extract_question_blocks_with_material_sets(text: str) -> list:
+    """行测：按 `（一）（二）…` 材料标记切段，把材料绑定到段内所有小题。
+
+    实现要点：**不重新切题**（重切会多出 2~3 个幻影题块），而是在
+    原题块基础上按题号区间回填 material_text，题块数量与题号完全不变。
+
+    - 无标记 / 申论文档 → 原样返回（零回归）
+    - 段区间 = [段内首个题号, 下一段首个题号 - 1]，最后一段到最后
+    """
+    blocks = extract_question_blocks(text)
+    if not blocks:
+        return blocks
+    if any((b.get('format') == 'essay') for b in blocks):
+        return blocks
+
+    marks = list(_XINGCE_SET_MARKER.finditer(text))
+    if not marks:
+        return blocks
+
+    # 只在「资料分析」分段内绑定材料：`（一）（二）` 在言语/判断等分段里
+    # 也会出现（实测国考 4 个标记里只有资料分析内的属于材料组），
+    # 不加分段约束会把 68 道无关题挂到同一份材料上。
+    sec_start, sec_end = 0, len(text)
+    try:
+        routing = route_xingce_sections(text) or {}
+        for sec in routing.get('sections') or []:
+            if '资料分析' in str(sec.get('name') or ''):
+                sec_start, sec_end = int(sec['start']), int(sec['end'])
+                break
+    except Exception:  # noqa: BLE001 — 分段失败就退回全文，不阻断导入
+        pass
+
+    marks = [m for m in marks if sec_start <= m.start() < sec_end]
+    if not marks:
+        return blocks
+
+    # 每段：标记位置 → (段首材料, 该段首个题号)
+    segments = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else sec_end
+        chunk = text[m.end():end]
+        qm = _QNUM_LINE_START.search(chunk)
+        if not qm:
+            continue
+        first_num = int(qm.group(1))
+        header = _XINGCE_SET_MARKER.sub('', chunk[:qm.start()], count=1)
+        header = _clean_material_header(header)
+        segments.append((first_num, header))
+
+    if not segments:
+        return blocks
+
+    for idx, (first_num, header) in enumerate(segments):
+        last_num = segments[idx + 1][0] - 1 if idx + 1 < len(segments) else 10 ** 6
+        if len(header) < _MIN_MATERIAL_CHARS:
+            continue
+        # 资料分析每组 4~5 题（实测 22 套）。若区间内题数超出 [2,6]，说明
+        # 漏检了组边界（如江苏/辽宁），此时**宁可不挂**也不把 10~19 道题
+        # 挂到同一份材料上 —— 错挂比缺材料更难被教师发现。
+        in_range = [b for b in blocks
+                    if b.get('question_number') is not None
+                    and first_num <= int(b['question_number']) <= last_num]
+        if not (2 <= len(in_range) <= 6):
+            continue
+        for block in in_range:
+            # 覆盖题块自带的 material_text：它常带「第五部分/（一）」前缀，
+            # 与同组后续题不一致，会导致按内容哈希分组时被拆成多组。
+            block['material_text'] = header
+    return blocks

@@ -82,19 +82,20 @@
                 title="从本次导入中剔除该题（已入库的题请到「题目管理」删除）">删除</button>
       </div>
       <div class="docs-q-body">
-        <div class="docs-q-content" v-html="renderQuestionContent(q.question_content)"></div>
+        <RichTextViewer class="docs-q-content" :content="q.question_content || ''" />
          <div class="docs-q-kao-tags" v-if="q.kao_points_normalized && q.kao_points_normalized.length">
            <span class="docs-q-kao-label">考点：</span>
            <span class="docs-q-kao-tag" v-for="(k, ki) in q.kao_points_normalized" :key="'k' + ki">{{ k }}</span>
          </div>
         <div class="docs-q-requirements" v-if="q.requirements && q.requirements.length">
           <div class="docs-q-ans-label" style="margin-bottom:4px;">题目要求：</div>
-          <div class="docs-q-req-text" style="white-space:pre-wrap;word-break:break-word;color:#b0b8c4;font-size:15px;line-height:1.7;"
-               v-html="renderQuestionContent(Array.isArray(q.requirements) ? q.requirements.join('\n') : q.requirements)"></div>
+          <RichTextViewer class="docs-q-req-text" style="white-space:pre-wrap;word-break:break-word;color:#b0b8c4;font-size:15px;line-height:1.7;"
+               :content="Array.isArray(q.requirements) ? q.requirements.join('\n') : q.requirements" />
         </div>
         <div class="docs-q-options" v-if="q.options && q.options.length">
           <span class="docs-q-opt" v-for="opt in q.options" :key="opt.key">
-            <span class="docs-q-opt-text">{{ opt.key }}. <span class="docs-q-opt-val" v-html="renderQuestionContent(opt.value)"></span></span>
+            <span class="docs-q-opt-text">{{ opt.key }}.</span>
+            <RichTextViewer class="docs-q-opt-val" :content="opt.value || ''" />
             <button class="btn-mini-img" :disabled="attachingKey === (idx + ':' + opt.key)"
                     @click="pickImage(idx, 'option', opt.key)"
                     :title="'为选项 ' + opt.key + ' 添加图片'">+图</button>
@@ -105,7 +106,7 @@
           <button class="btn-mini-img" :disabled="attachingKey === (idx + ':answer')"
                   @click="pickImage(idx, 'answer')" title="为该题答案添加图片">+答案图</button>
           <input v-if="isShortAnswer(q)" class="docs-q-ans-input" v-model="q.answer" :placeholder="isJudgeQuestion(q) ? '正确/错误' : 'A/B/C/D'" :maxlength="isJudgeQuestion(q) ? 8 : 4" />
-          <div v-else class="docs-q-ans-text" style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:#b0b8c4;font-size:15px;line-height:1.7;" v-html="renderQuestionContent(q.answer || '')"></div>
+          <RichTextViewer v-else class="docs-q-ans-text" style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:#b0b8c4;font-size:15px;line-height:1.7;" :content="q.answer || ''" />
           <span class="docs-q-ans-hint" v-if="!q.answer || q.answer === '待补充'">（必填 — {{ isJudgeQuestion(q) ? '判断题请填写 正确 或 错误' : '请输入选项字母' }}）</span>
         </div>
         <div class="docs-q-analysis" @paste="handlePaste(idx, 'analysis', null, $event)" tabindex="0" title="点击此处后可直接 Ctrl+V 粘贴图片到解析">
@@ -113,7 +114,7 @@
             <button class="btn-mini-img" :disabled="attachingKey === (idx + ':analysis')"
                     @click="pickImage(idx, 'analysis')" title="为该题解析添加图片">+解析图</button>
           </div>
-          <div v-if="q.analysis" class="docs-q-analysis-text" style="white-space:pre-wrap;word-break:break-word;line-height:1.7;" v-html="renderQuestionContent(q.analysis)"></div>
+          <RichTextViewer v-if="q.analysis" class="docs-q-analysis-text" style="white-space:pre-wrap;word-break:break-word;line-height:1.7;" :content="q.analysis" />
           <div v-else class="docs-q-analysis-text" style="white-space:pre-wrap;word-break:break-word;line-height:1.7;color:#e6a23c;font-style:italic;padding:6px 0;">⚠ 暂无答案解析，请补充（点击上方「+解析图」添加图片解析，或点「编辑」补文字解析）</div>
         </div>
       </div>
@@ -200,9 +201,11 @@
 import { defineComponent, ref, reactive, computed, watch, onMounted, getCurrentInstance } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
+import RichTextViewer from '@/components/rich-text/RichTextViewer.vue';
 
 export default defineComponent({
   name: 'QuestionPreviewList',
+  components: { RichTextViewer },
   props: {
     // ===== 数据入口 A（向后兼容）：导入预览的扁平题目列表 =====
     questions: { type: Array, default: function() { return []; } },
@@ -1192,6 +1195,9 @@ return {
   border-radius: 8px;
 }
 .docs-q-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   font-size: 13px;
   color: #b0b8c4;
   line-height: 1.6;
@@ -1645,6 +1651,8 @@ return {
   white-space: normal;
 }
 .docs-q-opt-val {
+  flex: 1;
+  min-width: 0;
   white-space: normal;
 }
 .docs-q-opt-val :deep(img) {

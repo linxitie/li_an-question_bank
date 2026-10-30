@@ -11,6 +11,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, case, text as sql_text
 
 from ....core.database import get_db, engine
+from ....services import media_service
+from ....services.paper_group_selector import (
+    select_questions_with_groups,
+    summarize_group_selection,
+)
 from ....core.security import (
     get_current_teacher, get_current_admin, get_password_hash,
     check_permission, Permission
@@ -44,6 +49,8 @@ logger = logging.getLogger(__name__)
 # ==================== 辅助函数 ====================
 
 from ....services.text_parser import clean_question_text
+from ....services.question_stats import QuestionStatsService
+from ....services.question_ingest.groups import upsert_question_material
 import re as _re
 
 # 题干摘要里必须**先剥图再截断**。
@@ -279,9 +286,17 @@ async def list_knowledge_points(
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """返回某科目的知识点列表（供题目选择器知识点下拉）"""
+    """返回某科目的 canonical L3 知识点列表（仅含有可见题目的考点）"""
+    visible_point_ids = db.query(QuestionBank.point_id).filter(
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
+        QuestionBank.point_id.isnot(None),
+    ).distinct()
     kps = db.query(KnowledgePoint).filter(
-        KnowledgePoint.subject_id == subject_id
+        KnowledgePoint.subject_id == subject_id,
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+        KnowledgePoint.point_id.in_(visible_point_ids),
     ).order_by(KnowledgePoint.sort_order).all()
     items = [{"point_id": kp.point_id, "point_name": kp.point_name} for kp in kps]
     return {"success": True, "total": len(items), "items": items}
@@ -305,11 +320,15 @@ async def list_teacher_questions(
     sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    include_offline: bool = Query(False, description="包含禁用/草稿题目"),
+    include_pending: bool = Query(False, description="包含待审核题目"),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
     """按多条件筛选题目列表"""
-    base_query = db.query(QuestionBank).filter(QuestionBank.status == 1)
+    base_query = QuestionStatsService.visible_query(
+        db, include_offline=include_offline, include_pending=include_pending
+    )
 
     if keyword:
         base_query = base_query.filter(QuestionBank.question_content.contains(keyword))
@@ -424,12 +443,29 @@ async def update_question(
         raise HTTPException(status_code=404, detail="题目不存在")
 
     try:
-        update_data = data.dict(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True)
+        material_keys = ("group_id", "shared_content", "shared_content_images")
+        material_data = {k: update_data.pop(k) for k in material_keys if k in update_data}
         for key, value in update_data.items():
             setattr(q, key, value)
+        if material_data:
+            upsert_question_material(
+                db,
+                q,
+                group_id=material_data.get("group_id"),
+                shared_content=material_data.get("shared_content"),
+                shared_content_images=material_data.get("shared_content_images"),
+                current_user=current_user,
+            )
         q.update_time = datetime.now()
         db.commit()
         return {"success": True, "message": "题目已更新", "question": _format_question(q)}
+    except PermissionError:
+        db.rollback()
+        raise HTTPException(status_code=403, detail="无权修改此题目材料")
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"更新题目 {question_id} 失败: {e}", exc_info=True)
         db.rollback()
@@ -1190,8 +1226,11 @@ async def auto_generate_paper(
     db.flush()
 
     # 按题型配置抽取题目
+    # 题组感知：命中 group_id>0 的复合题时整组带入，避免资料分析/申论材料题被拆散。
     order = 0
     total_questions = 0
+    requested_questions = sum(int(c) for c in data.question_config.values())
+    selected_ids = set()
     for type_name, count in data.question_config.items():
         # 根据题型名称找到type_id
         type_obj = db.query(QuestionType).filter(
@@ -1200,13 +1239,22 @@ async def auto_generate_paper(
         if not type_obj:
             continue
 
-        questions = db.query(QuestionBank).filter(
+        query = db.query(QuestionBank).filter(
             QuestionBank.subject_id == data.subject_id,
             QuestionBank.type_id == type_obj.type_id,
             QuestionBank.difficulty == data.difficulty,
             QuestionBank.status == 1,
             QuestionBank.audit_status == 1,
-        ).order_by(func.random()).limit(count).all()
+        )
+        if selected_ids:
+            query = query.filter(~QuestionBank.question_id.in_(selected_ids))
+
+        questions, selected_ids = select_questions_with_groups(
+            db=db,
+            query=query,
+            count=count,
+            selected_ids=selected_ids,
+        )
 
         for q in questions:
             order += 1
@@ -1214,20 +1262,33 @@ async def auto_generate_paper(
                 paper_id=paper.paper_id,
                 question_id=q.question_id,
                 question_order=order,
-                question_score=float(data.total_score) / sum(data.question_config.values()) if data.question_config else 5.0,
+                question_score=0,  # 先占位，组卷完成后按实际题数统一均分
             ))
             total_questions += 1
+
+    # 组展开后实际题数可能多于配置数，总分按实际题数均分，避免总分超发
+    per_score = round(float(data.total_score) / total_questions, 2) if total_questions else 5.0
+    for rel in db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper.paper_id
+    ).all():
+        rel.question_score = per_score
 
     paper.question_count = total_questions
     db.commit()
     db.refresh(paper)
 
+    quota = summarize_group_selection(requested_questions, total_questions)
+    message = f"智能组卷完成，共 {total_questions} 道题目"
+    if quota["over_quota"]:
+        message += f"（{quota['over_quota_reason']}，请核对后再发布）"
+
     return {
         "success": True,
-        "message": f"智能组卷完成，共 {total_questions} 道题目",
+        "message": message,
         "paper_id": paper.paper_id,
         "paper_code": paper_code,
         "question_count": total_questions,
+        **quota,
     }
 
 
@@ -1577,26 +1638,64 @@ async def update_teacher_profile(
     return {"success": True, "message": "个人信息已更新"}
 
 
+_TEACHER_AVATAR_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+_TEACHER_AVATAR_MAX = 2 * 1024 * 1024
+
+
 @router.post("/profile/avatar", summary="上传头像")
 async def upload_avatar(
     file: UploadFile = File(...),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """上传教师头像图片"""
+    """上传教师头像图片（与学生端同样的白名单/大小/文件头校验）"""
     import uuid
-    ext = os.path.splitext(file.filename)[1] if file.filename else '.jpg'
-    filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
     from app.core.config import settings
-    upload_dir = os.path.join(settings.UPLOAD_DIR, 'avatars')
-    os.makedirs(upload_dir, exist_ok=True)
-    filepath = os.path.join(upload_dir, filename)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _TEACHER_AVATAR_EXT:
+        raise HTTPException(400, "仅支持 jpg/jpeg/png/gif/webp 格式")
     content = await file.read()
-    with open(filepath, 'wb') as f:
-        f.write(content)
-    avatar_url = f"/uploads/avatars/{filename}"
-    current_user.avatar = avatar_url
-    db.commit()
+    if not content:
+        raise HTTPException(400, "文件内容为空")
+    if len(content) > _TEACHER_AVATAR_MAX:
+        raise HTTPException(400, "头像大小不能超过 2MB")
+    if not media_service.image_magic_ok(ext, content):
+        raise HTTPException(400, "文件实际格式与扩展名不符")
+
+    if settings.MEDIA_STORE_ENABLED:
+        try:
+            asset = media_service.store_bytes(
+                db,
+                content,
+                kind="avatar",
+                original_name=file.filename or f"avatar{ext}",
+                created_by=current_user.user_id,
+                max_bytes=_TEACHER_AVATAR_MAX,
+            )
+        except media_service.MediaTooLarge:
+            raise HTTPException(400, "头像大小不能超过 2MB")
+        except media_service.MediaValidationError as exc:
+            raise HTTPException(400, str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "头像存储暂不可用，请稍后重试")
+
+        old_url = current_user.avatar
+        avatar_url = f"/media/{asset.asset_id}"
+        current_user.avatar = avatar_url
+        media_service.retire_url(db, old_url)
+        db.commit()
+    else:
+        # 回滚分支：保留原 uploads 写路径。
+        filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
+        upload_dir = os.path.join(settings.UPLOAD_DIR, 'avatars')
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, 'wb') as f:
+            f.write(content)
+        avatar_url = f"/uploads/avatars/{filename}"
+        current_user.avatar = avatar_url
+        db.commit()
     return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}
 
 
@@ -2110,17 +2209,21 @@ async def get_knowledge_mastery(
 ):
     """获取知识点掌握度统计"""
     # 获取知识点列表
-    kp_query = db.query(KnowledgePoint)
+    kp_query = db.query(KnowledgePoint).filter(
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+    )
     if subject_id:
         kp_query = kp_query.filter(KnowledgePoint.subject_id == subject_id)
     knowledge_points = kp_query.all()
 
     items = []
     for kp in knowledge_points:
-        # 统计该知识点下的答题情况
+        # 统计该知识点下的答题情况（canonical point_id 单一归属）
         questions = db.query(QuestionBank.question_id).filter(
             QuestionBank.point_id == kp.point_id,
-            QuestionBank.status == 1
+            QuestionBank.status == 1,
+            QuestionBank.audit_status == 1,
         ).all()
         qids = [q[0] for q in questions]
 
@@ -2130,6 +2233,9 @@ async def get_knowledge_mastery(
         total = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
             ExamAnswerDetail.question_id.in_(qids)
         ).scalar() or 0
+
+        if total <= 0:
+            continue
 
         correct = db.query(func.count(ExamAnswerDetail.detail_id)).filter(
             ExamAnswerDetail.question_id.in_(qids),

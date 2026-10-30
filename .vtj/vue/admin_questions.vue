@@ -206,6 +206,20 @@
             </select>
           </div>
         </div>
+        <!-- P2-6：题组共享材料编辑 -->
+        <div class="fg material-section">
+          <label>
+            题组材料
+            <span class="material-group-hint" v-if="editForm.group_id > 0">（当前题组 #{{ editForm.group_id }}）</span>
+          </label>
+          <RichTextEditor v-model="editForm.shared_content" :group-id="editForm.group_id" placeholder="题组材料：支持加粗/链接/图片/表格" />
+          <div class="material-preview" v-if="editForm.shared_content">{{ editForm.shared_content }}</div>
+          <div class="material-actions">
+            <button type="button" class="btn-secondary" @click="clearMaterial">清除材料</button>
+            <span class="material-hint">清空材料并解除题组关联，保存后生效</span>
+          </div>
+        </div>
+
         <div class="fg">
           <label>题目内容</label>
           <textarea class="fi textarea" v-model="editForm.question_content" rows="4"
@@ -273,12 +287,15 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted } from 'vue';
+import { defineComponent, ref, onMounted, nextTick } from 'vue';
 import { useProvider } from '@vtj/renderer';
+import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { mountMaterialDock, removeMaterialDock } from '@/utils/materialDock';
 
 export default defineComponent({
   name: 'AdminQuestions',
+  components: { RichTextEditor },
   setup() {
     const provider = useProvider({ id: 'admin_questions', version: '1' });
     const loading = ref(true);
@@ -325,7 +342,11 @@ export default defineComponent({
       answer: '',
       answer_analysis: '',
       difficulty: 3,
-      source: ''
+      source: '',
+      // P2-6：题组共享材料（随 PUT 提交，后端事务化 upsert question_groups）
+      group_id: 0,
+      shared_content: '',
+      shared_content_images: ''
     });
     const rejectForm = ref({
       question_id: null,
@@ -505,6 +526,7 @@ export default defineComponent({
     function previewQuestion(q: any) {
       previewData.value = { ...q };
       groupInfo.value = null;
+      removeMaterialDock(document.querySelector('.modal-xlarge'), 'aq-material-dock');
       showPreviewModal.value = true;
       // P1-2: 复合题小题 → 拉取题组聚合（共享材料）
       if (q.group_id) {
@@ -514,6 +536,16 @@ export default defineComponent({
             if (d && d.group) {
               groupInfo.value = d.group;
               previewData.value.group_members = (d.members || []).map(withRequirements);
+              // 材料吸顶：管理端预览长材料时保持可见；脚本挂载，避免改 raw 模板
+              nextTick(function () {
+                var host = document.querySelector('.modal-xlarge');
+                if (!host || !d.group.shared_content) return;
+                mountMaterialDock(host, {
+                  html: cleanHtmlContent(d.group.shared_content),
+                  title: q.question_number ? ('📄 本组材料 · 第 ' + q.question_number + ' 题') : '📄 本组材料',
+                  dockClass: 'aq-material-dock'
+                });
+              });
             }
           })
           .catch(function() { /* 静默：材料加载失败不影响预览 */ });
@@ -530,9 +562,34 @@ export default defineComponent({
         answer: q.answer,
         answer_analysis: q.answer_analysis || '',
         difficulty: q.difficulty || 3,
-        source: q.source || ''
+        source: q.source || '',
+        group_id: q.group_id || 0,
+        shared_content: q.shared_content || '',
+        shared_content_images: q.shared_content_images || ''
       };
       showEditModal.value = true;
+      hydrateMaterialFromDetail(q.question_id);
+    }
+
+    // P2-6：列表接口不保证返回题组材料，编辑时按题目详情补齐；
+    // 用 question_id 守卫，避免切换题目后旧请求覆盖当前表单。
+    function hydrateMaterialFromDetail(qid) {
+      if (!qid) return;
+      auth().apiFetch('/api/questions/' + qid)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (!d || editForm.value.question_id !== qid) return;
+          editForm.value.group_id = d.group_id || 0;
+          editForm.value.shared_content = d.shared_content || '';
+          editForm.value.shared_content_images = d.shared_content_images || '';
+        })
+        .catch(function() { /* 静默：材料加载失败不影响编辑其他字段 */ });
+    }
+
+    function clearMaterial() {
+      editForm.value.shared_content = '';
+      editForm.value.shared_content_images = '';
+      editForm.value.group_id = 0;
     }
 
     // B 修复：编辑弹窗粘贴剪贴板图片 → data URI 插入字段
@@ -584,7 +641,11 @@ export default defineComponent({
           answer: editForm.value.answer,
           answer_analysis: editForm.value.answer_analysis,
           difficulty: editForm.value.difficulty,
-          source: editForm.value.source
+          source: editForm.value.source,
+          // P2-6：题组材料随保存提交；清空后传 0/'' 以便后端解除关联
+          group_id: editForm.value.group_id || 0,
+          shared_content: editForm.value.shared_content || '',
+          shared_content_images: editForm.value.shared_content_images || ''
         };
         if (options !== null) data.options = options;
 
@@ -598,6 +659,8 @@ export default defineComponent({
           msg.value = '✅ 题目已更新';
           showEditModal.value = false;
           load();
+          // P2-6：保存后按详情回填材料，确保再次打开编辑时显示已持久化内容
+          hydrateMaterialFromDetail(editForm.value.question_id);
         } else {
           msg.value = '❌ ' + (d.message || '更新失败');
         }
@@ -666,7 +729,7 @@ export default defineComponent({
       stats, filters, typeOptions, msg, showPreviewModal, showEditModal, showRejectModal,
       previewData, groupInfo, editForm, rejectForm,
       load, resetFilter, changePage, previewQuestion, editQuestion,
-      submitEdit, handleEditPaste, auditPass, showRejectDialog, submitReject,
+      submitEdit, handleEditPaste, auditPass, showRejectDialog, submitReject, clearMaterial,
       subjectName, typeDisplayName, typeBadgeClass, cleanHtmlContent, renderSummary,
       hasOptions, parsedOptions, renderQuestionContent
     };
@@ -777,6 +840,13 @@ export default defineComponent({
 .fg label { display: block; margin-bottom: 6px; font-weight: 500; color: #333; }
 .fi { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
 .fi.textarea { min-height: 80px; resize: vertical; }
+/* P2-6：题组共享材料编辑区（与教师端同规格） */
+.material-section { padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+.material-group-hint { font-weight: 400; color: #909399; font-size: 13px; }
+.material-textarea { min-height: 120px; }
+.material-preview { margin-top: 8px; padding: 10px 12px; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; background: #fff; border: 1px dashed #cbd5e1; border-radius: 6px; color: #475569; line-height: 1.7; font-size: 13px; }
+.material-actions { margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.material-hint { color: #909399; font-size: 12px; }
 
 .msg { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 12px 24px; background: #f0f9eb; color: #67C23A; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 2000; }
 </style>

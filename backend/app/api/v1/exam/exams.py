@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -11,6 +12,9 @@ from ....models.models import (
     ExamRecord,
     ExamAnswerDetail,
     QuestionBank,
+    QuestionGroup,
+    PaperQuestionRelation,
+    QuestionType,
     SysUser
 )
 from ....schemas.schemas import (
@@ -19,6 +23,7 @@ from ....schemas.schemas import (
     SuccessResponse
 )
 from ....core.security import get_current_user,require_teacher_or_admin
+from ....services.option_utils import is_subjective_question
 
 router = APIRouter(prefix="/api/exams",tags=["考试执行"])
 logger = logging.getLogger(__name__)
@@ -49,7 +54,6 @@ async def get_exams_list(
         query = query.filter(ExamPaper.paper_name.ilike(f"%{keyword}%"))
     if year:
         # 筛选包含该年份题目的试卷
-        from ....models.models import PaperQuestionRelation, QuestionBank
         year_paper_ids = db.query(PaperQuestionRelation.paper_id).join(
             QuestionBank, PaperQuestionRelation.question_id == QuestionBank.question_id
         ).filter(QuestionBank.year == year).distinct().subquery()
@@ -156,6 +160,15 @@ async def get_paper_questions(
     question_dict = {q.question_id: q for q in questions}
     relation_dict = {r.question_id: r for r in relations}
 
+    # ★ 复合题：一次性把本卷涉及的题组取出来，随题目一起返回。
+    #   学生答题页是独立前端（/paper-answer），没有题库详情页可再请求
+    #   /questions/group/{id}；若不在这里返回组材料，复合题必然只剩设问。
+    group_ids = sorted({int(q.group_id) for q in questions if int(q.group_id or 0) > 0})
+    group_dict = {}
+    if group_ids:
+        groups = db.query(QuestionGroup).filter(QuestionGroup.id.in_(group_ids)).all()
+        group_dict = {int(g.id): g for g in groups}
+
     # 按顺序组装题目列表（不含答案和解析）
     paper_questions = []
     for relation in relations:
@@ -168,19 +181,39 @@ async def get_paper_questions(
             QuestionType.type_id == q.type_id
         ).first()
         type_name = qtype.type_name if qtype else "单选题"
+        is_subjective = is_subjective_question(q, qtype)
+
+        group = group_dict.get(int(q.group_id or 0))
+        group_images: List[str] = []
+        if group and group.shared_content_images:
+            try:
+                parsed = json.loads(group.shared_content_images)
+                if isinstance(parsed, list):
+                    group_images = [str(x) for x in parsed if x]
+            except (TypeError, ValueError):
+                # 历史坏数据不应让整份试卷 500；材料正文仍可显示
+                logger.warning("[exam] 题组%s shared_content_images 非法 JSON", group.id)
 
         paper_questions.append({
             "question_id": q.question_id,
             "question_order": relation.question_order,
             "question_score": float(relation.question_score),
             "question_content": q.question_content,
-            "options": q.options,
+            "options": [] if is_subjective else q.options,
             "type_name": type_name,
             "type_id": q.type_id,
+            "is_subjective": is_subjective,
             "difficulty": q.difficulty,
             "subject_id": q.subject_id,
             "year": q.year,
             "source": q.source,
+            # ★ 复合题字段（0/空串表示非复合题），前端据此渲染“组内首题材料块”
+            "group_id": int(q.group_id or 0),
+            "question_level": int(q.question_level or 0),
+            "sort_order": int(q.sort_order or 0),
+            "group_title": group.title if group else '',
+            "shared_content": group.shared_content if group else '',
+            "shared_content_images": group_images,
         })
 
     return {
@@ -223,16 +256,28 @@ async def start_exam(
     if paper.end_time and now > paper.end_time:
         raise HTTPException(status_code=400, detail="考试已结束")
 
+    # 未完成记录直接复用：刷新/重新进入时继续原考试，避免一次答题产生多条记录
+    # （exam_record 历史库仍有 uk_paper_user 唯一约束时，重复 INSERT 会 500）
+    in_progress = db.query(ExamRecord).filter(
+        ExamRecord.paper_id == paper_id,
+        ExamRecord.user_id == current_user.user_id,
+        ExamRecord.is_completed == 0,
+    ).order_by(ExamRecord.record_id.desc()).first()
+    if in_progress:
+        return in_progress
+
     # 检查答题次数
     attempt_count = db.query(ExamRecord).filter(
         ExamRecord.paper_id == paper_id,
         ExamRecord.user_id == current_user.user_id
     ).count()
 
-    if attempt_count >= paper.max_attempts:
+    # max_attempts 为 NULL 时视为不限次数，避免教师手工建的试卷无法开始
+    max_attempts = paper.max_attempts
+    if max_attempts is not None and attempt_count >= max_attempts:
         raise HTTPException(
             status_code=400,
-            detail=f"已达到最大答题次数({paper.max_attempts}次)"
+            detail=f"已达到最大答题次数({max_attempts}次)"
         )
 
     # 创建考试记录
@@ -316,7 +361,6 @@ async def submit_answers(
         score_obtained = 0.0
 
         # 客观题自动评分
-        from ..models import QuestionType
         qtype = db.query(QuestionType).filter(
             QuestionType.type_id == question.type_id
         ).first()

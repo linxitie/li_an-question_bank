@@ -1,4 +1,5 @@
 from ....services.event_consumer import record_user_action
+from ....services import media_service
 from ....core.trigger_types import TRIGGER_CHECKIN_DONE
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -87,7 +88,7 @@ class RegisterForm(BaseModel):
     password: str
     email: Optional[str] = None
     phone: str
-    user_no: str
+    user_no: Optional[str] = None
     user_type: str = "student"
 
 
@@ -196,13 +197,10 @@ async def login_for_access_token(
         user.device_sessions = sessions
 
     user.last_login = datetime.now()
-    commit_with_retry(db)
 
-    # 触发「初来乍到」成就（首次登录，幂等）
-    try:
-        await record_user_action(db, user.user_id, TRIGGER_CHECKIN_DONE)
-    except Exception as e:
-        logger.warning(f"首次登录成就判定失败: {e}")
+    # F2b：事件与 last_login 同一事务；emit 失败则登录整体回滚，不再静默丢事件。
+    await record_user_action(db, user.user_id, TRIGGER_CHECKIN_DONE)
+    commit_with_retry(db)
 
     return LoginResponse(
         access_token=access_token,
@@ -218,10 +216,20 @@ async def register_user(
         db: Session = Depends(get_db)
 ):
     """用户注册接口"""
+    username = (form.username or "").strip()
+    phone = (form.phone or "").strip()
+    user_no = (form.user_no or username).strip()
+
+    if not username or not phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名和手机号不能为空"
+        )
+
     existing = db.query(SysUser).filter(
-        (SysUser.username == form.username) |
-        (SysUser.user_no == form.user_no) |
-        (SysUser.phone == form.phone)
+        (SysUser.username == username) |
+        (SysUser.user_no == user_no) |
+        (SysUser.phone == phone)
     ).first()
 
     if existing:
@@ -232,11 +240,11 @@ async def register_user(
 
     hashed_password = get_password_hash(form.password)
     new_user = SysUser(
-        username=form.username,
+        username=username,
         password=hashed_password,
         email=form.email,
-        phone=form.phone,
-        user_no=form.user_no,
+        phone=phone,
+        user_no=user_no,
         # 安全策略：注册仅创建学生账号，教师/管理员由管理员后台创建
         user_type="student",
         role_level=0,
@@ -463,6 +471,7 @@ _ALLOWED_AVATAR_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 _MAX_AVATAR_SIZE = 2 * 1024 * 1024
 
 
+
 @router.post("/avatar", summary="上传头像")
 async def upload_avatar(
         file: UploadFile = File(...),
@@ -481,19 +490,44 @@ async def upload_avatar(
         raise HTTPException(status_code=400, detail="头像大小不能超过 2MB")
     if not content:
         raise HTTPException(status_code=400, detail="文件内容为空")
+    if not media_service.image_magic_ok(ext, content):
+        raise HTTPException(status_code=400, detail="文件实际格式与扩展名不符")
 
-    # 3. UUID 重命名（防路径穿越/覆盖），存 uploads/avatars/
-    filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
-    upload_dir = os.path.join(settings.UPLOAD_DIR, "avatars")
-    os.makedirs(upload_dir, exist_ok=True)
-    filepath = os.path.join(upload_dir, filename)
-    with open(filepath, "wb") as f:
-        f.write(content)
+    if settings.MEDIA_STORE_ENABLED:
+        # F3：字节进对象存储，头像字段只存稳定代理 URL。
+        try:
+            asset = media_service.store_bytes(
+                db,
+                content,
+                kind="avatar",
+                original_name=file.filename or f"avatar{ext}",
+                created_by=current_user.user_id,
+                max_bytes=_MAX_AVATAR_SIZE,
+            )
+        except media_service.MediaTooLarge:
+            raise HTTPException(status_code=400, detail="头像大小不能超过 2MB")
+        except media_service.MediaValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(status_code=503, detail="头像存储暂不可用，请稍后重试")
 
-    # 4. 更新 avatar 字段
-    avatar_url = f"/uploads/avatars/{filename}"
-    current_user.avatar = avatar_url
-    commit_with_retry(db)
+        old_url = current_user.avatar
+        avatar_url = f"/media/{asset.asset_id}"
+        current_user.avatar = avatar_url
+        media_service.retire_url(db, old_url)
+        commit_with_retry(db)
+    else:
+        # 回滚分支：保留原 uploads 写路径，旧 URL 行为不变。
+        filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
+        upload_dir = os.path.join(settings.UPLOAD_DIR, "avatars")
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(content)
+
+        avatar_url = f"/uploads/avatars/{filename}"
+        current_user.avatar = avatar_url
+        commit_with_retry(db)
 
     logging.getLogger(__name__).info(f"用户 {current_user.user_id} 上传头像: {avatar_url}")
     return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}

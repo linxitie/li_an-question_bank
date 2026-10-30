@@ -3,6 +3,8 @@ WebSocket通信模块 - 支持实时问答、考试监控、消息推送
 """
 import json
 import asyncio
+import logging
+import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Iterable
 from enum import Enum
@@ -17,6 +19,7 @@ from ....schemas.schemas import SuccessResponse
 from ....core.monitoring import metrics_collector
 
 router = APIRouter(prefix="/ws", tags=["WebSocket通信"])
+logger = logging.getLogger(__name__)
 
 class MessageType(str, Enum):
     HEARTBEAT = "heartbeat"
@@ -33,14 +36,25 @@ class MessageType(str, Enum):
     IMPORT_COMPLETED = "import_completed"
     IMPORT_FAILED = "import_failed"
     DATA_CHANGED = "data-changed"
+    SYNC = "sync"
 
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[int, Dict[str, WebSocket]] = {}
         self.user_rooms: Dict[str, List[int]] = {}
+        # F2b：角色 -> 在线用户。用于 data-changed 按角色定向（教师/管理员看板）。
+        self.user_roles: Dict[str, set[int]] = {}
+        # 用于心跳超时判定：记录每条连接最后一次收/发消息的单调时钟
+        self.last_seen: Dict[WebSocket, float] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, user_id: int, room: Optional[str] = None) -> None:
+    async def connect(
+        self,
+        websocket: WebSocket,
+        user_id: int,
+        room: Optional[str] = None,
+        role: Optional[str] = None,
+    ) -> None:
         # 连接已在 websocket_connect 中 accept，此处仅做注册
         async with self._lock:
             if user_id not in self.active_connections:
@@ -48,6 +62,10 @@ class ConnectionManager:
 
             connection_id = f"{user_id}_{datetime.now().timestamp()}"
             self.active_connections[user_id][connection_id] = websocket
+            self.last_seen[websocket] = time.monotonic()
+
+            if role:
+                self.user_roles.setdefault(role, set()).add(user_id)
 
             if room:
                 if room not in self.user_rooms:
@@ -65,6 +83,15 @@ class ConnectionManager:
 
                 if not self.active_connections[user_id]:
                     del self.active_connections[user_id]
+
+            self.last_seen.pop(websocket, None)
+
+            # 同一用户可能多端连接，只有全部断开才移出角色索引。
+            if user_id not in self.active_connections:
+                for role, users in list(self.user_roles.items()):
+                    users.discard(user_id)
+                    if not users:
+                        del self.user_roles[role]
 
             if room and room in self.user_rooms:
                 if user_id in self.user_rooms[room]:
@@ -107,36 +134,97 @@ class ConnectionManager:
 
         return count
 
+    def touch(self, websocket: WebSocket) -> None:
+        """收到任何客户端消息（含心跳）即刷新活跃时间。"""
+        self.last_seen[websocket] = time.monotonic()
+
+    async def close_idle(self, timeout_seconds: float) -> int:
+        """关闭超过 timeout_seconds 无消息的连接（码 4008，客户端自动重连）。"""
+        now = time.monotonic()
+        async with self._lock:
+            stale = [
+                (user_id, websocket)
+                for user_id, connections in self.active_connections.items()
+                for websocket in connections.values()
+                if now - self.last_seen.get(websocket, now) > timeout_seconds
+            ]
+        for user_id, websocket in stale:
+            try:
+                await websocket.close(code=4008, reason="heartbeat timeout")
+            except Exception as exc:  # 对端已断开时 close 也会抛，照常清理
+                logger.debug("关闭空闲 WS 连接失败: %s", exc)
+            await self.disconnect(websocket, user_id)
+        return len(stale)
+
+    async def watchdog(self, timeout_seconds: float, interval: float = 30.0) -> None:
+        """长驻巡检：每 interval 秒清理一次空闲连接。"""
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await self.close_idle(timeout_seconds)
+            except Exception as exc:  # 单轮失败不能中断后续巡检
+                logger.warning("WS 心跳巡检失败: %s", exc)
+
     def get_online_users(self) -> List[int]:
         return list(self.active_connections.keys())
 
     def get_room_users(self, room: str) -> List[int]:
         return self.user_rooms.get(room, [])
 
+    def get_online_users_by_roles(self, roles: Iterable[str]) -> List[int]:
+        """按角色取在线用户（去重）；角色索引可能在并发连接时变化，先快照。"""
+        users: set[int] = set()
+        for role in roles:
+            users.update(tuple(self.user_roles.get(role, ())))
+        return [user_id for user_id in users if user_id in self.active_connections]
+
 ws_connection_manager = ConnectionManager()
 
 
-async def publish_data_changed(
-    user_ids: Iterable[int],
+def publish_data_changed_sync(
+    user_ids: Optional[Iterable[int]],
     domain: str,
     type: str,
     id: int | str,
+    roles: Optional[Iterable[str]] = None,
+    outbox_id: Optional[int] = None,
 ) -> int:
-    """向指定在线用户推送 `data-changed` 通知。
+    """同步入口：Outbox handler 在事件循环线程里调用，不能 await。
 
-    载荷只携带 `{domain, type, id}`，接收端按 id 自行回源拉取最新数据，
-    避免事件通道成为第二份业务数据源。
+    接收者 = user_ids ∪ roles 对应的在线用户；两者都为空时不广播。
+    载荷携带 `{domain, type, id}`；能从 Outbox 行拿到 id 时追加 oid，
+    客户端据此做断线重连增量补发（F2b-2，字段只增不删）。
     """
-    message = {
-        "type": MessageType.DATA_CHANGED.value,
-        "data": {"domain": domain, "type": type, "id": id},
-        "timestamp": datetime.utcnow().isoformat(),
-    }
-    delivered = 0
-    for user_id in dict.fromkeys(user_ids):
-        if await ws_connection_manager.send_personal_message(message, user_id):
-            delivered += 1
-    return delivered
+    from ....foundation.ws_relay import ws_relay
+
+    payload: Dict[str, Any] = {"domain": domain, "type": type, "id": id}
+    if outbox_id is not None:
+        payload["oid"] = int(outbox_id)
+    sent = ws_relay.emit(
+        MessageType.DATA_CHANGED.value,
+        data=payload,
+        domain=domain,
+        entity=type,
+        entity_id=id,
+        scope=f"{domain}.{type}",
+        user_ids=user_ids,
+        roles=roles,
+    )
+    return 1 if sent else 0
+
+
+async def publish_data_changed(
+    user_ids: Optional[Iterable[int]],
+    domain: str,
+    type: str,
+    id: int | str,
+    roles: Optional[Iterable[str]] = None,
+    outbox_id: Optional[int] = None,
+) -> int:
+    """异步兼容入口；实际发送逻辑在 publish_data_changed_sync。"""
+    return publish_data_changed_sync(
+        user_ids, domain, type, id, roles=roles, outbox_id=outbox_id
+    )
 
 
 @router.websocket("/connect")
@@ -169,7 +257,7 @@ async def websocket_connect(
         await websocket.close(code=4004, reason="Token validation failed")
         return
 
-    await ws_connection_manager.connect(websocket, user_id, room)
+    await ws_connection_manager.connect(websocket, user_id, room, payload.get("user_type"))
 
     metrics_collector.increment_counter("websocket_connections_total", tags={"room": room or "default"})
 
@@ -182,7 +270,10 @@ async def websocket_connect(
 
         while True:
             data = await websocket.receive_json()
-            await handle_websocket_message(websocket, user_id, data, room)
+            ws_connection_manager.touch(websocket)
+            await handle_websocket_message(
+                websocket, user_id, data, room, role=payload.get("user_type")
+            )
 
     except WebSocketDisconnect:
         await ws_connection_manager.disconnect(websocket, user_id, room)
@@ -195,7 +286,8 @@ async def handle_websocket_message(
     websocket: WebSocket,
     user_id: int,
     data: Dict[str, Any],
-    room: Optional[str]
+    room: Optional[str],
+    role: Optional[str] = None,
 ) -> None:
     message_type = data.get("type")
     payload = data.get("data", {})
@@ -205,6 +297,9 @@ async def handle_websocket_message(
             "type": MessageType.HEARTBEAT.value,
             "timestamp": datetime.utcnow().isoformat()
         })
+
+    elif message_type == MessageType.SYNC.value:
+        await handle_sync_request(websocket, user_id, payload, role)
 
     elif message_type == MessageType.EXAM_PROGRESS.value:
         record_id = payload.get("record_id")
@@ -229,6 +324,38 @@ async def handle_websocket_message(
                 },
                 "timestamp": datetime.utcnow().isoformat()
             }, room)
+
+async def handle_sync_request(
+    websocket: WebSocket,
+    user_id: int,
+    payload: Dict[str, Any],
+    role: Optional[str],
+) -> None:
+    """处理客户端重连后的增量补发请求。
+
+    补发是只读查询；任何异常都回 truncated=true，让前端回退全量同步，
+    绝不把半份事件列表当成完整结果发给客户端。
+    """
+    from ....core.database import SessionLocal
+    from ....foundation import ws_sync
+
+    db = SessionLocal()
+    try:
+        try:
+            result = ws_sync.replay(
+                db,
+                since=payload.get("since"),
+                limit=payload.get("limit"),
+                viewer_user_id=user_id,
+                viewer_role=role,
+            )
+        except Exception as exc:  # noqa: BLE001 - 补发失败必须显式降级
+            logger.warning("WS 增量补发失败 user=%s: %s", user_id, exc)
+            result = ws_sync.SyncResult("error", [], 0, True)
+        await websocket.send_json(ws_sync.build_sync_reply(result))
+    finally:
+        db.close()
+
 
 async def broadcast_exam_progress(user_id: int, record_id: int, room: Optional[str]) -> None:
     from ....core.database import SessionLocal

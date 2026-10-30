@@ -176,8 +176,12 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
     """
     import io
 
+    # 缓存作用域按「当前 OCR 引擎配置」隔离：MinerU 与 Paddle 的识别质量不同，
+    # 关掉 MinerU 后若仍命中 MinerU 的旧结果，会让人误以为配置没生效。
+    _cache_scope = 'mineru' if mineru_is_enabled() else 'paddle'
+
     # ===== 提取文本缓存：命中即返回（纯加速层，异常已在 text_cache 内降级） =====
-    _cached = text_cache.get(buf)
+    _cached = text_cache.get(buf, scope=_cache_scope)
     if _cached is not None:
         if progress_cb:
             # 缓存命中：无逐页过程可报，直接告知「文本提取已完成」
@@ -189,7 +193,7 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
 
     def _finish(text: str, engine: str) -> str:
         """统一出口：成功产出才写缓存（空结果不写，避免固化偶发失败）"""
-        text_cache.put(buf, text, {'engine': engine})
+        text_cache.put(buf, text, {'engine': engine}, scope=_cache_scope)
         global _last_extract_engine
         _last_extract_engine = engine
         return text

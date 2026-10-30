@@ -43,6 +43,12 @@ def render_image_placeholder(text: str, owner: str = 'questions') -> str:
     return _IMG_RE.sub(_replace, text)
 
 
+def is_subjective_question(question, qtype=None) -> bool:
+    """以 question_type.is_objective=0 为唯一判据；不使用 options 是否为空猜测。"""
+    qt = qtype if qtype is not None else getattr(question, "type", None)
+    return bool(qt is not None and getattr(qt, "is_objective", 1) == 0)
+
+
 def normalize_options(
     raw_options: Any,
     question_content: str = '',

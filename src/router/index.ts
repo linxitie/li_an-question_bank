@@ -20,12 +20,14 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/forum',
     name: 'Forum',
-    component: () => import('$vtj/vue/forum.vue')
+    component: () => import('$vtj/vue/forum.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/recruit',
     name: 'Recruitment',
-    component: () => import('$vtj/vue/recruitment_info.vue')
+    component: () => import('$vtj/vue/recruitment_info.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/unauthorized',
@@ -272,17 +274,20 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/materials/xingce',
     name: 'MaterialsXingce',
-    component: () => import('$vtj/vue/materials_xingce.vue')
+    component: () => import('$vtj/vue/materials_xingce.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/materials/shenlun',
     name: 'MaterialsShenlun',
-    component: () => import('$vtj/vue/materials_shenlun.vue')
+    component: () => import('$vtj/vue/materials_shenlun.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/materials/gongzhuan',
     name: 'MaterialsGongzhuan',
-    component: () => import('$vtj/vue/materials_gongzhuan.vue')
+    component: () => import('$vtj/vue/materials_gongzhuan.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
   },
 
   // ==================== 平板端路由 ====================
@@ -290,127 +295,127 @@ const routes: RouteRecordRaw[] = [
     path: '/tablet/login',
     name: 'TabletLogin',
     component: () => import('$vtj/vue/tablet_login.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/home',
     name: 'TabletHome',
     component: () => import('$vtj/vue/tablet_home.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/question-bank',
     name: 'TabletQuestionBank',
     component: () => import('$vtj/vue/tablet_question_bank.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/practice',
     name: 'TabletPractice',
     component: () => import('$vtj/vue/tablet_practice.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/forum',
     name: 'TabletForum',
     component: () => import('$vtj/vue/tablet_forum.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/profile',
     name: 'TabletProfile',
     component: () => import('$vtj/vue/tablet_profile.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/news',
     name: 'TabletNews',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/news/:id',
     name: 'TabletNewsDetail',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/wrong-questions',
     name: 'TabletWrongQuestions',
     component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/favorites',
     name: 'TabletFavorites',
     component: () => import('@/views/student/mobile/mobile_favorites.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/score-analysis',
     name: 'TabletScoreAnalysis',
     component: () => import('@/views/student/mobile/mobile_score_analysis.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/student-papers',
     name: 'TabletStudentPapers',
     component: () => import('@/views/student/mobile/mobile_student_papers.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/recruit',
     name: 'TabletRecruitment',
     component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/calendar',
     name: 'TabletCalendar',
     component: () => import('@/views/student/mobile/mobile_calendar.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/materials',
     name: 'TabletMaterials',
     component: () => import('@/views/student/mobile/mobile_materials.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/gold-purchase',
     name: 'TabletGoldPurchase',
     component: () => import('$vtj/vue/tablet_gold_purchase.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/notifications',
     name: 'TabletNotifications',
     component: () => import('@/views/student/mobile/mobile_notifications.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/answer',
     name: 'TabletAnswer',
     component: () => import('@/views/student/mobile/mobile_answer.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/notes',
     name: 'TabletNotes',
     component: () => import('@/views/student/mobile/mobile_notes.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/forum/create',
     name: 'TabletForumCreate',
     component: () => import('@/views/student/mobile/mobile_forum_create.vue'),
-    meta: { platform: 'tablet' }
+    meta: { platform: 'tablet', roles: ['student'] }
   },
   {
     path: '/tablet/forum/:id',
     name: 'TabletForumDetail',
-    component: () => import('@/views/student/tablet/tablet_forum_detail.vue'),
-    meta: { platform: 'tablet' }
+    component: () => import('@/views/student/mobile/mobile_forum_detail.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
   },
 
   // ==================== 手机端路由 ====================
@@ -418,163 +423,163 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/login',
     name: 'MobileLogin',
     component: () => import('$vtj/vue/mobile_login.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/scan',
     name: 'MobileScan',
     component: () => import('@/views/student/mobile/mobile_scan.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/news',
     name: 'MobileNews',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/news/:id',
     name: 'MobileNewsDetail',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/wrong-questions',
     name: 'MobileWrongQuestions',
     component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/favorites',
     name: 'MobileFavorites',
     component: () => import('@/views/student/mobile/mobile_favorites.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/wrong-review',
     name: 'MobileWrongReview',
     component: () => import('@/views/student/mobile/mobile_wrong_review.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/history',
     name: 'MobileHistory',
     component: () => import('@/views/student/mobile/mobile_history.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/score-analysis',
     name: 'MobileScoreAnalysis',
     component: () => import('@/views/student/mobile/mobile_score_analysis.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/student-papers',
     name: 'MobileStudentPapers',
     component: () => import('@/views/student/mobile/mobile_student_papers.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/recruit',
     name: 'MobileRecruitment',
     component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/calendar',
     name: 'MobileCalendar',
     component: () => import('@/views/student/mobile/mobile_calendar.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/materials',
     name: 'MobileMaterials',
     component: () => import('@/views/student/mobile/mobile_materials.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/gold-purchase',
     name: 'MobileGoldPurchase',
     component: () => import('$vtj/vue/mobile_gold_purchase.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/achievements',
     name: 'MobileAchievements',
     component: () => import('@/views/student/mobile/mobile_achievements.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/feedback',
     name: 'MobileFeedback',
     component: () => import('@/views/student/mobile/mobile_feedback.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/help',
     name: 'MobileHelp',
     component: () => import('@/views/student/mobile/mobile_help.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/home',
     name: 'MobileHome',
     component: () => import('$vtj/vue/mobile_home.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/question-bank',
     name: 'MobileQuestionBank',
     component: () => import('$vtj/vue/mobile_question_bank.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/practice',
     name: 'MobilePractice',
     component: () => import('$vtj/vue/mobile_practice.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/forum',
     name: 'MobileForum',
     component: () => import('$vtj/vue/mobile_forum.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/profile',
     name: 'MobileProfile',
     component: () => import('$vtj/vue/mobile_profile.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/notes',
     name: 'MobileNotes',
     component: () => import('@/views/student/mobile/mobile_notes.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/answer',
     name: 'MobileAnswer',
     component: () => import('@/views/student/mobile/mobile_answer.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/notifications',
     name: 'MobileNotifications',
     component: () => import('@/views/student/mobile/mobile_notifications.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/forum/create',
     name: 'MobileForumCreate',
     component: () => import('@/views/student/mobile/mobile_forum_create.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
   {
     path: '/mobile/forum/:id',
     name: 'MobileForumDetail',
     component: () => import('@/views/student/mobile/mobile_forum_detail.vue'),
-    meta: { platform: 'mobile' }
+    meta: { platform: 'mobile', roles: ['student'] }
   },
 
   // ==================== 兜底路由 ====================

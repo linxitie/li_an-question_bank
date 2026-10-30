@@ -85,9 +85,14 @@ def db_session(tmp_path):
     from sqlalchemy.orm import sessionmaker
 
     from app.core.database import Base
+    from app.foundation.schema import ddl_statements
 
     engine = create_engine(f'sqlite:///{tmp_path / "test_batch_import.db"}')
     Base.metadata.create_all(engine)
+    # F4 起导入成功会在同一事务写 foundation_outbox；临时库需自建该表。
+    with engine.begin() as conn:
+        for statement in ddl_statements():
+            conn.exec_driver_sql(statement)
     TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestSession()
     yield db
@@ -155,13 +160,6 @@ def test_dual_track_and_idempotent_rerun(db_session):
     db_session.commit()
 
 
-@pytest.mark.xfail(
-    reason="疑似产品缺陷：建卷时 _get_or_create_import_paper 未把 question_count "
-           "写入 ExamPaper，关联 5 题后该字段仍为 1。"
-           "question_import.py:1258 的累加分支依赖初值非 0，实际未生效。"
-           "修复需改产品代码，超出 P0.4（仅重写测试断言）范围",
-    strict=True,
-)
 def test_paper_question_count_tracks_linked_questions(db_session):
     run_marker = uuid.uuid4().hex[:8]
     r1 = asyncio.run(batch_import_parsed(_mk_payload(run_marker), _mk_user(), db_session))

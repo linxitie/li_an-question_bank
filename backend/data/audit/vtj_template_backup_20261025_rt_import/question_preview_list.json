@@ -1,0 +1,83 @@
+{
+  "id": "question_preview_list",
+  "__VTJ_BLOCK__": true,
+  "__VERSION__": "1785406000000",
+  "name": "QuestionPreviewList",
+  "state": {
+    "question_content": "''",
+    "question_type_detail": "'单选题'",
+    "difficulty": "'中等'",
+    "options": "[]",
+    "answer": "''",
+    "analysis": "''"
+  },
+  "methods": {
+    "openEditDialog": {
+      "type": "method",
+      "params": [
+        "idx"
+      ]
+    },
+    "closeEditDialog": {
+      "type": "method",
+      "params": []
+    },
+    "saveEdit": {
+      "type": "method",
+      "params": []
+    },
+    "addOption": {
+      "type": "method",
+      "params": []
+    },
+    "removeOption": {
+      "type": "method",
+      "params": [
+        "idx"
+      ]
+    },
+    "isJudgeQuestion": {
+      "type": "method",
+      "params": [
+        "q"
+      ]
+    },
+    "pickImage": {
+      "type": "method",
+      "params": [
+        "idx",
+        "target",
+        "optionKey"
+      ]
+    },
+    "finishAttach": {
+      "type": "method",
+      "params": []
+    }
+  },
+  "computed": {},
+  "lifeCycles": {},
+  "props": [
+    {
+      "name": "questions",
+      "type": "Array",
+      "default": "[]"
+    },
+    {
+      "name": "mode",
+      "type": "String",
+      "default": "'combined'"
+    },
+    {
+      "name": "loading",
+      "type": "Boolean",
+      "default": "false"
+    }
+  ],
+  "emits": [
+    "import-one",
+    "import-all",
+    "reverify",
+    "close"
+  ]
+}

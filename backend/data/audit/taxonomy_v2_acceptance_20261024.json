@@ -1,0 +1,1281 @@
+{
+  "ok": true,
+  "db": "D:\\砺安题库\\砺安题库\\backend\\data\\question_bank.db",
+  "checks": [
+    {
+      "name": "schema.knowledge_point.alias_of",
+      "ok": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "schema.knowledge_point.status",
+      "ok": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "schema.question_bank.sub_category_id",
+      "ok": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "schema.index.uq_knowledge_point_sibling_visible",
+      "ok": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "metrics.kp_total",
+      "ok": true,
+      "expected": 1049,
+      "actual": 1049
+    },
+    {
+      "name": "metrics.canonical",
+      "ok": true,
+      "expected": 518,
+      "actual": 518
+    },
+    {
+      "name": "metrics.status0",
+      "ok": true,
+      "expected": 531,
+      "actual": 531
+    },
+    {
+      "name": "metrics.alias_nonnull",
+      "ok": true,
+      "expected": 464,
+      "actual": 464
+    },
+    {
+      "name": "metrics.alias_null_status0",
+      "ok": true,
+      "expected": 67,
+      "actual": 67
+    },
+    {
+      "name": "metrics.visible_duplicate_siblings",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "metrics.canonical_l2",
+      "ok": true,
+      "expected": 91,
+      "actual": 91
+    },
+    {
+      "name": "metrics.canonical_l3",
+      "ok": true,
+      "expected": 427,
+      "actual": 427
+    },
+    {
+      "name": "metrics.qb_total",
+      "ok": true,
+      "expected": 3357,
+      "actual": 3357
+    },
+    {
+      "name": "metrics.qb_sub_category_nonnull",
+      "ok": true,
+      "expected": 2940,
+      "actual": 2940
+    },
+    {
+      "name": "metrics.qb_sub_category_null",
+      "ok": true,
+      "expected": 417,
+      "actual": 417
+    },
+    {
+      "name": "metrics.qb_point_id_nonnull",
+      "ok": true,
+      "expected": 2131,
+      "actual": 2131
+    },
+    {
+      "name": "metrics.qb_point_id_null",
+      "ok": true,
+      "expected": 1226,
+      "actual": 1226
+    },
+    {
+      "name": "metrics.qb_point_to_canonical_l2",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "metrics.qb_point_to_hidden",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "metrics.qk_total",
+      "ok": true,
+      "expected": 2775,
+      "actual": 2775
+    },
+    {
+      "name": "metrics.qk_to_canonical_l2",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "metrics.qk_to_hidden",
+      "ok": true,
+      "expected": 643,
+      "actual": 643
+    },
+    {
+      "name": "metrics.qk_duplicate_pairs",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_1.subcat_1.sum_matches_total",
+      "ok": true,
+      "expected": 20,
+      "actual": 20
+    },
+    {
+      "name": "tree.subject_1.subcat_2.sum_matches_total",
+      "ok": true,
+      "expected": 12,
+      "actual": 12
+    },
+    {
+      "name": "tree.subject_1.subcat_3.sum_matches_total",
+      "ok": true,
+      "expected": 41,
+      "actual": 41
+    },
+    {
+      "name": "tree.subject_1.subcat_4.sum_matches_total",
+      "ok": true,
+      "expected": 9,
+      "actual": 9
+    },
+    {
+      "name": "tree.subject_1.subcat_5.sum_matches_total",
+      "ok": true,
+      "expected": 52,
+      "actual": 52
+    },
+    {
+      "name": "tree.subject_1.subcat_6.sum_matches_total",
+      "ok": true,
+      "expected": 14,
+      "actual": 14
+    },
+    {
+      "name": "tree.subject_1.subcat_7.sum_matches_total",
+      "ok": true,
+      "expected": 2,
+      "actual": 2
+    },
+    {
+      "name": "tree.subject_1.subcat_16.sum_matches_total",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_1.subcategory_sum_equals_visible",
+      "ok": true,
+      "expected": 229,
+      "actual": 229
+    },
+    {
+      "name": "tree.subject_1.no_zero_total_nodes",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_1.returned_points_visible",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_1.l2_no_duplicate_child_names",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_2.subcat_8.sum_matches_total",
+      "ok": true,
+      "expected": 4,
+      "actual": 4
+    },
+    {
+      "name": "tree.subject_2.subcat_9.sum_matches_total",
+      "ok": true,
+      "expected": 3,
+      "actual": 3
+    },
+    {
+      "name": "tree.subject_2.subcat_10.sum_matches_total",
+      "ok": true,
+      "expected": 2,
+      "actual": 2
+    },
+    {
+      "name": "tree.subject_2.subcat_11.sum_matches_total",
+      "ok": true,
+      "expected": 2,
+      "actual": 2
+    },
+    {
+      "name": "tree.subject_2.subcat_12.sum_matches_total",
+      "ok": true,
+      "expected": 5,
+      "actual": 5
+    },
+    {
+      "name": "tree.subject_2.subcategory_sum_equals_visible",
+      "ok": true,
+      "expected": 16,
+      "actual": 16
+    },
+    {
+      "name": "tree.subject_2.no_zero_total_nodes",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_2.returned_points_visible",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_2.l2_no_duplicate_child_names",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_3.subcat_13.sum_matches_total",
+      "ok": true,
+      "expected": 124,
+      "actual": 124
+    },
+    {
+      "name": "tree.subject_3.subcat_14.sum_matches_total",
+      "ok": true,
+      "expected": 1739,
+      "actual": 1739
+    },
+    {
+      "name": "tree.subject_3.subcat_15.sum_matches_total",
+      "ok": true,
+      "expected": 698,
+      "actual": 698
+    },
+    {
+      "name": "tree.subject_3.subcategory_sum_equals_visible",
+      "ok": true,
+      "expected": 2877,
+      "actual": 2877
+    },
+    {
+      "name": "tree.subject_3.no_zero_total_nodes",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_3.returned_points_visible",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "tree.subject_3.l2_no_duplicate_child_names",
+      "ok": true,
+      "expected": 0,
+      "actual": 0
+    }
+  ],
+  "metrics": {
+    "kp_total": 1049,
+    "canonical": 518,
+    "status0": 531,
+    "alias_nonnull": 464,
+    "alias_null_status0": 67,
+    "visible_duplicate_siblings": 0,
+    "canonical_l2": 91,
+    "canonical_l3": 427,
+    "qb_total": 3357,
+    "qb_sub_category_nonnull": 2940,
+    "qb_sub_category_null": 417,
+    "qb_point_id_nonnull": 2131,
+    "qb_point_id_null": 1226,
+    "qb_point_to_canonical_l2": 0,
+    "qb_point_to_hidden": 0,
+    "qk_total": 2775,
+    "qk_to_canonical_l2": 0,
+    "qk_to_hidden": 643,
+    "qk_duplicate_pairs": 0
+  },
+  "subjects": [
+    {
+      "subject_id": 1,
+      "subject_name": "行测",
+      "visible_total": 229,
+      "sub_category_sum": 150,
+      "global_unclassified": 79,
+      "sum_equals_visible": true,
+      "evaluated": true,
+      "subcategories": [
+        {
+          "sub_category_id": 1,
+          "total": 20,
+          "classified": 12,
+          "unclassified": 8,
+          "l2_sum": 12,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 1,
+              "point_name": "习近平新时代中国特色社会主义思想",
+              "total": 6,
+              "l3_children": [
+                {
+                  "point_id": 635,
+                  "point_name": "其他",
+                  "total": 6
+                }
+              ]
+            },
+            {
+              "point_id": 4,
+              "point_name": "党和国家方针政策",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 648,
+                  "point_name": "其他",
+                  "total": 1
+                }
+              ]
+            },
+            {
+              "point_id": 2,
+              "point_name": "党的二十大精神",
+              "total": 4,
+              "l3_children": [
+                {
+                  "point_id": 639,
+                  "point_name": "其他",
+                  "total": 4
+                }
+              ]
+            },
+            {
+              "point_id": 3,
+              "point_name": "马克思主义基本原理",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 644,
+                  "point_name": "其他",
+                  "total": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 2,
+          "total": 12,
+          "classified": 11,
+          "unclassified": 1,
+          "l2_sum": 11,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 7,
+              "point_name": "文化常识",
+              "total": 3,
+              "l3_children": [
+                {
+                  "point_id": 660,
+                  "point_name": "其他",
+                  "total": 3
+                }
+              ]
+            },
+            {
+              "point_id": 12,
+              "point_name": "时政热点",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 682,
+                  "point_name": "其他",
+                  "total": 1
+                }
+              ]
+            },
+            {
+              "point_id": 9,
+              "point_name": "生态常识",
+              "total": 2,
+              "l3_children": [
+                {
+                  "point_id": 668,
+                  "point_name": "其他",
+                  "total": 2
+                }
+              ]
+            },
+            {
+              "point_id": 8,
+              "point_name": "社会常识",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 664,
+                  "point_name": "其他",
+                  "total": 1
+                }
+              ]
+            },
+            {
+              "point_id": 11,
+              "point_name": "科技常识",
+              "total": 4,
+              "l3_children": [
+                {
+                  "point_id": 678,
+                  "point_name": "其他",
+                  "total": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 3,
+          "total": 41,
+          "classified": 41,
+          "unclassified": 0,
+          "l2_sum": 41,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 14,
+              "point_name": "片段阅读",
+              "total": 20,
+              "l3_children": [
+                {
+                  "point_id": 689,
+                  "point_name": "意图判断",
+                  "total": 2
+                },
+                {
+                  "point_id": 692,
+                  "point_name": "词句理解",
+                  "total": 1
+                },
+                {
+                  "point_id": 694,
+                  "point_name": "其他",
+                  "total": 17
+                }
+              ]
+            },
+            {
+              "point_id": 13,
+              "point_name": "逻辑填空",
+              "total": 21,
+              "l3_children": [
+                {
+                  "point_id": 687,
+                  "point_name": "其他",
+                  "total": 21
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 4,
+          "total": 9,
+          "classified": 9,
+          "unclassified": 0,
+          "l2_sum": 9,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 19,
+              "point_name": "数字推理",
+              "total": 5,
+              "l3_children": [
+                {
+                  "point_id": 706,
+                  "point_name": "其他",
+                  "total": 5
+                }
+              ]
+            },
+            {
+              "point_id": 20,
+              "point_name": "数学运算",
+              "total": 4,
+              "l3_children": [
+                {
+                  "point_id": 714,
+                  "point_name": "其他",
+                  "total": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 5,
+          "total": 52,
+          "classified": 52,
+          "unclassified": 0,
+          "l2_sum": 52,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 21,
+              "point_name": "图形推理",
+              "total": 11,
+              "l3_children": [
+                {
+                  "point_id": 720,
+                  "point_name": "其他",
+                  "total": 11
+                }
+              ]
+            },
+            {
+              "point_id": 24,
+              "point_name": "定义判断",
+              "total": 19,
+              "l3_children": [
+                {
+                  "point_id": 734,
+                  "point_name": "其他",
+                  "total": 19
+                }
+              ]
+            },
+            {
+              "point_id": 23,
+              "point_name": "类比推理",
+              "total": 5,
+              "l3_children": [
+                {
+                  "point_id": 730,
+                  "point_name": "其他",
+                  "total": 5
+                }
+              ]
+            },
+            {
+              "point_id": 22,
+              "point_name": "逻辑判断",
+              "total": 17,
+              "l3_children": [
+                {
+                  "point_id": 726,
+                  "point_name": "其他",
+                  "total": 17
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 6,
+          "total": 14,
+          "classified": 10,
+          "unclassified": 4,
+          "l2_sum": 10,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 29,
+              "point_name": "统计术语",
+              "total": 9,
+              "l3_children": [
+                {
+                  "point_id": 745,
+                  "point_name": "其他",
+                  "total": 9
+                }
+              ]
+            },
+            {
+              "point_id": 735,
+              "point_name": "资料类型",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 736,
+                  "point_name": "文字资料",
+                  "total": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 7,
+          "total": 2,
+          "classified": 2,
+          "unclassified": 0,
+          "l2_sum": 2,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 32,
+              "point_name": "数字区间定位",
+              "total": 2,
+              "l3_children": [
+                {
+                  "point_id": 757,
+                  "point_name": "其他",
+                  "total": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 16,
+          "total": 0,
+          "classified": 0,
+          "unclassified": 0,
+          "l2_sum": 0,
+          "sum_matches_total": true,
+          "l2_nodes": []
+        }
+      ]
+    },
+    {
+      "subject_id": 2,
+      "subject_name": "申论",
+      "visible_total": 16,
+      "sub_category_sum": 16,
+      "global_unclassified": 0,
+      "sum_equals_visible": true,
+      "evaluated": true,
+      "subcategories": [
+        {
+          "sub_category_id": 8,
+          "total": 4,
+          "classified": 4,
+          "unclassified": 0,
+          "l2_sum": 4,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 38,
+              "point_name": "对策概括",
+              "total": 4,
+              "l3_children": [
+                {
+                  "point_id": 798,
+                  "point_name": "其他",
+                  "total": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 9,
+          "total": 3,
+          "classified": 3,
+          "unclassified": 0,
+          "l2_sum": 3,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 43,
+              "point_name": "词句理解",
+              "total": 3,
+              "l3_children": [
+                {
+                  "point_id": 819,
+                  "point_name": "其他",
+                  "total": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 10,
+          "total": 2,
+          "classified": 2,
+          "unclassified": 0,
+          "l2_sum": 2,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 47,
+              "point_name": "对策建议",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 835,
+                  "point_name": "其他",
+                  "total": 1
+                }
+              ]
+            },
+            {
+              "point_id": 48,
+              "point_name": "方案设计",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 840,
+                  "point_name": "其他",
+                  "total": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 11,
+          "total": 2,
+          "classified": 2,
+          "unclassified": 0,
+          "l2_sum": 2,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 52,
+              "point_name": "事务文书",
+              "total": 2,
+              "l3_children": [
+                {
+                  "point_id": 862,
+                  "point_name": "其他",
+                  "total": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 12,
+          "total": 5,
+          "classified": 5,
+          "unclassified": 0,
+          "l2_sum": 5,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 55,
+              "point_name": "命题作文",
+              "total": 2,
+              "l3_children": [
+                {
+                  "point_id": 875,
+                  "point_name": "其他",
+                  "total": 2
+                }
+              ]
+            },
+            {
+              "point_id": 57,
+              "point_name": "材料作文",
+              "total": 1,
+              "l3_children": [
+                {
+                  "point_id": 883,
+                  "point_name": "其他",
+                  "total": 1
+                }
+              ]
+            },
+            {
+              "point_id": 56,
+              "point_name": "话题作文",
+              "total": 2,
+              "l3_children": [
+                {
+                  "point_id": 879,
+                  "point_name": "其他",
+                  "total": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "subject_id": 3,
+      "subject_name": "公专",
+      "visible_total": 2877,
+      "sub_category_sum": 2561,
+      "global_unclassified": 316,
+      "sum_equals_visible": true,
+      "evaluated": true,
+      "subcategories": [
+        {
+          "sub_category_id": 13,
+          "total": 124,
+          "classified": 92,
+          "unclassified": 32,
+          "l2_sum": 92,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 62,
+              "point_name": "人民警察核心价值观",
+              "total": 15,
+              "l3_children": [
+                {
+                  "point_id": 904,
+                  "point_name": "其他",
+                  "total": 15
+                }
+              ]
+            },
+            {
+              "point_id": 64,
+              "point_name": "人民警察职业纪律",
+              "total": 42,
+              "l3_children": [
+                {
+                  "point_id": 914,
+                  "point_name": "其他",
+                  "total": 42
+                }
+              ]
+            },
+            {
+              "point_id": 63,
+              "point_name": "人民警察职业道德",
+              "total": 21,
+              "l3_children": [
+                {
+                  "point_id": 909,
+                  "point_name": "其他",
+                  "total": 21
+                }
+              ]
+            },
+            {
+              "point_id": 60,
+              "point_name": "政治立场与忠诚度",
+              "total": 14,
+              "l3_children": [
+                {
+                  "point_id": 895,
+                  "point_name": "其他",
+                  "total": 14
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 14,
+          "total": 1739,
+          "classified": 1074,
+          "unclassified": 665,
+          "l2_sum": 1074,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 65,
+              "point_name": "中国特色社会主义法治理论",
+              "total": 44,
+              "l3_children": [
+                {
+                  "point_id": 920,
+                  "point_name": "其他",
+                  "total": 44
+                }
+              ]
+            },
+            {
+              "point_id": 69,
+              "point_name": "人民警察法基础知识",
+              "total": 50,
+              "l3_children": [
+                {
+                  "point_id": 942,
+                  "point_name": "其他",
+                  "total": 50
+                }
+              ]
+            },
+            {
+              "point_id": 73,
+              "point_name": "公安工作根本原则",
+              "total": 15,
+              "l3_children": [
+                {
+                  "point_id": 960,
+                  "point_name": "其他",
+                  "total": 15
+                }
+              ]
+            },
+            {
+              "point_id": 75,
+              "point_name": "公安执法监督",
+              "total": 18,
+              "l3_children": [
+                {
+                  "point_id": 973,
+                  "point_name": "其他",
+                  "total": 18
+                }
+              ]
+            },
+            {
+              "point_id": 72,
+              "point_name": "公安机关性质与职能",
+              "total": 502,
+              "l3_children": [
+                {
+                  "point_id": 955,
+                  "point_name": "其他",
+                  "total": 502
+                }
+              ]
+            },
+            {
+              "point_id": 74,
+              "point_name": "公安队伍建设",
+              "total": 30,
+              "l3_children": [
+                {
+                  "point_id": 967,
+                  "point_name": "其他",
+                  "total": 30
+                }
+              ]
+            },
+            {
+              "point_id": 71,
+              "point_name": "刑事执法基础知识",
+              "total": 153,
+              "l3_children": [
+                {
+                  "point_id": 948,
+                  "point_name": "其他",
+                  "total": 153
+                }
+              ]
+            },
+            {
+              "point_id": 67,
+              "point_name": "宪法基础知识",
+              "total": 73,
+              "l3_children": [
+                {
+                  "point_id": 930,
+                  "point_name": "其他",
+                  "total": 73
+                }
+              ]
+            },
+            {
+              "point_id": 68,
+              "point_name": "民法基础知识",
+              "total": 76,
+              "l3_children": [
+                {
+                  "point_id": 935,
+                  "point_name": "其他",
+                  "total": 76
+                }
+              ]
+            },
+            {
+              "point_id": 66,
+              "point_name": "法学基础理论",
+              "total": 23,
+              "l3_children": [
+                {
+                  "point_id": 925,
+                  "point_name": "其他",
+                  "total": 23
+                }
+              ]
+            },
+            {
+              "point_id": 70,
+              "point_name": "行政执法基础知识",
+              "total": 90,
+              "l3_children": [
+                {
+                  "point_id": 946,
+                  "point_name": "其他",
+                  "total": 90
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sub_category_id": 15,
+          "total": 698,
+          "classified": 648,
+          "unclassified": 50,
+          "l2_sum": 648,
+          "sum_matches_total": true,
+          "l2_nodes": [
+            {
+              "point_id": 91,
+              "point_name": "事态研判",
+              "total": 11,
+              "l3_children": [
+                {
+                  "point_id": 1037,
+                  "point_name": "其他",
+                  "total": 11
+                }
+              ]
+            },
+            {
+              "point_id": 92,
+              "point_name": "信息上报",
+              "total": 13,
+              "l3_children": [
+                {
+                  "point_id": 1041,
+                  "point_name": "其他",
+                  "total": 13
+                }
+              ]
+            },
+            {
+              "point_id": 85,
+              "point_name": "信息分析",
+              "total": 38,
+              "l3_children": [
+                {
+                  "point_id": 1013,
+                  "point_name": "其他",
+                  "total": 38
+                }
+              ]
+            },
+            {
+              "point_id": 86,
+              "point_name": "信息应用",
+              "total": 7,
+              "l3_children": [
+                {
+                  "point_id": 1017,
+                  "point_name": "其他",
+                  "total": 7
+                }
+              ]
+            },
+            {
+              "point_id": 84,
+              "point_name": "信息收集",
+              "total": 58,
+              "l3_children": [
+                {
+                  "point_id": 1009,
+                  "point_name": "其他",
+                  "total": 58
+                }
+              ]
+            },
+            {
+              "point_id": 93,
+              "point_name": "合理处置",
+              "total": 75,
+              "l3_children": [
+                {
+                  "point_id": 1045,
+                  "point_name": "其他",
+                  "total": 75
+                }
+              ]
+            },
+            {
+              "point_id": 94,
+              "point_name": "善后恢复",
+              "total": 6,
+              "l3_children": [
+                {
+                  "point_id": 1049,
+                  "point_name": "其他",
+                  "total": 6
+                }
+              ]
+            },
+            {
+              "point_id": 90,
+              "point_name": "安全保护",
+              "total": 9,
+              "l3_children": [
+                {
+                  "point_id": 1033,
+                  "point_name": "其他",
+                  "total": 9
+                }
+              ]
+            },
+            {
+              "point_id": 89,
+              "point_name": "安全检查",
+              "total": 8,
+              "l3_children": [
+                {
+                  "point_id": 1029,
+                  "point_name": "其他",
+                  "total": 8
+                }
+              ]
+            },
+            {
+              "point_id": 76,
+              "point_name": "宣传教育",
+              "total": 5,
+              "l3_children": [
+                {
+                  "point_id": 977,
+                  "point_name": "其他",
+                  "total": 5
+                }
+              ]
+            },
+            {
+              "point_id": 87,
+              "point_name": "巡逻",
+              "total": 69,
+              "l3_children": [
+                {
+                  "point_id": 1021,
+                  "point_name": "其他",
+                  "total": 69
+                }
+              ]
+            },
+            {
+              "point_id": 88,
+              "point_name": "接警与处警",
+              "total": 138,
+              "l3_children": [
+                {
+                  "point_id": 1024,
+                  "point_name": "其他",
+                  "total": 138
+                }
+              ]
+            },
+            {
+              "point_id": 79,
+              "point_name": "服务群众",
+              "total": 25,
+              "l3_children": [
+                {
+                  "point_id": 989,
+                  "point_name": "其他",
+                  "total": 25
+                }
+              ]
+            },
+            {
+              "point_id": 77,
+              "point_name": "沟通协调",
+              "total": 18,
+              "l3_children": [
+                {
+                  "point_id": 981,
+                  "point_name": "其他",
+                  "total": 18
+                }
+              ]
+            },
+            {
+              "point_id": 81,
+              "point_name": "纠纷化解",
+              "total": 39,
+              "l3_children": [
+                {
+                  "point_id": 997,
+                  "point_name": "其他",
+                  "total": 39
+                }
+              ]
+            },
+            {
+              "point_id": 78,
+              "point_name": "组织动员",
+              "total": 34,
+              "l3_children": [
+                {
+                  "point_id": 985,
+                  "point_name": "其他",
+                  "total": 34
+                }
+              ]
+            },
+            {
+              "point_id": 80,
+              "point_name": "调查研究",
+              "total": 33,
+              "l3_children": [
+                {
+                  "point_id": 993,
+                  "point_name": "其他",
+                  "total": 33
+                }
+              ]
+            },
+            {
+              "point_id": 82,
+              "point_name": "风险识别",
+              "total": 28,
+              "l3_children": [
+                {
+                  "point_id": 1001,
+                  "point_name": "其他",
+                  "total": 28
+                }
+              ]
+            },
+            {
+              "point_id": 83,
+              "point_name": "风险防范",
+              "total": 34,
+              "l3_children": [
+                {
+                  "point_id": 1005,
+                  "point_name": "其他",
+                  "total": 34
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,13 @@ from ....schemas.schemas import PaperCreate, PaperUpdate, PaperDetailResponse, S
 from ....core.security import get_current_user, require_admin
 from ....core.cache import set_cache, get_cache, delete_cache, PAPER_CACHE_PREFIX
 from ....services import weakpoint_reader
+from ....services.paper_stats import next_question_order, recount_paper_questions
+from ....services.event_consumer import (
+    outbox_mode_enabled,
+    publish_paper_published_legacy,
+)
+from ....foundation.outbox import emit as outbox_emit
+from ....core.events import EV_PAPER_PUBLISHED
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 
@@ -152,6 +159,8 @@ async def update_paper(
     for key, value in paper_data.dict(exclude_unset=True).items():
         setattr(paper, key, value)
     
+    from ....foundation.document_events import emit_exam_snapshot
+    emit_exam_snapshot(db, paper_id, producer="catalog.papers.update")
     db.commit()
     db.refresh(paper)
     
@@ -259,8 +268,9 @@ async def add_questions_to_paper(
     if paper.paper_type != "DRAFT":
         raise HTTPException(status_code=400, detail="只有草稿状态的试卷才能添加题目")
     
-    order = paper.question_count
-    
+    order_base = next_question_order(db, paper_id)
+    added = 0
+
     for question_id in question_ids:
         # 检查题目是否已存在
         existing = db.query(PaperQuestionRelation).filter(
@@ -278,18 +288,19 @@ async def add_questions_to_paper(
         relation = PaperQuestionRelation(
             paper_id=paper_id,
             question_id=question_id,
-            question_order=order + 1,
+            question_order=order_base + added,
             question_score=question.score
         )
         db.add(relation)
-        order += 1
-    
-    paper.question_count = order
+        added += 1
+
+    # P1-3：以关联行实际数量重算，杜绝与既有漂移值叠加
+    paper.question_count = recount_paper_questions(db, paper)
     db.commit()
     
     delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
     
-    return SuccessResponse(message=f"成功添加 {order - paper.question_count} 道题目")
+    return SuccessResponse(message=f"成功添加 {added} 道题目")
 
 @router.delete("/{paper_id}/questions/{question_id}", response_model=SuccessResponse, summary="从试卷移除题目")
 async def remove_question_from_paper(
@@ -318,7 +329,8 @@ async def remove_question_from_paper(
         raise HTTPException(status_code=404, detail="题目不在该试卷中")
     
     db.delete(relation)
-    paper.question_count -= 1
+    # P1-3：删题后同样以关联行重算，避免 -1 叠加在漂移值上
+    paper.question_count = recount_paper_questions(db, paper)
     db.commit()
     
     delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
@@ -430,18 +442,28 @@ async def publish_paper(
     paper.paper_type = "PUBLISHED"
     paper.publish_time = datetime.now()
     paper.approver_id = current_user.user_id
-    db.commit()
-    
-    delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
+
+    # 文档投影：发布态试卷进 exam_resources，题干正文不进入文档库。
+    from ....foundation.document_events import emit_exam_snapshot
+    emit_exam_snapshot(db, paper_id, producer="catalog.papers.publish")
 
     # 纵向通信走事件总线（catalog 域不跨域 import platform）：
     # EV_PAPER_PUBLISHED → 消费者推送 data-changed 到在线端。
-    from ....core import events
-    await events.publish(events.Event(
-        name=events.EV_PAPER_PUBLISHED,
-        payload={"paper_id": paper_id},
-        aggregate_id=f"p-{paper_id}",
-        source="catalog.papers",
-    ))
-    
+    # F2b：开启 Outbox 时状态与事件同一事务；关闭时保留旧的 commit 后直发。
+    if outbox_mode_enabled():
+        outbox_emit(
+            db,
+            event_name=EV_PAPER_PUBLISHED,
+            aggregate_type="paper",
+            aggregate_id=f"p-{paper_id}",
+            payload={"paper_id": paper_id},
+            producer="catalog.papers",
+        )
+        db.commit()
+    else:
+        db.commit()
+        await publish_paper_published_legacy(paper_id, "catalog.papers")
+
+    delete_cache(f"{PAPER_CACHE_PREFIX}{paper_id}")
+
     return SuccessResponse(message="发布成功")

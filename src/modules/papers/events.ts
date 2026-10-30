@@ -11,6 +11,7 @@ import {
   onEvent,
   type PapersDataChangedPayload
 } from '@/stores/event-bus';
+import { toPapersEvent, type WsEnvelope } from '@/utils/wsMessage';
 
 export const PUBLISHED_EVENTS = {} as const;
 
@@ -35,4 +36,15 @@ export function onPapersDataChanged(
   handler: (payload: PapersDataChangedPayload) => void
 ): () => void {
   return onEvent(EVENT_NAMES.PAPERS_DATA_CHANGED, handler);
+}
+
+/**
+ * WS data-changed → papers:data-changed 桥接（F2）。
+ * 只处理 exam.paper.published；返回是否命中，便于调用方统计。
+ */
+export function bridgeWsMessageToPapers(msg: WsEnvelope): boolean {
+  const payload = toPapersEvent(msg);
+  if (!payload) return false;
+  emitPapersDataChanged(payload);
+  return true;
 }

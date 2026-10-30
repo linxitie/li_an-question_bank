@@ -244,6 +244,9 @@ class QuestionCreate(BaseModel):
     source: Optional[str] = Field(None, max_length=200, description="题目来源")
     tags: Optional[str] = Field(None, max_length=500, description="标签")
     video_url: Optional[str] = Field(None, max_length=500, description="讲解视频URL")
+    group_id: Optional[int] = Field(None, description="题组ID（0/None=非题组）")
+    shared_content: Optional[str] = Field(None, description="题组共享材料")
+    shared_content_images: Optional[str] = Field(None, description="题组材料图片（JSON串）")
 
 
 class QuestionUpdate(BaseModel):
@@ -261,6 +264,9 @@ class QuestionUpdate(BaseModel):
     tags: Optional[str] = None
     video_url: Optional[str] = None
     audit_status: Optional[AuditStatusEnum] = None
+    group_id: Optional[int] = None
+    shared_content: Optional[str] = None
+    shared_content_images: Optional[str] = None
 
 
 class QuestionResponse(BaseModel):
@@ -295,6 +301,9 @@ class QuestionResponse(BaseModel):
     update_time: Optional[datetime] = None
     status: int = 1
     version: int = 1
+    group_id: Optional[int] = 0
+    shared_content: Optional[str] = None
+    shared_content_images: Optional[str] = None
 
 
 class QuestionListQuery(BaseModel):
@@ -385,6 +394,11 @@ class GeneratePaperResponse(BaseModel):
     question_count: int
     total_score: float
     message: str
+    # 题组整组展开后实际题数可能大于配置数，显式回传给前端提示
+    requested_count: int = 0
+    actual_count: int = 0
+    over_quota: bool = False
+    over_quota_reason: str = ""
 
 # ------------------------------
 # 智能组卷相关Schema
@@ -434,6 +448,8 @@ class QuestionPreviewItem(BaseModel):
     subcategory: Optional[str] = None
     year: Optional[int] = None
     score: float = 0
+    # 复合题题组 ID（0 表示独立题）；前端据此显示题组徽标，避免误拆整组
+    group_id: int = 0
 
     class Config:
         from_attributes = True
@@ -451,6 +467,11 @@ class SmartExamGenerateResponse(BaseModel):
     subject_breakdown: dict = {}
     duration: Optional[int] = None
     message: str = "生成成功"
+    # 题组整组展开后实际题数可能大于配置数，显式回传给前端提示
+    requested_count: int = 0
+    actual_count: int = 0
+    over_quota: bool = False
+    over_quota_reason: str = ""
 
 
 class SmartExamSubmitRequest(BaseModel):
@@ -672,9 +693,9 @@ class ExamRecordResponse(ExamRecordBase):
     is_scored: bool
     submit_time: Optional[datetime]
     create_time: datetime
-    
-    class Config:
-        orm_mode = True
+
+    # Pydantic v2：orm_mode 已移除，必须用 from_attributes 才能从 ORM 对象读取属性
+    model_config = ConfigDict(from_attributes=True)
 
 class AnswerDetailBase(BaseModel):
     question_id: int = Field(..., description="题目ID")
@@ -748,9 +769,8 @@ class ForumUserPublic(BaseModel):
     createdAt: Optional[str] = None
     postCount: int = 0
     likeReceived: int = 0
-    
-    class Config:
-        orm_mode = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 # ------------------------------
 # 视频资源相关Schema

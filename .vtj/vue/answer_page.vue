@@ -63,7 +63,7 @@
                   'sheet-num',
                   {
                     active: idx === state.currentIndex,
-                    answered: state.answers[q.id] !== undefined,
+                    answered: isAnswered(q.id),
                     marked: state.markedQuestions.includes(q.id)
                   }
                 ]"
@@ -83,16 +83,16 @@
               class="question-block">
               <!-- P1-2: 复合题共享材料（可折叠，仅该题组首个出现时渲染） -->
               <div
-                v-if="q.group_id && state.groupMaterials[q.group_id] && isGroupFirstOccurrence(q.id)"
+                v-if="materialOf(q) && isGroupFirstOccurrence(q.id)"
                 class="group-material-block">
-                <div class="group-material-header" @click="toggleGroupCollapse(q.group_id)">
-                  <span class="group-material-title">📖 {{ state.groupMaterials[q.group_id].title || '题组材料' }}</span>
-                  <span class="group-material-toggle">{{ state.groupCollapsed[q.group_id] ? '展开 ▾' : '收起 ▴' }}</span>
+                <div class="group-material-header" @click="toggleGroupCollapse(materialKey(q))">
+                  <span class="group-material-title">📖 {{ materialOf(q).title || '题组材料' }}</span>
+                  <span class="group-material-toggle">{{ state.groupCollapsed[materialKey(q)] ? '展开 ▾' : '收起 ▴' }}</span>
                 </div>
                 <div
-                  v-if="!state.groupCollapsed[q.group_id]"
+                  v-if="!state.groupCollapsed[materialKey(q)]"
                   class="group-material-content"
-                  v-html="renderQuestionContent(state.groupMaterials[q.group_id].shared_content)"></div>
+                  v-html="renderQuestionContent(materialOf(q).shared_content)"></div>
               </div>
               <div class="q-header">
                 <span class="q-number">
@@ -108,11 +108,11 @@
                   已标记</span
                 >
               </div>
-              <p class="q-stem" v-html="q.stem"></p>
+              <p class="q-stem" v-html="renderQuestionContent(q.stem)"></p>
               <div v-if="q.requirements" class="q-requirements" style="margin:8px 0;padding:8px 12px;background:#f7f8fa;border-radius:6px;color:#666;font-size:14px;line-height:1.7;">
                 <strong style="color:#333;">题目要求：</strong><span v-html="renderQuestionContent(q.requirements)"></span>
               </div>
-              <div class="q-options">
+              <div class="q-options" v-if="!isEssay(q)">
                 <div v-if="q.type === '多选题' || q.type === '不定项' || q.type === '多选'" class="multi-hint">
                   <strong>多选题</strong> — 点击多个选项进行选择
                 </div>
@@ -135,14 +135,36 @@
                     {{ state.optionLabels[oidx] }}
                     <span v-if="isOptionSelected(q.id, oidx) && (q.type === '多选题' || q.type === '不定项' || q.type === '多选')" class="check-icon">&#10003;</span>
                   </span>
-                  <span class="option-text" v-html="opt"></span>
+                  <span class="option-text" v-html="renderQuestionContent(opt)"></span>
                 </div>
               </div>
+              <!-- 主观题（申论/简答/论述/写作）：多行文本作答，不能套用选择题控件 -->
+              <div class="q-essay" v-else>
+                <div class="essay-hint">主观题 · 请在下方作答（按材料与题目要求分点书写）</div>
+                <textarea
+                  class="essay-input"
+                  :rows="9"
+                  :disabled="state.showResult"
+                  :placeholder="state.showResult ? '已交卷，不可修改' : '请在此输入你的作答内容…'"
+                  :value="getEssayAnswer(q.id)"
+                  @input="setEssayAnswer(q.id, $event)"></textarea>
+                <div class="essay-counter">{{ (getEssayAnswer(q.id) || '').length }} 字</div>
+              </div>
               <div v-if="state.showResult" class="q-result">
-                <span class="result-badge">
-                  {{ isCorrect(q) ? '✓ 回答正确' : '✗ 回答错误' }}</span
-                >
-                <div v-if="q.explain" class="result-explain" v-html="q.explainHtml"></div>
+                <template v-if="isEssay(q)">
+                  <span class="result-badge essay-badge">主观题 · 参考作答</span>
+                  <div v-if="q.answer" class="essay-reference">
+                    <strong>参考答案：</strong>
+                    <div v-html="renderQuestionContent(q.answer)"></div>
+                  </div>
+                  <div v-if="q.explain" class="result-explain" v-html="q.explainHtml"></div>
+                </template>
+                <template v-else>
+                  <span class="result-badge">
+                    {{ isCorrect(q) ? '✓ 回答正确' : '✗ 回答错误' }}</span
+                  >
+                  <div v-if="q.explain" class="result-explain" v-html="q.explainHtml"></div>
+                </template>
               </div>
               <div class="q-actions">
                 <button
@@ -233,10 +255,36 @@
     },
     computed: {
       answeredCount() {
-        return Object.keys(this.state.answers).length;
+        var self = this;
+        return (this.state.questions || []).filter(function(q) { return self.isAnswered(q.id); }).length;
       }
     },
     methods: {
+      // 主观题判定：题型名同时兼容后端原始名与映射后的短名
+      isEssay(q) {
+        if (!q) return false;
+        var t = q.type || '';
+        if (['简答题', '论述题', '写作题', '综合分析题', '申论', '材料分析题',
+             '简答', '论述', '写作', '综合分析', '材料分析'].indexOf(t) >= 0) return true;
+        var objective = ['单选题', '多选题', '不定项', '多选', '判断题', '填空', '判断',
+                         '单选', '多选'];
+        return (!q.options || q.options.length === 0) && objective.indexOf(t) < 0;
+      },
+      // 已作答判定：选择题看下标是否存在，主观题看文本是否非空
+      isAnswered(qId) {
+        var v = this.state.answers[qId];
+        if (v === undefined || v === null) return false;
+        if (typeof v === 'string') return v.trim().length > 0;
+        return Array.isArray(v) ? v.length > 0 : true;
+      },
+      getEssayAnswer(qId) {
+        var v = this.state.answers[qId];
+        return typeof v === 'string' ? v : '';
+      },
+      setEssayAnswer(qId, evt) {
+        if (this.state.showResult) return;
+        this.state.answers[qId] = (evt && evt.target && evt.target.value) || '';
+      },
       isCorrect(q) {
         var userChoice = this.state.answers[q.id];
         if (userChoice === undefined || userChoice === null) return false;
@@ -387,6 +435,19 @@
           var q = questions[i];
           var userAns = this.state.answers[q.id];
           if (userAns === undefined) continue;
+          // 主观题：提交文本本身。若按选项下标映射会把整段作答弄丢（旧逻辑的隐性 bug）。
+          if (this.isEssay(q)) {
+            var text = String(userAns === null ? '' : userAns).trim();
+            if (!text) continue;
+            records.push({
+              question_id: q.id,
+              subject_id: q.subject_id || null,
+              user_answer: text,
+              time_spent: 0,
+              source: '随机练习'
+            });
+            continue;
+          }
           var userLetter;
           if (Array.isArray(userAns)) {
             userLetter = userAns.map(function(idx) { return self.state.optionLabels[idx]; }).sort().join('');
@@ -457,23 +518,64 @@
         }
       },
       getTypeLabel(type) {
-        var map = {'单选题':'[单选]','单选':'[单选]','多选题':'[多选]','不定项':'[多选]','多选':'[多选]','判断题':'[判断]','简答题':'[简答]','论述题':'[论述题]','写作题':'[写作题]'};
+        var map = {
+          '单选题': '[单选]', '单选': '[单选]',
+          '多选题': '[多选]', '不定项': '[多选]', '多选': '[多选]',
+          '判断题': '[判断]', '判断': '[判断]',
+          '简答题': '[简答]', '简答': '[简答]',
+          '论述题': '[论述]', '论述': '[论述]',
+          '写作题': '[写作]', '写作': '[写作]',
+          '综合分析题': '[综合分析]', '综合分析': '[综合分析]',
+          '材料分析题': '[材料分析]', '材料分析': '[材料分析]', '申论': '[申论]'
+        };
         return map[type] || '[单选]';
       },
       getTypeClass(type) {
-        var map = {'多选题':'multi','不定项':'multi','多选':'multi','判断题':'judge','简答题':'essay','论述题':'essay','写作题':'essay'};
+        var map = {
+          '多选题': 'multi', '不定项': 'multi', '多选': 'multi',
+          '判断题': 'judge', '判断': 'judge',
+          '简答题': 'essay', '简答': 'essay',
+          '论述题': 'essay', '论述': 'essay',
+          '写作题': 'essay', '写作': 'essay',
+          '综合分析题': 'essay', '综合分析': 'essay',
+          '材料分析题': 'essay', '材料分析': 'essay', '申论': 'essay'
+        };
         return map[type] || '';
       },
       // P1-2: 判断当前题目是否为其题组在当前列表中的首个出现（用于仅渲染一次共享材料）
       isGroupFirstOccurrence(qId) {
-        var self = this;
         var q = this.state.questions.find(function(x) { return x.id === qId; });
-        if (!q || !q.group_id) return false;
-        var firstIdx = -1;
-        for (var i = 0; i < this.state.questions.length; i++) {
-          if (this.state.questions[i].group_id === q.group_id) { firstIdx = i; break; }
+        if (!q) return false;
+        if (q.group_id) {
+          var firstIdx = -1;
+          for (var i = 0; i < this.state.questions.length; i++) {
+            if (this.state.questions[i].group_id === q.group_id) { firstIdx = i; break; }
+          }
+          return firstIdx >= 0 && this.state.questions[firstIdx].id === qId;
         }
-        return firstIdx >= 0 && this.state.questions[firstIdx].id === qId;
+        // 行测资料题常以 group_id=0 入库，材料随题返回（shared_content），
+        // 此时按"同材料只渲染一次"去重，避免每题重复整段材料。
+        if (!q.shared_content) return false;
+        var firstInline = this.state.questions.find(function(x) {
+          return x.shared_content === q.shared_content;
+        });
+        return !!firstInline && firstInline.id === qId;
+      },
+      // 材料来源：优先题组接口缓存，其次随题返回的 shared_content（兜底）
+      materialOf(q) {
+        if (!q) return null;
+        if (q.group_id && this.state.groupMaterials[q.group_id]) {
+          return this.state.groupMaterials[q.group_id];
+        }
+        if (q.shared_content) {
+          return { title: '题组材料', shared_content: q.shared_content };
+        }
+        return null;
+      },
+      // 折叠状态键：题组用 group_id，随题材料用 q<id> 区分
+      materialKey(q) {
+        if (!q) return '';
+        return q.group_id || ('q' + q.id);
       },
       // 「题目要求」归一：后端 requirements 为 Text 列，可能是单字符串，
       // 也可能是 JSON 数组（申论常有多条采分点依据，导入管线两形态都写过库）。
@@ -526,6 +628,16 @@
                     });
                   }
                 }
+                // 是否存在真实选项：必须在补 '(暂无选项)' 占位前判定，
+                // 否则所有主观题都会被当成"有选项"而误判成单选题（申论答题卡的根因）。
+                var rawHasOptions = false;
+                if (q.options) {
+                  if (Array.isArray(q.options)) rawHasOptions = q.options.length > 0;
+                  else if (typeof q.options === 'string') {
+                    var _t = q.options.trim();
+                    rawHasOptions = _t.length > 2 && _t !== '[]' && _t !== 'null';
+                  }
+                }
                 if (!parsedOpts.length) parsedOpts = ['(暂无选项)'];
                 // 题目内容统一走渲染真源 src/utils/questionRender.js
                 // 由其负责：[IMAGE:题号_序号] 标记转 <img>、白名单清洗、onerror 占位兜底
@@ -537,10 +649,26 @@
                 return {
                   id: q.question_id,
                   group_id: q.group_id || 0,
+                  // 题组材料随题返回（后端 QuestionResponse 有 shared_content 字段），
+                  // 作为题组接口失败/未返回时的兜底，避免材料与子题断裂。
+                  shared_content: q.shared_content || '',
                   type: (function() {
-                    var typeMap = {'单选题':'单选', '选择题':'单选', '单选':'单选', '多选题':'多选题', '不定项':'多选', '多选':'多选'};
-                    var mapped = typeMap[q.question_type_detail];
-                    if (!mapped && q.answer && q.answer.length > 1) mapped = '多选题';
+                    // 题型映射必须覆盖主观题：原实现只映射单选/多选，申论题
+                    // (question_type_detail 为空或无选项) 会兜底成"单选"，
+                    // 渲染出"(暂无选项)"的选择题页面 —— 这正是申论答题卡失效的根因。
+                    var rawType = q.question_type_detail || '';
+                    var typeMap = {
+                      '单选题': '单选', '选择题': '单选', '单选': '单选',
+                      '多选题': '多选题', '不定项': '多选', '多选': '多选',
+                      '判断题': '判断',
+                      '简答题': '简答', '论述题': '论述', '写作题': '写作',
+                      '综合分析题': '综合分析', '材料分析题': '材料分析', '申论': '申论'
+                    };
+                    var mapped = typeMap[rawType];
+                    if (!mapped) {
+                      if (!rawHasOptions) mapped = '简答';
+                      else if (q.answer && q.answer.length > 1) mapped = '多选题';
+                    }
                     return mapped || '单选';
                   })(),
                   stem: stem || q.question_content || '',
@@ -1017,6 +1145,42 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+  /* 主观题作答区：申论/简答/论述用多行文本，不再出现选项按钮 */
+  .q-essay {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .essay-hint {
+    padding: 8px 12px; background: #fef7ed;
+    border-radius: 8px; font-size: 12px; color: #b45309;
+  }
+  .essay-input {
+    width: 100%; box-sizing: border-box;
+    min-height: 200px; padding: 12px 14px;
+    border: 1px solid #e5e7eb; border-radius: 10px;
+    font-size: 14px; line-height: 1.8; color: #1f2937;
+    background: #fff; resize: vertical;
+    font-family: inherit;
+  }
+  .essay-input:focus {
+    outline: none; border-color: #c41e3a;
+    box-shadow: 0 0 0 3px rgba(196, 30, 58, 0.08);
+  }
+  .essay-input:disabled {
+    background: #f9fafb; color: #6b7280; cursor: not-allowed;
+  }
+  .essay-counter {
+    text-align: right; font-size: 12px; color: #9ca3af;
+  }
+  .essay-badge {
+    background: #fef3c7; color: #92400e;
+  }
+  .essay-reference {
+    margin-top: 8px; padding: 10px 12px;
+    background: #f9fafb; border-left: 3px solid #d1d5db;
+    border-radius: 6px; font-size: 14px; line-height: 1.8; color: #374151;
   }
   .multi-hint {
     padding: 8px 12px; background: #eff6ff;

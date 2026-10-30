@@ -51,7 +51,8 @@ from .tags import SUBJECT_NAME_MAP
 logger = logging.getLogger(__name__)
 
 
-def _detect_duplicate(db: Session, content: str, answer: str = '', subject_id: Optional[int] = None, use_fuzzy: bool = True) -> Optional[QuestionBank]:
+def _detect_duplicate(db: Session, content: str, answer: str = '', subject_id: Optional[int] = None,
+                      use_fuzzy: bool = True, options=None) -> Optional[QuestionBank]:
     """
     检测重复题目。
     - use_fuzzy=False: 仅精确匹配（兼容旧逻辑）
@@ -79,7 +80,7 @@ def _detect_duplicate(db: Session, content: str, answer: str = '', subject_id: O
 
     # 模糊匹配
     is_dup, matched, similarity = fuzzy_detect_duplicate(
-        db, content, answer, subject_id, DEDUP_SIMILARITY_THRESHOLD
+        db, content, answer, subject_id, DEDUP_SIMILARITY_THRESHOLD, options=options
     )
     return matched if is_dup else None
 
@@ -165,7 +166,8 @@ def _upsert_question_core(db: Session, current_user: SysUser,
                 QuestionBank.status != 0
             ).first()
     else:
-        existing = _detect_duplicate(db, content, answer, subject.subject_id)
+        existing = _detect_duplicate(db, content, answer, subject.subject_id,
+                                     options=question_data.get('options'))
     if existing:
         # ===== A2 回填式重导入 =====
         # 已存题缺字段而新导入数据有 → 补空不覆盖（绝不破坏已有非空值）。
@@ -195,6 +197,26 @@ def _upsert_question_core(db: Session, current_user: SysUser,
         if '<img' in content and '<img' not in (existing.question_content or ''):
             existing.question_content = content
             backfilled.append('content_images')
+        # ★ P3-12：重复题回填组字段。历史导入漏建组时存量题 group_id=0，
+        #   重导带 group_id/material_text 才能把组关系和材料补回来。
+        #   只在存量题无组时补 —— 绝不覆盖已有组（一个子题只属于一个组）。
+        _dup_gid = int(question_data.get('group_id') or 0)
+        _dup_material = (question_data.get('material_text')
+                         or question_data.get('material') or '').strip()
+        if not (existing.group_id or 0) and (_dup_gid or _dup_material):
+            try:
+                from .groups import upsert_question_material
+                if _dup_gid:
+                    upsert_question_material(db, existing, group_id=_dup_gid)
+                else:
+                    upsert_question_material(db, existing, shared_content=_dup_material)
+                if existing.group_id:
+                    backfilled.append('group_id')
+                    logger.info("[backfill] 题目%s 回填 group_id=%s",
+                                existing.question_id, existing.group_id)
+            except Exception as e:
+                logger.warning("[backfill] 题目%s 组字段回填失败(非阻断): %s",
+                               existing.question_id, e)
         if backfilled:
             logger.info(f"[backfill] 题目{existing.question_id} 回填字段: {backfilled}")
         dup_info = _get_duplicate_info(db, content, answer, subject.subject_id)
@@ -465,6 +487,21 @@ def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
         if answer and (existing.answer or '').strip() in ('', '待补充'):
             existing.answer = answer
             backfilled.append('answer')
+        # ★ P3-12：行测分离导入重导时补组关系（同上，只在存量题无组时补）。
+        _dup_gid = int(data.get('group_id') or 0)
+        _dup_material = (data.get('material_text') or data.get('material') or '').strip()
+        if not (existing.group_id or 0) and (_dup_gid or _dup_material):
+            try:
+                from .groups import upsert_question_material
+                if _dup_gid:
+                    upsert_question_material(db, existing, group_id=_dup_gid)
+                else:
+                    upsert_question_material(db, existing, shared_content=_dup_material)
+                if existing.group_id:
+                    backfilled.append('group_id')
+            except Exception as e:
+                logger.warning("[backfill] 行测题%s 组字段回填失败(非阻断): %s",
+                               existing.question_id, e)
         if backfilled:
             db.flush()
         return {'import_status': 'DUPLICATE', 'question_id': existing.question_id,

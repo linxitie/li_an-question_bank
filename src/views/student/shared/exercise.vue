@@ -12,6 +12,11 @@
         <span class="ex-subcat-name">{{ subcategory }}</span>
       </div>
       <div class="ex-header-right">
+        <!-- 做题 / 背题模式切换：背题模式直接展示答案与解析，适合记忆型复习 -->
+        <div class="ex-mode-switch">
+          <button :class="['ex-mode-btn', { active: !isMemorize }]" @click="setMode('practice')">做题模式</button>
+          <button :class="['ex-mode-btn', { active: isMemorize }]" @click="setMode('memorize')">背题模式</button>
+        </div>
         <!-- 答题卡按钮 -->
         <button class="ex-answer-sheet-btn" @click="toggleAnswerSheet" title="答题卡">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -45,7 +50,19 @@
         <div class="progress-fill" :style="{ width: ((state.currentIndex / state.questions.length) * 100) + '%' }"></div>
       </div>
       <div class="ex-progress-label">
-        第 {{ state.currentIndex + 1 }} / {{ state.questions.length }} 题
+        <span>第 {{ state.currentIndex + 1 }} / {{ state.questions.length }} 题</span>
+        <span class="ex-live-stats">
+          已答 {{ answeredCount }} / {{ state.questions.length }}
+          <template v-if="state.submitted"> · 得分 {{ state.score }} · 正确率 {{ state.accuracy }}% · 用时 {{ formattedTime }}</template>
+        </span>
+      </div>
+      <!-- 交卷后的成绩条：固定在题目区顶部，避免长卷滚动后看不到关键结果 -->
+      <div v-if="state.submitted" class="ex-result-bar">
+        <div class="ex-result-item"><span>得分</span><b>{{ state.score }}</b></div>
+        <div class="ex-result-item"><span>正确率</span><b>{{ state.accuracy }}%</b></div>
+        <div class="ex-result-item"><span>正确 / 错误</span><b class="ok">{{ state.correctCount }}</b> / <b class="fail">{{ state.wrongCount }}</b></div>
+        <div class="ex-result-item"><span>用时</span><b>{{ formattedTime }}</b></div>
+        <button class="btn-ex-outline" @click="backToBank">返回题库</button>
       </div>
 
       <!-- 题目卡片 -->
@@ -109,8 +126,28 @@
         </div>
         <div class="ex-q-content" v-html="renderContent(currentQ.question_content)"></div>
 
-        <!-- 选项 -->
-        <div class="ex-options">
+        <!-- P1-6: 主观题作答区（无选项，纯文本作答） -->
+        <div v-if="currentQ.is_subjective" class="ex-subjective">
+          <div class="ex-subjective-meta" v-if="hasSubjectiveMeta">
+            <span v-if="currentQ.score !== null && currentQ.score !== undefined && currentQ.score !== ''" class="ex-subjective-score">
+              分值：{{ currentQ.score }} 分
+            </span>
+            <span v-if="currentQ.requirements" class="ex-subjective-req">
+              <strong>作答要求：</strong>
+              <span v-html="renderContent(currentQ.requirements)"></span>
+            </span>
+          </div>
+          <textarea
+            v-model="subjectiveAnswer"
+            class="ex-subjective-input"
+            rows="10"
+            placeholder="请在此作答..."
+          ></textarea>
+          <div class="ex-subjective-count">已写 {{ subjectiveWordCount }} 字</div>
+        </div>
+
+        <!-- 选项（主观题不渲染选项） -->
+        <div class="ex-options" v-if="!currentQ.is_subjective">
           <label
             v-if="isMultiSelect(currentQ)"
             class="ex-option"
@@ -125,14 +162,35 @@
           <div
             v-else
             class="ex-option"
-            :class="{ 'opt-selected': state.userAnswers[state.currentIndex] === opt.key }"
+            :class="{
+              'opt-selected': state.userAnswers[state.currentIndex] === opt.key,
+              'opt-correct': showAnswerPanel && isCorrectKey(opt.key),
+              'opt-wrong': state.submitted && state.userAnswers[state.currentIndex] === opt.key && !isCorrectKey(opt.key)
+            }"
             v-for="opt in parsedOptions"
             :key="opt.key"
-            @click="selectAnswer(opt.key)"
+            @click="!showAnswerPanel && selectAnswer(opt.key)"
           >
             <span class="opt-key">{{ opt.key }}</span>
             <span class="opt-value" v-html="renderContent(opt.value)"></span>
           </div>
+        </div>
+
+        <!-- 背题模式 / 交卷后：答案与解析直接展示在当前题下方 -->
+        <div v-if="showAnswerPanel" class="ex-answer-panel">
+          <div class="ex-answer-head">
+            <span class="ex-answer-badge">{{ isMemorize ? '背题模式' : '答题结果' }}</span>
+            <span class="ex-answer-line">正确答案：<strong>{{ currentQ.answer || (currentQ.is_subjective ? '参考作答' : '暂无') }}</strong></span>
+          </div>
+          <div v-if="currentQ.is_subjective && currentQ.answer" class="ex-reference">
+            <div class="ex-analysis-title">📝 参考答案</div>
+            <div class="ex-analysis-body" v-html="renderContent(currentQ.answer)"></div>
+          </div>
+          <div v-if="currentQ.answer_analysis" class="ex-analysis">
+            <div class="ex-analysis-title">📖 答案解析</div>
+            <div class="ex-analysis-body" v-html="renderContent(currentQ.answer_analysis)"></div>
+          </div>
+          <div v-else class="ex-analysis-empty">该题暂无答案解析</div>
         </div>
       </div>
 
@@ -155,10 +213,11 @@
           下一题
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
-        <button v-else class="btn-ex-submit" @click="handleSubmit">
+        <button v-else-if="!state.submitted" class="btn-ex-submit" @click="handleSubmit">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
           交卷
         </button>
+        <button v-else class="btn-ex-primary" @click="backToBank">返回题库</button>
       </div>
     </template>
 
@@ -245,6 +304,7 @@
 import { defineComponent, reactive, computed, watch } from 'vue';
 import { sanitizeHtml } from '@/utils/questionRender';
 import FeedbackDrawer from '@/components/forum/FeedbackDrawer.vue';
+import { renderQuestionContent } from '@/utils/questionRender';
 
 var apiBase = '/api/questions';
 
@@ -274,6 +334,15 @@ export default defineComponent({
       materialExpanded: true,
       groupMaterial: '',       // 当前题组共享材料（HTML）
       _groupCache: {},         // group_id → 材料（会话内缓存）
+      // 做题 / 背题模式：背题模式直接展示答案与解析
+      mode: 'practice',
+      // 交卷后停留本页做逐题回顾，不再强制跳转结果页
+      submitted: false,
+      score: 0,
+      accuracy: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      resultDetails: [],
     });
 
     var markerTypes = [
@@ -300,6 +369,12 @@ export default defineComponent({
     currentQ() {
       return this.state.questions[this.state.currentIndex] || {};
     },
+    isMemorize() {
+      return this.state.mode === 'memorize';
+    },
+    showAnswerPanel() {
+      return this.state.submitted || this.isMemorize;
+    },
     // 多选答案数组(自动同步checkbox v-model)
     multiAnswers: {
       get() {
@@ -310,7 +385,28 @@ export default defineComponent({
         this.state.userAnswers[this.state.currentIndex] = val;
       }
     },
+    // P1-6: 主观题作答文本（存于 userAnswers，与客观题同一容器，切题自动保留）
+    subjectiveAnswer: {
+      get() {
+        var ans = this.state.userAnswers[this.state.currentIndex];
+        return typeof ans === 'string' ? ans : '';
+      },
+      set(val) {
+        this.state.userAnswers[this.state.currentIndex] = val;
+      }
+    },
+    // 字数统计：非空白字符数
+    subjectiveWordCount() {
+      return (this.subjectiveAnswer || '').replace(/\s/g, '').length;
+    },
+    hasSubjectiveMeta() {
+      var q = this.currentQ || {};
+      var hasScore = q.score !== null && q.score !== undefined && q.score !== '';
+      return !!(hasScore || q.requirements);
+    },
     parsedOptions() {
+      // P1-6: 主观题没有选项，直接返回空数组，避免补全 A-D「待补充」
+      if (this.currentQ.is_subjective) return [];
       var raw = this.currentQ.options;
       var opts = [];
 
@@ -470,19 +566,17 @@ export default defineComponent({
       return 'type-single';
     },
     // === 内容渲染（第9层防线：前端智能重试） ===
+    // 题干/选项/解析统一走 renderer：兼容转义 <img>、[IMAGE:]、相对路径与裂图兜底
     renderContent(text) {
-      if (!text) return '';
-      // 先白名单清洗服务端内容，再做占位符转换。
-      // 顺序很关键：清洗会剥掉内联 onerror，而本页面自建的 <img> 需要保留
-      // onerror="window.__retryImg(...)" 以实现多级重试，因此必须「先清洗、后转换」。
-      var html = sanitizeHtml(text);
-      // 支持 uuid_x_y 和 x_y 两种 IMAGE 占位符格式
-      html = html.replace(/\[?IMAGE:([a-f0-9]+_\d+_\d+|\d+_\d+)\]?/gi, function(match, marker) {
-        // 初始 src 使用扁平路径，onerror 调用全局 __retryImg 智能重试
-        return '<img src="/static/questions/' + marker + '.png" class="q-img" loading="lazy" ' +
-               'data-marker="' + marker + '" onerror="window.__retryImg && window.__retryImg(this)" />';
-      });
-      return html;
+      return renderQuestionContent(text);
+    },
+    setMode(mode) {
+      this.state.mode = mode === 'memorize' ? 'memorize' : 'practice';
+    },
+    // 背题/交卷后判断某个选项是否为正确答案（多选题支持字符串包含）
+    isCorrectKey(key) {
+      var answer = String((this.currentQ || {}).answer || '').toUpperCase();
+      return !!key && answer.indexOf(String(key).toUpperCase()) >= 0;
     },
     getDifficultyLabel(d) {
       var labels = ['', '★', '★★', '★★★', '★★★★', '★★★★★'];
@@ -805,7 +899,8 @@ export default defineComponent({
       var subjectId = subjectMap[routeSubject] || null;
 
       details.forEach(function(d) {
-        if (!d.is_correct && d.question_id) {
+        // P1-6: 主观题不自动判分（is_correct=null），不收录为错题
+        if (d.is_correct === false && d.question_id) {
           var fetchFn = self.getFetch();
           fetchFn('/api/wrong-questions/collect', {
             method: 'POST',
@@ -864,23 +959,48 @@ export default defineComponent({
       var unanswered = 0;
       var questions = this.state.questions;
       for (var i = 0; i < questions.length; i++) {
-        if (!this.state.userAnswers[i]) unanswered++;
+        var ans = this.state.userAnswers[i];
+        if (questions[i].is_subjective) {
+          if (!ans || !String(ans).trim()) unanswered++;
+        } else if (!ans) {
+          unanswered++;
+        }
       }
       if (unanswered > 0) {
         if (!confirm('还有 ' + unanswered + ' 道题未作答，确定交卷吗？')) return;
       }
       var correct = 0;
       var wrong = 0;
+      var objectiveTotal = 0;
       var details = [];
       for (var j = 0; j < questions.length; j++) {
+        var q = questions[j];
         var rawAns = this.state.userAnswers[j];
+        // P1-6: 主观题不自动判分，不计入正确/错误，也不进错题集
+        if (q.is_subjective) {
+          var text = typeof rawAns === 'string' ? rawAns.trim() : '';
+          details.push({
+            question_id: q.question_id,
+            question_content: q.question_content,
+            options: [],
+            user_answer: text || '未答',
+            correct_answer: q.answer || '',
+            is_correct: null,
+            is_subjective: true,
+            answer_analysis: q.answer_analysis || '',
+            question_type_detail: q.question_type_detail || '主观题',
+            difficulty: q.difficulty || 3,
+          });
+          continue;
+        }
+        objectiveTotal++;
         var userAns;
         if (Array.isArray(rawAns)) {
           userAns = rawAns.length ? rawAns.sort().join('') : '未答';
         } else {
           userAns = rawAns || '未答';
         }
-        var correctAns = questions[j].answer || '';
+        var correctAns = q.answer || '';
         // 多选题/数组答案：排序后比较字母串
         var isCorrect;
         if (Array.isArray(rawAns) && correctAns.length > 1) {
@@ -892,18 +1012,20 @@ export default defineComponent({
         }
         if (isCorrect) correct++; else wrong++;
         details.push({
-          question_id: questions[j].question_id,
-          question_content: questions[j].question_content,
-          options: questions[j].options,
+          question_id: q.question_id,
+          question_content: q.question_content,
+          options: q.options,
           user_answer: userAns,
           correct_answer: correctAns,
           is_correct: isCorrect,
-          answer_analysis: questions[j].answer_analysis || '',
-          question_type_detail: questions[j].question_type_detail || '选择题',
-          difficulty: questions[j].difficulty || 3,
+          is_subjective: false,
+          answer_analysis: q.answer_analysis || '',
+          question_type_detail: q.question_type_detail || '选择题',
+          difficulty: q.difficulty || 3,
         });
       }
-      var score = Math.round((correct / questions.length) * 100);
+      // 得分分母只计客观题；全为主观题时记 0 分，避免除零
+      var score = objectiveTotal ? Math.round((correct / objectiveTotal) * 100) : 0;
       var result = {
         total: questions.length,
         correct: correct,
@@ -926,11 +1048,25 @@ export default defineComponent({
       this.collectWrongAnswers(details);
 
       if (this.state.timerInterval) clearInterval(this.state.timerInterval);
-      this.$router.push('/solution');
+      // 结果直接呈现在每题下方，避免“交卷后跳走、看不到答案”的割裂体验
+      this.state.submitted = true;
+      this.state.score = score;
+      this.state.correctCount = correct;
+      this.state.wrongCount = wrong;
+      this.state.accuracy = objectiveTotal ? Math.round((correct / objectiveTotal) * 100) : 0;
+      this.state.resultDetails = details;
+      this.state.showAnswerSheet = false;
+      this.$nextTick(function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    },
+    backToBank() {
+      if (this.state.timerInterval) clearInterval(this.state.timerInterval);
+      // 题库页在 VTJ 动态路由 /page/question_bank；'/' 在学生端是首页
+      this.$router.push('/page/question_bank');
     },
     handleBack() {
-      if (this.state.timerInterval) clearInterval(this.state.timerInterval);
-      this.$router.push('/');
+      this.backToBank();
     },
   },
 });
@@ -1042,8 +1178,7 @@ export default defineComponent({
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #c41e3a 0%, #e8384f 100%);
-  border-radius: 2px;
-  transition: width 0.4s ease;
+  border-radius: 2px;  transition: width 0.4s ease;
 }
 .ex-progress-label {
   max-width: 1380px;
@@ -1216,6 +1351,46 @@ export default defineComponent({
   line-height: 1.6;
   padding-top: 4px;
 }
+/* ===== P1-6: 主观题作答区 ===== */
+.ex-subjective {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ex-subjective-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 20px;
+  padding: 10px 14px;
+  background: #f8f9fc;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #555876;
+  word-break: break-word;
+}
+.ex-subjective-score { color: #c41e3a; font-weight: 700; flex-shrink: 0; }
+.ex-subjective-req { flex: 1; min-width: 200px; }
+.ex-subjective-req strong { color: #1a2b5f; }
+.ex-subjective-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1.5px solid #e8ecf2;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #33375a;
+  font-family: inherit;
+  background: #fafbfd;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.ex-subjective-input:focus { border-color: #c41e3a; background: #ffffff; }
+.ex-subjective-count { text-align: right; font-size: 13px; color: #8899aa; }
 /* 底部操作 */
 .ex-actions {
   display: flex;
@@ -1400,6 +1575,10 @@ export default defineComponent({
   color: #43a047;
   font-weight: 600;
   margin-top: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cell-dot { color: #ccc; font-size: 12px; }
 
@@ -1477,5 +1656,82 @@ export default defineComponent({
   display: block;
   margin: 12px auto 0;
   padding: 6px 20px !important;
+}
+
+/* ===== 做题 / 背题模式（2026-10-29） ===== */
+.ex-mode-switch {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.ex-mode-btn {
+  border: 0;
+  background: transparent;
+  color: #b9c6d8;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ex-mode-btn.active { background: #c41e3a; color: #fff; font-weight: 600; }
+.ex-mode-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.ex-live-stats { margin-left: 12px; color: #64748b; font-size: 13px; }
+.ex-result-bar {
+  max-width: 1380px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding: 14px 20px;
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-left: 4px solid #c41e3a;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(15, 35, 70, 0.06);
+}
+.ex-result-item { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: #64748b; }
+.ex-result-item b { color: #1a2b5f; font-size: 18px; }
+.ex-result-item b.ok { color: #059669; }
+.ex-result-item b.fail { color: #dc2626; }
+.ex-result-bar .btn-ex-outline { margin-left: auto; }
+/* 答案与解析面板：直接跟随当前题 */
+.ex-answer-panel {
+  margin-top: 18px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.ex-answer-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.ex-answer-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #e8f0fb;
+  color: #1a3c6d;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ex-answer-line { font-size: 15px; color: #475569; }
+.ex-answer-line strong { color: #059669; font-size: 17px; }
+.ex-reference { margin-bottom: 12px; }
+.ex-analysis-title { font-size: 14px; font-weight: 700; color: #1a3c6d; margin-bottom: 8px; }
+.ex-analysis-body { font-size: 15px; line-height: 1.85; color: #334155; word-break: break-word; }
+.ex-analysis-body img,
+.ex-analysis-body table { max-width: 100%; height: auto; }
+.ex-analysis-body :deep(img) { max-width: 100%; height: auto; margin: 8px 0; border-radius: 6px; }
+.ex-analysis-empty { font-size: 14px; color: #94a3b8; }
+.opt-correct { border-color: #10b981 !important; background: #ecfdf5 !important; }
+.opt-correct .opt-key { background: #10b981 !important; color: #fff !important; }
+.opt-wrong { border-color: #ef4444 !important; background: #fef2f2 !important; }
+.opt-wrong .opt-key { background: #ef4444 !important; color: #fff !important; }
+@media (max-width: 720px) {
+  .ex-mode-switch { order: -1; }
+  .ex-live-stats { width: 100%; margin-left: 0; text-align: center; }
+  .ex-result-bar { margin: 0 12px 12px; gap: 8px 16px; }
+  .ex-result-item b { font-size: 16px; }
 }
 </style>

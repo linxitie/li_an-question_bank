@@ -50,6 +50,8 @@ ALLOW_EXACT = {
 ALLOW_PREFIX = (
     '<', '${', '$', 'your-', 'your_', 'yoursecret', '*', 'xxx',
     'example', 'placeholder', 'test-key', 'test_key',
+    # 环境变量读取表达式不是硬编码密钥；保留它们可避免新配置被误报。
+    'os.environ', 'os.getenv', 'environ.get(', 'getenv(',
 )
 
 

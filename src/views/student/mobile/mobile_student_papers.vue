@@ -42,8 +42,10 @@ const subjectName = (id: number) => {
   return { 1: '行测', 2: '申论', 3: '公专' }[id] || '通用';
 };
 
-const examTypeName = (t: string) => {
-  return { SIMULATION: '模拟卷', PRACTICE: '练习卷', FORMAL: '真题卷' }[t] || '试卷';
+const examTypeName = (t?: string | null) => {
+  // p.exam_type 来自后端，可能缺省；显式声明映射表避免用 undefined 索引对象
+  const map: Record<string, string> = { SIMULATION: '模拟卷', PRACTICE: '练习卷', FORMAL: '真题卷' };
+  return (t && map[t]) || '试卷';
 };
 
 const fetchPapers = async () => {

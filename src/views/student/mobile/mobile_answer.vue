@@ -25,7 +25,7 @@
             v-for="(q, i) in questions"
             :key="i"
             class="sheet-cell"
-            :class="{ current: i === currentIndex, done: !!answersRecord[i] }"
+            :class="{ current: i === currentIndex, done: isAnsweredAt(i) }"
             @click="jumpTo(i)"
           >{{ i + 1 }}</button>
         </div>
@@ -68,8 +68,8 @@
         </div>
       </div>
 
-      <!-- 选项 -->
-      <div class="options">
+      <!-- 选项（主观题不渲染选项） -->
+      <div v-if="!current.is_subjective" class="options">
         <div
           v-for="(opt, idx) in current.options"
           :key="idx"
@@ -81,16 +81,33 @@
         </div>
       </div>
 
-      <!-- 判分结果：仅在记背模式或全部答完后显示 -->
-      <div v-if="showResult" class="result" :class="{ correct: isCorrect }">
+      <!-- P1-6: 主观题作答区（题目要求已在上方 q-requirements 展示，此处不重复） -->
+      <div v-else class="subjective-card">
+        <div v-if="current.score !== null && current.score !== undefined && current.score !== ''" class="subjective-score">
+          分值：{{ current.score }} 分
+        </div>
+        <textarea
+          v-model="subjectiveAnswer"
+          class="subjective-input"
+          rows="10"
+          placeholder="请在此作答..."
+        ></textarea>
+        <div class="subjective-count">已写 {{ subjectiveWordCount }} 字</div>
+      </div>
+
+      <!-- 判分结果：仅在记背模式或全部答完后显示；主观题不自动判分 -->
+      <div v-if="showResult && !current.is_subjective" class="result" :class="{ correct: isCorrect }">
         <div class="result-title">{{ isCorrect ? '✅ 回答正确' : '❌ 回答错误' }}</div>
         <div v-if="!isCorrect" class="result-answer">正确答案：{{ current.answer }}</div>
         <div class="result-analysis" v-html="renderQuestionContent(current.answer_analysis || '暂无解析')"></div>
       </div>
+      <div v-if="showResult && current.is_subjective" class="result result-subjective">
+        <div class="result-title">📝 主观题已作答，等待人工评分</div>
+      </div>
       <!-- 全部答完后的统一成绩汇总 -->
       <div v-if="allFinished" class="summary">
         <div class="summary-title">🎉 全部完成</div>
-        <div class="summary-body">共 {{ questions.length }} 题，正确 {{ correctCount }} 题，正确率 {{ summaryRate }}%</div>
+        <div class="summary-body">共 {{ questions.length }} 题（客观题 {{ objectiveCount }} 题），正确 {{ correctCount }} 题，正确率 {{ summaryRate }}%</div>
       </div>
     </main>
 
@@ -136,26 +153,43 @@ const sheetOpen = ref(false);
 // 「是否正确」。此前只存 boolean，导致切题回来无法回填选择痕迹。
 type AnswerRec = { selected: number[]; correct: boolean; reported: boolean; seconds: number };
 const answersRecord = ref<Array<AnswerRec | null>>([]);
+// P1-6: 主观题作答文本与上报幂等标记（索引即题号）
+const subjectiveAnswers = ref<Record<number, string>>({});
+const subjectiveReported = ref<Record<number, boolean>>({});
+
+// 某一题是否已作答：客观题看 answersRecord，主观题看是否有非空文本
+const isAnsweredAt = (i: number) =>
+  !!answersRecord.value[i] || !!String(subjectiveAnswers.value[i] || '').trim();
 
 // 当前题的选择态 / 作答态 / 对错全部由 answersRecord 派生。
 // 这样切题时无需手动重置，也就不会再出现「状态与记录不一致」。
 const selectedOptions = computed<number[]>(
   () => answersRecord.value[currentIndex.value]?.selected ?? []
 );
-const answered = computed(() => !!answersRecord.value[currentIndex.value]);
+const answered = computed(() => isAnsweredAt(currentIndex.value));
 const isCorrect = computed(() => !!answersRecord.value[currentIndex.value]?.correct);
+
+// P1-6: 主观题作答文本（切题自动保留）
+const subjectiveAnswer = computed<string>({
+  get: () => subjectiveAnswers.value[currentIndex.value] || '',
+  set: (val: string) => {
+    subjectiveAnswers.value[currentIndex.value] = val;
+  }
+});
+// 字数统计：非空白字符数
+const subjectiveWordCount = computed(() => (subjectiveAnswer.value || '').replace(/\s/g, '').length);
 
 // 整体完成进度百分比
 const progressPercent = computed(() => {
   if (!questions.value.length) return 0;
-  const done = questions.value.filter((_, i) => !!answersRecord.value[i]).length;
+  const done = questions.value.filter((_, i) => isAnsweredAt(i)).length;
   return Math.round((done / questions.value.length) * 100);
 });
 
 // 是否所有题目都已作答
 const allFinished = computed(() => {
   if (!questions.value.length) return false;
-  return questions.value.every((_, i) => !!answersRecord.value[i]);
+  return questions.value.every((_, i) => isAnsweredAt(i));
 });
 
 // 当前题是否为末题。末题作答后立即展示答案与解析，
@@ -169,7 +203,7 @@ const isLastQuestion = computed(
 // 让用户切回上一题前就能看出那一题做过。
 const prevAnswered = computed(() => {
   const i = currentIndex.value - 1;
-  return i >= 0 && !!answersRecord.value[i];
+  return i >= 0 && isAnsweredAt(i);
 });
 
 // 答案与解析是否应当显示：记背模式立即显示；做题模式在末题或全部答完时显示
@@ -177,14 +211,18 @@ const showResult = computed(
   () => answered.value && (mode.value === 'memorize' || allFinished.value || isLastQuestion.value)
 );
 
-// 最终答对题数：直接由逐题记录派生
+// 最终答对题数：直接由逐题记录派生（主观题不自动判分，只计客观题）
 const correctCount = computed(
   () => answersRecord.value.filter((r) => !!r && r.correct).length
 );
-// 最终正确率
+// 客观题总数：正确率分母，避免把主观题算进自动判分
+const objectiveCount = computed(
+  () => questions.value.filter((q: any) => !q.is_subjective).length
+);
+// 最终正确率（仅客观题）
 const summaryRate = computed(() => {
-  if (!questions.value.length) return 0;
-  return Math.round((correctCount.value / questions.value.length) * 100);
+  if (!objectiveCount.value) return 0;
+  return Math.round((correctCount.value / objectiveCount.value) * 100);
 });
 
 // 从答题卡跳转到指定题号。
@@ -411,6 +449,9 @@ const fetchQuestions = async () => {
         // 「题目要求」归一为单一字符串（string/array 两形态收口）
         requirements: normalizeRequirements(q.requirements)
       }));
+      // P1-6: 换一批题时清空主观题作答与上报标记，避免跨套题的脏数据
+      subjectiveAnswers.value = {};
+      subjectiveReported.value = {};
     }
   } catch (e) {
     console.error('获取题目失败:', e);
@@ -450,6 +491,28 @@ const flushPending = async () => {
       })
     );
   });
+  // P1-6: 主观题按文本上报，is_correct 传 null（不自动判分，待人工评分）
+  questions.value.forEach((q: any, i: number) => {
+    if (!q.is_subjective) return;
+    const text = String(subjectiveAnswers.value[i] || '').trim();
+    if (!text || subjectiveReported.value[i]) return;
+    subjectiveReported.value[i] = true;
+    const rec = answersRecord.value[i];
+    tasks.push(
+      auth.apiFetch('/api/practice/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question_id: q.question_id,
+          subject_id: q.subject_id,
+          is_correct: null,
+          user_answer: text,
+          time_spent: rec?.seconds || 0,
+          source: '随机练习'
+        })
+      })
+    );
+  });
   if (!tasks.length) return;
   // 单题上报失败不应中断整卷结算
   const results = await Promise.allSettled(tasks);
@@ -460,7 +523,7 @@ const flushPending = async () => {
 const submitAll = async () => {
   if (!allFinished.value) {
     // 未全部作答：定位到第一道未作答的题，避免用户误以为已交卷
-    const idx = questions.value.findIndex((_, i) => !answersRecord.value[i]);
+    const idx = questions.value.findIndex((_, i) => !isAnsweredAt(i));
     if (idx >= 0) currentIndex.value = idx;
     return;
   }
@@ -772,12 +835,56 @@ onMounted(fetchQuestions);
   border-radius: 6px;
   margin: 6px 0;
 }
+/* P1-6: 主观题作答区（手机 / 平板共用） */
+.subjective-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e8ecf1;
+  border-radius: 12px;
+  padding: 14px;
+}
+.subjective-score {
+  font-size: 13px;
+  font-weight: 700;
+  color: #c41e3a;
+}
+.subjective-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1.5px solid #e8ecf1;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1a2a3a;
+  font-family: inherit;
+  background: #fafbfd;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.subjective-input:focus {
+  border-color: #1a2b5f;
+  background: #fff;
+}
+.subjective-count {
+  text-align: right;
+  font-size: 12px;
+  color: #8899aa;
+}
 .result {
   margin-top: 16px;
   background: #fff;
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
+}
+/* P1-6: 主观题不自动判分，结果区用中性底色的提示卡（须在 .result 之后覆盖底色） */
+.result.result-subjective {
+  border: 1px solid #c7dbf5;
+  background: #f0f6ff;
 }
 .result.correct {
   border: 1px solid #b7eb8f;

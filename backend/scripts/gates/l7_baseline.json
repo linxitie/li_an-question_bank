@@ -1,0 +1,28 @@
+{
+  "events": [
+    "achievement.unlocked.v1",
+    "catalog.paper.published",
+    "catalog.question.imported",
+    "exam.exam.graded",
+    "exam.exam.submitted",
+    "growth.awarded.v1",
+    "growth.goal.progressed",
+    "identity.user.updated",
+    "library.material.published",
+    "reward.coins.awarded",
+    "user.action.v1"
+  ],
+  "trigger_types": [
+    "checkin.done",
+    "favorite.added",
+    "forum.posted",
+    "material.opened",
+    "news.read",
+    "note.created",
+    "paper.completed",
+    "practice.record.created",
+    "practice.submit",
+    "shop.purchased",
+    "wrong.reviewed"
+  ]
+}

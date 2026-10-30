@@ -96,15 +96,12 @@ async def toggle_favorite(
             create_time=datetime.now()
         )
         db.add(fav)
+        db.flush()
+
+        # F2b：收藏记录与收藏成就同一事务提交。
+        await record_user_action(db, current_user.user_id, TRIGGER_FAVORITE_ADDED)
         commit_with_retry(db)
         db.refresh(fav)
-
-        # 触发收藏成就
-        try:
-            await record_user_action(db, current_user.user_id, TRIGGER_FAVORITE_ADDED)
-        except Exception as e:
-            logger.warning(f"收藏成就判定失败: {e}")
-
         return {"favorited": True, "message": "已收藏", "fav_id": f"q_{fav.fav_id}"}
 
     elif fav_type == "news":
@@ -129,15 +126,12 @@ async def toggle_favorite(
             create_time=datetime.now()
         )
         db.add(fav)
+        db.flush()
+
+        # F2b：收藏记录与收藏成就同一事务提交（仅在新建分支发一次）。
+        await record_user_action(db, current_user.user_id, TRIGGER_FAVORITE_ADDED)
         commit_with_retry(db)
         db.refresh(fav)
-
-        # 触发收藏成就（与典题收藏共用 favorite.added；仅在新建分支发一次）
-        try:
-            await record_user_action(db, current_user.user_id, TRIGGER_FAVORITE_ADDED)
-        except Exception as e:
-            logger.warning(f"收藏成就判定失败: {e}")
-
         return {"favorited": True, "message": "已收藏", "fav_id": f"n_{fav.fav_id}"}
 
     else:

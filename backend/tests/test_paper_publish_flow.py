@@ -1,7 +1,9 @@
 """P2-17..P2-23 组卷/历年试卷域：状态机、E3 事件、发布推送与幂等。"""
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import text
 
 from app.core.security import create_access_token, get_password_hash
 from app.models.models import ExamPaper, QuestionBank, SmartExamRecord, SysUser
@@ -110,17 +112,19 @@ def test_paper_state_machine_student_sees_only_published(
     assert approve.status_code == 200, approve.text
     assert _paper(db_session, paper_id).paper_type == "APPROVED"
 
-    with patch(
-        "app.core.events.publish",
-        new=AsyncMock(return_value=True),
-    ) as mocked_publish:
-        publish = client.post(f"/api/papers/{paper_id}/publish", headers=admin_headers)
-        assert publish.status_code == 200, publish.text
-        mocked_publish.assert_awaited_once()
-        assert mocked_publish.await_args is not None
-        event = mocked_publish.await_args[0][0]
-        assert event.name == "catalog.paper.published"
-        assert event.payload["paper_id"] == paper_id
+    publish = client.post(f"/api/papers/{paper_id}/publish", headers=admin_headers)
+    assert publish.status_code == 200, publish.text
+    # F2b：发布状态与事件在同一事务写入 Outbox。
+    row = db_session.execute(
+        text(
+            "SELECT event_name, aggregate_id, payload FROM foundation_outbox "
+            "WHERE event_name = :name"
+        ),
+        {"name": "catalog.paper.published"},
+    ).first()
+    assert row is not None
+    assert row.aggregate_id == f"p-{paper_id}"
+    assert json.loads(row.payload)["paper_id"] == paper_id
 
     assert _paper(db_session, paper_id).paper_type == "PUBLISHED"
 
@@ -145,13 +149,16 @@ def test_invalid_transitions_return_409_and_no_push(
     assert approve.status_code == 409
     assert "DRAFT" in approve.json()["error"]["message"]
 
-    with patch(
-        "app.core.events.publish",
-        new=AsyncMock(return_value=True),
-    ) as mocked_publish:
-        publish = client.post(f"/api/papers/{paper_id}/publish", headers=admin_headers)
-        assert publish.status_code == 409
-        mocked_publish.assert_not_awaited()
+    publish = client.post(f"/api/papers/{paper_id}/publish", headers=admin_headers)
+    assert publish.status_code == 409
+    # 状态机拒绝发布时不得写入任何发布事件。
+    rejected = db_session.execute(
+        text(
+            "SELECT COUNT(*) FROM foundation_outbox "
+            "WHERE event_name = 'catalog.paper.published'"
+        )
+    ).scalar()
+    assert rejected == 0
 
     student_create = client.post(
         "/api/papers/",

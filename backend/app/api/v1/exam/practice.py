@@ -16,7 +16,7 @@ from ....core.security import get_current_user
 from ....models.models import (
     PracticeRecord, QuestionBank, QuestionSubject, QuestionType, SysUser,
     SmartExamRecord, ExamRecord, ExamAnswerDetail,
-    YearPaper, ExamPaper, KnowledgePoint, QuestionKnowledge, SubCategory
+    YearPaper, ExamPaper, KnowledgePoint
 )
 from ....services.growth_service import add_growth, GROWTH_RULES
 from ....services.practice_grading import submit_answers, upsert_wrong_question
@@ -611,11 +611,11 @@ async def get_knowledge_progress(
         QuestionSubject.subject_name,
         QuestionSubject.subject_code,
     ).join(
-        SubCategory, KnowledgePoint.sub_category_id == SubCategory.id
-    ).join(
-        QuestionSubject, SubCategory.subject_id == QuestionSubject.subject_id
+        QuestionSubject, KnowledgePoint.subject_id == QuestionSubject.subject_id
     ).filter(
-        QuestionSubject.status == 1
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+        QuestionSubject.status == 1,
     ).order_by(
         QuestionSubject.subject_id, KnowledgePoint.sort_order
     ).all()
@@ -625,8 +625,8 @@ async def get_knowledge_progress(
 
     point_ids = [r.point_id for r in kp_rows]
     stat_rows = db.query(
-        QuestionKnowledge.knowledge_point_id,
-        func.count(distinct(QuestionKnowledge.question_id)).label("total"),
+        QuestionBank.point_id,
+        func.count(distinct(QuestionBank.question_id)).label("total"),
         func.count(distinct(PracticeRecord.question_id)).label("done"),
         func.coalesce(
             func.sum(case((PracticeRecord.is_correct == 1, 1), else_=0)), 0
@@ -634,12 +634,14 @@ async def get_knowledge_progress(
         func.count(PracticeRecord.record_id).label("attempts"),
     ).outerjoin(
         PracticeRecord,
-        (PracticeRecord.question_id == QuestionKnowledge.question_id) &
+        (PracticeRecord.question_id == QuestionBank.question_id) &
         (PracticeRecord.user_id == current_user.user_id)
     ).filter(
-        QuestionKnowledge.knowledge_point_id.in_(point_ids)
+        QuestionBank.point_id.in_(point_ids),
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
     ).group_by(
-        QuestionKnowledge.knowledge_point_id
+        QuestionBank.point_id
     ).all()
 
     stat_map = {r[0]: r for r in stat_rows}

@@ -131,7 +131,6 @@
 <script lang="ts">
 import { sanitizeHtml } from '@/utils/questionRender';
 import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
-  // @ts-nocheck
   import { defineComponent, reactive, ref } from 'vue';
   import { XIcon } from '@vtj/ui';
   import {
@@ -148,6 +147,42 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCheckinStore } from '@/modules/checkin/store';
+
+  // 招考条目：后端按来源不同返回结构不完全一致，故字段全部可缺省。
+  // 之前 state 写成 `[]` / `{}` 会被推断成 never[] / {}，模板逐字段访问就报 TS2339。
+  interface RecruitItem {
+    id?: string | number;
+    title?: string;
+    category?: string;
+    status_label?: string;
+    tag?: string;
+    status_color?: string;
+    tag_color?: string;
+    organization?: string;
+    registration_start?: string;
+    registration_end?: string;
+    requirements?: string;
+    content_html?: string;
+    content?: string;
+    url?: string;
+  }
+
+  /** 首页招考卡片：按分类聚合后的渲染单元 */
+  interface RecruitCategory {
+    id: string;
+    name: string;
+    icon: string;
+    bg: string;
+    allItems: RecruitItem[];
+  }
+
+  /** 后端元信息：本次更新时间 / 站点最新发布日期（P2 文案消费，字段随后端演进） */
+  interface RecruitMeta {
+    updated_at?: string;
+    latest_publish_date?: string;
+    [key: string]: unknown;
+  }
+
   export default defineComponent({
     name: 'HomePage',
     components: {
@@ -165,24 +200,25 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       const recruitListRefs = ref({} as Record<string, HTMLElement>);
       const checkinStore = useCheckinStore();
       const state = reactive({
-        recruitCategories: [],
-        recruitAllData: {},
+        // 显式标注：空数组/空对象否则被推断为 never[] / {}，模板逐字段访问即报类型错
+        recruitCategories: [] as RecruitCategory[],
+        recruitAllData: {} as Record<string, RecruitItem[]>,
         showRecruitModal: false,
-        selectedRecruit: {},
+        selectedRecruit: {} as RecruitItem,
         // 后端元信息（本次更新时间 / 站点最新发布日期），P2 文案消费
-        recruitMeta: null,
+        recruitMeta: null as RecruitMeta | null,
       });
       return { state, props, provider, recruitListRefs, checkinStore, Briefcase, ArrowRight, sanitizeHtml };
     },
     methods: {
-      scrollToTop(cardItem) {
+      scrollToTop(cardItem: RecruitCategory) {
         // 点击箭头时，将对应卡片滚动到顶部
         const el = this.recruitListRefs[cardItem.id];
         if (el) {
           el.scrollTo({ top: 0, behavior: 'smooth' });
         }
       },
-      openRecruitDetail(recruit) {
+      openRecruitDetail(recruit: RecruitItem) {
         this.state.selectedRecruit = recruit;
         this.state.showRecruitModal = true;
       },
@@ -192,8 +228,8 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       },
       async fetchRecruitment(ctx: any) {
         const categories = ['国考省考', '事业单位', '教师招聘', '国企招聘', '医疗卫生', '三支一扶'];
-        const icons = { '国考省考': '🏛️', '事业单位': '🏢', '教师招聘': '📚', '国企招聘': '🏭', '医疗卫生': '🏥', '三支一扶': '🌾' };
-        const bgs = {
+        const icons: Record<string, string> = { '国考省考': '🏛️', '事业单位': '🏢', '教师招聘': '📚', '国企招聘': '🏭', '医疗卫生': '🏥', '三支一扶': '🌾' };
+        const bgs: Record<string, string> = {
           '国考省考': 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
           '事业单位': 'linear-gradient(135deg, #fef3c7, #fde68a)',
           '教师招聘': 'linear-gradient(135deg, #e0f2fe, #bae6fd)',
@@ -215,14 +251,15 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
           } else {
             this.loadFallbackRecruit(categories, icons, bgs);
           }
-        } catch (e) {
+        } catch (e: any) {
+          // 取消类错误不是失败，直接丢弃；其余才回退到本地兜底数据
           if (e && (e.name === 'AbortError' || e.__aborted)) return;
           this.loadFallbackRecruit(categories, icons, bgs);
         }
       },
       buildRecruitCards() {
         // 构建招考信息卡片数据（每个分类默认显示前6条，卡片内滚动查看更多）
-        var result = [];
+        var result: RecruitCategory[] = [];
         var self = this;
         for (var cat in this.state.recruitAllData) {
           var items = this.state.recruitAllData[cat] || [];
@@ -237,23 +274,22 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
         result.sort(function(a, b) { return order.indexOf(a.id) - order.indexOf(b.id); });
         this.state.recruitCategories = result;
       },
-      loadFallbackRecruit(categories, icons, bgs) {
-        var self = this;
+      loadFallbackRecruit(categories: string[], icons: Record<string, string>, bgs: Record<string, string>) {
         this.state.recruitCategories = categories.map(function(cat) {
           return { id: cat, name: cat, icon: icons[cat] || '📋', bg: bgs[cat] || 'linear-gradient(135deg, #f8f9fc, #f1f3f8)', allItems: [] };
         });
       },
-      setRecruitListRef(name, el) {
+      setRecruitListRef(name: string, el: HTMLElement | null) {
         if (el) {
           this.recruitListRefs[name] = el;
         }
       },
-      _catIcon(cat) {
-        var m = { '国考省考': '🏛️', '事业单位': '🏢', '教师招聘': '📚', '国企招聘': '🏭', '医疗卫生': '🏥', '三支一扶': '🌾' };
+      _catIcon(cat: string) {
+        var m: Record<string, string> = { '国考省考': '🏛️', '事业单位': '🏢', '教师招聘': '📚', '国企招聘': '🏭', '医疗卫生': '🏥', '三支一扶': '🌾' };
         return m[cat] || '📋';
       },
-      _catBg(cat) {
-        var m = {
+      _catBg(cat: string) {
+        var m: Record<string, string> = {
           '国考省考': 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
           '事业单位': 'linear-gradient(135deg, #fef3c7, #fde68a)',
           '教师招聘': 'linear-gradient(135deg, #e0f2fe, #bae6fd)',
@@ -264,9 +300,16 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
         return m[cat] || 'linear-gradient(135deg, #f8f9fc, #f1f3f8)';
       }
     },
+    data() {
+      // 刷新内核实例：Options API 的 data 才能让 this.recruitRefresher 有类型。
+      // 不用下划线前缀，Vue 会保留以 _ 开头的内部属性。
+      return {
+        recruitRefresher: null as ReturnType<typeof createRecruitmentRefresher> | null,
+      };
+    },
     mounted() {
       // 统一刷新内核接管取数（首屏/广播/可见性/聚焦/跨日/15分钟轮询/登录态/手动）
-      this._recruitRefresher = createRecruitmentRefresher({
+      this.recruitRefresher = createRecruitmentRefresher({
         fetchFn: (ctx) => this.fetchRecruitment(ctx),
         pollMs: 15 * 60 * 1000,
       });
@@ -274,9 +317,9 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       this.checkinStore.load();
     },
     beforeUnmount() {
-      if (this._recruitRefresher) {
-        this._recruitRefresher.destroy();
-        this._recruitRefresher = null;
+      if (this.recruitRefresher) {
+        this.recruitRefresher.destroy();
+        this.recruitRefresher = null;
       }
     }
 
