@@ -101,6 +101,7 @@ async def my_badges(
     # 稀有度：每个成就的获得人数 + 全站用户数（一次聚合，经由 growth 契约）
     counts = growth_contract.achievement_owner_counts(db)
     total_users = growth_contract.total_users(db)
+    first_owners = growth_contract.achievement_first_owners(db)
 
     items = []
     if kind in ("", "achievement"):
@@ -118,6 +119,13 @@ async def my_badges(
                 # 稀有度只做文字：全服多少人拿到（相对量，随时间变，不参与颜色）
                 "rarity_text": (f"全服 {round(cnt / total_users * 100, 1)}% 获得"
                                 if total_users else ""),
+                # 「全服首个获得」是真正的稀有感：不改颜色，只加一枚文字标记
+                "is_first_owner": bool(
+                    rec is not None
+                    and first_owners.get(a.achievement_id) == current_user.user_id),
+                "first_owner_text": ("全服首个获得" if (
+                    rec is not None
+                    and first_owners.get(a.achievement_id) == current_user.user_id) else ""),
                 "owned_count": cnt,
                 "owned_percent": round(cnt / total_users * 100, 1) if total_users else 0.0,
             })
