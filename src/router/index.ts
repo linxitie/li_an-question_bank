@@ -283,6 +283,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '徽章预览', roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/materials/upload',
+    name: 'MaterialUpload',
+    component: () => import('@/views/student/material_upload.vue'),
+    meta: { title: '上传备考资料', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/materials-preview',
     name: 'MaterialsPreview',
     component: () => import('@/views/dev/MaterialsPreview.vue'),
@@ -655,6 +661,12 @@ router.beforeEach((to, _from, next) => {
 
   // 资料内容验收页：只读公开接口（/api/materials 游客可访问），允许未登录查看
   if (to.path === '/materials-preview') {
+    return next();
+  }
+
+  // 上传页的演示态（?demo=1）：只渲染界面与本页内 mock 数据，不触达任何接口，
+  // 便于截图与设计走查；正常访问（无 demo 参数）仍走登录 + 角色校验。
+  if (to.path === '/materials/upload' && to.query.demo === '1') {
     return next();
   }
 

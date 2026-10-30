@@ -1857,3 +1857,122 @@ async def import_confirm(import_id: int, body: dict,
         resp["skipped_count"] = len(skipped) + len(invalid_rows)
         resp["warnings"] = warnings
     return JSONResponse(resp)
+
+# ============================ P2-C 学生端上传（受限） ============================
+STUDENT_UPLOAD_DAILY = 5          # 每人每天最多上传几次文件
+STUDENT_UPLOAD_TOTAL = 500        # 每人累计最多 500 张卡
+STUDENT_UPLOAD_MAX_MB = 5
+
+
+@router.post("/my/upload", summary="学生上传卡片表格(默认待审)")
+async def my_upload(file: UploadFile = File(...),
+                    subject: str = Query(..., description="xingce/shenlun/gongzhuan"),
+                    current_user: SysUser = Depends(get_current_user),
+                    db: Session = Depends(get_db)):
+    """学生上传 xlsx/csv：先过 P2-B 格式校验器，再按考点自动分类，**默认 status=0 待审**。
+
+    与管理员导入的区别：文件更小、次数限额、必须待审，防止学生把内容直接推到公开库。
+    """
+    from ....services.material_format_validator import (
+        BLOCKING_CODES, check_file, validate_rows)
+
+    if subject not in SUBJECTS:
+        raise HTTPException(400, "无效科目")
+
+    raw = file.file.read()
+    errs = check_file(file.filename or "", len(raw))
+    if errs:
+        raise HTTPException(400, errs[0]["message"])
+    if len(raw) > STUDENT_UPLOAD_MAX_MB * 1024 * 1024:
+        raise HTTPException(400, f"文件不能超过 {STUDENT_UPLOAD_MAX_MB}MB")
+
+    # 配额：今日新建卡片数（MaterialImportRecord 无 creator_id 列，改用卡片自身计数）
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_cards = db.query(func.count(StudyMaterial.material_id)).filter(
+        StudyMaterial.creator_id == current_user.user_id,
+        func.date(StudyMaterial.create_time) == today,
+    ).scalar() or 0
+    if today_cards >= STUDENT_UPLOAD_DAILY * 10:
+        raise HTTPException(
+            429, f"今日已上传 {today_cards} 张，达到上限（{STUDENT_UPLOAD_DAILY * 10} 张），明天再试")
+    owned = db.query(func.count(StudyMaterial.material_id)).filter(
+        StudyMaterial.creator_id == current_user.user_id,
+        StudyMaterial.type == "card",
+    ).scalar() or 0
+    if owned >= STUDENT_UPLOAD_TOTAL:
+        raise HTTPException(429, f"你的资料库已达上限（{STUDENT_UPLOAD_TOTAL} 张）")
+
+    ext = _os.path.splitext(file.filename or "")[1].lower()
+    tmp_dir = UPLOAD_TMP_DIR
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = str(tmp_dir / f"stu_{_uuid.uuid4().hex}{ext}")
+    with open(tmp_path, "wb") as fh:
+        fh.write(raw)
+
+    try:
+        if ext == ".xlsx":
+            from ....services.material_parser import parse_xlsx
+            parsed = parse_xlsx(tmp_path, max_rows=200)
+        else:
+            import csv as _csv
+            import io as _io
+            rows = []
+            with _io.open(tmp_path, encoding="utf-8-sig", newline="") as fh:
+                for r in _csv.reader(fh):
+                    rows.append([(c or "").strip() for c in r])
+            parsed = {"headers": rows[0] if rows else [], "rows": rows[1:201]}
+    finally:
+        try:
+            _os.remove(tmp_path)
+        except OSError:
+            pass
+
+    val = validate_rows(parsed.get("headers") or [], parsed.get("rows") or [],
+                        category_names=_category_names(db, subject),
+                        point_names=list(taxonomy.point_map(db, subject).keys()),
+                        category_as_warning=True)
+    blocking = [e for e in val["errors"] if e["code"] in BLOCKING_CODES]
+    if blocking:
+        head = "；".join(f"第{e['row']}行 {e['column']}：{e['message']}" for e in blocking[:5])
+        raise HTTPException(400, f"格式校验未通过：{head}")
+
+    bad_rows = {e["row"] for e in val["errors"] if e["row"]}
+    created, skipped = [], []
+    for idx, r in enumerate(parsed.get("rows") or [], start=1):
+        if idx in bad_rows:
+            skipped.append({"row": idx, "reason": "invalid"})
+            continue
+        cols = val["columns"]
+        front = (r[cols["front"]] if cols.get("front") is not None and cols["front"] < len(r) else "").strip()
+        back = (r[cols["back"]] if cols.get("back") is not None and cols["back"] < len(r) else "").strip()
+        if not front or not back:
+            skipped.append({"row": idx, "reason": "empty"})
+            continue
+        from ....services.material_sanitizer import content_cleaner
+        front = content_cleaner.clean_text(front)
+        back = content_cleaner.clean_text(back)
+        combined = front + back
+        dup = db.query(StudyMaterial).filter(
+            StudyMaterial.content_hash == content_cleaner.calculate_content_hash(combined)
+        ).first()
+        if dup:
+            skipped.append({"row": idx, "reason": "duplicate"})
+            continue
+        cls = _resolve_classification(db, subject, front, front, back, strict=False)
+        m = StudyMaterial(
+            subject=subject, type="card", category=cls["category"],
+            point_id=cls["point_id"], title=front, card_front=front,
+            card_back=back, content_hash=content_cleaner.calculate_content_hash(combined),
+            status=0, creator_id=current_user.user_id,
+            difficulty=1, read_time=2)
+        db.add(m)
+        db.flush()
+        created.append(m.material_id)
+    db.commit()
+    _audit(db, current_user, "student_upload", f"created={len(created)}", file.filename)
+    db.commit()
+    return {"created": len(created), "material_ids": created,
+            "skipped": skipped, "skipped_count": len(skipped),
+            "warnings": val.get("warnings") or [],
+            "status": "pending_review",
+            "note": "已进入待审队列，管理员审核后才会公开展示"}
