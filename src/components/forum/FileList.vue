@@ -15,10 +15,17 @@
       <span class="fl-size">{{ formatFileSize(file.size) }}</span>
     </a>
   </div>
+  <DocxPreview
+    v-if="previewUrl"
+    :url="previewUrl"
+    :name="previewName"
+    @close="previewUrl = ''" />
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { fileIcon, formatFileSize } from './fileUtils';
+import DocxPreview from './DocxPreview.vue';
 import type { ForumImageAttachment } from './imageUtils';
 
 defineProps<{ files: ForumImageAttachment[] }>();
@@ -29,7 +36,19 @@ const canPreview = (name: string) =>
   PREVIEW_EXT.some((ext) => (name || '').toLowerCase().endsWith(ext));
 
 /** 可预览类型：显式新标签打开；被拦截时退回下载（?download=1 强制 attachment） */
+const previewUrl = ref('');
+const previewName = ref('');
+
+const isDocx = (name: string) => (name || '').toLowerCase().endsWith('.docx');
+
 const onOpen = (e: MouseEvent, file: ForumImageAttachment) => {
+  // .docx：站内渲染（docx-preview）；.doc 旧格式不支持，交给下载
+  if (isDocx(file.name)) {
+    e.preventDefault();
+    previewUrl.value = file.url;
+    previewName.value = file.name;
+    return;
+  }
   if (!canPreview(file.name)) return; // office/压缩包：交给原生 download 属性
   e.preventDefault();
   const win = window.open(file.url, '_blank', 'noopener');
