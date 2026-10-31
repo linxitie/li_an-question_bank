@@ -110,8 +110,8 @@ def test_duplicate_is_penalized(db_session):
         db_session,
         "法者，天下之程式也，万事之仪表也。",
         "q_scout_dup1",
-        author="管子",
-        source="管子",
+        author="某人",
+        source="某出处",
         trust=90,
         topic=True,
         normalized_hash="hash-dup",
@@ -120,8 +120,8 @@ def test_duplicate_is_penalized(db_session):
         db_session,
         "法者，天下之程式也，万事之仪表也。",
         "q_scout_dup2",
-        author="管子",
-        source="管子",
+        author="某人",
+        source="某出处",
         trust=90,
         topic=True,
         normalized_hash="hash-dup",
@@ -133,6 +133,25 @@ def test_duplicate_is_penalized(db_session):
     assert first_result.score == second_result.score <= 90
     assert "duplicate" in first_result.reasons
     assert "duplicate" in second_result.reasons
+
+
+def test_classic_short_quote_without_author_is_not_rejected(db_session):
+    quote = _quote(
+        db_session,
+        "他山之石，可以攻玉。",
+        "q_scout_classic_short",
+        author="",
+        source="诗经·小雅·鹤鸣",
+        trust=50,
+        topic=True,
+    )
+
+    result = score_quote(db_session, quote)
+
+    assert result.score >= 80
+    assert result.decision != "reject_candidate"
+    assert "classic_author_missing" in result.reasons
+    assert "short" not in result.reasons
 
 
 def test_apply_writes_score_without_changing_review_state(db_session):

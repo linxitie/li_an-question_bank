@@ -29,6 +29,19 @@ _SENSITIVE_TERMS = (
     "赌博", "毒品", "色情", "暴恐", "恐怖主义", "造谣", "谣言",
     "颠覆", "枪支", "自杀", "涉密", "绝密", "机密文件",
 )
+# 耳熟能详的经典/传统出处：缺作者、篇幅短不应重罚
+_CLASSIC_TERMS = (
+    "诗经", "论语", "道德经", "老子", "孟子", "庄子", "大学", "中庸",
+    "史记", "韩非子", "管子", "孙子兵法", "荀子", "墨子", "礼记",
+    "周易", "尚书", "左传", "国语", "战国策", "增广贤文", "古文观止",
+    "唐诗", "宋词", "毛泽东", "习近平", "苏轼", "苏辙", "孟郊", "郑板桥",
+    "陈子昂", "后汉书", "传统", "官箴",
+)
+
+
+def _is_classic(quote: EssayQuote) -> bool:
+    text = f"{quote.source or ''} {quote.author or ''}"
+    return any(term in text for term in _CLASSIC_TERMS)
 
 
 @dataclass
@@ -101,13 +114,21 @@ def score_quote(db: Session, quote: EssayQuote) -> ScoutResult:
     length = len(compact)
     reasons: list[str] = []
     signals: dict[str, Any] = {"length": length}
+    classic = _is_classic(quote)
+    signals["classic"] = classic
 
     if length < 8:
-        length_score = 10
-        reasons.append("too_short")
+        if classic:
+            length_score = 70
+        else:
+            length_score = 10
+            reasons.append("too_short")
     elif length < 15:
-        length_score = 45
-        reasons.append("short")
+        if classic:
+            length_score = 80
+        else:
+            length_score = 45
+            reasons.append("short")
     elif length <= 60:
         length_score = 100
     elif length <= 100:
@@ -128,10 +149,15 @@ def score_quote(db: Session, quote: EssayQuote) -> ScoutResult:
     else:
         trust_score = 25
         reasons.append("low_source_trust")
+    if classic:
+        trust_score = max(trust_score, 80)
 
     author = (quote.author or "").strip()
     if author:
         author_score = 100
+    elif classic:
+        author_score = 75
+        reasons.append("classic_author_missing")
     elif (quote.source or "").strip():
         author_score = 55
         reasons.append("author_missing")
@@ -139,15 +165,16 @@ def score_quote(db: Session, quote: EssayQuote) -> ScoutResult:
         author_score = 20
         reasons.append("source_missing")
 
-    topic_score = 100 if _has_topic(db, quote) else 30
-    if topic_score < 100:
+    topic_score = 100 if _has_topic(db, quote) else (90 if classic else 30)
+    if topic_score < 100 and not classic:
         reasons.append("topic_missing")
 
     duplicate_count = _duplicate_count(db, quote)
     signals["duplicate_count"] = duplicate_count
     duplicate_penalty = 0
     if duplicate_count > 1:
-        duplicate_penalty = min(30, 10 * (duplicate_count - 1))
+        if not classic:
+            duplicate_penalty = min(30, 10 * (duplicate_count - 1))
         reasons.append("duplicate")
 
     hard_risk = False
