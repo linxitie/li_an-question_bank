@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,15 @@ def _category_label(relative_parts: tuple[str, ...]) -> str:
 
 def _topic_slug(name: str) -> str:
     return "auto-" + hashlib.md5(name.encode("utf-8")).hexdigest()[:10]
+
+
+def _stable_uid(relative_file: str, stem_counts: Counter[str]) -> str:
+    """文件名 stem 作为稳定 ID；同名文件跨子目录时追加路径哈希消歧。"""
+    stem = Path(relative_file).stem
+    if stem_counts.get(stem, 1) <= 1:
+        return stem
+    suffix = hashlib.sha1(relative_file.encode("utf-8")).hexdigest()[:8]
+    return f"{stem}-{suffix}"
 
 
 def _ensure_topic(db: Session, name: str) -> tuple[Topic, bool]:
@@ -122,8 +132,10 @@ def import_vault(
     if apply:
         seed_relation_types(db)
 
+    files = sorted(library.rglob("*.md"))
+    stem_counts = Counter(path.stem for path in files)
     processed = 0
-    for path in sorted(library.rglob("*.md")):
+    for path in files:
         if limit is not None and processed >= limit:
             break
         item = parse_file(path, library)
@@ -141,7 +153,7 @@ def import_vault(
             report["errors"].append(f"{item['file']}: empty quote")
             continue
 
-        uid = Path(item["file"]).stem
+        uid = _stable_uid(item["file"], stem_counts)
         existing = db.query(EssayQuote).filter(EssayQuote.quote_uid == uid).first()
         if existing:
             # 已有人工结果时不让低阶文件状态回退

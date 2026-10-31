@@ -66,3 +66,19 @@ def test_dry_run_does_not_write(tmp_path, db_session):
     assert report["apply"] is False
     assert db_session.query(EssayQuote).count() == 0
     assert all(item["action"].startswith("would_") for item in report["items"])
+
+
+def test_colliding_filenames_get_unique_uids(tmp_path, db_session):
+    root = tmp_path / "vault" / "01-金句素材库" / "01-政治类"
+    _write(root / "subA" / "20260815-0001.md", "同文件名金句甲，内容长度足够用于测试。", "已审核")
+    _write(root / "subB" / "20260815-0001.md", "同文件名金句乙，内容长度足够用于测试。", "已审核")
+
+    report = import_vault(db_session, tmp_path / "vault", limit=None, apply=True)
+
+    assert report["inserted"] == 2
+    rows = db_session.query(EssayQuote).all()
+    assert len({row.quote_uid for row in rows}) == 2
+    assert {row.content for row in rows} == {
+        "同文件名金句甲，内容长度足够用于测试。",
+        "同文件名金句乙，内容长度足够用于测试。",
+    }
