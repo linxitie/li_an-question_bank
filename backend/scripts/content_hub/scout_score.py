@@ -23,12 +23,13 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=200)
     args = parser.parse_args()
 
+    limit = None if args.all else args.limit
     db = SessionLocal()
     try:
         report = scout_quotes(
             db,
             include_all=args.all,
-            limit=args.limit,
+            limit=limit,
             apply=bool(args.apply),
         )
     finally:

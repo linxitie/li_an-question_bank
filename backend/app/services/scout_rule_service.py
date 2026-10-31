@@ -198,13 +198,16 @@ def scout_quotes(
     db: Session,
     *,
     include_all: bool = False,
-    limit: int = 200,
+    limit: int | None = 200,
     apply: bool = False,
 ) -> dict[str, Any]:
     query = db.query(EssayQuote)
     if not include_all:
         query = query.filter(EssayQuote.review_status.in_(("pending", "draft")))
-    quotes = query.order_by(EssayQuote.quote_id).limit(max(1, min(limit, 1000))).all()
+    query = query.order_by(EssayQuote.quote_id)
+    if limit is not None:
+        query = query.limit(max(1, min(limit, 5000)))
+    quotes = query.all()
 
     items: list[dict[str, Any]] = []
     decisions: dict[str, int] = {
