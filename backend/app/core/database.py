@@ -34,6 +34,11 @@ if settings.DB_TYPE == "sqlite":
         cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute("PRAGMA busy_timeout=30000;")
         cursor.execute("PRAGMA synchronous=NORMAL;")
+        # 读多写少的题库场景：把页缓存与 mmap 放大，避免每次查询都回读磁盘。
+        # cache_size 为负数表示 KB（-32000 = 32MB/连接），mmap_size 为字节。
+        cursor.execute("PRAGMA cache_size=-32000;")
+        cursor.execute("PRAGMA mmap_size=134217728;")
+        cursor.execute("PRAGMA temp_store=MEMORY;")
         cursor.close()
 
 # 创建会话工厂

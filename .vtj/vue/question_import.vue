@@ -2520,6 +2520,7 @@ converted.push({
         if (data.options !== undefined) q.options = data.options;
         if (data.answer !== undefined) q.answer = data.answer;
         if (data.analysis !== undefined) q.analysis = data.analysis;
+        if (data.requirements !== undefined) q.requirements = data.requirements;
         ElMessage.success('第 ' + (payload.index + 1) + ' 题已更新');
       },
       // ===== 逐题删除（识别匹配后剔除解析出错的题）=====

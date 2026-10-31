@@ -174,6 +174,7 @@
 import { defineComponent, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
 
 export default defineComponent({
   name: 'PaperAnswer',
@@ -378,8 +379,10 @@ export default defineComponent({
       }
 
       if (!parts.length) return '';
-      // 复用统一渲染入口：白名单清洗 + [IMAGE:] 转 <img> + onerror 兜底
-      return this.renderQuestionContent(parts.join(''), { stripInlineOption: false });
+      // 复用统一渲染入口：白名单清洗 + [IMAGE:] 转 <img> + onerror 兜底；
+      // 再经 materialDock 切段，保证「材料N」高亮与段间距和教师端一致。
+      var html = this.renderQuestionContent(parts.join(''), { stripInlineOption: false });
+      return formatMaterialHtml(html);
     },
 
     // ===== 吸顶材料面板（script-only，遵守 raw 页 template 红线）=====
@@ -945,6 +948,7 @@ export default defineComponent({
     // capture=true：滚动事件不冒泡，但捕获阶段能收到内部滚动容器的事件
     window.addEventListener('scroll', this._onScroll, true);
 
+    ensureMaterialStyles();
     this.ensureToolbarFixed();
     this._onResize = this.ensureToolbarFixed.bind(this);
     window.addEventListener('resize', this._onResize);
