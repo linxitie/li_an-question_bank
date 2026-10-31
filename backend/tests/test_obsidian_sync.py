@@ -165,6 +165,26 @@ def test_board_multiple_checkboxes_are_rejected(tmp_path, db_session):
     assert quote.review_status == "pending"
 
 
+def test_inbox_draft_projection_is_skipped(tmp_path, db_session):
+    vault = tmp_path / "vault"
+    inbox = vault / "00-收件箱" / "金句"
+    inbox.mkdir(parents=True)
+    quote = _pending(db_session, "q_inbox_draft")
+    quote.review_status = "draft"
+    quote.status = 0
+    db_session.commit()
+    (inbox / "q_inbox_draft.md").write_text(
+        "---\nuid: q_inbox_draft\nstatus: draft\n---\n正文\n",
+        encoding="utf-8",
+    )
+
+    report = sync_review_inbox(db_session, vault)
+
+    assert report["processed"] == 0
+    assert report["skipped"] == 1
+    assert (inbox / "q_inbox_draft.md").exists()
+
+
 def test_note_without_uid_is_skipped(tmp_path, db_session):
     vault = tmp_path / "vault"
     board = vault / "00-收件箱" / "审核看板" / "抽样校准"

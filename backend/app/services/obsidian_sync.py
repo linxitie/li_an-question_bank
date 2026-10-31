@@ -121,6 +121,11 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
                     report["moved"] += 1
                 continue
 
+            # 投影导出的 draft 笔记自带 status: draft，不是人工回写动作
+            if not is_board and not checkbox_action and action == "request_changes" and current == "draft":
+                report["skipped"] += 1
+                continue
+
             if dry_run:
                 report["processed"] += 1
                 continue
