@@ -23,6 +23,7 @@ from sqlalchemy import desc, func
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import EssayQuote, QuoteFavorite, SysUser
+from ....services import quote_filter_service
 
 router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
@@ -244,6 +245,8 @@ async def get_daily_quote(
 @router.get("", summary="金句列表")
 async def get_quotes(
     category: Optional[str] = Query(None, description="分类筛选: 哲理/治国/民生/法治/品德"),
+    topic: Optional[str] = Query(None, description="主题 slug 或名称"),
+    q: Optional[str] = Query(None, description="金句内容模糊搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: SysUser = Depends(get_current_user),
@@ -253,6 +256,9 @@ async def get_quotes(
     query = db.query(EssayQuote).filter(EssayQuote.status == 1)
     if category:
         query = query.filter(EssayQuote.category == category)
+    if topic or q:
+        ids = quote_filter_service.filter_quote_ids(db, topic=topic, q=q)
+        query = query.filter(EssayQuote.quote_id.in_(ids))
 
     total = query.count()
     items = query.order_by(desc(EssayQuote.create_time))\
