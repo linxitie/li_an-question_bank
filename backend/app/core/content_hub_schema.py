@@ -26,6 +26,15 @@ _CONTENT_HUB_COLUMNS: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
+# 当前基线 user_notification 的字段（R0 早期版本用过 ntype/body/read_at）
+_USER_NOTIFICATION_COLUMNS: list[tuple[str, str]] = [
+    ("type", "TEXT NOT NULL DEFAULT 'system'"),
+    ("content", "TEXT"),
+    ("related_type", "TEXT"),
+    ("related_id", "INTEGER"),
+    ("is_read", "INTEGER DEFAULT 0"),
+]
+
 # 关系类型初始数据（relation, description, directed, src_types, dst_types）
 RELATION_SEED: tuple[tuple[str, str, int, str, str], ...] = (
     ("covers", "内容覆盖考点", 1, '["quote","news","recruitment"]', '["knowledge_point"]'),
@@ -40,10 +49,35 @@ RELATION_SEED: tuple[tuple[str, str, int, str, str], ...] = (
 )
 
 
+def _migrate_user_notification(engine: Engine, inspector) -> None:
+    """把 R0 早期的 user_notification 结构迁到当前基线。
+
+    - 空表：直接删除，交由 create_all 按当前模型重建；
+    - 有数据：只补缺失列，保留原数据与旧列。
+    """
+    tables = set(inspector.get_table_names())
+    if "user_notification" not in tables:
+        return
+    existing = {col["name"] for col in inspector.get_columns("user_notification")}
+    missing = [(name, ddl) for name, ddl in _USER_NOTIFICATION_COLUMNS if name not in existing]
+    if not missing:
+        return
+    with engine.begin() as conn:
+        count = conn.execute(text("SELECT COUNT(*) FROM user_notification")).scalar() or 0
+        if count == 0:
+            conn.execute(text("DROP TABLE user_notification"))
+            return
+        for name, ddl in missing:
+            conn.execute(text(f'ALTER TABLE "user_notification" ADD COLUMN "{name}" {ddl}'))
+
+
 def ensure_content_hub_schema(engine: Engine) -> None:
     """幂等建表、补列、种关系类型；可重复调用。"""
     # 确保所有 ORM 模型已注册到 metadata，再建缺失的新表
     from ..models import models  # noqa: F401  # 触发模型注册
+
+    inspector = inspect(engine)
+    _migrate_user_notification(engine, inspector)
 
     Base.metadata.create_all(bind=engine)
 
