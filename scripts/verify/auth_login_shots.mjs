@@ -97,15 +97,45 @@ async function main() {
   await cdp.send('Runtime.enable');
   mkdirSync(OUT, { recursive: true });
 
-  // 1) 登录
+  // 1) 登录：走 API 拿 token，再按登录页源码里的契约写 localStorage
+  //    （登录页 handleLogin 成功分支就是写 __VTJ_AUTH_STATE__，比模拟点按钮稳）
+  const form = `username=${encodeURIComponent(USER)}&password=${encodeURIComponent(PASS)}`;
+  const resp = await fetch('http://127.0.0.1:8010/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form,
+  });
+  if (!resp.ok) throw new Error(`API 登录失败 HTTP ${resp.status}`);
+  const tok = await resp.json();
+  const authState = {
+    token: tok.access_token,
+    refreshToken: tok.refresh_token || '',
+    username: USER,
+    loginTime: Date.now(),
+  };
+  console.log(`API 登录：OK（token 长度 ${String(tok.access_token).length}）`);
+
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await cdp.send('Page.navigate', { url: `${BASE}/#/login` });
-  await sleep(2500);
-  const r1 = await cdp.eval(FILL(USER, PASS));
-  await sleep(3000);
+  await sleep(1600);
+  // 先写存储（刷新后 provider 从 localStorage 水合），再调 __VTJ_AUTH__.login 同步内存态
+  await cdp.eval(
+    `localStorage.setItem('__VTJ_AUTH_STATE__', ${JSON.stringify(JSON.stringify(authState))}); true`);
+  const loginCall = await cdp.eval(`(async () => {
+    try {
+      if (!window.__VTJ_AUTH__ || typeof window.__VTJ_AUTH__.login !== 'function') return 'no-provider';
+      await window.__VTJ_AUTH__.login(${JSON.stringify(USER)}, ${JSON.stringify(PASS)});
+      return 'ok';
+    } catch (e) { return 'err:' + (e && e.message); }
+  })()`);
+  await sleep(1800);
+  await cdp.send('Page.navigate', { url: 'about:blank' });
+  await sleep(200);
+  await cdp.send('Page.navigate', { url: `${BASE}/#/badges` });
+  await sleep(2600);
   const after = await cdp.eval('location.hash');
-  const logged = !String(after).includes('login');
-  console.log(`登录：${r1} → hash=${after} → ${logged ? 'OK' : 'FAIL'}`);
+  const logged = String(after).includes('/badges');
+  console.log(`provider.login=${loginCall} → hash=${after} → ${logged ? 'OK' : 'FAIL'}`);
 
   const shots = [];
   const shoot = async (name) => {
