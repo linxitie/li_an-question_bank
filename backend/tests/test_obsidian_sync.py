@@ -82,3 +82,43 @@ def test_conflict_is_moved_aside(tmp_path, db_session):
     assert report["moved"] == 1
     assert not (inbox_dir / "q_sync_conflict.md").exists()
     assert list((vault / "00-收件箱" / "冲突").glob("q_sync_conflict-*.md"))
+
+
+def test_board_can_reject_published_quote(tmp_path, db_session):
+    vault = tmp_path / "vault"
+    board = vault / "00-收件箱" / "审核看板"
+    board.mkdir(parents=True)
+    quote = _pending(db_session, "q_board_reject")
+    quote.review_status = "published"
+    quote.status = 1
+    db_session.commit()
+    (board / "q_board_reject.md").write_text(
+        "---\nuid: q_board_reject\nstatus: rejected\nreview_note: 来源不可信\n---\n正文\n",
+        encoding="utf-8",
+    )
+
+    report = sync_review_inbox(db_session, vault)
+
+    assert report["processed"] == 1
+    db_session.refresh(quote)
+    assert quote.review_status == "rejected"
+    assert quote.status == 0
+    assert not (board / "q_board_reject.md").exists()
+    assert list((vault / "07-归档" / "审核记录").glob("q_board_reject-*.md"))
+
+
+def test_board_needs_human_is_skipped(tmp_path, db_session):
+    vault = tmp_path / "vault"
+    board = vault / "00-收件箱" / "审核看板"
+    board.mkdir(parents=True)
+    _pending(db_session, "q_board_wait")
+    (board / "q_board_wait.md").write_text(
+        "---\nuid: q_board_wait\nstatus: needs_human\n---\n正文\n",
+        encoding="utf-8",
+    )
+
+    report = sync_review_inbox(db_session, vault)
+
+    assert report["processed"] == 0
+    assert report["skipped"] == 1
+    assert (board / "q_board_wait.md").exists()

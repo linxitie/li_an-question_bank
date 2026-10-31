@@ -16,7 +16,11 @@ TRANSITIONS: dict[str, dict[str, str]] = {
         "reject": "rejected",
         "request_changes": "draft",
     },
-    "published": {"archive": "archived"},
+    "published": {
+        "archive": "archived",
+        "reject": "rejected",
+        "request_changes": "draft",
+    },
     "rejected": {"request_changes": "draft"},
     "archived": {},
 }

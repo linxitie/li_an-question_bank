@@ -52,12 +52,13 @@ def _move(vault: Path, path: Path, *parts: str, name: str) -> None:
 
 
 def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[str, Any]:
-    """扫描 00-收件箱/金句，按 frontmatter.status 回写审核结果。"""
+    """扫描收件箱与审核看板，按 frontmatter.status 回写审核结果。"""
     vault = Path(vault).expanduser()
     if not vault.exists() or not vault.is_dir():
         return {"ok": False, "error": "vault_not_found", "vault": str(vault)}
 
     inbox = _safe_path(vault, "00-收件箱", "金句")
+    board = _safe_path(vault, "00-收件箱", "审核看板")
     report: dict[str, Any] = {
         "ok": True,
         "processed": 0,
@@ -65,61 +66,76 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
         "moved": 0,
         "errors": [],
     }
-    if not inbox.is_dir():
+    folders = [folder for folder in (inbox, board) if folder.is_dir()]
+    if not folders:
         return report
 
-    for path in sorted(inbox.glob("*.md")):
-        fields, _body = parse_note(path.read_text(encoding="utf-8"))
-        uid = fields.get("uid") or path.stem
-        raw_status = (fields.get("status") or "").strip()
-        action = _STATUS_ACTIONS.get(raw_status.lower())
-        if not action:
-            report["skipped"] += 1
-            continue
+    for folder in folders:
+        is_board = folder == board
+        for path in sorted(folder.glob("*.md")):
+            fields, _body = parse_note(path.read_text(encoding="utf-8"))
+            uid = fields.get("uid") or path.stem
+            raw_status = (fields.get("status") or "").strip()
+            action = _STATUS_ACTIONS.get(raw_status.lower())
+            if not action:
+                report["skipped"] += 1
+                continue
 
-        quote = quote_review_service.get_quote(db, uid)
-        if not quote:
-            report["errors"].append(f"{uid}: quote not found")
-            continue
+            quote = quote_review_service.get_quote(db, uid)
+            if not quote:
+                report["errors"].append(f"{uid}: quote not found")
+                continue
 
-        current = quote.review_status or "published"
-        if current not in ("pending", "draft"):
-            report["skipped"] += 1
-            if not dry_run:
-                _move(
-                    vault,
-                    path,
-                    "00-收件箱",
-                    "冲突",
-                    name=f"{uid}-{datetime.now():%Y%m%d_%H%M%S_%f}.md",
-                )
-                report["moved"] += 1
-            continue
+            current = quote.review_status or "published"
+            allowed = ("pending", "draft", "published") if is_board else ("pending", "draft")
+            if current not in allowed:
+                report["skipped"] += 1
+                if not dry_run:
+                    _move(
+                        vault,
+                        path,
+                        "00-收件箱",
+                        "冲突",
+                        name=f"{uid}-{datetime.now():%Y%m%d_%H%M%S_%f}.md",
+                    )
+                    report["moved"] += 1
+                continue
 
-        if dry_run:
-            report["processed"] += 1
-            continue
+            if dry_run:
+                report["processed"] += 1
+                continue
 
-        try:
-            quote_review_service.review_quote(
-                db,
-                quote_ref=uid,
-                action=action,
-                reviewer=None,
-                reason=fields.get("review_note", ""),
+            noop = (
+                (action == "approve" and current == "published")
+                or (action == "reject" and current == "rejected")
+                or (action == "request_changes" and current == "draft")
             )
-        except ValueError as exc:
-            report["errors"].append(f"{uid}: {exc}")
-            continue
+            if not noop:
+                try:
+                    quote_review_service.review_quote(
+                        db,
+                        quote_ref=uid,
+                        action=action,
+                        reviewer=None,
+                        reason=fields.get("review_note", ""),
+                    )
+                except ValueError as exc:
+                    report["errors"].append(f"{uid}: {exc}")
+                    continue
 
-        _move(
-            vault,
-            path,
-            "07-归档",
-            "审核记录",
-            name=f"{uid}-{datetime.now():%Y%m%d_%H%M%S_%f}.md",
-        )
-        report["processed"] += 1
-        report["moved"] += 1
+            _move(
+                vault,
+                path,
+                "07-归档",
+                "审核记录",
+                name=f"{uid}-{datetime.now():%Y%m%d_%H%M%S_%f}.md",
+            )
+            report["processed"] += 1
+            report["moved"] += 1
+
+    if board.is_dir() and report["processed"] and not dry_run:
+        from .review_board_export import export_review_board
+
+        report["board_refresh"] = export_review_board(db, vault)
 
     return report
