@@ -1,5 +1,6 @@
 """R1 金句审核状态机 API 测试。"""
 from app.models.models import EssayQuote, QuoteReview
+from app.services.quote_review_service import get_quote
 
 
 def _pending_quote(db, uid="q_r1_test"):
@@ -106,3 +107,8 @@ def test_candidates_lists_pending(client, db_session, admin_headers):
 
     assert response.status_code == 200
     assert response.json()["total"] == 2
+
+
+def test_get_quote_supports_imported_uid(db_session):
+    quote = _pending_quote(db_session, uid="20260815-153000-0009")
+    assert get_quote(db_session, "20260815-153000-0009").quote_id == quote.quote_id

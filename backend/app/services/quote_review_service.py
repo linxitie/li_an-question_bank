@@ -30,8 +30,9 @@ REASON_REQUIRED_ACTIONS = {"reject", "request_changes"}
 
 def get_quote(db: Session, quote_ref: str | int) -> EssayQuote | None:
     ref = str(quote_ref)
-    if ref.startswith("q_"):
-        return db.query(EssayQuote).filter(EssayQuote.quote_uid == ref).first()
+    quote = db.query(EssayQuote).filter(EssayQuote.quote_uid == ref).first()
+    if quote:
+        return quote
     try:
         quote_id = int(ref)
     except ValueError:
