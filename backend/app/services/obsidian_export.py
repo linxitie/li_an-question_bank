@@ -75,6 +75,7 @@ def _render_quote(db: Session, quote: EssayQuote) -> str:
         f"topics: {json.dumps(topics, ensure_ascii=False)}\n"
         f"source: {quote.source or ''}\n"
         f"author: {quote.author or ''}\n"
+        "review_note: \"\"\n"
         "---\n\n"
         f"{quote.content}\n"
     )
@@ -137,6 +138,28 @@ def _write_if_changed(
     manifest[rel] = digest
 
 
+def _write_inbox_once(
+    vault: Path,
+    quote: EssayQuote,
+    content: str,
+    dry_run: bool,
+    stats: dict[str, int],
+) -> None:
+    """待审收件箱只写一次；已存在的文件可能含人工修改，绝不覆盖。"""
+    uid = quote.quote_uid or f"q_{quote.quote_id:06d}"
+    target = _safe_path(vault, "00-收件箱", "金句", f"{uid}.md")
+    if target.exists():
+        stats["skipped"] += 1
+        return
+    stats["written"] += 1
+    if dry_run:
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.replace(target)
+
+
 def export_all(db: Session, vault: Path, dry_run: bool = False) -> dict[str, Any]:
     """导出 R0 投影；返回 {ok, written, skipped, vault, error?}。"""
     vault = Path(vault).expanduser()
@@ -171,8 +194,20 @@ def export_all(db: Session, vault: Path, dry_run: bool = False) -> dict[str, Any
             stats,
         )
 
-    quotes = db.query(EssayQuote).filter(EssayQuote.status == 1).order_by(EssayQuote.quote_id).all()
+    quotes = db.query(EssayQuote).order_by(EssayQuote.quote_id).all()
     for quote in quotes:
+        status = quote.review_status or "published"
+        if status in ("pending", "draft"):
+            _write_inbox_once(
+                vault,
+                quote,
+                _render_quote(db, quote),
+                dry_run,
+                stats,
+            )
+            continue
+        if quote.status != 1:
+            continue
         uid = quote.quote_uid or f"q_{quote.quote_id:06d}"
         _write_if_changed(
             vault,

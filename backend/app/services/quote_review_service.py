@@ -50,7 +50,7 @@ def review_quote(
     *,
     quote_ref: str | int,
     action: str,
-    reviewer: SysUser,
+    reviewer: SysUser | None = None,
     reason: str = "",
 ) -> tuple[EssayQuote, QuoteReview]:
     quote = get_quote(db, quote_ref)
@@ -69,7 +69,7 @@ def review_quote(
 
     log = QuoteReview(
         quote_id=quote.quote_id,
-        reviewer_id=reviewer.user_id,
+        reviewer_id=reviewer.user_id if reviewer else None,
         action=action,
         reason=reason,
         diff_json=json.dumps(
