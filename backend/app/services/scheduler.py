@@ -338,7 +338,7 @@ def init_scheduler():
         trigger=CronTrigger(hour=3, minute=30, timezone=CST),
         id="audit_forum_recycle",
         name="每日论坛回收站审计",
-        replace_existing=True
+        replace_existing=True,
     )
 
     scheduler.start()
