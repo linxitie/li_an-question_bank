@@ -52,6 +52,60 @@ def tier_of(score: int) -> Dict[str, Any]:
     }
 
 
+# 成就条件 → 固定成色的门槛表（与 scripts/backfill_badge_tier.py 的 RULES 同源）
+TIER_RULES: Dict[str, tuple] = {
+    "first_login": ({}, "黑铁"),
+    "streak_days": ({3: "青铜", 7: "白银", 15: "黄金", 30: "钻石"}, "青铜"),
+    "month_days": ({}, "白银"),
+    "morning_bird": ({}, "青铜"),
+    "night_owl": ({}, "青铜"),
+    "total_questions": ({100: "青铜", 300: "白银", 1000: "黄金", 3000: "黄金",
+                         5000: "钻石", 10000: "钻石"}, "青铜"),
+    "today_questions": ({}, "青铜"),
+    "week_questions": ({}, "白银"),
+    "session_perfect_any": ({}, "青铜"),
+    "session_perfect": ({}, "白银"),
+    "session_accuracy": ({}, "白银"),
+    "accuracy80_streak": ({}, "白银"),
+    "week_accuracy": ({}, "白银"),
+    "month_accuracy": ({}, "黄金"),
+    "perfect_streak": ({}, "黄金"),
+    "view_wrong_first": ({}, "黑铁"),
+    "review_count": ({50: "青铜", 200: "白银"}, "青铜"),
+    "chop_count": ({10: "青铜", 100: "白银", 1000: "钻石"}, "青铜"),
+    "post_count": ({1: "黑铁", 10: "青铜", 50: "白银"}, "青铜"),
+    "single_post_likes": ({}, "白银"),
+    "total_likes": ({50: "白银", 200: "黄金"}, "白银"),
+    "three_subject_each": ({}, "白银"),
+    "three_subject_accuracy": ({}, "钻石"),
+    "level_reach": ({}, "黄金"),
+    "total_coins": ({}, "白银"),
+    "favorite_count": ({}, "黑铁"),
+    "note_count": ({}, "青铜"),
+    "quote_favorite_count": ({}, "白银"),
+    "material_read_count": ({1: "黑铁", 5: "青铜", 20: "白银"}, "黑铁"),
+}
+
+
+def tier_for_condition(code: str, threshold) -> str:
+    """按成就条件与门槛给出**固定成色**（新建徽章时用，与历史回填一致）。"""
+    mapping, default = TIER_RULES.get(code or "", ({}, "青铜"))
+    try:
+        t = int(threshold or 0)
+    except (TypeError, ValueError):
+        return default
+    if not mapping:
+        return default
+    keys = sorted(mapping)
+    if t <= keys[0]:
+        return mapping[keys[0]]
+    hit = mapping[keys[0]]
+    for k in keys:
+        if t >= k:
+            hit = mapping[k]
+    return hit
+
+
 def progress_to_next(score: int) -> Dict[str, Any]:
     """当前档位 → 下一档的进度（钻石档返回 maxed=True，积分继续累积）。"""
     s = max(0, int(score or 0))

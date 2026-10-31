@@ -283,6 +283,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '徽章预览', roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/materials/upload',
+    name: 'MaterialUpload',
+    component: () => import('@/views/student/material_upload.vue'),
+    meta: { title: '上传备考资料', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/materials-preview',
+    name: 'MaterialsPreview',
+    component: () => import('@/views/dev/MaterialsPreview.vue'),
+    meta: { title: '资料内容验收', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/materials/detail',
     name: 'MaterialDetail',
     component: () => import('@/views/pc/material_detail.vue'),
@@ -616,10 +628,22 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const device = detectDevice();
 
-  // 1) 已在设备专属路径（/tablet、/mobile）→ 校验角色：移动/平板端仅学生可访问
-  //    教师/管理员（已登录且非 student）跳转提示页；未登录放行到各端登录页
+  // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再验角色
+  //    - 未登录：只放行各端登录页，其余跳转到对应端登录页并带 redirect
+  //      （此前这里直接 `next()`，导致 /mobile/* 未登录也能进——已修）
+  //    - 教师/管理员：跳 /unauthorized
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
     const auth = (window as any).__VTJ_AUTH__;
+    const logged = auth && typeof auth.isLoggedIn === 'function'
+      ? !!auth.isLoggedIn()
+      : false;
+    const isLoginPage = /^\/(tablet|mobile)\/login\/?$/.test(to.path)
+      || to.path === '/unauthorized';
+    if (!logged) {
+      if (isLoginPage) return next();
+      const loginPath = to.path.startsWith('/tablet') ? '/tablet/login' : '/mobile/login';
+      return next({ path: loginPath, query: { redirect: to.fullPath } });
+    }
     const role = auth ? auth.getUserRole() : null;
     if (role && role !== 'student') {
       return next('/unauthorized?reason=mobile_student_only');
@@ -644,6 +668,17 @@ router.beforeEach((to, _from, next) => {
   }
 
   if (to.path === '/badge-preview') {
+    return next();
+  }
+
+  // 资料内容验收页：只读公开接口（/api/materials 游客可访问），允许未登录查看
+  if (to.path === '/materials-preview') {
+    return next();
+  }
+
+  // 上传页的演示态（?demo=1）：只渲染界面与本页内 mock 数据，不触达任何接口，
+  // 便于截图与设计走查；正常访问（无 demo 参数）仍走登录 + 角色校验。
+  if (to.path === '/materials/upload' && to.query.demo === '1') {
     return next();
   }
 

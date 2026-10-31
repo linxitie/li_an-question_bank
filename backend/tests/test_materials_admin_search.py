@@ -35,7 +35,7 @@ def tagged_cards(admin_client):
             "title": title,
             "card_front": f"正面-{tag}",
             "card_back": f"背面-{tag}",
-            "category": "自动化测试",
+            "category": "知觉速度与准确性",
             "publish": False,
         }
         r = admin_client.post("/api/materials/admin", json=body)
@@ -61,7 +61,7 @@ class TestAdminListSearch:
         """分类也应参与匹配（实现为 title OR category LIKE）"""
         tag, _ = tagged_cards
         r = admin_client.get("/api/materials/admin/list",
-                             params={"keyword": "自动化测试", "page_size": 100})
+                             params={"keyword": "知觉速度与准确性", "page_size": 100})
         assert r.status_code == 200
         items = r.json()["items"]
         assert any(tag in (i.get("title") or "") for i in items), "分类匹配结果里应含刚建的卡"

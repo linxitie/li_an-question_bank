@@ -1,5 +1,5 @@
 <template>
-  <div class="page">
+  <div class="page" :class="`theme-${activeSubject}`">
     <header class="topbar">
       <button class="back-btn" @click="goBack" aria-label="返回">←</button>
       <h1 class="title">备考资料</h1>
@@ -20,7 +20,7 @@
 
       <!-- 卡片栈（B4）：5 层堆叠 + 3D 翻转 + 上一张/下一张 + 字号三档 -->
       <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
-        <div class="stack" :class="{ 'is-flipped': flipped }">
+        <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering' }">
           <div
             v-for="(c, i) in stackCards"
             :key="c.id"
@@ -240,17 +240,24 @@ const stackCards = computed(() =>
 const flip = () => {
   if (cardItems.value.length) flipped.value = !flipped.value;
 };
-const nextCard = () => {
-  if (cardIndex.value < cardItems.value.length - 1) {
+// 翻页动效（与电脑端 detail 页同构）：上一层走出 → 新卡片进入
+const phase = ref<'idle' | 'leaving' | 'entering'>('idle');
+let phaseTimer: number | undefined;
+function playSwitch(delta: number) {
+  if (phase.value !== 'idle') return;
+  phase.value = 'leaving';
+  phaseTimer = window.setTimeout(() => {
+    cardIndex.value += delta;
     flipped.value = false;
-    cardIndex.value += 1;
-  }
+    phase.value = 'entering';
+    phaseTimer = window.setTimeout(() => { phase.value = 'idle'; }, 240);
+  }, 200);
+}
+const nextCard = () => {
+  if (cardIndex.value < cardItems.value.length - 1) playSwitch(1);
 };
 const prevCard = () => {
-  if (cardIndex.value > 0) {
-    flipped.value = false;
-    cardIndex.value -= 1;
-  }
+  if (cardIndex.value > 0) playSwitch(-1);
 };
 const setScale = (v: number) => {
   fontScale.value = v;
@@ -551,4 +558,66 @@ onMounted(fetchMaterials);
   border: 1px solid #eef1f6; background: #fff; color: #5a6b85;
 }
 .font-row button.on { border-color: #3b82f6; color: #3b82f6; }
+
+/* ===== 修复：科目三色主题（与电脑端 detail 页一致） ===== */
+.theme-xingce { --c1: #1e3a8a; --c2: #3b82f6; --c-soft: #eef4ff; }
+.theme-shenlun { --c1: #047857; --c2: #34d399; --c-soft: #ecfdf5; }
+.theme-gongzhuan { --c1: #9f1239; --c2: #f43f5e; --c-soft: #fff1f4; }
+
+/* 修复 1：科目栏不再被卡片盖住 */
+.tabs {
+  position: sticky;
+  top: 56px;
+  z-index: 30;
+  background: #fff;
+  box-shadow: 0 6px 14px rgba(26, 42, 74, 0.06);
+}
+.tab.active {
+  background: var(--c1);
+  border-color: var(--c1);
+  color: #fff;
+}
+.stack-wrap { padding: 18px 16px 6px; }
+.stack { z-index: 1; }
+
+/* 修复 2：卡片头部改成科目渐变条，正文区收紧留白 */
+.stack-card { background: #fff; }
+.card-face { padding: 0; }
+.card-face .card-head {
+  margin: 0;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--c1), var(--c2));
+  border-radius: 16px 16px 0 0;
+}
+.card-face .card-head .tag {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  border: none;
+}
+.card-face .card-head .idx { color: rgba(255, 255, 255, 0.85); }
+.card-face .card-title { padding: 12px 16px 0; }
+.card-face .card-text { padding: 6px 16px 0; }
+.card-face .card-foot { padding: 6px 16px 12px; margin-top: 0; }
+.card-face.back { background: var(--c-soft); }
+.card-face.back .card-head {
+  background: linear-gradient(135deg, var(--c1), var(--c2));
+}
+
+/* 修复 3：翻页动效（走出 / 进入） */
+.stack-card.lv0 { transition: transform 0.2s ease, opacity 0.2s ease; }
+.stack.is-leaving .stack-card.lv0 {
+  transform: translateX(-118%) rotate(-7deg);
+  opacity: 0;
+}
+.stack.is-entering .stack-card.lv0 {
+  animation: sm-enter 0.24s ease-out both;
+}
+@keyframes sm-enter {
+  from { transform: translateX(46%) rotate(5deg); opacity: 0; }
+  to { transform: translateX(0) rotate(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stack.is-leaving .stack-card.lv0,
+  .stack.is-entering .stack-card.lv0 { animation: none; transform: none; opacity: 1; }
+}
 </style>

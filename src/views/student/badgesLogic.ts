@@ -6,6 +6,10 @@
  */
 
 export interface BadgeItem {
+  badge_tier?: string;
+  rarity_text?: string;
+  is_first_owner?: boolean;
+
   kind: 'achievement' | 'title' | string;
   id: number;
   name: string;
@@ -18,6 +22,10 @@ export interface BadgeItem {
   owned: boolean;
   obtained_at?: string | null;
   snapshot_tier?: string | null;
+  snapshot_estimated?: boolean;
+  pinned?: boolean;
+  owned_count?: number;
+  owned_percent?: number;
   current_tier?: string;
 }
 

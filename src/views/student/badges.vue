@@ -8,6 +8,13 @@
       <span class="bd-total" v-if="!loading">共 {{ total }} 枚</span>
     </header>
 
+    <!-- T5：金币购只读入口（不改造商城，只展示余额与跳转） -->
+    <div class="bd-coins">
+      <span class="bd-coins-num">{{ coins }}</span>
+      <span class="bd-coins-lab">可用金币</span>
+      <button class="bd-coins-link" @click="goCoinsMall">去金币购 →</button>
+    </div>
+
     <BadgeTierCard
       :score="score"
       :tier-index="tierIndex"
@@ -78,6 +85,7 @@
       :item="detailItem"
       :current-tier-index="tierIndex"
       @close="detailItem = null"
+      @toggle-pin="togglePin"
     />
   </div>
 </template>
@@ -114,6 +122,7 @@ const score = ref(0);
 const tierIndex = ref(0);
 const owned = ref(0);
 const total = ref(0);
+const coins = ref(0);
 const loading = ref(true);
 const error = ref('');
 const page = ref(1);
@@ -121,6 +130,38 @@ const detailItem = ref<BadgeItem | null>(null);
 
 const openDetail = (item: BadgeItem) => {
   detailItem.value = item;
+};
+/** T5：跳金币购（只读入口，不改商城） */
+const goCoinsMall = () => {
+  window.location.hash = '#/page/gold_purchase';
+};
+
+/** T2：设为/取消精选——先取当前精选列表，再整体 PUT（≤6 枚） */
+const togglePin = async (item: BadgeItem) => {
+  try {
+    const cur = await apiFetch('/api/badges/top').then((r: Response) => (r.ok ? r.json() : null));
+    const list: number[] = (cur?.items || []).map((i: any) => Number(i.id));
+    const pinned = list.includes(Number(item.id));
+    let next = pinned
+      ? list.filter((x) => x !== Number(item.id))
+      : [...list, Number(item.id)];
+    if (next.length > 6) next = next.slice(next.length - 6);
+    const resp = await apiFetch('/api/badges/top', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: next.map((id) => ({ kind: 'achievement', id })) })
+    });
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      throw new Error(d.detail || `保存失败（${resp.status}）`);
+    }
+    if (detailItem.value) {
+      (detailItem.value as any).pinned = !pinned;
+    }
+    await load();
+  } catch (e) {
+    alert((e as Error)?.message || '精选保存失败');
+  }
 };
 const filters = reactive<BadgeFilters>({ ...DEFAULT_FILTERS });
 
@@ -144,7 +185,10 @@ const categories = computed(() => {
   return Array.from(set);
 });
 
-const tierLabelOf = (it: BadgeItem) => it.snapshot_tier || it.current_tier || '黑铁';
+// 档位筛选以「固定成色 badge_tier」为准：未获得徽章没有 snapshot_tier，
+// 旧写法会全部落到黑铁，导致「选了白银却什么都不显示」。
+const tierLabelOf = (it: BadgeItem) =>
+  (it as any).badge_tier || it.snapshot_tier || it.current_tier || '黑铁';
 
 const filtered = computed(() => {
   const byBase = filterBadges(items.value, filters);
@@ -162,6 +206,11 @@ const load = async () => {
   loading.value = true;
   error.value = '';
   try {
+    // 金币余额（T5）单独拉一次，失败不影响徽章展示
+    apiFetch('/api/badges/summary')
+      .then((r: Response) => (r.ok ? r.json() : null))
+      .then((d: any) => { if (d) coins.value = Number(d.coins || 0); })
+      .catch(() => {});
     const resp = await apiFetch('/api/badges/my');
     if (!resp.ok) {
       error.value =
@@ -297,4 +346,27 @@ onMounted(load);
   margin-top: 16px;
   text-align: center;
 }
+
+/* T5 金币购只读入口 */
+.bd-coins {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid #e5eaf3;
+  border-radius: 12px;
+}
+.bd-coins-num { font-size: 20px; font-weight: 700; color: #b45309; }
+.bd-coins-lab { font-size: 12px; color: #6b7280; }
+.bd-coins-link {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: #2a5298;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.bd-coins-link:hover { text-decoration: underline; }
 </style>

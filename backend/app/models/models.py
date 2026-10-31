@@ -1256,7 +1256,9 @@ class StudyMaterial(Base):
     material_id = Column(Integer, primary_key=True, autoincrement=True, comment="资料ID")
     subject = Column(String(20), nullable=False, comment="科目: xingce/shenlun/gongzhuan")
     type = Column(String(20), nullable=False, comment="类型: video_intro/video_advanced/article/card")
-    category = Column(String(50), comment="分类标签")
+    category = Column(String(50), comment="分类标签(必须是 sub_categories 子类名)")
+    point_id = Column(Integer, ForeignKey("knowledge_point.point_id"),
+                      comment="考点ID(分类法第三层: 子类→考点→资料)")
     title = Column(String(200), nullable=False, comment="标题")
     summary = Column(String(500), comment="摘要")
     content = Column(Text, comment="文章HTML(bleach消毒后)；卡片时为背面详述")
@@ -1818,6 +1820,7 @@ class Achievement(Base):
     is_hidden = Column(Integer, default=0, comment="是否隐藏成就: 1=条件对学生隐藏(仅剪影)")
     style_params = Column(JSON, comment="徽章视觉参数JSON(shape/material/palette/icon等)")
     tier_times = Column(JSON, comment="五档升级阈值倍数数组如[1,2,4,8,16]; NULL=不升档")
+    badge_tier = Column(String(20), comment="固定成色(黑铁/青铜/白银/黄金/钻石)，按获取难度定，不随玩家基数变")
 
     __table_args__ = (
         Index("idx_achievement_category", category),
@@ -1835,12 +1838,31 @@ class UserAchievement(Base):
     obtained_at = Column(DateTime, default=datetime.now, comment="获得时间")
     tier = Column(Integer, default=1, comment="徽章档位: 1铜/2银/3金/4铂金/5钻石")
     tier_snapshot = Column(Integer, comment="获得时的档位索引 0-4（与 badge_service.TIERS 对齐）")
+    snapshot_estimated = Column(Integer, default=0,
+                                comment="1=档位快照为回填估算（2026-10-30 前获得的历史数据）")
 
     user = relationship("SysUser")
 
     __table_args__ = (
         UniqueConstraint("user_id", "achievement_id", name="uk_user_achievement"),
         Index("idx_user_achievement_user", user_id),
+    )
+
+
+class UserBadgeTop(Base):
+    """用户手动精选徽章（个人主页墙优先展示，最多 6 枚）"""
+    __tablename__ = "user_badge_top"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    badge_kind = Column(String(16), nullable=False, comment="achievement / title")
+    badge_id = Column(Integer, nullable=False, comment="成就ID或称号ID")
+    sort = Column(Integer, default=0, comment="展示顺序，越小越靠前")
+    created_at = Column(DateTime, default=datetime.now, comment="设置时间")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "badge_kind", "badge_id", name="uk_user_badge_top"),
+        Index("idx_user_badge_top", user_id, sort),
     )
 
 

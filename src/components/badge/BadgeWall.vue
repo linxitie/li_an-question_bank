@@ -40,7 +40,7 @@ defineEmits<{ (e: 'select', item: BadgeItem): void; (e: 'viewAll'): void }>();
 
 const LABEL_TO_INDEX: Record<string, number> = { 黑铁: 0, 青铜: 1, 白银: 2, 黄金: 3, 钻石: 4 };
 const tierIndexOf = (it: BadgeItem): number => {
-  const label = it.snapshot_tier || it.current_tier || '黑铁';
+  const label = it.badge_tier || it.current_tier || '黑铁';
   return LABEL_TO_INDEX[label] ?? props.currentTierIndex;
 };
 </script>

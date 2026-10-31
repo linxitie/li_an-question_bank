@@ -23,6 +23,7 @@ __all__ = [
     "list_user_achievements",
     "count_user_achievements",
     "achievement_owner_counts",
+    "achievement_first_owners",
     "total_users",
 ]
 
@@ -43,14 +44,38 @@ def achievement_fields(a: Achievement) -> Dict[str, object]:
     """把成长域模型投影成中性 dict（其他域只依赖这个结构）。"""
     return {
         "id": a.achievement_id,
+        "achievement_id": a.achievement_id,
         "name": a.name,
         "category": a.category,
         "icon": a.icon,
         "condition_desc": a.condition_desc,
         "reward_coins": a.reward_coins or 0,
         "threshold": a.threshold or 0,
+        "badge_tier": getattr(a, "badge_tier", None),
         "hidden": bool(a.is_hidden),
     }
+
+
+def achievement_first_owners(db: Session) -> Dict[int, int]:
+    """每个成就「全服最早获得」的用户 ID；无人获得的不出现在结果里。"""
+    rows = (
+        db.query(UserAchievement.achievement_id,
+                 func.min(UserAchievement.obtained_at))
+        .group_by(UserAchievement.achievement_id)
+        .all()
+    )
+    first: Dict[int, int] = {}
+    for aid, ts in rows:
+        if ts is None:
+            continue
+        owner = (db.query(UserAchievement.user_id)
+                 .filter(UserAchievement.achievement_id == aid,
+                         UserAchievement.obtained_at == ts)
+                 .order_by(UserAchievement.user_id)
+                 .first())
+        if owner:
+            first[int(aid)] = int(owner[0])
+    return first
 
 
 def list_titles(db: Session) -> List[Title]:

@@ -99,8 +99,8 @@ describe('needToNext 进度', () => {
 });
 
 describe('辅助函数', () => {
-  it('SHAPE_LABELS 覆盖四类形状', () => {
-    expect(Object.keys(SHAPE_LABELS)).toEqual(['shield', 'ribbon', 'rosette', 'gem']);
+  it('SHAPE_LABELS 覆盖五类形状（v3 新增 star=准确率）', () => {
+    expect(Object.keys(SHAPE_LABELS)).toEqual(['shield', 'ribbon', 'rosette', 'gem', 'star']);
   });
 
   it('nextBadgeUid 每次唯一（避免同页渐变 id 冲突）', () => {

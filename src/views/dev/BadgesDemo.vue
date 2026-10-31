@@ -52,6 +52,27 @@
 
     <BadgeDetailModal :item="detailItem" :current-tier-index="tierIndex" @close="detailItem = null" />
 
+    <!-- 个人主页徽章墙的等价预览（同一套卡片样式，选中项即精选徽章） -->
+    <section class="bd-wall-strip">
+      <div class="bws-head">
+        <h2>我的徽章（主页墙预览 · 精选优先）</h2>
+        <span class="bws-all">查看全部 →</span>
+      </div>
+      <div class="bws-grid">
+        <div v-for="b in wallPinned" :key="`w-${b.id}`" class="bws-item">
+          <BadgeIcon
+            :shape="(b.shape as BadgeShape) || 'shield'"
+            :tier="tierIndexOf(b)"
+            :size="66"
+            :locked="!b.owned"
+          />
+          <span class="bws-name">{{ b.name }}</span>
+          <span v-if="b.owned && b.rarity_text" class="bws-rarity">{{ b.rarity_text }}</span>
+          <span v-if="b.is_first_owner" class="bws-first">全服首个获得</span>
+        </div>
+      </div>
+    </section>
+
     <footer class="bd-pager">
       <button class="bd-page-btn" :disabled="page <= 1" @click="goPage(page - 1)">上一页</button>
       <span class="bd-page-info">第 {{ page }} / {{ maxPage }} 页 · 共 {{ filteredTotal }} 枚</span>
@@ -64,9 +85,10 @@
 import { computed, reactive, ref } from 'vue';
 import BadgeTierCard from '@/components/badge/BadgeTierCard.vue';
 import BadgesGrid from '@/components/badge/BadgesGrid.vue';
+import BadgeIcon from '@/components/badge/BadgeIcon.vue';
 import BadgeWall from '@/components/badge/BadgeWall.vue';
 import BadgeDetailModal from '@/components/badge/BadgeDetailModal.vue';
-import { BADGE_TIERS } from '@/components/badge/badgePalette';
+import { BADGE_TIERS, type BadgeShape } from '@/components/badge/badgePalette';
 import {
   filterBadges,
   filterByTier,
@@ -97,6 +119,8 @@ const NAMES: Array<[string, string, boolean]> = [
   ['宗师', '称号', false], ['砺安之星', '称号', true], ['公考达人', '称号', false]
 ];
 
+const TIER_LABELS = ['黑铁', '青铜', '白银', '黄金', '钻石'];
+
 const items: BadgeItem[] = NAMES.map(([name, category, isOwned], i) => ({
   kind: category === '称号' ? 'title' : 'achievement',
   id: i + 1,
@@ -104,9 +128,15 @@ const items: BadgeItem[] = NAMES.map(([name, category, isOwned], i) => ({
   category,
   shape: SHAPES[category] || 'shield',
   owned: isOwned,
+  // 演示页刻意铺满 5 档，且已获得/未获得交替，便于一次看全新样式
+  badge_tier: TIER_LABELS[i % 5],
   obtained_at: isOwned ? `2026-10-${(i % 27) + 1}` : null,
-  snapshot_tier: isOwned ? '黄金' : null,
+  snapshot_tier: TIER_LABELS[i % 5],
   current_tier: '黄金',
+  rarity_text: `全服 ${Math.round(((120 + i * 37) / 1204) * 1000) / 10}% 获得`,
+  is_first_owner: isOwned && i % 7 === 1,
+  pinned: i < 3,                       // 演示精选：前 3 枚
+  snapshot_estimated: i % 4 === 0,     // 演示「（估算）」标注
   threshold: isOwned ? 0 : (i % 5) * 10,
   condition_desc: isOwned
     ? '达成对应学习条件后自动解锁（演示数据）'
@@ -137,7 +167,22 @@ const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
   ...BADGE_TIERS.map((t) => ({ value: t.code as TierFilter, label: t.label }))
 ];
 
-const tierLabelOf = (it: BadgeItem) => it.snapshot_tier || it.current_tier || '黑铁';
+// 档位筛选以「固定成色 badge_tier」为准：未获得徽章没有 snapshot_tier，
+// 旧写法会全部落到黑铁，导致「选了白银却什么都不显示」。
+const tierLabelOf = (it: BadgeItem) =>
+  (it as any).badge_tier || it.snapshot_tier || it.current_tier || '黑铁';
+const tierIndexOf = (it: BadgeItem) => {
+  const label = (it as any).badge_tier || it.snapshot_tier || '黑铁';
+  const i = TIER_LABELS.indexOf(label);
+  return i < 0 ? 0 : i;
+};
+/** 主页墙预览：精选优先，其次按 id 顺序取前 6 枚 */
+const wallPinned = computed(() => {
+  const owned = items.filter((i) => i.owned);
+  const pinned = owned.filter((i) => (i as any).pinned);
+  const rest = owned.filter((i) => !(i as any).pinned);
+  return [...pinned, ...rest].slice(0, 6);
+});
 const filtered = computed(() => {
   const base = filterBadges(items, { ...filters, kind: kind.value, state: state.value });
   return filterByTier(base, tierFilter.value, tierLabelOf);
@@ -192,4 +237,36 @@ if (window.location.hash.includes('modal=1')) {
 }
 .bd-page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .bd-page-info { font-size: 12px; color: #8493a8; }
+
+/* 主页墙预览 */
+.bd-wall-strip {
+  margin-top: 18px;
+  background: #fff;
+  border: 1px solid #e5eaf3;
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+.bws-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.bws-head h2 { font-size: 15px; margin: 0; color: #16233b; }
+.bws-all { font-size: 12.5px; color: #2a5298; }
+.bws-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.bws-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.bws-name { font-size: 12.5px; color: #1f2d3d; }
+.bws-rarity { font-size: 11px; color: #94a3b8; }
+.bws-first {
+  font-size: 10.5px; color: #64748b; border: 1px solid #cbd5e1;
+  border-radius: 6px; padding: 0 5px;
+}
+@media (max-width: 900px) {
+  .bws-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 </style>
