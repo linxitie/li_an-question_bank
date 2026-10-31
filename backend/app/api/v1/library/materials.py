@@ -1002,6 +1002,15 @@ def _finalize_classification(db, data: dict) -> dict:
         data["category"] = resolved["category"]
     if resolved.get("point_id"):
         data["point_id"] = resolved["point_id"]
+
+    # F2 未分类兜底：两级自动分类都没命中时，落到该科目第一个子类并留痕，
+    # 避免「分类为空」的卡进库（空分类会让筛选、统计、按考点推荐全部失效）。
+    if not data.get("category"):
+        names = _category_names(db, subject)
+        if names:
+            data["category"] = names[0]
+            logger.warning("[materials] 分类兜底 material title=%r subject=%s -> %s",
+                           (data.get("title") or "")[:40], subject, names[0])
     return data
 
 
