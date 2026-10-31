@@ -122,3 +122,44 @@ def test_board_needs_human_is_skipped(tmp_path, db_session):
     assert report["processed"] == 0
     assert report["skipped"] == 1
     assert (board / "q_board_wait.md").exists()
+
+
+def test_board_checkbox_reject_published_quote(tmp_path, db_session):
+    vault = tmp_path / "vault"
+    board = vault / "00-收件箱" / "审核看板" / "02-重点复核"
+    board.mkdir(parents=True)
+    quote = _pending(db_session, "q_board_checkbox")
+    quote.review_status = "published"
+    quote.status = 1
+    db_session.commit()
+    (board / "q_board_checkbox.md").write_text(
+        "---\nuid: q_board_checkbox\nstatus: needs_human\n---\n正文\n\n"
+        "- [x] 拒绝\n- [ ] 通过\n- [ ] 退回修改\n\n- 备注：来源不可信\n",
+        encoding="utf-8",
+    )
+
+    report = sync_review_inbox(db_session, vault)
+
+    assert report["processed"] == 1
+    db_session.refresh(quote)
+    assert quote.review_status == "rejected"
+    assert quote.status == 0
+
+
+def test_board_multiple_checkboxes_are_rejected(tmp_path, db_session):
+    vault = tmp_path / "vault"
+    board = vault / "00-收件箱" / "审核看板" / "02-重点复核"
+    board.mkdir(parents=True)
+    quote = _pending(db_session, "q_board_multi")
+    (board / "q_board_multi.md").write_text(
+        "---\nuid: q_board_multi\nstatus: needs_human\n---\n正文\n\n"
+        "- [x] 通过\n- [x] 拒绝\n- [ ] 退回修改\n",
+        encoding="utf-8",
+    )
+
+    report = sync_review_inbox(db_session, vault)
+
+    assert report["processed"] == 0
+    assert report["errors"]
+    db_session.refresh(quote)
+    assert quote.review_status == "pending"

@@ -62,7 +62,12 @@ def _block(db: Session, quote: EssayQuote, bucket: str, index: int) -> str:
         "",
         f"> {quote.content}",
         "",
-        "- 人工结论：☐ 通过　☐ 拒绝　☐ 退回修改",
+        "**人工结论（只勾一项）**",
+        "",
+        "- [ ] 通过",
+        "- [ ] 拒绝",
+        "- [ ] 退回修改",
+        "",
         "- 备注：",
         "",
     ]

@@ -53,6 +53,7 @@ def test_review_board_contains_middle_and_pending(tmp_path, db_session):
     assert (board / "index.md").is_file()
     assert (board / "02-重点复核" / "q_board_mid.md").is_file()
     assert (board / "02-重点复核" / "q_board_pending.md").is_file()
+    assert "- [ ] 通过" in (board / "02-重点复核" / "q_board_mid.md").read_text(encoding="utf-8")
     assert "q_board_high" not in (board / "index.md").read_text(encoding="utf-8")
 
 

@@ -28,6 +28,19 @@ _STATUS_ACTIONS = {
     "request_changes": "request_changes",
 }
 
+_CHECKBOX_RE = re.compile(r"^\s*-\s*\[([ xX])\]\s*(通过|拒绝|退回修改)", re.M)
+_CHECKBOX_ACTIONS = {"通过": "approve", "拒绝": "reject", "退回修改": "request_changes"}
+_NOTE_RE = re.compile(r"^\s*-\s*备注\s*[:：]\s*(.+)$", re.M)
+
+
+def _checkbox_action(body: str) -> tuple[str | None, str | None]:
+    checked = [label for mark, label in _CHECKBOX_RE.findall(body) if mark.lower() == "x"]
+    if len(checked) > 1:
+        return None, "only one checkbox may be checked"
+    if not checked:
+        return None, None
+    return _CHECKBOX_ACTIONS[checked[0]], None
+
 
 def parse_note(text: str) -> tuple[dict[str, str], str]:
     match = _FRONTMATTER_RE.match(text)
@@ -73,10 +86,14 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
     for folder in folders:
         is_board = folder == board
         for path in sorted(folder.rglob("*.md")):
-            fields, _body = parse_note(path.read_text(encoding="utf-8"))
+            fields, body = parse_note(path.read_text(encoding="utf-8"))
             uid = fields.get("uid") or path.stem
             raw_status = (fields.get("status") or "").strip()
-            action = _STATUS_ACTIONS.get(raw_status.lower())
+            checkbox_action, checkbox_error = _checkbox_action(body)
+            if checkbox_error:
+                report["errors"].append(f"{uid}: {checkbox_error}")
+                continue
+            action = checkbox_action or _STATUS_ACTIONS.get(raw_status.lower())
             if not action:
                 report["skipped"] += 1
                 continue
@@ -111,13 +128,17 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
                 or (action == "request_changes" and current == "draft")
             )
             if not noop:
+                reason = fields.get("review_note", "").strip()
+                if not reason:
+                    note_match = _NOTE_RE.search(body)
+                    reason = note_match.group(1).strip() if note_match else ""
                 try:
                     quote_review_service.review_quote(
                         db,
                         quote_ref=uid,
                         action=action,
                         reviewer=None,
-                        reason=fields.get("review_note", ""),
+                        reason=reason,
                     )
                 except ValueError as exc:
                     report["errors"].append(f"{uid}: {exc}")

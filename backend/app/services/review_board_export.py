@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,16 @@ def _uid(quote: EssayQuote) -> str:
     return quote.quote_uid or f"q_{quote.quote_id:06d}"
 
 
+_AUDIT_RE = re.compile(r"^\s*-\s*\[[ xX]\]\s*(通过|拒绝|退回修改)", re.M)
+_AUDIT_SECTION = (
+    "\n\n## 人工审核\n\n"
+    "- [ ] 通过\n"
+    "- [ ] 拒绝\n"
+    "- [ ] 退回修改\n\n"
+    "- 备注：\n"
+)
+
+
 def _note(quote: EssayQuote, topics: list[str], bucket: str) -> str:
     return (
         "---\n"
@@ -46,8 +57,18 @@ def _note(quote: EssayQuote, topics: list[str], bucket: str) -> str:
         f"author: {quote.author or ''}\n"
         'review_note: ""\n'
         "---\n\n"
-        f"{quote.content}\n"
+        f"{quote.content}"
+        f"{_AUDIT_SECTION}"
     )
+
+
+def _ensure_audit_section(path: Path, dry_run: bool) -> bool:
+    text = path.read_text(encoding="utf-8")
+    if _AUDIT_RE.search(text):
+        return False
+    if not dry_run:
+        path.write_text(text.rstrip() + _AUDIT_SECTION, encoding="utf-8")
+    return True
 
 
 def _table_cell(value: str) -> str:
@@ -77,6 +98,7 @@ def export_review_board(db: Session, vault: Path, dry_run: bool = False) -> dict
     board = _safe_path(vault, "00-收件箱", "审核看板")
     buckets: dict[str, int] = {name: 0 for name, _, _ in BUCKETS}
     written = 0
+    updated = 0
     skipped = 0
     moved = 0
     if not dry_run:
@@ -95,7 +117,10 @@ def export_review_board(db: Session, vault: Path, dry_run: bool = False) -> dict
         target_dir = _safe_path(vault, "00-收件箱", "审核看板", bucket)
         target = target_dir / f"{_uid(quote)}.md"
         if target.exists():
-            skipped += 1
+            if _ensure_audit_section(target, dry_run):
+                updated += 1
+            else:
+                skipped += 1
             continue
         if not dry_run:
             target_dir.mkdir(parents=True, exist_ok=True)
@@ -103,6 +128,13 @@ def export_review_board(db: Session, vault: Path, dry_run: bool = False) -> dict
         if flat and flat.exists():
             if not dry_run:
                 flat.replace(target)
+                if _ensure_audit_section(target, dry_run):
+                    updated += 1
+            else:
+                if not _AUDIT_RE.search(flat.read_text(encoding="utf-8")):
+                    updated += 1
+                else:
+                    skipped += 1
             moved += 1
             continue
         written += 1
@@ -163,6 +195,7 @@ def export_review_board(db: Session, vault: Path, dry_run: bool = False) -> dict
         "candidates": len(candidates),
         "buckets": buckets,
         "written": written,
+        "updated": updated,
         "moved": moved,
         "skipped": skipped,
         "dry_run": dry_run,
