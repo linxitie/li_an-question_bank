@@ -2287,3 +2287,24 @@ class ForumModeration(Base):
         Index("idx_moderation_target", target_type, target_id),
     )
 
+
+class QuoteReview(Base):
+    """金句审核流水（R1）"""
+    __tablename__ = "quote_review"
+
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    quote_id = Column(BigInteger, ForeignKey("essay_quote.quote_id"), nullable=False)
+    reviewer_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=True)
+    action = Column(String(20), nullable=False, comment="approve/reject/request_changes/archive")
+    reason = Column(Text)
+    diff_json = Column(Text, comment="状态迁移 JSON")
+    created_at = Column(DateTime, default=datetime.now)
+
+    quote = relationship("EssayQuote")
+    reviewer = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_quote_review_quote", quote_id, created_at),
+        Index("idx_quote_review_reviewer", reviewer_id, created_at),
+    )
+
