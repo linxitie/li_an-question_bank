@@ -8,6 +8,7 @@
 - POST /api/plan/task/{goal_id}/toggle  勾选/取消完成
 - DELETE /api/plan/{id}      删除整个计划
 """
+
 import json
 import logging
 from datetime import datetime
@@ -19,9 +20,8 @@ from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user
-from ....models.models import StudyGoal, SysUser, UserProfile, UserNotify, PlanAdjustment
-from ....services import llm_client
-from ....services import plan_agent
+from ....models.models import PlanAdjustment, StudyGoal, SysUser, UserNotify, UserProfile
+from ....services import llm_client, plan_agent
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +35,16 @@ MAX_TASKS = 200
 
 
 class AdjustRequest(BaseModel):
-    instruction: str = Field(..., min_length=1, max_length=300, description="调整要求（如：多留时间给公专）")
+    instruction: str = Field(
+        ..., min_length=1, max_length=300, description="调整要求（如：多留时间给公专）"
+    )
 
 
 class GenerateRequest(BaseModel):
-    exam_date: str            # YYYY-MM-DD
+    exam_date: str  # YYYY-MM-DD
     weak_subjects: List[str]  # ["行测","申论","公专"]
     daily_hours: float = Field(ge=1, le=8, description="每天可学时长 1-8 小时")
-    level: str                # 零基础/有基础/冲刺
+    level: str  # 零基础/有基础/冲刺
 
     @field_validator("weak_subjects")
     @classmethod
@@ -93,11 +95,7 @@ async def generate_plan(
     )
 
     # 2. PlanAgent 画像推理增强：有画像则注入推理结论，无画像走原有表单参数
-    profile_row = (
-        db.query(UserProfile)
-        .filter(UserProfile.user_id == current_user.user_id)
-        .first()
-    )
+    profile_row = db.query(UserProfile).filter(UserProfile.user_id == current_user.user_id).first()
     if profile_row:
         profile_data = plan_agent.profile_from_row(profile_row)
         if profile_data:
@@ -162,16 +160,18 @@ async def generate_plan(
         plan_id += 1
 
     # 元数据统一存 plan_meta；description 存任务原文（不再重复存 summary）
-    plan_meta = json.dumps({
-        "summary": summary,
-        "phases": phases,
-        "tips": tips,
-    }, ensure_ascii=False)
+    plan_meta = json.dumps(
+        {
+            "summary": summary,
+            "phases": phases,
+            "tips": tips,
+        },
+        ensure_ascii=False,
+    )
 
     # 每日任务闭环：金币按规则分配（10 基础 + 弱项科目 +5）；任务按顺序每 4 个滚动到后续日期
     _weak_set = set(req.weak_subjects)
     _TASKS_PER_DAY = 4
-    _today = datetime.now().strftime("%Y-%m-%d")
     from datetime import timedelta
 
     created = []
@@ -260,18 +260,18 @@ async def adjust_plan(
     today = datetime.now().strftime("%Y-%m-%d")
     today_rows = (
         db.query(StudyGoal)
-        .filter(StudyGoal.user_id == current_user.user_id, StudyGoal.task_date == today, StudyGoal.status == 1)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.task_date == today,
+            StudyGoal.status == 1,
+        )
         .all()
     )
     done = sum(1 for t in today_rows if t.is_completed == 1)
     today_titles = [t.title for t in today_rows[:10]]
 
     # 3. 画像摘要
-    profile = (
-        db.query(UserProfile)
-        .filter(UserProfile.user_id == current_user.user_id)
-        .first()
-    )
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.user_id).first()
     profile_line = ""
     if profile:
         profile_line = (
@@ -286,8 +286,8 @@ async def adjust_plan(
         f"今日任务（{len(today_rows)}项，已完成{done}项）：{'；'.join(today_titles)}\n"
         f"{profile_line}\n"
         f"用户要求调整：{instruction}\n"
-        "请给出调整后的计划。只输出 JSON：{\"summary\": \"调整后的计划摘要（100字内）\", "
-        "\"adjustments\": [\"具体调整点1\", \"调整点2\", ...]}。调整要具体可落地。"
+        '请给出调整后的计划。只输出 JSON：{"summary": "调整后的计划摘要（100字内）", '
+        '"adjustments": ["具体调整点1", "调整点2", ...]}。调整要具体可落地。'
     )
     try:
         raw = await llm_client.chat_plan(adjust_input)
@@ -317,16 +317,18 @@ async def adjust_plan(
         user_id=current_user.user_id,
         plan_id=plan_id,
         reason=instruction.strip()[:300],
-        adjustment=json.dumps({"summary": new_summary, "adjustments": adjustments}, ensure_ascii=False),
+        adjustment=json.dumps(
+            {"summary": new_summary, "adjustments": adjustments}, ensure_ascii=False
+        ),
         apply_flag=1,
     )
     db.add(record)
     if new_summary:
         meta["summary"] = new_summary
         meta["adjust_times"] = int(meta.get("adjust_times", 0)) + 1
-        db.query(StudyGoal).filter(
-            StudyGoal.plan_id == plan_id, StudyGoal.status == 1
-        ).update({StudyGoal.plan_meta: json.dumps(meta, ensure_ascii=False)})
+        db.query(StudyGoal).filter(StudyGoal.plan_id == plan_id, StudyGoal.status == 1).update(
+            {StudyGoal.plan_meta: json.dumps(meta, ensure_ascii=False)}
+        )
     db.commit()
     db.refresh(record)
 
@@ -378,7 +380,9 @@ async def current_plan(
     exam_date = None
     if tasks and tasks[0].deadline:
         exam_date = tasks[0].deadline.strftime("%Y-%m-%d")
-    days_left = max((tasks[0].deadline - datetime.now()).days, 0) if tasks and tasks[0].deadline else 0
+    days_left = (
+        max((tasks[0].deadline - datetime.now()).days, 0) if tasks and tasks[0].deadline else 0
+    )
 
     done = sum(1 for t in tasks if t.is_completed == 1)
     return {
@@ -508,6 +512,7 @@ async def delete_plan(
 
 # ==================== 模块4 v2 每日任务闭环 ====================
 
+
 def _task_summary(g: StudyGoal) -> dict:
     return {
         "goal_id": g.goal_id,
@@ -579,9 +584,14 @@ async def claim_task_coin(
 
     # 跨域写入走公开契约发币（禁止直接实例化他域表）
     from ..reward.contract import grant_coins
+
     grant_coins(
-        db, current_user, coin, source_type="TASK",
-        related_id=goal.goal_id, description=f"完成每日任务：{goal.title}",
+        db,
+        current_user,
+        coin,
+        source_type="TASK",
+        related_id=goal.goal_id,
+        description=f"完成每日任务：{goal.title}",
     )
     goal.coin_claimed = 1
     goal.update_time = datetime.now()
@@ -604,6 +614,7 @@ async def claim_task_coin(
 def _write_milestone(user_id: int, plan_id, db: Session):
     """完成率首次跨过 1/3/2/3/100% 时写入 UserMemory(milestone)，幂等。"""
     from sqlalchemy import func
+
     from ....models.models import UserMemory
 
     if plan_id is None:

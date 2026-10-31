@@ -2,9 +2,11 @@
 APScheduler 定时任务管理
 每日 24:00（北京时间）触发新闻、招考、考试日历爬取
 """
+
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -63,6 +65,7 @@ def _dispatch_sync(user_id: Optional[int], message: str, data: Optional[dict]):
     """
     try:
         from ..foundation.ws_relay import ws_relay
+
         payload_data = {"message": message}
         if data:
             payload_data.update(data)
@@ -81,10 +84,10 @@ def _dispatch_sync(user_id: Optional[int], message: str, data: Optional[dict]):
 
 def init_scheduler():
     """初始化并启动定时任务调度器"""
+    from .difficulty import update_all_difficulties
+    from .exam_scraper import scrape_all_exams
     from .news_scraper import scrape_all_news
     from .recruitment_scraper import scrape_all_recruitment
-    from .exam_scraper import scrape_all_exams
-    from .difficulty import update_all_difficulties
 
     # 包装：爬取完成后广播同步事件（通知前端刷新）
     def _news_with_broadcast():
@@ -105,21 +108,21 @@ def init_scheduler():
         trigger=CronTrigger(hour=0, minute=0, timezone=CST),
         id="scrape_news",
         name="每日新闻爬取",
-        replace_existing=True
+        replace_existing=True,
     )
     scheduler.add_job(
         _recruitment_with_broadcast,
         trigger=CronTrigger(hour=0, minute=5, timezone=CST),
         id="scrape_recruitment",
         name="招考信息爬取",
-        replace_existing=True
+        replace_existing=True,
     )
     scheduler.add_job(
         _exams_with_broadcast,
         trigger=CronTrigger(hour=0, minute=0, timezone=CST),
         id="scrape_exams",
         name="考试日历爬取+清理",
-        replace_existing=True
+        replace_existing=True,
     )
 
     # 每日 02:00（北京时间）执行 IRT 难度更新（在爬取完成后，避开高峰期）
@@ -128,14 +131,16 @@ def init_scheduler():
         trigger=CronTrigger(hour=2, minute=0, timezone=CST),
         id="update_difficulties",
         name="每日IRT难度更新",
-        replace_existing=True
+        replace_existing=True,
     )
 
     # 模块4 v2：每日 20:00 站内提醒——今日任务未完成的用户
     def _remind_unfinished_tasks():
-        from ..models.models import StudyGoal, UserNotify
-        from ..core.database import SessionLocal
         from datetime import datetime as _dt
+
+        from ..core.database import SessionLocal
+        from ..models.models import StudyGoal, UserNotify
+
         db = SessionLocal()
         try:
             today = _dt.now().strftime("%Y-%m-%d")
@@ -158,20 +163,24 @@ def init_scheduler():
                     .filter(
                         UserNotify.user_id == uid,
                         UserNotify.notify_type == "task_remind",
-                        UserNotify.create_time >= _dt.now().replace(hour=0, minute=0, second=0, microsecond=0),
+                        UserNotify.create_time
+                        >= _dt.now().replace(hour=0, minute=0, second=0, microsecond=0),
                     )
                     .first()
                 )
                 if existing:
                     continue  # 当日已提醒过，不重复打扰
-                db.add(UserNotify(
-                    user_id=uid,
-                    content=f"今天还有 {n} 个学习任务未完成，快去完成并领取金币吧！",
-                    notify_type="task_remind",
-                ))
+                db.add(
+                    UserNotify(
+                        user_id=uid,
+                        content=f"今天还有 {n} 个学习任务未完成，快去完成并领取金币吧！",
+                        notify_type="task_remind",
+                    )
+                )
             db.commit()
         except Exception as _e:
             import logging
+
             logging.getLogger(__name__).warning("每日任务提醒失败: %s", _e)
         finally:
             db.close()
@@ -181,20 +190,25 @@ def init_scheduler():
         trigger=CronTrigger(hour=20, minute=0, timezone=CST),
         id="task_remind",
         name="每日任务未完成提醒",
-        replace_existing=True
+        replace_existing=True,
     )
 
     # 每日 03:00 清理过期斩题记录
     def cleanup_expired_zhanti():
         """清理过期的斩题记录（auto_delete_time < now 的记录物理删除）"""
-        from ..models.models import WrongQuestionPersonal
         from ..core.database import SessionLocal
+        from ..models.models import WrongQuestionPersonal
+
         db = SessionLocal()
         try:
-            expired = db.query(WrongQuestionPersonal).filter(
-                WrongQuestionPersonal.is_cut == 1,
-                WrongQuestionPersonal.auto_delete_time < datetime.now()
-            ).all()
+            expired = (
+                db.query(WrongQuestionPersonal)
+                .filter(
+                    WrongQuestionPersonal.is_cut == 1,
+                    WrongQuestionPersonal.auto_delete_time < datetime.now(),
+                )
+                .all()
+            )
             for wq in expired:
                 db.delete(wq)
             db.commit()
@@ -211,13 +225,14 @@ def init_scheduler():
         trigger=CronTrigger(hour=3, minute=0, timezone=CST),
         id="cleanup_zhanti",
         name="每日清理过期斩题",
-        replace_existing=True
+        replace_existing=True,
     )
 
     # 每日 04:00 清理超期暂存图（F-2 配套：导入确认后暂存扁平图不再即时删除，
     # 改为按时间延迟回收，避免重复导入同一文档时 text_cache 命中而图已删）
     def cleanup_stale_staged():
         from ..services.question_ingest.images import cleanup_stale_staged_images
+
         cleanup_stale_staged_images(max_age_days=7)
 
     scheduler.add_job(
@@ -225,18 +240,23 @@ def init_scheduler():
         trigger=CronTrigger(hour=4, minute=0, timezone=CST),
         id="cleanup_staged_images",
         name="每日清理超期暂存图",
-        replace_existing=True
+        replace_existing=True,
     )
 
     # 每周日 20:30 复盘提醒（长期陪伴：统计本周完成 + 提示复盘调整下周计划）
     def _weekly_review_remind():
-        from ..models.models import StudyGoal, UserNotify
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
+
         from ..core.database import SessionLocal
-        from datetime import datetime as _dt, timedelta as _td
+        from ..models.models import StudyGoal, UserNotify
+
         db = SessionLocal()
         try:
             now = _dt.now()
-            monday = (now - _td(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+            monday = (now - _td(days=now.weekday())).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
             week_key = monday.strftime("%Y-%m-%d")
             users_with_tasks = (
                 db.query(StudyGoal.user_id)
@@ -275,14 +295,17 @@ def init_scheduler():
                 )
                 if existing:
                     continue
-                db.add(UserNotify(
-                    user_id=uid,
-                    content=f"【本周复盘】本周共 {total} 个任务，完成 {done} 个。周日花 30 分钟总结薄弱点，可让联考小智帮你调整下周计划。",
-                    notify_type="weekly_review",
-                ))
+                db.add(
+                    UserNotify(
+                        user_id=uid,
+                        content=f"【本周复盘】本周共 {total} 个任务，完成 {done} 个。周日花 30 分钟总结薄弱点，可让联考小智帮你调整下周计划。",
+                        notify_type="weekly_review",
+                    )
+                )
             db.commit()
         except Exception as _e:
             import logging
+
             logging.getLogger(__name__).warning("每周复盘提醒失败: %s", _e)
         finally:
             db.close()
@@ -292,7 +315,7 @@ def init_scheduler():
         trigger=CronTrigger(day_of_week="sun", hour=20, minute=30, timezone=CST),
         id="weekly_review",
         name="每周复盘提醒",
-        replace_existing=True
+        replace_existing=True,
     )
 
     scheduler.start()
@@ -306,14 +329,15 @@ def init_scheduler():
             scrape_all_recruitment()
             scrape_all_exams()
             logger.info("首次全量爬取完成")
-        except Exception as e:            logger.error(f"首次爬取失败（服务继续运行）: {e}")
+        except Exception as e:
+            logger.error(f"首次爬取失败（服务继续运行）: {e}")
 
     scheduler.add_job(
         _initial_run,
         trigger="date",
         run_date=datetime.now(CST) + timedelta(seconds=30),
         id="initial_scrape",
-        name="首次全量爬取"
+        name="首次全量爬取",
     )
 
 

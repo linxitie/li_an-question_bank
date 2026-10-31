@@ -3,9 +3,10 @@
 模块7 Phase3 - Obsidian 自生长知识库：图谱节点 + 审批入库 + Vault 工作流
 流程：Obsidian 中编辑 Markdown（docs/knowledge-vault/）→ 提交为 pending 节点 → 审批通过（approved）→ 供 Agent 装配/检索
 """
+
 import logging
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security import get_current_user
-from ...models.models import SysUser, KnowledgeNode, KnowledgeRelation
+from ...models.models import KnowledgeNode, KnowledgeRelation, SysUser
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/knowledge", tags=["联考小智-知识库"])
@@ -156,15 +157,8 @@ async def knowledge_graph(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    nodes = (
-        db.query(KnowledgeNode)
-        .filter(KnowledgeNode.status == "approved")
-        .all()
-    )
-    rels = (
-        db.query(KnowledgeRelation)
-        .all()
-    )
+    nodes = db.query(KnowledgeNode).filter(KnowledgeNode.status == "approved").all()
+    rels = db.query(KnowledgeRelation).all()
     return {
         "nodes": [
             {
@@ -194,7 +188,6 @@ async def knowledge_stats(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from sqlalchemy import func
     approved = db.query(KnowledgeNode).filter(KnowledgeNode.status == "approved").all()
     pending = db.query(KnowledgeNode).filter(KnowledgeNode.status == "pending").count()
     rels = db.query(KnowledgeRelation).all()
@@ -209,13 +202,11 @@ async def knowledge_stats(
         "pending_total": pending,
         "relation_total": len(rels),
         "by_category": [
-            {"key": k, "name": CATEGORIES[k], "count": v,
-             "color": CATEGORY_COLORS[k]}
+            {"key": k, "name": CATEGORIES[k], "count": v, "color": CATEGORY_COLORS[k]}
             for k, v in by_cat.items()
         ],
         "by_relation_type": [
-            {"key": k, "name": v, "count": by_type.get(k, 0)}
-            for k, v in REL_TYPE_NAMES.items()
+            {"key": k, "name": v, "count": by_type.get(k, 0)} for k, v in REL_TYPE_NAMES.items()
         ],
     }
 
@@ -230,30 +221,33 @@ async def node_detail(
     if not node:
         raise HTTPException(status_code=404, detail="节点不存在")
     # 出边 + 入边邻居（含对端标题与关系名）
-    neighbor_map = {}
     out_rels = db.query(KnowledgeRelation).filter(KnowledgeRelation.from_node == node_id).all()
     in_rels = db.query(KnowledgeRelation).filter(KnowledgeRelation.to_node == node_id).all()
     neighbors = []
     for r in out_rels:
         target = db.get(KnowledgeNode, r.to_node)
-        neighbors.append({
-            "dir": "out",
-            "rel_id": r.rel_id,
-            "node_id": r.to_node,
-            "title": target.title if target else f"节点{r.to_node}",
-            "type": r.rel_type,
-            "type_name": REL_TYPE_NAMES.get(r.rel_type, r.rel_type),
-        })
+        neighbors.append(
+            {
+                "dir": "out",
+                "rel_id": r.rel_id,
+                "node_id": r.to_node,
+                "title": target.title if target else f"节点{r.to_node}",
+                "type": r.rel_type,
+                "type_name": REL_TYPE_NAMES.get(r.rel_type, r.rel_type),
+            }
+        )
     for r in in_rels:
         source = db.get(KnowledgeNode, r.from_node)
-        neighbors.append({
-            "dir": "in",
-            "rel_id": r.rel_id,
-            "node_id": r.from_node,
-            "title": source.title if source else f"节点{r.from_node}",
-            "type": r.rel_type,
-            "type_name": REL_TYPE_NAMES.get(r.rel_type, r.rel_type),
-        })
+        neighbors.append(
+            {
+                "dir": "in",
+                "rel_id": r.rel_id,
+                "node_id": r.from_node,
+                "title": source.title if source else f"节点{r.from_node}",
+                "type": r.rel_type,
+                "type_name": REL_TYPE_NAMES.get(r.rel_type, r.rel_type),
+            }
+        )
     return {
         "node_id": node.node_id,
         "title": node.title,
@@ -286,18 +280,26 @@ async def create_relation(
 ):
     if req.from_node == req.to_node:
         raise HTTPException(status_code=400, detail="不能建立自环关系")
-    nodes = db.query(KnowledgeNode).filter(
-        KnowledgeNode.node_id.in_([req.from_node, req.to_node]),
-        KnowledgeNode.status == "approved",
-    ).count()
+    nodes = (
+        db.query(KnowledgeNode)
+        .filter(
+            KnowledgeNode.node_id.in_([req.from_node, req.to_node]),
+            KnowledgeNode.status == "approved",
+        )
+        .count()
+    )
     if nodes != 2:
         raise HTTPException(status_code=404, detail="关系节点不存在或未入库")
     if req.rel_type not in ("related", "contains", "leads_to"):
         raise HTTPException(status_code=400, detail="关系类型不合法")
-    dup = db.query(KnowledgeRelation).filter(
-        KnowledgeRelation.from_node == req.from_node,
-        KnowledgeRelation.to_node == req.to_node,
-    ).first()
+    dup = (
+        db.query(KnowledgeRelation)
+        .filter(
+            KnowledgeRelation.from_node == req.from_node,
+            KnowledgeRelation.to_node == req.to_node,
+        )
+        .first()
+    )
     if dup:
         return {"created": 0, "rel_id": dup.rel_id, "message": "关系已存在"}
     rel = KnowledgeRelation(from_node=req.from_node, to_node=req.to_node, rel_type=req.rel_type)
@@ -311,20 +313,24 @@ async def list_relations(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    rels = db.query(KnowledgeRelation).order_by(KnowledgeRelation.create_time.desc()).limit(200).all()
+    rels = (
+        db.query(KnowledgeRelation).order_by(KnowledgeRelation.create_time.desc()).limit(200).all()
+    )
     out = []
     for r in rels:
         src = db.get(KnowledgeNode, r.from_node)
         dst = db.get(KnowledgeNode, r.to_node)
-        out.append({
-            "rel_id": r.rel_id,
-            "from": r.from_node,
-            "to": r.to_node,
-            "from_title": src.title if src else f"节点{r.from_node}",
-            "to_title": dst.title if dst else f"节点{r.to_node}",
-            "type": r.rel_type,
-            "create_time": r.create_time.strftime("%Y-%m-%d %H:%M") if r.create_time else "",
-        })
+        out.append(
+            {
+                "rel_id": r.rel_id,
+                "from": r.from_node,
+                "to": r.to_node,
+                "from_title": src.title if src else f"节点{r.from_node}",
+                "to_title": dst.title if dst else f"节点{r.to_node}",
+                "type": r.rel_type,
+                "create_time": r.create_time.strftime("%Y-%m-%d %H:%M") if r.create_time else "",
+            }
+        )
     return {"total": len(out), "items": out}
 
 
@@ -349,13 +355,18 @@ async def suggest_relations(
 ):
     """已入库节点两两打分：同分类 + 标题/内容关键词共现 → 推荐 top10 未建关系。"""
     nodes = db.query(KnowledgeNode).filter(KnowledgeNode.status == "approved").all()
-    existing = set(
-        (r.from_node, r.to_node) for r in db.query(KnowledgeRelation).all()
-    )
+    existing = set((r.from_node, r.to_node) for r in db.query(KnowledgeRelation).all())
     existing |= set((b, a) for a, b in existing)  # 无向去重
 
     def tokens(text: str):
-        return set(str(text or "").replace("（", "").replace("）", "").replace("，", " ").replace("、", " ").split())
+        return set(
+            str(text or "")
+            .replace("（", "")
+            .replace("）", "")
+            .replace("，", " ")
+            .replace("、", " ")
+            .split()
+        )
 
     cands = []
     for i in range(len(nodes)):
@@ -413,7 +424,11 @@ async def vault_info(
 
 
 class VaultImportRequest(BaseModel):
-    path: Optional[str] = Field(default=None, max_length=300, description="vault 目录，默认 docs/knowledge-vault（仅允许项目内路径）")
+    path: Optional[str] = Field(
+        default=None,
+        max_length=300,
+        description="vault 目录，默认 docs/knowledge-vault（仅允许项目内路径）",
+    )
 
 
 @router.post("/vault/import", summary="从 Obsidian Vault 导入笔记（自动生成待审批节点）")
@@ -443,8 +458,16 @@ async def vault_import(
         base = next((c for c in candidates if c.exists()), candidates[0])
         base = base.resolve()
 
-    category_map = {"law": "law", "法条": "law", "recruit": "recruit", "报考": "recruit",
-                    "exam_point": "exam_point", "考点": "exam_point", "wrong": "wrong", "错题": "wrong"}
+    category_map = {
+        "law": "law",
+        "法条": "law",
+        "recruit": "recruit",
+        "报考": "recruit",
+        "exam_point": "exam_point",
+        "考点": "exam_point",
+        "wrong": "wrong",
+        "错题": "wrong",
+    }
     allowed_categories = {"law", "recruit", "exam_point", "wrong"}
 
     imported, skipped = 0, 0
@@ -489,8 +512,7 @@ async def vault_import(
             if not content:
                 skipped += 1
                 continue
-            # 幂等：标题+内容指纹查重
-            fingerprint = (title + "|" + content[:80]).strip()
+            # 幂等：标题+内容前80字查重
             dup = (
                 db.query(KnowledgeNode)
                 .filter(KnowledgeNode.title == title)
@@ -511,7 +533,14 @@ async def vault_import(
             )
             db.add(node)
             imported += 1
-            nodes.append({"node_id": node.node_id, "title": node.title, "category": node.category, "status": node.status})
+            nodes.append(
+                {
+                    "node_id": node.node_id,
+                    "title": node.title,
+                    "category": node.category,
+                    "status": node.status,
+                }
+            )
     db.commit()
 
     return {

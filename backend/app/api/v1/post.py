@@ -3,17 +3,17 @@
 模块7 v2 - 岗位库：公安联考岗位数据的批量导入与条件筛选。
 选岗顾问的数据底座：地区/专业/学历/性别/招录数/竞争比。
 """
+
 import logging
-from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security import get_current_user
-from ...models.models import SysUser, PolicePost
+from ...models.models import PolicePost, SysUser
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/post", tags=["岗位库"])
@@ -56,16 +56,18 @@ async def import_posts(
         if dup:
             skipped += 1
             continue
-        db.add(PolicePost(
-            region=item.region,
-            post_type=item.post_type,
-            profession=item.profession,
-            education=item.education,
-            sex_require=item.sex_require,
-            plan_count=item.plan_count,
-            ratio=item.ratio,
-            source=item.source or "用户导入",
-        ))
+        db.add(
+            PolicePost(
+                region=item.region,
+                post_type=item.post_type,
+                profession=item.profession,
+                education=item.education,
+                sex_require=item.sex_require,
+                plan_count=item.plan_count,
+                ratio=item.ratio,
+                source=item.source or "用户导入",
+            )
+        )
         imported += 1
     db.commit()
     total = db.query(PolicePost).filter(PolicePost.status == 1).count()
@@ -125,6 +127,7 @@ async def post_stats(
     db: Session = Depends(get_db),
 ):
     from sqlalchemy import func
+
     total = db.query(PolicePost).filter(PolicePost.status == 1).count()
     regions = {
         r[0]: r[1]

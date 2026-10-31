@@ -8,9 +8,10 @@
 - GET  /api/llm/sessions/{id}/messages 某会话历史
 - DELETE /api/llm/sessions/{id}     删除会话（软删）
 """
+
 import logging
 from datetime import datetime
-from typing import Optional, List, Dict, Literal
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 from ....core.config import settings
 from ....core.database import get_db
 from ....core.security import get_current_user
-from ....models.models import ChatSession, ChatMessage, SysUser
+from ....models.models import ChatMessage, ChatSession, SysUser
 from ....services import llm_client
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ Scene = Literal["psychological", "qa", "advice"]
 
 
 # ==================== 请求模型 ====================
+
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_LEN, description="消息内容")
@@ -45,13 +47,18 @@ class CreateSessionRequest(BaseModel):
 
 # ==================== 工具函数 ====================
 
+
 def _get_user_session(session_id: int, user_id: int, db: Session) -> ChatSession:
     """取当前用户的会话，不存在或不属于当前用户则 404"""
-    s = db.query(ChatSession).filter(
-        ChatSession.session_id == session_id,
-        ChatSession.user_id == user_id,
-        ChatSession.status == 1,
-    ).first()
+    s = (
+        db.query(ChatSession)
+        .filter(
+            ChatSession.session_id == session_id,
+            ChatSession.user_id == user_id,
+            ChatSession.status == 1,
+        )
+        .first()
+    )
     if not s:
         raise HTTPException(status_code=404, detail="会话不存在")
     return s
@@ -71,6 +78,7 @@ def _load_history(session_id: int, db: Session) -> List[Dict[str, str]]:
 
 
 # ==================== 路由 ====================
+
 
 @router.post("/chat", summary="发送消息")
 async def chat(
@@ -110,7 +118,13 @@ async def chat(
     history = _load_history(session.session_id, db)
 
     # 4. 多 Agent 路由 + 档案上下文装配（模块7 v2；心理场景直接走心理 Agent）
-    from ....services.agent_router import route_agent, agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge
+    from ....services.agent_router import (
+        agent_system_prompt,
+        assemble_context,
+        extract_memories,
+        retrieve_knowledge,
+        route_agent,
+    )
 
     agent_id, agent_name, route_score = route_agent(req.message)
     if req.scene == "psychological" or agent_id == "psychology":
@@ -136,6 +150,7 @@ async def chat(
     # 对话自动记忆（长期陪伴：意向地区/时间投入/目标分数规则提取，幂等）
     try:
         from ....services.agent_router import extract_chat_memory
+
         extract_chat_memory(current_user.user_id, db, req.message)
     except Exception as e:
         logger.warning("对话记忆提取失败: %s", e)
@@ -143,14 +158,20 @@ async def chat(
     if agent_id == "choose_post":
         try:
             from ....models.models import PolicePost
+
             pq = db.query(PolicePost).filter(PolicePost.status == 1).limit(8)
             posts = pq.all()
             if posts:
                 lines = [
-                    f"{p.region} · {p.post_type} · 招{p.plan_count}人 · 竞争比{p.ratio or '待公布'} · 学历{p.education} · 专业{p.profession}"
+                    (
+                        f"{p.region} · {p.post_type} · 招{p.plan_count}人 · "
+                        f"竞争比{p.ratio or '待公布'} · 学历{p.education} · 专业{p.profession}"
+                    )
                     for p in posts
                 ]
-                extra_parts.append("【岗位库实时数据】命中岗位（以官方公告为准）：\n" + "\n".join(lines))
+                extra_parts.append(
+                    "【岗位库实时数据】命中岗位（以官方公告为准）：\n" + "\n".join(lines)
+                )
         except Exception as e:
             logger.warning("岗位库检索失败: %s", e)
     extra_system = "\n\n".join(extra_parts)
@@ -203,12 +224,7 @@ async def list_sessions(
         ChatSession.status == 1,
     )
     total = base.count()
-    rows = (
-        base.order_by(ChatSession.update_time.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    rows = base.order_by(ChatSession.update_time.desc()).offset(offset).limit(limit).all()
     return {
         "total": total,
         "limit": limit,
@@ -293,8 +309,8 @@ async def assemble_context_api(
     db: Session = Depends(get_db),
 ):
     """返回装配好的档案上下文块 + 长期记忆清单（前端可展示'我的档案'）"""
-    from ....services.agent_router import assemble_context, extract_memories
     from ....models.models import UserMemory
+    from ....services.agent_router import assemble_context, extract_memories
 
     ctx = ""
     try:

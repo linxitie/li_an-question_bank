@@ -6,9 +6,10 @@
 - GET  /api/profile            当前用户画像
 - POST /api/profile/upsert     保存画像（全量覆盖，前端逐步提交）
 """
+
 import json
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/profile", tags=["备考画像"])
 
 
 # ==================== 请求模型 ====================
+
 
 class ProfileUpsertRequest(BaseModel):
     grade: Optional[str] = Field(None, max_length=20)
@@ -50,8 +52,12 @@ QUESTION_TEMPLATES = [
                 "step": 1,
                 "title": "基本信息",
                 "fields": [
-                    {"key": "grade", "type": "single", "label": "你现在几年级？",
-                     "options": ["大一", "大二", "大三", "大四", "应届/已毕业"]},
+                    {
+                        "key": "grade",
+                        "type": "single",
+                        "label": "你现在几年级？",
+                        "options": ["大一", "大二", "大三", "大四", "应届/已毕业"],
+                    },
                     {"key": "exam_date", "type": "date", "label": "备考截止日期（预计考试时间）"},
                 ],
             },
@@ -59,28 +65,58 @@ QUESTION_TEMPLATES = [
                 "step": 2,
                 "title": "目标设定",
                 "fields": [
-                    {"key": "target_score", "type": "text", "label": "目标分数（如：总分220 / 行测70 / 申论65 / 公专85）"},
-                    {"key": "daily_hours", "type": "slider", "label": "每天能投入多少小时学习？", "min": 1, "max": 8},
+                    {
+                        "key": "target_score",
+                        "type": "text",
+                        "label": "目标分数（如：总分220 / 行测70 / 申论65 / 公专85）",
+                    },
+                    {
+                        "key": "daily_hours",
+                        "type": "slider",
+                        "label": "每天能投入多少小时学习？",
+                        "min": 1,
+                        "max": 8,
+                    },
                 ],
             },
             {
                 "step": 3,
                 "title": "水平自评",
                 "fields": [
-                    {"key": "self_level", "type": "single", "label": "目前整体水平？",
-                     "options": ["零基础", "入门", "有基础", "冲刺阶段"]},
-                    {"key": "subject_weaknesses", "type": "multi", "label": "最薄弱的科目（可多选）",
-                     "options": ["行测", "申论", "公专"]},
-                    {"key": "subject_strengths", "type": "multi", "label": "相对有把握的科目（可多选）",
-                     "options": ["行测", "申论", "公专"]},
+                    {
+                        "key": "self_level",
+                        "type": "single",
+                        "label": "目前整体水平？",
+                        "options": ["零基础", "入门", "有基础", "冲刺阶段"],
+                    },
+                    {
+                        "key": "subject_weaknesses",
+                        "type": "multi",
+                        "label": "最薄弱的科目（可多选）",
+                        "options": ["行测", "申论", "公专"],
+                    },
+                    {
+                        "key": "subject_strengths",
+                        "type": "multi",
+                        "label": "相对有把握的科目（可多选）",
+                        "options": ["行测", "申论", "公专"],
+                    },
                 ],
             },
             {
                 "step": 4,
                 "title": "岗位意向（选填）",
                 "fields": [
-                    {"key": "target_region", "type": "text", "label": "意向报考地区（如：山东济南）"},
-                    {"key": "target_post", "type": "text", "label": "意向岗位方向（如：基层派出所 / 网安 / 不限）"},
+                    {
+                        "key": "target_region",
+                        "type": "text",
+                        "label": "意向报考地区（如：山东济南）",
+                    },
+                    {
+                        "key": "target_post",
+                        "type": "text",
+                        "label": "意向岗位方向（如：基层派出所 / 网安 / 不限）",
+                    },
                 ],
             },
         ],
@@ -94,9 +130,19 @@ QUESTION_TEMPLATES = [
                 "step": 1,
                 "title": "聊聊你的情况",
                 "fields": [
-                    {"key": "grade", "type": "single", "label": "先说说你现在几年级？",
-                     "options": ["大一", "大二", "大三", "大四", "应届/已毕业"]},
-                    {"key": "daily_hours", "type": "slider", "label": "每天大概能学多久？", "min": 1, "max": 8},
+                    {
+                        "key": "grade",
+                        "type": "single",
+                        "label": "先说说你现在几年级？",
+                        "options": ["大一", "大二", "大三", "大四", "应届/已毕业"],
+                    },
+                    {
+                        "key": "daily_hours",
+                        "type": "slider",
+                        "label": "每天大概能学多久？",
+                        "min": 1,
+                        "max": 8,
+                    },
                 ],
             },
             {
@@ -111,12 +157,24 @@ QUESTION_TEMPLATES = [
                 "step": 3,
                 "title": "强弱项盘点",
                 "fields": [
-                    {"key": "subject_weaknesses", "type": "multi", "label": "哪科让你最头疼？",
-                     "options": ["行测", "申论", "公专"]},
-                    {"key": "subject_strengths", "type": "multi", "label": "哪科你最有底？",
-                     "options": ["行测", "申论", "公专"]},
-                    {"key": "self_level", "type": "single", "label": "给自己定个位：",
-                     "options": ["零基础", "入门", "有基础", "冲刺阶段"]},
+                    {
+                        "key": "subject_weaknesses",
+                        "type": "multi",
+                        "label": "哪科让你最头疼？",
+                        "options": ["行测", "申论", "公专"],
+                    },
+                    {
+                        "key": "subject_strengths",
+                        "type": "multi",
+                        "label": "哪科你最有底？",
+                        "options": ["行测", "申论", "公专"],
+                    },
+                    {
+                        "key": "self_level",
+                        "type": "single",
+                        "label": "给自己定个位：",
+                        "options": ["零基础", "入门", "有基础", "冲刺阶段"],
+                    },
                 ],
             },
         ],
@@ -130,8 +188,12 @@ QUESTION_TEMPLATES = [
                 "step": 1,
                 "title": "基础档案",
                 "fields": [
-                    {"key": "grade", "type": "single", "label": "年级",
-                     "options": ["大一", "大二", "大三", "大四", "应届/已毕业"]},
+                    {
+                        "key": "grade",
+                        "type": "single",
+                        "label": "年级",
+                        "options": ["大一", "大二", "大三", "大四", "应届/已毕业"],
+                    },
                     {"key": "target_region", "type": "text", "label": "意向地区（选填）"},
                 ],
             },
@@ -141,19 +203,37 @@ QUESTION_TEMPLATES = [
                 "fields": [
                     {"key": "target_score", "type": "text", "label": "目标总分/单科目标"},
                     {"key": "exam_date", "type": "date", "label": "备考截止"},
-                    {"key": "daily_hours", "type": "slider", "label": "每日可用学时", "min": 1, "max": 8},
+                    {
+                        "key": "daily_hours",
+                        "type": "slider",
+                        "label": "每日可用学时",
+                        "min": 1,
+                        "max": 8,
+                    },
                 ],
             },
             {
                 "step": 3,
                 "title": "诊断输入",
                 "fields": [
-                    {"key": "self_level", "type": "single", "label": "水平自评",
-                     "options": ["零基础", "入门", "有基础", "冲刺阶段"]},
-                    {"key": "subject_weaknesses", "type": "multi", "label": "薄弱科目",
-                     "options": ["行测", "申论", "公专"]},
-                    {"key": "subject_strengths", "type": "multi", "label": "优势科目",
-                     "options": ["行测", "申论", "公专"]},
+                    {
+                        "key": "self_level",
+                        "type": "single",
+                        "label": "水平自评",
+                        "options": ["零基础", "入门", "有基础", "冲刺阶段"],
+                    },
+                    {
+                        "key": "subject_weaknesses",
+                        "type": "multi",
+                        "label": "薄弱科目",
+                        "options": ["行测", "申论", "公专"],
+                    },
+                    {
+                        "key": "subject_strengths",
+                        "type": "multi",
+                        "label": "优势科目",
+                        "options": ["行测", "申论", "公专"],
+                    },
                     {"key": "target_post", "type": "text", "label": "岗位方向（选填）"},
                 ],
             },
@@ -170,9 +250,11 @@ async def get_question_templates():
 
 # ==================== 画像读写 ====================
 
+
 def _to_dict(p: Optional[UserProfile]) -> dict:
     if not p:
         return {"has_profile": False}
+
     def _loads(v: Optional[str]) -> list:
         if not v:
             return []
@@ -180,6 +262,7 @@ def _to_dict(p: Optional[UserProfile]) -> dict:
             return json.loads(v)
         except (json.JSONDecodeError, TypeError):
             return []
+
     return {
         "has_profile": True,
         "profile_id": p.profile_id,
@@ -202,11 +285,7 @@ async def get_profile(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    row = (
-        db.query(UserProfile)
-        .filter(UserProfile.user_id == current_user.user_id)
-        .first()
-    )
+    row = db.query(UserProfile).filter(UserProfile.user_id == current_user.user_id).first()
     return _to_dict(row)
 
 
@@ -216,11 +295,7 @@ async def upsert_profile(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    row = (
-        db.query(UserProfile)
-        .filter(UserProfile.user_id == current_user.user_id)
-        .first()
-    )
+    row = db.query(UserProfile).filter(UserProfile.user_id == current_user.user_id).first()
     if not row:
         row = UserProfile(user_id=current_user.user_id)
         db.add(row)

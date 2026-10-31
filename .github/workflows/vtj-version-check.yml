@@ -164,9 +164,9 @@ jobs:
           files: ./backend/coverage.xml
           fail_ci_if_error: false
 
-  # 数据库迁移测试
+  # 数据库建表冒烟（项目用 create_all 自动建表，无 alembic 体系）
   migration-test:
-    name: Database Migration Test
+    name: Database Schema Smoke (create_all)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
@@ -183,21 +183,18 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install alembic sqlalchemy pymysql
           if [ -f backend/requirements.txt ]; then
             pip install -r backend/requirements.txt
           fi
-      
-      - name: Test migrations (SQLite)
+
+      - name: Schema smoke (create_all on in-memory SQLite)
         run: |
           cd backend
-          # 创建测试数据库
-          alembic upgrade head
-          # 测试回滚
-          alembic downgrade -1
-          alembic upgrade head
+          # 项目采用 Base.metadata.create_all 自动建表（无 alembic.ini / versions 目录），
+          # 此处用内存 SQLite 验证全部 ORM 模型可导入、空库成功建表
+          python scripts/smoke_create_all.py
         env:
-          DATABASE_URL: sqlite:///test.db
+          DB_TYPE: sqlite
 
   # 汇总报告
   summary:
@@ -217,7 +214,7 @@ jobs:
           echo "| Python Quality | ${{ needs.python-quality.result }} |"
           echo "| Frontend Quality | ${{ needs.frontend-quality.result }} |"
           echo "| Unit Tests | ${{ needs.unit-tests.result }} |"
-          echo "| Migration Test | ${{ needs.migration-test.result }} |"
+          echo "| Schema Smoke (create_all) | ${{ needs.migration-test.result }} |"
           
           # 检查是否有失败
           if [[ "${{ needs.vtj-version-check.result }}" != "success" ]] || \

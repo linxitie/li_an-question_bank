@@ -6,6 +6,7 @@
 - 档案上下文只取摘要与统计，不塞原文
 - 长期记忆从画像确定性抽取（幂等 upsert），不依赖 LLM
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,21 @@ AGENT_META: Dict[str, Dict[str, str]] = {
             "回答要点：结合公安联考的岗位类型（公安系统内岗位、按生源地与专业限制）、考生条件给出筛选思路；"
             "提醒以当年官方招录公告为准，不确定就说'以官方公告为准'。回答 250 字内，分点。"
         ),
-        "keywords": [("选岗", 3), ("岗位", 3), ("报哪", 3), ("报考条件", 3), ("生源地", 3), ("职位", 2), ("调剂", 2), ("入职", 2), ("分配", 2), ("安置", 2), ("户籍", 2), ("专业限制", 3), ("限专业", 3)],
+        "keywords": [
+            ("选岗", 3),
+            ("岗位", 3),
+            ("报哪", 3),
+            ("报考条件", 3),
+            ("生源地", 3),
+            ("职位", 2),
+            ("调剂", 2),
+            ("入职", 2),
+            ("分配", 2),
+            ("安置", 2),
+            ("户籍", 2),
+            ("专业限制", 3),
+            ("限专业", 3),
+        ],
     },
     "interview": {
         "name": "面试教练",
@@ -34,7 +49,21 @@ AGENT_META: Dict[str, Dict[str, str]] = {
             "出模拟题时附示范要点和一个追问；表达用'第一/第二/第三'条理作答，结合公安岗位实际，不空喊口号。"
             "回答 300 字内，条理清晰。"
         ),
-        "keywords": [("面试", 3), ("结构化", 3), ("答题框架", 3), ("模拟", 2), ("考官", 2), ("自我介绍", 2), ("应急处突", 3), ("综合分析", 3), ("组织管理", 3), ("人际沟通", 3), ("追问", 3), ("答题思路", 2), ("上岸面试", 2)],
+        "keywords": [
+            ("面试", 3),
+            ("结构化", 3),
+            ("答题框架", 3),
+            ("模拟", 2),
+            ("考官", 2),
+            ("自我介绍", 2),
+            ("应急处突", 3),
+            ("综合分析", 3),
+            ("组织管理", 3),
+            ("人际沟通", 3),
+            ("追问", 3),
+            ("答题思路", 2),
+            ("上岸面试", 2),
+        ],
         # 结构化面试四类题型答题框架（命中面试教练时随 system prompt 注入，token 受控）
         "bank_frame": (
             "【结构化面试四类题型答题框架】"
@@ -52,7 +81,23 @@ AGENT_META: Dict[str, Dict[str, str]] = {
             "回答要点：先共情，不评判；再用温和专业的语言疏导，给一个当下可执行的调节小方法（如呼吸法、任务拆解）。"
             "不直接讲题、不灌鸡汤。回答 150 字内，语气像靠谱的学长学姐。若对方情绪严重异常，提示寻求专业心理支持。"
         ),
-        "keywords": [("焦虑", 3), ("压力", 3), ("心态", 3), ("紧张", 3), ("失眠", 3), ("睡不着", 3), ("崩溃", 3), ("坚持不住", 3), ("想放弃", 3), ("没信心", 3), ("慌", 2), ("emo", 2), ("烦躁", 2), ("emo了", 2), ("累", 1)],
+        "keywords": [
+            ("焦虑", 3),
+            ("压力", 3),
+            ("心态", 3),
+            ("紧张", 3),
+            ("失眠", 3),
+            ("睡不着", 3),
+            ("崩溃", 3),
+            ("坚持不住", 3),
+            ("想放弃", 3),
+            ("没信心", 3),
+            ("慌", 2),
+            ("emo", 2),
+            ("烦躁", 2),
+            ("emo了", 2),
+            ("累", 1),
+        ],
     },
     "shenlun": {
         "name": "申论教练",
@@ -61,7 +106,20 @@ AGENT_META: Dict[str, Dict[str, str]] = {
             "回答要点：给方法框架+示例结构；批改思路时说清采分点与常见失分；涉及范文只给要点不给整篇。"
             "回答 300 字内，分点。"
         ),
-        "keywords": [("申论", 3), ("大作文", 3), ("归纳概括", 3), ("综合分析题", 3), ("提出对策", 3), ("公文", 2), ("应用文", 3), ("作文", 2), ("材料题", 2), ("议论文", 2), ("策论文", 3), ("分论点", 3)],
+        "keywords": [
+            ("申论", 3),
+            ("大作文", 3),
+            ("归纳概括", 3),
+            ("综合分析题", 3),
+            ("提出对策", 3),
+            ("公文", 2),
+            ("应用文", 3),
+            ("作文", 2),
+            ("材料题", 2),
+            ("议论文", 2),
+            ("策论文", 3),
+            ("分论点", 3),
+        ],
     },
     "xingce": {
         "name": "行测讲师",
@@ -70,7 +128,20 @@ AGENT_META: Dict[str, Dict[str, str]] = {
             "回答要点：先给思路/口诀，再讲解析；计算类给关键步骤即可，不用长篇演算。"
             "回答 300 字内，分点。"
         ),
-        "keywords": [("行测", 3), ("资料分析", 3), ("数量关系", 3), ("言语理解", 3), ("判断推理", 3), ("逻辑填空", 3), ("图形推理", 3), ("类比推理", 3), ("片段阅读", 3), ("常识", 2), ("速算", 2), ("蒙题", 2)],
+        "keywords": [
+            ("行测", 3),
+            ("资料分析", 3),
+            ("数量关系", 3),
+            ("言语理解", 3),
+            ("判断推理", 3),
+            ("逻辑填空", 3),
+            ("图形推理", 3),
+            ("类比推理", 3),
+            ("片段阅读", 3),
+            ("常识", 2),
+            ("速算", 2),
+            ("蒙题", 2),
+        ],
     },
     "gongzhuan": {
         "name": "公专导师",
@@ -79,7 +150,20 @@ AGENT_META: Dict[str, Dict[str, str]] = {
             "回答要点：结合《公安专业科目》考纲与常用法律法规（治安管理处罚法、人民警察法、刑法等）作答，"
             "法条引用到条即可，注明'以现行有效法条为准'，不编造条文。回答 300 字内，分点。"
         ),
-        "keywords": [("公专", 3), ("公安专业", 3), ("法条", 2), ("治安管理处罚法", 3), ("人民警察法", 3), ("情景题", 3), ("执法", 2), ("盘查", 2), ("逮捕", 2), ("拘留", 2), ("刑法", 2), ("行政处罚", 3)],
+        "keywords": [
+            ("公专", 3),
+            ("公安专业", 3),
+            ("法条", 2),
+            ("治安管理处罚法", 3),
+            ("人民警察法", 3),
+            ("情景题", 3),
+            ("执法", 2),
+            ("盘查", 2),
+            ("逮捕", 2),
+            ("拘留", 2),
+            ("刑法", 2),
+            ("行政处罚", 3),
+        ],
     },
 }
 
@@ -225,8 +309,7 @@ def assemble_context(user_id: int, db) -> str:
     来源：user_profile + 当前学习计划 + 学情统计（做题量/正确率/错题分布/最近错题Top3）。
     返回拼接好的上下文块；无档案时返回空串。
     """
-    from sqlalchemy import func
-    from ..models.models import UserProfile, StudyGoal, WrongQuestionPersonal, PracticeRecord
+    from ..models.models import PracticeRecord, StudyGoal, UserProfile, WrongQuestionPersonal
 
     parts: List[str] = []
 
@@ -264,6 +347,7 @@ def assemble_context(user_id: int, db) -> str:
     )
     if plan:
         import json as _json
+
         meta = {}
         try:
             meta = _json.loads(plan.plan_meta or "{}")
@@ -273,12 +357,16 @@ def assemble_context(user_id: int, db) -> str:
         today = __import__("datetime").datetime.now().strftime("%Y-%m-%d")
         today_total = (
             db.query(StudyGoal)
-            .filter(StudyGoal.user_id == user_id, StudyGoal.status == 1, StudyGoal.task_date == today)
+            .filter(
+                StudyGoal.user_id == user_id, StudyGoal.status == 1, StudyGoal.task_date == today
+            )
             .count()
         )
         plan_parts = [f"当前备考计划：{summary}。今日任务 {today_total} 项"]
         if meta.get("phases"):
-            plan_parts.append(f"阶段规划：{'；'.join(str(x.get('name', '')) for x in meta['phases'][:3])}")
+            plan_parts.append(
+                f"阶段规划：{'；'.join(str(x.get('name', '')) for x in meta['phases'][:3])}"
+            )
         parts.append("【学习计划】" + "；".join(plan_parts) + "。")
 
     # 3. 学情统计：做题量 / 正确率 / 错题分布 / 最近错题 Top3 / 模考成绩
@@ -289,7 +377,9 @@ def assemble_context(user_id: int, db) -> str:
         .count()
     )
     acc = round(practice_correct / practice_total * 100) if practice_total else None
-    wrong_total = db.query(WrongQuestionPersonal).filter(WrongQuestionPersonal.user_id == user_id).count()
+    wrong_total = (
+        db.query(WrongQuestionPersonal).filter(WrongQuestionPersonal.user_id == user_id).count()
+    )
     study_parts = []
     if practice_total:
         study_parts.append(f"累计做题 {practice_total} 题，正确率 {acc}%")
@@ -298,26 +388,37 @@ def assemble_context(user_id: int, db) -> str:
     # 错题科目分布 Top3 + 掌握度
     try:
         from sqlalchemy import func
+
         from ..models.models import QuestionSubject
+
         subj_rows = (
             db.query(QuestionSubject.subject_name, func.count(WrongQuestionPersonal.wrong_id))
             .join(QuestionSubject, WrongQuestionPersonal.subject_id == QuestionSubject.subject_id)
-            .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
+            .filter(
+                WrongQuestionPersonal.user_id == user_id,
+                WrongQuestionPersonal.collection_type == "WRONG",
+            )
             .group_by(QuestionSubject.subject_name)
             .order_by(func.count(WrongQuestionPersonal.wrong_id).desc())
             .limit(3)
             .all()
         )
         if subj_rows:
-            study_parts.append("薄弱科目：" + "、".join(f"{name}({cnt}题)" for name, cnt in subj_rows))
+            study_parts.append(
+                "薄弱科目：" + "、".join(f"{name}({cnt}题)" for name, cnt in subj_rows)
+            )
         mastery = (
-            db.query(WrongQuestionPersonal.mastery_level, func.count(WrongQuestionPersonal.wrong_id))
-            .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
+            db.query(
+                WrongQuestionPersonal.mastery_level, func.count(WrongQuestionPersonal.wrong_id)
+            )
+            .filter(
+                WrongQuestionPersonal.user_id == user_id,
+                WrongQuestionPersonal.collection_type == "WRONG",
+            )
             .group_by(WrongQuestionPersonal.mastery_level)
             .all()
         )
         if mastery:
-            mdesc = {m: c for m, c in mastery}
             parts_m = [f"{m}({c})" for m, c in mastery]
             study_parts.append("错题掌握度：" + "、".join(parts_m))
     except Exception as e:
@@ -326,11 +427,17 @@ def assemble_context(user_id: int, db) -> str:
     # 每条限长，防 token 爆炸；无关联题目时 outerjoin 兜底不报错）
     try:
         from ..models.models import QuestionBank
+
         wrong_details = (
             db.query(WrongQuestionPersonal, QuestionBank, QuestionSubject.subject_name)
             .outerjoin(QuestionBank, WrongQuestionPersonal.question_id == QuestionBank.question_id)
-            .outerjoin(QuestionSubject, WrongQuestionPersonal.subject_id == QuestionSubject.subject_id)
-            .filter(WrongQuestionPersonal.user_id == user_id, WrongQuestionPersonal.collection_type == "WRONG")
+            .outerjoin(
+                QuestionSubject, WrongQuestionPersonal.subject_id == QuestionSubject.subject_id
+            )
+            .filter(
+                WrongQuestionPersonal.user_id == user_id,
+                WrongQuestionPersonal.collection_type == "WRONG",
+            )
             .order_by(WrongQuestionPersonal.add_time.desc())
             .limit(3)
             .all()
@@ -339,7 +446,9 @@ def assemble_context(user_id: int, db) -> str:
             mastery_cn = {"UNMASTERED": "未掌握", "PARTIAL": "部分掌握", "MASTERED": "已掌握"}
             detail_parts = []
             for w, q, subj_name in wrong_details:
-                stem = (getattr(q, "question_content", None) or (w.user_answer or "无题面记录"))[:30]
+                stem = (getattr(q, "question_content", None) or (w.user_answer or "无题面记录"))[
+                    :30
+                ]
                 mine = (w.user_answer or "未记录")[:12]
                 right = (getattr(q, "answer", None) or "缺正解")[:12]
                 mastery = mastery_cn.get(w.mastery_level, w.mastery_level or "")
@@ -351,7 +460,8 @@ def assemble_context(user_id: int, db) -> str:
         logger.warning("错题明细装配失败: %s", e)
     # 模考成绩（最近3条已评分）
     try:
-        from ..models.models import ExamRecord, ExamPaper
+        from ..models.models import ExamPaper, ExamRecord
+
         exams = (
             db.query(ExamRecord, ExamPaper.paper_name)
             .join(ExamPaper, ExamRecord.paper_id == ExamPaper.paper_id)
@@ -396,7 +506,7 @@ def build_trajectory(user_id: int, db) -> str:
     零 LLM、纯统计，token 受限。无数据返回空串。
     """
     from datetime import datetime
-    from sqlalchemy import func
+
     from ..models.models import StudyGoal, UserMemory
 
     plan = (
@@ -410,7 +520,9 @@ def build_trajectory(user_id: int, db) -> str:
 
     total = (
         db.query(StudyGoal)
-        .filter(StudyGoal.user_id == user_id, StudyGoal.plan_id == plan.plan_id, StudyGoal.status == 1)
+        .filter(
+            StudyGoal.user_id == user_id, StudyGoal.plan_id == plan.plan_id, StudyGoal.status == 1
+        )
         .count()
     )
     done = (
@@ -475,7 +587,7 @@ def extract_memories(user_id: int, db):
     长期记忆抽取：从画像确定性 upsert 关键事实（幂等，不依赖 LLM）。
     返回本次写入/更新的记忆条数。
     """
-    from ..models.models import UserProfile, UserMemory
+    from ..models.models import UserMemory, UserProfile
 
     profile = (
         db.query(UserProfile)
@@ -489,9 +601,13 @@ def extract_memories(user_id: int, db):
     if profile.target_score:
         facts.append(("goal_score", f"目标分数 {profile.target_score}", profile.update_time))
     if profile.subject_weaknesses:
-        facts.append(("weak_subject", f"薄弱科目 {profile.subject_weaknesses}", profile.update_time))
+        facts.append(
+            ("weak_subject", f"薄弱科目 {profile.subject_weaknesses}", profile.update_time)
+        )
     if profile.daily_hours:
-        facts.append(("daily_hours", f"每日可学时长 {profile.daily_hours} 小时", profile.update_time))
+        facts.append(
+            ("daily_hours", f"每日可学时长 {profile.daily_hours} 小时", profile.update_time)
+        )
     if profile.exam_date:
         facts.append(("exam_date", f"目标考试日期 {profile.exam_date}", profile.update_time))
     if profile.grade:
@@ -510,10 +626,15 @@ def extract_memories(user_id: int, db):
                 row.update_time = ts
                 written += 1
         else:
-            db.add(UserMemory(
-                user_id=user_id, memory_type=mtype, content=content,
-                source="profile", update_time=ts,
-            ))
+            db.add(
+                UserMemory(
+                    user_id=user_id,
+                    memory_type=mtype,
+                    content=content,
+                    source="profile",
+                    update_time=ts,
+                )
+            )
             written += 1
     db.commit()
     return written
@@ -526,6 +647,7 @@ def extract_chat_memory(user_id: int, db, message: str) -> int:
     覆盖：意向地区/岗位、每周每天可投入时间、目标分数调整。
     """
     import re
+
     from ..models.models import UserMemory
 
     if not message or not message.strip():
@@ -533,13 +655,30 @@ def extract_chat_memory(user_id: int, db, message: str) -> int:
     msg = message.strip()[:200]
     patterns = [
         # 意向地区/城市/岗位
-        (r"(意向|想|打算|希望)(去|在|考)?(地区|城市|岗位|工作)?(是|为|定在|在)?[：:\s]*(山东|北京|上海|天津|河北|河南|山西|江苏|浙江|安徽|福建|江西|湖南|湖北|广东|广西|海南|四川|重庆|贵州|云南|西藏|陕西|甘肃|青海|宁夏|新疆|内蒙古|辽宁|吉林|黑龙江|廊坊|济南|青岛|烟台|潍坊|石家庄|唐山|保定|邯郸|郑州|洛阳|开封|南京|苏州|无锡|徐州|杭州|宁波|温州|嘉兴|福州|厦门|广州|深圳|珠海|武汉|长沙|成都|西安|兰州|西宁|银川|乌鲁木齐|呼和浩特|沈阳|大连|长春|哈尔滨)", "意向地区"),
+        (
+            r"(意向|想|打算|希望)(去|在|考)?(地区|城市|岗位|工作)?"
+            r"(是|为|定在|在)?[：:\s]*("
+            r"山东|北京|上海|天津|河北|河南|山西|江苏|浙江|安徽|福建|江西|"
+            r"湖南|湖北|广东|广西|海南|四川|重庆|贵州|云南|西藏|陕西|甘肃|"
+            r"青海|宁夏|新疆|内蒙古|辽宁|吉林|黑龙江|廊坊|济南|青岛|烟台|潍坊|"
+            r"石家庄|唐山|保定|邯郸|郑州|洛阳|开封|南京|苏州|无锡|徐州|杭州|"
+            r"宁波|温州|嘉兴|福州|厦门|广州|深圳|珠海|武汉|长沙|成都|西安|"
+            r"兰州|西宁|银川|乌鲁木齐|呼和浩特|沈阳|大连|长春|哈尔滨"
+            r")",
+            "意向地区",
+        ),
         # 每周/每天可学时间
-        (r"(每周|每天|每日|一天|一天能)\s*(能|可)?\s*(学|学习|复习|刷题|安排|投入)?\s*(\d+)\s*(小时|分钟)", "时间投入"),
+        (
+            r"(每周|每天|每日|一天|一天能)\s*(能|可)?\s*(学|学习|复习|刷题|安排|投入)?\s*(\d+)\s*(小时|分钟)",
+            "时间投入",
+        ),
         # 目标分数调整
         (r"(目标|想考)(分数|总分|分)\s*(到|为|在)?\s*(\d+)", "目标分数"),
         # 想考的岗位类型
-        (r"(想|意向|打算)(考|报)?\s*(综合|执法|技术|网安|技侦|经侦|刑侦|治安|特警|交警|监所|文职)\s*(岗|职位|岗位)?", "岗位意向"),
+        (
+            r"(想|意向|打算)(考|报)?\s*(综合|执法|技术|网安|技侦|经侦|刑侦|治安|特警|交警|监所|文职)\s*(岗|职位|岗位)?",
+            "岗位意向",
+        ),
     ]
     written = 0
     for pattern, tag in patterns:
@@ -554,10 +693,14 @@ def extract_chat_memory(user_id: int, db, message: str) -> int:
         )
         if exists:
             continue
-        db.add(UserMemory(
-            user_id=user_id, memory_type="pref", content=content,
-            source="chat-auto",
-        ))
+        db.add(
+            UserMemory(
+                user_id=user_id,
+                memory_type="pref",
+                content=content,
+                source="chat-auto",
+            )
+        )
         written += 1
     if written:
         db.commit()
@@ -568,9 +711,34 @@ def extract_chat_memory(user_id: int, db, message: str) -> int:
 # 从 approved 知识节点按关键词打分召回，只取摘要（控制 token），带出处
 
 CATEGORY_KEYWORDS: Dict[str, List[str]] = {
-    "law": ["法", "治安", "警察", "刑法", "处罚", "拘留", "传唤", "条例", "公安", "法条", "违法", "执法", "处罚法"],
+    "law": [
+        "法",
+        "治安",
+        "警察",
+        "刑法",
+        "处罚",
+        "拘留",
+        "传唤",
+        "条例",
+        "公安",
+        "法条",
+        "违法",
+        "执法",
+        "处罚法",
+    ],
     "recruit": ["报考", "岗位", "联考", "报名", "招录", "选岗", "公告", "生源地", "职位", "时间线"],
-    "exam_point": ["行测", "申论", "公专", "资料分析", "考点", "技巧", "题", "速算", "公式", "作答"],
+    "exam_point": [
+        "行测",
+        "申论",
+        "公专",
+        "资料分析",
+        "考点",
+        "技巧",
+        "题",
+        "速算",
+        "公式",
+        "作答",
+    ],
     "wrong": ["错题", "薄弱", "复盘", "易错", "陷阱", "笔记"],
 }
 _IGNORE_CHARS = set("的了吗呢是在我你有没个" "：")
@@ -585,11 +753,7 @@ def retrieve_knowledge(user_id: int, db, message: str, limit: int = 3, max_chars
 
     if not message or not message.strip():
         return ""
-    nodes = (
-        db.query(KnowledgeNode)
-        .filter(KnowledgeNode.status == "approved")
-        .all()
-    )
+    nodes = db.query(KnowledgeNode).filter(KnowledgeNode.status == "approved").all()
     if not nodes:
         return ""
 
@@ -618,4 +782,8 @@ def retrieve_knowledge(user_id: int, db, message: str, limit: int = 3, max_chars
     for n in top:
         body = (n.content or "")[:max_chars].replace("\n", " ")
         lines.append(f"- [{n.title}]({n.category}) {body}")
-    return "【知识库参考（已入库，引用时注明出处，涉法条以现行有效法条为准）】\n" + "\n".join(lines) + "\n"
+    return (
+        "【知识库参考（已入库，引用时注明出处，涉法条以现行有效法条为准）】\n"
+        + "\n".join(lines)
+        + "\n"
+    )

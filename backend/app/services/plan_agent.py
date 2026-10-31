@@ -10,9 +10,9 @@
 与 LLM 生成的关系：PlanAgent 做"确定性推理"（规则可复算），
 LLM 负责把推理结果转化为具体可执行的阶段/任务（保持生成质量与可审计性）。
 """
+
 import json
 import logging
-from datetime import datetime
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,8 @@ def build_prompt_extra(reasoning: dict) -> str:
     weights_txt = "、".join(f"{k} {int(v * 100)}%" for k, v in w.items())
     lines = [
         "【画像推理补充（PlanAgent 计算，请严格参考）】",
-        f"可用总学时约 {reasoning['total_hours']} 小时（剩余 {reasoning['days_left']} 天 × 每天 {reasoning['daily_hours']} 小时）",
+        f"可用总学时约 {reasoning['total_hours']} 小时"
+        f"（剩余 {reasoning['days_left']} 天 × 每天 {reasoning['daily_hours']} 小时）",
         f"建议科目学时占比：{weights_txt}",
         f"节奏建议：{reasoning['pace_advice']}",
     ]

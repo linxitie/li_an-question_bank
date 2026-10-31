@@ -9,8 +9,9 @@
 
 日志安全：任何日志不回显 LLM 响应原文（避免把大模型生成内容/敏感输入打进日志）。
 """
+
 import logging
-from typing import List, Dict, Optional
+from typing import Dict, List
 
 import httpx
 
@@ -110,11 +111,11 @@ async def _post(
             if resp.status_code != 200:
                 logger.error(
                     "%s 返回非200: status=%s content_length=%s",
-                    prompt_name, resp.status_code, len(resp.content),
+                    prompt_name,
+                    resp.status_code,
+                    len(resp.content),
                 )
-                raise LLMClientError(
-                    f"大模型返回错误（{resp.status_code}）", "llm_bad_status"
-                )
+                raise LLMClientError(f"大模型返回错误（{resp.status_code}）", "llm_bad_status")
 
             try:
                 data = resp.json()
@@ -133,7 +134,9 @@ async def _post(
         except _RETRYABLE_EXC as e:
             logger.warning(
                 "%s 第%s次尝试失败: %s，%s",
-                prompt_name, attempt, type(e).__name__,
+                prompt_name,
+                attempt,
+                type(e).__name__,
                 "重试中" if attempt < _RETRY_TIMES else "放弃",
             )
             if attempt == _RETRY_TIMES:

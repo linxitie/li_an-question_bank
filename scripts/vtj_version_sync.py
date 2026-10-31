@@ -62,7 +62,13 @@ def update_json_version(json_path: Path, new_version: str) -> bool:
 
 
 def sync_single_file(vue_file: str) -> bool:
-    """同步单个文件的版本号"""
+    """同步单个文件的版本号
+
+    校验口径（与 check_only 对齐，避免手写页误报阻断 CI）：
+    1. 存在配套 DSL JSON 且 Vue 能提取到 version：做一致性校验/自动同步；
+    2. 无配套 JSON（纯手写页面）：跳过，不阻断；
+    3. 有 JSON 但 Vue 无 useProvider version（历史页面）：跳过，不阻断。
+    """
     vue_path = VTJ_VUE_DIR / vue_file
     if not vue_path.exists():
         print(f"⚠️  Vue 文件不存在: {vue_path}")
@@ -71,15 +77,17 @@ def sync_single_file(vue_file: str) -> bool:
     # 对应的 JSON 文件
     json_path = VTJ_FILES_DIR / f"{vue_path.stem}.json"
     if not json_path.exists():
-        print(f"⚠️  JSON 文件不存在: {json_path}")
-        return False
+        # 纯手写页面没有 DSL 文件，不属于版本一致性管理范围，跳过不阻断
+        print(f"ℹ️  无配套 DSL（手写页跳过）: {vue_path.stem}")
+        return True
     
     vue_version = extract_vue_version(vue_path)
     json_version = extract_json_version(json_path)
     
     if not vue_version:
-        print(f"⚠️  无法从 Vue 提取版本: {vue_path}")
-        return False
+        # 历史页面未声明 useProvider version，跳过不阻断
+        print(f"ℹ️  Vue 无版本声明（跳过）: {vue_path.stem}")
+        return True
     
     if vue_version != json_version:
         print(f"🔄 版本不一致: {vue_path.stem}")

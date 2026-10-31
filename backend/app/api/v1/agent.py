@@ -3,8 +3,9 @@
 模块7 v2 - 工作模式：任务清单 + 结构化执行
 点选任务 → 收集参数 → 对应 Agent + 档案上下文 → LLM 生成结构化结果
 """
+
 import logging
-from datetime import date, datetime
+from datetime import date
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,9 +14,17 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security import get_current_user
-from ...models.models import SysUser, StudyGoal
+from ...models.models import StudyGoal, SysUser
 from ...services import llm_client
-from ...services.agent_router import agent_system_prompt, assemble_context, extract_memories, retrieve_knowledge, build_trajectory, AGENT_META, interview_sample
+from ...services.agent_router import (
+    AGENT_META,
+    agent_system_prompt,
+    assemble_context,
+    build_trajectory,
+    extract_memories,
+    interview_sample,
+    retrieve_knowledge,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["联考小智-工作模式"])
@@ -28,7 +37,13 @@ AGENT_TASKS: List[Dict] = [
         "agent": "xingce",
         "desc": "基于你的错题本与薄弱点，诊断行测短板并给出提升方案",
         "fields": [
-            {"key": "weak_type", "label": "薄弱题型（选填）", "type": "text", "required": False, "placeholder": "如：资料分析、图形推理"},
+            {
+                "key": "weak_type",
+                "label": "薄弱题型（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：资料分析、图形推理",
+            },
         ],
     },
     {
@@ -37,8 +52,13 @@ AGENT_TASKS: List[Dict] = [
         "agent": "interview",
         "desc": "出一道结构化面试题 + 示范答题框架 + 一个追问",
         "fields": [
-            {"key": "qtype", "label": "题目类型", "type": "select", "required": True,
-             "options": ["综合分析", "应急处突", "组织管理", "人际沟通"]},
+            {
+                "key": "qtype",
+                "label": "题目类型",
+                "type": "select",
+                "required": True,
+                "options": ["综合分析", "应急处突", "组织管理", "人际沟通"],
+            },
         ],
     },
     {
@@ -47,7 +67,13 @@ AGENT_TASKS: List[Dict] = [
         "agent": "shenlun",
         "desc": "按周生成申论学习计划，含每日任务，可一键写入今日任务",
         "fields": [
-            {"key": "focus", "label": "本周重点（选填）", "type": "text", "required": False, "placeholder": "如：归纳概括专项"},
+            {
+                "key": "focus",
+                "label": "本周重点（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：归纳概括专项",
+            },
         ],
     },
     {
@@ -56,8 +82,13 @@ AGENT_TASKS: List[Dict] = [
         "agent": "gongzhuan",
         "desc": "梳理指定法规的高频考点、情景题要点与记忆口诀",
         "fields": [
-            {"key": "law", "label": "法规", "type": "select", "required": True,
-             "options": ["治安管理处罚法", "人民警察法", "刑法", "公安机关办理刑事案件程序规定"]},
+            {
+                "key": "law",
+                "label": "法规",
+                "type": "select",
+                "required": True,
+                "options": ["治安管理处罚法", "人民警察法", "刑法", "公安机关办理刑事案件程序规定"],
+            },
         ],
     },
     {
@@ -66,10 +97,27 @@ AGENT_TASKS: List[Dict] = [
         "agent": "choose_post",
         "desc": "结合你的画像档案，给出岗位筛选思路与竞争分析建议",
         "fields": [
-            {"key": "region", "label": "意向地区（选填）", "type": "text", "required": False, "placeholder": "如：山东、北京"},
-            {"key": "profession", "label": "专业（选填）", "type": "text", "required": False, "placeholder": "如：数据警务技术"},
-            {"key": "education", "label": "学历（选填）", "type": "select", "required": False,
-             "options": ["不限", "本科", "硕士", "博士"]},
+            {
+                "key": "region",
+                "label": "意向地区（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：山东、北京",
+            },
+            {
+                "key": "profession",
+                "label": "专业（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：数据警务技术",
+            },
+            {
+                "key": "education",
+                "label": "学历（选填）",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "本科", "硕士", "博士"],
+            },
         ],
     },
 ]
@@ -140,6 +188,7 @@ async def agent_memories(
     db: Session = Depends(get_db),
 ):
     from ...models.models import UserMemory
+
     items = (
         db.query(UserMemory)
         .filter(UserMemory.user_id == current_user.user_id)
@@ -168,6 +217,7 @@ async def agent_memory_delete(
     db: Session = Depends(get_db),
 ):
     from ...models.models import UserMemory
+
     row = (
         db.query(UserMemory)
         .filter(UserMemory.memory_id == memory_id, UserMemory.user_id == current_user.user_id)
@@ -252,6 +302,7 @@ async def run_agent_task(
     if task["task_id"] == "choose_post_advice":
         try:
             from ...models.models import PolicePost
+
             pq = db.query(PolicePost).filter(PolicePost.status == 1)
             region = req.params.get("region", "")
             profession = req.params.get("profession", "")
@@ -268,7 +319,8 @@ async def run_agent_task(
                 for p in posts:
                     lines.append(
                         f"{p.region} · {p.post_type} · 招{p.plan_count}人 · "
-                        f"竞争比{p.ratio or '待公布'} · 学历{p.education} · 专业{p.profession} · 性别{p.sex_require}"
+                        f"竞争比{p.ratio or '待公布'} · 学历{p.education} · "
+                        f"专业{p.profession} · 性别{p.sex_require}"
                     )
                 extra = extra + "\n\n【岗位库实时数据】当前筛选命中 {n} 条（以官方公告为准）：\n{rows}".format(
                     n=len(posts), rows="\n".join(lines)
