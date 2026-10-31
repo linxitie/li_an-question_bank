@@ -7,7 +7,7 @@
 
 LLM 配置（由用户本人填写，不要把密钥写进仓库）：
     LLM_API_URL=http://...
-    LLM_API_KEY=...
+    LLM_API_KEY（由用户填写，禁止提交）
 """
 from __future__ import annotations
 
