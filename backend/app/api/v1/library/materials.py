@@ -39,6 +39,9 @@ def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -
         "difficulty": m.difficulty or 1, "view_count": m.view_count or 0,
         "card_front": m.card_front, "sort_order": m.sort_order or 0,
         "card_back": m.card_back,
+        # A 方案：技巧类卡片允许不挂具体考点（跨考点的通用方法），
+        # 用 is_generic 打标，前端展示为「通用技巧」，按子类归集。
+        "is_generic": bool(m.type == "card" and not m.point_id and (m.category or "").strip()),
     }
     if prog is not None:
         d.update({

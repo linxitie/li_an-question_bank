@@ -68,6 +68,7 @@
         <div class="m-title">{{ m.title }}</div>
         <div class="m-meta">
           <span class="tag">{{ typeName(m.type) }}</span>
+          <span v-if="m.is_generic" class="tag tag-generic">通用技巧</span>
           <span v-if="m.duration" class="tag">⏱ {{ m.duration }}分钟</span>
           <span v-if="m.read_time" class="tag">阅读 {{ m.read_time }}分钟</span>
           <span v-if="m.is_studied" class="done">已学</span>
@@ -347,6 +348,8 @@ onMounted(fetchMaterials);
   line-height: 1.5;
   margin-bottom: 8px;
 }
+/* A 方案：通用技巧标 */
+.tag-generic { background: #fff7e6; color: #b45309; }
 .m-meta {
   display: flex;
   gap: 8px;
