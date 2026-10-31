@@ -33,6 +33,7 @@ def _uid(quote: EssayQuote) -> str:
     return quote.quote_uid or f"q_{quote.quote_id:06d}"
 
 
+_FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?(.*)$", re.S)
 _AUDIT_RE = re.compile(r"^\s*-\s*\[[ xX]\]\s*(通过|拒绝|退回修改)", re.M)
 _AUDIT_SECTION = (
     "\n\n## 人工审核\n\n"
@@ -69,6 +70,37 @@ def _ensure_audit_section(path: Path, dry_run: bool) -> bool:
     if not dry_run:
         path.write_text(text.rstrip() + _AUDIT_SECTION, encoding="utf-8")
     return True
+
+
+def _sync_meta(path: Path, quote: EssayQuote, bucket: str, dry_run: bool) -> bool:
+    """更新已有笔记的分数/分档/状态，保留人工勾选与备注。"""
+    text = path.read_text(encoding="utf-8")
+    match = _FRONTMATTER_RE.match(text)
+    if not match:
+        return False
+    updates = {
+        "score": str(quote.quality_score),
+        "bucket": bucket,
+        "review_status": quote.review_status or "",
+    }
+    lines = match.group(1).splitlines()
+    changed = False
+    for key, value in updates.items():
+        prefix = f"{key}:"
+        for index, line in enumerate(lines):
+            if line.startswith(prefix):
+                replacement = f"{key}: {value}"
+                if lines[index] != replacement:
+                    lines[index] = replacement
+                    changed = True
+                break
+        else:
+            lines.append(f"{key}: {value}")
+            changed = True
+    if changed and not dry_run:
+        body = match.group(2).lstrip("\n")
+        path.write_text("---\n" + "\n".join(lines) + "\n---\n\n" + body, encoding="utf-8")
+    return changed
 
 
 def _table_cell(value: str) -> str:
@@ -117,7 +149,9 @@ def export_review_board(db: Session, vault: Path, dry_run: bool = False) -> dict
         target_dir = _safe_path(vault, "00-收件箱", "审核看板", bucket)
         target = target_dir / f"{_uid(quote)}.md"
         if target.exists():
-            if _ensure_audit_section(target, dry_run):
+            changed = _ensure_audit_section(target, dry_run)
+            changed = _sync_meta(target, quote, bucket, dry_run) or changed
+            if changed:
                 updated += 1
             else:
                 skipped += 1
@@ -128,7 +162,9 @@ def export_review_board(db: Session, vault: Path, dry_run: bool = False) -> dict
         if flat and flat.exists():
             if not dry_run:
                 flat.replace(target)
-                if _ensure_audit_section(target, dry_run):
+                changed = _ensure_audit_section(target, dry_run)
+                changed = _sync_meta(target, quote, bucket, dry_run) or changed
+                if changed:
                     updated += 1
             else:
                 if not _AUDIT_RE.search(flat.read_text(encoding="utf-8")):
