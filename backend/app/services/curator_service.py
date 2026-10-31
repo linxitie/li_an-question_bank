@@ -84,7 +84,7 @@ def _http_review(prompt: str) -> str:
         url,
         headers=headers,
         json={
-            "model": "police-exam",
+            "model": settings.LLM_MODEL,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -121,6 +121,7 @@ def review_quote_with_llm(
         decision=decision,
         confidence=confidence,
         reasons=[str(item) for item in reasons][:5],
+        model=settings.LLM_MODEL,
     )
 
 

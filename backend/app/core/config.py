@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     # 大模型配置
     LLM_API_URL: str = Field("http://localhost:8080/api/v1/chat", env="LLM_API_URL")
     LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
+    LLM_MODEL: str = Field("police-exam", env="LLM_MODEL")
     
     # 日志配置
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
