@@ -163,3 +163,19 @@ def test_board_multiple_checkboxes_are_rejected(tmp_path, db_session):
     assert report["errors"]
     db_session.refresh(quote)
     assert quote.review_status == "pending"
+
+
+def test_note_without_uid_is_skipped(tmp_path, db_session):
+    vault = tmp_path / "vault"
+    board = vault / "00-收件箱" / "审核看板" / "抽样校准"
+    board.mkdir(parents=True)
+    (board / "抽样审核包.md").write_text(
+        "# 抽样包\n\n- [x] 通过\n- [x] 拒绝\n",
+        encoding="utf-8",
+    )
+
+    report = sync_review_inbox(db_session, vault)
+
+    assert report["processed"] == 0
+    assert report["errors"] == []
+    assert report["skipped"] == 1

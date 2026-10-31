@@ -87,7 +87,10 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
         is_board = folder == board
         for path in sorted(folder.rglob("*.md")):
             fields, body = parse_note(path.read_text(encoding="utf-8"))
-            uid = fields.get("uid") or path.stem
+            uid = fields.get("uid")
+            if not uid:
+                report["skipped"] += 1
+                continue
             raw_status = (fields.get("status") or "").strip()
             checkbox_action, checkbox_error = _checkbox_action(body)
             if checkbox_error:
