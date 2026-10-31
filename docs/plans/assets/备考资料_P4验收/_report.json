@@ -1,0 +1,89 @@
+{
+  "tiers": [
+    {
+      "label": "A-",
+      "clicked": true,
+      "font": 11.7,
+      "scale": 0.9
+    },
+    {
+      "label": "A",
+      "clicked": true,
+      "font": 13,
+      "scale": 1
+    },
+    {
+      "label": "A+",
+      "clicked": true,
+      "font": 14.95,
+      "scale": 1.15
+    }
+  ],
+  "perf": {
+    "domContentLoaded": 273,
+    "loadEvent": 282,
+    "paints": [
+      {
+        "name": "first-paint",
+        "t": 36
+      },
+      {
+        "name": "first-contentful-paint",
+        "t": 36
+      }
+    ],
+    "api": [
+      {
+        "url": "/materials?subject=xingce&type=video_intro&page=1&page_size=50",
+        "ms": 25,
+        "size": 322
+      },
+      {
+        "url": "/materials/progress-summary?subject=xingce",
+        "ms": 25,
+        "size": 342
+      },
+      {
+        "url": "/materials?subject=xingce&type=video_advanced&page=1&page_size=50",
+        "ms": 10,
+        "size": 322
+      },
+      {
+        "url": "/materials?subject=xingce&type=article&page=1&page_size=50",
+        "ms": 14,
+        "size": 766
+      }
+    ]
+  },
+  "fps": {
+    "frames": 50,
+    "fps": 62,
+    "maxGapMs": 17
+  },
+  "checks": [
+    [
+      "字号三档递增（A- < A < A+）",
+      true
+    ],
+    [
+      "A- 约为基准 0.9 倍",
+      true
+    ],
+    [
+      "A+ 约为基准 1.15 倍",
+      true
+    ],
+    [
+      "首屏 FCP ≤ 2000ms",
+      true
+    ],
+    [
+      "资料接口返回 ≤ 800ms",
+      true
+    ],
+    [
+      "翻页动画 ≥ 50fps",
+      true
+    ]
+  ]
+}
