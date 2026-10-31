@@ -3,7 +3,7 @@
 
 用法（在 backend 目录）：
     python -m scripts.content_hub.export_obsidian --dry-run
-    python -m scripts.content_hub.export_obsidian --vault "D:\\Obsidian仓库\\每日金句知识库"
+    python -m scripts.content_hub.export_obsidian --vault "<仓库>/backend/content_hub_vault"
 """
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from pathlib import Path
 from app.core.database import SessionLocal
 from app.services.obsidian_export import export_all
 
-DEFAULT_VAULT = os.environ.get("OBSIDIAN_VAULT_PATH") or r"D:\Obsidian仓库\每日金句知识库"
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_VAULT = os.environ.get("OBSIDIAN_VAULT_PATH") or str(BACKEND_ROOT / "content_hub_vault")
 
 
 def main() -> int:

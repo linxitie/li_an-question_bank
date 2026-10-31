@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import hashlib
+from pathlib import Path
 from ....services.event_consumer import record_user_action
 from ....core.trigger_types import TRIGGER_LEGACY_QUOTE_FAVORITE
 from typing import Optional
@@ -30,19 +31,25 @@ logger = logging.getLogger(__name__)
 # 优先使用环境变量；如果环境变量指向的路径下没有 01-金句素材库 子目录，
 # 则自动回退到常见的默认路径
 _OB_ENV_PATH = os.environ.get("OBSIDIAN_VAULT_PATH", "")
-_DEFAULT_VAULT = r"D:\Obsidian仓库\每日金句知识库"
+_DEFAULT_VAULT = str(Path(__file__).resolve().parents[4] / "content_hub_vault")
+_QUOTE_SUBDIRS = ("01-金句素材库", "01-金句")
 
 def _resolve_quote_dir() -> str:
     """解析 Obsidian 金句目录，自动检测路径是否正确"""
-    candidates = []
+    roots = []
     if _OB_ENV_PATH:
-        candidates.append(os.path.join(_OB_ENV_PATH, "01-金句素材库"))
-    candidates.append(os.path.join(_DEFAULT_VAULT, "01-金句素材库"))
+        roots.append(_OB_ENV_PATH)
+    roots.append(_DEFAULT_VAULT)
+    candidates = [
+        os.path.join(root, sub)
+        for root in roots
+        for sub in _QUOTE_SUBDIRS
+    ]
     for path in candidates:
         if os.path.isdir(path):
             return path
     # 都不存在则返回默认值（让后续报错信息更清晰）
-    return candidates[-1] if candidates else os.path.join(_DEFAULT_VAULT, "01-金句素材库")
+    return candidates[0] if candidates else os.path.join(_DEFAULT_VAULT, _QUOTE_SUBDIRS[0])
 
 OBSIDIAN_QUOTE_DIR = _resolve_quote_dir()
 

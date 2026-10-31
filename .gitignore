@@ -113,6 +113,9 @@ backend/app/static/questions/
 !**/.env.example
 backend/.env
 deploy/.env*
+backend/.env copy*
+# 生成式 Obsidian 投影（本地工作副本，可由 export_obsidian 重建）
+backend/content_hub_vault/
 !deploy/.env.example
 # 本地 MCP 配置与管理员令牌（已从索引移除；历史泄露的密钥请轮换）。
 .obsidian_mcp.json
