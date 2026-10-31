@@ -92,8 +92,17 @@ async def _post(
     - 日志不回显响应原文与请求内容。
     """
     url = settings.LLM_API_URL.rstrip("/") + "/chat/completions"
+    # 未配置密钥时必须在这里报明确的配置错误：此前会带着 "Bearer None" 打上游，
+    # 上游回 401，用户只能看到「大模型返回错误（401）」，无法判断是配置缺失。
+    api_key = (settings.LLM_API_KEY or "").strip()
+    if not api_key or api_key.startswith("<"):
+        raise LLMClientError(
+            "未配置大模型密钥：请在 backend/.env（或仓库根 .env）设置 LLM_API_KEY"
+            "（兼容 DEEPSEEK_API_KEY）后重启后端",
+            "llm_no_key",
+        )
     headers = {
-        "Authorization": f"Bearer {settings.LLM_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
@@ -115,6 +124,13 @@ async def _post(
                     resp.status_code,
                     len(resp.content),
                 )
+                # 鉴权失败单独成句：401/403 是配置或密钥问题，不随重试消失
+                if resp.status_code in (401, 403):
+                    raise LLMClientError(
+                        f"大模型鉴权失败（{resp.status_code}）：API Key 无效、过期或无权限，"
+                        "请检查 LLM_API_KEY 配置",
+                        "llm_unauthorized",
+                    )
                 raise LLMClientError(f"大模型返回错误（{resp.status_code}）", "llm_bad_status")
 
             try:

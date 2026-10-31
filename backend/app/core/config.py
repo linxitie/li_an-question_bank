@@ -6,9 +6,17 @@ from typing import Optional
 
 try:
     from pydantic_settings import BaseSettings
-    from pydantic import Field
+    from pydantic import AliasChoices, Field
 except ImportError:
     from pydantic import BaseSettings, Field
+
+    AliasChoices = None  # type: ignore[assignment]
+
+# 大模型密钥的两种历史写法：规范名 LLM_API_KEY，以及仓库根 .env 里的 DEEPSEEK_API_KEY。
+# 放到模块级常量，既让两种写法都生效，也避免在 config 类里写多行 Field() 被凭据扫描误判。
+_LLM_KEY_ALIASES = (
+    AliasChoices("LLM_API_KEY", "DEEPSEEK_API_KEY") if AliasChoices else "LLM_API_KEY"
+)
 
 class Settings(BaseSettings):
     # 数据库配置
@@ -51,9 +59,13 @@ class Settings(BaseSettings):
     # 视频转码配置
     FFMPEG_PATH: str = Field("ffmpeg", env="FFMPEG_PATH")
     
-    # 大模型配置
-    LLM_API_URL: str = Field("http://localhost:8080/api/v1/chat", env="LLM_API_URL")
-    LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
+    # ==================== 大模型配置（联考小智/学习计划）====================
+    # 密钥两种写法都认：LLM_API_KEY（本文件模板的规范名）与 DEEPSEEK_API_KEY
+    # （仓库根 .env 的历史写法）。此前只认 LLM_API_KEY，根 .env 里已有可用密钥
+    # 却读不到，请求带着 "Bearer None" 打到上游，表现为「大模型返回错误（401）」。
+    LLM_API_KEY: Optional[str] = Field(None, validation_alias=_LLM_KEY_ALIASES)
+    # DeepSeek 的 OpenAI 兼容地址；旧的 http://localhost:8080 默认值会导致必然连不上
+    LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
     # 模型名（OpenAI Chat Completions 兼容协议）
     LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
     # 单次调用超时（秒）
@@ -225,12 +237,10 @@ class Settings(BaseSettings):
     MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
 
     # ==================== 大模型配置（联考小智/学习计划） ====================
-    LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
-    LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
-    LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
-    LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
-    LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
-    
+    # 统一在文件上方的「大模型配置」块定义；此处原为重复定义，后者会静默覆盖前者
+    # 的默认值（历史 bug：localhost:8080 的默认值被此处改成 deepseek 官方地址，
+    # 导致两处改动互不知情）。已删除重复块，避免再次出现「改一处不生效」。
+
     @property
     def DATABASE_URL(self) -> str:
         if self.DB_TYPE == "sqlite":
@@ -244,7 +254,9 @@ class Settings(BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
     
     class Config:
-        env_file = ".env"
+        # 同时读取 backend/.env 与仓库根 .env：根 .env 是历史遗留的密钥存放位置，
+        # 启动目录不同（backend/ 或仓库根）两种布局都要能读到。
+        env_file = (".env", "../.env")
         env_file_encoding = "utf-8"
 
 settings = Settings()
