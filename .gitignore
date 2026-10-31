@@ -173,3 +173,29 @@ solve_problems_files/
 backend/data/*.sqlite*
 backend/data/*.db*
 
+# ===== 2026-10-31：用户指定排除的本地/生成物 =====
+# 说明：Git 对已跟踪文件不生效；以下规则保证新增的本地缓存、日志、题库资料
+# 不再反复出现在提交中。核心配置与 .vtj 源码仍保持跟踪。
+.agent/
+.agents/
+.claude/
+.dsh/
+.idea/
+.omo/
+.opencode/
+.playwright-mcp/
+.pytest_cache/
+.sisyphus/
+.vscode/
+.worktrees/
+mineru_verify_out/
+node_modules/
+校徽.png
+/*.log
+/gate_all_*.log
+/frontend_*.log
+/backend_*.log
+/smart_fail.log
+题库/
+
+
