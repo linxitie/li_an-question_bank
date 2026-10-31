@@ -628,10 +628,22 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const device = detectDevice();
 
-  // 1) 已在设备专属路径（/tablet、/mobile）→ 校验角色：移动/平板端仅学生可访问
-  //    教师/管理员（已登录且非 student）跳转提示页；未登录放行到各端登录页
+  // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再验角色
+  //    - 未登录：只放行各端登录页，其余跳转到对应端登录页并带 redirect
+  //      （此前这里直接 `next()`，导致 /mobile/* 未登录也能进——已修）
+  //    - 教师/管理员：跳 /unauthorized
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
     const auth = (window as any).__VTJ_AUTH__;
+    const logged = auth && typeof auth.isLoggedIn === 'function'
+      ? !!auth.isLoggedIn()
+      : false;
+    const isLoginPage = /^\/(tablet|mobile)\/login\/?$/.test(to.path)
+      || to.path === '/unauthorized';
+    if (!logged) {
+      if (isLoginPage) return next();
+      const loginPath = to.path.startsWith('/tablet') ? '/tablet/login' : '/mobile/login';
+      return next({ path: loginPath, query: { redirect: to.fullPath } });
+    }
     const role = auth ? auth.getUserRole() : null;
     if (role && role !== 'student') {
       return next('/unauthorized?reason=mobile_student_only');
