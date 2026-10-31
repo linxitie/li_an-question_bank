@@ -2308,3 +2308,16 @@ class QuoteReview(Base):
         Index("idx_quote_review_reviewer", reviewer_id, created_at),
     )
 
+
+class DailyQuote(Base):
+    """每日金句预生成（R1）"""
+    __tablename__ = "daily_quote"
+
+    quote_date = Column(String(10), primary_key=True, comment="YYYY-MM-DD")
+    quote_id = Column(BigInteger, ForeignKey("essay_quote.quote_id"), nullable=False)
+    algorithm_version = Column(String(20), default="datehash-v1")
+    fallback_used = Column(Integer, default=0, comment="1=近30天候选耗尽后回退全池")
+    created_at = Column(DateTime, default=datetime.now)
+
+    quote = relationship("EssayQuote")
+

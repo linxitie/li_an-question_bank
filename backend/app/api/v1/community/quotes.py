@@ -23,7 +23,7 @@ from sqlalchemy import desc, func
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import EssayQuote, QuoteFavorite, SysUser
-from ....services import quote_filter_service
+from ....services import daily_quote_service, quote_filter_service
 
 router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
@@ -176,10 +176,23 @@ async def get_daily_quote(
 ):
     """
     获取每日金句：
-    1. 优先从 Obsidian 知识库读取已审核的有效金句
-    2. 按日期轮转选取（同一天返回相同金句）
-    3. 如果 Obsidian 不可用，回退到 SQLite 数据库
+    1. 优先使用 SQLite 预生成的 daily_quote（同一天稳定）
+    2. 无数据库候选时回退到 Obsidian 知识库
+    3. 再回退到随机数据库金句
     """
+    daily = daily_quote_service.get_or_create_daily(db)
+    if daily:
+        row, quote = daily
+        favorited = False
+        if current_user:
+            favorited = db.query(QuoteFavorite).filter(
+                QuoteFavorite.user_id == current_user.user_id,
+                QuoteFavorite.quote_id == quote.quote_id
+            ).first() is not None
+        payload = daily_quote_service.serialize_daily(row, quote)
+        payload["favorited"] = favorited
+        return payload
+
     # 1. 尝试从 Obsidian 读取
     obsidian_quotes = _read_obsidian_quotes()
     if obsidian_quotes:
