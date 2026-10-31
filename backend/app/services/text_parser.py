@@ -2804,7 +2804,10 @@ def _detect_essay_numbering(lines: List[str]) -> Optional[str]:
 
 _ESSAY_SECTION_HEAD_RE = re.compile(
     r'^[ \t　]*[（(]?\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})\s*[）)]?\s*[、.．]?\s*'
-    r'(?:作答要求|给定材料|参考答案|答题要求|材料)'
+    r'(?:作答要求|答题要求|参考答案|给定材料|给定资料|材料)'
+    # 章节标题必须在关键词后立即收尾（可带材料序号/冒号），
+    # 不能把「2. 给定材料2中提到……」这类真题行误当标题。
+    r'\s*(?:\d{1,2}|[一二三四五六七八九十]{1,3})?\s*(?:[：:]\s*)?$'
 )
 
 # 作答要求区起点：该区内的题目可能因分页/截断丢失分值标记，
@@ -5129,6 +5132,35 @@ _SET_IMAGE_RE = re.compile(r'\[IMAGE:[^\]]+\]')
 _QNUM_LINE_START = re.compile(r'(?m)^[ \t]*(\d{1,3})[ \t]*[.．、](?!\d)')
 _SECTION_HEAD_LINE = re.compile(r'^[ \t]*第[一二三四五六七八九十]+部分.*$')
 _MIN_MATERIAL_CHARS = 30
+
+# OCR 归一化：MinerU Markdown 用 ASCII (一)(二)，并把题号粘在上一行末尾。
+# 只在 OCR 出口调用，避免影响文本型 PDF 的既有切分（2026-10-31 P4）。
+_ASCII_SET_MARKER = re.compile(r'(?m)^[ \t]*\(([一二三四五六七八九十]{1,3})\)[ \t]*$')
+_OCR_GLUED_QNUM = re.compile(
+    r'(?<=[\u4e00-\u9fff。！？；：”"）\)])[ \t]*(\d{2,3})[ \t]*[.．、][ \t]*'
+    r'(?=(?:[\u4e00-\u9fff“（(])|(?:19|20)\d{2}[ \t]*年)'
+)
+# OCR 会把题号直接粘在年份前（106.2021年）；补一个空格，
+# 否则 _QNUM_LINE_START 的 (?!\d) 会把它当小数，材料段边界整体错位。
+_OCR_QNUM_YEAR_GAP = re.compile(r'(?m)^[ \t]*(\d{2,3})[.．、](?=(?:19|20)\d{2}[ \t]*年)')
+
+
+def normalize_ocr_markdown(text: str) -> str:
+    """把 MinerU OCR 文本归一化到与文本层 PDF 同构的切分前提。
+
+    只做两件低风险替换：
+    1. 行首 ASCII (一) 改为全角（一），让资料分析材料标记能被识别；
+    2. 把粘在上一行末尾的 2~3 位题号断到新行，如
+       ...高1.79个百分点108.2023年... → ...高1.79个百分点（换行）108.2023年...。
+
+    断行只认「题号 + 点/顿号 + 中文或年份」的强信号，且题号至少两位，
+    因此 1.79、93.37、58.05% 这类小数不会被误切。
+    """
+    if not text:
+        return text
+    normalized = _ASCII_SET_MARKER.sub(lambda m: f'（{m.group(1)}）', text)
+    normalized = _OCR_QNUM_YEAR_GAP.sub(lambda m: m.group(1) + '. ', normalized)
+    return _OCR_GLUED_QNUM.sub(lambda m: '\n' + m.group(1) + '. ', normalized)
 
 
 def _clean_material_header(header: str) -> str:

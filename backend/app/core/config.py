@@ -54,7 +54,12 @@ class Settings(BaseSettings):
     # 大模型配置
     LLM_API_URL: str = Field("http://localhost:8080/api/v1/chat", env="LLM_API_URL")
     LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
-    LLM_MODEL: str = Field("police-exam", env="LLM_MODEL")
+    # 模型名（OpenAI Chat Completions 兼容协议）
+    LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
+    # 单次调用超时（秒）
+    LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
+    # 多轮会话携带的最大历史条数
+    LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
     
     # 日志配置
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
@@ -218,6 +223,13 @@ class Settings(BaseSettings):
     MATERIAL_CLASSIFIER_ENABLED: bool = Field(True, env="MATERIAL_CLASSIFIER_ENABLED")
     # 去重检测开关
     MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
+
+    # ==================== 大模型配置（联考小智/学习计划） ====================
+    LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
+    LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
+    LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
+    LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
+    LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
     
     @property
     def DATABASE_URL(self) -> str:

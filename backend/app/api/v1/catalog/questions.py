@@ -27,6 +27,12 @@ from ....services.image_service import (sanitize_content_images, sanitize_option
 from ....services.option_utils import render_image_placeholder
 from ....services.text_parser import canonical_answer
 from ....services.question_ingest.groups import upsert_question_material
+from ....services.ocr_pipeline import (
+    question_candidates,
+    group_candidates,
+    apply_question_decisions,
+    apply_group_decisions,
+)
 from ....foundation.validation import ensure_valid
 
 
@@ -958,6 +964,84 @@ async def upload_question_image(
 
     logger.info("用户 %s 为题目 %d 上传图片 %s", current_user.username, qid, url)
     return SuccessResponse(message="图片上传成功", data={"url": url, "image_path": url})
+
+
+@router.get("/{question_id}/ocr-candidates", summary="题目内嵌图片 OCR 候选（P3）")
+async def get_question_ocr_candidates(
+    question_id: int,
+    run_ocr: bool = Query(True, description="是否立即识别；false 仅列出图片"),
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """扫描题干/选项/答案解析中的图片，返回原位 OCR 候选，供教师逐条审阅。
+
+    只读接口：不会修改题目。大图（图表/几何图/资料图）会带
+    suggest_keep_image=true，默认建议保留原图，避免把图形 OCR 成噪声文字。
+    """
+    question = db.query(QuestionBank).filter(
+        QuestionBank.question_id == question_id
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    items = question_candidates(db, question, run_ocr=run_ocr)
+    return {
+        "question_id": question_id,
+        "count": len(items),
+        "items": [item.as_dict() for item in items],
+    }
+
+
+@router.post("/{question_id}/ocr-apply", summary="按审阅结果原位替换题目图片（P3）")
+async def apply_question_ocr(
+    question_id: int,
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """body: {"items":[{"location":"stem","index":0,"text":"...","replace":true}]}
+
+    仅替换被 replace=true 的图片，且替换位置就是原 <img> 标签所在位置；
+    未选中的图片、前后文字、题组关系一律不动。可重复调用（幂等）。
+    """
+    question = db.query(QuestionBank).filter(
+        QuestionBank.question_id == question_id
+    ).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    report = apply_question_decisions(db, question, payload.get("items") or [])
+    return {"success": True, **report.as_dict()}
+
+
+@router.get("/group/{group_id}/ocr-candidates", summary="题组材料 OCR 候选（P3）")
+async def get_group_ocr_candidates(
+    group_id: int,
+    run_ocr: bool = Query(True, description="是否立即识别"),
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    group = db.query(QuestionGroup).filter(QuestionGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="题组不存在")
+    items = group_candidates(db, group, run_ocr=run_ocr)
+    return {
+        "group_id": group_id,
+        "count": len(items),
+        "items": [item.as_dict() for item in items],
+    }
+
+
+@router.post("/group/{group_id}/ocr-apply", summary="按审阅结果原位替换题组材料图片（P3）")
+async def apply_group_ocr(
+    group_id: int,
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    group = db.query(QuestionGroup).filter(QuestionGroup.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="题组不存在")
+    report = apply_group_decisions(db, group, payload.get("items") or [])
+    return {"success": True, **report.as_dict()}
 
 
 # RT-8：题组材料图片上传。目录口径与 question_ingest/images.py 的

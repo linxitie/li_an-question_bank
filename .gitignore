@@ -65,6 +65,11 @@ venv/
 .coverage
 htmlcov/
 *.egg-info/
+# 临时排查/种子脚本与旧版平铺路由副本（已归档 _archive_cleanup_A，不入库）
+backend/_*.py
+backend/run_demo.py
+# 运行错误输出（*.log 已忽略，补 *.err）
+*.err
 
 # ---------- 数据库 / 运行时数据 ----------
 *.db
@@ -105,12 +110,19 @@ backend/data/gates/last_run.json
 # 如需彻底瘦身需单独迁移，勿直接删除 backend/app/static/（R7）。
 backend/app/static/questions/
 
+# ---------- 容器化 staging 运行时数据 ----------
+# deploy/preflight.sh 与 docker compose 的 staging 数据目录；绝不入库。
+deploy/runtime/
+# TLS 证书与私钥不入库（保留 README 与生成脚本）
+deploy/certs/*.crt
+deploy/certs/*.key
+deploy/certs/*.pem
+
 # ---------- 凭据 ----------
-# 真实环境变量文件一律不入库；模板 *.env.example 放行。
+# 真实环境变量与 .env.example 模板一律不入库（2026-10-31 用户要求）。
 .env
 .env.*
-!.env.example
-!**/.env.example
+**/.env.example
 backend/.env
 deploy/.env*
 backend/.env copy*
@@ -119,6 +131,7 @@ backend/content_hub_vault/
 # 原始金句知识库（含自有 .git / node_modules，不纳入本仓库）
 每日金句知识库/
 !deploy/.env.example
+!deploy/.env.production.example
 # 本地 MCP 配置与管理员令牌（已从索引移除；历史泄露的密钥请轮换）。
 .obsidian_mcp.json
 admin_token.txt
@@ -163,4 +176,30 @@ solve_problems_files/
 *.sqlite-shm
 backend/data/*.sqlite*
 backend/data/*.db*
+
+# ===== 2026-10-31：用户指定排除的本地/生成物 =====
+# 说明：Git 对已跟踪文件不生效；以下规则保证新增的本地缓存、日志、题库资料
+# 不再反复出现在提交中。核心配置与 .vtj 源码仍保持跟踪。
+.agent/
+.agents/
+.claude/
+.dsh/
+.idea/
+.omo/
+.opencode/
+.playwright-mcp/
+.pytest_cache/
+.sisyphus/
+.vscode/
+.worktrees/
+mineru_verify_out/
+node_modules/
+校徽.png
+/*.log
+/gate_all_*.log
+/frontend_*.log
+/backend_*.log
+/smart_fail.log
+题库/
+
 

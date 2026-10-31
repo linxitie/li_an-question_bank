@@ -850,6 +850,16 @@ class StudyGoal(Base):
     baseline_accuracy = Column(Float, default=0.0, comment="基线正确率(创建时快照)")
     baseline_count = Column(Integer, default=0, comment="基线做题量(创建时快照)")
 
+    # === 学习计划（模块4）：AI 生成的计划归属与排序 ===
+    plan_id = Column(Integer, default=None, comment="所属学习计划ID（AI生成，同一计划共享）")
+    sort_order = Column(Integer, default=0, comment="计划内任务排序")
+    plan_meta = Column(Text, comment="计划元数据JSON(summary/phases/tips)")
+
+    # === 模块4 v2 每日任务闭环 ===
+    task_date = Column(String(10), nullable=True, comment="任务归属日期 YYYY-MM-DD（按日滚动）")
+    coin_reward = Column(Integer, default=0, comment="完成可领取金币（生成时按规则分配）")
+    coin_claimed = Column(Integer, default=0, comment="金币领取状态 0未领/1已领")
+
     user = relationship("SysUser")
 
     __table_args__ = (
@@ -857,6 +867,47 @@ class StudyGoal(Base):
         Index("idx_goal_type", goal_type),
         Index("idx_is_completed_studygoal", is_completed),
         Index("idx_deadline", deadline),
+        Index("idx_plan_id", plan_id),
+    )
+
+
+class PlanAdjustment(Base):
+    """模块4 v2 - AI 调整计划记录（可干预：调整原因+调整内容+应用状态）"""
+    __tablename__ = "plan_adjustment"
+
+    adjust_id = Column(Integer, primary_key=True, autoincrement=True, comment="调整记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    plan_id = Column(Integer, nullable=True, comment="被调整计划ID")
+    reason = Column(String(300), comment="调整原因（用户指令）")
+    adjustment = Column(Text, comment="调整内容（JSON: summary+adjustments）")
+    apply_flag = Column(Integer, default=1, comment="是否已应用到计划 1是/0否")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_adjust_user_plan", user_id, plan_id),
+    )
+
+
+class PolicePost(Base):
+    """模块7 v2 - 公安联考岗位库（选岗顾问数据支撑）"""
+    __tablename__ = "police_post"
+
+    post_id = Column(Integer, primary_key=True, autoincrement=True, comment="岗位ID")
+    region = Column(String(60), comment="招录地区/单位")
+    post_type = Column(String(30), comment="岗位类型：综合/执法/技术")
+    profession = Column(String(120), comment="专业要求（可含多个，顿号分隔）")
+    education = Column(String(30), comment="学历要求")
+    sex_require = Column(String(20), comment="性别要求：不限/男/女")
+    plan_count = Column(Integer, default=0, comment="招录人数")
+    ratio = Column(String(30), comment="竞争比（如 1:12）")
+    source = Column(String(200), comment="数据来源（官方公告等）")
+    status = Column(Integer, default=1, comment="1有效/0停用")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_post_region", region),
+        Index("idx_post_type", post_type),
+        Index("idx_post_education", education),
     )
 
 
@@ -2320,4 +2371,144 @@ class DailyQuote(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     quote = relationship("EssayQuote")
+
+
+class ChatSession(Base):
+    """联考小智 - 对话会话表"""
+    __tablename__ = "chat_session"
+
+    session_id = Column(Integer, primary_key=True, autoincrement=True, comment="会话ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    title = Column(String(100), nullable=False, default="新会话", comment="会话标题")
+    scene = Column(String(20), default="qa", comment="场景: psychological/qa/advice")
+    status = Column(Integer, default=1, comment="状态 1正常/0删除")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_chat_session_user", user_id),
+        Index("idx_chat_session_update", update_time),
+    )
+
+
+class ChatMessage(Base):
+    """联考小智 - 对话消息表"""
+    __tablename__ = "chat_message"
+
+    message_id = Column(Integer, primary_key=True, autoincrement=True, comment="消息ID")
+    session_id = Column(Integer, ForeignKey("chat_session.session_id"), nullable=False, comment="会话ID")
+    role = Column(String(10), nullable=False, comment="角色: user/assistant")
+    content = Column(Text, nullable=False, comment="消息内容")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    session = relationship("ChatSession")
+
+    __table_args__ = (
+        Index("idx_chat_message_session", session_id),
+        Index("idx_chat_message_create", create_time),
+    )
+
+
+class UserNotify(Base):
+    """模块4 v2 - 站内提醒表（每日任务未完成提醒等）"""
+    __tablename__ = "user_notify"
+
+    notify_id = Column(Integer, primary_key=True, autoincrement=True, comment="提醒ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    content = Column(String(500), nullable=False, comment="提醒内容")
+    notify_type = Column(String(20), default="task_remind", comment="类型: task_remind/system")
+    read_flag = Column(Integer, default=0, comment="已读 0未读/1已读")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_notify_user", user_id),
+        Index("idx_notify_read", read_flag),
+    )
+
+
+class UserMemory(Base):
+    """模块7 v2 - 长期记忆表（关键事实：目标分数/弱项/承诺行动/里程碑等）"""
+    __tablename__ = "user_memory"
+
+    memory_id = Column(Integer, primary_key=True, autoincrement=True, comment="记忆ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    memory_type = Column(String(30), default="fact", comment="类型: goal_score/weak_subject/daily_hours/exam_date/grade/action/milestone")
+    content = Column(String(500), nullable=False, comment="记忆内容")
+    source = Column(String(30), default="profile", comment="来源: profile/plan/agent/manual")
+    expire_at = Column(DateTime, nullable=True, comment="过期时间（可空=长期有效）")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_memory_user_type", user_id, memory_type),
+    )
+
+
+class KnowledgeNode(Base):
+    """模块7 Phase3 - 知识库节点（Obsidian 自生长知识库入库后的图谱节点）"""
+    __tablename__ = "knowledge_node"
+
+    node_id = Column(Integer, primary_key=True, autoincrement=True, comment="节点ID")
+    title = Column(String(200), nullable=False, comment="节点标题")
+    category = Column(String(30), default="exam_point", comment="分类: law/recruit/exam_point/wrong")
+    content = Column(Text, comment="节点内容（Markdown）")
+    source = Column(String(200), comment="来源（vault 路径/链接）")
+    status = Column(String(20), default="pending", comment="状态: pending/approved")
+    submitter_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=True, comment="提交人")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        Index("idx_knowledge_category", category),
+        Index("idx_knowledge_status", status),
+    )
+
+
+class KnowledgeRelation(Base):
+    """模块7 Phase3 - 知识图谱关系（轻量边）"""
+    __tablename__ = "knowledge_relation"
+
+    rel_id = Column(Integer, primary_key=True, autoincrement=True, comment="关系ID")
+    from_node = Column(Integer, ForeignKey("knowledge_node.node_id"), nullable=False, comment="源节点")
+    to_node = Column(Integer, ForeignKey("knowledge_node.node_id"), nullable=False, comment="目标节点")
+    rel_type = Column(String(30), default="related", comment="关系: related/contains/leads_to")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_knowledge_rel_from", from_node),
+        Index("idx_knowledge_rel_to", to_node),
+    )
+
+
+class UserProfile(Base):
+    """模块4 v2 - 用户备考画像表（注册/画像问卷采集，供 PlanAgent 推理）"""
+    __tablename__ = "user_profile"
+
+    profile_id = Column(Integer, primary_key=True, autoincrement=True, comment="画像ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, unique=True, comment="用户ID")
+    grade = Column(String(20), nullable=True, comment="年级: 大一/大二/大三/大四/应届")
+    target_score = Column(String(30), nullable=True, comment="目标分数（如 220/行测70/公专85）")
+    self_level = Column(String(20), nullable=True, comment="水平自评: 零基础/入门/有基础/冲刺")
+    daily_hours = Column(Float, nullable=True, comment="每日可学时长 1-8 小时")
+    subject_strengths = Column(Text, nullable=True, comment="强项科目 JSON 数组")
+    subject_weaknesses = Column(Text, nullable=True, comment="弱项科目 JSON 数组")
+    exam_date = Column(String(10), nullable=True, comment="备考截止日期 YYYY-MM-DD")
+    target_region = Column(String(50), nullable=True, comment="岗位意向地区")
+    target_post = Column(String(100), nullable=True, comment="岗位意向/方向")
+    profile_status = Column(Integer, default=0, comment="画像完成度 0未完成/1已完成")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_profile_user", user_id),
+        Index("idx_profile_status", profile_status),
+    )
 

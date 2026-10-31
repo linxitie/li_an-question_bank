@@ -296,7 +296,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted, computed, nextTick, watch } from 'vue';
+import { defineComponent, ref, onMounted, onBeforeUnmount, computed, nextTick, watch, createApp } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
@@ -305,6 +305,7 @@ import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { mountMaterialDock, removeMaterialDock } from '@/utils/materialDock';
 import { findEditModalRoot, refreshEditPreviews } from '@/utils/editPreview';
+import OcrReviewPanel from '@/components/question/OcrReviewPanel.vue';
 
 export default defineComponent({
   name: 'TeacherQuestions',
@@ -649,21 +650,40 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 
     // ========== 详情弹窗 ==========
 
-    function showDetail(q: any) {
+    // 列表接口已瘦身（不再返回 full_content/options/答案/解析），
+    // 详情与编辑必须先按 id 拉单题详情；否则会拿摘要去覆盖表单。
+    async function fetchQuestionDetail(qid: any) {
+      const auth = (window as any).__VTJ_AUTH__;
+      const res = await auth.apiFetch(`/api/questions/${qid}`);
+      if (!res.ok) throw new Error('题目详情加载失败');
+      return await res.json();
+    }
+
+    async function showDetail(q: any) {
       currentQuestion.value = q;
       showDetailModal.value = true;
       removeMaterialDock(document.querySelector('.detail-modal'), 'tq-material-dock');
       // B4: 复合题小题 → 拉取题组聚合（共享材料+同组成员）
       groupInfo.value = null;
-      if (q.group_id) {
+      var detail = q;
+      if (!q.detail_loaded) {
+        try {
+          detail = await fetchQuestionDetail(q.question_id);
+          detail = { ...q, ...detail, full_content: detail.question_content || q.question_content };
+          currentQuestion.value = detail;
+        } catch (e) {
+          console.error('题目详情加载失败:', e);
+        }
+      }
+      if (detail.group_id) {
         const auth = (window as any).__VTJ_AUTH__;
-        auth.apiFetch(`/api/questions/group/${q.group_id}`)
+        auth.apiFetch(`/api/questions/group/${detail.group_id}`)
           .then((res: any) => res.json())
           .then((data: any) => {
             if (data && data.group) {
               groupInfo.value = data.group;
               // members 的 requirements 前置拼进 question_content（见 withRequirements）
-              currentQuestion.value = { ...q, group_members: (data.members || []).map(withRequirements) };
+              currentQuestion.value = { ...detail, group_members: (data.members || []).map(withRequirements) };
               // 材料吸顶：教师查看长材料/多小题时始终可见；脚本挂载，避免改 raw 模板
               nextTick(function () {
                 var host = document.querySelector('.detail-modal');
@@ -682,24 +702,107 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 
     // ========== 编辑弹窗 ==========
 
-    function openEdit(q: any) {
-      const opts = parsedOptions(q.options);
-      currentQuestionTypeName.value = typeDisplayName(q.type_name);
+    // P3：编辑弹窗里的图片 OCR 入口。raw 页 <template> 不能改，故脚本注入到 h3 右侧；
+    // 只处理已入库题目，识别结果原位替换 <img>，审阅面板负责确认。
+    function mountOcrButton() {
+      const modal = document.querySelector('.modal-overlay .edit-modal');
+      if (!modal) return;
+      const qid = Number(editForm.value.question_id || 0);
+      const gid = Number(editForm.value.group_id || 0);
+      if (!qid && !gid) return;
+      let button = modal.querySelector('.tq-ocr-review-btn');
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tq-ocr-review-btn';
+        button.textContent = '🖼 图片 OCR 审阅';
+        button.style.cssText = 'float:right;margin-right:34px;padding:5px 11px;border:1px solid #cbd5e1;' +
+          'border-radius:6px;background:#f8fafc;color:#1a3c6d;cursor:pointer;font-size:13px;';
+        button.addEventListener('click', openOcrReview);
+        const heading = modal.querySelector('h3');
+        if (heading) heading.appendChild(button);
+      }
+      button.dataset.questionId = String(qid);
+      button.dataset.groupId = String(gid);
+    }
+
+    // 面板挂在 body 上，必须显式销毁；否则路由切换后遮罩会残留。
+    let ocrReviewApp: any = null;
+    let ocrReviewHost: any = null;
+
+    function destroyOcrReview() {
+      if (ocrReviewApp) {
+        try { ocrReviewApp.unmount(); } catch (e) { /* 已卸载 */ }
+        ocrReviewApp = null;
+      }
+      if (ocrReviewHost) {
+        ocrReviewHost.remove();
+        ocrReviewHost = null;
+      }
+    }
+
+    function openOcrReview() {
+      const qid = Number(editForm.value.question_id || 0);
+      const gid = Number(editForm.value.group_id || 0);
+      if (!qid && !gid) return;
+      destroyOcrReview();
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      ocrReviewHost = host;
+      const destroy = function () {
+        try { if (ocrReviewApp) ocrReviewApp.unmount(); } catch (e) { /* 已卸载 */ }
+        ocrReviewApp = null;
+        if (ocrReviewHost) { ocrReviewHost.remove(); ocrReviewHost = null; }
+      };
+      ocrReviewApp = createApp(OcrReviewPanel, {
+        questionId: qid,
+        groupId: gid,
+        onClose: destroy,
+        onApplied: async function () {
+          try {
+            const full: any = await fetchQuestionDetail(qid);
+            editForm.value.question_content = full.question_content || editForm.value.question_content;
+            editForm.value.answer_analysis = full.answer_analysis || editForm.value.answer_analysis;
+            editForm.value.shared_content = full.shared_content || editForm.value.shared_content;
+            editForm.value.optionsParsed = Object.assign({}, parsedOptions(full.options));
+            nextTick(refreshEditPreview);
+          } catch (e) { /* 拉取失败时保留现有编辑内容，避免覆盖用户输入 */ }
+        }
+      });
+      ocrReviewApp.mount(host);
+    }
+
+    onBeforeUnmount(destroyOcrReview);
+
+    async function openEdit(q: any) {
+      var full = q;
+      if (!q.detail_loaded) {
+        try {
+          full = { ...q, ...(await fetchQuestionDetail(q.question_id)) };
+        } catch (e: any) {
+          ElMessage.error('题目详情加载失败，请重试');
+          return;
+        }
+      }
+      const opts = parsedOptions(full.options);
+      currentQuestionTypeName.value = typeDisplayName(full.type_name || q.type_name);
       editForm.value = {
-        question_id: q.question_id,
-        subject_id: q.subject_id || 1,
-        question_content: q.full_content || q.question_content || '',
-        answer: q.answer || '',
-        answer_analysis: q.answer_analysis || '',
-        difficulty: q.difficulty || 3,
+        question_id: full.question_id,
+        subject_id: full.subject_id || 1,
+        question_content: full.question_content || full.full_content || '',
+        answer: full.answer || '',
+        answer_analysis: full.answer_analysis || '',
+        difficulty: full.difficulty || 3,
         optionsParsed: Object.keys(opts).length > 0 ? { ...opts } : { A: '', B: '', C: '', D: '' },
-        group_id: q.group_id || 0,
-        shared_content: q.shared_content || '',
-        shared_content_images: q.shared_content_images || '',
+        group_id: full.group_id || 0,
+        shared_content: full.shared_content || '',
+        shared_content_images: full.shared_content_images || '',
       };
       showEditModal.value = true;
-      nextTick(refreshEditPreview);
-      hydrateMaterialFromDetail(q.question_id);
+      nextTick(function () {
+        refreshEditPreview();
+        mountOcrButton();
+      });
     }
 
     // raw 页不能改 <template>：在脚本里把编辑弹窗的题组材料、选项、解析补成富文本预览。

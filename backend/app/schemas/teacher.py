@@ -231,6 +231,10 @@ class QuestionCorrectRate(BaseModel):
     question_content: str  # 截取前50字
     correct_rate: float
     total_attempts: int
+    # 错题归因需要：题型 / 知识点 / 科目，缺失时前端降级为“未标注”
+    type_name: Optional[str] = None
+    point_name: Optional[str] = None
+    subject_name: Optional[str] = None
 
 
 class StudentScoreItem(BaseModel):

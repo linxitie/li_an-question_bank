@@ -79,6 +79,36 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student'] }
   },
   {
+    path: '/ai-assistant',
+    name: 'AiAssistant',
+    component: () => import('$vtj/vue/ai_chat.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/study-plan',
+    name: 'StudyPlan',
+    component: () => import('$vtj/vue/study_plan.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/profile-quiz',
+    name: 'ProfileQuiz',
+    component: () => import('$vtj/vue/profile_quiz.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/knowledge',
+    name: 'KnowledgeView',
+    component: () => import('$vtj/vue/knowledge_view.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/memories',
+    name: 'MemoriesView',
+    component: () => import('$vtj/vue/memories.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/student/papers',
     name: 'StudentPapers',
     component: () => import('$vtj/vue/student_papers.vue'),
@@ -145,13 +175,17 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/teacher/papers',
     name: 'TeacherPapers',
-    component: () => import('$vtj/vue/teacher_papers.vue'),
+    // P5：旧 raw 页左栏固定 50 条、无预览解析；改为手写双栏工作台。
+    // 旧文件 teacher_papers.vue 保留，仅作设计器回滚参考，路由不再指向它。
+    component: () => import('@/views/teacher/pc/TeacherPaperEditor.vue'),
     meta: { roles: ['teacher', 'admin'] }
   },
   {
     path: '/teacher/scores',
     name: 'TeacherScores',
-    component: () => import('$vtj/vue/teacher_scores.vue'),
+    // P4：原 teacher_scores 仅 276 行、无班级/全校与知识点分析；
+    // 合并「数据分析」后改为手写驾驶舱，旧 SQL 级页面保留文件仅作回滚参考。
+    component: () => import('@/views/teacher/pc/TeacherScoresWorkspace.vue'),
     meta: { roles: ['teacher', 'admin'] }
   },
   {
@@ -163,7 +197,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/teacher/analytics',
     name: 'TeacherAnalytics',
-    component: () => import('$vtj/vue/teacher_analytics.vue'),
+    // P4：数据分析已合并进成绩管理，旧书签一律 302 到新驾驶舱，避免两套口径。
+    redirect: '/teacher/scores',
     meta: { roles: ['teacher', 'admin'] }
   },
   {

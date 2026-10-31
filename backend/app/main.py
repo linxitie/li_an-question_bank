@@ -14,6 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from .core.config import settings
 from .core.redis_client import get_redis, close_redis
 from .api.v1.platform import llm
+from .api.v1 import agent
+from .api.v1 import knowledge
+from .api.v1 import post
 from .api.v1.catalog import questions, papers, question_actions, wrong_questions
 from .api.v1.exam import exams, stats, practice, exam_records, quick_practice, smart_exam
 from .api.v1.library import videos, media, image_media
@@ -31,6 +34,8 @@ from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
 from .api.v1.platform import feedback, notifications
 from .api.v1.growth import achievements, checkin
+from .api.v1.growth import study_plan
+from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
@@ -423,6 +428,8 @@ async def lifespan(app: FastAPI):
         if 'study_goal' in inspector.get_table_names():
             sg_cols = [c['name'] for c in inspector.get_columns('study_goal')]
             for col_name, col_type in [
+                ('subject_mode', 'INTEGER DEFAULT 0'),
+                ('expected_minutes', 'INTEGER DEFAULT 0'),
                 ('base_reward', 'INTEGER DEFAULT 20'),
                 ('reward_coins', 'INTEGER DEFAULT 0'),
                 ('difficulty_factor', 'FLOAT DEFAULT 1.0'),
@@ -431,12 +438,31 @@ async def lifespan(app: FastAPI):
                 ('improvement_score', 'FLOAT DEFAULT 0.0'),
                 ('baseline_accuracy', 'FLOAT DEFAULT 0.0'),
                 ('baseline_count', 'INTEGER DEFAULT 0'),
+                # 学习计划（模块4）：AI 生成的计划归属字段
+                ('plan_id', 'INTEGER'),
+                ('sort_order', 'INTEGER DEFAULT 0'),
+                ('plan_meta', 'TEXT'),
+                # 模块4 v2 每日任务闭环
+                ('task_date', 'VARCHAR(10)'),
+                ('coin_reward', 'INTEGER DEFAULT 0'),
+                ('coin_claimed', 'INTEGER DEFAULT 0'),
             ]:
                 if col_name not in sg_cols:
                     with engine.connect() as conn:
                         conn.execute(text(f"ALTER TABLE study_goal ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: study_goal 添加列 {col_name}")
+
+            # 模块4 v2：存量计划任务回填 task_date（按创建日 + 每4个滚动一天），金币统一 10
+            with engine.connect() as conn:
+                backfilled = conn.execute(text(
+                    "UPDATE study_goal SET task_date = date(create_time, '+' || CAST(sort_order / 4 AS INTEGER) || ' days'), "
+                    "coin_reward = COALESCE(coin_reward, 0) "
+                    "WHERE plan_id IS NOT NULL AND task_date IS NULL"
+                )).rowcount
+                if backfilled:
+                    logger.info(f"自动迁移: study_goal 回填 {backfilled} 条存量任务的 task_date")
+                conn.commit()
 
         # 检查并修复双编码JSON options（99条历史数据）
         if 'question_bank' in inspector.get_table_names():
@@ -794,6 +820,11 @@ app.include_router(question_import_router)
 app.include_router(exams.router)
 app.include_router(videos.router)
 app.include_router(llm.router)
+app.include_router(study_plan.router)
+app.include_router(agent.router)
+app.include_router(knowledge.router)
+app.include_router(post.router)
+app.include_router(profile.router)
 app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
