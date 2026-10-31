@@ -79,8 +79,14 @@ def _summarize_content(content: str, limit: int = 120) -> str:
     return s[:limit] if s else ''
 
 
-def _format_question(q: QuestionBank) -> dict:
-    """格式化题目信息（含内容清洗：移除UTB ID等系统噪音）"""
+def _format_question(q: QuestionBank, include_detail: bool = True) -> dict:
+    """格式化题目信息（含内容清洗：移除UTB ID等系统噪音）。
+
+    include_detail=False 用于「题目管理」列表：只返回表格需要的摘要字段。
+    旧实现每页 20 条也返回 full_content / 完整 options / answer / 极长
+    answer_analysis（其中 3 条含 data:image base64），实测一页 579 KB、
+    0.2s 序列化，前端滚动明显卡顿。详情/编辑改为按 question_id 单题拉取。
+    """
     raw_content = q.question_content or ''
     cleaned_content = clean_question_text(raw_content)
     # full_content 供详情弹窗渲染完整正文，必须把裸 [IMAGE:...] 占位符
@@ -90,13 +96,15 @@ def _format_question(q: QuestionBank) -> dict:
     # 行号_序号.png -> 子目录匹配），找不到则剔除，宁可少图不要裂图。
     # 此处不传 db：_format_question 只拿到 ORM 对象，第7层 question_image
     # 表兜底用不上，但前四层已覆盖 docx 抽图的真实落点。
-    try:
-        from ....services.image_service import sanitize_image_placeholders
-        _qid = q.question_id if isinstance(q.question_id, int) else None
-        full_content = sanitize_image_placeholders(cleaned_content, _qid)
-    except Exception:
-        full_content = cleaned_content
-    return {
+    full_content = ''
+    if include_detail:
+        try:
+            from ....services.image_service import sanitize_image_placeholders
+            _qid = q.question_id if isinstance(q.question_id, int) else None
+            full_content = sanitize_image_placeholders(cleaned_content, _qid)
+        except Exception:
+            full_content = cleaned_content
+    result = {
         "question_id": q.question_id,
         "subject_id": q.subject_id,
         "subject_name": q.subject.subject_name if q.subject else "",
@@ -104,9 +112,9 @@ def _format_question(q: QuestionBank) -> dict:
         "type_name": q.type.type_name if q.type else "",
         "question_content": _summarize_content(cleaned_content),
         "full_content": full_content,
-        "options": q.options,
-        "answer": q.answer,
-        "answer_analysis": q.answer_analysis or "",
+        "options": q.options if include_detail else [],
+        "answer": q.answer if include_detail else "",
+        "answer_analysis": (q.answer_analysis or "") if include_detail else "",
         "difficulty": q.difficulty,
         "score": float(q.score) if q.score else 0,
         "year": q.year,
@@ -126,7 +134,10 @@ def _format_question(q: QuestionBank) -> dict:
         "need_review": 1 if q.need_review else 0,
         # P1c: 原题号（可追溯到源文档），列表「序号」列优先用它而非行号
         "question_number": q.question_number or "",
+        # 前端据此判断列表项是否已水合；false 时打开详情/编辑必须先拉单题。
+        "detail_loaded": bool(include_detail),
     }
+    return result
 
 
 # ==================== 工作台 ====================
@@ -376,7 +387,7 @@ async def list_teacher_questions(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [_format_question(q) for q in questions],
+        "items": [_format_question(q, include_detail=False) for q in questions],
     }
 
 

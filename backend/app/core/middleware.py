@@ -8,6 +8,7 @@ from typing import Callable, Dict, Any
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import ASGIApp
 
 from .security import rate_limiter, circuit_breaker, TokenType, decode_token
@@ -20,9 +21,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         request.state.request_id = request_id
 
+        # 静态图片请求量远大于 API，逐条 info 会拖慢日志与事件循环；
+        # 资产请求仍计时并回写 X-Process-Time，只是不写业务日志。
+        is_asset = request.url.path.startswith(("/static/", "/uploads/"))
+
         start_time = time.time()
 
-        logger.info(f"Request started: {request.method} {request.url.path} [Request-ID: {request_id}]")
+        if not is_asset:
+            logger.info(f"Request started: {request.method} {request.url.path} [Request-ID: {request_id}]")
 
         try:
             response = await call_next(request)
@@ -34,12 +40,45 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Process-Time"] = str(process_time)
 
-        logger.info(
-            f"Request completed: {request.method} {request.url.path} "
-            f"[Request-ID: {request_id}] - Status: {response.status_code} "
-            f"- Duration: {process_time:.3f}s"
-        )
+        if not is_asset:
+            logger.info(
+                f"Request completed: {request.method} {request.url.path} "
+                f"[Request-ID: {request_id}] - Status: {response.status_code} "
+                f"- Duration: {process_time:.3f}s"
+            )
 
+        return response
+
+
+class ApiGZipMiddleware(GZipMiddleware):
+    """只压缩 API 文本响应，跳过 /static 与 /uploads。
+
+    图片本身已压缩，再过 gzip 只会白耗 CPU；而教师端列表/详情是 JSON，
+    压缩后体积可降一个数量级，弱网和多人并发时明显更稳。
+    """
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http" and not scope.get("path", "").startswith(("/static/", "/uploads/")):
+            await super().__call__(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
+class StaticAssetCacheMiddleware(BaseHTTPMiddleware):
+    """给题目图片/上传文件加浏览器缓存头。
+
+    题库图片文件名带哈希或题号，内容基本不变；缺缓存头时每次翻页都会重新下载，
+    既拖慢列表滚动，也让后端静态服务承担无谓带宽。API 响应不走这里。
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        response = await call_next(request)
+        if response.status_code == 200:
+            path = request.url.path
+            if path.startswith("/static/"):
+                response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
+            elif path.startswith("/uploads/"):
+                response.headers.setdefault("Cache-Control", "public, max-age=86400")
         return response
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -201,3 +240,5 @@ def setup_middlewares(app):
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(CircuitBreakerMiddleware)
+    app.add_middleware(StaticAssetCacheMiddleware)
+    app.add_middleware(ApiGZipMiddleware, minimum_size=1024)

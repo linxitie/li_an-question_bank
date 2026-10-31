@@ -198,7 +198,7 @@
 
 <script>
 // @ts-nocheck
-import { defineComponent, ref, reactive, computed, watch, onMounted, getCurrentInstance } from 'vue';
+import { defineComponent, ref, reactive, computed, watch, onMounted, nextTick, getCurrentInstance } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
 import RichTextViewer from '@/components/rich-text/RichTextViewer.vue';
@@ -238,6 +238,8 @@ export default defineComponent({
     const editDialogVisible = ref(false);
     const editIndex = ref(-1);
     const editForm = reactive({
+      // 复合题材料（导入预览里是 material_text，题目管理里是 shared_content）
+      material: '',
       question_content: '',
       question_type_detail: '单选题',
       difficulty: '中等',
@@ -251,6 +253,7 @@ export default defineComponent({
       if (isReadonly.value) return;
       const q = props.questions[idx];
       editIndex.value = idx;
+      editForm.material = q.material_text || q.material || q.shared_content || '';
       editForm.question_content = q.question_content || '';
       editForm.question_type_detail = q.question_type_detail || '单选题';
       editForm.difficulty = q.difficulty || '中等';
@@ -263,6 +266,7 @@ export default defineComponent({
       editForm.answer = q.answer || '';
       editForm.analysis = q.analysis || '';
       editDialogVisible.value = true;
+      nextTick(refreshEditPreview);
     }
 
     // 关闭编辑对话框
@@ -270,6 +274,45 @@ export default defineComponent({
       editDialogVisible.value = false;
       editIndex.value = -1;
     }
+
+    // 编辑弹层实时预览：用户反馈「图片不能在编辑弹窗中展示」。
+    // 不改 <template>（设计器领地），在脚本里把预览面板插到弹层 body 顶部；
+    // 题干/选项/答案/解析统一走 renderQuestionContent，图片/表格/公式都能渲染。
+    function refreshEditPreview() {
+      if (!editDialogVisible.value || typeof document === 'undefined') return;
+      const body = document.querySelector('.edit-dialog-overlay .edit-dialog-body');
+      if (!body) return;
+      let panel = body.querySelector('.edit-live-preview');
+      if (!panel) {
+        panel = document.createElement('details');
+        panel.className = 'edit-live-preview';
+        panel.open = true;
+        body.insertBefore(panel, body.firstChild);
+      }
+      const section = function (label, html) {
+        if (!html) return '';
+        return '<div class="edit-live-preview-label">' + label + '</div>' +
+          '<div>' + html + '</div>';
+      };
+      const opts = editForm.options || [];
+      const optHtml = opts.map(function (o) {
+        if (!o || !String(o.value || '').trim()) return '';
+        return '<div><strong>' + (o.key || '') + '.</strong> ' +
+          renderQuestionContent(o.value) + '</div>';
+      }).join('');
+      const parts = [];
+      // 复合题先展示共享材料：材料里的 <img> 与文字都走同一渲染器，避免“题干无图”误判
+      parts.push(section('材料预览', renderQuestionContent(editForm.material || '')));
+      parts.push(section('题干预览', renderQuestionContent(editForm.question_content || '')));
+      parts.push(section('选项预览', optHtml));
+      parts.push(section('答案预览', renderQuestionContent(editForm.answer || '')));
+      parts.push(section('解析预览', renderQuestionContent(editForm.analysis || '')));
+      panel.innerHTML = '<summary>👁 实时预览（含图片，点击折叠）</summary>' +
+        '<div class="edit-live-preview-body">' + parts.join('') + '</div>';
+    }
+
+    // 任一字段变化后刷新预览；nextTick 保证 DOM 已挂载。
+    watch(editForm, function () { nextTick(refreshEditPreview); }, { deep: true });
 
     // 保存编辑
     // F-7：编辑弹层内粘贴剪贴板图片 → data URI 插入对应字段。
@@ -601,13 +644,23 @@ export default defineComponent({
       };
     }
 
-    const groupHeads = computed(function () {
+    // 组头统一出口：显式 groups[] / members[] 之外，再补「隐式组头」。
+    // 根因：JSON 批量导入没有 groups[]，但题干里可能已带 material_text；
+    // 若只认显式 groups，材料会被静默吞掉，教师只能看到孤立小题。
+    // 隐式组头只在该题材料未被任何显式组覆盖时生成，避免重复渲染。
+    const groupHeadsWithQnum = computed(function () {
+      const out = [];
       const unified = buildUnifiedHead();
-      const legacy = (props.groups || []).map(function (g, i) {
+      if (unified) {
+        const firstMember = (props.members && props.members[0]) || (props.questions && props.questions[0]) || {};
+        out.push(Object.assign({}, unified, { _qnum: firstMember.question_number }));
+      }
+      (props.groups || []).forEach(function (g, i) {
         const len = g.material_length || 0;
         const text = g.material_text || '';
-        const folded = len > MATERIAL_FOLD_THRESHOLD && !isGroupExpanded(i);
-        return {
+        const folded = len > MATERIAL_FOLD_THRESHOLD && !isGroupExpanded(out.length);
+        const first = (g.questions && g.questions[0]) || {};
+        out.push({
           group_key: g.group_key,
           title: g.title || '',
           material_length: len,
@@ -616,10 +669,36 @@ export default defineComponent({
           material_preview: folded ? text.slice(0, MATERIAL_CLIP_LEN) : text,
           truncated: folded,
           // 单题无材料时不渲染组头，完全退回旧版单卡行为
-          visible: len > 0 || (g.question_count || 0) > 1
-        };
+          visible: len > 0 || (g.question_count || 0) > 1,
+          _qnum: first.question_number
+        });
       });
-      return unified ? [unified].concat(legacy) : legacy;
+      const covered = {};
+      out.forEach(function (h) {
+        if (h._qnum != null) covered[String(h._qnum)] = true;
+      });
+      (props.questions || []).forEach(function (q) {
+        const qn = q && q.question_number;
+        const text = String((q && q.material_text) || '');
+        if (qn == null || !text || covered[String(qn)]) return;
+        covered[String(qn)] = true;
+        out.push({
+          group_key: 'inline_' + String(qn),
+          title: '',
+          material_length: text.length,
+          material_titles: extractMaterialTitles(text),
+          question_count: 1,
+          material_preview: text,
+          truncated: false,
+          visible: true,
+          _qnum: qn
+        });
+      });
+      return out;
+    });
+
+    const groupHeads = computed(function () {
+      return groupHeadsWithQnum.value;
     });
 
     // 组数变化时补齐默认展开态：新增组默认展开，用户已折叠过的组保持原状
@@ -640,15 +719,11 @@ export default defineComponent({
     // 供模板把组头渲染在「组内首题上方」，实现材料与子题同框（不再集中堆顶部）。
     const groupHeadIndexByQnum = computed(function () {
       const map = {};
-      (props.groups || []).forEach(function (g, gi) {
-        const members = g.questions || [];
-        for (let k = 0; k < members.length; k++) {
-          const qn = members[k] && members[k].question_number;
-          if (qn != null && !(String(qn) in map)) {
-            map[String(qn)] = gi;
-            break;
-          }
-        }
+      groupHeadsWithQnum.value.forEach(function (h, gi) {
+        // 显式组：只在组内首题上方渲染一次材料，避免每题重复；
+        // 隐式组：只有带 material_text 的那道题命中。
+        if (h._qnum == null) return;
+        if (!(String(h._qnum) in map)) map[String(h._qnum)] = gi;
       });
       return map;
     });
@@ -1388,12 +1463,24 @@ return {
   background: #1a2332;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
+  /* 用户要求：编辑弹窗占整个电脑屏幕的 3/4（原 600px 宽在 1920 屏上只有 31%）*/
+  width: 75vw;
+  height: 78vh;
+  max-width: 1600px;
+  max-height: 1000px;
+  min-width: 720px;
+  min-height: 560px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+@media (max-width: 900px) {
+  .edit-dialog {
+    width: 94vw;
+    height: 90vh;
+    min-width: 0;
+    min-height: 0;
+  }
 }
 .edit-dialog-header {
   display: flex;
@@ -1420,9 +1507,50 @@ return {
   color: #fff;
 }
 .edit-dialog-body {
-  padding: 20px;
+  padding: 20px 24px;
   overflow-y: auto;
   flex: 1;
+}
+/* 编辑弹层内实时预览（脚本注入，不改 <template>）：题干/选项/答案/解析都走
+   renderQuestionContent，导入的 /static 图片与粘贴的 data URI 均可显示。*/
+:deep(.edit-live-preview) {
+  position: sticky;
+  top: -20px;
+  z-index: 3;
+  margin: -20px -24px 18px;
+  padding: 12px 24px;
+  background: rgba(15, 23, 42, 0.97);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+}
+:deep(.edit-live-preview summary) {
+  cursor: pointer;
+  color: #9fb3d1;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+:deep(.edit-live-preview-body) {
+  max-height: 34vh;
+  overflow: auto;
+  margin-top: 10px;
+  color: #e8ecf4;
+  font-size: 14px;
+  line-height: 1.7;
+}
+:deep(.edit-live-preview-body img) {
+  max-width: 100%;
+  height: auto;
+}
+:deep(.edit-live-preview-body table) {
+  max-width: 100%;
+}
+:deep(.edit-live-preview-label) {
+  margin: 10px 0 4px;
+  color: #7f95b3;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 .edit-field {
   margin-bottom: 16px;
