@@ -40,7 +40,7 @@ def test_apply_scout_decisions(db_session):
 
 def test_review_board_contains_middle_and_pending(tmp_path, db_session):
     _quote(db_session, "q_board_high", 90, "published", 1)
-    _quote(db_session, "q_board_mid", 70, "published", 1)
+    _quote(db_session, "q_board_mid", 70, "pending", 0)
     _quote(db_session, "q_board_low", 50, "rejected", 0)
     _quote(db_session, "q_board_pending", 75, "pending", 0)
     vault = tmp_path / "vault"
@@ -58,8 +58,8 @@ def test_review_board_contains_middle_and_pending(tmp_path, db_session):
 
 
 def test_review_board_splits_into_three_buckets(tmp_path, db_session):
-    _quote(db_session, "q_bucket_high", 82, "published", 1)
-    _quote(db_session, "q_bucket_mid", 72, "published", 1)
+    _quote(db_session, "q_bucket_high", 82, "pending", 0)
+    _quote(db_session, "q_bucket_mid", 72, "pending", 0)
     _quote(db_session, "q_bucket_low", 62, "pending", 0)
     vault = tmp_path / "vault"
     vault.mkdir()

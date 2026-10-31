@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from ..models.models import EssayQuote
@@ -114,15 +113,7 @@ def export_review_board(db: Session, vault: Path, dry_run: bool = False) -> dict
 
     candidates = (
         db.query(EssayQuote)
-        .filter(
-            or_(
-                and_(
-                    EssayQuote.quality_score >= 60,
-                    EssayQuote.quality_score < 85,
-                ),
-                EssayQuote.review_status == "pending",
-            )
-        )
+        .filter(EssayQuote.review_status == "pending")
         .order_by(EssayQuote.quality_score.desc(), EssayQuote.quote_id)
         .all()
     )
