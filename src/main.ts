@@ -21,8 +21,7 @@ import { vtj, name } from '../package.json';
 import './style/index.scss';
 import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
 import { registerImageRetry } from './image-retry';  // 第9层防线：图片智能重试
-import { installGlobalLogout } from './utils/globalLogout';  // 学生端全局退出按钮（方案B）
-import { installBadgeEntry } from './utils/badgeEntry';  // 学生端「我的徽章」入口（脚本注入）
+import { installProfileBadgeEntry } from './utils/profileBadgeEntry';  // 「我的」页内徽章入口（DOM 注入）
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
@@ -56,9 +55,8 @@ onReady(async () => {
   app.use(provider);
   app.use(IconsPlugin);
   app.mount('#app');
-  // 学生端无退出入口（R3 禁改模板）→ 注入全局悬浮退出按钮
-  installGlobalLogout();
-  installBadgeEntry();
+  // 学生端「我的」页是 VTJ 页面（禁改模板）→ 运行时在「我的成就」下方注入「我的徽章」入口
+  installProfileBadgeEntry();
 });
 
 if (process.env.NODE_ENV === 'production') {

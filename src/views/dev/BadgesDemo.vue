@@ -167,7 +167,10 @@ const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
   ...BADGE_TIERS.map((t) => ({ value: t.code as TierFilter, label: t.label }))
 ];
 
-const tierLabelOf = (it: BadgeItem) => it.snapshot_tier || it.current_tier || '黑铁';
+// 档位筛选以「固定成色 badge_tier」为准：未获得徽章没有 snapshot_tier，
+// 旧写法会全部落到黑铁，导致「选了白银却什么都不显示」。
+const tierLabelOf = (it: BadgeItem) =>
+  (it as any).badge_tier || it.snapshot_tier || it.current_tier || '黑铁';
 const tierIndexOf = (it: BadgeItem) => {
   const label = (it as any).badge_tier || it.snapshot_tier || '黑铁';
   const i = TIER_LABELS.indexOf(label);
