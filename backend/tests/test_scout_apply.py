@@ -51,6 +51,26 @@ def test_review_board_contains_middle_and_pending(tmp_path, db_session):
     assert report["candidates"] == 2
     board = Path(report["board"])
     assert (board / "index.md").is_file()
-    assert (board / "q_board_mid.md").is_file()
-    assert (board / "q_board_pending.md").is_file()
+    assert (board / "02-重点复核" / "q_board_mid.md").is_file()
+    assert (board / "02-重点复核" / "q_board_pending.md").is_file()
     assert "q_board_high" not in (board / "index.md").read_text(encoding="utf-8")
+
+
+def test_review_board_splits_into_three_buckets(tmp_path, db_session):
+    _quote(db_session, "q_bucket_high", 82, "published", 1)
+    _quote(db_session, "q_bucket_mid", 72, "published", 1)
+    _quote(db_session, "q_bucket_low", 62, "pending", 0)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    report = export_review_board(db_session, vault)
+
+    assert report["buckets"] == {
+        "01-优先通过": 1,
+        "02-重点复核": 1,
+        "03-建议拒绝": 1,
+    }
+    board = Path(report["board"])
+    assert (board / "01-优先通过" / "q_bucket_high.md").is_file()
+    assert (board / "02-重点复核" / "q_bucket_mid.md").is_file()
+    assert (board / "03-建议拒绝" / "q_bucket_low.md").is_file()

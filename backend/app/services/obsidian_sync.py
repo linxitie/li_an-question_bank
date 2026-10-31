@@ -72,7 +72,7 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
 
     for folder in folders:
         is_board = folder == board
-        for path in sorted(folder.glob("*.md")):
+        for path in sorted(folder.rglob("*.md")):
             fields, _body = parse_note(path.read_text(encoding="utf-8"))
             uid = fields.get("uid") or path.stem
             raw_status = (fields.get("status") or "").strip()
