@@ -127,7 +127,8 @@ def parse_xlsx(xlsx_path: str, max_rows: int = 500) -> dict:
 
 
 def build_cards(rows: list, col_front: int, col_back: int,
-                col_category=None, limit: int = 500, col_point=None) -> list:
+                col_category=None, limit: int = 500, col_point=None,
+                col_cover=None) -> list:
     """按列映射生成卡片。空行跳过、正反面去重；超 limit 抛 ValueError。"""
     cards, seen = [], set()
     for r in rows:
@@ -145,8 +146,11 @@ def build_cards(rows: list, col_front: int, col_back: int,
         point = ""
         if col_point is not None and col_point < len(r):
             point = r[col_point].strip()
+        cover = ""
+        if col_cover is not None and col_cover < len(r):
+            cover = r[col_cover].strip()
         cards.append({"card_front": front[:200], "card_back": back,
-                      "category": cat, "point": point})
+                      "category": cat, "point": point, "cover": cover})
     if len(cards) > limit:
         raise ValueError(f"有效卡片 {len(cards)} 张超过上限 {limit}，请拆分文件")
     return cards

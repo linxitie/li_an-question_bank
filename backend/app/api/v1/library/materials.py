@@ -1732,6 +1732,8 @@ async def import_confirm(import_id: int, body: dict,
                        if mapping.get("category") not in (None, "") else None)
             col_point = (int(mapping["point"])
                          if mapping.get("point") not in (None, "") else None)
+            col_cover = (int(mapping["cover"])
+                         if mapping.get("cover") not in (None, "") else None)
         except (KeyError, TypeError, ValueError):
             raise HTTPException(400, "列映射不完整（正面列/背面列必填）")
         from ....services.material_parser import build_cards, parse_xlsx
@@ -1768,7 +1770,8 @@ async def import_confirm(import_id: int, body: dict,
         ]
         invalid_rows = sorted(set(invalid_rows) | set(_bad_rows))
         cards = build_cards(raw_rows, col_front, col_back, col_cat,
-                            limit=CARD_ROW_LIMIT, col_point=col_point)
+                            limit=CARD_ROW_LIMIT, col_point=col_point,
+                            col_cover=col_cover)
         if not cards:
             raise HTTPException(400, "按当前列映射未得到有效卡片（正反面均不能为空）")
         base_title = _os.path.splitext(rec.file_name)[0]
@@ -1805,6 +1808,7 @@ async def import_confirm(import_id: int, body: dict,
                 subject=subject, type="card",
                 category=cls["category"],
                 point_id=cls["point_id"],
+                cover_image=(c.get("cover") or None),
                 title=card_front, card_front=card_front,
                 card_back=card_back,
                 content_hash=content_hash,
