@@ -105,6 +105,14 @@ backend/data/gates/last_run.json
 # 如需彻底瘦身需单独迁移，勿直接删除 backend/app/static/（R7）。
 backend/app/static/questions/
 
+# ---------- 容器化 staging 运行时数据 ----------
+# deploy/preflight.sh 与 docker compose 的 staging 数据目录；绝不入库。
+deploy/runtime/
+# TLS 证书与私钥不入库（保留 README 与生成脚本）
+deploy/certs/*.crt
+deploy/certs/*.key
+deploy/certs/*.pem
+
 # ---------- 凭据 ----------
 # 真实环境变量文件一律不入库；模板 *.env.example 放行。
 .env
@@ -114,6 +122,7 @@ backend/app/static/questions/
 backend/.env
 deploy/.env*
 !deploy/.env.example
+!deploy/.env.production.example
 # 本地 MCP 配置与管理员令牌（已从索引移除；历史泄露的密钥请轮换）。
 .obsidian_mcp.json
 admin_token.txt

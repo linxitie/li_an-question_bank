@@ -4,6 +4,8 @@ python-multipart>=0.0.6
 requests>=2.31.0
 # MinerU：扫描件 PDF → Markdown。其 Windows 支持上限为 Python 3.12，
 # 官方推荐 3.10/3.11，故 sidecar 单独锁 3.11，主后端不受牵连。
-mineru[core]
+# 锁 3.4.5：与已部署的 C:\mineru_env 实测版本一致；4.x 移除了 core extra，
+# 模型/CLI 行为未在本项目验证，不跟随 latest。
+mineru[core]==3.4.5
 # pdfplumber/pdfminer：MinerU 输出的兜底解析
 pdfplumber>=0.11.0
