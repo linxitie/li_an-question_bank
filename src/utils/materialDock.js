@@ -4,14 +4,64 @@
  * 避免直接修改 <template> 触发 raw 页保护。
  */
 
-const LABEL_RE = /(^|\n|>)([ \t]*(?:材料|给定资料|资料)[ \t]*[0-9一二三四五六七八九十]+)[ \t]*[：:]?/g;
+const LABEL_RE = /(?:材料|给定资料|资料)[ \t]*[0-9一二三四五六七八九十]+/g;
 
-// 材料分段标注：只处理行首/段首的“材料一/资料二”，避免误伤正文中的同名词
+const MATERIAL_CSS = `
+  .qm-material-sep { display: block; margin: 12px 0; border-top: 1px dashed #dbe4f0; }
+  .qm-label { display: inline-block; max-width: 100%; margin: 2px 6px 8px 0; padding: 2px 11px;
+    border-radius: 999px; background: #e8f0fb; color: #1a3c6d; font-weight: 700;
+    font-size: 13px; line-height: 1.7; }
+  .qm-material body p { margin: 8px 0; }
+  .qm-material img, .qm-material table { max-width: 100%; height: auto; }
+`;
+
+export function ensureMaterialStyles(doc) {
+  const d = doc || (typeof document !== 'undefined' ? document : null);
+  if (!d || d.querySelector('style[data-qm-material]')) return;
+  const style = d.createElement('style');
+  style.setAttribute('data-qm-material', '1');
+  style.textContent = MATERIAL_CSS;
+  (d.head || d.documentElement).appendChild(style);
+}
+
+// 材料分段：不能像旧实现那样在 HTML 字符串里插 </div>，否则会拆坏 <p>/<table>
+// 的嵌套（教师端曾出现材料错位）。这里只遍历文本节点，在「材料N」前插入分隔线、
+// 给标签套高亮胶囊，原有标签结构完全不动，因此任何来源的富文本都安全。
 export function formatMaterialHtml(html) {
   const source = String(html || '');
-  return source.replace(LABEL_RE, function (_m, prefix, label) {
-    return prefix + '<span class="qm-label">' + label.trim() + '</span>';
+  if (!source || source.indexOf('qm-label') >= 0) return source;
+  if (typeof document === 'undefined') return source;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = source;
+  const walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  let firstLabel = true;
+  nodes.forEach(function (node) {
+    const text = node.nodeValue || '';
+    LABEL_RE.lastIndex = 0;
+    let match;
+    let last = 0;
+    let frag = null;
+    while ((match = LABEL_RE.exec(text))) {
+      if (!frag) frag = document.createDocumentFragment();
+      if (match.index > last) frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+      if (!firstLabel) {
+        const sep = document.createElement('span');
+        sep.className = 'qm-material-sep';
+        frag.appendChild(sep);
+      }
+      const label = document.createElement('span');
+      label.className = 'qm-label';
+      label.textContent = match[0];
+      frag.appendChild(label);
+      last = match.index + match[0].length;
+      firstLabel = false;
+    }
+    if (frag && last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    if (frag && node.parentNode) node.parentNode.replaceChild(frag, node);
   });
+  return tpl.innerHTML;
 }
 
 export function removeMaterialDock(host, dockClass) {
@@ -27,6 +77,7 @@ export function removeMaterialDock(host, dockClass) {
 export function mountMaterialDock(host, options) {
   if (!host || !options || !options.html) return null;
   const dockClass = options.dockClass || 'qm-dock';
+  ensureMaterialStyles();
   removeMaterialDock(host, dockClass);
   const dock = document.createElement('div');
   dock.className = 'qm-dock ' + dockClass;

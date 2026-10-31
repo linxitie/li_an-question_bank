@@ -296,7 +296,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted, computed, nextTick, watch } from 'vue';
+import { defineComponent, ref, onMounted, onBeforeUnmount, computed, nextTick, watch, createApp } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
@@ -305,6 +305,7 @@ import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { mountMaterialDock, removeMaterialDock } from '@/utils/materialDock';
 import { findEditModalRoot, refreshEditPreviews } from '@/utils/editPreview';
+import OcrReviewPanel from '@/components/question/OcrReviewPanel.vue';
 
 export default defineComponent({
   name: 'TeacherQuestions',
@@ -701,6 +702,78 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
 
     // ========== 编辑弹窗 ==========
 
+    // P3：编辑弹窗里的图片 OCR 入口。raw 页 <template> 不能改，故脚本注入到 h3 右侧；
+    // 只处理已入库题目，识别结果原位替换 <img>，审阅面板负责确认。
+    function mountOcrButton() {
+      const modal = document.querySelector('.modal-overlay .edit-modal');
+      if (!modal) return;
+      const qid = Number(editForm.value.question_id || 0);
+      const gid = Number(editForm.value.group_id || 0);
+      if (!qid && !gid) return;
+      let button = modal.querySelector('.tq-ocr-review-btn');
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tq-ocr-review-btn';
+        button.textContent = '🖼 图片 OCR 审阅';
+        button.style.cssText = 'float:right;margin-right:34px;padding:5px 11px;border:1px solid #cbd5e1;' +
+          'border-radius:6px;background:#f8fafc;color:#1a3c6d;cursor:pointer;font-size:13px;';
+        button.addEventListener('click', openOcrReview);
+        const heading = modal.querySelector('h3');
+        if (heading) heading.appendChild(button);
+      }
+      button.dataset.questionId = String(qid);
+      button.dataset.groupId = String(gid);
+    }
+
+    // 面板挂在 body 上，必须显式销毁；否则路由切换后遮罩会残留。
+    let ocrReviewApp: any = null;
+    let ocrReviewHost: any = null;
+
+    function destroyOcrReview() {
+      if (ocrReviewApp) {
+        try { ocrReviewApp.unmount(); } catch (e) { /* 已卸载 */ }
+        ocrReviewApp = null;
+      }
+      if (ocrReviewHost) {
+        ocrReviewHost.remove();
+        ocrReviewHost = null;
+      }
+    }
+
+    function openOcrReview() {
+      const qid = Number(editForm.value.question_id || 0);
+      const gid = Number(editForm.value.group_id || 0);
+      if (!qid && !gid) return;
+      destroyOcrReview();
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      ocrReviewHost = host;
+      const destroy = function () {
+        try { if (ocrReviewApp) ocrReviewApp.unmount(); } catch (e) { /* 已卸载 */ }
+        ocrReviewApp = null;
+        if (ocrReviewHost) { ocrReviewHost.remove(); ocrReviewHost = null; }
+      };
+      ocrReviewApp = createApp(OcrReviewPanel, {
+        questionId: qid,
+        groupId: gid,
+        onClose: destroy,
+        onApplied: async function () {
+          try {
+            const full: any = await fetchQuestionDetail(qid);
+            editForm.value.question_content = full.question_content || editForm.value.question_content;
+            editForm.value.answer_analysis = full.answer_analysis || editForm.value.answer_analysis;
+            editForm.value.shared_content = full.shared_content || editForm.value.shared_content;
+            editForm.value.optionsParsed = Object.assign({}, parsedOptions(full.options));
+            nextTick(refreshEditPreview);
+          } catch (e) { /* 拉取失败时保留现有编辑内容，避免覆盖用户输入 */ }
+        }
+      });
+      ocrReviewApp.mount(host);
+    }
+
+    onBeforeUnmount(destroyOcrReview);
+
     async function openEdit(q: any) {
       var full = q;
       if (!q.detail_loaded) {
@@ -726,7 +799,10 @@ const groupInfo: any = ref(null);  // B4: 题组聚合信息（共享材料）
         shared_content_images: full.shared_content_images || '',
       };
       showEditModal.value = true;
-      nextTick(refreshEditPreview);
+      nextTick(function () {
+        refreshEditPreview();
+        mountOcrButton();
+      });
     }
 
     // raw 页不能改 <template>：在脚本里把编辑弹窗的题组材料、选项、解析补成富文本预览。

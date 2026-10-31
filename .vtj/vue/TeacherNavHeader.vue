@@ -182,7 +182,7 @@ export default defineComponent({
       { key: 'papers', label: '试卷管理', path: '/teacher/papers' },
       { key: 'scores', label: '成绩管理', path: '/teacher/scores' },
       { key: 'classes', label: '班级管理', path: '/teacher/classes' },
-      { key: 'analytics', label: '数据分析', path: '/teacher/analytics' },
+      // P4：数据分析已并入成绩管理，导航不再单列，避免同源指标出现两套入口。
       { key: 'messages', label: '消息中心', path: '/teacher/messages' },
     ];
 

@@ -994,6 +994,75 @@ def _build_material_warnings(preview_items: List[Dict[str, Any]]) -> List[str]:
     return warnings
 
 
+
+# P1-6 切分闸门：题本里的题号是连续的 1..N，解析器若只切出其中一小部分，
+# 说明它把「多题页面」当成了一题（用户实测 2024 北京申论 4 题只出 1 题）。
+# 这里用源文本题号反推应有题数，再与解析结果比对；只在证据充分时告警，
+# 避免把材料里的编号列表误判成题目。
+_ESSAY_QNUM_SCORE_RE = re.compile(
+    r'(?m)^\s*(\d{1,2})\s*[.．、]\s*[^\n]{0,240}?[（(]\s*\d{1,3}\s*分\s*[）)]'
+)
+_GENERIC_QNUM_LINE_RE = re.compile(r'(?m)^\s*(\d{1,3})\s*[.．、]\s*(?=\S)')
+
+
+def _detect_numbering_gap(
+    preview_items: List[Dict[str, Any]],
+    raw_text: str,
+    subject: str,
+) -> Optional[Dict[str, Any]]:
+    """返回源文本题号与解析题数的缺口；证据不足时返回 None。
+
+    判定依据：
+    · 申论：题号行必须带（N分），材料里的编号列表基本不会带分值；
+    · 行测/公专：行首「数字.」即题目锚点；
+    · 题号覆盖度（文本中出现的 1..max 占比）低于阈值时不判，
+      防止把「只有 101-125 题」的片段卷误判成缺 1-100 题。
+    """
+    if not raw_text:
+        return None
+    is_essay = '申论' in (subject or '')
+    pattern = _ESSAY_QNUM_SCORE_RE if is_essay else _GENERIC_QNUM_LINE_RE
+    text_nums = sorted({
+        int(m.group(1)) for m in pattern.finditer(raw_text[:2_000_000])
+        if 1 <= int(m.group(1)) <= 300
+    })
+    if len(text_nums) < 2:
+        return None
+    expected = max(text_nums)
+    coverage = len([n for n in text_nums if n <= expected]) / expected
+    if coverage < (0.5 if is_essay else 0.8):
+        return None
+
+    parsed_nums = set()
+    for item in preview_items or []:
+        try:
+            parsed_nums.add(int(item.get('question_number')))
+        except (TypeError, ValueError):
+            continue
+    if not parsed_nums:
+        return None
+    missing = [n for n in range(1, expected + 1) if n not in parsed_nums]
+    # 只缺 1 题可能是原卷删题，不阻断；缺 2 题以上说明切分器成片漏切。
+    if len(missing) < 2:
+        return None
+    return {
+        'expected': expected,
+        'actual': len(parsed_nums),
+        'missing': missing,
+        'subject': subject,
+    }
+
+
+def _format_numbering_gap(gap: Dict[str, Any]) -> str:
+    miss = '、'.join(str(n) for n in gap.get('missing', [])[:15])
+    more = '…' if len(gap.get('missing', [])) > 15 else ''
+    return (
+        f"题本按题号应有 {gap['expected']} 题，实际只解析出 {gap['actual']} 题，"
+        f"缺少第 {miss}{more} 题。解析器可能把多题页面合并成了一题，"
+        "已阻止直接入库；请检查题本分页/题号后重新解析，或改用 PDF 题本导入。"
+    )
+
+
 def _build_preview_groups(preview_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """把预览题目按「给定材料」聚合成题组，供前端渲染复合题总题干。
 
@@ -2027,6 +2096,15 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             except Exception as _rec_err:  # 恢复失败不阻断预览，confirm 仍有硬闸门
                 logger.warning(f"[import-async] 预览阶段材料恢复失败: {_rec_err}")
             _material_warnings = _build_material_warnings(preview_items)
+            # P1-6：用源文本题号核对解析题数，避免「多题页面只切出 1 题」静默入库。
+            _seg_subject = next(
+                (str(it.get('subject_name') or '') for it in preview_items if it.get('subject_name')),
+                detected_subject,
+            )
+            _numbering_gap = _detect_numbering_gap(preview_items, text, _seg_subject)
+            _numbering_warning = _format_numbering_gap(_numbering_gap) if _numbering_gap else None
+            if _numbering_warning:
+                _material_warnings = [*_material_warnings, _numbering_warning]
             response_payload = {
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
                 # file_role 让前端/教师一眼区分「题目卷 / 答案卷」，答案卷不再按题目数展示
@@ -2035,6 +2113,10 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 'duplicate_count': 0, 'questions': preview_items,
                 # P5：预览阶段就提示缺材料题组，避免入库后才发现
                 'warnings': _material_warnings,
+                # P1-6：结构化缺口，前端可直接展示「应有/实际/缺失题号」，
+                # 不再只靠一句笼统的“解析失败”。
+                'segmentation_gap': _numbering_gap,
+                'segmentation_warning': _numbering_warning,
                 # ★ groups：按「给定材料」聚合的复合题组，供前端渲染总题干。
                 #   保留顶层 questions 不变，旧前端逻辑零回归。
                 'groups': _build_preview_groups(preview_items),
@@ -2511,6 +2593,15 @@ async def confirm_batch_import(
                 preview_data = {}
             items = preview_data.get('items', []) or []
 
+        # P1-6：切分闸门需要原始题本文本。payload.questions 只是前端回传的
+        # 解析结果，题本原文仍保存在 preview_data，读取它对账才能发现“成片漏切”。
+        _preview_snapshot = preview_data
+        if not _preview_snapshot:
+            _preview_snapshot = load_json_lenient(record.preview_data)
+        if not isinstance(_preview_snapshot, dict):
+            _preview_snapshot = {}
+        _raw_text_for_gap = str(_preview_snapshot.get('raw_text') or '')
+
         # P5：确认入库是主路径，JSON 批次同样按题干指纹回补历史 PDF 预览中的材料。
         _confirm_subject = next(
             (str(it.get('subject_name') or '').strip() for it in items if isinstance(it, dict) and it.get('subject_name')),
@@ -2520,6 +2611,13 @@ async def confirm_batch_import(
             _fn = str(record.original_filename or '')
             _confirm_subject = '申论' if '申论' in _fn else ('公专' if ('公安' in _fn or '公专' in _fn) else '行测')
         _recover_composite_materials(db, items, _confirm_subject)
+
+        # P1-6：确认入库前再做一次题号对账，防止前端绕过预览直接提交被合并的结果。
+        # force_import 仅用于人工确认“原卷本来就缺题”的极端情况。
+        _confirm_gap = _detect_numbering_gap(items, _raw_text_for_gap, _confirm_subject)
+        if _confirm_gap and not payload.get('force_import'):
+            raise HTTPException(status_code=422, detail=_format_numbering_gap(_confirm_gap))
+
         _confirm_pending = [
             it for it in items
             if isinstance(it, dict)

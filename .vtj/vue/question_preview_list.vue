@@ -198,10 +198,13 @@
 
 <script>
 // @ts-nocheck
-import { defineComponent, ref, reactive, computed, watch, onMounted, nextTick, getCurrentInstance } from 'vue';
+import { defineComponent, ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick, getCurrentInstance, createApp } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
 import RichTextViewer from '@/components/rich-text/RichTextViewer.vue';
+import { refreshEditPreviews } from '@/utils/editPreview';
+import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
+import OcrReviewPanel from '@/components/question/OcrReviewPanel.vue';
 
 export default defineComponent({
   name: 'QuestionPreviewList',
@@ -245,7 +248,9 @@ export default defineComponent({
       difficulty: '中等',
       options: [],
       answer: '',
-      analysis: ''
+      analysis: '',
+      // P1-2：申论「要求」是一等字段，编辑时必须原样带回，否则保存即丢。
+      requirements: []
     });
 
     // 打开编辑对话框（只读态直接拒绝：编辑弹窗由 editDialogVisible 控制，无需改模板即可隐藏）
@@ -265,9 +270,103 @@ export default defineComponent({
       ];
       editForm.answer = q.answer || '';
       editForm.analysis = q.analysis || '';
+      editForm.requirements = Array.isArray(q.requirements)
+        ? JSON.parse(JSON.stringify(q.requirements))
+        : (q.requirements ? [String(q.requirements)] : []);
       editDialogVisible.value = true;
-      nextTick(refreshEditPreview);
+      nextTick(function () {
+        refreshEditPreview();
+        mountOcrButton();
+      });
     }
+
+    // P3：题目/题组图片 OCR 审阅入口。只在已入库题目（有 question_id）上出现；
+    // 导入预览阶段还没有主键，强行 OCR 无处回写，故隐藏按钮。
+    function mountOcrButton() {
+      if (typeof document === 'undefined') return;
+      const header = document.querySelector('.edit-dialog-overlay .edit-dialog-header');
+      if (!header) return;
+      let button = header.querySelector('.edit-ocr-review-btn');
+      const q = props.questions[editIndex.value] || {};
+      const qid = Number(q.question_id || q.id || 0);
+      const gid = Number(q.group_id || 0);
+      if (!qid && !gid) {
+        if (button) button.style.display = 'none';
+        return;
+      }
+      if (!button) {
+        button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'edit-ocr-review-btn';
+        button.textContent = '🖼 图片 OCR 审阅';
+        button.style.cssText = 'margin-left:auto;margin-right:12px;padding:6px 12px;border:1px solid #cbd5e1;' +
+          'border-radius:6px;background:#f8fafc;color:#1a3c6d;cursor:pointer;font-size:13px;';
+        button.addEventListener('click', openOcrReview);
+        const close = header.querySelector('.edit-dialog-close');
+        header.insertBefore(button, close || null);
+      }
+      button.style.display = '';
+      button.dataset.questionId = String(qid);
+      button.dataset.groupId = String(gid);
+    }
+
+    // 面板挂在 body 上，必须显式销毁；否则路由切换后遮罩会残留。
+    let ocrReviewApp = null;
+    let ocrReviewHost = null;
+
+    function destroyOcrReview() {
+      if (ocrReviewApp) {
+        try { ocrReviewApp.unmount(); } catch (e) { /* 已卸载 */ }
+        ocrReviewApp = null;
+      }
+      if (ocrReviewHost) {
+        ocrReviewHost.remove();
+        ocrReviewHost = null;
+      }
+    }
+
+    function openOcrReview() {
+      const q = props.questions[editIndex.value] || {};
+      const qid = Number(q.question_id || q.id || 0);
+      const gid = Number(q.group_id || 0);
+      if (!qid && !gid) return;
+      destroyOcrReview();
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      ocrReviewHost = host;
+      const destroy = function () {
+        try { if (ocrReviewApp) ocrReviewApp.unmount(); } catch (e) { /* 已卸载 */ }
+        ocrReviewApp = null;
+        if (ocrReviewHost) { ocrReviewHost.remove(); ocrReviewHost = null; }
+      };
+      ocrReviewApp = createApp(OcrReviewPanel, {
+        questionId: qid,
+        groupId: gid,
+        onClose: destroy,
+        onApplied: async function () {
+          // 替换后重新拉取题目详情，编辑弹窗里的 textarea 也同步到最新内容。
+          if (!qid) return;
+          try {
+            const auth = window.__VTJ_AUTH__;
+            if (!auth || !auth.apiFetch) return;
+            const res = await auth.apiFetch('/api/questions/' + qid);
+            const detail = await res.json();
+            const item = props.questions[editIndex.value];
+            if (!item) return;
+            item.question_content = detail.question_content || item.question_content;
+            item.answer_analysis = detail.answer_analysis || detail.analysis || item.answer_analysis;
+            editForm.question_content = item.question_content;
+            editForm.analysis = item.answer_analysis || item.analysis || editForm.analysis;
+            nextTick(refreshEditPreview);
+          } catch (e) {
+            // 刷新失败不影响已提交的替换
+          }
+        }
+      });
+      ocrReviewApp.mount(host);
+    }
+
+    onBeforeUnmount(destroyOcrReview);
 
     // 关闭编辑对话框
     function closeEditDialog() {
@@ -302,13 +401,24 @@ export default defineComponent({
       }).join('');
       const parts = [];
       // 复合题先展示共享材料：材料里的 <img> 与文字都走同一渲染器，避免“题干无图”误判
-      parts.push(section('材料预览', renderQuestionContent(editForm.material || '')));
+      // 申论一份材料常含「材料1..N」多段：先清洗再切段，段间留白、标签高亮。
+      parts.push(section('材料预览', formatMaterialHtml(renderQuestionContent(editForm.material || ''))));
       parts.push(section('题干预览', renderQuestionContent(editForm.question_content || '')));
       parts.push(section('选项预览', optHtml));
+      const reqText = (editForm.requirements || []).join('；');
+      parts.push(section('要求预览', renderQuestionContent(reqText)));
       parts.push(section('答案预览', renderQuestionContent(editForm.answer || '')));
       parts.push(section('解析预览', renderQuestionContent(editForm.analysis || '')));
+      ensureMaterialStyles();
       panel.innerHTML = '<summary>👁 实时预览（含图片，点击折叠）</summary>' +
         '<div class="edit-live-preview-body">' + parts.join('') + '</div>';
+      // 顶部总预览会随弹窗一起滚走：再在每个字段下方挂一份就地预览，
+      // 教师滚到「答案解析」时无需回顶部就能确认图片是否正常。
+      refreshEditPreviews(body, {
+        question: editForm.question_content,
+        options: editForm.options,
+        analysis: editForm.analysis
+      });
     }
 
     // 任一字段变化后刷新预览；nextTick 保证 DOM 已挂载。
@@ -367,6 +477,7 @@ export default defineComponent({
       q.options = JSON.parse(JSON.stringify(editForm.options));
       q.answer = editForm.answer;
       q.analysis = editForm.analysis;
+      q.requirements = JSON.parse(JSON.stringify(editForm.requirements || []));
       
       // 通知父组件
       emitWrite('edit-question', {
@@ -377,7 +488,8 @@ export default defineComponent({
           difficulty: editForm.difficulty,
           options: editForm.options,
           answer: editForm.answer,
-          analysis: editForm.analysis
+          analysis: editForm.analysis,
+          requirements: editForm.requirements
         }
       });
       

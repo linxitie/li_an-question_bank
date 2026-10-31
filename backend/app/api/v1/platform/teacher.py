@@ -278,37 +278,56 @@ async def list_question_types(
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """返回题型列表（供下拉，含判断/填空/情境等独立题型）"""
-    fixed_types = [
-        {"type_name": "单选题", "is_objective": 1},
-        {"type_name": "多选题", "is_objective": 1},
-        {"type_name": "判断题", "is_objective": 1},
-        {"type_name": "填空题", "is_objective": 1},
-        {"type_name": "论述题", "is_objective": 0},
-        {"type_name": "写作题", "is_objective": 0},
-        {"type_name": "情境题", "is_objective": 0},
+    """返回题型列表（供下拉）。
+
+    P5：原实现硬编码且包含库中并不存在的「填空题 / 情境题」，同时缺少
+    实际存在的「简答题 / 写作题 / 论述题」等主观题。改为以 question_type
+    表 + 可见题目为准，并按固定教学顺序输出；学生端与教师端同源。
+    """
+    order = ["单选题", "多选题", "判断题", "简答题", "论述题", "写作题"]
+    rows = db.query(QuestionType.type_name, QuestionType.is_objective).join(
+        QuestionBank, QuestionBank.type_id == QuestionType.type_id
+    ).filter(
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
+        QuestionType.type_name.notin_(["填空题", "情境题"]),
+    ).distinct().all()
+    found = {name: objective for name, objective in rows}
+    items = [
+        {"type_name": name, "is_objective": int(found.get(name, 0) or 0)}
+        for name in order if name in found
     ]
-    return {"success": True, "items": fixed_types}
+    # 兜底：库中出现未列入 order 的题型也不能丢
+    for name, objective in sorted(found.items()):
+        if name not in order:
+            items.append({"type_name": name, "is_objective": int(objective or 0)})
+    return {"success": True, "items": items}
 
 
 @router.get("/knowledge-points", summary="知识点列表")
 async def list_knowledge_points(
-    subject_id: int = Query(..., description="科目ID"),
+    subject_id: Optional[int] = Query(None, description="科目ID，不传=全部科目"),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """返回某科目的 canonical L3 知识点列表（仅含有可见题目的考点）"""
+    """返回 canonical L3 知识点列表（仅含有可见题目的考点）。
+
+    P5：subject_id 改为可选，支持试卷编辑器「全部知识点」筛选；
+    口径与题库导入 /api/questions/taxonomy 的 L3 考点一致。
+    """
     visible_point_ids = db.query(QuestionBank.point_id).filter(
         QuestionBank.status == 1,
         QuestionBank.audit_status == 1,
         QuestionBank.point_id.isnot(None),
     ).distinct()
-    kps = db.query(KnowledgePoint).filter(
-        KnowledgePoint.subject_id == subject_id,
+    kp_query = db.query(KnowledgePoint).filter(
         KnowledgePoint.status == 1,
         KnowledgePoint.level == 3,
         KnowledgePoint.point_id.in_(visible_point_ids),
-    ).order_by(KnowledgePoint.sort_order).all()
+    )
+    if subject_id:
+        kp_query = kp_query.filter(KnowledgePoint.subject_id == subject_id)
+    kps = kp_query.order_by(KnowledgePoint.subject_id, KnowledgePoint.sort_order).all()
     items = [{"point_id": kp.point_id, "point_name": kp.point_name} for kp in kps]
     return {"success": True, "total": len(items), "items": items}
 
@@ -652,6 +671,7 @@ async def list_teacher_papers(
             "question_count": p.question_count,
             "exam_type": p.exam_type,
             "paper_type": p.paper_type,
+            "creator_id": p.creator_id,
             "approval_status": approval_status,
             "approval_opinion": latest_wf.opinion if latest_wf else "",
             "create_time": p.create_time.isoformat() if p.create_time else None,
@@ -718,6 +738,8 @@ async def get_teacher_paper_detail(
             "answer": q.answer,
             "answer_analysis": q.answer_analysis or "",
             "difficulty": q.difficulty,
+            "group_id": q.group_id or 0,
+            "point_name": q.point.point_name if q.point else "",
         })
 
     return {
@@ -1453,6 +1475,9 @@ async def get_score_overview(
                 question_content=q.question_content[:50] if q else f"题目{qid}",
                 correct_rate=round(stat["correct"] / stat["total"] * 100, 1) if stat["total"] > 0 else 0,
                 total_attempts=stat["total"],
+                type_name=q.type.type_name if q and q.type else None,
+                point_name=q.point.point_name if q and q.point else None,
+                subject_name=q.subject.subject_name if q and q.subject else None,
             ))
 
     return ScoreOverviewResponse(
@@ -1502,6 +1527,43 @@ async def get_class_scores(
         "min_score": min(scores) if scores else 0,
         "pass_rate": round(sum(1 for s in scores if s >= 60) / len(scores) * 100, 1) if scores else 0,
     }
+
+
+@router.get("/scores/class-compare", summary="班级成绩对比")
+async def compare_class_scores(
+    paper_id: Optional[int] = Query(None),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """全校班级横向对比：平均分 / 及格率 / 参考人数。
+
+    教师端「成绩管理」合并原「数据分析」后需要一张全校对比图；
+    /classes 只返回当前教师所带班级，无法支撑“全校”视图，故单列此端点。
+    """
+    classes = db.query(Banji).order_by(Banji.class_name.asc()).all()
+    items = []
+    for cls in classes:
+        user_ids = [row[0] for row in db.query(SysUser.user_id).filter(
+            SysUser.class_name == cls.class_name,
+            SysUser.user_type == "student",
+        ).all()]
+        records_query = db.query(ExamRecord).filter(
+            ExamRecord.is_completed == 1,
+            ExamRecord.user_id.in_(user_ids) if user_ids else False,
+        )
+        if paper_id:
+            records_query = records_query.filter(ExamRecord.paper_id == paper_id)
+        records = records_query.all()
+        scores = [float(r.total_score or 0) for r in records]
+        items.append({
+            "class_id": cls.class_id,
+            "class_name": cls.class_name,
+            "student_count": len(user_ids),
+            "exam_count": len(records),
+            "avg_score": round(sum(scores) / len(scores), 1) if scores else 0,
+            "pass_rate": round(sum(1 for s in scores if s >= 60) / len(scores) * 100, 1) if scores else 0,
+        })
+    return {"success": True, "total": len(items), "items": items}
 
 
 @router.get("/scores/student/{user_id}", summary="学生成绩详情")
@@ -1575,6 +1637,10 @@ async def get_question_stats(
             "total_attempts": stat["total"],
             "correct_count": stat["correct"],
             "common_mistakes": sorted(stat["wrong_answers"].items(), key=lambda x: x[1], reverse=True)[:3],
+            "type_name": q.type.type_name if q and q.type else "",
+            "point_name": q.point.point_name if q and q.point else "",
+            "subject_name": q.subject.subject_name if q and q.subject else "",
+            "difficulty": q.difficulty if q else None,
         })
 
     return {"success": True, "paper_id": paper_id, "question_count": len(result), "questions": result}
@@ -2046,15 +2112,22 @@ async def mark_all_read(
 async def get_analytics_overview(
     class_id: Optional[int] = Query(None),
     days: int = Query(30, ge=1, le=365),
+    scope: str = Query("mine", pattern="^(mine|school)$"),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """获取学情总览数据"""
-    # 获取教师所带班级的学生
-    teacher_classes = db.query(Banji.class_name).filter(
-        Banji.teacher_id == current_user.user_id
-    ).all()
-    class_names = [c[0] for c in teacher_classes]
+    """获取学情总览数据。
+
+    scope=school 用于教师端「成绩管理」的全校视图；默认 mine 保持原行为。
+    """
+    if scope == "school":
+        class_names = [c[0] for c in db.query(Banji.class_name).distinct().all()]
+    else:
+        # 获取教师所带班级的学生
+        teacher_classes = db.query(Banji.class_name).filter(
+            Banji.teacher_id == current_user.user_id
+        ).all()
+        class_names = [c[0] for c in teacher_classes]
 
     if not class_names:
         return AnalyticsOverview()
