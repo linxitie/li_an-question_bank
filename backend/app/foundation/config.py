@@ -5,6 +5,10 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = BACKEND_DIR / "migrations"
 DDL_FILE = MIGRATIONS_DIR / "20261027_001_foundation_core.sql"
+# F3 媒体资产表：独立 DDL，不混入 F1 的 7 表定义。
+MEDIA_DDL_FILE = MIGRATIONS_DIR / "20261027_002_media_assets.sql"
+# F5 图投影表：独立 DDL，不混入 F1/F3 定义。
+GRAPH_DDL_FILE = MIGRATIONS_DIR / "20261027_003_graph_projection.sql"
 DEFAULT_SQLITE_PATH = BACKEND_DIR / "data" / "question_bank.db"
 
 
@@ -21,10 +25,106 @@ FOUNDATION_DISPATCH_MS = int(os.environ.get("FOUNDATION_DISPATCH_MS", "500") or 
 FOUNDATION_MAX_ATTEMPTS = int(os.environ.get("FOUNDATION_MAX_ATTEMPTS", "8") or 8)
 # 写入守卫总开关：false 时 6 类校验整体短路，回到 F1 行为（回滚开关）。
 FOUNDATION_VALIDATION_ENABLED = _bool("FOUNDATION_VALIDATION_ENABLED", True)
+# F2b：业务事件写入 Outbox（同事务）。false 时回到 F2 的 events.publish + 同步兜底。
+EVENT_OUTBOX_ENABLED = _bool("EVENT_OUTBOX_ENABLED", True)
+# F2b-2：WS 重连增量补发。false 时服务端明确回 truncated，前端回退全量同步。
+WS_SYNC_REPLAY_ENABLED = _bool("WS_SYNC_REPLAY_ENABLED", True)
+WS_SYNC_MAX_EVENTS = int(os.environ.get("WS_SYNC_MAX_EVENTS", "200") or 200)
+WS_SYNC_MAX_AGE_HOURS = int(os.environ.get("WS_SYNC_MAX_AGE_HOURS", "24") or 24)
+# 同机多 worker 的 Dispatcher 单写者锁；相对路径按 backend/ 解析。
+DISPATCHER_LOCK_PATH = os.environ.get("DISPATCHER_LOCK_PATH") or "./data/foundation/dispatcher.lock"
+
+# ==================== F3 对象存储 ====================
+# 与 app.core.config 同源；脚本可只导入本模块，避免拉起 pydantic Settings。
+MEDIA_STORE_ENABLED = _bool("MEDIA_STORE_ENABLED", True)
+OBJECT_STORE_BACKEND = (os.environ.get("OBJECT_STORE_BACKEND") or "local").strip().lower()
+OBJECT_STORE_ROOT = os.environ.get("OBJECT_STORE_ROOT") or "./data/foundation/objects"
+MINIO_ENDPOINT = (os.environ.get("MINIO_ENDPOINT") or "").strip()
+MINIO_BUCKET = (os.environ.get("MINIO_BUCKET") or "").strip()
+MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY") or ""
+MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY") or ""
+MINIO_SECURE = _bool("MINIO_SECURE", False)
+MINIO_REGION = (os.environ.get("MINIO_REGION") or "us-east-1").strip()
+MEDIA_STRICT_BACKEND = _bool("MEDIA_STRICT_BACKEND", False)
+MEDIA_ORPHAN_GRACE_DAYS = int(os.environ.get("MEDIA_ORPHAN_GRACE_DAYS", "7") or 7)
+
+# ==================== F4 文档投影 ====================
+# 关闭后投影 handler 直接跳过，现有读路径零影响（回滚开关）。
+DOC_STORE_ENABLED = _bool("DOC_STORE_ENABLED", True)
+DOC_STORE_BACKEND = (os.environ.get("DOC_STORE_BACKEND") or "local").strip().lower()
+DOC_STORE_ROOT = os.environ.get("DOC_STORE_ROOT") or "./data/foundation/docs"
+DOC_STORE_MAX_BYTES = int(os.environ.get("DOC_STORE_MAX_BYTES", "8388608") or 8388608)
+DOC_STORE_MONGO_URI = os.environ.get("DOC_STORE_MONGO_URI") or ""
+DOC_STORE_MONGO_DB = os.environ.get("DOC_STORE_MONGO_DB") or "li_an_foundation"
+DOC_STORE_MONGO_PREFIX = os.environ.get("DOC_STORE_MONGO_PREFIX") or ""
+DOC_STORE_RECONCILE_MAX_AGE_DAYS = int(
+    os.environ.get("DOC_STORE_RECONCILE_MAX_AGE_DAYS", "7") or 7
+)
+
+
+# ==================== F5 图投影 ====================
+# 关闭后图回填/查询短路，现有业务零影响（回滚开关）。
+GRAPH_STORE_ENABLED = _bool("GRAPH_STORE_ENABLED", True)
+GRAPH_BACKEND = (os.environ.get("GRAPH_BACKEND") or "local").strip().lower()
+GRAPH_NEO4J_URI = (os.environ.get("GRAPH_NEO4J_URI") or "http://localhost:7474").strip()
+GRAPH_NEO4J_USER = (os.environ.get("GRAPH_NEO4J_USER") or "neo4j").strip()
+GRAPH_NEO4J_PASSWORD = os.environ.get("GRAPH_NEO4J_PASSWORD") or ""
+GRAPH_NEO4J_DATABASE = (os.environ.get("GRAPH_NEO4J_DATABASE") or "neo4j").strip()
+GRAPH_QUERY_MAX_DEPTH = int(os.environ.get("GRAPH_QUERY_MAX_DEPTH", "5") or 5)
+GRAPH_RECONCILE_MAX_AGE_DAYS = int(
+    os.environ.get("GRAPH_RECONCILE_MAX_AGE_DAYS", "7") or 7
+)
+
+
+# ==================== F6 向量投影与 AI 端口 ====================
+# 默认全关：没有模型时不静默生成伪语义向量；local/milvus 需显式开启。
+VECTOR_STORE_ENABLED = _bool("VECTOR_STORE_ENABLED", True)
+VECTOR_BACKEND = (os.environ.get("VECTOR_BACKEND") or "off").strip().lower()
+VECTOR_DIM = int(os.environ.get("VECTOR_DIM", "1024") or 1024)
+VECTOR_COLLECTION = (os.environ.get("VECTOR_COLLECTION") or "text_questions").strip()
+VECTOR_LOCAL_ROOT = os.environ.get("VECTOR_LOCAL_ROOT") or "./data/foundation/vectors"
+VECTOR_MILVUS_URI = (os.environ.get("VECTOR_MILVUS_URI") or "http://localhost:19530").strip()
+VECTOR_MILVUS_TOKEN = os.environ.get("VECTOR_MILVUS_TOKEN") or ""
+VECTOR_MILVUS_PREFIX = (os.environ.get("VECTOR_MILVUS_PREFIX") or "li_an_").strip()
+VECTOR_SEARCH_TOP_K_MAX = int(os.environ.get("VECTOR_SEARCH_TOP_K_MAX", "100") or 100)
+VECTOR_RECONCILE_MAX_AGE_DAYS = int(
+    os.environ.get("VECTOR_RECONCILE_MAX_AGE_DAYS", "7") or 7
+)
+EMBEDDING_ENABLED = _bool("EMBEDDING_ENABLED", False)
+EMBEDDING_PROVIDER = (os.environ.get("EMBEDDING_PROVIDER") or "off").strip().lower()
+EMBEDDING_BASE_URL = (os.environ.get("EMBEDDING_BASE_URL") or "").strip()
+EMBEDDING_MODEL = (os.environ.get("EMBEDDING_MODEL") or "").strip()
+EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY") or ""
+EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", str(VECTOR_DIM)) or VECTOR_DIM)
+EMBEDDING_TIMEOUT_SECONDS = float(os.environ.get("EMBEDDING_TIMEOUT_SECONDS", "30") or 30)
+EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE", "32") or 32)
 
 
 def sqlite_path() -> Path:
     """与 app.core.config 同源：SQLITE_PATH 相对路径按 backend/ 解析。"""
     raw = os.environ.get("SQLITE_PATH") or str(DEFAULT_SQLITE_PATH)
     path = Path(raw)
+    return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
+
+
+def dispatcher_lock_path() -> Path:
+    path = Path(DISPATCHER_LOCK_PATH)
+    return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
+
+
+def object_store_root() -> Path:
+    """local 根目录；相对路径按 backend/ 解析，与 SQLITE_PATH 一致。"""
+    path = Path(OBJECT_STORE_ROOT)
+    return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
+
+
+def document_store_root() -> Path:
+    """local 文档根目录；相对路径按 backend/ 解析。"""
+    path = Path(DOC_STORE_ROOT)
+    return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
+
+
+def vector_store_root() -> Path:
+    """local 向量根目录；相对路径按 backend/ 解析。"""
+    path = Path(VECTOR_LOCAL_ROOT)
     return path if path.is_absolute() else (BACKEND_DIR / path).resolve()

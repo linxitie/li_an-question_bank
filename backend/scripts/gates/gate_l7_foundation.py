@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""L7 底座一致性门禁 — 15 项检查（F1 落地版）。
+"""L7 底座一致性门禁 — 21 项检查（F1/F2b/F3/F4/F5/F6 落地版）。
 
 严重度约定：
-  1-5、8、13、14 FAIL —— 底座结构/契约/路由可见性/通信协议被破坏，必须阻断；
-  6-7、9-12 WARN —— 依赖环境与后续阶段（F3）的软检查，先观察后升级；
-  15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL。
+  1-5、8、13、14、16 表缺失 FAIL —— 底座结构/契约/路由/媒体表被破坏，必须阻断；
+  6-7、9-12、21 的 Milvus/对账部分 WARN —— 依赖环境与后续阶段的软检查，先观察后升级；
+  15 仅在已登记存量缺陷时 WARN，新增映射缺失按 D17 直接 FAIL；
+  17 事件同事务化/定向路由契约缺失 FAIL，调用点数量不足只 WARN；
+  18 断线补发后端契约缺失 FAIL；前端 useDataSync/typed 事件缺失只 WARN；
+  19 文档投影后端契约/local 文档库不可用 FAIL；Mongo 不可用、对账过期、漂移只 WARN；
+  20 图投影契约/图投影表/本地图存储不可用 FAIL；Neo4j 不可用、对账过期、漂移只 WARN；
+  21 向量投影契约/local 向量库不可用 FAIL；Milvus 不可用、对账过期、漂移/孤儿只 WARN，
+     向量/Embedding 关闭时 PASS disabled；
+  16 的存储不可达/对账过期/孤儿只 WARN，不阻断离线开发。
   L7-13 特例：已正确配置 WS_RELAY=redis 但 Redis 暂不可达只记 WARN（启动会重试）。
 
 设计原则：只读、不做任何写入（唯一例外：--update-baseline 显式更新基线）。
@@ -30,11 +37,20 @@ BASELINE_PATH = Path(__file__).resolve().parent / 'l7_baseline.json'
 # 迁移文件一经提交即视为历史事实；改动必须走人工评审并同步更新此常量。
 FOUNDATION_DDL_SHA256 = '0abfd2887b62aa251ef2952cab9352b425456415fe753b040707eeb5cd4e08f9'
 FOUNDATION_DDL = BACKEND_ROOT / 'migrations' / '20261027_001_foundation_core.sql'
+MEDIA_DDL = BACKEND_ROOT / 'migrations' / '20261027_002_media_assets.sql'
+MEDIA_DDL_SHA256 = '455cf727d076fe67dd760cfc430da521c6dd7aa5c41024d4b9a50250028cc21f'
+GRAPH_DDL = BACKEND_ROOT / 'migrations' / '20261027_003_graph_projection.sql'
+GRAPH_DDL_SHA256 = '525ffc8225f505ad0855d69e18f30956696b9df94216abf2c0cc2d6bb14b5c46'
 FOUNDATION_TABLES = (
     'foundation_outbox', 'foundation_projection_cursor', 'foundation_inbox',
     'foundation_projection_state', 'foundation_reconcile_run',
     'foundation_backfill_state', 'foundation_preview_ref',
 )
+MEDIA_TABLES = ('media_assets',)
+MEDIA_INDEXES = ('ix_media_assets_sha256', 'ix_media_assets_status',
+                 'ix_media_assets_created_by')
+GRAPH_TABLES = ('foundation_graph_node', 'foundation_graph_edge')
+GRAPH_INDEXES = ('ix_graph_edge_src', 'ix_graph_edge_dst')
 ROLE_SUFFIX_RE = re.compile(r'_(mobile|tablet|pc|teacher|admin)$', re.I)
 MAIN_DB_WARN_BYTES = 512 * 1024 * 1024
 MAIN_DB_FAIL_BYTES = 1024 * 1024 * 1024
@@ -173,6 +189,18 @@ def check_migrations() -> None:
         digest = hashlib.sha256(FOUNDATION_DDL.read_bytes()).hexdigest()
         if digest != FOUNDATION_DDL_SHA256:
             problems.append(f'DDL checksum 不符：{digest[:16]}…（历史迁移被改动？）')
+    if not MEDIA_DDL.exists():
+        problems.append(f'缺少 {MEDIA_DDL.name}')
+    else:
+        digest = hashlib.sha256(MEDIA_DDL.read_bytes()).hexdigest()
+        if digest != MEDIA_DDL_SHA256:
+            problems.append(f'media DDL checksum 不符：{digest[:16]}…')
+    if not GRAPH_DDL.exists():
+        problems.append(f'缺少 {GRAPH_DDL.name}')
+    else:
+        digest = hashlib.sha256(GRAPH_DDL.read_bytes()).hexdigest()
+        if digest != GRAPH_DDL_SHA256:
+            problems.append(f'graph DDL checksum 不符：{digest[:16]}…')
     groups: dict[str, list[int]] = {}
     for p in sorted((BACKEND_ROOT / 'migrations').glob('*.sql')):
         m = re.match(r'^(\d{8})_(\d{3})_', p.name)
@@ -460,7 +488,8 @@ def check_data_changed_contract() -> None:
     """
     src_path = BACKEND_ROOT / 'app' / 'api' / 'v1' / 'platform' / 'websocket.py'
     src = src_path.read_text(encoding='utf-8')
-    start = src.find('async def publish_data_changed(')
+    # F2b 起 async 版本只做转调，真正的 data/scope 组装在 sync 版本里。
+    start = src.find('def publish_data_changed_sync(')
     end = src.find('\nasync def ', start + 1) if start >= 0 else -1
     body = src[start:end if end > start else len(src)] if start >= 0 else src
     protocol_path = BACKEND_ROOT / 'app' / 'foundation' / 'ws_protocol.py'
@@ -511,6 +540,579 @@ def check_content_integrity() -> None:
     _add(15, '内容完整性', ok, detail, 'WARN' if ok else 'FAIL')
 
 
+def check_media_store() -> None:
+    """L7-16：媒体表/索引是硬结构；存储 health、对账新鲜度、孤儿只做软告警。"""
+    db = _db_path()
+    if not db.exists():
+        _add(16, '媒体表与对象存储', False, f'数据库不存在：{db}', 'FAIL')
+        return
+    con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+    try:
+        names = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        missing = [t for t in MEDIA_TABLES if t not in names]
+        idx = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'")}
+        miss_idx = [i for i in MEDIA_INDEXES if i not in idx]
+        active = 0
+        if not missing:
+            active = con.execute(
+                "SELECT COUNT(*) FROM media_assets WHERE status='active'").fetchone()[0]
+        row = None
+        if 'foundation_reconcile_run' in names:
+            row = con.execute(
+                "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                "WHERE scope='media' ORDER BY finished_at DESC LIMIT 1").fetchone()
+    finally:
+        con.close()
+    if missing or miss_idx:
+        _add(16, '媒体表与对象存储', False,
+             f'缺表={missing} 缺索引={miss_idx}', 'FAIL')
+        return
+
+    warnings: list[str] = []
+    enabled = os.environ.get('MEDIA_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    try:
+        sys.path.insert(0, str(BACKEND_ROOT))
+        from app.foundation.stores.object import build_object_store
+
+        health = build_object_store().health()
+        if not health.ok or health.degraded:
+            warnings.append(f'对象存储 {health.backend} 不可用：{health.detail}')
+        else:
+            store_detail = f'{health.backend}=ok'
+    except Exception as exc:  # 门禁不能因开发机无 MinIO 直接崩溃
+        warnings.append(f'对象存储检查失败：{type(exc).__name__}: {exc}')
+        store_detail = 'unknown'
+
+    if row is None:
+        warnings.append('还没有媒体对账记录（运行 media_inventory.py --record）')
+    else:
+        finished_at, status, report_path = row
+        try:
+            from datetime import datetime
+
+            finished = datetime.fromisoformat(str(finished_at))
+            if finished.tzinfo is None:
+                finished = finished.astimezone()
+            age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+            if age_days > 7:
+                warnings.append(f'媒体对账已过期 {age_days:.1f} 天')
+        except (TypeError, ValueError):
+            warnings.append('媒体对账时间无法解析')
+        if str(status) == 'drift':
+            warnings.append('最近一次媒体对账有漂移')
+        if report_path:
+            try:
+                rp = Path(report_path)
+                if not rp.is_absolute():
+                    rp = BACKEND_ROOT / rp
+                report = json.loads(rp.read_text(encoding='utf-8'))
+                orphans = int(report.get('orphans') or 0)
+                if orphans:
+                    warnings.append(f'孤儿对象 {orphans} 个（GC 默认 dry-run）')
+            except (OSError, ValueError):
+                pass
+
+    if warnings:
+        _add(16, '媒体表与对象存储', False,
+             f'表/索引齐全 active={active}；' + '；'.join(warnings), 'WARN')
+    else:
+        _add(16, '媒体表与对象存储', True,
+             f'表/索引齐全 active={active} {store_detail} enabled={enabled}', 'WARN')
+
+
+def check_f2b_events() -> None:
+    """L7-17：事件同事务化与定向路由契约（F2b-1）。"""
+    missing: list[str] = []
+    api_root = BACKEND_ROOT / 'app' / 'api' / 'v1'
+    published = []
+    for py in api_root.rglob('*.py'):
+        text = py.read_text(encoding='utf-8')
+        if 'events.publish' in text:
+            published.append(str(py.relative_to(BACKEND_ROOT)))
+    if published:
+        missing.append('api/v1 仍有 events.publish：' + ', '.join(published))
+
+    handlers = (BACKEND_ROOT / 'app' / 'services' / 'event_handlers.py').read_text(
+        encoding='utf-8')
+    for name in ('EV_USER_ACTION', 'EV_PAPER_PUBLISHED'):
+        if name not in handlers:
+            missing.append(f'event_handlers 未注册 {name}')
+
+    triggers = _module_constants(BACKEND_ROOT / 'app' / 'core' / 'trigger_types.py')
+    all_triggers = triggers.get('ALL_TRIGGER_TYPES', [])
+    if str(BACKEND_ROOT) not in sys.path:
+        sys.path.insert(0, str(BACKEND_ROOT))
+    from app.foundation.event_routes import missing_triggers
+    absent = missing_triggers()
+    if absent:
+        missing.append('event_routes 缺少 trigger：' + ', '.join(absent))
+
+    for rel_path, needles in (
+        ('app/foundation/dispatcher.py', ('DispatcherLock', 'run_forever')),
+        ('app/services/event_handlers.py', ('claim(',)),
+        ('app/foundation/config.py', ('EVENT_OUTBOX_ENABLED',)),
+    ):
+        body = (BACKEND_ROOT / rel_path).read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    refs = 0
+    for base in (api_root, BACKEND_ROOT / 'app' / 'services'):
+        for py in base.rglob('*.py'):
+            refs += py.read_text(encoding='utf-8').count('record_user_action(')
+    detail = f'triggers={len(all_triggers)} record_user_action引用={refs}'
+    if missing:
+        _add(17, 'F2b 事件同事务化契约', False, '；'.join(missing), 'FAIL')
+    elif refs < 20:
+        _add(17, 'F2b 事件同事务化契约', False,
+             detail + '（调用点少于 20，确认是否漏迁）', 'WARN')
+    else:
+        _add(17, 'F2b 事件同事务化契约', True, detail, 'FAIL')
+
+
+def check_sync_replay() -> None:
+    """L7-18：断线重连补发契约（F2b-2）。
+
+    后端契约是协议正确性的前提，缺失直接 FAIL；前端接入只影响刷新体验，
+    缺失记 WARN，避免尚未升级的部署被门禁阻断。
+    """
+    missing: list[str] = []
+    soft: list[str] = []
+
+    required = (
+        ('app/foundation/ws_sync.py', ('def replay(', 'latest_oid', 'truncated')),
+        ('app/api/v1/platform/websocket.py',
+         ('SYNC = "sync"', 'handle_sync_request', 'outbox_id')),
+        ('app/services/event_handlers.py', ('outbox_id=event.id',)),
+        ('app/foundation/config.py', ('WS_SYNC_REPLAY_ENABLED',)),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    frontend = (
+        ('src/composables/useDataSync.ts', ('createDataSyncListener', 'useDataSync')),
+        ('src/utils/wsMessage.ts', ('extractSyncReply', 'SyncReplay')),
+        ('src/auth.ts', ('_lastOutboxId', '__VTJ_DATA_CHANGED__')),
+    )
+    for rel_path, needles in frontend:
+        path = WORKSPACE_ROOT / rel_path
+        if not path.exists():
+            soft.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                soft.append(f'{rel_path} 缺少 {needle}')
+
+    detail = '后端补发契约完整'
+    if soft:
+        detail += '；前端：' + '；'.join(soft)
+    if missing:
+        _add(18, '断线补发与前端增量刷新', False,
+             '；'.join(missing) + ('；前端：' + '；'.join(soft) if soft else ''), 'FAIL')
+    elif soft:
+        _add(18, '断线补发与前端增量刷新', False, detail, 'WARN')
+    else:
+        _add(18, '断线补发与前端增量刷新', True, detail, 'FAIL')
+
+
+def check_document_store() -> None:
+    """L7-19：文档投影契约与 DocumentStore 健康（F4）。
+
+    后端契约/local 库不可用会直接阻断文档投影，记 FAIL；Mongo 仅是可选后端，
+    未安装 pymongo 或服务未起只 WARN。对账过期/漂移同样只 WARN，交给巡检处理。
+    """
+    missing: list[str] = []
+    warnings: list[str] = []
+    required = (
+        ('app/foundation/stores/document.py', ('COLLECTIONS', 'build_document_store')),
+        ('app/foundation/stores/local_document.py', ('class LocalDocumentStore',)),
+        ('app/foundation/stores/mongo_document.py', ('class MongoDocumentStore',)),
+        ('app/foundation/document_schema.py',
+         ('build_exam_resource', 'build_forum_content', 'build_import_snapshot')),
+        ('app/foundation/document_projection.py',
+         ('handle_exam_snapshot', 'handle_forum_changed')),
+        ('app/foundation/document_events.py', ('emit_exam_snapshot', 'emit_import_snapshot')),
+        ('app/services/event_handlers.py', ('document_projection',)),
+        ('app/foundation/config.py', ('DOC_STORE_ENABLED', 'DOC_STORE_MAX_BYTES')),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    events = (BACKEND_ROOT / 'app' / 'core' / 'events.py').read_text(encoding='utf-8')
+    for name in ('EV_PAPER_SNAPSHOT', 'EV_QUESTION_IMPORT_SNAPSHOT',
+                 'EV_MATERIAL_IMPORT_SNAPSHOT', 'EV_FORUM_CONTENT_CHANGED'):
+        if name not in events:
+            missing.append(f'events.py 缺少 {name}')
+
+    emit_refs = 0
+    for rel_path in (
+        'app/api/v1/catalog/papers.py',
+        'app/api/v1/catalog/question_import.py',
+        'app/api/v1/library/materials.py',
+        'app/api/v1/community/forum.py',
+    ):
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        if 'document_events' not in body and 'emit_exam_snapshot' not in body:
+            missing.append(f'{rel_path} 未接入文档事件')
+        emit_refs += body.count('emit_')
+
+    backend = os.environ.get('DOC_STORE_BACKEND', 'local').strip().lower() or 'local'
+    enabled = os.environ.get('DOC_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    store_detail = 'disabled'
+    if enabled:
+        try:
+            if str(BACKEND_ROOT) not in sys.path:
+                sys.path.insert(0, str(BACKEND_ROOT))
+            from app.foundation.stores.document import build_document_store
+
+            health = build_document_store().health()
+            store_detail = f'{health.backend}={"ok" if health.ok else "down"}'
+            if not health.ok or health.degraded:
+                message = f'文档库 {health.backend} 不可用：{health.detail}'
+                if str(health.backend).lower() == 'mongo' or backend == 'mongo':
+                    warnings.append(message)
+                else:
+                    missing.append(message)
+        except Exception as exc:  # 门禁不能因开发机未装可选后端直接崩溃
+            message = f'文档库检查失败：{type(exc).__name__}: {exc}'
+            if backend == 'mongo':
+                warnings.append(message)
+            else:
+                missing.append(message)
+
+    row = None
+    db = _db_path()
+    if db.exists():
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='foundation_reconcile_run'").fetchone()
+            if exists:
+                row = con.execute(
+                    "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                    "WHERE scope='document' ORDER BY finished_at DESC LIMIT 1").fetchone()
+        finally:
+            con.close()
+    if row is None:
+        warnings.append('还没有文档对账记录（运行 document_inventory.py --record）')
+    else:
+        finished_at, status, report_path = row
+        try:
+            from datetime import datetime
+
+            finished = datetime.fromisoformat(str(finished_at))
+            if finished.tzinfo is None:
+                finished = finished.astimezone()
+            age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+            if age_days > 7:
+                warnings.append(f'文档对账已过期 {age_days:.1f} 天')
+        except (TypeError, ValueError):
+            warnings.append('文档对账时间无法解析')
+        if str(status) == 'drift':
+            warnings.append('最近一次文档对账有漂移')
+        if report_path:
+            try:
+                rp = Path(report_path)
+                if not rp.is_absolute():
+                    rp = BACKEND_ROOT / rp
+                report = json.loads(rp.read_text(encoding='utf-8'))
+                orphan = int(report.get('orphan') or 0)
+                if orphan:
+                    warnings.append(f'文档库孤儿 {orphan} 个')
+            except (OSError, ValueError):
+                pass
+
+    detail = f'backend={backend} enabled={enabled} {store_detail} emit引用={emit_refs}'
+    if warnings:
+        detail += '；' + '；'.join(warnings)
+    _add(19, '文档投影与 DocumentStore', not missing,
+         '；'.join(missing) if missing else detail, 'FAIL')
+
+
+def check_graph_store() -> None:
+    """L7-20：图投影契约与 GraphStore 健康（F5）。
+
+    图投影表/本地图存储不可用会阻断图查询，记 FAIL；Neo4j 只是可选后端，
+    未启动/未配置只 WARN。对账过期/漂移/孤儿同样只 WARN，交给巡检处理。
+    """
+    missing: list[str] = []
+    warnings: list[str] = []
+    required = (
+        ('app/foundation/stores/graph.py', ('LABELS', 'build_graph_store')),
+        ('app/foundation/stores/local_graph.py', ('class LocalGraphStore',)),
+        ('app/foundation/stores/neo4j_graph.py', ('class Neo4jGraphStore',)),
+        ('app/foundation/graph_schema.py', ('GRAPH_TABLE_SPECS', 'verify_graph_schema')),
+        ('app/foundation/graph_builder.py', ('build_graph', 'apply_plan')),
+        ('app/foundation/graph_query.py', ('def prerequisites',)),
+        ('app/foundation/graph_reconcile.py', ('def inspect', 'SCOPE = "graph"')),
+        ('app/foundation/config.py', ('GRAPH_STORE_ENABLED', 'GRAPH_BACKEND')),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    db = _db_path()
+    if not db.exists():
+        missing.append(f'数据库不存在：{db}')
+    else:
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            names = {r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            miss_tables = [t for t in GRAPH_TABLES if t not in names]
+            idx = {r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'")}
+            miss_idx = [i for i in GRAPH_INDEXES if i not in idx]
+            if miss_tables or miss_idx:
+                missing.append(f'图投影缺表={miss_tables} 缺索引={miss_idx}')
+        finally:
+            con.close()
+
+    backend = os.environ.get('GRAPH_BACKEND', 'local').strip().lower() or 'local'
+    enabled = os.environ.get('GRAPH_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    store_detail = 'disabled'
+    counts: dict | None = None
+    if enabled:
+        try:
+            if str(BACKEND_ROOT) not in sys.path:
+                sys.path.insert(0, str(BACKEND_ROOT))
+            from app.foundation.stores.graph import build_graph_store
+
+            store = build_graph_store()
+            health = store.health()
+            store_detail = f'{health.backend}={"ok" if health.ok else "down"}'
+            if health.ok:
+                counts = store.counts()
+            if not health.ok or health.degraded:
+                message = f'图存储 {health.backend} 不可用：{health.detail}'
+                if str(health.backend).lower() == 'neo4j' or backend == 'neo4j':
+                    warnings.append(message)
+                else:
+                    missing.append(message)
+        except Exception as exc:  # 门禁不能因开发机未启动 Neo4j 直接崩溃
+            message = f'图存储检查失败：{type(exc).__name__}: {exc}'
+            if backend == 'neo4j':
+                warnings.append(message)
+            else:
+                missing.append(message)
+
+    row = None
+    if db.exists():
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='foundation_reconcile_run'").fetchone()
+            if exists:
+                row = con.execute(
+                    "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                    "WHERE scope='graph' ORDER BY finished_at DESC LIMIT 1").fetchone()
+        finally:
+            con.close()
+    if row is None:
+        warnings.append('还没有图对账记录（运行 graph_inventory.py --record）')
+    else:
+        finished_at, status, report_path = row
+        try:
+            from datetime import datetime
+
+            finished = datetime.fromisoformat(str(finished_at))
+            if finished.tzinfo is None:
+                finished = finished.astimezone()
+            age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+            if age_days > 7:
+                warnings.append(f'图对账已过期 {age_days:.1f} 天')
+        except (TypeError, ValueError):
+            warnings.append('图对账时间无法解析')
+        if str(status) == 'drift':
+            warnings.append('最近一次图对账有漂移')
+        if report_path:
+            try:
+                rp = Path(report_path)
+                if not rp.is_absolute():
+                    rp = BACKEND_ROOT / rp
+                report = json.loads(rp.read_text(encoding='utf-8'))
+                orphan = int(report.get('orphan') or 0)
+                if orphan:
+                    warnings.append(f'图投影孤儿 {orphan} 个')
+            except (OSError, ValueError):
+                pass
+
+    detail = f'backend={backend} enabled={enabled} {store_detail}'
+    if counts:
+        detail += f" nodes={counts.get('nodes')} edges={counts.get('edges')}"
+    if warnings:
+        detail += '；' + '；'.join(warnings)
+    _add(20, '图投影与 GraphStore', not missing,
+         '；'.join(missing) if missing else detail, 'FAIL')
+
+
+def check_vector_store() -> None:
+    """L7-21：向量投影契约与 VectorStore 健康（F6）。
+
+    协议/本地向量/构建/对账/检索文件缺失，或 local 后端不可用会阻断向量
+    检索，记 FAIL；Milvus 是可选的远程后端，未启动/未安装只 WARN；开关
+    关闭时 PASS disabled。对账过期/漂移/孤儿同样只 WARN。
+    """
+    missing: list[str] = []
+    warnings: list[str] = []
+    required = (
+        ('app/foundation/ports/ai.py', ('EmbeddingPort', 'build_embedding_port')),
+        ('app/foundation/stores/vector.py', ('build_vector_store', 'VectorStore')),
+        ('app/foundation/stores/local_vector.py', ('class LocalVectorStore',)),
+        ('app/foundation/stores/milvus_vector.py', ('class MilvusVectorStore',)),
+        ('app/foundation/vector_builder.py', ('def expected_records', 'def apply_plan')),
+        ('app/foundation/vector_reconcile.py', ('SCOPE = "vector"', 'def inspect')),
+        ('app/foundation/retrieval.py', ('def search_questions',)),
+        ('scripts/foundation/backfill_vectors.py', ('--verify', '--apply')),
+        ('scripts/audit/vector_inventory.py', ('def main',)),
+        ('scripts/audit/vector_parity.py', ('def main',)),
+        ('app/foundation/config.py', ('VECTOR_STORE_ENABLED', 'VECTOR_BACKEND',
+                                      'VECTOR_DIM', 'EMBEDDING_PROVIDER')),
+    )
+    for rel_path, needles in required:
+        path = BACKEND_ROOT / rel_path
+        if not path.exists():
+            missing.append(f'{rel_path} 不存在')
+            continue
+        body = path.read_text(encoding='utf-8')
+        for needle in needles:
+            if needle not in body:
+                missing.append(f'{rel_path} 缺少 {needle}')
+
+    backend = os.environ.get('VECTOR_BACKEND', 'off').strip().lower() or 'off'
+    enabled = os.environ.get('VECTOR_STORE_ENABLED', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    embedding_enabled = os.environ.get(
+        'EMBEDDING_ENABLED', 'false').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    embedding_provider = os.environ.get('EMBEDDING_PROVIDER', 'off').strip().lower()
+    if not enabled or backend in ('off', ''):
+        _add(21, '向量投影与 VectorStore', not missing,
+             '；'.join(missing) if missing else
+             f'backend={backend} enabled={enabled} disabled', 'FAIL')
+        return
+    if embedding_enabled and embedding_provider not in ('off', 'hash', 'http'):
+        warnings.append(f'未知 EMBEDDING_PROVIDER={embedding_provider}')
+
+    store_detail = 'disabled'
+    counts: dict | None = None
+    if enabled and backend not in ('off', ''):
+        try:
+            if str(BACKEND_ROOT) not in sys.path:
+                sys.path.insert(0, str(BACKEND_ROOT))
+            from app.foundation.stores.vector import build_vector_store
+
+            store = build_vector_store()
+            health = store.health()
+            store_detail = f'{health.backend}={"ok" if health.ok else "down"}'
+            if health.ok:
+                try:
+                    collection = os.environ.get('VECTOR_COLLECTION', 'text_questions')
+                    counts = {'count': store.count(collection)}
+                except Exception:
+                    counts = None
+            if not health.ok or health.degraded:
+                message = f'向量存储 {health.backend} 不可用：{health.detail}'
+                if str(health.backend).lower() == 'milvus' or backend == 'milvus':
+                    warnings.append(message)
+                else:
+                    missing.append(message)
+        except Exception as exc:  # 门禁不能因开发机未启动 Milvus 直接崩溃
+            message = f'向量存储检查失败：{type(exc).__name__}: {exc}'
+            if backend == 'milvus':
+                warnings.append(message)
+            else:
+                missing.append(message)
+
+    db = _db_path()
+    if db.exists():
+        con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+        try:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='foundation_reconcile_run'").fetchone()
+            if exists:
+                row = con.execute(
+                    "SELECT finished_at, status, report_path FROM foundation_reconcile_run "
+                    "WHERE scope='vector' ORDER BY finished_at DESC LIMIT 1").fetchone()
+            else:
+                row = None
+        finally:
+            con.close()
+        if row is None:
+            warnings.append('还没有向量对账记录（运行 vector_inventory.py --record）')
+        else:
+            finished_at, status, report_path = row
+            try:
+                from datetime import datetime
+
+                finished = datetime.fromisoformat(str(finished_at))
+                if finished.tzinfo is None:
+                    finished = finished.astimezone()
+                age_days = (datetime.now().astimezone() - finished).total_seconds() / 86400
+                if age_days > 7:
+                    warnings.append(f'向量对账已过期 {age_days:.1f} 天')
+            except (TypeError, ValueError):
+                warnings.append('向量对账时间无法解析')
+            if str(status) == 'drift':
+                warnings.append('最近一次向量对账有漂移')
+            if report_path:
+                try:
+                    rp = Path(report_path)
+                    if not rp.is_absolute():
+                        rp = BACKEND_ROOT / rp
+                    report = json.loads(rp.read_text(encoding='utf-8'))
+                    orphan = int(report.get('orphan') or 0)
+                    if orphan:
+                        warnings.append(f'向量投影孤儿 {orphan} 个')
+                except (OSError, ValueError):
+                    pass
+    else:
+        warnings.append(f'数据库不存在，跳过向量对账记录：{db}')
+
+    detail = (f'backend={backend} enabled={enabled} embedding='
+              f'{embedding_enabled}/{embedding_provider} {store_detail}')
+    if counts:
+        detail += f" count={counts.get('count')}"
+    if warnings:
+        detail += '；' + '；'.join(warnings)
+    _add(21, '向量投影与 VectorStore', not missing,
+         '；'.join(missing) if missing else detail, 'FAIL')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -522,6 +1124,8 @@ CHECKS = (
     check_migrations, check_health_switch, check_reconcile, check_routes_roles,
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
+    check_media_store, check_f2b_events, check_sync_replay, check_document_store,
+    check_graph_store, check_vector_store,
 )
 
 

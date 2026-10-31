@@ -8,33 +8,68 @@
           <XIcon :icon="ChatRound" :size="24" color="#c41e3a"></XIcon>
           <span> 备考论坛</span>
         </h2>
-        <button class="post-btn" @click="openNewPost">
-          <XIcon :icon="EditPen" :size="16" color="#ffffff"></XIcon>
-          <span> 发布新帖</span>
-        </button>
+        <div class="forum-header-actions">
+          <button class="post-btn ghost" @click="openFavorites('favorites')">
+            <XIcon :icon="Star" :size="16" color="#c41e3a"></XIcon>
+            <span> 我的收藏</span>
+          </button>
+          <button class="post-btn ghost" @click="openFavorites('likes')">
+            <XIcon :icon="StarFilled" :size="16" color="#c41e3a"></XIcon>
+            <span> 我的喜欢</span>
+          </button>
+          <button class="post-btn" @click="openNewPost">
+            <XIcon :icon="EditPen" :size="16" color="#ffffff"></XIcon>
+            <span> 发布新帖</span>
+          </button>
+        </div>
       </div>
       <div class="forum-body">
         <div class="forum-left">
+          <div class="category-bar">
+            <button
+              v-for="cat in categoryTabs"
+              :key="cat.key"
+              :class="['category-chip', { active: state.activeCategory === cat.key }]"
+              @click="selectCategory(cat.key)">
+              {{ cat.name }}
+            </button>
+          </div>
+          <div class="forum-search-bar">
+            <input
+              v-model="state.searchKeyword"
+              class="search-input"
+              placeholder="搜索帖子标题或内容…"
+              @keyup.enter="applySearch" />
+            <input v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
+            <span class="search-tilde">~</span>
+            <input v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
+            <button class="search-btn" @click="applySearch">搜索</button>
+            <button class="search-reset" @click="resetSearch">重置</button>
+          </div>
           <div class="post-list" v-if="state.posts.length">
             <div
               v-for="(post, index) in filteredPosts"
               :key="post.id"
               class="post-item">
-              <div class="post-avatar" @click.stop="viewUser(post.userId)">
-                <img
-                  v-if="post.avatar"
-                  :src="post.avatar"
-                  class="avatar-img"
-                  alt="头像"
-                  @error="onAvatarError"/>
-                <span v-else class="avatar-text">{{ (post.author || '匿').charAt(0) }}</span>
-              </div>
+              <UserBadge
+                class="post-avatar"
+                avatar-only
+                clickable
+                size="md"
+                :src="post.avatar"
+                :name="post.author"
+                :user-id="post.userId"
+                @click="viewUser(post.userId)" />
               <div class="post-content" @click="viewPost(post)">
-                <h4 class="post-title">{{ post.title }}</h4>
-                <p class="post-excerpt">{{ post.content }}</p>
-                <div class="post-attachments" v-if="post.attachments && post.attachments.length">
+                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
+                <p class="post-excerpt"><ForumContent :content="post.content" /></p>
+                <AttachmentList
+                  v-if="post.attachments && post.attachments.length"
+                  :attachments="post.attachments"
+                  mode="post" />
+                <div class="post-attachments" v-if="post.fileAttachments && post.fileAttachments.length">
                   <span
-                    v-for="(att, idx) in post.attachments"
+                    v-for="(att, idx) in post.fileAttachments"
                     :key="idx"
                     class="attachment-chip"
                     @click.stop="downloadAttachment(att)">
@@ -47,12 +82,17 @@
                   <span class="meta-dot"> ·</span>
                   <span class="meta-date">{{ post.date }}</span>
                   <span class="meta-dot"> ·</span>
-                  <span class="meta-likes" @click.stop="toggleLike(post)">
-                    <XIcon
-                      :icon="post.liked ? StarFilled : Star"
-                      :size="13"
-                      :color="post.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+                  <span class="meta-likes" @click.stop="toggleHeart(post)" title="喜欢">
+                    <span class="heart-icon" :class="{ active: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                     <span> {{ post.likeCount }}</span>
+                  </span>
+                  <span class="meta-dot"> ·</span>
+                  <span class="meta-favs" @click.stop="toggleFavorite(post)" title="收藏">
+                    <XIcon
+                      :icon="post.favorited ? StarFilled : Star"
+                      :size="13"
+                      :color="post.favorited ? '#f59e0b' : '#8a8faa'"></XIcon>
+                    <span> {{ post.favoriteCount }}</span>
                   </span>
                   <span class="meta-dot"> ·</span>
                   <span class="meta-comments">
@@ -152,12 +192,17 @@
             class="modal-input"
             placeholder="请输入标题..."
             maxlength="200"/>
+
           <textarea
             v-model="state.newPost.content"
             rows="6"
             class="modal-textarea"
             placeholder="请输入内容(分享观点、学习经验...)"
             maxlength="10000"></textarea>
+          <div class="post-image-upload">
+            <label class="post-color-label">图片（不限张数）</label>
+            <FileUploader v-model="state.newPost.images" :max-docs="10" />
+          </div>
           <div class="upload-area">
             <input
               type="file"
@@ -182,6 +227,53 @@
             <button class="confirm-btn" :disabled="state.submitting" @click="submitPost">
               {{ state.submitting ? '发布中...' : '发布' }}
             </button>
+          </div>
+        </div>
+      </div>
+      <!-- 我的收藏 / 我的喜欢（P2 为空态外壳，列表数据在 P3 接入） -->
+      <div
+        v-if="state.showFavorites"
+        class="modal-overlay"
+        @click.self="closeFavorites">
+        <div class="modal-card fav-modal">
+          <h3>{{ state.favoriteTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
+          <div class="fav-tabs">
+            <button
+              :class="['fav-tab', { active: state.favoriteTab === 'favorites' }]"
+              @click="switchFavoritesTab('favorites')">
+              我的收藏
+            </button>
+            <button
+              :class="['fav-tab', { active: state.favoriteTab === 'likes' }]"
+              @click="switchFavoritesTab('likes')">
+              我的喜欢
+            </button>
+          </div>
+          <div v-if="state.favoriteLoading" class="fav-empty">加载中...</div>
+          <div v-else-if="!state.favoriteList.length" class="fav-empty">
+            {{ state.favoriteTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
+          </div>
+          <div v-else class="fav-list">
+            <div
+              v-for="fp in state.favoriteList"
+              :key="fp.id"
+              class="fav-item"
+              @click="openPostDetail(fp)">
+              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }">{{ fp.title }}</span>
+              <span class="fav-item-meta">
+                <span class="heart-icon" :class="{ active: fp.liked }">{{ fp.liked ? '❤' : '♡' }}</span>
+                <span>{{ fp.likeCount }}</span>
+                <span class="fav-sep">·</span>
+                <XIcon
+                  :icon="StarFilled"
+                  :size="12"
+                  color="#f59e0b"></XIcon>
+                <span>{{ fp.favoriteCount }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="cancel-btn" @click="closeFavorites">关闭</button>
           </div>
         </div>
       </div>
@@ -240,15 +332,15 @@
             </div>
             <!-- 作者信息 -->
             <div class="detail-author">
-              <div class="post-avatar" @click.stop="viewUser(state.currentPost.userId)">
-                <img
-                  v-if="state.currentPost.avatar"
-                  :src="state.currentPost.avatar"
-                  class="avatar-img"
-                  alt="头像"
-                  @error="onAvatarError"/>
-                <span v-else class="avatar-text">{{ (state.currentPost.author || '匿').charAt(0) }}</span>
-              </div>
+              <UserBadge
+                class="post-avatar"
+                avatar-only
+                clickable
+                size="md"
+                :src="state.currentPost.avatar"
+                :name="state.currentPost.author"
+                :user-id="state.currentPost.userId"
+                @click="viewUser(state.currentPost.userId)" />
               <div class="author-info">
                 <span class="author-name" @click.stop="viewUser(state.currentPost.userId)">{{ state.currentPost.author }}</span>
                 <span class="author-time">{{ state.currentPost.date }}</span>
@@ -256,18 +348,15 @@
               <button v-if="canDeleteCurrentPost" class="delete-post-btn" @click="deletePost">删除</button>
             </div>
             <!-- 帖子正文 -->
-            <div class="detail-content">{{ state.currentPost.content }}</div>
-            <!-- 附件 -->
-            <div v-if="state.currentPost.attachments && state.currentPost.attachments.length" class="detail-attachments">
-              <span
-                v-for="(att, idx) in state.currentPost.attachments"
-                :key="idx"
-                class="attachment-chip"
-                @click="downloadAttachment(att)">
-                <XIcon :icon="Document" :size="12" color="#1a2b5f"></XIcon>
-                <span> {{ att.name }}</span>
-              </span>
-            </div>
+            <h3 class="detail-title" :style="{ color: titleColorValue(state.currentPost.titleColor) }">
+              {{ state.currentPost.title }}
+            </h3>
+            <div class="detail-content"><ForumContent :content="state.currentPost.content" /></div>
+            <!-- 图片 + 文档附件 -->
+            <AttachmentList
+              v-if="state.currentPost.attachments && state.currentPost.attachments.length"
+              :attachments="state.currentPost.attachments"
+              mode="post" />
             <!-- 帖子互动数据 -->
             <div class="detail-stats">
               <span class="stat-action" @click="toggleLike(state.currentPost)">
@@ -289,20 +378,38 @@
             <!-- 评论区域 -->
             <div class="comment-section">
               <h4>评论 ({{ state.currentPost.commentCount }})</h4>
+              <div class="comment-sort-row">
+                <CommentSortBar
+                  :sort-by="state.commentSortBy"
+                  :order="state.commentOrder"
+                  @update:sortBy="changeCommentSort"
+                  @update:order="changeCommentOrder" />
+              </div>
               <div v-if="state.commentsLoading" class="empty-tip-mini">加载评论中...</div>
               <div v-else-if="!state.comments.length" class="empty-tip-mini">暂无评论，抢个沙发吧!</div>
               <div v-else class="comment-list">
                 <div v-for="comment in state.comments" :key="comment.id" class="comment-item">
                   <div class="comment-main">
-                    <div class="comment-avatar" @click.stop="viewUser(comment.user?.id)">
-                      <span class="avatar-text-sm">{{ (comment.user?.nickname || '匿').charAt(0) }}</span>
-                    </div>
+                    <UserBadge
+                      class="comment-avatar"
+                      avatar-only
+                      clickable
+                      size="sm"
+                      :src="comment.user?.avatar"
+                      :name="comment.user?.nickname"
+                      :user-id="comment.user?.id"
+                      :user-type="comment.user?.userType"
+                      @click="viewUser(comment.user?.id)" />
                     <div class="comment-body">
                       <div class="comment-meta">
                         <span class="comment-author" @click.stop="viewUser(comment.user?.id)">{{ comment.user?.nickname }}</span>
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
-                      <div class="comment-text">{{ comment.content }}</div>
+                      <div class="comment-text"><ForumContent :content="comment.content" /></div>
+                      <AttachmentList
+                        v-if="comment.attachments && comment.attachments.length"
+                        :attachments="comment.attachments"
+                        mode="comment" />
                       <div class="comment-actions">
                         <span @click="toggleCommentLike(comment)" class="comment-action">
                           <XIcon
@@ -315,6 +422,18 @@
                           <XIcon :icon="ChatLineRound" :size="12" color="#8a8faa"></XIcon>
                           <span> 回复</span>
                         </span>
+                        <span
+                          v-if="canPinComment(comment)"
+                          class="comment-action"
+                          @click="togglePinComment(comment)">
+                          {{ comment.isPinned ? '取消置顶' : '置顶' }}
+                        </span>
+                        <span
+                          v-if="canReportComment(comment)"
+                          class="comment-action"
+                          @click="reportComment(comment)">
+                          举报
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -322,15 +441,26 @@
                   <div v-if="comment.children && comment.children.length" class="comment-children">
                     <div v-for="child in comment.children" :key="child.id" class="comment-item child">
                       <div class="comment-main">
-                        <div class="comment-avatar" @click.stop="viewUser(child.user?.id)">
-                          <span class="avatar-text-sm">{{ (child.user?.nickname || '匿').charAt(0) }}</span>
-                        </div>
+                        <UserBadge
+                          class="comment-avatar"
+                          avatar-only
+                          clickable
+                          size="sm"
+                          :src="child.user?.avatar"
+                          :name="child.user?.nickname"
+                          :user-id="child.user?.id"
+                          :user-type="child.user?.userType"
+                          @click="viewUser(child.user?.id)" />
                         <div class="comment-body">
                           <div class="comment-meta">
                             <span class="comment-author" @click.stop="viewUser(child.user?.id)">{{ child.user?.nickname }}</span>
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
-                          <div class="comment-text">{{ child.content }}</div>
+                          <div class="comment-text"><ForumContent :content="child.content" /></div>
+                          <AttachmentList
+                            v-if="child.attachments && child.attachments.length"
+                            :attachments="child.attachments"
+                            mode="comment" />
                           <div class="comment-actions">
                             <span @click="toggleCommentLike(child)" class="comment-action">
                               <XIcon
@@ -338,6 +468,12 @@
                                 :size="12"
                                 :color="child.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
                               <span> {{ child.likeCount }}</span>
+                            </span>
+                            <span
+                              v-if="canReportComment(child)"
+                              class="comment-action"
+                              @click="reportComment(child)">
+                              举报
                             </span>
                           </div>
                         </div>
@@ -351,6 +487,23 @@
                 <div v-if="state.replyTarget" class="reply-hint">
                   回复 @{{ state.replyTarget.username }}
                   <span class="cancel-reply" @click="cancelReply">× 取消</span>
+                </div>
+                <div v-if="state.showCommentPicker" class="comment-picker">
+                  <EmojiStickerPicker
+                    @select="insertCommentEmoji"
+                    @close="state.showCommentPicker = false" />
+                </div>
+                <div class="comment-toolbar">
+                  <button
+                    class="emoji-btn"
+                    title="表情 / 表情包"
+                    @click="state.showCommentPicker = !state.showCommentPicker">
+                    😀
+                  </button>
+                  <span class="comment-toolbar-tip">支持 emoji 与自定义表情包</span>
+                </div>
+                <div class="comment-image-upload">
+                  <FileUploader v-model="state.newCommentImages" :max-docs="3" />
                 </div>
                 <textarea
                   v-model="state.newComment"
@@ -429,15 +582,60 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCommunityStore } from '@/modules/community/store';
+  import {
+    formatReactionSummary,
+    reactionTotal
+  } from '@/modules/community/reactions';
+  import { avatarInitial } from '@/modules/community/avatar';
+  import {
+    FORUM_CATEGORY_TABS,
+    toShareTypeParam
+  } from '@/modules/community/categories';
+  // P3：收藏（五角星）/ 我的喜欢（爱心）
+  import {
+    toggleForumFavorite,
+    fetchMyForumFavorites,
+    fetchMyForumLikes,
+    fetchForumPosts
+  } from '@/modules/community/api';
+  import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
+  import ForumContent from '@/components/forum/ForumContent.vue';
+  import ImageGrid from '@/components/forum/ImageGrid.vue';
+  import ImageUploader from '@/components/forum/ImageUploader.vue';
+  import FileUploader from '@/components/forum/FileUploader.vue';
+  import AttachmentList from '@/components/forum/AttachmentList.vue';
+  import CommentSortBar from '@/components/forum/CommentSortBar.vue';
+  import UserBadge from '@/components/forum/UserBadge.vue';
+  import { pinForumComment, reportForumTarget } from '@/modules/community/api';
+  import { titleColorValue } from '@/components/forum/titleColors';
+  import { isImageUrl } from '@/components/forum/imageUtils';
+  import type { ForumImageAttachment } from '@/components/forum/imageUtils';
   export default defineComponent({
     name: 'Forum',
-    components: { NavBar, XIcon },
+    components: {
+      NavBar,
+      XIcon,
+      EmojiStickerPicker,
+      ForumContent,
+      ImageGrid,
+      ImageUploader,
+      FileUploader,
+      AttachmentList,
+      CommentSortBar,
+      UserBadge
+    },
     setup(props) {
       const provider = useProvider({ id: 'forum', version: '1785094400000' });
       const community = useCommunityStore();
       const state = reactive({
         page: 1,
         pageSize: 8,
+        activeCategory: 'all',
+        // P3：搜索与日期筛选
+        searchKeyword: '',
+        searchDateFrom: '',
+        searchDateTo: '',
+        showCommentPicker: false,
         posts: [] as any[],
         total: 0,
         loading: false,
@@ -445,7 +643,16 @@
         showNewPost: false,
         showUserProfile: false,
         userProfile: {} as any,
-        newPost: { title: '', content: '', attachments: [] as any[] },
+        newPost: {
+          title: '',
+          content: '',
+          titleColor: 'default',
+          images: [] as ForumImageAttachment[],
+          attachments: [] as any[]
+        },
+        newCommentImages: [] as ForumImageAttachment[],
+        commentSortBy: 'time',
+        commentOrder: 'desc',
         forumStats: { posts: 0, users: 0, online: 0 },
         // === 帖子详情 ===
         showPostDetail: false,
@@ -462,15 +669,32 @@
         myPostsLoaded: false,
         myPostsTotal: 0,
         showMyPosts: false,
+        // === 我的收藏 / 我的喜欢（P2 仅外壳，数据 P3 接入）===
+        showFavorites: false,
+        favoriteTab: 'favorites' as 'favorites' | 'likes',
+        favoriteList: [] as any[],
+        favoriteTotal: 0,
+        favoriteLoading: false,
         myPostsPage: 1,
         myPostsPageSize: 20,
-        myPostsLoading: false
+        myPostsLoading: false,
+        _refreshTimer: null as any,
+        _visibilityHandler: null as any
       });
+      const avatarFailed = reactive<Record<string, boolean>>({});
+      const markAvatarFailed = (key: string) => {
+        avatarFailed[key] = true;
+      };
       return {
         state,
         props,
         provider,
         community,
+        avatarInitial,
+        avatarFailed,
+        markAvatarFailed,
+        titleColorValue,
+        categoryTabs: FORUM_CATEGORY_TABS,
         ChatRound,
         EditPen,
         ChatLineRound,
@@ -493,7 +717,7 @@
       },
       hotPosts(): any[] {
         return [...this.state.posts]
-          .sort((a, b) => (b.likeCount + b.commentCount * 2) - (a.likeCount + a.commentCount * 2))
+          .sort((a, b) => (b.reactionTotal + b.commentCount * 2) - (a.reactionTotal + a.commentCount * 2))
           .slice(0, 5)
           .map((p, i) => ({ ...p, rank: i + 1 }));
       },
@@ -513,16 +737,66 @@
       }
     },
     methods: {
-      async loadPosts() {
+      /** 搜索：关键词 + 日期区间（复用 GET /api/forum/posts 的 keyword/date_from/date_to） */
+      async applySearch() {
+        this.state.loading = true;
+        try {
+          const res: any = await fetchForumPosts({
+            limit: this.state.pageSize,
+            offset: (this.state.page - 1) * this.state.pageSize,
+            shareType: toShareTypeParam(this.state.activeCategory),
+            keyword: this.state.searchKeyword || undefined,
+            dateFrom: this.state.searchDateFrom || undefined,
+            dateTo: this.state.searchDateTo || undefined
+          });
+          this.state.posts = (res.posts || []).map((p: any) => this._mapPost(p));
+          this.state.total = res.total || 0;
+        } catch (e) {
+          this._safeMsg('error', '搜索失败，请稍后重试');
+        } finally {
+          this.state.loading = false;
+        }
+      },
+      resetSearch() {
+        this.state.searchKeyword = '';
+        this.state.searchDateFrom = '';
+        this.state.searchDateTo = '';
+        this.state.page = 1;
+        this.loadPosts();
+      },
+      async loadPosts(silent = false) {
         this.state.loading = true;
         try {
           await this.community.loadPage(this.state.page, this.state.pageSize);
           this.state.posts = this.community.posts.map((p: any) => this._mapPost(p));
           this.state.total = this.community.total;
-          if (this.community.error) this._safeMsg('error', this.community.error);
+          if (this.community.error && !silent) {
+            this._safeMsg('error', this.community.error);
+          }
         } finally {
           this.state.loading = false;
         }
+      },
+      async selectCategory(key: string) {
+        if (this.state.activeCategory === key) return;
+        this.state.activeCategory = key;
+        this.state.page = 1;
+        this.state.showCommentPicker = false;
+        this.community.setShareType(toShareTypeParam(key));
+        await this.loadPosts();
+      },
+      insertCommentEmoji(payload: { type: 'emoji' | 'sticker'; value: string }) {
+        const text =
+          payload.type === 'emoji' ? payload.value : `[[sticker:${payload.value}]]`;
+        this.state.newComment = `${this.state.newComment || ''}${text}`;
+      },
+      async refreshSilently() {
+        if (this.community.loading) return;
+        if (this.state.showNewPost || this.state.showPostDetail) return;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          return;
+        }
+        await this.loadPosts(true);
       },
       async loadStats() {
         await this.community.loadStats();
@@ -551,24 +825,32 @@
         }
         this.state.submitting = true;
         try {
+          const allAttachments = [
+            ...this.state.newPost.images,
+            ...this.state.newPost.attachments
+          ];
           const created = await this.community.createPost({
             title: this.state.newPost.title,
             content: this.state.newPost.content,
             shareType: 'EXPERIENCE',
-            attachments: this.state.newPost.attachments.length
-              ? this.state.newPost.attachments
-              : undefined
+            titleColor: this.state.newPost.titleColor,
+            attachments: allAttachments.length ? allAttachments : undefined
           });
           if (!created) return;
           // 成功:unshift 到列表头(实时更新)
-          const mappedPost = this._mapPost(created);
-          this.state.posts.unshift(mappedPost);
+          this.state.posts.unshift(this._mapPost(created));
           this.state.total += 1;
-          // 同步刷新「我的帖子」卡片
-          this.state.myPosts.unshift(mappedPost);
+          // 同步刷新「我的帖子」卡片,该区域展示数字
+          this.state.myPosts.unshift(this._mapPost(created, false));
           this.state.myPostsTotal = (this.state.myPostsTotal || 0) + 1;
           this.state.showNewPost = false;
-          this.state.newPost = { title: '', content: '', attachments: [] };
+          this.state.newPost = {
+            title: '',
+            content: '',
+            titleColor: 'default',
+            images: [],
+            attachments: []
+          };
           ElMessage.success('发布成功!');
         } catch (e) {
           this._safeMsg('error', this.community.error || '发布失败,请稍后重试');
@@ -611,9 +893,15 @@
         this.state.newPost.attachments.splice(index, 1);
       },
       downloadAttachment(att: any) {
-        if (att.url) {
-          window.open(att.url, '_blank');
-        }
+        if (!att.url) return;
+        // 同页下载，避免新开标签页；图片已由 ImageGrid 在页内预览
+        const link = document.createElement('a');
+        link.href = att.url;
+        link.download = att.name || '';
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
       },
       async toggleLike(post: any) {
         const auth = (window as any).__VTJ_AUTH__;
@@ -622,10 +910,14 @@
           return;
         }
         try {
-          const data = await this.community.togglePostLike(post.id);
+          const data = await this.community.reactToPost(post.id, 'like');
           if (data) {
-            post.liked = data.liked;
-            post.likeCount = data.likeCount;
+            post.myReaction = data.myReaction;
+            post.reactions = data.reactions;
+            post.reactionTotal = data.reactionCount;
+            post.liked = data.myReaction !== null;
+            post.likeCount =
+              formatReactionSummary(data.reactions) || String(data.reactionCount);
           }
         } catch (e) {
           /* 静默 */
@@ -709,7 +1001,9 @@
         this.state.currentPost = null;
         this.state.comments = [];
         this.state.newComment = '';
+        this.state.newCommentImages = [];
         this.state.replyTarget = null;
+        this.state.showCommentPicker = false;
         this.state.detailLoading = false;
       },
       async deletePost() {
@@ -739,11 +1033,22 @@
       async loadComments(postId: number) {
         this.state.commentsLoading = true;
         try {
-          await this.community.loadComments(postId);
+          await this.community.loadComments(postId, {
+            sortBy: this.state.commentSortBy,
+            order: this.state.commentOrder
+          });
           this.state.comments = this.buildCommentTree(this.community.comments);
         } finally {
           this.state.commentsLoading = false;
         }
+      },
+      async changeCommentSort(key: string) {
+        this.state.commentSortBy = key;
+        if (this.state.currentPost) await this.loadComments(this.state.currentPost.id);
+      },
+      async changeCommentOrder(order: string) {
+        this.state.commentOrder = order;
+        if (this.state.currentPost) await this.loadComments(this.state.currentPost.id);
       },
       buildCommentTree(flatList: any[]): any[] {
         const map: any = {};
@@ -772,10 +1077,14 @@
             content: this.state.newComment,
             parentCommentId: this.state.replyTarget
               ? this.state.replyTarget.commentId
+              : undefined,
+            attachments: this.state.newCommentImages.length
+              ? this.state.newCommentImages
               : undefined
           });
           this._safeMsg('success', '评论成功');
           this.state.newComment = '';
+          this.state.newCommentImages = [];
           this.state.replyTarget = null;
           if (this.state.currentPost) {
             this.state.currentPost.commentCount = (this.state.currentPost.commentCount || 0) + 1;
@@ -785,6 +1094,50 @@
           this._safeMsg('error', this.community.error || '评论失败');
         } finally {
           this.state.commentSubmitting = false;
+        }
+      },
+      _currentUserId() {
+        const auth = (window as any).__VTJ_AUTH__;
+        const info = auth && auth.parseUserInfo ? auth.parseUserInfo() : null;
+        return info && info.userId ? info.userId : null;
+      },
+      canPinComment(comment: any) {
+        const uid = this._currentUserId();
+        if (!uid) return false;
+        const roleLevel =
+          ((window as any).__VTJ_AUTH__?.parseUserInfo?.() || {}).roleLevel || 0;
+        return uid === this.state.currentPost?.userId || roleLevel >= 2;
+      },
+      canReportComment(comment: any) {
+        return comment.user?.id !== this._currentUserId();
+      },
+      async togglePinComment(comment: any) {
+        try {
+          await pinForumComment(comment.id, !comment.isPinned);
+          if (this.state.currentPost) {
+            await this.loadComments(this.state.currentPost.id);
+          }
+          this._safeMsg('success', comment.isPinned ? '已取消置顶' : '已置顶');
+        } catch (e) {
+          this._safeMsg('error', '操作失败');
+        }
+      },
+      async reportComment(comment: any) {
+        const reason = window.prompt(
+          '举报原因：spam（广告）/ abuse（辱骂）/ illegal（违法）/ other（其他）',
+          'abuse'
+        );
+        if (!reason) return;
+        const allowed = ['spam', 'abuse', 'illegal', 'other'];
+        try {
+          await reportForumTarget({
+            targetType: 'COMMENT',
+            targetId: comment.id,
+            reasonCode: (allowed.includes(reason) ? reason : 'other') as any
+          });
+          this._safeMsg('success', '举报已提交');
+        } catch (e) {
+          this._safeMsg('error', '举报失败');
         }
       },
       async toggleCommentLike(comment: any) {
@@ -824,9 +1177,65 @@
         const auth = (window as any).__VTJ_AUTH__;
         if (!auth || !auth.isLoggedIn()) return;
         await this.community.loadMyPosts({ limit: 5, offset: 0 });
-        this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p));
-        this.state.myPostsTotal = this.community.myPostsTotal;
-        this.state.myPostsLoaded = true;
+          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p, false));
+          this.state.myPostsTotal = this.community.myPostsTotal;
+          this.state.myPostsLoaded = true;
+      },
+      openFavorites(tab?: 'favorites' | 'likes') {
+        this.state.favoriteTab = tab || 'favorites';
+        this.state.showFavorites = true;
+        this.loadFavoriteTab();
+      },
+      closeFavorites() {
+        this.state.showFavorites = false;
+      },
+      switchFavoritesTab(tab: 'favorites' | 'likes') {
+        this.state.favoriteTab = tab;
+        this.loadFavoriteTab();
+      },
+      async loadFavoriteTab() {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth || !auth.isLoggedIn()) {
+          this.state.favoriteList = [];
+          this.state.favoriteTotal = 0;
+          return;
+        }
+        this.state.favoriteLoading = true;
+        try {
+          const isFav = this.state.favoriteTab === 'favorites';
+          const res = isFav
+            ? await fetchMyForumFavorites(20, 0)
+            : await fetchMyForumLikes(20, 0);
+          const list = (res && res.posts) || [];
+          this.state.favoriteList = list.map((p: any) => this._mapPost(p));
+          this.state.favoriteTotal = (res && res.total) || list.length;
+        } catch (e) {
+          this.state.favoriteList = [];
+          this.state.favoriteTotal = 0;
+        } finally {
+          this.state.favoriteLoading = false;
+        }
+      },
+      /** 爱心：喜欢（复用点赞接口，reaction 固定 like） */
+      toggleHeart(post: any) {
+        return this.toggleLike(post);
+      },
+      /** 五角星：收藏 */
+      async toggleFavorite(post: any) {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth || !auth.isLoggedIn()) {
+          ElMessage.warning('请先登录后收藏');
+          return;
+        }
+        try {
+          const res = await toggleForumFavorite(post.id);
+          if (res) {
+            post.favorited = res.favorited;
+            post.favoriteCount = res.favoriteCount;
+          }
+        } catch (e) {
+          /* 静默 */
+        }
       },
       async openMyPosts() {
         this.state.showMyPosts = true;
@@ -843,7 +1252,7 @@
             limit: this.state.myPostsPageSize,
             offset
           });
-          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p));
+          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p, false));
           this.state.myPostsTotal = this.community.myPostsTotal;
         } finally {
           this.state.myPostsLoading = false;
@@ -872,7 +1281,17 @@
           console.log(`[forum] ${type}: ${msg}`);
         }
       },
-      _mapPost(p: any): any {
+      _mapPost(p: any, withSummary = true): any {
+        const reactions = p?.reactions ?? {};
+        const total = reactionTotal(reactions);
+        const summary = formatReactionSummary(reactions);
+        const attachments = Array.isArray(p?.attachments) ? p.attachments : [];
+        const imageUrls = attachments
+          .map((att: any) => att?.url)
+          .filter((url: any) => typeof url === 'string' && isImageUrl(url));
+        const fileAttachments = attachments.filter(
+          (att: any) => !isImageUrl(att?.url || '')
+        );
         return {
           id: p?.id ?? 0,
           title: p?.title ?? '',
@@ -880,11 +1299,23 @@
           author: (p?.user && p.user.nickname) || '匿名',
           avatar: (p?.user && p.user.avatar) || '',
           date: this.formatTime(p?.createTime),
-          likeCount: p?.likeCount ?? 0,
+          // 只用数字：原先用 formatReactionSummary 会显示 "👍1"，与爱心图标重复
+          likeCount: total,
+          reactionTotal: total,
+          reactions,
+          myReaction: p?.myReaction ?? null,
           commentCount: p?.commentCount ?? 0,
           viewCount: p?.viewCount ?? 0,
           liked: p?.liked ?? false,
-          attachments: p?.attachments ?? [],
+          // P3：收藏（五角星）状态与计数
+          favorited: p?.favorited ?? false,
+          favoriteCount: p?.favoriteCount ?? 0,
+          attachments,
+          imageUrls,
+          fileAttachments,
+          titleColor: p?.titleColor ?? 'default',
+          isLocked: !!p?.isLocked,
+          shareType: p?.shareType ?? '',
           userId: p?.user?.id ?? null,
           isTop: p?.isTop ?? false,
           isEssence: p?.isEssence ?? false
@@ -892,15 +1323,39 @@
       }
     },
     mounted() {
+      // 分类状态以当前页面为准，避免 store 里残留上次的分类筛选
+      this.state.activeCategory = 'all';
+      this.community.setShareType('');
       this.loadPosts();
       this.loadStats();
       this.loadMyPosts();
+      this.state._visibilityHandler = () => {
+        if (document.visibilityState === 'visible') this.refreshSilently();
+      };
+      this.state._refreshTimer = setInterval(() => this.refreshSilently(), 15000);
+      window.addEventListener('focus', this.state._visibilityHandler);
+      document.addEventListener('visibilitychange', this.state._visibilityHandler);
+    },
+    beforeUnmount() {
+      if (this.state._refreshTimer) {
+        clearInterval(this.state._refreshTimer);
+        this.state._refreshTimer = null;
+      }
+      if (this.state._visibilityHandler) {
+        window.removeEventListener('focus', this.state._visibilityHandler);
+        document.removeEventListener('visibilitychange', this.state._visibilityHandler);
+        this.state._visibilityHandler = null;
+      }
     }
   })
 </script>
 <style lang="css" scoped>
   .forum-page {
-    min-height: 100vh;
+    /* 自己成为滚动容器：VTJ 外壳存在 overflow 祖先，sticky 绑不到视口 */
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);
     font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     /* 全局字体统一 15px */
@@ -909,13 +1364,23 @@
   .forum-main {
     max-width: 1300px;
     margin: 0 auto;
-    padding: 24px 32px 40px;
+    padding: 0 32px 40px;
+    width: 100%;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .forum-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 24px;
+    /* 滚动容器是 .forum-main，这里贴其顶部常驻 */
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 12px 0;
+    background: #f8f9fc;
   }
   .forum-header h2 {
     display: flex;
@@ -945,6 +1410,157 @@
     transform: translateY(-2px);
     box-shadow: 0 4px 18px rgba(196, 30, 58, 0.4);
   }
+  /* P2：我的收藏 / 我的喜欢。几何尺寸完全继承 .post-btn（不改 padding/border/字体），
+     仅用 inset box-shadow 画描边，保证三个按钮同高同宽 */
+  .forum-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .post-btn.ghost {
+    background: #ffffff;
+    color: #c41e3a;
+    box-shadow: inset 0 0 0 1px #f0c4cc;
+  }
+  .post-btn.ghost:hover {
+    background: #fff5f7;
+    box-shadow: inset 0 0 0 1px #f0c4cc, 0 4px 12px rgba(196, 30, 58, 0.12);
+  }
+  .fav-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 16px;
+  }
+  .fav-tab {
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid #e3e8ef;
+    background: #ffffff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .fav-tab.active {
+    background: #fdf2f4;
+    border-color: #f0c4cc;
+    color: #c41e3a;
+  }
+  /* P3：搜索栏 */
+  .forum-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    background: #ffffff;
+    border-radius: 12px;
+  }
+  .search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+  }
+  .search-input:focus {
+    border-color: #c41e3a;
+  }
+  .search-date {
+    height: 34px;
+    padding: 0 8px;
+    border: 1px solid #e3e8ef;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #475569;
+  }
+  .search-tilde {
+    color: #94a3b8;
+  }
+  .search-btn {
+    height: 34px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 8px;
+    background: #c41e3a;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .search-reset {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid #e3e8ef;
+    border-radius: 8px;
+    background: #fff;
+    color: #475569;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  /* P3：爱心（喜欢）/ 五角星（收藏）/ 收藏弹窗列表 */
+  .heart-icon {
+    font-size: 13px;
+    line-height: 1;
+    color: #8a8faa;
+  }
+  .heart-icon.active {
+    color: #e5484d;
+  }
+  .meta-favs {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+  }
+  .meta-favs:hover {
+    color: #b8860b;
+  }
+  .fav-list {
+    max-height: 380px;
+    overflow-y: auto;
+    margin: 8px 0;
+  }
+  .fav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .fav-item:hover {
+    background: #f5f7fb;
+  }
+  .fav-item-title {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fav-item-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #8a8faa;
+    font-size: 12px;
+    flex: 0 0 auto;
+  }
+  .fav-sep {
+    color: #d5d9e5;
+  }
+  .fav-empty {
+    padding: 40px 0;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 14px;
+  }
   .forum-body {
     display: grid;
     grid-template-columns: 1fr 300px;
@@ -955,6 +1571,31 @@
     border-radius: 16px;
     padding: 20px;
     box-shadow: 0 2px 12px rgba(26, 43, 95, 0.04);
+  }
+  .category-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .category-chip {
+    border: 1px solid #e4e8f0;
+    background: #f7f9fc;
+    color: #4a5578;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .category-chip:hover {
+    border-color: #c41e3a;
+    color: #c41e3a;
+  }
+  .category-chip.active {
+    background: #c41e3a;
+    border-color: #c41e3a;
+    color: #ffffff;
   }
   .post-list {
     display: flex;
@@ -1014,6 +1655,27 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .detail-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 14px 0 8px;
+  }
+  .post-color-row,
+  .post-image-upload,
+  .comment-image-upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+  }
+  .post-color-label {
+    font-size: 13px;
+    color: #6b7896;
+    white-space: nowrap;
+  }
+  .post-image-upload {
+    align-items: flex-start;
   }
   .post-excerpt {
     font-size: 15px;
@@ -1122,6 +1784,14 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    /* grid 子项默认 stretch 会被拉成与左栏等高（实测 2552px），
+       align-self: start 才能让 sticky 有可粘空间 */
+    position: sticky;
+    top: 72px;
+    align-self: start;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .right-card {
     background: #ffffff;
@@ -1221,6 +1891,13 @@
     justify-content: center;
     z-index: 2000;
   }
+  /* 用户信息卡片必须盖在帖子详情之上：两者默认同为 z-index 2000，
+     由 DOM 顺序决定，用户卡片节点在详情之前，会被详情压住 */
+  @supports selector(:has(*)) {
+    .modal-overlay:has(.profile-card) {
+      z-index: 2100;
+    }
+  }
   .modal-card {
     background: #ffffff;
     border-radius: 16px;
@@ -1255,6 +1932,9 @@
     min-height: 120px;
   }
   .upload-area {
+    /* 与新 FileUploader 重复，且 accept 只含 doc/docx/pdf/xls/xlsx(不含 png)，
+       容易让用户以为不能传图片；隐藏后历史附件回显不受影响 */
+    display: none;
     margin-bottom: 14px;
   }
   .upload-btn {
@@ -1422,8 +2102,11 @@
   .post-detail-card {
     width: 680px;
     max-width: 95vw;
+    height: 85vh;          /* 固定高度，底部固定条才能与弹窗底边精确对齐 */
     max-height: 85vh;
     overflow-y: auto;
+    /* 底部留出固定输入区的高度，最后一条评论仍可滚到可见位置 */
+    padding-bottom: 90px;
   }
   .detail-header {
     display: flex;
@@ -1584,6 +2267,12 @@
   .comment-avatar:hover {
     box-shadow: 0 0 0 2px #c41e3a;
   }
+  .avatar-img-sm {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+  }
   .avatar-text-sm {
     font-size: 14px;
     font-weight: 700;
@@ -1639,9 +2328,111 @@
     margin-top: 4px;
   }
   .comment-input-area {
-    margin-top: 16px;
-    padding-top: 12px;
+    /* 吸底：详情弹窗(.post-detail-card)是滚动容器，输入区常驻可视底部，
+       否则上传/表情/发送位于内容末尾(2100px+)，用户看不到。
+       负外边距抵消 .modal-card 的 28px 内边距，让吸底条铺到卡片底边与两侧，
+       否则下方会露出 28px 的滚动内容。 */
+    margin: 0;
+    padding: 12px 28px;
     border-top: 1px solid #f0f2f5;
+    /* 弹窗高度固定为 85vh 且垂直居中，所以其底边恒在 92.5vh；
+       固定条贴同一条线，打开即在视口内，不依赖滚动 */
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 7.5vh;
+    width: 680px;
+    max-width: 95vw;
+    background: #ffffff;
+    z-index: 2100;
+    box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.06);
+    border-radius: 0 0 16px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  /* 单行：😊 → ＋ → 输入框 → 发表评论（DOM 顺序不变，仅改视觉顺序） */
+  .comment-input-area textarea {
+    order: 3;
+    flex: 1 1 0;
+    width: auto;          /* 覆盖 .modal-textarea 的 width:100%，否则整行被占满导致换行 */
+    min-width: 120px;
+    height: 40px;
+    min-height: 40px;
+    max-height: 120px;
+    resize: vertical;
+  }
+  .comment-input-area .comment-toolbar { order: 1; margin: 0; }
+  .comment-input-area .comment-image-upload { order: 2; margin: 0; }
+  .comment-input-area .modal-actions { order: 4; margin: 0 0 0 auto; }
+  .comment-input-area .reply-hint,
+  .comment-input-area .comment-picker { order: 0; flex: 0 0 100%; }
+  /* 表情面板浮在输入区上方，不把整条吸底区顶高 */
+  .comment-input-area .comment-picker {
+    position: absolute;
+    left: 28px;
+    bottom: calc(100% + 8px);
+    flex: 0 0 auto;
+  }
+  .comment-toolbar-tip { display: none; }
+  /* 关闭按钮隐藏而非删除：删 DOM 要改 <template>（R3）；弹窗仍可点遮罩/Esc 关闭 */
+  .comment-input-area .cancel-btn { display: none; }
+
+  /* 上传：76×76 虚线框 → 36×36 圆形「＋」；原文字视觉隐藏，读屏仍可读 */
+  .comment-input-area :deep(.fu-add) {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+    position: relative;
+  }
+  .comment-input-area :deep(.fu-add::before) {
+    content: '+';
+    font-size: 20px;
+    line-height: 1;
+    color: #1a2b5f;
+  }
+  .comment-input-area :deep(.fu-add span) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .comment-input-area :deep(.fu-thumb) { width: 40px; height: 40px; }
+  .comment-input-area :deep(.fu-doc) { max-width: 140px; padding: 6px 8px; font-size: 12px; }
+  .comment-input-area .confirm-btn { padding: 8px 16px; font-size: 13px; }
+  .comment-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .emoji-btn {
+    border: 1px solid #e4e8f0;
+    background: #f7f9fc;
+    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .emoji-btn:hover {
+    border-color: #c41e3a;
+    background: #fff5f6;
+  }
+  .comment-toolbar-tip {
+    font-size: 12px;
+    color: #8a8faa;
+  }
+  .comment-picker {
+    position: relative;
+    z-index: 20;
   }
   .reply-hint {
     background: #f0f4ff;

@@ -8,7 +8,7 @@
       </div>
       <h1 class="nav-title">学习论坛</h1>
       <div class="nav-right">
-        <XIcon :icon="Plus" :size="22" color="#1A365D" class="nav-icon" @click="createPost"></XIcon>
+        <button class="nav-fav-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
       </div>
     </header>
 
@@ -39,16 +39,13 @@
           <!-- 帖子头部 -->
           <div class="post-header">
             <div class="author-info">
-              <div class="author-avatar" :style="{ background: post.avatarBg }">
-                <img
-                  v-if="post.avatar && !post.avatarFailed"
-                  :src="post.avatar"
-                  class="avatar-img"
-                  alt="头像"
-                  @error="onAvatarError(post)"
-                />
-                <XIcon v-else :icon="User" :size="16" color="#ffffff"></XIcon>
-              </div>
+              <UserBadge
+                class="author-avatar"
+                avatar-only
+                size="sm"
+                :src="post.avatar"
+                :name="post.author"
+                :user-id="post.id" />
               <div class="author-detail">
                 <span class="author-name">{{ post.author }}</span>
                 <span class="post-time">{{ post.time }}</span>
@@ -61,20 +58,15 @@
           
           <!-- 帖子内容 -->
           <div class="post-content">
-            <h3 class="post-title">{{ post.title }}</h3>
-            <p class="post-excerpt">{{ post.excerpt }}</p>
+            <h3 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h3>
+            <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
           </div>
           
-          <!-- 帖子图片 -->
-          <div v-if="post.images && post.images.length > 0" class="post-images">
-            <div 
-              v-for="(img, imgIndex) in post.images.slice(0, 3)" 
-              :key="imgIndex"
-              class="post-image"
-            >
-              <img :src="img" alt="" />
-            </div>
-          </div>
+          <!-- 帖子图片/文件 -->
+          <AttachmentList
+            v-if="post.attachments && post.attachments.length"
+            :attachments="post.attachments"
+            mode="post" />
           
           <!-- 帖子底部 -->
           <div class="post-footer">
@@ -87,9 +79,13 @@
                 <XIcon :icon="ChatDotRound" :size="16" color="#8899aa"></XIcon>
                 {{ post.comments }}
               </span>
-              <span class="stat-item">
-                <XIcon :icon="Star" :size="16" color="#8899aa"></XIcon>
+              <span class="stat-item" @click.stop="toggleLike(post)">
+                <span class="heart-ico" :class="{ on: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                 {{ post.likes }}
+              </span>
+              <span class="stat-item" @click.stop="toggleFavorite(post)">
+                <XIcon :icon="Star" :size="16" :color="post.favorited ? '#f59e0b' : '#8899aa'"></XIcon>
+                {{ post.favoriteCount || 0 }}
               </span>
             </div>
             <div class="post-actions">
@@ -114,6 +110,28 @@
     <!-- 底部Tab栏：统一使用单一真源组件 src/components/MobileTabBar.vue -->
     <MobileTabBar active="forum" />
   </div>
+
+  <!-- T5：我的收藏 / 我的喜欢 -->
+  <div v-if="favVisible" class="fav-mask" @click.self="favVisible = false">
+    <div class="fav-sheet">
+      <div class="fav-head">
+        <button :class="['fav-tab', { on: favTab === 'favorites' }]" @click="favTab = 'favorites'; loadFavTab()">我的收藏</button>
+        <button :class="['fav-tab', { on: favTab === 'likes' }]" @click="favTab = 'likes'; loadFavTab()">我的喜欢</button>
+        <span class="fav-close" @click="favVisible = false">✕</span>
+      </div>
+      <div v-if="favLoading" class="fav-empty">加载中…</div>
+      <div v-else-if="!favList.length" class="fav-empty">
+        {{ favTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
+      </div>
+      <div v-else class="fav-list">
+        <div v-for="p in favList" :key="p.id" class="fav-item" @click="goToDetail(p)">
+          <span class="fav-title" :style="{ color: titleColorValue(p.titleColor) }">{{ p.title }}</span>
+          <span class="fav-num">❤ {{ p.likeCount || 0 }} · ★ {{ p.favoriteCount || 0 }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </template>
 
 <script lang="ts">
@@ -136,12 +154,26 @@ import {
   ChatLineRound
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+import { avatarInitial } from '@/modules/community/avatar';
+import {
+  toggleForumPostLike,
+  toggleForumFavorite,
+  fetchMyForumFavorites,
+  fetchMyForumLikes
+} from '@/modules/community/api';
+import { titleColorValue } from '@/components/forum/titleColors';
+import ForumContent from '@/components/forum/ForumContent.vue';
+import UserBadge from '@/components/forum/UserBadge.vue';
+import AttachmentList from '@/components/forum/AttachmentList.vue';
 
 export default defineComponent({
   name: 'MobileForum',
     components: {
       XIcon,
-      MobileTabBar
+      MobileTabBar,
+      ForumContent,
+      UserBadge,
+      AttachmentList
     },
   setup() {
     const router = useRouter();
@@ -149,92 +181,18 @@ export default defineComponent({
 
     // 分类标签
     const activeCategory = ref('all');
+    // key 必须与后端 forum_post.share_type 枚举一致
     const tabs = ref([
       { key: 'all', name: '全部' },
-      { key: 'discuss', name: '学习讨论' },
-      { key: 'share', name: '经验分享' },
-      { key: 'question', name: '答疑解惑' },
-      { key: 'resource', name: '资料分享' }
+      { key: 'DISCUSSION', name: '学习讨论' },
+      { key: 'EXPERIENCE', name: '经验分享' },
+      { key: 'QUESTION', name: '答疑解惑' },
+      { key: 'RESOURCE', name: '资料分享' },
+      { key: 'FEELING', name: '心情打卡' }
     ]);
     
-    // 帖子列表
-    const posts = ref([
-      {
-        id: 1,
-        title: '公安联考行测备考经验分享',
-        excerpt: '作为一名成功上岸的学姐，分享一下我的行测备考经验，希望能帮助到正在备考的同学们...',
-        author: '上岸学姐',
-        time: '2小时前',
-        avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
-        tag: '精华',
-        tagColor: '#c41e3a',
-        views: 1234,
-        comments: 89,
-        likes: 256,
-        category: 'share',
-        images: []
-      },
-      {
-        id: 2,
-        title: '申论写作如何拿高分？求指导',
-        excerpt: '申论写作一直是我的弱项，每次写都觉得无话可说，有没有大佬能指点一下？',
-        author: '备考小白',
-        time: '5小时前',
-        avatarBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        tag: '',
-        tagColor: '',
-        views: 567,
-        comments: 45,
-        likes: 78,
-        category: 'question',
-        images: []
-      },
-      {
-        id: 3,
-        title: '2025年公安联考真题回忆版',
-        excerpt: '刚考完，趁记忆还热乎，分享一下我能记住的真题，供大家参考...',
-        author: '刚考完',
-        time: '1天前',
-        avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        tag: '热门',
-        tagColor: '#f59e0b',
-        views: 3456,
-        comments: 156,
-        likes: 512,
-        category: 'discuss',
-        images: []
-      },
-      {
-        id: 4,
-        title: '政治理论重点知识整理',
-        excerpt: '整理了一份政治理论的重点知识，包括习近平新时代中国特色社会主义思想的核心要点...',
-        author: '学霸笔记',
-        time: '2天前',
-        avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-        tag: '资料',
-        tagColor: '#10b981',
-        views: 2345,
-        comments: 67,
-        likes: 432,
-        category: 'resource',
-        images: []
-      },
-      {
-        id: 5,
-        title: '每日打卡：第30天',
-        excerpt: '坚持每天做题，今天是第30天，感觉进步很大，继续加油！',
-        author: '坚持打卡',
-        time: '3天前',
-        avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        tag: '',
-        tagColor: '',
-        views: 890,
-        comments: 34,
-        likes: 156,
-        category: 'discuss',
-        images: []
-      }
-    ]);
+    // 帖子列表（只使用接口数据，禁止内置演示帖）
+    const posts = ref<any[]>([]);
     
     // 过滤帖子
     const filteredPosts = computed(() => {
@@ -244,58 +202,63 @@ export default defineComponent({
       return posts.value.filter(p => p.category === activeCategory.value);
     });
     
-    // 加载真实帖子数据（替换下方演示数据）
-    onMounted(async () => {
+    // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
+    const loadPosts = async (categoryKey: string = activeCategory.value) => {
       try {
         // 补认证头：缺失时后端只会返回公开数据，私有/审核态字段与用户信息会缺失
         const auth = (window as any).__VTJ_AUTH__;
-        const res = await fetch('/api/forum/posts', {
+        const params = new URLSearchParams({ limit: '50' });
+        if (categoryKey && categoryKey !== 'all') {
+          params.set('share_type', categoryKey);
+        }
+        const res = await fetch(`/api/forum/posts?${params.toString()}`, {
           headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.posts && data.posts.length) {
-            const typeMap: Record<string, string> = {
-              DISCUSSION: 'discuss',
-              EXPERIENCE: 'share',
-              RESOURCE: 'resource',
-              FEELING: 'discuss'
-            };
-            posts.value = data.posts.map((p: any) => {
-              const t = new Date(p.createTime).getTime();
-              const diff = Date.now() - t;
-              const min = Math.floor(diff / 60000);
-              let time = '';
-              if (min < 1) time = '刚刚';
-              else if (min < 60) time = min + '分钟前';
-              else if (min < 1440) time = Math.floor(min / 60) + '小时前';
-              else if (min < 43200) time = Math.floor(min / 1440) + '天前';
-              else time = new Date(p.createTime).toLocaleDateString();
-              return {
-                id: p.id,
-                title: p.title,
-                excerpt: p.content || '',
-                author: (p.user && p.user.nickname) || '匿名',
-                time,
-                // 后端 forum.py 在 user 存在时返回 avatar 字段（forum.py:72/99）
-                avatar: (p.user && p.user.avatar) || '',
-                avatarFailed: false,
-                avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
-                tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
-                tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
-                views: p.viewCount || 0,
-                comments: p.commentCount || 0,
-                likes: p.likeCount || 0,
-                category: typeMap[p.shareType] || 'discuss',
-                images: []
-              };
-            });
-          }
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
+        posts.value = (data.posts || []).map((p: any) => {
+          const t = new Date(p.createTime).getTime();
+          const diff = Date.now() - t;
+          const min = Math.floor(diff / 60000);
+          let time = '';
+          if (min < 1) time = '刚刚';
+          else if (min < 60) time = min + '分钟前';
+          else if (min < 1440) time = Math.floor(min / 60) + '小时前';
+          else if (min < 43200) time = Math.floor(min / 1440) + '天前';
+          else time = new Date(p.createTime).toLocaleDateString();
+          return {
+            id: p.id,
+            title: p.title,
+            titleColor: p.titleColor || 'default',
+            excerpt: p.content || '',
+            author: (p.user && p.user.nickname) || '匿名',
+            time,
+            avatar: (p.user && p.user.avatar) || '',
+            avatarFailed: false,
+            avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
+            tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
+            tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
+            views: p.viewCount || 0,
+            comments: p.commentCount || 0,
+            likes: p.likeCount || 0,
+            liked: p.liked ?? false,
+            favorited: p.favorited ?? false,
+            favoriteCount: p.favoriteCount || 0,
+            category: p.shareType || 'DISCUSSION',
+            attachments: Array.isArray(p.attachments) ? p.attachments : [],
+            images: (Array.isArray(p.attachments) ? p.attachments : [])
+              .map((att: any) => (att && typeof att.url === 'string' ? att.url : ''))
+              .filter((url: string) => IMAGE_PATTERN.test(url))
+          };
+        });
       } catch (error) {
         console.error('加载帖子失败:', error);
+        posts.value = [];
       }
-    });
+    };
+
+    onMounted(loadPosts);
 
     // 头像加载失败时降级为默认人形图标，避免出现破图
     const onAvatarError = (post: any) => {
@@ -305,10 +268,48 @@ export default defineComponent({
     // 方法
     const goBack = () => router.back();
     
-    const selectTab = (key: string) => {
+    const selectTab = async (key: string) => {
+      if (activeCategory.value === key) return;
       activeCategory.value = key;
+      await loadPosts(key);
     };
     
+    // T5：收藏/喜欢
+    const favVisible = ref(false);
+    const favTab = ref<'favorites' | 'likes'>('favorites');
+    const favList = ref<any[]>([]);
+    const favLoading = ref(false);
+    const loadFavTab = async () => {
+      favLoading.value = true;
+      try {
+        const res: any = favTab.value === 'favorites'
+          ? await fetchMyForumFavorites(20, 0)
+          : await fetchMyForumLikes(20, 0);
+        favList.value = (res && res.posts) || [];
+      } catch (e) {
+        favList.value = [];
+      } finally {
+        favLoading.value = false;
+      }
+    };
+    const openFav = async (tab: 'favorites' | 'likes') => {
+      favTab.value = tab;
+      favVisible.value = true;
+      await loadFavTab();
+    };
+    const toggleLike = async (post: any) => {
+      try {
+        const r: any = await toggleForumPostLike(post.id);
+        if (r) { post.liked = r.liked; post.likes = r.likeCount; }
+      } catch (e) { /* 静默 */ }
+    };
+    const toggleFavorite = async (post: any) => {
+      try {
+        const r: any = await toggleForumFavorite(post.id);
+        if (r) { post.favorited = r.favorited; post.favoriteCount = r.favoriteCount; }
+      } catch (e) { /* 静默 */ }
+    };
+
     const createPost = () => {
       router.push('/mobile/forum/create');
     };
@@ -318,12 +319,22 @@ export default defineComponent({
     };
 
     return {
+      avatarInitial,
+      titleColorValue,
       activeCategory,
       tabs,
       filteredPosts,
       goBack,
       selectTab,
       createPost,
+      favVisible,
+      favTab,
+      favList,
+      favLoading,
+      openFav,
+      loadFavTab,
+      toggleLike,
+      toggleFavorite,
       viewPost,
       onAvatarError,
       ArrowLeft,
@@ -477,6 +488,12 @@ export default defineComponent({
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.avatar-text {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 /* 真实头像：铺满圆形容器，避免变形 */
@@ -639,4 +656,20 @@ export default defineComponent({
     right: 16px;
   }
 }
+/* 单个五角星按钮：固定 36x36 圆形，避免文字换行把导航挤乱 */
+.nav-fav-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border: none; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+.heart-ico { font-size: 15px; color: #8899aa; }
+.heart-ico.on { color: #e5484d; }
+.fav-mask { position: fixed; inset: 0; background: rgba(8,12,24,.45); z-index: 300; display: flex; align-items: flex-end; }
+.fav-sheet { width: 100%; max-height: 70vh; background: #fff; border-radius: 16px 16px 0 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.fav-head { display: flex; align-items: center; gap: 8px; }
+.fav-tab { padding: 8px 14px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #475569; font-size: 13px; }
+.fav-tab.on { background: #fdf2f4; border-color: #f0c4cc; color: #c41e3a; font-weight: 600; }
+.fav-close { margin-left: auto; color: #94a3b8; font-size: 16px; padding: 4px 8px; }
+.fav-list { overflow-y: auto; }
+.fav-item { display: flex; justify-content: space-between; gap: 10px; padding: 12px 4px; border-bottom: 1px solid #f2f4f8; }
+.fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
+.fav-empty { color: #94a3b8; font-size: 13px; padding: 24px 0; text-align: center; }
 </style>

@@ -318,6 +318,29 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 每日 03:30 论坛回收站审计（只统计与写审计日志，不自动删除）
+    def audit_forum_recycle():
+        from ..core.database import SessionLocal
+        from ..services.forum_audit import run_forum_recycle_audit
+
+        db = SessionLocal()
+        try:
+            stats = run_forum_recycle_audit(db)
+            logger.info(f"论坛回收站审计完成: {stats}")
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"论坛回收站审计失败: {exc}")
+            db.rollback()
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        audit_forum_recycle,
+        trigger=CronTrigger(hour=3, minute=30, timezone=CST),
+        id="audit_forum_recycle",
+        name="每日论坛回收站审计",
+        replace_existing=True
+    )
+
     scheduler.start()
     logger.info("定时任务调度器已启动（每日 24:00 CST）")
 

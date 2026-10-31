@@ -35,6 +35,12 @@ KNOWN_EXTRA_OPERATIONS = {
     # 鉴权：require_teacher_or_admin；校验：content-type 白名单 + 扩展名白名单 + 10MB 上限 + 题组存在性。
     # 只登记不重算基线 —— api_surface.json 仍保持 343 条冻结口径，新增走本白名单单独可审计。
     ("POST", "/api/questions/group/{group_id}/images"),
+    # F1 一致性内核健康快照（非业务端点，只读）。
+    ("GET", "/health/foundation"),
+    # F3 媒体资产稳定读取代理（新资产 URL；旧 /uploads 与 /static 不变）。
+    # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。
+    ("GET", "/media/{asset_id}"),
+    ("HEAD", "/media/{asset_id}"),
 }
 
 

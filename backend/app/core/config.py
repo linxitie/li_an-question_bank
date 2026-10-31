@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     # 单轮投递间隔与最大尝试次数；超限进 dead + jsonl，人工重放。
     FOUNDATION_DISPATCH_MS: int = Field(500, env="FOUNDATION_DISPATCH_MS")
     FOUNDATION_MAX_ATTEMPTS: int = Field(8, env="FOUNDATION_MAX_ATTEMPTS")
+    # F2b：业务事件与业务写同事务进入 Outbox；false 回到 F2 的 events.publish + 同步兜底。
+    EVENT_OUTBOX_ENABLED: bool = Field(True, env="EVENT_OUTBOX_ENABLED")
+    # 同机多 worker 的 Dispatcher 单写者锁（相对路径按 backend/ 解析）。
+    DISPATCHER_LOCK_PATH: str = Field("./data/foundation/dispatcher.lock", env="DISPATCHER_LOCK_PATH")
 
     # ==================== F2 通信统一（WS 中继 / 心跳 / 写入守卫）====================
     # WS_RELAY=redis 时跨 worker 经 Redis pub/sub 扇出；留空为单进程本地扇出。
@@ -106,6 +110,63 @@ class Settings(BaseSettings):
     WS_HEARTBEAT_TIMEOUT_SECONDS: int = Field(90, env="WS_HEARTBEAT_TIMEOUT_SECONDS")
     # 写库前 6 类守卫的总开关；false 时回退到 F1 行为。
     FOUNDATION_VALIDATION_ENABLED: bool = Field(True, env="FOUNDATION_VALIDATION_ENABLED")
+
+    # ==================== F3 对象存储与媒体资产 ====================
+    # 关闭后新上传回退旧 uploads 写路径；/media 读路由仍保留，已写 URL 不裂。
+    MEDIA_STORE_ENABLED: bool = Field(True, env="MEDIA_STORE_ENABLED")
+    OBJECT_STORE_BACKEND: str = Field("local", env="OBJECT_STORE_BACKEND")
+    OBJECT_STORE_ROOT: str = Field("./data/foundation/objects", env="OBJECT_STORE_ROOT")
+    MINIO_ENDPOINT: str = Field("", env="MINIO_ENDPOINT")
+    MINIO_BUCKET: str = Field("", env="MINIO_BUCKET")
+    MINIO_ACCESS_KEY: str = Field("", env="MINIO_ACCESS_KEY")
+    MINIO_SECRET_KEY: str = Field("", env="MINIO_SECRET_KEY")
+    MINIO_SECURE: bool = Field(False, env="MINIO_SECURE")
+    MINIO_REGION: str = Field("us-east-1", env="MINIO_REGION")
+    # true 时 MinIO 不可达直接拒绝启动；默认 false，开发机无 MinIO 也能启动。
+    MEDIA_STRICT_BACKEND: bool = Field(False, env="MEDIA_STRICT_BACKEND")
+    MEDIA_ORPHAN_GRACE_DAYS: int = Field(7, env="MEDIA_ORPHAN_GRACE_DAYS")
+
+    # ==================== F4 文档投影 ====================
+    DOC_STORE_ENABLED: bool = Field(True, env="DOC_STORE_ENABLED")
+    DOC_STORE_BACKEND: str = Field("local", env="DOC_STORE_BACKEND")
+    DOC_STORE_ROOT: str = Field("./data/foundation/docs", env="DOC_STORE_ROOT")
+    DOC_STORE_MAX_BYTES: int = Field(8388608, env="DOC_STORE_MAX_BYTES")
+    DOC_STORE_MONGO_URI: str = Field("", env="DOC_STORE_MONGO_URI")
+    DOC_STORE_MONGO_DB: str = Field("li_an_foundation", env="DOC_STORE_MONGO_DB")
+    DOC_STORE_MONGO_PREFIX: str = Field("", env="DOC_STORE_MONGO_PREFIX")
+    DOC_STORE_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="DOC_STORE_RECONCILE_MAX_AGE_DAYS")
+
+    # ==================== F5 图投影 ====================
+    # 关闭后图回填/查询短路；默认 local，不要求 Neo4j 容器。
+    GRAPH_STORE_ENABLED: bool = Field(True, env="GRAPH_STORE_ENABLED")
+    GRAPH_BACKEND: str = Field("local", env="GRAPH_BACKEND")
+    GRAPH_NEO4J_URI: str = Field("http://localhost:7474", env="GRAPH_NEO4J_URI")
+    GRAPH_NEO4J_USER: str = Field("neo4j", env="GRAPH_NEO4J_USER")
+    GRAPH_NEO4J_PASSWORD: str = Field("", env="GRAPH_NEO4J_PASSWORD")
+    GRAPH_NEO4J_DATABASE: str = Field("neo4j", env="GRAPH_NEO4J_DATABASE")
+    GRAPH_QUERY_MAX_DEPTH: int = Field(5, env="GRAPH_QUERY_MAX_DEPTH")
+    GRAPH_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="GRAPH_RECONCILE_MAX_AGE_DAYS")
+
+    # ==================== F6 向量投影与 AI 端口 ====================
+    # 默认关闭；local/milvus 显式开启。没有真实模型时哈希向量只用于验证。
+    VECTOR_STORE_ENABLED: bool = Field(True, env="VECTOR_STORE_ENABLED")
+    VECTOR_BACKEND: str = Field("off", env="VECTOR_BACKEND")
+    VECTOR_DIM: int = Field(1024, env="VECTOR_DIM")
+    VECTOR_COLLECTION: str = Field("text_questions", env="VECTOR_COLLECTION")
+    VECTOR_LOCAL_ROOT: str = Field("./data/foundation/vectors", env="VECTOR_LOCAL_ROOT")
+    VECTOR_MILVUS_URI: str = Field("http://localhost:19530", env="VECTOR_MILVUS_URI")
+    VECTOR_MILVUS_TOKEN: Optional[str] = Field(None, env="VECTOR_MILVUS_TOKEN")
+    VECTOR_MILVUS_PREFIX: str = Field("li_an_", env="VECTOR_MILVUS_PREFIX")
+    VECTOR_SEARCH_TOP_K_MAX: int = Field(100, env="VECTOR_SEARCH_TOP_K_MAX")
+    VECTOR_RECONCILE_MAX_AGE_DAYS: int = Field(7, env="VECTOR_RECONCILE_MAX_AGE_DAYS")
+    EMBEDDING_ENABLED: bool = Field(False, env="EMBEDDING_ENABLED")
+    EMBEDDING_PROVIDER: str = Field("off", env="EMBEDDING_PROVIDER")
+    EMBEDDING_BASE_URL: str = Field("", env="EMBEDDING_BASE_URL")
+    EMBEDDING_MODEL: str = Field("", env="EMBEDDING_MODEL")
+    EMBEDDING_API_KEY: Optional[str] = Field(None, env="EMBEDDING_API_KEY")
+    EMBEDDING_DIM: int = Field(1024, env="EMBEDDING_DIM")
+    EMBEDDING_TIMEOUT_SECONDS: float = Field(30.0, env="EMBEDDING_TIMEOUT_SECONDS")
+    EMBEDDING_BATCH_SIZE: int = Field(32, env="EMBEDDING_BATCH_SIZE")
 
     # ==================== 复合题（题组）识别（方案 v1.1，灰度开关）====================
     # 关闭后导入不再识别题组（存量数据不受影响；题组仅为展示聚合视图）

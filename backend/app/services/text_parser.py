@@ -10,6 +10,7 @@
 6. 位置兜底匹配
 7. 智能匹配主入口（用于分离导入）
 """
+import json
 import re
 import os
 import logging
@@ -1336,12 +1337,52 @@ def _compute_option_similarity(text_a: str, text_b: str) -> float:
     return SequenceMatcher(None, struct_a, struct_b).ratio()
 
 
+def _options_fingerprint(options) -> set:
+    """把结构化选项归一化成可比较的内容集合（忽略 A/B/C/D 标签）。
+
+    用于“共用题干、选项不同”的行测题去重判定：题干完全相同不等于同题，
+    图形/资料分析常有多题共用同一句问法。
+    """
+    if not options:
+        return set()
+    if isinstance(options, str):
+        try:
+            options = json.loads(options)
+        except (TypeError, ValueError):
+            return set()
+    if isinstance(options, dict):
+        options = list(options.values())
+    if not isinstance(options, (list, tuple)):
+        return set()
+    values = set()
+    for item in options:
+        if isinstance(item, dict):
+            raw = item.get('value') or item.get('content') or item.get('text') or ''
+        else:
+            raw = item
+        normalized = normalize_text_for_comparison(str(raw))
+        if normalized:
+            values.add(normalized)
+    return values
+
+
+def _options_conflict(options_a, options_b) -> bool:
+    """两份选项内容集合是否明显不同（重合率 < 1/3）。"""
+    set_a = _options_fingerprint(options_a)
+    set_b = _options_fingerprint(options_b)
+    if not set_a or not set_b:
+        return False
+    overlap = len(set_a & set_b) / max(len(set_a), len(set_b))
+    return overlap < 0.34
+
+
 def fuzzy_detect_duplicate(
     db_session,
     content: str,
     answer: str = '',
     subject_id: Optional[int] = None,
-    threshold: float = DEDUP_SIMILARITY_THRESHOLD
+    threshold: float = DEDUP_SIMILARITY_THRESHOLD,
+    options=None,
 ) -> Tuple[bool, Optional[Any], float]:
     """
     增强版模糊去重检测。
@@ -1384,6 +1425,11 @@ def fuzzy_detect_duplicate(
             QuestionBank.question_content == content,
             QuestionBank.status != 0
         ).first()
+    # 题干完全相同但选项内容明显不同 → 不是同一题。
+    # 行测资料分析大量题目共用“能够从上述资料中推出的是：”这类问法，
+    # 旧逻辑在此直接返回重复，导致 q120/q125 被静默丢弃（实测 2025 安徽行测少 2 题）。
+    if exact and _options_conflict(options, exact.options):
+        exact = None
     if exact:
         return True, exact, 1.0
 
@@ -5072,11 +5118,46 @@ def _strip_answer_header(region: str, number: int) -> str:
 # 申论走自己的文档级材料链路，这里直接跳过，避免双重挂载。
 # ======================================================================
 
-_XINGCE_SET_MARKER = re.compile(r'(?m)^[ \t]*（[一二三四五六七八九十]{1,3}）[ \t]*$')
+# 材料标记行：允许行尾跟纯图片材料（实测 2025 安徽行测“（三） [IMAGE:x_0] [IMAGE:x_1]”）。
+# 用零宽前瞻而非吞掉图片 token：m.end() 停在图片前，后续 chunk 仍能把图片收进材料。
+_XINGCE_SET_MARKER = re.compile(
+    r'(?m)^[ \t]*（[一二三四五六七八九十]{1,3}）[ \t]*'
+    r'(?=(?:\[IMAGE:[^\]]+\][ \t]*)*$)'
+)
+_SET_IMAGE_RE = re.compile(r'\[IMAGE:[^\]]+\]')
 # 题号行必须排除「小数+单位」：`40.2%。` 会被朴素正则认成第 40 题（实测甘肃教材）。
 _QNUM_LINE_START = re.compile(r'(?m)^[ \t]*(\d{1,3})[ \t]*[.．、](?!\d)')
 _SECTION_HEAD_LINE = re.compile(r'^[ \t]*第[一二三四五六七八九十]+部分.*$')
 _MIN_MATERIAL_CHARS = 30
+
+# OCR 归一化：MinerU Markdown 用 ASCII (一)(二)，并把题号粘在上一行末尾。
+# 只在 OCR 出口调用，避免影响文本型 PDF 的既有切分（2026-10-31 P4）。
+_ASCII_SET_MARKER = re.compile(r'(?m)^[ \t]*\(([一二三四五六七八九十]{1,3})\)[ \t]*$')
+_OCR_GLUED_QNUM = re.compile(
+    r'(?<=[\u4e00-\u9fff。！？；：”"）\)])[ \t]*(\d{2,3})[ \t]*[.．、][ \t]*'
+    r'(?=(?:[\u4e00-\u9fff“（(])|(?:19|20)\d{2}[ \t]*年)'
+)
+# OCR 会把题号直接粘在年份前（106.2021年）；补一个空格，
+# 否则 _QNUM_LINE_START 的 (?!\d) 会把它当小数，材料段边界整体错位。
+_OCR_QNUM_YEAR_GAP = re.compile(r'(?m)^[ \t]*(\d{2,3})[.．、](?=(?:19|20)\d{2}[ \t]*年)')
+
+
+def normalize_ocr_markdown(text: str) -> str:
+    """把 MinerU OCR 文本归一化到与文本层 PDF 同构的切分前提。
+
+    只做两件低风险替换：
+    1. 行首 ASCII (一) 改为全角（一），让资料分析材料标记能被识别；
+    2. 把粘在上一行末尾的 2~3 位题号断到新行，如
+       ...高1.79个百分点108.2023年... → ...高1.79个百分点（换行）108.2023年...。
+
+    断行只认「题号 + 点/顿号 + 中文或年份」的强信号，且题号至少两位，
+    因此 1.79、93.37、58.05% 这类小数不会被误切。
+    """
+    if not text:
+        return text
+    normalized = _ASCII_SET_MARKER.sub(lambda m: f'（{m.group(1)}）', text)
+    normalized = _OCR_QNUM_YEAR_GAP.sub(lambda m: m.group(1) + '. ', normalized)
+    return _OCR_GLUED_QNUM.sub(lambda m: '\n' + m.group(1) + '. ', normalized)
 
 
 def _clean_material_header(header: str) -> str:
@@ -5087,7 +5168,14 @@ def _clean_material_header(header: str) -> str:
     """
     lines = []
     for ln in str(header or '').split('\n'):
-        if _XINGCE_SET_MARKER.match(ln) or _SECTION_HEAD_LINE.match(ln):
+        if _XINGCE_SET_MARKER.match(ln):
+            # 纯图片材料（“（三） [IMAGE:…]”）去掉序号行时必须留下占位符，
+            # 否则整行被清洗掉，题组最终拿不到任何材料（2026-10-28 实测）。
+            images = _SET_IMAGE_RE.findall(ln)
+            if images:
+                lines.append(' '.join(images))
+            continue
+        if _SECTION_HEAD_LINE.match(ln):
             continue
         lines.append(ln)
     return '\n'.join(lines).strip()
@@ -5147,7 +5235,12 @@ def extract_question_blocks_with_material_sets(text: str) -> list:
 
     for idx, (first_num, header) in enumerate(segments):
         last_num = segments[idx + 1][0] - 1 if idx + 1 < len(segments) else 10 ** 6
-        if len(header) < _MIN_MATERIAL_CHARS:
+        # 纯图片材料（如 2021 北京乡镇卷“（一） [IMAGE:…]”）清洗后只剩
+        # 20~30 字符的占位符，旧规则会按“材料过短”整组跳过，导致
+        # q111–115 / q116–120 两道资料分析组完全没有材料。有图片 token 时
+        # 长度不再是拒绝条件，题数区间检查仍保留，避免把图片误当组边界。
+        has_set_image = bool(_SET_IMAGE_RE.search(header))
+        if len(header) < _MIN_MATERIAL_CHARS and not has_set_image:
             continue
         # 资料分析每组 4~5 题（实测 22 套）。若区间内题数超出 [2,6]，说明
         # 漏检了组边界（如江苏/辽宁），此时**宁可不挂**也不把 10~19 道题

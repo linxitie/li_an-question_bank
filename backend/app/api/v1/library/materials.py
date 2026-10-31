@@ -173,12 +173,14 @@ async def toggle_favorite(material_id: int,
     return {"is_favorite": new_val}
 
 
-def _mark_opened(db: Session, user_id: int, material_id: int) -> bool:
+def _mark_opened(db: Session, user_id: int, material_id: int, *,
+                 commit: bool = True) -> bool:
     """记录一次资料打开，返回是否为该用户对该资料的首次打开。
 
     复用 ``user_material_progress`` 的 ``(user_id, material_id)`` 唯一约束做去重：
     没有进度行说明从未打开过，插入一行作为「已打开」标记并发布事件；
     已有进度行（打开 / 学习 / 收藏任一途径建立）则不再重复发布。
+    commit=False 时只 flush，由调用方与事件同事务提交。
     """
     exists = db.query(UserMaterialProgress).filter(
         UserMaterialProgress.user_id == user_id,
@@ -188,11 +190,13 @@ def _mark_opened(db: Session, user_id: int, material_id: int) -> bool:
     db.add(UserMaterialProgress(user_id=user_id, material_id=material_id,
                                 status=1, progress_percent=0))
     try:
-        db.commit()
+        db.flush()
     except IntegrityError:
         # 并发下另一个请求先写入：唯一约束兜底，视为非首次
         db.rollback()
         return False
+    if commit:
+        db.commit()
     return True
 
 
@@ -208,12 +212,20 @@ async def material_detail(material_id: int,
     first_open = False
     if current_user:
         try:
-            first_open = _mark_opened(db, current_user.user_id, material_id)
+            first_open = _mark_opened(
+                db, current_user.user_id, material_id, commit=False
+            )
         except Exception as e:  # noqa: BLE001 — 打开记录失败不阻断详情返回
             db.rollback()
             logger.warning("[materials] 记录打开失败 material=%s: %s", material_id, e)
 
     m.view_count = (m.view_count or 0) + 1
+
+    # F2b：首次打开记录、浏览量、E8 事件同一事务提交。
+    if first_open:
+        await record_user_action(
+            db, current_user.user_id, TRIGGER_MATERIAL_OPENED
+        )
     db.commit()
 
     prog = None
@@ -221,16 +233,6 @@ async def material_detail(material_id: int,
         prog = db.query(UserMaterialProgress).filter(
             UserMaterialProgress.user_id == current_user.user_id,
             UserMaterialProgress.material_id == material_id).first()
-
-    # E8：同资料二次打开不重复发布（_mark_opened 去重）
-    if first_open:
-        try:
-            await record_user_action(
-                db, current_user.user_id, TRIGGER_MATERIAL_OPENED
-            )
-        except Exception as e:  # noqa: BLE001 — 事件失败不影响详情返回
-            logger.warning("[materials] 学习行为事件发布失败 material=%s: %s",
-                           material_id, e)
 
     d = _item_brief(m, prog)
     d.update({"content": m.content or "", "card_back": m.card_back or "",
@@ -254,6 +256,8 @@ from ....services.material_classifier import classifier  # noqa: E402
 from ....services.material_deduplicator import deduplicator  # noqa: E402
 from ....services.material_sanitizer import content_cleaner  # noqa: E402
 from ....services.material_monitor import import_monitor  # noqa: E402
+from ....core.config import settings  # noqa: E402
+from ....services import media_service  # noqa: E402
 
 UPLOAD_IMG_DIR = _Path("uploads/materials/images")
 UPLOAD_TMP_DIR = _Path("uploads/materials/tmp")
@@ -340,7 +344,8 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         logger.warning("[materials] audit log failed: %s", e)
 
 
-def _safe_image_upload(file: UploadFile) -> str:
+def _safe_image_upload(file: UploadFile, db: Session | None = None,
+                       user_id: int | None = None) -> str:
     ext = _os.path.splitext(file.filename or "")[1].lower()
     if ext not in (".png", ".jpg", ".jpeg", ".webp"):
         raise HTTPException(400, "仅支持 png/jpg/webp 图片")
@@ -350,6 +355,24 @@ def _safe_image_upload(file: UploadFile) -> str:
     magic = MAGIC_BYTES.get(".jpg" if ext == ".jpeg" else ext)
     if magic and not content.startswith(magic):
         raise HTTPException(400, "文件实际格式与扩展名不符")
+
+    if settings.MEDIA_STORE_ENABLED:
+        if db is None:
+            raise HTTPException(500, "媒体存储缺少数据库会话")
+        try:
+            asset = media_service.store_bytes(
+                db, content, kind="material_image",
+                original_name=file.filename or f"image{ext}",
+                created_by=user_id, max_bytes=5 * 1024 * 1024,
+            )
+        except media_service.MediaTooLarge:
+            raise HTTPException(400, "图片不能超过 5MB")
+        except media_service.MediaValidationError as exc:
+            raise HTTPException(400, str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "图片存储暂不可用，请稍后重试")
+        return f"/media/{asset.asset_id}"
+
     UPLOAD_IMG_DIR.mkdir(parents=True, exist_ok=True)
     name = f"{_uuid.uuid4().hex}{ext}"
     (UPLOAD_IMG_DIR / name).write_bytes(content)
@@ -361,7 +384,7 @@ async def upload_image(file: UploadFile = File(...),
                        current_user: SysUser = Depends(get_current_user),
                        db: Session = Depends(get_db)):
     _require_admin(current_user)
-    url = _safe_image_upload(file)
+    url = _safe_image_upload(file, db=db, user_id=current_user.user_id)
     _audit(db, current_user, "upload_image", url)
     db.commit()
     return {"url": url}
@@ -664,30 +687,64 @@ def _load_result(rec: MaterialImportRecord) -> dict:
         return {}
 
 
-def _migrate_images(import_id: int, result: dict) -> None:
-    """把 parse_result.images 的临时图片迁入正式目录并改写 html 引用。"""
+def _migrate_images(import_id: int, result: dict, db: Session | None = None,
+                    user_id: int | None = None) -> None:
+    """把 parse_result.images 的临时图片迁入正式存储并改写 html 引用。
+
+    F3 开启时写入对象存储，HTML 改写为 /media/{asset_id}；关闭时保留原
+    uploads/materials/images/ 目录行为。图片字节只在确认入库时固化。
+    """
     html = result.get("html") or ""
     dest_dir = UPLOAD_IMG_DIR / f"import_{import_id}"
+    use_media = bool(settings.MEDIA_STORE_ENABLED and db is not None)
+
+    def _persist(src: _Path, original_name: str) -> str:
+        if use_media:
+            try:
+                with open(src, "rb") as fh:
+                    asset = media_service.store_file(
+                        db, fh, kind="material_image",
+                        original_name=original_name, created_by=user_id,
+                    )
+            except media_service.MediaValidationError as exc:
+                raise HTTPException(400, f"导入图片格式不支持: {exc}")
+            except media_service.ObjectStoreUnavailable:
+                raise HTTPException(503, "图片存储暂不可用，请稍后重试")
+            src.unlink(missing_ok=True)
+            return f"/media/{asset.asset_id}"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / original_name
+        _shutil.move(str(src), str(dest))
+        return f"/uploads/materials/images/import_{import_id}/{dest.name}"
+
     for img in result.get("images", []):
+        if not isinstance(img, dict):
+            continue
         src = _Path(img.get("src_path", ""))
         if not src.exists():
             continue
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / img.get("name", src.name)
-        _shutil.move(str(src), str(dest))
-        old_ref = f"/uploads/materials/tmp/{src.name}"
-        new_ref = f"/uploads/materials/images/import_{import_id}/{dest.name}"
-        html = html.replace(old_ref, new_ref)
+        name = img.get("name", src.name)
+        new_ref = _persist(src, name)
+        html = html.replace(f"/uploads/materials/tmp/{src.name}", new_ref)
     # Word 内嵌图引用同样从 tmp 迁移
     for name in result.get("images", []):
         if isinstance(name, str):
             src = UPLOAD_TMP_DIR / name
             if src.exists():
-                dest_dir.mkdir(parents=True, exist_ok=True)
-                _shutil.move(str(src), str(dest_dir / name))
-                html = html.replace(f"/uploads/materials/tmp/{name}",
-                                    f"/uploads/materials/images/import_{import_id}/{name}")
+                new_ref = _persist(src, name)
+                html = html.replace(f"/uploads/materials/tmp/{name}", new_ref)
     result["html"] = sanitize_html(html)
+
+
+def _commit_material_import(db: Session, rec: MaterialImportRecord) -> None:
+    """业务行与文档投影事件同事务提交，避免文档库与导入记录漂移。"""
+    db.flush()
+    from ....foundation.document_events import emit_import_snapshot
+    emit_import_snapshot(
+        db, "material_import_record", rec.import_id,
+        producer="library.materials",
+    )
+    db.commit()
 
 
 @router.post("/admin/import/upload", summary="上传素材并解析(docx/xlsx/文字pdf同步；扫描pdf异步)")
@@ -702,7 +759,7 @@ async def import_upload(background_tasks: BackgroundTasks,
         file_size=_os.path.getsize(tmp_path), parse_status="pending",
         uploader_id=current_user.user_id)
     db.add(rec)
-    db.commit()
+    _commit_material_import(db, rec)
     db.refresh(rec)
 
     scanned = False
@@ -714,7 +771,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_status = "failed"
             rec.error_message = "PDF 已加密或损坏，请解除密码后重新上传"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-            db.commit()
+            _commit_material_import(db, rec)
             raise HTTPException(400, rec.error_message)
 
     if ext == ".docx":
@@ -729,7 +786,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_status = "failed"
             rec.error_message = f"Word 文档损坏或格式不受支持: {e}"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-        db.commit()
+        _commit_material_import(db, rec)
     elif ext == ".xlsx":
         try:
             from ....services.material_parser import parse_xlsx
@@ -742,7 +799,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_status = "failed"
             rec.error_message = f"Excel 解析失败（空表或损坏）: {e}"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-        db.commit()
+        _commit_material_import(db, rec)
     elif ext == ".pdf":
         if scanned:
             from ....services.mineru_material_service import (
@@ -752,12 +809,12 @@ async def import_upload(background_tasks: BackgroundTasks,
                 rec.error_message = ("该 PDF 为扫描图片版且系统 OCR 组件未就绪，"
                                      "请转存为文字版 Word 后重新上传")
                 rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-                db.commit()
+                _commit_material_import(db, rec)
                 raise HTTPException(400, rec.error_message)
             rec.parse_mode = "async(mineru)"
             rec.parse_status = "processing"
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-            db.commit()
+            _commit_material_import(db, rec)
 
             def _ocr_job(import_id: int, path: str, workdir: str):
                 """后台线程：跑 OCR 并回写记录（自带独立 DB 会话）。"""
@@ -773,12 +830,12 @@ async def import_upload(background_tasks: BackgroundTasks,
                                    "_seconds": r["seconds"]})
                     row.parse_status = "success"
                     row.parse_result = _json.dumps(result, ensure_ascii=False)
-                    s.commit()
+                    _commit_material_import(s, row)
                 except Exception as e:
                     row = s.query(MaterialImportRecord).get(import_id)
                     row.parse_status = "failed"
                     row.error_message = f"OCR 失败({type(e).__name__}): 可点击重试或转存 Word"
-                    s.commit()
+                    _commit_material_import(s, row)
                 finally:
                     s.close()
 
@@ -797,7 +854,7 @@ async def import_upload(background_tasks: BackgroundTasks,
                 rec.parse_status = "failed"
                 rec.error_message = f"PDF 解析失败: {e}"
                 rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
-            db.commit()
+            _commit_material_import(db, rec)
 
     resp = {"import_id": rec.import_id, "parse_status": rec.parse_status}
     if rec.error_message:
@@ -890,13 +947,12 @@ async def import_confirm(import_id: int, body: dict,
             if dup_check["is_duplicate"]:
                 import_monitor.record_duplicate_match()
                 continue  # 跳过重复内容
-            # 智能分类
-            classification = classifier.classify(
-                ".xlsx", content=combined, title=card_front
-            )
+            # 类型由「正/背面双列」这一输入契约唯一确定，不再交给启发式分类器：
+            # 分类器只看扩展名+标题关键词，卡片正文短会判成 article，导致卡片
+            # 落入文章区、翻卡 UI 永不触发（D1）。此处只按业务事实写 card。
             content_hash = content_cleaner.calculate_content_hash(combined)
             m = StudyMaterial(
-                subject=subject, type=classification["type"],
+                subject=subject, type="card",
                 category=c["category"] or category,
                 title=card_front, card_front=card_front,
                 card_back=card_back,
@@ -911,7 +967,7 @@ async def import_confirm(import_id: int, body: dict,
         mtype = body.get("type")
         if mtype not in ("article",):
             raise HTTPException(400, "文档类素材入库类型只能是 article")
-        _migrate_images(import_id, result)
+        _migrate_images(import_id, result, db=db, user_id=current_user.user_id)
         word_count = result.get("word_count", 0)
         # 内容清洗
         raw_content = result.get("html") or ""

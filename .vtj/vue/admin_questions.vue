@@ -287,10 +287,12 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, onMounted } from 'vue';
+import { defineComponent, ref, onMounted, nextTick, watch } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { mountMaterialDock, removeMaterialDock } from '@/utils/materialDock';
+import { findEditModalRoot, refreshEditPreviews } from '@/utils/editPreview';
 
 export default defineComponent({
   name: 'AdminQuestions',
@@ -413,20 +415,30 @@ export default defineComponent({
 
     function parsedOptions(opts: any) {
       if (!opts) return {};
+      // 与教师端同源：必须尊重 o.key，并按 A/B/C/D 排序。
+      // 历史数据里选项数组顺序可能是 B/A/C/D，按下标重编号会让选项与答案错位。
+      function sortByKey(input: Record<string, string>) {
+        const sorted: Record<string, string> = {};
+        Object.keys(input).sort().forEach((k) => { sorted[k] = input[k]; });
+        return sorted;
+      }
       if (Array.isArray(opts)) {
         const result: Record<string, string> = {};
         opts.forEach((o: any, i: number) => {
-          const key = (o && o.key) || String.fromCharCode(65 + i);
-          if (typeof o === 'object') result[key] = o.value || o.text || '';
-          else result[key] = String(o);
+          if (o && typeof o === 'object') {
+            const key = String(o.key || String.fromCharCode(65 + i)).toUpperCase();
+            result[key] = o.value || o.text || '';
+          } else {
+            result[String.fromCharCode(65 + i)] = String(o);
+          }
         });
-        return result;
+        return sortByKey(result);
       }
       if (typeof opts === 'object') {
         // 已是 {A: "...", B: "..."} 形式
         const result: Record<string, string> = {};
         Object.keys(opts).forEach(k => { result[k] = opts[k]; });
-        return result;
+        return sortByKey(result);
       }
       if (typeof opts === 'string') {
         try { return parsedOptions(JSON.parse(opts)); } catch(e) { return {}; }
@@ -525,6 +537,7 @@ export default defineComponent({
     function previewQuestion(q: any) {
       previewData.value = { ...q };
       groupInfo.value = null;
+      removeMaterialDock(document.querySelector('.modal-xlarge'), 'aq-material-dock');
       showPreviewModal.value = true;
       // P1-2: 复合题小题 → 拉取题组聚合（共享材料）
       if (q.group_id) {
@@ -534,6 +547,16 @@ export default defineComponent({
             if (d && d.group) {
               groupInfo.value = d.group;
               previewData.value.group_members = (d.members || []).map(withRequirements);
+              // 材料吸顶：管理端预览长材料时保持可见；脚本挂载，避免改 raw 模板
+              nextTick(function () {
+                var host = document.querySelector('.modal-xlarge');
+                if (!host || !d.group.shared_content) return;
+                mountMaterialDock(host, {
+                  html: cleanHtmlContent(d.group.shared_content),
+                  title: q.question_number ? ('📄 本组材料 · 第 ' + q.question_number + ' 题') : '📄 本组材料',
+                  dockClass: 'aq-material-dock'
+                });
+              });
             }
           })
           .catch(function() { /* 静默：材料加载失败不影响预览 */ });
@@ -556,8 +579,38 @@ export default defineComponent({
         shared_content_images: q.shared_content_images || ''
       };
       showEditModal.value = true;
+      nextTick(refreshEditPreview);
       hydrateMaterialFromDetail(q.question_id);
     }
+
+    // raw 页不能改 <template>：脚本内补题干、选项、解析、题组材料的富文本预览。
+    // 选项在管理端是 JSON textarea，格式错误时给出明确提示，而不是静默显示原文。
+    function refreshEditPreview() {
+      const root = findEditModalRoot();
+      if (!root) return;
+      let optionItems: Array<{ key: string; value: string }> = [];
+      let optionsError = '';
+      const rawOptions = String(editForm.value.options_text || '').trim();
+      if (rawOptions) {
+        try {
+          const map = parsedOptions(JSON.parse(rawOptions));
+          optionItems = Object.keys(map).map((k) => ({ key: k, value: map[k] }));
+        } catch (e) {
+          optionsError = '选项 JSON 格式错误，暂无法预览；保存前请修正。';
+        }
+      }
+      refreshEditPreviews(root, {
+        material: editForm.value.shared_content || '',
+        question: editForm.value.question_content || '',
+        options: optionItems,
+        optionsError: optionsError,
+        analysis: editForm.value.answer_analysis || '',
+      });
+    }
+
+    watch(editForm, function () {
+      nextTick(refreshEditPreview);
+    }, { deep: true });
 
     // P2-6：列表接口不保证返回题组材料，编辑时按题目详情补齐；
     // 用 question_id 守卫，避免切换题目后旧请求覆盖当前表单。
@@ -570,6 +623,7 @@ export default defineComponent({
           editForm.value.group_id = d.group_id || 0;
           editForm.value.shared_content = d.shared_content || '';
           editForm.value.shared_content_images = d.shared_content_images || '';
+          nextTick(refreshEditPreview);
         })
         .catch(function() { /* 静默：材料加载失败不影响编辑其他字段 */ });
     }

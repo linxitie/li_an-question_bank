@@ -3,6 +3,7 @@
  */
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
+import { canAccess } from './access';
 
 const routes: RouteRecordRaw[] = [
   // ==================== 公共路由 ====================
@@ -202,6 +203,12 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['teacher', 'admin'] }
   },
   {
+    path: '/teacher/forum',
+    name: 'TeacherForum',
+    component: () => import('@/views/teacher/teacher_forum.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
     path: '/teacher/profile',
     name: 'TeacherProfile',
     component: () => import('$vtj/vue/teacher_profile.vue'),
@@ -276,6 +283,12 @@ const routes: RouteRecordRaw[] = [
         path: 'papers',
         name: 'AdminPapers',
         component: () => import('$vtj/vue/paper_approval.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'forum',
+        name: 'AdminForum',
+        component: () => import('@/views/admin/admin_forum.vue'),
         meta: { roles: ['admin'] }
       },
       {
@@ -624,20 +637,32 @@ router.beforeEach((to, _from, next) => {
     if (role && role !== 'student') {
       return next('/unauthorized?reason=mobile_student_only');
     }
+    if (role) {
+      const permissions = auth?.getPermissions ? auth.getPermissions() : [];
+      if (!canAccess(to.meta as any, role, permissions)) {
+        return next('/unauthorized');
+      }
+    }
     return next();
   }
 
-  // 2) 移动设备（手机/平板）访问 PC 路径 → 映射到对应端
-  //    关键修复：登录页也区分设备，手机访问 /login 会映射到 /mobile/login
-  if (device !== 'pc') {
+  // 2) 仅「手机」访问 PC 路径 → 映射到手机端
+  //    2026-10-26 用户决定：平板与电脑端使用同一套页面，因此平板不再自动跳 /tablet/*
+  //    （平板版仍可通过显式 URL 访问，如 /#/tablet/login、/#/tablet/forum/4）
+  //    保留原「登录页也区分设备」的行为：手机访问 /login 仍映射到 /mobile/login
+  if (device === 'mobile') {
     const target = resolveDevicePath(to.path, device);
     if (target) {
       return next({ path: target, replace: true });
     }
   }
 
-  // 3) PC 设备：公开路由直接放行
-  if (to.path === '/login' || to.path === '/unauthorized') {
+  // 3) PC 设备：公开路由直接放行（论坛允许游客浏览，互动仍由接口校验登录）
+  if (
+    to.path === '/login' ||
+    to.path === '/unauthorized' ||
+    to.path === '/forum'
+  ) {
     return next();
   }
 
@@ -654,19 +679,11 @@ router.beforeEach((to, _from, next) => {
     return next(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
   }
 
-  // 检查路由元数据中的角色限制
-  const allowedRoles = to.meta?.roles as string[] | undefined;
-  if (allowedRoles && allowedRoles.length > 0) {
-    const userRole = auth.getUserRole();
-
-    // admin 角色可访问所有路由
-    if (userRole === 'admin') {
-      return next();
-    }
-
-    if (!allowedRoles.includes(userRole)) {
-      return next('/unauthorized');
-    }
+  // 检查路由元数据中的角色与权限限制
+  const currentRole = auth.getUserRole();
+  const currentPermissions = auth.getPermissions ? auth.getPermissions() : [];
+  if (!canAccess(to.meta as any, currentRole, currentPermissions)) {
+    return next('/unauthorized');
   }
 
   // ===== 角色仪表盘重定向（三端分离） =====

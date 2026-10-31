@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-25 16:19:54",
+  "generated_at": "2026-10-30 15:55:48",
   "source": "scripts/qbdm/gen_module_ledger.py",
   "note": "端点以 api_surface.json 为准；页面/测试为登记口径+候选口径，候选需人工确认",
   "totals": {
@@ -15,8 +15,11 @@
       "footer_info": ".vtj/vue/footer_info.vue",
       "navbar": ".vtj/vue/navbar.vue",
       "TeacherNavHeader": ".vtj/vue/TeacherNavHeader.vue",
+      "admin_forum": "src/views/admin/admin_forum.vue",
+      "teacher_forum": "src/views/teacher/teacher_forum.vue",
       "not-found": "src/views/system/shared/not-found.vue",
-      "unauthorized": "src/views/system/shared/unauthorized.vue"
+      "unauthorized": "src/views/system/shared/unauthorized.vue",
+      "tablet_forum_detail": "src/views/student/tablet/tablet_forum_detail.vue"
     },
     "card_gaps": [
       "identity",
@@ -79,6 +82,7 @@
       "pages_missing": [],
       "tests_registered": [],
       "tests_candidates": [
+        "backend/tests/test_feedback_ticket.py",
         "backend/tests/test_identity_module.py",
         "src/modules/identity/__tests__/store.spec.ts"
       ],
@@ -244,6 +248,7 @@
       "pages_missing": [],
       "tests_registered": [],
       "tests_candidates": [
+        "backend/tests/test_paper_group_payload.py",
         "backend/tests/test_paper_publish_flow.py",
         "src/modules/papers/__tests__/store.spec.ts"
       ],
@@ -328,6 +333,7 @@
       "pages_missing": [],
       "tests_registered": [],
       "tests_candidates": [
+        "backend/tests/test_forum_favorite.py",
         "backend/tests/test_notes_collection_module.py",
         "backend/tests/test_quote_favorite.py",
         "src/modules/notes/__tests__/store.spec.ts"
@@ -411,7 +417,18 @@
       "tests_registered": [],
       "tests_candidates": [
         "backend/tests/test_community_module.py",
+        "backend/tests/test_forum_favorite.py",
+        "backend/tests/test_forum_moderation.py",
+        "backend/tests/test_forum_p1.py",
+        "backend/tests/test_forum_p3_schema.py",
+        "backend/tests/test_forum_posting.py",
+        "backend/tests/test_forum_report.py",
+        "backend/tests/test_forum_upload.py",
+        "backend/tests/test_forum_visibility.py",
         "backend/tests/test_quote_favorite.py",
+        "src/modules/community/__tests__/avatar.spec.ts",
+        "src/modules/community/__tests__/categories.spec.ts",
+        "src/modules/community/__tests__/reactions.spec.ts",
         "src/modules/community/__tests__/store.spec.ts"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"community|forum|quote\"",
@@ -593,6 +610,7 @@
         "backend/tests/test_composite_material_groups.py",
         "backend/tests/test_gongzhuan_regression.py",
         "backend/tests/test_library_module.py",
+        "backend/tests/test_material_import_card_type.py",
         "backend/tests/test_material_ownership.py",
         "backend/tests/test_material_parser.py",
         "backend/tests/test_materials_admin.py",
@@ -806,8 +824,10 @@
       "pages": [],
       "pages_missing": [],
       "tests_registered": [],
-      "tests_candidates": [],
-      "test_command": "",
+      "tests_candidates": [
+        "backend/tests/test_object_store_minio.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"mini\"",
       "events_publish": [],
       "events_subscribe": []
     },
@@ -842,6 +862,7 @@
         "backend/tests/test_batch_parsed_import.py",
         "backend/tests/test_composite_material_groups.py",
         "backend/tests/test_intelligent_matcher.py",
+        "backend/tests/test_material_import_card_type.py",
         "backend/tests/test_material_ownership.py",
         "backend/tests/test_material_parser.py",
         "backend/tests/test_materials_admin.py",
@@ -988,7 +1009,8 @@
       "pages_missing": [],
       "tests_registered": [],
       "tests_candidates": [
-        "backend/tests/test_exam_records_module.py"
+        "backend/tests/test_exam_records_module.py",
+        "backend/tests/test_exam_start_submit_regression.py"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"exam\"",
       "events_publish": [],

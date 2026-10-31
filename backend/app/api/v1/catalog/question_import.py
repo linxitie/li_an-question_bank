@@ -512,6 +512,13 @@ def _persist_group_images(group) -> None:
                        getattr(group, 'id', '?'), e)
 
 
+def _material_text_without_images(text: str) -> str:
+    """材料去掉图片标记/标签后的纯文本；为空说明是纯图片材料。"""
+    normalized = re.sub(r'\[IMAGE:[^\]]+\]', '', text or '')
+    normalized = re.sub(r'<img[^>]*>', '', normalized)
+    return re.sub(r'\s+', '', normalized)
+
+
 def _digest_for_group_dedup(text: str) -> str:
     """题组幂等键用的规范化指纹 —— **对图片状态不敏感**。
 
@@ -543,22 +550,28 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
     text = (material or '').strip()
     if not text:
         return None
+    # 纯图片材料没有稳定文本指纹：剥离图片后 SHA1 全是空串，
+    # 不同材料会被误并成同一组（2026-10-29 实测 2021 北京两组
+    # 图片材料被并进 2025 安徽的 group 31）。这类材料不走去重，直接新建。
+    image_only = not _material_text_without_images(text)
     digest = _digest_for_group_dedup(text)
 
     # 同批导入里重复查库代价高，先在本次请求内缓存
     cache_key = 'shenlun_group_' + digest
-    cached = _SHENLUN_GROUP_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+    if not image_only:
+        cached = _SHENLUN_GROUP_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
 
     # 跨批复用：库内已存在同指纹材料则直接挂上去
     # ★ J-1-3 修复：用 SHA1 全文指纹替代 LIKE '%前60字%'，消除误合并
     existing = None
-    for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == 'shenlun_material').all():
-        g_digest = _digest_for_group_dedup(str(g.shared_content or ''))
-        if g_digest == digest:
-            existing = g
-            break
+    if not image_only:
+        for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == 'shenlun_material').all():
+            g_digest = _digest_for_group_dedup(str(g.shared_content or ''))
+            if g_digest == digest:
+                existing = g
+                break
     if existing is not None:
         _shenlun_cache_put(cache_key, existing.id)
         return existing.id
@@ -571,7 +584,8 @@ def _get_or_create_shenlun_material_group(db: Session, material: str,
         source=source_tag or '',
         title=(subject_name + ' 给定材料')[:200],   # 申论组标题是「科目名 + 给定材料」，非 shared_content 前 200 字
     )
-    _shenlun_cache_put(cache_key, group.id)
+    if not image_only:
+        _shenlun_cache_put(cache_key, group.id)
     return group.id
 
 
@@ -589,17 +603,22 @@ def _get_or_create_group_by_material(db: Session, material: str,
     text = (material or '').strip()
     if not text:
         return None
+    # 纯图片材料剥离图片后指纹为空，不能参与内容去重（否则不同图片组
+    # 会因空串指纹互相合并，实测 2021 北京 q111–120 被塞进 2025 安徽 group 31）。
+    image_only = not _material_text_without_images(text)
     digest = _digest_for_group_dedup(text)
 
     cache_key = f'material_group_{group_type}_' + digest
-    cached = _SHENLUN_GROUP_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+    if not image_only:
+        cached = _SHENLUN_GROUP_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
 
-    for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == group_type).all():
-        if _digest_for_group_dedup(str(g.shared_content or '')) == digest:
-            _shenlun_cache_put(cache_key, g.id)
-            return g.id
+    if not image_only:
+        for g in db.query(QuestionGroup).filter(QuestionGroup.group_type == group_type).all():
+            if _digest_for_group_dedup(str(g.shared_content or '')) == digest:
+                _shenlun_cache_put(cache_key, g.id)
+                return g.id
 
     group = _upsert_question_group(
         db,
@@ -608,7 +627,8 @@ def _get_or_create_group_by_material(db: Session, material: str,
         subject=subject_name or '',
         source=source_tag or '',
     )
-    _shenlun_cache_put(cache_key, group.id)
+    if not image_only:
+        _shenlun_cache_put(cache_key, group.id)
     return group.id
 
 
@@ -735,8 +755,13 @@ def _link_shenlun_material_groups(db: Session, items: List[Dict[str, Any]],
     return linked
 
 
-def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, source_tag=''):
+def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, source_tag='',
+                                      stats: Dict[str, Any] | None = None):
     """批内复合题识别：返回 (groups_created, members_linked)。
+
+    P5 防丢组：识别到复合题组但解析器没有切出材料时，仍然建组保留子题关联，
+    但组材料留空、成员置 need_review=1，并通过 stats['missing_material_groups']
+    把数量交给调用方提示教师，绝不把题干冒充材料。
 
     算法（批内作用域，调用方统一 commit 保证事务安全）：
     1. 为每个成功入库题提取题号（question_number）
@@ -770,9 +795,16 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         旧实现固定取头题 `question_content`：材料正文已经被 text_parser 剥离到
         `material_text`，再用题干当组材料，会让「材料+题干」在详情里重复显示，
         而真正的材料在多题共享时又会串到别的组（P3-9）。
+
+        P5：没有显式材料时返回空串，不再回退题干。回退题干等于把设问句当材料，
+        既误导学生，也让「缺材料」永远无法被检测出来。
         """
-        return (q.get('material_text') or q.get('shared_content')
-                or q.get('question_content') or '')
+        return (q.get('material_text') or q.get('shared_content') or '').strip()
+
+    def _mark_missing_material() -> None:
+        """记录一个缺材料题组，供 confirm 阶段提示教师。"""
+        if stats is not None:
+            stats['missing_material_groups'] = stats.get('missing_material_groups', 0) + 1
 
     groups_created, members_linked = 0, 0
     # ★ P3-9：claimed 必须拆成两个集合。旧实现把「批内下标 i」与「题目ID jid」
@@ -831,26 +863,35 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
         for jid in member_ids[1:]:
             claimed_ids.add(jid)
 
+        shared_content = _group_shared_content(q)
+        material_missing = not shared_content
+        if material_missing:
+            _mark_missing_material()
+
         group = _upsert_question_group(
             db,
             group_type=group_type,
-            shared_content=_group_shared_content(q),
+            shared_content=shared_content,
             subject=subject_name or '公专',
             source=source_tag or q.get('paper_name', ''),
         )
         groups_created += 1
 
-        # 写入组字段（按题号升序排列）
+        # 写入组字段（按题号升序排列）；缺材料题组逐题标记待复核
         for sort_idx, mid in enumerate(sorted(member_ids, key=lambda mid_: qnum_map.get(mid_, 9999))):
+            values = {
+                'group_id': group.id,
+                'question_level': 2,
+                'sort_order': sort_idx + 1,
+            }
+            if material_missing:
+                values['need_review'] = 1
             db.query(QuestionBank).filter(
-                QuestionBank.question_id == mid).update({
-                    'group_id': group.id,
-                    'question_level': 2,
-                    'sort_order': sort_idx + 1,
-                }, synchronize_session=False)
+                QuestionBank.question_id == mid).update(values, synchronize_session=False)
             members_linked += 1
         logger.info(f"[composite] 题组#{group.id} 创建：{len(member_ids)} 题挂组 "
-                    f"(type={group_type}, 题号 {member_qnums[:10]})")
+                    f"(type={group_type}, 题号 {member_qnums[:10]}, "
+                    f"缺材料={material_missing})")
 
     # ===== 层2 语义增强兜底：对层1 未命中的题目做分组（无显式标识的复合题）=====
     unclaimed = [(i, q) for i, q in enumerate(ok_items) if i not in claimed_indices]
@@ -876,10 +917,15 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
             if not member_qids:
                 continue
 
+            shared_content = _group_shared_content(ok_items[head_idx])
+            material_missing = not shared_content
+            if material_missing:
+                _mark_missing_material()
+
             group = _upsert_question_group(
                 db,
                 group_type=sug.get('group_type') or 'material',
-                shared_content=_group_shared_content(ok_items[head_idx]),
+                shared_content=shared_content,
                 subject=subject_name or '公专',
                 source=source_tag or ok_items[head_idx].get('paper_name', ''),
             )
@@ -887,17 +933,65 @@ def _detect_and_link_composite_groups(db, ok_items, qid_by_index, subject_name, 
 
             member_ids = [head_qid] + member_qids
             for sort_idx, mid in enumerate(sorted(member_ids, key=lambda mid_: qnum_map.get(mid_, 9999))):
+                values = {
+                    'group_id': group.id,
+                    'question_level': 2,
+                    'sort_order': sort_idx + 1,
+                }
+                if material_missing:
+                    values['need_review'] = 1
                 db.query(QuestionBank).filter(
-                    QuestionBank.question_id == mid).update({
-                        'group_id': group.id,
-                        'question_level': 2,
-                        'sort_order': sort_idx + 1,
-                    }, synchronize_session=False)
+                    QuestionBank.question_id == mid).update(values, synchronize_session=False)
                 members_linked += 1
             logger.info(f"[composite] 语义增强题组#{group.id} 创建：{len(member_ids)} 题挂组 "
-                        f"(type={sug.get('group_type')}, conf={sug.get('confidence')})")
+                        f"(type={sug.get('group_type')}, conf={sug.get('confidence')}, "
+                        f"缺材料={material_missing})")
 
     return groups_created, members_linked
+
+
+def _build_material_warnings(preview_items: List[Dict[str, Any]]) -> List[str]:
+    """P5：预览阶段指出「识别为复合题组头但没有材料」的题目。
+
+    输入与入库使用同一套 composite_matcher 规则，避免预览说「正常」、入库却
+    建出空材料组。只返回提示文本，不改 preview_items，旧前端零回归。
+    """
+    from ....services.composite_matcher import match_group_head, infer_member_qnums
+
+    numbers: List[int] = []
+    for it in preview_items:
+        try:
+            numbers.append(int(it.get('question_number')))
+        except (TypeError, ValueError):
+            continue
+
+    warnings: List[str] = []
+    for it in preview_items:
+        content = it.get('question_content') or ''
+        hit = match_group_head(content)
+        if not hit:
+            continue
+        if (it.get('material_text') or '').strip():
+            continue
+        try:
+            head_qn = int(it.get('question_number'))
+        except (TypeError, ValueError):
+            head_qn = None
+        qnum_range = hit[1]
+        members = infer_member_qnums(
+            head_qn, [n for n in numbers if n != head_qn], qnum_range
+        ) if head_qn is not None else []
+        if members:
+            label = f"第{head_qn}题（含第{'、'.join(str(m) for m in members[:5])}题）"
+        elif head_qn is not None:
+            label = f"第{head_qn}题"
+        else:
+            label = "某道复合题"
+        warnings.append(
+            f"{label}识别为复合题组头，但未解析到材料；"
+            "将保留子题关联并标记待复核，请核对源文件材料后重新导入"
+        )
+    return warnings
 
 
 def _build_preview_groups(preview_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1325,6 +1419,13 @@ async def batch_import_parsed(
     )
     db.add(summary_record)
     try:
+        # flush 拿到 import_id 后写投影事件，再与业务行同一次 commit 提交。
+        db.flush()
+        from ....foundation.document_events import emit_import_snapshot
+        emit_import_snapshot(
+            db, 'question_import_record', summary_record.import_id,
+            producer='catalog.question_import.batch',
+        )
         db.commit()
     except Exception as ce:  # noqa: BLE001
         db.rollback()
@@ -1667,6 +1768,7 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             subcategory_suggestion = _build_subcategory_suggestion(
                 _upload_sub_id, _upload_sug_text) if _upload_sub_id else {
                     'name': '', 'confidence': 0.0}
+            _material_warnings = _build_material_warnings(preview_items)
             response_payload = {
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
                 'total_questions': total, 'success_count': success_count,
@@ -1674,6 +1776,7 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 'questions': preview_items, 'auto_detected_tags': auto_tags,
                 'subject_suggestion': subject_suggestion,
                 'subcategory_suggestion': subcategory_suggestion,
+                'warnings': _material_warnings,
             }
             stored = {'items': preview_items, 'auto_detected_tags': auto_tags,
                       '_response': response_payload}
@@ -1780,12 +1883,15 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
             subcategory_suggestion = _build_subcategory_suggestion(
                 _upload_sub_id, text) if _upload_sub_id else {
                     'name': '', 'confidence': 0.0}
+            _material_warnings = _build_material_warnings(preview_items)
             response_payload = {
                 'import_id': import_id, 'original_filename': filename, 'file_type': file_type,
                 # file_role 让前端/教师一眼区分「题目卷 / 答案卷」，答案卷不再按题目数展示
                 'file_role': 'answer' if is_answer_doc else 'question',
                 'total_questions': total, 'success_count': total, 'failed_count': 0,
                 'duplicate_count': 0, 'questions': preview_items,
+                # P5：预览阶段就提示缺材料题组，避免入库后才发现
+                'warnings': _material_warnings,
                 # ★ groups：按「给定材料」聚合的复合题组，供前端渲染总题干。
                 #   保留顶层 questions 不变，旧前端逻辑零回归。
                 'groups': _build_preview_groups(preview_items),
@@ -1815,6 +1921,12 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
         # 进度收尾：与 PREVIEW 状态同一次提交落库，前端轮询到 100 即停止
         record.progress_percent = 100
         record.current_phase = 'DONE'
+        db.flush()
+        from ....foundation.document_events import emit_import_snapshot
+        emit_import_snapshot(
+            db, 'question_import_record', import_id,
+            producer='catalog.question_import.parse',
+        )
         db.commit()
         logger.info(f"[import-async] import_id={import_id} 解析完成 → PREVIEW（{total} 题）")
 
@@ -1829,6 +1941,12 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                 record.import_status = 'FAILED'
                 record.error_messages = [{'stage': 'parse', 'error': str(e)[:500]}]
                 record.complete_time = datetime.now()
+                db.flush()
+                from ....foundation.document_events import emit_import_snapshot
+                emit_import_snapshot(
+                    db, 'question_import_record', import_id,
+                    producer='catalog.question_import.parse',
+                )
                 db.commit()
         except Exception:  # noqa: BLE001 — 连失败状态都写不回时只能放弃，绝不抛出
             logger.error(f"[import-async] import_id={import_id} 写入 FAILED 状态亦失败", exc_info=True)
@@ -1886,6 +2004,7 @@ async def upload_file_for_import(
         import_time=datetime.now(),
     )
     db.add(record)
+    # PARSING 是过渡态，不投文档事件；等 PREVIEW/FAILED 终态再写快照。
     db.commit()
     try:
         db.refresh(record)
@@ -2255,7 +2374,8 @@ async def confirm_batch_import(
         errors = []
         new_questions = []
         confirmed_items = []  # ★ RC-4 修复：初始化 confirmed_items，供试卷关联使用
-        group_stats = {'groups': 0, 'members': 0, 'materials': 0}
+        group_stats = {'groups': 0, 'members': 0, 'materials': 0,
+                       'missing_material_groups': 0}
         # F2 写入守卫：确认入库是主路径，坏数据必须在此逐条拒绝（不阻断整批）
         _confirm_refs = ReferenceCache(session=db)
 
@@ -2466,7 +2586,8 @@ async def confirm_batch_import(
                     _group_subject = (new_questions[0].subject.subject_name or '')
                 _group_source = record.original_filename or ''
                 _n_groups, _n_members = _detect_and_link_composite_groups(
-                    db, confirmed_items, id_map, _group_subject, _group_source)
+                    db, confirmed_items, id_map, _group_subject, _group_source,
+                    stats=group_stats)
                 _n_materials = _link_shenlun_material_groups(
                     db, confirmed_items, id_map, _group_subject or '申论', _group_source)
                 group_stats['groups'] = _n_groups
@@ -2551,6 +2672,9 @@ async def confirm_batch_import(
         if group_stats['groups'] or group_stats['materials']:
             message += (f'；题组 {group_stats["groups"]}（成员 {group_stats["members"]}），'
                         f'材料组 {group_stats["materials"]}')
+        if group_stats.get('missing_material_groups'):
+            message += (f'；缺材料题组 {group_stats["missing_material_groups"]} 个'
+                        '（子题已保留关联并标记待复核）')
         return {
             'success_count': imported,
             'failed_count': failed,
@@ -3555,6 +3679,7 @@ async def unified_parse(
 
                 # F-8：收集组聚合所需的轻量字段（供 _build_preview_groups）
                 _group_items.append({
+                    'question_content': content,
                     'material_text': block.get('material_text', ''),
                     'material_titles': block.get('material_titles', []),
                     'format': block.get('format', ''),
@@ -3644,6 +3769,7 @@ async def unified_parse(
 
                 # F-8：收集组聚合所需的轻量字段（供 _build_preview_groups）
                 _group_items.append({
+                    'question_content': content,
                     'material_text': block.get('material_text', ''),
                     'material_titles': block.get('material_titles', []),
                     'format': block.get('format', ''),
@@ -3747,6 +3873,10 @@ async def unified_parse(
         _response['subcategory_suggestion'] = subcategory_suggestion
         # F-8：返回复合题组结构（与 /upload 预览同构），供前端按组同框渲染
         _response['groups'] = _build_preview_groups(_group_items)
+        # P5：/parse 也提示缺材料题组，行为与 /upload 保持一致
+        _mat_warnings = _build_material_warnings(_group_items)
+        if _mat_warnings:
+            _response['warnings'] = list(_response.get('warnings') or []) + _mat_warnings
         # C-2：文件名相似度信号（前端可展示配对可信度）
         _response['filename_similarity'] = _filename_sim
         # A-2：与 /status 预览路径一致 —— 返回前 sanitize 裸 [IMAGE:xxx] 占位符，

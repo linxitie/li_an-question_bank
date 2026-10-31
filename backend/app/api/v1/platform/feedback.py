@@ -12,7 +12,7 @@ from sqlalchemy import desc
 
 from ....core.database import get_db
 from ....core.security import get_current_user, require_teacher_or_admin
-from ....models.models import SysUser, UserFeedback
+from ....models.models import SysUser, UserFeedback, FeedbackReply
 
 router = APIRouter(prefix="/api/feedback", tags=["意见反馈"])
 admin_router = APIRouter(prefix="/api/admin/feedback", tags=["反馈管理"])
@@ -52,6 +52,37 @@ async def get_faq():
     return {"items": FAQ_ITEMS}
 
 
+VALID_FEEDBACK_TYPES = {"question_content", "answer", "analysis", "function", "other"}
+VALID_SOURCES = {"form", "forum", "practice"}
+MAX_FEEDBACK_IMAGES = 5
+
+
+def _validate_attachments(raw: Any) -> list:
+    """反馈截图最多 5 张；只接受 {name,url,size,type} 结构。"""
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="attachments 必须是数组")
+    if len(raw) > MAX_FEEDBACK_IMAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"反馈截图最多 {MAX_FEEDBACK_IMAGES} 张",
+        )
+    cleaned = []
+    for item in raw:
+        if not isinstance(item, dict) or not item.get("url"):
+            raise HTTPException(status_code=400, detail="附件格式错误")
+        cleaned.append(
+            {
+                "name": str(item.get("name") or ""),
+                "url": str(item.get("url")),
+                "size": item.get("size"),
+                "type": item.get("type"),
+            }
+        )
+    return cleaned
+
+
 @router.post("", summary="提交意见反馈")
 async def submit_feedback(
     payload: Dict[str, Any],
@@ -67,17 +98,106 @@ async def submit_feedback(
     if category not in VALID_CATEGORIES:
         category = "其他"
 
+    feedback_type = payload.get("feedback_type") or "other"
+    if feedback_type not in VALID_FEEDBACK_TYPES:
+        feedback_type = "other"
+    source = payload.get("source") or "form"
+    if source not in VALID_SOURCES:
+        source = "form"
+
     fb = UserFeedback(
         user_id=current_user.user_id,
         category=category,
         content=content,
         contact=(payload.get("contact") or "").strip() or None,
         status="pending",
+        feedback_type=feedback_type,
+        question_id=payload.get("question_id"),
+        practice_record_id=payload.get("practice_record_id"),
+        attachments=_validate_attachments(payload.get("attachments")),
+        priority=payload.get("priority") or "normal",
+        source=source,
+        forum_post_id=payload.get("forum_post_id"),
+        subject_id=payload.get("subject_id"),
     )
     db.add(fb)
+    db.flush()  # 先拿到 feedback_id，再生成可读工单号
+    from datetime import datetime as _dt
+
+    fb.ticket_no = f"FB{_dt.now().strftime('%Y%m%d')}-{fb.feedback_id:06d}"
     db.commit()
     db.refresh(fb)
-    return {"feedback_id": fb.feedback_id, "message": "反馈已提交，感谢你的建议"}
+    return {
+        "feedback_id": fb.feedback_id,
+        "ticket_no": fb.ticket_no,
+        "message": "反馈已提交，感谢你的建议",
+    }
+
+
+@router.get("/{feedback_id}", summary="反馈工单详情")
+async def get_feedback_detail(
+    feedback_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    fb = db.query(UserFeedback).filter(UserFeedback.feedback_id == feedback_id).first()
+    if not fb:
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    is_staff = current_user.user_type in ("teacher", "admin")
+    if fb.user_id != current_user.user_id and not is_staff:
+        raise HTTPException(status_code=403, detail="无权查看该反馈")
+
+    data = _serialize_feedback(fb)
+    replies = (
+        db.query(FeedbackReply)
+        .filter(FeedbackReply.feedback_id == feedback_id)
+        .order_by(FeedbackReply.created_at.asc())
+        .all()
+    )
+    data["replies"] = [
+        {
+            "reply_id": r.reply_id,
+            "user_id": r.user_id,
+            "role": r.role,
+            "content": r.content,
+            "attachments": r.attachments or [],
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in replies
+    ]
+    return data
+
+
+@router.post("/{feedback_id}/reply", summary="学生追加反馈")
+async def reply_own_feedback(
+    feedback_id: int,
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    content = (payload.get("content") or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="回复内容不能为空")
+    if len(content) > 1000:
+        raise HTTPException(status_code=400, detail="回复内容过长（最多1000字）")
+
+    fb = db.query(UserFeedback).filter(UserFeedback.feedback_id == feedback_id).first()
+    if not fb:
+        raise HTTPException(status_code=404, detail="反馈不存在")
+    if fb.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="只能追加自己的反馈")
+
+    db.add(
+        FeedbackReply(
+            feedback_id=feedback_id,
+            user_id=current_user.user_id,
+            role=current_user.user_type,
+            content=content,
+            attachments=_validate_attachments(payload.get("attachments")),
+        )
+    )
+    db.commit()
+    return {"success": True, "feedback_id": feedback_id}
 
 
 @router.get("/my", summary="我的反馈列表")
@@ -141,11 +261,24 @@ async def reply_feedback(
     if not fb:
         raise HTTPException(status_code=404, detail="反馈不存在")
 
+    from datetime import datetime
+
+    now = datetime.now()
     fb.reply = reply
     fb.reply_by = current_user.user_id
+    fb.handler_id = fb.handler_id or current_user.user_id
     fb.status = "replied"
-    from datetime import datetime
-    fb.replied_at = datetime.now()
+    fb.replied_at = now
+    if not fb.first_response_at:
+        fb.first_response_at = now
+    db.add(
+        FeedbackReply(
+            feedback_id=feedback_id,
+            user_id=current_user.user_id,
+            role=current_user.user_type,
+            content=reply,
+        )
+    )
     db.commit()
     return {"message": "回复成功", "feedback_id": feedback_id}
 
@@ -153,10 +286,24 @@ async def reply_feedback(
 def _serialize_feedback(f: UserFeedback) -> Dict[str, Any]:
     return {
         "feedback_id": f.feedback_id,
+        "ticket_no": f.ticket_no,
         "category": f.category,
+        "feedback_type": f.feedback_type,
         "content": f.content,
         "contact": f.contact,
         "status": f.status,
+        "priority": f.priority,
+        "question_id": f.question_id,
+        "practice_record_id": f.practice_record_id,
+        "subject_id": f.subject_id,
+        "attachments": f.attachments or [],
+        "source": f.source,
+        "forum_post_id": f.forum_post_id,
+        "handler_id": f.handler_id,
+        "claimed_at": f.claimed_at.isoformat() if f.claimed_at else None,
+        "first_response_at": f.first_response_at.isoformat() if f.first_response_at else None,
+        "resolved_at": f.resolved_at.isoformat() if f.resolved_at else None,
+        "merged_into": f.merged_into,
         "reply": f.reply,
         "replied_at": f.replied_at.isoformat() if f.replied_at else None,
         "created_at": f.created_at.isoformat() if f.created_at else None,

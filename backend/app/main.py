@@ -19,7 +19,7 @@ from .api.v1 import knowledge
 from .api.v1 import post
 from .api.v1.catalog import questions, papers, question_actions, wrong_questions
 from .api.v1.exam import exams, stats, practice, exam_records, quick_practice, smart_exam
-from .api.v1.library import videos, media
+from .api.v1.library import videos, media, image_media
 from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
@@ -27,17 +27,18 @@ from .api.v1.content import news, recruitment, calendar
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
-from .api.v1.community import quotes, forum
+from .api.v1.community import quotes, forum, practice_admin, forum_moderation
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
-from .api.v1.platform import feedback
+from .api.v1.platform import feedback, notifications
 from .api.v1.growth import achievements, checkin
 from .api.v1.growth import study_plan
 from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.reward import shop, admin_shop
+from .api import media_assets as media_assets_api
 from .api.v1.platform.websocket import router as websocket_router
 from .api.v1.catalog.paper_generation import router as paper_router
 from .api.v1.catalog.question_import import router as question_import_router
@@ -122,6 +123,21 @@ async def lifespan(app: FastAPI):
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
+    # F3 媒体资产表：无论 MEDIA_STORE_ENABLED 真假都幂等建表，
+    # 保证关闭写入开关后 /media 读路由仍能服务已写 URL。
+    try:
+        from .foundation.media_schema import ensure_media_schema
+        _raw_media = engine.raw_connection()
+        try:
+            _conn_media = getattr(_raw_media, "driver_connection", _raw_media)
+            _media_created = ensure_media_schema(_conn_media)
+        finally:
+            _raw_media.close()
+        if _media_created:
+            logger.info(f"media_assets 表已创建: {_media_created}")
+    except Exception as e:
+        logger.warning(f"media_assets 建表失败（/media 读路由将不可用）: {e}")
+
     # F2 通信统一：多 worker 无中继直接拒绝启动（fail-fast，避免「有时收不到」）；
     # 中继本身不可用只降级为本地扇出，不影响业务读写。
     from .foundation.ws_relay import validate_worker_config, ws_relay
@@ -145,6 +161,7 @@ async def lifespan(app: FastAPI):
 
             from .foundation.dispatcher import Dispatcher
             from .foundation.schema import ensure_schema
+            from .services.event_handlers import build_handlers
 
             _raw = engine.raw_connection()
             try:
@@ -156,7 +173,7 @@ async def lifespan(app: FastAPI):
                 logger.info(f"foundation 表已创建: {created}")
             _foundation_stop = _foundation_asyncio.Event()
             dispatcher_task = _foundation_asyncio.create_task(
-                Dispatcher(SessionLocal).run_forever(_foundation_stop)
+                Dispatcher(SessionLocal, handlers=build_handlers()).run_forever(_foundation_stop)
             )
             logger.info("一致性内核投递器已启动")
         except Exception as e:
@@ -291,14 +308,94 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 logger.info("自动迁移: exam_paper 添加列 publish_target")
 
-        # 检查 forum_post 表(论坛模块完善:新增 attachments 字段)
+        # 检查 forum_post 表(论坛模块完善 + P1 个性化字段)
         if 'forum_post' in inspector.get_table_names():
             forum_cols = [c['name'] for c in inspector.get_columns('forum_post')]
-            if 'attachments' not in forum_cols:
+            forum_new_cols = [
+                ('attachments', 'JSON'),
+                ('title_color', "VARCHAR(16) DEFAULT 'default'"),
+                ('is_locked', 'INTEGER DEFAULT 0'),
+                ('question_id', 'BIGINT'),
+                ('feedback_id', 'BIGINT'),
+                ('last_activity_time', 'DATETIME'),
+                ('deleted_by', 'BIGINT'),
+                ('deleted_reason', 'VARCHAR(200)'),
+                ('deleted_at', 'DATETIME'),
+                # P3 可见范围（2026-10-26）
+                ('visibility', "VARCHAR(16) DEFAULT 'ALL'"),
+                ('visible_classes', 'JSON'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in forum_new_cols:
+                    if col_name not in forum_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE forum_post ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: forum_post 添加列 {col_name}")
+                conn.commit()
+
+        # 检查 forum_comment 表(P1 评论区扩展)
+        if 'forum_comment' in inspector.get_table_names():
+            comment_cols = [c['name'] for c in inspector.get_columns('forum_comment')]
+            comment_new_cols = [
+                ('is_pinned', 'INTEGER DEFAULT 0'),
+                ('reply_to_user_id', 'BIGINT'),
+                ('attachments', 'JSON'),
+                ('deleted_by', 'BIGINT'),
+                ('deleted_reason', 'VARCHAR(200)'),
+                ('deleted_at', 'DATETIME'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in comment_new_cols:
+                    if col_name not in comment_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE forum_comment ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: forum_comment 添加列 {col_name}")
+                conn.commit()
+
+        # 检查 forum_like 表(点赞表情:新增 reaction_code 字段)
+        if 'forum_like' in inspector.get_table_names():
+            like_cols = [c['name'] for c in inspector.get_columns('forum_like')]
+            if 'reaction_code' not in like_cols:
                 with engine.connect() as conn:
-                    conn.execute(text("ALTER TABLE forum_post ADD COLUMN attachments JSON"))
+                    conn.execute(text(
+                        "ALTER TABLE forum_like ADD COLUMN reaction_code VARCHAR(16) DEFAULT 'like'"
+                    ))
                     conn.commit()
-                logger.info("自动迁移: forum_post 添加列 attachments")
+                logger.info("自动迁移: forum_like 添加列 reaction_code")
+
+        # 检查 user_feedback 表(反馈工单化: P0 新增字段)
+        if 'user_feedback' in inspector.get_table_names():
+            fb_cols = [c['name'] for c in inspector.get_columns('user_feedback')]
+            fb_new_cols = [
+                ('ticket_no', 'VARCHAR(24)'),
+                ('feedback_type', 'VARCHAR(32)'),
+                ('question_id', 'BIGINT'),
+                ('practice_record_id', 'BIGINT'),
+                ('attachments', 'JSON'),
+                ('priority', "VARCHAR(10) DEFAULT 'normal'"),
+                ('handler_id', 'BIGINT'),
+                ('claimed_at', 'DATETIME'),
+                ('first_response_at', 'DATETIME'),
+                ('resolved_at', 'DATETIME'),
+                ('source', "VARCHAR(20) DEFAULT 'form'"),
+                ('forum_post_id', 'BIGINT'),
+                ('subject_id', 'INTEGER'),
+                ('merged_into', 'BIGINT'),
+            ]
+            with engine.connect() as conn:
+                for col_name, col_type in fb_new_cols:
+                    if col_name not in fb_cols:
+                        conn.execute(text(
+                            f"ALTER TABLE user_feedback ADD COLUMN {col_name} {col_type}"
+                        ))
+                        logger.info(f"自动迁移: user_feedback 添加列 {col_name}")
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_ticket_unique "
+                    "ON user_feedback(ticket_no)"
+                ))
+                conn.commit()
 
         # 检查 knowledge_point 表(快速练习三级分类:新增 sub_category_id 字段)
         if 'knowledge_point' in inspector.get_table_names():
@@ -401,6 +498,8 @@ async def lifespan(app: FastAPI):
                 ('created_by', 'BIGINT', None),
                 ('school_id', 'INTEGER', None),
                 ('device_sessions', 'JSON', None),
+                ('nickname', 'VARCHAR(50)', None),
+                ('signature', 'VARCHAR(200)', None),
             ]:
                 if col_name not in user_cols:
                     default_clause = f"DEFAULT {col_default}" if col_default else ""
@@ -591,10 +690,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"种子数据初始化失败（服务继续运行）: {e}")
 
-    # 事件消费者：P5.2 调用点改造完成前保持关闭（配置默认 False），
-    # 过早启动会与现有同步直调产生成就双写
+    # 事件消费者：F2b 开启 Outbox 后由 Dispatcher 接管，旧 Stream 消费者必须停用，
+    # 否则同一事件会被判成就两次。仅当 Outbox 不可用时回退旧路径。
     consumer_task = None
-    if settings.EVENT_CONSUMER_ENABLED:
+    _outbox_mode = settings.FOUNDATION_ENABLED and settings.EVENT_OUTBOX_ENABLED
+    if settings.EVENT_CONSUMER_ENABLED and not _outbox_mode:
         import asyncio as _consumer_asyncio
         from .services.event_consumer import consume_user_actions
         consumer_task = _consumer_asyncio.create_task(consume_user_actions())
@@ -722,6 +822,7 @@ app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
+app.include_router(media_assets_api.router)
 app.include_router(websocket_router)
 app.include_router(news.router)
 app.include_router(recruitment.router)
@@ -749,6 +850,12 @@ app.include_router(achievements.router, tags=["成就"])
 app.include_router(checkin.router, tags=["每日签到"])
 app.include_router(feedback.router, tags=["意见反馈"])
 app.include_router(feedback.admin_router, tags=["反馈管理"])
+app.include_router(practice_admin.router)
+app.include_router(practice_admin.admin_router)
+app.include_router(practice_admin.teacher_router)
+app.include_router(notifications.router)
+app.include_router(forum_moderation.teacher_router)
+app.include_router(forum_moderation.admin_router)
 
 @app.get("/health", tags=["系统"])
 async def health_check():
@@ -766,9 +873,15 @@ async def foundation_health():
     """F1 一致性内核健康：outbox 积压/死信/投影延迟/最近对账（只读）。"""
     from .core.database import engine
     from .foundation.health import snapshot
+    from .foundation.media_health import snapshot as media_snapshot
     from .foundation.ws_relay import ws_relay
 
-    return snapshot(engine, ws_relay.health())
+    result = snapshot(engine, ws_relay.health())
+    try:
+        result["media"] = media_snapshot(engine)
+    except Exception as exc:  # noqa: BLE001 - F3 健康不得影响 F1 健康返回
+        result["media"] = {"status": "degraded", "detail": str(exc)}
+    return result
 
 @app.get("/metrics", tags=["系统"])
 async def get_metrics():

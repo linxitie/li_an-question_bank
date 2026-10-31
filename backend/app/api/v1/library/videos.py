@@ -4,11 +4,12 @@
 import os
 import uuid
 import shutil
+import tempfile
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from ....core.config import settings
@@ -16,6 +17,7 @@ from ....core.database import get_db
 from ....models.models import VideoResource, QuestionBank, SysUser
 from ....schemas.schemas import VideoResourceResponse, VideoListResponse, SuccessResponse
 from ....core.security import get_current_user, require_admin
+from ....services import media_service
 
 router = APIRouter(prefix="/api/video", tags=["视频资源"])
 
@@ -109,14 +111,32 @@ async def upload_video(
         if not question:
             raise HTTPException(status_code=404, detail="关联题目不存在")
 
-    # 生成唯一文件名
-    file_uuid = str(uuid.uuid4())
-    filename = f"{file_uuid}.{file_ext}"
-    storage_path = os.path.join(settings.VIDEO_DIR, filename)
+    if settings.MEDIA_STORE_ENABLED:
+        # F3：视频字节进对象存储，storage_path 只保存稳定代理 URL。
+        try:
+            asset = media_service.store_file(
+                db, file.file, kind="video", original_name=file.filename,
+                created_by=current_user.user_id,
+                max_bytes=settings.MAX_UPLOAD_SIZE,
+            )
+        except media_service.MediaTooLarge:
+            max_mb = settings.MAX_UPLOAD_SIZE / 1024 / 1024
+            raise HTTPException(400, f"文件大小超过限制（最大 {max_mb:.0f}MB）")
+        except media_service.MediaValidationError as exc:
+            raise HTTPException(400, str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "视频存储暂不可用，请稍后重试")
+        storage_path = f"/media/{asset.asset_id}"
+        file_size = asset.size_bytes
+    else:
+        # 回滚分支：保留原 uploads/videos 写路径。
+        file_uuid = str(uuid.uuid4())
+        filename = f"{file_uuid}.{file_ext}"
+        storage_path = os.path.join(settings.VIDEO_DIR, filename)
 
-    # 保存文件
-    with open(storage_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        with open(storage_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        file_size = file.size
 
     # 创建视频记录
     video = VideoResource(
@@ -125,7 +145,7 @@ async def upload_video(
         original_filename=file.filename,
         storage_path=storage_path,
         duration=0,
-        file_size=file.size,
+        file_size=file_size,
         format=file_ext,
         status="COMPLETED"
     )
@@ -238,22 +258,67 @@ async def complete_chunk_upload(
             shutil.rmtree(chunk_dir, ignore_errors=True)
             raise HTTPException(status_code=404, detail="关联题目不存在")
 
-    # 合并分片
+    # 合并分片（complete 也可能被直接调用，必须重新校验扩展名）
     file_ext = filename.split(".")[-1].lower()
-    file_uuid = str(uuid.uuid4())
-    final_filename = f"{file_uuid}.{file_ext}"
-    storage_path = os.path.join(settings.VIDEO_DIR, final_filename)
+    if file_ext not in ALLOWED_FORMATS:
+        raise HTTPException(status_code=400, detail=f"不支持格式: {file_ext}")
 
-    total_size = 0
-    with open(storage_path, "wb") as final_file:
-        for chunk_name in chunks:
-            chunk_path = os.path.join(chunk_dir, chunk_name)
-            with open(chunk_path, "rb") as chunk_file:
-                data = chunk_file.read()
-                final_file.write(data)
-                total_size += len(data)
+    if settings.MEDIA_STORE_ENABLED:
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=f".{file_ext}")
+        os.close(tmp_fd)
+        try:
+            total_size = 0
+            with open(tmp_path, "wb") as final_file:
+                for chunk_name in chunks:
+                    chunk_path = os.path.join(chunk_dir, chunk_name)
+                    with open(chunk_path, "rb") as chunk_file:
+                        while True:
+                            data = chunk_file.read(1024 * 1024)
+                            if not data:
+                                break
+                            total_size += len(data)
+                            if total_size > settings.MAX_UPLOAD_SIZE:
+                                raise HTTPException(
+                                    400,
+                                    f"文件大小超过限制（最大 "
+                                    f"{settings.MAX_UPLOAD_SIZE / 1024 / 1024:.0f}MB）",
+                                )
+                            final_file.write(data)
+            try:
+                with open(tmp_path, "rb") as fh:
+                    asset = media_service.store_file(
+                        db, fh, kind="video", original_name=filename,
+                        created_by=current_user.user_id,
+                        max_bytes=settings.MAX_UPLOAD_SIZE,
+                    )
+            except media_service.MediaTooLarge:
+                raise HTTPException(400, "文件大小超过限制")
+            except media_service.MediaValidationError as exc:
+                raise HTTPException(400, str(exc))
+            except media_service.ObjectStoreUnavailable:
+                raise HTTPException(503, "视频存储暂不可用，请稍后重试")
+            storage_path = f"/media/{asset.asset_id}"
+            file_size = asset.size_bytes
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError as cleanup_exc:
+                logger.warning("视频临时文件清理失败 %s: %s", tmp_path, cleanup_exc)
+    else:
+        # 回滚分支：保留原 uploads/videos 写路径。
+        file_uuid = str(uuid.uuid4())
+        final_filename = f"{file_uuid}.{file_ext}"
+        storage_path = os.path.join(settings.VIDEO_DIR, final_filename)
+        file_size = 0
+        with open(storage_path, "wb") as final_file:
+            for chunk_name in chunks:
+                chunk_path = os.path.join(chunk_dir, chunk_name)
+                with open(chunk_path, "rb") as chunk_file:
+                    data = chunk_file.read()
+                    final_file.write(data)
+                    file_size += len(data)
 
-    # 清理分片
+    # 成功落存储后才清理分片
     shutil.rmtree(chunk_dir, ignore_errors=True)
 
     # 创建视频记录
@@ -263,7 +328,7 @@ async def complete_chunk_upload(
         original_filename=filename,
         storage_path=storage_path,
         duration=0,
-        file_size=total_size,
+        file_size=file_size,
         format=file_ext,
         status="COMPLETED"
     )
@@ -290,6 +355,11 @@ async def stream_video(
 
     if not video:
         raise HTTPException(status_code=404, detail="视频不存在")
+
+    if (video.storage_path or "").startswith("/media/"):
+        # F3 资产交给 /media 路由处理 Range/ETag；307 不改变请求方法，
+        # 客户端会带着 Range 头重新请求。
+        return RedirectResponse(url=video.storage_path, status_code=307)
 
     if not os.path.exists(video.storage_path):
         raise HTTPException(status_code=404, detail="视频文件不存在")
@@ -354,9 +424,16 @@ async def delete_video(
     if not video:
         raise HTTPException(status_code=404, detail="视频不存在")
 
-    # 删除物理文件
-    if os.path.exists(video.storage_path):
-        os.remove(video.storage_path)
+    if (video.storage_path or "").startswith("/media/"):
+        asset_id = video.storage_path[len("/media/"):].split("?", 1)[0]
+        try:
+            media_service.delete_asset(db, asset_id)
+        except media_service.MediaNotFound:
+            pass  # 元数据已被清理，仍删除视频行
+    else:
+        # 旧资产的物理文件删除逻辑保持不变。
+        if os.path.exists(video.storage_path):
+            os.remove(video.storage_path)
 
     if video.thumbnail_path and os.path.exists(video.thumbnail_path):
         os.remove(video.thumbnail_path)

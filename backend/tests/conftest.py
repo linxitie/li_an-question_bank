@@ -12,6 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import Base, get_db
+from app.foundation.schema import ddl_statements, FOUNDATION_TABLES
 from app.main import app
 from app.models.models import SysUser, QuestionSubject, QuestionType
 from app.core.security import get_password_hash, create_access_token
@@ -33,10 +34,20 @@ def override_get_db():
     finally:
         db.close()
 
+def _reset_foundation_tables():
+    """F2b 的 Outbox 写入需要 foundation 表；内存库不经过启动期迁移。"""
+    with engine.begin() as conn:
+        for table in FOUNDATION_TABLES:
+            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {table}")
+        for statement in ddl_statements():
+            conn.exec_driver_sql(statement)
+
+
 @pytest.fixture(scope="function")
 def db_session():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    _reset_foundation_tables()
     db = TestingSessionLocal()
     yield db
     db.close()
@@ -70,6 +81,25 @@ def test_user(db_session):
     db_session.commit()
     db_session.refresh(user)
     return user
+
+@pytest.fixture
+def test_teacher(db_session):
+    teacher = SysUser(
+        user_no="teacher001",
+        username="教师甲",
+        password=get_password_hash("teacher123"),
+        phone="13700137000",
+        user_type="teacher",
+        role_level=1,
+        status=1,
+        class_name="一班",
+        department="法学",
+    )
+    db_session.add(teacher)
+    db_session.commit()
+    db_session.refresh(teacher)
+    return teacher
+
 
 @pytest.fixture
 def test_admin(db_session):
@@ -116,12 +146,22 @@ def auth_token(test_user):
     return create_access_token(data={"user_id": test_user.user_id, "user_no": test_user.user_no})
 
 @pytest.fixture
+def teacher_token(test_teacher):
+    return create_access_token(data={"user_id": test_teacher.user_id, "user_no": test_teacher.user_no})
+
+
+@pytest.fixture
 def admin_token(test_admin):
     return create_access_token(data={"user_id": test_admin.user_id, "user_no": test_admin.user_no})
 
 @pytest.fixture
 def auth_headers(auth_token):
     return {"Authorization": f"Bearer {auth_token}"}
+
+@pytest.fixture
+def teacher_headers(teacher_token):
+    return {"Authorization": f"Bearer {teacher_token}"}
+
 
 @pytest.fixture
 def admin_headers(admin_token):

@@ -24,6 +24,9 @@ class FakeManager:
         self.broadcasts.append(message)
         return 1
 
+    def get_online_users_by_roles(self, roles):
+        return [2] if "teacher" in roles else []
+
 
 @pytest.mark.parametrize(
     "workers,relay",
@@ -69,11 +72,13 @@ def test_deliver_local_mode_sends_once():
     manager = FakeManager()
     relay = WsRelay(manager=manager)
     captured = []
-    relay._dispatch_local = lambda message, users, room: captured.append((users, room))
+    relay._dispatch_local = (
+        lambda message, users, room, roles=None: captured.append((users, room, roles))
+    )
 
     relay.deliver({"v": 2}, user_ids=[1])
 
-    assert captured == [([1], None)]
+    assert captured == [([1], None, None)]
     assert relay.health()["mode"] == "local"
 
 
@@ -132,3 +137,25 @@ def test_close_idle_disconnects_stale_connection():
     assert closed == 1
     assert ws.closed_with == 4008
     assert manager.get_online_users() == []
+
+
+def test_local_delivery_merges_explicit_users_and_roles():
+    manager = FakeManager()
+    relay = WsRelay(manager=manager)
+
+    delivered = asyncio.run(
+        relay._send_local({"v": 2}, [7], roles=("teacher", "admin"))
+    )
+
+    assert delivered == 2
+    assert [uid for uid, _ in manager.personal] == [2, 7]
+    assert manager.rooms == [] and manager.broadcasts == []
+
+
+def test_private_delivery_without_roles_only_targets_user():
+    manager = FakeManager()
+    relay = WsRelay(manager=manager)
+
+    asyncio.run(relay._send_local({"v": 2}, [7]))
+
+    assert [uid for uid, _ in manager.personal] == [7]

@@ -142,6 +142,9 @@ class UserResponse(BaseModel):
     email: Optional[str] = None
     phone: str = ''
     avatar: Optional[str] = None
+    avatar_frame: Optional[str] = None
+    nickname: Optional[str] = None
+    signature: Optional[str] = None
     gender: str = ''
     user_type: str = 'student'
     department: Optional[str] = None
@@ -391,6 +394,11 @@ class GeneratePaperResponse(BaseModel):
     question_count: int
     total_score: float
     message: str
+    # 题组整组展开后实际题数可能大于配置数，显式回传给前端提示
+    requested_count: int = 0
+    actual_count: int = 0
+    over_quota: bool = False
+    over_quota_reason: str = ""
 
 # ------------------------------
 # 智能组卷相关Schema
@@ -440,6 +448,8 @@ class QuestionPreviewItem(BaseModel):
     subcategory: Optional[str] = None
     year: Optional[int] = None
     score: float = 0
+    # 复合题题组 ID（0 表示独立题）；前端据此显示题组徽标，避免误拆整组
+    group_id: int = 0
 
     class Config:
         from_attributes = True
@@ -457,6 +467,11 @@ class SmartExamGenerateResponse(BaseModel):
     subject_breakdown: dict = {}
     duration: Optional[int] = None
     message: str = "生成成功"
+    # 题组整组展开后实际题数可能大于配置数，显式回传给前端提示
+    requested_count: int = 0
+    actual_count: int = 0
+    over_quota: bool = False
+    over_quota_reason: str = ""
 
 
 class SmartExamSubmitRequest(BaseModel):
@@ -746,6 +761,8 @@ class ForumUserPublic(BaseModel):
     id: int
     nickname: str
     avatar: str
+    avatarFrame: Optional[str] = None
+    signature: Optional[str] = None
     userType: str
     school: Optional[str] = None
     department: Optional[str] = None

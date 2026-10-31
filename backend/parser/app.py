@@ -13,6 +13,8 @@ PaddleOCR 要求 ≤3.12 —— 两者都无法在主进程内安装。把解析
 本服务只做一件事：收 PDF、跑 MinerU、回 Markdown。
 失败一律走异常中间件转成 5xx JSON，绝不返回 HTML。
 """
+import base64
+import glob
 import io
 import logging
 import os
@@ -55,6 +57,28 @@ def health():
     return {'ok': True, 'mineru': _mineru_available(), 'backend': _BACKEND}
 
 
+def _collect_images(outdir: str) -> dict:
+    """把 MinerU 抽出的图片编码成 base64，交回主后端落盘。
+
+    仅回传 images/ 目录下的直接文件；MinerU markdown 用 `![](images/<sha>.jpg)`
+    引用它们，主后端会把引用替换为 [IMAGE:<sha>_0_0] 占位符再入库。
+    单图上限 8MB、最多 200 张，避免超大扫描件把响应体撑爆。
+    """
+    out = {}
+    for path in sorted(glob.glob(os.path.join(outdir, '**', 'images', '*'), recursive=True)):
+        try:
+            if not os.path.isfile(path) or os.path.getsize(path) > 8 * 1024 * 1024:
+                continue
+            name = os.path.basename(path)
+            with open(path, 'rb') as f:
+                out[name] = base64.b64encode(f.read()).decode('ascii')
+            if len(out) >= 200:
+                break
+        except Exception:  # noqa: BLE001 — 单张图片失败不影响文本解析
+            log.warning('读取图片失败: %s', path)
+    return out
+
+
 @app.post('/parse')
 async def parse(file: UploadFile = File(...)):
     buf = await file.read()
@@ -87,14 +111,15 @@ async def parse(file: UploadFile = File(...)):
                  'MINERU_MODEL_SOURCE': os.environ.get('MINERU_MODEL_SOURCE', 'modelscope')},
         )
 
-        import glob
         md_files = sorted(glob.glob(os.path.join(outdir, '**', '*.md'), recursive=True))
         for p in md_files:
             with open(p, encoding='utf-8') as f:
                 content = f.read().strip()
             if content:
-                log.info('success chars=%d dur=%.1fs', len(content), time.time() - t0)
-                return {'markdown': content, 'chars': len(content)}
+                images = _collect_images(outdir)
+                log.info('success chars=%d images=%d dur=%.1fs',
+                         len(content), len(images), time.time() - t0)
+                return {'markdown': content, 'chars': len(content), 'images': images}
 
         stderr = proc.stderr.decode('utf-8', 'ignore')[:500]
         log.warning('未产出 markdown rc=%s stderr=%s', proc.returncode, stderr)

@@ -7,7 +7,7 @@ PUT  /api/wrong-questions/{id}/mastery - 更新掌握度
 """
 import logging
 from collections import OrderedDict
-from ....services.event_consumer import record_user_action
+from ....services.event_consumer import outbox_mode_enabled, record_user_action
 from ....core.trigger_types import (
     TRIGGER_LEGACY_CHOP,
     TRIGGER_LEGACY_VIEW_WRONG,
@@ -90,9 +90,11 @@ async def _publish_wrong_reviewed(
         return await record_user_action(
             db, user_id, TRIGGER_WRONG_REVIEWED, session=payload
         )
-    except Exception as e:  # noqa: BLE001 — 事件失败不阻断已提交的状态流转
-        logger.warning("错题掌握事件发布失败(非阻断): %s", e)
+    except Exception as e:  # noqa: BLE001 — 关闭 Outbox 时事件失败不阻断状态流转
         _release_reviewed_event(user_id, wq.wrong_id)
+        if outbox_mode_enabled():
+            raise
+        logger.warning("错题掌握事件发布失败(非阻断): %s", e)
         return False
 
 
@@ -156,11 +158,9 @@ async def get_wrong_questions(
             'note': wq.note,
         })
 
-    # 触发「直面错误」成就（首次查看错题集）
-    try:
-        await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_VIEW_WRONG)
-    except Exception as e:
-        logger.warning(f"查看错题成就判定失败: {e}")
+    # 触发「直面错误」成就（首次查看错题集）；只写事件，也要显式提交。
+    await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_VIEW_WRONG)
+    commit_with_retry(db)
 
     return {'total': total, 'page': page, 'page_size': page_size, 'items': result}
 
@@ -284,9 +284,7 @@ async def update_mastery(
     if mastery_level == 'MASTERED':
         wq.is_cut = 1
         wq.cut_time = datetime.now()
-    commit_with_retry(db)
-
-    if mastery_level == 'MASTERED':
+        # F2b：状态流转与 E4 事件同一事务。
         await _publish_wrong_reviewed(
             db,
             current_user.user_id,
@@ -294,6 +292,7 @@ async def update_mastery(
             previous_mastery=previous_mastery,
             previous_cut=previous_cut,
         )
+    commit_with_retry(db)
 
     return {"message": "掌握度已更新", "mastery_level": mastery_level}
 
@@ -498,8 +497,8 @@ async def chop_question(
     # 10天后自动删除
     from datetime import timedelta
     wq.auto_delete_time = datetime.now() + timedelta(days=10)
-    commit_with_retry(db)
 
+    # F2b：斩题状态、E4 与斩题成就同一事务提交。
     # E4：斩题属于「消灭错题」，与掌握度流转共用同一去重口径
     await _publish_wrong_reviewed(
         db,
@@ -508,12 +507,8 @@ async def chop_question(
         previous_mastery=previous_mastery,
         previous_cut=previous_cut,
     )
-
-    # 触发斩题成就
-    try:
-        await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_CHOP)
-    except Exception as e:
-        logger.warning(f"斩题成就判定失败: {e}")
+    await record_user_action(db, current_user.user_id, TRIGGER_LEGACY_CHOP)
+    commit_with_retry(db)
 
     return {"message": "已斩题，10天后自动删除", "wrong_id": wrong_id, "auto_delete_time": wq.auto_delete_time.isoformat()}
 
@@ -841,13 +836,9 @@ async def submit_review(
             'difficulty': q.difficulty or 3
         })
 
+    # F2b：错题重练记录与成就事件同一事务。
+    await record_user_action(db, current_user.user_id, TRIGGER_WRONG_REVIEWED)
     commit_with_retry(db)
-
-    # 触发错题重练成就
-    try:
-        await record_user_action(db, current_user.user_id, TRIGGER_WRONG_REVIEWED)
-    except Exception as e:
-        logger.warning(f"错题重练成就判定失败: {e}")
 
     return {
         'total': len(answers),

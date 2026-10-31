@@ -106,9 +106,9 @@ def get_today_status(
 
 
 def perform_checkin(
-    db: Session, user_id: int, today: Optional[date] = None
+    db: Session, user_id: int, today: Optional[date] = None, *, commit: bool = True
 ) -> dict:
-    """执行签到（幂等）。
+    """执行签到（幂等）。commit=False 时只 flush，由调用方与事件同事务提交。
 
     返回字段：
     - ``is_today_first``：本次是否真正签到成功（False = 今日已签）
@@ -198,7 +198,10 @@ def perform_checkin(
         )
     add_growth(db, user, growth)
 
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     logger.info(
         "签到成功 user=%s date=%s streak=%s coins=%s growth=%s",
         user_id,
