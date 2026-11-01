@@ -12,6 +12,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -66,19 +67,39 @@ def _mark_read(db: Session, user_id: int, news_id: int, *, commit: bool = True) 
 async def get_news(
     source: Optional[str] = Query(None, description="来源: cpd / people"),
     category: Optional[str] = Query(None, description="分类: 理论 / 党史 / 公安报"),
-    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    q: Optional[str] = Query(None, description="标题/摘要/正文模糊搜索"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    limit: Optional[int] = Query(None, ge=1, le=50, description="兼容旧参数：等价 page_size"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    """获取最新新闻列表，支持按来源和分类筛选"""
+    """获取新闻列表，支持来源/分类筛选、模糊搜索与分页。"""
     query = db.query(NewsArticle).filter(NewsArticle.status == 1)
 
     if source:
         query = query.filter(NewsArticle.source == source)
     if category:
         query = query.filter(NewsArticle.category == category)
+    keyword = (q or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        query = query.filter(
+            or_(
+                NewsArticle.title.like(like),
+                NewsArticle.summary.like(like),
+                NewsArticle.content.like(like),
+            )
+        )
 
-    articles = query.order_by(NewsArticle.create_time.desc()).limit(limit).all()
+    size = limit or page_size
+    total = query.count()
+    articles = (
+        query.order_by(NewsArticle.create_time.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+        .all()
+    )
 
     # 批量预取图片与收藏状态，消除 N+1 查询
     news_ids = [a.news_id for a in articles]
@@ -101,7 +122,10 @@ async def get_news(
     read_ids = _read_ids(db, current_user.user_id, news_ids) if current_user else set()
 
     return {
-        "total": len(articles),
+        "total": total,
+        "page": page,
+        "page_size": size,
+        "has_more": page * size < total,
         "items": [
             {
                 "id": a.news_id,
@@ -120,6 +144,25 @@ async def get_news(
             for a in articles
         ]
     }
+
+
+@router.get("/categories", summary="新闻分类字典")
+async def get_news_categories(
+    db: Session = Depends(get_db),
+):
+    """返回当前启用新闻的分类及数量，供前端筛选栏使用。"""
+    rows = (
+        db.query(NewsArticle.category, func.count(NewsArticle.news_id))
+        .filter(NewsArticle.status == 1)
+        .group_by(NewsArticle.category)
+        .order_by(func.count(NewsArticle.news_id).desc())
+        .all()
+    )
+    items = [
+        {"category": category or "未分类", "count": count}
+        for category, count in rows
+    ]
+    return {"total": sum(item["count"] for item in items), "items": items}
 
 
 @router.get("/today", summary="获取今日新闻")
