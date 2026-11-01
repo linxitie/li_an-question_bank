@@ -29,6 +29,12 @@ _CONTENT_SELECTORS = (
     ".p2j_con3", "#content", "#article", ".main-content", ".detail",
 )
 _DATE_RE = re.compile(r"(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})")
+_NOISE_IMAGE_PARTS = ("/template/", "logo", "icon", "banner", "qrcode", "share")
+
+
+def _is_noise_image(src: str) -> bool:
+    value = src.lower()
+    return any(part in value for part in _NOISE_IMAGE_PARTS)
 
 
 @dataclass
@@ -167,6 +173,8 @@ def parse_article(html: str, url: str) -> ArticleData:
         if not src or src.startswith("data:"):
             continue
         src = urljoin(url, src)
+        if _is_noise_image(src):
+            continue
         if src.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
             images.append(src)
         if len(images) >= 5:
