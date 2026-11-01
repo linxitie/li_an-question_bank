@@ -385,11 +385,29 @@ async def current_plan(
     )
 
     done = sum(1 for t in tasks if t.is_completed == 1)
+    total = len(tasks)
+    percent = round(done / total * 100) if total else 0
+
+    # 动态调整建议：根据完成率自动给出建议
+    adjustment_suggestion = None
+    if total > 0:
+        if percent >= 100:
+            adjustment_suggestion = {
+                "type": "increase",
+                "message": "🎉 今日任务全部完成！要不要明天多加一点挑战？",
+            }
+        elif percent <= 30:
+            adjustment_suggestion = {
+                "type": "decrease",
+                "message": "💪 今天任务有点难完成？要不要明天少安排一点？",
+            }
+
     return {
         "has_plan": True,
         "plan_id": row.plan_id,
         "exam_date": exam_date,
         "days_left": days_left,
+        "adjustment_suggestion": adjustment_suggestion,
         "summary": meta.get("summary", ""),
         "phases": meta.get("phases", []),
         "tips": meta.get("tips", ""),
