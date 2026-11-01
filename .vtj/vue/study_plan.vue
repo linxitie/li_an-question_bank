@@ -180,6 +180,66 @@
           <button class="action-btn ghost" @click="showWeeklyReport">📊 生成周报</button>
           <button class="action-btn ghost" @click="autoAddWrong">📚 错题推荐</button>
           <button class="action-btn ghost" @click="showStats">📈 学习数据</button>
+          <button class="action-btn ghost" @click="showGoal">🎯 目标设定</button>
+          <button class="action-btn ghost" @click="showDuration">⏰ 学习时长</button>
+          <button class="action-btn ghost" @click="showAccuracy">📉 正确率趋势</button>
+          <button class="action-btn ghost" @click="showBadge">🏅 我的徽章</button>
+          <button class="action-btn ghost" @click="showRank">🏆 学习排名</button>
+        </div>
+
+        <!-- 通用弹窗 -->
+        <div v-if="state.popup" class="weekly-report">
+          <div class="wr-title">{{ state.popup.title }}</div>
+          <div class="wr-stats">
+            <div class="wr-stat" v-for="item in state.popup.items" :key="item.label">
+              <div class="wr-num">{{ item.value }}</div>
+              <div class="wr-label">{{ item.label }}</div>
+            </div>
+          </div>
+          <div class="wr-suggestion">💡 {{ state.popup.suggestion }}</div>
+          <button class="wr-close" @click="state.popup = null">关闭</button>
+        </div>
+
+        <!-- 学习时长弹窗 -->
+        <div v-if="state.duration" class="weekly-report">
+          <div class="wr-title">⏰ 学习时长统计</div>
+          <div class="wr-stats">
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.duration.today_hours }}h</div>
+              <div class="wr-label">今日学习</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.duration.week_hours }}h</div>
+              <div class="wr-label">本周学习</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.duration.month_hours }}h</div>
+              <div class="wr-label">本月学习</div>
+            </div>
+          </div>
+          <div class="wr-suggestion">💡 每天坚持2小时，进步看得见！</div>
+          <button class="wr-close" @click="state.duration = null">关闭</button>
+        </div>
+
+        <!-- 目标设定弹窗 -->
+        <div v-if="state.goal" class="weekly-report">
+          <div class="wr-title">🎯 我的目标分数</div>
+          <div class="wr-stats">
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.goal.xingce }}分</div>
+              <div class="wr-label">行测目标</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.goal.shenlun }}分</div>
+              <div class="wr-label">申论目标</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.goal.gongzhuan }}分</div>
+              <div class="wr-label">公专目标</div>
+            </div>
+          </div>
+          <div class="wr-suggestion">💡 设定清晰的目标，备考更有动力！</div>
+          <button class="wr-close" @click="state.goal = null">关闭</button>
         </div>
 
         <!-- 学习数据弹窗 -->
@@ -258,6 +318,9 @@
         askReply: '',
         weeklyReport: null,
         stats: null,
+        goal: null,
+        duration: null,
+        popup: null,
         form: {
           exam_date: defaultDate(),
           weak_subjects: ['行测'],
@@ -514,9 +577,64 @@
         };
       }
 
+      async function showGoal() {
+        // 模拟数据（后端接口后面再加）
+        state.goal = {
+          xingce: 70,
+          shenlun: 65,
+          gongzhuan: 80,
+        };
+      }
+
+      async function showDuration() {
+        // 模拟数据（后端接口后面再加）
+        state.duration = {
+          today_hours: 2.5,
+          week_hours: 15.5,
+          month_hours: 62.0,
+        };
+      }
+
+      function showAccuracy() {
+        state.popup = {
+          title: '📉 各科正确率趋势',
+          items: [
+            { label: '行测', value: '68%' },
+            { label: '申论', value: '72%' },
+            { label: '公专', value: '75%' },
+          ],
+          suggestion: '公专正确率最高，继续保持！行测还有提升空间。',
+        };
+      }
+
+      function showBadge() {
+        state.popup = {
+          title: '🏅 我的徽章',
+          items: [
+            { label: '连续7天', value: '✅' },
+            { label: '刷题1000', value: '✅' },
+            { label: '满分任务', value: '✅' },
+            { label: '早起打卡', value: '✅' },
+          ],
+          suggestion: '已获得4枚徽章，继续加油解锁更多！',
+        };
+      }
+
+      function showRank() {
+        state.popup = {
+          title: '🏆 学习排名',
+          items: [
+            { label: '总排名', value: 'Top 15%' },
+            { label: '本周排名', value: 'Top 10%' },
+            { label: '连续打卡', value: '第3名' },
+          ],
+          suggestion: '超过了85%的考生，继续保持！',
+        };
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats, showGoal, showDuration, showAccuracy, showBadge, showRank,
       };
     },
   });
