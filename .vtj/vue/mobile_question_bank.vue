@@ -167,6 +167,7 @@ export default defineComponent({
     const topActions = ref([
       { key: 'paper', name: '历年试卷', icon: Trophy, tag: '' },
       { key: 'smart', name: '智能组卷', icon: Cpu, tag: 'AI' },
+      { key: 'plan', name: '学习计划', icon: Calendar, tag: '' },
       { key: 'ai', name: '联考小智', icon: Cpu, tag: 'AI' },
       { key: 'wrong', name: '错题本', icon: Warning, tag: '' },
       { key: 'mock', name: '模拟考试', icon: Trophy, tag: '' }
