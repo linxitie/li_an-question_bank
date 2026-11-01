@@ -80,6 +80,12 @@
 - 2026-10-31：**容器化 P6 完成（准备态）**：新增 `deploy/.env.production.example`（`/srv/liankao` 数据根、显式 `IMAGE_TAG`、JWT 占位符、`TLS_MODE=gateway`）、`deploy/release.sh`（preflight→checkpoint→backup→pull/build→up→healthy→smoke，失败回滚上一 tag）、preflight 对 `latest`/`CHANGE_ME*`/`REPLACE_*` 的拒绝，以及《容器化生产切换 Runbook》；临时 production env 下 `release.sh --dry-run` 全绿（`RELEASE_DRY_EXIT:0`）。未做真实 registry 拉取、`/srv/liankao` 迁移、域名切换与 RTO 实测；报告见 `superpowers/specs/容器化P6_生产切换准备_报告_v1.md`。
 - 2026-10-31：**容器化 P5 完成**：新增 `deploy/checkpoint.sh`、`backup.sh`、`restore.sh`、`inspect.sh`、systemd 定时器示例与 `.github/workflows/container-ci.yml`；备份走 `sqlite3.backup()` 产出 56.43 MB/327 对象一致性备份，恢复演练用 marker 表验证覆盖、四表计数复原且 backend 自动 healthy；巡检正常 0 FAIL/0 WARN、人为阈值失败退出 1；修复 Git Bash 路径转换与 compose `-f` 路径双重要求，`--assets` 在无 rsync 时退化 `cp -a`；报告见 `superpowers/specs/容器化P5_备份恢复与巡检_报告_v1.md`。
 - 2026-10-31：**容器化 P4 完成**：新增 `normalize_ocr_markdown()` 修复 MinerU ASCII `(一)` 与粘连题号（`…1.79个百分点108.2023年…`），真实 2 页扫描件 import 1645 从 P3 的 8 题/8 单题组恢复为 10 题/2 组×5（106–115，108/111 归位），题图仍落盘并可 GET 200；`deploy/nginx.conf` 删除固定 upstream，改 `resolver 127.0.0.11` + `set $backend` + `proxy_pass $backend`，人为把 backend 从 172.18.0.2 换到 172.18.0.4 后不重启 web 仍 200；新增 `deploy/nginx.tls.conf`、`docker-compose.tls.yml`、自签脚本与 `certs/README.md`，`https://127.0.0.1:8443/healthz` 200；报告见 `superpowers/specs/容器化P4_OCR归一化与nginx动态解析_报告_v1.md`。已知 trivy 漏洞库下载被 mirror.gcr.io/ghcr.io 拒绝，镜像扫描未完成。
+## 新增文档
+
+| 文档 | 状态 | 说明 |
+|---|---|---|
+| `plans/每日新闻模块总体设计方案_v1.md` | 📋 待批准（未实施） | 每日新闻：白名单采集、去重、AI 摘要/考点/实体、四库投影、审核安全阀、Obsidian 时效性看板、分阶段 R2.0–R2.5；明确默认 local、外部库可选，不自动发布 |
+
 ## 变更记录
 
 - 2026-10-31：**学习计划大模型 401/503 已修复**：现象为前端「大模型返回错误（401）」+ 后端 `POST /api/plan/generate 503`。根因为三处配置缺陷叠加：根 `.env` 存 `DEEPSEEK_API_KEY` 而后端只认 `LLM_API_KEY`、`env_file=".env"` 只读 `backend/.env`（该文件当时不存在）、`config.py` 内大模型配置块重复且后者覆盖前者默认值；链路为 `Bearer None` → DeepSeek 401 → 路由层统一 503。修复：`AliasChoices` 双密钥名兼容、`env_file=(".env","../.env")`、删除重复块，`llm_client` 增加缺密钥前置校验（`llm_no_key`）与 401/403 鉴权映射（`llm_unauthorized`）；实测密钥 `/models` 200、`generate` 200（49 天 4 任务）、新增回归 4 passed；报告见 `superpowers/specs/学习计划大模型401与503修复_报告_20261031.md`
