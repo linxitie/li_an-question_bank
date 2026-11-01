@@ -185,6 +185,10 @@
           <button class="action-btn ghost" @click="showAccuracy">📉 正确率趋势</button>
           <button class="action-btn ghost" @click="showBadge">🏅 我的徽章</button>
           <button class="action-btn ghost" @click="showRank">🏆 学习排名</button>
+          <button class="action-btn ghost" @click="showReminder">🔔 打卡提醒</button>
+          <button class="action-btn ghost" @click="showShare">📤 分享计划</button>
+          <button class="action-btn ghost" @click="showCustom">➕ 自定义任务</button>
+          <button class="action-btn ghost" @click="showCalendar">📅 学习日历</button>
         </div>
 
         <!-- 通用弹窗 -->
@@ -632,9 +636,57 @@
         };
       }
 
+      function showReminder() {
+        state.popup = {
+          title: '🔔 打卡提醒',
+          items: [
+            { label: '早上提醒', value: '7:00' },
+            { label: '晚上提醒', value: '21:00' },
+            { label: '未打卡提醒', value: '已开启' },
+          ],
+          suggestion: '每天定时提醒，再也不会忘记打卡！',
+        };
+      }
+
+      function showShare() {
+        state.popup = {
+          title: '📤 分享学习计划',
+          items: [
+            { label: '分享给好友', value: '已生成链接' },
+            { label: '分享到朋友圈', value: '可截图' },
+            { label: '邀请好友一起学', value: '得金币' },
+          ],
+          suggestion: '和好友一起备考，更有动力！',
+        };
+      }
+
+      function showCustom() {
+        state.popup = {
+          title: '➕ 自定义任务',
+          items: [
+            { label: '已添加任务', value: '3个' },
+            { label: '平均时长', value: '30分钟' },
+            { label: '总金币', value: '45' },
+          ],
+          suggestion: '想做什么任务自己加，灵活安排！',
+        };
+      }
+
+      function showCalendar() {
+        state.popup = {
+          title: '📅 学习日历',
+          items: [
+            { label: '本月学习天数', value: '22天' },
+            { label: '本月总时长', value: '62小时' },
+            { label: '连续打卡', value: '12天' },
+          ],
+          suggestion: '坚持就是胜利，距离考试还有XX天！',
+        };
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats, showGoal, showDuration, showAccuracy, showBadge, showRank,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats, showGoal, showDuration, showAccuracy, showBadge, showRank, showReminder, showShare, showCustom, showCalendar,
       };
     },
   });
