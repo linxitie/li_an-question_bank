@@ -21,6 +21,7 @@ from .news_storage import NewsStorage, get_news_storage
 logger = logging.getLogger(__name__)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 _NAV_WORDS = ("登录", "注册", "首页", "更多", "English", "网站地图", "联系我们")
+_BAD_HOST_PREFIXES = ("en.", "mail.", "search.")
 _CONTENT_SELECTORS = (
     "article", ".article-content", ".article", ".content", ".TRS_Editor",
     ".p2j_con3", "#content", "#article", ".main-content", ".detail",
@@ -83,6 +84,8 @@ def parse_list_links(
         if not url.startswith(("http://", "https://")):
             continue
         host = urlparse(url).netloc.lower()
+        if any(host.startswith(prefix) for prefix in _BAD_HOST_PREFIXES):
+            continue
         if allowed_hosts and not any(
             host == allowed or host.endswith("." + allowed)
             for allowed in allowed_hosts

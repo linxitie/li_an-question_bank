@@ -24,8 +24,8 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         category_code="current_politics", category="时政", trust_level=90,
     ),
     NewsSourceConfig(
-        "people", "人民网", "http://politics.people.com.cn", "http://politics.people.com.cn/",
-        adapter="playwright", category_code="current_politics", category="时政", trust_level=85,
+        "people", "人民网", "http://politics.people.com.cn", "http://politics.people.com.cn/GB/1024/index.html",
+        adapter="http", category_code="current_politics", category="时政", trust_level=85,
     ),
     NewsSourceConfig(
         "mps", "公安部", "https://www.mps.gov.cn", "https://www.mps.gov.cn/n2255079/index.html",
