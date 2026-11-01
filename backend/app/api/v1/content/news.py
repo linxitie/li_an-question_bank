@@ -12,6 +12,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,7 @@ from ....models.models import (
     NewsArticle, NewsFavorite, NewsNote, NewsImage, NewsRead, SysUser,
 )
 from ....services.event_consumer import record_user_action
+from ....services import news_search_service
 
 router = APIRouter(prefix="/api/news", tags=["新闻资讯"])
 logger = logging.getLogger(__name__)
@@ -66,19 +68,32 @@ def _mark_read(db: Session, user_id: int, news_id: int, *, commit: bool = True) 
 async def get_news(
     source: Optional[str] = Query(None, description="来源: cpd / people"),
     category: Optional[str] = Query(None, description="分类: 理论 / 党史 / 公安报"),
-    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    q: Optional[str] = Query(None, description="标题/摘要/正文模糊搜索"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    limit: Optional[int] = Query(None, ge=1, le=50, description="兼容旧参数：等价 page_size"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    """获取最新新闻列表，支持按来源和分类筛选"""
+    """获取新闻列表，支持来源/分类筛选、模糊搜索与分页。"""
     query = db.query(NewsArticle).filter(NewsArticle.status == 1)
 
     if source:
         query = query.filter(NewsArticle.source == source)
     if category:
-        query = query.filter(NewsArticle.category == category)
+        query = query.filter(
+            or_(NewsArticle.category == category, NewsArticle.category_code == category)
+        )
+    query = news_search_service.apply_keyword(query, db, q)
 
-    articles = query.order_by(NewsArticle.create_time.desc()).limit(limit).all()
+    size = limit or page_size
+    total = query.count()
+    articles = (
+        query.order_by(NewsArticle.create_time.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+        .all()
+    )
 
     # 批量预取图片与收藏状态，消除 N+1 查询
     news_ids = [a.news_id for a in articles]
@@ -101,7 +116,10 @@ async def get_news(
     read_ids = _read_ids(db, current_user.user_id, news_ids) if current_user else set()
 
     return {
-        "total": len(articles),
+        "total": total,
+        "page": page,
+        "page_size": size,
+        "has_more": page * size < total,
         "items": [
             {
                 "id": a.news_id,
@@ -119,6 +137,51 @@ async def get_news(
             }
             for a in articles
         ]
+    }
+
+
+@router.get("/categories", summary="新闻分类字典")
+async def get_news_categories(
+    db: Session = Depends(get_db),
+):
+    """返回当前启用新闻的分类及数量，供前端筛选栏使用。"""
+    return news_search_service.category_counts(db)
+
+
+@router.get("/timeline", summary="新闻时间线")
+async def news_timeline(
+    category: Optional[str] = Query(None, description="分类 code/名称"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """按发布日期聚合已发布新闻，供时间线页面使用。"""
+    query = db.query(NewsArticle).filter(
+        NewsArticle.status == 1,
+        NewsArticle.review_status == "published",
+    )
+    if category:
+        query = query.filter(
+            or_(NewsArticle.category == category, NewsArticle.category_code == category)
+        )
+    articles = (
+        query.order_by(NewsArticle.publish_date.desc(), NewsArticle.news_id.desc())
+        .limit(limit)
+        .all()
+    )
+    groups: dict[str, list] = {}
+    for article in articles:
+        key = article.publish_date.date().isoformat() if article.publish_date else "未分期"
+        groups.setdefault(key, []).append({
+            "news_id": article.news_id,
+            "title": article.title,
+            "source": article.source,
+            "category": article.category,
+            "url": article.url,
+            "ai_summary": article.ai_summary or "",
+        })
+    return {
+        "total": len(articles),
+        "items": [{"date": key, "items": value} for key, value in groups.items()],
     }
 
 

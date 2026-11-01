@@ -124,13 +124,13 @@ def _write_if_changed(
     stats: dict[str, int],
 ) -> None:
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    if manifest.get(rel) == digest:
+    target = _safe_path(vault, *rel.split("/"))
+    if manifest.get(rel) == digest and target.exists():
         stats["skipped"] += 1
         return
     stats["written"] += 1
     if dry_run:
         return
-    target = _safe_path(vault, *rel.split("/"))
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_name(target.name + ".tmp")
     tmp.write_text(content, encoding="utf-8")

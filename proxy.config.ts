@@ -104,4 +104,10 @@ export default {
     ...baseProxy,
     configure: createProxyConfigure('uploads'),
   },
+
+  // 2026-10-30：媒体资产（附件/图片/PDF/头像）走对象存储代理，需转发到后端
+  '/media': {
+    ...baseProxy,
+    configure: createProxyConfigure('media'),
+  },
 };

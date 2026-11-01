@@ -39,10 +39,16 @@ const FORUM_ROUTE_PATTERNS = [
 
 const isForumPage = (path: string) => FORUM_ROUTE_PATTERNS.some((re) => re.test(path));
 
-/** 学生端 PC 论坛把自己的主区做成了滚动容器，其余页面仍是 window 滚动 */
+/**
+ * 滚动容器候选：论坛各端把主区做成了独立滚动容器，其余页面仍是 window 滚动。
+ * 2026-10-30：补充教师端 .tf-page（此前只认 .forum-main，导致教师端看不到按钮）。
+ */
+const SCROLL_ROOTS = ['.forum-main', '.tf-page', '.tablet-forum-page', '.main-content'];
 const getScrollRoot = (): HTMLElement | null => {
-  const main = document.querySelector('.forum-main') as HTMLElement | null;
-  if (main && main.scrollHeight > main.clientHeight + 4) return main;
+  for (const sel of SCROLL_ROOTS) {
+    const el = document.querySelector(sel) as HTMLElement | null;
+    if (el && el.scrollHeight > el.clientHeight + 4) return el;
+  }
   return null;
 };
 
