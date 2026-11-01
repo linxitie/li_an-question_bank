@@ -42,6 +42,21 @@ def test_export_is_idempotent(tmp_path, db_session):
     assert second["skipped"] > 0
 
 
+def test_deleted_projection_is_recreated(tmp_path, db_session):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    quote = _prepare(db_session, vault)
+    export_all(db_session, vault)
+    target = vault / "01-金句" / f"q_{quote.quote_id:06d}.md"
+    assert target.is_file()
+    target.unlink()
+
+    report = export_all(db_session, vault)
+
+    assert report["written"] >= 1
+    assert target.is_file()
+
+
 def test_missing_vault_returns_error(tmp_path):
     report = export_all(None, tmp_path / "not-exist")
     assert report["ok"] is False
