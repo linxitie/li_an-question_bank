@@ -48,6 +48,16 @@
     </div>
 
     <div class="plan-body">
+      <!-- 视图切换tab -->
+      <div v-if="state.plan" class="view-tabs">
+        <div class="view-tab" @click="scrollToOverview">
+          📊 计划总览
+        </div>
+        <div class="view-tab" @click="scrollToToday">
+          📌 今日任务
+        </div>
+      </div>
+
       <!-- 表单 -->
       <div v-if="!state.plan" class="form-card">
         <div class="form-title">📋 告诉小智你的情况</div>
@@ -85,6 +95,12 @@
       <div v-else class="result-area">
         <!-- 操作错误提示（任务勾选等失败时显示） -->
         <div v-if="state.error" class="error-tip" style="margin-bottom:12px">{{ state.error }}</div>
+
+        <!-- 自动调整建议 -->
+        <div v-if="state.plan.adjustment_suggestion" class="adjust-hint" :class="state.plan.adjustment_suggestion.type">
+          <span>{{ state.plan.adjustment_suggestion.message }}</span>
+          <button class="adjust-btn" @click="askAI">去调整</button>
+        </div>
         <!-- 阶段卡片 -->
         <div v-if="state.plan.phases && state.plan.phases.length" class="phase-grid">
           <div v-for="(p, i) in state.plan.phases" :key="i" class="phase-card"
@@ -161,6 +177,29 @@
         <div class="action-row">
           <button class="action-btn ghost" @click="reset">🔄 重新生成</button>
           <button class="action-btn ghost" @click="askAI">🤖 AI 调整计划</button>
+          <button class="action-btn ghost" @click="showWeeklyReport">📊 生成周报</button>
+        </div>
+
+        <!-- 学习周报弹窗 -->
+        <div v-if="state.weeklyReport" class="weekly-report">
+          <div class="wr-title">📊 本周学习周报</div>
+          <div class="wr-range">{{ state.weeklyReport.week_range }}</div>
+          <div class="wr-stats">
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.weeklyReport.done_tasks }}/{{ state.weeklyReport.total_tasks }}</div>
+              <div class="wr-label">完成任务</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.weeklyReport.percent }}%</div>
+              <div class="wr-label">完成率</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.weeklyReport.streak_days }}天</div>
+              <div class="wr-label">连续打卡</div>
+            </div>
+          </div>
+          <div class="wr-suggestion">💡 {{ state.weeklyReport.suggestion }}</div>
+          <button class="wr-close" @click="state.weeklyReport = null">关闭</button>
         </div>
 
         <!-- AI 调整对话框 -->
@@ -194,6 +233,7 @@
         showAsk: false,
         askText: '',
         askReply: '',
+        weeklyReport: null,
         form: {
           exam_date: defaultDate(),
           weak_subjects: ['行测'],
@@ -284,6 +324,11 @@
       }
 
       async function toggleTask(t) {
+        // 标记完成前二次确认，防止假勾选
+        if (t.is_completed !== 1) {
+          const confirmed = window.confirm(`确认你已经完成「${t.title}」了吗？\n\n💡 小智建议：真实完成学习后再标记哦，这样计划才能越调越准~`);
+          if (!confirmed) return;
+        }
         try {
           const res = await window.__VTJ_AUTH__.apiFetch(`/api/plan/task/${t.goal_id}/toggle`, { method: 'POST' });
           if (res.ok) {
@@ -365,6 +410,15 @@
         else window.location.href = '/#/';
       }
 
+      function scrollToOverview() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function scrollToToday() {
+        const el = document.querySelector('.section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }
+
       onMounted(async () => {
         try {
           const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
@@ -398,9 +452,23 @@
         } catch (e) {}
       });
 
+      async function showWeeklyReport() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/weekly-report');
+          const d = await res.json();
+          if (res.ok) {
+            state.weeklyReport = d;
+          } else {
+            state.error = d.detail || '获取周报失败';
+          }
+        } catch (e) {
+          state.error = '网络异常，获取周报失败';
+        }
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport,
       };
     },
   });
@@ -456,6 +524,9 @@
   .stat-label { font-size: 11px; color: rgba(255,255,255,0.6); }
 
   /* Body */
+  .view-tabs { display: flex; background: #fff; border-radius: 12px; padding: 4px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(15,30,61,0.06); position: sticky; top: 10px; z-index: 100; }
+  .view-tab { flex: 1; text-align: center; padding: 10px; border-radius: 10px; font-size: 14px; font-weight: 500; color: #6b7280; cursor: pointer; transition: all .2s; }
+  .view-tab:hover { background: #f3f4f6; color: #2563eb; }
   .plan-body { max-width: 640px; margin: -12px auto 0; padding: 0 16px 40px; position: relative; z-index: 2; }
   .form-card, .result-area { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 6px 20px rgba(15,30,61,0.08); }
   .form-title { font-size: 15px; font-weight: 600; color: #1a2a4a; margin-bottom: 16px; }
@@ -483,6 +554,13 @@
   }
   .gen-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .error-tip { margin-top: 10px; color: #c8161e; font-size: 13px; text-align: center; }
+
+  .adjust-hint { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-radius: 12px; margin-bottom: 12px; font-size: 13px; }
+  .adjust-hint.increase { background: #f0fdf4; color: #166534; }
+  .adjust-hint.decrease { background: #fffbeb; color: #92400e; }
+  .adjust-btn { padding: 6px 14px; border-radius: 8px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 12px; flex-shrink: 0; }
+  .adjust-hint.increase .adjust-btn { background: #16a34a; color: #fff; }
+  .adjust-hint.decrease .adjust-btn { background: #d97706; color: #fff; }
 
   /* 阶段卡片 */
   .phase-grid { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
