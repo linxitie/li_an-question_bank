@@ -102,14 +102,18 @@ async def login_for_access_token(
     """
     用户登录接口
 
-    - 支持用户名或手机号登录
+    - 支持用户名、学号/工号或手机号登录
     - 返回 access_token 和 refresh_token
     - 记录登录日志
     """
     logger = logging.getLogger(__name__)
 
+    # 账号标识三选一：登录名(username)、学号/工号(user_no)、手机号。
+    # 加入 user_no 的原因：2026-11-01 教师账号 ycc5678 的 username 被改成中文姓名后，
+    # 用账号编号登录直接报「用户名不存在」，而 user_no 才是账号真正的唯一编号。
     user = db.query(SysUser).filter(
         (SysUser.username == form_data.username) |
+        (SysUser.user_no == form_data.username) |
         (SysUser.phone == form_data.username)
     ).first()
 
