@@ -247,3 +247,30 @@ def parse_image_ocr(file_path: str) -> str:
         return text.strip()
     except Exception:
         return ""
+
+# ===== 2026-10-30 修复：pdfplumber 对部分嵌入字体取不到文字（实测 3 份文本型 PDF 全空），
+# 改用 pymupdf 取文本；本定义在文件末尾，覆盖上方的同名实现。=====
+def parse_pdf_text(pdf_path: str) -> dict:  # noqa: F811
+    """PDF -> {chapters, html, word_count}（pymupdf 版）。"""
+    import pymupdf
+
+    doc = pymupdf.open(pdf_path)
+    chapters, parts = [], []
+    try:
+        for page in doc:
+            for raw in (page.get_text("text") or "").split("\n"):
+                line = raw.strip()
+                if not line:
+                    continue
+                # 标题启发式：短行、不以句末标点结尾、不含连续长句
+                is_head = (len(line) <= 24 and not re.search(r"[。！？；，,]$", line)
+                           and not re.search(r"\d{3,}", line))
+                if is_head:
+                    chapters.append({"title": line})
+                    parts.append(f"<h2>{line}</h2>")
+                else:
+                    parts.append(f"<p>{line}</p>")
+    finally:
+        doc.close()
+    html = "".join(parts)
+    return {"chapters": chapters, "html": html, "word_count": len(html)}
