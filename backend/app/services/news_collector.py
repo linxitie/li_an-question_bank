@@ -202,6 +202,59 @@ def _download_image(url: str, storage: NewsStorage, timeout: int = 15) -> str | 
         return None
 
 
+def _download_image_playwright(
+    image_url: str,
+    page_url: str,
+    storage: NewsStorage,
+    *,
+    state_path: str | None = None,
+    timeout: int = 30,
+    wait_ms: int = 8000,
+) -> str | None:
+    """在与正文相同的浏览器上下文内取图，解决 MPS 图片 521。"""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(
+                headless=True,
+                channel="msedge",
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+        except Exception:
+            browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent=UA,
+            storage_state=state_path or None,
+            locale="zh-CN",
+            timezone_id="Asia/Shanghai",
+        )
+        page = context.new_page()
+        try:
+            page.goto(page_url, wait_until="domcontentloaded", timeout=timeout * 1000)
+            page.wait_for_timeout(wait_ms)
+            if len(page.content()) < 2000:
+                page.reload(wait_until="domcontentloaded", timeout=timeout * 1000)
+                page.wait_for_timeout(wait_ms)
+            resp = context.request.get(
+                image_url,
+                headers={"Referer": page_url},
+                timeout=timeout * 1000,
+            )
+            if not resp.ok:
+                logger.warning("news playwright image HTTP %s: %s", resp.status, image_url[:100])
+                return None
+            data = resp.body()
+            if not data or len(data) > 8 * 1024 * 1024:
+                return None
+            return storage.save_image(data, _suffix(image_url), source_url=image_url)
+        except Exception as exc:
+            logger.warning("news playwright image failed %s: %s", image_url[:100], exc)
+            return None
+        finally:
+            browser.close()
+
+
 def _authorized_headers(source: NewsSourceConfig) -> dict[str, str]:
     """MPS 授权访问：仅使用用户配置的 Cookie/Headers，不做绕过。"""
     headers: dict[str, str] = {}
@@ -314,7 +367,12 @@ def collect_source(
             db.add(news)
             db.flush()
             for order, image_url in enumerate(article.images):
-                rel = _download_image(image_url, storage)
+                if source.code == "mps":
+                    rel = _download_image_playwright(
+                        image_url, link, storage, state_path=state_path
+                    )
+                else:
+                    rel = _download_image(image_url, storage)
                 if rel:
                     db.add(NewsImage(news_id=news.news_id, image_path=rel, image_order=order))
                     report["images"] += 1
