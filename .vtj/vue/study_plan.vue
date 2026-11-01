@@ -179,6 +179,28 @@
           <button class="action-btn ghost" @click="askAI">🤖 AI 调整计划</button>
           <button class="action-btn ghost" @click="showWeeklyReport">📊 生成周报</button>
           <button class="action-btn ghost" @click="autoAddWrong">📚 错题推荐</button>
+          <button class="action-btn ghost" @click="showStats">📈 学习数据</button>
+        </div>
+
+        <!-- 学习数据弹窗 -->
+        <div v-if="state.stats" class="weekly-report">
+          <div class="wr-title">📈 学习数据总览</div>
+          <div class="wr-stats">
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.stats.total_study_hours }}h</div>
+              <div class="wr-label">总学习时长</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.stats.total_questions }}</div>
+              <div class="wr-label">总刷题数</div>
+            </div>
+            <div class="wr-stat">
+              <div class="wr-num">{{ state.stats.avg_accuracy }}%</div>
+              <div class="wr-label">平均正确率</div>
+            </div>
+          </div>
+          <div class="wr-suggestion">💡 坚持就是胜利！继续保持这个节奏。</div>
+          <button class="wr-close" @click="state.stats = null">关闭</button>
         </div>
 
         <!-- 学习周报弹窗 -->
@@ -235,6 +257,7 @@
         askText: '',
         askReply: '',
         weeklyReport: null,
+        stats: null,
         form: {
           exam_date: defaultDate(),
           weak_subjects: ['行测'],
@@ -482,9 +505,18 @@
         }
       }
 
+      async function showStats() {
+        // 模拟数据（后端接口后面再加）
+        state.stats = {
+          total_study_hours: 128,
+          total_questions: 3560,
+          avg_accuracy: 68.5,
+        };
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats,
       };
     },
   });
