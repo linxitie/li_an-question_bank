@@ -385,11 +385,29 @@ async def current_plan(
     )
 
     done = sum(1 for t in tasks if t.is_completed == 1)
+    total = len(tasks)
+    percent = round(done / total * 100) if total else 0
+
+    # 动态调整建议：根据完成率自动给出建议
+    adjustment_suggestion = None
+    if total > 0:
+        if percent >= 100:
+            adjustment_suggestion = {
+                "type": "increase",
+                "message": "🎉 今日任务全部完成！要不要明天多加一点挑战？",
+            }
+        elif percent <= 30:
+            adjustment_suggestion = {
+                "type": "decrease",
+                "message": "💪 今天任务有点难完成？要不要明天少安排一点？",
+            }
+
     return {
         "has_plan": True,
         "plan_id": row.plan_id,
         "exam_date": exam_date,
         "days_left": days_left,
+        "adjustment_suggestion": adjustment_suggestion,
         "summary": meta.get("summary", ""),
         "phases": meta.get("phases", []),
         "tips": meta.get("tips", ""),
@@ -705,3 +723,105 @@ async def mark_notify_read(
     n.read_flag = 1
     db.commit()
     return {"notify_id": n.notify_id, "read_flag": 1}
+
+
+# ==================== 学习周报 ====================
+
+
+@router.get("/weekly-report", summary="生成学习周报")
+async def weekly_report(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    自动生成本周学习周报：
+    - 本周完成任务数 / 总任务数
+    - 连续打卡天数
+    - 各科目正确率
+    - 小智给的下周建议
+    """
+    from datetime import datetime, timedelta
+
+    # 本周一到今天
+    today = datetime.now().date()
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+
+    # 本周任务
+    tasks_this_week = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.status == 1,
+            StudyGoal.task_date >= monday,
+            StudyGoal.task_date <= sunday,
+        )
+        .all()
+    )
+
+    total = len(tasks_this_week)
+    done = sum(1 for t in tasks_this_week if t.is_completed == 1)
+    percent = int(done / total * 100) if total > 0 else 0
+
+    # 连续打卡天数（简单算：从今天往前数，每天都有完成任务）
+    streak = 0
+    check_date = today
+    while True:
+        has_done = (
+            db.query(StudyGoal)
+            .filter(
+                StudyGoal.user_id == current_user.user_id,
+                StudyGoal.status == 1,
+                StudyGoal.task_date == check_date,
+                StudyGoal.is_completed == 1,
+            )
+            .first()
+        )
+        if has_done:
+            streak += 1
+            check_date -= timedelta(days=1)
+        else:
+            break
+
+    # 各科目正确率（从PracticeRecord统计）
+    subject_stats = {}
+    try:
+        from ...models.models import PracticeRecord
+
+        records = (
+            db.query(PracticeRecord)
+            .filter(
+                PracticeRecord.user_id == current_user.user_id,
+                PracticeRecord.create_time >= monday,
+            )
+            .all()
+        )
+        for r in records:
+            subj = getattr(r, "subject", "其他")
+            if subj not in subject_stats:
+                subject_stats[subj] = {"total": 0, "correct": 0}
+            subject_stats[subj]["total"] += 1
+            if getattr(r, "is_correct", 0) == 1:
+                subject_stats[subj]["correct"] += 1
+    except Exception as e:
+        logger.warning("统计正确率失败: %s", e)
+
+    # 生成建议
+    if percent >= 90:
+        suggestion = "太棒了！本周完成率超过90%，继续保持这个节奏，下周可以适当增加难度。"
+    elif percent >= 70:
+        suggestion = "不错！本周完成率70%以上，继续保持，下周可以试着每天多学30分钟。"
+    elif percent >= 50:
+        suggestion = "还可以，本周完成率50%以上，建议找出没完成的原因，调整一下计划。"
+    else:
+        suggestion = "本周完成率有点低，建议重新审视一下计划是否合理，或者找小智聊聊怎么调整。"
+
+    return {
+        "week_range": f"{monday} ~ {sunday}",
+        "total_tasks": total,
+        "done_tasks": done,
+        "percent": percent,
+        "streak_days": streak,
+        "subject_stats": subject_stats,
+        "suggestion": suggestion,
+    }
