@@ -7,6 +7,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
 from .database import Base
+from .news_sources import NEWS_SOURCES
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,23 @@ def ensure_news_schema(engine: Engine) -> None:
                     "(category_code, name, sort, enabled) VALUES (:code, :name, :sort, 1)"
                 ),
                 {"code": code, "name": name, "sort": sort},
+            )
+        for source in NEWS_SOURCES:
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO news_source "
+                    "(source_code, name, base_url, adapter, cron, trust_level, enabled, robots_note) "
+                    "VALUES (:code, :name, :base_url, :adapter, '0 8,18 * * *', :trust, :enabled, :note)"
+                ),
+                {
+                    "code": source.code,
+                    "name": source.name,
+                    "base_url": source.base_url,
+                    "adapter": source.adapter,
+                    "trust": source.trust_level,
+                    "enabled": source.enabled,
+                    "note": "待人工确认授权/robots",
+                },
             )
         for name, code in CATEGORY_ALIASES.items():
             conn.execute(
