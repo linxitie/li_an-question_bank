@@ -2,7 +2,7 @@
 数据验证模型定义
 """
 from datetime import datetime
-from typing import Optional, List, Any,Dict
+from typing import Optional, List, Any,Dict,Literal
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from enum import Enum
 
@@ -1011,6 +1011,12 @@ class EssayQuoteCreate(BaseModel):
     source: Optional[str] = Field(None, max_length=200, description="来源")
     category: Optional[str] = Field(None, max_length=50, description="分类")
     author: Optional[str] = Field(None, max_length=100, description="作者")
+
+
+class QuoteReviewRequest(BaseModel):
+    """R1 金句审核请求"""
+    action: Literal["approve", "reject", "request_changes", "archive"]
+    reason: str = Field("", max_length=500, description="拒绝/退回时必填")
 
 
 # ------------------------------
