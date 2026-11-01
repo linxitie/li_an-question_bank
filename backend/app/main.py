@@ -127,6 +127,12 @@ async def lifespan(app: FastAPI):
         logger.info("内容中枢 Schema 就绪")
     except Exception as e:
         logger.warning(f"内容中枢 Schema 初始化失败: {e}")
+    try:
+        from .core.news_schema import ensure_news_schema
+        ensure_news_schema(engine)
+        logger.info("新闻 R2 Schema 就绪")
+    except Exception as e:
+        logger.warning(f"新闻 R2 Schema 初始化失败: {e}")
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 

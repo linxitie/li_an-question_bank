@@ -1456,6 +1456,13 @@ class NewsArticle(Base):
     url = Column(String(1000), nullable=False, comment="原始链接")
     source = Column(String(50), nullable=False, comment="来源: cpd/people")
     category = Column(String(50), comment="分类: 理论/党史/公安报")
+    category_code = Column(String(50), index=True, comment="分类字典 code")
+    content_hash = Column(String(64), index=True, comment="正文归一化哈希")
+    review_status = Column(String(20), default="published", index=True, comment="draft/pending/published/rejected/archived")
+    event_date = Column(Date, index=True, comment="事件日期")
+    region_code = Column(String(20), index=True, comment="地域 code")
+    source_id = Column(BigInteger, ForeignKey("content_source.source_id"), nullable=True, comment="统一来源ID")
+    deleted_at = Column(DateTime, comment="软删除时间")
     publish_date = Column(DateTime, comment="发布日期")
     summary = Column(Text, comment="摘要")
     content = Column(Text, comment="文章正文")
@@ -1467,6 +1474,34 @@ class NewsArticle(Base):
         Index("idx_source_news", source),
         Index("idx_publish_date_news", publish_date),
     )
+
+class NewsCategory(Base):
+    """新闻分类字典（R2）"""
+    __tablename__ = "news_category"
+
+    category_code = Column(String(50), primary_key=True)
+    name = Column(String(50), nullable=False, unique=True)
+    sort = Column(Integer, default=0)
+    enabled = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class NewsSource(Base):
+    """新闻来源注册表（R2）"""
+    __tablename__ = "news_source"
+
+    source_code = Column(String(50), primary_key=True)
+    name = Column(String(100), nullable=False)
+    base_url = Column(String(500), default="")
+    adapter = Column(String(20), default="http", comment="http/playwright")
+    cron = Column(String(50), default="0 8,18 * * *")
+    trust_level = Column(Integer, default=50)
+    enabled = Column(Integer, default=1)
+    robots_note = Column(String(500), default="")
+    last_cursor = Column(String(200), default="")
+    last_success_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.now)
+
 
 class NewsRead(Base):
     """新闻阅读记录表（P2-32）

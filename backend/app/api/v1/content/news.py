@@ -12,7 +12,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from ....models.models import (
     NewsArticle, NewsFavorite, NewsNote, NewsImage, NewsRead, SysUser,
 )
 from ....services.event_consumer import record_user_action
+from ....services import news_search_service
 
 router = APIRouter(prefix="/api/news", tags=["新闻资讯"])
 logger = logging.getLogger(__name__)
@@ -80,17 +81,10 @@ async def get_news(
     if source:
         query = query.filter(NewsArticle.source == source)
     if category:
-        query = query.filter(NewsArticle.category == category)
-    keyword = (q or "").strip()
-    if keyword:
-        like = f"%{keyword}%"
         query = query.filter(
-            or_(
-                NewsArticle.title.like(like),
-                NewsArticle.summary.like(like),
-                NewsArticle.content.like(like),
-            )
+            or_(NewsArticle.category == category, NewsArticle.category_code == category)
         )
+    query = news_search_service.apply_keyword(query, db, q)
 
     size = limit or page_size
     total = query.count()
@@ -151,18 +145,7 @@ async def get_news_categories(
     db: Session = Depends(get_db),
 ):
     """返回当前启用新闻的分类及数量，供前端筛选栏使用。"""
-    rows = (
-        db.query(NewsArticle.category, func.count(NewsArticle.news_id))
-        .filter(NewsArticle.status == 1)
-        .group_by(NewsArticle.category)
-        .order_by(func.count(NewsArticle.news_id).desc())
-        .all()
-    )
-    items = [
-        {"category": category or "未分类", "count": count}
-        for category, count in rows
-    ]
-    return {"total": sum(item["count"] for item in items), "items": items}
+    return news_search_service.category_counts(db)
 
 
 @router.get("/today", summary="获取今日新闻")
