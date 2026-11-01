@@ -770,3 +770,103 @@ async def get_weekly_checkin(
         "progress": round(total_signed / 7 * 100),
         "days": days
     }
+
+
+@router.get("/subject-distribution", summary="科目题量比例（饼图/环形图）")
+async def get_subject_distribution(
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """按科目聚合做题量与对错数量，供「我的」页饼图 + 对错环形图。
+
+    口径与 `/api/practice/unified-stats` 保持一致（合并统计范围）：
+      - 刷题流水：practice_record（全部 source_type）
+      - 试卷作答：exam_answer_detail JOIN exam_record，并排除智能组卷关联的 exam_record
+    SQL 固定 3 条；不逐科目循环。
+    """
+    from ....models.models import QuestionBank, QuestionSubject, ExamAnswerDetail, SmartExamRecord
+
+    user_id = current_user.user_id
+    acc: Dict[int, Dict[str, int]] = {}
+
+    def _cell(sid) -> Dict[str, int]:
+        return acc.setdefault(int(sid), {"total": 0, "correct": 0})
+
+    # ① 刷题流水
+    drill = db.query(
+        PracticeRecord.subject_id,
+        func.count(PracticeRecord.record_id),
+        func.coalesce(func.sum(PracticeRecord.is_correct), 0),
+    ).filter(
+        PracticeRecord.user_id == user_id
+    ).group_by(PracticeRecord.subject_id).all()
+    for sid, cnt, corr in drill:
+        if sid is None:
+            continue
+        cell = _cell(sid)
+        cell["total"] += int(cnt or 0)
+        cell["correct"] += int(corr or 0)
+
+    # ② 试卷作答（排除智能组卷关联记录，避免与刷题流水双计）
+    smart_ids = [
+        r[0] for r in db.query(SmartExamRecord.exam_record_id).filter(
+            SmartExamRecord.exam_record_id.isnot(None)
+        ).all()
+    ]
+    paper_q = db.query(
+        QuestionBank.subject_id,
+        func.count(ExamAnswerDetail.detail_id),
+        func.coalesce(func.sum(ExamAnswerDetail.is_correct), 0),
+    ).join(
+        QuestionBank, QuestionBank.question_id == ExamAnswerDetail.question_id
+    ).join(
+        ExamRecord, ExamRecord.record_id == ExamAnswerDetail.record_id
+    ).filter(
+        ExamRecord.user_id == user_id
+    )
+    if smart_ids:
+        paper_q = paper_q.filter(~ExamRecord.record_id.in_(smart_ids))
+    for sid, cnt, corr in paper_q.group_by(QuestionBank.subject_id).all():
+        if sid is None:
+            continue
+        cell = _cell(sid)
+        cell["total"] += int(cnt or 0)
+        cell["correct"] += int(corr or 0)
+
+    # ③ 科目名称
+    subjects = {
+        int(s.subject_id): s
+        for s in db.query(QuestionSubject).filter(QuestionSubject.status == 1).all()
+    }
+
+    items = []
+    for sid, cell in acc.items():
+        subj = subjects.get(sid)
+        if not subj or cell["total"] <= 0:
+            continue  # 停用科目 / 空科目不进饼图（避免 0 值扇区）
+        total = cell["total"]
+        correct = min(cell["correct"], total)
+        items.append({
+            "subject_id": sid,
+            "subject_name": subj.subject_name,
+            "subject_code": subj.subject_code,
+            "total": total,
+            "correct": correct,
+            "wrong": total - correct,
+            "accuracy": round(correct * 100 / total, 1),
+        })
+
+    items.sort(key=lambda x: x["total"], reverse=True)
+    total_all = sum(i["total"] for i in items)
+    correct_all = sum(i["correct"] for i in items)
+    for i in items:
+        i["ratio"] = round(i["total"] * 100 / max(total_all, 1), 1)
+
+    return {
+        "source": "unified",
+        "total": total_all,
+        "correct": correct_all,
+        "wrong": total_all - correct_all,
+        "accuracy": round(correct_all * 100 / max(total_all, 1), 1),
+        "items": items,
+    }
