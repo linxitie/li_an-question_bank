@@ -353,7 +353,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/tablet/forum',
     name: 'TabletForum',
-    component: () => import('$vtj/vue/tablet_forum.vue'),
+    // 2026-10-30（用户决定 A）：平板与 PC 共用同一套论坛页，避免两套布局维护
+    component: () => import('$vtj/vue/forum.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {

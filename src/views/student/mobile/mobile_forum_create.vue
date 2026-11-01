@@ -14,19 +14,6 @@
         <input v-model="title" type="text" class="input" placeholder="请输入标题（最多200字）" maxlength="200" />
       </div>
 
-      <div class="field">
-        <label class="label">分类</label>
-        <div class="type-tabs">
-          <div
-            v-for="t in types"
-            :key="t.key"
-            :class="['type-tab', { active: shareType === t.key }]"
-            @click="shareType = t.key"
-          >
-            {{ t.name }}
-          </div>
-        </div>
-      </div>
 
 
 
@@ -94,6 +81,12 @@ const goBack = () => {
 };
 
 const submitPost = async () => {
+  // 2026-11-01：标题 / 正文 / 附件 至少一项即可发布（与 PC、教师端一致）
+  const hasAtt = (images.value?.length || 0) > 0;
+  if (!title.value.trim() && !content.value.trim() && !hasAtt) {
+    showMsg('标题、正文、附件至少填写一项', 'error');
+    return;
+  }
   submitting.value = true;
   message.value = '';
   try {
@@ -219,24 +212,7 @@ const showMsg = (m: string, type: string) => {
 .textarea {
   resize: vertical;
   line-height: 1.6;
-}
-.type-tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.type-tab {
-  padding: 8px 16px;
-  border-radius: 18px;
-  font-size: 13px;
-  color: #5a6488;
-  background: #f0f3f7;
-  cursor: pointer;
-}
-.type-tab.active {
-  background: #1a2b5f;
-  color: #fff;
-}
+}
 .composer-actions {
   display: flex;
   align-items: center;

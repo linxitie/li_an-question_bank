@@ -1,12 +1,21 @@
 <template>
   <div class="tf-page">
     <div class="tf-nav-sticky"><TeacherNavHeader active-nav="forum" /></div>
-    <main class="tf-main">
-      <div class="tf-left">
       <div class="tf-topbar">
       <header class="tf-head">
         <div class="tf-head-row">
           <h1>论坛管理</h1>
+          <section class="tf-filters">
+          <input v-model="keyword" placeholder="搜索标题/内容" @keyup.enter="loadPosts" />
+          <input v-model="dateFrom" type="date" class="tf-date" title="开始日期" />
+          <span class="tf-tilde">~</span>
+          <input v-model="dateTo" type="date" class="tf-date" title="结束日期" />
+          <select v-model="className">
+          <option value="">全部班级</option>
+          <option v-for="name in classOptions" :key="name" :value="name">{{ name }}</option>
+          </select>
+          <button class="tf-btn" @click="loadPosts">查询</button>
+          </section>
           <div class="tf-head-actions">
             <button class="tf-star-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
             <button class="tf-post-btn" @click="openPostForm">发布新帖</button>
@@ -15,18 +24,9 @@
         <p class="tf-sub">全校帖子可见；只能隐藏本班学生的内容，需填写原因并提交管理员复核。</p>
       </header>
 
-      <section class="tf-filters">
-        <input v-model="keyword" placeholder="搜索标题/内容" @keyup.enter="loadPosts" />
-        <input v-model="dateFrom" type="date" class="tf-date" title="开始日期" />
-        <span class="tf-tilde">~</span>
-        <input v-model="dateTo" type="date" class="tf-date" title="结束日期" />
-        <select v-model="className">
-          <option value="">全部班级</option>
-          <option v-for="name in classOptions" :key="name" :value="name">{{ name }}</option>
-        </select>
-        <button class="tf-btn" @click="loadPosts">查询</button>
-      </section>
       </div>
+    <main class="tf-main">
+      <div class="tf-left">
 
       <p v-if="!canModerate" class="tf-warn">
         当前账号未绑定班级，暂不能隐藏本班学生内容。请先在「班级管理」中创建/绑定班级，并让学生填写班级。
@@ -144,37 +144,75 @@
 
       <aside class="tf-side">
         <section class="tf-mini-card">
-          <h3>热门帖子</h3>
+          <h3>今日热门（{{ hotIsWeek ? '近 7 天' : '当天' }}）</h3>
           <p v-if="!hotPosts.length" class="tf-mini-empty">暂无数据</p>
-          <ul v-else>
-            <li v-for="h in hotPosts" :key="h.id" @click="openPost(h)">
-              <span class="tf-mini-title" :style="{ color: titleColorValue(h.titleColor) }">{{ h.title }}</span>
-              <span class="tf-mini-num">❤ {{ h.likeCount }}</span>
-            </li>
-          </ul>
-        </section>
-
-        <section class="tf-mini-card">
-          <h3>论坛活跃</h3>
-          <div class="tf-stats">
-            <div><b>{{ stats.posts }}</b><span>帖子</span></div>
-            <div><b>{{ stats.users }}</b><span>用户</span></div>
-            <div><b>{{ stats.online }}</b><span>在线</span></div>
-          </div>
+          <template v-else>
+            <ul>
+              <li v-for="(h, i) in hotPosts.slice(0, 5)" :key="h.id" class="right-item" @click="openPost(h)">
+                <span class="right-rank" :class="'rank-' + (i + 1)">{{ i + 1 }}</span>
+                <span class="right-title" :style="{ color: titleColorValue(h.titleColor) }">{{ h.title }}</span>
+                <span class="right-num">{{ h.commentCount || 0 }} 回复</span>
+              </li>
+            </ul>
+            <p class="tf-mini-more" @click="openHotAll">查看更多 →</p>
+          </template>
         </section>
 
         <section class="tf-mini-card">
           <h3>我的帖子</h3>
-          <p v-if="!myPosts.length" class="tf-mini-empty">还没有发过帖</p>
-          <ul v-else>
-            <li v-for="m in myPosts" :key="m.id" @click="openPost(m)">
-              <span class="tf-mini-title">{{ m.title }}</span>
-              <span class="tf-mini-num">💬 {{ m.commentCount }}</span>
-            </li>
-          </ul>
+          <p v-if="!myPosts.length" class="tf-mini-empty">还没有发过帖，去发布第一篇吧</p>
+          <template v-else>
+            <ul>
+              <li v-for="m in myPosts.slice(0, 5)" :key="m.id" class="right-item" @click="openPost(m)">
+                <span class="right-title">{{ m.title }}</span>
+                <span class="right-num">❤ {{ m.likeCount || 0 }} · 💬 {{ m.commentCount || 0 }}</span>
+              </li>
+            </ul>
+            <p class="tf-mini-more" @click="openMyAll">查看更多 →</p>
+          </template>
         </section>
       </aside>
     </main>
+    <!-- D'：热门帖子前 100 / 我的帖子全部 -->
+    <div v-if="showHotAll" class="tf-modal" @click.self="showHotAll = false">
+      <div class="tf-modal-card tf-fav-card">
+        <h3>今日热门 · 前 100 条</h3>
+        <div class="tf-hot-range">
+          <input v-model="hotFrom" type="date" />
+          <span>~</span>
+          <input v-model="hotTo" type="date" />
+          <button class="tf-btn" @click="openHotAll">查询</button>
+        </div>
+        <p v-if="hotAllLoading" class="tf-empty">加载中…</p>
+        <p v-else-if="!hotAll.length" class="tf-empty">暂无热门</p>
+        <div v-else class="tf-fav-list">
+          <div v-for="h in hotAll" :key="h.id" class="tf-fav-item" @click="openPost(h)">
+            <span class="tf-fav-title">{{ h.title }}</span>
+            <span class="tf-fav-num">❤ {{ h.likeCount || 0 }} · 💬 {{ h.commentCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showHotAll = false">关闭</button></div>
+      </div>
+    </div>
+    <div v-if="showMyAll" class="tf-modal" @click.self="showMyAll = false">
+      <div class="tf-modal-card tf-fav-card">
+        <h3>我的帖子（全部）</h3>
+        <div class="tf-hot-range">
+          <input v-model="myKeyword" placeholder="搜索我的帖子…" @keyup.enter="openMyAll" />
+          <button class="tf-btn" @click="openMyAll">搜索</button>
+        </div>
+        <p v-if="myAllLoading" class="tf-empty">加载中…</p>
+        <p v-else-if="!myAll.length" class="tf-empty">还没有发过帖</p>
+        <div v-else class="tf-fav-list">
+          <div v-for="m in myAll" :key="m.id" class="tf-fav-item" @click="openPost(m)">
+            <span class="tf-fav-title">{{ m.title }}</span>
+            <span class="tf-fav-num">❤ {{ m.likeCount || 0 }} · 💬 {{ m.commentCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showMyAll = false">关闭</button></div>
+      </div>
+    </div>
+
     <!-- T4：我的收藏 / 我的喜欢 -->
     <div v-if="favVisible" class="tf-modal" @click.self="favVisible = false">
       <div class="tf-modal-card tf-fav-card">
@@ -274,8 +312,19 @@ const commentSubmitting = ref(false);
 
 // P3-07：侧栏三卡 + 发帖弹窗
 const hotPosts = ref<any[]>([]);
+const hotIsWeek = ref(false);
 const stats = reactive({ posts: 0, users: 0, online: 0 });
 const myPosts = ref<any[]>([]);
+// D'：查看更多
+const hotAll = ref<any[]>([]);
+const hotFrom = ref(new Date().toISOString().slice(0, 10));
+const hotTo = ref(new Date().toISOString().slice(0, 10));
+const showHotAll = ref(false);
+const hotAllLoading = ref(false);
+const myAll = ref<any[]>([]);
+const myKeyword = ref('');
+const showMyAll = ref(false);
+const myAllLoading = ref(false);
 const postForm = reactive({
   visible: false,
   submitting: false,
@@ -317,8 +366,27 @@ const openPostForm = () => {
 
 const loadSideCards = async () => {
   try {
-    const hot: any = await fetchForumPosts({ sortBy: 'likes', limit: 5 });
-    hotPosts.value = (hot && hot.posts) || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+    const hot: any = await fetchForumPosts({
+      sortBy: 'likes', order: 'desc', dateFrom: today, dateTo: today, limit: 5
+    });
+    let list = (hot && hot.posts) || [];
+    hotIsWeek.value = false;
+    if (list.length < 5) {
+      // B2：当天不足 5 条时用最近 7 天补足
+      const week: any = await fetchForumPosts({
+        sortBy: 'likes', order: 'desc', dateFrom: weekAgo, dateTo: today, limit: 5
+      });
+      const merged = [...list];
+      for (const item of ((week && week.posts) || [])) {
+        if (merged.length >= 5) break;
+        if (!merged.some((x: any) => x.id === item.id)) merged.push(item);
+      }
+      list = merged;
+      hotIsWeek.value = list.length > 0;
+    }
+    hotPosts.value = list.slice(0, 5);
   } catch (e) { hotPosts.value = []; }
   try {
     const s: any = await fetchForumStats();
@@ -331,8 +399,9 @@ const loadSideCards = async () => {
 };
 
 const submitPost = async () => {
-  if (!postForm.title.trim() || !postForm.content.trim()) {
-    ElMessage.warning('标题和正文不能为空');
+  // 2026-10-31：标题 / 正文 / 附件 至少一项
+  if (!postForm.title.trim() && !postForm.content.trim() && !postForm.attachments.length) {
+    ElMessage.warning('标题、正文、附件至少填写一项');
     return;
   }
   if (postForm.visibility === 'CLASSES' && !postForm.classes.length) {
@@ -412,6 +481,30 @@ const submitComment = async () => {
   } finally {
     commentSubmitting.value = false;
   }
+};
+
+const openHotAll = async () => {
+  showHotAll.value = true;
+  hotAllLoading.value = true;
+  try {
+    const res: any = await fetchForumPosts({
+      sortBy: 'likes', order: 'desc',
+      dateFrom: hotFrom.value || undefined,
+      dateTo: hotTo.value || undefined,
+      limit: 100
+    });
+    hotAll.value = (res && res.posts) || [];
+  } catch (e) { hotAll.value = []; } finally { hotAllLoading.value = false; }
+};
+const openMyAll = async () => {
+  showMyAll.value = true;
+  myAllLoading.value = true;
+  try {
+    const res: any = await fetchMyForumPosts({
+      limit: 50, offset: 0, keyword: myKeyword.value || undefined
+    });
+    myAll.value = (res && res.posts) || [];
+  } catch (e) { myAll.value = []; } finally { myAllLoading.value = false; }
 };
 
 const loadPosts = async () => {
@@ -556,8 +649,10 @@ onMounted(loadPosts);
 }
 /* P3-07：两列布局 + 侧栏三卡 + 发帖弹窗 */
 .tf-main { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
-.tf-left { min-width: 0; }
-.tf-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* 2026-10-31：左列表独立滚动 */
+.tf-left { min-width: 0; height: 100%; overflow-y: auto;
+  overscroll-behavior: contain; padding-right: 6px; }
+.tf-head-row { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
 .tf-post-btn { padding: 10px 18px; border: none; border-radius: 10px; background: #c41e3a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
 /* 右侧三卡固定：与学生端 PC 右栏同款做法（sticky + align-self:start） */
 .tf-side {
@@ -641,6 +736,64 @@ onMounted(loadPosts);
 .tf-head { margin: 0; padding-bottom: 6px; }
 .tf-sub { margin: 0 0 10px; }
 .tf-filters { margin-bottom: 0; }
+.tf-mini-more { margin: 8px 0 0; font-size: 12px; color: #c41e3a; cursor: pointer; text-align: right; }
+/* 2026-10-31：与导航「工作台」左对齐（实测 186px），左右留白对称，控件等比缩小 */
+.tf-page { --tf-gutter: 185px; }
+.tf-topbar { position: sticky; top: 56px; z-index: 30; background: #f5f7fb;
+  padding: 8px var(--tf-gutter) 6px; box-shadow: 0 8px 10px -12px rgba(15,23,42,.35); }
+.tf-head { margin: 0; }
+.tf-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
+.tf-head-row h1 { margin: 0; font-size: 26px; line-height: 38px; white-space: nowrap; flex: 0 0 auto; }
+.tf-head-row .tf-filters { flex: 1 1 auto; min-width: 0; margin: 0;
+  display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.tf-head-row .tf-filters input { flex: 1 1 160px; min-width: 120px; height: 38px;
+  padding: 0 12px; font-size: 14px; }
+.tf-head-row .tf-filters .tf-date { flex: 0 0 auto; width: 132px; height: 38px; padding: 0 8px; font-size: 13px; }
+.tf-head-row .tf-filters select { flex: 0 0 auto; height: 38px; width: 128px; font-size: 13px; }
+.tf-head-row .tf-filters .tf-btn { flex: 0 0 auto; height: 38px; padding: 0 20px; font-size: 14px; }
+.tf-head-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.tf-head-actions .tf-star-btn { width: 38px; height: 38px; font-size: 20px; }
+.tf-head-actions .tf-post-btn { height: 38px; padding: 0 22px; font-size: 14px; border-radius: 10px; }
+.tf-sub { margin: 4px 0 0; font-size: 12px; color: #6b7896; }
+/* 内容区与工具栏同宽同起点：左卡片与「论坛管理」对齐，右卡片右缘与「发布新帖」对齐 */
+.tf-page { overflow: hidden; }
+.tf-main { width: 100%; max-width: none; margin: 10px 0 0;
+  padding: 0 var(--tf-gutter) 16px; box-sizing: border-box;
+  height: calc(100vh - 56px - 110px); display: grid;
+  grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+.tf-side { width: 300px; }
+@media (max-width: 1500px) {
+  .tf-page { --tf-gutter: 120px; }
+  .tf-head-row h1 { font-size: 22px; }
+  .tf-head-row .tf-filters input { flex: 1 1 120px; min-width: 100px; }
+  .tf-head-row .tf-filters .tf-date { width: 118px; }
+}
+@media (max-width: 1180px) {
+  .tf-page { --tf-gutter: 24px; }
+  .tf-head-row { flex-wrap: wrap; }
+}
+/* 2026-10-31：右卡样式与学生端对齐（白卡 + 编号徽章 + 居中红字链接） */
+.tf-side .tf-mini-card { background: #fff; border-radius: 16px; padding: 18px 20px;
+  box-shadow: 0 2px 12px rgba(26,43,93,.08); }
+.tf-side .tf-mini-card h3 { margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #1a2b5f;
+  display: flex; align-items: center; gap: 8px; }
+.tf-side .tf-mini-card ul { list-style: none; margin: 0; padding: 0; }
+.tf-side .right-item { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  border-bottom: 1px solid #f2f4f8; cursor: pointer; }
+.tf-side .right-item:hover { background: #fafbfe; }
+.tf-side .right-rank { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; background: #94a3b8; }
+.tf-side .right-rank.rank-1 { background: #ef4444; }
+.tf-side .right-rank.rank-2 { background: #f59e0b; }
+.tf-side .right-rank.rank-3 { background: #f59e0b; }
+.tf-side .right-rank.rank-4, .tf-side .right-rank.rank-5 { background: #94a3b8; }
+.tf-side .right-title { flex: 1 1 auto; font-size: 14px; color: #1a2b5f;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-side .right-num { flex: 0 0 auto; font-size: 12px; color: #94a3b8; }
+.tf-side .tf-mini-more { margin: 12px 0 0; text-align: center; color: #c41e3a;
+  font-size: 14px; font-weight: 600; cursor: pointer; }
+.tf-side .tf-mini-empty { color: #94a3b8; font-size: 13px; margin: 6px 0; }
 </style>
 
 

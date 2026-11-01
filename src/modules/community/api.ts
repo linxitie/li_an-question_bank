@@ -96,6 +96,8 @@ export interface ForumPostListQuery {
   order?: ForumSortOrder;
   limit?: number;
   offset?: number;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface ForumCommentListQuery {
@@ -295,14 +297,14 @@ export function fetchForumStats(): Promise<ForumStats> {
 }
 
 export function fetchMyForumPosts(
-  query: { limit?: number; offset?: number } = {}
+  query: { limit?: number; offset?: number; keyword?: string } = {}
 ): Promise<ForumPostListResult> {
   const limit = normalizePageSize(query.limit);
   const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
   return request<ForumPostListResult>({
     url: '/api/forum/my-posts',
     method: 'GET',
-    params: { limit, offset }
+    params: { keyword: query.keyword || undefined, limit, offset }
   });
 }
 
