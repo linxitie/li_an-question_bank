@@ -99,6 +99,51 @@ AGENT_TASKS: List[Dict] = [
         ],
     },
     {
+        "task_id": "daily_jinju",
+        "title": "每日金句推荐",
+        "agent": "shenlun",
+        "desc": "每天自动生成3条申论金句，积累素材，写作直接用",
+        "fields": [
+            {
+                "key": "theme",
+                "label": "主题（选填）",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "为民服务", "创新", "法治", "奋斗", "诚信"],
+            },
+        ],
+    },
+    {
+        "task_id": "fagao_sucha",
+        "title": "法条速查",
+        "agent": "gongzhuan",
+        "desc": "输入关键词，快速查找相关法条及高频考点",
+        "fields": [
+            {
+                "key": "keyword",
+                "label": "关键词",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：行政拘留、取保候审",
+            },
+        ],
+    },
+    {
+        "task_id": "psychology_relax",
+        "title": "考前心理疏导",
+        "agent": "psychology",
+        "desc": "焦虑、紧张、学不进去？和我聊聊，帮你调整状态",
+        "fields": [
+            {
+                "key": "problem",
+                "label": "你现在的状态",
+                "type": "text",
+                "required": True,
+                "placeholder": "比如：最近老是熬夜，白天学不进去...",
+            },
+        ],
+    },
+    {
         "task_id": "gongzhuan_fatiao",
         "title": "公专法条梳理",
         "agent": "gongzhuan",
