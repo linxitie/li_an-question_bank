@@ -288,6 +288,8 @@ export default defineComponent({
         if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else if (key === 'smart') {
         router.push('/smart-exam');
+      } else if (key === 'plan') {
+        router.push('/study-plan');
       } else if (key === 'ai') {
         router.push('/ai-assistant');
       } else if (key === 'wrong') {
