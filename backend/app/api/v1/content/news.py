@@ -148,6 +148,43 @@ async def get_news_categories(
     return news_search_service.category_counts(db)
 
 
+@router.get("/timeline", summary="新闻时间线")
+async def news_timeline(
+    category: Optional[str] = Query(None, description="分类 code/名称"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """按发布日期聚合已发布新闻，供时间线页面使用。"""
+    query = db.query(NewsArticle).filter(
+        NewsArticle.status == 1,
+        NewsArticle.review_status == "published",
+    )
+    if category:
+        query = query.filter(
+            or_(NewsArticle.category == category, NewsArticle.category_code == category)
+        )
+    articles = (
+        query.order_by(NewsArticle.publish_date.desc(), NewsArticle.news_id.desc())
+        .limit(limit)
+        .all()
+    )
+    groups: dict[str, list] = {}
+    for article in articles:
+        key = article.publish_date.date().isoformat() if article.publish_date else "未分期"
+        groups.setdefault(key, []).append({
+            "news_id": article.news_id,
+            "title": article.title,
+            "source": article.source,
+            "category": article.category,
+            "url": article.url,
+            "ai_summary": article.ai_summary or "",
+        })
+    return {
+        "total": len(articles),
+        "items": [{"date": key, "items": value} for key, value in groups.items()],
+    }
+
+
 @router.get("/today", summary="获取今日新闻")
 async def get_today_news(
     limit: int = Query(20, ge=1, le=50),

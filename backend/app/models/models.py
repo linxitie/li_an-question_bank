@@ -1510,6 +1510,25 @@ class NewsSource(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class NewsReview(Base):
+    """新闻审核流水（R2.3）"""
+    __tablename__ = "news_review"
+
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
+    action = Column(String(20), nullable=False)
+    from_status = Column(String(20), default="")
+    to_status = Column(String(20), default="")
+    reviewer_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=True)
+    reason = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("idx_news_review_news", news_id, created_at),
+        Index("idx_news_review_status", to_status, created_at),
+    )
+
+
 class NewsRead(Base):
     """新闻阅读记录表（P2-32）
 

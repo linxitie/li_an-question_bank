@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -38,7 +40,13 @@ class ArticleData:
     images: list[str] = field(default_factory=list)
 
 
-def _fetch_html(url: str, adapter: str = "http", timeout: int = 20) -> str:
+def _fetch_html(
+    url: str,
+    adapter: str = "http",
+    timeout: int = 20,
+    headers: dict[str, str] | None = None,
+    state_path: str | None = None,
+) -> str:
     if adapter == "playwright":
         from playwright.sync_api import sync_playwright
 
@@ -47,15 +55,25 @@ def _fetch_html(url: str, adapter: str = "http", timeout: int = 20) -> str:
                 browser = p.chromium.launch(headless=True, channel="msedge")
             except Exception:
                 browser = p.chromium.launch(headless=True)
-            page = browser.new_page(user_agent=UA)
+            context = browser.new_context(
+                user_agent=UA,
+                storage_state=state_path or None,
+            )
+            page = context.new_page()
             try:
-                page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+                page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+                page.wait_for_timeout(2000)
+                if len(page.content()) < 2000:
+                    page.reload(wait_until="networkidle", timeout=timeout * 1000)
+                    page.wait_for_timeout(2000)
                 html = page.content()
             finally:
                 browser.close()
         return html
 
-    resp = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
+    request_headers = {"User-Agent": UA}
+    request_headers.update(headers or {})
+    resp = requests.get(url, headers=request_headers, timeout=timeout)
     resp.raise_for_status()
     if not resp.encoding or resp.encoding.lower() in ("iso-8859-1", "ascii"):
         resp.encoding = resp.apparent_encoding or "utf-8"
@@ -174,6 +192,29 @@ def _download_image(url: str, storage: NewsStorage, timeout: int = 15) -> str | 
         return None
 
 
+def _authorized_headers(source: NewsSourceConfig) -> dict[str, str]:
+    """MPS 授权访问：仅使用用户配置的 Cookie/Headers，不做绕过。"""
+    headers: dict[str, str] = {}
+    raw = os.environ.get("MPS_HEADERS_JSON", "").strip()
+    if source.code == "mps" and raw:
+        try:
+            loaded = json.loads(raw)
+            if isinstance(loaded, dict):
+                headers.update({str(k): str(v) for k, v in loaded.items()})
+        except ValueError:
+            logger.warning("MPS_HEADERS_JSON 不是合法 JSON，已忽略")
+    cookie = os.environ.get("MPS_COOKIE", "").strip()
+    if source.code == "mps" and cookie:
+        headers["Cookie"] = cookie
+    return headers
+
+
+def _playwright_state(source: NewsSourceConfig) -> str | None:
+    if source.code == "mps":
+        return os.environ.get("MPS_PLAYWRIGHT_STATE") or os.environ.get("NEWS_PLAYWRIGHT_STATE")
+    return os.environ.get("NEWS_PLAYWRIGHT_STATE") or None
+
+
 def collect_source(
     db: Session,
     source: NewsSourceConfig,
@@ -183,7 +224,13 @@ def collect_source(
     fetcher: Callable[[str], str] | None = None,
     storage: NewsStorage | None = None,
 ) -> dict:
-    fetch = fetcher or (lambda url: _fetch_html(url, source.adapter))
+    headers = _authorized_headers(source)
+    state_path = _playwright_state(source)
+    fetch = fetcher or (
+        lambda url: _fetch_html(
+            url, source.adapter, headers=headers, state_path=state_path
+        )
+    )
     storage = storage or get_news_storage()
     report = {
         "source": source.code,

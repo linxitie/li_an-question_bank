@@ -1019,6 +1019,12 @@ class QuoteReviewRequest(BaseModel):
     reason: str = Field("", max_length=500, description="拒绝/退回时必填")
 
 
+class NewsReviewRequest(BaseModel):
+    """R2.3 新闻审核请求"""
+    action: Literal["publish", "reject", "needs_changes", "resubmit", "archive"]
+    reason: str = Field("", max_length=500, description="拒绝/退回时必填")
+
+
 # ------------------------------
 # 题目导入 — 统一解析 Schema
 # ------------------------------

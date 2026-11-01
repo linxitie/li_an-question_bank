@@ -60,3 +60,18 @@ def test_news_categories_include_counts(client, db_session):
     counts = {item["category"]: item["count"] for item in body["items"]}
     assert counts["理论"] == 2
     assert counts["党史"] == 1
+
+
+def test_news_timeline_groups_published(client, db_session):
+    article = _article(db_session, "时间线新闻", "理论")
+    article.status = 1
+    article.review_status = "published"
+    db_session.commit()
+
+    response = client.get("/api/news/timeline")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["date"] == "未分期"
+    assert body["items"][0]["items"][0]["news_id"] == article.news_id
