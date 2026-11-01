@@ -189,6 +189,12 @@
           <button class="action-btn ghost" @click="showShare">📤 分享计划</button>
           <button class="action-btn ghost" @click="showCustom">➕ 自定义任务</button>
           <button class="action-btn ghost" @click="showCalendar">📅 学习日历</button>
+          <button class="action-btn ghost" @click="showPriority">📌 任务优先级</button>
+          <button class="action-btn ghost" @click="showAchievement">🏆 成就系统</button>
+          <button class="action-btn ghost" @click="showMockExam">📝 模拟考试</button>
+          <button class="action-btn ghost" @click="showWrongBook">📖 错题本</button>
+          <button class="action-btn ghost" @click="showNotes">📝 学习笔记</button>
+          <button class="action-btn ghost" @click="showSprint">🔥 冲刺模式</button>
         </div>
 
         <!-- 通用弹窗 -->
@@ -684,9 +690,81 @@
         };
       }
 
+      function showPriority() {
+        state.popup = {
+          title: '📌 任务优先级',
+          items: [
+            { label: '高优先级', value: '3个' },
+            { label: '中优先级', value: '5个' },
+            { label: '低优先级', value: '2个' },
+          ],
+          suggestion: '先做高优先级任务，效率更高！',
+        };
+      }
+
+      function showAchievement() {
+        state.popup = {
+          title: '🏆 成就系统',
+          items: [
+            { label: '已解锁', value: '8个' },
+            { label: '进行中', value: '3个' },
+            { label: '未解锁', value: '12个' },
+          ],
+          suggestion: '继续加油，解锁更多成就！',
+        };
+      }
+
+      function showMockExam() {
+        state.popup = {
+          title: '📝 模拟考试',
+          items: [
+            { label: '已参加', value: '5次' },
+            { label: '最高分', value: '68分' },
+            { label: '平均分', value: '62分' },
+          ],
+          suggestion: '多参加模考，熟悉考试节奏！',
+        };
+      }
+
+      function showWrongBook() {
+        state.popup = {
+          title: '📖 错题本',
+          items: [
+            { label: '总错题数', value: '156道' },
+            { label: '已复习', value: '89道' },
+            { label: '待复习', value: '67道' },
+          ],
+          suggestion: '定期复习错题，提分最快！',
+        };
+      }
+
+      function showNotes() {
+        state.popup = {
+          title: '📝 学习笔记',
+          items: [
+            { label: '总笔记数', value: '23篇' },
+            { label: '本周新增', value: '5篇' },
+            { label: '关联知识点', value: '45个' },
+          ],
+          suggestion: '好记性不如烂笔头，继续积累！',
+        };
+      }
+
+      function showSprint() {
+        state.popup = {
+          title: '🔥 冲刺模式',
+          items: [
+            { label: '距考试', value: '30天' },
+            { label: '每日时长', value: '6小时' },
+            { label: '目标分数', value: '70+65+80' },
+          ],
+          suggestion: '最后30天，冲刺阶段全力备考！',
+        };
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats, showGoal, showDuration, showAccuracy, showBadge, showRank, showReminder, showShare, showCustom, showCalendar,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats, showGoal, showDuration, showAccuracy, showBadge, showRank, showReminder, showShare, showCustom, showCalendar, showPriority, showAchievement, showMockExam, showWrongBook, showNotes, showSprint,
       };
     },
   });

@@ -1,0 +1,597 @@
+# -*- coding: utf-8 -*-
+"""
+模块7 v2 - 工作模式：任务清单 + 结构化执行
+点选任务 → 收集参数 → 对应 Agent + 档案上下文 → LLM 生成结构化结果
+"""
+
+import logging
+from datetime import date
+from typing import Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from ...core.database import get_db
+from ...core.security import get_current_user
+from ...models.models import StudyGoal, SysUser
+from ...services import llm_client
+from ...services.agent_router import (
+    AGENT_META,
+    agent_system_prompt,
+    assemble_context,
+    build_trajectory,
+    extract_memories,
+    interview_sample,
+    retrieve_knowledge,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/agent", tags=["联考小智-工作模式"])
+
+# ==================== 工作模式任务清单 ====================
+AGENT_TASKS: List[Dict] = [
+    {
+        "task_id": "xingce_diagnose",
+        "title": "行测错题诊断",
+        "agent": "xingce",
+        "desc": "基于你的错题本与薄弱点，诊断行测短板并给出提升方案",
+        "fields": [
+            {
+                "key": "weak_type",
+                "label": "薄弱题型（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：资料分析、图形推理",
+            },
+        ],
+    },
+    {
+        "task_id": "interview_sim",
+        "title": "模拟一场面试",
+        "agent": "interview",
+        "desc": "出一道结构化面试题 + 示范答题框架 + 一个追问",
+        "fields": [
+            {
+                "key": "qtype",
+                "label": "题目类型",
+                "type": "select",
+                "required": True,
+                "options": ["综合分析", "应急处突", "组织管理", "人际沟通"],
+            },
+        ],
+    },
+    {
+        "task_id": "shenlun_week",
+        "title": "生成一周申论计划",
+        "agent": "shenlun",
+        "desc": "按周生成申论学习计划，含每日任务，可一键写入今日任务",
+        "fields": [
+            {
+                "key": "focus",
+                "label": "本周重点（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：归纳概括专项",
+            },
+        ],
+    },
+    {
+        "task_id": "shenlun_pigai",
+        "title": "申论批改",
+        "agent": "shenlun",
+        "desc": "你贴出申论答案，我按考试标准打分+逐条评语+修改建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["归纳概括", "综合分析", "提出对策", "贯彻执行", "大作文"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答案",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答案贴在这里...",
+            },
+        ],
+    },
+    {
+        "task_id": "daily_jinju",
+        "title": "每日金句推荐",
+        "agent": "shenlun",
+        "desc": "每天自动生成3条申论金句，积累素材，写作直接用",
+        "fields": [
+            {
+                "key": "theme",
+                "label": "主题（选填）",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "为民服务", "创新", "法治", "奋斗", "诚信"],
+            },
+        ],
+    },
+    {
+        "task_id": "fagao_sucha",
+        "title": "法条速查",
+        "agent": "gongzhuan",
+        "desc": "输入关键词，快速查找相关法条及高频考点",
+        "fields": [
+            {
+                "key": "keyword",
+                "label": "关键词",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：行政拘留、取保候审",
+            },
+        ],
+    },
+    {
+        "task_id": "psychology_relax",
+        "title": "考前心理疏导",
+        "agent": "psychology",
+        "desc": "焦虑、紧张、学不进去？和我聊聊，帮你调整状态",
+        "fields": [
+            {
+                "key": "problem",
+                "label": "你现在的状态",
+                "type": "text",
+                "required": True,
+                "placeholder": "比如：最近老是熬夜，白天学不进去...",
+            },
+        ],
+    },
+    {
+        "task_id": "daily_question",
+        "title": "每日一题推荐",
+        "agent": "xingce",
+        "desc": "每天自动推荐一道经典真题，附带详细解析",
+        "fields": [
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "knowledge_map",
+        "title": "知识点思维导图",
+        "agent": "xingce",
+        "desc": "输入知识点，自动生成知识框架和关联考点",
+        "fields": [
+            {
+                "key": "topic",
+                "label": "知识点",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：图形推理、资料分析",
+            },
+        ],
+    },
+    {
+        "task_id": "mock_score",
+        "title": "面试模拟打分",
+        "agent": "interview",
+        "desc": "你答题，我按考试标准打分+逐条评语+改进建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["综合分析", "应急处突", "组织管理", "人际沟通"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答题内容",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答题内容贴在这里...",
+            },
+        ],
+    },
+    {
+        "task_id": "choose_post_detail",
+        "title": "岗位详细分析",
+        "agent": "choose_post",
+        "desc": "输入岗位名称，分析竞争比、薪资待遇、发展前景",
+        "fields": [
+            {
+                "key": "post_name",
+                "label": "岗位名称",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：出入境边防检查、铁路公安",
+            },
+        ],
+    },
+    {
+        "task_id": "zhenti_jiexi",
+        "title": "历年真题解析",
+        "agent": "xingce",
+        "desc": "输入年份和科目，自动生成真题解析和考点分析",
+        "fields": [
+            {
+                "key": "year",
+                "label": "年份",
+                "type": "select",
+                "required": True,
+                "options": ["2025", "2024", "2023", "2022"],
+            },
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": True,
+                "options": ["行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "efficiency_analysis",
+        "title": "学习效率分析",
+        "agent": "psychology",
+        "desc": "分析你的学习数据，找出最高效的学习时段和方法",
+        "fields": [
+            {
+                "key": "question",
+                "label": "你的问题",
+                "type": "text",
+                "required": False,
+                "placeholder": "比如：为什么我晚上学不进去？",
+            },
+        ],
+    },
+    {
+        "task_id": "shenlun_sucai",
+        "title": "申论素材积累",
+        "agent": "shenlun",
+        "desc": "每天自动生成3条申论素材，包含人物案例、金句、政策",
+        "fields": [
+            {
+                "key": "theme",
+                "label": "主题",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "乡村振兴", "科技创新", "生态文明", "基层治理"],
+            },
+        ],
+    },
+    {
+        "task_id": "wrong_analysis",
+        "title": "错题分析报告",
+        "agent": "xingce",
+        "desc": "自动分析你的错题本，找出薄弱题型和提分建议",
+        "fields": [
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "gongzhuan_fatiao",
+        "title": "公专法条梳理",
+        "agent": "gongzhuan",
+        "desc": "梳理指定法规的高频考点、情景题要点与记忆口诀",
+        "fields": [
+            {
+                "key": "law",
+                "label": "法规",
+                "type": "select",
+                "required": True,
+                "options": ["治安管理处罚法", "人民警察法", "刑法", "公安机关办理刑事案件程序规定"],
+            },
+        ],
+    },
+    {
+        "task_id": "choose_post_advice",
+        "title": "选岗建议",
+        "agent": "choose_post",
+        "desc": "结合你的画像档案，给出岗位筛选思路与竞争分析建议",
+        "fields": [
+            {
+                "key": "region",
+                "label": "意向地区（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：山东、北京",
+            },
+            {
+                "key": "profession",
+                "label": "专业（选填）",
+                "type": "text",
+                "required": False,
+                "placeholder": "如：数据警务技术",
+            },
+            {
+                "key": "education",
+                "label": "学历（选填）",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "本科", "硕士", "博士"],
+            },
+        ],
+    },
+]
+
+
+class AgentRunRequest(BaseModel):
+    task_id: str
+    params: Optional[Dict[str, str]] = Field(default_factory=dict)
+
+
+class ImportTodayRequest(BaseModel):
+    title: str = Field(..., min_length=2, max_length=200)
+    content: Optional[str] = Field(None, max_length=500)
+    coin_reward: int = Field(10, ge=0, le=100)
+
+
+@router.post("/import-today", summary="工作台结果一键写入今日任务（模块4联动）")
+async def import_to_today(
+    req: ImportTodayRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """把工作台生成的结果写入学习计划今日任务：完成可领金币，进入模块4每日闭环"""
+    today = date.today().isoformat()
+    # 当日任务排序：取当日最大 sort_order + 1
+    max_sort = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.task_date == today,
+            StudyGoal.status == 1,
+        )
+        .order_by(StudyGoal.sort_order.desc())
+        .first()
+    )
+    sort_order = (max_sort.sort_order + 1) if max_sort and max_sort.sort_order else 0
+
+    goal = StudyGoal(
+        user_id=current_user.user_id,
+        title=req.title.strip(),
+        description=(req.content or "").strip(),
+        goal_type="DAILY",
+        target_count=1,
+        current_count=0,
+        subject_mode=0,
+        is_completed=0,
+        status=1,
+        task_date=today,
+        coin_reward=req.coin_reward,
+        coin_claimed=0,
+        sort_order=sort_order,
+    )
+    db.add(goal)
+    db.commit()
+    db.refresh(goal)
+    return {
+        "goal_id": goal.goal_id,
+        "task_date": today,
+        "title": goal.title,
+        "coin_reward": goal.coin_reward,
+        "message": f"已写入今日任务，完成可领取 {goal.coin_reward} 金币",
+    }
+
+
+@router.get("/memories", summary="长期记忆列表（记忆管理）")
+async def agent_memories(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from ...models.models import UserMemory
+
+    items = (
+        db.query(UserMemory)
+        .filter(UserMemory.user_id == current_user.user_id)
+        .order_by(UserMemory.create_time.desc())
+        .limit(100)
+        .all()
+    )
+    return {
+        "memories": [
+            {
+                "memory_id": m.memory_id,
+                "memory_type": m.memory_type,
+                "content": m.content,
+                "source": m.source,
+                "create_time": m.create_time.isoformat() if m.create_time else None,
+            }
+            for m in items
+        ]
+    }
+
+
+@router.delete("/memory/{memory_id}", summary="删除一条长期记忆")
+async def agent_memory_delete(
+    memory_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from ...models.models import UserMemory
+
+    row = (
+        db.query(UserMemory)
+        .filter(UserMemory.memory_id == memory_id, UserMemory.user_id == current_user.user_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="记忆不存在")
+    db.delete(row)
+    db.commit()
+    return {"message": "已删除该记忆"}
+
+
+@router.get("/trajectory", summary="备考轨迹（长期陪伴：进度/打卡/里程碑）")
+async def agent_trajectory(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        text = build_trajectory(current_user.user_id, db)
+    except Exception as e:
+        logger.warning("轨迹读取失败: %s", e)
+        text = ""
+    return {"trajectory": text, "has_trajectory": bool(text)}
+
+
+@router.get("/tasks", summary="工作模式任务清单")
+async def list_agent_tasks():
+    return {"tasks": AGENT_TASKS}
+
+
+@router.post("/run", summary="执行工作模式任务")
+async def run_agent_task(
+    req: AgentRunRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    task = next((t for t in AGENT_TASKS if t["task_id"] == req.task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    agent_id = task["agent"]
+    agent_prompt = agent_system_prompt(agent_id)
+
+    # 档案上下文（只取摘要）
+    extra = agent_prompt
+    try:
+        ctx = assemble_context(current_user.user_id, db)
+        extract_memories(current_user.user_id, db)
+        if ctx:
+            extra = agent_prompt + "\n\n" + ctx
+    except Exception as e:
+        logger.warning("档案装配失败: %s", e)
+
+    # 拼任务 prompt：任务要求 + 用户参数
+    param_lines = []
+    for f in task["fields"]:
+        val = req.params.get(f["key"], "")
+        if val:
+            param_lines.append(f"{f['label']}：{val}")
+    params_text = "；".join(param_lines) if param_lines else "无额外参数"
+    user_prompt = (
+        f"【工作模式任务】{task['title']}\n"
+        f"任务要求：{task['desc']}\n"
+        f"用户提供的参数：{params_text}\n"
+        "请按任务要求给出结构化、可落地的结果；需要分点时分点；涉及法条注明'以现行有效法条为准'。"
+    )
+
+    # 知识库参考（Phase3 自生长知识库）
+    try:
+        kb = retrieve_knowledge(current_user.user_id, db, user_prompt)
+        if kb:
+            extra = extra + "\n\n" + kb
+    except Exception as e:
+        logger.warning("知识库检索失败: %s", e)
+
+    # 面试模拟任务：按题型抽取示例题与答题要点（零 LLM 题库支撑）
+    if task["task_id"] == "interview_sim":
+        qtype = req.params.get("qtype", "")
+        extra = extra + "\n\n" + interview_sample(qtype, index=0)
+
+    # 选岗任务：岗位库数据支撑（按意向地区/专业/学历筛选真实岗位）
+    if task["task_id"] == "choose_post_advice":
+        try:
+            from ...models.models import PolicePost
+
+            pq = db.query(PolicePost).filter(PolicePost.status == 1)
+            region = req.params.get("region", "")
+            profession = req.params.get("profession", "")
+            education = req.params.get("education", "")
+            if region:
+                pq = pq.filter(PolicePost.region.like(f"%{region}%"))
+            if profession and profession != "不限":
+                pq = pq.filter(PolicePost.profession.like(f"%{profession}%"))
+            if education and education != "不限":
+                pq = pq.filter(PolicePost.education.like(f"%{education}%"))
+            posts = pq.order_by(PolicePost.plan_count.desc()).limit(8).all()
+            if posts:
+                lines = []
+                for p in posts:
+                    lines.append(
+                        f"{p.region} · {p.post_type} · 招{p.plan_count}人 · "
+                        f"竞争比{p.ratio or '待公布'} · 学历{p.education} · "
+                        f"专业{p.profession} · 性别{p.sex_require}"
+                    )
+                extra = extra + "\n\n【岗位库实时数据】当前筛选命中 {n} 条（以官方公告为准）：\n{rows}".format(
+                    n=len(posts), rows="\n".join(lines)
+                )
+        except Exception as e:
+            logger.warning("岗位库检索失败: %s", e)
+
+    try:
+        reply = await llm_client.chat(
+            messages=[{"role": "user", "content": user_prompt}],
+            scene="qa",
+            extra_system=extra,
+        )
+    except llm_client.LLMClientError as e:
+        raise HTTPException(status_code=503, detail=e.message)
+
+    return {
+        "task_id": task["task_id"],
+        "title": task["title"],
+        "agent": agent_id,
+        "agent_name": AGENT_META.get(agent_id, {}).get("name", "联考小智"),
+        "reply": reply,
+    }
+
+
+# ==================== 一键写入今日任务（模块7 → 模块4 联动） ====================
+
+
+class ImportTodayRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200, description="任务标题")
+    content: str = Field("", max_length=500, description="任务内容/描述")
+    coin_reward: int = Field(15, ge=5, le=100, description="金币奖励")
+
+
+@router.post("/import-today", summary="一键写入今日任务")
+async def import_today_task(
+    req: ImportTodayRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    模块7工作模式产出的结构化结果，一键写入模块4的今日任务面板。
+    自动分配金币奖励，完成后自动计入打卡。
+    """
+    from ...models.models import StudyGoal
+
+    # 创建今日任务
+    today_task = StudyGoal(
+        user_id=current_user.user_id,
+        title=req.title,
+        description=req.content,
+        goal_type="DAILY",
+        target_count=1,
+        current_count=0,
+        expected_minutes=30,
+        priority=2,
+        is_completed=0,
+        base_reward=req.coin_reward,
+        reward_coins=req.coin_reward,
+        status=1,
+    )
+    db.add(today_task)
+    db.commit()
+    db.refresh(today_task)
+
+    logger.info(f"用户 {current_user.user_id} 从模块7导入任务: {req.title}")
+
+    return {
+        "goal_id": today_task.goal_id,
+        "title": today_task.title,
+        "reward_coins": today_task.reward_coins,
+        "message": "已写入今日任务，完成后可领取金币",
+    }
