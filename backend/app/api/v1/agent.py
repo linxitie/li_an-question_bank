@@ -77,6 +77,28 @@ AGENT_TASKS: List[Dict] = [
         ],
     },
     {
+        "task_id": "shenlun_pigai",
+        "title": "申论批改",
+        "agent": "shenlun",
+        "desc": "你贴出申论答案，我按考试标准打分+逐条评语+修改建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["归纳概括", "综合分析", "提出对策", "贯彻执行", "大作文"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答案",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答案贴在这里...",
+            },
+        ],
+    },
+    {
         "task_id": "gongzhuan_fatiao",
         "title": "公专法条梳理",
         "agent": "gongzhuan",
