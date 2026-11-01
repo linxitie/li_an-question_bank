@@ -85,6 +85,23 @@
         ];
       }
     },
+    watch: {
+      // 菜单高亮必须由路由驱动。NavBar 在每次 router.push 之后随新页面重新挂载，
+      // setup() 里 activeMenu 的初始值会把高亮拉回首页，表现为
+      // 「内容已切到题库、高亮仍停在首页，刷新也不变」。
+      // immediate: 首屏/刷新即按当前 URL 定高亮；$route 响应式: 同页内跳转也更新。
+      $route: {
+        immediate: true,
+        handler(to) {
+          const path = String((to && to.path) || '');
+          // 不用正则：/page/<id> 里含斜杠，正则字面量在构建链路上容易被转义
+          const seg = path.split('/page/')[1] || '';
+          const id = seg.split('/')[0].split('?')[0];
+          const known = ['home_page', 'question_bank', 'about', 'forum'];
+          this.state.activeMenu = known.indexOf(id) >= 0 ? id : '';
+        }
+      }
+    },
     mounted() {
       this.updateLoginState();
     },

@@ -851,3 +851,119 @@ async def submit_review(
             'updated': len(answers)
         }
     }
+
+
+@router.get("/point-stats", summary="错题知识点/子科目统计（图表）")
+async def get_wrong_point_stats(
+    dimension: str = Query("subcategory", description="统计维度: subcategory=子科目 / point=知识点"),
+    limit: int = Query(10, ge=1, le=50, description="返回条数"),
+    subject_id: Optional[int] = Query(None, description="按科目过滤（可选）"),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """错题分布统计，供「我的」页饼图/条形/雷达图。
+
+    - dimension=subcategory：按子科目（question_bank 三列文本，口径同 `_get_subcategory`）
+    - dimension=point：按考点（question_knowledge ⋈ knowledge_point）
+    - 只统计本人错题（wrong_question_personal）；同一题挂多个考点时按考点各计一次
+    - 不依赖 question_bank.sub_category_id（该列在库中缺失，本功能不需要它）
+    """
+    from sqlalchemy import func as _func, desc as _desc, case as _case
+    from ....models.models import QuestionKnowledge, KnowledgePoint
+
+    user_id = current_user.user_id
+    items: List[Dict[str, Any]] = []
+
+    if dimension == 'point':
+        # 本人错题按考点聚合
+        wrong_rows = db.query(
+            KnowledgePoint.point_id,
+            KnowledgePoint.point_name,
+            _func.count(_func.distinct(WrongQuestionPersonal.question_id)).label('wrong_count'),
+            _func.coalesce(_func.sum(WrongQuestionPersonal.error_count), 0).label('error_count'),
+        ).select_from(WrongQuestionPersonal).join(
+            QuestionKnowledge, QuestionKnowledge.question_id == WrongQuestionPersonal.question_id
+        ).join(
+            KnowledgePoint, KnowledgePoint.point_id == QuestionKnowledge.knowledge_point_id
+        ).filter(
+            WrongQuestionPersonal.user_id == user_id
+        )
+        if subject_id:
+            wrong_rows = wrong_rows.filter(KnowledgePoint.subject_id == subject_id)
+        wrong_rows = wrong_rows.group_by(
+            KnowledgePoint.point_id, KnowledgePoint.point_name
+        ).order_by(_desc('wrong_count')).limit(limit).all()
+
+        point_ids = [r[0] for r in wrong_rows]
+        totals = {}
+        if point_ids:
+            for pid, cnt in db.query(
+                QuestionKnowledge.knowledge_point_id,
+                _func.count(QuestionKnowledge.question_id)
+            ).filter(
+                QuestionKnowledge.knowledge_point_id.in_(point_ids)
+            ).group_by(QuestionKnowledge.knowledge_point_id).all():
+                totals[int(pid)] = int(cnt or 0)
+
+        for pid, pname, wrong_count, error_count in wrong_rows:
+            total = totals.get(int(pid), 0)
+            items.append({
+                'key': int(pid),
+                'name': pname,
+                'wrong_count': int(wrong_count or 0),
+                'error_count': int(error_count or 0),
+                'total': total,
+                'wrong_rate': round(int(wrong_count or 0) * 100 / max(total, 1), 1),
+            })
+    else:
+        # 子科目维度：三列文本折成统一维度
+        # 三列在模型里是 Enum，库内有枚举外历史值（如「判断推理」），
+        # 必须 cast 成 String 读取，否则触发枚举校验异常 → 500。
+        from sqlalchemy import cast as _cast, String as _String
+        sc_col = _case(
+            (QuestionBank.subject_id == 1, _cast(QuestionBank.xingce_subcategory, _String)),
+            (QuestionBank.subject_id == 2, _cast(QuestionBank.shenlun_subcategory, _String)),
+            (QuestionBank.subject_id == 3, _cast(QuestionBank.gongzhuan_subcategory, _String)),
+            else_=None,
+        ).label('sc')
+
+        wrong_q = db.query(
+            sc_col,
+            _func.count(_func.distinct(WrongQuestionPersonal.question_id)).label('wrong_count'),
+            _func.coalesce(_func.sum(WrongQuestionPersonal.error_count), 0).label('error_count'),
+        ).select_from(WrongQuestionPersonal).join(
+            QuestionBank, QuestionBank.question_id == WrongQuestionPersonal.question_id
+        ).filter(WrongQuestionPersonal.user_id == user_id)
+        if subject_id:
+            wrong_q = wrong_q.filter(QuestionBank.subject_id == subject_id)
+        wrong_rows = wrong_q.group_by(sc_col).order_by(_desc('wrong_count')).limit(limit).all()
+
+        total_q = db.query(
+            sc_col, _func.count(QuestionBank.question_id)
+        ).filter(QuestionBank.status == 1)
+        if subject_id:
+            total_q = total_q.filter(QuestionBank.subject_id == subject_id)
+        totals = {}
+        for sc_name, cnt in total_q.group_by(sc_col).all():
+            if sc_name and sc_name != '无':
+                totals[sc_name] = int(cnt or 0)
+
+        for sc_name, wrong_count, error_count in wrong_rows:
+            if not sc_name or sc_name == '无':
+                continue  # 与类型进度同口径：占位子科目不进图表
+            total = totals.get(sc_name, 0)
+            items.append({
+                'key': sc_name,
+                'name': sc_name,
+                'wrong_count': int(wrong_count or 0),
+                'error_count': int(error_count or 0),
+                'total': total,
+                'wrong_rate': round(int(wrong_count or 0) * 100 / max(total, 1), 1),
+            })
+
+    return {
+        'dimension': dimension,
+        'limit': limit,
+        'total_points': len(items),
+        'items': items,
+    }

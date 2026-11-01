@@ -420,6 +420,43 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 logger.info("自动迁移: knowledge_point 添加列 sub_category_id")
 
+        # 检查 question_bank 表(归一化子科目:新增 sub_category_id 字段)
+        # 根因: 模型 question_bank.sub_category_id 存在但历史库缺该列，
+        #       任何 ORM 实体查询(题库列表 /api/questions、快速练习)都会
+        #       "no such column: question_bank.sub_category_id" → 500。
+        # 回填规则: 按 subject_id 取对应文本列(xingce/shenlun/gongzhuan_subcategory)
+        #       与 sub_categories.name 精确匹配；匹配不到保持 NULL（未分类），
+        #       不回填「无」等占位值。
+        if 'question_bank' in inspector.get_table_names():
+            qb_cols = [c['name'] for c in inspector.get_columns('question_bank')]
+            if 'sub_category_id' not in qb_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE question_bank "
+                        "ADD COLUMN sub_category_id INTEGER REFERENCES sub_categories(id)"
+                    ))
+                    conn.commit()
+                logger.info("自动迁移: question_bank 添加列 sub_category_id")
+                with engine.connect() as conn:
+                    res = conn.execute(text("""
+                        UPDATE question_bank
+                           SET sub_category_id = (
+                               SELECT sc.id FROM sub_categories sc
+                                WHERE sc.subject_id = question_bank.subject_id
+                                  AND sc.name = CASE question_bank.subject_id
+                                                   WHEN 1 THEN question_bank.xingce_subcategory
+                                                   WHEN 2 THEN question_bank.shenlun_subcategory
+                                                   WHEN 3 THEN question_bank.gongzhuan_subcategory
+                                               END
+                           )
+                         WHERE sub_category_id IS NULL
+                    """))
+                    conn.commit()
+                    logger.info(
+                        "自动迁移: question_bank.sub_category_id 回填 %s 行",
+                        res.rowcount,
+                    )
+
         # 检查 study_material 表(备考资料:新增 content_hash 去重字段)
         # 根因: 模型定义了 content_hash 但历史数据库表缺该列，导致 admin_list 的 count() 查询
         #       触发 "no such column: study_material.content_hash" → 500 错误
