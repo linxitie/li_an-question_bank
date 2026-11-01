@@ -46,26 +46,33 @@ def _fetch_html(
     timeout: int = 20,
     headers: dict[str, str] | None = None,
     state_path: str | None = None,
+    wait_ms: int = 2000,
 ) -> str:
     if adapter == "playwright":
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
             try:
-                browser = p.chromium.launch(headless=True, channel="msedge")
+                browser = p.chromium.launch(
+                    headless=True,
+                    channel="msedge",
+                    args=["--disable-blink-features=AutomationControlled"],
+                )
             except Exception:
                 browser = p.chromium.launch(headless=True)
             context = browser.new_context(
                 user_agent=UA,
                 storage_state=state_path or None,
+                locale="zh-CN",
+                timezone_id="Asia/Shanghai",
             )
             page = context.new_page()
             try:
-                page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
-                page.wait_for_timeout(2000)
+                page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+                page.wait_for_timeout(wait_ms)
                 if len(page.content()) < 2000:
-                    page.reload(wait_until="networkidle", timeout=timeout * 1000)
-                    page.wait_for_timeout(2000)
+                    page.reload(wait_until="domcontentloaded", timeout=timeout * 1000)
+                    page.wait_for_timeout(wait_ms)
                 html = page.content()
             finally:
                 browser.close()
@@ -85,6 +92,7 @@ def parse_list_links(
     page_url: str,
     limit: int = 10,
     allowed_hosts: tuple[str, ...] = (),
+    link_contains: str = "",
 ) -> list[str]:
     soup = BeautifulSoup(html, "html.parser")
     links: list[str] = []
@@ -102,6 +110,8 @@ def parse_list_links(
         if not url.startswith(("http://", "https://")):
             continue
         host = urlparse(url).netloc.lower()
+        if link_contains and link_contains not in url:
+            continue
         if any(host.startswith(prefix) for prefix in _BAD_HOST_PREFIXES):
             continue
         if allowed_hosts and not any(
@@ -228,7 +238,11 @@ def collect_source(
     state_path = _playwright_state(source)
     fetch = fetcher or (
         lambda url: _fetch_html(
-            url, source.adapter, headers=headers, state_path=state_path
+            url,
+            source.adapter,
+            headers=headers,
+            state_path=state_path,
+            wait_ms=10000 if source.code == "mps" else 2000,
         )
     )
     storage = storage or get_news_storage()
@@ -246,7 +260,13 @@ def collect_source(
         list_html = fetch(source.list_url)
         host = urlparse(source.base_url).netloc.lower()
         allowed_hosts = (host, host.removeprefix("www."))
-        links = parse_list_links(list_html, source.list_url, limit=limit, allowed_hosts=allowed_hosts)
+        links = parse_list_links(
+            list_html,
+            source.list_url,
+            limit=limit,
+            allowed_hosts=allowed_hosts,
+            link_contains=source.link_contains,
+        )
         report["links"] = len(links)
         for link in links:
             try:
