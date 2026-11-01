@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """gate_all.py — 一键执行 L0-L7，聚合退出码"""
-import subprocess, sys, os, json, time
+import subprocess, sys, os, json, time, sqlite3
 
 BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 WORKSPACE_ROOT = os.path.abspath(os.path.join(BACKEND_ROOT, '..'))
@@ -32,6 +32,20 @@ GATES = [
 
 QUICK_GATES = ('L0', 'L1-G', 'L1', 'L1-H')
 
+def _has_local_question_db() -> bool:
+    """CI 的干净 checkout 不含 gitignore 的 question_bank.db，L1-G 无法执行。"""
+    db = os.path.join(BACKEND_ROOT, 'data', 'question_bank.db')
+    if not os.path.exists(db):
+        return False
+    try:
+        con = sqlite3.connect('file:%s?mode=ro' % db.replace('\\', '/'), uri=True)
+        try:
+            return con.execute('SELECT COUNT(*) FROM question_bank').fetchone()[0] > 0
+        finally:
+            con.close()
+    except Exception:
+        return False
+
 def main():
     # Windows 控制台默认 GBK：门禁脚本会打印 ✅/ℹ 等字符，子进程直接写 GBK 管道时
     # 抛 UnicodeEncodeError 被误判成 FAIL，本进程再打印含 U+FFFD 的结果又会二次崩溃。
@@ -43,6 +57,7 @@ def main():
         pass
 
     quick = '--quick' in sys.argv
+    ci = '--ci' in sys.argv
     layer_filter = None
     if '--layer' in sys.argv:
         idx = sys.argv.index('--layer')
@@ -53,6 +68,10 @@ def main():
         if quick and name not in QUICK_GATES:
             continue
         if layer_filter and name != layer_filter:
+            continue
+        if ci and name == 'L1-G' and not _has_local_question_db():
+            print('  SKIP  L1-G  (CI 无 question_bank.db 快照；本地仍强制执行)')
+            results.append({'layer': name, 'status': 'SKIP', 'elapsed_s': 0.0})
             continue
         t0 = time.time()
         is_node = name in NODE_GATES
@@ -79,7 +98,9 @@ def main():
         json.dump({'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'), 'results': results}, f, ensure_ascii=False, indent=2)
 
     failed = sum(1 for r in results if r['status'] == 'FAIL')
-    print(f'\ngate_all: {len(results) - failed}/{len(results)} 通过')
+    skipped = sum(1 for r in results if r['status'] == 'SKIP')
+    suffix = f'，{skipped} SKIP' if skipped else ''
+    print(f'\ngate_all: {len(results) - failed - skipped}/{len(results) - skipped} 通过{suffix}')
     sys.exit(1 if failed > 0 else 0)
 
 if __name__ == '__main__':
