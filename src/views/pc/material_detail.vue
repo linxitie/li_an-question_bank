@@ -123,6 +123,10 @@ type Card = {
   card_front?: string | null;
   card_back?: string | null;
   subject?: string;
+  /** 配图卡封面（导入 cover 列带入；空则详情页不渲染图区） */
+  cover_image?: string | null;
+  /** A 方案：通用技巧卡（分类有、考点空）标记 */
+  is_generic?: boolean;
 };
 
 const route = useRoute();
