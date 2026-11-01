@@ -43,7 +43,6 @@
     "@vueuse/core": "14.1.0",
     "ant-design-vue": "4.2.6",
     "axios": "1.13.6",
-    "docx-preview": "^0.3.7",
     "element-plus": "2.13.7",
     "mammoth": "1.8.0",
     "mitt": "^3.0.1",

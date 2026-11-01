@@ -837,6 +837,7 @@ app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
 app.include_router(media_assets_api.router)
+app.include_router(media_assets_api.router_api)  # /api/media 别名
 app.include_router(websocket_router)
 app.include_router(news.router)
 app.include_router(recruitment.router)

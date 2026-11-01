@@ -7,22 +7,40 @@
         <XIcon :icon="ArrowLeft" :size="22" color="#1A365D" class="nav-back" @click="goBack"></XIcon>
       </div>
       <h1 class="nav-title">学习论坛</h1>
-      <div class="nav-right">
-        <button class="nav-fav-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
-      </div>
+      <div class="nav-right"></div>
     </header>
 
-    <!-- 分类标签 -->
-    <section class="category-tabs">
-      <div class="tab-scroll">
-        <div 
-          v-for="(tab, index) in tabs" 
-          :key="index"
+    <!-- 固定工具条：全部 / 今日热门 / 我的帖子 + 五角星 + 搜索筛选 -->
+    <section class="forum-toolbar">
+      <div class="tab-row">
+        <div
+          v-for="tab in tabs"
+          :key="tab.key"
           :class="['cat-tab', { active: activeCategory === tab.key }]"
           @click="selectTab(tab.key)"
         >
           {{ tab.name }}
         </div>
+        <button class="nav-fav-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
+      </div>
+      <template v-if="!searchCollapsed">
+        <div class="m-search-row">
+          <input v-model="searchKeyword" class="m-search-input" placeholder="搜索帖子标题或内容…"
+            @keyup.enter="applySearch" />
+          <button class="m-search-btn" @click="applySearch">搜索</button>
+          <button class="m-search-reset" @click="resetSearch">重置</button>
+        </div>
+        <div class="m-date-row">
+          <input v-model="searchDateFrom" type="date" class="m-date" />
+          <span class="m-tilde">~</span>
+          <input v-model="searchDateTo" type="date" class="m-date" />
+        </div>
+        <div class="m-collapse-row" @click="searchCollapsed = true">
+          <span class="m-collapse-arrow">︿</span>
+        </div>
+      </template>
+      <div v-else class="m-collapse-row" @click="searchCollapsed = false">
+        <span class="m-collapse-arrow">﹀</span>
       </div>
     </section>
 
@@ -181,14 +199,16 @@ export default defineComponent({
 
     // 分类标签
     const activeCategory = ref('all');
+    const searchKeyword = ref('');
+    const searchCollapsed = ref(false);
+    const searchDateFrom = ref('');
+    const searchDateTo = ref('');
     // key 必须与后端 forum_post.share_type 枚举一致
+    // 2026-10-31：取消原分类，改为 全部 / 今日热门 / 我的帖子
     const tabs = ref([
       { key: 'all', name: '全部' },
-      { key: 'DISCUSSION', name: '学习讨论' },
-      { key: 'EXPERIENCE', name: '经验分享' },
-      { key: 'QUESTION', name: '答疑解惑' },
-      { key: 'RESOURCE', name: '资料分享' },
-      { key: 'FEELING', name: '心情打卡' }
+      { key: 'hot', name: '今日热门' },
+      { key: 'mine', name: '我的帖子' }
     ]);
     
     // 帖子列表（只使用接口数据，禁止内置演示帖）
@@ -203,15 +223,34 @@ export default defineComponent({
     });
     
     // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
+    /** 应用搜索（关键词 + 日期） */
+    const applySearch = () => { loadPosts(activeCategory.value); };
+    const resetSearch = () => {
+      searchKeyword.value = '';
+      searchDateFrom.value = '';
+      searchDateTo.value = '';
+      loadPosts(activeCategory.value);
+    };
+
     const loadPosts = async (categoryKey: string = activeCategory.value) => {
       try {
         // 补认证头：缺失时后端只会返回公开数据，私有/审核态字段与用户信息会缺失
         const auth = (window as any).__VTJ_AUTH__;
         const params = new URLSearchParams({ limit: '50' });
-        if (categoryKey && categoryKey !== 'all') {
-          params.set('share_type', categoryKey);
+        const today = new Date().toISOString().slice(0, 10);
+        if (categoryKey === 'hot') {
+          params.set('sort_by', 'likes');
+          params.set('order', 'desc');
+          params.set('date_from', today);
+          params.set('date_to', today);
+        } else if (categoryKey === 'mine') {
+          params.set('only_mine', '1');
         }
-        const res = await fetch(`/api/forum/posts?${params.toString()}`, {
+        if (searchKeyword.value.trim()) params.set('keyword', searchKeyword.value.trim());
+        if (searchDateFrom.value) params.set('date_from', searchDateFrom.value);
+        if (searchDateTo.value) params.set('date_to', searchDateTo.value);
+        const endpoint = categoryKey === 'mine' ? '/api/forum/my-posts' : '/api/forum/posts';
+        const res = await fetch(`${endpoint}?${params.toString()}`, {
           headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -326,6 +365,12 @@ export default defineComponent({
       filteredPosts,
       goBack,
       selectTab,
+      searchKeyword,
+      searchDateFrom,
+      searchDateTo,
+      searchCollapsed,
+      applySearch,
+      resetSearch,
       createPost,
       favVisible,
       favTab,
@@ -672,4 +717,25 @@ export default defineComponent({
 .fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
 .fav-empty { color: #94a3b8; font-size: 13px; padding: 24px 0; text-align: center; }
+/* 2026-10-31：整页 flex，工具条固定，只有列表滚动 */
+.mobile-forum-page { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.top-nav { flex: 0 0 auto; }
+.forum-toolbar { flex: 0 0 auto; background: #fff; padding: 8px 12px 10px;
+  box-shadow: 0 6px 8px -8px rgba(15,23,42,.25); }
+.tab-row { display: flex; align-items: center; gap: 8px; overflow-x: auto; }
+.tab-row .nav-fav-btn { margin-left: auto; flex: 0 0 auto; }
+.m-search-row { display: flex; gap: 6px; margin-top: 8px; }
+.m-search-input { flex: 1 1 auto; min-width: 0; height: 34px; padding: 0 10px;
+  border: 1px solid #e3e8ef; border-radius: 8px; font-size: 13px; }
+.m-search-btn { flex: 0 0 auto; height: 34px; padding: 0 14px; border: none;
+  border-radius: 8px; background: #c41e3a; color: #fff; font-size: 13px; }
+.m-search-reset { flex: 0 0 auto; height: 34px; padding: 0 12px; border: 1px solid #e3e8ef;
+  border-radius: 8px; background: #fff; color: #475569; font-size: 13px; }
+.m-date-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.m-date { flex: 1 1 0; height: 32px; padding: 0 8px; border: 1px solid #e3e8ef;
+  border-radius: 8px; font-size: 12px; }
+.m-tilde { color: #94a3b8; }
+.main-content { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+.m-collapse-row { display: flex; justify-content: center; padding: 2px 0 0; }
+.m-collapse-arrow { font-size: 16px; color: #94a3b8; line-height: 1; cursor: pointer; }
 </style>

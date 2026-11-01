@@ -93,9 +93,20 @@ beforeEach(() => {
 });
 
 describe('community 表单校验', () => {
-  it('标题与内容为空时拒绝', () => {
-    expect(validatePostDraft({ title: '  ', content: '内容' })).toBe('请输入标题');
-    expect(validatePostDraft({ title: '标题', content: '  ' })).toBe('请输入内容');
+  it('标题、正文、附件三者都为空时拒绝', () => {
+    // 2026-11-01：放宽为「标题/正文/附件 任一即可」
+    expect(validatePostDraft({ title: '  ', content: '  ' })).toBe('标题、正文、附件至少填写一项');
+    expect(validatePostDraft({ title: '  ', content: '  ', attachments: [] })).toBe(
+      '标题、正文、附件至少填写一项'
+    );
+  });
+
+  it('只有标题 / 只有正文 / 只有附件 均放行', () => {
+    expect(validatePostDraft({ title: '只有标题', content: '' })).toBeNull();
+    expect(validatePostDraft({ title: '', content: '只有正文' })).toBeNull();
+    expect(
+      validatePostDraft({ title: '', content: '', attachments: [{ url: '/media/x' }] })
+    ).toBeNull();
   });
 
   it('评论为空时拒绝', () => {
@@ -295,12 +306,13 @@ describe('community store 发帖', () => {
   it('校验失败不调用接口', async () => {
     const store = useCommunityStore();
 
+    // 三者都空才拒绝
     await expect(
-      store.createPost({ title: '', content: '内容' })
-    ).rejects.toThrow('请输入标题');
+      store.createPost({ title: '', content: '' })
+    ).rejects.toThrow('标题、正文、附件至少填写一项');
 
     expect(mockedCreatePost).not.toHaveBeenCalled();
-    expect(store.error).toBe('请输入标题');
+    expect(store.error).toBe('标题、正文、附件至少填写一项');
   });
 
   it('提交中重复发帖被拒绝', async () => {

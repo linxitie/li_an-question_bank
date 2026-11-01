@@ -4,55 +4,70 @@
       v-for="file in files"
       :key="file.url"
       class="fl-item"
-      :href="file.url"
-      :download="canPreview(file.name) ? undefined : file.name"
-      :target="canPreview(file.name) ? '_blank' : undefined"
-      @click="onOpen($event, file)"
+      href="javascript:void(0)"
       rel="noopener"
+      @click="onDownload($event, file)"
     >
       <span class="fl-icon">{{ fileIcon(file.name) }}</span>
       <span class="fl-name">{{ file.name }}</span>
       <span class="fl-size">{{ formatFileSize(file.size) }}</span>
     </a>
   </div>
-  <DocxPreview
-    v-if="previewUrl"
-    :url="previewUrl"
-    :name="previewName"
-    @close="previewUrl = ''" />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import { fileIcon, formatFileSize } from './fileUtils';
-import DocxPreview from './DocxPreview.vue';
 import type { ForumImageAttachment } from './imageUtils';
 
 defineProps<{ files: ForumImageAttachment[] }>();
 
-// 2026-10-30：PDF / 图片 / 文本用浏览器内联打开；Office/压缩包仍走下载
-const PREVIEW_EXT = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.txt'];
-const canPreview = (name: string) =>
-  PREVIEW_EXT.some((ext) => (name || '').toLowerCase().endsWith(ext));
-
-/** 可预览类型：显式新标签打开；被拦截时退回下载（?download=1 强制 attachment） */
-const previewUrl = ref('');
-const previewName = ref('');
-
-const isDocx = (name: string) => (name || '').toLowerCase().endsWith('.docx');
-
-const onOpen = (e: MouseEvent, file: ForumImageAttachment) => {
-  // .docx：站内渲染（docx-preview）；.doc 旧格式不支持，交给下载
-  if (isDocx(file.name)) {
-    e.preventDefault();
-    previewUrl.value = file.url;
-    previewName.value = file.name;
-    return;
-  }
-  if (!canPreview(file.name)) return; // office/压缩包：交给原生 download 属性
+/**
+ * 2026-10-30（用户决定）：点击附件直接用浏览器下载。
+ *
+ * 为什么用 fetch + blob 而不是 location.href：
+ * - location.href 会把整个 SPA 导航到 /media/...，一旦代理/响应异常就表现为"页面刷新"；
+ * - blob + <a download> 完全留在当前页，只触发下载，不会刷新页面。
+ * 失败时退回直接导航，保证仍能拿到文件。
+ */
+const onDownload = async (e: MouseEvent, file: ForumImageAttachment) => {
   e.preventDefault();
-  const win = window.open(file.url, '_blank', 'noopener');
-  if (!win) window.location.href = file.url + (file.url.includes('?') ? '&' : '?') + 'download=1';
+  const sep = file.url.includes('?') ? '&' : '?';
+  // 2026-10-31：/media 依赖 vite 代理，统一改走已代理的 /api/media
+  const raw = file.url.startsWith('/media/')
+    ? '/api/media/' + file.url.slice('/media/'.length)
+    : file.url;
+  // 2026-11-01：加时间戳 + no-store，绕开浏览器缓存。
+  // 服务端对媒体返回 Cache-Control: immutable(1年)，之前代理异常时缓存进去的
+  // index.html 会被长期复用，导致"服务端已修好、浏览器还下错文件"。
+  const url = raw + sep + 'download=1' + '&_t=' + Date.now();
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    // 若拿到的是 HTML（代理未生效时 Vite 返回 index.html），直接判失败，
+    // 避免把网页存成 .docx/.pdf 导致"打不开/正在加载资源"。
+    const head = await blob.slice(0, 15).text();
+    if (head.trimStart().startsWith('<')) {
+      throw new Error('服务器返回了网页而不是文件（媒体代理未生效）');
+    }
+    // 大小校验：与记录不一致说明拿到的是错误内容（例如被缓存的旧响应）
+    const expect = Number(file.size || 0);
+    if (expect > 0 && blob.size !== expect) {
+      throw new Error(`文件大小不符（期望 ${expect} 字节，实际 ${blob.size} 字节）`);
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = file.name || 'download';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+  } catch (err: any) {
+    ElMessage.error('下载失败：' + (err?.message || '未知错误'));
+    window.location.href = raw + sep + 'download=1' + '&_t=' + Date.now();
+  }
 };
 </script>
 
@@ -74,6 +89,7 @@ const onOpen = (e: MouseEvent, file: ForumImageAttachment) => {
   color: #3b4a6b;
   font-size: 12px;
   text-decoration: none;
+  cursor: pointer;
 }
 .fl-item:hover {
   background: #e8eef9;
