@@ -825,3 +825,143 @@ async def weekly_report(
         "subject_stats": subject_stats,
         "suggestion": suggestion,
     }
+
+
+# ==================== 打卡日历 ====================
+
+
+@router.get("/checkin-calendar", summary="近30天打卡日历")
+async def checkin_calendar(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    返回近30天的打卡数据，用于前端日历展示。
+    每天有完成任务就算打卡成功。
+    """
+    from datetime import datetime, timedelta
+
+    today = datetime.now().date()
+    start_date = today - timedelta(days=29)
+
+    # 查询近30天的任务
+    tasks = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.status == 1,
+            StudyGoal.task_date >= start_date,
+            StudyGoal.task_date <= today,
+        )
+        .all()
+    )
+
+    # 按日期分组
+    checkin_days = {}
+    for t in tasks:
+        if t.task_date:
+            date_str = t.task_date.isoformat() if hasattr(t.task_date, 'isoformat') else str(t.task_date)
+            if date_str not in checkin_days:
+                checkin_days[date_str] = {"total": 0, "done": 0}
+            checkin_days[date_str]["total"] += 1
+            if t.is_completed == 1:
+                checkin_days[date_str]["done"] += 1
+
+    # 计算连续打卡天数
+    streak = 0
+    check_date = today
+    while True:
+        date_str = check_date.isoformat()
+        if date_str in checkin_days and checkin_days[date_str]["done"] > 0:
+            streak += 1
+            check_date -= timedelta(days=1)
+        else:
+            break
+
+    return {
+        "start_date": start_date.isoformat(),
+        "end_date": today.isoformat(),
+        "checkin_days": checkin_days,
+        "streak_days": streak,
+        "total_days": len(checkin_days),
+    }
+
+
+# ==================== 错题联动（自动从错题本提取薄弱题型） ====================
+
+
+@router.post("/auto-add-wrong", summary="自动从错题本添加今日任务")
+async def auto_add_wrong(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    自动从错题本里提取最近的薄弱题型，加入今日任务。
+    每次最多加3道错题任务，每道10金币。
+    """
+    from datetime import datetime
+
+    try:
+        from ...models.models import WrongQuestionPersonal
+
+        # 找用户最近的错题（最多5道）
+        wrongs = (
+            db.query(WrongQuestionPersonal)
+            .filter(
+                WrongQuestionPersonal.user_id == current_user.user_id,
+                WrongQuestionPersonal.status == 1,
+            )
+            .order_by(WrongQuestionPersonal.create_time.desc())
+            .limit(5)
+            .all()
+        )
+
+        if not wrongs:
+            return {"added": 0, "message": "错题本里没有错题"}
+
+        today = datetime.now().date()
+        added = 0
+        for w in wrongs[:3]:
+            # 检查今天是否已经加过这道题
+            existing = (
+                db.query(StudyGoal)
+                .filter(
+                    StudyGoal.user_id == current_user.user_id,
+                    StudyGoal.status == 1,
+                    StudyGoal.task_date == today,
+                    StudyGoal.title.like(f"%{w.question_id}%"),
+                )
+                .first()
+            )
+            if existing:
+                continue
+
+            # 创建错题任务
+            wrong_task = StudyGoal(
+                user_id=current_user.user_id,
+                title=f"复习错题 #{w.question_id}",
+                description="从错题本自动添加，重点复习",
+                goal_type="DAILY",
+                target_count=1,
+                current_count=0,
+                expected_minutes=10,
+                priority=2,
+                is_completed=0,
+                base_reward=10,
+                reward_coins=10,
+                task_date=today,
+                status=1,
+            )
+            db.add(wrong_task)
+            added += 1
+
+        db.commit()
+
+        return {
+            "added": added,
+            "message": f"已从错题本添加 {added} 道复习任务",
+        }
+
+    except Exception as e:
+        logger.warning("自动添加错题失败: %s", e)
+        raise HTTPException(status_code=500, detail="自动添加错题失败")
