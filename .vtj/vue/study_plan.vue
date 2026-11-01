@@ -178,6 +178,7 @@
           <button class="action-btn ghost" @click="reset">🔄 重新生成</button>
           <button class="action-btn ghost" @click="askAI">🤖 AI 调整计划</button>
           <button class="action-btn ghost" @click="showWeeklyReport">📊 生成周报</button>
+          <button class="action-btn ghost" @click="autoAddWrong">📚 错题推荐</button>
         </div>
 
         <!-- 学习周报弹窗 -->
@@ -466,9 +467,24 @@
         }
       }
 
+      async function autoAddWrong() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/auto-add-wrong', { method: 'POST' });
+          const d = await res.json();
+          if (res.ok) {
+            state.coinNotice = d.message;
+            loadPlan();
+          } else {
+            state.error = d.detail || '添加错题失败';
+          }
+        } catch (e) {
+          state.error = '网络异常，添加错题失败';
+        }
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong,
       };
     },
   });
