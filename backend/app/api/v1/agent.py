@@ -344,3 +344,53 @@ async def run_agent_task(
         "agent_name": AGENT_META.get(agent_id, {}).get("name", "联考小智"),
         "reply": reply,
     }
+
+
+# ==================== 一键写入今日任务（模块7 → 模块4 联动） ====================
+
+
+class ImportTodayRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200, description="任务标题")
+    content: str = Field("", max_length=500, description="任务内容/描述")
+    coin_reward: int = Field(15, ge=5, le=100, description="金币奖励")
+
+
+@router.post("/import-today", summary="一键写入今日任务")
+async def import_today_task(
+    req: ImportTodayRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    模块7工作模式产出的结构化结果，一键写入模块4的今日任务面板。
+    自动分配金币奖励，完成后自动计入打卡。
+    """
+    from ...models.models import StudyGoal
+
+    # 创建今日任务
+    today_task = StudyGoal(
+        user_id=current_user.user_id,
+        title=req.title,
+        description=req.content,
+        goal_type="DAILY",
+        target_count=1,
+        current_count=0,
+        expected_minutes=30,
+        priority=2,
+        is_completed=0,
+        base_reward=req.coin_reward,
+        reward_coins=req.coin_reward,
+        status=1,
+    )
+    db.add(today_task)
+    db.commit()
+    db.refresh(today_task)
+
+    logger.info(f"用户 {current_user.user_id} 从模块7导入任务: {req.title}")
+
+    return {
+        "goal_id": today_task.goal_id,
+        "title": today_task.title,
+        "reward_coins": today_task.reward_coins,
+        "message": "已写入今日任务，完成后可领取金币",
+    }
