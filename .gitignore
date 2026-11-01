@@ -130,7 +130,6 @@ backend/.env copy*
 backend/content_hub_vault/
 # 原始金句知识库（含自有 .git / node_modules，不纳入本仓库）
 每日金句知识库/
-!deploy/.env.example
 !deploy/.env.production.example
 # 本地 MCP 配置与管理员令牌（已从索引移除；历史泄露的密钥请轮换）。
 .obsidian_mcp.json
