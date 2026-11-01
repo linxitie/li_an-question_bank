@@ -144,6 +144,58 @@ AGENT_TASKS: List[Dict] = [
         ],
     },
     {
+        "task_id": "daily_question",
+        "title": "每日一题推荐",
+        "agent": "xingce",
+        "desc": "每天自动推荐一道经典真题，附带详细解析",
+        "fields": [
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "knowledge_map",
+        "title": "知识点思维导图",
+        "agent": "xingce",
+        "desc": "输入知识点，自动生成知识框架和关联考点",
+        "fields": [
+            {
+                "key": "topic",
+                "label": "知识点",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：图形推理、资料分析",
+            },
+        ],
+    },
+    {
+        "task_id": "mock_score",
+        "title": "面试模拟打分",
+        "agent": "interview",
+        "desc": "你答题，我按考试标准打分+逐条评语+改进建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["综合分析", "应急处突", "组织管理", "人际沟通"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答题内容",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答题内容贴在这里...",
+            },
+        ],
+    },
+    {
         "task_id": "gongzhuan_fatiao",
         "title": "公专法条梳理",
         "agent": "gongzhuan",
