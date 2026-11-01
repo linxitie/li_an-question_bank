@@ -65,6 +65,25 @@ class TestBadgeTop:
         r = stu.put("/api/badges/top", json={"items": [{"kind": "achievement", "id": "x"}]})
         assert r.status_code == 400
 
+    def test_my_exposes_pinned_flag(self, stu, owned_ids):
+        """回归：/api/badges/my 必须回 pinned，否则前端星标与「取消精选」永远不出现。"""
+        pick = owned_ids[:2]
+        assert stu.put("/api/badges/top", json={
+            "items": [{"kind": "achievement", "id": x} for x in pick]}).status_code == 200
+        try:
+            mine = stu.get("/api/badges/my").json()["items"]
+            flags = {i["id"]: i.get("pinned") for i in mine if i.get("kind") == "achievement"}
+            for bid in pick:
+                assert flags.get(bid) is True, f"精选徽章 {bid} 的 pinned 应为 True"
+            others = [i["id"] for i in mine
+                      if i.get("kind") == "achievement" and i.get("owned") and i["id"] not in pick]
+            for bid in others:
+                assert flags.get(bid) is False, f"未精选徽章 {bid} 的 pinned 应为 False"
+        finally:
+            # 还原现场（保持原来 2 枚精选，顺序不变）
+            stu.put("/api/badges/top", json={
+                "items": [{"kind": "achievement", "id": x} for x in pick]})
+
 
 class TestBadgeSummaryFields:
     def test_coins_present(self, stu):

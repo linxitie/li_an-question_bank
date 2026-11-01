@@ -21,7 +21,11 @@ def _pages():
 
 
 def test_page_route_count():
-    assert len(_pages()) == 92
+    # 92 → 99：备考资料交付线新增 7 条页面路由（2026-11-01 核对）
+    #   /badges、/badges-demo、/badge-preview、/materials/upload、
+    #   /materials-preview、/materials/detail、/admin/material-rules
+    # 路由只增不减；再新增时请同步本数字并在提交信息写明。
+    assert len(_pages()) == 99
 
 
 def test_whitelist_has_no_roles():

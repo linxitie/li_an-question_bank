@@ -26,6 +26,11 @@
           <p class="dm-time" v-if="item.owned">获得于 {{ dateOnly(item.obtained_at) || '未记录' }}</p>
           <p class="dm-time dm-time-todo" v-else>尚未获得</p>
         </div>
+        <!-- 精选：弹层右侧空白处的金色五角星（与徽章页卡片左上角同一图形） -->
+        <div v-if="item.pinned" class="dm-pin-col">
+          <PinStar :size="42" />
+          <span class="dm-pin-text">精选</span>
+        </div>
       </div>
 
       <div class="dm-rows">
@@ -72,6 +77,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import BadgeIcon from './BadgeIcon.vue';
+import PinStar from './PinStar.vue';
 import { type BadgeShape, tierByIndex } from './badgePalette';
 import { dateOnly, rarityText, type BadgeItem } from '@/views/student/badgesLogic';
 
@@ -148,6 +154,32 @@ const onShare = async () => {
 .dm-hero-info {
   flex: 1;
   min-width: 0;
+}
+/* 精选星标列：贴右缘、与标题区同高 */
+.dm-pin-col {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 4px;
+}
+.dm-pin-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #b45309;
+  letter-spacing: 1px;
+}
+@media (max-width: 560px) {
+  .dm-hero {
+    gap: 12px;
+    padding-right: 46px;
+  }
+  .dm-pin-col {
+    position: absolute;
+    top: 46px;
+    right: 12px;
+  }
 }
 .dm-name {
   margin: 0 0 8px;

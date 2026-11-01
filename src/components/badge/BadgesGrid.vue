@@ -3,7 +3,10 @@
     <div v-if="!items.length" class="bg-empty">没有符合筛选条件的徽章</div>
 
     <ul v-else class="bg-grid">
-      <li v-for="it in items" :key="`${it.kind}-${it.id}`" class="bg-card" :class="{ 'is-locked': !it.owned }" @click="$emit('select', it)">
+      <li v-for="it in items" :key="`${it.kind}-${it.id}`" class="bg-card" :class="{ 'is-locked': !it.owned, 'is-pinned': it.pinned }" @click="$emit('select', it)">
+        <!-- 精选：左上角金色五角星（T2 设为精选后的可视反馈） -->
+        <span v-if="it.pinned" class="bg-pin-star"><PinStar :size="20" /></span>
+
         <BadgeIcon
           :shape="(it.shape as BadgeShape) || 'shield'"
           :tier="tierIndexOf(it)"
@@ -18,7 +21,6 @@
         <!-- 稀有度：只做文字（灰色小字），不参与颜色 -->
         <span v-if="it.owned && it.rarity_text" class="bg-rarity">{{ it.rarity_text }}</span>
         <span v-if="it.is_first_owner" class="bg-first">全服首个获得</span>
-        <span v-if="it.pinned" class="bg-pinned">精选</span>
         <span v-if="it.owned && it.snapshot_estimated" class="bg-est">档位（估算）</span>
 
         <span class="bg-state" :class="stateClass(it)">
@@ -31,6 +33,7 @@
 
 <script setup lang="ts">
 import BadgeIcon from './BadgeIcon.vue';
+import PinStar from './PinStar.vue';
 import { type BadgeShape, tierByScore } from './badgePalette';
 import type { BadgeItem } from '@/views/student/badgesLogic';
 
@@ -85,6 +88,7 @@ const stateClass = (it: BadgeItem): string => (it.owned ? 'is-owned' : 'is-todo'
 }
 .bg-card {
   cursor: pointer;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -138,6 +142,33 @@ const stateClass = (it: BadgeItem): string => (it.owned ? 'is-owned' : 'is-todo'
     grid-template-columns: repeat(3, 1fr);
   }
 }
+/* 手机端：3 列的最小内容宽（图标 88 + 卡片内边距）会撑破 390px 视口（实测溢出 13px，右侧被裁），
+   这里收紧内边距与列间距，让三列真正装得下。 */
+@media (max-width: 600px) {
+  .bg-grid {
+    gap: 8px;
+  }
+  .bg-card {
+    padding: 12px 6px 10px;
+  }
+  .bg-name {
+    font-size: 13px;
+  }
+  .bg-meta,
+  .bg-rarity {
+    font-size: 10px;
+    text-align: center;
+  }
+  .bg-first,
+  .bg-est {
+    font-size: 9.5px;
+    padding: 0 3px;
+  }
+  .bg-state {
+    font-size: 10px;
+    text-align: center;
+  }
+}
 
 .bg-rarity {
   font-size: 11px;
@@ -152,13 +183,19 @@ const stateClass = (it: BadgeItem): string => (it.owned ? 'is-owned' : 'is-todo'
   padding: 0 5px;
   margin-top: 3px;
 }
-.bg-pinned {
-  font-size: 10.5px;
-  color: #b45309;
-  background: #fef3c7;
-  border-radius: 6px;
-  padding: 0 5px;
-  margin-top: 3px;
+/* 精选星标：卡片左上角留白处，不占文字流 */
+.bg-pin-star {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  line-height: 0;
+  pointer-events: none;
+}
+.bg-card.is-pinned {
+  border-color: #f2d9a6;
+}
+.bg-card.is-pinned:hover {
+  border-color: #e6bf76;
 }
 .bg-est {
   font-size: 10.5px;

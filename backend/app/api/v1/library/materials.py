@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -80,6 +80,30 @@ async def list_materials(
             progs[p.material_id] = p
     return {"total": total,
             "items": [_item_brief(m, progs.get(m.material_id)) for m in rows]}
+
+
+@router.get("/taxonomy", summary="分类法：子类→考点（建卡表单下拉用）")
+async def material_taxonomy(subject: str = Query(..., description="xingce/shenlun/gongzhuan"),
+                            db: Session = Depends(get_db)):
+    """只读取自 catalog 域的分类法契约，供学生「创建卡片」表单渲染两级下拉。
+
+    路由必须声明在 `/{material_id}` 之前，否则会被整形路径参数吃掉。
+    """
+    if subject not in SUBJECTS:
+        raise HTTPException(400, "无效科目")
+    names = _category_names(db, subject)
+    buckets = {n: [] for n in names}
+    name_by_id = {}
+    for pname, (pid, scid) in taxonomy.point_map(db, subject).items():
+        if scid not in name_by_id:
+            name_by_id[scid] = taxonomy.category_name_by_id(db, scid)
+        cat = name_by_id[scid]
+        if cat in buckets:
+            buckets[cat].append({"id": pid, "name": pname})
+    return {"subject": subject,
+            "categories": [{"name": n,
+                            "points": sorted(buckets[n], key=lambda x: x["id"])}
+                           for n in names]}
 
 
 @router.get("/progress-summary", summary="科目进度概览(登录)")
@@ -276,6 +300,124 @@ async def my_create(body: dict,
     _audit(db, current_user, "my_create", f"material:{m.material_id}", m.title)
     db.commit()
     return {"id": m.material_id, "status": m.status}
+
+
+CARD_IMAGES_MAX = 2
+
+
+@router.post("/my/card", summary="学生手动建卡(免审, 保存后立即公开)")
+async def my_create_card(
+    subject: str = Form(..., description="xingce/shenlun/gongzhuan"),
+    card_front: str = Form(..., description="卡片正面（≤120 字）"),
+    card_back: str = Form("", description="卡片背面（≤600 字；背面为空时必须配图）"),
+    category: str = Form("", description="子类名，留空按文本自动判定"),
+    point_id: str = Form("", description="考点ID，留空自动判定"),
+    images: Optional[List[UploadFile]] = File(None),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """学生端「创建卡片」：一次提交文本字段 + 0~2 张配图，**免审批**直接公开。
+
+    与 `/my/upload`（表格批量、进待审队列）的区别：
+    - 单张、人工填写，Q6 已确认学生建卡免审批 → `status=1` 立即展示；
+    - 配图 1~2 张：第 1 张存 `cover_image`（封面），第 2 张进 `content`（详情附图），
+      两张都走 `_safe_image_upload` 的扩展名/魔数/≤5MB 校验；
+    - 分类可由前端下拉指定，也可留空走与导入一致的两轮自动分类。
+    """
+    if subject not in SUBJECTS:
+        raise HTTPException(400, "无效科目")
+
+    front = (card_front or "").strip()
+    back = (card_back or "").strip()
+    if not front:
+        raise HTTPException(400, "卡片正面必填")
+    _check_card_text(front, back)
+
+    uploads = [f for f in (images or []) if f is not None and (f.filename or "").strip()]
+    if len(uploads) > CARD_IMAGES_MAX:
+        raise HTTPException(400, f"最多上传 {CARD_IMAGES_MAX} 张配图")
+    if not back and not uploads:
+        raise HTTPException(400, "卡片背面或配图至少填一个")
+
+    # 配额：与学生批量上传共用同一套限额（当日 50 张 / 累计 500 张）
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_cards = db.query(func.count(StudyMaterial.material_id)).filter(
+        StudyMaterial.creator_id == current_user.user_id,
+        func.date(StudyMaterial.create_time) == today,
+    ).scalar() or 0
+    if today_cards >= STUDENT_UPLOAD_DAILY * 10:
+        raise HTTPException(
+            429, f"今日已新建 {today_cards} 张，达到上限（{STUDENT_UPLOAD_DAILY * 10} 张），明天再试")
+    owned = db.query(func.count(StudyMaterial.material_id)).filter(
+        StudyMaterial.creator_id == current_user.user_id,
+        StudyMaterial.type == "card",
+    ).scalar() or 0
+    if owned >= STUDENT_UPLOAD_TOTAL:
+        raise HTTPException(429, f"你的资料库已达上限（{STUDENT_UPLOAD_TOTAL} 张）")
+
+    from ....services.material_sanitizer import content_cleaner
+
+    combined = front + back
+    content_hash = content_cleaner.calculate_content_hash(combined)
+    if db.query(StudyMaterial).filter(
+            StudyMaterial.content_hash == content_hash).first():
+        raise HTTPException(409, "这张卡片与资料库已有内容重复")
+
+    # 分类收敛：显式优先，留空自动判定；非法候选回退自动分类并回报 warnings
+    pid = None
+    if (point_id or "").strip():
+        try:
+            pid = int(str(point_id).strip())
+        except (TypeError, ValueError):
+            raise HTTPException(400, "考点 ID 必须是整数")
+    cls = _resolve_classification(
+        db, subject, front, front, back,
+        explicit_category=(category or "").strip() or None,
+        explicit_point=pid, strict=False)
+    data = {"subject": subject, "type": "card", "category": cls.get("category"),
+            "point_id": cls.get("point_id"), "title": front, "card_front": front,
+            "card_back": back}
+    _finalize_classification(db, data)
+
+    # 配图：任一失败整单拒绝，回收本单已落盘文件（避免孤儿图）
+    urls, written = [], []
+    try:
+        for fh in uploads:
+            url = _safe_image_upload(fh)
+            urls.append(url)
+            written.append(url)
+    except HTTPException:
+        for u in written:
+            p = UPLOAD_IMG_DIR / _os.path.basename(u)
+            try:
+                if p.exists():
+                    p.unlink()
+            except OSError:
+                pass
+        raise
+
+    content = f'<p><img src="{urls[1]}" alt="卡片配图" /></p>' if len(urls) > 1 else None
+    m = StudyMaterial(
+        subject=subject, type="card", category=data.get("category"),
+        point_id=data.get("point_id"), title=front[:200], card_front=front,
+        card_back=back, content=content,
+        cover_image=urls[0] if urls else None,
+        content_hash=content_hash, status=1, creator_id=current_user.user_id,
+        difficulty=1, read_time=2)
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    _audit(db, current_user, "create", f"material:{m.material_id}",
+           f"学生建卡：{front[:30]}")
+    db.commit()
+
+    warnings = []
+    if cls.get("rejected_category"):
+        warnings.append(f"分类「{cls['rejected_category']}」不在本子类词表内，已按内容自动判定")
+    return {"id": m.material_id, "status": m.status, "subject": m.subject,
+            "title": m.title, "category": m.category, "point_id": m.point_id,
+            "cover_image": m.cover_image, "images": urls,
+            "warnings": warnings, "note": "已保存并公开展示（免审批）"}
 
 
 @router.get("/my", summary="我的资料库(含草稿/公开/私有)")

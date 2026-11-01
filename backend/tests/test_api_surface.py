@@ -35,6 +35,42 @@ KNOWN_EXTRA_OPERATIONS = {
     # 鉴权：require_teacher_or_admin；校验：content-type 白名单 + 扩展名白名单 + 10MB 上限 + 题组存在性。
     # 只登记不重算基线 —— api_surface.json 仍保持 343 条冻结口径，新增走本白名单单独可审计。
     ("POST", "/api/questions/group/{group_id}/images"),
+    # ===== 备考资料 / 徽章工作流新增（2026-11-01 补登记）=====
+    # 说明：这些端点是 `feat/Study-Material-Management` 交付线里陆续加的，
+    # 当时只改了代码没登记白名单，导致本守卫从那时起一直红。此处按 R11
+    # 「只登记不重算基线」的口径一次性补齐，基线文件仍冻结 343 条。
+    # 徽章（需求(6)：成就/金币/徽章联动）
+    ("GET", "/api/badges/catalog"),
+    ("GET", "/api/badges/summary"),
+    ("GET", "/api/badges/my"),
+    ("GET", "/api/badges/wall"),
+    ("GET", "/api/badges/top"),
+    ("PUT", "/api/badges/top"),
+    # 成长（徽章命名库 / 管理员建成就）
+    ("POST", "/api/achievements/admin"),
+    ("GET", "/api/achievements/name-bank/status"),
+    ("GET", "/health/foundation"),
+    # 备考资料：个人库（B1 三角色建卡）
+    ("POST", "/api/materials/my"),
+    ("GET", "/api/materials/my"),
+    ("PUT", "/api/materials/my/{material_id}"),
+    ("DELETE", "/api/materials/my/{material_id}"),
+    # 备考资料：共享区 / 领取 / 一卡多图
+    ("GET", "/api/materials/shared"),
+    ("POST", "/api/materials/{material_id}/share"),
+    ("POST", "/api/materials/{material_id}/unshare"),
+    ("POST", "/api/materials/{material_id}/adopt"),
+    ("POST", "/api/materials/admin/cards/batch-image"),
+    # 备考资料：分类规则后台（专利主张(3)）
+    ("GET", "/api/materials/admin/rules"),
+    ("POST", "/api/materials/admin/rules"),
+    ("PUT", "/api/materials/admin/rules/{rule_id}"),
+    ("PATCH", "/api/materials/admin/rules/{rule_id}/toggle"),
+    # 备考资料：学生上传（表格批量，待审）
+    ("POST", "/api/materials/my/upload"),
+    # 备考资料：学生手动建卡（免审批，2026-11-01 本轮新增）+ 分类法只读契约
+    ("POST", "/api/materials/my/card"),
+    ("GET", "/api/materials/taxonomy"),
 }
 
 

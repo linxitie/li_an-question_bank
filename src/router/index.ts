@@ -286,7 +286,7 @@ const routes: RouteRecordRaw[] = [
     path: '/materials/upload',
     name: 'MaterialUpload',
     component: () => import('@/views/student/material_upload.vue'),
-    meta: { title: '上传备考资料', roles: ['student', 'teacher', 'admin'] }
+    meta: { title: '创建卡片', roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/materials-preview',

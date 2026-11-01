@@ -137,15 +137,19 @@ const goCoinsMall = () => {
 };
 
 /** T2：设为/取消精选——先取当前精选列表，再整体 PUT（≤6 枚） */
+const TOP_MAX = 6;
 const togglePin = async (item: BadgeItem) => {
   try {
     const cur = await apiFetch('/api/badges/top').then((r: Response) => (r.ok ? r.json() : null));
     const list: number[] = (cur?.items || []).map((i: any) => Number(i.id));
     const pinned = list.includes(Number(item.id));
-    let next = pinned
+    if (!pinned && list.length >= TOP_MAX) {
+      alert(`最多精选 ${TOP_MAX} 枚，请先取消一枚`);
+      return;
+    }
+    const next = pinned
       ? list.filter((x) => x !== Number(item.id))
       : [...list, Number(item.id)];
-    if (next.length > 6) next = next.slice(next.length - 6);
     const resp = await apiFetch('/api/badges/top', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -155,10 +159,13 @@ const togglePin = async (item: BadgeItem) => {
       const d = await resp.json().catch(() => ({}));
       throw new Error(d.detail || `保存失败（${resp.status}）`);
     }
-    if (detailItem.value) {
-      (detailItem.value as any).pinned = !pinned;
-    }
+    // 以服务端为准重新拉取（pinned 由 /api/badges/my 返回）；
+    // 弹层必须指向刷新后的新对象，否则按钮文案会停留在旧值。
     await load();
+    const fresh = items.value.find(
+      (i) => i.kind === item.kind && Number(i.id) === Number(item.id)
+    );
+    if (fresh) detailItem.value = fresh;
   } catch (e) {
     alert((e as Error)?.message || '精选保存失败');
   }
@@ -262,6 +269,7 @@ onMounted(load);
 .bd-total {
   font-size: 13px;
   color: #8493a8;
+  white-space: nowrap;
 }
 .bd-filters {
   display: flex;
@@ -272,6 +280,7 @@ onMounted(load);
 }
 .bd-filter-group {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .bd-chip {
@@ -283,6 +292,9 @@ onMounted(load);
   color: #5c6b80;
   font-size: 12px;
   cursor: pointer;
+  /* 不压缩：否则窄屏下「全部品质 / 钻石」会被挤成两行并溢出 30px 高度 */
+  flex: none;
+  white-space: nowrap;
 }
 .bd-chip.is-active {
   background: #2563eb;
@@ -369,4 +381,21 @@ onMounted(load);
   cursor: pointer;
 }
 .bd-coins-link:hover { text-decoration: underline; }
+
+/* 手机端：外层留白收窄，给 3 列徽章卡留出空间（详见 BadgesGrid 的 600px 断点） */
+@media (max-width: 600px) {
+  .bd-page {
+    padding: 16px 12px 36px;
+  }
+  .bd-title {
+    font-size: 19px;
+  }
+  .bd-sub {
+    font-size: 12px;
+  }
+  .bd-search {
+    width: 100%;
+    margin-left: 0;
+  }
+}
 </style>

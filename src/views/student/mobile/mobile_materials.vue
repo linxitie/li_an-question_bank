@@ -3,7 +3,9 @@
     <header class="topbar">
       <button class="back-btn" @click="goBack" aria-label="返回">←</button>
       <h1 class="title">备考资料</h1>
-      <span class="spacer"></span>
+      <button class="create-btn" @click="createOpen = true">
+        <span class="create-plus">＋</span>创建
+      </button>
     </header>
 
     <!-- 科目 Tab -->
@@ -122,6 +124,14 @@
         </div>
       </div>
     </div>
+
+    <!-- 创建卡片：选科目 → 填字段 + 1~2 张配图 → 保存即公开（免审批） -->
+    <CardCreateForm
+      :open="createOpen"
+      :subject="activeSubject"
+      @close="createOpen = false"
+      @saved="onCardCreated"
+    />
   </div>
 </template>
 
@@ -132,6 +142,7 @@ import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { ElMessage } from 'element-plus';
 import { useLibraryStore } from '@/modules/library/store';
+import CardCreateForm from '@/components/materials/CardCreateForm.vue';
 
 const router = useRouter();
 const library = useLibraryStore();
@@ -144,6 +155,16 @@ const subjects = [
 ] as const;
 const activeSubject = ref<'xingce' | 'shenlun' | 'gongzhuan'>('xingce');
 const expandedId = ref<number | null>(null);
+
+// ===== 创建卡片（学生自建，免审批）=====
+const createOpen = ref(false);
+const onCardCreated = async (payload: Record<string, unknown>) => {
+  createOpen.value = false;
+  const subj = String(payload?.subject || activeSubject.value);
+  if (subj !== activeSubject.value) activeSubject.value = subj as typeof activeSubject.value;
+  ElMessage.success('卡片已创建并公开展示');
+  await fetchMaterials();
+};
 
 // ===== 资料详情弹层 =====
 const detailVisible = ref(false);
@@ -304,9 +325,32 @@ onMounted(fetchMaterials);
   font-weight: 600;
   color: #1a2b5f;
   margin: 0;
+  flex: 1;
+  text-align: center;
 }
-.spacer {
-  width: 32px;
+/* 创建卡片入口：放在顶栏右侧，避免右下角悬浮按钮遮挡列表 */
+.create-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 66px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #c9d9f8;
+  border-radius: 15px;
+  background: #eef4ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.create-btn:active {
+  background: #dbe8ff;
+}
+.create-plus {
+  font-size: 14px;
+  line-height: 1;
 }
 .tabs {
   display: flex;

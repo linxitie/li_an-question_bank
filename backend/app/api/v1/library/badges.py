@@ -117,6 +117,9 @@ async def my_badges(
     counts = growth_contract.achievement_owner_counts(db)
     total_users = growth_contract.total_users(db)
     first_owners = growth_contract.achievement_first_owners(db)
+    # 精选（T2）：前端据此显示金色星标 + 「取消精选」按钮文案
+    pinned_ids = {int(bid) for kind, bid in _top_keys(db, current_user.user_id)
+                  if kind == "achievement"}
 
     items = []
     if kind in ("", "achievement"):
@@ -146,6 +149,7 @@ async def my_badges(
                     and first_owners.get(a.achievement_id) == current_user.user_id) else ""),
                 "owned_count": cnt,
                 "owned_percent": round(cnt / total_users * 100, 1) if total_users else 0.0,
+                "pinned": a.achievement_id in pinned_ids,
             })
             if only_owned and not rec:
                 continue
@@ -155,7 +159,9 @@ async def my_badges(
         for t in growth_contract.list_titles(db):
             it = _title_item(t)
             it.update({"owned": False, "obtained_at": None,
-                       "snapshot_tier": None, "current_tier": tier["label"]})
+                       "snapshot_tier": None, "current_tier": tier["label"],
+                       # 称号暂不参与精选（/top 只收 achievement），固定 False
+                       "pinned": False})
             if only_owned:
                 continue
             items.append(it)
