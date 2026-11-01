@@ -205,7 +205,6 @@
         plan: null,
         today: null,
         daysLeft: 0,
-        viewTab: 'overview',
         streak: 0,
         coinNotice: '',
         showAsk: false,
