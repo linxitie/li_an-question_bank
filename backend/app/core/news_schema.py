@@ -19,6 +19,13 @@ NEWS_COLUMNS = (
     ("region_code", "TEXT"),
     ("source_id", "INTEGER REFERENCES content_source(source_id)"),
     ("deleted_at", "DATETIME"),
+    ("ai_summary", "TEXT"),
+    ("ai_exam_points", "TEXT"),
+    ("ai_entities", "TEXT"),
+    ("ai_risk_flags", "TEXT"),
+    ("ai_status", "TEXT DEFAULT 'pending'"),
+    ("ai_confidence", "REAL"),
+    ("ai_run_at", "DATETIME"),
 )
 
 CATEGORY_SEED = (
