@@ -26,6 +26,20 @@
         </div>
         <div v-if="sessions.length === 0" class="history-empty">还没有历史对话</div>
       </div>
+
+      <!-- 小智记住你的 -->
+      <div class="memories-panel">
+        <div class="memories-head">
+          <span class="memories-title">🧠 小智记住你的</span>
+        </div>
+        <div class="memories-list">
+          <div v-for="m in state.memories" :key="m.memory_id" class="memory-item">
+            <span class="memory-type">{{ m.memory_type }}</span>
+            <span class="memory-content">{{ m.content }}</span>
+          </div>
+          <div v-if="state.memories.length === 0" class="memories-empty">聊得越多，小智越懂你</div>
+        </div>
+      </div>
     </aside>
     <div v-if="drawerOpen" class="mask" @click="drawerOpen = false"></div>
 
@@ -112,7 +126,6 @@
             <div class="wr-head">
               <span>📋 {{ state.workTitle }} 结果</span>
               <button
-                v-if="state.workTaskId === 'shenlun_week'"
                 class="wi-btn"
                 :disabled="state.workImporting || state.workImportDone"
                 @click="importToToday()"
@@ -199,6 +212,7 @@
         loading: false,
         notice: '',
         agentName: '', // 模块7 v2：当前路由命中的专业 Agent
+        memories: [], // 长期记忆列表
         // 工作台模式（模块7 v2）
         workMode: false,
         workTasks: [],
@@ -469,9 +483,22 @@
         }
       }
 
+      async function loadMemories() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/agent/memories');
+          const d = await res.json();
+          if (res.ok) {
+            state.memories = d.items || [];
+          }
+        } catch (e) {
+          // 静默失败，不影响主功能
+        }
+      }
+
       onMounted(() => {
         state.__listEl = document.querySelector('.ai-chat-page .message-list');
         loadSessions();
+        loadMemories();
       });
 
       return {
