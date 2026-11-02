@@ -822,7 +822,8 @@ onMounted(fetchMaterials);
   .create-btn { min-height: 44px; min-width: 88px; border-radius: 22px; }
   .back-btn { min-height: 44px; min-width: 44px; }
   .font-row button { height: 44px; }
-  .list { width: 100%; max-width: 720px; margin: 0 auto; }
+  /* 列表与卡片栈同宽（640），否则左侧比卡片多出 40px，看着「错位」 */
+  .list { width: 100%; max-width: 640px; margin: 0 auto; padding: 12px 0 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

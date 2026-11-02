@@ -258,7 +258,17 @@ async function main() {
   out.lightbox = await cdp.eval(`(() => {
     const img = document.querySelector('.lb-img');
     const r = img ? img.getBoundingClientRect() : null;
-    return { open: !!document.querySelector('.lb-mask'), img: r ? { w: Math.round(r.width), h: Math.round(r.height) } : null, count: (document.querySelector('.lb-count') || {}).textContent || '' };
+    const tools = [...document.querySelectorAll('.lb-tool, .lb-nav')].map((b) => {
+      const q = b.getBoundingClientRect();
+      return { t: (b.getAttribute('title') || b.textContent || '').trim().slice(0, 8), w: Math.round(q.width), h: Math.round(q.height) };
+    });
+    return {
+      open: !!document.querySelector('.lb-mask'),
+      img: r ? { w: Math.round(r.width), h: Math.round(r.height) } : null,
+      count: (document.querySelector('.lb-count') || {}).textContent || '',
+      tools,
+      smallTools: tools.filter((x) => x.w > 0 && (x.h < 44 || x.w < 44))
+    };
   })()`);
   console.log('平板全图查看器', JSON.stringify({ okLb, ...out.lightbox }));
   await cdp.shot('06_平板_卡片配图全图');

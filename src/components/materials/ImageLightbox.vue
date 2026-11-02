@@ -223,4 +223,16 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: #93a2ba;
 }
+/* 触屏（平板/手机）：工具条按钮 30px 太小，补到 44px 最小可点区；PC 鼠标端不变。
+ * 平板实测：缩小 35×30、放大 35×30、1:1 41×30、关闭 34×30。 */
+@media (pointer: coarse) {
+  .lb-tool {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .lb-nav {
+    width: 48px;
+    height: 88px;
+  }
+}
 </style>
