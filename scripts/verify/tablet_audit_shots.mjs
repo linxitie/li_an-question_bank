@@ -510,7 +510,9 @@ async function main() {
   await sleep(400);
 
   // 徽章页（无平板路由，走 PC 页）
-  await go('#/badges', `document.body.innerText.includes('徽章')`, 1400);
+  // 徽章页：显式走平板路由（2026-11-02 起 device.ts 按 R4 原样保留，
+  // 不再把 PC 的 /badges 映射到平板，避免触屏笔记本被误判成平板后跳到移动版界面）
+  await go('#/tablet/badges', `document.body.innerText.includes('徽章')`, 1400);
   out.badges = await cdp.eval(M);
   out.badgeGrid = await cdp.eval(`(() => {
     const cands = [...document.querySelectorAll('[class*="grid"], [class*="wall"], [class*="list"]')]

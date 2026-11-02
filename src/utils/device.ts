@@ -115,7 +115,6 @@ const DEVICE_ROUTE_MAP: Record<'mobile' | 'tablet', Record<string, string>> = {
     '/forum': '/mobile/forum',
     '/practice': '/mobile/practice',
     '/profile': '/mobile/profile',
-    '/materials': '/mobile/materials',
   },
   tablet: {
     '/': '/tablet/home',
@@ -125,9 +124,6 @@ const DEVICE_ROUTE_MAP: Record<'mobile' | 'tablet', Record<string, string>> = {
     '/forum': '/tablet/forum',
     '/practice': '/tablet/practice',
     '/profile': '/tablet/profile',
-    // 2026-11-02：备考资料与徽章墙补映射，避免平板/手机打开 PC 链接落到 PC 版
-    '/materials': '/tablet/materials',
-    '/badges': '/tablet/badges',
   },
 };
 
