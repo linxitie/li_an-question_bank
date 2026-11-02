@@ -9,10 +9,10 @@ DELETE /api/news/notes/{id}  — 删除笔记
 """
 import logging
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date as date_cls
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -146,6 +146,63 @@ async def get_news_categories(
 ):
     """返回当前启用新闻的分类及数量，供前端筛选栏使用。"""
     return news_search_service.category_counts(db)
+
+
+@router.get("/digest", summary="新闻日报")
+async def news_digest(
+    day: Optional[str] = Query(None, description="YYYY-MM-DD；缺省取最近发布日"),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """按日聚合已发布新闻，供日报/时间线页面使用。"""
+    target = None
+    if day:
+        try:
+            target = datetime.strptime(day, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
+    base = db.query(NewsArticle).filter(
+        NewsArticle.status == 1,
+        NewsArticle.review_status == "published",
+    )
+    if target is None:
+        latest = base.with_entities(func.max(NewsArticle.publish_date)).scalar()
+        target = latest.date() if latest else date_cls.today()
+    daily = base.filter(func.date(NewsArticle.publish_date) == target.isoformat())
+    total = daily.count()
+    rows = (
+        daily.with_entities(
+            NewsArticle.category,
+            NewsArticle.category_code,
+            func.count(NewsArticle.news_id),
+        )
+        .group_by(NewsArticle.category, NewsArticle.category_code)
+        .all()
+    )
+    items = (
+        daily.order_by(NewsArticle.news_id.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "date": target.isoformat(),
+        "total": total,
+        "categories": [
+            {"category": category or "未分类", "category_code": code, "count": count}
+            for category, code, count in rows
+        ],
+        "items": [
+            {
+                "news_id": item.news_id,
+                "title": item.title,
+                "source": item.source,
+                "category": item.category,
+                "url": item.url,
+                "ai_summary": item.ai_summary or "",
+            }
+            for item in items
+        ],
+    }
 
 
 @router.get("/timeline", summary="新闻时间线")

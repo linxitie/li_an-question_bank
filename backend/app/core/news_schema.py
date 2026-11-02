@@ -67,6 +67,18 @@ def ensure_news_schema(engine: Engine) -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_news_category_code ON news_article(category_code)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_news_review_status ON news_article(review_status)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_news_content_hash ON news_article(content_hash)"))
+    if "news_image" in tables:
+        existing_image = {col["name"] for col in inspector.get_columns("news_image")}
+        if "media_asset_id" not in existing_image:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    'ALTER TABLE news_image ADD COLUMN "media_asset_id" TEXT '
+                    "REFERENCES media_assets(asset_id)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS idx_news_image_media_asset "
+                    "ON news_image(media_asset_id)"
+                ))
 
     with engine.begin() as conn:
         for code, name, sort in CATEGORY_SEED:

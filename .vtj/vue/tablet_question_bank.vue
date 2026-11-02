@@ -46,6 +46,14 @@
             </div>
             <XIcon :icon="ArrowRight" :size="16" color="#8899aa"></XIcon>
           </div>
+          <div class="action-item" @click="goToStudyPlan">
+            <XIcon :icon="Calendar" :size="24" color="#f59e0b"></XIcon>
+            <div class="action-info">
+              <span class="action-name">学习计划</span>
+              <span class="action-desc">AI定制</span>
+            </div>
+            <XIcon :icon="ArrowRight" :size="16" color="#8899aa"></XIcon>
+          </div>
           <div class="action-item" @click="goToLiankaoAI">
             <XIcon :icon="QuestionFilled" :size="24" color="#1890ff"></XIcon>
             <div class="action-info">
