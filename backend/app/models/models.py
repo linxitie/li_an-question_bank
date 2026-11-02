@@ -1796,6 +1796,7 @@ class NewsImage(Base):
     news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
     image_path = Column(String(500), nullable=False)
     image_order = Column(Integer, default=0)
+    media_asset_id = Column(String(32), ForeignKey("media_assets.asset_id"), nullable=True, index=True)
     create_time = Column(DateTime, default=datetime.now)
     news = relationship("NewsArticle")
     __table_args__ = (Index("idx_news_id_newsimage", news_id),)

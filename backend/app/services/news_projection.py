@@ -24,7 +24,9 @@ from app.foundation.stores.graph import GraphStore, build_graph_store
 from app.foundation.stores.local_vector import LocalVectorStore
 from app.foundation.stores.object import ObjectStore, build_object_store
 from app.foundation.stores.vector import VectorItem, VectorStore
+from app.models.media_asset import MediaAsset
 from app.models.models import NewsArticle, NewsImage
+from app.services import media_service
 
 NEWS_VECTOR_COLLECTION = "news_articles"
 NEWS_DOCUMENT_COLLECTION = "news_contents"
@@ -199,6 +201,75 @@ def project_objects(
     }
 
 
+def project_media_assets(
+    db: Session,
+    *,
+    upload_root: Path | str | None = None,
+) -> dict[str, Any]:
+    """把已发布新闻图片登记到 F3 media_assets，并回填 news_image.media_asset_id。"""
+    root = Path(upload_root) if upload_root else _DEFAULT_UPLOAD_ROOT
+    news_list = _published(db)
+    created = 0
+    existing = 0
+    linked = 0
+    missing = 0
+    errors: list[str] = []
+    for news in news_list:
+        rows = (
+            db.query(NewsImage)
+            .filter(NewsImage.news_id == news.news_id)
+            .order_by(NewsImage.image_order)
+            .all()
+        )
+        for image in rows:
+            if image.media_asset_id:
+                asset = db.get(MediaAsset, image.media_asset_id)
+                if asset is not None and asset.status == "active":
+                    existing += 1
+                    linked += 1
+                    continue
+            info = _image_info(image.image_path, root)
+            if info["missing"]:
+                missing += 1
+                continue
+            try:
+                asset = (
+                    db.query(MediaAsset)
+                    .filter(
+                        MediaAsset.sha256 == info["sha256"],
+                        MediaAsset.kind == "news_image",
+                        MediaAsset.status == "active",
+                    )
+                    .first()
+                )
+                if asset is None:
+                    asset = media_service.store_bytes(
+                        db,
+                        info["data"],
+                        kind="news_image",
+                        original_name=Path(image.image_path).name,
+                        content_type=info["contentType"],
+                        dedupe_key=f"news-image:{image.image_id}",
+                        max_bytes=8 * 1024 * 1024,
+                    )
+                    created += 1
+                else:
+                    existing += 1
+                image.media_asset_id = asset.asset_id
+                linked += 1
+            except Exception as exc:
+                errors.append(f"news {news.news_id} {image.image_path}: {exc}")
+    db.commit()
+    return {
+        "news": len(news_list),
+        "created": created,
+        "existing": existing,
+        "linked": linked,
+        "missing": missing,
+        "errors": errors[:10],
+    }
+
+
 def project_documents(
     db: Session,
     *,
@@ -223,6 +294,7 @@ def project_documents(
             info = _image_info(image.image_path, root)
             refs.append({
                 "imagePath": image.image_path,
+                "mediaAssetId": image.media_asset_id,
                 "objectKey": info.get("objectKey"),
                 "sha256": info.get("sha256"),
                 "size": info.get("size", 0),

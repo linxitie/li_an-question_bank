@@ -8,11 +8,14 @@ from app.foundation.stores.local_document import LocalDocumentStore
 from app.foundation.stores.local_graph import LocalGraphStore
 from app.foundation.stores.local_object import LocalObjectStore
 from app.foundation.stores.local_vector import LocalVectorStore
+from app.models.media_asset import MediaAsset
 from app.models.models import NewsArticle, NewsImage
+from app.services import media_service
 from app.services.news_projection import (
     NEWS_VECTOR_COLLECTION,
     project_documents,
     project_graph,
+    project_media_assets,
     project_objects,
     project_vectors,
     project_vectors_safe,
@@ -122,3 +125,27 @@ def test_project_objects_and_documents(tmp_path, db_session):
     doc = doc_store.get("news_contents", "news:1")
     assert doc["title"] == "新闻投影测试"
     assert doc["images"][0]["objectKey"] == key
+
+
+def test_project_media_assets_links_and_dedupes(tmp_path, db_session, monkeypatch):
+    _news(db_session)
+    image_dir = tmp_path / "news_images"
+    image_dir.mkdir()
+    (image_dir / "a.jpg").write_bytes(b"fake-news-image")
+    monkeypatch.setattr(
+        media_service, "build_object_store",
+        lambda: LocalObjectStore(tmp_path / "objects"),
+    )
+    monkeypatch.setattr(media_service.settings, "FOUNDATION_ENABLED", False)
+
+    first = project_media_assets(db_session, upload_root=tmp_path)
+    second = project_media_assets(db_session, upload_root=tmp_path)
+
+    assert first["created"] == 1
+    assert first["linked"] == 1
+    assert second["created"] == 0
+    assert second["existing"] == 1
+    asset = db_session.query(MediaAsset).one()
+    image = db_session.query(NewsImage).one()
+    assert image.media_asset_id == asset.asset_id
+    assert asset.kind == "news_image"
