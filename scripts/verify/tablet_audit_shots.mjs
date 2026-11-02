@@ -228,31 +228,60 @@ async function main() {
   console.log('我的页资料入口', JSON.stringify(profHit), '| 入口数', out.profileEntries.length);
   await cdp.shot('02_平板我的页_资料入口');
 
-  // 备考资料（复用手机页）
-  await go('#/tablet/materials', `!!document.querySelector('.stack-card')`, 1200);
+  // 备考资料：平板应走「模仿电脑端」的 hero + 卡片网格（守 R12：同页按断点两套布局）
+  await go('#/tablet/materials', `!!document.querySelector('.t-grid') || !!document.querySelector('.stack-card')`, 1400);
   out.materials = await cdp.eval(M);
-  out.materialsList = await cdp.eval(`(() => {
-    const top = document.querySelector('.stack-card.lv0');
-    const title = top ? (top.querySelector('.card-title') || {}).textContent : '';
-    const fs = top ? getComputedStyle(top.querySelector('.card-title') || top).fontSize : '';
-    const listCols = getComputedStyle(document.querySelector('.list') || document.body).gridTemplateColumns;
-    return { title: (title || '').trim().slice(0, 30), titleFont: fs, listCols, hash: location.hash };
+  out.materialsGrid = await cdp.eval(`(() => {
+    const grid = document.querySelector('.t-grid');
+    const cards = [...document.querySelectorAll('.g-card')];
+    const first = cards[0];
+    const fr = first ? first.getBoundingClientRect() : null;
+    const hero = document.querySelector('.t-hero');
+    const bar = document.querySelector('.t-bar-row');
+    const cs = grid ? getComputedStyle(grid) : null;
+    return {
+      layout: grid ? 'grid' : (document.querySelector('.stack-card') ? 'stack' : 'none'),
+      cols: cs ? cs.gridTemplateColumns.split(' ').length : 0,
+      cardCount: cards.length,
+      card: fr ? { w: Math.round(fr.width), h: Math.round(fr.height), aspect: +(fr.width / fr.height).toFixed(2) } : null,
+      hero: hero ? (hero.querySelector('h2') || {}).textContent : null,
+      progress: (document.querySelector('.t-progress b') || {}).textContent || '',
+      barButtons: bar ? [...bar.querySelectorAll('button')].map((b) => b.textContent.trim()) : [],
+      pageLabel: (document.querySelector('.t-page') || {}).textContent || '',
+      stackVisible: !!document.querySelector('.stack-card'),
+      listCards: [...document.querySelectorAll('.list > .card')].length
+    };
   })()`);
-  console.log('平板资料页', JSON.stringify({ ...out.materials, ...out.materialsList }));
-  await cdp.shot('03_平板资料页_卡片栈_768');
+  console.log('平板资料页', JSON.stringify({ ...out.materials, ...out.materialsGrid }));
+  await cdp.shot('03_平板资料页_网格_768');
 
-  // 翻页 / 翻转 / 看配图在平板上的表现
-  await cdp.eval(`[...document.querySelectorAll('.stack-bar button')].find(b => b.textContent.includes('下一张')).click(); true`);
-  await sleep(900);
-  await cdp.shot('04_平板资料页_翻页后');
-  await cdp.eval(`document.querySelector('.stack-card.lv0').click(); true`);
-  await sleep(900);
+  // 翻页：网格第 1 页 → 第 2 页（按你的要求保留上一页/下一页）
+  const pageBefore = out.materialsGrid.pageLabel;
+  await cdp.eval(`[...document.querySelectorAll('.t-bar-row button')].find(b => b.textContent.includes('下一页')).click(); true`);
+  await sleep(700);
+  const pageAfter = await cdp.eval(`(document.querySelector('.t-page') || {}).textContent || ''`);
+  out.gridPaging = { pageBefore: pageBefore.trim(), pageAfter: pageAfter.trim() };
+  console.log('平板网格翻页', JSON.stringify(out.gridPaging));
+  await cdp.shot('04_平板资料页_网格第2页');
+
+  // 点击卡片原地翻转（PC 行为）
+  await cdp.eval(`document.querySelector('.g-card').click(); true`);
+  await sleep(800);
   out.flip = await cdp.eval(`(() => {
-    const inner = document.querySelector('.card-inner');
-    return { flipped: !!document.querySelector('.stack.is-flipped'), t: inner ? getComputedStyle(inner).transform.slice(0, 20) : '' };
+    const card = document.querySelector('.g-card');
+    const inner = card ? card.querySelector('.g-inner') : null;
+    if (!inner) return { flipped: false, t: '' };
+    // 遮挡窗口下 CSS 过渡不插值，读到的还是起始 identity；
+    // 这里临时关掉过渡读一次「终态」，证明翻转规则真的生效
+    const old = inner.style.transition;
+    inner.style.transition = 'none';
+    const t = getComputedStyle(inner).transform;
+    inner.style.transition = old;
+    return { flipped: card.classList.contains('flipped'), t: t.slice(0, 22) };
   })()`);
-  await cdp.shot('05_平板资料页_卡片背面');
-  await cdp.eval(`document.querySelector('.card-act') && document.querySelector('.card-act').click(); true`);
+  console.log('平板卡片翻转', JSON.stringify(out.flip));
+  await cdp.shot('05_平板资料页_卡片翻转');
+  await cdp.eval(`document.querySelector('.g-card .card-act') && document.querySelector('.g-card .card-act').click(); true`);
   const okLb = await cdp.waitFor(`!!document.querySelector('.lb-mask')`, 8000);
   await sleep(600);
   out.lightbox = await cdp.eval(`(() => {
@@ -355,9 +384,22 @@ async function main() {
 
   // ---------- 平板横屏 1024×768 ----------
   await setViewport(1024, 768);
-  await go('#/tablet/materials', `!!document.querySelector('.stack-card')`, 1200);
+  await go('#/tablet/materials', `!!document.querySelector('.t-grid') || !!document.querySelector('.stack-card')`, 1400);
   out.materialsLandscape = await cdp.eval(M);
-  console.log('横屏资料页', JSON.stringify(out.materialsLandscape));
+  out.materialsLandscapeGrid = await cdp.eval(`(() => {
+    const grid = document.querySelector('.t-grid');
+    const cards = [...document.querySelectorAll('.g-card')];
+    const fr = cards[0] ? cards[0].getBoundingClientRect() : null;
+    const cs = grid ? getComputedStyle(grid) : null;
+    return {
+      layout: grid ? 'grid' : 'stack',
+      cols: cs ? cs.gridTemplateColumns.split(' ').length : 0,
+      cardCount: cards.length,
+      card: fr ? { w: Math.round(fr.width), h: Math.round(fr.height), aspect: +(fr.width / fr.height).toFixed(2) } : null,
+      pageLabel: (document.querySelector('.t-page') || {}).textContent || ''
+    };
+  })()`);
+  console.log('横屏资料页', JSON.stringify({ ...out.materialsLandscape, ...out.materialsLandscapeGrid }));
   await cdp.shot('11_平板横屏_资料页_1024');
 
   ws.close();

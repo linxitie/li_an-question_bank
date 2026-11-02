@@ -20,8 +20,72 @@
       </div>
     </div>
 
-      <!-- 卡片栈：后面是「真卡片」（翻转时能看到它的文字），顶层卡单独做 3D 翻转 -->
-      <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
+      <!-- ===== 平板（≥700px）：模仿电脑端的 hero + 卡片网格，但保留「上一页/下一页」 ===== -->
+      <template v-if="isTabletLayout">
+        <section class="t-hero">
+          <div class="t-hero-text">
+            <h2>{{ hero.title }}</h2>
+            <p>{{ hero.desc }}</p>
+          </div>
+          <div class="t-progress">
+            <span class="t-progress-lab">学习进度</span>
+            <div class="t-bar"><i :style="{ width: progress.percentage + '%' }"></i></div>
+            <b>{{ progress.percentage }}%</b>
+            <em>（已完成 {{ progress.studied }}/{{ progress.total }}）</em>
+          </div>
+        </section>
+
+        <section v-if="pageCards.length" class="t-grid" :style="{ '--sm-font-scale': String(fontScale) }">
+          <div
+            v-for="c in pageCards"
+            :key="c.id"
+            class="g-card"
+            :class="{ flipped: gridFlipped[c.id] }"
+            @click="toggleGridFlip(c)"
+          >
+            <div class="g-inner">
+              <div class="g-face front">
+                <div class="g-head">
+                  <span class="tag">{{ c.category || '知识点' }}</span>
+                  <span class="g-idx">{{ cardItems.indexOf(c) + 1 }} / {{ cardItems.length }}</span>
+                </div>
+                <p class="g-title">{{ c.card_front || c.title }}</p>
+                <div class="g-foot">
+                  <span class="hint">点击卡片翻转</span>
+                  <button class="card-act" @click.stop="openCardImages(c)">{{ actLabelOf(c) }}</button>
+                </div>
+              </div>
+              <div class="g-face back">
+                <div class="g-head">
+                  <span class="tag">要点</span>
+                  <span class="g-idx">背面</span>
+                </div>
+                <p class="g-back">{{ c.card_back || '暂无背面内容' }}</p>
+                <div class="g-foot">
+                  <span class="hint">点击翻回正面</span>
+                  <button class="card-act" @click.stop="openCardImages(c)">{{ actLabelOf(c) }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div v-if="cardItems.length" class="t-bar-row">
+          <button :disabled="gridPage <= 0" @click="gridPrev">上一页</button>
+          <span class="t-page">{{ gridPage + 1 }} / {{ pageCount }} 页 · 共 {{ cardItems.length }} 张</span>
+          <button :disabled="gridPage >= pageCount - 1" @click="gridNext">下一页</button>
+        </div>
+
+        <div class="font-row">
+          <span>字号</span>
+          <button :class="{ on: fontScale === 0.9 }" @click="setScale(0.9)">A-</button>
+          <button :class="{ on: fontScale === 1 }" @click="setScale(1)">A</button>
+          <button :class="{ on: fontScale === 1.15 }" @click="setScale(1.15)">A+</button>
+        </div>
+      </template>
+
+      <!-- 卡片栈（手机）：后面是「真卡片」（翻转时能看到它的文字），顶层卡单独做 3D 翻转 -->
+      <section v-else-if="cardItems.length" class="stack-wrap" :style="stackStyle">
         <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering', 'is-entering-prev': phase === 'entering-prev' }">
           <!-- 后面的卡：真内容，只露出一条渐变头；容器透明，不会出现白框 -->
           <div
@@ -86,7 +150,7 @@
       </section>
 
     <main class="list">
-      <div v-for="m in materials" :key="m.id" class="card" @click="toggleDetail(m)">
+      <div v-for="m in listItems" :key="m.id" class="card" @click="toggleDetail(m)">
         <div class="m-title">{{ m.title }}</div>
         <div class="m-meta">
           <span class="tag">{{ typeName(m.type) }}</span>
@@ -101,7 +165,9 @@
           <button class="view-btn" @click="openDetail(m)">查看详情</button>
         </div>
       </div>
-      <div v-if="!materials.length && !loading" class="empty">该科目暂无备考资料</div>
+      <div v-if="!listItems.length && !loading" class="empty">
+        {{ isTabletLayout && cardItems.length ? '该科目暂无其他资料' : '该科目暂无备考资料' }}
+      </div>
       <div v-if="loading" class="empty">加载中...</div>
     </main>
 
@@ -164,12 +230,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { ElMessage } from 'element-plus';
 import { useLibraryStore } from '@/modules/library/store';
+import { fetchLibraryProgressSummary } from '@/modules/library/api';
 import { collectCardImages } from '@/utils/materialImages';
 import CardCreateForm from '@/components/materials/CardCreateForm.vue';
 import ImageLightbox from '@/components/materials/ImageLightbox.vue';
@@ -192,6 +259,7 @@ const onCardCreated = async (payload: Record<string, unknown>) => {
   createOpen.value = false;
   const subj = String(payload?.subject || activeSubject.value);
   if (subj !== activeSubject.value) activeSubject.value = subj as typeof activeSubject.value;
+  gridPage.value = 0;
   ElMessage.success('卡片已创建并公开展示');
   await fetchMaterials();
 };
@@ -252,7 +320,9 @@ const typeName = (t: string) => {
 const switchSubject = (key: 'xingce' | 'shenlun' | 'gongzhuan') => {
   activeSubject.value = key;
   expandedId.value = null;
+  gridPage.value = 0;
   fetchMaterials();
+  loadProgress();
 };
 
 const toggleDetail = (m: any) => {
@@ -358,7 +428,77 @@ const setScale = (v: number) => {
 };
 const stackStyle = computed(() => ({ '--sm-font-scale': String(fontScale.value) }));
 
+// ===== 平板布局（≥700px）：模仿电脑端的 hero + 卡片网格，但按你的要求保留「上一页/下一页」 =====
+/** 与 CSS 断点保持一致：700px 起走平板网格，1000px 起 4 列 */
+const isTabletLayout = ref(false);
+const isWideLayout = ref(false);
+const HERO: Record<string, { title: string; desc: string }> = {
+  xingce: { title: '行测 · 行政职业能力测验', desc: '掌握五大模块解题规律，快速提升答题速度与准确率' },
+  shenlun: { title: '申论 · 写作专项突破', desc: '吃透材料分析方法，掌握高分写作框架与热点素材' },
+  gongzhuan: { title: '公专 · 公安专业科目', desc: '夯实职业素养与基础知识，掌握警务技能要点' }
+};
+const hero = computed(() => HERO[activeSubject.value] || HERO.xingce);
+
+/** 学习进度（电脑端同一份接口 /api/materials/progress-summary，未新增端点） */
+const progress = ref({ studied: 0, total: 0, percentage: 0 });
+const loadProgress = async () => {
+  try {
+    progress.value = await fetchLibraryProgressSummary(activeSubject.value);
+  } catch {
+    progress.value = { studied: 0, total: 0, percentage: 0 };
+  }
+};
+
+/** 每页卡片数：与 CSS 列数一致（768: 3 列×2 行；1000+: 4 列×2 行） */
+const GRID_ROWS = 2;
+const gridPage = ref(0);
+const gridFlipped = reactive<Record<string, boolean>>({});
+const perPage = computed(() => (isWideLayout.value ? 4 : 3) * GRID_ROWS);
+const pageCount = computed(() => Math.max(1, Math.ceil(cardItems.value.length / perPage.value)));
+const pageCards = computed(() =>
+  cardItems.value.slice(gridPage.value * perPage.value, gridPage.value * perPage.value + perPage.value)
+);
+const toggleGridFlip = (c: any) => {
+  gridFlipped[String(c?.id)] = !gridFlipped[String(c?.id)];
+};
+const gridPrev = () => {
+  if (gridPage.value > 0) gridPage.value -= 1;
+};
+const gridNext = () => {
+  if (gridPage.value < pageCount.value - 1) gridPage.value += 1;
+};
+/** 某张卡的「查看配图（N）」/「查看详情」文案 */
+const actLabelOf = (c: any) => {
+  const n = collectCardImages(c).length;
+  return n ? `查看配图（${n}）` : '查看详情';
+};
+/** 平板上卡片已在网格里展示，列表只留视频/文章，避免重复 */
+const listItems = computed(() =>
+  isTabletLayout.value
+    ? (materials.value as any[]).filter((m) => !(m.type === 'card' && m.card_front))
+    : (materials.value as any[])
+);
+
+let mqTablet: MediaQueryList | null = null;
+let mqWide: MediaQueryList | null = null;
+const syncLayout = () => {
+  isTabletLayout.value = !!mqTablet?.matches;
+  isWideLayout.value = !!mqWide?.matches;
+};
+
 onMounted(fetchMaterials);
+onMounted(() => {
+  mqTablet = window.matchMedia('(min-width: 700px)');
+  mqWide = window.matchMedia('(min-width: 1000px)');
+  syncLayout();
+  mqTablet.addEventListener('change', syncLayout);
+  mqWide.addEventListener('change', syncLayout);
+  loadProgress();
+});
+onBeforeUnmount(() => {
+  mqTablet?.removeEventListener('change', syncLayout);
+  mqWide?.removeEventListener('change', syncLayout);
+});
 </script>
 
 <style scoped>
@@ -700,6 +840,154 @@ onMounted(fetchMaterials);
 }
 .font-row button.on { border-color: #3b82f6; color: #3b82f6; }
 
+/* ===== 平板：模仿电脑端（hero + 卡片网格），列数与脚本 perPage 对齐（3 列 / ≥1000px 4 列） ===== */
+.t-hero {
+  background: #fff;
+  margin: 12px 16px 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(26, 42, 74, 0.05);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.t-hero-text { flex: 1 1 320px; min-width: 0; }
+.t-hero-text h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  line-height: 1.3;
+  color: #1a2b5f;
+}
+.t-hero-text p { margin: 0; font-size: 13px; color: #6b7280; }
+.t-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4b5563;
+  flex: 0 1 360px;
+}
+.t-progress-lab { color: #8899aa; }
+.t-bar {
+  flex: 1 1 120px;
+  height: 8px;
+  min-width: 80px;
+  border-radius: 4px;
+  background: #eef1f6;
+  overflow: hidden;
+}
+.t-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--c2, #3b82f6), var(--c1, #1e3a8a));
+}
+.t-progress b { color: #1a2b5f; }
+.t-progress em { font-style: normal; color: #8899aa; }
+
+.t-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px 16px 0;
+}
+.t-grid .g-card {
+  perspective: 900px;
+  /* 贴近电脑端的竖卡比例（PC 是 150×170 ≈ 0.88）；平板竖屏约 236×260 ≈ 0.91 */
+  height: clamp(210px, 28vh, 260px);
+  cursor: pointer;
+}
+.g-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.35, 0.1, 0.25, 1);
+}
+.g-card.flipped .g-inner { transform: rotateY(180deg); }
+.g-face {
+  position: absolute;
+  inset: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(26, 42, 74, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backface-visibility: hidden;
+}
+.g-face.back {
+  transform: rotateY(180deg) translateZ(1px);
+  background: var(--c-soft, #eef4ff);
+}
+.g-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.g-idx { font-size: 11px; color: #99a4b5; flex: none; }
+.g-title {
+  margin: auto 0;
+  font-size: calc(14px * var(--sm-font-scale, 1));
+  line-height: 1.5;
+  font-weight: 600;
+  color: #1a2b5f;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.g-back {
+  margin: 0;
+  font-size: calc(13px * var(--sm-font-scale, 1));
+  line-height: 1.55;
+  color: #3f4a5f;
+  overflow: auto;
+  flex: 1 1 auto;
+}
+.g-foot {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.g-foot .hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: #9aa7ba;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 16px 0;
+}
+.t-bar-row button {
+  min-height: 44px;
+  min-width: 96px;
+  border-radius: 10px;
+  border: 1px solid #e3e8ef;
+  background: #fff;
+  color: #334155;
+  font-size: 14px;
+  cursor: pointer;
+}
+.t-bar-row button:disabled { opacity: 0.45; }
+.t-page { font-size: 12px; color: #8899aa; }
+@media (min-width: 1000px) {
+  .t-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 /* ===== 修复：科目三色主题（与电脑端 detail 页一致） ===== */
 .theme-xingce { --c1: #1e3a8a; --c2: #3b82f6; --c-soft: #eef4ff; }
 .theme-shenlun { --c1: #047857; --c2: #34d399; --c-soft: #ecfdf5; }
@@ -822,8 +1110,8 @@ onMounted(fetchMaterials);
   .create-btn { min-height: 44px; min-width: 88px; border-radius: 22px; }
   .back-btn { min-height: 44px; min-width: 44px; }
   .font-row button { height: 44px; }
-  /* 列表与卡片栈同宽（640），否则左侧比卡片多出 40px，看着「错位」 */
-  .list { width: 100%; max-width: 640px; margin: 0 auto; padding: 12px 0 0; }
+  /* 平板走网格，列表只放视频/文章；宽度跟网格对齐 */
+  .list { width: 100%; max-width: 1080px; margin: 0 auto; padding: 12px 16px 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

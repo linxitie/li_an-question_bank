@@ -106,19 +106,19 @@ class Cdp {
     console.log('  ✓', name);
   }
   /** 触摸事件分发：带超时重试，避免上一组手势没收敛导致下一次挂住 */
-  async touch(type, points, timeoutMs = 8000) {
+  async touch(type, points, timeoutMs = 12000) {
     try {
       await this.send('Input.dispatchTouchEvent', { type, touchPoints: points }, timeoutMs);
     } catch (e) {
-      // 先取消残留触点，再重试一次
-      await this.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] }, 4000).catch(() => {});
-      await sleep(150);
+      // 先结束残留触点，再重试一次
+      await this.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, 5000).catch(() => {});
+      await sleep(250);
       await this.send('Input.dispatchTouchEvent', { type, touchPoints: points }, timeoutMs);
     }
   }
   async resetTouches() {
-    await this.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] }, 4000).catch(() => {});
-    await sleep(120);
+    await this.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, 5000).catch(() => {});
+    await sleep(150);
   }
   /** 单指滑动 */
   async swipe(from, to, steps = 5) {
@@ -203,6 +203,9 @@ async function main() {
     mobile: true
   });
   await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }).catch(() => {});
+  // 触摸事件要送进渲染进程，窗口被遮挡时容易挂住：先把页面提到前台并开焦点模拟
+  await cdp.send('Page.bringToFront', {}, 8000).catch(() => {});
+  await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
 
   await cdp.send('Page.navigate', { url: `${BASE}/#/` });
   await cdp.waitFor(`document.readyState === 'complete'`);

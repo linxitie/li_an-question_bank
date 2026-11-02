@@ -115,57 +115,46 @@
     "vh": 1024,
     "scrollW": 768,
     "overflowX": 0,
-    "card": {
-      "w": 600,
-      "h": 307,
-      "aspect": 1.95
-    },
+    "card": null,
     "actBtn": {
       "w": 119,
       "h": 44
     },
-    "barBtnH": 44,
+    "barBtnH": null,
     "smallTap": []
   },
-  "materialsList": {
-    "title": "老表",
-    "titleFont": "19px",
-    "listCols": "none",
-    "hash": "#/tablet/materials"
+  "materialsGrid": {
+    "layout": "grid",
+    "cols": 3,
+    "cardCount": 6,
+    "card": {
+      "w": 236,
+      "h": 260,
+      "aspect": 0.91
+    },
+    "hero": "行测 · 行政职业能力测验",
+    "progress": "23.7%",
+    "barButtons": [
+      "上一页",
+      "下一页"
+    ],
+    "pageLabel": "1 / 7 页 · 共 37 张",
+    "stackVisible": false,
+    "listCards": 1
+  },
+  "gridPaging": {
+    "pageBefore": "1 / 7 页 · 共 37 张",
+    "pageAfter": "2 / 7 页 · 共 37 张"
   },
   "flip": {
     "flipped": true,
-    "t": "matrix3d(-1, 0, 0, 0"
+    "t": "matrix3d(-1, 0, 0, 0, "
   },
   "lightbox": {
-    "open": true,
-    "img": {
-      "w": 501,
-      "h": 890
-    },
-    "count": "1 / 1",
-    "tools": [
-      {
-        "t": "缩小",
-        "w": 44,
-        "h": 44
-      },
-      {
-        "t": "放大",
-        "w": 44,
-        "h": 44
-      },
-      {
-        "t": "原始大小",
-        "w": 44,
-        "h": 44
-      },
-      {
-        "t": "关闭（Esc）",
-        "w": 44,
-        "h": 44
-      }
-    ],
+    "open": false,
+    "img": null,
+    "count": "",
+    "tools": [],
     "smallTools": []
   },
   "create": {
@@ -234,9 +223,9 @@
     "topBar": "← 返回首页\n只看收藏",
     "cardW": [
       702,
-      1490
+      1340
     ],
-    "bodyHead": "← 返回首页 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） Excel 批量导入 ＋ 创建卡片 申论 · 写作专项突破 吃透材料分析方法，掌握高分写作框架与热点素材 学习进度 6.9% （已完成"
+    "bodyHead": "← 返回首页 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） Excel 批量导入 ＋ 创建卡片 申论 · 写作专项突破 吃透材料分析方法，掌握高分写作框架与热点素材 学习进度 7.1% （已完成"
   },
   "materialsLandscape": {
     "hash": "#/tablet/materials",
@@ -244,16 +233,23 @@
     "vh": 768,
     "scrollW": 1024,
     "overflowX": 0,
-    "card": {
-      "w": 600,
-      "h": 330,
-      "aspect": 1.82
-    },
+    "card": null,
     "actBtn": {
       "w": 119,
       "h": 44
     },
-    "barBtnH": 44,
+    "barBtnH": null,
     "smallTap": []
+  },
+  "materialsLandscapeGrid": {
+    "layout": "grid",
+    "cols": 4,
+    "cardCount": 8,
+    "card": {
+      "w": 237,
+      "h": 215,
+      "aspect": 1.1
+    },
+    "pageLabel": "1 / 5 页 · 共 37 张"
   }
 }
