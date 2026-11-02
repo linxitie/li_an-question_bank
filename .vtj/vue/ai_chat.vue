@@ -142,8 +142,27 @@
           <div class="welcome-emoji">🎯</div>
           <p class="welcome-title">你好，我是联考小智</p>
           <p class="welcome-sub">选个场景，从下面挑一个问题开始问我</p>
-          <div class="quick-chips">
-            <div v-for="q in quickQuestions" :key="q" class="chip" @click="quickAsk(q)">{{ q }}</div>
+          <div class="welcome-grid">
+            <div class="wg-item" @click="quickAsk('行测资料分析总是做不完怎么办？')">
+              <div class="wg-icon">📊</div>
+              <div class="wg-title">行测提分</div>
+              <div class="wg-desc">资料分析、判断推理快速突破</div>
+            </div>
+            <div class="wg-item" @click="quickAsk('申论大作文总是跑题，怎么破？')">
+              <div class="wg-icon">✍️</div>
+              <div class="wg-title">申论写作</div>
+              <div class="wg-desc">大作文、归纳概括高分技巧</div>
+            </div>
+            <div class="wg-item" @click="quickAsk('最近模考成绩上不去，有点焦虑')">
+              <div class="wg-icon">💭</div>
+              <div class="wg-title">心理疏导</div>
+              <div class="wg-desc">缓解焦虑，调整备考状态</div>
+            </div>
+            <div class="wg-item" @click="quickAsk('帮我选个岗位')">
+              <div class="wg-icon">🎯</div>
+              <div class="wg-title">选岗建议</div>
+              <div class="wg-desc">根据你的情况推荐岗位</div>
+            </div>
           </div>
         </div>
 
@@ -775,6 +794,23 @@
     transition: all 0.2s;
   }
   .chip:hover { background: #fff5f5; border-color: #c8161e; color: #c8161e; }
+
+  /* 豆包风格欢迎卡片网格 */
+  .welcome-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin-top: 20px; max-width: 500px;
+  }
+  .wg-item {
+    padding: 16px; background: #f8f9fb; border-radius: 12px;
+    cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+  }
+  .wg-item:hover {
+    background: #fff; border-color: #e6ebf2;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .wg-icon { font-size: 24px; margin-bottom: 8px; }
+  .wg-title { font-size: 14px; font-weight: 600; color: #1a2a4a; margin-bottom: 4px; }
+  .wg-desc { font-size: 12px; color: #888; line-height: 1.4; }
 
   .msg-row { display: flex; margin-bottom: 14px; align-items: flex-end; gap: 8px; animation: fadeUp 0.25s ease; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
