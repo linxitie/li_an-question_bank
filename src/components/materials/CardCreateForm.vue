@@ -20,6 +20,10 @@
           <span class="cc-subject-desc">{{ s.desc }}</span>
         </button>
         <p class="cc-tip">选好科目后填写正面 / 背面，可另加 1~2 张配图；保存即公开展示，无需审核。</p>
+        <!-- Excel 批量上传入口：第一屏就能看到，不用先填表 -->
+        <button v-if="!inline" type="button" class="cc-batch cc-batch-step" @click="goBatchImport">
+          一次要传很多张？用「Excel 批量导入」→
+        </button>
       </div>
 
       <!-- 第 2 步：填卡片（字段与 Excel 模板逐列对应） -->
@@ -614,6 +618,16 @@ onBeforeUnmount(() => {
   font-size: 12.5px;
   text-align: center;
   cursor: pointer;
+}
+/* 第一步（选科目）里的入口：做成浅底卡片，更显眼 */
+.cc-batch-step {
+  margin-top: 14px;
+  padding: 12px 10px;
+  border: 1px dashed #c9d9f8;
+  border-radius: 12px;
+  background: #f4f8ff;
+  font-size: 13px;
+  font-weight: 600;
 }
 .cc-batch:hover {
   text-decoration: underline;

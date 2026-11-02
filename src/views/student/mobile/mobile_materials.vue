@@ -22,7 +22,7 @@
 
       <!-- 卡片栈：后面是「真卡片」（翻转时能看到它的文字），顶层卡单独做 3D 翻转 -->
       <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
-        <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering' }">
+        <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering', 'is-entering-prev': phase === 'entering-prev' }">
           <!-- 后面的卡：真内容，只露出一条渐变头；容器透明，不会出现白框 -->
           <div
             v-for="(c, i) in behindCards"
@@ -325,18 +325,27 @@ const openCardImages = (c: any) => {
 const flip = () => {
   if (cardItems.value.length) flipped.value = !flipped.value;
 };
-// 翻页动效（与电脑端 detail 页同构）：上一层走出 → 新卡片进入
-const phase = ref<'idle' | 'leaving' | 'entering'>('idle');
+// 翻页动效：两个方向都朝「右」——下一页时当前卡向右飞走，上一页时上一张从右边飞回来
+const phase = ref<'idle' | 'leaving' | 'entering' | 'entering-prev'>('idle');
 let phaseTimer: number | undefined;
 function playSwitch(delta: number) {
   if (phase.value !== 'idle') return;
-  phase.value = 'leaving';
-  phaseTimer = window.setTimeout(() => {
-    cardIndex.value += delta;
+  if (delta > 0) {
+    // 下一页：当前卡向右飞出 → 换下一张 → 新卡轻微落定（它本来就在后面）
+    phase.value = 'leaving';
+    phaseTimer = window.setTimeout(() => {
+      cardIndex.value += 1;
+      flipped.value = false;
+      phase.value = 'entering';
+      phaseTimer = window.setTimeout(() => { phase.value = 'idle'; }, 240);
+    }, 220);
+  } else {
+    // 上一页：先回退索引，再让上一张从右侧飞回来盖住
+    cardIndex.value -= 1;
     flipped.value = false;
-    phase.value = 'entering';
-    phaseTimer = window.setTimeout(() => { phase.value = 'idle'; }, 240);
-  }, 200);
+    phase.value = 'entering-prev';
+    phaseTimer = window.setTimeout(() => { phase.value = 'idle'; }, 280);
+  }
 }
 const nextCard = () => {
   if (cardIndex.value < cardItems.value.length - 1) playSwitch(1);
@@ -762,21 +771,31 @@ onMounted(fetchMaterials);
   background: var(--c1);
 }
 
-/* 修复 3：翻页动效（走出 / 进入）——后面是真卡片，飞走时直接看到它的正文 */
-.stack-card.lv0 { transition: transform 0.2s ease, opacity 0.2s ease; }
+/* 翻页动效：两个方向都朝右
+   · 下一页：当前卡向右飞走（translateX +118%），换过来的新卡轻轻落定
+   · 上一页：上一张从右侧飞回来（translateX 60% → 0）盖住当前卡 */
+.stack-card.lv0 { transition: transform 0.22s ease, opacity 0.22s ease; }
 .stack.is-leaving .stack-card.lv0 {
-  transform: translateX(-118%) rotate(-7deg);
+  transform: translateX(118%) rotate(7deg);
   opacity: 0;
 }
 .stack.is-entering .stack-card.lv0 {
   animation: sm-enter 0.24s ease-out both;
 }
 @keyframes sm-enter {
-  from { transform: translateX(46%) rotate(5deg); opacity: 0; }
+  from { transform: scale(0.97); opacity: 0.55; }
+  to { transform: scale(1); opacity: 1; }
+}
+.stack.is-entering-prev .stack-card.lv0 {
+  animation: sm-enter-right 0.28s cubic-bezier(0.25, 0.9, 0.3, 1) both;
+}
+@keyframes sm-enter-right {
+  from { transform: translateX(62%) rotate(-5deg); opacity: 0.25; }
   to { transform: translateX(0) rotate(0); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .stack.is-leaving .stack-card.lv0,
-  .stack.is-entering .stack-card.lv0 { animation: none; transform: none; opacity: 1; }
+  .stack.is-entering .stack-card.lv0,
+  .stack.is-entering-prev .stack-card.lv0 { animation: none; transform: none; opacity: 1; }
 }
 </style>

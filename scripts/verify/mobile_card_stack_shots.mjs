@@ -266,8 +266,13 @@ async function main() {
   await cdp.shot('03_卡片_背面');
 
   // ③ 卡片上直接看配图
-  await cdp.eval(`document.querySelector('.stack-card').click(); true`); // 翻回正面
+  await cdp.eval(`document.querySelector('.stack-card.lv0').click(); true`); // 翻回正面
   await sleep(600);
+  const faceNow = await cdp.eval(`(() => {
+    const inner = document.querySelector('.card-inner');
+    return { flipped: !!document.querySelector('.stack.is-flipped'), transform: inner ? getComputedStyle(inner).transform.slice(0, 24) : '' };
+  })()`);
+  check('能翻回正面（不卡在背面）', !faceNow.flipped, JSON.stringify(faceNow));
   await cdp.eval(`document.querySelector('.card-act').click(); true`);
   const okLb = await cdp.waitFor(`!!document.querySelector('.lb-mask')`, 8000);
   await sleep(500);
@@ -280,27 +285,122 @@ async function main() {
   await cdp.eval(`document.querySelector('.lb-close').click(); true`);
   await sleep(400);
 
-  // ④ 翻页动画期间：纸片淡出、不留白框
-  const before = await cdp.eval(`document.querySelector('.card-title').textContent`);
-  await cdp.eval(`[...document.querySelectorAll('.stack-bar button')].find(b => b.textContent.includes('下一张')).click(); true`);
-  await sleep(90);
-  const mid = await cdp.eval(`(() => {
-    const slab = document.querySelector('.stack-slab');
-    const card = document.querySelector('.stack-card');
-    return {
-      slabOpacity: slab ? getComputedStyle(slab).opacity : '',
-      cardTransform: card ? getComputedStyle(card).transform : '',
-      leaving: !!document.querySelector('.stack.is-leaving')
-    };
+  // ④ 翻页方向：下一页 → 当前卡向右飞走；上一页 → 上一张从右侧飞入
+  const tx = (m) => {
+    const hit = /matrix\(([^)]+)\)/.exec(m || '');
+    if (!hit) return 0;
+    return parseFloat(hit[1].split(',')[4] || '0');
+  };
+
+  // ① 方向规则：直接读样式表（scoped 会加 data-v 后缀，用包含匹配）
+  const dirCss = await cdp.eval(`(() => {
+    const rules = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } });
+    const leaving = rules.filter(r => r.selectorText && r.selectorText.includes('is-leaving'))
+      .map(r => r.cssText).join(' ');
+    const kf = rules.filter(r => r.type === 7 && /sm-enter-right/.test(r.name))
+      .map(r => [...r.cssRules].map(k => k.cssText).join(' ')).join(' ');
+    return { leaving, kf };
   })()`);
-  console.log('翻页中', JSON.stringify(mid));
-  check('翻页期间纸片淡出（无白框残留）',
-    parseFloat(mid.slabOpacity) < 0.2 || mid.leaving, `opacity=${mid.slabOpacity} leaving=${mid.leaving}`);
-  await cdp.shot('05_翻页中_无白框');
+  const nextRight = /translateX\(\s*118%/.test(dirCss.leaving);
+  const prevFromRight = /translateX\(\s*62%/.test(dirCss.kf);
+  console.log('方向规则', JSON.stringify({ nextRight, prevFromRight }));
+  check('下一页：样式为向右飞出（+118%）', nextRight, dirCss.leaving.slice(0, 70));
+  check('上一页：样式为从右侧飞入（62% → 0）', prevFromRight, dirCss.kf.slice(0, 70));
+
+  // ② 几何取证：套上离场样式后卡片整体右移，左侧让出后面那张（不依赖动画帧，Chrome 窗口被遮挡时也能测）
+  const geo = await cdp.eval(`(() => {
+    const stack = document.querySelector('.stack');
+    const el = document.querySelector('.stack-card.lv0');
+    const behind = document.querySelector('.stack-card.behind');
+    if (!el || !behind) return null;
+    const before = Math.round(el.getBoundingClientRect().left);
+    const behindLeft = Math.round(behind.getBoundingClientRect().left);
+    el.style.transition = 'none';
+    stack.classList.add('is-leaving');
+    const after = Math.round(el.getBoundingClientRect().left);
+    stack.classList.remove('is-leaving');
+    void el.offsetWidth;
+    el.style.transition = '';
+    return { before, after, behindLeft, delta: after - before };
+  })()`);
+  check('下一页：离场时卡片向右移动（几何位移 > 0）', !!geo && geo.delta > 100 && geo.after > geo.behindLeft, JSON.stringify(geo));
+  await cdp.shot('05_翻页前_第1张');
+
+  // ③ 真实点「下一张」：确认点击后进入离场动画，并真的换到下一张
+  const beforeIdx = await cdp.eval(`(document.querySelector('.stack-card.lv0 .idx')||{}).textContent || ''`);
+  const nextSamples = await cdp.eval(`(async () => {
+    const btn = [...document.querySelectorAll('.stack-bar button')].find(b => b.textContent.includes('下一张'));
+    if (!btn) return { error: 'no-button' };
+    btn.click();
+    const out = [];
+    const t0 = performance.now();
+    for (const t of [30, 70, 120, 170]) {
+      const w = t - (performance.now() - t0);
+      if (w > 0) await new Promise((r) => setTimeout(r, w));
+      const c = document.querySelector('.stack-card.lv0');
+      out.push({
+        t: Math.round(performance.now() - t0),
+        transform: c ? getComputedStyle(c).transform : 'MISSING',
+        leaving: !!document.querySelector('.stack.is-leaving')
+      });
+    }
+    return { samples: out, stacks: document.querySelectorAll('.stack').length };
+  })()`);
+  const nextXs = (nextSamples.samples || []).map((s) => tx(s.transform));
+  const nextLeaving = (nextSamples.samples || []).every((s) => s.leaving);
+  console.log('下一页采样', JSON.stringify({ x: nextXs.map((v) => Math.round(v)), stacks: nextSamples.stacks, leaving: nextLeaving }));
+  check('下一页：点击后进入离场动画（is-leaving 全程在场）', nextLeaving && nextSamples.stacks === 1, `leaving=${nextLeaving} stacks=${nextSamples.stacks}`);
+  await sleep(900);
+  const afterIdx = await cdp.eval(`(document.querySelector('.stack-card.lv0 .idx')||{}).textContent || ''`);
+  check('翻页后切到下一张', beforeIdx !== afterIdx, `序号 ${beforeIdx} → ${afterIdx}`);
+  await cdp.shot('06_翻页后_第2张');
+
+  // ④ 真实点「上一张」：关键帧从右侧 62% 起跳，读到的 translateX 应为正
+  const prevIdxBefore = afterIdx;
+  const prevSamples = await cdp.eval(`(async () => {
+    const btn = [...document.querySelectorAll('.stack-bar button')].find(b => b.textContent.includes('上一张'));
+    if (!btn) return { error: 'no-button' };
+    btn.click();
+    const out = [];
+    const t0 = performance.now();
+    for (const t of [20, 60, 110, 160]) {
+      const w = t - (performance.now() - t0);
+      if (w > 0) await new Promise((r) => setTimeout(r, w));
+      const c = document.querySelector('.stack-card.lv0');
+      out.push({
+        t: Math.round(performance.now() - t0),
+        transform: c ? getComputedStyle(c).transform : 'MISSING',
+        entering: !!document.querySelector('.stack.is-entering-prev')
+      });
+    }
+    return { samples: out };
+  })()`);
+  const prevXs = (prevSamples.samples || []).map((s) => tx(s.transform));
+  const prevMaxX = prevXs.length ? Math.max(...prevXs) : 0;
+  const prevEntering = (prevSamples.samples || []).some((s) => s.entering);
+  console.log('上一页采样', JSON.stringify({ x: prevXs.map((v) => Math.round(v)), entering: prevEntering }));
+  check('上一页：上一张从右侧飞入（translateX 由正归零）', prevEntering && prevMaxX > 0, `x=${prevXs.map((v) => Math.round(v)).join('/')}px`);
   await sleep(700);
-  const after = await cdp.eval(`document.querySelector('.card-title').textContent`);
-  check('翻页后切到下一张', before !== after, `${before.slice(0, 12)} → ${after.slice(0, 12)}`);
-  await cdp.shot('06_翻页后_恢复');
+  const prevIdxAfter = await cdp.eval(`(document.querySelector('.stack-card.lv0 .idx')||{}).textContent || ''`);
+  check('上一页后回到上一张', prevIdxBefore !== prevIdxAfter, `序号 ${prevIdxBefore} → ${prevIdxAfter}`);
+  await cdp.shot('07_上一页后_回到第1张');
+
+  // ⑤ 手机端 Excel 批量上传入口：＋创建 → 选科目第一步就能看到
+  await cdp.eval(`document.querySelector('.create-btn').click(); true`);
+  await cdp.waitFor(`!!document.querySelector('.cc-subjects')`, 10000);
+  await sleep(400);
+  const excelEntry = await cdp.eval(`(() => {
+    const b = document.querySelector('.cc-batch-step');
+    return b ? { text: b.textContent.trim(), visible: b.getBoundingClientRect().height > 0 } : null;
+  })()`);
+  console.log('Excel 入口', JSON.stringify(excelEntry));
+  check('手机端创建第一步就有 Excel 批量入口', !!excelEntry && excelEntry.visible && /Excel/.test(excelEntry.text), excelEntry ? excelEntry.text : 'not-found');
+  await cdp.shot('08_手机端_Excel批量入口');
+  await cdp.eval(`document.querySelector('.cc-batch-step').click(); true`);
+  await sleep(1400);
+  const excelRoute = await cdp.eval(`location.hash`);
+  check('点入口直达 Excel 上传面板', /tab=excel/.test(excelRoute), excelRoute);
+  await cdp.shot('09_手机端_Excel上传面板');
 
   ws.close();
   const failed = results.filter((r) => !r.pass);
