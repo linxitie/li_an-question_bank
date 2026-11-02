@@ -836,6 +836,9 @@ app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
+# /api/media/image（论坛/反馈图片上传）必须在 /api/media/{asset_id} 之前注册，
+# 否则精确路径会被动态路由先匹配走，POST 落到 GET 路由上返回 405 Method Not Allowed。
+app.include_router(image_media.router)
 app.include_router(media_assets_api.router)
 app.include_router(media_assets_api.router_api)  # /api/media 别名
 app.include_router(websocket_router)
