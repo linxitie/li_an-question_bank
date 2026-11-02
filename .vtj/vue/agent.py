@@ -288,7 +288,12 @@ AGENT_TASKS: List[Dict] = [
                 "label": "法规",
                 "type": "select",
                 "required": True,
-                "options": ["治安管理处罚法", "人民警察法", "刑法", "公安机关办理刑事案件程序规定"],
+                "options": [
+                    "治安管理处罚法",
+                    "人民警察法",
+                    "刑法",
+                    "公安机关办理刑事案件程序规定",
+                ],
             },
         ],
     },
@@ -421,7 +426,10 @@ async def agent_memory_delete(
 
     row = (
         db.query(UserMemory)
-        .filter(UserMemory.memory_id == memory_id, UserMemory.user_id == current_user.user_id)
+        .filter(
+            UserMemory.memory_id == memory_id,
+            UserMemory.user_id == current_user.user_id,
+        )
         .first()
     )
     if not row:
