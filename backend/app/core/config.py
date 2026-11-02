@@ -2,7 +2,10 @@
 数据库配置 - 支持SQLite作为开发环境备选方案
 """
 import os
+from pathlib import Path
 from typing import Optional
+
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 try:
     from pydantic_settings import BaseSettings
@@ -254,9 +257,11 @@ class Settings(BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
     
     class Config:
-        # 同时读取 backend/.env 与仓库根 .env：根 .env 是历史遗留的密钥存放位置，
-        # 启动目录不同（backend/ 或仓库根）两种布局都要能读到。
-        env_file = (".env", "../.env")
+        # 绝对路径锚定 backend/，不随启动 cwd 漂移；同时兼容仓库根历史 .env。
+        env_file = (
+            str(_BACKEND_DIR / ".env"),
+            str(_BACKEND_DIR.parent / ".env"),
+        )
         env_file_encoding = "utf-8"
 
 settings = Settings()

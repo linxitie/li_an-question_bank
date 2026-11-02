@@ -22,6 +22,19 @@ def load_env_files(paths: tuple[Path, ...] | None = None) -> None:
     try:
         from dotenv import load_dotenv
     except ImportError:
+        # 极简 fallback：缺少 python-dotenv 时不能静默退回 off/空值。
+        for path in paths or (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env"):
+            if not path.is_file():
+                continue
+            for raw in path.read_text(encoding="utf-8-sig").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip().removeprefix("export ").strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
         return
     candidates = paths or (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env")
     for path in candidates:
