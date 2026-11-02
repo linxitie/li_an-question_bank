@@ -20,15 +20,25 @@
       </div>
     </div>
 
-      <!-- 卡片栈：背景「纸片」只暗示还有多少张（不再画整张白卡），当前卡单独做 3D 翻转 -->
+      <!-- 卡片栈：后面是「真卡片」（翻转时能看到它的文字），顶层卡单独做 3D 翻转 -->
       <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
         <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering' }">
-          <span
-            v-for="n in SLAB_COUNT"
-            :key="'slab-' + n"
-            class="stack-slab"
-            :style="slabStyle(n)"
-          ></span>
+          <!-- 后面的卡：真内容，只露出一条渐变头；容器透明，不会出现白框 -->
+          <div
+            v-for="(c, i) in behindCards"
+            :key="c.id"
+            class="stack-card behind"
+            :style="behindStyle(i)"
+          >
+            <div class="card-face front">
+              <div class="card-head">
+                <span class="tag">{{ c.category || '资料卡' }}</span>
+                <span class="idx">{{ cardIndex + i + 2 }} / {{ cardItems.length }}</span>
+              </div>
+              <h3 class="card-title">{{ c.title }}</h3>
+              <p class="card-text">{{ c.card_front || c.title }}</p>
+            </div>
+          </div>
 
           <div v-if="currentCard" class="stack-card lv0" @click="flip()">
             <div class="card-inner">
@@ -267,8 +277,8 @@ const openDetail = async (m: any) => {
   await loadDetail(m.id);
 };
 
-// ===== 卡片栈：背景纸片 + 单卡 3D 翻转 + 切换 + 字号 =====
-const SLAB_COUNT = 3;
+// ===== 卡片栈：后面卡（真内容）+ 顶层卡 3D 翻转 + 切换 + 字号 =====
+const BEHIND_MAX = 3;
 const cardIndex = ref(0);
 const flipped = ref(false);
 const fontScale = ref(1);
@@ -277,18 +287,26 @@ const cardItems = computed(() =>
   (materials.value as any[]).filter((m) => m.type === 'card' && m.card_front)
 );
 const currentCard = computed(() => cardItems.value[cardIndex.value] || null);
+/** 后面叠着的卡片（真内容，翻转时能看见它的文字） */
+const behindCards = computed(() =>
+  cardItems.value.slice(cardIndex.value + 1, cardIndex.value + 1 + BEHIND_MAX)
+);
 /** 当前卡的全部配图（封面 + 正文附图），用于卡片上的「查看配图」 */
 const currentImages = computed(() => collectCardImages(currentCard.value as any));
 const actLabel = computed(() =>
   currentImages.value.length ? `查看配图（${currentImages.value.length}）` : '查看详情'
 );
 
-/** 层叠纸片：越靠后越窄、越淡，翻页时整体淡出（不会再留白框） */
-const slabStyle = (n: number) => ({
-  top: `${30 - n * 9}px`,
-  left: `${6 + n * 5}px`,
-  right: `${6 + n * 5}px`,
-  opacity: String(0.78 - n * 0.2)
+/**
+ * 后面卡片的定位：只往上露一条（-9px/层）并左右各内缩 6px/层，
+ * 这样它的白色卡身完全被顶层卡盖住 —— 不会再出现「白框」，
+ * 但翻转时顶层卡转开，后面的卡片正文就能看见。
+ */
+const behindStyle = (i: number) => ({
+  top: `${30 - (i + 1) * 9}px`,
+  left: `${(i + 1) * 6}px`,
+  right: `${(i + 1) * 6}px`,
+  zIndex: 8 - i
 });
 
 // 全图查看器（复用电脑端的同一个组件）
@@ -592,18 +610,9 @@ onMounted(fetchMaterials);
   opacity: 0.85;
 }
 
-/* ===== 卡片栈：背景纸片 + 单卡 3D 翻转 ===== */
+/* ===== 卡片栈：后面真卡片 + 顶层卡 3D 翻转 ===== */
 .stack-wrap { padding: 14px 16px 4px; }
-.stack { position: relative; height: 256px; perspective: 900px; perspective-origin: 50% 42%; }
-/* 背景纸片：只露一条渐变边，表示「后面还有几张」，不画整张白卡 */
-.stack-slab {
-  position: absolute;
-  height: 54px;
-  border-radius: 16px 16px 0 0;
-  background: linear-gradient(135deg, var(--c1), var(--c2));
-  pointer-events: none;
-  transition: opacity 0.22s ease, top 0.3s ease, left 0.3s ease, right 0.3s ease;
-}
+.stack { position: relative; height: 256px; }
 .stack-card {
   position: absolute;
   left: 0;
@@ -611,16 +620,23 @@ onMounted(fetchMaterials);
   top: 30px;
   height: 226px;
   border-radius: 16px;
-  background: #fff;
+  /* 容器必须透明：白色由正/反两面提供，否则翻转时会露出这块白底 */
+  background: transparent;
   border: none;
-  box-shadow: 0 10px 24px rgba(26, 42, 74, 0.14);
   transition: transform 0.35s ease, box-shadow 0.35s ease, opacity 0.22s ease;
-  z-index: 2;
+  z-index: 1;
   /* 3D 透视必须挂在「旋转元素的父级」上：card-inner 是 .stack-card 的子元素 */
   perspective: 900px;
   perspective-origin: 50% 45%;
 }
-.stack-card.lv0 { cursor: pointer; }
+/* 后面的卡：不投影、不可点，只作为「翻过去能看到的那张」 */
+.stack-card.behind {
+  z-index: 1;
+  pointer-events: none;
+  box-shadow: none;
+}
+.stack-card.behind .card-face { box-shadow: 0 6px 14px rgba(26, 42, 74, 0.08); }
+.stack-card.lv0 { cursor: pointer; box-shadow: 0 10px 24px rgba(26, 42, 74, 0.14); z-index: 10; }
 .card-inner {
   position: relative;
   width: 100%;
@@ -695,8 +711,10 @@ onMounted(fetchMaterials);
 .stack-wrap { padding: 18px 16px 6px; }
 .stack { z-index: 1; }
 
-/* 修复 2：卡片头部改成科目渐变条，正文区收紧留白 */
-.stack-card { background: #fff; }
+/* 修复 2：卡片头部改成科目渐变条，正文区收紧留白
+   注意：.stack-card 容器必须保持透明（白色由 .card-face 提供），
+   否则翻转时会在原地露出一块白底 —— 这正是之前「白框」的来源。 */
+.stack-card { background: transparent; }
 .card-face { padding: 0; }
 .card-face .card-head {
   margin: 0;
@@ -744,13 +762,8 @@ onMounted(fetchMaterials);
   background: var(--c1);
 }
 
-/* 修复 3：翻页动效（走出 / 进入）——纸片同时淡出，不留白框 */
+/* 修复 3：翻页动效（走出 / 进入）——后面是真卡片，飞走时直接看到它的正文 */
 .stack-card.lv0 { transition: transform 0.2s ease, opacity 0.2s ease; }
-.stack.is-leaving .stack-slab,
-.stack.is-entering .stack-slab {
-  opacity: 0 !important;
-  transition: opacity 0.18s ease;
-}
 .stack.is-leaving .stack-card.lv0 {
   transform: translateX(-118%) rotate(-7deg);
   opacity: 0;

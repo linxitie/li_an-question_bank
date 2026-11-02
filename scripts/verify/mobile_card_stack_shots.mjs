@@ -193,34 +193,71 @@ async function main() {
   await cdp.waitFor(`document.querySelector('.card-title') && document.querySelector('.card-title').textContent.includes('演示')`, 15000);
   await sleep(700);
 
-  // ① 结构：纸片 3 片、卡片无边框、底部有操作按钮
+  // ① 结构：后面 3 张真卡片（有正文）、顶层容器透明、底部有操作按钮
   const dom = await cdp.eval(`(() => {
-    const card = document.querySelector('.stack-card');
-    const cs = card ? getComputedStyle(card) : null;
-    const slabs = [...document.querySelectorAll('.stack-slab')];
+    const top = document.querySelector('.stack-card.lv0');
+    const topCs = top ? getComputedStyle(top) : null;
+    const behind = [...document.querySelectorAll('.stack-card.behind')];
+    const b0 = behind[0];
+    const b0Cs = b0 ? getComputedStyle(b0) : null;
     const act = document.querySelector('.card-act');
+    const rectOf = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width)]; };
     return {
-      slabs: slabs.length,
-      slabBg: slabs.length ? getComputedStyle(slabs[0]).backgroundImage.slice(0, 30) : '',
-      slabBgColor: slabs.length ? getComputedStyle(slabs[0]).backgroundColor : '',
-      borderWidth: cs ? cs.borderTopWidth : '',
+      behindCount: behind.length,
+      behindText: b0 ? (b0.querySelector('.card-title') || {}).textContent || '' : '',
+      behindBody: b0 ? (b0.querySelector('.card-text') || {}).textContent || '' : '',
+      topBg: topCs ? topCs.backgroundColor : '',
+      behindBg: b0Cs ? b0Cs.backgroundColor : '',
+      faceBg: b0 ? getComputedStyle(b0.querySelector('.card-face')).backgroundColor : '',
+      topRect: top ? rectOf(top) : null,
+      behindRect: b0 ? rectOf(b0) : null,
+      borderWidth: topCs ? topCs.borderTopWidth : '',
       actText: act ? act.textContent.trim() : '',
-      cardBg: cs ? cs.backgroundColor : '',
-      title: (document.querySelector('.card-title') || {}).textContent || ''
+      title: (document.querySelector('.stack-card.lv0 .card-title') || {}).textContent || ''
     };
   })()`);
   console.log('卡片结构', JSON.stringify(dom));
-  check('栈顶是演示卡', dom.title.includes('演示'), dom.title);
-  check('背景只保留 3 片渐变纸片（不再是白卡）', dom.slabs === 3 && /gradient/.test(dom.slabBg), dom.slabBg);
+  check('栈顶是要看的那张卡', dom.title.includes('演示'), dom.title);
+  check('后面叠着 3 张真卡片（带正文，不是白板）',
+    dom.behindCount === 3 && !!dom.behindText && dom.behindBody.length > 0,
+    `${dom.behindText} / ${dom.behindBody.slice(0, 14)}`);
+  check('顶层卡容器透明（翻转时不会露白底）', dom.topBg !== 'rgb(255, 255, 255)', dom.topBg);
+  check('后面卡片比顶层窄（白身被遮住，无白框）',
+    dom.behindRect && dom.topRect && dom.behindRect[2] < dom.topRect[2],
+    `behind=${dom.behindRect && dom.behindRect[2]} top=${dom.topRect && dom.topRect[2]}`);
   check('卡片没有白边（border=0）', dom.borderWidth === '0px', dom.borderWidth);
   check('卡片上有「查看配图」按钮', /查看配图/.test(dom.actText), dom.actText);
   await cdp.shot('01_卡片_默认态');
 
-  // ② 翻转：3D 透视 + 背面
-  await cdp.eval(`document.querySelector('.stack-card').click(); true`);
-  await sleep(30);
+  // ② 翻转：3D 透视 + 翻转途中能看到后面卡片的文字
+  //    为了让静态截图能停在「翻到一半」，临时把翻转时长拉到 3s（只影响截图，改完即移除）
+  await cdp.eval(`(() => {
+    const s = document.createElement('style');
+    s.id = 'qa-slowflip';
+    s.textContent = '.card-inner { transition-duration: 3s !important; }';
+    document.head.appendChild(s);
+    return true;
+  })()`);
+  await cdp.eval(`document.querySelector('.stack-card.lv0').click(); true`);
+  await sleep(40);
+  const midFlip = await cdp.eval(`(() => {
+    const b = document.querySelector('.stack-card.behind .card-title');
+    const inner = document.querySelector('.card-inner');
+    const r = b ? b.getBoundingClientRect() : null;
+    return {
+      behindText: b ? b.textContent : '',
+      behindVisible: r ? (r.width > 0 && r.height > 0) : false,
+      innerTransform: inner ? getComputedStyle(inner).transform.slice(0, 22) : ''
+    };
+  })()`);
+  console.log('翻转中', JSON.stringify(midFlip));
   await cdp.shot('02_翻转中_3D透视');
-  await sleep(700);
+  await sleep(900);
+  await cdp.shot('02b_翻转中_后卡文字');
+  // 移除临时样式，让翻转正常结束
+  await cdp.eval(`document.getElementById('qa-slowflip')?.remove(); true`);
+  await sleep(1200);
+  check('翻转途中后面卡片的文字可见', midFlip.behindVisible && !!midFlip.behindText, midFlip.behindText);
   const flipped = await cdp.eval(`(() => {
     const inner = document.querySelector('.card-inner');
     return { transform: inner ? getComputedStyle(inner).transform : '', back: (document.querySelector('.card-face.back .card-act')||{}).textContent || '' };
