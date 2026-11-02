@@ -188,9 +188,8 @@
         <div
           v-if="!state.workMode && state.messages.length === 0"
           class="welcome-card">
-          <div class="welcome-emoji">🎯</div>
-          <p class="welcome-title">你好，我是联考小智</p>
-          <p class="welcome-sub">选个场景，从下面挑一个问题开始问我</p>
+          <p class="welcome-title">我们要做什么？</p>
+          <p class="welcome-sub">联考小智帮你备考公安联考，从下面挑一个功能开始</p>
           <div class="welcome-grid">
             <div
               class="wg-item"
