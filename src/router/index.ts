@@ -411,6 +411,14 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    // 平板徽章墙：复用 PC 徽章页（.bg-grid 在 ≥700px 下是 3 列，768 实测无溢出），
+    // 守 R12「不为平板复制页面」；此前平板只能手打 PC 的 /badges。
+    path: '/tablet/badges',
+    name: 'TabletBadges',
+    component: () => import('@/views/student/badges.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
     path: '/tablet/gold-purchase',
     name: 'TabletGoldPurchase',
     component: () => import('$vtj/vue/tablet_gold_purchase.vue'),

@@ -497,4 +497,14 @@ const submitExcel = async () => {
     width: 100%;
   }
 }
+/* 触屏（平板/手机）：交互元素补到 44px 最小可点区；PC 鼠标端不受影响 */
+@media (pointer: coarse) {
+  .mc-tab,
+  .mc-btn,
+  .mc-seg-btn,
+  .mc-subj,
+  button {
+    min-height: 44px;
+  }
+}
 </style>

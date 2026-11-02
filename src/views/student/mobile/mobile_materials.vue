@@ -621,13 +621,14 @@ onMounted(fetchMaterials);
 
 /* ===== 卡片栈：后面真卡片 + 顶层卡 3D 翻转 ===== */
 .stack-wrap { padding: 14px 16px 4px; }
-.stack { position: relative; height: 256px; }
+/* 卡片高度抽成变量：手机 226px 不变，平板（≥700px）按视口放大，避免被拉成「横幅」 */
+.stack { position: relative; height: calc(30px + var(--card-h, 226px)); --card-h: 226px; }
 .stack-card {
   position: absolute;
   left: 0;
   right: 0;
   top: 30px;
-  height: 226px;
+  height: var(--card-h, 226px);
   border-radius: 16px;
   /* 容器必须透明：白色由正/反两面提供，否则翻转时会露出这块白底 */
   background: transparent;
@@ -793,6 +794,37 @@ onMounted(fetchMaterials);
   from { transform: translateX(62%) rotate(-5deg); opacity: 0.25; }
   to { transform: translateX(0) rotate(0); opacity: 1; }
 }
+/* 平板（≥700px）：同一份页面，只放大卡片与触控目标
+   · 卡片高度按 40vw 放大并封顶 330px，宽度限制在 640px 容器内 → 宽高比从 3.25/4.39 回到 ~1.9
+   · 交互元素统一 ≥44px，符合触屏最小可点区
+   · 不改模板、不复制页面（守 R12） */
+@media (min-width: 700px) {
+  /* 注意：.page 是 display:flex 的列容器，给子项写 margin:auto 会让它「收缩到内容宽」、
+     不再被拉伸（实测只撑到 203px）——所以 max-width 必须配 width:100% 一起用 */
+  .stack-wrap {
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 18px 20px 8px;
+  }
+  .stack { --card-h: clamp(240px, 40vw, 330px); }
+  .card-face .card-title { font-size: 19px; line-height: 1.45; }
+  .card-face .card-text { font-size: 14px; }
+  .card-act {
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 22px;
+    font-size: 13px;
+  }
+  .stack-bar { width: 100%; max-width: 640px; margin: 12px auto 0; }
+  .stack-bar button { min-height: 44px; }
+  .tabs .tab { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+  .create-btn { min-height: 44px; min-width: 88px; border-radius: 22px; }
+  .back-btn { min-height: 44px; min-width: 44px; }
+  .font-row button { height: 44px; }
+  .list { width: 100%; max-width: 720px; margin: 0 auto; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stack.is-leaving .stack-card.lv0,
   .stack.is-entering .stack-card.lv0,

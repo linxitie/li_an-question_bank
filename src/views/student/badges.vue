@@ -398,4 +398,14 @@ onMounted(load);
     margin-left: 0;
   }
 }
+/* 触屏（平板/手机）：筛选胶囊补到 44px 最小可点区；PC 鼠标端不受影响。
+ * 背景：平板实测 .bd-chip 只有 30px 高（本报告 P1「触控目标偏小」）。 */
+@media (pointer: coarse) {
+  .bd-chip,
+  .bd-page-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
 </style>
