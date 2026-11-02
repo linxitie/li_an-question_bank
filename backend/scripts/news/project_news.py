@@ -6,15 +6,14 @@ import argparse
 import json
 
 from app.core.database import SessionLocal
-from app.foundation.ports.ai import build_embedding_port
-from app.services.news_projection import project_graph, project_vectors
+from app.services.news_projection import project_graph, project_vectors_safe
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--graph", action="store_true")
     parser.add_argument("--vectors", action="store_true")
-    parser.add_argument("--provider", default="hash", help="off/hash/http；hash 仅用于离线验证")
+    parser.add_argument("--provider", default="auto", help="auto/off/hash/http；auto 不可用时降级 FTS")
     parser.add_argument("--reset", action="store_true")
     args = parser.parse_args()
     if not args.graph and not args.vectors:
@@ -25,9 +24,9 @@ def main() -> int:
         if args.graph:
             result["graph"] = project_graph(db, reset=args.reset)
         if args.vectors:
-            result["vectors"] = project_vectors(
+            result["vectors"] = project_vectors_safe(
                 db,
-                embedding=build_embedding_port(args.provider),
+                provider=args.provider,
                 reset=args.reset,
             )
     finally:

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.foundation import config as fcfg
 from app.foundation.graph_schema import ensure_graph_schema
-from app.foundation.ports.ai import EmbeddingPort, build_embedding_port
+from app.foundation.ports.ai import EmbeddingError, EmbeddingPort, build_embedding_port
 from app.foundation.stores.graph import GraphStore, build_graph_store
 from app.foundation.stores.local_vector import LocalVectorStore
 from app.foundation.stores.vector import VectorItem, VectorStore
@@ -149,3 +149,40 @@ def project_vectors(
         "degraded": bool(getattr(port, "degraded", False)),
         "collection": NEWS_VECTOR_COLLECTION,
     }
+
+
+def project_vectors_safe(
+    db: Session,
+    *,
+    provider: str = "auto",
+    embedding: EmbeddingPort | None = None,
+    store: VectorStore | None = None,
+    reset: bool = False,
+) -> dict[str, Any]:
+    """向量不可用时降级到 FTS/LIKE，不阻断新闻基础功能。"""
+    port = embedding
+    try:
+        if port is None:
+            if provider == "off":
+                return {
+                    "ok": False, "skipped": True, "fallback": "fts",
+                    "provider": "off", "reason": "EMBEDDING_PROVIDER=off",
+                }
+            port = build_embedding_port(None if provider == "auto" else provider)
+        actual_provider = getattr(port, "provider", "unknown")
+        if actual_provider == "off":
+            return {
+                "ok": False, "skipped": True, "fallback": "fts",
+                "provider": "off", "reason": "EMBEDDING_ENABLED=false 或 PROVIDER=off",
+            }
+        result = project_vectors(db, embedding=port, store=store, reset=reset)
+        result["ok"] = True
+        return result
+    except (EmbeddingError, ValueError) as exc:
+        return {
+            "ok": False,
+            "skipped": True,
+            "fallback": "fts",
+            "provider": getattr(port, "provider", provider),
+            "reason": str(exc)[:300],
+        }

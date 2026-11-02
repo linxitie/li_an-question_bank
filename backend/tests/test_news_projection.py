@@ -2,11 +2,16 @@
 import sqlite3
 
 from app.foundation.graph_schema import ensure_graph_schema
-from app.foundation.ports.ai import HashEmbedding
+from app.foundation.ports.ai import EmbeddingUnavailable, HashEmbedding
 from app.foundation.stores.local_graph import LocalGraphStore
 from app.foundation.stores.local_vector import LocalVectorStore
 from app.models.models import NewsArticle, NewsImage
-from app.services.news_projection import NEWS_VECTOR_COLLECTION, project_graph, project_vectors
+from app.services.news_projection import (
+    NEWS_VECTOR_COLLECTION,
+    project_graph,
+    project_vectors,
+    project_vectors_safe,
+)
 
 
 def _news(db):
@@ -53,3 +58,36 @@ def test_project_vectors_with_hash_provider(tmp_path, db_session):
     assert store.count(NEWS_VECTOR_COLLECTION) == 1
     hits = store.search(NEWS_VECTOR_COLLECTION, embedding.embed(["公安新闻"])[0], top_k=3)
     assert hits and hits[0].id == "1"
+
+
+class _FailingEmbedding:
+    provider = "http"
+    dim = 32
+    degraded = False
+
+    def embed(self, texts):
+        raise EmbeddingUnavailable("provider unavailable")
+
+
+def test_projection_degrades_when_embedding_off(tmp_path, db_session):
+    _news(db_session)
+    store = LocalVectorStore(tmp_path, dim=32)
+
+    report = project_vectors_safe(db_session, provider="off", store=store)
+
+    assert report["skipped"] is True
+    assert report["fallback"] == "fts"
+    assert store.count(NEWS_VECTOR_COLLECTION) == 0
+
+
+def test_projection_degrades_when_embedding_fails(tmp_path, db_session):
+    _news(db_session)
+    store = LocalVectorStore(tmp_path, dim=32)
+
+    report = project_vectors_safe(
+        db_session, embedding=_FailingEmbedding(), store=store
+    )
+
+    assert report["skipped"] is True
+    assert report["fallback"] == "fts"
+    assert "provider unavailable" in report["reason"]
