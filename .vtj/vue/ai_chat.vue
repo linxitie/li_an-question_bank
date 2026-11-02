@@ -175,6 +175,13 @@
           <div v-if="m.role !== 'user'" class="mini-avatar">智</div>
           <div class="bubble" :class="m.role === 'user' ? 'me' : 'bot'">
             <div class="bubble-content" v-html="renderMd(m.content)"></div>
+            <!-- 消息操作按钮（AI消息才显示） -->
+            <div v-if="m.role !== 'user' && !state.loading" class="msg-actions">
+              <button class="msg-btn" title="复制" @click="copyMessage(m.content)">📋</button>
+              <button class="msg-btn" title="重新生成" @click="regenerateMessage(idx)">🔄</button>
+              <button class="msg-btn" title="赞" @click="likeMessage(idx, true)">👍</button>
+              <button class="msg-btn" title="踩" @click="likeMessage(idx, false)">👎</button>
+            </div>
           </div>
           <div v-if="m.role === 'user'" class="mini-avatar me">我</div>
         </div>
@@ -460,6 +467,34 @@
         send();
       }
 
+      // 消息操作
+      function copyMessage(content) {
+        navigator.clipboard.writeText(content).then(() => {
+          state.notice = '✅ 已复制到剪贴板';
+          setTimeout(() => state.notice = '', 2000);
+        });
+      }
+
+      function regenerateMessage(idx) {
+        // 重新生成：找到上一条用户消息，重新发送
+        for (let i = idx - 1; i >= 0; i--) {
+          if (state.messages[i].role === 'user') {
+            const userText = state.messages[i].content;
+            // 删除当前这条AI消息
+            state.messages.splice(idx, 1);
+            // 重新发送
+            state.input = userText;
+            send();
+            break;
+          }
+        }
+      }
+
+      function likeMessage(idx, isLike) {
+        state.notice = isLike ? '👍 感谢点赞！' : '👎 我们会改进的';
+        setTimeout(() => state.notice = '', 2000);
+      }
+
       function switchScene(scene) {
         if (state.scene === scene) return;
         state.scene = scene;
@@ -574,6 +609,7 @@
         sceneLabel, fmtTime, renderMd,
         agentLabel, switchMode, selectTask, runWorkTask, importToToday,
         uploadFile, voiceInput, useQuickCommand,
+        copyMessage, regenerateMessage, likeMessage,
         Plus, Menu, Promotion,
       };
     },
@@ -836,6 +872,20 @@
     border: 1px solid #f0f2f5;
   }
   .bubble-content :deep(strong) { color: #c8161e; font-weight: 600; }
+
+  /* 消息操作按钮 */
+  .msg-actions {
+    display: flex; gap: 4px; margin-top: 8px;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .msg-row:hover .msg-actions { opacity: 1; }
+  .msg-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: none; background: transparent; cursor: pointer;
+    font-size: 14px; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .msg-btn:hover { background: rgba(0,0,0,0.06); }
   .typing { padding: 14px 16px !important; }
   .typing .dot {
     display: inline-block; width: 7px; height: 7px;
