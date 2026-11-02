@@ -198,101 +198,111 @@
         </div>
 
         <!-- 通用弹窗 -->
-        <div v-if="state.popup" class="weekly-report">
-          <div class="wr-title">{{ state.popup.title }}</div>
-          <div class="wr-stats">
-            <div class="wr-stat" v-for="item in state.popup.items" :key="item.label">
-              <div class="wr-num">{{ item.value }}</div>
-              <div class="wr-label">{{ item.label }}</div>
+        <div v-if="state.popup" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">{{ state.popup.title }}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+              <div v-for="item in state.popup.items" :key="item.label" style="flex: 1; min-width: 100px; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ item.value }}</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">{{ item.label }}</div>
+              </div>
             </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 {{ state.popup.suggestion }}</div>
+            <button @click="state.popup = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
           </div>
-          <div class="wr-suggestion">💡 {{ state.popup.suggestion }}</div>
-          <button class="wr-close" @click="state.popup = null">关闭</button>
         </div>
 
         <!-- 学习时长弹窗 -->
-        <div v-if="state.duration" class="weekly-report">
-          <div class="wr-title">⏰ 学习时长统计</div>
-          <div class="wr-stats">
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.duration.today_hours }}h</div>
-              <div class="wr-label">今日学习</div>
+        <div v-if="state.duration" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">⏰ 学习时长统计</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.duration.today_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">今日学习</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.duration.week_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">本周学习</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.duration.month_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">本月学习</div>
+              </div>
             </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.duration.week_hours }}h</div>
-              <div class="wr-label">本周学习</div>
-            </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.duration.month_hours }}h</div>
-              <div class="wr-label">本月学习</div>
-            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 每天坚持2小时，进步看得见！</div>
+            <button @click="state.duration = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
           </div>
-          <div class="wr-suggestion">💡 每天坚持2小时，进步看得见！</div>
-          <button class="wr-close" @click="state.duration = null">关闭</button>
         </div>
 
         <!-- 目标设定弹窗 -->
-        <div v-if="state.goal" class="weekly-report">
-          <div class="wr-title">🎯 我的目标分数</div>
-          <div class="wr-stats">
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.goal.xingce }}分</div>
-              <div class="wr-label">行测目标</div>
+        <div v-if="state.goal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">🎯 我的目标分数</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.goal.xingce }}分</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">行测目标</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.goal.shenlun }}分</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">申论目标</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.goal.gongzhuan }}分</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">公专目标</div>
+              </div>
             </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.goal.shenlun }}分</div>
-              <div class="wr-label">申论目标</div>
-            </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.goal.gongzhuan }}分</div>
-              <div class="wr-label">公专目标</div>
-            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 设定清晰的目标，备考更有动力！</div>
+            <button @click="state.goal = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
           </div>
-          <div class="wr-suggestion">💡 设定清晰的目标，备考更有动力！</div>
-          <button class="wr-close" @click="state.goal = null">关闭</button>
         </div>
 
         <!-- 学习数据弹窗 -->
-        <div v-if="state.stats" class="weekly-report">
-          <div class="wr-title">📈 学习数据总览</div>
-          <div class="wr-stats">
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.stats.total_study_hours }}h</div>
-              <div class="wr-label">总学习时长</div>
+        <div v-if="state.stats" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">📈 学习数据总览</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.stats.total_study_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">总学习时长</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.stats.total_questions }}</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">总刷题数</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.stats.avg_accuracy }}%</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">平均正确率</div>
+              </div>
             </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.stats.total_questions }}</div>
-              <div class="wr-label">总刷题数</div>
-            </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.stats.avg_accuracy }}%</div>
-              <div class="wr-label">平均正确率</div>
-            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 坚持就是胜利！继续保持这个节奏。</div>
+            <button @click="state.stats = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
           </div>
-          <div class="wr-suggestion">💡 坚持就是胜利！继续保持这个节奏。</div>
-          <button class="wr-close" @click="state.stats = null">关闭</button>
         </div>
 
         <!-- 学习周报弹窗 -->
-        <div v-if="state.weeklyReport" class="weekly-report">
-          <div class="wr-title">📊 本周学习周报</div>
-          <div class="wr-range">{{ state.weeklyReport.week_range }}</div>
-          <div class="wr-stats">
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.weeklyReport.done_tasks }}/{{ state.weeklyReport.total_tasks }}</div>
-              <div class="wr-label">完成任务</div>
+        <div v-if="state.weeklyReport" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 8px; text-align: center;">📊 本周学习周报</div>
+            <div style="font-size: 12px; color: #999; text-align: center; margin-bottom: 16px;">{{ state.weeklyReport.week_range }}</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.weeklyReport.done_tasks }}/{{ state.weeklyReport.total_tasks }}</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">完成任务</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.weeklyReport.percent }}%</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">完成率</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.weeklyReport.streak_days }}天</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">连续打卡</div>
+              </div>
             </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.weeklyReport.percent }}%</div>
-              <div class="wr-label">完成率</div>
-            </div>
-            <div class="wr-stat">
-              <div class="wr-num">{{ state.weeklyReport.streak_days }}天</div>
-              <div class="wr-label">连续打卡</div>
-            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 {{ state.weeklyReport.suggestion }}</div>
+            <button @click="state.weeklyReport = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
           </div>
-          <div class="wr-suggestion">💡 {{ state.weeklyReport.suggestion }}</div>
-          <button class="wr-close" @click="state.weeklyReport = null">关闭</button>
         </div>
 
         <!-- AI 调整对话框 -->
