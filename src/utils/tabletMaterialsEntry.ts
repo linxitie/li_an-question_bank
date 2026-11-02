@@ -41,19 +41,24 @@ export function shouldShowTabletMaterialsEntry({
 }
 
 const STYLE = `
-/* 入口插进 .quick-actions（VTJ 页里是 repeat(4,1fr)）后正好 5 个 →
- * 有入口时改成 5 列，避免第 5 个孤零零掉到第二行。:has 不支持则回退 4 列（换行也能用）。 */
-.quick-actions:has(#${ENTRY_ID}) { grid-template-columns: repeat(5, 1fr); }
+/* 平板首页的 .quick-actions 是「中间窄栏」里的 4 列网格（实测每列 80px、整块仅 368 宽），
+ * 再往里塞第 5 个会把整行挤扁 —— 所以入口放在 .quick-actions **下面**，
+ * 作为独立一行（宽度跟随父容器）。 */
 #${ENTRY_ID} {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 96px;
-  padding: 20px 12px;
+  justify-content: flex-start;
+  gap: 6px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 56px;
+  margin-top: 12px;
+  padding: 12px 14px;
   border-radius: 12px;
   background: #f8f9fc;
+  border: 1px solid #eef1f6;
   cursor: pointer;
   user-select: none;
   transition: background 0.3s ease, transform 0.3s ease;
@@ -61,17 +66,30 @@ const STYLE = `
 #${ENTRY_ID}:hover { background: #f0f2f5; transform: translateY(-2px); }
 #${ENTRY_ID}:active { transform: translateY(0); }
 #${ENTRY_ID} .tme-icon {
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
+  flex: none;
 }
 #${ENTRY_ID} .tme-name {
   font-size: 14px;
   font-weight: 700;
   color: #1a2b5f;
+  flex: none;
 }
 #${ENTRY_ID} .tme-desc {
+  flex: 1 1 100%;
+  order: 3;
   font-size: 12px;
   color: #8a97ad;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#${ENTRY_ID} .tme-arrow {
+  margin-left: auto;
+  font-size: 13px;
+  color: #1890ff;
+  flex: none;
 }
 @media (prefers-reduced-motion: reduce) {
   #${ENTRY_ID} { transition: none; }
@@ -99,7 +117,8 @@ export function installTabletMaterialsEntry(win: Window = window): () => void {
     el.innerHTML =
       '<span class="tme-icon">📚</span>' +
       '<span class="tme-name">备考资料</span>' +
-      '<span class="tme-desc">卡片 · 指南</span>';
+      '<span class="tme-desc">卡片 · 视频 · 指南</span>' +
+      '<span class="tme-arrow">›</span>';
     const go = () => {
       win.location.hash = '#/tablet/materials';
     };
@@ -134,15 +153,16 @@ export function installTabletMaterialsEntry(win: Window = window): () => void {
       return;
     }
     const host = doc.querySelector(HOST_SELECTOR);
-    if (!host) {
+    const parent = host?.parentElement;
+    if (!host || !parent) {
       existing?.remove();
       return;
     }
-    // 已在位且仍在正确容器里 → 什么都不做（避免闪烁）
-    if (existing && existing.parentElement === host) return;
+    // 已挂在同一个父容器里（且紧跟 quick-actions）→ 什么都不做（避免闪烁）
+    if (existing && existing.parentElement === parent) return;
     ensureStyle();
     existing?.remove();
-    host.appendChild(buildEntry());
+    parent.insertBefore(buildEntry(), host.nextSibling);
   };
 
   sync();
