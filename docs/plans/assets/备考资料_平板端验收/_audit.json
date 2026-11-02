@@ -52,6 +52,24 @@
     "周四",
     "20周五"
   ],
+  "homeInject": {
+    "present": true,
+    "text": "📚备考资料卡片 · 指南",
+    "host": "quick-actions",
+    "siblings": [
+      "智能组卷AI智能出题",
+      "题库练习海量题库",
+      "错题本攻克薄弱",
+      "模拟考试实战演练",
+      "📚备考资料卡片 · 指南"
+    ],
+    "rect": [
+      62,
+      162
+    ],
+    "gridCols": 5
+  },
+  "homeInjectNav": "#/tablet/materials",
   "profile": {
     "hash": "#/tablet/profile",
     "vw": 768,
@@ -140,7 +158,7 @@
     ],
     "pageLabel": "1 / 7 页 · 共 37 张",
     "stackVisible": false,
-    "listCards": 1
+    "listCards": 0
   },
   "gridPaging": {
     "pageBefore": "1 / 7 页 · 共 37 张",
@@ -150,11 +168,74 @@
     "flipped": true,
     "t": "matrix3d(-1, 0, 0, 0, "
   },
+  "sections": {
+    "blockCount": 2,
+    "titles": [
+      "🎬 入门讲解视频",
+      "📋 备考指南"
+    ],
+    "counts": [
+      1,
+      1
+    ],
+    "videos": 1,
+    "articles": 1,
+    "hasFavToggle": true,
+    "favChecked": false
+  },
+  "favFilter": {
+    "before": 2,
+    "after": 0
+  },
+  "mediaVideo": {
+    "open": true,
+    "hasVideo": true,
+    "src": "https://example.com/mock.mp4"
+  },
+  "mediaArticle": {
+    "open": true,
+    "hasArticle": true,
+    "len": 1331
+  },
+  "detailPage": {
+    "hash": "#/tablet/materials/detail?id=62&subject=xingce",
+    "hasPage": true,
+    "hasSide": true,
+    "sideW": 735,
+    "bodyFlexDir": "column",
+    "overflowX": 0,
+    "title": "速算技巧 首位估算验算",
+    "backBtnH": 44
+  },
   "lightbox": {
-    "open": false,
-    "img": null,
-    "count": "",
-    "tools": [],
+    "open": true,
+    "img": {
+      "w": 656,
+      "h": 875
+    },
+    "count": "1 / 1",
+    "tools": [
+      {
+        "t": "缩小",
+        "w": 44,
+        "h": 44
+      },
+      {
+        "t": "放大",
+        "w": 44,
+        "h": 44
+      },
+      {
+        "t": "原始大小",
+        "w": 44,
+        "h": 44
+      },
+      {
+        "t": "关闭（Esc）",
+        "w": 44,
+        "h": 44
+      }
+    ],
     "smallTools": []
   },
   "create": {
@@ -225,7 +306,7 @@
       702,
       1340
     ],
-    "bodyHead": "← 返回首页 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） Excel 批量导入 ＋ 创建卡片 申论 · 写作专项突破 吃透材料分析方法，掌握高分写作框架与热点素材 学习进度 7.4% （已完成"
+    "bodyHead": "← 返回首页 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） Excel 批量导入 ＋ 创建卡片 申论 · 写作专项突破 吃透材料分析方法，掌握高分写作框架与热点素材 学习进度 7.1% （已完成"
   },
   "materialsLandscape": {
     "hash": "#/tablet/materials",

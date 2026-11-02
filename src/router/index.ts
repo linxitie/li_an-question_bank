@@ -419,6 +419,14 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    // 平板整页详情：复用 PC 详情页（它读 route.query.id / subject），
+    // 守 R12 不复制页面；该页已补 @media(max-width:900px) 单栏。
+    path: '/tablet/materials/detail',
+    name: 'TabletMaterialDetail',
+    component: () => import('@/views/pc/material_detail.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
     path: '/tablet/gold-purchase',
     name: 'TabletGoldPurchase',
     component: () => import('$vtj/vue/tablet_gold_purchase.vue'),

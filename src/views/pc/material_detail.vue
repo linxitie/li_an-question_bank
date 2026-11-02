@@ -517,4 +517,42 @@ onMounted(load);
   font-style: normal;
   color: #d7e3ff;
 }
+
+/* 平板（≤900px）：PC 的「左侧栏 212px + 正文」在窄屏会挤成两窄列，
+ * 改成单列上下堆叠，并把返回/操作按钮补到 44px 触控高度。 */
+@media (max-width: 900px) {
+  .md-top {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+  .md-back,
+  .md-actions button,
+  .md-side button {
+    min-height: 44px;
+  }
+  .md-body {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px 28px;
+  }
+  .md-side {
+    width: 100%;
+    flex: 0 0 auto;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .md-main {
+    width: 100%;
+  }
+  /* 5 层堆叠卡的装饰层向上错位最多 60px（layerStyle 里 -i*15px），
+   * 单列时会把上面「字号」行盖住 → 给 stage 补等量上内边距 */
+  .md-stage {
+    padding-top: 64px;
+  }
+  .md-stack {
+    height: min(72vh, 560px);
+  }
+}
 </style>

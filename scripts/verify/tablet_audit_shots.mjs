@@ -44,14 +44,21 @@ class Cdp {
     this.ws = ws;
     this.id = 0;
     this.p = new Map();
+    this.handlers = new Map();
     ws.on('message', (raw) => {
       const m = JSON.parse(raw.toString());
       if (m.id && this.p.has(m.id)) {
         const { ok, fail } = this.p.get(m.id);
         this.p.delete(m.id);
         m.error ? fail(new Error(JSON.stringify(m.error))) : ok(m.result);
+      } else if (m.method && this.handlers.has(m.method)) {
+        for (const fn of this.handlers.get(m.method)) fn(m.params);
       }
     });
+  }
+  on(method, fn) {
+    if (!this.handlers.has(method)) this.handlers.set(method, []);
+    this.handlers.get(method).push(fn);
   }
   send(method, params = {}, timeoutMs = 30000) {
     const id = ++this.id;
@@ -214,6 +221,30 @@ async function main() {
   console.log('平板首页入口', JSON.stringify(out.homeEntries));
   await cdp.shot('01_平板首页_768');
 
+  // ② 首页「备考资料」入口（DOM 注入）是否在场、能不能点进去
+  await cdp.waitFor(`!!document.getElementById('tablet-materials-entry')`, 8000);
+  out.homeInject = await cdp.eval(`(() => {
+    const el = document.getElementById('tablet-materials-entry');
+    if (!el) return { present: false };
+    const host = el.parentElement;
+    const cards = host ? [...host.querySelectorAll('.action-card')].map((c) => (c.textContent || '').trim().slice(0, 14)) : [];
+    const r = el.getBoundingClientRect();
+    return {
+      present: true,
+      text: (el.textContent || '').trim(),
+      host: host ? host.className : '',
+      siblings: cards,
+      rect: [Math.round(r.width), Math.round(r.height)],
+      gridCols: host ? getComputedStyle(host).gridTemplateColumns.split(' ').length : 0
+    };
+  })()`);
+  console.log('首页注入入口', JSON.stringify(out.homeInject));
+  await cdp.shot('01b_平板首页_备考资料入口');
+  await cdp.eval(`document.getElementById('tablet-materials-entry').click(); true`);
+  await sleep(1200);
+  out.homeInjectNav = await cdp.eval(`location.hash`);
+  console.log('点入口后路由', out.homeInjectNav);
+
   // 我的页 → 资料入口
   await go('#/tablet/profile', `document.body.innerText.includes('我的') || !!document.querySelector('.user-role')`);
   out.profile = await cdp.eval(M);
@@ -229,6 +260,76 @@ async function main() {
   await cdp.shot('02_平板我的页_资料入口');
 
   // 备考资料：平板应走「模仿电脑端」的 hero + 卡片网格（守 R12：同页按断点两套布局）
+  // 库里目前 0 条视频（实测 gongzhuan/shenlun/xingce 都只有 article + card），
+  // 为了验证「视频分区 + 播放弹层」这条 UI 路径，这里用 CDP Fetch 域 mock 一条视频数据，
+  // 只影响本次浏览器会话，不写数据库。
+  const MOCK_VIDEO_ID = 999999;
+  const mockJson = (obj) => ({
+    responseCode: 200,
+    responseHeaders: [{ name: 'Content-Type', value: 'application/json; charset=utf-8' }],
+    body: Buffer.from(JSON.stringify(obj), 'utf8').toString('base64')
+  });
+  cdp.on('Fetch.requestPaused', async (p) => {
+    const url = p.request.url;
+    try {
+      if (url.includes('type=video_intro')) {
+        await cdp.send('Fetch.fulfillRequest', {
+          requestId: p.requestId,
+          ...mockJson({
+            total: 1,
+            items: [
+              {
+                id: MOCK_VIDEO_ID,
+                subject: 'xingce',
+                type: 'video_intro',
+                category: '（测试）mock',
+                title: '（mock）入门讲解视频',
+                summary: '用于验证平板视频分区与播放弹层',
+                badge: null,
+                cover_image: null,
+                duration: 754,
+                read_time: 0,
+                difficulty: 1,
+                view_count: 0,
+                card_front: null,
+                sort_order: 0,
+                is_studied: false,
+                progress_percent: 0,
+                is_favorite: false
+              }
+            ]
+          })
+        });
+      } else if (url.includes(`/api/materials/${MOCK_VIDEO_ID}`)) {
+        await cdp.send('Fetch.fulfillRequest', {
+          requestId: p.requestId,
+          ...mockJson({
+            id: MOCK_VIDEO_ID,
+            subject: 'xingce',
+            type: 'video_intro',
+            title: '（mock）入门讲解视频',
+            content: '',
+            card_back: '',
+            video_url: 'https://example.com/mock.mp4',
+            duration: 754,
+            read_time: 0,
+            difficulty: 1
+          })
+        });
+      } else {
+        await cdp.send('Fetch.continueRequest', { requestId: p.requestId });
+      }
+    } catch {
+      /* 已放行的请求会被取消，忽略 */
+    }
+  });
+  await cdp.send('Fetch.enable', {
+    patterns: [
+      { urlPattern: '*type=video_intro*', requestStage: 'Request' },
+      { urlPattern: `*api/materials/${MOCK_VIDEO_ID}*`, requestStage: 'Request' }
+    ]
+  }).catch(() => {});
+
   await go('#/tablet/materials', `!!document.querySelector('.t-grid') || !!document.querySelector('.stack-card')`, 1400);
   out.materials = await cdp.eval(M);
   out.materialsGrid = await cdp.eval(`(() => {
@@ -281,6 +382,87 @@ async function main() {
   })()`);
   console.log('平板卡片翻转', JSON.stringify(out.flip));
   await cdp.shot('05_平板资料页_卡片翻转');
+
+  // ① 视频 / 文章分区 + 只看收藏
+  out.sections = await cdp.eval(`(() => {
+    const blocks = [...document.querySelectorAll('.t-block')];
+    const fav = document.querySelector('.t-fav input');
+    return {
+      blockCount: blocks.length,
+      titles: blocks.map((b) => (b.querySelector('h3') || {}).textContent || ''),
+      counts: blocks.map((b) => b.querySelectorAll('.t-vcard, .t-alist li').length),
+      videos: document.querySelectorAll('.t-vcard').length,
+      articles: document.querySelectorAll('.t-alist li').length,
+      hasFavToggle: !!fav,
+      favChecked: fav ? fav.checked : null
+    };
+  })()`);
+  console.log('平板分区', JSON.stringify(out.sections));
+  await cdp.shot('05b_平板资料页_视频文章分区');
+
+  // 只看收藏：勾上后可见条目数应 ≤ 原来的数量
+  const favBefore = out.sections.counts.reduce((a, b) => a + b, 0);
+  await cdp.eval(`(() => { const cb = document.querySelector('.t-fav input'); if (cb) { cb.click(); } return true; })()`);
+  await sleep(500);
+  const favAfter = await cdp.eval(`[...document.querySelectorAll('.t-block')].reduce((n, b) => n + b.querySelectorAll('.t-vcard, .t-alist li').length, 0)`);
+  out.favFilter = { before: favBefore, after: favAfter };
+  console.log('只看收藏', JSON.stringify(out.favFilter));
+  await cdp.shot('05c_平板资料页_只看收藏');
+  await cdp.eval(`(() => { const cb = document.querySelector('.t-fav input'); if (cb && cb.checked) cb.click(); return true; })()`);
+  await sleep(400);
+
+  // 视频 / 文章弹层
+  await cdp.eval(`document.querySelector('.t-vcard') && document.querySelector('.t-vcard').click(); true`);
+  await sleep(1200);
+  out.mediaVideo = await cdp.eval(`(() => {
+    const v = document.querySelector('.t-media-body video');
+    return { open: !!document.querySelector('.t-media-mask'), hasVideo: !!v, src: v ? (v.getAttribute('src') || '').slice(0, 40) : '' };
+  })()`);
+  console.log('平板视频弹层', JSON.stringify(out.mediaVideo));
+  await cdp.shot('05d_平板_视频弹层');
+  await cdp.eval(`document.querySelector('.t-media-close') && document.querySelector('.t-media-close').click(); true`);
+  await sleep(400);
+  // 视频路径验完就撤掉 mock，避免影响后面的文章/详情/徽章等断言
+  await cdp.send('Fetch.disable', {}, 5000).catch(() => {});
+
+  await cdp.eval(`document.querySelector('.t-alist li') && document.querySelector('.t-alist li').click(); true`);
+  await sleep(1400);
+  out.mediaArticle = await cdp.eval(`(() => {
+    const a = document.querySelector('.t-article');
+    return { open: !!document.querySelector('.t-media-mask'), hasArticle: !!a, len: a ? (a.textContent || '').length : 0 };
+  })()`);
+  console.log('平板文章弹层', JSON.stringify(out.mediaArticle));
+  await cdp.shot('05e_平板_文章弹层');
+  await cdp.eval(`document.querySelector('.t-media-close') && document.querySelector('.t-media-close').click(); true`);
+  await sleep(400);
+
+  // ③ 平板整页详情（PC 式）
+  await cdp.eval(`document.querySelector('.g-detail') && document.querySelector('.g-detail').click(); true`);
+  await sleep(1600);
+  out.detailPage = await cdp.eval(`(() => {
+    const page = document.querySelector('.md-page');
+    const side = document.querySelector('.md-side');
+    const body = document.querySelector('.md-body');
+    const sideR = side ? side.getBoundingClientRect() : null;
+    const de = document.documentElement;
+    return {
+      hash: location.hash,
+      hasPage: !!page,
+      hasSide: !!side,
+      sideW: sideR ? Math.round(sideR.width) : null,
+      bodyFlexDir: body ? getComputedStyle(body).flexDirection : '',
+      overflowX: de.scrollWidth - window.innerWidth,
+      title: (document.querySelector('.md-title') || {}).textContent || '',
+      backBtnH: (() => { const b = document.querySelector('.md-back'); if (!b) return null; return Math.round(b.getBoundingClientRect().height); })()
+    };
+  })()`);
+  console.log('平板整页详情', JSON.stringify(out.detailPage));
+  await cdp.shot('05f_平板_整页详情');
+  await cdp.eval(`history.back(); true`);
+  await sleep(1200);
+  await cdp.waitFor(`!!document.querySelector('.t-grid')`, 8000);
+  await sleep(600);
+
   await cdp.eval(`document.querySelector('.g-card .card-act') && document.querySelector('.g-card .card-act').click(); true`);
   const okLb = await cdp.waitFor(`!!document.querySelector('.lb-mask')`, 8000);
   await sleep(600);

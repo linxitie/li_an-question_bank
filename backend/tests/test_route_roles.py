@@ -25,8 +25,9 @@ def test_page_route_count():
     #   /badges、/badges-demo、/badge-preview、/materials/upload、
     #   /materials-preview、/materials/detail、/admin/material-rules
     # 99 → 100：平板徽章墙 /tablet/badges（2026-11-02，复用 PC 徽章页，守 R12）
+    # 100 → 101：平板整页详情 /tablet/materials/detail（2026-11-02，复用 PC 详情页）
     # 路由只增不减；再新增时请同步本数字并在提交信息写明。
-    assert len(_pages()) == 100
+    assert len(_pages()) == 101
 
 
 def test_whitelist_has_no_roles():

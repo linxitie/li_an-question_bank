@@ -35,7 +35,8 @@ const VTJ_LOCKED_VERSIONS = {
 // 99 = 92（原基线）+ 5（徽章体系：/materials/detail、/admin/material-rules、/badges、
 //   /badge-preview、/badges-demo）+ 1（/materials-preview 内容验收）+ 1（/materials/upload 学生上传）
 // 100 = 99 + 1（/tablet/badges 平板徽章墙，2026-11-02；与 test_route_roles 的 100 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 100;
+// 101 = 100 + 1（/tablet/materials/detail 平板整页详情，2026-11-02）
+const EXPECTED_DYNAMIC_IMPORTS = 101;
 
 const violations = [];
 
