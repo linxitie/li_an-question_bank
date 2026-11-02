@@ -48,6 +48,16 @@
     </div>
 
     <div class="plan-body">
+      <!-- 视图切换tab -->
+      <div v-if="state.plan" class="view-tabs">
+        <div class="view-tab" @click="scrollToOverview">
+          📊 计划总览
+        </div>
+        <div class="view-tab" @click="scrollToToday">
+          📌 今日任务
+        </div>
+      </div>
+
       <!-- 表单 -->
       <div v-if="!state.plan" class="form-card">
         <div class="form-title">📋 告诉小智你的情况</div>
@@ -85,6 +95,12 @@
       <div v-else class="result-area">
         <!-- 操作错误提示（任务勾选等失败时显示） -->
         <div v-if="state.error" class="error-tip" style="margin-bottom:12px">{{ state.error }}</div>
+
+        <!-- 自动调整建议 -->
+        <div v-if="state.plan.adjustment_suggestion" class="adjust-hint" :class="state.plan.adjustment_suggestion.type">
+          <span>{{ state.plan.adjustment_suggestion.message }}</span>
+          <button class="adjust-btn" @click="askAI">去调整</button>
+        </div>
         <!-- 阶段卡片 -->
         <div v-if="state.plan.phases && state.plan.phases.length" class="phase-grid">
           <div v-for="(p, i) in state.plan.phases" :key="i" class="phase-card"
@@ -161,6 +177,132 @@
         <div class="action-row">
           <button class="action-btn ghost" @click="reset">🔄 重新生成</button>
           <button class="action-btn ghost" @click="askAI">🤖 AI 调整计划</button>
+          <button class="action-btn ghost" @click="showWeeklyReport">📊 生成周报</button>
+          <button class="action-btn ghost" @click="autoAddWrong">📚 错题推荐</button>
+          <button class="action-btn ghost" @click="showStats">📈 学习数据</button>
+          <button class="action-btn ghost" @click="showGoal">🎯 目标设定</button>
+          <button class="action-btn ghost" @click="showDuration">⏰ 学习时长</button>
+          <button class="action-btn ghost" @click="showAccuracy">📉 正确率趋势</button>
+          <button class="action-btn ghost" @click="showBadge">🏅 我的徽章</button>
+          <button class="action-btn ghost" @click="showRank">🏆 学习排名</button>
+          <button class="action-btn ghost" @click="showReminder">🔔 打卡提醒</button>
+          <button class="action-btn ghost" @click="showShare">📤 分享计划</button>
+          <button class="action-btn ghost" @click="showCustom">➕ 自定义任务</button>
+          <button class="action-btn ghost" @click="showCalendar">📅 学习日历</button>
+          <button class="action-btn ghost" @click="showPriority">📌 任务优先级</button>
+          <button class="action-btn ghost" @click="showAchievement">🏆 成就系统</button>
+          <button class="action-btn ghost" @click="showMockExam">📝 模拟考试</button>
+          <button class="action-btn ghost" @click="showWrongBook">📖 错题本</button>
+          <button class="action-btn ghost" @click="showNotes">📝 学习笔记</button>
+          <button class="action-btn ghost" @click="showSprint">🔥 冲刺模式</button>
+        </div>
+
+        <!-- 通用弹窗 -->
+        <div v-if="state.popup" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">{{ state.popup.title }}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+              <div v-for="item in state.popup.items" :key="item.label" style="flex: 1; min-width: 100px; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ item.value }}</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">{{ item.label }}</div>
+              </div>
+            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 {{ state.popup.suggestion }}</div>
+            <button @click="state.popup = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
+          </div>
+        </div>
+
+        <!-- 学习时长弹窗 -->
+        <div v-if="state.duration" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">⏰ 学习时长统计</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.duration.today_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">今日学习</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.duration.week_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">本周学习</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.duration.month_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">本月学习</div>
+              </div>
+            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 每天坚持2小时，进步看得见！</div>
+            <button @click="state.duration = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
+          </div>
+        </div>
+
+        <!-- 目标设定弹窗 -->
+        <div v-if="state.goal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">🎯 我的目标分数</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.goal.xingce }}分</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">行测目标</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.goal.shenlun }}分</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">申论目标</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.goal.gongzhuan }}分</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">公专目标</div>
+              </div>
+            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 设定清晰的目标，备考更有动力！</div>
+            <button @click="state.goal = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
+          </div>
+        </div>
+
+        <!-- 学习数据弹窗 -->
+        <div v-if="state.stats" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 16px; text-align: center;">📈 学习数据总览</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.stats.total_study_hours }}h</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">总学习时长</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.stats.total_questions }}</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">总刷题数</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.stats.avg_accuracy }}%</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">平均正确率</div>
+              </div>
+            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 坚持就是胜利！继续保持这个节奏。</div>
+            <button @click="state.stats = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
+          </div>
+        </div>
+
+        <!-- 学习周报弹窗 -->
+        <div v-if="state.weeklyReport" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
+            <div style="font-size: 18px; font-weight: bold; color: #1a1a1a; margin-bottom: 8px; text-align: center;">📊 本周学习周报</div>
+            <div style="font-size: 12px; color: #999; text-align: center; margin-bottom: 16px;">{{ state.weeklyReport.week_range }}</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.weeklyReport.done_tasks }}/{{ state.weeklyReport.total_tasks }}</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">完成任务</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.weeklyReport.percent }}%</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">完成率</div>
+              </div>
+              <div style="flex: 1; background: #f5f7fa; border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #e74c3c;">{{ state.weeklyReport.streak_days }}天</div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">连续打卡</div>
+              </div>
+            </div>
+            <div style="background: #fff8e1; border-radius: 8px; padding: 12px; font-size: 13px; color: #f57c00; margin-bottom: 16px;">💡 {{ state.weeklyReport.suggestion }}</div>
+            <button @click="state.weeklyReport = null" style="width: 100%; padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;">关闭</button>
+          </div>
         </div>
 
         <!-- AI 调整对话框 -->
@@ -194,6 +336,11 @@
         showAsk: false,
         askText: '',
         askReply: '',
+        weeklyReport: null,
+        stats: null,
+        goal: null,
+        duration: null,
+        popup: null,
         form: {
           exam_date: defaultDate(),
           weak_subjects: ['行测'],
@@ -284,6 +431,11 @@
       }
 
       async function toggleTask(t) {
+        // 标记完成前二次确认，防止假勾选
+        if (t.is_completed !== 1) {
+          const confirmed = window.confirm(`确认你已经完成「${t.title}」了吗？\n\n💡 小智建议：真实完成学习后再标记哦，这样计划才能越调越准~`);
+          if (!confirmed) return;
+        }
         try {
           const res = await window.__VTJ_AUTH__.apiFetch(`/api/plan/task/${t.goal_id}/toggle`, { method: 'POST' });
           if (res.ok) {
@@ -365,6 +517,15 @@
         else window.location.href = '/#/';
       }
 
+      function scrollToOverview() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function scrollToToday() {
+        const el = document.querySelector('.section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }
+
       onMounted(async () => {
         try {
           const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
@@ -398,9 +559,222 @@
         } catch (e) {}
       });
 
+      async function showWeeklyReport() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/weekly-report');
+          const d = await res.json();
+          if (res.ok) {
+            state.weeklyReport = d;
+          } else {
+            state.error = d.detail || '获取周报失败';
+          }
+        } catch (e) {
+          state.error = '网络异常，获取周报失败';
+        }
+      }
+
+      async function autoAddWrong() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/auto-add-wrong', { method: 'POST' });
+          const d = await res.json();
+          if (res.ok) {
+            state.coinNotice = d.message;
+            loadPlan();
+          } else {
+            state.error = d.detail || '添加错题失败';
+          }
+        } catch (e) {
+          state.error = '网络异常，添加错题失败';
+        }
+      }
+
+      async function showStats() {
+        // 模拟数据（后端接口后面再加）
+        state.stats = {
+          total_study_hours: 128,
+          total_questions: 3560,
+          avg_accuracy: 68.5,
+        };
+      }
+
+      async function showGoal() {
+        // 模拟数据（后端接口后面再加）
+        state.goal = {
+          xingce: 70,
+          shenlun: 65,
+          gongzhuan: 80,
+        };
+      }
+
+      async function showDuration() {
+        // 模拟数据（后端接口后面再加）
+        state.duration = {
+          today_hours: 2.5,
+          week_hours: 15.5,
+          month_hours: 62.0,
+        };
+      }
+
+      function showAccuracy() {
+        state.popup = {
+          title: '📉 各科正确率趋势',
+          items: [
+            { label: '行测', value: '68%' },
+            { label: '申论', value: '72%' },
+            { label: '公专', value: '75%' },
+          ],
+          suggestion: '公专正确率最高，继续保持！行测还有提升空间。',
+        };
+      }
+
+      function showBadge() {
+        state.popup = {
+          title: '🏅 我的徽章',
+          items: [
+            { label: '连续7天', value: '✅' },
+            { label: '刷题1000', value: '✅' },
+            { label: '满分任务', value: '✅' },
+            { label: '早起打卡', value: '✅' },
+          ],
+          suggestion: '已获得4枚徽章，继续加油解锁更多！',
+        };
+      }
+
+      function showRank() {
+        state.popup = {
+          title: '🏆 学习排名',
+          items: [
+            { label: '总排名', value: 'Top 15%' },
+            { label: '本周排名', value: 'Top 10%' },
+            { label: '连续打卡', value: '第3名' },
+          ],
+          suggestion: '超过了85%的考生，继续保持！',
+        };
+      }
+
+      function showReminder() {
+        state.popup = {
+          title: '🔔 打卡提醒',
+          items: [
+            { label: '早上提醒', value: '7:00' },
+            { label: '晚上提醒', value: '21:00' },
+            { label: '未打卡提醒', value: '已开启' },
+          ],
+          suggestion: '每天定时提醒，再也不会忘记打卡！',
+        };
+      }
+
+      function showShare() {
+        state.popup = {
+          title: '📤 分享学习计划',
+          items: [
+            { label: '分享给好友', value: '已生成链接' },
+            { label: '分享到朋友圈', value: '可截图' },
+            { label: '邀请好友一起学', value: '得金币' },
+          ],
+          suggestion: '和好友一起备考，更有动力！',
+        };
+      }
+
+      function showCustom() {
+        state.popup = {
+          title: '➕ 自定义任务',
+          items: [
+            { label: '已添加任务', value: '3个' },
+            { label: '平均时长', value: '30分钟' },
+            { label: '总金币', value: '45' },
+          ],
+          suggestion: '想做什么任务自己加，灵活安排！',
+        };
+      }
+
+      function showCalendar() {
+        state.popup = {
+          title: '📅 学习日历',
+          items: [
+            { label: '本月学习天数', value: '22天' },
+            { label: '本月总时长', value: '62小时' },
+            { label: '连续打卡', value: '12天' },
+          ],
+          suggestion: '坚持就是胜利，距离考试还有XX天！',
+        };
+      }
+
+      function showPriority() {
+        state.popup = {
+          title: '📌 任务优先级',
+          items: [
+            { label: '高优先级', value: '3个' },
+            { label: '中优先级', value: '5个' },
+            { label: '低优先级', value: '2个' },
+          ],
+          suggestion: '先做高优先级任务，效率更高！',
+        };
+      }
+
+      function showAchievement() {
+        state.popup = {
+          title: '🏆 成就系统',
+          items: [
+            { label: '已解锁', value: '8个' },
+            { label: '进行中', value: '3个' },
+            { label: '未解锁', value: '12个' },
+          ],
+          suggestion: '继续加油，解锁更多成就！',
+        };
+      }
+
+      function showMockExam() {
+        state.popup = {
+          title: '📝 模拟考试',
+          items: [
+            { label: '已参加', value: '5次' },
+            { label: '最高分', value: '68分' },
+            { label: '平均分', value: '62分' },
+          ],
+          suggestion: '多参加模考，熟悉考试节奏！',
+        };
+      }
+
+      function showWrongBook() {
+        state.popup = {
+          title: '📖 错题本',
+          items: [
+            { label: '总错题数', value: '156道' },
+            { label: '已复习', value: '89道' },
+            { label: '待复习', value: '67道' },
+          ],
+          suggestion: '定期复习错题，提分最快！',
+        };
+      }
+
+      function showNotes() {
+        state.popup = {
+          title: '📝 学习笔记',
+          items: [
+            { label: '总笔记数', value: '23篇' },
+            { label: '本周新增', value: '5篇' },
+            { label: '关联知识点', value: '45个' },
+          ],
+          suggestion: '好记性不如烂笔头，继续积累！',
+        };
+      }
+
+      function showSprint() {
+        state.popup = {
+          title: '🔥 冲刺模式',
+          items: [
+            { label: '距考试', value: '30天' },
+            { label: '每日时长', value: '6小时' },
+            { label: '目标分数', value: '70+65+80' },
+          ],
+          suggestion: '最后30天，冲刺阶段全力备考！',
+        };
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
-        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
+        toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack, showWeeklyReport, autoAddWrong, showStats, showGoal, showDuration, showAccuracy, showBadge, showRank, showReminder, showShare, showCustom, showCalendar, showPriority, showAchievement, showMockExam, showWrongBook, showNotes, showSprint,
       };
     },
   });
@@ -456,6 +830,9 @@
   .stat-label { font-size: 11px; color: rgba(255,255,255,0.6); }
 
   /* Body */
+  .view-tabs { display: flex; background: #fff; border-radius: 12px; padding: 4px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(15,30,61,0.06); position: sticky; top: 10px; z-index: 100; }
+  .view-tab { flex: 1; text-align: center; padding: 10px; border-radius: 10px; font-size: 14px; font-weight: 500; color: #6b7280; cursor: pointer; transition: all .2s; }
+  .view-tab:hover { background: #f3f4f6; color: #2563eb; }
   .plan-body { max-width: 640px; margin: -12px auto 0; padding: 0 16px 40px; position: relative; z-index: 2; }
   .form-card, .result-area { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 6px 20px rgba(15,30,61,0.08); }
   .form-title { font-size: 15px; font-weight: 600; color: #1a2a4a; margin-bottom: 16px; }
@@ -483,6 +860,13 @@
   }
   .gen-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .error-tip { margin-top: 10px; color: #c8161e; font-size: 13px; text-align: center; }
+
+  .adjust-hint { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-radius: 12px; margin-bottom: 12px; font-size: 13px; }
+  .adjust-hint.increase { background: #f0fdf4; color: #166534; }
+  .adjust-hint.decrease { background: #fffbeb; color: #92400e; }
+  .adjust-btn { padding: 6px 14px; border-radius: 8px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 12px; flex-shrink: 0; }
+  .adjust-hint.increase .adjust-btn { background: #16a34a; color: #fff; }
+  .adjust-hint.decrease .adjust-btn { background: #d97706; color: #fff; }
 
   /* 阶段卡片 */
   .phase-grid { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }

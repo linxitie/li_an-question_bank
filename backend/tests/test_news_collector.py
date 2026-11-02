@@ -20,8 +20,14 @@ ARTICLE_HTML = """
 要依靠群众、服务群众，把矛盾化解在基层，把平安建设落到实处。
 要坚持党建引领，把党的政治优势、组织优势转化为治理效能，形成共建共治共享的基层治理格局。</div>
 <img src="/img/1.jpg" />
+<img src="/template/logo.png" />
 </body></html>
 """
+
+
+def test_parse_article_filters_template_images():
+    article = news_collector.parse_article(ARTICLE_HTML, "https://example.com/a/1.html")
+    assert article.images == ["https://example.com/img/1.jpg"]
 
 
 def _source():

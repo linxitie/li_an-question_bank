@@ -31,7 +31,7 @@ jobs:
           cd backend
           python -m pytest tests/test_xingce_material_sets.py tests/test_ocr_markdown_normalization.py tests/test_paper_group_payload.py tests/test_question_media.py -q
       - name: Gates quick
-        run: cd backend && python scripts/gates/gate_all.py --quick
+        run: cd backend && python scripts/gates/gate_all.py --quick --ci
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

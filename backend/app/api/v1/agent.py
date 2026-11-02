@@ -77,6 +77,125 @@ AGENT_TASKS: List[Dict] = [
         ],
     },
     {
+        "task_id": "shenlun_pigai",
+        "title": "申论批改",
+        "agent": "shenlun",
+        "desc": "你贴出申论答案，我按考试标准打分+逐条评语+修改建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["归纳概括", "综合分析", "提出对策", "贯彻执行", "大作文"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答案",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答案贴在这里...",
+            },
+        ],
+    },
+    {
+        "task_id": "daily_jinju",
+        "title": "每日金句推荐",
+        "agent": "shenlun",
+        "desc": "每天自动生成3条申论金句，积累素材，写作直接用",
+        "fields": [
+            {
+                "key": "theme",
+                "label": "主题（选填）",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "为民服务", "创新", "法治", "奋斗", "诚信"],
+            },
+        ],
+    },
+    {
+        "task_id": "fagao_sucha",
+        "title": "法条速查",
+        "agent": "gongzhuan",
+        "desc": "输入关键词，快速查找相关法条及高频考点",
+        "fields": [
+            {
+                "key": "keyword",
+                "label": "关键词",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：行政拘留、取保候审",
+            },
+        ],
+    },
+    {
+        "task_id": "psychology_relax",
+        "title": "考前心理疏导",
+        "agent": "psychology",
+        "desc": "焦虑、紧张、学不进去？和我聊聊，帮你调整状态",
+        "fields": [
+            {
+                "key": "problem",
+                "label": "你现在的状态",
+                "type": "text",
+                "required": True,
+                "placeholder": "比如：最近老是熬夜，白天学不进去...",
+            },
+        ],
+    },
+    {
+        "task_id": "daily_question",
+        "title": "每日一题推荐",
+        "agent": "xingce",
+        "desc": "每天自动推荐一道经典真题，附带详细解析",
+        "fields": [
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "knowledge_map",
+        "title": "知识点思维导图",
+        "agent": "xingce",
+        "desc": "输入知识点，自动生成知识框架和关联考点",
+        "fields": [
+            {
+                "key": "topic",
+                "label": "知识点",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：图形推理、资料分析",
+            },
+        ],
+    },
+    {
+        "task_id": "mock_score",
+        "title": "面试模拟打分",
+        "agent": "interview",
+        "desc": "你答题，我按考试标准打分+逐条评语+改进建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["综合分析", "应急处突", "组织管理", "人际沟通"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答题内容",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答题内容贴在这里...",
+            },
+        ],
+    },
+    {
         "task_id": "gongzhuan_fatiao",
         "title": "公专法条梳理",
         "agent": "gongzhuan",
@@ -343,4 +462,54 @@ async def run_agent_task(
         "agent": agent_id,
         "agent_name": AGENT_META.get(agent_id, {}).get("name", "联考小智"),
         "reply": reply,
+    }
+
+
+# ==================== 一键写入今日任务（模块7 → 模块4 联动） ====================
+
+
+class ImportTodayRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200, description="任务标题")
+    content: str = Field("", max_length=500, description="任务内容/描述")
+    coin_reward: int = Field(15, ge=5, le=100, description="金币奖励")
+
+
+@router.post("/import-today", summary="一键写入今日任务")
+async def import_today_task(
+    req: ImportTodayRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    模块7工作模式产出的结构化结果，一键写入模块4的今日任务面板。
+    自动分配金币奖励，完成后自动计入打卡。
+    """
+    from ...models.models import StudyGoal
+
+    # 创建今日任务
+    today_task = StudyGoal(
+        user_id=current_user.user_id,
+        title=req.title,
+        description=req.content,
+        goal_type="DAILY",
+        target_count=1,
+        current_count=0,
+        expected_minutes=30,
+        priority=2,
+        is_completed=0,
+        base_reward=req.coin_reward,
+        reward_coins=req.coin_reward,
+        status=1,
+    )
+    db.add(today_task)
+    db.commit()
+    db.refresh(today_task)
+
+    logger.info(f"用户 {current_user.user_id} 从模块7导入任务: {req.title}")
+
+    return {
+        "goal_id": today_task.goal_id,
+        "title": today_task.title,
+        "reward_coins": today_task.reward_coins,
+        "message": "已写入今日任务，完成后可领取金币",
     }

@@ -29,6 +29,12 @@ _CONTENT_SELECTORS = (
     ".p2j_con3", "#content", "#article", ".main-content", ".detail",
 )
 _DATE_RE = re.compile(r"(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})")
+_NOISE_IMAGE_PARTS = ("/template/", "logo", "icon", "banner", "qrcode", "share")
+
+
+def _is_noise_image(src: str) -> bool:
+    value = src.lower()
+    return any(part in value for part in _NOISE_IMAGE_PARTS)
 
 
 @dataclass
@@ -46,26 +52,33 @@ def _fetch_html(
     timeout: int = 20,
     headers: dict[str, str] | None = None,
     state_path: str | None = None,
+    wait_ms: int = 2000,
 ) -> str:
     if adapter == "playwright":
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
             try:
-                browser = p.chromium.launch(headless=True, channel="msedge")
+                browser = p.chromium.launch(
+                    headless=True,
+                    channel="msedge",
+                    args=["--disable-blink-features=AutomationControlled"],
+                )
             except Exception:
                 browser = p.chromium.launch(headless=True)
             context = browser.new_context(
                 user_agent=UA,
                 storage_state=state_path or None,
+                locale="zh-CN",
+                timezone_id="Asia/Shanghai",
             )
             page = context.new_page()
             try:
-                page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
-                page.wait_for_timeout(2000)
+                page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+                page.wait_for_timeout(wait_ms)
                 if len(page.content()) < 2000:
-                    page.reload(wait_until="networkidle", timeout=timeout * 1000)
-                    page.wait_for_timeout(2000)
+                    page.reload(wait_until="domcontentloaded", timeout=timeout * 1000)
+                    page.wait_for_timeout(wait_ms)
                 html = page.content()
             finally:
                 browser.close()
@@ -85,6 +98,7 @@ def parse_list_links(
     page_url: str,
     limit: int = 10,
     allowed_hosts: tuple[str, ...] = (),
+    link_contains: str = "",
 ) -> list[str]:
     soup = BeautifulSoup(html, "html.parser")
     links: list[str] = []
@@ -102,6 +116,8 @@ def parse_list_links(
         if not url.startswith(("http://", "https://")):
             continue
         host = urlparse(url).netloc.lower()
+        if link_contains and link_contains not in url:
+            continue
         if any(host.startswith(prefix) for prefix in _BAD_HOST_PREFIXES):
             continue
         if allowed_hosts and not any(
@@ -157,6 +173,8 @@ def parse_article(html: str, url: str) -> ArticleData:
         if not src or src.startswith("data:"):
             continue
         src = urljoin(url, src)
+        if _is_noise_image(src):
+            continue
         if src.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
             images.append(src)
         if len(images) >= 5:
@@ -190,6 +208,59 @@ def _download_image(url: str, storage: NewsStorage, timeout: int = 15) -> str | 
     except Exception as exc:
         logger.warning("news image failed %s: %s", url[:100], exc)
         return None
+
+
+def _download_image_playwright(
+    image_url: str,
+    page_url: str,
+    storage: NewsStorage,
+    *,
+    state_path: str | None = None,
+    timeout: int = 30,
+    wait_ms: int = 8000,
+) -> str | None:
+    """在与正文相同的浏览器上下文内取图，解决 MPS 图片 521。"""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(
+                headless=True,
+                channel="msedge",
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+        except Exception:
+            browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent=UA,
+            storage_state=state_path or None,
+            locale="zh-CN",
+            timezone_id="Asia/Shanghai",
+        )
+        page = context.new_page()
+        try:
+            page.goto(page_url, wait_until="domcontentloaded", timeout=timeout * 1000)
+            page.wait_for_timeout(wait_ms)
+            if len(page.content()) < 2000:
+                page.reload(wait_until="domcontentloaded", timeout=timeout * 1000)
+                page.wait_for_timeout(wait_ms)
+            resp = context.request.get(
+                image_url,
+                headers={"Referer": page_url},
+                timeout=timeout * 1000,
+            )
+            if not resp.ok:
+                logger.warning("news playwright image HTTP %s: %s", resp.status, image_url[:100])
+                return None
+            data = resp.body()
+            if not data or len(data) > 8 * 1024 * 1024:
+                return None
+            return storage.save_image(data, _suffix(image_url), source_url=image_url)
+        except Exception as exc:
+            logger.warning("news playwright image failed %s: %s", image_url[:100], exc)
+            return None
+        finally:
+            browser.close()
 
 
 def _authorized_headers(source: NewsSourceConfig) -> dict[str, str]:
@@ -228,7 +299,11 @@ def collect_source(
     state_path = _playwright_state(source)
     fetch = fetcher or (
         lambda url: _fetch_html(
-            url, source.adapter, headers=headers, state_path=state_path
+            url,
+            source.adapter,
+            headers=headers,
+            state_path=state_path,
+            wait_ms=10000 if source.code == "mps" else 2000,
         )
     )
     storage = storage or get_news_storage()
@@ -246,7 +321,13 @@ def collect_source(
         list_html = fetch(source.list_url)
         host = urlparse(source.base_url).netloc.lower()
         allowed_hosts = (host, host.removeprefix("www."))
-        links = parse_list_links(list_html, source.list_url, limit=limit, allowed_hosts=allowed_hosts)
+        links = parse_list_links(
+            list_html,
+            source.list_url,
+            limit=limit,
+            allowed_hosts=allowed_hosts,
+            link_contains=source.link_contains,
+        )
         report["links"] = len(links)
         for link in links:
             try:
@@ -294,7 +375,12 @@ def collect_source(
             db.add(news)
             db.flush()
             for order, image_url in enumerate(article.images):
-                rel = _download_image(image_url, storage)
+                if source.code == "mps":
+                    rel = _download_image_playwright(
+                        image_url, link, storage, state_path=state_path
+                    )
+                else:
+                    rel = _download_image(image_url, storage)
                 if rel:
                     db.add(NewsImage(news_id=news.news_id, image_path=rel, image_order=order))
                     report["images"] += 1

@@ -1,0 +1,151 @@
+"""R2.4 新闻图/向量投影（可重建，不参与业务事务）。"""
+from __future__ import annotations
+
+import sqlite3
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.foundation import config as fcfg
+from app.foundation.graph_schema import ensure_graph_schema
+from app.foundation.ports.ai import EmbeddingPort, build_embedding_port
+from app.foundation.stores.graph import GraphStore, build_graph_store
+from app.foundation.stores.local_vector import LocalVectorStore
+from app.foundation.stores.vector import VectorItem, VectorStore
+from app.models.models import NewsArticle, NewsImage
+
+NEWS_VECTOR_COLLECTION = "news_articles"
+
+
+def _published(db: Session) -> list[NewsArticle]:
+    return (
+        db.query(NewsArticle)
+        .filter(NewsArticle.status == 1, NewsArticle.review_status == "published")
+        .order_by(NewsArticle.news_id)
+        .all()
+    )
+
+
+def _date(value: datetime | None) -> str:
+    return value.date().isoformat() if value else ""
+
+
+def project_graph(db: Session, *, store: GraphStore | None = None, reset: bool = False) -> dict[str, Any]:
+    if store is None:
+        with sqlite3.connect(str(fcfg.sqlite_path())) as conn:
+            ensure_graph_schema(conn)
+        store = build_graph_store()
+    if reset:
+        store.clear()
+    news_list = _published(db)
+    nodes = 0
+    edges = 0
+    for news in news_list:
+        store.upsert_node(
+            "News", str(news.news_id),
+            {
+                "newsId": news.news_id,
+                "title": news.title,
+                "source": news.source,
+                "category": news.category or "",
+                "publishDate": _date(news.publish_date),
+                "reviewStatus": news.review_status,
+            },
+            version=1,
+        )
+        nodes += 1
+        if news.category_code or news.category:
+            key = news.category_code or news.category or "uncategorized"
+            store.upsert_node(
+                "Topic", key,
+                {"code": key, "name": news.category or key},
+                version=1,
+            )
+            store.upsert_edge(
+                "ABOUT", ("News", str(news.news_id)), ("Topic", key),
+                {"derivation": "news_category"},
+            )
+            edges += 1
+        if news.source:
+            store.upsert_node(
+                "Source", news.source,
+                {"code": news.source, "name": news.source},
+                version=1,
+            )
+            store.upsert_edge(
+                "FROM_SOURCE", ("News", str(news.news_id)), ("Source", news.source),
+                {"derivation": "news_source"},
+            )
+            edges += 1
+        images = (
+            db.query(NewsImage)
+            .filter(NewsImage.news_id == news.news_id)
+            .order_by(NewsImage.image_order)
+            .all()
+        )
+        for image in images:
+            store.upsert_node(
+                "Media", image.image_path,
+                {"path": image.image_path, "newsId": news.news_id},
+                version=1,
+            )
+            store.upsert_edge(
+                "HAS_MEDIA", ("News", str(news.news_id)), ("Media", image.image_path),
+                {"derivation": "news_image", "order": image.image_order},
+            )
+            edges += 1
+    return {
+        "news": len(news_list),
+        "nodes_written": nodes,
+        "edges_written": edges,
+        "backend": getattr(store, "backend", "unknown"),
+    }
+
+
+def project_vectors(
+    db: Session,
+    *,
+    embedding: EmbeddingPort | None = None,
+    store: VectorStore | None = None,
+    reset: bool = False,
+) -> dict[str, Any]:
+    port = embedding or build_embedding_port()
+    news_list = _published(db)
+    if not news_list:
+        return {"news": 0, "planned": 0, "written": 0, "provider": getattr(port, "provider", "unknown")}
+    texts = [
+        f"{n.title}\n{n.ai_summary or n.summary or ''}\n{(n.content or '')[:3000]}"
+        for n in news_list
+    ]
+    vectors = port.embed(texts)
+    if len(vectors) != len(news_list):
+        raise ValueError("embedding 返回数量与新闻数不一致")
+    target = store or LocalVectorStore(fcfg.vector_store_root(), dim=int(port.dim))
+    if reset:
+        target.clear(NEWS_VECTOR_COLLECTION)
+    items = []
+    for news, vector in zip(news_list, vectors):
+        if len(vector) != int(port.dim):
+            raise ValueError(f"embedding 维度 {len(vector)} != {port.dim}")
+        items.append(VectorItem(
+            id=str(news.news_id),
+            vector=list(vector),
+            meta={
+                "newsId": news.news_id,
+                "title": news.title,
+                "category": news.category or "",
+                "source": news.source,
+                "provider": getattr(port, "provider", "unknown"),
+                "contentHash": news.content_hash or "",
+            },
+        ))
+    written = target.upsert_many(NEWS_VECTOR_COLLECTION, items)
+    return {
+        "news": len(news_list),
+        "planned": len(items),
+        "written": written,
+        "provider": getattr(port, "provider", "unknown"),
+        "degraded": bool(getattr(port, "degraded", False)),
+        "collection": NEWS_VECTOR_COLLECTION,
+    }
