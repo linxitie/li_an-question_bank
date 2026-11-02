@@ -816,22 +816,24 @@
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   .msg-row.me { justify-content: flex-end; }
   .mini-avatar {
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 36px; height: 36px; border-radius: 50%;
     background: linear-gradient(135deg, #1a2a4a, #2c4a82);
-    color: #fff; font-size: 11px; font-weight: 600;
+    color: #fff; font-size: 13px; font-weight: 600;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(26,42,74,0.15);
   }
   .mini-avatar.me { background: linear-gradient(135deg, #c8161e, #e63946); }
-  .bubble { max-width: 72%; padding: 10px 13px; font-size: 14px; line-height: 1.65; word-break: break-word; }
+  .bubble { max-width: 70%; padding: 12px 16px; font-size: 14px; line-height: 1.7; word-break: break-word; }
   .bubble.me {
     background: linear-gradient(135deg, #c8161e, #e63946);
-    color: #fff; border-radius: 16px 16px 4px 16px;
-    box-shadow: 0 3px 10px rgba(200,22,30,0.2);
+    color: #fff; border-radius: 20px 20px 6px 20px;
+    box-shadow: 0 4px 12px rgba(200,22,30,0.25);
   }
   .bubble.bot {
     background: #fff; color: #2c3e50;
-    border-radius: 16px 16px 16px 4px;
-    box-shadow: 0 2px 8px rgba(26,42,74,0.08);
+    border-radius: 20px 20px 20px 6px;
+    box-shadow: 0 2px 10px rgba(26,42,74,0.1);
+    border: 1px solid #f0f2f5;
   }
   .bubble-content :deep(strong) { color: #c8161e; font-weight: 600; }
   .typing { padding: 14px 16px !important; }
