@@ -4,7 +4,8 @@
     <header class="topbar">
       <button class="back-btn" @click="goBack" aria-label="返回">←</button>
       <h1 class="title">{{ currentNews ? '新闻详情' : '每日新闻' }}</h1>
-      <span class="spacer"></span>
+      <button v-if="!currentNews" class="timeline-btn" @click="openTimeline">时间线/日报</button>
+      <span v-else class="spacer"></span>
     </header>
 
     <!-- 新闻列表 -->
@@ -151,6 +152,13 @@ const goBack = () => {
   } else {
     router.push('/mobile/home');
   }
+};
+
+const openTimeline = () => {
+  const target = route.path.startsWith('/tablet')
+    ? '/tablet/news/timeline'
+    : '/mobile/news/timeline';
+  router.push(target);
 };
 
 const formatTime = (iso?: string | null) => {
@@ -362,6 +370,16 @@ onBeforeUnmount(() => {
 }
 .spacer {
   width: 32px;
+}
+.timeline-btn {
+  border: 1px solid #d6dfea;
+  background: #fff;
+  color: #1a2b5f;
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 .news-list {
   flex: 1;

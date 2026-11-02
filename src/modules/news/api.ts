@@ -106,3 +106,54 @@ export function refreshNews(
 ): Promise<NewsListResult> {
   return fetchNewsList(query);
 }
+
+/** 时间线条目（只含已发布新闻的展示字段） */
+export interface NewsTimelineItem {
+  news_id: number;
+  title: string;
+  source: string;
+  category: string | null;
+  url: string;
+  ai_summary: string;
+}
+
+export interface NewsTimelineGroup {
+  date: string;
+  items: NewsTimelineItem[];
+}
+
+export interface NewsTimelineResult {
+  total: number;
+  items: NewsTimelineGroup[];
+}
+
+/** 按发布日期分组的时间线 */
+export function fetchNewsTimeline(limit = 50): Promise<NewsTimelineResult> {
+  return request<NewsTimelineResult>({
+    url: '/api/news/timeline',
+    method: 'GET',
+    params: { limit }
+  });
+}
+
+export interface NewsDigestCategory {
+  category: string;
+  category_code: string | null;
+  count: number;
+}
+
+export interface NewsDigestResult {
+  date: string;
+  total: number;
+  categories: NewsDigestCategory[];
+  items: NewsTimelineItem[];
+}
+
+/** 指定日期的新闻日报；day 省略时后端取最近发布日 */
+export function fetchNewsDigest(day = '', limit = 20): Promise<NewsDigestResult> {
+  return request<NewsDigestResult>({
+    url: '/api/news/digest',
+    method: 'GET',
+    params: { day: day || undefined, limit }
+  });
+}

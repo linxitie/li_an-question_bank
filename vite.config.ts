@@ -1,4 +1,5 @@
 import { createViteConfig } from '@vtj/cli';
+import { execSync } from 'node:child_process';
 import { createDevTools } from '@vtj/pro/vite';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +7,26 @@ import type { Plugin } from 'vite';
 import proxy from './proxy.config';
 
 const DEV_PORT = 9527;
+
+/**
+ * 构建版本号：写入前端产物，用于与后端 /health 的 revision 比对。
+ * 为什么用 git 短 SHA 而不是时间戳：前后端同一次提交必须得到同一个值，
+ * 时间戳每次构建都不同，会把「同一版本」误判成「版本不一致」。
+ */
+function resolveBuildSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+      timeout: 3000,
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+const BUILD_SHA = resolveBuildSha();
+const BUILD_TIME = new Date().toISOString();
 const workspaceRoot = dirname(fileURLToPath(import.meta.url));
 
 function samePath(left: string, right: string): boolean {
@@ -24,6 +45,27 @@ const EXPECTED_SOCKET_CODES = new Set([
   'EPIPE',
   'ECONNABORTED',
 ]);
+
+/**
+ * 构建版本注入插件。
+ * 为什么用 transform 而不是 config.define：@vtj/cli 的 createViteConfig 会先构造完整 config、
+ * 再调用 defineConfig 回调并直接把返回值交给 Vite，dev 下 define 未生效（实测 serve 的 main.ts
+ * 仍保留未替换的标识符），因此改为在 transform 阶段做字面量替换，dev/build 行为一致。
+ */
+function buildStamp(): Plugin {
+  return {
+    name: 'build-stamp',
+    enforce: 'pre',
+    transform(code) {
+      if (!code.includes('__BUILD_SHA__') && !code.includes('__BUILD_TIME__')) {
+        return null;
+      }
+      return code
+        .replace(/__BUILD_SHA__/g, JSON.stringify(BUILD_SHA))
+        .replace(/__BUILD_TIME__/g, JSON.stringify(BUILD_TIME));
+    },
+  };
+}
 
 function devRuntimeSafety(): Plugin {
   const routeBySocket = new WeakMap<object, string>();
@@ -91,6 +133,7 @@ export default createViteConfig({
   host: '0.0.0.0',
   proxy,
   plugins: [
+    buildStamp(),
     devRuntimeSafety(),
     createDevTools({ hm: '' }),
   ],

@@ -4,6 +4,7 @@
   """
 import os
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -428,6 +429,43 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 logger.info("自动迁移: knowledge_point 添加列 sub_category_id")
 
+        # 检查 question_bank 表(归一化子科目:新增 sub_category_id 字段)
+        # 根因: 模型 question_bank.sub_category_id 存在但历史库缺该列，
+        #       任何 ORM 实体查询(题库列表 /api/questions、快速练习)都会
+        #       "no such column: question_bank.sub_category_id" → 500。
+        # 回填规则: 按 subject_id 取对应文本列(xingce/shenlun/gongzhuan_subcategory)
+        #       与 sub_categories.name 精确匹配；匹配不到保持 NULL（未分类），
+        #       不回填「无」等占位值。
+        if 'question_bank' in inspector.get_table_names():
+            qb_cols = [c['name'] for c in inspector.get_columns('question_bank')]
+            if 'sub_category_id' not in qb_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE question_bank "
+                        "ADD COLUMN sub_category_id INTEGER REFERENCES sub_categories(id)"
+                    ))
+                    conn.commit()
+                logger.info("自动迁移: question_bank 添加列 sub_category_id")
+                with engine.connect() as conn:
+                    res = conn.execute(text("""
+                        UPDATE question_bank
+                           SET sub_category_id = (
+                               SELECT sc.id FROM sub_categories sc
+                                WHERE sc.subject_id = question_bank.subject_id
+                                  AND sc.name = CASE question_bank.subject_id
+                                                   WHEN 1 THEN question_bank.xingce_subcategory
+                                                   WHEN 2 THEN question_bank.shenlun_subcategory
+                                                   WHEN 3 THEN question_bank.gongzhuan_subcategory
+                                               END
+                           )
+                         WHERE sub_category_id IS NULL
+                    """))
+                    conn.commit()
+                    logger.info(
+                        "自动迁移: question_bank.sub_category_id 回填 %s 行",
+                        res.rowcount,
+                    )
+
         # 检查 study_material 表(备考资料:新增 content_hash 去重字段)
         # 根因: 模型定义了 content_hash 但历史数据库表缺该列，导致 admin_list 的 count() 查询
         #       触发 "no such column: study_material.content_hash" → 500 错误
@@ -844,6 +882,11 @@ app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
+# 论坛/反馈图片上传（POST /api/media/image）。
+# 2026-11-02 修复：该行在 60ca515 合并时被冲突解决丢掉，导致 POST 落到
+# media_assets_api 的 GET /api/media/{asset_id} 兜底路由上，返回 405。
+# 注意：注册顺序必须在 media_assets 的 /{asset_id} 通配路由之前，保证先匹配到精确路径。
+app.include_router(image_media.router)
 app.include_router(media_assets_api.router)
 app.include_router(media_assets_api.router_api)  # /api/media 别名
 app.include_router(websocket_router)
@@ -883,6 +926,32 @@ app.include_router(notifications.router)
 app.include_router(forum_moderation.teacher_router)
 app.include_router(forum_moderation.admin_router)
 
+def _resolve_app_revision() -> str:
+    """读取当前代码的 git 短 SHA，供前端 /health 版本自检使用。
+
+    为什么不用启动时间：只有同一个提交才应产生同一个值，时间戳会把
+    「同版本的两次启动」误判成版本不一致。无 git 环境（容器/离线包）时降级 unknown。
+    """
+    try:
+        import subprocess
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return result.stdout.strip() if result.returncode == 0 else "unknown"
+    except Exception:
+        return "unknown"
+
+
+_APP_REVISION = _resolve_app_revision()
+_APP_STARTED_AT = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
 @app.get("/health", tags=["系统"])
 async def health_check():
     """
@@ -891,7 +960,10 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "公安联考题库系统",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        # 前端启动时用 revision 与自身构建 SHA 比对，不一致说明页面或后端是旧产物
+        "revision": _APP_REVISION,
+        "started_at": _APP_STARTED_AT,
     }
 
 @app.get("/health/foundation", tags=["系统"])

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from app.foundation.stores.document import (
+    COLLECTIONS,
     DocumentHealth,
     DocumentStoreCorrupt,
     DocumentStoreUnavailable,
@@ -100,7 +101,7 @@ class LocalDocumentStore:
             return False
 
     def iter_keys(self, collection: str) -> Iterator[str]:
-        if collection not in ("exam_resources", "import_snapshots", "forum_contents"):
+        if collection not in COLLECTIONS:
             raise ValueError(f"未知文档集合: {collection!r}")
         base = self.root / collection
         if not base.exists():

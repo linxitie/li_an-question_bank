@@ -41,6 +41,20 @@ KNOWN_EXTRA_OPERATIONS = {
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。
     ("GET", "/media/{asset_id}"),
     ("HEAD", "/media/{asset_id}"),
+    # R11 显式批准的新增（2026-11-01，任务「学生端练习记录可视化 + 未完成答题卡续答」）：
+    # 做法与上面一致：只登记白名单，api_surface.json 仍保持 343 条冻结口径，不重算基线。
+    # ① 未完成答题卡续答：只读，从 exam_record + paper_question_relation + exam_answer_detail
+    #    还原断点题目与已存答案；本人校验，已完成 409，题目被撤下则跳过而非整页 404。
+    ("GET", "/api/exams/records/{record_id}/resume"),
+    # ② 学习分布：只读聚合，口径同 /api/practice/unified-stats（排除智能组卷双计）。
+    ("GET", "/api/stats/subject-distribution"),
+    # ③ 错题知识点统计：只读聚合，dimension=subcategory|point 两维可选。
+    ("GET", "/api/wrong-questions/point-stats"),
+    # ④ 练习草稿（服务端，30 天 TTL，唯一键 user_id+scope+scope_key）：重启浏览器/换设备可续。
+    ("POST", "/api/practice/draft"),
+    ("GET", "/api/practice/draft"),
+    ("GET", "/api/practice/drafts"),
+    ("DELETE", "/api/practice/draft"),
 }
 
 

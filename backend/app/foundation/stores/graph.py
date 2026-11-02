@@ -9,8 +9,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterator, Protocol, runtime_checkable
 
-LABELS = ("KnowledgePoint", "Question")
-RELS = ("PREREQUISITE_OF", "PARALLEL_WITH", "INSTANCE_OF")
+LABELS = ("KnowledgePoint", "Question", "News", "Topic", "Source", "Media")
+RELS = (
+    "PREREQUISITE_OF", "PARALLEL_WITH", "INSTANCE_OF",
+    "ABOUT", "FROM_SOURCE", "HAS_MEDIA",
+)
 
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 

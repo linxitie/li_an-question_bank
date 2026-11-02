@@ -36,6 +36,7 @@ KINDS = {
     "question_option",
     "question_analysis",
     "group_material",
+    "news_image",
 }
 ASSET_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
@@ -128,6 +129,7 @@ def content_type_for(kind: str, original_name: str | None) -> str:
         "question_option": _IMAGE_TYPES,
         "question_analysis": _IMAGE_TYPES,
         "group_material": _IMAGE_TYPES,
+        "news_image": _IMAGE_TYPES,
     }[kind]
     mime = table.get(ext)
     if not mime:

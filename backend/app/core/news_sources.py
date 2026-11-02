@@ -11,6 +11,7 @@ class NewsSourceConfig:
     base_url: str
     list_url: str
     adapter: str = "http"
+    link_contains: str = ""
     category_code: str = ""
     category: str = ""
     region_code: str = ""
@@ -28,8 +29,9 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         adapter="http", category_code="current_politics", category="时政", trust_level=85,
     ),
     NewsSourceConfig(
-        "mps", "公安部", "https://www.mps.gov.cn", "https://www.mps.gov.cn/n2255079/index.html",
-        adapter="playwright", category_code="police_news", category="公安要闻", trust_level=95,
+        "mps", "公安部", "https://www.mps.gov.cn", "https://www.mps.gov.cn/n2253534/n2253535/index.html",
+        adapter="playwright", link_contains="/n2253534/n2253535/",
+        category_code="police_news", category="公安要闻", trust_level=95,
     ),
     NewsSourceConfig(
         "beijing", "北京市公安局", "https://gaj.beijing.gov.cn", "https://gaj.beijing.gov.cn/",

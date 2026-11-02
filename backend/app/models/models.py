@@ -1803,6 +1803,7 @@ class NewsImage(Base):
     news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
     image_path = Column(String(500), nullable=False)
     image_order = Column(Integer, default=0)
+    media_asset_id = Column(String(32), ForeignKey("media_assets.asset_id"), nullable=True, index=True)
     create_time = Column(DateTime, default=datetime.now)
     news = relationship("NewsArticle")
     __table_args__ = (Index("idx_news_id_newsimage", news_id),)
@@ -2551,6 +2552,34 @@ class KnowledgeRelation(Base):
     __table_args__ = (
         Index("idx_knowledge_rel_from", from_node),
         Index("idx_knowledge_rel_to", to_node),
+    )
+
+
+class PracticeDraft(Base):
+    """练习草稿表（未完成答题卡，跨设备续答）
+
+    与 practice_record 严格分离：草稿是中间态，交卷后才写正式练习记录，
+    避免未完成的答题污染统计口径。试卷型未完成不走本表，
+    直接复用 exam_record.is_completed=0 + exam_answer_detail。
+    """
+    __tablename__ = "practice_draft"
+
+    draft_id = Column(Integer, primary_key=True, autoincrement=True, comment="草稿ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    scope = Column(String(20), nullable=False, comment="范围: type/subject/paper")
+    scope_key = Column(String(100), nullable=False, comment="范围键, 如 1:12（subject_id:type_id）")
+    questions = Column(Text, comment="题序 JSON: [question_id, ...]")
+    answers = Column(Text, comment="答案 JSON: {\"12\":\"A\"}")
+    cursor = Column(Integer, default=0, comment="当前题序位置")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, comment="更新时间")
+    expires_at = Column(DateTime, comment="过期时间（默认 30 天）")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "scope", "scope_key", name="uk_practice_draft_owner"),
+        Index("idx_practice_draft_expires", expires_at),
     )
 
 
