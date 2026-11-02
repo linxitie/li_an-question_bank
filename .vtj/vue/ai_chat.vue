@@ -1133,45 +1133,46 @@ export default defineComponent({
 
 /* 工作台 */
 .work-panel {
-  padding: 20px;
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 .work-head {
-  margin-bottom: 20px;
-  padding: 20px;
-  background: linear-gradient(135deg, #1a2a4a, #2c4a82);
-  border-radius: 16px;
-  color: white;
+  text-align: center;
+  margin-bottom: 32px;
+  padding: 20px 0;
 }
 .work-title {
-  font-size: 18px;
+  font-size: 28px;
   font-weight: 700;
+  color: #1a2a4a;
 }
 .work-sub {
-  font-size: 13px;
-  color: rgba(255,255,255,0.8);
-  margin-top: 6px;
+  font-size: 14px;
+  color: #8899aa;
+  margin-top: 8px;
 }
 .work-tasks {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 .work-task {
   background: #fff;
   border: 1px solid #e6ebf2;
   border-radius: 16px;
-  padding: 16px;
+  padding: 20px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .work-task:hover {
   border-color: #c8161e;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 24px rgba(200, 22, 30, 0.12);
 }
 .work-task.open {
   border-color: #c8161e;
-  box-shadow: 0 4px 16px rgba(200, 22, 30, 0.15);
+  box-shadow: 0 8px 24px rgba(200, 22, 30, 0.15);
 }
 .wt-row {
   display: flex;
