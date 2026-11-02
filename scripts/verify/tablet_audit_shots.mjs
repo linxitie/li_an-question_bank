@@ -323,9 +323,18 @@ async function main() {
   await go('#/materials/upload?tab=excel', `document.body.innerText.includes('Excel')`, 1200);
   out.upload = await cdp.eval(M);
   out.uploadBox = await cdp.eval(`(() => {
-    const box = document.querySelector('.mu-page') || document.querySelector('.page') || document.body.firstElementChild;
+    // 之前用 .mu-page/.page 都没命中，回落到 body.firstElementChild（#app）→ 误判成「通栏无上限」；
+    // 真实容器是 .mc-page（max-width:860px）
+    const box = document.querySelector('.mc-page');
     const r = box ? box.getBoundingClientRect() : null;
-    return { w: r ? Math.round(r.width) : null, max: box ? getComputedStyle(box).maxWidth : null, tabs: [...document.querySelectorAll('.tab,.mu-tab')].map(t => t.textContent.trim()).slice(0,4) };
+    const sub = document.querySelector('.mc-sub');
+    const sr = sub ? sub.getBoundingClientRect() : null;
+    return {
+      container: box ? '.mc-page' : null,
+      w: r ? Math.round(r.width) : null,
+      max: box ? getComputedStyle(box).maxWidth : null,
+      textW: sr ? Math.round(sr.width) : null
+    };
   })()`);
   console.log('平板 Excel 上传页', JSON.stringify({ ...out.upload, ...out.uploadBox }));
   await cdp.shot('09_平板_Excel上传页_768');

@@ -407,5 +407,13 @@ onMounted(load);
     display: inline-flex;
     align-items: center;
   }
+  /* 文字链原来只有 78×20，补内边距凑到 44px 高；负外边距保持原排版位置 */
+  .bd-coins-link {
+    min-height: 44px;
+    padding: 0 10px;
+    margin: -12px -10px -12px auto;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 </style>

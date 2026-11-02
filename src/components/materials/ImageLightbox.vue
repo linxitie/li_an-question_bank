@@ -19,7 +19,14 @@
       @click.stop="step(-1)"
     >‹</button>
 
-    <div class="lb-stage" @click.self="close">
+    <div
+      class="lb-stage"
+      @click.self="close"
+      @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
+      @touchcancel="onTouchCancel"
+    >
       <img
         class="lb-img"
         :src="images[index]"
@@ -42,6 +49,14 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import {
+  clampScale,
+  distance,
+  pinchScale,
+  swipeDirection,
+  MAX_SCALE,
+  MIN_SCALE
+} from './lightboxGesture';
 
 const props = withDefaults(
   defineProps<{
@@ -64,7 +79,7 @@ const tip = computed(() => {
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(pointer: coarse)').matches;
   return coarse
-    ? '左右按钮切换 · ＋ － 缩放 · 点右上角 ✕ 关闭'
+    ? '左右滑动切换 · 双指缩放 · 点 ✕ 关闭'
     : '滚轮或按钮缩放 · 左右切换 · Esc 关闭';
 });
 
@@ -76,7 +91,67 @@ const step = (delta: number) => {
   scale.value = 1;
 };
 const zoom = (delta: number) => {
-  scale.value = Math.min(3, Math.max(1, Number((scale.value + delta).toFixed(2))));
+  scale.value = clampScale(scale.value + delta, MIN_SCALE, MAX_SCALE);
+};
+
+/* ---------- 触摸手势：单指左右滑动切图 / 双指捏合缩放 ---------- */
+type TouchSession = {
+  /** 单指起点（双指手势时为 0） */
+  x: number;
+  y: number;
+  /** 双指起始间距（单指手势为 0） */
+  startDistance: number;
+  /** 手势开始时的缩放值 */
+  startScale: number;
+};
+let session: TouchSession | null = null;
+
+const onTouchStart = (e: TouchEvent) => {
+  if (e.touches.length >= 2) {
+    session = {
+      x: 0,
+      y: 0,
+      startDistance: distance(
+        { x: e.touches[0].clientX, y: e.touches[0].clientY },
+        { x: e.touches[1].clientX, y: e.touches[1].clientY }
+      ),
+      startScale: scale.value
+    };
+    return;
+  }
+  const t = e.touches[0];
+  if (!t) return;
+  session = { x: t.clientX, y: t.clientY, startDistance: 0, startScale: scale.value };
+};
+
+const onTouchMove = (e: TouchEvent) => {
+  if (!session) return;
+  if (e.touches.length >= 2) {
+    // 双指：实时缩放，阻止浏览器自带的页面缩放
+    e.preventDefault();
+    const d = distance(
+      { x: e.touches[0].clientX, y: e.touches[0].clientY },
+      { x: e.touches[1].clientX, y: e.touches[1].clientY }
+    );
+    if (!session.startDistance) session.startDistance = d;
+    scale.value = pinchScale(session.startScale, session.startDistance, d);
+  }
+};
+
+const finishSession = (e: TouchEvent) => {
+  const s = session;
+  session = null;
+  if (!s || s.startDistance > 0) return; // 双指手势不参与切图
+  const t = e.changedTouches[0];
+  if (!t) return;
+  const dir = swipeDirection(t.clientX - s.x, t.clientY - s.y, undefined, s.startScale);
+  if (dir === 'next') step(1);
+  else if (dir === 'prev') step(-1);
+};
+
+const onTouchEnd = (e: TouchEvent) => finishSession(e);
+const onTouchCancel = () => {
+  session = null;
 };
 
 const onWheel = (e: WheelEvent) => {
@@ -99,10 +174,12 @@ watch(
     if (v) {
       index.value = Math.min(Math.max(0, props.startIndex), Math.max(0, props.images.length - 1));
       scale.value = 1;
+      session = null;
       document.addEventListener('keydown', onKey);
       document.addEventListener('wheel', onWheel, { passive: false });
       document.body.style.overflow = 'hidden';
     } else {
+      session = null;
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('wheel', onWheel);
       document.body.style.overflow = '';
@@ -181,6 +258,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 8px 56px 12px;
+  /* 手势自己处理：禁用浏览器默认的滚动/双指页面缩放，否则 pinch 会被放大整页 */
+  touch-action: none;
 }
 .lb-img {
   display: block;

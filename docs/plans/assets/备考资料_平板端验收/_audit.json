@@ -190,13 +190,7 @@
     "card": null,
     "actBtn": null,
     "barBtnH": null,
-    "smallTap": [
-      {
-        "t": "去金币购 →",
-        "w": 78,
-        "h": 20
-      }
-    ]
+    "smallTap": []
   },
   "badgeGrid": {
     "cls": "bg-grid",
@@ -218,9 +212,10 @@
     "smallTap": []
   },
   "uploadBox": {
-    "w": 768,
-    "max": "none",
-    "tabs": []
+    "container": ".mc-page",
+    "w": 767,
+    "max": "860px",
+    "textW": 731
   },
   "pcPage": {
     "hash": "#/materials/shenlun",
@@ -239,9 +234,9 @@
     "topBar": "← 返回首页\n只看收藏",
     "cardW": [
       702,
-      1340
+      1490
     ],
-    "bodyHead": "← 返回首页 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） Excel 批量导入 ＋ 创建卡片 申论 · 写作专项突破 吃透材料分析方法，掌握高分写作框架与热点素材 学习进度 7.4% （已完成"
+    "bodyHead": "← 返回首页 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） Excel 批量导入 ＋ 创建卡片 申论 · 写作专项突破 吃透材料分析方法，掌握高分写作框架与热点素材 学习进度 6.9% （已完成"
   },
   "materialsLandscape": {
     "hash": "#/tablet/materials",
