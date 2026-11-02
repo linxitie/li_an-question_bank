@@ -29,7 +29,8 @@ def main():
 
     demos = con.execute(
         "SELECT material_id, title, cover_image, content FROM study_material "
-        "WHERE subject='shenlun' AND type='card' AND title LIKE '申论综合分析 三步拆解（演示%'"
+        "WHERE subject='shenlun' AND type='card' AND creator_id=? AND title LIKE '%（演示%'",
+        (STUDENT_ID,)
     ).fetchall()
     # Excel 批量导入进来的待审行：只清「今天 + 学生本人在验收时提交」的，避免误删历史数据
     offline = con.execute(

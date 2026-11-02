@@ -20,34 +20,44 @@
       </div>
     </div>
 
-      <!-- 卡片栈（B4）：5 层堆叠 + 3D 翻转 + 上一张/下一张 + 字号三档 -->
+      <!-- 卡片栈：背景「纸片」只暗示还有多少张（不再画整张白卡），当前卡单独做 3D 翻转 -->
       <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
         <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering' }">
-          <div
-            v-for="(c, i) in stackCards"
-            :key="c.id"
-            class="stack-card"
-            :class="'lv' + i"
-            :style="layerStyle(i)"
-            @click="i === 0 && flip()"
-          >
+          <span
+            v-for="n in SLAB_COUNT"
+            :key="'slab-' + n"
+            class="stack-slab"
+            :style="slabStyle(n)"
+          ></span>
+
+          <div v-if="currentCard" class="stack-card lv0" @click="flip()">
             <div class="card-inner">
               <div class="card-face front">
                 <div class="card-head">
-                  <span class="tag">{{ c.category || '资料卡' }}</span>
+                  <span class="tag">{{ currentCard.category || '资料卡' }}</span>
                   <span class="idx">{{ cardIndex + 1 }} / {{ cardItems.length }}</span>
                 </div>
-                <h3 class="card-title">{{ c.title }}</h3>
-                <p class="card-text">{{ c.card_front || c.title }}</p>
-                <div class="card-foot"><span class="hint">点击卡片翻转看要点</span></div>
+                <h3 class="card-title">{{ currentCard.title }}</h3>
+                <p class="card-text">{{ currentCard.card_front || currentCard.title }}</p>
+                <div class="card-foot">
+                  <span class="hint">点击卡片翻转看要点</span>
+                  <button class="card-act" @click.stop="openCardImages(currentCard)">
+                    {{ actLabel }}
+                  </button>
+                </div>
               </div>
               <div class="card-face back">
                 <div class="card-head">
                   <span class="tag">要点</span>
                   <span class="idx">背面</span>
                 </div>
-                <p class="card-text">{{ c.card_back || '暂无背面内容' }}</p>
-                <div class="card-foot"><span class="hint">点击翻回正面</span></div>
+                <p class="card-text">{{ currentCard.card_back || '暂无背面内容' }}</p>
+                <div class="card-foot">
+                  <span class="hint">点击翻回正面</span>
+                  <button class="card-act" @click.stop="openCardImages(currentCard)">
+                    {{ actLabel }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -132,17 +142,27 @@
       @close="createOpen = false"
       @saved="onCardCreated"
     />
+
+    <!-- 卡片上的「查看配图」直接打开全图，不用再去下面的列表里找 -->
+    <ImageLightbox
+      :open="lightbox.open"
+      :images="lightbox.images"
+      :start-index="lightbox.index"
+      @close="lightbox.open = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { ElMessage } from 'element-plus';
 import { useLibraryStore } from '@/modules/library/store';
+import { collectCardImages } from '@/utils/materialImages';
 import CardCreateForm from '@/components/materials/CardCreateForm.vue';
+import ImageLightbox from '@/components/materials/ImageLightbox.vue';
 
 const router = useRouter();
 const library = useLibraryStore();
@@ -247,8 +267,8 @@ const openDetail = async (m: any) => {
   await loadDetail(m.id);
 };
 
-// ===== B4 卡片栈：5 层堆叠 + 翻转 + 切换 + 字号 =====
-const STACK_LAYERS = 5;
+// ===== 卡片栈：背景纸片 + 单卡 3D 翻转 + 切换 + 字号 =====
+const SLAB_COUNT = 3;
 const cardIndex = ref(0);
 const flipped = ref(false);
 const fontScale = ref(1);
@@ -256,9 +276,34 @@ const fontScale = ref(1);
 const cardItems = computed(() =>
   (materials.value as any[]).filter((m) => m.type === 'card' && m.card_front)
 );
-const stackCards = computed(() =>
-  cardItems.value.slice(cardIndex.value, cardIndex.value + STACK_LAYERS)
+const currentCard = computed(() => cardItems.value[cardIndex.value] || null);
+/** 当前卡的全部配图（封面 + 正文附图），用于卡片上的「查看配图」 */
+const currentImages = computed(() => collectCardImages(currentCard.value as any));
+const actLabel = computed(() =>
+  currentImages.value.length ? `查看配图（${currentImages.value.length}）` : '查看详情'
 );
+
+/** 层叠纸片：越靠后越窄、越淡，翻页时整体淡出（不会再留白框） */
+const slabStyle = (n: number) => ({
+  top: `${30 - n * 9}px`,
+  left: `${6 + n * 5}px`,
+  right: `${6 + n * 5}px`,
+  opacity: String(0.78 - n * 0.2)
+});
+
+// 全图查看器（复用电脑端的同一个组件）
+const lightbox = reactive({ open: false, index: 0, images: [] as string[] });
+const openCardImages = (c: any) => {
+  const list = collectCardImages(c);
+  if (list.length) {
+    lightbox.images = list;
+    lightbox.index = 0;
+    lightbox.open = true;
+    return;
+  }
+  openDetail(c);
+};
+
 const flip = () => {
   if (cardItems.value.length) flipped.value = !flipped.value;
 };
@@ -284,12 +329,6 @@ const prevCard = () => {
 const setScale = (v: number) => {
   fontScale.value = v;
 };
-// 后层：逐层上移 15px、右移 11px、缩放 -1.2%，投影在 CSS 里按层号递减
-const layerStyle = (i: number) => ({
-  transform: `translate(${i * 11}px, ${-i * 15}px) scale(${1 - 0.012 * i})`,
-  zIndex: 10 - i,
-  opacity: 1 - i * 0.04
-});
 const stackStyle = computed(() => ({ '--sm-font-scale': String(fontScale.value) }));
 
 onMounted(fetchMaterials);
@@ -553,32 +592,61 @@ onMounted(fetchMaterials);
   opacity: 0.85;
 }
 
-/* ===== B4 卡片栈：5 层堆叠 + 3D 翻转 + 字号变量 ===== */
+/* ===== 卡片栈：背景纸片 + 单卡 3D 翻转 ===== */
 .stack-wrap { padding: 14px 16px 4px; }
-.stack { position: relative; height: 252px; perspective: 1200px; }
-.stack-card {
-  position: absolute; left: 0; right: 0; top: 22px; height: 230px;
-  border-radius: 16px; background: #fff; border: 1px solid #eef1f6;
-  box-shadow: 0 6px 18px rgba(26, 42, 74, 0.10);
-  transition: transform 0.35s ease, box-shadow 0.35s ease;
+.stack { position: relative; height: 256px; perspective: 900px; perspective-origin: 50% 42%; }
+/* 背景纸片：只露一条渐变边，表示「后面还有几张」，不画整张白卡 */
+.stack-slab {
+  position: absolute;
+  height: 54px;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(135deg, var(--c1), var(--c2));
+  pointer-events: none;
+  transition: opacity 0.22s ease, top 0.3s ease, left 0.3s ease, right 0.3s ease;
 }
-.stack-card.lv1 { box-shadow: 0 5px 14px rgba(26, 42, 74, 0.07); background: #fdfdff; }
-.stack-card.lv2 { box-shadow: 0 4px 12px rgba(26, 42, 74, 0.05); background: #fbfcff; }
-.stack-card.lv3 { box-shadow: 0 3px 10px rgba(26, 42, 74, 0.04); background: #f9fbff; }
-.stack-card.lv4 { box-shadow: 0 2px 8px rgba(26, 42, 74, 0.03); background: #f8faff; }
+.stack-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30px;
+  height: 226px;
+  border-radius: 16px;
+  background: #fff;
+  border: none;
+  box-shadow: 0 10px 24px rgba(26, 42, 74, 0.14);
+  transition: transform 0.35s ease, box-shadow 0.35s ease, opacity 0.22s ease;
+  z-index: 2;
+  /* 3D 透视必须挂在「旋转元素的父级」上：card-inner 是 .stack-card 的子元素 */
+  perspective: 900px;
+  perspective-origin: 50% 45%;
+}
 .stack-card.lv0 { cursor: pointer; }
 .card-inner {
-  position: relative; width: 100%; height: 100%;
-  transition: transform 0.4s ease; transform-style: preserve-3d;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.35, 0.1, 0.25, 1);
+  will-change: transform;
 }
 .stack.is-flipped .stack-card.lv0 .card-inner { transform: rotateY(180deg); }
+.stack.is-flipped .stack-card.lv0 { box-shadow: 0 16px 34px rgba(26, 42, 74, 0.2); }
 .card-face {
-  position: absolute; inset: 0; padding: 14px 16px;
-  display: flex; flex-direction: column;
-  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  position: absolute;
+  inset: 0;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
 }
-.card-face.back { transform: rotateY(180deg); background: #f7fbff; }
+.card-face.back {
+  transform: rotateY(180deg) translateZ(1px);
+  background: #f7fbff;
+}
 .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .idx { font-size: 11px; color: #66738a; }
 .card-title {
@@ -650,8 +718,39 @@ onMounted(fetchMaterials);
   background: linear-gradient(135deg, var(--c1), var(--c2));
 }
 
-/* 修复 3：翻页动效（走出 / 进入） */
+/* 卡片底部：翻转提示 + 「查看配图 / 查看详情」入口（不再去下面列表里找） */
+.card-face .card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-face .card-foot .hint { flex: 1 1 auto; min-width: 0; }
+.card-act {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+  background: var(--c1);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.card-act:active { opacity: 0.82; }
+.card-face.back .card-act {
+  border-color: transparent;
+  background: var(--c1);
+}
+
+/* 修复 3：翻页动效（走出 / 进入）——纸片同时淡出，不留白框 */
 .stack-card.lv0 { transition: transform 0.2s ease, opacity 0.2s ease; }
+.stack.is-leaving .stack-slab,
+.stack.is-entering .stack-slab {
+  opacity: 0 !important;
+  transition: opacity 0.18s ease;
+}
 .stack.is-leaving .stack-card.lv0 {
   transform: translateX(-118%) rotate(-7deg);
   opacity: 0;
