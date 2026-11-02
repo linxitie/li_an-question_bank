@@ -1285,27 +1285,28 @@ export default defineComponent({
   padding: 18px;
 }
 .welcome-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 26px 20px 20px;
+  background: transparent;
+  padding: 40px 20px 20px;
   text-align: center;
-  box-shadow: 0 4px 16px rgba(26, 42, 74, 0.06);
   margin-top: 16px;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .welcome-emoji {
   font-size: 34px;
   margin-bottom: 6px;
 }
 .welcome-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 32px;
+  font-weight: 700;
   color: #1a2a4a;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
 }
 .welcome-sub {
-  font-size: 13px;
+  font-size: 15px;
   color: #8899aa;
-  margin: 0 0 16px;
+  margin: 0 0 24px;
 }
 .quick-chips {
   display: flex;
