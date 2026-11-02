@@ -197,8 +197,10 @@ async function main() {
   await cdp.send('Page.enable');
   await cdp.send('Runtime.enable');
   await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: 768,
-    height: 1024,
+    // 2026-11-02：平板已与电脑同版（/tablet/materials → /materials/xingce，电脑页），
+    // 全图手势组件仍在手机端资料页使用 → 这里改用手机视口验证同一个组件。
+    width: 390,
+    height: 844,
     deviceScaleFactor: 2,
     mobile: true
   });
@@ -206,6 +208,18 @@ async function main() {
   // 触摸事件要送进渲染进程，窗口被遮挡时容易挂住：先把页面提到前台并开焦点模拟
   await cdp.send('Page.bringToFront', {}, 8000).catch(() => {});
   await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
+
+  /** 按视口比例算触点（换成手机/平板视口都不会落到屏幕外） */
+  const vp = async () => {
+    const d = await cdp.eval(`({ w: window.innerWidth, h: window.innerHeight })`);
+    return d;
+  };
+  const gesture = (w, h) => ({
+    center: { x: Math.round(w * 0.5), y: Math.round(h * 0.5) },
+    left: { x: Math.round(w * 0.2), y: Math.round(h * 0.5) },
+    right: { x: Math.round(w * 0.8), y: Math.round(h * 0.5) },
+    gap: Math.round(w * 0.45)
+  });
 
   await cdp.send('Page.navigate', { url: `${BASE}/#/` });
   await cdp.waitFor(`document.readyState === 'complete'`);
@@ -216,7 +230,10 @@ async function main() {
   );
   check('学生登录态注入', lp === 'ok', lp);
 
-  await cdp.eval(`location.hash = '#/tablet/materials'; true`);
+  const { w: vw, h: vh } = await vp();
+  const G = gesture(vw, vh);
+
+  await cdp.eval(`location.hash = '#/mobile/materials'; true`);
   await cdp.waitFor(`!!document.querySelector('.stack-card')`);
   await cdp.eval(
     `[...document.querySelectorAll('.tabs .tab')].find(t => t.textContent.includes('申论')).click(); true`
@@ -244,7 +261,7 @@ async function main() {
   await cdp.shot('12_平板全图_手势前');
 
   // ① 双指张开 → 缩放应 > 100%
-  await cdp.pinch({ x: 384, y: 512 }, 200, 1.8);
+  await cdp.pinch(G.center, G.gap, 1.8);
   await sleep(500);
   const afterPinch = await cdp.eval(`(() => ({
     scaleText: (document.querySelector('.lb-scale')||{}).textContent || '',
@@ -257,7 +274,7 @@ async function main() {
 
   // ② 放大状态下左滑 → 不应切图（防手势打架）
   const idxBeforeSwipe = await cdp.eval(`(document.querySelector('.lb-count')||{}).textContent || ''`);
-  await cdp.swipe({ x: 560, y: 512 }, { x: 240, y: 512 });
+  await cdp.swipe(G.right, G.left);
   await sleep(400);
   const idxAfterZoomedSwipe = await cdp.eval(`(document.querySelector('.lb-count')||{}).textContent || ''`);
   console.log('放大后左滑', JSON.stringify({ idxBeforeSwipe, idxAfterZoomedSwipe }));
@@ -266,7 +283,7 @@ async function main() {
   // ③ 复位到 1:1，再左滑 → 应切到第 2 张
   await cdp.eval(`document.querySelector('.lb-reset').click(); true`);
   await sleep(300);
-  await cdp.swipe({ x: 600, y: 512 }, { x: 180, y: 512 });
+  await cdp.swipe(G.right, G.left);
   await sleep(500);
   const afterSwipe = await cdp.eval(`(() => ({
     count: (document.querySelector('.lb-count')||{}).textContent || '',
@@ -278,13 +295,13 @@ async function main() {
   await cdp.shot('14_平板全图_左滑到第2张');
 
   // ④ 右滑回到第 1 张
-  await cdp.swipe({ x: 180, y: 512 }, { x: 600, y: 512 });
+  await cdp.swipe(G.left, G.right);
   await sleep(450);
   const afterSwipeBack = await cdp.eval(`(document.querySelector('.lb-count')||{}).textContent || ''`);
   check('右滑回到上一张', afterSwipeBack.trim() === '1 / 2', afterSwipeBack.trim());
 
   // ⑤ 双指捏合 → 缩不回 100% 以下
-  await cdp.pinch({ x: 384, y: 512 }, 320, 0.4);
+  await cdp.pinch(G.center, G.gap, 0.4);
   await sleep(400);
   const afterPinchIn = await cdp.eval(`(document.querySelector('.lb-scale')||{}).textContent || ''`);
   check('双指捏合不小于 100%', (afterPinchIn || '').trim() === '100%', afterPinchIn);

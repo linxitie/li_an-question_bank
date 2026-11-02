@@ -35,3 +35,87 @@ body,
   transform: none !important;
   display: inline-block;
 }
+
+/* 平板横屏：与电脑同一套页面（2026-11-02）
+ *
+ * 要求：平板按横屏使用，且和电脑端用同一套页面/同一套布局。
+ * 实测（iPad 1024×768 / 1180×820 / 1366×1024）：
+ *   · 资料页网格是 auto-fill，横屏自动 6/7/7 列，横向溢出 0，版式本身成立；
+ *     真正要补的是触控目标（返回首页 19px、只看收藏 19px、Excel/建卡 34px、收起 17px 共 5 个）；
+ *   · 顶部（顶栏+建卡条+hero+备考指南）占 474px，768/820 高时首屏只剩 1 行卡片；
+ *     收紧留白后 1024 变 5 列 179×170、首屏 2 行（仍是同一套区块与样式，只调留白）。
+ * R3 约束：不改 `.vtj/` 源码，一律用全局样式覆盖。
+ */
+@media (orientation: landscape) and (max-width: 1366px) {
+  /* 触控：≥44px 最小可点区 */
+  #app .mat-page > .top-bar > .back,
+  #app .mat-page .fav-toggle,
+  #app .mat-page .block-head a,
+  #materials-create-bar .mce-btn,
+  #app .md-page .md-back,
+  #app .md-page .md-fs button,
+  #app .md-page .md-actions button,
+  #app .home-page .nav-item,
+  #app .home-page .navbar-menu .menu-item,
+  #app .home-page .section-more,
+  #app .home-page button,
+  #app .home-page footer a,
+  #app .badges-page .bd-chip,
+  #app .badges-page .bd-page-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  #materials-create-bar .mce-btn {
+    height: 44px;
+    padding: 0 18px;
+    border-radius: 22px;
+  }
+}
+
+@media (orientation: landscape) and (max-width: 1200px) {
+  /* 横屏收紧顶部：仍是同一套页面，只把副标题与建卡提示文字隐去、留白压小。
+   * 目标：1024×768 首屏能完整看到 2 行卡片（实测改前 gridTop=474 只够 1 行）。 */
+  #app .mat-page .hero {
+    margin: 6px 16px 0;
+    padding: 10px 14px;
+  }
+  #app .mat-page .hero .hero-text h2 {
+    font-size: 18px;
+  }
+  #app .mat-page .hero .hero-text p {
+    display: none;
+  }
+  #materials-create-bar {
+    margin-top: 6px;
+  }
+  #materials-create-bar .mce-hint {
+    display: none;
+  }
+  #app .mat-page .block {
+    margin: 6px 16px 0;
+  }
+  #app .mat-page .block-head {
+    margin-bottom: 4px;
+  }
+}
+
+/* 电脑首页在平板横屏：上层三栏 280/1fr/320 的中间栏 min-content ≈482px，
+ * 实测 1024 时内容 1122 > 容器 953（右栏「考试日历」被裁约 131px）；1180 轻微超出 13px。
+ * 分档：≤1100 右栏下移（两栏）；1101–1280 两侧收窄；≥1281 原样。
+ */
+@media (orientation: landscape) and (max-width: 1100px) {
+  #app .home-page .top-section {
+    grid-template-columns: 260px 1fr;
+    gap: 14px;
+  }
+  #app .home-page .right-col {
+    grid-column: 1 / -1;
+  }
+}
+@media (orientation: landscape) and (min-width: 1101px) and (max-width: 1280px) {
+  #app .home-page .top-section {
+    grid-template-columns: 220px 1fr 260px;
+    gap: 14px;
+  }
+}

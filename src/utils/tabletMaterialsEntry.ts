@@ -1,23 +1,25 @@
 /**
  * 平板首页「备考资料」入口（DOM 注入，遵守 R3：不改 `.vtj` 页面模板）
  *
- * 背景：`/tablet/home` 是 `.vtj/vue/tablet_home.vue`（VTJ 低代码页），按 R3 规定
- * AI 不得改其 `<template>`。因此运行时往首页的 `.quick-actions` 里追加一张
- * `.action-card`，与旁边「智能组卷 / 题库练习 / 错题本 / 模拟考试」同款：
+ * 背景（2026-11-02 变更）：平板与电脑改为**同一套页面**，`/tablet/home` 现在渲染的是
+ * 电脑首页组件 `$vtj/vue/home_page.vue`（内含 `navbar.vue`）。电脑首页本身没有「备考资料」
+ * 入口（电脑用户从资源中心进），而平板用户需要一个显眼入口。
  *
- *    📚 备考资料
- *       卡片 · 指南
+ * 做法：运行时往顶部导航栏 `.navbar-menu` 追加一个 `.menu-item`「📚 备考资料」，
+ * 与「首页 / 题库 / 关于砺安题库 / 论坛」同款；点击进 `/materials/xingce`。
  *
- * 与 `materialsCreateEntry.ts` / `profileBadgeEntry.ts` 同一套路：
- * 幂等标记 + MutationObserver 兜底（VTJ 重渲染把节点冲掉后补回）+ 路由切走时移除。
- * 只在平板设备、且当前路由是 /tablet/home 时生效，PC/手机零影响。
+ * 约束：
+ *  · 只在平板 + `/tablet/home` + 已登录 + student/teacher/admin 时注入（电脑首页不出现）；
+ *  · 幂等：id 标记 + hashchange/resize/1.2s 定时 + MutationObserver(500ms 节流) 兜底；
+ *  · 不改 `.vtj` 模板（R3），样式用 id 选择器自带。
  */
 
 const ENTRY_ID = 'tablet-materials-entry';
 const STYLE_ID = 'tablet-materials-entry-style';
-/** 平板首页的快捷功能容器（`.vtj/vue/tablet_home.vue:131`） */
-const HOST_SELECTOR = '.quick-actions';
+/** 电脑首页顶部导航的菜单容器（`.vtj/vue/navbar.vue`） */
+const HOST_SELECTOR = '.navbar-menu';
 const HOME_HASH = '#/tablet/home';
+const TARGET_HASH = '#/materials/xingce';
 
 export interface TabletEntryInput {
   hash: string;
@@ -41,56 +43,25 @@ export function shouldShowTabletMaterialsEntry({
 }
 
 const STYLE = `
-/* 平板首页的 .quick-actions 是「中间窄栏」里的 4 列网格（实测每列 80px、整块仅 368 宽），
- * 再往里塞第 5 个会把整行挤扁 —— 所以入口放在 .quick-actions **下面**，
- * 作为独立一行（宽度跟随父容器）。 */
 #${ENTRY_ID} {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px 10px;
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 56px;
-  margin-top: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #f8f9fc;
-  border: 1px solid #eef1f6;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
   user-select: none;
-  transition: background 0.3s ease, transform 0.3s ease;
+  border-radius: 8px;
+  transition: color 0.2s ease, background 0.2s ease;
 }
-#${ENTRY_ID}:hover { background: #f0f2f5; transform: translateY(-2px); }
-#${ENTRY_ID}:active { transform: translateY(0); }
-#${ENTRY_ID} .tme-icon {
-  font-size: 22px;
-  line-height: 1;
-  flex: none;
+#${ENTRY_ID}:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
 }
-#${ENTRY_ID} .tme-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1a2b5f;
-  flex: none;
-}
-#${ENTRY_ID} .tme-desc {
-  flex: 1 1 100%;
-  order: 3;
-  font-size: 12px;
-  color: #8a97ad;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#${ENTRY_ID} .tme-arrow {
-  margin-left: auto;
-  font-size: 13px;
-  color: #1890ff;
-  flex: none;
-}
+#${ENTRY_ID}:active { background: rgba(255, 255, 255, 0.14); }
 @media (prefers-reduced-motion: reduce) {
   #${ENTRY_ID} { transition: none; }
 }
@@ -108,19 +79,15 @@ export function installTabletMaterialsEntry(win: Window = window): () => void {
     doc.head.appendChild(style);
   };
 
-  const buildEntry = (): HTMLDivElement => {
-    const el = doc.createElement('div');
+  const buildEntry = (): HTMLAnchorElement => {
+    const el = doc.createElement('a');
     el.id = ENTRY_ID;
-    el.className = 'action-card';
+    el.className = 'menu-item';
     el.setAttribute('role', 'button');
     el.setAttribute('tabindex', '0');
-    el.innerHTML =
-      '<span class="tme-icon">📚</span>' +
-      '<span class="tme-name">备考资料</span>' +
-      '<span class="tme-desc">卡片 · 视频 · 指南</span>' +
-      '<span class="tme-arrow">›</span>';
+    el.innerHTML = '<span class="menu-text">📚 备考资料</span>';
     const go = () => {
-      win.location.hash = '#/tablet/materials';
+      win.location.hash = TARGET_HASH;
     };
     el.addEventListener('click', go);
     el.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -132,18 +99,21 @@ export function installTabletMaterialsEntry(win: Window = window): () => void {
     return el;
   };
 
+  const detectTablet = () =>
+    /ipad|tablet/i.test(win.navigator.userAgent) ||
+    (win.innerWidth >= 768 &&
+      win.innerWidth <= 1024 &&
+      (typeof win.navigator.maxTouchPoints === 'number'
+        ? win.navigator.maxTouchPoints > 0
+        : 'ontouchstart' in win));
+
   const sync = () => {
     const a = auth();
     const logged = typeof a?.isLoggedIn === 'function' ? !!a.isLoggedIn() : false;
     const role = typeof a?.getUserRole === 'function' ? String(a.getUserRole() || '') : '';
-    const isTablet = /ipad|tablet/i.test(win.navigator.userAgent) ||
-      (win.innerWidth >= 768 && win.innerWidth <= 1024 &&
-        (typeof win.navigator.maxTouchPoints === 'number'
-          ? win.navigator.maxTouchPoints > 0
-          : 'ontouchstart' in win));
     const visible = shouldShowTabletMaterialsEntry({
       hash: win.location.hash,
-      isTablet,
+      isTablet: detectTablet(),
       isLoggedIn: logged,
       role
     });
@@ -153,23 +123,20 @@ export function installTabletMaterialsEntry(win: Window = window): () => void {
       return;
     }
     const host = doc.querySelector(HOST_SELECTOR);
-    const parent = host?.parentElement;
-    if (!host || !parent) {
+    if (!host) {
       existing?.remove();
       return;
     }
-    // 已挂在同一个父容器里（且紧跟 quick-actions）→ 什么都不做（避免闪烁）
-    if (existing && existing.parentElement === parent) return;
+    if (existing && existing.parentElement === host) return;
     ensureStyle();
     existing?.remove();
-    parent.insertBefore(buildEntry(), host.nextSibling);
+    host.appendChild(buildEntry());
   };
 
   sync();
   win.addEventListener('hashchange', sync);
   win.addEventListener('resize', sync);
   const timer = win.setInterval(sync, 1200);
-  // VTJ 重渲染会把注入节点冲掉：容器有变化且节点不在位时补回（500ms 节流）
   let lastFix = 0;
   const MO = (win as any).MutationObserver as
     | (new (cb: MutationCallback) => MutationObserver)

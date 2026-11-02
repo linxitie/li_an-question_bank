@@ -36,7 +36,8 @@ const VTJ_LOCKED_VERSIONS = {
 //   /badge-preview、/badges-demo）+ 1（/materials-preview 内容验收）+ 1（/materials/upload 学生上传）
 // 100 = 99 + 1（/tablet/badges 平板徽章墙，2026-11-02；与 test_route_roles 的 100 同步）
 // 101 = 100 + 1（/tablet/materials/detail 平板整页详情，2026-11-02）
-const EXPECTED_DYNAMIC_IMPORTS = 101;
+// 98 = 101 - 3（平板与电脑同版：上面三条改为 redirect，动态 import 随之减少 3 处）
+const EXPECTED_DYNAMIC_IMPORTS = 98;
 
 const violations = [];
 

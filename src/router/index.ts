@@ -327,9 +327,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    // 2026-11-02：平板与电脑使用同一套页面（你的要求），首页直接复用电脑首页组件。
+    // 注意：不能 redirect 到 /home —— device.ts（R4 原样保留）会把平板访问的 /home 映射回
+    // /tablet/home，redirect 会形成死循环；所以这里只换 component，路径保持 /tablet/home。
     path: '/tablet/home',
     name: 'TabletHome',
-    component: () => import('$vtj/vue/tablet_home.vue'),
+    component: () => import('$vtj/vue/home_page.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -405,26 +408,20 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    // 2026-11-02：平板与电脑同版 → 旧地址一律 302 到电脑端页面（redirect 不带 component，
+    // 因此不再计入「页面路由数」；门禁数字已同步 101 → 98）
     path: '/tablet/materials',
-    name: 'TabletMaterials',
-    component: () => import('@/views/student/mobile/mobile_materials.vue'),
-    meta: { platform: 'tablet', roles: ['student'] }
+    redirect: '/materials/xingce'
   },
   {
-    // 平板徽章墙：复用 PC 徽章页（.bg-grid 在 ≥700px 下是 3 列，768 实测无溢出），
-    // 守 R12「不为平板复制页面」；此前平板只能手打 PC 的 /badges。
+    // 2026-11-02：平板与电脑同版 → 徽章墙直接用电脑端页面
     path: '/tablet/badges',
-    name: 'TabletBadges',
-    component: () => import('@/views/student/badges.vue'),
-    meta: { platform: 'tablet', roles: ['student'] }
+    redirect: '/badges'
   },
   {
-    // 平板整页详情：复用 PC 详情页（它读 route.query.id / subject），
-    // 守 R12 不复制页面；该页已补 @media(max-width:900px) 单栏。
+    // 2026-11-02：平板与电脑同版 → 详情页直接用电脑端整页
     path: '/tablet/materials/detail',
-    name: 'TabletMaterialDetail',
-    component: () => import('@/views/pc/material_detail.vue'),
-    meta: { platform: 'tablet', roles: ['student'] }
+    redirect: '/materials/detail'
   },
   {
     path: '/tablet/gold-purchase',

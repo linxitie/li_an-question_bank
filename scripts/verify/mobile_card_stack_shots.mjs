@@ -172,6 +172,11 @@ async function main() {
   });
   // 打开触摸模拟：让 (pointer: coarse) 生效，全图提示才会走手机文案
   await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }).catch(() => {});
+  // 窗口被遮挡时页面定时器/CSS 动画会被节流（playSwitch 的 220ms 会拖到 1s+），
+  // 会把翻页断言全部拖成假失败 —— 先把页面提到前台并开焦点模拟。
+  await cdp.send('Page.bringToFront', {}, 8000).catch(() => {});
+  await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
+  await cdp.send('Page.setWebLifecycleState', { state: 'active' }, 5000).catch(() => {});
 
   await cdp.send('Page.navigate', { url: `${BASE}/#/` });
   await cdp.waitFor(`document.readyState === 'complete'`);
@@ -373,13 +378,29 @@ async function main() {
         entering: !!document.querySelector('.stack.is-entering-prev')
       });
     }
-    return { samples: out };
+    // 关键帧在同一个 eval 里取，避免来回一次 CDP（页面被节流时 280ms 动画可能已结束）
+    const card = document.querySelector('.stack-card.lv0');
+    let keyframes = '';
+    try {
+      const anims = card && card.getAnimations ? card.getAnimations() : [];
+      const a = anims.find((x) => x.effect && x.effect.getKeyframes);
+      if (a) keyframes = a.effect.getKeyframes().map((k) => k.transform || '').join(' | ');
+    } catch (e) {
+      keyframes = 'err:' + (e && e.message);
+    }
+    return { samples: out, keyframes };
   })()`);
   const prevXs = (prevSamples.samples || []).map((s) => tx(s.transform));
   const prevMaxX = prevXs.length ? Math.max(...prevXs) : 0;
   const prevEntering = (prevSamples.samples || []).some((s) => s.entering);
-  console.log('上一页采样', JSON.stringify({ x: prevXs.map((v) => Math.round(v)), entering: prevEntering }));
-  check('上一页：上一张从右侧飞入（translateX 由正归零）', prevEntering && prevMaxX > 0, `x=${prevXs.map((v) => Math.round(v)).join('/')}px`);
+  const prevKeyframes = (prevSamples && prevSamples.keyframes) || '';
+  const prevFliesIn = prevMaxX > 0 || /62%/.test(String(prevKeyframes));
+  console.log('上一页采样', JSON.stringify({ x: prevXs.map((v) => Math.round(v)), entering: prevEntering, keyframes: prevKeyframes }));
+  check(
+    '上一页：上一张从右侧飞入（关键帧 62% 起跳 / 采样 translateX > 0）',
+    prevEntering && prevFliesIn,
+    `x=${prevXs.map((v) => Math.round(v)).join('/')}px keyframes=${String(prevKeyframes).slice(0, 40)}`
+  );
   await sleep(700);
   const prevIdxAfter = await cdp.eval(`(document.querySelector('.stack-card.lv0 .idx')||{}).textContent || ''`);
   check('上一页后回到上一张', prevIdxBefore !== prevIdxAfter, `序号 ${prevIdxBefore} → ${prevIdxAfter}`);

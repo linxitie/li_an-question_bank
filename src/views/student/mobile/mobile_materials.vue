@@ -20,125 +20,9 @@
       </div>
     </div>
 
-      <!-- ===== 平板（≥700px）：模仿电脑端的 hero + 卡片网格，但保留「上一页/下一页」 ===== -->
-      <template v-if="isTabletLayout">
-        <section class="t-hero">
-          <div class="t-hero-text">
-            <h2>{{ hero.title }}</h2>
-            <p>{{ hero.desc }}</p>
-          </div>
-          <div class="t-progress">
-            <span class="t-progress-lab">学习进度</span>
-            <div class="t-bar"><i :style="{ width: progress.percentage + '%' }"></i></div>
-            <b>{{ progress.percentage }}%</b>
-            <em>（已完成 {{ progress.studied }}/{{ progress.total }}）</em>
-          </div>
-          <label class="t-fav">
-            <input v-model="showFavOnly" type="checkbox" /> 只看收藏
-          </label>
-        </section>
-
-        <!-- 视频 / 文章分区（与电脑端同结构，数据逐个 type 拉） -->
-        <template v-for="s in SECTION_DEFS" :key="s.key">
-          <section v-if="visibleSection(s.key).length" class="t-block">
-            <div class="t-block-head">
-              <h3>{{ s.icon }} {{ s.title }}</h3>
-              <span class="t-count">{{ visibleSection(s.key).length }}</span>
-            </div>
-
-            <div v-if="s.kind === 'video'" class="t-hscroll">
-              <div
-                v-for="it in visibleSection(s.key)"
-                :key="it.id"
-                class="t-vcard"
-                @click="openMedia(it, 'video')"
-              >
-                <img v-if="it.cover_image" :src="it.cover_image" alt="" loading="lazy" />
-                <div v-else class="t-vcover">🎬</div>
-                <b class="t-dur">{{ fmtDur(it.duration) }}</b>
-                <em v-if="it.is_studied" class="t-done">✅ 已学</em>
-                <span class="t-vtitle">{{ it.title }}</span>
-              </div>
-            </div>
-
-            <ul v-else class="t-alist">
-              <li v-for="it in visibleSection(s.key)" :key="it.id" @click="openMedia(it, 'article')">
-                <span class="t-a-icon">📄</span>
-                <div class="t-a-body">
-                  <span class="t-a-title">{{ it.title }}<em v-if="it.is_studied">已读</em></span>
-                  <span v-if="it.summary" class="t-a-sum">{{ it.summary }}</span>
-                </div>
-                <small>{{ it.read_time }}min</small>
-              </li>
-            </ul>
-          </section>
-        </template>
-
-        <div v-if="cardItems.length" class="t-block-head t-grid-head">
-          <h3>🃏 知识卡片</h3>
-          <span class="t-count">{{ cardItems.length }}</span>
-        </div>
-        <section v-if="pageCards.length" class="t-grid" :style="{ '--sm-font-scale': String(fontScale) }">
-          <div
-            v-for="c in pageCards"
-            :key="c.id"
-            class="g-card"
-            :class="{ flipped: gridFlipped[c.id] }"
-            @click="toggleGridFlip(c)"
-          >
-            <div class="g-inner">
-              <div class="g-face front">
-                <div class="g-head">
-                  <span class="tag">{{ c.category || '知识点' }}</span>
-                  <span class="g-idx">{{ cardItems.indexOf(c) + 1 }} / {{ cardItems.length }}</span>
-                </div>
-                <p class="g-title">{{ c.card_front || c.title }}</p>
-                <div class="g-foot">
-                  <span class="hint">点击卡片翻转</span>
-                  <button class="g-detail" @click.stop="goTabletDetail(c)">详情</button>
-                  <button
-                    v-if="imageCount(c)"
-                    class="card-act"
-                    @click.stop="openCardImages(c)"
-                  >{{ actLabelOf(c) }}</button>
-                </div>
-              </div>
-              <div class="g-face back">
-                <div class="g-head">
-                  <span class="tag">要点</span>
-                  <span class="g-idx">背面</span>
-                </div>
-                <p class="g-back">{{ c.card_back || '暂无背面内容' }}</p>
-                <div class="g-foot">
-                  <span class="hint">点击翻回正面</span>
-                  <button class="g-detail" @click.stop="goTabletDetail(c)">详情</button>
-                  <button
-                    v-if="imageCount(c)"
-                    class="card-act"
-                    @click.stop="openCardImages(c)"
-                  >{{ actLabelOf(c) }}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div v-if="cardItems.length" class="t-bar-row">
-          <button :disabled="gridPage <= 0" @click="gridPrev">上一页</button>
-          <span class="t-page">{{ gridPage + 1 }} / {{ pageCount }} 页 · 共 {{ cardItems.length }} 张</span>
-          <button :disabled="gridPage >= pageCount - 1" @click="gridNext">下一页</button>
-        </div>
-
-        <div class="font-row">
-          <span>字号</span>
-          <button :class="{ on: fontScale === 0.9 }" @click="setScale(0.9)">A-</button>
-          <button :class="{ on: fontScale === 1 }" @click="setScale(1)">A</button>
-          <button :class="{ on: fontScale === 1.15 }" @click="setScale(1.15)">A+</button>
-        </div>
-      </template>
 
       <!-- 卡片栈（手机）：后面是「真卡片」（翻转时能看到它的文字），顶层卡单独做 3D 翻转 -->
-      <section v-else-if="cardItems.length" class="stack-wrap" :style="stackStyle">
+      <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
         <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering', 'is-entering-prev': phase === 'entering-prev' }">
           <!-- 后面的卡：真内容，只露出一条渐变头；容器透明，不会出现白框 -->
           <div
@@ -202,8 +86,8 @@
         </div>
       </section>
 
-    <main v-if="listItems.length" class="list">
-      <div v-for="m in listItems" :key="m.id" class="card" @click="toggleDetail(m)">
+    <main class="list">
+      <div v-for="m in materials" :key="m.id" class="card" @click="toggleDetail(m)">
         <div class="m-title">{{ m.title }}</div>
         <div class="m-meta">
           <span class="tag">{{ typeName(m.type) }}</span>
@@ -223,31 +107,6 @@
     <div v-if="!materials.length && !loading" class="empty">该科目暂无备考资料</div>
     <div v-if="loading" class="empty">加载中...</div>
 
-    <!-- 平板：视频播放 / 文章阅读（页内弹层；手机仍用下方详情弹层） -->
-    <div v-if="media.open" class="t-media-mask" @click.self="media.open = false">
-      <div class="t-media" @click.stop>
-        <header class="t-media-head">
-          <b>{{ media.title }}</b>
-          <button class="t-media-close" aria-label="关闭" @click="media.open = false">✕</button>
-        </header>
-        <div class="t-media-body">
-          <div v-if="media.loading" class="empty">加载中...</div>
-          <video
-            v-else-if="media.kind === 'video' && media.videoUrl"
-            :src="media.videoUrl"
-            controls
-            autoplay
-            playsinline
-          ></video>
-          <div
-            v-else-if="media.kind === 'article' && media.content"
-            class="t-article"
-            v-html="renderQuestionContent(media.content)"
-          ></div>
-          <div v-else class="empty">内容暂时无法加载</div>
-        </div>
-      </div>
-    </div>
 
     <!-- 资料详情弹层（页内展示；原实现跳 /materials/{subject}?id= 该路由不存在，必然 404） -->
     <div v-if="detailVisible" class="modal-mask" @click="closeDetail">
@@ -308,13 +167,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { ElMessage } from 'element-plus';
 import { useLibraryStore } from '@/modules/library/store';
-import { fetchLibraryDetail, fetchLibraryList, fetchLibraryProgressSummary } from '@/modules/library/api';
 import { collectCardImages } from '@/utils/materialImages';
 import CardCreateForm from '@/components/materials/CardCreateForm.vue';
 import ImageLightbox from '@/components/materials/ImageLightbox.vue';
@@ -337,7 +195,6 @@ const onCardCreated = async (payload: Record<string, unknown>) => {
   createOpen.value = false;
   const subj = String(payload?.subject || activeSubject.value);
   if (subj !== activeSubject.value) activeSubject.value = subj as typeof activeSubject.value;
-  gridPage.value = 0;
   ElMessage.success('卡片已创建并公开展示');
   await fetchMaterials();
 };
@@ -398,10 +255,7 @@ const typeName = (t: string) => {
 const switchSubject = (key: 'xingce' | 'shenlun' | 'gongzhuan') => {
   activeSubject.value = key;
   expandedId.value = null;
-  gridPage.value = 0;
   fetchMaterials();
-  loadProgress();
-  loadTabletSections();
 };
 
 const toggleDetail = (m: any) => {
@@ -468,11 +322,6 @@ const openCardImages = (c: any) => {
     lightbox.open = true;
     return;
   }
-  // 无配图：平板进 PC 式整页详情，手机保持底部弹层
-  if (isTabletLayout.value) {
-    goTabletDetail(c);
-    return;
-  }
   openDetail(c);
 };
 
@@ -512,151 +361,7 @@ const setScale = (v: number) => {
 };
 const stackStyle = computed(() => ({ '--sm-font-scale': String(fontScale.value) }));
 
-// ===== 平板布局（≥700px）：模仿电脑端的 hero + 卡片网格，但按你的要求保留「上一页/下一页」 =====
-/** 与 CSS 断点保持一致：700px 起走平板网格，1000px 起 4 列 */
-const isTabletLayout = ref(false);
-const isWideLayout = ref(false);
-const HERO: Record<string, { title: string; desc: string }> = {
-  xingce: { title: '行测 · 行政职业能力测验', desc: '掌握五大模块解题规律，快速提升答题速度与准确率' },
-  shenlun: { title: '申论 · 写作专项突破', desc: '吃透材料分析方法，掌握高分写作框架与热点素材' },
-  gongzhuan: { title: '公专 · 公安专业科目', desc: '夯实职业素养与基础知识，掌握警务技能要点' }
-};
-const hero = computed(() => HERO[activeSubject.value] || HERO.xingce);
-
-/** 学习进度（电脑端同一份接口 /api/materials/progress-summary，未新增端点） */
-const progress = ref({ studied: 0, total: 0, percentage: 0 });
-const loadProgress = async () => {
-  try {
-    progress.value = await fetchLibraryProgressSummary(activeSubject.value);
-  } catch {
-    progress.value = { studied: 0, total: 0, percentage: 0 };
-  }
-};
-
-/** 每页卡片数：与 CSS 列数一致（768: 3 列×2 行；1000+: 4 列×2 行） */
-const GRID_ROWS = 2;
-const gridPage = ref(0);
-const gridFlipped = reactive<Record<string, boolean>>({});
-const perPage = computed(() => (isWideLayout.value ? 4 : 3) * GRID_ROWS);
-const pageCount = computed(() => Math.max(1, Math.ceil(cardItems.value.length / perPage.value)));
-const pageCards = computed(() =>
-  cardItems.value.slice(gridPage.value * perPage.value, gridPage.value * perPage.value + perPage.value)
-);
-const toggleGridFlip = (c: any) => {
-  gridFlipped[String(c?.id)] = !gridFlipped[String(c?.id)];
-};
-const gridPrev = () => {
-  if (gridPage.value > 0) gridPage.value -= 1;
-};
-const gridNext = () => {
-  if (gridPage.value < pageCount.value - 1) gridPage.value += 1;
-};
-/** 某张卡的「查看配图（N）」/「查看详情」文案 */
-const actLabelOf = (c: any) => {
-  const n = collectCardImages(c).length;
-  return n ? `查看配图（${n}）` : '查看详情';
-};
-/** 配图张数（模板里用来决定是否显示「查看配图」按钮） */
-const imageCount = (c: any) => collectCardImages(c).length;
-/** 平板上卡片已在网格里展示，列表只留视频/文章，避免重复 */
-const listItems = computed(() => (isTabletLayout.value ? [] : (materials.value as any[])));
-
-// ===== 平板：模仿 PC 的视频 / 文章分区 + 只看收藏 =====
-const SECTION_DEFS = [
-  { key: 'video_intro', kind: 'video', title: '入门讲解视频', icon: '🎬' },
-  { key: 'video_advanced', kind: 'video', title: '深度拓展视频', icon: '🎯' },
-  { key: 'article', kind: 'article', title: '备考指南', icon: '📋' }
-] as const;
-const tabletSections = reactive<Record<string, any[]>>({
-  video_intro: [],
-  video_advanced: [],
-  article: []
-});
-const showFavOnly = ref(false);
-const visibleSection = (key: string) => {
-  const arr = tabletSections[key] || [];
-  return showFavOnly.value ? arr.filter((i: any) => i.is_favorite) : arr;
-};
-const loadTabletSections = async () => {
-  if (!isTabletLayout.value) return;
-  await Promise.all(
-    SECTION_DEFS.map(async (s) => {
-      try {
-        const r = await fetchLibraryList({
-          subject: activeSubject.value,
-          type: s.key,
-          pageSize: 50
-        });
-        tabletSections[s.key] = r.items ?? [];
-      } catch {
-        tabletSections[s.key] = [];
-      }
-    })
-  );
-};
-/** 秒 → 12:34 */
-const fmtDur = (sec?: number) => {
-  const n = Math.max(0, Math.floor(Number(sec) || 0));
-  return `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
-};
-
-/** 视频 / 文章弹层（平板才用；手机走原底部弹层） */
-const media = reactive({
-  open: false,
-  kind: 'video' as 'video' | 'article',
-  title: '',
-  videoUrl: '',
-  content: '',
-  loading: false
-});
-const openMedia = async (it: any, kind: 'video' | 'article') => {
-  media.open = true;
-  media.kind = kind;
-  media.title = it?.title || '';
-  media.videoUrl = '';
-  media.content = '';
-  media.loading = true;
-  try {
-    const detail: any = await fetchLibraryDetail(it.id);
-    if (kind === 'video') media.videoUrl = detail?.video_url || '';
-    else media.content = detail?.content || '';
-  } catch {
-    /* 详情失败时弹层显示空态 */
-  } finally {
-    media.loading = false;
-  }
-};
-
-/** 平板：进 PC 式整页详情（手机仍走底部弹层） */
-const goTabletDetail = (c: any) => {
-  if (!c || c.id == null) return;
-  router.push({
-    path: '/tablet/materials/detail',
-    query: { id: String(c.id), subject: activeSubject.value }
-  });
-};
-
-let mqTablet: MediaQueryList | null = null;
-let mqWide: MediaQueryList | null = null;
-const syncLayout = () => {
-  isTabletLayout.value = !!mqTablet?.matches;
-  isWideLayout.value = !!mqWide?.matches;
-};
-
 onMounted(fetchMaterials);
-onMounted(() => {
-  mqTablet = window.matchMedia('(min-width: 700px)');
-  mqWide = window.matchMedia('(min-width: 1000px)');
-  syncLayout();
-  mqTablet.addEventListener('change', syncLayout);
-  mqWide.addEventListener('change', syncLayout);
-  loadProgress();
-  loadTabletSections();
-});
-onBeforeUnmount(() => {
-  mqTablet?.removeEventListener('change', syncLayout);
-  mqWide?.removeEventListener('change', syncLayout);
-});
 </script>
 
 <style scoped>
@@ -920,13 +625,13 @@ onBeforeUnmount(() => {
 /* ===== 卡片栈：后面真卡片 + 顶层卡 3D 翻转 ===== */
 .stack-wrap { padding: 14px 16px 4px; }
 /* 卡片高度抽成变量：手机 226px 不变，平板（≥700px）按视口放大，避免被拉成「横幅」 */
-.stack { position: relative; height: calc(30px + var(--card-h, 226px)); --card-h: 226px; }
+.stack { position: relative; height: 256px; }
 .stack-card {
   position: absolute;
   left: 0;
   right: 0;
   top: 30px;
-  height: var(--card-h, 226px);
+  height: 226px;
   border-radius: 16px;
   /* 容器必须透明：白色由正/反两面提供，否则翻转时会露出这块白底 */
   background: transparent;
@@ -997,305 +702,6 @@ onBeforeUnmount(() => {
   border: 1px solid #eef1f6; background: #fff; color: #5a6b85;
 }
 .font-row button.on { border-color: #3b82f6; color: #3b82f6; }
-
-/* ===== 平板：模仿电脑端（hero + 卡片网格），列数与脚本 perPage 对齐（3 列 / ≥1000px 4 列） ===== */
-.t-hero {
-  background: #fff;
-  margin: 12px 16px 0;
-  padding: 14px 16px;
-  border-radius: 14px;
-  box-shadow: 0 2px 10px rgba(26, 42, 74, 0.05);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-.t-hero-text { flex: 1 1 320px; min-width: 0; }
-.t-hero-text h2 {
-  margin: 0 0 4px;
-  font-size: 20px;
-  line-height: 1.3;
-  color: #1a2b5f;
-}
-.t-hero-text p { margin: 0; font-size: 13px; color: #6b7280; }
-.t-progress {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #4b5563;
-  flex: 0 1 360px;
-}
-.t-progress-lab { color: #8899aa; }
-.t-bar {
-  flex: 1 1 120px;
-  height: 8px;
-  min-width: 80px;
-  border-radius: 4px;
-  background: #eef1f6;
-  overflow: hidden;
-}
-.t-bar i {
-  display: block;
-  height: 100%;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--c2, #3b82f6), var(--c1, #1e3a8a));
-}
-.t-progress b { color: #1a2b5f; }
-.t-progress em { font-style: normal; color: #8899aa; }
-
-.t-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  padding: 14px 16px 0;
-}
-.t-grid .g-card {
-  perspective: 900px;
-  /* 贴近电脑端的竖卡比例（PC 是 150×170 ≈ 0.88）；平板竖屏约 236×260 ≈ 0.91 */
-  height: clamp(210px, 28vh, 260px);
-  cursor: pointer;
-}
-.g-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transition: transform 0.5s cubic-bezier(0.35, 0.1, 0.25, 1);
-}
-.g-card.flipped .g-inner { transform: rotateY(180deg); }
-.g-face {
-  position: absolute;
-  inset: 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 6px 16px rgba(26, 42, 74, 0.08);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  backface-visibility: hidden;
-}
-.g-face.back {
-  transform: rotateY(180deg) translateZ(1px);
-  background: var(--c-soft, #eef4ff);
-}
-.g-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.g-idx { font-size: 11px; color: #99a4b5; flex: none; }
-.g-title {
-  margin: auto 0;
-  font-size: calc(14px * var(--sm-font-scale, 1));
-  line-height: 1.5;
-  font-weight: 600;
-  color: #1a2b5f;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-.g-back {
-  margin: 0;
-  font-size: calc(13px * var(--sm-font-scale, 1));
-  line-height: 1.55;
-  color: #3f4a5f;
-  overflow: auto;
-  flex: 1 1 auto;
-}
-.g-foot {
-  margin-top: auto;
-  padding-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.g-foot .hint {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 11px;
-  color: #9aa7ba;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.g-detail {
-  flex: none;
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 22px;
-  border: 1px solid #dbe3ef;
-  background: #fff;
-  color: #3f4a5f;
-  font-size: 13px;
-  cursor: pointer;
-}
-.t-bar-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 14px 16px 0;
-}
-.t-bar-row button {
-  min-height: 44px;
-  min-width: 96px;
-  border-radius: 10px;
-  border: 1px solid #e3e8ef;
-  background: #fff;
-  color: #334155;
-  font-size: 14px;
-  cursor: pointer;
-}
-.t-bar-row button:disabled { opacity: 0.45; }
-.t-page { font-size: 12px; color: #8899aa; }
-
-/* 只看收藏开关（PC 在顶栏，平板放 hero 里避免动手机端顶栏） */
-.t-fav {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  font-size: 13px;
-  color: #4b5563;
-  cursor: pointer;
-  user-select: none;
-}
-.t-fav input { width: 18px; height: 18px; }
-
-/* 视频 / 文章分区 */
-.t-block { padding: 6px 16px 0; }
-.t-grid-head { padding: 10px 16px 0; }
-.t-block-head { display: flex; align-items: baseline; gap: 8px; margin: 8px 0; }
-.t-block-head h3 { margin: 0; font-size: 16px; color: #1a2b5f; }
-.t-count { font-size: 12px; color: #99a4b5; }
-.t-hscroll {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  -webkit-overflow-scrolling: touch;
-}
-.t-vcard {
-  position: relative;
-  flex: 0 0 220px;
-  height: 132px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #eef1f6;
-  cursor: pointer;
-}
-.t-vcard img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.t-vcover {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-}
-.t-dur {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.72);
-  color: #fff;
-  font-size: 11px;
-}
-.t-done {
-  position: absolute;
-  left: 8px;
-  top: 8px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: rgba(16, 185, 129, 0.92);
-  color: #fff;
-  font-size: 11px;
-  font-style: normal;
-}
-.t-vtitle {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 18px 10px 8px;
-  background: linear-gradient(transparent, rgba(15, 23, 42, 0.78));
-  color: #fff;
-  font-size: 12.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.t-alist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.t-alist li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 56px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(26, 42, 74, 0.04);
-  cursor: pointer;
-}
-.t-a-icon { flex: none; }
-.t-a-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.t-a-title { font-size: 14px; font-weight: 600; color: #1a2b5f; }
-.t-a-title em { margin-left: 6px; font-style: normal; font-size: 11px; color: #10b981; }
-.t-a-sum { font-size: 12px; color: #8899aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.t-alist small { flex: none; font-size: 11px; color: #99a4b5; }
-
-/* 视频/文章弹层 */
-.t-media-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(15, 23, 42, 0.62);
-}
-.t-media {
-  width: min(900px, 100%);
-  max-height: 86vh;
-  background: #fff;
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.t-media-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #eef1f6;
-}
-.t-media-head b { font-size: 15px; color: #1a2b5f; }
-.t-media-close {
-  width: 44px;
-  height: 44px;
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  color: #8899aa;
-  cursor: pointer;
-}
-.t-media-body { padding: 14px 16px 18px; overflow: auto; }
-.t-media-body video { width: 100%; max-height: 64vh; border-radius: 10px; background: #000; }
-.t-article { font-size: 14px; line-height: 1.75; color: #334155; }
-.t-article :deep(img) { max-width: 100%; }
-@media (min-width: 1000px) {
-  .t-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
 
 /* ===== 修复：科目三色主题（与电脑端 detail 页一致） ===== */
 .theme-xingce { --c1: #1e3a8a; --c2: #3b82f6; --c-soft: #eef4ff; }
@@ -1395,35 +801,6 @@ onBeforeUnmount(() => {
    · 卡片高度按 40vw 放大并封顶 330px，宽度限制在 640px 容器内 → 宽高比从 3.25/4.39 回到 ~1.9
    · 交互元素统一 ≥44px，符合触屏最小可点区
    · 不改模板、不复制页面（守 R12） */
-@media (min-width: 700px) {
-  /* 注意：.page 是 display:flex 的列容器，给子项写 margin:auto 会让它「收缩到内容宽」、
-     不再被拉伸（实测只撑到 203px）——所以 max-width 必须配 width:100% 一起用 */
-  .stack-wrap {
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-    padding: 18px 20px 8px;
-  }
-  .stack { --card-h: clamp(240px, 40vw, 330px); }
-  .card-face .card-title { font-size: 19px; line-height: 1.45; }
-  .card-face .card-text { font-size: 14px; }
-  .card-act {
-    min-height: 44px;
-    padding: 0 16px;
-    border-radius: 22px;
-    font-size: 13px;
-  }
-  .stack-bar { width: 100%; max-width: 640px; margin: 12px auto 0; }
-  .stack-bar button { min-height: 44px; }
-  .tabs .tab { min-height: 44px; display: flex; align-items: center; justify-content: center; }
-  .create-btn { min-height: 44px; min-width: 88px; border-radius: 22px; }
-  .back-btn { min-height: 44px; min-width: 44px; }
-  .font-row button { height: 44px; }
-  /* 平板下 font-row 是 .page 的直接子节点，需自己补左右留白，否则「字号」贴到屏幕边缘 */
-  .font-row { padding: 10px 16px 0; margin: 0; }
-  /* 平板走网格，列表只放视频/文章；宽度跟网格对齐 */
-  .list { width: 100%; max-width: 1080px; margin: 0 auto; padding: 12px 16px 20px; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .stack.is-leaving .stack-card.lv0,
