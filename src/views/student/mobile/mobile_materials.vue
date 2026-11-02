@@ -1110,8 +1110,10 @@ onBeforeUnmount(() => {
   .create-btn { min-height: 44px; min-width: 88px; border-radius: 22px; }
   .back-btn { min-height: 44px; min-width: 44px; }
   .font-row button { height: 44px; }
+  /* 平板下 font-row 是 .page 的直接子节点，需自己补左右留白，否则「字号」贴到屏幕边缘 */
+  .font-row { padding: 10px 16px 0; margin: 0; }
   /* 平板走网格，列表只放视频/文章；宽度跟网格对齐 */
-  .list { width: 100%; max-width: 1080px; margin: 0 auto; padding: 12px 16px 0; }
+  .list { width: 100%; max-width: 1080px; margin: 0 auto; padding: 12px 16px 20px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
