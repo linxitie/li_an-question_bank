@@ -23,6 +23,7 @@ import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
 import { registerImageRetry } from './image-retry';  // 第9层防线：图片智能重试
 import { installProfileBadgeEntry } from './utils/profileBadgeEntry';  // 「我的」页内徽章入口（DOM 注入）
 import { installMaterialsCreateEntry } from './utils/materialsCreateEntry';  // PC 资料页「创建卡片」入口（DOM 注入）
+import { installTabletMaterialsEntry } from './utils/tabletMaterialsEntry';  // 平板首页「备考资料」入口（DOM 注入）
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
@@ -60,6 +61,8 @@ onReady(async () => {
   installProfileBadgeEntry();
   // 三科资料页同样是 VTJ 页面 → 运行时在顶栏下方注入「创建卡片 / Excel 批量导入」入口
   installMaterialsCreateEntry();
+  // 平板首页也是 VTJ 页面 → 运行时往「快捷功能」里注入「备考资料」入口
+  installTabletMaterialsEntry();
 });
 
 if (process.env.NODE_ENV === 'production') {
