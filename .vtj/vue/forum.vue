@@ -144,55 +144,19 @@
           </div>
         </aside>
       </div>
-      <div
-        v-if="state.showNewPost"
-        class="modal-overlay"
-        @click.self="state.showNewPost = false">
-        <div class="modal-card">
-          <h3>发布新帖</h3>
-          <input
-            v-model="state.newPost.title"
-            class="modal-input"
-            placeholder="请输入标题..."
-            maxlength="200"/>
-
-          <textarea
-            v-model="state.newPost.content"
-            rows="6"
-            class="modal-textarea"
-            placeholder="请输入内容(分享观点、学习经验...)"
-            maxlength="10000"></textarea>
-          <div class="post-image-upload">
-            <label class="post-color-label">图片（不限张数）</label>
-            <FileUploader v-model="state.newPost.images" :max-docs="10" />
-          </div>
-          <div class="upload-area">
-            <input
-              type="file"
-              ref="fileInput"
-              multiple
-              accept=".doc,.docx,.pdf,.xls,.xlsx"
-              @change="handleFileUpload"
-              style="display:none"/>
-            <button class="upload-btn" @click="triggerUpload">
-              <XIcon :icon="Upload" :size="14" color="#1a2b5f"></XIcon>
-              <span> 上传学习资料(Word/PDF/Excel)</span>
-            </button>
-            <div v-for="(f, i) in state.newPost.attachments" :key="i" class="file-chip">
-              <XIcon :icon="Document" :size="12" color="#1a2b5f"></XIcon>
-              <span class="file-name"> {{ f.name }} </span>
-              <span class="file-size"> ({{ formatFileSize(f.size) }}) </span>
-              <span class="file-remove" @click="removeFile(i)"> ×</span>
-            </div>
-          </div>
-          <div class="modal-actions">
-            <button class="cancel-btn" @click="state.showNewPost = false">取消</button>
-            <button class="confirm-btn" :disabled="state.submitting" @click="submitPost">
-              {{ state.submitting ? '发布中...' : '发布' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- 发帖弹窗：与教师端/管理员端共用 PostComposer（含可见范围、附件、草稿）
+           注：本页为 raw 页，模板改动经用户明确授权（2026-11-02），改前已备份
+           forum.vue.bak_20261102_p2composer -->
+      <PostComposer
+        v-model:visible="state.showNewPost"
+        title="发布新帖"
+        :initial="state.postDraftInitial"
+        :classes="state.myClasses"
+        :submitting="state.submitting"
+        :saving-draft="state.savingDraft"
+        @submit="submitPostFromComposer"
+        @save-draft="savePostDraft"
+      />
       <!-- 我的收藏 / 我的喜欢（P2 为空态外壳，列表数据在 P3 接入） -->
       <div
         v-if="state.showFavorites"
@@ -598,6 +562,8 @@
   import ImageGrid from '@/components/forum/ImageGrid.vue';
   import ImageUploader from '@/components/forum/ImageUploader.vue';
   import FileUploader from '@/components/forum/FileUploader.vue';
+  import PostComposer from '@/components/forum/PostComposer.vue';
+  import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
   import AttachmentList from '@/components/forum/AttachmentList.vue';
   import CommentSortBar from '@/components/forum/CommentSortBar.vue';
   import UserBadge from '@/components/forum/UserBadge.vue';
@@ -615,6 +581,7 @@
       ImageGrid,
       ImageUploader,
       FileUploader,
+      PostComposer,
       AttachmentList,
       CommentSortBar,
       UserBadge
@@ -638,6 +605,9 @@
         showNewPost: false,
         showUserProfile: false,
         userProfile: {} as any,
+        savingDraft: false,
+        postDraftInitial: null as any,
+        myClasses: [] as string[],
         newPost: {
           title: '',
           content: '',
@@ -970,7 +940,75 @@
           ElMessage.warning('请先登录后发帖');
           return;
         }
+        const info: any = auth.parseUserInfo ? auth.parseUserInfo() : {};
+        // 学生只能发本校/本班：班级候选取本人 class_name
+        this.state.myClasses = info && info.className ? [info.className] : [];
+        this.state.postDraftInitial = null;
         this.state.showNewPost = true;
+        fetchMyForumDraft()
+          .then((draft) => {
+            if (!draft) return;
+            this.state.postDraftInitial = {
+              title: draft.title,
+              content: draft.content,
+              attachments: draft.attachments,
+              visibility: draft.visibility,
+              visibleClasses: draft.visibleClasses,
+              isTop: false
+            };
+            ElMessage.info('已载入上次保存的草稿');
+          })
+          .catch(() => {
+            /* 草稿读取失败不阻塞发帖 */
+          });
+      },
+      async submitPostFromComposer(payload: any) {
+        const hasAtt = (payload.attachments || []).length > 0;
+        if (!payload.title && !payload.content && !hasAtt) {
+          ElMessage.warning('标题、正文、附件至少填写一项');
+          return;
+        }
+        this.state.submitting = true;
+        try {
+          const created = await this.community.createPost({
+            title: payload.title,
+            content: payload.content,
+            shareType: 'EXPERIENCE',
+            attachments: payload.attachments,
+            visibility: payload.visibility,
+            visibleClasses: payload.visibleClasses
+          });
+          if (!created) return;
+          this.state.posts.unshift(this._mapPost(created));
+          this.state.total += 1;
+          this.state.myPosts.unshift(this._mapPost(created, false));
+          this.state.myPostsTotal = (this.state.myPostsTotal || 0) + 1;
+          this.state.showNewPost = false;
+          this.state.postDraftInitial = null;
+          ElMessage.success('发布成功!');
+        } catch (e) {
+          this._safeMsg('error', this.community.error || '发布失败,请稍后重试');
+        } finally {
+          this.state.submitting = false;
+        }
+      },
+      async savePostDraft(payload: any) {
+        this.state.savingDraft = true;
+        try {
+          await saveMyForumDraft({
+            title: payload.title,
+            content: payload.content,
+            attachments: payload.attachments,
+            visibility: payload.visibility,
+            visible_classes: payload.visibleClasses,
+            is_top: false
+          });
+          ElMessage.success('已保存到草稿箱');
+        } catch (e) {
+          this._safeMsg('error', '保存草稿失败');
+        } finally {
+          this.state.savingDraft = false;
+        }
       },
       onAvatarError(e: any) {
         // 头像加载失败,隐藏 img 显示首字母

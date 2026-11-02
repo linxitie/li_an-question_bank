@@ -237,35 +237,18 @@
       </div>
     </div>
 
-    <!-- P3-07：教师发帖（含可见范围） -->
-    <div v-if="postForm.visible" class="tf-modal" @click.self="postForm.visible = false">
-      <div class="tf-modal-card">
-        <h3>发布新帖</h3>
-        <input v-model="postForm.title" class="tf-input" placeholder="请输入标题…" maxlength="200" />
-        <textarea v-model="postForm.content" class="tf-textarea" rows="6" placeholder="请输入内容…"></textarea>
-        <div class="tf-upload-row">
-          <span class="tf-label">附件（不限个数，单个 ≤20MB）</span>
-          <FileUploader v-model="postForm.attachments" :max-docs="0" />
-        </div>
-        <div class="tf-visibility">
-          <span class="tf-label">可见范围</span>
-          <label><input type="radio" value="ALL" v-model="postForm.visibility" /> 全校</label>
-          <label><input type="radio" value="CLASSES" v-model="postForm.visibility" /> 自己班级</label>
-        </div>
-        <div v-if="postForm.visibility === 'CLASSES'" class="tf-classes">
-          <label v-for="c in classOptions" :key="c" class="tf-class-chip">
-            <input type="checkbox" :value="c" v-model="postForm.classes" /> {{ c }}
-          </label>
-          <p v-if="!classOptions.length" class="tf-mini-empty">未查到可管理班级，请先绑定班级</p>
-        </div>
-        <div class="tf-modal-actions">
-          <button class="tf-btn ghost" @click="postForm.visible = false">取消</button>
-          <button class="tf-btn" :disabled="postForm.submitting" @click="submitPost">
-            {{ postForm.submitting ? '发布中…' : '发布' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- P3-07 + 统一发帖弹窗：与管理员端/学生端共用 PostComposer（含草稿、可见范围、置顶） -->
+    <PostComposer
+      v-model:visible="postForm.visible"
+      title="发布新帖"
+      :initial="postDraftInitial"
+      :can-pin="true"
+      :classes="classOptions"
+      :submitting="postForm.submitting"
+      :saving-draft="postForm.savingDraft"
+      @submit="submitPost"
+      @save-draft="savePostDraft"
+    />
   </div>
 </template>
 
@@ -283,6 +266,8 @@ import { createForumComment } from '@/modules/community/api';
 import { toggleForumPostLike, toggleForumFavorite } from '@/modules/community/api';
 import { fetchMyForumFavorites, fetchMyForumLikes } from '@/modules/community/api';
 import FileUploader from '@/components/forum/FileUploader.vue';
+import PostComposer, { type PostDraft } from '@/components/forum/PostComposer.vue';
+import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import {
   createForumPostWithVisibility,
@@ -328,13 +313,9 @@ const myAllLoading = ref(false);
 const postForm = reactive({
   visible: false,
   submitting: false,
-  title: '',
-  titleColor: 'default',
-  content: '',
-  visibility: 'ALL' as 'ALL' | 'CLASSES',
-  classes: [] as string[],
-  attachments: [] as any[]
+  savingDraft: false
 });
+const postDraftInitial = ref<Partial<PostDraft> | null>(null);
 const commentAttachments = ref<any[]>([]);
 const showCommentEmoji = ref(false);
 
@@ -361,7 +342,22 @@ const statusLabel = (status: string) =>
   status;
 
 const openPostForm = () => {
+  postDraftInitial.value = null;
   postForm.visible = true;
+  fetchMyForumDraft()
+    .then((draft) => {
+      if (!draft) return;
+      postDraftInitial.value = {
+        title: draft.title,
+        content: draft.content,
+        attachments: draft.attachments,
+        visibility: draft.visibility,
+        visibleClasses: draft.visibleClasses,
+        isTop: draft.isTop
+      };
+      ElMessage.info('已载入上次保存的草稿');
+    })
+    .catch(() => { /* 草稿读取失败不阻塞发帖 */ });
 };
 
 const loadSideCards = async () => {
@@ -398,35 +394,43 @@ const loadSideCards = async () => {
   } catch (e) { myPosts.value = []; }
 };
 
-const submitPost = async () => {
-  // 2026-10-31：标题 / 正文 / 附件 至少一项
-  if (!postForm.title.trim() && !postForm.content.trim() && !postForm.attachments.length) {
-    ElMessage.warning('标题、正文、附件至少填写一项');
-    return;
-  }
-  if (postForm.visibility === 'CLASSES' && !postForm.classes.length) {
-    ElMessage.warning('请选择可见班级');
-    return;
-  }
+const submitPost = async (payload: PostDraft) => {
   postForm.submitting = true;
   try {
     await createForumPostWithVisibility({
-      title: postForm.title.trim(),
-      content: postForm.content.trim(),
-      titleColor: postForm.titleColor,
-      visibility: postForm.visibility,
-      attachments: postForm.attachments,
-      visibleClasses: postForm.visibility === 'CLASSES' ? postForm.classes : undefined
+      title: payload.title,
+      content: payload.content,
+      visibility: payload.visibility,
+      attachments: payload.attachments,
+      visibleClasses: payload.visibility === 'CLASSES' ? payload.visibleClasses : undefined
     });
     ElMessage.success('发布成功');
     postForm.visible = false;
-    postForm.title = '';
-    postForm.content = '';
+    postDraftInitial.value = null;
     await Promise.all([loadPosts(), loadSideCards()]);
   } catch (e: any) {
     ElMessage.error(e && e.message ? e.message : '发布失败');
   } finally {
     postForm.submitting = false;
+  }
+};
+
+const savePostDraft = async (payload: PostDraft) => {
+  postForm.savingDraft = true;
+  try {
+    await saveMyForumDraft({
+      title: payload.title,
+      content: payload.content,
+      attachments: payload.attachments,
+      visibility: payload.visibility,
+      visible_classes: payload.visibleClasses,
+      is_top: payload.isTop
+    });
+    ElMessage.success('已保存到草稿箱');
+  } catch (e: any) {
+    ElMessage.error(e && e.message ? e.message : '保存草稿失败');
+  } finally {
+    postForm.savingDraft = false;
   }
 };
 

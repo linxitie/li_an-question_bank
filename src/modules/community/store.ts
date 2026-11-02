@@ -12,6 +12,7 @@ import {
   clearForumPostReaction,
   createForumComment,
   createForumPost,
+  createForumPostWithVisibility,
   deleteForumPost as deletePostRequest,
   fetchDailyQuote,
   fetchForumComments,
@@ -335,7 +336,11 @@ export const useCommunityStore = defineStore('community', () => {
   }
 
   async function createPost(
-    payload: ForumPostCreatePayload
+    payload: ForumPostCreatePayload & {
+      /** 普通发帖弹窗支持「全站 / 仅指定班级」，不传则走后端按角色的默认可见范围 */
+      visibility?: 'ALL' | 'CLASSES';
+      visibleClasses?: string[];
+    }
   ): Promise<ForumPostItem | null> {
     const validation = validatePostDraft(payload);
     if (validation) {
@@ -348,11 +353,22 @@ export const useCommunityStore = defineStore('community', () => {
 
     error.value = null;
     try {
-      const post = await createForumPost({
+      const base = {
         ...payload,
         title: payload.title.trim(),
         content: payload.content.trim()
-      });
+      };
+      const post = payload.visibility
+        ? await createForumPostWithVisibility({
+            title: base.title,
+            content: base.content,
+            shareType: base.shareType,
+            titleColor: base.titleColor,
+            attachments: base.attachments,
+            visibility: payload.visibility,
+            visibleClasses: payload.visibleClasses
+          })
+        : await createForumPost(base);
       posts.value = [post, ...posts.value];
       total.value += 1;
       return post;

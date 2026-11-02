@@ -610,3 +610,59 @@ export async function fetchQuoteFavorites(
     items: data.items ?? []
   };
 }
+
+// ==================== 发帖草稿（P2） ====================
+
+/** 附件（与 imageUtils 的 ForumImageAttachment 结构一致，此处内联避免跨模块耦合） */
+export interface ForumDraftAttachment {
+  name: string;
+  url: string;
+  size?: number;
+  type?: string;
+}
+
+/** 服务端返回的草稿（camelCase，与其余论坛接口一致） */
+export interface ForumDraft {
+  draftId: number;
+  title: string;
+  content: string;
+  attachments: ForumDraftAttachment[];
+  visibility: 'ALL' | 'CLASSES';
+  visibleClasses: string[];
+  isTop: boolean;
+  updateTime?: string | null;
+}
+
+/** 保存草稿的请求体：沿用后端字段命名（snake_case），不做隐式转换 */
+export interface ForumDraftPayload {
+  title: string;
+  content: string;
+  attachments: ForumDraftAttachment[];
+  visibility: 'ALL' | 'CLASSES';
+  visible_classes: string[];
+  is_top: boolean;
+}
+
+/** 读取我的草稿；没有草稿时返回 null */
+export async function fetchMyForumDraft(): Promise<ForumDraft | null> {
+  const data = await request<{ draft: ForumDraft | null }>({
+    url: '/api/forum/drafts/mine',
+    method: 'GET'
+  });
+  return data.draft ?? null;
+}
+
+/** 保存草稿（覆盖式：每人只有一条） */
+export async function saveMyForumDraft(payload: ForumDraftPayload): Promise<ForumDraft> {
+  const data = await request<{ success: boolean; draft: ForumDraft }>({
+    url: '/api/forum/drafts',
+    method: 'POST',
+    data: payload
+  });
+  return data.draft;
+}
+
+/** 删除我的草稿（发布成功后调用，避免旧草稿残留） */
+export async function deleteMyForumDraft(): Promise<void> {
+  await request<{ success: boolean }>({ url: '/api/forum/drafts/mine', method: 'DELETE' });
+}
