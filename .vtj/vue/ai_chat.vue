@@ -1,180 +1,151 @@
-<!-- 联考小智 - AI 聊天页 -->
+<!-- 联考小智 - AI 聊天页（ChatGPT风格重新设计） -->
 <template>
   <div class="ai-layout" :class="{ drawer_open: drawerOpen }">
-    <!-- 左侧历史会话栏 -->
-    <aside class="history-panel">
-      <div class="history-head">
-        <span class="history-title">历史对话</span>
-        <button class="new-btn" @click="newChat">
-          <XIcon :icon="Plus" :size="14"></XIcon>
+    <!-- 左侧历史对话栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <button class="new-chat-btn" @click="newChat">
+          <Plus :size="16" />
           <span>新对话</span>
         </button>
       </div>
-      <div class="history-list">
+      <div class="sidebar-list">
         <div
           v-for="s in sessions"
           :key="s.session_id"
           class="history-item"
           :class="{ active: s.session_id === state.sessionId }"
           @click="openSession(s)">
-          <div class="hi-main">
-            <div class="hi-title">{{ s.title || '新会话' }}</div>
-            <div class="hi-meta">
-              {{ sceneLabel(s.scene) }} · {{ fmtTime(s.update_time) }}
-            </div>
-          </div>
-          <div class="hi-del" @click.stop="removeSession(s)">×</div>
+          <span class="hi-title">{{ s.title || '新会话' }}</span>
+          <span class="hi-del" @click.stop="removeSession(s)">×</span>
         </div>
-        <div v-if="sessions.length === 0" class="history-empty">
+        <div v-if="sessions.length === 0" class="sidebar-empty">
           还没有历史对话
         </div>
       </div>
-
-      <!-- 小智记住你的 -->
-      <div class="memories-panel">
-        <div class="memories-head">
-          <span class="memories-title">🧠 小智记住你的</span>
+      <!-- 长期记忆 -->
+      <div class="sidebar-memories">
+        <div class="memories-title">🧠 小智记住你的</div>
+        <div v-for="m in state.memories" :key="m.memory_id" class="memory-item">
+          {{ m.content }}
         </div>
-        <div class="memories-list">
-          <div
-            v-for="m in state.memories"
-            :key="m.memory_id"
-            class="memory-item">
-            <span class="memory-type">{{ m.memory_type }}</span>
-            <span class="memory-content">{{ m.content }}</span>
-          </div>
-          <div v-if="state.memories.length === 0" class="memories-empty">
-            聊得越多，小智越懂你
-          </div>
+        <div v-if="state.memories.length === 0" class="memories-empty">
+          聊得越多，小智越懂你
         </div>
       </div>
     </aside>
+
+    <!-- 移动端遮罩 -->
     <div v-if="drawerOpen" class="mask" @click="drawerOpen = false"></div>
 
-    <!-- 右侧聊天主区 -->
-    <div class="ai-chat-page">
-      <!-- 顶部藏蓝横幅 -->
-      <div class="chat-header">
-        <div class="header-glow"></div>
-        <div class="header-row">
-          <button class="back-btn" @click="goBack" title="返回">‹</button>
-          <button class="hamburger" @click="drawerOpen = !drawerOpen">
-            <XIcon :icon="Menu" :size="18" color="#fff"></XIcon>
-          </button>
-          <div class="ai-avatar">智</div>
-          <div class="header-meta">
-            <div class="header-title-row">
-              <span class="header-title">联考小智</span>
-              <span class="online-dot"><i></i>在线</span>
-              <a class="kb-entry" href="/#/memories" title="长期记忆管理"
-                >🧠 记忆</a
-              >
-              <a class="kb-entry" href="/#/knowledge" title="自生长知识库"
-                >📚 知识库</a
-              >
-            </div>
-            <div class="header-sub">你的公安联考专属备考伙伴</div>
-          </div>
+    <!-- 主区域 -->
+    <div class="main-area">
+      <!-- 顶部栏 -->
+      <header class="topbar">
+        <button class="hamburger" @click="drawerOpen = !drawerOpen">
+          <Menu :size="20" />
+        </button>
+        <div class="topbar-title">
+          <span class="title-text">联考小智</span>
+          <span v-if="state.agentName" class="agent-badge">{{
+            state.agentName
+          }}</span>
         </div>
-        <div class="mode-tabs">
-          <div
-            class="mode-tab"
+        <!-- 模式切换 -->
+        <div class="mode-switch">
+          <button
+            class="mode-btn"
             :class="{ active: !state.workMode }"
             @click="switchMode(false)">
-            💬 对话
-          </div>
-          <div
-            class="mode-tab"
+            聊天
+          </button>
+          <button
+            class="mode-btn"
             :class="{ active: state.workMode }"
             @click="switchMode(true)">
-            🧰 工作台
-          </div>
+            工作台
+          </button>
         </div>
-        <div v-if="!state.workMode" class="scene-tabs">
-          <div
-            v-for="s in sceneOptions"
-            :key="s.value"
-            class="scene-tab"
-            :class="{ active: state.scene === s.value }"
-            @click="switchScene(s.value)">
-            <XIcon :icon="s.icon" :size="14"></XIcon>
-            <span>{{ s.label }}</span>
-          </div>
-        </div>
-        <div v-if="state.agentName" class="agent-bar">
-          <span class="agent-dot"></span>
-          <span class="agent-label">当前顾问：{{ state.agentName }}</span>
-        </div>
-      </div>
+      </header>
 
-      <!-- 消息流 -->
+      <!-- 消息列表区 -->
       <div class="message-list" ref="messageList">
-        <!-- 工作台模式：任务清单 + 表单 + 结果 -->
+        <!-- 工作台模式 -->
         <div v-if="state.workMode" class="work-panel">
-          <div class="work-head">
-            <div class="work-title">工作台 · 结构化备考任务</div>
-            <div class="work-sub">点选任务 → 填参数 → 生成可直接用的结果</div>
+          <div class="work-welcome">
+            <h2 class="work-title">选择一个备考任务</h2>
+            <p class="work-sub">点选任务 → 填参数 → 生成可直接用的结果</p>
           </div>
-          <div class="work-tasks">
+          <div class="work-grid">
             <div
               v-for="t in state.workTasks"
               :key="t.task_id"
-              class="work-task"
+              class="work-card"
               :class="{
                 open: state.activeTask && state.activeTask.task_id === t.task_id
               }"
               @click="selectTask(t)">
-              <div class="wt-row">
-                <span class="wt-title">{{ t.title }}</span>
-                <span class="wt-agent">{{ agentLabel(t.agent) }}</span>
-              </div>
-              <div class="wt-desc">{{ t.desc }}</div>
-              <div
-                v-if="
-                  state.activeTask && state.activeTask.task_id === t.task_id
-                "
-                class="wt-form"
-                @click.stop>
-                <div v-for="f in t.fields" :key="f.key" class="wf-row">
-                  <label class="wf-label"
-                    >{{ f.label }}{{ f.required ? ' *' : '' }}</label
-                  >
-                  <select
-                    v-if="f.type === 'select'"
-                    v-model="state.workParams[f.key]"
-                    class="wf-input">
-                    <option v-for="o in f.options" :key="o" :value="o">
-                      {{ o }}
-                    </option>
-                  </select>
-                  <input
-                    v-else
-                    v-model="state.workParams[f.key]"
-                    class="wf-input"
-                    :placeholder="f.placeholder || '选填'" />
-                </div>
-                <button
-                  class="wf-run"
-                  :disabled="state.workRunning"
-                  @click="runWorkTask(t)">
-                  {{ state.workRunning ? '生成中…' : '运行任务' }}
-                </button>
-              </div>
+              <div class="wc-title">{{ t.title }}</div>
+              <div class="wc-desc">{{ t.desc }}</div>
+              <div class="wc-agent">{{ agentLabel(t.agent) }}</div>
             </div>
           </div>
-          <div v-if="state.workReply" class="work-reply">
-            <div class="wr-head">
-              <span>📋 {{ state.workTitle }} 结果</span>
+
+          <!-- 选中任务后的表单 -->
+          <div v-if="state.activeTask" class="work-form" @click.stop>
+            <div
+              v-for="f in state.activeTask.fields"
+              :key="f.key"
+              class="form-row">
+              <label class="form-label"
+                >{{ f.label }}{{ f.required ? ' *' : '' }}</label
+              >
+              <select
+                v-if="f.type === 'select'"
+                v-model="state.workParams[f.key]"
+                class="form-input">
+                <option value="">请选择</option>
+                <option v-for="opt in f.options" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <input
+                v-else-if="f.type === 'number'"
+                v-model="state.workParams[f.key]"
+                type="number"
+                class="form-input"
+                :placeholder="f.placeholder || ''" />
+              <textarea
+                v-else
+                v-model="state.workParams[f.key]"
+                class="form-input"
+                rows="3"
+                :placeholder="f.placeholder || ''"></textarea>
+            </div>
+            <button
+              class="run-btn"
+              :disabled="state.workRunning"
+              @click="runWorkTask(state.activeTask)">
+              {{ state.workRunning ? '⏳ 生成中...' : '🚀 开始生成' }}
+            </button>
+          </div>
+
+          <!-- 工作台结果 -->
+          <div v-if="state.workReply" class="work-result">
+            <div class="wr-header">
+              <span class="wr-title"
+                >📋 {{ state.workTitle || '生成结果' }}</span
+              >
               <button
-                class="wi-btn"
+                class="import-btn"
                 :disabled="state.workImporting || state.workImportDone"
-                @click="importToToday()">
+                @click="importToToday">
                 {{
-                  state.workImportDone
-                    ? '已写入✓'
-                    : state.workImporting
-                      ? '写入中…'
-                      : '一键写入今日任务'
+                  state.workImporting
+                    ? '⏳ 写入中...'
+                    : state.workImportDone
+                      ? '✅ 已写入今日任务'
+                      : '📌 一键写入今日任务'
                 }}
               </button>
             </div>
@@ -185,11 +156,14 @@
           </div>
         </div>
 
+        <!-- 聊天模式 - 欢迎界面 -->
         <div
           v-if="!state.workMode && state.messages.length === 0"
-          class="welcome-card">
-          <p class="welcome-title">我们要做什么？</p>
-          <p class="welcome-sub">联考小智帮你备考公安联考，从下面挑一个功能开始</p>
+          class="welcome">
+          <h1 class="welcome-title">我们要做什么？</h1>
+          <p class="welcome-sub">
+            联考小智帮你备考公安联考，从下面挑一个功能开始
+          </p>
           <div class="welcome-grid">
             <div
               class="wg-item"
@@ -215,68 +189,96 @@
             <div class="wg-item" @click="quickAsk('帮我选个岗位')">
               <div class="wg-icon">🎯</div>
               <div class="wg-title">选岗建议</div>
-              <div class="wg-desc">根据你的情况推荐岗位</div>
+              <div class="wg-desc">根据成绩和意向推荐岗位</div>
             </div>
           </div>
         </div>
 
+        <!-- 聊天模式 - 消息流 -->
         <div
-          v-for="(m, idx) in state.messages"
-          :key="idx"
-          class="msg-row"
-          :class="m.role === 'user' ? 'me' : 'bot'">
-          <div v-if="m.role !== 'user'" class="mini-avatar">智</div>
-          <div class="bubble" :class="m.role === 'user' ? 'me' : 'bot'">
-            <div class="bubble-content" v-html="renderMd(m.content)"></div>
-            <!-- 消息操作按钮（AI消息才显示） -->
-            <div v-if="m.role !== 'user' && !state.loading" class="msg-actions">
-              <button
-                class="msg-btn"
-                title="复制"
-                @click="copyMessage(m.content)">
-                📋
-              </button>
-              <button
-                class="msg-btn"
-                title="重新生成"
-                @click="regenerateMessage(idx)">
-                🔄
-              </button>
-              <button
-                class="msg-btn"
-                title="赞"
-                @click="likeMessage(idx, true)">
-                👍
-              </button>
-              <button
-                class="msg-btn"
-                title="踩"
-                @click="likeMessage(idx, false)">
-                👎
-              </button>
+          v-if="!state.workMode && state.messages.length > 0"
+          class="messages">
+          <div
+            v-for="(m, idx) in state.messages"
+            :key="idx"
+            class="msg-row"
+            :class="m.role">
+            <div class="msg-avatar">{{ m.role === 'user' ? '我' : '智' }}</div>
+            <div class="msg-content-wrap">
+              <div class="msg-bubble" v-html="renderMd(m.content)"></div>
+              <!-- AI消息的操作按钮 -->
+              <div
+                v-if="m.role === 'assistant' && m.content"
+                class="msg-actions">
+                <button
+                  class="action-btn"
+                  @click="copyMessage(m.content)"
+                  title="复制">
+                  📋
+                </button>
+                <button
+                  class="action-btn"
+                  @click="regenerateMessage(idx)"
+                  title="重新生成">
+                  🔄
+                </button>
+                <button
+                  class="action-btn"
+                  @click="likeMessage(idx, true)"
+                  title="赞">
+                  👍
+                </button>
+                <button
+                  class="action-btn"
+                  @click="likeMessage(idx, false)"
+                  title="踩">
+                  👎
+                </button>
+              </div>
             </div>
           </div>
-          <div v-if="m.role === 'user'" class="mini-avatar me">我</div>
-        </div>
-
-        <div v-if="state.loading" class="msg-row bot">
-          <div class="mini-avatar">智</div>
-          <div class="bubble bot typing">
-            <span class="dot"></span><span class="dot"></span
-            ><span class="dot"></span>
+          <!-- 加载中 -->
+          <div v-if="state.loading" class="msg-row assistant">
+            <div class="msg-avatar">智</div>
+            <div class="msg-bubble typing">正在思考...</div>
           </div>
         </div>
       </div>
 
-      <!-- 操作提示（加载/删除失败时显示，发送后自动消失） -->
-      <div v-if="state.notice" class="notice-bar">{{ state.notice }}</div>
+      <!-- 底部输入区 -->
+      <div class="input-area" v-if="!state.workMode">
+        <!-- 快捷指令面板 -->
+        <div v-if="showQuickCommands" class="quick-panel">
+          <div class="qp-item" @click="useQuickCommand('帮我制定今日学习计划')">
+            📋 制定学习计划
+          </div>
+          <div class="qp-item" @click="useQuickCommand('分析我的错题')">
+            📊 错题分析
+          </div>
+          <div class="qp-item" @click="useQuickCommand('申论批改')">
+            ✍️ 申论批改
+          </div>
+          <div class="qp-item" @click="useQuickCommand('行测错题诊断')">
+            📈 行测诊断
+          </div>
+          <div class="qp-item" @click="useQuickCommand('公专法条梳理')">
+            ⚖️ 法条速查
+          </div>
+          <div class="qp-item" @click="useQuickCommand('选岗建议')">
+            🎯 选岗建议
+          </div>
+          <div class="qp-item" @click="useQuickCommand('模拟面试')">
+            🎤 面试模拟
+          </div>
+          <div class="qp-item" @click="useQuickCommand('心理疏导')">
+            💭 心理疏导
+          </div>
+        </div>
 
-      <!-- 输入区 -->
-      <div class="input-area">
-        <div class="input-card">
-          <!-- 豆包风格工具栏 -->
+        <!-- 输入框 -->
+        <div class="input-box">
           <div class="input-toolbar">
-            <button class="tool-btn" title="上传图片/文件" @click="uploadFile">
+            <button class="tool-btn" title="上传文件" @click="uploadFile">
               📎
             </button>
             <button class="tool-btn" title="语音输入" @click="voiceInput">
@@ -284,6 +286,7 @@
             </button>
             <button
               class="tool-btn"
+              :class="{ active: showQuickCommands }"
               title="快捷指令"
               @click="showQuickCommands = !showQuickCommands">
               ➕
@@ -297,46 +300,15 @@
             @keydown.enter.exact.prevent="send"></textarea>
           <button
             class="send-btn"
-            :disabled="state.loading || !state.input.trim()"
+            :disabled="!state.input.trim() || state.loading"
             @click="send">
-            <XIcon :icon="Promotion" :size="16" color="#fff"></XIcon>
-            <span>发送</span>
+            <Promotion :size="18" />
           </button>
         </div>
-        <!-- 快捷指令面板 -->
-        <div v-if="showQuickCommands" class="quick-panel">
-          <div class="qp-title">快捷指令</div>
-          <div class="qp-list">
-            <div
-              class="qp-item"
-              @click="useQuickCommand('帮我制定今日学习计划')">
-              📅 制定今日学习计划
-            </div>
-            <div class="qp-item" @click="useQuickCommand('分析我的错题')">
-              📊 分析我的错题
-            </div>
-            <div class="qp-item" @click="useQuickCommand('申论批改')">
-              ✍️ 申论批改
-            </div>
-            <div class="qp-item" @click="useQuickCommand('行测错题诊断')">
-              📝 行测错题诊断
-            </div>
-            <div class="qp-item" @click="useQuickCommand('公专法条梳理')">
-              ⚖️ 公专法条梳理
-            </div>
-            <div class="qp-item" @click="useQuickCommand('选岗建议')">
-              🎯 选岗建议
-            </div>
-            <div class="qp-item" @click="useQuickCommand('模拟面试')">
-              🎤 模拟面试
-            </div>
-            <div class="qp-item" @click="useQuickCommand('心理疏导')">
-              💭 心理疏导
-            </div>
-          </div>
-        </div>
-        <div class="input-tip">Enter 发送 · Shift+Enter 换行</div>
       </div>
+
+      <!-- 提示 -->
+      <div v-if="state.notice" class="toast">{{ state.notice }}</div>
     </div>
   </div>
 </template>
@@ -367,9 +339,9 @@ export default defineComponent({
       sessionId: null,
       loading: false,
       notice: '',
-      agentName: '', // 模块7 v2：当前路由命中的专业 Agent
-      memories: [], // 长期记忆列表
-      // 工作台模式（模块7 v2）
+      agentName: '',
+      memories: [],
+      // 工作台模式
       workMode: false,
       workTasks: [],
       activeTask: null,
@@ -418,43 +390,43 @@ export default defineComponent({
       }
     }
 
-    // 升级的 markdown 渲染
+    // Markdown 渲染
     function renderMd(text) {
       if (!text) return '';
       let s = String(text);
-      
-      // 转义HTML
       s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      
-      // 代码块（```代码```）
-      s = s.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre style="background:#f5f7fa;padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0;"><code>$2</code></pre>');
-      
-      // 行内代码（`代码`）
-      s = s.replace(/`([^`]+)`/g, '<code style="background:#f5f7fa;padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
-      
-      // 标题（### 三级标题、## 二级标题、# 一级标题）
-      s = s.replace(/^### (.*)$/gm, '<div style="font-size:15px;font-weight:bold;color:#1a2a4a;margin:12px 0 6px;">$1</div>');
-      s = s.replace(/^## (.*)$/gm, '<div style="font-size:16px;font-weight:bold;color:#1a2a4a;margin:14px 0 8px;">$1</div>');
-      s = s.replace(/^# (.*)$/gm, '<div style="font-size:18px;font-weight:bold;color:#1a2a4a;margin:16px 0 10px;">$1</div>');
-      
-      // 引用（> 引用）
-      s = s.replace(/^&gt; (.*)$/gm, '<div style="border-left:3px solid #e74c3c;padding-left:12px;margin:8px 0;color:#666;">$1</div>');
-      
-      // 加粗
-      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#c8161e;">$1</strong>');
-      
-      // 斜体
+      s = s.replace(
+        /```(\w*)\n([\s\S]*?)```/g,
+        '<pre style="background:#f5f7fa;padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0;"><code>$2</code></pre>'
+      );
+      s = s.replace(
+        /`([^`]+)`/g,
+        '<code style="background:#f5f7fa;padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>'
+      );
+      s = s.replace(
+        /^### (.*)$/gm,
+        '<div style="font-size:15px;font-weight:bold;color:#1a2a4a;margin:12px 0 6px;">$1</div>'
+      );
+      s = s.replace(
+        /^## (.*)$/gm,
+        '<div style="font-size:16px;font-weight:bold;color:#1a2a4a;margin:14px 0 8px;">$1</div>'
+      );
+      s = s.replace(
+        /^# (.*)$/gm,
+        '<div style="font-size:18px;font-weight:bold;color:#1a2a4a;margin:16px 0 10px;">$1</div>'
+      );
+      s = s.replace(
+        /^&gt; (.*)$/gm,
+        '<div style="border-left:3px solid #c8161e;padding-left:12px;margin:8px 0;color:#666;">$1</div>'
+      );
+      s = s.replace(
+        /\*\*([^*]+)\*\*/g,
+        '<strong style="color:#c8161e;">$1</strong>'
+      );
       s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      
-      // 列表
       s = s.replace(/^\s*[-•]\s+/gm, '<br>• ');
-      
-      // 有序列表
       s = s.replace(/^\s*\d+\.\s+/gm, '<br>');
-      
-      // 换行
       s = s.replace(/\n/g, '<br>');
-      
       return s;
     }
 
@@ -539,7 +511,6 @@ export default defineComponent({
     }
 
     async function typewriter(fullText) {
-      // 打字机效果：逐字 push 到最后一条 assistant 消息
       state.messages.push({ role: 'assistant', content: '' });
       const lastIdx = state.messages.length - 1;
       let i = 0;
@@ -605,51 +576,6 @@ export default defineComponent({
       send();
     }
 
-    // 豆包风格功能
-    function uploadFile() {
-      state.notice = '📎 文件上传功能即将上线，敬请期待！';
-      setTimeout(() => (state.notice = ''), 3000);
-    }
-
-    function voiceInput() {
-      state.notice = '🎤 语音输入功能即将上线，敬请期待！';
-      setTimeout(() => (state.notice = ''), 3000);
-    }
-
-    function useQuickCommand(cmd) {
-      showQuickCommands.value = false;
-      state.input = cmd;
-      send();
-    }
-
-    // 消息操作
-    function copyMessage(content) {
-      navigator.clipboard.writeText(content).then(() => {
-        state.notice = '✅ 已复制到剪贴板';
-        setTimeout(() => (state.notice = ''), 2000);
-      });
-    }
-
-    function regenerateMessage(idx) {
-      // 重新生成：找到上一条用户消息，重新发送
-      for (let i = idx - 1; i >= 0; i--) {
-        if (state.messages[i].role === 'user') {
-          const userText = state.messages[i].content;
-          // 删除当前这条AI消息
-          state.messages.splice(idx, 1);
-          // 重新发送
-          state.input = userText;
-          send();
-          break;
-        }
-      }
-    }
-
-    function likeMessage(idx, isLike) {
-      state.notice = isLike ? '👍 感谢点赞！你的反馈对我很重要' : '👎 我们会改进的，抱歉这次没帮到你';
-      setTimeout(() => (state.notice = ''), 2000);
-    }
-
     // 文件上传
     function uploadFile() {
       const input = document.createElement('input');
@@ -667,8 +593,8 @@ export default defineComponent({
 
     // 语音输入
     function voiceInput() {
-      // 检查浏览器是否支持语音识别
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
         recognition.lang = 'zh-CN';
@@ -689,6 +615,39 @@ export default defineComponent({
         state.notice = '🎤 你的浏览器不支持语音输入，请用Chrome浏览器';
         setTimeout(() => (state.notice = ''), 3000);
       }
+    }
+
+    function useQuickCommand(cmd) {
+      showQuickCommands.value = false;
+      state.input = cmd;
+      send();
+    }
+
+    // 消息操作
+    function copyMessage(content) {
+      navigator.clipboard.writeText(content).then(() => {
+        state.notice = '✅ 已复制到剪贴板';
+        setTimeout(() => (state.notice = ''), 2000);
+      });
+    }
+
+    function regenerateMessage(idx) {
+      for (let i = idx - 1; i >= 0; i--) {
+        if (state.messages[i].role === 'user') {
+          const userText = state.messages[i].content;
+          state.messages.splice(idx, 1);
+          state.input = userText;
+          send();
+          break;
+        }
+      }
+    }
+
+    function likeMessage(idx, isLike) {
+      state.notice = isLike
+        ? '👍 感谢点赞！你的反馈对我很重要'
+        : '👎 我们会改进的，抱歉这次没帮到你';
+      setTimeout(() => (state.notice = ''), 2000);
     }
 
     function switchScene(scene) {
@@ -795,13 +754,11 @@ export default defineComponent({
         if (res.ok) {
           state.memories = d.items || [];
         }
-      } catch (e) {
-        // 静默失败，不影响主功能
-      }
+      } catch (e) {}
     }
 
     onMounted(() => {
-      state.__listEl = document.querySelector('.ai-chat-page .message-list');
+      state.__listEl = document.querySelector('.message-list');
       loadSessions();
       loadMemories();
     });
@@ -836,8 +793,6 @@ export default defineComponent({
       copyMessage,
       regenerateMessage,
       likeMessage,
-      uploadFile,
-      voiceInput,
       Plus,
       Menu,
       Promotion
@@ -847,297 +802,311 @@ export default defineComponent({
 </script>
 
 <style lang="css" scoped>
+/* ===== 全局布局 ===== */
 .ai-layout {
   display: flex;
   height: 100vh;
-  background: #f3f5f9;
+  background: #f7f7f8;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
 }
 
-/* ===== 左侧历史栏 ===== */
-.history-panel {
-  width: 240px;
-  background: #1a2a4a;
-  color: #cfd8e3;
+/* ===== 左侧边栏 ===== */
+.sidebar {
+  width: 260px;
+  background: #fff;
+  border-right: 1px solid #e5e5e5;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
 }
-.history-head {
+.sidebar-head {
+  padding: 12px;
+}
+.new-chat-btn {
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 14px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-.history-title {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
-  letter-spacing: 1px;
-}
-.new-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
+  gap: 8px;
+  padding: 10px 14px;
   background: #c8161e;
   color: #fff;
   border: none;
-  border-radius: 14px;
-  font-size: 12px;
+  border-radius: 8px;
+  font-size: 14px;
   cursor: pointer;
+  transition: background 0.2s;
 }
-.new-btn:hover {
-  background: #e63946;
+.new-chat-btn:hover {
+  background: #a80f16;
 }
-.history-list {
+.sidebar-list {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
 }
 .history-item {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  padding: 10px 10px;
+  padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
-  margin-bottom: 4px;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 2px;
   transition: background 0.15s;
 }
 .history-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #f5f5f5;
 }
 .history-item.active {
-  background: rgba(200, 22, 30, 0.25);
-  border-left: 3px solid #c8161e;
-}
-.hi-main {
-  flex: 1;
-  min-width: 0;
+  background: #fdecec;
+  color: #c8161e;
 }
 .hi-title {
-  font-size: 13px;
-  color: #fff;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.hi-meta {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  margin-top: 2px;
+  white-space: nowrap;
+  flex: 1;
 }
 .hi-del {
-  opacity: 0;
-  color: #ff8a8a;
+  margin-left: 8px;
+  color: #999;
   font-size: 16px;
   padding: 0 4px;
 }
-.history-item:hover .hi-del {
-  opacity: 1;
+.hi-del:hover {
+  color: #c8161e;
 }
-.history-empty {
+.sidebar-empty {
+  padding: 20px;
   text-align: center;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.35);
-  margin-top: 30px;
+  color: #999;
+  font-size: 13px;
 }
-.mask {
-  display: none;
+.sidebar-memories {
+  border-top: 1px solid #e5e5e5;
+  padding: 12px;
+}
+.memories-title {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+.memory-item {
+  font-size: 12px;
+  color: #555;
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.memories-empty {
+  font-size: 12px;
+  color: #999;
 }
 
-/* ===== 右侧聊天区 ===== */
-.ai-chat-page {
+/* ===== 主区域 ===== */
+.main-area {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-width: 760px;
-  margin: 0 auto;
-  background: #f3f5f9;
-}
-.chat-header {
   position: relative;
-  background: linear-gradient(135deg, #1a2a4a 0%, #243b6b 60%, #2c4a82 100%);
-  padding: 14px 20px 12px;
-  color: #fff;
-  overflow: hidden;
-}
-.header-glow {
-  position: absolute;
-  right: -40px;
-  top: -40px;
-  width: 160px;
-  height: 160px;
-  background: radial-gradient(
-    circle,
-    rgba(200, 22, 30, 0.18) 0%,
-    transparent 70%
-  );
-  border-radius: 50%;
-}
-.header-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.hamburger {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  display: none;
-}
-.back-btn {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-.ai-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #c8161e, #e63946);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(200, 22, 30, 0.4);
-}
-.header-meta {
-  flex: 1;
-}
-.header-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.header-title {
-  font-size: 17px;
-  font-weight: 700;
-}
-.kb-entry {
-  margin-left: 4px;
-  padding: 2px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 999px;
-  text-decoration: none;
-  line-height: 18px;
-}
-.kb-entry:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-.online-dot {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #9fe6b0;
-}
-.online-dot i {
-  width: 6px;
-  height: 6px;
-  background: #4ade80;
-  border-radius: 50%;
-  box-shadow: 0 0 6px #4ade80;
-}
-.header-sub {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  margin-top: 2px;
-}
-.scene-tabs {
-  display: flex;
-  gap: 8px;
-  position: relative;
-  z-index: 1;
-}
-.scene-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 13px;
-  border-radius: 18px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.scene-tab.active {
-  background: #c8161e;
-  border-color: #c8161e;
-  color: #fff;
-  box-shadow: 0 4px 10px rgba(200, 22, 30, 0.35);
-}
-.agent-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 4px 12px;
-  border-radius: 14px;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  width: fit-content;
-}
-.agent-dot {
-  width: 6px;
-  height: 6px;
-  background: #4ade80;
-  border-radius: 50%;
-}
-.mode-tabs {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-.mode-tab {
-  padding: 5px 14px;
-  border-radius: 18px;
-  font-size: 13px;
-  cursor: pointer;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  transition: all 0.2s;
-}
-.mode-tab.active {
-  background: #1a2a4a;
-  border-color: #1a2a4a;
-  color: #fff;
 }
 
-/* 工作台 */
+/* ===== 顶部栏 ===== */
+.topbar {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fff;
+}
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+}
+.topbar-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.title-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a2a4a;
+}
+.agent-badge {
+  font-size: 12px;
+  color: #c8161e;
+  background: #fdecec;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.mode-switch {
+  display: flex;
+  background: #f0f0f0;
+  border-radius: 8px;
+  padding: 2px;
+}
+.mode-btn {
+  padding: 6px 16px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #666;
+  transition: all 0.2s;
+}
+.mode-btn.active {
+  background: #fff;
+  color: #c8161e;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ===== 消息列表 ===== */
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ===== 欢迎界面 ===== */
+.welcome {
+  max-width: 760px;
+  margin: 60px auto;
+  text-align: center;
+}
+.welcome-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a2a4a;
+  margin: 0 0 12px;
+}
+.welcome-sub {
+  font-size: 15px;
+  color: #888;
+  margin: 0 0 40px;
+}
+.welcome-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.wg-item {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.wg-item:hover {
+  border-color: #c8161e;
+  box-shadow: 0 4px 12px rgba(200, 22, 30, 0.1);
+  transform: translateY(-2px);
+}
+.wg-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+.wg-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2a4a;
+  margin-bottom: 4px;
+}
+.wg-desc {
+  font-size: 13px;
+  color: #888;
+}
+
+/* ===== 消息流 ===== */
+.messages {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.msg-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.msg-row.user {
+  flex-direction: row-reverse;
+}
+.msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.msg-row.assistant .msg-avatar {
+  background: #c8161e;
+  color: #fff;
+}
+.msg-row.user .msg-avatar {
+  background: #1a2a4a;
+  color: #fff;
+}
+.msg-content-wrap {
+  max-width: 80%;
+}
+.msg-bubble {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.msg-row.assistant .msg-bubble {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  color: #333;
+}
+.msg-row.user .msg-bubble {
+  background: #c8161e;
+  color: #fff;
+}
+.msg-bubble.typing {
+  color: #999;
+  font-style: italic;
+}
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.action-btn:hover {
+  opacity: 1;
+}
+
+/* ===== 工作台 ===== */
 .work-panel {
-  padding: 24px;
   max-width: 900px;
   margin: 0 auto;
 }
-.work-head {
+.work-welcome {
   text-align: center;
   margin-bottom: 32px;
   padding: 20px 0;
@@ -1146,508 +1115,295 @@ export default defineComponent({
   font-size: 28px;
   font-weight: 700;
   color: #1a2a4a;
+  margin: 0 0 8px;
 }
 .work-sub {
   font-size: 14px;
-  color: #8899aa;
-  margin-top: 8px;
+  color: #888;
 }
-.work-tasks {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.work-task {
-  background: #fff;
-  border: 1px solid #e6ebf2;
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.work-task:hover {
-  border-color: #c8161e;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(200, 22, 30, 0.12);
-}
-.work-task.open {
-  border-color: #c8161e;
-  box-shadow: 0 8px 24px rgba(200, 22, 30, 0.15);
-}
-.wt-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.wt-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2c3e50;
-}
-.wt-agent {
-  font-size: 11px;
-  color: #c8161e;
-  background: #fdecec;
-  border-radius: 10px;
-  padding: 2px 8px;
-}
-.wt-desc {
-  font-size: 12px;
-  color: #8899aa;
-  margin-top: 4px;
-}
-.wt-form {
-  margin-top: 10px;
-  border-top: 1px dashed #e6ebf2;
-  padding-top: 10px;
-}
-.wf-row {
-  margin-bottom: 8px;
-}
-.wf-label {
-  display: block;
-  font-size: 12px;
-  color: #5a6a7a;
-  margin-bottom: 4px;
-}
-.wf-input {
-  width: 100%;
-  padding: 7px 10px;
-  border: 1px solid #dce3ec;
-  border-radius: 8px;
-  font-size: 13px;
-  outline: none;
-  box-sizing: border-box;
-}
-.wf-run {
-  width: 100%;
-  padding: 9px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  background: #c8161e;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-.wf-run:hover {
-  background: #a81218;
-}
-.wf-run:disabled {
-  background: #e6b0b3;
-  cursor: not-allowed;
-}
-.work-reply {
-  margin-top: 12px;
-  background: #fff;
-  border: 1px solid #e6ebf2;
-  border-radius: 12px;
-  padding: 12px 14px;
-}
-.wr-head {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1a2a4a;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.wi-btn {
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 12px;
-  border: 1px solid #d33;
-  color: #d33;
-  background: #fff;
-  cursor: pointer;
-}
-.wi-btn:disabled {
-  border-color: #999;
-  color: #999;
-  cursor: default;
-}
-.wr-body {
-  font-size: 13px;
-  color: #2c3e50;
-  line-height: 1.6;
-}
-.work-notice {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #c8161e;
-}
-
-.message-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 18px;
-}
-.welcome-card {
-  background: transparent;
-  padding: 40px 20px 20px;
-  text-align: center;
-  margin-top: 16px;
-  max-width: 700px;
-  margin-left: auto;
-  margin-right: auto;
-}
-.welcome-emoji {
-  font-size: 34px;
-  margin-bottom: 6px;
-}
-.welcome-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1a2a4a;
-  margin: 0 0 8px;
-}
-.welcome-sub {
-  font-size: 15px;
-  color: #8899aa;
-  margin: 0 0 24px;
-}
-.quick-chips {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.chip {
-  padding: 10px 14px;
-  background: #f3f5f9;
-  border: 1px solid #e6ebf2;
-  border-radius: 10px;
-  font-size: 13px;
-  color: #3a4a6a;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.2s;
-}
-.chip:hover {
-  background: #fff5f5;
-  border-color: #c8161e;
-  color: #c8161e;
-}
-
-/* 豆包风格欢迎卡片网格 */
-.welcome-grid {
+.work-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-top: 20px;
-  max-width: 500px;
+  margin-bottom: 20px;
 }
-.wg-item {
-  padding: 16px;
-  background: #f8f9fb;
+.work-card {
+  background: #fff;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
+  padding: 16px;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid transparent;
 }
-.wg-item:hover {
-  background: #fff;
-  border-color: #e6ebf2;
+.work-card:hover {
+  border-color: #c8161e;
+  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
-.wg-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
+.work-card.open {
+  border-color: #c8161e;
+  box-shadow: 0 4px 16px rgba(200, 22, 30, 0.15);
 }
-.wg-title {
-  font-size: 14px;
+.wc-title {
+  font-size: 15px;
   font-weight: 600;
   color: #1a2a4a;
   margin-bottom: 4px;
 }
-.wg-desc {
-  font-size: 12px;
-  color: #888;
-  line-height: 1.4;
-}
-
-.msg-row {
-  display: flex;
-  margin-bottom: 14px;
-  align-items: flex-end;
-  gap: 8px;
-  animation: fadeUp 0.25s ease;
-}
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.msg-row.me {
-  justify-content: flex-end;
-}
-.mini-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1a2a4a, #2c4a82);
-  color: #fff;
+.wc-desc {
   font-size: 13px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(26, 42, 74, 0.15);
+  color: #888;
+  margin-bottom: 8px;
 }
-.mini-avatar.me {
-  background: linear-gradient(135deg, #c8161e, #e63946);
-}
-.bubble {
-  max-width: 70%;
-  padding: 12px 16px;
-  font-size: 14px;
-  line-height: 1.7;
-  word-break: break-word;
-}
-.bubble.me {
-  background: linear-gradient(135deg, #c8161e, #e63946);
-  color: #fff;
-  border-radius: 20px 20px 6px 20px;
-  box-shadow: 0 4px 12px rgba(200, 22, 30, 0.25);
-}
-.bubble.bot {
-  background: #fff;
-  color: #2c3e50;
-  border-radius: 20px 20px 20px 6px;
-  box-shadow: 0 2px 10px rgba(26, 42, 74, 0.1);
-  border: 1px solid #f0f2f5;
-}
-.bubble-content :deep(strong) {
+.wc-agent {
+  font-size: 11px;
   color: #c8161e;
-  font-weight: 600;
-}
-
-/* 消息操作按钮 */
-.msg-actions {
-  display: flex;
-  gap: 4px;
-  margin-top: 8px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.msg-row:hover .msg-actions {
-  opacity: 1;
-}
-.msg-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-.msg-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
-.typing {
-  padding: 14px 16px !important;
-}
-.typing .dot {
+  background: #fdecec;
+  padding: 2px 8px;
+  border-radius: 10px;
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  background: #aab4c0;
-  border-radius: 50%;
-  margin-right: 4px;
-  animation: blink 1.2s infinite;
 }
-.typing .dot:nth-child(2) {
-  animation-delay: 0.2s;
+.work-form {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
 }
-.typing .dot:nth-child(3) {
-  animation-delay: 0.4s;
+.form-row {
+  margin-bottom: 12px;
 }
-@keyframes blink {
-  0%,
-  80%,
-  100% {
-    opacity: 0.3;
-    transform: scale(0.8);
-  }
-  40% {
-    opacity: 1;
-    transform: scale(1);
-  }
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.form-input:focus {
+  outline: none;
+  border-color: #c8161e;
+}
+.run-btn {
+  width: 100%;
+  padding: 12px;
+  background: #c8161e;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.run-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.work-result {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 20px;
+}
+.wr-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.wr-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a2a4a;
+}
+.import-btn {
+  padding: 8px 16px;
+  background: #fdecec;
+  color: #c8161e;
+  border: 1px solid #c8161e;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.import-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.wr-body {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.work-notice {
+  margin-top: 12px;
+  padding: 10px;
+  background: #fff3cd;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #856404;
 }
 
+/* ===== 输入区 ===== */
 .input-area {
-  padding: 10px 16px 12px;
-  background: #fff;
-  border-top: 1px solid #e8ecf1;
+  padding: 16px 20px;
+  background: #f7f7f8;
 }
-.input-card {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-  background: #f5f7fa;
-  border: 1px solid #e6ebf2;
-  border-radius: 14px;
-  padding: 8px;
+.quick-panel {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-width: 760px;
+  margin: 0 auto 12px;
+}
+.qp-item {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
   transition: all 0.2s;
 }
-.input-card:focus-within {
-  border-color: #1a2a4a;
+.qp-item:hover {
+  border-color: #c8161e;
+  color: #c8161e;
+}
+.input-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 760px;
+  margin: 0 auto;
   background: #fff;
-  box-shadow: 0 0 0 3px rgba(26, 42, 74, 0.08);
+  border: 1px solid #e5e5e5;
+  border-radius: 16px;
+  padding: 12px;
+}
+.input-box:focus-within {
+  border-color: #c8161e;
+  box-shadow: 0 0 0 3px rgba(200, 22, 30, 0.1);
+}
+.input-toolbar {
+  display: flex;
+  gap: 4px;
+}
+.tool-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 6px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+.tool-btn:hover {
+  background: #f5f5f5;
+}
+.tool-btn.active {
+  background: #fdecec;
 }
 .chat-input {
   flex: 1;
   border: none;
-  background: transparent;
-  padding: 6px 8px;
-  font-size: 14px;
-  resize: none;
   outline: none;
-  font-family: inherit;
+  resize: none;
+  font-size: 14px;
   line-height: 1.5;
   max-height: 120px;
+  font-family: inherit;
 }
 .send-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  background: linear-gradient(135deg, #1a2a4a, #2c4a82);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #c8161e;
   color: #fff;
   border: none;
-  border-radius: 10px;
-  font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
-}
-.send-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(26, 42, 74, 0.3);
-}
-.send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.input-tip {
-  text-align: center;
-  font-size: 11px;
-  color: #aab4c0;
-  margin-top: 6px;
-}
-
-/* 豆包风格工具栏 */
-.input-toolbar {
-  display: flex;
-  gap: 4px;
-  padding: 0 4px;
-}
-.tool-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  flex-shrink: 0;
 }
-.tool-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-/* 快捷指令面板 */
-.quick-panel {
-  margin: 8px 0 0;
-  padding: 12px;
-  background: #fff;
-  border: 1px solid #e6ebf2;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-.qp-title {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-.qp-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.qp-item {
-  padding: 6px 12px;
-  background: #f5f7fa;
-  border-radius: 16px;
-  font-size: 12px;
-  color: #333;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.qp-item:hover {
-  background: #e8ecf1;
-  color: #1a2a4a;
+.send-btn:disabled {
+  background: #ddd;
+  cursor: not-allowed;
 }
 
-.notice-bar {
-  margin: 0 16px 8px;
-  padding: 8px 12px;
-  background: #fff3f3;
-  color: #c8161e;
+/* ===== Toast提示 ===== */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a2a4a;
+  color: #fff;
+  padding: 10px 20px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 14px;
+  z-index: 1000;
+  animation: fadeIn 0.2s;
 }
-/* 隐藏 VTJ 开发态浮窗按钮 */
-#vtjLink {
-  display: none !important;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
-/* 窄屏：历史栏变抽屉 */
-@media (max-width: 720px) {
-  .history-panel {
+/* ===== 移动端遮罩 ===== */
+.mask {
+  display: none;
+}
+
+/* ===== 响应式（移动端） ===== */
+@media (max-width: 768px) {
+  .sidebar {
     position: fixed;
-    left: 0;
+    left: -260px;
     top: 0;
     bottom: 0;
     z-index: 100;
-    transform: translateX(-100%);
-    transition: transform 0.25s;
-    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2);
+    transition: left 0.3s;
   }
-  .ai-layout.drawer_open .history-panel {
-    transform: translateX(0);
+  .drawer_open .sidebar {
+    left: 0;
   }
-  .ai-layout.drawer_open .mask {
+  .drawer_open .mask {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.5);
     z-index: 99;
   }
   .hamburger {
-    display: inline-flex;
+    display: block;
   }
-  .header-title-row {
-    flex-wrap: wrap;
+  .welcome-grid {
+    grid-template-columns: 1fr;
   }
-  .kb-entry {
-    padding: 1px 8px;
-    font-size: 10px;
+  .work-grid {
+    grid-template-columns: 1fr;
+  }
+  .quick-panel {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .msg-content-wrap {
+    max-width: 90%;
   }
 }
 </style>
