@@ -603,3 +603,67 @@ async def import_today_task(
         "reward_coins": today_task.reward_coins,
         "message": "已写入今日任务，完成后可领取金币",
     }
+
+
+# ==================== 文件上传接口 ====================
+from fastapi import UploadFile, File
+import os
+import uuid
+
+UPLOAD_DIR = "backend/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@router.post("/upload", summary="上传文件（图片/PDF/文档）")
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user: SysUser = Depends(get_current_user),
+):
+    """上传文件，返回文件URL"""
+    # 限制文件大小（10MB）
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件大小不能超过10MB")
+
+    # 生成唯一文件名
+    ext = os.path.splitext(file.filename)[1]
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, unique_name)
+
+    # 保存文件
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    logger.info(
+        f"用户 {current_user.user_id} 上传文件: {file.filename} -> {unique_name}"
+    )
+
+    return {
+        "file_id": unique_name,
+        "filename": file.filename,
+        "file_url": f"/uploads/{unique_name}",
+        "file_size": len(contents),
+        "message": "文件上传成功",
+    }
+
+
+# ==================== 消息反馈接口 ====================
+class FeedbackReq(BaseModel):
+    message_id: Optional[str] = None
+    rating: int = Field(..., description="1=点赞, -1=点踩")
+    comment: Optional[str] = None
+
+
+@router.post("/feedback", summary="消息反馈（点赞/点踩）")
+async def submit_feedback(
+    req: FeedbackReq,
+    current_user: SysUser = Depends(get_current_user),
+):
+    """用户对AI消息的反馈"""
+    logger.info(
+        f"用户 {current_user.user_id} 反馈: rating={req.rating}, message_id={req.message_id}"
+    )
+    return {
+        "success": True,
+        "message": "感谢你的反馈！我们会持续改进",
+    }
