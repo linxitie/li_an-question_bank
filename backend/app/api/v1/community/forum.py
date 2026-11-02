@@ -30,11 +30,12 @@ from sqlalchemy import func, or_, and_, String
 
 from ....core.database import get_db
 from ....core.config import settings
+from pydantic import BaseModel, Field
 from ....core.security import get_current_user, get_optional_user
 from ....services import media_service
 from ....models.models import (
     ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
-    SysUser, SysOperationLog
+    ForumDraft, SysUser, SysOperationLog
 )
 from ....services.sensitive_words import sensitive_filter, SensitiveLevel
 from ....services.event_consumer import outbox_mode_enabled, record_user_action
@@ -1797,4 +1798,78 @@ async def delete_comment(
     if post:
         post.comment_count = max(0, (post.comment_count or 0) - 1)
     db.commit()
+    return {"success": True}
+
+
+# =====================================================================
+# 发帖草稿（P2）：每人一条，覆盖式 upsert
+# =====================================================================
+
+
+class DraftPayload(BaseModel):
+    """草稿载荷。与会话内编辑器的字段一一对应。"""
+
+    title: str = Field("", max_length=200)
+    content: str = Field("", max_length=5000)
+    attachments: Optional[List[Dict[str, Any]]] = None
+    visibility: str = Field("ALL", pattern="^(ALL|CLASSES)$")
+    visible_classes: Optional[List[str]] = None
+    is_top: bool = False
+
+
+def _draft_item(draft: ForumDraft) -> Dict[str, Any]:
+    return {
+        "draftId": draft.draft_id,
+        "title": draft.title or "",
+        "content": draft.content or "",
+        "attachments": draft.attachments or [],
+        "visibility": draft.visibility or "ALL",
+        "visibleClasses": draft.visible_classes or [],
+        "isTop": bool(draft.is_top),
+        "updateTime": draft.update_time.isoformat() if draft.update_time else None,
+    }
+
+
+@router.get("/drafts/mine", summary="获取我的发帖草稿")
+async def get_my_draft(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """未登录/无草稿时返回 `{"draft": null}`，前端据此决定是否回填。"""
+    draft = db.query(ForumDraft).filter(ForumDraft.user_id == current_user.user_id).first()
+    return {"draft": _draft_item(draft) if draft else None}
+
+
+@router.post("/drafts", summary="保存发帖草稿（覆盖式）")
+async def save_my_draft(
+    payload: DraftPayload,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """同一用户重复保存只更新同一条记录，不会产生多条草稿。"""
+    draft = db.query(ForumDraft).filter(ForumDraft.user_id == current_user.user_id).first()
+    if not draft:
+        draft = ForumDraft(user_id=current_user.user_id)
+        db.add(draft)
+    draft.title = payload.title
+    draft.content = payload.content
+    draft.attachments = payload.attachments
+    draft.visibility = payload.visibility
+    draft.visible_classes = payload.visible_classes
+    # 置顶只在教师/管理员侧有意义，学生侧一律落 0，防止越权置顶
+    draft.is_top = 1 if payload.is_top and _can_moderate_forum(current_user, db) else 0
+    db.commit()
+    db.refresh(draft)
+    return {"success": True, "draft": _draft_item(draft)}
+
+
+@router.delete("/drafts/mine", summary="删除我的发帖草稿")
+async def delete_my_draft(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    draft = db.query(ForumDraft).filter(ForumDraft.user_id == current_user.user_id).first()
+    if draft:
+        db.delete(draft)
+        db.commit()
     return {"success": True}

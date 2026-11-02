@@ -2573,3 +2573,32 @@ class UserProfile(Base):
         Index("idx_profile_status", profile_status),
     )
 
+
+class ForumDraft(Base):
+    """论坛发帖草稿。
+
+    每人一条（user_id 唯一），保存方式为覆盖式 upsert：
+    前端「存为草稿」反复点击不会产生多条脏数据。
+    """
+
+    __tablename__ = "forum_draft"
+
+    draft_id = Column(Integer, primary_key=True, autoincrement=True, comment="草稿ID")
+    user_id = Column(
+        BigInteger,
+        ForeignKey("sys_user.user_id"),
+        nullable=False,
+        unique=True,
+        comment="草稿所有者",
+    )
+    title = Column(String(200), default="", comment="标题")
+    content = Column(Text, default="", comment="正文")
+    attachments = Column(JSON, comment="附件列表JSON:[{name,url,size,type}]")
+    visibility = Column(String(16), default="ALL", comment="可见范围: ALL | CLASSES")
+    visible_classes = Column(JSON, comment="可见班级名列表")
+    is_top = Column(Integer, default=0, comment="是否置顶（仅教师/管理员可用）")
+    create_time = Column(DateTime, default=datetime.now, comment="创建时间")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    user = relationship("SysUser")
+
