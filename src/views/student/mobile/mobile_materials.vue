@@ -33,8 +33,51 @@
             <b>{{ progress.percentage }}%</b>
             <em>（已完成 {{ progress.studied }}/{{ progress.total }}）</em>
           </div>
+          <label class="t-fav">
+            <input v-model="showFavOnly" type="checkbox" /> 只看收藏
+          </label>
         </section>
 
+        <!-- 视频 / 文章分区（与电脑端同结构，数据逐个 type 拉） -->
+        <template v-for="s in SECTION_DEFS" :key="s.key">
+          <section v-if="visibleSection(s.key).length" class="t-block">
+            <div class="t-block-head">
+              <h3>{{ s.icon }} {{ s.title }}</h3>
+              <span class="t-count">{{ visibleSection(s.key).length }}</span>
+            </div>
+
+            <div v-if="s.kind === 'video'" class="t-hscroll">
+              <div
+                v-for="it in visibleSection(s.key)"
+                :key="it.id"
+                class="t-vcard"
+                @click="openMedia(it, 'video')"
+              >
+                <img v-if="it.cover_image" :src="it.cover_image" alt="" loading="lazy" />
+                <div v-else class="t-vcover">🎬</div>
+                <b class="t-dur">{{ fmtDur(it.duration) }}</b>
+                <em v-if="it.is_studied" class="t-done">✅ 已学</em>
+                <span class="t-vtitle">{{ it.title }}</span>
+              </div>
+            </div>
+
+            <ul v-else class="t-alist">
+              <li v-for="it in visibleSection(s.key)" :key="it.id" @click="openMedia(it, 'article')">
+                <span class="t-a-icon">📄</span>
+                <div class="t-a-body">
+                  <span class="t-a-title">{{ it.title }}<em v-if="it.is_studied">已读</em></span>
+                  <span v-if="it.summary" class="t-a-sum">{{ it.summary }}</span>
+                </div>
+                <small>{{ it.read_time }}min</small>
+              </li>
+            </ul>
+          </section>
+        </template>
+
+        <div v-if="cardItems.length" class="t-block-head t-grid-head">
+          <h3>🃏 知识卡片</h3>
+          <span class="t-count">{{ cardItems.length }}</span>
+        </div>
         <section v-if="pageCards.length" class="t-grid" :style="{ '--sm-font-scale': String(fontScale) }">
           <div
             v-for="c in pageCards"
@@ -52,7 +95,12 @@
                 <p class="g-title">{{ c.card_front || c.title }}</p>
                 <div class="g-foot">
                   <span class="hint">点击卡片翻转</span>
-                  <button class="card-act" @click.stop="openCardImages(c)">{{ actLabelOf(c) }}</button>
+                  <button class="g-detail" @click.stop="goTabletDetail(c)">详情</button>
+                  <button
+                    v-if="imageCount(c)"
+                    class="card-act"
+                    @click.stop="openCardImages(c)"
+                  >{{ actLabelOf(c) }}</button>
                 </div>
               </div>
               <div class="g-face back">
@@ -63,7 +111,12 @@
                 <p class="g-back">{{ c.card_back || '暂无背面内容' }}</p>
                 <div class="g-foot">
                   <span class="hint">点击翻回正面</span>
-                  <button class="card-act" @click.stop="openCardImages(c)">{{ actLabelOf(c) }}</button>
+                  <button class="g-detail" @click.stop="goTabletDetail(c)">详情</button>
+                  <button
+                    v-if="imageCount(c)"
+                    class="card-act"
+                    @click.stop="openCardImages(c)"
+                  >{{ actLabelOf(c) }}</button>
                 </div>
               </div>
             </div>
@@ -149,7 +202,7 @@
         </div>
       </section>
 
-    <main class="list">
+    <main v-if="listItems.length" class="list">
       <div v-for="m in listItems" :key="m.id" class="card" @click="toggleDetail(m)">
         <div class="m-title">{{ m.title }}</div>
         <div class="m-meta">
@@ -165,11 +218,36 @@
           <button class="view-btn" @click="openDetail(m)">查看详情</button>
         </div>
       </div>
-      <div v-if="!listItems.length && !loading" class="empty">
-        {{ isTabletLayout && cardItems.length ? '该科目暂无其他资料' : '该科目暂无备考资料' }}
-      </div>
-      <div v-if="loading" class="empty">加载中...</div>
     </main>
+    <!-- 空态/加载态放在 list 外面，平板（list 不渲染）也能看到 -->
+    <div v-if="!materials.length && !loading" class="empty">该科目暂无备考资料</div>
+    <div v-if="loading" class="empty">加载中...</div>
+
+    <!-- 平板：视频播放 / 文章阅读（页内弹层；手机仍用下方详情弹层） -->
+    <div v-if="media.open" class="t-media-mask" @click.self="media.open = false">
+      <div class="t-media" @click.stop>
+        <header class="t-media-head">
+          <b>{{ media.title }}</b>
+          <button class="t-media-close" aria-label="关闭" @click="media.open = false">✕</button>
+        </header>
+        <div class="t-media-body">
+          <div v-if="media.loading" class="empty">加载中...</div>
+          <video
+            v-else-if="media.kind === 'video' && media.videoUrl"
+            :src="media.videoUrl"
+            controls
+            autoplay
+            playsinline
+          ></video>
+          <div
+            v-else-if="media.kind === 'article' && media.content"
+            class="t-article"
+            v-html="renderQuestionContent(media.content)"
+          ></div>
+          <div v-else class="empty">内容暂时无法加载</div>
+        </div>
+      </div>
+    </div>
 
     <!-- 资料详情弹层（页内展示；原实现跳 /materials/{subject}?id= 该路由不存在，必然 404） -->
     <div v-if="detailVisible" class="modal-mask" @click="closeDetail">
@@ -236,7 +314,7 @@ import { useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { ElMessage } from 'element-plus';
 import { useLibraryStore } from '@/modules/library/store';
-import { fetchLibraryProgressSummary } from '@/modules/library/api';
+import { fetchLibraryDetail, fetchLibraryList, fetchLibraryProgressSummary } from '@/modules/library/api';
 import { collectCardImages } from '@/utils/materialImages';
 import CardCreateForm from '@/components/materials/CardCreateForm.vue';
 import ImageLightbox from '@/components/materials/ImageLightbox.vue';
@@ -323,6 +401,7 @@ const switchSubject = (key: 'xingce' | 'shenlun' | 'gongzhuan') => {
   gridPage.value = 0;
   fetchMaterials();
   loadProgress();
+  loadTabletSections();
 };
 
 const toggleDetail = (m: any) => {
@@ -387,6 +466,11 @@ const openCardImages = (c: any) => {
     lightbox.images = list;
     lightbox.index = 0;
     lightbox.open = true;
+    return;
+  }
+  // 无配图：平板进 PC 式整页详情，手机保持底部弹层
+  if (isTabletLayout.value) {
+    goTabletDetail(c);
     return;
   }
   openDetail(c);
@@ -472,12 +556,85 @@ const actLabelOf = (c: any) => {
   const n = collectCardImages(c).length;
   return n ? `查看配图（${n}）` : '查看详情';
 };
+/** 配图张数（模板里用来决定是否显示「查看配图」按钮） */
+const imageCount = (c: any) => collectCardImages(c).length;
 /** 平板上卡片已在网格里展示，列表只留视频/文章，避免重复 */
-const listItems = computed(() =>
-  isTabletLayout.value
-    ? (materials.value as any[]).filter((m) => !(m.type === 'card' && m.card_front))
-    : (materials.value as any[])
-);
+const listItems = computed(() => (isTabletLayout.value ? [] : (materials.value as any[])));
+
+// ===== 平板：模仿 PC 的视频 / 文章分区 + 只看收藏 =====
+const SECTION_DEFS = [
+  { key: 'video_intro', kind: 'video', title: '入门讲解视频', icon: '🎬' },
+  { key: 'video_advanced', kind: 'video', title: '深度拓展视频', icon: '🎯' },
+  { key: 'article', kind: 'article', title: '备考指南', icon: '📋' }
+] as const;
+const tabletSections = reactive<Record<string, any[]>>({
+  video_intro: [],
+  video_advanced: [],
+  article: []
+});
+const showFavOnly = ref(false);
+const visibleSection = (key: string) => {
+  const arr = tabletSections[key] || [];
+  return showFavOnly.value ? arr.filter((i: any) => i.is_favorite) : arr;
+};
+const loadTabletSections = async () => {
+  if (!isTabletLayout.value) return;
+  await Promise.all(
+    SECTION_DEFS.map(async (s) => {
+      try {
+        const r = await fetchLibraryList({
+          subject: activeSubject.value,
+          type: s.key,
+          pageSize: 50
+        });
+        tabletSections[s.key] = r.items ?? [];
+      } catch {
+        tabletSections[s.key] = [];
+      }
+    })
+  );
+};
+/** 秒 → 12:34 */
+const fmtDur = (sec?: number) => {
+  const n = Math.max(0, Math.floor(Number(sec) || 0));
+  return `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+};
+
+/** 视频 / 文章弹层（平板才用；手机走原底部弹层） */
+const media = reactive({
+  open: false,
+  kind: 'video' as 'video' | 'article',
+  title: '',
+  videoUrl: '',
+  content: '',
+  loading: false
+});
+const openMedia = async (it: any, kind: 'video' | 'article') => {
+  media.open = true;
+  media.kind = kind;
+  media.title = it?.title || '';
+  media.videoUrl = '';
+  media.content = '';
+  media.loading = true;
+  try {
+    const detail: any = await fetchLibraryDetail(it.id);
+    if (kind === 'video') media.videoUrl = detail?.video_url || '';
+    else media.content = detail?.content || '';
+  } catch {
+    /* 详情失败时弹层显示空态 */
+  } finally {
+    media.loading = false;
+  }
+};
+
+/** 平板：进 PC 式整页详情（手机仍走底部弹层） */
+const goTabletDetail = (c: any) => {
+  if (!c || c.id == null) return;
+  router.push({
+    path: '/tablet/materials/detail',
+    query: { id: String(c.id), subject: activeSubject.value }
+  });
+};
 
 let mqTablet: MediaQueryList | null = null;
 let mqWide: MediaQueryList | null = null;
@@ -494,6 +651,7 @@ onMounted(() => {
   mqTablet.addEventListener('change', syncLayout);
   mqWide.addEventListener('change', syncLayout);
   loadProgress();
+  loadTabletSections();
 });
 onBeforeUnmount(() => {
   mqTablet?.removeEventListener('change', syncLayout);
@@ -965,6 +1123,17 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.g-detail {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 22px;
+  border: 1px solid #dbe3ef;
+  background: #fff;
+  color: #3f4a5f;
+  font-size: 13px;
+  cursor: pointer;
+}
 .t-bar-row {
   display: flex;
   align-items: center;
@@ -984,6 +1153,146 @@ onBeforeUnmount(() => {
 }
 .t-bar-row button:disabled { opacity: 0.45; }
 .t-page { font-size: 12px; color: #8899aa; }
+
+/* 只看收藏开关（PC 在顶栏，平板放 hero 里避免动手机端顶栏） */
+.t-fav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 13px;
+  color: #4b5563;
+  cursor: pointer;
+  user-select: none;
+}
+.t-fav input { width: 18px; height: 18px; }
+
+/* 视频 / 文章分区 */
+.t-block { padding: 6px 16px 0; }
+.t-grid-head { padding: 10px 16px 0; }
+.t-block-head { display: flex; align-items: baseline; gap: 8px; margin: 8px 0; }
+.t-block-head h3 { margin: 0; font-size: 16px; color: #1a2b5f; }
+.t-count { font-size: 12px; color: #99a4b5; }
+.t-hscroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.t-vcard {
+  position: relative;
+  flex: 0 0 220px;
+  height: 132px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #eef1f6;
+  cursor: pointer;
+}
+.t-vcard img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.t-vcover {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+.t-dur {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 11px;
+}
+.t-done {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.92);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+}
+.t-vtitle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 10px 8px;
+  background: linear-gradient(transparent, rgba(15, 23, 42, 0.78));
+  color: #fff;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.t-alist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.t-alist li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(26, 42, 74, 0.04);
+  cursor: pointer;
+}
+.t-a-icon { flex: none; }
+.t-a-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.t-a-title { font-size: 14px; font-weight: 600; color: #1a2b5f; }
+.t-a-title em { margin-left: 6px; font-style: normal; font-size: 11px; color: #10b981; }
+.t-a-sum { font-size: 12px; color: #8899aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-alist small { flex: none; font-size: 11px; color: #99a4b5; }
+
+/* 视频/文章弹层 */
+.t-media-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.62);
+}
+.t-media {
+  width: min(900px, 100%);
+  max-height: 86vh;
+  background: #fff;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.t-media-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eef1f6;
+}
+.t-media-head b { font-size: 15px; color: #1a2b5f; }
+.t-media-close {
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  color: #8899aa;
+  cursor: pointer;
+}
+.t-media-body { padding: 14px 16px 18px; overflow: auto; }
+.t-media-body video { width: 100%; max-height: 64vh; border-radius: 10px; background: #000; }
+.t-article { font-size: 14px; line-height: 1.75; color: #334155; }
+.t-article :deep(img) { max-width: 100%; }
 @media (min-width: 1000px) {
   .t-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
