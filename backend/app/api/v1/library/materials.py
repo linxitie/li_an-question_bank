@@ -5,6 +5,7 @@
 管理组：见同文件下半部（admin/import 组，Task3/T6 追加）。
 """
 import logging
+import re
 from datetime import datetime
 from typing import Optional, List
 
@@ -28,6 +29,24 @@ logger = logging.getLogger(__name__)
 SUBJECTS = {"xingce", "shenlun", "gongzhuan"}
 TYPES = {"video_intro", "video_advanced", "article", "card"}
 
+# 卡片配图：第 1 张落 cover_image，第 2 张内嵌在 content 的 <img> 里。
+# 列表/详情页都要一次拿全，所以在 brief 里直接给出 image_urls（不额外暴露整段 content）。
+_CONTENT_IMG_RE = re.compile(r'<img[^>]*?src=["\']([^"\']+)["\']', re.I)
+
+
+def _brief_images(m: StudyMaterial) -> List[str]:
+    urls: List[str] = []
+    cover = (m.cover_image or "").strip()
+    if cover:
+        urls.append(cover)
+    html = m.content or ""
+    if "<img" in html:
+        for u in _CONTENT_IMG_RE.findall(html):
+            u = (u or "").strip()
+            if u and u not in urls:
+                urls.append(u)
+    return urls
+
 
 def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -> dict:
     d = {
@@ -39,6 +58,8 @@ def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -
         "difficulty": m.difficulty or 1, "view_count": m.view_count or 0,
         "card_front": m.card_front, "sort_order": m.sort_order or 0,
         "card_back": m.card_back,
+        # 全部配图（封面 + 正文附图），PC/手机详情页「看全图」用
+        "image_urls": _brief_images(m),
         # A 方案：技巧类卡片允许不挂具体考点（跨考点的通用方法），
         # 用 is_generic 打标，前端展示为「通用技巧」，按子类归集。
         "is_generic": bool(m.type == "card" and not m.point_id and (m.category or "").strip()),

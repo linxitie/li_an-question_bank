@@ -31,6 +31,8 @@ export interface LibraryMaterial {
   summary: string | null;
   badge: string | null;
   cover_image: string | null;
+  /** 全部配图（封面 + 正文附图），后端 _item_brief 直接算好 */
+  image_urls?: string[];
   /** A 方案：技巧类卡片（分类有、考点空）标记，后端 _item_brief 返回 */
   is_generic?: boolean;
   /** 考点 ID（有则说明是正式考点卡） */

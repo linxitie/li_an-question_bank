@@ -20,3 +20,18 @@ body,
 #vtjLink {
   display: none !important;
 }
+
+/* 备考资料页（`.vtj/vue/materials_{xingce,shenlun,gongzhuan}.vue`）类名冲突修复
+ *
+ * 现象：顶栏「← 返回首页」的文字被水平镜像（看起来像“首页回返”，箭头跑到右边）。
+ * 根因：同一页面里翻卡「背面」也用 `.back` 类，且带 `transform: rotateY(180deg)`；
+ *      顶栏链接 `<a class="back">` 撞名后一起吃到了这个翻转（页面样式虽为 scoped，
+ *      但两个元素在同一个作用域内，选择器都命中）。
+ * 修法：只把顶栏内的 `.back` 复位；翻卡背面不受影响。
+ * 彻底方案：在设计器里把顶栏链接改名为 `.back-link`（R3 禁止 AI 改 `.vtj` 模板），
+ * 改完即可删除本段。
+ */
+.mat-page > .top-bar > .back {
+  transform: none !important;
+  display: inline-block;
+}

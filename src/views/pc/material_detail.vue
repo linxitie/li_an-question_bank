@@ -50,9 +50,17 @@
                   <span v-if="c.is_generic" class="md-chip-generic">通用技巧</span>
                   <span class="md-idx-light">{{ index + i + 1 }} / {{ cards.length }}</span>
                 </div>
-                <!-- 配图卡：导入时带封面列（cover）的卡片在这里出图；无图不占位 -->
-                <div v-if="c.cover_image" class="md-card-cover">
-                  <img :src="c.cover_image" :alt="c.title + ' 配图'" loading="lazy" />
+                <!-- 配图区：封面 + 正文内嵌图（第 2 张配图存在 content 里）。
+                     卡片内高度有限只能裁切展示，点击进「全图查看器」看完整图。 -->
+                <div
+                  v-if="imagesOf(c).length"
+                  class="md-card-cover"
+                  @click.stop="openLightbox(c)"
+                >
+                  <img :src="imagesOf(c)[0]" :alt="c.title + ' 配图'" loading="lazy" />
+                  <span class="md-zoom">
+                    点击看全图<em v-if="imagesOf(c).length > 1">（{{ imagesOf(c).length }} 张）</em>
+                  </span>
                 </div>
                 <h3 class="md-card-title">{{ c.title }}</h3>
                 <!-- 题干：浅灰圆角块，超长时块内滚动（不撑破卡片） -->
@@ -105,13 +113,22 @@
         </ul>
       </aside>
     </div>
+
+    <ImageLightbox
+      :open="lightbox.open"
+      :images="lightbox.images"
+      :start-index="lightbox.index"
+      @close="lightbox.open = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { difficultyLabel, timeLabel, typeLabel } from '@/utils/materialCardMeta';
+import { collectCardImages } from '@/utils/materialImages';
+import ImageLightbox from '@/components/materials/ImageLightbox.vue';
 
 type Card = {
   id: number;
@@ -125,6 +142,10 @@ type Card = {
   subject?: string;
   /** 配图卡封面（导入 cover 列带入；空则详情页不渲染图区） */
   cover_image?: string | null;
+  /** 卡片正文 HTML：一卡两图时第 2 张图存在这里（`<img>`） */
+  content?: string | null;
+  /** 后端 brief 直接给出的全套配图（封面 + 正文附图） */
+  image_urls?: string[] | null;
   /** A 方案：通用技巧卡（分类有、考点空）标记 */
   is_generic?: boolean;
 };
@@ -145,6 +166,19 @@ const activeModule = ref<string>('');
 
 const current = computed<Card | null>(() => cards.value[index.value] || null);
 const stack = computed<Card[]>(() => cards.value.slice(index.value, index.value + 5));
+
+/** 卡片配图：封面优先，其后接 content 里内嵌的 <img>（一卡两图时第 2 张在这里） */
+const imagesOf = (c: Card): string[] => collectCardImages(c);
+
+/** 全图查看器状态 */
+const lightbox = reactive({ open: false, index: 0, images: [] as string[] });
+const openLightbox = (c: Card, start = 0) => {
+  const list = imagesOf(c);
+  if (!list.length) return;
+  lightbox.images = list;
+  lightbox.index = start;
+  lightbox.open = true;
+};
 
 const modules = computed(() => {
   const map = new Map<string, number>();
@@ -441,15 +475,46 @@ onMounted(load);
 }
 /* 配图卡：封面图区域（无图时整块不渲染，不占位） */
 .md-card-cover {
+  position: relative;
   margin: 10px 18px 0;
   border-radius: 12px;
   overflow: hidden;
   background: #f3f5f9;
+  cursor: zoom-in;
 }
 .md-card-cover img {
   display: block;
   width: 100%;
   max-height: 190px;
   object-fit: cover;
+  transition: transform 0.25s ease;
+}
+.md-card-cover:hover img {
+  transform: scale(1.02);
+}
+/* 全图入口角标：常显（手机/触屏没有 hover），悬停时加深 */
+.md-zoom {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.56);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+  transition: background 0.2s ease;
+}
+.md-card-cover:hover .md-zoom,
+.md-card-cover:focus-within .md-zoom {
+  background: rgba(15, 23, 42, 0.78);
+}
+.md-zoom em {
+  font-style: normal;
+  color: #d7e3ff;
 }
 </style>

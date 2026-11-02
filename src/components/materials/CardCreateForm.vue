@@ -97,6 +97,11 @@
             {{ saving ? '保存中…' : '保存并公开' }}
           </button>
         </div>
+
+        <!-- 手机端也能走 Excel 批量（两种方式并存） -->
+        <button v-if="!inline" class="cc-batch" type="button" @click="goBatchImport">
+          一次多张？改用「Excel 批量导入」→
+        </button>
       </div>
     </div>
   </div>
@@ -281,6 +286,12 @@ const close = () => {
   resetForm();
   step.value = 'subject';
   emit('close');
+};
+
+/** 手机端跳到「Excel 批量导入」页（与学生端 Excel 通道并存） */
+const goBatchImport = () => {
+  emit('close');
+  window.location.hash = '#/materials/upload?tab=excel';
 };
 
 const submit = async () => {
@@ -590,5 +601,21 @@ onBeforeUnmount(() => {
 .cc-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+/* 手机端：切换到 Excel 批量导入 */
+.cc-batch {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: #2a5298;
+  font-size: 12.5px;
+  text-align: center;
+  cursor: pointer;
+}
+.cc-batch:hover {
+  text-decoration: underline;
 }
 </style>
