@@ -1,8 +1,13 @@
 """R2.4 新闻图/向量投影（可重建，不参与业务事务）。"""
 from __future__ import annotations
 
+import hashlib
+import json
+import mimetypes
 import sqlite3
 from datetime import datetime
+from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -10,12 +15,20 @@ from sqlalchemy.orm import Session
 from app.foundation import config as fcfg
 from app.foundation.graph_schema import ensure_graph_schema
 from app.foundation.ports.ai import EmbeddingError, EmbeddingPort, build_embedding_port
+from app.foundation.stores.document import (
+    DocumentStore,
+    DocumentTooLarge,
+    build_document_store,
+)
 from app.foundation.stores.graph import GraphStore, build_graph_store
 from app.foundation.stores.local_vector import LocalVectorStore
+from app.foundation.stores.object import ObjectStore, build_object_store
 from app.foundation.stores.vector import VectorItem, VectorStore
 from app.models.models import NewsArticle, NewsImage
 
 NEWS_VECTOR_COLLECTION = "news_articles"
+NEWS_DOCUMENT_COLLECTION = "news_contents"
+_DEFAULT_UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "uploads"
 
 
 def _published(db: Session) -> list[NewsArticle]:
@@ -101,6 +114,153 @@ def project_graph(db: Session, *, store: GraphStore | None = None, reset: bool =
         "edges_written": edges,
         "backend": getattr(store, "backend", "unknown"),
     }
+
+
+def _json_list(raw: str | None) -> list:
+    try:
+        value = json.loads(raw or "[]")
+        return value if isinstance(value, list) else []
+    except (TypeError, ValueError):
+        return []
+
+
+def _image_info(
+    image_path: str,
+    upload_root: Path,
+) -> dict[str, Any]:
+    relative = image_path.replace("\\", "/")
+    if relative.startswith("uploads/"):
+        relative = relative[len("uploads/"):]
+    path = Path(upload_root) / relative
+    if not path.is_file():
+        return {"imagePath": image_path, "missing": True}
+    data = path.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    return {
+        "imagePath": image_path,
+        "objectKey": f"{digest[:2]}/{digest}",
+        "sha256": digest,
+        "size": len(data),
+        "contentType": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        "data": data,
+        "missing": False,
+    }
+
+
+def project_objects(
+    db: Session,
+    *,
+    store: ObjectStore | None = None,
+    upload_root: Path | str | None = None,
+) -> dict[str, Any]:
+    """把已发布新闻图片写入 F3 ObjectStore（内容寻址，幂等）。"""
+    target = store or build_object_store()
+    root = Path(upload_root) if upload_root else _DEFAULT_UPLOAD_ROOT
+    news_list = _published(db)
+    images = 0
+    uploaded = 0
+    existing = 0
+    missing = 0
+    errors: list[str] = []
+    for news in news_list:
+        rows = (
+            db.query(NewsImage)
+            .filter(NewsImage.news_id == news.news_id)
+            .order_by(NewsImage.image_order)
+            .all()
+        )
+        for image in rows:
+            images += 1
+            info = _image_info(image.image_path, root)
+            if info["missing"]:
+                missing += 1
+                continue
+            try:
+                if target.stat(info["objectKey"]) is not None:
+                    existing += 1
+                    continue
+                target.put(
+                    info["objectKey"],
+                    BytesIO(info["data"]),
+                    info["contentType"],
+                    sha256=info["sha256"],
+                    size=info["size"],
+                )
+                uploaded += 1
+            except Exception as exc:
+                errors.append(f"news {news.news_id} {image.image_path}: {exc}")
+    return {
+        "news": len(news_list),
+        "images": images,
+        "uploaded": uploaded,
+        "existing": existing,
+        "missing": missing,
+        "errors": errors[:10],
+    }
+
+
+def project_documents(
+    db: Session,
+    *,
+    store: DocumentStore | None = None,
+    upload_root: Path | str | None = None,
+) -> dict[str, Any]:
+    """把已发布新闻正文/AI 结果/图片引用写入 F4 DocumentStore。"""
+    target = store or build_document_store()
+    root = Path(upload_root) if upload_root else _DEFAULT_UPLOAD_ROOT
+    news_list = _published(db)
+    written = 0
+    errors: list[str] = []
+    for news in news_list:
+        rows = (
+            db.query(NewsImage)
+            .filter(NewsImage.news_id == news.news_id)
+            .order_by(NewsImage.image_order)
+            .all()
+        )
+        refs = []
+        for image in rows:
+            info = _image_info(image.image_path, root)
+            refs.append({
+                "imagePath": image.image_path,
+                "objectKey": info.get("objectKey"),
+                "sha256": info.get("sha256"),
+                "size": info.get("size", 0),
+                "missing": info["missing"],
+            })
+        doc = {
+            "newsId": news.news_id,
+            "title": news.title,
+            "url": news.url,
+            "source": news.source,
+            "category": news.category or "",
+            "categoryCode": news.category_code or "",
+            "regionCode": news.region_code or "",
+            "publishDate": news.publish_date.isoformat() if news.publish_date else "",
+            "reviewStatus": news.review_status,
+            "summary": news.summary or "",
+            "content": news.content or "",
+            "aiSummary": news.ai_summary or "",
+            "aiExamPoints": _json_list(news.ai_exam_points),
+            "aiEntities": _json_list(news.ai_entities),
+            "aiRiskFlags": _json_list(news.ai_risk_flags),
+            "images": refs,
+            "projectedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
+        }
+        try:
+            # 投影无业务版本号；用微秒时间戳保证重跑能覆盖旧文档。
+            target.upsert(
+                NEWS_DOCUMENT_COLLECTION,
+                f"news:{news.news_id}",
+                doc,
+                version=int(datetime.now().timestamp() * 1_000_000),
+            )
+            written += 1
+        except DocumentTooLarge as exc:
+            errors.append(f"news {news.news_id}: {exc}")
+        except Exception as exc:
+            errors.append(f"news {news.news_id}: {exc}")
+    return {"news": len(news_list), "written": written, "errors": errors[:10]}
 
 
 def project_vectors(

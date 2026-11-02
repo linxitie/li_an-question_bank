@@ -1,14 +1,19 @@
 """R2.4 新闻图/向量投影测试。"""
+import hashlib
 import sqlite3
 
 from app.foundation.graph_schema import ensure_graph_schema
 from app.foundation.ports.ai import EmbeddingUnavailable, HashEmbedding
+from app.foundation.stores.local_document import LocalDocumentStore
 from app.foundation.stores.local_graph import LocalGraphStore
+from app.foundation.stores.local_object import LocalObjectStore
 from app.foundation.stores.local_vector import LocalVectorStore
 from app.models.models import NewsArticle, NewsImage
 from app.services.news_projection import (
     NEWS_VECTOR_COLLECTION,
+    project_documents,
     project_graph,
+    project_objects,
     project_vectors,
     project_vectors_safe,
 )
@@ -91,3 +96,29 @@ def test_projection_degrades_when_embedding_fails(tmp_path, db_session):
     assert report["skipped"] is True
     assert report["fallback"] == "fts"
     assert "provider unavailable" in report["reason"]
+
+
+def test_project_objects_and_documents(tmp_path, db_session):
+    _news(db_session)
+    image_dir = tmp_path / "news_images"
+    image_dir.mkdir()
+    image_bytes = b"fake-news-image"
+    (image_dir / "a.jpg").write_bytes(image_bytes)
+    digest = hashlib.sha256(image_bytes).hexdigest()
+    key = f"{digest[:2]}/{digest}"
+
+    obj_store = LocalObjectStore(tmp_path / "objects")
+    obj_report = project_objects(
+        db_session, store=obj_store, upload_root=tmp_path
+    )
+    assert obj_report["uploaded"] == 1
+    assert obj_store.stat(key) is not None
+
+    doc_store = LocalDocumentStore(tmp_path / "docs")
+    doc_report = project_documents(
+        db_session, store=doc_store, upload_root=tmp_path
+    )
+    assert doc_report["written"] == 1
+    doc = doc_store.get("news_contents", "news:1")
+    assert doc["title"] == "新闻投影测试"
+    assert doc["images"][0]["objectKey"] == key
