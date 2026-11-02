@@ -1,7 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
 <#
 .SYNOPSIS
-    一键重启备考资料模块开发环境（后端 8010 + 前端 9527），并自检 + 自动探测手机端地址。
+    一键重启备考资料模块开发环境（后端 8000 + 前端 9527），并自检 + 自动探测手机端地址。
 
 .DESCRIPTION
     背景：手工重启最容易踩两个坑——
@@ -31,7 +31,7 @@ $backend = Join-Path $repo 'backend'
 $runDir = Join-Path (Split-Path -Parent $repo) '_run'
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 
-$BE_PORT = 8010
+$BE_PORT = 8000
 $FE_PORT = 9527
 
 function Write-Step([string]$msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
@@ -129,7 +129,7 @@ if (-not $SkipBackend) {
 
 Write-Step "3/5 启动前端（$FE_PORT，带 DEV_BACKEND_ORIGIN）"
 if (-not $SkipFrontend) {
-    $env:DEV_BACKEND_ORIGIN = "http://127.0.0.1:$BE_PORT"   # 漏这句会代理到 8000 → 全站 404
+    $env:DEV_BACKEND_ORIGIN = "http://127.0.0.1:$BE_PORT"   # 与 $BE_PORT 绑定；端口若改回非 8000 而漏这句，Vite 仍代理到 8000 → 全站 404
     $feOut = Join-Path $runDir 'vite.out.log'
     $feErr = Join-Path $runDir 'vite.err.log'
     Start-Process -FilePath 'npm.cmd' -ArgumentList 'run', 'dev' `

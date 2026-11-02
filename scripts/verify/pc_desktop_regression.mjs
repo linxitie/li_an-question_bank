@@ -6,7 +6,7 @@
  * 于是打开 `/materials` 直接被改道到 `/tablet/materials`（手机版界面）。
  * 按 R4「device.ts 原样保留」已回滚，本脚本就是这条回归的守卫。
  *
- * 依赖：前端 9527、后端 8010、Chrome 9222（脚本会把视口设成 1440×900 桌面）
+ * 依赖：前端 9527、后端 8000、Chrome 9222（脚本会把视口设成 1440×900 桌面）
  */
 import http from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -15,7 +15,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_平板端验收');
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';

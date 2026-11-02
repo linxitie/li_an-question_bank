@@ -4,7 +4,7 @@
  *  2) 创建页两种方式并存（逐张创建 / Excel 批量导入），Excel 走真实接口
  *  3) 卡片详情配图可点开「全图查看器」（含一卡两图的第 2 张）
  *
- * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8010）、后端 8010、Chrome 调试端口 9222。
+ * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8000）、后端 8000、Chrome 调试端口 9222。
  * 会写入：1 张演示卡（2 张图，申论，免审批）+ 一次 Excel 导入（下架态，5 条）。
  * 清理：python scripts/verify/cleanup_test_materials.py --creator 3 之后按提示删下架行，
  *      或直接跑 _run/_cleanup_round3.py（见文档）。
@@ -17,7 +17,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_三轮验收');
 const XLSX = resolve('..', '备考资料', '_测试文件', '测试_行测_正常5张.xlsx');
 /** 演示配图（由 scripts/verify/gen_demo_images.py 生成；缺失时退化为纯色块） */

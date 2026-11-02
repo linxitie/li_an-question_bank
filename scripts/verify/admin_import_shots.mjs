@@ -10,7 +10,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_二轮验收');
 const XLSX = resolve('..', '备考资料', '_测试文件', '测试_行测_正常5张.xlsx');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

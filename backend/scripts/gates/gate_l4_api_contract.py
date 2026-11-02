@@ -3,7 +3,8 @@
 import subprocess, sys, os, json, urllib.request
 
 def main():
-    # 默认 8000（历史约定）；可用环境变量指向实际后端端口，例如 8010
+    # 默认 8000，与 backend/start.py、proxy.config.ts、scripts/dev-restart.ps1 的 $BE_PORT 一致；
+    # 如需指向别的端口（例如临时起在 8010），用 OPENAPI_URL 环境变量覆盖。
     OPENAPI_URL = os.environ.get(
         'OPENAPI_URL', 'http://127.0.0.1:8000/openapi.json')
     try:

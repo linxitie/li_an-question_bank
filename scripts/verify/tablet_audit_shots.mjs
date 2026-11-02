@@ -5,7 +5,7 @@
  *  3) 徽章页、创建/Excel 上传页在平板宽度下的溢出与可点区
  *  4) PC 资料页被平板直接打开时会怎样（说明「没有平板专属设计」的影响面）
  *
- * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8010）、后端 8010、Chrome 9222。
+ * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8000）、后端 8000、Chrome 9222。
  * 只读：不建卡、不改数据；截图落 docs/plans/assets/备考资料_平板端验收/
  */
 import http from 'node:http';
@@ -15,7 +15,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_平板端验收');
 const IPAD_UA =
   'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';

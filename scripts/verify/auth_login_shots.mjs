@@ -100,7 +100,7 @@ async function main() {
   // 1) 登录：走 API 拿 token，再按登录页源码里的契约写 localStorage
   //    （登录页 handleLogin 成功分支就是写 __VTJ_AUTH_STATE__，比模拟点按钮稳）
   const form = `username=${encodeURIComponent(USER)}&password=${encodeURIComponent(PASS)}`;
-  const resp = await fetch('http://127.0.0.1:8010/api/auth/login', {
+  const resp = await fetch('http://127.0.0.1:8000/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form,

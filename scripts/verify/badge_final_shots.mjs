@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { WebSocket } from 'ws';
 
-const PORT = 9222, BASE = 'http://localhost:9527', API = 'http://127.0.0.1:8010';
+const PORT = 9222, BASE = 'http://localhost:9527', API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_徽章终验');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

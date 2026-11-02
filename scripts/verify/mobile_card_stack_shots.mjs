@@ -4,7 +4,7 @@
  *  2) 背景不再画整张白卡，只留渐变纸片；卡片无白边
  *  3) 翻页动画期间纸片淡出（不留白框），翻转是 3D 透视
  *
- * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8010）、后端 8010、Chrome 9222。
+ * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8000）、后端 8000、Chrome 9222。
  * 会临时建 1 张申论演示卡（2 张配图），跑完可用 cleanup_round3.py 清理。
  */
 import http from 'node:http';
@@ -15,7 +15,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_四轮验收');
 const DEMO_IMG = [
   resolve('docs/plans/assets/备考资料_三轮验收/_素材/demo-img-1.png'),

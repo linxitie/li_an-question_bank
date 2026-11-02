@@ -10,7 +10,7 @@ import sqlite3
 import requests
 
 DB = r"C:\Users\35709\OneDrive\Desktop\题库\li_an-question_bank\backend\data\question_bank.db"
-B = "http://127.0.0.1:8010"
+B = "http://127.0.0.1:8000"
 
 # 子类 → 备考要点（方法论）
 HINT = {

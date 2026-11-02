@@ -8,7 +8,7 @@
  *  3) 注入「候选覆盖样式」（不动 .vtj 源码，只在本次会话注入 <style>），再测一遍并截图
  *     → 截图即「预期效果图」：真实页面 + 候选 CSS 的真实渲染，不是画图
  *
- * 依赖：前端 9527、后端 8010、Chrome 9222。只读，不改数据库。
+ * 依赖：前端 9527、后端 8000、Chrome 9222。只读，不改数据库。
  */
 import http from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_平板PC同版预览');
 const IPAD_UA =
   'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';

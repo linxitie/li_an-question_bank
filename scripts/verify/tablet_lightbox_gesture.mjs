@@ -3,7 +3,7 @@
  *  1) 双指捏合 → 缩放百分比变大（真实 Input.dispatchTouchEvent，不是直接改 ref）
  *  2) 单指左滑 → 切到第 2 张（放大状态下应当不切图，避免和缩放抢手势）
  *
- * 依赖：前端 9527、后端 8010、Chrome 9222。
+ * 依赖：前端 9527、后端 8000、Chrome 9222。
  * 会临时建 1 张申论演示卡（2 张配图），跑完用 scripts/verify/cleanup_round3.py 清理。
  */
 import http from 'node:http';
@@ -13,7 +13,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_平板端验收');
 const DEMO_IMG = [
   resolve('docs/plans/assets/备考资料_三轮验收/_素材/demo-img-1.png'),

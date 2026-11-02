@@ -5,7 +5,7 @@
  * 每个尺寸都打开**电脑端页面**测：网格列数、单卡尺寸、横向溢出、卡片网格距顶高度、
  * 首屏可见卡片行数、卡片正文字号、<44px 触控目标数；并对触控补齐后的效果截图。
  *
- * 依赖：前端 9527、后端 8010、Chrome 9222。只读，不改数据。
+ * 依赖：前端 9527、后端 8000、Chrome 9222。只读，不改数据。
  */
 import http from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_平板横屏预览');
 const IPAD_UA =
   'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';

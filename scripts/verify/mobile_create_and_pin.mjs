@@ -3,7 +3,7 @@
  *  1) 徽章「设为精选」后的金色五角星（徽章页左上角 / 弹层右侧）+ 按钮文案切换
  *  2) 手机端学生「创建卡片」：选科目 → 填字段 + 1~2 张配图 → 保存立即公开
  *
- * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8010）、后端 8010、
+ * 依赖：前端 9527（DEV_BACKEND_ORIGIN=http://127.0.0.1:8000）、后端 8000、
  *       Chrome 远程调试 9222。SPA 内跳转一律用 location.hash，避免重新 boot 丢登录态。
  *
  * 注意：脚本会真实写入 1 张申论卡片（内容固定，便于比对效果图）。重复执行前先清理，
@@ -17,7 +17,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_二轮验收');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

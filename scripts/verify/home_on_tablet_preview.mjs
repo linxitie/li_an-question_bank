@@ -8,7 +8,7 @@
  *   V2 两侧收窄（280/320 → 220/260）
  *   V3 右栏下移（两栏 + 右栏独占一行）
  *
- * 依赖：前端 9527、后端 8010、Chrome 9222。只读。
+ * 依赖：前端 9527、后端 8000、Chrome 9222。只读。
  */
 import http from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ import { WebSocket } from 'ws';
 
 const PORT = 9222;
 const BASE = 'http://localhost:9527';
-const API = 'http://127.0.0.1:8010';
+const API = 'http://127.0.0.1:8000';
 const OUT = resolve('docs/plans/assets/备考资料_平板首页电脑版预览');
 const IPAD_UA =
   'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
