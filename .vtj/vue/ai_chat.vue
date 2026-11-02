@@ -647,8 +647,49 @@ export default defineComponent({
     }
 
     function likeMessage(idx, isLike) {
-      state.notice = isLike ? '👍 感谢点赞！' : '👎 我们会改进的';
+      state.notice = isLike ? '👍 感谢点赞！你的反馈对我很重要' : '👎 我们会改进的，抱歉这次没帮到你';
       setTimeout(() => (state.notice = ''), 2000);
+    }
+
+    // 文件上传
+    function uploadFile() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*,.pdf,.doc,.docx';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          state.notice = `📎 已选择文件：${file.name}（上传功能即将上线）`;
+          setTimeout(() => (state.notice = ''), 3000);
+        }
+      };
+      input.click();
+    }
+
+    // 语音输入
+    function voiceInput() {
+      // 检查浏览器是否支持语音识别
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'zh-CN';
+        recognition.onstart = () => {
+          state.notice = '🎤 正在录音，请说话...';
+        };
+        recognition.onresult = (event) => {
+          const text = event.results[0][0].transcript;
+          state.input = text;
+          state.notice = '';
+        };
+        recognition.onerror = () => {
+          state.notice = '🎤 语音识别失败，请重试';
+          setTimeout(() => (state.notice = ''), 2000);
+        };
+        recognition.start();
+      } else {
+        state.notice = '🎤 你的浏览器不支持语音输入，请用Chrome浏览器';
+        setTimeout(() => (state.notice = ''), 3000);
+      }
     }
 
     function switchScene(scene) {
@@ -796,6 +837,8 @@ export default defineComponent({
       copyMessage,
       regenerateMessage,
       likeMessage,
+      uploadFile,
+      voiceInput,
       Plus,
       Menu,
       Promotion
