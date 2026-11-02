@@ -188,9 +188,8 @@
         <div
           v-if="!state.workMode && state.messages.length === 0"
           class="welcome-card">
-          <div class="welcome-emoji">🎯</div>
-          <p class="welcome-title">你好，我是联考小智</p>
-          <p class="welcome-sub">选个场景，从下面挑一个问题开始问我</p>
+          <p class="welcome-title">我们要做什么？</p>
+          <p class="welcome-sub">联考小智帮你备考公安联考，从下面挑一个功能开始</p>
           <div class="welcome-grid">
             <div
               class="wg-item"
@@ -647,8 +646,49 @@ export default defineComponent({
     }
 
     function likeMessage(idx, isLike) {
-      state.notice = isLike ? '👍 感谢点赞！' : '👎 我们会改进的';
+      state.notice = isLike ? '👍 感谢点赞！你的反馈对我很重要' : '👎 我们会改进的，抱歉这次没帮到你';
       setTimeout(() => (state.notice = ''), 2000);
+    }
+
+    // 文件上传
+    function uploadFile() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*,.pdf,.doc,.docx';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          state.notice = `📎 已选择文件：${file.name}（上传功能即将上线）`;
+          setTimeout(() => (state.notice = ''), 3000);
+        }
+      };
+      input.click();
+    }
+
+    // 语音输入
+    function voiceInput() {
+      // 检查浏览器是否支持语音识别
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'zh-CN';
+        recognition.onstart = () => {
+          state.notice = '🎤 正在录音，请说话...';
+        };
+        recognition.onresult = (event) => {
+          const text = event.results[0][0].transcript;
+          state.input = text;
+          state.notice = '';
+        };
+        recognition.onerror = () => {
+          state.notice = '🎤 语音识别失败，请重试';
+          setTimeout(() => (state.notice = ''), 2000);
+        };
+        recognition.start();
+      } else {
+        state.notice = '🎤 你的浏览器不支持语音输入，请用Chrome浏览器';
+        setTimeout(() => (state.notice = ''), 3000);
+      }
     }
 
     function switchScene(scene) {
@@ -796,6 +836,8 @@ export default defineComponent({
       copyMessage,
       regenerateMessage,
       likeMessage,
+      uploadFile,
+      voiceInput,
       Plus,
       Menu,
       Promotion
@@ -1091,45 +1133,46 @@ export default defineComponent({
 
 /* 工作台 */
 .work-panel {
-  padding: 20px;
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 .work-head {
-  margin-bottom: 20px;
-  padding: 20px;
-  background: linear-gradient(135deg, #1a2a4a, #2c4a82);
-  border-radius: 16px;
-  color: white;
+  text-align: center;
+  margin-bottom: 32px;
+  padding: 20px 0;
 }
 .work-title {
-  font-size: 18px;
+  font-size: 28px;
   font-weight: 700;
+  color: #1a2a4a;
 }
 .work-sub {
-  font-size: 13px;
-  color: rgba(255,255,255,0.8);
-  margin-top: 6px;
+  font-size: 14px;
+  color: #8899aa;
+  margin-top: 8px;
 }
 .work-tasks {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 .work-task {
   background: #fff;
   border: 1px solid #e6ebf2;
   border-radius: 16px;
-  padding: 16px;
+  padding: 20px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .work-task:hover {
   border-color: #c8161e;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 24px rgba(200, 22, 30, 0.12);
 }
 .work-task.open {
   border-color: #c8161e;
-  box-shadow: 0 4px 16px rgba(200, 22, 30, 0.15);
+  box-shadow: 0 8px 24px rgba(200, 22, 30, 0.15);
 }
 .wt-row {
   display: flex;
@@ -1242,27 +1285,28 @@ export default defineComponent({
   padding: 18px;
 }
 .welcome-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 26px 20px 20px;
+  background: transparent;
+  padding: 40px 20px 20px;
   text-align: center;
-  box-shadow: 0 4px 16px rgba(26, 42, 74, 0.06);
   margin-top: 16px;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .welcome-emoji {
   font-size: 34px;
   margin-bottom: 6px;
 }
 .welcome-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 32px;
+  font-weight: 700;
   color: #1a2a4a;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
 }
 .welcome-sub {
-  font-size: 13px;
+  font-size: 15px;
   color: #8899aa;
-  margin: 0 0 16px;
+  margin: 0 0 24px;
 }
 .quick-chips {
   display: flex;
