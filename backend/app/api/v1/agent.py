@@ -196,6 +196,88 @@ AGENT_TASKS: List[Dict] = [
         ],
     },
     {
+        "task_id": "choose_post_detail",
+        "title": "岗位详细分析",
+        "agent": "choose_post",
+        "desc": "输入岗位名称，分析竞争比、薪资待遇、发展前景",
+        "fields": [
+            {
+                "key": "post_name",
+                "label": "岗位名称",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：出入境边防检查、铁路公安",
+            },
+        ],
+    },
+    {
+        "task_id": "zhenti_jiexi",
+        "title": "历年真题解析",
+        "agent": "xingce",
+        "desc": "输入年份和科目，自动生成真题解析和考点分析",
+        "fields": [
+            {
+                "key": "year",
+                "label": "年份",
+                "type": "select",
+                "required": True,
+                "options": ["2025", "2024", "2023", "2022"],
+            },
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": True,
+                "options": ["行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "efficiency_analysis",
+        "title": "学习效率分析",
+        "agent": "psychology",
+        "desc": "分析你的学习数据，找出最高效的学习时段和方法",
+        "fields": [
+            {
+                "key": "question",
+                "label": "你的问题",
+                "type": "text",
+                "required": False,
+                "placeholder": "比如：为什么我晚上学不进去？",
+            },
+        ],
+    },
+    {
+        "task_id": "shenlun_sucai",
+        "title": "申论素材积累",
+        "agent": "shenlun",
+        "desc": "每天自动生成3条申论素材，包含人物案例、金句、政策",
+        "fields": [
+            {
+                "key": "theme",
+                "label": "主题",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "乡村振兴", "科技创新", "生态文明", "基层治理"],
+            },
+        ],
+    },
+    {
+        "task_id": "wrong_analysis",
+        "title": "错题分析报告",
+        "agent": "xingce",
+        "desc": "自动分析你的错题本，找出薄弱题型和提分建议",
+        "fields": [
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
         "task_id": "gongzhuan_fatiao",
         "title": "公专法条梳理",
         "agent": "gongzhuan",
@@ -206,7 +288,12 @@ AGENT_TASKS: List[Dict] = [
                 "label": "法规",
                 "type": "select",
                 "required": True,
-                "options": ["治安管理处罚法", "人民警察法", "刑法", "公安机关办理刑事案件程序规定"],
+                "options": [
+                    "治安管理处罚法",
+                    "人民警察法",
+                    "刑法",
+                    "公安机关办理刑事案件程序规定",
+                ],
             },
         ],
     },
@@ -339,7 +426,10 @@ async def agent_memory_delete(
 
     row = (
         db.query(UserMemory)
-        .filter(UserMemory.memory_id == memory_id, UserMemory.user_id == current_user.user_id)
+        .filter(
+            UserMemory.memory_id == memory_id,
+            UserMemory.user_id == current_user.user_id,
+        )
         .first()
     )
     if not row:

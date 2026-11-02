@@ -91,6 +91,11 @@ export default {
     ...baseProxy,
     configure: createProxyConfigure('api'),
   },
+  // /health 由前端启动时做版本自检，开发态必须透传给后端，否则会被 SPA 兜底成 index.html
+  '/health': {
+    ...baseProxy,
+    configure: createProxyConfigure('health'),
+  },
   '/ws': {
     ...baseProxy,
     ws: true,
