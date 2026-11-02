@@ -36,12 +36,12 @@
       @click.stop="step(1)"
     >›</button>
 
-    <p class="lb-tip">滚轮或按钮缩放 · 拖动画布看细节 · Esc 关闭</p>
+    <p class="lb-tip">{{ tip }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -56,6 +56,17 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 
 const index = ref(0);
 const scale = ref(1);
+
+/** 触屏与桌面给不同的操作提示（手机没有滚轮/Esc） */
+const tip = computed(() => {
+  const coarse =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches;
+  return coarse
+    ? '左右按钮切换 · ＋ － 缩放 · 点右上角 ✕ 关闭'
+    : '滚轮或按钮缩放 · 左右切换 · Esc 关闭';
+});
 
 const close = () => emit('close');
 const step = (delta: number) => {

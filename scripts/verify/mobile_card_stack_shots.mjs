@@ -170,6 +170,8 @@ async function main() {
     deviceScaleFactor: 2,
     mobile: true
   });
+  // 打开触摸模拟：让 (pointer: coarse) 生效，全图提示才会走手机文案
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }).catch(() => {});
 
   await cdp.send('Page.navigate', { url: `${BASE}/#/` });
   await cdp.waitFor(`document.readyState === 'complete'`);
