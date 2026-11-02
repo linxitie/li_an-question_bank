@@ -2,7 +2,7 @@
   "id": "ai_chat",
   "name": "联考小智",
   "type": "page",
-  "version": "20261102001",
+  "version": "20261028002",
   "node": {
     "id": "root",
     "type": "element",
