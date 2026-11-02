@@ -174,6 +174,18 @@
       <!-- 输入区 -->
       <div class="input-area">
         <div class="input-card">
+          <!-- 豆包风格工具栏 -->
+          <div class="input-toolbar">
+            <button class="tool-btn" title="上传图片/文件" @click="uploadFile">
+              📎
+            </button>
+            <button class="tool-btn" title="语音输入" @click="voiceInput">
+              🎤
+            </button>
+            <button class="tool-btn" title="快捷指令" @click="showQuickCommands = !showQuickCommands">
+              ➕
+            </button>
+          </div>
           <textarea
             v-model="state.input"
             :placeholder="inputPlaceholder"
@@ -185,6 +197,20 @@
             <XIcon :icon="Promotion" :size="16" color="#fff"></XIcon>
             <span>发送</span>
           </button>
+        </div>
+        <!-- 快捷指令面板 -->
+        <div v-if="showQuickCommands" class="quick-panel">
+          <div class="qp-title">快捷指令</div>
+          <div class="qp-list">
+            <div class="qp-item" @click="useQuickCommand('帮我制定今日学习计划')">📅 制定今日学习计划</div>
+            <div class="qp-item" @click="useQuickCommand('分析我的错题')">📊 分析我的错题</div>
+            <div class="qp-item" @click="useQuickCommand('申论批改')">✍️ 申论批改</div>
+            <div class="qp-item" @click="useQuickCommand('行测错题诊断')">📝 行测错题诊断</div>
+            <div class="qp-item" @click="useQuickCommand('公专法条梳理')">⚖️ 公专法条梳理</div>
+            <div class="qp-item" @click="useQuickCommand('选岗建议')">🎯 选岗建议</div>
+            <div class="qp-item" @click="useQuickCommand('模拟面试')">🎤 模拟面试</div>
+            <div class="qp-item" @click="useQuickCommand('心理疏导')">💭 心理疏导</div>
+          </div>
         </div>
         <div class="input-tip">Enter 发送 · Shift+Enter 换行</div>
       </div>
@@ -226,6 +252,7 @@
         workImportDone: false,
         workNotice: '',
       });
+      const showQuickCommands = ref(false);
       const sessions = ref([]);
       const drawerOpen = ref(false);
 
@@ -397,6 +424,23 @@
         send();
       }
 
+      // 豆包风格功能
+      function uploadFile() {
+        state.notice = '📎 文件上传功能即将上线，敬请期待！';
+        setTimeout(() => state.notice = '', 3000);
+      }
+
+      function voiceInput() {
+        state.notice = '🎤 语音输入功能即将上线，敬请期待！';
+        setTimeout(() => state.notice = '', 3000);
+      }
+
+      function useQuickCommand(cmd) {
+        showQuickCommands.value = false;
+        state.input = cmd;
+        send();
+      }
+
       function switchScene(scene) {
         if (state.scene === scene) return;
         state.scene = scene;
@@ -502,7 +546,7 @@
       });
 
       return {
-        state, sessions, drawerOpen,
+        state, sessions, drawerOpen, showQuickCommands,
         provider,
         sceneOptions, quickQuestions,
         inputPlaceholder: '输入消息…',
@@ -510,6 +554,7 @@
         openSession, removeSession,
         sceneLabel, fmtTime, renderMd,
         agentLabel, switchMode, selectTask, runWorkTask, importToToday,
+        uploadFile, voiceInput, useQuickCommand,
         Plus, Menu, Promotion,
       };
     },
@@ -791,6 +836,33 @@
   .send-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,42,74,0.3); }
   .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .input-tip { text-align: center; font-size: 11px; color: #aab4c0; margin-top: 6px; }
+
+  /* 豆包风格工具栏 */
+  .input-toolbar {
+    display: flex; gap: 4px; padding: 0 4px;
+  }
+  .tool-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    border: none; background: transparent; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .tool-btn:hover { background: rgba(0,0,0,0.06); }
+
+  /* 快捷指令面板 */
+  .quick-panel {
+    margin: 8px 0 0; padding: 12px;
+    background: #fff; border: 1px solid #e6ebf2;
+    border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .qp-title { font-size: 12px; color: #666; margin-bottom: 8px; font-weight: 500; }
+  .qp-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .qp-item {
+    padding: 6px 12px; background: #f5f7fa; border-radius: 16px;
+    font-size: 12px; color: #333; cursor: pointer; transition: all 0.15s;
+  }
+  .qp-item:hover { background: #e8ecf1; color: #1a2a4a; }
+
   .notice-bar {
     margin: 0 16px 8px; padding: 8px 12px;
     background: #fff3f3; color: #c8161e; border-radius: 8px;
