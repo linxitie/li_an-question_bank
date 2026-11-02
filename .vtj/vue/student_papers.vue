@@ -365,7 +365,7 @@ export default defineComponent({
 
 /* 预览弹窗 */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.preview-modal { background: #fff; border-radius: 12px; width: 90%; max-width: 800px; max-height: 80vh; display: flex; flex-direction: column; }
+.preview-modal { background: #fff; border-radius: 12px; width: 90%; max-width: 10000px; max-height: 90vh; display: flex; flex-direction: column; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #e8e8e8; }
 .modal-header h3 { margin: 0; color: #1A3C6D; font-size: 18px; }
 .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #909399; padding: 0 8px; }
