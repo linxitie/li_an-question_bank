@@ -4,6 +4,7 @@
   """
 import os
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -875,6 +876,32 @@ app.include_router(notifications.router)
 app.include_router(forum_moderation.teacher_router)
 app.include_router(forum_moderation.admin_router)
 
+def _resolve_app_revision() -> str:
+    """读取当前代码的 git 短 SHA，供前端 /health 版本自检使用。
+
+    为什么不用启动时间：只有同一个提交才应产生同一个值，时间戳会把
+    「同版本的两次启动」误判成版本不一致。无 git 环境（容器/离线包）时降级 unknown。
+    """
+    try:
+        import subprocess
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return result.stdout.strip() if result.returncode == 0 else "unknown"
+    except Exception:
+        return "unknown"
+
+
+_APP_REVISION = _resolve_app_revision()
+_APP_STARTED_AT = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
 @app.get("/health", tags=["系统"])
 async def health_check():
     """
@@ -883,7 +910,10 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "公安联考题库系统",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        # 前端启动时用 revision 与自身构建 SHA 比对，不一致说明页面或后端是旧产物
+        "revision": _APP_REVISION,
+        "started_at": _APP_STARTED_AT,
     }
 
 @app.get("/health/foundation", tags=["系统"])
