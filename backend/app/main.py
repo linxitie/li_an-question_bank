@@ -229,12 +229,20 @@ async def lifespan(app: FastAPI):
                 ('ai_qa_count', 'INTEGER DEFAULT 0'),
                 ('news_read_count', 'INTEGER DEFAULT 0'),
                 ('recruit_read_count', 'INTEGER DEFAULT 0'),
+                # 管理员端用户合并：软删除
+                ('is_deleted', 'INTEGER DEFAULT 0'),
+                ('deleted_at', 'DATETIME'),
+                ('deleted_by', 'BIGINT'),
+                ('delete_reason', 'VARCHAR(255)'),
             ]:
                 if col_name not in user_cols:
                     with engine.connect() as conn:
                         conn.execute(text(f"ALTER TABLE sys_user ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: sys_user 添加列 {col_name}")
+            with engine.connect() as conn:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_is_deleted ON sys_user(is_deleted)"))
+                conn.commit()
 
         # 检查 achievement 表（徽章体系：隐藏成就 + 视觉参数 + 五档升级）
         if 'achievement' in inspector.get_table_names():

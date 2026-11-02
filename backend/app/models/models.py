@@ -55,6 +55,12 @@ class SysUser(Base):
     school_id = Column(Integer, comment="所属学校/机构ID")
     device_sessions = Column(JSON, default=list, comment="设备会话列表")
 
+    # === 管理员端用户合并模块新增字段 ===
+    is_deleted = Column(Integer, default=0, comment="删除状态 0正常/1回收站/2已注销")
+    deleted_at = Column(DateTime, comment="删除时间")
+    deleted_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="删除操作人")
+    delete_reason = Column(String(255), comment="删除原因")
+
     # === 学生端「我的」模块新增字段 ===
     growth_points = Column(Integer, default=0, comment="累计成长值(学习等级)")
     settings = Column(JSON, comment="通知/隐私偏好JSON")
@@ -83,6 +89,7 @@ class SysUser(Base):
         Index("idx_is_disabled", is_disabled),
         Index("idx_department", department, class_name),
         Index("idx_school_id", school_id),
+        Index("idx_is_deleted", is_deleted),
     )
 
 class SysLoginLog(Base):
@@ -2573,3 +2580,68 @@ class UserProfile(Base):
         Index("idx_profile_status", profile_status),
     )
 
+
+
+# ------------------------------
+# 管理员端用户与权限合并（2026-11）
+# ------------------------------
+
+class UserPermissionOverride(Base):
+    """用户级权限覆盖：在角色基线与能力包之上做加授/拒绝。
+
+    为什么单独建表而不复用 UserCapability：
+    - UserCapability 的语义是“能力包”，没有 deny、到期、批次撤销；
+    - 通用权限码最长 64 字符，能力码只有 32；
+    - 本表需要按权限码聚合做权限矩阵与审计。
+    """
+    __tablename__ = "user_permission_override"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="被授权用户")
+    permission_code = Column(String(64), nullable=False, comment="权限码")
+    effect = Column(String(8), nullable=False, comment="grant/deny")
+    scope_type = Column(String(16), nullable=False, default="global", comment="global/subject/class")
+    scope_id = Column(BigInteger, nullable=False, default=0, comment="范围ID，global 固定 0")
+    scope_key = Column(String(64), nullable=False, default="", comment="范围键，class 用班级名")
+    status = Column(String(16), nullable=False, default="active", comment="active/revoked/expired")
+    reason = Column(String(255), nullable=False, default="", comment="变更原因")
+    granted_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="操作人")
+    granted_at = Column(DateTime, default=datetime.now, comment="授权时间")
+    expires_at = Column(DateTime, comment="到期时间，空=永久")
+    revoked_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="撤销人")
+    revoked_at = Column(DateTime, comment="撤销时间")
+    batch_id = Column(String(36), comment="变更批次")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="最后更新时间")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "permission_code", "scope_type", "scope_id",
+            name="uk_user_permission_override",
+        ),
+        Index("idx_permission_override_user_status", "user_id", "status"),
+        Index("idx_permission_override_code_status", "permission_code", "status"),
+        Index("idx_permission_override_batch", "batch_id"),
+    )
+
+
+class PermissionChangeBatch(Base):
+    """权限变更批次：保存 before/after，用于审计与 10 分钟内撤销。"""
+    __tablename__ = "permission_change_batch"
+
+    batch_id = Column(String(36), primary_key=True, comment="批次ID")
+    operator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="操作人")
+    action = Column(String(32), nullable=False, comment="grant/deny/inherit/apply_template/role_template_update")
+    target_count = Column(Integer, default=0, comment="目标用户数")
+    reason = Column(String(255), nullable=False, default="", comment="操作原因")
+    before_json = Column(Text, comment="变更前快照 JSON")
+    after_json = Column(Text, comment="变更后快照 JSON")
+    undo_deadline = Column(DateTime, comment="撤销截止时间")
+    undone_at = Column(DateTime, comment="撤销时间")
+    undone_by = Column(BigInteger, comment="撤销人")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    __table_args__ = (
+        Index("idx_permission_batch_operator", "operator_id", "created_at"),
+        Index("idx_permission_batch_created", "created_at"),
+    )

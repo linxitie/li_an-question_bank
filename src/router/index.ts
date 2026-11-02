@@ -239,7 +239,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'users',
         name: 'AdminUsers',
-        component: () => import('$vtj/vue/admin_users.vue'),
+        component: () => import('@/views/admin/pc/AdminUsersWorkspace.vue'),
         meta: { roles: ['admin'] }
       },
       {
@@ -281,8 +281,8 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'permissions',
         name: 'AdminPermissions',
-        component: () => import('$vtj/vue/admin_permissions.vue'),
-        meta: { roles: ['admin'] }
+        // 旧书签保留：权限模板已并入用户与权限工作台
+        redirect: '/admin/users?tab=templates'
       },
       {
         path: 'papers',
