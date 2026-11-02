@@ -419,14 +419,43 @@ export default defineComponent({
       }
     }
 
-    // 极简 markdown：转义 HTML → **加粗** → 换行 → 列表
+    // 升级的 markdown 渲染
     function renderMd(text) {
       if (!text) return '';
       let s = String(text);
+      
+      // 转义HTML
       s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      
+      // 代码块（```代码```）
+      s = s.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre style="background:#f5f7fa;padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0;"><code>$2</code></pre>');
+      
+      // 行内代码（`代码`）
+      s = s.replace(/`([^`]+)`/g, '<code style="background:#f5f7fa;padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
+      
+      // 标题（### 三级标题、## 二级标题、# 一级标题）
+      s = s.replace(/^### (.*)$/gm, '<div style="font-size:15px;font-weight:bold;color:#1a2a4a;margin:12px 0 6px;">$1</div>');
+      s = s.replace(/^## (.*)$/gm, '<div style="font-size:16px;font-weight:bold;color:#1a2a4a;margin:14px 0 8px;">$1</div>');
+      s = s.replace(/^# (.*)$/gm, '<div style="font-size:18px;font-weight:bold;color:#1a2a4a;margin:16px 0 10px;">$1</div>');
+      
+      // 引用（> 引用）
+      s = s.replace(/^&gt; (.*)$/gm, '<div style="border-left:3px solid #e74c3c;padding-left:12px;margin:8px 0;color:#666;">$1</div>');
+      
+      // 加粗
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#c8161e;">$1</strong>');
+      
+      // 斜体
+      s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      
+      // 列表
       s = s.replace(/^\s*[-•]\s+/gm, '<br>• ');
+      
+      // 有序列表
+      s = s.replace(/^\s*\d+\.\s+/gm, '<br>');
+      
+      // 换行
       s = s.replace(/\n/g, '<br>');
+      
       return s;
     }
 
@@ -1062,40 +1091,45 @@ export default defineComponent({
 
 /* 工作台 */
 .work-panel {
-  padding: 2px 0 16px;
+  padding: 20px;
 }
 .work-head {
-  margin-bottom: 12px;
+  margin-bottom: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #1a2a4a, #2c4a82);
+  border-radius: 16px;
+  color: white;
 }
 .work-title {
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 700;
-  color: #1a2a4a;
 }
 .work-sub {
-  font-size: 12px;
-  color: #8899aa;
-  margin-top: 2px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  margin-top: 6px;
 }
 .work-tasks {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 .work-task {
   background: #fff;
   border: 1px solid #e6ebf2;
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 16px;
+  padding: 16px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .work-task:hover {
   border-color: #c8161e;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 .work-task.open {
   border-color: #c8161e;
-  box-shadow: 0 4px 12px rgba(200, 22, 30, 0.08);
+  box-shadow: 0 4px 16px rgba(200, 22, 30, 0.15);
 }
 .wt-row {
   display: flex;
