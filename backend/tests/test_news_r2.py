@@ -1,4 +1,6 @@
 """R2 新闻分类与检索测试。"""
+from datetime import datetime
+
 from app.models.models import NewsArticle
 
 
@@ -75,3 +77,21 @@ def test_news_timeline_groups_published(client, db_session):
     assert body["total"] == 1
     assert body["items"][0]["date"] == "未分期"
     assert body["items"][0]["items"][0]["news_id"] == article.news_id
+
+
+def test_news_digest_groups_day(client, db_session):
+    article = _article(db_session, "日报新闻", "理论")
+    article.publish_date = datetime(2026, 11, 2, 9, 0)
+    article.review_status = "published"
+    db_session.commit()
+
+    response = client.get("/api/news/digest?day=2026-11-02")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["date"] == "2026-11-02"
+    assert body["total"] == 1
+    assert body["categories"][0]["count"] == 1
+    assert body["items"][0]["news_id"] == article.news_id
+
+    assert client.get("/api/news/digest?day=bad-date").status_code == 400
