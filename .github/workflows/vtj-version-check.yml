@@ -36,8 +36,8 @@ jobs:
       
       - name: Check VTJ version consistency
         run: |
-          echo "🔍 检查 VTJ 版本一致性..."
-          python scripts/vtj_version_sync.py
+          echo "🔍 检查 VTJ 版本一致性（--check 只读比对，不写入）..."
+          python scripts/vtj_version_sync.py --check
         continue-on-error: false
       
       - name: Comment on PR (if failed)
