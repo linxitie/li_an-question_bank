@@ -1,13 +1,1 @@
-{
-  "id": "study_plan",
-  "name": "学习计划",
-  "type": "page",
-  "version": "20261102001",
-  "node": {
-    "id": "root",
-    "type": "element",
-    "name": "div",
-    "props": {},
-    "children": []
-  }
-}
+{"id":"study_plan","css":"","name":"学习计划智能推荐","emits":[],"nodes":[],"props":[],"slots":[],"state":{},"watch":[],"expose":[],"inject":[],"locked":false,"methods":{},"computed":{},"lifeCycles":{},"__VERSION__":"20261028002","dataSources":{},"__VTJ_BLOCK__":true}

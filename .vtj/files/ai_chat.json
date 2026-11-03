@@ -1,13 +1,1 @@
-{
-  "id": "ai_chat",
-  "name": "联考小智",
-  "type": "page",
-  "version": "20261028002",
-  "node": {
-    "id": "root",
-    "type": "element",
-    "name": "div",
-    "props": {},
-    "children": []
-  }
-}
+{"id":"ai_chat","css":"","name":"AI助手联考小智","emits":[],"nodes":[],"props":[],"slots":[],"state":{},"watch":[],"expose":[],"inject":[],"locked":false,"methods":{},"computed":{},"lifeCycles":{},"__VERSION__":"20261028002","dataSources":{},"__VTJ_BLOCK__":true}
