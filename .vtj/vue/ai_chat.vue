@@ -44,8 +44,7 @@
             <div class="header-title-row">
               <span class="header-title">联考小智</span>
               <span class="online-dot"><i></i>在线</span>
-              <a class="kb-entry" href="/#/memories" title="长期记忆管理">🧠 记忆</a>
-              <a class="kb-entry" href="/#/knowledge" title="自生长知识库">📚 知识库</a>
+              <a class="kb-entry" href="/#/memories" title="小智对你的了解">👤 我的画像</a>
             </div>
             <div class="header-sub">你的公安联考专属备考伙伴</div>
           </div>
