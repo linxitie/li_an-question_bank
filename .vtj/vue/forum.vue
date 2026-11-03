@@ -21,6 +21,15 @@
         <button class="search-reset" @click="resetSearch">重置</button>
         </div>
 
+        <!-- 校园 / 班级论坛筛选（2026-11-03）：作用域 ALL=校园、CLASSES=班级 -->
+        <div class="scope-filter" role="group" aria-label="论坛范围筛选">
+          <button
+            v-for="opt in scopeOptions"
+            :key="opt.key"
+            :class="['scope-chip', { on: state.scopeFilter === opt.key }]"
+            @click="selectScope(opt.key)">{{ opt.label }}</button>
+        </div>
+
         <div class="forum-header-actions">
           <button class="post-btn ghost star-only" title="我的收藏 / 我的喜欢" @click="openFavorites('favorites')">
             <XIcon :icon="Star" :size="18" color="#c41e3a"></XIcon>
@@ -160,7 +169,7 @@
       <!-- 我的收藏 / 我的喜欢（P2 为空态外壳，列表数据在 P3 接入） -->
       <div
         v-if="state.showFavorites"
-        class="modal-overlay"
+        class="modal-overlay modal-l1"
         @click.self="closeFavorites">
         <div class="modal-card fav-modal">
           <h3>{{ state.favoriteTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
@@ -206,7 +215,7 @@
       </div>
       <div
         v-if="state.showUserProfile"
-        class="modal-overlay"
+        class="modal-overlay modal-l3"
         @click.self="state.showUserProfile = false">
         <div class="profile-card">
           <div class="profile-avatar-wrap">
@@ -246,7 +255,7 @@
       <!-- 帖子详情 Modal -->
       <div
         v-if="state.showPostDetail"
-        class="modal-overlay"
+        class="modal-overlay modal-l2"
         @click.self="closePostDetail">
         <div class="modal-card post-detail-card">
           <div v-if="state.detailLoading && !state.currentPost" class="empty-tip">加载中...</div>
@@ -453,7 +462,7 @@
         </div>
       </div>
       <!-- 热门帖子前 100 条 Modal -->
-      <div v-if="state.showHotAll" class="modal-overlay" @click.self="closeHotAll">
+      <div v-if="state.showHotAll" class="modal-overlay modal-l1" @click.self="closeHotAll">
         <div class="modal-card post-detail-card">
           <h3>热门帖子 · 前 100 条</h3>
           <div class="hot-range">
@@ -487,7 +496,7 @@
       <!-- 我的帖子完整列表 Modal -->
       <div
         v-if="state.showMyPosts"
-        class="modal-overlay"
+        class="modal-overlay modal-l1"
         @click.self="closeMyPosts">
         <div class="modal-card post-detail-card">
           <h3>我的帖子（{{ state.myPostsTotal }}）</h3>
@@ -564,6 +573,7 @@
   import FileUploader from '@/components/forum/FileUploader.vue';
   import PostComposer from '@/components/forum/PostComposer.vue';
   import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
+  import { loadMyClasses } from '@/modules/community/classScope';
   import AttachmentList from '@/components/forum/AttachmentList.vue';
   import CommentSortBar from '@/components/forum/CommentSortBar.vue';
   import UserBadge from '@/components/forum/UserBadge.vue';
@@ -593,6 +603,8 @@
         page: 1,
         pageSize: 8,
         activeCategory: 'all',
+        /** 校园/班级论坛筛选：'' 全部 / 'ALL' 校园 / 'CLASSES' 班级（2026-11-03） */
+        scopeFilter: '' as '' | 'ALL' | 'CLASSES',
         // P3：搜索与日期筛选
         searchKeyword: '',
         searchDateFrom: '',
@@ -664,6 +676,12 @@
         props,
         provider,
         community,
+        // 校园 / 班级论坛筛选项（2026-11-03）
+        scopeOptions: [
+          { key: '', label: '全部' },
+          { key: 'ALL', label: '校园论坛' },
+          { key: 'CLASSES', label: '班级论坛' }
+        ],
         avatarInitial,
         avatarFailed,
         markAvatarFailed,
@@ -758,6 +776,14 @@
         this.state.page = 1;
         this.state.showCommentPicker = false;
         this.community.setShareType(toShareTypeParam(key));
+        await this.loadPosts();
+      },
+      /** 校园 / 班级 论坛筛选：先写进 store 再重拉第一页（2026-11-03） */
+      async selectScope(key: '' | 'ALL' | 'CLASSES') {
+        if (this.state.scopeFilter === key) return;
+        this.state.scopeFilter = key;
+        this.state.page = 1;
+        this.community.setVisibilityFilter(key);
         await this.loadPosts();
       },
       insertCommentEmoji(payload: { type: 'emoji' | 'sticker'; value: string }) {
@@ -940,11 +966,19 @@
           ElMessage.warning('请先登录后发帖');
           return;
         }
-        const info: any = auth.parseUserInfo ? auth.parseUserInfo() : {};
-        // 学生只能发本校/本班：班级候选取本人 class_name
-        this.state.myClasses = info && info.className ? [info.className] : [];
+        // 班级候选的事实来源是 /api/auth/profile（JWT 里没有班级字段）。
+        // 2026-11-03 修正：此前读 auth.parseUserInfo().className 恒为空，
+        // 导致「仅指定班级」显示「当前账号没有可选班级」。
+        this.state.myClasses = [];
         this.state.postDraftInitial = null;
         this.state.showNewPost = true;
+        loadMyClasses()
+          .then((scope) => {
+            this.state.myClasses = scope.classes;
+          })
+          .catch(() => {
+            this.state.myClasses = [];
+          });
         fetchMyForumDraft()
           .then((draft) => {
             if (!draft) return;
@@ -1416,6 +1450,37 @@
           isTop: p?.isTop ?? false,
           isEssence: p?.isEssence ?? false
         };
+      },
+      /**
+       * 关闭「最上层」的弹窗（2026-11-03）。
+       * 顺序必须从高到低：用户卡片(3) → 帖子详情(2) → 我的帖子/热门/收藏(1) → 发帖弹窗。
+       * 为什么要有：二三级弹窗叠在一级之上时，Esc/遮罩只应关掉最上层那一个，
+       * 否则用户按一次就把三层全关了，或者反过来关了底层留着顶层。
+       */
+      closeTopModal() {
+        if (this.state.showUserProfile) {
+          this.state.showUserProfile = false;
+          return;
+        }
+        if (this.state.showPostDetail) {
+          this.closePostDetail();
+          return;
+        }
+        if (this.state.showMyPosts) {
+          this.closeMyPosts();
+          return;
+        }
+        if (this.state.showHotAll) {
+          this.closeHotAll();
+          return;
+        }
+        if (this.state.showFavorites) {
+          this.closeFavorites();
+          return;
+        }
+        if (this.state.showNewPost) {
+          this.state.showNewPost = false;
+        }
       }
     },
     mounted() {
@@ -1432,6 +1497,11 @@
       this.state._refreshTimer = setInterval(() => this.refreshSilently(), 15000);
       window.addEventListener('focus', this.state._visibilityHandler);
       document.addEventListener('visibilitychange', this.state._visibilityHandler);
+      // Esc 只关最上层弹窗（层级见 closeTopModal 注释）
+      this.state._escHandler = (e) => {
+        if (e.key === 'Escape') this.closeTopModal();
+      };
+      window.addEventListener('keydown', this.state._escHandler);
     },
     beforeUnmount() {
       if (this.state._refreshTimer) {
@@ -1443,10 +1513,21 @@
         document.removeEventListener('visibilitychange', this.state._visibilityHandler);
         this.state._visibilityHandler = null;
       }
+      if (this.state._escHandler) {
+        window.removeEventListener('keydown', this.state._escHandler);
+        this.state._escHandler = null;
+      }
     }
   })
 </script>
 <style lang="css" scoped>
+  /* 弹窗层级（2026-11-03）：一级列表弹窗 < 二级帖子详情 < 三级用户卡片。
+   * 背景：此前收藏/热门/我的（一级）与帖子详情（二级）共用 z-index:2000，
+   * 同层里谁后插入谁在上，导致二级被一级盖住、必须先关一级才能看到详情。 */
+  .modal-overlay.modal-l1 { z-index: 2000; }
+  .modal-overlay.modal-l2 { z-index: 2200; }
+  .modal-overlay.modal-l3 { z-index: 2400; }
+
   .forum-page {
     /* 自己成为滚动容器：VTJ 外壳存在 overflow 祖先，sticky 绑不到视口 */
     height: 100vh;
@@ -1548,13 +1629,47 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    /* 2026-11-03：与右侧范围筛选同行排布，不再独占整行 */
+    flex: 1 1 auto;
+    min-width: 0;
     margin: 0 0 12px;
     padding: 10px 12px;
     background: #ffffff;
     border-radius: 12px;
   }
+  /* 校园 / 班级 论坛筛选（2026-11-03） */
+  .scope-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: #f1f5fb;
+    border-radius: 9px;
+    flex: 0 0 auto;
+  }
+  .scope-chip {
+    height: 28px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: #5a6488;
+    font-size: 12.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .scope-chip:hover { color: #1a365d; }
+  .scope-chip.on {
+    background: #ffffff;
+    color: #1a365d;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(23, 35, 58, .12);
+  }
+
   .search-input {
-    flex: 1 1 auto;
+    /* 2026-11-03：搜索框缩短，给右侧「校园/班级论坛」筛选让位 */
+    flex: 0 1 260px;
+    max-width: 260px;
     min-width: 0;
     height: 34px;
     padding: 0 12px;

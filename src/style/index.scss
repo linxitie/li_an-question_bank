@@ -10,3 +10,19 @@ body,
   font-size: 14px;
   min-height: 100%;
 }
+
+/* ===== 手机端论坛：超长无空格串（纯数字/连写英文）必须换行 =====
+ * 背景：CJK 会在任意字间断行，但连续数字/拉丁串默认不断行，
+ * 长标题会横向顶破帖子卡片（实测 mobile_forum.vue 的 .post-title）。
+ * 为什么放全局而不是 .vtj 页的 <style>：R3 默认只允许改 raw 页的 <script>，
+ * 全局样式是普通手写文件，零模板改动、作用域限定，可独立回滚。 */
+.mobile-forum-page .post-title,
+.mobile-forum-page .post-excerpt,
+.mobile-forum-page .fav-title {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mobile-forum-page .post-card {
+  overflow: hidden;
+}

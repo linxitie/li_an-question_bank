@@ -215,12 +215,10 @@ export default defineComponent({
     const posts = ref<any[]>([]);
     
     // 过滤帖子
-    const filteredPosts = computed(() => {
-      if (activeCategory.value === 'all') {
-        return posts.value;
-      }
-      return posts.value.filter(p => p.category === activeCategory.value);
-    });
+    // 2026-11-03：页签已改为「全部 / 今日热门 / 我的帖子」，列表集合完全由接口决定
+    // （loadPosts 已按 hot/mine 分别请求），前端不得再按旧的 shareType 分类二次过滤，
+    // 否则 hot/mine 恒为空（p.category 永远不等于 'hot'/'mine'）。
+    const filteredPosts = computed(() => posts.value);
     
     // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
     /** 应用搜索（关键词 + 日期） */
@@ -244,7 +242,7 @@ export default defineComponent({
           params.set('date_from', today);
           params.set('date_to', today);
         } else if (categoryKey === 'mine') {
-          params.set('only_mine', '1');
+          // my-posts 只返回本人帖子，不接受 only_mine 参数（旧代码传了无效参数，已删除）
         }
         if (searchKeyword.value.trim()) params.set('keyword', searchKeyword.value.trim());
         if (searchDateFrom.value) params.set('date_from', searchDateFrom.value);

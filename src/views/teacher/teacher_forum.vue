@@ -15,6 +15,7 @@
           <option v-for="name in classOptions" :key="name" :value="name">{{ name }}</option>
           </select>
           <button class="tf-btn" @click="loadPosts">查询</button>
+          <button class="tf-btn ghost" @click="resetFilters">重置</button>
           </section>
           <div class="tf-head-actions">
             <button class="tf-star-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
@@ -68,7 +69,7 @@
         </article>
       </div>
 
-      <div v-if="detail" class="tf-modal" @click.self="detail = null">
+      <div v-if="detail" class="tf-modal tf-modal-l2" @click.self="detail = null">
         <div class="tf-modal-card">
           <button class="tf-close" @click="detail = null">×</button>
           <div class="tf-modal-scroll">
@@ -174,7 +175,7 @@
       </aside>
     </main>
     <!-- D'：热门帖子前 100 / 我的帖子全部 -->
-    <div v-if="showHotAll" class="tf-modal" @click.self="showHotAll = false">
+    <div v-if="showHotAll" class="tf-modal tf-modal-l1" @click.self="showHotAll = false">
       <div class="tf-modal-card tf-fav-card">
         <h3>今日热门 · 前 100 条</h3>
         <div class="tf-hot-range">
@@ -194,7 +195,7 @@
         <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showHotAll = false">关闭</button></div>
       </div>
     </div>
-    <div v-if="showMyAll" class="tf-modal" @click.self="showMyAll = false">
+    <div v-if="showMyAll" class="tf-modal tf-modal-l1" @click.self="showMyAll = false">
       <div class="tf-modal-card tf-fav-card">
         <h3>我的帖子（全部）</h3>
         <div class="tf-hot-range">
@@ -214,7 +215,7 @@
     </div>
 
     <!-- T4：我的收藏 / 我的喜欢 -->
-    <div v-if="favVisible" class="tf-modal" @click.self="favVisible = false">
+    <div v-if="favVisible" class="tf-modal tf-modal-l1" @click.self="favVisible = false">
       <div class="tf-modal-card tf-fav-card">
         <h3>{{ favTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
         <div class="tf-fav-tabs">
@@ -253,7 +254,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import TeacherNavHeader from '$vtj/vue/TeacherNavHeader.vue';
@@ -511,6 +512,15 @@ const openMyAll = async () => {
   } catch (e) { myAll.value = []; } finally { myAllLoading.value = false; }
 };
 
+/** 一键清空筛选条件（2026-11-03）：关键词 / 日期区间 / 班级，然后重新加载 */
+const resetFilters = async () => {
+  keyword.value = '';
+  dateFrom.value = '';
+  dateTo.value = '';
+  className.value = '';
+  await loadPosts();
+};
+
 const loadPosts = async () => {
   loading.value = true;
   try {
@@ -587,6 +597,36 @@ const submitReason = async (reason: string) => {
 
 onMounted(loadSideCards);
 onMounted(loadPosts);
+
+/**
+ * 关闭「最上层」弹窗（2026-11-03）：帖子详情(二级) 先关，再关热门/我的/收藏(一级)。
+ * 与模板里的 tf-modal-l1 / tf-modal-l2 层级保持一致。
+ */
+function closeTopModal() {
+  if (detail.value) {
+    detail.value = null;
+    return;
+  }
+  if (favVisible.value) {
+    favVisible.value = false;
+    return;
+  }
+  if (showHotAll.value) {
+    showHotAll.value = false;
+    return;
+  }
+  if (showMyAll.value) {
+    showMyAll.value = false;
+  }
+}
+
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeTopModal();
+}
+
+onMounted(() => window.addEventListener('keydown', onGlobalKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
+
 </script>
 
 <style scoped>
@@ -682,6 +722,11 @@ onMounted(loadPosts);
 .tf-stats b { font-size: 18px; color: #c41e3a; }
 .tf-stats span { font-size: 12px; color: #94a3b8; }
 .tf-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 2200; }
+/* 弹窗分层（2026-11-03）：一级列表（热门/我的/收藏）< 二级帖子详情。
+ * 本文件里 .tf-modal 有两处定义，后者会覆盖前者的 z-index；层级必须写在最后并提权，
+ * 否则同层里详情会被列表弹窗盖住。 */
+.tf-modal.tf-modal-l1 { z-index: 2200; }
+.tf-modal.tf-modal-l2 { z-index: 2400; }
 .tf-modal-card { width: 560px; max-width: 92vw; background: #fff; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .tf-modal-card h3 { margin: 0; font-size: 17px; color: #1a2b5f; }
 .tf-input, .tf-textarea, .tf-select { width: 100%; padding: 10px 12px; border: 1px solid #e3e8ef; border-radius: 10px; font-size: 14px; box-sizing: border-box; }

@@ -76,7 +76,9 @@
                 <span :class="['rp', { on: form.visibility === 'CLASSES' }]" @click="form.visibility = 'CLASSES'">仅指定班级</span>
               </div>
               <div v-if="form.visibility === 'CLASSES'" class="pc-classes">
-                <span v-if="!classes.length" class="pc-tip">当前账号没有可选班级</span>
+                <span v-if="!classes.length" class="pc-tip">
+                  当前账号未分班，无法按班级发送；请改用「全站可见」，或先联系管理员分配班级
+                </span>
                 <label v-for="c in classes" :key="c" class="chk-row">
                   <input v-model="form.visibleClasses" type="checkbox" :value="c" />{{ c }}
                 </label>

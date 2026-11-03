@@ -350,6 +350,9 @@ async def get_forum_posts(
     sort: Optional[Literal["new", "hot"]] = Query(None, description="快捷排序: new/hot"),
     date_from: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD（含当天）"),
     date_to: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD（含当天）"),
+    visibility: Optional[Literal["ALL", "CLASSES"]] = Query(
+        None, description="可见范围筛选：ALL=校园论坛 / CLASSES=班级论坛（不传=全部）"
+    ),
     limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
@@ -365,6 +368,12 @@ async def get_forum_posts(
     query = db.query(ForumPost).filter(ForumPost.status == "NORMAL")
     # P3：可见范围（教师/管理员不过滤；学生仅本校班级或全校；游客仅全校）
     query = _apply_visibility_filter(query, current_user)
+
+    # 校园 / 班级 论坛筛选（2026-11-03）。
+    # 顺序很关键：必须放在 _apply_visibility_filter 之后 —— 前者是「谁能看」的权限边界，
+    # 后者只是「看哪一类」的业务筛选。若顺序反过来，班级帖会被业务筛选绕开权限暴露。
+    if visibility:
+        query = query.filter(ForumPost.visibility == visibility)
 
     if share_type:
         query = query.filter(ForumPost.share_type == share_type)

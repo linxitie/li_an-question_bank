@@ -36,18 +36,41 @@
           <ForumContent :content="content" />
         </div>
       </div>
+
+      <!-- 可见范围（2026-11-03 新增）：与 PC/平板同一套语义 —— ALL 全校 / CLASSES 本班 -->
+      <div class="field">
+        <label class="label">可见范围</label>
+        <div class="visibility-group">
+          <button
+            type="button"
+            :class="['visibility-pill', { on: visibility === 'ALL' }]"
+            @click="visibility = 'ALL'"
+          >全站可见</button>
+          <button
+            type="button"
+            :class="['visibility-pill', { on: visibility === 'CLASSES' }]"
+            :disabled="!myClasses.length"
+            @click="visibility = 'CLASSES'"
+          >仅本班可见</button>
+        </div>
+        <p v-if="!myClasses.length" class="hint">
+          当前账号未分班，只能发全站帖；如需按班级发送请联系管理员分配班级
+        </p>
+        <p v-else class="hint">仅本班：{{ myClasses.join('、') }} 的同学可见</p>
+      </div>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   FORUM_SHARE_TYPE_OPTIONS,
   useCommunityStore
 } from '@/modules/community/store';
 import type { ForumShareType } from '@/modules/community/api';
+import { loadMyClasses } from '@/modules/community/classScope';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import FileUploader from '@/components/forum/FileUploader.vue';
@@ -64,6 +87,15 @@ const images = ref<ForumImageAttachment[]>([]);
 const submitting = ref(false);
 const message = ref('');
 const msgType = ref('');
+/** 可见范围：有班级时默认「仅本班」（与后端学生默认规则一致），未分班则只能全站 */
+const visibility = ref<'ALL' | 'CLASSES'>('ALL');
+const myClasses = ref<string[]>([]);
+
+onMounted(async () => {
+  const scope = await loadMyClasses();
+  myClasses.value = scope.classes;
+  visibility.value = scope.hasClass ? 'CLASSES' : 'ALL';
+});
 
 const types = FORUM_SHARE_TYPE_OPTIONS;
 
@@ -95,7 +127,9 @@ const submitPost = async () => {
       content: content.value,
       shareType: shareType.value,
       titleColor: titleColor.value,
-      attachments: images.value.length ? images.value : undefined
+      attachments: images.value.length ? images.value : undefined,
+      visibility: visibility.value,
+      visibleClasses: visibility.value === 'CLASSES' ? myClasses.value : undefined
     });
     if (!created) {
       showMsg(store.error || '发布失败，请稍后重试', 'error');
@@ -212,7 +246,7 @@ const showMsg = (m: string, type: string) => {
 .textarea {
   resize: vertical;
   line-height: 1.6;
-}
+}
 .composer-actions {
   display: flex;
   align-items: center;
@@ -231,6 +265,31 @@ const showMsg = (m: string, type: string) => {
 .hint {
   font-size: 11px;
   color: #8899aa;
+}
+/* 可见范围 pills（2026-11-03）：与 PC 弹窗同一套语义与配色 */
+.visibility-group {
+  display: flex;
+  gap: 8px;
+}
+.visibility-pill {
+  flex: 1;
+  height: 38px;
+  border: 1px solid #e2e8f3;
+  border-radius: 10px;
+  background: #fff;
+  color: #5a6488;
+  font-size: 13px;
+  cursor: pointer;
+}
+.visibility-pill.on {
+  border-color: #1a365d;
+  color: #1a365d;
+  background: #f2f7fc;
+  font-weight: 600;
+}
+.visibility-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .picker-wrap {
   margin-top: 8px;

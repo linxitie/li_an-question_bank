@@ -255,6 +255,8 @@ export async function fetchForumPosts(
   if (extra.keyword) params.keyword = String(extra.keyword).trim();
   if (extra.dateFrom) params.date_from = extra.dateFrom;
   if (extra.dateTo) params.date_to = extra.dateTo;
+  // 校园(ALL) / 班级(CLASSES) 论坛筛选；不传=全部
+  if (extra.visibility) params.visibility = extra.visibility;
 
   const data = await request<Partial<ForumPostListResult>>({
     url: '/api/forum/posts',
