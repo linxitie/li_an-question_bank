@@ -59,6 +59,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/news/:id',
+    name: 'NewsDetail',
+    component: () => import('@/views/student/shared/news_detail.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/exercise',
     name: 'Exercise',
     component: () => import('@/views/student/shared/exercise.vue'),

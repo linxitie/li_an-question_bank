@@ -75,12 +75,16 @@
             id="digest-day"
             v-model="day"
             type="date"
-            @change="loadDigest" />
-          <button type="button" @click="loadDigest">查询</button>
+            @change="loadDigest(1)" />
+          <button type="button" @click="loadDigest(1)">查询</button>
         </div>
 
         <div v-if="digest" class="digest-summary">
-          <strong>{{ digest.date }}</strong>
+          <div class="day-nav">
+            <button type="button" @click="shiftDay(-1)">前一天</button>
+            <strong>{{ digest.date }}</strong>
+            <button type="button" @click="shiftDay(1)">后一天</button>
+          </div>
           <span>共 {{ digest.total }} 条</span>
         </div>
 
@@ -118,6 +122,25 @@
             <span v-if="item.category">{{ item.category }}</span>
           </div>
         </article>
+
+        <div v-if="digest && digest.total > digest.page_size" class="page-nav">
+          <button
+            type="button"
+            :disabled="digest.page <= 1"
+            @click="loadDigest(digest.page - 1)">
+            上一页
+          </button>
+          <span>
+            第 {{ digest.page }} /
+            {{ Math.ceil(digest.total / digest.page_size) }} 页
+          </span>
+          <button
+            type="button"
+            :disabled="!digest.has_more"
+            @click="loadDigest(digest.page + 1)">
+            下一页
+          </button>
+        </div>
       </section>
     </template>
   </div>
@@ -125,7 +148,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
   fetchNewsDigest,
   fetchNewsTimeline,
@@ -135,6 +158,7 @@ import {
   type NewsTimelineItem
 } from '@/modules/news/api';
 
+const route = useRoute();
 const router = useRouter();
 const tab = ref<'timeline' | 'digest'>('timeline');
 const loading = ref(false);
@@ -164,6 +188,10 @@ function goBack(): void {
 }
 
 function openSource(item: NewsTimelineItem): void {
+  if (route.path === '/news') {
+    router.push(`/news/${item.news_id}`);
+    return;
+  }
   if (item.url) {
     window.open(item.url, '_blank', 'noopener,noreferrer');
   }
@@ -193,11 +221,11 @@ async function loadTimeline(): Promise<void> {
   }
 }
 
-async function loadDigest(): Promise<void> {
+async function loadDigest(page = 1): Promise<void> {
   loading.value = true;
   error.value = '';
   try {
-    digest.value = await fetchNewsDigest(day.value, 30);
+    digest.value = await fetchNewsDigest(day.value, page, 20);
   } catch (e) {
     error.value = e instanceof Error ? e.message : '日报加载失败';
   } finally {
@@ -205,12 +233,24 @@ async function loadDigest(): Promise<void> {
   }
 }
 
+function shiftDay(delta: number): void {
+  const base = digest.value?.date || day.value;
+  if (!base) return;
+  const date = new Date(`${base}T00:00:00`);
+  date.setDate(date.getDate() + delta);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const dayOfMonth = String(date.getDate()).padStart(2, '0');
+  day.value = `${year}-${month}-${dayOfMonth}`;
+  void loadDigest(1);
+}
+
 function switchTab(next: 'timeline' | 'digest'): void {
   tab.value = next;
   if (next === 'timeline') {
     void loadTimeline();
   } else {
-    void loadDigest();
+    void loadDigest(1);
   }
 }
 
@@ -218,7 +258,7 @@ function retry(): void {
   if (tab.value === 'timeline') {
     void loadTimeline();
   } else {
-    void loadDigest();
+    void loadDigest(digest.value?.page || 1);
   }
 }
 
@@ -412,9 +452,38 @@ onMounted(() => {
 
 .digest-summary {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   color: #505852;
   font-size: 14px;
+}
+
+.day-nav,
+.page-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-nav button,
+.page-nav button {
+  border: 1px solid #d9d3c8;
+  border-radius: 7px;
+  background: #fff;
+  color: #2f5d50;
+  padding: 5px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.page-nav {
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.page-nav button:disabled {
+  color: #b8bdb9;
+  cursor: not-allowed;
 }
 
 .category-list {

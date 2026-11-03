@@ -116,3 +116,21 @@ def test_timeline_and_digest_favorite_flag(client, db_session, test_user, auth_h
     toggled = client.post(f"/api/news/{article.news_id}/favorite", headers=auth_headers)
     assert toggled.status_code == 200
     assert toggled.json()["favorited"] is False
+
+
+def test_news_digest_paginates_same_day(client, db_session):
+    for index in range(25):
+        article = _article(db_session, f"分页新闻{index}", "理论")
+        article.publish_date = datetime(2026, 11, 4, 9, 0)
+        article.review_status = "published"
+        db_session.add(article)
+    db_session.commit()
+
+    second = client.get("/api/news/digest?day=2026-11-04&page=2&limit=10")
+    assert second.status_code == 200
+    body = second.json()
+    assert body["total"] == 25
+    assert body["page"] == 2
+    assert body["page_size"] == 10
+    assert body["has_more"] is True
+    assert len(body["items"]) == 10
