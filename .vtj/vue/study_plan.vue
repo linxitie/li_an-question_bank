@@ -176,6 +176,37 @@
           </div>
         </div>
 
+        <!-- 遗忘曲线复习提醒 -->
+        <div class="review-card">
+          <div class="review-head">
+            <span class="dist-title">🧠 遗忘曲线复习</span>
+            <span class="review-badge">3个待复习</span>
+          </div>
+          <div class="review-list">
+            <div class="review-item">
+              <div class="review-info">
+                <div class="review-topic">资料分析-增长率</div>
+                <div class="review-desc">1天前学过，现在复习最佳</div>
+              </div>
+              <button class="review-btn">去复习</button>
+            </div>
+            <div class="review-item">
+              <div class="review-info">
+                <div class="review-topic">判断推理-图形推理</div>
+                <div class="review-desc">3天前学过，现在复习最佳</div>
+              </div>
+              <button class="review-btn">去复习</button>
+            </div>
+            <div class="review-item">
+              <div class="review-info">
+                <div class="review-topic">言语理解-逻辑填空</div>
+                <div class="review-desc">7天前学过，现在复习最佳</div>
+              </div>
+              <button class="review-btn">去复习</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 本周进度 -->
         <div class="week-progress">
           <div class="dist-title">📅 本周打卡</div>
@@ -486,6 +517,74 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 遗忘曲线复习 ===== */
+  .review-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .review-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .review-badge {
+    background: linear-gradient(135deg, #ff6b35, #ff8e53);
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+  .review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .review-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #f8f9fc;
+    border-radius: 12px;
+    transition: all 0.2s;
+  }
+  .review-item:hover {
+    background: #f0f2f5;
+  }
+  .review-info {
+    flex: 1;
+  }
+  .review-topic {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+  }
+  .review-desc {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+  }
+  .review-btn {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .review-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(196, 30, 58, 0.3);
+  }
 
   /* ===== 成就系统 ===== */
   .achievement-card {
