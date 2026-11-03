@@ -80,6 +80,7 @@
         return [
           { id: 'home_page', label: '首页' },
           { id: 'question_bank', label: '题库' },
+          { id: 'news', label: '新闻' },
           { id: 'about', label: '关于砺安题库' },
           { id: 'forum', label: '论坛' }
         ];
@@ -95,9 +96,13 @@
         handler(to) {
           const path = String((to && to.path) || '');
           // 不用正则：/page/<id> 里含斜杠，正则字面量在构建链路上容易被转义
+          if (path === '/news' || path.startsWith('/news/')) {
+            this.state.activeMenu = 'news';
+            return;
+          }
           const seg = path.split('/page/')[1] || '';
           const id = seg.split('/')[0].split('?')[0];
-          const known = ['home_page', 'question_bank', 'about', 'forum'];
+          const known = ['home_page', 'question_bank', 'news', 'about', 'forum'];
           this.state.activeMenu = known.indexOf(id) >= 0 ? id : '';
         }
       }
@@ -108,7 +113,7 @@
     methods: {
       navigateTo(id) {
         if (this.$router) {
-          this.$router.push('/page/' + id);
+          this.$router.push(id === 'news' ? '/news' : '/page/' + id);
         }
       },
       handleMenuClick(id) {

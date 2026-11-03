@@ -52,7 +52,7 @@ const routes: RouteRecordRaw[] = [
     path: '/news',
     name: 'NewsTimeline',
     component: () => import('@/views/student/shared/news_timeline.vue'),
-    meta: { platform: 'pc', roles: ['student'] }
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/exercise',
