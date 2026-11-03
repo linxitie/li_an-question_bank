@@ -208,6 +208,16 @@
         <div
           v-if="!state.workMode && state.messages.length === 0"
           class="welcome-card">
+          <!-- 粒子动画背景 -->
+          <div class="particles">
+            <div v-for="i in 20" :key="i" class="particle"
+              :style="{
+                left: Math.random() * 100 + '%',
+                animationDelay: Math.random() * 5 + 's',
+                animationDuration: (3 + Math.random() * 4) + 's'
+              }">
+            </div>
+          </div>
           <div class="welcome-emoji">🎯</div>
           <p class="welcome-title">你好，我是联考小智</p>
           <p class="welcome-sub">选个场景，从下面挑一个问题开始问我</p>
@@ -1479,6 +1489,38 @@ export default defineComponent({
   text-align: center;
   box-shadow: 0 4px 16px rgba(26, 42, 74, 0.06);
   margin-top: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 粒子动画 */
+.particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  bottom: -10px;
+  width: 6px;
+  height: 6px;
+  background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+  border-radius: 50%;
+  opacity: 0.3;
+  animation: float-up linear infinite;
+}
+@keyframes float-up {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-300px) rotate(360deg);
+    opacity: 0;
+  }
 }
 .welcome-emoji {
   font-size: 34px;
