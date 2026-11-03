@@ -147,12 +147,15 @@ def parse_article(html: str, url: str) -> ArticleData:
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     title = ""
-    for selector in ('meta[property="og:title"]', "h1", "title"):
-        node = soup.select_one(selector)
+    for selector in ('meta[property="og:title"]', "h1", "h2", ".article-title", ".title"):
+        for node in soup.select(selector):
+            candidate = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
+            if len(candidate) > len(title):
+                title = candidate
+    if not title:
+        node = soup.select_one("title")
         if node:
-            title = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
-            if title:
-                break
+            title = node.get_text(" ", strip=True).strip()
     body = ""
     best_score = 0
     for selector in _CONTENT_SELECTORS:
