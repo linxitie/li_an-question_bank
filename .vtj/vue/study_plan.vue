@@ -207,6 +207,31 @@
           </div>
         </div>
 
+        <!-- 自适应学习推荐 -->
+        <div class="adaptive-card">
+          <div class="adaptive-head">
+            <span class="dist-title">🤖 自适应学习推荐</span>
+            <span class="adaptive-badge">AI</span>
+          </div>
+          <div class="adaptive-body">
+            <div class="adaptive-tip">
+              <div class="adaptive-tip-icon">📈</div>
+              <div class="adaptive-tip-text">
+                <div class="adaptive-tip-title">建议提升难度</div>
+                <div class="adaptive-tip-desc">你最近答对率85%，可以挑战更难的题目</div>
+              </div>
+            </div>
+            <div class="adaptive-tip">
+              <div class="adaptive-tip-icon">📉</div>
+              <div class="adaptive-tip-text">
+                <div class="adaptive-tip-title">建议巩固基础</div>
+                <div class="adaptive-tip-desc">资料分析正确率偏低，建议先练基础题</div>
+              </div>
+            </div>
+            <button class="adaptive-btn">开始自适应练习</button>
+          </div>
+        </div>
+
         <!-- 本周进度 -->
         <div class="week-progress">
           <div class="dist-title">📅 本周打卡</div>
@@ -517,6 +542,78 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 自适应学习 ===== */
+  .adaptive-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+    color: #fff;
+  }
+  .adaptive-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .adaptive-head .dist-title {
+    color: #fff;
+  }
+  .adaptive-badge {
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+  .adaptive-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .adaptive-tip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+  }
+  .adaptive-tip-icon {
+    font-size: 24px;
+  }
+  .adaptive-tip-text {
+    flex: 1;
+  }
+  .adaptive-tip-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .adaptive-tip-desc {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: 2px;
+  }
+  .adaptive-btn {
+    background: #fff;
+    color: #667eea;
+    border: none;
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+  }
+  .adaptive-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  }
 
   /* ===== 遗忘曲线复习 ===== */
   .review-card {
