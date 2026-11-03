@@ -51,7 +51,7 @@
             <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
             <span class="tf-meta">{{ post.authorClass || '未分班' }}</span>
           </div>
-          <p class="tf-content"><ForumContent :content="post.content" /></p>
+          <p class="tf-content"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
           <AttachmentList
             v-if="post.attachments && post.attachments.length"
             :attachments="post.attachments"
@@ -75,7 +75,7 @@
           <div class="tf-modal-scroll">
           <h2 :style="{ color: titleColorValue(detail.titleColor) }">{{ detail.title }}</h2>
           <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
-          <p class="tf-content"><ForumContent :content="detail.content" /></p>
+          <p class="tf-content"><ForumContent :content="detail.content" :format="detail.contentFormat" /></p>
           <AttachmentList
             v-if="detail.attachments && detail.attachments.length"
             :attachments="detail.attachments"
@@ -100,7 +100,7 @@
               </button>
             </div>
             <div class="tf-comment-body">
-              <p><ForumContent :content="c.content" /></p>
+              <p><ForumContent :content="c.content" :format="c.contentFormat" /></p>
               <AttachmentList
                 v-if="c.attachments && c.attachments.length"
                 :attachments="c.attachments"
@@ -352,6 +352,8 @@ const statusLabel = (status: string) =>
 const excerptOf = (post: any): string => {
   const raw = String(post?.content ?? post?.excerpt ?? '');
   const text = raw
+    // 富文本正文先去掉标签再截断
+    .replace(/<[^>]+>/g, ' ')
     .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -420,7 +422,8 @@ const submitPost = async (payload: PostDraft) => {
       content: payload.content,
       visibility: payload.visibility,
       attachments: payload.attachments,
-      visibleClasses: payload.visibility === 'CLASSES' ? payload.visibleClasses : undefined
+      visibleClasses: payload.visibility === 'CLASSES' ? payload.visibleClasses : undefined,
+      contentFormat: payload.contentFormat
     });
     ElMessage.success('发布成功');
     postForm.visible = false;

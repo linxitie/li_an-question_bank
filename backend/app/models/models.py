@@ -651,6 +651,9 @@ class ForumPost(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="发帖人ID")
     title = Column(String(200), nullable=False, comment="标题")
     content = Column(Text, nullable=False, comment="内容")
+    # 正文格式（2026-11-03）：TEXT = 纯文本/表情包占位符（历史数据）；HTML = 富文本（已消毒）
+    # 用显式列而不是「正则猜是不是 HTML」，避免正文里出现 '<' 的纯文本被误判成标记。
+    content_format = Column(String(8), default="TEXT", nullable=False, comment="正文格式 TEXT/HTML")
     share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION"), default="EXPERIENCE", comment="分享类型")
     tags = Column(String(500), comment="标签")
     is_top = Column(Integer, default=0, comment="是否置顶")
@@ -695,6 +698,8 @@ class ForumComment(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="评论人ID")
     parent_comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="父评论ID")
     content = Column(Text, nullable=False, comment="评论内容")
+    # 评论正文格式（2026-11-03）：与 forum_post.content_format 同一套语义
+    content_format = Column(String(8), default="TEXT", nullable=False, comment="正文格式 TEXT/HTML")
     like_count = Column(Integer, default=0, comment="点赞数")
     status = Column(Integer, default=1, comment="状态 1正常/0删除/2隐藏")
     # === P1 评论区扩展 ===

@@ -63,7 +63,7 @@
                   <span class="meta-date">{{ post.date }}</span>
                 </div>
                 <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
-                <p class="post-excerpt"><ForumContent :content="post.content" /></p>
+                <p class="post-excerpt"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
                 <AttachmentList
                   v-if="post.attachments && post.attachments.length"
                   :attachments="post.attachments"
@@ -293,7 +293,7 @@
             <h3 class="detail-title" :style="{ color: titleColorValue(state.currentPost.titleColor) }">
               {{ state.currentPost.title }}
             </h3>
-            <div class="detail-content"><ForumContent :content="state.currentPost.content" /></div>
+            <div class="detail-content"><ForumContent :content="state.currentPost.content" :format="state.currentPost.contentFormat" /></div>
             <!-- 图片 + 文档附件 -->
             <AttachmentList
               v-if="state.currentPost.attachments && state.currentPost.attachments.length"
@@ -347,7 +347,7 @@
                         <span class="comment-author" @click.stop="viewUser(comment.user?.id)">{{ comment.user?.nickname }}</span>
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
-                      <div class="comment-text"><ForumContent :content="comment.content" /></div>
+                      <div class="comment-text"><ForumContent :content="comment.content" :format="comment.contentFormat" /></div>
                       <AttachmentList
                         v-if="comment.attachments && comment.attachments.length"
                         :attachments="comment.attachments"
@@ -398,7 +398,7 @@
                             <span class="comment-author" @click.stop="viewUser(child.user?.id)">{{ child.user?.nickname }}</span>
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
-                          <div class="comment-text"><ForumContent :content="child.content" /></div>
+                          <div class="comment-text"><ForumContent :content="child.content" :format="child.contentFormat" /></div>
                           <AttachmentList
                             v-if="child.attachments && child.attachments.length"
                             :attachments="child.attachments"
@@ -688,6 +688,8 @@
       const excerptOf = (post: any): string => {
         const raw = String(post?.content ?? post?.excerpt ?? '');
         const text = raw
+          // 富文本正文先去掉标签再截断，否则列表里会出现 <p style=...>
+          .replace(/<[^>]+>/g, ' ')
           .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
           .replace(/\s+/g, ' ')
           .trim();
@@ -1034,7 +1036,8 @@
             shareType: 'EXPERIENCE',
             attachments: payload.attachments,
             visibility: payload.visibility,
-            visibleClasses: payload.visibleClasses
+            visibleClasses: payload.visibleClasses,
+            contentFormat: payload.contentFormat
           });
           if (!created) return;
           this.state.posts.unshift(this._mapPost(created));
@@ -1450,6 +1453,8 @@
           id: p?.id ?? 0,
           title: p?.title ?? '',
           content: p?.content ?? '',
+          // 正文格式（2026-11-03）：后端下发 TEXT/HTML，渲染时据此选纯文本还是富文本
+          contentFormat: p?.contentFormat === 'HTML' ? 'HTML' : 'TEXT',
           author: (p?.user && p.user.nickname) || '匿名',
           avatar: (p?.user && p.user.avatar) || '',
           date: this.formatTime(p?.createTime),

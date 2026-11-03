@@ -351,11 +351,14 @@ export function createForumPostWithVisibility(payload: {
   attachments?: any[];
   visibility?: 'ALL' | 'CLASSES';
   visibleClasses?: string[];
+  /** 正文格式（2026-11-03）：不传默认 TEXT，富文本发帖传 HTML（后端消毒后落库） */
+  contentFormat?: 'TEXT' | 'HTML';
 }): Promise<ForumPostItem> {
   const data = new FormData();
   data.append('title', payload.title);
   data.append('content', payload.content);
   data.append('share_type', payload.shareType || 'DISCUSSION');
+  if (payload.contentFormat) data.append('content_format', payload.contentFormat);
   if (payload.titleColor) data.append('title_color', payload.titleColor);
   if (payload.attachments && payload.attachments.length) {
     data.append('attachments', JSON.stringify(payload.attachments));

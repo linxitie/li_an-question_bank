@@ -17,6 +17,7 @@
   GET    /api/forum/stats                    论坛统计
 """
 import os
+import re
 import json
 import uuid
 import logging
@@ -38,6 +39,7 @@ from ....models.models import (
     ForumDraft, SysUser, SysOperationLog
 )
 from ....services.sensitive_words import sensitive_filter, SensitiveLevel
+from ....services.rich_text import sanitize_rich_text
 from ....services.event_consumer import outbox_mode_enabled, record_user_action
 from ....core.trigger_types import TRIGGER_FORUM_POSTED
 from ....core.exceptions import (
@@ -179,6 +181,8 @@ def _serialize_post(
         "favorited": bool(favorited),
         "visibility": post.visibility or "ALL",
         "visibleClasses": post.visible_classes or [],
+        # 正文格式（2026-11-03）：前端据此决定走纯文本渲染还是消毒后的 HTML 渲染
+        "contentFormat": getattr(post, "content_format", None) or "TEXT",
         "user": _user_brief(user, post.user_id),
     }
 
@@ -274,6 +278,8 @@ def _serialize_comment(
         "myReaction": my_reaction,
         "reactions": reactions or {},
         "replyCount": reply_count or 0,
+        # 正文格式（2026-11-03）
+        "contentFormat": getattr(comment, "content_format", None) or "TEXT",
         "user": _user_brief(user, comment.user_id),
     }
 
@@ -528,6 +534,7 @@ async def create_post(
     question_id: Optional[int] = Form(None, description="关联题目ID"),
     visibility: Optional[str] = Form(None, description="可见范围: ALL 全校 | CLASSES 本班/指定班级"),
     visible_classes: Optional[str] = Form(None, description="班级名 JSON 数组，visibility=CLASSES 时生效"),
+    content_format: str = Form("TEXT", description="正文格式：TEXT 纯文本 / HTML 富文本（落库前消毒）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -539,6 +546,14 @@ async def create_post(
     """
     title = (title or "").strip()
     content = (content or "").strip()
+    # 富文本（2026-11-03）：HTML 正文必须先过信任边界再参与后续校验/落库。
+    # 顺序很重要：先消毒 → 再判空 → 再敏感词过滤，避免把未消毒的标记写进库或写进审计日志。
+    content_format = "HTML" if (content_format or "").upper() == "HTML" else "TEXT"
+    if content_format == "HTML" and content:
+        content = sanitize_rich_text(content, allow_inline_style=True).strip()
+        # 只剩空标签（如 <p><br></p>）时视为空正文
+        if not re.sub(r"<[^>]+>|&nbsp;|\s", "", content):
+            content = ""
     # 2026-10-31：标题 / 正文 / 附件 至少满足一项即可发布
     _has_att = bool(attachments and attachments.strip() not in ("", "[]", "null"))
     if not title and not content and not _has_att:
@@ -609,6 +624,7 @@ async def create_post(
         user_id=current_user.user_id,
         title=title.strip(),
         content=final_content,
+        content_format=content_format,
         share_type=share_type if share_type in ("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION") else "EXPERIENCE",
         tags=tags,
         attachments=parsed_attachments,
@@ -980,6 +996,7 @@ async def create_comment(
     parent_comment_id: Optional[int] = Form(None),
     reply_to_user_id: Optional[int] = Form(None),
     attachments: Optional[str] = Form(None, description="评论图片 JSON 字符串"),
+    content_format: str = Form("TEXT", description="正文格式：TEXT 纯文本 / HTML 富文本（落库前消毒）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -990,6 +1007,12 @@ async def create_comment(
     - 支持楼中楼回复(parent_comment_id)
     """
     content = (content or "").strip()
+    # 富文本评论（2026-11-03）：与发帖同一套信任边界，先消毒再判空
+    content_format = "HTML" if (content_format or "").upper() == "HTML" else "TEXT"
+    if content_format == "HTML" and content:
+        content = sanitize_rich_text(content, allow_inline_style=True).strip()
+        if not re.sub(r"<[^>]+>|&nbsp;|\s", "", content):
+            content = ""
     if not content:
         raise ValidationError("评论内容不能为空")
 
@@ -1046,6 +1069,7 @@ async def create_comment(
         reply_to_user_id=reply_to_user_id,
         attachments=parsed_attachments,
         content=final_content,
+        content_format=content_format,
         status=1,
     )
     db.add(comment)

@@ -20,27 +20,17 @@
 
           <div class="f-row">
             <label>正文 <span class="req">*</span></label>
-            <div class="editor">
-              <div class="editor-tools">
-                <button type="button" title="加粗" @click="wrap('**')"><b>B</b></button>
-                <button type="button" title="斜体" @click="wrap('*')"><i>I</i></button>
-                <button type="button" title="下划线" @click="wrap('__')"><u>U</u></button>
-                <span class="sep"></span>
-                <button type="button" title="无序列表" @click="prefix('- ')">•≡</button>
-                <button type="button" title="有序列表" @click="prefixNumbered()">1≡</button>
-                <button type="button" title="引用" @click="prefix('> ')">❝</button>
-                <span class="sep"></span>
-                <button type="button" title="@同学" @click="insert('@')">@</button>
-                <button type="button" title="插入图片" :disabled="uploading" @click="pickImage">🖼</button>
-                <button type="button" title="插入链接" @click="insertLink">🔗</button>
-                <span class="cnt">{{ form.content.length }} / {{ maxContent }}</span>
-              </div>
-              <textarea
-                ref="bodyRef"
+            <!-- 2026-11-03：改用仓库已有的 wangEditor（RichTextEditor）做所见即所得，
+                 工具栏含段落/字体/字号/颜色/对齐/列表/引用/表情/表格/图片/链接/撤销重做。
+                 正文以 HTML 存储，落库前后端会走 bleach 白名单消毒。 -->
+            <div class="editor-rich">
+              <RichTextEditor
                 v-model="form.content"
-                :maxlength="maxContent"
+                :menus="richMenus"
+                :height="200"
+                :upload-image="uploadImageForEditor"
                 placeholder="正文内容，支持 @ 同学、插入图片与附件。请避免发布与备考无关的内容。"
-              ></textarea>
+              />
             </div>
           </div>
 
@@ -111,6 +101,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
 
+import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { fileIcon, formatFileSize, isDocFile, isImageFile, MAX_DOC_SIZE, uploadForumFile } from './fileUtils';
 import {
   MAX_IMAGE_SIZE,
@@ -120,11 +111,49 @@ import {
 
 export interface PostDraft {
   title: string;
+  /** 正文：contentFormat='HTML' 时是富文本 HTML，否则是纯文本 */
   content: string;
+  contentFormat?: 'TEXT' | 'HTML';
   attachments: ForumImageAttachment[];
   visibility: 'ALL' | 'CLASSES';
   visibleClasses: string[];
   isTop: boolean;
+}
+
+/** wangEditor 工具栏：图三那一组「原生支持」的菜单（公式/语音/音乐/视频为二期） */
+const richMenus = [
+  'head',
+  'fontName',
+  'fontSize',
+  'bold',
+  'italic',
+  'underline',
+  'strikeThrough',
+  'color',
+  'bgColor',
+  'justify',
+  'list',
+  'quote',
+  'emoticon',
+  'insertTable',
+  'divider',
+  'undo',
+  'redo'
+];
+
+/** 富文本内插图统一走论坛图片接口（与附件同一套白名单/大小校验） */
+const uploadImageForEditor = async (file: File): Promise<string> => {
+  const attachment = await uploadForumImage(file);
+  return attachment.url;
+};
+
+/** 去掉 HTML 标签后判断正文是否真的为空（<p><br></p> 视为空） */
+function stripHtml(html: string): string {
+  return String(html || '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, '')
+    .trim();
 }
 
 const props = withDefaults(
@@ -163,16 +192,15 @@ const emit = defineEmits<{
 const form = reactive<PostDraft>({
   title: '',
   content: '',
+  contentFormat: 'HTML',
   attachments: [],
   visibility: 'ALL',
   visibleClasses: [],
   isTop: false
 });
 
-const bodyRef = ref<HTMLTextAreaElement | null>(null);
 const uploading = ref(false);
 const error = ref('');
-const imageInput = ref<HTMLInputElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 /** 打开时把 initial 回填进去；关闭时清空错误提示 */
@@ -198,94 +226,6 @@ const attachHint = `支持 doc / docx / xlsx / pdf / png / jpg，文档单个不
 
 function close() {
   emit('update:visible', false);
-}
-
-function focusBody() {
-  bodyRef.value?.focus();
-}
-
-/** 在光标处包裹选中文本；无选区时插入成对标记并把光标放中间 */
-function wrap(marker: string) {
-  const el = bodyRef.value;
-  if (!el) return;
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const selected = form.content.slice(start, end);
-  form.content = form.content.slice(0, start) + marker + selected + marker + form.content.slice(end);
-  requestAnimationFrame(() => {
-    el.focus();
-    const pos = start + marker.length + selected.length;
-    el.setSelectionRange(pos, pos);
-  });
-}
-
-function insert(text: string) {
-  const el = bodyRef.value;
-  if (!el) {
-    form.content += text;
-    return;
-  }
-  const start = el.selectionStart ?? form.content.length;
-  const end = el.selectionEnd ?? form.content.length;
-  form.content = form.content.slice(0, start) + text + form.content.slice(end);
-  requestAnimationFrame(() => {
-    el.focus();
-    const pos = start + text.length;
-    el.setSelectionRange(pos, pos);
-  });
-}
-
-/** 给选区每一行加前缀（列表 / 引用） */
-function prefix(marker: string) {
-  const el = bodyRef.value;
-  if (!el) return;
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const block = form.content.slice(start, end) || '';
-  const marked = block
-    .split('\n')
-    .map((line) => (line ? marker + line : line))
-    .join('\n');
-  if (!block) {
-    insert(marker);
-    return;
-  }
-  form.content = form.content.slice(0, start) + marked + form.content.slice(end);
-}
-
-function prefixNumbered() {
-  const el = bodyRef.value;
-  if (!el) return;
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const block = form.content.slice(start, end) || '';
-  if (!block) {
-    insert('1. ');
-    return;
-  }
-  const marked = block
-    .split('\n')
-    .map((line, i) => (line ? `${i + 1}. ${line}` : line))
-    .join('\n');
-  form.content = form.content.slice(0, start) + marked + form.content.slice(end);
-}
-
-function insertLink() {
-  const url = window.prompt('请输入链接地址', 'https://');
-  if (!url) return;
-  insert(`[链接](${url})`);
-}
-
-function pickImage() {
-  if (!imageInput.value) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/png,image/jpeg,image/gif,image/webp';
-    input.multiple = true;
-    input.addEventListener('change', () => addFiles(Array.from(input.files || [])));
-    imageInput.value = input;
-  }
-  imageInput.value.click();
 }
 
 function pickFile() {
@@ -346,6 +286,7 @@ function toPayload(): PostDraft {
   return {
     title: form.title.trim(),
     content: form.content.trim(),
+    contentFormat: 'HTML',
     attachments: [...form.attachments],
     visibility: form.visibility,
     visibleClasses: form.visibility === 'CLASSES' ? [...form.visibleClasses] : [],
@@ -355,8 +296,10 @@ function toPayload(): PostDraft {
 
 function validate(): boolean {
   const payload = toPayload();
-  // 与三端既定规则一致：标题 / 正文 / 附件 任一即可，三者全空才拒绝
-  if (!payload.title && !payload.content && !payload.attachments.length) {
+  // 与三端既定规则一致：标题 / 正文 / 附件 任一即可，三者全空才拒绝。
+  // 富文本正文要按「去标签后的可见文字」判空，否则 <p><br></p> 会被当成有内容。
+  const hasText = stripHtml(payload.content).length > 0;
+  if (!payload.title && !hasText && !payload.attachments.length) {
     error.value = '标题、正文、附件至少填写一项';
     return false;
   }
@@ -374,14 +317,12 @@ function onSubmit() {
 
 function onSaveDraft() {
   const payload = toPayload();
-  if (!payload.title && !payload.content && !payload.attachments.length) {
+  if (!payload.title && !stripHtml(payload.content) && !payload.attachments.length) {
     error.value = '空草稿无需保存';
     return;
   }
   emit('save-draft', payload);
 }
-
-defineExpose({ focusBody });
 </script>
 
 <style scoped>

@@ -347,6 +347,8 @@ async def lifespan(app: FastAPI):
                 # P3 可见范围（2026-10-26）
                 ('visibility', "VARCHAR(16) DEFAULT 'ALL'"),
                 ('visible_classes', 'JSON'),
+                # 富文本（2026-11-03）：历史数据一律 TEXT，渲染走纯文本+表情包路径，行为不变
+                ('content_format', "VARCHAR(8) DEFAULT 'TEXT'"),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in forum_new_cols:
@@ -367,6 +369,8 @@ async def lifespan(app: FastAPI):
                 ('deleted_by', 'BIGINT'),
                 ('deleted_reason', 'VARCHAR(200)'),
                 ('deleted_at', 'DATETIME'),
+                # 富文本（2026-11-03）：同 forum_post.content_format
+                ('content_format', "VARCHAR(8) DEFAULT 'TEXT'"),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in comment_new_cols:

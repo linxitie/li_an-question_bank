@@ -343,6 +343,8 @@ export const useCommunityStore = defineStore('community', () => {
       /** 普通发帖弹窗支持「全站 / 仅指定班级」，不传则走后端按角色的默认可见范围 */
       visibility?: 'ALL' | 'CLASSES';
       visibleClasses?: string[];
+      /** 正文格式：富文本发帖传 HTML（后端消毒） */
+      contentFormat?: 'TEXT' | 'HTML';
     }
   ): Promise<ForumPostItem | null> {
     const validation = validatePostDraft(payload);
@@ -369,7 +371,8 @@ export const useCommunityStore = defineStore('community', () => {
             titleColor: base.titleColor,
             attachments: base.attachments,
             visibility: payload.visibility,
-            visibleClasses: payload.visibleClasses
+            visibleClasses: payload.visibleClasses,
+            contentFormat: payload.contentFormat
           })
         : await createForumPost(base);
       posts.value = [post, ...posts.value];
