@@ -77,7 +77,7 @@ class UserUpdate(BaseModel):
     department: Optional[str] = None
     class_name: Optional[str] = None
     school: Optional[str] = None
-    role_level: Optional[int] = None
+    # role_level 不在资料编辑中接收：改角色走 PUT /users/{id}/role（仅超管）
 
 
 class UserDisableRequest(BaseModel):
@@ -89,6 +89,76 @@ class UserDisableRequest(BaseModel):
 class UserResetPasswordRequest(BaseModel):
     """重置密码"""
     new_password: Optional[str] = Field(None, min_length=6, description="新密码，为空则自动生成")
+
+
+class UserRoleUpdate(BaseModel):
+    """改角色（仅超管；与资料编辑分离）"""
+    user_type: str = Field(..., description="student/teacher/admin")
+    role_level: int = Field(..., ge=0, le=3, description="0学生/1教师/2管理员/3超级管理员")
+    reason: str = Field("", max_length=255, description="变更原因")
+
+
+class UserDeleteRequest(BaseModel):
+    """软删除用户"""
+    reason: str = Field(..., min_length=2, max_length=255, description="删除原因")
+
+
+class UserPurgeRequest(BaseModel):
+    """匿名化注销（保留 user_id 墓碑）"""
+    reason: str = Field(..., min_length=2, max_length=255, description="注销原因")
+    confirm_username: str = Field(..., description="输入用户名确认，防止误操作")
+
+
+class PermissionChangeItem(BaseModel):
+    """单条权限覆盖变更"""
+    permission_code: str = Field(..., max_length=64)
+    effect: str = Field(..., description="grant/deny/inherit")
+    expires_at: Optional[datetime] = Field(None, description="到期时间，空=永久")
+
+
+class UserPermissionUpdate(BaseModel):
+    """单用户权限变更"""
+    reason: str = Field(..., min_length=2, max_length=255)
+    changes: List[PermissionChangeItem] = Field(..., min_length=1, max_length=30)
+
+
+class UserBatchTarget(BaseModel):
+    """用户批量目标：显式 ids 或服务端重放筛选。"""
+    mode: str = Field("ids", description="ids/filter")
+    user_ids: List[int] = Field(default_factory=list, max_length=500)
+    filter: dict = Field(default_factory=dict)
+    expected_count: Optional[int] = Field(None, ge=1, le=500)
+
+
+class UserBatchRequest(BaseModel):
+    """用户批量操作。"""
+    action: str = Field(..., description="disable/enable/delete/restore/update_profile/assign_role/reset_password")
+    target: UserBatchTarget
+    payload: dict = Field(default_factory=dict)
+    expected_count: Optional[int] = Field(None, ge=1, le=500)
+
+
+class PermissionBatchTarget(BaseModel):
+    """批量目标：显式 ids 或服务端重放筛选条件。"""
+    mode: str = Field("ids", description="ids/filter")
+    user_ids: List[int] = Field(default_factory=list, max_length=500)
+    filter: dict = Field(default_factory=dict)
+    expected_count: Optional[int] = Field(None, ge=1, le=500)
+
+
+class PermissionBatchRequest(BaseModel):
+    """批量权限预览/应用。"""
+    target: PermissionBatchTarget
+    operation: str = Field(..., description="grant/deny/inherit")
+    permissions: List[str] = Field(..., min_length=1, max_length=30)
+    expires_at: Optional[datetime] = None
+    reason: str = Field(..., min_length=2, max_length=255)
+    dry_run: bool = True
+
+
+class PermissionBatchUndoRequest(BaseModel):
+    """撤销批次。"""
+    reason: str = Field("撤销批量权限变更", max_length=255)
 
 
 class UserListQuery(BaseModel):
@@ -171,6 +241,7 @@ class PermissionRoleUpdate(BaseModel):
     """权限角色配置更新"""
     role: str = Field(..., description="角色: student/teacher/admin")
     permissions: List[str] = Field(..., description="权限码列表")
+    reason: str = Field("", max_length=255, description="变更原因（新页必填，旧页可空）")
 
 
 # ==================== 备份管理 ====================
