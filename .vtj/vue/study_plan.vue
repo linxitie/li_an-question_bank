@@ -128,6 +128,34 @@
           </div>
         </div>
 
+        <!-- 能力雷达图 -->
+        <div class="radar-card">
+          <div class="dist-title">🎯 能力雷达图</div>
+          <div class="radar-wrap">
+            <svg viewBox="0 0 200 200" class="radar-svg">
+              <!-- 背景多边形 -->
+              <polygon points="100,20 170,60 170,140 100,180 30,140 30,60" fill="none" stroke="#e0e3e9" stroke-width="1"/>
+              <polygon points="100,50 150,75 150,125 100,150 50,125 50,75" fill="none" stroke="#e0e3e9" stroke-width="1"/>
+              <polygon points="100,80 130,95 130,105 100,120 70,105 70,95" fill="none" stroke="#e0e3e9" stroke-width="1"/>
+              <!-- 轴线 -->
+              <line x1="100" y1="20" x2="100" y2="180" stroke="#e0e3e9" stroke-width="1"/>
+              <line x1="30" y1="60" x2="170" y2="140" stroke="#e0e3e9" stroke-width="1"/>
+              <line x1="30" y1="140" x2="170" y2="60" stroke="#e0e3e9" stroke-width="1"/>
+              <!-- 数据多边形 -->
+              <polygon points="100,40 160,70 150,130 100,160 40,130 50,70"
+                fill="rgba(196, 30, 58, 0.2)" stroke="#c41e3a" stroke-width="2"/>
+            </svg>
+            <div class="radar-labels">
+              <span class="radar-label top">言语理解</span>
+              <span class="radar-label right-top">数量关系</span>
+              <span class="radar-label right-bottom">判断推理</span>
+              <span class="radar-label bottom">资料分析</span>
+              <span class="radar-label left-bottom">申论</span>
+              <span class="radar-label left-top">面试</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 本周进度 -->
         <div class="week-progress">
           <div class="dist-title">📅 本周打卡</div>
@@ -438,6 +466,42 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 能力雷达图 ===== */
+  .radar-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .radar-wrap {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto;
+  }
+  .radar-svg {
+    width: 100%;
+    height: 100%;
+  }
+  .radar-labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .radar-label {
+    position: absolute;
+    font-size: 10px;
+    color: #666;
+    white-space: nowrap;
+  }
+  .radar-label.top { top: -10px; left: 50%; transform: translateX(-50%); }
+  .radar-label.right-top { top: 20px; right: -20px; }
+  .radar-label.right-bottom { bottom: 20px; right: -20px; }
+  .radar-label.bottom { bottom: -10px; left: 50%; transform: translateX(-50%); }
+  .radar-label.left-bottom { bottom: 20px; left: -20px; }
+  .radar-label.left-top { top: 20px; left: -20px; }
 
   /* Hero */
   .hero { position: relative; overflow: hidden; color: #fff; }
