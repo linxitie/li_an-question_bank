@@ -53,7 +53,7 @@ export interface NewsListResult {
 
 interface NewsRequestConfig {
   url: string;
-  method: 'GET';
+  method: 'GET' | 'POST';
   params?: Record<string, unknown>;
 }
 
@@ -115,6 +115,7 @@ export interface NewsTimelineItem {
   category: string | null;
   url: string;
   ai_summary: string;
+  is_favorited?: boolean;
 }
 
 export interface NewsTimelineGroup {
@@ -158,5 +159,18 @@ export function fetchNewsDigest(
     url: '/api/news/digest',
     method: 'GET',
     params: { day: day || undefined, limit }
+  });
+}
+
+export interface NewsFavoriteResult {
+  favorited: boolean;
+  message: string;
+}
+
+/** 收藏/取消收藏新闻 */
+export function toggleNewsFavorite(id: number): Promise<NewsFavoriteResult> {
+  return request<NewsFavoriteResult>({
+    url: `/api/news/${id}/favorite`,
+    method: 'POST'
   });
 }

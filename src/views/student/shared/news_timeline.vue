@@ -36,6 +36,8 @@
 
     <div v-else-if="loading" class="state">加载中...</div>
 
+    <p v-if="favoriteError" class="favorite-error">{{ favoriteError }}</p>
+
     <template v-else>
       <section v-if="tab === 'timeline'" class="panel">
         <div v-if="!groups.length" class="state">暂无已发布新闻</div>
@@ -48,6 +50,14 @@
             tabindex="0"
             @click="openSource(item)"
             @keydown.enter="openSource(item)">
+            <button
+              class="fav-btn"
+              :class="{ active: item.is_favorited }"
+              type="button"
+              :aria-label="item.is_favorited ? '取消收藏' : '收藏'"
+              @click.stop="toggleFavorite(item)">
+              {{ item.is_favorited ? '★' : '☆' }}
+            </button>
             <h3>{{ item.title }}</h3>
             <p v-if="item.ai_summary" class="summary">{{ item.ai_summary }}</p>
             <div class="meta">
@@ -93,6 +103,14 @@
           tabindex="0"
           @click="openSource(item)"
           @keydown.enter="openSource(item)">
+          <button
+            class="fav-btn"
+            :class="{ active: item.is_favorited }"
+            type="button"
+            :aria-label="item.is_favorited ? '取消收藏' : '收藏'"
+            @click.stop="toggleFavorite(item)">
+            {{ item.is_favorited ? '★' : '☆' }}
+          </button>
           <h3>{{ item.title }}</h3>
           <p v-if="item.ai_summary" class="summary">{{ item.ai_summary }}</p>
           <div class="meta">
@@ -111,6 +129,7 @@ import { useRouter } from 'vue-router';
 import {
   fetchNewsDigest,
   fetchNewsTimeline,
+  toggleNewsFavorite,
   type NewsDigestResult,
   type NewsTimelineGroup,
   type NewsTimelineItem
@@ -120,6 +139,7 @@ const router = useRouter();
 const tab = ref<'timeline' | 'digest'>('timeline');
 const loading = ref(false);
 const error = ref('');
+const favoriteError = ref('');
 const groups = ref<NewsTimelineGroup[]>([]);
 const digest = ref<NewsDigestResult | null>(null);
 const day = ref('');
@@ -146,6 +166,17 @@ function goBack(): void {
 function openSource(item: NewsTimelineItem): void {
   if (item.url) {
     window.open(item.url, '_blank', 'noopener,noreferrer');
+  }
+}
+
+async function toggleFavorite(item: NewsTimelineItem): Promise<void> {
+  favoriteError.value = '';
+  try {
+    const result = await toggleNewsFavorite(item.news_id);
+    item.is_favorited = result.favorited;
+  } catch (e) {
+    favoriteError.value =
+      e instanceof Error ? e.message : '收藏失败，请稍后重试';
   }
 }
 
@@ -284,7 +315,8 @@ onMounted(() => {
 
 .news-card {
   display: block;
-  padding: 14px 16px;
+  position: relative;
+  padding: 14px 52px 14px 16px;
   border: 1px solid #e6e1d8;
   border-radius: 12px;
   background: #fff;
@@ -293,6 +325,32 @@ onMounted(() => {
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
+}
+
+.fav-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: #f5f2eb;
+  color: #8a908b;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fav-btn.active {
+  color: #c8763f;
+  background: #fbf0e7;
+}
+
+.favorite-error {
+  margin: 0 0 10px;
+  color: #a33b2d;
+  font-size: 13px;
 }
 
 .news-card:hover,
