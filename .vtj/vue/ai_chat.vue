@@ -211,6 +211,26 @@
           <div class="welcome-emoji">🎯</div>
           <p class="welcome-title">你好，我是联考小智</p>
           <p class="welcome-sub">选个场景，从下面挑一个问题开始问我</p>
+          
+          <!-- AI角色选择 -->
+          <div class="role-select">
+            <div class="role-title">选择你的AI伙伴：</div>
+            <div class="role-list">
+              <div class="role" :class="{ active: state.role === 'strict' }" @click="switchRole('strict')">
+                <div class="role-emoji">😤</div>
+                <div class="role-name">严厉教官</div>
+              </div>
+              <div class="role" :class="{ active: state.role === 'gentle' }" @click="switchRole('gentle')">
+                <div class="role-emoji">😊</div>
+                <div class="role-name">温柔学姐</div>
+              </div>
+              <div class="role" :class="{ active: state.role === 'funny' }" @click="switchRole('funny')">
+                <div class="role-emoji">😄</div>
+                <div class="role-name">幽默学长</div>
+              </div>
+            </div>
+          </div>
+
           <div class="quick-chips">
             <div
               v-for="q in quickQuestions"
@@ -349,7 +369,9 @@ export default defineComponent({
       recording: false,
       recognition: null,
       // 思维导图
-      showMindMap: false
+      showMindMap: false,
+      // AI角色
+      role: 'gentle'
     });
     const sessions = ref([]);
     const drawerOpen = ref(false);
@@ -697,6 +719,10 @@ export default defineComponent({
       }
     }
 
+    function switchRole(role) {
+      state.role = role;
+    }
+
     onMounted(() => {
       state.__listEl = document.querySelector('.ai-chat-page .message-list');
       loadSessions();
@@ -724,6 +750,7 @@ export default defineComponent({
       switchMode,
       toggleDashboard,
       toggleMic,
+      switchRole,
       showMindMap,
       selectTask,
       runWorkTask,
@@ -1446,6 +1473,52 @@ export default defineComponent({
 }
 .welcome-sub {
   font-size: 13px;
+  color: #6b7a99;
+  margin: 0 0 16px;
+}
+
+/* AI角色选择 */
+.role-select {
+  margin-bottom: 16px;
+}
+.role-title {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 10px;
+}
+.role-list {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.role {
+  flex: 1;
+  max-width: 100px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 2px solid #e8ecf2;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f8f9fc;
+}
+.role:hover {
+  border-color: #c41e3a;
+  transform: translateY(-2px);
+}
+.role.active {
+  border-color: #c41e3a;
+  background: #fff5f6;
+  box-shadow: 0 4px 12px rgba(196, 30, 58, 0.15);
+}
+.role-emoji {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+.role-name {
+  font-size: 12px;
+  color: #333;
+  font-weight: 600;
+}
   color: #8899aa;
   margin: 0 0 16px;
 }
