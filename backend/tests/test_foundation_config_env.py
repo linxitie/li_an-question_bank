@@ -1,4 +1,5 @@
 """foundation 配置必须像 Pydantic 一样读取 backend/.env。"""
+
 import os
 
 from app.foundation.config import load_env_files
@@ -6,8 +7,11 @@ from app.foundation.config import load_env_files
 
 def test_foundation_loads_env_file(tmp_path, monkeypatch):
     for key in (
-        "EMBEDDING_ENABLED", "EMBEDDING_PROVIDER", "EMBEDDING_BASE_URL",
-        "EMBEDDING_MODEL", "EMBEDDING_DIM",
+        "EMBEDDING_ENABLED",
+        "EMBEDDING_PROVIDER",
+        "EMBEDDING_BASE_URL",
+        "EMBEDDING_MODEL",
+        "EMBEDDING_DIM",
     ):
         monkeypatch.delenv(key, raising=False)
     env_file = tmp_path / ".env"

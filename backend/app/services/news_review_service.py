@@ -1,4 +1,5 @@
 """R2.3 新闻审核状态机。"""
+
 from __future__ import annotations
 
 from sqlalchemy.orm import Session

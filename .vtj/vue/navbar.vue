@@ -112,6 +112,7 @@
     },
     methods: {
       navigateTo(id) {
+        // 新闻使用真实 /news 路由，其余页面保持 VTJ /page/<id> 路由。
         if (this.$router) {
           this.$router.push(id === 'news' ? '/news' : '/page/' + id);
         }

@@ -150,7 +150,10 @@ export interface NewsDigestResult {
 }
 
 /** 指定日期的新闻日报；day 省略时后端取最近发布日 */
-export function fetchNewsDigest(day = '', limit = 20): Promise<NewsDigestResult> {
+export function fetchNewsDigest(
+  day = '',
+  limit = 20
+): Promise<NewsDigestResult> {
   return request<NewsDigestResult>({
     url: '/api/news/digest',
     method: 'GET',

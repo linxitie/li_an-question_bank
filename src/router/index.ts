@@ -1,7 +1,11 @@
 /*
  * 砺安题库 - 路由配置（三端分离）
  */
-import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
+import {
+  createRouter,
+  createWebHashHistory,
+  type RouteRecordRaw
+} from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
 import { canAccess } from './access';
 
@@ -390,7 +394,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/tablet/wrong-questions',
     name: 'TabletWrongQuestions',
-    component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
+    component: () =>
+      import('@/views/student/mobile/mobile_wrong_questions.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -500,7 +505,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/mobile/wrong-questions',
     name: 'MobileWrongQuestions',
-    component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
+    component: () =>
+      import('@/views/student/mobile/mobile_wrong_questions.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
@@ -715,7 +721,7 @@ router.beforeEach((to, _from, next) => {
   const userRole = auth.getUserRole();
   const roleDashboardMap: Record<string, string> = {
     admin: '/admin/dashboard',
-    teacher: '/teacher/dashboard',
+    teacher: '/teacher/dashboard'
   };
   if (
     userRole &&

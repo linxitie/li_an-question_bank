@@ -1,7 +1,9 @@
 <template>
   <div class="news-timeline-page">
     <header class="page-head">
-      <button class="back-btn" type="button" aria-label="返回" @click="goBack">←</button>
+      <button class="back-btn" type="button" aria-label="返回" @click="goBack">
+        ←
+      </button>
       <div>
         <h1>新闻时间线</h1>
         <p class="subtitle">已发布新闻 · 按日聚合 · 日报速览</p>
@@ -14,8 +16,7 @@
         role="tab"
         :aria-selected="tab === 'timeline'"
         :class="{ active: tab === 'timeline' }"
-        @click="switchTab('timeline')"
-      >
+        @click="switchTab('timeline')">
         时间线
       </button>
       <button
@@ -23,8 +24,7 @@
         role="tab"
         :aria-selected="tab === 'digest'"
         :class="{ active: tab === 'digest' }"
-        @click="switchTab('digest')"
-      >
+        @click="switchTab('digest')">
         日报
       </button>
     </div>
@@ -47,8 +47,7 @@
             class="news-card"
             tabindex="0"
             @click="openSource(item)"
-            @keydown.enter="openSource(item)"
-          >
+            @keydown.enter="openSource(item)">
             <h3>{{ item.title }}</h3>
             <p v-if="item.ai_summary" class="summary">{{ item.ai_summary }}</p>
             <div class="meta">
@@ -62,7 +61,11 @@
       <section v-else class="panel">
         <div class="digest-tools">
           <label for="digest-day">日期</label>
-          <input id="digest-day" v-model="day" type="date" @change="loadDigest" />
+          <input
+            id="digest-day"
+            v-model="day"
+            type="date"
+            @change="loadDigest" />
           <button type="button" @click="loadDigest">查询</button>
         </div>
 
@@ -72,20 +75,24 @@
         </div>
 
         <div v-if="digest?.categories?.length" class="category-list">
-          <span v-for="c in digest.categories" :key="c.category_code || c.category" class="category-tag">
+          <span
+            v-for="c in digest.categories"
+            :key="c.category_code || c.category"
+            class="category-tag">
             {{ c.category }} {{ c.count }}
           </span>
         </div>
 
-        <div v-if="!digest?.items?.length" class="state">当天暂无已发布新闻</div>
+        <div v-if="!digest?.items?.length" class="state">
+          当天暂无已发布新闻
+        </div>
         <article
           v-for="item in digest?.items || []"
           :key="item.news_id"
           class="news-card"
           tabindex="0"
           @click="openSource(item)"
-          @keydown.enter="openSource(item)"
-        >
+          @keydown.enter="openSource(item)">
           <h3>{{ item.title }}</h3>
           <p v-if="item.ai_summary" class="summary">{{ item.ai_summary }}</p>
           <div class="meta">
@@ -283,7 +290,9 @@ onMounted(() => {
   background: #fff;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .news-card:hover,
