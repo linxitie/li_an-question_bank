@@ -132,6 +132,19 @@
           </div>
         </div>
 
+        <!-- 3D学习日历 -->
+        <div class="calendar-3d-card">
+          <div class="dist-title">📅 3D学习日历</div>
+          <div class="calendar-3d-wrap">
+            <div class="calendar-3d">
+              <div v-for="day in 30" :key="day" class="calendar-day"
+                :class="{ done: day < 20, today: day === 15 }">
+                {{ day }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 科目分布 -->
         <div class="subject-dist">
           <div class="dist-title">📊 任务科目分布</div>
@@ -571,6 +584,56 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 3D学习日历 ===== */
+  .calendar-3d-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .calendar-3d-wrap {
+    perspective: 1000px;
+    margin-top: 16px;
+  }
+  .calendar-3d {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+    transform: rotateX(10deg);
+    transform-style: preserve-3d;
+  }
+  .calendar-day {
+    aspect-ratio: 1;
+    background: #f0f2f5;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #666;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  .calendar-day:hover {
+    transform: translateY(-4px) rotateX(10deg);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  }
+  .calendar-day.done {
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: #fff;
+  }
+  .calendar-day.today {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4); }
+    50% { box-shadow: 0 4px 20px rgba(196, 30, 58, 0.8); }
+  }
 
   /* ===== AI错题本 ===== */
   .wrongbook-card {
