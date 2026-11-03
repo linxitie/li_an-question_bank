@@ -230,8 +230,36 @@
           <div v-if="m.role !== 'user'" class="mini-avatar">智</div>
           <div class="bubble" :class="m.role === 'user' ? 'me' : 'bot'">
             <div class="bubble-content" v-html="renderMd(m.content)"></div>
+            <div v-if="m.role !== 'user'" class="msg-actions">
+              <button class="msg-action-btn" @click="showMindMap(idx)">
+                🧠 思维导图
+              </button>
+            </div>
           </div>
           <div v-if="m.role === 'user'" class="mini-avatar me">我</div>
+        </div>
+
+        <!-- 思维导图弹窗 -->
+        <div v-if="state.showMindMap" class="mindmap-modal" @click="state.showMindMap = false">
+          <div class="mindmap-content" @click.stop>
+            <div class="mindmap-head">
+              <span>🧠 AI思维导图</span>
+              <button @click="state.showMindMap = false">×</button>
+            </div>
+            <div class="mindmap-body">
+              <div class="mindmap-center">联考小智</div>
+              <div class="mindmap-branch left">
+                <div class="branch-item">📚 核心知识点</div>
+                <div class="branch-item">📝 答题技巧</div>
+                <div class="branch-item">⚠️ 易错点</div>
+              </div>
+              <div class="mindmap-branch right">
+                <div class="branch-item">✅ 学习方法</div>
+                <div class="branch-item">🎯 备考策略</div>
+                <div class="branch-item">📊 进步方向</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div v-if="state.loading" class="msg-row bot">
@@ -249,6 +277,13 @@
       <!-- 输入区 -->
       <div class="input-area">
         <div class="input-card">
+          <button
+            class="mic-btn"
+            :class="{ recording: state.recording }"
+            @click="toggleMic"
+            title="语音输入">
+            🎤
+          </button>
           <textarea
             v-model="state.input"
             :placeholder="inputPlaceholder"
@@ -263,7 +298,7 @@
             <span>发送</span>
           </button>
         </div>
-        <div class="input-tip">Enter 发送 · Shift+Enter 换行</div>
+        <div class="input-tip">Enter 发送 · Shift+Enter 换行 · 🎤 语音输入</div>
       </div>
     </div>
   </div>
@@ -309,7 +344,12 @@ export default defineComponent({
       workImportDone: false,
       workNotice: '',
       // 学习仪表盘
-      showDashboard: false
+      showDashboard: false,
+      // 语音输入
+      recording: false,
+      recognition: null,
+      // 思维导图
+      showMindMap: false
     });
     const sessions = ref([]);
     const drawerOpen = ref(false);
@@ -527,6 +567,58 @@ export default defineComponent({
       state.showDashboard = !state.showDashboard;
     }
 
+    function toggleMic() {
+      if (state.recording) {
+        // 停止录音
+        if (state.recognition) {
+          state.recognition.stop();
+        }
+        state.recording = false;
+        return;
+      }
+
+      // 开始录音
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        state.notice = '浏览器不支持语音识别，请用Chrome';
+        setTimeout(() => state.notice = '', 3000);
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'zh-CN';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        state.recording = true;
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map(r => r[0].transcript)
+          .join('');
+        state.input = transcript;
+      };
+
+      recognition.onend = () => {
+        state.recording = false;
+      };
+
+      recognition.onerror = () => {
+        state.recording = false;
+        state.notice = '语音识别失败，请重试';
+        setTimeout(() => state.notice = '', 3000);
+      };
+
+      state.recognition = recognition;
+      recognition.start();
+    }
+
+    function showMindMap(idx) {
+      state.showMindMap = true;
+    }
+
     async function switchMode(work) {
       if (state.workMode === work) return;
       state.workMode = work;
@@ -631,6 +723,8 @@ export default defineComponent({
       agentLabel,
       switchMode,
       toggleDashboard,
+      toggleMic,
+      showMindMap,
       selectTask,
       runWorkTask,
       importToToday,
@@ -643,6 +737,160 @@ export default defineComponent({
 </script>
 
 <style lang="css" scoped>
+/* ===== 思维导图 ===== */
+.msg-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+.msg-action-btn {
+  background: #f0f2f5;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #666;
+  transition: all 0.2s;
+}
+.msg-action-btn:hover {
+  background: #e0e3e9;
+  color: #333;
+}
+.mindmap-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mindmap-content {
+  background: #fff;
+  border-radius: 16px;
+  width: 600px;
+  max-width: 90%;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.mindmap-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #1a2b5f, #2a4080);
+  color: #fff;
+  font-weight: 600;
+}
+.mindmap-head button {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+.mindmap-body {
+  padding: 60px 40px;
+  position: relative;
+  min-height: 400px;
+  background: linear-gradient(135deg, #f8f9ff 0%, #fff5f5 100%);
+}
+.mindmap-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.4);
+  z-index: 10;
+}
+.mindmap-branch {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  z-index: 5;
+}
+.mindmap-branch.left {
+  left: 60px;
+}
+.mindmap-branch.right {
+  right: 60px;
+}
+.branch-item {
+  background: #fff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #333;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  position: relative;
+  transition: all 0.3s ease;
+}
+.branch-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+.branch-item::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 40px;
+  height: 2px;
+  background: linear-gradient(90deg, #667eea, transparent);
+}
+.mindmap-branch.left .branch-item::before {
+  right: -40px;
+}
+.mindmap-branch.right .branch-item::before {
+  left: -40px;
+  background: linear-gradient(90deg, transparent, #764ba2);
+}
+
+/* ===== 语音输入按钮 ===== */
+.mic-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: none;
+  background: #f0f2f5;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.mic-btn:hover {
+  background: #e0e3e9;
+}
+.mic-btn.recording {
+  background: #c41e3a;
+  color: #fff;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196, 30, 58, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(196, 30, 58, 0); }
+}
+
 /* ===== 学习仪表盘 ===== */
 .dashboard-panel {
   position: absolute;
