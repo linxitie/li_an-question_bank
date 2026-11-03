@@ -1,4 +1,5 @@
 """R2.2 新闻 Obsidian 审核卡片导出。"""
+
 from __future__ import annotations
 
 import json

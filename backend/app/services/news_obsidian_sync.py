@@ -1,4 +1,5 @@
 """R2.3 Obsidian 新闻审核勾选回写。"""
+
 from __future__ import annotations
 
 import re
@@ -8,7 +9,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ..models.models import NewsArticle
 from .news_review_service import review_news
 from .obsidian_export import _safe_path
 

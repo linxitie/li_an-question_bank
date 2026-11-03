@@ -1,7 +1,8 @@
 """R2 新闻分类与检索测试。"""
+
 from datetime import datetime
 
-from app.models.models import NewsArticle
+from app.models.models import NewsArticle, NewsFavorite
 
 
 def _article(db, title, category, content="", summary=""):
@@ -95,3 +96,41 @@ def test_news_digest_groups_day(client, db_session):
     assert body["items"][0]["news_id"] == article.news_id
 
     assert client.get("/api/news/digest?day=bad-date").status_code == 400
+
+
+def test_timeline_and_digest_favorite_flag(client, db_session, test_user, auth_headers):
+    article = _article(db_session, "收藏标记新闻", "理论")
+    article.publish_date = datetime(2026, 11, 3, 9, 0)
+    article.review_status = "published"
+    db_session.add(NewsFavorite(user_id=test_user.user_id, news_id=article.news_id))
+    db_session.commit()
+
+    timeline = client.get("/api/news/timeline", headers=auth_headers)
+    digest = client.get("/api/news/digest?day=2026-11-03", headers=auth_headers)
+
+    assert timeline.status_code == 200
+    assert digest.status_code == 200
+    assert timeline.json()["items"][0]["items"][0]["is_favorited"] is True
+    assert digest.json()["items"][0]["is_favorited"] is True
+
+    toggled = client.post(f"/api/news/{article.news_id}/favorite", headers=auth_headers)
+    assert toggled.status_code == 200
+    assert toggled.json()["favorited"] is False
+
+
+def test_news_digest_paginates_same_day(client, db_session):
+    for index in range(25):
+        article = _article(db_session, f"分页新闻{index}", "理论")
+        article.publish_date = datetime(2026, 11, 4, 9, 0)
+        article.review_status = "published"
+        db_session.add(article)
+    db_session.commit()
+
+    second = client.get("/api/news/digest?day=2026-11-04&page=2&limit=10")
+    assert second.status_code == 200
+    body = second.json()
+    assert body["total"] == 25
+    assert body["page"] == 2
+    assert body["page_size"] == 10
+    assert body["has_more"] is True
+    assert len(body["items"]) == 10

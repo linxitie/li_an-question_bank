@@ -1,7 +1,9 @@
 <template>
   <div class="news-timeline-page">
     <header class="page-head">
-      <button class="back-btn" type="button" aria-label="返回" @click="goBack">←</button>
+      <button class="back-btn" type="button" aria-label="返回" @click="goBack">
+        ←
+      </button>
       <div>
         <h1>新闻时间线</h1>
         <p class="subtitle">已发布新闻 · 按日聚合 · 日报速览</p>
@@ -14,8 +16,7 @@
         role="tab"
         :aria-selected="tab === 'timeline'"
         :class="{ active: tab === 'timeline' }"
-        @click="switchTab('timeline')"
-      >
+        @click="switchTab('timeline')">
         时间线
       </button>
       <button
@@ -23,8 +24,7 @@
         role="tab"
         :aria-selected="tab === 'digest'"
         :class="{ active: tab === 'digest' }"
-        @click="switchTab('digest')"
-      >
+        @click="switchTab('digest')">
         日报
       </button>
     </div>
@@ -35,6 +35,8 @@
     </div>
 
     <div v-else-if="loading" class="state">加载中...</div>
+
+    <p v-if="favoriteError" class="favorite-error">{{ favoriteError }}</p>
 
     <template v-else>
       <section v-if="tab === 'timeline'" class="panel">
@@ -47,8 +49,15 @@
             class="news-card"
             tabindex="0"
             @click="openSource(item)"
-            @keydown.enter="openSource(item)"
-          >
+            @keydown.enter="openSource(item)">
+            <button
+              class="fav-btn"
+              :class="{ active: item.is_favorited }"
+              type="button"
+              :aria-label="item.is_favorited ? '取消收藏' : '收藏'"
+              @click.stop="toggleFavorite(item)">
+              {{ item.is_favorited ? '★' : '☆' }}
+            </button>
             <h3>{{ item.title }}</h3>
             <p v-if="item.ai_summary" class="summary">{{ item.ai_summary }}</p>
             <div class="meta">
@@ -62,30 +71,50 @@
       <section v-else class="panel">
         <div class="digest-tools">
           <label for="digest-day">日期</label>
-          <input id="digest-day" v-model="day" type="date" @change="loadDigest" />
-          <button type="button" @click="loadDigest">查询</button>
+          <input
+            id="digest-day"
+            v-model="day"
+            type="date"
+            @change="loadDigest(1)" />
+          <button type="button" @click="loadDigest(1)">查询</button>
         </div>
 
         <div v-if="digest" class="digest-summary">
-          <strong>{{ digest.date }}</strong>
+          <div class="day-nav">
+            <button type="button" @click="shiftDay(-1)">前一天</button>
+            <strong>{{ digest.date }}</strong>
+            <button type="button" @click="shiftDay(1)">后一天</button>
+          </div>
           <span>共 {{ digest.total }} 条</span>
         </div>
 
         <div v-if="digest?.categories?.length" class="category-list">
-          <span v-for="c in digest.categories" :key="c.category_code || c.category" class="category-tag">
+          <span
+            v-for="c in digest.categories"
+            :key="c.category_code || c.category"
+            class="category-tag">
             {{ c.category }} {{ c.count }}
           </span>
         </div>
 
-        <div v-if="!digest?.items?.length" class="state">当天暂无已发布新闻</div>
+        <div v-if="!digest?.items?.length" class="state">
+          当天暂无已发布新闻
+        </div>
         <article
           v-for="item in digest?.items || []"
           :key="item.news_id"
           class="news-card"
           tabindex="0"
           @click="openSource(item)"
-          @keydown.enter="openSource(item)"
-        >
+          @keydown.enter="openSource(item)">
+          <button
+            class="fav-btn"
+            :class="{ active: item.is_favorited }"
+            type="button"
+            :aria-label="item.is_favorited ? '取消收藏' : '收藏'"
+            @click.stop="toggleFavorite(item)">
+            {{ item.is_favorited ? '★' : '☆' }}
+          </button>
           <h3>{{ item.title }}</h3>
           <p v-if="item.ai_summary" class="summary">{{ item.ai_summary }}</p>
           <div class="meta">
@@ -93,6 +122,25 @@
             <span v-if="item.category">{{ item.category }}</span>
           </div>
         </article>
+
+        <div v-if="digest && digest.total > digest.page_size" class="page-nav">
+          <button
+            type="button"
+            :disabled="digest.page <= 1"
+            @click="loadDigest(digest.page - 1)">
+            上一页
+          </button>
+          <span>
+            第 {{ digest.page }} /
+            {{ Math.ceil(digest.total / digest.page_size) }} 页
+          </span>
+          <button
+            type="button"
+            :disabled="!digest.has_more"
+            @click="loadDigest(digest.page + 1)">
+            下一页
+          </button>
+        </div>
       </section>
     </template>
   </div>
@@ -100,19 +148,22 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
   fetchNewsDigest,
   fetchNewsTimeline,
+  toggleNewsFavorite,
   type NewsDigestResult,
   type NewsTimelineGroup,
   type NewsTimelineItem
 } from '@/modules/news/api';
 
+const route = useRoute();
 const router = useRouter();
 const tab = ref<'timeline' | 'digest'>('timeline');
 const loading = ref(false);
 const error = ref('');
+const favoriteError = ref('');
 const groups = ref<NewsTimelineGroup[]>([]);
 const digest = ref<NewsDigestResult | null>(null);
 const day = ref('');
@@ -137,8 +188,23 @@ function goBack(): void {
 }
 
 function openSource(item: NewsTimelineItem): void {
+  if (route.path === '/news') {
+    router.push(`/news/${item.news_id}`);
+    return;
+  }
   if (item.url) {
     window.open(item.url, '_blank', 'noopener,noreferrer');
+  }
+}
+
+async function toggleFavorite(item: NewsTimelineItem): Promise<void> {
+  favoriteError.value = '';
+  try {
+    const result = await toggleNewsFavorite(item.news_id);
+    item.is_favorited = result.favorited;
+  } catch (e) {
+    favoriteError.value =
+      e instanceof Error ? e.message : '收藏失败，请稍后重试';
   }
 }
 
@@ -155,11 +221,11 @@ async function loadTimeline(): Promise<void> {
   }
 }
 
-async function loadDigest(): Promise<void> {
+async function loadDigest(page = 1): Promise<void> {
   loading.value = true;
   error.value = '';
   try {
-    digest.value = await fetchNewsDigest(day.value, 30);
+    digest.value = await fetchNewsDigest(day.value, page, 20);
   } catch (e) {
     error.value = e instanceof Error ? e.message : '日报加载失败';
   } finally {
@@ -167,12 +233,24 @@ async function loadDigest(): Promise<void> {
   }
 }
 
+function shiftDay(delta: number): void {
+  const base = digest.value?.date || day.value;
+  if (!base) return;
+  const date = new Date(`${base}T00:00:00`);
+  date.setDate(date.getDate() + delta);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const dayOfMonth = String(date.getDate()).padStart(2, '0');
+  day.value = `${year}-${month}-${dayOfMonth}`;
+  void loadDigest(1);
+}
+
 function switchTab(next: 'timeline' | 'digest'): void {
   tab.value = next;
   if (next === 'timeline') {
     void loadTimeline();
   } else {
-    void loadDigest();
+    void loadDigest(1);
   }
 }
 
@@ -180,7 +258,7 @@ function retry(): void {
   if (tab.value === 'timeline') {
     void loadTimeline();
   } else {
-    void loadDigest();
+    void loadDigest(digest.value?.page || 1);
   }
 }
 
@@ -277,13 +355,42 @@ onMounted(() => {
 
 .news-card {
   display: block;
-  padding: 14px 16px;
+  position: relative;
+  padding: 14px 52px 14px 16px;
   border: 1px solid #e6e1d8;
   border-radius: 12px;
   background: #fff;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.fav-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: #f5f2eb;
+  color: #8a908b;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fav-btn.active {
+  color: #c8763f;
+  background: #fbf0e7;
+}
+
+.favorite-error {
+  margin: 0 0 10px;
+  color: #a33b2d;
+  font-size: 13px;
 }
 
 .news-card:hover,
@@ -345,9 +452,38 @@ onMounted(() => {
 
 .digest-summary {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   color: #505852;
   font-size: 14px;
+}
+
+.day-nav,
+.page-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-nav button,
+.page-nav button {
+  border: 1px solid #d9d3c8;
+  border-radius: 7px;
+  background: #fff;
+  color: #2f5d50;
+  padding: 5px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.page-nav {
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.page-nav button:disabled {
+  color: #b8bdb9;
+  cursor: not-allowed;
 }
 
 .category-list {
