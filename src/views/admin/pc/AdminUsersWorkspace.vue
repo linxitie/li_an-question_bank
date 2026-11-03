@@ -79,7 +79,11 @@
           <button type="button" class="au-btn" @click="openBatch('enable')">批量启用</button>
           <button type="button" class="au-btn danger" @click="openBatch('delete')">批量移入回收站</button>
         </template>
-        <button v-else type="button" class="au-btn primary" @click="openBatch('restore')">批量恢复</button>
+        <template v-else>
+          <button type="button" class="au-btn primary" @click="openBatch('restore')">批量恢复</button>
+          <button v-if="isSuper" type="button" class="au-btn danger"
+                  @click="openBatch('purge')">批量彻底删除</button>
+        </template>
         <button type="button" class="au-link" @click="selectedIds = []">取消选择</button>
       </div>
 
@@ -105,7 +109,15 @@
               </td>
               <td>
                 <div class="au-user">
-                  <span class="au-avatar">{{ (user.username || '?').slice(0, 1) }}</span>
+                  <button type="button" class="au-avatar"
+                          :class="{ 'has-photo': user.avatar && !isAvatarBroken(user) }"
+                          :aria-label="'查看 ' + (user.username || '用户') + ' 的资料'"
+                          @click="openAvatar(user)">
+                    <img v-if="user.avatar && !isAvatarBroken(user)" :src="user.avatar"
+                         :alt="(user.username || '用户') + ' 头像'" loading="lazy"
+                         @error="markAvatarBroken(user)" />
+                    <span v-else>{{ avatarInitial(user) }}</span>
+                  </button>
                   <div>
                     <strong>{{ user.username }}</strong>
                     <small>#{{ user.user_id }} · {{ user.user_no }}</small>
@@ -357,15 +369,66 @@
         <header><h2>批量{{ actionLabel(batchAction) }} · {{ selectedIds.length }} 人</h2>
           <button type="button" class="au-close" aria-label="关闭" @click="batchVisible = false">×</button>
         </header>
-        <p class="au-modal-hint">服务端会重新校验数量与越级关系；包含本人或同级账号时整批拒绝。</p>
+        <p v-if="batchAction === 'purge'" class="au-modal-hint danger-hint">
+          彻底删除会匿名化账号并清除手机、邮箱、头像与权限，历史题目/考试记录保留但不可恢复。
+        </p>
+        <p v-else class="au-modal-hint">服务端会重新校验数量与越级关系；包含本人或同级账号时整批拒绝。</p>
+        <div v-if="batchAction === 'purge'" class="au-impact" role="status">
+          <span>已选 <strong>{{ selectedIds.length }}</strong> 人</span>
+          <span>其中管理员 <strong>{{ selectedAdminCount }}</strong> 人</span>
+          <span class="au-impact-danger">不可恢复</span>
+        </div>
         <label v-if="batchAction !== 'restore'">原因
           <input v-model.trim="batchReason" class="au-input" placeholder="至少 2 字，将写入审计" />
         </label>
+        <label v-if="batchAction === 'purge'">输入「彻底删除」确认
+          <input v-model.trim="batchConfirm" class="au-input" autocomplete="off"
+                 placeholder="彻底删除" />
+        </label>
         <footer>
           <button type="button" class="au-btn" @click="batchVisible = false">取消</button>
-          <button type="button" class="au-btn primary" :disabled="saving" @click="submitBatch">
-            {{ saving ? '执行中…' : '确认执行' }}
+          <button type="button" class="au-btn primary" :disabled="saving || !batchReady" @click="submitBatch">
+            {{ saving ? '执行中…' : (batchAction === 'purge' ? '确认彻底删除' : '确认执行') }}
           </button>
+        </footer>
+      </section>
+    </div>
+
+    <!-- 头像资料卡 -->
+    <div v-if="avatarUser" class="au-modal-mask" @click.self="avatarUser = null">
+      <section class="au-modal au-avatar-modal" role="dialog" aria-modal="true"
+               aria-label="用户资料卡">
+        <header><h2>用户资料</h2>
+          <button type="button" class="au-close" aria-label="关闭" @click="avatarUser = null">×</button>
+        </header>
+        <div class="au-avatar-card">
+          <div class="au-avatar au-avatar-xl" :class="{ 'has-photo': avatarUser.avatar && !isAvatarBroken(avatarUser) }">
+            <img v-if="avatarUser.avatar && !isAvatarBroken(avatarUser)" :src="avatarUser.avatar"
+                 :alt="(avatarUser.username || '用户') + ' 头像'" @error="markAvatarBroken(avatarUser)" />
+            <span v-else>{{ avatarInitial(avatarUser) }}</span>
+          </div>
+          <div class="au-avatar-meta">
+            <h3>{{ avatarUser.username }}</h3>
+            <p>#{{ avatarUser.user_id }} · {{ avatarUser.user_no }}</p>
+            <div class="au-avatar-tags">
+              <span class="au-chip role" :class="avatarUser.user_type">{{ roleLabel(avatarUser) }}</span>
+              <span v-if="avatarUser.is_deleted" class="au-chip bad">回收站</span>
+              <span v-else-if="avatarUser.is_disabled" class="au-chip warn">停用</span>
+              <span v-else class="au-chip ok">正常</span>
+            </div>
+            <dl class="au-avatar-dl">
+              <dt>院系</dt><dd>{{ avatarUser.department || '—' }}</dd>
+              <dt>班级 / 学校</dt><dd>{{ avatarUser.class_name || avatarUser.school || '—' }}</dd>
+              <dt>手机</dt><dd>{{ avatarUser.phone || '—' }}</dd>
+              <dt>邮箱</dt><dd>{{ avatarUser.email || '—' }}</dd>
+              <dt>最近登录</dt><dd>{{ formatTime(avatarUser.last_login) }}</dd>
+            </dl>
+          </div>
+        </div>
+        <footer>
+          <button v-if="!avatarUser.is_deleted" type="button" class="au-btn"
+                  @click="editFromAvatar">编辑资料</button>
+          <button type="button" class="au-btn primary" @click="avatarUser = null">关闭</button>
         </footer>
       </section>
     </div>
@@ -444,6 +507,8 @@ export default defineComponent({
     const includeDeleted = ref(false);
     const filters = reactive<Dict>({ user_type: '', role_level: '', is_disabled: '', has_override: '', sort: 'register_time_desc' });
     const selectedIds = ref<number[]>([]);
+    const avatarErrors = reactive<Dict>({});
+    const avatarUser = ref<Dict | null>(null);
 
     const catalogGroups = ref<Dict[]>([]);
     const rolesConfig = ref<Dict>({});
@@ -472,6 +537,7 @@ export default defineComponent({
     const batchVisible = ref(false);
     const batchAction = ref('disable');
     const batchReason = ref('');
+    const batchConfirm = ref('');
 
     const resultVisible = ref(false);
     const resultTitle = ref('');
@@ -482,6 +548,25 @@ export default defineComponent({
     });
     const allChecked = computed(function () {
       return users.value.length > 0 && selectedIds.value.length === users.value.length;
+    });
+    const selectedUsers = computed(function () {
+      return users.value.filter(function (user) {
+        return selectedIds.value.indexOf(user.user_id) >= 0;
+      });
+    });
+    const selectedAdminCount = computed(function () {
+      return selectedUsers.value.filter(function (user) {
+        return user.user_type === 'admin';
+      }).length;
+    });
+    const batchReady = computed(function () {
+      if (batchAction.value === 'purge') {
+        return batchReason.value.trim().length >= 2 && batchConfirm.value === '彻底删除';
+      }
+      if (['disable', 'delete', 'assign_role'].indexOf(batchAction.value) >= 0) {
+        return batchReason.value.trim().length >= 2;
+      }
+      return true;
     });
 
     function showToast(message: string) {
@@ -499,7 +584,7 @@ export default defineComponent({
 
     function actionLabel(action: string) {
       return ({
-        disable: '停用', enable: '启用', delete: '移入回收站', restore: '恢复',
+        disable: '停用', enable: '启用', delete: '移入回收站', restore: '恢复', purge: '彻底删除',
         'single_user_permissions': '单用户权限', 'batch_user_permissions': '批量权限',
         'role_template_update': '角色模板',
       } as Dict)[action] || action;
@@ -512,6 +597,32 @@ export default defineComponent({
 
     function isProtected(code: string) {
       return ['user:manage', 'system:config', 'data:backup', 'log:audit'].indexOf(code) >= 0;
+    }
+
+    function avatarKey(user: Dict) {
+      return String(user.user_id) + ':' + String(user.avatar || '');
+    }
+
+    function isAvatarBroken(user: Dict) {
+      return !!avatarErrors[avatarKey(user)];
+    }
+
+    function markAvatarBroken(user: Dict) {
+      avatarErrors[avatarKey(user)] = true;
+    }
+
+    function avatarInitial(user: Dict) {
+      return (user.username || '?').slice(0, 1).toUpperCase();
+    }
+
+    function openAvatar(user: Dict) {
+      avatarUser.value = user;
+    }
+
+    function editFromAvatar() {
+      const user = avatarUser.value;
+      avatarUser.value = null;
+      if (user) openEdit(user);
     }
 
     async function loadBootstrap() {
@@ -790,10 +901,17 @@ export default defineComponent({
     function openBatch(action: string) {
       batchAction.value = action;
       batchReason.value = action === 'restore' ? '回收站恢复' : '';
+      batchConfirm.value = '';
       batchVisible.value = true;
     }
 
     async function submitBatch() {
+      if (!batchReady.value) {
+        showToast(batchAction.value === 'purge'
+          ? '请填写原因并输入「彻底删除」确认'
+          : '请填写至少 2 个字的操作原因');
+        return;
+      }
       saving.value = true;
       try {
         await requestJson('/api/admin/users/batch', {
@@ -806,7 +924,8 @@ export default defineComponent({
           }),
         });
         batchVisible.value = false;
-        showToast('批量操作完成');
+        batchConfirm.value = '';
+        showToast(batchAction.value === 'purge' ? '已批量彻底删除并匿名化' : '批量操作完成');
         await loadAll();
       } catch (err: any) {
         showToast(err.message);
@@ -917,9 +1036,11 @@ export default defineComponent({
       auditRows, auditTotal, auditPage, auditAction, health,
       editorVisible, editorMode, editor, roleReason,
       permissionVisible, permissionUser, permissionDetail, permissionStates, permReason,
-      batchVisible, batchAction, batchReason, resultVisible, resultTitle, resultMessage,
+      batchVisible, batchAction, batchReason, batchConfirm, resultVisible, resultTitle, resultMessage,
+      avatarUser, avatarErrors, selectedUsers, selectedAdminCount, batchReady,
       totalPages, allChecked,
       roleName, roleLabel, actionLabel, formatTime, isProtected,
+      avatarInitial, isAvatarBroken, markAvatarBroken, openAvatar, editFromAvatar,
       loadAll, reloadUsers, resetFilters, goPage, toggleAll,
       openCreate, openEdit, closeEditor, saveEditor,
       openPermissions, closePermissions, permState, setPerm, savePermissions,
@@ -999,7 +1120,10 @@ export default defineComponent({
 .au-avatar {
   width: 34px; height: 34px; flex: none; border-radius: 50%; background: #e8eef8;
   color: var(--au-primary); display: grid; place-items: center; font-weight: 700;
+  border: 0; padding: 0; overflow: hidden; cursor: pointer; font-size: 13px;
 }
+.au-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.au-avatar:focus-visible { outline: 2px solid #2f6feb; outline-offset: 2px; }
 .au-user strong { display: block; }
 .au-user small, .au-two-line small, .au-perm-name small { color: var(--au-muted); font-size: 11px; display: block; }
 .au-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef1f6; color: var(--au-muted); font-size: 11px; }
@@ -1048,6 +1172,27 @@ export default defineComponent({
 .au-form-grid label, .au-modal > label { display: flex; flex-direction: column; gap: 6px; color: var(--au-muted); font-size: 12px; }
 .au-form-grid .span-2 { grid-column: span 2; }
 .au-modal-hint { padding: 0 20px; color: var(--au-muted); line-height: 1.7; }
+.au-modal-hint.danger-hint { color: var(--au-danger); }
+.au-impact {
+  display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 0 20px 12px;
+  padding: 10px 12px; background: #fff7f6; border: 1px solid #f3d3cf; border-radius: 8px;
+  color: var(--au-ink); font-size: 13px;
+}
+.au-impact strong { color: var(--au-primary); font-size: 15px; }
+.au-impact-danger { color: var(--au-danger); font-weight: 600; }
+.au-avatar-modal { width: min(620px, 96vw); }
+.au-avatar-card { display: flex; gap: 20px; padding: 20px; align-items: flex-start; }
+.au-avatar-xl { width: 88px; height: 88px; font-size: 30px; cursor: default; }
+.au-avatar-meta { min-width: 0; flex: 1; }
+.au-avatar-meta h3 { margin: 0 0 4px; font-size: 20px; color: var(--au-primary); }
+.au-avatar-meta > p { margin: 0 0 10px; color: var(--au-muted); font-size: 12px; }
+.au-avatar-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.au-avatar-dl {
+  display: grid; grid-template-columns: 76px 1fr; gap: 6px 12px;
+  margin: 0; font-size: 13px;
+}
+.au-avatar-dl dt { color: var(--au-muted); }
+.au-avatar-dl dd { margin: 0; color: var(--au-ink); word-break: break-all; }
 .au-perm-summary { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; background: #f8fafd; border-bottom: 1px solid var(--au-border); }
 .au-perm-summary span { background: #fff; border: 1px solid var(--au-border); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
 .au-perm-body { padding: 14px 20px; max-height: 54vh; overflow: auto; }

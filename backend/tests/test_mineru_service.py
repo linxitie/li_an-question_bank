@@ -302,3 +302,55 @@ class TestSidecarImages:
              patch.object(ms.subprocess, 'run') as m_run:
             assert ms.extract_text_sync(b'x') is None
             m_run.assert_not_called()
+
+class TestStagingImageCleanup:
+    """F-2 回收必须只删未被引用的暂存图（2026-11-03 误删 469 张生产图回归）。"""
+
+    def test_extract_referenced_names_covers_url_and_marker(self):
+        from app.services.question_ingest.images import _extract_referenced_staging_names
+
+        names = _extract_referenced_staging_names([
+            '<img src="/static/questions/abc123_1_1.png" class="q-img">',
+            '[IMAGE:deadbeef_2_2]',
+            '无图正文',
+        ])
+        assert names == {'abc123_1_1.png', 'deadbeef_2_2.png'}
+
+    def test_cleanup_keeps_referenced_file_and_removes_orphan(self, monkeypatch, tmp_path):
+        import time
+        from app.services.question_ingest import images as img_mod
+
+        keep = tmp_path / 'abc123_1_1.png'
+        drop = tmp_path / 'deadbeef_2_2.png'
+        keep.write_bytes(b'keep')
+        drop.write_bytes(b'drop')
+        old = time.time() - 10 * 86400
+        os.utime(keep, (old, old))
+        os.utime(drop, (old, old))
+        monkeypatch.setattr(img_mod, '_STAGING_DIR', str(tmp_path))
+        monkeypatch.setattr(
+            img_mod, '_collect_referenced_staging_names', lambda: {'abc123_1_1.png'})
+
+        removed = img_mod.cleanup_stale_staged_images(max_age_days=7)
+
+        assert removed == 1
+        assert keep.exists()
+        assert not drop.exists()
+
+    def test_cleanup_fails_closed_when_reference_collection_errors(self, monkeypatch, tmp_path):
+        import time
+        from app.services.question_ingest import images as img_mod
+
+        orphan = tmp_path / 'deadbeef_2_2.png'
+        orphan.write_bytes(b'x')
+        old = time.time() - 10 * 86400
+        os.utime(orphan, (old, old))
+        monkeypatch.setattr(img_mod, '_STAGING_DIR', str(tmp_path))
+
+        def boom():
+            raise RuntimeError('db unavailable')
+
+        monkeypatch.setattr(img_mod, '_collect_referenced_staging_names', boom)
+
+        assert img_mod.cleanup_stale_staged_images(max_age_days=7) == 0
+        assert orphan.exists()

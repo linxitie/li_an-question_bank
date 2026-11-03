@@ -5,7 +5,9 @@ from datetime import datetime, timedelta
 
 from app.core.security import (
     Permission,
+    create_access_token,
     get_effective_permissions,
+    get_password_hash,
     permission_catalog,
 )
 from app.models.models import (
@@ -277,3 +279,104 @@ def test_role_template_update_can_be_undone(client, db_session, admin_headers):
     assert undone.status_code == 200, undone.text
     restored = client.get("/api/admin/permissions", headers=admin_headers)
     assert removed in restored.json()["roles"]["teacher"]["permissions"]
+
+def test_user_list_exposes_avatar(client, db_session, admin_headers, test_user):
+    test_user.avatar = "/uploads/avatars/avatar_test.png"
+    db_session.commit()
+    response = client.get("/api/admin/users", headers=admin_headers)
+    assert response.status_code == 200, response.text
+    item = next(i for i in response.json()["items"] if i["user_id"] == test_user.user_id)
+    assert item["avatar"] == "/uploads/avatars/avatar_test.png"
+
+
+def test_batch_purge_anonymizes_recycle_bin_user(
+    client, db_session, admin_headers, test_user
+):
+    test_user.is_deleted = 1
+    test_user.deleted_at = datetime.now()
+    test_user.avatar = "/uploads/avatars/avatar_test.png"
+    test_user.email = "pii@example.com"
+    db_session.commit()
+
+    response = client.post(
+        "/api/admin/users/batch",
+        headers=admin_headers,
+        json={
+            "action": "purge",
+            "target": {
+                "mode": "ids",
+                "user_ids": [test_user.user_id],
+                "expected_count": 1,
+            },
+            "payload": {"reason": "批量注销回归"},
+            "expected_count": 1,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["affected"] == 1
+
+    db_session.refresh(test_user)
+    assert test_user.is_deleted == 2
+    assert test_user.username == f"deleted_{test_user.user_id}"
+    assert test_user.user_no == f"deleted_{test_user.user_id}"
+    assert test_user.phone == ""
+    assert test_user.email is None
+    assert test_user.avatar is None
+    assert test_user.role_level == 0
+
+
+def test_batch_purge_requires_super_admin(
+    client, db_session, test_teacher, test_user
+):
+    test_user.is_deleted = 1
+    db_session.commit()
+    low_admin = SysUser(
+        user_no="admin002",
+        username="普通管理员",
+        password=get_password_hash("admin123"),
+        phone="13900139001",
+        user_type="admin",
+        role_level=2,
+        status=1,
+    )
+    db_session.add(low_admin)
+    db_session.commit()
+    token = create_access_token(
+        data={"user_id": low_admin.user_id, "user_no": low_admin.user_no}
+    )
+    response = client.post(
+        "/api/admin/users/batch",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "action": "purge",
+            "target": {
+                "mode": "ids",
+                "user_ids": [test_user.user_id],
+                "expected_count": 1,
+            },
+            "payload": {"reason": "越权注销"},
+            "expected_count": 1,
+        },
+    )
+    assert response.status_code == 403, response.text
+
+
+def test_batch_purge_rejects_user_outside_recycle_bin(
+    client, db_session, admin_headers, test_user
+):
+    assert (test_user.is_deleted or 0) == 0
+    response = client.post(
+        "/api/admin/users/batch",
+        headers=admin_headers,
+        json={
+            "action": "purge",
+            "target": {
+                "mode": "ids",
+                "user_ids": [test_user.user_id],
+                "expected_count": 1,
+            },
+            "payload": {"reason": "非回收站注销"},
+            "expected_count": 1,
+        },
+    )
+    assert response.status_code == 422, response.text

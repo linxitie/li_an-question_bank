@@ -855,6 +855,43 @@ async def restore_user(
     return {"success": True, "message": "用户已恢复"}
 
 
+def _anonymize_user(db: Session, user: SysUser, operator: SysUser, reason: str) -> str:
+    """把回收站用户匿名化为墓碑；返回原用户名，供审计记录。"""
+    user_id = user.user_id
+    original_username = user.username
+    user.username = f"deleted_{user_id}"
+    user.user_no = f"deleted_{user_id}"
+    user.phone = ""
+    user.email = None
+    user.avatar = None
+    user.password = get_password_hash(secrets.token_urlsafe(32))
+    user.device_sessions = []
+    user.user_type = "student"
+    user.role_level = 0
+    user.is_disabled = 1
+    user.is_deleted = 2
+    user.delete_reason = reason
+
+    # 权限与能力包同步失效，避免墓碑账号残留授权。
+    db.query(UserPermissionOverride).filter(
+        UserPermissionOverride.user_id == user_id,
+        UserPermissionOverride.status == "active",
+    ).update({
+        UserPermissionOverride.status: "revoked",
+        UserPermissionOverride.revoked_by: operator.user_id,
+        UserPermissionOverride.revoked_at: datetime.now(),
+        UserPermissionOverride.updated_at: datetime.now(),
+    }, synchronize_session=False)
+    try:
+        from ....models.models import UserCapability
+        db.query(UserCapability).filter(UserCapability.user_id == user_id).delete(
+            synchronize_session=False
+        )
+    except Exception:
+        pass
+    return original_username
+
+
 @router.post("/users/{user_id}/purge", summary="匿名化注销用户（仅超管）")
 async def purge_user(
     user_id: int,
@@ -872,41 +909,10 @@ async def purge_user(
         raise HTTPException(status_code=400, detail="确认用户名不匹配")
     _assert_not_last_super(db, user)
 
-    original = {"username": user.username, "user_no": user.user_no}
-    user.username = f"deleted_{user_id}"
-    user.user_no = f"deleted_{user_id}"
-    user.phone = ""
-    user.email = None
-    user.avatar = None
-    user.password = get_password_hash(secrets.token_urlsafe(32))
-    user.device_sessions = []
-    user.user_type = "student"
-    user.role_level = 0
-    user.is_disabled = 1
-    user.is_deleted = 2
-    user.delete_reason = data.reason
-
-    # 权限与能力包同步失效，避免墓碑账号残留授权。
-    db.query(UserPermissionOverride).filter(
-        UserPermissionOverride.user_id == user_id,
-        UserPermissionOverride.status == "active",
-    ).update({
-        UserPermissionOverride.status: "revoked",
-        UserPermissionOverride.revoked_by: current_user.user_id,
-        UserPermissionOverride.revoked_at: datetime.now(),
-        UserPermissionOverride.updated_at: datetime.now(),
-    }, synchronize_session=False)
-    try:
-        from ....models.models import UserCapability
-        db.query(UserCapability).filter(UserCapability.user_id == user_id).delete(
-            synchronize_session=False
-        )
-    except Exception:
-        pass
-
+    original_username = _anonymize_user(db, user, current_user, data.reason)
     db.commit()
     record_operation(db, current_user, "DELETE", "用户管理",
-                     f"匿名化注销用户 {original['username']}(ID:{user_id})；原因: {data.reason}")
+                     f"匿名化注销用户 {original_username}(ID:{user_id})；原因: {data.reason}")
     return {"success": True, "message": "用户已匿名化注销，历史引用保留"}
 
 
@@ -919,24 +925,31 @@ async def batch_operate_users(
     """批量禁用/启用/删除/恢复/改资料/改角色/重置密码；任一目标不合法整批拒绝。"""
     allowed = {
         "disable", "enable", "delete", "restore",
-        "update_profile", "assign_role", "reset_password",
+        "update_profile", "assign_role", "reset_password", "purge",
     }
     if data.action not in allowed:
         raise HTTPException(status_code=400, detail=f"无效的 action: {data.action}")
     payload = data.payload or {}
     reason = str(payload.get("reason", "")).strip()
-    if data.action in ("disable", "delete", "assign_role") and len(reason) < 2:
+    if data.action in ("disable", "delete", "assign_role", "purge") and len(reason) < 2:
         raise HTTPException(status_code=400, detail="该批量操作必须填写原因")
-    if data.action in ("assign_role", "reset_password") and current_user.role_level < 3:
-        raise HTTPException(status_code=403, detail="只有超级管理员可以批量改角色或重置密码")
+    if data.action in ("assign_role", "reset_password", "purge") and current_user.role_level < 3:
+        raise HTTPException(status_code=403, detail="只有超级管理员可以批量改角色、重置密码或彻底注销")
 
-    restore_mode = data.action == "restore"
+    recycle_mode = data.action in ("restore", "purge")
     users = _resolve_permission_batch_targets(
         db, data.target, current_user,
-        allow_deleted=restore_mode, deleted_only=restore_mode,
+        allow_deleted=recycle_mode, deleted_only=recycle_mode,
     )
     if data.expected_count is not None and len(users) != data.expected_count:
         raise HTTPException(status_code=409, detail="目标数量已变化，请重新选择")
+
+    # 先整批预检，避免处理到一半才发现最后超管保护，留下未提交的半批修改。
+    if data.action == "purge":
+        for user in users:
+            if (getattr(user, "is_deleted", 0) or 0) != 1:
+                raise HTTPException(status_code=409, detail=f"只能注销回收站中的用户: {user.username}")
+            _assert_not_last_super(db, user)
 
     changed = 0
     credentials = []
@@ -985,6 +998,8 @@ async def batch_operate_users(
             password = secrets.token_urlsafe(9)
             user.password = get_password_hash(password)
             credentials.append({"user_id": user.user_id, "username": user.username, "new_password": password})
+        elif data.action == "purge":
+            _anonymize_user(db, user, current_user, reason)
         changed += 1
 
     batch_id = str(uuid.uuid4())
@@ -994,7 +1009,7 @@ async def batch_operate_users(
         db.rollback()
         raise
     record_operation(
-        db, current_user, "UPDATE", "用户管理",
+        db, current_user, "DELETE" if data.action == "purge" else "UPDATE", "用户管理",
         f"批量{data.action} {changed} 人；原因: {reason or '无'}；批次: {batch_id}",
     )
     return {
