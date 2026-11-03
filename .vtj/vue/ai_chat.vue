@@ -331,6 +331,13 @@
             @click="toggleMic"
             title="语音输入">
             🎤
+            <div v-if="state.recording" class="mic-waves">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
           </button>
           <textarea
             v-model="state.input"
@@ -944,6 +951,32 @@ export default defineComponent({
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(196, 30, 58, 0.4); }
   50% { box-shadow: 0 0 0 8px rgba(196, 30, 58, 0); }
+}
+
+/* 声波动画 */
+.mic-waves {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.mic-waves span {
+  width: 3px;
+  background: #c41e3a;
+  border-radius: 2px;
+  animation: wave 1s ease-in-out infinite;
+}
+.mic-waves span:nth-child(1) { height: 8px; animation-delay: 0s; }
+.mic-waves span:nth-child(2) { height: 12px; animation-delay: 0.15s; }
+.mic-waves span:nth-child(3) { height: 16px; animation-delay: 0.3s; }
+.mic-waves span:nth-child(4) { height: 12px; animation-delay: 0.45s; }
+.mic-waves span:nth-child(5) { height: 8px; animation-delay: 0.6s; }
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1.5); }
 }
 
 /* ===== 学习仪表盘 ===== */
