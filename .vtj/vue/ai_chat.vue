@@ -47,6 +47,7 @@
             <div class="header-title-row">
               <span class="header-title">联考小智</span>
               <span class="online-dot"><i></i>在线</span>
+              <button class="kb-entry" @click="toggleDashboard" title="学习数据面板">📊 数据</button>
               <a class="kb-entry" href="/#/memories" title="小智对你的了解"
                 >👤 我的画像</a
               >
@@ -82,6 +83,46 @@
         <div v-if="state.agentName" class="agent-bar">
           <span class="agent-dot"></span>
           <span class="agent-label">当前顾问：{{ state.agentName }}</span>
+        </div>
+      </div>
+
+      <!-- 学习仪表盘（右侧浮动） -->
+      <div v-if="state.showDashboard" class="dashboard-panel">
+        <div class="dash-head">
+          <span>📊 学习数据</span>
+          <button @click="toggleDashboard">×</button>
+        </div>
+        <div class="dash-body">
+          <div class="dash-card">
+            <div class="dash-num">12.5h</div>
+            <div class="dash-label">本周学习时长</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-num">78%</div>
+            <div class="dash-label">平均正确率</div>
+          </div>
+          <div class="dash-section">
+            <div class="dash-section-title">薄弱科目</div>
+            <div class="dash-bar">
+              <span class="dash-bar-label">资料分析</span>
+              <div class="dash-bar-track"><div class="dash-bar-fill" style="width: 45%"></div></div>
+              <span class="dash-bar-pct">45%</span>
+            </div>
+            <div class="dash-bar">
+              <span class="dash-bar-label">数量关系</span>
+              <div class="dash-bar-track"><div class="dash-bar-fill" style="width: 38%"></div></div>
+              <span class="dash-bar-pct">38%</span>
+            </div>
+            <div class="dash-bar">
+              <span class="dash-bar-label">申论</span>
+              <div class="dash-bar-track"><div class="dash-bar-fill" style="width: 52%"></div></div>
+              <span class="dash-bar-pct">52%</span>
+            </div>
+          </div>
+          <div class="dash-section">
+            <div class="dash-section-title">连续打卡</div>
+            <div class="dash-streak">🔥 7天</div>
+          </div>
         </div>
       </div>
 
@@ -266,7 +307,9 @@ export default defineComponent({
       workTaskId: '',
       workImporting: false,
       workImportDone: false,
-      workNotice: ''
+      workNotice: '',
+      // 学习仪表盘
+      showDashboard: false
     });
     const sessions = ref([]);
     const drawerOpen = ref(false);
@@ -480,6 +523,10 @@ export default defineComponent({
       return AGENT_LABELS[a] || '联考小智';
     }
 
+    function toggleDashboard() {
+      state.showDashboard = !state.showDashboard;
+    }
+
     async function switchMode(work) {
       if (state.workMode === work) return;
       state.workMode = work;
@@ -583,6 +630,7 @@ export default defineComponent({
       renderMd,
       agentLabel,
       switchMode,
+      toggleDashboard,
       selectTask,
       runWorkTask,
       importToToday,
@@ -595,6 +643,110 @@ export default defineComponent({
 </script>
 
 <style lang="css" scoped>
+/* ===== 学习仪表盘 ===== */
+.dashboard-panel {
+  position: absolute;
+  right: 20px;
+  top: 80px;
+  width: 280px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  z-index: 100;
+  overflow: hidden;
+  animation: slideIn 0.3s ease;
+}
+@keyframes slideIn {
+  from { transform: translateX(300px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.dash-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #1a2b5f, #2a4080);
+  color: #fff;
+  font-weight: 600;
+}
+.dash-head button {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+.dash-body {
+  padding: 20px;
+}
+.dash-card {
+  text-align: center;
+  padding: 16px;
+  background: #f8f9fc;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.dash-num {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.dash-label {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+.dash-section {
+  margin-top: 16px;
+}
+.dash-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+}
+.dash-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dash-bar-label {
+  width: 60px;
+  font-size: 12px;
+  color: #666;
+}
+.dash-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.dash-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #c41e3a, #ff6b6b);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.dash-bar-pct {
+  width: 36px;
+  font-size: 12px;
+  color: #666;
+  text-align: right;
+}
+.dash-streak {
+  font-size: 32px;
+  font-weight: 800;
+  color: #ff6b35;
+  text-align: center;
+  padding: 12px;
+  background: #fff5f0;
+  border-radius: 12px;
+}
+
 .ai-layout {
   display: flex;
   height: 100vh;
