@@ -314,8 +314,7 @@
         <div v-if="state.loading" class="msg-row bot">
           <div class="mini-avatar">智</div>
           <div class="bubble bot typing">
-            <span class="dot"></span><span class="dot"></span
-            ><span class="dot"></span>
+            <span class="typing-cursor"></span>
           </div>
         </div>
       </div>
@@ -1724,21 +1723,19 @@ export default defineComponent({
 }
 .typing {
   padding: 14px 16px !important;
+  min-width: 40px;
 }
-.typing .dot {
+.typing-cursor {
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  background: #aab4c0;
-  border-radius: 50%;
-  margin-right: 4px;
-  animation: blink 1.2s infinite;
+  width: 3px;
+  height: 18px;
+  background: #c41e3a;
+  vertical-align: middle;
+  animation: cursor-blink 1s infinite;
 }
-.typing .dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.typing .dot:nth-child(3) {
-  animation-delay: 0.4s;
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 @keyframes blink {
   0%,
