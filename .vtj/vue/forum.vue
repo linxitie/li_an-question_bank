@@ -115,7 +115,11 @@
               class="hot-item"
               @click="viewPost(hot)">
               <span class="hot-rank" :class="'rank-' + hot.rank">{{ hot.rank }}</span>
-              <span class="hot-title">{{ hot.title }}</span>
+              <span class="hot-main">
+                <span class="hot-title">{{ hot.title }}</span>
+                <!-- 2026-11-03：列表只显示标题已不够用，补 2 行正文摘要（后端已带 200 字 content） -->
+                <span class="list-excerpt">{{ excerptOf(hot) }}</span>
+              </span>
               <span class="hot-replies">
                 <span> {{ hot.commentCount }} </span>
                 <span> 回复</span>
@@ -196,6 +200,8 @@
               class="fav-item"
               @click="openPostDetail(fp)">
               <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }">{{ fp.title }}</span>
+              <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
+              <span class="list-excerpt">{{ excerptOf(fp) }}</span>
               <span class="fav-item-meta">
                 <span class="heart-icon" :class="{ active: fp.liked }">{{ fp.liked ? '❤' : '♡' }}</span>
                 <span>{{ fp.likeCount }}</span>
@@ -509,6 +515,8 @@
               class="my-post-item"
               @click="openPostDetail(mp)">
               <span class="my-post-title">{{ mp.title }}</span>
+              <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
+              <span class="list-excerpt">{{ excerptOf(mp) }}</span>
               <span class="my-post-stats">
                 <span class="my-stat">❤️ {{ mp.likeCount }}</span>
                 <span class="my-stat">💬 {{ mp.commentCount }}</span>
@@ -671,11 +679,27 @@
       const markAvatarFailed = (key: string) => {
         avatarFailed[key] = true;
       };
+      /**
+       * 列表正文摘要（2026-11-03）：收藏/喜欢/热门/我的帖子 这些弹窗此前只显示标题，
+       * 用户看不到任何正文。后端 `_serialize_post` 已带 200 字 content，这里只需截断展示。
+       * - 去掉表情包占位符 [[sticker:url]]，否则列表里会出现一长串 URL
+       * - 压平空白，避免换行把两行摘要撑成一行空行
+       */
+      const excerptOf = (post: any): string => {
+        const raw = String(post?.content ?? post?.excerpt ?? '');
+        const text = raw
+          .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!text) return '（无正文）';
+        return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+      };
       return {
         state,
         props,
         provider,
         community,
+        excerptOf,
         // 校园 / 班级论坛筛选项（2026-11-03）
         scopeOptions: [
           { key: '', label: '全部' },
@@ -1664,6 +1688,28 @@
     color: #1a365d;
     font-weight: 600;
     box-shadow: 0 1px 3px rgba(23, 35, 58, .12);
+  }
+
+  /* 列表正文摘要（2026-11-03）：2 行截断 */
+  .list-excerpt {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #6b7896;
+    text-align: left;
+    width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .hot-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .search-input {

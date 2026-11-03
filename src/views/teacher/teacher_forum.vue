@@ -189,6 +189,7 @@
         <div v-else class="tf-fav-list">
           <div v-for="h in hotAll" :key="h.id" class="tf-fav-item" @click="openPost(h)">
             <span class="tf-fav-title">{{ h.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(h) }}</span>
             <span class="tf-fav-num">❤ {{ h.likeCount || 0 }} · 💬 {{ h.commentCount || 0 }}</span>
           </div>
         </div>
@@ -207,6 +208,7 @@
         <div v-else class="tf-fav-list">
           <div v-for="m in myAll" :key="m.id" class="tf-fav-item" @click="openPost(m)">
             <span class="tf-fav-title">{{ m.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(m) }}</span>
             <span class="tf-fav-num">❤ {{ m.likeCount || 0 }} · 💬 {{ m.commentCount || 0 }}</span>
           </div>
         </div>
@@ -229,6 +231,7 @@
         <div v-else class="tf-fav-list">
           <div v-for="p in favList" :key="p.id" class="tf-fav-item" @click="openPost(p)">
             <span class="tf-fav-title" :style="{ color: titleColorValue(p.titleColor) }">{{ p.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(p) }}</span>
             <span class="tf-fav-num">❤ {{ p.likeCount || 0 }} · ⭐ {{ p.favoriteCount || 0 }}</span>
           </div>
         </div>
@@ -341,6 +344,20 @@ const reasonDialog = reactive({
 const statusLabel = (status: string) =>
   ({ NORMAL: '正常', BLOCKED: '待复核隐藏', DELETED: '已删除' } as Record<string, string>)[status] ||
   status;
+
+/**
+ * 列表正文摘要（2026-11-03）：收藏/喜欢/热门/我的帖子 弹窗此前只显示标题。
+ * 后端已带 200 字 content，这里去表情包占位符 + 压平空白后截 120 字。
+ */
+const excerptOf = (post: any): string => {
+  const raw = String(post?.content ?? post?.excerpt ?? '');
+  const text = raw
+    .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '（无正文）';
+  return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+};
 
 const openPostForm = () => {
   postDraftInitial.value = null;
@@ -763,10 +780,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
 .tf-fav-tab { padding: 8px 16px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #475569; font-size: 13px; cursor: pointer; }
 .tf-fav-tab.on { background: #fdf2f4; border-color: #f0c4cc; color: #c41e3a; font-weight: 600; }
 .tf-fav-list { max-height: 380px; overflow-y: auto; }
-.tf-fav-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; }
+.tf-fav-item { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "title num" "excerpt excerpt"; align-items: center; gap: 2px 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; }
 .tf-fav-item:hover { background: #f7f9fc; }
-.tf-fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tf-fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
+.tf-fav-title { grid-area: title; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 列表正文摘要（2026-11-03）：2 行截断，占满第二行 */
+.tf-fav-excerpt {
+  grid-area: excerpt;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6b7896;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.tf-fav-num { grid-area: num; color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
 /* 单个五角星入口，避免窄屏换行 */
 .tf-star-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
