@@ -354,7 +354,8 @@ def init_scheduler():
     def _initial_run():
         try:
             logger.info("执行首次全量爬取...")
-            scrape_all_news()
+            # 新闻：v2 采集器统一走 collect_all_sources（旧的 scrape_all_news 已不存在）
+            _news_with_broadcast()
             scrape_all_recruitment()
             scrape_all_exams()
             logger.info("首次全量爬取完成")
