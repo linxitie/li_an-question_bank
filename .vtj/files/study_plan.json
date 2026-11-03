@@ -1,0 +1,13 @@
+{
+  "id": "study_plan",
+  "name": "学习计划",
+  "type": "page",
+  "version": "20261102001",
+  "node": {
+    "id": "root",
+    "type": "element",
+    "name": "div",
+    "props": {},
+    "children": []
+  }
+}

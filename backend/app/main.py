@@ -874,6 +874,11 @@ app.include_router(goals.router)
 app.include_router(stats.router)
 app.include_router(exam_records.router, tags=["成绩记录"])
 app.include_router(media.router)
+# 论坛/反馈图片上传（POST /api/media/image）。
+# 2026-11-02 修复：该行在 60ca515 合并时被冲突解决丢掉，导致 POST 落到
+# media_assets_api 的 GET /api/media/{asset_id} 兜底路由上，返回 405。
+# 注意：注册顺序必须在 media_assets 的 /{asset_id} 通配路由之前，保证先匹配到精确路径。
+app.include_router(image_media.router)
 app.include_router(media_assets_api.router)
 app.include_router(media_assets_api.router_api)  # /api/media 别名
 app.include_router(websocket_router)
