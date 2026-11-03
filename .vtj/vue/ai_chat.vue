@@ -240,6 +240,25 @@
               {{ q }}
             </div>
           </div>
+
+          <!-- 学习对战 -->
+          <div class="battle-card">
+            <div class="battle-title">⚔️ 学习对战</div>
+            <div class="battle-body">
+              <div class="battle-player">
+                <div class="player-avatar">😎</div>
+                <div class="player-name">你</div>
+                <div class="player-score">1250分</div>
+              </div>
+              <div class="battle-vs">VS</div>
+              <div class="battle-player">
+                <div class="player-avatar">🤖</div>
+                <div class="player-name">AI学长</div>
+                <div class="player-score">1180分</div>
+              </div>
+            </div>
+            <button class="battle-btn">开始对战</button>
+          </div>
         </div>
 
         <div
@@ -1518,6 +1537,64 @@ export default defineComponent({
   font-size: 12px;
   color: #333;
   font-weight: 600;
+}
+
+/* 学习对战 */
+.battle-card {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  color: #fff;
+  text-align: center;
+}
+.battle-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.battle-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+.battle-player {
+  flex: 1;
+}
+.player-avatar {
+  font-size: 32px;
+  margin-bottom: 4px;
+}
+.player-name {
+  font-size: 12px;
+  opacity: 0.9;
+}
+.player-score {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.battle-vs {
+  font-size: 20px;
+  font-weight: 900;
+  opacity: 0.8;
+}
+.battle-btn {
+  background: #fff;
+  color: #667eea;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.battle-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
 }
   color: #8899aa;
   margin: 0 0 16px;

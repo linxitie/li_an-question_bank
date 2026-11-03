@@ -232,6 +232,35 @@
           </div>
         </div>
 
+        <!-- AI错题本 -->
+        <div class="wrongbook-card">
+          <div class="wrongbook-head">
+            <span class="dist-title">📕 AI错题本</span>
+            <span class="wrongbook-badge">23道错题</span>
+          </div>
+          <div class="wrongbook-body">
+            <div class="wrongbook-stats">
+              <div class="wb-stat">
+                <div class="wb-num">12</div>
+                <div class="wb-label">资料分析</div>
+              </div>
+              <div class="wb-stat">
+                <div class="wb-num">8</div>
+                <div class="wb-label">判断推理</div>
+              </div>
+              <div class="wb-stat">
+                <div class="wb-num">3</div>
+                <div class="wb-label">言语理解</div>
+              </div>
+            </div>
+            <div class="wrongbook-tip">
+              <span class="wb-tip-icon">💡</span>
+              <span>AI分析：你资料分析的增长率题型错得最多，建议重点复习</span>
+            </div>
+            <button class="wrongbook-btn">开始错题重做</button>
+          </div>
+        </div>
+
         <!-- 本周进度 -->
         <div class="week-progress">
           <div class="dist-title">📅 本周打卡</div>
@@ -542,6 +571,88 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== AI错题本 ===== */
+  .wrongbook-card {
+    background: linear-gradient(135deg, #fff 0%, #fff5f6 100%);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(196, 30, 58, 0.1);
+    border: 1px solid #ffe0e6;
+  }
+  .wrongbook-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .wrongbook-badge {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+  .wrongbook-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .wrongbook-stats {
+    display: flex;
+    gap: 12px;
+  }
+  .wb-stat {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .wb-num {
+    font-size: 24px;
+    font-weight: 700;
+    color: #c41e3a;
+  }
+  .wb-label {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+  .wrongbook-tip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: #fffbeb;
+    border-radius: 12px;
+    border-left: 4px solid #f59e0b;
+  }
+  .wb-tip-icon {
+    font-size: 18px;
+  }
+  .wrongbook-tip span:last-child {
+    font-size: 13px;
+    color: #92400e;
+  }
+  .wrongbook-btn {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .wrongbook-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(196, 30, 58, 0.3);
+  }
 
   /* ===== 自适应学习 ===== */
   .adaptive-card {
