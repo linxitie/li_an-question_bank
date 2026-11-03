@@ -42,9 +42,7 @@ class Settings(BaseSettings):
     REDIS_DB: int = Field(0, env="REDIS_DB")
 
     # JWT配置
-    JWT_SECRET_KEY: str = Field(
-        "your-secret-key-here-must-be-at-least-32-characters", env="JWT_SECRET_KEY"
-    )
+    JWT_SECRET_KEY: str = Field("your-secret-key-here-must-be-at-least-32-characters", env="JWT_SECRET_KEY")
     JWT_ALGORITHM: str = Field("HS256", env="JWT_ALGORITHM")
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(120, env="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
 
