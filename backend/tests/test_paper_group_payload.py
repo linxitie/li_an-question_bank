@@ -84,6 +84,43 @@ def test_paper_questions_payload_carries_group_material(
     assert rows[standalone.question_id]["shared_content"] == ""
 
 
+
+
+def test_question_group_endpoint_keeps_option_key_value_contract(
+    client, db_session, test_subject, test_question_type, test_user
+):
+    """管理端/教师端题组预览用 o.key/o.value；接口不能把 dict 压成裸字符串。"""
+    group = QuestionGroup(group_type="material", shared_content="材料", subject="行测")
+    db_session.add(group)
+    db_session.commit()
+    db_session.refresh(group)
+    question = QuestionBank(
+        subject_id=test_subject.subject_id,
+        type_id=test_question_type.type_id,
+        question_content="组内选项题",
+        options=[{"key": "A", "value": "207"}, {"key": "B", "value": "237"}],
+        answer="A",
+        difficulty=1,
+        score=2,
+        creator_id=test_user.user_id,
+        status=1,
+        audit_status=1,
+        group_id=group.id,
+        sort_order=1,
+    )
+    db_session.add(question)
+    db_session.commit()
+
+    response = client.get(f"/api/questions/group/{group.id}")
+    assert response.status_code == 200, response.text
+    members = response.json().get("members") or []
+    assert members, response.text
+    assert members[0]["options"] == [
+        {"key": "A", "value": "207"},
+        {"key": "B", "value": "237"},
+    ]
+
+
 def test_group_aware_selector_never_returns_partial_group(
     db_session, test_subject, test_question_type, test_user
 ):
