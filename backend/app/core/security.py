@@ -19,7 +19,7 @@ import hashlib
 
 from .config import settings
 from .database import get_db
-from ..models.models import SysUser, SysConfig
+from ..models.models import SysUser, SysConfig, UserPermissionOverride
 
 
 class UserRole(str, Enum):
@@ -86,6 +86,62 @@ class Permission(str, Enum):
 
     # LLM 授权
     LLM_USE = "llm:use"
+
+# 权限目录元数据 — 管理员端权限矩阵的唯一展示来源。
+# 为什么在这里而不是前端硬编码：后端是 33 项权限码的唯一定义处，前端只负责渲染，
+# 避免新增权限时前后端各改一份、权限矩阵出现“幽灵项”。
+PERMISSION_META: Dict[Permission, Dict[str, Any]] = {
+    Permission.QUESTION_CREATE: {"label": "题目创建", "group": "题目", "risk": "medium", "scopes": ["global"], "description": "新建题目与题组材料"},
+    Permission.QUESTION_UPDATE: {"label": "题目编辑", "group": "题目", "risk": "medium", "scopes": ["global"], "description": "修改题干、选项、答案与解析"},
+    Permission.QUESTION_DELETE: {"label": "题目删除", "group": "题目", "risk": "high", "scopes": ["global"], "description": "删除题目（可回收）"},
+    Permission.QUESTION_VIEW: {"label": "题目查看", "group": "题目", "risk": "low", "scopes": ["global"], "description": "查看题库题目"},
+    Permission.QUESTION_AUDIT: {"label": "题目审核", "group": "题目", "risk": "high", "scopes": ["global"], "description": "审核题目并放行入库"},
+    Permission.QUESTION_IMPORT: {"label": "题目导入", "group": "题目", "risk": "medium", "scopes": ["global"], "description": "批量导入 PDF/图片题目"},
+    Permission.PAPER_CREATE: {"label": "试卷创建", "group": "试卷", "risk": "medium", "scopes": ["global"], "description": "新建试卷与智能组卷"},
+    Permission.PAPER_APPROVE: {"label": "试卷审核", "group": "试卷", "risk": "high", "scopes": ["global"], "description": "审核他人试卷"},
+    Permission.PAPER_PUBLISH: {"label": "试卷发布", "group": "试卷", "risk": "high", "scopes": ["global"], "description": "发布试卷给学生作答"},
+    Permission.PAPER_VIEW: {"label": "试卷查看", "group": "试卷", "risk": "low", "scopes": ["global"], "description": "查看试卷列表与详情"},
+    Permission.PAPER_UPDATE: {"label": "试卷编辑", "group": "试卷", "risk": "medium", "scopes": ["global"], "description": "调整试卷题目与分值"},
+    Permission.EXAM_START: {"label": "参加考试", "group": "考试", "risk": "low", "scopes": ["global"], "description": "开始作答考试"},
+    Permission.EXAM_VIEW_ALL: {"label": "查看全部考试", "group": "考试", "risk": "medium", "scopes": ["global"], "description": "查看全校考试记录"},
+    Permission.EXAM_VIEW: {"label": "查看本人考试", "group": "考试", "risk": "low", "scopes": ["global"], "description": "查看自己的考试记录"},
+    Permission.EXAM_GRADE: {"label": "成绩批阅", "group": "考试", "risk": "high", "scopes": ["global"], "description": "批阅主观题与调整成绩"},
+    Permission.USER_MANAGE: {"label": "用户管理", "group": "用户与权限", "risk": "critical", "scopes": ["global"], "description": "创建、编辑、禁用、删除用户"},
+    Permission.USER_VIEW: {"label": "用户查看", "group": "用户与权限", "risk": "medium", "scopes": ["global"], "description": "查看用户列表与详情"},
+    Permission.SYSTEM_CONFIG: {"label": "系统配置", "group": "系统", "risk": "critical", "scopes": ["global"], "description": "修改全局系统参数"},
+    Permission.SYSTEM_MONITOR: {"label": "系统监控", "group": "系统", "risk": "medium", "scopes": ["global"], "description": "查看服务与资源监控"},
+    Permission.LOG_AUDIT: {"label": "日志审计", "group": "安全", "risk": "critical", "scopes": ["global"], "description": "查看操作与安全审计日志"},
+    Permission.DATA_BACKUP: {"label": "数据备份", "group": "安全", "risk": "critical", "scopes": ["global"], "description": "备份与恢复数据库"},
+    Permission.VIDEO_UPLOAD: {"label": "视频上传", "group": "视频", "risk": "medium", "scopes": ["global"], "description": "上传课程视频"},
+    Permission.VIDEO_DELETE: {"label": "视频删除", "group": "视频", "risk": "high", "scopes": ["global"], "description": "删除课程视频"},
+    Permission.FORUM_POST: {"label": "论坛发帖", "group": "论坛", "risk": "low", "scopes": ["global"], "description": "发布帖子与回复"},
+    Permission.FORUM_MANAGE: {"label": "论坛管理", "group": "论坛", "risk": "high", "scopes": ["global"], "description": "管理板块与置顶"},
+    Permission.FORUM_MODERATE: {"label": "论坛内容审核", "group": "论坛", "risk": "high", "scopes": ["global"], "description": "删除违规内容"},
+    Permission.FORUM_REPORT_HANDLE: {"label": "举报处理", "group": "论坛", "risk": "medium", "scopes": ["global"], "description": "处理用户举报"},
+    Permission.FEEDBACK_READ: {"label": "反馈查看", "group": "练习反馈", "risk": "low", "scopes": ["global"], "description": "查看练习反馈"},
+    Permission.FEEDBACK_HANDLE: {"label": "反馈处理", "group": "练习反馈", "risk": "medium", "scopes": ["global"], "description": "回复与关闭反馈"},
+    Permission.FEEDBACK_STATS: {"label": "反馈统计", "group": "练习反馈", "risk": "low", "scopes": ["global"], "description": "查看反馈统计"},
+    Permission.PRACTICE_ADMIN_GRANT_TEACHER: {"label": "任命教师练习管理员", "group": "练习管理", "risk": "high", "scopes": ["global"], "description": "授予教师练习管理能力"},
+    Permission.PRACTICE_ADMIN_GRANT_STUDENT: {"label": "任命学生练习管理员", "group": "练习管理", "risk": "high", "scopes": ["global"], "description": "授予学生练习管理能力"},
+    Permission.LLM_USE: {"label": "AI 能力", "group": "AI", "risk": "low", "scopes": ["global"], "description": "调用 AI 解析与问答"},
+}
+
+# 这些权限即使被 deny 也不能从超管身上移除；API 层还会再拦一次“自伤/同级”。
+PROTECTED_PERMISSIONS = {
+    Permission.USER_MANAGE,
+    Permission.SYSTEM_CONFIG,
+    Permission.DATA_BACKUP,
+    Permission.LOG_AUDIT,
+}
+
+
+def permission_catalog() -> List[Dict[str, Any]]:
+    """返回前端权限矩阵所需的完整目录（稳定顺序，按枚举定义顺序）。"""
+    return [
+        {"code": permission.value, **PERMISSION_META[permission]}
+        for permission in Permission
+    ]
+
 
 # 角色权限映射 — 三端分离架构
 # role_level: 0=学生, 1=教师, 2=管理员, 3=超级管理员
@@ -182,12 +238,11 @@ def get_user_permissions(user: SysUser) -> List[Permission]:
     return perms
 
 
-def get_user_permissions_with_db(user: SysUser, db: Session) -> List[Permission]:
-    """获取用户完整权限列表（优先读 SysConfig 自定义配置，无则回退硬编码默认）
+def get_role_base_permissions(user: SysUser, db: Session) -> List[Permission]:
+    """角色基线权限（含超管附加项，不含能力包/个人覆盖）。
 
-    权限编辑功能（PUT /api/admin/permissions）将自定义权限写入 SysConfig 的
-    role_permissions_{role} 键。此函数在运行时读取该配置，使编辑真正生效。
-    未编辑过的角色回退到 ROLE_PERMISSIONS 硬编码默认值，保证向后兼容。
+    单独拆出的原因：权限详情页要区分“来自角色”和“来自个人加授”，
+    如果直接复用 get_user_permissions_with_db，能力包会被误标成角色基线。
     """
     import json as _json
     try:
@@ -219,7 +274,18 @@ def get_user_permissions_with_db(user: SysUser, db: Session) -> List[Permission]
             if p not in perms:
                 perms.append(p)
 
-    # 4) 叠加按用户授予的能力包（练习管理员等）
+    return perms
+
+
+def get_user_permissions_with_db(user: SysUser, db: Session) -> List[Permission]:
+    """获取用户完整权限列表（角色基线 ∪ 能力包）。
+
+    权限编辑功能（PUT /api/admin/permissions）将自定义权限写入 SysConfig 的
+    role_permissions_{role} 键；角色基线读取该配置，未编辑过则回退硬编码默认。
+    """
+    perms = get_role_base_permissions(user, db)
+
+    # 叠加按用户授予的能力包（练习管理员等）
     try:
         from .capabilities import get_capability_permission_values
 
@@ -237,9 +303,60 @@ def get_user_permissions_with_db(user: SysUser, db: Session) -> List[Permission]
     return perms
 
 
+def _load_active_permission_overrides(
+    user: SysUser, db: Session
+) -> tuple[set[Permission], set[Permission]]:
+    """读取用户当前生效的个人权限覆盖（仅 global 范围）。
+
+    返回 (grants, denies)。查询或表不存在时返回空集合，保证旧库不受影响。
+    过期在 Python 侧判断：SQLite 的 DATETIME 以文本存储，跨库比较时区不可靠。
+    """
+    grants: set[Permission] = set()
+    denies: set[Permission] = set()
+    try:
+        rows = (
+            db.query(UserPermissionOverride)
+            .filter(
+                UserPermissionOverride.user_id == user.user_id,
+                UserPermissionOverride.status == "active",
+                UserPermissionOverride.scope_type == "global",
+            )
+            .all()
+        )
+    except Exception:
+        return grants, denies
+
+    now = datetime.now()
+    for row in rows:
+        if row.expires_at and row.expires_at <= now:
+            continue
+        try:
+            permission = Permission(row.permission_code)
+        except ValueError:
+            continue
+        if row.effect == "deny":
+            denies.add(permission)
+        elif row.effect == "grant":
+            grants.add(permission)
+    return grants, denies
+
+
 def get_effective_permissions(user: SysUser, db: Session) -> List[Permission]:
-    """用户最终权限 = 角色权限 ∪ 能力包权限（对外统一入口）。"""
-    return get_user_permissions_with_db(user, db)
+    """用户最终权限 = 角色基线 ∪ 能力包 ∪ 个人加授 − 个人拒绝。
+
+    超管的 PROTECTED_PERMISSIONS 忽略 deny：即使有人误写覆盖数据，
+    也不会把系统管理能力从唯一超管身上抹掉。API 层仍需阻止“自伤”。
+    """
+    permissions = get_user_permissions_with_db(user, db)
+    grants, denies = _load_active_permission_overrides(user, db)
+    for permission in grants:
+        if permission not in permissions:
+            permissions.append(permission)
+    if getattr(user, "role_level", 0) >= 3:
+        denies = {p for p in denies if p not in PROTECTED_PERMISSIONS}
+    if denies:
+        permissions = [p for p in permissions if p not in denies]
+    return permissions
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -339,6 +456,13 @@ async def get_current_user(
             detail="用户不存在",
         )
 
+    # 软删除用户保留行用于审计，但不再允许任何受保护入口；管理员可在回收站恢复。
+    if getattr(user, "is_deleted", 0) in (1, 2):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已停用，请联系管理员",
+        )
+
     if user.status == 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -380,7 +504,11 @@ async def get_optional_user(
         if not user_id:
             return None
         user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
-        if user and user.status != 0:
+        if (
+            user
+            and user.status != 0
+            and getattr(user, "is_deleted", 0) not in (1, 2)
+        ):
             return user
     except Exception:
         pass
@@ -388,8 +516,10 @@ async def get_optional_user(
 
 def check_permission(user: SysUser, permission: Permission) -> bool:
     """检查用户是否有指定权限（含 disabled 检查）"""
-    # 禁用用户无任何权限
+    # 禁用/回收站用户无任何权限
     if getattr(user, 'is_disabled', 0) == 1:
+        return False
+    if getattr(user, 'is_deleted', 0) in (1, 2):
         return False
     if user.status == 0:
         return False
@@ -398,7 +528,11 @@ def check_permission(user: SysUser, permission: Permission) -> bool:
 
 def check_any_permission(user: SysUser, *permissions: Permission) -> bool:
     """检查用户是否有任一权限"""
-    if getattr(user, 'is_disabled', 0) == 1 or user.status == 0:
+    if (
+        getattr(user, 'is_disabled', 0) == 1
+        or getattr(user, 'is_deleted', 0) in (1, 2)
+        or user.status == 0
+    ):
         return False
     user_perms = get_user_permissions(user)
     return any(p in user_perms for p in permissions)

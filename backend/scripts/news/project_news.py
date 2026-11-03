@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """R2.4 新闻图/向量投影 CLI。"""
+
 from __future__ import annotations
 
 import argparse
@@ -22,7 +23,9 @@ def main() -> int:
     parser.add_argument("--documents", action="store_true", help="写 F4 news_contents")
     parser.add_argument("--objects", action="store_true", help="写 F3 新闻图片对象")
     parser.add_argument("--media-assets", action="store_true", help="登记 F3 media_assets")
-    parser.add_argument("--provider", default="auto", help="auto/off/hash/http；auto 不可用时降级 FTS")
+    parser.add_argument(
+        "--provider", default="auto", help="auto/off/hash/http；auto 不可用时降级 FTS"
+    )
     parser.add_argument("--reset", action="store_true")
     args = parser.parse_args()
     selected = any((args.graph, args.vectors, args.documents, args.objects, args.media_assets))

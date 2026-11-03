@@ -1,4 +1,5 @@
 """R2.2 新闻 AI 摘要/考点/实体/合规校验。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -19,8 +20,17 @@ _SYSTEM = (
 )
 _JSON_RE = re.compile(r"\{.*\}", re.S)
 _HIGH_RISK_TERMS = (
-    "法轮功", "暴恐", "颠覆国家", "六四", "台独", "藏独", "疆独",
-    "涉密", "绝密", "机密文件", "发动暴乱",
+    "法轮功",
+    "暴恐",
+    "颠覆国家",
+    "六四",
+    "台独",
+    "藏独",
+    "疆独",
+    "涉密",
+    "绝密",
+    "机密文件",
+    "发动暴乱",
 )
 
 
@@ -78,10 +88,12 @@ def _normalize(data: dict[str, Any]) -> dict[str, Any]:
     entities = []
     for item in data.get("entities") or []:
         if isinstance(item, dict) and item.get("name"):
-            entities.append({
-                "type": str(item.get("type") or "unknown"),
-                "name": str(item.get("name")),
-            })
+            entities.append(
+                {
+                    "type": str(item.get("type") or "unknown"),
+                    "name": str(item.get("name")),
+                }
+            )
     risks = [str(item) for item in (data.get("risk_flags") or [])][:8]
     confidence = float(data.get("confidence") or 0.0)
     return {

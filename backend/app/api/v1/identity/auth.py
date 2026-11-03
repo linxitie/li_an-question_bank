@@ -133,7 +133,7 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if user.status == 0:
+    if user.status == 0 or getattr(user, "is_deleted", 0) in (1, 2):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用",
@@ -152,7 +152,7 @@ async def login_for_access_token(
         )
 
     # 三端分离：JWT payload 含角色和权限，前端路由守卫依赖此信息
-    from ....core.security import get_user_permissions_with_db
+    from ....core.security import get_effective_permissions
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -160,7 +160,7 @@ async def login_for_access_token(
             "user_no": user.user_no,
             "user_type": user.user_type,
             "role_level": user.role_level,
-            "permissions": [p.value for p in get_user_permissions_with_db(user, db)],
+            "permissions": [p.value for p in get_effective_permissions(user, db)],
         },
         expires_delta=access_token_expires
     )
@@ -304,14 +304,14 @@ async def sms_login(
             detail="手机号与注册手机号不一致"
         )
 
-    if user.status == 0:
+    if user.status == 0 or getattr(user, "is_deleted", 0) in (1, 2):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用"
         )
 
     # sms-login: JWT payload 含角色权限
-    from ....core.security import get_user_permissions_with_db as _get_perms_sms
+    from ....core.security import get_effective_permissions as _get_perms_sms
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -351,14 +351,18 @@ async def refresh_access_token(
         )
 
     user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
-    if not user or user.status == 0:
+    if (
+        not user
+        or user.status == 0
+        or getattr(user, "is_deleted", 0) in (1, 2)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户不存在或已被禁用"
         )
 
     # refresh: JWT payload 含角色权限
-    from ....core.security import get_user_permissions_with_db as _get_perms_refresh
+    from ....core.security import get_effective_permissions as _get_perms_refresh
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={

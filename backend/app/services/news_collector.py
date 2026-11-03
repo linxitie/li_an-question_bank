@@ -1,4 +1,5 @@
 """R2.1 通用新闻采集器：配置驱动，首批 8 个来源。"""
+
 from __future__ import annotations
 
 import hashlib
@@ -17,7 +18,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..core.news_sources import NEWS_SOURCES, SOURCE_BY_CODE, NewsSourceConfig
-from ..models.models import NewsArticle, NewsImage
+from ..models.models import NewsArticle, NewsImage, NewsSource
 from .news_storage import NewsStorage, get_news_storage
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,16 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Sa
 _NAV_WORDS = ("登录", "注册", "首页", "更多", "English", "网站地图", "联系我们")
 _BAD_HOST_PREFIXES = ("en.", "mail.", "search.")
 _CONTENT_SELECTORS = (
-    "article", ".article-content", ".article", ".content", ".TRS_Editor",
-    ".p2j_con3", "#content", "#article", ".main-content", ".detail",
+    "article",
+    ".article-content",
+    ".article",
+    ".content",
+    ".TRS_Editor",
+    ".p2j_con3",
+    "#content",
+    "#article",
+    ".main-content",
+    ".detail",
 )
 _DATE_RE = re.compile(r"(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})")
 _NOISE_IMAGE_PARTS = ("/template/", "logo", "icon", "banner", "qrcode", "share")
@@ -121,8 +130,7 @@ def parse_list_links(
         if any(host.startswith(prefix) for prefix in _BAD_HOST_PREFIXES):
             continue
         if allowed_hosts and not any(
-            host == allowed or host.endswith("." + allowed)
-            for allowed in allowed_hosts
+            host == allowed or host.endswith("." + allowed) for allowed in allowed_hosts
         ):
             continue
         if url in seen:
@@ -139,25 +147,39 @@ def parse_article(html: str, url: str) -> ArticleData:
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     title = ""
-    for selector in ('meta[property="og:title"]', "h1", "title"):
-        node = soup.select_one(selector)
+    for selector in (
+        'meta[property="og:title"]',
+        'meta[name="ArticleTitle"]',
+        "h1",
+        "h2",
+        ".article-title",
+        ".title",
+        "title",
+    ):
+        for node in soup.select(selector):
+            candidate = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
+            if len(candidate) > len(title):
+                title = candidate
+    if not title:
+        node = soup.select_one("title")
         if node:
-            title = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
-            if title:
-                break
+            title = node.get_text(" ", strip=True).strip()
     body = ""
     best_score = 0
     for selector in _CONTENT_SELECTORS:
         for node in soup.select(selector):
             text = "\n".join(
-                line.strip() for line in node.get_text("\n", strip=True).splitlines() if line.strip()
+                line.strip()
+                for line in node.get_text("\n", strip=True).splitlines()
+                if line.strip()
             )
             if len(text) > best_score:
                 body = text
                 best_score = len(text)
     if not body:
         body = "\n".join(
-            line.strip() for line in soup.get_text("\n", strip=True).splitlines()
+            line.strip()
+            for line in soup.get_text("\n", strip=True).splitlines()
             if len(line.strip()) >= 8
         )
     date_match = _DATE_RE.search(soup.get_text(" ", strip=True))
@@ -179,7 +201,9 @@ def parse_article(html: str, url: str) -> ArticleData:
             images.append(src)
         if len(images) >= 5:
             break
-    return ArticleData(url=url, title=title, content=body.strip(), published_at=published_at, images=images)
+    return ArticleData(
+        url=url, title=title, content=body.strip(), published_at=published_at, images=images
+    )
 
 
 def _normalize(text: str) -> str:
@@ -353,7 +377,9 @@ def collect_source(
             if existing:
                 report["duplicates"] += 1
                 continue
-            report["samples"].append({"title": article.title, "url": link, "chars": len(article.content)})
+            report["samples"].append(
+                {"title": article.title, "url": link, "chars": len(article.content)}
+            )
             if dry_run:
                 report["inserted"] += 1
                 continue
@@ -395,9 +421,13 @@ def collect_source(
 
 
 def collect_all_sources(db: Session, *, limit: int = 5, dry_run: bool = False) -> list[dict]:
+    enabled = {
+        row.source_code: bool(row.enabled)
+        for row in db.query(NewsSource.source_code, NewsSource.enabled).all()
+    }
     reports = []
     for source in NEWS_SOURCES:
-        if not source.enabled:
+        if not enabled.get(source.code, bool(source.enabled)):
             continue
         reports.append(collect_source(db, source, limit=limit, dry_run=dry_run))
     return reports

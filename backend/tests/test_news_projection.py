@@ -1,4 +1,5 @@
 """R2.4 新闻图/向量投影测试。"""
+
 import hashlib
 import sqlite3
 
@@ -24,9 +25,14 @@ from app.services.news_projection import (
 
 def _news(db):
     news = NewsArticle(
-        title="新闻投影测试", url="https://example.com/p/1", source="mps",
-        category="公安要闻", category_code="police_news",
-        content="公安新闻投影正文" * 10, status=1, review_status="published",
+        title="新闻投影测试",
+        url="https://example.com/p/1",
+        source="mps",
+        category="公安要闻",
+        category_code="police_news",
+        content="公安新闻投影正文" * 10,
+        status=1,
+        review_status="published",
     )
     db.add(news)
     db.flush()
@@ -92,9 +98,7 @@ def test_projection_degrades_when_embedding_fails(tmp_path, db_session):
     _news(db_session)
     store = LocalVectorStore(tmp_path, dim=32)
 
-    report = project_vectors_safe(
-        db_session, embedding=_FailingEmbedding(), store=store
-    )
+    report = project_vectors_safe(db_session, embedding=_FailingEmbedding(), store=store)
 
     assert report["skipped"] is True
     assert report["fallback"] == "fts"
@@ -111,16 +115,12 @@ def test_project_objects_and_documents(tmp_path, db_session):
     key = f"{digest[:2]}/{digest}"
 
     obj_store = LocalObjectStore(tmp_path / "objects")
-    obj_report = project_objects(
-        db_session, store=obj_store, upload_root=tmp_path
-    )
+    obj_report = project_objects(db_session, store=obj_store, upload_root=tmp_path)
     assert obj_report["uploaded"] == 1
     assert obj_store.stat(key) is not None
 
     doc_store = LocalDocumentStore(tmp_path / "docs")
-    doc_report = project_documents(
-        db_session, store=doc_store, upload_root=tmp_path
-    )
+    doc_report = project_documents(db_session, store=doc_store, upload_root=tmp_path)
     assert doc_report["written"] == 1
     doc = doc_store.get("news_contents", "news:1")
     assert doc["title"] == "新闻投影测试"
@@ -133,7 +133,8 @@ def test_project_media_assets_links_and_dedupes(tmp_path, db_session, monkeypatc
     image_dir.mkdir()
     (image_dir / "a.jpg").write_bytes(b"fake-news-image")
     monkeypatch.setattr(
-        media_service, "build_object_store",
+        media_service,
+        "build_object_store",
         lambda: LocalObjectStore(tmp_path / "objects"),
     )
     monkeypatch.setattr(media_service.settings, "FOUNDATION_ENABLED", False)
