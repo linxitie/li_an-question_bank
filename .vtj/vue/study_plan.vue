@@ -48,6 +48,26 @@
     </div>
 
     <div class="plan-body">
+      <!-- 成就系统 -->
+      <div class="achievement-card">
+        <div class="ach-left">
+          <div class="ach-avatar">🎓</div>
+          <div class="ach-info">
+            <div class="ach-level">Lv.3 高手</div>
+            <div class="ach-exp">经验值 350/500</div>
+            <div class="ach-exp-bar">
+              <div class="ach-exp-fill" style="width: 70%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="ach-right">
+          <div class="badge" title="连续打卡7天">🔥</div>
+          <div class="badge" title="100题全对">💯</div>
+          <div class="badge" title="模考高分">🏆</div>
+          <div class="badge locked" title="还未解锁">🔒</div>
+        </div>
+      </div>
+
       <!-- 视图切换tab -->
       <div v-if="state.plan" class="view-tabs">
         <div class="view-tab" @click="scrollToOverview">
@@ -466,6 +486,84 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 成就系统 ===== */
+  .achievement-card {
+    background: linear-gradient(135deg, #fff 0%, #f8f9ff 100%);
+    border-radius: 16px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ach-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .ach-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  }
+  .ach-info {
+    flex: 1;
+  }
+  .ach-level {
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+  }
+  .ach-exp {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+  }
+  .ach-exp-bar {
+    width: 150px;
+    height: 6px;
+    background: #eee;
+    border-radius: 3px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .ach-exp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  .ach-right {
+    display: flex;
+    gap: 12px;
+  }
+  .badge {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #f0f2f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .badge:hover {
+    transform: scale(1.1);
+  }
+  .badge.locked {
+    opacity: 0.5;
+    filter: grayscale(100%);
+  }
 
   /* ===== 能力雷达图 ===== */
   .radar-card {
