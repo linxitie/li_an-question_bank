@@ -177,6 +177,7 @@ async def get_news_categories(
 @router.get("/digest", summary="新闻日报")
 async def news_digest(
     day: Optional[str] = Query(None, description="YYYY-MM-DD；缺省取最近发布日"),
+    page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50),
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db),
@@ -206,7 +207,7 @@ async def news_digest(
         .group_by(NewsArticle.category, NewsArticle.category_code)
         .all()
     )
-    items = daily.order_by(NewsArticle.news_id.desc()).limit(limit).all()
+    items = daily.order_by(NewsArticle.news_id.desc()).offset((page - 1) * limit).limit(limit).all()
     favorite_ids = _favorite_ids(
         db,
         current_user.user_id if current_user else None,
@@ -215,6 +216,9 @@ async def news_digest(
     return {
         "date": target.isoformat(),
         "total": total,
+        "page": page,
+        "page_size": limit,
+        "has_more": page * limit < total,
         "categories": [
             {"category": category or "未分类", "category_code": code, "count": count}
             for category, code, count in rows

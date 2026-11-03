@@ -146,19 +146,23 @@ export interface NewsDigestCategory {
 export interface NewsDigestResult {
   date: string;
   total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
   categories: NewsDigestCategory[];
   items: NewsTimelineItem[];
 }
 
-/** 指定日期的新闻日报；day 省略时后端取最近发布日 */
+/** 指定日期、分页的新闻日报；day 省略时后端取最近发布日 */
 export function fetchNewsDigest(
   day = '',
+  page = 1,
   limit = 20
 ): Promise<NewsDigestResult> {
   return request<NewsDigestResult>({
     url: '/api/news/digest',
     method: 'GET',
-    params: { day: day || undefined, limit }
+    params: { day: day || undefined, page, limit }
   });
 }
 
