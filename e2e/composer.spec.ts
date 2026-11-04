@@ -32,13 +32,18 @@ async function assertComposer(page: Page, shot?: string) {
 
   // 标题 / 正文
   await expect(mask.getByPlaceholder(/给帖子起一个清晰的标题/)).toBeVisible();
-  const area = mask.locator('.editor textarea');
-  await expect(area).toBeVisible();
-  await area.fill('测试正文');
-  await expect(mask.locator('.editor-tools .cnt')).toHaveText('4 / 5000');
+  // 2026-11-03：正文改为 wangEditor 富文本（RichTextEditor），不再有 .editor textarea。
+  // 断言内容区可编辑，并真实写入一段内容验证 v-model 通路。
+  const richBody = mask.locator('.editor-rich .w-e-text-container [contenteditable="true"]');
+  await expect(richBody).toBeVisible({ timeout: 15_000 });
+  await richBody.click();
+  await page.keyboard.type('测试正文');
+  await expect(richBody).toContainText('测试正文');
 
-  // 工具条：B / I / U + 列表 / 引用 + @ / 图片 / 链接
-  expect(await mask.locator('.editor-tools button').count()).toBeGreaterThanOrEqual(9);
+  // 富文本工具栏由 wangEditor 渲染（段落/字体/字号/颜色/对齐/列表/表格…）
+  const richToolbar = mask.locator('.editor-rich .w-e-toolbar');
+  await expect(richToolbar).toBeVisible();
+  expect(await richToolbar.locator('.w-e-menu').count()).toBeGreaterThanOrEqual(10);
 
   // 附件拖拽区
   await expect(mask.locator('.dropzone')).toBeVisible();

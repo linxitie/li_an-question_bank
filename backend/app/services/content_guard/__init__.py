@@ -1,0 +1,158 @@
+"""内容安全知识库服务入口（敏感词自生长 KB）。
+
+对外只暴露四个动作：
+- guard_text：论坛/资料/昵称等写路径的统一审核闸门
+- check_text：只检测、不落判定（资料导入等只读预检）
+- seed_defaults：幂等种入政策、词条、变体与图谱边
+- reload_engine：人工改库后主动刷新 DFA
+
+设计约束见 docs/superpowers/specs/论坛敏感词自生长知识库_v1.md。
+"""
+from __future__ import annotations
+
+import logging
+import os
+import time
+from typing import Optional
+
+from sqlalchemy import inspect
+from sqlalchemy.orm import Session
+
+from . import audit, catalog, engine, graph, judgments, normalizer, obsidian, proposals, reconcile, redteam, stats
+
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "guard_text",
+    "check_text",
+    "seed_defaults",
+    "reload_engine",
+    "audit",
+    "catalog",
+    "engine",
+    "graph",
+    "judgments",
+    "normalizer",
+    "obsidian",
+    "proposals",
+    "reconcile",
+    "redteam",
+    "stats",
+]
+
+_READY: dict[str, tuple[bool, float]] = {}
+
+
+def _tables_ready(db: Session) -> bool:
+    """缓存建表检查；未建表时按旧版过滤器降级，避免论坛 500。"""
+    try:
+        bind = db.get_bind()
+        url = str(bind.engine.url) if hasattr(bind, "engine") else str(bind.url)
+    except Exception:  # noqa: BLE001
+        url = "unknown"
+    cached = _READY.get(url)
+    now = time.time()
+    if cached and (cached[0] or now - cached[1] < 30):
+        return cached[0]
+    try:
+        ready = inspect(db.get_bind()).has_table("cg_term")
+    except Exception:  # noqa: BLE001
+        ready = False
+    _READY[url] = (ready, now)
+    return ready
+
+
+def _legacy_result(text: str) -> dict:
+    from ..sensitive_words import SensitiveLevel, sensitive_filter
+
+    result = sensitive_filter.detect(text or "")
+    level = result.get("level")
+    decision = {"blocked": "block", "masked": "mask", "reviewed": "review"}.get(level, "pass")
+    return {
+        **result,
+        "hits": [],
+        "policy_ids": [],
+        "policy_clauses": [],
+        "evidence": [{"step": "decision", "decision": decision, "reason": "旧版过滤器降级"}],
+        "confidence": 0.9 if level == "blocked" else (0.8 if level == "masked" else 0.6),
+        "decision": decision,
+        "judgment_id": None,
+        "task_id": None,
+        "engine_source": "legacy",
+        "degraded": True,
+    }
+
+
+def guard_text(
+    db: Session,
+    text: str,
+    *,
+    scene: str = "forum_post",
+    source_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    persist: bool = True,
+) -> dict:
+    """审核闸门。返回字段与旧 sensitive_filter.detect 兼容，并新增 decision/evidence。"""
+    enabled = os.environ.get("CONTENT_GUARD_ENABLED", "true").strip().lower()
+    if enabled in ("false", "0", "off"):
+        return _legacy_result(text)
+    ready = _tables_ready(db)
+    result = judgments.guard_text(
+        db,
+        text,
+        scene=scene,
+        source_id=source_id,
+        user_id=user_id,
+        persist=persist and ready,
+    )
+    if not ready:
+        result["degraded"] = True
+        result["degraded_reason"] = "cg_* 表未就绪，已降级为旧版词库"
+    return result
+
+
+def check_text(db: Session, text: str, *, scene: str = "precheck") -> dict:
+    return guard_text(db, text, scene=scene, persist=False)
+
+
+def seed_defaults(db: Session, actor: str = "system") -> dict:
+    """幂等初始化；返回本次新增数量。已有人工改动不会被覆盖。"""
+    policies = catalog.seed_policies(db)
+    seeded = catalog.seed_terms(db, actor=actor)
+    created = policies or seeded["terms"] or seeded["variants"]
+    if created:
+        # 只有真正新增内容才推进版本号，避免每次启动都制造一个空版本
+        version = engine.bump_version(db)
+        audit.record(
+            db,
+            "catalog.seed",
+            actor=actor,
+            actor_role="system",
+            target_type="catalog",
+            target_id="default",
+            after={"policies": policies, **seeded, "engine_version": version},
+        )
+    else:
+        version = max(0, engine.read_version(db))
+    engine.reset_engine()
+    return {
+        "policies": policies,
+        "terms": seeded["terms"],
+        "variants": seeded["variants"],
+        "engine_version": version,
+    }
+
+
+def reload_engine(db: Session, *, actor: str = "system") -> dict:
+    version = engine.bump_version(db)
+    engine.reset_engine()
+    audit.record(
+        db,
+        "engine.reload",
+        actor=actor,
+        actor_role="system",
+        target_type="engine",
+        target_id=str(version),
+        after={"version": version},
+    )
+    return {"engine_version": version}

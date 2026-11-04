@@ -23,6 +23,10 @@ export interface ModerationPost {
   title: string;
   titleColor?: string | null;
   content: string;
+  /** 正文格式（2026-11-03）：TEXT 纯文本 / HTML 富文本 */
+  contentFormat?: 'TEXT' | 'HTML' | string;
+  /** 标题是否由 AI 生成（2026-11-03 第 3 轮） */
+  aiTitle?: boolean;
   status: string;
   author?: string;
   authorAvatar?: string;
@@ -47,6 +51,8 @@ export interface ModerationPost {
 export interface ModerationComment {
   id: number;
   content: string;
+  /** 正文格式（2026-11-03）：TEXT 纯文本 / HTML 富文本 */
+  contentFormat?: 'TEXT' | 'HTML' | string;
   status: number;
   user?: { id?: number; nickname?: string; avatar?: string; className?: string | null; userType?: string };
   author?: string;

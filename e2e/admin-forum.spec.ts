@@ -52,75 +52,110 @@ test.describe('管理员端论坛', () => {
     await expect(tabs.nth(0)).toHaveClass(/on/);
   });
 
-  test('数据看板：6 个 KPI + 图表 + 关键词 + 风险提示', async ({ page }) => {
-    const kpis = page.locator('.kpi-row .kpi');
-    await expect(kpis).toHaveCount(6);
-    await expect(kpis.nth(0).locator('.k-label')).toHaveText('发帖量');
+  test('数据看板：6 个 KPI + 图表 + 关键词 + 风险提示', async ({ page, request }) => {
+    // 看板的词云依赖「窗口内有帖」，而本套用例会清理自己造的测试数据，
+    // 库里可能一条当天的帖子都没有 → 词云为空导致断言假失败。
+    // 这里先自建几条带不同关键词的帖子，跑完 purge，保证断言不依赖外部数据。
+    const studentToken = await apiLogin(request, STUDENT);
+    const adminToken = await apiLogin(request, ADMIN);
+    const seeded: number[] = [];
+    const keywords = ['行测资料', '申论写作', '面试技巧', '公安联考', '备考计划', '真题变化'];
+    try {
+      for (const kw of keywords) {
+        const res = await request.post('/api/forum/posts', {
+          headers: { Authorization: `Bearer ${studentToken}` },
+          form: {
+            title: `${kw} 讨论`,
+            content: `关于${kw}的经验分享，希望和大家交流一下具体的复习方法。`,
+            content_format: 'TEXT',
+            visibility: 'ALL',
+            ai_title_enabled: 'false'
+          }
+        });
+        if (res.ok()) seeded.push((await res.json()).id);
+      }
 
-    const segs = page.locator('.seg-time button');
-    await expect(segs).toHaveCount(3);
-    await expect(segs.nth(0)).toHaveClass(/on/);
-    expect(await page.locator('.dash-grid canvas').count()).toBeGreaterThanOrEqual(3);
+      await page.reload();
+      await expect(page.locator('.af')).toBeVisible();
+      await page.waitForLoadState('networkidle');
 
-    const words = page.locator('.wordcloud .w');
-    expect(await words.count()).toBeGreaterThan(0);
-    await expect(page.locator('.sub').filter({ hasText: /词频 TOP/ })).toBeVisible();
-    await expect(words.first()).toHaveAttribute('title', /次$/);
+      const kpis = page.locator('.kpi-row .kpi');
+      await expect(kpis).toHaveCount(6);
+      await expect(kpis.nth(0).locator('.k-label')).toHaveText('发帖量');
 
-    const boxes = await words.evaluateAll((els) =>
-      els.map((el) => {
-        const r = el.getBoundingClientRect();
-        return { y: Math.round(r.y), size: parseFloat(getComputedStyle(el).fontSize) };
-      })
-    );
-    expect(new Set(boxes.map((b) => b.y)).size, '词云必须是散点分布').toBeGreaterThan(5);
-    expect(new Set(boxes.map((b) => b.size)).size, '字号至少 3 档').toBeGreaterThanOrEqual(3);
+      const segs = page.locator('.seg-time button');
+      await expect(segs).toHaveCount(3);
+      await expect(segs.nth(0)).toHaveClass(/on/);
+      expect(await page.locator('.dash-grid canvas').count()).toBeGreaterThanOrEqual(3);
 
-    const overflow = await page.evaluate(() => {
-      const box = document.querySelector('.wordcloud') as HTMLElement | null;
-      if (!box) return ['容器不存在'];
-      const outer = box.getBoundingClientRect();
-      return Array.from(box.querySelectorAll('.w'))
-        .filter((el) => {
+      const words = page.locator('.wordcloud .w');
+      await expect(words.first()).toBeVisible({ timeout: 20_000 });
+      expect(await words.count()).toBeGreaterThan(0);
+      await expect(page.locator('.sub').filter({ hasText: /词频 TOP/ })).toBeVisible();
+      await expect(words.first()).toHaveAttribute('title', /次$/);
+
+      const boxes = await words.evaluateAll((els) =>
+        els.map((el) => {
           const r = el.getBoundingClientRect();
-          return (
-            r.left < outer.left - 1 ||
-            r.right > outer.right + 1 ||
-            r.top < outer.top - 1 ||
-            r.bottom > outer.bottom + 1
-          );
+          return { y: Math.round(r.y), size: parseFloat(getComputedStyle(el).fontSize) };
         })
-        .map((el) => el.textContent || '');
-    });
-    expect(overflow, `这些词溢出了词云容器：${overflow.join('、')}`).toHaveLength(0);
+      );
+      expect(new Set(boxes.map((b) => b.y)).size, '词云必须是散点分布').toBeGreaterThan(5);
+      expect(new Set(boxes.map((b) => b.size)).size, '字号至少 3 档').toBeGreaterThanOrEqual(3);
 
-    const radius = await page.evaluate(() => {
-      const box = document.querySelector('.wordcloud') as HTMLElement;
-      const outer = box.getBoundingClientRect();
-      const cx = outer.left + outer.width / 2;
-      const cy = outer.top + outer.height / 2;
-      return Array.from(box.querySelectorAll('.w')).map((el) => {
-        const r = el.getBoundingClientRect();
-        const dx = r.left + r.width / 2 - cx;
-        const dy = r.top + r.height / 2 - cy;
-        return { text: el.textContent || '', d: Math.sqrt(dx * dx + dy * dy) };
+      const overflow = await page.evaluate(() => {
+        const box = document.querySelector('.wordcloud') as HTMLElement | null;
+        if (!box) return ['容器不存在'];
+        const outer = box.getBoundingClientRect();
+        return Array.from(box.querySelectorAll('.w'))
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return (
+              r.left < outer.left - 1 ||
+              r.right > outer.right + 1 ||
+              r.top < outer.top - 1 ||
+              r.bottom > outer.bottom + 1
+            );
+          })
+          .map((el) => el.textContent || '');
       });
-    });
-    expect(radius[0].d, `「${radius[0].text}」应最靠中心`).toBe(Math.min(...radius.map((r) => r.d)));
-    const half = Math.floor(radius.length / 2);
-    const inner = radius.slice(0, half).reduce((s, r) => s + r.d, 0) / Math.max(1, half);
-    const outerAvg = radius.slice(half).reduce((s, r) => s + r.d, 0) / Math.max(1, radius.length - half);
-    expect(outerAvg, '低热度词应比高热度词离中心更远').toBeGreaterThan(inner);
+      expect(overflow, `这些词溢出了词云容器：${overflow.join('、')}`).toHaveLength(0);
 
-    await page.locator('.wordcloud').scrollIntoViewIfNeeded();
-    await page.locator('.wordcloud').screenshot({ path: 'e2e/.artifacts/wordcloud.png' });
-    await expect(page.locator('.hbars .hbar')).toHaveCount(4);
-    expect(await page.locator('.risk .item').count()).toBeGreaterThan(0);
+      const radius = await page.evaluate(() => {
+        const box = document.querySelector('.wordcloud') as HTMLElement;
+        const outer = box.getBoundingClientRect();
+        const cx = outer.left + outer.width / 2;
+        const cy = outer.top + outer.height / 2;
+        return Array.from(box.querySelectorAll('.w')).map((el) => {
+          const r = el.getBoundingClientRect();
+          const dx = r.left + r.width / 2 - cx;
+          const dy = r.top + r.height / 2 - cy;
+          return { text: el.textContent || '', d: Math.sqrt(dx * dx + dy * dy) };
+        });
+      });
+      expect(radius[0].d, `「${radius[0].text}」应最靠中心`).toBe(Math.min(...radius.map((r) => r.d)));
+      const half = Math.floor(radius.length / 2);
+      const inner = radius.slice(0, half).reduce((s, r) => s + r.d, 0) / Math.max(1, half);
+      const outerAvg =
+        radius.slice(half).reduce((s, r) => s + r.d, 0) / Math.max(1, radius.length - half);
+      expect(outerAvg, '低热度词应比高热度词离中心更远').toBeGreaterThan(inner);
 
-    await page.screenshot({ path: 'e2e/.artifacts/admin-forum-dashboard.png' });
-    await segs.nth(1).click();
-    await expect(segs.nth(1)).toHaveClass(/on/);
-    await expect(page.locator('.kpi-row .kpi')).toHaveCount(6);
+      await page.locator('.wordcloud').scrollIntoViewIfNeeded();
+      await page.locator('.wordcloud').screenshot({ path: 'e2e/.artifacts/wordcloud.png' });
+      await expect(page.locator('.hbars .hbar')).toHaveCount(4);
+      expect(await page.locator('.risk .item').count()).toBeGreaterThan(0);
+
+      await page.screenshot({ path: 'e2e/.artifacts/admin-forum-dashboard.png' });
+      await segs.nth(1).click();
+      await expect(segs.nth(1)).toHaveClass(/on/);
+      await expect(page.locator('.kpi-row .kpi')).toHaveCount(6);
+    } finally {
+      for (const id of seeded) {
+        await request.delete(`/api/admin/forum/posts/${id}/purge`, {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+      }
+    }
   });
 
   test('内容管理：筛选条 / 真实数据 / 分页', async ({ page }) => {

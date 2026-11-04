@@ -34,7 +34,7 @@
           <span v-if="post.isTop" class="badge">置顶</span>
           <span v-if="post.isEssence" class="badge">精华</span>
         </div>
-        <div class="post-content"><ForumContent :content="post.content" /></div>
+        <div class="post-content"><ForumContent :content="post.content" :format="post.contentFormat" /></div>
         <AttachmentList v-if="post.attachments && post.attachments.length" :attachments="post.attachments" mode="post" />
         <div class="reaction-bar">
           <!-- P3-08：反应收敛为单个爱心（喜欢） -->
@@ -46,6 +46,16 @@
           >
             <span class="reaction-emoji">{{ post.liked ? '❤' : '♡' }}</span>
             <span v-if="post.likeCount" class="reaction-count">{{ post.likeCount }}</span>
+          </button>
+          <!-- 2026-11-04 v5：详情页补回「收藏」，与喜欢相互独立 -->
+          <button
+            class="reaction-btn fav-only"
+            :class="{ active: post.favorited }"
+            title="收藏"
+            @click="toggleFavorite"
+          >
+            <span class="reaction-emoji">{{ post.favorited ? '★' : '☆' }}</span>
+            <span v-if="post.favoriteCount" class="reaction-count">{{ post.favoriteCount }}</span>
           </button>
           <span class="action-count">💬 {{ post.commentCount || 0 }}</span>
         </div>
@@ -84,7 +94,7 @@
                 {{ c.user && c.user.nickname }}
                 <span v-if="c.user && c.user.signature" class="signature">{{ c.user.signature }}</span>
               </div>
-              <div class="comment-content"><ForumContent :content="c.content" /></div>
+              <div class="comment-content"><ForumContent :content="c.content" :format="c.contentFormat" /></div>
               <AttachmentList
                 v-if="c.attachments && c.attachments.length"
                 :attachments="c.attachments"
@@ -111,7 +121,7 @@
                   {{ c.liked ? '❤' : '♡' }}<span v-if="c.likeCount">{{ c.likeCount }}</span>
                 </button>
               </div>
-              <div class="comment-time">{{ formatTime(c.createTime) }}</div>
+              <div class="comment-time">{{ formatDateTime(c.createTime) }}</div>
             </div>
           </div>
 
@@ -127,7 +137,7 @@
                 :user-type="r.user && r.user.userType" />
               <div class="comment-main">
                 <div class="comment-user">{{ r.user && r.user.nickname }}</div>
-                <div class="comment-content"><ForumContent :content="r.content" /></div>
+                <div class="comment-content"><ForumContent :content="r.content" :format="r.contentFormat" /></div>
                 <AttachmentList
                   v-if="r.attachments && r.attachments.length"
                   :attachments="r.attachments"
@@ -151,7 +161,7 @@
                     {{ r.liked ? '❤' : '♡' }}<span v-if="r.likeCount">{{ r.likeCount }}</span>
                   </button>
                 </div>
-                <div class="comment-time">{{ formatTime(r.createTime) }}</div>
+                <div class="comment-time">{{ formatDateTime(r.createTime) }}</div>
               </div>
             </div>
           </div>
@@ -197,6 +207,7 @@ import { titleColorValue } from '@/components/forum/titleColors';
 import {
   pinForumComment,
   reportForumTarget,
+  toggleForumFavorite,
   type ForumCommentItem,
   type ForumCommentSortBy,
   type ForumPostItem,
@@ -320,6 +331,17 @@ const formatTime = (iso?: string | null) => {
   return new Date(iso).toLocaleDateString();
 };
 
+/**
+ * 评论时间用绝对日期（2026-11-04 20:30）。
+ * 为什么不用「3 天前」：评论是讨论证据，用户需要精确时间；相对时间在跨月/跨年时还有歧义。
+ */
+const formatDateTime = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const loadComments = async () => {
   await store.loadComments(postId, { sortBy: sortBy.value, order: order.value });
 };
@@ -357,6 +379,23 @@ const reactToPost = async (reaction: ForumReactionCode) => {
     await store.reactToPost(postId, reaction);
   } catch (e) {
     console.error('表情反应失败:', e);
+  }
+};
+
+/**
+ * 收藏（五角星）。与「喜欢」是两套状态：
+ * 之前移动端详情只有喜欢，用户找不到收藏入口（2026-11-04 v5）。
+ */
+const toggleFavorite = async () => {
+  if (!post.value) return;
+  try {
+    const res = await toggleForumFavorite(postId);
+    if (res) {
+      post.value.favorited = res.favorited;
+      post.value.favoriteCount = res.favoriteCount;
+    }
+  } catch (e) {
+    console.error('收藏失败:', e);
   }
 };
 
@@ -409,6 +448,9 @@ onMounted(() => {
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   display: flex;
   flex-direction: column;
+  /* v5：内容不能让容器横向撑破（长标题/长链接） */
+  min-width: 0;
+  overflow-x: hidden;
 }
 .topbar {
   height: 48px;
@@ -462,6 +504,10 @@ onMounted(() => {
   color: #1a2b5f;
   line-height: 1.4;
   margin: 0 0 8px;
+  /* 2026-11-04 v5：本页根类是通用 .page，全局 .mobile-forum-page 的规则命中不到；
+     连续数字/英文串默认不断行，会把标题顶出卡片（截图实测）。 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .post-meta {
   display: flex;

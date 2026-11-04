@@ -19,7 +19,7 @@
           :class="['cat-tab', { active: activeCategory === tab.key }]"
           @click="selectTab(tab.key)"
         >
-          {{ tab.name }}
+          {{ tab.key === 'hot' && hotRange === 'week' ? '今日热门 · 近 7 天' : tab.name }}
         </div>
         <button class="nav-fav-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
       </div>
@@ -154,7 +154,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted } from 'vue';
+import { defineComponent, ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
@@ -199,6 +199,8 @@ export default defineComponent({
 
     // 分类标签
     const activeCategory = ref('all');
+    /** 今日热门的数据范围：day 当天 / week 回退近 7 天 / none 无数据（2026-11-03 第 2 轮） */
+    const hotRange = ref<'day' | 'week' | 'none'>('day');
     const searchKeyword = ref('');
     const searchCollapsed = ref(false);
     const searchDateFrom = ref('');
@@ -215,20 +217,22 @@ export default defineComponent({
     const posts = ref<any[]>([]);
     
     // 过滤帖子
-    const filteredPosts = computed(() => {
-      if (activeCategory.value === 'all') {
-        return posts.value;
-      }
-      return posts.value.filter(p => p.category === activeCategory.value);
-    });
+    // 2026-11-03：页签已改为「全部 / 今日热门 / 我的帖子」，列表集合完全由接口决定
+    // （loadPosts 已按 hot/mine 分别请求），前端不得再按旧的 shareType 分类二次过滤，
+    // 否则 hot/mine 恒为空（p.category 永远不等于 'hot'/'mine'）。
+    const filteredPosts = computed(() => posts.value);
     
     // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
     /** 应用搜索（关键词 + 日期） */
-    const applySearch = () => { loadPosts(activeCategory.value); };
+    const applySearch = () => {
+      clearScroll();
+      loadPosts(activeCategory.value);
+    };
     const resetSearch = () => {
       searchKeyword.value = '';
       searchDateFrom.value = '';
       searchDateTo.value = '';
+      clearScroll();
       loadPosts(activeCategory.value);
     };
 
@@ -244,7 +248,7 @@ export default defineComponent({
           params.set('date_from', today);
           params.set('date_to', today);
         } else if (categoryKey === 'mine') {
-          params.set('only_mine', '1');
+          // my-posts 只返回本人帖子，不接受 only_mine 参数（旧代码传了无效参数，已删除）
         }
         if (searchKeyword.value.trim()) params.set('keyword', searchKeyword.value.trim());
         if (searchDateFrom.value) params.set('date_from', searchDateFrom.value);
@@ -255,8 +259,34 @@ export default defineComponent({
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        let rawPosts: any[] = data.posts || [];
+
+        // 今日热门回退（2026-11-03 第 2 轮）：当天一条都没有时，自动改看近 7 天，
+        // 与电脑/平板端「近 7 天」口径一致，并在页签上注明，避免误以为是当天数据。
+        if (categoryKey === 'hot') {
+          if (rawPosts.length > 0) {
+            hotRange.value = 'day';
+          } else {
+            const weekAgo = new Date(Date.now() - 6 * 24 * 3600 * 1000)
+              .toISOString()
+              .slice(0, 10);
+            params.set('date_from', weekAgo);
+            params.set('date_to', today);
+            // 回退不再叠加用户手选的日期，否则两个区间会互相覆盖
+            params.delete('keyword');
+            const resWeek = await fetch(`${endpoint}?${params.toString()}`, {
+              headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
+            });
+            if (resWeek.ok) {
+              const dataWeek = await resWeek.json();
+              rawPosts = dataWeek.posts || [];
+            }
+            hotRange.value = rawPosts.length > 0 ? 'week' : 'none';
+          }
+        }
+
         const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
-        posts.value = (data.posts || []).map((p: any) => {
+        posts.value = rawPosts.map((p: any) => {
           const t = new Date(p.createTime).getTime();
           const diff = Date.now() - t;
           const min = Math.floor(diff / 60000);
@@ -270,7 +300,9 @@ export default defineComponent({
             id: p.id,
             title: p.title,
             titleColor: p.titleColor || 'default',
-            excerpt: p.content || '',
+            // 2026-11-04 v5：列表摘要必须是纯文本——富文本帖的 content 是 HTML，
+            // 直接塞进 ForumContent（TEXT 模式）会把标签当正文显示出来。
+            excerpt: String(p.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
             author: (p.user && p.user.nickname) || '匿名',
             time,
             avatar: (p.user && p.user.avatar) || '',
@@ -291,6 +323,8 @@ export default defineComponent({
               .filter((url: string) => IMAGE_PATTERN.test(url))
           };
         });
+        // v5：从详情返回时列表是重新加载的，这里把之前记录的滚动位置还原回去
+        await restoreScroll();
       } catch (error) {
         console.error('加载帖子失败:', error);
         posts.value = [];
@@ -310,6 +344,7 @@ export default defineComponent({
     const selectTab = async (key: string) => {
       if (activeCategory.value === key) return;
       activeCategory.value = key;
+      clearScroll();
       await loadPosts(key);
     };
     
@@ -353,7 +388,50 @@ export default defineComponent({
       router.push('/mobile/forum/create');
     };
     
+    /** 列表滚动容器（本页自己的滚动区，不是 window） */
+    const SCROLL_KEY = 'mobile-forum-scroll';
+    const scrollEl = () =>
+      document.querySelector('.mobile-forum-page .main-content') as HTMLElement | null;
+
+    /** 进详情前保存滚动位置，供返回后还原 */
+    const saveScroll = () => {
+      const el = scrollEl();
+      if (!el) return;
+      try {
+        sessionStorage.setItem(SCROLL_KEY, String(el.scrollTop || 0));
+      } catch {
+        /* 隐私模式下 sessionStorage 可能不可用，忽略即可 */
+      }
+    };
+
+    /** 列表渲染完成后还原滚动位置；没有记录则不动 */
+    const restoreScroll = async () => {
+      let raw: string | null = null;
+      try {
+        raw = sessionStorage.getItem(SCROLL_KEY);
+      } catch {
+        return;
+      }
+      if (!raw) return;
+      await nextTick();
+      const el = scrollEl();
+      if (el) {
+        el.scrollTop = Number(raw) || 0;
+      }
+    };
+
+    /** 切页签/搜索时清掉记录，避免恢复到「上一次筛选」的位置 */
+    const clearScroll = () => {
+      try {
+        sessionStorage.removeItem(SCROLL_KEY);
+      } catch {
+        /* ignore */
+      }
+    };
+
     const viewPost = (post: any) => {
+      // 2026-11-04 v5：进详情前记住列表滚动位置，返回后能接着看（此前会跳回顶部）
+      saveScroll();
       router.push(`/mobile/forum/${post.id}`);
     };
 
@@ -365,6 +443,7 @@ export default defineComponent({
       filteredPosts,
       goBack,
       selectTab,
+      hotRange,
       searchKeyword,
       searchDateFrom,
       searchDateTo,
@@ -381,6 +460,8 @@ export default defineComponent({
       toggleLike,
       toggleFavorite,
       viewPost,
+      // 收藏弹窗里用的是 goToDetail，之前没有定义 → 点了没反应（v5 修正）
+      goToDetail: viewPost,
       onAvatarError,
       ArrowLeft,
       Plus,

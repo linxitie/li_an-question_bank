@@ -376,12 +376,20 @@
               <div class="time mono">{{ fmtTime(activePost.createTime) }}</div>
             </div>
             <div class="post-title">
-              {{ activePost.title || '（无标题）' }}
+              <span v-if="activePost.aiTitle" class="ai-title-tag">AI生成</span>{{ activePost.title || '（无标题）' }}
               <span :class="['pill', statusClass(activePost.status)]"><i></i>{{ statusText(activePost.status) }}</span>
               <span v-if="activePost.isTop" class="pill pin"><i></i>置顶</span>
               <span v-if="activePost.isEssence" class="pill essence"><i></i>精华</span>
             </div>
-            <div class="post-body text-body"><ForumContent :content="contentWithoutStickers(activePost.content) || '（无正文）'" /></div>
+            <!-- 富文本帖子（contentFormat=HTML）不能再去表情包占位符后当纯文本渲染，否则标签会显示出来 -->
+            <div class="post-body text-body">
+              <ForumContent
+                v-if="activePost.contentFormat === 'HTML'"
+                :content="activePost.content || '（无正文）'"
+                format="HTML"
+              />
+              <ForumContent v-else :content="contentWithoutStickers(activePost.content) || '（无正文）'" />
+            </div>
             <ImageGrid
               v-if="postImageUrls(activePost).length"
               class="post-media"
@@ -423,7 +431,7 @@
                   <span class="n">{{ c.user?.nickname || c.author || '匿名' }}</span>
                   <span>{{ c.user?.className || '' }}</span>
                 </div>
-                <div class="tx text-body"><ForumContent :content="c.content" /></div>
+                <div class="tx text-body"><ForumContent :content="c.content" :format="c.contentFormat" /></div>
                 <AttachmentList
                   v-if="c.attachments && c.attachments.length"
                   :attachments="c.attachments"
@@ -1040,7 +1048,11 @@ async function publishPost(payload: PostDraft) {
       shareType: 'DISCUSSION',
       attachments: payload.attachments,
       visibility: payload.visibility,
-      visibleClasses: payload.visibleClasses
+      visibleClasses: payload.visibleClasses,
+      contentFormat: payload.contentFormat,
+      // v4：AI 标题开关与「标题是否原样来自模型」
+      aiTitleEnabled: payload.aiTitleEnabled !== false,
+      titleFromAi: Boolean(payload.titleFromAi)
     });
     // create_post 不接受 is_top，置顶走既有置顶接口，避免再改发帖契约
     if (payload.isTop && created?.id) {
@@ -1066,7 +1078,8 @@ async function saveDraft(payload: PostDraft) {
       attachments: payload.attachments,
       visibility: payload.visibility,
       visible_classes: payload.visibleClasses,
-      is_top: payload.isTop
+      is_top: payload.isTop,
+      ai_title_enabled: payload.aiTitleEnabled !== false
     });
     showToast('已保存到草稿箱');
   } catch (e: any) {

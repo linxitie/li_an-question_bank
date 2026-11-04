@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     # 多轮会话携带的最大历史条数
     LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
 
+    # 全局限流（每 IP 每分钟请求数）。默认 300 与线上一致；
+    # 本机跑 e2e 时请求量会超过它，可在 backend/.env 里调高，避免自己把自己限流。
+    RATE_LIMIT_PER_MINUTE: int = Field(300, env="RATE_LIMIT_PER_MINUTE")
+
     # 日志配置
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
     LOG_FILE: str = Field("./logs/app.log", env="LOG_FILE")

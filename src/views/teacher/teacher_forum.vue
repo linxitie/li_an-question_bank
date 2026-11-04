@@ -15,6 +15,7 @@
           <option v-for="name in classOptions" :key="name" :value="name">{{ name }}</option>
           </select>
           <button class="tf-btn" @click="loadPosts">查询</button>
+          <button class="tf-btn ghost" @click="resetFilters">重置</button>
           </section>
           <div class="tf-head-actions">
             <button class="tf-star-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
@@ -47,10 +48,10 @@
               :user-id="post.id"
               :user-type="post.authorType || 'student'" />
             <span class="tf-status" :class="`st-${post.status}`">{{ statusLabel(post.status) }}</span>
-            <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
+            <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }"><span v-if="post.aiTitle" class="ai-title-tag">AI生成</span>{{ post.title }}</span>
             <span class="tf-meta">{{ post.authorClass || '未分班' }}</span>
           </div>
-          <p class="tf-content"><ForumContent :content="post.content" /></p>
+          <p class="tf-content"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
           <AttachmentList
             v-if="post.attachments && post.attachments.length"
             :attachments="post.attachments"
@@ -68,13 +69,13 @@
         </article>
       </div>
 
-      <div v-if="detail" class="tf-modal" @click.self="detail = null">
+      <div v-if="detail" class="tf-modal tf-modal-l2" @click.self="detail = null">
         <div class="tf-modal-card">
           <button class="tf-close" @click="detail = null">×</button>
           <div class="tf-modal-scroll">
-          <h2 :style="{ color: titleColorValue(detail.titleColor) }">{{ detail.title }}</h2>
+          <h2 :style="{ color: titleColorValue(detail.titleColor) }"><span v-if="detail.aiTitle" class="ai-title-tag">AI生成</span>{{ detail.title }}</h2>
           <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
-          <p class="tf-content"><ForumContent :content="detail.content" /></p>
+          <p class="tf-content"><ForumContent :content="detail.content" :format="detail.contentFormat" /></p>
           <AttachmentList
             v-if="detail.attachments && detail.attachments.length"
             :attachments="detail.attachments"
@@ -99,7 +100,7 @@
               </button>
             </div>
             <div class="tf-comment-body">
-              <p><ForumContent :content="c.content" /></p>
+              <p><ForumContent :content="c.content" :format="c.contentFormat" /></p>
               <AttachmentList
                 v-if="c.attachments && c.attachments.length"
                 :attachments="c.attachments"
@@ -174,7 +175,7 @@
       </aside>
     </main>
     <!-- D'：热门帖子前 100 / 我的帖子全部 -->
-    <div v-if="showHotAll" class="tf-modal" @click.self="showHotAll = false">
+    <div v-if="showHotAll" class="tf-modal tf-modal-l1" @click.self="showHotAll = false">
       <div class="tf-modal-card tf-fav-card">
         <h3>今日热门 · 前 100 条</h3>
         <div class="tf-hot-range">
@@ -188,13 +189,14 @@
         <div v-else class="tf-fav-list">
           <div v-for="h in hotAll" :key="h.id" class="tf-fav-item" @click="openPost(h)">
             <span class="tf-fav-title">{{ h.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(h) }}</span>
             <span class="tf-fav-num">❤ {{ h.likeCount || 0 }} · 💬 {{ h.commentCount || 0 }}</span>
           </div>
         </div>
         <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showHotAll = false">关闭</button></div>
       </div>
     </div>
-    <div v-if="showMyAll" class="tf-modal" @click.self="showMyAll = false">
+    <div v-if="showMyAll" class="tf-modal tf-modal-l1" @click.self="showMyAll = false">
       <div class="tf-modal-card tf-fav-card">
         <h3>我的帖子（全部）</h3>
         <div class="tf-hot-range">
@@ -206,6 +208,7 @@
         <div v-else class="tf-fav-list">
           <div v-for="m in myAll" :key="m.id" class="tf-fav-item" @click="openPost(m)">
             <span class="tf-fav-title">{{ m.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(m) }}</span>
             <span class="tf-fav-num">❤ {{ m.likeCount || 0 }} · 💬 {{ m.commentCount || 0 }}</span>
           </div>
         </div>
@@ -214,7 +217,7 @@
     </div>
 
     <!-- T4：我的收藏 / 我的喜欢 -->
-    <div v-if="favVisible" class="tf-modal" @click.self="favVisible = false">
+    <div v-if="favVisible" class="tf-modal tf-modal-l1" @click.self="favVisible = false">
       <div class="tf-modal-card tf-fav-card">
         <h3>{{ favTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
         <div class="tf-fav-tabs">
@@ -228,6 +231,7 @@
         <div v-else class="tf-fav-list">
           <div v-for="p in favList" :key="p.id" class="tf-fav-item" @click="openPost(p)">
             <span class="tf-fav-title" :style="{ color: titleColorValue(p.titleColor) }">{{ p.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(p) }}</span>
             <span class="tf-fav-num">❤ {{ p.likeCount || 0 }} · ⭐ {{ p.favoriteCount || 0 }}</span>
           </div>
         </div>
@@ -253,7 +257,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import TeacherNavHeader from '$vtj/vue/TeacherNavHeader.vue';
@@ -341,6 +345,22 @@ const statusLabel = (status: string) =>
   ({ NORMAL: '正常', BLOCKED: '待复核隐藏', DELETED: '已删除' } as Record<string, string>)[status] ||
   status;
 
+/**
+ * 列表正文摘要（2026-11-03）：收藏/喜欢/热门/我的帖子 弹窗此前只显示标题。
+ * 后端已带 200 字 content，这里去表情包占位符 + 压平空白后截 120 字。
+ */
+const excerptOf = (post: any): string => {
+  const raw = String(post?.content ?? post?.excerpt ?? '');
+  const text = raw
+    // 富文本正文先去掉标签再截断
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '（无正文）';
+  return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+};
+
 const openPostForm = () => {
   postDraftInitial.value = null;
   postForm.visible = true;
@@ -402,7 +422,11 @@ const submitPost = async (payload: PostDraft) => {
       content: payload.content,
       visibility: payload.visibility,
       attachments: payload.attachments,
-      visibleClasses: payload.visibility === 'CLASSES' ? payload.visibleClasses : undefined
+      visibleClasses: payload.visibility === 'CLASSES' ? payload.visibleClasses : undefined,
+      contentFormat: payload.contentFormat,
+      // v4：AI 标题开关与「标题是否原样来自模型」
+      aiTitleEnabled: payload.aiTitleEnabled !== false,
+      titleFromAi: Boolean(payload.titleFromAi)
     });
     ElMessage.success('发布成功');
     postForm.visible = false;
@@ -424,7 +448,8 @@ const savePostDraft = async (payload: PostDraft) => {
       attachments: payload.attachments,
       visibility: payload.visibility,
       visible_classes: payload.visibleClasses,
-      is_top: payload.isTop
+      is_top: payload.isTop,
+      ai_title_enabled: payload.aiTitleEnabled !== false
     });
     ElMessage.success('已保存到草稿箱');
   } catch (e: any) {
@@ -511,6 +536,15 @@ const openMyAll = async () => {
   } catch (e) { myAll.value = []; } finally { myAllLoading.value = false; }
 };
 
+/** 一键清空筛选条件（2026-11-03）：关键词 / 日期区间 / 班级，然后重新加载 */
+const resetFilters = async () => {
+  keyword.value = '';
+  dateFrom.value = '';
+  dateTo.value = '';
+  className.value = '';
+  await loadPosts();
+};
+
 const loadPosts = async () => {
   loading.value = true;
   try {
@@ -587,6 +621,36 @@ const submitReason = async (reason: string) => {
 
 onMounted(loadSideCards);
 onMounted(loadPosts);
+
+/**
+ * 关闭「最上层」弹窗（2026-11-03）：帖子详情(二级) 先关，再关热门/我的/收藏(一级)。
+ * 与模板里的 tf-modal-l1 / tf-modal-l2 层级保持一致。
+ */
+function closeTopModal() {
+  if (detail.value) {
+    detail.value = null;
+    return;
+  }
+  if (favVisible.value) {
+    favVisible.value = false;
+    return;
+  }
+  if (showHotAll.value) {
+    showHotAll.value = false;
+    return;
+  }
+  if (showMyAll.value) {
+    showMyAll.value = false;
+  }
+}
+
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeTopModal();
+}
+
+onMounted(() => window.addEventListener('keydown', onGlobalKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
+
 </script>
 
 <style scoped>
@@ -682,6 +746,11 @@ onMounted(loadPosts);
 .tf-stats b { font-size: 18px; color: #c41e3a; }
 .tf-stats span { font-size: 12px; color: #94a3b8; }
 .tf-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 2200; }
+/* 弹窗分层（2026-11-03）：一级列表（热门/我的/收藏）< 二级帖子详情。
+ * 本文件里 .tf-modal 有两处定义，后者会覆盖前者的 z-index；层级必须写在最后并提权，
+ * 否则同层里详情会被列表弹窗盖住。 */
+.tf-modal.tf-modal-l1 { z-index: 2200; }
+.tf-modal.tf-modal-l2 { z-index: 2400; }
 .tf-modal-card { width: 560px; max-width: 92vw; background: #fff; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .tf-modal-card h3 { margin: 0; font-size: 17px; color: #1a2b5f; }
 .tf-input, .tf-textarea, .tf-select { width: 100%; padding: 10px 12px; border: 1px solid #e3e8ef; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
@@ -718,10 +787,23 @@ onMounted(loadPosts);
 .tf-fav-tab { padding: 8px 16px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #475569; font-size: 13px; cursor: pointer; }
 .tf-fav-tab.on { background: #fdf2f4; border-color: #f0c4cc; color: #c41e3a; font-weight: 600; }
 .tf-fav-list { max-height: 380px; overflow-y: auto; }
-.tf-fav-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; }
+.tf-fav-item { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "title num" "excerpt excerpt"; align-items: center; gap: 2px 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; }
 .tf-fav-item:hover { background: #f7f9fc; }
-.tf-fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tf-fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
+.tf-fav-title { grid-area: title; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 列表正文摘要（2026-11-03）：2 行截断，占满第二行 */
+.tf-fav-excerpt {
+  grid-area: excerpt;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6b7896;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.tf-fav-num { grid-area: num; color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
 /* 单个五角星入口，避免窄屏换行 */
 .tf-star-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }

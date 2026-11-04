@@ -651,6 +651,13 @@ class ForumPost(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="发帖人ID")
     title = Column(String(200), nullable=False, comment="标题")
     content = Column(Text, nullable=False, comment="内容")
+    # 正文格式（2026-11-03）：TEXT = 纯文本/表情包占位符（历史数据）；HTML = 富文本（已消毒）
+    # 用显式列而不是「正则猜是不是 HTML」，避免正文里出现 '<' 的纯文本被误判成标记。
+    content_format = Column(String(8), default="TEXT", nullable=False, comment="正文格式 TEXT/HTML")
+    # AI 标题标记（2026-11-03）：1 = 标题由大模型按正文生成，前端展示时加「AI生成」前缀
+    ai_title = Column(Integer, default=0, nullable=False, comment="标题是否由 AI 生成(0/1)")
+    # AI 标题开关（2026-11-04 v4）：记录发帖人是否允许 AI 总结标题，默认允许
+    ai_title_enabled = Column(Integer, default=1, nullable=False, comment="是否允许AI总结标题(0/1)")
     share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION"), default="EXPERIENCE", comment="分享类型")
     tags = Column(String(500), comment="标签")
     is_top = Column(Integer, default=0, comment="是否置顶")
@@ -695,6 +702,8 @@ class ForumComment(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="评论人ID")
     parent_comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), comment="父评论ID")
     content = Column(Text, nullable=False, comment="评论内容")
+    # 评论正文格式（2026-11-03）：与 forum_post.content_format 同一套语义
+    content_format = Column(String(8), default="TEXT", nullable=False, comment="正文格式 TEXT/HTML")
     like_count = Column(Integer, default=0, comment="点赞数")
     status = Column(Integer, default=1, comment="状态 1正常/0删除/2隐藏")
     # === P1 评论区扩展 ===
@@ -2633,6 +2642,8 @@ class ForumDraft(Base):
     visibility = Column(String(16), default="ALL", comment="可见范围: ALL | CLASSES")
     visible_classes = Column(JSON, comment="可见班级名列表")
     is_top = Column(Integer, default=0, comment="是否置顶（仅教师/管理员可用）")
+    # v4（2026-11-04）：记住发帖人的 AI 标题开关，重开弹窗时恢复
+    ai_title_enabled = Column(Integer, default=1, comment="是否允许AI总结标题(0/1)")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 

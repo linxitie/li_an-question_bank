@@ -17,18 +17,20 @@
   GET    /api/forum/stats                    论坛统计
 """
 import os
+import re
 import json
+import time
 import uuid
 import logging
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Literal
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, UploadFile, File, Form, Request, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, or_, and_, String
 
-from ....core.database import get_db
+from ....core.database import get_db, SessionLocal
 from ....core.config import settings
 from pydantic import BaseModel, Field
 from ....core.security import get_current_user, get_optional_user
@@ -37,7 +39,10 @@ from ....models.models import (
     ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
     ForumDraft, SysUser, SysOperationLog
 )
-from ....services.sensitive_words import sensitive_filter, SensitiveLevel
+from ....services.sensitive_words import SensitiveLevel
+from ....services.content_guard import guard_text, judgments as content_guard_judgments
+from ....services.rich_text import sanitize_rich_text
+from ....services.forum_title_ai import generate_forum_title, needs_ai_title
 from ....services.event_consumer import outbox_mode_enabled, record_user_action
 from ....core.trigger_types import TRIGGER_FORUM_POSTED
 from ....core.exceptions import (
@@ -179,8 +184,45 @@ def _serialize_post(
         "favorited": bool(favorited),
         "visibility": post.visibility or "ALL",
         "visibleClasses": post.visible_classes or [],
+        # 正文格式（2026-11-03）：前端据此决定走纯文本渲染还是消毒后的 HTML 渲染
+        "contentFormat": getattr(post, "content_format", None) or "TEXT",
+        # AI 标题标记（2026-11-03 第 3 轮）：前端据此在标题前加「AI生成」
+        "aiTitle": bool(getattr(post, "ai_title", 0)),
+        # 发帖人是否允许 AI 总结标题（2026-11-04 v4），便于管理端统计
+        "aiTitleEnabled": bool(getattr(post, "ai_title_enabled", 1)),
         "user": _user_brief(user, post.user_id),
     }
+
+
+async def _generate_title_in_background(post_id: int, content: str, content_format: str) -> None:
+    """后台为无标题帖生成 AI 标题（2026-11-03 第 3 轮）。
+
+    约定：
+    - **必须用独立 Session**：请求级 db 在响应返回后就关闭了，复用会拿到已关闭的会话；
+    - 写库前再校验一次标题仍为空，避免用户在这几秒内手动填了标题被覆盖；
+    - 任何失败只记日志，不抛出（后台任务抛错不会影响已返回的响应，但会污染日志）。
+    """
+    title = await generate_forum_title(content, content_format or "TEXT")
+    if not title:
+        return
+
+    db = SessionLocal()
+    try:
+        post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
+        if not post:
+            return
+        if not needs_ai_title(post.title, post.content):
+            logger.info("AI 标题跳过：帖子 %s 已有标题", post_id)
+            return
+        post.title = title
+        post.ai_title = 1
+        db.commit()
+        logger.info("AI 标题已写入：帖子 %s -> %s", post_id, title)
+    except Exception as exc:  # noqa: BLE001 - 后台任务不能因单条失败中断
+        logger.warning("AI 标题写库失败：帖子 %s: %s", post_id, exc)
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _apply_visibility_filter(query, current_user: Optional[SysUser]):
@@ -274,6 +316,8 @@ def _serialize_comment(
         "myReaction": my_reaction,
         "reactions": reactions or {},
         "replyCount": reply_count or 0,
+        # 正文格式（2026-11-03）
+        "contentFormat": getattr(comment, "content_format", None) or "TEXT",
         "user": _user_brief(user, comment.user_id),
     }
 
@@ -350,6 +394,9 @@ async def get_forum_posts(
     sort: Optional[Literal["new", "hot"]] = Query(None, description="快捷排序: new/hot"),
     date_from: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD（含当天）"),
     date_to: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD（含当天）"),
+    visibility: Optional[Literal["ALL", "CLASSES"]] = Query(
+        None, description="可见范围筛选：ALL=校园论坛 / CLASSES=班级论坛（不传=全部）"
+    ),
     limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
@@ -365,6 +412,12 @@ async def get_forum_posts(
     query = db.query(ForumPost).filter(ForumPost.status == "NORMAL")
     # P3：可见范围（教师/管理员不过滤；学生仅本校班级或全校；游客仅全校）
     query = _apply_visibility_filter(query, current_user)
+
+    # 校园 / 班级 论坛筛选（2026-11-03）。
+    # 顺序很关键：必须放在 _apply_visibility_filter 之后 —— 前者是「谁能看」的权限边界，
+    # 后者只是「看哪一类」的业务筛选。若顺序反过来，班级帖会被业务筛选绕开权限暴露。
+    if visibility:
+        query = query.filter(ForumPost.visibility == visibility)
 
     if share_type:
         query = query.filter(ForumPost.share_type == share_type)
@@ -510,6 +563,7 @@ async def get_post_detail(
 @router.post("/posts", summary="发布新帖")
 async def create_post(
     request: Request,
+    background_tasks: BackgroundTasks,
     title: str = Form("", max_length=200),  # 2026-10-31：允许空标题（附件/正文至少一项即可）
     content: str = Form("", max_length=10000),  # 2026-10-31：允许空正文
     share_type: str = Form("EXPERIENCE"),
@@ -519,6 +573,12 @@ async def create_post(
     question_id: Optional[int] = Form(None, description="关联题目ID"),
     visibility: Optional[str] = Form(None, description="可见范围: ALL 全校 | CLASSES 本班/指定班级"),
     visible_classes: Optional[str] = Form(None, description="班级名 JSON 数组，visibility=CLASSES 时生效"),
+    content_format: str = Form("TEXT", description="正文格式：TEXT 纯文本 / HTML 富文本（落库前消毒）"),
+    # 用 str 解析而不是 bool：实测这版 FastAPI 对「缺省的 bool Form 字段」
+    # 会统一喂 False（连 Form(True) 的默认值都不生效，隔离实验已验证），
+    # 这会把「老客户端没传该字段」误判成「用户明确关闭 AI」。
+    ai_title_enabled: str = Form("true", description="是否允许 AI 总结标题（缺省=允许）"),
+    title_from_ai: str = Form("false", description="标题是否原样来自模型建议（缺省=否）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -530,6 +590,17 @@ async def create_post(
     """
     title = (title or "").strip()
     content = (content or "").strip()
+    # 布尔字段按字符串解析后再判定（原因见签名处注释）
+    ai_allowed = str(ai_title_enabled).strip().lower() not in ("false", "0", "no", "off")
+    title_is_ai = str(title_from_ai).strip().lower() in ("true", "1", "yes", "on")
+    # 富文本（2026-11-03）：HTML 正文必须先过信任边界再参与后续校验/落库。
+    # 顺序很重要：先消毒 → 再判空 → 再敏感词过滤，避免把未消毒的标记写进库或写进审计日志。
+    content_format = "HTML" if (content_format or "").upper() == "HTML" else "TEXT"
+    if content_format == "HTML" and content:
+        content = sanitize_rich_text(content, allow_inline_style=True).strip()
+        # 只剩空标签（如 <p><br></p>）时视为空正文
+        if not re.sub(r"<[^>]+>|&nbsp;|\s", "", content):
+            content = ""
     # 2026-10-31：标题 / 正文 / 附件 至少满足一项即可发布
     _has_att = bool(attachments and attachments.strip() not in ("", "[]", "null"))
     if not title and not content and not _has_att:
@@ -538,8 +609,13 @@ async def create_post(
     if not title:
         title = "(无标题)"
 
-    # 1. 关键词过滤(关键词工程核心)
-    filter_result = sensitive_filter.detect(f"{title} {content}")
+    # 1. 关键词过滤(关键词工程核心) + 知识库判定（落 cg_judgment/cg_task）
+    filter_result = guard_text(
+        db,
+        f"{title} {content}",
+        scene="forum_post",
+        user_id=current_user.user_id,
+    )
 
     if filter_result["level"] == SensitiveLevel.BLOCKED:
         # 记录审计日志
@@ -549,10 +625,12 @@ async def create_post(
             code="SENSITIVE_CONTENT_BLOCKED"
         )
 
-    # masked 级别:自动屏蔽后发布
+    # masked 级别:标题与正文分别打码后发布（混合检测的 masked_text 不适用于单个字段）
+    final_title = title
     final_content = content
     if filter_result["level"] == SensitiveLevel.MASKED:
-        final_content = filter_result["masked_text"]
+        final_title = guard_text(db, title, scene="forum_post", persist=False).get("masked_text") or title
+        final_content = guard_text(db, content, scene="forum_post", persist=False).get("masked_text") or content
         _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
 
     # reviewed 级别:记录但不阻断
@@ -598,8 +676,9 @@ async def create_post(
         title_color = "default"
     post = ForumPost(
         user_id=current_user.user_id,
-        title=title.strip(),
+        title=final_title.strip(),
         content=final_content,
+        content_format=content_format,
         share_type=share_type if share_type in ("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION") else "EXPERIENCE",
         tags=tags,
         attachments=parsed_attachments,
@@ -609,10 +688,16 @@ async def create_post(
         status="NORMAL",
         visibility=visibility,
         visible_classes=classes,
+        # v4（2026-11-04）：记录发帖人的 AI 标题选择；标题若原样来自模型建议则标记 AI 生成。
+        # title_from_ai 只在「标题由模型产出且用户没改过」时为真，手改过的标题不冒充 AI 产物。
+        ai_title_enabled=1 if ai_allowed else 0,
+        ai_title=1 if (title_is_ai and final_title.strip()) else 0,
     )
     db.add(post)
     # F2b：先 flush 拿 post_id，事件与帖子同一事务提交。
     db.flush()
+    if filter_result.get("judgment_id"):
+        content_guard_judgments.bind_source(db, filter_result["judgment_id"], post.post_id)
 
     logger.info(f"用户 {current_user.user_id} 发布帖子 {post.post_id}")
 
@@ -624,6 +709,18 @@ async def create_post(
     emit_forum_content(db, post.post_id, producer="community.forum.create")
     db.commit()
     db.refresh(post)
+
+    # AI 标题（2026-11-03 第 3 轮）：标题为空且有正文时，放到后台生成，不阻塞发帖。
+    # 为什么用 BackgroundTasks 而不是同步：模型调用通常 2–5s，同步会让「发布」按钮明显卡顿。
+    # 2026-11-04 v4：发帖人可以在弹窗里**关闭**该能力（ai_title_enabled=False）——
+    # 关闭后一律不投递后台任务，按原样落库，这是「用户不想让 AI 插手」的唯一出口。
+    if ai_allowed and needs_ai_title(post.title, post.content):
+        background_tasks.add_task(
+            _generate_title_in_background,
+            post.post_id,
+            post.content,
+            post.content_format or "TEXT",
+        )
 
     # 4. 返回完整数据(前端 unshift 到列表头)
     return _serialize_post(post, current_user, liked=False, content_full=True)
@@ -971,6 +1068,7 @@ async def create_comment(
     parent_comment_id: Optional[int] = Form(None),
     reply_to_user_id: Optional[int] = Form(None),
     attachments: Optional[str] = Form(None, description="评论图片 JSON 字符串"),
+    content_format: str = Form("TEXT", description="正文格式：TEXT 纯文本 / HTML 富文本（落库前消毒）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -981,6 +1079,12 @@ async def create_comment(
     - 支持楼中楼回复(parent_comment_id)
     """
     content = (content or "").strip()
+    # 富文本评论（2026-11-03）：与发帖同一套信任边界，先消毒再判空
+    content_format = "HTML" if (content_format or "").upper() == "HTML" else "TEXT"
+    if content_format == "HTML" and content:
+        content = sanitize_rich_text(content, allow_inline_style=True).strip()
+        if not re.sub(r"<[^>]+>|&nbsp;|\s", "", content):
+            content = ""
     if not content:
         raise ValidationError("评论内容不能为空")
 
@@ -1004,8 +1108,14 @@ async def create_comment(
         if not reply_to_user_id:
             reply_to_user_id = parent.user_id
 
-    # 关键词过滤
-    filter_result = sensitive_filter.detect(content)
+    # 关键词过滤 + 知识库判定
+    filter_result = guard_text(
+        db,
+        content,
+        scene="forum_comment",
+        source_id=post_id,
+        user_id=current_user.user_id,
+    )
     if filter_result["level"] == SensitiveLevel.BLOCKED:
         _log_violation(db, current_user.user_id, request, filter_result, "rejected", content)
         raise BusinessLogicError(
@@ -1037,6 +1147,7 @@ async def create_comment(
         reply_to_user_id=reply_to_user_id,
         attachments=parsed_attachments,
         content=final_content,
+        content_format=content_format,
         status=1,
     )
     db.add(comment)
@@ -1047,6 +1158,8 @@ async def create_comment(
 
     # F2b：评论与帖子计数、事件同一事务提交（先 flush 拿 comment_id）。
     db.flush()
+    if filter_result.get("judgment_id"):
+        content_guard_judgments.bind_source(db, filter_result["judgment_id"], comment.comment_id)
 
     # 回帖同样走 forum.posted；同一帖子只在首次创建时上报一次（P2-28）
     await _publish_forum_posted(
@@ -1715,8 +1828,14 @@ async def update_post(
     if not title or not content:
         raise ValidationError("标题和正文不能为空")
 
-    title_filter = sensitive_filter.detect(title)
-    content_filter = sensitive_filter.detect(content)
+    title_filter = guard_text(
+        db, title, scene="forum_post_update", source_id=post.post_id,
+        user_id=current_user.user_id,
+    )
+    content_filter = guard_text(
+        db, content, scene="forum_post_update", source_id=post.post_id,
+        user_id=current_user.user_id,
+    )
     if (
         title_filter["level"] == SensitiveLevel.BLOCKED
         or content_filter["level"] == SensitiveLevel.BLOCKED
@@ -1806,6 +1925,58 @@ async def delete_comment(
 # =====================================================================
 
 
+class AiTitleSuggestPayload(BaseModel):
+    """「AI 生成标题」预览请求体（2026-11-04 v4）。"""
+
+    content: str = Field("", max_length=10000)
+    content_format: str = Field("TEXT")
+
+
+# 预览接口的进程内限流（单实例部署足够；重启清零）。
+# 为什么要限流：这是直接花 token 的接口，必须挡住连点/脚本刷。
+_AI_SUGGEST_HITS: Dict[int, List[float]] = {}
+AI_SUGGEST_LIMIT = 30          # 每用户每小时最多 30 次
+AI_SUGGEST_WINDOW_SECONDS = 3600
+
+
+def _consume_ai_suggest_quota(user_id: int) -> int:
+    """占用一次配额并返回剩余次数；超限抛 429。"""
+    now = time.time()
+    hits = [t for t in _AI_SUGGEST_HITS.get(user_id, []) if now - t < AI_SUGGEST_WINDOW_SECONDS]
+    if len(hits) >= AI_SUGGEST_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"AI 生成标题过于频繁，请稍后再试（每 {AI_SUGGEST_WINDOW_SECONDS // 60} 分钟 {AI_SUGGEST_LIMIT} 次）",
+        )
+    hits.append(now)
+    _AI_SUGGEST_HITS[user_id] = hits
+    return AI_SUGGEST_LIMIT - len(hits)
+
+
+@router.post("/ai-title/suggest", summary="按正文生成标题建议（预览，不落库）")
+async def suggest_forum_title(
+    payload: AiTitleSuggestPayload,
+    current_user: SysUser = Depends(get_current_user),
+):
+    """给发帖弹窗的「AI 生成标题 / 重新生成」按钮用。
+
+    设计取舍：
+    - **不落库**：用户可能点好几次才满意，落库只会产生垃圾数据；
+    - **限流**：每次调用都花 token，按用户每小时 30 次；
+    - **正文不足直接拒绝**，不浪费调用（复用论坛 AI 标题的有效文字门槛）。
+    """
+    from ....services.forum_title_ai import generate_forum_title, has_meaningful_content
+
+    if not has_meaningful_content(payload.content):
+        return {"title": None, "reason": "no_content", "remaining": None}
+
+    remaining = _consume_ai_suggest_quota(current_user.user_id)
+    title = await generate_forum_title(payload.content, payload.content_format or "TEXT")
+    if not title:
+        return {"title": None, "reason": "llm_unavailable", "remaining": remaining}
+    return {"title": title, "reason": None, "remaining": remaining}
+
+
 class DraftPayload(BaseModel):
     """草稿载荷。与会话内编辑器的字段一一对应。"""
 
@@ -1815,6 +1986,8 @@ class DraftPayload(BaseModel):
     visibility: str = Field("ALL", pattern="^(ALL|CLASSES)$")
     visible_classes: Optional[List[str]] = None
     is_top: bool = False
+    # v4（2026-11-04）：草稿也记住发帖人的 AI 标题开关，重开弹窗能恢复
+    ai_title_enabled: bool = True
 
 
 def _draft_item(draft: ForumDraft) -> Dict[str, Any]:
@@ -1826,6 +1999,8 @@ def _draft_item(draft: ForumDraft) -> Dict[str, Any]:
         "visibility": draft.visibility or "ALL",
         "visibleClasses": draft.visible_classes or [],
         "isTop": bool(draft.is_top),
+        # v4（2026-11-04）：草稿恢复 AI 标题开关
+        "aiTitleEnabled": bool(getattr(draft, "ai_title_enabled", 1)),
         "updateTime": draft.update_time.isoformat() if draft.update_time else None,
     }
 
@@ -1858,6 +2033,8 @@ async def save_my_draft(
     draft.visible_classes = payload.visible_classes
     # 置顶只在教师/管理员侧有意义，学生侧一律落 0，防止越权置顶
     draft.is_top = 1 if payload.is_top and _can_moderate_forum(current_user, db) else 0
+    # v4：默认允许；显式关闭才落 0
+    draft.ai_title_enabled = 1 if payload.ai_title_enabled else 0
     db.commit()
     db.refresh(draft)
     return {"success": True, "draft": _draft_item(draft)}

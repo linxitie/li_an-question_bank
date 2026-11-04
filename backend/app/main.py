@@ -30,6 +30,7 @@ from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
 from .api.v1.platform import admin_quotes
 from .api.v1.platform import admin_news
+from .api.v1.platform import content_guard_admin
 from .api.v1.community import quotes, forum, practice_admin, forum_moderation
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
@@ -135,6 +136,12 @@ async def lifespan(app: FastAPI):
         logger.info("新闻 R2 Schema 就绪")
     except Exception as e:
         logger.warning(f"新闻 R2 Schema 初始化失败: {e}")
+    try:
+        from .core.content_guard_schema import ensure_content_guard_schema
+        _cg_report = ensure_content_guard_schema(engine)
+        logger.info(f"内容安全知识库 Schema 就绪: {_cg_report}")
+    except Exception as e:
+        logger.warning(f"内容安全知识库 Schema 初始化失败（审核降级为旧词库）: {e}")
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
@@ -347,6 +354,12 @@ async def lifespan(app: FastAPI):
                 # P3 可见范围（2026-10-26）
                 ('visibility', "VARCHAR(16) DEFAULT 'ALL'"),
                 ('visible_classes', 'JSON'),
+                # 富文本（2026-11-03）：历史数据一律 TEXT，渲染走纯文本+表情包路径，行为不变
+                ('content_format', "VARCHAR(8) DEFAULT 'TEXT'"),
+                # AI 标题标记（2026-11-03 第 3 轮）：1 = 标题由大模型生成
+                ('ai_title', 'INTEGER DEFAULT 0'),
+                # AI 标题开关（2026-11-04 v4）：默认允许，关闭后不调用大模型
+                ('ai_title_enabled', 'INTEGER DEFAULT 1'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in forum_new_cols:
@@ -367,6 +380,8 @@ async def lifespan(app: FastAPI):
                 ('deleted_by', 'BIGINT'),
                 ('deleted_reason', 'VARCHAR(200)'),
                 ('deleted_at', 'DATETIME'),
+                # 富文本（2026-11-03）：同 forum_post.content_format
+                ('content_format', "VARCHAR(8) DEFAULT 'TEXT'"),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in comment_new_cols:
@@ -376,6 +391,17 @@ async def lifespan(app: FastAPI):
                         ))
                         logger.info(f"自动迁移: forum_comment 添加列 {col_name}")
                 conn.commit()
+
+        # 检查 forum_draft 表（v4 2026-11-04：记住发帖人的 AI 标题开关）
+        if 'forum_draft' in inspector.get_table_names():
+            draft_cols = [c['name'] for c in inspector.get_columns('forum_draft')]
+            if 'ai_title_enabled' not in draft_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE forum_draft ADD COLUMN ai_title_enabled INTEGER DEFAULT 1"
+                    ))
+                    conn.commit()
+                    logger.info("自动迁移: forum_draft 添加列 ai_title_enabled")
 
         # 检查 forum_like 表(点赞表情:新增 reaction_code 字段)
         if 'forum_like' in inspector.get_table_names():
@@ -925,6 +951,7 @@ app.include_router(practice_admin.teacher_router)
 app.include_router(notifications.router)
 app.include_router(forum_moderation.teacher_router)
 app.include_router(forum_moderation.admin_router)
+app.include_router(content_guard_admin.router, tags=["管理员端-内容安全"])
 
 def _resolve_app_revision() -> str:
     """读取当前代码的 git 短 SHA，供前端 /health 版本自检使用。

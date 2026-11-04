@@ -10,37 +10,51 @@
         <div class="pc-bd">
           <div class="f-row">
             <label>标题 <span class="req">*</span></label>
-            <input
-              v-model="form.title"
-              class="f-input"
-              maxlength="200"
-              placeholder="给帖子起一个清晰的标题，例如：2024 公专真题变化分析"
-            />
+            <div class="title-row">
+              <input
+                v-model="form.title"
+                class="f-input"
+                maxlength="200"
+                placeholder="给帖子起一个清晰的标题，例如：2024 公专真题变化分析"
+                @input="onTitleEdited"
+              />
+              <button
+                v-if="form.aiTitleEnabled"
+                type="button"
+                class="ai-suggest-btn"
+                :disabled="suggesting"
+                :title="suggestHint"
+                @click="onSuggestTitle"
+              >{{ suggesting ? '生成中…' : (titleFromAi ? '重新生成' : 'AI 生成标题') }}</button>
+            </div>
+            <!-- AI 标题开关（v4 2026-11-04）：用户不同意就完全不调用大模型 -->
+            <div class="ai-switch-row">
+              <label class="ai-switch">
+                <input v-model="form.aiTitleEnabled" type="checkbox" />
+                <span>允许 AI 自动总结标题</span>
+              </label>
+              <span class="ai-switch-tip">
+                {{ form.aiTitleEnabled
+                  ? '不填标题时才会生效；生成后可修改或重新生成'
+                  : '已关闭：按原样发布，不调用大模型' }}
+              </span>
+            </div>
+            <p v-if="titleFromAi" class="ai-ok-tip">已生成建议标题，可直接发布，也可手动修改或重新生成</p>
           </div>
 
           <div class="f-row">
             <label>正文 <span class="req">*</span></label>
-            <div class="editor">
-              <div class="editor-tools">
-                <button type="button" title="加粗" @click="wrap('**')"><b>B</b></button>
-                <button type="button" title="斜体" @click="wrap('*')"><i>I</i></button>
-                <button type="button" title="下划线" @click="wrap('__')"><u>U</u></button>
-                <span class="sep"></span>
-                <button type="button" title="无序列表" @click="prefix('- ')">•≡</button>
-                <button type="button" title="有序列表" @click="prefixNumbered()">1≡</button>
-                <button type="button" title="引用" @click="prefix('> ')">❝</button>
-                <span class="sep"></span>
-                <button type="button" title="@同学" @click="insert('@')">@</button>
-                <button type="button" title="插入图片" :disabled="uploading" @click="pickImage">🖼</button>
-                <button type="button" title="插入链接" @click="insertLink">🔗</button>
-                <span class="cnt">{{ form.content.length }} / {{ maxContent }}</span>
-              </div>
-              <textarea
-                ref="bodyRef"
+            <!-- 2026-11-03：改用仓库已有的 wangEditor（RichTextEditor）做所见即所得，
+                 工具栏含段落/字体/字号/颜色/对齐/列表/引用/表情/表格/图片/链接/撤销重做。
+                 正文以 HTML 存储，落库前后端会走 bleach 白名单消毒。 -->
+            <div class="editor-rich">
+              <RichTextEditor
                 v-model="form.content"
-                :maxlength="maxContent"
+                :menus="richMenus"
+                :height="200"
+                :upload-image="uploadImageForEditor"
                 placeholder="正文内容，支持 @ 同学、插入图片与附件。请避免发布与备考无关的内容。"
-              ></textarea>
+              />
             </div>
           </div>
 
@@ -76,7 +90,9 @@
                 <span :class="['rp', { on: form.visibility === 'CLASSES' }]" @click="form.visibility = 'CLASSES'">仅指定班级</span>
               </div>
               <div v-if="form.visibility === 'CLASSES'" class="pc-classes">
-                <span v-if="!classes.length" class="pc-tip">当前账号没有可选班级</span>
+                <span v-if="!classes.length" class="pc-tip">
+                  当前账号未分班，无法按班级发送；请改用「全站可见」，或先联系管理员分配班级
+                </span>
                 <label v-for="c in classes" :key="c" class="chk-row">
                   <input v-model="form.visibleClasses" type="checkbox" :value="c" />{{ c }}
                 </label>
@@ -107,8 +123,11 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
+import { suggestForumTitle } from '@/modules/community/api';
+
+import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { fileIcon, formatFileSize, isDocFile, isImageFile, MAX_DOC_SIZE, uploadForumFile } from './fileUtils';
 import {
   MAX_IMAGE_SIZE,
@@ -118,11 +137,53 @@ import {
 
 export interface PostDraft {
   title: string;
+  /** 正文：contentFormat='HTML' 时是富文本 HTML，否则是纯文本 */
   content: string;
+  contentFormat?: 'TEXT' | 'HTML';
   attachments: ForumImageAttachment[];
   visibility: 'ALL' | 'CLASSES';
   visibleClasses: string[];
   isTop: boolean;
+  /** 是否允许 AI 总结标题（v4）：关闭后后端完全跳过模型调用 */
+  aiTitleEnabled?: boolean;
+  /** 标题是否原样来自模型建议（用户没改过）*/
+  titleFromAi?: boolean;
+}
+
+/** wangEditor 工具栏：图三那一组「原生支持」的菜单（公式/语音/音乐/视频为二期） */
+const richMenus = [
+  'head',
+  'fontName',
+  'fontSize',
+  'bold',
+  'italic',
+  'underline',
+  'strikeThrough',
+  'color',
+  'bgColor',
+  'justify',
+  'list',
+  'quote',
+  'emoticon',
+  'insertTable',
+  'divider',
+  'undo',
+  'redo'
+];
+
+/** 富文本内插图统一走论坛图片接口（与附件同一套白名单/大小校验） */
+const uploadImageForEditor = async (file: File): Promise<string> => {
+  const attachment = await uploadForumImage(file);
+  return attachment.url;
+};
+
+/** 去掉 HTML 标签后判断正文是否真的为空（<p><br></p> 视为空） */
+function stripHtml(html: string): string {
+  return String(html || '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, '')
+    .trim();
 }
 
 const props = withDefaults(
@@ -161,17 +222,100 @@ const emit = defineEmits<{
 const form = reactive<PostDraft>({
   title: '',
   content: '',
+  contentFormat: 'HTML',
   attachments: [],
   visibility: 'ALL',
   visibleClasses: [],
-  isTop: false
+  isTop: false,
+  aiTitleEnabled: true,
+  titleFromAi: false
 });
 
-const bodyRef = ref<HTMLTextAreaElement | null>(null);
 const uploading = ref(false);
 const error = ref('');
-const imageInput = ref<HTMLInputElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+
+// ===== AI 标题建议（v4 2026-11-04）=====
+const suggesting = ref(false);
+/** 本次打开弹窗已生成次数：超过 5 次就不再调用，避免连点烧 token */
+const suggestCount = ref(0);
+const MAX_SUGGEST_PER_OPEN = 5;
+/** 标题是否来自模型建议且用户未手改 */
+const titleFromAi = ref(false);
+
+const suggestHint = computed(() => {
+  if (suggestCount.value >= MAX_SUGGEST_PER_OPEN) {
+    return `本次最多生成 ${MAX_SUGGEST_PER_OPEN} 次，请手动填写标题`;
+  }
+  return '按正文内容让 AI 拟一个标题';
+});
+
+/** 表单是否还是空的（用于判断「能不能安全回填草稿」） */
+function isFormEmpty(): boolean {
+  return !form.title.trim() && !stripHtml(form.content) && form.attachments.length === 0;
+}
+
+/** 把 initial 回填进表单 */
+function applyInitial(init: Partial<PostDraft>) {
+  form.title = init.title ?? '';
+  form.content = init.content ?? '';
+  form.attachments = [...(init.attachments ?? [])];
+  form.visibility = init.visibility === 'CLASSES' ? 'CLASSES' : 'ALL';
+  form.visibleClasses = [...(init.visibleClasses ?? [])];
+  form.isTop = Boolean(init.isTop);
+  // v4：草稿里存的开关状态优先；没有则默认允许
+  form.aiTitleEnabled = init.aiTitleEnabled !== false;
+  // 打开弹窗时重置一次性状态：AI 建议次数、是否来自模型
+  suggestCount.value = 0;
+  titleFromAi.value = Boolean(init.titleFromAi);
+}
+
+/**
+ * 点「AI 生成标题 / 重新生成」：先调预览接口拿建议填进标题框，用户可改、可再生成。
+ * 覆盖已有标题前会二次确认，避免把用户手写的标题一键抹掉。
+ */
+async function onSuggestTitle() {
+  if (suggesting.value) return;
+  if (suggestCount.value >= MAX_SUGGEST_PER_OPEN) {
+    error.value = `本次最多生成 ${MAX_SUGGEST_PER_OPEN} 次标题，请直接手动填写`;
+    return;
+  }
+  if (form.title.trim()) {
+    const ok = window.confirm('将用 AI 建议替换当前标题，继续？');
+    if (!ok) return;
+  }
+
+  const plain = stripHtml(form.content);
+  if (!plain) {
+    error.value = '请先填写正文，AI 需要根据正文内容总结标题';
+    return;
+  }
+
+  suggesting.value = true;
+  error.value = '';
+  try {
+    const res = await suggestForumTitle(form.content, form.contentFormat === 'HTML' ? 'HTML' : 'TEXT');
+    if (!res.title) {
+      error.value =
+        res.reason === 'no_content'
+          ? '正文内容太少，AI 无法总结标题，请补充正文或手动填写标题'
+          : 'AI 暂时不可用，请稍后重试或手动填写标题';
+      return;
+    }
+    form.title = res.title;
+    titleFromAi.value = true;
+    suggestCount.value += 1;
+  } catch (e: any) {
+    error.value = e?.message || 'AI 生成标题失败，请手动填写';
+  } finally {
+    suggesting.value = false;
+  }
+}
+
+/** 用户手动改标题后，就不再认为标题是「AI 原样产物」 */
+function onTitleEdited() {
+  if (titleFromAi.value) titleFromAi.value = false;
+}
 
 /** 打开时把 initial 回填进去；关闭时清空错误提示 */
 watch(
@@ -181,109 +325,29 @@ watch(
       error.value = '';
       return;
     }
-    const init = props.initial || {};
-    form.title = init.title ?? '';
-    form.content = init.content ?? '';
-    form.attachments = [...(init.attachments ?? [])];
-    form.visibility = init.visibility === 'CLASSES' ? 'CLASSES' : 'ALL';
-    form.visibleClasses = [...(init.visibleClasses ?? [])];
-    form.isTop = Boolean(init.isTop);
+    applyInitial(props.initial || {});
   },
   { immediate: true }
+);
+
+/**
+ * 草稿是异步拉取的（父页先 showXxx=true，再 fetchMyForumDraft），
+ * 只监听 visible 会漏掉「后到的 initial」——用户就会以为草稿没保存成功（2026-11-03 第 3 轮修复）。
+ * 回填条件：弹窗打开 且 表单仍为空，避免覆盖用户正在输入的内容。
+ */
+watch(
+  () => props.initial,
+  (init) => {
+    if (!props.visible || !init) return;
+    if (!isFormEmpty()) return;
+    applyInitial(init);
+  }
 );
 
 const attachHint = `支持 doc / docx / xlsx / pdf / png / jpg，文档单个不超过 20 MB、图片不超过 5 MB，最多 ${props.maxAttachments} 个`;
 
 function close() {
   emit('update:visible', false);
-}
-
-function focusBody() {
-  bodyRef.value?.focus();
-}
-
-/** 在光标处包裹选中文本；无选区时插入成对标记并把光标放中间 */
-function wrap(marker: string) {
-  const el = bodyRef.value;
-  if (!el) return;
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const selected = form.content.slice(start, end);
-  form.content = form.content.slice(0, start) + marker + selected + marker + form.content.slice(end);
-  requestAnimationFrame(() => {
-    el.focus();
-    const pos = start + marker.length + selected.length;
-    el.setSelectionRange(pos, pos);
-  });
-}
-
-function insert(text: string) {
-  const el = bodyRef.value;
-  if (!el) {
-    form.content += text;
-    return;
-  }
-  const start = el.selectionStart ?? form.content.length;
-  const end = el.selectionEnd ?? form.content.length;
-  form.content = form.content.slice(0, start) + text + form.content.slice(end);
-  requestAnimationFrame(() => {
-    el.focus();
-    const pos = start + text.length;
-    el.setSelectionRange(pos, pos);
-  });
-}
-
-/** 给选区每一行加前缀（列表 / 引用） */
-function prefix(marker: string) {
-  const el = bodyRef.value;
-  if (!el) return;
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const block = form.content.slice(start, end) || '';
-  const marked = block
-    .split('\n')
-    .map((line) => (line ? marker + line : line))
-    .join('\n');
-  if (!block) {
-    insert(marker);
-    return;
-  }
-  form.content = form.content.slice(0, start) + marked + form.content.slice(end);
-}
-
-function prefixNumbered() {
-  const el = bodyRef.value;
-  if (!el) return;
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const block = form.content.slice(start, end) || '';
-  if (!block) {
-    insert('1. ');
-    return;
-  }
-  const marked = block
-    .split('\n')
-    .map((line, i) => (line ? `${i + 1}. ${line}` : line))
-    .join('\n');
-  form.content = form.content.slice(0, start) + marked + form.content.slice(end);
-}
-
-function insertLink() {
-  const url = window.prompt('请输入链接地址', 'https://');
-  if (!url) return;
-  insert(`[链接](${url})`);
-}
-
-function pickImage() {
-  if (!imageInput.value) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/png,image/jpeg,image/gif,image/webp';
-    input.multiple = true;
-    input.addEventListener('change', () => addFiles(Array.from(input.files || [])));
-    imageInput.value = input;
-  }
-  imageInput.value.click();
 }
 
 function pickFile() {
@@ -344,17 +408,22 @@ function toPayload(): PostDraft {
   return {
     title: form.title.trim(),
     content: form.content.trim(),
+    contentFormat: 'HTML',
     attachments: [...form.attachments],
     visibility: form.visibility,
     visibleClasses: form.visibility === 'CLASSES' ? [...form.visibleClasses] : [],
-    isTop: props.canPin ? form.isTop : false
+    isTop: props.canPin ? form.isTop : false,
+    aiTitleEnabled: form.aiTitleEnabled,
+    titleFromAi: titleFromAi.value
   };
 }
 
 function validate(): boolean {
   const payload = toPayload();
-  // 与三端既定规则一致：标题 / 正文 / 附件 任一即可，三者全空才拒绝
-  if (!payload.title && !payload.content && !payload.attachments.length) {
+  // 与三端既定规则一致：标题 / 正文 / 附件 任一即可，三者全空才拒绝。
+  // 富文本正文要按「去标签后的可见文字」判空，否则 <p><br></p> 会被当成有内容。
+  const hasText = stripHtml(payload.content).length > 0;
+  if (!payload.title && !hasText && !payload.attachments.length) {
     error.value = '标题、正文、附件至少填写一项';
     return false;
   }
@@ -372,14 +441,12 @@ function onSubmit() {
 
 function onSaveDraft() {
   const payload = toPayload();
-  if (!payload.title && !payload.content && !payload.attachments.length) {
+  if (!payload.title && !stripHtml(payload.content) && !payload.attachments.length) {
     error.value = '空草稿无需保存';
     return;
   }
   emit('save-draft', payload);
 }
-
-defineExpose({ focusBody });
 </script>
 
 <style scoped>
@@ -451,6 +518,68 @@ defineExpose({ focusBody });
 }
 .f-row label .req {
   color: #e23b2e;
+}
+
+/* ===== AI 标题（v4 2026-11-04）===== */
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.title-row .f-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ai-suggest-btn {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #c7d7ff;
+  border-radius: 7px;
+  background: #f2f7ff;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ai-suggest-btn:hover:not(:disabled) {
+  background: #e6efff;
+}
+.ai-suggest-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.ai-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 7px;
+  flex-wrap: wrap;
+}
+.ai-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #33415c;
+  cursor: pointer;
+  margin-bottom: 0;
+}
+.ai-switch input {
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+.ai-switch-tip {
+  font-size: 11.5px;
+  color: #8a94ad;
+}
+.ai-ok-tip {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: #1a7f37;
 }
 .f-input {
   width: 100%;

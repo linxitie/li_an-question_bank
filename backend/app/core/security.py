@@ -788,7 +788,9 @@ class RateLimiter:
             oldest_request = min(self.allowance[key])
             return int(self.per - (current_time - oldest_request)) + 1
 
-rate_limiter = RateLimiter(rate=300, per=60)
+# 阈值可配置：默认仍是线上的 300/分钟；本机跑 e2e 时在 .env 里调高，
+# 否则整套用例的请求量会触发 429，表现为「登录超时 / 列表空白」这类假失败。
+rate_limiter = RateLimiter(rate=getattr(settings, "RATE_LIMIT_PER_MINUTE", 300), per=60)
 
 
 class LeakyBucketRateLimiter:
