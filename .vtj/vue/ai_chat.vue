@@ -714,7 +714,11 @@ export default defineComponent({
     function showMindMap(idx) {
       // 获取当前消息内容
       const msg = state.messages[idx];
-      const topic = msg?.content?.slice(0, 20) || '联考小智';
+      let topic = msg?.content?.slice(0, 10) || '联考小智';
+      // 如果太长，加省略号
+      if (msg?.content?.length > 10) {
+        topic += '...';
+      }
 
       // 根据问题关键词生成思维导图内容
       const content = msg?.content || '';
@@ -903,8 +907,11 @@ export default defineComponent({
 .mindmap-content {
   background: #fff;
   border-radius: 16px;
-  width: 600px;
-  max-width: 90%;
+  width: 900px;
+  max-width: 95%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   animation: slideUp 0.3s ease;
 }
@@ -929,22 +936,33 @@ export default defineComponent({
   cursor: pointer;
 }
 .mindmap-body {
-  padding: 60px 40px;
+  padding: 40px;
   position: relative;
   min-height: 400px;
+  overflow-y: auto;
   background: linear-gradient(135deg, #f8f9ff 0%, #fff5f5 100%);
+  flex: 1;
 }
 .mindmap-center {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 120px;
-  height: 120px;
+  width: 140px;
+  height: 140px;
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  padding: 10px;
+  line-height: 1.3;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
+  word-break: break-all;
   align-items: center;
   justify-content: center;
   font-weight: 700;
