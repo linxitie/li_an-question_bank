@@ -21,6 +21,17 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 论坛本轮新增（2026-11-03/04，R11：只登记不重算基线）=====
+    ("POST", "/api/forum/drafts"),
+    ("GET", "/api/forum/drafts/mine"),
+    ("DELETE", "/api/forum/drafts/mine"),
+    ("GET", "/api/admin/forum/dashboard"),
+    ("POST", "/api/admin/forum/posts/batch"),
+    ("POST", "/api/admin/forum/posts/{post_id}/hide"),
+    ("POST", "/api/admin/forum/posts/{post_id}/unhide"),
+    ("POST", "/api/admin/forum/posts/{post_id}/pin"),
+    ("POST", "/api/forum/ai-title/suggest"),
+    ("POST", "/api/admin/forum/ai-titles/backfill"),
     ("GET", "/api/admin/feedback"),
     ("POST", "/api/admin/feedback/{feedback_id}/reply"),
     ("GET", "/health"),

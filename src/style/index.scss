@@ -197,6 +197,8 @@ body,
 .forum-page .my-post-item .list-excerpt {
   flex: 0 0 100%;
   width: 100%;
+}
+
 /* VTJ 设计器悬浮入口
  * 来源：`@vtj/pro` 的 createDevTools({ link: true }) 在开发期向页面注入 `#vtjLink`
  * （右下角铅笔圆钮，z-index 9999）。它会盖住手机端右下角内容，验收时误认为业务按钮。
