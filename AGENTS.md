@@ -97,6 +97,10 @@
 
 **重要**：旧方案文档 `学生端容器化模块化设计方案_v1.md` 的 9 条主张中 **8 条与系统实际不符**（容器数、数据库类型、拆分必要性、badge 服务、健康检查等）。**以 v2.0 为准，勿以 v1 为据。**
 
+> **2026-11-04 复核（实测）**：上表部分数字已变化——`models/models.py` 2567 行 / 99 类；`.vtj/vue` 80 页 + `.vtj/files` 75；`src/views` 38 页；`backend/tests` 141 个 `test_*.py`；`api/v1` 51 个非 `__init__` py / `main.py` 52 处 `include_router`；门禁 13 个脚本 / 10 层（含 L7）；`api_surface.json` 仍为 37 模块 / 343 条目，但实际 `app.openapi()` 为 414 paths / 462 operations（快照 2026-10-15 已过期）。
+> **数字唯一来源改为 `docs/plans/题库设计模式_事实基线_v2.md`（F1–F30）**；本表仅作 2026-10-26 前基线，引用前先查基线 v2。
+> `solve_problems_files/` 已不存在（目录分层重构完成）：归档只写 `docs/{design,plans,ops,archive}/` + `docs/README.md` 索引，不再新增副本。
+
 ---
 
 ## 4. 实测优先原则
@@ -158,9 +162,10 @@
 
 | 项 | 位置 | 说明 |
 |---|---|---|
-| 项目技能根 | `.dsh/skills` → `.opencode/skills`（Windows 目录联接 / junction） | dsh 按 `project-dsh` 根（rank 100）扫描；项目自有 **22** 个技能（`li-an-workflow`、`vtj-frontend`、`plan-first-workflow`、`completion-verifier`、`scope-guard`、`token-optimization`、`qbdm-design-mode` 等）**正文仍只存放在 `.opencode/skills`**，该目录已在 `.gitignore` 中 |
-| 联接的 Git 处理 | `.gitignore` 中 `.dsh/skills` | 若不加，git 会穿过 junction 把 22 个技能重复登记为未跟踪文件（实测） |
-| MCP 桥接 | `~/.dsh/profiles/desktop/cordis.patch.yml` 的 `mcp-vtj` 行 | `@deepseek-ai/dsh-mcp-client` + `vtj-mcp-server`，工具名 `mcp__vtj__*`（19 个） |
+| 本机 profile | `~/.dsh/profiles/web/`（**只有 web；不存在 `profiles/desktop`**） | dsh `0.1.7-rc.2`；`cordis.patch.yml` 仅 4 条覆盖（ui-settings-general / agent-default-model / subagent / permission）；模型 provider `deepseek-official` / `deepseek-flash` / `reasoningEffort: max`（2026-11-04 实测） |
+| 项目技能根 | `.dsh/skills` → `.opencode/skills`（Windows 目录联接 / junction） | dsh 按 `project-dsh` 根扫描；本机 `.opencode/skills` 实测 **2 个**（`qbdm-role-switch`、`qbdm-design-mode`，历史机 22 个）；正文不入 Git，缺失按 `docs/plans/题库设计模式_技能重建手册_v2.md` 重建 |
+| 联接的 Git 处理 | `.gitignore` 中 `.dsh/skills` | 若不加，git 会穿过 junction 把技能重复登记为未跟踪文件（实测） |
+| MCP 桥接 | `.mcp.json` = `vtj-mcp-server`（19 工具 / 3 资源） | **本机未桥接**：profile `web` 无 `mcp-vtj` 行、`dsh-mcp-client` 未挂载、会话无 `mcp__vtj__*`（2026-11-04 实测）；需要时补 MCP bundle（需用户批准） |
 | 门禁编码 | `backend/scripts/gates/gate_all.py` | 子进程强制 `PYTHONIOENCODING=utf-8`；否则 Windows GBK 控制台下子脚本打印 `✅/ℹ` 会抛 `UnicodeEncodeError`，被误判为 FAIL |
 
 **注意**：MCP 行是**宿主级**配置，`cwd` 固定指向本仓库。在 dsh 里打开其它工作区时
@@ -175,28 +180,33 @@ New-Item -ItemType Junction -Path .dsh\skills -Target (Resolve-Path .opencode\sk
 
 ---
 
-## 8. 题库设计模式 QBDM（2026-10-25 起生效）
+## 8. 题库设计模式 QBDM（2026-11-04 起以 v5 为唯一权威）
 
 任何涉及题库功能模块的设计 / 编码 / 测试 / 归档任务，**开工前先戴帽**，再动手。
 
 | 项 | 位置 | 说明 |
 |---|---|---|
-| 全文（权威） | `docs/superpowers/specs/题库设计模式_v1.md` | 九角色、Q0–Q6、五零指标、分支细则、门禁矩阵、13 条反模式 |
-| **模块层（v2）** | `docs/superpowers/specs/题库设计模式_v2.md` | 25 模块台账、**设计 D1–D10 / 优化 O1–O8 / 测试 T1–T8**、影响面五步、A14–A20 |
-| **「题库设计」模式（v3）** | `docs/superpowers/specs/题库设计模式_v3.md` | 会话执行版：标准/创造/PTC 分层、九角色落地形态、设计/测试/优化三态、技能+MCP+工作流绑定、A21–A26 |
-| 角色卡（热加载） | `docs/superpowers/specs/题库设计模式_角色卡_v1.md` | **换角色只读这个**（3.8KB） |
-| **模块作战卡（热加载）** | `docs/superpowers/specs/题库设计模式_模块作战卡_v1.md` | **领到模块任务只读这个**（一屏） |
-| **模块台账** | `docs/design/题库模块台账_v1.md` + `.json` | 25 模块 × 端点/页面/测试/事件，由 `gen_module_ledger.py` 实测生成，勿手改 |
-| 技能（自动触发） | `qbdm-role-switch`（`.opencode/skills/qbdm-role-switch/SKILL.md`） | 已实测被 dsh 即时发现；因 `.opencode/` 在 `.gitignore` 中，**技能正文不纳入 Git**，缺失去从角色卡文档重建 |
-| 模式入口 CLI | `python scripts/qbdm/qbdm.py role <CODE> / gate --role <CODE> [--run] / modules / module <id> / design <id> --state design\|test\|optimize / status` | 角色、门禁、模块三段清单、**三态多角色管线**一条命令可查；`status` 自检模式资产 |
-| 装载预算闸 | `scripts/qbdm/ctx_budget.py` | 装载前估算 token 并对照 T0–T3 预算（Z4 可测） |
+| **总纲（v5，现行）** | `docs/plans/题库设计模式_v5.md` | **唯一入口总纲**：GitHub 分工接管（模块 4/7）、三分支方案、MCP/Skills/Workflows 重点分析、DeepInfer 契约、Token 100% 可审计协议、九角色、Q0–Q6 + 三态、门禁、A1–A39、G1–G27 |
+| **事实基线（v2，数字唯一来源）** | `docs/plans/题库设计模式_事实基线_v2.md` | F1–F30（2026-11-04 实测）：主线/分支/契约/装配/ORM/页面/测试/门禁/技能/MCP/dsh/DeepInfer/模块 4/7/Phase 2；v1 的历史错值保留为反面凭证 |
+| 热加载角色卡（v3） | `docs/plans/题库设计模式_角色卡_v3.md` | **换角色只读这个**（声明头 v5、九角色真实技能、Token 自检、分支一屏） |
+| 热加载模块作战卡（v3） | `docs/plans/题库设计模式_模块作战卡_v3.md` | **领到模块任务只读这个**（开工五步、M1–M12、D/O/T、模块 4/7 入口） |
+| 技能重建手册（v2） | `docs/plans/题库设计模式_技能重建手册_v2.md` | `.opencode/skills` 不入 Git：换机按 16 技能清单重建（本机缺 13 个） |
+| 模块 4/7 接管档案（v1） | `docs/plans/题库设计模式_模块4_7交接档案_v1.md` | 模块 4/7 的分支、页面、端点、表、测试、Phase 2 现状与下一步任务 |
+| 历史版本（v1–v4） | `docs/superpowers/specs/题库设计模式_v1/v2/v3.md` + `docs/plans/题库设计模式_v4.md` | v4 已被 v5 取代；v1–v3 仅追溯用 |
+| **模块台账** | `docs/design/题库模块台账_v1.md` + `.json` | 25 模块 × 端点/页面/测试/事件；生成于 2026-10-30，**当前 `--check` = DRIFT**（模块 4 未入账、模块 7 为 stub），重生成单独立项 |
+| 模式入口 CLI | `python scripts/qbdm/qbdm.py role / gate / modules / module / design / branch / handoff / token / status` | 角色、门禁、模块三段清单、三态管线、**分支拓扑、模块 4/7 接管、Token 账单**一条命令可查；`status` 自检模式资产 |
+| 装载预算闸 / 测试扫描 | `scripts/qbdm/ctx_budget.py` / `scripts/qbdm/test_sweep.py` | 装载前估算 token（Z4）；全量 pytest 挂起时拿 OK/FAIL/HANG 三态 |
+| 机器可读绑定 | `scripts/qbdm/design_mode.json` | `version: v5`，含 roles/states/mcp/github/token/deepinfer/facts 指针 |
 
-**最少记住 5 条**：
+**最少记住 9 条**：
 1. 九角色 = ARCH / PM / DATA / BE / API / FE / SEC / QA / DOC，**一次只戴一顶帽子**；仲裁链 `SEC > API > ARCH > PM > DATA > BE ≈ FE > QA > DOC`。
 2. 流程 Q0→Q6，**Q2/Q3/Q4/Q5/Q6 不可跳**；方案须用户批准后才进入实施。
-3. 五零指标：Z1 重复读=0、Z2 未验证断言=0、Z3 返工=0、Z4 超预算=0、Z5 归档遗漏=0。
-4. 没有门禁输出的"完成"一律判为未完成（与 `completion-verifier` 一致）。
-5. 模块任务先跑 `python scripts/qbdm/qbdm.py module <id>`：端点/页面/测试/门禁一次看全；台账漂移用 `gen_module_ledger.py --check` 发现。
-6. 整套「题库设计」模式用 `python scripts/qbdm/qbdm.py design <id> --state design|test|optimize`：三态管线、技能、MCP、门禁一次打印；模式全文见 v3。
+3. 五零指标：Z1 重复读=0、Z2 未验证断言=0、Z3 返工=0、Z4 超预算=0、Z5 归档遗漏=0；每轮必须写 `[TOKEN]` 账单（v5 §6）。
+4. 没有门禁输出的"完成"一律判为未完成；未跑的层标「未验证 + 验证方式」。
+5. 模块任务先跑 `python scripts/qbdm/qbdm.py module <id>`；模块 4/7 先跑 `qbdm.py handoff` 并读接管档案。
+6. 分支：**只在子分支干活、只向父域合并、禁止直连 main**；父 ref 与斜杠子 ref 同仓不可并存（D/F），默认 `feat/<模块>-<子任务>`。
+7. 用户只负责模块 4（学习计划）/ 7（联考小智）；其他模块只读，跨模块需求走 Handoff + 用户裁决。
+8. 本机 MCP 未桥接、DeepInfer 零证据：文档不得写「已接入」；dsh 唯一 profile 是 `web`（不是 desktop）。
+9. 数字只认事实基线 v2；v1–v4 与 AGENTS §3 旧表均为历史输入（api_surface 343 条是 2026-10-15 冻结值，实际 openapi 462 操作）。
 
 > 与第 7 节的关系：第 7 节讲**工具怎么接**，本节讲**任务怎么跑**，两者不重叠。

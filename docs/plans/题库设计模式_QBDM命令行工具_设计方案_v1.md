@@ -1,6 +1,7 @@
 # 题库设计模式 · QBDM 命令行工具 设计方案 v1
 
 > 状态：**✅ 已实施（2026-10-26，提交 `76a36b8`）**——`scripts/qbdm/qbdm.py` 已建（293 行，只读零依赖），`module` / `gate` 两条子命令可用，交叉校验与基线三项均通过。
+> **v5 扩展（2026-11-04）**：CLI 已扩到 role/gate/modules/module/design/branch/handoff/token/status；本文 §7 的 v1.1（design 三态）已完成，另新增 GitHub 工作域视图（`branch`/`handoff`）与 Token 协议视图（`token`），详见 `docs/plans/题库设计模式_v5.md` 与事实基线 v2 F13。
 > 日期：2026-10-26
 > 背景：旧版 QBDM 文档（v1/v2/v3 + 角色卡）把 `python scripts/qbdm/qbdm.py …` 写成开工第一步，但 **`scripts/qbdm/` 目录根本不存在**（事实基线 R3）。
 > 目标：把这个空头承诺变成**真能跑、只读、零依赖**的小工具。
