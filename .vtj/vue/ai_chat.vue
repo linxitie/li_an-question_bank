@@ -1034,18 +1034,90 @@ export default defineComponent({
       }
     }
 
-    // AI学习教练：按真实今日计划生成今日建议（失败保留每日金句兜底）
+    // AI学习教练：并行聚合 5 个真实只读接口的数据，生成今日建议（失败保留每日金句兜底）
+    // 字段口径均按后端源码核对：/api/stats/dashboard → todayQuestions/weeklyQuestions/totalQuestions/
+    // accuracyRate/monthDays/streakDays；/api/achievements/progress → level/total_coins；
+    // /api/wrong-questions/review/queue → total/items；/api/stats/weekly-checkin → totalSigned/progress；
+    // /api/plan/today → total/done。说明：这 5 个接口均无「本周学习时长」字段（时段在 practice-trend），故不纳入。
     async function loadCoachSuggestion() {
-      try {
-        let ctxText = '暂无今日计划数据';
-        const r = await window.__VTJ_AUTH__.apiFetch('/api/plan/today');
-        if (r.ok) {
-          const d = await r.json();
-          const items = d && d.today ? d.today : (d.items || []);
-          const lines = items.slice(0, 6).map((t) => (t.title || '') + (t.is_completed === 1 ? '（已完成）' : ''));
-          if (lines.length) ctxText = lines.join('；');
+      // 单接口取 JSON：非 2xx（含 401/404）或解析失败一律返回 null，静默跳过，不弹错、不阻塞
+      const fetchJson = async (url) => {
+        const r = await window.__VTJ_AUTH__.apiFetch(url);
+        if (!r || !r.ok) return null;
+        try {
+          return await r.json();
+        } catch (e) {
+          return null;
         }
-        const reply = await callAiOneShot('【学习数据】今日计划：' + ctxText, 'coach');
+      };
+      try {
+        const results = await Promise.allSettled([
+          fetchJson('/api/stats/dashboard'),
+          fetchJson('/api/achievements/progress'),
+          fetchJson('/api/wrong-questions/review/queue'),
+          fetchJson('/api/stats/weekly-checkin'),
+          fetchJson('/api/plan/today'),
+        ]);
+        const take = (r) => (r.status === 'fulfilled' && r.value && typeof r.value === 'object' ? r.value : null);
+        const dash = take(results[0]);
+        const ach = take(results[1]);
+        const wrong = take(results[2]);
+        const week = take(results[3]);
+        const plan = take(results[4]);
+        const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+        const lines = [];
+        // ① 今日计划完成度（/api/plan/today）
+        if (plan) {
+          const t = num(plan.total);
+          const d = num(plan.done);
+          if (t !== null && d !== null) lines.push('今日计划：完成 ' + d + '/' + t + ' 项');
+        }
+        // ② 本周做题量 + ③ 正确率（/api/stats/dashboard）
+        if (dash) {
+          const wq = num(dash.weeklyQuestions);
+          if (wq !== null) lines.push('本周做题：' + wq + ' 题');
+          const acc = num(dash.accuracyRate);
+          if (acc !== null) lines.push('把握正确率：' + acc + '%');
+        }
+        // ④ 连续打卡天数（/api/stats/dashboard）
+        if (dash) {
+          const sd = num(dash.streakDays);
+          if (sd !== null) lines.push('连续打卡：' + sd + ' 天');
+        }
+        // ⑤ 本周签到（/api/stats/weekly-checkin）
+        if (week) {
+          const ts = num(week.totalSigned);
+          if (ts !== null) {
+            const pg = num(week.progress);
+            lines.push('本周签到：' + ts + '/7 天' + (pg !== null ? '（' + pg + '%）' : ''));
+          }
+        }
+        // ⑥ 待复习错题条数（/api/wrong-questions/review/queue）
+        if (wrong) {
+          let wt = num(wrong.total);
+          if (wt === null && Array.isArray(wrong.items)) wt = wrong.items.length;
+          if (wt !== null) lines.push('待复习错题：' + wt + ' 条');
+        }
+        // ⑦ 累计做题与本月学习天数（/api/stats/dashboard）
+        if (dash) {
+          const tq = num(dash.totalQuestions);
+          const md = num(dash.monthDays);
+          const seg = [];
+          if (tq !== null) seg.push('累计 ' + tq + ' 题');
+          if (md !== null) seg.push('本月学习 ' + md + ' 天');
+          if (seg.length) lines.push(seg.join('，'));
+        }
+        // ⑧ 成长等级与金币（/api/achievements/progress）
+        if (ach) {
+          const lv = num(ach.level);
+          const coins = num(ach.total_coins);
+          const seg = [];
+          if (lv !== null) seg.push('等级 Lv.' + lv);
+          if (coins !== null) seg.push('金币 ' + coins);
+          if (seg.length) lines.push(seg.join('，'));
+        }
+        if (!lines.length) return; // 五个接口均无可用数据：保留每日金句兜底
+        const reply = await callAiOneShot('【学习数据】' + lines.slice(0, 8).join('\n'), 'coach');
         const parsed = parseAiJson(reply);
         if (parsed && parsed.suggestion) coachQuote.value = String(parsed.suggestion);
       } catch (e) { /* 保留每日金句兜底 */ }
@@ -1060,18 +1132,81 @@ export default defineComponent({
       state.showCoachCard = false;
     }
 
-    // 模拟面试
+    // 模拟面试（页面内本地题库：按考官风格抽题，本场不重复）
     const interviewQuestions = [
-      '如果让你组织一次校园反诈宣传活动，你会怎么开展？',
-      '你为什么想当一名移民管理警察？',
-      '如果在执勤时遇到群众不配合，你会怎么处理？',
-      '请谈谈你对“科技强警”的理解。',
-      '如果领导给你安排了一项你不熟悉的工作，你会怎么做？',
+      // —— 应急处突 ——
+      { q: '如果在执勤时遇到群众不配合，你会怎么处理？', tag: '应急处突' },
+      { q: '口岸现场一名旅客因证件问题情绪激动、大声吵闹，你会怎么处置？', tag: '应急处突' },
+      { q: '你在服务大厅值班时，突然有位老人晕倒在地，你会怎么办？', tag: '应急处突' },
+      { q: '执勤中发现一名可疑人员试图翻越隔离设施，你会如何应对？', tag: '应急处突' },
+      { q: '夜间巡逻时发现有人聚集争执、有升级趋势，你会怎么处理？', tag: '应急处突' },
+      { q: '如果执法过程中有群众举着手机拍摄并扬言断章取义发到网上，你会怎么应对？', tag: '应急处突' },
+      { q: '有群众在微信群散播关于你单位的不实言论，领导让你去处理，你会怎么做？', tag: '应急处突' },
+      // —— 组织活动 ——
+      { q: '如果让你组织一次校园反诈宣传活动，你会怎么开展？', tag: '组织活动' },
+      { q: '领导让你牵头组织一次口岸反走私联合演练，你会怎么准备？', tag: '组织活动' },
+      { q: '让你在单位内部组织一次警务技能比武，你会怎么策划？', tag: '组织活动' },
+      { q: '你所在派出所要开展一次“为民服务”入户走访活动，让你负责，你怎么安排？', tag: '组织活动' },
+      { q: '单位准备组织新警入职培训，领导把培训方案交给你，你会怎么做？', tag: '组织活动' },
+      // —— 自我认知 ——
+      { q: '你为什么想当一名移民管理警察？', tag: '自我认知' },
+      { q: '如果领导给你安排了一项你不熟悉的工作，你会怎么做？', tag: '自我认知' },
+      { q: '你觉得自己最大的优点和最大的短板分别是什么？', tag: '自我认知' },
+      { q: '如果这次面试没能被录取，你会怎么打算？', tag: '自我认知' },
+      { q: '你的家人不太支持你去边检一线工作，你会怎么和他们沟通？', tag: '自我认知' },
+      { q: '请谈谈你过去经历过的一次失败，它给你带来了什么影响？', tag: '自我认知' },
+      // —— 综合分析 ——
+      { q: '请谈谈你对“科技强警”的理解。', tag: '综合分析' },
+      { q: '有人说“执法既要有力度，也要有温度”，你怎么看？', tag: '综合分析' },
+      { q: '现在不少年轻人选择考公，有人说是为了稳定，你怎么看？', tag: '综合分析' },
+      { q: '谈谈你对“人民警察为人民”这句话的理解。', tag: '综合分析' },
+      { q: '有人说基层工作又苦又累，你怎么看待基层民警的职业价值？', tag: '综合分析' },
+      // —— 警务实务 ——
+      { q: '接警后到达现场，发现是邻里纠纷且有人员受伤，你会怎么处置？', tag: '警务实务' },
+      { q: '办理一起行政案件时，当事人提出要请律师，你应当如何回应？', tag: '警务实务' },
+      { q: '群众来派出所报警称自己遭遇了网络诈骗，你会怎么处理？', tag: '警务实务' },
+      { q: '你在口岸查验中发现旅客护照疑似伪造，应当如何处置？', tag: '警务实务' },
+      { q: '执勤时你发现同事的做法不符合规定，你会怎么做？', tag: '警务实务' },
     ];
+
+    // 考官风格标签（模板与评分共用同一份映射，避免重复内联）
+    const INTERVIEW_ROLE_STYLE = { strict: '严肃考官', gentle: '温和考官', pro: '专业考官' };
+    // 风格 → 出题偏好（轻量过滤，过滤后为空则回退全库）
+    const INTERVIEW_ROLE_TAGS = {
+      strict: ['应急处突', '综合分析'],
+      gentle: ['自我认知', '综合分析'],
+      pro: ['警务实务', '组织活动'],
+    };
+    // 本场已出题索引（startInterview 时清空；题库抽完则清空重来）
+    const askedInterviewIdx = [];
+
+    // 从本地题库抽一道本场未出过的题：优先命中风格偏好标签
+    function drawInterviewQuestion() {
+      const preferred = INTERVIEW_ROLE_TAGS[state.interviewRole] || [];
+      let unasked = [];
+      for (let i = 0; i < interviewQuestions.length; i++) {
+        if (askedInterviewIdx.indexOf(i) < 0) unasked.push(i);
+      }
+      if (!unasked.length) {
+        // 题库已全部出过：清空记录，重新开始
+        askedInterviewIdx.length = 0;
+        for (let i = 0; i < interviewQuestions.length; i++) unasked.push(i);
+      }
+      let pool = [];
+      for (let j = 0; j < unasked.length; j++) {
+        if (preferred.indexOf(interviewQuestions[unasked[j]].tag) >= 0) pool.push(unasked[j]);
+      }
+      if (!pool.length) pool = unasked; // 风格过滤后为空 → 用全库
+      const idx = pool[Math.floor(Math.random() * pool.length)];
+      askedInterviewIdx.push(idx);
+      return interviewQuestions[idx].q;
+    }
 
     function startInterview() {
       state.interviewMode = true;
       state.moodMode = false;
+      // 每次进入面试都从头抽题
+      askedInterviewIdx.length = 0;
     }
 
     function exitInterview() {
@@ -1086,19 +1221,8 @@ export default defineComponent({
     async function nextQuestion() {
       state.interviewResult = null;
       state.notice = '';
-      const roleLabel = { strict: '严肃考官', gentle: '温和考官', pro: '专业考官' }[state.interviewRole] || '专业考官';
-      try {
-        const reply = await callAiOneShot('【出题】考官风格：' + roleLabel + '。请出一道公安联考面试题。', 'interview');
-        const parsed = parseAiJson(reply);
-        if (parsed && parsed.question) {
-          state.interviewQuestion = String(parsed.question);
-          return;
-        }
-      } catch (e) {
-        state.notice = 'AI 出题暂不可用，已使用备用题';
-      }
-      const randomIdx = Math.floor(Math.random() * interviewQuestions.length);
-      state.interviewQuestion = interviewQuestions[randomIdx];
+      // 稳定优先：只从本地题库抽题，不再调用 AI 出题；AI 仅用于评分（submitAnswer）
+      state.interviewQuestion = drawInterviewQuestion();
     }
 
     async function submitAnswer() {
@@ -1110,7 +1234,7 @@ export default defineComponent({
       }
       state.interviewResult = null;
       state.notice = '';
-      const roleLabel = { strict: '严肃考官', gentle: '温和考官', pro: '专业考官' }[state.interviewRole] || '专业考官';
+      const roleLabel = INTERVIEW_ROLE_STYLE[state.interviewRole] || INTERVIEW_ROLE_STYLE.pro;
       try {
         const reply = await callAiOneShot(
           '【评分】考官风格：' + roleLabel

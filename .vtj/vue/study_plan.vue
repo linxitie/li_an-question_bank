@@ -505,6 +505,8 @@
           isBreak: false,
           completed: 0,
           minutes: 0,
+          // 今日专注秒数累加（minutes 由它 floor 得出，修复旧写法「分钟数恒为 0」的问题）
+          focusSeconds: 0,
           timer: null,
         },
         // 智能排课
@@ -528,6 +530,66 @@
       const subjects = ['行测', '申论', '公安专业科目'];
       const levels = ['零基础', '有基础', '冲刺'];
       const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
+
+      // ===== 本地存储小工具（番茄钟当日记录 / 作文草稿 / 作文历史）=====
+      // 本地时区日期键：用 new Date() 拼 YYYY-MM-DD，避免 toISOString() 的 UTC 偏移造成跨日错位
+      function localDateKey() {
+        const d = new Date();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${d.getFullYear()}-${m}-${day}`;
+      }
+
+      // 番茄钟按天分桶：li_an_pomodoro_<YYYY-MM-DD>，跨天自然从 0 计
+      function pomodoroStorageKey() {
+        return 'li_an_pomodoro_' + localDateKey();
+      }
+
+      // 读 JSON：隐私模式 / 配额异常 / 脏数据一律吞掉，返回兜底值，页面不白屏
+      function safeReadJson(key, fallback) {
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) return fallback;
+          const parsed = JSON.parse(raw);
+          return parsed === null || parsed === undefined ? fallback : parsed;
+        } catch (e) {
+          return fallback;
+        }
+      }
+
+      // 写 JSON：同上，存储不可用时静默降级为内存态
+      function safeWriteJson(key, value) {
+        try {
+          window.localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) { /* 忽略：不影响页面功能 */ }
+      }
+
+      // 落盘当日累计：completed=已完成番茄数，minutes=专注分钟数
+      function savePomodoro() {
+        safeWriteJson(pomodoroStorageKey(), {
+          completed: Number(state.pomodoro.completed) || 0,
+          minutes: Number(state.pomodoro.minutes) || 0,
+        });
+      }
+
+      // 恢复当日累计（刷新页面不丢；坏数据 try/catch 在 safeReadJson 内已兜住）
+      function restorePomodoro() {
+        const saved = safeReadJson(pomodoroStorageKey(), null);
+        if (saved && typeof saved === 'object') {
+          const c = Number(saved.completed);
+          const m = Number(saved.minutes);
+          if (Number.isFinite(c) && c >= 0) state.pomodoro.completed = Math.floor(c);
+          if (Number.isFinite(m) && m >= 0) {
+            state.pomodoro.minutes = Math.floor(m);
+            // 用「分钟 × 60」回填秒数基线，保证本轮继续计时后分钟数单调递增
+            state.pomodoro.focusSeconds = state.pomodoro.minutes * 60;
+          }
+        }
+      }
+
+      restorePomodoro();
+      // 节流基线：只在分钟数真正变化时落盘，避免每秒写 localStorage
+      let lastSavedMinutes = state.pomodoro.minutes;
 
       // 计算科目分布（动态）
       function getSubjectStats() {
@@ -661,18 +723,27 @@
           // 暂停
           clearInterval(p.timer);
           p.running = false;
+          savePomodoro(); // 暂停即落盘当日累计
         } else {
           // 开始
           p.running = true;
           p.timer = setInterval(() => {
             p.seconds--;
             if (!p.isBreak) {
-              p.minutes = Math.round((p.minutes * 60 + 1) / 60);
+              // 专注秒数累加，每满 60 秒 minutes +1（共原写法 Math.round((m*60+1)/60) 自身取整恒为 0）
+              p.focusSeconds++;
+              p.minutes = Math.floor(p.focusSeconds / 60);
+              // 节流：仅分钟数变化时写一次，避免每秒写 localStorage
+              if (p.minutes !== lastSavedMinutes) {
+                lastSavedMinutes = p.minutes;
+                savePomodoro();
+              }
             }
             if (p.seconds <= 0) {
               if (!p.isBreak) {
                 // 专注完成，进入休息
                 p.completed++;
+                savePomodoro(); // 完成一个番茄即落盘 completed 累计
                 p.isBreak = true;
                 p.seconds = 5 * 60;
               } else {
@@ -692,6 +763,8 @@
         p.running = false;
         p.isBreak = false;
         p.seconds = 25 * 60;
+        // 注意：重置只清当前计时，不清当日已完成累计（completed / minutes 属「今日」统计，仅随日期切换归零）
+        savePomodoro();
       }
 
       // 智能排课：切换任务完成状态
@@ -772,12 +845,66 @@
         };
       }
 
+      // ===== AI 作文批改：草稿 + 历史（本地存储）=====
+      const ESSAY_DRAFT_KEY = 'li_an_essay_draft_v1';
+      const ESSAY_HISTORY_KEY = 'li_an_essay_history_v1';
+
+      // 保存作文草稿（题目 + 正文）：批改开始时保存一次，不监听逐字符输入
+      function saveEssayDraft() {
+        safeWriteJson(ESSAY_DRAFT_KEY, {
+          topic: state.essay.topic || '',
+          content: state.essay.content || '',
+        });
+      }
+
+      // 恢复草稿：仅当页面 state 为空时才填，避免覆盖用户刚输入的内容
+      function restoreEssayDraft() {
+        const d = safeReadJson(ESSAY_DRAFT_KEY, null);
+        if (d && typeof d === 'object') {
+          if (!state.essay.topic && typeof d.topic === 'string') state.essay.topic = d.topic;
+          if (!state.essay.content && typeof d.content === 'string') state.essay.content = d.content;
+        }
+      }
+
+      // 读历史：数组元素 {ts, total}，只保留最近 20 条
+      function readEssayHistory() {
+        const arr = safeReadJson(ESSAY_HISTORY_KEY, []);
+        if (!Array.isArray(arr)) return [];
+        return arr.filter((x) => x && Number.isFinite(Number(x.total))).slice(-20);
+      }
+
+      function writeEssayHistory(arr) {
+        safeWriteJson(ESSAY_HISTORY_KEY, arr.slice(-20));
+      }
+
+      // 统一收口：算分差 → 追加对比文案到 comment → push 历史
+      // 口径：与历史中「最近一条」批改比较（不限当天，便于跨天看进步）
+      // 示例回退（isFallback=true）同样记录并参与对比，仅额外打标便于日后过滤
+      function applyEssayHistory(result, isFallback) {
+        const item = Object.assign({}, result, { isFallback: !!isFallback });
+        const history = readEssayHistory();
+        const prev = history.length ? history[history.length - 1] : null;
+        let extra = '';
+        if (prev) {
+          const diff = item.total - Number(prev.total);
+          const verdict = diff > 0 ? '+' + diff : (diff < 0 ? String(diff) : '持平');
+          extra = '\n\n📈 较上次批改：' + verdict + ' 分（上次 ' + Number(prev.total) + ' 分）';
+        } else {
+          extra = '\n\n📈 首次批改，已记录分数，下次可看进步';
+        }
+        item.comment = String(item.comment || '') + extra;
+        history.push({ ts: Date.now(), total: item.total });
+        writeEssayHistory(history);
+        return item;
+      }
+
       async function gradeEssay() {
         if (!state.essay.content.trim()) {
           alert('请先输入作文内容！');
           return;
         }
         if (state.essay.grading) return;
+        saveEssayDraft(); // 批改开始即存草稿，刷新不丢题目与正文
         state.essay.grading = true;
         try {
           const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/chat', {
@@ -792,14 +919,14 @@
           const data = await res.json();
           const parsed = res.ok && data && data.reply ? parseAiJson(data.reply) : null;
           if (parsed && parsed.total !== undefined && Array.isArray(parsed.dimensions)) {
-            state.essay.result = normalizeEssayResult(parsed);
+            state.essay.result = applyEssayHistory(normalizeEssayResult(parsed), false);
             state.error = '';
           } else {
-            state.essay.result = fallbackEssayResult();
+            state.essay.result = applyEssayHistory(fallbackEssayResult(), true);
             state.error = (data && data.detail) || 'AI 批改暂不可用，已展示示例评分';
           }
         } catch (e) {
-          state.essay.result = fallbackEssayResult();
+          state.essay.result = applyEssayHistory(fallbackEssayResult(), true);
           state.error = '网络异常，已展示示例评分';
         } finally {
           state.essay.grading = false;
@@ -862,6 +989,9 @@
       }
 
       onMounted(async () => {
+        // 恢复作文草稿（仅 state 为空时填充）与番茄钟当日累计
+        restoreEssayDraft();
+        restorePomodoro();
         try {
           const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
           const data = await res.json();
