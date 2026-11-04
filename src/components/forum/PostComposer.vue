@@ -203,6 +203,21 @@ const uploading = ref(false);
 const error = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
 
+/** 表单是否还是空的（用于判断「能不能安全回填草稿」） */
+function isFormEmpty(): boolean {
+  return !form.title.trim() && !stripHtml(form.content) && form.attachments.length === 0;
+}
+
+/** 把 initial 回填进表单 */
+function applyInitial(init: Partial<PostDraft>) {
+  form.title = init.title ?? '';
+  form.content = init.content ?? '';
+  form.attachments = [...(init.attachments ?? [])];
+  form.visibility = init.visibility === 'CLASSES' ? 'CLASSES' : 'ALL';
+  form.visibleClasses = [...(init.visibleClasses ?? [])];
+  form.isTop = Boolean(init.isTop);
+}
+
 /** 打开时把 initial 回填进去；关闭时清空错误提示 */
 watch(
   () => props.visible,
@@ -211,15 +226,23 @@ watch(
       error.value = '';
       return;
     }
-    const init = props.initial || {};
-    form.title = init.title ?? '';
-    form.content = init.content ?? '';
-    form.attachments = [...(init.attachments ?? [])];
-    form.visibility = init.visibility === 'CLASSES' ? 'CLASSES' : 'ALL';
-    form.visibleClasses = [...(init.visibleClasses ?? [])];
-    form.isTop = Boolean(init.isTop);
+    applyInitial(props.initial || {});
   },
   { immediate: true }
+);
+
+/**
+ * 草稿是异步拉取的（父页先 showXxx=true，再 fetchMyForumDraft），
+ * 只监听 visible 会漏掉「后到的 initial」——用户就会以为草稿没保存成功（2026-11-03 第 3 轮修复）。
+ * 回填条件：弹窗打开 且 表单仍为空，避免覆盖用户正在输入的内容。
+ */
+watch(
+  () => props.initial,
+  (init) => {
+    if (!props.visible || !init) return;
+    if (!isFormEmpty()) return;
+    applyInitial(init);
+  }
 );
 
 const attachHint = `支持 doc / docx / xlsx / pdf / png / jpg，文档单个不超过 20 MB、图片不超过 5 MB，最多 ${props.maxAttachments} 个`;

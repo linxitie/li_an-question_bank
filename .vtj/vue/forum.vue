@@ -62,7 +62,7 @@
                   <span class="meta-dot"> ·</span>
                   <span class="meta-date">{{ post.date }}</span>
                 </div>
-                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
+                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }"><span v-if="post.aiTitle" class="ai-title-tag">AI生成</span>{{ post.title }}</h4>
                 <p class="post-excerpt"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
                 <AttachmentList
                   v-if="post.attachments && post.attachments.length"
@@ -70,12 +70,12 @@
                   mode="post" />
 
                 <div class="post-meta">
-                  <span class="meta-likes" @click.stop="toggleHeart(post)" :title="post.reactionSummary || '喜欢'">
+                  <span class="meta-likes" :class="{ active: post.liked }" @click.stop="toggleHeart(post)" :title="post.reactionSummary || '喜欢'">
                     <span class="heart-icon" :class="{ active: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                     <span> {{ post.likeCount }}</span>
                   </span>
                   <span class="meta-dot"> ·</span>
-                  <span class="meta-favs" @click.stop="toggleFavorite(post)" title="收藏">
+                  <span class="meta-favs" :class="{ active: post.favorited }" @click.stop="toggleFavorite(post)" title="收藏">
                     <XIcon
                       :icon="post.favorited ? StarFilled : Star"
                       :size="13"
@@ -116,7 +116,7 @@
               @click="viewPost(hot)">
               <span class="hot-rank" :class="'rank-' + hot.rank">{{ hot.rank }}</span>
               <span class="hot-main">
-                <span class="hot-title">{{ hot.title }}</span>
+                <span class="hot-title"><span v-if="hot.aiTitle" class="ai-title-tag">AI生成</span>{{ hot.title }}</span>
                 <!-- 2026-11-03：列表只显示标题已不够用，补 2 行正文摘要（后端已带 200 字 content） -->
                 <span class="list-excerpt">{{ excerptOf(hot) }}</span>
               </span>
@@ -142,7 +142,7 @@
                 :key="mp.id"
                 class="my-post-item"
                 @click="openPostDetail(mp)">
-                <span class="my-post-title">{{ mp.title }}</span>
+                <span class="my-post-title"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
                 <span class="my-post-stats">
                   <span class="my-stat">❤️ {{ mp.likeCount }}</span>
                   <span class="my-stat">💬 {{ mp.commentCount }}</span>
@@ -199,7 +199,7 @@
               :key="fp.id"
               class="fav-item"
               @click="openPostDetail(fp)">
-              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }">{{ fp.title }}</span>
+              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }"><span v-if="fp.aiTitle" class="ai-title-tag">AI生成</span>{{ fp.title }}</span>
               <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
               <span class="list-excerpt">{{ excerptOf(fp) }}</span>
               <span class="fav-item-meta">
@@ -291,7 +291,7 @@
             </div>
             <!-- 帖子正文 -->
             <h3 class="detail-title" :style="{ color: titleColorValue(state.currentPost.titleColor) }">
-              {{ state.currentPost.title }}
+              <span v-if="state.currentPost.aiTitle" class="ai-title-tag">AI生成</span>{{ state.currentPost.title }}
             </h3>
             <div class="detail-content"><ForumContent :content="state.currentPost.content" :format="state.currentPost.contentFormat" /></div>
             <!-- 图片 + 文档附件 -->
@@ -301,7 +301,7 @@
               mode="post" />
             <!-- 帖子互动数据 -->
             <div class="detail-stats">
-              <span class="stat-action" @click="toggleLike(state.currentPost)">
+              <span class="stat-action" :class="{ active: state.currentPost.liked }" @click="toggleLike(state.currentPost)">
                 <XIcon
                   :icon="state.currentPost.liked ? StarFilled : Star"
                   :size="14"
@@ -486,7 +486,7 @@
               class="my-post-item"
               @click="viewPost(hp)">
               <span class="hot-rank" :class="'rank-' + (hp.rank <= 3 ? hp.rank : '')">{{ hp.rank }}</span>
-              <span class="my-post-title">{{ hp.title }}</span>
+              <span class="my-post-title"><span v-if="hp.aiTitle" class="ai-title-tag">AI生成</span>{{ hp.title }}</span>
               <!-- 2026-11-03 第 2 轮：查看更多弹窗此前只有标题，补正文摘要 -->
               <span class="list-excerpt">{{ excerptOf(hp) }}</span>
               <span class="my-post-stats">
@@ -516,7 +516,7 @@
               :key="mp.id"
               class="my-post-item"
               @click="openPostDetail(mp)">
-              <span class="my-post-title">{{ mp.title }}</span>
+              <span class="my-post-title"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
               <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
               <span class="list-excerpt">{{ excerptOf(mp) }}</span>
               <span class="my-post-stats">
@@ -1460,6 +1460,8 @@
           content: p?.content ?? '',
           // 正文格式（2026-11-03）：后端下发 TEXT/HTML，渲染时据此选纯文本还是富文本
           contentFormat: p?.contentFormat === 'HTML' ? 'HTML' : 'TEXT',
+          // AI 标题标记（2026-11-03 第 3 轮）
+          aiTitle: Boolean(p?.aiTitle),
           author: (p?.user && p.user.nickname) || '匿名',
           avatar: (p?.user && p.user.avatar) || '',
           date: this.formatTime(p?.createTime),

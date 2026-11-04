@@ -1008,6 +1008,70 @@ def _delta_pct(current: int, previous: int) -> Optional[int]:
     return round((current - previous) / previous * 100)
 
 
+@admin_router.post("/ai-titles/backfill", summary="为无标题帖批量生成 AI 标题")
+async def backfill_ai_titles(
+    limit: int = Query(5, ge=1, le=20, description="本次最多处理多少条，控制 token 成本"),
+    dry_run: bool = Query(False, description="只统计候选，不调用模型"),
+    _: SysUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """给存量「无标题 + 有正文」的帖子补 AI 标题（2026-11-03 第 3 轮）。
+
+    为什么手动触发而不是自动/定时：大模型按调用计费，自动跑会让成本脱离管理员视线。
+    只填空标题，已有标题绝不动；单条失败不影响其它帖子。
+    """
+    from ....services.forum_title_ai import (
+        clean_title,
+        generate_forum_title,
+        needs_ai_title,
+    )
+
+    rows = (
+        db.query(ForumPost)
+        .filter(ForumPost.status == "NORMAL")
+        .order_by(ForumPost.create_time.desc())
+        .limit(200)
+        .all()
+    )
+    candidates = [p for p in rows if needs_ai_title(p.title, p.content)]
+
+    stats = {
+        "candidates": len(candidates),
+        "processed": 0,
+        "generated": 0,
+        "skipped": 0,
+        "errors": 0,
+        "dryRun": dry_run,
+    }
+    if dry_run:
+        return {"success": True, **stats}
+
+    for post in candidates[:limit]:
+        stats["processed"] += 1
+        try:
+            title = clean_title(await generate_forum_title(post.content, post.content_format or "TEXT"))
+        except Exception:  # noqa: BLE001 - 单条失败不影响其它
+            stats["errors"] += 1
+            continue
+
+        if not title or title == "无标题":
+            stats["skipped"] += 1
+            continue
+
+        # 再校验一次：避免并发下把用户刚填的标题覆盖掉
+        fresh = db.query(ForumPost).filter(ForumPost.post_id == post.post_id).first()
+        if not fresh or not needs_ai_title(fresh.title, fresh.content):
+            stats["skipped"] += 1
+            continue
+
+        fresh.title = title
+        fresh.ai_title = 1
+        stats["generated"] += 1
+
+    db.commit()
+    return {"success": True, **stats}
+
+
 @admin_router.get("/dashboard", summary="管理员端论坛数据看板")
 async def admin_dashboard(
     days: int = Query(7, ge=1, le=180, description="统计窗口天数：7 / 30 / 180"),

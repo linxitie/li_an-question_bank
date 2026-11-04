@@ -48,7 +48,7 @@
               :user-id="post.id"
               :user-type="post.authorType || 'student'" />
             <span class="tf-status" :class="`st-${post.status}`">{{ statusLabel(post.status) }}</span>
-            <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
+            <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }"><span v-if="post.aiTitle" class="ai-title-tag">AI生成</span>{{ post.title }}</span>
             <span class="tf-meta">{{ post.authorClass || '未分班' }}</span>
           </div>
           <p class="tf-content"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
@@ -73,7 +73,7 @@
         <div class="tf-modal-card">
           <button class="tf-close" @click="detail = null">×</button>
           <div class="tf-modal-scroll">
-          <h2 :style="{ color: titleColorValue(detail.titleColor) }">{{ detail.title }}</h2>
+          <h2 :style="{ color: titleColorValue(detail.titleColor) }"><span v-if="detail.aiTitle" class="ai-title-tag">AI生成</span>{{ detail.title }}</h2>
           <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
           <p class="tf-content"><ForumContent :content="detail.content" :format="detail.contentFormat" /></p>
           <AttachmentList

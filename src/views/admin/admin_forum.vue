@@ -376,7 +376,7 @@
               <div class="time mono">{{ fmtTime(activePost.createTime) }}</div>
             </div>
             <div class="post-title">
-              {{ activePost.title || '（无标题）' }}
+              <span v-if="activePost.aiTitle" class="ai-title-tag">AI生成</span>{{ activePost.title || '（无标题）' }}
               <span :class="['pill', statusClass(activePost.status)]"><i></i>{{ statusText(activePost.status) }}</span>
               <span v-if="activePost.isTop" class="pill pin"><i></i>置顶</span>
               <span v-if="activePost.isEssence" class="pill essence"><i></i>精华</span>
