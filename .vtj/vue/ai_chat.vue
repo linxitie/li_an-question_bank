@@ -296,16 +296,46 @@
               <button @click="state.showMindMap = false">×</button>
             </div>
             <div class="mindmap-body">
-              <div class="mindmap-center">联考小智</div>
+              <div class="mindmap-center">{{ state.mindMapTopic || '联考小智' }}</div>
               <div class="mindmap-branch left">
-                <div class="branch-item">📚 核心知识点</div>
-                <div class="branch-item">📝 答题技巧</div>
-                <div class="branch-item">⚠️ 易错点</div>
+                <div class="branch-item">
+                  <div class="branch-title">📚 核心知识点</div>
+                  <div class="branch-sub">
+                    <div v-for="item in state.mindMapData.knowledge" :key="item" class="branch-sub-item">{{ item }}</div>
+                  </div>
+                </div>
+                <div class="branch-item">
+                  <div class="branch-title">📝 答题技巧</div>
+                  <div class="branch-sub">
+                    <div v-for="item in state.mindMapData.skills" :key="item" class="branch-sub-item">{{ item }}</div>
+                  </div>
+                </div>
+                <div class="branch-item">
+                  <div class="branch-title">⚠️ 易错点</div>
+                  <div class="branch-sub">
+                    <div v-for="item in state.mindMapData.mistakes" :key="item" class="branch-sub-item">{{ item }}</div>
+                  </div>
+                </div>
               </div>
               <div class="mindmap-branch right">
-                <div class="branch-item">✅ 学习方法</div>
-                <div class="branch-item">🎯 备考策略</div>
-                <div class="branch-item">📊 进步方向</div>
+                <div class="branch-item">
+                  <div class="branch-title">✅ 学习方法</div>
+                  <div class="branch-sub">
+                    <div v-for="item in state.mindMapData.methods" :key="item" class="branch-sub-item">{{ item }}</div>
+                  </div>
+                </div>
+                <div class="branch-item">
+                  <div class="branch-title">🎯 备考策略</div>
+                  <div class="branch-sub">
+                    <div v-for="item in state.mindMapData.strategy" :key="item" class="branch-sub-item">{{ item }}</div>
+                  </div>
+                </div>
+                <div class="branch-item">
+                  <div class="branch-title">📊 进步方向</div>
+                  <div class="branch-sub">
+                    <div v-for="item in state.mindMapData.progress" :key="item" class="branch-sub-item">{{ item }}</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -405,6 +435,15 @@ export default defineComponent({
       recognition: null,
       // 思维导图
       showMindMap: false,
+      mindMapTopic: '',
+      mindMapData: {
+        knowledge: [],
+        skills: [],
+        mistakes: [],
+        methods: [],
+        strategy: [],
+        progress: []
+      },
       // AI角色
       role: 'gentle'
     });
@@ -673,6 +712,39 @@ export default defineComponent({
     }
 
     function showMindMap(idx) {
+      // 获取当前消息内容
+      const msg = state.messages[idx];
+      const topic = msg?.content?.slice(0, 20) || '联考小智';
+
+      // 根据问题关键词生成思维导图内容
+      const content = msg?.content || '';
+      let knowledge = [], skills = [], mistakes = [], methods = [], strategy = [], progress = [];
+
+      if (content.includes('资料分析') || content.includes('行测')) {
+        knowledge = ['增长率', '比重', '倍数', '平均数', '速算技巧'];
+        skills = ['截位直除法', '特殊分数法', '尾数法', '快速找数据', '先看问题再读材料'];
+        mistakes = ['找错数据', '单位换算错', '时间看错', '计算粗心', '公式记错'];
+        methods = ['每天练20题', '总结错题', '限时训练', '先易后难', '错题本复习'];
+        strategy = ['每天30分钟', '每周模考', '薄弱项专项突破', '错题反复做', '总结答题套路'];
+        progress = ['提升做题速度', '提高正确率', '减少粗心错误', '掌握速算技巧', '形成答题节奏'];
+      } else if (content.includes('申论')) {
+        knowledge = ['归纳概括', '综合分析', '提出对策', '应用文写作', '大作文'];
+        skills = ['找点方法', '加工整合', '规范表达', '结构清晰', '字数控制'];
+        mistakes = ['要点不全', '逻辑混乱', '语言不规范', '字数超标', '跑题偏题'];
+        methods = ['每天写1题', '背诵规范表达', '总结答题框架', '积累素材', '对照答案修改'];
+        strategy = ['每天1小时', '每周写1篇大作文', '积累人民日报素材', '总结万能模板', '限时写作'];
+        progress = ['提高找点能力', '规范语言表达', '提升文章结构', '积累素材库', '提高写作速度'];
+      } else {
+        knowledge = ['核心概念', '基本原理', '常见题型', '解题思路', '易错考点'];
+        skills = ['审题技巧', '快速定位', '排除法', '代入法', '蒙题技巧'];
+        mistakes = ['审题不清', '概念混淆', '计算错误', '时间不够', '粗心大意'];
+        methods = ['系统学习知识点', '多做练习题', '整理错题本', '总结规律', '定期复习'];
+        strategy = ['制定学习计划', '分模块突破', '每天坚持学习', '每周模考', '考前冲刺'];
+        progress = ['夯实基础', '提高正确率', '加快做题速度', '掌握应试技巧', '建立知识体系'];
+      }
+
+      state.mindMapTopic = topic;
+      state.mindMapData = { knowledge, skills, mistakes, methods, strategy, progress };
       state.showMindMap = true;
     }
 
@@ -923,6 +995,22 @@ export default defineComponent({
 .mindmap-branch.right .branch-item::before {
   left: -40px;
   background: linear-gradient(90deg, transparent, #764ba2);
+}
+.branch-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.branch-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.branch-sub-item {
+  font-size: 12px;
+  color: #666;
+  padding: 4px 8px;
+  background: #f8f9fc;
+  border-radius: 6px;
 }
 
 /* ===== 语音输入按钮 ===== */
