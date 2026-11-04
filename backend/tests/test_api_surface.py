@@ -55,6 +55,40 @@ KNOWN_EXTRA_OPERATIONS = {
     ("GET", "/api/practice/draft"),
     ("GET", "/api/practice/drafts"),
     ("DELETE", "/api/practice/draft"),
+    # R11 显式批准的新增（2026-11-03，任务「论坛敏感词自生长知识库」）：
+    # 只登记白名单，api_surface.json 仍保持 343 条冻结口径。
+    # 鉴权：require_admin（role_level >= 2）；Agent 无 HTTP 入口，只能经服务层提案。
+    # 输出：词条/政策/判定/任务/提案/审计哈希链/图谱/趋势/红队/Obsidian 投影/对账。
+    ("GET", "/api/v1/admin/content-guard/overview"),
+    ("GET", "/api/v1/admin/content-guard/terms"),
+    ("POST", "/api/v1/admin/content-guard/terms"),
+    ("PATCH", "/api/v1/admin/content-guard/terms/{term_id}"),
+    ("GET", "/api/v1/admin/content-guard/terms/{term_id}/variants"),
+    ("POST", "/api/v1/admin/content-guard/terms/{term_id}/variants"),
+    ("DELETE", "/api/v1/admin/content-guard/variants/{variant_id}"),
+    ("GET", "/api/v1/admin/content-guard/policies"),
+    ("POST", "/api/v1/admin/content-guard/policies"),
+    ("GET", "/api/v1/admin/content-guard/judgments"),
+    ("GET", "/api/v1/admin/content-guard/judgments/{judgment_id}"),
+    ("POST", "/api/v1/admin/content-guard/judgments/{judgment_id}/override"),
+    ("GET", "/api/v1/admin/content-guard/tasks"),
+    ("POST", "/api/v1/admin/content-guard/tasks/{task_id}/resolve"),
+    ("GET", "/api/v1/admin/content-guard/proposals"),
+    ("POST", "/api/v1/admin/content-guard/proposals"),
+    ("POST", "/api/v1/admin/content-guard/proposals/{proposal_id}/approve"),
+    ("POST", "/api/v1/admin/content-guard/proposals/{proposal_id}/reject"),
+    ("GET", "/api/v1/admin/content-guard/audit"),
+    ("GET", "/api/v1/admin/content-guard/audit/verify"),
+    ("GET", "/api/v1/admin/content-guard/graph"),
+    ("GET", "/api/v1/admin/content-guard/stats/trend"),
+    ("POST", "/api/v1/admin/content-guard/detect"),
+    ("POST", "/api/v1/admin/content-guard/redteam/run"),
+    ("GET", "/api/v1/admin/content-guard/redteam/samples"),
+    ("POST", "/api/v1/admin/content-guard/obsidian/export"),
+    ("POST", "/api/v1/admin/content-guard/obsidian/import"),
+    ("POST", "/api/v1/admin/content-guard/reconcile"),
+    ("POST", "/api/v1/admin/content-guard/seed"),
+    ("POST", "/api/v1/admin/content-guard/reload"),
 }
 
 

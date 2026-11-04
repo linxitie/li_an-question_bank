@@ -461,10 +461,12 @@ async def update_user_profile(
         v for v in (update_data.get("nickname"), update_data.get("signature")) if v
     )
     if text_to_check:
-        from ....services.sensitive_words import sensitive_filter, SensitiveLevel
+        from ....services.content_guard import guard_text
 
-        result = sensitive_filter.detect(text_to_check)
-        if result["level"] == SensitiveLevel.BLOCKED:
+        result = guard_text(
+            db, text_to_check, scene="profile", user_id=current_user.user_id
+        )
+        if result.get("decision") == "block" or result.get("level") == "blocked":
             raise HTTPException(status_code=400, detail="昵称或签名包含违规词，请修改后重试")
 
     for key, value in update_data.items():

@@ -140,6 +140,34 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 每日 03:30（北京时间）内容安全知识库自维护：
+    # 红队找盲区 → 跨层对账 → 导出 Obsidian 待审队列。
+    # 离线链路，任何一步失败都只告警，不影响实时审核。
+    def _content_guard_maintenance():
+        from ..core.database import SessionLocal
+        from .content_guard import obsidian, reconcile, redteam
+
+        db = SessionLocal()
+        try:
+            redteam.run(db, limit=50)
+            reconcile.run(db)
+            obsidian.export_all(db)
+            db.commit()
+            logger.info("内容安全知识库自维护完成")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"内容安全知识库自维护失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _content_guard_maintenance,
+        trigger=CronTrigger(hour=3, minute=30, timezone=CST),
+        id="content_guard_maintenance",
+        name="敏感词知识库自维护（红队/对账/投影）",
+        replace_existing=True,
+    )
+
     # 模块4 v2：每日 20:00 站内提醒——今日任务未完成的用户
     def _remind_unfinished_tasks():
         from datetime import datetime as _dt
