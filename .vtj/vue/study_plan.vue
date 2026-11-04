@@ -310,6 +310,40 @@
           </div>
         </div>
 
+        <!-- 番茄钟专注记录 -->
+        <div class="pomodoro-card">
+          <div class="pomodoro-head">
+            <span class="section-title">⏱️ 番茄钟专注</span>
+            <span class="pomodoro-today">今日专注 {{ state.pomodoro.minutes }} 分钟</span>
+          </div>
+          <div class="pomodoro-body">
+            <div class="pomodoro-display" :class="{ running: state.pomodoro.running, break: state.pomodoro.isBreak }">
+              <div class="pomodoro-time">{{ formatTime(state.pomodoro.seconds) }}</div>
+              <div class="pomodoro-mode">{{ state.pomodoro.isBreak ? '休息时间' : '专注时间' }}</div>
+            </div>
+            <div class="pomodoro-controls">
+              <button class="pomodoro-btn primary" @click="togglePomodoro">
+                {{ state.pomodoro.running ? '暂停' : '开始' }}
+              </button>
+              <button class="pomodoro-btn" @click="resetPomodoro">重置</button>
+            </div>
+            <div class="pomodoro-stats">
+              <div class="ps-item">
+                <div class="ps-num">{{ state.pomodoro.completed }}</div>
+                <div class="ps-label">已完成番茄</div>
+              </div>
+              <div class="ps-item">
+                <div class="ps-num">25:00</div>
+                <div class="ps-label">单番茄时长</div>
+              </div>
+              <div class="ps-item">
+                <div class="ps-num">5:00</div>
+                <div class="ps-label">休息时长</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- AI 提示 -->
         <div v-if="state.plan.tips" class="tips-card">
           <div class="tips-icon">💡</div>
@@ -361,6 +395,15 @@
           weak_subjects: ['行测'],
           daily_hours: 3,
           level: '有基础',
+        },
+        // 番茄钟
+        pomodoro: {
+          seconds: 25 * 60,
+          running: false,
+          isBreak: false,
+          completed: 0,
+          minutes: 0,
+          timer: null,
         },
       });
 
@@ -486,6 +529,53 @@
         }
       }
 
+      // 番茄钟：格式化时间
+      function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      }
+
+      // 番茄钟：切换开始/暂停
+      function togglePomodoro() {
+        const p = state.pomodoro;
+        if (p.running) {
+          // 暂停
+          clearInterval(p.timer);
+          p.running = false;
+        } else {
+          // 开始
+          p.running = true;
+          p.timer = setInterval(() => {
+            p.seconds--;
+            if (!p.isBreak) {
+              p.minutes = Math.round((p.minutes * 60 + 1) / 60);
+            }
+            if (p.seconds <= 0) {
+              if (!p.isBreak) {
+                // 专注完成，进入休息
+                p.completed++;
+                p.isBreak = true;
+                p.seconds = 5 * 60;
+              } else {
+                // 休息完成，进入下一个专注
+                p.isBreak = false;
+                p.seconds = 25 * 60;
+              }
+            }
+          }, 1000);
+        }
+      }
+
+      // 番茄钟：重置
+      function resetPomodoro() {
+        const p = state.pomodoro;
+        clearInterval(p.timer);
+        p.running = false;
+        p.isBreak = false;
+        p.seconds = 25 * 60;
+      }
+
       function reset() {
         state.plan = null;
         state.error = '';
@@ -577,6 +667,7 @@
       return {
         state, subjects, levels, weekDays, getSubjectStats,
         toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
+        formatTime, togglePomodoro, resetPomodoro,
       };
     },
   });
@@ -584,6 +675,106 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 番茄钟专注 ===== */
+  .pomodoro-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .pomodoro-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .pomodoro-today {
+    font-size: 12px;
+    color: #666;
+    background: #f0f2f5;
+    padding: 4px 12px;
+    border-radius: 12px;
+  }
+  .pomodoro-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .pomodoro-display {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f0f2f5, #e8ecf2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+  }
+  .pomodoro-display.running {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    box-shadow: 0 4px 30px rgba(196, 30, 58, 0.4);
+  }
+  .pomodoro-display.break {
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: #fff;
+    box-shadow: 0 4px 30px rgba(16, 185, 129, 0.4);
+  }
+  .pomodoro-time {
+    font-size: 32px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .pomodoro-mode {
+    font-size: 12px;
+    opacity: 0.9;
+    margin-top: 4px;
+  }
+  .pomodoro-controls {
+    display: flex;
+    gap: 12px;
+  }
+  .pomodoro-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f0f2f5;
+    color: #333;
+  }
+  .pomodoro-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .pomodoro-btn.primary {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+  }
+  .pomodoro-stats {
+    display: flex;
+    gap: 24px;
+  }
+  .ps-item {
+    text-align: center;
+  }
+  .ps-num {
+    font-size: 18px;
+    font-weight: 700;
+    color: #333;
+  }
+  .ps-label {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+  }
 
   /* ===== 3D学习日历 ===== */
   .calendar-3d-card {
