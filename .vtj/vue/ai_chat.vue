@@ -980,21 +980,6 @@ export default defineComponent({
   box-shadow: 0 12px 32px rgba(102, 126, 234, 0.4);
   z-index: 10;
 }
-.mindmap-branch {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  z-index: 5;
-}
-.mindmap-branch.left {
-  left: 60px;
-}
-.mindmap-branch.right {
-  right: 60px;
-}
 .branch-item {
   background: #fff;
   padding: 12px 20px;
