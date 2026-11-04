@@ -121,20 +121,24 @@ def process_news(
     *,
     limit: int = 20,
     client: Callable[[str], str] | None = None,
+    include_fallback: bool = False,
 ) -> dict[str, Any]:
-    news_list = (
-        db.query(NewsArticle)
-        .filter(
-            or_(
-                NewsArticle.review_status == "pending",
-                NewsArticle.review_status == "high_risk",
-            ),
-            NewsArticle.ai_summary.is_(None),
+    query = db.query(NewsArticle).filter(
+        or_(
+            NewsArticle.review_status == "pending",
+            NewsArticle.review_status == "high_risk",
         )
-        .order_by(NewsArticle.news_id)
-        .limit(max(1, min(limit, 100)))
-        .all()
     )
+    if include_fallback:
+        query = query.filter(
+            or_(
+                NewsArticle.ai_summary.is_(None),
+                NewsArticle.ai_status == "fallback",
+            )
+        )
+    else:
+        query = query.filter(NewsArticle.ai_summary.is_(None))
+    news_list = query.order_by(NewsArticle.news_id).limit(max(1, min(limit, 100))).all()
     ok = 0
     fallback = 0
     high_risk = 0

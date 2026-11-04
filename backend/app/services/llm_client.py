@@ -79,6 +79,16 @@ class LLMClientError(Exception):
         super().__init__(message)
 
 
+def _chat_completions_url() -> str:
+    """兼容 base URL 与完整 endpoint 两种配置，避免重复拼接。"""
+    base = (settings.LLM_API_URL or "").strip().rstrip("/")
+    if not base:
+        raise LLMClientError("未配置 LLM_API_URL", "llm_config")
+    if base.endswith("/chat/completions"):
+        return base
+    return f"{base}/chat/completions"
+
+
 async def _post(
     messages: List[Dict[str, str]],
     temperature: float,
@@ -91,7 +101,7 @@ async def _post(
     - 非 200、解析失败立即抛 LLMClientError（不重试，重试无意义）；
     - 日志不回显响应原文与请求内容。
     """
-    url = settings.LLM_API_URL.rstrip("/") + "/chat/completions"
+    url = _chat_completions_url()
     headers = {
         "Authorization": f"Bearer {settings.LLM_API_KEY}",
         "Content-Type": "application/json",
