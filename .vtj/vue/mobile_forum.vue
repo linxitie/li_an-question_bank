@@ -154,7 +154,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted } from 'vue';
+import { defineComponent, ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
@@ -224,11 +224,15 @@ export default defineComponent({
     
     // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
     /** 应用搜索（关键词 + 日期） */
-    const applySearch = () => { loadPosts(activeCategory.value); };
+    const applySearch = () => {
+      clearScroll();
+      loadPosts(activeCategory.value);
+    };
     const resetSearch = () => {
       searchKeyword.value = '';
       searchDateFrom.value = '';
       searchDateTo.value = '';
+      clearScroll();
       loadPosts(activeCategory.value);
     };
 
@@ -296,7 +300,9 @@ export default defineComponent({
             id: p.id,
             title: p.title,
             titleColor: p.titleColor || 'default',
-            excerpt: p.content || '',
+            // 2026-11-04 v5：列表摘要必须是纯文本——富文本帖的 content 是 HTML，
+            // 直接塞进 ForumContent（TEXT 模式）会把标签当正文显示出来。
+            excerpt: String(p.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
             author: (p.user && p.user.nickname) || '匿名',
             time,
             avatar: (p.user && p.user.avatar) || '',
@@ -317,6 +323,8 @@ export default defineComponent({
               .filter((url: string) => IMAGE_PATTERN.test(url))
           };
         });
+        // v5：从详情返回时列表是重新加载的，这里把之前记录的滚动位置还原回去
+        await restoreScroll();
       } catch (error) {
         console.error('加载帖子失败:', error);
         posts.value = [];
@@ -336,6 +344,7 @@ export default defineComponent({
     const selectTab = async (key: string) => {
       if (activeCategory.value === key) return;
       activeCategory.value = key;
+      clearScroll();
       await loadPosts(key);
     };
     
@@ -379,7 +388,50 @@ export default defineComponent({
       router.push('/mobile/forum/create');
     };
     
+    /** 列表滚动容器（本页自己的滚动区，不是 window） */
+    const SCROLL_KEY = 'mobile-forum-scroll';
+    const scrollEl = () =>
+      document.querySelector('.mobile-forum-page .main-content') as HTMLElement | null;
+
+    /** 进详情前保存滚动位置，供返回后还原 */
+    const saveScroll = () => {
+      const el = scrollEl();
+      if (!el) return;
+      try {
+        sessionStorage.setItem(SCROLL_KEY, String(el.scrollTop || 0));
+      } catch {
+        /* 隐私模式下 sessionStorage 可能不可用，忽略即可 */
+      }
+    };
+
+    /** 列表渲染完成后还原滚动位置；没有记录则不动 */
+    const restoreScroll = async () => {
+      let raw: string | null = null;
+      try {
+        raw = sessionStorage.getItem(SCROLL_KEY);
+      } catch {
+        return;
+      }
+      if (!raw) return;
+      await nextTick();
+      const el = scrollEl();
+      if (el) {
+        el.scrollTop = Number(raw) || 0;
+      }
+    };
+
+    /** 切页签/搜索时清掉记录，避免恢复到「上一次筛选」的位置 */
+    const clearScroll = () => {
+      try {
+        sessionStorage.removeItem(SCROLL_KEY);
+      } catch {
+        /* ignore */
+      }
+    };
+
     const viewPost = (post: any) => {
+      // 2026-11-04 v5：进详情前记住列表滚动位置，返回后能接着看（此前会跳回顶部）
+      saveScroll();
       router.push(`/mobile/forum/${post.id}`);
     };
 
@@ -408,6 +460,8 @@ export default defineComponent({
       toggleLike,
       toggleFavorite,
       viewPost,
+      // 收藏弹窗里用的是 goToDetail，之前没有定义 → 点了没反应（v5 修正）
+      goToDetail: viewPost,
       onAvatarError,
       ArrowLeft,
       Plus,

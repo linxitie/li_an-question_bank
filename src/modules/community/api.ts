@@ -53,6 +53,10 @@ export interface ForumPostItem {
   id: number;
   title: string;
   content: string;
+  /** 正文格式（2026-11-04 v5）：TEXT 纯文本 / HTML 富文本，渲染时据此选择 */
+  contentFormat?: string;
+  /** 标题是否由 AI 生成（v3） */
+  aiTitle?: boolean;
   shareType?: string;
   tags?: string[];
   attachments?: ForumAttachment[];
@@ -69,6 +73,9 @@ export interface ForumPostItem {
   createTime: string | null;
   userId?: number;
   liked: boolean;
+  /** 收藏（五角星）状态与计数（v5 详情页需要） */
+  favorited?: boolean;
+  favoriteCount?: number;
   myReaction?: ForumReactionCode | null;
   reactions?: Record<string, number>;
   user?: ForumUserBrief;
@@ -77,6 +84,8 @@ export interface ForumPostItem {
 export interface ForumCommentItem {
   id: number;
   content: string;
+  /** 评论正文格式（v5）：与帖子同一套语义 */
+  contentFormat?: string;
   likeCount: number;
   createTime: string | null;
   parentCommentId?: number | null;

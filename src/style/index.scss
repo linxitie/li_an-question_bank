@@ -122,6 +122,14 @@ body,
 .stat-action.active {
   animation: dsh-ring 460ms ease-out;
 }
+/* 详情的「收藏」用金色光圈，与「喜欢」的红色区分开（v5） */
+.stat-action.fav.active {
+  animation: dsh-ring-gold 460ms ease-out;
+}
+.stat-action.fav.active > .fav-star {
+  display: inline-block;
+  animation: dsh-star-wiggle 360ms ease-out;
+}
 .meta-likes.active .heart-icon,
 .meta-likes.active > svg,
 .stat-action.active > svg {

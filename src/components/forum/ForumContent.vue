@@ -3,6 +3,7 @@
   <div v-if="isHtml" class="forum-content forum-content-html" v-html="safeHtml"></div>
 
   <!-- 纯文本 / 历史数据：保持原有分段渲染（表情包 + 行内标记），行为不变 -->
+  <span v-else-if="looksLikeHtmlDoc" class="forum-content">{{ plainSafeText }}</span>
   <span v-else class="forum-content">
     <template v-for="(segment, index) in segments" :key="index">
       <img
@@ -32,6 +33,20 @@ const props = withDefaults(
 );
 
 const isHtml = computed(() => props.format === 'HTML');
+
+/**
+ * format=TEXT 但内容其实是 HTML 的历史脏数据兜底（2026-11-04 v5）。
+ *
+ * 背景：早期帖子正文里有 `<h1><span style="font-size:14px">` 这类标签，但
+ * `content_format` 落的是 TEXT，按纯文本渲染就会把标签原样显示成字面量。
+ * 这里**只转义、不渲染**：既不显示标签，也不会执行未知 HTML。
+ */
+const looksLikeHtmlDoc = computed(() =>
+  /^\s*<(p|div|h[1-6]|span|font|table|ul|ol|blockquote|br)\b/i.test(String(props.content || ''))
+);
+const plainSafeText = computed(() =>
+  String(props.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+);
 
 /**
  * 渲染前的最后一道防线。
@@ -146,6 +161,15 @@ const segments = computed<Segment[]>(() => {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
+}
+/* 表情包内嵌在 HTML 正文里时的尺寸（v5：移动端发帖改为富文本后使用） */
+.forum-content-html :deep(img.forum-sticker) {
+  display: inline-block;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin: 2px 4px;
 }
 .forum-content-html :deep(table) {
   width: 100%;

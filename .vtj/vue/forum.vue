@@ -300,13 +300,16 @@
               :attachments="state.currentPost.attachments"
               mode="post" />
             <!-- 帖子互动数据 -->
+            <!-- 2026-11-04 v5：详情页把「喜欢」和「收藏」分成两个按钮。
+                 之前这里用五角星图标调 toggleLike，用户会误以为那是收藏（且没有收藏入口）。 -->
             <div class="detail-stats">
-              <span class="stat-action" :class="{ active: state.currentPost.liked }" @click="toggleLike(state.currentPost)">
-                <XIcon
-                  :icon="state.currentPost.liked ? StarFilled : Star"
-                  :size="14"
-                  :color="state.currentPost.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+              <span class="stat-action" :class="{ active: state.currentPost.liked }" @click="toggleLike(state.currentPost)" title="喜欢">
+                <span class="heart-icon">{{ state.currentPost.liked ? '❤' : '♡' }}</span>
                 <span> {{ state.currentPost.likeCount }}</span>
+              </span>
+              <span class="stat-action fav" :class="{ active: state.currentPost.favorited }" @click="toggleFavorite(state.currentPost)" title="收藏">
+                <span class="fav-star">{{ state.currentPost.favorited ? '★' : '☆' }}</span>
+                <span> {{ state.currentPost.favoriteCount || 0 }}</span>
               </span>
               <span class="stat-label">
                 <XIcon :icon="ChatLineRound" :size="14" color="#8a8faa"></XIcon>
