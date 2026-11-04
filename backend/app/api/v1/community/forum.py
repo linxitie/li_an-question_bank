@@ -25,11 +25,11 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Literal
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, UploadFile, File, Form, Request, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, or_, and_, String
 
-from ....core.database import get_db
+from ....core.database import get_db, SessionLocal
 from ....core.config import settings
 from pydantic import BaseModel, Field
 from ....core.security import get_current_user, get_optional_user
@@ -38,8 +38,10 @@ from ....models.models import (
     ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
     ForumDraft, SysUser, SysOperationLog
 )
-from ....services.sensitive_words import sensitive_filter, SensitiveLevel
+from ....services.sensitive_words import SensitiveLevel
+from ....services.content_guard import guard_text, judgments as content_guard_judgments
 from ....services.rich_text import sanitize_rich_text
+from ....services.forum_title_ai import generate_forum_title, needs_ai_title
 from ....services.event_consumer import outbox_mode_enabled, record_user_action
 from ....core.trigger_types import TRIGGER_FORUM_POSTED
 from ....core.exceptions import (
@@ -183,8 +185,41 @@ def _serialize_post(
         "visibleClasses": post.visible_classes or [],
         # 正文格式（2026-11-03）：前端据此决定走纯文本渲染还是消毒后的 HTML 渲染
         "contentFormat": getattr(post, "content_format", None) or "TEXT",
+        # AI 标题标记（2026-11-03 第 3 轮）：前端据此在标题前加「AI生成」
+        "aiTitle": bool(getattr(post, "ai_title", 0)),
         "user": _user_brief(user, post.user_id),
     }
+
+
+async def _generate_title_in_background(post_id: int, content: str, content_format: str) -> None:
+    """后台为无标题帖生成 AI 标题（2026-11-03 第 3 轮）。
+
+    约定：
+    - **必须用独立 Session**：请求级 db 在响应返回后就关闭了，复用会拿到已关闭的会话；
+    - 写库前再校验一次标题仍为空，避免用户在这几秒内手动填了标题被覆盖；
+    - 任何失败只记日志，不抛出（后台任务抛错不会影响已返回的响应，但会污染日志）。
+    """
+    title = await generate_forum_title(content, content_format or "TEXT")
+    if not title:
+        return
+
+    db = SessionLocal()
+    try:
+        post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
+        if not post:
+            return
+        if not needs_ai_title(post.title, post.content):
+            logger.info("AI 标题跳过：帖子 %s 已有标题", post_id)
+            return
+        post.title = title
+        post.ai_title = 1
+        db.commit()
+        logger.info("AI 标题已写入：帖子 %s -> %s", post_id, title)
+    except Exception as exc:  # noqa: BLE001 - 后台任务不能因单条失败中断
+        logger.warning("AI 标题写库失败：帖子 %s: %s", post_id, exc)
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _apply_visibility_filter(query, current_user: Optional[SysUser]):
@@ -525,6 +560,7 @@ async def get_post_detail(
 @router.post("/posts", summary="发布新帖")
 async def create_post(
     request: Request,
+    background_tasks: BackgroundTasks,
     title: str = Form("", max_length=200),  # 2026-10-31：允许空标题（附件/正文至少一项即可）
     content: str = Form("", max_length=10000),  # 2026-10-31：允许空正文
     share_type: str = Form("EXPERIENCE"),
@@ -562,8 +598,13 @@ async def create_post(
     if not title:
         title = "(无标题)"
 
-    # 1. 关键词过滤(关键词工程核心)
-    filter_result = sensitive_filter.detect(f"{title} {content}")
+    # 1. 关键词过滤(关键词工程核心) + 知识库判定（落 cg_judgment/cg_task）
+    filter_result = guard_text(
+        db,
+        f"{title} {content}",
+        scene="forum_post",
+        user_id=current_user.user_id,
+    )
 
     if filter_result["level"] == SensitiveLevel.BLOCKED:
         # 记录审计日志
@@ -573,10 +614,12 @@ async def create_post(
             code="SENSITIVE_CONTENT_BLOCKED"
         )
 
-    # masked 级别:自动屏蔽后发布
+    # masked 级别:标题与正文分别打码后发布（混合检测的 masked_text 不适用于单个字段）
+    final_title = title
     final_content = content
     if filter_result["level"] == SensitiveLevel.MASKED:
-        final_content = filter_result["masked_text"]
+        final_title = guard_text(db, title, scene="forum_post", persist=False).get("masked_text") or title
+        final_content = guard_text(db, content, scene="forum_post", persist=False).get("masked_text") or content
         _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
 
     # reviewed 级别:记录但不阻断
@@ -622,7 +665,7 @@ async def create_post(
         title_color = "default"
     post = ForumPost(
         user_id=current_user.user_id,
-        title=title.strip(),
+        title=final_title.strip(),
         content=final_content,
         content_format=content_format,
         share_type=share_type if share_type in ("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION") else "EXPERIENCE",
@@ -638,6 +681,8 @@ async def create_post(
     db.add(post)
     # F2b：先 flush 拿 post_id，事件与帖子同一事务提交。
     db.flush()
+    if filter_result.get("judgment_id"):
+        content_guard_judgments.bind_source(db, filter_result["judgment_id"], post.post_id)
 
     logger.info(f"用户 {current_user.user_id} 发布帖子 {post.post_id}")
 
@@ -649,6 +694,16 @@ async def create_post(
     emit_forum_content(db, post.post_id, producer="community.forum.create")
     db.commit()
     db.refresh(post)
+
+    # AI 标题（2026-11-03 第 3 轮）：标题为空且有正文时，放到后台生成，不阻塞发帖。
+    # 为什么用 BackgroundTasks 而不是同步：模型调用通常 2–5s，同步会让「发布」按钮明显卡顿。
+    if needs_ai_title(post.title, post.content):
+        background_tasks.add_task(
+            _generate_title_in_background,
+            post.post_id,
+            post.content,
+            post.content_format or "TEXT",
+        )
 
     # 4. 返回完整数据(前端 unshift 到列表头)
     return _serialize_post(post, current_user, liked=False, content_full=True)
@@ -1036,8 +1091,14 @@ async def create_comment(
         if not reply_to_user_id:
             reply_to_user_id = parent.user_id
 
-    # 关键词过滤
-    filter_result = sensitive_filter.detect(content)
+    # 关键词过滤 + 知识库判定
+    filter_result = guard_text(
+        db,
+        content,
+        scene="forum_comment",
+        source_id=post_id,
+        user_id=current_user.user_id,
+    )
     if filter_result["level"] == SensitiveLevel.BLOCKED:
         _log_violation(db, current_user.user_id, request, filter_result, "rejected", content)
         raise BusinessLogicError(
@@ -1080,6 +1141,8 @@ async def create_comment(
 
     # F2b：评论与帖子计数、事件同一事务提交（先 flush 拿 comment_id）。
     db.flush()
+    if filter_result.get("judgment_id"):
+        content_guard_judgments.bind_source(db, filter_result["judgment_id"], comment.comment_id)
 
     # 回帖同样走 forum.posted；同一帖子只在首次创建时上报一次（P2-28）
     await _publish_forum_posted(
@@ -1748,8 +1811,14 @@ async def update_post(
     if not title or not content:
         raise ValidationError("标题和正文不能为空")
 
-    title_filter = sensitive_filter.detect(title)
-    content_filter = sensitive_filter.detect(content)
+    title_filter = guard_text(
+        db, title, scene="forum_post_update", source_id=post.post_id,
+        user_id=current_user.user_id,
+    )
+    content_filter = guard_text(
+        db, content, scene="forum_post_update", source_id=post.post_id,
+        user_id=current_user.user_id,
+    )
     if (
         title_filter["level"] == SensitiveLevel.BLOCKED
         or content_filter["level"] == SensitiveLevel.BLOCKED

@@ -30,6 +30,7 @@ from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
 from .api.v1.platform import admin_quotes
 from .api.v1.platform import admin_news
+from .api.v1.platform import content_guard_admin
 from .api.v1.community import quotes, forum, practice_admin, forum_moderation
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
@@ -135,6 +136,12 @@ async def lifespan(app: FastAPI):
         logger.info("新闻 R2 Schema 就绪")
     except Exception as e:
         logger.warning(f"新闻 R2 Schema 初始化失败: {e}")
+    try:
+        from .core.content_guard_schema import ensure_content_guard_schema
+        _cg_report = ensure_content_guard_schema(engine)
+        logger.info(f"内容安全知识库 Schema 就绪: {_cg_report}")
+    except Exception as e:
+        logger.warning(f"内容安全知识库 Schema 初始化失败（审核降级为旧词库）: {e}")
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
@@ -349,6 +356,8 @@ async def lifespan(app: FastAPI):
                 ('visible_classes', 'JSON'),
                 # 富文本（2026-11-03）：历史数据一律 TEXT，渲染走纯文本+表情包路径，行为不变
                 ('content_format', "VARCHAR(8) DEFAULT 'TEXT'"),
+                # AI 标题标记（2026-11-03 第 3 轮）：1 = 标题由大模型生成
+                ('ai_title', 'INTEGER DEFAULT 0'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in forum_new_cols:
@@ -929,6 +938,7 @@ app.include_router(practice_admin.teacher_router)
 app.include_router(notifications.router)
 app.include_router(forum_moderation.teacher_router)
 app.include_router(forum_moderation.admin_router)
+app.include_router(content_guard_admin.router, tags=["管理员端-内容安全"])
 
 def _resolve_app_revision() -> str:
     """读取当前代码的 git 短 SHA，供前端 /health 版本自检使用。
