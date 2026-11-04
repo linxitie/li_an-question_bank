@@ -33,8 +33,10 @@ def test_page_route_count():
     #           （与 scripts/verify-modularization-constraints.mjs 的 104 同步）
     # 104 → 101：2026-11-04 徽章展示模块下线，/badges、/badges-demo、/badge-preview 移除
     # 101 → 105：2026-11-04 远端 main 再前进（新闻时间线/详情 + 平板与手机端），共 4 条
-    # 路由只增不减（本次两次例外均为用户明确要求的模块调整，已在提交信息写明）。
-    assert len(_pages()) == 105
+    # 105 → 104：2026-11-04 远端二次合并，管理端用户/权限页改用 AdminUsersWorkspace、
+    #            平板论坛页移除，净减 1 条（与 scripts/verify-modularization-constraints.mjs 的 104 同步）
+    # 路由只增不减（本次例外均为用户明确要求的模块调整或远端重构，已在提交信息写明）。
+    assert len(_pages()) == 104
 
 
 def test_whitelist_has_no_roles():

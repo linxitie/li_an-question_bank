@@ -102,14 +102,18 @@ async def login_for_access_token(
     """
     用户登录接口
 
-    - 支持用户名或手机号登录
+    - 支持用户名、学号/工号或手机号登录
     - 返回 access_token 和 refresh_token
     - 记录登录日志
     """
     logger = logging.getLogger(__name__)
 
+    # 账号标识三选一：登录名(username)、学号/工号(user_no)、手机号。
+    # 加入 user_no 的原因：2026-11-01 教师账号 ycc5678 的 username 被改成中文姓名后，
+    # 用账号编号登录直接报「用户名不存在」，而 user_no 才是账号真正的唯一编号。
     user = db.query(SysUser).filter(
         (SysUser.username == form_data.username) |
+        (SysUser.user_no == form_data.username) |
         (SysUser.phone == form_data.username)
     ).first()
 
@@ -129,7 +133,7 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if user.status == 0:
+    if user.status == 0 or getattr(user, "is_deleted", 0) in (1, 2):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用",
@@ -148,7 +152,7 @@ async def login_for_access_token(
         )
 
     # 三端分离：JWT payload 含角色和权限，前端路由守卫依赖此信息
-    from ....core.security import get_user_permissions_with_db
+    from ....core.security import get_effective_permissions
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -156,7 +160,7 @@ async def login_for_access_token(
             "user_no": user.user_no,
             "user_type": user.user_type,
             "role_level": user.role_level,
-            "permissions": [p.value for p in get_user_permissions_with_db(user, db)],
+            "permissions": [p.value for p in get_effective_permissions(user, db)],
         },
         expires_delta=access_token_expires
     )
@@ -300,14 +304,14 @@ async def sms_login(
             detail="手机号与注册手机号不一致"
         )
 
-    if user.status == 0:
+    if user.status == 0 or getattr(user, "is_deleted", 0) in (1, 2):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用"
         )
 
     # sms-login: JWT payload 含角色权限
-    from ....core.security import get_user_permissions_with_db as _get_perms_sms
+    from ....core.security import get_effective_permissions as _get_perms_sms
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
@@ -347,14 +351,18 @@ async def refresh_access_token(
         )
 
     user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
-    if not user or user.status == 0:
+    if (
+        not user
+        or user.status == 0
+        or getattr(user, "is_deleted", 0) in (1, 2)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户不存在或已被禁用"
         )
 
     # refresh: JWT payload 含角色权限
-    from ....core.security import get_user_permissions_with_db as _get_perms_refresh
+    from ....core.security import get_effective_permissions as _get_perms_refresh
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={

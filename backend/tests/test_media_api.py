@@ -70,7 +70,8 @@ def test_forum_attachment_disposition(client, db_session, tmp_path, monkeypatch)
     r = client.get(f"/media/{asset.asset_id}")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/pdf"
-    assert "attachment" in r.headers["content-disposition"]
+    # 2026-11-01：PDF 改为 inline（可内联预览），其余类型仍 attachment
+    assert "inline" in r.headers["content-disposition"]
     assert "UTF-8''" in r.headers["content-disposition"]
 
 

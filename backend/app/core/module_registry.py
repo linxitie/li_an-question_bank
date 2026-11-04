@@ -84,10 +84,10 @@ _D = (
         events=("library.material.published",),
     ),
     Domain(
-        "content", "新闻/招考/日历",
-        ("news", "recruitment", "calendar"),
-        ("api/news", "api/recruitment", "api/calendar"),
-        13,
+        "content", "新闻/招考/日历/图谱",
+        ("news", "recruitment", "calendar", "kg"),
+        ("api/news", "api/recruitment", "api/calendar", "api/kg"),
+        17,  # R0 新增 /api/kg 4 个只读端点
     ),
     Domain(
         "personal", "收藏/笔记",

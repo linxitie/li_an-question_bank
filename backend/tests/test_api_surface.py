@@ -72,6 +72,20 @@ KNOWN_EXTRA_OPERATIONS = {
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。
     ("GET", "/media/{asset_id}"),
     ("HEAD", "/media/{asset_id}"),
+    # R11 显式批准的新增（2026-11-01，任务「学生端练习记录可视化 + 未完成答题卡续答」）：
+    # 做法与上面一致：只登记白名单，api_surface.json 仍保持 343 条冻结口径，不重算基线。
+    # ① 未完成答题卡续答：只读，从 exam_record + paper_question_relation + exam_answer_detail
+    #    还原断点题目与已存答案；本人校验，已完成 409，题目被撤下则跳过而非整页 404。
+    ("GET", "/api/exams/records/{record_id}/resume"),
+    # ② 学习分布：只读聚合，口径同 /api/practice/unified-stats（排除智能组卷双计）。
+    ("GET", "/api/stats/subject-distribution"),
+    # ③ 错题知识点统计：只读聚合，dimension=subcategory|point 两维可选。
+    ("GET", "/api/wrong-questions/point-stats"),
+    # ④ 练习草稿（服务端，30 天 TTL，唯一键 user_id+scope+scope_key）：重启浏览器/换设备可续。
+    ("POST", "/api/practice/draft"),
+    ("GET", "/api/practice/draft"),
+    ("GET", "/api/practice/drafts"),
+    ("DELETE", "/api/practice/draft"),
     # ===== 远端 main 合并补登记（2026-11-04）=====
     # 来源：模块4（学习计划/能力雷达/成就）、模块7（联考小智/知识图谱/记忆/学习仪表盘）、
     # 论坛治理与练习管理员、媒体资产 F3、OCR 候选等端点随远端 main 合入；
@@ -169,6 +183,36 @@ KNOWN_EXTRA_OPERATIONS = {
     ("PUT", "/api/forum/posts/{post_id}"),
     ("PUT", "/api/notifications/read-all"),
     ("PUT", "/api/notifications/{notification_id}/read"),
+    # ===== 本次合并补登记（2026-11-04）=====
+    # 管理员端用户/权限工作台、知识图谱查询、媒体资产 /api 别名与 Agent 反馈入口
+    # 在两侧分支各自新增，合并冲突解决时白名单取并集后仍缺这批条目；
+    # 仍按 R11「只登记不重算基线」补齐，api_surface.json 保持 343 条冻结口径。
+    ("DELETE", "/api/admin/users/{user_id}"),
+    ("GET", "/api/admin/permission-audit"),
+    ("GET", "/api/admin/permission-health"),
+    ("GET", "/api/admin/permissions/catalog"),
+    ("GET", "/api/admin/quotes/candidates"),
+    ("GET", "/api/admin/users/stats"),
+    ("GET", "/api/admin/users/{user_id}"),
+    ("GET", "/api/admin/users/{user_id}/permissions"),
+    ("GET", "/api/kg/nodes/{node_type}/{node_id}"),
+    ("GET", "/api/kg/search"),
+    ("GET", "/api/kg/subgraph"),
+    ("GET", "/api/kg/topics"),
+    ("GET", "/api/media/{asset_id}"),
+    ("HEAD", "/api/media/{asset_id}"),
+    ("POST", "/api/admin/permission-batches/{batch_id}/undo"),
+    ("POST", "/api/admin/quotes/{quote_ref}/review"),
+    ("POST", "/api/admin/users/batch"),
+    ("POST", "/api/admin/users/permissions/apply"),
+    ("POST", "/api/admin/users/permissions/preview"),
+    ("POST", "/api/admin/users/{user_id}/purge"),
+    ("POST", "/api/admin/users/{user_id}/restore"),
+    ("POST", "/api/agent/feedback"),
+    ("POST", "/api/agent/upload"),
+    ("POST", "/api/media/image"),
+    ("PUT", "/api/admin/users/{user_id}/permissions"),
+    ("PUT", "/api/admin/users/{user_id}/role"),
 }
 
 

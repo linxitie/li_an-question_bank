@@ -12,6 +12,7 @@ import uuid
 
 import pytest
 
+from app.core.config import settings
 from app.models.models import StudyMaterial
 
 PNG_1PX = base64.b64decode(
@@ -81,9 +82,15 @@ class TestCreateCard:
         assert r.status_code == 200, r.text
         body = r.json()
         try:
-            assert body["cover_image"].startswith("/uploads/materials/images/")
+            # 2026-11-04：F3 媒体资产开启后图片 URL 是 /media/{asset_id}；
+            # 关闭时仍是本地 /uploads/materials/images/<uuid>.png，两者都算通过。
+            if settings.MEDIA_STORE_ENABLED:
+                assert body["cover_image"].startswith("/media/")
+            else:
+                assert body["cover_image"].startswith("/uploads/materials/images/")
+                assert os.path.exists(os.path.join(
+                    IMG_DIR, os.path.basename(body["cover_image"])))
             assert len(body["images"]) == 1
-            assert os.path.exists(os.path.join(IMG_DIR, os.path.basename(body["cover_image"])))
         finally:
             _drop_images(*body.get("images", []))
 

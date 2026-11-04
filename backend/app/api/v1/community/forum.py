@@ -349,7 +349,7 @@ async def get_forum_posts(
     sort: Optional[Literal["new", "hot"]] = Query(None, description="快捷排序: new/hot"),
     date_from: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD（含当天）"),
     date_to: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD（含当天）"),
-    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db)
@@ -509,8 +509,8 @@ async def get_post_detail(
 @router.post("/posts", summary="发布新帖")
 async def create_post(
     request: Request,
-    title: str = Form(..., max_length=200),
-    content: str = Form(..., max_length=10000),
+    title: str = Form("", max_length=200),  # 2026-10-31：允许空标题（附件/正文至少一项即可）
+    content: str = Form("", max_length=10000),  # 2026-10-31：允许空正文
     share_type: str = Form("EXPERIENCE"),
     tags: Optional[str] = Form(None),
     attachments: Optional[str] = Form(None, description="附件列表 JSON 字符串"),
@@ -529,10 +529,13 @@ async def create_post(
     """
     title = (title or "").strip()
     content = (content or "").strip()
+    # 2026-10-31：标题 / 正文 / 附件 至少满足一项即可发布
+    _has_att = bool(attachments and attachments.strip() not in ("", "[]", "null"))
+    if not title and not content and not _has_att:
+        raise ValidationError("标题、正文、附件至少填写一项")
+
     if not title:
-        raise ValidationError("标题不能为空")
-    if not content:
-        raise ValidationError("正文不能为空")
+        title = "(无标题)"
 
     # 1. 关键词过滤(关键词工程核心)
     filter_result = sensitive_filter.detect(f"{title} {content}")
@@ -1393,6 +1396,15 @@ async def upload_attachment(
         ".rar": (b"Rar!\x1a\x07",),
         ".7z": (b"7z\xbc\xaf\x27\x1c",),
     }
+    # 2026-11-01：Office / PDF / 文本 也必须校验文件头，
+    # 防止把网页(index.html)当作文档上传后入库（曾出现 3081 字节 HTML 冒充 docx/pdf）。
+    OOXML_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+    FILE_MAGIC = {
+        ".docx": OOXML_MAGIC, ".xlsx": OOXML_MAGIC, ".pptx": OOXML_MAGIC,
+        ".doc": (b"\xd0\xcf\x11\xe0",), ".xls": (b"\xd0\xcf\x11\xe0",), ".ppt": (b"\xd0\xcf\x11\xe0",),
+        ".pdf": (b"%PDF",),
+        ".txt": (b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff"),  # txt 只挡掉明显非文本
+    }
 
     original_name = file.filename or ""
     ext = os.path.splitext(original_name)[1].lower()
@@ -1405,6 +1417,15 @@ async def upload_attachment(
     contents = await file.read()
     if len(contents) > MAX_SIZE:
         raise ValidationError("文件大小不能超过 20MB")
+
+    # 文件头校验：压缩包 + Office + PDF
+    magic_sigs = ARCHIVE_MAGIC.get(ext) or FILE_MAGIC.get(ext)
+    if magic_sigs and not any(contents.startswith(sig) for sig in magic_sigs):
+        raise ValidationError(
+            f"文件内容与扩展名不符（{ext}）——请确认上传的是真实文件，而不是网页或占位文件"
+        )
+    if contents.lstrip()[:1] == b"<":
+        raise ValidationError("检测到 HTML 内容，已拒绝：该请求没有取到真实文件")
 
     if settings.MEDIA_STORE_ENABLED:
         # F3：附件字节进对象存储，URL 走稳定代理；MIME 由服务端按扩展名决定。
@@ -1436,9 +1457,6 @@ async def upload_attachment(
         }
 
     # 回滚分支：保留原 uploads 写路径。
-    if ext in ARCHIVE_MAGIC:
-        if not any(contents.startswith(sig) for sig in ARCHIVE_MAGIC[ext]):
-            raise ValidationError("压缩包文件头校验失败")
     elif file.content_type not in ALLOWED_MIME:
         raise ValidationError(f"文件 MIME 类型不合法: {file.content_type}")
 
@@ -1512,8 +1530,9 @@ async def get_user_public(
 
 @router.get("/my-posts", summary="获取我的帖子")
 async def get_my_posts(
-    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
+    keyword: Optional[str] = Query(None, description="标题/正文关键词"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1526,6 +1545,11 @@ async def get_my_posts(
         ForumPost.user_id == current_user.user_id,
         ForumPost.status == "NORMAL"
     )
+    if keyword:
+        like = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(ForumPost.title.like(like), ForumPost.content.like(like))
+        )
     total = query.count()
     posts = query.order_by(ForumPost.create_time.desc()).offset(offset).limit(limit).all()
 

@@ -17,7 +17,8 @@ echo 前端构建完成
 
 echo.
 echo [2/3] 启动后端服务 (端口 8000)...
-start "砺安题库-后端" cmd /c "cd /d %~dp0backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+rem --reload: 本机开发态自动重载，避免改完代码后运行中的进程仍用旧路由表（会表现为接口 404）
+start "砺安题库-后端" cmd /c "cd /d %~dp0backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 echo.
 echo 等待服务启动...

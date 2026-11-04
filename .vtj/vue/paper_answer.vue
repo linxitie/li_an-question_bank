@@ -425,6 +425,12 @@ export default defineComponent({
     // 用块级间距把多则材料分开。只处理文本节点，不碰 img/table。
     formatMaterialBody(root) {
       if (!root) return;
+      // 新渲染层已分段并高亮标题：保留其结构，避免再套一层胶囊/重复断段。
+      if (root.querySelector('.qr-rich')) {
+        root.style.whiteSpace = 'normal';
+        root.style.wordBreak = 'break-word';
+        return;
+      }
       root.style.whiteSpace = 'pre-wrap';
       root.style.wordBreak = 'break-word';
       // 标注可能写作「材料一：」「材料1\n」「给定资料2」，冒号可有可无；

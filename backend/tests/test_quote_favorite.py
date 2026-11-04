@@ -102,10 +102,10 @@ class TestObsidianQuoteFavorite:
         r = client.post(f"/api/quotes/obsidian/{self.OBSIDIAN_SOURCE}/favorite")
         assert r.status_code == 401
 
-    def test_invalid_obsidian_source_returns_400(self, client, auth_headers):
-        # 路径分隔符 / 违反正则
+    def test_invalid_obsidian_source_is_rejected(self, client, auth_headers):
+        # 含编码斜杠的路径在路由层不匹配，Starlette 返回 404；拒绝效果与 400 等价
         r = client.post("/api/quotes/obsidian/..%2F..%2Fetc%2Fpasswd/favorite", headers=auth_headers)
-        assert r.status_code in (400, 405)  # 路由层可能直接拦截
+        assert r.status_code in (400, 404, 405)
         # 不含斜杠但不符合 .md 后缀
         r = client.post("/api/quotes/obsidian/test.txt/favorite", headers=auth_headers)
         assert r.status_code == 400

@@ -2960,6 +2960,45 @@ def _essay_collect_materials(lines: List[str], q_start: int):
     return (body or None), titles
 
 
+_ESSAY_REQ_MARK_RE = re.compile(r'(?<![\u4e00-\u9fa5])(?:作答要求|要求)\s*[:：]?')
+# 要求子项：全角/半角括号编号，或 1. / 1、 形式。用零宽切分，保留编号本身。
+_ESSAY_REQ_ITEM_SPLIT_RE = re.compile(r'(?=(?:[（(]\s*\d{1,2}\s*[）)]|\d{1,2}[.、．]))')
+# 兜底：题干末尾「（15分）」后紧跟「（1）」，说明原文省略了“要求”二字。
+_ESSAY_REQ_SCORE_THEN_ITEM_RE = re.compile(
+    r'[（(]\s*\d{1,3}\s*分\s*[）)]\s*(?=[（(]\s*1\s*[）)])'
+)
+
+
+def _split_essay_requirements(text: str) -> tuple[str, List[str]]:
+    """把申论题的「题干」与「要求」拆开，避免要求被当成题干正文。
+
+    返回 (stem, requirements)。requirements 保留原始编号（（1）/1.），
+    因为前端和导出需要按考生看到的顺序展示；没有编号时整段作为一条。
+    """
+    raw = text or ''
+    mark = _ESSAY_REQ_MARK_RE.search(raw)
+    if mark:
+        stem = raw[:mark.start()].strip()
+        after = raw[mark.end():].strip()
+    else:
+        # 无“要求”字样时，只在“分值 + （1）”这一强特征下兜底，
+        # 不能把普通题干里的“要求你……”误判成要求区。
+        score = _ESSAY_REQ_SCORE_THEN_ITEM_RE.search(raw)
+        if not score:
+            return raw.strip(), []
+        stem = raw[:score.end()].strip()
+        after = raw[score.end():].strip()
+
+    if not after:
+        return stem, []
+    parts = [p.strip() for p in _ESSAY_REQ_ITEM_SPLIT_RE.split(after) if p.strip()]
+    # 若切分产生多个片段，但第一段不是编号（例如正文里偶然出现“1.”），
+    # 则退回整段，避免把要求正文切碎。
+    if len(parts) > 1 and not re.match(r'^(?:[（(]\s*\d{1,2}\s*[）)]|\d{1,2}[.、．])', parts[0]):
+        parts = [after]
+    return stem, parts or [after]
+
+
 def _essay_is_requirement_run(block_lines: List[str], start: int, style: str) -> bool:
     """判断 start 行起是否为"要求子项序列"。硬判据：整段无分值标记。"""
     seg = '\n'.join(block_lines[start:])
@@ -3105,34 +3144,9 @@ def _parse_essay_document(text: str) -> Optional[List[Dict[str, Any]]]:
                 analysis_txt = '\n'.join(_ana_l).strip()
 
         # --- 题干 / 要求 拆分 ---
-        req_at = None
-        req_inline = ''
-        for j, l in enumerate(stem_and_req.split('\n')):
-            if l.strip().startswith(_ESSAY_REQ_MARK):
-                req_at = j
-                # 要求内容可能与「要求：」同行（实测 2022 国考行政执法卷：
-                #   "　　要求：全面、准确、有条理。不超过250 字。"），必须先摘掉前缀取正文，
-                # 否则只取后续行会把内容整段丢掉，导致 requirements 为空。
-                req_inline = re.sub(
-                    r'^[ \t　]*' + re.escape(_ESSAY_REQ_MARK) + r'[ \t　]*[：:]?[ \t　]*',
-                    '', l).strip()
-                break
-        if req_at is None:
-            stem = stem_and_req.strip()
-            requirements: List[str] = []
-        else:
-            sl = stem_and_req.split('\n')
-            stem = '\n'.join(sl[:req_at]).strip()
-            collected: List[str] = []
-            if req_inline:
-                collected.append(req_inline)
-            for l in sl[req_at + 1:]:
-                t = l.strip()
-                if _ESSAY_REQ_LINE_RE.match(t):
-                    collected.append(t)
-            # 纯文本要求（无「（1）」编号）没有子项行，整段作为一条要求保留，
-            # 绝不能因为缺少编号就把要求丢掉——要求是申论题的采分点依据。
-            requirements = collected
+        # 统一走 _split_essay_requirements：支持“要求：”同行、无冒号、
+        # 以及原文省略“要求”但“（15分）＋（1）”可判定的历史题。
+        stem, requirements = _split_essay_requirements(stem_and_req)
         # 去掉题干里的题号前缀
         stem = re.sub(r'^[ \t　]*(?:\d{1,2}\s*[.．、]|[（(]\s*\d{1,2}\s*[）)])[ \t　]*', '', stem).strip()
 
@@ -3595,7 +3609,38 @@ def _extract_options(lines: List[str]) -> List[Dict[str, str]]:
     # L3 记录：L1+L2后仍不足2个
     if len(options) < 2:
         logger.warning(f"[options] 仅提取 {len(options)} 个选项，无法自动修复，保留原始结果")
+    options = _split_image_only_options(options)
     return options
+
+
+_OPTION_IMAGE_TOKEN_RE = re.compile(r'\[IMAGE:[^\]\s]+\]|<img\b[^>]*>', re.IGNORECASE)
+
+
+def _split_image_only_options(options: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """处理“一个选项里塞了多张图”的 PDF 行。
+
+    仅当选项去图后几乎无文字、且总图数 2–4 时，按出现顺序还原为 A–D；
+    已经是“4 个选项各 1 图”的题不动，避免把正确选项结构重建成同义项。
+    """
+    if not options:
+        return options
+    tokens: List[str] = []
+    has_text = False
+    for opt in options:
+        value = str(opt.get('value', ''))
+        found = _OPTION_IMAGE_TOKEN_RE.findall(value)
+        tokens.extend(found)
+        residual = _OPTION_IMAGE_TOKEN_RE.sub('', value)
+        residual = re.sub(r'[\s;；,，。.、]+', '', residual)
+        if residual:
+            has_text = True
+    if has_text or not (2 <= len(tokens) <= 4):
+        return options
+    # 已是 A–D 各一张图：结构正确，禁止重建。
+    if len(options) == 4 and all(
+            len(_OPTION_IMAGE_TOKEN_RE.findall(str(o.get('value', '')))) == 1 for o in options):
+        return options
+    return [{'key': chr(65 + i), 'value': token} for i, token in enumerate(tokens)]
 
 
 # ============ 题型归一化映射 ============

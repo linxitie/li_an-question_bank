@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import hashlib
+from pathlib import Path
 from ....services.event_consumer import record_user_action
 from ....core.trigger_types import TRIGGER_LEGACY_QUOTE_FAVORITE
 from typing import Optional
@@ -22,6 +23,7 @@ from sqlalchemy import desc, func
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import EssayQuote, QuoteFavorite, SysUser
+from ....services import daily_quote_service, quote_filter_service
 
 router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
@@ -30,19 +32,25 @@ logger = logging.getLogger(__name__)
 # 优先使用环境变量；如果环境变量指向的路径下没有 01-金句素材库 子目录，
 # 则自动回退到常见的默认路径
 _OB_ENV_PATH = os.environ.get("OBSIDIAN_VAULT_PATH", "")
-_DEFAULT_VAULT = r"D:\Obsidian仓库\每日金句知识库"
+_DEFAULT_VAULT = str(Path(__file__).resolve().parents[4] / "content_hub_vault")
+_QUOTE_SUBDIRS = ("01-金句素材库", "01-金句")
 
 def _resolve_quote_dir() -> str:
     """解析 Obsidian 金句目录，自动检测路径是否正确"""
-    candidates = []
+    roots = []
     if _OB_ENV_PATH:
-        candidates.append(os.path.join(_OB_ENV_PATH, "01-金句素材库"))
-    candidates.append(os.path.join(_DEFAULT_VAULT, "01-金句素材库"))
+        roots.append(_OB_ENV_PATH)
+    roots.append(_DEFAULT_VAULT)
+    candidates = [
+        os.path.join(root, sub)
+        for root in roots
+        for sub in _QUOTE_SUBDIRS
+    ]
     for path in candidates:
         if os.path.isdir(path):
             return path
     # 都不存在则返回默认值（让后续报错信息更清晰）
-    return candidates[-1] if candidates else os.path.join(_DEFAULT_VAULT, "01-金句素材库")
+    return candidates[0] if candidates else os.path.join(_DEFAULT_VAULT, _QUOTE_SUBDIRS[0])
 
 OBSIDIAN_QUOTE_DIR = _resolve_quote_dir()
 
@@ -168,10 +176,23 @@ async def get_daily_quote(
 ):
     """
     获取每日金句：
-    1. 优先从 Obsidian 知识库读取已审核的有效金句
-    2. 按日期轮转选取（同一天返回相同金句）
-    3. 如果 Obsidian 不可用，回退到 SQLite 数据库
+    1. 优先使用 SQLite 预生成的 daily_quote（同一天稳定）
+    2. 无数据库候选时回退到 Obsidian 知识库
+    3. 再回退到随机数据库金句
     """
+    daily = daily_quote_service.get_or_create_daily(db)
+    if daily:
+        row, quote = daily
+        favorited = False
+        if current_user:
+            favorited = db.query(QuoteFavorite).filter(
+                QuoteFavorite.user_id == current_user.user_id,
+                QuoteFavorite.quote_id == quote.quote_id
+            ).first() is not None
+        payload = daily_quote_service.serialize_daily(row, quote)
+        payload["favorited"] = favorited
+        return payload
+
     # 1. 尝试从 Obsidian 读取
     obsidian_quotes = _read_obsidian_quotes()
     if obsidian_quotes:
@@ -237,6 +258,8 @@ async def get_daily_quote(
 @router.get("", summary="金句列表")
 async def get_quotes(
     category: Optional[str] = Query(None, description="分类筛选: 哲理/治国/民生/法治/品德"),
+    topic: Optional[str] = Query(None, description="主题 slug 或名称"),
+    q: Optional[str] = Query(None, description="金句内容模糊搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: SysUser = Depends(get_current_user),
@@ -246,6 +269,9 @@ async def get_quotes(
     query = db.query(EssayQuote).filter(EssayQuote.status == 1)
     if category:
         query = query.filter(EssayQuote.category == category)
+    if topic or q:
+        ids = quote_filter_service.filter_quote_ids(db, topic=topic, q=q)
+        query = query.filter(EssayQuote.quote_id.in_(ids))
 
     total = query.count()
     items = query.order_by(desc(EssayQuote.create_time))\

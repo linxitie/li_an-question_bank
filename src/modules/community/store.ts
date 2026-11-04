@@ -84,14 +84,16 @@ export function createCommunityInitialState(): CommunityState {
 export function validatePostDraft(draft: {
   title: string;
   content: string;
+  attachments?: unknown[];
 }): string | null {
   const title = (draft.title ?? '').trim();
   const content = (draft.content ?? '').trim();
-  if (!title) return '请输入标题';
+  // 2026-11-01：标题 / 正文 / 附件 至少一项即可发布
+  const hasAtt = (draft.attachments?.length ?? 0) > 0;
+  if (!title && !content && !hasAtt) return '标题、正文、附件至少填写一项';
   if (title.length > MAX_POST_TITLE_LENGTH) {
     return `标题不能超过 ${MAX_POST_TITLE_LENGTH} 字`;
   }
-  if (!content) return '请输入内容';
   if (content.length > MAX_POST_CONTENT_LENGTH) {
     return `内容不能超过 ${MAX_POST_CONTENT_LENGTH} 字`;
   }

@@ -109,5 +109,7 @@ def test_health_reports_missing_tables(tmp_path):
 
 
 def test_protocol_constants():
-    assert LABELS == ("KnowledgePoint", "Question")
+    assert LABELS[:2] == ("KnowledgePoint", "Question")
+    assert {"News", "Topic", "Source", "Media"} <= set(LABELS)
     assert "INSTANCE_OF" in RELS
+    assert {"ABOUT", "FROM_SOURCE", "HAS_MEDIA"} <= set(RELS)

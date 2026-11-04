@@ -42,7 +42,9 @@ const VTJ_LOCKED_VERSIONS = {
 // 101 = 104 - 3（2026-11-04 徽章展示模块下线：/badges、/badges-demo、/badge-preview 三条页面路由移除）
 // 105 = 101 + 4（2026-11-04 远端 main 再前进 10 提交：新闻时间线/详情 + 平板与手机端新闻时间线
 //   /news、/news/:id、/tablet/news/timeline、/mobile/news/timeline；与 test_route_roles 的 105 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 105;
+// 104 = 105 - 1（2026-11-04 远端二次合并：管理端用户/权限页改用 AdminUsersWorkspace 组件、
+//   平板论坛页移除，净减少 1 处动态 import；与 test_route_roles 的 104 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 104;
 
 const violations = [];
 

@@ -620,9 +620,22 @@ async def get_question_group(
             except Exception:
                 _opts = []
         if isinstance(_opts, list):
-            _opts = [sanitize_image_placeholders(sanitize_content_images(
-                render_image_placeholder(str(o.get('value', '')) if isinstance(o, dict) else str(o)),
-                q.question_id, db), q.question_id, db) if isinstance(o, dict) else o for o in _opts]
+            # 题组接口是前端 o.key/o.value 契约的唯一来源。旧实现把 dict
+            # 压成 value 字符串，管理端/教师端题组预览因此丢失 A/B/C/D。
+            # 这里保留 key；纯字符串按数组下标补 key，兼容历史数据。
+            _normalized_opts = []
+            for _idx, _o in enumerate(_opts):
+                if isinstance(_o, dict):
+                    _key = str(_o.get('key') or chr(65 + _idx)).strip() or chr(65 + _idx)
+                    _value = str(_o.get('value', ''))
+                else:
+                    _key = chr(65 + _idx)
+                    _value = str(_o)
+                _value = render_image_placeholder(_value)
+                _value = sanitize_content_images(_value, q.question_id, db)
+                _value = sanitize_image_placeholders(_value, q.question_id, db)
+                _normalized_opts.append({'key': _key, 'value': _value})
+            _opts = _normalized_opts
         detail_row = db.query(QuestionDetailCategory).filter(
             QuestionDetailCategory.question_id == q.question_id).first()
         items.append({

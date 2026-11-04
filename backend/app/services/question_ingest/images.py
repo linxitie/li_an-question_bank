@@ -514,12 +514,63 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
     return images
 
 
+_STAGED_REF_URL_RE = re.compile(
+    r'/static/questions/([A-Za-z0-9_\-]+\.(?:png|jpe?g|webp))', re.IGNORECASE)
+_STAGED_REF_MARKER_RE = re.compile(r'\[IMAGE:([A-Za-z0-9_\-]+)\]')
+
+
+def _extract_referenced_staging_names(texts) -> set:
+    """从题目/题组正文中提取仍被引用的暂存图文件名。"""
+    names = set()
+    for text in texts or []:
+        if not text:
+            continue
+        for match in _STAGED_REF_URL_RE.finditer(str(text)):
+            names.add(match.group(1))
+        for match in _STAGED_REF_MARKER_RE.finditer(str(text)):
+            names.add(match.group(1) + '.png')
+    return names
+
+
+def _collect_referenced_staging_names() -> set:
+    """收集数据库内所有仍被题目/题组引用的暂存图；失败时向上抛出，调用方 fail-closed。"""
+    from ...core.database import SessionLocal
+    from ...models.models import QuestionBank, QuestionGroup
+
+    db = SessionLocal()
+    try:
+        question_rows = db.query(
+            QuestionBank.stem,
+            QuestionBank.options,
+            QuestionBank.answer_analysis,
+        ).all()
+        group_rows = db.query(
+            QuestionGroup.shared_content,
+            QuestionGroup.shared_content_images,
+        ).all()
+    finally:
+        db.close()
+
+    texts = []
+    for stem, options, analysis in question_rows:
+        texts.extend((stem, str(options or ''), analysis))
+    for shared, images in group_rows:
+        texts.extend((shared, images))
+    return _extract_referenced_staging_names(texts)
+
+
 def cleanup_stale_staged_images(max_age_days: int = 7) -> int:
     """按时间清理暂存扁平图（F-2 配套，挂调度器每天一次）。
 
     只删除 ``_STAGING_DIR`` 根目录下、命名符合暂存形态（hex_题号_序号.png 或
-    题号_序号.png）且 mtime 超过 max_age_days 的文件。绝不触碰 {qid}/ 子目录
-    内的正式题目图——那是落库后的唯一副本。
+    题号_序号.png）、mtime 超过 max_age_days **且未被任何题目/题组引用**的文件。
+    绝不触碰 {qid}/ 子目录内的正式题目图——那是落库后的唯一副本。
+
+    为什么必须做 DB 引用保护（2026-11-03 事故）
+    ------------------------------------------
+    题目编辑/导入会把图写到扁平暂存目录，落库后正文仍可能直接引用
+    ``/static/questions/<name>.png``。只按 mtime 删除会误删生产图（实测一天删掉
+    469 张）。因此先收集引用集合，命中即跳过；收集失败则整轮不删除。
 
     返回删除文件数；任何异常吞掉并告警（清理失败不阻断任何业务）。
     """
@@ -529,12 +580,15 @@ def cleanup_stale_staged_images(max_age_days: int = 7) -> int:
     _staged_name_re = re.compile(r'(?:[a-f0-9]+_\d+_\d+|\d+_\d+)')
     removed = 0
     try:
+        referenced = _collect_referenced_staging_names()
         cutoff = _time.time() - max_age_days * 86400
         if not os.path.isdir(_STAGING_DIR):
             return 0
         for name in os.listdir(_STAGING_DIR):
             path = os.path.join(_STAGING_DIR, name)
             if not os.path.isfile(path) or not name.lower().endswith('.png'):
+                continue
+            if name in referenced:
                 continue
             if not _staged_name_re.fullmatch(name[:-4]):
                 continue
@@ -546,7 +600,8 @@ def cleanup_stale_staged_images(max_age_days: int = 7) -> int:
             except OSError:
                 pass
         if removed:
-            logger.info(f"[images] 清理暂存图 {removed} 张（>={max_age_days} 天）")
+            logger.info(
+                f"[images] 清理未被引用的暂存图 {removed} 张（>={max_age_days} 天）")
     except Exception as e:  # noqa: BLE001
-        logger.warning(f"[images] 暂存图清理失败: {e}")
+        logger.warning(f"[images] 暂存图清理失败，本轮不删除任何文件: {e}")
     return removed

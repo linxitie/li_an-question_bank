@@ -1013,6 +1013,18 @@ class EssayQuoteCreate(BaseModel):
     author: Optional[str] = Field(None, max_length=100, description="作者")
 
 
+class QuoteReviewRequest(BaseModel):
+    """R1 金句审核请求"""
+    action: Literal["approve", "reject", "request_changes", "archive"]
+    reason: str = Field("", max_length=500, description="拒绝/退回时必填")
+
+
+class NewsReviewRequest(BaseModel):
+    """R2.3 新闻审核请求"""
+    action: Literal["publish", "reject", "needs_changes", "resubmit", "archive"]
+    reason: str = Field("", max_length=500, description="拒绝/退回时必填")
+
+
 # ------------------------------
 # 题目导入 — 统一解析 Schema
 # ------------------------------
