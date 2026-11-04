@@ -86,6 +86,21 @@ def grant_unlock(
                 description=f"获得成就：{achievement.name}",
             )
 
+        # 写入「获得时档位快照」（0–4）：按**发放当时**的累计积分换算。
+        # 放在单点发奖处，登录/答题/资料等所有触发路径都能覆盖。
+        try:
+            from . import badge_service
+
+            snap = badge_service.tier_of(
+                badge_service.total_score(db, user.user_id))["index"]
+            db.query(UserAchievement).filter(
+                UserAchievement.user_id == user.user_id,
+                UserAchievement.achievement_id == achievement_id,
+            ).update({UserAchievement.tier_snapshot: snap},
+                     synchronize_session=False)
+        except Exception as e:  # 快照失败不影响发放
+            logger.warning("写入档位快照失败 user=%s: %r", user.user_id, e)
+
         add_growth(db, user, GROWTH_RULES["achievement"])
         logger.info(
             "用户 %s 获得成就「%s」tier=%s，奖励 %s 金币",

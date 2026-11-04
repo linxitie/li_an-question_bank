@@ -1,0 +1,133 @@
+{
+  "mat_before_768x1024": {
+    "vw": 768,
+    "overflowX": 0,
+    "gridCols": 3,
+    "card": {
+      "w": 227,
+      "h": 140
+    },
+    "smallTap": [
+      {
+        "t": "← 返回首页",
+        "w": 75,
+        "h": 19
+      },
+      {
+        "t": "只看收藏",
+        "w": 78,
+        "h": 19
+      },
+      {
+        "t": "Excel 批量",
+        "w": 122,
+        "h": 34
+      },
+      {
+        "t": "＋ 创建卡片",
+        "w": 101,
+        "h": 34
+      },
+      {
+        "t": "收起 ▴",
+        "w": 38,
+        "h": 17
+      }
+    ],
+    "heroTitle": "行测 · 行政职业能力测验",
+    "hasMatPage": true,
+    "hasGrid": true,
+    "bodyHead": "← 返回首页 行测备考资料 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） "
+  },
+  "mat_after_768x1024": {
+    "vw": 768,
+    "overflowX": 0,
+    "gridCols": 3,
+    "card": {
+      "w": 227,
+      "h": 140
+    },
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验",
+    "hasMatPage": true,
+    "hasGrid": true,
+    "bodyHead": "← 返回首页 行测备考资料 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） "
+  },
+  "detail": {
+    "hash": "#/materials/detail?subject=xingce&id=108",
+    "overflowX": 0,
+    "flexDir": "column",
+    "sideW": 735,
+    "title": "老表"
+  },
+  "upload": {
+    "vw": 768,
+    "overflowX": 0,
+    "gridCols": 0,
+    "card": null,
+    "smallTap": [],
+    "heroTitle": "",
+    "hasMatPage": false,
+    "hasGrid": false,
+    "bodyHead": "创建卡片 学生端两种建卡方式并存：逐张创建（人工填写，保存即公开展示，免审批）与 Excel 批量导入（表格一次多行，提"
+  },
+  "badges": {
+    "overflowX": 0,
+    "cols": 3,
+    "small": 0
+  },
+  "mat_before_1024x768": {
+    "vw": 1024,
+    "overflowX": 0,
+    "gridCols": 6,
+    "card": {
+      "w": 152,
+      "h": 170
+    },
+    "smallTap": [
+      {
+        "t": "← 返回首页",
+        "w": 75,
+        "h": 19
+      },
+      {
+        "t": "只看收藏",
+        "w": 78,
+        "h": 19
+      },
+      {
+        "t": "Excel 批量",
+        "w": 122,
+        "h": 34
+      },
+      {
+        "t": "＋ 创建卡片",
+        "w": 101,
+        "h": 34
+      },
+      {
+        "t": "收起 ▴",
+        "w": 38,
+        "h": 17
+      }
+    ],
+    "heroTitle": "行测 · 行政职业能力测验",
+    "hasMatPage": true,
+    "hasGrid": true,
+    "bodyHead": "← 返回首页 行测备考资料 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） "
+  },
+  "mat_after_1024x768": {
+    "vw": 1024,
+    "overflowX": 0,
+    "gridCols": 6,
+    "card": {
+      "w": 152,
+      "h": 170
+    },
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验",
+    "hasMatPage": true,
+    "hasGrid": true,
+    "bodyHead": "← 返回首页 行测备考资料 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） "
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "generatedAt": "2026-10-30T02:58:43.216Z",
+  "report": [
+    {
+      "device": "PC",
+      "scene": "徽章页_详情弹层",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/PC_徽章页_详情弹层.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "PC",
+      "scene": "徽章页_主页墙",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/PC_徽章页_主页墙.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "PC",
+      "scene": "上传页",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/PC_上传页.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "平板",
+      "scene": "徽章页_详情弹层",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/平板_徽章页_详情弹层.png",
+      "scrollWidth": 834,
+      "innerWidth": 834,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "平板",
+      "scene": "徽章页_主页墙",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/平板_徽章页_主页墙.png",
+      "scrollWidth": 834,
+      "innerWidth": 834,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "平板",
+      "scene": "上传页",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/平板_上传页.png",
+      "scrollWidth": 834,
+      "innerWidth": 834,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "手机",
+      "scene": "徽章页_详情弹层",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/手机_徽章页_详情弹层.png",
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "手机",
+      "scene": "徽章页_主页墙",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/手机_徽章页_主页墙.png",
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "horizontalOverflow": false
+    },
+    {
+      "device": "手机",
+      "scene": "上传页",
+      "file": "C:\\Users\\35709\\OneDrive\\Desktop\\题库\\li_an-question_bank\\docs\\plans\\assets\\备考资料_三端/手机_上传页.png",
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "horizontalOverflow": false
+    }
+  ]
+}

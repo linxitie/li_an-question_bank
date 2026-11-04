@@ -1,0 +1,336 @@
+{
+  "home": {
+    "hash": "#/tablet/home",
+    "vw": 768,
+    "vh": 1024,
+    "scrollW": 768,
+    "overflowX": 0,
+    "card": null,
+    "actBtn": null,
+    "barBtnH": null,
+    "smallTap": []
+  },
+  "homeEntries": [
+    "砺安题库",
+    "公安联考备考学员",
+    "15连续天数",
+    "15",
+    "连续天数",
+    "1289总做题",
+    "1289",
+    "总做题",
+    "70.2%正确率",
+    "70.2%",
+    "正确率",
+    "今日目标",
+    "已完成 0/40 题0%",
+    "已完成 0/40 题",
+    "0%",
+    "开始练习",
+    "考试日历",
+    "11月1",
+    "11月",
+    "1",
+    "还有 0 天",
+    "9月15",
+    "9月",
+    "10月21",
+    "10月",
+    "21",
+    "本周学习趋势  详细数据",
+    "详细数据",
+    "15周一",
+    "周一",
+    "22周二",
+    "22",
+    "周二",
+    "18周三",
+    "18",
+    "周三",
+    "25周四",
+    "25",
+    "周四",
+    "20周五"
+  ],
+  "homeInject": {
+    "present": true,
+    "text": "📚备考资料卡片 · 视频 · 指南›",
+    "host": "center-content",
+    "siblings": [
+      "智能组卷AI智能出题",
+      "题库练习海量题库",
+      "错题本攻克薄弱",
+      "模拟考试实战演练",
+      "📚备考资料卡片 · 视频 "
+    ],
+    "rect": [
+      107,
+      93
+    ],
+    "gridCols": 1
+  },
+  "homeInjectNav": "#/tablet/materials",
+  "profile": {
+    "hash": "#/tablet/profile",
+    "vw": 768,
+    "vh": 1024,
+    "scrollW": 768,
+    "overflowX": 0,
+    "card": null,
+    "actBtn": null,
+    "barBtnH": null,
+    "smallTap": []
+  },
+  "profileEntries": [
+    "砺安题库",
+    "个人中心",
+    "公安联考备考学员",
+    "2连续天数0总做题0%正确率",
+    "2连续天数",
+    "2",
+    "连续天数",
+    "0总做题",
+    "0",
+    "总做题",
+    "0%正确率",
+    "0%",
+    "正确率",
+    "我的成就",
+    "我的徽章",
+    "离线下载",
+    "意见反馈",
+    "帮助中心",
+    "关于砺安题库",
+    "退出登录",
+    "学习数据",
+    "0错题本",
+    "错题本",
+    "0收藏",
+    "收藏",
+    "0历史记录",
+    "历史记录",
+    "0笔记",
+    "笔记",
+    "学习趋势 近30天",
+    "近30天",
+    "010-27",
+    "10-27",
+    "010-28",
+    "10-28",
+    "010-29",
+    "10-29",
+    "010-30",
+    "10-30",
+    "010-31"
+  ],
+  "profileHit": {
+    "text": "离线下载",
+    "tag": "DIV"
+  },
+  "materials": {
+    "hash": "#/tablet/materials",
+    "vw": 768,
+    "vh": 1024,
+    "scrollW": 768,
+    "overflowX": 0,
+    "card": null,
+    "actBtn": {
+      "w": 119,
+      "h": 44
+    },
+    "barBtnH": null,
+    "smallTap": []
+  },
+  "materialsGrid": {
+    "layout": "grid",
+    "cols": 3,
+    "cardCount": 6,
+    "card": {
+      "w": 236,
+      "h": 260,
+      "aspect": 0.91
+    },
+    "hero": "行测 · 行政职业能力测验",
+    "progress": "23.7%",
+    "barButtons": [
+      "上一页",
+      "下一页"
+    ],
+    "pageLabel": "1 / 7 页 · 共 37 张",
+    "stackVisible": false,
+    "listCards": 0
+  },
+  "gridPaging": {
+    "pageBefore": "1 / 7 页 · 共 37 张",
+    "pageAfter": "2 / 7 页 · 共 37 张"
+  },
+  "flip": {
+    "flipped": true,
+    "t": "matrix3d(-1, 0, 0, 0, "
+  },
+  "sections": {
+    "blockCount": 2,
+    "titles": [
+      "🎬 入门讲解视频",
+      "📋 备考指南"
+    ],
+    "counts": [
+      1,
+      1
+    ],
+    "videos": 1,
+    "articles": 1,
+    "hasFavToggle": true,
+    "favChecked": false
+  },
+  "favFilter": {
+    "before": 2,
+    "after": 0
+  },
+  "mediaVideo": {
+    "open": true,
+    "hasVideo": true,
+    "src": "https://example.com/mock.mp4"
+  },
+  "mediaArticle": {
+    "open": true,
+    "hasArticle": true,
+    "len": 1331
+  },
+  "detailPage": {
+    "hash": "#/tablet/materials/detail?id=62&subject=xingce",
+    "hasPage": true,
+    "hasSide": true,
+    "sideW": 735,
+    "bodyFlexDir": "column",
+    "overflowX": 0,
+    "title": "速算技巧 首位估算验算",
+    "backBtnH": 44
+  },
+  "lightbox": {
+    "open": true,
+    "img": {
+      "w": 656,
+      "h": 875
+    },
+    "count": "1 / 1",
+    "tools": [
+      {
+        "t": "缩小",
+        "w": 44,
+        "h": 44
+      },
+      {
+        "t": "放大",
+        "w": 44,
+        "h": 44
+      },
+      {
+        "t": "原始大小",
+        "w": 44,
+        "h": 44
+      },
+      {
+        "t": "关闭（Esc）",
+        "w": 44,
+        "h": 44
+      }
+    ],
+    "smallTools": []
+  },
+  "create": {
+    "open": true,
+    "mask": {
+      "w": 768,
+      "h": 1024
+    },
+    "panel": {
+      "w": 520,
+      "h": 440
+    },
+    "panelMaxW": "520px",
+    "batchStep": "一次要传很多张？用「Excel 批量导入」→"
+  },
+  "badges": {
+    "hash": "#/tablet/badges",
+    "vw": 768,
+    "vh": 1024,
+    "scrollW": 768,
+    "overflowX": 0,
+    "card": null,
+    "actBtn": null,
+    "barBtnH": null,
+    "smallTap": []
+  },
+  "badgeGrid": {
+    "cls": "bg-grid",
+    "display": "grid",
+    "cols": 3,
+    "w": 711,
+    "childW": 226,
+    "childH": 262
+  },
+  "upload": {
+    "hash": "#/materials/upload?tab=excel",
+    "vw": 768,
+    "vh": 1024,
+    "scrollW": 768,
+    "overflowX": 0,
+    "card": null,
+    "actBtn": null,
+    "barBtnH": null,
+    "smallTap": []
+  },
+  "uploadBox": {
+    "container": ".mc-page",
+    "w": 767,
+    "max": "860px",
+    "textW": 731
+  },
+  "pcPage": {
+    "hash": "#/materials/shenlun",
+    "vw": 768,
+    "vh": 1024,
+    "scrollW": 768,
+    "overflowX": 0,
+    "card": null,
+    "actBtn": null,
+    "barBtnH": null,
+    "smallTap": []
+  },
+  "pcPageInfo": {
+    "hash": "#/materials/shenlun",
+    "matPage": true,
+    "topBar": "← 返回首页\n只看收藏",
+    "cardW": [
+      702,
+      1340
+    ],
+    "bodyHead": "← 返回首页 只看收藏 学生可自建卡片：逐张创建（免审，保存即公开）· Excel 批量（提交后待审核） Excel 批量导入 ＋ 创建卡片 申论 · 写作专项突破 吃透材料分析方法，掌握高分写作框架与热点素材 学习进度 7.4% （已完成"
+  },
+  "materialsLandscape": {
+    "hash": "#/tablet/materials",
+    "vw": 1024,
+    "vh": 768,
+    "scrollW": 1024,
+    "overflowX": 0,
+    "card": null,
+    "actBtn": {
+      "w": 119,
+      "h": 44
+    },
+    "barBtnH": null,
+    "smallTap": []
+  },
+  "materialsLandscapeGrid": {
+    "layout": "grid",
+    "cols": 4,
+    "cardCount": 8,
+    "card": {
+      "w": 237,
+      "h": 215,
+      "aspect": 1.1
+    },
+    "pageLabel": "1 / 5 页 · 共 37 张"
+  }
+}

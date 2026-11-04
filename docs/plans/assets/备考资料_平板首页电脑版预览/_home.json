@@ -1,0 +1,467 @@
+{
+  "home_base_1024x768": {
+    "vw": 1024,
+    "vh": 768,
+    "overflowX": -6,
+    "pageHeight": 2593,
+    "topCols": "280px 482.188px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 990,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 482,
+        "h": 990,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 990,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [
+      {
+        "t": "首页",
+        "h": 37
+      },
+      {
+        "t": "题库",
+        "h": 37
+      },
+      {
+        "t": "关于砺安题库",
+        "h": 37
+      },
+      {
+        "t": "论坛",
+        "h": 37
+      },
+      {
+        "t": "下载客户端",
+        "h": 35
+      },
+      {
+        "t": "+ 新增目标",
+        "h": 28
+      }
+    ],
+    "smallTapCount": 16,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_touch_1024x768": {
+    "vw": 1024,
+    "vh": 768,
+    "overflowX": -6,
+    "pageHeight": 2644,
+    "topCols": "280px 482.188px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 482,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 1000,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_v2_1024x768": {
+    "vw": 1024,
+    "vh": 768,
+    "overflowX": -6,
+    "pageHeight": 2644,
+    "topCols": "220px 482.188px 260px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 220,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 482,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 260,
+        "h": 1000,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_v3_1024x768": {
+    "vw": 1024,
+    "vh": 768,
+    "overflowX": -6,
+    "pageHeight": 3187,
+    "topCols": "240px 699.333px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 240,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 699,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 953,
+        "h": 528,
+        "top": 1102
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "tabletHome_1024": {
+    "overflowX": 0,
+    "hash": "#/tablet/home",
+    "hasQuick": true,
+    "entry": true
+  },
+  "home_base_1180x820": {
+    "vw": 1180,
+    "vh": 820,
+    "overflowX": -6,
+    "pageHeight": 2593,
+    "topCols": "280px 482.188px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 990,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 482,
+        "h": 990,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 990,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [
+      {
+        "t": "首页",
+        "h": 37
+      },
+      {
+        "t": "题库",
+        "h": 37
+      },
+      {
+        "t": "关于砺安题库",
+        "h": 37
+      },
+      {
+        "t": "论坛",
+        "h": 37
+      },
+      {
+        "t": "下载客户端",
+        "h": 35
+      },
+      {
+        "t": "+ 新增目标",
+        "h": 28
+      }
+    ],
+    "smallTapCount": 16,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_touch_1180x820": {
+    "vw": 1180,
+    "vh": 820,
+    "overflowX": -6,
+    "pageHeight": 2644,
+    "topCols": "280px 482.188px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 482,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 1000,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_v2_1180x820": {
+    "vw": 1180,
+    "vh": 820,
+    "overflowX": -6,
+    "pageHeight": 2644,
+    "topCols": "220px 601.333px 260px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 220,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 601,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 260,
+        "h": 1000,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_v3_1180x820": {
+    "vw": 1180,
+    "vh": 820,
+    "overflowX": -6,
+    "pageHeight": 3215,
+    "topCols": "240px 855.333px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 240,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 855,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 1109,
+        "h": 557,
+        "top": 1102
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_base_1366x1024": {
+    "vw": 1366,
+    "vh": 1024,
+    "overflowX": -6,
+    "pageHeight": 2593,
+    "topCols": "280px 655.333px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 990,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 655,
+        "h": 990,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 990,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [
+      {
+        "t": "首页",
+        "h": 37
+      },
+      {
+        "t": "题库",
+        "h": 37
+      },
+      {
+        "t": "关于砺安题库",
+        "h": 37
+      },
+      {
+        "t": "论坛",
+        "h": 37
+      },
+      {
+        "t": "下载客户端",
+        "h": 35
+      },
+      {
+        "t": "+ 新增目标",
+        "h": 28
+      }
+    ],
+    "smallTapCount": 16,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_touch_1366x1024": {
+    "vw": 1366,
+    "vh": 1024,
+    "overflowX": -6,
+    "pageHeight": 2644,
+    "topCols": "280px 655.333px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 655,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 1000,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_v2_1366x1024": {
+    "vw": 1366,
+    "vh": 1024,
+    "overflowX": -6,
+    "pageHeight": 2644,
+    "topCols": "280px 655.333px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 655,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 1000,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  },
+  "home_v3_1366x1024": {
+    "vw": 1366,
+    "vh": 1024,
+    "overflowX": -6,
+    "pageHeight": 2644,
+    "topCols": "280px 655.333px 320px",
+    "cols": [
+      {
+        "c": "left-col",
+        "w": 280,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "center-col",
+        "w": 655,
+        "h": 1000,
+        "top": 88
+      },
+      {
+        "c": "right-col",
+        "w": 320,
+        "h": 1000,
+        "top": 88
+      }
+    ],
+    "recruitCols": 3,
+    "smallTap": [],
+    "smallTapCount": 0,
+    "hasHome": true,
+    "bodyHead": "🛡️ 警大砺安 首页 题库 关于砺安题库 论坛 下载客户端 202516001 📅 签到打卡 2 天连续 ✅ 2 周一 ✓ 3 周二 4"
+  }
+}

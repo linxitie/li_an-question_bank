@@ -128,6 +128,8 @@
           </div>
         </div>
       </aside>
+      <!-- 2026-11-04：徽章展示模块下线，「我的徽章」墙与其 /api/badges/wall 数据源一并移除；
+           上方「学习成就」徽标（earnedBadges）属成就引擎，保留。 -->
     </main>
 
     <!-- 编辑资料弹窗 -->
@@ -201,6 +203,7 @@ import {
   Trophy, TrendCharts, Setting,
 } from '@vtj/icons';
 import NavBar from '$vtj/vue/navbar.vue';
+// 2026-11-04：徽章展示模块下线，BadgeIcon / BADGE_TIERS 依赖随之移除
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 // 学习分布（科目占比 + 对错比例）与错题知识点：数据来自 P2 新增的两个只读聚合端点
@@ -243,7 +246,11 @@ async function apiGet(url: string) {
   return res.json();
 }
 
-// 统计/金币/等级/勋章/掌握度的加载逻辑抽成独立函数：首屏与增量同步共用。
+/** 档位中文 → 索引（0-4），未知按黑铁兜底 */
+// 2026-11-04：徽章展示模块下线，徽章墙抓取与档位映射一并移除
+
+// 统计/金币/等级/勋章/掌握度的加载逻辑抽成独立函数：首屏与 __VTJ_SYNC__ 增量同步共用，
+// 避免两处重复实现（合并解冲突时保留两边的说明口径）。
 async function loadStudyData() {
   const [s, c, l, a, m] = await Promise.all([
     apiGet('/api/stats/'),
@@ -495,4 +502,6 @@ function handleLogout() {
 .record-amt.plus { color: #10b981; }
 .record-amt.minus { color: #ef4444; }
 .record-date { color: #8a8faa; font-size: 11px; }
+
+/* 2026-11-04：徽章墙样式（.badge-wall-card / .bw-*）随徽章展示模块下线一并移除 */
 </style>

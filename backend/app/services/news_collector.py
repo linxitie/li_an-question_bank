@@ -18,7 +18,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..core.news_sources import NEWS_SOURCES, SOURCE_BY_CODE, NewsSourceConfig
-from ..models.models import NewsArticle, NewsImage
+from ..models.models import NewsArticle, NewsImage, NewsSource
 from .news_storage import NewsStorage, get_news_storage
 
 logger = logging.getLogger(__name__)
@@ -147,12 +147,25 @@ def parse_article(html: str, url: str) -> ArticleData:
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     title = ""
-    for selector in ('meta[property="og:title"]', "h1", "title"):
-        node = soup.select_one(selector)
+    for selector in (
+        'meta[property="og:title"]',
+        'meta[name="ArticleTitle"]',
+        ".article-title",
+        ".intr_title",
+        "h1",
+        "h2",
+        ".title",
+    ):
+        for node in soup.select(selector):
+            candidate = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
+            if len(candidate) < 6 or candidate in {"工作链接", "专题专栏", "地方特色"}:
+                continue
+            if len(candidate) > len(title):
+                title = candidate
+    if not title:
+        node = soup.select_one("title")
         if node:
-            title = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
-            if title:
-                break
+            title = node.get_text(" ", strip=True).strip()
     body = ""
     best_score = 0
     for selector in _CONTENT_SELECTORS:
@@ -410,9 +423,13 @@ def collect_source(
 
 
 def collect_all_sources(db: Session, *, limit: int = 5, dry_run: bool = False) -> list[dict]:
+    enabled = {
+        row.source_code: bool(row.enabled)
+        for row in db.query(NewsSource.source_code, NewsSource.enabled).all()
+    }
     reports = []
     for source in NEWS_SOURCES:
-        if not source.enabled:
+        if not enabled.get(source.code, bool(source.enabled)):
             continue
         reports.append(collect_source(db, source, limit=limit, dry_run=dry_run))
     return reports

@@ -15,8 +15,9 @@ BASELINE_PATH = (
 CONVERTER_RE = re.compile(r":[a-zA-Z_]+")
 
 DOCUMENTED_FEEDBACK_MOVES = {
+    # 2026-11-04 合并远端 main 后复核：反馈工单化保留了 POST /api/feedback/{feedback_id}/reply，
+    # 仅 GET /api/feedback 仍为「已文档化下线」，故本集合只留这一条。
     ("GET", "/api/feedback"),
-    ("POST", "/api/feedback/{feedback_id}/reply"),
 }
 
 KNOWN_EXTRA_OPERATIONS = {
@@ -35,8 +36,38 @@ KNOWN_EXTRA_OPERATIONS = {
     # 鉴权：require_teacher_or_admin；校验：content-type 白名单 + 扩展名白名单 + 10MB 上限 + 题组存在性。
     # 只登记不重算基线 —— api_surface.json 仍保持 343 条冻结口径，新增走本白名单单独可审计。
     ("POST", "/api/questions/group/{group_id}/images"),
-    # F1 一致性内核健康快照（非业务端点，只读）。
+    # ===== 备考资料 / 徽章工作流新增（2026-11-01 补登记）=====
+    # 说明：这些端点是 `feat/Study-Material-Management` 交付线里陆续加的，
+    # 当时只改了代码没登记白名单，导致本守卫从那时起一直红。此处按 R11
+    # 「只登记不重算基线」的口径一次性补齐，基线文件仍冻结 343 条。
+    # 2026-11-04：徽章展示模块下线（/api/badges/* 六个端点随 badges.py 删除），
+    # 白名单里对应条目一并移除；成就/金币相关端点仍保留登记。
+    # 成长（徽章命名库 / 管理员建成就）
+    ("POST", "/api/achievements/admin"),
+    ("GET", "/api/achievements/name-bank/status"),
     ("GET", "/health/foundation"),
+    # 备考资料：个人库（B1 三角色建卡）
+    ("POST", "/api/materials/my"),
+    ("GET", "/api/materials/my"),
+    ("PUT", "/api/materials/my/{material_id}"),
+    ("DELETE", "/api/materials/my/{material_id}"),
+    # 备考资料：共享区 / 领取 / 一卡多图
+    ("GET", "/api/materials/shared"),
+    ("POST", "/api/materials/{material_id}/share"),
+    ("POST", "/api/materials/{material_id}/unshare"),
+    ("POST", "/api/materials/{material_id}/adopt"),
+    ("POST", "/api/materials/admin/cards/batch-image"),
+    # 备考资料：分类规则后台（专利主张(3)）
+    ("GET", "/api/materials/admin/rules"),
+    ("POST", "/api/materials/admin/rules"),
+    ("PUT", "/api/materials/admin/rules/{rule_id}"),
+    ("PATCH", "/api/materials/admin/rules/{rule_id}/toggle"),
+    # 备考资料：学生上传（表格批量，待审）
+    ("POST", "/api/materials/my/upload"),
+    # 备考资料：学生手动建卡（免审批，2026-11-01 本轮新增）+ 分类法只读契约
+    ("POST", "/api/materials/my/card"),
+    ("GET", "/api/materials/taxonomy"),
+    # ===== 远端 main（模块4/7 与 F3）新增，合并时保留 =====
     # F3 媒体资产稳定读取代理（新资产 URL；旧 /uploads 与 /static 不变）。
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。
     ("GET", "/media/{asset_id}"),
@@ -55,6 +86,133 @@ KNOWN_EXTRA_OPERATIONS = {
     ("GET", "/api/practice/draft"),
     ("GET", "/api/practice/drafts"),
     ("DELETE", "/api/practice/draft"),
+    # ===== 远端 main 合并补登记（2026-11-04）=====
+    # 来源：模块4（学习计划/能力雷达/成就）、模块7（联考小智/知识图谱/记忆/学习仪表盘）、
+    # 论坛治理与练习管理员、媒体资产 F3、OCR 候选等端点随远端 main 合入；
+    # 此前只在代码里、未登记本白名单，按 R11「只登记不重算基线」一次补齐（基线仍冻结 343 条）。
+    ("DELETE", "/api/admin/forum/comments/{comment_id}"),
+    ("DELETE", "/api/admin/forum/comments/{comment_id}/purge"),
+    ("DELETE", "/api/admin/forum/posts/{post_id}"),
+    ("DELETE", "/api/admin/forum/posts/{post_id}/purge"),
+    ("DELETE", "/api/admin/practice-admins/{user_id}"),
+    ("DELETE", "/api/agent/memory/{memory_id}"),
+    ("DELETE", "/api/forum/comments/{comment_id}"),
+    ("DELETE", "/api/forum/comments/{comment_id}/reactions"),
+    ("DELETE", "/api/forum/posts/{post_id}/reactions"),
+    ("DELETE", "/api/forum/stickers/{sticker_id}"),
+    ("DELETE", "/api/knowledge/relation/{rel_id}"),
+    ("DELETE", "/api/llm/sessions/{session_id}"),
+    ("DELETE", "/api/plan/{plan_id}"),
+    ("DELETE", "/api/teacher/practice-admins/{user_id}"),
+    ("GET", "/api/admin/forum/comments"),
+    ("GET", "/api/admin/forum/moderation"),
+    ("GET", "/api/admin/forum/posts"),
+    ("GET", "/api/admin/forum/recycle"),
+    ("GET", "/api/admin/forum/recycle/audit"),
+    ("GET", "/api/admin/news/pending"),
+    ("GET", "/api/admin/practice-admins"),
+    ("GET", "/api/agent/memories"),
+    ("GET", "/api/agent/tasks"),
+    ("GET", "/api/agent/trajectory"),
+    ("GET", "/api/exams/{paper_id}"),
+    ("GET", "/api/feedback/{feedback_id}"),
+    ("GET", "/api/forum/my-favorites"),
+    ("GET", "/api/forum/my-likes"),
+    ("GET", "/api/forum/stickers"),
+    ("GET", "/api/knowledge/categories"),
+    ("GET", "/api/knowledge/graph"),
+    ("GET", "/api/knowledge/nodes"),
+    ("GET", "/api/knowledge/nodes/{node_id}/detail"),
+    ("GET", "/api/knowledge/relations"),
+    ("GET", "/api/knowledge/stats"),
+    ("GET", "/api/knowledge/vault"),
+    ("GET", "/api/llm/context/assemble"),
+    ("GET", "/api/llm/sessions"),
+    ("GET", "/api/llm/sessions/{session_id}/messages"),
+    ("GET", "/api/news/categories"),
+    ("GET", "/api/news/digest"),
+    ("GET", "/api/news/timeline"),
+    ("GET", "/api/notifications"),
+    ("GET", "/api/plan/current"),
+    ("GET", "/api/plan/notifies"),
+    ("GET", "/api/plan/today"),
+    ("GET", "/api/plan/{plan_id}/tasks"),
+    ("GET", "/api/post/search"),
+    ("GET", "/api/post/stats"),
+    ("GET", "/api/profile"),
+    ("GET", "/api/profile/questions"),
+    ("GET", "/api/questions/group/{group_id}/ocr-candidates"),
+    ("GET", "/api/questions/{question_id}/ocr-candidates"),
+    ("GET", "/api/teacher/forum/posts"),
+    ("GET", "/api/teacher/forum/posts/{post_id}/comments"),
+    ("GET", "/api/teacher/practice-admins"),
+    ("GET", "/api/teacher/scores/class-compare"),
+    ("POST", "/api/admin/forum/comments/{comment_id}/restore"),
+    ("POST", "/api/admin/forum/moderation/{moderation_id}/approve"),
+    ("POST", "/api/admin/forum/moderation/{moderation_id}/reject"),
+    ("POST", "/api/admin/forum/posts/{post_id}/restore"),
+    ("POST", "/api/admin/news/{news_id}/review"),
+    ("POST", "/api/admin/practice-admins"),
+    ("POST", "/api/agent/import-today"),
+    ("POST", "/api/agent/run"),
+    ("POST", "/api/forum/comments/{comment_id}/reactions/{reaction_code}"),
+    ("POST", "/api/forum/posts/{post_id}/favorite"),
+    ("POST", "/api/forum/posts/{post_id}/reactions/{reaction_code}"),
+    ("POST", "/api/forum/reports"),
+    ("POST", "/api/forum/stickers"),
+    ("POST", "/api/knowledge/nodes"),
+    ("POST", "/api/knowledge/nodes/{node_id}/approve"),
+    ("POST", "/api/knowledge/nodes/{node_id}/reject"),
+    ("POST", "/api/knowledge/relation"),
+    ("POST", "/api/knowledge/relation/suggest"),
+    ("POST", "/api/knowledge/vault/import"),
+    ("POST", "/api/llm/sessions"),
+    ("POST", "/api/plan/adjust"),
+    ("POST", "/api/plan/generate"),
+    ("POST", "/api/plan/notify/{notify_id}/read"),
+    ("POST", "/api/plan/task/{goal_id}/claim"),
+    ("POST", "/api/plan/task/{goal_id}/toggle"),
+    ("POST", "/api/post/import"),
+    ("POST", "/api/profile/upsert"),
+    ("POST", "/api/questions/group/{group_id}/ocr-apply"),
+    ("POST", "/api/questions/{question_id}/ocr-apply"),
+    ("POST", "/api/teacher/forum/comments/{comment_id}/hide"),
+    ("POST", "/api/teacher/forum/posts/{post_id}/hide"),
+    ("POST", "/api/teacher/practice-admins"),
+    ("PUT", "/api/forum/comments/{comment_id}/pin"),
+    ("PUT", "/api/forum/posts/{post_id}"),
+    ("PUT", "/api/notifications/read-all"),
+    ("PUT", "/api/notifications/{notification_id}/read"),
+    # ===== 本次合并补登记（2026-11-04）=====
+    # 管理员端用户/权限工作台、知识图谱查询、媒体资产 /api 别名与 Agent 反馈入口
+    # 在两侧分支各自新增，合并冲突解决时白名单取并集后仍缺这批条目；
+    # 仍按 R11「只登记不重算基线」补齐，api_surface.json 保持 343 条冻结口径。
+    ("DELETE", "/api/admin/users/{user_id}"),
+    ("GET", "/api/admin/permission-audit"),
+    ("GET", "/api/admin/permission-health"),
+    ("GET", "/api/admin/permissions/catalog"),
+    ("GET", "/api/admin/quotes/candidates"),
+    ("GET", "/api/admin/users/stats"),
+    ("GET", "/api/admin/users/{user_id}"),
+    ("GET", "/api/admin/users/{user_id}/permissions"),
+    ("GET", "/api/kg/nodes/{node_type}/{node_id}"),
+    ("GET", "/api/kg/search"),
+    ("GET", "/api/kg/subgraph"),
+    ("GET", "/api/kg/topics"),
+    ("GET", "/api/media/{asset_id}"),
+    ("HEAD", "/api/media/{asset_id}"),
+    ("POST", "/api/admin/permission-batches/{batch_id}/undo"),
+    ("POST", "/api/admin/quotes/{quote_ref}/review"),
+    ("POST", "/api/admin/users/batch"),
+    ("POST", "/api/admin/users/permissions/apply"),
+    ("POST", "/api/admin/users/permissions/preview"),
+    ("POST", "/api/admin/users/{user_id}/purge"),
+    ("POST", "/api/admin/users/{user_id}/restore"),
+    ("POST", "/api/agent/feedback"),
+    ("POST", "/api/agent/upload"),
+    ("POST", "/api/media/image"),
+    ("PUT", "/api/admin/users/{user_id}/permissions"),
+    ("PUT", "/api/admin/users/{user_id}/role"),
 }
 
 

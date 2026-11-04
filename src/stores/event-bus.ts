@@ -24,7 +24,9 @@ export const EVENT_NAMES = {
   /** 成就解锁（成长域广播，通知 / 徽章消费） */
   GROWTH_ACHIEVEMENT_UNLOCKED: 'growth:achievement-unlocked',
   /** 组卷/历年试卷数据变更（后端 data-changed 推送后由前端桥接触发） */
-  PAPERS_DATA_CHANGED: 'papers:data-changed'
+  PAPERS_DATA_CHANGED: 'papers:data-changed',
+  /** 联考小智会话列表已刷新（模块7 实装新增；载荷 { total }） */
+  SESSIONS_UPDATED: 'ai-assistant:sessions-updated'
 } as const;
 
 /** 全部合法事件名 */
@@ -66,12 +68,18 @@ export interface PapersDataChangedPayload {
   source?: string;
 }
 
+/** 联考小智会话列表刷新载荷（模块7：会话条数） */
+export interface AiAssistantSessionsUpdatedPayload {
+  total: number;
+}
+
 /** 事件名 -> 载荷类型映射（键取自 EVENT_NAMES，不重复字面量） */
 export interface EventPayloads {
   [EVENT_NAMES.WRONG_QUESTIONS_CHANGED]: WrongQuestionsChangedPayload;
   [EVENT_NAMES.REWARD_COINS_CHANGED]: RewardCoinsChangedPayload;
   [EVENT_NAMES.GROWTH_ACHIEVEMENT_UNLOCKED]: GrowthAchievementUnlockedPayload;
   [EVENT_NAMES.PAPERS_DATA_CHANGED]: PapersDataChangedPayload;
+  [EVENT_NAMES.SESSIONS_UPDATED]: AiAssistantSessionsUpdatedPayload;
 }
 
 /** mitt 要求的事件表类型 */
@@ -119,3 +127,4 @@ export const WRONG_QUESTIONS_CHANGED = EVENT_NAMES.WRONG_QUESTIONS_CHANGED;
 export const REWARD_COINS_CHANGED = EVENT_NAMES.REWARD_COINS_CHANGED;
 export const GROWTH_ACHIEVEMENT_UNLOCKED = EVENT_NAMES.GROWTH_ACHIEVEMENT_UNLOCKED;
 export const PAPERS_DATA_CHANGED = EVENT_NAMES.PAPERS_DATA_CHANGED;
+export const SESSIONS_UPDATED = EVENT_NAMES.SESSIONS_UPDATED;
