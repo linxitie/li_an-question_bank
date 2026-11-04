@@ -17,6 +17,7 @@
 
 | 文档 | 版本 | 状态 | 说明 |
 |---|---|---|---|
+| `plans/AI真功能_实施与验收_v1.md` | v1 | ✅ 已实施并静态验收（2026-11-04，分支 feature/ai-assistant-ai-real） | 模块4/7 AI 演示态转真功能：作文批改/模拟面试/学习教练走 /api/llm/chat 一次性任务（persist=false + essay/interview/coach 三场景，零新增端点，R11 不变）；前端只改 script（R3）；pytest 5 passed、L0 7/7、L5 PASS、VTJ 版本一致；真实 LLM 与前端运行时未验证 |
 | `superpowers/specs/砺安题库终态总体架构_v2.0.md` | v2.1 | ✅ 已批准（D1–D17）；F0–F2 已执行（2026-10-26） | **终态架构 + 多库一致性底座**：1 SoT（SQLite）+ 4 类可重建投影 + 事务 Outbox/幂等投影/对账；对草案 10 处硬修正、F0–F6 主干路线、L7 门禁（15 项）、Agent 规约；端×角色（3×3）一致性与空库审计；**v2.1 新增容量预算(§17)/数据卫生(§18)/写入准确性(§19)/三端通信 SLO(§20)/可落地自证(§21)**；业务功能模块不在此方案 |
 | `superpowers/specs/main分支启动阻断与考试链路修复_报告_20261026.md` | v1 | ✅ 已合并 main（2026-10-26） | main 报告 P0-1/2/3 + P1-1 + P1-3 + P3-1 修复：Pydantic v2 `ConfigDict`、考试路由导入收敛、日志目录自建+降级、`question_count` 以关联行数为唯一口径（含存量修复脚本）；3 条新回归测试 + 真机烟测 health/login/取题/开考/交卷全 200；全量 650 passed（8 失败均为既有环境项） |
 | `superpowers/specs/资料卡片导入D1类型覆盖缺陷修复_报告_20261027.md` | v1 | ✅ 已修复（2026-10-27，分支 `fix/D1-import-card-type`） | D1 阻断缺陷：xlsx 卡片导入的 `type` 被启发式分类器覆盖成 `article`，卡片进文章区、翻卡 UI 永不触发。修复：卡片分支按输入契约直写 `type='card'` 并删除多余 classify 调用；新增 2 条回归测试（xlsx→card、长 docx→article），资料域 39 passed；附存量清洗 SQL 与 D2–D8 交接说明 |
@@ -68,6 +69,7 @@
 
 ## 变更记录
 
+- 2026-11-04：**模块 4/7 AI 演示态转真功能**（分支 `feature/ai-assistant-ai-real`）。后端 `/api/llm/chat` add-only 扩 3 场景 + `persist=false` 一次性通道（不落会话/不写消息，零新增端点）；前端作文批改/模拟面试/AI学习教练接真 LLM，失败自动回退旧示例；只改 `<script>`（R3，模板零改动）。验收：pytest 5 passed、L0 7/7、L5 PASS、VTJ 版本 70 一致；如实标注 3 条限制（教练统计模板硬编码、面试作答输入框缺失、真实 LLM/前端运行时未验证）。
 - 2026-11-01：新增 `plans/备考资料_二轮UI与学生自建卡_方案与验收_v1.md`（已交付）。三条实测根因：`/api/badges/my` 漏返 `pinned`（精选点了没反应）、`#vtjLink` 是 `@vtj/pro` 开发期注入的设计器入口（手机端右下角铅笔钮）、学生端建卡缺的是「入口+单卡表单+配图通道」而非整条链路（`POST /api/materials/my` 早已存在）。新增 `POST /api/materials/my/card`（免审批 `status=1`，2 张图分别落 `cover_image` 与 `content`，零表结构变更）与 `GET /api/materials/taxonomy`（只经 catalog 契约取数，声明在 `/{material_id}` 之前）。顺带修徽章页 13px 横向裁切、筛选胶囊换行、CSP `img-src` 无 `blob:` 导致缩略图空白。
 - 2026-11-02：新增 `plans/备考资料_三轮PC建卡与全图_方案与验收_v1.md`（已交付）。三条实测结论：「返回首页」镜像源于 `.vtj` 页内 `.back` 类名冲突（顶栏链接与翻卡背面同名）；PC 建卡入口受 R3 约束只能用 DOM 注入（`.mat-page > .top-bar` 之后插一行操作条）；一卡两图拿不全是因为列表 brief 不返回 `content`，已补 `image_urls`。学生端 Excel 批量上传按「还原」口径保留待审（`status=0`），与逐张创建（免审 `status=1`）并存，页面两处文案写明差异。
 - 2026-11-02：四轮卡片栈文档升 v2。补四条实测结论：①翻页白框真根因是 `.stack-card` 容器自身 `background:#fff`（不是背景纸片），最终用「后置 3 张真卡片 + 容器透明 + 显式 z-index」解决，翻转时能看到后卡正文；②翻页方向原先两键共用朝左的 `is-leaving`，上一页根本没有独立动效 → 扩出 `entering-prev` 相位，两方向都向右（下一页 `+118%` 飞出，上一页关键帧 `62% → 0` 飞入）；③手机端 Excel 入口藏在弹层里等于没有，弹层第一步底部加显性入口直达 `#/materials/upload?tab=excel`；④浏览器窗口被遮挡时不产帧、CSS 过渡不插值，方向验收改用「样式规则 + 几何位移」而不是读 `transform`。
