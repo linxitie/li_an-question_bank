@@ -96,6 +96,11 @@ def _meaningful_chars(text: str) -> int:
     return len(re.findall(r"[\u4e00-\u9fff\u3400-\u4dbfA-Za-z0-9]", text or ""))
 
 
+def has_meaningful_content(content: str, min_chars: int = 8) -> bool:
+    """正文是否有足够「有效文字」可用来概括标题（供接口层快速拒绝）。"""
+    return _meaningful_chars(strip_html(content or "")) >= min_chars
+
+
 def needs_ai_title(title: Optional[str], content: Optional[str]) -> bool:
     """是否需要 AI 生成标题：标题为空/(无标题)，且正文有足够「有效文字」。
 
@@ -104,8 +109,7 @@ def needs_ai_title(title: Optional[str], content: Optional[str]) -> bool:
     normalized = (title or "").strip()
     if normalized and normalized != "(无标题)":
         return False
-    plain = strip_html(content or "")
-    return _meaningful_chars(plain) >= 8
+    return has_meaningful_content(content or "")
 
 
 async def generate_forum_title(content: str, content_format: str = "TEXT") -> Optional[str]:

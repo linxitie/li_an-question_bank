@@ -10,12 +10,36 @@
         <div class="pc-bd">
           <div class="f-row">
             <label>标题 <span class="req">*</span></label>
-            <input
-              v-model="form.title"
-              class="f-input"
-              maxlength="200"
-              placeholder="给帖子起一个清晰的标题，例如：2024 公专真题变化分析"
-            />
+            <div class="title-row">
+              <input
+                v-model="form.title"
+                class="f-input"
+                maxlength="200"
+                placeholder="给帖子起一个清晰的标题，例如：2024 公专真题变化分析"
+                @input="onTitleEdited"
+              />
+              <button
+                v-if="form.aiTitleEnabled"
+                type="button"
+                class="ai-suggest-btn"
+                :disabled="suggesting"
+                :title="suggestHint"
+                @click="onSuggestTitle"
+              >{{ suggesting ? '生成中…' : (titleFromAi ? '重新生成' : 'AI 生成标题') }}</button>
+            </div>
+            <!-- AI 标题开关（v4 2026-11-04）：用户不同意就完全不调用大模型 -->
+            <div class="ai-switch-row">
+              <label class="ai-switch">
+                <input v-model="form.aiTitleEnabled" type="checkbox" />
+                <span>允许 AI 自动总结标题</span>
+              </label>
+              <span class="ai-switch-tip">
+                {{ form.aiTitleEnabled
+                  ? '不填标题时才会生效；生成后可修改或重新生成'
+                  : '已关闭：按原样发布，不调用大模型' }}
+              </span>
+            </div>
+            <p v-if="titleFromAi" class="ai-ok-tip">已生成建议标题，可直接发布，也可手动修改或重新生成</p>
           </div>
 
           <div class="f-row">
@@ -99,7 +123,9 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
+
+import { suggestForumTitle } from '@/modules/community/api';
 
 import RichTextEditor from '@/components/rich-text/RichTextEditor.vue';
 import { fileIcon, formatFileSize, isDocFile, isImageFile, MAX_DOC_SIZE, uploadForumFile } from './fileUtils';
@@ -118,6 +144,10 @@ export interface PostDraft {
   visibility: 'ALL' | 'CLASSES';
   visibleClasses: string[];
   isTop: boolean;
+  /** 是否允许 AI 总结标题（v4）：关闭后后端完全跳过模型调用 */
+  aiTitleEnabled?: boolean;
+  /** 标题是否原样来自模型建议（用户没改过）*/
+  titleFromAi?: boolean;
 }
 
 /** wangEditor 工具栏：图三那一组「原生支持」的菜单（公式/语音/音乐/视频为二期） */
@@ -196,12 +226,29 @@ const form = reactive<PostDraft>({
   attachments: [],
   visibility: 'ALL',
   visibleClasses: [],
-  isTop: false
+  isTop: false,
+  aiTitleEnabled: true,
+  titleFromAi: false
 });
 
 const uploading = ref(false);
 const error = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
+
+// ===== AI 标题建议（v4 2026-11-04）=====
+const suggesting = ref(false);
+/** 本次打开弹窗已生成次数：超过 5 次就不再调用，避免连点烧 token */
+const suggestCount = ref(0);
+const MAX_SUGGEST_PER_OPEN = 5;
+/** 标题是否来自模型建议且用户未手改 */
+const titleFromAi = ref(false);
+
+const suggestHint = computed(() => {
+  if (suggestCount.value >= MAX_SUGGEST_PER_OPEN) {
+    return `本次最多生成 ${MAX_SUGGEST_PER_OPEN} 次，请手动填写标题`;
+  }
+  return '按正文内容让 AI 拟一个标题';
+});
 
 /** 表单是否还是空的（用于判断「能不能安全回填草稿」） */
 function isFormEmpty(): boolean {
@@ -216,6 +263,58 @@ function applyInitial(init: Partial<PostDraft>) {
   form.visibility = init.visibility === 'CLASSES' ? 'CLASSES' : 'ALL';
   form.visibleClasses = [...(init.visibleClasses ?? [])];
   form.isTop = Boolean(init.isTop);
+  // v4：草稿里存的开关状态优先；没有则默认允许
+  form.aiTitleEnabled = init.aiTitleEnabled !== false;
+  // 打开弹窗时重置一次性状态：AI 建议次数、是否来自模型
+  suggestCount.value = 0;
+  titleFromAi.value = Boolean(init.titleFromAi);
+}
+
+/**
+ * 点「AI 生成标题 / 重新生成」：先调预览接口拿建议填进标题框，用户可改、可再生成。
+ * 覆盖已有标题前会二次确认，避免把用户手写的标题一键抹掉。
+ */
+async function onSuggestTitle() {
+  if (suggesting.value) return;
+  if (suggestCount.value >= MAX_SUGGEST_PER_OPEN) {
+    error.value = `本次最多生成 ${MAX_SUGGEST_PER_OPEN} 次标题，请直接手动填写`;
+    return;
+  }
+  if (form.title.trim()) {
+    const ok = window.confirm('将用 AI 建议替换当前标题，继续？');
+    if (!ok) return;
+  }
+
+  const plain = stripHtml(form.content);
+  if (!plain) {
+    error.value = '请先填写正文，AI 需要根据正文内容总结标题';
+    return;
+  }
+
+  suggesting.value = true;
+  error.value = '';
+  try {
+    const res = await suggestForumTitle(form.content, form.contentFormat === 'HTML' ? 'HTML' : 'TEXT');
+    if (!res.title) {
+      error.value =
+        res.reason === 'no_content'
+          ? '正文内容太少，AI 无法总结标题，请补充正文或手动填写标题'
+          : 'AI 暂时不可用，请稍后重试或手动填写标题';
+      return;
+    }
+    form.title = res.title;
+    titleFromAi.value = true;
+    suggestCount.value += 1;
+  } catch (e: any) {
+    error.value = e?.message || 'AI 生成标题失败，请手动填写';
+  } finally {
+    suggesting.value = false;
+  }
+}
+
+/** 用户手动改标题后，就不再认为标题是「AI 原样产物」 */
+function onTitleEdited() {
+  if (titleFromAi.value) titleFromAi.value = false;
 }
 
 /** 打开时把 initial 回填进去；关闭时清空错误提示 */
@@ -313,7 +412,9 @@ function toPayload(): PostDraft {
     attachments: [...form.attachments],
     visibility: form.visibility,
     visibleClasses: form.visibility === 'CLASSES' ? [...form.visibleClasses] : [],
-    isTop: props.canPin ? form.isTop : false
+    isTop: props.canPin ? form.isTop : false,
+    aiTitleEnabled: form.aiTitleEnabled,
+    titleFromAi: titleFromAi.value
   };
 }
 
@@ -417,6 +518,68 @@ function onSaveDraft() {
 }
 .f-row label .req {
   color: #e23b2e;
+}
+
+/* ===== AI 标题（v4 2026-11-04）===== */
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.title-row .f-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ai-suggest-btn {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #c7d7ff;
+  border-radius: 7px;
+  background: #f2f7ff;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ai-suggest-btn:hover:not(:disabled) {
+  background: #e6efff;
+}
+.ai-suggest-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.ai-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 7px;
+  flex-wrap: wrap;
+}
+.ai-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #33415c;
+  cursor: pointer;
+  margin-bottom: 0;
+}
+.ai-switch input {
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+.ai-switch-tip {
+  font-size: 11.5px;
+  color: #8a94ad;
+}
+.ai-ok-tip {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: #1a7f37;
 }
 .f-input {
   width: 100%;

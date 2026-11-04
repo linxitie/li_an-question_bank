@@ -345,6 +345,10 @@ export const useCommunityStore = defineStore('community', () => {
       visibleClasses?: string[];
       /** 正文格式：富文本发帖传 HTML（后端消毒） */
       contentFormat?: 'TEXT' | 'HTML';
+      /** 是否允许 AI 总结标题（v4）：false 时后端不调用模型 */
+      aiTitleEnabled?: boolean;
+      /** 标题是否原样来自模型建议（未手改） */
+      titleFromAi?: boolean;
     }
   ): Promise<ForumPostItem | null> {
     const validation = validatePostDraft(payload);
@@ -372,7 +376,9 @@ export const useCommunityStore = defineStore('community', () => {
             attachments: base.attachments,
             visibility: payload.visibility,
             visibleClasses: payload.visibleClasses,
-            contentFormat: payload.contentFormat
+            contentFormat: payload.contentFormat,
+            aiTitleEnabled: payload.aiTitleEnabled,
+            titleFromAi: payload.titleFromAi
           })
         : await createForumPost(base);
       posts.value = [post, ...posts.value];

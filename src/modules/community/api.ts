@@ -353,12 +353,20 @@ export function createForumPostWithVisibility(payload: {
   visibleClasses?: string[];
   /** 正文格式（2026-11-03）：不传默认 TEXT，富文本发帖传 HTML（后端消毒后落库） */
   contentFormat?: 'TEXT' | 'HTML';
+  /** 是否允许 AI 总结标题（2026-11-04 v4）：false 时后端完全不调用大模型 */
+  aiTitleEnabled?: boolean;
+  /** 标题是否原样来自模型建议（用户未手改），true 时落库标记「AI生成」 */
+  titleFromAi?: boolean;
 }): Promise<ForumPostItem> {
   const data = new FormData();
   data.append('title', payload.title);
   data.append('content', payload.content);
   data.append('share_type', payload.shareType || 'DISCUSSION');
   if (payload.contentFormat) data.append('content_format', payload.contentFormat);
+  if (payload.aiTitleEnabled !== undefined) {
+    data.append('ai_title_enabled', payload.aiTitleEnabled ? 'true' : 'false');
+  }
+  if (payload.titleFromAi) data.append('title_from_ai', 'true');
   if (payload.titleColor) data.append('title_color', payload.titleColor);
   if (payload.attachments && payload.attachments.length) {
     data.append('attachments', JSON.stringify(payload.attachments));
@@ -635,6 +643,8 @@ export interface ForumDraft {
   visibility: 'ALL' | 'CLASSES';
   visibleClasses: string[];
   isTop: boolean;
+  /** 是否允许 AI 总结标题（v4）：恢复弹窗开关状态 */
+  aiTitleEnabled?: boolean;
   updateTime?: string | null;
 }
 
@@ -646,6 +656,8 @@ export interface ForumDraftPayload {
   visibility: 'ALL' | 'CLASSES';
   visible_classes: string[];
   is_top: boolean;
+  /** v4：草稿记住 AI 标题开关（不传时后端按允许处理） */
+  ai_title_enabled?: boolean;
 }
 
 /** 读取我的草稿；没有草稿时返回 null */
@@ -670,4 +682,31 @@ export async function saveMyForumDraft(payload: ForumDraftPayload): Promise<Foru
 /** 删除我的草稿（发布成功后调用，避免旧草稿残留） */
 export async function deleteMyForumDraft(): Promise<void> {
   await request<{ success: boolean }>({ url: '/api/forum/drafts/mine', method: 'DELETE' });
+}
+
+// ==================== AI 标题建议（v4 2026-11-04） ====================
+
+export interface AiTitleSuggestion {
+  title: string | null;
+  /** no_content：正文有效文字不足；llm_unavailable：模型不可用 */
+  reason: 'no_content' | 'llm_unavailable' | null;
+  remaining: number | null;
+}
+
+/**
+ * 让大模型按正文给一个标题建议（预览用，不落库）。
+ *
+ * 为什么要单独一个接口而不是发帖时顺带生成：
+ * 用户需要「先看到标题、不满意就重新生成」，这是发布前的交互，与落库无关；
+ * 后端对该接口有每用户每小时限流（30 次），防止连点刷 token。
+ */
+export async function suggestForumTitle(
+  content: string,
+  contentFormat: 'TEXT' | 'HTML' = 'TEXT'
+): Promise<AiTitleSuggestion> {
+  return request<AiTitleSuggestion>({
+    url: '/api/forum/ai-title/suggest',
+    method: 'POST',
+    data: { content, content_format: contentFormat }
+  });
 }

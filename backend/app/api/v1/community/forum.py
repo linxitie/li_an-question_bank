@@ -19,6 +19,7 @@
 import os
 import re
 import json
+import time
 import uuid
 import logging
 from collections import OrderedDict
@@ -187,6 +188,8 @@ def _serialize_post(
         "contentFormat": getattr(post, "content_format", None) or "TEXT",
         # AI 标题标记（2026-11-03 第 3 轮）：前端据此在标题前加「AI生成」
         "aiTitle": bool(getattr(post, "ai_title", 0)),
+        # 发帖人是否允许 AI 总结标题（2026-11-04 v4），便于管理端统计
+        "aiTitleEnabled": bool(getattr(post, "ai_title_enabled", 1)),
         "user": _user_brief(user, post.user_id),
     }
 
@@ -571,6 +574,11 @@ async def create_post(
     visibility: Optional[str] = Form(None, description="可见范围: ALL 全校 | CLASSES 本班/指定班级"),
     visible_classes: Optional[str] = Form(None, description="班级名 JSON 数组，visibility=CLASSES 时生效"),
     content_format: str = Form("TEXT", description="正文格式：TEXT 纯文本 / HTML 富文本（落库前消毒）"),
+    # 用 str 解析而不是 bool：实测这版 FastAPI 对「缺省的 bool Form 字段」
+    # 会统一喂 False（连 Form(True) 的默认值都不生效，隔离实验已验证），
+    # 这会把「老客户端没传该字段」误判成「用户明确关闭 AI」。
+    ai_title_enabled: str = Form("true", description="是否允许 AI 总结标题（缺省=允许）"),
+    title_from_ai: str = Form("false", description="标题是否原样来自模型建议（缺省=否）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -582,6 +590,9 @@ async def create_post(
     """
     title = (title or "").strip()
     content = (content or "").strip()
+    # 布尔字段按字符串解析后再判定（原因见签名处注释）
+    ai_allowed = str(ai_title_enabled).strip().lower() not in ("false", "0", "no", "off")
+    title_is_ai = str(title_from_ai).strip().lower() in ("true", "1", "yes", "on")
     # 富文本（2026-11-03）：HTML 正文必须先过信任边界再参与后续校验/落库。
     # 顺序很重要：先消毒 → 再判空 → 再敏感词过滤，避免把未消毒的标记写进库或写进审计日志。
     content_format = "HTML" if (content_format or "").upper() == "HTML" else "TEXT"
@@ -677,6 +688,10 @@ async def create_post(
         status="NORMAL",
         visibility=visibility,
         visible_classes=classes,
+        # v4（2026-11-04）：记录发帖人的 AI 标题选择；标题若原样来自模型建议则标记 AI 生成。
+        # title_from_ai 只在「标题由模型产出且用户没改过」时为真，手改过的标题不冒充 AI 产物。
+        ai_title_enabled=1 if ai_allowed else 0,
+        ai_title=1 if (title_is_ai and final_title.strip()) else 0,
     )
     db.add(post)
     # F2b：先 flush 拿 post_id，事件与帖子同一事务提交。
@@ -697,7 +712,9 @@ async def create_post(
 
     # AI 标题（2026-11-03 第 3 轮）：标题为空且有正文时，放到后台生成，不阻塞发帖。
     # 为什么用 BackgroundTasks 而不是同步：模型调用通常 2–5s，同步会让「发布」按钮明显卡顿。
-    if needs_ai_title(post.title, post.content):
+    # 2026-11-04 v4：发帖人可以在弹窗里**关闭**该能力（ai_title_enabled=False）——
+    # 关闭后一律不投递后台任务，按原样落库，这是「用户不想让 AI 插手」的唯一出口。
+    if ai_allowed and needs_ai_title(post.title, post.content):
         background_tasks.add_task(
             _generate_title_in_background,
             post.post_id,
@@ -1908,6 +1925,58 @@ async def delete_comment(
 # =====================================================================
 
 
+class AiTitleSuggestPayload(BaseModel):
+    """「AI 生成标题」预览请求体（2026-11-04 v4）。"""
+
+    content: str = Field("", max_length=10000)
+    content_format: str = Field("TEXT")
+
+
+# 预览接口的进程内限流（单实例部署足够；重启清零）。
+# 为什么要限流：这是直接花 token 的接口，必须挡住连点/脚本刷。
+_AI_SUGGEST_HITS: Dict[int, List[float]] = {}
+AI_SUGGEST_LIMIT = 30          # 每用户每小时最多 30 次
+AI_SUGGEST_WINDOW_SECONDS = 3600
+
+
+def _consume_ai_suggest_quota(user_id: int) -> int:
+    """占用一次配额并返回剩余次数；超限抛 429。"""
+    now = time.time()
+    hits = [t for t in _AI_SUGGEST_HITS.get(user_id, []) if now - t < AI_SUGGEST_WINDOW_SECONDS]
+    if len(hits) >= AI_SUGGEST_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"AI 生成标题过于频繁，请稍后再试（每 {AI_SUGGEST_WINDOW_SECONDS // 60} 分钟 {AI_SUGGEST_LIMIT} 次）",
+        )
+    hits.append(now)
+    _AI_SUGGEST_HITS[user_id] = hits
+    return AI_SUGGEST_LIMIT - len(hits)
+
+
+@router.post("/ai-title/suggest", summary="按正文生成标题建议（预览，不落库）")
+async def suggest_forum_title(
+    payload: AiTitleSuggestPayload,
+    current_user: SysUser = Depends(get_current_user),
+):
+    """给发帖弹窗的「AI 生成标题 / 重新生成」按钮用。
+
+    设计取舍：
+    - **不落库**：用户可能点好几次才满意，落库只会产生垃圾数据；
+    - **限流**：每次调用都花 token，按用户每小时 30 次；
+    - **正文不足直接拒绝**，不浪费调用（复用论坛 AI 标题的有效文字门槛）。
+    """
+    from ....services.forum_title_ai import generate_forum_title, has_meaningful_content
+
+    if not has_meaningful_content(payload.content):
+        return {"title": None, "reason": "no_content", "remaining": None}
+
+    remaining = _consume_ai_suggest_quota(current_user.user_id)
+    title = await generate_forum_title(payload.content, payload.content_format or "TEXT")
+    if not title:
+        return {"title": None, "reason": "llm_unavailable", "remaining": remaining}
+    return {"title": title, "reason": None, "remaining": remaining}
+
+
 class DraftPayload(BaseModel):
     """草稿载荷。与会话内编辑器的字段一一对应。"""
 
@@ -1917,6 +1986,8 @@ class DraftPayload(BaseModel):
     visibility: str = Field("ALL", pattern="^(ALL|CLASSES)$")
     visible_classes: Optional[List[str]] = None
     is_top: bool = False
+    # v4（2026-11-04）：草稿也记住发帖人的 AI 标题开关，重开弹窗能恢复
+    ai_title_enabled: bool = True
 
 
 def _draft_item(draft: ForumDraft) -> Dict[str, Any]:
@@ -1928,6 +1999,8 @@ def _draft_item(draft: ForumDraft) -> Dict[str, Any]:
         "visibility": draft.visibility or "ALL",
         "visibleClasses": draft.visible_classes or [],
         "isTop": bool(draft.is_top),
+        # v4（2026-11-04）：草稿恢复 AI 标题开关
+        "aiTitleEnabled": bool(getattr(draft, "ai_title_enabled", 1)),
         "updateTime": draft.update_time.isoformat() if draft.update_time else None,
     }
 
@@ -1960,6 +2033,8 @@ async def save_my_draft(
     draft.visible_classes = payload.visible_classes
     # 置顶只在教师/管理员侧有意义，学生侧一律落 0，防止越权置顶
     draft.is_top = 1 if payload.is_top and _can_moderate_forum(current_user, db) else 0
+    # v4：默认允许；显式关闭才落 0
+    draft.ai_title_enabled = 1 if payload.ai_title_enabled else 0
     db.commit()
     db.refresh(draft)
     return {"success": True, "draft": _draft_item(draft)}

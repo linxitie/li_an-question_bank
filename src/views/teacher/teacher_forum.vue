@@ -423,7 +423,10 @@ const submitPost = async (payload: PostDraft) => {
       visibility: payload.visibility,
       attachments: payload.attachments,
       visibleClasses: payload.visibility === 'CLASSES' ? payload.visibleClasses : undefined,
-      contentFormat: payload.contentFormat
+      contentFormat: payload.contentFormat,
+      // v4：AI 标题开关与「标题是否原样来自模型」
+      aiTitleEnabled: payload.aiTitleEnabled !== false,
+      titleFromAi: Boolean(payload.titleFromAi)
     });
     ElMessage.success('发布成功');
     postForm.visible = false;
@@ -445,7 +448,8 @@ const savePostDraft = async (payload: PostDraft) => {
       attachments: payload.attachments,
       visibility: payload.visibility,
       visible_classes: payload.visibleClasses,
-      is_top: payload.isTop
+      is_top: payload.isTop,
+      ai_title_enabled: payload.aiTitleEnabled !== false
     });
     ElMessage.success('已保存到草稿箱');
   } catch (e: any) {

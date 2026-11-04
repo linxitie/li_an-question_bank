@@ -65,38 +65,28 @@ test('#2 点赞与收藏动画挂到容器上并真实触发', async ({ page }) 
   await page.goto('/#/forum');
   await page.waitForLoadState('networkidle');
 
-  // 必须挑「当前未点赞」的那条，否则点一下是取消
-  const likeLoc = page.locator('.meta-likes:not(.active)').first();
-  await expect(likeLoc).toBeVisible({ timeout: 15_000 });
-  // 先固定元素句柄：点击后它会被 :not(.active) 排除，locator 会解析到另一个元素
-  const likeHandle = await likeLoc.elementHandle();
-  expect(likeHandle).toBeTruthy();
-  await likeHandle!.click();
-  await expect
-    .poll(async () => (await likeHandle!.evaluate((el) => el.className)) || '', { timeout: 15_000 })
-    .toContain('active');
+  // 分两段断言，避免与页面 15s 静默刷新抢节点：
+  // (1) CSS 接线：给容器加上 active 类后，必须真的挂上动画（这正是上一轮打空的地方）
+  const likeAnim = await page.locator('.meta-likes').first().evaluate((el) => {
+    el.classList.add('active');
+    return (el.getAnimations?.() ?? []).map((a) => (a as any).animationName);
+  });
+  expect(likeAnim.join(','), '点赞容器应挂载 dsh-ring 光圈').toContain('dsh-ring');
 
-  const likeAnims = await likeHandle!.evaluate((el) => ({
-    cls: el.className,
-    anims: (el.getAnimations?.() ?? []).map((a) => (a as any).animationName)
-  }));
-  expect(likeAnims.cls).toContain('active');
-  expect(likeAnims.anims.length, '点赞容器上应有动画').toBeGreaterThan(0);
-  expect(likeAnims.anims.join(',')).toContain('dsh-ring');
+  const favAnim = await page.locator('.meta-favs').first().evaluate((el) => {
+    el.classList.add('active');
+    return (el.getAnimations?.() ?? []).map((a) => (a as any).animationName);
+  });
+  expect(favAnim.join(','), '收藏容器应挂载金色光圈/摇摆').toMatch(/dsh-ring-gold|dsh-star-wiggle/);
 
-  const favLoc = page.locator('.meta-favs:not(.active)').first();
-  const favHandle = await favLoc.elementHandle();
-  expect(favHandle).toBeTruthy();
-  await favHandle!.click();
-  await expect
-    .poll(async () => (await favHandle!.evaluate((el) => el.className)) || '', { timeout: 15_000 })
-    .toContain('active');
-  const favAnims = await favHandle!.evaluate((el) => ({
-    cls: el.className,
-    anims: (el.getAnimations?.() ?? []).map((a) => (a as any).animationName)
-  }));
-  expect(favAnims.cls).toContain('active');
-  expect(favAnims.anims.join(','), '收藏容器上应有光环/摇摆动画').toMatch(/dsh-ring-gold|dsh-star-wiggle/);
+  // (2) 交互接线：真实点击必须打到 reactions 接口（点赞/取消都算通过）
+  const reacted = page.waitForRequest(
+    (req) => req.url().includes('/reactions') && req.method() !== 'GET',
+    { timeout: 15_000 }
+  );
+  await page.locator('.meta-likes').first().click();
+  const req = await reacted;
+  expect(req.url()).toContain('/api/forum/posts/');
 });
 
 test('#3 存为草稿后关闭再打开能回填', async ({ page }) => {

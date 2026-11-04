@@ -358,6 +358,8 @@ async def lifespan(app: FastAPI):
                 ('content_format', "VARCHAR(8) DEFAULT 'TEXT'"),
                 # AI 标题标记（2026-11-03 第 3 轮）：1 = 标题由大模型生成
                 ('ai_title', 'INTEGER DEFAULT 0'),
+                # AI 标题开关（2026-11-04 v4）：默认允许，关闭后不调用大模型
+                ('ai_title_enabled', 'INTEGER DEFAULT 1'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in forum_new_cols:
@@ -389,6 +391,17 @@ async def lifespan(app: FastAPI):
                         ))
                         logger.info(f"自动迁移: forum_comment 添加列 {col_name}")
                 conn.commit()
+
+        # 检查 forum_draft 表（v4 2026-11-04：记住发帖人的 AI 标题开关）
+        if 'forum_draft' in inspector.get_table_names():
+            draft_cols = [c['name'] for c in inspector.get_columns('forum_draft')]
+            if 'ai_title_enabled' not in draft_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE forum_draft ADD COLUMN ai_title_enabled INTEGER DEFAULT 1"
+                    ))
+                    conn.commit()
+                    logger.info("自动迁移: forum_draft 添加列 ai_title_enabled")
 
         # 检查 forum_like 表(点赞表情:新增 reaction_code 字段)
         if 'forum_like' in inspector.get_table_names():

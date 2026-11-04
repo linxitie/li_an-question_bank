@@ -1042,7 +1042,10 @@
             attachments: payload.attachments,
             visibility: payload.visibility,
             visibleClasses: payload.visibleClasses,
-            contentFormat: payload.contentFormat
+            contentFormat: payload.contentFormat,
+            // v4：把发帖人的 AI 标题开关与「标题是否原样来自模型」透传给后端
+            aiTitleEnabled: payload.aiTitleEnabled !== false,
+            titleFromAi: Boolean(payload.titleFromAi)
           });
           if (!created) return;
           this.state.posts.unshift(this._mapPost(created));
@@ -1067,7 +1070,9 @@
             attachments: payload.attachments,
             visibility: payload.visibility,
             visible_classes: payload.visibleClasses,
-            is_top: false
+            is_top: false,
+            // v4：草稿也记住 AI 标题开关，重开弹窗能恢复
+            ai_title_enabled: payload.aiTitleEnabled !== false
           });
           ElMessage.success('已保存到草稿箱');
         } catch (e) {

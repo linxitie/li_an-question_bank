@@ -656,6 +656,8 @@ class ForumPost(Base):
     content_format = Column(String(8), default="TEXT", nullable=False, comment="正文格式 TEXT/HTML")
     # AI 标题标记（2026-11-03）：1 = 标题由大模型按正文生成，前端展示时加「AI生成」前缀
     ai_title = Column(Integer, default=0, nullable=False, comment="标题是否由 AI 生成(0/1)")
+    # AI 标题开关（2026-11-04 v4）：记录发帖人是否允许 AI 总结标题，默认允许
+    ai_title_enabled = Column(Integer, default=1, nullable=False, comment="是否允许AI总结标题(0/1)")
     share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION"), default="EXPERIENCE", comment="分享类型")
     tags = Column(String(500), comment="标签")
     is_top = Column(Integer, default=0, comment="是否置顶")
@@ -2640,6 +2642,8 @@ class ForumDraft(Base):
     visibility = Column(String(16), default="ALL", comment="可见范围: ALL | CLASSES")
     visible_classes = Column(JSON, comment="可见班级名列表")
     is_top = Column(Integer, default=0, comment="是否置顶（仅教师/管理员可用）")
+    # v4（2026-11-04）：记住发帖人的 AI 标题开关，重开弹窗时恢复
+    ai_title_enabled = Column(Integer, default=1, comment="是否允许AI总结标题(0/1)")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 

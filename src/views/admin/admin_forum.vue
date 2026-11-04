@@ -1049,7 +1049,10 @@ async function publishPost(payload: PostDraft) {
       attachments: payload.attachments,
       visibility: payload.visibility,
       visibleClasses: payload.visibleClasses,
-      contentFormat: payload.contentFormat
+      contentFormat: payload.contentFormat,
+      // v4：AI 标题开关与「标题是否原样来自模型」
+      aiTitleEnabled: payload.aiTitleEnabled !== false,
+      titleFromAi: Boolean(payload.titleFromAi)
     });
     // create_post 不接受 is_top，置顶走既有置顶接口，避免再改发帖契约
     if (payload.isTop && created?.id) {
@@ -1075,7 +1078,8 @@ async function saveDraft(payload: PostDraft) {
       attachments: payload.attachments,
       visibility: payload.visibility,
       visible_classes: payload.visibleClasses,
-      is_top: payload.isTop
+      is_top: payload.isTop,
+      ai_title_enabled: payload.aiTitleEnabled !== false
     });
     showToast('已保存到草稿箱');
   } catch (e: any) {

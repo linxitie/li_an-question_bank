@@ -11,7 +11,26 @@
 
       <div class="field">
         <label class="label">标题</label>
-        <input v-model="title" type="text" class="input" placeholder="请输入标题（最多200字）" maxlength="200" />
+        <input v-model="title" type="text" class="input" placeholder="请输入标题（最多200字）" maxlength="200" @input="titleFromAi = false" />
+        <!-- v4（2026-11-04）：AI 标题开关 + 生成按钮，与 PC 弹窗同一套语义 -->
+        <div class="ai-row">
+          <label class="ai-check">
+            <input v-model="aiTitleEnabled" type="checkbox" />
+            <span>允许 AI 自动总结标题</span>
+          </label>
+          <button
+            v-if="aiTitleEnabled"
+            type="button"
+            class="ai-btn"
+            :disabled="suggesting"
+            @click="onSuggestTitle"
+          >{{ suggesting ? '生成中…' : (titleFromAi ? '重新生成' : 'AI 生成标题') }}</button>
+        </div>
+        <p class="hint">
+          {{ aiTitleEnabled
+            ? '不填标题时才会生效；生成后可修改或重新生成'
+            : '已关闭：按原样发布，不调用大模型' }}
+        </p>
       </div>
 
 
@@ -70,6 +89,7 @@ import {
   useCommunityStore
 } from '@/modules/community/store';
 import type { ForumShareType } from '@/modules/community/api';
+import { suggestForumTitle } from '@/modules/community/api';
 import { loadMyClasses } from '@/modules/community/classScope';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
@@ -90,6 +110,46 @@ const msgType = ref('');
 /** 可见范围：有班级时默认「仅本班」（与后端学生默认规则一致），未分班则只能全站 */
 const visibility = ref<'ALL' | 'CLASSES'>('ALL');
 const myClasses = ref<string[]>([]);
+
+// ===== AI 标题（v4 2026-11-04）=====
+const aiTitleEnabled = ref(true);
+const titleFromAi = ref(false);
+const suggesting = ref(false);
+const suggestCount = ref(0);
+const MAX_SUGGEST = 5;
+
+/** 按正文让 AI 拟标题并填入输入框；不满意可再次点击重新生成 */
+async function onSuggestTitle() {
+  if (suggesting.value) return;
+  if (suggestCount.value >= MAX_SUGGEST) {
+    showMsg(`本次最多生成 ${MAX_SUGGEST} 次，请手动填写标题`, 'error');
+    return;
+  }
+  if (!content.value.trim()) {
+    showMsg('请先填写正文，AI 需要根据正文内容总结标题', 'error');
+    return;
+  }
+  suggesting.value = true;
+  try {
+    const res = await suggestForumTitle(content.value, 'TEXT');
+    if (!res.title) {
+      showMsg(
+        res.reason === 'no_content'
+          ? '正文内容太少，AI 无法总结标题，请补充正文或手动填写'
+          : 'AI 暂时不可用，请稍后重试或手动填写',
+        'error'
+      );
+      return;
+    }
+    title.value = res.title;
+    titleFromAi.value = true;
+    suggestCount.value += 1;
+  } catch (e: any) {
+    showMsg(e?.message || 'AI 生成标题失败，请手动填写', 'error');
+  } finally {
+    suggesting.value = false;
+  }
+}
 
 onMounted(async () => {
   const scope = await loadMyClasses();
@@ -129,7 +189,10 @@ const submitPost = async () => {
       titleColor: titleColor.value,
       attachments: images.value.length ? images.value : undefined,
       visibility: visibility.value,
-      visibleClasses: visibility.value === 'CLASSES' ? myClasses.value : undefined
+      visibleClasses: visibility.value === 'CLASSES' ? myClasses.value : undefined,
+      // v4：AI 标题开关与「标题是否原样来自模型」
+      aiTitleEnabled: aiTitleEnabled.value,
+      titleFromAi: titleFromAi.value
     });
     if (!created) {
       showMsg(store.error || '发布失败，请稍后重试', 'error');
@@ -265,6 +328,41 @@ const showMsg = (m: string, type: string) => {
 .hint {
   font-size: 11px;
   color: #8899aa;
+}
+/* v4：AI 标题开关与生成按钮（移动端竖排） */
+.ai-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ai-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #33415c;
+}
+.ai-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: #1a365d;
+}
+.ai-btn {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #c7d7ff;
+  border-radius: 8px;
+  background: #f2f7ff;
+  color: #2563eb;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 /* 可见范围 pills（2026-11-03）：与 PC 弹窗同一套语义与配色 */
 .visibility-group {
