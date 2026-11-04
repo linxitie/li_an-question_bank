@@ -32,8 +32,9 @@ def test_page_route_count():
     #           /ai-assistant、/study-plan、/profile-quiz、/knowledge、/memories、/teacher/forum
     #           （与 scripts/verify-modularization-constraints.mjs 的 104 同步）
     # 104 → 101：2026-11-04 徽章展示模块下线，/badges、/badges-demo、/badge-preview 移除
-    # 路由只增不减（本次是用户明确要求删除功能模块，属例外，已在提交信息写明）。
-    assert len(_pages()) == 101
+    # 101 → 105：2026-11-04 远端 main 再前进（新闻时间线/详情 + 平板与手机端），共 4 条
+    # 路由只增不减（本次两次例外均为用户明确要求的模块调整，已在提交信息写明）。
+    assert len(_pages()) == 105
 
 
 def test_whitelist_has_no_roles():

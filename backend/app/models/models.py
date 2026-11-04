@@ -1459,6 +1459,20 @@ class NewsArticle(Base):
     url = Column(String(1000), nullable=False, comment="原始链接")
     source = Column(String(50), nullable=False, comment="来源: cpd/people")
     category = Column(String(50), comment="分类: 理论/党史/公安报")
+    category_code = Column(String(50), index=True, comment="分类字典 code")
+    content_hash = Column(String(64), index=True, comment="正文归一化哈希")
+    review_status = Column(String(20), default="published", index=True, comment="draft/pending/published/rejected/archived")
+    event_date = Column(Date, index=True, comment="事件日期")
+    region_code = Column(String(20), index=True, comment="地域 code")
+    source_id = Column(BigInteger, ForeignKey("content_source.source_id"), nullable=True, comment="统一来源ID")
+    deleted_at = Column(DateTime, comment="软删除时间")
+    ai_summary = Column(Text, comment="AI 摘要")
+    ai_exam_points = Column(Text, comment="申论考点 JSON")
+    ai_entities = Column(Text, comment="实体 JSON")
+    ai_risk_flags = Column(Text, comment="合规风险 JSON")
+    ai_status = Column(String(20), default="pending", comment="pending/ok/fallback/high_risk")
+    ai_confidence = Column(Float, comment="AI 置信度")
+    ai_run_at = Column(DateTime, comment="AI 处理时间")
     publish_date = Column(DateTime, comment="发布日期")
     summary = Column(Text, comment="摘要")
     content = Column(Text, comment="文章正文")
@@ -1470,6 +1484,53 @@ class NewsArticle(Base):
         Index("idx_source_news", source),
         Index("idx_publish_date_news", publish_date),
     )
+
+class NewsCategory(Base):
+    """新闻分类字典（R2）"""
+    __tablename__ = "news_category"
+
+    category_code = Column(String(50), primary_key=True)
+    name = Column(String(50), nullable=False, unique=True)
+    sort = Column(Integer, default=0)
+    enabled = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class NewsSource(Base):
+    """新闻来源注册表（R2）"""
+    __tablename__ = "news_source"
+
+    source_code = Column(String(50), primary_key=True)
+    name = Column(String(100), nullable=False)
+    base_url = Column(String(500), default="")
+    adapter = Column(String(20), default="http", comment="http/playwright")
+    cron = Column(String(50), default="0 8,18 * * *")
+    trust_level = Column(Integer, default=50)
+    enabled = Column(Integer, default=1)
+    robots_note = Column(String(500), default="")
+    last_cursor = Column(String(200), default="")
+    last_success_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class NewsReview(Base):
+    """新闻审核流水（R2.3）"""
+    __tablename__ = "news_review"
+
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
+    action = Column(String(20), nullable=False)
+    from_status = Column(String(20), default="")
+    to_status = Column(String(20), default="")
+    reviewer_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=True)
+    reason = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("idx_news_review_news", news_id, created_at),
+        Index("idx_news_review_status", to_status, created_at),
+    )
+
 
 class NewsRead(Base):
     """新闻阅读记录表（P2-32）
@@ -1738,6 +1799,7 @@ class NewsImage(Base):
     news_id = Column(BigInteger, ForeignKey("news_article.news_id"), nullable=False)
     image_path = Column(String(500), nullable=False)
     image_order = Column(Integer, default=0)
+    media_asset_id = Column(String(32), ForeignKey("media_assets.asset_id"), nullable=True, index=True)
     create_time = Column(DateTime, default=datetime.now)
     news = relationship("NewsArticle")
     __table_args__ = (Index("idx_news_id_newsimage", news_id),)
@@ -2377,6 +2439,97 @@ class UserProfile(Base):
         Index("idx_profile_status", profile_status),
     )
 
+
+class KgRelationType(Base):
+    """关系类型注册表：新增关系只加一行"""
+    __tablename__ = "kg_relation_type"
+
+    relation = Column(String(40), primary_key=True)
+    description = Column(String(200))
+    directed = Column(Integer, default=1)
+    src_types = Column(Text, comment="JSON 数组")
+    dst_types = Column(Text, comment="JSON 数组")
+
+
+class KgEdge(Base):
+    """薄图边：只存 (type,id) 指针，不复制正文"""
+    __tablename__ = "kg_edge"
+
+    edge_id = Column(Integer, primary_key=True, autoincrement=True)
+    src_type = Column(String(20), nullable=False)
+    src_id = Column(BigInteger, nullable=False)
+    dst_type = Column(String(20), nullable=False)
+    dst_id = Column(BigInteger, nullable=False)
+    relation = Column(String(40), nullable=False)
+    weight = Column(Float, default=1.0)
+    confidence = Column(Float, default=1.0)
+    origin = Column(String(20), default="rule", comment="rule/llm/human")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("src_type", "src_id", "dst_type", "dst_id", "relation",
+                         name="uq_kg_edge"),
+        Index("idx_kg_src", src_type, src_id, relation),
+        Index("idx_kg_dst", dst_type, dst_id, relation),
+    )
+
+
+class ContentSource(Base):
+    """统一来源：金句/新闻/招考共用"""
+    __tablename__ = "content_source"
+
+    source_id = Column(Integer, primary_key=True, autoincrement=True)
+    content_type = Column(String(20), nullable=False, comment="quote/news/recruitment")
+    content_id = Column(BigInteger, nullable=False)
+    source_type = Column(String(20), nullable=False, comment="obsidian/rss/web/official/manual")
+    url = Column(String(1000), nullable=False, default="")
+    publisher = Column(String(200))
+    author = Column(String(200))
+    published_at = Column(String(40))
+    fetched_at = Column(DateTime)
+    trust_level = Column(Integer, default=50)
+    content_hash = Column(String(64))
+    snapshot_path = Column(String(500))
+    license = Column(String(200))
+
+    __table_args__ = (
+        UniqueConstraint("content_type", "content_id", "url", name="uq_content_source"),
+        Index("idx_source_content", content_type, content_id),
+    )
+
+class Topic(Base):
+    """主题字典：theme（主题）/ exam_type（考试类型）"""
+    __tablename__ = "topic"
+
+    topic_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, comment="主题名")
+    slug = Column(String(100), nullable=False, unique=True, comment="稳定标识")
+    kind = Column(String(20), nullable=False, default="theme", comment="theme/exam_type")
+    parent_id = Column(Integer, ForeignKey("topic.topic_id"), nullable=True)
+    description = Column(String(500))
+    aliases = Column(JSON, comment="别名数组")
+    status = Column(Integer, default=1)
+    sort_order = Column(Integer, default=1)
+
+    __table_args__ = (Index("idx_topic_kind", kind),)
+
+
+class ContentEvidence(Base):
+    """多模态证据：图片/PDF/二维码等"""
+    __tablename__ = "content_evidence"
+
+    evidence_id = Column(Integer, primary_key=True, autoincrement=True)
+    content_type = Column(String(20), nullable=False)
+    content_id = Column(BigInteger, nullable=False)
+    media_type = Column(String(20), nullable=False, comment="image/pdf/audio/video")
+    path = Column(String(500), nullable=False)
+    sha256 = Column(String(64), index=True)
+    ocr_text = Column(Text)
+    caption = Column(String(500))
+    source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (Index("idx_evidence_content", content_type, content_id),)
 
 
 class MaterialShare(Base):

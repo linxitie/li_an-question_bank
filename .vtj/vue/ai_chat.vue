@@ -208,9 +208,39 @@
         <div
           v-if="!state.workMode && state.messages.length === 0"
           class="welcome-card">
+          <!-- 粒子动画背景 -->
+          <div class="particles">
+            <div v-for="i in 20" :key="i" class="particle"
+              :style="{
+                left: Math.random() * 100 + '%',
+                animationDelay: Math.random() * 5 + 's',
+                animationDuration: (3 + Math.random() * 4) + 's'
+              }">
+            </div>
+          </div>
           <div class="welcome-emoji">🎯</div>
           <p class="welcome-title">你好，我是联考小智</p>
           <p class="welcome-sub">选个场景，从下面挑一个问题开始问我</p>
+          
+          <!-- AI角色选择 -->
+          <div class="role-select">
+            <div class="role-title">选择你的AI伙伴：</div>
+            <div class="role-list">
+              <div class="role" :class="{ active: state.role === 'strict' }" @click="switchRole('strict')">
+                <div class="role-emoji">😤</div>
+                <div class="role-name">严厉教官</div>
+              </div>
+              <div class="role" :class="{ active: state.role === 'gentle' }" @click="switchRole('gentle')">
+                <div class="role-emoji">😊</div>
+                <div class="role-name">温柔学姐</div>
+              </div>
+              <div class="role" :class="{ active: state.role === 'funny' }" @click="switchRole('funny')">
+                <div class="role-emoji">😄</div>
+                <div class="role-name">幽默学长</div>
+              </div>
+            </div>
+          </div>
+
           <div class="quick-chips">
             <div
               v-for="q in quickQuestions"
@@ -219,6 +249,25 @@
               @click="quickAsk(q)">
               {{ q }}
             </div>
+          </div>
+
+          <!-- 学习对战 -->
+          <div class="battle-card">
+            <div class="battle-title">⚔️ 学习对战</div>
+            <div class="battle-body">
+              <div class="battle-player">
+                <div class="player-avatar">😎</div>
+                <div class="player-name">你</div>
+                <div class="player-score">1250分</div>
+              </div>
+              <div class="battle-vs">VS</div>
+              <div class="battle-player">
+                <div class="player-avatar">🤖</div>
+                <div class="player-name">AI学长</div>
+                <div class="player-score">1180分</div>
+              </div>
+            </div>
+            <button class="battle-btn">开始对战</button>
           </div>
         </div>
 
@@ -265,8 +314,7 @@
         <div v-if="state.loading" class="msg-row bot">
           <div class="mini-avatar">智</div>
           <div class="bubble bot typing">
-            <span class="dot"></span><span class="dot"></span
-            ><span class="dot"></span>
+            <span class="typing-cursor"></span>
           </div>
         </div>
       </div>
@@ -283,6 +331,13 @@
             @click="toggleMic"
             title="语音输入">
             🎤
+            <div v-if="state.recording" class="mic-waves">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
           </button>
           <textarea
             v-model="state.input"
@@ -349,7 +404,9 @@ export default defineComponent({
       recording: false,
       recognition: null,
       // 思维导图
-      showMindMap: false
+      showMindMap: false,
+      // AI角色
+      role: 'gentle'
     });
     const sessions = ref([]);
     const drawerOpen = ref(false);
@@ -697,6 +754,10 @@ export default defineComponent({
       }
     }
 
+    function switchRole(role) {
+      state.role = role;
+    }
+
     onMounted(() => {
       state.__listEl = document.querySelector('.ai-chat-page .message-list');
       loadSessions();
@@ -724,6 +785,7 @@ export default defineComponent({
       switchMode,
       toggleDashboard,
       toggleMic,
+      switchRole,
       showMindMap,
       selectTask,
       runWorkTask,
@@ -889,6 +951,32 @@ export default defineComponent({
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(196, 30, 58, 0.4); }
   50% { box-shadow: 0 0 0 8px rgba(196, 30, 58, 0); }
+}
+
+/* 声波动画 */
+.mic-waves {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.mic-waves span {
+  width: 3px;
+  background: #c41e3a;
+  border-radius: 2px;
+  animation: wave 1s ease-in-out infinite;
+}
+.mic-waves span:nth-child(1) { height: 8px; animation-delay: 0s; }
+.mic-waves span:nth-child(2) { height: 12px; animation-delay: 0.15s; }
+.mic-waves span:nth-child(3) { height: 16px; animation-delay: 0.3s; }
+.mic-waves span:nth-child(4) { height: 12px; animation-delay: 0.45s; }
+.mic-waves span:nth-child(5) { height: 8px; animation-delay: 0.6s; }
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1.5); }
 }
 
 /* ===== 学习仪表盘 ===== */
@@ -1433,6 +1521,38 @@ export default defineComponent({
   text-align: center;
   box-shadow: 0 4px 16px rgba(26, 42, 74, 0.06);
   margin-top: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 粒子动画 */
+.particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  bottom: -10px;
+  width: 6px;
+  height: 6px;
+  background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+  border-radius: 50%;
+  opacity: 0.3;
+  animation: float-up linear infinite;
+}
+@keyframes float-up {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-300px) rotate(360deg);
+    opacity: 0;
+  }
 }
 .welcome-emoji {
   font-size: 34px;
@@ -1446,8 +1566,109 @@ export default defineComponent({
 }
 .welcome-sub {
   font-size: 13px;
-  color: #8899aa;
+  color: #6b7a99;
   margin: 0 0 16px;
+}
+
+/* AI角色选择 */
+.role-select {
+  margin-bottom: 16px;
+}
+.role-title {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 10px;
+}
+.role-list {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.role {
+  flex: 1;
+  max-width: 100px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 2px solid #e8ecf2;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f8f9fc;
+}
+.role:hover {
+  border-color: #c41e3a;
+  transform: translateY(-2px);
+}
+.role.active {
+  border-color: #c41e3a;
+  background: #fff5f6;
+  box-shadow: 0 4px 12px rgba(196, 30, 58, 0.15);
+}
+.role-emoji {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+.role-name {
+  font-size: 12px;
+  color: #333;
+  font-weight: 600;
+}
+
+/* 学习对战 */
+.battle-card {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  color: #fff;
+  text-align: center;
+}
+.battle-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.battle-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+.battle-player {
+  flex: 1;
+}
+.player-avatar {
+  font-size: 32px;
+  margin-bottom: 4px;
+}
+.player-name {
+  font-size: 12px;
+  opacity: 0.9;
+}
+.player-score {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.battle-vs {
+  font-size: 20px;
+  font-weight: 900;
+  opacity: 0.8;
+}
+.battle-btn {
+  background: #fff;
+  color: #667eea;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.battle-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
 }
 .quick-chips {
   display: flex;
@@ -1532,21 +1753,19 @@ export default defineComponent({
 }
 .typing {
   padding: 14px 16px !important;
+  min-width: 40px;
 }
-.typing .dot {
+.typing-cursor {
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  background: #aab4c0;
-  border-radius: 50%;
-  margin-right: 4px;
-  animation: blink 1.2s infinite;
+  width: 3px;
+  height: 18px;
+  background: #c41e3a;
+  vertical-align: middle;
+  animation: cursor-blink 1s infinite;
 }
-.typing .dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.typing .dot:nth-child(3) {
-  animation-delay: 0.4s;
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 @keyframes blink {
   0%,

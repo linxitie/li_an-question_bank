@@ -40,7 +40,9 @@ const VTJ_LOCKED_VERSIONS = {
 // 104 = 98 + 6（2026-11-04 合并远端 main：模块4/7 新增 /ai-assistant、/study-plan、
 //   /profile-quiz、/knowledge、/memories、/teacher/forum 六个页面路由；与 test_route_roles 的 104 同步）
 // 101 = 104 - 3（2026-11-04 徽章展示模块下线：/badges、/badges-demo、/badge-preview 三条页面路由移除）
-const EXPECTED_DYNAMIC_IMPORTS = 101;
+// 105 = 101 + 4（2026-11-04 远端 main 再前进 10 提交：新闻时间线/详情 + 平板与手机端新闻时间线
+//   /news、/news/:id、/tablet/news/timeline、/mobile/news/timeline；与 test_route_roles 的 105 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 105;
 
 const violations = [];
 

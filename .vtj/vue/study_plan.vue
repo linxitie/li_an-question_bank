@@ -132,6 +132,19 @@
           </div>
         </div>
 
+        <!-- 3D学习日历 -->
+        <div class="calendar-3d-card">
+          <div class="dist-title">📅 3D学习日历</div>
+          <div class="calendar-3d-wrap">
+            <div class="calendar-3d">
+              <div v-for="day in 30" :key="day" class="calendar-day"
+                :class="{ done: day < 20, today: day === 15 }">
+                {{ day }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 科目分布 -->
         <div class="subject-dist">
           <div class="dist-title">📊 任务科目分布</div>
@@ -207,6 +220,60 @@
           </div>
         </div>
 
+        <!-- 自适应学习推荐 -->
+        <div class="adaptive-card">
+          <div class="adaptive-head">
+            <span class="dist-title">🤖 自适应学习推荐</span>
+            <span class="adaptive-badge">AI</span>
+          </div>
+          <div class="adaptive-body">
+            <div class="adaptive-tip">
+              <div class="adaptive-tip-icon">📈</div>
+              <div class="adaptive-tip-text">
+                <div class="adaptive-tip-title">建议提升难度</div>
+                <div class="adaptive-tip-desc">你最近答对率85%，可以挑战更难的题目</div>
+              </div>
+            </div>
+            <div class="adaptive-tip">
+              <div class="adaptive-tip-icon">📉</div>
+              <div class="adaptive-tip-text">
+                <div class="adaptive-tip-title">建议巩固基础</div>
+                <div class="adaptive-tip-desc">资料分析正确率偏低，建议先练基础题</div>
+              </div>
+            </div>
+            <button class="adaptive-btn">开始自适应练习</button>
+          </div>
+        </div>
+
+        <!-- AI错题本 -->
+        <div class="wrongbook-card">
+          <div class="wrongbook-head">
+            <span class="dist-title">📕 AI错题本</span>
+            <span class="wrongbook-badge">23道错题</span>
+          </div>
+          <div class="wrongbook-body">
+            <div class="wrongbook-stats">
+              <div class="wb-stat">
+                <div class="wb-num">12</div>
+                <div class="wb-label">资料分析</div>
+              </div>
+              <div class="wb-stat">
+                <div class="wb-num">8</div>
+                <div class="wb-label">判断推理</div>
+              </div>
+              <div class="wb-stat">
+                <div class="wb-num">3</div>
+                <div class="wb-label">言语理解</div>
+              </div>
+            </div>
+            <div class="wrongbook-tip">
+              <span class="wb-tip-icon">💡</span>
+              <span>AI分析：你资料分析的增长率题型错得最多，建议重点复习</span>
+            </div>
+            <button class="wrongbook-btn">开始错题重做</button>
+          </div>
+        </div>
+
         <!-- 本周进度 -->
         <div class="week-progress">
           <div class="dist-title">📅 本周打卡</div>
@@ -240,6 +307,40 @@
               </div>
             </template>
             <div v-else class="task-empty">今日暂无任务，先重新生成学习计划吧</div>
+          </div>
+        </div>
+
+        <!-- 番茄钟专注记录 -->
+        <div class="pomodoro-card">
+          <div class="pomodoro-head">
+            <span class="section-title">⏱️ 番茄钟专注</span>
+            <span class="pomodoro-today">今日专注 {{ state.pomodoro.minutes }} 分钟</span>
+          </div>
+          <div class="pomodoro-body">
+            <div class="pomodoro-display" :class="{ running: state.pomodoro.running, break: state.pomodoro.isBreak }">
+              <div class="pomodoro-time">{{ formatTime(state.pomodoro.seconds) }}</div>
+              <div class="pomodoro-mode">{{ state.pomodoro.isBreak ? '休息时间' : '专注时间' }}</div>
+            </div>
+            <div class="pomodoro-controls">
+              <button class="pomodoro-btn primary" @click="togglePomodoro">
+                {{ state.pomodoro.running ? '暂停' : '开始' }}
+              </button>
+              <button class="pomodoro-btn" @click="resetPomodoro">重置</button>
+            </div>
+            <div class="pomodoro-stats">
+              <div class="ps-item">
+                <div class="ps-num">{{ state.pomodoro.completed }}</div>
+                <div class="ps-label">已完成番茄</div>
+              </div>
+              <div class="ps-item">
+                <div class="ps-num">25:00</div>
+                <div class="ps-label">单番茄时长</div>
+              </div>
+              <div class="ps-item">
+                <div class="ps-num">5:00</div>
+                <div class="ps-label">休息时长</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -294,6 +395,15 @@
           weak_subjects: ['行测'],
           daily_hours: 3,
           level: '有基础',
+        },
+        // 番茄钟
+        pomodoro: {
+          seconds: 25 * 60,
+          running: false,
+          isBreak: false,
+          completed: 0,
+          minutes: 0,
+          timer: null,
         },
       });
 
@@ -419,6 +529,53 @@
         }
       }
 
+      // 番茄钟：格式化时间
+      function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      }
+
+      // 番茄钟：切换开始/暂停
+      function togglePomodoro() {
+        const p = state.pomodoro;
+        if (p.running) {
+          // 暂停
+          clearInterval(p.timer);
+          p.running = false;
+        } else {
+          // 开始
+          p.running = true;
+          p.timer = setInterval(() => {
+            p.seconds--;
+            if (!p.isBreak) {
+              p.minutes = Math.round((p.minutes * 60 + 1) / 60);
+            }
+            if (p.seconds <= 0) {
+              if (!p.isBreak) {
+                // 专注完成，进入休息
+                p.completed++;
+                p.isBreak = true;
+                p.seconds = 5 * 60;
+              } else {
+                // 休息完成，进入下一个专注
+                p.isBreak = false;
+                p.seconds = 25 * 60;
+              }
+            }
+          }, 1000);
+        }
+      }
+
+      // 番茄钟：重置
+      function resetPomodoro() {
+        const p = state.pomodoro;
+        clearInterval(p.timer);
+        p.running = false;
+        p.isBreak = false;
+        p.seconds = 25 * 60;
+      }
+
       function reset() {
         state.plan = null;
         state.error = '';
@@ -510,6 +667,7 @@
       return {
         state, subjects, levels, weekDays, getSubjectStats,
         toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
+        formatTime, togglePomodoro, resetPomodoro,
       };
     },
   });
@@ -517,6 +675,310 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 番茄钟专注 ===== */
+  .pomodoro-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .pomodoro-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .pomodoro-today {
+    font-size: 12px;
+    color: #666;
+    background: #f0f2f5;
+    padding: 4px 12px;
+    border-radius: 12px;
+  }
+  .pomodoro-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .pomodoro-display {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f0f2f5, #e8ecf2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+  }
+  .pomodoro-display.running {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    box-shadow: 0 4px 30px rgba(196, 30, 58, 0.4);
+  }
+  .pomodoro-display.break {
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: #fff;
+    box-shadow: 0 4px 30px rgba(16, 185, 129, 0.4);
+  }
+  .pomodoro-time {
+    font-size: 32px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .pomodoro-mode {
+    font-size: 12px;
+    opacity: 0.9;
+    margin-top: 4px;
+  }
+  .pomodoro-controls {
+    display: flex;
+    gap: 12px;
+  }
+  .pomodoro-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f0f2f5;
+    color: #333;
+  }
+  .pomodoro-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .pomodoro-btn.primary {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+  }
+  .pomodoro-stats {
+    display: flex;
+    gap: 24px;
+  }
+  .ps-item {
+    text-align: center;
+  }
+  .ps-num {
+    font-size: 18px;
+    font-weight: 700;
+    color: #333;
+  }
+  .ps-label {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+  }
+
+  /* ===== 3D学习日历 ===== */
+  .calendar-3d-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .calendar-3d-wrap {
+    perspective: 1000px;
+    margin-top: 16px;
+  }
+  .calendar-3d {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+    transform: rotateX(10deg);
+    transform-style: preserve-3d;
+  }
+  .calendar-day {
+    aspect-ratio: 1;
+    background: #f0f2f5;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #666;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  .calendar-day:hover {
+    transform: translateY(-4px) rotateX(10deg);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  }
+  .calendar-day.done {
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: #fff;
+  }
+  .calendar-day.today {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 4px 12px rgba(196, 30, 58, 0.4); }
+    50% { box-shadow: 0 4px 20px rgba(196, 30, 58, 0.8); }
+  }
+
+  /* ===== AI错题本 ===== */
+  .wrongbook-card {
+    background: linear-gradient(135deg, #fff 0%, #fff5f6 100%);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(196, 30, 58, 0.1);
+    border: 1px solid #ffe0e6;
+  }
+  .wrongbook-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .wrongbook-badge {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+  .wrongbook-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .wrongbook-stats {
+    display: flex;
+    gap: 12px;
+  }
+  .wb-stat {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .wb-num {
+    font-size: 24px;
+    font-weight: 700;
+    color: #c41e3a;
+  }
+  .wb-label {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+  .wrongbook-tip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: #fffbeb;
+    border-radius: 12px;
+    border-left: 4px solid #f59e0b;
+  }
+  .wb-tip-icon {
+    font-size: 18px;
+  }
+  .wrongbook-tip span:last-child {
+    font-size: 13px;
+    color: #92400e;
+  }
+  .wrongbook-btn {
+    background: linear-gradient(135deg, #c41e3a, #ff6b6b);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .wrongbook-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(196, 30, 58, 0.3);
+  }
+
+  /* ===== 自适应学习 ===== */
+  .adaptive-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+    color: #fff;
+  }
+  .adaptive-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .adaptive-head .dist-title {
+    color: #fff;
+  }
+  .adaptive-badge {
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+  .adaptive-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .adaptive-tip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+  }
+  .adaptive-tip-icon {
+    font-size: 24px;
+  }
+  .adaptive-tip-text {
+    flex: 1;
+  }
+  .adaptive-tip-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .adaptive-tip-desc {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: 2px;
+  }
+  .adaptive-btn {
+    background: #fff;
+    color: #667eea;
+    border: none;
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+  }
+  .adaptive-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  }
 
   /* ===== 遗忘曲线复习 ===== */
   .review-card {
