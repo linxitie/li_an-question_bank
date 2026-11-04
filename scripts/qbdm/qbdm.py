@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""QBDM 模式入口 —— 一个命令把"我现在是谁、该跑什么门禁"说清楚。
+"""QBDM 模式入口 —— 一个命令把"我现在是谁、该跑什么门禁、在哪个分支"说清楚。
 
 为什么要有它：
     QBDM 的九角色与门禁矩阵写在文档里，但人不会每次都翻文档。
     本 CLI 把矩阵变成可执行清单：print 模式看"该跑什么"，--run 模式真跑并回退出码。
     v2 增加模块层：`modules` / `module <id>` 从台账读出该模块的端点/页面/测试，
     并打印"设计 D / 优化 O / 测试 T"三段式清单（与 题库设计模式_v2.md 同源）。
+    v5 增加 GitHub 工作域视图：`branch`（拓扑/父子域/upstream）、`handoff`（模块 4/7
+    接管状态）、`token`（Token 账单模板与预算）；资产清单改为 docs/plans 权威版。
 
 用法：
     python scripts/qbdm/qbdm.py role BE          # 看某角色能改什么、被什么否决
@@ -14,6 +16,9 @@
     python scripts/qbdm/qbdm.py gate --role QA --run   # 真跑
     python scripts/qbdm/qbdm.py modules          # 列出 25 个功能模块
     python scripts/qbdm/qbdm.py module wrongbook # 单模块作战清单
+    python scripts/qbdm/qbdm.py branch           # 分支拓扑 / 父域映射 / upstream
+    python scripts/qbdm/qbdm.py handoff          # 模块 4/7 GitHub 接管状态
+    python scripts/qbdm/qbdm.py token            # Token 协议、预算与账单模板
     python scripts/qbdm/qbdm.py status           # 检查模式资产是否齐全
 """
 
@@ -30,26 +35,44 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LEDGER = REPO_ROOT / 'docs/design/题库模块台账_v1.json'
 DESIGN_MODE = REPO_ROOT / 'scripts/qbdm/design_mode.json'
 
-# 角色卡：与 docs/superpowers/specs/题库设计模式_角色卡_v1.md 保持一致
+# 角色卡：与 docs/plans/题库设计模式_角色卡_v3.md 保持一致（v5：只绑真实可加载技能）
 ROLES: dict[str, dict] = {
-    'ARCH': {'name': '系统架构师', 'can': '定边界/分层/依赖方向，出 ADR',
-             'veto': '跨域直连、新建第 38 个 API 模块', 'gates': ['module_boundary']},
-    'PM': {'name': '项目管理师', 'can': '拆任务/控范围/管分支',
-           'veto': '无验收命令的任务行、一分支两件事', 'gates': []},
+    'ARCH': {'name': '系统架构师', 'can': '定边界/分层/依赖方向，出 ADR + CTC-11',
+             'veto': '跨域直连、新建第 52 个 API 模块、把重构塞进功能任务',
+             'skills': ['codebase-design', 'decision-mapping', 'brainstorming'],
+             'gates': ['module_boundary']},
+    'PM': {'name': '项目管理师', 'can': '拆任务/控范围/管分支（父域与子分支）',
+           'veto': '无验收命令的任务行、一分支两件事、超预算、main 上直接干活',
+           'skills': ['li-an-workflow', 'writing-plans', 'executing-plans'],
+           'gates': []},
     'DATA': {'name': '数据建模师', 'can': '表/字段/索引/迁移/计数口径',
-             'veto': '破坏 R10、无迁移加字段', 'gates': ['field_fingerprint', 'db_guard']},
+             'veto': '破坏 R10、无迁移加字段、三端各写 WHERE',
+             'skills': ['domain-modeling', 'ubiquitous-language', 'diagnose'],
+             'gates': ['field_fingerprint', 'db_guard']},
     'BE': {'name': '后端建模师', 'can': '端点 + ORM',
-           'veto': '裸 SQL、跨域 import api 层', 'gates': ['api_contract', 'module_boundary']},
-    'API': {'name': '接口建模师', 'can': '保 343 端点契约',
-            'veto': '未批准的端点增删改', 'gates': ['api_contract']},
-    'FE': {'name': '前端建模师', 'can': '只改 <script>，走 VTJ 工具',
-           'veto': '直改 <template>、raw 页同步', 'gates': ['frontend_contract']},
-    'SEC': {'name': '网络安全检测与保障员', 'can': '凭据/越权/注入/脱敏',
-            'veto': '密钥入 .md/源码/提交信息', 'gates': ['secrets']},
-    'QA': {'name': '系统测试与问题反馈员', 'can': '用命令证明能/不能用',
-           'veto': '无证据的"完成"声明', 'gates': ['quick', 'sweep']},
-    'DOC': {'name': '归档与索引官', 'can': '落盘/双写/更新索引',
-            'veto': '只展示不落盘', 'gates': []},
+           'veto': '裸 SQL、跨域 import api 层',
+           'skills': ['tdd', 'implement', 'systematic-debugging'],
+           'gates': ['api_contract', 'module_boundary']},
+    'API': {'name': '接口建模师', 'can': '保 343 条路由条目契约',
+            'veto': '未批准的端点增删改',
+            'skills': ['design-an-interface', 'request-refactor-plan', 'review'],
+            'gates': ['api_contract']},
+    'FE': {'name': '前端建模师', 'can': '只改 <script>；MCP 未桥接时读文件手改并标注',
+           'veto': '直改 <template>、raw 页同步、复制平板页',
+           'skills': ['li-an-workflow', 'prototype'],
+           'gates': ['frontend_contract']},
+    'SEC': {'name': '网络安全检测与保障员', 'can': '凭据/越权/注入/脱敏五问',
+            'veto': '密钥入 .md/源码/提交信息',
+            'skills': ['review', 'git-guardrails-claude-code'],
+            'gates': ['secrets']},
+    'QA': {'name': '系统测试与问题反馈员', 'can': '用命令证明能/不能用，三态扫描',
+           'veto': '无证据的"完成"声明',
+           'skills': ['verification-before-completion', 'qa', 'systematic-debugging'],
+           'gates': ['quick', 'sweep']},
+    'DOC': {'name': '归档与索引官', 'can': '落盘/索引/事实回填',
+            'veto': '只展示不落盘、索引不更新',
+            'skills': ['handoff', 'zoom-out', 'obsidian-vault'],
+            'gates': []},
 }
 
 # 模块三段式作战清单：与 docs/superpowers/specs/题库设计模式_v2.md §2 同源。
@@ -114,22 +137,29 @@ GATES: dict[str, list[str]] = {
     'sweep': ['python', 'scripts/qbdm/test_sweep.py', '--suite', 'backend/tests'],
 }
 
-# 模式资产清单：缺一项，模式就不完整
+# 模式资产清单：缺一项，模式就不完整（v5：docs/plans 为权威位置）
 ARTIFACTS = [
-    ('docs/superpowers/specs/题库设计模式_v1.md', '权威全文（角色/流程/门禁）'),
-    ('docs/superpowers/specs/题库设计模式_角色卡_v1.md', '热加载角色卡'),
-    ('docs/superpowers/specs/题库设计模式_v2.md', '模块层全文（设计/优化/测试）'),
-    ('docs/superpowers/specs/题库设计模式_模块作战卡_v1.md', '热加载模块卡'),
-    ('docs/superpowers/specs/题库设计模式_v3.md', '「题库设计」模式（会话执行版）'),
-    ('scripts/qbdm/design_mode.json', '模式绑定（角色/技能/MCP/门禁）'),
+    ('docs/plans/题库设计模式_v5.md', 'QBDM v5 总纲（唯一权威）'),
+    ('docs/plans/题库设计模式_事实基线_v2.md', '事实基线（数字唯一来源）'),
+    ('docs/plans/题库设计模式_角色卡_v3.md', '热加载角色卡 v3'),
+    ('docs/plans/题库设计模式_模块作战卡_v3.md', '热加载模块作战卡 v3'),
+    ('docs/plans/题库设计模式_技能重建手册_v2.md', '技能重建手册 v2'),
+    ('docs/plans/题库设计模式_模块4_7交接档案_v1.md', '模块 4/7 GitHub 接管档案'),
+    ('scripts/qbdm/design_mode.json', '模式绑定（角色/技能/MCP/GitHub/Token）'),
     ('docs/design/题库模块台账_v1.md', '模块台账（人读）'),
     ('docs/design/题库模块台账_v1.json', '模块台账（机读）'),
     ('docs/design/题库领域词表_v1.md', '领域词表'),
     ('scripts/qbdm/ctx_budget.py', '装载预算闸'),
     ('scripts/qbdm/test_sweep.py', '逐文件测试扫描器'),
     ('scripts/qbdm/gen_module_ledger.py', '台账生成器'),
-    ('.opencode/skills/qbdm-role-switch/SKILL.md', '项目技能（不入 Git）'),
-    ('.opencode/skills/qbdm-design-mode/SKILL.md', '「题库设计」模式技能（不入 Git）'),
+    ('AGENTS.md', '红线唯一出处 + QBDM 入口规则'),
+    ('docs/README.md', '文档索引（归档三件事之一）'),
+]
+
+# 可选资产：缺失只告警（.opencode 不入 Git，换机后按技能重建手册 v2 重建）
+OPTIONAL_ARTIFACTS = [
+    ('.opencode/skills/qbdm-role-switch/SKILL.md', '项目技能：角色换帽（不入 Git）'),
+    ('.opencode/skills/qbdm-design-mode/SKILL.md', '项目技能：「题库设计」模式（不入 Git）'),
 ]
 
 
@@ -290,6 +320,156 @@ def _print_design(mode: dict, state_key: str, module: dict | None, as_json: bool
     return 0
 
 
+# ---------- v5 GitHub 工作域视图 ----------
+
+def _git(*args: str) -> tuple[int, str]:
+    """在仓库根跑 git，返回 (退出码, 输出或错误)。失败不抛异常，由调用方判定。"""
+    env = {**os.environ, 'PYTHONIOENCODING': 'utf-8'}
+    try:
+        proc = subprocess.run(['git', *args], cwd=str(REPO_ROOT), env=env,
+                              capture_output=True, text=True,
+                              encoding='utf-8', errors='replace')
+    except FileNotFoundError:
+        return 127, 'git 未安装'
+    out = (proc.stdout or '').strip()
+    err = (proc.stderr or '').strip()
+    return proc.returncode, out or err
+
+
+def _rev_parse(ref: str) -> str | None:
+    code, out = _git('rev-parse', '--verify', '-q', ref)
+    if code != 0 or not out:
+        return None
+    return out.splitlines()[0].strip()
+
+
+def _short(sha: str | None) -> str:
+    return sha[:8] if sha else '?'
+
+
+def _left_right(left_ref: str, right_ref: str) -> str:
+    """git rev-list --left-right --count A...B → 「A 独有 n / B 独有 m」。"""
+    code, out = _git('rev-list', '--left-right', '--count', f'{left_ref}...{right_ref}')
+    if code != 0 or not out:
+        return '无法比较'
+    parts = out.split()
+    if len(parts) != 2:
+        return '无法比较'
+    return f'{left_ref} 独有 {parts[0]} / {right_ref} 独有 {parts[1]}'
+
+
+def _print_branch(mode: dict) -> int:
+    gh = mode.get('github') or {}
+    code, branch = _git('rev-parse', '--abbrev-ref', 'HEAD')
+    if code != 0:
+        print(f'[分支] 读取失败：{branch}')
+        return 1
+    print(f'[分支] 当前：{branch}')
+    code, upstream = _git('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}')
+    print(f'[上游] {upstream if code == 0 else "无 upstream（开工先确认，禁止伪造 pull 成功 B9）"}')
+    if _rev_parse('origin/main'):
+        print(f'[相对 main] {_left_right("origin/main", "HEAD")}')
+    print(f'[拓扑] 方案 {gh.get("default_scheme", "A")}：main → feat/<模块>（父域） → '
+          f'feat/<模块>-<子任务>（子分支；斜杠子分支单仓不可行，见事实基线 F21）')
+    print(f'[合并顺序] {" → ".join(gh.get("merge_order") or ["孙", "子", "模块域", "main"])}')
+    domains = gh.get('domains') or []
+    print(f'[职责域] 用户负责模块：{", ".join(d.get("module", "") for d in domains) or "未登记"}')
+    for d in domains:
+        parent = d.get('parent', '')
+        sha = _rev_parse(f'origin/{parent}')
+        state = f'origin/{parent} @ {_short(sha)}' if sha else f'origin/{parent} 不存在'
+        print(f'  - {d.get("module")}｜父域 {state}｜子分支 {d.get("child_pattern")}')
+    print('[规则] B1 子分支禁连 main｜B2 一分支一任务｜B6 禁 git add -A｜'
+          'B10 不在 main 直接开发｜B12 push 失败如实报')
+    print('[提醒] 远端 push 可能网络失败（事实基线 F22）；失败如实记录，不伪造成功')
+    return 0
+
+
+def _print_handoff(mode: dict) -> int:
+    gh = mode.get('github') or {}
+    domains = gh.get('domains') or []
+    if not domains:
+        print('模式绑定里没有 github.domains（无法展示接管状态）')
+        return 1
+    print('[接管] 用户职责域：模块 4 学习计划 / 模块 7 联考小智')
+    for d in domains:
+        parent = d.get('parent', '')
+        sha = _rev_parse(f'origin/{parent}')
+        print(f'\n## {d.get("module")}（id={d.get("id")}）')
+        if sha:
+            print(f'  父域：origin/{parent} @ {_short(sha)}｜{_left_right("origin/main", f"origin/{parent}")}')
+        else:
+            print(f'  父域：origin/{parent} — 本地无远端跟踪 ref（先 git fetch origin --prune）')
+        routes = d.get('routes') or ([d['route']] if d.get('route') else [])
+        if routes:
+            print(f'  入口：{"、".join(routes)}')
+        if d.get('main_page'):
+            print(f'  主页面：{d["main_page"]}')
+        fe = d.get('frontend') or {}
+        if fe:
+            parts = []
+            if fe.get('page_lines'):
+                parts.append(f'{fe["page_lines"]} 行')
+            if fe.get('dsl'):
+                parts.append(f'DSL {fe["dsl"]}')
+            if fe.get('dead_code'):
+                parts.append(f'死代码 {fe["dead_code"]}')
+            if parts:
+                print(f'  前端：{"｜".join(parts)}')
+        be = d.get('backend') or {}
+        if be:
+            if be.get('endpoints') is not None:
+                extra = ''
+                if be.get('lines'):
+                    extra = f'（{be["lines"]} 行 / {be.get("prefix", "")}）'
+                print(f'  后端：{be["endpoints"]} 端点{extra}')
+            for item in be.get('files') or []:
+                print(f'    - {item.get("file")}｜{item.get("lines")} 行｜{item.get("endpoints")} 端点')
+        if d.get('tables'):
+            print(f'  表：{"、".join(d["tables"])}')
+        if d.get('tests'):
+            print(f'  测试：{d["tests"]}')
+        if d.get('baseline_gap'):
+            print(f'  基线缺口：{d["baseline_gap"]}')
+        print(f'  子分支命名：{d.get("child_pattern")}')
+        print(f'  档案：{d.get("doc") or d.get("docs")}')
+    print('\n[下一步] ① git fetch origin --prune ② 父域领先 0 时 git merge --ff-only origin/main'
+          ' ③ 从父域开子分支（方案 A 连字符）④ 开工前跑 qbdm.py module <id>')
+    return 0
+
+
+def _print_token(mode: dict) -> int:
+    tok = mode.get('token') or {}
+    print('[Token 协议] 目标：零无效 token（五零指标 + 三张账单 + 每任务计量表）')
+    print(f'  诚实边界：{tok.get("honest_boundary", "token 效用不可直接度量")}')
+    tiers = tok.get('tiers') or {}
+    if tiers:
+        print('[预算档]')
+        for name, info in tiers.items():
+            print(f'  {name}：≤{info.get("budget")} 估算 token｜写文件 {info.get("write_files")}'
+                  f'｜场景 {info.get("scene")}')
+    metrics = tok.get('zero_metrics') or {}
+    if metrics:
+        print('[五零指标] ' + '｜'.join(f'{k} {v}' for k, v in metrics.items()))
+    templates = tok.get('ledger_template') or []
+    if templates:
+        print('[账单模板（每轮回复末尾填）]')
+        for line in templates:
+            print('  ' + line)
+    targets = tok.get('targets') or {}
+    if targets:
+        print('[目标] ' + '｜'.join(f'{k}={v}' for k, v in targets.items()))
+    tools = tok.get('tools') or {}
+    if tools:
+        print('[采集工具]')
+        for name, desc in tools.items():
+            print(f'  {name}: {desc}')
+    forbidden = tok.get('forbidden') or []
+    if forbidden:
+        print('[禁用] ' + '；'.join(forbidden))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -324,10 +504,26 @@ def main(argv: list[str] | None = None) -> int:
     p_design.add_argument('--roles', action='store_true', help='附九角色 × 技能对照')
     p_design.add_argument('--json', action='store_true', help='输出机器可读管线')
 
+    sub.add_parser('branch', help='打印分支拓扑 / 父域映射 / upstream（v5）')
+    sub.add_parser('handoff', help='打印模块 4/7 GitHub 接管状态（v5）')
+    sub.add_parser('token', help='打印 Token 协议、预算与账单模板（v5）')
+
     args = parser.parse_args(argv)
 
     if args.cmd == 'role':
         return _print_role(args.code)
+
+    if args.cmd == 'branch':
+        mode = _load_design_mode()
+        return _print_branch(mode) if mode else 1
+
+    if args.cmd == 'handoff':
+        mode = _load_design_mode()
+        return _print_handoff(mode) if mode else 1
+
+    if args.cmd == 'token':
+        mode = _load_design_mode()
+        return _print_token(mode) if mode else 1
 
     if args.cmd == 'modules':
         ledger = _load_ledger()
@@ -361,12 +557,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == 'status':
         missing = 0
-        print('QBDM 资产自检：')
+        print('QBDM 资产自检（v5）：')
         for path, label in ARTIFACTS:
             ok = os.path.exists(os.path.join(REPO_ROOT, path))
             missing += 0 if ok else 1
-            print(f'  {"OK  " if ok else "MISS"} {path:52} {label}')
-        print('结论：' + ('齐全' if not missing else f'缺 {missing} 项'))
+            print(f'  {"OK  " if ok else "MISS"} {path:56} {label}')
+        warn = 0
+        for path, label in OPTIONAL_ARTIFACTS:
+            ok = os.path.exists(os.path.join(REPO_ROOT, path))
+            warn += 0 if ok else 1
+            print(f'  {"OK  " if ok else "WARN"} {path:56} {label}')
+        if warn:
+            print('  提示：WARN 项为不入 Git 的项目技能，换机按《技能重建手册 v2》重建即可（不阻断）')
+        print('结论：' + ('齐全' if not missing else f'缺 {missing} 项') +
+              (f'（可选缺 {warn} 项）' if warn else ''))
         return 0 if not missing else 1
 
     names, code = _gate_commands(args.role)
