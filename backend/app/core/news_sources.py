@@ -18,6 +18,7 @@ class NewsSourceConfig:
     region_code: str = ""
     trust_level: int = 70
     enabled: int = 1
+    robots_note: str = ""
 
 
 NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
@@ -372,14 +373,49 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         trust_level=80,
     ),
     NewsSourceConfig(
-        "xinjiang",
-        "新疆维吾尔自治区公安厅",
-        "http://gat.xinjiang.gov.cn",
-        "http://gat.xinjiang.gov.cn/",
-        link_contains="/gat/jwyw/20",
+        "cpd",
+        "中国警察网",
+        "https://www.cpd.com.cn",
+        "https://www.cpd.com.cn/",
+        link_contains="/yw_30937/",
         category_code="police_news",
         category="公安要闻",
-        region_code="650000",
+        region_code="000000",
+        trust_level=90,
+        enabled=0,
+        robots_note="robots.txt 返回 403，待授权确认",
+    ),
+    NewsSourceConfig(
+        "chinapeace",
+        "中国长安网",
+        "http://www.chinapeace.gov.cn",
+        "http://www.chinapeace.gov.cn/",
+        link_contains="/chinapeace/c100",
+        category_code="police_news",
+        category="公安要闻",
+        region_code="000000",
+        trust_level=85,
+    ),
+    NewsSourceConfig(
+        "nia",
+        "国家移民管理局",
+        "https://www.nia.gov.cn",
+        "https://www.nia.gov.cn/",
+        link_contains="/n741",
+        category_code="police_news",
+        category="公安要闻",
+        region_code="000000",
+        trust_level=85,
+    ),
+    NewsSourceConfig(
+        "legaldaily",
+        "法治日报",
+        "http://www.legaldaily.com.cn",
+        "http://www.legaldaily.com.cn/",
+        link_contains="/index_article/content/",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
         trust_level=80,
     ),
 )

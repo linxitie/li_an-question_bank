@@ -198,6 +198,14 @@ def parse_list_links(
     return links
 
 
+def _clean_title(value: str) -> str:
+    value = (value or "").strip()
+    value = re.sub(r"\s+20\d{2}[-/年]\d{1,2}[-/月]\d{1,2}.*$", "", value)
+    value = re.sub(r"\s+(?:来源|分享)[:：].*$", "", value)
+    value = re.sub(r"\s*-\s*标准\s*\+\s*$", "", value)
+    return value.strip()
+
+
 def parse_article(html: str, url: str) -> ArticleData:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
@@ -214,6 +222,7 @@ def parse_article(html: str, url: str) -> ArticleData:
     ):
         for node in soup.select(selector):
             candidate = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
+            candidate = _clean_title(candidate)
             if len(candidate) < 6 or candidate in {"工作链接", "专题专栏", "地方特色"}:
                 continue
             if len(candidate) > len(title):
@@ -221,7 +230,7 @@ def parse_article(html: str, url: str) -> ArticleData:
     if not title:
         node = soup.select_one("title")
         if node:
-            title = node.get_text(" ", strip=True).strip()
+            title = _clean_title(node.get_text(" ", strip=True))
     body = ""
     best_score = 0
     content_node = None

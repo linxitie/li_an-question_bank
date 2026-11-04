@@ -61,6 +61,11 @@ def test_image_url_and_alt_noise_filter():
     assert not news_collector._is_noise_image("https://example.com/news/road.jpg")
 
 
+def test_clean_title_strips_feed_metadata():
+    raw = "把加强党性修养作为终身课题 2026-11-04 09:10:40 来源：新华网 分享： - 标准 +"
+    assert news_collector._clean_title(raw) == "把加强党性修养作为终身课题"
+
+
 def _source():
     return NewsSourceConfig(
         "beijing",
