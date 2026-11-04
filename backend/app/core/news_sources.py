@@ -418,6 +418,43 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         region_code="000000",
         trust_level=80,
     ),
+    # 第六批：公安院校与法治系统权威来源
+    NewsSourceConfig(
+        "ppsuc",
+        "中国人民公安大学",
+        "https://www.ppsuc.edu.cn",
+        "https://www.ppsuc.edu.cn/",
+        link_contains="/info/1016/",
+        category_code="police_education",
+        category="公安教育",
+        region_code="000000",
+        trust_level=80,
+        robots_note="robots.txt 404，协议层面无显式规则",
+    ),
+    NewsSourceConfig(
+        "cipuc",
+        "中国刑事警察学院",
+        "https://www.cipuc.edu.cn",
+        "https://www.cipuc.edu.cn/",
+        link_contains="/info/2697/",
+        category_code="police_education",
+        category="公安教育",
+        region_code="000000",
+        trust_level=80,
+        robots_note="robots.txt 404，协议层面无显式规则",
+    ),
+    NewsSourceConfig(
+        "moj",
+        "司法部",
+        "https://www.moj.gov.cn",
+        "https://www.moj.gov.cn/",
+        link_contains="/pub/sfbgw/gwxw/xwyw/",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
+        trust_level=80,
+        robots_note="robots.txt 404，协议层面无显式规则",
+    ),
 )
 
 SOURCE_BY_CODE = {source.code: source for source in NEWS_SOURCES}
