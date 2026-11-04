@@ -67,3 +67,16 @@ declare module 'vue' {
 }
 
 export {};
+
+/** 构建时由 vite.config.ts 注入的 git 短 SHA 与构建时间（全局，供 main.ts 做版本自检） */
+declare global {
+  const __BUILD_SHA__: string;
+  const __BUILD_TIME__: string;
+
+  interface Window {
+    /** 前端构建版本；backend 为后端 /health 返回的 revision */
+    __APP_BUILD__?: { sha: string; time: string; backend?: string };
+    /** 前后端版本不一致时存在，便于排查「功能开发中」这类旧产物问题 */
+    __VERSION_MISMATCH__?: { frontend: string; backend: string };
+  }
+}

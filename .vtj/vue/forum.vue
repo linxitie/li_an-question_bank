@@ -8,14 +8,22 @@
           <XIcon :icon="ChatRound" :size="24" color="#c41e3a"></XIcon>
           <span> 备考论坛</span>
         </h2>
+        <div class="forum-search-bar in-header">
+        <input
+        v-model="state.searchKeyword"
+        class="search-input"
+        placeholder="搜索帖子标题或内容…"
+        @keyup.enter="applySearch" />
+        <input v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
+        <span class="search-tilde">~</span>
+        <input v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
+        <button class="search-btn" @click="applySearch">搜索</button>
+        <button class="search-reset" @click="resetSearch">重置</button>
+        </div>
+
         <div class="forum-header-actions">
-          <button class="post-btn ghost" @click="openFavorites('favorites')">
-            <XIcon :icon="Star" :size="16" color="#c41e3a"></XIcon>
-            <span> 我的收藏</span>
-          </button>
-          <button class="post-btn ghost" @click="openFavorites('likes')">
-            <XIcon :icon="StarFilled" :size="16" color="#c41e3a"></XIcon>
-            <span> 我的喜欢</span>
+          <button class="post-btn ghost star-only" title="我的收藏 / 我的喜欢" @click="openFavorites('favorites')">
+            <XIcon :icon="Star" :size="18" color="#c41e3a"></XIcon>
           </button>
           <button class="post-btn" @click="openNewPost">
             <XIcon :icon="EditPen" :size="16" color="#ffffff"></XIcon>
@@ -25,27 +33,6 @@
       </div>
       <div class="forum-body">
         <div class="forum-left">
-          <div class="category-bar">
-            <button
-              v-for="cat in categoryTabs"
-              :key="cat.key"
-              :class="['category-chip', { active: state.activeCategory === cat.key }]"
-              @click="selectCategory(cat.key)">
-              {{ cat.name }}
-            </button>
-          </div>
-          <div class="forum-search-bar">
-            <input
-              v-model="state.searchKeyword"
-              class="search-input"
-              placeholder="搜索帖子标题或内容…"
-              @keyup.enter="applySearch" />
-            <input v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
-            <span class="search-tilde">~</span>
-            <input v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
-            <button class="search-btn" @click="applySearch">搜索</button>
-            <button class="search-reset" @click="resetSearch">重置</button>
-          </div>
           <div class="post-list" v-if="state.posts.length">
             <div
               v-for="(post, index) in filteredPosts"
@@ -61,27 +48,19 @@
                 :user-id="post.userId"
                 @click="viewUser(post.userId)" />
               <div class="post-content" @click="viewPost(post)">
+                <div class="post-author-line" @click.stop="viewUser(post.userId)">
+                  <span class="meta-author">{{ post.author }}</span>
+                  <span class="meta-dot"> ·</span>
+                  <span class="meta-date">{{ post.date }}</span>
+                </div>
                 <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
                 <p class="post-excerpt"><ForumContent :content="post.content" /></p>
                 <AttachmentList
                   v-if="post.attachments && post.attachments.length"
                   :attachments="post.attachments"
                   mode="post" />
-                <div class="post-attachments" v-if="post.fileAttachments && post.fileAttachments.length">
-                  <span
-                    v-for="(att, idx) in post.fileAttachments"
-                    :key="idx"
-                    class="attachment-chip"
-                    @click.stop="downloadAttachment(att)">
-                    <XIcon :icon="Document" :size="12" color="#1a2b5f"></XIcon>
-                    <span> {{ att.name }}</span>
-                  </span>
-                </div>
+
                 <div class="post-meta">
-                  <span class="meta-author" @click.stop="viewUser(post.userId)">{{ post.author }}</span>
-                  <span class="meta-dot"> ·</span>
-                  <span class="meta-date">{{ post.date }}</span>
-                  <span class="meta-dot"> ·</span>
                   <span class="meta-likes" @click.stop="toggleHeart(post)" title="喜欢">
                     <span class="heart-icon" :class="{ active: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                     <span> {{ post.likeCount }}</span>
@@ -119,7 +98,7 @@
           <div class="right-card hot-posts">
             <h4>
               <XIcon :icon="TrendCharts" :size="16" color="#ef4444"></XIcon>
-              <span> 热门帖子</span>
+              <span> 今日热门（{{ state.hotIsWeek ? '近 7 天' : '当天' }}）</span>
             </h4>
             <div
               v-for="(hot, index) in hotPosts"
@@ -134,27 +113,11 @@
               </span>
             </div>
             <div v-if="!hotPosts.length" class="empty-tip-mini">暂无热门</div>
-          </div>
-          <div class="right-card user-stats">
-            <h4>
-              <XIcon :icon="User" :size="16" color="#1a2b5f"></XIcon>
-              <span> 论坛活跃</span>
-            </h4>
-            <div class="stats-grid">
-              <div class="stats-item">
-                <span class="stats-number">{{ state.forumStats.posts }}</span>
-                <span class="stats-label"> 帖子</span>
-              </div>
-              <div class="stats-item">
-                <span class="stats-number">{{ state.forumStats.users }}</span>
-                <span class="stats-label"> 用户</span>
-              </div>
-              <div class="stats-item">
-                <span class="stats-number">{{ state.forumStats.online }}</span>
-                <span class="stats-label"> 在线</span>
-              </div>
+            <div v-if="hotPosts.length" class="my-posts-view-all" @click="openHotAll">
+              查看更多 →
             </div>
           </div>
+
           <div v-if="isLoggedIn" class="right-card my-posts">
             <h4>
               <XIcon :icon="User" :size="16" color="#1a2b5f"></XIcon>
@@ -525,6 +488,38 @@
           </template>
         </div>
       </div>
+      <!-- 热门帖子前 100 条 Modal -->
+      <div v-if="state.showHotAll" class="modal-overlay" @click.self="closeHotAll">
+        <div class="modal-card post-detail-card">
+          <h3>热门帖子 · 前 100 条</h3>
+          <div class="hot-range">
+            <input v-model="state.hotFrom" type="date" />
+            <span>~</span>
+            <input v-model="state.hotTo" type="date" />
+            <button @click="openHotAll">查询</button>
+          </div>
+          <div v-if="state.hotAllLoading" class="empty-tip-mini">加载中...</div>
+          <div v-else-if="!state.hotAll.length" class="empty-tip-mini">暂无热门</div>
+          <div v-else class="my-posts-full-list">
+            <div
+              v-for="hp in state.hotAll"
+              :key="hp.id"
+              class="my-post-item"
+              @click="viewPost(hp)">
+              <span class="hot-rank" :class="'rank-' + (hp.rank <= 3 ? hp.rank : '')">{{ hp.rank }}</span>
+              <span class="my-post-title">{{ hp.title }}</span>
+              <span class="my-post-stats">
+                <span class="my-stat">❤️ {{ hp.likeCount }}</span>
+                <span class="my-stat">💬 {{ hp.commentCount }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button @click="closeHotAll">关闭</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 我的帖子完整列表 Modal -->
       <div
         v-if="state.showMyPosts"
@@ -668,6 +663,15 @@
         myPosts: [] as any[],
         myPostsLoaded: false,
         myPostsTotal: 0,
+        // 今日热门
+        hotToday: [],
+        hotIsWeek: false,
+        hotFrom: new Date().toISOString().slice(0, 10),
+        hotTo: new Date().toISOString().slice(0, 10),
+        // 热门帖子「查看更多」
+        hotAll: [],
+        showHotAll: false,
+        hotAllLoading: false,
         showMyPosts: false,
         // === 我的收藏 / 我的喜欢（P2 仅外壳，数据 P3 接入）===
         showFavorites: false,
@@ -715,11 +719,12 @@
         // 后端已分页,直接返回(避免前端切片导致显示数量不准)
         return this.state.posts;
       },
+      /** 今日热门：只取当天按点赞量前 5（B 方案：当天无帖则为空） */
       hotPosts(): any[] {
-        return [...this.state.posts]
-          .sort((a, b) => (b.reactionTotal + b.commentCount * 2) - (a.reactionTotal + a.commentCount * 2))
-          .slice(0, 5)
-          .map((p, i) => ({ ...p, rank: i + 1 }));
+        return (this.state.hotToday || []).slice(0, 5).map((p: any, i: number) => ({
+          ...p,
+          rank: i + 1
+        }));
       },
       canDeleteCurrentPost(): boolean {
         if (!this.state.currentPost) return false;
@@ -810,12 +815,11 @@
         }
       },
       async submitPost() {
-        if (!this.state.newPost.title.trim()) {
-          ElMessage.warning('请输入标题');
-          return;
-        }
-        if (!this.state.newPost.content.trim()) {
-          ElMessage.warning('请输入内容');
+        // 2026-10-31：标题 / 正文 / 附件(图片或文件) 至少一项即可发布
+        const np: any = this.state.newPost;
+        const hasAtt = (np.images?.length || 0) + (np.attachments?.length || 0) > 0;
+        if (!np.title.trim() && !np.content.trim() && !hasAtt) {
+          ElMessage.warning('标题、正文、附件至少填写一项');
           return;
         }
         const auth = (window as any).__VTJ_AUTH__;
@@ -1237,6 +1241,60 @@
           /* 静默 */
         }
       },
+      /** 热门帖子查看更多：按点赞量取前 100 条 */
+      /** 拉今日热门（标题卡片） */
+      async loadHotToday() {
+        const today = new Date().toISOString().slice(0, 10);
+        const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+        try {
+          const res: any = await fetchForumPosts({
+            sortBy: 'likes', order: 'desc', dateFrom: today, dateTo: today, limit: 5
+          });
+          let list = (res.posts || []).map((p: any) => this._mapPost(p));
+          this.state.hotIsWeek = false;
+          if (list.length < 5) {
+            const week: any = await fetchForumPosts({
+              sortBy: 'likes', order: 'desc', dateFrom: weekAgo, dateTo: today, limit: 5
+            });
+            const merged = [...list];
+            for (const item of (week.posts || [])) {
+              if (merged.length >= 5) break;
+              if (!merged.some((x: any) => x.id === item.id)) merged.push(this._mapPost(item));
+            }
+            list = merged;
+            this.state.hotIsWeek = list.length > 0;
+          }
+          this.state.hotToday = list.slice(0, 5);
+        } catch (e) {
+          this.state.hotToday = [];
+        }
+      },
+
+      async openHotAll() {
+        this.state.showHotAll = true;
+        this.state.hotAllLoading = true;
+        try {
+          const res: any = await fetchForumPosts({
+            sortBy: 'likes',
+            order: 'desc',
+            dateFrom: this.state.hotFrom || undefined,
+            dateTo: this.state.hotTo || undefined,
+            limit: 100
+          });
+          this.state.hotAll = (res.posts || []).map((p: any, i: number) => ({
+            ...this._mapPost(p),
+            rank: i + 1
+          }));
+        } catch (e) {
+          this.state.hotAll = [];
+        } finally {
+          this.state.hotAllLoading = false;
+        }
+      },
+      closeHotAll() {
+        this.state.showHotAll = false;
+      },
+
       async openMyPosts() {
         this.state.showMyPosts = true;
         this.state.myPostsPage = 1;
@@ -1327,6 +1385,7 @@
       this.state.activeCategory = 'all';
       this.community.setShareType('');
       this.loadPosts();
+      this.loadHotToday();
       this.loadStats();
       this.loadMyPosts();
       this.state._visibilityHandler = () => {
@@ -2524,4 +2583,47 @@
     flex-shrink: 0;
     white-space: nowrap;
   }
+
+/* 2026-10-30：分类与搜索固定（学生 PC）——标题行 68px 之下依次吸附 */
+.category-bar { position: sticky; top: var(--forum-toolbar-h, 84px); z-index: 24; background: #fff;
+  padding-top: 8px; padding-bottom: 8px; margin-bottom: 0; }
+/* in-header：搜索栏并入标题行后不再单独吸顶 */
+.forum-search-bar.in-header { position: static; flex: 1 1 auto; min-width: 320px; background: #fff;
+  padding-bottom: 8px; margin-bottom: 8px;
+  box-shadow: 0 8px 10px -12px rgba(15,23,42,.45); }
+
+/* 2026-10-30：窄屏（平板/小笔记本）压缩标题行，避免拥挤与标题换行 */
+@media (max-width: 1560px) {
+  .forum-header { gap: 10px; }
+  .forum-header h2 { font-size: 22px; white-space: nowrap; }
+  .forum-search-bar.in-header { min-width: 0; gap: 6px; }
+  .forum-search-bar.in-header .search-input { min-width: 130px; padding: 7px 10px; font-size: 13px; }
+  .forum-search-bar.in-header .search-date { width: 116px; padding: 6px 6px; font-size: 12px; }
+  .forum-search-bar.in-header .search-btn,
+  .forum-search-bar.in-header .search-reset {
+    padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+  .forum-header-actions { gap: 6px; }
+  .forum-header-actions .post-btn { padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+}
+@media (max-width: 1280px) {
+  .forum-header h2 { font-size: 19px; }
+  .forum-search-bar.in-header .search-input { min-width: 100px; }
+  .forum-search-bar.in-header .search-date { width: 104px; }
+  .forum-header-actions .post-btn { padding: 6px 8px; font-size: 12px; }
+}
+/* 收藏/喜欢合并为单个五角星 */
+.post-btn.star-only { padding: 0; width: 38px; height: 38px; display: inline-flex;
+  align-items: center; justify-content: center; border-radius: 50%; }
+/* 2026-10-31：整页固定高度，左右两栏各自滚动（互不带动） */
+.forum-page { height: 100vh; overflow: hidden; }
+.forum-main { height: calc(100vh - 0px); overflow: hidden; }
+.forum-body { display: flex; gap: 20px; align-items: flex-start;
+  height: calc(100vh - 148px); overflow: hidden; }
+.forum-left { flex: 1 1 auto; min-width: 0; height: 100%;
+  overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+.forum-right { flex: 0 0 300px; height: 100%;
+  overflow-y: auto; overscroll-behavior: contain; }
+.post-author-line { display: flex; align-items: center; gap: 4px;
+  font-size: 13px; color: #6b7896; margin-bottom: 4px; }
+.post-author-line .meta-author { font-weight: 600; color: #1a2b5f; }
 </style>

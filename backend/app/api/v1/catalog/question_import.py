@@ -52,6 +52,7 @@ from ....services.question_ingest.docx_reader import (  # I-3：畸形 docx 三�
 )
 from ....services.question_ingest.tags import (  # I-4：标签检测 + 自动建卷（pure move 自本文件）
     _auto_detect_tags,               # 文件/全文启发式提取 年份/考试类型/科目/完整卷/试卷名
+    _clean_source_title,             # 文件名 → 可追溯的题目来源标题
     _detect_complete_paper,          # 完整试卷判定（连续题号 + 答案区）
     _extract_paper_name,             # 试卷名提取（书名号/模式/首行兜底）
     _get_or_create_import_paper,     # 按标签自动建/复用 ExamPaper（<5 题跳过）
@@ -1436,9 +1437,12 @@ async def batch_import_parsed(
             )
     except Exception as e:  # noqa: BLE001 — 预检绝不能阻断导入
         logger.warning(f"答案一致性预检异常（已忽略）: {e}")
-    _inject_source = ''.join(
-        p for p in (auto_tags.get('exam_province', ''), auto_tags.get('exam_type', '')) if p
-    )
+    # 来源优先取导入文档标题（用户要求可追溯到原文件），仅在标题不可用时回退到
+    # 省份+考试类型的旧泛化值；不能用泛化值覆盖 payload 已带的明确来源。
+    _inject_source = (auto_tags.get('source_title')
+                      or _clean_source_title(paper_name or '')
+                      or ''.join(p for p in (auto_tags.get('exam_province', ''),
+                                             auto_tags.get('exam_type', '')) if p))
     _inject_year = auto_tags.get('exam_year')
     # F2 写入守卫：参考表在本请求内只加载一次
     _vrefs = ReferenceCache(session=db)
@@ -1964,6 +1968,11 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
 
             total = len(raw_questions[:MAX_BATCH_QUESTIONS])
             auto_tags = _auto_detect_tags(filename, str(preview_items[:5]) if preview_items else '')
+            _preview_source = auto_tags.get('source_title') or _clean_source_title(filename)
+            if _preview_source:
+                for _it in preview_items:
+                    if isinstance(_it, dict) and _it.get('status') in ('NEW', 'DUPLICATE'):
+                        _it.setdefault('source', _preview_source)
             # W2-1：科目/子科目建议（追加字段，不改既有字段）
             _upload_sug_text = ' '.join(
                 (it.get('question_content') or '') for it in preview_items[:10])
@@ -2047,6 +2056,7 @@ def _process_import_async(import_id: int, buf: bytes, filename: str, ext: str, f
                         'question_number': block.get('question_number'),
                         'question_level': block.get('question_level'),
                         'sort_order': block.get('sort_order'),
+                        'source': auto_tags.get('source_title') or _clean_source_title(filename),
                     })
                 # 逐题推进 75→90：大文档（数百题）时进度同样是平滑的
                 if parsed_blocks and (idx % 20 == 0 or idx == len(parsed_blocks) - 1):

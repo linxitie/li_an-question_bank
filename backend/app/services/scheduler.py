@@ -86,12 +86,18 @@ def init_scheduler():
     """初始化并启动定时任务调度器"""
     from .difficulty import update_all_difficulties
     from .exam_scraper import scrape_all_exams
-    from .news_scraper import scrape_all_news
+    from .news_collector import collect_all_sources
     from .recruitment_scraper import scrape_all_recruitment
 
     # 包装：爬取完成后广播同步事件（通知前端刷新）
     def _news_with_broadcast():
-        scrape_all_news()
+        from ..core.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            collect_all_sources(db, limit=5, dry_run=False)
+        finally:
+            db.close()
         _broadcast_sync("新闻更新")
 
     def _recruitment_with_broadcast():
@@ -102,12 +108,12 @@ def init_scheduler():
         scrape_all_exams()
         _broadcast_sync("考试日历更新")
 
-    # 每日 24:00（北京时间）执行爬取
+    # 每日 08:00 / 18:00（北京时间）采集白名单新闻
     scheduler.add_job(
         _news_with_broadcast,
-        trigger=CronTrigger(hour=0, minute=0, timezone=CST),
-        id="scrape_news",
-        name="每日新闻爬取",
+        trigger=CronTrigger(hour="8,18", minute=0, timezone=CST),
+        id="collect_news_8_18",
+        name="每日新闻采集 08:00/18:00",
         replace_existing=True,
     )
     scheduler.add_job(

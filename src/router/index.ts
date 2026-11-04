@@ -1,7 +1,11 @@
 /*
  * 砺安题库 - 路由配置（三端分离）
  */
-import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
+import {
+  createRouter,
+  createWebHashHistory,
+  type RouteRecordRaw
+} from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
 import { canAccess } from './access';
 
@@ -251,7 +255,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'users',
         name: 'AdminUsers',
-        component: () => import('$vtj/vue/admin_users.vue'),
+        component: () => import('@/views/admin/pc/AdminUsersWorkspace.vue'),
         meta: { roles: ['admin'] }
       },
       {
@@ -299,8 +303,8 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'permissions',
         name: 'AdminPermissions',
-        component: () => import('$vtj/vue/admin_permissions.vue'),
-        meta: { roles: ['admin'] }
+        // 旧书签保留：权限模板已并入用户与权限工作台
+        redirect: '/admin/users?tab=templates'
       },
       {
         path: 'papers',
@@ -394,7 +398,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/tablet/forum',
     name: 'TabletForum',
-    component: () => import('$vtj/vue/tablet_forum.vue'),
+    // 2026-10-30（用户决定 A）：平板与 PC 共用同一套论坛页，避免两套布局维护
+    component: () => import('$vtj/vue/forum.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -424,7 +429,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/tablet/wrong-questions',
     name: 'TabletWrongQuestions',
-    component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
+    component: () =>
+      import('@/views/student/mobile/mobile_wrong_questions.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -540,7 +546,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/mobile/wrong-questions',
     name: 'MobileWrongQuestions',
-    component: () => import('@/views/student/mobile/mobile_wrong_questions.vue'),
+    component: () =>
+      import('@/views/student/mobile/mobile_wrong_questions.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
@@ -774,7 +781,7 @@ router.beforeEach((to, _from, next) => {
   const userRole = auth.getUserRole();
   const roleDashboardMap: Record<string, string> = {
     admin: '/admin/dashboard',
-    teacher: '/teacher/dashboard',
+    teacher: '/teacher/dashboard'
   };
   if (
     userRole &&

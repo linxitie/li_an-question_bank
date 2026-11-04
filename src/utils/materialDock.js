@@ -29,7 +29,10 @@ export function ensureMaterialStyles(doc) {
 // 给标签套高亮胶囊，原有标签结构完全不动，因此任何来源的富文本都安全。
 export function formatMaterialHtml(html) {
   const source = String(html || '');
-  if (!source || source.indexOf('qm-label') >= 0) return source;
+  // 新渲染层已经输出 .qr-rich/.qr-heading；再按“材料N”包胶囊会二次嵌套。
+  if (!source || source.indexOf('qm-label') >= 0 || source.indexOf('qr-rich') >= 0 || source.indexOf('qr-heading') >= 0) {
+    return source;
+  }
   if (typeof document === 'undefined') return source;
   const tpl = document.createElement('template');
   tpl.innerHTML = source;
@@ -100,6 +103,7 @@ export function mountMaterialDock(host, options) {
     .qm-dock-body { max-height: 32vh; overflow: auto; overscroll-behavior: contain;
       padding: 12px 16px; line-height: 1.9; font-size: 15px; color: #334155; white-space: pre-wrap; }
     .qm-dock-body img, .qm-dock-body table { max-width: 100%; height: auto; }
+    .qm-dock-body .qr-rich { white-space: normal; }
     .qm-dock-body .qm-label { display: block; width: fit-content; max-width: 100%;
       margin: 18px 0 8px; padding: 2px 10px; border-radius: 999px; background: #e8f0fb;
       color: #1a3c6d; font-weight: 700; font-size: 13px; line-height: 1.6; }

@@ -100,7 +100,8 @@ def test_forum_attachment_uses_media_asset(client, db_session, test_user, auth_h
     got = client.get(body["url"])
     assert got.status_code == 200
     assert got.headers["content-type"] == "application/pdf"
-    assert "attachment" in got.headers["content-disposition"]
+    # 2026-11-01：PDF 改为 inline（浏览器可内联预览）
+    assert "inline" in got.headers["content-disposition"]
 
 
 def test_forum_dedupes_bytes_but_keeps_two_urls(client, db_session, auth_headers, tmp_path, monkeypatch):

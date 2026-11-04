@@ -77,6 +77,207 @@ AGENT_TASKS: List[Dict] = [
         ],
     },
     {
+        "task_id": "shenlun_pigai",
+        "title": "申论批改",
+        "agent": "shenlun",
+        "desc": "你贴出申论答案，我按考试标准打分+逐条评语+修改建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["归纳概括", "综合分析", "提出对策", "贯彻执行", "大作文"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答案",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答案贴在这里...",
+            },
+        ],
+    },
+    {
+        "task_id": "daily_jinju",
+        "title": "每日金句推荐",
+        "agent": "shenlun",
+        "desc": "每天自动生成3条申论金句，积累素材，写作直接用",
+        "fields": [
+            {
+                "key": "theme",
+                "label": "主题（选填）",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "为民服务", "创新", "法治", "奋斗", "诚信"],
+            },
+        ],
+    },
+    {
+        "task_id": "fagao_sucha",
+        "title": "法条速查",
+        "agent": "gongzhuan",
+        "desc": "输入关键词，快速查找相关法条及高频考点",
+        "fields": [
+            {
+                "key": "keyword",
+                "label": "关键词",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：行政拘留、取保候审",
+            },
+        ],
+    },
+    {
+        "task_id": "psychology_relax",
+        "title": "考前心理疏导",
+        "agent": "psychology",
+        "desc": "焦虑、紧张、学不进去？和我聊聊，帮你调整状态",
+        "fields": [
+            {
+                "key": "problem",
+                "label": "你现在的状态",
+                "type": "text",
+                "required": True,
+                "placeholder": "比如：最近老是熬夜，白天学不进去...",
+            },
+        ],
+    },
+    {
+        "task_id": "daily_question",
+        "title": "每日一题推荐",
+        "agent": "xingce",
+        "desc": "每天自动推荐一道经典真题，附带详细解析",
+        "fields": [
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "knowledge_map",
+        "title": "知识点思维导图",
+        "agent": "xingce",
+        "desc": "输入知识点，自动生成知识框架和关联考点",
+        "fields": [
+            {
+                "key": "topic",
+                "label": "知识点",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：图形推理、资料分析",
+            },
+        ],
+    },
+    {
+        "task_id": "mock_score",
+        "title": "面试模拟打分",
+        "agent": "interview",
+        "desc": "你答题，我按考试标准打分+逐条评语+改进建议",
+        "fields": [
+            {
+                "key": "question_type",
+                "label": "题型",
+                "type": "select",
+                "required": True,
+                "options": ["综合分析", "应急处突", "组织管理", "人际沟通"],
+            },
+            {
+                "key": "answer",
+                "label": "你的答题内容",
+                "type": "text",
+                "required": True,
+                "placeholder": "把你的答题内容贴在这里...",
+            },
+        ],
+    },
+    {
+        "task_id": "choose_post_detail",
+        "title": "岗位详细分析",
+        "agent": "choose_post",
+        "desc": "输入岗位名称，分析竞争比、薪资待遇、发展前景",
+        "fields": [
+            {
+                "key": "post_name",
+                "label": "岗位名称",
+                "type": "text",
+                "required": True,
+                "placeholder": "如：出入境边防检查、铁路公安",
+            },
+        ],
+    },
+    {
+        "task_id": "zhenti_jiexi",
+        "title": "历年真题解析",
+        "agent": "xingce",
+        "desc": "输入年份和科目，自动生成真题解析和考点分析",
+        "fields": [
+            {
+                "key": "year",
+                "label": "年份",
+                "type": "select",
+                "required": True,
+                "options": ["2025", "2024", "2023", "2022"],
+            },
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": True,
+                "options": ["行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
+        "task_id": "efficiency_analysis",
+        "title": "学习效率分析",
+        "agent": "psychology",
+        "desc": "分析你的学习数据，找出最高效的学习时段和方法",
+        "fields": [
+            {
+                "key": "question",
+                "label": "你的问题",
+                "type": "text",
+                "required": False,
+                "placeholder": "比如：为什么我晚上学不进去？",
+            },
+        ],
+    },
+    {
+        "task_id": "shenlun_sucai",
+        "title": "申论素材积累",
+        "agent": "shenlun",
+        "desc": "每天自动生成3条申论素材，包含人物案例、金句、政策",
+        "fields": [
+            {
+                "key": "theme",
+                "label": "主题",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "乡村振兴", "科技创新", "生态文明", "基层治理"],
+            },
+        ],
+    },
+    {
+        "task_id": "wrong_analysis",
+        "title": "错题分析报告",
+        "agent": "xingce",
+        "desc": "自动分析你的错题本，找出薄弱题型和提分建议",
+        "fields": [
+            {
+                "key": "subject",
+                "label": "科目",
+                "type": "select",
+                "required": False,
+                "options": ["不限", "行测", "申论", "公专"],
+            },
+        ],
+    },
+    {
         "task_id": "gongzhuan_fatiao",
         "title": "公专法条梳理",
         "agent": "gongzhuan",
@@ -87,7 +288,12 @@ AGENT_TASKS: List[Dict] = [
                 "label": "法规",
                 "type": "select",
                 "required": True,
-                "options": ["治安管理处罚法", "人民警察法", "刑法", "公安机关办理刑事案件程序规定"],
+                "options": [
+                    "治安管理处罚法",
+                    "人民警察法",
+                    "刑法",
+                    "公安机关办理刑事案件程序规定",
+                ],
             },
         ],
     },
@@ -220,7 +426,10 @@ async def agent_memory_delete(
 
     row = (
         db.query(UserMemory)
-        .filter(UserMemory.memory_id == memory_id, UserMemory.user_id == current_user.user_id)
+        .filter(
+            UserMemory.memory_id == memory_id,
+            UserMemory.user_id == current_user.user_id,
+        )
         .first()
     )
     if not row:
@@ -343,4 +552,118 @@ async def run_agent_task(
         "agent": agent_id,
         "agent_name": AGENT_META.get(agent_id, {}).get("name", "联考小智"),
         "reply": reply,
+    }
+
+
+# ==================== 一键写入今日任务（模块7 → 模块4 联动） ====================
+
+
+class ImportTodayRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200, description="任务标题")
+    content: str = Field("", max_length=500, description="任务内容/描述")
+    coin_reward: int = Field(15, ge=5, le=100, description="金币奖励")
+
+
+@router.post("/import-today", summary="一键写入今日任务")
+async def import_today_task(
+    req: ImportTodayRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    模块7工作模式产出的结构化结果，一键写入模块4的今日任务面板。
+    自动分配金币奖励，完成后自动计入打卡。
+    """
+    from ...models.models import StudyGoal
+
+    # 创建今日任务
+    today_task = StudyGoal(
+        user_id=current_user.user_id,
+        title=req.title,
+        description=req.content,
+        goal_type="DAILY",
+        target_count=1,
+        current_count=0,
+        expected_minutes=30,
+        priority=2,
+        is_completed=0,
+        base_reward=req.coin_reward,
+        reward_coins=req.coin_reward,
+        status=1,
+    )
+    db.add(today_task)
+    db.commit()
+    db.refresh(today_task)
+
+    logger.info(f"用户 {current_user.user_id} 从模块7导入任务: {req.title}")
+
+    return {
+        "goal_id": today_task.goal_id,
+        "title": today_task.title,
+        "reward_coins": today_task.reward_coins,
+        "message": "已写入今日任务，完成后可领取金币",
+    }
+
+
+# ==================== 文件上传接口 ====================
+from fastapi import UploadFile, File
+import os
+import uuid
+
+UPLOAD_DIR = "backend/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@router.post("/upload", summary="上传文件（图片/PDF/文档）")
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user: SysUser = Depends(get_current_user),
+):
+    """上传文件，返回文件URL"""
+    # 限制文件大小（10MB）
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件大小不能超过10MB")
+
+    # 生成唯一文件名
+    ext = os.path.splitext(file.filename)[1]
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, unique_name)
+
+    # 保存文件
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    logger.info(
+        f"用户 {current_user.user_id} 上传文件: {file.filename} -> {unique_name}"
+    )
+
+    return {
+        "file_id": unique_name,
+        "filename": file.filename,
+        "file_url": f"/uploads/{unique_name}",
+        "file_size": len(contents),
+        "message": "文件上传成功",
+    }
+
+
+# ==================== 消息反馈接口 ====================
+class FeedbackReq(BaseModel):
+    message_id: Optional[str] = None
+    rating: int = Field(..., description="1=点赞, -1=点踩")
+    comment: Optional[str] = None
+
+
+@router.post("/feedback", summary="消息反馈（点赞/点踩）")
+async def submit_feedback(
+    req: FeedbackReq,
+    current_user: SysUser = Depends(get_current_user),
+):
+    """用户对AI消息的反馈"""
+    logger.info(
+        f"用户 {current_user.user_id} 反馈: rating={req.rating}, message_id={req.message_id}"
+    )
+    return {
+        "success": True,
+        "message": "感谢你的反馈！我们会持续改进",
     }

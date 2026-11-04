@@ -55,6 +55,12 @@ class SysUser(Base):
     school_id = Column(Integer, comment="所属学校/机构ID")
     device_sessions = Column(JSON, default=list, comment="设备会话列表")
 
+    # === 管理员端用户合并模块新增字段 ===
+    is_deleted = Column(Integer, default=0, comment="删除状态 0正常/1回收站/2已注销")
+    deleted_at = Column(DateTime, comment="删除时间")
+    deleted_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="删除操作人")
+    delete_reason = Column(String(255), comment="删除原因")
+
     # === 学生端「我的」模块新增字段 ===
     growth_points = Column(Integer, default=0, comment="累计成长值(学习等级)")
     settings = Column(JSON, comment="通知/隐私偏好JSON")
@@ -83,6 +89,7 @@ class SysUser(Base):
         Index("idx_is_disabled", is_disabled),
         Index("idx_department", department, class_name),
         Index("idx_school_id", school_id),
+        Index("idx_is_deleted", is_deleted),
     )
 
 class SysLoginLog(Base):
@@ -1898,6 +1905,13 @@ class EssayQuote(Base):
     author = Column(String(100), comment="作者")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     status = Column(Integer, default=1, comment="状态 1正常/0禁用")
+    # 内容知识中枢 R0（v3.0 §6.2）
+    quote_uid = Column(String(40), unique=True, index=True, comment="稳定ID")
+    normalized_hash = Column(String(64), index=True, comment="归一化内容哈希")
+    review_status = Column(String(20), nullable=False, default="published", index=True, comment="审核状态")
+    source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True, comment="主来源")
+    quality_score = Column(Float, comment="质量分 0-100")
+    deleted_at = Column(DateTime, comment="软删除时间")
 
     __table_args__ = (
         Index("idx_category_essayquote", category),
@@ -2254,6 +2268,107 @@ class ForumMention(Base):
     )
 
 
+# ------------------------------
+# 内容知识中枢（R0）
+# ------------------------------
+
+class Topic(Base):
+    """主题字典：theme（主题）/ exam_type（考试类型）"""
+    __tablename__ = "topic"
+
+    topic_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, comment="主题名")
+    slug = Column(String(100), nullable=False, unique=True, comment="稳定标识")
+    kind = Column(String(20), nullable=False, default="theme", comment="theme/exam_type")
+    parent_id = Column(Integer, ForeignKey("topic.topic_id"), nullable=True)
+    description = Column(String(500))
+    aliases = Column(JSON, comment="别名数组")
+    status = Column(Integer, default=1)
+    sort_order = Column(Integer, default=1)
+
+    __table_args__ = (
+        Index("idx_topic_kind", kind),
+    )
+
+
+class KgRelationType(Base):
+    """关系类型注册表：新增关系只加一行"""
+    __tablename__ = "kg_relation_type"
+
+    relation = Column(String(40), primary_key=True)
+    description = Column(String(200))
+    directed = Column(Integer, default=1)
+    src_types = Column(Text, comment="JSON 数组")
+    dst_types = Column(Text, comment="JSON 数组")
+
+
+class KgEdge(Base):
+    """薄图边：只存 (type,id) 指针，不复制正文"""
+    __tablename__ = "kg_edge"
+
+    edge_id = Column(Integer, primary_key=True, autoincrement=True)
+    src_type = Column(String(20), nullable=False)
+    src_id = Column(BigInteger, nullable=False)
+    dst_type = Column(String(20), nullable=False)
+    dst_id = Column(BigInteger, nullable=False)
+    relation = Column(String(40), nullable=False)
+    weight = Column(Float, default=1.0)
+    confidence = Column(Float, default=1.0)
+    origin = Column(String(20), default="rule", comment="rule/llm/human")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("src_type", "src_id", "dst_type", "dst_id", "relation",
+                         name="uq_kg_edge"),
+        Index("idx_kg_src", src_type, src_id, relation),
+        Index("idx_kg_dst", dst_type, dst_id, relation),
+    )
+
+
+class ContentSource(Base):
+    """统一来源：金句/新闻/招考共用"""
+    __tablename__ = "content_source"
+
+    source_id = Column(Integer, primary_key=True, autoincrement=True)
+    content_type = Column(String(20), nullable=False, comment="quote/news/recruitment")
+    content_id = Column(BigInteger, nullable=False)
+    source_type = Column(String(20), nullable=False, comment="obsidian/rss/web/official/manual")
+    url = Column(String(1000), nullable=False, default="")
+    publisher = Column(String(200))
+    author = Column(String(200))
+    published_at = Column(String(40))
+    fetched_at = Column(DateTime)
+    trust_level = Column(Integer, default=50)
+    content_hash = Column(String(64))
+    snapshot_path = Column(String(500))
+    license = Column(String(200))
+
+    __table_args__ = (
+        UniqueConstraint("content_type", "content_id", "url", name="uq_content_source"),
+        Index("idx_source_content", content_type, content_id),
+    )
+
+
+class ContentEvidence(Base):
+    """多模态证据：图片/PDF/二维码等"""
+    __tablename__ = "content_evidence"
+
+    evidence_id = Column(Integer, primary_key=True, autoincrement=True)
+    content_type = Column(String(20), nullable=False)
+    content_id = Column(BigInteger, nullable=False)
+    media_type = Column(String(20), nullable=False, comment="image/pdf/audio/video")
+    path = Column(String(500), nullable=False)
+    sha256 = Column(String(64), index=True)
+    ocr_text = Column(Text)
+    caption = Column(String(500))
+    source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("idx_evidence_content", content_type, content_id),
+    )
+
+
 class UserNotification(Base):
     """统一站内信（学生/教师/管理员共用）。"""
     __tablename__ = "user_notification"
@@ -2298,6 +2413,40 @@ class ForumModeration(Base):
         Index("idx_moderation_status", status, created_at),
         Index("idx_moderation_target", target_type, target_id),
     )
+
+
+class QuoteReview(Base):
+    """金句审核流水（R1）"""
+    __tablename__ = "quote_review"
+
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    quote_id = Column(BigInteger, ForeignKey("essay_quote.quote_id"), nullable=False)
+    reviewer_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=True)
+    action = Column(String(20), nullable=False, comment="approve/reject/request_changes/archive")
+    reason = Column(Text)
+    diff_json = Column(Text, comment="状态迁移 JSON")
+    created_at = Column(DateTime, default=datetime.now)
+
+    quote = relationship("EssayQuote")
+    reviewer = relationship("SysUser")
+
+    __table_args__ = (
+        Index("idx_quote_review_quote", quote_id, created_at),
+        Index("idx_quote_review_reviewer", reviewer_id, created_at),
+    )
+
+
+class DailyQuote(Base):
+    """每日金句预生成（R1）"""
+    __tablename__ = "daily_quote"
+
+    quote_date = Column(String(10), primary_key=True, comment="YYYY-MM-DD")
+    quote_id = Column(BigInteger, ForeignKey("essay_quote.quote_id"), nullable=False)
+    algorithm_version = Column(String(20), default="datehash-v1")
+    fallback_used = Column(Integer, default=0, comment="1=近30天候选耗尽后回退全池")
+    created_at = Column(DateTime, default=datetime.now)
+
+    quote = relationship("EssayQuote")
 
 
 class ChatSession(Base):
@@ -2413,6 +2562,34 @@ class KnowledgeRelation(Base):
     )
 
 
+class PracticeDraft(Base):
+    """练习草稿表（未完成答题卡，跨设备续答）
+
+    与 practice_record 严格分离：草稿是中间态，交卷后才写正式练习记录，
+    避免未完成的答题污染统计口径。试卷型未完成不走本表，
+    直接复用 exam_record.is_completed=0 + exam_answer_detail。
+    """
+    __tablename__ = "practice_draft"
+
+    draft_id = Column(Integer, primary_key=True, autoincrement=True, comment="草稿ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    scope = Column(String(20), nullable=False, comment="范围: type/subject/paper")
+    scope_key = Column(String(100), nullable=False, comment="范围键, 如 1:12（subject_id:type_id）")
+    questions = Column(Text, comment="题序 JSON: [question_id, ...]")
+    answers = Column(Text, comment="答案 JSON: {\"12\":\"A\"}")
+    cursor = Column(Integer, default=0, comment="当前题序位置")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, comment="更新时间")
+    expires_at = Column(DateTime, comment="过期时间（默认 30 天）")
+
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "scope", "scope_key", name="uk_practice_draft_owner"),
+        Index("idx_practice_draft_expires", expires_at),
+    )
+
+
 class UserProfile(Base):
     """模块4 v2 - 用户备考画像表（注册/画像问卷采集，供 PlanAgent 推理）"""
     __tablename__ = "user_profile"
@@ -2440,96 +2617,70 @@ class UserProfile(Base):
     )
 
 
-class KgRelationType(Base):
-    """关系类型注册表：新增关系只加一行"""
-    __tablename__ = "kg_relation_type"
+# ------------------------------
+# 管理员端用户与权限合并（2026-11）
+# ------------------------------
 
-    relation = Column(String(40), primary_key=True)
-    description = Column(String(200))
-    directed = Column(Integer, default=1)
-    src_types = Column(Text, comment="JSON 数组")
-    dst_types = Column(Text, comment="JSON 数组")
+class UserPermissionOverride(Base):
+    """用户级权限覆盖：在角色基线与能力包之上做加授/拒绝。
 
+    为什么单独建表而不复用 UserCapability：
+    - UserCapability 的语义是“能力包”，没有 deny、到期、批次撤销；
+    - 通用权限码最长 64 字符，能力码只有 32；
+    - 本表需要按权限码聚合做权限矩阵与审计。
+    """
+    __tablename__ = "user_permission_override"
 
-class KgEdge(Base):
-    """薄图边：只存 (type,id) 指针，不复制正文"""
-    __tablename__ = "kg_edge"
-
-    edge_id = Column(Integer, primary_key=True, autoincrement=True)
-    src_type = Column(String(20), nullable=False)
-    src_id = Column(BigInteger, nullable=False)
-    dst_type = Column(String(20), nullable=False)
-    dst_id = Column(BigInteger, nullable=False)
-    relation = Column(String(40), nullable=False)
-    weight = Column(Float, default=1.0)
-    confidence = Column(Float, default=1.0)
-    origin = Column(String(20), default="rule", comment="rule/llm/human")
-    created_at = Column(DateTime, default=datetime.now)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="被授权用户")
+    permission_code = Column(String(64), nullable=False, comment="权限码")
+    effect = Column(String(8), nullable=False, comment="grant/deny")
+    scope_type = Column(String(16), nullable=False, default="global", comment="global/subject/class")
+    scope_id = Column(BigInteger, nullable=False, default=0, comment="范围ID，global 固定 0")
+    scope_key = Column(String(64), nullable=False, default="", comment="范围键，class 用班级名")
+    status = Column(String(16), nullable=False, default="active", comment="active/revoked/expired")
+    reason = Column(String(255), nullable=False, default="", comment="变更原因")
+    granted_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="操作人")
+    granted_at = Column(DateTime, default=datetime.now, comment="授权时间")
+    expires_at = Column(DateTime, comment="到期时间，空=永久")
+    revoked_by = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="撤销人")
+    revoked_at = Column(DateTime, comment="撤销时间")
+    batch_id = Column(String(36), comment="变更批次")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="最后更新时间")
 
     __table_args__ = (
-        UniqueConstraint("src_type", "src_id", "dst_type", "dst_id", "relation",
-                         name="uq_kg_edge"),
-        Index("idx_kg_src", src_type, src_id, relation),
-        Index("idx_kg_dst", dst_type, dst_id, relation),
+        UniqueConstraint(
+            "user_id", "permission_code", "scope_type", "scope_id",
+            name="uk_user_permission_override",
+        ),
+        Index("idx_permission_override_user_status", "user_id", "status"),
+        Index("idx_permission_override_code_status", "permission_code", "status"),
+        Index("idx_permission_override_batch", "batch_id"),
     )
 
 
-class ContentSource(Base):
-    """统一来源：金句/新闻/招考共用"""
-    __tablename__ = "content_source"
+class PermissionChangeBatch(Base):
+    """权限变更批次：保存 before/after，用于审计与 10 分钟内撤销。"""
+    __tablename__ = "permission_change_batch"
 
-    source_id = Column(Integer, primary_key=True, autoincrement=True)
-    content_type = Column(String(20), nullable=False, comment="quote/news/recruitment")
-    content_id = Column(BigInteger, nullable=False)
-    source_type = Column(String(20), nullable=False, comment="obsidian/rss/web/official/manual")
-    url = Column(String(1000), nullable=False, default="")
-    publisher = Column(String(200))
-    author = Column(String(200))
-    published_at = Column(String(40))
-    fetched_at = Column(DateTime)
-    trust_level = Column(Integer, default=50)
-    content_hash = Column(String(64))
-    snapshot_path = Column(String(500))
-    license = Column(String(200))
+    batch_id = Column(String(36), primary_key=True, comment="批次ID")
+    operator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="操作人")
+    action = Column(String(32), nullable=False, comment="grant/deny/inherit/apply_template/role_template_update")
+    target_count = Column(Integer, default=0, comment="目标用户数")
+    reason = Column(String(255), nullable=False, default="", comment="操作原因")
+    before_json = Column(Text, comment="变更前快照 JSON")
+    after_json = Column(Text, comment="变更后快照 JSON")
+    undo_deadline = Column(DateTime, comment="撤销截止时间")
+    undone_at = Column(DateTime, comment="撤销时间")
+    undone_by = Column(BigInteger, comment="撤销人")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     __table_args__ = (
-        UniqueConstraint("content_type", "content_id", "url", name="uq_content_source"),
-        Index("idx_source_content", content_type, content_id),
+        Index("idx_permission_batch_operator", "operator_id", "created_at"),
+        Index("idx_permission_batch_created", "created_at"),
     )
 
-class Topic(Base):
-    """主题字典：theme（主题）/ exam_type（考试类型）"""
-    __tablename__ = "topic"
-
-    topic_id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(100), nullable=False, unique=True, comment="主题名")
-    slug = Column(String(100), nullable=False, unique=True, comment="稳定标识")
-    kind = Column(String(20), nullable=False, default="theme", comment="theme/exam_type")
-    parent_id = Column(Integer, ForeignKey("topic.topic_id"), nullable=True)
-    description = Column(String(500))
-    aliases = Column(JSON, comment="别名数组")
-    status = Column(Integer, default=1)
-    sort_order = Column(Integer, default=1)
-
-    __table_args__ = (Index("idx_topic_kind", kind),)
-
-
-class ContentEvidence(Base):
-    """多模态证据：图片/PDF/二维码等"""
-    __tablename__ = "content_evidence"
-
-    evidence_id = Column(Integer, primary_key=True, autoincrement=True)
-    content_type = Column(String(20), nullable=False)
-    content_id = Column(BigInteger, nullable=False)
-    media_type = Column(String(20), nullable=False, comment="image/pdf/audio/video")
-    path = Column(String(500), nullable=False)
-    sha256 = Column(String(64), index=True)
-    ocr_text = Column(Text)
-    caption = Column(String(500))
-    source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
-
-    __table_args__ = (Index("idx_evidence_content", content_type, content_id),)
 
 
 class MaterialShare(Base):

@@ -501,7 +501,14 @@ export default defineComponent({
         const r = await auth().apiFetch('/api/admin/questions?' + params.toString());
         const d = await r.json();
         if (d.success) {
-          questionList.value = d.items || [];
+          // 用户要求列表 ID 在当前页从 1 连续升序；真实 question_id 仍保留在
+          // _realId，编辑/审核/驳回等写操作必须使用它，不能把显示序号落库。
+          questionList.value = (d.items || []).map(function(q, idx) {
+            return Object.assign({}, q, {
+              _realId: q.question_id,
+              question_id: (currentPage.value - 1) * pageSize.value + idx + 1
+            });
+          });
           total.value = d.total || 0;
           totalPages.value = Math.ceil(total.value / pageSize.value);
         }
@@ -563,15 +570,20 @@ export default defineComponent({
       }
     }
 
+    function realQuestionId(q: any) {
+      return (q && (q._realId || q.question_id)) || 0;
+    }
+
     function editQuestion(q: any) {
       editForm.value = {
-        question_id: q.question_id,
+        question_id: realQuestionId(q),
         subject_id: String(q.subject_id),
         type_id: q.type_id,
         question_content: q.full_content || q.question_content,
         options_text: typeof q.options === 'string' ? q.options : JSON.stringify(q.options || []),
         answer: q.answer,
         answer_analysis: q.answer_analysis || '',
+        requirements: q.requirements || '',
         difficulty: q.difficulty || 3,
         source: q.source || '',
         group_id: q.group_id || 0,
@@ -580,7 +592,38 @@ export default defineComponent({
       };
       showEditModal.value = true;
       nextTick(refreshEditPreview);
-      hydrateMaterialFromDetail(q.question_id);
+      hydrateMaterialFromDetail(realQuestionId(q));
+    }
+
+    // raw 页不能改 <template>：脚本注入“申论要求”输入框（题目要求是采分点依据，
+    // 解析器已独立入库，但编辑弹窗此前只能看不能改）。
+    function ensureRequirementsEditor(root) {
+      if (!root) return;
+      const isEssay = String(editForm.value.subject_id) === '2';
+      let field = root.querySelector('.fg[data-field="requirements"]');
+      if (!isEssay) {
+        if (field) field.style.display = 'none';
+        return;
+      }
+      if (field) field.style.display = '';
+      if (!field) {
+        field = document.createElement('div');
+        field.className = 'fg';
+        field.setAttribute('data-field', 'requirements');
+        field.innerHTML = '<label>申论要求（每行一条，保存后生效）</label>' +
+          '<textarea class="fi textarea" rows="3" placeholder="如：（1）准确全面；&#10;（2）分条列出；"></textarea>';
+        const actions = root.querySelector('.modal-actions');
+        if (actions && actions.parentNode) actions.parentNode.insertBefore(field, actions);
+        else root.appendChild(field);
+        const input = field.querySelector('textarea');
+        input.addEventListener('input', function () {
+          editForm.value.requirements = input.value;
+        });
+      }
+      const input = field.querySelector('textarea');
+      if (input && document.activeElement !== input) {
+        input.value = editForm.value.requirements || '';
+      }
     }
 
     // raw 页不能改 <template>：脚本内补题干、选项、解析、题组材料的富文本预览。
@@ -588,6 +631,7 @@ export default defineComponent({
     function refreshEditPreview() {
       const root = findEditModalRoot();
       if (!root) return;
+      ensureRequirementsEditor(root);
       let optionItems: Array<{ key: string; value: string }> = [];
       let optionsError = '';
       const rawOptions = String(editForm.value.options_text || '').trim();
@@ -623,6 +667,9 @@ export default defineComponent({
           editForm.value.group_id = d.group_id || 0;
           editForm.value.shared_content = d.shared_content || '';
           editForm.value.shared_content_images = d.shared_content_images || '';
+          if (d.requirements !== undefined && d.requirements !== null) {
+            editForm.value.requirements = d.requirements || '';
+          }
           nextTick(refreshEditPreview);
         })
         .catch(function() { /* 静默：材料加载失败不影响编辑其他字段 */ });
@@ -682,6 +729,7 @@ export default defineComponent({
           question_content: editForm.value.question_content,
           answer: editForm.value.answer,
           answer_analysis: editForm.value.answer_analysis,
+          requirements: editForm.value.requirements || '',
           difficulty: editForm.value.difficulty,
           source: editForm.value.source,
           // P2-6：题组材料随保存提交；清空后传 0/'' 以便后端解除关联
@@ -716,7 +764,7 @@ export default defineComponent({
     async function auditPass(q: any) {
       if (!confirm('确定通过题目 ' + q.question_id + ' 的审核吗？')) return;
       try {
-        const r = await auth().apiFetch('/api/admin/questions/' + q.question_id + '/audit', {
+        const r = await auth().apiFetch('/api/admin/questions/' + realQuestionId(q) + '/audit', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ audit_status: 1, audit_comment: '审核通过' })
@@ -735,7 +783,7 @@ export default defineComponent({
     }
 
     function showRejectDialog(q: any) {
-      rejectForm.value = { question_id: q.question_id, reason_type: '', comment: '' };
+      rejectForm.value = { question_id: realQuestionId(q), reason_type: '', comment: '' };
       showRejectModal.value = true;
     }
 

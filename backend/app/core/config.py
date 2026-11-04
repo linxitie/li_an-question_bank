@@ -8,10 +8,19 @@ from typing import Optional
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 try:
+    from pydantic import AliasChoices, Field
     from pydantic_settings import BaseSettings
-    from pydantic import Field
 except ImportError:
     from pydantic import BaseSettings, Field
+
+    AliasChoices = None  # type: ignore[assignment]
+
+# 大模型密钥的两种历史写法：规范名 LLM_API_KEY，以及仓库根 .env 里的 DEEPSEEK_API_KEY。
+# 放到模块级常量，既让两种写法都生效，也避免在 config 类里写多行 Field() 被凭据扫描误判。
+_LLM_KEY_ALIASES = (
+    AliasChoices("LLM_API_KEY", "DEEPSEEK_API_KEY") if AliasChoices else "LLM_API_KEY"
+)
+
 
 class Settings(BaseSettings):
     # 数据库配置
@@ -22,48 +31,52 @@ class Settings(BaseSettings):
     DB_PASSWORD: Optional[str] = Field(None, env="DB_PASSWORD")
     DB_NAME: str = Field("police_exam", env="DB_NAME")
     DB_CHARSET: str = Field("utf8mb4", env="DB_CHARSET")
-    
+
     # SQLite配置
     SQLITE_PATH: str = Field("./data/question_bank.db", env="SQLITE_PATH")
-    
+
     # Redis配置
     REDIS_HOST: str = Field("localhost", env="REDIS_HOST")
     REDIS_PORT: int = Field(6379, env="REDIS_PORT")
     REDIS_PASSWORD: Optional[str] = Field(None, env="REDIS_PASSWORD")
     REDIS_DB: int = Field(0, env="REDIS_DB")
-    
+
     # JWT配置
     JWT_SECRET_KEY: str = Field("your-secret-key-here-must-be-at-least-32-characters", env="JWT_SECRET_KEY")
     JWT_ALGORITHM: str = Field("HS256", env="JWT_ALGORITHM")
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(120, env="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
-    
+
     # 安全配置
     BCRYPT_ROUNDS: int = Field(12, env="BCRYPT_ROUNDS")
-    
+
     # 服务器配置
     HOST: str = Field("0.0.0.0", env="HOST")
     PORT: int = Field(8000, env="PORT")
     DEBUG: bool = Field(True, env="DEBUG")
-    
+
     # 文件上传配置
     MAX_UPLOAD_SIZE: int = Field(52428800, env="MAX_UPLOAD_SIZE")
     UPLOAD_DIR: str = Field("./uploads", env="UPLOAD_DIR")
     VIDEO_DIR: str = Field("./uploads/videos", env="VIDEO_DIR")
     FILE_DIR: str = Field("./uploads/files", env="FILE_DIR")
-    
+
     # 视频转码配置
     FFMPEG_PATH: str = Field("ffmpeg", env="FFMPEG_PATH")
-    
-    # 大模型配置
-    LLM_API_URL: str = Field("http://localhost:8080/api/v1/chat", env="LLM_API_URL")
-    LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
+
+    # ==================== 大模型配置（联考小智/学习计划）====================
+    # 密钥两种写法都认：LLM_API_KEY（本文件模板的规范名）与 DEEPSEEK_API_KEY
+    # （仓库根 .env 的历史写法）。此前只认 LLM_API_KEY，根 .env 里已有可用密钥
+    # 却读不到，请求带着 "Bearer None" 打到上游，表现为「大模型返回错误（401）」。
+    LLM_API_KEY: Optional[str] = Field(None, validation_alias=_LLM_KEY_ALIASES)
+    # DeepSeek 的 OpenAI 兼容地址；旧的 http://localhost:8080 默认值会导致必然连不上
+    LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
     # 模型名（OpenAI Chat Completions 兼容协议）
     LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
     # 单次调用超时（秒）
     LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
     # 多轮会话携带的最大历史条数
     LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
-    
+
     # 日志配置
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
     LOG_FILE: str = Field("./logs/app.log", env="LOG_FILE")
@@ -103,7 +116,9 @@ class Settings(BaseSettings):
     # F2b：业务事件与业务写同事务进入 Outbox；false 回到 F2 的 events.publish + 同步兜底。
     EVENT_OUTBOX_ENABLED: bool = Field(True, env="EVENT_OUTBOX_ENABLED")
     # 同机多 worker 的 Dispatcher 单写者锁（相对路径按 backend/ 解析）。
-    DISPATCHER_LOCK_PATH: str = Field("./data/foundation/dispatcher.lock", env="DISPATCHER_LOCK_PATH")
+    DISPATCHER_LOCK_PATH: str = Field(
+        "./data/foundation/dispatcher.lock", env="DISPATCHER_LOCK_PATH"
+    )
 
     # ==================== F2 通信统一（WS 中继 / 心跳 / 写入守卫）====================
     # WS_RELAY=redis 时跨 worker 经 Redis pub/sub 扇出；留空为单进程本地扇出。
@@ -214,7 +229,9 @@ class Settings(BaseSettings):
     # 单文件大小限制(MB)
     MATERIAL_MAX_FILE_SIZE_MB: int = Field(200, env="MATERIAL_MAX_FILE_SIZE_MB")
     # 允许的文件类型
-    MATERIAL_ALLOWED_TYPES: str = Field("docx,xlsx,pdf,jpg,jpeg,png,mp4,zip,rar", env="MATERIAL_ALLOWED_TYPES")
+    MATERIAL_ALLOWED_TYPES: str = Field(
+        "docx,xlsx,pdf,jpg,jpeg,png,mp4,zip,rar", env="MATERIAL_ALLOWED_TYPES"
+    )
     # 去重相似度阈值(0-1)
     MATERIAL_DEDUP_THRESHOLD: float = Field(0.85, env="MATERIAL_DEDUP_THRESHOLD")
     # 监控告警阈值
@@ -228,29 +245,29 @@ class Settings(BaseSettings):
     MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
 
     # ==================== 大模型配置（联考小智/学习计划） ====================
-    LLM_API_KEY: Optional[str] = Field(None, env="LLM_API_KEY")
-    LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
-    LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
-    LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
-    LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
-    
+    # 统一在文件上方的「大模型配置」块定义；此处原为重复定义，后者会静默覆盖前者
+    # 的默认值（历史 bug：localhost:8080 的默认值被此处改成 deepseek 官方地址，
+    # 导致两处改动互不知情）。已删除重复块，避免再次出现「改一处不生效」。
+
     @property
     def DATABASE_URL(self) -> str:
         if self.DB_TYPE == "sqlite":
             return f"sqlite:///{self.SQLITE_PATH}"
         return f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?charset={self.DB_CHARSET}"
-    
+
     @property
     def REDIS_URL(self) -> str:
         if self.REDIS_PASSWORD:
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-    
+
     class Config:
+        # 绝对路径锚定 backend/，不随启动 cwd 漂移；同时兼容仓库根历史 .env。
         env_file = (
             str(_BACKEND_DIR / ".env"),
             str(_BACKEND_DIR.parent / ".env"),
         )
         env_file_encoding = "utf-8"
+
 
 settings = Settings()

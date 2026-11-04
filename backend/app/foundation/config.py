@@ -1,4 +1,5 @@
 """F1 配置：纯环境变量与路径，不依赖 app.core（可被迁移脚本/测试独立导入）。"""
+
 import os
 from pathlib import Path
 
@@ -13,11 +14,17 @@ DEFAULT_SQLITE_PATH = BACKEND_DIR / "data" / "question_bank.db"
 
 
 def load_env_files(paths: tuple[Path, ...] | None = None) -> None:
-    """把 backend/.env 与仓库根 .env 载入进程环境；Pydantic 不会导出到 os.environ。"""
+    """把 backend/.env 与仓库根 .env 载入进程环境。
+
+    foundation 层刻意不依赖 app.core；Pydantic 的 BaseSettings 只把 .env 读进
+    settings 对象，不会导出到 os.environ，因此这里必须单独加载，否则
+    build_embedding_port() 只能看到 off/空值。
+    """
     candidates = paths or (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env")
     try:
         from dotenv import load_dotenv
     except ImportError:
+        # 极简 fallback：缺少 python-dotenv 时不能静默退回 off/空值。
         for path in candidates:
             if not path.is_file():
                 continue
@@ -84,9 +91,7 @@ DOC_STORE_MAX_BYTES = int(os.environ.get("DOC_STORE_MAX_BYTES", "8388608") or 83
 DOC_STORE_MONGO_URI = os.environ.get("DOC_STORE_MONGO_URI") or ""
 DOC_STORE_MONGO_DB = os.environ.get("DOC_STORE_MONGO_DB") or "li_an_foundation"
 DOC_STORE_MONGO_PREFIX = os.environ.get("DOC_STORE_MONGO_PREFIX") or ""
-DOC_STORE_RECONCILE_MAX_AGE_DAYS = int(
-    os.environ.get("DOC_STORE_RECONCILE_MAX_AGE_DAYS", "7") or 7
-)
+DOC_STORE_RECONCILE_MAX_AGE_DAYS = int(os.environ.get("DOC_STORE_RECONCILE_MAX_AGE_DAYS", "7") or 7)
 
 
 # ==================== F5 图投影 ====================
@@ -98,9 +103,7 @@ GRAPH_NEO4J_USER = (os.environ.get("GRAPH_NEO4J_USER") or "neo4j").strip()
 GRAPH_NEO4J_PASSWORD = os.environ.get("GRAPH_NEO4J_PASSWORD") or ""
 GRAPH_NEO4J_DATABASE = (os.environ.get("GRAPH_NEO4J_DATABASE") or "neo4j").strip()
 GRAPH_QUERY_MAX_DEPTH = int(os.environ.get("GRAPH_QUERY_MAX_DEPTH", "5") or 5)
-GRAPH_RECONCILE_MAX_AGE_DAYS = int(
-    os.environ.get("GRAPH_RECONCILE_MAX_AGE_DAYS", "7") or 7
-)
+GRAPH_RECONCILE_MAX_AGE_DAYS = int(os.environ.get("GRAPH_RECONCILE_MAX_AGE_DAYS", "7") or 7)
 
 
 # ==================== F6 向量投影与 AI 端口 ====================
@@ -114,9 +117,7 @@ VECTOR_MILVUS_URI = (os.environ.get("VECTOR_MILVUS_URI") or "http://localhost:19
 VECTOR_MILVUS_TOKEN = os.environ.get("VECTOR_MILVUS_TOKEN") or ""
 VECTOR_MILVUS_PREFIX = (os.environ.get("VECTOR_MILVUS_PREFIX") or "li_an_").strip()
 VECTOR_SEARCH_TOP_K_MAX = int(os.environ.get("VECTOR_SEARCH_TOP_K_MAX", "100") or 100)
-VECTOR_RECONCILE_MAX_AGE_DAYS = int(
-    os.environ.get("VECTOR_RECONCILE_MAX_AGE_DAYS", "7") or 7
-)
+VECTOR_RECONCILE_MAX_AGE_DAYS = int(os.environ.get("VECTOR_RECONCILE_MAX_AGE_DAYS", "7") or 7)
 EMBEDDING_ENABLED = _bool("EMBEDDING_ENABLED", False)
 EMBEDDING_PROVIDER = (os.environ.get("EMBEDDING_PROVIDER") or "off").strip().lower()
 EMBEDDING_BASE_URL = (os.environ.get("EMBEDDING_BASE_URL") or "").strip()
