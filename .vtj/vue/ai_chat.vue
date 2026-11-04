@@ -973,13 +973,6 @@ export default defineComponent({
   flex-direction: column;
   gap: 16px;
 }
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 16px;
-  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.4);
-  z-index: 10;
-}
 .branch-item {
   background: #fff;
   padding: 12px 20px;
