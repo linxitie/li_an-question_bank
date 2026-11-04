@@ -34,7 +34,9 @@ jobs:
         run: cd backend && python scripts/gates/gate_all.py --quick
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # 2026-11-04：node 22 自带 npm 10，与 npm 11 生成的 package-lock 解析不一致会 EUSAGE；
+          # 升到 24（npm 11）与锁文件生成环境一致（package.json engines 允许 20.19–24）。
+          node-version: '24'
           cache: npm
       - run: npm ci
       - name: Typecheck

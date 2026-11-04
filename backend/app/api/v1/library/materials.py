@@ -9,7 +9,7 @@ import re
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -741,7 +741,8 @@ import shutil as _shutil  # noqa: E402
 import uuid as _uuid  # noqa: E402
 from pathlib import Path as _Path  # noqa: E402
 
-from fastapi import File, UploadFile  # noqa: E402
+# 2026-11-04：File/UploadFile 原在此处延迟导入，但上面的函数签名（第 340/520 行）已经用到它们，
+# 在 Python < 3.14（注解立即求值）下会 NameError；已提到文件顶部导入，这里不再重复。
 
 from ....models.models import MaterialImportRecord, SysOperationLog  # noqa: E402
 from ....services.material_sanitizer import sanitize_html  # noqa: E402
