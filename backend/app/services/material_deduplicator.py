@@ -17,7 +17,8 @@ class MaterialDeduplicator:
     # 公开接口
     # ------------------------------------------------------------------
 
-    def check_duplicate(self, content: str, db: Session) -> dict:
+    def check_duplicate(self, content: str, db: Session,
+                        user_id: Optional[int] = None) -> dict:
         """
         检查内容是否重复（MD5精确匹配）。
 
@@ -26,7 +27,7 @@ class MaterialDeduplicator:
              "existing_id": int | None}
         """
         md5 = self._calculate_md5(content)
-        existing_id = self._check_md5_exists(md5, db)
+        existing_id = self._check_md5_exists(md5, db, user_id=user_id)
         if existing_id is not None:
             return {
                 "is_duplicate": True,
@@ -65,16 +66,23 @@ class MaterialDeduplicator:
         return hashlib.md5(content.encode("utf-8")).hexdigest()
 
     @staticmethod
-    def _check_md5_exists(md5: str, db: Session) -> Optional[int]:
-        """检查 MD5 是否已存在于 study_material.content_hash。"""
-        row = (
-            db.query(StudyMaterial.material_id)
-            .filter(
-                StudyMaterial.content_hash == md5,
-                StudyMaterial.status >= 0,  # 排除已删除(status=-1)
-            )
-            .first()
+    def _check_md5_exists(md5: str, db: Session,
+                          user_id: Optional[int] = None) -> Optional[int]:
+        """检查 MD5 是否已存在。
+
+        R-1 修正：私有卡（status=2）只在"自己的库"内参与去重，
+        否则别人的私有卡会阻塞当前用户创建相同内容，并泄露"库里已有该内容"。
+        """
+        from sqlalchemy import or_
+
+        q = db.query(StudyMaterial.material_id).filter(
+            StudyMaterial.content_hash == md5,
+            StudyMaterial.status >= 0,  # 排除已删除(status=-1)
         )
+        if user_id is not None:
+            q = q.filter(or_(StudyMaterial.status != 2,
+                             StudyMaterial.creator_id == user_id))
+        row = q.first()
         return row[0] if row else None
 
 

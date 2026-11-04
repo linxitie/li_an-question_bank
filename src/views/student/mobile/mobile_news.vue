@@ -4,23 +4,15 @@
     <header class="topbar">
       <button class="back-btn" @click="goBack" aria-label="返回">←</button>
       <h1 class="title">{{ currentNews ? '新闻详情' : '每日新闻' }}</h1>
-      <button v-if="!currentNews" class="timeline-btn" @click="openTimeline">
-        时间线/日报
-      </button>
+      <button v-if="!currentNews" class="timeline-btn" @click="openTimeline">时间线/日报</button>
       <span v-else class="spacer"></span>
     </header>
 
     <!-- 新闻列表 -->
     <main v-if="!currentNews" class="news-list">
-      <div
-        v-for="item in newsList"
-        :key="item.id"
-        class="news-item"
-        @click="openDetail(item)">
+      <div v-for="item in newsList" :key="item.id" class="news-item" @click="openDetail(item)">
         <div class="news-title">{{ item.title }}</div>
-        <div class="news-meta">
-          {{ item.source || '' }} · {{ formatTime(item.publish_date) }}
-        </div>
+        <div class="news-meta">{{ item.source || '' }} · {{ formatTime(item.publish_date) }}</div>
       </div>
       <div v-if="!newsList.length && !loading" class="empty">暂无新闻</div>
       <div v-if="loading" class="empty">加载中...</div>
@@ -29,22 +21,18 @@
     <!-- 新闻详情 -->
     <main v-else class="news-detail">
       <h2 class="detail-title">{{ currentNews.title }}</h2>
-      <div class="detail-meta">
-        {{ currentNews.source || '' }} ·
-        {{ formatTime(currentNews.publish_date) }}
-      </div>
-      <div
-        ref="contentEl"
-        class="detail-content"
-        v-html="renderedContent"></div>
+      <div class="detail-meta">{{ currentNews.source || '' }} · {{ formatTime(currentNews.publish_date) }}</div>
+      <div ref="contentEl" class="detail-content" v-html="renderedContent"></div>
       <div
         v-if="displayImages.length && !hasInlineMarkers"
-        class="detail-images">
+        class="detail-images"
+      >
         <img
           v-for="(src, idx) in displayImages"
           :key="src + '-' + idx"
           :src="src"
-          :alt="'图片' + (idx + 1)" />
+          :alt="'图片' + (idx + 1)"
+        />
       </div>
 
       <!-- 选中文字操作菜单（5 色划线 + 想法） -->
@@ -53,22 +41,21 @@
         class="selection-menu"
         :style="{ top: menuPos.y + 'px', left: menuPos.x + 'px' }"
         @mousedown.prevent
-        @touchstart.prevent>
+        @touchstart.prevent
+      >
         <button
           v-for="c in colors"
           :key="c"
           class="color-dot"
           :style="{ background: c }"
-          @click="applyHighlight(c)" />
+          @click="applyHighlight(c)"
+        />
         <button class="note-btn" @click="openNoteInput">📝 想法</button>
       </div>
 
       <!-- 想法输入 -->
       <div v-if="noteInputVisible" class="note-input">
-        <textarea
-          v-model="noteText"
-          class="note-textarea"
-          placeholder="记录想法…" />
+        <textarea v-model="noteText" class="note-textarea" placeholder="记录想法…" />
         <div class="note-actions">
           <button class="cancel" @click="cancelNoteInput">取消</button>
           <button class="save" @click="saveNote">保存</button>
@@ -79,16 +66,11 @@
       <div v-if="notes.length" class="notes-section">
         <h4 class="notes-title">我的笔记 ({{ notes.length }})</h4>
         <div v-for="n in notes" :key="n.note_id" class="note-item">
-          <blockquote
-            v-if="n.quote_text"
-            class="note-quote"
-            :style="renderNoteStyle(n)">
+          <blockquote v-if="n.quote_text" class="note-quote" :style="renderNoteStyle(n)">
             {{ n.quote_text }}
           </blockquote>
           <p v-if="n.note_text" class="note-text">{{ n.note_text }}</p>
-          <button class="delete-btn" @click="removeNote(n.note_id)">
-            删除
-          </button>
+          <button class="delete-btn" @click="removeNote(n.note_id)">删除</button>
         </div>
       </div>
     </main>
@@ -111,11 +93,7 @@ const newsStore = useNewsStore();
 const newsList = computed<NewsItem[]>(() => newsStore.items);
 const loading = computed(() => newsStore.loading);
 
-interface NewsImage {
-  url?: string;
-  order?: number;
-  [key: string]: any;
-}
+interface NewsImage { url?: string; order?: number; [key: string]: any; }
 const currentNews = computed<NewsItem | null>(() => newsStore.selected);
 const notes = ref<any[]>([]);
 /** 正文容器引用：划线时用于判定选区是否落在正文内 */
@@ -148,11 +126,7 @@ const displayImages = computed(() =>
 const highlights = computed(() =>
   notes.value
     .filter((n) => n && n.quote_text)
-    .map((n) => ({
-      quote_text: n.quote_text,
-      color: n.color,
-      line_style: n.line_style
-    }))
+    .map((n) => ({ quote_text: n.quote_text, color: n.color, line_style: n.line_style }))
 );
 
 /** 正文渲染统一走 newsRender.js（其内部复用 questionRender.js 的 sanitizeHtml） */
@@ -255,19 +229,16 @@ const applyHighlight = async (color: string) => {
   highlightColor.value = color;
   const newsId = currentNews.value.id;
   try {
-    await (window as any).__VTJ_AUTH__.apiFetch(
-      '/api/news/' + newsId + '/note',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          note_text: '',
-          quote_text: selectedText.value,
-          color: color,
-          line_style: lineStyle.value
-        })
-      }
-    );
+    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        note_text: '',
+        quote_text: selectedText.value,
+        color: color,
+        line_style: lineStyle.value
+      })
+    });
     clearSelection();
     await fetchNotes(newsId);
   } catch (e) {
@@ -295,19 +266,16 @@ const saveNote = async () => {
   }
   const newsId = currentNews.value.id;
   try {
-    await (window as any).__VTJ_AUTH__.apiFetch(
-      '/api/news/' + newsId + '/note',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          note_text: thought,
-          quote_text: selectedText.value,
-          color: highlightColor.value,
-          line_style: lineStyle.value
-        })
-      }
-    );
+    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        note_text: thought,
+        quote_text: selectedText.value,
+        color: highlightColor.value,
+        line_style: lineStyle.value
+      })
+    });
     noteInputVisible.value = false;
     noteText.value = '';
     clearSelection();
@@ -321,9 +289,7 @@ const saveNote = async () => {
 
 const fetchNotes = async (newsId: number) => {
   try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch(
-      '/api/news/' + newsId + '/notes'
-    );
+    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/notes');
     const data = await res.json();
     if (res.ok) notes.value = data.items || [];
   } catch (e) {
@@ -333,9 +299,7 @@ const fetchNotes = async (newsId: number) => {
 
 const removeNote = async (noteId: number) => {
   try {
-    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/notes/' + noteId, {
-      method: 'DELETE'
-    });
+    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/notes/' + noteId, { method: 'DELETE' });
     notes.value = notes.value.filter((n) => n.note_id !== noteId);
   } catch (e) {
     console.error('删除笔记失败:', e);
@@ -344,12 +308,9 @@ const removeNote = async (noteId: number) => {
 
 const renderNoteStyle = (note: any) => {
   const c = note.color || '#FFD700';
-  if (note.line_style === 'wavy')
-    return 'text-decoration: underline wavy ' + c + ';';
-  if (note.line_style === 'straight')
-    return 'text-decoration: underline ' + c + ';';
-  if (note.line_style === 'marker')
-    return 'background-color: ' + c + '40; padding: 0 2px;';
+  if (note.line_style === 'wavy') return 'text-decoration: underline wavy ' + c + ';';
+  if (note.line_style === 'straight') return 'text-decoration: underline ' + c + ';';
+  if (note.line_style === 'marker') return 'background-color: ' + c + '40; padding: 0 2px;';
   return 'border-left: 3px solid ' + c + ';';
 };
 
@@ -376,7 +337,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .mobile-news-page {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #F5F7FA;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   display: flex;
   flex-direction: column;
@@ -565,7 +526,7 @@ onBeforeUnmount(() => {
   color: #5a6488;
 }
 .note-actions .save {
-  background: linear-gradient(135deg, #1a365d 0%, #2a5298 100%);
+  background: linear-gradient(135deg, #1A365D 0%, #2a5298 100%);
   color: #fff;
 }
 .notes-section {

@@ -1165,6 +1165,7 @@ async def list_all_questions(
             "options": q.options,
             "answer": q.answer,
             "answer_analysis": q.answer_analysis or "",
+            "requirements": q.requirements or "",
             "difficulty": q.difficulty,
             "score": float(q.score) if q.score else 0,
             "audit_status": q.audit_status,

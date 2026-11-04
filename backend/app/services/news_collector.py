@@ -150,14 +150,16 @@ def parse_article(html: str, url: str) -> ArticleData:
     for selector in (
         'meta[property="og:title"]',
         'meta[name="ArticleTitle"]',
+        ".article-title",
+        ".intr_title",
         "h1",
         "h2",
-        ".article-title",
         ".title",
-        "title",
     ):
         for node in soup.select(selector):
             candidate = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
+            if len(candidate) < 6 or candidate in {"工作链接", "专题专栏", "地方特色"}:
+                continue
             if len(candidate) > len(title):
                 title = candidate
     if not title:

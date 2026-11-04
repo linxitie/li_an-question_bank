@@ -1,7 +1,7 @@
 """
 数据库配置 - 支持SQLite作为开发环境备选方案
 """
-
+import os
 from pathlib import Path
 from typing import Optional
 

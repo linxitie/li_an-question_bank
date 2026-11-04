@@ -10,8 +10,9 @@ NODE_GATES = ('L6',)
 
 GATES = [
     ('L0', 'scripts/gates/gate_l0_redlines.py', []),
-    # L1-G 必须排在 L1 之前：它守「公专基线内 2583 题逐字段不变」这条最高红线，
-    # 且耗时 ~2s，故纳入 --quick。
+    # L1-G 必须排在 L1 之前：它守「做题字段一个都不能变」+「题量不许下降」两条线，
+    # 且耗时 ~2s，故纳入 --quick。基线见 data/gates/gongzhuan_field_fingerprint.json
+    # （含 meta.expected_counts 护栏；重定基线须 --rebaseline --reason "…"）。
     ('L1-G', 'scripts/gates/gate_l1g_field_fingerprint.py', []),
     ('L3', 'scripts/gates/gate_l3_ingest.py', []),
     ('L1', 'scripts/gates/gate_l1_parser.py', ['--subject', 'gongzhuan']),

@@ -10,7 +10,9 @@
 # 构建：
 #   docker build -f deploy/Dockerfile.web -t liankao/web:dev .
 
-FROM node:22-bookworm-slim AS build
+# 2026-11-04：node 22 自带 npm 10，与 npm 11 生成的 package-lock 解析不一致会让 `npm ci`
+# 直接 EUSAGE（Missing: vue-tsc@… from lock file）；统一到 node 24（npm 11），与 CI/本机一致。
+FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
 

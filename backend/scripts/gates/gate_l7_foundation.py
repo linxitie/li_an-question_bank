@@ -186,19 +186,23 @@ def check_migrations() -> None:
     if not FOUNDATION_DDL.exists():
         problems.append(f'缺少 {FOUNDATION_DDL.name}')
     else:
-        digest = hashlib.sha256(FOUNDATION_DDL.read_bytes()).hexdigest()
+        # 规范化换行再算哈希：Windows 检出默认 CRLF，会让同一文件产生不同摘要
+        _raw_bytes = FOUNDATION_DDL.read_bytes().replace(b'\r\n', b'\n')
+        digest = hashlib.sha256(_raw_bytes).hexdigest()
         if digest != FOUNDATION_DDL_SHA256:
             problems.append(f'DDL checksum 不符：{digest[:16]}…（历史迁移被改动？）')
     if not MEDIA_DDL.exists():
         problems.append(f'缺少 {MEDIA_DDL.name}')
     else:
-        digest = hashlib.sha256(MEDIA_DDL.read_bytes()).hexdigest()
+        # 与 foundation DDL 同口径：先规范化换行再算哈希。2026-11-04 合并远端 main 时实测，
+        # 媒体/图 DDL 原先直接对原始字节求哈希，Windows 检出为 CRLF 时必然不符（Linux 才过）。
+        digest = hashlib.sha256(MEDIA_DDL.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
         if digest != MEDIA_DDL_SHA256:
             problems.append(f'media DDL checksum 不符：{digest[:16]}…')
     if not GRAPH_DDL.exists():
         problems.append(f'缺少 {GRAPH_DDL.name}')
     else:
-        digest = hashlib.sha256(GRAPH_DDL.read_bytes()).hexdigest()
+        digest = hashlib.sha256(GRAPH_DDL.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
         if digest != GRAPH_DDL_SHA256:
             problems.append(f'graph DDL checksum 不符：{digest[:16]}…')
     groups: dict[str, list[int]] = {}

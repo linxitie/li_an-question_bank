@@ -21,7 +21,22 @@ def _pages():
 
 
 def test_page_route_count():
-    assert len(_pages()) == 92
+    # 92 → 99：备考资料交付线新增 7 条页面路由（2026-11-01 核对）
+    #   /badges、/badges-demo、/badge-preview、/materials/upload、
+    #   /materials-preview、/materials/detail、/admin/material-rules
+    # 99 → 100：平板徽章墙 /tablet/badges（2026-11-02，复用 PC 徽章页，守 R12）
+    # 100 → 101：平板整页详情 /tablet/materials/detail（2026-11-02，复用 PC 详情页）
+    # 101 → 98：平板与电脑同版 —— 上面三条改 redirect（无 component，不计入），
+    #           /tablet/home 只是换 component 不增删
+    # 98 → 104：2026-11-04 合并远端 main，模块4/7 新增 6 条页面路由
+    #           /ai-assistant、/study-plan、/profile-quiz、/knowledge、/memories、/teacher/forum
+    #           （与 scripts/verify-modularization-constraints.mjs 的 104 同步）
+    # 104 → 101：2026-11-04 徽章展示模块下线，/badges、/badges-demo、/badge-preview 移除
+    # 101 → 105：2026-11-04 远端 main 再前进（新闻时间线/详情 + 平板与手机端），共 4 条
+    # 105 → 104：2026-11-04 远端二次合并，管理端用户/权限页改用 AdminUsersWorkspace、
+    #            平板论坛页移除，净减 1 条（与 scripts/verify-modularization-constraints.mjs 的 104 同步）
+    # 路由只增不减（本次例外均为用户明确要求的模块调整或远端重构，已在提交信息写明）。
+    assert len(_pages()) == 104
 
 
 def test_whitelist_has_no_roles():

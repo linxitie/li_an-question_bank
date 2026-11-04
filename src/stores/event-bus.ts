@@ -25,7 +25,7 @@ export const EVENT_NAMES = {
   GROWTH_ACHIEVEMENT_UNLOCKED: 'growth:achievement-unlocked',
   /** 组卷/历年试卷数据变更（后端 data-changed 推送后由前端桥接触发） */
   PAPERS_DATA_CHANGED: 'papers:data-changed',
-  /** 联考小智会话列表已刷新（模块⑦广播，供成就/金币等跨域消费） */
+  /** 联考小智会话列表已刷新（模块7 实装新增；载荷 { total }） */
   SESSIONS_UPDATED: 'ai-assistant:sessions-updated'
 } as const;
 
@@ -68,12 +68,9 @@ export interface PapersDataChangedPayload {
   source?: string;
 }
 
-/** 联考小智会话列表刷新载荷 */
-export interface SessionsUpdatedPayload {
-  /** 刷新后的会话总数 */
-  total?: number;
-  /** 触发来源（便于排查链路） */
-  source?: string;
+/** 联考小智会话列表刷新载荷（模块7：会话条数） */
+export interface AiAssistantSessionsUpdatedPayload {
+  total: number;
 }
 
 /** 事件名 -> 载荷类型映射（键取自 EVENT_NAMES，不重复字面量） */
@@ -82,7 +79,7 @@ export interface EventPayloads {
   [EVENT_NAMES.REWARD_COINS_CHANGED]: RewardCoinsChangedPayload;
   [EVENT_NAMES.GROWTH_ACHIEVEMENT_UNLOCKED]: GrowthAchievementUnlockedPayload;
   [EVENT_NAMES.PAPERS_DATA_CHANGED]: PapersDataChangedPayload;
-  [EVENT_NAMES.SESSIONS_UPDATED]: SessionsUpdatedPayload;
+  [EVENT_NAMES.SESSIONS_UPDATED]: AiAssistantSessionsUpdatedPayload;
 }
 
 /** mitt 要求的事件表类型 */

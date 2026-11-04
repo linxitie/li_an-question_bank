@@ -1,0 +1,233 @@
+{
+  "mat_base_1024x768": {
+    "vw": 1024,
+    "vh": 768,
+    "overflowX": 0,
+    "cols": 6,
+    "card": {
+      "w": 152,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 474,
+    "rowsVisibleFirstScreen": 1,
+    "pageHeight": 1879,
+    "smallTap": [
+      {
+        "t": "← 返回首页",
+        "h": 19
+      },
+      {
+        "t": "只看收藏",
+        "h": 19
+      },
+      {
+        "t": "Excel 批量",
+        "h": 34
+      },
+      {
+        "t": "＋ 创建卡片",
+        "h": 34
+      },
+      {
+        "t": "收起 ▴",
+        "h": 17
+      }
+    ],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "mat_touch_1024x768": {
+    "vw": 1024,
+    "vh": 768,
+    "overflowX": 0,
+    "cols": 6,
+    "card": {
+      "w": 152,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 528,
+    "rowsVisibleFirstScreen": 1,
+    "pageHeight": 1933,
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "mat_dense_1024x768": {
+    "vw": 1024,
+    "vh": 768,
+    "overflowX": 0,
+    "cols": 5,
+    "card": {
+      "w": 179,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 407,
+    "rowsVisibleFirstScreen": 2,
+    "pageHeight": 1979,
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "detail_1024": {
+    "overflowX": 0,
+    "bodyH": 1553,
+    "flexDir": "row",
+    "sideW": 184,
+    "stackTop": 82
+  },
+  "upload_1024": {
+    "overflowX": 0,
+    "w": 860,
+    "max": "860px"
+  },
+  "badges_1024": {
+    "overflowX": 0,
+    "cols": 4
+  },
+  "tabletHome_1024": {
+    "overflowX": 0,
+    "entry": true,
+    "entryRect": [
+      363,
+      69
+    ]
+  },
+  "mat_base_1180x820": {
+    "vw": 1180,
+    "vh": 820,
+    "overflowX": 0,
+    "cols": 7,
+    "card": {
+      "w": 151,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 474,
+    "rowsVisibleFirstScreen": 1,
+    "pageHeight": 1695,
+    "smallTap": [
+      {
+        "t": "← 返回首页",
+        "h": 19
+      },
+      {
+        "t": "只看收藏",
+        "h": 19
+      },
+      {
+        "t": "Excel 批量",
+        "h": 34
+      },
+      {
+        "t": "＋ 创建卡片",
+        "h": 34
+      },
+      {
+        "t": "收起 ▴",
+        "h": 17
+      }
+    ],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "mat_touch_1180x820": {
+    "vw": 1180,
+    "vh": 820,
+    "overflowX": 0,
+    "cols": 7,
+    "card": {
+      "w": 151,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 528,
+    "rowsVisibleFirstScreen": 1,
+    "pageHeight": 1749,
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "mat_dense_1180x820": {
+    "vw": 1180,
+    "vh": 820,
+    "overflowX": 0,
+    "cols": 6,
+    "card": {
+      "w": 173,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 407,
+    "rowsVisibleFirstScreen": 2,
+    "pageHeight": 1795,
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "mat_base_1366x1024": {
+    "vw": 1366,
+    "vh": 1024,
+    "overflowX": 0,
+    "cols": 7,
+    "card": {
+      "w": 154,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 474,
+    "rowsVisibleFirstScreen": 3,
+    "pageHeight": 1695,
+    "smallTap": [
+      {
+        "t": "← 返回首页",
+        "h": 19
+      },
+      {
+        "t": "只看收藏",
+        "h": 19
+      },
+      {
+        "t": "Excel 批量",
+        "h": 34
+      },
+      {
+        "t": "＋ 创建卡片",
+        "h": 34
+      },
+      {
+        "t": "收起 ▴",
+        "h": 17
+      }
+    ],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "mat_touch_1366x1024": {
+    "vw": 1366,
+    "vh": 1024,
+    "overflowX": 0,
+    "cols": 7,
+    "card": {
+      "w": 154,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 528,
+    "rowsVisibleFirstScreen": 2,
+    "pageHeight": 1749,
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验"
+  },
+  "mat_dense_1366x1024": {
+    "vw": 1366,
+    "vh": 1024,
+    "overflowX": 0,
+    "cols": 7,
+    "card": {
+      "w": 154,
+      "h": 170
+    },
+    "cardFont": "14px",
+    "gridTop": 528,
+    "rowsVisibleFirstScreen": 2,
+    "pageHeight": 1749,
+    "smallTap": [],
+    "heroTitle": "行测 · 行政职业能力测验"
+  }
+}

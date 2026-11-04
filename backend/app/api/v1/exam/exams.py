@@ -12,11 +12,11 @@ from ....models.models import (
     ExamRecord,
     ExamAnswerDetail,
     QuestionBank,
-    QuestionGroup,
     PaperQuestionRelation,
     QuestionType,
     SysUser
 )
+from ..catalog import contract as catalog_contract
 from ....schemas.schemas import (
     ExamRecordResponse,
     AnswerDetailResponse,
@@ -164,10 +164,8 @@ async def get_paper_questions(
     #   学生答题页是独立前端（/paper-answer），没有题库详情页可再请求
     #   /questions/group/{id}；若不在这里返回组材料，复合题必然只剩设问。
     group_ids = sorted({int(q.group_id) for q in questions if int(q.group_id or 0) > 0})
-    group_dict = {}
-    if group_ids:
-        groups = db.query(QuestionGroup).filter(QuestionGroup.id.in_(group_ids)).all()
-        group_dict = {int(g.id): g for g in groups}
+    # 题组属 catalog 域，按 P4.1 边界只经 catalog 契约读取（返回纯 dict）
+    group_dict = catalog_contract.question_groups_by_ids(db, group_ids)
 
     # 按顺序组装题目列表（不含答案和解析）
     paper_questions = []
@@ -185,14 +183,16 @@ async def get_paper_questions(
 
         group = group_dict.get(int(q.group_id or 0))
         group_images: List[str] = []
-        if group and group.shared_content_images:
+        group_images_raw = (group or {}).get("shared_content_images") or ""
+        if group_images_raw:
             try:
-                parsed = json.loads(group.shared_content_images)
+                parsed = json.loads(group_images_raw)
                 if isinstance(parsed, list):
                     group_images = [str(x) for x in parsed if x]
             except (TypeError, ValueError):
                 # 历史坏数据不应让整份试卷 500；材料正文仍可显示
-                logger.warning("[exam] 题组%s shared_content_images 非法 JSON", group.id)
+                logger.warning("[exam] 题组%s shared_content_images 非法 JSON",
+                               (group or {}).get("id"))
 
         paper_questions.append({
             "question_id": q.question_id,
@@ -211,8 +211,8 @@ async def get_paper_questions(
             "group_id": int(q.group_id or 0),
             "question_level": int(q.question_level or 0),
             "sort_order": int(q.sort_order or 0),
-            "group_title": group.title if group else '',
-            "shared_content": group.shared_content if group else '',
+            "group_title": (group or {}).get("title", ""),
+            "shared_content": (group or {}).get("shared_content", ""),
             "shared_content_images": group_images,
         })
 

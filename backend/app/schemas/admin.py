@@ -211,6 +211,8 @@ class QuestionUpdateRequest(BaseModel):
     options: Optional[str] = None
     answer: Optional[str] = None
     answer_analysis: Optional[str] = None
+    # 申论要求：独立列，编辑时必须能保存；缺省 None 表示不修改。
+    requirements: Optional[str] = None
     difficulty: Optional[int] = None
     source: Optional[str] = None
     group_id: Optional[int] = None

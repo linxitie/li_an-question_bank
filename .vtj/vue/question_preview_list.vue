@@ -250,7 +250,8 @@ export default defineComponent({
       answer: '',
       analysis: '',
       // P1-2：申论「要求」是一等字段，编辑时必须原样带回，否则保存即丢。
-      requirements: []
+      requirements: [],
+      subject: ''
     });
 
     // 打开编辑对话框（只读态直接拒绝：编辑弹窗由 editDialogVisible 控制，无需改模板即可隐藏）
@@ -270,6 +271,7 @@ export default defineComponent({
       ];
       editForm.answer = q.answer || '';
       editForm.analysis = q.analysis || '';
+      editForm.subject = q.subject_name || q.subject_category || q.subject || '';
       editForm.requirements = Array.isArray(q.requirements)
         ? JSON.parse(JSON.stringify(q.requirements))
         : (q.requirements ? [String(q.requirements)] : []);
@@ -374,6 +376,47 @@ export default defineComponent({
       editIndex.value = -1;
     }
 
+    // 教师端同样不改 <template>：把“申论要求”输入框插入选项之前，
+    // 解决“解析器已提取要求、教师却无法核对/修正”的断点。
+    function ensureRequirementsEditor(body) {
+      if (!body) return;
+      const isEssay = String(editForm.subject || '').indexOf('申论') >= 0;
+      let field = body.querySelector('.edit-field[data-field="requirements"]');
+      if (!isEssay) {
+        if (field) field.style.display = 'none';
+        return;
+      }
+      if (field) field.style.display = '';
+      if (!field) {
+        field = document.createElement('div');
+        field.className = 'edit-field';
+        field.setAttribute('data-field', 'requirements');
+        field.innerHTML = '<label>申论要求：</label>' +
+          '<textarea rows="3" placeholder="每行一条，如：（1）准确全面；（2）分条列出；"></textarea>';
+        let before = null;
+        const fields = body.querySelectorAll('.edit-field');
+        for (let i = 0; i < fields.length; i++) {
+          const label = fields[i].querySelector('label');
+          if (label && String(label.textContent || '').indexOf('选项') >= 0) {
+            before = fields[i];
+            break;
+          }
+        }
+        body.insertBefore(field, before || null);
+        const input = field.querySelector('textarea');
+        input.addEventListener('input', function () {
+          editForm.requirements = input.value
+            .split('\n')
+            .map(function (s) { return s.trim(); })
+            .filter(Boolean);
+        });
+      }
+      const input = field.querySelector('textarea');
+      if (input && document.activeElement !== input) {
+        input.value = (editForm.requirements || []).join('\n');
+      }
+    }
+
     // 编辑弹层实时预览：用户反馈「图片不能在编辑弹窗中展示」。
     // 不改 <template>（设计器领地），在脚本里把预览面板插到弹层 body 顶部；
     // 题干/选项/答案/解析统一走 renderQuestionContent，图片/表格/公式都能渲染。
@@ -381,6 +424,7 @@ export default defineComponent({
       if (!editDialogVisible.value || typeof document === 'undefined') return;
       const body = document.querySelector('.edit-dialog-overlay .edit-dialog-body');
       if (!body) return;
+      ensureRequirementsEditor(body);
       let panel = body.querySelector('.edit-live-preview');
       if (!panel) {
         panel = document.createElement('details');

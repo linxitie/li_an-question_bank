@@ -180,16 +180,96 @@ function attachImageFallback(html) {
  * @param {{stripInlineOption?: boolean}} [options]
  * @returns {string} 可直接 v-html 的安全 HTML
  */
+/**
+ * 材料/长文本分段格式化（展示层，不改原文）。
+ *
+ * PDF 抽取的段落是“按版面宽度硬换行”，材料正文因此没有空行；直接 v-html
+ * 会挤成一整段。这里只在已经 sanitize 的 HTML 上做启发式分段：
+ *   · 空行 / <br> 强制断段；
+ *   · 独占一行的「材料N」「（一）」等作为标题块；
+ *   · 独占一行的纯图片作为 figure 块；
+ *   · 编号/列表行单独成块；
+ *   · 上一行以句末标点结尾且不足 48 字时才断段，否则视为软换行合并。
+ *
+ * 这是启发式而非 PDF 版面还原：宁可少断段，也不把一句话拆开。已有块级
+ * 标签或已格式化的内容直接原样返回，保证幂等，避免二次包裹。
+ */
+var RICH_BLOCK_RE = /<(p|div|ul|ol|li|table|thead|tbody|tr|td|th|blockquote|h[1-6])\b/i;
+var RICH_HEAD_RE = /^(?:给定材料[一二三四五六七八九十\d]*|材料\s*[一二三四五六七八九十\d]{1,3}|[一二三四五六七八九十]{1,3}、|（[一二三四五六七八九十]{1,3}）)\s*$/;
+var RICH_SUBHEAD_RE = /^（[一二三四五六七八九十]{1,3}）[^。！？!?；;]{0,28}$/;
+var RICH_LIST_RE = /^(?:\d{1,2}[.、．](?!\d)|[（(]\d{1,2}[）)])\s*/;
+
+export function formatRichContent(html) {
+  var source = String(html || '');
+  if (!source) return '';
+  if (source.indexOf('qr-rich') >= 0 || RICH_BLOCK_RE.test(source)) return source;
+
+  var lines = source.replace(/<br\s*\/?>/gi, '\n').split('\n');
+  var parts = [];
+  var para = [];
+  var lastLine = '';
+
+  function flushPara() {
+    if (!para.length) return;
+    parts.push('<p class="qr-p">' + para.join('') + '</p>');
+    para = [];
+  }
+
+  function appendLine(line) {
+    var sep = '';
+    if (para.length) {
+      var prev = para[para.length - 1];
+      if (/[A-Za-z0-9]$/.test(prev) && /^[A-Za-z0-9]/.test(line)) sep = ' ';
+    }
+    para.push(sep + line);
+    lastLine = line;
+  }
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) { flushPara(); lastLine = ''; continue; }
+    var plain = line.replace(/<img\b[^>]*>/gi, '').replace(/<[^>]*>/g, '').trim();
+    if (!plain && /<img/i.test(line)) {
+      flushPara();
+      parts.push('<div class="qr-figure">' + line + '</div>');
+      lastLine = '';
+      continue;
+    }
+    if (RICH_HEAD_RE.test(plain) || (plain.length <= 30 && RICH_SUBHEAD_RE.test(plain))) {
+      flushPara();
+      parts.push('<div class="qr-heading">' + line + '</div>');
+      lastLine = '';
+      continue;
+    }
+    if (RICH_LIST_RE.test(plain)) {
+      flushPara();
+      parts.push('<p class="qr-p qr-li">' + line + '</p>');
+      lastLine = '';
+      continue;
+    }
+    if (para.length && /[。！？!?；;：:…”"]$/.test(lastLine) && lastLine.length <= 48) {
+      flushPara();
+    }
+    appendLine(line);
+  }
+  flushPara();
+  return parts.length ? '<div class="qr-rich">' + parts.join('') + '</div>' : source;
+}
+
 export function renderQuestionContent(content, options) {
   if (content === null || content === undefined || content === '') return '';
   var s = String(content);
   var strip = !!(options && options.stripInlineOption);
   var hasMarkup = s.indexOf('<') >= 0 || s.indexOf('&lt;') >= 0 || hasImageMarker(s);
-  if (!hasMarkup && !strip) return s;
+  // 材料/长文本可能只有换行、没有任何标签；旧逻辑会在这里直接 return，
+  // 导致分段样式永远不生效。只对含换行的内容启用格式化，避免改变短选项布局。
+  var needsFormat = /\n/.test(s);
+  if (!hasMarkup && !strip && !needsFormat) return s;
   s = decodeEscapedTags(s);
   s = convertImageMarkers(s, strip);
   s = normalizeImageTags(s);
   s = sanitizeHtml(s);
+  s = formatRichContent(s);
   s = attachImageFallback(s);
   return s;
 }

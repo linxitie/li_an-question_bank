@@ -439,7 +439,8 @@ export default defineComponent({
     const goToNotes = () => router.push('/tablet/notes');
     
     const goToAchievements = () => router.push('/achievements');
-    const goToDownloads = () => router.push('/tablet/materials');
+    // 2026-11-02：平板与电脑同版 → 「离线下载」直接进电脑端资料页
+    const goToDownloads = () => router.push('/materials/xingce');
     const goToFeedback = () => router.push('/feedback');
     const goToHelp = () => router.push('/help');
     const goToAbout = () => router.push('/tablet/profile');

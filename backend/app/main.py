@@ -930,6 +930,7 @@ app.include_router(notes.router)
 app.include_router(collection.router)
 app.include_router(quotes.router)
 app.include_router(materials.router)
+# 2026-11-04：徽章展示模块下线（/api/badges/* 六个端点随 badges.py 一并删除）
 app.include_router(admin_api.router, tags=["管理员端"])
 app.include_router(admin_approval.router, tags=["管理员端-试卷审批"])
 app.include_router(admin_quotes.router, tags=["管理员端-金句"])

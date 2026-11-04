@@ -4,7 +4,7 @@
  *
  * 三项检查：
  *   1. package.json 中 8 个 VTJ 包版本必须等于锁定值。
- *   2. src/router/index.ts 中所有动态 import 目标必须存在（92 处），
+ *   2. src/router/index.ts 中所有动态 import 目标必须存在（97 处），
  *      其中 `$vtj/vue/<id>.vue` 映射到 `.vtj/vue/<id>.vue`，
  *      `@/...` 映射到 `src/...`。
  *   3. src/modules/<域>/** 中禁止出现 `@/modules/<其他域>` 的跨域 import。
@@ -32,7 +32,19 @@ const VTJ_LOCKED_VERSIONS = {
   '@vtj/cli': '0.12.19',
 };
 
-const EXPECTED_DYNAMIC_IMPORTS = 92;
+// 99 = 92（原基线）+ 5（徽章体系：/materials/detail、/admin/material-rules、/badges、
+//   /badge-preview、/badges-demo）+ 1（/materials-preview 内容验收）+ 1（/materials/upload 学生上传）
+// 100 = 99 + 1（/tablet/badges 平板徽章墙，2026-11-02；与 test_route_roles 的 100 同步）
+// 101 = 100 + 1（/tablet/materials/detail 平板整页详情，2026-11-02）
+// 98 = 101 - 3（平板与电脑同版：上面三条改为 redirect，动态 import 随之减少 3 处）
+// 104 = 98 + 6（2026-11-04 合并远端 main：模块4/7 新增 /ai-assistant、/study-plan、
+//   /profile-quiz、/knowledge、/memories、/teacher/forum 六个页面路由；与 test_route_roles 的 104 同步）
+// 101 = 104 - 3（2026-11-04 徽章展示模块下线：/badges、/badges-demo、/badge-preview 三条页面路由移除）
+// 105 = 101 + 4（2026-11-04 远端 main 再前进 10 提交：新闻时间线/详情 + 平板与手机端新闻时间线
+//   /news、/news/:id、/tablet/news/timeline、/mobile/news/timeline；与 test_route_roles 的 105 同步）
+// 104 = 105 - 1（2026-11-04 远端二次合并：管理端用户/权限页改用 AdminUsersWorkspace 组件、
+//   平板论坛页移除，净减少 1 处动态 import；与 test_route_roles 的 104 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 104;
 
 const violations = [];
 

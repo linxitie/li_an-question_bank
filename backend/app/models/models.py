@@ -1388,7 +1388,9 @@ class StudyMaterial(Base):
     material_id = Column(Integer, primary_key=True, autoincrement=True, comment="资料ID")
     subject = Column(String(20), nullable=False, comment="科目: xingce/shenlun/gongzhuan")
     type = Column(String(20), nullable=False, comment="类型: video_intro/video_advanced/article/card")
-    category = Column(String(50), comment="分类标签")
+    category = Column(String(50), comment="分类标签(必须是 sub_categories 子类名)")
+    point_id = Column(Integer, ForeignKey("knowledge_point.point_id"),
+                      comment="考点ID(分类法第三层: 子类→考点→资料)")
     title = Column(String(200), nullable=False, comment="标题")
     summary = Column(String(500), comment="摘要")
     content = Column(Text, comment="文章HTML(bleach消毒后)；卡片时为背面详述")
@@ -1405,6 +1407,7 @@ class StudyMaterial(Base):
     view_count = Column(Integer, default=0, comment="浏览量")
     study_count = Column(Integer, default=0, comment="完成人数")
     creator_id = Column(BigInteger, ForeignKey("sys_user.user_id"), comment="创建人")
+    source_material_id = Column(BigInteger, comment="领取来源卡片ID(自建为空)")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
     content_hash = Column(String(64), comment="内容MD5哈希(去重用)")
@@ -2018,6 +2021,7 @@ class Achievement(Base):
     is_hidden = Column(Integer, default=0, comment="是否隐藏成就: 1=条件对学生隐藏(仅剪影)")
     style_params = Column(JSON, comment="徽章视觉参数JSON(shape/material/palette/icon等)")
     tier_times = Column(JSON, comment="五档升级阈值倍数数组如[1,2,4,8,16]; NULL=不升档")
+    badge_tier = Column(String(20), comment="固定成色(黑铁/青铜/白银/黄金/钻石)，按获取难度定，不随玩家基数变")
 
     __table_args__ = (
         Index("idx_achievement_category", category),
@@ -2034,6 +2038,9 @@ class UserAchievement(Base):
     achievement_id = Column(Integer, ForeignKey("achievement.achievement_id"), nullable=False, comment="成就ID")
     obtained_at = Column(DateTime, default=datetime.now, comment="获得时间")
     tier = Column(Integer, default=1, comment="徽章档位: 1铜/2银/3金/4铂金/5钻石")
+    tier_snapshot = Column(Integer, comment="获得时的档位索引 0-4（与 badge_service.TIERS 对齐）")
+    snapshot_estimated = Column(Integer, default=0,
+                                comment="1=档位快照为回填估算（2026-10-30 前获得的历史数据）")
 
     user = relationship("SysUser")
 
@@ -2711,4 +2718,40 @@ class PermissionChangeBatch(Base):
     __table_args__ = (
         Index("idx_permission_batch_operator", "operator_id", "created_at"),
         Index("idx_permission_batch_created", "created_at"),
+    )
+
+
+
+class MaterialShare(Base):
+    """资料卡分享记录（B2）：一张卡同时最多一条分享。"""
+
+    __tablename__ = "material_share"
+
+    share_id = Column(Integer, primary_key=True, autoincrement=True)
+    material_id = Column(BigInteger, nullable=False, comment="源卡片ID")
+    owner_id = Column(BigInteger, nullable=False, comment="分享者ID")
+    scope = Column(String(20), default="public", comment="public/org")
+    status = Column(Integer, default=1, comment="1可领取/0已撤回")
+    adopted_count = Column(Integer, default=0, comment="被领取次数")
+    create_time = Column(DateTime, default=datetime.now, comment="分享时间")
+
+    __table_args__ = (
+        Index("ux_material_share_material", material_id, unique=True),
+        Index("idx_material_share_owner", owner_id),
+    )
+
+
+class MaterialAdoptLog(Base):
+    """领取记录（B2）：每人每分享仅一次。"""
+
+    __tablename__ = "material_adopt_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    share_id = Column(Integer, nullable=False, comment="分享ID")
+    user_id = Column(BigInteger, nullable=False, comment="领取人")
+    created_id = Column(BigInteger, nullable=False, comment="复制出的新卡ID")
+    create_time = Column(DateTime, default=datetime.now, comment="领取时间")
+
+    __table_args__ = (
+        Index("ux_adopt_share_user", share_id, user_id, unique=True),
     )

@@ -4,6 +4,7 @@
     <!-- 顶部 -->
     <div class="quiz-hero">
       <div class="quiz-hero-bg"></div>
+      <button class="quiz-skip-btn" @click="goHome">跳过，先逛逛</button>
       <div class="quiz-hero-inner">
         <div class="quiz-title-row">
           <span class="quiz-title">备考画像</span>
@@ -138,6 +139,8 @@ function prevStep() { if (state.step > 0) state.step -= 1 }
 
 function nextStep() { if (!isLastStep.value) state.step += 1 }
 
+function goHome() { location.hash = '#/question_bank' }
+
 function getToken() {
   try {
     const raw = localStorage.getItem('__VTJ_AUTH_STATE__')
@@ -198,6 +201,8 @@ onMounted(loadTemplates)
 .quiz-page { min-height: 100vh; background: #f5f7fa; padding-bottom: 40px; }
 .quiz-hero { position: relative; overflow: hidden; padding: 40px 20px 60px; background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #3b82f6 100%); border-radius: 0 0 28px 28px; }
 .quiz-hero-bg { position: absolute; right: -40px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: rgba(255,255,255,0.08); }
+.quiz-skip-btn { position: absolute; top: 16px; right: 16px; padding: 6px 14px; border-radius: 16px; background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); font-size: 12px; cursor: pointer; z-index: 10; }
+.quiz-skip-btn:hover { background: rgba(255,255,255,0.25); }
 .quiz-hero-inner { position: relative; }
 .quiz-title-row { display: flex; align-items: center; gap: 10px; }
 .quiz-title { font-size: 24px; font-weight: 700; color: #fff; }

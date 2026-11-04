@@ -20,11 +20,12 @@ def load_env_files(paths: tuple[Path, ...] | None = None) -> None:
     settings 对象，不会导出到 os.environ，因此这里必须单独加载，否则
     build_embedding_port() 只能看到 off/空值。
     """
+    candidates = paths or (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env")
     try:
         from dotenv import load_dotenv
     except ImportError:
         # 极简 fallback：缺少 python-dotenv 时不能静默退回 off/空值。
-        for path in paths or (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env"):
+        for path in candidates:
             if not path.is_file():
                 continue
             for raw in path.read_text(encoding="utf-8-sig").splitlines():
@@ -37,7 +38,6 @@ def load_env_files(paths: tuple[Path, ...] | None = None) -> None:
                 if key and key not in os.environ:
                     os.environ[key] = value
         return
-    candidates = paths or (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env")
     for path in candidates:
         if path.is_file():
             load_dotenv(path, override=False)

@@ -1,0 +1,89 @@
+<!doctype html><meta charset="utf-8"><style>
+body{margin:0;background:#eef1f6;font-family:system-ui,'Microsoft YaHei';color:#16233b}
+.wrap{padding:20px 24px}
+h1{font-size:19px;margin:0 0 4px}
+.sub{font-size:12.5px;color:#6b7280;margin-bottom:16px}
+.row{display:flex;gap:22px;align-items:flex-start}
+.col{flex:1}
+.col h2{font-size:13px;color:#475569;margin:0 0 8px;font-weight:600}
+/* 手机端列表 */
+.phone{width:360px;background:#f4f6fb;border-radius:22px;padding:14px;box-shadow:0 10px 30px rgba(20,35,60,.10)}
+.card{background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px;box-shadow:0 4px 12px rgba(20,35,60,.06)}
+.m-title{font-size:15px;font-weight:700;margin-bottom:6px}
+.m-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11.5px}
+.tag{background:#eef2f8;color:#5b6b82;border-radius:6px;padding:1px 7px}
+.tag-generic{background:#fff7e6;color:#b45309;font-weight:600}
+.m-body{font-size:12.5px;color:#4a5a75;line-height:1.6;margin-top:8px}
+/* PC 详情 */
+.pc{flex:1;background:#fff;border-radius:16px;padding:16px 18px;box-shadow:0 10px 30px rgba(20,35,60,.10)}
+.pc-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.pc-cover{height:78px;border-radius:12px 12px 0 0;background:linear-gradient(135deg,#1e3a8a,#3b82f6);
+  display:flex;align-items:center;padding:0 14px;gap:8px}
+.chip{background:rgba(255,255,255,.22);color:#fff;font-size:11.5px;padding:2px 9px;border-radius:999px}
+.chip-generic{background:rgba(255,255,255,.92);color:#b45309;font-weight:700;font-size:11.5px;padding:2px 9px;border-radius:999px}
+.md-title{font-size:17px;font-weight:800;margin:12px 0 8px}
+.md-quote{background:#f7f8fb;border-radius:10px;padding:10px 12px;font-size:13px;color:#3d4c63;line-height:1.7}
+.md-meta{display:flex;gap:18px;margin-top:10px;font-size:12px;color:#6b7280}
+.md-meta em{font-style:normal;color:#9aa6b8;margin-right:6px}
+.note{font-size:11.5px;color:#8493a8;margin-top:10px}
+.badge-group{display:flex;gap:8px;margin-top:6px}
+.pill{font-size:11px;background:#eef2f8;color:#5b6b82;border-radius:999px;padding:2px 9px}
+</style>
+<div class="wrap">
+  <h1>「通用技巧卡」效果预期（A 方案：分类有、考点空）</h1>
+  <div class="sub">技巧类内容天然跨考点（截位直除/首数法并非只服务某一个考点），因此不强行挂考点，
+    只挂子类并在 UI 上标「通用技巧」；它按子类归集，不参与考点级筛选与考点覆盖率统计。</div>
+  <div class="row">
+    <div class="col">
+      <h2>① 手机端资料列表（按子类归集）</h2>
+      <div class="phone">
+        <div class="card">
+          <div class="m-title">截位直除 分母只截两位</div>
+          <div class="m-meta">
+            <span class="tag">知识卡片</span>
+            <span class="tag tag-generic">通用技巧</span>
+            <span class="tag">阅读 1 分钟</span>
+          </div>
+          <div class="m-body">一步除法只截分母，多步计算上下都截；选项差距大时截两位即可，</div>
+        </div>
+        <div class="card">
+          <div class="m-title">首数法 先定位首位</div>
+          <div class="m-meta">
+            <span class="tag">知识卡片</span>
+            <span class="tag tag-generic">通用技巧</span>
+            <span class="tag">阅读 1 分钟</span>
+          </div>
+          <div class="m-body">先算首位定区间，再看次位差是否大于首位，避免全程精算。</div>
+        </div>
+        <div class="card">
+          <div class="m-title">速算技巧 首位估算验算</div>
+          <div class="m-meta">
+            <span class="tag">知识卡片</span>
+            <span class="tag">资料分析 · 进阶</span>
+            <span class="tag">阅读 2 分钟</span>
+          </div>
+          <div class="m-body">（对照）这张是挂在考点「速算技巧」下的正式考点卡，没有通用技巧标。</div>
+        </div>
+        <div class="badge-group"><span class="pill">资料分析（子类）下共 3 张：2 通用 + 1 考点</span></div>
+      </div>
+    </div>
+    <div class="col">
+      <h2>② PC 卡片详情（科目带上加标）</h2>
+      <div class="pc">
+        <div class="pc-cover">
+          <span class="chip">资料分析</span>
+          <span class="chip-generic">通用技巧</span>
+        </div>
+        <div class="md-title">截位直除 分母只截两位</div>
+        <div class="md-quote">考的是资料分析里的快速估算能力。作答：一步除法只截分母，多步计算上下都截；
+          选项差距大时截两位，首位不同可只算首位。易错：中间步骤过早取整导致量级偏移。</div>
+        <div class="md-meta">
+          <span><em>题型</em>资料分析</span>
+          <span><em>难度</em>入门</span>
+          <span><em>建议用时</em>1 分钟</span>
+        </div>
+        <div class="note">无「考点」行 → 详情页不显示考点跳转；左栏「知识模块」仍按子类高亮「资料分析」。</div>
+      </div>
+    </div>
+  </div>
+</div>

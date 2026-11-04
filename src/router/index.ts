@@ -277,6 +277,12 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       },
       {
+        path: 'material-rules',
+        name: 'AdminMaterialRules',
+        component: () => import('@/views/admin/material_rules.vue'),
+        meta: { title: '分类规则', roles: ['admin'] }
+      },
+      {
         path: 'materials',
         name: 'AdminMaterials',
         component: () => import('$vtj/vue/admin_materials.vue'),
@@ -322,6 +328,26 @@ const routes: RouteRecordRaw[] = [
   },
 
   // ==================== 备考资料（学生端公开页） ====================
+  // 2026-11-04：徽章展示模块下线（用户要求推远端前删除），/badges、/badges-demo、
+  // /badge-preview 三条路由随页面文件一并移除；成就/金币引擎不受影响。
+  {
+    path: '/materials/upload',
+    name: 'MaterialUpload',
+    component: () => import('@/views/student/material_upload.vue'),
+    meta: { title: '创建卡片', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/materials-preview',
+    name: 'MaterialsPreview',
+    component: () => import('@/views/dev/MaterialsPreview.vue'),
+    meta: { title: '资料内容验收', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/materials/detail',
+    name: 'MaterialDetail',
+    component: () => import('@/views/pc/material_detail.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
   {
     path: '/materials/xingce',
     name: 'MaterialsXingce',
@@ -349,9 +375,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    // 2026-11-02：平板与电脑使用同一套页面（你的要求），首页直接复用电脑首页组件。
+    // 注意：不能 redirect 到 /home —— device.ts（R4 原样保留）会把平板访问的 /home 映射回
+    // /tablet/home，redirect 会形成死循环；所以这里只换 component，路径保持 /tablet/home。
     path: '/tablet/home',
     name: 'TabletHome',
-    component: () => import('$vtj/vue/tablet_home.vue'),
+    component: () => import('$vtj/vue/home_page.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -435,10 +464,16 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    // 2026-11-02：平板与电脑同版 → 旧地址一律 302 到电脑端页面（redirect 不带 component，
+    // 因此不再计入「页面路由数」；门禁数字已同步 101 → 98）
     path: '/tablet/materials',
-    name: 'TabletMaterials',
-    component: () => import('@/views/student/mobile/mobile_materials.vue'),
-    meta: { platform: 'tablet', roles: ['student'] }
+    redirect: '/materials/xingce'
+  },
+  {
+    // 2026-11-04：徽章展示模块下线 → /tablet/badges 重定向一并移除
+    // 2026-11-02：平板与电脑同版 → 详情页直接用电脑端整页
+    path: '/tablet/materials/detail',
+    redirect: '/materials/detail'
   },
   {
     path: '/tablet/gold-purchase',
@@ -665,10 +700,22 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const device = detectDevice();
 
-  // 1) 已在设备专属路径（/tablet、/mobile）→ 校验角色：移动/平板端仅学生可访问
-  //    教师/管理员（已登录且非 student）跳转提示页；未登录放行到各端登录页
+  // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再验角色
+  //    - 未登录：只放行各端登录页，其余跳转到对应端登录页并带 redirect
+  //      （此前这里直接 `next()`，导致 /mobile/* 未登录也能进——已修）
+  //    - 教师/管理员：跳 /unauthorized
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
     const auth = (window as any).__VTJ_AUTH__;
+    const logged = auth && typeof auth.isLoggedIn === 'function'
+      ? !!auth.isLoggedIn()
+      : false;
+    const isLoginPage = /^\/(tablet|mobile)\/login\/?$/.test(to.path)
+      || to.path === '/unauthorized';
+    if (!logged) {
+      if (isLoginPage) return next();
+      const loginPath = to.path.startsWith('/tablet') ? '/tablet/login' : '/mobile/login';
+      return next({ path: loginPath, query: { redirect: to.fullPath } });
+    }
     const role = auth ? auth.getUserRole() : null;
     if (role && role !== 'student') {
       return next('/unauthorized?reason=mobile_student_only');
@@ -694,11 +741,18 @@ router.beforeEach((to, _from, next) => {
   }
 
   // 3) PC 设备：公开路由直接放行（论坛允许游客浏览，互动仍由接口校验登录）
-  if (
-    to.path === '/login' ||
-    to.path === '/unauthorized' ||
-    to.path === '/forum'
-  ) {
+  // 资料内容验收页：只读公开接口（/api/materials 游客可访问），允许未登录查看
+  if (to.path === '/materials-preview') {
+    return next();
+  }
+
+  // 上传页的演示态（?demo=1）：只渲染界面与本页内 mock 数据，不触达任何接口，
+  // 便于截图与设计走查；正常访问（无 demo 参数）仍走登录 + 角色校验。
+  if (to.path === '/materials/upload' && to.query.demo === '1') {
+    return next();
+  }
+
+  if (to.path === '/login' || to.path === '/unauthorized' || to.path === '/forum') {
     return next();
   }
 

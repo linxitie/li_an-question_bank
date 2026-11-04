@@ -9,6 +9,7 @@ question_import.py 改为导入并 re-export，外部调用方
 （tests/test_gongzhuan_regression.py、scripts/probe_xingce_corpus.py 等）零改动。
 """
 import logging
+import os
 import re
 from typing import Any, Dict, Optional
 
@@ -19,6 +20,30 @@ SUBJECT_NAME_MAP = {
     '行测': 1, '申论': 2, '公专': 3, '公安专业知识': 3,
     '其他': 4, '综合': 4,
 }
+
+
+_SOURCE_TITLE_STRIP_RE = re.compile(
+    r'^(?:[0-9]{1,6}[_\-\s]+|[a-f0-9]{8,}[_\-\s]+|题目[_\-\s]*|试题[_\-\s]*)',
+    re.IGNORECASE,
+)
+_SOURCE_TITLE_COPY_RE = re.compile(r'[\s_\-]*[（(]?副本[）)]?$|[\s_\-]*[（(]\d{1,2}[）)]$')
+
+
+def _clean_source_title(filename: str) -> str:
+    """把上传文件名清洗成可追溯的“题目来源”标题。
+
+    只做确定性的展示清洗：去目录/扩展名/首尾编号与“副本”后缀、压缩空白；
+    不猜测年份或考试类型（那是 _auto_detect_tags 的职责）。
+    """
+    name = os.path.basename(str(filename or '').replace('\\', '/').split('/')[-1])
+    name = re.sub(r'\.(pdf|docx?|txt|json|xlsx?|csv|png|jpe?g)$', '', name, flags=re.IGNORECASE)
+    name = name.replace('\u3000', ' ').strip()
+    name = _SOURCE_TITLE_COPY_RE.sub('', name)
+    name = _SOURCE_TITLE_STRIP_RE.sub('', name).strip(' _-—.')
+    name = re.sub(r'[ \t]+', ' ', name).strip()
+    if len(name) < 4:
+        return ''
+    return name[:200]
 
 
 def _auto_detect_tags(filename: str, text: str) -> Dict[str, Any]:
@@ -62,6 +87,13 @@ def _auto_detect_tags(filename: str, text: str) -> Dict[str, Any]:
     # 尝试从文档标题提取试卷名称
     if not tags.get('paper_name'):
         tags['paper_name'] = _extract_paper_name(filename, text)
+
+    # 来源 = 导入文档标题（用户要求可追溯到哪份文件），不是泛化的“省考”。
+    source_title = _clean_source_title(filename)
+    if not source_title:
+        source_title = _clean_source_title(tags.get('paper_name') or '')
+    if source_title:
+        tags['source_title'] = source_title
 
     # 检测考试来源标记
     source_markers = {'绝密': '绝密', '启用前': '启用前', '机密': '机密'}
