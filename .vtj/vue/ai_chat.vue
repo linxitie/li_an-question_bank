@@ -296,44 +296,46 @@
               <button @click="state.showMindMap = false">×</button>
             </div>
             <div class="mindmap-body">
-              <div class="mindmap-center">{{ state.mindMapTopic || '联考小智' }}</div>
-              <div class="mindmap-branch left">
-                <div class="branch-item">
-                  <div class="branch-title">📚 核心知识点</div>
-                  <div class="branch-sub">
-                    <div v-for="item in state.mindMapData.knowledge" :key="item" class="branch-sub-item">{{ item }}</div>
+              <div class="mindmap-layout">
+                <div class="mindmap-branch left">
+                  <div class="branch-item">
+                    <div class="branch-title">📚 核心知识点</div>
+                    <div class="branch-sub">
+                      <div v-for="item in state.mindMapData.knowledge" :key="item" class="branch-sub-item">{{ item }}</div>
+                    </div>
+                  </div>
+                  <div class="branch-item">
+                    <div class="branch-title">📝 答题技巧</div>
+                    <div class="branch-sub">
+                      <div v-for="item in state.mindMapData.skills" :key="item" class="branch-sub-item">{{ item }}</div>
+                    </div>
+                  </div>
+                  <div class="branch-item">
+                    <div class="branch-title">⚠️ 易错点</div>
+                    <div class="branch-sub">
+                      <div v-for="item in state.mindMapData.mistakes" :key="item" class="branch-sub-item">{{ item }}</div>
+                    </div>
                   </div>
                 </div>
-                <div class="branch-item">
-                  <div class="branch-title">📝 答题技巧</div>
-                  <div class="branch-sub">
-                    <div v-for="item in state.mindMapData.skills" :key="item" class="branch-sub-item">{{ item }}</div>
+                <div class="mindmap-center">{{ state.mindMapTopic || '联考小智' }}</div>
+                <div class="mindmap-branch right">
+                  <div class="branch-item">
+                    <div class="branch-title">✅ 学习方法</div>
+                    <div class="branch-sub">
+                      <div v-for="item in state.mindMapData.methods" :key="item" class="branch-sub-item">{{ item }}</div>
+                    </div>
                   </div>
-                </div>
-                <div class="branch-item">
-                  <div class="branch-title">⚠️ 易错点</div>
-                  <div class="branch-sub">
-                    <div v-for="item in state.mindMapData.mistakes" :key="item" class="branch-sub-item">{{ item }}</div>
+                  <div class="branch-item">
+                    <div class="branch-title">🎯 备考策略</div>
+                    <div class="branch-sub">
+                      <div v-for="item in state.mindMapData.strategy" :key="item" class="branch-sub-item">{{ item }}</div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div class="mindmap-branch right">
-                <div class="branch-item">
-                  <div class="branch-title">✅ 学习方法</div>
-                  <div class="branch-sub">
-                    <div v-for="item in state.mindMapData.methods" :key="item" class="branch-sub-item">{{ item }}</div>
-                  </div>
-                </div>
-                <div class="branch-item">
-                  <div class="branch-title">🎯 备考策略</div>
-                  <div class="branch-sub">
-                    <div v-for="item in state.mindMapData.strategy" :key="item" class="branch-sub-item">{{ item }}</div>
-                  </div>
-                </div>
-                <div class="branch-item">
-                  <div class="branch-title">📊 进步方向</div>
-                  <div class="branch-sub">
-                    <div v-for="item in state.mindMapData.progress" :key="item" class="branch-sub-item">{{ item }}</div>
+                  <div class="branch-item">
+                    <div class="branch-title">📊 进步方向</div>
+                    <div class="branch-sub">
+                      <div v-for="item in state.mindMapData.progress" :key="item" class="branch-sub-item">{{ item }}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -907,7 +909,7 @@ export default defineComponent({
 .mindmap-content {
   background: #fff;
   border-radius: 16px;
-  width: 900px;
+  width: 750px;
   max-width: 95%;
   max-height: 85vh;
   display: flex;
@@ -936,33 +938,41 @@ export default defineComponent({
   cursor: pointer;
 }
 .mindmap-body {
-  padding: 40px;
-  position: relative;
-  min-height: 400px;
+  padding: 20px;
   overflow-y: auto;
   background: linear-gradient(135deg, #f8f9ff 0%, #fff5f5 100%);
   flex: 1;
 }
+.mindmap-layout {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 400px;
+}
 .mindmap-center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 140px;
-  height: 140px;
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   text-align: center;
   padding: 10px;
   line-height: 1.3;
   box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
   word-break: break-all;
+}
+.mindmap-branch {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
   align-items: center;
   justify-content: center;
   font-weight: 700;
