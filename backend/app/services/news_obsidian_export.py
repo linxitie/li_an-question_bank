@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,9 +13,39 @@ from sqlalchemy.orm import Session
 from ..models.models import NewsArticle, NewsImage
 from .obsidian_export import _safe_path
 
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 
 def _uid(news: NewsArticle) -> str:
     return f"news_{news.news_id:06d}"
+
+
+def _copy_images(db: Session, news_list: list[NewsArticle], vault: Path) -> tuple[int, int]:
+    """把卡片引用的本地图片复制到 vault 同名路径，保证 Obsidian 能解析 /uploads。"""
+    copied = 0
+    missing = 0
+    for news in news_list:
+        images = (
+            db.query(NewsImage)
+            .filter(NewsImage.news_id == news.news_id)
+            .order_by(NewsImage.image_order)
+            .all()
+        )
+        for img in images:
+            relative = Path(str(img.image_path or "").lstrip("/\\"))
+            if not relative.parts or ".." in relative.parts:
+                missing += 1
+                continue
+            source = _BACKEND_DIR / relative
+            target = vault / relative
+            if not source.is_file():
+                missing += 1
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or target.stat().st_size != source.stat().st_size:
+                shutil.copy2(source, target)
+            copied += 1
+    return copied, missing
 
 
 def _card(db: Session, news: NewsArticle) -> str:
@@ -88,6 +119,9 @@ def export_news_board(db: Session, vault: Path, dry_run: bool = False) -> dict[s
         .order_by(NewsArticle.publish_date.desc(), NewsArticle.news_id)
         .all()
     )
+    images_copied, images_missing = (0, 0)
+    if not dry_run:
+        images_copied, images_missing = _copy_images(db, news_list, vault)
     root = vault / "00-收件箱" / "新闻"
     written = 0
     skipped = 0
@@ -133,5 +167,7 @@ def export_news_board(db: Session, vault: Path, dry_run: bool = False) -> dict[s
         "candidates": len(news_list),
         "written": written,
         "skipped": skipped,
+        "images_copied": images_copied,
+        "images_missing": images_missing,
         "dry_run": dry_run,
     }
