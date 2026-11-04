@@ -416,7 +416,7 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
-import { sanitizeHtml } from '@/utils/questionRender';
+import { renderQuestionContent } from '@/utils/questionRender';
 import { useWrongbookStore } from '@/modules/wrongbook/store';
 import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wrongbook/events';
   export default defineComponent({
@@ -1107,8 +1107,9 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
                  'style="max-width:100%;height:auto;border:1px solid #e8eaf0;' +
                  'border-radius:8px;margin:4px 0;" alt="题目图片" />';
         });
-        // 交给单一真源做白名单清洗（丢弃 script/iframe/on* 等危险标签）
-        return sanitizeHtml(replaced);
+        // 交给单一真源：还原被转义的 <img>、归一化地址、白名单清洗并补 onerror。
+        // 之前只调 sanitizeHtml，数据库里的 &lt;img ...&gt; 会原样显示成路径文本。
+        return renderQuestionContent(replaced);
       },
 
       // ========== 选项高亮判断 ==========

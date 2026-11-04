@@ -1,0 +1,10 @@
+[
+  {"region": "山东省公安厅", "post_type": "技术", "profession": "数据警务技术,网络安全与执法", "education": "本科", "sex_require": "男", "plan_count": 8, "ratio": "1:15", "source": "示例数据（以官方公告为准）"},
+  {"region": "山东济南市公安局", "post_type": "执法", "profession": "不限", "education": "本科", "sex_require": "不限", "plan_count": 12, "ratio": "1:22", "source": "示例数据（以官方公告为准）"},
+  {"region": "山东青岛市公安局", "post_type": "执法", "profession": "计算机类", "education": "本科", "sex_require": "男", "plan_count": 6, "ratio": "1:18", "source": "示例数据（以官方公告为准）"},
+  {"region": "北京市公安局", "post_type": "执法", "profession": "不限", "education": "本科", "sex_require": "不限", "plan_count": 30, "ratio": "1:35", "source": "示例数据（以官方公告为准）"},
+  {"region": "北京海淀分局", "post_type": "技术", "profession": "数据警务技术,情报学", "education": "硕士", "sex_require": "不限", "plan_count": 4, "ratio": "1:10", "source": "示例数据（以官方公告为准）"},
+  {"region": "河北省公安厅", "post_type": "执法", "profession": "不限", "education": "大专及以上", "sex_require": "不限", "plan_count": 15, "ratio": "1:12", "source": "示例数据（以官方公告为准）"},
+  {"region": "河北廊坊市公安局", "post_type": "执法", "profession": "不限", "education": "本科", "sex_require": "不限", "plan_count": 10, "ratio": "1:9", "source": "示例数据（以官方公告为准）"},
+  {"region": "天津市公安局", "post_type": "综合", "profession": "法学,公安学", "education": "本科", "sex_require": "不限", "plan_count": 9, "ratio": "1:20", "source": "示例数据（以官方公告为准）"}
+]

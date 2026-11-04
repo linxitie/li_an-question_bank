@@ -48,6 +48,7 @@ declare global {
       getUserRole: () => string | null;
       hasRole: (role: string) => boolean;
       hasPermission: (permission: string) => boolean;
+      getPermissions: () => string[];
       getRoleLevel: () => number;
       parseUserInfo: () => { role: string | null; roleLevel: number; permissions: string[]; userId?: number | null };
       initSyncSocket: () => void;

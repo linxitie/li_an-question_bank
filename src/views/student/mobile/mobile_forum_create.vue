@@ -28,9 +28,26 @@
         </div>
       </div>
 
+
+
       <div class="field">
         <label class="label">内容</label>
         <textarea v-model="content" class="textarea" placeholder="分享你的经验、资料或心得..." rows="10"></textarea>
+        <div class="composer-actions">
+          <button class="emoji-trigger" @click="showPicker = !showPicker">😊 表情 / 表情包</button>
+          <span class="hint">支持 emoji 与自定义表情包</span>
+        </div>
+        <div v-if="showPicker" class="picker-wrap">
+          <EmojiStickerPicker @select="insertEmoji" @close="showPicker = false" />
+        </div>
+        <div class="image-field">
+          <label class="label">图片（不限张数）</label>
+          <FileUploader v-model="images" :max-docs="10" />
+        </div>
+        <div v-if="content" class="content-preview">
+          <label class="label">预览</label>
+          <ForumContent :content="content" />
+        </div>
       </div>
     </main>
   </div>
@@ -41,20 +58,35 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   FORUM_SHARE_TYPE_OPTIONS,
-  useCommunityStore,
-  type ForumShareType
+  useCommunityStore
 } from '@/modules/community/store';
+import type { ForumShareType } from '@/modules/community/api';
+import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
+import ForumContent from '@/components/forum/ForumContent.vue';
+import FileUploader from '@/components/forum/FileUploader.vue';
+import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 
 const router = useRouter();
 const store = useCommunityStore();
 const title = ref('');
 const content = ref('');
+const showPicker = ref(false);
 const shareType = ref<ForumShareType>('EXPERIENCE');
+const titleColor = ref('default');
+const images = ref<ForumImageAttachment[]>([]);
 const submitting = ref(false);
 const message = ref('');
 const msgType = ref('');
 
 const types = FORUM_SHARE_TYPE_OPTIONS;
+
+const insertEmoji = (payload: { type: 'emoji' | 'sticker'; value: string; name?: string }) => {
+  if (payload.type === 'emoji') {
+    content.value += payload.value;
+  } else {
+    content.value += `[[sticker:${payload.value}]]`;
+  }
+};
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
@@ -68,13 +100,20 @@ const submitPost = async () => {
     const created = await store.createPost({
       title: title.value,
       content: content.value,
-      shareType: shareType.value
+      shareType: shareType.value,
+      titleColor: titleColor.value,
+      attachments: images.value.length ? images.value : undefined
     });
-    if (!created) return;
+    if (!created) {
+      showMsg(store.error || '发布失败，请稍后重试', 'error');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     showMsg('发布成功', 'success');
     setTimeout(() => router.push('/mobile/forum'), 800);
   } catch (e) {
     showMsg(store.error || (e instanceof Error ? e.message : '发布失败'), 'error');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   } finally {
     submitting.value = false;
   }
@@ -197,5 +236,36 @@ const showMsg = (m: string, type: string) => {
 .type-tab.active {
   background: #1a2b5f;
   color: #fff;
+}
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.emoji-trigger {
+  background: #f0f3f7;
+  border: none;
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #1a365d;
+  cursor: pointer;
+}
+.hint {
+  font-size: 11px;
+  color: #8899aa;
+}
+.picker-wrap {
+  margin-top: 8px;
+}
+.content-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #1a2a3a;
+  line-height: 1.6;
 }
 </style>

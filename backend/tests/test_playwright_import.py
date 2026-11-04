@@ -1,6 +1,9 @@
 """
 Task 9: Playwright 自动化测试 - 题目导入流程
 测试 7 个 docx 题目文档 + 7 个 PDF 答案文档的分离导入匹配
+
+默认跳过：该链路会向真实后端导入数据，必须显式用 RUN_PLAYWRIGHT_E2E=1
+并先启动 9527 前端与 8000 后端。前端端口唯一为 9527，禁止回退到旧端口。
 """
 import asyncio
 import json
@@ -9,8 +12,15 @@ import pytest
 from playwright.async_api import async_playwright, expect
 
 # ============ 测试配置 ============
-BASE_URL = "http://localhost:5173"
-API_URL = "http://localhost:8000"
+# 前端只有 9527 一个启动端口（vite.config.ts DEV_PORT + strictPort）。
+BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:9527").rstrip("/")
+API_URL = os.environ.get("E2E_API_URL", "http://localhost:8000").rstrip("/")
+
+# 导入链路会写真实库，默认不纳入常规 pytest；需要时显式开启。
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_PLAYWRIGHT_E2E") != "1",
+    reason="需显式设置 RUN_PLAYWRIGHT_E2E=1，并先启动 9527 前端与 8000 后端",
+)
 LOGIN_USER = "admin"
 LOGIN_PASS = "admin123"
 

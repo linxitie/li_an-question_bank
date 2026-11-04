@@ -94,7 +94,7 @@
                 📖 答案解析 {{ state.expandedAnalysis[d.question_id] ? '▲' : '▼' }}
               </div>
               <div v-if="state.expandedAnalysis[d.question_id]" class="analysis-content">
-                {{ d.answer_analysis }}
+                <span v-html="renderQuestionContent(d.answer_analysis)"></span>
               </div>
             </div>
           </div>

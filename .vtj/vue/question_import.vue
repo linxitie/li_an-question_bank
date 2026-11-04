@@ -1097,6 +1097,15 @@ import { renderQuestionContent } from '@/utils/questionRender';
               self.state.importId = data.import_id;
               self.stepDone(0); self.setProgress(0, 100);
               ElMessage.success('解析完成：' + (data.success_count || 0) + ' 题可导入，' + (data.failed_count || 0) + ' 题跳过');
+              // P5：复合题识别到题组但缺材料时，后端通过 warnings 返回，必须展示
+              if (data.warnings && data.warnings.length) {
+                data.warnings.slice(0, 5).forEach(function(w) {
+                  ElMessage.warning({ message: String(w), duration: 6000 });
+                });
+                if (data.warnings.length > 5) {
+                  ElMessage.warning('另有 ' + (data.warnings.length - 5) + ' 条材料缺失提示，请检查待复核题组');
+                }
+              }
             }
             // Word/PDF 返回 raw_text_preview → 自动智能提取题目
             else if (data.raw_text_preview) {
@@ -2511,6 +2520,7 @@ converted.push({
         if (data.options !== undefined) q.options = data.options;
         if (data.answer !== undefined) q.answer = data.answer;
         if (data.analysis !== undefined) q.analysis = data.analysis;
+        if (data.requirements !== undefined) q.requirements = data.requirements;
         ElMessage.success('第 ' + (payload.index + 1) + ' 题已更新');
       },
       // ===== 逐题删除（识别匹配后剔除解析出错的题）=====

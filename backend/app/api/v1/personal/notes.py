@@ -132,15 +132,12 @@ async def create_or_update_note(
             update_time=datetime.now()
         )
         db.add(note)
+        db.flush()
+
+        # F2b：笔记记录与笔记成就同一事务提交。
+        await record_user_action(db, current_user.user_id, TRIGGER_NOTE_CREATED)
         commit_with_retry(db)
         db.refresh(note)
-
-        # 触发笔记成就
-        try:
-            await record_user_action(db, current_user.user_id, TRIGGER_NOTE_CREATED)
-        except Exception as e:
-            logger.warning(f"笔记成就判定失败: {e}")
-
         return {"note_id": f"q_{note.note_id}", "message": "笔记已创建", "created": True}
 
     elif note_type == "news":
@@ -173,15 +170,12 @@ async def create_or_update_note(
             update_time=datetime.now()
         )
         db.add(note)
+        db.flush()
+
+        # F2b：笔记记录与笔记成就同一事务提交。
+        await record_user_action(db, current_user.user_id, TRIGGER_NOTE_CREATED)
         commit_with_retry(db)
         db.refresh(note)
-
-        # 触发笔记成就
-        try:
-            await record_user_action(db, current_user.user_id, TRIGGER_NOTE_CREATED)
-        except Exception as e:
-            logger.warning(f"笔记成就判定失败: {e}")
-
         return {"note_id": f"n_{note.note_id}", "message": "笔记已创建", "created": True}
 
     else:

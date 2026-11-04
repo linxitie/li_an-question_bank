@@ -147,3 +147,26 @@ def test_quote_favorite_keeps_legacy_trigger_constant(
         len([e for e in published if e["trigger_type"] == TRIGGER_LEGACY_QUOTE_FAVORITE])
         == 1
     )
+
+
+def test_question_share_type_is_accepted_and_filtered(client, auth_headers):
+    """「答疑解惑」分类必须可发布，且列表能按该分类筛选。"""
+    created = client.post(
+        "/api/forum/posts",
+        headers=auth_headers,
+        data={
+            "title": "求解答题思路",
+            "content": "这道资料分析题怎么快速定位？",
+            "share_type": "QUESTION",
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["shareType"] == "QUESTION"
+
+    listed = client.get(
+        "/api/forum/posts", params={"share_type": "QUESTION"}
+    )
+    assert listed.status_code == 200
+    posts = listed.json()["posts"]
+    assert posts
+    assert all(p["shareType"] == "QUESTION" for p in posts)

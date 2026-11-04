@@ -32,13 +32,11 @@ async def do_checkin(
 ):
     """签到；返回今日状态、连续天数与本次奖励。"""
     try:
-        result = checkin_service.perform_checkin(db, current_user.user_id)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail="用户不存在") from exc
-
-    # 事务已在服务内提交；仅在今日首次签到后发布 E10，且发布失败不影响签到结果。
-    if result["is_today_first"]:
-        try:
+        # F2b：签到记录、金币/成长值与 E10 事件同一事务提交。
+        result = checkin_service.perform_checkin(
+            db, current_user.user_id, commit=False
+        )
+        if result["is_today_first"]:
             await record_user_action(
                 db,
                 current_user.user_id,
@@ -50,13 +48,10 @@ async def do_checkin(
                     "growth_reward": result["reward_growth"],
                 },
             )
-        except Exception as exc:  # noqa: BLE001 - 事件失败不得回滚已完成的签到
-            logger.error(
-                "签到事件发布失败 user=%s date=%s: %s",
-                current_user.user_id,
-                result["date"],
-                exc,
-            )
+        db.commit()
+    except LookupError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="用户不存在") from exc
 
     return result
 

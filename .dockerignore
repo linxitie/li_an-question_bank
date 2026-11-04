@@ -1,0 +1,55 @@
+# Docker 构建上下文（仓库根）—— 只服务 deploy/Dockerfile.web
+#
+# 原则：
+#   1) 前端构建只需要 package*.json、src、.vtj、public、scripts、配置与基线；
+#   2) 题库/后端数据/上传/构建产物/密钥一律不进上下文；
+#   3) deploy/ 保留，因为 Dockerfile.web 第二阶段要 COPY deploy/nginx.conf。
+#
+# 注意：backend/Dockerfile 的构建上下文是 ./backend，使用 backend/.dockerignore，
+# 不受本文件影响。
+
+# 版本库与本地工具缓存
+.git
+.gitignore
+.github
+.vscode
+.idea
+.agent
+.agents
+.claude
+.dsh
+.opencode
+.omo
+.sisyphus
+.worktrees
+
+# 依赖与构建产物
+node_modules
+dist
+dist-ssr
+coverage
+.vite
+*.tsbuildinfo
+*.log
+logs
+
+# 本地资料与业务数据（体积大，前端构建不需要）
+题库
+docs
+backend
+linxitie.policy-exam-bank-mobile
+linxitie.policy-exam-bank-tablet
+packages
+vtj-mcp-server
+deploy/runtime
+
+# 密钥与本地环境：绝不允许进入构建上下文
+.env
+.env.*
+deploy/.env*
+!deploy/.env.example
+
+# 本地调试残留
+tmp-*
+*.bak
+*.orig

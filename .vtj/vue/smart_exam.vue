@@ -157,24 +157,25 @@ import NavBar from './navbar.vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
 
+// 题型 ID 必须与 question_type 表一致：行测=15，申论=14/19，公专=1/4/5
 const XINGCE_PRESET = [
-  { subject_id: 1, type_id: 1, label: '常识判断', count: 20, score: 1.0, subcategory: '常识判断' },
-  { subject_id: 1, type_id: 1, label: '言语理解', count: 30, score: 1.0, subcategory: '言语理解与表达' },
-  { subject_id: 1, type_id: 1, label: '数量关系', count: 10, score: 1.0, subcategory: '数量关系' },
-  { subject_id: 1, type_id: 1, label: '判断推理', count: 35, score: 1.0, subcategory: '判断推理' },
-  { subject_id: 1, type_id: 1, label: '资料分析', count: 15, score: 1.0, subcategory: '资料分析' },
-  { subject_id: 1, type_id: 1, label: '政治理论', count: 10, score: 1.0, subcategory: '政治理论' },
+  { subject_id: 1, type_id: 15, label: '常识判断', count: 20, score: 1.0, subcategory: '常识判断' },
+  { subject_id: 1, type_id: 15, label: '言语理解', count: 30, score: 1.0, subcategory: '言语理解与表达' },
+  { subject_id: 1, type_id: 15, label: '数量关系', count: 10, score: 1.0, subcategory: '数量关系' },
+  { subject_id: 1, type_id: 15, label: '判断推理', count: 35, score: 1.0, subcategory: '判断推理' },
+  { subject_id: 1, type_id: 15, label: '资料分析', count: 15, score: 1.0, subcategory: '资料分析' },
+  { subject_id: 1, type_id: 15, label: '政治理论', count: 10, score: 1.0, subcategory: '政治理论' },
 ];
 const SHENLUN_PRESET = [
-  { subject_id: 2, type_id: 4, label: '归纳概括', count: 1, score: 20.0, subcategory: '归纳概括' },
-  { subject_id: 2, type_id: 4, label: '综合分析', count: 1, score: 25.0, subcategory: '综合分析' },
-  { subject_id: 2, type_id: 4, label: '应用文写作', count: 1, score: 25.0, subcategory: '应用文写作' },
-  { subject_id: 2, type_id: 5, label: '议论文写作', count: 1, score: 30.0, subcategory: '议论文写作' },
+  { subject_id: 2, type_id: 14, label: '归纳概括', count: 1, score: 20.0, subcategory: '归纳概括' },
+  { subject_id: 2, type_id: 14, label: '综合分析', count: 1, score: 25.0, subcategory: '综合分析' },
+  { subject_id: 2, type_id: 19, label: '应用文写作', count: 1, score: 25.0, subcategory: '应用文写作' },
+  { subject_id: 2, type_id: 19, label: '议论文写作', count: 1, score: 30.0, subcategory: '议论文写作' },
 ];
 const GONGZHUAN_PRESET = [
   { subject_id: 3, type_id: 1, label: '单选题', count: 50, score: 1.0, subcategory: '' },
-  { subject_id: 3, type_id: 2, label: '多选题', count: 20, score: 1.5, subcategory: '' },
-  { subject_id: 3, type_id: 3, label: '情境题', count: 30, score: 1.0, subcategory: '' },
+  { subject_id: 3, type_id: 4, label: '多选题', count: 20, score: 1.5, subcategory: '' },
+  { subject_id: 3, type_id: 5, label: '判断题', count: 30, score: 1.0, subcategory: '' },
 ];
 
 const SUBJECT_OPTIONS = [
@@ -211,6 +212,13 @@ export default defineComponent({
       gp_difficultyHard: 0,
       gp_subjectBreakdown: '{}',
       gp_duration: 120,
+      // 题组整组展开后的配额信息（raw 页模板不可直接改，用 DOM 注入展示）
+      gp_requestedCount: 0,
+      gp_actualCount: 0,
+      gp_overQuota: false,
+      gp_overQuotaReason: '',
+      gp_groupCount: 0,
+      gp_groupedQuestionCount: 0,
       // 表单字段 (fm_)
       fm_subjectMode: 'xingce',
       fm_yearRange: 'all',
@@ -314,6 +322,16 @@ export default defineComponent({
         this.state.gp_difficultyMedium = data.difficulty_distribution ? (data.difficulty_distribution.medium || 0) : 0;
         this.state.gp_difficultyHard = data.difficulty_distribution ? (data.difficulty_distribution.hard || 0) : 0;
         this.state.gp_duration = data.duration || 120;
+        // 复合题整组展开会超出配置题数：进入预览后用内联提示条显式展示，不再用 alert 打断
+        var qs = data.questions || [];
+        var gids = {};
+        qs.forEach(function(q) { var g = parseInt(q.group_id || 0, 10) || 0; if (g > 0) gids[g] = 1; });
+        this.state.gp_requestedCount = data.requested_count || this.totalQuestions;
+        this.state.gp_actualCount = data.actual_count || data.question_count || qs.length;
+        this.state.gp_overQuota = !!data.over_quota;
+        this.state.gp_overQuotaReason = data.over_quota_reason || data.message || '';
+        this.state.gp_groupCount = Object.keys(gids).length;
+        this.state.gp_groupedQuestionCount = qs.filter(function(q) { return (parseInt(q.group_id || 0, 10) || 0) > 0; }).length;
         this.state.step = 2;
       } catch (err) {
         alert('生成失败: ' + (err.message || '网络错误'));
@@ -347,10 +365,14 @@ export default defineComponent({
         if (!res.ok) { var e = await res.json(); throw new Error(e.detail || '替换失败'); }
         var data = await res.json();
 
-        if (data.new_question && this.state.replaceIdx >= 0) {
+        if (data.group_replaced) {
+          // 整组替换后题数/题组范围都可能变化，重新拉预览而不是只改一行
+          await this.reloadPreview();
+        } else if (data.new_question && this.state.replaceIdx >= 0) {
           var qs = JSON.parse(this.state.gp_questions || '[]');
           qs[this.state.replaceIdx] = Object.assign({}, qs[this.state.replaceIdx], data.new_question);
           this.state.gp_questions = JSON.stringify(qs);
+          this.updateGroupStats(qs, data.question_count);
         }
         this.closeReplace();
       } catch (err) {
@@ -359,11 +381,41 @@ export default defineComponent({
         this.state.replaceLoading = false;
       }
     },
+    // 统一计算题组统计与超额状态，替换/刷新后复用
+    updateGroupStats(questions, actualCount) {
+      var qs = questions || [];
+      var gids = {};
+      qs.forEach(function(q) { var g = parseInt(q.group_id || 0, 10) || 0; if (g > 0) gids[g] = 1; });
+      this.state.gp_groupCount = Object.keys(gids).length;
+      this.state.gp_groupedQuestionCount = qs.filter(function(q) { return (parseInt(q.group_id || 0, 10) || 0) > 0; }).length;
+      this.state.gp_actualCount = actualCount || qs.length;
+      this.state.gp_questionCount = actualCount || qs.length;
+      if (this.state.gp_requestedCount > 0) {
+        this.state.gp_overQuota = this.state.gp_actualCount > this.state.gp_requestedCount;
+      }
+      this.$nextTick(this.applyPreviewEnhancements);
+    },
+    // 重新拉取草稿预览，确保整组替换后的题序、题数、总分与后端一致
+    async reloadPreview() {
+      var res = await window.__VTJ_AUTH__.apiFetch('/api/smart-exam/' + this.state.gp_paperId + '/preview');
+      if (!res.ok) return;
+      var data = await res.json();
+      var qs = data.questions || [];
+      this.state.gp_questions = JSON.stringify(qs);
+      this.state.gp_totalScore = data.total_score || 0;
+      this.updateGroupStats(qs, data.question_count || qs.length);
+    },
     regenerate() {
       this.state.step = 1;
       this.state.gp_paperId = null;
       this.state.gp_paperName = '';
       this.state.gp_questions = '[]';
+      this.state.gp_requestedCount = 0;
+      this.state.gp_actualCount = 0;
+      this.state.gp_overQuota = false;
+      this.state.gp_overQuotaReason = '';
+      this.state.gp_groupCount = 0;
+      this.state.gp_groupedQuestionCount = 0;
     },
 
     // ===== 确认并开始答题 =====
@@ -393,12 +445,112 @@ export default defineComponent({
         alert('启动失败: ' + (err.message || ''));
       }
     },
+    // ===== 预览增强：题组徽标 + 超额内联提示（不修改 raw 页模板）=====
+    applyPreviewEnhancements() {
+      var self = this;
+      var root = this.$el;
+      if (!root || !root.querySelector) return;
+      var hero = root.querySelector('.preview-hero');
+      var stepEl = hero && hero.closest ? hero.closest('.se-step') : null;
+      if (!stepEl) return;
+
+      // 1) 先清理旧节点，避免重复注入
+      var oldNotice = stepEl.querySelector('.se-overquota-notice');
+      if (oldNotice && oldNotice.parentNode) oldNotice.parentNode.removeChild(oldNotice);
+      var oldSummary = stepEl.querySelector('.se-group-summary');
+      if (oldSummary && oldSummary.parentNode) oldSummary.parentNode.removeChild(oldSummary);
+
+      // 2) 题组汇总标签
+      if (this.state.gp_groupCount > 0) {
+        var stats = hero.querySelector('.preview-stats');
+        var summary = document.createElement('span');
+        summary.className = 'se-group-summary';
+        summary.textContent = '🧩 复合题 ' + this.state.gp_groupCount + ' 组 · ' + this.state.gp_groupedQuestionCount + ' 题';
+        summary.style.cssText = 'display:inline-block;margin-top:8px;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600;background:#FFF5E6;color:#9A4D00;border:1px solid #FFE0B2;';
+        if (stats) stats.appendChild(summary); else hero.appendChild(summary);
+      }
+
+      // 3) 题组逐题徽标：同组内标注范围，提醒材料共享、整组抽取
+      var qs = this.gp_questionsParsed || [];
+      var groupMap = {};
+      qs.forEach(function(q, i) {
+        var g = parseInt(q.group_id || 0, 10) || 0;
+        if (g > 0) { if (!groupMap[g]) groupMap[g] = []; groupMap[g].push(i); }
+      });
+      var items = stepEl.querySelectorAll('.question-item');
+      for (var i = 0; i < items.length && i < qs.length; i++) {
+        var item = items[i];
+        var gid = parseInt(qs[i].group_id || 0, 10) || 0;
+        var oldBadge = item.querySelector('.se-group-badge');
+        if (oldBadge && oldBadge.parentNode) oldBadge.parentNode.removeChild(oldBadge);
+        if (gid <= 0) continue;
+        var members = groupMap[gid] || [i];
+        var first = members[0] + 1;
+        var last = members[members.length - 1] + 1;
+        var badge = document.createElement('span');
+        badge.className = 'se-group-badge';
+        badge.textContent = '🧩 题组 ' + first + '–' + last;
+        badge.title = '该题属于复合题题组，共 ' + members.length + ' 题，材料共享且整组抽取';
+        badge.style.cssText = 'padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;background:#FFF5E6;color:#9A4D00;border:1px solid #FFE0B2;white-space:nowrap;';
+        var header = item.querySelector('.qi-header');
+        var typeTag = header && header.querySelector('.qi-type');
+        if (typeTag && typeTag.parentNode) typeTag.parentNode.insertBefore(badge, typeTag.nextSibling);
+        else if (header) header.appendChild(badge);
+      }
+
+      // 4) 题数超额提示：说明为何比配置多，并提供返回调整入口
+      if (!this.state.gp_overQuota) return;
+      var notice = document.createElement('div');
+      notice.className = 'se-overquota-notice';
+      notice.setAttribute('role', 'status');
+      notice.style.cssText = 'display:flex;gap:12px;align-items:flex-start;margin:0 0 16px;padding:14px 16px;border-radius:12px;background:#FFF8E1;border:1px solid #FFE0A3;border-left:4px solid #D97706;color:#7A4A00;font-size:13px;line-height:1.65;';
+      var icon = document.createElement('span');
+      icon.textContent = '⚠️';
+      icon.style.cssText = 'font-size:18px;line-height:1.2;flex:0 0 auto;';
+      var body = document.createElement('div');
+      body.style.cssText = 'flex:1;min-width:0;';
+      var title = document.createElement('div');
+      title.style.cssText = 'font-weight:800;color:#7A3E00;margin-bottom:2px;';
+      title.textContent = '实际生成 ' + this.state.gp_actualCount + ' 题，高于配置的 ' + this.state.gp_requestedCount + ' 题';
+      var desc = document.createElement('div');
+      desc.textContent = (this.state.gp_overQuotaReason || '复合题按整组抽取，为保留材料与子题完整性，题数会超出配置。') + ' 可返回调整题量，或继续预览后手动换题。';
+      var actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+      var backBtn = document.createElement('button');
+      backBtn.type = 'button';
+      backBtn.textContent = '← 返回调整参数';
+      backBtn.style.cssText = 'padding:5px 12px;border-radius:8px;border:1px solid #D97706;background:#FFF;color:#9A4D00;font-size:12px;font-weight:700;cursor:pointer;';
+      backBtn.addEventListener('click', function() { self.state.step = 1; });
+      var okBtn = document.createElement('button');
+      okBtn.type = 'button';
+      okBtn.textContent = '继续预览';
+      okBtn.style.cssText = 'padding:5px 12px;border-radius:8px;border:1px solid #E8D5B0;background:#FFF3D6;color:#7A4A00;font-size:12px;font-weight:700;cursor:pointer;';
+      okBtn.addEventListener('click', function() { notice.style.display = 'none'; });
+      actions.appendChild(backBtn);
+      actions.appendChild(okBtn);
+      body.appendChild(title);
+      body.appendChild(desc);
+      body.appendChild(actions);
+      notice.appendChild(icon);
+      notice.appendChild(body);
+      stepEl.insertBefore(notice, hero);
+    },
     goBack() {
       if (this.state.step > 1) { this.state.step--; } else { this.$router.back(); }
     },
   },
   mounted() {
+    var self = this;
+    // raw 页模板不可直接改，这里监听步骤/题目变化后做 DOM 增强
+    this._previewWatcher = this.$watch(
+      function() { return [self.state.step, self.state.gp_questions]; },
+      function() { self.$nextTick(self.applyPreviewEnhancements); }
+    );
+    this.$nextTick(this.applyPreviewEnhancements);
     console.log('[SmartExam] mounted v1785854718491');
+  },
+  beforeUnmount() {
+    if (this._previewWatcher) { this._previewWatcher(); this._previewWatcher = null; }
   },
 });
 </script>

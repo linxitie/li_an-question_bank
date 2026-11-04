@@ -98,3 +98,55 @@ export function toPapersEvent(msg: WsEnvelope): PapersDataChangedPayload | null 
       : undefined);
   return { domain: 'exam', type: 'paper.published', id: eventId, source: 'ws' };
 }
+
+/** 补发事件：只带恢复刷新所需的最小字段，不携带 payload/他人隐私。 */
+export interface SyncReplayEvent {
+  domain: string;
+  type: string;
+  id?: number | string;
+  oid: number;
+}
+
+export interface SyncReplay {
+  reason: string;
+  events: SyncReplayEvent[];
+  latestOid: number;
+  truncated: boolean;
+}
+
+/** data-changed 的 oid 游标；缺失/非法一律返回 null，旧报文继续可用。 */
+export function extractOid(msg: WsEnvelope): number | null {
+  const value = msg.data?.oid;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  if (!Number.isInteger(value)) return null;
+  return value;
+}
+
+/** 解析服务端 sync 补发回复；结构非法返回 null，由调用方走全量兜底。 */
+export function extractSyncReply(msg: WsEnvelope): SyncReplay | null {
+  if (msg.type !== 'sync' || !msg.data || typeof msg.data !== 'object') return null;
+  const data = msg.data;
+  const latest = data.latest_oid;
+  if (typeof data.reason !== 'string') return null;
+  if (typeof latest !== 'number' || !Number.isFinite(latest) || latest < 0) return null;
+  const rawEvents = Array.isArray(data.events) ? data.events : [];
+  const events: SyncReplayEvent[] = [];
+  for (const raw of rawEvents) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as Record<string, unknown>;
+    if (typeof item.domain !== 'string' || typeof item.type !== 'string') continue;
+    if (typeof item.oid !== 'number' || !Number.isInteger(item.oid) || item.oid <= 0) continue;
+    events.push({
+      domain: item.domain,
+      type: item.type,
+      id: item.id as number | string | undefined,
+      oid: item.oid
+    });
+  }
+  return {
+    reason: data.reason,
+    events,
+    latestOid: latest,
+    truncated: data.truncated === true
+  };
+}

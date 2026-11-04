@@ -3,9 +3,11 @@ from sqlalchemy.orm import Session
 import os
 
 from ....core.database import get_db
+from ....core.config import settings
 from ....models.models import SysUser as UserModel
 from ....core.security import get_current_user
 from ....schemas.schemas import UserBase
+from ....services import media_service
 
 router = APIRouter(prefix="/api/media",tags=['论坛'])
 
@@ -30,14 +32,31 @@ async def upload_video(
     if file_size > max_size:
         raise HTTPException(status_code=400, detail="File size exceeds 50MB")
     
+    if settings.MEDIA_STORE_ENABLED:
+        try:
+            asset = media_service.store_bytes(
+                db, content, kind="video", original_name=file.filename,
+                created_by=getattr(current_user, "user_id", None),
+                max_bytes=max_size,
+            )
+        except media_service.MediaTooLarge:
+            raise HTTPException(status_code=400, detail="File size exceeds 50MB")
+        except media_service.MediaValidationError:
+            raise HTTPException(status_code=400, detail="Invalid file format")
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(status_code=503, detail="Storage temporarily unavailable")
+        db.commit()
+        return {"url": f"/media/{asset.asset_id}"}
+
+    # 回滚分支：只取 basename，禁止原始文件名路径穿越。
     upload_dir = "./uploads/videos"
     os.makedirs(upload_dir, exist_ok=True)
-    
-    file_path = os.path.join(upload_dir, file.filename)
+    safe_name = os.path.basename(file.filename or "video")
+    file_path = os.path.join(upload_dir, safe_name)
     with open(file_path, "wb") as f:
         f.write(content)
-    
-    return {"url": f"/uploads/videos/{file.filename}"}
+
+    return {"url": f"/uploads/videos/{safe_name}"}
 
 
 @router.post("/import")

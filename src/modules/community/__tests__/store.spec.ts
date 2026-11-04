@@ -118,6 +118,8 @@ describe('community store 列表与分页', () => {
 
     expect(mockedFetchPosts).toHaveBeenCalledWith({
       shareType: '',
+      sortBy: 'time',
+      order: 'desc',
       limit: 8,
       offset: 0
     });
@@ -151,12 +153,50 @@ describe('community store 列表与分页', () => {
 
     expect(mockedFetchPosts).toHaveBeenLastCalledWith({
       shareType: '',
+      sortBy: 'time',
+      order: 'desc',
       limit: 2,
       offset: 2
     });
     expect(store.posts.map((item) => item.id)).toEqual([1, 2, 3]);
     expect(store.total).toBe(3);
     expect(store.hasMore).toBe(false);
+  });
+
+  it('帖子与评论排序参数透传', async () => {
+    mockedFetchPosts.mockResolvedValue({
+      total: 0,
+      limit: 8,
+      offset: 0,
+      posts: []
+    });
+    mockedFetchComments.mockResolvedValue({
+      total: 0,
+      limit: 100,
+      offset: 0,
+      comments: []
+    });
+
+    const store = useCommunityStore();
+    store.setPostSort('likes', 'asc');
+    await store.load();
+
+    expect(mockedFetchPosts).toHaveBeenCalledWith({
+      shareType: '',
+      sortBy: 'likes',
+      order: 'asc',
+      limit: 8,
+      offset: 0
+    });
+
+    await store.loadComments(7, { sortBy: 'replies', order: 'desc' });
+
+    expect(mockedFetchComments).toHaveBeenCalledWith(7, {
+      sortBy: 'replies',
+      order: 'desc',
+      limit: 100,
+      offset: 0
+    });
   });
 
   it('空态与加载失败', async () => {

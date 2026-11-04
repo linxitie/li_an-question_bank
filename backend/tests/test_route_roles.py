@@ -28,8 +28,11 @@ def test_page_route_count():
     # 100 → 101：平板整页详情 /tablet/materials/detail（2026-11-02，复用 PC 详情页）
     # 101 → 98：平板与电脑同版 —— 上面三条改 redirect（无 component，不计入），
     #           /tablet/home 只是换 component 不增删
+    # 98 → 104：2026-11-04 合并远端 main，模块4/7 新增 6 条页面路由
+    #           /ai-assistant、/study-plan、/profile-quiz、/knowledge、/memories、/teacher/forum
+    #           （与 scripts/verify-modularization-constraints.mjs 的 104 同步）
     # 路由只增不减；再新增时请同步本数字并在提交信息写明。
-    assert len(_pages()) == 98
+    assert len(_pages()) == 104
 
 
 def test_whitelist_has_no_roles():

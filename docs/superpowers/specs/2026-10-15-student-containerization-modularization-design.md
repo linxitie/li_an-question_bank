@@ -616,7 +616,7 @@ backend/data/                    全部不纳入 Git，容器化后为卷
 |---|---|
 | **禁止移动 `.vtj/vue/<id>.vue`** | 92 处路由硬绑定 + 设计器按 id 读写 |
 | **`raw: true` 页禁止 `vtj_sync_vue_to_dsl`** | 同步器提取不到的手写方法会丢失，设计器回存再覆盖回来；工具会返回 `RAW_PAGE_PROTECTED` |
-| **`<template>` 变更须由用户在设计器完成** | 设计器地址 `http://localhost:9527/__vtj__/`（端口来自 `vite.config.ts` 的 `DEV_PORT`，`strictPort: true`，不要用 5173） |
+| **`<template>` 变更须由用户在设计器完成** | 设计器地址 `http://localhost:9527/__vtj__/`（端口来自 `vite.config.ts` 的 `DEV_PORT`，`strictPort: true`，不要改用其他端口） |
 | **`<script>` 可程序化修改，但必须先 `dryRun: true`** | 写操作会自动生成 `.bak` |
 | **页面 ID 保持语义化** | 有效 ID 示例 `home_page`、`question_bank`、`gold_purchase`、`mobile_home` |
 

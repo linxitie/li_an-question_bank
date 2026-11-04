@@ -209,8 +209,16 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
     即时更新（第3层防线）：传入 question_obj 时，会立即把 question_content
     和 options 中的 [IMAGE:xxx] 占位符替换为最终 <img> 标签，写入数据库，
     避免占位符残留导致前端图片不显示。
+
+    同时把 **内联 data:image base64 的 src 改写为落盘后的 /static URL**。
+    旧实现只把 base64 解码落盘、却把原 src 留在正文里，导致同一张图既存
+    磁盘又整段留在 SQLite（单题解析可膨胀到 20 万字符），列表接口原样返回
+    后前端卡顿。此处在落盘成功后立即回写，从源头阻断 base64 入库。
     """
     images = []
+    # 原始 src -> 落盘后的静态 URL。只记录本次真正落盘成功的图片，
+    # 落盘失败的不改写，避免把 data URI 换成不存在的 URL。
+    _src_rewrites = {}
 
     # 无关图片检测（问题2-R2/P2-1）：委托共享模块 image_filters 的 classify_image
     # 三级判定（block/suspect/keep），与存量清理脚本使用同一判定标准。
@@ -363,6 +371,10 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
             if filepath and os.path.exists(filepath):
                 rel_path = f'/static/questions/{question_id}/{os.path.basename(filepath)}'
                 images.append(rel_path)
+                # data URI / 外链 / uploads 本地路径都要换成静态 URL；
+                # 已经是 /static 的 src 不重复登记。
+                if src and not src.startswith('/static/'):
+                    _src_rewrites[src] = rel_path
                 logger.debug(f"[images] 保存图片: {rel_path}")
         except Exception as e:
             logger.warning(f"[images] 图片{idx}保存失败: {e}")
@@ -461,6 +473,43 @@ def _extract_and_save_images(content_text, question_id, upload_dir='static/quest
         except Exception as e:
             logger.warning(f"[images] docx图片{idx}({marker_key})保存失败: {e}")
             continue
+
+    # 3. 回写内联图片 src：data URI -> /static/...，避免 base64 永久留在库内。
+    #    只替换 src 属性值（保留原 <img> 的 class/loading 等属性），并同时覆盖
+    #    question_content / options / answer_analysis 三个字段。
+    if question_obj is not None and _src_rewrites:
+        def _rewrite_srcs(text):
+            if not text:
+                return text
+            out = str(text)
+            for old_src, new_src in _src_rewrites.items():
+                if old_src == new_src:
+                    continue
+                out = out.replace(f'src="{old_src}"', f'src="{new_src}"')
+                out = out.replace(f"src='{old_src}'", f'src="{new_src}"')
+            return out
+
+        try:
+            question_obj.question_content = _rewrite_srcs(
+                getattr(question_obj, 'question_content', '') or '')
+        except Exception as _e:
+            logger.warning(f"[images] 题干图片来源回写失败: {_e}")
+        try:
+            opts = getattr(question_obj, 'options', None)
+            if isinstance(opts, str):
+                question_obj.options = _rewrite_srcs(opts)
+            elif isinstance(opts, list):
+                for _o in opts:
+                    if isinstance(_o, dict) and 'value' in _o:
+                        _o['value'] = _rewrite_srcs(_o.get('value') or '')
+        except Exception as _e:
+            logger.warning(f"[images] 选项图片来源回写失败: {_e}")
+        try:
+            if getattr(question_obj, 'answer_analysis', None):
+                question_obj.answer_analysis = _rewrite_srcs(
+                    question_obj.answer_analysis or '')
+        except Exception as _e:
+            logger.warning(f"[images] 解析图片来源回写失败: {_e}")
 
     return images
 

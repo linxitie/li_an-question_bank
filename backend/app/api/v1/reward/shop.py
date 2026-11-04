@@ -156,17 +156,7 @@ async def exchange(
         product_name = product.name
         coin_cost = product.coin_price
 
-        commit_with_retry(db)
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"兑换失败 user={current_user.user_id} product={product.id}: {e}")
-        raise HTTPException(status_code=500, detail="兑换失败，请稍后重试")
-
-    # E9：仅在兑换事务成功提交后发布一次；失败路径已在上方抛出，不会到达此处
-    try:
+        # F2b：兑换记录、库存扣减与 E9 事件同一事务提交。
         await record_user_action(
             db,
             current_user.user_id,
@@ -179,10 +169,14 @@ async def exchange(
                 "balance": balance_after,
             },
         )
-    except Exception as e:  # noqa: BLE001 - 事件发布失败不得回滚已完成的兑换
-        logger.error(
-            f"兑换事件发布失败 user={current_user.user_id} exchange={exchange_id}: {e}"
-        )
+        commit_with_retry(db)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"兑换失败 user={current_user.user_id} product={product.id}: {e}")
+        raise HTTPException(status_code=500, detail="兑换失败，请稍后重试")
 
     logger.info(f"用户 {current_user.user_id} 兑换 {product_name}，消耗 {coin_cost} 金币")
     return {

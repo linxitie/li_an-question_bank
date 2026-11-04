@@ -99,17 +99,24 @@ def classify(vue_path: Path) -> tuple[str, str | None, str | None]:
 
 
 def sync_single_file(vue_file: str, strict: bool = False) -> bool:
-    """同步单个文件的版本号（同步模式）"""
+    """同步单个文件的版本号（同步模式）
+
+    校验口径（与 check_only 对齐，避免手写页误报阻断 CI）：
+    1. 存在配套 DSL JSON 且 Vue 能提取到 version：做一致性校验/自动同步；
+    2. 无配套 JSON（纯手写页面）：跳过，不阻断；
+    3. 有 JSON 但 Vue 无 useProvider version（历史页面）：跳过，不阻断。
+    """
     vue_path = VTJ_VUE_DIR / vue_file
     if not vue_path.exists():
         print(f"⚠️  Vue 文件不存在: {vue_path}")
         return False
-
     kind, vue_version, json_version = classify(vue_path)
     if kind == SKIP_NO_JSON:
+        # 纯手写页面没有 DSL 文件，不属于版本一致性管理范围，跳过不阻断
         print(f"⏭  跳过（无对应 JSON，非设计器页面）: {vue_path.stem}")
         return not strict
     if kind == SKIP_NO_PROVIDER:
+        # 历史页面未声明 useProvider version，跳过不阻断
         print(f"⏭  跳过（Vue 无 useProvider 版本，非设计器页面）: {vue_path.stem}")
         return not strict
 

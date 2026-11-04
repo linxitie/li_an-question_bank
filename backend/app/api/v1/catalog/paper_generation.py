@@ -32,7 +32,17 @@ from ....schemas.schemas import (
     PaperUpdate
 )
 from ....core.security import get_current_user, require_teacher_or_admin
+from ....services.paper_group_selector import (
+    select_questions_with_groups,
+    summarize_group_selection,
+)
 from .papers import apply_weakpoint_recommendation
+from ....services.event_consumer import (
+    outbox_mode_enabled,
+    publish_paper_published_legacy,
+)
+from ....foundation.outbox import emit as outbox_emit
+from ....core.events import EV_PAPER_PUBLISHED
 
 router = APIRouter(prefix="/api/papers", tags=["试卷管理"])
 logger = logging.getLogger(__name__)
@@ -197,8 +207,11 @@ async def auto_generate_paper(
     db.flush()
 
     # 5. 按配置抽取题目并建立关联
+    # 题组感知：复合题命中后整组展开，资料分析/申论材料题不再被拆散。
     total_score_calculated = 0
     question_order = 0
+    actual_question_count = 0
+    requested_count = sum(int(config.count) for config in request.question_configs)
 
     for config in request.question_configs:
         # 构建查询条件
@@ -207,8 +220,9 @@ async def auto_generate_paper(
             QuestionBank.audit_status == 1,
             QuestionBank.subject_id == request.subject_id,
             QuestionBank.type_id == config.type_id,
-            ~QuestionBank.question_id.in_(selected_question_ids) if selected_question_ids else True
         )
+        if selected_question_ids:
+            query = query.filter(~QuestionBank.question_id.in_(selected_question_ids))
 
         # 难度筛选
         if config.difficulty:
@@ -223,15 +237,19 @@ async def auto_generate_paper(
         if config.points:
             query = query.filter(QuestionBank.point_id.in_(config.points))
 
-        # 随机抽取指定数量的题目
-        questions = query.order_by(func.rand()).limit(config.count).all()
+        # 随机抽取指定数量的题目（组感知）
+        questions, selected_question_ids = select_questions_with_groups(
+            db=db,
+            query=query,
+            count=config.count,
+            selected_ids=selected_question_ids,
+        )
 
-        # 计算每题平均分
-        avg_score = request.total_score / total_questions if total_questions > 0 else 0
-
-        # 添加题目关联
+        # 组展开后实际题数可能多于配置数，按配置总分/实际题数均分
         for question in questions:
             question_order += 1
+            actual_question_count += 1
+            avg_score = request.total_score / max(actual_question_count, 1)
             score = question.score if question.score else avg_score
 
             relation = PaperQuestionRelation(
@@ -241,11 +259,11 @@ async def auto_generate_paper(
                 question_score=score
             )
             db.add(relation)
-
-            selected_question_ids.add(question.question_id)
             total_score_calculated += score
 
     # 6. 更新试卷总分并提交
+    # 记录实际题数：组展开会改变题数，不能用配置和冒充
+    new_paper.question_count = actual_question_count
     new_paper.total_score = total_score_calculated
     db.commit()
     db.refresh(new_paper)
@@ -255,13 +273,19 @@ async def auto_generate_paper(
         f"题目数: {total_questions}, 总分: {total_score_calculated}"
     )
 
+    quota = summarize_group_selection(requested_count, actual_question_count)
+    message = "智能组卷成功"
+    if quota["over_quota"]:
+        message += f"；{quota['over_quota_reason']}，请核对后再发布"
+
     return GeneratePaperResponse(
         paper_id=new_paper.paper_id,
         paper_code=paper_code,
         paper_name=request.paper_name,
-        question_count=total_questions,
+        question_count=actual_question_count,
         total_score=total_score_calculated,
-        message="智能组卷成功"
+        message=message,
+        **quota,
     )
 
 
@@ -724,17 +748,25 @@ async def publish_paper(
     paper.paper_type = "PUBLISHED"
     paper.publish_time = datetime.now()
     paper.approver_id = current_user.user_id
-    db.commit()
 
     # 纵向通信走事件总线（catalog 域不跨域 import platform）：
     # EV_PAPER_PUBLISHED → 消费者推送 data-changed 到在线端。
-    from ....core import events
-    await events.publish(events.Event(
-        name=events.EV_PAPER_PUBLISHED,
-        payload={"paper_id": paper_id},
-        aggregate_id=f"p-{paper_id}",
-        source="catalog.paper_generation",
-    ))
+    # F2b：开启 Outbox 时状态与事件同一事务；关闭时保留旧的 commit 后直发。
+    if outbox_mode_enabled():
+        outbox_emit(
+            db,
+            event_name=EV_PAPER_PUBLISHED,
+            aggregate_type="paper",
+            aggregate_id=f"p-{paper_id}",
+            payload={"paper_id": paper_id},
+            producer="catalog.paper_generation",
+        )
+        db.commit()
+    else:
+        db.commit()
+        await publish_paper_published_legacy(
+            paper_id, "catalog.paper_generation"
+        )
 
     logger.info(f"用户 {current_user.username} 发布试卷 ID: {paper_id}")
 

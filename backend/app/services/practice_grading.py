@@ -2,7 +2,7 @@
 
 一次提交在同一事务内完成：判分 -> 写作答记录（PracticeRecord）->
 写个人错题集（WrongQuestionPersonal）-> 提交。任一环节异常整体回滚。
-事务提交后才发布 ``practice.submit`` 行为事件；事件发布失败不回滚已落库数据。
+行为事件与业务写同一事务（Outbox 默认开启）；关闭 Outbox 时在提交后发布，发布失败不回滚已落库数据。
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from ..core.trigger_types import (
     TRIGGER_PRACTICE_SUBMIT,
 )
 from ..models.models import PracticeRecord, QuestionBank, WrongQuestionPersonal
-from .event_consumer import record_user_action
+from .event_consumer import outbox_mode_enabled, record_user_action
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +213,6 @@ async def submit_answers(
             results.append(result)
             if not result["is_correct"] and result["wrong_result"] in wrong_stats:
                 wrong_stats[result["wrong_result"]] += 1
-        commit_with_retry(db)
     except Exception:
         db.rollback()
         raise
@@ -227,25 +226,33 @@ async def submit_answers(
         "correct": correct,
     }
     published = False
-    if publish_event:
-        try:
-            published = await record_user_action(
-                db, user_id, TRIGGER_PRACTICE_SUBMIT, session=event_session
-            )
-        except Exception as exc:  # noqa: BLE001 — 事件是加速器，不回滚已提交数据
-            logger.warning(f"练习判分事件发布失败(非阻断): {exc}")
+    # F2b：判分数据与两个行为事件同一事务提交。
+    try:
+        if publish_event:
+            try:
+                published = await record_user_action(
+                    db, user_id, TRIGGER_PRACTICE_SUBMIT, session=event_session
+                )
+            except Exception as exc:  # noqa: BLE001 — 关闭 Outbox 时事件不阻断判分
+                if outbox_mode_enabled():
+                    raise
+                logger.warning(f"练习判分事件发布失败(非阻断): {exc}")
 
-    record_event_published = await _publish_record_created(
-        db,
-        user_id,
-        records=results,
-        total=total,
-        correct=correct,
-        time_spent=sum(int(item.get("time_spent") or 0) for item in records),
-        session_id=session_id,
-        source_type=source_type,
-        publish_event=publish_event,
-    )
+        record_event_published = await _publish_record_created(
+            db,
+            user_id,
+            records=results,
+            total=total,
+            correct=correct,
+            time_spent=sum(int(item.get("time_spent") or 0) for item in records),
+            session_id=session_id,
+            source_type=source_type,
+            publish_event=publish_event,
+        )
+        commit_with_retry(db)
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "status": "ok",
@@ -293,7 +300,9 @@ async def _publish_record_created(
         published = await record_user_action(
             db, user_id, TRIGGER_PRACTICE_RECORD_CREATED, session=payload
         )
-    except Exception as exc:  # noqa: BLE001 — 事件失败不影响已提交的记录
+    except Exception as exc:  # noqa: BLE001 — 关闭 Outbox 时事件不阻断判分
+        if outbox_mode_enabled():
+            raise
         logger.warning(f"练习记录事件发布失败(非阻断): {exc}")
         return False
     if session_id:

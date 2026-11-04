@@ -37,7 +37,9 @@ const VTJ_LOCKED_VERSIONS = {
 // 100 = 99 + 1（/tablet/badges 平板徽章墙，2026-11-02；与 test_route_roles 的 100 同步）
 // 101 = 100 + 1（/tablet/materials/detail 平板整页详情，2026-11-02）
 // 98 = 101 - 3（平板与电脑同版：上面三条改为 redirect，动态 import 随之减少 3 处）
-const EXPECTED_DYNAMIC_IMPORTS = 98;
+// 104 = 98 + 6（2026-11-04 合并远端 main：模块4/7 新增 /ai-assistant、/study-plan、
+//   /profile-quiz、/knowledge、/memories、/teacher/forum 六个页面路由；与 test_route_roles 的 104 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 104;
 
 const violations = [];
 

@@ -13,8 +13,12 @@
     因此通过 MINERU_PYTHON 指向的独立 venv 以子进程方式调用，
     主后端依赖零变更，互不影响。
 """
+import base64
+import hashlib
+import io
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -102,7 +106,7 @@ def is_enabled() -> bool:
     return True
 
 
-def call_parser_http(buf: bytes) -> str | None:
+def call_parser_http_payload(buf: bytes) -> dict | None:
     """走 parser sidecar 的 HTTP 路径。
 
     与 extract_text_sync 相同的失败契约：任何失败返回 None，调用方静默回退。
@@ -155,7 +159,7 @@ def call_parser_http(buf: bytes) -> str | None:
 
         dur = time.time() - t0
         logger.info(f'[mineru] sidecar success chars={len(content)} dur={dur:.1f}s')
-        return content
+        return data
 
     except Exception as e:  # noqa: BLE001 — 兜底契约：绝不上抛
         logger.warning(
@@ -163,6 +167,92 @@ def call_parser_http(buf: bytes) -> str | None:
         return None
     finally:
         _sem.release()
+
+
+def call_parser_http(buf: bytes) -> str | None:
+    """兼容旧调用方：只取 sidecar 返回的 markdown 文本。"""
+    payload = call_parser_http_payload(buf)
+    if not payload:
+        return None
+    return str(payload.get('markdown') or '').strip() or None
+
+
+def _as_png(raw: bytes) -> bytes:
+    """把任意 Pillow 可识别图片转成 PNG；失败时原样返回，绝不阻断入库。"""
+    try:
+        from PIL import Image
+        with Image.open(io.BytesIO(raw)) as im:
+            if im.format == 'PNG':
+                return raw
+            if 'A' in im.getbands():
+                im = im.convert('RGBA')
+            else:
+                im = im.convert('RGB')
+            out = io.BytesIO()
+            im.save(out, format='PNG', optimize=True)
+            return out.getvalue()
+    except Exception:
+        return raw
+
+
+def _materialize_sidecar_images(payload: dict) -> str | None:
+    """把 sidecar 回传的 base64 图片落盘，并把 markdown 引用换成 [IMAGE:] 标记。
+
+    为什么要做这一步：扫描件的图片只存在于 MinerU 临时输出目录，sidecar 若只回
+    markdown，前端拿到的就是 `images/<sha>.jpg` 这种容器内相对路径，必然裂图。
+    主后端落盘到统一的题目暂存目录后，后续确认入库会按既有 [IMAGE:] 协议复制到
+    static/questions/{qid}/，与文本型 PDF 的题图走同一条链路。
+    """
+    content = str(payload.get('markdown') or '').strip()
+    if not content:
+        return None
+    images = payload.get('images') or {}
+    if not isinstance(images, dict) or not images:
+        return content
+
+    try:
+        from .question_ingest.images import _STAGING_DIR
+    except Exception as e:  # noqa: BLE001 — 图片落盘失败不能阻断文本入库
+        logger.warning(f'[mineru] 图片暂存目录不可用: {type(e).__name__}: {e}')
+        return content
+
+    try:
+        os.makedirs(_STAGING_DIR, exist_ok=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f'[mineru] 创建图片暂存目录失败: {e}')
+        return content
+
+    saved = 0
+    for name, encoded in images.items():
+        try:
+            raw = base64.b64decode(str(encoded), validate=False)
+        except Exception:
+            continue
+        # MinerU 抽出的图多为 JPEG，但暂存协议与后续 [IMAGE:] 解析只认 .png。
+        # 统一转码为真 PNG，避免扩展名/Content-Type 与实际字节不一致（浏览器靠嗅探
+        # 虽多能显示，但下载、缓存与安全扫描会读到错误 MIME）。
+        raw = _as_png(raw)
+        if not raw or len(raw) > 10 * 1024 * 1024:
+            continue
+        stem = os.path.splitext(os.path.basename(str(name)))[0]
+        # 只接受纯十六进制文件名；否则用内容哈希，杜绝路径穿越
+        if not re.fullmatch(r'[a-fA-F0-9]{8,64}', stem):
+            stem = hashlib.sha1(raw).hexdigest()[:32]
+        marker = f'{stem}_0_0'
+        try:
+            with open(os.path.join(_STAGING_DIR, f'{marker}.png'), 'wb') as f:
+                f.write(raw)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f'[mineru] 图片落盘失败 {name}: {e}')
+            continue
+        content = re.sub(
+            r'!\[[^\]]*\]\(images/' + re.escape(str(name)) + r'\)',
+            f'[IMAGE:{marker}]', content)
+        saved += 1
+
+    if saved:
+        logger.info(f'[mineru] 图片落盘 {saved} 张 → {_STAGING_DIR}')
+    return content
 
 
 def health_check(force: bool = False) -> dict:
@@ -181,6 +271,21 @@ def health_check(force: bool = False) -> dict:
     try:
         if not is_enabled():
             data['message'] = 'MinerU 未启用或解释器路径无效'
+        elif _parser_url():
+            # 容器化路径：真正可用的是 sidecar，不是本地 MINERU_PYTHON。
+            # 只检查本地解释器会把“sidecar 正常”误报为不可用（P3 实测踩中）。
+            import requests
+            url = _parser_url().rstrip('/') + '/health'
+            resp = requests.get(url, timeout=8)
+            body = resp.json() if resp.status_code == 200 else {}
+            if resp.status_code == 200 and body.get('ok') and body.get('mineru'):
+                data['available'] = True
+                data['version'] = 'sidecar:' + str(body.get('backend') or '')
+                data['message'] = url
+            else:
+                data['message'] = (
+                    f'sidecar HTTP {resp.status_code} body={str(body)[:160]}'
+                )
         else:
             py = str(_cfg('MINERU_PYTHON', '') or '')
             proc = subprocess.run(
@@ -232,9 +337,17 @@ def extract_text_sync(buf: bytes) -> str | None:
     # 容器化路径：已配置 sidecar 时优先走 HTTP。未配置则此段整体跳过，
     # 行为与改造前逐字节一致。
     if _parser_url():
-        content = call_parser_http(buf)
-        if content:
-            return content
+        payload = call_parser_http_payload(buf)
+        if payload:
+            content = _materialize_sidecar_images(payload)
+            if content:
+                return content
+        # 已显式配置 sidecar 时，本地解释器通常为空；继续走本地子进程只会得到
+        # PermissionError('') 并多等一轮超时，故只有本地解释器真实存在才回退。
+        local_py = str(_cfg('MINERU_PYTHON', '') or '')
+        if not (local_py and os.path.isfile(local_py)):
+            logger.info('[mineru] sidecar 未产出内容且无本地解释器 → 放弃本次 MinerU')
+            return None
         logger.info('[mineru] sidecar 未产出内容，改走本地子进程')
 
     timeout = compute_timeout_seconds(_pdf_page_count(buf))

@@ -940,6 +940,10 @@ export default defineComponent({
         });
         const data = await res.json();
         if (data.success) {
+          // 整组展开可能让实际题数超过配置数，必须显式告知教师
+          if (data.over_quota) {
+            ElMessage.warning(data.message || data.over_quota_reason || '复合题整组展开，实际题数超过配置数');
+          }
           // 加载生成的试卷题目，作为"备选试卷"
           const paperRes = await apiFetch(`/api/teacher/papers/${data.paper_id}`);
           const paperData = await paperRes.json();

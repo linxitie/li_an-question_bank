@@ -3,8 +3,8 @@
 # 后端镜像 —— FastAPI + SQLite(WAL) + PDF解析 + 爬虫
 #
 # 硬性约束（红线见 AGENTS.md，改动本文件前必读）：
-#   R7   app/static/ 是 4.27 GB / 94814 个文件的题图库，
-#        绝不 COPY 进镜像，必须由 qimg 卷在运行时挂载。
+#   R7   app/static/ 是约 7.1 GB 的题图库，
+#        绝不 COPY 进镜像，必须由宿主 STATIC_ROOT 在运行时挂载。
 #   R10  SQLite 处于 WAL 模式。容器启动时若发现遗留的 -wal/-shm
 #        而无对应主库，必须连同 -wal/-shm 一起清理，否则库打不开。
 #   R11  /api/v1/... 路径冻结。本文件不改动任何路由。
@@ -31,7 +31,13 @@ ENV PYTHONUNBUFFERED=1 \
 # libgl1 libglib2.0 : opencv-python 运行时依赖
 # curl              : HEALTHCHECK 探针（slim 镜像默认无 curl）
 # tini              : PID 1 信号转发，保证 uvicorn 能优雅退出与滚动重启
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 构建机在国内访问 deb.debian.org 常见丢包（实测同一 .deb 80KB/s vs 清华 2.3MB/s），
+# 故镜像源可替换；海外构建可 --build-arg APT_MIRROR=deb.debian.org 还原。
+ARG APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=10 -o Acquire::http::Timeout=45 -o Acquire::ForceIPv4=true update \
+    && apt-get install -y --no-install-recommends \
+        -o Acquire::Retries=10 -o Acquire::http::Timeout=45 -o Acquire::ForceIPv4=true \
         ffmpeg \
         libgl1 \
         libglib2.0-0 \
@@ -42,17 +48,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# 依赖单独成层：业务代码频繁改动时，这层走缓存，不必重装 1GB+ 的依赖
+# 依赖单独成层：业务代码频繁改动时，这层走缓存，不必重装 1GB+ 的依赖。
+# PyPI 官方源在部分网络下会返回空版本列表（实测），默认走清华镜像；
+# 海外构建可 --build-arg PIP_INDEX_URL=https://pypi.org/simple 还原。
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # playwright 被生产代码使用（exam_scraper / news_scraper / recruitment_scraper），
 # 不是仅门禁需要，故 chromium 必须进镜像。--with-deps 补齐其系统库。
-RUN playwright install --with-deps chromium \
+# 浏览器包默认走 npmmirror，海外构建可 --build-arg PLAYWRIGHT_DOWNLOAD_HOST= 清空回官方 CDN。
+ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} \
+    PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000
+# Chromium 约 191MB，弱网下单次构建可能超过 1 小时；默认安装（生产镜像），
+# staging/CI 可用 --build-arg INSTALL_PLAYWRIGHT_BROWSERS=0 跳过，仅影响爬虫功能。
+ARG INSTALL_PLAYWRIGHT_BROWSERS=1
+RUN if [ "${INSTALL_PLAYWRIGHT_BROWSERS}" = "1" ]; then \
+        playwright install --with-deps chromium; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
-# 业务代码。app/static 被 .dockerignore 排除，此处不会出现 4.27 GB 题图。
+# 业务代码。app/static 被 .dockerignore 排除，此处不会出现 7.1 GB 题图。
 COPY app ./app
+
+# scripts/ 是运行时依赖：main.py 启动时 from scripts.admin.seed import run_seed。
+# 只排除门禁/校验脚本（.dockerignore），其余 2MB 运维脚本随镜像发布，
+# 供备份/恢复/回填使用；seed 在非 DEBUG 下只 import 不执行。
+COPY scripts ./scripts
 
 # 仅门禁基线入镜像。data/ 其余内容（SQLite 主库、41 份 .bak*、audit、
 # snapshots、text_cache、xingce_cache）一律排除，走 db_data 卷。

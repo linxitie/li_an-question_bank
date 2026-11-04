@@ -1,0 +1,11 @@
+[Unit]
+Description=LiAn question bank container inspection
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/liankao
+Environment=ENV_FILE=.env.production
+ExecStart=/opt/liankao/deploy/inspect.sh
+Nice=10

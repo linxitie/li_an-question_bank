@@ -13,15 +13,32 @@ export const FORUM_SHARE_TYPES = [
   'EXPERIENCE',
   'RESOURCE',
   'DISCUSSION',
-  'FEELING'
+  'FEELING',
+  'QUESTION'
 ] as const;
 
 export type ForumShareType = (typeof FORUM_SHARE_TYPES)[number];
+
+export type ForumReactionCode = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
+
+export type ForumSortOrder = 'asc' | 'desc';
+
+export type ForumPostSortBy = 'time' | 'likes' | 'comments' | 'views';
+
+export type ForumCommentSortBy = 'time' | 'likes' | 'replies';
+
+export interface ReactionResult {
+  myReaction: ForumReactionCode | null;
+  reactions: Record<string, number>;
+  reactionCount: number;
+}
 
 export interface ForumUserBrief {
   id: number | null;
   nickname: string;
   avatar: string;
+  avatarFrame?: string | null;
+  signature?: string | null;
   userType: string;
 }
 
@@ -41,12 +58,19 @@ export interface ForumPostItem {
   attachments?: ForumAttachment[];
   isTop?: boolean;
   isEssence?: boolean;
+  isLocked?: boolean;
+  titleColor?: string;
+  questionId?: number | null;
+  lastActivityTime?: string | null;
+  updateTime?: string | null;
   likeCount: number;
   commentCount: number;
   viewCount: number;
   createTime: string | null;
   userId?: number;
   liked: boolean;
+  myReaction?: ForumReactionCode | null;
+  reactions?: Record<string, number>;
   user?: ForumUserBrief;
 }
 
@@ -56,12 +80,27 @@ export interface ForumCommentItem {
   likeCount: number;
   createTime: string | null;
   parentCommentId?: number | null;
+  isPinned?: boolean;
+  replyToUserId?: number | null;
+  attachments?: ForumAttachment[];
+  replyCount?: number;
   liked: boolean;
+  myReaction?: ForumReactionCode | null;
+  reactions?: Record<string, number>;
   user?: ForumUserBrief;
 }
 
 export interface ForumPostListQuery {
   shareType?: ForumShareType | '';
+  sortBy?: ForumPostSortBy;
+  order?: ForumSortOrder;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ForumCommentListQuery {
+  sortBy?: ForumCommentSortBy;
+  order?: ForumSortOrder;
   limit?: number;
   offset?: number;
 }
@@ -103,6 +142,8 @@ export interface ForumPostCreatePayload {
   title: string;
   content: string;
   shareType?: ForumShareType;
+  titleColor?: string;
+  questionId?: number | null;
   tags?: string[];
   attachments?: ForumAttachment[];
 }
@@ -110,11 +151,21 @@ export interface ForumPostCreatePayload {
 export interface ForumCommentCreatePayload {
   content: string;
   parentCommentId?: number | null;
+  replyToUserId?: number | null;
+  attachments?: ForumAttachment[];
 }
 
 export interface LikeToggleResult {
   liked: boolean;
   likeCount: number;
+}
+
+export interface ForumSticker {
+  id: number;
+  name: string;
+  url: string;
+  category: string;
+  ownerId?: number | null;
 }
 
 export interface QuoteItem {
@@ -195,6 +246,13 @@ export async function fetchForumPosts(
   const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
   const params: Record<string, unknown> = { limit, offset };
   if (query.shareType) params.share_type = query.shareType;
+  if (query.sortBy) params.sort_by = query.sortBy;
+  if (query.order) params.order = query.order;
+  // P3：搜索与日期筛选（类型未定义时按可选字段透传）
+  const extra = query as Record<string, any>;
+  if (extra.keyword) params.keyword = String(extra.keyword).trim();
+  if (extra.dateFrom) params.date_from = extra.dateFrom;
+  if (extra.dateTo) params.date_to = extra.dateTo;
 
   const data = await request<Partial<ForumPostListResult>>({
     url: '/api/forum/posts',
@@ -218,14 +276,17 @@ export function fetchForumPostDetail(postId: number): Promise<ForumPostItem> {
 
 export function fetchForumComments(
   postId: number,
-  query: { limit?: number; offset?: number } = {}
+  query: ForumCommentListQuery = {}
 ): Promise<ForumCommentListResult> {
   const limit = normalizePageSize(query.limit);
   const offset = query.offset && query.offset > 0 ? Math.floor(query.offset) : 0;
+  const params: Record<string, unknown> = { limit, offset };
+  if (query.sortBy) params.sort_by = query.sortBy;
+  if (query.order) params.order = query.order;
   return request<ForumCommentListResult>({
     url: `/api/forum/posts/${postId}/comments`,
     method: 'GET',
-    params: { limit, offset }
+    params
   });
 }
 
@@ -262,6 +323,8 @@ export function createForumPost(
       title: payload.title,
       content: payload.content,
       share_type: payload.shareType,
+      title_color: payload.titleColor,
+      question_id: payload.questionId,
       tags: payload.tags?.length ? payload.tags.join(',') : undefined,
       attachments: payload.attachments?.length ? payload.attachments : undefined
     })
@@ -275,10 +338,126 @@ export function deleteForumPost(postId: number): Promise<{ success: boolean; mes
   });
 }
 
+/** 教师端发帖：支持可见范围（P3-07）。学生默认本班由后端决定，这里只透传。 */
+export function createForumPostWithVisibility(payload: {
+  title: string;
+  content: string;
+  titleColor?: string;
+  shareType?: string;
+  attachments?: any[];
+  visibility?: 'ALL' | 'CLASSES';
+  visibleClasses?: string[];
+}): Promise<ForumPostItem> {
+  const data = new FormData();
+  data.append('title', payload.title);
+  data.append('content', payload.content);
+  data.append('share_type', payload.shareType || 'DISCUSSION');
+  if (payload.titleColor) data.append('title_color', payload.titleColor);
+  if (payload.attachments && payload.attachments.length) {
+    data.append('attachments', JSON.stringify(payload.attachments));
+  }
+  if (payload.visibility) data.append('visibility', payload.visibility);
+  if (payload.visibleClasses && payload.visibleClasses.length) {
+    data.append('visible_classes', JSON.stringify(payload.visibleClasses));
+  }
+  return request<ForumPostItem>({
+    url: '/api/forum/posts',
+    method: 'POST',
+    data
+  });
+}
+
+export function updateForumPost(
+  postId: number,
+  payload: Partial<ForumPostCreatePayload>
+): Promise<ForumPostItem> {
+  return request<ForumPostItem>({
+    url: `/api/forum/posts/${postId}`,
+    method: 'PUT',
+    data: {
+      title: payload.title,
+      content: payload.content,
+      title_color: payload.titleColor,
+      tags: payload.tags?.length ? payload.tags.join(',') : undefined,
+      attachments: payload.attachments
+    }
+  });
+}
+
+export function pinForumComment(
+  commentId: number,
+  pinned: boolean
+): Promise<{ success: boolean; isPinned: boolean }> {
+  return request<{ success: boolean; isPinned: boolean }>({
+    url: `/api/forum/comments/${commentId}/pin`,
+    method: 'PUT',
+    data: { pinned }
+  });
+}
+
+export function deleteForumComment(
+  commentId: number
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>({
+    url: `/api/forum/comments/${commentId}`,
+    method: 'DELETE'
+  });
+}
+
+export function reportForumTarget(payload: {
+  targetType: 'POST' | 'COMMENT' | 'USER';
+  targetId: number;
+  reasonCode: 'spam' | 'abuse' | 'illegal' | 'other';
+  reasonText?: string;
+}): Promise<{ success: boolean; report_id: number }> {
+  return request<{ success: boolean; report_id: number }>({
+    url: '/api/forum/reports',
+    method: 'POST',
+    data: {
+      target_type: payload.targetType,
+      target_id: payload.targetId,
+      reason_code: payload.reasonCode,
+      reason_text: payload.reasonText
+    }
+  });
+}
+
 export function toggleForumPostLike(postId: number): Promise<LikeToggleResult> {
   return request<LikeToggleResult>({
     url: `/api/forum/posts/${postId}/like`,
     method: 'POST'
+  });
+}
+
+/** 收藏（五角星）切换：已收藏则取消 */
+export function toggleForumFavorite(
+  postId: number
+): Promise<{ favorited: boolean; favoriteCount: number }> {
+  return request<{ favorited: boolean; favoriteCount: number }>({
+    url: `/api/forum/posts/${postId}/favorite`,
+    method: 'POST'
+  });
+}
+
+/** 我的收藏（五角星） */
+export function fetchMyForumFavorites(
+  limit = 20,
+  offset = 0
+): Promise<{ total: number; limit: number; offset: number; posts: ForumPostItem[] }> {
+  return request({
+    url: `/api/forum/my-favorites?limit=${limit}&offset=${offset}`,
+    method: 'GET'
+  });
+}
+
+/** 我的喜欢（爱心） */
+export function fetchMyForumLikes(
+  limit = 20,
+  offset = 0
+): Promise<{ total: number; limit: number; offset: number; posts: ForumPostItem[] }> {
+  return request({
+    url: `/api/forum/my-likes?limit=${limit}&offset=${offset}`,
+    method: 'GET'
   });
 }
 
@@ -291,7 +470,9 @@ export function createForumComment(
     method: 'POST',
     data: toFormData({
       content: payload.content,
-      parent_comment_id: payload.parentCommentId
+      parent_comment_id: payload.parentCommentId,
+      reply_to_user_id: payload.replyToUserId,
+      attachments: payload.attachments?.length ? payload.attachments : undefined
     })
   });
 }
@@ -302,6 +483,65 @@ export function toggleForumCommentLike(
   return request<LikeToggleResult>({
     url: `/api/forum/comments/${commentId}/like`,
     method: 'POST'
+  });
+}
+
+export function setForumPostReaction(
+  postId: number,
+  reaction: ForumReactionCode
+): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/posts/${postId}/reactions/${reaction}`,
+    method: 'POST'
+  });
+}
+
+export function clearForumPostReaction(postId: number): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/posts/${postId}/reactions`,
+    method: 'DELETE'
+  });
+}
+
+export function setForumCommentReaction(
+  commentId: number,
+  reaction: ForumReactionCode
+): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/comments/${commentId}/reactions/${reaction}`,
+    method: 'POST'
+  });
+}
+
+export function clearForumCommentReaction(commentId: number): Promise<ReactionResult> {
+  return request<ReactionResult>({
+    url: `/api/forum/comments/${commentId}/reactions`,
+    method: 'DELETE'
+  });
+}
+
+export function fetchForumStickers(): Promise<{ stickers: ForumSticker[] }> {
+  return request<{ stickers: ForumSticker[] }>({
+    url: '/api/forum/stickers',
+    method: 'GET'
+  });
+}
+
+export function uploadForumSticker(file: File, name?: string): Promise<ForumSticker> {
+  const form = new FormData();
+  form.append('file', file);
+  if (name) form.append('name', name);
+  return request<ForumSticker>({
+    url: '/api/forum/stickers',
+    method: 'POST',
+    data: form
+  });
+}
+
+export function deleteForumSticker(stickerId: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>({
+    url: `/api/forum/stickers/${stickerId}`,
+    method: 'DELETE'
   });
 }
 

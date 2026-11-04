@@ -3,7 +3,8 @@
 语义：
 - 成功：投影 + 游标推进 + 事件置 dispatched，同一事务；
 - 失败：attempts+1；未超限留 pending 并退避，超限置 dead 并写 jsonl（可人工重放）；
-- 不 claim、不加锁：F1 只允许单 worker（方案 §20.2），多 worker 在 F2 接 Redis 后启用。
+- run_once 不 claim、不加锁，供测试/脚本单次执行；
+- run_forever 用同机文件锁保证单写者（F2b），多 worker 不会重复处理同一条事件。
 """
 from __future__ import annotations
 
@@ -17,7 +18,13 @@ from typing import Callable
 
 from sqlalchemy.orm import Session
 
-from app.foundation.config import BACKEND_DIR, FOUNDATION_DISPATCH_MS, FOUNDATION_MAX_ATTEMPTS
+from app.foundation.config import (
+    BACKEND_DIR,
+    FOUNDATION_DISPATCH_MS,
+    FOUNDATION_MAX_ATTEMPTS,
+    dispatcher_lock_path,
+)
+from app.foundation.dispatcher_lock import DispatcherLock
 from app.foundation.projection import LocalProjection
 from app.foundation.stores.base import OutboxEvent
 from app.foundation.stores.local import SqliteCursorStore, SqliteOutboxStore
@@ -48,6 +55,7 @@ class Dispatcher:
         retry_base_seconds: int = 2,
         dead_letter_dir: Path | None = None,
         interval_ms: int = FOUNDATION_DISPATCH_MS,
+        lock: DispatcherLock | None = None,
     ):
         self.session_factory = session_factory
         self.projection = projection or LocalProjection()
@@ -57,6 +65,7 @@ class Dispatcher:
         self.retry_base_seconds = max(0, retry_base_seconds)
         self.dead_letter_dir = dead_letter_dir or DEFAULT_DEAD_LETTER_DIR
         self.interval_ms = interval_ms
+        self.lock = lock or DispatcherLock(dispatcher_lock_path())
 
     def run_once(self, now: str | None = None) -> DispatchStats:
         now = now or _now()
@@ -122,15 +131,26 @@ class Dispatcher:
             logger.warning("dead letter 落盘失败: %s", exc)
 
     async def run_forever(self, stop: asyncio.Event) -> None:
+        """长驻投递；拿不到锁说明同机已有 Dispatcher，退化为等待。"""
         while not stop.is_set():
-            try:
-                self.run_once()
-            except Exception as exc:  # noqa: BLE001 - 后台任务不得因单轮异常退出
-                logger.warning("dispatcher 单轮异常: %s", exc)
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=self.interval_ms / 1000)
-            except asyncio.TimeoutError:
+            if not self.lock.acquire():
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=self.interval_ms / 1000)
+                except asyncio.TimeoutError:
+                    continue
                 continue
+            try:
+                while not stop.is_set():
+                    try:
+                        self.run_once()
+                    except Exception as exc:  # noqa: BLE001 - 后台任务不得因单轮异常退出
+                        logger.warning("dispatcher 单轮异常: %s", exc)
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=self.interval_ms / 1000)
+                    except asyncio.TimeoutError:
+                        continue
+            finally:
+                self.lock.release()
 
 
 def _now() -> str:

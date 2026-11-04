@@ -3,12 +3,19 @@ fastapi>=0.104.0
 uvicorn>=0.24.0
 sqlalchemy>=2.0.0
 pydantic>=2.5.0
+# pydantic v2 把 BaseSettings 拆到独立包；宿主环境已装，镜像内漏装会导致启动即崩
+pydantic-settings>=2.0.0
+# pydantic EmailStr 依赖；缺它会 schema 导入失败
+email-validator>=2.0.0
 python-multipart>=0.0.6
 python-dotenv>=1.0.0
 aiofiles>=23.0.0
 
 # ==================== 认证安全（必需）====================
 passlib[bcrypt]>=1.7.4
+# passlib 1.7.4 与 bcrypt 5.x 不兼容：其 backend 自检会用 >72 字节 secret 调 hashpw，
+# bcrypt 5 会直接抛 ValueError，导致所有登录 500。固定到 4.x 直到迁移掉 passlib。
+bcrypt>=4.0,<5
 python-jose[cryptography]>=3.3.0
 cryptography>=41.0.0
 
@@ -69,5 +76,6 @@ playwright-stealth>=1.0.6
 python-docx
 openpyxl
 pdfplumber
+PyPDF2>=3.0.0  # pdf_reader 扫描件回退与图片提取显式 import PyPDF2；缺包会让无文本层 PDF 在 OCR 前误报 500
 bleach
 Pillow

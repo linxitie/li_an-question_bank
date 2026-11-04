@@ -38,11 +38,12 @@ def _read_ids(db: Session, user_id, news_ids) -> set:
     return {row[0] for row in rows}
 
 
-def _mark_read(db: Session, user_id: int, news_id: int) -> bool:
+def _mark_read(db: Session, user_id: int, news_id: int, *, commit: bool = True) -> bool:
     """记录一次阅读，返回是否为首次阅读（幂等）。
 
     (user_id, news_id) 唯一约束兜底并发重复写入：唯一冲突说明另一请求
-    已记录过，本次不视为首次阅读。
+    已记录过，本次不视为首次阅读。commit=False 时只 flush，由调用方把
+    阅读记录与成就事件放在同一事务里提交。
     """
     exists = db.query(NewsRead).filter(
         NewsRead.user_id == user_id,
@@ -52,10 +53,12 @@ def _mark_read(db: Session, user_id: int, news_id: int) -> bool:
         return False
     db.add(NewsRead(user_id=user_id, news_id=news_id))
     try:
-        db.commit()
+        db.flush()
     except IntegrityError:
         db.rollback()
         return False
+    if commit:
+        db.commit()
     return True
 
 
@@ -261,20 +264,18 @@ async def get_news_detail(
         ).first() is not None
 
         try:
-            first_read = _mark_read(db, current_user.user_id, news_id)
+            first_read = _mark_read(db, current_user.user_id, news_id, commit=False)
+            if first_read:
+                # F2b：阅读记录与阅读成就事件同一事务提交。
+                await record_user_action(
+                    db, current_user.user_id, TRIGGER_NEWS_READ
+                )
+            db.commit()
         except Exception as e:  # noqa: BLE001 — 阅读记录失败不阻断正文返回
             db.rollback()
             logger.warning(f"记录新闻已读失败 news={news_id}: {e}")
             first_read = False
         is_read = True
-
-        if first_read:
-            try:
-                await record_user_action(
-                    db, current_user.user_id, TRIGGER_NEWS_READ
-                )
-            except Exception as e:  # noqa: BLE001 — 事件失败不影响阅读
-                logger.warning(f"新闻阅读事件发布失败 news={news_id}: {e}")
 
     return {
         "id": article.news_id,

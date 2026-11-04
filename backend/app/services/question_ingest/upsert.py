@@ -51,7 +51,8 @@ from .tags import SUBJECT_NAME_MAP
 logger = logging.getLogger(__name__)
 
 
-def _detect_duplicate(db: Session, content: str, answer: str = '', subject_id: Optional[int] = None, use_fuzzy: bool = True) -> Optional[QuestionBank]:
+def _detect_duplicate(db: Session, content: str, answer: str = '', subject_id: Optional[int] = None,
+                      use_fuzzy: bool = True, options=None) -> Optional[QuestionBank]:
     """
     检测重复题目。
     - use_fuzzy=False: 仅精确匹配（兼容旧逻辑）
@@ -79,7 +80,7 @@ def _detect_duplicate(db: Session, content: str, answer: str = '', subject_id: O
 
     # 模糊匹配
     is_dup, matched, similarity = fuzzy_detect_duplicate(
-        db, content, answer, subject_id, DEDUP_SIMILARITY_THRESHOLD
+        db, content, answer, subject_id, DEDUP_SIMILARITY_THRESHOLD, options=options
     )
     return matched if is_dup else None
 
@@ -165,7 +166,8 @@ def _upsert_question_core(db: Session, current_user: SysUser,
                 QuestionBank.status != 0
             ).first()
     else:
-        existing = _detect_duplicate(db, content, answer, subject.subject_id)
+        existing = _detect_duplicate(db, content, answer, subject.subject_id,
+                                     options=question_data.get('options'))
     if existing:
         # ===== A2 回填式重导入 =====
         # 已存题缺字段而新导入数据有 → 补空不覆盖（绝不破坏已有非空值）。

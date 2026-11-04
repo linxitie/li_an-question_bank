@@ -54,8 +54,9 @@
  *
  * limit 三端统一为 5，与用户可见区域匹配。
  */
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useDataSync } from '@/composables/useDataSync';
 
 const props = withDefaults(defineProps<{ limit?: number }>(), { limit: 5 });
 
@@ -63,7 +64,6 @@ const router = useRouter();
 const items = ref<any[]>([]);
 const total = ref(0);
 const loading = ref(false);
-let timer: any = null;
 
 /** 来源徽标配色：与项目既有主题一致，四来源可区分 */
 function sourceClass(source: string) {
@@ -113,26 +113,16 @@ function go(r: any) {
   router.push(q ? `${jump.path}?${q}` : jump.path);
 }
 
-const onSync = (e: any) => {
-  const d = e && e.detail && e.detail.data;
-  // 只关心练习范围；题目导入等事件与本区块无关
-  if (d && d.scope && d.scope !== 'practice') return;
-  if (timer) clearTimeout(timer);
-  // 防抖：连续答题会连发事件，合并为一次刷新
-  timer = setTimeout(() => {
-    timer = null;
-    load();
-  }, 800);
-};
+// 只订阅练习相关变更；防抖 800ms 保留原有连续答题合并刷新的体验
+useDataSync({
+  domains: ['exam'],
+  types: ['practice.submit', 'practice.record.created', 'paper.completed'],
+  debounceMs: 800,
+  handler: () => { load(); }
+});
 
 onMounted(() => {
   load();
-  window.addEventListener('__VTJ_SYNC__', onSync);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('__VTJ_SYNC__', onSync);
-  if (timer) clearTimeout(timer);
 });
 
 defineExpose({ reload: load });

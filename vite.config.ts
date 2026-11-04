@@ -98,6 +98,7 @@ export default createViteConfig({
     config.root = workspaceRoot;
     config.server = {
       ...config.server,
+      port: DEV_PORT,
       strictPort: true,
       cors: false,
       hmr: {
@@ -115,6 +116,13 @@ export default createViteConfig({
           '**/.worktrees/**',
         ],
       },
+    };
+
+    // 预览服务器同样固定 9527，避免 `vite preview` 回落到 4173 形成第二端口。
+    config.preview = {
+      ...config.preview,
+      port: DEV_PORT,
+      strictPort: true,
     };
     return config;
   },

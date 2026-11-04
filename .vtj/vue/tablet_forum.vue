@@ -46,7 +46,6 @@
             >
               <XIcon :icon="cat.icon" :size="18" color="currentColor"></XIcon>
               <span class="category-name">{{ cat.name }}</span>
-              <span class="category-count">{{ cat.count }}</span>
             </div>
           </div>
         </div>
@@ -99,9 +98,13 @@
             <!-- 帖子头部 -->
             <div class="post-header">
               <div class="author-info">
-                <div class="author-avatar" :style="{ background: post.avatarBg }">
-                  <XIcon :icon="User" :size="16" color="#ffffff"></XIcon>
-                </div>
+                <UserBadge
+                  class="author-avatar"
+                  avatar-only
+                  size="md"
+                  :src="post.avatar"
+                  :name="post.author"
+                  :user-id="post.id" />
                 <div class="author-detail">
                   <span class="author-name">{{ post.author }}</span>
                   <span class="post-time">{{ post.time }}</span>
@@ -114,8 +117,12 @@
             
             <!-- 帖子内容 -->
             <div class="post-content">
-              <h3 class="post-title">{{ post.title }}</h3>
-              <p class="post-excerpt">{{ post.excerpt }}</p>
+              <h3 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h3>
+              <p class="post-excerpt"><ForumContent :content="post.excerpt" /></p>
+              <AttachmentList
+                v-if="post.attachments && post.attachments.length"
+                :attachments="post.attachments"
+                mode="post" />
             </div>
             
             <!-- 帖子底部 -->
@@ -175,7 +182,7 @@
             >
               <span class="hot-rank" :class="{ top: index < 3 }">{{ index + 1 }}</span>
               <div class="hot-info">
-                <span class="hot-title">{{ post.title }}</span>
+                <span class="hot-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
                 <span class="hot-views">{{ post.views }} 浏览</span>
               </div>
             </div>
@@ -250,11 +257,19 @@ import {
   Refresh
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+import { avatarInitial } from '@/modules/community/avatar';
+import { titleColorValue } from '@/components/forum/titleColors';
+import ForumContent from '@/components/forum/ForumContent.vue';
+import UserBadge from '@/components/forum/UserBadge.vue';
+import AttachmentList from '@/components/forum/AttachmentList.vue';
 
 export default defineComponent({
   name: 'TabletForum',
   components: {
-    XIcon
+    XIcon,
+    ForumContent,
+    UserBadge,
+    AttachmentList
   },
   setup() {
     const router = useRouter();
@@ -262,12 +277,14 @@ export default defineComponent({
     
     // 分类
     const activeCategory = ref('all');
+    // key 必须与后端 forum_post.share_type 枚举一致
     const categories = ref([
-      { key: 'all', name: '全部帖子', icon: Grid, count: 256 },
-      { key: 'discuss', name: '学习讨论', icon: ChatDotRound, count: 128 },
-      { key: 'share', name: '经验分享', icon: Star, count: 64 },
-      { key: 'question', name: '答疑解惑', icon: User, count: 45 },
-      { key: 'resource', name: '资料分享', icon: PriceTag, count: 19 }
+      { key: 'all', name: '全部帖子', icon: Grid },
+      { key: 'DISCUSSION', name: '学习讨论', icon: ChatDotRound },
+      { key: 'EXPERIENCE', name: '经验分享', icon: Star },
+      { key: 'QUESTION', name: '答疑解惑', icon: User },
+      { key: 'RESOURCE', name: '资料分享', icon: PriceTag },
+      { key: 'FEELING', name: '心情打卡', icon: ChatDotRound }
     ]);
     
     // 筛选
@@ -281,83 +298,16 @@ export default defineComponent({
     // 热门标签
     const hotTags = ref(['行测', '申论', '公安', '政治', '法律', '经验', '真题']);
     
-    // 帖子列表
-    const posts = ref([
-      {
-        id: 1,
-        title: '公安联考行测备考经验分享',
-        excerpt: '作为一名成功上岸的学姐，分享一下我的行测备考经验，希望能帮助到正在备考的同学们...',
-        author: '上岸学姐',
-        time: '2小时前',
-        avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
-        tag: '精华',
-        tagColor: '#c41e3a',
-        views: 1234,
-        comments: 89,
-        likes: 256,
-        category: 'share',
-        tags: ['行测', '经验']
-      },
-      {
-        id: 2,
-        title: '申论写作如何拿高分？求指导',
-        excerpt: '申论写作一直是我的弱项，每次写都觉得无话可说，有没有大佬能指点一下？',
-        author: '备考小白',
-        time: '5小时前',
-        avatarBg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-        tag: '',
-        tagColor: '',
-        views: 567,
-        comments: 45,
-        likes: 78,
-        category: 'question',
-        tags: ['申论', '求助']
-      },
-      {
-        id: 3,
-        title: '2025年公安联考真题回忆版',
-        excerpt: '刚考完，趁记忆还热乎，分享一下我能记住的真题，供大家参考...',
-        author: '刚考完',
-        time: '1天前',
-        avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        tag: '热门',
-        tagColor: '#f59e0b',
-        views: 3456,
-        comments: 156,
-        likes: 512,
-        category: 'discuss',
-        tags: ['真题', '回忆']
-      },
-      {
-        id: 4,
-        title: '政治理论重点知识整理',
-        excerpt: '整理了一份政治理论的重点知识，包括习近平新时代中国特色社会主义思想的核心要点...',
-        author: '学霸笔记',
-        time: '2天前',
-        avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-        tag: '资料',
-        tagColor: '#10b981',
-        views: 2345,
-        comments: 67,
-        likes: 432,
-        category: 'resource',
-        tags: ['政治', '资料']
-      }
-    ]);
-    
-    // 热门帖子
-    const hotPosts = ref([
-      { id: 1, title: '公安联考行测备考经验分享', views: 1234 },
-      { id: 3, title: '2025年公安联考真题回忆版', views: 3456 },
-      { id: 4, title: '政治理论重点知识整理', views: 2345 }
-    ]);
-    
-    // 活跃用户
-    const activeUsers = ref([
-      { name: '上岸学姐', posts: 28, avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)' },
-      { name: '学霸笔记', posts: 22, avatarBg: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' },
-      { name: '刚考完', posts: 15, avatarBg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }
-    ]);
+    // 帖子列表（只使用接口数据，禁止内置演示帖）
+    const posts = ref<any[]>([]);
+
+    // 热门帖子与活跃用户均由真实数据派生，无数据时为空
+    const hotPosts = computed(() =>
+      [...posts.value]
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 3)
+    );
+    const activeUsers = ref<any[]>([]);
     
     // 过滤帖子
     const filteredPosts = computed(() => {
@@ -367,59 +317,69 @@ export default defineComponent({
       return posts.value.filter(p => p.category === activeCategory.value);
     });
     
-    // 加载真实帖子数据（替换下方演示数据）
-    onMounted(async () => {
+    // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
+    const loadPosts = async (categoryKey: string = activeCategory.value) => {
       try {
-        const res = await fetch('/api/forum/posts');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.posts && data.posts.length) {
-            const typeMap: Record<string, string> = {
-              DISCUSSION: 'discuss',
-              EXPERIENCE: 'share',
-              RESOURCE: 'resource',
-              FEELING: 'discuss'
-            };
-            posts.value = data.posts.map((p: any) => {
-              const t = new Date(p.createTime).getTime();
-              const diff = Date.now() - t;
-              const min = Math.floor(diff / 60000);
-              let time = '';
-              if (min < 1) time = '刚刚';
-              else if (min < 60) time = min + '分钟前';
-              else if (min < 1440) time = Math.floor(min / 60) + '小时前';
-              else if (min < 43200) time = Math.floor(min / 1440) + '天前';
-              else time = new Date(p.createTime).toLocaleDateString();
-              return {
-                id: p.id,
-                title: p.title,
-                excerpt: p.content || '',
-                author: (p.user && p.user.nickname) || '匿名',
-                time,
-                avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
-                tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
-                tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
-                views: p.viewCount || 0,
-                comments: p.commentCount || 0,
-                likes: p.likeCount || 0,
-                category: typeMap[p.shareType] || 'discuss',
-                images: []
-              };
-            });
-          }
+        const auth = (window as any).__VTJ_AUTH__;
+        const params = new URLSearchParams({ limit: '50' });
+        if (categoryKey && categoryKey !== 'all') {
+          params.set('share_type', categoryKey);
         }
+        const res = await fetch(`/api/forum/posts?${params.toString()}`, {
+          headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
+        posts.value = (data.posts || []).map((p: any) => {
+          const t = new Date(p.createTime).getTime();
+          const diff = Date.now() - t;
+          const min = Math.floor(diff / 60000);
+          let time = '';
+          if (min < 1) time = '刚刚';
+          else if (min < 60) time = min + '分钟前';
+          else if (min < 1440) time = Math.floor(min / 60) + '小时前';
+          else if (min < 43200) time = Math.floor(min / 1440) + '天前';
+          else time = new Date(p.createTime).toLocaleDateString();
+          const images = (Array.isArray(p.attachments) ? p.attachments : [])
+            .map((att: any) => (att && typeof att.url === 'string' ? att.url : ''))
+            .filter((url: string) => IMAGE_PATTERN.test(url));
+          return {
+            id: p.id,
+            title: p.title,
+            titleColor: p.titleColor || 'default',
+            excerpt: p.content || '',
+            author: (p.user && p.user.nickname) || '匿名',
+            avatar: (p.user && p.user.avatar) || '',
+            time,
+            avatarBg: 'linear-gradient(135deg, #1A365D 0%, #2a5298 100%)',
+            tag: p.isEssence ? '精华' : (p.isTop ? '置顶' : ''),
+            tagColor: p.isEssence ? '#c41e3a' : '#f59e0b',
+            views: p.viewCount || 0,
+            comments: p.commentCount || 0,
+            likes: p.likeCount || 0,
+            category: p.shareType || 'DISCUSSION',
+            attachments: Array.isArray(p.attachments) ? p.attachments : [],
+            images
+          };
+        });
       } catch (error) {
         console.error('加载帖子失败:', error);
+        posts.value = [];
       }
-    });
+    };
+
+    onMounted(() => loadPosts());
 
     // 方法
     const goToNotifications = () => router.push('/tablet/notifications');
     const goToSettings = () => router.push('/tablet/profile');
     const goToProfile = () => router.push('/tablet/profile');
     
-    const selectCategory = (key: string) => {
+    const selectCategory = async (key: string) => {
+      if (activeCategory.value === key) return;
       activeCategory.value = key;
+      await loadPosts(key);
     };
     
     const selectFilter = (key: string) => {
@@ -439,6 +399,8 @@ export default defineComponent({
     };
     
     return {
+      avatarInitial,
+      titleColorValue,
       activeCategory,
       categories,
       activeFilter,
@@ -579,7 +541,7 @@ export default defineComponent({
   display: grid;
   grid-template-columns: 260px 1fr 280px;
   gap: 20px;
-  padding: 20px;
+  padding: 0 20px 20px;
   overflow: hidden;
 }
 
@@ -758,6 +720,20 @@ export default defineComponent({
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.author-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.author-avatar .avatar-text {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .author-detail {
@@ -804,6 +780,21 @@ export default defineComponent({
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.post-images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.post-images img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f2f5fa;
 }
 
 .post-footer {

@@ -221,6 +221,7 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { renderQuestionContent } from '@/utils/questionRender';
+import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
   import { emitWrongQuestionsChanged } from '@/modules/practice/events';
   export default defineComponent({
     name: 'AnswerPage',
@@ -564,13 +565,17 @@
       // 材料来源：优先题组接口缓存，其次随题返回的 shared_content（兜底）
       materialOf(q) {
         if (!q) return null;
+        var mat = null;
         if (q.group_id && this.state.groupMaterials[q.group_id]) {
-          return this.state.groupMaterials[q.group_id];
+          mat = this.state.groupMaterials[q.group_id];
+        } else if (q.shared_content) {
+          mat = { title: '题组材料', shared_content: q.shared_content };
         }
-        if (q.shared_content) {
-          return { title: '题组材料', shared_content: q.shared_content };
-        }
-        return null;
+        if (!mat) return null;
+        // 材料分段在数据出口统一做：模板只消费 shared_content，
+        // 这样教师/管理/学生三端拿到的是同一套「材料N」高亮与段间距。
+        mat.shared_content = formatMaterialHtml(mat.shared_content || '');
+        return mat;
       },
       // 折叠状态键：题组用 group_id，随题材料用 q<id> 区分
       materialKey(q) {
@@ -792,6 +797,7 @@
     },
     mounted() {
       console.log('[AnswerPage] mounted v20260623 - VUE SOURCE loaded');
+      ensureMaterialStyles();
       this.loadQuestions();
       this.loadPracticeSession();
       this.startTimer();

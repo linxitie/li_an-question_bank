@@ -11,6 +11,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, case, text as sql_text
 
 from ....core.database import get_db, engine
+from ....services import media_service
+from ....services.paper_group_selector import (
+    select_questions_with_groups,
+    summarize_group_selection,
+)
 from ....core.security import (
     get_current_teacher, get_current_admin, get_password_hash,
     check_permission, Permission
@@ -74,8 +79,14 @@ def _summarize_content(content: str, limit: int = 120) -> str:
     return s[:limit] if s else ''
 
 
-def _format_question(q: QuestionBank) -> dict:
-    """格式化题目信息（含内容清洗：移除UTB ID等系统噪音）"""
+def _format_question(q: QuestionBank, include_detail: bool = True) -> dict:
+    """格式化题目信息（含内容清洗：移除UTB ID等系统噪音）。
+
+    include_detail=False 用于「题目管理」列表：只返回表格需要的摘要字段。
+    旧实现每页 20 条也返回 full_content / 完整 options / answer / 极长
+    answer_analysis（其中 3 条含 data:image base64），实测一页 579 KB、
+    0.2s 序列化，前端滚动明显卡顿。详情/编辑改为按 question_id 单题拉取。
+    """
     raw_content = q.question_content or ''
     cleaned_content = clean_question_text(raw_content)
     # full_content 供详情弹窗渲染完整正文，必须把裸 [IMAGE:...] 占位符
@@ -85,13 +96,15 @@ def _format_question(q: QuestionBank) -> dict:
     # 行号_序号.png -> 子目录匹配），找不到则剔除，宁可少图不要裂图。
     # 此处不传 db：_format_question 只拿到 ORM 对象，第7层 question_image
     # 表兜底用不上，但前四层已覆盖 docx 抽图的真实落点。
-    try:
-        from ....services.image_service import sanitize_image_placeholders
-        _qid = q.question_id if isinstance(q.question_id, int) else None
-        full_content = sanitize_image_placeholders(cleaned_content, _qid)
-    except Exception:
-        full_content = cleaned_content
-    return {
+    full_content = ''
+    if include_detail:
+        try:
+            from ....services.image_service import sanitize_image_placeholders
+            _qid = q.question_id if isinstance(q.question_id, int) else None
+            full_content = sanitize_image_placeholders(cleaned_content, _qid)
+        except Exception:
+            full_content = cleaned_content
+    result = {
         "question_id": q.question_id,
         "subject_id": q.subject_id,
         "subject_name": q.subject.subject_name if q.subject else "",
@@ -99,9 +112,9 @@ def _format_question(q: QuestionBank) -> dict:
         "type_name": q.type.type_name if q.type else "",
         "question_content": _summarize_content(cleaned_content),
         "full_content": full_content,
-        "options": q.options,
-        "answer": q.answer,
-        "answer_analysis": q.answer_analysis or "",
+        "options": q.options if include_detail else [],
+        "answer": q.answer if include_detail else "",
+        "answer_analysis": (q.answer_analysis or "") if include_detail else "",
         "difficulty": q.difficulty,
         "score": float(q.score) if q.score else 0,
         "year": q.year,
@@ -121,7 +134,10 @@ def _format_question(q: QuestionBank) -> dict:
         "need_review": 1 if q.need_review else 0,
         # P1c: 原题号（可追溯到源文档），列表「序号」列优先用它而非行号
         "question_number": q.question_number or "",
+        # 前端据此判断列表项是否已水合；false 时打开详情/编辑必须先拉单题。
+        "detail_loaded": bool(include_detail),
     }
+    return result
 
 
 # ==================== 工作台 ====================
@@ -262,37 +278,56 @@ async def list_question_types(
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """返回题型列表（供下拉，含判断/填空/情境等独立题型）"""
-    fixed_types = [
-        {"type_name": "单选题", "is_objective": 1},
-        {"type_name": "多选题", "is_objective": 1},
-        {"type_name": "判断题", "is_objective": 1},
-        {"type_name": "填空题", "is_objective": 1},
-        {"type_name": "论述题", "is_objective": 0},
-        {"type_name": "写作题", "is_objective": 0},
-        {"type_name": "情境题", "is_objective": 0},
+    """返回题型列表（供下拉）。
+
+    P5：原实现硬编码且包含库中并不存在的「填空题 / 情境题」，同时缺少
+    实际存在的「简答题 / 写作题 / 论述题」等主观题。改为以 question_type
+    表 + 可见题目为准，并按固定教学顺序输出；学生端与教师端同源。
+    """
+    order = ["单选题", "多选题", "判断题", "简答题", "论述题", "写作题"]
+    rows = db.query(QuestionType.type_name, QuestionType.is_objective).join(
+        QuestionBank, QuestionBank.type_id == QuestionType.type_id
+    ).filter(
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
+        QuestionType.type_name.notin_(["填空题", "情境题"]),
+    ).distinct().all()
+    found = {name: objective for name, objective in rows}
+    items = [
+        {"type_name": name, "is_objective": int(found.get(name, 0) or 0)}
+        for name in order if name in found
     ]
-    return {"success": True, "items": fixed_types}
+    # 兜底：库中出现未列入 order 的题型也不能丢
+    for name, objective in sorted(found.items()):
+        if name not in order:
+            items.append({"type_name": name, "is_objective": int(objective or 0)})
+    return {"success": True, "items": items}
 
 
 @router.get("/knowledge-points", summary="知识点列表")
 async def list_knowledge_points(
-    subject_id: int = Query(..., description="科目ID"),
+    subject_id: Optional[int] = Query(None, description="科目ID，不传=全部科目"),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """返回某科目的 canonical L3 知识点列表（仅含有可见题目的考点）"""
+    """返回 canonical L3 知识点列表（仅含有可见题目的考点）。
+
+    P5：subject_id 改为可选，支持试卷编辑器「全部知识点」筛选；
+    口径与题库导入 /api/questions/taxonomy 的 L3 考点一致。
+    """
     visible_point_ids = db.query(QuestionBank.point_id).filter(
         QuestionBank.status == 1,
         QuestionBank.audit_status == 1,
         QuestionBank.point_id.isnot(None),
     ).distinct()
-    kps = db.query(KnowledgePoint).filter(
-        KnowledgePoint.subject_id == subject_id,
+    kp_query = db.query(KnowledgePoint).filter(
         KnowledgePoint.status == 1,
         KnowledgePoint.level == 3,
         KnowledgePoint.point_id.in_(visible_point_ids),
-    ).order_by(KnowledgePoint.sort_order).all()
+    )
+    if subject_id:
+        kp_query = kp_query.filter(KnowledgePoint.subject_id == subject_id)
+    kps = kp_query.order_by(KnowledgePoint.subject_id, KnowledgePoint.sort_order).all()
     items = [{"point_id": kp.point_id, "point_name": kp.point_name} for kp in kps]
     return {"success": True, "total": len(items), "items": items}
 
@@ -371,7 +406,7 @@ async def list_teacher_questions(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [_format_question(q) for q in questions],
+        "items": [_format_question(q, include_detail=False) for q in questions],
     }
 
 
@@ -636,6 +671,7 @@ async def list_teacher_papers(
             "question_count": p.question_count,
             "exam_type": p.exam_type,
             "paper_type": p.paper_type,
+            "creator_id": p.creator_id,
             "approval_status": approval_status,
             "approval_opinion": latest_wf.opinion if latest_wf else "",
             "create_time": p.create_time.isoformat() if p.create_time else None,
@@ -702,6 +738,8 @@ async def get_teacher_paper_detail(
             "answer": q.answer,
             "answer_analysis": q.answer_analysis or "",
             "difficulty": q.difficulty,
+            "group_id": q.group_id or 0,
+            "point_name": q.point.point_name if q.point else "",
         })
 
     return {
@@ -1221,8 +1259,11 @@ async def auto_generate_paper(
     db.flush()
 
     # 按题型配置抽取题目
+    # 题组感知：命中 group_id>0 的复合题时整组带入，避免资料分析/申论材料题被拆散。
     order = 0
     total_questions = 0
+    requested_questions = sum(int(c) for c in data.question_config.values())
+    selected_ids = set()
     for type_name, count in data.question_config.items():
         # 根据题型名称找到type_id
         type_obj = db.query(QuestionType).filter(
@@ -1231,13 +1272,22 @@ async def auto_generate_paper(
         if not type_obj:
             continue
 
-        questions = db.query(QuestionBank).filter(
+        query = db.query(QuestionBank).filter(
             QuestionBank.subject_id == data.subject_id,
             QuestionBank.type_id == type_obj.type_id,
             QuestionBank.difficulty == data.difficulty,
             QuestionBank.status == 1,
             QuestionBank.audit_status == 1,
-        ).order_by(func.random()).limit(count).all()
+        )
+        if selected_ids:
+            query = query.filter(~QuestionBank.question_id.in_(selected_ids))
+
+        questions, selected_ids = select_questions_with_groups(
+            db=db,
+            query=query,
+            count=count,
+            selected_ids=selected_ids,
+        )
 
         for q in questions:
             order += 1
@@ -1245,20 +1295,33 @@ async def auto_generate_paper(
                 paper_id=paper.paper_id,
                 question_id=q.question_id,
                 question_order=order,
-                question_score=float(data.total_score) / sum(data.question_config.values()) if data.question_config else 5.0,
+                question_score=0,  # 先占位，组卷完成后按实际题数统一均分
             ))
             total_questions += 1
+
+    # 组展开后实际题数可能多于配置数，总分按实际题数均分，避免总分超发
+    per_score = round(float(data.total_score) / total_questions, 2) if total_questions else 5.0
+    for rel in db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == paper.paper_id
+    ).all():
+        rel.question_score = per_score
 
     paper.question_count = total_questions
     db.commit()
     db.refresh(paper)
 
+    quota = summarize_group_selection(requested_questions, total_questions)
+    message = f"智能组卷完成，共 {total_questions} 道题目"
+    if quota["over_quota"]:
+        message += f"（{quota['over_quota_reason']}，请核对后再发布）"
+
     return {
         "success": True,
-        "message": f"智能组卷完成，共 {total_questions} 道题目",
+        "message": message,
         "paper_id": paper.paper_id,
         "paper_code": paper_code,
         "question_count": total_questions,
+        **quota,
     }
 
 
@@ -1412,6 +1475,9 @@ async def get_score_overview(
                 question_content=q.question_content[:50] if q else f"题目{qid}",
                 correct_rate=round(stat["correct"] / stat["total"] * 100, 1) if stat["total"] > 0 else 0,
                 total_attempts=stat["total"],
+                type_name=q.type.type_name if q and q.type else None,
+                point_name=q.point.point_name if q and q.point else None,
+                subject_name=q.subject.subject_name if q and q.subject else None,
             ))
 
     return ScoreOverviewResponse(
@@ -1461,6 +1527,43 @@ async def get_class_scores(
         "min_score": min(scores) if scores else 0,
         "pass_rate": round(sum(1 for s in scores if s >= 60) / len(scores) * 100, 1) if scores else 0,
     }
+
+
+@router.get("/scores/class-compare", summary="班级成绩对比")
+async def compare_class_scores(
+    paper_id: Optional[int] = Query(None),
+    current_user: SysUser = Depends(get_current_teacher),
+    db: Session = Depends(get_db)
+):
+    """全校班级横向对比：平均分 / 及格率 / 参考人数。
+
+    教师端「成绩管理」合并原「数据分析」后需要一张全校对比图；
+    /classes 只返回当前教师所带班级，无法支撑“全校”视图，故单列此端点。
+    """
+    classes = db.query(Banji).order_by(Banji.class_name.asc()).all()
+    items = []
+    for cls in classes:
+        user_ids = [row[0] for row in db.query(SysUser.user_id).filter(
+            SysUser.class_name == cls.class_name,
+            SysUser.user_type == "student",
+        ).all()]
+        records_query = db.query(ExamRecord).filter(
+            ExamRecord.is_completed == 1,
+            ExamRecord.user_id.in_(user_ids) if user_ids else False,
+        )
+        if paper_id:
+            records_query = records_query.filter(ExamRecord.paper_id == paper_id)
+        records = records_query.all()
+        scores = [float(r.total_score or 0) for r in records]
+        items.append({
+            "class_id": cls.class_id,
+            "class_name": cls.class_name,
+            "student_count": len(user_ids),
+            "exam_count": len(records),
+            "avg_score": round(sum(scores) / len(scores), 1) if scores else 0,
+            "pass_rate": round(sum(1 for s in scores if s >= 60) / len(scores) * 100, 1) if scores else 0,
+        })
+    return {"success": True, "total": len(items), "items": items}
 
 
 @router.get("/scores/student/{user_id}", summary="学生成绩详情")
@@ -1534,6 +1637,10 @@ async def get_question_stats(
             "total_attempts": stat["total"],
             "correct_count": stat["correct"],
             "common_mistakes": sorted(stat["wrong_answers"].items(), key=lambda x: x[1], reverse=True)[:3],
+            "type_name": q.type.type_name if q and q.type else "",
+            "point_name": q.point.point_name if q and q.point else "",
+            "subject_name": q.subject.subject_name if q and q.subject else "",
+            "difficulty": q.difficulty if q else None,
         })
 
     return {"success": True, "paper_id": paper_id, "question_count": len(result), "questions": result}
@@ -1608,26 +1715,64 @@ async def update_teacher_profile(
     return {"success": True, "message": "个人信息已更新"}
 
 
+_TEACHER_AVATAR_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+_TEACHER_AVATAR_MAX = 2 * 1024 * 1024
+
+
 @router.post("/profile/avatar", summary="上传头像")
 async def upload_avatar(
     file: UploadFile = File(...),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """上传教师头像图片"""
+    """上传教师头像图片（与学生端同样的白名单/大小/文件头校验）"""
     import uuid
-    ext = os.path.splitext(file.filename)[1] if file.filename else '.jpg'
-    filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
     from app.core.config import settings
-    upload_dir = os.path.join(settings.UPLOAD_DIR, 'avatars')
-    os.makedirs(upload_dir, exist_ok=True)
-    filepath = os.path.join(upload_dir, filename)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _TEACHER_AVATAR_EXT:
+        raise HTTPException(400, "仅支持 jpg/jpeg/png/gif/webp 格式")
     content = await file.read()
-    with open(filepath, 'wb') as f:
-        f.write(content)
-    avatar_url = f"/uploads/avatars/{filename}"
-    current_user.avatar = avatar_url
-    db.commit()
+    if not content:
+        raise HTTPException(400, "文件内容为空")
+    if len(content) > _TEACHER_AVATAR_MAX:
+        raise HTTPException(400, "头像大小不能超过 2MB")
+    if not media_service.image_magic_ok(ext, content):
+        raise HTTPException(400, "文件实际格式与扩展名不符")
+
+    if settings.MEDIA_STORE_ENABLED:
+        try:
+            asset = media_service.store_bytes(
+                db,
+                content,
+                kind="avatar",
+                original_name=file.filename or f"avatar{ext}",
+                created_by=current_user.user_id,
+                max_bytes=_TEACHER_AVATAR_MAX,
+            )
+        except media_service.MediaTooLarge:
+            raise HTTPException(400, "头像大小不能超过 2MB")
+        except media_service.MediaValidationError as exc:
+            raise HTTPException(400, str(exc))
+        except media_service.ObjectStoreUnavailable:
+            raise HTTPException(503, "头像存储暂不可用，请稍后重试")
+
+        old_url = current_user.avatar
+        avatar_url = f"/media/{asset.asset_id}"
+        current_user.avatar = avatar_url
+        media_service.retire_url(db, old_url)
+        db.commit()
+    else:
+        # 回滚分支：保留原 uploads 写路径。
+        filename = f"avatar_{current_user.user_id}_{uuid.uuid4().hex[:8]}{ext}"
+        upload_dir = os.path.join(settings.UPLOAD_DIR, 'avatars')
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, 'wb') as f:
+            f.write(content)
+        avatar_url = f"/uploads/avatars/{filename}"
+        current_user.avatar = avatar_url
+        db.commit()
     return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}
 
 
@@ -1967,15 +2112,22 @@ async def mark_all_read(
 async def get_analytics_overview(
     class_id: Optional[int] = Query(None),
     days: int = Query(30, ge=1, le=365),
+    scope: str = Query("mine", pattern="^(mine|school)$"),
     current_user: SysUser = Depends(get_current_teacher),
     db: Session = Depends(get_db)
 ):
-    """获取学情总览数据"""
-    # 获取教师所带班级的学生
-    teacher_classes = db.query(Banji.class_name).filter(
-        Banji.teacher_id == current_user.user_id
-    ).all()
-    class_names = [c[0] for c in teacher_classes]
+    """获取学情总览数据。
+
+    scope=school 用于教师端「成绩管理」的全校视图；默认 mine 保持原行为。
+    """
+    if scope == "school":
+        class_names = [c[0] for c in db.query(Banji.class_name).distinct().all()]
+    else:
+        # 获取教师所带班级的学生
+        teacher_classes = db.query(Banji.class_name).filter(
+            Banji.teacher_id == current_user.user_id
+        ).all()
+        class_names = [c[0] for c in teacher_classes]
 
     if not class_names:
         return AnalyticsOverview()

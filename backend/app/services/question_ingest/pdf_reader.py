@@ -28,6 +28,7 @@ from ..mineru_service import (
     extract_text_sync as mineru_extract_text_sync,
     is_enabled as mineru_is_enabled,
 )
+from ..text_parser import normalize_ocr_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,9 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
     # ===== 提取文本缓存：命中即返回（纯加速层，异常已在 text_cache 内降级） =====
     _cached = text_cache.get(buf, scope=_cache_scope)
     if _cached is not None:
+        # 旧缓存可能是归一化前的 MinerU 文本；命中时补做一次，避免必须清缓存。
+        if _cache_scope == 'mineru':
+            _cached = normalize_ocr_markdown(_cached)
         if progress_cb:
             # 缓存命中：无逐页过程可报，直接告知「文本提取已完成」
             try:
@@ -193,6 +197,9 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
 
     def _finish(text: str, engine: str) -> str:
         """统一出口：成功产出才写缓存（空结果不写，避免固化偶发失败）"""
+        # OCR 文本先归一化再入缓存，保证切题与材料标记和文本层 PDF 同构。
+        if engine == 'mineru':
+            text = normalize_ocr_markdown(text)
         text_cache.put(buf, text, {'engine': engine}, scope=_cache_scope)
         global _last_extract_engine
         _last_extract_engine = engine

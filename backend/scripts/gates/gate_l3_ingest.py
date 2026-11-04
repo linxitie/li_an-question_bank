@@ -41,6 +41,15 @@ _TMP_DB = os.path.join(tempfile.gettempdir(), f'gate_l3_test_{int(time.time())}.
 assert 'question_bank.db' not in _TMP_DB, 'L3 门禁绝不触碰真实库'
 
 
+def _ensure_foundation_tables(engine):
+    """F4 起导入成功会写 foundation_outbox；门禁临时库需自建这些表。"""
+    from app.foundation.schema import ddl_statements
+
+    with engine.begin() as conn:
+        for statement in ddl_statements():
+            conn.exec_driver_sql(statement)
+
+
 def make_engine():
     # 用临时文件 DB 而非 :memory:，避免 StaticPool 共享连接导致索引重复创建
     if os.path.exists(_TMP_DB):
@@ -51,6 +60,7 @@ def make_engine():
             table.create(engine, checkfirst=True)
         except Exception:
             pass
+    _ensure_foundation_tables(engine)
     return engine
 
 
@@ -74,6 +84,7 @@ def fresh_engine():
             table.create(engine, checkfirst=True)
         except Exception:
             pass
+    _ensure_foundation_tables(engine)
     return engine
 
 

@@ -161,7 +161,9 @@ def test_admin_can_upload_image(
     client, admin_headers, monkeypatch, published
 ):
     monkeypatch.setattr(
-        materials_api, "_safe_image_upload", lambda file: "/uploads/materials/images/x.png"
+        materials_api,
+        "_safe_image_upload",
+        lambda file, db=None, user_id=None: "/uploads/materials/images/x.png",
     )
 
     response = client.post(

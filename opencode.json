@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "vtj": {
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "node",
+        "D:/AAA项目文件/砺安题库/li_an-question_bank/vtj-mcp-server/vtj-mcp-server.js"
+      ]
+    }
+  }
+}

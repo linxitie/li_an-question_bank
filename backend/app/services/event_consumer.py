@@ -25,8 +25,25 @@ from typing import Any, Optional
 
 from ..core import events
 from ..core.database import SessionLocal
+from ..foundation import outbox
+from ..foundation.config import EVENT_OUTBOX_ENABLED, FOUNDATION_ENABLED
 
 logger = logging.getLogger(__name__)
+
+
+async def publish_paper_published_legacy(paper_id: int, source: str) -> None:
+    """关闭 Outbox 时保留旧的直接发布路径（兼容回滚）。"""
+    await events.publish(events.Event(
+        name=EV_PAPER_PUBLISHED,
+        payload={"paper_id": paper_id},
+        aggregate_id=f"p-{paper_id}",
+        source=source,
+    ))
+
+
+def outbox_mode_enabled() -> bool:
+    """业务事件是否走事务性 Outbox（F2b）。"""
+    return bool(FOUNDATION_ENABLED and EVENT_OUTBOX_ENABLED)
 
 
 async def _dispatch(event: events.Event) -> None:
@@ -120,12 +137,33 @@ async def consume_user_actions(idle_ms: int = 5000) -> None:
 
 async def record_user_action(db, user_id: int, trigger_type: str,
                              session=None) -> bool:
-    """发布 user.action 事件；Redis 不可用时同步兜底走判据 + 奖励单点。
+    """记录用户行为事件。
 
-    折中方案（P5.2）：保证重要数据不丢失——
-    - publish 成功 → 消费者异步判定/授予（不阻塞请求），返回 True
-    - publish 失败（Redis 宕机）→ 立即同步兜底判定 + 发奖，返回 False
+    F2b 起默认写事务性 Outbox：事件行与业务写共用 `db` 的 Session，由调用方
+    在同一个 commit 里提交；Redis 只影响投递速度，不再决定事件是否丢失。
+    关闭 `EVENT_OUTBOX_ENABLED` 时保留 F2 的 events.publish + 同步兜底。
     """
+    if FOUNDATION_ENABLED and EVENT_OUTBOX_ENABLED:
+        dedupe_key = None
+        if isinstance(session, dict):
+            session_key = session.get("session_id") or session.get("id")
+            if isinstance(session_key, (str, int)):
+                dedupe_key = f"user_action:{user_id}:{trigger_type}:{session_key}"
+        outbox.emit(
+            db,
+            event_name=events.EV_USER_ACTION,
+            aggregate_type="user_action",
+            aggregate_id=f"u-{user_id}",
+            payload={
+                "user_id": user_id,
+                "trigger_type": trigger_type,
+                "session": session if isinstance(session, dict) else None,
+            },
+            producer="user_action",
+            dedupe_key=dedupe_key,
+        )
+        return True
+
     ok = await events.publish(events.Event(
         name=events.EV_USER_ACTION,
         payload={"user_id": user_id, "trigger_type": trigger_type,

@@ -1026,6 +1026,21 @@ export default defineComponent({
 }
 
 /* 响应式 */
+/* 中间档：768~1100 三栏放不下，右栏下移占满整行，入口改两行两列 */
+@media (max-width: 1100px) {
+  .main-content {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .right-panel {
+    grid-column: 1 / -1;
+  }
+
+  .quick-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 767px) {
   .main-content {
     grid-template-columns: 1fr;

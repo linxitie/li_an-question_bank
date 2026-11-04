@@ -85,9 +85,14 @@ def db_session(tmp_path):
     from sqlalchemy.orm import sessionmaker
 
     from app.core.database import Base
+    from app.foundation.schema import ddl_statements
 
     engine = create_engine(f'sqlite:///{tmp_path / "test_batch_import.db"}')
     Base.metadata.create_all(engine)
+    # F4 起导入成功会在同一事务写 foundation_outbox；临时库需自建该表。
+    with engine.begin() as conn:
+        for statement in ddl_statements():
+            conn.exec_driver_sql(statement)
     TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestSession()
     yield db

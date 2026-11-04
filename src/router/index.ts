@@ -3,6 +3,7 @@
  */
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
+import { canAccess } from './access';
 
 const routes: RouteRecordRaw[] = [
   // ==================== 公共路由 ====================
@@ -78,6 +79,36 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student'] }
   },
   {
+    path: '/ai-assistant',
+    name: 'AiAssistant',
+    component: () => import('$vtj/vue/ai_chat.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/study-plan',
+    name: 'StudyPlan',
+    component: () => import('$vtj/vue/study_plan.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/profile-quiz',
+    name: 'ProfileQuiz',
+    component: () => import('$vtj/vue/profile_quiz.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/knowledge',
+    name: 'KnowledgeView',
+    component: () => import('$vtj/vue/knowledge_view.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/memories',
+    name: 'MemoriesView',
+    component: () => import('$vtj/vue/memories.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/student/papers',
     name: 'StudentPapers',
     component: () => import('$vtj/vue/student_papers.vue'),
@@ -144,13 +175,17 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/teacher/papers',
     name: 'TeacherPapers',
-    component: () => import('$vtj/vue/teacher_papers.vue'),
+    // P5：旧 raw 页左栏固定 50 条、无预览解析；改为手写双栏工作台。
+    // 旧文件 teacher_papers.vue 保留，仅作设计器回滚参考，路由不再指向它。
+    component: () => import('@/views/teacher/pc/TeacherPaperEditor.vue'),
     meta: { roles: ['teacher', 'admin'] }
   },
   {
     path: '/teacher/scores',
     name: 'TeacherScores',
-    component: () => import('$vtj/vue/teacher_scores.vue'),
+    // P4：原 teacher_scores 仅 276 行、无班级/全校与知识点分析；
+    // 合并「数据分析」后改为手写驾驶舱，旧 SQL 级页面保留文件仅作回滚参考。
+    component: () => import('@/views/teacher/pc/TeacherScoresWorkspace.vue'),
     meta: { roles: ['teacher', 'admin'] }
   },
   {
@@ -162,13 +197,20 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/teacher/analytics',
     name: 'TeacherAnalytics',
-    component: () => import('$vtj/vue/teacher_analytics.vue'),
+    // P4：数据分析已合并进成绩管理，旧书签一律 302 到新驾驶舱，避免两套口径。
+    redirect: '/teacher/scores',
     meta: { roles: ['teacher', 'admin'] }
   },
   {
     path: '/teacher/messages',
     name: 'TeacherMessages',
     component: () => import('$vtj/vue/teacher_messages.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
+    path: '/teacher/forum',
+    name: 'TeacherForum',
+    component: () => import('@/views/teacher/teacher_forum.vue'),
     meta: { roles: ['teacher', 'admin'] }
   },
   {
@@ -252,6 +294,12 @@ const routes: RouteRecordRaw[] = [
         path: 'papers',
         name: 'AdminPapers',
         component: () => import('$vtj/vue/paper_approval.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'forum',
+        name: 'AdminForum',
+        component: () => import('@/views/admin/admin_forum.vue'),
         meta: { roles: ['admin'] }
       },
       {
@@ -661,21 +709,28 @@ router.beforeEach((to, _from, next) => {
     if (role && role !== 'student') {
       return next('/unauthorized?reason=mobile_student_only');
     }
+    if (role) {
+      const permissions = auth?.getPermissions ? auth.getPermissions() : [];
+      if (!canAccess(to.meta as any, role, permissions)) {
+        return next('/unauthorized');
+      }
+    }
     return next();
   }
 
-  // 2) 移动设备（手机/平板）访问 PC 路径 → 映射到对应端
-  //    关键修复：登录页也区分设备，手机访问 /login 会映射到 /mobile/login
-  if (device !== 'pc') {
+  // 2) 仅「手机」访问 PC 路径 → 映射到手机端
+  //    2026-10-26 用户决定：平板与电脑端使用同一套页面，因此平板不再自动跳 /tablet/*
+  //    （平板版仍可通过显式 URL 访问，如 /#/tablet/login、/#/tablet/forum/4）
+  //    保留原「登录页也区分设备」的行为：手机访问 /login 仍映射到 /mobile/login
+  if (device === 'mobile') {
     const target = resolveDevicePath(to.path, device);
     if (target) {
       return next({ path: target, replace: true });
     }
   }
 
-  // 3) PC 设备：公开路由直接放行
-  // 徽章 SVG 预览页：纯静态演示、不触达任何数据，允许未登录查看
-  // 徽章页演示：纯前端演示数据，允许未登录查看（供截图/预览）
+  // 3) PC 设备：公开路由直接放行（论坛允许游客浏览，互动仍由接口校验登录）
+  // 徽章 SVG 预览页 / 徽章演示页 / 资料内容验收页：纯静态或只读，允许未登录查看（供截图/预览）
   if (to.path === '/badges-demo') {
     return next();
   }
@@ -684,7 +739,6 @@ router.beforeEach((to, _from, next) => {
     return next();
   }
 
-  // 资料内容验收页：只读公开接口（/api/materials 游客可访问），允许未登录查看
   if (to.path === '/materials-preview') {
     return next();
   }
@@ -695,7 +749,7 @@ router.beforeEach((to, _from, next) => {
     return next();
   }
 
-  if (to.path === '/login' || to.path === '/unauthorized') {
+  if (to.path === '/login' || to.path === '/unauthorized' || to.path === '/forum') {
     return next();
   }
 
@@ -712,19 +766,11 @@ router.beforeEach((to, _from, next) => {
     return next(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
   }
 
-  // 检查路由元数据中的角色限制
-  const allowedRoles = to.meta?.roles as string[] | undefined;
-  if (allowedRoles && allowedRoles.length > 0) {
-    const userRole = auth.getUserRole();
-
-    // admin 角色可访问所有路由
-    if (userRole === 'admin') {
-      return next();
-    }
-
-    if (!allowedRoles.includes(userRole)) {
-      return next('/unauthorized');
-    }
+  // 检查路由元数据中的角色与权限限制
+  const currentRole = auth.getUserRole();
+  const currentPermissions = auth.getPermissions ? auth.getPermissions() : [];
+  if (!canAccess(to.meta as any, currentRole, currentPermissions)) {
+    return next('/unauthorized');
   }
 
   // ===== 角色仪表盘重定向（三端分离） =====
