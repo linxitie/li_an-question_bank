@@ -1,4 +1,12 @@
-"""生成「远端 main 页面 / 接口清单」文档（可重复运行：python ../_gen_inventory.py）。"""
+"""生成「远端 main 页面 / 接口清单」文档。
+
+页面：解析 src/router/index.ts（展开嵌套 children，得到完整路径与组件文件）
+接口：以 FastAPI openapi 为权威路径，用 AST 把 operationId 映射回源码 文件:行号
+
+刷新：python scripts/gen_inventory.py   （在仓库根执行）
+"""
+import ast
+import os
 import re
 import sys
 from collections import defaultdict
@@ -7,19 +15,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 DOC = REPO / 'docs/plans/远端main页面与接口清单_v1.md'
 ROUTER = REPO / 'src/router/index.ts'
-API = REPO / 'backend/app/api'
-MAIN = REPO / 'backend/app/main.py'
+BACKEND = REPO / 'backend'
+API = BACKEND / 'app/api'
+MAIN = BACKEND / 'app/main.py'
 
-DECOR = re.compile(
-    r'@(?P<router>[A-Za-z_][A-Za-z0-9_]*)\.(?P<method>get|post|put|patch|delete|head)\('
-    r'\s*["\'](?P<path>[^"\']*)["\']', re.S)
+ROUTE_METHODS = {'get', 'post', 'put', 'patch', 'delete', 'head'}
 
 
 # ---------------- 页面 ----------------
 def find_array(text: str, start: int):
-    depth = 0
-    i = start
-    quote = ''
+    depth, i, quote = 0, start, ''
     while i < len(text):
         ch = text[i]
         if quote:
@@ -104,48 +109,26 @@ def parse_pages() -> list[dict]:
     return out
 
 
-# ---------------- 接口（静态解析，带文件/行号） ----------------
-def parse_api_file(p: Path) -> list[dict]:
-    text = p.read_text(encoding='utf-8', errors='replace')
-    m = re.search(r'APIRouter\(\s*(?:[^)]*?)prefix\s*=\s*["\']([^"\']*)["\']', text, re.S)
-    prefix = m.group(1) if m else ''
-    rows = []
-    for mt in DECOR.finditer(text):
-        sub = mt.group('path')
-        full = (prefix.rstrip('/') + '/' + sub.lstrip('/')).replace('//', '/')
-        if not full.startswith('/'):
-            full = '/' + full
-        line = text[:mt.start()].count('\n') + 1
-        rest = text[mt.end():]
-        dm = re.search(r'\ndef\s+([A-Za-z_][A-Za-z0-9_]*)', rest)
-        rows.append({'method': mt.group('method').upper(), 'path': full,
-                     'func': dm.group(1) if dm else '—', 'line': line, 'file': p})
-    return rows
+# ---------------- 接口 ----------------
+def parse_py(p: Path):
+    try:
+        tree = ast.parse(p.read_text(encoding='utf-8', errors='replace'))
+    except SyntaxError:
+        return []
+    return [(n.name, n.lineno, p) for n in ast.walk(tree)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
 
 
-def collect_api() -> list[dict]:
-    items = []
+def collect_defs():
+    defs = {}
     for p in sorted(API.rglob('*.py')):
         if '__pycache__' in p.parts or p.name == '__init__.py':
             continue
-        items.extend(parse_api_file(p))
-    if MAIN.exists():
-        text = MAIN.read_text(encoding='utf-8', errors='replace')
-        for mt in re.finditer(r'@app\.(?P<method>get|post|put|patch|delete)\('
-                              r'\s*["\'](?P<path>[^"\']*)', text):
-            line = text[:mt.start()].count('\n') + 1
-            rest = text[mt.end():]
-            dm = re.search(r'\ndef\s+([A-Za-z_][A-Za-z0-9_]*)', rest)
-            items.append({'method': mt.group('method').upper(), 'path': mt.group('path'),
-                          'func': dm.group(1) if dm else '—', 'line': line, 'file': MAIN})
-    seen, uniq = set(), []
-    for it in items:
-        key = (it['method'], it['path'], str(it['file']), it['line'])
-        if key in seen:
-            continue
-        seen.add(key)
-        uniq.append(it)
-    return uniq
+        for name, line, f in parse_py(p):
+            defs.setdefault(name, (line, f))
+    for name, line, f in parse_py(MAIN):
+        defs.setdefault(name, (line, f))
+    return defs
 
 
 def domain_of(p: Path) -> str:
@@ -154,6 +137,39 @@ def domain_of(p: Path) -> str:
     except ValueError:
         return p.stem if p.name != 'main.py' else 'app-main'
     return rel.parts[0] if len(rel.parts) > 1 else rel.stem
+
+
+def collect_ops(defs):
+    sys.path.insert(0, str(BACKEND))
+    os.chdir(BACKEND)
+    from app.main import app  # noqa: WPS433
+
+    spec = app.openapi()
+    names_by_len = sorted(defs, key=len, reverse=True)
+    ops = []
+    for path, methods in spec['paths'].items():
+        for method, meta in methods.items():
+            if method not in ROUTE_METHODS:
+                continue
+            opid = meta.get('operationId', '')
+            func = None
+            for fname in names_by_len:
+                if opid == fname or opid.startswith(fname + '_'):
+                    func = fname
+                    break
+            line, f = defs[func] if func else (0, None)
+            ops.append({
+                'method': method.upper(),
+                'path': path,
+                'summary': (meta.get('summary') or '').strip(),
+                'tags': ', '.join(meta.get('tags') or []),
+                'func': func or '—',
+                'line': line,
+                'file': f,
+                'domain': domain_of(f) if f else 'unknown',
+            })
+    ops.sort(key=lambda x: (x['domain'], x['path'], x['method']))
+    return ops
 
 
 PAGE_GROUPS = [
@@ -179,8 +195,8 @@ PAGE_GROUPS = [
 ]
 
 DOMAIN_LABEL = {
-    'platform': '平台域（管理端/教师端/通知/反馈/LLM/WebSocket）',
-    'catalog': '题库域（目录/题目/试卷/导入）',
+    'platform': '平台域（管理端/教师端/通知/反馈/WebSocket）',
+    'catalog': '题库域（目录/题目/试卷/导入/OCR）',
     'community': '社区域（论坛/举报/治理）',
     'exam': '考试域（考试执行/成绩/练习）',
     'library': '资料域（备考资料/个人库/上传/图片）',
@@ -193,8 +209,9 @@ DOMAIN_LABEL = {
     'knowledge': '知识图谱',
     'llm': '大模型对话',
     'media_assets': '媒体资产代理',
-    'app-main': '应用级（健康检查/指标/静态）',
     'post': '帖子（根级旧接口）',
+    'app-main': '应用级（健康检查/指标/媒体代理）',
+    'unknown': '未定位到源码的接口',
 }
 
 
@@ -219,26 +236,26 @@ def main():
     routes = parse_pages()
     pages = [r for r in routes if r['component']]
     redirects = [r for r in routes if r['redirect']]
-    apis = collect_api()
+    defs = collect_defs()
+    ops = collect_ops(defs)
 
     by_page = defaultdict(list)
     for p in pages:
         by_page[page_group(p['path'])[0]].append(p)
-
     by_domain = defaultdict(list)
-    for a in apis:
-        by_domain[domain_of(a['file'])].append(a)
+    for o in ops:
+        by_domain[o['domain']].append(o)
 
     L = []
     L.append('# 远端 main 页面与接口清单 v1')
     L.append('')
     L.append('> 自动生成，可重复运行刷新：`python scripts/gen_inventory.py`（在仓库根执行）')
-    L.append('> 页面：解析 `src/router/index.ts`（含嵌套 children 展开）；'
-             '接口：静态解析 `backend/app/api/**` 的 `@router.<method>(...)` + `main.py` 的 `@app.<method>`')
+    L.append('> 页面：解析 `src/router/index.ts`（嵌套 children 展开）；'
+             '接口：路径取自 FastAPI `openapi()`，源码位置用 AST 按 `operationId` 回填')
     L.append(f'> 统计：**页面 {len(pages)} 条**（另有 {len(redirects)} 条 redirect）、'
-             f'**接口 {len(apis)} 个操作**')
+             f'**接口 {len(ops)} 个操作**')
     L.append('')
-    L.append('文件列是相对本文件的链接（带行号锚点），编辑器 / GitHub 可直接点开。')
+    L.append('文件列是相对本文件的链接（带 `#L行号` 锚点），编辑器 / GitHub 可直接点开。')
     L.append('')
 
     L.append('## 一、页面路由（按模块）')
@@ -283,10 +300,13 @@ def main():
         L.append('')
         L.append('| 方法 | 路径 | 处理函数 | 代码位置 |')
         L.append('|---|---|---|---|')
-        for a in sorted(items, key=lambda x: (x['path'], x['method'])):
-            rel = a['file'].relative_to(REPO).as_posix()
-            L.append(f"| `{a['method']}` | `{a['path']}` | `{a['func']}` | "
-                     f"[{rel}:{a['line']}](../../{rel}#L{a['line']}) |")
+        for o in sorted(items, key=lambda x: (x['path'], x['method'])):
+            if o['file']:
+                rel = o['file'].relative_to(REPO).as_posix()
+                loc = f"[{rel}:{o['line']}](../../{rel}#L{o['line']})"
+            else:
+                loc = '—'
+            L.append(f"| `{o['method']}` | `{o['path']}` | `{o['func']}` | {loc} |")
         L.append('')
 
     L.append('## 三、代码位置索引')
@@ -303,12 +323,12 @@ def main():
     L.append('')
     L.append('---')
     L.append('')
-    L.append('**基线**：远端 `main@1864593`（2026-11-04）')
+    L.append('**基线**：远端 `main@6b0df0a`（2026-11-04）')
     L.append('')
 
     DOC.write_text('\n'.join(L), encoding='utf-8')
     print('written', DOC)
-    print('pages', len(pages), 'redirects', len(redirects), 'ops', len(apis),
+    print('pages', len(pages), 'redirects', len(redirects), 'ops', len(ops),
           'page_groups', len(by_page), 'domains', len(by_domain))
 
 
