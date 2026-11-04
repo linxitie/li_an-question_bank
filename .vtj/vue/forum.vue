@@ -70,7 +70,7 @@
                   mode="post" />
 
                 <div class="post-meta">
-                  <span class="meta-likes" @click.stop="toggleHeart(post)" title="喜欢">
+                  <span class="meta-likes" @click.stop="toggleHeart(post)" :title="post.reactionSummary || '喜欢'">
                     <span class="heart-icon" :class="{ active: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                     <span> {{ post.likeCount }}</span>
                   </span>
@@ -487,6 +487,8 @@
               @click="viewPost(hp)">
               <span class="hot-rank" :class="'rank-' + (hp.rank <= 3 ? hp.rank : '')">{{ hp.rank }}</span>
               <span class="my-post-title">{{ hp.title }}</span>
+              <!-- 2026-11-03 第 2 轮：查看更多弹窗此前只有标题，补正文摘要 -->
+              <span class="list-excerpt">{{ excerptOf(hp) }}</span>
               <span class="my-post-stats">
                 <span class="my-stat">❤️ {{ hp.likeCount }}</span>
                 <span class="my-stat">💬 {{ hp.commentCount }}</span>
@@ -942,8 +944,11 @@
             post.reactions = data.reactions;
             post.reactionTotal = data.reactionCount;
             post.liked = data.myReaction !== null;
-            post.likeCount =
-              formatReactionSummary(data.reactions) || String(data.reactionCount);
+            // 2026-11-03 第 2 轮：计数只显示数字。
+            // 之前把 formatReactionSummary() 的结果（"👍1"）当计数渲染，
+            // 爱心图标旁就多出一个大拇指。emoji 汇总改放 title 里悬停可见。
+            post.likeCount = String(data.reactionCount ?? 0);
+            post.reactionSummary = formatReactionSummary(data.reactions) || '';
           }
         } catch (e) {
           /* 静默 */

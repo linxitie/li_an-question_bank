@@ -19,7 +19,7 @@
           :class="['cat-tab', { active: activeCategory === tab.key }]"
           @click="selectTab(tab.key)"
         >
-          {{ tab.name }}
+          {{ tab.key === 'hot' && hotRange === 'week' ? '今日热门 · 近 7 天' : tab.name }}
         </div>
         <button class="nav-fav-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
       </div>
@@ -199,6 +199,8 @@ export default defineComponent({
 
     // 分类标签
     const activeCategory = ref('all');
+    /** 今日热门的数据范围：day 当天 / week 回退近 7 天 / none 无数据（2026-11-03 第 2 轮） */
+    const hotRange = ref<'day' | 'week' | 'none'>('day');
     const searchKeyword = ref('');
     const searchCollapsed = ref(false);
     const searchDateFrom = ref('');
@@ -253,8 +255,34 @@ export default defineComponent({
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        let rawPosts: any[] = data.posts || [];
+
+        // 今日热门回退（2026-11-03 第 2 轮）：当天一条都没有时，自动改看近 7 天，
+        // 与电脑/平板端「近 7 天」口径一致，并在页签上注明，避免误以为是当天数据。
+        if (categoryKey === 'hot') {
+          if (rawPosts.length > 0) {
+            hotRange.value = 'day';
+          } else {
+            const weekAgo = new Date(Date.now() - 6 * 24 * 3600 * 1000)
+              .toISOString()
+              .slice(0, 10);
+            params.set('date_from', weekAgo);
+            params.set('date_to', today);
+            // 回退不再叠加用户手选的日期，否则两个区间会互相覆盖
+            params.delete('keyword');
+            const resWeek = await fetch(`${endpoint}?${params.toString()}`, {
+              headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
+            });
+            if (resWeek.ok) {
+              const dataWeek = await resWeek.json();
+              rawPosts = dataWeek.posts || [];
+            }
+            hotRange.value = rawPosts.length > 0 ? 'week' : 'none';
+          }
+        }
+
         const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
-        posts.value = (data.posts || []).map((p: any) => {
+        posts.value = rawPosts.map((p: any) => {
           const t = new Date(p.createTime).getTime();
           const diff = Date.now() - t;
           const min = Math.floor(diff / 60000);
@@ -363,6 +391,7 @@ export default defineComponent({
       filteredPosts,
       goBack,
       selectTab,
+      hotRange,
       searchKeyword,
       searchDateFrom,
       searchDateTo,

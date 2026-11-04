@@ -26,3 +26,88 @@ body,
 .mobile-forum-page .post-card {
   overflow: hidden;
 }
+
+/* ===== 第 2 轮（2026-11-03）===== */
+
+/* #1 帖子详情（含评论区）里的超长标题同样必须换行。
+ * 与列表卡同一根因：CJK 会断行，连续数字/英文不会，长标题会顶破详情卡片。 */
+.forum-page .detail-title,
+.forum-page .post-detail-card h3,
+.tablet-forum-page .post-title,
+.mobile-forum-page .detail-title,
+.mobile-forum-page .post-title,
+.tf-page .tf-modal-card h2,
+.tf-page .tf-modal-card h3 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 详情卡片自身不能被内容撑宽（min-width:0 让 flex 子项可收缩） */
+.forum-page .post-detail-card,
+.tf-page .tf-modal-card {
+  min-width: 0;
+}
+
+/* #2 点赞 / 收藏微动效：克制版（≤400ms，纯 transform/opacity，走合成层） */
+@keyframes dsh-heart-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.35); }
+  65% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+@keyframes dsh-heart-float {
+  0% { opacity: 0.9; transform: translateY(0) scale(0.7); }
+  100% { opacity: 0; transform: translateY(-14px) scale(1.1); }
+}
+@keyframes dsh-star-wiggle {
+  0% { transform: rotate(0deg) scale(1); }
+  35% { transform: rotate(18deg) scale(1.18); }
+  65% { transform: rotate(-12deg) scale(1.05); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+.heart-icon {
+  position: relative;
+  display: inline-block;
+}
+.heart-icon.active {
+  animation: dsh-heart-pop 240ms ease-out;
+}
+/* 点赞成功时右上角飘一颗小爱心；用伪元素，不改 DOM 结构 */
+.heart-icon.active::after {
+  content: '❤';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  font-size: 10px;
+  color: #e5484d;
+  pointer-events: none;
+  animation: dsh-heart-float 400ms ease-out forwards;
+}
+.star-icon.active,
+.fav-star.active {
+  display: inline-block;
+  animation: dsh-star-wiggle 300ms ease-out;
+}
+
+/* 无障碍：系统设置「减少动态效果」时全部关闭 */
+@media (prefers-reduced-motion: reduce) {
+  .heart-icon.active,
+  .heart-icon.active::after,
+  .star-icon.active,
+  .fav-star.active {
+    animation: none;
+  }
+}
+
+/* #4 查看更多 / 收藏弹窗：标题与统计一行、正文摘要独占第二行。
+ * 这些容器原本是 flex 单行，后加的摘要会被挤没，改为可换行 + 摘要占满一行。 */
+.forum-page .fav-item,
+.forum-page .my-post-item {
+  flex-wrap: wrap;
+}
+.forum-page .fav-item .list-excerpt,
+.forum-page .my-post-item .list-excerpt {
+  flex: 0 0 100%;
+  width: 100%;
+}
