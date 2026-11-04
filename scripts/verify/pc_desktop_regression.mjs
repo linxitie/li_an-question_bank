@@ -192,12 +192,14 @@ async function main() {
     !matRoot.hash.includes('/tablet/') && !matRoot.hash.includes('/mobile/'),
     JSON.stringify(matRoot));
 
-  // 徽章页同理
+  // 2026-11-04：徽章展示模块下线 → 改为验证「/badges 已无徽章页，且不会被改道到平板/手机」
   await cdp.eval(`location.hash = '#/badges'; true`);
   await sleep(1800);
-  const badges = await cdp.eval(`location.hash`);
-  check('电脑打开 /badges 不会被改道到平板页', !badges.includes('/tablet/') && !badges.includes('/mobile/'), badges);
-  await cdp.shot('18_PC徽章页_1440');
+  const badges = await cdp.eval(`(() => ({ hash: location.hash, hasBadgesPage: !!document.querySelector('.badges-page'), hasMatPage: !!document.querySelector('.mat-page') }))()`);
+  check('电脑打开 /badges 不会被改道到平板/手机页',
+    !badges.hash.includes('/tablet/') && !badges.hash.includes('/mobile/'),
+    JSON.stringify(badges));
+  check('电脑打开 /badges 已无徽章页（模块已下线）', !badges.hasBadgesPage, JSON.stringify(badges));
 
   ws.close();
   const failed = results.filter((r) => !r.pass);

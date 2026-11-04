@@ -125,29 +125,8 @@
           </div>
         </div>
       </aside>
-      <!-- 我的徽章墙（T3）：个人页底部、整页滚动；精选优先，数据来自 /api/badges/wall -->
-      <section class="card badge-wall-card">
-        <div class="bw-head">
-          <h3 class="card-title">
-            <XIcon :icon="Trophy" :size="18" color="#f59e0b" /> 我的徽章
-          </h3>
-          <button class="bw-all" @click="go('#/badges')">查看全部 →</button>
-        </div>
-        <div v-if="!badgeWall.length" class="empty">还没有徽章，完成学习任务即可解锁</div>
-        <div v-else class="bw-grid">
-          <div v-for="b in badgeWall" :key="`${b.kind}-${b.id}`" class="bw-item">
-            <BadgeIcon
-              :shape="b.shape || 'shield'"
-              :tier="tierIndexOfLabel(b.badge_tier)"
-              :size="66"
-              :locked="!b.owned"
-            />
-            <span class="bw-name">{{ b.name }}</span>
-            <span v-if="b.owned && b.rarity_text" class="bw-rarity">{{ b.rarity_text }}</span>
-            <span v-if="b.is_first_owner" class="bw-first">全服首个获得</span>
-          </div>
-        </div>
-      </section>
+      <!-- 2026-11-04：徽章展示模块下线，「我的徽章」墙与其 /api/badges/wall 数据源一并移除；
+           上方「学习成就」徽标（earnedBadges）属成就引擎，保留。 -->
     </main>
 
     <!-- 编辑资料弹窗 -->
@@ -223,8 +202,7 @@ import {
   Trophy, TrendCharts, Setting,
 } from '@vtj/icons';
 import NavBar from '$vtj/vue/navbar.vue';
-import BadgeIcon from '@/components/badge/BadgeIcon.vue';
-import { BADGE_TIERS } from '@/components/badge/badgePalette';
+// 2026-11-04：徽章展示模块下线，BadgeIcon / BADGE_TIERS 依赖随之移除
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 import { useDataSync } from '@/composables/useDataSync';
@@ -238,8 +216,6 @@ const coin = ref<any>({ balance: 0, month_income: 0, month_expense: 0 });
 const level = ref<any>({ level: 1, title: '新手学员', progress: 0, growth_points: 0 });
 const earnedCount = ref(0);
 const earnedBadges = ref<any[]>([]);
-// T3 徽章墙：精选优先的 6 枚（后端 /api/badges/wall 已按精选+最近获得排序）
-const badgeWall = ref<any[]>([]);
 const devices = ref<any[]>([]);
 const coinRecords = ref<any[]>([]);
 // 题型掌握度：来自 /api/stats/type-mastery（用户维度按 type_id 聚合），
@@ -267,22 +243,7 @@ async function apiGet(url: string) {
 }
 
 /** 档位中文 → 索引（0-4），未知按黑铁兜底 */
-function tierIndexOfLabel(label?: string | null) {
-  const i = BADGE_TIERS.findIndex((t) => t.label === (label || ''));
-  return i < 0 ? 0 : i;
-}
-
-/** 拉取主页徽章墙（失败不影响页面其余部分） */
-async function loadBadgeWall() {
-  try {
-    const d = await apiGet('/api/badges/wall?limit=6');
-    badgeWall.value = d.items || [];
-  } catch {
-    badgeWall.value = [];
-  }
-}
-
-onMounted(loadBadgeWall);
+// 2026-11-04：徽章展示模块下线，徽章墙抓取与档位映射一并移除
 
 // 统计/金币/等级/勋章/掌握度的加载逻辑抽成独立函数：首屏与 __VTJ_SYNC__ 增量同步共用，
 // 避免两处重复实现（合并解冲突时保留两边的说明口径）。
@@ -541,61 +502,5 @@ function handleLogout() {
 .record-amt.minus { color: #ef4444; }
 .record-date { color: #8a8faa; font-size: 11px; }
 
-/* ===== 我的徽章墙（T3）：跨满三栏，整页滚动，不做独立滚动容器 ===== */
-.badge-wall-card {
-  grid-column: 1 / -1;
-  margin-top: 4px;
-}
-.bw-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.bw-all {
-  border: none;
-  background: none;
-  color: #2a5298;
-  font-size: 12.5px;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-.bw-all:hover { text-decoration: underline; }
-.bw-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 14px;
-}
-.bw-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border-radius: 12px;
-  transition: background 0.2s ease;
-}
-.bw-item:hover { background: #f7f9fc; }
-.bw-name {
-  font-size: 12.5px;
-  color: #1f2d3d;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.bw-rarity { font-size: 11px; color: #94a3b8; }
-.bw-first {
-  font-size: 10.5px;
-  color: #64748b;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  padding: 0 5px;
-}
-@media (max-width: 1200px) {
-  .bw-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (max-width: 767px) {
-  .bw-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-}
+/* 2026-11-04：徽章墙样式（.badge-wall-card / .bw-*）随徽章展示模块下线一并移除 */
 </style>

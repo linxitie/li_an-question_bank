@@ -312,24 +312,8 @@ const routes: RouteRecordRaw[] = [
   },
 
   // ==================== 备考资料（学生端公开页） ====================
-  {
-    path: '/badges',
-    name: 'StudentBadges',
-    component: () => import('@/views/student/badges.vue'),
-    meta: { title: '我的徽章', roles: ['student', 'teacher', 'admin'] }
-  },
-  {
-    path: '/badges-demo',
-    name: 'BadgesDemo',
-    component: () => import('@/views/dev/BadgesDemo.vue'),
-    meta: { title: '徽章页演示', roles: ['student', 'teacher', 'admin'] }
-  },
-  {
-    path: '/badge-preview',
-    name: 'BadgePreview',
-    component: () => import('@/views/dev/BadgePreview.vue'),
-    meta: { title: '徽章预览', roles: ['student', 'teacher', 'admin'] }
-  },
+  // 2026-11-04：徽章展示模块下线（用户要求推远端前删除），/badges、/badges-demo、
+  // /badge-preview 三条路由随页面文件一并移除；成就/金币引擎不受影响。
   {
     path: '/materials/upload',
     name: 'MaterialUpload',
@@ -462,11 +446,7 @@ const routes: RouteRecordRaw[] = [
     redirect: '/materials/xingce'
   },
   {
-    // 2026-11-02：平板与电脑同版 → 徽章墙直接用电脑端页面
-    path: '/tablet/badges',
-    redirect: '/badges'
-  },
-  {
+    // 2026-11-04：徽章展示模块下线 → /tablet/badges 重定向一并移除
     // 2026-11-02：平板与电脑同版 → 详情页直接用电脑端整页
     path: '/tablet/materials/detail',
     redirect: '/materials/detail'
@@ -730,15 +710,7 @@ router.beforeEach((to, _from, next) => {
   }
 
   // 3) PC 设备：公开路由直接放行（论坛允许游客浏览，互动仍由接口校验登录）
-  // 徽章 SVG 预览页 / 徽章演示页 / 资料内容验收页：纯静态或只读，允许未登录查看（供截图/预览）
-  if (to.path === '/badges-demo') {
-    return next();
-  }
-
-  if (to.path === '/badge-preview') {
-    return next();
-  }
-
+  // 资料内容验收页：只读公开接口（/api/materials 游客可访问），允许未登录查看
   if (to.path === '/materials-preview') {
     return next();
   }

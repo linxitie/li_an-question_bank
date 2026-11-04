@@ -40,13 +40,8 @@ KNOWN_EXTRA_OPERATIONS = {
     # 说明：这些端点是 `feat/Study-Material-Management` 交付线里陆续加的，
     # 当时只改了代码没登记白名单，导致本守卫从那时起一直红。此处按 R11
     # 「只登记不重算基线」的口径一次性补齐，基线文件仍冻结 343 条。
-    # 徽章（需求(6)：成就/金币/徽章联动）
-    ("GET", "/api/badges/catalog"),
-    ("GET", "/api/badges/summary"),
-    ("GET", "/api/badges/my"),
-    ("GET", "/api/badges/wall"),
-    ("GET", "/api/badges/top"),
-    ("PUT", "/api/badges/top"),
+    # 2026-11-04：徽章展示模块下线（/api/badges/* 六个端点随 badges.py 删除），
+    # 白名单里对应条目一并移除；成就/金币相关端点仍保留登记。
     # 成长（徽章命名库 / 管理员建成就）
     ("POST", "/api/achievements/admin"),
     ("GET", "/api/achievements/name-bank/status"),

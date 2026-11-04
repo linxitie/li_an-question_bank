@@ -31,8 +31,9 @@ def test_page_route_count():
     # 98 → 104：2026-11-04 合并远端 main，模块4/7 新增 6 条页面路由
     #           /ai-assistant、/study-plan、/profile-quiz、/knowledge、/memories、/teacher/forum
     #           （与 scripts/verify-modularization-constraints.mjs 的 104 同步）
-    # 路由只增不减；再新增时请同步本数字并在提交信息写明。
-    assert len(_pages()) == 104
+    # 104 → 101：2026-11-04 徽章展示模块下线，/badges、/badges-demo、/badge-preview 移除
+    # 路由只增不减（本次是用户明确要求删除功能模块，属例外，已在提交信息写明）。
+    assert len(_pages()) == 101
 
 
 def test_whitelist_has_no_roles():

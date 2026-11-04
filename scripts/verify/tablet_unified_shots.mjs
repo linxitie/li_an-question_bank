@@ -261,22 +261,21 @@ async function main() {
       check('1024 上传页无横向溢出', up.overflowX === 0, JSON.stringify(up));
       await cdp.shot('04_1024x768_电脑端上传页_横屏');
 
-      await go('#/badges', `document.body.innerText.includes('徽章')`, 1800);
+      // 2026-11-04：徽章展示模块下线 → 不再断言徽章页 4 列，改为确认 /badges 已无徽章页
+      await go('#/badges', `!!location.hash`, 1500);
       const bd = await cdp.eval(`(() => ({
         overflowX: document.documentElement.scrollWidth - window.innerWidth,
-        cols: (() => { const g = document.querySelector('.bg-grid'); return g ? getComputedStyle(g).gridTemplateColumns.split(' ').length : 0; })()
+        hasBadgesPage: !!document.querySelector('.badges-page')
       }))()`);
-      check('1024 徽章页 4 列且无溢出', bd.cols === 4 && bd.overflowX === 0, JSON.stringify(bd));
-      await cdp.shot('05_1024x768_电脑端徽章页_横屏');
+      check('1024 /badges 已无徽章页（模块已下线）且无溢出',
+        bd.hasBadgesPage === false && bd.overflowX === 0, JSON.stringify(bd));
 
-      // ⑤ 旧地址 302
+      // ⑤ 旧地址 302（徽章那一条随模块下线移除）
       await go('#/tablet/materials', `!!document.querySelector('.mat-page')`, 1800);
       const r1 = await cdp.eval(`location.hash`);
-      await go('#/tablet/badges', `document.body.innerText.includes('徽章')`, 1800);
-      const r2 = await cdp.eval(`location.hash`);
       await go(`#/tablet/materials/detail?subject=xingce&id=${cardId}`, `!!document.querySelector('.md-page')`, 1800);
       const r3 = await cdp.eval(`location.hash`);
-      check('旧平板地址自动 302 到电脑端', r1 === '#/materials/xingce' && r2 === '#/badges' && r3.startsWith('#/materials/detail'), `${r1} | ${r2} | ${r3}`);
+      check('旧平板地址自动 302 到电脑端', r1 === '#/materials/xingce' && r3.startsWith('#/materials/detail'), `${r1} | ${r3}`);
     }
   }
 

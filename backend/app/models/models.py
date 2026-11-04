@@ -1965,23 +1965,6 @@ class UserAchievement(Base):
     )
 
 
-class UserBadgeTop(Base):
-    """用户手动精选徽章（个人主页墙优先展示，最多 6 枚）"""
-    __tablename__ = "user_badge_top"
-
-    id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
-    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
-    badge_kind = Column(String(16), nullable=False, comment="achievement / title")
-    badge_id = Column(Integer, nullable=False, comment="成就ID或称号ID")
-    sort = Column(Integer, default=0, comment="展示顺序，越小越靠前")
-    created_at = Column(DateTime, default=datetime.now, comment="设置时间")
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "badge_kind", "badge_id", name="uk_user_badge_top"),
-        Index("idx_user_badge_top", user_id, sort),
-    )
-
-
 class BadgeNameBank(Base):
     """徽章名称库表（规则引擎/LLM 产出统一入库）"""
     __tablename__ = "badge_name_bank"

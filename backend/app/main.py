@@ -28,7 +28,7 @@ from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
 from .api.v1.community import quotes, forum, practice_admin, forum_moderation
-from .api.v1.library import materials, badges
+from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
 from .api.v1.platform import feedback, notifications
@@ -837,7 +837,7 @@ app.include_router(notes.router)
 app.include_router(collection.router)
 app.include_router(quotes.router)
 app.include_router(materials.router)
-app.include_router(badges.router)
+# 2026-11-04：徽章展示模块下线（/api/badges/* 六个端点随 badges.py 一并删除）
 app.include_router(admin_api.router, tags=["管理员端"])
 app.include_router(admin_approval.router, tags=["管理员端-试卷审批"])
 app.include_router(teacher_api.router, tags=["教师端"])
