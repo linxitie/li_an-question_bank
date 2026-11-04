@@ -89,10 +89,6 @@ def _card(db: Session, news: NewsArticle) -> str:
         "",
         *(f"- {item.get('type')}: {item.get('name')}" for item in entities),
         "",
-        "## 图片",
-        "",
-        *(f"- ![{img.image_path}](/{img.image_path.lstrip('/')})" for img in images),
-        "",
         "## 风险提示",
         "",
         *(f"- {item}" for item in risks),
@@ -106,6 +102,15 @@ def _card(db: Session, news: NewsArticle) -> str:
         "- 备注：",
         "",
     ]
+    if images:
+        lines.extend(
+            [
+                "## 图片",
+                "",
+                *(f"- ![{img.image_path}](/{img.image_path.lstrip('/')})" for img in images),
+                "",
+            ]
+        )
     return "\n".join(lines)
 
 

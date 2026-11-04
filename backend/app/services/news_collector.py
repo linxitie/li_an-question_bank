@@ -9,6 +9,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from io import BytesIO
 from typing import Callable
 from urllib.parse import urljoin, urlparse
 
@@ -38,12 +39,67 @@ _CONTENT_SELECTORS = (
     ".detail",
 )
 _DATE_RE = re.compile(r"(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})")
-_NOISE_IMAGE_PARTS = ("/template/", "logo", "icon", "banner", "qrcode", "share")
+_NOISE_IMAGE_PARTS = (
+    "/template/",
+    "logo",
+    "icon",
+    "banner",
+    "qrcode",
+    "qr-code",
+    "二维码",
+    "avatar",
+    "share",
+    "广告",
+)
+_AD_IMAGE_RE = re.compile(r"(?:^|[/_.-])ad(?:[/_.-]|$)", re.I)
+_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
 
 
-def _is_noise_image(src: str) -> bool:
-    value = src.lower()
-    return any(part in value for part in _NOISE_IMAGE_PARTS)
+def _image_text(img) -> str:
+    return " ".join(
+        str(value or "")
+        for value in (
+            img.get("alt"),
+            img.get("title"),
+            " ".join(img.get("class") or []),
+        )
+    ).lower()
+
+
+def _is_noise_image(src: str, img=None) -> bool:
+    value = f"{src} {_image_text(img) if img is not None else ''}".lower()
+    if any(part in value for part in _NOISE_IMAGE_PARTS):
+        return True
+    return bool(_AD_IMAGE_RE.search(value))
+
+
+def _is_acceptable_image(data: bytes, *, min_size: int = 100, min_area: int = 90000) -> bool:
+    """用真实像素尺寸排除 icon、头像、二维码等小图；无法解码的图片不下载。"""
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(data)) as image:
+            width, height = image.size
+    except Exception:
+        return False
+    if width < min_size or height < min_size:
+        return False
+    long_side, short_side = max(width, height), min(width, height)
+    if short_side / long_side >= 0.85 and width * height <= min_area:
+        return False
+    # 可选：直接识别二维码，避免“尺寸够大但实际是下载二维码”的图片。
+    try:
+        import cv2
+        import numpy as np
+
+        matrix = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if matrix is not None:
+            decoded, points, _ = cv2.QRCodeDetector().detectAndDecode(matrix)
+            if decoded or points is not None:
+                return False
+    except Exception:
+        pass
+    return True
 
 
 @dataclass
@@ -168,6 +224,7 @@ def parse_article(html: str, url: str) -> ArticleData:
             title = node.get_text(" ", strip=True).strip()
     body = ""
     best_score = 0
+    content_node = None
     for selector in _CONTENT_SELECTORS:
         for node in soup.select(selector):
             text = "\n".join(
@@ -178,6 +235,7 @@ def parse_article(html: str, url: str) -> ArticleData:
             if len(text) > best_score:
                 body = text
                 best_score = len(text)
+                content_node = node
     if not body:
         body = "\n".join(
             line.strip()
@@ -192,15 +250,27 @@ def parse_article(html: str, url: str) -> ArticleData:
         except ValueError:
             published_at = None
     images = []
-    for img in soup.find_all("img"):
-        src = (img.get("src") or img.get("data-src") or "").strip()
+    seen_images = set()
+    # 只在最佳正文容器内取图；没有识别到正文时不回退到全页 <img>。
+    for img in (content_node.find_all("img") if content_node is not None else []):
+        src = (
+            img.get("src")
+            or img.get("data-src")
+            or img.get("data-original")
+            or img.get("data-url")
+            or ""
+        ).strip()
         if not src or src.startswith("data:"):
             continue
         src = urljoin(url, src)
-        if _is_noise_image(src):
+        if _is_noise_image(src, img):
             continue
-        if src.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
-            images.append(src)
+        if not src.lower().split("?")[0].endswith(_IMAGE_EXTS):
+            continue
+        if src in seen_images:
+            continue
+        seen_images.add(src)
+        images.append(src)
         if len(images) >= 5:
             break
     return ArticleData(
@@ -229,6 +299,9 @@ def _download_image(url: str, storage: NewsStorage, timeout: int = 15) -> str | 
         resp = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
         resp.raise_for_status()
         if len(resp.content) > 8 * 1024 * 1024:
+            return None
+        if not _is_acceptable_image(resp.content):
+            logger.info("news image ignored by size/filter: %s", url[:100])
             return None
         return storage.save_image(resp.content, _suffix(url), source_url=url)
     except Exception as exc:
@@ -280,6 +353,9 @@ def _download_image_playwright(
                 return None
             data = resp.body()
             if not data or len(data) > 8 * 1024 * 1024:
+                return None
+            if not _is_acceptable_image(data):
+                logger.info("news playwright image ignored by size/filter: %s", image_url[:100])
                 return None
             return storage.save_image(data, _suffix(image_url), source_url=image_url)
         except Exception as exc:

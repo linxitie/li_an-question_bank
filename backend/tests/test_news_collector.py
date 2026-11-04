@@ -1,4 +1,5 @@
 """R2.1 通用新闻采集器测试。"""
+
 from app.core.news_sources import NewsSourceConfig
 from app.models.models import NewsArticle, NewsImage
 from app.services import news_collector
@@ -16,24 +17,59 @@ ARTICLE_HTML = """
 <html><head><title>坚持和发展新时代枫桥经验</title>
 <meta property="og:title" content="坚持和发展新时代枫桥经验"></head>
 <body><h1>坚持和发展新时代枫桥经验</h1>
+<header><img src="/img/header-logo.png" alt="logo"></header>
 <div class="article-content">坚持和发展新时代枫桥经验，是基层社会治理的重要实践。
 要依靠群众、服务群众，把矛盾化解在基层，把平安建设落到实处。
-要坚持党建引领，把党的政治优势、组织优势转化为治理效能，形成共建共治共享的基层治理格局。</div>
-<img src="/img/1.jpg" />
+要坚持党建引领，把党的政治优势、组织优势转化为治理效能，形成共建共治共享的基层治理格局。
+<img src="/img/1.jpg" alt="新闻现场" />
+<img src="/img/qrcode.png" alt="二维码" />
+<img src="/img/photo.jpg" alt="logo" />
+</div>
+<div class="sidebar"><img src="/img/sidebar.jpg" alt="相关新闻" /></div>
 <img src="/template/logo.png" />
 </body></html>
 """
 
 
-def test_parse_article_filters_template_images():
+def test_parse_article_filters_only_content_images():
     article = news_collector.parse_article(ARTICLE_HTML, "https://example.com/a/1.html")
     assert article.images == ["https://example.com/img/1.jpg"]
 
 
+def test_image_size_filter_rejects_icons_and_tiny_squares():
+    from io import BytesIO
+
+    from PIL import Image
+
+    def png(width: int, height: int) -> bytes:
+        buffer = BytesIO()
+        Image.new("RGB", (width, height), "white").save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    assert not news_collector._is_acceptable_image(png(80, 80))
+    assert not news_collector._is_acceptable_image(png(120, 120))
+    assert news_collector._is_acceptable_image(png(320, 180))
+    assert news_collector._is_acceptable_image(png(400, 400))
+
+
+def test_image_url_and_alt_noise_filter():
+    assert news_collector._is_noise_image("https://example.com/assets/qrcode.png")
+    assert news_collector._is_noise_image(
+        "https://example.com/photo.jpg", {"alt": "新华网客户端下载二维码"}
+    )
+    assert news_collector._is_noise_image("https://example.com/ad/banner.jpg")
+    assert not news_collector._is_noise_image("https://example.com/news/road.jpg")
+
+
 def _source():
     return NewsSourceConfig(
-        "beijing", "北京市公安局", "https://example.com", "https://example.com/list",
-        category_code="police_news", category="公安要闻", region_code="110000",
+        "beijing",
+        "北京市公安局",
+        "https://example.com",
+        "https://example.com/list",
+        category_code="police_news",
+        category="公安要闻",
+        region_code="110000",
     )
 
 
@@ -44,17 +80,26 @@ def test_collect_source_inserts_and_dedupes(tmp_path, db_session, monkeypatch):
         "https://example.com/a/1.html": ARTICLE_HTML,
     }
     monkeypatch.setattr(
-        news_collector, "_download_image",
+        news_collector,
+        "_download_image",
         lambda url, _storage, timeout=15: "uploads/news_images/fake.jpg",
     )
 
     first = news_collector.collect_source(
-        db_session, _source(), limit=1, dry_run=False,
-        fetcher=lambda url: html[url], storage=storage,
+        db_session,
+        _source(),
+        limit=1,
+        dry_run=False,
+        fetcher=lambda url: html[url],
+        storage=storage,
     )
     second = news_collector.collect_source(
-        db_session, _source(), limit=1, dry_run=False,
-        fetcher=lambda url: html[url], storage=storage,
+        db_session,
+        _source(),
+        limit=1,
+        dry_run=False,
+        fetcher=lambda url: html[url],
+        storage=storage,
     )
 
     assert first["inserted"] == 1
@@ -69,8 +114,12 @@ def test_collect_source_inserts_and_dedupes(tmp_path, db_session, monkeypatch):
 def test_collect_source_dry_run_does_not_write(tmp_path, db_session):
     html = {"https://example.com/list": LIST_HTML, "https://example.com/a/1.html": ARTICLE_HTML}
     report = news_collector.collect_source(
-        db_session, _source(), limit=1, dry_run=True,
-        fetcher=lambda url: html[url], storage=LocalNewsStorage(tmp_path),
+        db_session,
+        _source(),
+        limit=1,
+        dry_run=True,
+        fetcher=lambda url: html[url],
+        storage=LocalNewsStorage(tmp_path),
     )
 
     assert report["inserted"] == 1
