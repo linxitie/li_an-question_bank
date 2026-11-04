@@ -1005,7 +1005,51 @@ export default defineComponent({
       '坚持到最后的人，运气都不会太差。',
       '你已经坚持了7天，离上岸又近了一步！'
     ];
-    const coachQuote = coachQuotes[new Date().getDay() % coachQuotes.length];
+    const coachQuote = ref(coachQuotes[new Date().getDay() % coachQuotes.length]);
+
+    // 一次性 AI 任务调用（/api/llm/chat，persist=false：不落会话、不写消息）
+    async function callAiOneShot(message, scene) {
+      const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, scene, persist: false })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.reply) throw new Error((data && data.detail) || 'AI 服务暂不可用');
+      return data.reply;
+    }
+
+    // 容错解析大模型返回的 JSON（去 ```json 围栏 → 截取首尾 {} → JSON.parse）
+    function parseAiJson(text) {
+      if (!text) return null;
+      let s = String(text).trim();
+      s = s.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+      const start = s.indexOf('{');
+      const end = s.lastIndexOf('}');
+      if (start >= 0 && end > start) s = s.slice(start, end + 1);
+      try {
+        return JSON.parse(s);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // AI学习教练：按真实今日计划生成今日建议（失败保留每日金句兜底）
+    async function loadCoachSuggestion() {
+      try {
+        let ctxText = '暂无今日计划数据';
+        const r = await window.__VTJ_AUTH__.apiFetch('/api/plan/today');
+        if (r.ok) {
+          const d = await r.json();
+          const items = d && d.today ? d.today : (d.items || []);
+          const lines = items.slice(0, 6).map((t) => (t.title || '') + (t.is_completed === 1 ? '（已完成）' : ''));
+          if (lines.length) ctxText = lines.join('；');
+        }
+        const reply = await callAiOneShot('【学习数据】今日计划：' + ctxText, 'coach');
+        const parsed = parseAiJson(reply);
+        if (parsed && parsed.suggestion) coachQuote.value = String(parsed.suggestion);
+      } catch (e) { /* 保留每日金句兜底 */ }
+    }
 
     function startTodayStudy() {
       state.input = '帮我制定今日学习计划';
@@ -1039,19 +1083,61 @@ export default defineComponent({
       state.interviewRole = role;
     }
 
-    function nextQuestion() {
+    async function nextQuestion() {
+      state.interviewResult = null;
+      state.notice = '';
+      const roleLabel = { strict: '严肃考官', gentle: '温和考官', pro: '专业考官' }[state.interviewRole] || '专业考官';
+      try {
+        const reply = await callAiOneShot('【出题】考官风格：' + roleLabel + '。请出一道公安联考面试题。', 'interview');
+        const parsed = parseAiJson(reply);
+        if (parsed && parsed.question) {
+          state.interviewQuestion = String(parsed.question);
+          return;
+        }
+      } catch (e) {
+        state.notice = 'AI 出题暂不可用，已使用备用题';
+      }
       const randomIdx = Math.floor(Math.random() * interviewQuestions.length);
       state.interviewQuestion = interviewQuestions[randomIdx];
-      state.interviewResult = null;
     }
 
-    function submitAnswer() {
+    async function submitAnswer() {
+      const answer = window.prompt('请输入你的作答内容（将交给 AI 考官评分）：', '');
+      if (answer === null) return;
+      if (!answer.trim()) {
+        alert('请先输入作答内容！');
+        return;
+      }
+      state.interviewResult = null;
+      state.notice = '';
+      const roleLabel = { strict: '严肃考官', gentle: '温和考官', pro: '专业考官' }[state.interviewRole] || '专业考官';
+      try {
+        const reply = await callAiOneShot(
+          '【评分】考官风格：' + roleLabel
+            + '\n面试题：' + state.interviewQuestion
+            + '\n考生作答：' + answer.trim(),
+          'interview'
+        );
+        const parsed = parseAiJson(reply);
+        if (parsed && parsed.content !== undefined && parsed.logic !== undefined) {
+          state.interviewResult = {
+            content: Number(parsed.content) || 0,
+            expression: Number(parsed.expression) || 0,
+            presence: Number(parsed.presence) || 0,
+            logic: Number(parsed.logic) || 0,
+            comment: String(parsed.comment || ''),
+          };
+          return;
+        }
+      } catch (e) {
+        state.notice = 'AI 评分暂不可用，已展示示例点评';
+      }
       state.interviewResult = {
         content: 82,
         expression: 78,
         presence: 85,
         logic: 80,
-        comment: '整体表现不错！内容方面有一定的思路和框架，但可以再结合一些公安实际案例。表达比较流畅，仪态方面可以再自信一点。逻辑上层次比较清晰，但开头和结尾可以更精炼。继续加油！',
+        comment: '（示例点评，非 AI 实时结果）整体表现不错！内容方面有一定的思路和框架，但可以再结合一些公安实际案例。表达比较流畅，仪态方面可以再自信一点。逻辑上层次比较清晰，但开头和结尾可以更精炼。继续加油！',
       };
     }
 
@@ -1089,6 +1175,7 @@ export default defineComponent({
     onMounted(() => {
       state.__listEl = document.querySelector('.ai-chat-page .message-list');
       loadSessions();
+      loadCoachSuggestion();
     });
 
     return {
