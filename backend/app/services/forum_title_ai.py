@@ -87,18 +87,33 @@ def clean_title(raw: str) -> str:
     return title[:MAX_TITLE_LEN]
 
 
+def _meaningful_chars(text: str) -> int:
+    """统计「有效文字」数量：只算中日韩文字、字母、数字。
+
+    为什么要这一步：库里存在正文只有表情（😄😍🤨）或标点（。。。。）的帖子，
+    对它们调模型只会拿到「无标题」这种结果，既浪费 token 又污染标题。
+    """
+    return len(re.findall(r"[\u4e00-\u9fff\u3400-\u4dbfA-Za-z0-9]", text or ""))
+
+
 def needs_ai_title(title: Optional[str], content: Optional[str]) -> bool:
-    """是否需要 AI 生成标题：标题为空/(无标题)，且正文去掉标签后仍有内容。"""
+    """是否需要 AI 生成标题：标题为空/(无标题)，且正文有足够「有效文字」。
+
+    门槛取 8 个有效字符：低于这个量无法概括出有意义的标题。
+    """
     normalized = (title or "").strip()
     if normalized and normalized != "(无标题)":
         return False
-    return bool(strip_html(content or ""))
+    plain = strip_html(content or "")
+    return _meaningful_chars(plain) >= 8
 
 
 async def generate_forum_title(content: str, content_format: str = "TEXT") -> Optional[str]:
     """调用大模型生成标题；任何失败都返回 None（调用方据此跳过，不阻断业务）。"""
     plain = strip_html(content or "")
-    if not plain:
+    # 正文有效文字太少时直接放弃，不浪费 token
+    if _meaningful_chars(plain) < 8:
+        logger.info("AI 标题跳过：正文有效文字不足（%s 字）", _meaningful_chars(plain))
         return None
 
     # 正文过长时截断，控制 token 成本

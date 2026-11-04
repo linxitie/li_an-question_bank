@@ -34,8 +34,8 @@ def test_clean_title_truncates_long_output():
 # --------------------------- 判定 ---------------------------
 
 def test_needs_ai_title_for_empty_title_with_body():
-    assert ai.needs_ai_title("(无标题)", "<p>正文</p>") is True
-    assert ai.needs_ai_title("", "<p>正文</p>") is True
+    assert ai.needs_ai_title("(无标题)", "<p>推荐两本行测备考资料</p>") is True
+    assert ai.needs_ai_title("", "<p>推荐两本行测备考资料</p>") is True
 
 
 def test_does_not_touch_existing_title():
@@ -45,6 +45,17 @@ def test_does_not_touch_existing_title():
 def test_needs_ai_title_requires_real_body():
     assert ai.needs_ai_title("", "<p><br></p>") is False
     assert ai.needs_ai_title("", "[[sticker:http://x]]") is False
+
+
+def test_needs_ai_title_ignores_emoji_and_punctuation_only_body():
+    """纯表情/纯标点的正文无法概括标题，不应触发模型调用（省钱且避免垃圾标题）。"""
+    assert ai.needs_ai_title("(无标题)", "😄😍🤨🤔😐🙂") is False
+    assert ai.needs_ai_title("(无标题)", "。。。。。。。") is False
+    assert ai.needs_ai_title("(无标题)", "<p>。。</p>") is False
+
+
+def test_needs_ai_title_accepts_meaningful_body():
+    assert ai.needs_ai_title("", "推荐几本公安联考行测的备考资料") is True
 
 
 def test_strip_html_removes_tags_and_stickers():
