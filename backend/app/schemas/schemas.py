@@ -2,7 +2,7 @@
 数据验证模型定义
 """
 from datetime import datetime
-from typing import Optional, List, Any,Dict
+from typing import Optional, List, Any, Dict, Literal
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from enum import Enum
 
@@ -1075,3 +1075,8 @@ class OCREnhancedResult(BaseModel):
     char_count: int = Field(0, description="识别字符总数")
     confidence: float = Field(0.0, description="整体置信度 0-1")
     message: str = Field('', description="用户提示信息")
+
+class NewsReviewRequest(BaseModel):
+    """R2.3 新闻审核请求"""
+    action: Literal["publish", "reject", "needs_changes", "resubmit", "archive"]
+    reason: str = Field("", max_length=500, description="拒绝/退回时必填")

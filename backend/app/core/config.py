@@ -2,7 +2,10 @@
 数据库配置 - 支持SQLite作为开发环境备选方案
 """
 import os
+from pathlib import Path
 from typing import Optional
+
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 try:
     from pydantic_settings import BaseSettings
@@ -244,7 +247,10 @@ class Settings(BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
     
     class Config:
-        env_file = ".env"
+        env_file = (
+            str(_BACKEND_DIR / ".env"),
+            str(_BACKEND_DIR.parent / ".env"),
+        )
         env_file_encoding = "utf-8"
 
 settings = Settings()

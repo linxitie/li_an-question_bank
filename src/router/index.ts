@@ -49,6 +49,18 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/news',
+    name: 'NewsTimeline',
+    component: () => import('@/views/student/shared/news_timeline.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/news/:id',
+    name: 'NewsDetail',
+    component: () => import('@/views/student/shared/news_detail.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/exercise',
     name: 'Exercise',
     component: () => import('@/views/student/shared/exercise.vue'),
@@ -369,6 +381,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    path: '/tablet/news/timeline',
+    name: 'TabletNewsTimeline',
+    component: () => import('@/views/student/shared/news_timeline.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
     path: '/tablet/news/:id',
     name: 'TabletNewsDetail',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
@@ -470,6 +488,12 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/news',
     name: 'MobileNews',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/news/timeline',
+    name: 'MobileNewsTimeline',
+    component: () => import('@/views/student/shared/news_timeline.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {

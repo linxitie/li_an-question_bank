@@ -27,6 +27,7 @@ from .api.v1.content import news, recruitment, calendar
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
+from .api.v1.platform import admin_news
 from .api.v1.community import quotes, forum, practice_admin, forum_moderation
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
@@ -120,6 +121,12 @@ async def lifespan(app: FastAPI):
     from .core.database import engine, Base, SessionLocal
     from .models import models  # 确保所有模型被导入
     Base.metadata.create_all(bind=engine)
+    try:
+        from .core.news_schema import ensure_news_schema
+        ensure_news_schema(engine)
+        logger.info("新闻 Schema 就绪")
+    except Exception as e:
+        logger.warning(f"新闻 Schema 初始化失败: {e}")
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
@@ -839,6 +846,7 @@ app.include_router(quotes.router)
 app.include_router(materials.router)
 app.include_router(admin_api.router, tags=["管理员端"])
 app.include_router(admin_approval.router, tags=["管理员端-试卷审批"])
+app.include_router(admin_news.router, tags=["管理员端-新闻"])
 app.include_router(teacher_api.router, tags=["教师端"])
 app.include_router(auth_qrcode.router, tags=["二维码登录"])
 app.include_router(devices.router, tags=["设备管理"])

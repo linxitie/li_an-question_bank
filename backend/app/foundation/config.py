@@ -12,6 +12,33 @@ GRAPH_DDL_FILE = MIGRATIONS_DIR / "20261027_003_graph_projection.sql"
 DEFAULT_SQLITE_PATH = BACKEND_DIR / "data" / "question_bank.db"
 
 
+def load_env_files(paths: tuple[Path, ...] | None = None) -> None:
+    """把 backend/.env 与仓库根 .env 载入进程环境；Pydantic 不会导出到 os.environ。"""
+    candidates = paths or (BACKEND_DIR / ".env", BACKEND_DIR.parent / ".env")
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        for path in candidates:
+            if not path.is_file():
+                continue
+            for raw in path.read_text(encoding="utf-8-sig").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip().removeprefix("export ").strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+        return
+    for path in candidates:
+        if path.is_file():
+            load_dotenv(path, override=False)
+
+
+load_env_files()
+
+
 def _bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":

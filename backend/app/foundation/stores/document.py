@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterator, Protocol, runtime_checkable
 
-COLLECTIONS = ("exam_resources", "import_snapshots", "forum_contents")
+COLLECTIONS = ("exam_resources", "import_snapshots", "forum_contents", "news_contents")
 
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
