@@ -408,7 +408,8 @@ async def my_create_card(
     urls, written = [], []
     try:
         for fh in uploads:
-            url = _safe_image_upload(fh)
+            # 合并远端 main 后 MEDIA_STORE_ENABLED 走媒体资产库，必须传 db/user_id
+            url = _safe_image_upload(fh, db=db, user_id=current_user.user_id)
             urls.append(url)
             written.append(url)
     except HTTPException:
@@ -529,7 +530,7 @@ async def batch_image(files: List[UploadFile] = File(...),
     written = []          # B3：本批已落盘 URL，失败时回收
     try:
         for fh in files:
-            url = _safe_image_upload(fh)      # 复用白名单+魔数+uuid 重命名
+            url = _safe_image_upload(fh, db=db, user_id=current_user.user_id)  # 复用白名单+魔数+uuid 重命名（媒体库需 db）
             images.append({"url": url})
             written.append(url)
     except HTTPException:

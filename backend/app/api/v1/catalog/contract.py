@@ -12,7 +12,7 @@
 """
 from typing import Dict, List, Optional, Tuple
 
-from ....models.models import KnowledgePoint, SubCategory
+from ....models.models import KnowledgePoint, QuestionGroup, SubCategory
 
 # 科目字符串 ↔ subject_id（question_subject 表里 fallback 名称也叫 auto_<科目>）
 SUBJECT_IDS = {"xingce": 1, "shenlun": 2, "gongzhuan": 3}
@@ -88,3 +88,35 @@ def category_of_point(db, subject: str, point_id) -> Optional[str]:
 
 def point_belongs_to(db, subject: str, point_id) -> bool:
     return point_by_id(db, subject, point_id) is not None
+
+
+def question_groups_by_ids(db, group_ids) -> Dict[int, Dict[str, object]]:
+    """按题组 ID 批量取复合题共享材料（只读）。
+
+    exam 域组装试卷时要随题返回组材料（学生答题页 `/paper-answer` 没有题库详情入口，
+    不返回就只能看到设问），但 `question_group` 表属 catalog 域。按 P4.1 模块边界约定
+    （`scripts/gates/check_module_boundary.py`），他域不得直接 import 本域 ORM 模型，
+    故在此提供只读契约，返回纯 dict（不把 ORM 对象泄给他域）。
+
+    返回 ``{group_id: {id, title, shared_content, shared_content_images}}``。
+    """
+    ids = []
+    for g in group_ids or []:
+        try:
+            gid = int(g or 0)
+        except (TypeError, ValueError):
+            continue
+        if gid > 0:
+            ids.append(gid)
+    if not ids:
+        return {}
+    rows = db.query(QuestionGroup).filter(QuestionGroup.id.in_(sorted(set(ids)))).all()
+    return {
+        int(r.id): {
+            "id": int(r.id),
+            "title": r.title or "",
+            "shared_content": r.shared_content or "",
+            "shared_content_images": r.shared_content_images or "",
+        }
+        for r in rows
+    }
