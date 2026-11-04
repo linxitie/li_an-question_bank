@@ -145,6 +145,108 @@
           </div>
         </div>
 
+        <!-- 智能排课 -->
+        <div class="smart-schedule-card">
+          <div class="dist-title">⏰ 智能排课 · 今日时间表</div>
+          <div class="schedule-timeline">
+            <div class="time-slot morning">
+              <div class="time-label">🌅 上午 9:00-12:00</div>
+              <div class="task-list">
+                <div class="task-item" :class="{ done: slot.morning.done }">
+                  <span class="task-subject">资料分析</span>
+                  <span class="task-detail">20题 · 重点：增长率</span>
+                  <button class="task-check" @click="toggleSlotTask('morning')">{{ slot.morning.done ? '✓' : '○' }}</button>
+                </div>
+                <div class="task-item" :class="{ done: slot.morning2.done }">
+                  <span class="task-subject">言语理解</span>
+                  <span class="task-detail">15题 · 重点：逻辑填空</span>
+                  <button class="task-check" @click="toggleSlotTask('morning2')">{{ slot.morning2.done ? '✓' : '○' }}</button>
+                </div>
+              </div>
+            </div>
+            <div class="time-slot afternoon">
+              <div class="time-label">☀️ 下午 14:00-17:00</div>
+              <div class="task-list">
+                <div class="task-item" :class="{ done: slot.afternoon.done }">
+                  <span class="task-subject">判断推理</span>
+                  <span class="task-detail">15题 · 重点：图形推理</span>
+                  <button class="task-check" @click="toggleSlotTask('afternoon')">{{ slot.afternoon.done ? '✓' : '○' }}</button>
+                </div>
+                <div class="task-item" :class="{ done: slot.afternoon2.done }">
+                  <span class="task-subject">数量关系</span>
+                  <span class="task-detail">10题 · 重点：工程问题</span>
+                  <button class="task-check" @click="toggleSlotTask('afternoon2')">{{ slot.afternoon2.done ? '✓' : '○' }}</button>
+                </div>
+              </div>
+            </div>
+            <div class="time-slot evening">
+              <div class="time-label">🌙 晚上 19:00-21:30</div>
+              <div class="task-list">
+                <div class="task-item" :class="{ done: slot.evening.done }">
+                  <span class="task-subject">申论</span>
+                  <span class="task-detail">大作文 · 1篇</span>
+                  <button class="task-check" @click="toggleSlotTask('evening')">{{ slot.evening.done ? '✓' : '○' }}</button>
+                </div>
+                <div class="task-item" :class="{ done: slot.evening2.done }">
+                  <span class="task-subject">错题复习</span>
+                  <span class="task-detail">复习今日错题 · 艾宾浩斯</span>
+                  <button class="task-check" @click="toggleSlotTask('evening2')">{{ slot.evening2.done ? '✓' : '○' }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="schedule-progress">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: getScheduleProgress() + '%' }"></div>
+            </div>
+            <div class="progress-text">今日已完成 {{ getScheduleProgress() }}%</div>
+          </div>
+        </div>
+
+        <!-- AI作文批改 -->
+        <div class="essay-grading-card">
+          <div class="dist-title">✍️ AI作文批改 · 申论大作文</div>
+          <div class="essay-intro">
+            <p>把你的申论大作文粘贴进来，AI专家帮你打分点评！</p>
+          </div>
+          <div class="essay-topic-input">
+            <label>作文题目：</label>
+            <input type="text" v-model="essay.topic" placeholder="例如：请以“新时代公安使命”为主题写一篇议论文" />
+          </div>
+          <div class="essay-content-input">
+            <label>作文内容：</label>
+            <textarea v-model="essay.content" rows="6" placeholder="把你的作文内容粘贴在这里..."></textarea>
+          </div>
+          <button class="essay-submit-btn" @click="gradeEssay">🤖 开始AI批改</button>
+
+          <!-- 批改结果 -->
+          <div v-if="essay.result" class="essay-result">
+            <div class="result-score">
+              <div class="score-num">{{ essay.result.total }}<span>分</span></div>
+              <div class="score-label">总分（百分制）</div>
+            </div>
+            <div class="result-dimensions">
+              <div v-for="dim in essay.result.dimensions" :key="dim.name" class="dim-item">
+                <div class="dim-name">{{ dim.name }}</div>
+                <div class="dim-bar">
+                  <div class="dim-fill" :style="{ width: (dim.score / dim.max) * 100 + '%', background: dim.color }"></div>
+                </div>
+                <div class="dim-score">{{ dim.score }}/{{ dim.max }}</div>
+              </div>
+            </div>
+            <div class="result-comment">
+              <div class="comment-title">📝 AI评语：</div>
+              <p>{{ essay.result.comment }}</p>
+            </div>
+            <div class="result-suggest">
+              <div class="suggest-title">💡 改进建议：</div>
+              <ul>
+                <li v-for="(s, i) in essay.result.suggestions" :key="i">{{ s }}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <!-- 科目分布 -->
         <div class="subject-dist">
           <div class="dist-title">📊 任务科目分布</div>
@@ -405,6 +507,21 @@
           minutes: 0,
           timer: null,
         },
+        // 智能排课
+        slot: {
+          morning: { done: false },
+          morning2: { done: false },
+          afternoon: { done: false },
+          afternoon2: { done: false },
+          evening: { done: false },
+          evening2: { done: false },
+        },
+        // AI作文批改
+        essay: {
+          topic: '',
+          content: '',
+          result: null,
+        },
       });
 
       const subjects = ['行测', '申论', '公安专业科目'];
@@ -576,6 +693,45 @@
         p.seconds = 25 * 60;
       }
 
+      // 智能排课：切换任务完成状态
+      function toggleSlotTask(slotKey) {
+        state.slot[slotKey].done = !state.slot[slotKey].done;
+      }
+
+      // 智能排课：计算今日完成进度
+      function getScheduleProgress() {
+        const slots = Object.values(state.slot);
+        const done = slots.filter(s => s.done).length;
+        return Math.round((done / slots.length) * 100);
+      }
+
+      // AI作文批改
+      function gradeEssay() {
+        if (!state.essay.content.trim()) {
+          alert('请先输入作文内容！');
+          return;
+        }
+        // 模拟AI批改结果
+        state.essay.result = {
+          total: 78,
+          dimensions: [
+            { name: '立意', score: 16, max: 20, color: '#4caf50' },
+            { name: '结构', score: 15, max: 20, color: '#ff9800' },
+            { name: '内容', score: 24, max: 30, color: '#2196f3' },
+            { name: '语言', score: 16, max: 20, color: '#9c27b0' },
+            { name: '卷面', score: 7, max: 10, color: '#607d8b' },
+          ],
+          comment: '这篇作文立意明确，紧扣新时代公安使命的主题，结合了公安实际工作，有一定的深度。但结构上略显松散，分论点之间的逻辑衔接可以更紧密。内容上论据比较充分，但可以再增加一些具体的案例和数据支撑。语言表达比较流畅，但个别地方可以更精炼。整体来看是一篇中等偏上的作文，继续加油！',
+          suggestions: [
+            '开头可以更吸引人，用一个生动的案例或名言引入主题',
+            '分论点之间增加过渡句，让文章结构更清晰',
+            '增加1-2个具体的公安工作案例，让内容更有说服力',
+            '结尾可以升华主题，呼应开头，让文章更有感染力',
+            '注意段落划分，每段不要太长，200-300字一段比较合适',
+          ],
+        };
+      }
+
       function reset() {
         state.plan = null;
         state.error = '';
@@ -668,6 +824,7 @@
         state, subjects, levels, weekDays, getSubjectStats,
         toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
         formatTime, togglePomodoro, resetPomodoro,
+        toggleSlotTask, getScheduleProgress, gradeEssay,
       };
     },
   });
@@ -675,6 +832,266 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 智能排课 ===== */
+  .smart-schedule-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .schedule-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .time-slot {
+    border-radius: 12px;
+    padding: 12px 16px;
+    border-left: 4px solid;
+  }
+  .time-slot.morning {
+    background: linear-gradient(90deg, #fff8e1, #fff);
+    border-left-color: #ff9800;
+  }
+  .time-slot.afternoon {
+    background: linear-gradient(90deg, #e3f2fd, #fff);
+    border-left-color: #2196f3;
+  }
+  .time-slot.evening {
+    background: linear-gradient(90deg, #f3e5f5, #fff);
+    border-left-color: #9c27b0;
+  }
+  .time-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+  }
+  .task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .task-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
+    transition: all 0.3s;
+  }
+  .task-item.done {
+    opacity: 0.6;
+    background: #f5f5f5;
+  }
+  .task-item.done .task-subject {
+    text-decoration: line-through;
+  }
+  .task-subject {
+    font-weight: 600;
+    color: #d32f2f;
+    min-width: 80px;
+  }
+  .task-detail {
+    flex: 1;
+    font-size: 13px;
+    color: #666;
+  }
+  .task-check {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    color: #999;
+    transition: all 0.3s;
+  }
+  .task-item.done .task-check {
+    background: #4caf50;
+    border-color: #4caf50;
+    color: #fff;
+  }
+  .schedule-progress {
+    margin-top: 16px;
+  }
+  .progress-bar {
+    height: 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #d32f2f, #ff5722);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+  .progress-text {
+    text-align: center;
+    font-size: 13px;
+    color: #666;
+  }
+
+  /* ===== AI作文批改 ===== */
+  .essay-grading-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .essay-intro {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+  .essay-topic-input,
+  .essay-content-input {
+    margin-bottom: 16px;
+  }
+  .essay-topic-input label,
+  .essay-content-input label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+  }
+  .essay-topic-input input,
+  .essay-content-input textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  .essay-topic-input input:focus,
+  .essay-content-input textarea:focus {
+    outline: none;
+    border-color: #d32f2f;
+  }
+  .essay-submit-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #d32f2f, #ff5722);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .essay-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(211, 47, 47, 0.3);
+  }
+  .essay-result {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #f0f0f0;
+  }
+  .result-score {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .score-num {
+    font-size: 48px;
+    font-weight: 700;
+    color: #d32f2f;
+  }
+  .score-num span {
+    font-size: 20px;
+    font-weight: 400;
+  }
+  .score-label {
+    font-size: 14px;
+    color: #666;
+  }
+  .result-dimensions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .dim-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .dim-name {
+    width: 60px;
+    font-size: 13px;
+    color: #333;
+    font-weight: 600;
+  }
+  .dim-bar {
+    flex: 1;
+    height: 10px;
+    background: #f0f0f0;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .dim-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.5s ease;
+  }
+  .dim-score {
+    width: 60px;
+    text-align: right;
+    font-size: 13px;
+    color: #666;
+  }
+  .result-comment {
+    background: #fff8e1;
+    padding: 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+  .comment-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f57c00;
+    margin-bottom: 8px;
+  }
+  .result-comment p {
+    font-size: 14px;
+    line-height: 1.8;
+    color: #333;
+    margin: 0;
+  }
+  .result-suggest {
+    background: #e8f5e9;
+    padding: 16px;
+    border-radius: 10px;
+  }
+  .suggest-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #388e3c;
+    margin-bottom: 8px;
+  }
+  .result-suggest ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+  .result-suggest li {
+    font-size: 14px;
+    line-height: 1.8;
+    color: #333;
+  }
 
   /* ===== 番茄钟专注 ===== */
   .pomodoro-card {
