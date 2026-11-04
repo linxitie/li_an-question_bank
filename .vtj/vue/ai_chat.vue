@@ -1670,9 +1670,6 @@ export default defineComponent({
   transform: scale(1.05);
   box-shadow: 0 6px 20px rgba(0,0,0,0.2);
 }
-  color: #8899aa;
-  margin: 0 0 16px;
-}
 .quick-chips {
   display: flex;
   flex-direction: column;
