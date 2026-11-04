@@ -10,6 +10,8 @@ on:
     paths:
       - '.vtj/vue/**'
       - '.vtj/files/**'
+  # 2026-11-04：加手动触发，便于在不改 .vtj 的提交上单独验证 Python/前端质量作业
+  workflow_dispatch:
 
 jobs:
   vtj-version-check:
