@@ -21,6 +21,15 @@
         <button class="search-reset" @click="resetSearch">重置</button>
         </div>
 
+        <!-- 校园 / 班级论坛筛选（2026-11-03）：作用域 ALL=校园、CLASSES=班级 -->
+        <div class="scope-filter" role="group" aria-label="论坛范围筛选">
+          <button
+            v-for="opt in scopeOptions"
+            :key="opt.key"
+            :class="['scope-chip', { on: state.scopeFilter === opt.key }]"
+            @click="selectScope(opt.key)">{{ opt.label }}</button>
+        </div>
+
         <div class="forum-header-actions">
           <button class="post-btn ghost star-only" title="我的收藏 / 我的喜欢" @click="openFavorites('favorites')">
             <XIcon :icon="Star" :size="18" color="#c41e3a"></XIcon>
@@ -53,20 +62,20 @@
                   <span class="meta-dot"> ·</span>
                   <span class="meta-date">{{ post.date }}</span>
                 </div>
-                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
-                <p class="post-excerpt"><ForumContent :content="post.content" /></p>
+                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }"><span v-if="post.aiTitle" class="ai-title-tag">AI生成</span>{{ post.title }}</h4>
+                <p class="post-excerpt"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
                 <AttachmentList
                   v-if="post.attachments && post.attachments.length"
                   :attachments="post.attachments"
                   mode="post" />
 
                 <div class="post-meta">
-                  <span class="meta-likes" @click.stop="toggleHeart(post)" title="喜欢">
+                  <span class="meta-likes" :class="{ active: post.liked }" @click.stop="toggleHeart(post)" :title="post.reactionSummary || '喜欢'">
                     <span class="heart-icon" :class="{ active: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                     <span> {{ post.likeCount }}</span>
                   </span>
                   <span class="meta-dot"> ·</span>
-                  <span class="meta-favs" @click.stop="toggleFavorite(post)" title="收藏">
+                  <span class="meta-favs" :class="{ active: post.favorited }" @click.stop="toggleFavorite(post)" title="收藏">
                     <XIcon
                       :icon="post.favorited ? StarFilled : Star"
                       :size="13"
@@ -106,7 +115,11 @@
               class="hot-item"
               @click="viewPost(hot)">
               <span class="hot-rank" :class="'rank-' + hot.rank">{{ hot.rank }}</span>
-              <span class="hot-title">{{ hot.title }}</span>
+              <span class="hot-main">
+                <span class="hot-title"><span v-if="hot.aiTitle" class="ai-title-tag">AI生成</span>{{ hot.title }}</span>
+                <!-- 2026-11-03：列表只显示标题已不够用，补 2 行正文摘要（后端已带 200 字 content） -->
+                <span class="list-excerpt">{{ excerptOf(hot) }}</span>
+              </span>
               <span class="hot-replies">
                 <span> {{ hot.commentCount }} </span>
                 <span> 回复</span>
@@ -129,7 +142,7 @@
                 :key="mp.id"
                 class="my-post-item"
                 @click="openPostDetail(mp)">
-                <span class="my-post-title">{{ mp.title }}</span>
+                <span class="my-post-title"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
                 <span class="my-post-stats">
                   <span class="my-stat">❤️ {{ mp.likeCount }}</span>
                   <span class="my-stat">💬 {{ mp.commentCount }}</span>
@@ -144,59 +157,23 @@
           </div>
         </aside>
       </div>
-      <div
-        v-if="state.showNewPost"
-        class="modal-overlay"
-        @click.self="state.showNewPost = false">
-        <div class="modal-card">
-          <h3>发布新帖</h3>
-          <input
-            v-model="state.newPost.title"
-            class="modal-input"
-            placeholder="请输入标题..."
-            maxlength="200"/>
-
-          <textarea
-            v-model="state.newPost.content"
-            rows="6"
-            class="modal-textarea"
-            placeholder="请输入内容(分享观点、学习经验...)"
-            maxlength="10000"></textarea>
-          <div class="post-image-upload">
-            <label class="post-color-label">图片（不限张数）</label>
-            <FileUploader v-model="state.newPost.images" :max-docs="10" />
-          </div>
-          <div class="upload-area">
-            <input
-              type="file"
-              ref="fileInput"
-              multiple
-              accept=".doc,.docx,.pdf,.xls,.xlsx"
-              @change="handleFileUpload"
-              style="display:none"/>
-            <button class="upload-btn" @click="triggerUpload">
-              <XIcon :icon="Upload" :size="14" color="#1a2b5f"></XIcon>
-              <span> 上传学习资料(Word/PDF/Excel)</span>
-            </button>
-            <div v-for="(f, i) in state.newPost.attachments" :key="i" class="file-chip">
-              <XIcon :icon="Document" :size="12" color="#1a2b5f"></XIcon>
-              <span class="file-name"> {{ f.name }} </span>
-              <span class="file-size"> ({{ formatFileSize(f.size) }}) </span>
-              <span class="file-remove" @click="removeFile(i)"> ×</span>
-            </div>
-          </div>
-          <div class="modal-actions">
-            <button class="cancel-btn" @click="state.showNewPost = false">取消</button>
-            <button class="confirm-btn" :disabled="state.submitting" @click="submitPost">
-              {{ state.submitting ? '发布中...' : '发布' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- 发帖弹窗：与教师端/管理员端共用 PostComposer（含可见范围、附件、草稿）
+           注：本页为 raw 页，模板改动经用户明确授权（2026-11-02），改前已备份
+           forum.vue.bak_20261102_p2composer -->
+      <PostComposer
+        v-model:visible="state.showNewPost"
+        title="发布新帖"
+        :initial="state.postDraftInitial"
+        :classes="state.myClasses"
+        :submitting="state.submitting"
+        :saving-draft="state.savingDraft"
+        @submit="submitPostFromComposer"
+        @save-draft="savePostDraft"
+      />
       <!-- 我的收藏 / 我的喜欢（P2 为空态外壳，列表数据在 P3 接入） -->
       <div
         v-if="state.showFavorites"
-        class="modal-overlay"
+        class="modal-overlay modal-l1"
         @click.self="closeFavorites">
         <div class="modal-card fav-modal">
           <h3>{{ state.favoriteTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
@@ -222,7 +199,9 @@
               :key="fp.id"
               class="fav-item"
               @click="openPostDetail(fp)">
-              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }">{{ fp.title }}</span>
+              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }"><span v-if="fp.aiTitle" class="ai-title-tag">AI生成</span>{{ fp.title }}</span>
+              <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
+              <span class="list-excerpt">{{ excerptOf(fp) }}</span>
               <span class="fav-item-meta">
                 <span class="heart-icon" :class="{ active: fp.liked }">{{ fp.liked ? '❤' : '♡' }}</span>
                 <span>{{ fp.likeCount }}</span>
@@ -242,7 +221,7 @@
       </div>
       <div
         v-if="state.showUserProfile"
-        class="modal-overlay"
+        class="modal-overlay modal-l3"
         @click.self="state.showUserProfile = false">
         <div class="profile-card">
           <div class="profile-avatar-wrap">
@@ -282,7 +261,7 @@
       <!-- 帖子详情 Modal -->
       <div
         v-if="state.showPostDetail"
-        class="modal-overlay"
+        class="modal-overlay modal-l2"
         @click.self="closePostDetail">
         <div class="modal-card post-detail-card">
           <div v-if="state.detailLoading && !state.currentPost" class="empty-tip">加载中...</div>
@@ -312,22 +291,25 @@
             </div>
             <!-- 帖子正文 -->
             <h3 class="detail-title" :style="{ color: titleColorValue(state.currentPost.titleColor) }">
-              {{ state.currentPost.title }}
+              <span v-if="state.currentPost.aiTitle" class="ai-title-tag">AI生成</span>{{ state.currentPost.title }}
             </h3>
-            <div class="detail-content"><ForumContent :content="state.currentPost.content" /></div>
+            <div class="detail-content"><ForumContent :content="state.currentPost.content" :format="state.currentPost.contentFormat" /></div>
             <!-- 图片 + 文档附件 -->
             <AttachmentList
               v-if="state.currentPost.attachments && state.currentPost.attachments.length"
               :attachments="state.currentPost.attachments"
               mode="post" />
             <!-- 帖子互动数据 -->
+            <!-- 2026-11-04 v5：详情页把「喜欢」和「收藏」分成两个按钮。
+                 之前这里用五角星图标调 toggleLike，用户会误以为那是收藏（且没有收藏入口）。 -->
             <div class="detail-stats">
-              <span class="stat-action" @click="toggleLike(state.currentPost)">
-                <XIcon
-                  :icon="state.currentPost.liked ? StarFilled : Star"
-                  :size="14"
-                  :color="state.currentPost.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+              <span class="stat-action" :class="{ active: state.currentPost.liked }" @click="toggleLike(state.currentPost)" title="喜欢">
+                <span class="heart-icon">{{ state.currentPost.liked ? '❤' : '♡' }}</span>
                 <span> {{ state.currentPost.likeCount }}</span>
+              </span>
+              <span class="stat-action fav" :class="{ active: state.currentPost.favorited }" @click="toggleFavorite(state.currentPost)" title="收藏">
+                <span class="fav-star">{{ state.currentPost.favorited ? '★' : '☆' }}</span>
+                <span> {{ state.currentPost.favoriteCount || 0 }}</span>
               </span>
               <span class="stat-label">
                 <XIcon :icon="ChatLineRound" :size="14" color="#8a8faa"></XIcon>
@@ -368,7 +350,7 @@
                         <span class="comment-author" @click.stop="viewUser(comment.user?.id)">{{ comment.user?.nickname }}</span>
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
-                      <div class="comment-text"><ForumContent :content="comment.content" /></div>
+                      <div class="comment-text"><ForumContent :content="comment.content" :format="comment.contentFormat" /></div>
                       <AttachmentList
                         v-if="comment.attachments && comment.attachments.length"
                         :attachments="comment.attachments"
@@ -419,7 +401,7 @@
                             <span class="comment-author" @click.stop="viewUser(child.user?.id)">{{ child.user?.nickname }}</span>
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
-                          <div class="comment-text"><ForumContent :content="child.content" /></div>
+                          <div class="comment-text"><ForumContent :content="child.content" :format="child.contentFormat" /></div>
                           <AttachmentList
                             v-if="child.attachments && child.attachments.length"
                             :attachments="child.attachments"
@@ -489,7 +471,7 @@
         </div>
       </div>
       <!-- 热门帖子前 100 条 Modal -->
-      <div v-if="state.showHotAll" class="modal-overlay" @click.self="closeHotAll">
+      <div v-if="state.showHotAll" class="modal-overlay modal-l1" @click.self="closeHotAll">
         <div class="modal-card post-detail-card">
           <h3>热门帖子 · 前 100 条</h3>
           <div class="hot-range">
@@ -507,7 +489,9 @@
               class="my-post-item"
               @click="viewPost(hp)">
               <span class="hot-rank" :class="'rank-' + (hp.rank <= 3 ? hp.rank : '')">{{ hp.rank }}</span>
-              <span class="my-post-title">{{ hp.title }}</span>
+              <span class="my-post-title"><span v-if="hp.aiTitle" class="ai-title-tag">AI生成</span>{{ hp.title }}</span>
+              <!-- 2026-11-03 第 2 轮：查看更多弹窗此前只有标题，补正文摘要 -->
+              <span class="list-excerpt">{{ excerptOf(hp) }}</span>
               <span class="my-post-stats">
                 <span class="my-stat">❤️ {{ hp.likeCount }}</span>
                 <span class="my-stat">💬 {{ hp.commentCount }}</span>
@@ -523,7 +507,7 @@
       <!-- 我的帖子完整列表 Modal -->
       <div
         v-if="state.showMyPosts"
-        class="modal-overlay"
+        class="modal-overlay modal-l1"
         @click.self="closeMyPosts">
         <div class="modal-card post-detail-card">
           <h3>我的帖子（{{ state.myPostsTotal }}）</h3>
@@ -535,7 +519,9 @@
               :key="mp.id"
               class="my-post-item"
               @click="openPostDetail(mp)">
-              <span class="my-post-title">{{ mp.title }}</span>
+              <span class="my-post-title"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
+              <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
+              <span class="list-excerpt">{{ excerptOf(mp) }}</span>
               <span class="my-post-stats">
                 <span class="my-stat">❤️ {{ mp.likeCount }}</span>
                 <span class="my-stat">💬 {{ mp.commentCount }}</span>
@@ -598,6 +584,9 @@
   import ImageGrid from '@/components/forum/ImageGrid.vue';
   import ImageUploader from '@/components/forum/ImageUploader.vue';
   import FileUploader from '@/components/forum/FileUploader.vue';
+  import PostComposer from '@/components/forum/PostComposer.vue';
+  import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
+  import { loadMyClasses } from '@/modules/community/classScope';
   import AttachmentList from '@/components/forum/AttachmentList.vue';
   import CommentSortBar from '@/components/forum/CommentSortBar.vue';
   import UserBadge from '@/components/forum/UserBadge.vue';
@@ -615,6 +604,7 @@
       ImageGrid,
       ImageUploader,
       FileUploader,
+      PostComposer,
       AttachmentList,
       CommentSortBar,
       UserBadge
@@ -626,6 +616,8 @@
         page: 1,
         pageSize: 8,
         activeCategory: 'all',
+        /** 校园/班级论坛筛选：'' 全部 / 'ALL' 校园 / 'CLASSES' 班级（2026-11-03） */
+        scopeFilter: '' as '' | 'ALL' | 'CLASSES',
         // P3：搜索与日期筛选
         searchKeyword: '',
         searchDateFrom: '',
@@ -638,6 +630,9 @@
         showNewPost: false,
         showUserProfile: false,
         userProfile: {} as any,
+        savingDraft: false,
+        postDraftInitial: null as any,
+        myClasses: [] as string[],
         newPost: {
           title: '',
           content: '',
@@ -689,11 +684,35 @@
       const markAvatarFailed = (key: string) => {
         avatarFailed[key] = true;
       };
+      /**
+       * 列表正文摘要（2026-11-03）：收藏/喜欢/热门/我的帖子 这些弹窗此前只显示标题，
+       * 用户看不到任何正文。后端 `_serialize_post` 已带 200 字 content，这里只需截断展示。
+       * - 去掉表情包占位符 [[sticker:url]]，否则列表里会出现一长串 URL
+       * - 压平空白，避免换行把两行摘要撑成一行空行
+       */
+      const excerptOf = (post: any): string => {
+        const raw = String(post?.content ?? post?.excerpt ?? '');
+        const text = raw
+          // 富文本正文先去掉标签再截断，否则列表里会出现 <p style=...>
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!text) return '（无正文）';
+        return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+      };
       return {
         state,
         props,
         provider,
         community,
+        excerptOf,
+        // 校园 / 班级论坛筛选项（2026-11-03）
+        scopeOptions: [
+          { key: '', label: '全部' },
+          { key: 'ALL', label: '校园论坛' },
+          { key: 'CLASSES', label: '班级论坛' }
+        ],
         avatarInitial,
         avatarFailed,
         markAvatarFailed,
@@ -788,6 +807,14 @@
         this.state.page = 1;
         this.state.showCommentPicker = false;
         this.community.setShareType(toShareTypeParam(key));
+        await this.loadPosts();
+      },
+      /** 校园 / 班级 论坛筛选：先写进 store 再重拉第一页（2026-11-03） */
+      async selectScope(key: '' | 'ALL' | 'CLASSES') {
+        if (this.state.scopeFilter === key) return;
+        this.state.scopeFilter = key;
+        this.state.page = 1;
+        this.community.setVisibilityFilter(key);
         await this.loadPosts();
       },
       insertCommentEmoji(payload: { type: 'emoji' | 'sticker'; value: string }) {
@@ -920,8 +947,11 @@
             post.reactions = data.reactions;
             post.reactionTotal = data.reactionCount;
             post.liked = data.myReaction !== null;
-            post.likeCount =
-              formatReactionSummary(data.reactions) || String(data.reactionCount);
+            // 2026-11-03 第 2 轮：计数只显示数字。
+            // 之前把 formatReactionSummary() 的结果（"👍1"）当计数渲染，
+            // 爱心图标旁就多出一个大拇指。emoji 汇总改放 title 里悬停可见。
+            post.likeCount = String(data.reactionCount ?? 0);
+            post.reactionSummary = formatReactionSummary(data.reactions) || '';
           }
         } catch (e) {
           /* 静默 */
@@ -970,7 +1000,89 @@
           ElMessage.warning('请先登录后发帖');
           return;
         }
+        // 班级候选的事实来源是 /api/auth/profile（JWT 里没有班级字段）。
+        // 2026-11-03 修正：此前读 auth.parseUserInfo().className 恒为空，
+        // 导致「仅指定班级」显示「当前账号没有可选班级」。
+        this.state.myClasses = [];
+        this.state.postDraftInitial = null;
         this.state.showNewPost = true;
+        loadMyClasses()
+          .then((scope) => {
+            this.state.myClasses = scope.classes;
+          })
+          .catch(() => {
+            this.state.myClasses = [];
+          });
+        fetchMyForumDraft()
+          .then((draft) => {
+            if (!draft) return;
+            this.state.postDraftInitial = {
+              title: draft.title,
+              content: draft.content,
+              attachments: draft.attachments,
+              visibility: draft.visibility,
+              visibleClasses: draft.visibleClasses,
+              isTop: false
+            };
+            ElMessage.info('已载入上次保存的草稿');
+          })
+          .catch(() => {
+            /* 草稿读取失败不阻塞发帖 */
+          });
+      },
+      async submitPostFromComposer(payload: any) {
+        const hasAtt = (payload.attachments || []).length > 0;
+        if (!payload.title && !payload.content && !hasAtt) {
+          ElMessage.warning('标题、正文、附件至少填写一项');
+          return;
+        }
+        this.state.submitting = true;
+        try {
+          const created = await this.community.createPost({
+            title: payload.title,
+            content: payload.content,
+            shareType: 'EXPERIENCE',
+            attachments: payload.attachments,
+            visibility: payload.visibility,
+            visibleClasses: payload.visibleClasses,
+            contentFormat: payload.contentFormat,
+            // v4：把发帖人的 AI 标题开关与「标题是否原样来自模型」透传给后端
+            aiTitleEnabled: payload.aiTitleEnabled !== false,
+            titleFromAi: Boolean(payload.titleFromAi)
+          });
+          if (!created) return;
+          this.state.posts.unshift(this._mapPost(created));
+          this.state.total += 1;
+          this.state.myPosts.unshift(this._mapPost(created, false));
+          this.state.myPostsTotal = (this.state.myPostsTotal || 0) + 1;
+          this.state.showNewPost = false;
+          this.state.postDraftInitial = null;
+          ElMessage.success('发布成功!');
+        } catch (e) {
+          this._safeMsg('error', this.community.error || '发布失败,请稍后重试');
+        } finally {
+          this.state.submitting = false;
+        }
+      },
+      async savePostDraft(payload: any) {
+        this.state.savingDraft = true;
+        try {
+          await saveMyForumDraft({
+            title: payload.title,
+            content: payload.content,
+            attachments: payload.attachments,
+            visibility: payload.visibility,
+            visible_classes: payload.visibleClasses,
+            is_top: false,
+            // v4：草稿也记住 AI 标题开关，重开弹窗能恢复
+            ai_title_enabled: payload.aiTitleEnabled !== false
+          });
+          ElMessage.success('已保存到草稿箱');
+        } catch (e) {
+          this._safeMsg('error', '保存草稿失败');
+        } finally {
+          this.state.savingDraft = false;
+        }
       },
       onAvatarError(e: any) {
         // 头像加载失败,隐藏 img 显示首字母
@@ -1354,6 +1466,10 @@
           id: p?.id ?? 0,
           title: p?.title ?? '',
           content: p?.content ?? '',
+          // 正文格式（2026-11-03）：后端下发 TEXT/HTML，渲染时据此选纯文本还是富文本
+          contentFormat: p?.contentFormat === 'HTML' ? 'HTML' : 'TEXT',
+          // AI 标题标记（2026-11-03 第 3 轮）
+          aiTitle: Boolean(p?.aiTitle),
           author: (p?.user && p.user.nickname) || '匿名',
           avatar: (p?.user && p.user.avatar) || '',
           date: this.formatTime(p?.createTime),
@@ -1378,6 +1494,37 @@
           isTop: p?.isTop ?? false,
           isEssence: p?.isEssence ?? false
         };
+      },
+      /**
+       * 关闭「最上层」的弹窗（2026-11-03）。
+       * 顺序必须从高到低：用户卡片(3) → 帖子详情(2) → 我的帖子/热门/收藏(1) → 发帖弹窗。
+       * 为什么要有：二三级弹窗叠在一级之上时，Esc/遮罩只应关掉最上层那一个，
+       * 否则用户按一次就把三层全关了，或者反过来关了底层留着顶层。
+       */
+      closeTopModal() {
+        if (this.state.showUserProfile) {
+          this.state.showUserProfile = false;
+          return;
+        }
+        if (this.state.showPostDetail) {
+          this.closePostDetail();
+          return;
+        }
+        if (this.state.showMyPosts) {
+          this.closeMyPosts();
+          return;
+        }
+        if (this.state.showHotAll) {
+          this.closeHotAll();
+          return;
+        }
+        if (this.state.showFavorites) {
+          this.closeFavorites();
+          return;
+        }
+        if (this.state.showNewPost) {
+          this.state.showNewPost = false;
+        }
       }
     },
     mounted() {
@@ -1394,6 +1541,11 @@
       this.state._refreshTimer = setInterval(() => this.refreshSilently(), 15000);
       window.addEventListener('focus', this.state._visibilityHandler);
       document.addEventListener('visibilitychange', this.state._visibilityHandler);
+      // Esc 只关最上层弹窗（层级见 closeTopModal 注释）
+      this.state._escHandler = (e) => {
+        if (e.key === 'Escape') this.closeTopModal();
+      };
+      window.addEventListener('keydown', this.state._escHandler);
     },
     beforeUnmount() {
       if (this.state._refreshTimer) {
@@ -1405,10 +1557,21 @@
         document.removeEventListener('visibilitychange', this.state._visibilityHandler);
         this.state._visibilityHandler = null;
       }
+      if (this.state._escHandler) {
+        window.removeEventListener('keydown', this.state._escHandler);
+        this.state._escHandler = null;
+      }
     }
   })
 </script>
 <style lang="css" scoped>
+  /* 弹窗层级（2026-11-03）：一级列表弹窗 < 二级帖子详情 < 三级用户卡片。
+   * 背景：此前收藏/热门/我的（一级）与帖子详情（二级）共用 z-index:2000，
+   * 同层里谁后插入谁在上，导致二级被一级盖住、必须先关一级才能看到详情。 */
+  .modal-overlay.modal-l1 { z-index: 2000; }
+  .modal-overlay.modal-l2 { z-index: 2200; }
+  .modal-overlay.modal-l3 { z-index: 2400; }
+
   .forum-page {
     /* 自己成为滚动容器：VTJ 外壳存在 overflow 祖先，sticky 绑不到视口 */
     height: 100vh;
@@ -1510,13 +1673,69 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    /* 2026-11-03：与右侧范围筛选同行排布，不再独占整行 */
+    flex: 1 1 auto;
+    min-width: 0;
     margin: 0 0 12px;
     padding: 10px 12px;
     background: #ffffff;
     border-radius: 12px;
   }
+  /* 校园 / 班级 论坛筛选（2026-11-03） */
+  .scope-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: #f1f5fb;
+    border-radius: 9px;
+    flex: 0 0 auto;
+  }
+  .scope-chip {
+    height: 28px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: #5a6488;
+    font-size: 12.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .scope-chip:hover { color: #1a365d; }
+  .scope-chip.on {
+    background: #ffffff;
+    color: #1a365d;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(23, 35, 58, .12);
+  }
+
+  /* 列表正文摘要（2026-11-03）：2 行截断 */
+  .list-excerpt {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #6b7896;
+    text-align: left;
+    width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .hot-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .search-input {
-    flex: 1 1 auto;
+    /* 2026-11-03：搜索框缩短，给右侧「校园/班级论坛」筛选让位 */
+    flex: 0 1 260px;
+    max-width: 260px;
     min-width: 0;
     height: 34px;
     padding: 0 12px;

@@ -12,6 +12,7 @@ import {
   clearForumPostReaction,
   createForumComment,
   createForumPost,
+  createForumPostWithVisibility,
   deleteForumPost as deletePostRequest,
   fetchDailyQuote,
   fetchForumComments,
@@ -129,6 +130,8 @@ export const useCommunityStore = defineStore('community', () => {
   const page = ref(1);
   const pageSize = ref(8);
   const shareType = ref<ForumShareType | ''>('');
+  /** 校园(ALL) / 班级(CLASSES) 论坛筛选；空串=全部（2026-11-03） */
+  const visibilityFilter = ref<'' | 'ALL' | 'CLASSES'>('');
   const postSortBy = ref<ForumPostSortBy>('time');
   const postSortOrder = ref<ForumSortOrder>('desc');
   const commentSortBy = ref<ForumCommentSortBy>('time');
@@ -249,8 +252,9 @@ export const useCommunityStore = defineStore('community', () => {
         sortBy: postSortBy.value,
         order: postSortOrder.value,
         limit: pageSize.value,
-        offset: (safePage - 1) * pageSize.value
-      });
+        offset: (safePage - 1) * pageSize.value,
+        visibility: visibilityFilter.value || undefined
+      } as any);
       posts.value = result.posts;
       total.value = result.total;
       page.value = safePage;
@@ -335,7 +339,17 @@ export const useCommunityStore = defineStore('community', () => {
   }
 
   async function createPost(
-    payload: ForumPostCreatePayload
+    payload: ForumPostCreatePayload & {
+      /** 普通发帖弹窗支持「全站 / 仅指定班级」，不传则走后端按角色的默认可见范围 */
+      visibility?: 'ALL' | 'CLASSES';
+      visibleClasses?: string[];
+      /** 正文格式：富文本发帖传 HTML（后端消毒） */
+      contentFormat?: 'TEXT' | 'HTML';
+      /** 是否允许 AI 总结标题（v4）：false 时后端不调用模型 */
+      aiTitleEnabled?: boolean;
+      /** 标题是否原样来自模型建议（未手改） */
+      titleFromAi?: boolean;
+    }
   ): Promise<ForumPostItem | null> {
     const validation = validatePostDraft(payload);
     if (validation) {
@@ -348,11 +362,25 @@ export const useCommunityStore = defineStore('community', () => {
 
     error.value = null;
     try {
-      const post = await createForumPost({
+      const base = {
         ...payload,
         title: payload.title.trim(),
         content: payload.content.trim()
-      });
+      };
+      const post = payload.visibility
+        ? await createForumPostWithVisibility({
+            title: base.title,
+            content: base.content,
+            shareType: base.shareType,
+            titleColor: base.titleColor,
+            attachments: base.attachments,
+            visibility: payload.visibility,
+            visibleClasses: payload.visibleClasses,
+            contentFormat: payload.contentFormat,
+            aiTitleEnabled: payload.aiTitleEnabled,
+            titleFromAi: payload.titleFromAi
+          })
+        : await createForumPost(base);
       posts.value = [post, ...posts.value];
       total.value += 1;
       return post;
@@ -645,6 +673,12 @@ export const useCommunityStore = defineStore('community', () => {
     page.value = 1;
   }
 
+  /** 设置校园/班级筛选并回到第一页（'' = 全部） */
+  function setVisibilityFilter(type: '' | 'ALL' | 'CLASSES'): void {
+    visibilityFilter.value = type;
+    page.value = 1;
+  }
+
   function setPostSort(
     sortBy: ForumPostSortBy,
     order: ForumSortOrder = 'desc'
@@ -708,6 +742,7 @@ export const useCommunityStore = defineStore('community', () => {
     page,
     pageSize,
     shareType,
+    visibilityFilter,
     postSortBy,
     postSortOrder,
     commentSortBy,
@@ -751,6 +786,7 @@ export const useCommunityStore = defineStore('community', () => {
     loadRandomQuote,
     toggleFavorite,
     setShareType,
+    setVisibilityFilter,
     setPostSort,
     setCommentSort
   };

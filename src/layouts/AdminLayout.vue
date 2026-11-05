@@ -231,9 +231,13 @@ export default defineComponent({
 </script>
 
 <style scoped>
+/* 高度锁死 100vh + 隐藏外层溢出：让 .admin-main 成为全页唯一滚动容器。
+   此前只有 min-height，内容变长时滚动落在 document 上（实测 layout 高度 7903px vs 视口 900px），
+   侧栏的 sticky 会跟着页面走。 */
 .admin-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #F5F7FA;
 }
 

@@ -521,6 +521,7 @@
           topic: '',
           content: '',
           result: null,
+          grading: false,
         },
       });
 
@@ -705,14 +706,53 @@
         return Math.round((done / slots.length) * 100);
       }
 
-      // AI作文批改
-      function gradeEssay() {
-        if (!state.essay.content.trim()) {
-          alert('请先输入作文内容！');
-          return;
+      // AI作文批改（真 LLM：/api/llm/chat 一次性任务，scene=essay；失败回退示例评分）
+      function buildEssayPrompt() {
+        return [
+          '【任务】申论作文批改',
+          '作文题目：' + (state.essay.topic.trim() || '（未填写题目）'),
+          '作文正文：',
+          state.essay.content.trim(),
+        ].join('\n');
+      }
+
+      function parseAiJson(text) {
+        if (!text) return null;
+        let s = String(text).trim();
+        s = s.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+        const start = s.indexOf('{');
+        const end = s.lastIndexOf('}');
+        if (start >= 0 && end > start) s = s.slice(start, end + 1);
+        try {
+          return JSON.parse(s);
+        } catch (e) {
+          return null;
         }
-        // 模拟AI批改结果
-        state.essay.result = {
+      }
+
+      function normalizeEssayResult(raw) {
+        const colors = { '立意': '#4caf50', '结构': '#ff9800', '内容': '#2196f3', '语言': '#9c27b0', '卷面': '#607d8b' };
+        const dims = Array.isArray(raw.dimensions) ? raw.dimensions : [];
+        const dimensions = dims.map((d) => ({
+          name: String(d.name || ''),
+          score: Number(d.score) || 0,
+          max: Number(d.max) || 0,
+          color: colors[String(d.name || '')] || '#607d8b',
+        }));
+        const total = typeof raw.total === 'number'
+          ? raw.total
+          : dimensions.reduce((acc, d) => acc + d.score, 0);
+        return {
+          total: Math.max(0, Math.min(100, Math.round(total))),
+          dimensions,
+          comment: String(raw.comment || ''),
+          suggestions: Array.isArray(raw.suggestions) ? raw.suggestions.map(String) : [],
+        };
+      }
+
+      // AI 不可用时的兜底示例（保留旧版固定评分，页面不白屏）
+      function fallbackEssayResult() {
+        return {
           total: 78,
           dimensions: [
             { name: '立意', score: 16, max: 20, color: '#4caf50' },
@@ -721,7 +761,7 @@
             { name: '语言', score: 16, max: 20, color: '#9c27b0' },
             { name: '卷面', score: 7, max: 10, color: '#607d8b' },
           ],
-          comment: '这篇作文立意明确，紧扣新时代公安使命的主题，结合了公安实际工作，有一定的深度。但结构上略显松散，分论点之间的逻辑衔接可以更紧密。内容上论据比较充分，但可以再增加一些具体的案例和数据支撑。语言表达比较流畅，但个别地方可以更精炼。整体来看是一篇中等偏上的作文，继续加油！',
+          comment: '（示例评分，非 AI 实时结果）这篇作文立意明确，紧扣新时代公安使命的主题，结合了公安实际工作，有一定的深度。但结构上略显松散，分论点之间的逻辑衔接可以更紧密。内容上论据比较充分，但可以再增加一些具体的案例和数据支撑。语言表达比较流畅，但个别地方可以更精炼。整体来看是一篇中等偏上的作文，继续加油！',
           suggestions: [
             '开头可以更吸引人，用一个生动的案例或名言引入主题',
             '分论点之间增加过渡句，让文章结构更清晰',
@@ -730,6 +770,40 @@
             '注意段落划分，每段不要太长，200-300字一段比较合适',
           ],
         };
+      }
+
+      async function gradeEssay() {
+        if (!state.essay.content.trim()) {
+          alert('请先输入作文内容！');
+          return;
+        }
+        if (state.essay.grading) return;
+        state.essay.grading = true;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: buildEssayPrompt(),
+              scene: 'essay',
+              persist: false,
+            }),
+          });
+          const data = await res.json();
+          const parsed = res.ok && data && data.reply ? parseAiJson(data.reply) : null;
+          if (parsed && parsed.total !== undefined && Array.isArray(parsed.dimensions)) {
+            state.essay.result = normalizeEssayResult(parsed);
+            state.error = '';
+          } else {
+            state.essay.result = fallbackEssayResult();
+            state.error = (data && data.detail) || 'AI 批改暂不可用，已展示示例评分';
+          }
+        } catch (e) {
+          state.essay.result = fallbackEssayResult();
+          state.error = '网络异常，已展示示例评分';
+        } finally {
+          state.essay.grading = false;
+        }
       }
 
       function reset() {

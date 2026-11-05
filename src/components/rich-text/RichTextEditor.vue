@@ -8,11 +8,31 @@ const props = withDefaults(
     modelValue?: string;
     groupId?: number | null;
     placeholder?: string;
+    /** 工具栏菜单（wangEditor v4 菜单名）。不传则用题目富文本的默认组合 */
+    menus?: string[];
+    /** 上传图片的实现；不传则用题组图片接口（论坛发帖需要走论坛图片接口） */
+    uploadImage?: ((file: File) => Promise<string>) | null;
+    height?: number;
   }>(),
   {
     modelValue: '',
     groupId: null,
-    placeholder: '请输入内容…'
+    placeholder: '请输入内容…',
+    menus: () => [
+      'head',
+      'bold',
+      'italic',
+      'underline',
+      'strikeThrough',
+      'list',
+      'link',
+      'image',
+      'table',
+      'undo',
+      'redo'
+    ],
+    uploadImage: null,
+    height: 180
   }
 );
 
@@ -124,26 +144,27 @@ async function mountEditor() {
     editor = instance;
 
     instance.config.placeholder = props.placeholder;
-    instance.config.height = 180;
-    // 工具栏只保留需求列表中的菜单，显式排除 video
-    instance.config.menus = [
-      'head',
-      'bold',
-      'italic',
-      'underline',
-      'strikeThrough',
-      'list',
-      'link',
-      'image',
-      'table',
-      'undo',
-      'redo'
-    ];
+    instance.config.height = props.height;
+    // 工具栏由调用方决定：题目富文本用默认组合，论坛发帖用更全的一组（含颜色/字号/对齐）
+    instance.config.menus = props.menus;
     // 禁止 base64 内嵌与粘贴图片，统一走上传端点
     instance.config.uploadImgShowBase64 = false;
     instance.config.uploadImgMaxSize = 10 * 1024 * 1024;
     instance.config.pasteIgnoreImg = true;
-    instance.config.customUploadImg = handleUpload;
+    // 自定义上传优先用调用方注入的实现（论坛发帖走 /api/media/image）
+    instance.config.customUploadImg = props.uploadImage
+      ? (files: File[], insertImg: (url: string, alt?: string, href?: string) => void) => {
+          void (async () => {
+            try {
+              for (const file of files) {
+                insertImg(await props.uploadImage!(file));
+              }
+            } catch (error: any) {
+              uploadHint.value = (error && error.message) || '图片上传失败';
+            }
+          })();
+        }
+      : handleUpload;
 
     instance.config.onchange = (html: string) => {
       if (syncing) return;

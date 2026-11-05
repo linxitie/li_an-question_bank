@@ -53,6 +53,10 @@ export interface ForumPostItem {
   id: number;
   title: string;
   content: string;
+  /** 正文格式（2026-11-04 v5）：TEXT 纯文本 / HTML 富文本，渲染时据此选择 */
+  contentFormat?: string;
+  /** 标题是否由 AI 生成（v3） */
+  aiTitle?: boolean;
   shareType?: string;
   tags?: string[];
   attachments?: ForumAttachment[];
@@ -69,6 +73,9 @@ export interface ForumPostItem {
   createTime: string | null;
   userId?: number;
   liked: boolean;
+  /** 收藏（五角星）状态与计数（v5 详情页需要） */
+  favorited?: boolean;
+  favoriteCount?: number;
   myReaction?: ForumReactionCode | null;
   reactions?: Record<string, number>;
   user?: ForumUserBrief;
@@ -77,6 +84,8 @@ export interface ForumPostItem {
 export interface ForumCommentItem {
   id: number;
   content: string;
+  /** 评论正文格式（v5）：与帖子同一套语义 */
+  contentFormat?: string;
   likeCount: number;
   createTime: string | null;
   parentCommentId?: number | null;
@@ -255,6 +264,8 @@ export async function fetchForumPosts(
   if (extra.keyword) params.keyword = String(extra.keyword).trim();
   if (extra.dateFrom) params.date_from = extra.dateFrom;
   if (extra.dateTo) params.date_to = extra.dateTo;
+  // 校园(ALL) / 班级(CLASSES) 论坛筛选；不传=全部
+  if (extra.visibility) params.visibility = extra.visibility;
 
   const data = await request<Partial<ForumPostListResult>>({
     url: '/api/forum/posts',
@@ -349,11 +360,22 @@ export function createForumPostWithVisibility(payload: {
   attachments?: any[];
   visibility?: 'ALL' | 'CLASSES';
   visibleClasses?: string[];
+  /** 正文格式（2026-11-03）：不传默认 TEXT，富文本发帖传 HTML（后端消毒后落库） */
+  contentFormat?: 'TEXT' | 'HTML';
+  /** 是否允许 AI 总结标题（2026-11-04 v4）：false 时后端完全不调用大模型 */
+  aiTitleEnabled?: boolean;
+  /** 标题是否原样来自模型建议（用户未手改），true 时落库标记「AI生成」 */
+  titleFromAi?: boolean;
 }): Promise<ForumPostItem> {
   const data = new FormData();
   data.append('title', payload.title);
   data.append('content', payload.content);
   data.append('share_type', payload.shareType || 'DISCUSSION');
+  if (payload.contentFormat) data.append('content_format', payload.contentFormat);
+  if (payload.aiTitleEnabled !== undefined) {
+    data.append('ai_title_enabled', payload.aiTitleEnabled ? 'true' : 'false');
+  }
+  if (payload.titleFromAi) data.append('title_from_ai', 'true');
   if (payload.titleColor) data.append('title_color', payload.titleColor);
   if (payload.attachments && payload.attachments.length) {
     data.append('attachments', JSON.stringify(payload.attachments));
@@ -609,4 +631,91 @@ export async function fetchQuoteFavorites(
     page_size: data.page_size ?? pageSize,
     items: data.items ?? []
   };
+}
+
+// ==================== 发帖草稿（P2） ====================
+
+/** 附件（与 imageUtils 的 ForumImageAttachment 结构一致，此处内联避免跨模块耦合） */
+export interface ForumDraftAttachment {
+  name: string;
+  url: string;
+  size?: number;
+  type?: string;
+}
+
+/** 服务端返回的草稿（camelCase，与其余论坛接口一致） */
+export interface ForumDraft {
+  draftId: number;
+  title: string;
+  content: string;
+  attachments: ForumDraftAttachment[];
+  visibility: 'ALL' | 'CLASSES';
+  visibleClasses: string[];
+  isTop: boolean;
+  /** 是否允许 AI 总结标题（v4）：恢复弹窗开关状态 */
+  aiTitleEnabled?: boolean;
+  updateTime?: string | null;
+}
+
+/** 保存草稿的请求体：沿用后端字段命名（snake_case），不做隐式转换 */
+export interface ForumDraftPayload {
+  title: string;
+  content: string;
+  attachments: ForumDraftAttachment[];
+  visibility: 'ALL' | 'CLASSES';
+  visible_classes: string[];
+  is_top: boolean;
+  /** v4：草稿记住 AI 标题开关（不传时后端按允许处理） */
+  ai_title_enabled?: boolean;
+}
+
+/** 读取我的草稿；没有草稿时返回 null */
+export async function fetchMyForumDraft(): Promise<ForumDraft | null> {
+  const data = await request<{ draft: ForumDraft | null }>({
+    url: '/api/forum/drafts/mine',
+    method: 'GET'
+  });
+  return data.draft ?? null;
+}
+
+/** 保存草稿（覆盖式：每人只有一条） */
+export async function saveMyForumDraft(payload: ForumDraftPayload): Promise<ForumDraft> {
+  const data = await request<{ success: boolean; draft: ForumDraft }>({
+    url: '/api/forum/drafts',
+    method: 'POST',
+    data: payload
+  });
+  return data.draft;
+}
+
+/** 删除我的草稿（发布成功后调用，避免旧草稿残留） */
+export async function deleteMyForumDraft(): Promise<void> {
+  await request<{ success: boolean }>({ url: '/api/forum/drafts/mine', method: 'DELETE' });
+}
+
+// ==================== AI 标题建议（v4 2026-11-04） ====================
+
+export interface AiTitleSuggestion {
+  title: string | null;
+  /** no_content：正文有效文字不足；llm_unavailable：模型不可用 */
+  reason: 'no_content' | 'llm_unavailable' | null;
+  remaining: number | null;
+}
+
+/**
+ * 让大模型按正文给一个标题建议（预览用，不落库）。
+ *
+ * 为什么要单独一个接口而不是发帖时顺带生成：
+ * 用户需要「先看到标题、不满意就重新生成」，这是发布前的交互，与落库无关；
+ * 后端对该接口有每用户每小时限流（30 次），防止连点刷 token。
+ */
+export async function suggestForumTitle(
+  content: string,
+  contentFormat: 'TEXT' | 'HTML' = 'TEXT'
+): Promise<AiTitleSuggestion> {
+  return request<AiTitleSuggestion>({
+    url: '/api/forum/ai-title/suggest',
+    method: 'POST',
+    data: { content, content_format: contentFormat }
+  });
 }

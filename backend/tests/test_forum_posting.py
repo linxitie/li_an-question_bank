@@ -75,10 +75,16 @@ def test_create_post_rejects_overlong_fields(client, auth_headers):
 
 
 def test_create_post_blocks_sensitive_content(client, auth_headers, monkeypatch):
-    def fake_detect(text):
-        return {"level": SensitiveLevel.BLOCKED, "words": ["违规词"], "masked_text": text}
+    def fake_guard(db, text, **kwargs):
+        return {
+            "level": SensitiveLevel.BLOCKED,
+            "words": ["违规词"],
+            "masked_text": text,
+            "decision": "block",
+            "judgment_id": None,
+        }
 
-    monkeypatch.setattr(forum.sensitive_filter, "detect", fake_detect)
+    monkeypatch.setattr(forum, "guard_text", fake_guard)
     response = _create_post(client, auth_headers)
 
     assert response.status_code == 400
@@ -86,10 +92,16 @@ def test_create_post_blocks_sensitive_content(client, auth_headers, monkeypatch)
 
 
 def test_create_post_masks_sensitive_content(client, auth_headers, monkeypatch):
-    def fake_detect(text):
-        return {"level": SensitiveLevel.MASKED, "words": ["敏感"], "masked_text": "已屏蔽内容"}
+    def fake_guard(db, text, **kwargs):
+        return {
+            "level": SensitiveLevel.MASKED,
+            "words": ["敏感"],
+            "masked_text": "已屏蔽内容",
+            "decision": "mask",
+            "judgment_id": None,
+        }
 
-    monkeypatch.setattr(forum.sensitive_filter, "detect", fake_detect)
+    monkeypatch.setattr(forum, "guard_text", fake_guard)
     response = _create_post(client, auth_headers)
 
     assert response.status_code == 200

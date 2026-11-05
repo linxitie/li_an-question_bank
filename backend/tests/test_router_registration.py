@@ -37,17 +37,50 @@ CRITICAL_ROUTES = [
 ]
 
 
-def _registered_routes() -> set[tuple[str, str]]:
-    """把 FastAPI 路由表摊平成 (method, path) 集合。"""
-    result: set[tuple[str, str]] = set()
-    for route in app.routes:
+def _iter_routes(routes, prefix: str = ""):
+    """递归展开路由表，产出 (path, methods)。
+
+    为什么不能直接遍历 `app.routes`：
+    FastAPI 0.156 起 `include_router` 改为惰性实现，路由表里存的是
+    `_IncludedRouter` 对象（fastapi/routing.py），它**没有** `.path` 和 `.methods`，
+    真正的路由挂在 `.original_router.routes` 上，前缀在 `.include_context.prefix`。
+    旧写法会把这些路由全部当成「未注册」，导致本守卫对任何版本都误报缺失。
+    """
+    for route in routes:
+        included = getattr(route, "original_router", None)
+        if included is not None:
+            context = getattr(route, "include_context", None)
+            sub_prefix = getattr(context, "prefix", "") or ""
+            yield from _iter_routes(getattr(included, "routes", []), prefix + sub_prefix)
+            continue
+
         path = getattr(route, "path", None)
         methods = getattr(route, "methods", None) or set()
         if not path:
             continue
+        # Mount / Host 之类没有 methods 的容器跳过，它们不是可断言的端点
+        if not methods:
+            continue
+        yield prefix + path, methods
+
+
+def _registered_routes() -> set[tuple[str, str]]:
+    """把 FastAPI 路由表摊平成 (method, path) 集合。"""
+    result: set[tuple[str, str]] = set()
+    for path, methods in _iter_routes(app.routes):
         for method in methods:
             result.add((method.upper(), path))
     return result
+
+
+def test_route_expansion_actually_walks_included_routers():
+    """自检：展开逻辑必须真的走进 include_router，否则守卫会永远「通过」。"""
+    registered = _registered_routes()
+    assert len(registered) > 300, f"展开后的路由数异常偏少（{len(registered)}），遍历逻辑可能失效"
+    # 正例：真实存在的端点必须在集合里
+    assert ("POST", "/api/media/image") in registered
+    # 反例：不存在的端点不能凭空出现，否则等于没有守卫
+    assert ("POST", "/api/__not_a_real_route__") not in registered
 
 
 def test_critical_routes_are_registered():
