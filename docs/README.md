@@ -17,6 +17,7 @@
 
 | 文档 | 版本 | 状态 | 说明 |
 |---|---|---|---|
+| `superpowers/specs/评论区舆情监控与内容安全智能体_M1-0能力对齐_v1.md` | v1 | 📋 待批准（2026-11-05） | 一页纸：content_guard（已上线闸门/判定/任务/审计/红队/对账/投影/31 端点）与 M0 `policy_compiler` 的 16 段能力矩阵 + 3 处冲突裁定（政策源 / Obsidian 双库 / 台账）+ A0–A5↔四档映射 + M1 五步与 3 项待拍板（D1–D3） |
 | `superpowers/specs/评论区舆情监控与内容安全智能体_v2.0.md` | v2.0 | 📋 方案（待审批，未实施） | 论坛评论区实时舆情监控与内容安全智能体：5 条硬判断（J1–J5）、9 处对第一版修正（C1–C9）、动作梯度 A0–A5、四库=1 SoT+4 可重建投影、三层知识图谱本体、Obsidian 子库「AI舆情审核知识库」+ Policy-as-Markdown 编译闭环、创新 I1–I8、路线 M0–M5；17 章 |
 | `superpowers/specs/AI舆情审核知识库_搭建说明_v1.md` | v1 | ✅ 已搭建并接入（2026-11-05，69 文件/65 md + 4 canvas，断链 0） | Obsidian 子库 `D:\Obsidian仓库\AI舆情审核知识库`：14 个一级区、政策库扩至 10 域 29 条款（critical 4 / high 16 / medium 8 / low 1）、三色状态灯、政策护照卡、三段式收件箱、双轨日志、A0–A5 动作梯度卡、知识健康度 H1–H5；已由 `policy_compiler.py` 编译为运行期规则 |
 | `superpowers/specs/评论区舆情监控与内容安全智能体_M0实施记录_v1.md` | v1 | ✅ M0 已完成（2026-11-05，分支 `feat/teacher-administrator`） | M0 系统侧接入：`policy_compiler.py`（540 行）、`knowledge_ops.py`（210 行）、12 项定向测试通过；4 个开关全默认 off；已知问题与 M1 五步清单 |
@@ -879,4 +880,5 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 - 2026-11-04：把 feat/teacher-administrator 的管理员端用户与权限、管理员头像/回收站批量注销、题目展示与导入完整性三组整改合并入主线；索引保留 6 份对应设计/计划与 9 份本分支历史文档。
 - 2026-11-05：评论区舆情监控与内容安全智能体 v2.0 方案定稿（待审批）：定位「审核层/研判层/治理层」三层、动作梯度 A0–A5、四库=1 SoT+4 投影、三层图谱本体、Obsidian 治理层、创新 I1–I8、路线 M0–M5；索引新增本行。
 - 2026-11-05：Obsidian 子库「AI舆情审核知识库」搭建完成（69 文件/65 md + 4 canvas，断链 0），政策库 10 域 29 条款，已由 `policy_compiler.py` 编译为运行期规则。
+- 2026-11-05：M1-0 能力对齐一页纸定稿（待批准）：确认远端 `content_guard` 为运行态闸门（发帖/评论/改资料三处生效、31 端点），本分支 M0 为「政策源 + 动作梯度」编译层；裁定复用 `cg_*` 台账、Markdown 为政策唯一源、双 Obsidian 库单向同步。
 - 2026-11-05：评论区舆情审核 M0 系统侧接入（政策编译器 + 知识运营接口 + 12 项测试通过，4 开关默认 off），合并入 `feat/teacher-administrator` 后开 `feat/teacher-administrator-forum` 子分支。
