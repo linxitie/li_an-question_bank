@@ -14,6 +14,8 @@
           <span class="balance-value"> {{ state.balance }}</span>
           <XIcon :icon="Medal" :size="20" color="#f59e0b"></XIcon>
         </div>
+        <!-- M1.5：我的兑换入口（用户授权的模板改动，2026-11-05） -->
+        <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
       </div>
 
       <!-- Tab 导航 -->
@@ -208,6 +210,17 @@
       }
     },
     methods: {
+      // M1.5：跳到「我的兑换」独立页；优先用 router，取不到时退回 hash 跳转
+      goExchanges() {
+        const path = '/student/shop/exchanges';
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push(path).catch(() => {
+            window.location.hash = '#' + path;
+          });
+        } else {
+          window.location.hash = '#' + path;
+        }
+      },
       switchTab(key) {
         this.state.activeTab = key;
         if (key === 'records') this.loadRecords();
@@ -408,6 +421,23 @@
   }
   .balance-label { font-size: 13px; color: #92400e; font-weight: 500; }
   .balance-value { font-size: 28px; font-weight: 900; color: #b45309; font-family: 'DIN Alternate', sans-serif; }
+  /* M1.5：我的兑换入口 */
+  .gp-my-exchanges {
+    margin-left: 12px;
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .gp-my-exchanges:hover {
+    background: #dbeafe;
+    transform: translateY(-1px);
+  }
   .gp-tabs {
     display: flex;
     gap: 8px;

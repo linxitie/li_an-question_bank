@@ -6,6 +6,8 @@
       <div class="gp-header">
         <h2><XIcon :icon="ShoppingCartFull" :size="22" color="#f59e0b"></XIcon> 金币购</h2>
         <div class="gold-balance">🪙 {{ state.balance }}</div>
+        <!-- M1.5：我的兑换入口（用户授权的模板改动，2026-11-05） -->
+        <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
       </div>
 
       <div class="gp-tabs">
@@ -147,6 +149,17 @@
       }
     },
     methods: {
+      // M1.5：跳到「我的兑换」独立页；优先用 router，取不到时退回 hash 跳转
+      goExchanges() {
+        const path = '/student/shop/exchanges';
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push(path).catch(() => {
+            window.location.hash = '#' + path;
+          });
+        } else {
+          window.location.hash = '#' + path;
+        }
+      },
       switchTab(key) {
         this.state.activeTab = key;
         if (key === 'records') this.loadRecords();
@@ -234,6 +247,8 @@
   .gp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
   .gp-header h2 { display: flex; align-items: center; gap: 6px; font-size: 20px; color: #1a2b5f; margin: 0; }
   .gold-balance { background: #fef3c7; padding: 10px 20px; border-radius: 16px; font-weight: 800; color: #b45309; font-size: 20px; }
+  /* M1.5：我的兑换入口 */
+  .gp-my-exchanges { margin-left: 10px; padding: 8px 14px; border-radius: 12px; border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8; font-size: 13px; font-weight: 600; cursor: pointer; }
   .gp-tabs { display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; }
   .gp-tab { padding: 8px 18px; background: none; border: none; font-size: 14px; font-weight: 600; color: #6b7280; cursor: pointer; white-space: nowrap; }
   .gp-tab.active { color: #c41e3a; border-bottom: 2px solid #c41e3a; }
