@@ -159,6 +159,12 @@
         </div>
       </div>
     </div>
+
+    <!-- M1.5：我的兑换弹窗（用户要求以弹窗形式出现） -->
+    <MyExchangesModal
+      v-if="state.showExchanges"
+      @close="state.showExchanges = false"
+    />
   </div>
 </template>
 
@@ -171,10 +177,11 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useRewardStore } from '@/modules/reward/store';
+  import MyExchangesModal from '@/components/shop/MyExchangesModal.vue';
 
   export default defineComponent({
     name: 'GoldPurchase',
-    components: { NavBar, XIcon },
+    components: { NavBar, XIcon, MyExchangesModal },
     setup(props) {
       const provider = useProvider({ id: 'gold_purchase', version: '1778918740312' });
       const rewardStore = useRewardStore();
@@ -188,7 +195,9 @@
         achievements: { categories: {} },
         detailVisible: false,
         detailProduct: null,
-        exchanging: false
+        exchanging: false,
+        // M1.5：我的兑换弹窗开关
+        showExchanges: false
       });
       return {
         state,
@@ -210,8 +219,12 @@
       }
     },
     methods: {
-      // M1.5：跳到「我的兑换」独立页；优先用 router，取不到时退回 hash 跳转
+      // M1.5：我的兑换改为弹窗（用户要求，2026-11-05）
       goExchanges() {
+        this.state.showExchanges = true;
+      },
+      // 独立页入口：保留给需要直接发链接的场景（/student/shop/exchanges）
+      openExchangesPage() {
         const path = '/student/shop/exchanges';
         if (this.$router && typeof this.$router.push === 'function') {
           this.$router.push(path).catch(() => {

@@ -1,9 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * M1.5：「我的兑换」入口（用户授权改模板，2026-11-05）
+ * M1.5：「我的兑换」入口 —— 用户要求改为弹窗（2026-11-05）
  *
- * 覆盖 PC / 平板 / 手机三端金币购页：入口可见 → 点击 → 跳到 /student/shop/exchanges 并渲染。
+ * 覆盖 PC / 平板 / 手机三端：点「我的兑换」→ 弹窗出现（不跳路由）→ 卡密可见
+ * → 关闭（Esc / 右上角 / 点遮罩）→ 弹窗消失。
  */
 
 const STUDENT = { user: '202516001', pass: 'test123456' };
@@ -17,51 +18,76 @@ async function login(page: Page) {
   await page.waitForURL((url) => !url.hash.includes('/login'), { timeout: 40_000 });
 }
 
-test('PC 金币购页 → 我的兑换', async ({ page }) => {
+async function expectModal(page: Page) {
+  await expect(page.locator('.mex-mask')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.mex-modal')).toBeVisible();
+  await expect(page.locator('.mex-modal-head h3')).toHaveText('我的兑换');
+  // 弹窗里必须看到卡密与订单
+  await expect(page.locator('.mex-item').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.mex-code-value').first()).toBeVisible();
+}
+
+test('PC：点「我的兑换」弹出弹窗，不跳路由', async ({ page }) => {
   await login(page);
   await page.goto('/#/page/gold_purchase');
   await page.waitForLoadState('networkidle');
+  const urlBefore = page.url();
 
-  const btn = page.locator('.gp-my-exchanges');
-  await expect(btn).toBeVisible({ timeout: 20_000 });
-  await expect(btn).toHaveText('我的兑换');
+  await page.locator('.gp-my-exchanges').click();
+  await expectModal(page);
 
-  await btn.click();
-  await expect
-    .poll(() => page.url(), { timeout: 15_000 })
-    .toContain('/student/shop/exchanges');
-  await expect(page.locator('.ex-page')).toBeVisible({ timeout: 20_000 });
+  expect(page.url(), '弹窗不应改变路由').toBe(urlBefore);
+
+  // Esc 关闭
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.mex-mask')).toHaveCount(0);
 });
 
-test('手机端金币购页 → 我的兑换', async ({ page }) => {
-  // 手机端登录页的输入框不同，先用 PC 视口登录，再切到手机视口访问移动页
+test('PC：点遮罩关闭弹窗', async ({ page }) => {
+  await login(page);
+  await page.goto('/#/page/gold_purchase');
+  await page.waitForLoadState('networkidle');
+  await page.locator('.gp-my-exchanges').click();
+  await expectModal(page);
+
+  await page.locator('.mex-mask').click({ position: { x: 5, y: 5 } });
+  await expect(page.locator('.mex-mask')).toHaveCount(0);
+
+  // 再次打开后点右上角关闭
+  await page.locator('.gp-my-exchanges').click();
+  await expectModal(page);
+  await page.locator('.mex-close').click();
+  await expect(page.locator('.mex-mask')).toHaveCount(0);
+});
+
+test('手机端：我的兑换弹窗', async ({ page }) => {
   await login(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#/mobile/gold-purchase');
   await page.waitForLoadState('networkidle');
 
-  const btn = page.locator('.gp-my-exchanges');
-  await expect(btn).toBeVisible({ timeout: 20_000 });
+  await page.locator('.gp-my-exchanges').click();
+  await expectModal(page);
 
-  await btn.click();
-  await expect
-    .poll(() => page.url(), { timeout: 15_000 })
-    .toContain('/student/shop/exchanges');
-  await expect(page.locator('.ex-page')).toBeVisible({ timeout: 20_000 });
+  // 手机端弹窗是底部抽屉形态：宽度接近整屏
+  const box = await page.locator('.mex-modal').boundingBox();
+  expect(box!.width).toBeGreaterThan(330);
 });
 
-test('平板端金币购页 → 我的兑换', async ({ page }) => {
+test('平板端：我的兑换弹窗', async ({ page }) => {
   await login(page);
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto('/#/tablet/gold-purchase');
   await page.waitForLoadState('networkidle');
 
-  const btn = page.locator('.gp-my-exchanges');
-  await expect(btn).toBeVisible({ timeout: 20_000 });
+  await page.locator('.gp-my-exchanges').click();
+  await expectModal(page);
+});
 
-  await btn.click();
-  await expect
-    .poll(() => page.url(), { timeout: 15_000 })
-    .toContain('/student/shop/exchanges');
+test('独立页仍可直接访问（保留链接能力）', async ({ page }) => {
+  await login(page);
+  await page.goto('/#/student/shop/exchanges');
+  await page.waitForLoadState('networkidle');
   await expect(page.locator('.ex-page')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.mex-item').first()).toBeVisible({ timeout: 20_000 });
 });
