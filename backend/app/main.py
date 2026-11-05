@@ -30,7 +30,7 @@ from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
 from .api.v1.platform import admin_quotes
 from .api.v1.platform import admin_news
-from .api.v1.community import quotes, forum, practice_admin, forum_moderation
+from .api.v1.community import quotes, forum, practice_admin, forum_moderation, knowledge_ops
 from .api.v1.library import materials
 from .api.v1.identity import auth_qrcode
 from .api.v1.identity import devices
@@ -926,6 +926,7 @@ app.include_router(practice_admin.teacher_router)
 app.include_router(notifications.router)
 app.include_router(forum_moderation.teacher_router)
 app.include_router(forum_moderation.admin_router)
+app.include_router(knowledge_ops.router)
 
 def _resolve_app_revision() -> str:
     """读取当前代码的 git 短 SHA，供前端 /health 版本自检使用。
