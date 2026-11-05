@@ -21,6 +21,7 @@ from ....models.models import (
     SysUser, Task, UserTaskProgress, CoinRecord, DailyCheckin, PracticeRecord,
 )
 from ....services.growth_service import add_growth
+from ....services.coin_ledger import grant as grant_coins
 
 router = APIRouter(prefix="/api/tasks", tags=["任务中心"])
 logger = logging.getLogger(__name__)
@@ -312,18 +313,16 @@ async def claim_task(
 
     source_type = "RANDOM_TASK" if task.t_type == "random" else "TASK"
 
-    # 发币
+    # 发币（2026-11-04 M1：统一走金币台账，确保生成批次以支持 12 个月到期清零）
     if task.reward_coins > 0:
-        current_user.total_coins = (current_user.total_coins or 0) + task.reward_coins
-        db.add(CoinRecord(
-            user_id=current_user.user_id,
-            coin_change=task.reward_coins,
-            current_balance=current_user.total_coins,
-            transaction_type="GAIN",
+        grant_coins(
+            db,
+            current_user,
+            task.reward_coins,
             source_type=source_type,
             related_id=task_id,
             description=f"完成任务：{task.title}",
-        ))
+        )
 
     if task.reward_growth and task.reward_growth > 0:
         add_growth(db, current_user, task.reward_growth)

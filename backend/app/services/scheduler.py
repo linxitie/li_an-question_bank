@@ -168,6 +168,30 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 每日 03:10（北京时间）金币到期清零（2026-11-04 M1）
+    # 金币有效期 12 个月滚动清零：把 expire_at 已过的批次剩余额度扣掉并写 EXPIRE 流水。
+    def _expire_coins():
+        from ..core.database import SessionLocal
+        from .coin_ledger import expire_due
+
+        db = SessionLocal()
+        try:
+            report = expire_due(db)
+            logger.info(f"金币到期清零完成: {report}")
+        except Exception as exc:  # noqa: BLE001 - 定时任务失败不影响主流程
+            db.rollback()
+            logger.warning(f"金币到期清零失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _expire_coins,
+        trigger=CronTrigger(hour=3, minute=10, timezone=CST),
+        id="expire_coins",
+        name="金币到期清零（12 个月滚动）",
+        replace_existing=True,
+    )
+
     # 模块4 v2：每日 20:00 站内提醒——今日任务未完成的用户
     def _remind_unfinished_tasks():
         from datetime import datetime as _dt

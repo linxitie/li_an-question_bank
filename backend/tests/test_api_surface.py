@@ -21,6 +21,15 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 金币购 M1（2026-11-04，R11：只登记不重算基线）=====
+    ("GET", "/api/coins/expiring"),
+    ("GET", "/api/coupons/mine"),
+    ("POST", "/api/coupons/grant"),
+    ("GET", "/api/shop/products/{product_id}/quote"),
+    ("GET", "/api/shop/exchange/mine"),
+    ("GET", "/api/admin/shop/stock-alerts"),
+    ("POST", "/api/admin/shop/products/{product_id}/shelf"),
+    ("GET", "/api/admin/shop/metrics"),
     # ===== 论坛本轮新增（2026-11-03/04，R11：只登记不重算基线）=====
     ("POST", "/api/forum/drafts"),
     ("GET", "/api/forum/drafts/mine"),

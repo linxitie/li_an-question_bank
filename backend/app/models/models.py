@@ -737,8 +737,10 @@ class CoinRecord(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     coin_change = Column(Integer, nullable=False, comment="金币变化")
     current_balance = Column(Integer, nullable=False, comment="当前余额")
+    # 注意：transaction_type 落库是 VARCHAR(5)，只能放 GAIN/SPEND；
+    # 金币到期用 SPEND + source_type=EXPIRY 表达（2026-11-04 M1）
     transaction_type = Column(Enum("GAIN", "SPEND"), nullable=False, comment="交易类型")
-    source_type = Column(Enum("CHECKIN", "TASK", "EXAM", "SYSTEM", "PURCHASE", "RANDOM_TASK", "GOAL", "SHOP"), comment="来源/用途")
+    source_type = Column(Enum("CHECKIN", "TASK", "EXAM", "SYSTEM", "PURCHASE", "RANDOM_TASK", "GOAL", "SHOP", "EXPIRY"), comment="来源/用途")
     related_id = Column(BigInteger, comment="关联ID")
     description = Column(String(500), comment="描述")
     transaction_time = Column(DateTime, default=datetime.now, comment="交易时间")
@@ -768,12 +770,87 @@ class ShopProduct(Base):
     deliverable_payload = Column(JSON, comment="权益参数JSON")
     status = Column(String(20), default="on_sale", comment="状态: on_sale/off_shelf")
     sort_order = Column(Integer, default=0, comment="排序")
+    # ===== 金币购 M1（2026-11-04）：分层商品池 =====
+    tier = Column(String(16), default="small", comment="价格区间: small/mid/large")
+    cost_estimate = Column(DECIMAL(10, 2), nullable=True, comment="成本估算(元)，用于预算监控")
+    shelf_priority = Column(String(2), default="P3", comment="上架优先级 P1/P2/P3")
+    min_stock_alert = Column(Integer, default=5, comment="库存低于该值触发预警")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     __table_args__ = (
         Index("idx_shop_product_status", status),
         Index("idx_shop_product_category", category),
+        Index("idx_shop_product_tier", tier),
+    )
+
+
+class CoinLot(Base):
+    """金币批次（2026-11-04 M1）。
+
+    为什么需要批次：金币要有 12 个月有效期，就必须知道"每笔金币什么时候发、还剩多少"。
+    单一余额列无法表达到期，所以发放时落一条批次，消费时按 FIFO（先到期先花）扣减。
+    `sys_user.total_coins` 仍作为冗余余额用于展示，扣减时与批次同事务双写。
+    """
+
+    __tablename__ = "coin_lot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="批次ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    amount = Column(Integer, nullable=False, comment="发放数量")
+    remaining = Column(Integer, nullable=False, comment="剩余可消费数量")
+    source_type = Column(String(32), default="TASK", comment="来源: TASK/ACHIEVEMENT/CHECKIN/ADMIN/...")
+    related_id = Column(Integer, nullable=True, comment="来源记录ID")
+    description = Column(String(200), default="", comment="描述")
+    available_at = Column(DateTime, default=datetime.now, comment="可消费时间")
+    expire_at = Column(DateTime, nullable=False, comment="过期时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_coin_lot_user", user_id),
+        Index("idx_coin_lot_expire", expire_at),
+    )
+
+
+class Coupon(Base):
+    """折扣券模板（2026-11-04 M1，供 C 类场景任务与到期兜底使用）"""
+
+    __tablename__ = "coupon"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="券ID")
+    code = Column(String(64), unique=True, nullable=False, comment="券码（唯一）")
+    title = Column(String(120), nullable=False, comment="券名称")
+    discount_type = Column(String(16), default="rate", comment="类型: rate 折扣 / amount 立减")
+    discount_value = Column(DECIMAL(10, 2), nullable=False, comment="折扣率(0.8)或立减金额(元)")
+    scope = Column(String(32), default="product", comment="适用范围: product/category/tier")
+    scope_value = Column(String(64), default="", comment="范围取值：商品ID/分类/区间")
+    coin_only = Column(Integer, default=1, comment="是否仅纯金币兑换可用(0/1)")
+    valid_from = Column(DateTime, default=datetime.now, comment="生效时间")
+    valid_to = Column(DateTime, nullable=True, comment="失效时间（空=长期）")
+    stock = Column(Integer, default=-1, comment="可发放数量(-1=不限)")
+    status = Column(String(16), default="active", comment="状态: active/disabled")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (Index("idx_coupon_status", status),)
+
+
+class CouponGrant(Base):
+    """用户持有的券（发券记录 + 使用状态）"""
+
+    __tablename__ = "coupon_grant"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="发放ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    coupon_id = Column(Integer, ForeignKey("coupon.id"), nullable=False, comment="券ID")
+    status = Column(String(16), default="unused", comment="状态: unused/used/expired")
+    granted_at = Column(DateTime, default=datetime.now, comment="发放时间")
+    used_at = Column(DateTime, nullable=True, comment="使用时间")
+    exchange_id = Column(Integer, nullable=True, comment="使用于哪笔兑换")
+    source = Column(String(32), default="TASK", comment="来源: TASK/COMPENSATE/ADMIN")
+
+    __table_args__ = (
+        Index("idx_coupon_grant_user", user_id),
+        Index("idx_coupon_grant_status", status),
     )
 
 

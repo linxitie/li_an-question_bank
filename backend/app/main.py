@@ -41,7 +41,7 @@ from .api.v1.growth import study_plan
 from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
-from .api.v1.reward import shop, admin_shop
+from .api.v1.reward import shop, admin_shop, coupons
 from .api import media_assets as media_assets_api
 from .api.v1.platform.websocket import router as websocket_router
 from .api.v1.catalog.paper_generation import router as paper_router
@@ -216,6 +216,23 @@ async def lifespan(app: FastAPI):
     try:
         from sqlalchemy import inspect, text
         inspector = inspect(engine)
+
+        # 金币购 M1（2026-11-04）：商品分层与成本监控字段
+        if 'shop_products' in inspector.get_table_names():
+            shop_cols = [c['name'] for c in inspector.get_columns('shop_products')]
+            for col_name, col_type in [
+                ('tier', "VARCHAR(16) DEFAULT 'small'"),
+                ('cost_estimate', 'NUMERIC(10, 2)'),
+                ('shelf_priority', "VARCHAR(2) DEFAULT 'P3'"),
+                ('min_stock_alert', 'INTEGER DEFAULT 5'),
+            ]:
+                if col_name not in shop_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE shop_products ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: shop_products 添加列 {col_name}")
 
         # 检查 sys_user 表（学生端「我的」模块新增字段）
         if 'sys_user' in inspector.get_table_names():
@@ -940,6 +957,7 @@ app.include_router(auth_qrcode.router, tags=["二维码登录"])
 app.include_router(devices.router, tags=["设备管理"])
 app.include_router(coins.router, tags=["金币"])
 app.include_router(shop.router, tags=["金币商城"])
+app.include_router(coupons.router, tags=["优惠券"])
 app.include_router(tasks.router, tags=["任务中心"])
 app.include_router(admin_shop.router, tags=["管理员端-金币商城"])
 app.include_router(achievements.router, tags=["成就"])
