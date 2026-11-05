@@ -62,8 +62,32 @@ def _count_practice(user_id: int, start: datetime, end: datetime, db: Session) -
     )
 
 
-def _count_exam_papers(user_id: int, start: datetime, end: datetime, db: Session) -> int:
+def _count_kg_node_questions(
+    user_id: int, point_id: Optional[int], start: datetime, end: datetime, db: Session
+) -> int:
+    """个性化任务：本周在指定知识点上的答题数（exam_answer_detail.knowledge_point 为文本）。"""
+    from ..models.models import ExamAnswerDetail, KnowledgePoint
+
+    if not point_id:
+        return 0
+    point = db.query(KnowledgePoint).filter(KnowledgePoint.point_id == point_id).first()
+    if not point:
+        return 0
     return (
+        db.query(func.count(ExamAnswerDetail.detail_id))
+        .join(ExamRecord, ExamRecord.record_id == ExamAnswerDetail.record_id)
+        .filter(
+            ExamRecord.user_id == user_id,
+            ExamAnswerDetail.knowledge_point == point.point_name,
+            ExamAnswerDetail.create_time >= start,
+            ExamAnswerDetail.create_time < end,
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _count_exam_papers(user_id: int, start: datetime, end: datetime, db: Session) -> int:    return (
         db.query(func.count(ExamRecord.record_id))
         .filter(
             ExamRecord.user_id == user_id,
@@ -91,9 +115,20 @@ def _active_days(user_id: int, start: datetime, end: datetime, db: Session) -> i
     return len({r[0] for r in rows})
 
 
-def compute_metric(metric: str, user_id: int, db: Session, today: Optional[date] = None) -> float:
-    """周任务指标计算入口（全部按本周范围）。"""
+def compute_metric(
+    metric: str,
+    user_id: int,
+    db: Session,
+    today: Optional[date] = None,
+    param: Optional[int] = None,
+) -> float:
+    """周任务指标计算入口（全部按本周范围）。
+
+    `param`：个性化任务的知识点 ID（metric = kg_node_questions 时使用）。
+    """
     start, end = week_range(today)
+    if metric == "kg_node_questions":
+        return _count_kg_node_questions(user_id, param, start, end, db)
 
     if metric == "week_questions":
         return _count_practice(user_id, start, end, db)

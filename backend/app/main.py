@@ -25,6 +25,7 @@ from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
 from .api.v1.content import news, recruitment, calendar, kg
+from .api.v1.content import kg_growth_api
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
@@ -260,6 +261,8 @@ async def lifespan(app: FastAPI):
                 ('category', "VARCHAR(8) DEFAULT 'A'"),
                 ('coupon_code', 'VARCHAR(64)'),
                 ('pin_eligible', 'INTEGER DEFAULT 0'),
+                ('metric_param', 'INTEGER'),
+                ('personalized_for', 'BIGINT'),
             ]:
                 if col_name not in task_cols:
                     with engine.connect() as conn:
@@ -997,6 +1000,7 @@ app.include_router(news.router)
 app.include_router(recruitment.router)
 app.include_router(calendar.router)
 app.include_router(kg.router)
+app.include_router(kg_growth_api.router, tags=["自生长知识图谱"])
 app.include_router(practice.router)
 app.include_router(quick_practice.router)
 app.include_router(smart_exam.router)

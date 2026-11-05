@@ -2200,6 +2200,8 @@ class Task(Base):
     category = Column(String(8), default="A", comment="任务类型: A 定量 / B 连续 / C 场景")
     coupon_code = Column(String(64), nullable=True, comment="完成时额外发放的券（C 类场景）")
     pin_eligible = Column(Integer, default=0, comment="是否可被选入置顶槽位(0/1)")
+    metric_param = Column(Integer, nullable=True, comment="指标参数（如知识点ID，用于个性化任务）")
+    personalized_for = Column(BigInteger, nullable=True, comment="个性化任务所属用户（空=全站任务）")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
@@ -2230,6 +2232,74 @@ class WeeklyTaskPool(Base):
         UniqueConstraint("week_key", "task_id", name="uk_weekly_pool_task"),
         Index("idx_weekly_pool_week", week_key),
     )
+
+
+class KgUserNodeState(Base):
+    """用户级知识节点状态（2026-11-05 M3 自生长知识库）。
+
+    为什么新建而不是复用 knowledge_point：
+    - `knowledge_point` 是题目/教材的静态结构，全站共用；
+    - 自生长需要**每个用户**自己的掌握度与生长热度（同一知识点，A 掌握 B 没掌握）。
+
+    掌握度 mastery ∈ [0,1]（EMA 更新）；生长热度 heat ≥0（随时间衰减，被行为事件加热）。
+    """
+
+    __tablename__ = "kg_user_node_state"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    point_id = Column(Integer, ForeignKey("knowledge_point.point_id"), nullable=False, comment="知识点ID")
+    mastery = Column(Float, default=0.0, comment="掌握度 0~1")
+    heat = Column(Float, default=0.0, comment="生长热度（越大越'正在生长'）")
+    attempt_count = Column(Integer, default=0, comment="答题次数")
+    correct_count = Column(Integer, default=0, comment="答对次数")
+    last_event_at = Column(DateTime, nullable=True, comment="最近一次行为时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "point_id", name="uk_kg_user_node"),
+        Index("idx_kg_user_node_user", user_id),
+    )
+
+
+class KgUserEdge(Base):
+    """用户级知识边权重（自生长：边由用户行为动态新增/加权）。
+
+    与静态 `kg_edge` 的区别：这里是"这个用户的图谱"，权重随其行为演化；
+    错题与笔记在同一时间窗内命中两个节点时，二者之间的边被创建或加权。
+    """
+
+    __tablename__ = "kg_user_edge"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    src_point = Column(Integer, nullable=False, comment="源知识点ID")
+    dst_point = Column(Integer, nullable=False, comment="目标知识点ID")
+    rel_type = Column(String(32), default="co_occur", comment="关系: co_occur/weakness_linked")
+    weight = Column(Float, default=1.0, comment="边权重")
+    heat = Column(Float, default=0.0, comment="边的生长热度")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "src_point", "dst_point", "rel_type", name="uk_kg_user_edge"),
+        Index("idx_kg_user_edge_user", user_id),
+    )
+
+
+class KgUserEvent(Base):
+    """行为事件流水（答题/错题/笔记编辑），用于重放与生长曲线计算。"""
+
+    __tablename__ = "kg_user_event"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    point_id = Column(Integer, nullable=False, comment="知识点ID")
+    event_type = Column(String(16), nullable=False, comment="answer_correct/answer_wrong/note_edit")
+    weight = Column(Float, default=1.0, comment="事件权重（错题>编辑>普通）")
+    ref_id = Column(Integer, nullable=True, comment="关联题目/记录ID")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (Index("idx_kg_event_user_time", user_id, created_at),)
 
 
 class UserTaskProgress(Base):

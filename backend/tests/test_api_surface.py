@@ -21,6 +21,12 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 自生长知识图谱 M3（2026-11-05）=====
+    ("GET", "/api/knowledge/kg/nodes/mine"),
+    ("GET", "/api/knowledge/kg/edges/mine"),
+    ("GET", "/api/knowledge/kg/sample"),
+    ("POST", "/api/knowledge/kg/generate"),
+    ("POST", "/api/knowledge/kg/decay"),
     # ===== 周任务 M2（2026-11-05）=====
     ("GET", "/api/tasks/weekly/pool"),
     ("POST", "/api/tasks/weekly/pool/pin"),

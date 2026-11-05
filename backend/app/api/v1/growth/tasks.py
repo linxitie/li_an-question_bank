@@ -50,10 +50,13 @@ def _period_key_for(task: Task) -> str:
 
 # ------------------------- 进度计算（calc） -------------------------
 
-def _calc_metric(user_id: int, metric: str, db: Session) -> float:
+def _calc_metric(user_id: int, metric: str, db: Session, param: Optional[int] = None) -> float:
     # M2：周任务指标统一由 weekly_tasks 计算（按 ISO 周范围，数据源 exam 域）
     if metric.startswith("week_"):
         return weekly.compute_metric(metric, user_id, db)
+    # M3：个性化任务按知识点统计本周答题数
+    if metric == "kg_node_questions":
+        return weekly.compute_metric(metric, user_id, db, param=param)
 
     today_start = datetime.combine(date.today(), datetime.min.time())
     week_start = datetime.now() - timedelta(days=7)
@@ -104,7 +107,7 @@ def _task_view(task: Task, user_id: int, db: Session, pinned_slot: int = 0) -> d
         UserTaskProgress.period_key == period_key,
     ).first()
 
-    current = _calc_metric(user_id, task.metric, db)
+    current = _calc_metric(user_id, task.metric, db, task.metric_param)
     completed = current >= task.threshold
     claimed = bool(prog and prog.claimed == 1)
     expired = bool(prog and prog.expired == 1)
@@ -225,11 +228,14 @@ async def overview(
         Task.t_type == "random",
     ).all() if random_task_ids else []
 
-    # 周常任务（M2：按置顶槽位排序，置顶任务套稀缺系数）
+    # 周常任务（M2：按置顶槽位排序，置顶任务套稀缺系数；M3：附带本人个性化任务）
     weekly.ensure_week_pool(db)
     slots = weekly.pinned_slots(db)
-    weekly_tasks = db.query(Task).filter(Task.t_type == "weekly", Task.enabled == 1)\
-        .order_by(Task.sort_order.asc()).all()
+    weekly_tasks = db.query(Task).filter(
+        Task.t_type == "weekly",
+        Task.enabled == 1,
+        (Task.personalized_for.is_(None)) | (Task.personalized_for == current_user.user_id),
+    ).order_by(Task.sort_order.asc()).all()
     weekly_views = [_task_view(t, current_user.user_id, db, slots.get(t.task_id, 0)) for t in weekly_tasks]
     # 置顶在前，其余按原排序
     weekly_views.sort(key=lambda v: (0 if v["pinned"] else 1, v["pinned_slot"] or 99, v["task_id"]))
@@ -332,8 +338,8 @@ async def claim_task(
         UserTaskProgress.period_key == period_key,
     ).first()
 
-    # 实时进度校验（M2：周任务的指标从 exam 域按周聚合）
-    current = _calc_metric(current_user.user_id, task.metric, db)
+    # 实时进度校验（M2：周任务的指标从 exam 域按周聚合；M3：个性化任务按知识点）
+    current = _calc_metric(current_user.user_id, task.metric, db, task.metric_param)
     if current < task.threshold:
         raise HTTPException(status_code=400, detail="任务未完成")
 

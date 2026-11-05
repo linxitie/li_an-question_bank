@@ -256,6 +256,29 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 每日 03:30（北京时间）自生长知识图谱热度衰减（2026-11-05 M3）
+    def _decay_kg():
+        from ..core.database import SessionLocal
+        from .kg_growth import decay
+
+        db = SessionLocal()
+        try:
+            report = decay(db)
+            logger.info(f"知识图谱衰减完成: {report}")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"知识图谱衰减失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _decay_kg,
+        trigger=CronTrigger(hour=3, minute=30, timezone=CST),
+        id="decay_kg_heat",
+        name="知识图谱热度衰减（每日 03:30）",
+        replace_existing=True,
+    )
+
     # 模块4 v2：每日 20:00 站内提醒——今日任务未完成的用户
     def _remind_unfinished_tasks():
         from datetime import datetime as _dt
