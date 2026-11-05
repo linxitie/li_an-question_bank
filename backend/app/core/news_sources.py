@@ -492,6 +492,32 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         trust_level=80,
         robots_note="robots.txt 404，协议层面无显式规则",
     ),
+    # 第八批：反邪教与网信系统
+    NewsSourceConfig(
+        "chinafxj",
+        "中国反邪教网",
+        "https://www.chinafxj.cn",
+        "https://www.chinafxj.cn/",
+        link_contains="/n2759",
+        category_code="police_news",
+        category="公安要闻",
+        region_code="000000",
+        trust_level=80,
+        robots_note="robots.txt 404，协议层面无显式规则",
+    ),
+    NewsSourceConfig(
+        "cac",
+        "中央网信办",
+        "https://www.cac.gov.cn",
+        "https://www.cac.gov.cn/",
+        link_contains="/2026-",
+        category_code="cyber_news",
+        category="网信要闻",
+        region_code="000000",
+        trust_level=85,
+        enabled=0,
+        robots_note="robots.txt 仅限制 /zfz/ 等执法栏目，根路径允许",
+    ),
 )
 
 SOURCE_BY_CODE = {source.code: source for source in NEWS_SOURCES}
