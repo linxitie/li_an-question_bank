@@ -1,0 +1,71 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030;-webkit-font-smoothing:antialiased}
+.mono{font-family:"Cascadia Mono",Consolas,monospace}
+.canvas{padding:34px 44px 40px;display:flex;flex-direction:column;gap:16px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:12px}
+.hd h1{font-size:26px;font-weight:700}
+.hd .sub{font-size:12.5px;color:#7a8298;margin-top:5px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(23,32,64,.06);border:1px solid #eaeef7}
+.drop{border:2px dashed #b9c2dd;border-radius:14px;padding:18px 22px;display:flex;align-items:center;gap:16px;background:#fbfcff}
+.drop .ic{width:40px;height:40px;border-radius:10px;background:#eef0ff;color:#4054e0;display:flex;align-items:center;justify-content:center;font-size:18px}
+.drop .t{font-size:15px;font-weight:700}
+.drop .h{font-size:12px;color:#8b93a7;margin-top:4px}
+.btn{background:#4054e0;color:#fff;border-radius:10px;padding:10px 18px;font-size:13.5px;font-weight:700;display:inline-block}
+.btn.ghost{background:#f1f3fb;color:#3a4bd8}
+.btn.warn{background:#fff2e8;color:#d9480f}
+.sum{display:flex;align-items:center;gap:18px;padding:14px 20px}
+.sum .big{font-size:30px;font-weight:800;letter-spacing:.5px}
+.sum .txt{font-size:12.5px;color:#7a8298}
+.pbar{height:8px;background:#eef1f8;border-radius:99px;overflow:hidden;flex:1}
+.pbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#3a4bd8,#6a4ce0)}
+.cols{display:grid;grid-template-columns:1fr 430px;gap:16px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:11.5px;color:#6b7387;font-weight:600;padding:11px 14px;background:#f7f8fd;border-bottom:1px solid #e6eaf4}
+.tbl td{padding:11px 14px;border-bottom:1px solid #f0f2f8;vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.name{font-weight:600}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
+.c-run{background:#eaf0ff;color:#2f49c4}.c-ok{background:#e7f7ee;color:#0f7a4d}.c-err{background:#fff0e8;color:#c2410c}.c-queue{background:#f1f2f6;color:#6b7387}
+.mini{height:6px;background:#eef1f8;border-radius:99px;overflow:hidden;width:120px;display:inline-block;vertical-align:middle}
+.mini i{display:block;height:100%;background:#6a4ce0}
+.det{padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.det .ttl{font-size:15px;font-weight:700}
+.kv{display:flex;justify-content:space-between;font-size:12.5px;color:#5b6478;border-bottom:1px dashed #eef1f8;padding-bottom:7px}
+.kv b{color:#1a2030}
+.note{font-size:11.5px;color:#8b93a7;line-height:1.65;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:10px 14px}
+
+body{background:#eef0f6;display:flex;justify-content:center;padding:20px}
+.phone{width:390px;min-height:800px;background:#f4f6fb;border-radius:26px;padding:18px 16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 24px rgba(20,28,60,.12)}
+.phone .ttl{font-size:18px;font-weight:700}
+.mc .pbar{flex:none;height:8px;width:100%}
+.mc{background:#fff;border-radius:13px;padding:13px 14px;display:flex;flex-direction:column;gap:8px;border:1px solid #eaeef7}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc .n{font-size:13px;font-weight:700;line-height:1.35}
+.tag{font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:6px;white-space:nowrap}
+.gold{background:#fff7e6;color:#b26a00}
+.blue{background:#eaf0ff;color:#2f49c4}
+.green{background:#e7f7ee;color:#0f7a4d}
+.red{background:#fff0e8;color:#c2410c}
+.mc .meta{font-size:11px;color:#8b93a7}
+.act{display:flex;gap:8px}
+.act span{flex:1;text-align:center;font-size:12px;font-weight:700;padding:9px;border-radius:9px;background:#f1f3fb;color:#3a4bd8}
+.act span.p{background:#4054e0;color:#fff}
+</style></head><body><div class="phone">
+<div class="ttl">批量导入</div>
+<div class="mono" style="font-size:11.5px;color:#8b93a7">教师端 · 单批 ≤10 个 · 单文件 ≤50 MB</div>
+<div class="mc"><div class="r1"><div class="n">三色笔记-申论.pdf</div><span class="tag blue">OCR 34/90</span></div>
+  <div class="pbar"><i style="width:38%"></i></div><div class="meta">已用 14 分 · 预计还需 68 分</div>
+  <div class="act"><span class="p">取消</span><span>后台继续</span></div></div>
+<div class="mc"><div class="r1"><div class="n">公专_必背考点_法律.xlsx</div><span class="tag green">已完成</span></div>
+  <div class="pbar"><i style="width:100%;background:#22a06b"></i></div><div class="meta">1277 行 → 111 张卡 · 待审核</div>
+  <div class="act"><span class="p">预览</span><span>删除</span></div></div>
+<div class="mc"><div class="r1"><div class="n">公安基础知识.docx</div><span class="tag blue">解析 210/297</span></div>
+  <div class="pbar"><i style="width:71%"></i></div><div class="meta">预计 4 秒后完成</div>
+  <div class="act"><span class="p">取消</span></div></div>
+<div class="mc"><div class="r1"><div class="n">行测必背手册.pdf</div><span class="tag red">失败：已加密</span></div>
+  <div class="pbar"><i style="width:0%"></i></div><div class="meta">请解除密码后重传</div>
+  <div class="act"><span class="p">重试</span><span>移除</span></div></div>
+<div style="font-size:11px;color:#8b93a7;line-height:1.6;margin-top:auto">提示：手机端可切后台，任务在服务端继续；回来时进度不会丢。</div>
+</div></body></html>
