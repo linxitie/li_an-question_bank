@@ -2194,11 +2194,41 @@ class Task(Base):
     reward_growth = Column(Integer, default=0, comment="奖励成长值")
     sort_order = Column(Integer, default=0, comment="排序")
     enabled = Column(Integer, default=1, comment="是否启用")
+    # ===== M2 周任务（2026-11-05）=====
+    difficulty_factor = Column(DECIMAL(4, 2), default=1.0, comment="难度系数 1.0/1.2/1.4/1.6")
+    scarcity_factor = Column(DECIMAL(4, 2), default=1.0, comment="稀缺系数 1.30 置顶 / 1.15 限时")
+    category = Column(String(8), default="A", comment="任务类型: A 定量 / B 连续 / C 场景")
+    coupon_code = Column(String(64), nullable=True, comment="完成时额外发放的券（C 类场景）")
+    pin_eligible = Column(Integer, default=0, comment="是否可被选入置顶槽位(0/1)")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     __table_args__ = (
         Index("idx_badge_task_type", t_type),
+    )
+
+
+class WeeklyTaskPool(Base):
+    """周任务置顶池（2026-11-05 M2）。
+
+    置顶是稀缺资源：每周全站只置顶 2–3 个任务（设计文档 §3.4）。
+    每周一 00:05 由调度重建本周池（week_key + 槽位），用户侧按 `pinned_slot` 排序展示，
+    并套用 `scarcity_factor`（1.30/1.45/1.50）提高奖励。
+    """
+
+    __tablename__ = "weekly_task_pool"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="池记录ID")
+    week_key = Column(String(20), nullable=False, comment="ISO 周键，如 2026-W45")
+    task_id = Column(Integer, ForeignKey("badge_task.task_id"), nullable=False, comment="任务ID")
+    pinned_slot = Column(Integer, default=0, comment="置顶槽位 1..3，0=普通")
+    audience = Column(String(16), default="all", comment="受众: all/student/teacher")
+    source = Column(String(8), default="auto", comment="来源: auto 自动排期 / manual 管理员指定")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        UniqueConstraint("week_key", "task_id", name="uk_weekly_pool_task"),
+        Index("idx_weekly_pool_week", week_key),
     )
 
 
@@ -2213,6 +2243,10 @@ class UserTaskProgress(Base):
     current = Column(Integer, default=0, comment="当前进度")
     completed = Column(Integer, default=0, comment="是否已完成")
     claimed = Column(Integer, default=0, comment="是否已领取奖励")
+    # ===== M2 周任务状态机（2026-11-05）=====
+    pending_verify = Column(Integer, default=0, comment="待判定: 1=已达阈值待服务端二次校验")
+    expired = Column(Integer, default=0, comment="已失效: 1=周期结束未达标或校验失败")
+    revoked = Column(Integer, default=0, comment="已回滚: 1=风控回溯撤销")
     completed_at = Column(DateTime, comment="完成时间")
     claimed_at = Column(DateTime, comment="领取时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")

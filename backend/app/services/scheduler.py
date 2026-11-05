@@ -192,6 +192,70 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 每周一 00:05（北京时间）重建周任务置顶池（2026-11-05 M2）
+    def _rebuild_weekly_pool():
+        from ..core.database import SessionLocal
+        from .weekly_tasks import ensure_week_pool
+
+        db = SessionLocal()
+        try:
+            rows = ensure_week_pool(db)
+            logger.info(f"周任务置顶池重建完成: {len(rows)} 条")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"周任务置顶池重建失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _rebuild_weekly_pool,
+        trigger=CronTrigger(day_of_week="mon", hour=0, minute=5, timezone=CST),
+        id="rebuild_weekly_pool",
+        name="周任务置顶池（每周一 00:05）",
+        replace_existing=True,
+    )
+
+    # 每日 03:20（北京时间）把过期的未完成周任务置为已失效
+    def _expire_weekly_tasks():
+        from datetime import datetime as _dt
+
+        from ..core.database import SessionLocal
+        from ..models.models import Task, UserTaskProgress
+        from .weekly_tasks import week_key
+
+        db = SessionLocal()
+        try:
+            week = week_key()
+            rows = (
+                db.query(UserTaskProgress, Task)
+                .join(Task, Task.task_id == UserTaskProgress.task_id)
+                .filter(
+                    Task.t_type == "weekly",
+                    UserTaskProgress.period_key != week,
+                    UserTaskProgress.claimed == 0,
+                    UserTaskProgress.expired == 0,
+                )
+                .all()
+            )
+            for prog, _task in rows:
+                prog.expired = 1
+            db.commit()
+            if rows:
+                logger.info(f"周任务失效处理: {len(rows)} 条")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"周任务失效处理失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _expire_weekly_tasks,
+        trigger=CronTrigger(hour=3, minute=20, timezone=CST),
+        id="expire_weekly_tasks",
+        name="周任务失效处理（每日 03:20）",
+        replace_existing=True,
+    )
+
     # 模块4 v2：每日 20:00 站内提醒——今日任务未完成的用户
     def _remind_unfinished_tasks():
         from datetime import datetime as _dt

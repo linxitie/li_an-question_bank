@@ -99,11 +99,18 @@
           <div v-if="!state.tasks.random.length" class="gp-empty">暂无随机任务</div>
         </div>
 
-        <!-- 周常任务 -->
+        <!-- 周常任务（M2：置顶槽位 + 生效奖励） -->
         <div class="gp-card">
-          <h4>📅 周常任务</h4>
+          <h4>
+            📅 周常任务
+            <span v-if="state.tasks.weekly_meta" class="week-meta">
+              {{ state.tasks.weekly_meta.week_key }} · 本周已领 {{ state.tasks.weekly_meta.claimed_total }}/{{ state.tasks.weekly_meta.reward_cap }}
+            </span>
+          </h4>
           <div v-for="t in state.tasks.weekly" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
+            <span class="task-title">
+              <span v-if="t.pinned" class="pin-badge">置顶</span>{{ t.title }}
+            </span>
             <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
             <span class="task-reward">🪙{{ t.reward_coins }}</span>
             <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">
@@ -527,6 +534,24 @@
   .task-title { flex: 1; color: #333; font-weight: 500; }
   .task-progress { color: #6b7280; min-width: 60px; text-align: center; }
   .task-reward { color: #b45309; font-weight: 700; min-width: 50px; }
+  /* M2：周任务置顶标记与本周统计 */
+  .pin-badge {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #fef3c7;
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 700;
+    vertical-align: middle;
+  }
+  .week-meta {
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+  }
   .task-btn {
     padding: 5px 14px; background: #1a2b5f; color: #fff; border: none;
     border-radius: 8px; cursor: pointer; font-size: 12px;

@@ -41,6 +41,7 @@ from .api.v1.growth import study_plan
 from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
+from .api.v1.growth import weekly_tasks_api
 from .api.v1.reward import shop, admin_shop, coupons
 from .api import media_assets as media_assets_api
 from .api.v1.platform.websocket import router as websocket_router
@@ -249,6 +250,49 @@ async def lifespan(app: FastAPI):
                         ))
                         conn.commit()
                         logger.info(f"自动迁移: coin_exchanges 添加列 {col_name}")
+
+        # 周任务 M2（2026-11-05）：任务系数/分类/券，进度状态机字段
+        if 'badge_task' in inspector.get_table_names():
+            task_cols = [c['name'] for c in inspector.get_columns('badge_task')]
+            for col_name, col_type in [
+                ('difficulty_factor', 'NUMERIC(4, 2) DEFAULT 1.0'),
+                ('scarcity_factor', 'NUMERIC(4, 2) DEFAULT 1.0'),
+                ('category', "VARCHAR(8) DEFAULT 'A'"),
+                ('coupon_code', 'VARCHAR(64)'),
+                ('pin_eligible', 'INTEGER DEFAULT 0'),
+            ]:
+                if col_name not in task_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE badge_task ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: badge_task 添加列 {col_name}")
+
+        if 'user_task_progress' in inspector.get_table_names():
+            prog_cols = [c['name'] for c in inspector.get_columns('user_task_progress')]
+            for col_name, col_type in [
+                ('pending_verify', 'INTEGER DEFAULT 0'),
+                ('expired', 'INTEGER DEFAULT 0'),
+                ('revoked', 'INTEGER DEFAULT 0'),
+            ]:
+                if col_name not in prog_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE user_task_progress ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: user_task_progress 添加列 {col_name}")
+
+        if 'weekly_task_pool' in inspector.get_table_names():
+            pool_cols = [c['name'] for c in inspector.get_columns('weekly_task_pool')]
+            if 'source' not in pool_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE weekly_task_pool ADD COLUMN source VARCHAR(8) DEFAULT 'auto'"
+                    ))
+                    conn.commit()
+                    logger.info("自动迁移: weekly_task_pool 添加列 source")
 
         # 检查 sys_user 表（学生端「我的」模块新增字段）
         if 'sys_user' in inspector.get_table_names():
@@ -975,6 +1019,7 @@ app.include_router(coins.router, tags=["金币"])
 app.include_router(shop.router, tags=["金币商城"])
 app.include_router(coupons.router, tags=["优惠券"])
 app.include_router(tasks.router, tags=["任务中心"])
+app.include_router(weekly_tasks_api.router, tags=["周任务"])
 app.include_router(admin_shop.router, tags=["管理员端-金币商城"])
 app.include_router(achievements.router, tags=["成就"])
 app.include_router(checkin.router, tags=["每日签到"])

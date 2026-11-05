@@ -21,6 +21,11 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 周任务 M2（2026-11-05）=====
+    ("GET", "/api/tasks/weekly/pool"),
+    ("POST", "/api/tasks/weekly/pool/pin"),
+    ("POST", "/api/tasks/weekly/recalc"),
+    ("POST", "/api/tasks/weekly/expire"),
     # ===== 金币购 M1.5（2026-11-05，卡密交付/待处理订单）=====
     ("POST", "/api/admin/shop/products/{product_id}/codes"),
     ("GET", "/api/admin/shop/products/{product_id}/codes/stats"),
