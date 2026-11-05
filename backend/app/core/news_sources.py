@@ -455,6 +455,43 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         trust_level=80,
         robots_note="robots.txt 404，协议层面无显式规则",
     ),
+    # 第七批：禁毒、检察与招考权威来源
+    NewsSourceConfig(
+        "nncc",
+        "中国禁毒网",
+        "http://www.nncc626.com",
+        "http://www.nncc626.com/",
+        link_contains="/c.html",
+        category_code="police_news",
+        category="公安要闻",
+        region_code="000000",
+        trust_level=85,
+        robots_note="robots.txt Allow: /",
+    ),
+    NewsSourceConfig(
+        "spp",
+        "最高人民检察院",
+        "https://www.spp.gov.cn",
+        "https://www.spp.gov.cn/",
+        link_contains="/2026",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
+        trust_level=85,
+        robots_note="robots.txt 返回 HTML，非有效规则",
+    ),
+    NewsSourceConfig(
+        "cpta",
+        "中国人事考试网",
+        "http://www.cpta.com.cn",
+        "http://www.cpta.com.cn/",
+        link_contains="/notice/",
+        category_code="exam_news",
+        category="招考要闻",
+        region_code="000000",
+        trust_level=80,
+        robots_note="robots.txt 404，协议层面无显式规则",
+    ),
 )
 
 SOURCE_BY_CODE = {source.code: source for source in NEWS_SOURCES}
