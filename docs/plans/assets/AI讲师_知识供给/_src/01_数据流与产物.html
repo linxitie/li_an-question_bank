@@ -1,0 +1,69 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030;-webkit-font-smoothing:antialiased}
+.canvas{width:1600px;min-height:1000px;padding:40px 56px 48px;display:flex;flex-direction:column;gap:20px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:14px}
+.hd h1{font-size:29px;font-weight:700;letter-spacing:.3px}
+.hd .sub{font-size:13px;color:#7a8298;margin-top:6px}
+.badge{font-size:12.5px;color:#4054e0;background:#e9ecff;padding:6px 13px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:16px;box-shadow:0 2px 10px rgba(23,32,64,.07);border:1px solid #eaeef7}
+.muted{color:#7a8298;font-size:12.5px}
+.row{display:flex;gap:18px}
+.mono{font-family:"Cascadia Mono",Consolas,monospace}
+
+.stage{}
+.lane{display:flex;gap:16px}
+.ibox{flex:1;background:#fff;border:1px solid #e6eaf4;border-radius:14px;padding:16px 18px;position:relative}
+.ibox .t{font-size:14.5px;font-weight:700;color:#1a2030}
+.ibox .p{font-size:11.5px;color:#8b93a7;margin-top:5px;font-family:Consolas,monospace;word-break:break-all}
+.ibox .v{margin-top:10px;font-size:12px;color:#4054e0;background:#f2f4ff;border-radius:8px;padding:5px 9px;display:inline-block}
+.arrow{text-align:center;color:#c3c9da;font-size:20px;line-height:1;margin:-4px 0}
+.gen{background:linear-gradient(135deg,#3a4bd8,#6a4ce0);border-radius:16px;padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;box-shadow:0 6px 18px rgba(74,84,214,.28)}
+.gen .l{font-size:17px;font-weight:700}
+.gen .l span{opacity:.72;font-weight:400;font-size:12.5px;margin-left:10px}
+.gen .code{font-family:Consolas,monospace;font-size:12px;background:rgba(255,255,255,.16);padding:9px 14px;border-radius:10px;line-height:1.75}
+.prod{flex:1;background:#fff;border-radius:14px;border:1px solid #e6eaf4;padding:16px 18px;border-top:3px solid #6a4ce0}
+.prod .n{font-size:14.5px;font-weight:700}
+.prod .d{font-size:12px;color:#7a8298;margin-top:6px;line-height:1.6}
+.prod .kv{margin-top:10px;font-size:11.5px;color:#4054e0;font-family:Consolas,monospace}
+.next{flex:1;border-radius:14px;padding:16px 18px;background:#fff;border:1px dashed #b9c1d6}
+.next .tag{font-size:11px;font-weight:700;color:#fff;background:#9aa3bb;border-radius:6px;padding:3px 8px;display:inline-block}
+.next .tag.on{background:#22a06b}
+.strip{display:flex;gap:12px;flex-wrap:wrap}
+.chip{background:#fff;border:1px solid #e6eaf4;border-radius:11px;padding:10px 15px;font-size:12.5px;color:#4a5266}
+.chip b{color:#1a2030;font-size:15px;margin-right:5px}
+.note{background:#fffdf3;border:1px solid #f4e3b0;border-radius:12px;padding:13px 17px;font-size:12.5px;color:#7a5f16;line-height:1.7}
+</style></head><body><div class="canvas">
+<div class="hd"><div><h1>知识供给适配器 · 数据流与产物</h1><div class="sub">离线、只读、确定性：无网络 · 无 LLM Key · 不写库 · 不写教研笔记</div></div><div class="badge">T1–T4 · 方案 v1 待审批</div></div>
+
+<div class="lane">
+  <div class="ibox"><div class="t">① 分类树（机器可读）</div><div class="p">AI讲师知识库/产出/清单/知识分类_科目-知识点-考点.json</div><div class="v">3 科目 · 15 模块 · 87 知识点 · 403 考点</div></div>
+  <div class="ibox"><div class="t">② 文字大纲（顺序基准）</div><div class="p">AI讲师知识库/笔记/考点/知识分类大纲_科目-知识点.md</div><div class="v">用于校验模块内顺序与命名</div></div>
+  <div class="ibox"><div class="t">③ 试点映射（主题来源）</div><div class="p">AI讲师知识库/笔记/考点/桐哥课程-考点候选映射.md</div><div class="v">12 个试点 → 解析出 topic 切片</div></div>
+  <div class="ibox"><div class="t">④ 题库（只读）</div><div class="p">backend/data/question_bank.db &nbsp;file:…?mode=ro</div><div class="v">200 题 · 126 关联 · 26 个知识点有题</div></div>
+</div>
+<div class="arrow">▼</div>
+
+<div class="gen"><div class="l">scripts/lecture/build_lecture_source.py<span>单一职责：读事实 → 算分级 → 写产物</span></div>
+<div class="code">--build（默认）　生成产物<br>--check　　　　与磁盘比对，漂移 exit 1<br>--stats　　　　只打印 counts</div></div>
+<div class="arrow">▼</div>
+
+<div class="lane">
+  <div class="prod"><div class="n">lecture_source.json</div><div class="d">事实层：ID / 考点 / 题量 / 视频 / 分级 / 排除原因 + 输入 sha256</div><div class="kv">→ src/assets/lecture/（Vite 静态 import）</div></div>
+  <div class="prod" style="border-top-color:#3a4bd8"><div class="n">知识供给清单_可讲知识点_v1.md</div><div class="d">人读清单：与 JSON 同源渲染，数字不一致即报错</div><div class="kv">→ docs/plans/</div></div>
+  <div class="prod" style="border-top-color:#22a06b"><div class="n">知识点ID.json</div><div class="d">冻结的 87 个 point_id（含 frozen_at 与 sha256），发布后不改</div><div class="kv">→ AI讲师知识库/产出/清单/</div></div>
+</div>
+<div class="arrow">▼</div>
+
+<div class="lane">
+  <div class="next"><div class="tag">T5</div><div style="font-size:14px;font-weight:700;margin-top:9px">规则版讲稿生成</div><div class="d" style="font-size:12px;color:#7a8298;margin-top:6px;line-height:1.6">7 段式 + 桐哥四步 → DSL 台词。3 个试点，约 1 天。<br>不用 LLM（Key 为空 + 规范禁生成条文）</div></div>
+  <div class="next"><div class="tag on">T6</div><div style="font-size:14px;font-weight:700;margin-top:9px">播放器 P1</div><div class="d" style="font-size:12px;color:#7a8298;margin-top:6px;line-height:1.6">1080p 舞台 + 96px 安全边距 · SVG 讲师 · 板书/流程图/对照表 · 右侧题目面板 · 状态机</div></div>
+  <div class="next" style="border-style:solid;border-color:#e6eaf4"><div class="tag">性质</div><div style="font-size:14px;font-weight:700;margin-top:9px">P1 零后端</div><div class="d" style="font-size:12px;color:#7a8298;margin-top:6px;line-height:1.6">不新增表 / 端点 / 迁移 → openapi 462 不变、R11 白名单不动；只加 1 个前端页面路由（104→105，双改点）</div></div>
+</div>
+
+<div class="strip">
+  <div class="chip"><b>87</b>知识点</div><div class="chip"><b>403</b>考点</div><div class="chip"><b>317</b>有效考点（去「其他」）</div>
+  <div class="chip"><b>14</b>零考点知识点</div><div class="chip"><b>12</b>topic 试点</div><div class="chip"><b>25</b>有题库题</div><div class="chip"><b>0</b>有视频切片</div><div class="chip"><b>0</b>法条卡</div>
+</div>
+<div class="note">三条硬约束：① 库内铁律第 9 条「数字必须实测」——清单与 JSON 的数字都由脚本算，不手填；② 库内铁律第 10 条「产出只写产出」——编译物进 <span class="mono">产出/</span>，正文笔记由教研确认；③ 《教学画面渲染规范》第 5 条「禁生成式模型产文字/公式/法条」——P1 台词全部来自规则模板，标 <span class="mono">source: "rule_template"</span>。</div>
+</div></body></html>

@@ -1,0 +1,63 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030;-webkit-font-smoothing:antialiased}
+.canvas{width:1600px;min-height:1000px;padding:40px 56px 48px;display:flex;flex-direction:column;gap:20px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:14px}
+.hd h1{font-size:29px;font-weight:700;letter-spacing:.3px}
+.hd .sub{font-size:13px;color:#7a8298;margin-top:6px}
+.badge{font-size:12.5px;color:#4054e0;background:#e9ecff;padding:6px 13px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:16px;box-shadow:0 2px 10px rgba(23,32,64,.07);border:1px solid #eaeef7}
+.muted{color:#7a8298;font-size:12.5px}
+.row{display:flex;gap:18px}
+.mono{font-family:"Cascadia Mono",Consolas,monospace}
+
+.stats{display:flex;gap:14px}
+.stat{flex:1;background:#fff;border:1px solid #e6eaf4;border-radius:14px;padding:15px 18px}
+.stat .k{font-size:12px;color:#8b93a7}
+.stat .v{font-size:27px;font-weight:800;margin-top:5px;letter-spacing:.5px}
+.stat .v small{font-size:12px;font-weight:600;color:#8b93a7;margin-left:5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;font-weight:600;color:#6b7387;font-size:12px;padding:11px 12px;background:#f7f8fd;border-bottom:1px solid #e6eaf4}
+thead th:first-child{border-radius:10px 0 0 0} thead th:last-child{border-radius:0 10px 0 0}
+tbody td{padding:10px 12px;border-bottom:1px solid #f0f2f8}
+tbody tr:last-child td{border-bottom:none}
+.pid{color:#4054e0;font-size:12.2px}
+.nm{font-weight:600}
+.num{text-align:left;font-variant-numeric:tabular-nums;color:#4a5266}
+.q-yes{color:#0f7a4d;font-weight:700} .q-no{color:#b6bccd}
+.cov{color:#b6bccd;font-variant-numeric:tabular-nums}
+.tier{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
+.b0{background:#e7f7ee;color:#0f7a4d} .b1{background:#eaf0ff;color:#2f49c4} .b2{background:#f1f2f6;color:#7d859a}
+.gr{font-size:11px;color:#8b93a7;font-family:Consolas,monospace}
+.tbl{padding:6px 18px 16px}
+.foot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#8b93a7;padding:0 4px}
+</style></head><body><div class="canvas" style="min-height:860px">
+<div class="hd"><div><h1>可讲清单 · 预览（前 10 行样例）</h1><div class="sub">docs/plans/知识供给清单_可讲知识点_v1.md — 由生成器从 JSON 同源渲染，数字全部实算</div></div><div class="badge">示意稿 · 非最终数据</div></div>
+
+<div class="stats">
+  <div class="stat"><div class="k">知识点</div><div class="v">87<small>3 科目 / 15 模块</small></div></div>
+  <div class="stat"><div class="k">考点</div><div class="v">403<small>有效 317</small></div></div>
+  <div class="stat"><div class="k">零考点知识点</div><div class="v">14<small>行测3 / 申论3 / 公专8</small></div></div>
+  <div class="stat"><div class="k">topic 试点</div><div class="v">12<small>P0 单元</small></div></div>
+  <div class="stat"><div class="k">有题库题</div><div class="v">25<small>/ 87</small></div></div>
+  <div class="stat"><div class="k">有视频切片</div><div class="v">0<small>待转写</small></div></div>
+</div>
+
+<div class="card tbl">
+<table><thead><tr><th style="width:118px">point_id</th><th style="width:60px">科目</th><th style="width:118px">模块</th><th>知识点</th>
+<th style="width:96px">有效/全部考点</th><th style="width:78px">题库题</th><th style="width:60px">视频</th><th style="width:150px">分级 · 粒度</th></tr></thead>
+<tbody><tr><td class="mono pid">GZ-JC-010</td><td>公专</td><td>基础知识</td><td class="nm">行政执法基础知识</td><td class="num">5 / 6</td><td class="num"><span class="q-yes">7</span></td><td><span class="cov">0</span></td><td><span class="tier b0">P0</span> <span class="gr">topic ×4</span></td></tr>
+<tr><td class="mono pid">GZ-JC-006</td><td>公专</td><td>基础知识</td><td class="nm">人民警察法基础知识</td><td class="num">5 / 6</td><td class="num"><span class="q-yes">4</span></td><td><span class="cov">0</span></td><td><span class="tier b1">P1</span> <span class="gr">exam</span></td></tr>
+<tr><td class="mono pid">GZ-JC-011</td><td>公专</td><td>基础知识</td><td class="nm">公安工作基本原则</td><td class="num">4 / 5</td><td class="num"><span class="q-no">0</span></td><td><span class="cov">0</span></td><td><span class="tier b0">P0</span> <span class="gr">topic</span></td></tr>
+<tr><td class="mono pid">GZ-JC-003</td><td>公专</td><td>基础知识</td><td class="nm">刑事执法基础知识</td><td class="num">5 / 6</td><td class="num"><span class="q-yes">6</span></td><td><span class="cov">0</span></td><td><span class="tier b1">P1</span> <span class="gr">exam</span></td></tr>
+<tr><td class="mono pid">GZ-JW-012</td><td>公专</td><td>基本警务能力</td><td class="nm">安全检查</td><td class="num">0 / 0</td><td class="num"><span class="q-yes">1</span></td><td><span class="cov">0</span></td><td><span class="tier b2">P2</span> <span class="gr">point</span></td></tr>
+<tr><td class="mono pid">GZ-JC-007</td><td>公专</td><td>基础知识</td><td class="nm">公安机关性质与职能</td><td class="num">6 / 7</td><td class="num"><span class="q-yes">40</span></td><td><span class="cov">0</span></td><td><span class="tier b1">P1</span> <span class="gr">exam</span></td></tr>
+<tr><td class="mono pid">XC-ZL-003</td><td>行测</td><td>资料分析</td><td class="nm">速算技巧</td><td class="num">0 / 0</td><td class="num"><span class="q-no">0</span></td><td><span class="cov">0</span></td><td><span class="tier b0">P0</span> <span class="gr">topic</span></td></tr>
+<tr><td class="mono pid">XC-ZL-002</td><td>行测</td><td>资料分析</td><td class="nm">统计术语</td><td class="num">4 / 5</td><td class="num"><span class="q-no">0</span></td><td><span class="cov">0</span></td><td><span class="tier b2">P2</span> <span class="gr">exam</span></td></tr>
+<tr><td class="mono pid">XC-ZZ-001</td><td>行测</td><td>政治理论</td><td class="nm">习近平新时代中国特色社会主义思想</td><td class="num">3 / 4</td><td class="num"><span class="q-no">0</span></td><td><span class="cov">0</span></td><td><span class="tier b2">P2</span> <span class="gr">exam</span></td></tr>
+<tr><td class="mono pid">SL-GN-004</td><td>申论</td><td>归纳概括</td><td class="nm">特点概括</td><td class="num">3 / 4</td><td class="num"><span class="q-no">0</span></td><td><span class="cov">0</span></td><td><span class="tier b2">P2</span> <span class="gr">exam</span></td></tr></tbody></table>
+</div>
+
+<div class="foot"><div>规则：P0 = 试点 topic｜P1 = 题库有题或命中程序类关键词｜P2 = 其余；<span class="mono">其他</span> 占位考点不生成单元</div><div>生成：scripts/lecture/build_lecture_source.py</div></div>
+<div class="note">为什么需要 topic 层（实测）：12 个试点里 8 个（立案/管辖/回避/传唤/听证/当场处罚/处罚执行/新旧法对比）在大纲 87 知识点中没有对应节点——它们是「行政执法基础知识 <span class="mono">GZ-JC-010</span>」下面的程序细目。只有 point 一层时无处安放；硬塞进去则一节微课要覆盖 11 集视频。</div>
+</div></body></html>

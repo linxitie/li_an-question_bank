@@ -1,0 +1,102 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030;-webkit-font-smoothing:antialiased}
+.canvas{width:1600px;min-height:1000px;padding:40px 56px 48px;display:flex;flex-direction:column;gap:20px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:14px}
+.hd h1{font-size:29px;font-weight:700;letter-spacing:.3px}
+.hd .sub{font-size:13px;color:#7a8298;margin-top:6px}
+.badge{font-size:12.5px;color:#4054e0;background:#e9ecff;padding:6px 13px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:16px;box-shadow:0 2px 10px rgba(23,32,64,.07);border:1px solid #eaeef7}
+.muted{color:#7a8298;font-size:12.5px}
+.row{display:flex;gap:18px}
+.mono{font-family:"Cascadia Mono",Consolas,monospace}
+
+.top{display:flex;align-items:center;justify-content:space-between}
+.crumb{font-size:13px;color:#7a8298}
+.crumb b{color:#1a2030}
+.wrap{display:grid;grid-template-columns:1fr 452px;gap:20px;flex:1}
+.stagebox{background:#fff;border-radius:18px;border:1px solid #e6eaf4;overflow:hidden;display:flex;flex-direction:column}
+.screen{position:relative;flex:1;background:#fbfcff;background-image:radial-gradient(#e7ebf6 1px,transparent 1px);background-size:26px 26px}
+.safe{position:absolute;inset:64px 96px;border:1px dashed #dfe5f4;border-radius:10px;pointer-events:none}
+.sh{position:absolute;left:96px;top:84px;right:300px}
+.sh .k{display:inline-block;font-size:12px;font-weight:700;color:#4054e0;background:#eef0ff;border-radius:6px;padding:4px 9px}
+.sh h2{font-size:34px;margin-top:14px;letter-spacing:.4px}
+.sh .lead{font-size:15px;color:#6b7387;margin-top:10px;line-height:1.7;max-width:760px}
+.bul{position:absolute;left:96px;top:268px;right:330px;display:flex;flex-direction:column;gap:14px}
+.bul div{font-size:17px;line-height:1.6;color:#232a3a;display:flex;gap:12px;align-items:flex-start}
+.bul i{width:9px;height:9px;border-radius:3px;background:#6a4ce0;margin-top:9px;flex:none}
+.flow{position:absolute;left:96px;bottom:104px;right:330px;display:flex;align-items:center;gap:10px}
+.fb{background:#f2f4ff;border:1px solid #d9dffa;color:#2f49c4;border-radius:9px;padding:8px 13px;font-size:13px;font-weight:600}
+.fb.on{background:#3a4bd8;border-color:#3a4bd8;color:#fff;box-shadow:0 4px 12px rgba(58,75,216,.3)}
+.fa{color:#c3c9da}
+.foot{position:absolute;left:96px;right:96px;bottom:56px;display:flex;justify-content:space-between;font-size:11.5px;color:#9aa3bb;font-family:Consolas,monospace;border-top:1px solid #eef1f8;padding-top:10px}
+.av{position:absolute;right:96px;bottom:104px;width:196px;height:236px}
+.ctl{display:flex;align-items:center;gap:14px;padding:12px 18px;border-top:1px solid #eef1f8;background:#fff}
+.pbar{flex:1;height:6px;background:#eef1f8;border-radius:99px;overflow:hidden}
+.pbar span{display:block;height:100%;width:38%;background:linear-gradient(90deg,#3a4bd8,#6a4ce0);border-radius:99px}
+.ibtn{width:34px;height:34px;border-radius:50%;background:#f2f4ff;color:#3a4bd8;display:flex;align-items:center;justify-content:center;font-size:13px}
+.panel{background:#fff;border-radius:18px;border:1px solid #e6eaf4;padding:22px;display:flex;flex-direction:column;gap:14px}
+.pk{display:flex;justify-content:space-between;align-items:center}
+.pk .l{font-size:13px;font-weight:700;color:#3a4bd8}
+.pk .r{font-size:12px;color:#8b93a7}
+.q{font-size:16.5px;line-height:1.75;font-weight:600}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{border:1.5px solid #e6eaf4;border-radius:12px;padding:13px 15px;font-size:14.5px;display:flex;gap:11px;align-items:flex-start}
+.opt b{width:22px;height:22px;border-radius:50%;background:#f2f4ff;color:#3a4bd8;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none;font-weight:700}
+.opt.sel{border-color:#6a4ce0;background:#f8f6ff}
+.submit{margin-top:auto;background:#6a4ce0;color:#fff;border-radius:12px;padding:14px;text-align:center;font-weight:700;font-size:15px;box-shadow:0 6px 16px rgba(106,76,224,.3)}
+.axis{display:flex;gap:6px;padding:0 4px}
+.seg{flex:1;height:26px;border-radius:6px;background:#eef1f8;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#8b93a7}
+.seg.done{background:#dfe4ff;color:#3a4bd8} .seg.cur{background:#6a4ce0;color:#fff;font-weight:700}
+.hint{font-size:11.5px;color:#9aa3bb;line-height:1.6}
+</style></head><body><div class="canvas" style="min-height:1000px">
+<div class="top"><div class="crumb">← 返回　<b>公专</b> / 基础知识 / <b>行政执法基础知识</b> / 传唤与行政强制措施</div><div class="badge">T6 预期效果 · 播放器首屏</div></div>
+
+<div class="wrap">
+  <div class="stagebox">
+    <div class="screen">
+      <div class="safe"></div>
+      <div class="sh"><span class="k">概念 · 04/07</span><h2>传唤：口头与书面，怎么用？</h2>
+        <div class="lead">传唤不是强制措施，是「通知到案」。用错一次，后面整条程序链都可能被认定违法。</div></div>
+      <div class="bul">
+        <div><i></i>对象：违反治安管理的行为人，<b>不包括证人</b></div>
+        <div><i></i>形式：口头传唤需<b>出示工作证件</b>，书面传唤用<b>传唤证</b></div>
+        <div><i></i>时限：询问查证<b>不超过 8 小时</b>，复杂的 <b>不超过 24 小时</b></div>
+      </div>
+      <div class="flow"><span class="fb">立案</span><span class="fa">→</span><span class="fb on">传唤</span><span class="fa">→</span><span class="fb">询问</span><span class="fa">→</span><span class="fb">处罚告知</span></div>
+      <div class="foot"><span>基础知识 · GZ-JC-010-T04 · 03/07</span><span>《治安管理处罚法》第八十二条</span></div>
+      <svg class="av" viewBox="0 0 200 240" fill="none">
+        <ellipse cx="100" cy="228" rx="58" ry="9" fill="#e8ecf7"/>
+        <rect x="52" y="150" width="96" height="76" rx="20" fill="#3a4bd8"/>
+        <rect x="86" y="150" width="28" height="76" fill="#fff" opacity=".92"/>
+        <rect x="96" y="150" width="8" height="46" fill="#3a4bd8"/>
+        <circle cx="100" cy="104" r="42" fill="#ffd9bd"/>
+        <path d="M58 100a42 42 0 0 1 84 0c0-26-18-44-42-44S58 74 58 100z" fill="#2b2f43"/>
+        <circle cx="86" cy="104" r="4.5" fill="#2b2f43"/><circle cx="114" cy="104" r="4.5" fill="#2b2f43"/>
+        <path d="M90 122q10 7 20 0" stroke="#c0714f" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M148 168q26-6 30 14" stroke="#ffd9bd" stroke-width="13" stroke-linecap="round"/>
+        <circle cx="182" cy="186" r="8" fill="#ffd9bd"/>
+      </svg>
+    </div>
+    <div class="ctl"><div class="ibtn">▶</div><div class="pbar"><span></span></div><div class="mono" style="font-size:12px;color:#8b93a7">02:41 / 08:00</div><div class="ibtn">↺</div><div class="ibtn">1.0×</div></div>
+    <div class="axis" style="padding:10px 18px 14px">
+      <div class="seg done">开场</div><div class="seg done">条文</div><div class="seg done">要件</div><div class="seg cur">程序</div>
+      <div class="seg">对比</div><div class="seg">检查点</div><div class="seg">小结</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="pk"><div class="l">检查点 1 / 2</div><div class="r">本题来自：手写（question_source: hand）</div></div>
+    <div class="q">民警口头传唤违法嫌疑人到派出所接受询问，下列做法正确的是？</div>
+    <div class="opts">
+      <div class="opt sel"><b>A</b><div>出示工作证件，并在询问笔录中注明传唤原因和到案经过</div></div>
+      <div class="opt"><b>B</b><div>先传唤到案，事后再补一份传唤证</div></div>
+      <div class="opt"><b>C</b><div>口头传唤后询问查证最长可 48 小时</div></div>
+      <div class="opt"><b>D</b><div>对证人也可使用口头传唤</div></div>
+    </div>
+    <div class="hint">答错会立刻给出解析并定位到「时限」那一段板书；答对放烟花 + 对勾，2 秒后自动继续。</div>
+    <div class="submit">提交答案</div>
+  </div>
+</div>
+<div class="note">视觉口径已按库内《教学画面渲染规范》：1920×1080 设计（虚线 = 四周 96px 安全边距，容器等比缩放）、标题 56–72 实标 34 因预览缩放、正文 40–48、页脚固定「模块名 · 考点 ID · 页码」、≤3 色、动效 200–400ms 且同屏最多 2 个元素运动。所有文字为规则模板产出（<span class="mono">source: "rule_template"</span>），不自称真人语料。</div>
+</div></body></html>
