@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030;-webkit-font-smoothing:antialiased}
+.mono{font-family:"Cascadia Mono",Consolas,monospace}
+.canvas{padding:34px 44px 40px;display:flex;flex-direction:column;gap:16px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:12px}
+.hd h1{font-size:26px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:5px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(23,32,64,.06);border:1px solid #eaeef7}
+.row{display:flex;gap:16px}
+.kv{display:flex;justify-content:space-between;font-size:12.5px;color:#5b6478;border-bottom:1px dashed #eef1f8;padding-bottom:7px}
+.kv b{color:#1a2030}
+.btn{background:#4054e0;color:#fff;border-radius:10px;padding:11px 18px;font-size:13.5px;font-weight:700;display:inline-block;text-align:center}
+.btn.ghost{background:#f1f3fb;color:#3a4bd8}
+.btn.dis{background:#eef0f6;color:#a6adc0}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tab{flex:1;text-align:center;padding:9px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f4f6fb;color:#6b7387}
+.tab.on{background:#4054e0;color:#fff}
+.chk{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e6eaf4;border-radius:10px;font-size:13px;margin-bottom:8px}
+.box{width:17px;height:17px;border-radius:5px;border:1.6px solid #c3c9da;flex:none}
+.box.on{background:#4054e0;border-color:#4054e0;color:#fff;font-size:12px;text-align:center;line-height:15px}
+.cnt{margin-left:auto;font-size:11.5px;color:#8b93a7}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.chip{background:#eef0ff;color:#2f49c4;font-size:12px;padding:5px 10px;border-radius:999px;font-weight:600}
+.note{font-size:11.5px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:10px 13px;line-height:1.65}
+.mini{font-size:11.5px;color:#8b93a7}
+</style></head><body>
+<div class="canvas" style="width:1600px;min-height:900px">
+<div class="hd"><div><h1>教师 · 上传并下发（仅我的班级）</h1><div class="sub">教师不可选择"全部学生"；班级列表来自 banji.teacher_id ∪ 本人 class_name（复用 services/class_scope.py）</div></div><div class="badge">P1 · 教师视图</div></div>
+<div class="card" style="padding:14px 18px;display:flex;align-items:center;gap:14px;background:#eef2ff;border-color:#d9e0ff">
+  <div style="font-size:13px;font-weight:700;color:#2f49c4">你管辖的班级</div>
+  <div class="chip">2024级公安专业1班 · 48 人</div><div class="chip">2024级公安专业2班 · 48 人</div>
+  <div class="mini" style="margin-left:auto">共 96 名学生 · 来自 banji.teacher_id 与 sys_user.class_name</div>
+</div>
+<div class="row">
+  <div class="card" style="width:760px;padding:20px 22px">
+    <div style="font-size:15.5px;font-weight:700;margin-bottom:12px">下发对象</div>
+    <div class="tabs"><div class="tab" style="color:#a6adc0">全部学生（仅管理员）</div><div class="tab on">指定班级</div><div class="tab">指定学生</div></div>
+    <div class="chk"><div class="box on">✓</div>2024级公安专业1班<div class="cnt">48 人</div></div>
+    <div class="chk"><div class="box on">✓</div>2024级公安专业2班<div class="cnt">48 人</div></div>
+    <div class="note" style="margin-top:10px">若尝试提交非本人班级（如 2025级治安学1班），后端校验 <span class="mono">class_name ∈ teacher_class_names()</span> 直接 403，前端仅作提示。</div>
+  </div>
+  <div class="card" style="flex:1;padding:20px 22px;display:flex;flex-direction:column;gap:11px">
+    <div style="font-size:15.5px;font-weight:700">指定学生（搜索）</div>
+    <div style="border:1px solid #e6eaf4;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#8b93a7">输入姓名 / 学号搜索（仅本班范围）</div>
+    <div class="chk"><div class="box on">✓</div>202516001 · 学生A<div class="cnt">1班</div></div>
+    <div class="chk"><div class="box on">✓</div>2026c29996 · 学生B<div class="cnt">2班</div></div>
+    <div class="chk"><div class="box"></div>2028a5a6c · 学生C<div class="cnt">1班</div></div>
+    <div style="margin-top:auto;padding-top:12px;font-size:13px;color:#4054e0;font-weight:700">将下发给 2 个班 · 96 名学生（含 2 名指定学生去重）</div>
+  </div>
+</div></div></body></html>
