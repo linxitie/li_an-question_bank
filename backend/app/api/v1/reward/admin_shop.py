@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
@@ -312,3 +313,140 @@ async def admin_coin_metrics(
         "budget_usage_pct": budget_pct,
         "flags": flags,
     }
+
+
+# ==================== M1.5（2026-11-05）：卡密池 / 待处理兑换 ====================
+
+
+class CodeImportPayload(BaseModel):
+    codes: list[str]
+    batch_no: str = ""
+
+
+@router.post("/products/{product_id}/codes", summary="导入卡密（码池）")
+async def admin_import_codes(
+    product_id: int,
+    data: CodeImportPayload,
+    current_user: SysUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """批量导入卡密。重复码会被跳过（唯一约束），返回导入/跳过数量。"""
+    from ....models.models import ShopCode
+
+    product = db.query(ShopProduct).filter(ShopProduct.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+
+    imported, skipped = 0, 0
+    seen = set()
+    for raw in data.codes:
+        code = (raw or "").strip()
+        if not code or code in seen:
+            skipped += 1
+            continue
+        seen.add(code)
+        if db.query(ShopCode.id).filter(ShopCode.code == code).first():
+            skipped += 1
+            continue
+        db.add(
+            ShopCode(
+                product_id=product_id,
+                code=code,
+                status="available",
+                batch_no=data.batch_no,
+            )
+        )
+        imported += 1
+
+    db.commit()
+    available = (
+        db.query(ShopCode)
+        .filter(ShopCode.product_id == product_id, ShopCode.status == "available")
+        .count()
+    )
+    logger.info("管理员 %s 为商品 %s 导入卡密 %s 条", current_user.username, product_id, imported)
+    return {"imported": imported, "skipped": skipped, "available": available}
+
+
+@router.get("/products/{product_id}/codes/stats", summary="卡密库存统计")
+async def admin_code_stats(
+    product_id: int,
+    current_user: SysUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from ....models.models import ShopCode
+
+    rows = (
+        db.query(ShopCode.status, func.count(ShopCode.id))
+        .filter(ShopCode.product_id == product_id)
+        .group_by(ShopCode.status)
+        .all()
+    )
+    stats = {status: int(cnt) for status, cnt in rows}
+    return {
+        "product_id": product_id,
+        "available": stats.get("available", 0),
+        "assigned": stats.get("assigned", 0),
+        "disabled": stats.get("disabled", 0),
+    }
+
+
+@router.get("/orders", summary="待处理兑换（待发货/待开通）")
+async def admin_pending_orders(
+    status: str = Query("pending", description="pending/completed/refunded"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: SysUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from ....models.models import CoinExchange
+
+    query = db.query(CoinExchange).filter(CoinExchange.status == status)
+    total = query.count()
+    rows = (
+        query.order_by(CoinExchange.created_at.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "product_name": r.product_name,
+                "coin_cost": r.coin_cost,
+                "deliverable_type": r.deliverable_type,
+                "delivered_code": r.delivered_code,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/orders/{order_id}/ship", summary="标记已发货/已开通")
+async def admin_ship_order(
+    order_id: int,
+    current_user: SysUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime as _dt
+
+    from ....models.models import CoinExchange
+
+    order = db.query(CoinExchange).filter(CoinExchange.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="兑换单不存在")
+    if order.status != "pending":
+        raise HTTPException(status_code=400, detail="该兑换单不是待处理状态")
+
+    order.status = "completed"
+    order.shipped_at = _dt.now()
+    order.completed_at = _dt.now()
+    db.commit()
+    logger.info("管理员 %s 完成兑换单 %s 的发货/开通", current_user.username, order_id)
+    return {"success": True, "id": order.id, "status": order.status}

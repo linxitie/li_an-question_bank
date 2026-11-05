@@ -836,7 +836,6 @@ class Coupon(Base):
 
 class CouponGrant(Base):
     """用户持有的券（发券记录 + 使用状态）"""
-
     __tablename__ = "coupon_grant"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="发放ID")
@@ -854,8 +853,34 @@ class CouponGrant(Base):
     )
 
 
+class ShopCode(Base):
+    """商品卡密池（2026-11-05 M1.5）。
+
+    为什么需要：视频会员/电商卡这类商品兑换后必须给用户一串可用的码。
+    兑换时从本表按"最早入库"原子领取一条，写回 `coin_exchanges.delivered_code`；
+    没有可用码就**在扣币前拒绝兑换**，避免再出现"扣了币却没有任何交付物"。
+    """
+
+    __tablename__ = "shop_code"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="码ID")
+    product_id = Column(Integer, ForeignKey("shop_products.id"), nullable=False, comment="商品ID")
+    code = Column(String(128), nullable=False, unique=True, comment="卡密/兑换码")
+    status = Column(String(16), default="available", comment="状态: available/assigned/disabled")
+    assigned_user_id = Column(BigInteger, nullable=True, comment="领取用户ID")
+    assigned_at = Column(DateTime, nullable=True, comment="领取时间")
+    exchange_id = Column(Integer, nullable=True, comment="关联兑换单ID")
+    batch_no = Column(String(64), default="", comment="入库批次（便于问题追溯）")
+    created_at = Column(DateTime, default=datetime.now, comment="入库时间")
+
+    __table_args__ = (
+        Index("idx_shop_code_product_status", product_id, status),
+    )
+
+
 class CoinExchange(Base):
     """金币兑换记录表"""
+
     __tablename__ = "coin_exchanges"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="兑换ID")
@@ -868,6 +893,10 @@ class CoinExchange(Base):
     status = Column(String(20), default="completed", comment="状态: pending/completed/refunded")
     deliverable_type = Column(String(30), comment="权益类型快照")
     deliverable_payload = Column(JSON, comment="权益参数快照")
+    # ===== M1.5（2026-11-05）：交付物，解决"扣了币看不到东西" =====
+    delivered_code = Column(String(128), nullable=True, comment="发放的卡密/兑换码（code 类商品）")
+    delivered_at = Column(DateTime, nullable=True, comment="交付时间")
+    shipped_at = Column(DateTime, nullable=True, comment="实物发货时间（manual 类商品）")
     request_id = Column(String(64), nullable=False, comment="幂等键(客户端请求ID)")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     completed_at = Column(DateTime, comment="完成时间")

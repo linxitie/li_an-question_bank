@@ -234,6 +234,22 @@ async def lifespan(app: FastAPI):
                         conn.commit()
                         logger.info(f"自动迁移: shop_products 添加列 {col_name}")
 
+        # 金币购 M1.5（2026-11-05）：兑换单的交付物字段
+        if 'coin_exchanges' in inspector.get_table_names():
+            ex_cols = [c['name'] for c in inspector.get_columns('coin_exchanges')]
+            for col_name, col_type in [
+                ('delivered_code', 'VARCHAR(128)'),
+                ('delivered_at', 'DATETIME'),
+                ('shipped_at', 'DATETIME'),
+            ]:
+                if col_name not in ex_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE coin_exchanges ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: coin_exchanges 添加列 {col_name}")
+
         # 检查 sys_user 表（学生端「我的」模块新增字段）
         if 'sys_user' in inspector.get_table_names():
             user_cols = [c['name'] for c in inspector.get_columns('sys_user')]

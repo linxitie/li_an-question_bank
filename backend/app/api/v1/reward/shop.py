@@ -225,6 +225,16 @@ async def my_exchanges(
                 "coin_cost": r.coin_cost,
                 "cash_cost": float(r.cash_cost) if r.cash_cost is not None else 0,
                 "status": r.status,
+                # M1.5：交付物（"我的兑换"页面直接展示这几项）
+                "deliverable_type": r.deliverable_type,
+                "delivered_code": r.delivered_code,
+                "delivered_at": r.delivered_at.isoformat() if r.delivered_at else None,
+                "shipped_at": r.shipped_at.isoformat() if r.shipped_at else None,
+                "status_text": {
+                    "completed": "已交付",
+                    "pending": "待发货/待开通",
+                    "refunded": "已退款",
+                }.get(r.status, r.status),
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "completed_at": r.completed_at.isoformat() if r.completed_at else None,
             }
@@ -266,6 +276,18 @@ async def exchange(
 
     if product.stock == 0:
         raise HTTPException(status_code=400, detail="商品库存不足")
+
+    # ===== M1.5：交付防线——先把"能不能真的交付"查清楚，再扣币 =====
+    # 背景：历史商品里 deliverable_type='none' 时，旧逻辑照样扣币但不发任何东西，
+    # 用户表现为「兑换成功但什么都没有」。这里在扣币前拒绝，并把卡密不足也挡在扣币前。
+    dtype = (product.deliverable_type or "none").strip()
+    if dtype not in deliverable_service.SUPPORTED_DELIVERABLE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="该商品尚未配置交付方式，暂不可兑换（已阻止扣币）",
+        )
+    if dtype == "code" and not deliverable_service.has_available_code(db, product.id):
+        raise HTTPException(status_code=400, detail="该商品暂无可用卡密，请稍后再试（未扣币）")
 
     # ===== M1：券校验与折后价 =====
     coupon = None
@@ -336,12 +358,18 @@ async def exchange(
             grant.exchange_id = exchange_record.id
 
         # 触发权益发放（同一事务）
-        deliverable_service.deliver(exchange_record, current_user, db)
+        delivered = deliverable_service.deliver(exchange_record, current_user, db)
+        if not delivered:
+            # code 类商品可能在并发下被抢完：此时必须整体回滚，不能让用户白扣币
+            db.rollback()
+            raise HTTPException(status_code=409, detail="交付失败（卡密可能已被抢完），本次未扣币，请重试")
 
         exchange_id = exchange_record.id
         product_id = product.id
         product_name = product.name
         coin_cost = pay_price
+        delivered_code = exchange_record.delivered_code
+        order_status = exchange_record.status
 
         # F2b：兑换记录、库存扣减与 E9 事件同一事务提交。
         await record_user_action(
@@ -371,5 +399,8 @@ async def exchange(
         "balance": balance_after,
         "product_name": product_name,
         "coin_cost": coin_cost,
-        "message": "兑换成功",
+        # M1.5：把交付结果直接返回，前端可立刻展示卡密，而不是只弹"兑换成功"
+        "delivered_code": delivered_code,
+        "status": order_status,
+        "message": "兑换成功" if order_status == "completed" else "兑换成功，待人工发货/开通",
     }

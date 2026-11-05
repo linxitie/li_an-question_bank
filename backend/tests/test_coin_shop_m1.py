@@ -13,6 +13,8 @@ from app.services import coin_ledger
 
 
 def _mk_product(db, *, name="测试商品", coin=200, tier="small", stock=-1, category="权益券"):
+    # M1.5 起：deliverable_type='none' 的商品会在扣币前被拒绝，
+    # 这里的通用测试商品用 manual（待人工处理），避免与交付防线冲突。
     p = ShopProduct(
         name=name,
         category=category,
@@ -24,6 +26,7 @@ def _mk_product(db, *, name="测试商品", coin=200, tier="small", stock=-1, ca
         cost_estimate=0.2,
         shelf_priority="P1",
         min_stock_alert=5,
+        deliverable_type="manual",
     )
     db.add(p)
     db.commit()

@@ -21,6 +21,11 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 金币购 M1.5（2026-11-05，卡密交付/待处理订单）=====
+    ("POST", "/api/admin/shop/products/{product_id}/codes"),
+    ("GET", "/api/admin/shop/products/{product_id}/codes/stats"),
+    ("GET", "/api/admin/shop/orders"),
+    ("POST", "/api/admin/shop/orders/{order_id}/ship"),
     # ===== 金币购 M1（2026-11-04，R11：只登记不重算基线）=====
     ("GET", "/api/coins/expiring"),
     ("GET", "/api/coupons/mine"),
