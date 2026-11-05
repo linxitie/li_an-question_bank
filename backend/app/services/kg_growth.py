@@ -228,19 +228,47 @@ def sample_nodes(
     user_id: int,
     n: int = 2,
     *,
-    temperature: float = DEFAULT_TEMPERATURE,
+    temperature: Optional[float] = None,
     exclude_mastered: float = 0.85,
+    use_habits: bool = True,
 ) -> list[dict]:
     """按 softmax((α·heat + β·growth)/T) 抽样，返回概率最高的 n 个节点。
 
     与均匀随机的区别：这里抽的是"正在快速生长但还没掌握"的节点（设计文档 §4.1 权 3）。
+
+    M3.5：温度 T 不再写死，而是由做题习惯画像调制——
+    习惯稳定 → T 低（聚焦已知薄弱点）；习惯波动大 → T 高（多探索）；
+    同时命中偏好学科的节点获得轻微加分。
     """
+    from . import kg_habits
+
+    profile = kg_habits.build_habit_profile(db, user_id) if use_habits else None
+    if temperature is None:
+        temperature = profile["temperature"] if profile else DEFAULT_TEMPERATURE
+
     nodes = db.query(KgUserNodeState).filter(KgUserNodeState.user_id == user_id).all()
     candidates = [x for x in nodes if (x.mastery or 0.0) < exclude_mastered and (x.heat or 0.0) > 0]
     if not candidates:
         return []
 
-    scores = [node_score(db, x) for x in candidates]
+    point_rows = (
+        db.query(KnowledgePoint)
+        .filter(KnowledgePoint.point_id.in_([x.point_id for x in candidates]))
+        .all()
+    )
+    points = {p.point_id: p for p in point_rows}
+
+    scores = []
+    for node in candidates:
+        base = node_score(db, node)
+        if profile:
+            point = points.get(node.point_id)
+            if point is not None:
+                base += kg_habits.prefer_subject_boost(
+                    db, user_id, profile, point.subject_id or 0
+                )
+        scores.append(base)
+
     peak = max(scores)
     exp = [math.exp((s - peak) / max(0.05, temperature)) for s in scores]  # 数值稳定
     total = sum(exp) or 1.0
@@ -252,14 +280,10 @@ def sample_nodes(
         reverse=True,
     )[:n]
 
-    points = {p.point_id: p.point_name for p in db.query(KnowledgePoint).filter(
-        KnowledgePoint.point_id.in_([x.point_id for x, _, _ in ranked])
-    ).all()}
-
     return [
         {
             "point_id": node.point_id,
-            "point_name": points.get(node.point_id, f"知识点#{node.point_id}"),
+            "point_name": points[node.point_id].point_name if node.point_id in points else f"知识点#{node.point_id}",
             "mastery": round(node.mastery or 0.0, 4),
             "heat": round(node.heat or 0.0, 4),
             "score": round(score, 4),

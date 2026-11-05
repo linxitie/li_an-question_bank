@@ -131,6 +131,13 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    // M3.5（2026-11-05）：我的知识图谱（手写页，不改 .vtj 模板）
+    path: '/student/knowledge/graph',
+    name: 'StudentKnowledgeGraph',
+    component: () => import('@/views/student/pc/knowledge_graph.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'], title: '我的知识图谱' }
+  },
+  {
     // 金币购 M1.5（2026-11-05）：我的兑换（手写页，放在 src/views，不改 .vtj 模板）
     path: '/student/shop/exchanges',
     name: 'StudentShopExchanges',

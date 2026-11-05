@@ -33,7 +33,7 @@ test('PC：点「我的兑换」弹出弹窗，不跳路由', async ({ page }) =
   await page.waitForLoadState('networkidle');
   const urlBefore = page.url();
 
-  await page.locator('.gp-my-exchanges').click();
+  await page.getByRole('button', { name: '我的兑换' }).click();
   await expectModal(page);
 
   expect(page.url(), '弹窗不应改变路由').toBe(urlBefore);
@@ -47,14 +47,14 @@ test('PC：点遮罩关闭弹窗', async ({ page }) => {
   await login(page);
   await page.goto('/#/page/gold_purchase');
   await page.waitForLoadState('networkidle');
-  await page.locator('.gp-my-exchanges').click();
+  await page.getByRole('button', { name: '我的兑换' }).click();
   await expectModal(page);
 
   await page.locator('.mex-mask').click({ position: { x: 5, y: 5 } });
   await expect(page.locator('.mex-mask')).toHaveCount(0);
 
   // 再次打开后点右上角关闭
-  await page.locator('.gp-my-exchanges').click();
+  await page.getByRole('button', { name: '我的兑换' }).click();
   await expectModal(page);
   await page.locator('.mex-close').click();
   await expect(page.locator('.mex-mask')).toHaveCount(0);
@@ -66,7 +66,7 @@ test('手机端：我的兑换弹窗', async ({ page }) => {
   await page.goto('/#/mobile/gold-purchase');
   await page.waitForLoadState('networkidle');
 
-  await page.locator('.gp-my-exchanges').click();
+  await page.getByRole('button', { name: '我的兑换' }).click();
   await expectModal(page);
 
   // 手机端弹窗是底部抽屉形态：宽度接近整屏
@@ -80,7 +80,7 @@ test('平板端：我的兑换弹窗', async ({ page }) => {
   await page.goto('/#/tablet/gold-purchase');
   await page.waitForLoadState('networkidle');
 
-  await page.locator('.gp-my-exchanges').click();
+  await page.getByRole('button', { name: '我的兑换' }).click();
   await expectModal(page);
 });
 

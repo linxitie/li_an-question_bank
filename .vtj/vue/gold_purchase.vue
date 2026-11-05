@@ -16,6 +16,7 @@
         </div>
         <!-- M1.5：我的兑换入口（用户授权的模板改动，2026-11-05） -->
         <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
+        <button class="gp-my-exchanges gp-kg-entry" @click="goKnowledgeGraph">知识图谱</button>
       </div>
 
       <!-- Tab 导航 -->
@@ -229,6 +230,17 @@
       // M1.5：我的兑换改为弹窗（用户要求，2026-11-05）
       goExchanges() {
         this.state.showExchanges = true;
+      },
+      // M3.5：知识图谱独立页
+      goKnowledgeGraph() {
+        const path = '/student/knowledge/graph';
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push(path).catch(() => {
+            window.location.hash = '#' + path;
+          });
+        } else {
+          window.location.hash = '#' + path;
+        }
       },
       // 独立页入口：保留给需要直接发链接的场景（/student/shop/exchanges）
       openExchangesPage() {

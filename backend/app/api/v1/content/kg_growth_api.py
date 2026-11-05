@@ -18,6 +18,7 @@ from ....core.database import get_db
 from ....core.security import get_current_admin, get_current_user
 from ....models.models import KgUserEdge, KgUserNodeState, KnowledgePoint, SysUser
 from ....services import kg_growth
+from ....services import kg_habits
 
 router = APIRouter(prefix="/api/knowledge/kg", tags=["自生长知识图谱"])
 logger = logging.getLogger(__name__)
@@ -99,17 +100,28 @@ async def my_edges(
 @router.get("/sample", summary="本周个性化任务候选（非均匀采样）")
 async def sample(
     n: int = Query(3, ge=1, le=10),
-    temperature: float = Query(kg_growth.DEFAULT_TEMPERATURE, gt=0.05, le=5),
+    temperature: Optional[float] = Query(None, gt=0.05, le=5, description="留空则按做题习惯自适应"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     items = kg_growth.sample_nodes(db, current_user.user_id, n=n, temperature=temperature)
+    profile = kg_habits.build_habit_profile(db, current_user.user_id)
     return {
         "user_id": current_user.user_id,
         "count": len(items),
-        "temperature": temperature,
+        "temperature": temperature if temperature is not None else profile["temperature"],
+        "temperature_source": "manual" if temperature is not None else "habit_profile",
         "items": items,
     }
+
+
+@router.get("/habits/mine", summary="我的做题习惯画像（近 N 天）")
+async def my_habits(
+    days: int = Query(30, ge=7, le=180),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return kg_habits.build_habit_profile(db, current_user.user_id, days=days)
 
 
 @router.post("/generate", summary="生成本周个性化任务（幂等）")
