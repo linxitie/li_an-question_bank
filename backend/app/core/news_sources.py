@@ -518,6 +518,31 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         enabled=0,
         robots_note="robots.txt 仅限制 /zfz/ 等执法栏目，根路径允许",
     ),
+    # 第九批：辟谣与政策
+    NewsSourceConfig(
+        "piyao",
+        "中国互联网联合辟谣平台",
+        "https://www.piyao.org.cn",
+        "https://www.piyao.org.cn/",
+        link_contains="/c.html",
+        category_code="rumor_control",
+        category="辟谣动态",
+        region_code="000000",
+        trust_level=85,
+        robots_note="robots.txt 404，协议层面无显式规则",
+    ),
+    NewsSourceConfig(
+        "gov",
+        "中国政府网",
+        "https://www.gov.cn",
+        "https://www.gov.cn/",
+        link_contains="/zhengce/202",
+        category_code="policy_news",
+        category="政策要闻",
+        region_code="000000",
+        trust_level=90,
+        robots_note="robots.txt 有 Sitemap 与 Allow 规则",
+    ),
 )
 
 SOURCE_BY_CODE = {source.code: source for source in NEWS_SOURCES}
