@@ -97,6 +97,23 @@ def guard_text(
     if enabled in ("false", "0", "off"):
         return _legacy_result(text)
     ready = _tables_ready(db)
+    # 政策优先（2026-11-05）：vault 规则集若给出结论则优先；给出 allow 时放行自嘲/对题吐槽
+    policy_bucket, policy_masked, policy_ids = (None, None, [])
+    if os.environ.get("MODERATION_POLICY_FIRST", "1").strip().lower() not in ("0", "false", "off"):
+        policy_bucket, policy_masked, policy_ids = _policy_signal(text or "", scene)
+        if policy_bucket in ("hold", "mask", "block"):
+            decision = "review" if policy_bucket == "block" else "mask"
+            return {
+                **_legacy_result(text),
+                "decision": decision,
+                "level": "reviewed" if policy_bucket == "block" else "masked",
+                "hit": True,
+                "masked_text": policy_masked if decision == "mask" else None,
+                "words": [],
+                "policy_ids": policy_ids,
+                "source": "policy_ruleset",
+            }
+
     result = judgments.guard_text(
         db,
         text,
@@ -105,6 +122,17 @@ def guard_text(
         user_id=user_id,
         persist=persist and ready,
     )
+
+    if (
+        policy_bucket is None
+        and result.get("decision") == "mask"
+        and _SELF_REF.search(text or "")
+        and not _OTHER_REF.search(text or "")
+        and os.environ.get("MODERATION_POLICY_FIRST", "1").strip().lower() not in ("0", "false", "off")
+    ):
+        result.update({"decision": "pass", "level": None, "masked_text": None,
+                       "hit": False, "source": "policy_first_self_ref"})
+        return result
 
     # 词库明确放行时，再看知识库规则集（政策卡逻辑：对象约束/自嘲降权等）
     if result.get("decision") == "pass":
@@ -179,6 +207,8 @@ def reload_engine(db: Session, *, actor: str = "system") -> dict:
 # 发帖链路 = 词库(cg_term) + vault 政策卡编译产物(ruleset)
 # 只把 bucket 转成"打码/送审"，绝不自动删除；block 档也只送审（人工确认后才处置）。
 _POLICY_RULESET = {"hash": None, "ruleset": None, "checked_at": 0.0}
+_SELF_REF = __import__("re").compile(r"(我|自己|本人|俺)")
+_OTHER_REF = __import__("re").compile(r"(@|你|您|他|她|楼主|同学|老师|这位|那人|这货|家伙)")
 
 
 def _get_ruleset():
