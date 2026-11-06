@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ....core.database import get_db
 from ....core.security import get_current_user
 from ....models.models import CoinExchange, ShopProduct, SysUser, Title, UserTitle
+from ....services import decoration_expiry
 
 router = APIRouter(prefix="/api/user/decoration", tags=["我的装扮"])
 logger = logging.getLogger(__name__)
@@ -98,13 +99,29 @@ async def my_decorations(
         }
         for ut, t in owned_titles
     ]
+    # 到期处理：当前佩戴的若已过期，先摘掉
+    if decoration_expiry.expire_equipped_frame(db, current_user):
+        db.commit()
+
     frames = _owned_frames(db, current_user)
+    status = {x["frame"]: x for x in decoration_expiry.frame_status(db, current_user.user_id)}
+    for f in frames:
+        info = status.get(f["frame"], {})
+        f.update(
+            {
+                "expire_at": info.get("expire_at"),
+                "expired": info.get("expired", False),
+                "days_left": info.get("days_left"),
+            }
+        )
+
     return {
         "titles": titles,
         "frames": frames,
         "current_title_id": next((t["title_id"] for t in titles if t["equipped"]), None),
         "current_title": current_user.title or None,
         "current_frame": current_user.avatar_frame or None,
+        "expired_frames": [x["frame"] for x in status.values() if x["expired"]],
     }
 
 
@@ -161,6 +178,12 @@ async def equip_frame(
     owned = {f["frame"] for f in _owned_frames(db, current_user)}
     if payload.frame not in owned:
         raise HTTPException(status_code=403, detail="尚未拥有该头像框，请先在商城兑换")
+
+    # 到期校验（2026-11-05）
+    status = {x["frame"]: x for x in decoration_expiry.frame_status(db, current_user.user_id)}
+    info = status.get(payload.frame, {})
+    if info.get("expired"):
+        raise HTTPException(status_code=400, detail="该头像框已过期，不能佩戴")
 
     current_user.avatar_frame = payload.frame
     db.commit()

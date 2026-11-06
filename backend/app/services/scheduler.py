@@ -271,6 +271,30 @@ def init_scheduler():
         finally:
             db.close()
 
+    # 每日 03:40（北京时间）摘除已过期的头像框（2026-11-05）
+    def _expire_decorations():
+        from ..core.database import SessionLocal
+        from .decoration_expiry import expire_all
+
+        db = SessionLocal()
+        try:
+            report = expire_all(db)
+            if report["removed"]:
+                logger.info("头像框到期处理: %s", report)
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning("头像框到期处理失败: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _expire_decorations,
+        trigger=CronTrigger(hour=3, minute=40, timezone=CST),
+        id="expire_decorations",
+        name="头像框到期摘除（每日 03:40）",
+        replace_existing=True,
+    )
+
     scheduler.add_job(
         _decay_kg,
         trigger=CronTrigger(hour=3, minute=30, timezone=CST),

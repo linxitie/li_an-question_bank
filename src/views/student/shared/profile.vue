@@ -193,10 +193,19 @@
                 v-for="f in decorations.frames"
                 :key="f.frame"
                 class="deco-chip"
-                :class="{ 'is-on': decorations.current_frame === f.frame }"
+                :class="{
+                  'is-on': decorations.current_frame === f.frame,
+                  'is-expired': f.expired
+                }"
+                :disabled="f.expired"
+                :title="f.expire_at ? `到期时间：${f.expire_at.slice(0, 10)}` : '永久有效'"
                 @click="equipFrame(f)"
               >
                 {{ f.name }}
+                <span v-if="f.expired" class="deco-expire">已过期</span>
+                <span v-else-if="f.days_left !== null && f.days_left !== undefined" class="deco-expire">
+                  剩 {{ f.days_left }} 天
+                </span>
               </button>
               <button
                 v-if="decorations.frames.length"
@@ -293,7 +302,13 @@ const avatarInput = ref<HTMLInputElement | null>(null);
 
 const showEdit = ref(false);
 interface DecoTitle { title_id: number; name: string; equipped: boolean; }
-interface DecoFrame { frame: string; name: string; }
+interface DecoFrame {
+  frame: string;
+  name: string;
+  expire_at?: string | null;
+  expired?: boolean;
+  days_left?: number | null;
+}
 const decorations = reactive({
   titles: [] as DecoTitle[],
   frames: [] as DecoFrame[],
@@ -628,4 +643,7 @@ function handleLogout() {
 .deco-chip.is-on { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; font-weight: 600; }
 .deco-chip.ghost { background: #fff; color: #9ca3af; }
 .deco-empty { font-size: 12px; color: #9ca3af; line-height: 26px; }
+.deco-chip.is-expired { opacity: 0.55; cursor: not-allowed; text-decoration: line-through; }
+.deco-expire { margin-left: 4px; font-size: 11px; color: #9ca3af; }
+.deco-chip.is-expired .deco-expire { color: #dc2626; }
 </style>
