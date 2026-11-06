@@ -248,6 +248,16 @@ class Settings(BaseSettings):
     # 去重检测开关
     MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
 
+    # ==================== 评论区舆情审核（M0 影子期，默认全关） ====================
+    # 政策库来源：Obsidian vault 根目录；编译器内部再拼「AI舆情审核知识库/政策库」
+    MODERATION_VAULT_DIR: str = Field(r"D:\Obsidian仓库", env="MODERATION_VAULT_DIR")
+    # 是否允许「发布规则集」写盘；关闭时知识运营接口只读（仍可试编译与试判）
+    MODERATION_VAULT_WRITE: bool = Field(False, env="MODERATION_VAULT_WRITE")
+    # 评论入库时是否跑影子判定（只落日志、不影响展示）；M0 默认关闭
+    FORUM_AI_SHADOW: bool = Field(False, env="FORUM_AI_SHADOW")
+    # 是否允许规则输出 block；首月上限 A2 时保持 False，block 会被降级为 mask
+    MODERATION_ENFORCE_BLOCK: bool = Field(False, env="MODERATION_ENFORCE_BLOCK")
+
     # ==================== 大模型配置（联考小智/学习计划） ====================
     # 统一在文件上方的「大模型配置」块定义；此处原为重复定义，后者会静默覆盖前者
     # 的默认值（历史 bug：localhost:8080 的默认值被此处改成 deepseek 官方地址，
