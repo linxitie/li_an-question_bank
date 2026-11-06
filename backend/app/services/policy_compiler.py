@@ -78,6 +78,13 @@ DECLARATIVE_OPERATORS = frozenset(
 )
 # 枚举类算子：按"文本是否包含枚举值"粗判（中文枚举可用，英文枚举不命中）
 ENUM_OPERATORS = frozenset({"object_in", "behavior_in", "topic_in", "ner_target", "ner_org"})
+CONTEXT_DETECTORS = {
+    "is_news_report": re.compile(r"(警方通报|据.{0,6}报道|新闻|通告|官方通报|案件的?通报)"),
+    "is_anti_fraud_education": re.compile(r"(如何防范|防骗|反诈|警惕|识别.{0,4}诈骗|避免上当)"),
+    "is_help_seeking": re.compile(r"(求助|怎么办|有人威胁我|我被|谁能帮|求救)"),
+    "is_quote_of_news": re.compile(r"(引用|转自|来源[:：])"),
+    "is_legal_discussion": re.compile(r"(法律|第.{1,3}条|判例|司法解释)"),
+}
 PERSON_REF_RE = re.compile(r"(@|你|您|他|她|楼主|同学|老师|这位|那人|这货|家伙)")
 SELF_REF_RE = re.compile(r"(我|自己|本人|俺)")
 SEVERITY_WEIGHT = {"critical": 0.95, "high": 0.80, "medium": 0.60, "low": 0.40}
@@ -572,6 +579,12 @@ def _apply_modifiers(text: str, rule: Dict[str, Any], strength: float) -> Tuple[
     for item in modifiers:
         cond = item.get("if")
         weight = float(item.get("weight") or 0)
+        detector = CONTEXT_DETECTORS.get(str(cond))
+        if detector is not None:
+            if detector.search(text):
+                strength = max(0.0, strength * (1 + weight))
+                notes.append(f"{cond}:{weight}")
+            continue
         if cond in ("target_is_self", "is_self_deprecation", "is_self_reference"):
             if self_ref:
                 strength = max(0.0, strength * (1 + weight))

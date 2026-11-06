@@ -123,6 +123,11 @@ def guard_text(
         persist=persist and ready,
     )
 
+    # 新闻/科普/求助语境：reviewed 档降为放行（不误删、也不占用人工）
+    if result.get("decision") == "review" and NEWS_EDU.search(text or ""):
+        result.update({"decision": "pass", "level": None, "source": "context_news_edu"})
+        return result
+
     if (
         policy_bucket is None
         and result.get("decision") == "mask"
@@ -208,6 +213,9 @@ def reload_engine(db: Session, *, actor: str = "system") -> dict:
 # 只把 bucket 转成"打码/送审"，绝不自动删除；block 档也只送审（人工确认后才处置）。
 _POLICY_RULESET = {"hash": None, "ruleset": None, "checked_at": 0.0}
 _SELF_REF = __import__("re").compile(r"(我|自己|本人|俺)")
+NEWS_EDU = __import__("re").compile(
+    r"(警方通报|据.{0,6}报道|官方通报|新闻|通告|如何防范|防骗|反诈|警惕|举报|求助|法律|司法解释)"
+)
 _OTHER_REF = __import__("re").compile(r"(@|你|您|他|她|楼主|同学|老师|这位|那人|这货|家伙)")
 
 
