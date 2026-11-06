@@ -20,7 +20,8 @@
     <!-- 商城 -->
     <div v-if="state.activeTab === 'shop'" class="gp-panel">
       <div v-for="item in state.products" :key="item.id" class="goods-card" @click="openDetail(item)">
-        <span class="goods-emoji">{{ item.image_url || '🎁' }}</span>
+        <img v-if="isImageUrl(item.image_url)" :src="item.image_url" class="goods-img" alt="" />
+        <span v-else class="goods-emoji">{{ item.image_url || '🎁' }}</span>
         <div class="goods-info">
           <h4 class="goods-name">{{ item.name }}</h4>
           <p class="goods-desc">{{ item.description }}</p>
@@ -166,6 +167,9 @@
       goKnowledgeGraph() {
         this.state.showKnowledgeGraph = true;
       },
+      isImageUrl(v) {
+        return typeof v === 'string' && /^(\/|https?:\/\/)/.test(v);
+      },
       switchTab(key) {
         this.state.activeTab = key;
         if (key === 'records') this.loadRecords();
@@ -310,6 +314,7 @@
   .gp-tab.active { color: #c41e3a; border-bottom: 2px solid #c41e3a; }
   .goods-card { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 10px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
   .goods-emoji { font-size: 30px; }
+  .goods-img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; background: #fff; }
   .goods-info { flex: 1; }
   .goods-name { margin: 0 0 2px; font-size: 14px; color: #1a2b5f; }
   .goods-desc { font-size: 11px; color: #8a8faa; margin: 0; }

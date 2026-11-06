@@ -44,7 +44,7 @@ from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.growth import weekly_tasks_api
-from .api.v1.reward import shop, admin_shop, coupons
+from .api.v1.reward import shop, admin_shop, coupons, admin_shop_options
 from .api import media_assets as media_assets_api
 from .api.v1.platform.websocket import router as websocket_router
 from .api.v1.catalog.paper_generation import router as paper_router
@@ -1027,6 +1027,7 @@ app.include_router(coupons.router, tags=["优惠券"])
 app.include_router(tasks.router, tags=["任务中心"])
 app.include_router(weekly_tasks_api.router, tags=["周任务"])
 app.include_router(admin_shop.router, tags=["管理员端-金币商城"])
+app.include_router(admin_shop_options.router, tags=["管理员端-商城选项"])
 app.include_router(achievements.router, tags=["成就"])
 app.include_router(checkin.router, tags=["每日签到"])
 app.include_router(feedback.router, tags=["意见反馈"])

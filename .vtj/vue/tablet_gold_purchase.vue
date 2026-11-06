@@ -23,7 +23,8 @@
       <div v-if="state.activeTab === 'shop'" class="gp-panel">
         <div class="goods-grid">
           <div v-for="item in state.products" :key="item.id" class="goods-card" @click="openDetail(item)">
-            <span class="goods-emoji">{{ item.image_url || '🎁' }}</span>
+            <img v-if="isImageUrl(item.image_url)" :src="item.image_url" class="goods-img" alt="" />
+            <span v-else class="goods-emoji">{{ item.image_url || '🎁' }}</span>
             <h4 class="goods-name">{{ item.name }}</h4>
             <p class="goods-desc">{{ item.description }}</p>
             <div class="goods-footer">
@@ -175,6 +176,9 @@
       goKnowledgeGraph() {
         this.state.showKnowledgeGraph = true;
       },
+      isImageUrl(v) {
+        return typeof v === 'string' && /^(\/|https?:\/\/)/.test(v);
+      },
       switchTab(key) {
         this.state.activeTab = key;
         if (key === 'records') this.loadRecords();
@@ -300,4 +304,5 @@
   .modal-header h3 { margin: 0; } .close-btn { background: none; border: none; font-size: 16px; cursor: pointer; }
   .modal-price { font-weight: 700; color: #b45309; }
   .modal-footer { display: flex; gap: 10px; margin-top: 16px; }
+  .goods-img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; background: #fff; }
 </style>

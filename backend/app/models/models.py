@@ -878,6 +878,29 @@ class ShopCode(Base):
     )
 
 
+class ShopOption(Base):
+    """商城可选项（2026-11-05）：商品分类 / 权益类型，支持管理员自定义。
+
+    单独建表的原因：分类会随运营不断新增（如「警大文创」），
+    写死在下拉框里每次都要改前端代码。
+    """
+
+    __tablename__ = "shop_option"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    kind = Column(String(24), nullable=False, comment="category 分类 / deliverable_type 权益类型")
+    value = Column(String(32), nullable=False, comment="存库值")
+    label = Column(String(32), default="", comment="展示名")
+    sort_order = Column(Integer, default=0)
+    custom = Column(Integer, default=0, comment="是否管理员自定义")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("kind", "value", name="uk_shop_option"),
+        Index("idx_shop_option_kind", kind),
+    )
+
+
 class CoinExchange(Base):
     """金币兑换记录表"""
 

@@ -52,26 +52,30 @@ test('手机端底部导航：商城在中间', async ({ page }) => {
   await expect(page.locator('.mobile-gp-page')).toBeVisible({ timeout: 20_000 });
 });
 
-test('管理员端：商品上架/下架切换生效', async ({ page }) => {
+test('管理员端：在售与已下架分离展示', async ({ page }) => {
   await login(page, ADMIN);
-  await page.goto('/#/page/admin_shop');
+  await page.goto('/#/admin/shop');
   await page.waitForLoadState('networkidle');
 
-  const rows = page.locator('.product-row, tr, .goods-row');
-  await expect(rows.first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.as-table tbody tr').first()).toBeVisible({ timeout: 20_000 });
 
-  const toggle = page.getByRole('button', { name: /上架|下架/ }).first();
-  const before = await toggle.innerText();
-  await toggle.click();
+  // 在售列表只出现「在售」标签
+  const tags = await page.locator('.as-table .status-tag').allInnerTexts();
+  expect(tags.length).toBeGreaterThan(0);
+  tags.forEach((t) => expect(t).toContain('在售'));
 
-  // 成功后列表刷新，按钮文案应翻转
-  await expect
-    .poll(async () => (await page.getByRole('button', { name: /上架|下架/ }).first().innerText()), {
-      timeout: 15_000,
-    })
-    .not.toBe(before);
+  // 已下架入口带数量；打开后能看到下架商品（看板与在售完全分离）
+  const badge = page.locator('.as-offshelf-btn .as-count');
+  await expect(badge).toBeVisible({ timeout: 15_000 });
+  const offCount = Number((await badge.innerText()).trim());
+  expect(offCount).toBeGreaterThan(0);
 
-  // 复原，避免留下上下架副作用
-  await page.getByRole('button', { name: /上架|下架/ }).first().click();
-  await expect(page.locator('.el-message, .status-tag').first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('.as-offshelf-btn').click({ force: true });
+  await expect(page.locator('.as-offshelf-modal')).toBeVisible({ timeout: 15_000 });
+  const offRows = page.locator('.as-offshelf-modal tbody tr');
+  await expect(offRows.first()).toBeVisible({ timeout: 15_000 });
+  expect(await offRows.count()).toBe(offCount);
+
+  await page.locator('.as-offshelf-modal .close-btn').click({ force: true });
+  await expect(page.locator('.as-offshelf-modal')).toHaveCount(0);
 });

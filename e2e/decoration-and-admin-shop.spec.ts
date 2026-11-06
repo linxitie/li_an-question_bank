@@ -27,7 +27,7 @@ test('管理员导航：金币商城入口可进入', async ({ page }) => {
   await expect(menu).toBeVisible({ timeout: 20_000 });
 
   await menu.click();
-  await expect.poll(() => page.url(), { timeout: 15_000 }).toContain('admin_shop');
+  await expect.poll(() => page.url(), { timeout: 15_000 }).toContain('/admin/shop');
   await expect(page.getByRole('button', { name: /上架|下架/ }).first()).toBeVisible({
     timeout: 20_000,
   });

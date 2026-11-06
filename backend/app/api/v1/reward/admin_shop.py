@@ -8,7 +8,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from ....core.database import get_db
 from ....core.security import get_current_admin
 from ....models.models import SysUser, ShopProduct
+from ....services import product_image
 
 router = APIRouter(prefix="/api/admin/shop", tags=["管理员端-金币商城"])
 logger = logging.getLogger(__name__)
@@ -450,3 +451,19 @@ async def admin_ship_order(
     db.commit()
     logger.info("管理员 %s 完成兑换单 %s 的发货/开通", current_user.username, order_id)
     return {"success": True, "id": order.id, "status": order.status}
+
+
+@router.post("/upload-image", summary="上传商品图（自动抠像 + 白底 + 清晰度校验）")
+async def admin_upload_product_image(
+    file: UploadFile = File(...),
+    current_user: SysUser = Depends(get_current_admin),
+):
+    """管理员上传商品照：自动扣背景、合成白底 600×600；照片模糊或尺寸太小会被拒绝。"""
+    try:
+        raw = await file.read()
+        result = product_image.process_product_image(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    logger.info("管理员 %s 上传商品图 %s", current_user.username, result["url"])
+    return {"success": True, **result}

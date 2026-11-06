@@ -279,6 +279,13 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       },
       {
+        // 2026-11-05：金币商城挂到 AdminLayout 下，保证左侧导航常驻
+        path: 'shop',
+        name: 'AdminShop',
+        component: () => import('$vtj/vue/admin_shop.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
         path: 'settings',
         name: 'AdminSettings',
         component: () => import('$vtj/vue/admin_settings.vue'),

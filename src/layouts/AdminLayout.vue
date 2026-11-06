@@ -111,7 +111,7 @@ export default defineComponent({
   { label: '分类规则', path: '/admin/material-rules', icon: '🏷️' },
       { label: '试卷审批', path: '/admin/papers', icon: '📝' },
       { label: '论坛管理', path: '/admin/forum', icon: '💬' },
-      { label: '金币商城', path: '/page/admin_shop', icon: '🛒' },
+      { label: '金币商城', path: '/admin/shop', icon: '🛒' },
       { label: '系统设置', path: '/admin/settings', icon: '⚙️' },
       { label: '日志审计', path: '/admin/logs', icon: '📋' },
       { label: '数据备份', path: '/admin/backup', icon: '💾' },

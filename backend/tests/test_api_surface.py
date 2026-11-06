@@ -49,6 +49,11 @@ KNOWN_EXTRA_OPERATIONS = {
     ("GET", "/api/shop/products/{product_id}/quote"),
     ("GET", "/api/shop/exchange/mine"),
     ("GET", "/api/admin/shop/stock-alerts"),
+    ("POST", "/api/admin/shop/upload-image"),
+    ("GET", "/api/admin/shop/options"),
+    ("POST", "/api/admin/shop/options"),
+    ("POST", "/api/admin/shop/options/sync-categories"),
+
     ("POST", "/api/admin/shop/products/{product_id}/shelf"),
     ("GET", "/api/admin/shop/metrics"),
     # ===== 论坛本轮新增（2026-11-03/04，R11：只登记不重算基线）=====

@@ -34,7 +34,10 @@
       <div v-if="state.activeTab === 'shop'" class="gp-panel">
         <div class="goods-grid">
           <div v-for="item in state.products" :key="item.id" class="goods-card" @click="openDetail(item)">
-            <div class="goods-image"><span class="goods-emoji">{{ item.image_url || '🎁' }}</span></div>
+            <div class="goods-image">
+              <img v-if="isImageUrl(item.image_url)" :src="item.image_url" class="goods-img" alt="" />
+              <span v-else class="goods-emoji">{{ item.image_url || '🎁' }}</span>
+            </div>
             <div class="goods-info">
               <h4 class="goods-name">{{ item.name }}</h4>
               <p class="goods-desc">{{ item.description }}</p>
@@ -253,6 +256,9 @@
         } else {
           window.location.hash = '#' + path;
         }
+      },
+      isImageUrl(v) {
+        return typeof v === 'string' && /^(\/|https?:\/\/)/.test(v);
       },
       switchTab(key) {
         this.state.activeTab = key;
@@ -515,6 +521,7 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .goods-emoji { font-size: 30px; }
+  .goods-img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; background: #fff; }
   .goods-info { flex: 1; display: flex; flex-direction: column; }
   .goods-name { font-size: 15px; font-weight: 700; color: #1a2b5f; margin: 0 0 4px; }
   .goods-desc { font-size: 12px; color: #8a8faa; margin: 0 0 12px; flex: 1; }
