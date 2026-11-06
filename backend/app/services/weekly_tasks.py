@@ -65,22 +65,31 @@ def _count_practice(user_id: int, start: datetime, end: datetime, db: Session) -
 def _count_kg_node_questions(
     user_id: int, point_id: Optional[int], start: datetime, end: datetime, db: Session
 ) -> int:
-    """个性化任务：本周在指定知识点上的答题数（exam_answer_detail.knowledge_point 为文本）。"""
-    from ..models.models import ExamAnswerDetail, KnowledgePoint
+    """个性化任务：本周在指定知识点上的答题数。
+
+    真实关联：`question_bank.point_id` 与 `question_knowledge(question_id, knowledge_point_id)`；
+    题目表**没有** knowledge_point 文本列，按文本统计是错的。
+    """
+    from ..models.models import QuestionBank, QuestionKnowledge
 
     if not point_id:
         return 0
-    point = db.query(KnowledgePoint).filter(KnowledgePoint.point_id == point_id).first()
-    if not point:
+
+    direct = db.query(QuestionBank.question_id).filter(QuestionBank.point_id == point_id)
+    linked = db.query(QuestionKnowledge.question_id).filter(
+        QuestionKnowledge.knowledge_point_id == point_id
+    )
+    question_ids = {r[0] for r in direct.all()} | {r[0] for r in linked.all()}
+    if not question_ids:
         return 0
+
     return (
-        db.query(func.count(ExamAnswerDetail.detail_id))
-        .join(ExamRecord, ExamRecord.record_id == ExamAnswerDetail.record_id)
+        db.query(func.count(PracticeRecord.record_id))
         .filter(
-            ExamRecord.user_id == user_id,
-            ExamAnswerDetail.knowledge_point == point.point_name,
-            ExamAnswerDetail.create_time >= start,
-            ExamAnswerDetail.create_time < end,
+            PracticeRecord.user_id == user_id,
+            PracticeRecord.question_id.in_(question_ids),
+            PracticeRecord.practice_time >= start,
+            PracticeRecord.practice_time < end,
         )
         .scalar()
         or 0

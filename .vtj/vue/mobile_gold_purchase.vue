@@ -114,6 +114,12 @@
       v-if="state.showExchanges"
       @close="state.showExchanges = false"
     />
+
+    <!-- M3.5：知识图谱弹窗 -->
+    <KnowledgeGraphModal
+      v-if="state.showKnowledgeGraph"
+      @close="state.showKnowledgeGraph = false"
+    />
   </div>
 </template>
 
@@ -124,10 +130,11 @@
   import { ElMessage } from 'element-plus';
   import { useRewardStore } from '@/modules/reward/store';
   import MyExchangesModal from '@/components/shop/MyExchangesModal.vue';
+  import KnowledgeGraphModal from '@/components/kg/KnowledgeGraphModal.vue';
 
   export default defineComponent({
     name: 'MobileGoldPurchase',
-    components: { MyExchangesModal },
+    components: { MyExchangesModal, KnowledgeGraphModal },
     setup(props) {
       const provider = useProvider({ id: 'mobile_gold_purchase', version: '1778918740312' });
       const rewardStore = useRewardStore();
@@ -137,7 +144,8 @@
         goals: [], achievements: { categories: {} },
         detailVisible: false, detailProduct: null, exchanging: false,
         // M1.5：我的兑换弹窗开关
-        showExchanges: false
+        showExchanges: false,
+        showKnowledgeGraph: false
       });
       return { state, props, provider, rewardStore };
     },
@@ -156,14 +164,7 @@
       },
       // M3.5：知识图谱独立页
       goKnowledgeGraph() {
-        const path = '/student/knowledge/graph';
-        if (this.$router && typeof this.$router.push === 'function') {
-          this.$router.push(path).catch(() => {
-            window.location.hash = '#' + path;
-          });
-        } else {
-          window.location.hash = '#' + path;
-        }
+        this.state.showKnowledgeGraph = true;
       },
       switchTab(key) {
         this.state.activeTab = key;

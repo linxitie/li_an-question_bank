@@ -49,7 +49,12 @@ MAX_REWARD_BONUS = 0.30
 
 
 def _point_id_by_name(db: Session, name: str) -> Optional[int]:
-    """把答题记录里的知识点文本映射到 knowledge_point（设计文档 A6：需数据清洗）。"""
+    """把答题记录里的知识点文本映射到 knowledge_point（兼容旧数据用）。
+
+    注意：题目表 `question_bank` 没有 knowledge_point 文本列，真实关联是
+    `question_bank.point_id` 与 `question_knowledge(question_id, knowledge_point_id)`。
+    这个函数只在没有 point_id 时作为兜底。
+    """
     if not name:
         return None
     name = name.strip()
@@ -58,13 +63,42 @@ def _point_id_by_name(db: Session, name: str) -> Optional[int]:
     row = db.query(KnowledgePoint).filter(KnowledgePoint.point_name == name).first()
     if row:
         return row.point_id
-    # 容错：包含匹配（如"行政法-行政处罚" → "行政处罚"）
     row = (
         db.query(KnowledgePoint)
         .filter(KnowledgePoint.point_name.contains(name))
         .first()
     )
     return row.point_id if row else None
+
+
+def resolve_point_id(db: Session, question) -> Optional[int]:
+    """题目 → 知识点ID（真实链路）。
+
+    优先级：
+    1. `question_bank.point_id`（主关联，61/97 题已挂）
+    2. `question_knowledge.question_id → knowledge_point_id`（多对多补充）
+    3. 题目上的 knowledge_point 文本（兼容历史/未来字段）
+    """
+    if question is None:
+        return None
+
+    point_id = getattr(question, "point_id", None)
+    if point_id:
+        return int(point_id)
+
+    question_id = getattr(question, "question_id", None)
+    if question_id:
+        from ..models.models import QuestionKnowledge
+
+        row = (
+            db.query(QuestionKnowledge)
+            .filter(QuestionKnowledge.question_id == question_id)
+            .first()
+        )
+        if row and row.knowledge_point_id:
+            return int(row.knowledge_point_id)
+
+    return _point_id_by_name(db, getattr(question, "knowledge_point", None) or "")
 
 
 def record_event(
@@ -158,13 +192,20 @@ def _upsert_edge(db: Session, user_id: int, src: int, dst: int, delta: float) ->
 def record_answer(
     db: Session,
     user_id: int,
-    knowledge_point_name: Optional[str],
-    is_correct: bool,
+    knowledge_point_name: Optional[str] = None,
+    is_correct: bool = True,
     *,
     ref_id: Optional[int] = None,
+    question=None,
 ) -> Optional[KgUserNodeState]:
-    """答题入口：知识点文本 → point_id → 事件。映射不到就跳过（不阻塞答题）。"""
-    point_id = _point_id_by_name(db, knowledge_point_name or "")
+    """答题入口：题目 → point_id → 事件。
+
+    优先用传入的 `question`（走 resolve_point_id 的真实关联），
+    其次才回退到知识点文本；任何一步失败都跳过（不阻塞答题）。
+    """
+    point_id = resolve_point_id(db, question) if question is not None else None
+    if not point_id:
+        point_id = _point_id_by_name(db, knowledge_point_name or "")
     if not point_id:
         return None
     return record_event(

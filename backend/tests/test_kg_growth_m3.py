@@ -147,30 +147,66 @@ def test_personalized_task_only_visible_to_owner(client, db_session, auth_header
     assert any("私有任务知识点" in t for t in titles), "本人应能看到自己的个性化任务"
 
 
-def test_kg_metric_counts_exam_answers_by_point(db_session, test_user):
+def test_kg_metric_counts_practice_by_question_knowledge(db_session, test_user):
+    """真实关联：question_knowledge(question_id, knowledge_point_id) → practice_record 计数。"""
     from datetime import datetime
 
+    from app.models.models import PracticeRecord, QuestionKnowledge
     from app.services.weekly_tasks import compute_metric
 
     p = _point(db_session, "统计口径知识点")
-    record = ExamRecord(
-        paper_id=1, user_id=test_user.user_id, exam_type="SELF_TEST",
-        start_time=datetime.now(), submit_time=datetime.now(), is_completed=1,
-    )
-    db_session.add(record)
+    db_session.add(QuestionKnowledge(question_id=99001, knowledge_point_id=p.point_id))
     db_session.commit()
+
     for _ in range(3):
         db_session.add(
-            ExamAnswerDetail(
-                record_id=record.record_id,
-                question_id=1,
+            PracticeRecord(
+                user_id=test_user.user_id,
+                question_id=99001,
                 is_correct=0,
-                knowledge_point="统计口径知识点",
+                practice_time=datetime.now(),
+                practice_date=datetime.now().date(),
+                time_spent=5,
+                source_type="practice",
             )
         )
+    # 不在该知识点的题目不应计入
+    db_session.add(
+        PracticeRecord(
+            user_id=test_user.user_id,
+            question_id=99002,
+            is_correct=0,
+            practice_time=datetime.now(),
+            practice_date=datetime.now().date(),
+            time_spent=5,
+            source_type="practice",
+        )
+    )
     db_session.commit()
 
     assert compute_metric("kg_node_questions", test_user.user_id, db_session, param=p.point_id) == 3
+
+
+def test_resolve_point_id_uses_question_knowledge(db_session):
+    """题目表 point_id 为空时，应能通过 question_knowledge 反查知识点。"""
+    from app.models.models import QuestionBank, QuestionKnowledge
+
+    p = _point(db_session, "关联映射知识点")
+    q = QuestionBank(
+        subject_id=1,
+        type_id=1,
+        question_content="测试题",
+        answer="A",
+        point_id=None,
+        creator_id=1,
+        status=1,
+    )
+    db_session.add(q)
+    db_session.commit()
+    db_session.add(QuestionKnowledge(question_id=q.question_id, knowledge_point_id=p.point_id))
+    db_session.commit()
+
+    assert kg_growth.resolve_point_id(db_session, q) == p.point_id
 
 
 def test_decay_reduces_heat(db_session, test_user):

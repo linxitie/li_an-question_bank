@@ -173,6 +173,12 @@
       v-if="state.showExchanges"
       @close="state.showExchanges = false"
     />
+
+    <!-- M3.5：知识图谱弹窗 -->
+    <KnowledgeGraphModal
+      v-if="state.showKnowledgeGraph"
+      @close="state.showKnowledgeGraph = false"
+    />
   </div>
 </template>
 
@@ -186,10 +192,11 @@
   import { ElMessage } from 'element-plus';
   import { useRewardStore } from '@/modules/reward/store';
   import MyExchangesModal from '@/components/shop/MyExchangesModal.vue';
+  import KnowledgeGraphModal from '@/components/kg/KnowledgeGraphModal.vue';
 
   export default defineComponent({
     name: 'GoldPurchase',
-    components: { NavBar, XIcon, MyExchangesModal },
+    components: { NavBar, XIcon, MyExchangesModal, KnowledgeGraphModal },
     setup(props) {
       const provider = useProvider({ id: 'gold_purchase', version: '1778918740312' });
       const rewardStore = useRewardStore();
@@ -205,7 +212,8 @@
         detailProduct: null,
         exchanging: false,
         // M1.5：我的兑换弹窗开关
-        showExchanges: false
+        showExchanges: false,
+        showKnowledgeGraph: false
       });
       return {
         state,
@@ -233,14 +241,7 @@
       },
       // M3.5：知识图谱独立页
       goKnowledgeGraph() {
-        const path = '/student/knowledge/graph';
-        if (this.$router && typeof this.$router.push === 'function') {
-          this.$router.push(path).catch(() => {
-            window.location.hash = '#' + path;
-          });
-        } else {
-          window.location.hash = '#' + path;
-        }
+        this.state.showKnowledgeGraph = true;
       },
       // 独立页入口：保留给需要直接发链接的场景（/student/shop/exchanges）
       openExchangesPage() {
