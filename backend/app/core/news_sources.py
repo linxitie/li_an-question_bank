@@ -543,6 +543,43 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         trust_level=90,
         robots_note="robots.txt 有 Sitemap 与 Allow 规则",
     ),
+    # 第十批：法院/检察系统
+    NewsSourceConfig(
+        "chinacourt",
+        "中国法院网",
+        "https://www.chinacourt.cn",
+        "https://www.chinacourt.cn/index.shtml",
+        link_contains="/article/detail/",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
+        trust_level=85,
+        robots_note="robots.txt Allow: /*",
+    ),
+    NewsSourceConfig(
+        "court",
+        "最高人民法院",
+        "https://www.court.gov.cn",
+        "https://www.court.gov.cn/",
+        link_contains="/zixun/xiangqing/",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
+        trust_level=90,
+        robots_note="robots.txt 返回 HTML，非有效规则",
+    ),
+    NewsSourceConfig(
+        "jcy",
+        "12309中国检察网",
+        "https://www.12309.gov.cn",
+        "https://www.12309.gov.cn/",
+        link_contains="/12309/C0",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
+        trust_level=85,
+        robots_note="robots.txt 404，协议层面无显式规则",
+    ),
 )
 
 SOURCE_BY_CODE = {source.code: source for source in NEWS_SOURCES}
