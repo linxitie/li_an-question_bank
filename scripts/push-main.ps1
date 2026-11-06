@@ -16,6 +16,8 @@
 
 .PARAMETER Merge
     远端领先时自动 merge origin/main（无冲突才继续推送）。
+.PARAMETER ForceIp
+    跳过普通 push，强制走 IP 覆盖（用于验证回退链路）。
 .PARAMETER Message
     合并提交信息（默认自动生成）。
 .PARAMETER Remote
@@ -31,6 +33,7 @@
 #>
 param(
     [switch]$Merge,
+    [switch]$ForceIp,
     [string]$Message = "",
     [string]$Remote = "origin",
     [string]$Branch = "main"
@@ -109,14 +112,18 @@ if ($dirty) {
 Write-Ok "工作区干净"
 
 # ---------- 1. 普通 push ----------
-Write-Step "尝试普通 push（DNS 正常时最快）"
-$plain = Invoke-Git @("push", $Remote, $Branch)
-if ($plain.Code -eq 0) {
-    Write-Ok "推送成功（未使用 IP 覆盖）"
-    Write-Host $plain.Output
-    exit 0
+if ($ForceIp) {
+    Write-Warn2 "已指定 -ForceIp，跳过普通 push，直接走 IP 覆盖"
+} else {
+    Write-Step "尝试普通 push（DNS 正常时最快）"
+    $plain = Invoke-Git @("push", $Remote, $Branch)
+    if ($plain.Code -eq 0) {
+        Write-Ok "推送成功（未使用 IP 覆盖）"
+        Write-Host $plain.Output
+        exit 0
+    }
+    Write-Warn2 "普通 push 失败（多为 DNS 解析到被墙 IP，属已知问题）"
 }
-Write-Warn2 "普通 push 失败（多为 DNS 解析到被墙 IP，属已知问题）"
 
 # ---------- 2. 探测可用 IP ----------
 Write-Step "探测 GitHub 可用 IP（443 连通性）"
