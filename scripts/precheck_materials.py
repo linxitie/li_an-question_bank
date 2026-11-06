@@ -268,7 +268,10 @@ def main() -> int:
         print("[warn] 未加载到子类词表，E006 跳过", file=sys.stderr)
 
     files = []
-    for dirpath, dirnames, filenames in os.walk(args.root):
+    single_file = os.path.isfile(args.root)
+    if single_file:
+        files = [args.root]
+    for dirpath, dirnames, filenames in ([] if single_file else os.walk(args.root)):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
         if not args.include_nonprod:
             dirnames[:] = [d for d in dirnames if d not in ("_模板", "_测试文件")]
@@ -279,7 +282,7 @@ def main() -> int:
 
     rows, blocked = [], 0
     for p in files:
-        rel = os.path.relpath(p, args.root)
+        rel = os.path.basename(p) if single_file else os.path.relpath(p, args.root)
         ext = os.path.splitext(p)[1].lower()
         try:
             if ext == ".xlsx":

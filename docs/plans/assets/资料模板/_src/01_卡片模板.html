@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030}
+.canvas{width:1500px;padding:32px 40px;display:flex;flex-direction:column;gap:16px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:12px}
+.hd h1{font-size:24px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:5px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:14px;border:1px solid #eaeef7;box-shadow:0 2px 10px rgba(23,32,64,.06);padding:16px 18px}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{background:#4054e0;color:#fff;text-align:left;padding:8px 10px;font-weight:600;font-size:12px}
+.tbl td{padding:8px 10px;border-bottom:1px solid #eef1f8;border-right:1px solid #f0f2f8;vertical-align:top;line-height:1.55}
+.tbl tr:nth-child(even) td{background:#fbfcff}
+.note{font-size:11.5px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:10px 13px;line-height:1.6}
+h2.sec{font-size:15px;margin:6px 0 8px}
+</style></head><body><div class="canvas">
+<div class="hd"><div><h1>模板 1 · 资料卡片（xlsx）</h1><div class="sub">模板_资料卡片.xlsx ｜ sheet「卡片」5 列 + 「合法分类」下拉 + 「考点参考」+「填写说明」</div></div><div class="badge">T0.2 上传模板</div></div>
+<div class="card"><h2 class="sec">sheet「卡片」—— 前 3 行示例，直接往下填</h2><table class="tbl">
+<tr><th>正面</th><th>背面</th><th>分类</th><th>考点</th><th>封面</th></tr>
+<tr><td>传唤的对象是谁？</td><td>违法嫌疑人。注意：不能对被侵害人和证人采取传唤手段。</td><td>基础知识</td><td>行政执法基础知识</td><td></td></tr>
+<tr><td>口头传唤需要出示什么？</td><td>人民警察证；并在询问笔录中注明到案经过、到案时间和离开时间。【口头传唤不补证】</td><td>基础知识</td><td>公安机关性质与职能</td><td></td></tr>
+<tr><td>治安管理处罚法新旧对比的核心变化？</td><td>2025 修订后新增/调整的处罚种类与幅度，需按「变更表」逐项记忆，避免新旧混用。</td><td>基础知识</td><td>人民警察法基础知识</td><td></td></tr>
+</table></div>
+<div class="card"><h2 class="sec">sheet「合法分类」—— 「分类」列下拉来源（16 子类，全部来自库内 sub_categories）</h2><table class="tbl">
+<tr><th>科目</th><th>子类（下拉可选）</th><th>说明</th></tr>
+<tr><td>行测</td><td>政治理论</td><td>卡片「分类」列填本表的子类名</td></tr>
+<tr><td>行测</td><td>常识判断</td><td></td></tr>
+<tr><td>行测</td><td>言语理解与表达</td><td></td></tr>
+<tr><td>行测</td><td>数量关系</td><td></td></tr>
+<tr><td>行测</td><td>判断推理</td><td></td></tr>
+<tr><td>行测</td><td>资料分析</td><td></td></tr>
+<tr><td>行测</td><td>知觉速度与准确性</td><td></td></tr>
+<tr><td>行测</td><td>科学推理</td><td></td></tr>
+<tr><td>申论</td><td>归纳概括</td><td></td></tr>
+<tr><td>申论</td><td>综合分析</td><td></td></tr>
+<tr><td>申论</td><td>提出对策</td><td></td></tr>
+<tr><td>申论</td><td>应用文写作</td><td></td></tr>
+<tr><td>申论</td><td>议论文写作</td><td></td></tr>
+<tr><td>公专</td><td>职业素养</td><td></td></tr>
+<tr><td>公专</td><td>基础知识</td><td></td></tr>
+<tr><td>公专</td><td>基本警务能力</td><td></td></tr>
+</table></div>
+<div class="note">预检实测：按模板填 20 行 → <b>0 阻断 0 提示</b>；分类填表外词 → E006；正面/背面空 → E002；正面 &gt;120 字 → E003；考点填库内不存在的名字 → E007（提示级）。</div>
+</div></body></html>
