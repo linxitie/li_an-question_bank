@@ -1,0 +1,78 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030}
+.canvas{padding:30px 40px;display:flex;flex-direction:column;gap:14px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:11px}
+.hd h1{font-size:24px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:4px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:13px;border:1px solid #eaeef7;box-shadow:0 2px 10px rgba(23,32,64,.06)}
+.stats{display:flex;gap:12px}
+.st{flex:1;padding:14px 16px;text-align:center}
+.st .v{font-size:26px;font-weight:800}.st .l{font-size:11.5px;color:#8b93a7;margin-top:3px}
+.st.on{border-color:#c9d2ff;background:#f8f9ff}
+.bar{display:flex;gap:8px;align-items:center;padding:12px 14px}
+.sel{border:1px solid #dfe4f0;border-radius:9px;padding:8px 10px;font-size:12.5px;background:#fff;min-width:96px;color:#2b3244}
+.sel strong{font-weight:600}
+.inp{flex:1;border:1px solid #dfe4f0;border-radius:9px;padding:8px 12px;font-size:12.5px;color:#8b93a7}
+.btn{background:#4054e0;color:#fff;border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700}
+.btn.ghost{background:#f1f3fb;color:#3a4bd8}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;background:#f7f8fd;color:#6b7387;font-size:11.5px;padding:10px 12px;border-bottom:1px solid #e6eaf4;font-weight:600}
+.tbl td{padding:11px 12px;border-bottom:1px solid #f0f2f8;vertical-align:middle}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:4px}
+.t-card{background:#f3ecff;color:#6b3fbf}.t-art{background:#e8efff;color:#2f49c4}
+.t-lec{background:#e6f7f9;color:#0f7a86}.t-paper{background:#fff2e3;color:#b35309}
+.t-vid{background:#f1f2f6;color:#6b7387}
+.pub{font-weight:600}.role{font-size:10.5px;color:#8b93a7;margin-left:4px}
+.act{color:#4054e0;font-weight:600;cursor:default}
+.act.g{color:#c2410c}
+.fmt{display:inline-block;font-size:10px;border:1px solid #d9dfef;border-radius:4px;padding:1px 5px;color:#5b6478;margin-right:3px}
+.note{font-size:11.5px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:10px 13px;line-height:1.6}
+</style></head><body>
+<div class="canvas" style="width:1620px;min-height:900px">
+<div class="hd"><div><h1>备考资料管理 v3</h1><div class="sub">类型扩到 6 类 · 每行可预览 · 显示发布者 · 试卷/讲义支持 PDF+Word</div></div><div class="badge">A 批 · 列表与筛选</div></div>
+<div class="stats">
+  <div class="st card"><div class="v">119</div><div class="l">总资料数</div></div>
+  <div class="st card"><div class="v">0</div><div class="l">视频</div></div>
+  <div class="st card"><div class="v">3</div><div class="l">文章</div></div>
+  <div class="st card"><div class="v">116</div><div class="l">知识卡片</div></div>
+  <div class="st card on"><div class="v" style="color:#0f7a86">1</div><div class="l">讲义（新）</div></div>
+  <div class="st card on"><div class="v" style="color:#b35309">1</div><div class="l">试卷（新）</div></div>
+</div>
+<div class="card bar">
+  <div class="sel">全部科目 ▾</div>
+  <div class="sel" style="border-color:#4054e0;color:#4054e0"><strong>全部类型 ▾</strong></div>
+  <div class="sel">全部状态 ▾</div>
+  <div class="sel">年份 ▾</div><div class="sel">地区 ▾</div>
+  <div class="inp">搜索标题…</div>
+  <div class="btn ghost">搜索</div><div class="btn">批量导入</div><div class="btn ghost">＋ 新建资料</div>
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+<table class="tbl"><thead><tr><th style="width:36px"><input type="checkbox"></th><th style="width:56px">ID</th><th>标题 / 类型</th>
+<th style="width:64px">科目</th><th style="width:100px">分类</th><th style="width:150px">发布者</th><th style="width:66px">浏览</th><th style="width:60px">完成</th><th style="width:80px">上架</th><th style="width:170px">操作</th></tr></thead>
+<tbody><tr><td><input type="checkbox"></td><td class="mono">122</td>
+<td><b>04_讲义_正常</b><span class="tag t-card">卡片</span><div style="font-size:11px;color:#8b93a7;margin-top:3px"><span class="fmt">HTML</span></div></td>
+<td>公专</td><td>基础知识</td><td class="pub">cbrycc<span class="role">（管理员）</span></td><td>0 次</td><td>0</td>
+<td><span style="color:#c2410c">未上架</span></td>
+<td><span class="act">预览</span>　<span class="act">编辑</span>　<span class="act g">删除</span></td></tr><tr><td><input type="checkbox"></td><td class="mono">120</td>
+<td><b>继续盘问的适用对象？（第2组）</b><span class="tag t-card">卡片</span><div style="font-size:11px;color:#8b93a7;margin-top:3px"><span class="fmt">HTML</span></div></td>
+<td>公专</td><td>基础知识</td><td class="pub">cbrycc<span class="role">（管理员）</span></td><td>0 次</td><td>0</td>
+<td><span style="color:#c2410c">未上架</span></td>
+<td><span class="act">预览</span>　<span class="act">编辑</span>　<span class="act g">删除</span></td></tr><tr><td><input type="checkbox"></td><td class="mono">115</td>
+<td><b>2024年国考公安专业科目·题本</b><span class="tag t-paper">试卷</span><div style="font-size:11px;color:#8b93a7;margin-top:3px">2024·国考·题本·25 题·100 分<span class="fmt">PDF</span><span class="fmt">Word</span></div></td>
+<td>公专</td><td>—</td><td class="pub">cbrycc<span class="role">（管理员）</span></td><td>12 次</td><td>—</td>
+<td><span style="color:#0f7a4d">已上架</span></td>
+<td><span class="act">预览</span>　<span class="act">编辑</span>　<span class="act g">删除</span></td></tr><tr><td><input type="checkbox"></td><td class="mono">114</td>
+<td><b>公专·行政执法程序讲义</b><span class="tag t-lecture">讲义</span><div style="font-size:11px;color:#8b93a7;margin-top:3px">12 章 · 1.2 万字<span class="fmt">PDF</span><span class="fmt">Word</span></div></td>
+<td>公专</td><td>基础知识</td><td class="pub">ycc5678<span class="role">（教师）</span></td><td>8 次</td><td>0</td>
+<td><span style="color:#0f7a4d">已上架</span></td>
+<td><span class="act">预览</span>　<span class="act">编辑</span>　<span class="act g">删除</span></td></tr><tr><td><input type="checkbox"></td><td class="mono">110</td>
+<td><b>行测·资料分析速算技巧</b><span class="tag t-card">卡片</span><div style="font-size:11px;color:#8b93a7;margin-top:3px"><span class="fmt">HTML</span></div></td>
+<td>行测</td><td>资料分析</td><td class="pub">cbrycc<span class="role">（管理员）</span></td><td>31 次</td><td>0</td>
+<td><span style="color:#0f7a4d">已上架</span></td>
+<td><span class="act">预览</span>　<span class="act">编辑</span>　<span class="act g">删除</span></td></tr><tr><td><input type="checkbox"></td><td class="mono">108</td>
+<td><b>申论·概括题四步法</b><span class="tag t-article">文章</span><div style="font-size:11px;color:#8b93a7;margin-top:3px"><span class="fmt">HTML</span></div></td>
+<td>申论</td><td>归纳概括</td><td class="pub">ycc5678<span class="role">（教师）</span></td><td>19 次</td><td>0</td>
+<td><span style="color:#0f7a4d">已上架</span></td>
+<td><span class="act">预览</span>　<span class="act">编辑</span>　<span class="act g">删除</span></td></tr></tbody></table></div>
+<div class="note">类型下拉实际为 6 项：入门视频 / 进阶视频 / 文章 / 知识卡片 / <b>讲义</b> / <b>试卷</b>；选「科目=公专 + 类型=试卷」即只剩试卷。发布者来自 <span style="font-family:Consolas">creator_id → sys_user</span>（119/119 有值）。</div></div></body></html>

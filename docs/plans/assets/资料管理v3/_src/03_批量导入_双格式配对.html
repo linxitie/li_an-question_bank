@@ -1,0 +1,54 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030}
+.canvas{padding:30px 40px;display:flex;flex-direction:column;gap:14px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:11px}
+.hd h1{font-size:24px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:4px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:13px;border:1px solid #eaeef7;box-shadow:0 2px 10px rgba(23,32,64,.06)}
+.stats{display:flex;gap:12px}
+.st{flex:1;padding:14px 16px;text-align:center}
+.st .v{font-size:26px;font-weight:800}.st .l{font-size:11.5px;color:#8b93a7;margin-top:3px}
+.st.on{border-color:#c9d2ff;background:#f8f9ff}
+.bar{display:flex;gap:8px;align-items:center;padding:12px 14px}
+.sel{border:1px solid #dfe4f0;border-radius:9px;padding:8px 10px;font-size:12.5px;background:#fff;min-width:96px;color:#2b3244}
+.sel strong{font-weight:600}
+.inp{flex:1;border:1px solid #dfe4f0;border-radius:9px;padding:8px 12px;font-size:12.5px;color:#8b93a7}
+.btn{background:#4054e0;color:#fff;border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700}
+.btn.ghost{background:#f1f3fb;color:#3a4bd8}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;background:#f7f8fd;color:#6b7387;font-size:11.5px;padding:10px 12px;border-bottom:1px solid #e6eaf4;font-weight:600}
+.tbl td{padding:11px 12px;border-bottom:1px solid #f0f2f8;vertical-align:middle}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:4px}
+.t-card{background:#f3ecff;color:#6b3fbf}.t-art{background:#e8efff;color:#2f49c4}
+.t-lec{background:#e6f7f9;color:#0f7a86}.t-paper{background:#fff2e3;color:#b35309}
+.t-vid{background:#f1f2f6;color:#6b7387}
+.pub{font-weight:600}.role{font-size:10.5px;color:#8b93a7;margin-left:4px}
+.act{color:#4054e0;font-weight:600;cursor:default}
+.act.g{color:#c2410c}
+.fmt{display:inline-block;font-size:10px;border:1px solid #d9dfef;border-radius:4px;padding:1px 5px;color:#5b6478;margin-right:3px}
+.note{font-size:11.5px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:10px 13px;line-height:1.6}
+</style></head><body>
+<div class="canvas" style="width:1560px;min-height:880px">
+<div class="hd"><div><h1>批量导入 · 双格式自动配对</h1><div class="sub">一次 ≤50 个文件；同名主干 pdf+docx 合成一条资料（Word 主、PDF 副本）；类型可逐条改</div></div><div class="badge">B 批 · 批量与配对</div></div>
+<div class="card" style="padding:16px 18px;display:flex;align-items:center;gap:14px;border:2px dashed #b9c2dd">
+  <div style="width:40px;height:40px;border-radius:10px;background:#eef0ff;color:#4054e0;display:flex;align-items:center;justify-content:center;font-size:18px">⇪</div>
+  <div style="flex:1"><div style="font-size:14px;font-weight:700">拖入文件或文件夹，或点击选择</div>
+  <div style="font-size:11.5px;color:#8b93a7;margin-top:3px">.xlsx/.csv（卡片）· .docx/.pdf（讲义/试卷）· 单文件 ≤250MB（试卷）/ 50MB（讲义）/ 10MB（卡片）</div></div>
+  <div class="btn">选择文件</div><div class="btn ghost">选择文件夹</div>
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+<div style="padding:12px 16px;border-bottom:1px solid #eef1f8;display:flex;justify-content:space-between;align-items:center">
+  <b style="font-size:13.5px">解析与配对结果 · 20 个文件 → 14 条资料</b>
+  <span style="font-size:12px;color:#8b93a7">总进度 62% · 已完成 8 · 失败 1</span></div>
+<table class="tbl"><thead><tr><th>文件名</th><th style="width:96px">配对结果</th><th>说明</th><th style="width:150px">进度</th></tr></thead>
+<tbody><tr><td><span style="font-family:Consolas;font-size:12px">公专_必背考点.pdf</span></td>
+<td style="color:#0f7a4d;font-weight:700">已配对</td><td style="color:#5b6478">1 条资料（Word 为主 + PDF 副本）</td>
+<td style="width:150px"><div style="height:6px;background:#eef1f8;border-radius:99px;overflow:hidden"><i style="display:block;height:100%;width:100%;background:#0f7a4d"></i></div></td></tr><tr><td><span style="font-family:Consolas;font-size:12px">公专_必背考点.docx</span></td>
+<td style="color:#0f7a4d;font-weight:700">已配对</td><td style="color:#5b6478">同上</td>
+<td style="width:150px"><div style="height:6px;background:#eef1f8;border-radius:99px;overflow:hidden"><i style="display:block;height:100%;width:100%;background:#0f7a4d"></i></div></td></tr><tr><td><span style="font-family:Consolas;font-size:12px">行测_速算技巧.pdf</span></td>
+<td style="color:#2f49c4;font-weight:700">单格式</td><td style="color:#5b6478">1 条资料（PDF）</td>
+<td style="width:150px"><div style="height:6px;background:#eef1f8;border-radius:99px;overflow:hidden"><i style="display:block;height:100%;width:70%;background:#2f49c4"></i></div></td></tr><tr><td><span style="font-family:Consolas;font-size:12px">申论_范文48篇.docx</span></td>
+<td style="color:#b35309;font-weight:700">待确认</td><td style="color:#5b6478">找不到同名 PDF，可单独导入</td>
+<td style="width:150px"><div style="height:6px;background:#eef1f8;border-radius:99px;overflow:hidden"><i style="display:block;height:100%;width:10%;background:#b35309"></i></div></td></tr></tbody></table></div>
+<div class="note">规则：配对键 = 文件名主干（去扩展名、去「(1)/副本」）；配对后再比 <b>sha256 与页数</b>，不一致则<b>不自动合并</b>并提示；重复文件（sha256 相同）直接跳过。入库后一条资料两个格式徽标，列表不重复。</div></div></body></html>
