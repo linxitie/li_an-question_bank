@@ -24,6 +24,7 @@ from .api.v1.library import videos, media, image_media
 from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
+from .api.v1.personal import decoration
 from .api.v1.content import news, recruitment, calendar, kg
 from .api.v1.content import kg_growth_api
 from .api.v1.platform import admin as admin_api
@@ -983,6 +984,7 @@ app.include_router(study_plan.router)
 app.include_router(agent.router)
 app.include_router(knowledge.router)
 app.include_router(post.router)
+app.include_router(decoration.router)
 app.include_router(profile.router)
 app.include_router(goals.router)
 app.include_router(stats.router)

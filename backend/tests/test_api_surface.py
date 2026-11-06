@@ -22,6 +22,10 @@ DOCUMENTED_FEEDBACK_MOVES = {
 
 KNOWN_EXTRA_OPERATIONS = {
     # ===== 自生长知识图谱 M3（2026-11-05）=====
+    # ===== 我的装扮（2026-11-05）=====
+    ("GET", "/api/user/decoration/mine"),
+    ("POST", "/api/user/decoration/equip-title"),
+    ("POST", "/api/user/decoration/equip-frame"),
     ("GET", "/api/knowledge/kg/nodes/mine"),
     ("GET", "/api/knowledge/kg/edges/mine"),
     ("GET", "/api/knowledge/kg/sample"),

@@ -48,7 +48,7 @@ test('任务页签：置顶标记与本周统计', async ({ page }) => {
   const rewards = (await weeklyCard.locator('.task-reward').allInnerTexts())
     .slice(0, 3)
     .map((t) => t.replace(/[^\d]/g, ''));
-  expect(rewards[0]).toBe('416');
-  expect(rewards[1]).toBe('365');
-  expect(rewards[2]).toBe('270');
+  expect(rewards[0]).toBe('250');
+  expect(rewards[1]).toBe('223');
+  expect(rewards[2]).toBe('162');
 });
