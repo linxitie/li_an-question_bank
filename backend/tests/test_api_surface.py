@@ -21,6 +21,14 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 远端 knowledge-ops（2026-11-05 合并时一并登记）=====
+    ("GET", "/api/admin/knowledge-ops/summary"),
+    ("GET", "/api/admin/knowledge-ops/policies"),
+    ("GET", "/api/admin/knowledge-ops/policies/{policy_id}"),
+    ("GET", "/api/admin/knowledge-ops/proposals"),
+    ("POST", "/api/admin/knowledge-ops/compile"),
+    ("POST", "/api/admin/knowledge-ops/preview"),
+
     # ===== 自生长知识图谱 M3（2026-11-05）=====
     # ===== 我的装扮（2026-11-05）=====
     ("GET", "/api/user/decoration/mine"),
