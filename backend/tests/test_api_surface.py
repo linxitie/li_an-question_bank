@@ -40,6 +40,9 @@ KNOWN_EXTRA_OPERATIONS = {
     ("POST", "/api/knowledge/kg/generate"),
     ("GET", "/api/knowledge/kg/habits/mine"),
     ("POST", "/api/knowledge/kg/decay"),
+    # ===== 周任务设计分配 M1（2026-11-06，周任务设计分配 2027.1 包接入）=====
+    ("GET", "/api/v1/weekly-tasks/overview"),
+    ("GET", "/api/v1/weekly-tasks/plans"),
     # ===== 周任务 M2（2026-11-05）=====
     ("GET", "/api/tasks/weekly/pool"),
     ("POST", "/api/tasks/weekly/pool/pin"),

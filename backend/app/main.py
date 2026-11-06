@@ -43,6 +43,7 @@ from .api.v1.growth import study_plan
 from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
+from .api.v1.growth import weekly_task_catalog
 from .api.v1.growth import weekly_tasks_api
 from .api.v1.reward import shop, admin_shop, coupons, admin_shop_options
 from .api import media_assets as media_assets_api
@@ -145,6 +146,12 @@ async def lifespan(app: FastAPI):
         logger.info(f"内容安全知识库 Schema 就绪: {_cg_report}")
     except Exception as e:
         logger.warning(f"内容安全知识库 Schema 初始化失败（审核降级为旧词库）: {e}")
+    try:
+        from .core.weekly_task_schema import ensure_weekly_task_schema
+        _wt_report = ensure_weekly_task_schema(engine)
+        logger.info(f"周任务设计分配 Schema 就绪: {_wt_report}")
+    except Exception as e:
+        logger.warning(f"周任务设计分配 Schema 初始化失败: {e}")
     logger.info("数据库表初始化完成")
     db_verify(engine, logger)
 
@@ -1026,6 +1033,7 @@ app.include_router(shop.router, tags=["金币商城"])
 app.include_router(coupons.router, tags=["优惠券"])
 app.include_router(tasks.router, tags=["任务中心"])
 app.include_router(weekly_tasks_api.router, tags=["周任务"])
+app.include_router(weekly_task_catalog.router, tags=["周任务设计"])
 app.include_router(admin_shop.router, tags=["管理员端-金币商城"])
 app.include_router(admin_shop_options.router, tags=["管理员端-商城选项"])
 app.include_router(achievements.router, tags=["成就"])
