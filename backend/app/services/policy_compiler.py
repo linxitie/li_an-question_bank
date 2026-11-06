@@ -159,6 +159,8 @@ class Policy:
             "match": self.match,
             "context_modifiers": self.modifiers,
             "thresholds": self.thresholds,
+            # 修饰条件需要 target 等原始信息（自嘲/他人指代判定）
+            "raw_dsl": self.raw_dsl,
         }
 
 
