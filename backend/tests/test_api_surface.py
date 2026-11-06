@@ -21,6 +21,42 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 自生长知识图谱 M3（2026-11-05）=====
+    # ===== 我的装扮（2026-11-05）=====
+    ("GET", "/api/user/decoration/mine"),
+    ("POST", "/api/user/decoration/equip-title"),
+    ("POST", "/api/user/decoration/equip-frame"),
+    ("GET", "/api/knowledge/kg/nodes/mine"),
+    ("GET", "/api/knowledge/kg/edges/mine"),
+    ("GET", "/api/knowledge/kg/sample"),
+    ("POST", "/api/knowledge/kg/generate"),
+    ("GET", "/api/knowledge/kg/habits/mine"),
+    ("POST", "/api/knowledge/kg/decay"),
+    # ===== 周任务 M2（2026-11-05）=====
+    ("GET", "/api/tasks/weekly/pool"),
+    ("POST", "/api/tasks/weekly/pool/pin"),
+    ("POST", "/api/tasks/weekly/recalc"),
+    ("POST", "/api/tasks/weekly/expire"),
+    # ===== 金币购 M1.5（2026-11-05，卡密交付/待处理订单）=====
+    ("POST", "/api/admin/shop/products/{product_id}/codes"),
+    ("GET", "/api/admin/shop/products/{product_id}/codes/stats"),
+    ("GET", "/api/admin/shop/orders"),
+    ("POST", "/api/admin/shop/orders/{order_id}/ship"),
+    # ===== 金币购 M1（2026-11-04，R11：只登记不重算基线）=====
+    ("GET", "/api/coins/expiring"),
+    ("GET", "/api/coupons/mine"),
+    ("POST", "/api/coupons/grant"),
+    ("GET", "/api/shop/products/{product_id}/quote"),
+    ("GET", "/api/shop/exchange/mine"),
+    ("GET", "/api/admin/shop/stock-alerts"),
+    ("GET", "/api/shop/images/{name}"),
+    ("POST", "/api/admin/shop/upload-image"),
+    ("GET", "/api/admin/shop/options"),
+    ("POST", "/api/admin/shop/options"),
+    ("POST", "/api/admin/shop/options/sync-categories"),
+
+    ("POST", "/api/admin/shop/products/{product_id}/shelf"),
+    ("GET", "/api/admin/shop/metrics"),
     # ===== 论坛本轮新增（2026-11-03/04，R11：只登记不重算基线）=====
     ("POST", "/api/forum/drafts"),
     ("GET", "/api/forum/drafts/mine"),

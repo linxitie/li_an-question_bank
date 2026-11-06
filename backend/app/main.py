@@ -24,7 +24,9 @@ from .api.v1.library import videos, media, image_media
 from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
+from .api.v1.personal import decoration
 from .api.v1.content import news, recruitment, calendar, kg
+from .api.v1.content import kg_growth_api
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
@@ -41,7 +43,8 @@ from .api.v1.growth import study_plan
 from .api.v1.growth import profile
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
-from .api.v1.reward import shop, admin_shop
+from .api.v1.growth import weekly_tasks_api
+from .api.v1.reward import shop, admin_shop, coupons, admin_shop_options
 from .api import media_assets as media_assets_api
 from .api.v1.platform.websocket import router as websocket_router
 from .api.v1.catalog.paper_generation import router as paper_router
@@ -216,6 +219,84 @@ async def lifespan(app: FastAPI):
     try:
         from sqlalchemy import inspect, text
         inspector = inspect(engine)
+
+        # 金币购 M1（2026-11-04）：商品分层与成本监控字段
+        if 'shop_products' in inspector.get_table_names():
+            shop_cols = [c['name'] for c in inspector.get_columns('shop_products')]
+            for col_name, col_type in [
+                ('tier', "VARCHAR(16) DEFAULT 'small'"),
+                ('cost_estimate', 'NUMERIC(10, 2)'),
+                ('shelf_priority', "VARCHAR(2) DEFAULT 'P3'"),
+                ('min_stock_alert', 'INTEGER DEFAULT 5'),
+            ]:
+                if col_name not in shop_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE shop_products ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: shop_products 添加列 {col_name}")
+
+        # 金币购 M1.5（2026-11-05）：兑换单的交付物字段
+        if 'coin_exchanges' in inspector.get_table_names():
+            ex_cols = [c['name'] for c in inspector.get_columns('coin_exchanges')]
+            for col_name, col_type in [
+                ('delivered_code', 'VARCHAR(128)'),
+                ('delivered_at', 'DATETIME'),
+                ('shipped_at', 'DATETIME'),
+            ]:
+                if col_name not in ex_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE coin_exchanges ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: coin_exchanges 添加列 {col_name}")
+
+        # 周任务 M2（2026-11-05）：任务系数/分类/券，进度状态机字段
+        if 'badge_task' in inspector.get_table_names():
+            task_cols = [c['name'] for c in inspector.get_columns('badge_task')]
+            for col_name, col_type in [
+                ('difficulty_factor', 'NUMERIC(4, 2) DEFAULT 1.0'),
+                ('scarcity_factor', 'NUMERIC(4, 2) DEFAULT 1.0'),
+                ('category', "VARCHAR(8) DEFAULT 'A'"),
+                ('coupon_code', 'VARCHAR(64)'),
+                ('pin_eligible', 'INTEGER DEFAULT 0'),
+                ('metric_param', 'INTEGER'),
+                ('personalized_for', 'BIGINT'),
+            ]:
+                if col_name not in task_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE badge_task ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: badge_task 添加列 {col_name}")
+
+        if 'user_task_progress' in inspector.get_table_names():
+            prog_cols = [c['name'] for c in inspector.get_columns('user_task_progress')]
+            for col_name, col_type in [
+                ('pending_verify', 'INTEGER DEFAULT 0'),
+                ('expired', 'INTEGER DEFAULT 0'),
+                ('revoked', 'INTEGER DEFAULT 0'),
+            ]:
+                if col_name not in prog_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE user_task_progress ADD COLUMN {col_name} {col_type}"
+                        ))
+                        conn.commit()
+                        logger.info(f"自动迁移: user_task_progress 添加列 {col_name}")
+
+        if 'weekly_task_pool' in inspector.get_table_names():
+            pool_cols = [c['name'] for c in inspector.get_columns('weekly_task_pool')]
+            if 'source' not in pool_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE weekly_task_pool ADD COLUMN source VARCHAR(8) DEFAULT 'auto'"
+                    ))
+                    conn.commit()
+                    logger.info("自动迁移: weekly_task_pool 添加列 source")
 
         # 检查 sys_user 表（学生端「我的」模块新增字段）
         if 'sys_user' in inspector.get_table_names():
@@ -903,6 +984,7 @@ app.include_router(study_plan.router)
 app.include_router(agent.router)
 app.include_router(knowledge.router)
 app.include_router(post.router)
+app.include_router(decoration.router)
 app.include_router(profile.router)
 app.include_router(goals.router)
 app.include_router(stats.router)
@@ -920,6 +1002,7 @@ app.include_router(news.router)
 app.include_router(recruitment.router)
 app.include_router(calendar.router)
 app.include_router(kg.router)
+app.include_router(kg_growth_api.router, tags=["自生长知识图谱"])
 app.include_router(practice.router)
 app.include_router(quick_practice.router)
 app.include_router(smart_exam.router)
@@ -940,8 +1023,11 @@ app.include_router(auth_qrcode.router, tags=["二维码登录"])
 app.include_router(devices.router, tags=["设备管理"])
 app.include_router(coins.router, tags=["金币"])
 app.include_router(shop.router, tags=["金币商城"])
+app.include_router(coupons.router, tags=["优惠券"])
 app.include_router(tasks.router, tags=["任务中心"])
+app.include_router(weekly_tasks_api.router, tags=["周任务"])
 app.include_router(admin_shop.router, tags=["管理员端-金币商城"])
+app.include_router(admin_shop_options.router, tags=["管理员端-商城选项"])
 app.include_router(achievements.router, tags=["成就"])
 app.include_router(checkin.router, tags=["每日签到"])
 app.include_router(feedback.router, tags=["意见反馈"])

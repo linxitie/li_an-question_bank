@@ -171,6 +171,23 @@ def _grade_item(db: Session, user_id: int, item: Dict[str, Any],
             db, user_id, question_id, record_subject, str(user_answer or "")
         )
 
+    # M3 自生长知识图谱：答题事件写入节点状态与边权重。
+    # 真实关联走 question.point_id / question_knowledge（题目表没有 knowledge_point 文本列），
+    # 失败不阻塞判分（图谱是增益能力，不能把答题主流程拖挂）。
+    try:
+        from . import kg_growth
+
+        kg_growth.record_answer(
+            db,
+            user_id,
+            getattr(question, "knowledge_point", None),
+            bool(is_correct),
+            ref_id=record.record_id,
+            question=question,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("知识图谱事件写入失败 user=%s question=%s: %s", user_id, question_id, exc)
+
     return {
         "record_id": record.record_id,
         "question_id": question_id,

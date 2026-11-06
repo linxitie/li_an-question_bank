@@ -737,8 +737,10 @@ class CoinRecord(Base):
     user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
     coin_change = Column(Integer, nullable=False, comment="金币变化")
     current_balance = Column(Integer, nullable=False, comment="当前余额")
+    # 注意：transaction_type 落库是 VARCHAR(5)，只能放 GAIN/SPEND；
+    # 金币到期用 SPEND + source_type=EXPIRY 表达（2026-11-04 M1）
     transaction_type = Column(Enum("GAIN", "SPEND"), nullable=False, comment="交易类型")
-    source_type = Column(Enum("CHECKIN", "TASK", "EXAM", "SYSTEM", "PURCHASE", "RANDOM_TASK", "GOAL", "SHOP"), comment="来源/用途")
+    source_type = Column(Enum("CHECKIN", "TASK", "EXAM", "SYSTEM", "PURCHASE", "RANDOM_TASK", "GOAL", "SHOP", "EXPIRY"), comment="来源/用途")
     related_id = Column(BigInteger, comment="关联ID")
     description = Column(String(500), comment="描述")
     transaction_time = Column(DateTime, default=datetime.now, comment="交易时间")
@@ -768,17 +770,140 @@ class ShopProduct(Base):
     deliverable_payload = Column(JSON, comment="权益参数JSON")
     status = Column(String(20), default="on_sale", comment="状态: on_sale/off_shelf")
     sort_order = Column(Integer, default=0, comment="排序")
+    # ===== 金币购 M1（2026-11-04）：分层商品池 =====
+    tier = Column(String(16), default="small", comment="价格区间: small/mid/large")
+    cost_estimate = Column(DECIMAL(10, 2), nullable=True, comment="成本估算(元)，用于预算监控")
+    shelf_priority = Column(String(2), default="P3", comment="上架优先级 P1/P2/P3")
+    min_stock_alert = Column(Integer, default=5, comment="库存低于该值触发预警")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     __table_args__ = (
         Index("idx_shop_product_status", status),
         Index("idx_shop_product_category", category),
+        Index("idx_shop_product_tier", tier),
+    )
+
+
+class CoinLot(Base):
+    """金币批次（2026-11-04 M1）。
+
+    为什么需要批次：金币要有 12 个月有效期，就必须知道"每笔金币什么时候发、还剩多少"。
+    单一余额列无法表达到期，所以发放时落一条批次，消费时按 FIFO（先到期先花）扣减。
+    `sys_user.total_coins` 仍作为冗余余额用于展示，扣减时与批次同事务双写。
+    """
+
+    __tablename__ = "coin_lot"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="批次ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    amount = Column(Integer, nullable=False, comment="发放数量")
+    remaining = Column(Integer, nullable=False, comment="剩余可消费数量")
+    source_type = Column(String(32), default="TASK", comment="来源: TASK/ACHIEVEMENT/CHECKIN/ADMIN/...")
+    related_id = Column(Integer, nullable=True, comment="来源记录ID")
+    description = Column(String(200), default="", comment="描述")
+    available_at = Column(DateTime, default=datetime.now, comment="可消费时间")
+    expire_at = Column(DateTime, nullable=False, comment="过期时间")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        Index("idx_coin_lot_user", user_id),
+        Index("idx_coin_lot_expire", expire_at),
+    )
+
+
+class Coupon(Base):
+    """折扣券模板（2026-11-04 M1，供 C 类场景任务与到期兜底使用）"""
+
+    __tablename__ = "coupon"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="券ID")
+    code = Column(String(64), unique=True, nullable=False, comment="券码（唯一）")
+    title = Column(String(120), nullable=False, comment="券名称")
+    discount_type = Column(String(16), default="rate", comment="类型: rate 折扣 / amount 立减")
+    discount_value = Column(DECIMAL(10, 2), nullable=False, comment="折扣率(0.8)或立减金额(元)")
+    scope = Column(String(32), default="product", comment="适用范围: product/category/tier")
+    scope_value = Column(String(64), default="", comment="范围取值：商品ID/分类/区间")
+    coin_only = Column(Integer, default=1, comment="是否仅纯金币兑换可用(0/1)")
+    valid_from = Column(DateTime, default=datetime.now, comment="生效时间")
+    valid_to = Column(DateTime, nullable=True, comment="失效时间（空=长期）")
+    stock = Column(Integer, default=-1, comment="可发放数量(-1=不限)")
+    status = Column(String(16), default="active", comment="状态: active/disabled")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (Index("idx_coupon_status", status),)
+
+
+class CouponGrant(Base):
+    """用户持有的券（发券记录 + 使用状态）"""
+    __tablename__ = "coupon_grant"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="发放ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    coupon_id = Column(Integer, ForeignKey("coupon.id"), nullable=False, comment="券ID")
+    status = Column(String(16), default="unused", comment="状态: unused/used/expired")
+    granted_at = Column(DateTime, default=datetime.now, comment="发放时间")
+    used_at = Column(DateTime, nullable=True, comment="使用时间")
+    exchange_id = Column(Integer, nullable=True, comment="使用于哪笔兑换")
+    source = Column(String(32), default="TASK", comment="来源: TASK/COMPENSATE/ADMIN")
+
+    __table_args__ = (
+        Index("idx_coupon_grant_user", user_id),
+        Index("idx_coupon_grant_status", status),
+    )
+
+
+class ShopCode(Base):
+    """商品卡密池（2026-11-05 M1.5）。
+
+    为什么需要：视频会员/电商卡这类商品兑换后必须给用户一串可用的码。
+    兑换时从本表按"最早入库"原子领取一条，写回 `coin_exchanges.delivered_code`；
+    没有可用码就**在扣币前拒绝兑换**，避免再出现"扣了币却没有任何交付物"。
+    """
+
+    __tablename__ = "shop_code"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="码ID")
+    product_id = Column(Integer, ForeignKey("shop_products.id"), nullable=False, comment="商品ID")
+    code = Column(String(128), nullable=False, unique=True, comment="卡密/兑换码")
+    status = Column(String(16), default="available", comment="状态: available/assigned/disabled")
+    assigned_user_id = Column(BigInteger, nullable=True, comment="领取用户ID")
+    assigned_at = Column(DateTime, nullable=True, comment="领取时间")
+    exchange_id = Column(Integer, nullable=True, comment="关联兑换单ID")
+    batch_no = Column(String(64), default="", comment="入库批次（便于问题追溯）")
+    created_at = Column(DateTime, default=datetime.now, comment="入库时间")
+
+    __table_args__ = (
+        Index("idx_shop_code_product_status", product_id, status),
+    )
+
+
+class ShopOption(Base):
+    """商城可选项（2026-11-05）：商品分类 / 权益类型，支持管理员自定义。
+
+    单独建表的原因：分类会随运营不断新增（如「警大文创」），
+    写死在下拉框里每次都要改前端代码。
+    """
+
+    __tablename__ = "shop_option"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    kind = Column(String(24), nullable=False, comment="category 分类 / deliverable_type 权益类型")
+    value = Column(String(32), nullable=False, comment="存库值")
+    label = Column(String(32), default="", comment="展示名")
+    sort_order = Column(Integer, default=0)
+    custom = Column(Integer, default=0, comment="是否管理员自定义")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("kind", "value", name="uk_shop_option"),
+        Index("idx_shop_option_kind", kind),
     )
 
 
 class CoinExchange(Base):
     """金币兑换记录表"""
+
     __tablename__ = "coin_exchanges"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="兑换ID")
@@ -791,6 +916,10 @@ class CoinExchange(Base):
     status = Column(String(20), default="completed", comment="状态: pending/completed/refunded")
     deliverable_type = Column(String(30), comment="权益类型快照")
     deliverable_payload = Column(JSON, comment="权益参数快照")
+    # ===== M1.5（2026-11-05）：交付物，解决"扣了币看不到东西" =====
+    delivered_code = Column(String(128), nullable=True, comment="发放的卡密/兑换码（code 类商品）")
+    delivered_at = Column(DateTime, nullable=True, comment="交付时间")
+    shipped_at = Column(DateTime, nullable=True, comment="实物发货时间（manual 类商品）")
     request_id = Column(String(64), nullable=False, comment="幂等键(客户端请求ID)")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     completed_at = Column(DateTime, comment="完成时间")
@@ -2088,12 +2217,112 @@ class Task(Base):
     reward_growth = Column(Integer, default=0, comment="奖励成长值")
     sort_order = Column(Integer, default=0, comment="排序")
     enabled = Column(Integer, default=1, comment="是否启用")
+    # ===== M2 周任务（2026-11-05）=====
+    difficulty_factor = Column(DECIMAL(4, 2), default=1.0, comment="难度系数 1.0/1.2/1.4/1.6")
+    scarcity_factor = Column(DECIMAL(4, 2), default=1.0, comment="稀缺系数 1.30 置顶 / 1.15 限时")
+    category = Column(String(8), default="A", comment="任务类型: A 定量 / B 连续 / C 场景")
+    coupon_code = Column(String(64), nullable=True, comment="完成时额外发放的券（C 类场景）")
+    pin_eligible = Column(Integer, default=0, comment="是否可被选入置顶槽位(0/1)")
+    metric_param = Column(Integer, nullable=True, comment="指标参数（如知识点ID，用于个性化任务）")
+    personalized_for = Column(BigInteger, nullable=True, comment="个性化任务所属用户（空=全站任务）")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
 
     __table_args__ = (
         Index("idx_badge_task_type", t_type),
     )
+
+
+class WeeklyTaskPool(Base):
+    """周任务置顶池（2026-11-05 M2）。
+
+    置顶是稀缺资源：每周全站只置顶 2–3 个任务（设计文档 §3.4）。
+    每周一 00:05 由调度重建本周池（week_key + 槽位），用户侧按 `pinned_slot` 排序展示，
+    并套用 `scarcity_factor`（1.30/1.45/1.50）提高奖励。
+    """
+
+    __tablename__ = "weekly_task_pool"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="池记录ID")
+    week_key = Column(String(20), nullable=False, comment="ISO 周键，如 2026-W45")
+    task_id = Column(Integer, ForeignKey("badge_task.task_id"), nullable=False, comment="任务ID")
+    pinned_slot = Column(Integer, default=0, comment="置顶槽位 1..3，0=普通")
+    audience = Column(String(16), default="all", comment="受众: all/student/teacher")
+    source = Column(String(8), default="auto", comment="来源: auto 自动排期 / manual 管理员指定")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+
+    __table_args__ = (
+        UniqueConstraint("week_key", "task_id", name="uk_weekly_pool_task"),
+        Index("idx_weekly_pool_week", week_key),
+    )
+
+
+class KgUserNodeState(Base):
+    """用户级知识节点状态（2026-11-05 M3 自生长知识库）。
+
+    为什么新建而不是复用 knowledge_point：
+    - `knowledge_point` 是题目/教材的静态结构，全站共用；
+    - 自生长需要**每个用户**自己的掌握度与生长热度（同一知识点，A 掌握 B 没掌握）。
+
+    掌握度 mastery ∈ [0,1]（EMA 更新）；生长热度 heat ≥0（随时间衰减，被行为事件加热）。
+    """
+
+    __tablename__ = "kg_user_node_state"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    point_id = Column(Integer, ForeignKey("knowledge_point.point_id"), nullable=False, comment="知识点ID")
+    mastery = Column(Float, default=0.0, comment="掌握度 0~1")
+    heat = Column(Float, default=0.0, comment="生长热度（越大越'正在生长'）")
+    attempt_count = Column(Integer, default=0, comment="答题次数")
+    correct_count = Column(Integer, default=0, comment="答对次数")
+    last_event_at = Column(DateTime, nullable=True, comment="最近一次行为时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "point_id", name="uk_kg_user_node"),
+        Index("idx_kg_user_node_user", user_id),
+    )
+
+
+class KgUserEdge(Base):
+    """用户级知识边权重（自生长：边由用户行为动态新增/加权）。
+
+    与静态 `kg_edge` 的区别：这里是"这个用户的图谱"，权重随其行为演化；
+    错题与笔记在同一时间窗内命中两个节点时，二者之间的边被创建或加权。
+    """
+
+    __tablename__ = "kg_user_edge"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    src_point = Column(Integer, nullable=False, comment="源知识点ID")
+    dst_point = Column(Integer, nullable=False, comment="目标知识点ID")
+    rel_type = Column(String(32), default="co_occur", comment="关系: co_occur/weakness_linked")
+    weight = Column(Float, default=1.0, comment="边权重")
+    heat = Column(Float, default=0.0, comment="边的生长热度")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "src_point", "dst_point", "rel_type", name="uk_kg_user_edge"),
+        Index("idx_kg_user_edge_user", user_id),
+    )
+
+
+class KgUserEvent(Base):
+    """行为事件流水（答题/错题/笔记编辑），用于重放与生长曲线计算。"""
+
+    __tablename__ = "kg_user_event"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    point_id = Column(Integer, nullable=False, comment="知识点ID")
+    event_type = Column(String(16), nullable=False, comment="answer_correct/answer_wrong/note_edit")
+    weight = Column(Float, default=1.0, comment="事件权重（错题>编辑>普通）")
+    ref_id = Column(Integer, nullable=True, comment="关联题目/记录ID")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (Index("idx_kg_event_user_time", user_id, created_at),)
 
 
 class UserTaskProgress(Base):
@@ -2107,6 +2336,10 @@ class UserTaskProgress(Base):
     current = Column(Integer, default=0, comment="当前进度")
     completed = Column(Integer, default=0, comment="是否已完成")
     claimed = Column(Integer, default=0, comment="是否已领取奖励")
+    # ===== M2 周任务状态机（2026-11-05）=====
+    pending_verify = Column(Integer, default=0, comment="待判定: 1=已达阈值待服务端二次校验")
+    expired = Column(Integer, default=0, comment="已失效: 1=周期结束未达标或校验失败")
+    revoked = Column(Integer, default=0, comment="已回滚: 1=风控回溯撤销")
     completed_at = Column(DateTime, comment="完成时间")
     claimed_at = Column(DateTime, comment="领取时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
