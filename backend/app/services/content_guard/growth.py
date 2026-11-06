@@ -26,6 +26,10 @@ def _model(name: str):
     return next(c for c in vars(cg).values() if getattr(c, "__tablename__", "") == name)
 
 
+# 自动批准策略：只覆盖"纯追加单条词条 + 有证据"，其余仍走人工
+AUTO_APPROVE_KINDS = {"term_add"}
+
+
 def _vault_sub() -> Path:
     return Path(str(settings.MODERATION_VAULT_DIR)) / policy_compiler.DEFAULT_SUBVAULT
 
@@ -72,7 +76,21 @@ def propose_term(db: Session, term: str, lexicon: str = "insult_zh_v1", evidence
     )
     db.add(p)
     db.commit()
-    return p.proposal_id
+    pid = p.proposal_id
+
+    # 自动批准（2026-11-05）：只追加单条词条 + 有证据 → 无需人工
+    # 改阈值/删词/改条款正文仍必须人审
+    if (
+        p.kind in AUTO_APPROVE_KINDS
+        and evidence
+        and len(str(term).strip()) >= 2
+        and p.status == "pending"
+    ):
+        try:
+            approve_proposal(db, pid, reviewer_id=0)
+        except Exception:  # noqa: BLE001
+            pass
+    return pid
 
 
 def approve_proposal(db: Session, proposal_id: int, reviewer_id: int = 1) -> dict:
@@ -113,6 +131,20 @@ def approve_proposal(db: Session, proposal_id: int, reviewer_id: int = 1) -> dic
                  target_type="proposal", target_id=str(proposal_id), before_hash=before, after_hash=after,
                  payload=json.dumps({"term": term, "lexicon": lexicon}, ensure_ascii=False)))
     db.commit()
+
+    # 让运行时引擎重建索引（版本号自增；失败不影响落盘）
+    try:
+        State = _model("cg_sync_state")
+        for row in db.query(State).all():
+            key = str(getattr(row, "key", "")).lower()
+            if "version" in key or "engine" in key:
+                try:
+                    row.value = str(int(float(str(row.value))) + 1)
+                except (TypeError, ValueError):
+                    row.value = "1"
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
 
     try:
         rs = policy_compiler.compile_ruleset(policy_compiler.load_library(str(settings.MODERATION_VAULT_DIR)),
