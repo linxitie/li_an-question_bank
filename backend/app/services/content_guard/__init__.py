@@ -105,6 +105,24 @@ def guard_text(
         user_id=user_id,
         persist=persist and ready,
     )
+
+    # 词库明确放行时，再看知识库规则集（政策卡逻辑：对象约束/自嘲降权等）
+    if result.get("decision") == "pass":
+        bucket, masked_text, policy_ids = _policy_signal(text or "", scene)
+        if bucket:
+            decision = "review" if bucket == "block" else "mask"
+            result.update(
+                {
+                    "decision": decision,
+                    "level": "reviewed" if bucket == "block" else "masked",
+                    "hit": bool(masked_text and masked_text != text),
+                    "masked_text": masked_text,
+                    "policy_ids": policy_ids,
+                    "source": "policy_ruleset",
+                }
+            )
+            if decision == "mask":
+                result["words"] = [w for w in (result.get("words") or [])]
     if not ready:
         result["degraded"] = True
         result["degraded_reason"] = "cg_* 表未就绪，已降级为旧版词库"
@@ -156,3 +174,58 @@ def reload_engine(db: Session, *, actor: str = "system") -> dict:
         after={"version": version},
     )
     return {"engine_version": version}
+
+# ===== 知识库规则集接入（2026-11-05）=====
+# 发帖链路 = 词库(cg_term) + vault 政策卡编译产物(ruleset)
+# 只把 bucket 转成"打码/送审"，绝不自动删除；block 档也只送审（人工确认后才处置）。
+_POLICY_RULESET = {"hash": None, "ruleset": None, "checked_at": 0.0}
+
+
+def _get_ruleset():
+    """懒加载 vault ruleset；vault 不可用时返回 None（降级为纯词库）。"""
+    import time as _time
+
+    from ...core.config import settings
+
+    vault = str(getattr(settings, "MODERATION_VAULT_DIR", "") or "")
+    if not vault:
+        return None
+    now = _time.time()
+    if _POLICY_RULESET["ruleset"] is not None and now - _POLICY_RULESET["checked_at"] < 300:
+        return _POLICY_RULESET["ruleset"]
+    try:
+        from .. import policy_compiler as pc
+
+        lib = pc.load_library(vault)
+        rs = pc.compile_ruleset(lib, vault_dir=vault)
+        _POLICY_RULESET.update({"hash": rs.get("hash"), "ruleset": rs, "checked_at": now})
+        return rs
+    except Exception:  # noqa: BLE001
+        _POLICY_RULESET["checked_at"] = now
+        return None
+
+
+def _policy_signal(text: str, scene: str):
+    """返回 (bucket, masked_text, policy_ids)；无则 (None, None, [])。"""
+    rs = _get_ruleset()
+    if not rs:
+        return None, None, []
+    from .. import policy_compiler as pc
+
+    scope = "forum.post" if scene.startswith("forum_post") else "forum.comment"
+    try:
+        sig = pc.score_text(text, rs, scope=scope, enforce_block=False)
+    except Exception:  # noqa: BLE001
+        return None, None, []
+    bucket = sig.get("bucket")
+    if bucket not in ("hold", "mask", "block"):
+        return None, None, []
+    # 打码：把命中的词表词条替换为 *
+    masked = text
+    for name, terms in (rs.get("lexicons") or {}).items():
+        for term in terms:
+            if term and term in masked:
+                masked = masked.replace(term, "*" * len(term))
+    ids = [h.get("id") for h in (sig.get("hits") or [])]
+    return bucket, masked, ids
+
