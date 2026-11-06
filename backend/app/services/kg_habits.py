@@ -95,8 +95,13 @@ def build_habit_profile(db: Session, user_id: int, days: int = 30) -> dict:
             daily_counts[practice_time.date().isoformat()] = (
                 daily_counts.get(practice_time.date().isoformat(), 0) + 1
             )
-        if subject_id is not None:
-            subject_counts[int(subject_id)] = subject_counts.get(int(subject_id), 0) + 1
+        # subject_id 历史上出现过脏值（如来源字符串），只接受可转成整数的值
+        try:
+            sid = int(subject_id) if subject_id is not None else None
+        except (TypeError, ValueError):
+            sid = None
+        if sid is not None:
+            subject_counts[sid] = subject_counts.get(sid, 0) + 1
         if time_spent:
             durations.append(int(time_spent))
 
