@@ -200,7 +200,7 @@ def parse_list_links(
 
 def _clean_title(value: str) -> str:
     value = (value or "").strip()
-    value = re.sub(r"^(?:地方动态|要闻|新闻)\s*[|｜]\s*", "", value)
+    value = re.sub(r"^(?:中国法学会|地方动态|要闻|新闻)\s*[-|｜:：]\s*", "", value)
     value = re.sub(r"\s+20\d{2}[-/年]\d{1,2}[-/月]\d{1,2}.*$", "", value)
     value = re.sub(r"\s+(?:来源|分享)[:：].*$", "", value)
     value = re.sub(r"\s*-\s*标准\s*\+\s*$", "", value)

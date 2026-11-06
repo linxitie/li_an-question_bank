@@ -580,6 +580,31 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         trust_level=85,
         robots_note="robots.txt 404，协议层面无显式规则",
     ),
+    # 第十一批：立法与法学
+    NewsSourceConfig(
+        "npc",
+        "中国人大网",
+        "http://www.npc.gov.cn",
+        "http://www.npc.gov.cn/",
+        link_contains="/npc/c2/",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
+        trust_level=90,
+        robots_note="robots.txt 仅对 YisouSpider 禁止，通用 UA 无限制",
+    ),
+    NewsSourceConfig(
+        "chinalaw",
+        "中国法学会",
+        "https://www.chinalaw.org.cn",
+        "https://www.chinalaw.org.cn/",
+        link_contains="/portal/article/index.html",
+        category_code="legal_news",
+        category="法治要闻",
+        region_code="000000",
+        trust_level=85,
+        robots_note="robots.txt Allow 全部路径",
+    ),
 )
 
 SOURCE_BY_CODE = {source.code: source for source in NEWS_SOURCES}
