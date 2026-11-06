@@ -75,8 +75,19 @@ function Invoke-Git([string[]]$arguments, [string]$resolveIp = "") {
         $base += @("-c", "http.curloptResolve=github.com:443:$resolveIp")
     }
     $all = $base + $arguments
-    $output = & $all[0] $all[1..($all.Length - 1)] 2>&1
-    return @{ Code = $LASTEXITCODE; Output = ($output | Out-String) }
+
+    # 关键：git 会把进度/提示写到 stderr；在 $ErrorActionPreference='Stop' 下
+    # 这些会被当成终止错误（"To https://github.com/..."），导致脚本误判失败。
+    # 这里临时改成 Continue，只以退出码判断成败。
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & $all[0] $all[1..($all.Length - 1)] 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    return @{ Code = $code; Output = ($output | Out-String) }
 }
 
 # ---------- 0. 预检 ----------
