@@ -49,6 +49,7 @@ KNOWN_EXTRA_OPERATIONS = {
     ("GET", "/api/shop/products/{product_id}/quote"),
     ("GET", "/api/shop/exchange/mine"),
     ("GET", "/api/admin/shop/stock-alerts"),
+    ("GET", "/api/shop/images/{name}"),
     ("POST", "/api/admin/shop/upload-image"),
     ("GET", "/api/admin/shop/options"),
     ("POST", "/api/admin/shop/options"),

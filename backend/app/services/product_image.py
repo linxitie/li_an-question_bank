@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 STATIC_ROOT = Path(__file__).resolve().parents[1] / "static"
 SHOP_DIR = STATIC_ROOT / "shop"
-SHOP_URL_PREFIX = "/static/shop"
+SHOP_URL_PREFIX = "/api/shop/images"
 
 MIN_WIDTH = 300
 MIN_HEIGHT = 300

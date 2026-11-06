@@ -404,3 +404,26 @@ async def exchange(
         "status": order_status,
         "message": "兑换成功" if order_status == "completed" else "兑换成功，待人工发货/开通",
     }
+
+
+@router.get("/images/{name}", summary="商品图（抠像后的白底图）")
+async def product_image_file(name: str):
+    """读取上传的商品图。
+
+    不走 /static 的原因：Vite dev server 的 SPA 兜底会把未命中的 /static 请求
+    返回 index.html；走 /api 前缀则由后端直接返回 PNG，开发和线上行为一致。
+    """
+    import re
+
+    from fastapi.responses import FileResponse
+
+    from ....services.product_image import SHOP_DIR
+
+    # 防止路径穿越：只允许 uuid.png 这种文件名
+    if not re.fullmatch(r"[0-9a-f]{32}\.png", name):
+        raise HTTPException(status_code=404, detail="图片不存在")
+
+    path = SHOP_DIR / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="图片不存在")
+    return FileResponse(path, media_type="image/png")
