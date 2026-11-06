@@ -1,48 +1,43 @@
-"""回溯打码（安全版）：只替换中文词条，且跳过 HTML 标签内部，避免破坏样式与英文单词。"""
+"""回溯打码（安全版）：用运行时引擎的命中区间打码，只改命中的字，跳过 HTML 标签内部。
+
+2026-11-06 修正：旧版遍历全词表做 str.replace，会把「就是」这类泛词、甚至整句测试文本
+一起打掉（实测「楼主就是个智障」→「*******」）。现在与线上一致，用 span 级打码。
+"""
 import re
 import sys
 
 sys.path.insert(0, r"D:\AAA项目文件\砺安题库\li_an-question_bank\backend")
 
-from app.core.config import settings  # noqa: E402
 from app.core.database import SessionLocal  # noqa: E402
 from app.models.models import ForumComment, ForumPost  # noqa: E402
-from app.services import policy_compiler as pc  # noqa: E402
+from app.services.content_guard import engine as cg_engine  # noqa: E402
 
 APPLY = "--apply" in sys.argv
-CJK = re.compile(r"^[\u4e00-\u9fa5]{2,}$")
-
-terms = set()
-for name, words in (pc.load_lexicons(str(settings.MODERATION_VAULT_DIR)) or {}).items():
-    if name in ("ambiguous_v1", "general_zh_v1"):
-        continue
-    terms.update(w for w in words if CJK.match(w))
-terms = sorted(terms, key=len, reverse=True)
-
 TAG = re.compile(r"<[^>]+>")
+
+db = SessionLocal()
+guard = cg_engine.get_engine(db)
 
 
 def mask_outside_tags(text: str) -> str:
-    parts = []
+    """按 <tag> 切块，只对文本块做 span 级打码，标签原样保留。"""
+    parts: list[str] = []
     last = 0
-    for m in TAG.finditer(text):
-        parts.append(("text", text[last:m.start()]))
-        parts.append(("tag", m.group(0)))
-        last = m.end()
-    parts.append(("text", text[last:]))
-    out = []
-    for kind, chunk in parts:
-        if kind == "tag":
+    for match in TAG.finditer(text):
+        parts.append(text[last:match.start()])
+        parts.append(match.group(0))
+        last = match.end()
+    parts.append(text[last:])
+    out: list[str] = []
+    for idx, chunk in enumerate(parts):
+        if idx % 2 == 1:  # 奇数位是标签，原样保留
             out.append(chunk)
             continue
-        for term in terms:
-            if term in chunk:
-                chunk = chunk.replace(term, "*" * len(term))
-        out.append(chunk)
+        detected = guard.detect(chunk)
+        out.append(detected.get("masked_text") or chunk)
     return "".join(out)
 
 
-db = SessionLocal()
 scanned = changed = 0
 samples = []
 for model, field in ((ForumPost, "title"), (ForumPost, "content"), (ForumComment, "content")):
@@ -61,6 +56,6 @@ for model, field in ((ForumPost, "title"), (ForumPost, "content"), (ForumComment
 if APPLY:
     db.commit()
 db.close()
-print(f"{'[演练]' if not APPLY else '[已写入]'} 扫描 {scanned} 处，命中中文违规词 {changed} 处")
+print(f"{'[演练]' if not APPLY else '[已写入]'} 扫描 {scanned} 处，命中违规词 {changed} 处")
 for s in samples:
     print("  ", s)

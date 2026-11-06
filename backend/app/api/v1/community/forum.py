@@ -625,15 +625,16 @@ async def create_post(
             code="SENSITIVE_CONTENT_BLOCKED"
         )
 
-    # masked 级别:标题与正文分别打码后发布（混合检测的 masked_text 不适用于单个字段）
+    # masked / reviewed 级别:标题与正文分别打码后发布（命中即打码，review 也落打码文本）
     final_title = title
     final_content = content
-    if filter_result["level"] == SensitiveLevel.MASKED:
+    if filter_result["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         final_title = guard_text(db, title, scene="forum_post", persist=False).get("masked_text") or title
         final_content = guard_text(db, content, scene="forum_post", persist=False).get("masked_text") or content
-        _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
 
-    # reviewed 级别:记录但不阻断
+    if filter_result["level"] == SensitiveLevel.MASKED:
+        _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
+    # reviewed 级别:已打码发布，同时保留人工复核记录
     if filter_result["level"] == SensitiveLevel.REVIEWED:
         _log_violation(db, current_user.user_id, request, filter_result, "reviewed", f"{title} {content}")
 
@@ -1124,8 +1125,10 @@ async def create_comment(
         )
 
     final_content = content
+    if filter_result["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
+        # 命中即打码：review 级也落打码文本，人工任务照常保留
+        final_content = filter_result.get("masked_text") or content
     if filter_result["level"] == SensitiveLevel.MASKED:
-        final_content = filter_result["masked_text"]
         _log_violation(db, current_user.user_id, request, filter_result, "masked", content)
     elif filter_result["level"] == SensitiveLevel.REVIEWED:
         _log_violation(db, current_user.user_id, request, filter_result, "reviewed", content)
@@ -1847,9 +1850,9 @@ async def update_post(
         )
         _log_violation(db, current_user.user_id, None, blocked, "rejected", title)
         raise BusinessLogicError("内容包含违规词，无法发布")
-    if title_filter["level"] == SensitiveLevel.MASKED:
+    if title_filter["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         title = title_filter.get("masked_text") or title
-    if content_filter["level"] == SensitiveLevel.MASKED:
+    if content_filter["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         content = content_filter.get("masked_text") or content
 
     title_color = payload.get("title_color", post.title_color or "default")

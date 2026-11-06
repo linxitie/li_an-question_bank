@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -28,6 +29,27 @@ def _model(name: str):
 
 # 自动批准策略：只覆盖"纯追加单条词条 + 有证据"，其余仍走人工
 AUTO_APPROVE_KINDS = {"term_add"}
+
+# 词条质量闸（2026-11-06）：自动批准曾把「就是」「楼主就是个智障」这类泛词/整句测试文本
+# 写进 vault 词表，导致打码位置错乱。自动入词只接受 2–12 位、无空白标点的词。
+_TERM_RE = re.compile(r"^[\w\u4e00-\u9fff]{2,12}$")
+_GENERIC_TERMS = frozenset({
+    "就是", "真是个", "这个", "那个", "什么", "真的", "我们", "你们", "他们",
+    "一个", "不是", "可以", "没有", "这样", "那样", "怎么",
+})
+
+
+_GENERIC_FRAGMENTS = ("就是", "真是个", "这个", "那个", "什么", "真的")
+
+
+def _term_ok(term: str) -> bool:
+    value = str(term or "").strip()
+    if not _TERM_RE.match(value):
+        return False
+    if value.lower() in _GENERIC_TERMS:
+        return False
+    # 整句测试文本往往含虚词片段（如「楼主就是个智障」），一律拒绝自动入词
+    return not any(fragment in value for fragment in _GENERIC_FRAGMENTS)
 
 
 def _vault_sub() -> Path:
@@ -83,7 +105,7 @@ def propose_term(db: Session, term: str, lexicon: str = "insult_zh_v1", evidence
     if (
         p.kind in AUTO_APPROVE_KINDS
         and evidence
-        and len(str(term).strip()) >= 2
+        and _term_ok(term)
         and p.status == "pending"
     ):
         try:

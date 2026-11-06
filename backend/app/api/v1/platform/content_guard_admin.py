@@ -21,6 +21,7 @@ from ....services.content_guard import (
     audit,
     engine,
     graph,
+    guard_text,
     judgments,
     normalizer,
     obsidian,
@@ -652,9 +653,8 @@ async def detect_text(
     db: Session = Depends(get_db),
     _: SysUser = Depends(require_admin),
 ):
-    result = judgments.guard_text(
-        db, body.text, scene=body.scene, persist=body.persist
-    )
+    # 运营台检测必须与发帖闸门同源，否则会出现"运营台 pass、发帖 mask"的假象
+    result = guard_text(db, body.text, scene=body.scene, persist=body.persist)
     result.pop("_policies", None)
     return result
 

@@ -190,6 +190,35 @@ def record_judgment(
     return judgment
 
 
+def persist_result(
+    db: Session,
+    text: str,
+    result: dict,
+    *,
+    scene: str,
+    source_id: Optional[int],
+    user_id: Optional[int],
+) -> dict:
+    """把包装层最终结论落成一条判定 + 一个任务，并写回 judgment_id / task_id。
+
+    包装层为了合并政策/链接层，需要先拿到词库结论再定最终处置，因此统一在这里落库，
+    避免同一条文本落两条判定。
+    """
+    judgment = record_judgment(
+        db, text, result, scene=scene, source_id=source_id, user_id=user_id
+    )
+    task = (
+        db.query(CgTask)
+        .filter(CgTask.judgment_id == judgment.judgment_id)
+        .order_by(desc(CgTask.task_id))
+        .first()
+    )
+    result["judgment_id"] = judgment.judgment_id
+    result["task_id"] = task.task_id if task else None
+    result.pop("_policies", None)
+    return result
+
+
 def guard_text(
     db: Session,
     text: str,
