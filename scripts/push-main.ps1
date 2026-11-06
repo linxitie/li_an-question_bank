@@ -80,7 +80,7 @@ function Invoke-Git([string[]]$arguments, [string]$resolveIp = "") {
     # 这些会被当成终止错误（"To https://github.com/..."），导致脚本误判失败。
     # 这里临时改成 Continue，只以退出码判断成败。
     $prev = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
+    $ErrorActionPreference = "SilentlyContinue"
     try {
         $output = & $all[0] $all[1..($all.Length - 1)] 2>&1
         $code = $LASTEXITCODE
