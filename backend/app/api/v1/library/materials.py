@@ -870,6 +870,7 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         "import_confirm": "导入入库",
         "batch_create": "批量创建",
         "batch_delete": "批量删除",
+        "restore": "恢复资料",
     }.get(action, action)
     try:
         db.add(SysOperationLog(
@@ -1634,27 +1635,74 @@ async def admin_set_status(material_id: int, body: dict,
         StudyMaterial.material_id == material_id).first()
     if not m:
         raise HTTPException(404, "资料不存在")
+    prev = m.status
     m.status = st
     db.commit()
-    _audit(db, current_user, "status", f"material:{material_id}",
-           "上架" if st == 1 else "下架")
+    # 从回收站（status=-1）回到 0/1 记为「恢复资料」，与普通上/下架在审计里可区分
+    if prev == -1:
+        _audit(db, current_user, "restore", f"material:{material_id}",
+               "恢复为" + ("上架" if st == 1 else "未上架"))
+    else:
+        _audit(db, current_user, "status", f"material:{material_id}",
+               "上架" if st == 1 else "下架")
     db.commit()
     return {"ok": True}
+
+
+@router.delete("/admin/batch", summary="批量删除资料(管理员)")
+async def admin_batch_delete(
+    body: dict,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """批量删除多条资料（软删除）。body.ids 为资料 ID 数组。
+
+    2026-11-07 裁定 B：与单条删除一致改为 `status=-1`，不再物理删行、不再清学习进度。
+    返回 `deleted` = 本次真正被标记为删除的条数（已删除的不重复计数）。
+
+    ⚠️ **路由顺序**：本路由必须声明在 `DELETE /admin/{material_id}` **之前**。
+    FastAPI/Starlette 按声明顺序匹配，`/admin/batch` 若排在动态段之后会被当成
+    `material_id="batch"` → 422「Input should be a valid integer」（实测：批量删除从来没调通过）。
+    """
+    _require_admin(current_user)
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(400, "ids 不能为空")
+
+    deleted = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id.in_(ids),
+        StudyMaterial.status >= 0,
+    ).update({"status": -1}, synchronize_session=False)
+
+    db.commit()
+    _audit(db, current_user, "batch_delete", f"deleted={deleted}")
+    db.commit()
+    return {"deleted": deleted}
 
 
 @router.delete("/admin/{material_id}", summary="删除资料(管理员)")
 async def admin_delete(material_id: int,
                        current_user: SysUser = Depends(get_current_user),
                        db: Session = Depends(get_db)):
+    """软删除（`status=-1`），不物理删行。
+
+    2026-11-07 用户裁定 B：统一为软删除，与《试卷管理收敛_单一入口与上架即审批_方案_v1.md》§2.2
+    「（删除）|-1|软删除，不参与列表与统计」一致。原实现是 `db.delete(m)` 物理删除 + 清学习进度，
+    误删后无法恢复（实测 121/122 两条就是这样消失的）。
+
+    - **不移除 `UserMaterialProgress`**：恢复后学生学习进度还在；彻底清理由后续「回收站·彻底删除」承担。
+    - **幂等**：对已删除行再次删除返回 `{"ok": true, "already_deleted": true}`，不报 404。
+    - **恢复**：`PUT /admin/{id}/status` 传 `status=0`（恢复为未上架）。
+    """
     _require_admin(current_user)
     m = db.query(StudyMaterial).filter(
         StudyMaterial.material_id == material_id).first()
     if not m:
         raise HTTPException(404, "资料不存在")
+    if m.status == -1:
+        return {"ok": True, "already_deleted": True}
     title = m.title
-    db.query(UserMaterialProgress).filter(
-        UserMaterialProgress.material_id == material_id).delete()
-    db.delete(m)
+    m.status = -1
     db.commit()
     _audit(db, current_user, "delete", f"material:{material_id}", title)
     db.commit()
@@ -1761,33 +1809,6 @@ async def admin_batch_create(
     _audit(db, current_user, "batch_create", f"created={len(created_ids)}")
     db.commit()
     return {"created": len(created_ids), "material_ids": created_ids}
-
-
-@router.delete("/admin/batch", summary="批量删除资料(管理员)")
-async def admin_batch_delete(
-    body: dict,
-    current_user: SysUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """批量删除多条资料。body.ids 为资料 ID 数组。"""
-    _require_admin(current_user)
-    ids = body.get("ids", [])
-    if not ids:
-        raise HTTPException(400, "ids 不能为空")
-
-    # 先删学习进度
-    db.query(UserMaterialProgress).filter(
-        UserMaterialProgress.material_id.in_(ids)
-    ).delete(synchronize_session=False)
-
-    deleted = db.query(StudyMaterial).filter(
-        StudyMaterial.material_id.in_(ids)
-    ).delete(synchronize_session=False)
-
-    db.commit()
-    _audit(db, current_user, "batch_delete", f"deleted={deleted}")
-    db.commit()
-    return {"deleted": deleted}
 
 
 @router.get("/admin/import-records", summary="导入记录列表(管理员)")

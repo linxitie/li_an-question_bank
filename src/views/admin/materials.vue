@@ -43,6 +43,7 @@
         <option value="">全部状态</option>
         <option value="1">已上架（=通过）</option>
         <option value="0">未上架（=未通过）</option>
+        <option value="-1">回收站（已删除）</option>
       </select>
       <select v-model="filters.createdWithin" class="adm-select" @change="applyFilter">
         <option value="">全部时间</option>
@@ -57,6 +58,9 @@
         @keyup.enter="applyFilter"
       />
       <template #actions>
+        <span v-if="filters.status === '-1'" class="mm-chip">
+          回收站：只看已删除资料，点「恢复」可还原
+        </span>
         <span v-if="filters.createdWithin" class="mm-chip">
           最近 {{ filters.createdWithin === '7d' ? 7 : 30 }} 天：{{ total }} 条
         </span>
@@ -110,22 +114,32 @@
             <td class="adm-mono mm-time">{{ fmtTime(row.created_at) }}</td>
             <td>{{ row.view_count || 0 }}</td>
             <td class="mm-status-cell">
-              <button
-                class="mm-switch"
-                :class="{ 'is-on': row.status === 1 }"
-                :aria-label="row.status === 1 ? '下架' : '上架（=审批通过）'"
-                @click="toggleStatus(row)"
-              >
-                <i />
-              </button>
-              <AdminTag :tone="row.status === 1 ? 'ok' : 'muted'" style="margin-left: 6px">
-                {{ row.status === 1 ? '已通过' : '未通过' }}
-              </AdminTag>
+              <template v-if="row.status === -1">
+                <AdminTag tone="danger">已删除</AdminTag>
+              </template>
+              <template v-else>
+                <button
+                  class="mm-switch"
+                  :class="{ 'is-on': row.status === 1 }"
+                  :aria-label="row.status === 1 ? '下架' : '上架（=审批通过）'"
+                  @click="toggleStatus(row)"
+                >
+                  <i />
+                </button>
+                <AdminTag :tone="row.status === 1 ? 'ok' : 'muted'" style="margin-left: 6px">
+                  {{ row.status === 1 ? '已通过' : '未通过' }}
+                </AdminTag>
+              </template>
             </td>
             <td class="mm-ops">
               <a class="mm-op" @click="openPreview(row)">预览</a>
-              <a class="mm-op is-muted" title="元数据编辑随 C 批接入" @click="notYet('改信息')">改信息</a>
-              <a class="mm-op is-danger" @click="remove(row)">删除</a>
+              <template v-if="row.status === -1">
+                <a class="mm-op is-restore" @click="restore(row)">恢复</a>
+              </template>
+              <template v-else>
+                <a class="mm-op is-muted" title="元数据编辑随 C 批接入" @click="notYet('改信息')">改信息</a>
+                <a class="mm-op is-danger" @click="remove(row)">删除</a>
+              </template>
             </td>
           </tr>
         </tbody>
@@ -331,9 +345,9 @@ async function toggleStatus(row: AdminMaterialListItem): Promise<void> {
 async function remove(row: AdminMaterialListItem): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      `删除后该资料将被永久删除，其学习进度一并清除，不可恢复。确认删除「${row.title}」？`,
-      '删除资料（不可恢复）',
-      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+      `移入回收站后学生端立即不可见，数据保留、学习进度保留，可随时恢复。确认删除「${row.title}」？`,
+      '移入回收站',
+      { confirmButtonText: '移入回收站', cancelButtonText: '取消', type: 'warning' }
     );
   } catch {
     return;
@@ -344,11 +358,36 @@ async function remove(row: AdminMaterialListItem): Promise<void> {
       method: 'DELETE',
       baseURL: ''
     });
-    ElMessage.success('已删除');
+    ElMessage.success('已移入回收站（可在「回收站（已删除）」恢复）');
     if (rows.value.length === 1 && page.value > 1) page.value -= 1;
     await reload();
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '删除失败');
+  }
+}
+
+/** 从回收站恢复：status -1 → 0（未上架），需管理员再点「上架」才对学生可见 */
+async function restore(row: AdminMaterialListItem): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `恢复后为「未上架」状态，学生仍不可见；需要再点「上架（=审批通过）」才可见。确认恢复「${row.title}」？`,
+      '恢复资料',
+      { confirmButtonText: '恢复', cancelButtonText: '取消', type: 'success' }
+    );
+  } catch {
+    return;
+  }
+  try {
+    await libraryClient.request({
+      url: `/api/materials/admin/${row.id}/status`,
+      method: 'PUT',
+      baseURL: '',
+      data: { status: 0 }
+    });
+    ElMessage.success('已恢复为未上架');
+    await reload();
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '恢复失败');
   }
 }
 
@@ -466,6 +505,7 @@ onMounted(reload);
 }
 .mm-op:hover { text-decoration: underline; }
 .mm-op.is-danger { color: var(--adm-danger); margin-right: 0; }
+.mm-op.is-restore { color: var(--adm-ok); margin-right: 0; }
 .mm-op.is-muted { color: var(--adm-text-weak); font-weight: 600; }
 
 .mm-pager {
