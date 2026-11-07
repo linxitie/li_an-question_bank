@@ -1,0 +1,127 @@
+﻿<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030}
+.canvas{width:1680px;height:1230px;padding:26px 34px;display:flex;flex-direction:column;gap:16px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:10px}
+.hd h1{font-size:24px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:4px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.grid{display:flex;gap:16px}
+.card{background:#fff;border-radius:13px;border:1px solid #eaeef7;box-shadow:0 2px 10px rgba(23,32,64,.06);padding:16px 18px}
+.card h3{font-size:13px;color:#6b7387;font-weight:700;margin-bottom:12px;letter-spacing:.3px}
+.sw{display:flex;flex-wrap:nowrap;gap:8px}
+.sw .i{width:118px;flex:none}
+.sw .box{height:44px;border-radius:9px;border:1px solid #e8ecf5}
+.sw .n{font-size:11.5px;color:#2b3244;margin-top:6px;font-weight:600}
+.sw .h{font-family:Consolas,monospace;font-size:10.5px;color:#98a0b3}
+.row{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.lab{font-size:11.5px;color:#8b93a7;width:56px;flex:none}
+.btn{border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:700;display:inline-block}
+.b-pri{background:#4054e0;color:#fff;box-shadow:0 4px 12px rgba(64,84,224,.28)}
+.b-pri-h{background:#3a4bd8;color:#fff}
+.b-ghost{background:#f1f3fb;color:#3a4bd8}
+.b-ghost-h{background:#e9ecff;color:#3341c0}
+.b-danger{background:#fff;border:1px solid #f3c4ae;color:#c2410c}
+.b-line{background:#fff;border:1px solid #dfe4f0;color:#4a5266}
+.b-dis{background:#eef1f6;color:#a7aec1}
+.iv{border:1px solid #dfe4f0;border-radius:9px;padding:9px 11px;font-size:13px;color:#1a2030;min-width:150px;background:#fff}
+.iv.ph{color:#b3b9c9}.iv.focus{border-color:#4054e0;box-shadow:0 0 0 3px rgba(64,84,224,.12)}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:5px;margin-right:5px}
+.t-card{background:#f3ecff;color:#6b3fbf}.t-art{background:#e8efff;color:#2f49c4}
+.t-lec{background:#e6f7f9;color:#0f7a86}.t-paper{background:#fff2e3;color:#b35309}
+.t-vid{background:#eef1f6;color:#4a5266}.t-ok{background:#eaf7f0;color:#0f7a4d}
+.t-warn{background:#fff7ed;color:#b35309}.t-off{background:#f4f5f8;color:#7a8298}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;background:#f7f8fd;color:#6b7387;font-size:11.5px;padding:9px 10px;border-bottom:1px solid #e6eaf4;font-weight:600}
+.tbl td{padding:10px;border-bottom:1px solid #f0f2f8;color:#2b3244}
+.tbl tr:last-child td{border-bottom:none}
+.mono{font-family:Consolas,monospace}
+.stat{background:#fff;border-radius:13px;border:1px solid #eaeef7;padding:14px 16px;text-align:center;flex:1}
+.stat .v{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.stat .l{font-size:11.5px;color:#8b93a7;margin-top:3px}
+.two{display:flex;gap:16px}
+.half{flex:1}
+.kv{display:flex;justify-content:space-between;font-size:12px;color:#4a5266;padding:7px 0;border-bottom:1px dashed #eef1f6}
+.kv b{color:#1a2030}
+.empty{text-align:center;padding:22px;color:#98a0b3;font-size:12px}
+.pill{font-size:11px;color:#3a4bd8;background:#eef1ff;border:1px solid #d6dcff;border-radius:999px;padding:3px 10px;font-weight:600}
+.note{font-size:11.5px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:10px 13px;line-height:1.65}
+</style></head><body>
+<div class="canvas">
+  <div class="hd"><div><h1>管理员端新画风 · 令牌与组件</h1><div class="sub">一套令牌 + 一套组件 = 12 个管理页统一；色值/圆角/字号取自效果图 01/05/06</div></div><div class="badge">画风基座 A0 · 设计稿</div></div>
+
+  <div class="card"><h3>1. 颜色令牌（新画风只用这 12 个色，禁止再写字面量）</h3>
+    <div class="sw">
+      <div class="i"><div class="box" style="background:#f4f6fb"></div><div class="n">页面底色</div><div class="h">#f4f6fb</div></div>
+      <div class="i"><div class="box" style="background:#fff"></div><div class="n">卡片面</div><div class="h">#ffffff</div></div>
+      <div class="i"><div class="box" style="background:#eaeef7"></div><div class="n">卡片描边</div><div class="h">#eaeef7</div></div>
+      <div class="i"><div class="box" style="background:#f0f2f8"></div><div class="n">表格分割</div><div class="h">#f0f2f8</div></div>
+      <div class="i"><div class="box" style="background:#4054e0"></div><div class="n">主色</div><div class="h">#4054e0</div></div>
+      <div class="i"><div class="box" style="background:#eef1ff"></div><div class="n">主色浅底</div><div class="h">#eef1ff</div></div>
+      <div class="i"><div class="box" style="background:#1a2030"></div><div class="n">正文</div><div class="h">#1a2030</div></div>
+      <div class="i"><div class="box" style="background:#6b7387"></div><div class="n">次文/表头</div><div class="h">#6b7387</div></div>
+      <div class="i"><div class="box" style="background:#98a0b3"></div><div class="n">弱文/占位</div><div class="h">#98a0b3</div></div>
+      <div class="i"><div class="box" style="background:#0f7a4d"></div><div class="n">成功</div><div class="h">#0f7a4d</div></div>
+      <div class="i"><div class="box" style="background:#b35309"></div><div class="n">警告</div><div class="h">#b35309</div></div>
+      <div class="i"><div class="box" style="background:#c2410c"></div><div class="n">危险</div><div class="h">#c2410c</div></div>
+    </div>
+    <div style="margin-top:12px;font-size:11.5px;color:#6b7387">侧栏沿用品牌深蓝 <b class="mono">#1A3C6D</b>（不随内容区改动）；类型徽标另用 4 个语义色：卡片 <b class="mono">#6b3fbf</b>／文章 <b class="mono">#2f49c4</b>／讲义 <b class="mono">#0f7a86</b>／试卷 <b class="mono">#b35309</b>。</div>
+  </div>
+
+  <div class="two">
+    <div class="card half"><h3>2. 形状 / 阴影 / 字号</h3>
+      <div class="kv"><span>圆角</span><b>标签 5 · 输入&按钮 9 · 卡片 13 · 弹窗 16 · 胶囊 999</b></div>
+      <div class="kv"><span>阴影</span><b>卡片 0 2px 10px rgba(23,32,64,.06)</b></div>
+      <div class="kv"><span>阴影</span><b>弹窗 0 24px 60px rgba(15,23,42,.35)</b></div>
+      <div class="kv"><span>字号</span><b>页标题 24 · 弹窗标题 17 · 正文 12.5 · 标签 11.5</b></div>
+      <div class="kv"><span>统计值</span><b>26–28 / 800 字重 / 数字等宽</b></div>
+      <div class="kv"><span>间距</span><b>8 · 12 · 14 · 16 · 22 · 40（只用这 6 档）</b></div>
+      <div class="kv"><span>字体</span><b>正文 微软雅黑；时间/编号/代码 Consolas</b></div>
+    </div>
+    <div class="card half"><h3>3. 按钮四态</h3>
+      <div class="row"><span class="lab">主按钮</span><span class="btn b-pri">新建资料</span><span class="btn b-pri-h">悬停</span></div>
+      <div class="row"><span class="lab">次按钮</span><span class="btn b-ghost">批量导入</span><span class="btn b-ghost-h">悬停</span></div>
+      <div class="row"><span class="lab">描边</span><span class="btn b-line">刷新</span><span class="btn b-danger">删除</span></div>
+      <div class="row"><span class="lab">禁用</span><span class="btn b-dis">保存中…</span><span class="pill">已选 3 项</span></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card half"><h3>4. 输入 / 下拉（默认 · 聚焦 · 占位）</h3>
+      <div class="row"><span class="lab">默认</span><div class="iv" style="min-width:220px">2024年国考公安专业科目</div></div>
+      <div class="row"><span class="lab">聚焦</span><div class="iv focus" style="min-width:220px">2024年国考公安专业科目</div></div>
+      <div class="row"><span class="lab">占位</span><div class="iv ph" style="min-width:220px">搜索标题…</div></div>
+      <div class="row"><span class="lab">下拉</span><div class="iv" style="min-width:150px">全部类型 <span style="float:right;color:#a7aec1">▾</span></div><div class="iv" style="min-width:120px">公专 <span style="float:right;color:#a7aec1">▾</span></div></div>
+    </div>
+    <div class="card half"><h3>5. 类型徽标 / 状态徽标</h3>
+      <div class="row"><span class="lab">类型</span>
+        <span class="tag t-vid">入门视频</span><span class="tag t-vid">进阶视频</span>
+        <span class="tag t-art">文章</span><span class="tag t-card">知识卡片</span>
+        <span class="tag t-lec">讲义</span><span class="tag t-paper">试卷</span></div>
+      <div class="row"><span class="lab">状态</span>
+        <span class="tag t-ok">已上架</span><span class="tag t-off">未上架</span><span class="tag t-warn">待补全</span></div>
+      <div class="row"><span class="lab">说明</span><span style="font-size:11.5px;color:#8b93a7">徽标 = 中文名 + 语义色，6 类共用一套（来自 <span class="mono">materialTypes.ts</span>）</span></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card half"><h3>6. 统计卡（替换 emoji 图标）</h3>
+      <div class="row" style="gap:10px">
+        <div class="stat"><div class="v">119</div><div class="l">总资料数</div></div>
+        <div class="stat"><div class="v" style="color:#0f7a86">1</div><div class="l">讲义</div></div>
+        <div class="stat"><div class="v" style="color:#b35309">3</div><div class="l">试卷</div></div>
+        <div class="stat"><div class="v" style="color:#c2410c">1</div><div class="l">待补全</div></div>
+      </div>
+      <div style="margin-top:10px;font-size:11.5px;color:#6b7387">现网用 emoji 当图标（👥📚📝📈📄），跨系统字体不一致、无法统一着色 → 新画风只保留数字 + 文案，异常值用语义色。</div>
+    </div>
+    <div class="card half"><h3>7. 表格 + 空状态</h3>
+      <table class="tbl"><thead><tr><th style="width:44px">ID</th><th>标题 / 类型</th><th style="width:64px">科目</th><th style="width:132px">上传时间</th><th style="width:80px">状态</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">115</td><td><b>2024年国考公安专业科目·题本</b> <span class="tag t-paper">试卷</span></td><td>公专</td><td class="mono" style="color:#4a5266">2026-11-05 21:12</td><td><span class="tag t-ok">已上架</span></td></tr>
+        <tr><td class="mono">114</td><td><b>公专·行政执法程序讲义</b> <span class="tag t-lec">讲义</span></td><td>公专</td><td class="mono" style="color:#4a5266">2026-11-05 20:48</td><td><span class="tag t-ok">已上架</span></td></tr>
+      </tbody></table>
+      <div class="empty">暂无数据 · 换个筛选条件试试</div>
+    </div>
+  </div>
+
+  <div class="note">一页画风 = 上面这 7 组。<b>12 个管理页共用</b>：4 个手写页直接换组件，9 个 <span class="mono">.vtj</span> 页靠 <span class="mono">.admin-layout</span> 作用域的覆盖层洗一版（不动模板），后续替换手写时自然继承。</div>
+</div></body></html>

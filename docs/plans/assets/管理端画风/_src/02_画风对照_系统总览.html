@@ -1,0 +1,143 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#eef1f7;color:#1a2030}
+.canvas{width:1680px;height:1300px;display:flex;flex-direction:column}
+.hd{padding:22px 30px 12px;display:flex;align-items:flex-end;justify-content:space-between}
+.hd h1{font-size:23px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:4px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.tagline{padding:0 30px 8px;display:flex;align-items:center;gap:10px}
+.tagline .n{font-size:12px;font-weight:700;color:#fff;background:#c2410c;padding:3px 10px;border-radius:6px}
+.tagline .n.new{background:#0f7a4d}
+.tagline .d{font-size:11.5px;color:#6b7387}
+.shot{margin:0 0 0 0;height:520px;overflow:hidden;border-top:1px solid #e2e7f1;border-bottom:1px solid #e2e7f1;background:#fff}
+.shot img{display:block;width:1680px}
+/* ===== 新画风渲染（同样是系统总览，只换画风） ===== */
+.after{height:640px;display:flex;overflow:hidden;background:#f4f6fb}
+.side{width:220px;flex:none;background:#1A3C6D;color:#fff;display:flex;flex-direction:column}
+.side .hd2{padding:19px 16px;text-align:center;border-bottom:1px solid rgba(255,255,255,.1)}
+.side .hd2 .t{font-size:16px;font-weight:600;letter-spacing:1px}
+.side .hd2 .s{font-size:12px;color:rgba(255,255,255,.6);margin-top:2px}
+.side nav{padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.side .it{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:13.5px;color:rgba(255,255,255,.86)}
+.side .it.on{background:rgba(64,84,224,.92);color:#fff;font-weight:600;box-shadow:0 4px 14px rgba(64,84,224,.35)}
+.side .ico{font-size:14px;opacity:.9;width:16px;text-align:center}
+.side .ft{margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,.1)}
+.side .ft .b{background:rgba(255,255,255,.12);border-radius:8px;height:30px;display:flex;align-items:center;justify-content:center;font-size:12px;color:rgba(255,255,255,.8)}
+.right{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:58px;background:#fff;border-bottom:1px solid #eaeef7;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top .bc{font-size:13.5px;color:#1a2030;font-weight:600}
+.top .r{display:flex;align-items:center;gap:14px;font-size:12.5px;color:#4a5266}
+.top .bell{position:relative;font-size:15px}
+.top .av{width:28px;height:28px;border-radius:50%;background:#c2410c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.main{padding:18px 24px;overflow:hidden}
+.pagehd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.pagehd h2{font-size:20px;font-weight:800;letter-spacing:-.2px}
+.pagehd .acts{display:flex;gap:8px}
+.btnb{border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;background:#fff;border:1px solid #dfe4f0;color:#4a5266}
+.btnb.pri{background:#4054e0;color:#fff;border-color:#4054e0;box-shadow:0 4px 12px rgba(64,84,224,.26)}
+.stats{display:flex;gap:12px;margin-bottom:14px}
+.st{flex:1;background:#fff;border:1px solid #eaeef7;border-radius:13px;box-shadow:0 2px 10px rgba(23,32,64,.06);padding:14px 16px;text-align:center}
+.st .v{font-size:27px;font-weight:800;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+.st .l{font-size:11.5px;color:#8b93a7;margin-top:3px}
+.panels{display:flex;gap:12px}
+.panel{flex:1;background:#fff;border:1px solid #eaeef7;border-radius:13px;box-shadow:0 2px 10px rgba(23,32,64,.06);padding:14px 16px;min-height:196px}
+.panel .pt{font-size:12.5px;font-weight:700;color:#2b3244;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.panel .pt .more{font-size:11.5px;color:#4054e0;font-weight:600}
+.chart{height:130px;position:relative;border-radius:9px;background:linear-gradient(180deg,#fbfcff,#f7f9ff);border:1px dashed #e3e8f5;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#98a0b3}
+.bars{display:flex;align-items:flex-end;gap:10px;height:118px;padding:0 6px}
+.bars .b{flex:1;background:linear-gradient(180deg,#6b7bf0,#4054e0);border-radius:5px 5px 2px 2px;opacity:.92}
+.bars .b.g{background:linear-gradient(180deg,#c9cee0,#dfe3ee)}
+.axis{display:flex;justify-content:space-between;font-size:10.5px;color:#98a0b3;margin-top:6px;padding:0 4px}
+.acts-list .li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed #eef1f6;font-size:12px;color:#4a5266}
+.acts-list .li:last-child{border-bottom:none}
+.acts-list .dot{width:6px;height:6px;border-radius:50%;background:#0f7a4d;flex:none}
+.acts-list .who{font-weight:600;color:#1a2030}
+.acts-list .t{margin-left:auto;font-family:Consolas,monospace;font-size:11px;color:#98a0b3}
+.empty{text-align:center;padding:26px 0;color:#98a0b3;font-size:12px}
+.dots{display:flex;justify-content:center;gap:8px;margin-top:22px}
+.dots .d{width:9px;height:9px;border-radius:2px}
+.lg{display:flex;gap:14px;font-size:10.5px;color:#6b7387;margin-top:10px;justify-content:center}
+.lg .k{display:flex;align-items:center;gap:5px}
+.lg .sw{width:9px;height:9px;border-radius:2px}
+.note{margin:10px 30px 16px;font-size:11.5px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:9px 13px;line-height:1.6}
+</style></head><body>
+<div class="canvas">
+  <div class="hd"><div><h1>管理员端画风改造 · 系统总览 对照</h1><div class="sub">同一页、同一批数据，只换画风：去 emoji 图标、统一卡片/表格/徽标、主色归到 #4054e0、时间改成等宽可读格式</div></div><div class="badge">画风基座 A0 · 设计稿</div></div>
+
+  <div class="tagline"><span class="n">现状</span><span class="d">真机截图 · 2026-11-07 · <span style="font-family:Consolas">#/admin/dashboard</span></span></div>
+  <div class="shot"><img src="before_系统总览.png" alt="before"></div>
+
+  <div class="tagline"><span class="n new">新画风</span><span class="d">同一页面结构，套用令牌与组件（侧栏品牌色不变，激活态由红色竖条改为品牌蓝圆角块）</span></div>
+  <div class="after">
+    <div class="side">
+      <div class="hd2"><div class="t">砺安题库</div><div class="s">管理端</div></div>
+      <nav>
+        <div class="it on"><span class="ico">▦</span>系统总览</div>
+        <div class="it"><span class="ico">◍</span>用户与权限</div>
+        <div class="it"><span class="ico">▤</span>题库管理</div>
+        <div class="it"><span class="ico">▣</span>资料管理</div>
+        <div class="it"><span class="ico">✎</span>分类规则</div>
+        <div class="it"><span class="ico">▧</span>试卷审批</div>
+        <div class="it"><span class="ico">◌</span>论坛管理</div>
+        <div class="it"><span class="ico">⚙</span>系统设置</div>
+        <div class="it"><span class="ico">☰</span>日志审计</div>
+        <div class="it"><span class="ico">⛁</span>数据备份</div>
+        <div class="it"><span class="ico">ⓘ</span>帮助文档</div>
+      </nav>
+      <div class="ft"><div class="b">◀ 收起菜单</div></div>
+    </div>
+    <div class="right">
+      <div class="top"><div class="bc">系统总览</div><div class="r"><span class="bell">🔔</span><span class="av">c</span><span>cbrycc ▾</span></div></div>
+      <div class="main">
+        <div class="pagehd"><h2>系统总览</h2><div class="acts"><span class="btnb">刷新</span><span class="btnb pri">导出快照</span></div></div>
+        <div class="stats">
+          <div class="st"><div class="v">30</div><div class="l">总用户数</div></div>
+          <div class="st"><div class="v">200</div><div class="l">总题目数</div></div>
+          <div class="st"><div class="v">2</div><div class="l">总试卷数</div></div>
+          <div class="st"><div class="v" style="color:#6b7387">0</div><div class="l">今日活跃</div></div>
+          <div class="st"><div class="v" style="color:#b35309">2</div><div class="l">待审批试卷</div></div>
+        </div>
+        <div class="panels">
+          <div class="panel">
+            <div class="pt">近 7 天活跃趋势<span class="more">查看明细</span></div>
+            <div class="bars">
+              <div class="b g" style="height:22%"></div><div class="b g" style="height:34%"></div>
+              <div class="b" style="height:58%"></div><div class="b" style="height:46%"></div>
+              <div class="b" style="height:72%"></div><div class="b g" style="height:30%"></div>
+              <div class="b" style="height:88%"></div>
+            </div>
+            <div class="axis"><span>11-01</span><span>11-02</span><span>11-03</span><span>11-04</span><span>11-05</span><span>11-06</span><span>11-07</span></div>
+          </div>
+          <div class="panel">
+            <div class="pt">各科目题目占比</div>
+            <div class="bars" style="align-items:center;height:120px">
+              <div class="chart" style="height:120px;border-style:solid;border-color:#eef1f8;background:#fff">
+                <div style="text-align:center">
+                  <div class="dots"><span class="d" style="background:#4054e0"></span><span class="d" style="background:#0f7a86"></span><span class="d" style="background:#b35309"></span><span class="d" style="background:#e6e9f2"></span></div>
+                  <div style="margin-top:8px;font-size:11.5px;color:#8b93a7">公专 100% · 行测 0% · 申论 0%</div>
+                </div>
+              </div>
+            </div>
+            <div class="lg"><span class="k"><i class="sw" style="background:#4054e0"></i>公专</span><span class="k"><i class="sw" style="background:#0f7a86"></i>行测</span><span class="k"><i class="sw" style="background:#b35309"></i>申论</span></div>
+          </div>
+        </div>
+        <div class="panels" style="margin-top:12px">
+          <div class="panel" style="min-height:150px">
+            <div class="pt">最新动态<span class="more">全部日志</span></div>
+            <div class="acts-list">
+              <div class="li"><span class="dot"></span><span class="who">cbrycc</span> 登录管理端<span class="t">2026-11-07 08:38</span></div>
+              <div class="li"><span class="dot"></span><span class="who">cbrycc</span> 打开资料管理<span class="t">2026-11-07 08:31</span></div>
+              <div class="li"><span class="dot"></span><span class="who">cbrycc</span> 审核试卷《公安专业科目》<span class="t">2026-11-06 21:12</span></div>
+            </div>
+          </div>
+          <div class="panel" style="min-height:150px">
+            <div class="pt">待办事项</div>
+            <div class="empty">暂无待办 · 审批与异常会出现在这里</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">改的都是"看着不一样"的部分，不动业务逻辑：① 去掉 emoji 图标（👥📚📝📈📄 跨系统渲染不一致）② 侧栏激活态由"红色竖条 + 蓝底"改为品牌蓝圆角块 ③ 页面标题不再和面包屑重复 ④ 时间从 <span style="font-family:Consolas">2026-11-07T08:38:17.629487</span> 改成 <span style="font-family:Consolas">2026-11-07 08:38</span> ⑤ 表格/卡片/按钮统一 9–13px 圆角与主色。</div>
+</div></body></html>
