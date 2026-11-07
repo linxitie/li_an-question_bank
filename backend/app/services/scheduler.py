@@ -510,6 +510,29 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    def purge_forum_recycle():
+        """回收站保留 30 天，超期物理删除（帖子 + 其评论）。"""
+        from ..core.database import SessionLocal
+        from .forum_recycle import purge_expired
+
+        db = SessionLocal()
+        try:
+            result = purge_expired(db)
+            logger.info("论坛回收站到期清理完成: %s", result)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("论坛回收站到期清理失败: %s", exc)
+            db.rollback()
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        purge_forum_recycle,
+        trigger=CronTrigger(hour=3, minute=40, timezone=CST),
+        id="purge_forum_recycle",
+        name="论坛回收站 30 天到期清理",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("定时任务调度器已启动（每日 24:00 CST）")
 

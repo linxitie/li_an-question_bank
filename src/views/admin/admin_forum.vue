@@ -317,6 +317,7 @@
               <td>
                 <div class="acts">
                   <button class="lnk strong" @click="askAction('restore', p)">恢复</button>
+                  <button class="lnk" @click="askAction('restore', p)">恢复</button>
                   <button v-if="isSuperAdmin" class="lnk danger" @click="askAction('purge', p)">彻底删除</button>
                 </div>
               </td>
@@ -446,17 +447,26 @@
 
             <!-- 管理员代发评论：此前管理端只能看和删，不能评论（用户反馈） -->
             <div class="cmt-input">
-              <input
+              <textarea
                 v-model="adminComment"
                 maxlength="2000"
-                placeholder="以管理员身份评论…"
-                @keyup.enter="submitAdminComment"
+                rows="2"
+                class="cmt-textarea"
+                placeholder="以管理员身份评论… Ctrl+Enter 发送"
+                @keyup.ctrl.enter="submitAdminComment"
               />
-              <button
-                class="btn btn-sm btn-primary"
-                :disabled="sendingComment || !adminComment.trim()"
-                @click="submitAdminComment"
-              >{{ sendingComment ? '发送中…' : '发送' }}</button>
+              <div class="cmt-tools">
+                <button class="cmt-icon-btn" title="表情 / 表情包" @click="showAdminEmoji = !showAdminEmoji">😊</button>
+                <FileUploader v-model="adminCommentAttachments" :max-docs="0" class="cmt-uploader" />
+                <button
+                  class="btn btn-sm btn-primary"
+                  :disabled="sendingComment || !adminComment.trim()"
+                  @click="submitAdminComment"
+                >{{ sendingComment ? '发送中…' : '发送' }}</button>
+              </div>
+              <div v-if="showAdminEmoji" class="cmt-emoji-pop">
+                <EmojiStickerPicker @select="onAdminEmojiSelect" @close="showAdminEmoji = false" />
+              </div>
             </div>
           </div>
         </template>
@@ -525,6 +535,8 @@ import PostComposer, { type PostDraft } from '@/components/forum/PostComposer.vu
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import ImageGrid from '@/components/forum/ImageGrid.vue';
+import FileUploader from '@/components/forum/FileUploader.vue';
+import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import { isImageUrl } from '@/components/forum/imageUtils';
 import {
   adminForumApi,
@@ -585,7 +597,14 @@ const drawerOpen = ref(false);
 const activePost = ref<ModerationPost | null>(null);
 const drawerComments = ref<ModerationComment[]>([]);
 const adminComment = ref('');
+const adminCommentAttachments = ref<any[]>([]);
+const showAdminEmoji = ref(false);
 const sendingComment = ref(false);
+
+function onAdminEmojiSelect(p: { value: string }) {
+  adminComment.value += p.value;
+  showAdminEmoji.value = false;
+}
 
 /** 表情包在正文里以 [[sticker:url]] 形式存储，抽出来按图片渲染 */
 const STICKER_RE = /\[\[sticker:([^\]]+)\]\]/g;
@@ -1223,8 +1242,13 @@ async function submitAdminComment() {
   if (!text || !activePost.value) return;
   sendingComment.value = true;
   try {
-    await createForumComment(activePost.value.id, { content: text });
+    await createForumComment(activePost.value.id, {
+      content: text,
+      attachments: adminCommentAttachments.value
+    });
     adminComment.value = '';
+    adminCommentAttachments.value = [];
+    showAdminEmoji.value = false;
     const data = await adminForumApi.comments(activePost.value.id);
     drawerComments.value = data.items;
     showToast('评论已发布');
@@ -1675,6 +1699,33 @@ input[type='checkbox'].cb {
   margin-top: 10px;
   max-width: 330px;
 }
+.cmt-textarea {
+  width: 100%;
+  min-height: 56px;
+  border: 1px solid #dfe3ee;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+}
+.cmt-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cmt-tools .btn { margin-left: auto; }
+.cmt-icon-btn {
+  border: 1px solid #dfe3ee;
+  background: #fff;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  line-height: 1;
+}
+.cmt-emoji-pop { margin-top: 8px; }
 .cmt-input {
   position: sticky;
   bottom: 0;

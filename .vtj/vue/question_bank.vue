@@ -271,13 +271,6 @@
                 <XIcon :icon="DataAnalysis" :size="20" color="#10b981"></XIcon>
                 <span> 成绩分析</span>
               </div>
-              <div class="tool-item" @click="navigateTo('gold_purchase')">
-                <XIcon
-                  :icon="ShoppingCartFull"
-                  :size="20"
-                  color="#8b5cf6"></XIcon>
-                <span> 金币购</span>
-              </div>
             </div>
           </div>
           <!-- 练习记录弹窗：知识点进度 + 多来源最近记录（v2 新增） -->

@@ -14,9 +14,11 @@
           <span class="balance-value"> {{ state.balance }}</span>
           <XIcon :icon="Medal" :size="20" color="#f59e0b"></XIcon>
         </div>
-        <!-- M1.5：我的兑换入口（用户授权的模板改动，2026-11-05） -->
-        <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
-        <button class="gp-my-exchanges gp-kg-entry" @click="goKnowledgeGraph">知识图谱</button>
+        <!-- 2026-11-07：金币居中，我的兑换/知识图谱并排右侧 -->
+        <div class="gp-header-actions">
+          <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
+          <button class="gp-my-exchanges gp-kg-entry" @click="goKnowledgeGraph">知识图谱</button>
+        </div>
       </div>
 
       <!-- Tab 导航 -->
@@ -190,6 +192,46 @@
           </div>
         </div>
       </div>
+      <!-- 新建目标弹窗（2026-11-07，替换 window.prompt） -->
+      <div v-if="state.goalModal.visible" class="gp-modal-mask" @click.self="closeGoalModal">
+        <div class="gp-modal">
+          <h3>新增目标</h3>
+          <div class="gp-field">
+            <label>目标名称</label>
+            <input v-model="state.goalModal.title" maxlength="50" placeholder="例如：每日做题100道" />
+          </div>
+          <div class="gp-field">
+            <label>目标数量（题）</label>
+            <input v-model.number="state.goalModal.count" type="number" min="1" max="10000" />
+          </div>
+          <div class="gp-field">
+            <label>目标类型</label>
+            <select v-model="state.goalModal.type">
+              <option value="DAILY">每日</option>
+              <option value="WEEKLY">每周</option>
+              <option value="MONTHLY">每月</option>
+              <option value="CUSTOM">自定义</option>
+            </select>
+          </div>
+          <div class="gp-field">
+            <label>截止日期（可选）</label>
+            <input v-model="state.goalModal.deadline" type="date" />
+          </div>
+          <div class="gp-field">
+            <label>优先级</label>
+            <select v-model="state.goalModal.priority">
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+            </select>
+          </div>
+          <div class="gp-modal-actions">
+            <button class="gp-cancel" @click="closeGoalModal">取消</button>
+            <button class="gp-save" :disabled="state.goalModal.submitting" @click="submitGoal">保存</button>
+          </div>
+        </div>
+      </div>
+
     </main>
 
     <!-- 详情弹窗 -->
@@ -258,7 +300,17 @@
         exchanging: false,
         // M1.5：我的兑换弹窗开关
         showExchanges: false,
-        showKnowledgeGraph: false
+        showKnowledgeGraph: false,
+        // 2026-11-07：新建目标改为弹窗（替换 window.prompt）
+        goalModal: {
+          visible: false,
+          submitting: false,
+          title: '',
+          count: 1,
+          type: 'DAILY',
+          deadline: '',
+          priority: 'medium'
+        }
       });
       return {
         state,
@@ -432,11 +484,51 @@
         } catch (e) { /* 静默 */ }
       },
       showCreateGoal() {
-        const title = window.prompt('请输入目标标题（如：每日完成30题）');
-        if (!title) return;
-        const target = window.prompt('请输入目标数量');
-        if (!target) return;
-        this.createGoal(title, parseInt(target, 10));
+        this.state.goalModal = {
+          visible: true,
+          submitting: false,
+          title: '',
+          count: 1,
+          type: 'DAILY',
+          deadline: '',
+          priority: 'medium'
+        };
+      },
+      closeGoalModal() {
+        this.state.goalModal.visible = false;
+      },
+      async submitGoal() {
+        const m = this.state.goalModal;
+        const title = (m.title || '').trim();
+        const count = parseInt(m.count, 10);
+        if (!title) { ElMessage.warning('请填写目标名称'); return; }
+        if (!count || count < 1) { ElMessage.warning('目标数量需大于 0'); return; }
+        m.submitting = true;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/goals/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title,
+              target_count: count,
+              goal_type: m.type,
+              deadline: m.deadline || null,
+              priority: m.priority
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            ElMessage.success('目标已创建');
+            m.visible = false;
+            this.loadGoals();
+          } else {
+            ElMessage.warning(data.detail || '创建失败');
+          }
+        } catch (e) {
+          ElMessage.error('创建失败');
+        } finally {
+          m.submitting = false;
+        }
       },
       async createGoal(title, targetCount) {
         try {
@@ -683,4 +775,63 @@
   .modal-price { font-weight: 700; color: #b45309; font-size: 16px !important; }
   .modal-balance { color: #6b7280; }
   .modal-footer { display: flex; gap: 12px; margin-top: 20px; }
+
+/* 2026-11-07：头部居中 + 新建目标弹窗 */
+.gp-header { position: relative; }
+.gp-header .gold-balance {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+}
+.gp-header-actions { margin-left: auto; display: flex; gap: 8px; }
+@media (max-width: 900px) {
+  .gp-header .gold-balance { position: static; transform: none; margin: 0 auto; }
+}
+.gp-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+.gp-modal {
+  width: 460px;
+  max-width: 92vw;
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px 22px 16px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+}
+.gp-modal h3 { margin: 0 0 14px; font-size: 18px; color: #1a2b5f; }
+.gp-field { margin-bottom: 12px; }
+.gp-field label { display: block; font-size: 13px; color: #5a6488; margin-bottom: 6px; }
+.gp-field input,
+.gp-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #dfe3ee;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: #f7f9fd;
+}
+.gp-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.gp-cancel {
+  border: 1px solid #dfe3ee;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 18px;
+  cursor: pointer;
+}
+.gp-save {
+  border: none;
+  background: #c41e3a;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 20px;
+  cursor: pointer;
+}
 </style>

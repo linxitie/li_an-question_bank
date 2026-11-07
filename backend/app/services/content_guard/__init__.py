@@ -155,6 +155,14 @@ def guard_text(
         result["words"] = _merge_words(result.get("words"), link["words"])
         evidence.append({"step": "link", "decision": "review", "reason": link["reason"]})
 
+    # 4.5) 命中即打码可发布：blocked 级词条降级为 mask（链接拦截除外）
+    if base_decision == "block" and link["decision"] != "block" and _block_as_mask():
+        decision = "mask"
+        reason = "命中 blocked 级词条，按配置降级为打码发布"
+        evidence.append(
+            {"step": "policy_switch", "decision": "mask", "reason": "MODERATION_BLOCK_AS_MASK=1"}
+        )
+
     # 5) 收口：结论 / 等级 / 被打码文本 / 证据链
     if decision != base_decision:
         evidence = [item for item in evidence if item.get("step") != "decision"]
@@ -242,6 +250,17 @@ _POLICY_RULESET = {"hash": None, "ruleset": None, "checked_at": 0.0}
 
 def _policy_enabled() -> bool:
     return os.environ.get("MODERATION_POLICY_FIRST", "1").strip().lower() not in (
+        "0", "false", "off"
+    )
+
+
+def _block_as_mask() -> bool:
+    """2026-11-07 用户决策：命中即打码可发布，blocked 级词条也降级为 mask。
+
+    默认开启（MODERATION_BLOCK_AS_MASK=1）；设 0 可恢复“违规内容直接拦截”。
+    链接黑名单/短链的 block 不受此开关影响（属安全拦截，不是言论分级）。
+    """
+    return os.environ.get("MODERATION_BLOCK_AS_MASK", "1").strip().lower() not in (
         "0", "false", "off"
     )
 

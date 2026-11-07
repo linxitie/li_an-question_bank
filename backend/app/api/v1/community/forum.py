@@ -55,6 +55,12 @@ from ....core.exceptions import (
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
 
 TITLE_COLORS = {"default", "red", "gold", "blue", "green", "purple"}
+
+
+class BatchPostIds(BaseModel):
+    """批量操作帖子 ID（上限 100，避免单次请求过重）。"""
+
+    post_ids: List[int] = Field(..., min_length=1, max_length=100)
 logger = logging.getLogger(__name__)
 
 # 点赞表情白名单：只接受固定码，避免任意文本/图片进入
@@ -748,8 +754,11 @@ async def delete_post(
     if not is_owner and not is_admin:
         raise BusinessLogicError("无权删除他人帖子", code="PERMISSION_DENIED")
 
-    # 软删除
+    # 软删除进回收站（2026-11-07）：保留 30 天，超期由定时任务彻底删除
     post.status = "DELETED"
+    post.deleted_by = current_user.user_id
+    post.deleted_reason = "作者删除" if is_owner else "管理员删除"
+    post.deleted_at = datetime.now()
     from ....foundation.document_events import emit_forum_content
     emit_forum_content(db, post_id, producer="community.forum.delete")
     db.commit()
@@ -1650,17 +1659,18 @@ async def get_my_posts(
     limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     keyword: Optional[str] = Query(None, description="标题/正文关键词"),
+    include_deleted: bool = Query(False, description="true=查看我的回收站（已删除帖子）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     获取当前登录用户的所有帖子
     - 必须登录
-    - 按时间倒序排列
+    - 默认只返回 NORMAL；include_deleted=true 返回回收站（DELETED）
     """
     query = db.query(ForumPost).filter(
         ForumPost.user_id == current_user.user_id,
-        ForumPost.status == "NORMAL"
+        ForumPost.status == ("DELETED" if include_deleted else "NORMAL")
     )
     if keyword:
         like = f"%{keyword.strip()}%"
@@ -1668,27 +1678,80 @@ async def get_my_posts(
             or_(ForumPost.title.like(like), ForumPost.content.like(like))
         )
     total = query.count()
-    posts = query.order_by(ForumPost.create_time.desc()).offset(offset).limit(limit).all()
+    order_col = ForumPost.deleted_at if include_deleted else ForumPost.create_time
+    posts = query.order_by(order_col.desc()).offset(offset).limit(limit).all()
 
     post_ids = [p.post_id for p in posts]
     reaction_counts, my_reactions = _load_reaction_stats(
         db, post_ids, user_id=current_user.user_id
     )
+    items = []
+    for p in posts:
+        item = _serialize_post(
+            p,
+            current_user,
+            p.post_id in my_reactions,
+            reactions=reaction_counts.get(p.post_id, {}),
+            my_reaction=my_reactions.get(p.post_id),
+        )
+        item["deletedAt"] = p.deleted_at.isoformat() if p.deleted_at else None
+        items.append(item)
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "posts": [
-            _serialize_post(
-                p,
-                current_user,
-                p.post_id in my_reactions,
-                reactions=reaction_counts.get(p.post_id, {}),
-                my_reaction=my_reactions.get(p.post_id),
-            )
-            for p in posts
-        ]
+        "posts": items
     }
+
+
+@router.post("/posts/batch-delete", summary="批量删除我的帖子（软删除进回收站）")
+async def batch_delete_posts(
+    payload: BatchPostIds,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """只允许删自己的帖子；删除后进回收站，30 天内可恢复。"""
+    posts = (
+        db.query(ForumPost)
+        .filter(
+            ForumPost.post_id.in_(payload.post_ids),
+            ForumPost.user_id == current_user.user_id,
+            ForumPost.status == "NORMAL",
+        )
+        .all()
+    )
+    now = datetime.now()
+    for post in posts:
+        post.status = "DELETED"
+        post.deleted_by = current_user.user_id
+        post.deleted_reason = "作者批量删除"
+        post.deleted_at = now
+    db.commit()
+    logger.info(f"用户 {current_user.user_id} 批量删除 {len(posts)} 篇帖子")
+    return {"success": True, "deleted": len(posts), "requested": len(payload.post_ids)}
+
+
+@router.post("/posts/{post_id}/restore", summary="从回收站恢复我的帖子（30 天内）")
+async def restore_post(
+    post_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
+    if not post:
+        raise ResourceNotFoundError("帖子", post_id)
+    if post.user_id != current_user.user_id:
+        raise BusinessLogicError("只能恢复自己的帖子", code="PERMISSION_DENIED")
+    if post.status != "DELETED":
+        raise ValidationError("帖子不在回收站")
+    if post.deleted_at and datetime.now() - post.deleted_at > timedelta(days=30):
+        raise ValidationError("已超过 30 天保留期，无法恢复")
+    post.status = "NORMAL"
+    post.deleted_by = None
+    post.deleted_reason = None
+    post.deleted_at = None
+    db.commit()
+    return {"success": True, "message": "已恢复"}
 
 
 # ============================== 论坛统计 ==============================
