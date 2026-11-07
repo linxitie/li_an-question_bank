@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 砺安题库 - 路由配置（三端分离）
  */
 import {
@@ -285,8 +285,17 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'materials',
         name: 'AdminMaterials',
+        // A4（2026-11-07）：换成手写页，6 类筛选 / 发布者 / 上传时间 / 预览 / 上架即审批
+        component: () => import('@/views/admin/materials.vue'),
+        meta: { title: '资料管理', roles: ['admin'] }
+      },
+      {
+        // 旧版保留（R1：`.vtj` 文件不删不改），过渡期供「智能导入 / 富文本编辑 / 批量操作」使用，
+        // B 批在新页重建这些能力后下线本路由（届时页面计数 106 → 105，两处门禁同步）。
+        path: 'materials/legacy',
+        name: 'AdminMaterialsLegacy',
         component: () => import('$vtj/vue/admin_materials.vue'),
-        meta: { roles: ['admin'] }
+        meta: { title: '资料管理（旧版）', roles: ['admin'] }
       },
       {
         // A0（2026-11-07）：管理端画风组件库预览页 —— E1/E2 改造的视觉基准。
@@ -295,6 +304,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminDevStyle',
         component: () => import('@/views/admin/dev/StylePreview.vue'),
         meta: { title: '画风组件库', roles: ['admin'] }
+      },
+      {
+        // 试卷审批页下线（2026-11-07，试卷收敛方案 P4=A）：旧书签不 404，redirect 到资料管理并带上类型筛选。
+        // 该条无 component → **不计入页面路由数**，因此 L6/L7 不受影响。
+        path: 'papers',
+        redirect: '/admin/materials?type=paper'
       },
       {
         path: 'profile',
@@ -313,12 +328,6 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminPermissions',
         // 旧书签保留：权限模板已并入用户与权限工作台
         redirect: '/admin/users?tab=templates'
-      },
-      {
-        path: 'papers',
-        name: 'AdminPapers',
-        component: () => import('$vtj/vue/paper_approval.vue'),
-        meta: { roles: ['admin'] }
       },
       {
         path: 'forum',
