@@ -412,6 +412,8 @@ const fetchQuestions = async () => {
     // 并自动展开为该子科目下全部考点（quick_practice.py:234-239）。
     // 缺失该参数会导致后端按考点 ID 查询，查不到任何题目。
     const bySubCategory = route.query.bySubCategory === 'true';
+    // 0 号「未分类」必须带 subjectId，否则后端无法在三科之间收窄范围
+    const subjectId = route.query.subjectId as string | undefined;
     let list: any[] = [];
     if (knowledgePointIds) {
       // 练习页三科目下钻进入：按知识点取题
@@ -421,6 +423,7 @@ const fetchQuestions = async () => {
       qs.set('knowledge_point_ids', knowledgePointIds);
       qs.set('limit', '20');
       if (bySubCategory) qs.set('bySubCategory', 'true');
+      if (bySubCategory && subjectId) qs.set('subjectId', subjectId);
       const res = await auth.apiFetch(`/api/quick-practice/questions?${qs.toString()}`);
       const data = await res.json();
       if (res.status === 422) {

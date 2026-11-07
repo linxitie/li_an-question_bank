@@ -128,6 +128,15 @@ async def lifespan(app: FastAPI):
     from .core.database import engine, Base, SessionLocal
     from .models import models  # 确保所有模型被导入
     Base.metadata.create_all(bind=engine)
+    # 存量库补列：create_all 不会 ALTER 已有表，模型新增字段必须在启动时自愈，
+    # 否则 ORM 的 SELECT 会因 "no such column" 直接 500（资料/成就页曾因此不可用）。
+    try:
+        from .core.schema_heal import ensure_model_columns
+        _added_columns = ensure_model_columns(engine)
+        if _added_columns:
+            logger.info("模型列自愈完成: %s", ", ".join(_added_columns))
+    except Exception as e:
+        logger.warning(f"模型列自愈失败（服务继续运行）: {e}")
     try:
         from .core.content_hub_schema import ensure_content_hub_schema
         ensure_content_hub_schema(engine)

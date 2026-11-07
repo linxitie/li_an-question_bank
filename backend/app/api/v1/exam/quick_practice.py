@@ -337,6 +337,10 @@ async def get_practice_questions(
     limit: int = Query(20, ge=1, le=100, description="题目数量上限"),
     year: Optional[int] = Query(None, description="题目年份筛选（近N年）"),
     by_sub_category: bool = Query(False, alias="bySubCategory", description="是否按子科目ID查询"),
+    subject_id: Optional[int] = Query(
+        None, ge=1, le=3, alias="subjectId",
+        description="未分类（0号）范围必填：1=行测 2=申论 3=公专",
+    ),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -361,9 +365,27 @@ async def get_practice_questions(
         # P1-3 直查：按 question_bank.sub_category_id 取可见题，不依赖
         # question_knowledge，未挂知识点的题也能练。
         sc_id = raw_ids[0]
-        visible_query = QuestionStatsService.visible_query(db).filter(
-            QuestionBank.sub_category_id == sc_id
-        )
+        if sc_id == 0:
+            # 0 是前端合成的「未分类」虚拟子科目，不是真实 sub_categories.id。
+            # 未分类题必须限定科目，避免把三科混在一次练习里。
+            if subject_id is None:
+                return {
+                    "total": 0,
+                    "items": [],
+                    "message": "未分类练习需指定科目（subjectId=1/2/3）",
+                }
+            visible_query = QuestionStatsService.visible_query(db).filter(
+                QuestionBank.sub_category_id.is_(None),
+                QuestionBank.subject_id == subject_id,
+            )
+        else:
+            visible_query = QuestionStatsService.visible_query(db).filter(
+                QuestionBank.sub_category_id == sc_id
+            )
+            if subject_id is not None:
+                visible_query = visible_query.filter(
+                    QuestionBank.subject_id == subject_id
+                )
         if visible_query.count() == 0:
             return {"total": 0, "items": [], "message": "该子科目下暂无题目"}
 

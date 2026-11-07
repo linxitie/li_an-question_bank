@@ -8,7 +8,7 @@
 | 目录 | 用途 |
 |---|---|
 | `design/` | 历史设计方案（95 份，含 v1 旧版容器化方案等） |
-| `plans/` | 实施计划与当前活跃设计（24 份） |
+| `plans/` | 实施计划与当前活跃设计（119 份） |
 | `ops/` | 使用/运维手册（环境、启动、拉取更新、数据库、共享、排错） |
 | `archive/` | 已归档的历史文档（37 份） |
 | `superpowers/` | Superpowers 工作流产物（specs/plans 子目录） |
@@ -32,6 +32,7 @@
 | `superpowers/plans/F1一致性内核_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 1–7 完成，tag `foundation-v1-f1`） | F1：7 表 + Outbox→投递→投影→对账 + `content_integrity.py`/`db_inventory.py` + L7 门禁；21 文件、7 步、每步独立验证与回滚；不改 `api/v1`/`models`/`.vtj` |
 | `superpowers/specs/预览数据治理与容量回收_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | 571 行 / 257.76 MB 超期预览外置 gzip 后置摘要，`auto_vacuum=INCREMENTAL` + VACUUM，主库 **303.17 → 46.52 MB**；四表行数与指纹不变，`integrity_check=ok` |
 | `superpowers/plans/F2通信统一与写入守卫_实施计划_v1.md` | v1 | ✅ 已执行（2026-10-26，Step 1–7 完成，tag `foundation-v1-f2`） | F2：WS 协议 v2（seq/scope）+ Redis 中继 + 多 worker fail-fast + 前端 data-changed 消费/重连重同步 + 92 条路由 roles + 写入守卫 6 类；7 步、无迁移、无新表；F2b 写调用点迁移未做 |
+| `superpowers/specs/资料模块500与Schema漂移修复_报告_20261105.md` | v1 | ✅ 已修复并浏览器验收（2026-11-05，`main`） | 管理员资料/成就 500 根因是模型新增 5 列未迁移到存量 SQLite（`study_material.point_id` 等）；新增启动列自愈 `schema_heal.py`、成就成色回填、32 张资料卡种子数据；四个 500 接口均 200，资料页 32 行、编辑弹窗可用 |
 | `superpowers/specs/F2通信统一与写入守卫_报告_20261026.md` | v1 | ✅ 已交付（2026-10-26，tag `foundation-v1-f2`） | F2 交付报告：协议/中继/fail-fast/前端去重/路由 roles/6 类写入守卫；L7 15/15、全量门禁 9/10（L2 既有基线）、62 后端 + 342 前端测试；Redis 双客户端各 1 条无重复；明确 F2b 未做 |
 | `superpowers/specs/F1一致性内核_报告_20261026.md` | v1 | ✅ 已交付（2026-10-26，tag `foundation-v1-f1`） | F1 7 表 + Outbox/投递/投影/对账 + `/health/foundation` + L7 15 项；26 测试通过；13 条验收 10 PASS / 2 PARTIAL / 1 环境项；F0 内容指纹口径修正（以备份库重算，四表 MATCH）；性能增幅未达 5% 与 6 类坏数据校验移交 F2 |
 | `superpowers/specs/F0基线冻结与内容完整性_报告_20261026.md` | v1 | ✅ 已执行（2026-10-26） | F0：tag `foundation-v1`@`2ec9cc7`、`sqlite3.backup()` 备份（303.17 MB，integrity ok，四表指纹一致）、`gate_all --quick` 4/4 PASS；内容完整性基线：复合题 33 题挂组、组 11 空、293 图片行中 13 行文件缺失、10 个 `[IMAGE:]` 令牌未解析、申论 24 题未挂组（只登记不删） |
@@ -78,9 +79,31 @@
 | `plans/备考资料_平板端补齐三项_方案_v1.md` | v2 | ✅ 已实施（2026-11-02，分支 `feat/Study-Material-Management-r4`，`main` 未动） | 你点的 ①②③ 全部落地：①平板补 PC 的「入门讲解视频/深度拓展视频/备考指南」分区 + 只看收藏（逐 type 拉 `/api/materials?subject=&type=&page_size=50`，与 PC 同源，未新增端点）——实测 `blockCount=2`（视频/指南）、收藏筛选 `2 → 0`、视频弹层 `<video>` 有 src、文章弹层正文 1331 字；**库内实际 0 条视频**，视频路径用 CDP Fetch 域 mock 验证（不写库，跑完 disable）。②平板首页 `.quick-actions` DOM 注入「备考资料」入口（守 R3 不碰 `.vtj` 模板）——实测 `present=true`、**放在 `.quick-actions` 之后的独立一行 107×93**（塞进它那 4 列网格会被挤成 62px 宽），纯函数判定 + 8 条单测 + `hashchange`/`resize`/1.2s/`MutationObserver` 四重兜底；③新增 `/tablet/materials/detail` 复用 PC 详情页（守 R12）+ `@media(max-width:900px)` 单栏——实测 `sideW=735`、`flexDirection=column`、`overflowX=0`、返回键 44px，并修掉单列下「5 层堆叠卡装饰层向上溢出 60px 盖住字号行」的遮挡。门禁同步：页面路由 100→101、L6 101；`vitest 35 文件 479`、`vue-tsc 0`、`gate_all 10/10`、手机 20/20、全图手势 9/9 |
 | `plans/备考资料_平板端模仿PC布局_方案_v1.md` | v2 | ✅ 已实施（2026-11-02，分支 `feat/Study-Material-Management-r4`，`main` 未动） | 你的要求「平板端模仿电脑端、按平板比例排布」，三条决定：**A 同页两套布局 / 保留上一页下一页 / 要 hero 进度条**。实测 PC 结构：`.top-bar` → `.hero` → 分区块，卡片是 `repeat(auto-fill,minmax(150px,1fr))` 网格 + 点击原地翻转。**实施**（`mobile_materials.vue` 内 `matchMedia('(min-width:700px)')` / `(min-width:1000px)` 双断点）：768 宽 **3 列 × 2 行 = 6 张/页**、卡片 **236×260（比例 0.91，贴近 PC 150×170 的 0.88）**；1024 宽 **4 列 × 2 行 = 8 张/页**、237×215；hero 走 `/api/materials/progress-summary`（未新增端点，守 R11）；下方列表只留视频/文章不重复；手机 390 仍是卡片栈 + 上一张/下一张 **20/20 不回退**。实测：网格翻页 `1/7 页 → 2/7 页`、点击翻转 `matrix3d(-1,0,0,0)`、查看配图接全图手势 9/9、横向溢出 0px、vitest 34 文件 471、vue-tsc 0、gate_all 10/10 |
 | `plans/备考资料模块总体方案_v1.md` | v1 | 🟡 待用户审批（2026-10-27） | 备考资料 6 项需求的总方案。实测结论：**后端家底已厚**（`study_material` 23 列已含 `card_front/card_back/cover_image/badge`、`material_classification_rules` 规则骨架、18 个 `/api/materials/*` 端点、`achievement`45/`badge_task`14/`badge_name_bank`/`coin_record` 奖励引擎齐备），真正缺口是**前端视觉（卡片/翻页/3D/三端）、格式规范与自动分类、AI 视频（外部阻塞）、奖励接线**。含 6 子分支依赖图、R3（template 由设计器拖拽）/R11（3 个新端点待批）落地规程、分阶段验收、K1–K6 风险、D1–D8 待拍板 |
+| `superpowers/specs/快速练习知识分层知识图谱与Obsidian自生长知识库_v1.md` | v1 | 📜 历史版本（分类层与 Obsidian 结构均被 v2 取代，仅存档） | 快速练习四层知识图谱 + Obsidian 自生长知识库：6 处第一版硬校正、8 条关系、14 区目录、qp_kg_* 覆盖层 + 编译器、H1–H13 健康度、P0–P4 路线；Obsidian 骨架已搭建 |
+| `superpowers/specs/快速练习知识分层Obsidian知识库_搭建报告_v1.md` | v1 | 📜 历史版本（v2 已重建，v1 仅存档） | 交付位置 `D:/Obsidian仓库/快速练习知识分层`：14 区 + 首页、1049 知识节点、13 张 Dataview 看板、5 张 Canvas、6 个图谱颜色组；只写设计态，不改 DB/API/代码。**v2 建库后由新报告取代** |
+| `superpowers/specs/快速练习知识分类体系_v2.md` | v2 | ✅ P1 已按默认 D1–D10 实施（2026-11-06，main） | 全中文、科学严谨的知识分类层重构：446 张规范卡（3 科目 + 16 域 + 42 分组 + 220 知识点 + 165 考点）、甲乙两族、8 关系、10 区 Obsidian、P0–P5 迁移；不写 DB/代码。归档副本 `design/快速练习知识分类体系_v2.md` |
+| `superpowers/plans/快速练习知识分类体系_v2_实施计划.md` | v2 | ✅ P1 已实施，P2–P5 待批（2026-11-06，main） | P0–P5 实施计划：P1 只读建 446 卡、P2 乙类 771 回链、P3 甲类 1208 题簇、P4 1285 残差定性、P5 写库单独审批；含 V1–V21 校验、回滚、RACI、D1–D10。归档副本 `plans/快速练习知识分类体系_v2_实施计划.md` |
+| `superpowers/specs/快速练习知识分类体系_v2_搭建报告.md` | v2 | ✅ P1 已实施并验收（2026-11-06，547 文件 / 446 卡 / 828 边 / 断链 0） | Obsidian 库 `D:/Obsidian仓库/快速练习知识分层`：10 区 + 首页、446 张规范卡、828 条基础边、5 Canvas、8 看板、10 模板、9 治理、9 归档；V1–V21 全过，数据库哈希前后一致。**165 考点 0 题、171 甲类无考点、4 张 Canvas 待逐张视觉验收** |
+| `superpowers/specs/快速练习周任务设计分配Obsidian知识库_搭建报告_v1.md` | v1 | ✅ 设计已批准（2026-11-06）；P1 已验收，P2–P3 待启动 | Obsidian 子库 `D:/Obsidian仓库/周任务设计分配`：10 区 + 首页、55 主题、165 模板、12 周、84 日批、216 实例、5 Canvas、8 看板、10 模板、9 治理、15 接口契约；每日审批铃 + 今日任务栏 + Windows 通知脚本；**6 个模板可试点、159 待补题、42 主题无考点**。归档副本 `design/快速练习周任务设计分配Obsidian知识库_搭建报告_v1.md` |
+| `superpowers/specs/快速练习周任务设计分配_设计批准记录_v1.md` | v1 | ✅ 设计要求已批准（2026-11-06，main） | 记录批准范围：三科大纲框架、12 周 × 18 任务、周批 + 日批 + 状态机、Obsidian 设计态/审批态、15 篇接口契约；明确不含写 DB、改后端/前端、P3 API 实现与 P5 写库。归档副本 `design/快速练习周任务设计分配_设计批准记录_v1.md` |
+| `superpowers/plans/2026-11-06-未分类题目可答题与分类回填.md` | v1 | ✅ 已批准并实施（可答题链路 + 160 回填，2026-11-06，main） | 未分类题实测 668（行测 341 / 申论 11 / 公专 316）；160 题高置信回填已 apply，未分类降至 508（行测 192 / 申论 0 / 公专 316）；508 题保留「未分类」可答题通道；0 号范围、PC/手机入口、sqlite3.backup()、dry-run、逐行复核已完成。归档副本 `plans/2026-11-06-未分类题目可答题与分类回填.md` |
+| `superpowers/specs/快速练习未分类题目可答题与分类回填_实施报告_v1.md` | v1 | ✅ 已实施并验收（2026-11-06，main；未分类 668→508） | 668 未分类拆为 160 可回填 + 508 保留；160 已 apply，未分类降至 508；后端 subjectId + 0 号 sub_category_id IS NULL、PC/手机入口、3 条接口测试；Obsidian 429 文件/断链 0；typecheck 0、生产构建通过、quick gate 4/4；pytest 22/23（1 条既有跳转断言失败）；**PC 真机 20 题交卷 + 20 条记录落库后清理**；**160 行仅改 sub_category_id，核心字段指纹不变**。归档副本 `design/快速练习未分类题目可答题与分类回填_实施报告_v1.md` |
 
 ## 变更记录
 
+- 2026-11-06：**「未分类题目可答题与分类回填」已批准并实施可答题链路，PC 浏览器真机验收通过**。668 题 `sub_category_id IS NULL`（行测 341 / 申论 11 / 公专 316）；160 题有旧字段/qk 证据，**已 apply，未分类 668→508**（行测 192 / 申论 0 / 公专 316）；508 题保留「未分类」可答题；已改 0 号 API（`subjectId` + `sub_category_id IS NULL`）、PC/手机入口、回填脚本、3 条接口测试；Obsidian 429 文件/断链 0；**PC 真机 20 题进入→作答→交卷，控制台 20 条记录，落库后按 ID 清理**；**160 行仅改 sub_category_id，核心字段指纹不变**。报告 `superpowers/specs/快速练习未分类题目可答题与分类回填_实施报告_v1.md`。
+
+- 2026-11-06：**快速练习周任务设计分配设计要求已获用户批准**。批准范围为设计框架、周任务配比、审批闭环、Obsidian 设计态/审批态、接口契约；不包含写 DB、改后端/前端、P3 API 实现与 P5 写库。批准记录 `superpowers/specs/快速练习周任务设计分配_设计批准记录_v1.md`。
+
+- 2026-11-06：**周任务设计分配 Obsidian 知识库 P1 已搭建并验收**（设计态，未写 DB/代码）。`D:/Obsidian仓库/周任务设计分配` 427 文件 = 413 Markdown + 5 Canvas + 6 JSONL + 2 JSON + 1 PowerShell；220 张任务卡（55 主题 + 165 模板）、12 周、84 日批、216 实例；532 节点 / 1033 边，断链 0、Canvas 断链 0；5 Canvas、8 看板、15 篇接口契约、9 篇治理；`每日审批提醒.ps1 -Test` 实测待批 7 天；数据库 sha256 前后一致。已知：6/165 模板可试点、159 待补题、42/55 主题无考点、33 个相邻周重复主题；报告 `superpowers/specs/快速练习周任务设计分配Obsidian知识库_搭建报告_v1.md`。
+
+- 2026-11-06：**快速练习知识分类体系 v2 P1 已实施并验收**（Obsidian 设计态，未写 DB/代码）。`D:/Obsidian仓库/快速练习知识分层` 由 v1 的 1164 文件重建为 v2 的 547 文件（446 规范卡 + 5 Canvas + 8 数据文件），10 区 + 首页；边 828 = 包含 278 + 实例 165 + 大纲映射 385；断链 0、Canvas 断链 0、V1–V21 全过、数据库 sha256 前后一致。已知：165 考点 0 题、171 甲类知识点无考点、候选语义边 0；报告 `superpowers/specs/快速练习知识分类体系_v2_搭建报告.md`。
+
+- 2026-11-05：新增快速练习知识分类体系 v2（设计 + 实施计划）。全中文命名，446 张规范卡，甲乙两族，8 关系，10 区 Obsidian；明确 91 个“其他”不建卡、531 个停用节点只建索引；P1–P4 不写 DB/代码，P5 单独审批。v1 设计文档标记为历史版本。
+
+- 2026-11-05：Obsidian 子库「快速练习知识分层」搭建完成（1164 文件 / 1150 md + 5 canvas，断链 0），交付于 `D:/Obsidian仓库/快速练习知识分层`；新增 `superpowers/specs/快速练习知识分层Obsidian知识库_搭建报告_v1.md`，设计文档状态改为「设计完成，待批 D1–D10」。
+- 2026-11-05：新增 `superpowers/specs/快速练习知识分层知识图谱与Obsidian自生长知识库_v1.md`（待审批）。快速练习四层知识图谱 + Obsidian 自生长知识库方案：6 处第一版硬校正、8 条关系、14 区目录、qp_kg_* 覆盖层 + 编译器、H1–H13 健康度、P0–P4 路线、D1–D10 待拍板；本轮只设计不实施。
+- 2026-11-05：**修复管理员端资料/成就 500 与存量库列漂移**。根因：模型新增 5 列（`achievement.badge_tier`、`user_achievement.tier_snapshot/snapshot_estimated`、`study_material.point_id/source_material_id`）未迁移到存量 SQLite，`create_all` 不会 ALTER 已有表，ORM SELECT 直接 `no such column`。新增 `backend/app/core/schema_heal.py` 启动自愈（只补可空缺列、幂等），`main.py` 启动调用；成就播种回填 `badge_tier`；执行 `init_material_data.py`（32 卡/3 成就/16 规则）与 `init_badge_names.py`（84 名）。四个 500 接口全部 200，管理员资料页 32 行、编辑弹窗可用；报告见 `superpowers/specs/资料模块500与Schema漂移修复_报告_20261105.md`。
 - 2026-11-04：**模块 4/7 AI 演示态转真功能**（分支 `feature/ai-assistant-ai-real`）。后端 `/api/llm/chat` add-only 扩 3 场景 + `persist=false` 一次性通道（不落会话/不写消息，零新增端点）；前端作文批改/模拟面试/AI学习教练接真 LLM，失败自动回退旧示例；只改 `<script>`（R3，模板零改动）。验收：pytest 5 passed、L0 7/7、L5 PASS、VTJ 版本 70 一致；如实标注 3 条限制（教练统计模板硬编码、面试作答输入框缺失、真实 LLM/前端运行时未验证）。
 - 2026-11-01：新增 `plans/备考资料_二轮UI与学生自建卡_方案与验收_v1.md`（已交付）。三条实测根因：`/api/badges/my` 漏返 `pinned`（精选点了没反应）、`#vtjLink` 是 `@vtj/pro` 开发期注入的设计器入口（手机端右下角铅笔钮）、学生端建卡缺的是「入口+单卡表单+配图通道」而非整条链路（`POST /api/materials/my` 早已存在）。新增 `POST /api/materials/my/card`（免审批 `status=1`，2 张图分别落 `cover_image` 与 `content`，零表结构变更）与 `GET /api/materials/taxonomy`（只经 catalog 契约取数，声明在 `/{material_id}` 之前）。顺带修徽章页 13px 横向裁切、筛选胶囊换行、CSP `img-src` 无 `blob:` 导致缩略图空白。
 - 2026-11-02：新增 `plans/备考资料_三轮PC建卡与全图_方案与验收_v1.md`（已交付）。三条实测结论：「返回首页」镜像源于 `.vtj` 页内 `.back` 类名冲突（顶栏链接与翻卡背面同名）；PC 建卡入口受 R3 约束只能用 DOM 注入（`.mat-page > .top-bar` 之后插一行操作条）；一卡两图拿不全是因为列表 brief 不返回 `content`，已补 `image_urls`。学生端 Excel 批量上传按「还原」口径保留待审（`status=0`），与逐张创建（免审 `status=1`）并存，页面两处文案写明差异。
