@@ -1485,6 +1485,11 @@ async def admin_list(subject: Optional[str] = Query(None),
         q = q.filter(StudyMaterial.type == type)
     if status is not None:
         q = q.filter(StudyMaterial.status == status)
+    else:
+        # 口径（2026-11-07 修正，裁定 A）：不传 status 时**排除软删除**（-1），
+        # 与 /admin/stats 的 total 保持一致——否则"删掉的资料还在列表里，却又不计入统计"。
+        # 想专门看已删除的，显式传 status=-1。
+        q = q.filter(StudyMaterial.status >= 0)
     if publisher_id:
         q = q.filter(StudyMaterial.creator_id == publisher_id)
     # A2：最近 N 天（滚动窗口，不是"本周一"）。create_time 为空的旧行天然被排除。
@@ -1663,13 +1668,24 @@ async def admin_stats(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """返回资料总量、按类型/科目/状态的分布统计。"""
+    """返回资料总量、按类型/科目/状态的分布统计。
+
+    口径（2026-11-07 修正，用户裁定 A）：**全部聚合统一排除软删除（status = -1）**。
+    原实现 `total = count(*)` 把已删除也算进总数，而 `by_status` 只取 1/0 两档，
+    导致「已上架 + 未上架 ≠ 总资料」（实测差 5 条：114 vs 119），`by_type` 也虚高。
+    现在 total / by_type / by_subject / by_status 用同一个过滤条件，满足：
+        total == sum(by_type) == sum(by_subject) == published + draft + 其它在用状态
+    """
     _require_admin(current_user)
 
-    total = db.query(func.count(StudyMaterial.material_id)).scalar() or 0
+    alive = StudyMaterial.status >= 0   # 排除软删除（-1）；学生个人库 status=2 仍计入
+
+    total = (db.query(func.count(StudyMaterial.material_id))
+             .filter(alive).scalar() or 0)
 
     type_rows = (
         db.query(StudyMaterial.type, func.count(StudyMaterial.material_id))
+        .filter(alive)
         .group_by(StudyMaterial.type)
         .all()
     )
@@ -1677,6 +1693,7 @@ async def admin_stats(
 
     subject_rows = (
         db.query(StudyMaterial.subject, func.count(StudyMaterial.material_id))
+        .filter(alive)
         .group_by(StudyMaterial.subject)
         .all()
     )
@@ -1684,6 +1701,7 @@ async def admin_stats(
 
     status_rows = (
         db.query(StudyMaterial.status, func.count(StudyMaterial.material_id))
+        .filter(alive)
         .group_by(StudyMaterial.status)
         .all()
     )
@@ -1707,6 +1725,10 @@ async def admin_stats(
         "by_status": {
             "published": status_stats.get(1, 0),
             "draft": status_stats.get(0, 0),
+            # 学生个人库（status=2）单列，避免它悄悄混进"未上架"里
+            "personal": status_stats.get(2, 0),
+            "deleted": (db.query(func.count(StudyMaterial.material_id))
+                        .filter(StudyMaterial.status == -1).scalar() or 0),
         },
     }
 
