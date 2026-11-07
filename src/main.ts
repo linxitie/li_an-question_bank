@@ -76,6 +76,12 @@ async function checkVersionConsistency(): Promise<void> {
     console.warn(
       `[砺安题库] 前后端版本不一致：前端 ${frontendSha} / 后端 ${backend}，请刷新页面；仍不一致则重启后端`
     );
+    // dev 环境不弹 toast，只打日志（2026-11-07）：
+    // `__BUILD_SHA__` 是 **vite 启动那一刻** 的 `git rev-parse --short HEAD`（见 vite.config 的 define），
+    // 而后端每次重启都会更新 `/health.revision` → 只要「先起前端、后提交、再重启后端」，
+    // 就必然出现一次"版本不一致"。这是构建时间差，不是代码问题（刷新页面也没用，得重启 vite）。
+    // 生产环境仍保留 toast：那里的不一致是真实事故信号（旧 bundle + 新后端）。
+    if (process.env.NODE_ENV !== 'production') return;
     const { ElMessage } = await import('element-plus');
     ElMessage.warning({
       message: '检测到前后端版本不一致，请刷新页面（后端需重启到最新版本）',
