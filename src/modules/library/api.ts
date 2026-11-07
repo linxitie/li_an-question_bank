@@ -214,8 +214,51 @@ export function fetchAdminMaterialStats(): Promise<AdminMaterialStats> {
   });
 }
 
-/** 管理端列表条目：在列表条目上多出上下架/学习人数/发布者 */
-export interface AdminMaterialListItem extends LibraryMaterial {
+/**
+ * 管理端统一预览契约（A3）。
+ *
+ * 6 类资料共用一个抽屉：卡片给 `card`，文章/讲义/试卷给 `content_html`（服务端已 sanitize），
+ * 视频给 `video.url`。`chapters`（讲义章节，C 批）/ `files`（pdf+docx，B 批）/
+ * `paper`（元数据，C 批）当前为空值，但**字段已固定存在**，前端不用改分支。
+ */
+export interface MaterialPreview {
+  id: number;
+  type: LibraryMaterialType;
+  type_label: string;
+  title: string;
+  summary: string | null;
+  subject: LibrarySubject;
+  subject_label: string;
+  category: string | null;
+  status: number;
+  badge: string | null;
+  difficulty: number;
+  read_time: number;
+  duration: number;
+  view_count: number;
+  study_count: number;
+  publisher: LibraryMaterialPublisher | null;
+  /** 入库时间（ISO +08:00） */
+  created_at: string | null;
+  /** 文件上传时间；后端暂无可靠来源，恒为 null（B 批补） */
+  uploaded_at: string | null;
+  content_html: string | null;
+  card: { front: string | null; back: string | null; images: string[] } | null;
+  video: { url: string } | null;
+  chapters: unknown[];
+  files: unknown[];
+  paper: unknown | null;
+}
+
+/** 拉取单条资料的管理端预览数据（含未上架） */
+export function fetchMaterialPreview(id: number): Promise<MaterialPreview> {
+  return request<MaterialPreview>({
+    url: `/api/materials/admin/${id}/preview`,
+    method: 'GET'
+  });
+}
+
+/** 管理端列表条目：在列表条目上多出上下架/学习人数/发布者 */export interface AdminMaterialListItem extends LibraryMaterial {
   status: number;
   study_count: number;
   creator_id: number | null;

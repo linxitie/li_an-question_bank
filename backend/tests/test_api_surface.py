@@ -67,6 +67,9 @@ KNOWN_EXTRA_OPERATIONS = {
     # 备考资料：学生手动建卡（免审批，2026-11-01 本轮新增）+ 分类法只读契约
     ("POST", "/api/materials/my/card"),
     ("GET", "/api/materials/taxonomy"),
+    # 备考资料：管理端统一预览契约（A3，2026-11-07）
+    # 鉴权：_require_admin；含未上架资料；HTML 二次 sanitize；只读
+    ("GET", "/api/materials/admin/{material_id}/preview"),
     # ===== 远端 main（模块4/7 与 F3）新增，合并时保留 =====
     # F3 媒体资产稳定读取代理（新资产 URL；旧 /uploads 与 /static 不变）。
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。

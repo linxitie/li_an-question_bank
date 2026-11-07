@@ -18,3 +18,5 @@ export { default as AdminToolbar } from './AdminToolbar.vue';
 export { default as AdminTable } from './AdminTable.vue';
 export { default as AdminTag } from './AdminTag.vue';
 export { default as AdminFormItem } from './AdminFormItem.vue';
+// A3（2026-11-07）：统一预览抽屉，6 类资料共用一个
+export { default as MaterialPreviewDrawer } from './MaterialPreviewDrawer.vue';

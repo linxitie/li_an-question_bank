@@ -55,6 +55,11 @@ def _brief_images(m: StudyMaterial) -> List[str]:
 # 库里存的是 naive 本地时间（default=datetime.now），对外统一补 +08:00，前端才不用猜时区。
 _TZ_CN = timezone(timedelta(hours=8))
 _PUBLISHER_ROLE_LABEL = {"admin": "管理员", "teacher": "教师", "student": "学生"}
+_SUBJECT_LABEL = {"xingce": "行测", "shenlun": "申论", "gongzhuan": "公专"}
+_MATERIAL_TYPE_LABEL = {
+    "video_intro": "入门视频", "video_advanced": "进阶视频",
+    "article": "文章", "card": "知识卡片", "lecture": "讲义", "paper": "试卷",
+}
 # 「最近 N 天」筛选白名单：只接受这两个值，非法值由 FastAPI 直接 422
 CREATED_WITHIN_DAYS = {"7d": 7, "30d": 30}
 # 排序白名单：默认按入库时间倒序（最新在上）
@@ -1511,6 +1516,65 @@ async def admin_list(subject: Optional[str] = Query(None),
                      "publisher": publishers.get(m.creator_id)})
         items.append(item)
     return {"total": total, "items": items}
+
+
+@router.get("/admin/{material_id}/preview", summary="统一预览契约(管理员)")
+async def admin_preview(material_id: int,
+                        current_user: SysUser = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
+    """A3（2026-11-07）：管理端**一个**预览契约，6 类资料共用一个抽屉。
+
+    各类型分别给到：
+      · `card`             → `card{front,back,images}`（配图含封面 + 正文附图）
+      · `article/lecture/paper` → `content_html`（**二次 sanitize**，防历史脏数据）
+      · `video_intro/advanced`  → `video{url}`（`/api/video/{id}/stream`）
+
+    尚未接入的三块**先给空值**，契约先定死，后续批次只填数据不改前端分支：
+      · `chapters`（讲义章节，C 批）
+      · `files`（pdf+docx 双格式，B 批）
+      · `paper`（年份/地区/题数/满分，C 批）
+    """
+    _require_admin(current_user)
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id).first()
+    if not m:
+        raise HTTPException(404, "资料不存在")
+
+    from ....services.material_sanitizer import sanitize_html  # noqa: E402
+
+    is_card = m.type == "card"
+    is_video = m.type in ("video_intro", "video_advanced")
+    return {
+        "id": m.material_id,
+        "type": m.type,
+        "type_label": _MATERIAL_TYPE_LABEL.get(m.type, m.type),
+        "title": m.title,
+        "summary": m.summary,
+        "subject": m.subject,
+        "subject_label": _SUBJECT_LABEL.get(m.subject, m.subject),
+        "category": m.category,
+        "status": m.status,
+        "badge": m.badge,
+        "difficulty": m.difficulty or 1,
+        "read_time": m.read_time or 0,
+        "duration": m.duration or 0,
+        "view_count": m.view_count or 0,
+        "study_count": m.study_count or 0,
+        "publisher": _publisher_map(db, [m]).get(m.creator_id),
+        "created_at": _iso_cn(m.create_time),
+        # `material_import_record` 只记 uploader_id/file_name，**没有 material_id 外键**，
+        # 无法可靠反查「文件上传于何时」→ 先返回 None（前端不渲染这一行）；B 批建
+        # material_file 时补关联再回填，契约不用改。
+        "uploaded_at": None,
+        "content_html": None if (is_card or is_video) else sanitize_html(m.content or ""),
+        "card": ({"front": m.card_front, "back": m.card_back,
+                  "images": _brief_images(m)} if is_card else None),
+        "video": ({"url": (f"/api/video/{m.video_id}/stream" if m.video_id else "")}
+                  if is_video else None),
+        "chapters": [],
+        "files": [],
+        "paper": None,
+    }
 
 
 @router.post("/admin", summary="创建资料(管理员)")

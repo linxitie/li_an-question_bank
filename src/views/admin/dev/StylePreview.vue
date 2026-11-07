@@ -107,6 +107,22 @@
           <h3>空状态</h3>
           <div class="adm-empty">暂无数据 · 换个筛选条件试试</div>
         </div>
+
+        <div class="adm-card sp-card">
+          <h3>预览抽屉（A3）· 6 类共用一个</h3>
+          <div class="sp-line">
+            <button class="adm-btn adm-btn--primary" @click="openMock('card')">卡片样例</button>
+            <button class="adm-btn" @click="openMock('article')">文章样例</button>
+            <button class="adm-btn" @click="openMock('video')">视频样例</button>
+          </div>
+          <div class="sp-line">
+            <input v-model="realId" class="adm-input" style="width: 110px" placeholder="资料 ID" />
+            <button class="adm-btn adm-btn--line" :disabled="drawerLoading" @click="openReal">
+              {{ drawerLoading ? '读取中…' : '用真实数据打开' }}
+            </button>
+            <span class="sp-tip">走 GET /api/materials/admin/{id}/preview</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -115,6 +131,15 @@
       保留 emoji 图标（E3 裁定），但尺寸、对齐、透明度由 <code>AdminStatCard</code> 统一。
       本页仅管理员可见，用于 E1/E2 改造时的视觉基准。
     </div>
+
+    <!-- A3：预览抽屉（6 类共用一个组件；这里用样例数据演示，也可读真实资料） -->
+    <MaterialPreviewDrawer
+      :open="drawerOpen"
+      :preview="drawerData"
+      :loading="drawerLoading"
+      :error="drawerError"
+      @close="drawerOpen = false"
+    />
   </div>
 </template>
 
@@ -135,8 +160,10 @@ import {
   AdminTag,
   AdminTable,
   AdminToolbar,
-  AdminFormItem
+  AdminFormItem,
+  MaterialPreviewDrawer
 } from '@/components/admin';
+import { fetchMaterialPreview, type MaterialPreview } from '@/modules/library/api';
 
 const rows = ref([
   {
@@ -170,6 +197,107 @@ const rows = ref([
 
 function reload(): void {
   rows.value = [...rows.value];
+}
+
+// ---------------- A3：预览抽屉演示 ----------------
+const drawerOpen = ref(false);
+const drawerLoading = ref(false);
+const drawerError = ref('');
+const drawerData = ref<MaterialPreview | null>(null);
+const realId = ref('115');
+
+function basePreview(over: Partial<MaterialPreview>): MaterialPreview {
+  return {
+    id: 0,
+    type: 'card',
+    type_label: '知识卡片',
+    title: '样例资料',
+    summary: null,
+    subject: 'gongzhuan',
+    subject_label: '公专',
+    category: '基础知识',
+    status: 1,
+    badge: null,
+    difficulty: 2,
+    read_time: 3,
+    duration: 0,
+    view_count: 12,
+    study_count: 0,
+    publisher: { id: 2, name: 'cbrycc', role: 'admin', role_label: '管理员' },
+    created_at: '2026-11-05T21:12:37+08:00',
+    uploaded_at: null,
+    content_html: null,
+    card: null,
+    video: null,
+    chapters: [],
+    files: [],
+    paper: null,
+    ...over
+  };
+}
+
+const MOCKS: Record<'card' | 'article' | 'video', MaterialPreview> = {
+  card: basePreview({
+    id: 120,
+    title: '继续盘问的适用对象？（第2组）',
+    type: 'card',
+    type_label: '知识卡片',
+    card: {
+      front: '继续盘问的适用对象是？',
+      back: '① 被指控有犯罪行为 ② 有现场作案嫌疑 ③ 有作案嫌疑身份不明 ④ 携带物品可能是赃物',
+      images: []
+    }
+  }),
+  article: basePreview({
+    id: 108,
+    title: '申论·概括题四步法',
+    type: 'article',
+    type_label: '文章',
+    category: '归纳概括',
+    subject: 'shenlun',
+    subject_label: '申论',
+    content_html:
+      '<h2>一、审题</h2><p>先定位「作答对象 + 给定范围 + 字数」，再回材料。</p>' +
+      '<h2>二、找点</h2><p>按段落逐句圈关键词，宁多勿少。</p>' +
+      '<h2>三、合并</h2><p>同类项合并，异类项分条，控制在 4–6 条。</p>' +
+      '<h2>四、成文</h2><p>总分结构：总括句 + 分条，每条 15–25 字。</p>'
+  }),
+  video: basePreview({
+    id: 130,
+    title: '公专·传唤与拘传的区别（入门）',
+    type: 'video_intro',
+    type_label: '入门视频',
+    duration: 318,
+    video: { url: '' }
+  })
+};
+
+function openMock(kind: 'card' | 'article' | 'video'): void {
+  drawerError.value = '';
+  drawerLoading.value = false;
+  drawerData.value = MOCKS[kind];
+  drawerOpen.value = true;
+}
+
+async function openReal(): Promise<void> {
+  const id = Number(realId.value);
+  if (!Number.isFinite(id) || id <= 0) {
+    drawerError.value = '请输入有效的资料 ID';
+    drawerData.value = null;
+    drawerOpen.value = true;
+    return;
+  }
+  drawerOpen.value = true;
+  drawerLoading.value = true;
+  drawerError.value = '';
+  drawerData.value = null;
+  try {
+    drawerData.value = await fetchMaterialPreview(id);
+  } catch (e: unknown) {
+    drawerError.value = e instanceof Error ? e.message : '读取失败（可能是 ID 不存在或无权限）';
+  } finally {
+    drawerLoading.value = false;
+  }
 }
 </script>
 
@@ -205,6 +333,7 @@ function reload(): void {
   gap: var(--adm-s1);
   margin-bottom: var(--adm-s1);
 }
+.sp-tip { font-size: 11px; color: var(--adm-text-weak); font-family: var(--adm-font-mono); }
 .sp-note {
   margin-top: var(--adm-s2);
   padding: 10px 13px;
