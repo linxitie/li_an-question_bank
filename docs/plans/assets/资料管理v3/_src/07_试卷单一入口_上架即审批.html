@@ -1,0 +1,201 @@
+﻿<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#eef1f7;color:#1a2030}
+.canvas{width:1680px;padding:20px 26px 18px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
+.hd h1{font-size:22px;font-weight:700}.hd .sub{font-size:12px;color:#7a8298;margin-top:4px}
+.badge{font-size:11.5px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.app{display:flex;gap:14px;align-items:flex-start}
+.side{width:196px;flex:none;background:#33465F;border-radius:12px;color:#fff;padding:10px 8px}
+.side .lg{padding:10px 8px 12px;text-align:center;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:8px}
+.side .lg .t{font-size:13.5px;font-weight:600;letter-spacing:.6px}.side .lg .s{font-size:10px;opacity:.62}
+.side .it{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;font-size:12px;color:rgba(255,255,255,.85);margin-bottom:2px}
+.side .it.on{background:rgba(64,84,224,.92);color:#fff;font-weight:700;box-shadow:0 4px 14px rgba(64,84,224,.32)}
+.side .it.gone{color:rgba(255,255,255,.35);text-decoration:line-through}
+.main{flex:1;min-width:0}
+.card{background:#fff;border:1px solid #eaeef7;border-radius:13px;box-shadow:0 2px 10px rgba(23,32,64,.06)}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.ph h2{font-size:19px;font-weight:800;letter-spacing:-.2px}
+.ph p{font-size:11.5px;color:#98a0b3;margin-top:4px}
+.ph .acts{display:flex;gap:8px}
+.b{border-radius:9px;padding:8px 13px;font-size:12px;font-weight:700;background:#eef1ff;color:#3a4bd8;border:1px solid transparent;display:inline-flex;align-items:center;gap:5px}
+.b.pri{background:#4054e0;color:#fff;box-shadow:0 4px 12px rgba(64,84,224,.26)}
+.b.line{background:#fff;border-color:#dfe4f0;color:#4a5266}
+.stats{display:flex;gap:10px;margin-bottom:10px}
+.st{flex:1;background:#fff;border:1px solid #eaeef7;border-radius:12px;box-shadow:0 2px 10px rgba(23,32,64,.06);padding:11px 13px;display:flex;align-items:center;gap:9px}
+.st .ico{font-size:17px;opacity:.9}.st .v{font-size:20px;font-weight:800;letter-spacing:-.4px;line-height:1.1}
+.st .l{font-size:10.5px;color:#98a0b3}
+.toolbar{display:flex;align-items:center;gap:7px;padding:10px 12px;margin-bottom:10px}
+.sel{border:1px solid #dfe4f0;border-radius:8px;padding:6px 9px;font-size:11.5px;color:#2b3244;background:#fff}
+.sel.on{border-color:#4054e0;color:#4054e0;font-weight:700}
+.inp{flex:1;max-width:220px;border:1px solid #dfe4f0;border-radius:8px;padding:6px 9px;font-size:11.5px;color:#b3b9c9}
+.tw{background:#fff;border:1px solid #eaeef7;border-radius:13px;box-shadow:0 2px 10px rgba(23,32,64,.06);overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{background:#f7f8fd;color:#6b7387;font-size:10.5px;font-weight:600;text-align:left;padding:8px 9px;border-bottom:1px solid #e6eaf4;white-space:nowrap}
+td{padding:8px 9px;border-bottom:1px solid #f0f2f8;color:#2b3244;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.tag{display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:5px;font-size:10px;font-weight:700}
+.t-paper{background:#fff2e3;color:#b35309}.t-ok{background:#eaf7f0;color:#0f7a4d}.t-off{background:#eef1f6;color:#4a5266}
+.t-card{background:#f3ecff;color:#6b3fbf}.t-lec{background:#e6f7f9;color:#0f7a86}
+.mono{font-family:Consolas,monospace;font-size:10.5px;color:#4a5266}
+.act{color:#4054e0;font-weight:600}.act.g{color:#c2410c}
+.sw{width:34px;height:18px;border-radius:999px;background:#4054e0;position:relative;display:inline-block;vertical-align:middle}
+.sw i{position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#fff}
+.sw.off{background:#dfe4f0}.sw.off i{left:2px;right:auto}
+.flow{margin-top:12px;display:flex;align-items:center;gap:0;background:#fff;border:1px solid #eaeef7;border-radius:13px;padding:12px 14px;box-shadow:0 2px 10px rgba(23,32,64,.06)}
+.flow .step{display:flex;flex-direction:column;gap:3px;padding:0 12px}
+.flow .step .n{font-size:11.5px;font-weight:800}
+.flow .step .d{font-size:10.5px;color:#8b93a7}
+.flow .arrow{color:#c9d0e0;font-size:15px}
+.flow .kill{margin-left:auto;font-size:11px;color:#c2410c;background:#fff7ed;border:1px solid #f3c4ae;border-radius:8px;padding:6px 10px;font-weight:700}
+.panel{width:452px;flex:none}
+.mask{position:fixed;inset:0;background:rgba(17,24,39,.35);border-radius:14px}
+.up{background:#fff;border:1px solid #eaeef7;border-radius:14px;box-shadow:0 18px 48px rgba(15,23,42,.22);padding:14px 16px}
+.up h3{font-size:14px;font-weight:800;margin-bottom:3px}
+.up .sub{font-size:10.5px;color:#98a0b3;margin-bottom:10px}
+.drop{border:1.5px dashed #c9d2e8;border-radius:11px;background:#fbfcff;padding:14px;text-align:center;margin-bottom:10px}
+.drop .big{font-size:12.5px;font-weight:700;color:#2b3244}
+.drop .small{font-size:10.5px;color:#98a0b3;margin-top:3px}
+.pair{display:flex;gap:8px;margin-bottom:10px}
+.file{flex:1;border:1px solid #eaeef7;border-radius:9px;padding:7px 9px;font-size:10.5px;background:#fff}
+.file .n{font-weight:700;color:#2b3244;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file .m{color:#98a0b3;margin-top:2px}
+.file.ans{border-color:#f4d7b8;background:#fffaf3}
+.frow{display:flex;gap:8px;margin-bottom:8px}
+.f{flex:1}
+.f .lb{font-size:10px;color:#6b7387;font-weight:600;margin-bottom:3px}
+.f .iv{border:1px solid #dfe4f0;border-radius:8px;padding:6px 8px;font-size:11px;color:#2b3244;background:#fff}
+.f .iv.ph{color:#b3b9c9}
+.hint{font-size:10px;color:#b35309;background:#fffdf3;border:1px dashed #f4e3b0;border-radius:8px;padding:6px 8px;margin-bottom:10px;line-height:1.5}
+.upfoot{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #eef1f8;padding-top:10px}
+.note{margin-top:12px;font-size:11px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:9px;padding:9px 12px;line-height:1.65}
+.note b{color:#2b3244}
+</style></head><body>
+<div class="canvas">
+  <div class="hd"><div><h1>试卷管理 · 收敛为一条路（上架即审批）</h1><div class="sub">删除独立「试卷审批」页与菜单；试卷=一条资料，只有「未上架 / 已上架」两态，上架动作=审批通过</div></div><div class="badge">方案 v1 · 待你拍板 P1–P5</div></div>
+
+<div class="app">
+  <!-- 左：菜单（含被移除项） -->
+  <aside class="side">
+    <div class="lg"><div class="t">砺安题库</div><div class="s">管理端</div></div>
+    <div class="it">▦ 系统总览</div>
+    <div class="it">◍ 用户与权限</div>
+    <div class="it">▤ 题库管理</div>
+    <div class="it on">▣ 资料管理</div>
+    <div class="it">✎ 分类规则</div>
+    <div class="it gone">▧ 试卷审批</div>
+    <div class="it">◌ 论坛管理</div>
+    <div class="it">⚙ 系统设置</div>
+    <div class="it">☰ 日志审计</div>
+    <div class="it">⛁ 数据备份</div>
+    <div class="it">ⓘ 帮助文档</div>
+  </aside>
+
+  <div class="main">
+    <div class="ph">
+      <div><h2>资料管理</h2><p>唯一入口：卡片 / 文章 / 视频 / 讲义 / <b>试卷</b>；试卷上架 = 审批通过，未上架 = 未通过</p></div>
+      <div class="acts"><span class="b line">批量导入</span><span class="b pri">＋ 上传试卷</span><span class="b">＋ 新建资料</span></div>
+    </div>
+
+    <div class="stats">
+      <div class="st"><span class="ico">📚</span><div><div class="v">119</div><div class="l">总资料</div></div></div>
+      <div class="st"><span class="ico">📄</span><div><div class="v" style="color:#b35309">2</div><div class="l">试卷</div></div></div>
+      <div class="st"><span class="ico">✅</span><div><div class="v" style="color:#0f7a4d">2</div><div class="l">已上架（=通过）</div></div></div>
+      <div class="st"><span class="ico">⏳</span><div><div class="v" style="color:#c2410c">0</div><div class="l">未上架（=未通过）</div></div></div>
+      <div class="st"><span class="ico">📘</span><div><div class="v" style="color:#0f7a86">1</div><div class="l">讲义</div></div></div>
+    </div>
+
+    <div class="card toolbar">
+      <span class="sel on">类型：试卷 ▾</span>
+      <span class="sel">全部科目 ▾</span>
+      <span class="sel">年份 ▾</span><span class="sel">地区 ▾</span>
+      <span class="sel">上架状态 ▾</span>
+      <span class="inp">搜索标题 / 试卷编号…</span>
+      <span class="b line" style="margin-left:auto">搜索</span>
+    </div>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th style="width:44px">ID</th><th>标题 / 类型</th><th style="width:150px">试卷信息</th><th style="width:118px">编号</th><th style="width:92px">发布者</th><th style="width:96px">上传时间</th><th style="width:104px">上架（=审批）</th><th style="width:112px">操作</th></tr></thead>
+        <tbody>
+          <tr><td><input type="checkbox"></td><td class="mono">115</td>
+            <td><b>2019年北京市公务员考试《公安专业科目》真题</b> <span class="tag t-paper">试卷</span>
+              <div style="font-size:10px;color:#98a0b3;margin-top:2px">PDF + Word · 题本 + 答案解析</div></td>
+            <td style="font-size:10.5px;color:#4a5266">2019 · 北京 · 题本<br>100 题 · 100 分</td>
+            <td class="mono">GZ-2019-BJ-T</td><td>cbrycc</td><td class="mono">11-07 09:12</td>
+            <td><span class="sw"><i></i></span> <span style="font-size:10.5px;color:#0f7a4d">已通过</span></td>
+            <td><span class="act">预览</span>　<span class="act">改信息</span>　<span class="act g">删除</span></td></tr>
+
+          <tr><td><input type="checkbox"></td><td class="mono">116</td>
+            <td><b>2017年江苏省公务员考试《公安基础知识》考试真题</b> <span class="tag t-paper">试卷</span>
+              <div style="font-size:10px;color:#98a0b3;margin-top:2px">PDF · 题本（答案缺失）</div></td>
+            <td style="font-size:10.5px;color:#4a5266">2017 · 江苏 · 题本<br>— 题 · — 分</td>
+            <td class="mono">GZ-2017-JS-T</td><td>cbrycc</td><td class="mono">11-07 09:13</td>
+            <td><span class="sw off"><i></i></span> <span style="font-size:10.5px;color:#c2410c">未通过</span></td>
+            <td><span class="act">预览</span>　<span class="act">改信息</span>　<span class="act g">删除</span></td></tr>
+
+          <tr><td><input type="checkbox"></td><td class="mono">114</td>
+            <td><b>公专·行政执法程序讲义</b> <span class="tag t-lec">讲义</span></td>
+            <td style="font-size:10.5px;color:#98a0b3">—</td><td class="mono">—</td><td>ycc5678</td>
+            <td class="mono">11-05 20:48</td>
+            <td><span class="sw"><i></i></span> <span style="font-size:10.5px;color:#0f7a4d">已通过</span></td>
+            <td><span class="act">预览</span>　<span class="act">改信息</span>　<span class="act g">删除</span></td></tr>
+
+          <tr><td><input type="checkbox"></td><td class="mono">108</td>
+            <td><b>申论·概括题四步法</b> <span class="tag t-card">知识卡片</span></td>
+            <td style="font-size:10.5px;color:#98a0b3">—</td><td class="mono">—</td><td>ycc5678</td>
+            <td class="mono">11-03 10:22</td>
+            <td><span class="sw off"><i></i></span> <span style="font-size:10.5px;color:#c2410c">未通过</span></td>
+            <td><span class="act">预览</span>　<span class="act">改信息</span>　<span class="act g">删除</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flow">
+      <div class="step"><div class="n">① 上传原卷</div><div class="d">资料管理页唯一入口（PDF/Word，可配答案）</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="n">② 未上架</div><div class="d">status=0 = 未通过；学生不可见</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="n">③ 上架</div><div class="d">status=1 = <b>审批通过</b>；学生可见、考试可用</div></div>
+      <div class="arrow">↔</div>
+      <div class="step"><div class="n">④ 下架</div><div class="d">回到未通过；不改内容、不删文件</div></div>
+      <div class="kill">✕ 删除「试卷审批」页 + 菜单项；✕ 没有单独的「通过 / 驳回」按钮</div>
+    </div>
+  </div>
+
+  <!-- 右：上传试卷弹层 -->
+  <div class="panel">
+    <div class="up">
+      <h3>上传试卷</h3>
+      <div class="sub">拖进原卷与答案 · 只从文件名取信息，取不到的留空</div>
+      <div class="drop"><div class="big">拖入 PDF / Word（题本 + 答案）</div><div class="small">同名自动配对 · 单卷 ≤ 250MB · 最多 50 个</div></div>
+      <div class="pair">
+        <div class="file"><div class="n">…《公安专业科目》真题.pdf</div><div class="m">题本 · 2.1 MB</div></div>
+        <div class="file ans"><div class="n">…真题答案及解析.pdf</div><div class="m">答案解析 · 1.4 MB</div></div>
+      </div>
+      <div class="frow"><div class="f"><div class="lb">科目 可留空</div><div class="iv">公专 ▾</div></div>
+          <div class="f"><div class="lb">年份 可留空</div><div class="iv">2019 ▾</div></div></div>
+      <div class="frow"><div class="f"><div class="lb">地区 可留空</div><div class="iv">北京 ▾</div></div>
+          <div class="f"><div class="lb">题本/答案</div><div class="iv">题本 + 答案 ▾</div></div></div>
+      <div class="frow"><div class="f"><div class="lb">题量</div><div class="iv ph">— 可留空</div></div>
+          <div class="f"><div class="lb">满分</div><div class="iv ph">— 可留空</div></div></div>
+      <div class="hint">文件名解析：公专 / 2019 / 北京 / 题本 → 编号 <span class="mono">GZ-2019-BJ-T</span>；题量与满分读不到，先空着，入库后可改</div>
+      <div class="upfoot">
+        <span class="b line">取消</span>
+        <span class="b">保存为未上架</span>
+        <span class="b pri">保存并上架（=通过）</span>
+      </div>
+    </div>
+    <div class="note">
+      为什么只留一条路：现在试卷有 <b>6 条链路、8 处建卷调用</b>（手工建卷 1 / AI 组卷 3 / 题目导入 1 / 智能考试 1 / 教师端 2，分布在 5 个文件）和 <b>两套状态</b>（资料 status 与试卷 paper_type），
+      于是出现「我传了两套卷、资料统计还是 0」。本方案把<b>资料侧</b>收敛成一页两态，<b>可作答卷</b>退为附属投影（上架→PUBLISHED、下架→DRAFT）。
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>落地要点：</b>①`/admin/papers` 路由移除（`paper_approval.vue` 文件保留不删，R1）→ 页面路由 105→104，L6/L7 双改点；
+  ②`AdminLayout.vue:112` 删菜单项；③上/下架接口联动 `exam_paper.paper_type`（学生考试链路依赖 PUBLISHED，见 `exams.py` 3 处过滤）；
+  ④现有 2 套已发布卷在 C 批补录原卷资料并写 `paper_code` 关联，之前统计才会从 0 变 2。
+</div>
+</div></body></html>
