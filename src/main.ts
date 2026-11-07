@@ -24,6 +24,7 @@ import { registerImageRetry } from './image-retry';  // 第9层防线：图片�
 // 2026-11-04：徽章展示模块下线 → 「我的」页内徽章入口注入一并移除
 import { installMaterialsCreateEntry } from './utils/materialsCreateEntry';  // PC 资料页「创建卡片」入口（DOM 注入）
 import { installTabletMaterialsEntry } from './utils/tabletMaterialsEntry';  // 平板首页「备考资料」入口（DOM 注入）
+import { installAdminMaterialTypes } from './utils/adminMaterialTypes';  // 管理页「讲义/试卷」类型与统计卡（DOM 注入，A4 后删除）
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
@@ -95,6 +96,8 @@ onReady(async () => {
   installMaterialsCreateEntry();
   // 平板首页也是 VTJ 页面 → 运行时往「快捷功能」里注入「备考资料」入口
   installTabletMaterialsEntry();
+  // 管理端资料页：类型下拉补「讲义/试卷」、统计卡补两格（A4 换成手写页后连同本行删除）
+  installAdminMaterialTypes();
 });
 
 if (process.env.NODE_ENV === 'production') {

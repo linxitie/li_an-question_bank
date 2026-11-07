@@ -19,7 +19,9 @@ export type LibraryMaterialType =
   | 'video_intro'
   | 'video_advanced'
   | 'article'
-  | 'card';
+  | 'card'
+  | 'lecture'
+  | 'paper';
 
 /** 列表条目 */
 export interface LibraryMaterial {
@@ -176,4 +178,24 @@ export function refreshLibrary(
   query: LibraryListQuery
 ): Promise<LibraryListResult> {
   return fetchLibraryList(query);
+}
+
+/** 管理端统计概览（`GET /api/materials/admin/stats`，需管理员登录态） */
+export interface AdminMaterialStats {
+  total: number;
+  /** 按类型计数，键为 6 个类型：video_intro / video_advanced / article / card / lecture / paper */
+  by_type: Record<string, number>;
+  by_subject: Record<string, number>;
+  by_status: Record<string, number>;
+}
+
+/**
+ * 拉取管理端统计（资料管理 v3.1 A1：管理页统计卡要显示「讲义 / 试卷」两个新类型）。
+ * 后端 `admin_stats` 已固定返回 6 个类型键，缺省补 0，故前端不会拿到 undefined。
+ */
+export function fetchAdminMaterialStats(): Promise<AdminMaterialStats> {
+  return request<AdminMaterialStats>({
+    url: '/api/materials/admin/stats',
+    method: 'GET'
+  });
 }

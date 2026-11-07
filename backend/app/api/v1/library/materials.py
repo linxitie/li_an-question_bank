@@ -27,7 +27,9 @@ router = APIRouter(prefix="/api/materials", tags=["备考资料"])
 logger = logging.getLogger(__name__)
 
 SUBJECTS = {"xingce", "shenlun", "gongzhuan"}
-TYPES = {"video_intro", "video_advanced", "article", "card"}
+# 资料类型白名单。lecture（讲义）/ paper（试卷）为 2026-11-06 v3.1 新增（裁定 D29），零迁移：
+# type 是 String(20)，只在这张白名单 + 前端类型映射里出现。
+TYPES = {"video_intro", "video_advanced", "article", "card", "lecture", "paper"}
 
 # 卡片配图：第 1 张落 cover_image，第 2 张内嵌在 content 的 <img> 里。
 # 列表/详情页都要一次拿全，所以在 brief 里直接给出 image_urls（不额外暴露整段 content）。
@@ -1567,6 +1569,8 @@ async def admin_stats(
             "video_advanced": type_stats.get("video_advanced", 0),
             "article": type_stats.get("article", 0),
             "card": type_stats.get("card", 0),
+            "lecture": type_stats.get("lecture", 0),
+            "paper": type_stats.get("paper", 0),
         },
         "by_subject": {
             "xingce": subject_stats.get("xingce", 0),
