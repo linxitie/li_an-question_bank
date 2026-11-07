@@ -786,6 +786,7 @@ async def material_detail(material_id: int,
 # ============================ 管理端（role=admin）============================
 
 import json as _json  # noqa: E402
+import hashlib as _hashlib  # noqa: E402
 import os as _os  # noqa: E402
 import shutil as _shutil  # noqa: E402
 import uuid as _uuid  # noqa: E402
@@ -1855,6 +1856,13 @@ CARD_ROW_LIMIT = 500
 
 
 def _save_tmp(file: UploadFile) -> tuple:
+    """落临时文件并返回 `(路径, 扩展名, sha256)`。
+
+    B3（2026-11-07）新增 sha256：用于**同一文件重复上传**的拦截。
+    为什么用文件字节哈希而不是标题/内容：用户重复上传同一个 docx 时，文件名、
+    大小、字节都相同，这是最不容易误判的"同一份东西"证据；
+    不同文件名的同内容仍由 confirm 阶段的内容哈希去重负责。
+    """
     ext = _os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_DOC_EXT:
         raise HTTPException(400, "仅支持 docx/xlsx/pdf")
@@ -1868,7 +1876,66 @@ def _save_tmp(file: UploadFile) -> tuple:
     UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
     tmp_name = f"{_uuid.uuid4().hex}{ext}"
     (UPLOAD_TMP_DIR / tmp_name).write_bytes(content)
-    return str(UPLOAD_TMP_DIR / tmp_name), ext
+    return str(UPLOAD_TMP_DIR / tmp_name), ext, _hashlib.sha256(content).hexdigest()
+
+
+# 重复上传检测只看「已确认入库」的记录。
+# 为什么不含 success（已解析未确认）：管理员解析完关掉对话框/换个科目再来一次是正常操作，
+# 若把未确认记录也算"导入过"，他会被自己刚才那次上传挡住（实测踩到）。
+# 已经建出资料的记录一定是 consumed，所以真重复仍然拦得住。
+_IMPORT_DONE_STATUS = ("consumed",)
+
+
+def _find_same_file_import(db: Session, file_name: str, file_size: int,
+                           sha256: str) -> Optional[MaterialImportRecord]:
+    """找"同一个文件"此前**已确认入库**的导入记录（同名 + 同大小 + 同 sha256）。
+
+    候选按同名同大小先过滤（通常只有个位数），再逐个比对 parse_result._sha256，
+    避免为了一个字段加列迁移（`material_file` 表在 B1 才建，届时改用正式列）。
+    """
+    candidates = (db.query(MaterialImportRecord)
+                  .filter(MaterialImportRecord.file_name == file_name,
+                          MaterialImportRecord.file_size == file_size,
+                          MaterialImportRecord.parse_status.in_(_IMPORT_DONE_STATUS))
+                  .order_by(MaterialImportRecord.import_id.desc())
+                  .all())
+    for rec in candidates:
+        try:
+            stored = _json.loads(rec.parse_result or "{}").get("_sha256")
+        except (TypeError, ValueError):
+            stored = None
+        if stored == sha256:
+            return rec
+    return None
+
+
+def _stash_fingerprint(db: Session, rec: MaterialImportRecord, sha256: str) -> None:
+    """把文件指纹写进 parse_result（JSON 列，零迁移），供下次上传比对。"""
+    result = _load_result(rec)
+    result["_sha256"] = sha256
+    result.setdefault("_tmp", "")
+    rec.parse_result = _json.dumps(result, ensure_ascii=False)
+    _commit_material_import(db, rec)
+
+
+def _find_duplicate_material_id(db: Session, content_hash: str,
+                                user_id: Optional[int] = None) -> Optional[int]:
+    """按内容哈希找已入库的同内容资料 id。
+
+    与 `MaterialDeduplicator.check_duplicate` 的差别：这里**直接比 `content_hash` 列**，
+    与入库时写入的哈希同一口径（`calculate_content_hash` 会再清洗一次，
+    拿原始字符串去算 MD5 有可能对不上）。口径同样排除软删除（status=-1），
+    否则"删掉后重新导入"会被自己挡住。
+    """
+    q = db.query(StudyMaterial.material_id).filter(
+        StudyMaterial.content_hash == content_hash,
+        StudyMaterial.status >= 0)
+    if user_id is not None:
+        # 私有卡（status=2）只在"自己的库"内参与去重，避免泄露别人有同内容
+        q = q.filter(or_(StudyMaterial.status != 2,
+                         StudyMaterial.creator_id == user_id))
+    row = q.order_by(StudyMaterial.material_id.asc()).first()
+    return row[0] if row else None
 
 
 def _load_result(rec: MaterialImportRecord) -> dict:
@@ -1941,13 +2008,34 @@ def _commit_material_import(db: Session, rec: MaterialImportRecord) -> None:
 @router.post("/admin/import/upload", summary="上传素材并解析(docx/xlsx/文字pdf同步；扫描pdf异步)")
 async def import_upload(background_tasks: BackgroundTasks,
                         file: UploadFile = File(...),
+                        force: bool = Form(False),
                         current_user: SysUser = Depends(get_current_user),
                         db: Session = Depends(get_db)):
+    """上传并解析。B3（2026-11-07）新增**同一文件重复上传拦截**。
+
+    判定口径：**文件名 + 字节大小 + sha256 全同**，且该文件此前已解析成功或已入库。
+    命中即 409，并在消息里给出旧记录号与入库条数，管理端直接就能判断"是不是我已经导过了"。
+    `force=true`（表单字段）可强制再传一份——给"文件没变但我确实要再建一条"的场景留口子。
+    """
     _require_admin(current_user)
-    tmp_path, ext = _save_tmp(file)
+    tmp_path, ext, sha256 = _save_tmp(file)
+    fsize = _os.path.getsize(tmp_path)
+    prev = _find_same_file_import(db, file.filename, fsize, sha256)
+    if prev and not force:
+        try:
+            _os.remove(tmp_path)
+        except OSError:
+            pass
+        when = prev.update_time or prev.create_time
+        raise HTTPException(
+            409,
+            f"该文件已于 {when:%Y-%m-%d %H:%M} 导入过（记录 #{prev.import_id}，"
+            f"状态 {prev.parse_status}），已拒绝重复上传。"
+            f"想找它：去资料管理搜文件名即可；确需再存一份："
+            f"用同一接口带 force=true 重传（B2 会做成向导里的勾选项）。")
     rec = MaterialImportRecord(
         file_name=file.filename, file_type=ext.lstrip("."),
-        file_size=_os.path.getsize(tmp_path), parse_status="pending",
+        file_size=fsize, parse_status="pending",
         uploader_id=current_user.user_id)
     db.add(rec)
     _commit_material_import(db, rec)
@@ -2012,7 +2100,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
             _commit_material_import(db, rec)
 
-            def _ocr_job(import_id: int, path: str, workdir: str):
+            def _ocr_job(import_id: int, path: str, workdir: str, sha: str):
                 """后台线程：跑 OCR 并回写记录（自带独立 DB 会话）。"""
                 from ....core.database import SessionLocal
                 s = SessionLocal()
@@ -2023,7 +2111,10 @@ async def import_upload(background_tasks: BackgroundTasks,
                     result.update({"chapters": [], "html": r["html"],
                                    "images": r["images"],
                                    "word_count": len(r["html"]),
-                                   "_seconds": r["seconds"]})
+                                   "_seconds": r["seconds"],
+                                   # B3：后台回写会整段覆盖 parse_result，
+                                   # 指纹必须带着走，否则异步 OCR 的文件永远查不到重复
+                                   "_sha256": sha})
                     row.parse_status = "success"
                     row.parse_result = _json.dumps(result, ensure_ascii=False)
                     _commit_material_import(s, row)
@@ -2037,7 +2128,7 @@ async def import_upload(background_tasks: BackgroundTasks,
 
             background_tasks.add_task(run_in_threadpool,
                                       _ocr_job, rec.import_id, tmp_path,
-                                      str(UPLOAD_TMP_DIR))
+                                      str(UPLOAD_TMP_DIR), sha256)
         else:
             try:
                 from ....services.material_parser import parse_pdf_text
@@ -2051,6 +2142,10 @@ async def import_upload(background_tasks: BackgroundTasks,
                 rec.error_message = f"PDF 解析失败: {e}"
                 rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
             _commit_material_import(db, rec)
+
+    # B3：把文件指纹写进 parse_result，供下次同名同大小上传比对（异步 OCR 分支已自带）
+    if rec.parse_status != "processing":
+        _stash_fingerprint(db, rec, sha256)
 
     resp = {"import_id": rec.import_id, "parse_status": rec.parse_status}
     if rec.error_message:
@@ -2220,9 +2315,15 @@ async def import_confirm(import_id: int, body: dict,
             created_ids.append(m.material_id)
         _ = base_title
     else:
-        mtype = body.get("type")
-        if mtype not in ("article",):
-            raise HTTPException(400, "文档类素材入库类型只能是 article")
+        # B3（2026-11-07）根因修复：原来这里只允许 article，却在下面用
+        # `classifier.classify()` 的结果覆盖了管理员的显式选择，而分类器把
+        # **短文档一律判成 card**（`_classify_document`：len<500 → card），
+        # 于是「作为文章」导入的 docx 落在卡片区、翻卡 UI 反而永不触发
+        # （实测样本 04_讲义_正常.docx 两次导入 → material 121/122 都是 card）。
+        # 现在：显式选择优先（白名单 article / lecture），不传则默认 **lecture（讲义）**。
+        mtype = body.get("type") or "lecture"
+        if mtype not in ("article", "lecture"):
+            raise HTTPException(400, "文档类素材入库类型只能是 article（文章）或 lecture（讲义）")
         _migrate_images(import_id, result, db=db, user_id=current_user.user_id)
         word_count = result.get("word_count", 0)
         # 内容清洗
@@ -2230,16 +2331,27 @@ async def import_confirm(import_id: int, body: dict,
         content = content_cleaner.clean_text(raw_content)
         title = (body.get("title") or _os.path.splitext(rec.file_name)[0])[:200]
         summary_text = (body.get("summary") or "")[:500]
-        # 去重检测
+        # 去重：同一份内容第二次入库必须被拦（原来只记指标、照样创建重复行）
         content_hash = content_cleaner.calculate_content_hash(content)
-        dup_check = deduplicator.check_duplicate(content, db, user_id=current_user.user_id)
-        if dup_check["is_duplicate"]:
+        dup_id = _find_duplicate_material_id(db, content_hash,
+                                             user_id=current_user.user_id)
+        force = bool(body.get("force"))
+        if dup_id is not None:
             import_monitor.record_duplicate_match()
-        # 智能分类
-        ext = "." + rec.file_type
-        classification = classifier.classify(ext, content=content, title=title)
+            if not force:
+                dup = db.query(StudyMaterial).filter(
+                    StudyMaterial.material_id == dup_id).first()
+                dup_title = (dup.title if dup else "")[:60]
+                raise HTTPException(
+                    409,
+                    f"内容与已存在资料《{dup_title}》(#{dup_id}) 完全相同（内容哈希一致），"
+                    f"已拒绝重复入库。确需保留两份：confirm 时带 force=true。")
+            try:
+                deduplicator.record_duplicate(dup_id, dup_id, "exact", 1.0, db)
+            except Exception:      # 去重记录表写失败不应阻断入库
+                logger.warning("[materials] record_duplicate failed", exc_info=True)
         m = StudyMaterial(
-            subject=subject, type=classification["type"],
+            subject=subject, type=mtype,
             category=category, badge=badge,
             title=title, summary=summary_text,
             content=content, content_hash=content_hash,
@@ -2263,7 +2375,8 @@ async def import_confirm(import_id: int, body: dict,
            f"导入 {len(created_ids)} 条资料")
     db.commit()
     resp = {"created": len(created_ids), "material_ids": created_ids,
-            "type": ("card" if rec.file_type == "xlsx" else "article"),
+            # B3：文档类回传真实落库类型（article/lecture），不再写死 "article"
+            "type": ("card" if rec.file_type == "xlsx" else mtype),
             "published": publish}
     if rec.file_type == "xlsx":
         resp["invalid_rows"] = invalid_rows

@@ -91,14 +91,21 @@ class MaterialClassifier:
         return {'type': 'image', 'confidence': 0.70, 'reason': '图片文件'}
 
     def _classify_document(self, content: Optional[str], title: Optional[str]) -> dict:
+        """文档（docx/pdf/txt）→ **讲义**。
+
+        B3（2026-11-07）修正：原实现把「字数 < 500 的文档」判成 `card`（知识卡片），
+        于是导入的短讲义落进卡片区（实测 `04_讲义_正常.docx` → material 121/122 都是 card），
+        卡片页翻卡 UI 拿到的是整段文档，体验完全错位。
+
+        为什么现在一律走 lecture 而不是 article：
+        · 卡片（card）必须有「正面 / 背面」结构，文档天然没有 → 文档永远不可能是 card；
+        · 讲义与文章都是长文本，但**上传的文档默认是教学讲义**，文章更适合站内撰写；
+        · 管理员仍可在导入确认时显式选「作为文章」，显式选择优先于本分类器
+          （见 `materials.import_confirm`，type 白名单 article/lecture）。
+        """
         content_len = len(content) if content else 0
-
-        if content_len < self.DOC_SHORT_THRESHOLD:
-            if title and self.RE_CARD.search(title):
-                return {'type': 'card', 'confidence': 0.88, 'reason': '短文档+卡片关键词'}
-            return {'type': 'card', 'confidence': 0.70, 'reason': f'短文档({content_len}字)'}
-
-        return {'type': 'article', 'confidence': 0.82, 'reason': f'长文档({content_len}字)'}
+        return {'type': 'lecture', 'confidence': 0.75,
+                'reason': f'文档({content_len}字)→讲义'}
 
     def _classify_spreadsheet(self, title: Optional[str]) -> dict:
         if title and self.RE_CARD.search(title):

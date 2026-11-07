@@ -26,6 +26,7 @@ import { registerImageRetry } from './image-retry';  // 第9层防线：图片�
 import { installMaterialsCreateEntry } from './utils/materialsCreateEntry';  // PC 资料页「创建卡片」入口（DOM 注入）
 import { installTabletMaterialsEntry } from './utils/tabletMaterialsEntry';  // 平板首页「备考资料」入口（DOM 注入）
 import { installAdminMaterialTypes } from './utils/adminMaterialTypes';  // 管理页「讲义/试卷」类型与统计卡（DOM 注入，A4 后删除）
+import { installAdminImportTypeFix } from './utils/adminImportTypeFix';  // 旧版导入向导：文档默认「作为讲义」（B3，B2 后删除）
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
@@ -105,6 +106,8 @@ onReady(async () => {
   installTabletMaterialsEntry();
   // 管理端资料页：类型下拉补「讲义/试卷」、统计卡补两格（A4 换成手写页后连同本行删除）
   installAdminMaterialTypes();
+  // 旧版资料页的导入向导：文档类默认「作为讲义」（B3 修复 P1；B2 重建向导后删除）
+  installAdminImportTypeFix();
 });
 
 if (process.env.NODE_ENV === 'production') {
