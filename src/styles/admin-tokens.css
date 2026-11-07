@@ -17,7 +17,11 @@
   --adm-line: #eaeef7;
   --adm-line-soft: #f0f2f8;
   --adm-head-bg: #f7f8fd;
-  --adm-sidebar: #1a3c6d;
+  /* 侧栏底色：2026-11-07 由 #1a3c6d（藏青，偏沉）改为 #33465f（蓝灰，不偏纯蓝）；
+     白字对比度 9.62:1（WCAG AA 通过）。原件写死在 AdminLayout.vue，A5 已改读本令牌。 */
+  --adm-sidebar: #33465f;
+  --adm-sidebar-active: rgba(64, 84, 224, 0.92);
+  --adm-sidebar-active-shadow: 0 4px 14px rgba(64, 84, 224, 0.32);
 
   /* —— 主色 —— */
   --adm-primary: #4054e0;

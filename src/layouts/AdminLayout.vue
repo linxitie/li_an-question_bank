@@ -244,7 +244,8 @@ export default defineComponent({
 /* 侧边栏 */
 .admin-sidebar {
   width: 220px;
-  background: #1A3C6D;
+  /* 2026-11-07：底色改由令牌控制（原写死 #1A3C6D，偏沉；现 #33465F 蓝灰，白字 9.62:1） */
+  background: var(--adm-sidebar, #33465f);
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -281,16 +282,17 @@ export default defineComponent({
 
 .sidebar-nav {
   flex: 1;
-  padding: 12px 0;
+  padding: 12px 8px;
 }
 
 .sidebar-item {
   display: flex;
   align-items: center;
-  padding: 12px 20px;
+  padding: 11px 14px;
   color: rgba(255,255,255,0.7);
   text-decoration: none;
   font-size: 15px;
+  border-radius: 9px;          /* A5：激活态由"红竖条"改为品牌蓝圆角块 */
   transition: all 0.2s;
   border-left: 3px solid transparent;
 }
@@ -302,9 +304,11 @@ export default defineComponent({
 
 .sidebar-item.active {
   color: #fff;
-  background: rgba(255,255,255,0.12);
-  border-left-color: #C41E3A;
+  /* 2026-11-07 A5：原来的 rgba(255,255,255,.12) + 红色左竖条（#C41E3A）与蓝灰侧栏冲突，改为品牌蓝圆角块 */
+  background: var(--adm-sidebar-active, rgba(64, 84, 224, 0.92));
+  border-left-color: transparent;
   font-weight: 600;
+  box-shadow: var(--adm-sidebar-active-shadow, 0 4px 14px rgba(64, 84, 224, 0.32));
 }
 
 .sidebar-icon {
