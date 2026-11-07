@@ -121,7 +121,11 @@ export default defineComponent({
 
     const pageTitle = computed(() => {
       const item = navItems.find(n => route.path.startsWith(n.path));
-      return item ? item.label : '管理端';
+      if (item) return item.label;
+      // A0（2026-11-07）：没有左侧菜单项的页面（如 /admin/dev/style）回落到路由 meta.title，
+      // 再兜底「管理端」——否则面包屑只显示笼统的"管理端"，看不出当前在哪一页。
+      const metaTitle = route.meta && route.meta.title;
+      return typeof metaTitle === 'string' && metaTitle ? metaTitle : '管理端';
     });
 
     onMounted(() => {

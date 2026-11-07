@@ -289,6 +289,14 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       },
       {
+        // A0（2026-11-07）：管理端画风组件库预览页 —— E1/E2 改造的视觉基准。
+        // 新增 1 条页面路由 → L6/L7 的页面计数 104 → 105（两处门禁已同步）。
+        path: 'dev/style',
+        name: 'AdminDevStyle',
+        component: () => import('@/views/admin/dev/StylePreview.vue'),
+        meta: { title: '画风组件库', roles: ['admin'] }
+      },
+      {
         path: 'profile',
         name: 'AdminProfile',
         component: () => import('$vtj/vue/admin_profile.vue'),

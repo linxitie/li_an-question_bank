@@ -1,0 +1,163 @@
+/* =============================================================================
+ * 管理员端设计令牌（A0 · 2026-11-07）
+ *
+ * 为什么是纯 CSS 而不是 scss：仓库没有直接依赖 sass（`sass` 不在 package.json），
+ * 只有 `.scss` 被 vite 间接处理；令牌用 `:root` CSS 变量，任何页面（含 `.vtj` 页的
+ * 覆盖层）都能读，且不需要预处理器。
+ *
+ * 用法约定：
+ *   · 手写页：直接用 `var(--adm-*)`；按钮/输入/空态用下面的 `.adm-*` 工具类；
+ *   · `.vtj` 旧页：由 `admin-theme.css`（E1）在 `.admin-layout` 作用域内覆盖，同样读这些变量；
+ *   · **新代码禁止再写字面色值**（除本文件与 `admin-theme.css`）。
+ * ========================================================================== */
+:root {
+  /* —— 面 / 线 —— */
+  --adm-bg: #f4f6fb;
+  --adm-surface: #ffffff;
+  --adm-line: #eaeef7;
+  --adm-line-soft: #f0f2f8;
+  --adm-head-bg: #f7f8fd;
+  --adm-sidebar: #1a3c6d;
+
+  /* —— 主色 —— */
+  --adm-primary: #4054e0;
+  --adm-primary-dark: #3a4bd8;
+  --adm-primary-weak: #eef1ff;
+  --adm-primary-line: #d6dcff;
+
+  /* —— 文字 —— */
+  --adm-text: #1a2030;
+  --adm-text-mid: #2b3244;
+  --adm-text-sub: #6b7387;
+  --adm-text-weak: #98a0b3;
+
+  /* —— 语义色（前景 / 浅底）—— */
+  --adm-ok: #0f7a4d;
+  --adm-ok-weak: #eaf7f0;
+  --adm-warn: #b35309;
+  --adm-warn-weak: #fff2e3;
+  --adm-danger: #c2410c;
+  --adm-danger-weak: #fff7ed;
+  --adm-info: #0f7a86;
+  --adm-info-weak: #e6f7f9;
+  --adm-purple: #6b3fbf;
+  --adm-purple-weak: #f3ecff;
+  --adm-blue: #2f49c4;
+  --adm-blue-weak: #e8efff;
+  --adm-muted: #4a5266;
+  --adm-muted-weak: #eef1f6;
+
+  /* —— 形状 —— */
+  --adm-r-tag: 5px;
+  --adm-r-ctl: 9px;
+  --adm-r-card: 13px;
+  --adm-r-dialog: 16px;
+  --adm-r-pill: 999px;
+
+  /* —— 阴影 —— */
+  --adm-shadow-card: 0 2px 10px rgba(23, 32, 64, 0.06);
+  --adm-shadow-dialog: 0 24px 60px rgba(15, 23, 42, 0.35);
+  --adm-shadow-primary: 0 4px 12px rgba(64, 84, 224, 0.26);
+
+  /* —— 字体 —— */
+  --adm-font: "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --adm-font-mono: Consolas, "Cascadia Mono", monospace;
+
+  /* —— 间距（只有这 6 档）—— */
+  --adm-s1: 8px;
+  --adm-s2: 12px;
+  --adm-s3: 14px;
+  --adm-s4: 16px;
+  --adm-s5: 22px;
+  --adm-s6: 40px;
+}
+
+/* ============================ 工具类：按钮 ============================ */
+.adm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--adm-r-ctl);
+  background: var(--adm-primary-weak);
+  color: var(--adm-primary-dark);
+  font-family: var(--adm-font);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  user-select: none;
+}
+.adm-btn:hover { background: #e9ecff; }
+.adm-btn:active { transform: translateY(1px); }
+.adm-btn:focus-visible { outline: 2px solid var(--adm-primary); outline-offset: 2px; }
+.adm-btn[disabled] { background: var(--adm-muted-weak); color: #a7aec1; cursor: not-allowed; }
+
+.adm-btn--primary {
+  background: var(--adm-primary);
+  color: #fff;
+  box-shadow: var(--adm-shadow-primary);
+}
+.adm-btn--primary:hover { background: var(--adm-primary-dark); }
+
+.adm-btn--line {
+  background: var(--adm-surface);
+  border-color: #dfe4f0;
+  color: var(--adm-muted);
+}
+.adm-btn--line:hover { border-color: #c9d2e4; color: var(--adm-primary); }
+
+.adm-btn--danger {
+  background: var(--adm-surface);
+  border-color: #f3c4ae;
+  color: var(--adm-danger);
+}
+.adm-btn--danger:hover { background: var(--adm-danger-weak); }
+
+.adm-btn--sm { height: 28px; padding: 0 10px; font-size: 11.5px; }
+
+/* ============================ 工具类：输入 ============================ */
+.adm-input,
+.adm-select {
+  height: 34px;
+  min-width: 120px;
+  padding: 0 11px;
+  border: 1px solid #dfe4f0;
+  border-radius: var(--adm-r-ctl);
+  background: var(--adm-surface);
+  color: var(--adm-text);
+  font-family: var(--adm-font);
+  font-size: 12.5px;
+}
+.adm-input::placeholder { color: var(--adm-text-weak); }
+.adm-input:focus,
+.adm-select:focus {
+  outline: none;
+  border-color: var(--adm-primary);
+  box-shadow: 0 0 0 3px rgba(64, 84, 224, 0.12);
+}
+.adm-input[disabled],
+.adm-select[disabled] { background: #f6f8fc; color: var(--adm-text-weak); }
+
+/* ============================ 工具类：空状态 ============================ */
+.adm-empty {
+  padding: 26px 0;
+  text-align: center;
+  color: var(--adm-text-weak);
+  font-size: 12px;
+}
+
+/* ============================ 工具类：卡片壳 ============================ */
+.adm-card {
+  background: var(--adm-surface);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-card);
+  box-shadow: var(--adm-shadow-card);
+  padding: var(--adm-s4);
+}
+
+/* 数字/时间用等宽，避免小数跳动 */
+.adm-mono { font-family: var(--adm-font-mono); }

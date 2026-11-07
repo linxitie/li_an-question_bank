@@ -19,6 +19,7 @@ import router from './router';
 import App from './App.vue';
 import { vtj, name } from '../package.json';
 import './style/index.scss';
+import './styles/admin-tokens.css';   // 管理端设计令牌（A0）：CSS 变量 + .adm-btn/.adm-input 工具类
 import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
 import { registerImageRetry } from './image-retry';  // 第9层防线：图片智能重试
 // 2026-11-04：徽章展示模块下线 → 「我的」页内徽章入口注入一并移除

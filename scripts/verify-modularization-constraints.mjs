@@ -44,7 +44,9 @@ const VTJ_LOCKED_VERSIONS = {
 //   /news、/news/:id、/tablet/news/timeline、/mobile/news/timeline；与 test_route_roles 的 105 同步）
 // 104 = 105 - 1（2026-11-04 远端二次合并：管理端用户/权限页改用 AdminUsersWorkspace 组件、
 //   平板论坛页移除，净减少 1 处动态 import；与 test_route_roles 的 104 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 104;
+// 105 = 104 + 1（2026-11-07 A0：管理端画风组件库预览页 /admin/dev/style 新增 1 条页面路由，
+//   供 E1/E2 画风改造做视觉基准、仅 admin 可见；与 test_route_roles 的 105 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 105;
 
 const violations = [];
 

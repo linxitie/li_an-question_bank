@@ -35,8 +35,10 @@ def test_page_route_count():
     # 101 → 105：2026-11-04 远端 main 再前进（新闻时间线/详情 + 平板与手机端），共 4 条
     # 105 → 104：2026-11-04 远端二次合并，管理端用户/权限页改用 AdminUsersWorkspace、
     #            平板论坛页移除，净减 1 条（与 scripts/verify-modularization-constraints.mjs 的 104 同步）
+    # 104 → 105：2026-11-07 A0 管理端画风组件库预览页 /admin/dev/style（仅 admin 可见），
+    #            供 E1/E2 画风改造做视觉基准（与 verify-modularization-constraints.mjs 的 105 同步）
     # 路由只增不减（本次例外均为用户明确要求的模块调整或远端重构，已在提交信息写明）。
-    assert len(_pages()) == 104
+    assert len(_pages()) == 105
 
 
 def test_whitelist_has_no_roles():
