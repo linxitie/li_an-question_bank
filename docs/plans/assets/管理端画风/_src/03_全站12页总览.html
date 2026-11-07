@@ -1,0 +1,266 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#eef1f7;color:#1a2030}
+.canvas{width:1680px;padding:22px 26px 18px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+.hd h1{font-size:23px;font-weight:700}.hd .sub{font-size:12px;color:#7a8298;margin-top:4px}
+.badge{font-size:11.5px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.pg{background:#f4f6fb;border:1px solid #e2e7f1;border-radius:12px;overflow:hidden;height:326px;display:flex;flex-direction:column}
+.pg-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border-bottom:1px solid #eaeef7}
+.pg-hd .t{font-size:13.5px;font-weight:800;letter-spacing:-.2px}
+.pg-hd .acts{display:flex;gap:5px}
+.b{border-radius:7px;padding:4px 8px;font-size:10px;font-weight:700;background:#eef1ff;color:#3a4bd8}
+.b.pri{background:#4054e0;color:#fff}
+.b.line{background:#fff;border:1px solid #dfe4f0;color:#4a5266}
+.b.dgr{background:#fff;border:1px solid #f3c4ae;color:#c2410c}
+.pg-bd{padding:9px 12px;flex:1;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.stats{display:flex;gap:7px}
+.st{flex:1;background:#fff;border:1px solid #eaeef7;border-radius:9px;padding:7px 8px;text-align:center}
+.st .v{font-size:16px;font-weight:800;letter-spacing:-.3px}
+.st .l{font-size:9px;color:#98a0b3;margin-top:1px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #eaeef7;padding-bottom:0}
+.tab{font-size:10.5px;color:#6b7387;padding:5px 9px;border-radius:7px 7px 0 0}
+.tab.on{background:#fff;border:1px solid #eaeef7;border-bottom-color:#fff;color:#4054e0;font-weight:700}
+.bar{display:flex;gap:5px;align-items:center;background:#fff;border:1px solid #eaeef7;border-radius:9px;padding:6px 8px}
+.ctl{border:1px solid #dfe4f0;border-radius:6px;padding:3px 7px;font-size:9.5px;color:#4a5266;background:#fff;white-space:nowrap}
+.ctl.ph{color:#b3b9c9}
+.tbl{width:100%;border-collapse:collapse;font-size:9.5px;background:#fff;border-radius:9px;overflow:hidden;border:1px solid #eaeef7}
+.tbl th{background:#f7f8fd;color:#6b7387;font-size:9px;font-weight:600;text-align:left;padding:5px 6px;border-bottom:1px solid #e6eaf4;white-space:nowrap}
+.tbl td{padding:5px 6px;border-bottom:1px solid #f0f2f8;color:#2b3244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.tbl tr:last-child td{border-bottom:none}
+.tag{display:inline-block;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:4px}
+.t-ok{background:#eaf7f0;color:#0f7a4d}.t-warn{background:#fff2e3;color:#b35309}.t-off{background:#eef1f6;color:#4a5266}
+.t-paper{background:#fff2e3;color:#b35309}.t-lec{background:#e6f7f9;color:#0f7a86}.t-art{background:#e8efff;color:#2f49c4}
+.t-card{background:#f3ecff;color:#6b3fbf}.t-info{background:#e6f7f9;color:#0f7a86}
+.mono{font-family:Consolas,monospace;font-size:9px;color:#4a5266}
+.two{display:flex;gap:8px;flex:1;min-height:0}
+.panel{flex:1;background:#fff;border:1px solid #eaeef7;border-radius:9px;padding:7px 8px;display:flex;flex-direction:column;gap:5px}
+.panel .pt{font-size:9.5px;font-weight:700;color:#2b3244;display:flex;justify-content:space-between}
+.panel .pt .more{color:#4054e0;font-weight:600}
+.bars{display:flex;align-items:flex-end;gap:4px;height:44px}
+.bars i{flex:1;background:linear-gradient(180deg,#6b7bf0,#4054e0);border-radius:3px 3px 1px 1px}
+.bars i.g{background:#e2e7f2}
+.li{display:flex;align-items:center;gap:5px;font-size:9px;color:#4a5266;padding:3px 0;border-bottom:1px dashed #eef1f6}
+.li:last-child{border-bottom:none}
+.li .dot{width:4px;height:4px;border-radius:50%;background:#0f7a4d;flex:none}
+.li .when{margin-left:auto;font-family:Consolas,monospace;font-size:8.5px;color:#98a0b3}
+.empty{flex:1;display:flex;align-items:center;justify-content:center;color:#98a0b3;font-size:9.5px;background:#fff;border:1px solid #eaeef7;border-radius:9px}
+.sform{display:flex;flex-direction:column;gap:6px}
+.frow{display:flex;align-items:center;gap:6px}
+.frow .lb{font-size:9px;color:#6b7387;width:52px;flex:none}
+.frow .iv{flex:1;border:1px solid #dfe4f0;border-radius:6px;padding:3px 7px;font-size:9px;color:#2b3244;background:#fff}
+.frow .iv.sel{color:#4a5266}
+.vtabs{display:flex;flex-direction:column;gap:3px;width:88px;flex:none}
+.vt{font-size:9.5px;padding:5px 7px;border-radius:6px;color:#4a5266;background:#fff;border:1px solid #eaeef7}
+.vt.on{background:#eef1ff;border-color:#d6dcff;color:#3a4bd8;font-weight:700}
+.doc{background:#fff;border:1px solid #eaeef7;border-radius:9px;padding:8px;flex:1;font-size:9px;color:#4a5266;line-height:1.7}
+.doc b{color:#1a2030;font-size:9.5px}
+.doc .h{color:#4054e0;font-weight:700;margin-top:4px;display:block}
+.kv{display:flex;justify-content:space-between;font-size:9px;color:#4a5266;padding:3px 0;border-bottom:1px dashed #eef1f6}
+.kv b{color:#1a2030}
+.note{margin-top:12px;font-size:11px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:9px;padding:8px 12px;line-height:1.6}
+</style></head><body>
+<div class="canvas">
+  <div class="hd"><div><h1>管理员端 12 个界面 · 新画风预期效果（总览）</h1><div class="sub">结构照搬各页真实模板（表头/页签/按钮取自源码），只换画风：令牌 + 6 组件 + 工具类；emoji 保留（E3 裁定）</div></div><div class="badge">A0 基座已定 · E1/E2 目标态</div></div>
+  <div class="grid">
+
+    <!-- 1 系统总览 -->
+    <div class="pg"><div class="pg-hd"><span class="t">系统总览</span><span class="acts"><i class="b line">🔄 刷新</i><i class="b">⛶ 全屏</i></span></div>
+      <div class="pg-bd">
+        <div class="stats">
+          <div class="st"><div class="v">30</div><div class="l">总用户数</div></div>
+          <div class="st"><div class="v">200</div><div class="l">总题目数</div></div>
+          <div class="st"><div class="v">2</div><div class="l">总试卷数</div></div>
+          <div class="st"><div class="v" style="color:#6b7387">0</div><div class="l">今日活跃</div></div>
+          <div class="st"><div class="v" style="color:#b35309">2</div><div class="l">待审批</div></div>
+        </div>
+        <div class="two">
+          <div class="panel"><div class="pt">📈 近 7 天活跃趋势<span class="more">查看</span></div>
+            <div class="bars"><i class="g" style="height:30%"></i><i class="g" style="height:42%"></i><i style="height:66%"></i><i style="height:50%"></i><i style="height:80%"></i><i class="g" style="height:38%"></i><i style="height:92%"></i></div>
+          </div>
+          <div class="panel"><div class="pt">📊 各科目题目占比</div>
+            <div class="empty" style="border:none">公专 100% · 行测 0% · 申论 0%</div>
+          </div>
+        </div>
+        <div class="panel" style="flex:none"><div class="pt">📋 最新动态</div>
+          <div class="li"><i class="dot"></i><b style="color:#1a2030">cbrycc</b> 登录管理端<span class="when">2026-11-07 08:38</span></div>
+        </div>
+      </div></div>
+
+    <!-- 2 用户与权限 -->
+    <div class="pg"><div class="pg-hd"><span class="t">用户与权限</span><span class="acts"><i class="b line">刷新</i><i class="b pri">＋ 新建用户</i></span></div>
+      <div class="pg-bd">
+        <div class="tabs"><span class="tab on">用户</span><span class="tab">权限模板</span><span class="tab">授权审计</span><span class="tab">权限健康</span></div>
+        <div class="bar"><span class="ctl">全部角色</span><span class="ctl">全部状态</span><span class="ctl ph">搜索姓名/学号…</span><span class="ctl" style="color:#3a4bd8;font-weight:700">查询</span><span class="ctl" style="margin-left:auto;color:#c2410c">批量移入回收站</span></div>
+        <table class="tbl"><thead><tr><th>用户</th><th>角色</th><th>院系/班级</th><th>状态</th><th>最近登录</th></tr></thead>
+          <tbody>
+            <tr><td>cbrycc</td><td>管理员</td><td>—</td><td><span class="tag t-ok">正常</span></td><td class="mono">11-07 08:38</td></tr>
+            <tr><td>ycc5678</td><td>教师</td><td>公安学院</td><td><span class="tag t-ok">正常</span></td><td class="mono">11-06 20:41</td></tr>
+            <tr><td>202516001</td><td>学生</td><td>1 班</td><td><span class="tag t-off">停用</span></td><td class="mono">11-05 09:12</td></tr>
+          </tbody></table>
+      </div></div>
+
+    <!-- 3 题库管理 -->
+    <div class="pg"><div class="pg-hd"><span class="t">题库管理</span><span class="acts"><i class="b line">🔄 刷新</i><i class="b">🔍 查询</i></span></div>
+      <div class="pg-bd">
+        <div class="stats">
+          <div class="st"><div class="v">200</div><div class="l">总题目数</div></div>
+          <div class="st"><div class="v">0</div><div class="l">行测</div></div>
+          <div class="st"><div class="v">0</div><div class="l">申论</div></div>
+          <div class="st"><div class="v">200</div><div class="l">公专</div></div>
+          <div class="st"><div class="v" style="color:#b35309">0</div><div class="l">待审核</div></div>
+        </div>
+        <div class="bar"><span class="ctl">全部科目</span><span class="ctl">全部题型</span><span class="ctl">难度</span><span class="ctl">审核状态</span><span class="ctl ph">关键词…</span></div>
+        <table class="tbl"><thead><tr><th>ID</th><th>题目内容</th><th>题型</th><th>审核</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1</td><td>继续盘问的适用对象是？</td><td>单选</td><td><span class="tag t-ok">已通过</span></td><td style="color:#4054e0">👁️ ✏️</td></tr>
+            <tr><td class="mono">2</td><td>拘传与传唤的区别？</td><td>单选</td><td><span class="tag t-warn">待审核</span></td><td style="color:#4054e0">✅ ❌</td></tr>
+          </tbody></table>
+      </div></div>
+
+    <!-- 4 分类规则 -->
+    <div class="pg"><div class="pg-hd"><span class="t">分类规则</span><span class="acts"><i class="b pri">＋ 新增规则</i></span></div>
+      <div class="pg-bd">
+        <div class="bar"><span class="ctl ph">搜索规则/关键词…</span><span class="ctl">全部科目</span><span class="ctl" style="color:#3a4bd8;font-weight:700">查询</span><span class="ctl" style="margin-left:auto">共 110 条</span></div>
+        <table class="tbl"><thead><tr><th>ID</th><th>关键词 / 规则</th><th>命中分类</th><th>类型</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1</td><td>盘问 · 继续盘问</td><td>基础知识</td><td><span class="tag t-info">关键词</span></td><td style="color:#4054e0">编辑</td></tr>
+            <tr><td class="mono">2</td><td>传唤 / 拘传</td><td>执法程序</td><td><span class="tag t-info">关键词</span></td><td style="color:#4054e0">编辑</td></tr>
+            <tr><td class="mono">3</td><td>回避 · 近亲属</td><td>职业素养</td><td><span class="tag t-info">正则</span></td><td style="color:#4054e0">编辑</td></tr>
+            <tr><td class="mono">4</td><td>听证 程序 告知</td><td>执法程序</td><td><span class="tag t-info">关键词</span></td><td style="color:#4054e0">编辑</td></tr>
+          </tbody></table>
+        <div style="display:flex;justify-content:flex-end;gap:5px"><i class="b line">上一页</i><i class="b line">1 / 12</i><i class="b line">下一页</i></div>
+      </div></div>
+
+    <!-- 5 资料管理 -->
+    <div class="pg"><div class="pg-hd"><span class="t">资料管理</span><span class="acts"><i class="b line">批量导入</i><i class="b pri">＋ 新建</i></span></div>
+      <div class="pg-bd">
+        <div class="stats">
+          <div class="st"><div class="v">119</div><div class="l">总资料</div></div>
+          <div class="st"><div class="v" style="color:#0f7a86">1</div><div class="l">讲义</div></div>
+          <div class="st"><div class="v" style="color:#b35309">3</div><div class="l">试卷</div></div>
+          <div class="st"><div class="v">116</div><div class="l">卡片</div></div>
+        </div>
+        <div class="bar"><span class="ctl">全部类型</span><span class="ctl">全部科目</span><span class="ctl on" style="border-color:#4054e0;color:#4054e0;font-weight:700">最近 7 天</span><span class="ctl ph">搜索标题…</span><span class="ctl" style="margin-left:auto;color:#0f7a4d;font-weight:700">7 天 12 条</span></div>
+        <table class="tbl"><thead><tr><th>ID</th><th>标题 / 类型</th><th>发布者</th><th>上传时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">115</td><td>2024年国考公安专业科目·题本 <span class="tag t-paper">试卷</span></td><td>cbrycc</td><td class="mono">11-05 21:12</td><td style="color:#4054e0">预览 改信息</td></tr>
+            <tr><td class="mono">114</td><td>公专·行政执法程序讲义 <span class="tag t-lec">讲义</span></td><td>ycc5678</td><td class="mono">11-05 20:48</td><td style="color:#4054e0">预览 改信息</td></tr>
+            <tr><td class="mono">108</td><td>申论·概括题四步法 <span class="tag t-art">文章</span></td><td>ycc5678</td><td class="mono">11-03 10:22</td><td style="color:#4054e0">预览 编辑</td></tr>
+          </tbody></table>
+      </div></div>
+
+    <!-- 6 试卷审批 -->
+    <div class="pg"><div class="pg-hd"><span class="t">试卷审批</span><span class="acts"><i class="b line">🔄 刷新</i><i class="b">🔍 搜索</i></span></div>
+      <div class="pg-bd">
+        <div class="bar"><span class="ctl">全部状态</span><span class="ctl">全部科目</span><span class="ctl ph">试卷名称…</span></div>
+        <table class="tbl"><thead><tr><th>试卷名称</th><th>提交教师</th><th>题数</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>2024 国考公专 · 题本</td><td>ycc5678</td><td class="mono">100</td><td><span class="tag t-warn">待审批</span></td><td style="color:#4054e0">👁️ ✅ ❌</td></tr>
+            <tr><td>2023 联考申论 · 卷</td><td>ycc5678</td><td class="mono">4</td><td><span class="tag t-warn">待审批</span></td><td style="color:#4054e0">👁️ ✅ ❌</td></tr>
+            <tr><td>行测模拟卷（测试）</td><td>cbrycc</td><td class="mono">120</td><td><span class="tag t-ok">已发布</span></td><td style="color:#4054e0">👁️</td></tr>
+          </tbody></table>
+        <div class="two" style="flex:none">
+          <i class="b pri" style="text-align:center;padding:6px">✅ 通过并发布</i><i class="b dgr" style="text-align:center;padding:6px">❌ 驳回</i>
+        </div>
+      </div></div>
+
+    <!-- 7 论坛管理 -->
+    <div class="pg"><div class="pg-hd"><span class="t">论坛管理</span><span class="acts"><i class="b line">回收站</i><i class="b">查询</i></span></div>
+      <div class="pg-bd">
+        <div class="tabs"><span class="tab on">帖子</span><span class="tab">待复核</span><span class="tab">回收站</span></div>
+        <div class="bar"><span class="ctl">全部板块</span><span class="ctl ph">标题/作者…</span></div>
+        <table class="tbl"><thead><tr><th>标题</th><th>作者</th><th>评论</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>请教资料分析速算技巧</td><td>202516001</td><td class="mono">12</td><td><span class="tag t-ok">正常</span></td><td style="color:#4054e0">查看评论 删除</td></tr>
+            <tr><td>公专备考经验分享</td><td>202516007</td><td class="mono">5</td><td><span class="tag t-warn">教师隐藏</span></td><td style="color:#4054e0">驳回并恢复</td></tr>
+            <tr><td>（已删）刷题打卡第 3 天</td><td>202516012</td><td class="mono">0</td><td><span class="tag t-off">回收站</span></td><td style="color:#4054e0">恢复 彻底删除</td></tr>
+          </tbody></table>
+      </div></div>
+
+    <!-- 8 系统设置 -->
+    <div class="pg"><div class="pg-hd"><span class="t">系统设置</span><span class="acts"><i class="b line">🔄 重置默认</i><i class="b pri">💾 保存设置</i></span></div>
+      <div class="pg-bd"><div class="two">
+        <div class="vtabs"><div class="vt on">基本设置</div><div class="vt">安全设置</div><div class="vt">考试设置</div><div class="vt">通知设置</div></div>
+        <div class="sform" style="flex:1">
+          <div class="frow"><span class="lb">站点名称</span><span class="iv">砺安题库</span></div>
+          <div class="frow"><span class="lb">LOGO</span><span class="iv sel">png / 200×200 · 上传标识</span></div>
+          <div class="frow"><span class="lb">备案号</span><span class="iv sel">—</span></div>
+          <div class="frow"><span class="lb">客服邮箱</span><span class="iv">support@…</span></div>
+          <div class="frow"><span class="lb">开放注册</span><span class="iv sel">关闭</span></div>
+          <div class="frow"><span class="lb">维护模式</span><span class="iv sel">开启（仅管理员可进）</span></div>
+        </div>
+      </div></div></div>
+
+    <!-- 9 日志审计 -->
+    <div class="pg"><div class="pg-hd"><span class="t">日志审计</span><span class="acts"><i class="b line">🔄 刷新</i><i class="b">📤 导出日志</i></span></div>
+      <div class="pg-bd">
+        <div class="bar"><span class="ctl">最近 7 天</span><span class="ctl">全部模块</span><span class="ctl ph">用户 / IP…</span><span class="ctl" style="color:#3a4bd8;font-weight:700">搜索</span><span class="ctl">重置</span></div>
+        <table class="tbl"><thead><tr><th>时间</th><th>用户</th><th>模块</th><th>操作描述</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">11-07 08:38</td><td>cbrycc</td><td>认证</td><td>登录管理端</td><td><span class="tag t-ok">200</span></td></tr>
+            <tr><td class="mono">11-07 08:31</td><td>cbrycc</td><td>资料</td><td>打开资料管理</td><td><span class="tag t-ok">200</span></td></tr>
+            <tr><td class="mono">11-06 21:12</td><td>ycc5678</td><td>试卷</td><td>提交试卷审批</td><td><span class="tag t-ok">200</span></td></tr>
+            <tr><td class="mono">11-06 20:04</td><td>202516001</td><td>练习</td><td>交卷</td><td><span class="tag t-warn">422</span></td></tr>
+          </tbody></table>
+        <div style="font-size:9px;color:#98a0b3">时间已格式化为 <span class="mono">MM-DD HH:mm</span>（E5）</div>
+      </div></div>
+
+    <!-- 10 数据备份 -->
+    <div class="pg"><div class="pg-hd"><span class="t">数据备份</span><span class="acts"><i class="b line">🔄</i><i class="b pri">📦 立即备份</i></span></div>
+      <div class="pg-bd">
+        <div class="stats">
+          <div class="st"><div class="v">292<span style="font-size:9px">MB</span></div><div class="l">数据库大小</div></div>
+          <div class="st"><div class="v">41</div><div class="l">备份存储</div></div>
+          <div class="st"><div class="v" style="color:#0f7a4d">开</div><div class="l">自动备份</div></div>
+        </div>
+        <table class="tbl"><thead><tr><th>备份名称</th><th>类型</th><th>大小</th><th>状态</th><th>时间</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">bak_20261107_0830.db</td><td>全量</td><td class="mono">292MB</td><td><span class="tag t-ok">完成</span></td><td class="mono">11-07 08:30</td></tr>
+            <tr><td class="mono">bak_20261106_2000.db</td><td>全量</td><td class="mono">291MB</td><td><span class="tag t-ok">完成</span></td><td class="mono">11-06 20:00</td></tr>
+            <tr><td class="mono">bak_pre_wipe_20261004.db</td><td>全量</td><td class="mono">1.2GB</td><td><span class="tag t-ok">完成</span></td><td class="mono">10-04 10:25</td></tr>
+          </tbody></table>
+      </div></div>
+
+    <!-- 11 个人资料 -->
+    <div class="pg"><div class="pg-hd"><span class="t">个人信息</span><span class="acts"><i class="b line">🔄 重置默认</i><i class="b pri">💾 保存修改</i></span></div>
+      <div class="pg-bd"><div class="two">
+        <div class="panel" style="flex:none;width:150px">
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:26px;height:26px;border-radius:50%;background:#c2410c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">c</span><div><div style="font-size:10px;font-weight:700">cbrycc</div><div style="font-size:8.5px;color:#98a0b3">管理员 · ID 2</div></div></div>
+          <div class="kv" style="margin-top:6px"><span>账号状态</span><b style="color:#0f7a4d">正常</b></div>
+          <div class="kv"><span>最近登录</span><b class="mono">11-07 08:38</b></div>
+          <div class="kv"><span>登录 IP</span><b class="mono">127.0.0.1</b></div>
+          <i class="b" style="text-align:center;margin-top:4px">🔑 修改密码</i>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div class="frow"><span class="lb">昵称</span><span class="iv">cbrycc</span></div>
+          <div class="frow"><span class="lb">手机号</span><span class="iv">138****0000</span></div>
+          <div class="frow"><span class="lb">邮箱</span><span class="iv sel">未绑定</span></div>
+          <div class="panel" style="flex:1"><div class="pt">📋 最近操作记录</div>
+            <div class="li"><i class="dot"></i>登录管理端<span class="when">11-07 08:38</span></div>
+            <div class="li"><i class="dot"></i>上传资料<span class="when">11-06 08:41</span></div>
+            <div class="li"><i class="dot"></i>审批试卷<span class="when">11-05 21:12</span></div>
+          </div>
+        </div>
+      </div></div></div>
+
+    <!-- 12 帮助文档 -->
+    <div class="pg"><div class="pg-hd"><span class="t">系统使用帮助</span><span class="acts"><i class="b line">打印</i></span></div>
+      <div class="pg-bd"><div class="two">
+        <div class="vtabs" style="width:104px"><div class="vt on">一、快速上手</div><div class="vt">二、资料管理</div><div class="vt">三、题目导入</div><div class="vt">四、试卷审批</div><div class="vt">五、日志审计</div></div>
+        <div class="doc">
+          <b>一、快速上手</b>
+          <span class="h">1. 登录与角色</span>
+          管理端仅 <b>admin</b> 可进入；教师与学生分别走各自的入口。
+          <span class="h">2. 页面导航</span>
+          左侧菜单 11 项，当前项高亮为品牌蓝圆角块；侧栏固定不随内容滚动（A5）。
+          <span class="h">3. 常见问题</span>
+          上传报错先看「日志审计」里的 4xx 记录，再核对文件格式与大小上限。
+        </div>
+      </div></div></div>
+
+  </div>
+  <div class="note">12 页结构均取自源码实测（表头/页签/按钮文案原样）：<span style="font-family:Consolas">dashboard 455 / users 1214 / questions 942 / settings 97 / logs 90 / material-rules 622 / materials 728 / profile 451 / backup 111 / papers 214 / forum 359 / help 294 行</span>。
+  统一后每页只剩三件套：<b>AdminPageHeader + AdminToolbar/AdminStatCard + AdminTable</b>；emoji 保留但尺寸/对齐由组件统一（E3=C）。</div>
+</div></body></html>

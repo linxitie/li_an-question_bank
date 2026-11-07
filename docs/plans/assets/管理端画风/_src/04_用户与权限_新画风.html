@@ -1,0 +1,126 @@
+﻿<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030}
+.app{width:1560px;height:1000px;display:flex;overflow:hidden}
+.side{width:220px;flex:none;background:#1A3C6D;color:#fff;display:flex;flex-direction:column}
+.side .hd{padding:19px 16px;text-align:center;border-bottom:1px solid rgba(255,255,255,.1)}
+.side .hd .t{font-size:16px;font-weight:600;letter-spacing:1px}
+.side .hd .s{font-size:12px;color:rgba(255,255,255,.6);margin-top:2px}
+.side nav{padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.side .it{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:13.5px;color:rgba(255,255,255,.86)}
+.side .it.on{background:rgba(64,84,224,.92);color:#fff;font-weight:600;box-shadow:0 4px 14px rgba(64,84,224,.35)}
+.side .ico{width:16px;text-align:center;font-size:14px;opacity:.9}
+.side .ft{margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,.1)}
+.side .ft .b{background:rgba(255,255,255,.12);border-radius:8px;height:30px;display:flex;align-items:center;justify-content:center;font-size:12px;color:rgba(255,255,255,.8)}
+.right{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:58px;background:#fff;border-bottom:1px solid #eaeef7;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top .bc{font-size:13.5px;font-weight:600}
+.top .r{display:flex;align-items:center;gap:14px;font-size:12.5px;color:#4a5266}
+.top .av{width:28px;height:28px;border-radius:50%;background:#c2410c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.main{padding:18px 24px;overflow:hidden}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.ph h2{font-size:20px;font-weight:800;letter-spacing:-.2px}
+.ph p{font-size:12px;color:#98a0b3;margin-top:4px}
+.ph .acts{display:flex;gap:8px}
+.b{border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;background:#eef1ff;color:#3a4bd8;border:1px solid transparent}
+.b.primary{background:#4054e0;color:#fff;box-shadow:0 4px 12px rgba(64,84,224,.26)}
+.b.line{background:#fff;border-color:#dfe4f0;color:#4a5266}
+.tabs{display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid #eaeef7}
+.tab{font-size:13px;color:#6b7387;padding:9px 14px;border-radius:9px 9px 0 0;display:flex;align-items:center;gap:6px}
+.tab.on{background:#fff;border:1px solid #eaeef7;border-bottom-color:#fff;color:#4054e0;font-weight:700;position:relative;top:1px}
+.tab .n{font-size:11px;background:#eef1ff;color:#3a4bd8;border-radius:999px;padding:1px 7px;font-weight:700}
+.tab.on .n{background:#4054e0;color:#fff}
+.toolbar{background:#fff;border:1px solid #eaeef7;border-radius:13px;box-shadow:0 2px 10px rgba(23,32,64,.06);padding:12px 14px;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.sel{border:1px solid #dfe4f0;border-radius:9px;padding:8px 11px;font-size:12.5px;color:#2b3244;background:#fff;min-width:104px}
+.sel.on{border-color:#4054e0;color:#4054e0;font-weight:700}
+.inp{flex:1;max-width:260px;border:1px solid #dfe4f0;border-radius:9px;padding:8px 11px;font-size:12.5px;color:#b3b9c9}
+.batch{margin-left:auto;display:flex;gap:8px;align-items:center}
+.batch .cnt{font-size:12px;color:#6b7387}
+.tablewrap{background:#fff;border:1px solid #eaeef7;border-radius:13px;box-shadow:0 2px 10px rgba(23,32,64,.06);overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{background:#f7f8fd;color:#6b7387;font-size:11.5px;font-weight:600;text-align:left;padding:11px 12px;border-bottom:1px solid #e6eaf4;white-space:nowrap}
+td{padding:11px 12px;border-bottom:1px solid #f0f2f8;color:#2b3244;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fbfcff}
+.u{display:flex;align-items:center;gap:8px}
+.av2{width:24px;height:24px;border-radius:50%;background:#eef1ff;color:#3a4bd8;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none}
+.tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:5px;font-size:10.5px;font-weight:700}
+.t-ok{background:#eaf7f0;color:#0f7a4d}.t-off{background:#eef1f6;color:#4a5266}.t-warn{background:#fff2e3;color:#b35309}.t-blue{background:#e8efff;color:#2f49c4}
+.mono{font-family:Consolas,monospace;font-size:11.5px;color:#4a5266}
+.act{color:#4054e0;font-weight:600}
+.act.dgr{color:#c2410c}
+.pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:11px 12px;border-top:1px solid #f0f2f8;font-size:12px;color:#6b7387}
+.pg{width:26px;height:26px;border-radius:7px;border:1px solid #dfe4f0;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#4a5266;background:#fff}
+.pg.on{background:#4054e0;border-color:#4054e0;color:#fff;font-weight:700}
+.note{margin-top:10px;font-size:11.5px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:10px;padding:9px 13px;line-height:1.6}
+</style></head><body>
+<div class="app">
+  <aside class="side">
+    <div class="hd"><div class="t">砺安题库</div><div class="s">管理端</div></div>
+    <nav>
+      <div class="it"><span class="ico">▦</span>系统总览</div>
+      <div class="it on"><span class="ico">◍</span>用户与权限</div>
+      <div class="it"><span class="ico">▤</span>题库管理</div>
+      <div class="it"><span class="ico">▣</span>资料管理</div>
+      <div class="it"><span class="ico">✎</span>分类规则</div>
+      <div class="it"><span class="ico">▧</span>试卷审批</div>
+      <div class="it"><span class="ico">◌</span>论坛管理</div>
+      <div class="it"><span class="ico">⚙</span>系统设置</div>
+      <div class="it"><span class="ico">☰</span>日志审计</div>
+      <div class="it"><span class="ico">⛁</span>数据备份</div>
+      <div class="it"><span class="ico">ⓘ</span>帮助文档</div>
+    </nav>
+    <div class="ft"><div class="b">◀ 收起菜单</div></div>
+  </aside>
+  <div class="right">
+    <div class="top"><div class="bc">用户与权限</div><div class="r"><span>🔔</span><span class="av">c</span><span>cbrycc ▾</span></div></div>
+    <div class="main">
+      <div class="ph">
+        <div><h2>用户与权限</h2><p>角色基线 + 能力包 + 个人加授/拒绝；批量操作 10 分钟内可撤销</p></div>
+        <div class="acts"><span class="b line">刷新</span><span class="b primary">＋ 新建用户</span></div>
+      </div>
+
+      <div class="tabs">
+        <span class="tab on">用户 <span class="n">30</span></span>
+        <span class="tab">权限模板 <span class="n">6</span></span>
+        <span class="tab">授权审计 <span class="n">128</span></span>
+        <span class="tab">权限健康 <span class="n">3</span></span>
+      </div>
+
+      <div class="toolbar">
+        <span class="sel">全部角色 ▾</span>
+        <span class="sel on">全部状态 ▾</span>
+        <span class="sel">全部院系 ▾</span>
+        <span class="inp">搜索姓名 / 学号 / 手机号…</span>
+        <span class="b">查询</span><span class="b line">重置</span>
+        <div class="batch">
+          <span class="cnt">已选 3 人</span>
+          <span class="b line">批量停用</span>
+          <span class="b line">批量启用</span>
+          <span class="b line" style="border-color:#f3c4ae;color:#c2410c">批量移入回收站</span>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th style="width:36px"><input type="checkbox" checked></th><th>用户</th><th>角色</th><th>院系 / 班级</th><th>联系方式</th><th>状态</th><th>个人覆盖</th><th>最近登录</th><th style="width:150px">操作</th></tr></thead>
+          <tbody>
+            <tr><td><input type="checkbox"></td><td><div class="u"><span class="av2">c</span><div><div style="font-weight:700">cbrycc</div><div style="font-size:11px;color:#98a0b3">ID 2 · 超级管理员</div></div></div></td><td>管理员</td><td>—</td><td class="mono">—</td><td><span class="tag t-ok">正常</span></td><td><span class="tag t-off">无</span></td><td class="mono">2026-11-07 08:38</td><td><span class="act">详情</span>　<span class="act">权限</span>　<span class="act dgr">停用</span></td></tr>
+            <tr><td><input type="checkbox" checked></td><td><div class="u"><span class="av2">y</span><div><div style="font-weight:700">ycc5678</div><div style="font-size:11px;color:#98a0b3">ID 3 · 教师</div></div></div></td><td>教师</td><td>公安学院 / —</td><td class="mono">138****0001</td><td><span class="tag t-ok">正常</span></td><td><span class="tag t-blue">+2 项</span></td><td class="mono">2026-11-06 20:41</td><td><span class="act">详情</span>　<span class="act">权限</span>　<span class="act dgr">停用</span></td></tr>
+            <tr><td><input type="checkbox" checked></td><td><div class="u"><span class="av2">2</span><div><div style="font-weight:700">202516001</div><div style="font-size:11px;color:#98a0b3">学生 · 1 班</div></div></div></td><td>学生</td><td>— / 1 班</td><td class="mono">—</td><td><span class="tag t-off">停用</span></td><td><span class="tag t-warn">−1 项</span></td><td class="mono">2026-11-05 09:12</td><td><span class="act">详情</span>　<span class="act">权限</span>　<span class="act">启用</span></td></tr>
+            <tr><td><input type="checkbox"></td><td><div class="u"><span class="av2">0</span><div><div style="font-weight:700">202516007</div><div style="font-size:11px;color:#98a0b3">学生 · 2 班</div></div></div></td><td>学生</td><td>— / 2 班</td><td class="mono">—</td><td><span class="tag t-ok">正常</span></td><td><span class="tag t-off">无</span></td><td class="mono">2026-11-04 19:02</td><td><span class="act">详情</span>　<span class="act">权限</span>　<span class="act dgr">停用</span></td></tr>
+            <tr><td><input type="checkbox"></td><td><div class="u"><span class="av2">2</span><div><div style="font-weight:700">202516012</div><div style="font-size:11px;color:#98a0b3">学生 · 3 班</div></div></div></td><td>学生</td><td>— / 3 班</td><td class="mono">—</td><td><span class="tag t-ok">正常</span></td><td><span class="tag t-off">无</span></td><td class="mono">2026-11-03 10:22</td><td><span class="act">详情</span>　<span class="act">权限</span>　<span class="act dgr">停用</span></td></tr>
+            <tr><td><input type="checkbox"></td><td><div class="u"><span class="av2">2</span><div><div style="font-weight:700">202516015</div><div style="font-size:11px;color:#98a0b3">学生 · 4 班</div></div></div></td><td>学生</td><td>— / 4 班</td><td class="mono">—</td><td><span class="tag t-ok">正常</span></td><td><span class="tag t-off">无</span></td><td class="mono">2026-11-02 15:40</td><td><span class="act">详情</span>　<span class="act">权限</span>　<span class="act dgr">停用</span></td></tr>
+            <tr><td><input type="checkbox"></td><td><div class="u"><span class="av2">2</span><div><div style="font-weight:700">202516020</div><div style="font-size:11px;color:#98a0b3">学生 · 1 班</div></div></div></td><td>学生</td><td>— / 1 班</td><td class="mono">—</td><td><span class="tag t-ok">正常</span></td><td><span class="tag t-off">无</span></td><td class="mono">2026-10-30 09:05</td><td><span class="act">详情</span>　<span class="act">权限</span>　<span class="act dgr">停用</span></td></tr>
+          </tbody>
+        </table>
+        <div class="pager">
+          <span>共 30 人 · 每页 20</span>
+          <span class="pg">‹</span><span class="pg on">1</span><span class="pg">2</span><span class="pg">›</span>
+        </div>
+      </div>
+
+      <div class="note">这一页是管理端最重的（1214 行源码、8 列表格 + 4 个页签 + 批量操作）。画风统一后：表头统一 <span style="font-family:Consolas">#f7f8fd</span>、行高 40px、状态徽标 4 色、危险操作降饱和、分页放右下；<b>结构、列、交互一个都没减</b>——这是 E2 的验收口径：<b>只换皮，不换功能</b>。</div>
+    </div>
+  </div>
+</div></body></html>
