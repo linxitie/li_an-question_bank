@@ -1,0 +1,122 @@
+﻿<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#eef1f7;color:#1a2030}
+.canvas{width:1680px;padding:20px 26px 16px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+.hd h1{font-size:23px;font-weight:700}.hd .sub{font-size:12px;color:#7a8298;margin-top:4px}
+.badge{font-size:11.5px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.pn{border:1px solid #e2e7f1;border-radius:12px;overflow:hidden;background:#fff;height:340px;display:flex;flex-direction:column}
+.pn .cap{padding:8px 11px;border-bottom:1px solid #eaeef7;display:flex;align-items:center;justify-content:space-between;background:#fff}
+.pn .cap .nm{font-size:12.5px;font-weight:800}
+.pn .cap .hex{font-family:Consolas,monospace;font-size:10.5px;color:#6b7387}
+.pn .cap .cr{font-size:10px;font-weight:700;color:#0f7a4d;background:#eaf7f0;border-radius:999px;padding:2px 7px}
+.pn .cap .cr.lo{color:#b35309;background:#fff2e3}
+.fake{flex:1;display:flex;overflow:hidden}
+.sb{width:190px;flex:none;display:flex;flex-direction:column}
+.sb .lg{padding:13px 12px;text-align:center;border-bottom:1px solid rgba(255,255,255,.1)}
+.sb .lg .t{font-size:13px;font-weight:600;letter-spacing:.6px}
+.sb .lg .s{font-size:10px;opacity:.62;margin-top:1px}
+.sb nav{padding:7px 6px;display:flex;flex-direction:column;gap:2px}
+.sb .it{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;font-size:11.5px}
+.sb .it .i{width:13px;text-align:center;font-size:11px;opacity:.9}
+.ct{flex:1;background:#f4f6fb;padding:10px}
+.ct .top{height:26px;background:#fff;border:1px solid #eaeef7;border-radius:8px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;font-size:10px;color:#4a5266;margin-bottom:8px}
+.ct .st{display:flex;gap:6px;margin-bottom:8px}
+.ct .st .c{flex:1;background:#fff;border:1px solid #eaeef7;border-radius:8px;padding:6px;text-align:center}
+.ct .st .c b{font-size:14px;letter-spacing:-.3px;display:block}
+.ct .st .c span{font-size:8.5px;color:#98a0b3}
+.ct .tb{background:#fff;border:1px solid #eaeef7;border-radius:8px;overflow:hidden}
+.ct .tb .r{display:flex;font-size:9px;padding:4px 6px;border-bottom:1px solid #f0f2f8;color:#2b3244}
+.ct .tb .r:first-child{background:#f7f8fd;color:#6b7387;font-weight:600}
+.ct .tb .r:last-child{border-bottom:none}
+.ct .tb .r span:first-child{width:44px;flex:none;font-family:Consolas,monospace;color:#6b7387}
+.ct .tb .r span:last-child{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.note{margin-top:12px;font-size:11px;color:#7a5f16;background:#fffdf3;border:1px solid #f4e3b0;border-radius:9px;padding:9px 12px;line-height:1.7}
+.note b{color:#2b3244}
+/* —— 5 套配色 —— */
+.v0 .sb{background:#1A3C6D;color:rgba(255,255,255,.86)} .v0 .sb .lg{border-color:rgba(255,255,255,.1)}
+.v0 .sb .it.on{background:rgba(64,84,224,.92);color:#fff;font-weight:600}
+.v1 .sb{background:#24487D;color:rgba(255,255,255,.88)} .v1 .sb .lg{border-color:rgba(255,255,255,.12)}
+.v1 .sb .it.on{background:rgba(64,84,224,.92);color:#fff;font-weight:600}
+.v2 .sb{background:#2B5AA0;color:rgba(255,255,255,.9)} .v2 .sb .lg{border-color:rgba(255,255,255,.15)}
+.v2 .sb .it.on{background:rgba(255,255,255,.95);color:#2B5AA0;font-weight:700}
+.v3 .sb{background:#3A6BB5;color:rgba(255,255,255,.92)} .v3 .sb .lg{border-color:rgba(255,255,255,.18)}
+.v3 .sb .it.on{background:rgba(255,255,255,.96);color:#2F63B0;font-weight:700}
+.v4 .sb{background:#33465F;color:rgba(255,255,255,.86)} .v4 .sb .lg{border-color:rgba(255,255,255,.12)}
+.v4 .sb .it.on{background:rgba(64,84,224,.9);color:#fff;font-weight:600}
+.v5 .sb{background:#fff;color:#4a5266;border-right:1px solid #eaeef7} .v5 .sb .lg{border-color:#eaeef7}
+.v5 .sb .lg .t{color:#1a2030} .v5 .sb .lg .s{color:#98a0b3}
+.v5 .sb .it.on{background:#eef1ff;color:#3a4bd8;font-weight:700;box-shadow:inset 3px 0 0 #4054e0}
+</style></head><body>
+<div class="canvas">
+  <div class="hd"><div><h1>侧栏配色 · 六选一（其他元素不变）</h1><div class="sub">现状 #1A3C6D 偏沉；下面 5 个候选都保持"深底白字 + 品牌蓝激活"，只有 B/C 反过来用白底激活块；F 是整条浅色侧栏</div></div><div class="badge">E2 复议 · 只改侧栏底色</div></div>
+  <div class="grid">
+
+    <div class="pn v0"><div class="cap"><span class="nm">现状（对照）</span><span class="cr">白字 10.99</span><span class="hex">#1A3C6D</span></div>
+      <div class="fake"><aside class="sb"><div class="lg"><div class="t">砺安题库</div><div class="s">管理端</div></div><nav>
+        <div class="it"><span class="i">▦</span>系统总览</div><div class="it"><span class="i">◍</span>用户与权限</div>
+        <div class="it"><span class="i">▤</span>题库管理</div><div class="it on"><span class="i">▣</span>资料管理</div>
+        <div class="it"><span class="i">✎</span>分类规则</div><div class="it"><span class="i">▧</span>试卷审批</div>
+        <div class="it"><span class="i">☰</span>日志审计</div></nav></aside>
+        <div class="ct"><div class="top"><span>资料管理</span><span>cbrycc ▾</span></div>
+          <div class="st"><div class="c"><b>119</b><span>总资料</span></div><div class="c"><b style="color:#0f7a86">1</b><span>讲义</span></div><div class="c"><b style="color:#b35309">3</b><span>试卷</span></div></div>
+          <div class="tb"><div class="r"><span>ID</span><span>标题</span></div><div class="r"><span>115</span><span>2024年国考公专·题本</span></div><div class="r"><span>114</span><span>公专·执法程序讲义</span></div></div></div></div></div>
+
+    <div class="pn v1"><div class="cap"><span class="nm">A 中蓝</span><span class="cr">白字 9.14</span><span class="hex">#24487D</span></div>
+      <div class="fake"><aside class="sb"><div class="lg"><div class="t">砺安题库</div><div class="s">管理端</div></div><nav>
+        <div class="it"><span class="i">▦</span>系统总览</div><div class="it"><span class="i">◍</span>用户与权限</div>
+        <div class="it"><span class="i">▤</span>题库管理</div><div class="it on"><span class="i">▣</span>资料管理</div>
+        <div class="it"><span class="i">✎</span>分类规则</div><div class="it"><span class="i">▧</span>试卷审批</div>
+        <div class="it"><span class="i">☰</span>日志审计</div></nav></aside>
+        <div class="ct"><div class="top"><span>资料管理</span><span>cbrycc ▾</span></div>
+          <div class="st"><div class="c"><b>119</b><span>总资料</span></div><div class="c"><b style="color:#0f7a86">1</b><span>讲义</span></div><div class="c"><b style="color:#b35309">3</b><span>试卷</span></div></div>
+          <div class="tb"><div class="r"><span>ID</span><span>标题</span></div><div class="r"><span>115</span><span>2024年国考公专·题本</span></div><div class="r"><span>114</span><span>公专·执法程序讲义</span></div></div></div></div></div>
+
+    <div class="pn v2"><div class="cap"><span class="nm">B 亮蓝（推荐）</span><span class="cr">白字 6.83</span><span class="hex">#2B5AA0</span></div>
+      <div class="fake"><aside class="sb"><div class="lg"><div class="t">砺安题库</div><div class="s">管理端</div></div><nav>
+        <div class="it"><span class="i">▦</span>系统总览</div><div class="it"><span class="i">◍</span>用户与权限</div>
+        <div class="it"><span class="i">▤</span>题库管理</div><div class="it on"><span class="i">▣</span>资料管理</div>
+        <div class="it"><span class="i">✎</span>分类规则</div><div class="it"><span class="i">▧</span>试卷审批</div>
+        <div class="it"><span class="i">☰</span>日志审计</div></nav></aside>
+        <div class="ct"><div class="top"><span>资料管理</span><span>cbrycc ▾</span></div>
+          <div class="st"><div class="c"><b>119</b><span>总资料</span></div><div class="c"><b style="color:#0f7a86">1</b><span>讲义</span></div><div class="c"><b style="color:#b35309">3</b><span>试卷</span></div></div>
+          <div class="tb"><div class="r"><span>ID</span><span>标题</span></div><div class="r"><span>115</span><span>2024年国考公专·题本</span></div><div class="r"><span>114</span><span>公专·执法程序讲义</span></div></div></div></div></div>
+
+    <div class="pn v3"><div class="cap"><span class="nm">C 天蓝</span><span class="cr">白字 5.32</span><span class="hex">#3A6BB5</span></div>
+      <div class="fake"><aside class="sb"><div class="lg"><div class="t">砺安题库</div><div class="s">管理端</div></div><nav>
+        <div class="it"><span class="i">▦</span>系统总览</div><div class="it"><span class="i">◍</span>用户与权限</div>
+        <div class="it"><span class="i">▤</span>题库管理</div><div class="it on"><span class="i">▣</span>资料管理</div>
+        <div class="it"><span class="i">✎</span>分类规则</div><div class="it"><span class="i">▧</span>试卷审批</div>
+        <div class="it"><span class="i">☰</span>日志审计</div></nav></aside>
+        <div class="ct"><div class="top"><span>资料管理</span><span>cbrycc ▾</span></div>
+          <div class="st"><div class="c"><b>119</b><span>总资料</span></div><div class="c"><b style="color:#0f7a86">1</b><span>讲义</span></div><div class="c"><b style="color:#b35309">3</b><span>试卷</span></div></div>
+          <div class="tb"><div class="r"><span>ID</span><span>标题</span></div><div class="r"><span>115</span><span>2024年国考公专·题本</span></div><div class="r"><span>114</span><span>公专·执法程序讲义</span></div></div></div></div></div>
+
+    <div class="pn v4"><div class="cap"><span class="nm">D 蓝灰（不偏纯蓝）</span><span class="cr">白字 9.62</span><span class="hex">#33465F</span></div>
+      <div class="fake"><aside class="sb"><div class="lg"><div class="t">砺安题库</div><div class="s">管理端</div></div><nav>
+        <div class="it"><span class="i">▦</span>系统总览</div><div class="it"><span class="i">◍</span>用户与权限</div>
+        <div class="it"><span class="i">▤</span>题库管理</div><div class="it on"><span class="i">▣</span>资料管理</div>
+        <div class="it"><span class="i">✎</span>分类规则</div><div class="it"><span class="i">▧</span>试卷审批</div>
+        <div class="it"><span class="i">☰</span>日志审计</div></nav></aside>
+        <div class="ct"><div class="top"><span>资料管理</span><span>cbrycc ▾</span></div>
+          <div class="st"><div class="c"><b>119</b><span>总资料</span></div><div class="c"><b style="color:#0f7a86">1</b><span>讲义</span></div><div class="c"><b style="color:#b35309">3</b><span>试卷</span></div></div>
+          <div class="tb"><div class="r"><span>ID</span><span>标题</span></div><div class="r"><span>115</span><span>2024年国考公专·题本</span></div><div class="r"><span>114</span><span>公专·执法程序讲义</span></div></div></div></div></div>
+
+    <div class="pn v5"><div class="cap"><span class="nm">F 浅色整条（最轻）</span><span class="cr">深字 12.79</span><span class="hex">#FFFFFF</span></div>
+      <div class="fake"><aside class="sb"><div class="lg"><div class="t">砺安题库</div><div class="s">管理端</div></div><nav>
+        <div class="it"><span class="i">▦</span>系统总览</div><div class="it"><span class="i">◍</span>用户与权限</div>
+        <div class="it"><span class="i">▤</span>题库管理</div><div class="it on"><span class="i">▣</span>资料管理</div>
+        <div class="it"><span class="i">✎</span>分类规则</div><div class="it"><span class="i">▧</span>试卷审批</div>
+        <div class="it"><span class="i">☰</span>日志审计</div></nav></aside>
+        <div class="ct"><div class="top"><span>资料管理</span><span>cbrycc ▾</span></div>
+          <div class="st"><div class="c"><b>119</b><span>总资料</span></div><div class="c"><b style="color:#0f7a86">1</b><span>讲义</span></div><div class="c"><b style="color:#b35309">3</b><span>试卷</span></div></div>
+          <div class="tb"><div class="r"><span>ID</span><span>标题</span></div><div class="r"><span>115</span><span>2024年国考公专·题本</span></div><div class="r"><span>114</span><span>公专·执法程序讲义</span></div></div></div></div></div>
+
+  </div>
+  <div class="note">
+    对比度按 WCAG 计算（白字 vs 底色）：<b>现状 10.99 → A 9.14 → B 6.83 → C 5.32</b>，四者都过 AA（≥4.5）；<b>F 浅色</b>是深字 12.79，也过 AAA。
+    B/C 的激活块反过来用<b>白底 + 深蓝字</b>（更像"选中"而不是"高亮"），D 保留蓝底激活块但整条更中性、不偏纯蓝，F 是整条浅色、最轻但和前台深色顶栏反差最大。
+    注意：侧栏底色目前<b>写死在</b> <span style="font-family:Consolas">src/layouts/AdminLayout.vue</span> 的 <span style="font-family:Consolas">.admin-sidebar{background:#1A3C6D}</span>，不在令牌里——选定后需同时改这一处并改为 <span style="font-family:Consolas">var(--adm-sidebar)</span>（A5 做）。
+  </div>
+</div></body></html>
