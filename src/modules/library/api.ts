@@ -23,6 +23,16 @@ export type LibraryMaterialType =
   | 'lecture'
   | 'paper';
 
+/** 发布者（A2：列表「发布者」列 + 「我发布的」筛选） */
+export interface LibraryMaterialPublisher {
+  id: number;
+  /** 昵称优先，空则回退用户名 */
+  name: string;
+  role: 'admin' | 'teacher' | 'student';
+  /** 角色中文（管理员/教师/学生） */
+  role_label: string;
+}
+
 /** 列表条目 */
 export interface LibraryMaterial {
   id: number;
@@ -45,6 +55,10 @@ export interface LibraryMaterial {
   view_count: number;
   card_front: string | null;
   sort_order: number;
+  /** A2：入库时间（对外叫「上传时间」），ISO-8601 带 +08:00；空表示无记录 */
+  created_at?: string | null;
+  /** A2：发布者；creator_id 为空时为 null（前端显示 —） */
+  publisher?: LibraryMaterialPublisher | null;
   is_studied?: boolean;
   progress_percent?: number;
   is_favorite?: boolean;
@@ -197,5 +211,57 @@ export function fetchAdminMaterialStats(): Promise<AdminMaterialStats> {
   return request<AdminMaterialStats>({
     url: '/api/materials/admin/stats',
     method: 'GET'
+  });
+}
+
+/** 管理端列表条目：在列表条目上多出上下架/学习人数/发布者 */
+export interface AdminMaterialListItem extends LibraryMaterial {
+  status: number;
+  study_count: number;
+  creator_id: number | null;
+}
+
+/** 管理端列表查询（A2 新增 created_within / order / publisher_id） */
+export interface AdminMaterialListQuery {
+  subject?: LibrarySubject | '';
+  type?: LibraryMaterialType | '';
+  status?: number | null;
+  keyword?: string;
+  /** 最近 N 天（滚动窗口：create_time >= now - N 天） */
+  created_within?: '7d' | '30d' | '';
+  /** 默认 created_desc（最新在上） */
+  order?: 'created_desc' | 'created_asc';
+  /** 只看某个发布者 */
+  publisher_id?: number | null;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AdminMaterialListResult {
+  total: number;
+  items: AdminMaterialListItem[];
+}
+
+/**
+ * 管理端资料列表（含下架；A2 起返回 `created_at` 与 `publisher`）。
+ * 空字符串参数不下发，避免后端把 `created_within=` 当成非法值 422。
+ */
+export function fetchAdminMaterialList(
+  query: AdminMaterialListQuery = {}
+): Promise<AdminMaterialListResult> {
+  return request<AdminMaterialListResult>({
+    url: '/api/materials/admin/list',
+    method: 'GET',
+    params: {
+      subject: query.subject || undefined,
+      type: query.type || undefined,
+      status: query.status ?? undefined,
+      keyword: query.keyword || undefined,
+      created_within: query.created_within || undefined,
+      order: query.order ?? 'created_desc',
+      publisher_id: query.publisher_id ?? undefined,
+      page: query.page ?? 1,
+      page_size: query.pageSize ?? 20
+    }
   });
 }

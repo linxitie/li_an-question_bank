@@ -6,7 +6,7 @@
 """
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -50,6 +50,47 @@ def _brief_images(m: StudyMaterial) -> List[str]:
     return urls
 
 
+# ============================ A2：上传时间 / 发布者（2026-11-07）============================
+# 口径（裁定 D37）：对外叫「上传时间」，实现取**入库时间** study_material.create_time（零迁移）。
+# 库里存的是 naive 本地时间（default=datetime.now），对外统一补 +08:00，前端才不用猜时区。
+_TZ_CN = timezone(timedelta(hours=8))
+_PUBLISHER_ROLE_LABEL = {"admin": "管理员", "teacher": "教师", "student": "学生"}
+# 「最近 N 天」筛选白名单：只接受这两个值，非法值由 FastAPI 直接 422
+CREATED_WITHIN_DAYS = {"7d": 7, "30d": 30}
+# 排序白名单：默认按入库时间倒序（最新在上）
+LIST_ORDERS = ("created_desc", "created_asc")
+
+
+def _iso_cn(dt: Optional[datetime]) -> Optional[str]:
+    """naive 本地时间 → 带 +08:00 的 ISO-8601；空值返回 None（前端显示 —）。"""
+    if not dt:
+        return None
+    aware = dt.replace(tzinfo=_TZ_CN) if dt.tzinfo is None else dt.astimezone(_TZ_CN)
+    return aware.isoformat(timespec="seconds")
+
+
+def _publisher_map(db: Session, rows: List[StudyMaterial]) -> dict:
+    """creator_id → {id,name,role,role_label}，**一次查询**避免 N+1。
+
+    名字取 nickname，空则回退 username（与论坛同一规则）；creator_id 可能为空
+    （历史数据/系统导入），此时前端显示「—」。
+    """
+    ids = {m.creator_id for m in rows if m.creator_id}
+    if not ids:
+        return {}
+    users = (db.query(SysUser.user_id, SysUser.username, SysUser.nickname, SysUser.user_type)
+             .filter(SysUser.user_id.in_(ids)).all())
+    out = {}
+    for u in users:
+        out[u.user_id] = {
+            "id": u.user_id,
+            "name": (u.nickname or "").strip() or u.username,
+            "role": u.user_type,
+            "role_label": _PUBLISHER_ROLE_LABEL.get(u.user_type, u.user_type),
+        }
+    return out
+
+
 def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -> dict:
     d = {
         "id": m.material_id, "subject": m.subject, "type": m.type,
@@ -60,6 +101,8 @@ def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -
         "difficulty": m.difficulty or 1, "view_count": m.view_count or 0,
         "card_front": m.card_front, "sort_order": m.sort_order or 0,
         "card_back": m.card_back,
+        # A2：入库时间（列表「上传时间」列 / 排序 / 「最近 7·30 天」筛选都靠它）
+        "created_at": _iso_cn(m.create_time),
         # 全部配图（封面 + 正文附图），PC/手机详情页「看全图」用
         "image_urls": _brief_images(m),
         # A 方案：技巧类卡片允许不挂具体考点（跨考点的通用方法），
@@ -1423,6 +1466,11 @@ async def admin_list(subject: Optional[str] = Query(None),
                      page_size: int = Query(20, ge=1, le=100),
                      current_user: SysUser = Depends(get_current_user),
                      keyword: str = Query(""),
+                     created_within: Optional[str] = Query(
+                         None, pattern="^(7d|30d)$",
+                         description="最近 7/30 天（滚动窗口：create_time >= now - N 天）"),
+                     order: str = Query("created_desc", pattern="^(created_desc|created_asc)$"),
+                     publisher_id: Optional[int] = Query(None, description="只看某个发布者"),
                      db: Session = Depends(get_db)):
     _require_admin(current_user)
     q = db.query(StudyMaterial)
@@ -1432,6 +1480,12 @@ async def admin_list(subject: Optional[str] = Query(None),
         q = q.filter(StudyMaterial.type == type)
     if status is not None:
         q = q.filter(StudyMaterial.status == status)
+    if publisher_id:
+        q = q.filter(StudyMaterial.creator_id == publisher_id)
+    # A2：最近 N 天（滚动窗口，不是"本周一"）。create_time 为空的旧行天然被排除。
+    if created_within:
+        cutoff = datetime.now() - timedelta(days=CREATED_WITHIN_DAYS[created_within])
+        q = q.filter(StudyMaterial.create_time >= cutoff)
     # 标题 / 分类 模糊搜索（前端 admin_materials 搜索框传 keyword）
     kw = (keyword or "").strip()
     if kw:
@@ -1439,13 +1493,22 @@ async def admin_list(subject: Optional[str] = Query(None),
         q = q.filter(or_(StudyMaterial.title.like(like),
                          StudyMaterial.category.like(like)))
     total = q.count()
-    rows = (q.order_by(StudyMaterial.material_id.desc())
-             .offset((page - 1) * page_size).limit(page_size).all())
+    # 排序：create_time 为空的旧行**恒定排最后**（否则正序时 NULL 会顶到最前，看起来像"最老的资料"）。
+    # SQLite 里 `is_(None)` 是 0/1，asc 即"有时间的在前"。
+    null_last = StudyMaterial.create_time.is_(None).asc()
+    if order == "created_asc":
+        q = q.order_by(null_last, StudyMaterial.create_time.asc(), StudyMaterial.material_id.asc())
+    else:
+        q = q.order_by(null_last, StudyMaterial.create_time.desc(), StudyMaterial.material_id.desc())
+    rows = q.offset((page - 1) * page_size).limit(page_size).all()
+    publishers = _publisher_map(db, rows)
     items = []
     for m in rows:
         item = _item_brief(m)
         item.update({"status": m.status, "study_count": m.study_count or 0,
-                     "creator_id": m.creator_id})
+                     "creator_id": m.creator_id,
+                     # A2：发布者（名字 + 角色徽标），creator_id 为空时给 None
+                     "publisher": publishers.get(m.creator_id)})
         items.append(item)
     return {"total": total, "items": items}
 
