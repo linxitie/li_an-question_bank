@@ -176,7 +176,8 @@
  * 本版（v1）范围：列表/筛选/排序/分页 + 5 格统计 + 上架（=审批）+ 删除 + 预览抽屉。
  * 未在 v1：上传试卷（等 B 批 material_file）、改信息（C 批）、批量操作、智能导入向导。
  */
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   AdminPageHeader,
@@ -187,6 +188,7 @@ import {
   MaterialPreviewDrawer
 } from '@/components/admin';
 import { MATERIAL_TYPES, materialTypeLabel } from '@/modules/library/materialTypes';
+import { parseListQuery } from '@/utils/materialListQuery';
 import {
   fetchAdminMaterialList,
   fetchAdminMaterialStats,
@@ -410,6 +412,33 @@ async function openPreview(row: AdminMaterialListItem): Promise<void> {
     previewLoading.value = false;
   }
 }
+
+const route = useRoute();
+
+/**
+ * 地址栏 query → 筛选项（A4 补充）。
+ * 场景：`/admin/papers` redirect 到 `?type=paper`（旧书签不 404），以及手写的
+ * `?status=-1`（直接进回收站）、`?created_within=7d`。
+ * 首版漏了这一步，实测跳转后类型仍为「全部类型」、列表仍 112 条 —— 跳对了但没筛。
+ */
+function syncFromQuery(): void {
+  const q = parseListQuery(route.query as Record<string, unknown>);
+  filters.subject = q.subject;
+  filters.type = q.type;
+  filters.status = q.status;
+  filters.createdWithin = q.createdWithin;
+}
+
+syncFromQuery(); // setup 阶段 route.query 已就绪，首屏请求就带上筛选
+// 页面已打开时再点旧链接（hash query 变化）也要跟着筛，而不是"点了没反应"
+watch(
+  () => route.query,
+  () => {
+    syncFromQuery();
+    page.value = 1;
+    void loadList();
+  }
+);
 
 onMounted(reload);
 </script>
