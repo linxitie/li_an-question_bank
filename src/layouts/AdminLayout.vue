@@ -1,5 +1,5 @@
-﻿<template>
-  <div class="admin-layout">
+<template>
+  <div class="admin-layout" :class="{ 'is-collapsed': sidebarCollapsed }">
     <!-- 左侧导航 -->
     <aside class="admin-sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
@@ -240,7 +240,13 @@ export default defineComponent({
   background: #F5F7FA;
 }
 
-/* 侧边栏 */
+/* 侧边栏
+ * A5（2026-11-07）：`position: sticky` → `position: fixed`。
+ * 原因（已实测）：VTJ 渲染器把整页包进 `.x-mask` / `.x-container.is-overflow-auto` / `.x-mask__inner`
+ * 三层容器，且都带 `overflow: auto|hidden`；按 CSS 规范，sticky 元素任意祖先 `overflow != visible`
+ * 时 sticky 就相对该祖先固定 → 侧栏跟着页面滚走（实测滚动 600px 后 rectTop 0 → −600）。
+ * fixed 不受祖先 overflow 影响，配 `.admin-right { margin-left }` 让位即可。
+ */
 .admin-sidebar {
   width: 220px;
   /* 2026-11-07：底色改由令牌控制（原写死 #1A3C6D，偏沉；现 #33465F 蓝灰，白字 9.62:1） */
@@ -249,11 +255,13 @@ export default defineComponent({
   display: flex;
   flex-direction: column;
   transition: width 0.3s;
-  position: sticky;
+  position: fixed;
+  left: 0;
   top: 0;
   height: 100vh;
   overflow-y: auto;
   z-index: 100;
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.06);
 }
 
 .admin-sidebar.collapsed {
@@ -337,29 +345,52 @@ export default defineComponent({
   font-size: 14px;
 }
 
-/* 右侧区域 */
+/* 右侧区域
+ * A5：侧栏改 fixed 后，内容区用 margin-left 让位（折叠态 64px），并随折叠动画一起过渡。
+ */
 .admin-right {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  margin-left: 220px;
+  /* 顶栏改 fixed 后不再占据流内高度 → 用 padding 补回同样 56px，页面视觉位置不变 */
+  padding-top: 56px;
+  transition: margin-left 0.3s;
 }
 
+.admin-layout.is-collapsed .admin-right {
+  margin-left: 64px;
+}
+
+/* 顶栏（A5）：sticky 与侧栏同一个失效原因（VTJ 三层 overflow 祖先），故一并改 fixed。
+ * 高度/描边/阴影同时统一到令牌（原来 #e8e8e8 + 灰阴影与本套画风不符）。 */
 .admin-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   height: 56px;
   padding: 0 24px;
-  background: #fff;
-  border-bottom: 1px solid #e8e8e8;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  background: var(--adm-surface, #fff);
+  border-bottom: 1px solid var(--adm-line, #eaeef7);
+  box-shadow: 0 1px 2px rgba(23, 32, 64, 0.04);
+  position: fixed;
+  top: 0;
+  left: 220px;
+  right: 0;
+  z-index: 90;
+  transition: left 0.3s;
+}
+
+.admin-layout.is-collapsed .admin-header {
+  left: 64px;
 }
 
 .breadcrumb {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1A3C6D;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--adm-text, #1a2030);
+  letter-spacing: -0.2px;
 }
 
 .header-actions {
