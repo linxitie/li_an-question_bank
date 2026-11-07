@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mm-page">
     <AdminPageHeader
       title="资料管理"
@@ -331,9 +331,9 @@ async function toggleStatus(row: AdminMaterialListItem): Promise<void> {
 async function remove(row: AdminMaterialListItem): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      `删除后该资料从列表与统计中移除（软删除，可在 C 批回收站恢复）。确认删除「${row.title}」？`,
-      '删除资料',
-      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+      `删除后该资料将被永久删除，其学习进度一并清除，不可恢复。确认删除「${row.title}」？`,
+      '删除资料（不可恢复）',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
     );
   } catch {
     return;
