@@ -75,6 +75,7 @@
           <div class="tf-modal-scroll">
           <h2 :style="{ color: titleColorValue(detail.titleColor) }"><span v-if="detail.aiTitle" class="ai-title-tag">AI生成</span>{{ detail.title }}</h2>
           <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
+          <p class="tf-stats">❤ {{ detail.likeCount || 0 }} · ★ {{ detail.favoriteCount || 0 }} · 💬 {{ detail.commentCount || 0 }} · 👁 {{ detail.viewCount || 0 }}</p>
           <p class="tf-content"><ForumContent :content="detail.content" :format="detail.contentFormat" /></p>
           <AttachmentList
             v-if="detail.attachments && detail.attachments.length"
@@ -91,6 +92,7 @@
                 :user-id="c.user?.id"
                 :user-type="c.user?.userType || 'student'" />
               <span class="tf-meta">{{ c.user?.className || '未分班' }}</span>
+              <span class="tf-comment-date">{{ formatDateTime(c.createTime) }}</span>
               <button
                 v-if="c.canDelete && c.status === 1"
                 class="tf-danger small tf-comment-hide"
@@ -105,6 +107,12 @@
                 v-if="c.attachments && c.attachments.length"
                 :attachments="c.attachments"
                 mode="comment" />
+              <div class="tf-comment-actions">
+                <button class="tf-act" :class="{ on: c.liked }" @click.stop="commentLike(c)">❤ {{ c.likeCount || 0 }}</button>
+                <button class="tf-act" :class="{ on: c.favorited }" @click.stop="commentFavorite(c)">★ {{ c.favoriteCount || 0 }}</button>
+                <button class="tf-act" @click.stop="commentReport(c)">举报</button>
+                <span class="tf-act-r">回复 {{ c.replyCount || 0 }}</span>
+              </div>
             </div>
           </div>
 
@@ -152,6 +160,7 @@
               <li v-for="(h, i) in hotPosts.slice(0, 5)" :key="h.id" class="right-item" @click="openPost(h)">
                 <span class="right-rank" :class="'rank-' + (i + 1)">{{ i + 1 }}</span>
                 <span class="right-title" :style="{ color: titleColorValue(h.titleColor) }">{{ h.title }}</span>
+                <span class="right-excerpt">{{ excerptOf(h) }}</span>
                 <span class="right-num">{{ h.commentCount || 0 }} 回复</span>
               </li>
             </ul>
@@ -166,6 +175,7 @@
             <ul>
               <li v-for="m in myPosts.slice(0, 5)" :key="m.id" class="right-item" @click="openPost(m)">
                 <span class="right-title">{{ m.title }}</span>
+                <span class="right-excerpt">{{ excerptOf(m) }}</span>
                 <span class="right-num">❤ {{ m.likeCount || 0 }} · 💬 {{ m.commentCount || 0 }}</span>
               </li>
             </ul>
@@ -188,9 +198,15 @@
         <p v-else-if="!hotAll.length" class="tf-empty">暂无热门</p>
         <div v-else class="tf-fav-list">
           <div v-for="h in hotAll" :key="h.id" class="tf-fav-item" @click="openPost(h)">
+            <span class="tf-fav-author">
+              <img v-if="h.authorAvatar || (h.user && h.user.avatar)" :src="h.authorAvatar || (h.user && h.user.avatar)" class="tf-fav-avatar" alt="头像" />
+              <span v-else class="tf-fav-avatar tf-fav-avatar-text">{{ ((h.author || (h.user && h.user.nickname) || '匿')).charAt(0) }}</span>
+              <span class="tf-fav-name">{{ h.author || (h.user && h.user.nickname) || '匿名' }}</span>
+              <span class="tf-fav-date">{{ formatDateTime(h.createTime) }}</span>
+            </span>
             <span class="tf-fav-title">{{ h.title }}</span>
             <span class="tf-fav-excerpt">{{ excerptOf(h) }}</span>
-            <span class="tf-fav-num">❤ {{ h.likeCount || 0 }} · 💬 {{ h.commentCount || 0 }}</span>
+            <span class="tf-fav-num">❤ {{ h.likeCount || 0 }} · ★ {{ h.favoriteCount || 0 }} · 💬 {{ h.commentCount || 0 }} · 👁 {{ h.viewCount || 0 }}</span>
           </div>
         </div>
         <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showHotAll = false">关闭</button></div>
@@ -207,9 +223,15 @@
         <p v-else-if="!myAll.length" class="tf-empty">还没有发过帖</p>
         <div v-else class="tf-fav-list">
           <div v-for="m in myAll" :key="m.id" class="tf-fav-item" @click="openPost(m)">
+            <span class="tf-fav-author">
+              <img v-if="m.authorAvatar || (m.user && m.user.avatar)" :src="m.authorAvatar || (m.user && m.user.avatar)" class="tf-fav-avatar" alt="头像" />
+              <span v-else class="tf-fav-avatar tf-fav-avatar-text">{{ ((m.author || (m.user && m.user.nickname) || '匿')).charAt(0) }}</span>
+              <span class="tf-fav-name">{{ m.author || (m.user && m.user.nickname) || '匿名' }}</span>
+              <span class="tf-fav-date">{{ formatDateTime(m.createTime) }}</span>
+            </span>
             <span class="tf-fav-title">{{ m.title }}</span>
             <span class="tf-fav-excerpt">{{ excerptOf(m) }}</span>
-            <span class="tf-fav-num">❤ {{ m.likeCount || 0 }} · 💬 {{ m.commentCount || 0 }}</span>
+            <span class="tf-fav-num">❤ {{ m.likeCount || 0 }} · ★ {{ m.favoriteCount || 0 }} · 💬 {{ m.commentCount || 0 }} · 👁 {{ m.viewCount || 0 }}</span>
           </div>
         </div>
         <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showMyAll = false">关闭</button></div>
@@ -230,9 +252,15 @@
         </p>
         <div v-else class="tf-fav-list">
           <div v-for="p in favList" :key="p.id" class="tf-fav-item" @click="openPost(p)">
+            <span class="tf-fav-author">
+              <img v-if="p.authorAvatar || (p.user && p.user.avatar)" :src="p.authorAvatar || (p.user && p.user.avatar)" class="tf-fav-avatar" alt="头像" />
+              <span v-else class="tf-fav-avatar tf-fav-avatar-text">{{ ((p.author || (p.user && p.user.nickname) || '匿')).charAt(0) }}</span>
+              <span class="tf-fav-name">{{ p.author || (p.user && p.user.nickname) || '匿名' }}</span>
+              <span class="tf-fav-date">{{ formatDateTime(p.createTime) }}</span>
+            </span>
             <span class="tf-fav-title" :style="{ color: titleColorValue(p.titleColor) }">{{ p.title }}</span>
             <span class="tf-fav-excerpt">{{ excerptOf(p) }}</span>
-            <span class="tf-fav-num">❤ {{ p.likeCount || 0 }} · ⭐ {{ p.favoriteCount || 0 }}</span>
+            <span class="tf-fav-num">❤ {{ p.likeCount || 0 }} · ★ {{ p.favoriteCount || 0 }} · 💬 {{ p.commentCount || 0 }} · 👁 {{ p.viewCount || 0 }}</span>
           </div>
         </div>
         <div class="tf-modal-actions">
@@ -268,6 +296,12 @@ import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
 import { createForumComment } from '@/modules/community/api';
 import { toggleForumPostLike, toggleForumFavorite } from '@/modules/community/api';
+import {
+  fetchForumComments,
+  toggleForumCommentLike,
+  toggleForumCommentFavorite,
+  reportForumTarget
+} from '@/modules/community/api';
 import { fetchMyForumFavorites, fetchMyForumLikes } from '@/modules/community/api';
 import FileUploader from '@/components/forum/FileUploader.vue';
 import PostComposer, { type PostDraft } from '@/components/forum/PostComposer.vue';
@@ -495,6 +529,43 @@ const loadFavTab = async () => {
   }
 };
 
+const formatDateTime = (v?: string | null) =>
+  v ? String(v).replace('T', ' ').slice(0, 16) : '';
+
+const commentLike = async (c: any) => {
+  try {
+    const r = await toggleForumCommentLike(c.id);
+    c.liked = r.liked;
+    c.likeCount = r.likeCount;
+  } catch (e) {
+    /* 静默 */
+  }
+};
+
+const commentFavorite = async (c: any) => {
+  try {
+    const r = await toggleForumCommentFavorite(c.id);
+    c.favorited = r.favorited;
+    c.favoriteCount = r.favoriteCount;
+  } catch (e) {
+    /* 静默 */
+  }
+};
+
+const commentReport = async (c: any) => {
+  try {
+    await reportForumTarget({
+      targetType: 'COMMENT',
+      targetId: c.id,
+      reasonCode: 'other',
+      reasonText: '教师举报评论'
+    });
+    ElMessage.success('已举报，等待管理员处理');
+  } catch (e) {
+    ElMessage.error('举报失败');
+  }
+};
+
 const submitComment = async () => {
   const text = commentDraft.value.trim();
   if (!text || !detail.value) return;
@@ -573,8 +644,17 @@ const loadPosts = async () => {
 const openPost = async (post: ModerationPost) => {
   detail.value = post;
   try {
-    const data = await teacherForumApi.comments(post.id);
-    comments.value = data.items;
+    // 教师端评论：合并「教师审核字段（canDelete/status）+ 学生端互动字段（liked/favorited/回复数）」
+    const [teacherData, studentData] = await Promise.all([
+      teacherForumApi.comments(post.id).catch(() => ({ items: [] })),
+      fetchForumComments(post.id, { limit: 100, sortBy: 'time', order: 'asc' }).catch(() => ({ comments: [] }))
+    ]);
+    const interMap = new Map<number, any>();
+    for (const c of (studentData as any).comments || []) interMap.set(c.id, c);
+    comments.value = ((teacherData as any).items || []).map((c: any) => ({
+      ...c,
+      ...(interMap.get(c.id) || {})
+    }));
   } catch (e) {
     comments.value = [];
   }
@@ -880,6 +960,65 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
 .tf-side .tf-mini-more { margin: 12px 0 0; text-align: center; color: #c41e3a;
   font-size: 14px; font-weight: 600; cursor: pointer; }
 .tf-side .tf-mini-empty { color: #94a3b8; font-size: 13px; margin: 6px 0; }
+
+/* 2026-11-07：教师端列表作者信息 + 评论操作 */
+.tf-fav-author { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6b7896; }
+.tf-fav-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.tf-fav-avatar-text { display: inline-flex; align-items: center; justify-content: center; background: #eef1f8; color: #1a2b5f; }
+.tf-fav-name { font-weight: 600; color: #1a2b5f; }
+.tf-fav-date { color: #8a8faa; }
+.tf-stats { font-size: 12px; color: #8a8faa; margin: 2px 0 8px; }
+.tf-comment-date { font-size: 12px; color: #8a8faa; margin-left: auto; }
+.tf-comment-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.tf-act { border: none; background: transparent; color: #6b7896; font-size: 12px; cursor: pointer; padding: 0; }
+.tf-act.on { color: #c41e3a; }
+.tf-act-r { font-size: 12px; color: #8a8faa; margin-left: auto; }
+
+.right-excerpt { display: block; font-size: 12px; color: #8a8faa; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* 2026-11-07：右侧「今日热门 / 我的帖子」改为标题一行、摘要一行的学生端同款布局 */
+.tf-mini-card li.right-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'rank title num'
+    'rank excerpt excerpt';
+  align-items: start;
+  column-gap: 8px;
+  row-gap: 2px;
+}
+.right-item .right-rank { grid-area: rank; }
+.right-item .right-title { grid-area: title; display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.right-item .right-excerpt {
+  grid-area: excerpt;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  font-size: 12px;
+  color: #8a8faa;
+  line-height: 1.5;
+}
+.right-item .right-num { grid-area: num; white-space: nowrap; }
+
+/* 2026-11-07：固定高度布局下，右侧「今日热门/我的帖子」独立滚动到底 */
+.tf-main {
+  align-items: stretch;
+  min-height: 0;
+}
+.tf-left {
+  min-height: 0;
+}
+.tf-side {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 20px;
+  box-sizing: border-box;
+}
+.tf-side .tf-mini-card:last-child { margin-bottom: 8px; }
 </style>
 
 

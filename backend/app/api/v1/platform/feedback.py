@@ -119,6 +119,7 @@ async def submit_feedback(
         source=source,
         forum_post_id=payload.get("forum_post_id"),
         subject_id=payload.get("subject_id"),
+        is_anonymous=1 if payload.get("is_anonymous") else 0,
     )
     db.add(fb)
     db.flush()  # 先拿到 feedback_id，再生成可读工单号
@@ -239,8 +240,12 @@ async def list_all_feedback(
     result = []
     for f in items:
         data = _serialize_feedback(f)
-        data["user_name"] = f.user.username if f.user else ""
-        data["user_no"] = f.user.user_no if f.user else ""
+        if getattr(f, "is_anonymous", 0):
+            data["user_name"] = "匿名"
+            data["user_no"] = ""
+        else:
+            data["user_name"] = f.user.username if f.user else ""
+            data["user_no"] = f.user.user_no if f.user else ""
         result.append(data)
 
     return {"total": total, "page": page, "page_size": page_size, "items": result}
@@ -304,6 +309,7 @@ def _serialize_feedback(f: UserFeedback) -> Dict[str, Any]:
         "first_response_at": f.first_response_at.isoformat() if f.first_response_at else None,
         "resolved_at": f.resolved_at.isoformat() if f.resolved_at else None,
         "merged_into": f.merged_into,
+        "is_anonymous": int(getattr(f, "is_anonymous", 0) or 0),
         "reply": f.reply,
         "replied_at": f.replied_at.isoformat() if f.replied_at else None,
         "created_at": f.created_at.isoformat() if f.created_at else None,

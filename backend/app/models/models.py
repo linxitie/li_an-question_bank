@@ -1343,6 +1343,28 @@ class ForumLike(Base):
     )
 
 
+class ForumCommentFavorite(Base):
+    """评论收藏表（2026-11-07）。
+
+    与 forum_favorite（帖子收藏）分开，避免 post_id/comment_id 混用。
+    """
+
+    __tablename__ = "forum_comment_favorite"
+
+    favorite_id = Column(Integer, primary_key=True, autoincrement=True, comment="收藏ID")
+    comment_id = Column(BigInteger, ForeignKey("forum_comment.comment_id"), nullable=False, comment="评论ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    create_time = Column(DateTime, default=datetime.now, comment="收藏时间")
+
+    comment = relationship("ForumComment")
+    user = relationship("SysUser")
+
+    __table_args__ = (
+        UniqueConstraint("comment_id", "user_id", name="uk_comment_favorite"),
+        Index("idx_comment_fav_user", user_id, create_time),
+    )
+
+
 class ForumFavorite(Base):
     """论坛收藏表（P3，2026-10-26）
 
@@ -2400,6 +2422,8 @@ class UserFeedback(Base):
     reply_by = Column(BigInteger, comment="回复人ID")
     replied_at = Column(DateTime, comment="回复时间")
     created_at = Column(DateTime, default=datetime.now, comment="提交时间")
+    # 2026-11-07：论坛/平板反馈支持匿名展示（user_id 仍保留用于治理）
+    is_anonymous = Column(Integer, default=0, comment="是否匿名 0/1")
 
     # === 工单化扩展（P0） ===
     ticket_no = Column(String(24), unique=True, comment="工单号 FBYYYYMMDD-000001")

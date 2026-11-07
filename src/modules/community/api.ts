@@ -510,6 +510,15 @@ export function toggleForumCommentLike(
   });
 }
 
+export function toggleForumCommentFavorite(
+  commentId: number
+): Promise<{ favorited: boolean; favoriteCount: number }> {
+  return request<{ favorited: boolean; favoriteCount: number }>({
+    url: '/api/forum/comments/' + commentId + '/favorite',
+    method: 'POST'
+  });
+}
+
 export function setForumPostReaction(
   postId: number,
   reaction: ForumReactionCode

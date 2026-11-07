@@ -1,9 +1,10 @@
 <!-- 学生端「我的」个人中心（桌面端） -->
 <template>
   <div class="profile-page">
-    <NavBar />
+    <div class="profile-nav"><NavBar /></div>
     <main class="profile-main">
-      <!-- 左栏：个人资料 + 金币 -->
+      <!-- 左栏：个人资料 + 成就/等级/设置 -->
+      <div class="side-col">
       <aside class="left-col">
         <section class="card profile-card">
           <div class="avatar" @click="openEditProfile">
@@ -16,19 +17,45 @@
           <button class="btn-edit" @click="openEditProfile">编辑资料</button>
         </section>
 
-        <section class="card coin-card">
-          <h3 class="card-title"><XIcon :icon="GoldMedal" :size="18" color="#f59e0b" /> 我的金币</h3>
-          <div class="coin-balance">{{ coin.balance }} <span>金币</span></div>
-          <div class="coin-month">
-            <span>本月收入 +{{ coin.month_income }}</span>
-            <span>本月支出 -{{ coin.month_expense }}</span>
-          </div>
-          <div class="coin-actions">
-            <button class="btn-mini" @click="go('/page/gold_purchase')">金币购</button>
-            <button class="btn-mini" @click="openCoinDetail">明细</button>
-          </div>
-        </section>
       </aside>
+
+      <!-- 右栏：成就 + 等级 + 设置 -->
+      <aside class="right-col">
+        <div class="card">
+          <h3 class="card-title"><XIcon :icon="Trophy" :size="18" color="#f59e0b" /> 成就与激励</h3>
+          <div class="ach-badges" v-if="earnedBadges.length">
+            <span
+              v-for="b in earnedBadges"
+              :key="b.achievement_id"
+              class="ach-badge"
+              :style="{ borderColor: tierColor(b.tier), color: tierColor(b.tier) }"
+              :title="b.name"
+            >{{ b.icon }}</span>
+          </div>
+          <p class="ach-count">已获得 <strong>{{ earnedCount }}</strong> 枚勋章</p>
+          <button class="btn-mini full" @click="go('/achievements')">查看全部 →</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title"><XIcon :icon="TrendCharts" :size="18" color="#1A365D" /> 学习等级</h3>
+          <p class="level-text">Lv.{{ level.level }} {{ level.title }}</p>
+          <div class="progress-bar"><div class="progress-fill" :style="{ width: level.progress + '%' }"></div></div>
+          <p class="level-sub">{{ level.growth_points }} 成长值 · 进度 {{ level.progress }}%</p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title"><XIcon :icon="Setting" :size="18" color="#1A365D" /> 设置</h3>
+          <div class="menu-list">
+            <div class="menu-row" @click="openEditProfile">个人设置</div>
+            <div class="menu-row" @click="openDevices">设备管理</div>
+            <div class="menu-row" @click="go('/feedback')">意见反馈</div>
+            <div class="menu-row" @click="go('/help')">帮助中心</div>
+            <div class="menu-row" @click="go('/page/about')">关于砺安题库</div>
+            <div class="menu-row danger" @click="handleLogout">退出登录</div>
+          </div>
+        </div>
+      </aside>
+      </div>
 
       <!-- 中栏：学习数据 + 学习内容 -->
       <section class="center-col">
@@ -92,42 +119,6 @@
         <RecentPracticeRecords :limit="5" />
       </section>
 
-      <!-- 右栏：成就 + 等级 + 设置 -->
-      <aside class="right-col">
-        <div class="card">
-          <h3 class="card-title"><XIcon :icon="Trophy" :size="18" color="#f59e0b" /> 成就与激励</h3>
-          <div class="ach-badges" v-if="earnedBadges.length">
-            <span
-              v-for="b in earnedBadges"
-              :key="b.achievement_id"
-              class="ach-badge"
-              :style="{ borderColor: tierColor(b.tier), color: tierColor(b.tier) }"
-              :title="b.name"
-            >{{ b.icon }}</span>
-          </div>
-          <p class="ach-count">已获得 <strong>{{ earnedCount }}</strong> 枚勋章</p>
-          <button class="btn-mini full" @click="go('/achievements')">查看全部 →</button>
-        </div>
-
-        <div class="card">
-          <h3 class="card-title"><XIcon :icon="TrendCharts" :size="18" color="#1A365D" /> 学习等级</h3>
-          <p class="level-text">Lv.{{ level.level }} {{ level.title }}</p>
-          <div class="progress-bar"><div class="progress-fill" :style="{ width: level.progress + '%' }"></div></div>
-          <p class="level-sub">{{ level.growth_points }} 成长值 · 进度 {{ level.progress }}%</p>
-        </div>
-
-        <div class="card">
-          <h3 class="card-title"><XIcon :icon="Setting" :size="18" color="#1A365D" /> 设置</h3>
-          <div class="menu-list">
-            <div class="menu-row" @click="openEditProfile">个人设置</div>
-            <div class="menu-row" @click="openDevices">设备管理</div>
-            <div class="menu-row" @click="go('/feedback')">意见反馈</div>
-            <div class="menu-row" @click="go('/help')">帮助中心</div>
-            <div class="menu-row" @click="go('/page/about')">关于砺安题库</div>
-            <div class="menu-row danger" @click="handleLogout">退出登录</div>
-          </div>
-        </div>
-      </aside>
       <!-- 2026-11-04：徽章展示模块下线，「我的徽章」墙与其 /api/badges/wall 数据源一并移除；
            上方「学习成就」徽标（earnedBadges）属成就引擎，保留。 -->
     </main>
@@ -533,15 +524,29 @@ function handleLogout() {
   background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
+.profile-nav { position: sticky; top: 0; z-index: 120; }
 .profile-main {
   max-width: 1300px;
   margin: 0 auto;
-  padding: 24px 32px 40px;
+  padding: 20px 32px 40px;
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 300px 1fr;
   gap: 20px;
   align-items: start;
 }
+.side-col {
+  position: sticky;
+  top: 76px;
+  align-self: start;
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.left-col, .right-col { display: flex; flex-direction: column; gap: 16px; }
+.center-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .left-col, .right-col { display: flex; flex-direction: column; gap: 16px; }
 .center-col { display: flex; flex-direction: column; gap: 16px; }
 
@@ -646,4 +651,20 @@ function handleLogout() {
 .deco-chip.is-expired { opacity: 0.55; cursor: not-allowed; text-decoration: line-through; }
 .deco-expire { margin-left: 4px; font-size: 11px; color: #9ca3af; }
 .deco-chip.is-expired .deco-expire { color: #dc2626; }
+
+/* 2026-11-07：左右两栏各自独立滚动，顶部导航固定后可收纳更多内容 */
+.profile-main {
+  height: calc(100vh - 64px);
+  overflow: hidden;
+  align-items: stretch;
+}
+.side-col {
+  height: 100%;
+  max-height: none;
+}
+.center-col {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 6px;
+}
 </style>

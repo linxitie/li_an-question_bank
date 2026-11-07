@@ -36,8 +36,8 @@ from pydantic import BaseModel, Field
 from ....core.security import get_current_user, get_optional_user
 from ....services import media_service
 from ....models.models import (
-    ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
-    ForumDraft, SysUser, SysOperationLog
+    ForumPost, ForumComment, ForumLike, ForumFavorite, ForumCommentFavorite,
+    ForumSticker, ForumReport, ForumDraft, SysUser, SysOperationLog
 )
 from ....services.sensitive_words import SensitiveLevel
 from ....services.content_guard import guard_text, judgments as content_guard_judgments
@@ -300,6 +300,31 @@ def _load_favorite_stats(db: Session, post_ids: List[int], user_id: Optional[int
     return counts, mine
 
 
+def _comment_favorite_stats(db: Session, comment_ids: List[int], user_id: Optional[int] = None):
+    """批量取评论收藏数 + 当前用户是否收藏（避免 N+1）。"""
+    if not comment_ids:
+        return {}, set()
+    rows = (
+        db.query(ForumCommentFavorite.comment_id, func.count(ForumCommentFavorite.favorite_id))
+        .filter(ForumCommentFavorite.comment_id.in_(comment_ids))
+        .group_by(ForumCommentFavorite.comment_id)
+        .all()
+    )
+    counts = {cid: int(cnt or 0) for cid, cnt in rows}
+    mine = set()
+    if user_id:
+        mine_rows = (
+            db.query(ForumCommentFavorite.comment_id)
+            .filter(
+                ForumCommentFavorite.comment_id.in_(comment_ids),
+                ForumCommentFavorite.user_id == user_id,
+            )
+            .all()
+        )
+        mine = {row[0] for row in mine_rows}
+    return counts, mine
+
+
 def _serialize_comment(
     comment: ForumComment,
     user: Optional[SysUser] = None,
@@ -307,6 +332,8 @@ def _serialize_comment(
     reactions: Optional[Dict[str, int]] = None,
     my_reaction: Optional[str] = None,
     reply_count: int = 0,
+    favorite_count: int = 0,
+    favorited: bool = False,
 ) -> Dict[str, Any]:
     """序列化评论为响应字典"""
     return {
@@ -319,6 +346,8 @@ def _serialize_comment(
         "replyToUserId": comment.reply_to_user_id,
         "attachments": comment.attachments or [],
         "liked": liked or my_reaction is not None,
+        "favorited": favorited,
+        "favoriteCount": favorite_count,
         "myReaction": my_reaction,
         "reactions": reactions or {},
         "replyCount": reply_count or 0,
@@ -863,6 +892,108 @@ async def toggle_post_favorite(
     }
 
 
+@router.get("/my-interactions", summary="我的收藏/喜欢（帖子+评论混排）")
+async def my_interactions(
+    kind: Literal["favorites", "likes"],
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """统一返回帖子与评论两种收藏/点赞；评论项带所属帖子 ID 与标题。"""
+    items: List[Dict[str, Any]] = []
+    if kind == "favorites":
+        post_rows = (
+            db.query(ForumFavorite, ForumPost)
+            .join(ForumPost, ForumPost.post_id == ForumFavorite.post_id)
+            .filter(ForumFavorite.user_id == current_user.user_id, ForumPost.status == "NORMAL")
+            .all()
+        )
+        comment_rows = (
+            db.query(ForumCommentFavorite, ForumComment, ForumPost)
+            .join(ForumComment, ForumComment.comment_id == ForumCommentFavorite.comment_id)
+            .join(ForumPost, ForumPost.post_id == ForumComment.post_id)
+            .filter(
+                ForumCommentFavorite.user_id == current_user.user_id,
+                ForumComment.status == 1,
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+    else:
+        post_rows = (
+            db.query(ForumLike, ForumPost)
+            .join(ForumPost, ForumPost.post_id == ForumLike.post_id)
+            .filter(
+                ForumLike.user_id == current_user.user_id,
+                ForumLike.post_id.isnot(None),
+                ForumLike.reaction_code == "like",
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+        comment_rows = (
+            db.query(ForumLike, ForumComment, ForumPost)
+            .join(ForumComment, ForumComment.comment_id == ForumLike.comment_id)
+            .join(ForumPost, ForumPost.post_id == ForumComment.post_id)
+            .filter(
+                ForumLike.user_id == current_user.user_id,
+                ForumLike.comment_id.isnot(None),
+                ForumLike.reaction_code == "like",
+                ForumComment.status == 1,
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+
+    post_ids = [post.post_id for _, post in post_rows]
+    fav_counts, my_favs = _load_favorite_stats(db, post_ids, user_id=current_user.user_id)
+    react_counts, my_react = _load_reaction_stats(db, post_ids, user_id=current_user.user_id)
+    post_user_ids = {post.user_id for _, post in post_rows}
+    post_users = db.query(SysUser).filter(SysUser.user_id.in_(post_user_ids)).all() if post_user_ids else []
+    post_user_map = {u.user_id: u for u in post_users}
+    for fav, post in post_rows:
+        items.append({
+            "type": "post",
+            "time": fav.create_time.isoformat() if fav.create_time else None,
+            "post": _serialize_post(
+                post,
+                post_user_map.get(post.user_id),
+                post.post_id in my_react,
+                reactions=react_counts.get(post.post_id, {}),
+                my_reaction=my_react.get(post.post_id),
+                favorite_count=fav_counts.get(post.post_id, 0),
+                favorited=post.post_id in my_favs,
+            ),
+        })
+
+    comment_ids = [c.comment_id for _, c, _ in comment_rows]
+    cfav_counts, _ = _comment_favorite_stats(db, comment_ids)
+    comment_user_ids = {c.user_id for _, c, _ in comment_rows}
+    comment_users = db.query(SysUser).filter(SysUser.user_id.in_(comment_user_ids)).all() if comment_user_ids else []
+    comment_user_map = {u.user_id: u for u in comment_users}
+    for fav, comment, post in comment_rows:
+        items.append({
+            "type": "comment",
+            "time": fav.create_time.isoformat() if fav.create_time else None,
+            "postId": post.post_id,
+            "postTitle": post.title,
+            "comment": {
+                "id": comment.comment_id,
+                "content": comment.content,
+                "contentFormat": getattr(comment, "content_format", None) or "TEXT",
+                "createTime": comment.create_time.isoformat() if comment.create_time else None,
+                "likeCount": comment.like_count or 0,
+                "favoriteCount": cfav_counts.get(comment.comment_id, 0),
+                "user": _user_brief(comment_user_map.get(comment.user_id), comment.user_id),
+            },
+        })
+
+    items.sort(key=lambda x: x.get("time") or "", reverse=True)
+    total = len(items)
+    return {"total": total, "limit": limit, "offset": offset, "items": items[offset:offset + limit]}
+
+
 @router.get("/my-favorites", summary="我的收藏（五角星）")
 async def get_my_favorites(
     limit: int = Query(20, ge=1, le=50),
@@ -1051,6 +1182,9 @@ async def get_post_comments(
         is_comment=True,
         user_id=current_user.user_id if current_user else None,
     )
+    favorite_counts, my_favorites = _comment_favorite_stats(
+        db, comment_ids, user_id=current_user.user_id if current_user else None
+    )
 
     return {
         "total": total,
@@ -1064,6 +1198,8 @@ async def get_post_comments(
                 reactions=reaction_counts.get(c.comment_id, {}),
                 my_reaction=my_reactions.get(c.comment_id),
                 reply_count=reply_counts.get(c.comment_id, 0),
+                favorite_count=favorite_counts.get(c.comment_id, 0),
+                favorited=c.comment_id in my_favorites,
             )
             for c in comments
         ]
@@ -1221,6 +1357,37 @@ async def toggle_comment_like(
     # 点赞不是创建行为，不上报 E6 事件（P2-28）
 
     return {"liked": liked, "likeCount": comment.like_count}
+
+
+@router.post("/comments/{comment_id}/favorite", summary="评论收藏切换")
+async def toggle_comment_favorite(
+    comment_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(ForumComment).filter(
+        ForumComment.comment_id == comment_id,
+        ForumComment.status == 1,
+    ).first()
+    if not comment:
+        raise ResourceNotFoundError("评论", comment_id)
+    existing = (
+        db.query(ForumCommentFavorite)
+        .filter(
+            ForumCommentFavorite.comment_id == comment_id,
+            ForumCommentFavorite.user_id == current_user.user_id,
+        )
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+        favorited = False
+    else:
+        db.add(ForumCommentFavorite(comment_id=comment_id, user_id=current_user.user_id))
+        favorited = True
+    db.commit()
+    counts, _ = _comment_favorite_stats(db, [comment_id])
+    return {"favorited": favorited, "favoriteCount": counts.get(comment_id, 0)}
 
 
 # ============================== 表情反应 ==============================
