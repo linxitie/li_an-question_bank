@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = Field("./uploads", env="UPLOAD_DIR")
     VIDEO_DIR: str = Field("./uploads/videos", env="VIDEO_DIR")
     FILE_DIR: str = Field("./uploads/files", env="FILE_DIR")
+    # B1（2026-11-07）：资料原件留档目录。**故意不放 uploads/**（那里是 StaticFiles 公开挂载），
+    # 也不放 data/（与 SQLite 同目录：OneDrive 对新文件的同步扫描实测会把库锁住 ~30s，
+    # 表现为导入/上传接口偶发卡死）。独立 storage/ 目录，只能经鉴权下载接口取用。
+    MATERIAL_FILES_DIR: str = Field("./storage/material_files", env="MATERIAL_FILES_DIR")
 
     # 视频转码配置
     FFMPEG_PATH: str = Field("ffmpeg", env="FFMPEG_PATH")

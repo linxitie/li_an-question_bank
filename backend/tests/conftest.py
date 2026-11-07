@@ -8,8 +8,25 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import sys
 import os
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 2026-11-07（B1）：把**上传/原件目录**指到系统临时盘，必须在 import app.* 之前设置。
+#
+# 为什么要这么做：本机仓库在 OneDrive 同步目录里，`_save_tmp()` 往
+# `backend/uploads/materials/tmp/` 写文件时，偶尔被同步扫描/杀软卡住 ~30s（faulthandler
+# 抓到阻塞点在 `Path.write_bytes`）。表现为"跑了 4 个用例后整进程卡死、没有 summary"，
+# 且与用例内容无关、随机复现。指到 %TEMP% 后跑满 17 个用例 3s 内结束（实测）。
+#
+# 用 setdefault：外部显式指定（CI/其它机器）时以外部为准。
+_TEST_UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), "li_an_test_uploads")
+_TEST_FILES_ROOT = os.path.join(tempfile.gettempdir(), "li_an_test_material_files")
+os.environ.setdefault("UPLOAD_DIR", _TEST_UPLOAD_ROOT)
+os.environ.setdefault("MATERIAL_FILES_DIR", _TEST_FILES_ROOT)
+# StaticFiles 挂载要求目录已存在（main.py 里 mount /uploads），否则 import 阶段直接抛 RuntimeError
+os.makedirs(_TEST_UPLOAD_ROOT, exist_ok=True)
+os.makedirs(_TEST_FILES_ROOT, exist_ok=True)
 
 from app.core.database import Base, get_db
 from app.foundation.schema import ddl_statements, FOUNDATION_TABLES

@@ -1453,6 +1453,49 @@ class MaterialImportRecord(Base):
         Index("idx_material_parse_status", parse_status),
     )
 
+
+class MaterialFile(Base):
+    """资料原件留档（B1，2026-11-07）。
+
+    为什么要这张表：导入 `.vtj` 向导时源文件（docx/pdf/xlsx）在解析完成后被删掉，
+    库里有正文却没有原件——管理员想核对"当初传的是哪一版"只能靠记忆；试卷原卷更是必须留档。
+
+    存储口径（用户 2026-11-07 裁定 A/A/A）：
+    · **位置** = `<SQLITE_PATH 同级>/material_files/`（默认 `backend/data/material_files`），
+      **不在 `/uploads` 静态目录下** → 只能走鉴权下载接口，匿名拿不到 URL；
+    · **权限** = 管理员不限；非管理员只能下**已上架**（`study_material.status=1`）资料的原件；
+    · **内容寻址** = 物理文件按 `sha256` 命名（`<前2位>/<sha256>.<ext>`），同一份文件只存一份，
+      多条资料可引用同一物理文件；**删除资料只删本表行，物理文件留待清理脚本**（不靠引用计数误删）。
+
+    与 `material_import_record` 的关系：那张表记"导入过程"，本表记"最终留档的原件"，
+    一条资料可有多个文件（B2 的双格式配对：docx 主文件 + pdf 附件）。
+    """
+    __tablename__ = "material_file"
+
+    file_id = Column(Integer, primary_key=True, autoincrement=True)
+    material_id = Column(Integer, ForeignKey("study_material.material_id"),
+                         nullable=False, comment="归属资料")
+    # primary=主文件（导入的那个 docx/xlsx/pdf）/ attachment=附件（双格式配对的另一份）
+    role = Column(String(20), default="primary", comment="primary / attachment")
+    file_name = Column(String(255), comment="原始文件名（含扩展名，下载时用）")
+    file_ext = Column(String(10), comment="小写扩展名，不含点")
+    mime_type = Column(String(100), comment="下载 Content-Type")
+    file_size = Column(BigInteger, comment="字节")
+    sha256 = Column(String(64), comment="内容哈希，物理文件按它命名")
+    storage_path = Column(String(500), comment="相对 material_files 根目录的路径，禁止绝对路径")
+    source = Column(String(20), default="import", comment="import / upload（B2 批量）/ manual")
+    uploader_id = Column(BigInteger, ForeignKey("sys_user.user_id"))
+    create_time = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("idx_material_file_material", material_id),
+        Index("idx_material_file_sha", sha256),
+        # 同一条资料同角色同一份内容只登记一次（重复导入时不再插第二行）
+        Index("uq_material_file_material_sha_role", material_id, sha256, role,
+              unique=True),
+    )
+
+
 # ------------------------------
 # 新闻资讯模型（新增）
 # ------------------------------

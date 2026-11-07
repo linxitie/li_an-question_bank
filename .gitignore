@@ -80,6 +80,9 @@ backend/run_demo.py
 *.db-journal
 *.db.backup
 backend/uploads/
+# B1（2026-11-07）：资料原件留档目录（由 MATERIAL_FILES_DIR 决定，见 backend/app/core/config.py）。
+# 里面是上传的 docx/pdf/xlsx 原件（可能有大文件与业务内容），跟随部署环境，不入库。
+backend/storage/
 backend/mineru_env/
 backend/tmp/
 backend/_*.txt

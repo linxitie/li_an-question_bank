@@ -69,9 +69,16 @@
             </ul>
           </section>
           <section v-if="preview?.files?.length" class="mpd-block">
-            <div class="mpd-block__label">原件</div>
-            <ul class="mpd-list">
-              <li v-for="(f, i) in preview.files" :key="i">{{ f }}</li>
+            <div class="mpd-block__label">原件（{{ preview.files.length }}）</div>
+            <ul class="mpd-files">
+              <li v-for="f in preview.files" :key="f.file_id">
+                <button type="button" class="mpd-file" @click="onDownload(f)">
+                  <span class="mpd-file__ext">{{ (f.file_ext || '').toUpperCase() }}</span>
+                  <span class="mpd-file__name">{{ f.file_name }}</span>
+                  <span class="mpd-file__meta">{{ f.role_label }} · {{ f.size_label }}</span>
+                  <span class="mpd-file__dl">下载</span>
+                </button>
+              </li>
             </ul>
           </section>
         </div>
@@ -99,9 +106,10 @@
  *
  * 安全：正文用 `v-html`，但内容已由服务端 `sanitize_html` 二次清洗（见后端 A3 端点）。
  */
-import { onBeforeUnmount, watch } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import { AdminTag } from '@/components/admin';
-import type { MaterialPreview } from '@/modules/library/api';
+import { downloadMaterialFile, type MaterialFileItem, type MaterialPreview } from '@/modules/library/api';
 
 const props = withDefaults(
   defineProps<{
@@ -125,6 +133,25 @@ function fmt(iso?: string | null): string {
 /** ESC 关闭（只在本组件打开时挂监听，卸载时摘掉） */
 function onKey(e: KeyboardEvent): void {
   if (e.key === 'Escape' && props.open) emit('close');
+}
+
+/**
+ * 下载原件（B1）。
+ * 下载接口要 token，不能裸 `<a href>`；失败要把服务端原因原样告诉管理员
+ * （最常见的是「原件已丢失」和「未上架不可下载」两种 404/403）。
+ */
+const downloading = ref<number | null>(null);
+async function onDownload(f: MaterialFileItem): Promise<void> {
+  if (downloading.value !== null) return;
+  downloading.value = f.file_id;
+  try {
+    await downloadMaterialFile(f);
+    ElMessage.success(`已开始下载 ${f.file_name}`);
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '下载失败');
+  } finally {
+    downloading.value = null;
+  }
 }
 
 watch(
@@ -271,6 +298,37 @@ onBeforeUnmount(() => {
 .mpd-html :deep(th) { background: var(--adm-head-bg); text-align: left; padding: 8px; border: 1px solid var(--adm-line); }
 .mpd-html :deep(td) { padding: 8px; border: 1px solid var(--adm-line); }
 .mpd-list { padding-left: 18px; font-size: 12.5px; color: var(--adm-text-mid); line-height: 1.9; }
+/* 原件清单（B1）：整行是一个按钮，点击即鉴权下载 */
+.mpd-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mpd-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-ctl);
+  background: var(--adm-surface);
+  font-family: var(--adm-font);
+  font-size: 12.5px;
+  color: var(--adm-text);
+  cursor: pointer;
+  text-align: left;
+}
+.mpd-file:hover { border-color: var(--adm-primary); background: #f7f9ff; }
+.mpd-file__ext {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--adm-r-tag);
+  background: var(--adm-primary-weak, #eef1fe);
+  color: var(--adm-primary);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+.mpd-file__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpd-file__meta { flex-shrink: 0; color: var(--adm-text-weak); font-size: 11.5px; }
+.mpd-file__dl { flex-shrink: 0; color: var(--adm-primary); font-weight: 700; margin-left: 4px; }
 .mpd-error {
   padding: 12px 14px;
   border: 1px solid #f3c4ae;

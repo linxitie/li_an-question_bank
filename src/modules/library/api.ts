@@ -215,11 +215,35 @@ export function fetchAdminMaterialStats(): Promise<AdminMaterialStats> {
 }
 
 /**
+ * 资料原件（B1，2026-11-07）：`material_file` 的一行。
+ *
+ * 原件存在 `backend/data/material_files/`（**不在 `/uploads` 公开目录**），
+ * 下载必须带 token 走 `/api/materials/files/{file_id}/download`，
+ * 所以前端要用 `downloadMaterialFile()` 而不是裸 `<a href>`。
+ */
+export interface MaterialFileItem {
+  file_id: number;
+  file_name: string;
+  file_ext: string;
+  mime_type: string;
+  /** 字节 */
+  size: number;
+  /** 人读大小，如 `35 KB` */
+  size_label: string;
+  sha256_short: string;
+  role: 'primary' | 'attachment' | string;
+  role_label: string;
+  source: string;
+  download_url: string;
+  uploaded_at: string | null;
+}
+
+/**
  * 管理端统一预览契约（A3）。
  *
  * 6 类资料共用一个抽屉：卡片给 `card`，文章/讲义/试卷给 `content_html`（服务端已 sanitize），
- * 视频给 `video.url`。`chapters`（讲义章节，C 批）/ `files`（pdf+docx，B 批）/
- * `paper`（元数据，C 批）当前为空值，但**字段已固定存在**，前端不用改分支。
+ * 视频给 `video.url`。`chapters`（讲义章节，C 批）/ `paper`（元数据，C 批）当前为空值，
+ * 但**字段已固定存在**；`files` 从 B1 起为真实原件清单（无原件的老资料返回 `[]`）。
  */
 export interface MaterialPreview {
   id: number;
@@ -246,7 +270,8 @@ export interface MaterialPreview {
   card: { front: string | null; back: string | null; images: string[] } | null;
   video: { url: string } | null;
   chapters: unknown[];
-  files: unknown[];
+  /** 原件清单（B1）：主文件在前、附件在后 */
+  files: MaterialFileItem[];
   paper: unknown | null;
 }
 
@@ -256,6 +281,54 @@ export function fetchMaterialPreview(id: number): Promise<MaterialPreview> {
     url: `/api/materials/admin/${id}/preview`,
     method: 'GET'
   });
+}
+
+/**
+ * 下载原件（B1）。
+ *
+ * 为什么要走 fetch + blob 而不是 `<a href>`：下载接口要求 `Authorization`，
+ * 浏览器对 `<a>` 导航不会带自定义头，会直接 401。
+ * 做成"先取 blob → 触发 <a download>"与论坛附件下载（`FileList.vue`）同一套路；
+ * 服务端出错时把 JSON 错误体当文件存下来是最常见的坑，这里统一抛错交给调用方提示。
+ *
+ * 取 token 只走 `window.__VTJ_AUTH__.getJsonHeaders()`（与 `interceptors.ts` 同一来源），
+ * 不自己解析 localStorage，避免多出第二套凭据逻辑。
+ */
+async function authHeadersForDownload(): Promise<Record<string, string>> {
+  const auth = (window as unknown as {
+    __VTJ_AUTH__?: { getJsonHeaders?: () => Record<string, string> };
+  }).__VTJ_AUTH__;
+  if (auth && typeof auth.getJsonHeaders === 'function') {
+    const h = auth.getJsonHeaders();
+    if (h && Object.keys(h).length) return h;
+  }
+  return {};
+}
+
+export async function downloadMaterialFile(file: MaterialFileItem): Promise<void> {
+  const res = await fetch(file.download_url, {
+    headers: await authHeadersForDownload(),
+    cache: 'no-store'
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = body?.error?.message || body?.detail || detail;
+    } catch {
+      /* 非 JSON 错误体，保留状态码 */
+    }
+    throw new Error(detail);
+  }
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = file.file_name || 'download';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
 }
 
 /** 管理端列表条目：在列表条目上多出上下架/学习人数/发布者 */export interface AdminMaterialListItem extends LibraryMaterial {

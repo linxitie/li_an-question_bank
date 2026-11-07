@@ -795,17 +795,23 @@ from pathlib import Path as _Path  # noqa: E402
 # 2026-11-04：File/UploadFile 原在此处延迟导入，但上面的函数签名（第 340/520 行）已经用到它们，
 # 在 Python < 3.14（注解立即求值）下会 NameError；已提到文件顶部导入，这里不再重复。
 
-from ....models.models import MaterialImportRecord, SysOperationLog  # noqa: E402
+from ....models.models import MaterialImportRecord, SysOperationLog, MaterialFile  # noqa: E402
 from ....services.material_sanitizer import sanitize_html  # noqa: E402
 from ....services.material_classifier import classifier  # noqa: E402
 from ....services.material_deduplicator import deduplicator  # noqa: E402
 from ....services.material_sanitizer import content_cleaner  # noqa: E402
 from ....services.material_monitor import import_monitor  # noqa: E402
+from ....services import material_files  # noqa: E402  B1：原件留档（存储+下载路径）
 from ....core.config import settings  # noqa: E402
 from ....services import media_service  # noqa: E402
 
-UPLOAD_IMG_DIR = _Path("uploads/materials/images")
-UPLOAD_TMP_DIR = _Path("uploads/materials/tmp")
+# 上传目录跟随 `settings.UPLOAD_DIR`（B1 修正）。
+# 原来写死 `"uploads/..."`：一旦部署换了上传根目录（或被测试指到临时目录）就会"
+# 写到另一个地方"，且与 `/uploads` 静态挂载（用 settings.UPLOAD_DIR）口径不一致。
+# 实测背景：本机仓库在 OneDrive 里，写 `uploads/materials/tmp` 偶尔会被同步/杀软卡 30s，
+# 测试把这个根目录指到临时盘即可彻底摆脱（见 tests/conftest.py）。
+UPLOAD_IMG_DIR = _Path(settings.UPLOAD_DIR) / "materials" / "images"
+UPLOAD_TMP_DIR = _Path(settings.UPLOAD_DIR) / "materials" / "tmp"
 
 MAGIC_BYTES = {
     ".png": b"\x89PNG",
@@ -1579,9 +1585,51 @@ async def admin_preview(material_id: int,
         "video": ({"url": (f"/api/video/{m.video_id}/stream" if m.video_id else "")}
                   if is_video else None),
         "chapters": [],
-        "files": [],
+        # B1（2026-11-07）：原件留档已落地，这里回真实清单（主文件在前、附件在后）。
+        # 没有留档的老资料返回 []，前端按"无原件"渲染，契约不变。
+        "files": [material_files.serialize(f)
+                  for f in material_files.list_for_material(db, m.material_id)],
         "paper": None,
     }
+
+
+@router.get("/files/{file_id}/download", summary="下载资料原件(登录+可见性校验)")
+async def download_material_file(file_id: int,
+                                 current_user: SysUser = Depends(get_current_user),
+                                 db: Session = Depends(get_db)):
+    """下载 `material_file` 留档的原件（B1，2026-11-07）。
+
+    权限（用户裁定 A）：
+      · 管理员（含超管）——不限，含未上架与已删除资料（要先能核对原件才谈得上恢复）；
+      · 其他人——只允许 `study_material.status == 1`（已上架）；未上架/已删除一律 403。
+
+    为什么不用 `/uploads` 静态：静态挂载没有鉴权，试卷原卷放进去等于公开。
+    路径安全交给 `material_files.resolve_abs_path()`（越界/绝对路径一律当"不存在"404）。
+    """
+    from fastapi.responses import FileResponse
+
+    row = db.query(MaterialFile).filter(MaterialFile.file_id == file_id).first()
+    if not row:
+        raise HTTPException(404, "原件不存在")
+    material = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == row.material_id).first()
+    if not material:
+        raise HTTPException(404, "原件不存在")
+    if not material_files.can_download(is_admin=_own_or_admin(current_user),
+                                       material_status=material.status):
+        raise HTTPException(403, "该资料未上架，原件不可下载")
+    try:
+        path = material_files.resolve_abs_path(row)
+    except FileNotFoundError:
+        # 库里有行、磁盘没有文件（历史数据/清理脚本误删）→ 当不存在，不暴露内部路径
+        logger.warning("[materials] 原件缺失 file_id=%s storage=%s", file_id, row.storage_path)
+        raise HTTPException(404, "原件文件已丢失，请联系管理员")
+    return FileResponse(
+        path,
+        media_type=row.mime_type or "application/octet-stream",
+        filename=row.file_name or path.name,
+        headers={"Cache-Control": "private, max-age=0, must-revalidate"},
+    )
 
 
 @router.post("/admin", summary="创建资料(管理员)")
@@ -2364,6 +2412,21 @@ async def import_confirm(import_id: int, body: dict,
     db.commit()
     rec.parse_status = "consumed"
     db.commit()
+    # B1（2026-11-07）：**原件留档**——先落档，再删临时文件。
+    # 只对文档类（docx/pdf）留档：一条资料 ? 一份源文件，语义清晰；
+    # xlsx 是一张表转 N 张卡（源表与单卡不是一对一），留档放 B2 的批量导入按"批次"处理。
+    if rec.file_type != "xlsx" and created_ids:
+        tmp = result.get("_tmp")
+        if tmp and _Path(tmp).exists():
+            try:
+                material_files.save_from_path(
+                    db, created_ids[0], tmp, rec.file_name,
+                    role="primary", source="import",
+                    uploader_id=current_user.user_id)
+                db.commit()
+            except (ValueError, OSError) as exc:
+                # 留档失败不能回滚"资料已建好"这件事，但必须留痕，便于按记录补档
+                logger.warning("[materials] 原件留档失败 import=%s: %s", import_id, exc)
     # 清理临时源文件
     tmp = result.get("_tmp")
     if tmp and _Path(tmp).exists():

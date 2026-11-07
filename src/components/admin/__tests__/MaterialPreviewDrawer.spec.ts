@@ -3,6 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import MaterialPreviewDrawer from '../MaterialPreviewDrawer.vue';
 import type { MaterialPreview } from '@/modules/library/api';
+// B1：点「下载」会走鉴权 fetch，这里整体替掉，只验组件调不调
+vi.mock('@/modules/library/api', async (orig) => {
+  const actual = await orig<typeof import('@/modules/library/api')>();
+  return { ...actual, downloadMaterialFile: vi.fn(async () => undefined) };
+});
 
 /**
  * A3 预览抽屉的渲染契约。
@@ -144,3 +149,51 @@ describe('MaterialPreviewDrawer', () => {
 
 // 让 vi 参与编译期检查（本文件未直接使用 mock，但保持与其他 spec 一致的导入风格）
 void vi;
+
+describe('B1 原件清单', () => {
+  it('有原件时列出文件名 / 角色 / 大小', async () => {
+    const { downloadMaterialFile } = await import('@/modules/library/api');
+    mountDrawer({
+      open: true,
+      preview: base({
+        type: 'lecture',
+        content_html: '<p>讲义正文</p>',
+        files: [
+          {
+            file_id: 7,
+            file_name: '04_讲义_正常.docx',
+            file_ext: 'docx',
+            mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            size: 35898,
+            size_label: '35 KB',
+            sha256_short: 'abc123def456',
+            role: 'primary',
+            role_label: '主文件',
+            source: 'import',
+            download_url: '/api/materials/files/7/download',
+            uploaded_at: '2026-11-07 11:38'
+          }
+        ]
+      })
+    });
+    const block = body().querySelector('.mpd-files');
+    expect(block).toBeTruthy();
+    expect(block!.textContent).toContain('04_讲义_正常.docx');
+    expect(block!.textContent).toContain('主文件');
+    expect(block!.textContent).toContain('35 KB');
+    expect(body().querySelector('.mpd-file__ext')!.textContent).toBe('DOCX');
+
+    const btn = body().querySelector('.mpd-file') as HTMLButtonElement;
+    btn.click();
+    await Promise.resolve();
+    expect(downloadMaterialFile).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(downloadMaterialFile).mock.calls[0][0].file_id).toBe(7);
+  });
+
+  it('没有原件时不渲染原件区', () => {
+    // Teleport 到 body，上一个用例的节点不会自动清（组件不卸载就是残留）
+    document.body.innerHTML = '';
+    mountDrawer({ open: true, preview: base() });
+    expect(body().querySelector('.mpd-files')).toBeNull();
+  });
+});
