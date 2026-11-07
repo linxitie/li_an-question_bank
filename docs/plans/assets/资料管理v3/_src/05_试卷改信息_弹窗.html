@@ -1,0 +1,111 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030}
+.canvas{width:1680px;height:900px;position:relative;overflow:hidden}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding:26px 40px 11px}
+.hd h1{font-size:24px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:4px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.card{background:#fff;border-radius:13px;border:1px solid #eaeef7;box-shadow:0 2px 10px rgba(23,32,64,.06)}
+.stats{display:flex;gap:12px;padding:16px 40px 0}
+.st{flex:1;padding:12px 14px;text-align:center;background:#fff;border-radius:13px;border:1px solid #eaeef7}
+.st .v{font-size:24px;font-weight:800}.st .l{font-size:11.5px;color:#8b93a7;margin-top:2px}
+.bar{display:flex;gap:8px;align-items:center;margin:14px 40px 0;padding:12px 14px}
+.sel{border:1px solid #dfe4f0;border-radius:9px;padding:8px 10px;font-size:12.5px;background:#fff;min-width:96px;color:#2b3244}
+.inp{flex:1;border:1px solid #dfe4f0;border-radius:9px;padding:8px 12px;font-size:12.5px;color:#8b93a7}
+.btn{background:#4054e0;color:#fff;border-radius:9px;padding:9px 15px;font-size:12.5px;font-weight:700}
+.btn.ghost{background:#f1f3fb;color:#3a4bd8}
+.tblw{margin:14px 40px 0;background:#fff;border-radius:13px;border:1px solid #eaeef7;overflow:hidden}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;background:#f7f8fd;color:#6b7387;font-size:11.5px;padding:10px;border-bottom:1px solid #e6eaf4;font-weight:600}
+.tbl td{padding:11px 10px;border-bottom:1px solid #f0f2f8}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:4px}
+.t-paper{background:#fff2e3;color:#b35309}.t-card{background:#f3ecff;color:#6b3fbf}
+.time{font-family:Consolas,monospace;font-size:11.5px;color:#4a5266}
+.act{color:#4054e0;font-weight:600}.act.hi{background:#eef1ff;padding:3px 8px;border-radius:6px;border:1px solid #ccd5ff}
+/* overlay + modal */
+.mask{position:absolute;inset:0;background:rgba(17,24,39,.42)}
+.modal{position:absolute;left:50%;top:96px;transform:translateX(-50%);width:760px;background:#fff;border-radius:16px;
+  box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden}
+.mh{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid #eef1f8}
+.mh h2{font-size:17px;font-weight:700}
+.mh .id{font-size:11.5px;color:#8b93a7;font-family:Consolas,monospace;margin-left:8px}
+.mh .x{font-size:16px;color:#98a0b3}
+.mb{padding:18px 22px 6px}
+.row{display:flex;gap:14px;margin-bottom:14px}
+.f{flex:1}
+.f.w2{flex:2}.f.w3{flex:3}
+.lab{font-size:12px;color:#4a5266;font-weight:600;margin-bottom:6px}
+.lab .opt{font-weight:400;color:#98a0b3;font-size:11px;margin-left:4px}
+.iv{border:1px solid #dfe4f0;border-radius:9px;padding:9px 11px;font-size:13px;color:#1a2030;background:#fff}
+.iv.ph{color:#b3b9c9}
+.iv.focus{border-color:#4054e0;box-shadow:0 0 0 3px rgba(64,84,224,.12)}
+.hint{margin:2px 0 14px;background:#f7f8fd;border:1px dashed #d9dfef;border-radius:10px;padding:10px 13px;font-size:11.5px;color:#5b6478;line-height:1.7}
+.hint b{color:#2b3244}
+.hint .mono{font-family:Consolas,monospace;color:#b35309;font-weight:700}
+.empty{border:1px dashed #f0b87a;background:#fffaf3;color:#b35309;font-size:11px;padding:6px 9px;border-radius:7px;margin-top:6px}
+.mf{display:flex;justify-content:flex-end;gap:10px;padding:14px 22px 18px;border-top:1px solid #eef1f8;background:#fbfcff}
+.btn2{border-radius:9px;padding:9px 20px;font-size:13px;font-weight:700}
+.btn2.c{background:#f1f3fb;color:#4a5266}
+.btn2.s{background:#4054e0;color:#fff}
+.toast{position:absolute;right:44px;bottom:44px;background:#0f7a4d;color:#fff;font-size:12.5px;font-weight:700;padding:11px 16px;border-radius:10px;box-shadow:0 8px 22px rgba(15,122,77,.35)}
+.note{position:absolute;left:40px;bottom:22px;width:740px;font-size:11.5px;color:#fff;background:rgba(23,32,64,.82);border-radius:10px;padding:10px 13px;line-height:1.65}
+</style></head><body>
+<div class="canvas">
+  <div class="hd"><div><h1>备考资料管理 v3.1</h1><div class="sub">试卷/讲义行：解析不出的元数据留空，入库后随时「改信息」</div></div><div class="badge">C 批 · C2b 改信息弹窗（D32 裁定）</div></div>
+  <div class="stats">
+    <div class="st"><div class="v">119</div><div class="l">总资料数</div></div>
+    <div class="st"><div class="v">3</div><div class="l">文章</div></div>
+    <div class="st"><div class="v">116</div><div class="l">知识卡片</div></div>
+    <div class="st"><div class="v" style="color:#0f7a86">1</div><div class="l">讲义</div></div>
+    <div class="st"><div class="v" style="color:#b35309">3</div><div class="l">试卷</div></div>
+    <div class="st"><div class="v" style="color:#c2410c">1</div><div class="l">待补全</div></div>
+  </div>
+  <div class="bar card">
+    <div class="sel">全部科目 ▾</div><div class="sel">全部类型 ▾</div><div class="sel">全部状态 ▾</div>
+    <div class="sel">年份 ▾</div><div class="sel">地区 ▾</div><div class="sel">全部时间 ▾</div>
+    <div class="inp">搜索标题…</div><div class="btn ghost">搜索</div><div class="btn">批量导入</div>
+  </div>
+  <div class="tblw">
+    <table class="tbl"><thead><tr><th style="width:34px"><input type="checkbox"></th><th style="width:52px">ID</th><th>标题 / 类型</th><th style="width:60px">科目</th><th style="width:92px">分类</th><th style="width:146px">发布者</th><th style="width:140px">上传时间 ⇅</th><th style="width:76px">上架</th><th style="width:176px">操作</th></tr></thead>
+    <tbody>
+      <tr><td><input type="checkbox"></td><td style="font-family:Consolas">115</td>
+        <td><b>2024年国考公安专业科目·题本</b><span class="tag t-paper">试卷</span><div style="font-size:11px;color:#8b93a7;margin-top:3px">2024·国考·题本·副省级<span style="border:1px solid #d9dfef;border-radius:4px;padding:1px 5px;margin-left:4px">PDF</span><span style="border:1px solid #d9dfef;border-radius:4px;padding:1px 5px;margin-left:3px">Word</span></div></td>
+        <td>公专</td><td>—</td><td style="font-weight:600">cbrycc<span style="font-size:10.5px;color:#8b93a7">（管理员）</span></td>
+        <td class="time">2026-11-05 21:12</td><td><span style="color:#0f7a4d">已上架</span></td>
+        <td><span class="act">预览</span>　<span class="act hi">改信息</span>　<span class="act" style="color:#c2410c">删除</span></td></tr>
+      <tr><td><input type="checkbox"></td><td style="font-family:Consolas">116</td>
+        <td><b>2022年公安院校人民警察招录考试试题</b><span class="tag t-paper">试卷</span><div style="font-size:11px;color:#8b93a7;margin-top:3px">2022·—·题本<span style="border:1px solid #f0b87a;background:#fffaf3;color:#b35309;border-radius:4px;padding:1px 5px;margin-left:4px">地区待补</span></div></td>
+        <td>公专</td><td>—</td><td style="font-weight:600">cbrycc<span style="font-size:10.5px;color:#8b93a7">（管理员）</span></td>
+        <td class="time">2026-11-05 21:14</td><td><span style="color:#0f7a4d">已上架</span></td>
+        <td><span class="act">预览</span>　<span class="act">改信息</span>　<span class="act" style="color:#c2410c">删除</span></td></tr>
+    </tbody></table>
+  </div>
+
+  <div class="mask"></div>
+  <div class="modal">
+    <div class="mh"><div><h2>修改试卷信息</h2><span class="id">ID 115 · 试卷</span></div><div class="x">✕</div></div>
+    <div class="mb">
+      <div class="row"><div class="f"><div class="lab">标题</div><div class="iv focus">2024年国考公安专业科目·题本</div></div></div>
+      <div class="row">
+        <div class="f"><div class="lab">科目 <span class="opt">可留空</span></div><div class="iv">公专 ▾</div></div>
+        <div class="f"><div class="lab">年份 <span class="opt">可留空</span></div><div class="iv">2024 ▾</div></div>
+        <div class="f"><div class="lab">地区 <span class="opt">可留空</span></div><div class="iv">全国 ▾</div></div>
+        <div class="f"><div class="lab">考试类型 <span class="opt">可留空</span></div><div class="iv">国考 ▾</div></div>
+      </div>
+      <div class="row">
+        <div class="f"><div class="lab">类型 <span class="opt">可留空</span></div><div class="iv">题本 ▾</div></div>
+        <div class="f"><div class="lab">卷别 <span class="opt">可留空</span></div><div class="iv">副省级 ▾</div></div>
+        <div class="f"><div class="lab">题量（题）</div><div class="iv">25</div></div>
+        <div class="f"><div class="lab">满分（分）</div><div class="iv ph">— 可留空</div></div>
+      </div>
+      <div class="hint">
+        <b>文件名解析：</b><span class="mono">2024年国考公安专业科目·题本</span> → 公专 / 2024 / 全国 / 国考 / 题本 / 副省级<br>
+        <b>当前 paper_code：</b><span class="mono">GZ-2024-GK-T-FS</span> 改「科目」或「年份」会自动重建，文件与 material_id 不变
+      </div>
+      <div class="empty">题量、满分在文件名里读不到（实测 517 份命中率 0%）→ 留空不阻断入库，可在此补填</div>
+    </div>
+    <div class="mf"><div class="btn2 c">取消</div><div class="btn2 s">保存</div></div>
+  </div>
+  <div class="toast">✓ 已保存 · 列表已刷新</div>
+  <div class="note">全字段非必填：只做格式校验（年份 2000–2035、题量 1–300、满分 1–300）。保存走 <b style="font-family:Consolas">PATCH /api/materials/admin/{id}/meta</b>，同步 <b style="font-family:Consolas">exam_paper / exam_paper_tag</b>，并把 before/after 写入 <b style="font-family:Consolas">logs/material_meta_audit.jsonl</b>；并发冲突返回 409。</div>
+</div></body></html>

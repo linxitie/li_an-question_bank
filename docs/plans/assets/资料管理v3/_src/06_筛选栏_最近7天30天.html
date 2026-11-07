@@ -1,0 +1,78 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#f4f6fb;color:#1a2030}
+.canvas{width:1680px;height:640px;position:relative;overflow:hidden;padding:26px 40px}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #e6e9f2;padding-bottom:11px}
+.hd h1{font-size:24px;font-weight:700}.hd .sub{font-size:12.5px;color:#7a8298;margin-top:4px}
+.badge{font-size:12px;color:#4054e0;background:#e9ecff;padding:6px 12px;border-radius:999px;font-weight:600}
+.bar{position:relative;display:flex;gap:8px;align-items:center;margin-top:18px;padding:14px 16px;background:#fff;border-radius:13px;border:1px solid #eaeef7;box-shadow:0 2px 10px rgba(23,32,64,.06)}
+.sel{border:1px solid #dfe4f0;border-radius:9px;padding:9px 12px;font-size:13px;background:#fff;min-width:104px;color:#2b3244}
+.sel.on{border-color:#4054e0;color:#4054e0;font-weight:700;box-shadow:0 0 0 3px rgba(64,84,224,.12);position:relative;z-index:3}
+.sel .car{float:right;color:#a7aec1;margin-left:10px;font-size:10px}
+.sel.on .car{color:#4054e0}
+.inp{flex:1;border:1px solid #dfe4f0;border-radius:9px;padding:9px 12px;font-size:13px;color:#8b93a7}
+.btn{background:#4054e0;color:#fff;border-radius:9px;padding:10px 16px;font-size:13px;font-weight:700}
+.btn.ghost{background:#f1f3fb;color:#3a4bd8}
+.chip{font-size:12px;font-weight:700;color:#0f7a4d;background:#eaf7f0;border:1px solid #bfe6d2;padding:7px 11px;border-radius:999px;white-space:nowrap}
+.dd{position:absolute;left:530px;top:60px;width:184px;background:#fff;border-radius:11px;border:1px solid #e3e8f4;
+  box-shadow:0 14px 34px rgba(23,32,64,.18);padding:6px;z-index:5}
+.dd .it{padding:9px 11px;border-radius:8px;font-size:12.5px;color:#2b3244;display:flex;justify-content:space-between}
+.dd .it.a{background:#eef1ff;color:#4054e0;font-weight:700}
+.dd .it .k{font-size:10.5px;color:#98a0b3}
+.dd .it.a .k{color:#4054e0}
+.tblw{margin-top:16px;background:#fff;border-radius:13px;border:1px solid #eaeef7;overflow:hidden}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;background:#f7f8fd;color:#6b7387;font-size:11.5px;padding:10px;border-bottom:1px solid #e6eaf4;font-weight:600}
+.tbl td{padding:11px 10px;border-bottom:1px solid #f0f2f8}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:4px}
+.t-paper{background:#fff2e3;color:#b35309}.t-card{background:#f3ecff;color:#6b3fbf}.t-art{background:#e8efff;color:#2f49c4}
+.time{font-family:Consolas,monospace;font-size:11.5px;color:#4a5266;white-space:nowrap}
+.time.new{color:#4054e0;font-weight:700}
+.note{margin-top:14px;display:flex;gap:12px}
+.note .b{flex:1;background:#fffdf3;border:1px solid #f4e3b0;border-radius:11px;padding:11px 14px;font-size:11.5px;color:#7a5f16;line-height:1.7}
+.note .b.blue{background:#f7f9ff;border-color:#d6ddf7;color:#33406a}
+.note b{color:#2b3244}
+.mono{font-family:Consolas,monospace}
+.legend{position:absolute;right:40px;top:96px;font-size:11px;color:#8b93a7}
+</style></head><body>
+<div class="canvas">
+  <div class="hd"><div><h1>备考资料管理 v3.1 · 筛选栏</h1><div class="sub">在现有筛选栏旁边新增「时间范围」：全部时间 / 最近 7 天 / 最近 30 天</div></div><div class="badge">A 批 · A2 时间范围筛选（D38 裁定：加）</div></div>
+
+  <div class="bar">
+    <div class="sel">全部科目 <span class="car">▾</span></div>
+    <div class="sel">全部类型 <span class="car">▾</span></div>
+    <div class="sel">全部状态 <span class="car">▾</span></div>
+    <div class="sel">年份 <span class="car">▾</span></div>
+    <div class="sel">地区 <span class="car">▾</span></div>
+    <div class="sel on">最近 7 天 <span class="car">▴</span></div>
+    <div class="inp">搜索标题…</div>
+    <div class="btn ghost">搜索</div>
+    <div class="btn">批量导入</div>
+    <div class="chip">最近 7 天：12 条</div>
+    <div class="dd">
+      <div class="it">全部时间 <span class="k">119</span></div>
+      <div class="it a">最近 7 天 <span class="k">12</span></div>
+      <div class="it">最近 30 天 <span class="k">47</span></div>
+    </div>
+  </div>
+
+  <div class="tblw">
+    <table class="tbl"><thead><tr>
+      <th style="width:52px">ID</th><th>标题 / 类型</th><th style="width:60px">科目</th><th style="width:146px">发布者</th>
+      <th style="width:150px">上传时间 ⇅</th><th style="width:96px">距今</th><th style="width:76px">上架</th></tr></thead>
+    <tbody>
+      <tr><td style="font-family:Consolas">119</td><td><b>2024年国考公安专业科目·题本</b><span class="tag t-paper">试卷</span><div style="font-size:11px;color:#8b93a7;margin-top:3px">2024·国考·题本·副省级</div></td><td>公专</td><td style="font-weight:600">cbrycc<span style="font-size:10.5px;color:#8b93a7">（管理员）</span></td><td class="time new">2026-11-06 08:41</td><td style="font-size:11.5px;color:#0f7a4d">今天</td><td><span style="color:#0f7a4d">已上架</span></td></tr>
+      <tr><td style="font-family:Consolas">118</td><td><b>申论·概括题四步法</b><span class="tag t-article">文章</span></td><td>申论</td><td style="font-weight:600">ycc5678<span style="font-size:10.5px;color:#8b93a7">（教师）</span></td><td class="time new">2026-11-04 16:05</td><td style="font-size:11.5px;color:#4a5266">2 天前</td><td><span style="color:#0f7a4d">已上架</span></td></tr>
+      <tr><td style="font-family:Consolas">117</td><td><b>行测·资料分析速算技巧</b><span class="tag t-card">卡片</span></td><td>行测</td><td style="font-weight:600">cbrycc<span style="font-size:10.5px;color:#8b93a7">（管理员）</span></td><td class="time new">2026-11-01 10:22</td><td style="font-size:11.5px;color:#4a5266">5 天前</td><td><span style="color:#0f7a4d">已上架</span></td></tr>
+      <tr style="opacity:.45"><td style="font-family:Consolas">110</td><td><b>公专·行政执法程序讲义</b><span class="tag t-card">卡片</span></td><td>公专</td><td style="font-weight:600">cbrycc</td><td class="time">2026-10-26 09:12</td><td style="font-size:11.5px;color:#c2410c">11 天前 · 已过滤</td><td><span style="color:#0f7a4d">已上架</span></td></tr>
+    </tbody></table>
+  </div>
+
+  <div class="note">
+    <div class="b"><b>口径：滚动窗口，不是"本周一"。</b>「最近 7 天」= <span class="mono">create_time &gt;= now - 7d</span>，时区 Asia/Shanghai；「最近 30 天」同理。<br>
+    <b>叠加：</b>可与科目/类型/状态/年份/地区、发布者、关键词同时生效，例：<span class="mono">发布者=ycc5678 + 最近 7 天</span> → "这位老师这周发了什么"。</div>
+    <div class="b blue"><b>实现：</b>不新增路径，只在 <span class="mono">GET /api/materials</span> 上加参数 <span class="mono">created_within=7d|30d</span>（省略=全部）。<br>
+    <b>空值：</b><span class="mono">create_time IS NULL</span> 的旧行在选择时间范围后不出现（符合直觉）。<br>
+    <b>条数：</b>筛选行右侧的 <span class="mono">最近 7 天：12 条</span> 直接取列表接口的 <span class="mono">total</span>，不额外请求。</div>
+  </div>
+</div></body></html>
