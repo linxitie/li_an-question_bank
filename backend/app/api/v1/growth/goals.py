@@ -16,6 +16,7 @@ from ....schemas.schemas import (
     SuccessResponse
 )
 from ....core.security import get_current_user
+from ....services import goal_verification
 
 router = APIRouter(prefix="/api/goals", tags=["学习目标"])
 logger = logging.getLogger(__name__)
@@ -245,9 +246,12 @@ async def update_goal_progress(
     if goal.is_completed:
         raise HTTPException(status_code=400, detail="目标已完成，如需继续请先取消完成")
 
-    goal.current_count = min(goal.current_count + increment, goal.target_count)
+    # 安全修复（2026-11-05）：进度只能由服务端按答题事实计算，
+    # 客户端传入的 increment 不再被信任（原实现可凭空 +N 刷金币）。
+    detail = goal_verification.count_real_progress(db, goal)
+    goal.current_count = min(detail["actual"], goal.target_count)
 
-    # 达标自动标记完成
+    # 达标自动标记完成（仍未发币，发币在 /complete）
     if goal.current_count >= goal.target_count:
         goal.is_completed = 1
         goal.completed_time = datetime.now()
@@ -313,15 +317,18 @@ async def confirm_goal_complete(
         "progress": compute_progress(goal),
     }
 
-    # 标记完成
+    # 安全修复（2026-11-05）：确认完成前必须通过服务端判定
+    try:
+        detail = goal_verification.verify_or_raise(db, goal)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # 标记完成（进度用真实值，不再伪造到 target）
     now = datetime.now()
     goal.is_completed = 1
     goal.completed_time = now
     goal.update_time = now
-
-    # 如果进度未达标但手动确认，将 current 补充到 target
-    if goal.current_count < goal.target_count:
-        goal.current_count = goal.target_count
+    goal.current_count = min(detail["actual"], goal.target_count)
 
     commit_with_retry(db)
     db.refresh(goal)
@@ -351,6 +358,7 @@ async def complete_goal(
     """完成目标：按四维加权算法结算并发放金币（幂等：已完成直接返回已发奖励）"""
     from ....services import goal_completion_service
     from ....services.growth_service import add_growth
+    from ....services import goal_verification
 
     goal = db.query(StudyGoal).filter(
         StudyGoal.goal_id == goal_id,
@@ -369,9 +377,23 @@ async def complete_goal(
             "already_completed": True,
         }
 
-    # 进度未达标则补齐到目标值（完成结算时 completion_rate = 1.0）
-    if goal.current_count < goal.target_count:
-        goal.current_count = goal.target_count
+    # 安全修复（2026-11-05）：完成结算前必须通过服务端判定，
+    # 不再把 current_count 补到目标值（原实现 = 白送金币）。
+    try:
+        detail = goal_verification.verify_or_raise(db, goal)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # 已发过币的（取消完成后再完成）不重复发放
+    if getattr(goal, "coin_claimed", 0) == 1:
+        return {
+            **to_response(goal),
+            "message": "该目标奖励已发放过，不能重复领取",
+            "reward_coins": 0,
+            "already_claimed": True,
+        }
+
+    goal.current_count = min(detail["actual"], goal.target_count)
 
     # 四维加权结算
     result = goal_completion_service.evaluate(goal, current_user, db)
@@ -381,6 +403,7 @@ async def complete_goal(
     from ..reward.contract import grant_coins
     grant_coins(db, current_user, reward, source_type="GOAL",
                 related_id=goal_id, description=f"完成目标：{goal.title}")
+    goal.coin_claimed = 1  # 幂等标记：取消完成后再完成不重复发币
 
     # 更新目标
     now = datetime.now()

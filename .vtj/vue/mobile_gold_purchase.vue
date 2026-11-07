@@ -4,6 +4,9 @@
     <div class="gp-header">
       <span class="gp-title">金币购</span>
       <div class="gold-balance">🪙 {{ state.balance }}</div>
+      <!-- M1.5：我的兑换入口（用户授权的模板改动，2026-11-05） -->
+      <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
+      <button class="gp-my-exchanges gp-kg-entry" @click="goKnowledgeGraph">知识图谱</button>
     </div>
 
     <div class="gp-tabs">
@@ -17,7 +20,8 @@
     <!-- 商城 -->
     <div v-if="state.activeTab === 'shop'" class="gp-panel">
       <div v-for="item in state.products" :key="item.id" class="goods-card" @click="openDetail(item)">
-        <span class="goods-emoji">{{ item.image_url || '🎁' }}</span>
+        <img v-if="isImageUrl(item.image_url)" :src="item.image_url" class="goods-img" alt="" />
+        <span v-else class="goods-emoji">{{ item.image_url || '🎁' }}</span>
         <div class="goods-info">
           <h4 class="goods-name">{{ item.name }}</h4>
           <p class="goods-desc">{{ item.description }}</p>
@@ -105,6 +109,18 @@
         </div>
       </div>
     </div>
+
+    <!-- M1.5：我的兑换弹窗（用户要求以弹窗形式出现） -->
+    <MyExchangesModal
+      v-if="state.showExchanges"
+      @close="state.showExchanges = false"
+    />
+
+    <!-- M3.5：知识图谱弹窗 -->
+    <KnowledgeGraphModal
+      v-if="state.showKnowledgeGraph"
+      @close="state.showKnowledgeGraph = false"
+    />
   </div>
 </template>
 
@@ -114,9 +130,12 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useRewardStore } from '@/modules/reward/store';
+  import MyExchangesModal from '@/components/shop/MyExchangesModal.vue';
+  import KnowledgeGraphModal from '@/components/kg/KnowledgeGraphModal.vue';
 
   export default defineComponent({
     name: 'MobileGoldPurchase',
+    components: { MyExchangesModal, KnowledgeGraphModal },
     setup(props) {
       const provider = useProvider({ id: 'mobile_gold_purchase', version: '1778918740312' });
       const rewardStore = useRewardStore();
@@ -124,7 +143,10 @@
         balance: 0, activeTab: 'shop', products: [], records: [],
         tasks: { checkin: {}, daily: [], random: [], weekly: [] },
         goals: [], achievements: { categories: {} },
-        detailVisible: false, detailProduct: null, exchanging: false
+        detailVisible: false, detailProduct: null, exchanging: false,
+        // M1.5：我的兑换弹窗开关
+        showExchanges: false,
+        showKnowledgeGraph: false
       });
       return { state, props, provider, rewardStore };
     },
@@ -137,6 +159,17 @@
       }
     },
     methods: {
+      // M1.5：我的兑换改为弹窗（用户要求，2026-11-05）
+      goExchanges() {
+        this.state.showExchanges = true;
+      },
+      // M3.5：知识图谱独立页
+      goKnowledgeGraph() {
+        this.state.showKnowledgeGraph = true;
+      },
+      isImageUrl(v) {
+        return typeof v === 'string' && /^(\/|https?:\/\/)/.test(v);
+      },
       switchTab(key) {
         this.state.activeTab = key;
         if (key === 'records') this.loadRecords();
@@ -274,11 +307,14 @@
   .gp-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 12px; }
   .gp-title { font-size: 18px; font-weight: 800; color: #1a2b5f; }
   .gold-balance { background: #fef3c7; padding: 8px 16px; border-radius: 14px; font-weight: 800; color: #b45309; }
+  /* M1.5：我的兑换入口 */
+  .gp-my-exchanges { margin-left: 8px; padding: 6px 10px; border-radius: 10px; border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .gp-tabs { display: flex; gap: 2px; margin-bottom: 12px; overflow-x: auto; }
   .gp-tab { flex: 1; padding: 8px 0; background: none; border: none; font-size: 13px; font-weight: 600; color: #6b7280; cursor: pointer; white-space: nowrap; }
   .gp-tab.active { color: #c41e3a; border-bottom: 2px solid #c41e3a; }
   .goods-card { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 10px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
   .goods-emoji { font-size: 30px; }
+  .goods-img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; background: #fff; }
   .goods-info { flex: 1; }
   .goods-name { margin: 0 0 2px; font-size: 14px; color: #1a2b5f; }
   .goods-desc { font-size: 11px; color: #8a8faa; margin: 0; }

@@ -157,6 +157,70 @@
         </div>
         <div class="form-row"><label>学院/部门</label><input v-model="editForm.department" /></div>
         <div class="form-row"><label>班级</label><input v-model="editForm.class_name" /></div>
+        <!-- 2026-11-05：我的装扮（称号 / 头像框） -->
+        <div class="deco-block">
+          <h4 class="deco-title">我的装扮</h4>
+
+          <div class="deco-group">
+            <span class="deco-label">称号</span>
+            <div class="deco-list">
+              <button
+                v-for="t in decorations.titles"
+                :key="t.title_id"
+                class="deco-chip"
+                :class="{ 'is-on': t.equipped }"
+                @click="equipTitle(t)"
+              >
+                {{ t.name }}
+              </button>
+              <button
+                v-if="decorations.titles.length"
+                class="deco-chip ghost"
+                @click="equipTitle(null)"
+              >
+                不佩戴
+              </button>
+              <span v-if="!decorations.titles.length" class="deco-empty">
+                还没有称号，去金币商城兑换
+              </span>
+            </div>
+          </div>
+
+          <div class="deco-group">
+            <span class="deco-label">头像框</span>
+            <div class="deco-list">
+              <button
+                v-for="f in decorations.frames"
+                :key="f.frame"
+                class="deco-chip"
+                :class="{
+                  'is-on': decorations.current_frame === f.frame,
+                  'is-expired': f.expired
+                }"
+                :disabled="f.expired"
+                :title="f.expire_at ? `到期时间：${f.expire_at.slice(0, 10)}` : '永久有效'"
+                @click="equipFrame(f)"
+              >
+                {{ f.name }}
+                <span v-if="f.expired" class="deco-expire">已过期</span>
+                <span v-else-if="f.days_left !== null && f.days_left !== undefined" class="deco-expire">
+                  剩 {{ f.days_left }} 天
+                </span>
+              </button>
+              <button
+                v-if="decorations.frames.length"
+                class="deco-chip ghost"
+                @click="equipFrame(null)"
+              >
+                不佩戴
+              </button>
+              <span v-if="!decorations.frames.length" class="deco-empty">
+                还没有头像框，去金币商城兑换
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn-mini" @click="saveProfile">保存</button>
           <button class="btn-mini ghost" @click="showEdit = false">取消</button>
@@ -237,6 +301,19 @@ function masteryColor(accuracy: number) {
 const avatarInput = ref<HTMLInputElement | null>(null);
 
 const showEdit = ref(false);
+interface DecoTitle { title_id: number; name: string; equipped: boolean; }
+interface DecoFrame {
+  frame: string;
+  name: string;
+  expire_at?: string | null;
+  expired?: boolean;
+  days_left?: number | null;
+}
+const decorations = reactive({
+  titles: [] as DecoTitle[],
+  frames: [] as DecoFrame[],
+  current_frame: null as string | null
+});
 const showDevices = ref(false);
 const showCoinDetail = ref(false);
 const editForm = reactive<any>({});
@@ -333,13 +410,62 @@ function go(path: string) {
   router.push(path);
 }
 
+async function loadDecorations() {
+  const auth = window.__VTJ_AUTH__;
+  if (!auth) return;
+  try {
+    const res = await auth.apiFetch('/api/user/decoration/mine');
+    const data = await res.json();
+    decorations.titles = data.titles || [];
+    decorations.frames = data.frames || [];
+    decorations.current_frame = data.current_frame || null;
+  } catch (e) {
+    console.warn('加载装扮失败', e);
+  }
+}
+
 function openEditProfile() {
+  loadDecorations();
   editForm.phone = user.value.phone || '';
   editForm.email = user.value.email || '';
   editForm.gender = user.value.gender || '未知';
   editForm.department = user.value.department || '';
   editForm.class_name = user.value.class_name || '';
   showEdit.value = true;
+}
+
+async function equipTitle(t: DecoTitle | null) {
+  const auth = window.__VTJ_AUTH__;
+  if (!auth) return;
+  const body = { title_id: t ? t.title_id : null };
+  const res = await auth.apiFetch('/api/user/decoration/equip-title', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.detail || '佩戴失败');
+    return;
+  }
+  loadDecorations();
+}
+
+async function equipFrame(f: DecoFrame | null) {
+  const auth = window.__VTJ_AUTH__;
+  if (!auth) return;
+  const body = { frame: f ? f.frame : null };
+  const res = await auth.apiFetch('/api/user/decoration/equip-frame', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.detail || '佩戴失败');
+    return;
+  }
+  loadDecorations();
 }
 
 async function saveProfile() {
@@ -504,4 +630,20 @@ function handleLogout() {
 .record-date { color: #8a8faa; font-size: 11px; }
 
 /* 2026-11-04：徽章墙样式（.badge-wall-card / .bw-*）随徽章展示模块下线一并移除 */
+
+.deco-block { margin: 14px 0 4px; padding-top: 12px; border-top: 1px dashed #eef2f7; }
+.deco-title { margin: 0 0 8px; font-size: 14px; color: #1a2b5f; }
+.deco-group { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.deco-label { flex: 0 0 52px; font-size: 13px; color: #6b7280; line-height: 26px; }
+.deco-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.deco-chip {
+  padding: 4px 10px; border-radius: 8px; border: 1px solid #dbeafe;
+  background: #f8fafc; color: #1f2937; font-size: 12px; cursor: pointer;
+}
+.deco-chip.is-on { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; font-weight: 600; }
+.deco-chip.ghost { background: #fff; color: #9ca3af; }
+.deco-empty { font-size: 12px; color: #9ca3af; line-height: 26px; }
+.deco-chip.is-expired { opacity: 0.55; cursor: not-allowed; text-decoration: line-through; }
+.deco-expire { margin-left: 4px; font-size: 11px; color: #9ca3af; }
+.deco-chip.is-expired .deco-expire { color: #dc2626; }
 </style>

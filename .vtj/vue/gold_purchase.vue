@@ -14,6 +14,9 @@
           <span class="balance-value"> {{ state.balance }}</span>
           <XIcon :icon="Medal" :size="20" color="#f59e0b"></XIcon>
         </div>
+        <!-- M1.5：我的兑换入口（用户授权的模板改动，2026-11-05） -->
+        <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
+        <button class="gp-my-exchanges gp-kg-entry" @click="goKnowledgeGraph">知识图谱</button>
       </div>
 
       <!-- Tab 导航 -->
@@ -31,7 +34,10 @@
       <div v-if="state.activeTab === 'shop'" class="gp-panel">
         <div class="goods-grid">
           <div v-for="item in state.products" :key="item.id" class="goods-card" @click="openDetail(item)">
-            <div class="goods-image"><span class="goods-emoji">{{ item.image_url || '🎁' }}</span></div>
+            <div class="goods-image">
+              <img v-if="isImageUrl(item.image_url)" :src="item.image_url" class="goods-img" alt="" />
+              <span v-else class="goods-emoji">{{ item.image_url || '🎁' }}</span>
+            </div>
             <div class="goods-info">
               <h4 class="goods-name">{{ item.name }}</h4>
               <p class="goods-desc">{{ item.description }}</p>
@@ -97,11 +103,18 @@
           <div v-if="!state.tasks.random.length" class="gp-empty">暂无随机任务</div>
         </div>
 
-        <!-- 周常任务 -->
+        <!-- 周常任务（M2：置顶槽位 + 生效奖励） -->
         <div class="gp-card">
-          <h4>📅 周常任务</h4>
+          <h4>
+            📅 周常任务
+            <span v-if="state.tasks.weekly_meta" class="week-meta">
+              {{ state.tasks.weekly_meta.week_key }} · 本周已领 {{ state.tasks.weekly_meta.claimed_total }}/{{ state.tasks.weekly_meta.reward_cap }}
+            </span>
+          </h4>
           <div v-for="t in state.tasks.weekly" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
+            <span class="task-title">
+              <span v-if="t.pinned" class="pin-badge">置顶</span>{{ t.title }}
+            </span>
             <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
             <span class="task-reward">🪙{{ t.reward_coins }}</span>
             <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">
@@ -157,6 +170,18 @@
         </div>
       </div>
     </div>
+
+    <!-- M1.5：我的兑换弹窗（用户要求以弹窗形式出现） -->
+    <MyExchangesModal
+      v-if="state.showExchanges"
+      @close="state.showExchanges = false"
+    />
+
+    <!-- M3.5：知识图谱弹窗 -->
+    <KnowledgeGraphModal
+      v-if="state.showKnowledgeGraph"
+      @close="state.showKnowledgeGraph = false"
+    />
   </div>
 </template>
 
@@ -169,10 +194,12 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useRewardStore } from '@/modules/reward/store';
+  import MyExchangesModal from '@/components/shop/MyExchangesModal.vue';
+  import KnowledgeGraphModal from '@/components/kg/KnowledgeGraphModal.vue';
 
   export default defineComponent({
     name: 'GoldPurchase',
-    components: { NavBar, XIcon },
+    components: { NavBar, XIcon, MyExchangesModal, KnowledgeGraphModal },
     setup(props) {
       const provider = useProvider({ id: 'gold_purchase', version: '1778918740312' });
       const rewardStore = useRewardStore();
@@ -186,7 +213,10 @@
         achievements: { categories: {} },
         detailVisible: false,
         detailProduct: null,
-        exchanging: false
+        exchanging: false,
+        // M1.5：我的兑换弹窗开关
+        showExchanges: false,
+        showKnowledgeGraph: false
       });
       return {
         state,
@@ -208,6 +238,28 @@
       }
     },
     methods: {
+      // M1.5：我的兑换改为弹窗（用户要求，2026-11-05）
+      goExchanges() {
+        this.state.showExchanges = true;
+      },
+      // M3.5：知识图谱独立页
+      goKnowledgeGraph() {
+        this.state.showKnowledgeGraph = true;
+      },
+      // 独立页入口：保留给需要直接发链接的场景（/student/shop/exchanges）
+      openExchangesPage() {
+        const path = '/student/shop/exchanges';
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push(path).catch(() => {
+            window.location.hash = '#' + path;
+          });
+        } else {
+          window.location.hash = '#' + path;
+        }
+      },
+      isImageUrl(v) {
+        return typeof v === 'string' && /^(\/|https?:\/\/)/.test(v);
+      },
       switchTab(key) {
         this.state.activeTab = key;
         if (key === 'records') this.loadRecords();
@@ -408,6 +460,23 @@
   }
   .balance-label { font-size: 13px; color: #92400e; font-weight: 500; }
   .balance-value { font-size: 28px; font-weight: 900; color: #b45309; font-family: 'DIN Alternate', sans-serif; }
+  /* M1.5：我的兑换入口 */
+  .gp-my-exchanges {
+    margin-left: 12px;
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .gp-my-exchanges:hover {
+    background: #dbeafe;
+    transform: translateY(-1px);
+  }
   .gp-tabs {
     display: flex;
     gap: 8px;
@@ -452,6 +521,7 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .goods-emoji { font-size: 30px; }
+  .goods-img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; background: #fff; }
   .goods-info { flex: 1; display: flex; flex-direction: column; }
   .goods-name { font-size: 15px; font-weight: 700; color: #1a2b5f; margin: 0 0 4px; }
   .goods-desc { font-size: 12px; color: #8a8faa; margin: 0 0 12px; flex: 1; }
@@ -484,6 +554,24 @@
   .task-title { flex: 1; color: #333; font-weight: 500; }
   .task-progress { color: #6b7280; min-width: 60px; text-align: center; }
   .task-reward { color: #b45309; font-weight: 700; min-width: 50px; }
+  /* M2：周任务置顶标记与本周统计 */
+  .pin-badge {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #fef3c7;
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 700;
+    vertical-align: middle;
+  }
+  .week-meta {
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+  }
   .task-btn {
     padding: 5px 14px; background: #1a2b5f; color: #fff; border: none;
     border-radius: 8px; cursor: pointer; font-size: 12px;
