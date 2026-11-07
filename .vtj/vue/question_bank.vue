@@ -915,13 +915,24 @@
         return false;
       },
       practiceBySubcard(sub) {
+        // 子科目卡片 → 练习页。必须把真实的 sub.id（含 0 号「未分类」）
+        // 作为 scId 传下去；只传名称会落到旧接口，未分类题恒为空。
         var cat = this.state.activeCategory;
         var catNameMap = { xc: '行测', sl: '申论', ga: '公专' };
-        this.startTypePractice({
-          subject_code: cat,
-          subject_name: catNameMap[cat] || '',
-          subcategory: sub.name,
-        });
+        var subjectIdMap = { xc: 1, sl: 2, ga: 3 };
+        var subjectId = subjectIdMap[cat] || '';
+        var hasId = sub && sub.id !== undefined && sub.id !== null && sub.id !== '';
+        var path = '/exercise?subject=' + cat +
+          '&subcategory=' + encodeURIComponent(sub.name || '') +
+          '&count=20' + (subjectId ? '&subjectId=' + subjectId : '');
+        if (hasId) {
+          path += '&scId=' + encodeURIComponent(sub.id);
+        }
+        this.checkDraftThenGo(
+          'sub:' + cat + ':' + (sub.name || ''),
+          path,
+          (catNameMap[cat] || '') + '·' + (sub.name || '')
+        );
       },
       async checkDraftThenGo(scopeKey, path, label) {
         var self = this;
