@@ -1,24 +1,25 @@
 /**
- * 管理端「备考资料管理」页：类型下拉补「讲义 / 试卷」+ 统计卡补两格
+ * 管理端「备考资料管理」页：类型下拉补「讲义 / 试卷」+ 统计卡整行替换
  * （DOM 注入，遵守 R3：不修改 `.vtj` 页面模板）
  *
  * 背景（资料管理 v3.1 · A1 / 裁定 D29）
  *  `/admin/materials` 现在仍渲染 `.vtj/vue/admin_materials.vue`（VTJ 低代码页）。
- *  R3 规定不得直接改其 `<template>`，而本轮 A1 就要让两个新类型可见可用：
+ *  R3 规定不得直接改其 `<template>`，而本轮要：
  *   ① 类型下拉只有 入门视频/进阶视频/文章/知识卡片 4 项 → 追加「讲义」「试卷」；
- *   ② 统计概览只有 总/视频/文档/卡片 4 格 → 追加「讲义」「试卷」两格，数字走
- *      `GET /api/materials/admin/stats`（后端已返回 6 个类型键）。
+ *   ② 统计行只有 总/视频/文档/卡片 4 格 → **整行换成 5 格**：
+ *      总资料 ｜ 试卷 ｜ 文章/讲义 ｜ 卡片 ｜ 已上架/未上架
+ *      （2026-11-07 用户指定：双值用 `a/b` 形态，合并在同一格）
  *
  * 生命周期：A4 会用新建的手写页 `src/views/admin/materials.vue` 替换路由，
- *  届时本文件连同 `main.ts` 里的一行安装调用**一起删除**即可（6 类由手写页直接渲染）。
+ *  届时本文件连同 `main.ts` 里的一行安装调用**一起删除**即可（统计行由手写页直接渲染）。
  *
  * 约束（与 materialsCreateEntry / tabletMaterialsEntry 同一套路）
- *  · 只在 `#/admin/materials` + admin 角色下注入；离开页面自动移除；
+ *  · 只在 `#/admin/materials` + admin 角色下注入；离开页面自动移除、原 4 格恢复显示；
  *  · 幂等：元素带 id / data 标记，重复调用不插第二份；
  *  · 页面被 Vue 重新 patch 掉注入节点时，由 1s 定时 + hashchange 兜底补回；
  *  · 页面样式是 `scoped`，注入节点拿不到 `.stat-card` 规则 → 自带样式，不依赖页面 CSS。
  */
-import { fetchAdminMaterialStats } from '@/modules/library/api';
+import { fetchAdminMaterialStats, type AdminMaterialStats } from '@/modules/library/api';
 import { MATERIAL_TYPES, type MaterialTypeMeta } from '@/modules/library/materialTypes';
 
 /** A1 追加的两种类型（保持与后端 TYPES 一致） */
@@ -26,7 +27,9 @@ const NEW_TYPE_KEYS = ['lecture', 'paper'] as const;
 
 const STYLE_ID = 'admin-material-types-style';
 const OPTION_MARK = 'data-a1-type';
-const statCardId = (key: string) => `a1-stat-${key}`;
+/** 统计行被接管时给容器加的标记类（用于隐藏原来的 4 格并回收） */
+const OVERRIDE_CLASS = 'a1-stats-overridden';
+const statCardId = (id: string) => `a1-stat-${id}`;
 
 /** 管理页路由（hash 路由，允许带查询参数） */
 const PAGE_HASH = '#/admin/materials';
@@ -48,29 +51,104 @@ export function injectedMaterialTypes(): MaterialTypeMeta[] {
   return MATERIAL_TYPES.filter((t) => (NEW_TYPE_KEYS as readonly string[]).includes(t.key));
 }
 
+/** 统计行 5 格的规格（顺序即展示顺序，2026-11-07 用户指定） */
+export type StatCardId = 'total' | 'paper' | 'doc' | 'card' | 'status';
+
+export interface StatSpec {
+  id: StatCardId;
+  label: string;
+  icon: string;
+  tone?: 'ok' | 'warn' | 'info' | 'danger';
+  value2Tone?: 'ok' | 'warn' | 'info' | 'danger' | 'weak';
+}
+
+export const STAT_SPECS: readonly StatSpec[] = [
+  { id: 'total', label: '总资料', icon: '📚' },
+  { id: 'paper', label: '试卷', icon: '📄', tone: 'warn' },
+  // 双值：文章 / 讲义
+  { id: 'doc', label: '文章/讲义', icon: '📘' },
+  { id: 'card', label: '卡片', icon: '🗂️' },
+  // 双值：已上架 / 未上架（上架=审批通过）
+  { id: 'status', label: '已上架/未上架', icon: '✅', tone: 'ok', value2Tone: 'warn' }
+];
+
+export interface StatValue {
+  id: StatCardId;
+  label: string;
+  value: number;
+  /** 双值卡片右半（文章/讲义、已上架/未上架） */
+  value2?: number;
+}
+
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/**
+ * 把 `/admin/stats` 的返回映射成 5 格数值（纯函数，便于单测）。
+ * 空数据一律给 0，绝不给 undefined（避免卡片显示 — 让人以为接口挂了）。
+ */
+export function buildStatValues(stats: Partial<AdminMaterialStats> | null | undefined): StatValue[] {
+  const byType = (stats?.by_type ?? {}) as Record<string, number>;
+  const byStatus = (stats?.by_status ?? {}) as Record<string, number>;
+  return [
+    { id: 'total', label: '总资料', value: num(stats?.total) },
+    { id: 'paper', label: '试卷', value: num(byType.paper) },
+    { id: 'doc', label: '文章/讲义', value: num(byType.article), value2: num(byType.lecture) },
+    { id: 'card', label: '卡片', value: num(byType.card) },
+    { id: 'status', label: '已上架/未上架', value: num(byStatus.published), value2: num(byStatus.draft) }
+  ];
+}
+
 const STYLE = `
 .a1-stat-card {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   background: #fff;
   border-radius: 12px;
-  padding: 20px;
-  text-align: center;
+  padding: 16px 18px;
   box-shadow: 0 2px 12px rgba(10, 22, 40, 0.08);
 }
-.a1-stat-card .a1-stat-value {
-  font-size: 28px;
-  font-weight: 600;
-  color: #1a2a4a;
-  margin-bottom: 8px;
-  font-variant-numeric: tabular-nums;
+.a1-stat-card .a1-stat-icon {
+  flex: none;
+  font-size: 20px;
+  line-height: 1;
+  opacity: 0.92;
 }
+.a1-stat-card .a1-stat-body { min-width: 0; text-align: left; }
+.a1-stat-card .a1-stat-value {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #1a2a4a;
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.a1-stat-card .a1-stat-slash {
+  margin: 0 2px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #98a0b3;
+}
+.a1-stat-card .a1-stat-value2 { color: #98a0b3; }
 .a1-stat-card .a1-stat-label {
   font-size: 13px;
   color: #8899aa;
 }
-.a1-stat-card.is-lecture .a1-stat-value { color: #0f7a86; }
-.a1-stat-card.is-paper .a1-stat-value { color: #b35309; }
+.a1-stat-card.is-tone-warn .a1-stat-value { color: #b35309; }
+.a1-stat-card.is-tone-ok .a1-stat-value { color: #0f7a4d; }
+.a1-stat-card.is-tone-info .a1-stat-value { color: #0f7a86; }
+.a1-stat-card.is-tone-danger .a1-stat-value { color: #c2410c; }
+.a1-stat-card .a1-stat-value2.is-tone-warn { color: #b35309; }
+.a1-stat-card .a1-stat-value2.is-tone-ok { color: #0f7a4d; }
+.a1-stat-card .a1-stat-value2.is-tone-info { color: #0f7a86; }
+.a1-stat-card .a1-stat-value2.is-tone-danger { color: #c2410c; }
+/* 统计行被接管：隐藏页面原有的 4 格（只匹配页面自己的 .stat-card，不误伤注入的 .a1-stat-card） */
+.stats-overview.a1-stats-overridden > .stat-card { display: none; }
 `;
 
 /** 单例句柄：同一 window 只保留一套注入（HMR / 重复 onReady 不会叠加定时器与节点） */
@@ -125,10 +203,20 @@ export function installAdminMaterialTypes(win: Window = window): () => void {
     doc.querySelectorAll(`option[${OPTION_MARK}]`).forEach((o) => o.remove());
   };
 
-  const writeStat = (key: string, value: number | string) => {
-    const card = doc.getElementById(statCardId(key));
-    const box = card?.querySelector('.a1-stat-value');
-    if (box) box.textContent = String(value);
+  const writeStat = (v: StatValue) => {
+    const card = doc.getElementById(statCardId(v.id));
+    if (!card) return;
+    const box = card.querySelector('.a1-stat-value');
+    if (!box) return;
+    // 双值：保留 `/` 与右半节点，只改文本
+    const first = box.querySelector('.a1-stat-num');
+    if (first) first.textContent = String(v.value);
+    const second = box.querySelector('.a1-stat-value2');
+    if (second) second.textContent = String(v.value2 ?? 0);
+  };
+
+  const writeAll = (values: StatValue[]) => {
+    for (const v of values) writeStat(v);
   };
 
   const loadStats = async (): Promise<void> => {
@@ -139,9 +227,7 @@ export function installAdminMaterialTypes(win: Window = window): () => void {
     statsInFlight = true;
     try {
       const stats = await fetchAdminMaterialStats();
-      for (const meta of injectedMaterialTypes()) {
-        writeStat(meta.key, stats?.by_type?.[meta.key] ?? 0);
-      }
+      writeAll(buildStatValues(stats));
     } catch {
       // 后端未启动 / token 过期：保留 "—"，15s 后或下次进页面再试，不打断页面
     } finally {
@@ -149,25 +235,72 @@ export function installAdminMaterialTypes(win: Window = window): () => void {
     }
   };
 
+  const buildCard = (spec: StatSpec): HTMLDivElement => {
+    const card = doc.createElement('div');
+    card.id = statCardId(spec.id);
+    card.className = `a1-stat-card${spec.tone ? ` is-tone-${spec.tone}` : ''}`;
+
+    // E3 裁定：保留 emoji，但尺寸/对齐统一（20px、与数值垂直居中）
+    const icon = doc.createElement('span');
+    icon.className = 'a1-stat-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = spec.icon;
+    card.appendChild(icon);
+
+    const body = doc.createElement('div');
+    body.className = 'a1-stat-body';
+
+    const value = doc.createElement('div');
+    value.className = 'a1-stat-value';
+
+    const first = doc.createElement('span');
+    first.className = 'a1-stat-num';
+    first.textContent = '—';
+    value.appendChild(first);
+
+    // 只有双值卡片（doc / status）才渲染 `/ 右半`
+    if (spec.id === 'doc' || spec.id === 'status') {
+      const slash = doc.createElement('span');
+      slash.className = 'a1-stat-slash';
+      slash.textContent = '/';
+      value.appendChild(slash);
+
+      const second = doc.createElement('span');
+      second.className = 'a1-stat-value2';
+      if (spec.value2Tone && spec.value2Tone !== 'weak') {
+        second.classList.add(`is-tone-${spec.value2Tone}`);
+      }
+      second.textContent = '—';
+      value.appendChild(second);
+    }
+
+    const label = doc.createElement('div');
+    label.className = 'a1-stat-label';
+    label.textContent = spec.label;
+
+    body.appendChild(value);
+    body.appendChild(label);
+    card.appendChild(body);
+    return card;
+  };
+
   const syncStats = () => {
     const box = doc.querySelector('.stats-overview');
     if (!box) return;
-    for (const meta of injectedMaterialTypes()) {
-      if (doc.getElementById(statCardId(meta.key))) continue;
-      const card = doc.createElement('div');
-      card.id = statCardId(meta.key);
-      card.className = `a1-stat-card is-${meta.key}`;
-      card.innerHTML =
-        '<div class="a1-stat-value">—</div><div class="a1-stat-label"></div>';
-      const label = card.querySelector('.a1-stat-label');
-      if (label) label.textContent = meta.label;
-      box.appendChild(card);
+    box.classList.add(OVERRIDE_CLASS);
+    for (const spec of STAT_SPECS) {
+      if (doc.getElementById(statCardId(spec.id))) continue;
+      box.appendChild(buildCard(spec));
     }
-    void loadStats();   // 自带 15s 节流：1s 兜底 sync 不会变成请求风暴
+    void loadStats(); // 自带 15s 节流：1s 兜底 sync 不会变成请求风暴
   };
 
   const clearStats = () => {
-    for (const meta of injectedMaterialTypes()) doc.getElementById(statCardId(meta.key))?.remove();
+    for (const spec of STAT_SPECS) doc.getElementById(statCardId(spec.id))?.remove();
+    // 还原页面原有 4 格
+    doc.querySelectorAll('.stats-overview.' + OVERRIDE_CLASS).forEach((el) =>
+      el.classList.remove(OVERRIDE_CLASS)
+    );
   };
 
   const visible = (): boolean => {
