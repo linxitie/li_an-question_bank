@@ -54,14 +54,23 @@ class TestClassifier:
         assert result["type"] == "video_advanced"
 
     def test_classify_document_long(self):
+        """B3（2026-11-07）起：文档一律判 **讲义**，不再按字数分 article/card。
+
+        原断言是 `article`，B3 把 `_classify_document` 改成恒返回 lecture
+        （卡片必须有正/背面结构，文档天然没有），但本测试没跟随，成为长期红。
+        这里补上原因，避免下次又被误判成"新引入的失败"。
+        """
         from app.services.material_classifier import classifier
         result = classifier.classify(".docx", content="测试" * 600, title="行测备考指南")
-        assert result["type"] == "article"
+        assert result["type"] == "lecture"
+        assert result["confidence"] > 0
 
     def test_classify_document_short(self):
+        """短文档同样是讲义（B3 删除了「len(content) < 500 → card」的旧规则）。"""
         from app.services.material_classifier import classifier
         result = classifier.classify(".docx", content="短内容", title="知识卡片要点")
-        assert result["type"] == "card"
+        assert result["type"] == "lecture"
+        assert "讲义" in result["reason"]
 
     def test_classify_unknown(self):
         from app.services.material_classifier import classifier

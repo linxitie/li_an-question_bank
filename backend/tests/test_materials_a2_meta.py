@@ -117,9 +117,22 @@ class TestOrder:
         assert [i["title"] for i in items] == ["较旧", "较新"]
 
     def test_invalid_order_is_422(self, client, db_session, test_admin, admin_headers):
+        """非法排序值 → 422（`order` 是白名单 pattern，不是自由字符串）。
+
+        2026-11-08 更新：`id_desc` 现在是**合法默认值**（ID 方案 A），
+        所以拿它当"非法样本"已经过时 —— 换成真正不存在的 `relevance`。
+        """
+        r = client.get("/api/materials/admin/list", headers=admin_headers,
+                       params={"order": "relevance"})
+        assert r.status_code == 422
+
+    def test_id_desc_is_accepted(self, client, db_session, test_admin, admin_headers):
+        """`id_desc` 是默认排序键（列表时间倒序），必须 200 而不是 422。"""
+        _mk(db_session, test_admin.user_id, 1, "随便一条")
         r = client.get("/api/materials/admin/list", headers=admin_headers,
                        params={"order": "id_desc"})
-        assert r.status_code == 422
+        assert r.status_code == 200, r.text
+        assert r.json()["items"][0]["seq"] == r.json()["total"]
 
 
 class TestPermission:

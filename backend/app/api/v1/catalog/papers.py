@@ -221,12 +221,17 @@ async def preview_paper(
     db: Session = Depends(get_db)
 ):
     """
-    学生端预览试卷 - 仅显示题目，不含答案和解析
+    预览试卷 - 仅显示题目，不含答案和解析
+
+    权限（2026-11-08 / D9 修正）：`role_level` 实测是 student=0 / **teacher=1** / admin=3，
+    旧阈值 `< 2` 把教师也当成学生（教师看不到自己的草稿卷）。现改为 `< 1`：
+    · 学生（0）→ 只能看 `PUBLISHED`；
+    · 教师（1）及以上 → 可预览未发布卷（发布前自查）。
     """
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
     if not paper:
         raise HTTPException(status_code=404, detail="试卷不存在")
-    if current_user.role_level < 2 and paper.paper_type != "PUBLISHED":
+    if current_user.role_level < 1 and paper.paper_type != "PUBLISHED":
         raise HTTPException(status_code=404, detail="试卷不存在")
 
     from ....services.exam_service import ExamService
@@ -234,7 +239,7 @@ async def preview_paper(
         # R8（2026-11-08）：契约层默认只看已发布，这里按角色显式放行，
         # 避免教师/管理员预览草稿卷被误 404（本端点上面已有同样的角色守卫）。
         preview_data = ExamService.get_exam_preview(
-            db, paper_id, allow_unpublished=current_user.role_level >= 2)
+            db, paper_id, allow_unpublished=current_user.role_level >= 1)
         return preview_data
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

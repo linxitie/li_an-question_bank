@@ -4,7 +4,6 @@
 只读端点不发布事件、``/api/exam-records`` 路由面未变且无硬删除端点。
 """
 import pytest
-from fastapi.routing import APIRoute
 
 from app.main import app
 from app.models.models import PracticeRecord, QuestionBank
@@ -128,13 +127,22 @@ def test_read_endpoints_do_not_publish_events(
 
 
 def test_exam_records_surface_is_read_only():
-    routes = {
-        (next(iter(route.methods)), route.path)
-        for route in app.routes
-        if isinstance(route, APIRoute) and route.path.startswith("/api/exam-records")
+    """`/api/exam-records` 路由面冻结：只有 8 个端点，且**没有 DELETE**。
+
+    2026-11-08 修正（这条守卫曾长期失效）：旧写法遍历 `app.routes` 并 `isinstance(..., APIRoute)`，
+    但本机 FastAPI 版本把 `include_router` 的结果存成 `_IncludedRouter`（延迟展开），
+    `APIRoute` 一个都取不到 → 集合恒为空、断言恒失败，等于**守卫根本没在工作**。
+    现在改为读 `app.openapi()['paths']`（等价于对外契约），既修好红，也真正能拦住"端点被删/被改名"。
+    """
+    paths = app.openapi()["paths"]
+    surface = {
+        (method.upper(), path)
+        for path, operations in paths.items()
+        if path.startswith("/api/exam-records")
+        for method in operations
     }
 
-    assert routes == {
+    assert surface == {
         ("GET", "/api/exam-records/self"),
         ("GET", "/api/exam-records/mock"),
         ("GET", "/api/exam-records/stats"),
@@ -143,5 +151,5 @@ def test_exam_records_surface_is_read_only():
         ("GET", "/api/exam-records/{record_id}/details"),
         ("POST", "/api/exam-records/ai/analyze"),
         ("GET", "/api/exam-records/summary"),
-    }
-    assert all(method != "DELETE" for method, _ in routes)
+    }, sorted(surface)
+    assert all(method != "DELETE" for method, _ in surface)

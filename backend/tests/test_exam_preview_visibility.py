@@ -9,8 +9,35 @@
 - `GET /api/exams/preview/{paper_id}`（本次修补的主口子）
 - `GET /api/papers/{paper_id}/preview`（原本就有角色守卫，做回归防退化）
 教师/管理员仍可预览未发布卷（避免把内部预览一起堵死）。
+
+⚠️ 夹具说明（2026-11-08）：`conftest.test_user` 虽然是 `user_type="student"`，但
+`role_level=1`（与真实数据 student=0 不一致）。为避免改动全局夹具引发连锁，
+本文件自带 `student_headers`（role_level=0）来测"学生被拦"，
+教师用 conftest 的 `teacher_headers`（真实就是 1）。
 """
-from app.models.models import ExamPaper, PaperQuestionRelation, QuestionBank
+import pytest
+
+from app.core.security import create_access_token, get_password_hash
+from app.models.models import ExamPaper, PaperQuestionRelation, QuestionBank, SysUser
+
+
+@pytest.fixture()
+def student_headers(db_session):
+    """真实口径的学生：`user_type=student` + `role_level=0`（见 sys_user 实测分布）。"""
+    user = SysUser(
+        user_no="pv_stu_01",
+        username="预览测试学生",
+        password=get_password_hash("preview123"),
+        phone="13600136001",
+        user_type="student",
+        role_level=0,
+        status=1,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    token = create_access_token(data={"user_id": user.user_id, "user_no": user.user_no})
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _make_paper(db_session, subject_id, type_id, creator_id, *,
@@ -65,12 +92,12 @@ def _paths(paper_id):
 
 
 def test_student_can_preview_published(client, db_session, test_subject,
-                                       test_question_type, test_user, auth_headers):
+                                       test_question_type, test_user, student_headers):
     paper = _make_paper(db_session, test_subject.subject_id,
                         test_question_type.type_id, test_user.user_id,
                         paper_type="PUBLISHED", code="R8-PUB-1")
     for path in _paths(paper.paper_id):
-        resp = client.get(path, headers=auth_headers)
+        resp = client.get(path, headers=student_headers)
         assert resp.status_code == 200, (path, resp.text)
         body = resp.json()
         assert len(body["questions"]) == 2
@@ -81,40 +108,41 @@ def test_student_can_preview_published(client, db_session, test_subject,
 
 
 def test_student_blocked_on_draft(client, db_session, test_subject,
-                                  test_question_type, test_user, auth_headers):
+                                  test_question_type, test_user, student_headers):
     paper = _make_paper(db_session, test_subject.subject_id,
                         test_question_type.type_id, test_user.user_id,
                         paper_type="DRAFT", code="R8-DRAFT-1", name="R8 草稿卷")
     for path in _paths(paper.paper_id):
-        resp = client.get(path, headers=auth_headers)
+        resp = client.get(path, headers=student_headers)
         assert resp.status_code == 404, (path, resp.status_code, resp.text)
 
 
 def test_student_blocked_on_ended(client, db_session, test_subject,
-                                  test_question_type, test_user, auth_headers):
+                                  test_question_type, test_user, student_headers):
     paper = _make_paper(db_session, test_subject.subject_id,
                         test_question_type.type_id, test_user.user_id,
                         paper_type="ENDED", code="R8-ENDED-1", name="R8 回收站卷")
     for path in _paths(paper.paper_id):
-        resp = client.get(path, headers=auth_headers)
+        resp = client.get(path, headers=student_headers)
         assert resp.status_code == 404, (path, resp.status_code, resp.text)
 
 
-def test_teacher_level1_matches_papers_guard(client, db_session, test_subject,
-                                             test_question_type, test_user, teacher_headers):
-    """教师（实测 `role_level=1`，与 papers.py 的 `role_level < 2` 判据一致）也被拦。
+def test_teacher_can_preview_draft(client, db_session, test_subject,
+                                   test_question_type, test_user, teacher_headers):
+    """教师（实测 `role_level=1`）可预览草稿卷（D9，2026-11-08 放开）。
 
-    依据真实数据：`sys_user` 里 student=0 / teacher=1 / admin=3，
-    `catalog/papers.py:229` 用的就是 `< 2`，所以两条预览口对教师口径相同。
-    教师预览自己的卷走教师端端点（teacher_papers 等），不走这两个学生口。
-    若要放行教师，需同时改 papers.py 的阈值（建议单独立项，别在本次补丁里悄悄改）。
+    背景：`sys_user` 里 student=0 / teacher=1 / admin=3，而 R8 补丁最初沿用
+    `catalog/papers.py` 的 `< 2` 阈值 → 教师被当成学生，发布前无法自查卷面。
+    D9 把两条预览口的阈值都改成 `< 1` / `>= 1`：学生仍被拦，教师及以上放行。
+    学生被拦的用例见 `test_student_blocked_on_draft/ended`（未变）。
     """
     paper = _make_paper(db_session, test_subject.subject_id,
                         test_question_type.type_id, test_user.user_id,
                         paper_type="DRAFT", code="R8-DRAFT-2", name="R8 教师草稿")
     for path in _paths(paper.paper_id):
         resp = client.get(path, headers=teacher_headers)
-        assert resp.status_code == 404, (path, resp.status_code, resp.text)
+        assert resp.status_code == 200, (path, resp.status_code, resp.text)
+        assert len(resp.json()["questions"]) == 2
 
 
 def test_admin_can_preview_ended(client, db_session, test_subject,
@@ -128,10 +156,10 @@ def test_admin_can_preview_ended(client, db_session, test_subject,
 
 
 def test_missing_paper_is_404(client, db_session, test_subject,
-                              test_question_type, test_user, auth_headers):
+                              test_question_type, test_user, student_headers):
     _make_paper(db_session, test_subject.subject_id,
                 test_question_type.type_id, test_user.user_id,
                 paper_type="PUBLISHED", code="R8-PUB-2", name="R8 占位", count=1)
     for path in ("/api/exams/preview/999999", "/api/papers/999999/preview"):
-        resp = client.get(path, headers=auth_headers)
+        resp = client.get(path, headers=student_headers)
         assert resp.status_code == 404, (path, resp.status_code)
