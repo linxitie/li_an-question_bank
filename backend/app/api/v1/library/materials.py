@@ -899,6 +899,17 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         logger.warning("[materials] audit log failed: %s", e)
 
 
+def _paper_sync_payload(sync: dict | None) -> dict | None:
+    """P5：把 `material_paper_sync` 的结果裁成对外回包的 `paper_sync` 字段。
+
+    只暴露前端/测试需要的 6 个键；内部键（enabled/note）不进响应体。
+    """
+    if not sync:
+        return None
+    return {key: sync.get(key) for key in
+            ("paper_id", "paper_code", "before", "after", "changed", "skipped")}
+
+
 def _safe_image_upload(file: UploadFile, db: Session | None = None,
                        user_id: int | None = None) -> str:
     ext = _os.path.splitext(file.filename or "")[1].lower()
@@ -2046,16 +2057,18 @@ async def admin_set_status(material_id: int, body: dict,
         raise HTTPException(404, "资料不存在")
     prev = m.status
     m.status = st
-    db.commit()
+    # P5（2026-11-08）：资料可见性 → 可作答性（方案《试卷管理收敛》§2.3）。
+    # 与状态变更、审计写在同一个事务里：要么全成，要么全不成。
+    from ....services import material_paper_sync
+    sync = material_paper_sync.sync_material(db, m)
     # 从回收站（status=-1）回到 0/1 记为「恢复资料」，与普通上/下架在审计里可区分
-    if prev == -1:
-        _audit(db, current_user, "restore", f"material:{material_id}",
-               "恢复为" + ("上架" if st == 1 else "未上架"))
-    else:
-        _audit(db, current_user, "status", f"material:{material_id}",
-               "上架" if st == 1 else "下架")
+    base = (("恢复为" + ("上架" if st == 1 else "未上架")) if prev == -1
+            else ("上架" if st == 1 else "下架"))
+    detail = f"{base}；{sync['note']}" if sync.get("note") else base
+    _audit(db, current_user, "restore" if prev == -1 else "status",
+           f"material:{material_id}", detail)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "paper_sync": _paper_sync_payload(sync)}
 
 
 @router.delete("/admin/batch", summary="批量删除资料(管理员)")
@@ -2078,15 +2091,25 @@ async def admin_batch_delete(
     if not ids:
         raise HTTPException(400, "ids 不能为空")
 
-    deleted = db.query(StudyMaterial).filter(
-        StudyMaterial.material_id.in_(ids),
-        StudyMaterial.status >= 0,
-    ).update({"status": -1}, synchronize_session=False)
-
+    # 2026-11-08（P5）：改为逐条置 -1（原来是 bulk update），原因是联动要按 ORM 对象
+    # 计算「同编号是否还有其它已上架资料」，bulk update 用 synchronize_session=False
+    # 会让会话里的 status 仍是旧值，导致该下架的卷没下架。条数由前端勾选，量级很小。
+    targets = (db.query(StudyMaterial)
+               .filter(StudyMaterial.material_id.in_(ids),
+                       StudyMaterial.status >= 0)
+               .all())
+    for m in targets:
+        m.status = -1
+    from ....services import material_paper_sync
+    syncs = material_paper_sync.sync_materials(db, targets)
+    deleted = len(targets)
+    note = material_paper_sync.note_of_many(syncs)
+    _audit(db, current_user, "batch_delete",
+           f"deleted={deleted}" + (f"；{note}" if note else ""))
     db.commit()
-    _audit(db, current_user, "batch_delete", f"deleted={deleted}")
-    db.commit()
-    return {"deleted": deleted}
+    changed = [p for p in (_paper_sync_payload(s) for s in syncs)
+               if p and p.get("changed")]
+    return {"deleted": deleted, "paper_sync": changed}
 
 
 @router.delete("/admin/{material_id}", summary="删除资料(管理员)")
@@ -2112,10 +2135,13 @@ async def admin_delete(material_id: int,
         return {"ok": True, "already_deleted": True}
     title = m.title
     m.status = -1
+    # P5（2026-11-08）：删除即"不可见"，与下架同语义 → 关联卷同步 DRAFT（同事务）
+    from ....services import material_paper_sync
+    sync = material_paper_sync.sync_material(db, m)
+    detail = f"{title}；{sync['note']}" if sync.get("note") else title
+    _audit(db, current_user, "delete", f"material:{material_id}", detail)
     db.commit()
-    _audit(db, current_user, "delete", f"material:{material_id}", title)
-    db.commit()
-    return {"ok": True}
+    return {"ok": True, "paper_sync": _paper_sync_payload(sync)}
 
 
 # ============================ 统计概览 & 批量操作（Task3/4）============================

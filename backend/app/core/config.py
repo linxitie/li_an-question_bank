@@ -124,6 +124,12 @@ class Settings(BaseSettings):
         "./data/foundation/dispatcher.lock", env="DISPATCHER_LOCK_PATH"
     )
 
+    # ==================== P5 资料↔可作答卷联动（2026-11-08）====================
+    # 资料上/下架、软删除时是否同步 exam_paper.paper_type（方案《试卷管理收敛》§2.3）。
+    # 默认 True；设 MATERIAL_PAPER_SYNC=false 可秒级退回"只改资料、不动卷"的旧行为
+    # （回滚预案第一层，见 docs/plans/P5_上下架联动_方案对比_v1.md §8）。
+    MATERIAL_PAPER_SYNC: bool = Field(True, env="MATERIAL_PAPER_SYNC")
+
     # ==================== F2 通信统一（WS 中继 / 心跳 / 写入守卫）====================
     # WS_RELAY=redis 时跨 worker 经 Redis pub/sub 扇出；留空为单进程本地扇出。
     # WEB_CONCURRENCY>1 且未开中继时 lifespan 直接拒绝启动（见 ws_relay.validate_worker_config）。
