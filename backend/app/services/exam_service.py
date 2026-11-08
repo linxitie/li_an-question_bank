@@ -74,6 +74,15 @@ class ExamService:
         )
         db.add(exam_record)
         db.flush()
+        # ★ 必须提交（2026-11-08 修）：原来只有 `flush()` 没有 `commit()`，
+        #   `get_db()` 在请求结束时 `db.close()` → 未提交的 INSERT 被回滚。
+        #   表现：`POST /api/exams/start` 返回 exam_id=1，但 `exam_record` 表里
+        #   一行都没有；学生答完点「交卷」立刻报「考试记录不存在」（实测复现）。
+        #   老路由 `/{paper_id}/start` 一直是 `commit()` 的，所以只有走新路由
+        #   的「开始考试」按钮会坏 —— 单测复用了同一个 session，看不到未提交问题，
+        #   故长期没被发现（已补跨 session 的回归用例）。
+        db.commit()
+        db.refresh(exam_record)
         
         # 4. 获取题目（根据试卷设置决定是否打乱）
         questions = ExamService._get_paper_questions(db, paper)

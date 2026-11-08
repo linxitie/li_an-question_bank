@@ -160,3 +160,31 @@ def test_start_exam_allows_retake_after_submit(client, db_session, test_subject,
         ExamRecord.record_id == second.json()["record_id"]
     ).one()
     assert record.attempt_count == 2
+
+
+def test_start_exam_persists_record_across_rollback(client, db_session, test_subject,
+                                                    test_question_type, test_user):
+    """开考必须落库：`rollback()` 后记录仍在（原 `ExamService.start_exam` 只 flush 不 commit）。
+
+    为什么这么断言：生产 `get_db()` 在请求结束 `db.close()`，未提交的 INSERT 会被丢弃 ——
+    表现就是「开始考试」拿到 exam_id，交卷却报「考试记录不存在」（实测复现）。
+    这里用 rollback 模拟请求结束的回滚；修复前该行会消失。
+    """
+    from app.services.exam_service import ExamService
+
+    paper, _ = _make_published_paper(
+        db_session, test_subject.subject_id, test_question_type.type_id,
+        test_user.user_id
+    )
+
+    result = ExamService.start_exam(
+        db_session, paper.paper_id, test_user.user_id, "SELF_TEST")
+    record_id = result["exam_id"]
+    assert record_id > 0
+
+    db_session.rollback()  # 模拟请求结束时的回滚/close
+
+    assert db_session.query(ExamRecord).filter(
+        ExamRecord.record_id == record_id).first() is not None, \
+        "开始考试没有 commit，记录在请求结束时会丢失"
+
