@@ -874,6 +874,7 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         "delete": "删除资料",
         "status": "状态变更",
         "upload_image": "上传图片",
+        "upload_file": "上传原件",
         "import_confirm": "导入入库",
         "batch_create": "批量创建",
         "batch_delete": "批量删除",
@@ -1630,6 +1631,112 @@ async def download_material_file(file_id: int,
         filename=row.file_name or path.name,
         headers={"Cache-Control": "private, max-age=0, must-revalidate"},
     )
+
+
+@router.post("/admin/files/upload", summary="上传原件并建资料/挂附件(批量导入·单文件)")
+async def admin_upload_file(
+        file: UploadFile = File(...),
+        subject: str = Form(...),
+        type: str = Form("lecture"),
+        category: str = Form(""),
+        title: str = Form(""),
+        material_id: Optional[int] = Form(None),
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)):
+    """B2（2026-11-07）：**批量导入的单个文件入口**。
+
+    为什么是"一次一个文件"而不是一次 50 个：50 个 × 20MB 放一个请求里既不能显示进度，
+    失败整批重来；前端按队列逐个小请求发，进度、失败重试、跳过重复都能精确到行，
+    服务端也不必为 2GB 请求体设超时。**数量（≤50）与总量（≤2GB）由前端队列把关**，
+    服务端只守单文件上限 20MB（`material_files.MAX_FILE_BYTES`）。
+
+    两种用法：
+      · 不带 `material_id` → **建一条资料**（`status=0` 未上架）+ 原件作 `primary`；
+      · 带 `material_id` → 只挂 `attachment`（双格式配对：docx 主文件 + pdf 附件）。
+
+    重复内容不报错、也不重复建：返回 `duplicate=true` 与已存在资料的 id
+    （批量场景里"跳过"比"整批失败"有用）。
+    """
+    _require_admin(current_user)
+    if subject not in SUBJECTS:
+        raise HTTPException(400, "科目必选且有效")
+    if type not in ("article", "lecture", "paper"):
+        raise HTTPException(400, "文件类资料类型只能是 article / lecture / paper")
+
+    data = file.file.read()
+    name = (file.filename or "未命名").replace("\\", "/").split("/")[-1][:255]
+    ext = _os.path.splitext(name)[1].lower().lstrip(".")
+    if ext not in material_files.ALLOWED_EXT_MIME:
+        raise HTTPException(400, "仅支持 docx / doc / pdf / xlsx / xls 原件")
+    if not data:
+        raise HTTPException(400, "空文件不能上传")
+    if len(data) > material_files.MAX_FILE_BYTES:
+        raise HTTPException(400,
+                            f"文件超过 {material_files.MAX_FILE_BYTES // 1024 // 1024}MB 上限")
+    magic = MAGIC_BYTES.get("." + ext)
+    if magic and not data.startswith(magic):
+        raise HTTPException(400, "文件实际格式与扩展名不符")
+
+    sha = material_files.sha256_of_bytes(data)
+    # 同内容已存在（且资料没被删）→ 跳过，回已有 id，便于前端标"重复"
+    dup = (db.query(MaterialFile, StudyMaterial)
+           .join(StudyMaterial, StudyMaterial.material_id == MaterialFile.material_id)
+           .filter(MaterialFile.sha256 == sha, StudyMaterial.status >= 0)
+           .order_by(MaterialFile.file_id.asc()).first())
+    if dup:
+        dup_file, dup_material = dup
+        return JSONResponse({
+            "duplicate": True, "created": False,
+            "material_id": dup_material.material_id,
+            "existing_file_id": dup_file.file_id,
+            "file_name": dup_file.file_name,
+            "title": dup_material.title,
+        })
+
+    target_material = None
+    created_new = False          # 是否**本次新建**了资料（挂附件时必须为 False）
+    if material_id is not None:
+        target_material = db.query(StudyMaterial).filter(
+            StudyMaterial.material_id == material_id,
+            StudyMaterial.status >= 0).first()
+        if not target_material:
+            raise HTTPException(404, "要挂附件的资料不存在或已删除")
+        role = "attachment"
+    else:
+        role = "primary"
+
+    try:
+        if target_material is None:
+            stem = _os.path.splitext(name)[0][:200] or "未命名资料"
+            target_material = StudyMaterial(
+                subject=subject, type=type,
+                category=(category or None), title=(title or stem)[:200],
+                content="", status=0, creator_id=current_user.user_id)
+            db.add(target_material)
+            db.flush()
+            created_new = True
+        row = material_files.save_bytes(
+            db, target_material.material_id, data, name,
+            role=role, source="upload", uploader_id=current_user.user_id)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(400, str(exc))
+    except OSError:
+        db.rollback()
+        logger.exception("[materials] 原件写盘失败")
+        raise HTTPException(503, "原件写入失败（磁盘不可用），请稍后重试")
+
+    _audit(db, current_user, "upload_file",
+           f"material:{target_material.material_id}",
+           f"{name}（{role}）")
+    db.commit()
+    return JSONResponse({
+        "duplicate": False, "created": created_new,
+        "material_id": target_material.material_id,
+        "file": material_files.serialize(row),
+        "title": target_material.title,
+    })
 
 
 @router.post("/admin", summary="创建资料(管理员)")

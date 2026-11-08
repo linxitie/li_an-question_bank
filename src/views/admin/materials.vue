@@ -7,8 +7,10 @@
       <template #actions>
         <button class="adm-btn adm-btn--line" :disabled="loading" @click="reload">刷新</button>
         <router-link class="adm-btn adm-btn--line" to="/admin/materials/legacy">旧版（临时）</router-link>
-        <button class="adm-btn" disabled title="B 批接入（material_file）">＋ 上传试卷</button>
-        <button class="adm-btn adm-btn--primary" disabled title="B 批接入批量导入">批量导入</button>
+        <button class="adm-btn" :disabled="loading" @click="openUpload('paper')">＋ 上传试卷</button>
+        <button class="adm-btn adm-btn--primary" :disabled="loading" @click="openUpload('lecture')">
+          批量导入
+        </button>
       </template>
     </AdminPageHeader>
 
@@ -161,6 +163,14 @@
       :error="previewError"
       @close="drawerOpen = false"
     />
+
+    <MaterialBatchUpload
+      :open="uploadOpen"
+      :preset-type="uploadType"
+      :title="uploadType === 'paper' ? '上传试卷（原件留档）' : '批量导入资料'"
+      @close="uploadOpen = false"
+      @done="onUploaded"
+    />
   </div>
 </template>
 
@@ -185,7 +195,8 @@ import {
   AdminTable,
   AdminTag,
   AdminToolbar,
-  MaterialPreviewDrawer
+  MaterialPreviewDrawer,
+  MaterialBatchUpload
 } from '@/components/admin';
 import { MATERIAL_TYPES, materialTypeLabel } from '@/modules/library/materialTypes';
 import { parseListQuery } from '@/utils/materialListQuery';
@@ -391,6 +402,24 @@ async function restore(row: AdminMaterialListItem): Promise<void> {
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '恢复失败');
   }
+}
+
+// ---------------- 批量导入（B2） ----------------
+const uploadOpen = ref(false);
+const uploadType = ref<'article' | 'lecture' | 'paper'>('lecture');
+
+/** 「＋ 上传试卷」预置 paper，「批量导入」预置 lecture（对话框里仍可改） */
+function openUpload(type: 'article' | 'lecture' | 'paper'): void {
+  uploadType.value = type;
+  uploadOpen.value = true;
+}
+
+/** 导入完成 → 刷新列表与统计（新资料是未上架，落在默认视图里） */
+async function onUploaded(payload: { created: number }): Promise<void> {
+  uploadOpen.value = false;
+  page.value = 1;
+  await reload();
+  if (payload.created) ElMessage.success(`已导入 ${payload.created} 条，可在列表里预览并上架`);
 }
 
 // ---------------- 预览抽屉 ----------------

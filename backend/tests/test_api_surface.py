@@ -73,6 +73,9 @@ KNOWN_EXTRA_OPERATIONS = {
     # 备考资料：原件下载（B1，2026-11-07）
     # 鉴权：get_current_user（必须登录）；管理员不限，其他人仅 status=1 资料；路径越界一律 404
     ("GET", "/api/materials/files/{file_id}/download"),
+    # 备考资料：批量导入单文件上传（B2，2026-11-07）
+    # 鉴权：_require_admin；单文件 ≤20MB；扩展名+magic bytes 双校验；同内容返回 duplicate 而不是重复建行
+    ("POST", "/api/materials/admin/files/upload"),
     # ===== 远端 main（模块4/7 与 F3）新增，合并时保留 =====
     # F3 媒体资产稳定读取代理（新资产 URL；旧 /uploads 与 /static 不变）。
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。

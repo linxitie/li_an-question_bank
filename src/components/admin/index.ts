@@ -20,3 +20,5 @@ export { default as AdminTag } from './AdminTag.vue';
 export { default as AdminFormItem } from './AdminFormItem.vue';
 // A3（2026-11-07）：统一预览抽屉，6 类资料共用一个
 export { default as MaterialPreviewDrawer } from './MaterialPreviewDrawer.vue';
+// B2（2026-11-07）：批量导入对话框（同名 docx+pdf 合并、逐文件队列、进度与重复跳过）
+export { default as MaterialBatchUpload } from './MaterialBatchUpload.vue';

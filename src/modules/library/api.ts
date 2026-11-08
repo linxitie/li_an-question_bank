@@ -331,6 +331,69 @@ export async function downloadMaterialFile(file: MaterialFileItem): Promise<void
   setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
 }
 
+/**
+ * 批量导入：单个文件的上传结果（B2，2026-11-07）。
+ *
+ * 后端语义：不带 `materialId` → 建一条资料（未上架）+ 原件作主文件；
+ * 带 `materialId` → 只挂附件（双格式配对）。同内容不重复建，返回 `duplicate=true`。
+ */
+export interface UploadFileResult {
+  duplicate: boolean;
+  created: boolean;
+  material_id: number;
+  title: string;
+  file?: MaterialFileItem;
+  /** duplicate=true 时：已存在的那份原件 */
+  existing_file_id?: number;
+  file_name?: string;
+}
+
+export interface UploadFileParams {
+  file: File;
+  subject: LibrarySubject;
+  type: 'article' | 'lecture' | 'paper';
+  category?: string;
+  title?: string;
+  /** 有值 = 挂到这条资料当附件（双格式配对的第二步） */
+  materialId?: number;
+  /** 上传进度 0–100（浏览器在本地算，服务端不参与） */
+  onProgress?: (percent: number) => void;
+}
+
+/**
+ * 上传一个原件（批量导入队列的最小单位）。
+ *
+ * 为什么逐文件请求而不是一次 50 个：进度、失败重试、跳过重复都能精确到行；
+ * 后端按单文件 20MB 守上限，数量/总量由前端编排（`utils/batchUploadPlan.ts`）把关。
+ * 超时单独放宽到 120s——20MB 文件在慢盘/弱网下远超 apiClient 默认的 15s。
+ */
+export async function uploadMaterialFile(params: UploadFileParams): Promise<UploadFileResult> {
+  const form = new FormData();
+  form.append('file', params.file, params.file.name);
+  form.append('subject', params.subject);
+  form.append('type', params.type);
+  if (params.category) form.append('category', params.category);
+  if (params.title) form.append('title', params.title);
+  if (params.materialId != null) form.append('material_id', String(params.materialId));
+
+  const response = await libraryClient.request<UploadFileResult>({
+    url: '/api/materials/admin/files/upload',
+    method: 'POST',
+    baseURL: '',
+    data: form,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+    onUploadProgress: (e) => {
+      if (!params.onProgress) return;
+      const total = e.total || params.file.size || 0;
+      if (!total) return;
+      params.onProgress(Math.min(99, Math.round(((e.loaded || 0) / total) * 100)));
+    }
+  });
+  params.onProgress?.(100);
+  return response.data;
+}
+
 /** 管理端列表条目：在列表条目上多出上下架/学习人数/发布者 */export interface AdminMaterialListItem extends LibraryMaterial {
   status: number;
   study_count: number;
