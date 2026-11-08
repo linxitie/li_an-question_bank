@@ -87,10 +87,32 @@
       </template>
     </AdminToolbar>
 
+    <!-- A7（2026-11-08）：批量操作条。只作用于**当前页**已勾选的行；
+         回收站视图不显示勾选（那边的动作是「恢复」，不是批量增删）。 -->
+    <div v-if="selected.length > 0" class="mm-batchbar">
+      <span class="mm-batchbar__count">已选 <b>{{ selected.length }}</b> 条</span>
+      <button class="adm-btn adm-btn--sm" :disabled="batchRunning" @click="batchSetStatus(1)">批量上架</button>
+      <button class="adm-btn adm-btn--sm adm-btn--line" :disabled="batchRunning" @click="batchSetStatus(0)">批量下架</button>
+      <button class="adm-btn adm-btn--sm adm-btn--danger" :disabled="batchRunning" @click="batchRemove">批量删除</button>
+      <button class="adm-btn adm-btn--sm adm-btn--line" :disabled="batchRunning" @click="clearSelection">取消选择</button>
+      <span v-if="batchRunning" class="mm-batchbar__hint">处理中…</span>
+      <span v-else class="mm-batchbar__hint">删除=移入回收站（可恢复）；上/下架会同步影响学生端可见性</span>
+    </div>
+
     <AdminTable :empty="!loading && rows.length === 0" empty-text="暂无数据 · 换个筛选条件试试">
       <table>
         <thead>
           <tr>
+            <th v-if="!isRecycleView" style="width: 40px">
+              <input
+                type="checkbox"
+                class="mm-check"
+                :checked="isAllSelected(rows, selected)"
+                :indeterminate="isPartialSelected(rows, selected)"
+                aria-label="全选当前页"
+                @change="toggleSelectAll"
+              />
+            </th>
             <!-- ID 方案 A（2026-11-08）：这里显示的是**连续序号**（当前筛选内倒序名次，
                  首行 = 总数），不是数据库主键。真实主键在单元格 title 里（悬停可见）。
                  回收站视图不参与编号，显示「—」。 -->
@@ -110,9 +132,18 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="9" class="mm-loading">加载中…</td>
+            <td :colspan="isRecycleView ? 9 : 10" class="mm-loading">加载中…</td>
           </tr>
           <tr v-for="row in rows" :key="row.id">
+            <td v-if="!isRecycleView">
+              <input
+                type="checkbox"
+                class="mm-check"
+                :checked="selected.includes(row.id)"
+                :aria-label="`选择 ${row.title}`"
+                @change="onToggleRow(row.id)"
+              />
+            </td>
             <td class="adm-mono" :title="`内部 ID: ${row.id}`">
               {{ filters.status === '-1' ? '—' : (row.seq ?? row.id) }}
             </td>
@@ -242,6 +273,16 @@ import { parseListQuery } from '@/utils/materialListQuery';
 import { errorMessage } from '@/utils/apiError';
 import { confirmOverlay, notify } from '@/utils/overlay';
 import {
+  batchSummary,
+  isAllSelected,
+  isPartialSelected,
+  pickSelected,
+  targetsForStatus,
+  toggleAll,
+  toggleOne,
+  type BatchStatus
+} from '@/utils/materialBatch';
+import {
   fetchAdminMaterialList,
   fetchAdminMaterialStats,
   fetchMaterialPreview,
@@ -259,6 +300,26 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
 const maxPage = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+
+// ---------------- 批量操作（A7，2026-11-08） ----------------
+/** 当前页已勾选的资料 ID（不跨页；换页/换筛选即清空） */
+const selected = ref<number[]>([]);
+/** 批量请求进行中：禁用按钮，避免连点重复提交 */
+const batchRunning = ref(false);
+/** 回收站视图不显示勾选（那边的动作是单条「恢复」） */
+const isRecycleView = computed(() => filters.status === '-1');
+
+function clearSelection(): void {
+  selected.value = [];
+}
+
+function toggleSelectAll(): void {
+  selected.value = toggleAll(rows.value, selected.value);
+}
+
+function onToggleRow(id: number): void {
+  selected.value = toggleOne(selected.value, id);
+}
 
 type ListOrder = 'id_desc' | 'id_asc' | 'created_desc' | 'created_asc';
 
@@ -355,9 +416,13 @@ async function loadList(): Promise<void> {
     });
     rows.value = res.items || [];
     total.value = res.total || 0;
+    // A7：换页/换筛选后清空勾选——勾选只对"当前页这几行"有意义，
+    // 留着会让批量条上的数字与屏幕上的行对不上。
+    clearSelection();
   } catch (e) {
     rows.value = [];
     total.value = 0;
+    clearSelection();
     ElMessage.error(errorMessage(e, '列表加载失败'));
   } finally {
     loading.value = false;
@@ -481,6 +546,99 @@ async function restore(row: AdminMaterialListItem): Promise<void> {
   }
 }
 
+// ---------------- 批量操作（A7） ----------------
+
+/**
+ * 批量上架/下架：**逐条**调 `PUT /admin/{id}/status`（不新增批量端点，API 面保持 343）。
+ * 为什么逐条：条数是"当前页勾选"（≤20），逐条能让每条独立成败，
+ * 服务端也就能为每条单独写审计、单独联动可作答卷（P5）。
+ */
+async function batchSetStatus(status: BatchStatus): Promise<void> {
+  const picked = pickSelected(rows.value, selected.value);
+  const targets = targetsForStatus(picked, status);
+  if (targets.length === 0) {
+    ElMessage.info('选中的资料都已是该状态，无需操作');
+    return;
+  }
+  const label = status === 1 ? '上架' : '下架';
+  try {
+    await confirmOverlay(
+      status === 1
+        ? `将把 ${targets.length} 条资料上架，学生端立即可见；已关联的可作答卷会同步开放。`
+        : `将把 ${targets.length} 条资料下架，学生端立即不可见；已关联的可作答卷会同步关闭（进行中的考试不受影响）。`,
+      `批量${label}（=审批）`,
+      {
+        confirmButtonText: `确认批量${label}`,
+        cancelButtonText: '取消',
+        type: status === 1 ? 'success' : 'warning'
+      }
+    );
+  } catch {
+    return; // 用户取消
+  }
+
+  batchRunning.value = true;
+  let ok = 0;
+  const fails: string[] = [];
+  for (const row of targets) {
+    try {
+      await libraryClient.request({
+        url: `/api/materials/admin/${row.id}/status`,
+        method: 'PUT',
+        baseURL: '',
+        data: { status }
+      });
+      ok += 1;
+    } catch (e) {
+      fails.push(`${row.title.slice(0, 12)}：${errorMessage(e, `${label}失败`)}`);
+    }
+  }
+  batchRunning.value = false;
+
+  const summary = batchSummary(label, { ok, fails });
+  if (summary.level === 'success') ElMessage.success(summary.text);
+  else ElMessage.warning(summary.text);
+  clearSelection();
+  await reload();
+}
+
+/**
+ * 批量删除 = 批量**软删**（走 `DELETE /admin/batch`，服务端逐条置 -1 并联动卷 DRAFT）。
+ * 与单条删除同语义：进回收站、可恢复、学习进度保留。
+ */
+async function batchRemove(): Promise<void> {
+  const targets = pickSelected(rows.value, selected.value);
+  if (targets.length === 0) return;
+  try {
+    await confirmOverlay(
+      `将把 ${targets.length} 条资料移入回收站：学生端立即不可见，数据与学习进度保留，可随时恢复。`,
+      '批量删除',
+      { confirmButtonText: '移入回收站', cancelButtonText: '取消', type: 'warning' }
+    );
+  } catch {
+    return;
+  }
+
+  batchRunning.value = true;
+  try {
+    const res = (await libraryClient.request({
+      url: '/api/materials/admin/batch',
+      method: 'DELETE',
+      baseURL: '',
+      data: { ids: targets.map((row) => row.id) }
+    })) as unknown as { data?: { deleted?: number } };
+    const deleted = Number(res?.data?.deleted ?? targets.length);
+    ElMessage.success(`已移入回收站 ${deleted} 条（可在「回收站（已删除）」恢复）`);
+    clearSelection();
+    if (rows.value.length === deleted && page.value > 1) page.value -= 1;
+    await reload();
+  } catch (e) {
+    ElMessage.error(errorMessage(e, '批量删除失败'));
+  } finally {
+    batchRunning.value = false;
+  }
+}
+
 // ---------------- 批量导入（B2） ----------------
 const uploadOpen = ref(false);
 const uploadType = ref<'article' | 'lecture' | 'paper'>('lecture');
@@ -595,6 +753,40 @@ onMounted(reload);
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+/* A7：批量操作条 + 勾选框 */
+.mm-batchbar {
+  display: flex;
+  align-items: center;
+  gap: var(--adm-s2);
+  flex-wrap: wrap;
+  margin-bottom: var(--adm-s2);
+  padding: 9px 12px;
+  background: var(--adm-primary-weak);
+  border: 1px solid var(--adm-primary-line);
+  border-radius: var(--adm-r-ctl);
+}
+.mm-batchbar__count {
+  font-size: 12.5px;
+  color: var(--adm-primary-dark);
+}
+.mm-batchbar__count b { font-weight: 700; }
+.mm-batchbar__hint {
+  font-size: 11px;
+  color: var(--adm-text-sub);
+}
+.adm-btn--danger {
+  background: var(--adm-danger-weak);
+  color: var(--adm-danger);
+  border-color: #f3d3c2;
+}
+.adm-btn--danger:hover { background: #ffeede; }
+.mm-check {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--adm-primary);
+  vertical-align: middle;
 }
 .mm-title b {
   font-weight: 700;
