@@ -85,6 +85,10 @@ KNOWN_EXTRA_OPERATIONS = {
     # 备考资料：删除单份原件（C2b 补漏，2026-11-08）
     # 鉴权：_require_admin；只删登记行，同一 sha256 无其他引用时才删物理文件
     ("DELETE", "/api/materials/admin/{material_id}/files/{file_id}"),
+    # 备考资料：试卷资料 → 可作答卷（A2，2026-11-08）
+    # 鉴权：_require_admin；幂等（同 paper_code 已存在则复用，不覆盖状态/题目）；
+    # 新卷固定 DRAFT，是否可考由「资料上架」经 P5 联动决定；不新增表、不加列
+    ("POST", "/api/materials/admin/{material_id}/ensure-paper"),
     # ===== 远端 main（模块4/7 与 F3）新增，合并时保留 =====
     # F3 媒体资产稳定读取代理（新资产 URL；旧 /uploads 与 /static 不变）。
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。

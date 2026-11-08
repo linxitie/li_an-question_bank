@@ -199,6 +199,14 @@
                 <a class="mm-op is-restore" @click="restore(row)">恢复</a>
               </template>
               <template v-else>
+                <!-- A2（2026-11-08）：试卷资料 → 题库里的可作答卷（DRAFT；上架后经 P5 自动 PUBLISHED）。
+                     没有编号的试卷资料不显示（后端也会 400 并提示先补编号）。 -->
+                <a
+                  v-if="row.type === 'paper' && paperCodeOf(row)"
+                  class="mm-op"
+                  title="在题库里为这份试卷资料建一张可作答卷（草稿；资料上架后学生即可考）"
+                  @click="ensurePaper(row)"
+                >建卷</a>
                 <a class="mm-op" @click="openMeta(row)">改信息</a>
                 <a class="mm-op is-danger" @click="remove(row)">删除</a>
               </template>
@@ -518,6 +526,41 @@ async function remove(row: AdminMaterialListItem): Promise<void> {
     await reload();
   } catch (e) {
     ElMessage.error(errorMessage(e, '删除失败'));
+  }
+}
+
+/**
+ * A2（2026-11-08）：为试卷资料在题库里建一张可作答卷。
+ * 后端幂等（同编号已存在则复用、不会覆盖状态），所以可以放心点第二次。
+ * 新卷是 DRAFT：资料上架后由 P5 联动自动变 PUBLISHED，学生才看得到。
+ */
+async function ensurePaper(row: AdminMaterialListItem): Promise<void> {
+  const code = paperCodeOf(row);
+  if (!code) return;
+  try {
+    await confirmOverlay(
+      `将在题库里为「${row.title}」建一张可作答卷（编号 ${code}，草稿状态）。\n`
+        + '建好后还需要导入题目，并把资料「上架」，学生才能考。',
+      '生成可作答卷',
+      { confirmButtonText: '生成', cancelButtonText: '取消', type: 'success' }
+    );
+  } catch {
+    return;
+  }
+  try {
+    const res = (await libraryClient.request({
+      url: `/api/materials/admin/${row.id}/ensure-paper`,
+      method: 'POST',
+      baseURL: ''
+    })) as unknown as { data?: { created?: boolean; paper_id?: number; paper_code?: string; paper_type?: string } };
+    const data = res?.data || {};
+    if (data.created) {
+      ElMessage.success(`已生成可作答卷 #${data.paper_id}（${data.paper_type}），接下来请导入题目`);
+    } else {
+      ElMessage.info(`该编号已有可作答卷 #${data.paper_id}（${data.paper_type}），未重复创建`);
+    }
+  } catch (e) {
+    ElMessage.error(errorMessage(e, '生成可作答卷失败'));
   }
 }
 

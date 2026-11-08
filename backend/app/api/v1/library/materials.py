@@ -881,6 +881,9 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         "batch_create": "批量创建",
         "batch_delete": "批量删除",
         "restore": "恢复资料",
+        # A2（2026-11-08）：试卷资料 → 可作答卷
+        "ensure_paper": "生成可作答卷",
+        "paper_backfill": "试卷补录",
     }.get(action, action)
     try:
         db.add(SysOperationLog(
@@ -1771,6 +1774,45 @@ async def admin_backfill_papers(body: Optional[dict] = None,
         "to_create": sum(1 for p in plan if p.get("action") == "create"),
         "items": plan,
     })
+
+
+@router.post("/admin/{material_id}/ensure-paper",
+             summary="为试卷资料生成可作答卷(管理员)")
+async def admin_ensure_paper(material_id: int,
+                             current_user: SysUser = Depends(get_current_user),
+                             db: Session = Depends(get_db)):
+    """A2（2026-11-08）：把一份**试卷类资料**变成题库里的可作答卷。
+
+    背景（实测）：上传试卷只落资料 + 原件 + `paper_code`，**不建 `exam_paper`**，
+    于是学生端永远看不到上传的真题（#127「2024国考·公专题本」上传后仍是"有资料无卷"）。
+
+    行为：
+      · 用资料的 `paper_code`（回落 `badge`）建一张 `exam_paper`，**状态固定 `DRAFT`**；
+        是否可考由「资料上架」经 P5 联动决定（方案 §2.3 的唯一真源）；
+      · 元数据取"人工订正 > 文件名解析"（与预览抽屉同口径），缺省 120 分钟 / 100 分；
+      · **幂等**：同编号已存在则原样返回（`created=false`），绝不覆盖已有卷的状态与题目；
+      · 不 commit 前先 flush 拿 `paper_id`，与审计、提交在同一事务。
+    """
+    _require_admin(current_user)
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id).first()
+    if not m:
+        raise HTTPException(404, "资料不存在")
+
+    from ....services import material_paper_link
+    try:
+        result = material_paper_link.ensure_paper_for_material(
+            db, m, actor_id=current_user.user_id)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+
+    brief = material_paper_link.paper_brief(result)
+    _audit(db, current_user, "ensure_paper", f"material:{material_id}",
+           f"{'新建' if brief['created'] else '复用'}可作答卷 {brief['paper_code']}"
+           f"（#{brief['paper_id']}，{brief['paper_type']}）")
+    db.commit()
+    return brief
 
 
 @router.delete("/admin/{material_id}/files/{file_id}", summary="删除单份原件(管理员)")
