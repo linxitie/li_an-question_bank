@@ -53,7 +53,7 @@
 
     <div v-else class="news-list">
       <article
-        v-for="item in items"
+        v-for="item in visibleItems"
         :key="item.id"
         class="news-row"
         tabindex="0"
@@ -73,6 +73,16 @@
           <span class="row-arrow" aria-hidden="true">›</span>
         </div>
       </article>
+    </div>
+
+    <div v-if="!loading && !error && items.length > 5" class="panel-footer">
+      <button
+        type="button"
+        class="expand-btn"
+        :aria-expanded="expanded"
+        @click="expanded = !expanded">
+        {{ expanded ? '收起' : `展开全部（${items.length} 条）` }}
+      </button>
     </div>
   </section>
 </template>
@@ -104,10 +114,14 @@ const items = ref<NewsItem[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const error = ref('');
+const expanded = ref(false);
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 const activeTabConfig = computed(
   () => tabs.find((tab) => tab.key === activeTab.value) || tabs[0]
+);
+const visibleItems = computed(() =>
+  expanded.value ? items.value : items.value.slice(0, 5)
 );
 
 function sourceLabel(source: string): string {
@@ -175,6 +189,7 @@ function formatDate(value: string): string {
 async function loadNews(): Promise<void> {
   loading.value = true;
   error.value = '';
+  expanded.value = false;
   try {
     const tab = activeTabConfig.value;
     const result = await fetchNewsList({
@@ -394,6 +409,27 @@ onBeforeUnmount(() => {
 .row-arrow {
   color: #b8bdb9;
   font-size: 20px;
+}
+
+.panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+}
+
+.expand-btn {
+  border: 1px solid #d9d3c8;
+  border-radius: 7px;
+  background: #fff;
+  color: #2f5d50;
+  padding: 6px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.expand-btn:hover {
+  border-color: #2f5d50;
+  background: #f5f8f6;
 }
 
 .state {
