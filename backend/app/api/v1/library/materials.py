@@ -1529,7 +1529,8 @@ async def admin_list(subject: Optional[str] = Query(None),
                      created_within: Optional[str] = Query(
                          None, pattern="^(7d|30d)$",
                          description="最近 7/30 天（滚动窗口：create_time >= now - N 天）"),
-                     order: str = Query("created_desc", pattern="^(created_desc|created_asc)$"),
+                     order: str = Query("id_desc", pattern="^(id_desc|id_asc|created_desc|created_asc)$",
+                                        description="id_desc(默认,按列表时间倒序) / id_asc / created_desc / created_asc"),
                      publisher_id: Optional[int] = Query(None, description="只看某个发布者"),
                      paper_year: Optional[int] = Query(
                          None, ge=1900, le=2100,
@@ -1564,13 +1565,29 @@ async def admin_list(subject: Optional[str] = Query(None),
         like = f"%{kw}%"
         q = q.filter(or_(StudyMaterial.title.like(like),
                          StudyMaterial.category.like(like)))
-    # 排序：create_time 为空的旧行**恒定排最后**（否则正序时 NULL 会顶到最前，看起来像"最老的资料"）。
-    # SQLite 里 `is_(None)` 是 0/1，asc 即"有时间的在前"。
-    null_last = StudyMaterial.create_time.is_(None).asc()
-    if order == "created_asc":
-        q = q.order_by(null_last, StudyMaterial.create_time.asc(), StudyMaterial.material_id.asc())
+    # 排序（2026-11-08 / ID 方案 A）：
+    #   · 默认 `id_desc` —— 按 `list_time`（平时 = create_time，从回收站恢复时刷新为 now → 置顶）
+    #     倒序，`material_id` 作确定性 tiebreaker，保证跨页不重不漏（实测翻 12 页 0 重复）。
+    #   · `created_*` 保留给「上传时间」列排序（真实上传时间，NULL 恒定排最后）。
+    #   为什么不用 create_time 当默认排序键：58 条历史资料 create_time 为 NULL，
+    #   会被排到最后一页，页面就出现 `107,106 → 45,44` 的跳号（用户 2026-11-08 反馈的缺陷①）。
+    if order in ("created_asc", "created_desc"):
+        null_last = StudyMaterial.create_time.is_(None).asc()
+        if order == "created_asc":
+            q = q.order_by(null_last, StudyMaterial.create_time.asc(),
+                           StudyMaterial.material_id.asc())
+        else:
+            q = q.order_by(null_last, StudyMaterial.create_time.desc(),
+                           StudyMaterial.material_id.desc())
     else:
-        q = q.order_by(null_last, StudyMaterial.create_time.desc(), StudyMaterial.material_id.desc())
+        # id_desc / id_asc：list_time 为空的行同样排最后（理论上不会为空，见启动期回填）
+        null_last = StudyMaterial.list_time.is_(None).asc()
+        if order == "id_asc":
+            q = q.order_by(null_last, StudyMaterial.list_time.asc(),
+                           StudyMaterial.material_id.asc())
+        else:
+            q = q.order_by(null_last, StudyMaterial.list_time.desc(),
+                           StudyMaterial.material_id.desc())
 
     paper_filters_on = any(v not in (None, "") for v in (paper_year, region, book_kind))
     if paper_filters_on:
@@ -1588,10 +1605,16 @@ async def admin_list(subject: Optional[str] = Query(None),
         rows = q.offset((page - 1) * page_size).limit(page_size).all()
     publishers = _publisher_map(db, rows)
     items = []
-    for m in rows:
+    offset = (page - 1) * page_size
+    for idx, m in enumerate(rows):
         item = _item_brief(m)
         item.update({"status": m.status, "study_count": m.study_count or 0,
                      "creator_id": m.creator_id,
+                     # ID 方案 A（2026-11-08）：连续序号（D2 口径 = 当前筛选结果内）。
+                     # 倒序（默认）时首行 = total、往下递减；删 N 条后其后（更旧）的不变、
+                     # 其前（更新）的整体 -N；恢复置顶后该行 seq == total（= "最大号"）。
+                     # 正序时按 1..N。前端在回收站视图显示「—」（D3）。
+                     "seq": (offset + idx + 1) if order == "id_asc" else (total - offset - idx),
                      # A2：发布者（名字 + 角色徽标），creator_id 为空时给 None
                      "publisher": publishers.get(m.creator_id),
                      # C1（2026-11-08）：讲义行显示「N 章 · M 字」；非讲义/未抽到大纲时为 None
@@ -2057,6 +2080,11 @@ async def admin_set_status(material_id: int, body: dict,
         raise HTTPException(404, "资料不存在")
     prev = m.status
     m.status = st
+    if prev == -1:
+        # ID 方案 A（2026-11-08）：从回收站恢复 → 排到列表最前面。
+        # 只改排序键 `list_time`，**不改 `create_time`**（"上传时间"列必须保持真实）；
+        # 倒序编号下该行随即拿到"当前最大序号"（= total），等价于"新号"且不复用旧号。
+        m.list_time = datetime.now()
     # P5（2026-11-08）：资料可见性 → 可作答性（方案《试卷管理收敛》§2.3）。
     # 与状态变更、审计写在同一个事务里：要么全成，要么全不成。
     from ....services import material_paper_sync

@@ -1414,6 +1414,12 @@ class StudyMaterial(Base):
     # 为什么存快照而不是每次预览现场解析 docx：列表要显示「N 章 · M 字」，逐行解析太贵；
     # 原件被删/替换时由上传/导入路径重算（见 services/doc_outline.py）。
     doc_meta = Column(Text, comment="讲义大纲 JSON：字数/章节数/章节列表")
+    # ID 方案 A（2026-11-08）：列表排序时间。
+    # 为什么与 create_time 分开：管理端"恢复回收站资料"要把它放回列表最前面（用户要求），
+    # 但"上传时间"列必须保持真实。于是排序键单独一列：平时 == create_time，恢复时刷新为 now。
+    # 排序口径：list_time DESC, material_id DESC（material_id 作确定性 tiebreaker，跨页不重不漏）。
+    list_time = Column(DateTime, index=True, default=datetime.now,
+                       comment="列表排序时间(恢复置顶用，默认=create_time)")
 
     __table_args__ = (
         Index("idx_subject_type", subject, type),

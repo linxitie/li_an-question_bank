@@ -497,6 +497,25 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE study_material ADD COLUMN doc_meta TEXT"))
                     conn.commit()
                 logger.info("自动迁移: study_material 添加列 doc_meta")
+            # ID 方案 A（2026-11-08）：列表排序时间（恢复时刷新为 now → 置顶）
+            # 与 create_time 分开存：上传时间保持真实，排序键可被"恢复"改写。
+            if 'list_time' not in sm_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE study_material ADD COLUMN list_time DATETIME"))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS idx_material_list_time "
+                        "ON study_material(list_time)"))
+                    conn.commit()
+                logger.info("自动迁移: study_material 添加列 list_time + idx_material_list_time")
+                with engine.connect() as conn:
+                    # 回填：有 create_time 用它，否则用 update_time，再否则给一个固定历史基准，
+                    # 保证"排序键非空"，避免 NULL 又被排到最后（问题①的成因）。
+                    n = conn.execute(text(
+                        "UPDATE study_material SET list_time = "
+                        "COALESCE(create_time, update_time, '2026-10-28 21:26:44') "
+                        "WHERE list_time IS NULL")).rowcount
+                    conn.commit()
+                logger.info(f"自动迁移: study_material.list_time 回填 {n} 行")
 
         # 检查 study_goal 表(金币购:四维加权奖励字段)
         if 'study_goal' in inspector.get_table_names():

@@ -91,13 +91,17 @@
       <table>
         <thead>
           <tr>
-            <th style="width: 56px">ID</th>
+            <!-- ID 方案 A（2026-11-08）：这里显示的是**连续序号**（当前筛选内倒序名次，
+                 首行 = 总数），不是数据库主键。真实主键在单元格 title 里（悬停可见）。
+                 回收站视图不参与编号，显示「—」。 -->
+            <th style="width: 64px" title="按列表顺序倒排：最上面一行 = 当前结果总数">编号</th>
             <th>标题 / 类型</th>
             <th style="width: 60px">科目</th>
             <th style="width: 100px">分类</th>
             <th style="width: 146px">发布者</th>
-            <th class="mm-sortable" style="width: 132px" @click="toggleOrder">
-              上传时间 {{ filters.order === 'created_asc' ? '↑' : '↓' }}
+            <th class="mm-sortable" style="width: 132px" @click="toggleOrder"
+                title="按真实上传时间排序（NULL 恒排最后）；编号列始终按列表时间倒序">
+              上传时间 {{ timeOrderArrow }}
             </th>
             <th style="width: 60px">浏览</th>
             <th style="width: 152px">上架（=审批）</th>
@@ -109,7 +113,9 @@
             <td colspan="9" class="mm-loading">加载中…</td>
           </tr>
           <tr v-for="row in rows" :key="row.id">
-            <td class="adm-mono">{{ row.id }}</td>
+            <td class="adm-mono" :title="`内部 ID: ${row.id}`">
+              {{ filters.status === '-1' ? '—' : (row.seq ?? row.id) }}
+            </td>
             <td>
               <div class="mm-title">
                 <b>{{ row.title }}</b>
@@ -254,17 +260,28 @@ const page = ref(1);
 const pageSize = 20;
 const maxPage = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
+type ListOrder = 'id_desc' | 'id_asc' | 'created_desc' | 'created_asc';
+
 const filters = reactive({
   subject: '',
   type: '',
   status: '',
   createdWithin: '' as '' | '7d' | '30d',
   keyword: '',
-  order: 'created_desc' as 'created_desc' | 'created_asc',
+  // ID 方案 A（2026-11-08）：默认按「列表时间」倒序（== 上传顺序，恢复的置顶）。
+  // 「上传时间」列点击后才切到 created_desc/created_asc（真实上传时间，NULL 排最后）。
+  order: 'id_desc' as ListOrder,
   // C3：试卷专属筛选（空串=不筛）
   paperYear: '',
   region: '',
   bookKind: ''
+});
+
+/** 「上传时间」列头箭头：只有按时间排序时才显示方向，按列表时间排序时不误导 */
+const timeOrderArrow = computed(() => {
+  if (filters.order === 'created_asc') return '↑';
+  if (filters.order === 'created_desc') return '↓';
+  return '';
 });
 
 /** 年份下拉：从今年往前 12 年（真题目录基本落在这个区间；用户也可用地址栏传别的年份） */
@@ -361,11 +378,13 @@ function resetFilters(): void {
   filters.region = '';
   filters.bookKind = '';
   filters.keyword = '';
-  filters.order = 'created_desc';
+  filters.order = 'id_desc';
   applyFilter();
 }
 
 function toggleOrder(): void {
+  // 只在两种"按上传时间"之间切换；再点一次也不会回到列表时间（列表时间是默认态，
+  // 需要回到默认就点「重置」或刷新页面——避免三态循环让用户分不清当前是哪种排序）。
   filters.order = filters.order === 'created_desc' ? 'created_asc' : 'created_desc';
   applyFilter();
 }

@@ -18,7 +18,7 @@ beforeEach(() => {
  * `pattern="^(7d|30d)$"` 校验，若前端把 `created_within=` 空值发过去会 422。
  */
 describe('fetchAdminMaterialList 参数拼装', () => {
-  it('默认只要 created_desc + 第 1 页 20 条', async () => {
+  it('默认只要 id_desc（2026-11-08 ID 方案 A：列表时间倒序）+ 第 1 页 20 条', async () => {
     mockedRequest.mockResolvedValue({ data: { total: 0, items: [] } } as never);
 
     await fetchAdminMaterialList();
@@ -34,12 +34,21 @@ describe('fetchAdminMaterialList 参数拼装', () => {
         status: undefined,
         keyword: undefined,
         created_within: undefined,
-        order: 'created_desc',
+        order: 'id_desc',
         publisher_id: undefined,
         page: 1,
         page_size: 20
       }
     });
+  });
+
+  it('显式 order 原样透传（含按上传时间排序）', async () => {
+    mockedRequest.mockResolvedValue({ data: { total: 0, items: [] } } as never);
+
+    await fetchAdminMaterialList({ order: 'created_desc' });
+
+    const arg = mockedRequest.mock.calls[0][0] as unknown as { params: Record<string, unknown> };
+    expect(arg.params.order).toBe('created_desc');
   });
 
   it('最近 7 天 + 正序 + 指定发布者', async () => {

@@ -503,6 +503,11 @@ export interface MaterialChapter {
   status: number;
   study_count: number;
   creator_id: number | null;
+  /**
+   * 连续序号（ID 方案 A，2026-11-08）：按当前筛选结果的倒序名次，首行 = total。
+   * 与 `id`（真实主键）不同：删除/恢复会让序号前移，`id` 永不变。
+   */
+  seq?: number;
   /** 讲义章节数（C1）；未抽到大纲/非讲义为 null */
   chapter_count?: number | null;
   /** 讲义字数（C1） */
@@ -521,8 +526,11 @@ export interface AdminMaterialListQuery {
   keyword?: string;
   /** 最近 N 天（滚动窗口：create_time >= now - N 天） */
   created_within?: '7d' | '30d' | '';
-  /** 默认 created_desc（最新在上） */
-  order?: 'created_desc' | 'created_asc';
+  /**
+   * 默认 `id_desc`（按列表时间倒序 = 恢复的置顶，2026-11-08 ID 方案 A）。
+   * `created_*` 只给「上传时间」列排序用（真实上传时间，NULL 排最后）。
+   */
+  order?: 'id_desc' | 'id_asc' | 'created_desc' | 'created_asc';
   /** 只看某个发布者 */
   publisher_id?: number | null;
   /** C3：试卷年份 */
@@ -556,7 +564,7 @@ export function fetchAdminMaterialList(
       status: query.status ?? undefined,
       keyword: query.keyword || undefined,
       created_within: query.created_within || undefined,
-      order: query.order ?? 'created_desc',
+      order: query.order ?? 'id_desc',
       publisher_id: query.publisher_id ?? undefined,
       // C3：试卷三维筛选。空值必须省略——后端 `region=''` 会被当成"不筛"，
       // 但 axios 会把 `region: undefined` 直接丢掉，语义更干净。
