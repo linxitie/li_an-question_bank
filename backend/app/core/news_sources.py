@@ -373,6 +373,17 @@ NEWS_SOURCES: tuple[NewsSourceConfig, ...] = (
         trust_level=80,
     ),
     NewsSourceConfig(
+        "xinjiang",
+        "新疆维吾尔自治区公安厅",
+        "http://gat.xinjiang.gov.cn",
+        "http://gat.xinjiang.gov.cn/",
+        link_contains="/gat/jwyw/20",
+        category_code="police_news",
+        category="公安要闻",
+        region_code="650000",
+        trust_level=80,
+    ),
+    NewsSourceConfig(
         "cpd",
         "中国警察网",
         "https://www.cpd.com.cn",
