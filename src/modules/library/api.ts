@@ -507,6 +507,10 @@ export interface MaterialChapter {
   chapter_count?: number | null;
   /** 讲义字数（C1） */
   word_count?: number | null;
+  /** 试卷年份/地区/卷别（C3，订正优先）；非试卷为 null */
+  paper_year?: number | null;
+  paper_region?: string | null;
+  paper_book_kind?: string | null;
 }
 
 /** 管理端列表查询（A2 新增 created_within / order / publisher_id） */
@@ -521,6 +525,12 @@ export interface AdminMaterialListQuery {
   order?: 'created_desc' | 'created_asc';
   /** 只看某个发布者 */
   publisher_id?: number | null;
+  /** C3：试卷年份 */
+  paper_year?: number | null;
+  /** C3：试卷地区（地区代码或中文） */
+  region?: string;
+  /** C3：试卷卷别 T/A/J */
+  book_kind?: string;
   page?: number;
   pageSize?: number;
 }
@@ -548,6 +558,11 @@ export function fetchAdminMaterialList(
       created_within: query.created_within || undefined,
       order: query.order ?? 'created_desc',
       publisher_id: query.publisher_id ?? undefined,
+      // C3：试卷三维筛选。空值必须省略——后端 `region=''` 会被当成"不筛"，
+      // 但 axios 会把 `region: undefined` 直接丢掉，语义更干净。
+      paper_year: query.paper_year ?? undefined,
+      region: query.region || undefined,
+      book_kind: query.book_kind || undefined,
       page: query.page ?? 1,
       page_size: query.pageSize ?? 20
     }

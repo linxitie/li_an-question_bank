@@ -17,6 +17,12 @@ export interface MaterialListQuery {
   type: string;
   status: string;
   createdWithin: '' | '7d' | '30d';
+  /** C3：试卷年份（空串=不筛） */
+  paperYear: string;
+  /** C3：试卷地区（代码或中文，空串=不筛） */
+  region: string;
+  /** C3：试卷卷别 T/A/J（空串=不筛） */
+  bookKind: string;
 }
 
 const SUBJECTS = ['xingce', 'shenlun', 'gongzhuan'];
@@ -25,6 +31,25 @@ const TYPES = ['video_intro', 'video_advanced', 'article', 'card', 'lecture', 'p
 /** 1=已上架 / 0=未上架 / -1=回收站 */
 const STATUSES = ['1', '0', '-1'];
 const WINDOWS = ['7d', '30d'];
+/** C3：地区白名单与后端 `paper_meta_parser.REGIONS` 同源（代码 + 中文名都收） */
+const REGIONS = [
+  'BJ', 'JS', 'ZJ', 'GD', 'SD', 'SH', 'TJ', 'CQ', 'HE', 'HA', 'HB', 'HN',
+  'SC', 'FJ', 'AH', 'JX', 'SX', 'SN', 'LN', 'JL', 'HLJ', 'GX', 'YN', 'GZ',
+  'NM', 'GS', 'XJ', 'NX', 'QH', 'HI', 'XZ', 'GK', 'LK',
+  '北京', '江苏', '浙江', '广东', '山东', '上海', '天津', '重庆', '河北', '河南',
+  '湖北', '湖南', '四川', '福建', '安徽', '江西', '山西', '陕西', '辽宁', '吉林',
+  '黑龙江', '广西', '云南', '贵州', '内蒙古', '甘肃', '新疆', '宁夏', '青海', '海南',
+  '西藏', '国考', '联考'
+];
+const BOOK_KINDS = ['T', 'A', 'J'];
+
+/** 年份：只接受 1900–2100 的整数（与后端 `paper_year` 校验一致） */
+function pickYear(v: unknown): string {
+  const s = firstString(v).trim();
+  if (!/^\d{4}$/.test(s)) return '';
+  const n = Number(s);
+  return n >= 1900 && n <= 2100 ? s : '';
+}
 
 /** router 的 query 值可能是 string / string[] / null / undefined，统一取第一个字符串 */
 function firstString(v: unknown): string {
@@ -51,11 +76,15 @@ export function parseListQuery(query: Record<string, unknown> | null | undefined
     subject: pick(q.subject, SUBJECTS),
     type: pick(q.type, TYPES),
     status: pick(q.status, STATUSES),
-    createdWithin: (win as '' | '7d' | '30d') || ''
+    createdWithin: (win as '' | '7d' | '30d') || '',
+    paperYear: pickYear(q.year),
+    region: pick(q.region, REGIONS),
+    bookKind: pick(q.book_kind, BOOK_KINDS)
   };
 }
 
 /** 这批筛选项里是否有任何一个生效（用于决定要不要在页头提示"来自地址栏"） */
 export function hasListQuery(q: MaterialListQuery): boolean {
-  return !!(q.subject || q.type || q.status || q.createdWithin);
+  return !!(q.subject || q.type || q.status || q.createdWithin
+    || q.paperYear || q.region || q.bookKind);
 }

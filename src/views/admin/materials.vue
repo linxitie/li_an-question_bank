@@ -47,6 +47,22 @@
         <option value="0">未上架（=未通过）</option>
         <option value="-1">回收站（已删除）</option>
       </select>
+      <!-- C3：试卷专属筛选（年份/地区/卷别）——只在「类型=试卷」时出现，
+           因为只有试卷带这套元数据；选回其它类型时自动清空，避免"筛了却看不到原因" -->
+      <template v-if="filters.type === 'paper'">
+        <select v-model="filters.paperYear" class="adm-select" @change="applyFilter">
+          <option value="">全部年份</option>
+          <option v-for="y in yearOptions" :key="y" :value="String(y)">{{ y }} 年</option>
+        </select>
+        <select v-model="filters.region" class="adm-select" @change="applyFilter">
+          <option value="">全部地区</option>
+          <option v-for="r in PAPER_REGIONS" :key="r.code" :value="r.code">{{ r.name }}</option>
+        </select>
+        <select v-model="filters.bookKind" class="adm-select" @change="applyFilter">
+          <option value="">全部卷别</option>
+          <option v-for="k in BOOK_KINDS" :key="k.code" :value="k.code">{{ k.name }}</option>
+        </select>
+      </template>
       <select v-model="filters.createdWithin" class="adm-select" @change="applyFilter">
         <option value="">全部时间</option>
         <option value="7d">最近 7 天</option>
@@ -215,6 +231,7 @@ import {
   MaterialMetaDialog
 } from '@/components/admin';
 import { MATERIAL_TYPES, materialTypeLabel } from '@/modules/library/materialTypes';
+import { BOOK_KINDS, PAPER_REGIONS } from '@/utils/paperRegions';
 import { parseListQuery } from '@/utils/materialListQuery';
 import { errorMessage } from '@/utils/apiError';
 import { confirmOverlay, notify } from '@/utils/overlay';
@@ -243,7 +260,17 @@ const filters = reactive({
   status: '',
   createdWithin: '' as '' | '7d' | '30d',
   keyword: '',
-  order: 'created_desc' as 'created_desc' | 'created_asc'
+  order: 'created_desc' as 'created_desc' | 'created_asc',
+  // C3：试卷专属筛选（空串=不筛）
+  paperYear: '',
+  region: '',
+  bookKind: ''
+});
+
+/** 年份下拉：从今年往前 12 年（真题目录基本落在这个区间；用户也可用地址栏传别的年份） */
+const yearOptions = computed(() => {
+  const now = new Date().getFullYear();
+  return Array.from({ length: 12 }, (_, i) => now - i);
 });
 
 const stats = reactive({
@@ -302,6 +329,10 @@ async function loadList(): Promise<void> {
       keyword: filters.keyword,
       created_within: filters.createdWithin,
       order: filters.order,
+      // C3：只在试卷类型下带上，避免误伤其它类型（后端也会强制排除非试卷）
+      paper_year: filters.type === 'paper' && filters.paperYear ? Number(filters.paperYear) : null,
+      region: filters.type === 'paper' ? filters.region : '',
+      book_kind: filters.type === 'paper' ? filters.bookKind : '',
       page: page.value,
       pageSize
     });
@@ -326,6 +357,9 @@ function resetFilters(): void {
   filters.type = '';
   filters.status = '';
   filters.createdWithin = '';
+  filters.paperYear = '';
+  filters.region = '';
+  filters.bookKind = '';
   filters.keyword = '';
   filters.order = 'created_desc';
   applyFilter();
@@ -497,6 +531,9 @@ function syncFromQuery(): void {
   filters.type = q.type;
   filters.status = q.status;
   filters.createdWithin = q.createdWithin;
+  filters.paperYear = q.paperYear;
+  filters.region = q.region;
+  filters.bookKind = q.bookKind;
 }
 
 syncFromQuery(); // setup 阶段 route.query 已就绪，首屏请求就带上筛选

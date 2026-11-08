@@ -1479,6 +1479,34 @@ def _doc_meta_of(m) -> dict:
     return doc_outline.loads(getattr(m, "doc_meta", None)) or {}
 
 
+def _paper_meta_for_filter(m) -> dict:
+    """C3：筛选用的元数据 = `paper_meta` 订正 > 文件名解析。与预览同一口径。"""
+    from ....services import paper_meta_edit
+    return paper_meta_edit.merge_meta(m)
+
+
+def _match_paper_filters(m, year, region, book_kind) -> bool:
+    """试卷三维筛选：年份 / 地区（code 或中文名都收）/ 卷别。
+
+    口径与预览一致（订正压过解析）。**非试卷类**在带试卷筛选时统一排除——
+    请求里既然问了"2019 年的试卷"，卡片/讲义就不该出现。
+    """
+    if getattr(m, "type", "") != "paper":
+        return False
+    meta = _paper_meta_for_filter(m)
+    if year is not None and meta.get("year") != year:
+        return False
+    if region:
+        want = region.strip().upper()
+        codes = {(meta.get("region_code") or "").upper(),
+                 (meta.get("region_name") or "")}
+        if want not in {c for c in codes if c}:
+            return False
+    if book_kind:
+        if (meta.get("book_kind") or "").upper() != book_kind.strip().upper():
+            return False
+    return True
+
 @router.get("/admin/list", summary="管理列表(含下架)")
 async def admin_list(subject: Optional[str] = Query(None),
                      type: Optional[str] = Query(None),
@@ -1492,6 +1520,13 @@ async def admin_list(subject: Optional[str] = Query(None),
                          description="最近 7/30 天（滚动窗口：create_time >= now - N 天）"),
                      order: str = Query("created_desc", pattern="^(created_desc|created_asc)$"),
                      publisher_id: Optional[int] = Query(None, description="只看某个发布者"),
+                     paper_year: Optional[int] = Query(
+                         None, ge=1900, le=2100,
+                         description="C3：试卷年份（订正优先于文件名解析）"),
+                     region: Optional[str] = Query(
+                         None, description="C3：试卷地区，地区代码（BJ）或中文（北京）"),
+                     book_kind: Optional[str] = Query(
+                         None, description="C3：试卷卷别 T=题本 / A=答案 / J=解析"),
                      db: Session = Depends(get_db)):
     _require_admin(current_user)
     q = db.query(StudyMaterial)
@@ -1518,7 +1553,6 @@ async def admin_list(subject: Optional[str] = Query(None),
         like = f"%{kw}%"
         q = q.filter(or_(StudyMaterial.title.like(like),
                          StudyMaterial.category.like(like)))
-    total = q.count()
     # 排序：create_time 为空的旧行**恒定排最后**（否则正序时 NULL 会顶到最前，看起来像"最老的资料"）。
     # SQLite 里 `is_(None)` 是 0/1，asc 即"有时间的在前"。
     null_last = StudyMaterial.create_time.is_(None).asc()
@@ -1526,7 +1560,21 @@ async def admin_list(subject: Optional[str] = Query(None),
         q = q.order_by(null_last, StudyMaterial.create_time.asc(), StudyMaterial.material_id.asc())
     else:
         q = q.order_by(null_last, StudyMaterial.create_time.desc(), StudyMaterial.material_id.desc())
-    rows = q.offset((page - 1) * page_size).limit(page_size).all()
+
+    paper_filters_on = any(v not in (None, "") for v in (paper_year, region, book_kind))
+    if paper_filters_on:
+        # C3：年份/地区/卷别存在 **两种来源**（`paper_meta` 订正 / 文件名解析），
+        # SQL 表达不了"订正优先 + 解析兜底"，所以先按其它条件取候选、再在 Python 里精筛。
+        # 量级：管理端资料是百级，全量取回可接受；超过 ~5000 条应改成
+        # 落库的 year/region 列 + 索引（届时只需换这一段，接口契约不变）。
+        candidates = q.all()
+        matched = [m for m in candidates
+                   if _match_paper_filters(m, paper_year, region, book_kind)]
+        total = len(matched)
+        rows = matched[(page - 1) * page_size: (page - 1) * page_size + page_size]
+    else:
+        total = q.count()
+        rows = q.offset((page - 1) * page_size).limit(page_size).all()
     publishers = _publisher_map(db, rows)
     items = []
     for m in rows:
@@ -1537,7 +1585,14 @@ async def admin_list(subject: Optional[str] = Query(None),
                      "publisher": publishers.get(m.creator_id),
                      # C1（2026-11-08）：讲义行显示「N 章 · M 字」；非讲义/未抽到大纲时为 None
                      "chapter_count": _doc_meta_of(m).get("chapter_count"),
-                     "word_count": _doc_meta_of(m).get("word_count")})
+                     "word_count": _doc_meta_of(m).get("word_count"),
+                     # C3：试卷的年份/地区/卷别（订正优先），非试卷为 None
+                     "paper_year": (_paper_meta_for_filter(m).get("year")
+                                    if m.type == "paper" else None),
+                     "paper_region": (_paper_meta_for_filter(m).get("region_name")
+                                      if m.type == "paper" else None),
+                     "paper_book_kind": (_paper_meta_for_filter(m).get("book_kind")
+                                         if m.type == "paper" else None)})
         items.append(item)
     return {"total": total, "items": items}
 
