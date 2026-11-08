@@ -239,3 +239,34 @@ def orphan_count(db: Session) -> int:
     on_disk = sum(1 for p in root.rglob("*") if p.is_file() and p.suffix != ".part")
     registered = db.query(MaterialFile).count()
     return max(0, on_disk - registered)
+
+
+def delete_file(db: Session, row: MaterialFile) -> dict:
+    """删除一条原件登记；**同一 sha256 没有别的资料引用时**顺带删物理文件。
+
+    为什么按 sha 判断而不是无条件删文件：存储是内容寻址的，同一份文件可能被多条资料引用
+    （B2 的 `content` 去重 + 手工补档都会出现），无条件删会把别人还在用的文件删掉。
+    物理文件删除失败（被占用/权限）只记日志，不阻断——DB 行已经删了，`orphan_count()` 能对账出来。
+    """
+    sha = row.sha256
+    rel = row.storage_path
+    file_id = row.file_id
+    material_id = row.material_id
+
+    db.delete(row)
+    db.flush()
+
+    still_used = (db.query(MaterialFile)
+                  .filter(MaterialFile.sha256 == sha).count()) > 0
+    physical_deleted = False
+    if not still_used and rel:
+        try:
+            path = resolve_abs_path(rel)
+            path.unlink()
+            physical_deleted = True
+        except (FileNotFoundError, OSError) as exc:
+            logger.warning("[material_files] 物理文件删除失败 %s: %s", rel, exc)
+
+    return {"file_id": file_id, "material_id": material_id,
+            "sha256": sha, "physical_deleted": physical_deleted,
+            "still_used_by_others": still_used}

@@ -491,6 +491,12 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE study_material ADD COLUMN paper_meta TEXT"))
                     conn.commit()
                 logger.info("自动迁移: study_material 添加列 paper_meta")
+            # C1（2026-11-08）：讲义大纲（字数/章节）
+            if 'doc_meta' not in sm_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE study_material ADD COLUMN doc_meta TEXT"))
+                    conn.commit()
+                logger.info("自动迁移: study_material 添加列 doc_meta")
 
         # 检查 study_goal 表(金币购:四维加权奖励字段)
         if 'study_goal' in inspector.get_table_names():

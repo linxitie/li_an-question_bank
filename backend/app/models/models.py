@@ -1410,6 +1410,10 @@ class StudyMaterial(Base):
     # 为什么不再开 6 个列：这些字段只用于展示与筛选，且解析不出的项可以为空；
     # 合并优先级见 `services/paper_registry.paper_block()`（显式值 > 文件名解析 > exam_paper）。
     paper_meta = Column(Text, comment="试卷元数据 JSON：year/region/book_kind/volume/题量/总分/时长")
+    # C1（2026-11-08）：讲义大纲（JSON 文本）——`{word_count, chapter_count, chapters:[{level,title}]}`。
+    # 为什么存快照而不是每次预览现场解析 docx：列表要显示「N 章 · M 字」，逐行解析太贵；
+    # 原件被删/替换时由上传/导入路径重算（见 services/doc_outline.py）。
+    doc_meta = Column(Text, comment="讲义大纲 JSON：字数/章节数/章节列表")
 
     __table_args__ = (
         Index("idx_subject_type", subject, type),

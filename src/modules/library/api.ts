@@ -294,6 +294,28 @@ export interface MaterialMetaResult {
   paper: MaterialPaperMeta | null;
 }
 
+/**
+ * 删除资料下的一份原件（C1 同期补的能力，2026-11-08）。
+ *
+ * 服务端只删登记行；同一内容没有别的资料引用时才删物理文件。
+ * 返回删除结果 + 该资料剩余原件，前端可直接替换列表，不必再拉一次预览。
+ */
+export async function deleteMaterialFile(
+  materialId: number,
+  fileId: number
+): Promise<{ ok: boolean; files: MaterialFileItem[]; deleted: { physical_deleted: boolean } }> {
+  const response = await libraryClient.request<{
+    ok: boolean;
+    files: MaterialFileItem[];
+    deleted: { physical_deleted: boolean };
+  }>({
+    url: `/api/materials/admin/${materialId}/files/${fileId}`,
+    method: 'DELETE',
+    baseURL: ''
+  });
+  return response.data;
+}
+
 /** 改试卷/讲义信息（C2b）：只写资料本身，不动题库里的可作答卷 */
 export async function updateMaterialMeta(
   id: number,
@@ -339,7 +361,10 @@ export interface MaterialPreview {
   content_html: string | null;
   card: { front: string | null; back: string | null; images: string[] } | null;
   video: { url: string } | null;
-  chapters: unknown[];
+  /** 讲义章节树（C1）；非讲义或未抽到大纲时为 [] */
+  chapters: MaterialChapter[];
+  /** 讲义规模（C1）：字数/章节数；非讲义时 word_count 为 null */
+  doc?: { word_count: number | null; word_count_label: string; chapter_count: number };
   /** 原件清单（B1）：主文件在前、附件在后 */
   files: MaterialFileItem[];
   /** 试卷元数据（C2/C4）；非试卷类为 null */
@@ -465,10 +490,23 @@ export async function uploadMaterialFile(params: UploadFileParams): Promise<Uplo
   return response.data;
 }
 
+/**
+ * 讲义章节（C1）：`level` 1=章 2=节，`title` 是标题原文。
+ * 由后端在**上传/导入时**从 docx 样式或编号行抽取（`services/doc_outline.py`），存快照。
+ */
+export interface MaterialChapter {
+  level: number;
+  title: string;
+}
+
 /** 管理端列表条目：在列表条目上多出上下架/学习人数/发布者 */export interface AdminMaterialListItem extends LibraryMaterial {
   status: number;
   study_count: number;
   creator_id: number | null;
+  /** 讲义章节数（C1）；未抽到大纲/非讲义为 null */
+  chapter_count?: number | null;
+  /** 讲义字数（C1） */
+  word_count?: number | null;
 }
 
 /** 管理端列表查询（A2 新增 created_within / order / publisher_id） */

@@ -104,6 +104,13 @@
                 <span v-if="row.category" class="mm-dot">·</span>
                 <span v-if="row.category">{{ row.category }}</span>
               </div>
+              <!-- C1：讲义行给规模，便于一眼判断"是不是那份长讲义" -->
+              <div v-else-if="row.type === 'lecture'" class="mm-sub">
+                <span v-if="row.chapter_count">{{ row.chapter_count }} 章</span>
+                <span v-if="row.chapter_count && row.word_count" class="mm-dot">·</span>
+                <span v-if="row.word_count">{{ formatWords(row.word_count) }}</span>
+                <span v-if="!row.chapter_count && !row.word_count">未解析大纲</span>
+              </div>
             </td>
             <td>{{ subjectLabel(row.subject) }}</td>
             <td>{{ row.category || '—' }}</td>
@@ -257,6 +264,12 @@ function fmtTime(iso?: string | null): string {
 /** 试卷编号：约定写在 badge 字段（C 批会迁到 paper_code 列） */
 function paperCodeOf(row: AdminMaterialListItem): string {
   return row.badge || '';
+}
+
+/** 字数展示：`1.2 万字` / `8600 字`（后端也给了同口径的 label，列表这里只需数值） */
+function formatWords(n?: number | null): string {
+  if (!n) return '—';
+  return n >= 10000 ? `${(n / 10000).toFixed(1)} 万字` : `${n} 字`;
 }
 
 function notYet(name: string): void {

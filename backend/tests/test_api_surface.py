@@ -82,6 +82,9 @@ KNOWN_EXTRA_OPERATIONS = {
     # 备考资料：改试卷/讲义信息（C2b，2026-11-08）
     # 鉴权：_require_admin；只写 study_material（写 exam_paper 会被模块边界门禁拦）；字段白名单 + 范围校验
     ("PATCH", "/api/materials/admin/{material_id}/meta"),
+    # 备考资料：删除单份原件（C2b 补漏，2026-11-08）
+    # 鉴权：_require_admin；只删登记行，同一 sha256 无其他引用时才删物理文件
+    ("DELETE", "/api/materials/admin/{material_id}/files/{file_id}"),
     # ===== 远端 main（模块4/7 与 F3）新增，合并时保留 =====
     # F3 媒体资产稳定读取代理（新资产 URL；旧 /uploads 与 /static 不变）。
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。

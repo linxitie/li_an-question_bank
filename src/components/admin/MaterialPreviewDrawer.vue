@@ -22,6 +22,7 @@
           <span>发布者：{{ preview?.publisher ? `${preview.publisher.name}（${preview.publisher.role_label}）` : '—' }}</span>
           <span>上传时间：<b class="adm-mono">{{ fmt(preview?.created_at) }}</b></span>
           <span v-if="preview?.uploaded_at">文件上传于：<b class="adm-mono">{{ fmt(preview.uploaded_at) }}</b></span>
+          <span v-if="preview?.doc?.word_count">字数：<b>{{ preview.doc.word_count_label }}</b></span>
           <span>浏览 {{ preview?.view_count ?? 0 }} · 学习 {{ preview?.study_count ?? 0 }}</span>
         </div>
 
@@ -63,9 +64,16 @@
 
           <!-- 后续批次占位：有数据才渲染，契约不变 -->
           <section v-if="preview?.chapters?.length" class="mpd-block">
-            <div class="mpd-block__label">章节</div>
-            <ul class="mpd-list">
-              <li v-for="(c, i) in preview.chapters" :key="i">{{ c }}</li>
+            <div class="mpd-block__label">
+              章节（{{ preview.chapters.length }}）
+              <span v-if="preview.doc?.word_count" class="mpd-hint">
+                · 共 {{ preview.doc.word_count_label }}
+              </span>
+            </div>
+            <ul class="mpd-toc">
+              <li v-for="(c, i) in preview.chapters" :key="i" :class="`is-lv${c.level}`">
+                <span class="mpd-toc__dot" />{{ c.title }}
+              </li>
             </ul>
           </section>
           <!-- C2/C4（2026-11-08）：试卷元数据 + 题库关联 -->
@@ -366,6 +374,18 @@ onBeforeUnmount(() => {
 .mpd-paper dd { margin: 0; color: var(--adm-text); }
 .mpd-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 .mpd-hint { color: var(--adm-text-weak); font-size: 12px; }
+/* 讲义目录（C1）：一级标题加粗、二级缩进 */
+.mpd-toc { list-style: none; margin: 0; padding: 0; font-size: 12.5px; line-height: 1.9; }
+.mpd-toc li { display: flex; align-items: baseline; gap: 6px; color: var(--adm-text-mid); }
+.mpd-toc li.is-lv1 { font-weight: 700; color: var(--adm-text); margin-top: 4px; }
+.mpd-toc li.is-lv2 { padding-left: 18px; }
+.mpd-toc__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--adm-primary);
+  flex-shrink: 0;
+}
 .mpd-error {
   padding: 12px 14px;
   border: 1px solid #f3c4ae;

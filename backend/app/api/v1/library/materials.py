@@ -803,6 +803,7 @@ from ....services.material_sanitizer import content_cleaner  # noqa: E402
 from ....services.material_monitor import import_monitor  # noqa: E402
 from ....services import material_files  # noqa: E402  B1：原件留档（存储+下载路径）
 from ....services import paper_registry  # noqa: E402  C2/C4：试卷↔可作答卷只读桥（避免 library 直接 import ExamPaper）
+from ....services import doc_outline  # noqa: E402  C1：讲义大纲（字数/章节）
 from ....core.config import settings  # noqa: E402
 from ....services import media_service  # noqa: E402
 
@@ -1473,6 +1474,11 @@ async def admin_rule_toggle(rule_id: int, body: dict,
     return {"id": rule_id, "enabled": int(r.enabled)}
 
 
+def _doc_meta_of(m) -> dict:
+    """读取讲义大纲快照（C1）；空/损坏都返回 `{}`，调用方按"没有大纲"处理。"""
+    return doc_outline.loads(getattr(m, "doc_meta", None)) or {}
+
+
 @router.get("/admin/list", summary="管理列表(含下架)")
 async def admin_list(subject: Optional[str] = Query(None),
                      type: Optional[str] = Query(None),
@@ -1528,7 +1534,10 @@ async def admin_list(subject: Optional[str] = Query(None),
         item.update({"status": m.status, "study_count": m.study_count or 0,
                      "creator_id": m.creator_id,
                      # A2：发布者（名字 + 角色徽标），creator_id 为空时给 None
-                     "publisher": publishers.get(m.creator_id)})
+                     "publisher": publishers.get(m.creator_id),
+                     # C1（2026-11-08）：讲义行显示「N 章 · M 字」；非讲义/未抽到大纲时为 None
+                     "chapter_count": _doc_meta_of(m).get("chapter_count"),
+                     "word_count": _doc_meta_of(m).get("word_count")})
         items.append(item)
     return {"total": total, "items": items}
 
@@ -1586,7 +1595,13 @@ async def admin_preview(material_id: int,
                   "images": _brief_images(m)} if is_card else None),
         "video": ({"url": (f"/api/video/{m.video_id}/stream" if m.video_id else "")}
                   if is_video else None),
-        "chapters": [],
+        # C1（2026-11-08）：讲义目录树 + 字数（导入/上传时抽好的快照；pdf/无大纲时为空）
+        "chapters": _doc_meta_of(m).get("chapters", []),
+        "doc": {
+            "word_count": _doc_meta_of(m).get("word_count"),
+            "word_count_label": doc_outline.human_word_count(_doc_meta_of(m).get("word_count")),
+            "chapter_count": _doc_meta_of(m).get("chapter_count", 0),
+        },
         # B1（2026-11-07）：原件留档已落地，这里回真实清单（主文件在前、附件在后）。
         # 没有留档的老资料返回 []，前端按"无原件"渲染，契约不变。
         "files": [material_files.serialize(f)
@@ -1666,6 +1681,40 @@ async def admin_backfill_papers(body: Optional[dict] = None,
         "planned": len(plan),
         "to_create": sum(1 for p in plan if p.get("action") == "create"),
         "items": plan,
+    })
+
+
+@router.delete("/admin/{material_id}/files/{file_id}", summary="删除单份原件(管理员)")
+async def admin_delete_file(material_id: int, file_id: int,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    """删除资料下的一份原件（C2b 补漏，2026-11-08）。
+
+    场景：验收时把「模拟卷.pdf」误挂到了 2019 北京真题上——没有删除入口就只能删整条资料。
+    口径：
+      · 只删登记行；**同一内容（sha256）没有别的资料引用时**才删物理文件（存储是内容寻址的，
+        别的资料可能引用同一份文件，无条件删会把人家正在用的文件删掉）；
+      · 物理文件删失败（占用/权限）不阻断，`orphan_count()` 能对账出来；
+      · 写审计（`delete_file`）。
+    """
+    _require_admin(current_user)
+    row = db.query(MaterialFile).filter(
+        MaterialFile.file_id == file_id,
+        MaterialFile.material_id == material_id).first()
+    if not row:
+        raise HTTPException(404, "原件不存在或不属于该资料")
+
+    info = material_files.delete_file(db, row)
+    db.commit()
+    _audit(db, current_user, "delete_file", f"material:{material_id}",
+           f"file:{file_id} {info['physical_deleted'] and '物理文件已删' or '物理文件保留'}")
+    db.commit()
+
+    remaining = material_files.list_for_material(db, material_id)
+    return JSONResponse({
+        "ok": True,
+        "deleted": info,
+        "files": [material_files.serialize(f) for f in remaining],
     })
 
 
@@ -1859,6 +1908,14 @@ async def admin_upload_file(
         row = material_files.save_bytes(
             db, target_material.material_id, data, name,
             role=role, source="upload", uploader_id=current_user.user_id)
+        # C1：讲义 docx 上传后顺手抽大纲（字数/章节），列表与抽屉直接有数据
+        if role == "primary" and name.lower().endswith(".docx"):
+            try:
+                doc_outline.apply_to_material(
+                    db, target_material, material_files.resolve_abs_path(row))
+            except Exception:      # 抽不出大纲不影响上传成功
+                logger.warning("[materials] 讲义大纲抽取失败 material=%s",
+                               target_material.material_id, exc_info=True)
         db.commit()
     except ValueError as exc:
         db.rollback()
@@ -2667,10 +2724,21 @@ async def import_confirm(import_id: int, body: dict,
         tmp = result.get("_tmp")
         if tmp and _Path(tmp).exists():
             try:
-                material_files.save_from_path(
+                saved = material_files.save_from_path(
                     db, created_ids[0], tmp, rec.file_name,
                     role="primary", source="import",
                     uploader_id=current_user.user_id)
+                # C1：导入的讲义同样抽大纲
+                if rec.file_type == "docx":
+                    target = db.query(StudyMaterial).filter(
+                        StudyMaterial.material_id == created_ids[0]).first()
+                    if target is not None:
+                        try:
+                            doc_outline.apply_to_material(
+                                db, target, material_files.resolve_abs_path(saved))
+                        except Exception:
+                            logger.warning("[materials] 导入大纲抽取失败 import=%s",
+                                           import_id, exc_info=True)
                 db.commit()
             except (ValueError, OSError) as exc:
                 # 留档失败不能回滚"资料已建好"这件事，但必须留痕，便于按记录补档

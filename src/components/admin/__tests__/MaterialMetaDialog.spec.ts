@@ -13,11 +13,23 @@ vi.mock('@/modules/library/api', async (orig) => {
     ...actual,
     fetchMaterialPreview: vi.fn(),
     updateMaterialMeta: vi.fn(),
-    uploadMaterialFile: vi.fn()
+    uploadMaterialFile: vi.fn(),
+    deleteMaterialFile: vi.fn()
+  };
+});
+
+vi.mock('element-plus', async (orig) => {
+  const actual = await orig<typeof import('element-plus')>();
+  return {
+    ...actual,
+    ElMessage: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+    // 默认确认（用例里可改）；返回 Promise 以免组件 .catch 报错
+    ElMessageBox: { confirm: vi.fn(async () => 'confirm') }
   };
 });
 
 import {
+  deleteMaterialFile,
   fetchMaterialPreview,
   updateMaterialMeta,
   uploadMaterialFile,
@@ -103,6 +115,7 @@ afterEach(() => {
   vi.mocked(fetchMaterialPreview).mockReset();
   vi.mocked(updateMaterialMeta).mockReset();
   vi.mocked(uploadMaterialFile).mockReset();
+  vi.mocked(deleteMaterialFile).mockReset();
 });
 
 describe('改信息：回填', () => {
@@ -230,6 +243,71 @@ describe('改信息：补原件', () => {
     expect(call.type).toBe('paper');
     await vi.waitFor(() => {
       expect(vi.mocked(fetchMaterialPreview)).toHaveBeenCalledTimes(2);
+    });
+    wrapper.unmount();
+  });
+});
+
+describe('C1 删除原件', () => {
+  const fileItem = {
+    file_id: 7,
+    file_name: '单独一份试卷·模拟卷.pdf',
+    file_ext: 'pdf',
+    mime_type: 'application/pdf',
+    size: 2850,
+    size_label: '3 KB',
+    sha256_short: '604cf9d22f6a',
+    role: 'primary' as const,
+    role_label: '主文件',
+    source: 'upload',
+    download_url: '/api/materials/files/7/download',
+    uploaded_at: '2026-11-08 10:57'
+  };
+
+  it('点「删除」→ 二次确认 → 调接口并刷新原件列表', async () => {
+    vi.mocked(fetchMaterialPreview).mockResolvedValue(preview({ files: [fileItem] }));
+    vi.mocked(deleteMaterialFile).mockResolvedValue({
+      ok: true,
+      files: [],
+      deleted: { physical_deleted: true }
+    });
+    const wrapper = await mountDialog();
+
+    const del = [...body().querySelectorAll('.mmd-file__del')][0] as HTMLButtonElement;
+    expect(del).toBeTruthy();
+    del.click();
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(deleteMaterialFile)).toHaveBeenCalledWith(125, 7);
+    });
+    await vi.waitFor(() => {
+      expect(body().querySelectorAll('.mmd-file__del')).toHaveLength(0);
+    });
+    wrapper.unmount();
+  });
+
+  it('确认框取消时不调接口', async () => {
+    const { ElMessageBox } = await import('element-plus');
+    vi.mocked(fetchMaterialPreview).mockResolvedValue(preview({ files: [fileItem] }));
+    // 真实 Element Plus 在"取消"时是 reject，不是 resolve('cancel')
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce(new Error('cancel'));
+    const wrapper = await mountDialog();
+
+    (body().querySelector('.mmd-file__del') as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(vi.mocked(deleteMaterialFile)).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('删除失败时把后端原因提示出来', async () => {
+    vi.mocked(fetchMaterialPreview).mockResolvedValue(preview({ files: [fileItem] }));
+    vi.mocked(deleteMaterialFile).mockRejectedValue({ message: '原件不存在或不属于该资料' });
+    const wrapper = await mountDialog();
+
+    (body().querySelector('.mmd-file__del') as HTMLButtonElement).click();
+    const { ElMessage } = await import('element-plus');
+    await vi.waitFor(() => {
+      expect(vi.mocked(ElMessage.error)).toHaveBeenCalledWith('原件不存在或不属于该资料');
     });
     wrapper.unmount();
   });

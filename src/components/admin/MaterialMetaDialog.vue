@@ -93,6 +93,15 @@
               <div class="mmd-files">
                 <span v-for="f in files" :key="f.file_id" class="mmd-file">
                   {{ f.file_name }}（{{ f.role_label }} · {{ f.size_label }}）
+                  <button
+                    class="mmd-file__del"
+                    type="button"
+                    :disabled="saving || deletingId === f.file_id"
+                    :title="`删除原件 ${f.file_name}`"
+                    @click="removeFile(f)"
+                  >
+                    {{ deletingId === f.file_id ? '删除中…' : '删除' }}
+                  </button>
                 </span>
                 <span v-if="!files.length" class="mmd-tip">还没有原件</span>
                 <input
@@ -139,8 +148,9 @@
  * 组件**不自己判断业务**：范围校验以后端为准，400 的原因原样弹出来。
  */
 import { computed, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
+  deleteMaterialFile,
   fetchMaterialPreview,
   updateMaterialMeta,
   uploadMaterialFile,
@@ -169,6 +179,7 @@ const emit = defineEmits<{
 const loading = ref(false);
 const saving = ref(false);
 const uploading = ref(false);
+const deletingId = ref<number | null>(null);
 const uploadPercent = ref(0);
 const loadError = ref('');
 const saveError = ref('');
@@ -284,6 +295,34 @@ async function save(): Promise<void> {
   }
 }
 
+/**
+ * 删除单份原件（C2b 补漏的能力）。
+ *
+ * 为什么二次确认：原件删了之后**没有回收站**（物理文件在无其他引用时一并删除），
+ * 误删只能重新上传；这类不可逆操作必须让管理员看清要删哪个文件。
+ */
+async function removeFile(file: MaterialFileItem): Promise<void> {
+  if (props.materialId == null || deletingId.value !== null) return;
+  const ok = await ElMessageBox.confirm(
+    `即将删除原件「${file.file_name}」（${file.role_label} · ${file.size_label}）。\n` +
+      '删除后不可恢复；若仍被其它资料引用，物理文件会保留。',
+    '删除原件',
+    { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+  ).catch(() => false);
+  if (!ok) return;
+
+  deletingId.value = file.file_id;
+  try {
+    const res = await deleteMaterialFile(props.materialId, file.file_id);
+    files.value = res.files;
+    ElMessage.success(res.deleted.physical_deleted ? '原件已删除（物理文件已清理）' : '原件已删除');
+  } catch (e) {
+    ElMessage.error(errorMessage(e, '删除失败'));
+  } finally {
+    deletingId.value = null;
+  }
+}
+
 async function onAttach(e: Event): Promise<void> {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -361,11 +400,24 @@ defineExpose({ load, save });
 .mmd-tip { margin: 8px 0 0; font-size: 11.5px; color: var(--adm-text-weak); line-height: 1.7; }
 .mmd-files { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
 .mmd-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 3px 8px;
   border-radius: var(--adm-r-tag);
   background: var(--adm-bg);
   color: var(--adm-text-mid);
 }
+.mmd-file__del {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  color: var(--adm-danger);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mmd-file__del:disabled { color: var(--adm-text-weak); cursor: default; }
 .mmd-file-input { display: none; }
 .mmd-error {
   margin: 10px 0 0;
