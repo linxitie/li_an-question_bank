@@ -209,6 +209,7 @@ import {
 } from '@/components/admin';
 import { MATERIAL_TYPES, materialTypeLabel } from '@/modules/library/materialTypes';
 import { parseListQuery } from '@/utils/materialListQuery';
+import { errorMessage } from '@/utils/apiError';
 import {
   fetchAdminMaterialList,
   fetchAdminMaterialStats,
@@ -295,7 +296,7 @@ async function loadList(): Promise<void> {
   } catch (e) {
     rows.value = [];
     total.value = 0;
-    ElMessage.error(e instanceof Error ? e.message : '列表加载失败');
+    ElMessage.error(errorMessage(e, '列表加载失败'));
   } finally {
     loading.value = false;
   }
@@ -360,7 +361,7 @@ async function toggleStatus(row: AdminMaterialListItem): Promise<void> {
     ElMessage.success(isOn ? '已上架（=审批通过）' : '已下架（=未通过）');
     await loadStats();
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '操作失败');
+    ElMessage.error(errorMessage(e, '操作失败'));
   }
 }
 
@@ -384,7 +385,7 @@ async function remove(row: AdminMaterialListItem): Promise<void> {
     if (rows.value.length === 1 && page.value > 1) page.value -= 1;
     await reload();
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '删除失败');
+    ElMessage.error(errorMessage(e, '删除失败'));
   }
 }
 
@@ -409,7 +410,7 @@ async function restore(row: AdminMaterialListItem): Promise<void> {
     ElMessage.success('已恢复为未上架');
     await reload();
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '恢复失败');
+    ElMessage.error(errorMessage(e, '恢复失败'));
   }
 }
 
@@ -462,7 +463,7 @@ async function openPreview(row: AdminMaterialListItem): Promise<void> {
   try {
     preview.value = await fetchMaterialPreview(row.id);
   } catch (e) {
-    previewError.value = e instanceof Error ? e.message : '预览加载失败';
+    previewError.value = errorMessage(e, '预览加载失败');
   } finally {
     previewLoading.value = false;
   }

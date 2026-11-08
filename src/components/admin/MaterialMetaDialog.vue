@@ -149,6 +149,7 @@ import {
   type MaterialPreview
 } from '@/modules/library/api';
 import { BOOK_KINDS, PAPER_REGIONS } from '@/utils/paperRegions';
+import { errorMessage } from '@/utils/apiError';
 
 const props = withDefaults(
   defineProps<{
@@ -235,7 +236,7 @@ async function load(): Promise<void> {
   try {
     fillFromPreview(await fetchMaterialPreview(props.materialId));
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : '加载失败';
+    loadError.value = errorMessage(e, '加载失败');
   } finally {
     loading.value = false;
   }
@@ -277,7 +278,7 @@ async function save(): Promise<void> {
       category: res.material.category
     });
   } catch (e) {
-    saveError.value = e instanceof Error ? e.message : '保存失败';
+    saveError.value = errorMessage(e, '保存失败');
   } finally {
     saving.value = false;
   }
@@ -304,7 +305,7 @@ async function onAttach(e: Event): Promise<void> {
       await load();
     }
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '上传失败');
+    ElMessage.error(errorMessage(err, '上传失败'));
   } finally {
     uploading.value = false;
     if (fileInput.value) fileInput.value.value = '';

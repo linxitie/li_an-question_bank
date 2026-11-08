@@ -227,3 +227,41 @@ class TestAttachRoleAuto:
         roles = {r.role for r in db_session.query(MaterialFile).filter(
             MaterialFile.material_id == m.material_id).all()}
         assert roles == {"primary", "attachment"}
+
+class TestPaperCodeFromFileName:
+    """C2a 接线（2026-11-08）：试卷上传时按文件名生成编号，不能只靠补录/改信息生成。
+
+    验收时发现：`2024国考·公专题本.docx` 走 B2 上传后编号为空（material 127）。
+    """
+
+    def test_upload_paper_gets_code_from_file_name(self, client, admin_headers, db_session):
+        resp = _upload(client, admin_headers, "2024国考·公专题本.docx",
+                       _docx_bytes("2024 国考题本"), type="paper")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        m = db_session.query(StudyMaterial).filter(
+            StudyMaterial.material_id == body["material_id"]).one()
+        assert m.paper_code == "GZ-2024-GK-T"
+        assert m.badge == "GZ-2024-GK-T", "列表副标题取 badge"
+
+        # 预览侧：编号/年份/地区/卷别 都能出，题量等留空（没有可作答卷）
+        pv = client.get(f"/api/materials/admin/{m.material_id}/preview",
+                        headers=admin_headers).json()
+        assert pv["paper"]["paper_code"] == "GZ-2024-GK-T"
+        assert pv["paper"]["year"] == 2024
+        assert pv["paper"]["region_name"] == "国考"
+        assert pv["paper"]["book_kind_label"] == "题本"
+        assert pv["paper"]["question_count"] is None
+        assert pv["paper"]["exam_paper_id"] is None
+
+    def test_unparseable_paper_name_gets_no_code(self, client, admin_headers, db_session):
+        resp = _upload(client, admin_headers, "扫描件_001.pdf", _pdf_bytes(), type="paper")
+        m = db_session.query(StudyMaterial).filter(
+            StudyMaterial.material_id == resp.json()["material_id"]).one()
+        assert m.paper_code is None and m.badge is None, "解析不出就留空，不编造"
+
+    def test_lecture_upload_has_no_paper_code(self, client, admin_headers, db_session):
+        resp = _upload(client, admin_headers, "2019北京讲义.docx", _docx_bytes("讲义"), type="lecture")
+        m = db_session.query(StudyMaterial).filter(
+            StudyMaterial.material_id == resp.json()["material_id"]).one()
+        assert m.paper_code is None

@@ -153,6 +153,7 @@ import {
   type SelectionIssue,
   type UploadGroup
 } from '@/utils/batchUploadPlan';
+import { errorMessage } from '@/utils/apiError';
 
 const props = withDefaults(
   defineProps<{
@@ -321,7 +322,7 @@ async function start(): Promise<void> {
       created += 1;
     } catch (e) {
       row.status = 'failed';
-      row.error = e instanceof Error ? e.message : '上传失败';
+      row.error = errorMessage(e, '上传失败');
       failed += 1;
     }
   }

@@ -133,6 +133,7 @@ import { onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { AdminTag } from '@/components/admin';
 import { downloadMaterialFile, type MaterialFileItem, type MaterialPreview } from '@/modules/library/api';
+import { errorMessage } from '@/utils/apiError';
 
 const props = withDefaults(
   defineProps<{
@@ -171,7 +172,7 @@ async function onDownload(f: MaterialFileItem): Promise<void> {
     await downloadMaterialFile(f);
     ElMessage.success(`已开始下载 ${f.file_name}`);
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '下载失败');
+    ElMessage.error(errorMessage(e, '下载失败'));
   } finally {
     downloading.value = null;
   }

@@ -1841,9 +1841,17 @@ async def admin_upload_file(
     try:
         if target_material is None:
             stem = _os.path.splitext(name)[0][:200] or "未命名资料"
+            # C2a 接线（2026-11-08）：试卷类上传时按**文件名**解析元数据，直接落人读编号。
+            # 之前只有补录（C4）与改信息（C2b）会生成编号，B2 上传路径漏了这一步，
+            # 结果「2024国考·公专题本.docx」导入后编号为空（验收时发现）。
+            parsed_code = None
+            if type == "paper":
+                from ....services.paper_meta_parser import parse_paper_file_name
+                parsed_code = parse_paper_file_name(stem).paper_code
             target_material = StudyMaterial(
                 subject=subject, type=type,
                 category=(category or None), title=(title or stem)[:200],
+                badge=parsed_code, paper_code=parsed_code,
                 content="", status=0, creator_id=current_user.user_id)
             db.add(target_material)
             db.flush()
