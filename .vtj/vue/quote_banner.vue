@@ -128,9 +128,10 @@
   import { ReadingLamp, RefreshRight, Document, Close } from '@vtj/icons';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+  import DailyNewsPanel from '@/components/news/DailyNewsPanel.vue';
   export default defineComponent({
     name: 'QuoteBanner',
-    components: { XIcon },
+    components: { XIcon, DailyNewsPanel },
     setup(props) {
       const provider = useProvider({ id: 'quote_banner', version: '1778918000716' });
       const state = reactive({
