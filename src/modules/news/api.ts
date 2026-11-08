@@ -42,6 +42,8 @@ export interface NewsListQuery {
   pageSize?: number;
   source?: string;
   category?: string;
+  /** 标题/摘要/正文关键词，映射到后端 q 参数 */
+  keyword?: string;
   /** 后端单次返回上限 1..50 */
   limit?: number;
 }
@@ -72,7 +74,8 @@ export function fetchNewsList(
     params: {
       limit: query.limit ?? 20,
       source: query.source || undefined,
-      category: query.category || undefined
+      category: query.category || undefined,
+      q: query.keyword || undefined
     }
   });
 }
