@@ -30,6 +30,7 @@ _CONTENT_SELECTORS = (
     "article",
     ".article-content",
     ".article",
+    ".content_main",
     ".content",
     ".TRS_Editor",
     ".p2j_con3",
@@ -219,6 +220,10 @@ _UNWANTED_CONTENT_SELECTORS = (
     ".copyright",
     ".footer",
     ".sidebar",
+    ".list_box_right",
+    ".list_img",
+    ".list_list",
+    ".list_tit2",
     ".ad",
     ".advertisement",
 )
@@ -246,6 +251,7 @@ _JUNK_MARKERS = (
 _LINE_NOISE_PREFIXES = (
     "来源：",
     "发布时间：",
+    "时间：",
     "字号：",
     "打印本页",
     "分享",
@@ -280,6 +286,17 @@ def clean_article_text(title: str, text: str) -> str:
         if repeated:
             paragraph = repeated.group(1) + paragraph[repeated.end() :]
         compact = re.sub(r"\s+", "", paragraph)
+        if title_key and compact.startswith(title_key):
+            rest = paragraph[paragraph.find(title) + len(title) :]
+            rest = re.sub(
+                r"^.*?时间[:：]\s*\d{4}[-/]\d{1,2}[-/]\d{1,2}" r"(?:\s+\d{1,2}:\d{2})?\s*",
+                "",
+                rest,
+            ).lstrip(" -—_|｜")
+            if not rest:
+                continue
+            paragraph = rest
+            compact = re.sub(r"\s+", "", paragraph)
         if compact == title_key:
             continue
         if any(paragraph.startswith(prefix) for prefix in _LINE_NOISE_PREFIXES):
@@ -368,6 +385,9 @@ def parse_article(html: str, url: str) -> ArticleData:
                 body = text
                 best_score = len(text)
                 content_node = node
+    preferred_content = soup.select_one(".content_main")
+    if preferred_content is not None and len(preferred_content.get_text(" ", strip=True)) >= 100:
+        content_node = preferred_content
     if not body:
         body = "\n".join(
             line.strip()
