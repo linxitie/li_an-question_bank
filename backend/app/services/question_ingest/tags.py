@@ -183,29 +183,49 @@ def _extract_paper_name(filename: str, text: str) -> Optional[str]:
     return None
 
 
-def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: str, question_count: int = 0):
+def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: str,
+                                question_count: int = 0, paper_code: Optional[str] = None):
     """根据检测到的标签自动创建或查找ExamPaper
-    
+
     新增参数:
         question_count: 导入的题目数量
-    
+        paper_code: A2（2026-11-08）**资料侧已有的试卷编号**。给了就先按编号找卷：
+            · 命中 → 直接复用（含 ENDED 复活为 DRAFT），这样"上传真题 → 建卷 → 导题"
+              会挂到同一张卷上，而不是又生成一个 `PAPER-xxxx` 新编号；
+            · 没命中 → 用这个编号建卷（不再 `generate_paper_code()`），保证两侧编号一致。
+
     阈值规则:
-        - question_count < 5: 不创建试卷，只入库
-        - question_count >= 5: 正常创建试卷
+        - 只有在**需要新建卷**时才看 question_count：< 5 不建卷，只入库；
+        - **按编号命中已有卷时不受阈值限制**（否则"给已建好的卷补 3 道题"会被静默丢弃）。
     """
     from ...models.models import ExamPaper, ExamPaperTag
     from ...api.v1.catalog.paper_generation import generate_paper_code
-
-    # 阈值检查：少于5题不创建试卷
-    MIN_QUESTION_COUNT = 5
-    if question_count < MIN_QUESTION_COUNT:
-        logger.info(f"[import-paper] 题目数量({question_count})少于阈值({MIN_QUESTION_COUNT})，跳过试卷创建")
-        return None
 
     paper_name = auto_tags.get('paper_name') or filename.rsplit('.', 1)[0] if '.' in filename else filename
     exam_type_tag = auto_tags.get('exam_type', '模拟考试')
     subject_name = auto_tags.get('subject_category', '行测')
     subject_id = SUBJECT_NAME_MAP.get(subject_name, 1)
+
+    # A2：优先按"资料侧编号"命中——这条路径保证「资料 ↔ 卷」是同一张卷。
+    # 放在阈值检查**之前**：命中已存在的卷时不受"≥5 题"限制。
+    code = (paper_code or '').strip()
+    if code:
+        by_code = db.query(ExamPaper).filter(ExamPaper.paper_code == code).first()
+        if by_code is not None:
+            if by_code.paper_type == "ENDED":
+                by_code.paper_type = "DRAFT"
+                logger.info(f"[import-paper] 按编号命中 ENDED 试卷并复活: {by_code.paper_id} {code}")
+            else:
+                logger.info(f"[import-paper] 按编号复用试卷: {by_code.paper_id} '{code}'")
+            return by_code
+
+    # 阈值检查：少于5题不创建试卷（仅约束"新建"）
+    MIN_QUESTION_COUNT = 5
+    if question_count < MIN_QUESTION_COUNT:
+        logger.info(f"[import-paper] 题目数量({question_count})少于阈值({MIN_QUESTION_COUNT})，跳过试卷创建")
+        return None
+
+        logger.info(f"[import-paper] 按编号未命中，将用 {code} 新建试卷")
 
     # 查重：同名+同创建者 → 复用
     existing = db.query(ExamPaper).filter(
@@ -223,10 +243,10 @@ def _get_or_create_import_paper(db, user, auto_tags: Dict[str, Any], filename: s
             logger.info(f"[import-paper] 复用已有试卷: {existing.paper_id} '{paper_name}'")
         return existing
 
-    # 新建试卷(DRAFT状态)
+    # 新建试卷(DRAFT状态)。A2：给了资料侧编号就用它（保证两侧一致），否则照旧生成
     paper = ExamPaper(
         paper_name=paper_name,
-        paper_code=generate_paper_code(),
+        paper_code=code or generate_paper_code(),
         subject_id=subject_id,
         composition_method="IMPORT",
         creator_id=user.user_id,

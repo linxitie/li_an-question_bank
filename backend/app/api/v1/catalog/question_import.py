@@ -1557,7 +1557,12 @@ async def batch_import_parsed(
             paper = _get_or_create_import_paper(
                 db, current_user, auto_tags,
                 paper_name or (auto_tags.get('paper_name') or '导入试卷'),
-                question_count=len(ok_ids) + len(reused_ids))
+                question_count=len(ok_ids) + len(reused_ids),
+                # A2（2026-11-08）：资料侧已有的编号（GZ-2024-GK-T 这类）。
+                # 命中就复用那张卷（资料页「建卷」建的），不命中就用它建卷，
+                # 保证「资料 ↔ 卷」两侧 paper_code 一致。
+                paper_code=(payload.get('paper_code') or '').strip() or None,
+            )
             if paper is None:
                 # 题目数量少于阈值，不创建试卷
                 logger.info(f"[batch-parsed] 题目数量({len(ok_ids) + len(reused_ids)})少于阈值，跳过试卷创建")
@@ -2891,7 +2896,9 @@ async def confirm_batch_import(
                 paper = _get_or_create_import_paper(
                     db, current_user, auto_tags,
                     record.original_filename or '导入试卷',
-                    question_count=imported
+                    question_count=imported,
+                    # A2（2026-11-08）：确认导入时也可指定资料侧编号，与 batch-parsed 同口径
+                    paper_code=(payload.get('paper_code') or '').strip() or None,
                 )
                 if paper:
                     record.paper_id = paper.paper_id
