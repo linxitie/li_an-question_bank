@@ -86,12 +86,40 @@ def init_scheduler():
     """初始化并启动定时任务调度器"""
     from .difficulty import update_all_difficulties
     from .exam_scraper import scrape_all_exams
-    from .news_scraper import scrape_all_news
     from .recruitment_scraper import scrape_all_recruitment
 
-    # 包装：爬取完成后广播同步事件（通知前端刷新）
-    def _news_with_broadcast():
-        scrape_all_news()
+    # 新新闻管线：配置来源采集 → AI 摘要 → Obsidian 待审卡片；不自动发布。
+    def _collect_news_with_broadcast():
+        from pathlib import Path
+
+        from ..core.database import SessionLocal
+        from .news_ai_service import process_news
+        from .news_collector import collect_all_sources
+        from .news_obsidian_export import export_news_board
+
+        db = SessionLocal()
+        try:
+            collect_report = collect_all_sources(db, limit=1, dry_run=False)
+            ai_report = process_news(db, limit=100)
+            vault = Path(__file__).resolve().parents[2] / "content_hub_vault"
+            export_report = export_news_board(db, vault, dry_run=False)
+            logger.info(
+                "新闻自动任务完成: 采集=%s AI=%s 导出=%s",
+                {
+                    "sources": len(collect_report),
+                    "inserted": sum(r.get("inserted", 0) for r in collect_report),
+                    "errors": sum(len(r.get("errors", [])) for r in collect_report),
+                },
+                ai_report,
+                {
+                    "written": export_report.get("written"),
+                    "skipped": export_report.get("skipped"),
+                },
+            )
+        except Exception:
+            logger.exception("新闻自动任务失败")
+        finally:
+            db.close()
         _broadcast_sync("新闻更新")
 
     def _recruitment_with_broadcast():
@@ -102,12 +130,12 @@ def init_scheduler():
         scrape_all_exams()
         _broadcast_sync("考试日历更新")
 
-    # 每日 24:00（北京时间）执行爬取
+    # 每天 08:00 / 18:00（北京时间）执行新采集器。
     scheduler.add_job(
-        _news_with_broadcast,
-        trigger=CronTrigger(hour=0, minute=0, timezone=CST),
-        id="scrape_news",
-        name="每日新闻爬取",
+        _collect_news_with_broadcast,
+        trigger=CronTrigger(hour="8,18", minute=0, timezone=CST),
+        id="collect_news",
+        name="每日新闻采集（新采集器）",
         replace_existing=True,
     )
     scheduler.add_job(
@@ -342,16 +370,17 @@ def init_scheduler():
     )
 
     scheduler.start()
-    logger.info("定时任务调度器已启动（每日 24:00 CST）")
+    logger.info("定时任务调度器已启动（新闻 08:00/18:00 CST）")
 
     # 启动时立即执行一次（延迟 30 秒，等数据库就绪）
     def _initial_run():
         try:
-            logger.info("执行首次全量爬取...")
-            scrape_all_news()
+            logger.info("执行首次招考/考试爬取...")
+            # 新闻由 collect_news 在 08:00/18:00 执行；服务重启不重复全量新闻，
+            # 避免频繁重启产生大量待审堆积。
             scrape_all_recruitment()
             scrape_all_exams()
-            logger.info("首次全量爬取完成")
+            logger.info("首次招考/考试爬取完成")
         except Exception as e:
             logger.error(f"首次爬取失败（服务继续运行）: {e}")
 
