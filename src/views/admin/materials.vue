@@ -203,7 +203,7 @@
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import {
   AdminPageHeader,
   AdminStatCard,
@@ -217,6 +217,7 @@ import {
 import { MATERIAL_TYPES, materialTypeLabel } from '@/modules/library/materialTypes';
 import { parseListQuery } from '@/utils/materialListQuery';
 import { errorMessage } from '@/utils/apiError';
+import { confirmOverlay, notify } from '@/utils/overlay';
 import {
   fetchAdminMaterialList,
   fetchAdminMaterialStats,
@@ -353,7 +354,7 @@ async function toggleStatus(row: AdminMaterialListItem): Promise<void> {
   const next = row.status === 1 ? 0 : 1;
   const isOn = next === 1;
   try {
-    await ElMessageBox.confirm(
+    await confirmOverlay(
       isOn
         ? '上架后学生端立即可见；若该试卷已关联可作答卷，会同步开放考试用卷。'
         : '下架后学生端立即不可见；已关联的可作答卷会同步关闭（进行中的考试不受影响）。',
@@ -380,7 +381,7 @@ async function toggleStatus(row: AdminMaterialListItem): Promise<void> {
 
 async function remove(row: AdminMaterialListItem): Promise<void> {
   try {
-    await ElMessageBox.confirm(
+    await confirmOverlay(
       `移入回收站后学生端立即不可见，数据保留、学习进度保留，可随时恢复。确认删除「${row.title}」？`,
       '移入回收站',
       { confirmButtonText: '移入回收站', cancelButtonText: '取消', type: 'warning' }
@@ -405,7 +406,7 @@ async function remove(row: AdminMaterialListItem): Promise<void> {
 /** 从回收站恢复：status -1 → 0（未上架），需管理员再点「上架」才对学生可见 */
 async function restore(row: AdminMaterialListItem): Promise<void> {
   try {
-    await ElMessageBox.confirm(
+    await confirmOverlay(
       `恢复后为「未上架」状态，学生仍不可见；需要再点「上架（=审批通过）」才可见。确认恢复「${row.title}」？`,
       '恢复资料',
       { confirmButtonText: '恢复', cancelButtonText: '取消', type: 'success' }

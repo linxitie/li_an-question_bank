@@ -20,9 +20,17 @@ vi.mock('@/modules/library/api', async (orig) => {
 
 vi.mock('element-plus', async (orig) => {
   const actual = await orig<typeof import('element-plus')>();
+  // 组件通过 `utils/overlay` 以**函数形式**调用 ElMessage({type,...})，
+  // 所以 mock 必须是可调用对象（带 .success/.error 等静态方法）。
+  const message = Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn()
+  });
   return {
     ...actual,
-    ElMessage: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+    ElMessage: message,
     // 默认确认（用例里可改）；返回 Promise 以免组件 .catch 报错
     ElMessageBox: { confirm: vi.fn(async () => 'confirm') }
   };
@@ -307,7 +315,9 @@ describe('C1 删除原件', () => {
     (body().querySelector('.mmd-file__del') as HTMLButtonElement).click();
     const { ElMessage } = await import('element-plus');
     await vi.waitFor(() => {
-      expect(vi.mocked(ElMessage.error)).toHaveBeenCalledWith('原件不存在或不属于该资料');
+      expect(vi.mocked(ElMessage)).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error', message: '原件不存在或不属于该资料' })
+      );
     });
     wrapper.unmount();
   });

@@ -148,7 +148,7 @@
  * 组件**不自己判断业务**：范围校验以后端为准，400 的原因原样弹出来。
  */
 import { computed, reactive, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import {
   deleteMaterialFile,
   fetchMaterialPreview,
@@ -160,6 +160,7 @@ import {
 } from '@/modules/library/api';
 import { BOOK_KINDS, PAPER_REGIONS } from '@/utils/paperRegions';
 import { errorMessage } from '@/utils/apiError';
+import { confirmOverlay, notify } from '@/utils/overlay';
 
 const props = withDefaults(
   defineProps<{
@@ -282,7 +283,7 @@ async function save(): Promise<void> {
           }
         : {})
     });
-    ElMessage.success(res.changed.length ? `已保存：${res.changed.join('、')}` : '没有变化');
+    notify('success', res.changed.length ? `已保存：${res.changed.join('、')}` : '没有变化');
     emit('saved', {
       id: res.material.id,
       title: res.material.title,
@@ -303,7 +304,7 @@ async function save(): Promise<void> {
  */
 async function removeFile(file: MaterialFileItem): Promise<void> {
   if (props.materialId == null || deletingId.value !== null) return;
-  const ok = await ElMessageBox.confirm(
+  const ok = await confirmOverlay(
     `即将删除原件「${file.file_name}」（${file.role_label} · ${file.size_label}）。\n` +
       '删除后不可恢复；若仍被其它资料引用，物理文件会保留。',
     '删除原件',
@@ -315,9 +316,9 @@ async function removeFile(file: MaterialFileItem): Promise<void> {
   try {
     const res = await deleteMaterialFile(props.materialId, file.file_id);
     files.value = res.files;
-    ElMessage.success(res.deleted.physical_deleted ? '原件已删除（物理文件已清理）' : '原件已删除');
+    notify('success', res.deleted.physical_deleted ? '原件已删除（物理文件已清理）' : '原件已删除');
   } catch (e) {
-    ElMessage.error(errorMessage(e, '删除失败'));
+    notify('error', errorMessage(e, '删除失败'));
   } finally {
     deletingId.value = null;
   }
@@ -338,13 +339,13 @@ async function onAttach(e: Event): Promise<void> {
       onProgress: (p) => { uploadPercent.value = p; }
     });
     if (res.duplicate) {
-      ElMessage.info('这份原件已经存在（内容重复），没有重复上传');
+      notify('info', '这份原件已经存在（内容重复），没有重复上传');
     } else {
-      ElMessage.success('原件已上传');
+      notify('success', '原件已上传');
       await load();
     }
   } catch (err) {
-    ElMessage.error(errorMessage(err, '上传失败'));
+    notify('error', errorMessage(err, '上传失败'));
   } finally {
     uploading.value = false;
     if (fileInput.value) fileInput.value.value = '';

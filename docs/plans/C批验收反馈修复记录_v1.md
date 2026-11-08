@@ -106,3 +106,49 @@ vitest `src/utils/__tests__/apiError.spec.ts` 6 例（归一化对象 / Error / 
 
 **要清理的话告诉我**（没有"删原件"入口）：可以删掉 #125 上那个 `模拟卷.pdf`（行 + 物理文件），
 或把 #125 的 `paper_meta` 订正一并清空、#123/#124「同名资料」两条测试资料软删。
+
+---
+
+## 缺陷 3（第二轮验收）：确认框被压在「改信息」弹窗下面
+
+### 现象
+
+在「改信息」里点原件行的「删除」，确认框**出现在弹窗背后**（截图里只看得到弹窗，点不到"删除"按钮）。
+
+### 根因
+
+两套浮层各算各的：
+
+| 浮层 | z-index |
+|---|---|
+| 管理端自绘：预览抽屉 `.mpd-root` | 3000 |
+| 管理端自绘：对话框 `.mmd-root` / `.mbu-root` | 3100 |
+| **Element Plus 弹层**（确认框 / 消息 / 下拉） | **从 2000 起算** |
+
+EP 的 `ElMessageBox`、`ElMessage` 用内部计数器（默认 2000 起），**不看**我们的自绘层级 →
+弹窗一开，确认框必然在下面。而且 `ElMessageBox` 的选项里**没有 `zIndex`**（2.13.7 的
+`ElMessageBoxOptions` 不含该键），所以没法逐次抬高。
+
+### 修法
+
+1. `src/main.ts`：`app.mount()` 之前调 `provideGlobalConfig({ zIndex: 5000 }, app)`，
+   把**整族** EP 浮层的初始层级抬到 5000 → 永远压在自绘浮层（3000/3100）之上。
+   顺手也修好了"对话框里 EP 下拉/气泡被遮"和"消息提示被抽屉遮住"这两类同源问题。
+2. 新增 `src/utils/overlay.ts`：把层级数值集中定义（`OVERLAY_Z=3000` / `DIALOG_Z=3100` / `EP_Z=5000`），
+   并提供 `confirmOverlay()` 与 `notify()` 两个包装——以后在自绘弹窗里弹确认框/提示，走这两个函数，
+   不会再有第二处各写各的 z-index。`改信息`、`资料管理页`、`预览抽屉` 已全部切过去。
+
+### 验证（真机）
+
+```
+.mmd-root       z-index = 3100
+.el-overlay     z-index = 5002     ← EP 确认框
+elementFromPoint(确认框中心) = .el-message-box   ← 命中测试：确认框在最上层、可点击
+```
+
+截图：`docs/plans/assets/资料管理v3/C2b_03_确认框在弹窗之上.png`
+
+### 不变量测试
+
+`src/utils/__tests__/overlay.spec.ts`（3 例）：`OVERLAY_Z < DIALOG_Z < EP_Z`；
+`confirmOverlay` 透传选项且**不塞** EP 不支持的 `zIndex`；`notify` 统一带 `EP_Z`。

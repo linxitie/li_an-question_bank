@@ -138,10 +138,10 @@
  * 安全：正文用 `v-html`，但内容已由服务端 `sanitize_html` 二次清洗（见后端 A3 端点）。
  */
 import { onBeforeUnmount, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
 import { AdminTag } from '@/components/admin';
 import { downloadMaterialFile, type MaterialFileItem, type MaterialPreview } from '@/modules/library/api';
 import { errorMessage } from '@/utils/apiError';
+import { notify } from '@/utils/overlay';
 
 const props = withDefaults(
   defineProps<{
@@ -178,9 +178,9 @@ async function onDownload(f: MaterialFileItem): Promise<void> {
   downloading.value = f.file_id;
   try {
     await downloadMaterialFile(f);
-    ElMessage.success(`已开始下载 ${f.file_name}`);
+    notify('success', `已开始下载 ${f.file_name}`);
   } catch (e) {
-    ElMessage.error(errorMessage(e, '下载失败'));
+    notify('error', errorMessage(e, '下载失败'));
   } finally {
     downloading.value = null;
   }

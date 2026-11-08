@@ -94,6 +94,13 @@ async function checkVersionConsistency(): Promise<void> {
 }
 
 onReady(async () => {
+  // 2026-11-08（验收缺陷修复）：Element Plus 的浮层默认从 z-index 2000 起算，
+  // 而管理端自绘浮层是 3000（预览抽屉）/3100（对话框）→ 弹窗里的「确认框」会被压在对话框下面。
+  // 把 EP 的初始 z-index 提到 5000，让**所有** EP 浮层（确认框/消息/下拉/气泡）都压在自绘浮层之上。
+  // 数值关系见 `src/utils/overlay.ts`（OVERLAY_Z / DIALOG_Z / EP_Z），改动要同步。
+  const { provideGlobalConfig } = await import('element-plus');
+  provideGlobalConfig({ zIndex: 5000 }, app);
+
   app.use(pinia);
   app.use(router);
   app.use(provider);
