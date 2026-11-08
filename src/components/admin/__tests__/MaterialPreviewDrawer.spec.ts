@@ -197,3 +197,57 @@ describe('B1 原件清单', () => {
     expect(body().querySelector('.mpd-files')).toBeNull();
   });
 });
+
+describe('C2/C4 试卷信息', () => {
+  it('试卷资料显示编号/年份/地区/题量/时长与「已关联 · 可考」', async () => {
+    document.body.innerHTML = '';
+    mountDrawer({
+      open: true,
+      preview: base({
+        type: 'paper',
+        type_label: '试卷',
+        title: '2019年北京市公务员考试《公安专业科目》真题',
+        card: null,          // 试卷没有正/背面，别让卡片分支先渲染
+        content_html: '',
+        paper: {
+          paper_code: 'GZ-2019-BJ-T', year: 2019, region_name: '北京',
+          book_kind_label: '题本', meta_label: '2019 · 北京 · 题本',
+          exam_paper_id: 2, question_count: 100, total_score: 100,
+          duration: 120, paper_type: 'PUBLISHED', answerable: true
+        }
+      })
+    });
+    const block = body().querySelector('.mpd-paper')!;
+    expect(block.textContent).toContain('GZ-2019-BJ-T');
+    expect(block.textContent).toContain('2019');
+    expect(block.textContent).toContain('北京');
+    expect(block.textContent).toContain('100');
+    expect(block.textContent).toContain('120 分钟');
+    expect(body().textContent).toContain('试卷信息');
+    expect(body().textContent).toContain('已关联 · 可考');
+  });
+
+  it('解析不出的字段显示 —，且未关联时提示题库没有', () => {
+    document.body.innerHTML = '';
+    mountDrawer({
+      open: true,
+      preview: base({
+        type: 'paper', type_label: '试卷', content_html: '',
+        paper: {
+          paper_code: null, year: null, region_name: null, book_kind_label: null,
+          meta_label: '', exam_paper_id: null, question_count: null,
+          total_score: null, duration: null, paper_type: null, answerable: false
+        }
+      })
+    });
+    const block = body().querySelector('.mpd-paper')!;
+    expect(block.textContent).toContain('—');
+    expect(block.textContent).toContain('题库里还没有这套卷');
+  });
+
+  it('非试卷不出试卷信息区', () => {
+    document.body.innerHTML = '';
+    mountDrawer({ open: true, preview: base({ paper: null }) });
+    expect(body().querySelector('.mpd-paper')).toBeNull();
+  });
+});

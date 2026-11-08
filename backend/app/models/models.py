@@ -1402,6 +1402,10 @@ class StudyMaterial(Base):
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
     content_hash = Column(String(64), comment="内容MD5哈希(去重用)")
+    # C4（2026-11-08）：试卷人读编号，如 `GZ-2019-BJ-T`（公专-2019-北京-题本）。
+    # 与 `exam_paper.paper_code` 同值时即视为"这份资料对应的可作答卷"，见方案 §2.3。
+    # 非试卷类资料该列为空；存量行不强制回填（能解析出才写）。
+    paper_code = Column(String(50), index=True, comment="试卷人读编号(仅 type=paper)")
 
     __table_args__ = (
         Index("idx_subject_type", subject, type),

@@ -476,6 +476,15 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE study_material ADD COLUMN content_hash VARCHAR(64)"))
                     conn.commit()
                 logger.info("自动迁移: study_material 添加列 content_hash")
+            # C4（2026-11-08）：试卷人读编号（如 GZ-2019-BJ-T），与 exam_paper.paper_code 同值即成对
+            if 'paper_code' not in sm_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE study_material ADD COLUMN paper_code VARCHAR(50)"))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS idx_material_paper_code "
+                        "ON study_material(paper_code)"))
+                    conn.commit()
+                logger.info("自动迁移: study_material 添加列 paper_code + idx_material_paper_code")
 
         # 检查 study_goal 表(金币购:四维加权奖励字段)
         if 'study_goal' in inspector.get_table_names():

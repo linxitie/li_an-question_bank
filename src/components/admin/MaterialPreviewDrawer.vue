@@ -68,6 +68,29 @@
               <li v-for="(c, i) in preview.chapters" :key="i">{{ c }}</li>
             </ul>
           </section>
+          <!-- C2/C4（2026-11-08）：试卷元数据 + 题库关联 -->
+          <section v-if="preview?.paper" class="mpd-block">
+            <div class="mpd-block__label">试卷信息</div>
+            <dl class="mpd-paper">
+              <div><dt>编号</dt><dd class="mpd-mono">{{ preview.paper.paper_code || '—' }}</dd></div>
+              <div><dt>年份</dt><dd>{{ preview.paper.year ?? '—' }}</dd></div>
+              <div><dt>地区</dt><dd>{{ preview.paper.region_name || '—' }}</dd></div>
+              <div><dt>卷别</dt><dd>{{ preview.paper.book_kind_label || '—' }}</dd></div>
+              <div><dt>题量</dt><dd>{{ preview.paper.question_count ?? '—' }}</dd></div>
+              <div><dt>总分</dt><dd>{{ preview.paper.total_score ?? '—' }}</dd></div>
+              <div><dt>时长</dt><dd>{{ preview.paper.duration ? preview.paper.duration + ' 分钟' : '—' }}</dd></div>
+              <div>
+                <dt>可作答卷</dt>
+                <dd>
+                  <AdminTag v-if="preview.paper.exam_paper_id" :tone="preview.paper.answerable ? 'ok' : 'muted'">
+                    {{ preview.paper.answerable ? '已关联 · 可考' : '已关联 · 未发布' }}
+                  </AdminTag>
+                  <span v-else class="mpd-hint">题库里还没有这套卷</span>
+                </dd>
+              </div>
+            </dl>
+          </section>
+
           <section v-if="preview?.files?.length" class="mpd-block">
             <div class="mpd-block__label">原件（{{ preview.files.length }}）</div>
             <ul class="mpd-files">
@@ -329,6 +352,19 @@ onBeforeUnmount(() => {
 .mpd-file__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mpd-file__meta { flex-shrink: 0; color: var(--adm-text-weak); font-size: 11.5px; }
 .mpd-file__dl { flex-shrink: 0; color: var(--adm-primary); font-weight: 700; margin-left: 4px; }
+/* 试卷元数据（C2/C4）：两列小表，字段解析不出时显示 — */
+.mpd-paper {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.mpd-paper > div { display: flex; gap: 8px; align-items: baseline; }
+.mpd-paper dt { flex-shrink: 0; width: 62px; color: var(--adm-text-weak); }
+.mpd-paper dd { margin: 0; color: var(--adm-text); }
+.mpd-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.mpd-hint { color: var(--adm-text-weak); font-size: 12px; }
 .mpd-error {
   padding: 12px 14px;
   border: 1px solid #f3c4ae;

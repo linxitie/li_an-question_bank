@@ -239,11 +239,32 @@ export interface MaterialFileItem {
 }
 
 /**
+ * 试卷元数据（C2/C4，2026-11-08）。
+ *
+ * 年份/地区/题本或答案来自**文件名解析**（后端 `paper_meta_parser`），解析不出就是 null（界面显示 `—`）；
+ * `exam_paper_id` 非空表示这份资料已和题库里的可作答卷对上（`paper_code` 两侧相等）。
+ */
+export interface MaterialPaperMeta {
+  paper_code: string | null;
+  year: number | null;
+  region_name: string | null;
+  book_kind_label: string | null;
+  meta_label: string;
+  exam_paper_id: number | null;
+  question_count: number | null;
+  total_score: number | null;
+  duration: number | null;
+  paper_type: string | null;
+  /** 学生当前能否考（`paper_type === 'PUBLISHED'`） */
+  answerable: boolean;
+}
+
+/**
  * 管理端统一预览契约（A3）。
  *
  * 6 类资料共用一个抽屉：卡片给 `card`，文章/讲义/试卷给 `content_html`（服务端已 sanitize），
- * 视频给 `video.url`。`chapters`（讲义章节，C 批）/ `paper`（元数据，C 批）当前为空值，
- * 但**字段已固定存在**；`files` 从 B1 起为真实原件清单（无原件的老资料返回 `[]`）。
+ * 视频给 `video.url`。`chapters`（讲义章节，C 批）当前为空值；
+ * `files` 从 B1 起为真实原件清单；`paper` 从 C2/C4 起为试卷元数据 + 可作答卷关联。
  */
 export interface MaterialPreview {
   id: number;
@@ -272,7 +293,8 @@ export interface MaterialPreview {
   chapters: unknown[];
   /** 原件清单（B1）：主文件在前、附件在后 */
   files: MaterialFileItem[];
-  paper: unknown | null;
+  /** 试卷元数据（C2/C4）；非试卷类为 null */
+  paper: MaterialPaperMeta | null;
 }
 
 /** 拉取单条资料的管理端预览数据（含未上架） */

@@ -76,6 +76,9 @@ KNOWN_EXTRA_OPERATIONS = {
     # 备考资料：批量导入单文件上传（B2，2026-11-07）
     # 鉴权：_require_admin；单文件 ≤20MB；扩展名+magic bytes 双校验；同内容返回 duplicate 而不是重复建行
     ("POST", "/api/materials/admin/files/upload"),
+    # 备考资料：可作答卷反向补录成试卷资料（C4，2026-11-08）
+    # 鉴权：_require_admin；默认 dry-run，幂等（同 paper_code/同标题跳过）
+    ("POST", "/api/materials/admin/papers/backfill"),
     # ===== 远端 main（模块4/7 与 F3）新增，合并时保留 =====
     # F3 媒体资产稳定读取代理（新资产 URL；旧 /uploads 与 /static 不变）。
     # 公开只读、ETag/Range/HEAD；新增走本白名单，不重算 343 条基线。

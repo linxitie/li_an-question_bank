@@ -802,6 +802,7 @@ from ....services.material_deduplicator import deduplicator  # noqa: E402
 from ....services.material_sanitizer import content_cleaner  # noqa: E402
 from ....services.material_monitor import import_monitor  # noqa: E402
 from ....services import material_files  # noqa: E402  B1：原件留档（存储+下载路径）
+from ....services import paper_registry  # noqa: E402  C2/C4：试卷↔可作答卷只读桥（避免 library 直接 import ExamPaper）
 from ....core.config import settings  # noqa: E402
 from ....services import media_service  # noqa: E402
 
@@ -1590,7 +1591,10 @@ async def admin_preview(material_id: int,
         # 没有留档的老资料返回 []，前端按"无原件"渲染，契约不变。
         "files": [material_files.serialize(f)
                   for f in material_files.list_for_material(db, m.material_id)],
-        "paper": None,
+        # C2/C4（2026-11-08）：试卷类资料回元数据 + 关联的可作答卷。
+        # 关联口径 = `study_material.paper_code == exam_paper.paper_code`（方案 §2.3，一对一）。
+        # 非试卷类返回 None，前端分支不变。
+        "paper": paper_registry.paper_block(db, m) if m.type == "paper" else None,
     }
 
 
@@ -1631,6 +1635,38 @@ async def download_material_file(file_id: int,
         filename=row.file_name or path.name,
         headers={"Cache-Control": "private, max-age=0, must-revalidate"},
     )
+
+
+@router.post("/admin/papers/backfill", summary="把已发布的可作答卷补录成试卷资料(管理员)")
+async def admin_backfill_papers(body: Optional[dict] = None,
+                                current_user: SysUser = Depends(get_current_user),
+                                db: Session = Depends(get_db)):
+    """C4（2026-11-08）：`exam_paper` → `study_material(type=paper)` 的反向补录。
+
+    背景：题库里已有 2 套真实公专真题（各 100 题、已发布、学生能考），
+    但资料库 `type=paper` 是 0 条 → 管理员在「资料管理」看不到、也无法统一上架。
+
+    **默认 dry-run**：`{"apply": true}` 才真的写库。
+    幂等：已有同 `paper_code`（或同标题）的试卷资料就跳过，可反复调用。
+    关联：两侧 `paper_code` 相等即为"这份资料对应的可作答卷"，不需要第二张关联表。
+    """
+    from ....services import paper_backfill
+
+    payload = body or {}
+    apply = bool(payload.get("apply"))
+    plan = paper_backfill.apply_backfill(db, apply=apply,
+                                         creator_id=current_user.user_id)
+    if apply:
+        created = [p for p in plan if p.get("action") == "created"]
+        _audit(db, current_user, "paper_backfill", f"created={len(created)}",
+               "；".join(f"#{p['material_id']}←paper {p['paper_id']}" for p in created)[:500])
+        db.commit()
+    return JSONResponse({
+        "applied": apply,
+        "planned": len(plan),
+        "to_create": sum(1 for p in plan if p.get("action") == "create"),
+        "items": plan,
+    })
 
 
 @router.post("/admin/files/upload", summary="上传原件并建资料/挂附件(批量导入·单文件)")
