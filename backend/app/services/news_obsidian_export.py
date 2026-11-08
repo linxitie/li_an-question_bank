@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..models.models import NewsArticle, NewsImage
+from .news_collector import clean_article_text
 from .obsidian_export import _safe_path
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -58,6 +59,7 @@ def _card(db: Session, news: NewsArticle) -> str:
     exam = json.loads(news.ai_exam_points or "[]")
     entities = json.loads(news.ai_entities or "[]")
     risks = json.loads(news.ai_risk_flags or "[]")
+    body = clean_article_text(news.title, news.content or "")
     lines = [
         "---",
         f"news_id: {news.news_id}",
@@ -81,6 +83,7 @@ def _card(db: Session, news: NewsArticle) -> str:
         "",
         news.ai_summary or "（待生成）",
         "",
+        *(["## 正文", "", body, ""] if body else []),
         "## 申论考点",
         "",
         *(f"- {item}" for item in exam),

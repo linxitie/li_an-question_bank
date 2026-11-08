@@ -66,6 +66,17 @@ def test_clean_title_strips_feed_metadata():
     assert news_collector._clean_title(raw) == "把加强党性修养作为终身课题"
 
 
+def test_clean_article_text_removes_duplicate_title_and_tail():
+    raw = (
+        "测试标题\n\n测试标题\n\n第一段完整内容，包含句号。\n\n"
+        "第二段完整内容，继续说明。\n\n相关阅读\n\n推荐链接\n\n"
+        "版权所有：测试单位\n\n京ICP备000000号"
+    )
+    assert news_collector.clean_article_text("测试标题", raw) == (
+        "第一段完整内容，包含句号。\n\n第二段完整内容，继续说明。"
+    )
+
+
 def _source():
     return NewsSourceConfig(
         "beijing",

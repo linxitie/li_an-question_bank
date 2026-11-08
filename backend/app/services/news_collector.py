@@ -207,6 +207,128 @@ def _clean_title(value: str) -> str:
     return value.strip()
 
 
+_UNWANTED_CONTENT_SELECTORS = (
+    "footer",
+    "aside",
+    "nav",
+    ".related",
+    ".related-news",
+    ".recommend",
+    ".recommend-list",
+    ".share",
+    ".copyright",
+    ".footer",
+    ".sidebar",
+    ".ad",
+    ".advertisement",
+)
+_JUNK_MARKERS = (
+    "相关阅读",
+    "相关链接",
+    "推荐阅读",
+    "延伸阅读",
+    "猜你喜欢",
+    "热门推荐",
+    "更多推荐",
+    "版权所有",
+    "Copyright",
+    "ICP备",
+    "主办单位",
+    "承办单位",
+    "网站标识码",
+    "责任编辑",
+    "编辑：",
+    "审核：",
+    "签发：",
+    "--相关机构--",
+    "--新闻媒体--",
+)
+_LINE_NOISE_PREFIXES = (
+    "来源：",
+    "发布时间：",
+    "字号：",
+    "打印本页",
+    "分享",
+    "[ English ]",
+    "中国共产党新闻网",
+)
+
+
+def _is_link_only(paragraph: str) -> bool:
+    value = paragraph.strip()
+    if not value:
+        return True
+    if value.count("http://") + value.count("https://") >= 2:
+        return True
+    if re.fullmatch(r"(?:https?://|www\.)\S+", value):
+        return True
+    if re.fullmatch(r"[\d\s.,，。、:：\-—（）()【】]+", value):
+        return True
+    return len(value) < 10 and not re.search(r"[。！？；：]", value)
+
+
+def clean_article_text(title: str, text: str) -> str:
+    """把正文规范为 Markdown 段落，去标题重复、尾部版权/推荐和纯链接。"""
+    raw = re.split(r"\r?\n+", text or "")
+    title_key = re.sub(r"\s+", "", title or "")
+    paragraphs: list[str] = []
+    for item in raw:
+        paragraph = re.sub(r"[ \t\u3000]+", " ", item).strip()
+        if not paragraph:
+            continue
+        repeated = re.match(r"^(.{2,30}?)\1", paragraph)
+        if repeated:
+            paragraph = repeated.group(1) + paragraph[repeated.end() :]
+        compact = re.sub(r"\s+", "", paragraph)
+        if compact == title_key:
+            continue
+        if any(paragraph.startswith(prefix) for prefix in _LINE_NOISE_PREFIXES):
+            continue
+        if any(marker in paragraph for marker in _JUNK_MARKERS):
+            if paragraphs:
+                break
+            continue
+        if _is_link_only(paragraph):
+            continue
+        paragraphs.append(paragraph)
+        if len(paragraphs) >= 80:
+            break
+    while (
+        paragraphs
+        and len(paragraphs[0]) < 20
+        and not re.search(r"[。！？；：.!?;:]", paragraphs[0])
+    ):
+        paragraphs.pop(0)
+    merged: list[str] = []
+    for paragraph in paragraphs:
+        if (
+            merged
+            and len(merged[-1]) < 80
+            and not re.search(r"[。！？；：.!?;:”\"』】）)]$", merged[-1])
+        ):
+            merged[-1] = f"{merged[-1]}{paragraph}"
+        else:
+            merged.append(paragraph)
+    return "\n\n".join(merged)
+
+
+def _content_paragraphs(node) -> list[str]:
+    for unwanted in node.select(", ".join(_UNWANTED_CONTENT_SELECTORS)):
+        unwanted.decompose()
+    paragraph_nodes = node.find_all("p")
+    if paragraph_nodes:
+        return [
+            re.sub(r"[ \t\u3000]+", " ", item.get_text(" ", strip=True)).strip()
+            for item in paragraph_nodes
+            if item.get_text(" ", strip=True).strip()
+        ]
+    return [
+        re.sub(r"[ \t\u3000]+", " ", line).strip()
+        for line in node.get_text("\n", strip=True).splitlines()
+        if line.strip()
+    ]
+
+
 def parse_article(html: str, url: str) -> ArticleData:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
@@ -252,6 +374,10 @@ def parse_article(html: str, url: str) -> ArticleData:
             for line in soup.get_text("\n", strip=True).splitlines()
             if len(line.strip()) >= 8
         )
+    if content_node is not None:
+        body = clean_article_text(title, "\n".join(_content_paragraphs(content_node)))
+    else:
+        body = clean_article_text(title, body)
     date_match = _DATE_RE.search(soup.get_text(" ", strip=True))
     published_at = None
     if date_match:
