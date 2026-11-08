@@ -1669,6 +1669,99 @@ async def admin_backfill_papers(body: Optional[dict] = None,
     })
 
 
+@router.patch("/admin/{material_id}/meta", summary="改试卷/讲义信息(管理员)")
+async def admin_update_meta(material_id: int, body: dict,
+                            current_user: SysUser = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    """C2b（2026-11-08）：列表「改信息」→ 改标题 / 分类 / 试卷元数据。
+
+    为什么只写 `study_material`、不写 `exam_paper`：见 `services/paper_meta_edit.py` 开头
+    （跨域写会被 L4 模块边界门禁拦；且资料描述的是"原卷"，与在线卷的题量本就可能不同）。
+
+    字段（全部非必填，`null`/空串 = 清除该项）：
+      · `title` / `category`：普通资料字段；
+      · `year` / `region_code`|`region_name` / `book_kind` / `volume` / `question_count` /
+        `total_score` / `duration`：写进 `paper_meta`（JSON），优先级高于文件名解析；
+      · `paper_code`：人读编号；传空串且资料未关联可作答卷时，系统按新元数据自动重算。
+    """
+    from ....services import paper_meta_edit
+
+    _require_admin(current_user)
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id,
+        StudyMaterial.status >= 0).first()
+    if not m:
+        raise HTTPException(404, "资料不存在或已删除")
+
+    changed: list = []
+
+    if "title" in body:
+        title = (body.get("title") or "").strip()
+        if not title:
+            raise HTTPException(400, "标题不能为空")
+        if title != (m.title or ""):
+            m.title = title[:200]
+            changed.append("title")
+    if "category" in body:
+        category = (body.get("category") or "").strip() or None
+        if category != m.category:
+            m.category = category[:100] if category else None
+            changed.append("category")
+
+    meta_payload = {k: v for k, v in body.items()
+                    if k in ("year", "region_code", "region_name", "book_kind",
+                             "book_kind_label", "volume", "question_count",
+                             "total_score", "duration")}
+    if meta_payload or body.get("paper_meta_reset"):
+        try:
+            patch = paper_meta_edit.normalize_patch(meta_payload)
+        except paper_meta_edit.MetaError as exc:
+            raise HTTPException(400, str(exc))
+        current = {} if body.get("paper_meta_reset") else paper_meta_edit.load_override(m)
+        current.update(patch)
+        # 全部清空后不留空 JSON，回到"按文件名解析"的状态
+        current = {k: v for k, v in current.items() if v not in (None, "")}
+        m.paper_meta = _json.dumps(current, ensure_ascii=False) if current else None
+        changed.extend(sorted(patch))
+
+    # 编号：显式传了就用传的；传空 + 未关联 + 能算出 → 自动重算
+    if "paper_code" in body:
+        want = (body.get("paper_code") or "").strip().upper()
+        if want:
+            clash = db.query(StudyMaterial).filter(
+                StudyMaterial.paper_code == want,
+                StudyMaterial.material_id != m.material_id,
+                StudyMaterial.status >= 0).first()
+            if clash:
+                raise HTTPException(400, f"编号 {want} 已被资料 #{clash.material_id} 使用")
+            if want != (m.paper_code or ""):
+                m.paper_code = want
+                m.badge = want
+                changed.append("paper_code")
+        else:
+            merged = paper_meta_edit.merge_meta(m)
+            merged["subject"] = m.subject or None
+            suggestion = paper_meta_edit.suggest_paper_code(merged)
+            if suggestion and suggestion != (m.paper_code or ""):
+                m.paper_code = suggestion
+                m.badge = suggestion
+                changed.append("paper_code")
+
+    db.commit()
+    _audit(db, current_user, "update", f"material:{material_id}",
+           "改信息：" + (", ".join(changed) if changed else "无变化"))
+    db.commit()
+
+    return JSONResponse({
+        "ok": True,
+        "changed": changed,
+        "material": {"id": m.material_id, "title": m.title,
+                     "category": m.category, "paper_code": m.paper_code,
+                     "status": m.status, "type": m.type},
+        "paper": (paper_registry.paper_block(db, m) if m.type == "paper" else None),
+    })
+
+
 @router.post("/admin/files/upload", summary="上传原件并建资料/挂附件(批量导入·单文件)")
 async def admin_upload_file(
         file: UploadFile = File(...),
@@ -1737,7 +1830,11 @@ async def admin_upload_file(
             StudyMaterial.status >= 0).first()
         if not target_material:
             raise HTTPException(404, "要挂附件的资料不存在或已删除")
-        role = "attachment"
+        # C2b：给**还没有任何原件**的资料补档时，这一份应当是主文件，
+        # 否则会出现"只有附件、没有主文件"的畸形数据（补 2 套真题原卷时就会遇到）。
+        has_files = (db.query(MaterialFile)
+                     .filter(MaterialFile.material_id == material_id).first()) is not None
+        role = "attachment" if has_files else "primary"
     else:
         role = "primary"
 

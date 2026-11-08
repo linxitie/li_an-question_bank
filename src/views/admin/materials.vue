@@ -139,7 +139,7 @@
                 <a class="mm-op is-restore" @click="restore(row)">恢复</a>
               </template>
               <template v-else>
-                <a class="mm-op is-muted" title="元数据编辑随 C 批接入" @click="notYet('改信息')">改信息</a>
+                <a class="mm-op" @click="openMeta(row)">改信息</a>
                 <a class="mm-op is-danger" @click="remove(row)">删除</a>
               </template>
             </td>
@@ -162,6 +162,14 @@
       :loading="previewLoading"
       :error="previewError"
       @close="drawerOpen = false"
+    />
+
+    <MaterialMetaDialog
+      :open="metaOpen"
+      :material-id="metaId"
+      :type-label="metaTypeLabel"
+      @close="metaOpen = false"
+      @saved="onMetaSaved"
     />
 
     <MaterialBatchUpload
@@ -196,7 +204,8 @@ import {
   AdminTag,
   AdminToolbar,
   MaterialPreviewDrawer,
-  MaterialBatchUpload
+  MaterialBatchUpload,
+  MaterialMetaDialog
 } from '@/components/admin';
 import { MATERIAL_TYPES, materialTypeLabel } from '@/modules/library/materialTypes';
 import { parseListQuery } from '@/utils/materialListQuery';
@@ -420,6 +429,23 @@ async function onUploaded(payload: { created: number }): Promise<void> {
   page.value = 1;
   await reload();
   if (payload.created) ElMessage.success(`已导入 ${payload.created} 条，可在列表里预览并上架`);
+}
+
+// ---------------- 改信息（C2b） ----------------
+const metaOpen = ref(false);
+const metaId = ref<number | null>(null);
+const metaTypeLabel = ref('资料');
+
+function openMeta(row: AdminMaterialListItem): void {
+  metaId.value = row.id;
+  metaTypeLabel.value = materialTypeLabel(row.type);
+  metaOpen.value = true;
+}
+
+/** 保存成功：标题/分类可能变了，刷新当前页 */
+async function onMetaSaved(): Promise<void> {
+  metaOpen.value = false;
+  await reload();
 }
 
 // ---------------- 预览抽屉 ----------------

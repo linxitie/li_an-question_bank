@@ -248,15 +248,64 @@ export interface MaterialPaperMeta {
   paper_code: string | null;
   year: number | null;
   region_name: string | null;
+  region_code: string | null;
   book_kind_label: string | null;
+  volume: number | null;
   meta_label: string;
   exam_paper_id: number | null;
   question_count: number | null;
   total_score: number | null;
   duration: number | null;
+  /** 人工订正过的原始键值（改信息表单只回填这些，不回填解析结果） */
+  override?: Record<string, unknown>;
+  /** 题量/总分/时长各自来自哪里：`edit` = 管理员订正，`exam` = 可作答卷兜底，null = 没值 */
+  source?: { question_count: string | null; total_score: string | null; duration: string | null };
   paper_type: string | null;
   /** 学生当前能否考（`paper_type === 'PUBLISHED'`） */
   answerable: boolean;
+}
+
+/** C2b：改信息的提交体（全部非必填；null / 空串 = 清除该项） */
+export interface MaterialMetaPayload {
+  title?: string;
+  category?: string | null;
+  year?: number | null;
+  region_code?: string | null;
+  region_name?: string | null;
+  book_kind?: string | null;
+  volume?: number | null;
+  question_count?: number | null;
+  total_score?: number | null;
+  duration?: number | null;
+  paper_code?: string | null;
+}
+
+export interface MaterialMetaResult {
+  ok: boolean;
+  changed: string[];
+  material: {
+    id: number;
+    title: string;
+    category: string | null;
+    paper_code: string | null;
+    status: number;
+    type: LibraryMaterialType;
+  };
+  paper: MaterialPaperMeta | null;
+}
+
+/** 改试卷/讲义信息（C2b）：只写资料本身，不动题库里的可作答卷 */
+export async function updateMaterialMeta(
+  id: number,
+  payload: MaterialMetaPayload
+): Promise<MaterialMetaResult> {
+  const response = await libraryClient.request<MaterialMetaResult>({
+    url: `/api/materials/admin/${id}/meta`,
+    method: 'PATCH',
+    baseURL: '',
+    data: payload
+  });
+  return response.data;
 }
 
 /**

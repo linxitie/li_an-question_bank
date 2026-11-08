@@ -22,3 +22,5 @@ export { default as AdminFormItem } from './AdminFormItem.vue';
 export { default as MaterialPreviewDrawer } from './MaterialPreviewDrawer.vue';
 // B2（2026-11-07）：批量导入对话框（同名 docx+pdf 合并、逐文件队列、进度与重复跳过）
 export { default as MaterialBatchUpload } from './MaterialBatchUpload.vue';
+// C2b（2026-11-08）：改信息弹窗（标题/分类/试卷元数据/补原件）
+export { default as MaterialMetaDialog } from './MaterialMetaDialog.vue';

@@ -32,24 +32,54 @@ def find_exam_by_code(db: Session, code: Optional[str]) -> Optional[ExamPaper]:
 def paper_block(db: Session, material: StudyMaterial) -> dict:
     """预览接口的 `paper` 区块。
 
-    - 元数据：**从资料标题解析**（年份/地区/题本或答案），解析不出返回 None，前端显示 `—`；
-    - 关联：`study_material.paper_code`（没有则退回 `badge`）== `exam_paper.paper_code`；
-    - `answerable`：`paper_type == 'PUBLISHED'`（学生考试链路只看这个值，见 `exams.py`）。
+    合并优先级（C2b 起）：**管理员显式订正**（`paper_meta`）> 文件名解析 > 可作答卷（`exam_paper`）。
+    题量/总分/时长这三项若资料里没订正、而可作答卷有值，就用卷上的（并标 `source` 便于界面解释）。
+    `answerable`：`paper_type == 'PUBLISHED'`（学生考试链路只看这个值，见 `exams.py`）。
     """
+    from .paper_meta_edit import load_override, merge_meta, meta_label_of
+
     code = (material.paper_code or material.badge or "").strip()
-    meta = parse_paper_file_name(material.title or "")
+    override = load_override(material)
+    merged = merge_meta(material, override)
     exam = find_exam_by_code(db, code)
+
+    question_count = merged.get("question_count")
+    total_score = merged.get("total_score")
+    duration = merged.get("duration")
+    source = {
+        "question_count": "edit" if question_count is not None else None,
+        "total_score": "edit" if total_score is not None else None,
+        "duration": "edit" if duration is not None else None,
+    }
+    if exam:
+        if question_count is None:
+            question_count = int(exam.question_count or 0)
+            source["question_count"] = "exam"
+        if total_score is None:
+            total_score = float(exam.total_score) if exam.total_score is not None else None
+            source["total_score"] = "exam"
+        if duration is None:
+            duration = int(exam.duration or 0)
+            source["duration"] = "exam"
+
+    meta = parse_paper_file_name(material.title or "")
     return {
         "paper_code": code or None,
-        "year": meta.year,
-        "region_name": meta.region_name,
-        "book_kind_label": meta.book_kind_label,
-        "meta_label": format_meta_label(meta),
+        "year": merged.get("year"),
+        "region_name": merged.get("region_name"),
+        "region_code": merged.get("region_code"),
+        "book_kind_label": merged.get("book_kind_label"),
+        "volume": merged.get("volume"),
+        "meta_label": meta_label_of(merged) or format_meta_label(meta),
         "exam_paper_id": exam.paper_id if exam else None,
-        "question_count": (int(exam.question_count or 0) if exam else None),
+        "question_count": question_count,
         # `exam_paper.total_score` 是 NUMERIC → Decimal，不转 float 会让 JSON 序列化 500
-        "total_score": (float(exam.total_score) if exam and exam.total_score is not None else None),
-        "duration": (int(exam.duration or 0) if exam else None),
+        "total_score": total_score,
+        "duration": duration,
+        "source": source,
+        # 人工订正过的原始键值（只有这些值该回填进"改信息"表单；
+        # 解析出来的值不回填，否则保存一次就把解析结果固化成了订正）
+        "override": override,
         "paper_type": exam.paper_type if exam else None,
         "answerable": bool(exam and exam.paper_type == "PUBLISHED"),
     }

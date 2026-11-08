@@ -196,3 +196,34 @@ class TestValidation:
         row = db_session.query(MaterialFile).filter(
             MaterialFile.material_id == resp.json()["material_id"]).one()
         assert row.file_ext == "xlsx"
+
+class TestAttachRoleAuto:
+    """C2b：给「还没有原件」的资料补档时，这一份要落成主文件，而不是附件。"""
+
+    def test_first_file_becomes_primary(self, client, admin_headers, db_session):
+        # 建一条没有原件的试卷资料，再挂一份 pdf
+        from app.models.models import StudyMaterial
+        m = StudyMaterial(subject="gongzhuan", type="paper", title="无原件的试卷", status=0)
+        db_session.add(m)
+        db_session.commit()
+
+        resp = _upload(client, admin_headers, "补的原卷.pdf", _pdf_bytes(),
+                       type="paper", material_id=m.material_id)
+        assert resp.status_code == 200, resp.text
+        row = db_session.query(MaterialFile).filter(
+            MaterialFile.material_id == m.material_id).one()
+        assert row.role == "primary", "补档的第一份必须是主文件"
+
+    def test_second_file_becomes_attachment(self, client, admin_headers, db_session):
+        from app.models.models import StudyMaterial
+        m = StudyMaterial(subject="gongzhuan", type="paper", title="已有原件的试卷", status=0)
+        db_session.add(m)
+        db_session.commit()
+        _upload(client, admin_headers, "第一份.pdf", _pdf_bytes("v1"),
+                type="paper", material_id=m.material_id)
+        _upload(client, admin_headers, "第二份.docx", _docx_bytes("第二份正文"),
+                type="paper", material_id=m.material_id)
+
+        roles = {r.role for r in db_session.query(MaterialFile).filter(
+            MaterialFile.material_id == m.material_id).all()}
+        assert roles == {"primary", "attachment"}

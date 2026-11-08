@@ -1406,6 +1406,10 @@ class StudyMaterial(Base):
     # 与 `exam_paper.paper_code` 同值时即视为"这份资料对应的可作答卷"，见方案 §2.3。
     # 非试卷类资料该列为空；存量行不强制回填（能解析出才写）。
     paper_code = Column(String(50), index=True, comment="试卷人读编号(仅 type=paper)")
+    # C2b（2026-11-08）：管理员手工订正的试卷元数据（JSON 文本）。
+    # 为什么不再开 6 个列：这些字段只用于展示与筛选，且解析不出的项可以为空；
+    # 合并优先级见 `services/paper_registry.paper_block()`（显式值 > 文件名解析 > exam_paper）。
+    paper_meta = Column(Text, comment="试卷元数据 JSON：year/region/book_kind/volume/题量/总分/时长")
 
     __table_args__ = (
         Index("idx_subject_type", subject, type),

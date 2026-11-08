@@ -210,10 +210,10 @@ describe('C2/C4 试卷信息', () => {
         card: null,          // 试卷没有正/背面，别让卡片分支先渲染
         content_html: '',
         paper: {
-          paper_code: 'GZ-2019-BJ-T', year: 2019, region_name: '北京',
+          paper_code: 'GZ-2019-BJ-T', year: 2019, region_name: '北京', region_code: 'BJ',
           book_kind_label: '题本', meta_label: '2019 · 北京 · 题本',
           exam_paper_id: 2, question_count: 100, total_score: 100,
-          duration: 120, paper_type: 'PUBLISHED', answerable: true
+          duration: 120, volume: null, paper_type: 'PUBLISHED', answerable: true
         }
       })
     });
@@ -234,7 +234,8 @@ describe('C2/C4 试卷信息', () => {
       preview: base({
         type: 'paper', type_label: '试卷', content_html: '',
         paper: {
-          paper_code: null, year: null, region_name: null, book_kind_label: null,
+          paper_code: null, year: null, region_name: null, region_code: null,
+          book_kind_label: null, volume: null,
           meta_label: '', exam_paper_id: null, question_count: null,
           total_score: null, duration: null, paper_type: null, answerable: false
         }
