@@ -457,13 +457,24 @@ class ExamService:
         }
     
     @staticmethod
-    def get_exam_preview(db: Session, paper_id: int) -> Dict:
+    def get_exam_preview(db: Session, paper_id: int, *,
+                         allow_unpublished: bool = False) -> Dict:
         """
         获取试卷预览（不含答案）
+
+        `allow_unpublished`（2026-11-08 / P5 前置补丁 R8）：
+        默认 **False** —— 只允许预览 `paper_type='PUBLISHED'` 的卷。
+        此前本函数只校验"卷存在"，导致任何登录学生都能用
+        `GET /api/exams/preview/{id}` 读到草稿/回收站卷的题干与选项
+        （实测：学生请求 ENDED 的 #1 返回 200）。教师/管理员由调用方
+        传 True 才能预览未发布卷（与 `catalog/papers.py` 的角色判据一致）。
         """
-        paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
+        query = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id)
+        if not allow_unpublished:
+            query = query.filter(ExamPaper.paper_type == "PUBLISHED")
+        paper = query.first()
         if not paper:
-            raise ValueError("试卷不存在")
+            raise ValueError("试卷不存在或未发布")
         
         relations = db.query(PaperQuestionRelation).filter(
             PaperQuestionRelation.paper_id == paper_id

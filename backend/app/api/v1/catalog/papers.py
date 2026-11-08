@@ -231,7 +231,10 @@ async def preview_paper(
 
     from ....services.exam_service import ExamService
     try:
-        preview_data = ExamService.get_exam_preview(db, paper_id)
+        # R8（2026-11-08）：契约层默认只看已发布，这里按角色显式放行，
+        # 避免教师/管理员预览草稿卷被误 404（本端点上面已有同样的角色守卫）。
+        preview_data = ExamService.get_exam_preview(
+            db, paper_id, allow_unpublished=current_user.role_level >= 2)
         return preview_data
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

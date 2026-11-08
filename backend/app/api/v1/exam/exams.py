@@ -655,11 +655,17 @@ async def preview_exam(
         db: Session = Depends(get_db)
 ):
     """
-    学生端预览试卷（不含答案）
+    预览试卷（不含答案）
+
+    权限（2026-11-08 / R8 补丁）：学生只能预览 `PUBLISHED` 的卷；
+    教师（role_level≥2）/管理员（≥3）可预览未发布卷，与
+    `catalog/papers.py` 的 `role_level < 2 and paper_type != PUBLISHED → 404` 对齐。
+    此前该端点漏了这道判据，学生可直读草稿卷题干（实测 ENDED 卷返回 200）。
     """
     from ....services.exam_service import ExamService
     try:
-        result = ExamService.get_exam_preview(db, paper_id)
+        result = ExamService.get_exam_preview(
+            db, paper_id, allow_unpublished=current_user.role_level >= 2)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
