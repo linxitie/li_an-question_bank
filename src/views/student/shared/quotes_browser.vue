@@ -15,7 +15,7 @@
           <p>按主题、作者和关键词，找到能写进申论的那句话。</p>
         </div>
       </div>
-      <router-link class="ds-button ds-button--ghost" to="/quotes/favorites">
+      <router-link class="ds-button ds-button--ghost" :to="favoritesPath">
         我的收藏 →
       </router-link>
     </header>
@@ -115,8 +115,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { onMounted, computed, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { apiClient } from '@/services/api/client';
 import QuoteCategoryTag from '@/components/quotes/QuoteCategoryTag.vue';
 
@@ -141,6 +141,12 @@ const categories = [
   '古典名言'
 ];
 const router = useRouter();
+const route = useRoute();
+const favoritesPath = computed(() =>
+  route.path.startsWith('/mobile')
+    ? '/mobile/quotes/favorites'
+    : '/quotes/favorites'
+);
 const activeCategory = ref('全部');
 const keyword = ref('');
 const author = ref('');
@@ -245,7 +251,7 @@ async function toggleFavorite(item: QuoteItem): Promise<void> {
 }
 
 function goHome(): void {
-  router.replace('/home');
+  router.replace(route.path.startsWith('/mobile') ? '/mobile/home' : '/home');
 }
 
 onMounted(() => {

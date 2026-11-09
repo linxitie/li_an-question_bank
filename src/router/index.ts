@@ -524,6 +524,18 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
+    path: '/mobile/quotes',
+    name: 'MobileQuotes',
+    component: () => import('@/views/student/shared/quotes_browser.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/quotes/favorites',
+    name: 'MobileQuoteFavorites',
+    component: () => import('@/views/student/shared/quote_favorites.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
     path: '/mobile/news/timeline',
     name: 'MobileNewsTimeline',
     component: () => import('@/views/student/shared/news_timeline.vue'),

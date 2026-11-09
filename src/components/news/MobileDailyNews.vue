@@ -16,7 +16,17 @@
         :key="item.id"
         class="mobile-news-item"
         @click="openNews(item)">
-        <h3>{{ item.title }}</h3>
+        <div class="mobile-news-item__top">
+          <h3>{{ item.title }}</h3>
+          <button
+            type="button"
+            class="favorite-btn"
+            :class="{ active: item.is_favorited }"
+            :aria-label="item.is_favorited ? '取消收藏' : '收藏新闻'"
+            @click.stop="toggleFavorite(item)">
+            {{ item.is_favorited ? '★' : '☆' }}
+          </button>
+        </div>
         <p v-if="item.ai_summary || item.summary" class="summary">
           {{ item.ai_summary || item.summary }}
         </p>
@@ -40,6 +50,7 @@ interface MobileNewsItem {
   ai_summary?: string;
   category?: string;
   publish_date?: string;
+  is_favorited?: boolean;
 }
 
 const router = useRouter();
@@ -54,10 +65,36 @@ function openNews(item: MobileNewsItem): void {
   router.push(`/mobile/news/${item.id}`);
 }
 
+function authHeaders(): Record<string, string> {
+  const auth = (window as any).__VTJ_AUTH__;
+  if (auth && auth.isLoggedIn && auth.isLoggedIn()) {
+    return auth.getJsonHeaders ? auth.getJsonHeaders() : {};
+  }
+  return {};
+}
+
+async function toggleFavorite(item: MobileNewsItem): Promise<void> {
+  const auth = (window as any).__VTJ_AUTH__;
+  if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) return;
+  try {
+    const response = await fetch(`/api/news/${item.id}/favorite`, {
+      method: 'POST',
+      headers: authHeaders()
+    });
+    if (!response.ok) throw new Error('收藏失败');
+    const data = await response.json();
+    item.is_favorited = !!data.favorited;
+  } catch {
+    // 不阻断阅读
+  }
+}
+
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const response = await fetch('/api/news?limit=5');
+    const response = await fetch('/api/news?limit=5', {
+      headers: authHeaders()
+    });
     if (!response.ok) throw new Error('获取新闻失败');
     const data = await response.json();
     items.value = data.items || [];
@@ -117,12 +154,36 @@ onMounted(() => {
   box-shadow: 0 2px 10px rgba(16, 42, 71, 0.04);
 }
 
+.mobile-news-item__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .mobile-news-item h3 {
+  flex: 1;
   margin: 0;
   color: #1f2d3d;
   font-size: 15px;
   font-weight: 700;
   line-height: 1.5;
+}
+
+.favorite-btn {
+  flex: 0 0 auto;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #b1bac3;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.favorite-btn.active {
+  color: #d9a72d;
 }
 
 .summary {

@@ -52,7 +52,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { apiClient } from '@/services/api/client';
 import QuoteCategoryTag from '@/components/quotes/QuoteCategoryTag.vue';
 
@@ -69,6 +69,7 @@ interface QuoteFavorite {
 }
 
 const router = useRouter();
+const route = useRoute();
 const items = ref<QuoteFavorite[]>([]);
 const loading = ref(false);
 const error = ref('');
@@ -113,7 +114,9 @@ async function removeFavorite(item: QuoteFavorite): Promise<void> {
 }
 
 function goBack(): void {
-  router.replace('/quotes');
+  router.replace(
+    route.path.startsWith('/mobile') ? '/mobile/quotes' : '/quotes'
+  );
 }
 
 function displaySource(author: string, source: string): string {
