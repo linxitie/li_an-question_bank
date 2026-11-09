@@ -188,3 +188,68 @@ def test_start_exam_persists_record_across_rollback(client, db_session, test_sub
         ExamRecord.record_id == record_id).first() is not None, \
         "开始考试没有 commit，记录在请求结束时会丢失"
 
+
+def test_submit_records_duration_in_seconds(client, db_session, test_subject,
+                                            test_question_type, auth_headers, test_user):
+    """交卷的 `duration_used` 必须是**秒**（2026-11-09 修）。
+
+    原缺陷：老提交端点把"分钟数"直接写进 `duration_used`，而结果页 `formatTime()` 按秒拆时/分/秒
+    → 实测 9 秒交卷显示「用时 0 秒」；90 分钟的卷会被记成 90 秒（少算 60 倍）。
+    这里把开考时间手动拨到 90 秒前，断言落库值≈90（而不是 1 分钟的整数倍 1 或 0）。
+    """
+    from datetime import datetime, timedelta
+
+    paper, _ = _make_published_paper(
+        db_session, test_subject.subject_id, test_question_type.type_id,
+        test_user.user_id
+    )
+    record = ExamRecord(
+        paper_id=paper.paper_id, user_id=test_user.user_id, exam_type="SELF_TEST",
+        start_time=datetime.now() - timedelta(seconds=90),
+        is_completed=0, is_scored=0, attempt_count=1,
+    )
+    db_session.add(record)
+    db_session.commit()
+    db_session.refresh(record)
+
+    resp = client.post(f"/api/exams/{record.record_id}/submit",
+                       headers=auth_headers, json={})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()["data"]
+    assert 88 <= body["time_used"] <= 120, body       # 秒，不是分钟
+
+    db_session.expire_all()
+    row = db_session.query(ExamRecord).filter(
+        ExamRecord.record_id == record.record_id).one()
+    assert 88 <= (row.duration_used or 0) <= 120, row.duration_used
+    assert row.is_completed == 1
+
+
+def test_submit_short_attempt_is_not_zero_seconds(client, db_session, test_subject,
+                                                  test_question_type, auth_headers,
+                                                  test_user):
+    """不到 1 分钟的交卷也要有秒数（原缺陷下这里会是 0）。"""
+    from datetime import datetime, timedelta
+
+    paper, question_ids = _make_published_paper(
+        db_session, test_subject.subject_id, test_question_type.type_id,
+        test_user.user_id
+    )
+    record = ExamRecord(
+        paper_id=paper.paper_id, user_id=test_user.user_id, exam_type="SELF_TEST",
+        start_time=datetime.now() - timedelta(seconds=12),
+        is_completed=0, is_scored=0, attempt_count=1,
+    )
+    db_session.add(record)
+    db_session.commit()
+    db_session.refresh(record)
+
+    resp = client.post(f"/api/exams/{record.record_id}/submit",
+                       headers=auth_headers,
+                       json={str(question_ids[0]): "A"})
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+    row = db_session.query(ExamRecord).filter(
+        ExamRecord.record_id == record.record_id).one()
+    assert 10 <= (row.duration_used or 0) <= 60, row.duration_used
+

@@ -248,6 +248,10 @@ class TestUploadParsePipeline:
         db_session.expire_all()
         paper = db_session.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).one()
         assert paper.question_count == 5
+        # 满分同步成"各题分值之和"（5 题 × 1 分 = 5），否则结果页会出现「0 / 100」这种
+        # 分母比可得分还大的怪数字（#128 实测：97 题 × 1 分，卷满分却是 100）
+        assert float(paper.total_score) == 5.0
+        assert result["total_score"] == 5.0
         relations = db_session.query(PaperQuestionRelation).filter(
             PaperQuestionRelation.paper_id == paper_id).all()
         assert len(relations) == 5

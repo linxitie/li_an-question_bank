@@ -343,12 +343,18 @@ async def submit_answers(
 
     # 检查是否超时
     now = datetime.now()
-    time_elapsed = (now - exam_record.start_time).total_seconds() / 60
+    # 超时判定用**分钟**（与 `paper.duration` 同单位），
+    # 但落库的 `duration_used` 是**秒**（结果页 formatTime 按秒拆时/分/秒）。
+    # ★ 2026-11-09 修：原来这里只算了一个"分钟数"，又直接写进 `duration_used`，
+    #   于是任何不足 1 分钟的卷（含 9 秒就交卷的实测）都显示「用时 0 秒」，
+    #   而 90 分钟的卷会被记成 90"秒"（少算 60 倍）。
+    elapsed_seconds = (now - exam_record.start_time).total_seconds()
+    time_elapsed_minutes = elapsed_seconds / 60
 
     is_late = False
-    if time_elapsed > paper.duration and not paper.allow_late_submit:
+    if time_elapsed_minutes > paper.duration and not paper.allow_late_submit:
         raise HTTPException(status_code=400, detail="考试已超时，不允许迟交")
-    elif time_elapsed > paper.duration:
+    elif time_elapsed_minutes > paper.duration:
         is_late = True
 
     # 获取题目
@@ -409,7 +415,8 @@ async def submit_answers(
 
     # 更新考试记录
     exam_record.end_time = now
-    exam_record.duration_used = int(time_elapsed)
+    # `duration_used` 单位为**秒**（结果页按秒拆时/分/秒；统计也按秒累加）
+    exam_record.duration_used = int(max(0, elapsed_seconds))
     exam_record.total_score = total_score
     exam_record.is_completed = 1
     exam_record.is_scored = 1 if scored_count == len(questions) else 0
@@ -442,7 +449,7 @@ async def submit_answers(
             "record_id": record_id,
             "total_score": total_score,
             "max_score": float(paper.total_score),
-            "time_used": int(time_elapsed),
+            "time_used": int(max(0, elapsed_seconds)),
             "is_late": is_late,
             "scored_count": scored_count
         }

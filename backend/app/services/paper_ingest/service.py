@@ -348,6 +348,9 @@ def confirm_draft(db: Session, draft: PaperParseDraft, *,
 
     # 卷题量以关系表实数重算（`question_count` 是缓存值，见 paper_stats 的说明）
     paper.question_count = paper_stats.recount_paper_questions(db, paper)
+    # 满分跟着题量/分值走（97 题 × 1 分 = 97），否则结果页会出现「得分 0 / 满分 100」这种
+    # 分母比可得分还大的怪数字（#128 实测）。
+    new_total = sync_total_score(db, paper)
     draft.status = "confirmed"
     draft.paper_id = paper_id
     draft.item_count = len(created_ids)
@@ -359,6 +362,7 @@ def confirm_draft(db: Session, draft: PaperParseDraft, *,
         "created": len(created_ids),
         "question_ids": created_ids,
         "replaced": replaced,
+        "total_score": new_total,
         "warnings": warnings_of(draft),
     }
 
@@ -372,6 +376,28 @@ def _type_ids(db: Session) -> dict:
         return {"单选题": 1, "多选题": 2}
     out = {(r.type_name or "").strip(): r.type_id for r in rows if r.type_id}
     return out or {"单选题": 1, "多选题": 2}
+
+
+def sync_total_score(db: Session, paper: ExamPaper) -> float:
+    """让卷的「满分」= 各题**分值之和**（取 `question_bank.score`）。**不 commit**。
+
+    为什么用 `question_bank.score` 而不是 `paper_question_relation.question_score`：
+    评分代码（`exams.py` 交卷）用的是 `question.score`，而关系表里的分值在历史导入里是残值
+    （实测 #2/#3 关系表写着每题 5 分 = 500，而题库里每题 1 分、卷满分 100，两者对不上）。
+    以**实际参与打分的那一列**为准，才不会再出现"分母和得分口径不一致"。
+
+    #128 实测：97 题 × 1 分 = 97，而卷满分还是早先的 100 → 学生看到「0 / 100」，
+    容易以为被扣了 3 分，其实是分母不对。
+    """
+    from sqlalchemy import func
+    total = (db.query(func.coalesce(func.sum(QuestionBank.score), 0))
+             .join(PaperQuestionRelation,
+                   PaperQuestionRelation.question_id == QuestionBank.question_id)
+             .filter(PaperQuestionRelation.paper_id == paper.paper_id).scalar())
+    total = float(total or 0)
+    if total > 0:
+        paper.total_score = total
+    return total
 
 
 def _render_html(question_id: int, item: dict, src_dir: str,
