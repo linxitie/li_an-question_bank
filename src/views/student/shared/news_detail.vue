@@ -34,6 +34,51 @@
 
       <p v-if="favoriteError" class="favorite-error">{{ favoriteError }}</p>
 
+      <section v-if="hasAi" class="ai-panel">
+        <div class="ai-panel__head">
+          <span class="ai-panel__label">AI 预审</span>
+          <span v-if="item.ai_status" class="ai-status">{{
+            item.ai_status
+          }}</span>
+        </div>
+
+        <div v-if="item.ai_summary" class="ai-block">
+          <h3>AI 摘要</h3>
+          <p>{{ item.ai_summary }}</p>
+        </div>
+
+        <div v-if="item.ai_exam_points?.length" class="ai-block">
+          <h3>申论考点</h3>
+          <ul>
+            <li v-for="point in item.ai_exam_points" :key="point">
+              {{ point }}
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="item.ai_entities?.length" class="ai-block">
+          <h3>实体</h3>
+          <div class="entity-tags">
+            <span
+              v-for="entity in item.ai_entities"
+              :key="entity.type + entity.name"
+              class="entity-tag">
+              <small>{{ entity.type }}</small>
+              {{ entity.name }}
+            </span>
+          </div>
+        </div>
+
+        <div v-if="item.ai_risk_flags?.length" class="ai-block risk-block">
+          <h3>风险提示</h3>
+          <ul>
+            <li v-for="risk in item.ai_risk_flags" :key="risk">
+              {{ risk }}
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <div class="content" v-html="renderedContent"></div>
 
       <div v-if="displayImages.length && !hasInlineMarkers" class="images">
@@ -82,6 +127,14 @@ const hasInlineMarkers = computed(() => {
 });
 const renderedContent = computed(() =>
   renderNewsContent(item.value?.content || '', item.value?.images || [])
+);
+const hasAi = computed(() =>
+  Boolean(
+    item.value?.ai_summary ||
+    item.value?.ai_exam_points?.length ||
+    item.value?.ai_entities?.length ||
+    item.value?.ai_risk_flags?.length
+  )
 );
 
 function sourceLabel(source: string): string {
@@ -229,6 +282,90 @@ onMounted(() => {
   margin: 10px 0 0;
   color: #a33b2d;
   font-size: 13px;
+}
+
+.ai-panel {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid #e6e1d8;
+  border-radius: 12px;
+  background: #faf8f3;
+}
+
+.ai-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ai-panel__label {
+  color: #2f5d50;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ai-status {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e8f1ec;
+  color: #2f5d50;
+  font-size: 11px;
+}
+
+.ai-block + .ai-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #eee9df;
+}
+
+.ai-block h3 {
+  margin: 0 0 6px;
+  color: #49524c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-block p,
+.ai-block ul {
+  margin: 0;
+  color: #3f4742;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.ai-block ul {
+  padding-left: 20px;
+}
+
+.entity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.entity-tag {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #e3ddd2;
+  color: #535b55;
+  font-size: 12px;
+}
+
+.entity-tag small {
+  margin-right: 4px;
+  color: #9aa09c;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.risk-block h3 {
+  color: #a33b2d;
+}
+
+.risk-block li {
+  color: #8e4b3a;
 }
 
 .content {

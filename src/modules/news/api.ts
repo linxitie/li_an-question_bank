@@ -34,6 +34,11 @@ export interface NewsItem {
   is_favorited: boolean;
   /** 后端权威已读标记（不来自 localStorage） */
   is_read: boolean;
+  ai_summary?: string;
+  ai_exam_points?: string[];
+  ai_entities?: Array<{ type: string; name: string }>;
+  ai_risk_flags?: string[];
+  ai_status?: string;
 }
 
 /** 列表查询参数（page / pageSize 由 store 做客户端分页，不发给后端） */

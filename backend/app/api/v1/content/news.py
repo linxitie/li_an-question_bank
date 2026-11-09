@@ -8,6 +8,7 @@ GET  /api/news/{id}/notes  — 获取笔记列表
 DELETE /api/news/notes/{id}  — 删除笔记
 """
 
+import json
 import logging
 from typing import List, Optional
 from datetime import datetime, date as date_cls
@@ -33,6 +34,15 @@ from ....services import news_search_service
 
 router = APIRouter(prefix="/api/news", tags=["新闻资讯"])
 logger = logging.getLogger(__name__)
+
+
+def _json_list(raw: str | None) -> list:
+    """安全解析新闻 AI JSON 列表，坏数据返回空列表而不是 500。"""
+    try:
+        value = json.loads(raw or "[]")
+        return value if isinstance(value, list) else []
+    except (TypeError, ValueError):
+        return []
 
 
 def _read_ids(db: Session, user_id, news_ids) -> set:
@@ -468,6 +478,11 @@ async def get_news_detail(
         "publish_date": article.publish_date.isoformat() if article.publish_date else None,
         "summary": article.summary,
         "content": article.content or "",
+        "ai_summary": article.ai_summary or "",
+        "ai_exam_points": _json_list(article.ai_exam_points),
+        "ai_entities": _json_list(article.ai_entities),
+        "ai_risk_flags": _json_list(article.ai_risk_flags),
+        "ai_status": article.ai_status or "",
         "images": [
             {"url": "/" + img.image_path.lstrip("/"), "order": img.image_order} for img in images
         ],
