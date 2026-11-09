@@ -8,74 +8,39 @@
       </button>
     </header>
 
-    <!-- 科目 Tab -->
-    <div class="tabs">
-      <div
-        v-for="s in subjects"
-        :key="s.key"
-        :class="['tab', { active: activeSubject === s.key }]"
-        @click="switchSubject(s.key)"
-      >
-        {{ s.name }}
+    <!-- 两级 tab 一起吸顶：科目 + 资料类型。
+         原来只有科目行 sticky；新增第二行后若各管各的，滚动时第二行会被第一行盖住
+         （实测截图里类型 tab 的上半截被压掉）。 -->
+    <div class="tabbar">
+      <!-- 科目 Tab -->
+      <div class="tabs">
+        <div
+          v-for="s in subjects"
+          :key="s.key"
+          :class="['tab', { active: activeSubject === s.key }]"
+          @click="switchSubject(s.key)"
+        >
+          {{ s.name }}
+        </div>
+      </div>
+
+      <!-- 资料类型 Tab（B-M1，2026-11-09）：科目 tab 下再加一行类型 tab。
+           四类顺序由 `MOBILE_TYPE_TABS` 决定（讲义/文章/卡片/试卷）；视频类全库 0 条，
+           暂不出 tab（有内容时往常量里加一项即可）。 -->
+      <div class="type-tabs">
+        <div
+          v-for="t in typeTabs"
+          :key="t.key"
+          :class="['type-tab', { active: activeType === t.key }]"
+          @click="switchType(t.key)"
+        >
+          {{ t.label }}
+        </div>
       </div>
     </div>
 
-
-    <!-- L3（2026-11-08）：讲义 / 试卷资料 两个横滑区。
-         为什么单独做：原来 6 类资料混在一个纵向列表里，讲义与试卷点开只有空白
-         （详情只渲染 content/card_back），学生拿不到原件、也不知道能不能考。
-         分组与"可不可考"文案复用 @/utils/materialShelf（与 PC 端同一口径）。 -->
-    <section v-if="shelf.lectures.length" class="shelf">
-      <div class="shelf-head">
-        <h2>📘 讲义</h2>
-        <span class="shelf-hint">原件可下载</span>
-      </div>
-      <div class="shelf-row">
-        <article v-for="m in shelf.lectures" :key="m.id" class="shelf-card">
-          <h3>{{ m.title }}</h3>
-          <p v-if="lectureMetaLine(m)" class="shelf-meta">{{ lectureMetaLine(m) }}</p>
-          <p class="shelf-meta">
-            {{ m.has_files ? `共 ${m.file_count} 份原件` : '暂无原件' }}
-          </p>
-          <div class="shelf-actions">
-            <button class="shelf-btn primary" @click="openDetail(m)">在线阅读</button>
-            <button class="shelf-btn" :disabled="!m.has_files" @click="downloadOriginals(m)">
-              下载原件
-            </button>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section v-if="shelf.papers.length" class="shelf">
-      <div class="shelf-head">
-        <h2>📄 试卷资料</h2>
-        <span class="shelf-hint">只放原卷</span>
-      </div>
-      <div class="shelf-row">
-        <article v-for="m in shelf.papers" :key="m.id" class="shelf-card">
-          <h3>{{ m.title }}</h3>
-          <p class="shelf-meta">{{ paperMetaLine(m) }}</p>
-          <p class="shelf-meta">{{ m.has_files ? `共 ${m.file_count} 份原件` : '暂无原件' }}</p>
-          <div class="shelf-actions">
-            <button class="shelf-btn primary" :disabled="!m.has_files" @click="downloadOriginals(m)">
-              下载原卷
-            </button>
-            <button
-              :class="['shelf-btn', canExam(m) ? 'go' : 'off']"
-              :disabled="!canExam(m)"
-              :title="canExam(m) ? '去考试页作答' : examHint(m)"
-              @click="goExam(m)"
-            >
-              {{ canExam(m) ? '去考试' : '暂不可考' }}
-            </button>
-          </div>
-          <p v-if="!canExam(m)" class="shelf-off-note">{{ examHint(m) }}</p>
-        </article>
-      </div>
-    </section>
-
-      <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
+      <!-- 3D 卡片栈只在「卡片」tab 下出现（其它类型没有卡片可翻） -->
+      <section v-if="activeType === 'card' && cardItems.length" class="stack-wrap" :style="stackStyle">
         <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering', 'is-entering-prev': phase === 'entering-prev' }">
           <!-- 后面的卡：真内容，只露出一条渐变头；容器透明，不会出现白框 -->
           <div
@@ -139,27 +104,69 @@
         </div>
       </section>
 
-    <main class="list">
-      <!-- L3：讲义/试卷已移到上面的横滑区，这里只排"其余"（视频/文章/卡片），避免同一份资料出现两次 -->
-      <div v-for="m in shelf.rest" :key="m.id" class="card" @click="toggleDetail(m)">
-        <div class="m-title">{{ m.title }}</div>
-        <div class="m-meta">
-          <span class="tag">{{ typeName(m.type) }}</span>
-          <span v-if="m.is_generic" class="tag tag-generic">通用技巧</span>
-          <span v-if="m.duration" class="tag">⏱ {{ m.duration }}分钟</span>
-          <span v-if="m.read_time" class="tag">阅读 {{ m.read_time }}分钟</span>
-          <span v-if="m.is_studied" class="done">已学</span>
-          <span v-if="m.progress_percent" class="progress">进度 {{ m.progress_percent }}%</span>
+    <main class="list" v-if="materials.length">
+      <!-- 讲义 / 试卷：纵向专属卡片（带"阅读/下载/去考试"按钮，普通列表给不了这些动作） -->
+      <template v-if="activeType === 'lecture' || activeType === 'paper'">
+        <article v-for="m in materials" :key="m.id" class="type-card">
+          <h3>{{ m.title }}</h3>
+          <p v-if="activeType === 'lecture' && lectureMetaLine(m)" class="type-meta">
+            {{ lectureMetaLine(m) }}
+          </p>
+          <p v-if="activeType === 'paper'" class="type-meta">{{ paperMetaLine(m) }}</p>
+          <p class="type-meta">{{ m.has_files ? `共 ${m.file_count} 份原件` : '暂无原件' }}</p>
+          <div class="type-actions">
+            <template v-if="activeType === 'lecture'">
+              <button class="shelf-btn primary" @click="openDetail(m)">在线阅读</button>
+              <button class="shelf-btn" :disabled="!m.has_files" @click="downloadOriginals(m)">
+                下载原件
+              </button>
+            </template>
+            <template v-else>
+              <button class="shelf-btn primary" :disabled="!m.has_files" @click="downloadOriginals(m)">
+                下载原卷
+              </button>
+              <button
+                :class="['shelf-btn', canExam(m) ? 'go' : 'off']"
+                :disabled="!canExam(m)"
+                :title="canExam(m) ? '去考试页作答' : examHint(m)"
+                @click="goExam(m)"
+              >
+                {{ canExam(m) ? '去考试' : '暂不可考' }}
+              </button>
+            </template>
+          </div>
+          <p v-if="activeType === 'paper' && !canExam(m)" class="shelf-off-note">{{ examHint(m) }}</p>
+        </article>
+      </template>
+
+      <!-- 文章 / 卡片：原列表样式（卡片另有上方 3D 栈） -->
+      <template v-else>
+        <div v-for="m in materials" :key="m.id" class="card" @click="toggleDetail(m)">
+          <div class="m-title">{{ m.title }}</div>
+          <div class="m-meta">
+            <span class="tag">{{ typeName(m.type) }}</span>
+            <span v-if="m.is_generic" class="tag tag-generic">通用技巧</span>
+            <span v-if="m.duration" class="tag">⏱ {{ m.duration }}分钟</span>
+            <span v-if="m.read_time" class="tag">阅读 {{ m.read_time }}分钟</span>
+            <span v-if="m.is_studied" class="done">已学</span>
+            <span v-if="m.progress_percent" class="progress">进度 {{ m.progress_percent }}%</span>
+          </div>
+          <div v-if="expandedId === m.id" class="detail" @click.stop>
+            <p v-if="m.summary" class="summary">{{ m.summary }}</p>
+            <button class="view-btn" @click="openDetail(m)">查看详情</button>
+          </div>
         </div>
-        <div v-if="expandedId === m.id" class="detail" @click.stop>
-          <p v-if="m.summary" class="summary">{{ m.summary }}</p>
-          <button class="view-btn" @click="openDetail(m)">查看详情</button>
-        </div>
-      </div>
+      </template>
     </main>
-    <!-- 空态/加载态放在 list 外面，平板（list 不渲染）也能看到 -->
-    <div v-if="!materials.length && !loading" class="empty">该科目暂无备考资料</div>
-    <div v-if="loading" class="empty">加载中...</div>
+
+    <!-- 空态：按"科目+类型"给具体说明（B-M1 需求：没资料就显示无资料）。
+         空态要占满剩余高度并垂直居中，否则会贴在屏幕最底部（实测第一版就是这样）。 -->
+    <div v-if="!materials.length && !loading" class="empty empty-page">
+      <div class="empty-title">{{ emptyText.title }}</div>
+      <div class="empty-hint">{{ emptyText.hint }}</div>
+      <div class="empty-hint">上传并上架后会出现在这里</div>
+    </div>
+    <div v-if="loading" class="empty empty-page">加载中...</div>
 
 
     <!-- 资料详情弹层（页内展示；原实现跳 /materials/{subject}?id= 该路由不存在，必然 404） -->
@@ -255,10 +262,13 @@ import { useLibraryStore } from '@/modules/library/store';
 import { collectCardImages } from '@/utils/materialImages';
 import {
   canExam,
+  emptyTextOf,
   examHint,
-  groupShelfItems,
   lectureMetaLine,
-  paperMetaLine
+  MOBILE_TYPE_TABS,
+  normalizeTypeTab,
+  paperMetaLine,
+  type MobileTypeTab
 } from '@/utils/materialShelf';
 import {
   downloadMaterialFile,
@@ -287,6 +297,13 @@ const initialSubject = (['xingce', 'shenlun', 'gongzhuan'] as const).includes(
   : 'xingce';
 const activeSubject = ref<'xingce' | 'shenlun' | 'gongzhuan'>(initialSubject);
 const expandedId = ref<number | null>(null);
+
+// ===== B-M1：资料类型二级 tab =====
+// 顺序与文案来自 `MOBILE_TYPE_TABS`（讲义/文章/卡片/试卷）；默认「卡片」（D-T6）。
+// 深链 `?type=` 走 `normalizeTypeTab` 归一化，非法值回落默认，不白屏。
+const typeTabs = MOBILE_TYPE_TABS;
+const activeType = ref<MobileTypeTab>(normalizeTypeTab(route.query.type));
+const emptyText = computed(() => emptyTextOf(activeSubject.value, activeType.value));
 
 // ===== 创建卡片（学生自建，免审批）=====
 const createOpen = ref(false);
@@ -353,11 +370,6 @@ const typeName = (t: string) => {
   }[t] || '资料';
 };
 
-/** L3：讲义 / 试卷 / 其余 —— 与 PC 端同一套分组与"可不可考"口径 */
-const shelf = computed(() =>
-  groupShelfItems((materials.value || []) as any[])
-);
-
 /** 下载原件/原卷：走鉴权端点（原件不在公开目录），失败给明确提示 */
 const downloadOriginals = async (m: any) => {
   if (!m?.id) return;
@@ -392,6 +404,18 @@ const downloadFile = async (f: MaterialFileItem) => {
 const switchSubject = (key: 'xingce' | 'shenlun' | 'gongzhuan') => {
   activeSubject.value = key;
   expandedId.value = null;
+  closeDetail();          // 切科目时关掉详情，避免"点开的是上一个科目的资料"
+  fetchMaterials();
+};
+
+/** 切类型：关弹层、重置卡片栈、重新拉该类型（后端按 type 过滤） */
+const switchType = (key: MobileTypeTab) => {
+  if (key === activeType.value) return;
+  activeType.value = key;
+  expandedId.value = null;
+  cardIndex.value = 0;
+  flipped.value = false;
+  closeDetail();
   fetchMaterials();
 };
 
@@ -402,6 +426,7 @@ const toggleDetail = (m: any) => {
 const fetchMaterials = async () => {
   await library.load({
     subject: activeSubject.value,
+    type: activeType.value,
     page: 1,
     pageSize: 50
   });
@@ -579,66 +604,52 @@ onMounted(fetchMaterials);
   background: #1a2b5f;
   color: #fff;
 }
-/* ===== L3：讲义 / 试卷资料 横滑区 ===== */
-.shelf {
-  padding: 10px 12px 2px;
+/* ===== B-M1：资料类型二级 tab（2026-11-09） ===== */
+.type-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px 10px;
   background: #fff;
   border-bottom: 1px solid #f0f2f5;
 }
-.shelf-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
+.type-tab {
+  flex: 1;
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 15px;
+  font-size: 13px;
+  color: #7a8399;
+  background: #f0f3f7;
+  border: 1px solid #e6eaf2;
+  cursor: pointer;
 }
-.shelf-head h2 {
-  margin: 0;
-  font-size: 15px;
-  color: #1a2b5f;
+.type-tab.active {
+  color: #1d4ed8;
+  background: #fff;
+  border-color: #1d4ed8;
+  font-weight: 600;
 }
-.shelf-hint {
-  font-size: 12px;
-  color: #8a93a8;
-}
-/* 横滑：不换行、可惯性滚动；卡片宽度用百分比，375 宽刚好露出下一张的边 */
-.shelf-row {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 8px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.shelf-row::-webkit-scrollbar {
-  display: none;
-}
-.shelf-card {
-  flex: 0 0 82%;
-  max-width: 320px;
-  background: #fbfcff;
+/* 讲义/试卷的纵向专属卡片（带动作按钮，普通列表给不了） */
+.type-card {
+  background: #fff;
   border: 1px solid #e3e9f5;
   border-radius: 12px;
   padding: 12px;
-  box-sizing: border-box;
+  margin-bottom: 12px;
 }
-.shelf-card h3 {
+.type-card h3 {
   margin: 0 0 6px;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.45;
   color: #1a2b5f;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
-.shelf-meta {
+.type-meta {
   margin: 0 0 4px;
   font-size: 12px;
   color: #6b7688;
   line-height: 1.5;
 }
-.shelf-actions {
+.type-actions {
   display: flex;
   gap: 8px;
   margin-top: 8px;
@@ -789,6 +800,27 @@ onMounted(fetchMaterials);
   text-align: center;
   color: #8899aa;
   padding: 40px 0;
+}
+/* B-M1 空态：大字「无资料」+ 具体说明（区分"整科目没资料"和"该类型没资料"） */
+.empty-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 46vh;
+  padding: 24px 12px;
+}
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #8a93a8;
+  margin-bottom: 8px;
+}
+.empty-hint {
+  font-size: 12px;
+  color: #aab3c2;
+  line-height: 1.7;
 }
 
 /* ===== 资料详情弹层 ===== */
@@ -987,13 +1019,17 @@ onMounted(fetchMaterials);
 .theme-shenlun { --c1: #047857; --c2: #34d399; --c-soft: #ecfdf5; }
 .theme-gongzhuan { --c1: #9f1239; --c2: #f43f5e; --c-soft: #fff1f4; }
 
-/* 修复 1：科目栏不再被卡片盖住 */
-.tabs {
+/* 修复 1：科目栏不再被卡片盖住（B-M1：两级 tab 一起吸顶，所以 sticky 移到 .tabbar） */
+.tabbar {
   position: sticky;
   top: 56px;
   z-index: 30;
   background: #fff;
   box-shadow: 0 6px 14px rgba(26, 42, 74, 0.06);
+}
+.tabs {
+  position: static;
+  box-shadow: none;
 }
 .tab.active {
   background: var(--c1);

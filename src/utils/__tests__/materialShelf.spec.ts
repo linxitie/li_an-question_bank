@@ -6,10 +6,14 @@ import { describe, expect, it } from 'vitest';
 import {
   canExam,
   COLLAPSED,
+  DEFAULT_MOBILE_TYPE,
+  emptyTextOf,
   examHint,
   fmtDuration,
   groupShelfItems,
   lectureMetaLine,
+  MOBILE_TYPE_TABS,
+  normalizeTypeTab,
   paperMetaLine,
   visibleItems
 } from '@/utils/materialShelf';
@@ -129,6 +133,28 @@ describe('groupShelfItems（手机端分组）', () => {
     expect(g.lectures).toHaveLength(0);
     expect(g.papers).toHaveLength(0);
     expect(g.rest).toHaveLength(3);
+  });
+});
+
+describe('手机端二级 tab（B-M1）', () => {
+  it('tab 顺序 = 讲义/文章/卡片/试卷（用户指定）', () => {
+    expect(MOBILE_TYPE_TABS.map((t) => t.label)).toEqual(['讲义', '文章', '卡片', '试卷']);
+    expect(MOBILE_TYPE_TABS.map((t) => t.key)).toEqual(['lecture', 'article', 'card', 'paper']);
+  });
+  it('深链参数：合法值原样返回，非法/空回落默认 tab', () => {
+    expect(normalizeTypeTab('paper')).toBe('paper');
+    expect(normalizeTypeTab('lecture')).toBe('lecture');
+    expect(normalizeTypeTab('video_intro')).toBe(DEFAULT_MOBILE_TYPE);
+    expect(normalizeTypeTab('')).toBe(DEFAULT_MOBILE_TYPE);
+    expect(normalizeTypeTab(null)).toBe(DEFAULT_MOBILE_TYPE);
+  });
+  it('空态文案带科目与类型，且大字是「无资料」', () => {
+    expect(emptyTextOf('gongzhuan', 'lecture')).toEqual({
+      title: '无资料',
+      hint: '公专还没有「讲义」资料'
+    });
+    expect(emptyTextOf('xingce', 'paper').hint).toBe('行测还没有「试卷」资料');
+    expect(emptyTextOf('shenlun', 'article').hint).toBe('申论还没有「文章」资料');
   });
 });
 

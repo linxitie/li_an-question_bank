@@ -86,3 +86,45 @@ export function groupShelfItems<
   }
   return { lectures, papers, rest };
 }
+
+// ==================== 手机端二级 tab（B-M1，2026-11-09） ====================
+
+export type MobileTypeTab = 'lecture' | 'article' | 'card' | 'paper';
+
+/**
+ * 手机端二级 tab 的顺序与文案（用户 2026-11-09 指定：讲义/文章/卡片/试卷）。
+ *
+ * 为什么只列四类、不含视频：全库视频类资料 0 条（含未上架），
+ * 加了也是永久空态；等真有视频内容再往这里加一项即可（页面按本数组渲染）。
+ */
+export const MOBILE_TYPE_TABS: ReadonlyArray<{ key: MobileTypeTab; label: string }> = [
+  { key: 'lecture', label: '讲义' },
+  { key: 'article', label: '文章' },
+  { key: 'card', label: '卡片' },
+  { key: 'paper', label: '试卷' }
+];
+
+/** 默认停在「卡片」：三科卡片都有 30+ 条，避免一进页面就是空态（D-T6） */
+export const DEFAULT_MOBILE_TYPE: MobileTypeTab = 'card';
+
+/** 深链参数归一化：非法/空 → 默认 tab（不抛错、不白屏） */
+export function normalizeTypeTab(raw: unknown): MobileTypeTab {
+  const v = String(raw ?? '').trim();
+  return (MOBILE_TYPE_TABS.some((t) => t.key === v) ? v : DEFAULT_MOBILE_TYPE) as MobileTypeTab;
+}
+
+const SUBJECT_LABEL: Record<string, string> = {
+  xingce: '行测',
+  shenlun: '申论',
+  gongzhuan: '公专'
+};
+
+/** 空态文案：大字"无资料" + 一句具体说明（D-T5），别让用户以为页面坏了 */
+export function emptyTextOf(subject: string, type: MobileTypeTab): { title: string; hint: string } {
+  const subjectLabel = SUBJECT_LABEL[subject] || '该科目';
+  const typeLabel = MOBILE_TYPE_TABS.find((t) => t.key === type)?.label || '资料';
+  return {
+    title: '无资料',
+    hint: `${subjectLabel}还没有「${typeLabel}」资料`
+  };
+}
