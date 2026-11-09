@@ -151,46 +151,75 @@
       </section>
     </template>
 
-    <!-- 阅读器（文章 / 讲义） -->
-    <el-dialog v-model="reader.open" :title="reader.title || '阅读'" width="820px" top="4vh" destroy-on-close>
-      <div v-if="reader.loading" class="mp-reader-loading">加载中…</div>
-      <template v-else>
-        <div v-if="reader.meta" class="mp-reader-meta">{{ reader.meta }}</div>
-        <div v-if="reader.html" class="mp-article" v-html="sanitizeHtml(reader.html)" />
-        <div v-else class="mp-reader-empty">
-          这篇资料只有原件、没有正文。点下面的「下载原件」拿到 PDF/Word 后阅读。
-        </div>
-        <div v-if="reader.files.length" class="mp-reader-files">
-          <p class="mp-reader-files-title">原件（{{ reader.files.length }}）</p>
-          <ul>
-            <li v-for="f in reader.files" :key="f.file_id">
-              <span>{{ f.file_name }}</span>
-              <em>{{ f.size_label }}</em>
-              <button class="mp-btn mp-btn--mini" @click="downloadFile(f)">下载</button>
-            </li>
-          </ul>
-        </div>
-      </template>
-      <template #footer>
-        <button class="mp-btn" @click="reader.open = false">关闭</button>
-        <button v-if="reader.materialId" class="mp-btn mp-btn--primary" :disabled="reader.marked" @click="markStudied()">
-          {{ reader.marked ? '已标记学完' : '标记已学完' }}
-        </button>
-      </template>
-    </el-dialog>
+    <!-- 阅读器（文章 / 讲义）
+         为什么用自绘弹层而不是 <el-dialog>：本项目的 Element Plus 只按需 import
+         （main.ts 里没有 app.use(ElementPlus)），`el-dialog` 会退化成未知元素、
+         把插槽内容直接摊在页面底部（实测无头截图可见）。自绘一层 mask 最稳，
+         也和手写管理端页的抽屉风格一致。 -->
+    <Teleport to="body">
+      <div v-if="reader.open" class="mp-mask" @click.self="reader.open = false">
+        <section class="mp-modal" role="dialog" aria-modal="true">
+          <header class="mp-modal-head">
+            <h3>{{ reader.title || '阅读' }}</h3>
+            <button class="mp-modal-x" aria-label="关闭" @click="reader.open = false">×</button>
+          </header>
+          <div class="mp-modal-body">
+            <div v-if="reader.loading" class="mp-reader-loading">加载中…</div>
+            <template v-else>
+              <div v-if="reader.meta" class="mp-reader-meta">{{ reader.meta }}</div>
+              <div v-if="reader.html" class="mp-article" v-html="sanitizeHtml(reader.html)" />
+              <div v-else class="mp-reader-empty">
+                这篇资料只有原件、没有正文。点下面的「下载原件」拿到 PDF/Word 后阅读。
+              </div>
+              <div v-if="reader.files.length" class="mp-reader-files">
+                <p class="mp-reader-files-title">原件（{{ reader.files.length }}）</p>
+                <ul>
+                  <li v-for="f in reader.files" :key="f.file_id">
+                    <span>{{ f.file_name }}</span>
+                    <em>{{ f.size_label }}</em>
+                    <button class="mp-btn mp-btn--mini" @click="downloadFile(f)">下载</button>
+                  </li>
+                </ul>
+              </div>
+            </template>
+          </div>
+          <footer class="mp-modal-foot">
+            <button class="mp-btn" @click="reader.open = false">关闭</button>
+            <button
+              v-if="reader.materialId"
+              class="mp-btn mp-btn--primary"
+              :disabled="reader.marked"
+              @click="markStudied()"
+            >
+              {{ reader.marked ? '已标记学完' : '标记已学完' }}
+            </button>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
 
     <!-- 视频播放 -->
-    <el-dialog v-model="video.open" :title="video.title || '视频学习'" width="900px" destroy-on-close>
-      <video
-        v-if="video.open && video.url"
-        controls
-        autoplay
-        playsinline
-        style="width:100%;border-radius:8px;background:#000;max-height:60vh"
-        :src="video.url"
-      />
-      <p v-else class="mp-reader-empty">该视频暂时无法播放。</p>
-    </el-dialog>
+    <Teleport to="body">
+      <div v-if="video.open" class="mp-mask" @click.self="video.open = false">
+        <section class="mp-modal mp-modal--wide" role="dialog" aria-modal="true">
+          <header class="mp-modal-head">
+            <h3>{{ video.title || '视频学习' }}</h3>
+            <button class="mp-modal-x" aria-label="关闭" @click="video.open = false">×</button>
+          </header>
+          <div class="mp-modal-body">
+            <video
+              v-if="video.url"
+              controls
+              autoplay
+              playsinline
+              style="width:100%;border-radius:8px;background:#000;max-height:60vh"
+              :src="video.url"
+            />
+            <p v-else class="mp-reader-empty">该视频暂时无法播放。</p>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -711,6 +740,64 @@ onMounted(loadAll);
   font-style: normal;
 }
 /* ---------- 阅读器 ---------- */
+/* 自绘弹层（不用 el-dialog，原因见模板里的注释） */
+.mp-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 5vh 16px;
+  z-index: 3000;
+}
+.mp-modal {
+  width: min(820px, 100%);
+  max-height: 88vh;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mp-modal--wide {
+  width: min(900px, 100%);
+}
+.mp-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #eef1f6;
+}
+.mp-modal-head h3 {
+  margin: 0;
+  font-size: 16px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-modal-x {
+  border: none;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  color: #8896ab;
+  cursor: pointer;
+}
+.mp-modal-body {
+  padding: 16px 18px;
+  overflow: auto;
+}
+.mp-modal-foot {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 12px 18px;
+  border-top: 1px solid #eef1f6;
+}
 .mp-article {
   max-height: 62vh;
   overflow: auto;

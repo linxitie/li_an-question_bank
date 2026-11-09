@@ -85,7 +85,13 @@ function devRuntimeSafety(): Plugin {
       const httpServer = server.httpServer;
       if (!httpServer) return;
 
-      const remember = (socket: object, url?: string) => {
+      // 为什么判空（2026-11-09 修）：`response.socket` 在连接已被对端关闭时可能是
+      // null/undefined，WeakMap.set 拿它当键会抛 `TypeError: Invalid value used as
+      // weak map key` —— 该异常在 http 'request' 事件里抛出会**直接把 dev server
+      // 干掉**（实测：无头浏览器/客户端 abort 后 `npm run dev` 退出，退出码 1）。
+      // 这只是开发期诊断插件的记账动作，丢掉一次记账完全无害。
+      const remember = (socket: object | null | undefined, url?: string) => {
+        if (!socket || typeof socket !== 'object') return;
         routeBySocket.set(socket, url?.split('?')[0] || 'unknown');
       };
 
