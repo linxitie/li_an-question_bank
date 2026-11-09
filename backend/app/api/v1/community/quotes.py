@@ -24,6 +24,7 @@ from sqlalchemy import desc, func, or_
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import EssayQuote, QuoteFavorite, SysUser
+from ....services.quote_daily_service import ensure_daily_quote
 
 router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
@@ -204,6 +205,30 @@ async def get_daily_quote(
     2. 按日期轮转选取（同一天返回相同金句）
     3. 如果 Obsidian 不可用，回退到 SQLite 数据库
     """
+    # 0. 优先读取每日快照；不存在时幂等生成，保证三端同日一致。
+    daily_quote, _, _ = ensure_daily_quote(db)
+    if daily_quote is not None:
+        favorited = False
+        if current_user:
+            favorited = (
+                db.query(QuoteFavorite)
+                .filter(
+                    QuoteFavorite.user_id == current_user.user_id,
+                    QuoteFavorite.quote_id == daily_quote.quote_id,
+                )
+                .first()
+                is not None
+            )
+        return {
+            "quote_id": daily_quote.quote_id,
+            "content": daily_quote.content,
+            "source": daily_quote.source or "",
+            "category": daily_quote.category or "",
+            "author": daily_quote.author or "",
+            "favorited": favorited,
+            "source_type": "database",
+        }
+
     # 1. 尝试从 Obsidian 读取
     obsidian_quotes = _filter_rejected_obsidian(db, _read_obsidian_quotes())
     if obsidian_quotes:

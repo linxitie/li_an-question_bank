@@ -2240,6 +2240,18 @@ class EssayQuote(Base):
     )
 
 
+class DailyQuote(Base):
+    """每日金句预生成快照，保证同日三端一致。"""
+
+    __tablename__ = "daily_quote"
+
+    quote_date = Column(String(10), primary_key=True, comment="日期 YYYY-MM-DD")
+    quote_id = Column(BigInteger, nullable=False, comment="金句ID")
+    algorithm_version = Column(String(20), default="datehash-v2", comment="选句算法版本")
+    fallback_used = Column(Integer, default=0, comment="是否回退")
+    created_at = Column(DateTime, default=datetime.now, comment="生成时间")
+
+
 class QuoteFavorite(Base):
     """金句收藏表"""
 

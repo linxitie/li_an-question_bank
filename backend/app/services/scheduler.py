@@ -128,6 +128,24 @@ def init_scheduler():
         scrape_all_recruitment()
         _broadcast_sync("招考信息更新")
 
+    def _generate_daily_quote():
+        from ..core.database import SessionLocal
+        from .quote_daily_service import ensure_daily_quote
+
+        db = SessionLocal()
+        try:
+            quote, record, created = ensure_daily_quote(db)
+            logger.info(
+                "每日金句预生成: created=%s date=%s quote_id=%s",
+                created,
+                record.quote_date if record else None,
+                quote.quote_id if quote else None,
+            )
+        except Exception:
+            logger.exception("每日金句预生成失败")
+        finally:
+            db.close()
+
     def _sync_quotes_with_broadcast():
         from ..core.database import SessionLocal
         from .quote_ai_service import review_quotes
@@ -154,6 +172,13 @@ def init_scheduler():
         trigger=CronTrigger(hour="8,18", minute=0, timezone=CST),
         id="collect_news",
         name="每日新闻采集（新采集器）",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _generate_daily_quote,
+        trigger=CronTrigger(hour=0, minute=5, timezone=CST),
+        id="generate_daily_quote",
+        name="每日金句预生成",
         replace_existing=True,
     )
     scheduler.add_job(

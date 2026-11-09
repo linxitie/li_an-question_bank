@@ -246,11 +246,15 @@ import {
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
+import MobileDailyQuote from '@/components/quotes/MobileDailyQuote.vue';
+import MobileDailyNews from '@/components/news/MobileDailyNews.vue';
 
 export default defineComponent({
   name: 'TabletHome',
   components: {
-    XIcon
+    XIcon,
+    MobileDailyQuote,
+    MobileDailyNews
   },
   setup() {
     const router = useRouter();
