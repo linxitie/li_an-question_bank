@@ -12,7 +12,33 @@
         <h1>金句库</h1>
         <p>按主题浏览 · 收藏你的申论素材</p>
       </div>
+      <router-link class="favorites-link" to="/favorites">
+        我的收藏 →
+      </router-link>
     </header>
+
+    <div class="search-row">
+      <input
+        v-model="keyword"
+        type="search"
+        placeholder="搜索金句内容..."
+        aria-label="搜索金句内容"
+        @keyup.enter="search" />
+      <input
+        v-model="author"
+        type="search"
+        placeholder="作者 / 出处"
+        aria-label="按作者或出处搜索"
+        @keyup.enter="search" />
+      <button type="button" class="search-btn" @click="search">检索</button>
+      <button
+        v-if="keyword || author"
+        type="button"
+        class="reset-btn"
+        @click="resetSearch">
+        重置
+      </button>
+    </div>
 
     <div class="category-tabs" role="tablist" aria-label="金句分类">
       <button
@@ -26,6 +52,8 @@
         {{ category }}
       </button>
     </div>
+
+    <p class="result-count">共 {{ total }} 条</p>
 
     <div v-if="error" class="state error">
       <p>{{ error }}</p>
@@ -91,6 +119,8 @@ const categories = [
 ];
 const router = useRouter();
 const activeCategory = ref('全部');
+const keyword = ref('');
+const author = ref('');
 const items = ref<QuoteItem[]>([]);
 const total = ref(0);
 const page = ref(1);
@@ -107,6 +137,12 @@ async function requestQuotes(targetPage: number): Promise<void> {
   };
   if (activeCategory.value !== '全部') {
     params.category = activeCategory.value;
+  }
+  if (keyword.value.trim()) {
+    params.keyword = keyword.value.trim();
+  }
+  if (author.value.trim()) {
+    params.author = author.value.trim();
   }
   const response = await apiClient.request<{
     total: number;
@@ -148,6 +184,16 @@ async function loadMore(): Promise<void> {
 function selectCategory(category: string): void {
   if (activeCategory.value === category) return;
   activeCategory.value = category;
+  void load();
+}
+
+function search(): void {
+  void load();
+}
+
+function resetSearch(): void {
+  keyword.value = '';
+  author.value = '';
   void load();
 }
 
@@ -200,6 +246,62 @@ onMounted(() => {
   margin: 5px 0 0;
   color: #8a928b;
   font-size: 13px;
+}
+
+.favorites-link {
+  margin-left: auto;
+  padding-top: 5px;
+  color: #2f5d50;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.search-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #e3ded4;
+  border-radius: 9px;
+  background: #fff;
+  color: #2f3933;
+  outline: none;
+}
+
+.search-row input:focus {
+  border-color: #2f5d50;
+}
+
+.search-btn,
+.reset-btn {
+  flex: 0 0 auto;
+  padding: 0 15px;
+  border-radius: 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.search-btn {
+  border: 1px solid #2f5d50;
+  background: #2f5d50;
+  color: #fff;
+}
+
+.reset-btn {
+  border: 1px solid #e3ded4;
+  background: #fff;
+  color: #59635c;
+}
+
+.result-count {
+  margin: 0 0 12px;
+  color: #9aa19c;
+  font-size: 12px;
 }
 
 .back-btn {

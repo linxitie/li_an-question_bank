@@ -65,6 +65,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/favorites',
+    name: 'Favorites',
+    component: () => import('$vtj/vue/favorites.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/news',
     name: 'NewsTimeline',
     component: () => import('@/views/student/shared/news_timeline.vue'),

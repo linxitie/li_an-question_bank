@@ -5,6 +5,7 @@
       <div class="quote-source">
         <XIcon :icon="ReadingLamp" :size="18" color="#c41e3a"></XIcon>
         <span>每日金句</span>
+        <QuoteCategoryTag :category="state.category" />
       </div>
       <span class="quote-date"> {{ state.currentDate }}</span>
     </div>
@@ -114,9 +115,10 @@
   import { ElMessage } from 'element-plus';
   import DailyNewsPanel from '@/components/news/DailyNewsPanel.vue';
   import QuoteCategoryTag from '@/components/quotes/QuoteCategoryTag.vue';
+  import QuoteLibraryLink from '@/components/quotes/QuoteLibraryLink.vue';
   export default defineComponent({
     name: 'QuoteBanner',
-    components: { XIcon, DailyNewsPanel, QuoteCategoryTag },
+    components: { XIcon, DailyNewsPanel, QuoteCategoryTag, QuoteLibraryLink },
     setup(props) {
       const provider = useProvider({ id: 'quote_banner', version: '1778918000716' });
       const state = reactive({

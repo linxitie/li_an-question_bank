@@ -80,6 +80,7 @@
         return [
           { id: 'home_page', label: '首页' },
           { id: 'question_bank', label: '题库' },
+          { id: 'favorites', label: '收藏' },
           { id: 'about', label: '关于砺安题库' },
           { id: 'forum', label: '论坛' }
         ];
@@ -96,6 +97,10 @@
       },
       handleMenuClick(id) {
         this.state.activeMenu = id;
+        if (id === 'favorites') {
+          if (this.$router) this.$router.push('/favorites');
+          return;
+        }
         this.navigateTo(id);
       },
       handleUserClick() {

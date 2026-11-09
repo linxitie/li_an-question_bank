@@ -19,7 +19,7 @@ from typing import Optional
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
@@ -277,6 +277,8 @@ async def get_daily_quote(
 @router.get("", summary="金句列表")
 async def get_quotes(
     category: Optional[str] = Query(None, description="分类筛选: 哲理/治国/民生/法治/品德"),
+    keyword: Optional[str] = Query(None, description="关键词：内容/作者/出处"),
+    author: Optional[str] = Query(None, description="作者或出处"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: SysUser = Depends(get_current_user),
@@ -286,6 +288,18 @@ async def get_quotes(
     query = db.query(EssayQuote).filter(EssayQuote.status == 1)
     if category:
         query = query.filter(EssayQuote.category == category)
+    if keyword:
+        value = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(
+                EssayQuote.content.like(value),
+                EssayQuote.author.like(value),
+                EssayQuote.source.like(value),
+            )
+        )
+    if author:
+        value = f"%{author.strip()}%"
+        query = query.filter(or_(EssayQuote.author.like(value), EssayQuote.source.like(value)))
 
     total = query.count()
     items = (
