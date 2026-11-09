@@ -549,6 +549,7 @@ def collect_source(
     source: NewsSourceConfig,
     *,
     limit: int = 5,
+    scan_limit: int | None = None,
     dry_run: bool = False,
     fetcher: Callable[[str], str] | None = None,
     storage: NewsStorage | None = None,
@@ -582,7 +583,7 @@ def collect_source(
         links = parse_list_links(
             list_html,
             source.list_url,
-            limit=limit,
+            limit=max(limit, scan_limit or limit * 3),
             allowed_hosts=allowed_hosts,
             link_contains=source.link_contains,
         )
@@ -616,6 +617,8 @@ def collect_source(
             )
             if dry_run:
                 report["inserted"] += 1
+                if report["inserted"] >= limit:
+                    break
                 continue
             news = NewsArticle(
                 title=article.title[:500],
@@ -645,6 +648,8 @@ def collect_source(
                     db.add(NewsImage(news_id=news.news_id, image_path=rel, image_order=order))
                     report["images"] += 1
             report["inserted"] += 1
+            if report["inserted"] >= limit:
+                break
         if not dry_run:
             db.commit()
         report["ok"] = True
@@ -654,7 +659,13 @@ def collect_source(
     return report
 
 
-def collect_all_sources(db: Session, *, limit: int = 5, dry_run: bool = False) -> list[dict]:
+def collect_all_sources(
+    db: Session,
+    *,
+    limit: int = 5,
+    scan_limit: int | None = None,
+    dry_run: bool = False,
+) -> list[dict]:
     enabled = {
         row.source_code: bool(row.enabled)
         for row in db.query(NewsSource.source_code, NewsSource.enabled).all()
@@ -663,7 +674,15 @@ def collect_all_sources(db: Session, *, limit: int = 5, dry_run: bool = False) -
     for source in NEWS_SOURCES:
         if not enabled.get(source.code, bool(source.enabled)):
             continue
-        reports.append(collect_source(db, source, limit=limit, dry_run=dry_run))
+        reports.append(
+            collect_source(
+                db,
+                source,
+                limit=limit,
+                scan_limit=scan_limit,
+                dry_run=dry_run,
+            )
+        )
     return reports
 
 
