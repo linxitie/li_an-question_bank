@@ -34,50 +34,13 @@
 
       <p v-if="favoriteError" class="favorite-error">{{ favoriteError }}</p>
 
-      <section v-if="hasAi" class="ai-panel">
-        <div class="ai-panel__head">
-          <span class="ai-panel__label">AI 预审</span>
-          <span v-if="item.ai_status" class="ai-status">{{
-            item.ai_status
-          }}</span>
-        </div>
-
-        <div v-if="item.ai_summary" class="ai-block">
-          <h3>AI 摘要</h3>
-          <p>{{ item.ai_summary }}</p>
-        </div>
-
-        <div v-if="item.ai_exam_points?.length" class="ai-block">
-          <h3>申论考点</h3>
-          <ul>
-            <li v-for="point in item.ai_exam_points" :key="point">
-              {{ point }}
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="item.ai_entities?.length" class="ai-block">
-          <h3>实体</h3>
-          <div class="entity-tags">
-            <span
-              v-for="entity in item.ai_entities"
-              :key="entity.type + entity.name"
-              class="entity-tag">
-              <small>{{ entity.type }}</small>
-              {{ entity.name }}
-            </span>
-          </div>
-        </div>
-
-        <div v-if="item.ai_risk_flags?.length" class="ai-block risk-block">
-          <h3>风险提示</h3>
-          <ul>
-            <li v-for="risk in item.ai_risk_flags" :key="risk">
-              {{ risk }}
-            </li>
-          </ul>
-        </div>
-      </section>
+      <NewsAICard
+        v-if="hasAi"
+        :summary="item.ai_summary"
+        :exam-points="item.ai_exam_points"
+        :entities="item.ai_entities"
+        :risk-flags="item.ai_risk_flags"
+        :status="item.ai_status" />
 
       <div class="content" v-html="renderedContent"></div>
 
@@ -110,6 +73,7 @@ import {
   type NewsItem
 } from '@/modules/news/api';
 import { dedupeNewsImages, renderNewsContent } from '@/utils/newsRender';
+import NewsAICard from '@/components/news/NewsAICard.vue';
 
 const route = useRoute();
 const router = useRouter();
