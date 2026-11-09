@@ -21,7 +21,60 @@
     </div>
 
 
-      <!-- 卡片栈（手机）：后面是「真卡片」（翻转时能看到它的文字），顶层卡单独做 3D 翻转 -->
+    <!-- L3（2026-11-08）：讲义 / 试卷资料 两个横滑区。
+         为什么单独做：原来 6 类资料混在一个纵向列表里，讲义与试卷点开只有空白
+         （详情只渲染 content/card_back），学生拿不到原件、也不知道能不能考。
+         分组与"可不可考"文案复用 @/utils/materialShelf（与 PC 端同一口径）。 -->
+    <section v-if="shelf.lectures.length" class="shelf">
+      <div class="shelf-head">
+        <h2>📘 讲义</h2>
+        <span class="shelf-hint">原件可下载</span>
+      </div>
+      <div class="shelf-row">
+        <article v-for="m in shelf.lectures" :key="m.id" class="shelf-card">
+          <h3>{{ m.title }}</h3>
+          <p v-if="lectureMetaLine(m)" class="shelf-meta">{{ lectureMetaLine(m) }}</p>
+          <p class="shelf-meta">
+            {{ m.has_files ? `共 ${m.file_count} 份原件` : '暂无原件' }}
+          </p>
+          <div class="shelf-actions">
+            <button class="shelf-btn primary" @click="openDetail(m)">在线阅读</button>
+            <button class="shelf-btn" :disabled="!m.has_files" @click="downloadOriginals(m)">
+              下载原件
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section v-if="shelf.papers.length" class="shelf">
+      <div class="shelf-head">
+        <h2>📄 试卷资料</h2>
+        <span class="shelf-hint">只放原卷</span>
+      </div>
+      <div class="shelf-row">
+        <article v-for="m in shelf.papers" :key="m.id" class="shelf-card">
+          <h3>{{ m.title }}</h3>
+          <p class="shelf-meta">{{ paperMetaLine(m) }}</p>
+          <p class="shelf-meta">{{ m.has_files ? `共 ${m.file_count} 份原件` : '暂无原件' }}</p>
+          <div class="shelf-actions">
+            <button class="shelf-btn primary" :disabled="!m.has_files" @click="downloadOriginals(m)">
+              下载原卷
+            </button>
+            <button
+              :class="['shelf-btn', canExam(m) ? 'go' : 'off']"
+              :disabled="!canExam(m)"
+              :title="canExam(m) ? '去考试页作答' : examHint(m)"
+              @click="goExam(m)"
+            >
+              {{ canExam(m) ? '去考试' : '暂不可考' }}
+            </button>
+          </div>
+          <p v-if="!canExam(m)" class="shelf-off-note">{{ examHint(m) }}</p>
+        </article>
+      </div>
+    </section>
+
       <section v-if="cardItems.length" class="stack-wrap" :style="stackStyle">
         <div class="stack" :class="{ 'is-flipped': flipped, 'is-leaving': phase === 'leaving', 'is-entering': phase === 'entering', 'is-entering-prev': phase === 'entering-prev' }">
           <!-- 后面的卡：真内容，只露出一条渐变头；容器透明，不会出现白框 -->
@@ -87,7 +140,8 @@
       </section>
 
     <main class="list">
-      <div v-for="m in materials" :key="m.id" class="card" @click="toggleDetail(m)">
+      <!-- L3：讲义/试卷已移到上面的横滑区，这里只排"其余"（视频/文章/卡片），避免同一份资料出现两次 -->
+      <div v-for="m in shelf.rest" :key="m.id" class="card" @click="toggleDetail(m)">
         <div class="m-title">{{ m.title }}</div>
         <div class="m-meta">
           <span class="tag">{{ typeName(m.type) }}</span>
@@ -137,11 +191,36 @@
               <span v-if="detailData.read_time" class="tag">阅读 {{ detailData.read_time }}分钟</span>
             </div>
             <p v-if="detailData.summary" class="summary">{{ detailData.summary }}</p>
+            <!-- L3：讲义/试卷的元数据与原卷下载入口（原来弹层里完全没有） -->
+            <p v-if="detailData.type === 'paper'" class="summary">{{ paperMetaLine(detailData) }}</p>
+            <p v-else-if="detailData.type === 'lecture' && lectureMetaLine(detailData)" class="summary">
+              {{ lectureMetaLine(detailData) }}
+            </p>
             <div class="detail-content" v-html="renderQuestionContent(detailData.content)"></div>
             <div v-if="detailData.card_back" class="detail-card-back" v-html="renderQuestionContent(detailData.card_back)"></div>
+            <div v-if="(detailData.files || []).length" class="modal-files">
+              <p class="modal-files-title">原件（{{ detailData.files!.length }}）</p>
+              <div v-for="f in detailData.files" :key="f.file_id" class="modal-file-row">
+                <span class="modal-file-name">{{ f.file_name }}</span>
+                <em>{{ f.size_label }}</em>
+                <button class="shelf-btn" @click="downloadFile(f)">下载</button>
+              </div>
+            </div>
+            <p v-else-if="detailData.type === 'lecture' || detailData.type === 'paper'" class="empty">
+              这份资料还没有原件，暂时无法下载。
+            </p>
           </template>
         </div>
         <div class="modal-actions">
+          <button
+            v-if="detailData && detailData.type === 'paper'"
+            class="action-btn"
+            :disabled="!canExam(detailData)"
+            :title="canExam(detailData) ? '去考试页作答' : examHint(detailData)"
+            @click="goExam(detailData)"
+          >
+            {{ canExam(detailData) ? '去考试' : '暂不可考' }}
+          </button>
           <button class="action-btn" @click="markStudied">标记已学</button>
           <button class="action-btn" @click="closeDetail">关闭</button>
         </div>
@@ -169,15 +248,28 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { ElMessage } from 'element-plus';
 import { useLibraryStore } from '@/modules/library/store';
 import { collectCardImages } from '@/utils/materialImages';
+import {
+  canExam,
+  examHint,
+  groupShelfItems,
+  lectureMetaLine,
+  paperMetaLine
+} from '@/utils/materialShelf';
+import {
+  downloadMaterialFile,
+  fetchLibraryDetail,
+  type MaterialFileItem
+} from '@/modules/library/api';
 import CardCreateForm from '@/components/materials/CardCreateForm.vue';
 import ImageLightbox from '@/components/materials/ImageLightbox.vue';
 
 const router = useRouter();
+const route = useRoute();
 const library = useLibraryStore();
 const { items: materials, loading, selected: detailData } = storeToRefs(library);
 
@@ -186,7 +278,14 @@ const subjects = [
   { key: 'shenlun', name: '申论' },
   { key: 'gongzhuan', name: '公专' }
 ] as const;
-const activeSubject = ref<'xingce' | 'shenlun' | 'gongzhuan'>('xingce');
+/** 支持 `?subject=` 深链（PC 端"去看公专/申论"、分享链接都能直接落到对应科目） */
+const querySubject = String(route.query.subject || '');
+const initialSubject = (['xingce', 'shenlun', 'gongzhuan'] as const).includes(
+  querySubject as 'xingce' | 'shenlun' | 'gongzhuan'
+)
+  ? (querySubject as 'xingce' | 'shenlun' | 'gongzhuan')
+  : 'xingce';
+const activeSubject = ref<'xingce' | 'shenlun' | 'gongzhuan'>(initialSubject);
 const expandedId = ref<number | null>(null);
 
 // ===== 创建卡片（学生自建，免审批）=====
@@ -248,8 +347,46 @@ const typeName = (t: string) => {
     video_intro: '入门视频',
     video_advanced: '进阶视频',
     article: '文章',
+    lecture: '讲义',
+    paper: '试卷',
     card: '知识卡片'
   }[t] || '资料';
+};
+
+/** L3：讲义 / 试卷 / 其余 —— 与 PC 端同一套分组与"可不可考"口径 */
+const shelf = computed(() =>
+  groupShelfItems((materials.value || []) as any[])
+);
+
+/** 下载原件/原卷：走鉴权端点（原件不在公开目录），失败给明确提示 */
+const downloadOriginals = async (m: any) => {
+  if (!m?.id) return;
+  try {
+    const d = await fetchLibraryDetail(m.id);
+    const files: MaterialFileItem[] = d.files || [];
+    if (!files.length) {
+      ElMessage.warning('这份资料没有原件');
+      return;
+    }
+    for (const f of files) await downloadMaterialFile(f);
+  } catch (e: any) {
+    ElMessage.error('下载失败：' + (e?.message || '网络异常'));
+  }
+};
+
+/** 去考试：与 PC 端一致，只送人到考试页（开考会在账号里留进行中记录） */
+const goExam = (m: any) => {
+  if (!canExam(m)) return;
+  router.push('/student/papers');
+};
+
+/** 弹层里单个原件下载 */
+const downloadFile = async (f: MaterialFileItem) => {
+  try {
+    await downloadMaterialFile(f);
+  } catch (e: any) {
+    ElMessage.error('下载失败：' + (e?.message || '网络异常'));
+  }
 };
 
 const switchSubject = (key: 'xingce' | 'shenlun' | 'gongzhuan') => {
@@ -441,6 +578,148 @@ onMounted(fetchMaterials);
 .tab.active {
   background: #1a2b5f;
   color: #fff;
+}
+/* ===== L3：讲义 / 试卷资料 横滑区 ===== */
+.shelf {
+  padding: 10px 12px 2px;
+  background: #fff;
+  border-bottom: 1px solid #f0f2f5;
+}
+.shelf-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.shelf-head h2 {
+  margin: 0;
+  font-size: 15px;
+  color: #1a2b5f;
+}
+.shelf-hint {
+  font-size: 12px;
+  color: #8a93a8;
+}
+/* 横滑：不换行、可惯性滚动；卡片宽度用百分比，375 宽刚好露出下一张的边 */
+.shelf-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.shelf-row::-webkit-scrollbar {
+  display: none;
+}
+.shelf-card {
+  flex: 0 0 82%;
+  max-width: 320px;
+  background: #fbfcff;
+  border: 1px solid #e3e9f5;
+  border-radius: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.shelf-card h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #1a2b5f;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.shelf-meta {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: #6b7688;
+  line-height: 1.5;
+}
+.shelf-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.shelf-btn {
+  flex: 1;
+  min-height: 32px;
+  border-radius: 8px;
+  border: 1px solid #c9d9f8;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 13px;
+  padding: 0 8px;
+}
+.shelf-btn:disabled {
+  border-color: #e6eaf2;
+  background: #f5f7fa;
+  color: #aab3c2;
+}
+.shelf-btn.primary {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+.shelf-btn.primary:disabled {
+  background: #f5f7fa;
+  border-color: #e6eaf2;
+  color: #aab3c2;
+}
+.shelf-btn.go {
+  flex: 0 0 42%;
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+}
+.shelf-btn.off {
+  flex: 0 0 42%;
+  background: #f5f7fa;
+  border-color: #e6eaf2;
+  color: #aab3c2;
+}
+.shelf-off-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #0f766e;
+  line-height: 1.5;
+}
+/* 弹层内原件列表 */
+.modal-files {
+  margin-top: 12px;
+  border-top: 1px dashed #e6eaf2;
+  padding-top: 10px;
+}
+.modal-files-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #4b5768;
+}
+.modal-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.modal-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1a2b5f;
+}
+.modal-file-row em {
+  font-style: normal;
+  font-size: 12px;
+  color: #8a93a8;
+}
+.modal-file-row .shelf-btn {
+  flex: 0 0 64px;
+  min-height: 28px;
+  font-size: 12px;
 }
 .list {
   flex: 1;

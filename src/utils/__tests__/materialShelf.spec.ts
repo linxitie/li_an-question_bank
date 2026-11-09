@@ -8,6 +8,7 @@ import {
   COLLAPSED,
   examHint,
   fmtDuration,
+  groupShelfItems,
   lectureMetaLine,
   paperMetaLine,
   visibleItems
@@ -96,6 +97,38 @@ describe('visibleItems', () => {
     const arr = Array.from({ length: 6 }, (_, i) => i);
     expect(visibleItems(arr, true)).toHaveLength(COLLAPSED);
     expect(visibleItems(arr, false)).toHaveLength(6);
+  });
+});
+
+describe('groupShelfItems（手机端分组）', () => {
+  it('讲义 / 试卷 / 其余 三分，且保持原顺序', () => {
+    const items = [
+      { id: 1, type: 'article' },
+      { id: 2, type: 'lecture' },
+      { id: 3, type: 'paper' },
+      { id: 4, type: 'card' },
+      { id: 5, type: 'lecture' }
+    ];
+    const g = groupShelfItems(items as any[]);
+    expect(g.lectures.map((x) => x.id)).toEqual([2, 5]);
+    expect(g.papers.map((x) => x.id)).toEqual([3]);
+    expect(g.rest.map((x) => x.id)).toEqual([1, 4]);
+  });
+  it('空输入不炸，三组都是空数组', () => {
+    const g = groupShelfItems([] as any[]);
+    expect(g.lectures).toEqual([]);
+    expect(g.papers).toEqual([]);
+    expect(g.rest).toEqual([]);
+  });
+  it('视频/卡片不会被误分到讲义或试卷', () => {
+    const g = groupShelfItems([
+      { id: 1, type: 'video_intro' },
+      { id: 2, type: 'video_advanced' },
+      { id: 3, type: 'card' }
+    ] as any[]);
+    expect(g.lectures).toHaveLength(0);
+    expect(g.papers).toHaveLength(0);
+    expect(g.rest).toHaveLength(3);
   });
 });
 

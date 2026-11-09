@@ -59,3 +59,30 @@ export const COLLAPSED = 4;
 export function visibleItems<T>(arr: T[], folded: boolean): T[] {
   return folded ? arr.slice(0, COLLAPSED) : arr;
 }
+
+/**
+ * 把一屏资料分成「讲义 / 试卷资料 / 其余」（L3 手机端用）。
+ *
+ * 为什么单独抽：手机页原来把 6 类资料混在一个纵向列表里，讲义与试卷点开只有空白
+ * （详情只渲染 content/card_back）。L3 要给这两类单独做横滑区与专属按钮，
+ * 就需要一个**可测**的分组口径，且 PC 与手机对"哪些进讲义区"的判断必须一致。
+ */
+export interface ShelfGroups<T> {
+  lectures: T[];
+  papers: T[];
+  rest: T[];
+}
+
+export function groupShelfItems<
+  T extends { type: string; paper?: MaterialPaperMeta | null; placement?: string }
+>(items: T[]): ShelfGroups<T> {
+  const lectures: T[] = [];
+  const papers: T[] = [];
+  const rest: T[] = [];
+  for (const it of items || []) {
+    if (it.type === 'lecture') lectures.push(it);
+    else if (it.type === 'paper') papers.push(it);
+    else rest.push(it);
+  }
+  return { lectures, papers, rest };
+}

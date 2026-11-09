@@ -130,20 +130,23 @@
 
         <!-- 卡片：3D 翻转 -->
         <div v-else class="mp-cards">
+          <!-- L2 修正（用户反馈）：点卡片**进入翻卡详情页** `/materials/detail?subject&id=`，
+               与改造前一致（旧页 click 捕获后 push 的就是这个地址）。
+               不要只做就地翻转——用户明确的"点卡片进翻卡页"入口会消失。 -->
           <div
             v-for="it in visible(sec.key)"
             :key="it.id"
-            :class="['mp-flip', { flipped: flipped[it.id] }]"
-            @click="flipped[it.id] = !flipped[it.id]"
+            class="mp-flip"
+            role="button"
+            tabindex="0"
+            @click="openCardDetail(it)"
+            @keydown.enter="openCardDetail(it)"
           >
             <div class="mp-flip-inner">
               <div class="mp-flip-face front">
                 <span class="mp-tag">{{ it.category || '知识点' }}</span>
                 <p>{{ it.card_front || it.title }}</p>
-                <i>👆 点击翻转</i>
-              </div>
-              <div class="mp-flip-face back">
-                <p>{{ it.card_back || '暂无背面内容' }}</p>
+                <i>进入翻卡学习 ›</i>
               </div>
             </div>
           </div>
@@ -299,7 +302,11 @@ const folded = reactive<Record<string, boolean>>({
   paper: false,
   card: false
 });
-const flipped = reactive<Record<number, boolean>>({});
+/** 点卡片 → 进翻卡详情页（与改造前一致：旧页 click 捕获后 push 的就是这个地址） */
+function openCardDetail(it: LibraryMaterial) {
+  if (!it?.id) return;
+  router.push(`/materials/detail?subject=${subject.value}&id=${it.id}`);
+}
 const summary = ref<{ studied: number; total: number; percentage: number } | null>(null);
 
 const pageEmpty = computed(() => SECTIONS.every((s) => !(data[s.key] || []).length));
