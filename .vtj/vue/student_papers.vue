@@ -206,7 +206,11 @@ export default defineComponent({
             progress[pid] = {
               completed: !!r.is_completed,
               score: r.total_score,
-              maxScore: data.max_score || 100,
+              // 2026-11-09 修：原来写的是 `data.max_score || 100` —— `data` 是**列表响应体**
+              // （{total, page, page_size, data:[...]}），根本没有 max_score，于是永远退到 100，
+              // 97 分的卷在卡片上显示成「得分 0 / 100」。改取单条记录的 max_score（没有就留给
+              // 模板里的 `|| p.total_score` 兜底，试卷自己的满分才是权威）。
+              maxScore: r.max_score,
             };
           }
         });
