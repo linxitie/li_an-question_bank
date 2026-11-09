@@ -181,6 +181,19 @@ def _select_daily_db_quote(db: Session) -> Optional[EssayQuote]:
     return db.get(EssayQuote, ids[get_random_int(len(ids))])
 
 
+def _filter_rejected_obsidian(db: Session, quotes: list[dict]) -> list[dict]:
+    """Obsidian 里仍可能保留被 AI 拒绝的原文；按数据库 status=0 过滤。"""
+    rejected = {
+        re.sub(r"\s+", "", row[0] or "")
+        for row in db.query(EssayQuote.content).filter(EssayQuote.status == 0).all()
+    }
+    if not rejected:
+        return quotes
+    return [
+        quote for quote in quotes if re.sub(r"\s+", "", quote.get("content") or "") not in rejected
+    ]
+
+
 @router.get("/quote/daily", summary="每日金句（从 Obsidian 知识库读取）")
 async def get_daily_quote(
     current_user: Optional[SysUser] = Depends(get_optional_user), db: Session = Depends(get_db)
@@ -192,7 +205,7 @@ async def get_daily_quote(
     3. 如果 Obsidian 不可用，回退到 SQLite 数据库
     """
     # 1. 尝试从 Obsidian 读取
-    obsidian_quotes = _read_obsidian_quotes()
+    obsidian_quotes = _filter_rejected_obsidian(db, _read_obsidian_quotes())
     if obsidian_quotes:
         selected = _select_daily_quote(obsidian_quotes)
         if selected:
@@ -370,7 +383,7 @@ async def get_random_quote(
     import random as _rnd
 
     # 1. 尝试从 Obsidian 随机读取
-    obsidian_quotes = _read_obsidian_quotes()
+    obsidian_quotes = _filter_rejected_obsidian(db, _read_obsidian_quotes())
     if obsidian_quotes:
         pool = [
             q for q in obsidian_quotes if q.get("content", "").strip() != (exclude or "").strip()
