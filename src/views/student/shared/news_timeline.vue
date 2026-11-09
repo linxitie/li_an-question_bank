@@ -1,5 +1,5 @@
 <template>
-  <div class="news-timeline-page">
+  <div class="news-timeline-page ds-page">
     <header class="page-head">
       <button class="back-btn" type="button" aria-label="返回" @click="goBack">
         ←
@@ -553,6 +553,286 @@ onMounted(() => {
 
   .news-card h3 {
     font-size: 15px;
+  }
+}
+
+/* ── 内容页统一视觉规范 ───────────────────────────── */
+.news-timeline-page {
+  max-width: 1000px;
+  padding: 36px 28px 64px;
+  background: var(--ds-bg);
+  color: var(--ds-text);
+}
+
+.page-head {
+  align-items: center;
+  padding: 22px 24px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface);
+  box-shadow: var(--ds-shadow);
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  background: #f0f4f8;
+  color: var(--ds-navy);
+  font-size: 19px;
+}
+
+.page-head h1 {
+  color: var(--ds-navy-deep);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.subtitle {
+  color: var(--ds-muted);
+  font-size: 13px;
+}
+
+.news-favorites-link {
+  padding: 8px 13px;
+  border: 1px solid var(--ds-border);
+  border-radius: 9px;
+  background: var(--ds-surface);
+  color: var(--ds-ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: var(--ds-transition);
+}
+
+.news-favorites-link:hover {
+  border-color: var(--ds-ink);
+  box-shadow: 0 4px 12px rgba(47, 93, 80, 0.12);
+}
+
+.tabs {
+  padding: 4px;
+  border-radius: 999px;
+  background: #e9eef4;
+  margin: 20px 0 26px;
+}
+
+.tabs button {
+  padding: 8px 22px;
+  border-radius: 999px;
+  color: #627184;
+  font-size: 13px;
+  font-weight: 600;
+  transition: var(--ds-transition);
+}
+
+.tabs button.active {
+  background: var(--ds-ink);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(47, 93, 80, 0.2);
+}
+
+.panel {
+  gap: 26px;
+}
+
+.day-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-left: 122px;
+  padding-bottom: 8px;
+}
+
+.day-group::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 0;
+  left: 92px;
+  width: 1px;
+  background: #dfe7ef;
+}
+
+.day-title {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 78px;
+  margin: 0;
+  padding: 0;
+  border-left: 0;
+  color: var(--ds-navy);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.news-card {
+  padding: 20px 52px 20px 22px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius);
+  background: var(--ds-surface);
+  box-shadow: var(--ds-shadow);
+  transition: var(--ds-transition);
+}
+
+.news-card:hover,
+.news-card:focus-visible {
+  border-color: #d6e0e8;
+  box-shadow: var(--ds-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.news-card h3 {
+  color: var(--ds-navy-deep);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.summary {
+  margin: 9px 0 0;
+  color: #6b7a90;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.meta span {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #f0f4f8;
+  color: #53657a;
+}
+
+.fav-btn {
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  background: #f4f7fa;
+  color: #aab5c1;
+  font-size: 18px;
+  transition: var(--ds-transition);
+}
+
+.fav-btn:hover {
+  background: #fff7df;
+  color: #d5a52e;
+}
+
+.fav-btn.active {
+  background: #fff7df;
+  color: #d9a72d;
+}
+
+.digest-tools {
+  padding: 14px 16px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius);
+  background: var(--ds-surface);
+  box-shadow: var(--ds-shadow);
+}
+
+.digest-tools input {
+  border-color: var(--ds-border);
+  border-radius: 8px;
+}
+
+.digest-tools button,
+.day-nav button,
+.page-nav button {
+  border: 1px solid var(--ds-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ds-ink);
+  transition: var(--ds-transition);
+}
+
+.digest-tools button:hover,
+.day-nav button:hover,
+.page-nav button:hover {
+  border-color: var(--ds-ink);
+}
+
+.digest-summary {
+  color: #53657a;
+}
+
+.category-tag {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--ds-ink-soft);
+  color: var(--ds-ink);
+  font-size: 12px;
+}
+
+.page-nav {
+  padding-top: 12px;
+}
+
+.state {
+  padding: 64px 16px;
+  color: var(--ds-muted);
+}
+
+@media (max-width: 720px) {
+  .news-timeline-page {
+    padding: 22px 14px 48px;
+  }
+
+  .page-head {
+    padding: 16px;
+  }
+
+  .page-head h1 {
+    font-size: 22px;
+  }
+
+  .news-favorites-link {
+    display: none;
+  }
+
+  .day-group {
+    padding-left: 0;
+    padding-bottom: 14px;
+  }
+
+  .day-group::before {
+    display: none;
+  }
+
+  .day-title {
+    position: static;
+    width: auto;
+    margin: 4px 0 2px;
+    font-size: 16px;
+  }
+
+  .news-card {
+    padding: 16px 44px 16px 16px;
+  }
+
+  .news-card h3 {
+    font-size: 16px;
+  }
+
+  .summary {
+    font-size: 13px;
   }
 }
 </style>

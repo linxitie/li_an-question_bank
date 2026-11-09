@@ -1,69 +1,84 @@
 <template>
-  <div class="quote-browser">
-    <header class="quote-browser__head">
-      <button
-        type="button"
-        class="back-btn"
-        aria-label="返回首页"
-        @click="goHome">
-        ←
-      </button>
-      <div>
-        <h1>金句库</h1>
-        <p>按主题浏览 · 收藏你的申论素材</p>
+  <div class="quote-browser ds-page">
+    <header class="quote-hero">
+      <div class="quote-hero__main">
+        <button
+          type="button"
+          class="back-btn"
+          aria-label="返回首页"
+          @click="goHome">
+          ←
+        </button>
+        <div>
+          <span class="ds-eyebrow">每日金句 · 申论素材</span>
+          <h1>金句库</h1>
+          <p>按主题、作者和关键词，找到能写进申论的那句话。</p>
+        </div>
       </div>
-      <router-link class="favorites-link" to="/quotes/favorites">
+      <router-link class="ds-button ds-button--ghost" to="/quotes/favorites">
         我的收藏 →
       </router-link>
     </header>
 
-    <div class="search-row">
-      <input
-        v-model="keyword"
-        type="search"
-        placeholder="搜索金句内容..."
-        aria-label="搜索金句内容"
-        @keyup.enter="search" />
-      <input
-        v-model="author"
-        type="search"
-        placeholder="作者 / 出处"
-        aria-label="按作者或出处搜索"
-        @keyup.enter="search" />
-      <button type="button" class="search-btn" @click="search">检索</button>
+    <section class="search-panel ds-card">
+      <label class="search-field">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input
+          v-model="keyword"
+          type="search"
+          placeholder="搜索金句内容..."
+          aria-label="搜索金句内容"
+          @keyup.enter="search" />
+      </label>
+      <label class="search-field search-field--author">
+        <span class="search-icon" aria-hidden="true">✎</span>
+        <input
+          v-model="author"
+          type="search"
+          placeholder="作者 / 出处"
+          aria-label="按作者或出处搜索"
+          @keyup.enter="search" />
+      </label>
+      <button type="button" class="search-btn" @click="search">搜索</button>
       <button
         v-if="keyword || author"
         type="button"
-        class="reset-btn"
+        class="ds-button ds-button--ghost reset-btn"
         @click="resetSearch">
         重置
       </button>
-    </div>
+    </section>
 
-    <div class="category-tabs" role="tablist" aria-label="金句分类">
-      <button
-        v-for="category in categories"
-        :key="category"
-        type="button"
-        role="tab"
-        :aria-selected="activeCategory === category"
-        :class="['category-tab', { active: activeCategory === category }]"
-        @click="selectCategory(category)">
-        {{ category }}
-      </button>
+    <div class="filter-row">
+      <div class="category-tabs" role="tablist" aria-label="金句分类">
+        <button
+          v-for="category in categories"
+          :key="category"
+          type="button"
+          role="tab"
+          :aria-selected="activeCategory === category"
+          :class="['category-tab', { active: activeCategory === category }]"
+          @click="selectCategory(category)">
+          {{ category }}
+        </button>
+      </div>
+      <span class="result-count">共 {{ total }} 条</span>
     </div>
-
-    <p class="result-count">共 {{ total }} 条</p>
 
     <div v-if="error" class="state error">
       <p>{{ error }}</p>
-      <button type="button" @click="load">重试</button>
+      <button type="button" class="ds-button ds-button--primary" @click="load">
+        重试
+      </button>
     </div>
     <div v-else-if="loading" class="state">金句加载中...</div>
     <div v-else-if="!items.length" class="state">暂无匹配金句</div>
 
     <div v-else class="quote-list">
-      <article v-for="item in items" :key="item.quote_id" class="quote-card">
+      <article
+        v-for="item in items"
+        :key="item.quote_id"
+        class="quote-card ds-card">
         <div class="quote-card__top">
           <QuoteCategoryTag :category="item.category" />
           <button
@@ -76,15 +91,21 @@
           </button>
         </div>
         <blockquote>{{ item.content }}</blockquote>
-        <footer>
-          <span>{{ item.author || item.source || '佚名' }}</span>
-          <span v-if="item.author && item.source"> · {{ item.source }}</span>
+        <footer class="quote-card__foot">
+          <span class="author">{{ item.author || item.source || '佚名' }}</span>
+          <span v-if="item.author && item.source" class="source">
+            {{ item.source }}
+          </span>
         </footer>
       </article>
     </div>
 
     <div v-if="total > items.length" class="load-more">
-      <button type="button" :disabled="loadingMore" @click="loadMore">
+      <button
+        type="button"
+        class="ds-button ds-button--ghost"
+        :disabled="loadingMore"
+        @click="loadMore">
         {{ loadingMore ? '加载中...' : '加载更多' }}
       </button>
     </div>
@@ -221,197 +242,291 @@ onMounted(() => {
 
 <style scoped>
 .quote-browser {
-  box-sizing: border-box;
-  max-width: 880px;
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: 24px 18px 60px;
-  background: #fbfaf7;
-  color: #1f2321;
+  max-width: 1120px;
 }
 
-.quote-browser__head {
+.quote-hero {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 20px;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
 }
 
-.quote-browser__head h1 {
-  margin: 0;
-  font-size: 24px;
-}
-
-.quote-browser__head p {
-  margin: 5px 0 0;
-  color: #8a928b;
-  font-size: 13px;
-}
-
-.favorites-link {
-  margin-left: auto;
-  padding-top: 5px;
-  color: #2f5d50;
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.search-row {
+.quote-hero__main {
   display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.search-row input {
-  flex: 1;
-  min-width: 0;
-  padding: 9px 12px;
-  border: 1px solid #e3ded4;
-  border-radius: 9px;
-  background: #fff;
-  color: #2f3933;
-  outline: none;
+.quote-hero h1 {
+  margin: 5px 0 4px;
+  color: var(--ds-navy-deep);
+  font-size: 30px;
+  line-height: 1.2;
 }
 
-.search-row input:focus {
-  border-color: #2f5d50;
-}
-
-.search-btn,
-.reset-btn {
-  flex: 0 0 auto;
-  padding: 0 15px;
-  border-radius: 9px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.search-btn {
-  border: 1px solid #2f5d50;
-  background: #2f5d50;
-  color: #fff;
-}
-
-.reset-btn {
-  border: 1px solid #e3ded4;
-  background: #fff;
-  color: #59635c;
-}
-
-.result-count {
-  margin: 0 0 12px;
-  color: #9aa19c;
-  font-size: 12px;
+.quote-hero p {
+  margin: 0;
+  color: var(--ds-muted);
+  font-size: 14px;
 }
 
 .back-btn {
-  padding: 2px 5px;
+  margin-top: 4px;
+  padding: 3px 5px;
   border: 0;
   background: transparent;
-  color: #2f5d50;
-  font-size: 22px;
+  color: var(--ds-navy);
+  font-size: 23px;
+  line-height: 1;
   cursor: pointer;
+}
+
+.search-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 18px;
+  box-shadow: var(--ds-shadow);
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  padding: 0 12px;
+  height: 42px;
+  border: 1px solid var(--ds-border);
+  border-radius: 9px;
+  background: #fbfcfe;
+  transition: var(--ds-transition);
+}
+
+.search-field:focus-within {
+  border-color: var(--ds-ink);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(47, 93, 80, 0.08);
+}
+
+.search-field--author {
+  flex: 0 1 230px;
+}
+
+.search-field input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ds-text);
+  font-size: 14px;
+}
+
+.search-icon {
+  color: var(--ds-subtle);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.search-btn {
+  flex: 0 0 auto;
+  height: 42px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--ds-ink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--ds-transition);
+}
+
+.search-btn:hover {
+  background: var(--ds-ink-deep);
+  box-shadow: 0 5px 14px rgba(47, 93, 80, 0.22);
+}
+
+.reset-btn {
+  height: 42px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
 .category-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 7px;
 }
 
 .category-tab {
-  padding: 6px 13px;
-  border: 1px solid #e3ded4;
-  border-radius: 999px;
-  background: #fff;
-  color: #59635c;
+  padding: 7px 13px;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background: #e9eef4;
+  color: #627184;
   font-size: 13px;
   cursor: pointer;
+  transition: var(--ds-transition);
+}
+
+.category-tab:hover {
+  background: #dfe7ef;
 }
 
 .category-tab.active {
-  border-color: #2f5d50;
-  background: #2f5d50;
+  background: var(--ds-ink);
   color: #fff;
+  box-shadow: 0 4px 12px rgba(47, 93, 80, 0.18);
+}
+
+.result-count {
+  flex: 0 0 auto;
+  color: var(--ds-subtle);
+  font-size: 12px;
 }
 
 .quote-list {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .quote-card {
-  padding: 18px 20px;
-  border: 1px solid #ece8df;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 5px 16px rgba(31, 35, 33, 0.04);
+  display: flex;
+  flex-direction: column;
+  min-height: 190px;
+  padding: 20px 22px;
+  border-radius: var(--ds-radius-md, 14px);
 }
 
 .quote-card__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 24px;
 }
 
 .quote-card blockquote {
-  margin: 13px 0;
-  color: #2f3933;
-  font-size: 16px;
-  line-height: 1.8;
+  flex: 1;
+  margin: 18px 0 20px;
+  color: var(--ds-navy-deep);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.85;
 }
 
-.quote-card footer {
-  color: #8a928b;
+.quote-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--ds-muted);
   font-size: 12px;
 }
 
+.quote-card__foot .source {
+  color: var(--ds-subtle);
+}
+
+.quote-card__foot .source::before {
+  content: '·';
+  margin-right: 8px;
+}
+
 .fav-btn {
+  width: 30px;
+  height: 30px;
   border: 0;
+  border-radius: 50%;
   background: transparent;
-  color: #c9a74a;
+  color: #b8c1cb;
   font-size: 20px;
+  line-height: 1;
   cursor: pointer;
+  transition: var(--ds-transition);
+}
+
+.fav-btn:hover {
+  background: #fff7df;
+  color: #d5a52e;
 }
 
 .fav-btn.active {
-  color: #d0902e;
+  color: #d9a72d;
 }
 
 .state {
-  padding: 36px 0;
-  color: #8a928b;
+  padding: 70px 16px;
+  color: var(--ds-muted);
   text-align: center;
 }
 
 .state.error {
-  color: #9d4436;
+  color: #a33b2d;
 }
 
-.state button,
-.load-more button {
-  margin-top: 8px;
-  padding: 7px 14px;
-  border: 1px solid #d9d3c8;
-  border-radius: 8px;
-  background: #fff;
-  color: #2f5d50;
-  cursor: pointer;
+.state .ds-button {
+  margin-top: 12px;
 }
 
 .load-more {
-  padding-top: 18px;
+  padding-top: 24px;
   text-align: center;
 }
 
+@media (max-width: 800px) {
+  .quote-list {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-hero h1 {
+    font-size: 26px;
+  }
+
+  .search-panel {
+    flex-wrap: wrap;
+  }
+
+  .search-field,
+  .search-field--author {
+    flex: 1 1 100%;
+  }
+
+  .search-btn {
+    flex: 1;
+  }
+}
+
 @media (max-width: 640px) {
-  .quote-browser {
-    padding: 16px 12px 48px;
+  .quote-hero {
+    display: block;
+  }
+
+  .quote-hero .ds-button {
+    margin: 14px 0 0 24px;
+  }
+
+  .filter-row {
+    display: block;
+  }
+
+  .result-count {
+    display: block;
+    margin-top: 10px;
   }
 
   .quote-card {
-    padding: 15px;
+    padding: 17px;
   }
 }
 </style>
