@@ -1,13 +1,26 @@
 <template>
-  <span v-if="category" :class="['quote-category', categoryClass]">
+  <span
+    v-if="category"
+    :class="['quote-category', categoryClass]"
+    role="link"
+    tabindex="0"
+    title="浏览金句库"
+    @click="openBrowser"
+    @keydown.enter="openBrowser">
     {{ category }}
   </span>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useRouter } from 'vue-router';
 
 const props = defineProps<{ category?: string }>();
+const router = useRouter();
+
+function openBrowser(): void {
+  router.push('/quotes');
+}
 
 const categoryClass = computed(() => {
   const value = (props.category || '').toLowerCase();
@@ -28,6 +41,7 @@ const categoryClass = computed(() => {
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .is-law {
