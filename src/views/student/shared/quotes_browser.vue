@@ -12,7 +12,7 @@
         <h1>金句库</h1>
         <p>按主题浏览 · 收藏你的申论素材</p>
       </div>
-      <router-link class="favorites-link" to="/favorites">
+      <router-link class="favorites-link" to="/quotes/favorites">
         我的收藏 →
       </router-link>
     </header>

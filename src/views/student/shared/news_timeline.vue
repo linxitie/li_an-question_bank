@@ -8,6 +8,9 @@
         <h1>新闻时间线</h1>
         <p class="subtitle">已发布新闻 · 按日聚合 · 日报速览</p>
       </div>
+      <router-link class="news-favorites-link" to="/news/favorites">
+        我的收藏 →
+      </router-link>
     </header>
 
     <div class="tabs" role="tablist" aria-label="新闻视图">
@@ -288,6 +291,15 @@ onMounted(() => {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 20px;
+}
+
+.news-favorites-link {
+  margin-left: auto;
+  padding-top: 5px;
+  color: #2f5d50;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .back-btn {

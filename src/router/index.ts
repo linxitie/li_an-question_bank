@@ -65,15 +65,25 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/quotes/favorites',
+    name: 'QuoteFavorites',
+    component: () => import('@/views/student/shared/quote_favorites.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/favorites',
-    name: 'Favorites',
-    component: () => import('$vtj/vue/favorites.vue'),
-    meta: { roles: ['student', 'teacher', 'admin'] }
+    redirect: '/news/favorites'
   },
   {
     path: '/news',
     name: 'NewsTimeline',
     component: () => import('@/views/student/shared/news_timeline.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/news/favorites',
+    name: 'NewsFavorites',
+    component: () => import('@/views/student/shared/news_favorites.vue'),
     meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
   },
   {
