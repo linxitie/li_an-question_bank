@@ -89,6 +89,21 @@
                 · 题量/总分/时长留空时用可作答卷的值
               </p>
 
+              <!-- L4（2026-11-09）：投放位可改。改完后端会立刻同步一次卷状态
+                   （both→library 会把已发布的卷落回 DRAFT，不用等下次上架）。 -->
+              <div class="mmd-sub">投放位</div>
+              <div class="mmd-place">
+                <label
+                  v-for="p in MATERIAL_PLACEMENTS"
+                  :key="p.key"
+                  :class="['mmd-place__opt', { on: form.placement === p.key }]"
+                >
+                  <input v-model="form.placement" type="radio" :value="p.key" :disabled="saving" />
+                  <b>{{ p.label }}</b>
+                  <em>{{ p.hint }}</em>
+                </label>
+              </div>
+
               <div class="mmd-sub">原件</div>
               <div class="mmd-files">
                 <span v-for="f in files" :key="f.file_id" class="mmd-file">
@@ -159,6 +174,7 @@ import {
   type MaterialPreview
 } from '@/modules/library/api';
 import { BOOK_KINDS, PAPER_REGIONS } from '@/utils/paperRegions';
+import { MATERIAL_PLACEMENTS, normalizePlacement } from '@/modules/library/materialTypes';
 import { errorMessage } from '@/utils/apiError';
 import { confirmOverlay, notify } from '@/utils/overlay';
 
@@ -198,7 +214,9 @@ const form = reactive({
   volume: null as number | null,
   questionCount: null as number | null,
   totalScore: null as number | null,
-  duration: null as number | null
+  duration: null as number | null,
+  /** L4：投放位（仅试卷；默认都投，与后端 normalize 一致） */
+  placement: 'both' as 'exam' | 'library' | 'both'
 });
 
 const isPaper = computed(() => preview.value?.type === 'paper');
@@ -238,6 +256,7 @@ function fillFromPreview(pv: MaterialPreview): void {
   form.questionCount = (rawMeta.question_count as number) ?? null;
   form.totalScore = (rawMeta.total_score as number) ?? null;
   form.duration = (rawMeta.duration as number) ?? null;
+  form.placement = normalizePlacement(pv.placement, pv.type);
 }
 
 async function load(): Promise<void> {
@@ -279,7 +298,9 @@ async function save(): Promise<void> {
             volume: form.volume ?? null,
             question_count: form.questionCount ?? null,
             total_score: form.totalScore ?? null,
-            duration: form.duration ?? null
+            duration: form.duration ?? null,
+            // L4：投放位（后端改完立刻同步卷状态）
+            placement: form.placement
           }
         : {})
     });
@@ -399,6 +420,24 @@ defineExpose({ load, save });
 }
 .mmd-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .mmd-tip { margin: 8px 0 0; font-size: 11.5px; color: var(--adm-text-weak); line-height: 1.7; }
+/* L4：投放位三选一（仅试卷） */
+.mmd-place { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.mmd-place__opt {
+  flex: 1 1 190px;
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-ctl);
+  cursor: pointer;
+  background: #fff;
+}
+.mmd-place__opt.on { border-color: var(--adm-blue); background: #f5f8ff; }
+.mmd-place__opt input { grid-row: 1 / span 2; margin-top: 2px; }
+.mmd-place__opt b { font-size: 12.5px; color: var(--adm-text); }
+.mmd-place__opt em { font-style: normal; font-size: 11px; color: var(--adm-text-weak); line-height: 1.5; }
 .mmd-files { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
 .mmd-file {
   display: inline-flex;

@@ -24,3 +24,5 @@ export { default as MaterialPreviewDrawer } from './MaterialPreviewDrawer.vue';
 export { default as MaterialBatchUpload } from './MaterialBatchUpload.vue';
 // C2b（2026-11-08）：改信息弹窗（标题/分类/试卷元数据/补原件）
 export { default as MaterialMetaDialog } from './MaterialMetaDialog.vue';
+// L4（2026-11-09）：文章批量上传（走解析导入，正文可读；与"文件留档"那条区分）
+export { default as ArticleBatchUpload } from './ArticleBatchUpload.vue';

@@ -81,6 +81,23 @@
                 <input v-model="form.category" class="adm-input" :disabled="running" placeholder="如 基础知识" />
               </label>
             </div>
+
+            <!-- L4（2026-11-09）：投放位只对试卷有意义——决定上架后"进考试页 / 进资料库 / 两边都进"。
+                 讲义/文章没有"考试页"这回事，所以不显示（后端也会把非试卷强制成 library）。 -->
+            <div v-if="form.type === 'paper'" class="mbu-place">
+              <div class="mbu-place__label">投放位（上架后往哪儿放）</div>
+              <div class="mbu-place__opts">
+                <label
+                  v-for="p in MATERIAL_PLACEMENTS"
+                  :key="p.key"
+                  :class="['mbu-place__opt', { on: form.placement === p.key }]"
+                >
+                  <input v-model="form.placement" type="radio" :value="p.key" :disabled="running" />
+                  <b>{{ p.label }}</b>
+                  <em>{{ p.hint }}</em>
+                </label>
+              </div>
+            </div>
           </div>
 
           <!-- 3. 队列 -->
@@ -142,6 +159,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { uploadMaterialFile, type LibrarySubject } from '@/modules/library/api';
+import { MATERIAL_PLACEMENTS } from '@/modules/library/materialTypes';
 import {
   MAX_BATCH_BYTES,
   MAX_BATCH_FILES,
@@ -190,7 +208,9 @@ const running = ref(false);
 const form = reactive({
   subject: 'gongzhuan' as LibrarySubject,
   type: props.presetType,
-  category: ''
+  category: '',
+  /** L4：投放位（默认都投 = 改造前行为）；只在 type=paper 时提交 */
+  placement: 'both' as 'exam' | 'library' | 'both'
 });
 
 const plan = computed(() => planUploadGroups(picked.value.map((f) => ({ name: f.name, size: f.size }))));
@@ -289,6 +309,8 @@ async function start(): Promise<void> {
         subject: form.subject,
         type: form.type,
         category: form.category,
+        // 只有试卷才有投放位；讲义/文章不传（后端强制 library）
+        placement: form.type === 'paper' ? form.placement : undefined,
         onProgress: (p) => {
           // 配对组里主文件占前 80%，附件占后 20%
           row.percent = ext.attachFile ? Math.round(p * 0.8) : p;
@@ -439,6 +461,26 @@ defineExpose({ buildRows });
 .mbu-group__size { flex-shrink: 0; color: var(--adm-text-weak); }
 .mbu-form { display: flex; gap: 12px; flex-wrap: wrap; }
 .mbu-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--adm-text-mid); }
+/* L4：投放位三选一（仅试卷显示） */
+.mbu-place { margin-top: 12px; }
+.mbu-place__label { font-size: 12px; font-weight: 700; color: var(--adm-text-mid); margin-bottom: 6px; }
+.mbu-place__opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.mbu-place__opt {
+  flex: 1 1 190px;
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-r-ctl);
+  cursor: pointer;
+  background: #fff;
+}
+.mbu-place__opt.on { border-color: var(--adm-blue); background: #f5f8ff; }
+.mbu-place__opt input { grid-row: 1 / span 2; margin-top: 2px; }
+.mbu-place__opt b { font-size: 12.5px; color: var(--adm-text); }
+.mbu-place__opt em { font-style: normal; font-size: 11px; color: var(--adm-text-weak); line-height: 1.5; }
 .mbu-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .mbu-row {
   display: grid;

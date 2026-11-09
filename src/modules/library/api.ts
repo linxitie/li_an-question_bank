@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 备考资料（library）域 API 封装（P2-37）。
  *
  * 后端端点挂在 `/api/materials`（api_surface.json 冻结口径），
@@ -366,6 +366,8 @@ export interface MaterialPreview {
   summary: string | null;
   subject: LibrarySubject;
   subject_label: string;
+  /** L4：投放位（exam/library/both；非试卷恒 library） */
+  placement?: 'exam' | 'library' | 'both';
   category: string | null;
   status: number;
   badge: string | null;
@@ -473,6 +475,8 @@ export interface UploadFileParams {
   title?: string;
   /** 有值 = 挂到这条资料当附件（双格式配对的第二步） */
   materialId?: number;
+  /** L4：投放位（仅试卷有意义；不传 = 后端默认：试卷 both、其它 library） */
+  placement?: 'exam' | 'library' | 'both';
   /** 上传进度 0–100（浏览器在本地算，服务端不参与） */
   onProgress?: (percent: number) => void;
 }
@@ -492,6 +496,8 @@ export async function uploadMaterialFile(params: UploadFileParams): Promise<Uplo
   if (params.category) form.append('category', params.category);
   if (params.title) form.append('title', params.title);
   if (params.materialId != null) form.append('material_id', String(params.materialId));
+  // L4：投放位（仅 type=paper 有意义；后端对非试卷传 exam/both 会 400，所以只在该传时传）
+  if (params.placement) form.append('placement', params.placement);
 
   const response = await libraryClient.request<UploadFileResult>({
     url: '/api/materials/admin/files/upload',
@@ -595,5 +601,69 @@ export function fetchAdminMaterialList(
       page: query.page ?? 1,
       page_size: query.pageSize ?? 20
     }
+  });
+}
+
+// ==================== 解析导入链路（L4 文章批量上传用）====================
+
+export interface MaterialImportUploadResult {
+  import_id: number;
+  parse_status: 'success' | 'failed' | 'processing' | string;
+  error_message?: string;
+}
+
+/**
+ * 上传素材并解析（管理端「智能导入」第 1 步）。
+ *
+ * 为什么文章批量要走这条而不是 `uploadMaterialFile`：后者只留档不解析，
+ * 文章详情页要读 `content` 正文，留档路径拿不到正文 → 学生点开是空白。
+ * 本接口会同步解析 docx/文字版 pdf，正文可用；扫描版 pdf 会转异步 OCR。
+ */
+export async function importMaterialFile(file: File): Promise<MaterialImportUploadResult> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const response = await libraryClient.request<MaterialImportUploadResult>({
+    url: '/api/materials/admin/import/upload',
+    method: 'POST',
+    baseURL: '',
+    data: form,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  });
+  return response.data;
+}
+
+export interface MaterialImportStatusResult {
+  import_id: number;
+  parse_status: 'success' | 'failed' | 'processing' | string;
+  error_message?: string;
+  result?: unknown;
+}
+
+/** 轮询解析状态（前端 3s 一次；扫描版 pdf 会经历 processing） */
+export function fetchMaterialImportStatus(importId: number): Promise<MaterialImportStatusResult> {
+  return request<MaterialImportStatusResult>({
+    url: `/api/materials/admin/import/${importId}/status`,
+    method: 'GET'
+  });
+}
+
+export interface MaterialImportConfirmResult {
+  created: number;
+  material_ids: number[];
+  type?: string;
+  published?: boolean;
+  skipped_count?: number;
+}
+
+/** 确认入库（文章批量：type='article'；默认未上架，与上传路径一致） */
+export function confirmMaterialImport(
+  importId: number,
+  body: { subject: LibrarySubject; type: 'article' | 'lecture'; title?: string; publish?: boolean }
+): Promise<MaterialImportConfirmResult> {
+  return request<MaterialImportConfirmResult>({
+    url: `/api/materials/admin/import/${importId}/confirm`,
+    method: 'POST',
+    data: body
   });
 }

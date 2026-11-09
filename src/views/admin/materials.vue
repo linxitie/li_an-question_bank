@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mm-page">
     <AdminPageHeader
       title="资料管理"
@@ -10,6 +10,10 @@
         <button class="adm-btn" :disabled="loading" @click="openUpload('paper')">＋ 上传试卷</button>
         <button class="adm-btn adm-btn--primary" :disabled="loading" @click="openUpload('lecture')">
           批量导入
+        </button>
+        <!-- L4（2026-11-09）：文章要正文，走"解析导入"链路（逐条上传→解析→入库） -->
+        <button class="adm-btn adm-btn--line" :disabled="loading" @click="articleUploadOpen = true">
+          批量上传文章
         </button>
       </template>
     </AdminPageHeader>
@@ -120,6 +124,8 @@
             <th>标题 / 类型</th>
             <th style="width: 60px">科目</th>
             <th style="width: 100px">分类</th>
+            <!-- L4（2026-11-09）：投放位（仅试卷有意义）——上架后"进考试页/进资料库/两边都进" -->
+            <th style="width: 92px" title="仅试卷类有意义：考试=只在考试页；资料=只在资料库；都投=两边都放">投放位</th>
             <th style="width: 146px">发布者</th>
             <th class="mm-sortable" style="width: 132px" @click="toggleOrder"
                 title="按真实上传时间排序（NULL 恒排最后）；编号列始终按列表时间倒序">
@@ -132,7 +138,7 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td :colspan="isRecycleView ? 9 : 10" class="mm-loading">加载中…</td>
+            <td :colspan="isRecycleView ? 10 : 11" class="mm-loading">加载中…</td>
           </tr>
           <tr v-for="row in rows" :key="row.id">
             <td v-if="!isRecycleView">
@@ -167,6 +173,12 @@
             </td>
             <td>{{ subjectLabel(row.subject) }}</td>
             <td>{{ row.category || '—' }}</td>
+            <td>
+              <AdminTag v-if="row.type === 'paper'" :tone="placementTone(row.placement)">
+                {{ placementLabel(row.placement) }}
+              </AdminTag>
+              <span v-else>—</span>
+            </td>
             <td class="mm-pub-cell">
               <span v-if="row.publisher" class="mm-pub">
                 {{ row.publisher.name }}<span class="mm-role">（{{ row.publisher.role_label }}）</span>
@@ -247,6 +259,14 @@
       @close="uploadOpen = false"
       @done="onUploaded"
     />
+
+    <!-- L4：文章批量上传（走解析导入，正文可读） -->
+    <ArticleBatchUpload
+      :open="articleUploadOpen"
+      :default-subject="articleDefaultSubject"
+      @close="articleUploadOpen = false"
+      @done="onUploaded"
+    />
   </div>
 </template>
 
@@ -273,9 +293,17 @@ import {
   AdminToolbar,
   MaterialPreviewDrawer,
   MaterialBatchUpload,
-  MaterialMetaDialog
+  MaterialMetaDialog,
+  ArticleBatchUpload
 } from '@/components/admin';
-import { MATERIAL_TYPES, materialTypeLabel } from '@/modules/library/materialTypes';
+import {
+  MATERIAL_PLACEMENTS,
+  MATERIAL_TYPES,
+  materialTypeLabel,
+  normalizePlacement,
+  placementLabel,
+  placementTone
+} from '@/modules/library/materialTypes';
 import { BOOK_KINDS, PAPER_REGIONS } from '@/utils/paperRegions';
 import { parseListQuery } from '@/utils/materialListQuery';
 import { errorMessage } from '@/utils/apiError';
@@ -684,6 +712,10 @@ async function batchRemove(): Promise<void> {
 
 // ---------------- 批量导入（B2） ----------------
 const uploadOpen = ref(false);
+/** L4：文章批量上传（解析链路） */
+const articleUploadOpen = ref(false);
+/** 文章批量上传的默认科目：跟当前筛选走（没筛就公专） */
+const articleDefaultSubject = computed(() => (filters.subject || 'gongzhuan') as 'xingce' | 'shenlun' | 'gongzhuan');
 const uploadType = ref<'article' | 'lecture' | 'paper'>('lecture');
 
 /** 「＋ 上传试卷」预置 paper，「批量导入」预置 lecture（对话框里仍可改） */

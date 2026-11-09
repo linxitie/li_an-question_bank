@@ -64,3 +64,50 @@ export function isVideoMaterialType(key?: string | null): boolean {
 export function isDualFormatMaterialType(key?: string | null): boolean {
   return MATERIAL_TYPES.some((t) => t.key === key && t.dualFormat);
 }
+
+// ==================== 投放位（L4，2026-11-09）====================
+
+export type MaterialPlacement = 'exam' | 'library' | 'both';
+
+export interface PlacementMeta {
+  key: MaterialPlacement;
+  /** 下拉/徽标统一文案 */
+  label: string;
+  /** 一句话解释（上传弹窗与改信息共用，避免各处措辞不一） */
+  hint: string;
+}
+
+/**
+ * 投放位登记表：与后端 `PLACEMENTS = {exam, library, both}` 一一对应。
+ * 为什么放这里：上传弹窗（三选一）、列表徽标（考试/资料/都投）、改信息弹窗三处都要文案，
+ * 集中一份才不会出现"考试页 / 仅考试 / 只考试"三种说法。
+ */
+export const MATERIAL_PLACEMENTS: readonly PlacementMeta[] = [
+  { key: 'exam', label: '仅考试页', hint: '学生只在「考试」里遇到它，资料库里不出现' },
+  { key: 'library', label: '仅资料页', hint: '学生只能看/下载原卷，不能在线作答' },
+  { key: 'both', label: '都投', hint: '两边都有（等同于现在的行为）' }
+];
+
+/** 列表徽标用的短文案 */
+export function placementLabel(key?: string | null): string {
+  if (key === 'exam') return '考试';
+  if (key === 'library') return '资料';
+  if (key === 'both') return '都投';
+  return '—';
+}
+
+/** 徽标色调（AdminTag 的 tone） */
+export function placementTone(key?: string | null): 'info' | 'muted' | 'ok' {
+  if (key === 'exam') return 'info';
+  if (key === 'library') return 'muted';
+  return 'ok';
+}
+
+/** 归一化：NULL/脏值 → 试卷默认 both，其它类型 library（与后端同一口径） */
+export function normalizePlacement(
+  key?: string | null,
+  type?: string | null
+): MaterialPlacement {
+  if (key === 'exam' || key === 'library' || key === 'both') return key;
+  return type === 'paper' ? 'both' : 'library';
+}
