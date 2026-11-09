@@ -130,12 +130,14 @@ def init_scheduler():
 
     def _sync_quotes_with_broadcast():
         from ..core.database import SessionLocal
+        from .quote_ai_service import review_quotes
         from .quote_sync_service import sync_obsidian_quotes
 
         db = SessionLocal()
         try:
             report = sync_obsidian_quotes(db)
-            logger.info("金句自动同步完成: %s", report)
+            quality = review_quotes(db, limit=30, apply=True)
+            logger.info("金句自动同步完成: sync=%s quality=%s", report, quality)
         except Exception:
             logger.exception("金句自动同步失败")
         finally:

@@ -50,6 +50,9 @@ def sync_obsidian_quotes(db: Session) -> dict[str, Any]:
                 existing.category = category
                 changed = True
             if changed:
+                existing.ai_quality = "pending"
+                existing.ai_quality_reason = None
+                existing.ai_reviewed_at = None
                 updated += 1
             else:
                 skipped += 1
