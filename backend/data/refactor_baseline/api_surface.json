@@ -827,7 +827,7 @@
     "domain": "library",
     "prefix": "/api/materials",
     "router_instances": 1,
-    "endpoint_count": 22,
+    "endpoint_count": 28,
     "endpoints": [
       {
         "method": "GET",
@@ -960,6 +960,42 @@
         "path": "/admin/{material_id}/exam-window",
         "fn": "admin_set_exam_window",
         "line": 1951
+      },
+      {
+        "method": "POST",
+        "path": "/admin/{material_id}/parse",
+        "fn": "admin_parse_material",
+        "line": 0
+      },
+      {
+        "method": "GET",
+        "path": "/admin/parse-drafts",
+        "fn": "admin_list_parse_drafts",
+        "line": 0
+      },
+      {
+        "method": "GET",
+        "path": "/admin/parse-drafts/{draft_id}",
+        "fn": "admin_get_parse_draft",
+        "line": 0
+      },
+      {
+        "method": "PUT",
+        "path": "/admin/parse-drafts/{draft_id}/items",
+        "fn": "admin_update_parse_items",
+        "line": 0
+      },
+      {
+        "method": "POST",
+        "path": "/admin/parse-drafts/{draft_id}/confirm",
+        "fn": "admin_confirm_parse_draft",
+        "line": 0
+      },
+      {
+        "method": "DELETE",
+        "path": "/admin/parse-drafts/{draft_id}",
+        "fn": "admin_discard_parse_draft",
+        "line": 0
       }
     ]
   },

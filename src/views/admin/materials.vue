@@ -168,13 +168,30 @@
                 <span class="adm-mono">{{ paperCodeOf(row) || '—' }}</span>
                 <span v-if="row.category" class="mm-dot">·</span>
                 <span v-if="row.category">{{ row.category }}</span>
+                <!-- 2026-11-09 修：管理端列表此前没算原件数（恒 0），后端补上后这里才有意义 -->
+                <span v-if="row.file_count" class="mm-dot">·</span>
+                <span v-if="row.file_count">原件 {{ row.file_count }}</span>
+                <!-- P3：解析草稿状态（点一下进「导题确认」） -->
+                <span
+                  v-if="parseChip(row)"
+                  class="mm-parse"
+                  :class="`is-${row.parse_draft?.status}`"
+                  :title="parseChipTitle(row)"
+                  @click="openDraft(row)"
+                >{{ parseChip(row) }}</span>
               </div>
               <!-- C1：讲义行给规模，便于一眼判断"是不是那份长讲义" -->
               <div v-else-if="row.type === 'lecture'" class="mm-sub">
                 <span v-if="row.chapter_count">{{ row.chapter_count }} 章</span>
                 <span v-if="row.chapter_count && row.word_count" class="mm-dot">·</span>
                 <span v-if="row.word_count">{{ formatWords(row.word_count) }}</span>
-                <span v-if="!row.chapter_count && !row.word_count">未解析大纲</span>
+                <span v-if="!row.chapter_count && !row.word_count">
+                  {{ row.file_count ? `原件 ${row.file_count}` : '未解析大纲' }}
+                </span>
+                <template v-else>
+                  <span v-if="row.file_count" class="mm-dot">·</span>
+                  <span v-if="row.file_count">原件 {{ row.file_count }}</span>
+                </template>
               </div>
             </td>
             <td>{{ subjectLabel(row.subject) }}</td>
@@ -247,21 +264,29 @@
               </template>
               <template v-else>
                 <!-- A2（2026-11-08）：试卷资料 → 题库里的可作答卷（DRAFT；上架后经 P5 自动 PUBLISHED）。
-                     没有编号的试卷资料不显示（后端也会 400 并提示先补编号）。 -->
+                     没有编号的试卷资料不显示；已有卷时不显示（P1 起上传即建卷，重复建没有意义）。 -->
                 <a
-                  v-if="row.type === 'paper' && paperCodeOf(row)"
+                  v-if="row.type === 'paper' && paperCodeOf(row) && !row.exam?.known"
                   class="mm-op"
                   title="在题库里为这份试卷资料建一张可作答卷（草稿；资料上架后学生即可考）"
                   @click="ensurePaper(row)"
                 >建卷</a>
+                <!-- P3（2026-11-09）：导题。有草稿 → 打开确认页；没草稿 → 直接解析原件 -->
+                <a
+                  v-if="row.type === 'paper' && row.file_count"
+                  class="mm-op"
+                  :title="row.parse_draft?.status === 'pending'
+                    ? `打开导题确认（已拆出 ${row.parse_draft.item_count} 题）`
+                    : '解析原件里的题目（docx/pdf），先出待确认清单再入库'"
+                  @click="openDraft(row)"
+                >{{ row.parse_draft?.status === 'pending' ? '待确认' : '导题' }}</a>
                 <a class="mm-op" @click="openMeta(row)">改信息</a>
                 <a class="mm-op is-danger" @click="remove(row)">删除</a>
               </template>
             </td>
           </tr>
         </tbody>
-      </table>
-      <template #footer>
+      </table>      <template #footer>
         <div class="mm-pager">
           <span>共 {{ total }} 条 · 每页 {{ pageSize }}</span>
           <button class="adm-btn adm-btn--sm adm-btn--line" :disabled="page <= 1" @click="goto(page - 1)">上一页</button>
@@ -313,6 +338,16 @@
       @close="articleUploadOpen = false"
       @done="onUploaded"
     />
+
+    <!-- P3（2026-11-09）：导题确认抽屉（拆题结果逐题核对 → 确认入库） -->
+    <ParseDraftDrawer
+      :open="draftOpen"
+      :draft-id="draftId"
+      :material-id="draftMaterialId"
+      @close="draftOpen = false"
+      @confirmed="onDraftConfirmed"
+      @discarded="onDraftDiscarded"
+    />
   </div>
 </template>
 
@@ -341,7 +376,8 @@ import {
   MaterialBatchUpload,
   MaterialMetaDialog,
   ArticleBatchUpload,
-  ExamGateDialog
+  ExamGateDialog,
+  ParseDraftDrawer
 } from '@/components/admin';
 import {
   MATERIAL_PLACEMENTS,
@@ -370,6 +406,7 @@ import {
   fetchAdminMaterialStats,
   fetchMaterialPreview,
   libraryClient,
+  parseMaterialPaper,
   setMaterialExamOpen,
   type AdminMaterialListItem,
   type LibraryExamState,
@@ -698,6 +735,86 @@ function onExamWindowSaved(state: LibraryExamState): void {
   const target = rows.value.find((r) => r.id === examWinId.value);
   if (target) target.exam = state;
   examWinOpen.value = false;
+}
+
+// ---------------- 导题（P3，2026-11-09） ----------------
+const draftOpen = ref(false);
+const draftId = ref<number | null>(null);
+const draftMaterialId = ref<number | null>(null);
+/** 正在解析的行（禁用重复点击） */
+const parsingId = ref<number | null>(null);
+
+/** 标题下那枚状态小标签：待确认 N 题 / 解析失败 / 已入库 N 题 */
+function parseChip(row: AdminMaterialListItem): string {
+  const d = row.parse_draft;
+  if (!d) return '';
+  if (d.status === 'pending') return `待确认 ${d.item_count} 题`;
+  if (d.status === 'failed') return '解析失败';
+  if (d.status === 'confirmed') return `已入库 ${d.item_count} 题`;
+  return '';
+}
+
+function parseChipTitle(row: AdminMaterialListItem): string {
+  const d = row.parse_draft;
+  if (!d) return '';
+  if (d.status === 'pending') return `点开核对这 ${d.item_count} 题，确认后才写进题库`;
+  if (d.status === 'failed') return d.message || '解析失败，可点「导题」重试';
+  if (d.status === 'confirmed') return d.message || '这些题已经入库';
+  return '';
+}
+
+/** 「导题」入口：有 pending 草稿 → 打开确认页；否则先解析再打开 */
+async function openDraft(row: AdminMaterialListItem): Promise<void> {
+  const d = row.parse_draft;
+  if (d && d.status === 'pending') {
+    draftId.value = d.draft_id;
+    draftMaterialId.value = row.id;
+    draftOpen.value = true;
+    return;
+  }
+  if (d && d.status === 'confirmed') {
+    // 已入库：允许"再解析一遍"（改版原件时用），但要说清楚会发生什么
+    try {
+      await confirmOverlay(
+        '这套卷的题已经入库了。重新解析会生成一份新的待确认清单，不会动已入库的题；'
+          + '确认入库时才会问你要不要覆盖。继续？',
+        '重新解析',
+        { confirmButtonText: '重新解析', cancelButtonText: '取消', type: 'warning' }
+      );
+    } catch {
+      return;
+    }
+  }
+  if (parsingId.value === row.id) return;
+  parsingId.value = row.id;
+  try {
+    const brief = await parseMaterialPaper(row.id);
+    row.parse_draft = brief;
+    if (brief.status === 'pending') {
+      draftId.value = brief.draft_id;
+      draftMaterialId.value = row.id;
+      draftOpen.value = true;
+      ElMessage.success(`已拆出 ${brief.item_count} 题，请核对后点「确认入库」`);
+    } else {
+      ElMessage.error(brief.message || '解析失败，请检查原件是不是题本');
+    }
+  } catch (e) {
+    ElMessage.error(errorMessage(e, '解析失败'));
+  } finally {
+    parsingId.value = null;
+  }
+}
+
+/** 入库成功：刷新列表（卷题量、考试状态都会变） */
+async function onDraftConfirmed(payload: { draftId: number; created: number }): Promise<void> {
+  draftOpen.value = false;
+  await reload();
+  ElMessage.success(`已入库 ${payload.created} 题；若资料已上架，这张卷现在学生就能考了`);
+}
+
+async function onDraftDiscarded(): Promise<void> {
+  draftOpen.value = false;
+  await reload();
 }
 
 /** 从回收站恢复：status -1 → 0（未上架），需管理员再点「上架」才对学生可见 */
@@ -1072,6 +1189,20 @@ onMounted(reload);
 }
 .mm-exam__timer:hover { text-decoration: underline; }
 .mm-exam__timer.is-muted { color: var(--adm-text-weak); }
+
+/* P3：解析草稿小标签（点开 = 导题确认） */
+.mm-parse {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mm-parse.is-pending { background: #fff2e2; color: #b4620a; }
+.mm-parse.is-failed { background: var(--adm-danger-weak, #fdeceb); color: var(--adm-danger, #d9463b); }
+.mm-parse.is-confirmed { background: #eafaf1; color: var(--adm-ok, #12a150); }
+.mm-parse:hover { text-decoration: underline; }
 .mm-op {
   color: var(--adm-primary);
   font-weight: 600;

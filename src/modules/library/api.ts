@@ -599,6 +599,47 @@ export interface MaterialChapter {
   paper_book_kind?: string | null;
   /** P2：考试可进入状态（仅试卷行有；未建卷为 {known:false}） */
   exam?: LibraryExamState | null;
+  /** P3：最近一条解析草稿（列表据此显示「待确认 N 题 / 解析失败 / 已入库」） */
+  parse_draft?: ParseDraftBrief | null;
+}
+
+/**
+ * 解析草稿摘要（P3，2026-11-09）。
+ *
+ * 状态机：`pending` 待确认 → `confirmed` 已入库 / `discarded` 已放弃 / `failed` 解析失败。
+ * 关键点：拆题**不直接入库**，先在管理端给人看一眼（错位入库＝学生做错题）。
+ */
+export interface ParseDraftBrief {
+  draft_id: number;
+  material_id: number;
+  paper_id: number | null;
+  status: 'pending' | 'confirmed' | 'discarded' | 'failed' | string;
+  source_ext: string | null;
+  item_count: number;
+  message: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  title?: string | null;
+  warnings?: string[];
+  paper_code?: string | null;
+}
+
+/** 草稿里的一道题（确认页可改题号/题型、删误拆） */
+export interface ParseDraftItem {
+  no: number;
+  type: '单选' | '多选' | '判断' | string;
+  stem: string;
+  options: { A: string; B: string; C: string; D: string };
+  /** 情境材料（组内共享；只挂在组里第一题上也行，入库时会带给同组每题） */
+  shared: string;
+  section: number;
+  images: Array<{ name: string; width?: number | null; height?: number | null }>;
+  flags: string[];
+}
+
+export interface ParseDraftDetail extends ParseDraftBrief {
+  items: ParseDraftItem[];
+  can_edit: boolean;
 }
 
 /** 管理端列表查询（A2 新增 created_within / order / publisher_id） */
@@ -764,4 +805,81 @@ export async function setMaterialExamWindow(
     data: payload
   });
   return res.data.exam;
+}
+
+// ==================== 上传即导题（P3，2026-11-09）====================
+
+/** 解析这条资料的主文件（docx/pdf）→ 生成「待确认」草稿；可重复调用（重试） */
+export async function parseMaterialPaper(materialId: number): Promise<ParseDraftBrief> {
+  const res = await libraryClient.request<ParseDraftBrief & { ok: boolean }>({
+    url: `/api/materials/admin/${materialId}/parse`,
+    method: 'POST',
+    baseURL: '',
+    timeout: 180000        // 大 PDF 拆题 + 抽图，放宽容超时
+  });
+  return res.data;
+}
+
+export function fetchParseDraft(draftId: number): Promise<ParseDraftDetail> {
+  return request<ParseDraftDetail>({
+    url: `/api/materials/admin/parse-drafts/${draftId}`,
+    method: 'GET'
+  });
+}
+
+export function fetchParseDrafts(status = 'pending'): Promise<{ total: number; items: ParseDraftBrief[] }> {
+  return request<{ total: number; items: ParseDraftBrief[] }>({
+    url: '/api/materials/admin/parse-drafts',
+    method: 'GET',
+    params: { status }
+  });
+}
+
+/** 整表保存草稿题目（改题号/题型、删误拆）；后端会校验题号不重复、题干非空、题型合法 */
+export async function saveParseDraftItems(
+  draftId: number,
+  items: ParseDraftItem[]
+): Promise<ParseDraftBrief> {
+  const res = await libraryClient.request<ParseDraftBrief>({
+    url: `/api/materials/admin/parse-drafts/${draftId}/items`,
+    method: 'PUT',
+    baseURL: '',
+    data: { items }
+  });
+  return res.data;
+}
+
+export interface ParseConfirmResult {
+  ok: boolean;
+  paper_id: number;
+  created: number;
+  replaced: number;
+  question_ids: number[];
+  warnings?: string[];
+  paper_sync?: { before?: string | null; after?: string | null } | null;
+}
+
+/** 确认入库：题目写题库 + 挂卷 + 图片落地；卷里已有题时必须 replace=true */
+export async function confirmParseDraft(
+  draftId: number,
+  body: { replace?: boolean; subject_id?: number } = {}
+): Promise<ParseConfirmResult> {
+  const res = await libraryClient.request<ParseConfirmResult>({
+    url: `/api/materials/admin/parse-drafts/${draftId}/confirm`,
+    method: 'POST',
+    baseURL: '',
+    data: body,
+    timeout: 180000
+  });
+  return res.data;
+}
+
+/** 放弃草稿（删草稿图片；正式题目/图片目录不受影响） */
+export async function discardParseDraft(draftId: number): Promise<{ ok: boolean; status: string }> {
+  const res = await libraryClient.request<{ ok: boolean; status: string }>({
+    url: `/api/materials/admin/parse-drafts/${draftId}`,
+    method: 'DELETE',
+    baseURL: ''
+  });
+  return res.data;
 }

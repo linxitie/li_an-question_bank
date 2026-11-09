@@ -1537,6 +1537,56 @@ class MaterialFile(Base):
     )
 
 
+class PaperParseDraft(Base):
+    """试卷解析草稿（P3，2026-11-09）：上传的 docx/pdf 拆出来的"待确认题目"。
+
+    为什么要有这一层（用户决策 ④）：自动拆题在 2024 国考那套卷上验证过，但**不同来源排版差异极大**，
+    自动直入一旦错位，学生做到的就是错题。所以解析结果先落"草稿"，
+    管理员在管理端逐题看一眼（可改题号/题型、删误拆），点「确认入库」才写 `question_bank`。
+
+    生命周期：
+      pending（刚解析完，等确认）→ confirmed（已入库，保留记录便于追溯）
+                                  → discarded（人工放弃）
+                                  → failed（解析失败，`message` 写原因，可重试）
+
+    保留期（决策 S3）：`expires_at` = 解析后 30 天；到期由 `paper_ingest.cleanup_expired`
+    只清 **pending/discarded** 的 `items_json` 与草稿图片目录，`confirmed` 只留摘要。
+
+    `items_json` 结构（列表，每题一项）：:
+
+        {"no": 12, "type": "单选", "stem": "……", "options": {"A": "…", "B": "…"},
+         "shared": "情境材料(可空)", "section": 1,
+         "images": [{"name": "p3_12_1.png", "width": 640, "height": 320}],
+         "flags": ["选项不全", "依赖图"]}
+
+    图片在解析时就写到 `images_dir`（草稿私有目录），确认入库时才复制到
+    `app/static/questions/{qid}/` —— 这样"放弃"不会在正式图片目录里留垃圾。
+    """
+    __tablename__ = "paper_parse_draft"
+
+    draft_id = Column(Integer, primary_key=True, autoincrement=True)
+    material_id = Column(Integer, ForeignKey("study_material.material_id"),
+                         nullable=False, comment="来源资料")
+    paper_id = Column(Integer, comment="确认入库后挂到哪张卷（解析时按 paper_code 解析，可空）")
+    status = Column(String(16), default="pending", nullable=False,
+                    comment="pending / confirmed / discarded / failed")
+    source_ext = Column(String(10), comment="docx / pdf")
+    item_count = Column(Integer, default=0, comment="拆出多少题")
+    items_json = Column(Text, comment="题目草稿（JSON 数组，见类文档）")
+    warnings_json = Column(Text, comment="整卷级告警（缺号/选项不全比例等）")
+    message = Column(String(500), comment="失败原因 / 确认结果摘要")
+    images_dir = Column(String(500), comment="草稿图片目录（相对 storage 根），确认后不再使用")
+    created_by = Column(BigInteger, ForeignKey("sys_user.user_id"))
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    expires_at = Column(DateTime, comment="保留到什么时候（S3：解析后 30 天）")
+
+    __table_args__ = (
+        Index("idx_paper_parse_draft_material", material_id),
+        Index("idx_paper_parse_draft_status", status),
+    )
+
+
 # ------------------------------
 # 新闻资讯模型（新增）
 # ------------------------------

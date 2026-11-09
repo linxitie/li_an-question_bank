@@ -255,3 +255,32 @@ class TestContentAddressing:
             material_files.resolve_abs_path(row).unlink()
         except FileNotFoundError:
             pass
+
+
+class TestAdminListFileCount:
+    """2026-11-09 修：管理端列表的 `file_count` 曾是恒 0。
+
+    原因：`admin_list` 调 `_item_brief(m)` 时没传原件数（公共列表传了）。
+    表现：列表显示"没有原件"，可预览抽屉里原件明明在 —— 同一份资料两个接口两种说法。
+    """
+
+    def test_admin_list_reports_real_file_count(self, imported, client, admin_headers):
+        payload, material, rows = imported
+        mid = material.material_id
+        resp = client.get("/api/materials/admin/list?type=lecture&page_size=50",
+                          headers=admin_headers)
+        assert resp.status_code == 200, resp.text
+        item = next(i for i in resp.json()["items"] if i["id"] == mid)
+        assert item["file_count"] == len(rows) == 1
+        assert item["has_files"] is True
+
+    def test_admin_list_zero_when_no_file(self, client, admin_headers, db_session):
+        m = StudyMaterial(subject="gongzhuan", type="lecture", title="没有原件的讲义",
+                          content="c", status=0)
+        db_session.add(m)
+        db_session.commit()
+        resp = client.get("/api/materials/admin/list?type=lecture&page_size=50",
+                          headers=admin_headers)
+        item = next(i for i in resp.json()["items"] if i["id"] == m.material_id)
+        assert item["file_count"] == 0
+        assert item["has_files"] is False

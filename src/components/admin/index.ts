@@ -28,3 +28,5 @@ export { default as MaterialMetaDialog } from './MaterialMetaDialog.vue';
 export { default as ArticleBatchUpload } from './ArticleBatchUpload.vue';
 // P2（2026-11-09）：考试定时弹层（开关在列表里，这里只设时间窗）
 export { default as ExamGateDialog } from './ExamGateDialog.vue';
+// P3（2026-11-09）：导题确认抽屉（拆题结果逐题核对 → 确认入库）
+export { default as ParseDraftDrawer } from './ParseDraftDrawer.vue';

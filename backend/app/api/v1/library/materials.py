@@ -971,6 +971,10 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         "paper_backfill": "试卷补录",
         # P1（2026-11-09）：上传即建卷（自动触发；跳过时也记一笔原因）
         "auto_create_paper": "自动建卷",
+        # P3（2026-11-09）：上传即导题
+        "paper_parse": "解析导题",
+        "paper_import": "确认入库",
+        "paper_parse_discard": "放弃导题",
     }.get(action, action)
     try:
         db.add(SysOperationLog(
@@ -1694,10 +1698,22 @@ async def admin_list(subject: Optional[str] = Query(None),
         total = q.count()
         rows = q.offset((page - 1) * page_size).limit(page_size).all()
     publishers = _publisher_map(db, rows)
+    # L2 修（2026-11-09）：管理端列表也要真实原件数。
+    # 之前调 `_item_brief(m)` 没传 file_count，于是每一行 `file_count` 恒为 0 / `has_files=false`，
+    # 而预览抽屉（详情接口）里原件是好的 —— 同一份资料两个接口两种说法。
+    # 用一次 group by 取齐（与公共列表同口径），别逐行子查询。
+    file_counts = {}
+    if rows:
+        from ....models.models import MaterialFile
+        ids = [r.material_id for r in rows]
+        for mid, cnt in (db.query(MaterialFile.material_id, func.count(MaterialFile.file_id))
+                         .filter(MaterialFile.material_id.in_(ids))
+                         .group_by(MaterialFile.material_id).all()):
+            file_counts[mid] = int(cnt)
     items = []
     offset = (page - 1) * page_size
     for idx, m in enumerate(rows):
-        item = _item_brief(m)
+        item = _item_brief(m, file_count=file_counts.get(m.material_id, 0))
         item.update({"status": m.status, "study_count": m.study_count or 0,
                      "creator_id": m.creator_id,
                      # ID 方案 A（2026-11-08）：连续序号（D2 口径 = 当前筛选结果内）。
@@ -1727,6 +1743,16 @@ async def admin_list(subject: Optional[str] = Query(None),
                 logger.warning("[materials] 读取考试开关状态失败 material=%s",
                                m.material_id, exc_info=True)
                 item["exam"] = None
+            # P3（2026-11-09）：附最近一条解析草稿，列表显示「待确认（N 题）」/「解析失败」
+            try:
+                from ....services import paper_ingest
+                draft = paper_ingest.latest_of(db, m.material_id)
+                item["parse_draft"] = (paper_ingest.draft_brief(draft, m)
+                                       if draft is not None else None)
+            except Exception:  # noqa: BLE001
+                logger.warning("[materials] 读取解析草稿失败 material=%s",
+                               m.material_id, exc_info=True)
+                item["parse_draft"] = None
         items.append(item)
     return {"total": total, "items": items}
 
@@ -1978,6 +2004,218 @@ async def admin_set_exam_window(material_id: int, body: dict,
     return {"ok": True, "exam": state}
 
 
+# ============================ P3：上传即导题（2026-11-09）============================
+# 规划见 `docs/plans/上传即建卷_上传即导题_考试开关与定时_方案_v1.md` §3。
+# 分工：解析/拆题/入库规则全在 `services/paper_ingest/`，这里只做**鉴权 + 事务 + 审计 + 回包**。
+# 为什么不在这里直接写 QuestionBank：跨域写题目会撞 `check_module_boundary`（cross_write），
+# 服务层可以 import 任意模型，端点只调服务（与 `paper_registry` 同一套路）。
+
+#: 允许自动导题的扩展名（xlsx 是卡片/表格链路，不在这里）
+PARSE_EXTS = ("docx", "pdf")
+
+
+def _draft_payload(db: Session, draft, material=None) -> dict:
+    """草稿的统一回包（列表/明细/动作回执共用一个形状）。"""
+    from ....services import paper_ingest
+    data = paper_ingest.draft_brief(draft, material)
+    data["warnings"] = paper_ingest.warnings_of(draft)
+    if material is not None:
+        data["paper_code"] = (material.paper_code or material.badge
+                              or "").strip() or None
+    return data
+
+
+@router.post("/admin/{material_id}/parse", summary="解析原件生成题目草稿(管理员)")
+async def admin_parse_material(material_id: int,
+                               current_user: SysUser = Depends(get_current_user),
+                               db: Session = Depends(get_db)):
+    """把这条资料的**主文件**解析成题目草稿（P3）。
+
+    - 支持 docx / pdf；不是试卷类、没有原件、扩展名不支持 → 400 并说明原因；
+    - 解析结果**不直接入库**：先落草稿，管理员看完题号/选项/图片后点「确认入库」；
+    - 可重复调用（重试用）：旧的 pending 草稿会先作废，不会积累两条待确认。
+    """
+    _require_admin(current_user)
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id,
+        StudyMaterial.status >= 0).first()
+    if not m:
+        raise HTTPException(404, "资料不存在或已删除")
+    if (m.type or "") != "paper":
+        raise HTTPException(400, "只有「试卷」类资料需要导题")
+
+    from ....models.models import MaterialFile
+    files = (db.query(MaterialFile)
+             .filter(MaterialFile.material_id == material_id)
+             .order_by(MaterialFile.role.asc(), MaterialFile.file_id.asc()).all())
+    primary = next((f for f in files if (f.role or "") == "primary"), None) or (files[0] if files else None)
+    if primary is None:
+        raise HTTPException(400, "这条资料还没有原件，无法解析（先在「改信息」里上传原件）")
+    ext = (primary.file_ext or "").lower().lstrip(".")
+    if ext not in PARSE_EXTS:
+        raise HTTPException(400, f"暂不支持 .{ext}：目前能自动导题的只有 docx / pdf")
+
+    from ....services import material_files, paper_ingest
+    abs_path = str(material_files.resolve_abs_path(primary))
+
+    expected = None
+    from ....services import paper_meta_edit
+    merged = paper_meta_edit.merge_meta(m, paper_meta_edit.load_override(m))
+    if merged.get("question_count"):
+        expected = int(merged["question_count"])
+
+    draft = paper_ingest.parse_material(db, m, ext=ext, abs_path=abs_path,
+                                        actor_id=current_user.user_id,
+                                        expected=expected)
+    _audit(db, current_user, "paper_parse", f"material:{material_id}",
+           f"解析 {primary.file_name}（{draft.item_count} 题，{draft.status}）")
+    db.commit()
+    db.refresh(draft)
+    payload = _draft_payload(db, draft, m)
+    payload["ok"] = draft.status != "failed"
+    return payload
+
+
+@router.get("/admin/parse-drafts", summary="解析草稿列表(管理员)")
+async def admin_list_parse_drafts(status: str = "pending",
+                                  page: int = Query(1, ge=1),
+                                  page_size: int = Query(20, ge=1, le=100),
+                                  current_user: SysUser = Depends(get_current_user),
+                                  db: Session = Depends(get_db)):
+    """按状态列草稿（默认 pending = 待确认）。管理端「待确认（N 题）」入口用它。"""
+    _require_admin(current_user)
+    from ....models.models import PaperParseDraft
+    from ....services import paper_ingest
+
+    q = db.query(PaperParseDraft)
+    if status and status != "all":
+        q = q.filter(PaperParseDraft.status == status)
+    total = q.count()
+    rows = (q.order_by(PaperParseDraft.draft_id.desc())
+             .offset((page - 1) * page_size).limit(page_size).all())
+    materials = {m.material_id: m for m in db.query(StudyMaterial).filter(
+        StudyMaterial.material_id.in_([r.material_id for r in rows] or [0])).all()}
+    return {"total": total, "items": [
+        _draft_payload(db, r, materials.get(r.material_id)) for r in rows]}
+
+
+@router.get("/admin/parse-drafts/{draft_id}", summary="解析草稿明细(管理员)")
+async def admin_get_parse_draft(draft_id: int,
+                                current_user: SysUser = Depends(get_current_user),
+                                db: Session = Depends(get_db)):
+    """明细：题目草稿 + 告警 + 来源资料/卷。确认页用它渲染逐题对照。"""
+    _require_admin(current_user)
+    from ....models.models import PaperParseDraft
+    from ....services import paper_ingest
+
+    draft = db.query(PaperParseDraft).filter(
+        PaperParseDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "草稿不存在")
+    material = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == draft.material_id).first()
+    pay = _draft_payload(db, draft, material)
+    pay["items"] = paper_ingest.items_of(draft)
+    pay["can_edit"] = draft.status == "pending"
+    return pay
+
+
+@router.put("/admin/parse-drafts/{draft_id}/items", summary="改草稿题目(管理员)")
+async def admin_update_parse_items(draft_id: int, body: dict,
+                                   current_user: SysUser = Depends(get_current_user),
+                                   db: Session = Depends(get_db)):
+    """整表覆盖草稿题目（改题号/题型、删误拆）。
+
+    为什么是整表覆盖而不是逐条 patch：前端确认页本来就把完整列表拿在手里，
+    整表提交能一次校验"题号不重复/题型合法/题干非空"，也避免半途失败留半套数据。
+    """
+    _require_admin(current_user)
+    from ....models.models import PaperParseDraft
+    from ....services import paper_ingest
+
+    draft = db.query(PaperParseDraft).filter(
+        PaperParseDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "草稿不存在")
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise HTTPException(400, "items 必须是数组")
+    try:
+        paper_ingest.update_items(db, draft, items)
+    except paper_ingest.IngestError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    db.commit()
+    db.refresh(draft)
+    material = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == draft.material_id).first()
+    return _draft_payload(db, draft, material)
+
+
+@router.post("/admin/parse-drafts/{draft_id}/confirm", summary="确认入库(管理员)")
+async def admin_confirm_parse_draft(draft_id: int, body: dict | None = None,
+                                    current_user: SysUser = Depends(get_current_user),
+                                    db: Session = Depends(get_db)):
+    """确认入库：题目写 `question_bank` + 挂到该卷 + 图片落到 `static/questions/{qid}/`。
+
+    - 卷里已有题目时默认拒绝（409），要重导必须显式 `replace=true`（只删关系，不删题目）；
+    - 入库后卷题量按关系表实数重算（`paper_stats`），此时打开考试开关学生才有题可做。
+    """
+    _require_admin(current_user)
+    body = body or {}
+    from ....models.models import PaperParseDraft
+    from ....services import paper_ingest
+
+    draft = db.query(PaperParseDraft).filter(
+        PaperParseDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "草稿不存在")
+    try:
+        result = paper_ingest.confirm_draft(
+            db, draft, actor_id=current_user.user_id,
+            replace=bool(body.get("replace")),
+            subject_id=body.get("subject_id"))
+    except paper_ingest.IngestError as e:
+        db.rollback()
+        raise HTTPException(409 if "已有" in str(e) else 400, str(e))
+    _audit(db, current_user, "paper_import", f"material:{draft.material_id}",
+           f"确认入库 {result['created']} 题 → 卷 #{result['paper_id']}"
+           + (f"（覆盖 {result['replaced']} 题）" if result.get("replaced") else ""))
+    # 入库后卷已有题：如果资料本来就是「已上架」，按 P5 的唯一真源把它推成可作答（PUBLISHED）。
+    # 不这么做会出现「资料已上架 + 卷有 100 题，但卷还是 DRAFT」→ 学生看不到，要等下次上/下架才生效。
+    from ....services import material_paper_sync
+    draft_material = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == draft.material_id).first()
+    sync = (material_paper_sync.sync_material(db, draft_material)
+            if draft_material is not None else None)
+    db.commit()
+    return {"ok": True, "paper_sync": _paper_sync_payload(sync), **result}
+
+
+@router.delete("/admin/parse-drafts/{draft_id}", summary="放弃草稿(管理员)")
+async def admin_discard_parse_draft(draft_id: int,
+                                    current_user: SysUser = Depends(get_current_user),
+                                    db: Session = Depends(get_db)):
+    """放弃草稿：标 discarded + 删草稿图片（正式题目/图片目录不受影响）。"""
+    _require_admin(current_user)
+    from ....models.models import PaperParseDraft
+    from ....services import paper_ingest
+
+    draft = db.query(PaperParseDraft).filter(
+        PaperParseDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "草稿不存在")
+    try:
+        paper_ingest.discard_draft(db, draft)
+    except paper_ingest.IngestError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    _audit(db, current_user, "paper_parse_discard", f"material:{draft.material_id}",
+           f"放弃解析草稿 #{draft_id}")
+    db.commit()
+    return {"ok": True, "draft_id": draft_id, "status": draft.status}
+
+
 @router.delete("/admin/{material_id}/files/{file_id}", summary="删除单份原件(管理员)")
 async def admin_delete_file(material_id: int, file_id: int,
                             current_user: SysUser = Depends(get_current_user),
@@ -2129,6 +2367,7 @@ async def admin_upload_file(
         title: str = Form(""),
         material_id: Optional[int] = Form(None),
         placement: str = Form(""),
+        auto_parse: str = Form("1"),
         current_user: SysUser = Depends(get_current_user),
         db: Session = Depends(get_db)):
     """B2（2026-11-07）：**批量导入的单个文件入口**。
@@ -2302,6 +2541,34 @@ async def admin_upload_file(
                 if paper_auto.get("created")
                 else f"跳过：{paper_auto.get('hint') or paper_auto.get('reason')}"))
     db.commit()
+
+    # ★ P3（2026-11-09）上传即导题：试卷主文件是 docx/pdf 时**当场解析**成待确认草稿。
+    #   · 为什么不放后台任务：`SessionLocal` 在测试里指向**真实库**（conftest 只用 get_db
+    #     覆盖了请求会话），后台任务会绕过覆盖写到生产库。同步解析用同一个 request session，
+    #     既安全又能把「解析出多少题」直接回给前端；
+    #   · 为什么解析失败不报错：上传本身已经成功（资料+原件+卷都在），解析只是增值步骤；
+    #   · 耗时：docx 97 题 ≈0.2s，2024 国考 pdf 100 题+25 图 ≈1.5s（实测），可接受；
+    #     批量导入是逐文件请求，进度条会照常往前走。
+    parse_auto = None
+    if (role == "primary" and type == "paper" and ext in PARSE_EXTS
+            and (auto_parse or "1").strip().lower() not in ("0", "false", "no")):
+        try:
+            from ....services import paper_ingest
+            draft = paper_ingest.parse_material(
+                db, target_material, ext=ext,
+                abs_path=material_files.resolve_abs_path(row),
+                actor_id=current_user.user_id)
+            _audit(db, current_user, "paper_parse",
+                   f"material:{target_material.material_id}",
+                   f"上传即导题：{draft.item_count} 题（{draft.status}）")
+            db.commit()
+            db.refresh(draft)
+            parse_auto = _draft_payload(db, draft, target_material)
+        except Exception:       # noqa: BLE001 — 解析失败绝不影响上传结果
+            db.rollback()
+            logger.warning("[materials] 上传即导题失败 material=%s",
+                           target_material.material_id, exc_info=True)
+
     return JSONResponse({
         "duplicate": False, "created": created_new,
         "material_id": target_material.material_id,
@@ -2309,6 +2576,8 @@ async def admin_upload_file(
         "title": target_material.title,
         # P1：投放位∈{exam,both} 的试卷上传会当场建卷；前端据此提示「已建卷/未建卷原因」
         "paper": paper_auto,
+        # P3：docx/pdf 试卷上传会当场解析出「待确认」草稿；前端提示「已拆出 N 题，去确认」
+        "parse": parse_auto,
     })
 
 
