@@ -14,11 +14,14 @@ import pytest
 
 
 def _mk_card(client, headers, title, tag):
+    # W2 起 `POST /admin` 按 `content_hash` 去重（卡片 = 正面+背面），
+    # 所以同 tag 的两张卡**内容也必须不同**，否则第二张会被判"内容重复"（409）——
+    # 这正说明去重生效，测试数据要按真实语义造（标题不同 ≠ 内容不同）。
     resp = client.post("/api/materials/admin", json={
         "subject": "xingce",
         "type": "card",
         "title": title,
-        "card_front": f"正面-{tag}",
+        "card_front": f"正面-{title}",
         "card_back": f"背面-{tag}",
         "category": "知觉速度与准确性",
         "publish": False,

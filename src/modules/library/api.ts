@@ -531,6 +531,14 @@ export interface UploadFileParams {
   materialId?: number;
   /** L4：投放位（仅试卷有意义；不传 = 后端默认：试卷 both、其它 library） */
   placement?: 'exam' | 'library' | 'both';
+  /**
+   * W2（2026-11-09）：上传时**立即上架**。
+   * 默认 false = 未上架（与"上架即审批"一致）；传 true 后端会直接置 `status=1`
+   * 并同步卷状态（试卷会走 P5 联动变 PUBLISHED）。
+   */
+  publish?: boolean;
+  /** 解析原件里的题目（试卷 docx/pdf 默认 true；批量导入可关掉） */
+  autoParse?: boolean;
   /** 上传进度 0–100（浏览器在本地算，服务端不参与） */
   onProgress?: (percent: number) => void;
 }
@@ -552,6 +560,9 @@ export async function uploadMaterialFile(params: UploadFileParams): Promise<Uplo
   if (params.materialId != null) form.append('material_id', String(params.materialId));
   // L4：投放位（仅 type=paper 有意义；后端对非试卷传 exam/both 会 400，所以只在该传时传）
   if (params.placement) form.append('placement', params.placement);
+  // W2：立即上架（默认不上架）；解析开关也一并下发，便于批量场景关掉
+  if (params.publish) form.append('publish', '1');
+  if (params.autoParse === false) form.append('auto_parse', '0');
 
   const response = await libraryClient.request<UploadFileResult>({
     url: '/api/materials/admin/files/upload',

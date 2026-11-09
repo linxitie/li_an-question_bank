@@ -98,6 +98,17 @@
                 </label>
               </div>
             </div>
+            <!-- W2（2026-11-09）：默认不立即上架。以前"上传即上架"是三处直写 PUBLISHED 的来源之一，
+                 现在统一成显式开关：只有勾了才以已上架状态入库（试卷还会同步卷状态）。 -->
+            <div class="mbu-block" style="margin-top: 10px">
+              <label class="mbu-publish">
+                <input v-model="form.publish" type="checkbox" :disabled="running" />
+                <span>
+                  <b>立即上架</b>
+                  <em>不勾 = 先落「未上架」，等你在列表里核对后再点上架（推荐）</em>
+                </span>
+              </label>
+            </div>
           </div>
 
           <!-- 3. 队列 -->
@@ -213,7 +224,9 @@ const form = reactive({
   type: props.presetType,
   category: '',
   /** L4：投放位（默认都投 = 改造前行为）；只在 type=paper 时提交 */
-  placement: 'both' as 'exam' | 'library' | 'both'
+  placement: 'both' as 'exam' | 'library' | 'both',
+  /** W2（2026-11-09）：立即上架，默认关（先落未上架 → 核对 → 再上架） */
+  publish: false
 });
 
 const plan = computed(() => planUploadGroups(picked.value.map((f) => ({ name: f.name, size: f.size }))));
@@ -234,7 +247,8 @@ const footHint = computed(() => {
   if (running.value) return '正在上传，别关页面…';
   if (!groups.value.length) return '先选文件（可多选）';
   if (planIssues.value.length) return '有文件不符合要求，先处理上面的提示';
-  return `将创建 ${summary.value.materials} 条资料（未上架），共 ${summary.value.files} 个文件`;
+  return `将创建 ${summary.value.materials} 条资料（${form.publish ? '已上架' : '未上架'}），`
+    + `共 ${summary.value.files} 个文件`;
 });
 
 function statusLabel(s: RowStatus): string {
@@ -315,6 +329,8 @@ async function start(): Promise<void> {
         category: form.category,
         // 只有试卷才有投放位；讲义/文章不传（后端强制 library）
         placement: form.type === 'paper' ? form.placement : undefined,
+        // W2：勾了「立即上架」才以已上架状态入库
+        publish: form.publish,
         onProgress: (p) => {
           // 配对组里主文件占前 80%，附件占后 20%
           row.percent = ext.attachFile ? Math.round(p * 0.8) : p;
@@ -363,7 +379,13 @@ async function start(): Promise<void> {
   }
 
   running.value = false;
-  if (created) ElMessage.success(`成功导入 ${created} 条资料（未上架）`);
+  if (created) {
+    ElMessage.success(
+      form.publish
+        ? `成功导入 ${created} 条资料（已上架）`
+        : `成功导入 ${created} 条资料（未上架，核对后点上架）`
+    );
+  }
   if (skipped) ElMessage.info(`有 ${skipped} 条因内容重复被跳过`);
   if (failed) ElMessage.error(`有 ${failed} 条失败，可看队列里的原因后重试`);
   if (created || skipped) emit('done', { created, skipped, failed });
@@ -476,6 +498,25 @@ defineExpose({ buildRows });
 .mbu-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--adm-text-mid); }
 /* L4：投放位三选一（仅试卷显示） */
 .mbu-place { margin-top: 12px; }
+/* W2：立即上架（默认关；不勾就是未上架，等核对后再点上架） */
+.mbu-publish {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--adm-line);
+  border-radius: 10px;
+  background: #fcfdff;
+  cursor: pointer;
+}
+.mbu-publish input { margin-top: 3px; }
+.mbu-publish b { display: block; font-size: 12.5px; color: var(--adm-text); }
+.mbu-publish em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--adm-text-weak);
+  line-height: 1.5;
+}
 .mbu-place__label { font-size: 12px; font-weight: 700; color: var(--adm-text-mid); margin-bottom: 6px; }
 .mbu-place__opts { display: flex; gap: 8px; flex-wrap: wrap; }
 .mbu-place__opt {

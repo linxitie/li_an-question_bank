@@ -806,12 +806,28 @@ async def adopt_material(material_id: int,
 async def material_detail(material_id: int,
                           current_user: Optional[SysUser] = Depends(get_optional_user),
                           db: Session = Depends(get_db)):
-    m = db.query(StudyMaterial).filter(
-        StudyMaterial.material_id == material_id, StudyMaterial.status == 1,
-        # L1：仅考试页（placement=exam）的资料不进资料库，直连 URL 也按 404 处理，
-        # 避免"列表里没有、地址栏能打开"的不一致。
-        or_(StudyMaterial.placement.in_(LIBRARY_PLACEMENTS),
-            StudyMaterial.placement.is_(None))).first()
+    """资料详情。
+
+    可见性（W2 / 方案 D3，2026-11-09）：
+      · 游客 / 学生：只能看 `status==1` 且投放位含资料库的（原来就有的规则）；
+      · **教师 / 管理员**：可以看未上架（`status=0`）的草稿，便于"上架前先看一眼"。
+        以前教师只能走管理端预览接口，而那个要管理员权限 —— 教师审核前根本看不到内容。
+    注意判据用 `user_type` 而不是 `role_level`：教师与学生的 `role_level` 都是 1（实测），
+    按 level 判会把教师一起挡掉（`conftest.test_user` 就是 level=1 的学生，别被它骗了）。
+    """
+    is_staff = bool(current_user and (current_user.user_type or "") in ("teacher", "admin"))
+    q = db.query(StudyMaterial).filter(StudyMaterial.material_id == material_id)
+    if not is_staff:
+        q = q.filter(
+            StudyMaterial.status == 1,
+            # L1：仅考试页（placement=exam）的资料不进资料库，直连 URL 也按 404 处理，
+            # 避免"列表里没有、地址栏能打开"的不一致。
+            or_(StudyMaterial.placement.in_(LIBRARY_PLACEMENTS),
+                StudyMaterial.placement.is_(None)))
+    else:
+        # 回收站里的（status=-1）谁都别在详情里看到，避免"看起来还在"
+        q = q.filter(StudyMaterial.status >= 0)
+    m = q.first()
     if not m:
         raise HTTPException(404, "资料不存在或已下架")
 
@@ -1077,6 +1093,25 @@ def _validate_material_body(body: dict, partial: bool = False) -> dict:
     elif data.get("content"):
         data["content"] = sanitize_html(data["content"])
     return {k: v for k, v in data.items() if v is not None}
+
+
+def _material_content_hash(data: dict) -> str:
+    """给「建资料 / 批量建资料」算内容哈希（W2 去重口径，2026-11-09）。
+
+    与卡片建卡、文章入库同口径（`content_cleaner.calculate_content_hash`）：
+      · 卡片：正面 + 背面（卡片的价值全在这两段）；
+      · 其它类型：正文 content，正文为空时退化成 标题 + 摘要（否则所有空正文资料哈希相同）。
+    算不出来（全空）返回空串 → 调用方跳过去重，不要因为"算不出"就把人挡住。
+    """
+    from ....services.material_sanitizer import content_cleaner
+
+    if (data.get("type") or "") == "card":
+        raw = f"{data.get('card_front') or ''}{data.get('card_back') or ''}"
+    else:
+        raw = (data.get("content") or "") or (f"{data.get('title') or ''}{data.get('summary') or ''}")
+    if not (raw or "").strip():
+        return ""
+    return content_cleaner.calculate_content_hash(raw)
 
 
 # ========== B：卡片文本格式校验 + 关键词自动分类（专利主张 (3) 的落地部件） ==========
@@ -2553,6 +2588,7 @@ async def admin_upload_file(
         material_id: Optional[int] = Form(None),
         placement: str = Form(""),
         auto_parse: str = Form("1"),
+        publish: str = Form("0"),
         current_user: SysUser = Depends(get_current_user),
         db: Session = Depends(get_db)):
     """B2（2026-11-07）：**批量导入的单个文件入口**。
@@ -2588,6 +2624,10 @@ async def admin_upload_file(
         target_placement = "library"
     else:
         target_placement = want_placement or "both"
+
+    # W2（2026-11-09）：上传时可选「立即上架」。默认不上架（与"上架即审批"一致），
+    # 只有显式 publish=1 才直接写成已上架并同步卷状态 —— 省掉"传完再去列表点一次"。
+    want_publish = (publish or "0").strip().lower() in ("1", "true", "yes", "on")
 
     data = file.file.read()
     name = (file.filename or "未命名").replace("\\", "/").split("/")[-1][:255]
@@ -2659,7 +2699,10 @@ async def admin_upload_file(
                 category=(category or None), title=(title or stem)[:200],
                 badge=parsed_code, paper_code=parsed_code,
                 placement=target_placement,
-                content="", status=0, creator_id=current_user.user_id)
+                # W2（2026-11-09）：默认未上架；`publish=1` 时直接上架（省掉"传完再点一次"）。
+                # 上架仍要过一次 P5 联动，保证卷状态与资料状态一致（见下方 db.flush 之后的同步）。
+                content="", status=(1 if want_publish else 0),
+                creator_id=current_user.user_id)
             db.add(target_material)
             db.flush()
             created_new = True
@@ -2717,7 +2760,8 @@ async def admin_upload_file(
 
     _audit(db, current_user, "upload_file",
            f"material:{target_material.material_id}",
-           f"{name}（{role}）")
+           f"{name}（{role}）"
+           + ("，立即上架" if want_publish and created_new else ""))
     if paper_auto:
         # 建卷是**独立可追溯**的动作（自动触发也要留痕），失败/跳过同样记一笔原因
         _audit(db, current_user, "auto_create_paper",
@@ -2725,6 +2769,13 @@ async def admin_upload_file(
                (f"卷 {paper_auto.get('paper_code')} #{paper_auto.get('paper_id')}"
                 if paper_auto.get("created")
                 else f"跳过：{paper_auto.get('hint') or paper_auto.get('reason')}"))
+    if want_publish and created_new:
+        # 立即上架也要走 P5 联动（否则会出现"资料已上架但卷还是 DRAFT"，
+        # 学生看不到刚传上来的真题 —— #127 就是这种）。
+        from ....services import material_paper_sync
+        sync_publish = material_paper_sync.sync_material(db, target_material)
+        _audit(db, current_user, "status", f"material:{target_material.material_id}",
+               "上传即上架" + (f"（卷 {sync_publish.get('after')}）" if sync_publish.get("after") else ""))
     db.commit()
 
     # ★ P3（2026-11-09）上传即导题：试卷主文件是 docx/pdf 时**当场解析**成待确认草稿。
@@ -2763,6 +2814,9 @@ async def admin_upload_file(
         "paper": paper_auto,
         # P3：docx/pdf 试卷上传会当场解析出「待确认」草稿；前端提示「已拆出 N 题，去确认」
         "parse": parse_auto,
+        # W2：是否本次就上架了（前端据此提示「已上架 / 仍是未上架」）
+        "published": bool(want_publish and created_new),
+        "status": target_material.status,
     })
 
 
@@ -2770,16 +2824,39 @@ async def admin_upload_file(
 async def admin_create(body: dict,
                        current_user: SysUser = Depends(get_current_user),
                        db: Session = Depends(get_db)):
+    """建一条资料。**默认未上架**（W2 / 方案 D1，2026-11-09）。
+
+    为什么改默认：以前 `POST /admin` 不带 status 时走模型默认 `status=1`，
+    也就是"建好就等于审批通过、学生立刻可见"——与「上架即审批」的唯一真源冲突。
+    现在：
+      · 不传 status → **0（未上架）**，要上线必须显式点「上架」或传 `status=1`；
+      · 同内容（`content_hash`）已存在且未删除 → 409 并回已有 id，不再产生第二条；
+      · `status` 只接受 0/1。
+    """
     _require_admin(current_user)
     data = _validate_material_body(body)
     _finalize_classification(db, data)
-    m = StudyMaterial(**data, creator_id=current_user.user_id)
+
+    status = body.get("status", 0)
+    if status not in (0, 1):
+        raise HTTPException(400, "status 只能是 0（未上架）或 1（已上架）")
+
+    content_hash = _material_content_hash(data)
+    if content_hash:
+        dup_id = _find_duplicate_material_id(db, content_hash, current_user.user_id)
+        if dup_id:
+            raise HTTPException(409, f"与已有资料 #{dup_id} 内容重复（同内容不重复建）")
+
+    m = StudyMaterial(**data, status=status, content_hash=(content_hash or None),
+                      creator_id=current_user.user_id)
     db.add(m)
     db.commit()
     db.refresh(m)
-    _audit(db, current_user, "create", f"material:{m.material_id}", m.title)
+    _audit(db, current_user, "create", f"material:{m.material_id}",
+           f"{m.title}（{'已上架' if status else '未上架'}）")
     db.commit()
-    return {"id": m.material_id}
+    return {"id": m.material_id, "status": status,
+            "duplicate": False, "content_hash": content_hash or None}
 
 
 @router.put("/admin/{material_id}", summary="更新资料(管理员)")
@@ -2990,7 +3067,13 @@ async def admin_batch_create(
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """批量创建多条资料。body.items 为资料对象数组。"""
+    """批量创建多条资料。body.items 为资料对象数组。
+
+    W2（2026-11-09）与单条创建对齐：
+      · **默认未上架**（`status=0`，可在 items 里显式传 1）；
+      · 同内容（`content_hash`）**跳过**而不是整批失败 —— 批量场景里"跳过重复"比"整批回滚"有用，
+        跳过的会在回包里以 `skipped_duplicates` 列出来（含已存在的 id）。
+    """
     _require_admin(current_user)
     items = body.get("items", [])
     if not items:
@@ -3000,18 +3083,32 @@ async def admin_batch_create(
         raise HTTPException(400, f"单次最多 {limit} 条")
 
     created_ids = []
+    skipped = []
     for item in items:
         data = _validate_material_body(item)
         _finalize_classification(db, data)   # P2.4：批量建卡同样走两级自动分类
-        m = StudyMaterial(**data, creator_id=current_user.user_id)
+        status = item.get("status", 0)
+        if status not in (0, 1):
+            raise HTTPException(400, "status 只能是 0（未上架）或 1（已上架）")
+        content_hash = _material_content_hash(data)
+        if content_hash:
+            dup_id = _find_duplicate_material_id(db, content_hash, current_user.user_id)
+            if dup_id:
+                skipped.append({"title": data.get("title"), "existing_id": dup_id})
+                continue
+        m = StudyMaterial(**data, status=status, content_hash=(content_hash or None),
+                          creator_id=current_user.user_id)
         db.add(m)
         db.flush()
         created_ids.append(m.material_id)
 
     db.commit()
-    _audit(db, current_user, "batch_create", f"created={len(created_ids)}")
+    _audit(db, current_user, "batch_create", f"created={len(created_ids)}",
+           f"批量建资料 {len(created_ids)} 条"
+           + (f"，跳过重复 {len(skipped)} 条" if skipped else ""))
     db.commit()
-    return {"created": len(created_ids), "material_ids": created_ids}
+    return {"created": len(created_ids), "material_ids": created_ids,
+            "skipped_duplicates": skipped}
 
 
 @router.get("/admin/import-records", summary="导入记录列表(管理员)")
