@@ -224,6 +224,10 @@ _UNWANTED_CONTENT_SELECTORS = (
     ".list_img",
     ".list_list",
     ".list_tit2",
+    ".list_rows",
+    ".article_photo_title",
+    ".photo",
+    ".address",
     ".ad",
     ".advertisement",
 )
@@ -301,6 +305,9 @@ def clean_article_text(title: str, text: str) -> str:
             continue
         if any(paragraph.startswith(prefix) for prefix in _LINE_NOISE_PREFIXES):
             continue
+        # 相关新闻列表里的截断标题通常以 .. / ... 结尾，出现在正文之后。
+        if paragraphs and re.search(r"(?:\.{2,}|…{1,})$", paragraph):
+            break
         if any(marker in paragraph for marker in _JUNK_MARKERS):
             if paragraphs:
                 break

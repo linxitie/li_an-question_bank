@@ -93,8 +93,10 @@
         <blockquote>{{ item.content }}</blockquote>
         <footer class="quote-card__foot">
           <span class="author">{{ item.author || item.source || '佚名' }}</span>
-          <span v-if="item.author && item.source" class="source">
-            {{ item.source }}
+          <span
+            v-if="item.author && displaySource(item.author, item.source)"
+            class="source">
+            {{ displaySource(item.author, item.source) }}
           </span>
         </footer>
       </article>
@@ -210,6 +212,17 @@ function selectCategory(category: string): void {
 
 function search(): void {
   void load();
+}
+
+function displaySource(author: string, source: string): string {
+  const a = (author || '').trim();
+  const s = (source || '').trim();
+  if (!a || !s) return s;
+  if (!s.startsWith(a)) return s;
+  return s
+    .slice(a.length)
+    .replace(/^[\s·•—\-/|:：]+/, '')
+    .trim();
 }
 
 function resetSearch(): void {

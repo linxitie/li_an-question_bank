@@ -41,7 +41,9 @@
         <blockquote>{{ item.content }}</blockquote>
         <footer>
           <span>{{ item.author || item.source || '佚名' }}</span>
-          <span v-if="item.author && item.source"> · {{ item.source }}</span>
+          <span v-if="item.author && displaySource(item.author, item.source)">
+            · {{ displaySource(item.author, item.source) }}
+          </span>
         </footer>
       </article>
     </div>
@@ -112,6 +114,16 @@ async function removeFavorite(item: QuoteFavorite): Promise<void> {
 
 function goBack(): void {
   router.replace('/quotes');
+}
+
+function displaySource(author: string, source: string): string {
+  const a = (author || '').trim();
+  const s = (source || '').trim();
+  if (!a || !s || !s.startsWith(a)) return s;
+  return s
+    .slice(a.length)
+    .replace(/^[\s·•—\-/|:：]+/, '')
+    .trim();
 }
 
 onMounted(() => {
