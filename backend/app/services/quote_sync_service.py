@@ -9,6 +9,14 @@ from sqlalchemy.orm import Session
 from ..api.v1.community.quotes import _read_obsidian_quotes
 from ..models.models import EssayQuote
 
+_INVALID_AUTHORS = {'"', "'", "“", "”", "-", "—", "佚名", "未知", "无"}
+
+
+def _clean_author(value: object) -> str:
+    """清掉同步/历史数据里的引号、破折号等伪作者。"""
+    author = str(value or "").strip()
+    return "" if author in _INVALID_AUTHORS else author
+
 
 def sync_obsidian_quotes(db: Session) -> dict[str, Any]:
     """把 Obsidian 中 status=已审核 的金句幂等写入数据库。"""
@@ -23,7 +31,7 @@ def sync_obsidian_quotes(db: Session) -> dict[str, Any]:
             continue
         existing = db.query(EssayQuote).filter(EssayQuote.content == content).first()
         source = (item.get("source") or "").strip()
-        author = (item.get("author") or "").strip()
+        author = _clean_author(item.get("author"))
         topics = [str(topic).strip() for topic in (item.get("topics") or []) if topic]
         category = "、".join(topics[:2]) or "金句"
         if existing:
@@ -31,7 +39,11 @@ def sync_obsidian_quotes(db: Session) -> dict[str, Any]:
             if source and not existing.source:
                 existing.source = source
                 changed = True
-            if author and not existing.author:
+            current_author = _clean_author(existing.author)
+            if current_author != (existing.author or ""):
+                existing.author = current_author or None
+                changed = True
+            if author and not current_author:
                 existing.author = author
                 changed = True
             if category and not existing.category:
