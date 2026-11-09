@@ -17,6 +17,7 @@ from ....models.models import (
     SysUser
 )
 from ..catalog import contract as catalog_contract
+from . import contract as exam_contract
 from ....schemas.schemas import (
     ExamRecordResponse,
     AnswerDetailResponse,
@@ -66,7 +67,14 @@ async def get_exams_list(
 
     # 手动序列化，避免返回 SQLAlchemy ORM 对象导致 JSON 序列化 500
     items = []
+    now = datetime.now()
     for p in papers:
+        # P2 补（2026-11-09）：把考试状态（开关/定时窗口/有题）一并下发。
+        # 为什么在这里而不只在前端推断：`open_at/close_at` 的判定用**服务器本地时间**，
+        # 浏览器时区不同就会算错；原因码也只有后端知道（closed / not_started / expired /
+        # no_questions / draft）。口径与资料页的 `paper.exam` 完全一致（同一份 contract）。
+        exam_state = exam_contract.exam_state(
+            p, now, questions=exam_contract.question_total(db, p))
         items.append({
             "paper_id": p.paper_id,
             "paper_name": p.paper_name,
@@ -81,6 +89,10 @@ async def get_exams_list(
             "difficulty": p.difficulty,
             "create_time": p.create_time.isoformat() if p.create_time else None,
             "publish_time": p.publish_time.isoformat() if p.publish_time else None,
+            # 只增不改：老前端不读这两个键，读到的也只是多了两个字段
+            "exam": exam_state,
+            "answerable": bool(exam_state.get("ready")),
+            "exam_hint": exam_contract.exam_block_message(exam_state, now),
         })
 
     return {"total": total,

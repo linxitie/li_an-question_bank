@@ -7,14 +7,29 @@
     </header>
 
     <main class="list">
-      <div v-for="p in papers" :key="p.paper_id" class="card" @click="startPaper(p)">
-        <div class="p-name">{{ p.paper_name }}</div>
+      <div
+        v-for="p in papers"
+        :key="p.paper_id"
+        class="card"
+        :class="{ 'card--off': !isAnswerable(p) }"
+        @click="startPaper(p)"
+      >
+        <div class="p-head">
+          <div class="p-name">{{ p.paper_name }}</div>
+          <!-- P2 补（2026-11-09）：考试状态角标。数据来自后端 contract.exam_state()，
+               含开关/定时窗口/有题三种闸；ready=false 时显示原因，学生不用再猜"为什么考不了"。 -->
+          <span class="p-state" :class="isAnswerable(p) ? 'is-ready' : 'is-off'">
+            {{ isAnswerable(p) ? '可考' : stateLabel(p) }}
+          </span>
+        </div>
         <div class="p-meta">
           <span class="tag">{{ subjectName(p.subject_id) }}</span>
           <span class="tag">{{ p.question_count }} 题</span>
+          <span v-if="p.total_score" class="tag">{{ p.total_score }} 分</span>
           <span class="tag">{{ p.duration }} 分钟</span>
           <span class="tag">{{ examTypeName(p.exam_type) }}</span>
         </div>
+        <p v-if="!isAnswerable(p) && p.exam_hint" class="p-hint">{{ p.exam_hint }}</p>
       </div>
       <div v-if="!papers.length && !loading" class="empty">暂无已发布试卷</div>
       <div v-if="loading" class="empty">加载中...</div>
@@ -23,14 +38,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { usePapersStore } from '@/modules/papers/store';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { fetchExamPapers, type ExamPaperItem } from '@/modules/papers/api';
+import { onPapersDataChanged } from '@/modules/papers/events';
 
 const router = useRouter();
-const papersStore = usePapersStore();
-const papers = computed(() => papersStore.items);
-const loading = computed(() => papersStore.loading);
+const route = useRoute();
+const papers = ref<ExamPaperItem[]>([]);
+const loading = ref(false);
 let unbindRefresh: (() => void) | null = null;
 
 const goBack = () => {
@@ -38,8 +54,8 @@ const goBack = () => {
   else router.push('/mobile/home');
 };
 
-const subjectName = (id: number) => {
-  return { 1: '行测', 2: '申论', 3: '公专' }[id] || '通用';
+const subjectName = (id?: number) => {
+  return ({ 1: '行测', 2: '申论', 3: '公专' } as Record<number, string>)[id || 0] || '通用';
 };
 
 const examTypeName = (t?: string | null) => {
@@ -48,20 +64,52 @@ const examTypeName = (t?: string | null) => {
   return (t && map[t]) || '试卷';
 };
 
-const fetchPapers = async () => {
-  const auth = (window as any).__VTJ_AUTH__;
-  if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) return;
-  await papersStore.load({ pageSize: 50 });
+/** 能不能点「开考」：只有后端说 ready 才允许（口径与资料页 canExam 一致） */
+const isAnswerable = (p: ExamPaperItem) => p.answerable !== false && p.exam?.ready !== false;
+
+/** 角标文案：把后端原因码翻成 2–4 个字，长原因放在下面的 p-hint 里 */
+const stateLabel = (p: ExamPaperItem) => {
+  const reason = p.exam?.reason;
+  const map: Record<string, string> = {
+    closed: '已关闭',
+    not_started: '未开始',
+    expired: '已结束',
+    no_questions: '无题目',
+    draft: '未发布',
+    no_paper: '未建卷'
+  };
+  return (reason && map[reason]) || '不可考';
 };
 
-const startPaper = (p: any) => {
-  // 移动端答题页尚未开放，先跳 PC 端答题（后续接移动端答题页）
-  router.push('/answer?paper_id=' + p.paper_id);
+const load = async () => {
+  const auth = (window as any).__VTJ_AUTH__;
+  if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) return;
+  loading.value = true;
+  try {
+    papers.value = await fetchExamPapers(50);
+  } catch (e) {
+    console.error('加载试卷失败:', e);
+  } finally {
+    loading.value = false;
+  }
+};
+
+/** 开考：手机走 /mobile/answer，平板走 /tablet/answer（同一份组件，paper_id 触发整卷模式） */
+const startPaper = (p: ExamPaperItem) => {
+  if (!isAnswerable(p)) {
+    // 不可考时把原因说清楚，不让用户点了没反应
+    window.alert(p.exam_hint || '这场考试暂时不能开始');
+    return;
+  }
+  const prefix = route.path.startsWith('/tablet') ? '/tablet' : '/mobile';
+  router.push(`${prefix}/answer?paper_id=${p.paper_id}`);
 };
 
 onMounted(async () => {
-  await fetchPapers();
-  unbindRefresh = papersStore.bindRefresh();
+  await load();
+  unbindRefresh = onPapersDataChanged(() => {
+    void load();
+  });
 });
 
 onUnmounted(() => {
@@ -118,12 +166,41 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(26, 54, 95, 0.04);
   cursor: pointer;
 }
+/* 不可考的卷：整卡降饱和，但仍然显示 —— 学生要知道"这套卷在，只是现在不能考" */
+.card--off {
+  opacity: 0.72;
+}
+.p-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 .p-name {
+  flex: 1;
   font-size: 15px;
   font-weight: 600;
   color: #1a2b5f;
   line-height: 1.5;
-  margin-bottom: 8px;
+}
+.p-state {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  padding: 0 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.p-state.is-ready {
+  color: #0f7a4d;
+  background: #e8f8f0;
+  border: 1px solid #bfe9d4;
+}
+.p-state.is-off {
+  color: #8a6d3b;
+  background: #fff7e6;
+  border: 1px solid #fde68a;
 }
 .p-meta {
   display: flex;
@@ -136,6 +213,12 @@ onUnmounted(() => {
   background: #f0f3f7;
   padding: 3px 8px;
   border-radius: 6px;
+}
+.p-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b45309;
+  line-height: 1.5;
 }
 .empty {
   text-align: center;

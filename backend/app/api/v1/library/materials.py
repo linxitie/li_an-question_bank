@@ -3082,12 +3082,18 @@ async def admin_batch_create(
     if len(items) > limit:
         raise HTTPException(400, f"单次最多 {limit} 条")
 
+    # 2026-11-09（用户点单）：一键上架。`publish=true` 覆盖 items 里各自的 status，
+    # 并且**必须走 P5 联动**——否则会出现"资料已上架、卷还是 DRAFT、学生考不了"
+    # （#127 那次就是这种：状态写 1 但没同步卷）。
+    publish = bool(body.get("publish"))
+
     created_ids = []
+    created_objs = []
     skipped = []
     for item in items:
         data = _validate_material_body(item)
         _finalize_classification(db, data)   # P2.4：批量建卡同样走两级自动分类
-        status = item.get("status", 0)
+        status = 1 if publish else item.get("status", 0)
         if status not in (0, 1):
             raise HTTPException(400, "status 只能是 0（未上架）或 1（已上架）")
         content_hash = _material_content_hash(data)
@@ -3096,19 +3102,42 @@ async def admin_batch_create(
             if dup_id:
                 skipped.append({"title": data.get("title"), "existing_id": dup_id})
                 continue
+        # 2026-11-09：批量建「试卷资料」时也要能带上关联键与投放位，
+        # 否则 P5 联动取不到卷（`paper_code` 为空 → skipped=empty_code），
+        # 一键上架就只改了资料状态、卷仍是 DRAFT。两个字段都做显式校验。
+        placement = (item.get("placement") or "").strip().lower()
+        if placement and placement not in ("exam", "library", "both"):
+            raise HTTPException(400, "placement 只能是 exam（仅考试页）/ library（仅资料页）/ both")
+        paper_code = (item.get("paper_code") or "").strip() or None
         m = StudyMaterial(**data, status=status, content_hash=(content_hash or None),
-                          creator_id=current_user.user_id)
+                          creator_id=current_user.user_id,
+                          paper_code=paper_code, placement=(placement or None))
         db.add(m)
         db.flush()
         created_ids.append(m.material_id)
+        created_objs.append(m)
 
     db.commit()
     _audit(db, current_user, "batch_create", f"created={len(created_ids)}",
            f"批量建资料 {len(created_ids)} 条"
+           + ("，一键上架" if publish and created_ids else "")
            + (f"，跳过重复 {len(skipped)} 条" if skipped else ""))
     db.commit()
+
+    # P5 联动：批量上架时把对应可作答卷一并置为 PUBLISHED（不 commit 由这里统一提交）
+    syncs: list = []
+    if publish and created_objs:
+        from ....services import material_paper_sync
+        syncs = material_paper_sync.sync_materials(db, created_objs)
+        note = material_paper_sync.note_of_many(syncs)
+        if note:
+            _audit(db, current_user, "status", f"materials:{len(created_objs)}", note)
+        db.commit()
+
     return {"created": len(created_ids), "material_ids": created_ids,
-            "skipped_duplicates": skipped}
+            "skipped_duplicates": skipped,
+            "published": len(created_objs) if publish else 0,
+            "paper_sync": [s for s in syncs if s.get("changed")]}
 
 
 @router.get("/admin/import-records", summary="导入记录列表(管理员)")

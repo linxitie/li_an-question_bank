@@ -174,3 +174,65 @@ class TestTeacherPreviewUnpublished:
         row.status = -1
         db_session.commit()
         assert client.get(f"/api/materials/{mid}", headers=teacher_headers).status_code == 404
+
+
+class TestBatchPublish:
+    """2026-11-09 用户点单：批量导入/批量创建要能「一键上架」。
+
+    除了把 status 写 1，**必须**顺带 P5 联动（卷同步 PUBLISHED），
+    否则就是历史坑：资料显示已上架，学生点「去考试」却提示"未发布"。
+    """
+
+    def _draft_paper(self, db_session, code="BATCH-PUB-1"):
+        from app.models.models import ExamPaper
+        paper = ExamPaper(
+            paper_name="批量上架测试卷", paper_code=code, subject_id=3,
+            composition_method="IMPORT", creator_id=1, duration=120,
+            total_score=100, difficulty=3, exam_type="SIMULATION",
+            paper_type="DRAFT", question_count=2, max_attempts=5,
+        )
+        db_session.add(paper)
+        db_session.commit()
+        db_session.refresh(paper)
+        return paper
+
+    def test_batch_publish_sets_status_and_syncs_paper(self, client, db_session, admin_headers):
+        paper = self._draft_paper(db_session)
+        resp = client.post("/api/materials/admin/batch", headers=admin_headers, json={
+            "publish": True,
+            "items": [{
+                "subject": "gongzhuan", "type": "paper", "title": "批量一键上架卷",
+                "paper_code": paper.paper_code,
+            }],
+        })
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["created"] == 1
+        assert body["published"] == 1
+
+        from app.models.models import StudyMaterial
+        row = db_session.query(StudyMaterial).filter(
+            StudyMaterial.material_id == body["material_ids"][0]).one()
+        assert row.status == 1, "publish=true 必须覆盖为已上架"
+
+        db_session.refresh(paper)
+        assert paper.paper_type == "PUBLISHED", "上架必须联动卷状态（P5），否则学生考不了"
+
+    def test_batch_without_publish_stays_unpublished(self, client, db_session, admin_headers):
+        paper = self._draft_paper(db_session, code="BATCH-PUB-2")
+        resp = client.post("/api/materials/admin/batch", headers=admin_headers, json={
+            "items": [{
+                "subject": "gongzhuan", "type": "paper", "title": "批量不上架卷",
+                "paper_code": paper.paper_code,
+            }],
+        })
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["published"] == 0
+
+        from app.models.models import StudyMaterial
+        row = db_session.query(StudyMaterial).filter(
+            StudyMaterial.material_id == body["material_ids"][0]).one()
+        assert row.status == 0
+        db_session.refresh(paper)
+        assert paper.paper_type == "DRAFT", "没勾一键上架就不该动卷状态"

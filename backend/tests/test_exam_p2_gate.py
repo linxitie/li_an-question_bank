@@ -308,3 +308,58 @@ def test_material_preview_reports_not_answerable(client, db_session, test_subjec
                       headers=admin_headers).json()
     assert body["paper"]["answerable"] is True
     assert body["paper"]["exam"]["reason"] == "ready"
+
+
+# ---------------------------------------- /api/exams/list 下发考试状态（2026-11-09）
+def _exam_list_item(client, headers, paper_id):
+    resp = client.get("/api/exams/list?page=1&page_size=100", headers=headers)
+    assert resp.status_code == 200, resp.text
+    for item in resp.json()["data"]:
+        if item["paper_id"] == paper_id:
+            return item
+    return None
+
+
+def test_exam_list_carries_ready_state(client, db_session, test_subject,
+                                       test_question_type, auth_headers, test_user):
+    """可考的卷：exam.ready=True、answerable=True、exam_hint 为空。"""
+    paper = _paper(db_session, test_subject.subject_id, code="P2-LIST-READY")
+    _add_questions(db_session, paper, test_subject.subject_id,
+                   test_question_type.type_id, test_user.user_id, 2)
+
+    item = _exam_list_item(client, auth_headers, paper.paper_id)
+    assert item is not None
+    assert item["exam"]["ready"] is True
+    assert item["exam"]["reason"] == "ready"
+    assert item["answerable"] is True
+    assert item["exam_hint"] == ""
+
+
+def test_exam_list_marks_closed_reason(client, db_session, test_subject,
+                                       test_question_type, auth_headers, test_user):
+    """/api/exams/list 不过滤开关，学生能拿到 closed 原因与一句人话。"""
+    paper = _paper(db_session, test_subject.subject_id, code="P2-LIST-CLOSED", open_=0)
+    _add_questions(db_session, paper, test_subject.subject_id,
+                   test_question_type.type_id, test_user.user_id, 2)
+
+    item = _exam_list_item(client, auth_headers, paper.paper_id)
+    assert item is not None
+    assert item["exam"]["reason"] == "closed"
+    assert item["answerable"] is False
+    assert "已关闭" in item["exam_hint"]
+
+
+def test_exam_list_marks_not_started_with_time(client, db_session, test_subject,
+                                               test_question_type, auth_headers, test_user):
+    """定时未到：reason=not_started，文案里带开始时间（学生不用再问管理员）。"""
+    future = datetime.now() + timedelta(hours=2)
+    paper = _paper(db_session, test_subject.subject_id, code="P2-LIST-SOON",
+                   open_at=future)
+    _add_questions(db_session, paper, test_subject.subject_id,
+                   test_question_type.type_id, test_user.user_id, 2)
+
+    item = _exam_list_item(client, auth_headers, paper.paper_id)
+    assert item is not None
+    assert item["exam"]["reason"] == "not_started"
+    assert item["answerable"] is False
+    assert "开始" in item["exam_hint"]

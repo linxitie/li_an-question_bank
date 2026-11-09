@@ -38,8 +38,9 @@
     <div v-if="loading" class="empty">加载中...</div>
 
     <main v-else class="body">
-      <!-- 模式切换：做题模式延后显示答案，记背模式立即显示 -->
-      <div class="mode-switch">
+      <!-- 模式切换：做题模式延后显示答案，记背模式立即显示。
+           整卷考试（paper_id 模式）不显示：考试中不能泄露模式概念 -->
+      <div v-if="!isPaperMode" class="mode-switch">
         <button
           class="mode-btn"
           :class="{ active: mode === 'practice' }"
@@ -61,7 +62,7 @@
       </div>
       <!-- 题目 -->
       <div class="q-card">
-        <div class="q-type">{{ current.type_label || '' }} · {{ current.question_type_detail || '单选题' }}</div>
+        <div class="q-type">{{ typeLine }}</div>
         <div class="q-content" v-html="renderQuestionContent(current.question_content, { stripInlineOption: true })"></div>
         <div v-if="current.requirements" class="q-requirements" style="margin:6px 0;padding:6px 10px;background:#f7f8fa;border-radius:6px;color:#666;font-size:13px;line-height:1.6;">
           <strong style="color:#333;">题目要求：</strong><span v-html="renderQuestionContent(current.requirements)"></span>
@@ -104,8 +105,8 @@
       <div v-if="showResult && current.is_subjective" class="result result-subjective">
         <div class="result-title">📝 主观题已作答，等待人工评分</div>
       </div>
-      <!-- 全部答完后的统一成绩汇总 -->
-      <div v-if="allFinished" class="summary">
+      <!-- 全部答完后的统一成绩汇总（练习模式本地判分；整卷考试由服务端评分，交卷后跳结果页） -->
+      <div v-if="allFinished && !isPaperMode" class="summary">
         <div class="summary-title">🎉 全部完成</div>
         <div class="summary-body">共 {{ questions.length }} 题（客观题 {{ objectiveCount }} 题），正确 {{ correctCount }} 题，正确率 {{ summaryRate }}%</div>
       </div>
@@ -120,7 +121,11 @@
         :disabled="currentIndex === 0"
       ><span v-if="prevAnswered" class="prev-dot"></span>上一题</button>
       <button class="next-btn" @click="nextQuestion" :disabled="currentIndex >= questions.length - 1">下一题</button>
-      <button class="submit-btn" @click="submitAll" :disabled="!allFinished">交卷</button>
+      <button
+        class="submit-btn"
+        @click="submitAll"
+        :disabled="isPaperMode ? submitting : !allFinished"
+      >{{ isPaperMode ? (submitting ? '交卷中…' : '交卷') : '交卷' }}</button>
     </footer>
   </div>
 </template>
@@ -132,6 +137,19 @@ import { renderQuestionContent } from '@/utils/questionRender';
 
 const router = useRouter();
 const route = useRoute();
+
+// ===== 整卷考试模式（2026-11-09，用户立项）=====
+// 同一份组件承担两种入口，靠 `paper_id` 参数分流：
+//   · 练习：`/mobile/answer?knowledge_point_ids=…`（原有逻辑，本地判分、答后看解析）
+//   · 整卷考试：`/mobile/answer?paper_id=5`（开考 → 作答 → 交卷 → 服务端评分 → 结果页）
+// 为什么不新建页面：路由条数是门禁基线（L6/L7 105 条），新增路由要改基线；
+// 且题干渲染、选项交互、答题卡、主观题输入都能直接复用。
+const paperId = computed(() => Number(route.query.paper_id || 0) || 0);
+const isPaperMode = computed(() => paperId.value > 0);
+const paperInfo = ref<any>(null);   // { paper_name, duration, total_score, question_count }
+const recordId = ref(0);            // 开考返回的 exam_record.record_id
+const submitting = ref(false);
+
 const questions = ref<{ options?: string[]; [key: string]: any }[]>([]);
 const currentIndex = ref(0);
 const loading = ref(false);
@@ -206,9 +224,13 @@ const prevAnswered = computed(() => {
   return i >= 0 && isAnsweredAt(i);
 });
 
-// 答案与解析是否应当显示：记背模式立即显示；做题模式在末题或全部答完时显示
+// 答案与解析是否应当显示：记背模式立即显示；做题模式在末题或全部答完时显示。
+// 整卷考试（paper_id 模式）**一律不显示**：考试中泄露答案等于作弊通道。
 const showResult = computed(
-  () => answered.value && (mode.value === 'memorize' || allFinished.value || isLastQuestion.value)
+  () =>
+    !isPaperMode.value &&
+    answered.value &&
+    (mode.value === 'memorize' || allFinished.value || isLastQuestion.value)
 );
 
 // 最终答对题数：直接由逐题记录派生（主观题不自动判分，只计客观题）
@@ -236,6 +258,16 @@ const jumpTo = (idx: number) => {
 };
 
 const current = computed<{ options?: string[]; [key: string]: any }>(() => questions.value[currentIndex.value] || {});
+
+// 题型行：`type_label` 与 `question_type_detail` 两段拼接，**去重**后再拼。
+// 为什么：整卷考试接口只给一个 type_name（如「单选题」），两段都填会显示成
+// 「单选题 · 单选题」；去重后保持练习模式的原样（两段不同则仍用「·」分隔）。
+const typeLine = computed(() => {
+  const a = String(current.value.type_label || '').trim();
+  const b = String(current.value.question_type_detail || '').trim();
+  if (a && b && a !== b) return `${a} · ${b}`;
+  return a || b || '单选题';
+});
 
 // P1-2: 切题时加载当前题的题组材料
 watch(current, (q: any) => {
@@ -404,6 +436,8 @@ const normalizeRequirements = (raw: any): string => {
 };
 
 const fetchQuestions = async () => {
+  // 整卷考试走另一条链路（开考 → 取题），不碰练习模式的本地判分
+  if (isPaperMode.value) return fetchPaperExam();
   loading.value = true;
   try {
     const auth = (window as any).__VTJ_AUTH__;
@@ -521,6 +555,7 @@ const flushPending = async () => {
 };
 
 const submitAll = async () => {
+  if (isPaperMode.value) return submitPaperExam();
   if (!allFinished.value) {
     // 未全部作答：定位到第一道未作答的题，避免用户误以为已交卷
     const idx = questions.value.findIndex((_, i) => !isAnsweredAt(i));
@@ -537,6 +572,113 @@ const prevQuestion = () => {
 
 const nextQuestion = () => {
   if (currentIndex.value < questions.value.length - 1) currentIndex.value++;
+};
+
+// ===== 整卷考试：开考 + 取题 =====
+// 两条现有后端链路直接复用，不新增接口：
+//   POST /api/exams/{paper_id}/start   → 过考试闸（开关/定时/有题），幂等复用未完成记录
+//   GET  /api/exams/{paper_id}/questions → 返回题目（考试态，**不含答案与解析**）
+const fetchPaperExam = async () => {
+  loading.value = true;
+  fetchError.value = '';
+  try {
+    const auth = (window as any).__VTJ_AUTH__;
+    const startRes = await auth.apiFetch(`/api/exams/${paperId.value}/start`, { method: 'POST' });
+    const startJson = await startRes.json().catch(() => ({}));
+    if (!startRes.ok) {
+      // 后端的 400 文案就是给学生看的人话（"考试已关闭…" / "还没到开始时间…"）
+      fetchError.value = startJson?.detail || startJson?.message || '这场考试暂时不能开始';
+      return;
+    }
+    const startData = startJson?.data ?? startJson;
+    recordId.value = Number(startData?.record_id || 0);
+
+    const qRes = await auth.apiFetch(`/api/exams/${paperId.value}/questions`);
+    const qJson = await qRes.json().catch(() => ({}));
+    if (!qRes.ok) {
+      fetchError.value = qJson?.detail || '题目加载失败，请返回重试';
+      return;
+    }
+    paperInfo.value = qJson;
+    const list = (qJson?.questions || []) as any[];
+    questions.value = list.map((q: any) => ({
+      question_id: q.question_id,
+      question_content: q.question_content,
+      // 考试接口的 options 是 [{key,value}]，模板要纯文本数组（字母单独渲染）
+      options: normalizeOptionsForDisplay(q.options),
+      is_subjective: !!q.is_subjective,
+      type_label: q.type_name || '',
+      // 多选题必须让 `isMulti` 认出来（它看的就是这一段），否则多选只能单选
+      question_type_detail: q.type_name === '多选题' ? '多选题' : '',
+      score: q.question_score,
+      group_id: q.group_id || 0,
+      requirements: '',
+      // 考试中后端不下发答案；这里显式留空，避免任何"本地判分"的误显示
+      answer: undefined,
+      answer_analysis: '',
+      shared_content: q.shared_content || ''
+    }));
+    answersRecord.value = new Array(questions.value.length).fill(null);
+    subjectiveAnswers.value = {};
+    currentIndex.value = 0;
+  } catch (e) {
+    console.error('开考失败:', e);
+    fetchError.value = '网络异常，请返回重试';
+  } finally {
+    loading.value = false;
+  }
+};
+
+// ===== 整卷考试：交卷 =====
+// 只提交**已作答**的题（空白题不传）：后端按"空=错"落明细，
+// 与 PC 端答题卡的行为一致（实测 97 题只答 2 题也是 97 条明细、95 条空）。
+const submitPaperExam = async () => {
+  if (submitting.value) return;
+  const answeredCount = questions.value.filter((_, i) => isAnsweredAt(i)).length;
+  const rest = questions.value.length - answeredCount;
+  const tip = rest > 0
+    ? `还有 ${rest} 题未作答（空题按错计），确定交卷？`
+    : '确定交卷？交卷后不能再改。';
+  if (!window.confirm(tip)) return;
+
+  submitting.value = true;
+  try {
+    const auth = (window as any).__VTJ_AUTH__;
+    const answers: Record<string, string> = {};
+    questions.value.forEach((q: any, i: number) => {
+      if (q.is_subjective) {
+        const text = String(subjectiveAnswers.value[i] || '').trim();
+        if (text) answers[String(q.question_id)] = text;
+        return;
+      }
+      const selected = answersRecord.value[i]?.selected || [];
+      // 客观题**每题都提交**（未作答传空串）：PC 答题卡就是这个行为，
+      // 这样 `exam_answer_detail` 条数 = 卷题数，结果页「正确/错误 0 / N 题」的分母才对；
+      // 只传已答题会让分母变成"答了几题"（实测显示成 0 / 1）。
+      answers[String(q.question_id)] = selected.length
+        // 多选题按字母升序拼 A,C（后端按集合比较，顺序不敏感）
+        ? selected.map((idx: number) => letters[idx]).sort().join(',')
+        : '';
+    });
+
+    const res = await auth.apiFetch(`/api/exams/${recordId.value}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(answers)
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      window.alert(json?.detail || json?.message || '交卷失败，请重试');
+      return;
+    }
+    // 交卷成功 → 结果页（PC/手机共用；结果页口径已统一为 is_scored + answered_count）
+    router.replace(`/paper-result?record_id=${recordId.value}&paper_id=${paperId.value}`);
+  } catch (e) {
+    console.error('交卷失败:', e);
+    window.alert('网络异常，交卷未成功，请重试');
+  } finally {
+    submitting.value = false;
+  }
 };
 
 onMounted(fetchQuestions);
