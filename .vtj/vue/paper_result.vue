@@ -263,6 +263,23 @@ export default defineComponent({
 .meta-label { font-size: 12px; color: #999; }
 .meta-value { font-size: 18px; font-weight: 700; color: #1A3C6D; }
 .meta-value.green { color: #67c23a; }
+
+/* 分母口径（2026-11-09）：结果页原来并排两个「0 / 97」——一个是分数、一个是题数，容易看混。
+   这里只加**视觉后缀**，不改模板结构（R3：.vtj 页面的 <template> 由设计器维护）：
+     · 满分后面补「分」   → 「0 / 97 分」
+     · 正确/错误后面补「题」→ 「0 / 97 题」（第 3 个 meta-item 就是它） */
+.score-max::after {
+  content: " 分";
+  font-size: 15px;
+  font-weight: 500;
+  color: #999;
+}
+.score-meta .meta-item:nth-child(3) .meta-value::after {
+  content: " 题";
+  font-size: 13px;
+  font-weight: 500;
+  color: #999;
+}
 .result-actions { display: flex; gap: 12px; }
 .pr-btn { padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 14px; border: none; }
 .pr-btn.primary { background: #1A3C6D; color: #fff; }
