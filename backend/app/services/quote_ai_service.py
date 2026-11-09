@@ -11,7 +11,7 @@ from typing import Any, Callable
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..models.models import EssayQuote
+from ..models.models import EssayQuote, QuoteReview
 from . import llm_client
 
 _SYSTEM = (
@@ -132,6 +132,8 @@ def review_quotes(
                 quality, score, reason = "error", 0, f"AI审核失败: {exc}"
                 errors += 1
         if apply:
+            previous_status = quote.status
+            previous_review = quote.review_status
             quote.ai_quality = quality
             quote.ai_quality_reason = reason
             quote.ai_reviewed_at = datetime.now()
@@ -144,6 +146,24 @@ def review_quotes(
                 quote.status = 0
                 quote.review_status = "rejected"
                 rejected += 1
+            db.add(
+                QuoteReview(
+                    quote_id=quote.quote_id,
+                    reviewer_id=None,
+                    action=f"ai_{quality}",
+                    reason=reason,
+                    diff_json=json.dumps(
+                        {
+                            "from": previous_review,
+                            "to": quote.review_status,
+                            "status_from": previous_status,
+                            "status_to": quote.status,
+                            "score": score,
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            )
         elif quality == "approved":
             approved += 1
         elif quality == "rejected":

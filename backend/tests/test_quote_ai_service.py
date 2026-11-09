@@ -1,4 +1,4 @@
-from app.models.models import EssayQuote
+from app.models.models import EssayQuote, QuoteReview
 from app.services.quote_ai_service import review_quotes
 
 
@@ -27,3 +27,4 @@ def test_quote_ai_review_isolates_low_quality(db_session):
     assert good.status == 1
     assert good.review_status == "published"
     assert good.quality_score == 92.0
+    assert db_session.query(QuoteReview).count() == 2

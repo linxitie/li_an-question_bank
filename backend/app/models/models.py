@@ -2252,6 +2252,20 @@ class DailyQuote(Base):
     created_at = Column(DateTime, default=datetime.now, comment="生成时间")
 
 
+class QuoteReview(Base):
+    """金句审核流水，保留 AI/人工审核痕迹。"""
+
+    __tablename__ = "quote_review"
+
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    quote_id = Column(BigInteger, nullable=False)
+    reviewer_id = Column(BigInteger, nullable=True)
+    action = Column(String(20), nullable=False)
+    reason = Column(Text)
+    diff_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class QuoteFavorite(Base):
     """金句收藏表"""
 

@@ -121,11 +121,7 @@
         </div>
 
         <!-- 每日金句 -->
-        <div class="quote-card">
-          <XIcon :icon="ChatDotRound" :size="24" color="#f59e0b" class="quote-icon"></XIcon>
-          <p class="quote-text">{{ dailyQuote }}</p>
-          <p class="quote-author">—— {{ quoteAuthor }}</p>
-        </div>
+        <MobileDailyQuote />
 
         <!-- 快捷功能 -->
         <div class="quick-actions">
@@ -163,21 +159,7 @@
       <!-- 右侧面板 -->
       <aside class="right-panel">
         <!-- 每日新闻 -->
-        <div class="news-card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <XIcon :icon="Document" :size="20" color="#1A365D"></XIcon>
-              每日新闻
-            </h2>
-            <span class="card-action" @click="viewAllNews">查看全部</span>
-          </div>
-          <div class="news-list">
-            <div class="news-item" v-for="(news, index) in newsList" :key="index" @click="viewNews(news)">
-              <XIcon :icon="Right" :size="12" color="#1A365D"></XIcon>
-              <span class="news-title">{{ news.title }}</span>
-            </div>
-          </div>
-        </div>
+        <MobileDailyNews />
 
         <!-- 招考信息 -->
         <div class="recruit-card">

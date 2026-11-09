@@ -421,6 +421,7 @@ def parse_article(html: str, url: str) -> ArticleData:
         except ValueError:
             published_at = None
     images = []
+    image_nodes = []
     seen_images = set()
     # 只在最佳正文容器内取图；没有识别到正文时不回退到全页 <img>。
     for img in (content_node.find_all("img") if content_node is not None else []):
@@ -442,8 +443,13 @@ def parse_article(html: str, url: str) -> ArticleData:
             continue
         seen_images.add(src)
         images.append(src)
+        image_nodes.append((img, len(images) - 1))
         if len(images) >= 5:
             break
+    if content_node is not None and image_nodes:
+        for img, order in image_nodes:
+            img.replace_with(f" [[IMG:{order}]] ")
+        body = clean_article_text(title, "\n".join(_content_paragraphs(content_node)))
     return ArticleData(
         url=url, title=title, content=body.strip(), published_at=published_at, images=images
     )
