@@ -20,6 +20,12 @@ def main() -> int:
     parser.add_argument("--source", default="", help="来源 code；留空表示全部")
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument(
+        "--daily-limit",
+        type=int,
+        default=5,
+        help="每个来源每天最多入库条数（跨 08/18 两次任务累计）",
+    )
+    parser.add_argument(
         "--scan-limit",
         type=int,
         default=0,
@@ -46,6 +52,7 @@ def main() -> int:
                     source,
                     limit=args.limit,
                     scan_limit=scan_limit,
+                    daily_limit=args.daily_limit,
                     dry_run=not args.apply,
                 )
             ]
@@ -54,6 +61,7 @@ def main() -> int:
                 db,
                 limit=args.limit,
                 scan_limit=scan_limit,
+                daily_limit=args.daily_limit,
                 dry_run=not args.apply,
             )
     finally:

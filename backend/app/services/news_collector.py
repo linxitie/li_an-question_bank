@@ -550,6 +550,7 @@ def collect_source(
     *,
     limit: int = 5,
     scan_limit: int | None = None,
+    daily_limit: int | None = 5,
     dry_run: bool = False,
     fetcher: Callable[[str], str] | None = None,
     storage: NewsStorage | None = None,
@@ -576,6 +577,24 @@ def collect_source(
         "errors": [],
         "samples": [],
     }
+    if daily_limit is not None:
+        day_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        used_today = (
+            db.query(NewsArticle)
+            .filter(
+                NewsArticle.source == source.code,
+                NewsArticle.create_time >= day_start,
+            )
+            .count()
+        )
+        remaining_today = max(0, daily_limit - used_today)
+        report["daily_used"] = used_today
+        report["daily_remaining"] = remaining_today
+        if remaining_today == 0:
+            report["ok"] = True
+            report["daily_skipped"] = True
+            return report
+        limit = min(limit, remaining_today)
     try:
         list_html = fetch(source.list_url)
         host = urlparse(source.base_url).netloc.lower()
@@ -664,6 +683,7 @@ def collect_all_sources(
     *,
     limit: int = 5,
     scan_limit: int | None = None,
+    daily_limit: int | None = 5,
     dry_run: bool = False,
 ) -> list[dict]:
     enabled = {
@@ -680,6 +700,7 @@ def collect_all_sources(
                 source,
                 limit=limit,
                 scan_limit=scan_limit,
+                daily_limit=daily_limit,
                 dry_run=dry_run,
             )
         )

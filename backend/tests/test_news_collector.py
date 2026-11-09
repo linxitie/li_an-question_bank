@@ -140,3 +140,31 @@ def test_collect_source_dry_run_does_not_write(tmp_path, db_session):
 
     assert report["inserted"] == 1
     assert db_session.query(NewsArticle).count() == 0
+
+
+def test_daily_limit_blocks_source_after_five(db_session):
+    for index in range(5):
+        db_session.add(
+            NewsArticle(
+                title=f"今日来源文章{index}",
+                url=f"https://example.com/{index}",
+                source="beijing",
+                content="正文" * 50,
+                status=0,
+                review_status="pending",
+            )
+        )
+    db_session.commit()
+
+    report = news_collector.collect_source(
+        db_session,
+        _source(),
+        limit=5,
+        daily_limit=5,
+        dry_run=True,
+    )
+
+    assert report["daily_used"] == 5
+    assert report["daily_remaining"] == 0
+    assert report["daily_skipped"] is True
+    assert report["inserted"] == 0

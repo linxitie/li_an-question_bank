@@ -99,7 +99,9 @@ def init_scheduler():
 
         db = SessionLocal()
         try:
-            collect_report = collect_all_sources(db, limit=5, scan_limit=15, dry_run=False)
+            collect_report = collect_all_sources(
+                db, limit=5, scan_limit=15, daily_limit=5, dry_run=False
+            )
             ai_report = process_news(db, limit=100)
             vault = Path(__file__).resolve().parents[2] / "content_hub_vault"
             export_report = export_news_board(db, vault, dry_run=False)
