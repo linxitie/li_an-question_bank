@@ -84,6 +84,10 @@ def _fallback(news: NewsArticle) -> dict[str, Any]:
 
 def _normalize(data: dict[str, Any]) -> dict[str, Any]:
     summary = str(data.get("summary") or "").strip()[:400]
+    if summary and not re.search(r"[。！？!?]$", summary):
+        boundary = max(summary.rfind("。"), summary.rfind("！"), summary.rfind("？"))
+        if boundary >= 100:
+            summary = summary[: boundary + 1]
     exam_points = [str(item) for item in (data.get("exam_points") or [])][:8]
     official = [str(item) for item in (data.get("official_phrases") or [])][:8]
     entities = []
