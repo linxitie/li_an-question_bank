@@ -128,6 +128,20 @@ def init_scheduler():
         scrape_all_recruitment()
         _broadcast_sync("招考信息更新")
 
+    def _sync_quotes_with_broadcast():
+        from ..core.database import SessionLocal
+        from .quote_sync_service import sync_obsidian_quotes
+
+        db = SessionLocal()
+        try:
+            report = sync_obsidian_quotes(db)
+            logger.info("金句自动同步完成: %s", report)
+        except Exception:
+            logger.exception("金句自动同步失败")
+        finally:
+            db.close()
+        _broadcast_sync("金句更新")
+
     def _exams_with_broadcast():
         scrape_all_exams()
         _broadcast_sync("考试日历更新")
@@ -138,6 +152,13 @@ def init_scheduler():
         trigger=CronTrigger(hour="8,18", minute=0, timezone=CST),
         id="collect_news",
         name="每日新闻采集（新采集器）",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _sync_quotes_with_broadcast,
+        trigger=CronTrigger(hour=0, minute=10, timezone=CST),
+        id="sync_quotes",
+        name="每日金句 Obsidian 同步",
         replace_existing=True,
     )
     scheduler.add_job(
