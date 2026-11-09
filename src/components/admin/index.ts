@@ -30,3 +30,5 @@ export { default as ArticleBatchUpload } from './ArticleBatchUpload.vue';
 export { default as ExamGateDialog } from './ExamGateDialog.vue';
 // P3（2026-11-09）：导题确认抽屉（拆题结果逐题核对 → 确认入库）
 export { default as ParseDraftDrawer } from './ParseDraftDrawer.vue';
+// P4（2026-11-09）：补答案抽屉（上传答案 PDF → 逐题核对 → 写入答案/解析）
+export { default as AnswerDraftDrawer } from './AnswerDraftDrawer.vue';

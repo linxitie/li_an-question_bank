@@ -883,3 +883,138 @@ export async function discardParseDraft(draftId: number): Promise<{ ok: boolean;
   });
   return res.data;
 }
+
+// ==================== 答案上传（P4，2026-11-09）====================
+
+/**
+ * 答案解析草稿里的一道题。
+ *
+ * `answer` 为空但 `suggestion` 有值 = 只有"推断建议"（实测该层会错，所以**不自动填**，
+ * 界面显示「建议 ABCD → 采纳」，由人点一下）。
+ */
+export interface AnswerDraftItem {
+  no: number;
+  answer: string;
+  tier: string;
+  suggestion: string;
+  evidence: string;
+  analysis: string;
+  flags: string[];
+  question_type?: string;
+  current?: string;
+}
+
+export interface AnswerDraftDetail {
+  draft_id: number;
+  paper_id: number;
+  paper_code: string | null;
+  paper_name: string | null;
+  status: 'pending' | 'applied' | 'discarded' | 'failed' | string;
+  source_ext: string | null;
+  source_name: string | null;
+  item_count: number;
+  conflict_count: number;
+  empty_count: number;
+  message: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  items?: AnswerDraftItem[];
+  can_edit?: boolean;
+  ok?: boolean;
+}
+
+/** 上传答案文件（PDF 一等通道）→ 解析成「答案草稿」，此时**还没写库** */
+export async function parseAnswerFile(
+  paperId: number,
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<AnswerDraftDetail> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await libraryClient.request<AnswerDraftDetail>({
+    url: `/api/materials/admin/papers/${paperId}/answers/parse`,
+    method: 'POST',
+    baseURL: '',
+    data: form,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 180000,
+    onUploadProgress: (e) => {
+      const total = e.total || file.size || 0;
+      if (!total) return;
+      onProgress?.(Math.min(99, Math.round(((e.loaded || 0) / total) * 100)));
+    }
+  });
+  onProgress?.(100);
+  return res.data;
+}
+
+export function fetchAnswerDraft(draftId: number): Promise<AnswerDraftDetail> {
+  return request<AnswerDraftDetail>({
+    url: `/api/materials/admin/answers/drafts/${draftId}`,
+    method: 'GET'
+  });
+}
+
+/**
+ * 取该卷**最近一份**答案草稿（抽屉打开时先看有没有未确认的）。
+ *
+ * 为什么需要：上传后若先关掉抽屉，草稿会留在库里；没有这个入口就成了"看不见的待办"。
+ */
+export async function fetchLatestAnswerDraft(
+  paperId: number
+): Promise<AnswerDraftDetail & { exists: boolean }> {
+  const res = await libraryClient.request<AnswerDraftDetail & { exists: boolean }>({
+    url: `/api/materials/admin/papers/${paperId}/answers/latest`,
+    method: 'GET',
+    baseURL: ''
+  });
+  return res.data;
+}
+
+/** 整表保存（补空 / 改冲突 / 采纳建议）；答案只允许 A–D，题号必须属于该卷 */
+export async function saveAnswerDraftItems(
+  draftId: number,
+  items: AnswerDraftItem[]
+): Promise<AnswerDraftDetail> {
+  const res = await libraryClient.request<AnswerDraftDetail>({
+    url: `/api/materials/admin/answers/drafts/${draftId}/items`,
+    method: 'PUT',
+    baseURL: '',
+    data: { items }
+  });
+  return res.data;
+}
+
+export interface AnswerApplyResult {
+  ok: boolean;
+  filled: number;
+  overwritten: number;
+  kept: number;
+  skipped: number;
+  analysis_only: number;
+  kept_numbers: number[];
+}
+
+/** 写入答案（只动 answer / answer_analysis；不重算历史成绩） */
+export async function applyAnswerDraft(
+  draftId: number,
+  body: { overwrite?: boolean } = {}
+): Promise<AnswerApplyResult> {
+  const res = await libraryClient.request<AnswerApplyResult>({
+    url: `/api/materials/admin/answers/drafts/${draftId}/apply`,
+    method: 'POST',
+    baseURL: '',
+    data: body,
+    timeout: 180000
+  });
+  return res.data;
+}
+
+export async function discardAnswerDraft(draftId: number): Promise<{ ok: boolean; status: string }> {
+  const res = await libraryClient.request<{ ok: boolean; status: string }>({
+    url: `/api/materials/admin/answers/drafts/${draftId}`,
+    method: 'DELETE',
+    baseURL: ''
+  });
+  return res.data;
+}

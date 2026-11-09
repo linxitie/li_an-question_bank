@@ -1587,6 +1587,49 @@ class PaperParseDraft(Base):
     )
 
 
+class PaperAnswerDraft(Base):
+    """答案解析草稿（P4，2026-11-09）。
+
+    背景：现有答案素材**全是 PDF**（`题库/答案解析（不用打印）/` 47 份）。实测 4 套卷的答案
+    PDF 能做到题号 397/397、答案自动识别 397/397，但不同来源写法差别很大，所以和"导题"一样
+    走**草稿 → 预览 → 确认写入**：错一个答案，学生就对不上解析。
+
+    与 `paper_parse_draft` 的分工：那张表管"题目从哪来"，本表管"答案/解析从哪来"。
+
+    `items_json` 每题一项：:
+
+        {"no": 12, "answer": "AB", "tier": "L1", "suggestion": "",
+         "analysis": "本题考查…故正确答案为AB。", "flags": ["题型冲突"],
+         "question_type": "多选", "current": ""}
+
+    - `tier`：答案从哪一层读出来的（L0 直给 / L1 标记 / L2 结论 / L3 推断）；
+    - `suggestion`：**只给建议不自动填**的那一层（L3 推断）的结果 —— 实测该层会错，必须人看一眼；
+    - `current`：库里已有的答案（用于"默认保留 + 冲突标红"）。
+    """
+    __tablename__ = "paper_answer_draft"
+
+    draft_id = Column(Integer, primary_key=True, autoincrement=True)
+    paper_id = Column(Integer, nullable=False, comment="目标卷")
+    status = Column(String(16), default="pending", nullable=False,
+                    comment="pending / applied / discarded / failed")
+    source_ext = Column(String(10), comment="pdf / docx / xlsx / txt")
+    source_name = Column(String(255), comment="原始文件名（追溯用）")
+    item_count = Column(Integer, default=0, comment="解析出多少题")
+    conflict_count = Column(Integer, default=0, comment="与题型或已有答案冲突的题数")
+    empty_count = Column(Integer, default=0, comment="没有解析出答案的题数")
+    items_json = Column(Text, comment="答案草稿（JSON 数组，见类文档）")
+    message = Column(String(500), comment="失败原因 / 写入结果摘要")
+    created_by = Column(BigInteger, ForeignKey("sys_user.user_id"))
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    expires_at = Column(DateTime, comment="保留到什么时候（30 天）")
+
+    __table_args__ = (
+        Index("idx_paper_answer_draft_paper", paper_id),
+        Index("idx_paper_answer_draft_status", status),
+    )
+
+
 # ------------------------------
 # 新闻资讯模型（新增）
 # ------------------------------

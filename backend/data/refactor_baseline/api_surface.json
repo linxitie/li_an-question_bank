@@ -827,7 +827,7 @@
     "domain": "library",
     "prefix": "/api/materials",
     "router_instances": 1,
-    "endpoint_count": 28,
+    "endpoint_count": 34,
     "endpoints": [
       {
         "method": "GET",
@@ -995,6 +995,42 @@
         "method": "DELETE",
         "path": "/admin/parse-drafts/{draft_id}",
         "fn": "admin_discard_parse_draft",
+        "line": 0
+      },
+      {
+        "method": "POST",
+        "path": "/admin/papers/{paper_id}/answers/parse",
+        "fn": "admin_parse_answers",
+        "line": 0
+      },
+      {
+        "method": "GET",
+        "path": "/admin/papers/{paper_id}/answers/latest",
+        "fn": "admin_latest_answer_draft",
+        "line": 0
+      },
+      {
+        "method": "GET",
+        "path": "/admin/answers/drafts/{draft_id}",
+        "fn": "admin_get_answer_draft",
+        "line": 0
+      },
+      {
+        "method": "PUT",
+        "path": "/admin/answers/drafts/{draft_id}/items",
+        "fn": "admin_update_answer_items",
+        "line": 0
+      },
+      {
+        "method": "POST",
+        "path": "/admin/answers/drafts/{draft_id}/apply",
+        "fn": "admin_apply_answer_draft",
+        "line": 0
+      },
+      {
+        "method": "DELETE",
+        "path": "/admin/answers/drafts/{draft_id}",
+        "fn": "admin_discard_answer_draft",
         "line": 0
       }
     ]

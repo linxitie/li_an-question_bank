@@ -975,6 +975,10 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         "paper_parse": "解析导题",
         "paper_import": "确认入库",
         "paper_parse_discard": "放弃导题",
+        # P4（2026-11-09）：答案上传
+        "answer_parse": "解析答案",
+        "answer_apply": "写入答案",
+        "answer_discard": "放弃答案",
     }.get(action, action)
     try:
         db.add(SysOperationLog(
@@ -2212,6 +2216,187 @@ async def admin_discard_parse_draft(draft_id: int,
         raise HTTPException(400, str(e))
     _audit(db, current_user, "paper_parse_discard", f"material:{draft.material_id}",
            f"放弃解析草稿 #{draft_id}")
+    db.commit()
+    return {"ok": True, "draft_id": draft_id, "status": draft.status}
+
+
+# ============================ P4：答案上传（2026-11-09）============================
+# 方案见 `docs/plans/答案上传_PDF与Excel多通道_方案_v1.md`（用户「按建议」批准 4 条决策）。
+# 分工与导题一致：解析/校验/写入全在 `services/answer_ingest/`，端点只做鉴权+事务+审计+回包。
+# 用户拍板：① 已有答案不同默认保留；② 推断层只给建议不自动填；③ 解析正文一起入库；
+#          ④ 本次不做"按文件名自动匹配卷"（只按卷上传）。
+
+#: 答案文件允许的扩展名（xlsx 走"一行一题"通道；txt 便于小批量手写）
+ANSWER_EXTS = ("pdf", "docx", "xlsx", "xls", "txt", "csv")
+
+
+@router.post("/admin/papers/{paper_id}/answers/parse",
+             summary="上传答案文件并解析(管理员)")
+async def admin_parse_answers(paper_id: int,
+                              file: UploadFile = File(...),
+                              current_user: SysUser = Depends(get_current_user),
+                              db: Session = Depends(get_db)):
+    """上传答案解析（**PDF 是一等通道**）→ 解析成「答案草稿」，不直接写库。
+
+    实测（4 套卷 / 397 题）：题号 397/397、答案自动识别 397/397，只有 1 题与题型不符需人看。
+    写入前必须预览：答案错一位，学生看到的解析就对不上。
+    """
+    _require_admin(current_user)
+    name = (file.filename or "答案").replace("\\", "/").split("/")[-1][:255]
+    ext = _os.path.splitext(name)[1].lower().lstrip(".")
+    if ext not in ANSWER_EXTS:
+        raise HTTPException(400, "答案文件仅支持 pdf / docx / xlsx / txt / csv")
+    raw = file.file.read()
+    if not raw:
+        raise HTTPException(400, "空文件不能上传")
+    if len(raw) > 30 * 1024 * 1024:
+        raise HTTPException(400, "答案文件超过 30MB 上限")
+
+    from ....services import answer_ingest
+    tmp_dir = _os.path.join(UPLOAD_TMP_DIR, "answers")
+    _os.makedirs(tmp_dir, exist_ok=True)
+    tmp_path = _os.path.join(tmp_dir, f"{_uuid.uuid4().hex}.{ext}")
+    with open(tmp_path, "wb") as fh:
+        fh.write(raw)
+    try:
+        draft = answer_ingest.parse_answers(
+            db, paper_id=paper_id, ext=ext, abs_path=tmp_path,
+            source_name=name, actor_id=current_user.user_id)
+        _audit(db, current_user, "answer_parse", f"paper:{paper_id}",
+               f"解析答案 {name}（{draft.item_count} 题，{draft.status}）")
+        db.commit()
+        db.refresh(draft)
+    except answer_ingest.AnswerIngestError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    finally:
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    payload = answer_ingest.draft_payload(db, draft)
+    payload["ok"] = draft.status != "failed"
+    return payload
+
+
+@router.get("/admin/papers/{paper_id}/answers/latest", summary="取该卷最近一份答案草稿(管理员)")
+async def admin_latest_answer_draft(paper_id: int,
+                                    current_user: SysUser = Depends(get_current_user),
+                                    db: Session = Depends(get_db)):
+    """给「补答案」抽屉用：打开时先看有没有**未确认**的草稿，有就直接续上。
+
+    为什么需要：管理员上传后如果先关掉抽屉，草稿会留在库里；没有这个入口就变成
+    "看不见的待办"，下次又传一遍，草稿越堆越多。
+    """
+    _require_admin(current_user)
+    from ....services import answer_ingest
+
+    draft = answer_ingest.latest_of(db, paper_id)
+    if draft is None:
+        return {"exists": False}
+    payload = answer_ingest.draft_payload(db, draft, with_items=True)
+    payload["exists"] = True
+    payload["can_edit"] = draft.status == "pending"
+    return payload
+
+
+@router.get("/admin/answers/drafts/{draft_id}", summary="答案草稿明细(管理员)")
+async def admin_get_answer_draft(draft_id: int,
+                                 current_user: SysUser = Depends(get_current_user),
+                                 db: Session = Depends(get_db)):
+    """预览：逐题答案 / 来源层级 / 推断建议 / 解析摘要 / 标记（冲突、未识别）。"""
+    _require_admin(current_user)
+    from ....models.models import PaperAnswerDraft
+    from ....services import answer_ingest
+
+    draft = db.query(PaperAnswerDraft).filter(
+        PaperAnswerDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "答案草稿不存在")
+    return answer_ingest.draft_payload(db, draft, with_items=True)
+
+
+@router.put("/admin/answers/drafts/{draft_id}/items", summary="改答案草稿(管理员)")
+async def admin_update_answer_items(draft_id: int, body: dict,
+                                    current_user: SysUser = Depends(get_current_user),
+                                    db: Session = Depends(get_db)):
+    """整表保存（人工补空 / 改冲突 / 采纳"推断建议"）。
+
+    校验：题号必须属于该卷、题号不重复、答案只允许 A–D；错误一次说清，不留半套数据。
+    """
+    _require_admin(current_user)
+    from ....models.models import PaperAnswerDraft
+    from ....services import answer_ingest
+
+    draft = db.query(PaperAnswerDraft).filter(
+        PaperAnswerDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "答案草稿不存在")
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise HTTPException(400, "items 必须是数组")
+    try:
+        answer_ingest.update_items(db, draft, items)
+    except answer_ingest.AnswerIngestError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    db.commit()
+    db.refresh(draft)
+    return answer_ingest.draft_payload(db, draft)
+
+
+@router.post("/admin/answers/drafts/{draft_id}/apply", summary="写入答案解析(管理员)")
+async def admin_apply_answer_draft(draft_id: int, body: dict | None = None,
+                                   current_user: SysUser = Depends(get_current_user),
+                                   db: Session = Depends(get_db)):
+    """把答案与解析写进题库（**只动 `answer` / `answer_analysis` 两列**）。
+
+    - 默认**只填空位**；库里已有不同答案计入 `kept`，要覆盖必须 `overwrite=true`（决策 Q1）；
+    - **不重算历史成绩**：`exam_record` 一概不动，只影响之后的新考试；
+    - 空答案但有解析的题只补解析（素材不浪费）。
+    """
+    _require_admin(current_user)
+    body = body or {}
+    from ....models.models import PaperAnswerDraft
+    from ....services import answer_ingest
+
+    draft = db.query(PaperAnswerDraft).filter(
+        PaperAnswerDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "答案草稿不存在")
+    try:
+        result = answer_ingest.apply_draft(db, draft, overwrite=bool(body.get("overwrite")))
+    except answer_ingest.AnswerIngestError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    _audit(db, current_user, "answer_apply", f"paper:{draft.paper_id}",
+           f"写入答案 {result['filled']} 题"
+           + (f"、覆盖 {result['overwritten']} 题" if result["overwritten"] else "")
+           + (f"、保留 {result['kept']} 题" if result["kept"] else ""))
+    db.commit()
+    return {"ok": True, **result}
+
+
+@router.delete("/admin/answers/drafts/{draft_id}", summary="放弃答案草稿(管理员)")
+async def admin_discard_answer_draft(draft_id: int,
+                                     current_user: SysUser = Depends(get_current_user),
+                                     db: Session = Depends(get_db)):
+    _require_admin(current_user)
+    from ....models.models import PaperAnswerDraft
+    from ....services import answer_ingest
+
+    draft = db.query(PaperAnswerDraft).filter(
+        PaperAnswerDraft.draft_id == draft_id).first()
+    if not draft:
+        raise HTTPException(404, "答案草稿不存在")
+    try:
+        answer_ingest.discard_draft(db, draft)
+    except answer_ingest.AnswerIngestError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    _audit(db, current_user, "answer_discard", f"paper:{draft.paper_id}",
+           f"放弃答案草稿 #{draft_id}")
     db.commit()
     return {"ok": True, "draft_id": draft_id, "status": draft.status}
 

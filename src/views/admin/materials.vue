@@ -280,6 +280,13 @@
                     : '解析原件里的题目（docx/pdf），先出待确认清单再入库'"
                   @click="openDraft(row)"
                 >{{ row.parse_draft?.status === 'pending' ? '待确认' : '导题' }}</a>
+                <!-- P4（2026-11-09）：补答案（需要已有可作答卷，且卷里有题） -->
+                <a
+                  v-if="row.type === 'paper' && row.exam?.known && row.exam.question_count"
+                  class="mm-op"
+                  :title="`上传答案 PDF 补这 ${row.exam.question_count} 题的答案与解析`"
+                  @click="openAnswer(row)"
+                >补答案</a>
                 <a class="mm-op" @click="openMeta(row)">改信息</a>
                 <a class="mm-op is-danger" @click="remove(row)">删除</a>
               </template>
@@ -348,6 +355,16 @@
       @confirmed="onDraftConfirmed"
       @discarded="onDraftDiscarded"
     />
+
+    <!-- P4（2026-11-09）：补答案抽屉（上传答案 PDF → 逐题核对 → 写入答案/解析） -->
+    <AnswerDraftDrawer
+      :open="answerOpen"
+      :paper-id="answerPaperId"
+      :paper-code="answerPaperCode"
+      :paper-name="answerPaperName"
+      @close="answerOpen = false"
+      @applied="onAnswerApplied"
+    />
   </div>
 </template>
 
@@ -377,7 +394,8 @@ import {
   MaterialMetaDialog,
   ArticleBatchUpload,
   ExamGateDialog,
-  ParseDraftDrawer
+  ParseDraftDrawer,
+  AnswerDraftDrawer
 } from '@/components/admin';
 import {
   MATERIAL_PLACEMENTS,
@@ -815,6 +833,29 @@ async function onDraftConfirmed(payload: { draftId: number; created: number }): 
 async function onDraftDiscarded(): Promise<void> {
   draftOpen.value = false;
   await reload();
+}
+
+// ---------------- 补答案（P4，2026-11-09） ----------------
+const answerOpen = ref(false);
+const answerPaperId = ref<number | null>(null);
+const answerPaperCode = ref('');
+const answerPaperName = ref('');
+
+/** 「补答案」入口：只有"已有可作答卷且有题"的试卷行才显示（没题补了也没用） */
+function openAnswer(row: AdminMaterialListItem): void {
+  const paperId = row.exam?.paper_id;
+  if (!paperId) return;
+  answerPaperId.value = paperId;
+  answerPaperCode.value = paperCodeOf(row);
+  answerPaperName.value = row.title;
+  answerOpen.value = true;
+}
+
+/** 写入成功：刷新列表（答案变了但列表不展示答案数，主要是保持一致） */
+async function onAnswerApplied(payload: { paperId: number; filled: number }): Promise<void> {
+  answerOpen.value = false;
+  await reload();
+  ElMessage.success(`已写入 ${payload.filled} 题的答案与解析`);
 }
 
 /** 从回收站恢复：status -1 → 0（未上架），需管理员再点「上架」才对学生可见 */
