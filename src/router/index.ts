@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 砺安题库 - 路由配置（三端分离）
  */
 import {
@@ -365,22 +365,26 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/pc/material_detail.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
+  // L2（2026-11-08）：学生「备考资料」改用**手写页**（src/views/student/materials.vue）。
+  // 为什么换 component 而不是改 `.vtj/vue/materials_*.vue`：R3 禁止 AI 改 .vtj 模板，
+  // 且 `.vtj/files/*.json` 的 DSL 与真实模板不同步，改模板会被设计器回存覆盖。
+  // 三条路由**条数不变**（L6/L7 的 105 不动），旧页仍保留在仓库 → 回滚=把这行改回去。
   {
     path: '/materials/xingce',
     name: 'MaterialsXingce',
-    component: () => import('$vtj/vue/materials_xingce.vue'),
+    component: () => import('@/views/student/materials.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/materials/shenlun',
     name: 'MaterialsShenlun',
-    component: () => import('$vtj/vue/materials_shenlun.vue'),
+    component: () => import('@/views/student/materials.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
     path: '/materials/gongzhuan',
     name: 'MaterialsGongzhuan',
-    component: () => import('$vtj/vue/materials_gongzhuan.vue'),
+    component: () => import('@/views/student/materials.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
 

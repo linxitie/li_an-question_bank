@@ -54,6 +54,8 @@ export interface LibraryMaterial {
   difficulty: number;
   view_count: number;
   card_front: string | null;
+  /** 卡片背面（列表就带，翻转卡直接可用） */
+  card_back?: string | null;
   sort_order: number;
   /** A2：入库时间（对外叫「上传时间」），ISO-8601 带 +08:00；空表示无记录 */
   created_at?: string | null;
@@ -62,6 +64,16 @@ export interface LibraryMaterial {
   is_studied?: boolean;
   progress_percent?: number;
   is_favorite?: boolean;
+  /** L1/L2（2026-11-08）：投放位（仅试卷有意义）；后端 NULL 会归一化成 library/both */
+  placement?: 'exam' | 'library' | 'both';
+  /** 有没有原件（列表直接给，免得逐条拉详情才知道能不能显示"下载"按钮） */
+  has_files?: boolean;
+  file_count?: number;
+  /** L2：试卷行随列表返回的元数据（年份/地区/卷别/题量/总分/时长/编号/可考） */
+  paper?: MaterialPaperMeta | null;
+  /** L2：讲义大纲（列表直接给，用于「N 章 · M 字」那行） */
+  chapter_count?: number | null;
+  word_count?: number | null;
 }
 
 /** 详情条目（在列表条目基础上多出正文与视频地址） */
@@ -69,6 +81,15 @@ export interface LibraryMaterialDetail extends LibraryMaterial {
   content: string;
   card_back: string;
   video_url: string;
+  /** L2：原件清单（含 download_url），讲义/试卷抽屉的"下载原件"用 */
+  files?: MaterialFileItem[];
+  /** L2：讲义大纲快照（字数/章节数/章节列表），没抽到大纲时为 null */
+  doc_meta?: {
+    word_count?: number;
+    chapter_count?: number;
+    chapters?: Array<{ level: number; title: string }>;
+    format?: string;
+  } | null;
 }
 
 export interface LibraryListQuery {

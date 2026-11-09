@@ -1,4 +1,4 @@
-﻿"""备考资料 API。响应风格与 news.py 一致：裸 JSON。
+"""备考资料 API。响应风格与 news.py 一致：裸 JSON。
 
 学生组：GET "" 列表 / GET "/{id}" 详情 / GET "/progress-summary" / POST "/progress"
         POST "/{id}/favorite" / GET "/favorites"
@@ -138,6 +138,10 @@ def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None,
         "placement": _placement_of(m),
         "file_count": int(file_count or 0),
         "has_files": bool(file_count),
+        # L2（2026-11-08）：讲义卡要显示「N 章 · M 字」，列表直接给（管理端同名口径）。
+        # 取值来自 `doc_meta` 快照，解析失败时为 None，前端不渲染这一行。
+        "chapter_count": _doc_meta_of(m).get("chapter_count"),
+        "word_count": _doc_meta_of(m).get("word_count"),
     }
     if prog is not None:
         d.update({
@@ -174,6 +178,18 @@ async def list_materials(
              .offset((page - 1) * page_size).limit(page_size).all())
     progs = {}
     file_counts = {}
+    # L2（2026-11-08）：试卷行随列表返回 `paper` 区块（年份/地区/卷别/题量/总分/时长/编号/可考）。
+    # 为什么在列表里做、而不是让学生逐条拉详情：试卷卡片上就要显示这些，逐条请求会把
+    # 一屏 3~10 张卡变成 3~10 个额外请求；量级只有"每科几套卷"，每行一次查询可接受。
+    paper_blocks = {}
+    for m in rows:
+        if m.type == "paper":
+            try:
+                paper_blocks[m.material_id] = paper_registry.paper_block(db, m)
+            except Exception:  # noqa: BLE001 — 元数据解析失败不能拖垮整个列表
+                logger.warning("[materials] 列表读取试卷元数据失败 material=%s",
+                               m.material_id, exc_info=True)
+                paper_blocks[m.material_id] = None
     if rows:
         ids = [r.material_id for r in rows]
         # 一次 group by 拿齐"有没有原件"，避免逐条子查询（列表最多 50 行）
@@ -187,9 +203,13 @@ async def list_materials(
                   .filter(UserMaterialProgress.user_id == current_user.user_id,
                           UserMaterialProgress.material_id.in_(ids)).all()):
             progs[p.material_id] = p
-    return {"total": total,
-            "items": [_item_brief(m, progs.get(m.material_id), file_counts.get(m.material_id))
-                      for m in rows]}
+    items = []
+    for m in rows:
+        item = _item_brief(m, progs.get(m.material_id), file_counts.get(m.material_id))
+        if m.type == "paper":
+            item["paper"] = paper_blocks.get(m.material_id)
+        items.append(item)
+    return {"total": total, "items": items}
 
 
 @router.get("/taxonomy", summary="分类法：子类→考点（建卡表单下拉用）")
