@@ -126,7 +126,7 @@ function formatDate(value: string | null): string {
 }
 
 function goBack(): void {
-  router.push('/news');
+  router.replace('/home');
 }
 
 async function load(): Promise<void> {

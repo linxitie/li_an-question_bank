@@ -184,7 +184,12 @@ function sourceLabel(source: string): string {
 }
 
 function goBack(): void {
-  router.back();
+  const home = route.path.startsWith('/tablet')
+    ? '/tablet/home'
+    : route.path.startsWith('/mobile')
+      ? '/mobile/home'
+      : '/home';
+  router.replace(home);
 }
 
 function openSource(item: NewsTimelineItem): void {
