@@ -1,13 +1,5 @@
 <template>
   <section class="news-ai-card">
-    <header class="news-ai-card__header">
-      <div>
-        <div class="news-ai-card__eyebrow">AI 预审</div>
-        <h2>新闻摘要与考点</h2>
-      </div>
-      <span v-if="status" class="news-ai-card__status">{{ statusText }}</span>
-    </header>
-
     <div v-if="summary" class="ai-section">
       <h3>AI 摘要</h3>
       <p class="ai-summary">{{ summary }}</p>
@@ -23,35 +15,15 @@
       </ul>
     </div>
 
-    <div v-if="entityGroups.length" class="ai-section">
+    <div v-if="orderedEntities.length" class="ai-section">
       <h3>实体</h3>
-      <div class="entity-groups">
-        <div
-          v-for="group in entityGroups"
-          :key="group.key"
-          class="entity-group">
-          <span class="entity-group__label">{{ group.label }}</span>
-          <div class="entity-group__tags">
-            <span
-              v-for="entity in group.items"
-              :key="group.key + entity.name"
-              :class="['entity-tag', `entity-tag--${group.key}`]">
-              {{ entity.name }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="riskFlags.length" class="ai-section">
-      <div class="risk-alert" role="alert">
-        <span class="risk-alert__icon" aria-hidden="true">!</span>
-        <div>
-          <h3>风险提示</h3>
-          <ul>
-            <li v-for="risk in riskFlags" :key="risk">{{ risk }}</li>
-          </ul>
-        </div>
+      <div class="entity-tags">
+        <span
+          v-for="entity in orderedEntities"
+          :key="entity.key"
+          :class="['entity-tag', `entity-tag--${entity.kind}`]">
+          {{ entity.name }}
+        </span>
       </div>
     </div>
   </section>
@@ -69,49 +41,46 @@ const props = defineProps<{
   summary?: string;
   examPoints?: string[];
   entities?: NewsEntity[];
-  riskFlags?: string[];
-  status?: string;
 }>();
 
 const examPoints = computed(() => props.examPoints || []);
-const riskFlags = computed(() => props.riskFlags || []);
 
-const typeMeta: Record<string, { label: string; order: number }> = {
-  organization: { label: '组织', order: 1 },
-  policy: { label: '政策', order: 2 },
-  person: { label: '人物', order: 3 },
-  region: { label: '地域', order: 4 }
+const typeOrder: Record<string, number> = {
+  organization: 1,
+  policy: 2,
+  person: 3,
+  region: 4
 };
 
-const statusText = computed(() => {
-  if (props.status === 'ok') return '已处理';
-  if (props.status === 'high_risk') return '高风险';
-  return props.status || '';
-});
-
-const entityGroups = computed(() => {
-  const groups = new Map<
-    string,
-    { key: string; label: string; order: number; items: NewsEntity[] }
-  >();
-
-  for (const entity of props.entities || []) {
-    const key = (entity.type || 'other').toLowerCase();
-    const meta = typeMeta[key] || { label: '其他', order: 5 };
-    if (!groups.has(key)) {
-      groups.set(key, { key, label: meta.label, order: meta.order, items: [] });
-    }
-    groups.get(key)?.items.push(entity);
-  }
-
-  return Array.from(groups.values()).sort((a, b) => a.order - b.order);
+const orderedEntities = computed(() => {
+  const seen = new Set<string>();
+  return (props.entities || [])
+    .filter((entity) => entity && entity.name)
+    .map((entity) => {
+      const kind = (entity.type || 'other').toLowerCase();
+      return {
+        key: `${kind}:${entity.name}`,
+        kind: typeOrder[kind] ? kind : 'other',
+        name: entity.name
+      };
+    })
+    .filter((entity) => {
+      if (seen.has(entity.key)) return false;
+      seen.add(entity.key);
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        (typeOrder[a.kind] || 5) - (typeOrder[b.kind] || 5) ||
+        a.name.localeCompare(b.name, 'zh-CN')
+    );
 });
 </script>
 
 <style scoped>
 .news-ai-card {
-  margin: 22px 0;
-  padding: 24px 26px;
+  margin: 18px 0;
+  padding: 20px 24px;
   border: 1px solid #ece8df;
   border-radius: 16px;
   background: #ffffff;
@@ -119,42 +88,13 @@ const entityGroups = computed(() => {
   color: #2b332e;
 }
 
-.news-ai-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f1eee7;
-}
-
-.news-ai-card__eyebrow {
-  color: #2f5d50;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.news-ai-card__header h2 {
-  margin: 4px 0 0;
-  color: #1f2321;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.news-ai-card__status {
-  flex: 0 0 auto;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #eaf4ee;
-  color: #2f6b57;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .ai-section {
-  padding: 18px 0;
+  padding: 15px 0;
   border-bottom: 1px solid #f3f0ea;
+}
+
+.ai-section:first-child {
+  padding-top: 0;
 }
 
 .ai-section:last-child {
@@ -163,7 +103,7 @@ const entityGroups = computed(() => {
 }
 
 .ai-section h3 {
-  margin: 0 0 10px;
+  margin: 0 0 9px;
   color: #34413a;
   font-size: 15px;
   font-weight: 700;
@@ -173,7 +113,7 @@ const entityGroups = computed(() => {
   margin: 0;
   color: #4a534d;
   font-size: 14px;
-  line-height: 1.85;
+  line-height: 1.8;
 }
 
 .exam-point-list {
@@ -210,37 +150,19 @@ const entityGroups = computed(() => {
   text-align: center;
 }
 
-.entity-groups {
-  display: grid;
-  gap: 12px;
-}
-
-.entity-group {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.entity-group__label {
-  flex: 0 0 42px;
-  padding-top: 4px;
-  color: #8a938c;
-  font-size: 12px;
-}
-
-.entity-group__tags {
+.entity-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
 }
 
 .entity-tag {
   display: inline-flex;
   align-items: center;
-  padding: 4px 9px;
-  border-radius: 8px;
+  padding: 5px 11px;
+  border-radius: 999px;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .entity-tag--organization {
@@ -268,55 +190,9 @@ const entityGroups = computed(() => {
   color: #68716b;
 }
 
-.risk-alert {
-  display: flex;
-  gap: 10px;
-  padding: 13px 14px;
-  border-left: 4px solid #d77a68;
-  border-radius: 8px;
-  background: #fff5f3;
-}
-
-.risk-alert__icon {
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #f2c4ba;
-  color: #a33b2d;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 20px;
-  text-align: center;
-}
-
-.risk-alert h3 {
-  margin: 0 0 6px;
-  color: #9d4436;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.risk-alert ul {
-  margin: 0;
-  padding-left: 18px;
-  color: #8f5147;
-  font-size: 13px;
-  line-height: 1.75;
-}
-
 @media (max-width: 640px) {
   .news-ai-card {
-    padding: 18px 16px;
-  }
-
-  .entity-group {
-    display: block;
-  }
-
-  .entity-group__label {
-    display: block;
-    margin-bottom: 5px;
+    padding: 16px;
   }
 }
 </style>

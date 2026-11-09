@@ -38,9 +38,7 @@
         v-if="hasAi"
         :summary="item.ai_summary"
         :exam-points="item.ai_exam_points"
-        :entities="item.ai_entities"
-        :risk-flags="item.ai_risk_flags"
-        :status="item.ai_status" />
+        :entities="item.ai_entities" />
 
       <div class="content" v-html="renderedContent"></div>
 
@@ -96,8 +94,7 @@ const hasAi = computed(() =>
   Boolean(
     item.value?.ai_summary ||
     item.value?.ai_exam_points?.length ||
-    item.value?.ai_entities?.length ||
-    item.value?.ai_risk_flags?.length
+    item.value?.ai_entities?.length
   )
 );
 
