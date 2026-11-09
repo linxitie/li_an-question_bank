@@ -311,6 +311,12 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       },
       {
+        path: 'quotes',
+        name: 'AdminQuotes',
+        component: () => import('@/views/admin/quotes_review.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
         path: 'profile',
         name: 'AdminProfile',
         component: () => import('$vtj/vue/admin_profile.vue'),

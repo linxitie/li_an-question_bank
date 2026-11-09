@@ -2231,6 +2231,7 @@ class EssayQuote(Base):
     ai_reviewed_at = Column(DateTime, comment="AI质量审核时间")
     review_status = Column(String(20), default="published", comment="审核状态")
     quality_score = Column(Float, comment="历史质量分")
+    source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True)
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     status = Column(Integer, default=1, comment="状态 1正常/0禁用")
 
@@ -2264,6 +2265,17 @@ class QuoteReview(Base):
     reason = Column(Text)
     diff_json = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class QuoteTag(Base):
+    """金句-主题标签关联。"""
+
+    __tablename__ = "quote_tag"
+
+    quote_id = Column(BigInteger, ForeignKey("essay_quote.quote_id"), primary_key=True)
+    tag_id = Column(Integer, ForeignKey("topic.topic_id"), primary_key=True)
+    confidence = Column(Float, default=1.0)
+    source = Column(String(20), default="category")
 
 
 class QuoteFavorite(Base):

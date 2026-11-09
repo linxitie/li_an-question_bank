@@ -19,7 +19,7 @@ from typing import Optional
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, or_
+from sqlalchemy import desc, func, or_, text
 
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
@@ -571,6 +571,68 @@ async def toggle_obsidian_quote_favorite(
     db.commit()
 
     return {"favorited": True, "message": "已收藏"}
+
+
+@router.get("/search", summary="金句全文检索")
+async def search_quotes(
+    q: str = Query(..., min_length=1, max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """FTS5 全文检索；表不存在时回退 LIKE。"""
+    try:
+        rows = (
+            db.execute(
+                text("""
+                SELECT q.quote_id, q.content, q.author, q.source, q.category
+                FROM quote_fts
+                JOIN essay_quote q ON q.quote_id = quote_fts.quote_id
+                WHERE quote_fts MATCH :q AND q.status = 1
+                ORDER BY rank
+                LIMIT :limit
+                """),
+                {"q": q, "limit": limit},
+            )
+            .mappings()
+            .all()
+        )
+        items = [
+            {
+                "quote_id": row["quote_id"],
+                "content": row["content"],
+                "author": row["author"] or "",
+                "source": row["source"] or "",
+                "category": row["category"] or "",
+            }
+            for row in rows
+        ]
+    except Exception:
+        value = f"%{q}%"
+        rows = (
+            db.query(EssayQuote)
+            .filter(
+                EssayQuote.status == 1,
+                or_(
+                    EssayQuote.content.like(value),
+                    EssayQuote.author.like(value),
+                    EssayQuote.source.like(value),
+                ),
+            )
+            .limit(limit)
+            .all()
+        )
+        items = [
+            {
+                "quote_id": row.quote_id,
+                "content": row.content,
+                "author": row.author or "",
+                "source": row.source or "",
+                "category": row.category or "",
+            }
+            for row in rows
+        ]
+    return {"query": q, "items": items}
 
 
 @router.get("/favorites", summary="我的金句收藏列表")
