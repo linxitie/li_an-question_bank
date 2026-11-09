@@ -276,6 +276,8 @@ def _is_link_only(paragraph: str) -> bool:
     value = paragraph.strip()
     if not value:
         return True
+    if re.fullmatch(r"\[\[IMG:\d+\]\]", value):
+        return False
     if value.count("http://") + value.count("https://") >= 2:
         return True
     if re.fullmatch(r"(?:https?://|www\.)\S+", value):
