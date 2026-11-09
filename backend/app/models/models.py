@@ -1420,6 +1420,20 @@ class StudyMaterial(Base):
     # 排序口径：list_time DESC, material_id DESC（material_id 作确定性 tiebreaker，跨页不重不漏）。
     list_time = Column(DateTime, index=True, default=datetime.now,
                        comment="列表排序时间(恢复置顶用，默认=create_time)")
+    # 投放位（L1，2026-11-08）：一份试卷资料到底"进资料库"还是"进考试页"，还是两边都放。
+    # 为什么单独一列：现状 P5 把"资料上架"和"卷可考"绑死了，导致做不到"只给原卷不给考"
+    # 或"只考试不露原卷"。把审批（status）与去向（placement）正交后：
+    #   · 资料库可见 = status=1 且 placement ∈ {library, both}
+    #   · 考试页可考 = exam_paper.paper_type=PUBLISHED 且 placement ∈ {exam, both}
+    # 非试卷类（文章/讲义/卡片/视频）恒为 library —— 它们没有"考试页"这回事。
+    # 故意不给 Python 侧默认值（NULL = 未指定），由 `_placement_of()` /
+    # `material_paper_sync.placement_of()` 统一归一化：
+    #   · 试卷 → 按 both 解释（与改造前行为一致）；
+    #   · 非试卷 → 按 library 解释。
+    # 为什么不写 `default="library"`：那会让"老代码/ORM 直接建的试卷行"变成"仅资料页"，
+    # 上架时不再发布卷 —— 实测会让 5 条既有 P5 用例整片失败（语义回归）。
+    placement = Column(String(10), index=True, nullable=True,
+                       comment="投放位: exam=仅考试页/library=仅资料页/both=都投/NULL=按类型推断")
 
     __table_args__ = (
         Index("idx_subject_type", subject, type),

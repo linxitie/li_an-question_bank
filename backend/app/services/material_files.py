@@ -198,19 +198,24 @@ def human_size(size: Optional[int]) -> str:
     return f"{n / 1024 / 1024:.1f} MB"
 
 
-def can_download(*, is_admin: bool, material_status: Optional[int]) -> bool:
+def can_download(*, is_admin: bool, material_status: Optional[int],
+                 placement: str = "library") -> bool:
     """下载权限判定（纯函数，便于单测与 B2 复用）。
 
-    口径（用户 2026-11-07 裁定 A）：
+    口径（用户 2026-11-07 裁定 A + 2026-11-08 L1 投放位）：
       · 管理员（含超管）→ 一律可下（含未上架 `0`、已删除 `-1`，核对原件是恢复的前提）；
-      · 其他人 → 只有**已上架**（`status == 1`）的资料可下；未上架/已删除都不可。
+      · 其他人 → 必须**已上架**（`status == 1`）**且**投放位含"资料库"
+        （`placement ∈ {library, both}`）。`placement=exam`（仅考试页）的原卷
+        学生侧一律不可下——否则"只考试、不给原卷"这条产品语义就形同虚设。
 
     把这条规则从路由里抽出来，是因为它是**安全边界**：写死在端点里就只能靠 HTTP 用例验证，
     而 HTTP 用例一旦跑不动（见 B1 交付记录里的 TestClient 流式响应坑），边界就没人守了。
     """
     if is_admin:
         return True
-    return material_status == 1
+    if material_status != 1:
+        return False
+    return (placement or "library").strip().lower() in ("library", "both")
 
 
 def serialize(row: MaterialFile) -> dict:

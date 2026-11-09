@@ -1,4 +1,4 @@
-"""备考资料 API。响应风格与 news.py 一致：裸 JSON。
+﻿"""备考资料 API。响应风格与 news.py 一致：裸 JSON。
 
 学生组：GET "" 列表 / GET "/{id}" 详情 / GET "/progress-summary" / POST "/progress"
         POST "/{id}/favorite" / GET "/favorites"
@@ -30,6 +30,13 @@ SUBJECTS = {"xingce", "shenlun", "gongzhuan"}
 # 资料类型白名单。lecture（讲义）/ paper（试卷）为 2026-11-06 v3.1 新增（裁定 D29），零迁移：
 # type 是 String(20)，只在这张白名单 + 前端类型映射里出现。
 TYPES = {"video_intro", "video_advanced", "article", "card", "lecture", "paper"}
+# L1（2026-11-08）投放位：一份试卷资料的去向。审批（status）与去向（placement）正交：
+#   · 资料库可见 = status==1 且 placement∈{library,both}
+#   · 考试页可考 = exam_paper.paper_type=='PUBLISHED' 且 placement∈{exam,both}
+# 非试卷类恒为 library（它们没有"考试页"这回事），上传/建资料时由服务端强制。
+PLACEMENTS = {"exam", "library", "both"}
+#: 出现在"资料库"里的投放位（NULL 视为 library —— 老数据/直接走 ORM 建的行走这条）
+LIBRARY_PLACEMENTS = ("library", "both")
 
 # 卡片配图：第 1 张落 cover_image，第 2 张内嵌在 content 的 <img> 里。
 # 列表/详情页都要一次拿全，所以在 brief 里直接给出 image_urls（不额外暴露整段 content）。
@@ -96,7 +103,20 @@ def _publisher_map(db: Session, rows: List[StudyMaterial]) -> dict:
     return out
 
 
-def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -> dict:
+def _placement_of(m: StudyMaterial) -> str:
+    """取投放位：显式值优先；NULL/脏值按类型归一化（试卷 both、其余 library）。
+
+    与 `services/material_paper_sync.placement_of()` 同一口径，两处必须一致：
+    列表过滤用它、同步用它，否则会出现"列表说可见、卷却没发布"的错位。
+    """
+    value = (getattr(m, "placement", "") or "").strip().lower()
+    if value in PLACEMENTS:
+        return value
+    return "both" if (getattr(m, "type", "") or "") == "paper" else "library"
+
+
+def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None,
+                file_count: Optional[int] = None) -> dict:
     d = {
         "id": m.material_id, "subject": m.subject, "type": m.type,
         "category": m.category, "point_id": m.point_id,
@@ -113,6 +133,11 @@ def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None) -
         # A 方案：技巧类卡片允许不挂具体考点（跨考点的通用方法），
         # 用 is_generic 打标，前端展示为「通用技巧」，按子类归集。
         "is_generic": bool(m.type == "card" and not m.point_id and (m.category or "").strip()),
+        # L1（2026-11-08）：投放位 + 是否有原件。
+        # 列表就给这两个字段，前端不必逐条拉详情就能决定"显示不显示下载按钮"。
+        "placement": _placement_of(m),
+        "file_count": int(file_count or 0),
+        "has_files": bool(file_count),
     }
     if prog is not None:
         d.update({
@@ -135,22 +160,36 @@ async def list_materials(
         raise HTTPException(400, "无效科目")
     if type and type not in TYPES:
         raise HTTPException(400, "无效类型")
+    # L1（2026-11-08）：资料库只放"投放位含资料页"的行。
+    # `placement=exam`（仅考试页）的原卷仍留档在库、管理员可查，但学生资料库不露出。
+    # NULL 视为 library：老数据、以及直接走 ORM 建的测试行都不会被误藏。
     q = db.query(StudyMaterial).filter(
-        StudyMaterial.subject == subject, StudyMaterial.status == 1)
+        StudyMaterial.subject == subject, StudyMaterial.status == 1,
+        or_(StudyMaterial.placement.in_(LIBRARY_PLACEMENTS),
+            StudyMaterial.placement.is_(None)))
     if type:
         q = q.filter(StudyMaterial.type == type)
     total = q.count()
     rows = (q.order_by(StudyMaterial.sort_order.asc(), StudyMaterial.material_id.desc())
              .offset((page - 1) * page_size).limit(page_size).all())
     progs = {}
-    if current_user and rows:
+    file_counts = {}
+    if rows:
         ids = [r.material_id for r in rows]
+        # 一次 group by 拿齐"有没有原件"，避免逐条子查询（列表最多 50 行）
+        from ....models.models import MaterialFile
+        for mid, cnt in (db.query(MaterialFile.material_id, func.count(MaterialFile.file_id))
+                         .filter(MaterialFile.material_id.in_(ids))
+                         .group_by(MaterialFile.material_id).all()):
+            file_counts[mid] = int(cnt)
+    if current_user and rows:
         for p in (db.query(UserMaterialProgress)
                   .filter(UserMaterialProgress.user_id == current_user.user_id,
                           UserMaterialProgress.material_id.in_(ids)).all()):
             progs[p.material_id] = p
     return {"total": total,
-            "items": [_item_brief(m, progs.get(m.material_id)) for m in rows]}
+            "items": [_item_brief(m, progs.get(m.material_id), file_counts.get(m.material_id))
+                      for m in rows]}
 
 
 @router.get("/taxonomy", summary="分类法：子类→考点（建卡表单下拉用）")
@@ -748,7 +787,11 @@ async def material_detail(material_id: int,
                           current_user: Optional[SysUser] = Depends(get_optional_user),
                           db: Session = Depends(get_db)):
     m = db.query(StudyMaterial).filter(
-        StudyMaterial.material_id == material_id, StudyMaterial.status == 1).first()
+        StudyMaterial.material_id == material_id, StudyMaterial.status == 1,
+        # L1：仅考试页（placement=exam）的资料不进资料库，直连 URL 也按 404 处理，
+        # 避免"列表里没有、地址栏能打开"的不一致。
+        or_(StudyMaterial.placement.in_(LIBRARY_PLACEMENTS),
+            StudyMaterial.placement.is_(None))).first()
     if not m:
         raise HTTPException(404, "资料不存在或已下架")
 
@@ -780,6 +823,26 @@ async def material_detail(material_id: int,
     d = _item_brief(m, prog)
     d.update({"content": m.content or "", "card_back": m.card_back or "",
               "video_url": f"/api/video/{m.video_id}/stream" if m.video_id else ""})
+    # L1/L2（2026-11-08）：学生详情补三样，L2 的讲义/试卷抽屉直接渲染，不用再发第二个请求：
+    #   · files        —— 原件清单（含 download_url），"下载原件"按钮用；
+    #   · placement    —— 前端据此决定是否显示"去考试"；
+    #   · doc_meta     —— 讲义的章节/字数（上传时抽取的快照，没有则为 None）。
+    # 只读派生，不新增端点；原件下载仍走 /api/materials/files/{id}/download 的鉴权。
+    files = []
+    try:
+        from ....services import material_files as _mf
+        files = [dict(_mf.serialize(f),
+                      download_url=f"/api/materials/files/{f.file_id}/download")
+                 for f in _mf.list_for_material(db, m.material_id)]
+    except Exception:  # noqa: BLE001 — 读原件失败不能拖垮详情
+        logger.warning("[materials] 详情读取原件清单失败 material=%s", material_id, exc_info=True)
+    d.update({
+        "files": files,
+        "has_files": bool(files),
+        "file_count": len(files),
+        "placement": _placement_of(m),
+        "doc_meta": _doc_meta_of(m) or None,
+    })
     return d
 
 
@@ -1670,6 +1733,8 @@ async def admin_preview(material_id: int,
         "subject_label": _SUBJECT_LABEL.get(m.subject, m.subject),
         "category": m.category,
         "status": m.status,
+        # L1：投放位（管理端预览抽屉/列表列用；非试卷类恒 library）
+        "placement": _placement_of(m),
         "badge": m.badge,
         "difficulty": m.difficulty or 1,
         "read_time": m.read_time or 0,
@@ -1728,8 +1793,9 @@ async def download_material_file(file_id: int,
     if not material:
         raise HTTPException(404, "原件不存在")
     if not material_files.can_download(is_admin=_own_or_admin(current_user),
-                                       material_status=material.status):
-        raise HTTPException(403, "该资料未上架，原件不可下载")
+                                       material_status=material.status,
+                                       placement=_placement_of(material)):
+        raise HTTPException(403, "该资料未上架或不对资料库开放，原件不可下载")
     try:
         path = material_files.resolve_abs_path(row)
     except FileNotFoundError:
@@ -1887,6 +1953,21 @@ async def admin_update_meta(material_id: int, body: dict,
         if category != m.category:
             m.category = category[:100] if category else None
             changed.append("category")
+    # L1（2026-11-08）：投放位可改（D-L8）。改完立刻同步一次卷状态 —— 例如
+    # both→library 要马上把已发布的卷落回 DRAFT，不能等到下次上架。
+    if "placement" in body:
+        if m.type != "paper":
+            raise HTTPException(400, "只有试卷类资料才有投放位")
+        want = (body.get("placement") or "").strip().lower()
+        if want not in PLACEMENTS:
+            raise HTTPException(400, "投放位只能是 exam（仅考试页）/ library（仅资料页）/ both（都投）")
+        if want != (m.placement or "library"):
+            m.placement = want
+            changed.append("placement")
+            from ....services import material_paper_sync
+            sync = material_paper_sync.sync_material(db, m)
+            if sync.get("note"):
+                changed.append(sync["note"])
 
     meta_payload = {k: v for k, v in body.items()
                     if k in ("year", "region_code", "region_name", "book_kind",
@@ -1950,6 +2031,7 @@ async def admin_upload_file(
         category: str = Form(""),
         title: str = Form(""),
         material_id: Optional[int] = Form(None),
+        placement: str = Form(""),
         current_user: SysUser = Depends(get_current_user),
         db: Session = Depends(get_db)):
     """B2（2026-11-07）：**批量导入的单个文件入口**。
@@ -1971,6 +2053,20 @@ async def admin_upload_file(
         raise HTTPException(400, "科目必选且有效")
     if type not in ("article", "lecture", "paper"):
         raise HTTPException(400, "文件类资料类型只能是 article / lecture / paper")
+
+    # L1（2026-11-08）投放位：只有试卷类能选"仅考试页/仅资料页/都投"。
+    # 默认值按 D-L2：试卷 = both（与改造前完全一致：学生既能看原卷也能考），
+    # 其它类型恒 library（文章/讲义没有"考试页"这回事，传别的值直接 400 而不是静默忽略，
+    # 因为静默忽略会让前端以为设置生效了）。
+    want_placement = (placement or "").strip().lower()
+    if want_placement and want_placement not in PLACEMENTS:
+        raise HTTPException(400, "投放位只能是 exam（仅考试页）/ library（仅资料页）/ both（都投）")
+    if type != "paper":
+        if want_placement and want_placement != "library":
+            raise HTTPException(400, "只有试卷类资料可以选投放位")
+        target_placement = "library"
+    else:
+        target_placement = want_placement or "both"
 
     data = file.file.read()
     name = (file.filename or "未命名").replace("\\", "/").split("/")[-1][:255]
@@ -2032,10 +2128,17 @@ async def admin_upload_file(
                 subject=subject, type=type,
                 category=(category or None), title=(title or stem)[:200],
                 badge=parsed_code, paper_code=parsed_code,
+                placement=target_placement,
                 content="", status=0, creator_id=current_user.user_id)
             db.add(target_material)
             db.flush()
             created_new = True
+        elif type == "paper" and want_placement and (target_material.placement or "library") != target_placement:
+            # 给已有试卷补原件时可顺带改投放位；改完必须同步一次卷状态，
+            # 否则 both→library 这种"撤出考试页"的操作要等下次上架才生效。
+            target_material.placement = target_placement
+            from ....services import material_paper_sync
+            material_paper_sync.sync_material(db, target_material)
         row = material_files.save_bytes(
             db, target_material.material_id, data, name,
             role=role, source="upload", uploader_id=current_user.user_id)

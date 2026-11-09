@@ -516,6 +516,28 @@ async def lifespan(app: FastAPI):
                         "WHERE list_time IS NULL")).rowcount
                     conn.commit()
                 logger.info(f"自动迁移: study_material.list_time 回填 {n} 行")
+            # L1（2026-11-08）：投放位 exam/library/both —— 把"审批"与"去向"拆开。
+            # 回填口径：试卷类一律 both（= 与改造前行为完全一致，学生既能看资料也能考），
+            # 其余类型 library（它们本来就不进考试页）。
+            if 'placement' not in sm_cols:
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE study_material ADD COLUMN placement VARCHAR(10) "
+                        "DEFAULT 'library'"))
+                    conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS idx_material_placement "
+                        "ON study_material(placement)"))
+                    conn.commit()
+                with engine.connect() as conn:
+                    n1 = conn.execute(text(
+                        "UPDATE study_material SET placement = 'both' "
+                        "WHERE type = 'paper'")).rowcount
+                    n2 = conn.execute(text(
+                        "UPDATE study_material SET placement = 'library' "
+                        "WHERE placement IS NULL")).rowcount
+                    conn.commit()
+                logger.info(f"自动迁移: study_material 添加列 placement + idx_material_placement"
+                            f"（试卷置 both {n1} 行，其余置 library {n2} 行）")
 
         # 检查 study_goal 表(金币购:四维加权奖励字段)
         if 'study_goal' in inspector.get_table_names():

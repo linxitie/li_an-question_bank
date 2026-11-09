@@ -47,6 +47,26 @@ from ..models.models import StudyMaterial
 PAPER_TYPE = "paper"
 #: 已上架状态
 PUBLISHED_STATUS = 1
+#: 投放命中"考试页"的取值（L1，2026-11-08）：
+#:   exam  = 只进考试页（资料库不露出）
+#:   both  = 两边都放（改造前的唯一行为，迁移时就是这么回填的）
+#:   library = 只进资料库（卷保持/落回 DRAFT，学生不能在线作答）
+EXAM_PLACEMENTS = ("exam", "both")
+#: 缺省/脏值一律按 library 处理（老数据、直接走 ORM 建的测试行）
+DEFAULT_PLACEMENT = "library"
+
+
+def placement_of(material: StudyMaterial) -> str:
+    """取投放位：显式值优先，NULL/脏值按**类型**归一化（试卷 both、其余 library）。
+
+    为什么 NULL 要按类型推断而不是一律 library：改造前没有这一列，"资料上架→卷发布"
+    对所有试卷资料都成立；若把 NULL 当 library，老数据/老代码建的卷会突然不再发布
+    （实测会让 5 条既有 P5 用例失败）。显式 `library` 才表示"只要资料、不要考试"。
+    """
+    value = (getattr(material, "placement", "") or "").strip().lower()
+    if value in ("exam", "library", "both"):
+        return value
+    return "both" if (getattr(material, "type", "") or "") == PAPER_TYPE else DEFAULT_PLACEMENT
 
 
 def code_of(material: StudyMaterial) -> str:
@@ -56,12 +76,16 @@ def code_of(material: StudyMaterial) -> str:
 
 
 def _has_other_published(db: Session, code: str, exclude_id: Optional[int]) -> bool:
-    """同一编号是否还有**其它**已上架资料（一码多资料时保持可考）。"""
+    """同一编号是否还有**其它**已上架、且投放位含考试页的资料。"""
     if not code:
         return False
     query = db.query(StudyMaterial.material_id).filter(
         StudyMaterial.type == PAPER_TYPE,
         StudyMaterial.status == PUBLISHED_STATUS,
+        # L1：只统计"会进考试页"的资料 —— 否则一条 library 的重复行会把卷硬撑成 PUBLISHED，
+        # 与"仅资料页不发布"的语义冲突。
+        or_(StudyMaterial.placement.in_(EXAM_PLACEMENTS),
+            StudyMaterial.placement.is_(None)),
         or_(StudyMaterial.paper_code == code, StudyMaterial.badge == code),
     )
     if exclude_id is not None:
@@ -96,10 +120,14 @@ def sync_material(db: Session, material: StudyMaterial) -> dict:
                 "changed": False, "note": ""}
 
     code = code_of(material)
-    visible = (material.status == PUBLISHED_STATUS
-               or _has_other_published(db, code, material.material_id))
+    # L1（2026-11-08）：只有投放位含"考试页"时才谈卷的发布。
+    # 仅资料页（library）→ 永远不发布（如果之前发布过，这里会把它落回 DRAFT）。
+    exam_side = placement_of(material) in EXAM_PLACEMENTS
+    visible = exam_side and (material.status == PUBLISHED_STATUS
+                             or _has_other_published(db, code, material.material_id))
     result = contract.sync_paper_visibility(db, code, visible=visible)
     result["enabled"] = True
+    result["placement"] = placement_of(material)
     result["note"] = note_of(result)
     return result
 
