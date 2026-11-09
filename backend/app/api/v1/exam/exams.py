@@ -24,6 +24,7 @@ from ....schemas.schemas import (
 )
 from ....core.security import get_current_user,require_teacher_or_admin
 from ....services.option_utils import is_subjective_question
+from ....services.exam_scoring import finalize_record
 
 router = APIRouter(prefix="/api/exams",tags=["考试执行"])
 logger = logging.getLogger(__name__)
@@ -368,6 +369,9 @@ async def submit_answers(
     # 评分
     total_score = 0.0
     scored_count = 0
+    # 口径 A（2026-11-09）：交卷后由 `exam_scoring.finalize_record()` 统一判定
+    # `is_scored`（= 分数已完全确定，无待人工评分项）与三个派生字段。
+    created_details: List[ExamAnswerDetail] = []
 
     for question_id, student_answer in answers.items():
         question = question_dict.get(question_id)
@@ -411,6 +415,7 @@ async def submit_answers(
             create_time=now
         )
         db.add(answer_detail)
+        created_details.append(answer_detail)
         scored_count += 1
 
     # 更新考试记录
@@ -419,7 +424,10 @@ async def submit_answers(
     exam_record.duration_used = int(max(0, elapsed_seconds))
     exam_record.total_score = total_score
     exam_record.is_completed = 1
-    exam_record.is_scored = 1 if scored_count == len(questions) else 0
+    # 口径 A：`is_scored` = 分数已完全确定（不是"提交过"）。
+    # 原来这里是 `1 if scored_count == len(questions) else 0`，
+    # 而 `questions` 就是"提交上来的那批题"，两端同源 → 恒真式（见方案 §1）。
+    scoring = finalize_record(exam_record, created_details, paper.question_count)
     exam_record.submit_time = now
     exam_record.is_late = 1 if is_late else 0
 
@@ -451,7 +459,12 @@ async def submit_answers(
             "max_score": float(paper.total_score),
             "time_used": int(max(0, elapsed_seconds)),
             "is_late": is_late,
-            "scored_count": scored_count
+            "scored_count": scored_count,
+            # 口径 A 的三个派生字段（只增不改；结果页/成绩单可直接用）
+            "is_scored": bool(scoring.is_scored),
+            "manual_pending_count": scoring.manual_pending_count,
+            "answered_count": scoring.answered_count,
+            "question_total": scoring.question_total
         }
     )
 
@@ -493,6 +506,10 @@ async def get_my_exam_records(
             "total_score": float(r.total_score) if r.total_score is not None else 0,
             "is_completed": r.is_completed,
             "is_scored": r.is_scored,
+            # 口径 A 的三个派生字段（只增不改）
+            "manual_pending_count": r.manual_pending_count or 0,
+            "answered_count": r.answered_count or 0,
+            "question_total": r.question_total or 0,
             "is_late": r.is_late,
             "attempt_count": r.attempt_count,
         })
@@ -568,6 +585,10 @@ async def get_exam_record_detail(
         "max_score": float(paper.total_score) if paper else 0,
         "is_completed": bool(exam_record.is_completed),
         "is_scored": bool(exam_record.is_scored),
+        # 口径 A 的三个派生字段（只增不改）
+        "manual_pending_count": exam_record.manual_pending_count or 0,
+        "answered_count": exam_record.answered_count or 0,
+        "question_total": exam_record.question_total or 0,
         "is_late": bool(exam_record.is_late),
         "attempt_count": exam_record.attempt_count,
         "details": details

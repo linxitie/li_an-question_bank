@@ -41,6 +41,7 @@ from ....models.models import (
 )
 from ....core.trigger_types import TRIGGER_PAPER_COMPLETED
 from ....services.event_consumer import record_user_action
+from ....services.exam_scoring import finalize_record
 from ....services.option_utils import is_subjective_question
 from ....services.paper_group_selector import (
     select_questions_with_groups,
@@ -969,6 +970,8 @@ async def submit_smart_exam(
     scored_count = 0
     correct_count = 0
     wrong_count = 0
+    # 口径 A（2026-11-09）：交卷时统一用 exam_scoring 判定 is_scored 与派生字段
+    created_details = []
 
     for question_id, student_answer in request.answers.items():
         qid = int(question_id)
@@ -1022,6 +1025,7 @@ async def submit_smart_exam(
             create_time=now,
         )
         db.add(answer_detail)
+        created_details.append(answer_detail)
         db.flush()  # 获取 detail_id
 
     # 4. 创建 ExamRecord (SELF_TEST → 同步到成绩分析→自测)
@@ -1036,10 +1040,11 @@ async def submit_smart_exam(
         duration_used=time_spent,
         total_score=total_score,
         is_completed=1,
-        is_scored=1,
         submit_time=now,
         attempt_count=1,
     )
+    # 口径 A：原写死 `is_scored=1`（建记录即"已评分"），改由统一写点判定
+    finalize_record(exam_record, created_details, paper.question_count)
     db.add(exam_record)
     db.flush()
 

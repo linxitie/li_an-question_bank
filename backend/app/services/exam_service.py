@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
+from .exam_scoring import finalize_record
+
 from ..models.models import (
     ExamPaper, ExamRecord, ExamAnswerDetail, QuestionBank,
     PaperQuestionRelation, SysUser
@@ -365,7 +367,13 @@ class ExamService:
         
         # 更新考试记录
         record.is_completed = 1
-        record.is_scored = 1
+        # 口径 A（2026-11-09）：`is_scored` 不再无条件写 1，改由统一写点判定
+        # （本方法当前无调用方，仍按同一口径收口，避免将来复用踩坑）
+        finalize_record(
+            record,
+            details,
+            getattr(getattr(record, "paper", None), "question_count", 0),
+        )
         record.end_time = datetime.now()
         record.submit_time = datetime.now()
         record.duration_used = int((datetime.now() - record.start_time).total_seconds())

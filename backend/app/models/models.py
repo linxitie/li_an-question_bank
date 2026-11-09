@@ -434,7 +434,14 @@ class ExamRecord(Base):
     duration_used = Column(Integer, comment="用时")
     total_score = Column(DECIMAL(10, 2), default=0.00, comment="总分")
     is_completed = Column(Integer, default=0, comment="是否完成")
-    is_scored = Column(Integer, default=0, comment="是否已评分")
+    # 口径 A（2026-11-09 统一，见 docs/plans/考试评分口径_is_scored统一_方案_v1.md）：
+    # `is_scored=1` 表示**分数已完全确定**（已交卷 且 不存在待人工评分的明细），
+    # 不再表示"提交过"；写入统一走 `services/exam_scoring.finalize_record()`。
+    is_scored = Column(Integer, default=0, comment="分数是否已完全确定(1=无待人工评分项)")
+    # 三个派生字段：只增不改，供结果页/成绩单/学情使用（旧字段语义不动）
+    manual_pending_count = Column(Integer, default=0, comment="待人工评分题数(is_correct为NULL)")
+    answered_count = Column(Integer, default=0, comment="已作答题数(答案非空)")
+    question_total = Column(Integer, default=0, comment="本卷题数(分母)")
     submit_time = Column(DateTime, comment="提交时间")
     is_late = Column(Integer, default=0, comment="是否迟交")
     attempt_count = Column(Integer, default=1, comment="答题次数")

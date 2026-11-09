@@ -691,6 +691,11 @@ class ExamRecordResponse(ExamRecordBase):
     total_score: float
     is_completed: bool
     is_scored: bool
+    # 口径 A（2026-11-09）：`is_scored` = 分数已完全确定（无待人工评分项）；
+    # 以下三个是只增不改的派生字段（老响应不带也不报错，默认 0）
+    manual_pending_count: int = 0
+    answered_count: int = 0
+    question_total: int = 0
     submit_time: Optional[datetime]
     create_time: datetime
 
