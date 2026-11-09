@@ -86,6 +86,17 @@ describe('canExam / examHint', () => {
     const draft = { ...PAPER_OK, answerable: false, paper_type: 'DRAFT' };
     expect(examHint({ paper: draft, placement: 'both' })).toContain('未发布');
   });
+  it('P2：后端给了 exam_hint 就照它的说法（关闭/未开始/已结束只有后端知道）', () => {
+    const closed = {
+      ...PAPER_OK,
+      answerable: false,
+      exam_hint: '考试已关闭，暂时不能开始（历史成绩不受影响）'
+    };
+    expect(examHint({ paper: closed, placement: 'both' })).toContain('已关闭');
+    // exam_hint 为空串时不能把空串当原因弹出来，要退回本地推断
+    const draft = { ...PAPER_OK, answerable: false, paper_type: 'DRAFT', exam_hint: '' };
+    expect(examHint({ paper: draft, placement: 'both' })).toContain('未发布');
+  });
 });
 
 describe('fmtDuration', () => {

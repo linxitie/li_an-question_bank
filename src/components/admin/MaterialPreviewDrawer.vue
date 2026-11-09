@@ -91,10 +91,16 @@
                 <dt>可作答卷</dt>
                 <dd>
                   <AdminTag v-if="preview.paper.exam_paper_id" :tone="preview.paper.answerable ? 'ok' : 'muted'">
-                    {{ preview.paper.answerable ? '已关联 · 可考' : '已关联 · 未发布' }}
+                    {{ preview.paper.answerable ? '已关联 · 可考' : '已关联 · 暂不可考' }}
                   </AdminTag>
                   <span v-else class="mpd-hint">题库里还没有这套卷</span>
                 </dd>
+              </div>
+              <!-- P2（2026-11-09）：不可考时把原因写清楚（关闭/未开始/已结束/0 题），
+                   否则管理员只能看到"暂不可考"却不知道是开关关了还是没导题 -->
+              <div v-if="preview.paper.exam_paper_id && !preview.paper.answerable">
+                <dt>原因</dt>
+                <dd class="mpd-hint">{{ preview.paper.exam_hint || '暂时不能开考' }}</dd>
               </div>
             </dl>
           </section>

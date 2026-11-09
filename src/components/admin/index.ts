@@ -26,3 +26,5 @@ export { default as MaterialBatchUpload } from './MaterialBatchUpload.vue';
 export { default as MaterialMetaDialog } from './MaterialMetaDialog.vue';
 // L4（2026-11-09）：文章批量上传（走解析导入，正文可读；与"文件留档"那条区分）
 export { default as ArticleBatchUpload } from './ArticleBatchUpload.vue';
+// P2（2026-11-09）：考试定时弹层（开关在列表里，这里只设时间窗）
+export { default as ExamGateDialog } from './ExamGateDialog.vue';

@@ -330,6 +330,16 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE exam_paper ADD COLUMN publish_target VARCHAR(20)"))
                     conn.commit()
                 logger.info("自动迁移: exam_paper 添加列 publish_target")
+            # P2（2026-11-09）：考试开关 + 定时窗口（与资料上架独立；判定按时间窗计算）
+            for _col, _type in (("exam_open", "INTEGER DEFAULT 1"),
+                                ("exam_open_at", "DATETIME"),
+                                ("exam_close_at", "DATETIME")):
+                if _col not in paper_cols:
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            f"ALTER TABLE exam_paper ADD COLUMN {_col} {_type}"))
+                        conn.commit()
+                    logger.info(f"自动迁移: exam_paper 添加列 {_col}")
 
         # 检查 forum_post 表(论坛模块完善 + P1 个性化字段)
         if 'forum_post' in inspector.get_table_names():

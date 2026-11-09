@@ -827,7 +827,7 @@
     "domain": "library",
     "prefix": "/api/materials",
     "router_instances": 1,
-    "endpoint_count": 20,
+    "endpoint_count": 22,
     "endpoints": [
       {
         "method": "GET",
@@ -948,6 +948,18 @@
         "path": "/admin/import/{import_id}/confirm",
         "fn": "import_confirm",
         "line": 800
+      },
+      {
+        "method": "PUT",
+        "path": "/admin/{material_id}/exam-open",
+        "fn": "admin_set_exam_open",
+        "line": 1918
+      },
+      {
+        "method": "PUT",
+        "path": "/admin/{material_id}/exam-window",
+        "fn": "admin_set_exam_window",
+        "line": 1951
       }
     ]
   },

@@ -120,6 +120,7 @@
                 </span>
                 <span class="mbu-row__bar"><i :style="{ width: `${r.percent}%` }" /></span>
                 <span v-if="r.error" class="mbu-row__err" :title="r.error">{{ r.error }}</span>
+                <span v-else-if="r.paperNote" class="mbu-row__note" :title="r.paperNote">{{ r.paperNote }}</span>
               </li>
             </ul>
           </div>
@@ -198,6 +199,8 @@ interface QueueRow {
   percent: number;
   materialId: number | null;
   error: string;
+  /** P1：自动建卷的回执（成功建卷或"为什么没建"），成功行也要显示 */
+  paperNote: string;
 }
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -273,7 +276,8 @@ function buildRows(): void {
     status: 'waiting' as RowStatus,
     percent: 0,
     materialId: null,
-    error: ''
+    error: '',
+    paperNote: ''
   }));
   for (const r of rows.value) {
     // 供 start() 取用（避免再按名字查一遍）
@@ -325,6 +329,15 @@ async function start(): Promise<void> {
       }
       row.materialId = res.material_id;
       row.percent = ext.attachFile ? 80 : 100;
+
+      // P1（2026-11-09）：投放位含考试页的试卷，后端上传时就会建可作答卷。
+      // 这里把结果原样告诉管理员 —— 建成了要去导题；没建成是因为文件名缺年份/地区，
+      // 需要去「改信息」补编号（不阻断上传，所以不能吞掉不显示）。
+      if (res.paper) {
+        row.paperNote = res.paper.created
+          ? `已自动建卷 ${res.paper.paper_code}（0 题，导题后学生才能考）`
+          : `未自动建卷：${res.paper.hint || '编号解析失败'}`;
+      }
 
       if (ext.attachFile) {
         const att = await uploadMaterialFile({
@@ -504,6 +517,8 @@ defineExpose({ buildRows });
 .mbu-row.is-ok .mbu-row__bar i { background: var(--adm-ok); }
 .mbu-row.is-failed .mbu-row__bar i { background: var(--adm-danger); }
 .mbu-row__err { grid-column: 1 / -1; color: var(--adm-danger); font-size: 11.5px; }
+/* P1：自动建卷回执（不是错误，用中性色 + 与错误同占一行） */
+.mbu-row__note { grid-column: 1 / -1; color: var(--adm-text-mid, #5b6b85); font-size: 11px; }
 .mbu-foot {
   display: flex;
   align-items: center;

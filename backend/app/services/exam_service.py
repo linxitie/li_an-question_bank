@@ -61,7 +61,20 @@ class ExamService:
         if existing_record:
             # 继续之前的考试
             return ExamService._continue_exam(db, existing_record, paper)
-        
+
+        # 2.5 ★ P2（2026-11-09）：**新开**必须过考试开关 + 定时窗口 + 有题。
+        #   位置刻意放在"继续未完成考试"之后：用户决策 S2 —— 关闭考试时，
+        #   已经在作答的学生仍可继续并交卷，只是不能再新开一场。
+        #   判定收敛在 `exam/contract.py`（与 `/api/papers/list` 过滤同一口径），
+        #   这里只负责把原因码翻成人话抛给前端（ValueError → 端点转 400）。
+        #   题量用 `question_total()`：`question_count` 是缓存值，为 0 时回落实数，
+        #   免得"有题却因字段漏更被挡住"。
+        from ..api.v1.exam import contract
+        questions = contract.question_total(db, paper)
+        if not contract.exam_ready(paper, questions=questions):
+            raise ValueError(contract.exam_block_message(
+                contract.exam_state(paper, questions=questions)))
+
         # 3. 创建新的考试记录
         exam_record = ExamRecord(
             paper_id=paper_id,

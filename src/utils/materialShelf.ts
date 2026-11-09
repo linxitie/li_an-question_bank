@@ -29,18 +29,26 @@ export function paperMetaLine(it: Pick<LibraryMaterial, 'paper'>): string {
   return `${head} ｜ ${mid} ｜ ${p.paper_code ?? '无编号'}`;
 }
 
-/** 能不能"去考试"：只有卷已发布（PUBLISHED）且投放位含考试页时才算 */
+/** 能不能"去考试"：投放位含考试页 + 后端判定的 `answerable`（P2 起 = 已发布 + 开关/时间窗 + 有题） */
 export function canExam(it: Pick<LibraryMaterial, 'paper' | 'placement'>): boolean {
   if (it.placement === 'library') return false;
   return Boolean(it.paper?.answerable);
 }
 
-/** 不可考的原因（按钮 title 与卡片说明共用一句，别让用户猜） */
+/**
+ * 不可考的原因（按钮 title 与卡片说明共用一句，别让用户猜）。
+ *
+ * P2（2026-11-09）起优先用后端给的 `exam_hint`：关闭 / 未到开始时间 / 已结束
+ * 这三种原因只有后端知道（判定用服务器本地时间），前端算不出来。
+ * 没有 `exam_hint`（老接口/游客视角）时退回本地推断，保证老页面不出现空提示。
+ */
 export function examHint(it: Pick<LibraryMaterial, 'paper' | 'placement'>): string {
   if (it.placement === 'library') return '投放位=仅资料页：只给原卷，不开放作答。';
-  if (!it.paper) return '这套卷还没建可作答卷，暂时不能在线作答。';
-  if (!it.paper.exam_paper_id) return '这套卷还没建可作答卷，暂时不能在线作答。';
-  if (!it.paper.question_count) return '可作答卷里还没有题目，导题后才能考。';
+  const p = it.paper;
+  if (!p) return '这套卷还没建可作答卷，暂时不能在线作答。';
+  if (!p.exam_paper_id) return '这套卷还没建可作答卷，暂时不能在线作答。';
+  if (!p.question_count) return '可作答卷里还没有题目，导题后才能考。';
+  if (p.exam_hint) return p.exam_hint;
   return '试卷未发布（资料下架或投放位未含考试页）。';
 }
 

@@ -887,6 +887,8 @@ from ....services.material_monitor import import_monitor  # noqa: E402
 from ....services import material_files  # noqa: E402  B1：原件留档（存储+下载路径）
 from ....services import paper_registry  # noqa: E402  C2/C4：试卷↔可作答卷只读桥（避免 library 直接 import ExamPaper）
 from ....services import doc_outline  # noqa: E402  C1：讲义大纲（字数/章节）
+from ....services import material_paper_link  # noqa: E402  P1：上传即建卷（资料→可作答卷）
+from ....services.material_paper_sync import EXAM_PLACEMENTS  # noqa: E402  P1：考试相关投放位
 from ....core.config import settings  # noqa: E402
 from ....services import media_service  # noqa: E402
 
@@ -967,6 +969,8 @@ def _audit(db: Session, user: SysUser, action: str, target: str, detail: str = "
         # A2（2026-11-08）：试卷资料 → 可作答卷
         "ensure_paper": "生成可作答卷",
         "paper_backfill": "试卷补录",
+        # P1（2026-11-09）：上传即建卷（自动触发；跳过时也记一笔原因）
+        "auto_create_paper": "自动建卷",
     }.get(action, action)
     try:
         db.add(SysOperationLog(
@@ -1713,6 +1717,16 @@ async def admin_list(subject: Optional[str] = Query(None),
                                       if m.type == "paper" else None),
                      "paper_book_kind": (_paper_meta_for_filter(m).get("book_kind")
                                          if m.type == "paper" else None)})
+        # P2（2026-11-09）：试卷行附「考试开关注」状态，列表直接渲染开关与定时摘要。
+        # 只在试卷行查一次（每科几套卷），不做的代价是要前端逐行再发请求。
+        if m.type == "paper":
+            try:
+                from ....services import exam_gate
+                item["exam"] = exam_gate.state_of(db, m)
+            except Exception:  # noqa: BLE001 — 状态算不出来不能拖垮列表
+                logger.warning("[materials] 读取考试开关状态失败 material=%s",
+                               m.material_id, exc_info=True)
+                item["exam"] = None
         items.append(item)
     return {"total": total, "items": items}
 
@@ -1899,6 +1913,69 @@ async def admin_ensure_paper(material_id: int,
            f"（#{brief['paper_id']}，{brief['paper_type']}）")
     db.commit()
     return brief
+
+
+@router.put("/admin/{material_id}/exam-open", summary="考试开关(管理员)")
+async def admin_set_exam_open(material_id: int, body: dict,
+                              current_user: SysUser = Depends(get_current_user),
+                              db: Session = Depends(get_db)):
+    """P2（2026-11-09）：切换"学生现在能不能进这场考试"。
+
+    与「资料上架」**互相独立**：
+      · 上架只决定资料在不在库里、能不能下载原卷；
+      · 本开关只决定学生能否**进入考试**；关闭不动 `exam_record`，历史成绩保留。
+    0 题的卷即使打开也进不去（判定在 `exam/contract.exam_ready`，界面把开关灰掉）。
+    """
+    _require_admin(current_user)
+    if "open" not in body:
+        raise HTTPException(400, "缺少 open 字段（true/false）")
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id,
+        StudyMaterial.status >= 0).first()
+    if not m:
+        raise HTTPException(404, "资料不存在或已删除")
+
+    from ....services import exam_gate
+    try:
+        state = exam_gate.set_open(db, m, open_=bool(body.get("open")))
+    except exam_gate.ExamGateError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    _audit(db, current_user, "exam_open", f"material:{material_id}",
+           f"考试{'开启' if body.get('open') else '关闭'}"
+           f"（{state.get('paper_code')} #{state.get('paper_id')}）")
+    db.commit()
+    return {"ok": True, "exam": state}
+
+
+@router.put("/admin/{material_id}/exam-window", summary="考试定时窗口(管理员)")
+async def admin_set_exam_window(material_id: int, body: dict,
+                                current_user: SysUser = Depends(get_current_user),
+                                db: Session = Depends(get_db)):
+    """P2：设置/清空定时窗口（如今晚 20:00–22:00）。
+
+    **不建定时任务**：判定在读取时按时间窗计算（`exam/contract.exam_is_open`），
+    所以到点自动开关、进程重启也不影响。`open_at`/`close_at` 传空 = 该侧不限。
+    """
+    _require_admin(current_user)
+    m = db.query(StudyMaterial).filter(
+        StudyMaterial.material_id == material_id,
+        StudyMaterial.status >= 0).first()
+    if not m:
+        raise HTTPException(404, "资料不存在或已删除")
+
+    from ....services import exam_gate
+    try:
+        open_at = exam_gate.parse_dt(body.get("open_at"))
+        close_at = exam_gate.parse_dt(body.get("close_at"))
+        state = exam_gate.set_window(db, m, open_at=open_at, close_at=close_at)
+    except exam_gate.ExamGateError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    _audit(db, current_user, "exam_window", f"material:{material_id}",
+           f"考试定时 {state.get('open_at') or '不限'} → {state.get('close_at') or '不限'}")
+    db.commit()
+    return {"ok": True, "exam": state}
 
 
 @router.delete("/admin/{material_id}/files/{file_id}", summary="删除单份原件(管理员)")
@@ -2135,6 +2212,7 @@ async def admin_upload_file(
         role = "primary"
 
     try:
+        paper_auto = None
         if target_material is None:
             stem = _os.path.splitext(name)[0][:200] or "未命名资料"
             # C2a 接线（2026-11-08）：试卷类上传时按**文件名**解析元数据，直接落人读编号。
@@ -2142,8 +2220,16 @@ async def admin_upload_file(
             # 结果「2024国考·公专题本.docx」导入后编号为空（验收时发现）。
             parsed_code = None
             if type == "paper":
-                from ....services.paper_meta_parser import parse_paper_file_name
-                parsed_code = parse_paper_file_name(stem).paper_code
+                from ....services.paper_meta_parser import (
+                    PaperMeta, build_paper_code, parse_paper_file_name)
+                meta = parse_paper_file_name(stem)
+                # ★ P1（2026-11-09）：文件名解析不出**科目**时，用上传表单里选的科目兜底。
+                # 实测 #128「2016江西招警考试《人民警察基础知识》真题（部分）.docx」：
+                # 年份/地区/卷别都能解析，唯独"人民警察基础知识"不在科目关键词里 →
+                # build_paper_code 拒绝生成编号 → 列表里连「建卷」都不出现。
+                if not getattr(meta, "subject", None):
+                    meta = PaperMeta(**{**meta.as_dict(), "subject": subject})
+                parsed_code = build_paper_code(meta)
             target_material = StudyMaterial(
                 subject=subject, type=type,
                 category=(category or None), title=(title or stem)[:200],
@@ -2159,6 +2245,32 @@ async def admin_upload_file(
             target_material.placement = target_placement
             from ....services import material_paper_sync
             material_paper_sync.sync_material(db, target_material)
+
+        # ★ P1（2026-11-09）上传即建卷：投放位落在「仅考试页 / 都投」时，上传当场建好可作答卷。
+        #   · 用户决策 ①：只在考试相关投放位触发 —— 纯资料库不该平白多出 0 题草稿卷塞满题库；
+        #   · 用户决策 ②：卷名 = 文件名去扩展名（不用资料展示标题），与原件同名最好认；
+        #   · 幂等：ensure_paper_for_material 以 paper_code 为唯一键，同编号重复上传不建第二张，
+        #     也不会把已发布卷改回草稿；
+        #   · 编号解析不出来（缺年份/地区）时**绝不阻断上传**：资料照存，回包里给 hint，
+        #     管理员在「改信息」补编号后仍可点「建卷」——这是 #128 的真实踩坑路径。
+        if created_new and type == "paper" and target_placement in EXAM_PLACEMENTS:
+            if not material_paper_link.paper_code_of(target_material):
+                paper_auto = {
+                    "created": False, "reason": "no_code",
+                    "hint": "文件名里没解析出「年份 + 地区」，未自动建卷；"
+                            "在「改信息」补编号后可点「建卷」",
+                }
+            else:
+                try:
+                    paper_auto = material_paper_link.paper_brief(
+                        material_paper_link.ensure_paper_for_material(
+                            db, target_material, actor_id=current_user.user_id,
+                            paper_name=stem))
+                    paper_auto["reason"] = None
+                    paper_auto["hint"] = None
+                except ValueError as exc:      # 理论上不会走到（已判过编号）
+                    paper_auto = {"created": False, "reason": "invalid",
+                                  "hint": str(exc)}
         row = material_files.save_bytes(
             db, target_material.material_id, data, name,
             role=role, source="upload", uploader_id=current_user.user_id)
@@ -2182,12 +2294,21 @@ async def admin_upload_file(
     _audit(db, current_user, "upload_file",
            f"material:{target_material.material_id}",
            f"{name}（{role}）")
+    if paper_auto:
+        # 建卷是**独立可追溯**的动作（自动触发也要留痕），失败/跳过同样记一笔原因
+        _audit(db, current_user, "auto_create_paper",
+               f"material:{target_material.material_id}",
+               (f"卷 {paper_auto.get('paper_code')} #{paper_auto.get('paper_id')}"
+                if paper_auto.get("created")
+                else f"跳过：{paper_auto.get('hint') or paper_auto.get('reason')}"))
     db.commit()
     return JSONResponse({
         "duplicate": False, "created": created_new,
         "material_id": target_material.material_id,
         "file": material_files.serialize(row),
         "title": target_material.title,
+        # P1：投放位∈{exam,both} 的试卷上传会当场建卷；前端据此提示「已建卷/未建卷原因」
+        "paper": paper_auto,
     })
 
 

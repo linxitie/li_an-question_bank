@@ -46,8 +46,14 @@ def find_paper(db: Session, code: str) -> Optional[ExamPaper]:
 
 
 def ensure_paper_for_material(db: Session, material: StudyMaterial, *,
-                              actor_id: Optional[int] = None) -> dict:
+                              actor_id: Optional[int] = None,
+                              paper_name: Optional[str] = None) -> dict:
     """建卷（或复用同编号的卷）。**不 commit**，由调用方决定事务。
+
+    Args:
+        paper_name: 只影响**新建**时的卷名。P1 上传即建卷按用户决策 ② 传「文件名去扩展名」，
+            避免管理端填的展示标题（可能带「（含答案）」等修饰）被卷名继承；
+            传 None 时沿用旧口径（资料标题）。
 
     返回::
 
@@ -74,7 +80,8 @@ def ensure_paper_for_material(db: Session, material: StudyMaterial, *,
     subject_id = SUBJECT_IDS.get((material.subject or "").strip(), 3)
 
     paper = ExamPaper(
-        paper_name=(material.title or f"试卷 {code}")[:200],
+        paper_name=((paper_name or "").strip()
+                    or material.title or f"试卷 {code}")[:200],
         paper_code=code,
         subject_id=subject_id,
         composition_method="IMPORT",

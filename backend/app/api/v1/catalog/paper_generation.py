@@ -559,6 +559,17 @@ async def get_paper_list(
         )
     # 管理员可以看到所有
 
+    # ★ P2（2026-11-09）：学生列表再叠一层考试开关 / 定时窗口 / 有题 —— 学生看不到
+    #   "点进去也考不了"的卷（#128 那种 0 题空卷就是典型）。
+    #   · 下推到 SQL 而不是取回后在 Python 里筛：分页 total 必须与实际条数一致；
+    #   · 经**服务层** `exam_gate` 取条件，不直接 import 考试域契约
+    #     （`check_module_boundary.py` 会拦 catalog → exam 的 cross_import）；
+    #   · 判据用 `user_type == 'student'` 而不是 `role_level < 2`：**教师 role_level 也是 1**，
+    #     按 level 会把教师一起筛掉 —— 教师要看得到自己关掉的卷才能再打开。
+    if (current_user.user_type or "").strip().lower() == "student":
+        from ....services import exam_gate
+        query = query.filter(*exam_gate.open_conditions())
+
     # 条件过滤
     if subject_id:
         query = query.filter(ExamPaper.subject_id == subject_id)

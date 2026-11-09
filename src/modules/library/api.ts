@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 备考资料（library）域 API 封装（P2-37）。
  *
  * 后端端点挂在 `/api/materials`（api_surface.json 冻结口径），
@@ -282,8 +282,45 @@ export interface MaterialPaperMeta {
   /** 题量/总分/时长各自来自哪里：`edit` = 管理员订正，`exam` = 可作答卷兜底，null = 没值 */
   source?: { question_count: string | null; total_score: string | null; duration: string | null };
   paper_type: string | null;
-  /** 学生当前能否考（`paper_type === 'PUBLISHED'`） */
+  /** 学生当前能否考（P2 起 = 已发布 + 开关/时间窗放行 + 有题） */
   answerable: boolean;
+  /** P2：完整考试状态（管理端/资料页共用），未知时为 null */
+  exam?: LibraryExamState | null;
+  /** P2：不能考时的一句话（后端已翻成人话；能考时为空串） */
+  exam_hint?: string;
+}
+
+/**
+ * 考试可进入状态（P2，2026-11-09）。
+ *
+ * `reason` 是后端给的原因码，前端只用它选文案，**不自己推算**：
+ * `ready` 可进入 / `draft` 未发布 / `no_questions` 无题 / `closed` 手动关闭 /
+ * `not_started` 未到开始时间 / `expired` 已结束 / `no_paper` 未建卷。
+ */
+export interface LibraryExamState {
+  known: boolean;
+  published: boolean;
+  open: boolean;
+  ready: boolean;
+  reason:
+    | 'ready'
+    | 'draft'
+    | 'no_questions'
+    | 'closed'
+    | 'not_started'
+    | 'expired'
+    | 'no_paper'
+    | string;
+  open_at: string | null;
+  close_at: string | null;
+  question_count: number;
+  /** 服务器本地时间（判定口径；决策 S1 用服务器时间而非浏览器时区） */
+  server_now?: string;
+  /** 资料侧的人读编号（管理端列表行才有） */
+  paper_code?: string | null;
+  paper_id?: number | null;
+  /** 手动总闸：1 开 / 0 关（管理端列表行才有） */
+  manual_open?: number;
 }
 
 /** C2b：改信息的提交体（全部非必填；null / 空串 = 清除该项） */
@@ -465,6 +502,23 @@ export interface UploadFileResult {
   /** duplicate=true 时：已存在的那份原件 */
   existing_file_id?: number;
   file_name?: string;
+  /**
+   * P1（2026-11-09）上传即建卷的结果。
+   *
+   * 只有「试卷 + 投放位含考试页 + 本次新建资料」才有值：
+   * `created=true` 表示已建好草稿卷；`created=false` 时 `reason`/`hint` 说明为什么没建
+   * （最常见是文件名缺年份/地区 → 去「改信息」补编号后点「建卷」）。
+   */
+  paper?: {
+    created: boolean;
+    paper_id?: number;
+    paper_code?: string;
+    paper_name?: string;
+    paper_type?: string;
+    question_count?: number;
+    reason?: string | null;
+    hint?: string | null;
+  } | null;
 }
 
 export interface UploadFileParams {
@@ -543,6 +597,8 @@ export interface MaterialChapter {
   paper_year?: number | null;
   paper_region?: string | null;
   paper_book_kind?: string | null;
+  /** P2：考试可进入状态（仅试卷行有；未建卷为 {known:false}） */
+  exam?: LibraryExamState | null;
 }
 
 /** 管理端列表查询（A2 新增 created_within / order / publisher_id） */
@@ -666,4 +722,46 @@ export function confirmMaterialImport(
     method: 'POST',
     data: body
   });
+}
+
+// ==================== 考试开关 / 定时（P2，2026-11-09）====================
+
+/**
+ * 开/关一场考试（管理端）。
+ *
+ * 语义（方案 §4）：与「资料上架」**独立** —— 上架只决定资料在不在库里，
+ * 本开关只决定学生能不能进考试；关闭不动历史成绩，只禁止新开。
+ * 0 题的卷服务端不拦（管理端可先关），但学生侧 `exam_ready` 本来就进不去。
+ */
+export async function setMaterialExamOpen(
+  materialId: number,
+  open: boolean
+): Promise<LibraryExamState> {
+  const res = await libraryClient.request<{ ok: boolean; exam: LibraryExamState }>({
+    url: `/api/materials/admin/${materialId}/exam-open`,
+    method: 'PUT',
+    baseURL: '',
+    data: { open }
+  });
+  return res.data.exam;
+}
+
+export interface ExamWindowPayload {
+  /** `YYYY-MM-DD HH:MM`（服务器本地时间）；null / 空串 = 该侧不限 */
+  open_at: string | null;
+  close_at: string | null;
+}
+
+/** 设置/清空定时窗口（留空 = 不限；两端都空 = 取消定时） */
+export async function setMaterialExamWindow(
+  materialId: number,
+  payload: ExamWindowPayload
+): Promise<LibraryExamState> {
+  const res = await libraryClient.request<{ ok: boolean; exam: LibraryExamState }>({
+    url: `/api/materials/admin/${materialId}/exam-window`,
+    method: 'PUT',
+    baseURL: '',
+    data: payload
+  });
+  return res.data.exam;
 }

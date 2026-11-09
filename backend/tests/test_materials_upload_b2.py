@@ -244,15 +244,19 @@ class TestPaperCodeFromFileName:
         assert m.paper_code == "GZ-2024-GK-T"
         assert m.badge == "GZ-2024-GK-T", "列表副标题取 badge"
 
-        # 预览侧：编号/年份/地区/卷别 都能出，题量等留空（没有可作答卷）
+        # 预览侧：编号/年份/地区/卷别 都能出。
+        # P1（2026-11-09）起，投放位默认 both 的试卷上传会**自动建卷**，
+        # 所以这里 `exam_paper_id` 非空、题量为 0（还没导题）——
+        # 与改造前「完全没有可作答卷」不同，是 P1 的既定行为。
         pv = client.get(f"/api/materials/admin/{m.material_id}/preview",
                         headers=admin_headers).json()
         assert pv["paper"]["paper_code"] == "GZ-2024-GK-T"
         assert pv["paper"]["year"] == 2024
         assert pv["paper"]["region_name"] == "国考"
         assert pv["paper"]["book_kind_label"] == "题本"
-        assert pv["paper"]["question_count"] is None
-        assert pv["paper"]["exam_paper_id"] is None
+        assert pv["paper"]["exam_paper_id"] is not None, "P1：上传即建卷"
+        assert pv["paper"]["question_count"] == 0
+        assert pv["paper"]["paper_type"] == "DRAFT"
 
     def test_unparseable_paper_name_gets_no_code(self, client, admin_headers, db_session):
         resp = _upload(client, admin_headers, "扫描件_001.pdf", _pdf_bytes(), type="paper")

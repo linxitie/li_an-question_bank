@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mm-page">
     <AdminPageHeader
       title="资料管理"
@@ -107,7 +107,7 @@
       <table>
         <thead>
           <tr>
-            <th v-if="!isRecycleView" style="width: 40px">
+            <th v-if="!isRecycleView" style="width: 36px">
               <input
                 type="checkbox"
                 class="mm-check"
@@ -120,25 +120,31 @@
             <!-- ID 方案 A（2026-11-08）：这里显示的是**连续序号**（当前筛选内倒序名次，
                  首行 = 总数），不是数据库主键。真实主键在单元格 title 里（悬停可见）。
                  回收站视图不参与编号，显示「—」。 -->
-            <th style="width: 64px" title="按列表顺序倒排：最上面一行 = 当前结果总数">编号</th>
+            <th style="width: 52px" title="按列表顺序倒排：最上面一行 = 当前结果总数">编号</th>
             <th>标题 / 类型</th>
-            <th style="width: 60px">科目</th>
-            <th style="width: 100px">分类</th>
+            <th style="width: 48px">科目</th>
+            <th style="width: 78px">分类</th>
             <!-- L4（2026-11-09）：投放位（仅试卷有意义）——上架后"进考试页/进资料库/两边都进" -->
-            <th style="width: 92px" title="仅试卷类有意义：考试=只在考试页；资料=只在资料库；都投=两边都放">投放位</th>
-            <th style="width: 146px">发布者</th>
-            <th class="mm-sortable" style="width: 132px" @click="toggleOrder"
+            <th style="width: 70px" title="仅试卷类有意义：考试=只在考试页；资料=只在资料库；都投=两边都放">投放位</th>
+            <!-- P2（2026-11-09）：考试开关 + 定时。与「上架」独立：
+                 上架=资料在不在库里；这里=学生能不能进考试（关闭不影响历史成绩） -->
+            <th
+              style="width: 140px"
+              title="开关=学生能不能进这场考试；与「上架」独立。定时=只在时间窗内可进（到点自动，不靠后台任务）"
+            >考试（可进入）</th>
+            <th style="width: 104px">发布者</th>
+            <th class="mm-sortable" style="width: 100px" @click="toggleOrder"
                 title="按真实上传时间排序（NULL 恒排最后）；编号列始终按列表时间倒序">
               上传时间 {{ timeOrderArrow }}
             </th>
-            <th style="width: 60px">浏览</th>
-            <th style="width: 152px">上架（=审批）</th>
+            <th style="width: 44px">浏览</th>
+            <th style="width: 116px">上架（=审批）</th>
             <th style="width: 150px">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td :colspan="isRecycleView ? 10 : 11" class="mm-loading">加载中…</td>
+            <td :colspan="isRecycleView ? 11 : 12" class="mm-loading">加载中…</td>
           </tr>
           <tr v-for="row in rows" :key="row.id">
             <td v-if="!isRecycleView">
@@ -177,6 +183,35 @@
               <AdminTag v-if="row.type === 'paper'" :tone="placementTone(row.placement)">
                 {{ placementLabel(row.placement) }}
               </AdminTag>
+              <span v-else>—</span>
+            </td>
+            <!-- P2：考试开关。仅「试卷 + 投放位含考试页」显示；0 题时开关灰掉并说明原因 -->
+            <td class="mm-exam-cell">
+              <template v-if="examSwitchVisible(row)">
+                <div class="mm-exam">
+                  <button
+                    class="mm-switch"
+                    :class="{ 'is-on': row.exam?.manual_open !== 0 }"
+                    :disabled="!examSwitchEnabled(row.exam) || examBusyId === row.id"
+                    :title="examSwitchHint(row.exam)"
+                    :aria-label="row.exam?.manual_open === 0 ? '打开考试' : '关闭考试'"
+                    @click="toggleExam(row)"
+                  >
+                    <i />
+                  </button>
+                  <span class="mm-exam__text">
+                    <AdminTag :tone="examStatusTone(row.exam)">{{ examStatusLabel(row.exam) }}</AdminTag>
+                    <span class="mm-exam__sub">{{ examTimingText(row.exam) }}</span>
+                  </span>
+                </div>
+                <!-- 0 题没有定时可设（开了也进不去），但保留入口让人看得到"为什么" -->
+                <a
+                  class="mm-exam__timer"
+                  :class="{ 'is-muted': !row.exam?.known }"
+                  :title="row.exam?.known ? '只在时间窗内允许学生进入；留空=不限' : '还没有可作答卷'"
+                  @click="openExamWindow(row)"
+                >设置定时</a>
+              </template>
               <span v-else>—</span>
             </td>
             <td class="mm-pub-cell">
@@ -252,6 +287,17 @@
       @saved="onMetaSaved"
     />
 
+    <!-- P2（2026-11-09）：考试定时弹层（开关在列表里点，这里只设时间窗） -->
+    <ExamGateDialog
+      :open="examWinOpen"
+      :material-id="examWinId"
+      :paper-code="examWinCode"
+      :paper-name="examWinName"
+      :exam="examWinExam"
+      @close="examWinOpen = false"
+      @saved="onExamWindowSaved"
+    />
+
     <MaterialBatchUpload
       :open="uploadOpen"
       :preset-type="uploadType"
@@ -294,7 +340,8 @@ import {
   MaterialPreviewDrawer,
   MaterialBatchUpload,
   MaterialMetaDialog,
-  ArticleBatchUpload
+  ArticleBatchUpload,
+  ExamGateDialog
 } from '@/components/admin';
 import {
   MATERIAL_PLACEMENTS,
@@ -323,9 +370,19 @@ import {
   fetchAdminMaterialStats,
   fetchMaterialPreview,
   libraryClient,
+  setMaterialExamOpen,
   type AdminMaterialListItem,
+  type LibraryExamState,
   type MaterialPreview
 } from '@/modules/library/api';
+import {
+  examStatusLabel,
+  examStatusTone,
+  examSwitchEnabled,
+  examSwitchHint,
+  examSwitchVisible,
+  examTimingText
+} from '@/utils/examGate';
 
 const SUBJECT_LABEL: Record<string, string> = { xingce: '行测', shenlun: '申论', gongzhuan: '公专' };
 const subjectLabel = (s: string): string => SUBJECT_LABEL[s] || s;
@@ -590,6 +647,57 @@ async function ensurePaper(row: AdminMaterialListItem): Promise<void> {
   } catch (e) {
     ElMessage.error(errorMessage(e, '生成可作答卷失败'));
   }
+}
+
+// ---------------- 考试开关 / 定时（P2，2026-11-09） ----------------
+/** 正在提交开关的行 id（只禁那一行，别把整表冻住） */
+const examBusyId = ref<number | null>(null);
+const examWinOpen = ref(false);
+const examWinId = ref<number | null>(null);
+const examWinCode = ref('');
+const examWinName = ref('');
+const examWinExam = ref<LibraryExamState | null>(null);
+
+/**
+ * 开/关一场考试。
+ * 语义（方案 §4.4）：与「上架」独立，关闭只影响"能不能新进入"，历史成绩一条都不动 ——
+ * 所以这里**不提示"会影响成绩"**，反而要说明"不影响"，否则管理员不敢点。
+ */
+async function toggleExam(row: AdminMaterialListItem): Promise<void> {
+  if (!examSwitchEnabled(row.exam) || examBusyId.value === row.id) return;
+  const nextOpen = row.exam?.manual_open === 0;
+  examBusyId.value = row.id;
+  try {
+    const state = await setMaterialExamOpen(row.id, nextOpen);
+    row.exam = state;
+    if (nextOpen) {
+      ElMessage.success(state.ready
+        ? '已打开：学生现在可以进入这场考试'
+        : `已打开，但学生现在还进不去（${examStatusLabel(state)}）——${examTimingText(state)}`);
+    } else {
+      ElMessage.success('已关闭：学生不能再新开这场考试（进行中的仍可交卷，历史成绩保留）');
+    }
+  } catch (e) {
+    ElMessage.error(errorMessage(e, '开关失败'));
+  } finally {
+    examBusyId.value = null;
+  }
+}
+
+/** 打开定时弹层：把当前行状态一起带进去，弹层里能显示"现在能不能进" */
+function openExamWindow(row: AdminMaterialListItem): void {
+  examWinId.value = row.id;
+  examWinCode.value = paperCodeOf(row);
+  examWinName.value = row.title;
+  examWinExam.value = row.exam || null;
+  examWinOpen.value = true;
+}
+
+/** 保存定时成功：用后端回的新状态覆盖本行（不整表刷新，避免页码/滚动位置乱跳） */
+function onExamWindowSaved(state: LibraryExamState): void {
+  const target = rows.value.find((r) => r.id === examWinId.value);
+  if (target) target.exam = state;
+  examWinOpen.value = false;
 }
 
 /** 从回收站恢复：status -1 → 0（未上架），需管理员再点「上架」才对学生可见 */
@@ -866,11 +974,20 @@ onMounted(reload);
 .mm-title b {
   font-weight: 700;
   color: var(--adm-text);
+  /* P2：列数到 12 后标题只剩 ~130px（1440 宽）。原来只给 nowrap+省略号 → 只剩「2024年...」；
+     改成最多两行，至少能认出是哪一套卷。超长仍会裁切，不会把行高撑爆。 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 520px;
+  word-break: break-all;
+  max-width: 100%;
 }
+/* P2：列数已满（12 列）。用固定表布局让"标题"吃掉剩余宽度；
+   并给表身留横向滚动兜底（1440 桌面勉强够，更窄的窗口可横向拖，不至于把「操作」列吃掉）。 */
+.mm-page :deep(table) { table-layout: fixed; min-width: 1040px; }
+.mm-page :deep(.adm-table__body) { overflow-x: auto; }
+.mm-title { overflow: hidden; }
 .mm-sub {
   margin-top: 3px;
   font-size: 10.5px;
@@ -919,6 +1036,42 @@ onMounted(reload);
 .mm-ops { white-space: nowrap; }
 .mm-status-cell { white-space: nowrap; }
 .mm-pub-cell { white-space: nowrap; }
+
+/* P2：考试开关列（开关 + 状态 + 定时摘要 + 设置定时） */
+.mm-exam-cell { white-space: nowrap; vertical-align: middle; }
+.mm-exam {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mm-exam .mm-switch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.mm-exam__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mm-exam__sub {
+  font-size: 10.5px;
+  color: var(--adm-text-weak);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 92px;
+}
+.mm-exam__timer {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--adm-primary);
+  cursor: pointer;
+}
+.mm-exam__timer:hover { text-decoration: underline; }
+.mm-exam__timer.is-muted { color: var(--adm-text-weak); }
 .mm-op {
   color: var(--adm-primary);
   font-weight: 600;

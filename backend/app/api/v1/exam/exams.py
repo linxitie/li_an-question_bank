@@ -266,6 +266,17 @@ async def start_exam(
     if in_progress:
         return in_progress
 
+    # ★ P2（2026-11-09）：新开一场要过考试开关 + 定时窗口 + 有题（0 题不可开）。
+    # 放在"复用未完成记录"之后是刻意的：S2 决定关闭考试时进行中的仍可继续/交卷。
+    # 与 `POST /api/exams/start` 用同一个判定函数，避免两条链路口径漂移。
+    from . import contract
+    questions = contract.question_total(db, paper)
+    if not contract.exam_ready(paper, questions=questions):
+        raise HTTPException(
+            status_code=400,
+            detail=contract.exam_block_message(
+                contract.exam_state(paper, questions=questions)))
+
     # 检查答题次数
     attempt_count = db.query(ExamRecord).filter(
         ExamRecord.paper_id == paper_id,

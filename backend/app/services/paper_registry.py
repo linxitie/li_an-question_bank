@@ -16,6 +16,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from ..api.v1.exam import contract  # 服务层可读跨域契约（与 material_paper_link 读 catalog.contract 同理）
 from ..models.models import ExamPaper, StudyMaterial
 from .paper_meta_parser import format_meta_label, parse_paper_file_name
 
@@ -53,7 +54,9 @@ def paper_block(db: Session, material: StudyMaterial) -> dict:
     }
     if exam:
         if question_count is None:
-            question_count = int(exam.question_count or 0)
+            # P2：`question_count` 是缓存值，用 `question_total()` 兜底成实数，
+            # 保证预览里的题量与「能否开考」的判定不会自相矛盾。
+            question_count = contract.question_total(db, exam)
             source["question_count"] = "exam"
         if total_score is None:
             total_score = float(exam.total_score) if exam.total_score is not None else None
@@ -63,6 +66,11 @@ def paper_block(db: Session, material: StudyMaterial) -> dict:
             source["duration"] = "exam"
 
     meta = parse_paper_file_name(material.title or "")
+    # ★ P2（2026-11-09）：`answerable` 从「只看 PUBLISHED」升级为「考试开关 + 定时窗口 + 有题」
+    #   的完整判据（`contract.exam_ready`）。原因：P2 之后 PUBLISHED 只是必要条件 ——
+    #   管理员可能已关闭这场考试，或卷里还是 0 题；前端若仍显示「开始考试」，
+    #   学生点进去只会拿到 400。同时把完整 `exam` 状态块给出，前端不必自己拼文案。
+    state = contract.exam_state(exam, questions=contract.question_total(db, exam))
     return {
         "paper_code": code or None,
         "year": merged.get("year"),
@@ -81,5 +89,8 @@ def paper_block(db: Session, material: StudyMaterial) -> dict:
         # 解析出来的值不回填，否则保存一次就把解析结果固化成了订正）
         "override": override,
         "paper_type": exam.paper_type if exam else None,
-        "answerable": bool(exam and exam.paper_type == "PUBLISHED"),
+        "answerable": bool(state.get("ready")),
+        # P2：完整考试状态（known/published/open/ready/reason/open_at/close_at/question_count）
+        "exam": state,
+        "exam_hint": contract.exam_block_message(state),
     }

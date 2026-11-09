@@ -337,6 +337,15 @@ class ExamPaper(Base):
     exam_type = Column(Enum("SIMULATION", "PRACTICE", "FORMAL"), default="SIMULATION", comment="考试类型")
     paper_type = Column(Enum("DRAFT", "PENDING", "APPROVED", "PUBLISHED", "ENDED"), default="DRAFT", comment="试卷状态")
     publish_target = Column(String(20), comment="发布目标: past_paper(历年试卷)/mock_exam(小模考)")
+    # P2（2026-11-09）：考试开关注（与"资料上架"独立）。
+    # 为什么单独三列而不是复用 paper_type：paper_type 表达"这份卷是否已发布"，
+    # 而"现在这一刻允许不允许学生进"是运营动作（定时开放、临时关闭），两者混用会导致
+    # "关考试"必须把资料一起下架。判定采用**读取时按时间窗计算**，不依赖定时任务：
+    #   可进入 = PUBLISHED 且 exam_open=1 且 now∈[open_at, close_at) 且 question_count>0
+    exam_open = Column(Integer, default=1, nullable=True,
+                       comment="考试总闸: 1开/0关（NULL 视为开，兼容老数据）")
+    exam_open_at = Column(DateTime, nullable=True, comment="定时开放开始时间（空=不限）")
+    exam_close_at = Column(DateTime, nullable=True, comment="定时关闭时间（空=不限）")
     exam_time = Column(DateTime, comment="考试时间")
     start_time = Column(DateTime, comment="开始时间")
     end_time = Column(DateTime, comment="结束时间")
