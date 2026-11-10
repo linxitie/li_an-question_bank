@@ -25,8 +25,33 @@
       </button>
     </div>
 
+    <div v-if="activeTab === 'duplicates'" class="dup-panel">
+      <p class="dup-hint">
+        同文去重结果。合并会把重复项下线，并保留 canonical 金句。
+      </p>
+      <div v-if="!duplicateGroups.length" class="state">暂无重复金句</div>
+      <article
+        v-for="group in duplicateGroups"
+        :key="group.canonical_id"
+        class="dup-group">
+        <div class="dup-canonical">
+          <span>保留 #{{ group.canonical_id }}</span>
+          <blockquote>{{ group.canonical_content }}</blockquote>
+        </div>
+        <div
+          v-for="dup in group.duplicates"
+          :key="dup.quote_id"
+          class="dup-item">
+          <span>#{{ dup.quote_id }} {{ dup.content }}</span>
+          <button type="button" @click="mergeDuplicate(dup.quote_id, group)">
+            合并
+          </button>
+        </div>
+      </article>
+    </div>
+
     <div
-      v-if="activeTab === 'sources' || activeTab === 'tags'"
+      v-else-if="activeTab === 'sources' || activeTab === 'tags'"
       class="meta-panel">
       <h2>{{ activeTab === 'sources' ? '来源分布' : '标签分布' }}</h2>
       <div class="meta-list">
@@ -106,6 +131,7 @@ const tabs = [
   { key: 'pending', label: '待审核' },
   { key: 'approved', label: '已通过' },
   { key: 'rejected', label: '已拒绝' },
+  { key: 'duplicates', label: '重复金句' },
   { key: 'sources', label: '来源' },
   { key: 'tags', label: '标签' }
 ];
@@ -113,6 +139,7 @@ const activeTab = ref('pending');
 const keyword = ref('');
 const items = ref<QuoteItem[]>([]);
 const metaItems = ref<any[]>([]);
+const duplicateGroups = ref<any[]>([]);
 const reasons = reactive<Record<number, string>>({});
 const stats = reactive({ total: 0, pending: 0, sources: 0, tags: 0 });
 const loading = ref(false);
@@ -146,6 +173,11 @@ async function load(): Promise<void> {
     } else if (activeTab.value === 'tags') {
       const data = await request<{ items: any[] }>('/api/admin/quotes/tags');
       metaItems.value = data.items || [];
+    } else if (activeTab.value === 'duplicates') {
+      const data = await request<{ groups: any[] }>(
+        '/api/admin/quotes/duplicates'
+      );
+      duplicateGroups.value = data.groups || [];
     } else {
       const data = await request<{ items: QuoteItem[] }>(
         '/api/admin/quotes/review',
@@ -185,6 +217,20 @@ async function review(
     await loadStats();
   } catch (e) {
     error.value = e instanceof Error ? e.message : '审核失败';
+  }
+}
+
+async function mergeDuplicate(duplicateId: number, group: any): Promise<void> {
+  try {
+    await apiClient.request({
+      url: `/api/admin/quotes/${duplicateId}/merge`,
+      method: 'POST',
+      data: { canonical_id: group.canonical_id, reason: '重复合并' },
+      baseURL: ''
+    });
+    await load();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '合并失败';
   }
 }
 
@@ -363,6 +409,59 @@ h1 {
   border: 1px solid #ebeef5;
   border-radius: 12px;
   background: #fff;
+}
+
+.dup-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.dup-hint {
+  margin: 0;
+  color: #8492a6;
+  font-size: 12px;
+}
+
+.dup-group {
+  padding: 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dup-canonical {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f4f8;
+  color: #2f5d50;
+  font-size: 12px;
+}
+
+.dup-canonical blockquote {
+  margin: 6px 0 0;
+  color: #1f2d3d;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 9px;
+  color: #7a8794;
+  font-size: 13px;
+}
+
+.dup-item button {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid #e2b6ae;
+  border-radius: 6px;
+  background: #fff5f3;
+  color: #a33b2d;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .meta-panel h2 {

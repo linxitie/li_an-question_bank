@@ -14,11 +14,13 @@ from ....core.security import get_current_user
 from ....models.models import (
     ContentSource,
     EssayQuote,
+    QuoteRelation,
     QuoteReview,
     QuoteTag,
     SysUser,
     Topic,
 )
+from ....services.quote_dedupe_service import duplicate_groups, rebuild_duplicate_relations
 
 router = APIRouter(prefix="/api/admin/quotes", tags=["管理员端-金句"])
 
@@ -30,6 +32,11 @@ def _require_admin(user: SysUser) -> None:
 
 class QuoteReviewRequest(BaseModel):
     action: str
+    reason: str = ""
+
+
+class QuoteMergeRequest(BaseModel):
+    canonical_id: int
     reason: str = ""
 
 
@@ -145,6 +152,67 @@ def review_quote(
         "review_status": quote.review_status,
         "review_id": review.review_id,
     }
+
+
+@router.get("/duplicates", summary="重复金句分组")
+def duplicates(
+    limit: int = Query(100, ge=1, le=200),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_admin(current_user)
+    groups = duplicate_groups(db, limit=limit)
+    return {"total": len(groups), "groups": groups}
+
+
+@router.post("/duplicates/rebuild", summary="重建重复关系")
+def rebuild_duplicates(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_admin(current_user)
+    return rebuild_duplicate_relations(db)
+
+
+@router.post("/{quote_id}/merge", summary="合并重复金句")
+def merge_quote(
+    quote_id: int,
+    body: QuoteMergeRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_admin(current_user)
+    if quote_id == body.canonical_id:
+        raise HTTPException(status_code=400, detail="不能合并到自身")
+    duplicate = db.query(EssayQuote).filter(EssayQuote.quote_id == quote_id).first()
+    canonical = db.query(EssayQuote).filter(EssayQuote.quote_id == body.canonical_id).first()
+    if duplicate is None or canonical is None:
+        raise HTTPException(status_code=404, detail="金句不存在")
+    duplicate.status = 0
+    duplicate.review_status = "rejected"
+    duplicate.ai_quality = "rejected"
+    duplicate.ai_quality_reason = body.reason.strip() or f"重复，合并至 {body.canonical_id}"
+    duplicate.ai_reviewed_at = datetime.now()
+    db.add(
+        QuoteRelation(
+            from_quote_id=quote_id,
+            to_quote_id=body.canonical_id,
+            relation_type="duplicate_of",
+            score=1.0,
+            created_by="manual",
+        )
+    )
+    db.add(
+        QuoteReview(
+            quote_id=quote_id,
+            reviewer_id=current_user.user_id,
+            action="merge_duplicate",
+            reason=duplicate.ai_quality_reason,
+            diff_json=f'{{"canonical_id":{body.canonical_id}}}',
+        )
+    )
+    db.commit()
+    return {"quote_id": quote_id, "canonical_id": body.canonical_id, "status": 0}
 
 
 @router.get("/sources", summary="金句来源")

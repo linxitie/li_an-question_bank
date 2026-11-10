@@ -2232,6 +2232,7 @@ class EssayQuote(Base):
     review_status = Column(String(20), default="published", comment="审核状态")
     quality_score = Column(Float, comment="历史质量分")
     source_id = Column(Integer, ForeignKey("content_source.source_id"), nullable=True)
+    normalized_hash = Column(String(64), comment="去重归一化哈希")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     status = Column(Integer, default=1, comment="状态 1正常/0禁用")
 
@@ -2276,6 +2277,20 @@ class QuoteTag(Base):
     tag_id = Column(Integer, ForeignKey("topic.topic_id"), primary_key=True)
     confidence = Column(Float, default=1.0)
     source = Column(String(20), default="category")
+
+
+class QuoteRelation(Base):
+    """金句关系边：当前用于 duplicate_of。"""
+
+    __tablename__ = "quote_relation"
+
+    relation_id = Column(Integer, primary_key=True, autoincrement=True)
+    from_quote_id = Column(BigInteger, nullable=False)
+    to_quote_id = Column(BigInteger, nullable=False)
+    relation_type = Column(String(30), default="duplicate_of")
+    score = Column(Float, default=1.0)
+    created_by = Column(String(20), default="system")
+    created_at = Column(DateTime, default=datetime.now)
 
 
 class QuoteFavorite(Base):
