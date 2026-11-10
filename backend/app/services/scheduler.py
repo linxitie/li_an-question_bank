@@ -162,6 +162,27 @@ def init_scheduler():
             db.close()
         _broadcast_sync("金句更新")
 
+    def _collect_external_quotes_with_broadcast():
+        from ..core.database import SessionLocal
+        from .quote_ai_service import review_quotes
+        from .quote_external_collector import collect_external_quotes
+
+        db = SessionLocal()
+        try:
+            reports = collect_external_quotes(db, dry_run=False)
+            quality = review_quotes(db, limit=30, apply=True)
+            logger.info(
+                "外部金句采集完成: inserted=%s errors=%s quality=%s",
+                sum(r.get("inserted", 0) for r in reports),
+                sum(len(r.get("errors", [])) for r in reports),
+                quality,
+            )
+        except Exception:
+            logger.exception("外部金句采集失败")
+        finally:
+            db.close()
+        _broadcast_sync("金句更新")
+
     def _exams_with_broadcast():
         scrape_all_exams()
         _broadcast_sync("考试日历更新")
@@ -186,6 +207,13 @@ def init_scheduler():
         trigger=CronTrigger(hour=0, minute=10, timezone=CST),
         id="sync_quotes",
         name="每日金句 Obsidian 同步",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _collect_external_quotes_with_broadcast,
+        trigger=CronTrigger(hour=6, minute=0, timezone=CST),
+        id="collect_external_quotes",
+        name="每日外部金句采集",
         replace_existing=True,
     )
     scheduler.add_job(

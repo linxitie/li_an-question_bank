@@ -107,7 +107,10 @@ def review_quotes(
     batch = (
         db.query(EssayQuote)
         .filter(
-            EssayQuote.status == 1,
+            or_(
+                EssayQuote.status == 1,
+                EssayQuote.ai_quality == "pending",
+            ),
             or_(
                 EssayQuote.ai_quality.is_(None),
                 EssayQuote.ai_quality == "pending",
