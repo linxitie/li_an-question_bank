@@ -71,6 +71,12 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/custom-practice',
+    name: 'CustomPractice',
+    component: () => import('@/views/student/shared/CustomPractice.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/solution',
     name: 'Solution',
     component: () => import('@/views/student/shared/solution.vue'),

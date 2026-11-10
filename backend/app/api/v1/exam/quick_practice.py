@@ -10,7 +10,7 @@ import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 
 from ....core.database import get_db
 from ....core.security import get_current_user
@@ -23,6 +23,7 @@ from ....services.option_utils import (
     is_subjective_question, normalize_options, render_image_placeholder
 )
 from ....services.image_service import sanitize_content_images, sanitize_options_images, verify_image_exists
+from ....services.paper_group_selector import expand_question_groups
 from ....services.practice_grading import submit_answers
 from ....services.question_stats import QuestionStatsService
 from ....services.question_material import get_question_group
@@ -116,6 +117,475 @@ def _dedupe_children_by_name(children) -> list:
     return sorted(kept.values(), key=lambda item: (item.sort_order or 0, item.point_id))
 
 
+def _is_canonical_other(point) -> bool:
+    """taxonomy 中每个 L2 下的 canonical「其他」L3。
+
+    它是 T-03/T-08b 的正式叶子，不是脏数据；前端不应把它当普通考点逐条
+    下钻，而应聚合成一个「其他（未细分）」直练入口。
+    """
+    return (
+        int(getattr(point, "level", 0) or 0) == 3
+        and str(getattr(point, "point_name", "") or "").strip() == "其他"
+    )
+
+
+def _scope_payload(scope_type: str, *, scope_id=0, name="", subject_id=None,
+                   sub_category_id=None, l2_id=None) -> dict:
+    """统一的练习作用域描述，前端原样回传，提交时写入记录快照。"""
+    return {
+        "type": scope_type,
+        "id": int(scope_id or 0),
+        "name": name or "",
+        "subject_id": subject_id,
+        "sub_category_id": sub_category_id,
+        "l2_id": l2_id,
+    }
+
+
+def _build_display_node(point, level: int, question_ids, answer_map: dict, *,
+                        key: str, scope: dict, children=None,
+                        is_direct: bool = False, is_other: bool = False,
+                        other_count: int = 0, parent_id: int = 0) -> dict:
+    """在旧 point 节点上叠加 display_points 语义，旧字段保持不变。"""
+    node = _build_point_node(point, level, question_ids, answer_map, children)
+    node.update({
+        "key": key,
+        "parent_id": int(parent_id or 0),
+        "scope": scope,
+        "is_direct": bool(is_direct),
+        "is_other": bool(is_other),
+        "other_count": int(other_count or 0),
+    })
+    return node
+
+
+def _build_display_points_for_subcat(*, sc, l2_points, l3_by_parent,
+                                     question_ids_by_point, sub_question_ids,
+                                     answer_map) -> tuple:
+    """构造子科目的展示树，返回 (display_points, returned_ids, other_count)。
+
+    规则（设计 D2）：
+    - L2 有具体 L3：children = 具体 L3 + 末尾一个合成「其他（未细分）」；
+    - L2 只有「其他」/直挂题：children = []，节点本身 is_direct，点击即练；
+    - 子科目剩余未归属题（point_id 为空/孤立点）追加一个「其他（未归类）」。
+    """
+    subject_id = sc.subject_id
+    display_points = []
+    returned_ids = set()
+
+    for l2 in l2_points:
+        if l2.sub_category_id != sc.id:
+            continue
+
+        raw_children = [
+            child for child in l3_by_parent.get(l2.point_id, [])
+            if child.sub_category_id == sc.id
+        ]
+        specific_children = []
+        other_ids = set()
+        for l3 in _dedupe_children_by_name(raw_children):
+            l3_ids = question_ids_by_point.get(l3.point_id, set()) & sub_question_ids
+            if not l3_ids:
+                continue
+            if _is_canonical_other(l3):
+                other_ids |= l3_ids
+            else:
+                specific_children.append((l3, l3_ids))
+
+        direct_ids = (
+            question_ids_by_point.get(l2.point_id, set()) & sub_question_ids
+        )
+        other_ids |= direct_ids
+        l2_all_ids = direct_ids | other_ids
+        for _, ids in specific_children:
+            l2_all_ids |= ids
+
+        if not l2_all_ids:
+            continue
+
+        if specific_children:
+            children = []
+            for l3, l3_ids in specific_children:
+                children.append(_build_display_node(
+                    l3, 3, l3_ids, answer_map,
+                    key="l3:%s" % l3.point_id,
+                    scope=_scope_payload(
+                        "l3", scope_id=l3.point_id, name=l3.point_name,
+                        subject_id=subject_id, sub_category_id=sc.id,
+                        l2_id=l2.point_id,
+                    ),
+                    is_direct=True,
+                    parent_id=l2.point_id,
+                ))
+            if other_ids:
+                other_node = _build_display_node(
+                    l2, 3, other_ids, answer_map,
+                    key="other:%s:%s" % (sc.id, l2.point_id),
+                    scope=_scope_payload(
+                        "other", scope_id=l2.point_id,
+                        name="%s·其他（未细分）" % l2.point_name,
+                        subject_id=subject_id, sub_category_id=sc.id,
+                        l2_id=l2.point_id,
+                    ),
+                    is_direct=True, is_other=True,
+                    other_count=len(other_ids),
+                    parent_id=l2.point_id,
+                )
+                # 合成节点没有物理 point_id，避免与真实考点混淆。
+                other_node["point_id"] = 0
+                other_node["point_name"] = "其他（未细分）"
+                children.append(other_node)
+
+            l2_node = _build_display_node(
+                l2, 2, l2_all_ids, answer_map,
+                key="l2:%s" % l2.point_id,
+                scope=_scope_payload(
+                    "l2", scope_id=l2.point_id, name=l2.point_name,
+                    subject_id=subject_id, sub_category_id=sc.id,
+                    l2_id=l2.point_id,
+                ),
+                children=children,
+                other_count=len(other_ids),
+            )
+        else:
+            l2_node = _build_display_node(
+                l2, 2, l2_all_ids, answer_map,
+                key="l2:%s" % l2.point_id,
+                scope=_scope_payload(
+                    "l2", scope_id=l2.point_id, name=l2.point_name,
+                    subject_id=subject_id, sub_category_id=sc.id,
+                    l2_id=l2.point_id,
+                ),
+                is_direct=True, is_other=True,
+                other_count=len(other_ids),
+            )
+
+        display_points.append(l2_node)
+        returned_ids |= l2_all_ids
+
+    other_ids = sub_question_ids - returned_ids
+    if other_ids:
+        display_points.append(_build_synthetic_other(
+            ids=other_ids,
+            answer_map=answer_map,
+            key="other:sub:%s" % sc.id,
+            name="其他（未归类）",
+            scope=_scope_payload(
+                "other", scope_id=sc.id,
+                name="%s·其他（未归类）" % sc.name,
+                subject_id=subject_id, sub_category_id=sc.id, l2_id=None,
+            ),
+        ))
+
+    return display_points, returned_ids, len(other_ids)
+
+
+def _filters_for(*, ids, meta: dict, type_name_map: dict) -> dict:
+    """返回子科目/未分类卡片可用的年份、题型、难度筛选项（只含真实有题的项）。"""
+    years = set()
+    type_counts = {}
+    difficulty_counts = {}
+    for qid in ids:
+        item = meta.get(qid) or {}
+        if item.get("year"):
+            years.add(int(item["year"]))
+        type_id = item.get("type_id")
+        if type_id:
+            type_counts[int(type_id)] = type_counts.get(int(type_id), 0) + 1
+        difficulty = item.get("difficulty")
+        if difficulty:
+            difficulty_counts[int(difficulty)] = (
+                difficulty_counts.get(int(difficulty), 0) + 1
+            )
+    return {
+        "years": sorted(years, reverse=True),
+        "types": [
+            {
+                "type_id": type_id,
+                "type_name": type_name_map.get(type_id, "未知题型"),
+                "count": count,
+            }
+            for type_id, count in sorted(type_counts.items())
+        ],
+        "difficulties": [
+            {"difficulty": level, "count": count}
+            for level, count in sorted(difficulty_counts.items())
+        ],
+    }
+
+
+def _build_synthetic_other(*, ids, answer_map: dict, key: str, name: str,
+                           scope: dict, parent_id: int = 0) -> dict:
+    """合成「其他」节点：没有物理 point_id，只承载一组题。"""
+    done, correct = _practice_stats(answer_map, ids)
+    return {
+        "point_id": 0,
+        "point_name": name,
+        "level": 2,
+        "total_questions": len(ids),
+        "done_count": done,
+        "correct_count": correct,
+        "accuracy": _accuracy(correct, done),
+        "children": [],
+        "key": key,
+        "parent_id": int(parent_id or 0),
+        "scope": scope,
+        "is_direct": True,
+        "is_other": True,
+        "other_count": len(ids),
+    }
+
+
+def _parse_int_csv(value: Optional[str]) -> List[int]:
+    if not value:
+        return []
+    parsed = []
+    for part in str(value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            parsed.append(int(part))
+        except ValueError:
+            continue
+    return sorted(set(parsed))
+
+
+def _point_children(db: Session, *, subject_id: int, l2_id: int) -> tuple:
+    """返回 L2 下的 (具体 L3 ids, canonical 其他 L3 ids)。"""
+    rows = db.query(KnowledgePoint).filter(
+        KnowledgePoint.subject_id == subject_id,
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 3,
+        KnowledgePoint.parent_id == l2_id,
+    ).all()
+    specific, other = [], []
+    for row in rows:
+        if _is_canonical_other(row):
+            other.append(row.point_id)
+        else:
+            specific.append(row.point_id)
+    return specific, other
+
+
+def _resolve_scope_query(db: Session, *, scope: str, scope_id: int = 0,
+                         subject_id: Optional[int] = None,
+                         sub_category_id: Optional[int] = None,
+                         l2_id: Optional[int] = None,
+                         point_id: Optional[int] = None,
+                         include_descendants: bool = True,
+                         include_other: bool = False):
+    """按 scope 构造可见题查询（设计 D3）。
+
+    旧路径未传 scope 时不进入本函数；这里只负责新语义，保证默认参数与旧
+    调用完全隔离。
+    """
+    base = QuestionStatsService.visible_query(db)
+    scope = (scope or "").strip().lower()
+    target_id = int(scope_id or point_id or l2_id or 0)
+
+    if scope == "subject":
+        sid = int(subject_id or target_id or 0)
+        if not sid:
+            raise HTTPException(status_code=400, detail="scope=subject 需要 subject_id")
+        return base.filter(QuestionBank.subject_id == sid)
+
+    if scope == "subcategory":
+        sid = int(sub_category_id if sub_category_id is not None else target_id)
+        if sid == 0:
+            return base.filter(QuestionBank.sub_category_id.is_(None))
+        return base.filter(QuestionBank.sub_category_id == sid)
+
+    if scope in ("l3", "knowledge_point"):
+        pid = int(point_id or target_id or 0)
+        if not pid:
+            raise HTTPException(status_code=400, detail="scope=l3 需要 point_id")
+        point = db.query(KnowledgePoint).filter(
+            KnowledgePoint.point_id == pid,
+            KnowledgePoint.status == 1,
+        ).first()
+        if point is None:
+            return base.filter(False)
+        if int(point.level or 0) == 2:
+            scope, l2_id = "l2", pid
+        else:
+            return base.filter(QuestionBank.point_id == pid)
+
+    if scope == "l2":
+        lid = int(l2_id or point_id or target_id or 0)
+        if not lid:
+            raise HTTPException(status_code=400, detail="scope=l2 需要 l2_id")
+        point = db.query(KnowledgePoint).filter(
+            KnowledgePoint.point_id == lid,
+            KnowledgePoint.status == 1,
+            KnowledgePoint.level == 2,
+        ).first()
+        if point is None:
+            return base.filter(False)
+        sid = int(point.subject_id)
+        specific, other = _point_children(db, subject_id=sid, l2_id=lid)
+        ids = [lid]
+        if include_descendants:
+            ids.extend(specific)
+        if include_other:
+            ids.extend(other)
+        return base.filter(QuestionBank.point_id.in_(ids))
+
+    if scope == "other":
+        sid = int(subject_id or 0)
+        if not sid and sub_category_id is not None:
+            sc = db.query(SubCategory).filter(SubCategory.id == sub_category_id).first()
+            sid = int(sc.subject_id) if sc else 0
+        if not sid and l2_id:
+            l2 = db.query(KnowledgePoint).filter(
+                KnowledgePoint.point_id == l2_id
+            ).first()
+            sid = int(l2.subject_id) if l2 else 0
+        if not sid:
+            raise HTTPException(status_code=400, detail="scope=other 需要 subject_id")
+
+        # 子科目级「其他（未归类）」= 该子科目全部可见题（供超集过滤），
+        # 再按 point_id 收窄到 空/失效/其他 L3/L2 直挂。绝不能用
+        # sub_category_id == sc 当作 other 条件，否则整科题都会被算进其他。
+        if sub_category_id is not None:
+            if int(sub_category_id) == 0:
+                return base.filter(QuestionBank.sub_category_id.is_(None))
+            base = base.filter(QuestionBank.sub_category_id == int(sub_category_id))
+
+        all_point_rows = db.query(KnowledgePoint.point_id).filter(
+            KnowledgePoint.subject_id == sid,
+            KnowledgePoint.status == 1,
+        ).all()
+        valid_point_ids = [int(row[0]) for row in all_point_rows]
+
+        if l2_id:
+            _specific, other = _point_children(db, subject_id=sid, l2_id=int(l2_id))
+            ids = [int(l2_id)] + other
+        else:
+            l2_rows = db.query(KnowledgePoint.point_id).filter(
+                KnowledgePoint.subject_id == sid,
+                KnowledgePoint.status == 1,
+                KnowledgePoint.level == 2,
+            ).all()
+            l2_ids = [int(row[0]) for row in l2_rows]
+            other_rows = db.query(KnowledgePoint.point_id).filter(
+                KnowledgePoint.subject_id == sid,
+                KnowledgePoint.status == 1,
+                KnowledgePoint.level == 3,
+                KnowledgePoint.point_name == "其他",
+            ).all()
+            ids = l2_ids + [int(row[0]) for row in other_rows]
+
+        conditions = [QuestionBank.point_id.is_(None)]
+        if ids:
+            conditions.append(QuestionBank.point_id.in_(ids))
+        if valid_point_ids:
+            # 指向失效/被删知识点的题也归「其他」，与 display_points 的
+            # 「其他（未归类）」口径一致。
+            conditions.append(and_(
+                QuestionBank.point_id.isnot(None),
+                ~QuestionBank.point_id.in_(valid_point_ids),
+            ))
+        return base.filter(or_(*conditions))
+
+    raise HTTPException(status_code=400, detail="不支持的 scope：%s" % scope)
+
+
+def _serialize_practice_questions(db: Session, questions, *, total: int, limit: int,
+                                    requested_limit: int = 0,
+                                    group_expanded: bool = False,
+                                    scope: Optional[str] = None,
+                                    extra_count: int = 0) -> dict:
+    """统一序列化练习题，含题型、选项、图片与题组材料。"""
+    items = []
+    type_cache = {}
+    group_cache = {}
+    for q in questions:
+        qtype = None
+        if q.type_id:
+            if q.type_id not in type_cache:
+                type_cache[q.type_id] = db.query(QuestionType).filter(
+                    QuestionType.type_id == q.type_id
+                ).first()
+            qtype = type_cache[q.type_id]
+
+        qtype_name = '选择题'
+        detail_row = db.query(QuestionDetailCategory).filter(
+            QuestionDetailCategory.question_id == q.question_id
+        ).first()
+        if detail_row and detail_row.question_type_detail:
+            qtype_name = str(detail_row.question_type_detail)
+        elif qtype:
+            qtype_name = qtype.type_name or '选择题'
+
+        group = None
+        if q.group_id:
+            if q.group_id not in group_cache:
+                group_cache[q.group_id] = get_question_group(db, q.group_id)
+            group = group_cache[q.group_id]
+
+        is_subjective = is_subjective_question(q, qtype)
+        if is_subjective:
+            cleaned_options = []
+        else:
+            normalized_opts = normalize_options(q.options, q.question_content or '')
+            cleaned_options = sanitize_options_images(
+                normalized_opts, q.question_id, db
+            )
+
+        cleaned_content = sanitize_content_images(
+            render_image_placeholder(q.question_content or ''), q.question_id, db
+        )
+        cleaned_analysis = sanitize_content_images(
+            render_image_placeholder(q.answer_analysis or ''), q.question_id, db
+        )
+
+        img_list = db.query(QuestionImage).filter(
+            QuestionImage.question_id == q.question_id
+        ).order_by(QuestionImage.image_order).all()
+        valid_images = [{
+            "image_path": i.image_path,
+            "image_type": i.image_type,
+            "image_order": i.image_order,
+        } for i in img_list if verify_image_exists(i.image_path)]
+
+        items.append({
+            "question_id": q.question_id,
+            "subject_id": q.subject_id,
+            "type_id": q.type_id,
+            "question_content": cleaned_content,
+            "question_type_detail": qtype_name,
+            "options": cleaned_options,
+            "answer": q.answer,
+            "answer_analysis": cleaned_analysis,
+            "difficulty": q.difficulty,
+            "year": q.year,
+            "source": q.source,
+            "tags": q.tags,
+            "requirements": q.requirements or '',
+            "score": float(q.score or 0),
+            "group_id": q.group_id or 0,
+            "shared_content": (group.shared_content or '') if group else '',
+            "shared_content_images": group.shared_content_images if group else None,
+            "is_subjective": bool(qtype is not None and qtype.is_objective == 0),
+            "question_type_name": (
+                qtype.type_name if qtype and qtype.type_name else qtype_name
+            ),
+            "images": valid_images,
+        })
+
+    return {
+        "total": total,
+        "limit": limit,
+        "requested_limit": int(requested_limit or limit),
+        "actual_count": len(items),
+        "group_expanded": bool(group_expanded),
+        "extra_count": int(extra_count or 0),
+        "scope": scope,
+        "items": items,
+    }
+
+
 # ============================================================
 # API 端点
 # ============================================================
@@ -166,6 +636,9 @@ async def get_sub_categories(
         QuestionBank.question_id,
         QuestionBank.sub_category_id,
         QuestionBank.point_id,
+        QuestionBank.year,
+        QuestionBank.type_id,
+        QuestionBank.difficulty,
     ).filter(
         QuestionBank.subject_id == subject_id
     ).all()
@@ -173,16 +646,29 @@ async def get_sub_categories(
     question_ids_by_subcat = {}
     global_unclassified_ids = set()
     question_point_ids = {}
+    question_meta = {}
     all_visible_ids = []
-    for question_id, sc_id, point_id in visible_rows:
+    for question_id, sc_id, point_id, year, type_id, difficulty in visible_rows:
         qid = int(question_id)
         all_visible_ids.append(qid)
+        question_meta[qid] = {
+            "year": int(year) if year else None,
+            "type_id": int(type_id) if type_id else None,
+            "difficulty": int(difficulty) if difficulty else None,
+        }
         if point_id is not None:
             question_point_ids[qid] = int(point_id)
         if sc_id is None:
             global_unclassified_ids.add(qid)
         else:
             question_ids_by_subcat.setdefault(int(sc_id), set()).add(qid)
+
+    type_name_map = {
+        int(type_id): type_name
+        for type_id, type_name in db.query(
+            QuestionType.type_id, QuestionType.type_name
+        ).all()
+    }
 
     answer_map = _practice_answer_map(db, current_user.user_id, all_visible_ids)
 
@@ -249,7 +735,24 @@ async def get_sub_categories(
             )
             returned_question_ids |= l2_question_ids
 
+        display_points, _display_returned, orphan_count = _build_display_points_for_subcat(
+            sc=sc,
+            l2_points=l2_points,
+            l3_by_parent=l3_by_parent,
+            question_ids_by_point=question_ids_by_point,
+            sub_question_ids=sub_question_ids,
+            answer_map=answer_map,
+        )
         unclassified_count = len(sub_question_ids - returned_question_ids)
+        # display 分支覆盖全部题；以它为准确认没有题被展示树漏掉。
+        unclassified_count = max(unclassified_count, orphan_count)
+        other_question_count = 0
+        for node in display_points:
+            if node.get("is_other"):
+                other_question_count += int(node.get("total_questions") or 0)
+            for child in node.get("children") or []:
+                if child.get("is_other"):
+                    other_question_count += int(child.get("total_questions") or 0)
 
         result.append({
             "id": sc.id,
@@ -261,6 +764,17 @@ async def get_sub_categories(
             "correct_count": sub_correct,
             "accuracy": _accuracy(sub_correct, sub_done),
             "knowledge_points": point_items,
+            "display_points": display_points,
+            "has_specific_points": any(
+                bool(node.get("children")) for node in display_points
+            ),
+            "other_count": other_question_count,
+            "other_question_count": other_question_count,
+            "filters": _filters_for(
+                ids=sub_question_ids,
+                meta=question_meta,
+                type_name_map=type_name_map,
+            ),
             "children": [],
             "is_unclassified": False,
             "unclassified_count": unclassified_count,
@@ -269,6 +783,10 @@ async def get_sub_categories(
     # 仅当存在 sub_category_id IS NULL 的可见题时追加合成「未分类」项
     if global_unclassified_ids:
         unc_done, unc_correct = _practice_stats(answer_map, global_unclassified_ids)
+        unc_scope = _scope_payload(
+            "other", scope_id=0, name="未分类",
+            subject_id=subject_id, sub_category_id=None, l2_id=None,
+        )
         result.append({
             "id": 0,
             "name": "未分类",
@@ -279,6 +797,23 @@ async def get_sub_categories(
             "correct_count": unc_correct,
             "accuracy": _accuracy(unc_correct, unc_done),
             "knowledge_points": [],
+            "display_points": [
+                _build_synthetic_other(
+                    ids=global_unclassified_ids,
+                    answer_map=answer_map,
+                    key="other:global",
+                    name="未分类",
+                    scope=unc_scope,
+                )
+            ],
+            "has_specific_points": False,
+            "other_count": len(global_unclassified_ids),
+            "other_question_count": len(global_unclassified_ids),
+            "filters": _filters_for(
+                ids=global_unclassified_ids,
+                meta=question_meta,
+                type_name_map=type_name_map,
+            ),
             "children": [],
             "is_unclassified": True,
             "unclassified_count": len(global_unclassified_ids),
@@ -287,6 +822,11 @@ async def get_sub_categories(
     return {
         "subject_id": subject_id,
         "total": len(result),
+        "filters": _filters_for(
+            ids=all_visible_ids,
+            meta=question_meta,
+            type_name_map=type_name_map,
+        ),
         "items": result,
     }
 
@@ -333,29 +873,104 @@ async def get_knowledge_points(
 
 @router.get("/questions", summary="获取练习题目")
 async def get_practice_questions(
-    knowledge_point_ids: str = Query(..., description="考点ID列表，逗号分隔；当 bySubCategory=true 时为子科目ID"),
+    knowledge_point_ids: str = Query("", description="考点ID列表，逗号分隔；当 bySubCategory=true 时为子科目ID"),
     limit: int = Query(20, ge=1, le=100, description="题目数量上限"),
     year: Optional[int] = Query(None, description="题目年份筛选（近N年）"),
     by_sub_category: bool = Query(False, alias="bySubCategory", description="是否按子科目ID查询"),
+    scope: Optional[str] = Query(None, description="subject/subcategory/l2/l3/other"),
+    scope_id: int = Query(0, ge=0, alias="scopeId", description="scope 对应主键"),
+    subject_id: Optional[int] = Query(None, ge=1, le=3, alias="subjectId"),
+    sub_category_id: Optional[int] = Query(None, ge=0, alias="subCategoryId"),
+    l2_id: Optional[int] = Query(None, ge=0, alias="l2Id"),
+    point_id: Optional[int] = Query(None, ge=0, alias="pointId"),
+    include_descendants: bool = Query(True, alias="includeDescendants"),
+    include_other: bool = Query(False, alias="includeOther"),
+    year_from: Optional[int] = Query(None, alias="yearFrom"),
+    year_to: Optional[int] = Query(None, alias="yearTo"),
+    type_ids: str = Query("", alias="typeIds", description="题型ID，逗号分隔"),
+    difficulties: str = Query("", description="难度 1-5，逗号分隔"),
+    order: str = Query("random", description="random/weak/unseen"),
+    dedupe: bool = Query(True),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    根据考点ID列表获取题目。
-    支持年份筛选（如只取近3年/近5年/不限）。
-    当 bySubCategory=true 时，knowledge_point_ids 参数为子科目ID，
-    系统自动查找该子科目下所有考点再获取题目。
-    返回去重后的题目列表。
+    根据考点ID列表或 scope 获取题目。
+    旧参数（knowledge_point_ids/bySubCategory/year）保持原语义；新调用传
+    scope 后走作用域查询，并支持年份区间、题型、难度、排序与题组展开。
     """
-    try:
-        raw_ids = [int(x.strip()) for x in knowledge_point_ids.split(",") if x.strip()]
-    except ValueError:
-        return {"error": "考点ID格式错误，请使用逗号分隔的整数", "items": [], "total": 0}
+    from sqlalchemy import case
+    from sqlalchemy import func as sql_func
 
-    if not raw_ids:
+    raw_ids = _parse_int_csv(knowledge_point_ids)
+    if not scope and not raw_ids:
         return {"error": "请至少选择一个考点或子科目", "items": [], "total": 0}
 
-    from sqlalchemy import func as sql_func
+    try:
+        if scope:
+            query = _resolve_scope_query(
+                db,
+                scope=scope,
+                scope_id=scope_id,
+                subject_id=subject_id,
+                sub_category_id=sub_category_id,
+                l2_id=l2_id,
+                point_id=point_id,
+                include_descendants=include_descendants,
+                include_other=include_other,
+            )
+            if year_from:
+                query = query.filter(QuestionBank.year >= year_from)
+            if year_to:
+                query = query.filter(QuestionBank.year <= year_to)
+            parsed_types = _parse_int_csv(type_ids)
+            if parsed_types:
+                query = query.filter(QuestionBank.type_id.in_(parsed_types))
+            parsed_difficulties = _parse_int_csv(difficulties)
+            if parsed_difficulties:
+                query = query.filter(
+                    QuestionBank.difficulty.in_(parsed_difficulties)
+                )
+            if dedupe:
+                sub = query.with_entities(
+                    sql_func.min(QuestionBank.question_id).label("min_id")
+                ).group_by(QuestionBank.question_content).subquery()
+                query = db.query(QuestionBank).filter(
+                    QuestionBank.question_id.in_(db.query(sub.c.min_id))
+                )
+            order_key = (order or "random").strip().lower()
+            if order_key == "weak":
+                stats = db.query(
+                    PracticeRecord.question_id.label("question_id"),
+                    sql_func.avg(PracticeRecord.is_correct).label("accuracy"),
+                ).filter(
+                    PracticeRecord.user_id == current_user.user_id
+                ).group_by(PracticeRecord.question_id).subquery()
+                query = query.outerjoin(
+                    stats, stats.c.question_id == QuestionBank.question_id
+                )
+                order_clause = sql_func.coalesce(stats.c.accuracy, 0).asc()
+            elif order_key == "unseen":
+                seen = db.query(PracticeRecord.question_id.label("question_id")).filter(
+                    PracticeRecord.user_id == current_user.user_id
+                ).distinct().subquery()
+                query = query.outerjoin(
+                    seen, seen.c.question_id == QuestionBank.question_id
+                )
+                order_clause = case((seen.c.question_id.is_(None), 0), else_=1)
+            else:
+                order_clause = sql_func.random()
+
+            total = query.count()
+            questions = query.order_by(order_clause, sql_func.random()).limit(limit).all()
+            questions, extra = expand_question_groups(db, questions)
+            return _serialize_practice_questions(
+                db, questions, total=total, limit=limit,
+                requested_limit=limit, group_expanded=extra > 0,
+                scope=scope, extra_count=extra,
+            )
+    except HTTPException:
+        raise
 
     if by_sub_category:
         # P1-3 直查：按 question_bank.sub_category_id 取可见题，不依赖
@@ -403,88 +1018,12 @@ async def get_practice_questions(
 
     total = query.count()
     questions = query.order_by(func.random()).limit(limit).all()
-
-    items = []
-    type_cache = {}
-    group_cache = {}
-    for q in questions:
-        qtype = None
-        if q.type_id:
-            if q.type_id not in type_cache:
-                type_cache[q.type_id] = db.query(QuestionType).filter(
-                    QuestionType.type_id == q.type_id
-                ).first()
-            qtype = type_cache[q.type_id]
-
-        # 获取题型详情
-        qtype_name = '选择题'
-        detail_row = db.query(QuestionDetailCategory).filter(
-            QuestionDetailCategory.question_id == q.question_id
-        ).first()
-        if detail_row and detail_row.question_type_detail:
-            qtype_name = str(detail_row.question_type_detail)
-        elif qtype:
-            qtype_name = qtype.type_name or '选择题'
-
-        group = None
-        if q.group_id:
-            if q.group_id not in group_cache:
-                group_cache[q.group_id] = get_question_group(db, q.group_id)
-            group = group_cache[q.group_id]
-
-        # 统一规范化options（自动处理双编码JSON、补全、排序、IMAGE转换）
-        # 主观题以 question_type.is_objective=0 为准：不补全、不渲染占位选项
-        is_subjective = is_subjective_question(q, qtype)
-        if is_subjective:
-            cleaned_options = []
-        else:
-            normalized_opts = normalize_options(q.options, q.question_content or '')
-            cleaned_options = sanitize_options_images(normalized_opts, q.question_id, db)
-
-        # 图片预检+恢复（先转换 IMAGE 占位符为 img 标签，再 sanitize 预检）
-        cleaned_content = sanitize_content_images(
-            render_image_placeholder(q.question_content or ''), q.question_id, db
-        )
-        cleaned_analysis = sanitize_content_images(
-            render_image_placeholder(q.answer_analysis or ''), q.question_id, db
-        )
-
-        # 查询 QuestionImage 表，只返回存在的图片
-        img_list = db.query(QuestionImage).filter(
-            QuestionImage.question_id == q.question_id
-        ).order_by(QuestionImage.image_order).all()
-        valid_images = [{
-            "image_path": i.image_path,
-            "image_type": i.image_type,
-            "image_order": i.image_order
-        } for i in img_list if verify_image_exists(i.image_path)]
-
-        items.append({
-            "question_id": q.question_id,
-            "subject_id": q.subject_id,
-            "type_id": q.type_id,
-            "question_content": cleaned_content,
-            "question_type_detail": qtype_name,
-            "options": cleaned_options,
-            "answer": q.answer,
-            "answer_analysis": cleaned_analysis,
-            "difficulty": q.difficulty,
-            "year": q.year,
-            "source": q.source,
-            "tags": q.tags,
-            "requirements": q.requirements or '',
-            "score": float(q.score or 0),
-            "group_id": q.group_id or 0,
-            "shared_content": (group.shared_content or '') if group else '',
-            "shared_content_images": group.shared_content_images if group else None,
-            "is_subjective": bool(qtype is not None and qtype.is_objective == 0),
-            "question_type_name": (
-                qtype.type_name if qtype and qtype.type_name else qtype_name
-            ),
-            "images": valid_images,
-        })
-
-    return {"total": total, "limit": limit, "items": items}
+    questions, extra = expand_question_groups(db, questions)
+    return _serialize_practice_questions(
+        db, questions, total=total, limit=limit,
+        requested_limit=limit, group_expanded=extra > 0,
+        extra_count=extra,
+    )
 
 
 @router.post("/submit", summary="提交练习结果")
@@ -523,12 +1062,14 @@ async def submit_practice(
         "source": "快速练习",
     } for item in records_data]
 
+    scope = payload.get("scope") if isinstance(payload.get("scope"), dict) else None
     try:
         result = await submit_answers(
             db, current_user.user_id, normalized,
             source_type="快速练习",
             subject_id=subject_id,
             session_id=payload.get("session_id"),
+            scope=scope,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

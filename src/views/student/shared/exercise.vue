@@ -350,7 +350,10 @@ export default defineComponent({
       return m[this.$route.query.subject] || '练习';
     },
     subcategory() {
-      // 优先显示考点名称（快速练习三级分类）
+      // 优先显示本次练习的作用域名称（考点/知识点/其他）
+      var scopeName = this.$route.query.scopeName;
+      if (scopeName) return decodeURIComponent(scopeName);
+      // 兼容旧入口
       var kpName = this.$route.query.kpName;
       if (kpName) return decodeURIComponent(kpName);
       return this.$route.query.subcategory || '';
@@ -733,9 +736,32 @@ export default defineComponent({
         var scId = self.$route.query.scId || '';
         var count = parseInt(self.$route.query.count || '20', 10);
         var yearRange = self.$route.query.yearRange || '';
+        var scope = self.$route.query.scope || '';
+        var scopeId = self.$route.query.scopeId || '';
 
         var url;
-        if (kpId) {
+        if (scope) {
+          // 统一作用域入口：subject / subcategory / l2 / l3 / other
+          url = '/api/quick-practice/questions?scope=' + encodeURIComponent(scope)
+            + '&scopeId=' + encodeURIComponent(scopeId || '0')
+            + '&limit=' + count
+            + '&order=random';
+          var subCategoryId = self.$route.query.subCategoryId || '';
+          var l2Id = self.$route.query.l2Id || '';
+          if (subCategoryId) url += '&subCategoryId=' + encodeURIComponent(subCategoryId);
+          if (l2Id) url += '&l2Id=' + encodeURIComponent(l2Id);
+          if (String(self.$route.query.includeDescendants || '') === '1') url += '&includeDescendants=1';
+          if (String(self.$route.query.includeOther || '') === '1') url += '&includeOther=1';
+          if (yearRange && yearRange !== '0') {
+            var span = parseInt(yearRange, 10) || 3;
+            var endYear = new Date().getFullYear();
+            url += '&yearFrom=' + (endYear - span + 1) + '&yearTo=' + endYear;
+          }
+          var typeIds = self.$route.query.typeIds || '';
+          var difficulties = self.$route.query.difficulties || '';
+          if (typeIds) url += '&typeIds=' + encodeURIComponent(typeIds);
+          if (difficulties) url += '&difficulties=' + encodeURIComponent(difficulties);
+        } else if (kpId) {
           // 通过考点ID加载题目（快速练习三级分类）
           url = '/api/quick-practice/questions?knowledge_point_ids=' + kpId + '&limit=' + count;
           if (yearRange && yearRange !== '0') {
@@ -999,6 +1025,19 @@ export default defineComponent({
       });
     },
 
+    practiceScopePayload() {
+      var q = this.$route.query || {};
+      var scope = q.scope;
+      if (!scope) return null;
+      var scopeName = q.scopeName ? decodeURIComponent(q.scopeName) : '';
+      return {
+        scope_type: scope,
+        scope_id: Number(q.scopeId || 0) || 0,
+        scope_name: scopeName,
+        sub_category_id: Number(q.subCategoryId || 0) || null,
+      };
+    },
+
     async submitPracticeRecords(details) {
       try {
         var self = this;
@@ -1019,10 +1058,13 @@ export default defineComponent({
           };
         });
 
+        var payload = { records: records };
+        var scope = this.practiceScopePayload();
+        if (scope) payload.scope = scope;
         var res = await fetchFn('/api/practice/batch-record', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ records: records })
+          body: JSON.stringify(payload)
         });
 
         if (!res.ok) {

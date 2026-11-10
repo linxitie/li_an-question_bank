@@ -156,11 +156,13 @@ async def batch_record_practice(
         "source": item.get('source') or '随机练习',
     } for item in records_data]
     source = payload.get('source') or '随机练习'
+    scope = payload.get('scope') if isinstance(payload.get('scope'), dict) else None
     try:
         result = await submit_answers(
             db, current_user.user_id, normalized,
             source_type=source,
             session_id=payload.get('session_id'),
+            scope=scope,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -633,6 +635,7 @@ async def get_knowledge_progress(
     kp_rows = db.query(
         KnowledgePoint.point_id,
         KnowledgePoint.point_name,
+        KnowledgePoint.parent_id,
         QuestionSubject.subject_id,
         QuestionSubject.subject_name,
         QuestionSubject.subject_code,
@@ -649,7 +652,19 @@ async def get_knowledge_progress(
     if not kp_rows:
         return {"subjects": []}
 
-    point_ids = [r.point_id for r in kp_rows]
+    subject_ids = sorted({r.subject_id for r in kp_rows})
+    # 二级考点（L2）名称表：把 L3 进度汇总回 L2，避免 91 个「其他」占位考点铺满列表。
+    l2_rows = db.query(
+        KnowledgePoint.point_id,
+        KnowledgePoint.point_name,
+        KnowledgePoint.subject_id,
+    ).filter(
+        KnowledgePoint.status == 1,
+        KnowledgePoint.level == 2,
+        KnowledgePoint.subject_id.in_(subject_ids),
+    ).all()
+    l2_map = {pid: (pname, sid) for pid, pname, sid in l2_rows}
+    point_ids = sorted(set([r.point_id for r in kp_rows]) | set(l2_map.keys()))
     stat_rows = db.query(
         QuestionBank.point_id,
         func.count(distinct(QuestionBank.question_id)).label("total"),
@@ -672,8 +687,16 @@ async def get_knowledge_progress(
 
     stat_map = {r[0]: r for r in stat_rows}
 
+    def _stat(pid):
+        st = stat_map.get(pid)
+        if not st:
+            return 0, 0, 0, 0
+        return int(st[1] or 0), int(st[2] or 0), int(st[3] or 0), int(st[4] or 0)
+
     subjects, subject_order = {}, []
-    for pid, pname, sid, sname, scode in kp_rows:
+    groups = {}  # (subject_id, group_key) -> row
+
+    def _ensure_subject(sid, sname, scode):
         if sid not in subjects:
             subjects[sid] = {
                 "subject_id": sid,
@@ -682,16 +705,71 @@ async def get_knowledge_progress(
                 "kps": [],
             }
             subject_order.append(sid)
-        st = stat_map.get(pid)
-        total = int(st[1]) if st else 0
+
+    def _ensure_group(sid, key, name, level, scope, point_id, sname, scode):
+        _ensure_subject(sid, sname, scode)
+        gid = (sid, key)
+        if gid not in groups:
+            groups[gid] = {
+                "point_id": point_id,
+                "point_name": name,
+                "level": level,
+                "scope": scope,
+                "_ids": [],
+            }
+        return groups[gid]
+
+    # L2 分组：先建 L2（含直挂在该 L2 上的题），再把 L3 归入父级。
+    for l2_id, l2_name, sid in l2_rows:
+        row = next((r for r in kp_rows if r.subject_id == sid), None)
+        sname, scode = (row[4], row[5]) if row else ("", "")
+        g = _ensure_group(
+            sid, ("l2", l2_id), l2_name, 2,
+            {"type": "l2", "id": l2_id, "include_descendants": True, "include_other": True},
+            l2_id, sname, scode,
+        )
+        g["_ids"].append(l2_id)
+
+    for pid, pname, parent_id, sid, sname, scode in kp_rows:
+        parent_ok = parent_id and int(parent_id) in l2_map
+        if parent_ok:
+            l2_id = int(parent_id)
+            l2_name = l2_map[l2_id][0]
+            g = _ensure_group(
+                sid, ("l2", l2_id), l2_name, 2,
+                {"type": "l2", "id": l2_id, "include_descendants": True, "include_other": True},
+                l2_id, sname, scode,
+            )
+        elif (pname or "").strip() in ("其他", "其他（未细分）"):
+            # 无父级的「其他」占位考点：每科合并成唯一「其他（未归类）」，不再逐个铺开。
+            g = _ensure_group(
+                sid, ("other", 0), "其他（未归类）", 3,
+                {"type": "other", "id": 0, "sub_category_id": None},
+                0, sname, scode,
+            )
+        else:
+            g = _ensure_group(
+                sid, ("l3", pid), pname, 3,
+                {"type": "l3", "id": pid},
+                pid, sname, scode,
+            )
+        g["_ids"].append(pid)
+
+    for (sid, _key), g in groups.items():
+        total = done = corrects = attempts = 0
+        for pid in g["_ids"]:
+            t, d, c, a = _stat(pid)
+            total += t
+            done += d
+            corrects += c
+            attempts += a
         if total <= 0:
             continue
-        done = int(st[2]) if st else 0
-        attempts = int(st[4] or 0) if st else 0
-        corrects = int(st[3] or 0) if st else 0
         subjects[sid]["kps"].append({
-            "point_id": pid,
-            "point_name": pname,
+            "point_id": g["point_id"],
+            "point_name": g["point_name"],
+            "level": g["level"],
+            "scope": g["scope"],
             "total": total,
             "done": done,
             "done_pct": round(done * 100 / total, 1),
@@ -872,6 +950,10 @@ async def get_recent_records(
             db.query(
                 PracticeRecord.practice_date,
                 PracticeRecord.subject_id,
+                PracticeRecord.scope_type,
+                PracticeRecord.scope_id,
+                PracticeRecord.scope_name,
+                PracticeRecord.sub_category_id,
                 func.count(PracticeRecord.record_id),
                 func.coalesce(func.sum(PracticeRecord.is_correct), 0),
                 func.coalesce(func.sum(PracticeRecord.time_spent), 0),
@@ -890,17 +972,31 @@ async def get_recent_records(
                 ),
             )
             .group_by(
-                PracticeRecord.practice_date, PracticeRecord.subject_id
+                PracticeRecord.practice_date,
+                PracticeRecord.subject_id,
+                PracticeRecord.scope_type,
+                PracticeRecord.scope_id,
+                PracticeRecord.scope_name,
+                PracticeRecord.sub_category_id,
             )
             .order_by(desc(PracticeRecord.practice_date))
             .limit(_RECORD_PRE_LIMIT)
         ).all()
-        for d, sid, cnt, corr, secs in qrows:
+        for d, sid, stype, sid2, sname_scope, scid, cnt, corr, secs in qrows:
             sname, scode = subj_map.get(sid, ("综合", ""))
+            label = sname_scope or "快速练习"
+            params = {"subject": _cat_by_id.get(sid, scode or "")}
+            if stype:
+                params.update({
+                    "scope": stype,
+                    "scopeId": sid2 or 0,
+                    "scopeName": sname_scope or "",
+                    "subCategoryId": scid or "",
+                })
             merged.append({
-                "record_key": f"qp_{d.isoformat()}_{sid}",
+                "record_key": f"qp_{d.isoformat()}_{sid}_{stype or 'legacy'}_{sid2 or 0}_{sname_scope or ''}",
                 "source": "快速练习",
-                "name": f"{d.month}月{d.day}日·{sname}·快速练习",
+                "name": f"{d.month}月{d.day}日·{sname}·{label}",
                 "status": "completed",
                 "score": None,
                 "accuracy": round(int(corr or 0) * 100 / int(cnt or 1), 1),
@@ -908,8 +1004,7 @@ async def get_recent_records(
                 "time_spent_seconds": int(secs or 0),
                 "started_at": _fmt_dt(d),
                 "completed_at": _fmt_dt(d),
-                "jump": {"path": "/exercise",
-                         "params": {"subject": _cat_by_id.get(sid, scode or "")}},
+                "jump": {"path": "/exercise", "params": params},
                 "_sort": _recency_dt(d),
             })
 

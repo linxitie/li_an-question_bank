@@ -134,7 +134,8 @@ def _load_questions(db: Session, question_ids: Iterable[int]) -> Dict[int, Quest
 
 def _grade_item(db: Session, user_id: int, item: Dict[str, Any],
                 questions: Dict[int, QuestionBank], source_type: str,
-                subject_id: Optional[int]) -> Dict[str, Any]:
+                subject_id: Optional[int],
+                scope: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     question_id = item.get("question_id")
     if question_id is None:
         raise ValueError("records 中存在缺少 question_id 的条目")
@@ -161,6 +162,10 @@ def _grade_item(db: Session, user_id: int, item: Dict[str, Any],
         practice_date=date.today(),
         practice_time=datetime.now(),
         source_type=item.get("source") or source_type,
+        scope_type=(scope or {}).get("scope_type"),
+        scope_id=(scope or {}).get("scope_id"),
+        scope_name=(scope or {}).get("scope_name"),
+        sub_category_id=(scope or {}).get("sub_category_id"),
     )
     db.add(record)
     db.flush()
@@ -188,6 +193,7 @@ async def submit_answers(
     subject_id: Optional[int] = None,
     session_id: Optional[str] = None,
     publish_event: bool = True,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """判分 + 记录 + 错题入库（单事务），提交后发布一次 E1 事件。"""
     if not records:
@@ -209,7 +215,7 @@ async def submit_answers(
         questions = _load_questions(db, (item.get("question_id") for item in records))
         for item in records:
             result = _grade_item(db, user_id, item, questions,
-                                 source_type, subject_id)
+                                 source_type, subject_id, scope)
             results.append(result)
             if not result["is_correct"] and result["wrong_result"] in wrong_stats:
                 wrong_stats[result["wrong_result"]] += 1

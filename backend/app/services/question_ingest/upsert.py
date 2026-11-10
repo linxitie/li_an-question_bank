@@ -553,4 +553,6 @@ def _upsert_xingce_question(db: Session, user, data: Dict[str, Any]):
     )
     db.add(q)
     db.flush()
+    # 行测旧链路完全不跑分类；不补这一步，新导入题会继续以「其他」出现。
+    _link_knowledge_points(db, [q])
     return {'import_status': 'SUCCESS', 'question_id': q.question_id}

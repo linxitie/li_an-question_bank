@@ -526,6 +526,12 @@ class PracticeRecord(Base):
     practice_date = Column(Date, comment="刷题日期（用于按日统计）")
     time_spent = Column(Integer, comment="耗时（秒）")
     source_type = Column(String(50), comment="刷题来源（随机练习/章节练习/错题复习/快速练习/历年试卷/智能组卷）")
+    # 快速练习的作用域快照：让「最近记录」能显示真实考点/其他，而不是一律回退「其他」。
+    # 仅新增可空列，历史记录保持 NULL，读取端按旧口径回退。
+    scope_type = Column(String(20), comment="作用域类型 subject/subcategory/l2/l3/other")
+    scope_id = Column(Integer, comment="作用域主键")
+    scope_name = Column(String(100), comment="作用域名称快照")
+    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), comment="子科目ID")
 
     user = relationship("SysUser")
     question = relationship("QuestionBank")

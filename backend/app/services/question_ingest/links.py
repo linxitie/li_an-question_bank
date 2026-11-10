@@ -14,11 +14,56 @@ from fastapi import HTTPException
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ...models.models import QuestionKnowledge, QuestionSubject, QuestionType
+from ...models.models import (
+    KnowledgePoint,
+    QuestionKnowledge,
+    QuestionSubject,
+    QuestionType,
+    SubCategory,
+)
 from ..question_classifier import QuestionClassifier
 from .tags import SUBJECT_NAME_MAP
 
 logger = logging.getLogger(__name__)
+
+
+def _find_other_point(db: Session, subject_id: int, sub_category_id: int):
+    """返回该子科目下的 canonical「其他」L3 考点；不存在时返回 None，绝不新建节点。"""
+    if not subject_id or not sub_category_id:
+        return None
+    return db.query(KnowledgePoint).filter(
+        KnowledgePoint.subject_id == subject_id,
+        KnowledgePoint.sub_category_id == sub_category_id,
+        KnowledgePoint.level == 3,
+        KnowledgePoint.status == 1,
+        KnowledgePoint.point_name.in_(("其他", "其他（未细分）")),
+    ).order_by(KnowledgePoint.point_id).first()
+
+
+def _resolve_sub_category_id(db: Session, q) -> int:
+    """分类引擎未给出子科目时，用题目自带的子科目名称兜底。"""
+    for attr in ("xingce_subcategory", "shenlun_subcategory", "gongzhuan_subcategory"):
+        name = (getattr(q, attr, None) or "").strip()
+        if not name or name == "无":
+            continue
+        row = db.query(SubCategory).filter(
+            SubCategory.subject_id == q.subject_id,
+            SubCategory.name == name,
+            SubCategory.status == 1,
+        ).first()
+        if row:
+            return int(row.id)
+    return 0
+
+
+def _attach_point(q, point_id: int, sub_category_id: int) -> None:
+    """把三级考点与子科目写回题目主表，供快速练习按 point_id 直接统计。
+
+    历史数据只写 QuestionKnowledge，QuestionBank.point_id 为空，导致快速练习
+    只能反查关联表；导入时双写是让新题一次到位、不再产生新的「其他」。
+    """
+    q.point_id = int(point_id)
+    q.sub_category_id = int(sub_category_id)
 
 
 def _link_knowledge_points(db: Session, questions) -> int:
@@ -26,6 +71,9 @@ def _link_knowledge_points(db: Session, questions) -> int:
 
     仅 db.add 关联，不 commit，由调用方在合适时机提交。
     返回成功建立考点关联的题目数。
+
+    分类命中时同时回填 QuestionBank.point_id / sub_category_id；分类不到具体
+    考点时落入该子科目的 canonical「其他」，保证快速练习可被点击练习。
     """
     if not questions:
         return 0
@@ -36,17 +84,32 @@ def _link_knowledge_points(db: Session, questions) -> int:
             result = classifier.classify_with_db(
                 q.question_content or "", q.subject_id, db
             )
-            if result.knowledge_point_id:
-                existing = db.query(QuestionKnowledge).filter(
-                    QuestionKnowledge.question_id == q.question_id,
-                    QuestionKnowledge.knowledge_point_id == result.knowledge_point_id
+            point_id = int(result.knowledge_point_id or 0)
+            sc_id = int(result.sub_category_id or 0)
+            if point_id and not sc_id:
+                kp = db.query(KnowledgePoint).filter(
+                    KnowledgePoint.point_id == point_id
                 ).first()
-                if not existing:
-                    db.add(QuestionKnowledge(
-                        question_id=q.question_id,
-                        knowledge_point_id=result.knowledge_point_id
-                    ))
-                    linked += 1
+                sc_id = int(kp.sub_category_id or 0) if kp else 0
+            if not sc_id:
+                sc_id = _resolve_sub_category_id(db, q)
+            if not point_id and sc_id:
+                other = _find_other_point(db, int(q.subject_id or 0), sc_id)
+                if other:
+                    point_id = int(other.point_id)
+            if not point_id:
+                continue
+            _attach_point(q, point_id, sc_id)
+            existing = db.query(QuestionKnowledge).filter(
+                QuestionKnowledge.question_id == q.question_id,
+                QuestionKnowledge.knowledge_point_id == point_id
+            ).first()
+            if not existing:
+                db.add(QuestionKnowledge(
+                    question_id=q.question_id,
+                    knowledge_point_id=point_id
+                ))
+                linked += 1
         except Exception as e:
             logger.warning(f"考点关联失败 question_id={getattr(q, 'question_id', None)}: {e}")
     return linked

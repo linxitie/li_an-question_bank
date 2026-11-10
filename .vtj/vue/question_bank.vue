@@ -125,19 +125,20 @@
                     直接练习该题型（{{ sub.total_questions || sub.count || 0 }} 题）
                   </button>
                 </div>
-                <template v-for="l2 in sub.knowledge_points" :key="l2.point_id">
+                <template v-for="l2 in (sub.display_points || sub.knowledge_points)" :key="l2.key || l2.point_id">
                   <div class="kp-l2" v-if="(l2.total_questions || 0) > 0">
-                    <div class="kp-row kp-l2-row" @click.stop="toggleL2(sub.key, l2.point_id)">
+                    <div class="kp-row kp-l2-row" :class="{ 'kp-l2-direct': l2.is_direct }" @click.stop="onL2Click(sub.key, l2)">
                       <span class="kp-name">{{ l2.point_name }}</span>
                       <span class="kp-badge">{{ l2.done_count || 0 }}/{{ l2.total_questions || 0 }}</span>
-                      <XIcon :icon="isL2Expanded(sub.key, l2.point_id) ? ArrowDown : ArrowRightBold" :size="12" color="#8899aa"></XIcon>
+                      <span v-if="l2.is_direct" class="kp-direct-tag">直接练</span>
+                      <XIcon v-else :icon="isL2Expanded(sub.key, l2.key || l2.point_id) ? ArrowDown : ArrowRightBold" :size="12" color="#8899aa"></XIcon>
                     </div>
-                    <div class="kp-l3-list" v-if="isL2Expanded(sub.key, l2.point_id)">
-                      <template v-for="l3 in l2.children" :key="l3.point_id">
+                    <div class="kp-l3-list" v-if="!l2.is_direct && isL2Expanded(sub.key, l2.key || l2.point_id)">
+                      <template v-for="l3 in l2.children" :key="l3.key || l3.point_id">
                         <div
                           class="kp-row kp-l3-row"
                           v-if="(l3.total_questions || 0) > 0"
-                          @click.stop="startKnowledgePractice(sub.key, l3)">
+                          @click.stop="startScopePractice(sub.key, l3)">
                           <span class="kp-name">{{ l3.point_name }}</span>
                           <span class="kp-badge">{{ l3.done_count || 0 }}/{{ l3.total_questions || 0 }}</span>
                         </div>
@@ -664,6 +665,7 @@
               done_count: 0,
               count: realCount,
               knowledge_points: [],
+              display_points: [],
               emoji: (SUBCARD_STYLES[def.name] || {}).emoji || '📝',
               bg: (SUBCARD_STYLES[def.name] || {}).bg || '#f8f9fc',
             };
@@ -685,6 +687,10 @@
             done_count: item.done_count || 0,
             count: item.total_questions || 0,
             knowledge_points: item.knowledge_points || [],
+            display_points: (item.display_points && item.display_points.length)
+              ? item.display_points
+              : (item.knowledge_points || []),
+            other_count: item.other_count || 0,
             emoji: (SUBCARD_STYLES[item.name] || {}).emoji || '📝',
             bg: (SUBCARD_STYLES[item.name] || {}).bg || '#f8f9fc',
           };
@@ -908,7 +914,7 @@
       // 考点树是否可点：只要有一个 L2 考点挂着题，就按原设计走考点练习；
       // 否则回退到"按题型直接抽题"——不依赖 question_bank.point_id 是否有值。
       hasVisiblePoints(sub) {
-        var kps = (sub && sub.knowledge_points) || [];
+        var kps = (sub && (sub.display_points || sub.knowledge_points)) || [];
         for (var i = 0; i < kps.length; i++) {
           if ((kps[i].total_questions || 0) > 0) return true;
         }
@@ -1067,6 +1073,19 @@
         // 与既有协议对齐：exercise 页期望 xc/sl/ga 键（种子数据的 subject_code 可能为 auto_*）
         var catIdMap = { 1: 'xc', 2: 'sl', 3: 'ga' };
         var cat = catIdMap[sub.subject_id] || sub.subject_code || '';
+        if (k.scope && k.scope.type) {
+          var url = '/exercise?subject=' + cat
+            + '&scope=' + k.scope.type
+            + '&scopeId=' + (k.scope.id || 0)
+            + '&scopeName=' + encodeURIComponent(k.point_name || '')
+            + '&count=20';
+          if (k.scope.type === 'l2') {
+            url += '&l2Id=' + (k.scope.id || 0)
+              + '&includeDescendants=1&includeOther=1';
+          }
+          this.$router.push(url);
+          return;
+        }
         this.$router.push('/exercise?subject=' + cat
           + '&kpId=' + k.point_id
           + '&kpName=' + encodeURIComponent(k.point_name || ''));
@@ -1207,13 +1226,16 @@
         }
       },
       switchCategory(key) {
+        // 自定义刷题使用独立配置页，保留原题库页的模板与样式不动
+        if (key === 'custom') {
+          var cfg = this.state.customConfig || {};
+          this.$router.push('/custom-practice?subject=' + (cfg.subject || this.state.activeCategory));
+          return;
+        }
         this.state.activeCategory = key;
         this.state.expandedSubCategory = null;
         this.state.expandedL2 = {};
-        // 切换到非自定义Tab时，加载快速练习数据
-        if (key !== 'custom') {
-          this.fetchQuickPracticeData(key);
-        }
+        this.fetchQuickPracticeData(key);
       },
       handleSubAction(key) {
         if (key === 'mini') {
@@ -1274,26 +1296,46 @@
         this.state.expandedL2 = Object.assign({}, this.state.expandedL2, { [key]: !this.state.expandedL2[key] });
       },
       isL2Expanded(subKey, l2Id) { return !!this.state.expandedL2[subKey + ':' + l2Id]; },
+      onL2Click(subKey, l2) {
+        if (!l2) return;
+        if (l2.is_direct || !(l2.children && l2.children.length)) {
+          this.startScopePractice(subKey, l2);
+          return;
+        }
+        this.toggleL2(subKey, l2.key || l2.point_id);
+      },
       startKnowledgePractice(subKey, kp) {
-        if (!kp || !kp.point_id) return;
+        if (!kp) return;
+        if (kp.scope) { this.startScopePractice(subKey, kp); return; }
+        if (!kp.point_id) return;
         var catKey = this.state.activeCategory;
         this.$router.push('/exercise?subject=' + catKey + '&kpId=' + kp.point_id + '&kpName=' + encodeURIComponent(kp.point_name || ''));
       },
-      startCustomPractice() {
-        var cfg = this.state.customConfig;
-        var subCatId = cfg.subCategory;
-        if (!subCatId) {
-          ElMessage.warning('请选择具体练习子科目');
-          return;
+      startScopePractice(subKey, node) {
+        if (!node) return;
+        var scope = node.scope || { type: 'l3', scope_id: node.point_id || 0 };
+        var catKey = this.state.activeCategory;
+        var params = [
+          'subject=' + catKey,
+          'scope=' + encodeURIComponent(scope.type || 'l3'),
+          'scopeId=' + (scope.scope_id || node.point_id || 0),
+          'scopeName=' + encodeURIComponent(node.point_name || ''),
+          'count=20',
+        ];
+        if (scope.sub_category_id) params.push('subCategoryId=' + scope.sub_category_id);
+        if (scope.l2_id) params.push('l2Id=' + scope.l2_id);
+        if (scope.type === 'l2') {
+          params.push('includeDescendants=1');
+          params.push('includeOther=1');
         }
-        var count = cfg.questionCount || 20;
-        var yearRange = cfg.yearRange || '3';
-        // 使用子科目ID获取题目
-        this.$router.push('/exercise?subject=' + cfg.subject
-          + '&scId=' + subCatId
-          + '&count=' + count
-          + '&yearRange=' + yearRange
-          + '&timeLimit=' + (cfg.timeLimit || 0));
+        this.$router.push('/exercise?' + params.join('&'));
+      },
+      startCustomPractice() {
+        var cfg = this.state.customConfig || {};
+        var query = ['subject=' + (cfg.subject || this.state.activeCategory)];
+        if (cfg.subCategory) query.push('subCategoryId=' + cfg.subCategory);
+        if (cfg.questionCount) query.push('count=' + cfg.questionCount);
+        this.$router.push('/custom-practice?' + query.join('&'));
       },
       navigateTo(id) {
         if (id) {
@@ -1707,6 +1749,8 @@
   /* 考点二级 / 三级层级 */
   .kp-l2-row { font-weight: 600; gap: 8px; }
   .kp-l2-row .kp-name { font-weight: 600; }
+  .kp-l2-direct { background: #f7faff; }
+  .kp-direct-tag { font-size: 10px; color: #1a3c6d; background: #e3edff; border-radius: 999px; padding: 2px 8px; font-weight: 600; flex-shrink: 0; }
   .kp-l3-list { background: #fff; border-top: 1px solid #f0f2f5; }
   .kp-l3-row { padding: 8px 16px 8px 34px; background: #fff; }
   .kp-l3-row .kp-name { font-size: 12px; color: #5a6488; font-weight: 400; }

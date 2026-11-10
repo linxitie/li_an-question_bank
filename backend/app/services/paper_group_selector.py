@@ -84,6 +84,51 @@ def select_questions_with_groups(
     return picked, used
 
 
+def expand_question_groups(
+    db: Session,
+    questions: Sequence[QuestionBank],
+    subject_id: Optional[int] = None,
+) -> Tuple[list, int]:
+    """把已抽中的题按题组补全，返回 (展开后的题列表, 额外带入的题数)。
+
+    用于练习/预览等「先按筛选抽 limit，再保证组完整」的场景：
+    - 独立题保持原有随机顺序；
+    - 每命中一个题组，在首次出现位置连续放入整组成员；
+    - 组内成员即使不满足原筛选条件也带入（完整优先）。
+    """
+    expanded: list = []
+    seen_ids: Set[int] = set()
+    seen_groups: Set[int] = set()
+    selected_ids = {q.question_id for q in questions}
+
+    for q in questions:
+        gid = int(q.group_id or 0)
+        if gid <= 0:
+            if q.question_id not in seen_ids:
+                seen_ids.add(q.question_id)
+                expanded.append(q)
+            continue
+        if gid in seen_groups:
+            continue
+        seen_groups.add(gid)
+        members = _group_members(db, gid)
+        if subject_id is not None:
+            members = [m for m in members if int(m.subject_id or 0) == int(subject_id)]
+        if not members:
+            if q.question_id not in seen_ids:
+                seen_ids.add(q.question_id)
+                expanded.append(q)
+            continue
+        for m in members:
+            if m.question_id in seen_ids:
+                continue
+            seen_ids.add(m.question_id)
+            expanded.append(m)
+
+    extra = sum(1 for m in expanded if m.question_id not in selected_ids)
+    return expanded, extra
+
+
 def summarize_group_selection(requested_count: int, actual_count: int) -> dict:
     """把"请求题量 vs 实际题量"整理成可直接塞进 API 响应的字段。
 
