@@ -71,27 +71,50 @@ def _list_ids(client, headers):
     return [p["paper_id"] for p in resp.json()["items"]]
 
 
-# ------------------------------------------------------------------ 列表过滤
-def test_student_list_hides_closed_paper(client, db_session, test_subject,
-                                         auth_headers, test_admin):
+# ------------------------------------------------------------------ 列表状态
+# 2026-11-09 产品口径变更（用户点单「PC 试卷列表也显示未开放」）：
+#   以前这三条断言的是"不可考的卷**不出现**"，现在改为"**出现**但 answerable=False + 带原因"。
+#   理由：隐藏会让学生以为卷丢了；显示 + 原因才解释得清，而且能不能考仍由后端闸门把关。
+def _list_item(client, headers, paper_id):
+    resp = client.get("/api/papers/list?page=1&page_size=100", headers=headers)
+    assert resp.status_code == 200, resp.text
+    for item in resp.json()["items"]:
+        if item["paper_id"] == paper_id:
+            return item
+    return None
+
+
+def test_student_list_shows_closed_paper_with_reason(client, db_session, test_subject,
+                                                     auth_headers, test_admin):
     closed = _paper(db_session, test_subject.subject_id, code="P2-CLOSED", open_=0)
     opened = _paper(db_session, test_subject.subject_id, code="P2-OPEN")
     ids = _list_ids(client, auth_headers)
     assert opened.paper_id in ids
-    assert closed.paper_id not in ids
+    assert closed.paper_id in ids, "关闭的卷要显示出来（带原因），不再隐藏"
+
+    item = _list_item(client, auth_headers, closed.paper_id)
+    assert item is not None
+    assert item["answerable"] is False
+    assert item["exam"]["reason"] == "closed"
+    assert "已关闭" in item["exam_hint"]
 
 
-def test_student_list_hides_zero_question_paper(client, db_session, test_subject,
-                                               auth_headers):
-    """0 题的已发布卷不该出现在学生列表里（#128 的坑：点进去考不了）。"""
+def test_student_list_shows_zero_question_paper_with_reason(client, db_session, test_subject,
+                                                            auth_headers):
+    """0 题的已发布卷也要显示（#128 的坑从"看不到"改成"看得到但点不了并说明原因"）。"""
     empty = _paper(db_session, test_subject.subject_id, code="P2-EMPTY", questions=0)
     full = _paper(db_session, test_subject.subject_id, code="P2-FULL")
     ids = _list_ids(client, auth_headers)
     assert full.paper_id in ids
-    assert empty.paper_id not in ids
+    assert empty.paper_id in ids
+
+    item = _list_item(client, auth_headers, empty.paper_id)
+    assert item["answerable"] is False
+    assert item["exam"]["reason"] == "no_questions"
+    assert "还没有题目" in item["exam_hint"]
 
 
-def test_student_list_hides_not_started_and_expired(client, db_session, test_subject,
+def test_student_list_shows_not_started_and_expired(client, db_session, test_subject,
                                                     auth_headers):
     now = datetime.now()
     future = _paper(db_session, test_subject.subject_id, code="P2-FUTURE",
@@ -103,8 +126,18 @@ def test_student_list_hides_not_started_and_expired(client, db_session, test_sub
                      close_at=now + timedelta(hours=1))
     ids = _list_ids(client, auth_headers)
     assert current.paper_id in ids
-    assert future.paper_id not in ids
-    assert past.paper_id not in ids
+    assert future.paper_id in ids and past.paper_id in ids
+
+    soon = _list_item(client, auth_headers, future.paper_id)
+    assert soon["answerable"] is False and soon["exam"]["reason"] == "not_started"
+    assert "开始" in soon["exam_hint"]
+
+    done = _list_item(client, auth_headers, past.paper_id)
+    assert done["answerable"] is False and done["exam"]["reason"] == "expired"
+    assert "结束" in done["exam_hint"]
+
+    now_item = _list_item(client, auth_headers, current.paper_id)
+    assert now_item["answerable"] is True and now_item["exam_hint"] == ""
 
 
 def test_teacher_list_keeps_closed_paper(client, db_session, test_subject,

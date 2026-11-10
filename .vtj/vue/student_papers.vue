@@ -236,14 +236,25 @@ export default defineComponent({
     }
 
     function getPaperStatus(p: any) {
+      // 2026-11-09（用户点单「PC 试卷列表也显示未开放」）：
+      // 后端 `/api/papers/list` 不再隐藏"暂不可考"的卷，改为下发 `answerable` 与
+      // `exam_hint`。状态优先级：不可考 > 已完成 > 进行中 > 未开始 —— 因为"现在考不了"
+      // 是学生最需要先知道的信息（哪怕他考过一次）。
+      if (p && p.answerable === false) return { label: '未开放', cls: 'status-off' };
       const pId = p.paper_id;
       const prog = userProgress.value[pId];
-      if (!prog) return { label: '未开始', cls: 'status-new' };
+      if (!prog) return { label: '可考', cls: 'status-new' };
       if (prog.completed) return { label: '已完成 ✓', cls: 'status-done' };
       return { label: '进行中', cls: 'status-progress' };
     }
 
     async function startExam(p: any) {
+      // 2026-11-09：不可考时**先在前端拦住并说清原因**，不要让学生点了才发现进不去
+      // （后端闸门仍会兜底，这里只是把原因提前亮出来）。
+      if (p && p.answerable === false) {
+        ElMessage.warning(p.exam_hint || '这场考试暂时不能开始');
+        return;
+      }
       const auth = (window as any).__VTJ_AUTH__;
       if (!auth || !auth.isLoggedIn || !auth.isLoggedIn()) {
         ElMessage.warning('请先登录后再参加考试');
@@ -352,6 +363,8 @@ export default defineComponent({
 .status-new { background: #f0f2f5; color: #909399; }
 .status-progress { background: #fff7e6; color: #e6a23c; }
 .status-done { background: #f0f9eb; color: #67c23a; }
+/* 未开放：琥珀底 + 边框，和"进行中"区分开（后者是暖黄字、无边框） */
+.status-off { background: #fff7e6; color: #b45309; border: 1px solid #fde68a; }
 
 .card-title { color: #1A3C6D; margin: 0 0 12px; font-size: 17px; line-height: 1.4; }
 .card-stats { display: flex; gap: 16px; margin-bottom: 8px; font-size: 14px; color: #606266; }

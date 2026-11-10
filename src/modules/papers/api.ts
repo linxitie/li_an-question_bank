@@ -23,6 +23,10 @@ export interface PaperItem {
   difficulty?: number;
   create_time?: string | null;
   publish_time?: string | null;
+  // 2026-11-09：`/api/papers/list` 也补了考试状态（学生因此能看到"未开放 + 原因"）
+  exam?: PaperExamState | null;
+  answerable?: boolean;
+  exam_hint?: string;
 }
 
 export interface PapersListQuery {

@@ -593,6 +593,12 @@ class PaperDetailResponse(BaseModel):
     update_time: datetime
     publish_time: Optional[datetime]
     questions: Optional[List[QuestionResponse]] = None
+    # 2026-11-09（用户点单「PC 试卷列表也显示未开放」）：列表/详情补「考试状态」，
+    # 口径同 `exam/contract.exam_state`（学生看到"未开放 + 原因"，而不是整卷被隐藏）。
+    # 三个字段都可空：老调用方/不挂状态时保持 None，前端无感。
+    exam: Optional[dict] = None
+    answerable: Optional[bool] = None
+    exam_hint: Optional[str] = None
 
 
 class PaperListQuery(BaseModel):

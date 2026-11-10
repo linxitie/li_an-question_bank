@@ -3,6 +3,12 @@
     <header class="topbar">
       <button class="back-btn" @click="goBack" aria-label="返回">←</button>
       <div class="progress-text">{{ currentIndex + 1 }} / {{ questions.length }}</div>
+      <!-- 整卷考试倒计时（剩余秒数来自后端 `/resume`，前端只每秒递减；到 0 自动交卷） -->
+      <div
+        v-if="isPaperMode && remainingSeconds !== null"
+        class="timer"
+        :class="{ warn: remainingSeconds <= 300 }"
+      >{{ timerText }}</div>
       <button
         class="sheet-btn"
         :class="{ active: sheetOpen }"
@@ -131,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { renderQuestionContent } from '@/utils/questionRender';
 
@@ -149,6 +155,41 @@ const isPaperMode = computed(() => paperId.value > 0);
 const paperInfo = ref<any>(null);   // { paper_name, duration, total_score, question_count }
 const recordId = ref(0);            // 开考返回的 exam_record.record_id
 const submitting = ref(false);
+// 剩余秒数：来自 `GET /records/{id}/resume`（后端按 start_time + duration 算），null=不限时
+const remainingSeconds = ref<number | null>(null);
+let timerId: number | null = null;
+let saveTimerId: number | null = null;
+
+const timerText = computed(() => {
+  const s = remainingSeconds.value;
+  if (s === null) return '';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  return `${h > 0 ? h + ':' : ''}${mm}:${String(sec).padStart(2, '0')}`;
+});
+
+const stopTimer = () => {
+  if (timerId !== null) {
+    window.clearInterval(timerId);
+    timerId = null;
+  }
+};
+
+const startTimer = () => {
+  stopTimer();
+  if (remainingSeconds.value === null) return;
+  timerId = window.setInterval(() => {
+    if (remainingSeconds.value === null) return;
+    remainingSeconds.value = Math.max(0, remainingSeconds.value - 1);
+    if (remainingSeconds.value === 0) {
+      stopTimer();
+      // 时间到：不再询问，直接交卷（拖下去只会被后端判迟交）
+      void submitPaperExam({ auto: true });
+    }
+  }, 1000);
+};
 
 const questions = ref<{ options?: string[]; [key: string]: any }[]>([]);
 const currentIndex = ref(0);
@@ -574,10 +615,11 @@ const nextQuestion = () => {
   if (currentIndex.value < questions.value.length - 1) currentIndex.value++;
 };
 
-// ===== 整卷考试：开考 + 取题 =====
-// 两条现有后端链路直接复用，不新增接口：
-//   POST /api/exams/{paper_id}/start   → 过考试闸（开关/定时/有题），幂等复用未完成记录
-//   GET  /api/exams/{paper_id}/questions → 返回题目（考试态，**不含答案与解析**）
+// ===== 整卷考试：开考 + 断点续答 + 倒计时 =====
+// 三条现成链路直接复用，不新增接口：
+//   POST /api/exams/{paper_id}/start            → 过考试闸，**幂等复用**未完成记录
+//   GET  /api/exams/records/{record_id}/resume  → 题目 + 已保存答案 + remaining_seconds
+//   GET  /api/exams/{paper_id}/questions        → resume 不可用时的兜底取题
 const fetchPaperExam = async () => {
   loading.value = true;
   fetchError.value = '';
@@ -593,14 +635,26 @@ const fetchPaperExam = async () => {
     const startData = startJson?.data ?? startJson;
     recordId.value = Number(startData?.record_id || 0);
 
-    const qRes = await auth.apiFetch(`/api/exams/${paperId.value}/questions`);
-    const qJson = await qRes.json().catch(() => ({}));
-    if (!qRes.ok) {
-      fetchError.value = qJson?.detail || '题目加载失败，请返回重试';
-      return;
+    // 断点续答优先：start 会复用未完成记录，resume 会带回"上次选了什么 + 还剩多少秒"。
+    // 跨设备也成立（答案存在 exam_answer_detail，不靠 localStorage）。
+    let source: any = null;
+    if (recordId.value) {
+      const rRes = await auth.apiFetch(`/api/exams/records/${recordId.value}/resume`);
+      if (rRes.ok) source = await rRes.json().catch(() => null);
+      // 409 = 记录已完成（点"再考一次"时会新建记录，正常不会走到这里）
     }
-    paperInfo.value = qJson;
-    const list = (qJson?.questions || []) as any[];
+    if (!source || !(source.questions || []).length) {
+      const qRes = await auth.apiFetch(`/api/exams/${paperId.value}/questions`);
+      const qJson = await qRes.json().catch(() => ({}));
+      if (!qRes.ok) {
+        fetchError.value = qJson?.detail || '题目加载失败，请返回重试';
+        return;
+      }
+      source = qJson;
+    }
+
+    paperInfo.value = source;
+    const list = (source?.questions || []) as any[];
     questions.value = list.map((q: any) => ({
       question_id: q.question_id,
       question_content: q.question_content,
@@ -618,9 +672,37 @@ const fetchPaperExam = async () => {
       answer_analysis: '',
       shared_content: q.shared_content || ''
     }));
-    answersRecord.value = new Array(questions.value.length).fill(null);
-    subjectiveAnswers.value = {};
-    currentIndex.value = 0;
+
+    // 回填已保存答案：saved_answer 形如 "A" / "A,C"（字母 → 选项下标）
+    const saved: Record<string, string> =
+      source?.saved_answers || {};
+    answersRecord.value = questions.value.map((q: any) => {
+      const raw = String(saved[String(q.question_id)] || '').trim();
+      if (!raw) return null;
+      const selected = raw
+        .split(',')
+        .map((s) => letters.indexOf(s.trim().toUpperCase()))
+        .filter((i) => i >= 0);
+      if (!selected.length) return null;
+      return { selected, correct: false, reported: false, seconds: 0 };
+    });
+    // 主观题的已保存答案也要回填（resume 的 saved_answers 同一份）
+    const subjective: Record<number, string> = {};
+    questions.value.forEach((q: any, i: number) => {
+      if (!q.is_subjective) return;
+      const raw = String(saved[String(q.question_id)] || '').trim();
+      if (raw) subjective[i] = raw;
+    });
+    subjectiveAnswers.value = subjective;
+
+    // 从第一道未作答开始（续答时不用自己翻页找）
+    const firstTodo = questions.value.findIndex((_, i) => !isAnsweredAt(i));
+    currentIndex.value = firstTodo >= 0 ? firstTodo : 0;
+
+    // 倒计时：resume 给了 remaining_seconds 就用它；没有（不限时）则不显示
+    const remain = Number(source?.remaining_seconds);
+    remainingSeconds.value = Number.isFinite(remain) ? remain : null;
+    startTimer();
   } catch (e) {
     console.error('开考失败:', e);
     fetchError.value = '网络异常，请返回重试';
@@ -629,17 +711,64 @@ const fetchPaperExam = async () => {
   }
 };
 
+// ===== 整卷考试：进度自动保存（断点续答的服务端一侧） =====
+// 只存已作答的题；`save_progress` 按 (record_id, question_id) UPSERT，重复保存幂等。
+const saveProgress = async () => {
+  if (!isPaperMode.value || !recordId.value || submitting.value) return;
+  const auth = (window as any).__VTJ_AUTH__;
+  const items = questions.value
+    .map((q: any, i: number) => {
+      const selected = answersRecord.value[i]?.selected || [];
+      const answer = q.is_subjective
+        ? String(subjectiveAnswers.value[i] || '').trim()
+        : selected.map((idx: number) => letters[idx]).sort().join(',');
+      return { question_id: q.question_id, answer, time_spent: 0 };
+    })
+    .filter((x: any) => x.answer);
+  if (!items.length) return;
+  try {
+    await auth.apiFetch(`/api/exams/${recordId.value}/progress`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(items)
+    });
+  } catch (e) {
+    // 存进度失败不该打断答题：用户仍在本地记录，交卷时以本次作答为准
+    console.warn('[mobile_answer] 保存进度失败:', e);
+  }
+};
+
+// 防抖：选项频繁切换时不要每题都打一次接口
+const scheduleSave = () => {
+  if (!isPaperMode.value) return;
+  if (saveTimerId !== null) window.clearTimeout(saveTimerId);
+  saveTimerId = window.setTimeout(() => {
+    saveTimerId = null;
+    void saveProgress();
+  }, 1200);
+};
+
+watch(
+  [answersRecord, subjectiveAnswers],
+  () => {
+    if (isPaperMode.value) scheduleSave();
+  },
+  { deep: true }
+);
+
 // ===== 整卷考试：交卷 =====
-// 只提交**已作答**的题（空白题不传）：后端按"空=错"落明细，
-// 与 PC 端答题卡的行为一致（实测 97 题只答 2 题也是 97 条明细、95 条空）。
-const submitPaperExam = async () => {
+// 客观题**每题都提交**（未作答传空串）：PC 答题卡就是这个行为，
+// 这样 `exam_answer_detail` 条数 = 卷题数，结果页「正确/错误 0 / N 题」的分母才对。
+const submitPaperExam = async (opts: { auto?: boolean } = {}) => {
   if (submitting.value) return;
-  const answeredCount = questions.value.filter((_, i) => isAnsweredAt(i)).length;
-  const rest = questions.value.length - answeredCount;
-  const tip = rest > 0
-    ? `还有 ${rest} 题未作答（空题按错计），确定交卷？`
-    : '确定交卷？交卷后不能再改。';
-  if (!window.confirm(tip)) return;
+  if (!opts.auto) {
+    const answeredCount = questions.value.filter((_, i) => isAnsweredAt(i)).length;
+    const rest = questions.value.length - answeredCount;
+    const tip = rest > 0
+      ? `还有 ${rest} 题未作答（空题按错计），确定交卷？`
+      : '确定交卷？交卷后不能再改。';
+    if (!window.confirm(tip)) return;
+  }
 
   submitting.value = true;
   try {
@@ -672,6 +801,7 @@ const submitPaperExam = async () => {
       return;
     }
     // 交卷成功 → 结果页（PC/手机共用；结果页口径已统一为 is_scored + answered_count）
+    stopTimer();
     router.replace(`/paper-result?record_id=${recordId.value}&paper_id=${paperId.value}`);
   } catch (e) {
     console.error('交卷失败:', e);
@@ -682,6 +812,14 @@ const submitPaperExam = async () => {
 };
 
 onMounted(fetchQuestions);
+// 离开页面必须停表，否则用户退出后 setInterval 仍在跑（还会在 0 时触发一次交卷）
+onUnmounted(() => {
+  stopTimer();
+  if (saveTimerId !== null) {
+    window.clearTimeout(saveTimerId);
+    saveTimerId = null;
+  }
+});
 </script>
 
 <style scoped>
@@ -713,6 +851,26 @@ onMounted(fetchQuestions);
   font-size: 15px;
   font-weight: 600;
   color: #1a2b5f;
+}
+/* 整卷考试倒计时：默认深蓝，最后 5 分钟转红并轻微呼吸，提醒"要交卷了" */
+.timer {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #1a2b5f;
+  background: #eef3fb;
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin: 0 8px;
+}
+.timer.warn {
+  color: #b42318;
+  background: #fee4e2;
+  animation: timerPulse 1.2s ease-in-out infinite;
+}
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 .spacer {
   width: 32px;

@@ -104,8 +104,22 @@ def open_conditions(now: Optional[datetime] = None) -> list:
 
     为什么不让 catalog 直接 import `exam/contract.py`：门禁把 catalog → exam 的
     跨域 import 判为违规。服务层是两边都能用的公共层（与 `paper_registry` 同理）。
+
+    **2026-11-09 起 `/api/papers/list` 不再用它做"隐藏"**：产品要求把"暂不可考"的卷
+    也显示出来并标注原因（否则学生以为卷丢了）。本函数保留给仍需要"只列可考"的调用方。
     """
     return contract.open_conditions(now)
+
+
+def paper_state(db: Session, paper, now: Optional[datetime] = None) -> dict:
+    """卷的考试状态块（catalog 列表用；与资料页 `paper.exam` 同一份契约）。"""
+    return contract.exam_state(paper, now,
+                               questions=contract.question_total(db, paper))
+
+
+def paper_hint(db: Session, paper, now: Optional[datetime] = None) -> str:
+    """卷"为什么不能考"的一句话（已翻成人话）。可考时返回空串。"""
+    return contract.exam_block_message(paper_state(db, paper, now))
 
 
 def block_message(db: Session, material: StudyMaterial,

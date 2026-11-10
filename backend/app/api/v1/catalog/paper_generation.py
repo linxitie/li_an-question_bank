@@ -559,16 +559,15 @@ async def get_paper_list(
         )
     # 管理员可以看到所有
 
-    # ★ P2（2026-11-09）：学生列表再叠一层考试开关 / 定时窗口 / 有题 —— 学生看不到
-    #   "点进去也考不了"的卷（#128 那种 0 题空卷就是典型）。
-    #   · 下推到 SQL 而不是取回后在 Python 里筛：分页 total 必须与实际条数一致；
-    #   · 经**服务层** `exam_gate` 取条件，不直接 import 考试域契约
-    #     （`check_module_boundary.py` 会拦 catalog → exam 的 cross_import）；
-    #   · 判据用 `user_type == 'student'` 而不是 `role_level < 2`：**教师 role_level 也是 1**，
-    #     按 level 会把教师一起筛掉 —— 教师要看得到自己关掉的卷才能再打开。
-    if (current_user.user_type or "").strip().lower() == "student":
-        from ....services import exam_gate
-        query = query.filter(*exam_gate.open_conditions())
+    # ★ 2026-11-09（用户点单「PC 试卷列表也显示未开放」）：
+    #   这里原来对学生会把「关掉 / 未到时间 / 已过期 / 0 题」的卷**直接从 SQL 过滤掉**，
+    #   学生只看到"能考的"，看不到"为什么这套卷不在"。现改为**显示 + 标注原因**：
+    #   · 不再隐藏（学生知道卷还在，只是现在不能考）；
+    #   · 每行补 `exam` 状态块 + `exam_hint`（与资料页 `paper.exam` 同一份契约，
+    #     判定用服务器本地时间，前端不自己算）；
+    #   · 能否真的开考仍由后端闸门把关（`POST /{id}/start`），前端只做提前提示。
+    #   教师/管理员分支本来就能看到全部，行为不变。
+    show_unavailable = (current_user.user_type or "").strip().lower() == "student"
 
     # 条件过滤
     if subject_id:
@@ -598,6 +597,19 @@ async def get_paper_list(
     papers = query.order_by(
         ExamPaper.create_time.desc()
     ).offset((page - 1) * page_size).limit(page_size).all()
+
+    # 2026-11-09：给每行挂考试状态（只读；不写库，纯粹是给序列化用的临时属性）。
+    # `PaperDetailResponse` 新增了 exam/answerable/exam_hint 三个可选字段，
+    # Pydantic 的 from_attributes 会直接读对象属性，因此这里 setattr 即可。
+    # 对所有角色都挂：学生终于能看到"未开放 + 原因"，教师/管理员看自己的卷也一致。
+    from ....services import exam_gate
+    from datetime import datetime as _dt
+    _now = _dt.now()
+    for p in papers:
+        _state = exam_gate.paper_state(db, p, _now)
+        setattr(p, "exam", _state)
+        setattr(p, "answerable", bool(_state.get("ready")))
+        setattr(p, "exam_hint", exam_gate.paper_hint(db, p, _now))
 
     return PaperListResponse(
         total=total,
