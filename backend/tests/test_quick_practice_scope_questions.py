@@ -4,9 +4,9 @@ from app.models.models import KnowledgePoint, QuestionBank, SubCategory
 
 def _seed(db_session, user, content, subcategory, *, sub_category_id=None,
           point_id=None, group_id=0, sort_order=0, year=2025, type_id=1,
-          difficulty=2):
+          difficulty=2, subject_id=1):
     question = QuestionBank(
-        subject_id=1, type_id=type_id, question_content=content,
+        subject_id=subject_id, type_id=type_id, question_content=content,
         options=[{"key": "A", "value": "1"}], answer="A",
         difficulty=difficulty, score=2, year=year,
         xingce_subcategory=subcategory, sub_category_id=sub_category_id,
@@ -93,14 +93,31 @@ def test_scope_other_collects_null_other_and_l2_direct_only(
     sc, l2, specific, other, direct, spec, other_q, orphan = _fixture(
         db_session, test_user
     )
+    # 跨科未归类题用于验证 scope=other 必须限定当前科目。
+    foreign_orphan = _seed(db_session, test_user, "公专未归类", "常识判断",
+                           point_id=None, year=2022, subject_id=3)
 
     ids = _ids(client.get(
         "/api/quick-practice/questions?scope=other&subCategoryId=%s&limit=20"
         % sc.id,
         headers=auth_headers,
     ))
-    assert ids == {direct.question_id, other_q.question_id, orphan.question_id}
+    # 子科目级「其他（未归类）」只收真正未归类的题；canonical「其他」
+    # 挂在 L2 下，不能重复计入。
+    assert ids == {orphan.question_id}
     assert spec.question_id not in ids
+    assert direct.question_id not in ids
+    assert other_q.question_id not in ids
+    assert foreign_orphan.question_id not in ids
+
+    l2_other_ids = _ids(client.get(
+        "/api/quick-practice/questions?scope=other&l2Id=%s&limit=20" % l2.point_id,
+        headers=auth_headers,
+    ))
+    assert l2_other_ids == {direct.question_id, other_q.question_id}, (
+        direct.question_id, spec.question_id, other_q.question_id,
+        orphan.question_id, l2.point_id, specific.point_id, other.point_id,
+    )
 
 
 def test_scope_subcategory_returns_all(

@@ -103,7 +103,7 @@
           <div class="cp-sum-row"><span>科目</span><b>{{ subjectName }}</b></div>
           <div class="cp-sum-row"><span>子科目</span><b>{{ currentSub ? currentSub.name : '未选择' }}</b></div>
           <div class="cp-sum-row"><span>范围</span><b>{{ selectedScope ? selectedScope.label : '全部题目' }}</b></div>
-          <div class="cp-sum-row"><span>题型 / 难度</span><b>{{ typeSummary }} / {{ difficultySummary }}</b></div>
+          <div class="cp-sum-row"><span>题型 / 难度</span><b>{{ typeSummary() }} / {{ difficultySummary() }}</b></div>
           <div class="cp-sum-row"><span>预计可抽</span><b>{{ estimatedCount }} 题</b></div>
           <button class="cp-start" :disabled="!canStart" @click="startPractice">开始自定义练习</button>
           <p class="cp-warn" v-if="!canStart">请选择子科目后再开始</p>
@@ -179,7 +179,9 @@ export default defineComponent({
     }
 
     var currentSub = computed(function() {
-      var id = Number(form.subCategoryId || 0);
+      // 空字符串表示「尚未选择」，不能 Number('')=0 误命中 id=0 的「未分类」。
+      if (form.subCategoryId === '' || form.subCategoryId == null) return null;
+      var id = Number(form.subCategoryId);
       for (var i = 0; i < subCategories.value.length; i++) {
         if (Number(subCategories.value[i].id) === id) return subCategories.value[i];
       }

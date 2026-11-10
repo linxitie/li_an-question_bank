@@ -687,6 +687,36 @@ async def get_knowledge_progress(
 
     stat_map = {r[0]: r for r in stat_rows}
 
+    # 未归类题：point_id 为空或指向已失效/非 L3 的考点，按科目单独计数。
+    # 这些题在题库页由「未分类」直接练入口承接，进度页也必须有一条可点击的
+    # 「其他（未归类）」，否则用户看不到这批题的进度（实测存量 239 题）。
+    unclassified_rows = db.query(
+        QuestionBank.subject_id,
+        func.count(distinct(QuestionBank.question_id)).label("total"),
+        func.count(distinct(PracticeRecord.question_id)).label("done"),
+        func.coalesce(
+            func.sum(case((PracticeRecord.is_correct == 1, 1), else_=0)), 0
+        ).label("corrects"),
+        func.count(PracticeRecord.record_id).label("attempts"),
+    ).outerjoin(
+        PracticeRecord,
+        (PracticeRecord.question_id == QuestionBank.question_id) &
+        (PracticeRecord.user_id == current_user.user_id)
+    ).filter(
+        QuestionBank.status == 1,
+        QuestionBank.audit_status == 1,
+        or_(
+            QuestionBank.point_id.is_(None),
+            ~QuestionBank.point_id.in_(point_ids),
+        ),
+    ).group_by(
+        QuestionBank.subject_id
+    ).all()
+    unclassified_map = {
+        int(r[0]): (int(r[1] or 0), int(r[2] or 0), int(r[3] or 0), int(r[4] or 0))
+        for r in unclassified_rows
+    }
+
     def _stat(pid):
         st = stat_map.get(pid)
         if not st:
@@ -755,7 +785,19 @@ async def get_knowledge_progress(
             )
         g["_ids"].append(pid)
 
-    for (sid, _key), g in groups.items():
+    # 有未归类题但还没有「其他」分组的科目，补一个可点击入口。
+    subject_meta = {r.subject_id: (r[4], r[5]) for r in kp_rows}
+    for sid, (total, _done, _corrects, _attempts) in unclassified_map.items():
+        if total <= 0:
+            continue
+        sname, scode = subject_meta.get(sid, ("", ""))
+        _ensure_group(
+            sid, ("other", 0), "其他（未归类）", 3,
+            {"type": "other", "id": 0, "sub_category_id": None},
+            0, sname, scode,
+        )
+
+    for (sid, key), g in groups.items():
         total = done = corrects = attempts = 0
         for pid in g["_ids"]:
             t, d, c, a = _stat(pid)
@@ -763,6 +805,13 @@ async def get_knowledge_progress(
             done += d
             corrects += c
             attempts += a
+        if key == ("other", 0):
+            u = unclassified_map.get(sid)
+            if u:
+                total += u[0]
+                done += u[1]
+                corrects += u[2]
+                attempts += u[3]
         if total <= 0:
             continue
         subjects[sid]["kps"].append({

@@ -40,6 +40,8 @@ def test_progress_rolls_l3_up_to_l2_and_merges_orphan_other(
               "L2 下其他题", nested_other.point_id)
     _question(db_session, test_user, sid, test_question_type.type_id,
               "无父级其他题", orphan_other.point_id)
+    _question(db_session, test_user, sid, test_question_type.type_id,
+              "完全没有归类的题", None)
 
     response = client.get("/api/practice/knowledge-progress", headers=auth_headers)
     assert response.status_code == 200, response.text
@@ -55,7 +57,7 @@ def test_progress_rolls_l3_up_to_l2_and_merges_orphan_other(
         "type": "l2", "id": l2.point_id,
         "include_descendants": True, "include_other": True,
     }
-    assert rows["其他（未归类）"]["total"] == 1
+    assert rows["其他（未归类）"]["total"] == 2
     assert rows["其他（未归类）"]["scope"] == {
         "type": "other", "id": 0, "sub_category_id": None,
     }

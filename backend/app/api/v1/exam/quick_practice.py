@@ -444,6 +444,10 @@ def _resolve_scope_query(db: Session, *, scope: str, scope_id: int = 0,
         if not sid:
             raise HTTPException(status_code=400, detail="scope=other 需要 subject_id")
 
+        # 「其他」必须限定在当前科目内；否则 point_id 为空的跨科题会被
+        # 一并捞出（实测行测口径从 241 膨胀到 3502）。
+        base = base.filter(QuestionBank.subject_id == sid)
+
         # 子科目级「其他（未归类）」= 该子科目全部可见题（供超集过滤），
         # 再按 point_id 收窄到 空/失效/其他 L3/L2 直挂。绝不能用
         # sub_category_id == sc 当作 other 条件，否则整科题都会被算进其他。
@@ -459,22 +463,16 @@ def _resolve_scope_query(db: Session, *, scope: str, scope_id: int = 0,
         valid_point_ids = [int(row[0]) for row in all_point_rows]
 
         if l2_id:
+            # 指定 L2 时，「其他（未细分）」包含该 L2 直挂题 + 其下 canonical 其他。
+            # 不能把全局 point_id 为空/失效率的题算进来：它们没有 L2 归属。
             _specific, other = _point_children(db, subject_id=sid, l2_id=int(l2_id))
             ids = [int(l2_id)] + other
+            return base.filter(QuestionBank.point_id.in_(ids))
         else:
-            l2_rows = db.query(KnowledgePoint.point_id).filter(
-                KnowledgePoint.subject_id == sid,
-                KnowledgePoint.status == 1,
-                KnowledgePoint.level == 2,
-            ).all()
-            l2_ids = [int(row[0]) for row in l2_rows]
-            other_rows = db.query(KnowledgePoint.point_id).filter(
-                KnowledgePoint.subject_id == sid,
-                KnowledgePoint.status == 1,
-                KnowledgePoint.level == 3,
-                KnowledgePoint.point_name == "其他",
-            ).all()
-            ids = l2_ids + [int(row[0]) for row in other_rows]
+            # 科目/子科目级「其他（未归类）」只收 point_id 为空或指向失效点的题。
+            # canonical「其他」L3 已挂在有名字的 L2 下（L2 直练或 L2 内
+            # 「其他（未细分）」），若在这里再收一次会把整科题重复统计。
+            ids = []
 
         conditions = [QuestionBank.point_id.is_(None)]
         if ids:

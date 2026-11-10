@@ -750,6 +750,12 @@ export default defineComponent({
             + '&order=random';
           var subCategoryId = self.$route.query.subCategoryId || '';
           var l2Id = self.$route.query.l2Id || '';
+          // scope=other 不带 subCategoryId 时，后端只能靠 subjectId 判断科目；
+          // 进度页「其他（未归类）」正是这种入口，缺了会 400/空题。
+          var scopeSubjectIdMap = { xc: 1, sl: 2, ga: 3 };
+          var scopeSubjectId = scopeSubjectIdMap[subject]
+            || (/^[123]$/.test(subject) ? Number(subject) : '');
+          if (scopeSubjectId) url += '&subjectId=' + scopeSubjectId;
           if (subCategoryId) url += '&subCategoryId=' + encodeURIComponent(subCategoryId);
           if (l2Id) url += '&l2Id=' + encodeURIComponent(l2Id);
           if (String(self.$route.query.includeDescendants || '') === '1') url += '&includeDescendants=1';
