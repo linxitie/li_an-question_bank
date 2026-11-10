@@ -75,6 +75,7 @@
       <section class="center-content">
         <!-- 筛选栏 -->
         <div class="filter-bar">
+          <button class="feedback-btn" @click="showFeedback = true">反馈</button>
           <div class="filter-tabs">
             <div 
               v-for="(tab, index) in filterTabs" 
@@ -183,6 +184,7 @@
               <span class="hot-rank" :class="{ top: index < 3 }">{{ index + 1 }}</span>
               <div class="hot-info">
                 <span class="hot-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
+                <span class="hot-excerpt">{{ post.excerpt }}</span>
                 <span class="hot-views">{{ post.views }} 浏览</span>
               </div>
             </div>
@@ -232,6 +234,17 @@
         <span class="version">v1.0.0</span>
       </div>
     </footer>
+    <div v-if="showFeedback" class="tf-fb-mask" @click.self="showFeedback = false">
+      <div class="tf-fb-modal">
+        <h3>问题反馈</h3>
+        <textarea v-model="feedbackText" rows="5" maxlength="1000" placeholder="请描述你遇到的问题或建议…"></textarea>
+        <label class="tf-fb-anon"><input type="checkbox" v-model="feedbackAnonymous" /> 匿名提交（列表中显示为「匿名」）</label>
+        <div class="tf-fb-actions">
+          <button class="tf-fb-cancel" @click="showFeedback = false">取消</button>
+          <button class="tf-fb-submit" :disabled="feedbackSubmitting || !feedbackText.trim()" @click="submitFeedback">提交</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -297,6 +310,44 @@ export default defineComponent({
     
     // 热门标签
     const hotTags = ref(['行测', '申论', '公安', '政治', '法律', '经验', '真题']);
+
+    // 2026-11-07：平板端问题反馈
+    const showFeedback = ref(false);
+    const feedbackText = ref('');
+    const feedbackAnonymous = ref(false);
+    const feedbackSubmitting = ref(false);
+    const submitFeedback = async () => {
+      const content = feedbackText.value.trim();
+      if (!content) return;
+      feedbackSubmitting.value = true;
+      try {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth) return;
+        const res = await auth.apiFetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            category: '其他',
+            source: 'tablet_forum',
+            is_anonymous: feedbackAnonymous.value ? 1 : 0
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback.value = false;
+          feedbackText.value = '';
+          feedbackAnonymous.value = false;
+          alert('反馈已提交：' + (data.ticket_no || ''));
+        } else {
+          alert(data.detail || '提交失败');
+        }
+      } catch (e) {
+        alert('提交失败');
+      } finally {
+        feedbackSubmitting.value = false;
+      }
+    };
     
     // 帖子列表（只使用接口数据，禁止内置演示帖）
     const posts = ref<any[]>([]);
@@ -417,6 +468,11 @@ export default defineComponent({
       createPost,
       viewPost,
       searchByTag,
+      showFeedback,
+      feedbackText,
+      feedbackAnonymous,
+      feedbackSubmitting,
+      submitFeedback,
       Medal,
       Bell,
       Setting,
@@ -1035,4 +1091,18 @@ export default defineComponent({
     display: none;
   }
 }
+
+/* 2026-11-07：平板反馈 */
+.feedback-btn { margin-left: auto; order: 2; border: 1px solid #dfe3ee; background: #fff; color: #1a365d; border-radius: 10px; padding: 6px 14px; cursor: pointer; }
+.filter-tabs { order: 1; }
+.tf-fb-mask { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: center; justify-content: center; z-index: 3000; }
+.tf-fb-modal { width: 520px; max-width: 90vw; background: #fff; border-radius: 14px; padding: 20px 22px 16px; }
+.tf-fb-modal h3 { margin: 0 0 12px; color: #1a2b5f; }
+.tf-fb-modal textarea { width: 100%; box-sizing: border-box; border: 1px solid #dfe3ee; border-radius: 10px; padding: 10px 12px; font-size: 14px; resize: vertical; font-family: inherit; }
+.tf-fb-anon { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 13px; color: #5a6488; }
+.tf-fb-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.tf-fb-cancel { border: 1px solid #dfe3ee; background: #fff; border-radius: 8px; padding: 8px 18px; cursor: pointer; }
+.tf-fb-submit { border: none; background: #c41e3a; color: #fff; border-radius: 8px; padding: 8px 20px; cursor: pointer; }
+
+.hot-excerpt { display: block; font-size: 12px; color: #6b7896; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 </style>

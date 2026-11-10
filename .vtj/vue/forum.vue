@@ -30,6 +30,8 @@
             @click="selectScope(opt.key)">{{ opt.label }}</button>
         </div>
 
+        <button class="feedback-btn" @click="openFeedback">反馈</button>
+
         <div class="forum-header-actions">
           <button class="post-btn ghost star-only" title="我的收藏 / 我的喜欢" @click="openFavorites('favorites')">
             <XIcon :icon="Star" :size="18" color="#c41e3a"></XIcon>
@@ -41,7 +43,7 @@
         </div>
       </div>
       <div class="forum-body">
-        <div class="forum-left">
+        <div class="forum-left" @scroll.passive="onForumScroll">
           <div class="post-list" v-if="state.posts.length">
             <div
               v-for="(post, index) in filteredPosts"
@@ -93,15 +95,8 @@
           </div>
           <div v-else-if="state.loading" class="empty-tip">加载中...</div>
           <div v-else class="empty-tip">暂无帖子,快来发表第一篇吧!</div>
-          <div class="pagination" v-if="state.total > state.pageSize">
-            <button :disabled="state.page === 1" @click="prevPage">上一页</button>
-            <span class="page-info">
-              <span> {{ state.page }} </span>
-              <span> / </span>
-              <span> {{ totalPages }} </span>
-            </span>
-            <button :disabled="state.page >= totalPages" @click="nextPage">下一页</button>
-          </div>
+          <div v-if="state.loadingMore" class="empty-tip">加载中...</div>
+          <div v-else-if="state.posts.length && state.posts.length >= state.total" class="empty-tip">已经到底了</div>
         </div>
         <aside class="forum-right">
           <div class="right-card hot-posts">
@@ -143,6 +138,7 @@
                 class="my-post-item"
                 @click="openPostDetail(mp)">
                 <span class="my-post-title"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
+                <span class="list-excerpt">{{ excerptOf(mp) }}</span>
                 <span class="my-post-stats">
                   <span class="my-stat">❤️ {{ mp.likeCount }}</span>
                   <span class="my-stat">💬 {{ mp.commentCount }}</span>
@@ -190,28 +186,39 @@
             </button>
           </div>
           <div v-if="state.favoriteLoading" class="fav-empty">加载中...</div>
-          <div v-else-if="!state.favoriteList.length" class="fav-empty">
+          <div v-else-if="!state.interactionItems.length" class="fav-empty">
             {{ state.favoriteTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
           </div>
           <div v-else class="fav-list">
             <div
-              v-for="fp in state.favoriteList"
-              :key="fp.id"
-              class="fav-item"
-              @click="openPostDetail(fp)">
-              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }"><span v-if="fp.aiTitle" class="ai-title-tag">AI生成</span>{{ fp.title }}</span>
-              <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
-              <span class="list-excerpt">{{ excerptOf(fp) }}</span>
-              <span class="fav-item-meta">
-                <span class="heart-icon" :class="{ active: fp.liked }">{{ fp.liked ? '❤' : '♡' }}</span>
-                <span>{{ fp.likeCount }}</span>
-                <span class="fav-sep">·</span>
-                <XIcon
-                  :icon="StarFilled"
-                  :size="12"
-                  color="#f59e0b"></XIcon>
-                <span>{{ fp.favoriteCount }}</span>
+              v-for="it in state.interactionItems"
+              :key="it.type + '-' + (it.type === 'post' ? it.post.id : it.comment.id)"
+              class="fav-item fav-item-rich"
+              @click="openInteraction(it)">
+              <span class="list-author list-author-left">
+                <img v-if="_avatarOf(it)" :src="_avatarOf(it)" class="list-avatar" alt="头像" />
+                <span v-else class="list-avatar list-avatar-text">{{ _authorOf(it).charAt(0) }}</span>
+                <span class="list-author-name">{{ _authorOf(it) }}</span>
+                <span class="list-author-date">{{ _timeOf(it) }}</span>
               </span>
+              <template v-if="it.type === 'post'">
+                <span class="fav-item-title"><span v-if="it.post.aiTitle" class="ai-title-tag">AI生成</span>{{ it.post.title }}</span>
+                <span class="list-excerpt">{{ excerptOf(it.post) }}</span>
+                <span class="my-post-stats">
+                  <span class="my-stat">❤️ {{ it.post.likeCount }}</span>
+                  <span class="my-stat">★ {{ it.post.favoriteCount }}</span>
+                  <span class="my-stat">💬 {{ it.post.commentCount }}</span>
+                  <span class="my-stat">👁 {{ it.post.viewCount }}</span>
+                </span>
+              </template>
+              <template v-else>
+                <span class="fav-item-title">评论 · {{ it.postTitle }}</span>
+                <span class="list-excerpt">{{ it.comment.content }}</span>
+                <span class="my-post-stats">
+                  <span class="my-stat">❤️ {{ it.comment.likeCount }}</span>
+                  <span class="my-stat">★ {{ it.comment.favoriteCount }}</span>
+                </span>
+              </template>
             </div>
           </div>
           <div class="modal-actions">
@@ -357,11 +364,12 @@
                         mode="comment" />
                       <div class="comment-actions">
                         <span @click="toggleCommentLike(comment)" class="comment-action">
-                          <XIcon
-                            :icon="comment.liked ? StarFilled : Star"
-                            :size="12"
-                            :color="comment.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+                          <span class="heart-icon" :class="{ active: comment.liked }">{{ comment.liked ? '❤' : '♡' }}</span>
                           <span> {{ comment.likeCount }}</span>
+                        </span>
+                        <span @click.stop="toggleCommentFavorite(comment)" class="comment-action" title="收藏评论">
+                          <span class="fav-star" :class="{ active: comment.favorited }">{{ comment.favorited ? '★' : '☆' }}</span>
+                          <span> {{ comment.favoriteCount || 0 }}</span>
                         </span>
                         <span @click="startReply(comment)" class="comment-action comment-reply">
                           <XIcon :icon="ChatLineRound" :size="12" color="#8a8faa"></XIcon>
@@ -408,10 +416,7 @@
                             mode="comment" />
                           <div class="comment-actions">
                             <span @click="toggleCommentLike(child)" class="comment-action">
-                              <XIcon
-                                :icon="child.liked ? StarFilled : Star"
-                                :size="12"
-                                :color="child.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+                              <span class="heart-icon" :class="{ active: child.liked }">{{ child.liked ? '❤' : '♡' }}</span>
                               <span> {{ child.likeCount }}</span>
                             </span>
                             <span
@@ -472,7 +477,7 @@
       </div>
       <!-- 热门帖子前 100 条 Modal -->
       <div v-if="state.showHotAll" class="modal-overlay modal-l1" @click.self="closeHotAll">
-        <div class="modal-card post-detail-card">
+        <div class="modal-card post-detail-card hot-all-card">
           <h3>热门帖子 · 前 100 条</h3>
           <div class="hot-range">
             <input v-model="state.hotFrom" type="date" />
@@ -486,15 +491,22 @@
             <div
               v-for="hp in state.hotAll"
               :key="hp.id"
-              class="my-post-item"
+              class="my-post-item my-post-item-rich"
               @click="viewPost(hp)">
               <span class="hot-rank" :class="'rank-' + (hp.rank <= 3 ? hp.rank : '')">{{ hp.rank }}</span>
+              <span class="list-author list-author-left">
+                <img v-if="hp.avatar" :src="hp.avatar" class="list-avatar" alt="头像" />
+                <span v-else class="list-avatar list-avatar-text">{{ (hp.author || '匿').charAt(0) }}</span>
+                <span class="list-author-name">{{ hp.author }}</span>
+                <span class="list-author-date">{{ hp.date }}</span>
+              </span>
               <span class="my-post-title"><span v-if="hp.aiTitle" class="ai-title-tag">AI生成</span>{{ hp.title }}</span>
-              <!-- 2026-11-03 第 2 轮：查看更多弹窗此前只有标题，补正文摘要 -->
               <span class="list-excerpt">{{ excerptOf(hp) }}</span>
               <span class="my-post-stats">
                 <span class="my-stat">❤️ {{ hp.likeCount }}</span>
+                <span class="my-stat">★ {{ hp.favoriteCount }}</span>
                 <span class="my-stat">💬 {{ hp.commentCount }}</span>
+                <span class="my-stat">👁 {{ hp.viewCount }}</span>
               </span>
             </div>
           </div>
@@ -504,39 +516,76 @@
         </div>
       </div>
 
-      <!-- 我的帖子完整列表 Modal -->
+      <!-- 反馈弹窗（2026-11-07） -->
+      <div v-if="state.feedbackModal.visible" class="modal-overlay modal-l1" @click.self="closeFeedback">
+        <div class="modal-card feedback-card">
+          <h3>问题反馈</h3>
+          <textarea
+            v-model="state.feedbackModal.content"
+            rows="5"
+            maxlength="1000"
+            placeholder="请描述你遇到的问题或建议…"></textarea>
+          <label class="fb-anon">
+            <input type="checkbox" v-model="state.feedbackModal.anonymous" />
+            匿名提交（列表中显示为「匿名」）
+          </label>
+          <div class="modal-actions">
+            <button class="cancel-btn" @click="closeFeedback">取消</button>
+            <button
+              class="confirm-btn"
+              :disabled="state.feedbackModal.submitting || !state.feedbackModal.content.trim()"
+              @click="submitFeedback">
+              {{ state.feedbackModal.submitting ? '提交中...' : '提交' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 我的帖子完整列表 Modal（2026-11-07：批量删除 + 回收站，去分页） -->
       <div
         v-if="state.showMyPosts"
         class="modal-overlay modal-l1"
         @click.self="closeMyPosts">
         <div class="modal-card post-detail-card">
           <h3>我的帖子（{{ state.myPostsTotal }}）</h3>
+          <div class="my-posts-toolbar">
+            <button :class="['fav-tab', { active: state.myPostsTab === 'normal' }]" @click="switchMyPostsTab('normal')">我的帖子</button>
+            <button :class="['fav-tab', { active: state.myPostsTab === 'recycle' }]" @click="switchMyPostsTab('recycle')">回收站</button>
+            <button
+              v-if="state.myPostsTab === 'normal'"
+              class="batch-delete-btn"
+              :disabled="!state.myPostsSelected.length"
+              @click="batchDeleteMyPosts">批量删除({{ state.myPostsSelected.length }})</button>
+          </div>
           <div v-if="state.myPostsLoading" class="empty-tip-mini">加载中...</div>
-          <div v-else-if="!state.myPosts.length" class="empty-tip-mini">暂无帖子</div>
+          <div v-else-if="!state.myPosts.length" class="empty-tip-mini">{{ state.myPostsTab === 'recycle' ? '回收站为空' : '暂无帖子' }}</div>
           <div v-else class="my-posts-full-list">
-            <div
-              v-for="mp in state.myPosts"
-              :key="mp.id"
-              class="my-post-item"
-              @click="openPostDetail(mp)">
-              <span class="my-post-title"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
-              <!-- 2026-11-03：补正文摘要，避免「只有标题、看不到内容」 -->
-              <span class="list-excerpt">{{ excerptOf(mp) }}</span>
+            <div v-for="mp in state.myPosts" :key="mp.id" class="my-post-item">
+              <input
+                v-if="state.myPostsTab === 'normal'"
+                type="checkbox"
+                class="post-select"
+                :checked="state.myPostsSelected.includes(mp.id)"
+                @change="toggleMyPostSelect(mp.id)" />
+              <span class="list-author list-author-left" @click="openPostDetail(mp)">
+                <img v-if="mp.avatar" :src="mp.avatar" class="list-avatar" alt="头像" />
+                <span v-else class="list-avatar list-avatar-text">{{ (mp.author || '匿').charAt(0) }}</span>
+                <span class="list-author-name">{{ mp.author }}</span>
+                <span class="list-author-date">{{ mp.date }}</span>
+              </span>
+              <span class="my-post-title" @click="openPostDetail(mp)"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
+              <span class="list-excerpt" @click="openPostDetail(mp)">{{ excerptOf(mp) }}</span>
               <span class="my-post-stats">
                 <span class="my-stat">❤️ {{ mp.likeCount }}</span>
+                <span class="my-stat">★ {{ mp.favoriteCount }}</span>
                 <span class="my-stat">💬 {{ mp.commentCount }}</span>
+                <span class="my-stat">👁 {{ mp.viewCount }}</span>
               </span>
-              <span class="my-post-date">{{ mp.date }}</span>
+              <button v-if="state.myPostsTab === 'recycle'" class="restore-post-btn" @click.stop="restoreMyPost(mp)">恢复</button>
             </div>
           </div>
-          <div v-if="myPostsTotalPages > 1" class="pagination">
-            <button :disabled="state.myPostsPage === 1" @click="prevMyPostsPage">上一页</button>
-            <span class="page-info">
-              <span> {{ state.myPostsPage }} </span>
-              <span> / </span>
-              <span> {{ myPostsTotalPages }} </span>
-            </span>
-            <button :disabled="state.myPostsPage >= myPostsTotalPages" @click="nextMyPostsPage">下一页</button>
+          <div class="modal-actions">
+            <button @click="closeMyPosts">关闭</button>
           </div>
         </div>
       </div>
@@ -626,6 +675,7 @@
         posts: [] as any[],
         total: 0,
         loading: false,
+        loadingMore: false,
         submitting: false,
         showNewPost: false,
         showUserProfile: false,
@@ -672,9 +722,13 @@
         showFavorites: false,
         favoriteTab: 'favorites' as 'favorites' | 'likes',
         favoriteList: [] as any[],
+        interactionItems: [] as any[],
         favoriteTotal: 0,
         favoriteLoading: false,
         myPostsPage: 1,
+        myPostsTab: 'normal',
+        myPostsSelected: [] as number[],
+        feedbackModal: { visible: false, content: '', anonymous: false, submitting: false },
         myPostsPageSize: 20,
         myPostsLoading: false,
         _refreshTimer: null as any,
@@ -800,6 +854,41 @@
         } finally {
           this.state.loading = false;
         }
+      },
+      /** 2026-11-07：触底加载下一页（替代分页按钮） */
+      async loadMore() {
+        if (this.state.loading || this.state.loadingMore) return;
+        if (this.state.posts.length >= this.state.total) return;
+        this.state.loadingMore = true;
+        try {
+          const res: any = await fetchForumPosts({
+            limit: this.state.pageSize,
+            offset: this.state.posts.length,
+            shareType: toShareTypeParam(this.state.activeCategory),
+            keyword: this.state.searchKeyword || undefined,
+            dateFrom: this.state.searchDateFrom || undefined,
+            dateTo: this.state.searchDateTo || undefined
+          });
+          const seen = new Set(this.state.posts.map((x: any) => x.id));
+          for (const item of res.posts || []) {
+            const mapped = this._mapPost(item);
+            if (!seen.has(mapped.id)) this.state.posts.push(mapped);
+          }
+          this.state.total = res.total || this.state.total;
+        } catch (e) {
+          /* 静默：滚动加载失败不打断浏览 */
+        } finally {
+          this.state.loadingMore = false;
+        }
+      },
+      onForumScroll(e: any) {
+        const el = e && e.target;
+        if (el && el.scrollHeight) {
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) this.loadMore();
+          return;
+        }
+        const doc = document.documentElement;
+        if (window.innerHeight + window.scrollY >= doc.scrollHeight - 300) this.loadMore();
       },
       async selectCategory(key: string) {
         if (this.state.activeCategory === key) return;
@@ -1289,6 +1378,21 @@
         this.state.newComment = '';
       },
       // ===== 我的帖子 =====
+      async toggleCommentFavorite(comment: any) {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth || !auth.isLoggedIn()) return;
+        try {
+          const res = await auth.apiFetch('/api/forum/comments/' + comment.id + '/favorite', { method: 'POST' });
+          const data = await res.json();
+          if (res.ok) {
+            comment.favorited = data.favorited;
+            comment.favoriteCount = data.favoriteCount;
+          }
+        } catch (e) {
+          /* 静默 */
+        }
+      },
+
       async loadMyPosts() {
         const auth = (window as any).__VTJ_AUTH__;
         if (!auth || !auth.isLoggedIn()) return;
@@ -1313,23 +1417,45 @@
         const auth = (window as any).__VTJ_AUTH__;
         if (!auth || !auth.isLoggedIn()) {
           this.state.favoriteList = [];
+          this.state.interactionItems = [];
           this.state.favoriteTotal = 0;
           return;
         }
         this.state.favoriteLoading = true;
         try {
-          const isFav = this.state.favoriteTab === 'favorites';
-          const res = isFav
-            ? await fetchMyForumFavorites(20, 0)
-            : await fetchMyForumLikes(20, 0);
-          const list = (res && res.posts) || [];
-          this.state.favoriteList = list.map((p: any) => this._mapPost(p));
-          this.state.favoriteTotal = (res && res.total) || list.length;
+          const kind = this.state.favoriteTab === 'favorites' ? 'favorites' : 'likes';
+          const res = await auth.apiFetch('/api/forum/my-interactions?kind=' + kind + '&limit=50');
+          const data = await res.json();
+          const items = (data.items || []).map((it: any) =>
+            it.type === 'post' ? { ...it, post: this._mapPost(it.post) } : it
+          );
+          this.state.interactionItems = items;
+          this.state.favoriteTotal = data.total || items.length;
         } catch (e) {
-          this.state.favoriteList = [];
+          this.state.interactionItems = [];
           this.state.favoriteTotal = 0;
         } finally {
           this.state.favoriteLoading = false;
+        }
+      },
+      _authorOf(it: any) {
+        if (it.type === 'post') return it.post.author || '匿名';
+        return (it.comment && it.comment.user && it.comment.user.nickname) || '匿名';
+      },
+      _avatarOf(it: any) {
+        if (it.type === 'post') return it.post.avatar || '';
+        return (it.comment && it.comment.user && it.comment.user.avatar) || '';
+      },
+      _timeOf(it: any) {
+        if (it.type === 'post') return it.post.date || '';
+        const t = (it.comment && it.comment.createTime) || '';
+        return t ? String(t).replace('T', ' ').slice(0, 16) : '';
+      },
+      openInteraction(it: any) {
+        if (it.type === 'post') {
+          this.openPostDetail(it.post);
+        } else {
+          this.openPostDetail({ id: it.postId });
         }
       },
       /** 爱心：喜欢（复用点赞接口，reaction 固定 like） */
@@ -1409,7 +1535,8 @@
 
       async openMyPosts() {
         this.state.showMyPosts = true;
-        this.state.myPostsPage = 1;
+        this.state.myPostsTab = 'normal';
+        this.state.myPostsSelected = [];
         await this.loadMyPostsPage();
       },
       async loadMyPostsPage() {
@@ -1417,30 +1544,94 @@
         if (!auth || !auth.isLoggedIn()) return;
         this.state.myPostsLoading = true;
         try {
-          const offset = (this.state.myPostsPage - 1) * this.state.myPostsPageSize;
-          await this.community.loadMyPosts({
-            limit: this.state.myPostsPageSize,
-            offset
-          });
-          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p, false));
-          this.state.myPostsTotal = this.community.myPostsTotal;
+          const includeDeleted = this.state.myPostsTab === 'recycle';
+          const url = '/api/forum/my-posts?limit=100&offset=0' + (includeDeleted ? '&include_deleted=true' : '');
+          const res = await auth.apiFetch(url);
+          const data = await res.json();
+          this.state.myPosts = (data.posts || []).map((p: any) => this._mapPost(p, false));
+          this.state.myPostsTotal = data.total || 0;
         } finally {
           this.state.myPostsLoading = false;
+        }
+      },
+      async switchMyPostsTab(tab: string) {
+        if (this.state.myPostsTab === tab) return;
+        this.state.myPostsTab = tab;
+        this.state.myPostsSelected = [];
+        await this.loadMyPostsPage();
+      },
+      toggleMyPostSelect(id: number) {
+        const list = this.state.myPostsSelected;
+        const idx = list.indexOf(id);
+        if (idx >= 0) list.splice(idx, 1);
+        else list.push(id);
+      },
+      async batchDeleteMyPosts() {
+        const ids = this.state.myPostsSelected;
+        if (!ids.length) { this._safeMsg('info', '请先勾选要删除的帖子'); return; }
+        if (!window.confirm('确定把这 ' + ids.length + ' 篇帖子移入回收站？30 天内可恢复')) return;
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/forum/posts/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ post_ids: ids })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this._safeMsg('success', '已移入回收站 ' + (data.deleted || 0) + ' 篇');
+          this.state.myPostsSelected = [];
+          await this.loadMyPostsPage();
+        } else {
+          this._safeMsg('error', data.detail || '批量删除失败');
+        }
+      },
+      async restoreMyPost(mp: any) {
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/forum/posts/' + mp.id + '/restore', { method: 'POST' });
+        if (res.ok) {
+          this._safeMsg('success', '已恢复');
+          await this.loadMyPostsPage();
+        } else {
+          const data = await res.json();
+          this._safeMsg('error', data.detail || '恢复失败');
         }
       },
       closeMyPosts() {
         this.state.showMyPosts = false;
       },
-      prevMyPostsPage() {
-        if (this.state.myPostsPage > 1) {
-          this.state.myPostsPage--;
-          this.loadMyPostsPage();
-        }
+      openFeedback() {
+        this.state.feedbackModal = { visible: true, content: '', anonymous: false, submitting: false };
       },
-      nextMyPostsPage() {
-        if (this.state.myPostsPage < this.myPostsTotalPages) {
-          this.state.myPostsPage++;
-          this.loadMyPostsPage();
+      closeFeedback() {
+        this.state.feedbackModal.visible = false;
+      },
+      async submitFeedback() {
+        const m = this.state.feedbackModal;
+        const content = (m.content || '').trim();
+        if (!content) { this._safeMsg('warning', '请填写反馈内容'); return; }
+        m.submitting = true;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content,
+              category: '其他',
+              source: 'forum',
+              is_anonymous: m.anonymous ? 1 : 0
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            this._safeMsg('success', data.ticket_no ? '反馈已提交：' + data.ticket_no : '反馈已提交');
+            m.visible = false;
+          } else {
+            this._safeMsg('error', data.detail || '提交失败');
+          }
+        } catch (e) {
+          this._safeMsg('error', '提交失败');
+        } finally {
+          m.submitting = false;
         }
       },
       // ===== 安全辅助 =====
@@ -1546,6 +1737,8 @@
         if (e.key === 'Escape') this.closeTopModal();
       };
       window.addEventListener('keydown', this.state._escHandler);
+      this.state._scrollHandler = () => this.onForumScroll();
+      window.addEventListener('scroll', this.state._scrollHandler, { passive: true });
     },
     beforeUnmount() {
       if (this.state._refreshTimer) {
@@ -1556,6 +1749,10 @@
         window.removeEventListener('focus', this.state._visibilityHandler);
         document.removeEventListener('visibilitychange', this.state._visibilityHandler);
         this.state._visibilityHandler = null;
+      }
+      if (this.state._scrollHandler) {
+        window.removeEventListener('scroll', this.state._scrollHandler);
+        this.state._scrollHandler = null;
       }
       if (this.state._escHandler) {
         window.removeEventListener('keydown', this.state._escHandler);
@@ -1783,10 +1980,15 @@
   .heart-icon {
     font-size: 13px;
     line-height: 1;
-    color: #8a8faa;
+    color: #e5484d;
   }
   .heart-icon.active {
-    color: #e5484d;
+    color: #c41e3a;
+  }
+  .fav-star {
+    color: #f59e0b;
+    font-size: 13px;
+    line-height: 1;
   }
   .meta-favs {
     display: inline-flex;
@@ -2845,4 +3047,82 @@
 .post-author-line { display: flex; align-items: center; gap: 4px;
   font-size: 13px; color: #6b7896; margin-bottom: 4px; }
 .post-author-line .meta-author { font-weight: 600; color: #1a2b5f; }
+
+  /* 2026-11-07 UI 批量修复：列表作者/计数、热门弹窗自适应、批量删除与恢复 */
+  .hot-all-card { height: auto; max-height: 85vh; padding-bottom: 16px; }
+  .hot-all-card .my-posts-full-list { max-height: 60vh; }
+  .list-author {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #6b7896;
+    min-width: 0;
+  }
+  .list-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: 0 0 auto;
+  }
+  .list-avatar-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef1f8;
+    color: #1a2b5f;
+    font-size: 12px;
+  }
+  .list-author-name { font-weight: 600; color: #1a2b5f; }
+  .list-author-date { color: #8a8faa; }
+  .fav-item-rich { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .my-post-item-rich,
+  .my-posts-full-list .my-post-item { flex-wrap: wrap; }
+  .my-post-item-rich .list-author { flex-basis: 100%; }
+  .post-select { width: 16px; height: 16px; flex: 0 0 auto; }
+  .my-posts-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .batch-delete-btn {
+    margin-left: auto;
+    border: 1px solid #f0c2bd;
+    background: #fff5f4;
+    color: #c0392b;
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .batch-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .restore-post-btn {
+    border: 1px solid #b7e1c1;
+    background: #f0fbf3;
+    color: #1e7b3c;
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+
+  /* 2026-11-07：反馈按钮与弹窗 */
+  .feedback-btn {
+    border: 1px solid #dfe3ee;
+    background: #fff;
+    color: #1a365d;
+    border-radius: 10px;
+    padding: 8px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .feedback-btn:hover { border-color: #1a365d; }
+  .feedback-card { width: 520px; max-width: 92vw; }
+  .feedback-card h3 { margin: 0 0 12px; }
+  .feedback-card textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #dfe3ee;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .fb-anon { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 13px; color: #5a6488; }
 </style>

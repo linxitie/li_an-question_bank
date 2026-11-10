@@ -1,9 +1,10 @@
 <!-- 学生端「我的」个人中心（桌面端） -->
 <template>
   <div class="profile-page">
-    <NavBar />
+    <div class="profile-nav"><NavBar /></div>
     <main class="profile-main">
-      <!-- 左栏：个人资料 + 金币 -->
+      <!-- 左栏：个人资料 + 成就/等级/设置 -->
+      <div class="side-col">
       <aside class="left-col">
         <section class="card profile-card">
           <div class="avatar" @click="openEditProfile">
@@ -16,19 +17,45 @@
           <button class="btn-edit" @click="openEditProfile">编辑资料</button>
         </section>
 
-        <section class="card coin-card">
-          <h3 class="card-title"><XIcon :icon="GoldMedal" :size="18" color="#f59e0b" /> 我的金币</h3>
-          <div class="coin-balance">{{ coin.balance }} <span>金币</span></div>
-          <div class="coin-month">
-            <span>本月收入 +{{ coin.month_income }}</span>
-            <span>本月支出 -{{ coin.month_expense }}</span>
-          </div>
-          <div class="coin-actions">
-            <button class="btn-mini" @click="go('/page/gold_purchase')">金币购</button>
-            <button class="btn-mini" @click="openCoinDetail">明细</button>
-          </div>
-        </section>
       </aside>
+
+      <!-- 右栏：成就 + 等级 + 设置 -->
+      <aside class="right-col">
+        <div class="card">
+          <h3 class="card-title"><XIcon :icon="Trophy" :size="18" color="#f59e0b" /> 成就与激励</h3>
+          <div class="ach-badges" v-if="earnedBadges.length">
+            <span
+              v-for="b in earnedBadges"
+              :key="b.achievement_id"
+              class="ach-badge"
+              :style="{ borderColor: tierColor(b.tier), color: tierColor(b.tier) }"
+              :title="b.name"
+            >{{ b.icon }}</span>
+          </div>
+          <p class="ach-count">已获得 <strong>{{ earnedCount }}</strong> 枚勋章</p>
+          <button class="btn-mini full" @click="go('/achievements')">查看全部 →</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title"><XIcon :icon="TrendCharts" :size="18" color="#1A365D" /> 学习等级</h3>
+          <p class="level-text">Lv.{{ level.level }} {{ level.title }}</p>
+          <div class="progress-bar"><div class="progress-fill" :style="{ width: level.progress + '%' }"></div></div>
+          <p class="level-sub">{{ level.growth_points }} 成长值 · 进度 {{ level.progress }}%</p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title"><XIcon :icon="Setting" :size="18" color="#1A365D" /> 设置</h3>
+          <div class="menu-list">
+            <div class="menu-row" @click="openEditProfile">个人设置</div>
+            <div class="menu-row" @click="openDevices">设备管理</div>
+            <div class="menu-row" @click="go('/feedback')">意见反馈</div>
+            <div class="menu-row" @click="go('/help')">帮助中心</div>
+            <div class="menu-row" @click="go('/page/about')">关于砺安题库</div>
+            <div class="menu-row danger" @click="handleLogout">退出登录</div>
+          </div>
+        </div>
+      </aside>
+      </div>
 
       <!-- 中栏：学习数据 + 学习内容 -->
       <section class="center-col">
@@ -92,42 +119,6 @@
         <RecentPracticeRecords :limit="5" />
       </section>
 
-      <!-- 右栏：成就 + 等级 + 设置 -->
-      <aside class="right-col">
-        <div class="card">
-          <h3 class="card-title"><XIcon :icon="Trophy" :size="18" color="#f59e0b" /> 成就与激励</h3>
-          <div class="ach-badges" v-if="earnedBadges.length">
-            <span
-              v-for="b in earnedBadges"
-              :key="b.achievement_id"
-              class="ach-badge"
-              :style="{ borderColor: tierColor(b.tier), color: tierColor(b.tier) }"
-              :title="b.name"
-            >{{ b.icon }}</span>
-          </div>
-          <p class="ach-count">已获得 <strong>{{ earnedCount }}</strong> 枚勋章</p>
-          <button class="btn-mini full" @click="go('/achievements')">查看全部 →</button>
-        </div>
-
-        <div class="card">
-          <h3 class="card-title"><XIcon :icon="TrendCharts" :size="18" color="#1A365D" /> 学习等级</h3>
-          <p class="level-text">Lv.{{ level.level }} {{ level.title }}</p>
-          <div class="progress-bar"><div class="progress-fill" :style="{ width: level.progress + '%' }"></div></div>
-          <p class="level-sub">{{ level.growth_points }} 成长值 · 进度 {{ level.progress }}%</p>
-        </div>
-
-        <div class="card">
-          <h3 class="card-title"><XIcon :icon="Setting" :size="18" color="#1A365D" /> 设置</h3>
-          <div class="menu-list">
-            <div class="menu-row" @click="openEditProfile">个人设置</div>
-            <div class="menu-row" @click="openDevices">设备管理</div>
-            <div class="menu-row" @click="go('/feedback')">意见反馈</div>
-            <div class="menu-row" @click="go('/help')">帮助中心</div>
-            <div class="menu-row" @click="go('/page/about')">关于砺安题库</div>
-            <div class="menu-row danger" @click="handleLogout">退出登录</div>
-          </div>
-        </div>
-      </aside>
       <!-- 2026-11-04：徽章展示模块下线，「我的徽章」墙与其 /api/badges/wall 数据源一并移除；
            上方「学习成就」徽标（earnedBadges）属成就引擎，保留。 -->
     </main>
@@ -157,6 +148,70 @@
         </div>
         <div class="form-row"><label>学院/部门</label><input v-model="editForm.department" /></div>
         <div class="form-row"><label>班级</label><input v-model="editForm.class_name" /></div>
+        <!-- 2026-11-05：我的装扮（称号 / 头像框） -->
+        <div class="deco-block">
+          <h4 class="deco-title">我的装扮</h4>
+
+          <div class="deco-group">
+            <span class="deco-label">称号</span>
+            <div class="deco-list">
+              <button
+                v-for="t in decorations.titles"
+                :key="t.title_id"
+                class="deco-chip"
+                :class="{ 'is-on': t.equipped }"
+                @click="equipTitle(t)"
+              >
+                {{ t.name }}
+              </button>
+              <button
+                v-if="decorations.titles.length"
+                class="deco-chip ghost"
+                @click="equipTitle(null)"
+              >
+                不佩戴
+              </button>
+              <span v-if="!decorations.titles.length" class="deco-empty">
+                还没有称号，去金币商城兑换
+              </span>
+            </div>
+          </div>
+
+          <div class="deco-group">
+            <span class="deco-label">头像框</span>
+            <div class="deco-list">
+              <button
+                v-for="f in decorations.frames"
+                :key="f.frame"
+                class="deco-chip"
+                :class="{
+                  'is-on': decorations.current_frame === f.frame,
+                  'is-expired': f.expired
+                }"
+                :disabled="f.expired"
+                :title="f.expire_at ? `到期时间：${f.expire_at.slice(0, 10)}` : '永久有效'"
+                @click="equipFrame(f)"
+              >
+                {{ f.name }}
+                <span v-if="f.expired" class="deco-expire">已过期</span>
+                <span v-else-if="f.days_left !== null && f.days_left !== undefined" class="deco-expire">
+                  剩 {{ f.days_left }} 天
+                </span>
+              </button>
+              <button
+                v-if="decorations.frames.length"
+                class="deco-chip ghost"
+                @click="equipFrame(null)"
+              >
+                不佩戴
+              </button>
+              <span v-if="!decorations.frames.length" class="deco-empty">
+                还没有头像框，去金币商城兑换
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn-mini" @click="saveProfile">保存</button>
           <button class="btn-mini ghost" @click="showEdit = false">取消</button>
@@ -237,6 +292,19 @@ function masteryColor(accuracy: number) {
 const avatarInput = ref<HTMLInputElement | null>(null);
 
 const showEdit = ref(false);
+interface DecoTitle { title_id: number; name: string; equipped: boolean; }
+interface DecoFrame {
+  frame: string;
+  name: string;
+  expire_at?: string | null;
+  expired?: boolean;
+  days_left?: number | null;
+}
+const decorations = reactive({
+  titles: [] as DecoTitle[],
+  frames: [] as DecoFrame[],
+  current_frame: null as string | null
+});
 const showDevices = ref(false);
 const showCoinDetail = ref(false);
 const editForm = reactive<any>({});
@@ -333,13 +401,62 @@ function go(path: string) {
   router.push(path);
 }
 
+async function loadDecorations() {
+  const auth = window.__VTJ_AUTH__;
+  if (!auth) return;
+  try {
+    const res = await auth.apiFetch('/api/user/decoration/mine');
+    const data = await res.json();
+    decorations.titles = data.titles || [];
+    decorations.frames = data.frames || [];
+    decorations.current_frame = data.current_frame || null;
+  } catch (e) {
+    console.warn('加载装扮失败', e);
+  }
+}
+
 function openEditProfile() {
+  loadDecorations();
   editForm.phone = user.value.phone || '';
   editForm.email = user.value.email || '';
   editForm.gender = user.value.gender || '未知';
   editForm.department = user.value.department || '';
   editForm.class_name = user.value.class_name || '';
   showEdit.value = true;
+}
+
+async function equipTitle(t: DecoTitle | null) {
+  const auth = window.__VTJ_AUTH__;
+  if (!auth) return;
+  const body = { title_id: t ? t.title_id : null };
+  const res = await auth.apiFetch('/api/user/decoration/equip-title', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.detail || '佩戴失败');
+    return;
+  }
+  loadDecorations();
+}
+
+async function equipFrame(f: DecoFrame | null) {
+  const auth = window.__VTJ_AUTH__;
+  if (!auth) return;
+  const body = { frame: f ? f.frame : null };
+  const res = await auth.apiFetch('/api/user/decoration/equip-frame', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.detail || '佩戴失败');
+    return;
+  }
+  loadDecorations();
 }
 
 async function saveProfile() {
@@ -407,15 +524,29 @@ function handleLogout() {
   background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
+.profile-nav { position: sticky; top: 0; z-index: 120; }
 .profile-main {
   max-width: 1300px;
   margin: 0 auto;
-  padding: 24px 32px 40px;
+  padding: 20px 32px 40px;
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 300px 1fr;
   gap: 20px;
   align-items: start;
 }
+.side-col {
+  position: sticky;
+  top: 76px;
+  align-self: start;
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.left-col, .right-col { display: flex; flex-direction: column; gap: 16px; }
+.center-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .left-col, .right-col { display: flex; flex-direction: column; gap: 16px; }
 .center-col { display: flex; flex-direction: column; gap: 16px; }
 
@@ -504,4 +635,36 @@ function handleLogout() {
 .record-date { color: #8a8faa; font-size: 11px; }
 
 /* 2026-11-04：徽章墙样式（.badge-wall-card / .bw-*）随徽章展示模块下线一并移除 */
+
+.deco-block { margin: 14px 0 4px; padding-top: 12px; border-top: 1px dashed #eef2f7; }
+.deco-title { margin: 0 0 8px; font-size: 14px; color: #1a2b5f; }
+.deco-group { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.deco-label { flex: 0 0 52px; font-size: 13px; color: #6b7280; line-height: 26px; }
+.deco-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.deco-chip {
+  padding: 4px 10px; border-radius: 8px; border: 1px solid #dbeafe;
+  background: #f8fafc; color: #1f2937; font-size: 12px; cursor: pointer;
+}
+.deco-chip.is-on { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; font-weight: 600; }
+.deco-chip.ghost { background: #fff; color: #9ca3af; }
+.deco-empty { font-size: 12px; color: #9ca3af; line-height: 26px; }
+.deco-chip.is-expired { opacity: 0.55; cursor: not-allowed; text-decoration: line-through; }
+.deco-expire { margin-left: 4px; font-size: 11px; color: #9ca3af; }
+.deco-chip.is-expired .deco-expire { color: #dc2626; }
+
+/* 2026-11-07：左右两栏各自独立滚动，顶部导航固定后可收纳更多内容 */
+.profile-main {
+  height: calc(100vh - 64px);
+  overflow: hidden;
+  align-items: stretch;
+}
+.side-col {
+  height: 100%;
+  max-height: none;
+}
+.center-col {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 6px;
+}
 </style>

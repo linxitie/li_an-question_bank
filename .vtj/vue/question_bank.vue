@@ -272,13 +272,6 @@
                 <XIcon :icon="DataAnalysis" :size="20" color="#10b981"></XIcon>
                 <span> 成绩分析</span>
               </div>
-              <div class="tool-item" @click="navigateTo('gold_purchase')">
-                <XIcon
-                  :icon="ShoppingCartFull"
-                  :size="20"
-                  color="#8b5cf6"></XIcon>
-                <span> 金币购</span>
-              </div>
             </div>
           </div>
           <!-- 练习记录弹窗：知识点进度 + 多来源最近记录（v2 新增） -->
@@ -613,6 +606,7 @@
           { key: 'quick', name: '快速练习', icon: '⚡', tag: 'NEW' },
           { key: 'history', name: '历年试卷', icon: '📋' },
           { key: 'smart', name: '智能组卷', icon: '🤖' },
+          { key: 'plan', name: '学习计划', icon: '📅', tag: '' },
           { key: 'ai', name: '联考小智', icon: '🧠', tag: 'AI' },
         ];
         // 题目导入仅教师和管理员可见
@@ -921,13 +915,24 @@
         return false;
       },
       practiceBySubcard(sub) {
+        // 子科目卡片 → 练习页。必须把真实的 sub.id（含 0 号「未分类」）
+        // 作为 scId 传下去；只传名称会落到旧接口，未分类题恒为空。
         var cat = this.state.activeCategory;
         var catNameMap = { xc: '行测', sl: '申论', ga: '公专' };
-        this.startTypePractice({
-          subject_code: cat,
-          subject_name: catNameMap[cat] || '',
-          subcategory: sub.name,
-        });
+        var subjectIdMap = { xc: 1, sl: 2, ga: 3 };
+        var subjectId = subjectIdMap[cat] || '';
+        var hasId = sub && sub.id !== undefined && sub.id !== null && sub.id !== '';
+        var path = '/exercise?subject=' + cat +
+          '&subcategory=' + encodeURIComponent(sub.name || '') +
+          '&count=20' + (subjectId ? '&subjectId=' + subjectId : '');
+        if (hasId) {
+          path += '&scId=' + encodeURIComponent(sub.id);
+        }
+        this.checkDraftThenGo(
+          'sub:' + cat + ':' + (sub.name || ''),
+          path,
+          (catNameMap[cat] || '') + '·' + (sub.name || '')
+        );
       },
       async checkDraftThenGo(scopeKey, path, label) {
         var self = this;
@@ -1221,8 +1226,10 @@
           this.$router.push('/student/papers');
         } else if (key === 'smart') {
           this.$router.push('/smart-exam');
+        } else if (key === 'plan') {
+          this.$router.push('/study-plan');
         } else if (key === 'ai') {
-          ElMessage.info('联考小智功能开发中');
+          this.$router.push('/ai-assistant');
         }
       },
       switchCategory(key) {

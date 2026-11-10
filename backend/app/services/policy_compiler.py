@@ -31,9 +31,17 @@ POLICY_ID_RE = re.compile(r"^P-\d{2}-\d{3}$")
 LEXICON_RE = re.compile(r"^[a-z0-9_]{2,64}$")
 FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n", re.S)
 
-SUPPORTED_SCOPES = frozenset({"forum.post", "forum.comment"})
+SUPPORTED_SCOPES = frozenset({"forum.post", "forum.comment", "forum.media", "forum.all"})
+# media 视为 comment（当前无多模态模型）；all 展开为 post+comment
+SCOPE_ALIASES = {"forum.media": ["forum.comment"], "forum.all": ["forum.post", "forum.comment"]}
 MATCH_OPERATORS = frozenset(
-    {"lexicon", "regex", "ner_target", "ner_org", "keyword_all", "keyword_any"}
+    {
+        "lexicon", "regex", "pattern", "keyword_all", "keyword_any",
+        "ner_target", "ner_org",
+        "object_in", "behavior_in", "topic_in",
+        # 声明式算子：条款可写、编译保留，但当前无执行器（不参与打分，不报错）
+        "intent", "multimodal", "claim_type", "source", "repetitive_posting", "target",
+    }
 )
 CONTEXT_CONDITIONS = frozenset(
     {
@@ -64,6 +72,21 @@ CONTEXT_CONDITIONS = frozenset(
     }
 )
 SEVERITIES = frozenset({"critical", "high", "medium", "low"})
+# 声明式算子：保留在规则里但不参与打分
+DECLARATIVE_OPERATORS = frozenset(
+    {"intent", "multimodal", "claim_type", "source", "repetitive_posting", "target"}
+)
+# 枚举类算子：按"文本是否包含枚举值"粗判（中文枚举可用，英文枚举不命中）
+ENUM_OPERATORS = frozenset({"object_in", "behavior_in", "topic_in", "ner_target", "ner_org"})
+CONTEXT_DETECTORS = {
+    "is_news_report": re.compile(r"(警方通报|据.{0,6}报道|新闻|通告|官方通报|案件的?通报)"),
+    "is_anti_fraud_education": re.compile(r"(如何防范|防骗|反诈|警惕|识别.{0,4}诈骗|避免上当)"),
+    "is_help_seeking": re.compile(r"(求助|怎么办|有人威胁我|我被|谁能帮|求救)"),
+    "is_quote_of_news": re.compile(r"(引用|转自|来源[:：])"),
+    "is_legal_discussion": re.compile(r"(法律|第.{1,3}条|判例|司法解释)"),
+}
+PERSON_REF_RE = re.compile(r"(@|你|您|他|她|楼主|同学|老师|这位|那人|这货|家伙)")
+SELF_REF_RE = re.compile(r"(我|自己|本人|俺)")
 SEVERITY_WEIGHT = {"critical": 0.95, "high": 0.80, "medium": 0.60, "low": 0.40}
 THRESHOLD_KEYS = ("allow", "hold", "mask", "block")
 
@@ -143,6 +166,8 @@ class Policy:
             "match": self.match,
             "context_modifiers": self.modifiers,
             "thresholds": self.thresholds,
+            # 修饰条件需要 target 等原始信息（自嘲/他人指代判定）
+            "raw_dsl": self.raw_dsl,
         }
 
 
@@ -213,7 +238,14 @@ def _validate_scope(dsl: Dict[str, Any], pid: str, issues: List[CompileIssue]) -
     unknown = [s for s in scopes if s not in SUPPORTED_SCOPES]
     if unknown:
         issues.append(_issue(pid, "scope_unknown", f"不支持的 scope：{unknown}"))
-    return [s for s in scopes if s in SUPPORTED_SCOPES]
+    out: List[str] = []
+    for item in scopes:
+        if item not in SUPPORTED_SCOPES:
+            continue
+        for expanded in SCOPE_ALIASES.get(item, [item]):
+            if expanded not in out:
+                out.append(expanded)
+    return out
 
 
 def _validate_conditions(
@@ -231,6 +263,14 @@ def _validate_conditions(
             issues.append(_issue(pid, "match_item_shape", f"算子项必须是单键映射：{item!r}"))
             continue
         (operator, value), = item.items()
+        if operator == "pattern":
+            operator = "regex"
+        if operator in DECLARATIVE_OPERATORS:
+            issues.append(
+                _issue(pid, "match_operator_deferred", f"算子 {operator} 暂未实现，仅保留声明", "warning")
+            )
+            cleaned.append({operator: value})
+            continue
         if operator not in MATCH_OPERATORS:
             issues.append(
                 _issue(pid, "match_operator_unknown", f"未知算子：{operator}")
@@ -265,9 +305,8 @@ def _validate_modifiers(
         condition = str(item["if"])
         if condition not in CONTEXT_CONDITIONS:
             issues.append(
-                _issue(pid, "modifier_condition_unknown", f"未知上下文条件：{condition}")
+                _issue(pid, "modifier_condition_unknown", f"未注册上下文条件：{condition}", "warning")
             )
-            continue
         try:
             weight = float(item["weight"])
         except (TypeError, ValueError):
@@ -301,6 +340,12 @@ def _validate_thresholds(
     out: Dict[str, str] = {}
     for key in THRESHOLD_KEYS:
         if key not in raw:
+            if key == "mask":
+                out["mask"] = "0.75 - 0.90"
+                issues.append(
+                    _issue(pid, "threshold_defaulted", "缺少 mask 档，已按 0.75 - 0.90 兜底", "warning")
+                )
+                continue
             issues.append(_issue(pid, "threshold_missing", f"缺少阈值档 {key}"))
             continue
         if not _valid_threshold(raw[key]):
@@ -335,7 +380,7 @@ def parse_policy_file(path: Path, root: Path) -> Tuple[Optional[Policy], List[Co
     dsl = _load_dsl(meta.get("policy_dsl"), pid, issues)
     if dsl is None:
         return None, issues
-    unknown_keys = set(dsl) - {"scope", "match", "context_modifiers", "thresholds"}
+    unknown_keys = set(dsl) - {"scope", "match", "target", "context_modifiers", "thresholds"}
     if unknown_keys:
         issues.append(
             _issue(pid, "dsl_unknown_key", f"DSL 含未知顶层字段：{sorted(unknown_keys)}")
@@ -380,6 +425,41 @@ def parse_policy_file(path: Path, root: Path) -> Tuple[Optional[Policy], List[Co
     return policy, issues
 
 
+def lexicon_dir(vault_dir: str) -> Path:
+    """词表目录：<vault>/AI舆情审核知识库/模型与规则/词表。"""
+    return Path(vault_dir) / DEFAULT_SUBVAULT / "模型与规则" / "词表"
+
+
+def load_lexicons(vault_dir: str) -> Dict[str, List[str]]:
+    """读取 <词表>/<name>.yaml|txt|json → {name: [词条]}。
+
+    词表缺失时返回空 dict；编译器只告警不报错（由调用方决定是否阻断发布）。
+    """
+    root = lexicon_dir(vault_dir)
+    out: Dict[str, List[str]] = {}
+    if not root.is_dir():
+        return out
+    for path in sorted(root.glob("*")):
+        if path.suffix.lower() not in (".yaml", ".yml", ".json", ".txt"):
+            continue
+        name = path.stem
+        if not LEXICON_RE.match(name):
+            continue
+        try:
+            if path.suffix.lower() == ".txt":
+                terms = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()]
+            else:
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+                terms = data.get("terms") if isinstance(data, dict) else data
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(terms, list):
+            clean = sorted({str(t).strip() for t in terms if str(t).strip()})
+            if clean:
+                out[name] = clean
+    return out
+
+
 def resolve_policy_root(vault_dir: str) -> Path:
     """vault 根 → 政策库目录。缺目录时由调用方转成 503。"""
     return Path(vault_dir) / DEFAULT_SUBVAULT / POLICY_DIRNAME
@@ -411,9 +491,25 @@ def load_library(vault_dir: str) -> Library:
     return library
 
 
-def compile_ruleset(library: Library, include_issues: bool = True) -> Dict[str, Any]:
+def compile_ruleset(
+    library: Library,
+    include_issues: bool = True,
+    vault_dir: Optional[str] = None,
+    lexicons: Optional[Dict[str, List[str]]] = None,
+) -> Dict[str, Any]:
     """编译成规则集。哈希只覆盖规则内容（不含编译时间），保证可复算。"""
+    if lexicons is None and vault_dir:
+        lexicons = load_lexicons(vault_dir)
+    lexicons = lexicons or {}
     rules = [p.to_rule() for p in library.policies]
+    for rule in rules:
+        needed = {
+            str(item["lexicon"])
+            for item in rule.get("match", {}).get("any", [])
+            if isinstance(item, dict) and "lexicon" in item
+        }
+        if needed:
+            rule["lexicon_terms"] = {n: lexicons.get(n, []) for n in sorted(needed)}
     payload = {"schema_version": SCHEMA_VERSION, "rules": rules}
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -426,6 +522,8 @@ def compile_ruleset(library: Library, include_issues: bool = True) -> Dict[str, 
         "domains": sorted({r["domain"] for r in rules}),
         "severity_counts": severity_counts,
         "required_lexicons": library.required_lexicons(),
+        "lexicons": lexicons,
+        "missing_lexicons": sorted(set(library.required_lexicons()) - set(lexicons)),
         "scanned": library.scanned,
         "skipped": library.skipped,
         "error_count": library.error_count,
@@ -467,6 +565,40 @@ def bucket_for(score: float, thresholds: Dict[str, str]) -> str:
     return "allow"
 
 
+def _apply_modifiers(text: str, rule: Dict[str, Any], strength: float) -> Tuple[float, List[str]]:
+    """只实现可判定的修饰条件：自指/自嘲、他人指代。
+
+    其余条件（如 is_quote_of_news）无执行器，返回原强度并记 note。
+    """
+    notes: List[str] = []
+    target = (rule.get("raw_dsl") or {}).get("target") or {}
+    modifiers = rule.get("modifiers") or []
+    self_ref = bool(SELF_REF_RE.search(text))
+    other_ref = bool(PERSON_REF_RE.search(text))
+
+    for item in modifiers:
+        cond = item.get("if")
+        weight = float(item.get("weight") or 0)
+        detector = CONTEXT_DETECTORS.get(str(cond))
+        if detector is not None:
+            if detector.search(text):
+                strength = max(0.0, strength * (1 + weight))
+                notes.append(f"{cond}:{weight}")
+            continue
+        if cond in ("target_is_self", "is_self_deprecation", "is_self_reference"):
+            if self_ref:
+                strength = max(0.0, strength * (1 + weight))
+                notes.append(f"{cond}:{weight}")
+        elif cond == "target_is_public_figure" and other_ref:
+            strength = max(0.0, strength * (1 + weight))
+            notes.append(f"{cond}:{weight}")
+
+    if target.get("requires_person_reference") and not other_ref and self_ref:
+        strength = max(0.0, strength * 0.4)
+        notes.append("target:requires_person_reference(自指降权)")
+    return strength, notes
+
+
 def _match_rule(text: str, rule: Dict[str, Any]) -> Tuple[float, List[str]]:
     """返回 (强度 0–1, 命中原因)。lexicon 未注入时不算命中（如实说明）。"""
     strength = 0.0
@@ -482,6 +614,18 @@ def _match_rule(text: str, rule: Dict[str, Any]) -> Tuple[float, List[str]]:
                     reasons.append(f"regex:{value}")
             except re.error:
                 continue
+        elif operator == "lexicon":
+            terms = rule.get("lexicon_terms") or {}
+            words = terms.get(str(value)) or []
+            hit = [w for w in words if w and w in text]
+            if hit:
+                strength = max(strength, 0.80)
+                reasons.append(f"lexicon:{value}:" + ",".join(hit[:3]))
+        elif operator in ENUM_OPERATORS and isinstance(value, list):
+            hits = [str(v) for v in value if str(v) and str(v) in text]
+            if hits:
+                strength = max(strength, 0.70)
+                reasons.append(f"{operator}:" + ",".join(hits[:3]))
         elif operator in ("keyword_all", "keyword_any") and isinstance(value, list):
             words = [str(w) for w in value]
             hits = [w for w in words if w and w in text]
@@ -491,6 +635,8 @@ def _match_rule(text: str, rule: Dict[str, Any]) -> Tuple[float, List[str]]:
             elif operator == "keyword_any" and hits:
                 strength = max(strength, 0.75)
                 reasons.append("keyword_any:" + ",".join(hits))
+    strength, notes = _apply_modifiers(text, rule, strength)
+    reasons.extend(notes)
     return strength, reasons
 
 

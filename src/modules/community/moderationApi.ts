@@ -61,6 +61,13 @@ export interface ModerationComment {
   deletedReason?: string | null;
   moderationStatus?: string | null;
   attachments?: Array<{ name: string; url: string; size?: number; type?: string }>;
+  // 2026-11-07：教师端评论与学生端互动字段合并后新增（typecheck 需要）
+  createTime?: string | null;
+  liked?: boolean;
+  likeCount?: number;
+  favorited?: boolean;
+  favoriteCount?: number;
+  replyCount?: number;
 }
 
 export interface ModerationRecord {

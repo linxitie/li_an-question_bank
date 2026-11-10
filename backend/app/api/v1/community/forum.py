@@ -36,8 +36,8 @@ from pydantic import BaseModel, Field
 from ....core.security import get_current_user, get_optional_user
 from ....services import media_service
 from ....models.models import (
-    ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
-    ForumDraft, SysUser, SysOperationLog
+    ForumPost, ForumComment, ForumLike, ForumFavorite, ForumCommentFavorite,
+    ForumSticker, ForumReport, ForumDraft, SysUser, SysOperationLog
 )
 from ....services.sensitive_words import SensitiveLevel
 from ....services.content_guard import guard_text, judgments as content_guard_judgments
@@ -55,6 +55,12 @@ from ....core.exceptions import (
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
 
 TITLE_COLORS = {"default", "red", "gold", "blue", "green", "purple"}
+
+
+class BatchPostIds(BaseModel):
+    """批量操作帖子 ID（上限 100，避免单次请求过重）。"""
+
+    post_ids: List[int] = Field(..., min_length=1, max_length=100)
 logger = logging.getLogger(__name__)
 
 # 点赞表情白名单：只接受固定码，避免任意文本/图片进入
@@ -294,6 +300,31 @@ def _load_favorite_stats(db: Session, post_ids: List[int], user_id: Optional[int
     return counts, mine
 
 
+def _comment_favorite_stats(db: Session, comment_ids: List[int], user_id: Optional[int] = None):
+    """批量取评论收藏数 + 当前用户是否收藏（避免 N+1）。"""
+    if not comment_ids:
+        return {}, set()
+    rows = (
+        db.query(ForumCommentFavorite.comment_id, func.count(ForumCommentFavorite.favorite_id))
+        .filter(ForumCommentFavorite.comment_id.in_(comment_ids))
+        .group_by(ForumCommentFavorite.comment_id)
+        .all()
+    )
+    counts = {cid: int(cnt or 0) for cid, cnt in rows}
+    mine = set()
+    if user_id:
+        mine_rows = (
+            db.query(ForumCommentFavorite.comment_id)
+            .filter(
+                ForumCommentFavorite.comment_id.in_(comment_ids),
+                ForumCommentFavorite.user_id == user_id,
+            )
+            .all()
+        )
+        mine = {row[0] for row in mine_rows}
+    return counts, mine
+
+
 def _serialize_comment(
     comment: ForumComment,
     user: Optional[SysUser] = None,
@@ -301,6 +332,8 @@ def _serialize_comment(
     reactions: Optional[Dict[str, int]] = None,
     my_reaction: Optional[str] = None,
     reply_count: int = 0,
+    favorite_count: int = 0,
+    favorited: bool = False,
 ) -> Dict[str, Any]:
     """序列化评论为响应字典"""
     return {
@@ -313,6 +346,8 @@ def _serialize_comment(
         "replyToUserId": comment.reply_to_user_id,
         "attachments": comment.attachments or [],
         "liked": liked or my_reaction is not None,
+        "favorited": favorited,
+        "favoriteCount": favorite_count,
         "myReaction": my_reaction,
         "reactions": reactions or {},
         "replyCount": reply_count or 0,
@@ -625,15 +660,16 @@ async def create_post(
             code="SENSITIVE_CONTENT_BLOCKED"
         )
 
-    # masked 级别:标题与正文分别打码后发布（混合检测的 masked_text 不适用于单个字段）
+    # masked / reviewed 级别:标题与正文分别打码后发布（命中即打码，review 也落打码文本）
     final_title = title
     final_content = content
-    if filter_result["level"] == SensitiveLevel.MASKED:
+    if filter_result["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         final_title = guard_text(db, title, scene="forum_post", persist=False).get("masked_text") or title
         final_content = guard_text(db, content, scene="forum_post", persist=False).get("masked_text") or content
-        _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
 
-    # reviewed 级别:记录但不阻断
+    if filter_result["level"] == SensitiveLevel.MASKED:
+        _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
+    # reviewed 级别:已打码发布，同时保留人工复核记录
     if filter_result["level"] == SensitiveLevel.REVIEWED:
         _log_violation(db, current_user.user_id, request, filter_result, "reviewed", f"{title} {content}")
 
@@ -747,8 +783,11 @@ async def delete_post(
     if not is_owner and not is_admin:
         raise BusinessLogicError("无权删除他人帖子", code="PERMISSION_DENIED")
 
-    # 软删除
+    # 软删除进回收站（2026-11-07）：保留 30 天，超期由定时任务彻底删除
     post.status = "DELETED"
+    post.deleted_by = current_user.user_id
+    post.deleted_reason = "作者删除" if is_owner else "管理员删除"
+    post.deleted_at = datetime.now()
     from ....foundation.document_events import emit_forum_content
     emit_forum_content(db, post_id, producer="community.forum.delete")
     db.commit()
@@ -851,6 +890,108 @@ async def toggle_post_favorite(
         "favorited": favorited,
         "favoriteCount": counts.get(post_id, post.collect_count or 0),
     }
+
+
+@router.get("/my-interactions", summary="我的收藏/喜欢（帖子+评论混排）")
+async def my_interactions(
+    kind: Literal["favorites", "likes"],
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """统一返回帖子与评论两种收藏/点赞；评论项带所属帖子 ID 与标题。"""
+    items: List[Dict[str, Any]] = []
+    if kind == "favorites":
+        post_rows = (
+            db.query(ForumFavorite, ForumPost)
+            .join(ForumPost, ForumPost.post_id == ForumFavorite.post_id)
+            .filter(ForumFavorite.user_id == current_user.user_id, ForumPost.status == "NORMAL")
+            .all()
+        )
+        comment_rows = (
+            db.query(ForumCommentFavorite, ForumComment, ForumPost)
+            .join(ForumComment, ForumComment.comment_id == ForumCommentFavorite.comment_id)
+            .join(ForumPost, ForumPost.post_id == ForumComment.post_id)
+            .filter(
+                ForumCommentFavorite.user_id == current_user.user_id,
+                ForumComment.status == 1,
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+    else:
+        post_rows = (
+            db.query(ForumLike, ForumPost)
+            .join(ForumPost, ForumPost.post_id == ForumLike.post_id)
+            .filter(
+                ForumLike.user_id == current_user.user_id,
+                ForumLike.post_id.isnot(None),
+                ForumLike.reaction_code == "like",
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+        comment_rows = (
+            db.query(ForumLike, ForumComment, ForumPost)
+            .join(ForumComment, ForumComment.comment_id == ForumLike.comment_id)
+            .join(ForumPost, ForumPost.post_id == ForumComment.post_id)
+            .filter(
+                ForumLike.user_id == current_user.user_id,
+                ForumLike.comment_id.isnot(None),
+                ForumLike.reaction_code == "like",
+                ForumComment.status == 1,
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+
+    post_ids = [post.post_id for _, post in post_rows]
+    fav_counts, my_favs = _load_favorite_stats(db, post_ids, user_id=current_user.user_id)
+    react_counts, my_react = _load_reaction_stats(db, post_ids, user_id=current_user.user_id)
+    post_user_ids = {post.user_id for _, post in post_rows}
+    post_users = db.query(SysUser).filter(SysUser.user_id.in_(post_user_ids)).all() if post_user_ids else []
+    post_user_map = {u.user_id: u for u in post_users}
+    for fav, post in post_rows:
+        items.append({
+            "type": "post",
+            "time": fav.create_time.isoformat() if fav.create_time else None,
+            "post": _serialize_post(
+                post,
+                post_user_map.get(post.user_id),
+                post.post_id in my_react,
+                reactions=react_counts.get(post.post_id, {}),
+                my_reaction=my_react.get(post.post_id),
+                favorite_count=fav_counts.get(post.post_id, 0),
+                favorited=post.post_id in my_favs,
+            ),
+        })
+
+    comment_ids = [c.comment_id for _, c, _ in comment_rows]
+    cfav_counts, _ = _comment_favorite_stats(db, comment_ids)
+    comment_user_ids = {c.user_id for _, c, _ in comment_rows}
+    comment_users = db.query(SysUser).filter(SysUser.user_id.in_(comment_user_ids)).all() if comment_user_ids else []
+    comment_user_map = {u.user_id: u for u in comment_users}
+    for fav, comment, post in comment_rows:
+        items.append({
+            "type": "comment",
+            "time": fav.create_time.isoformat() if fav.create_time else None,
+            "postId": post.post_id,
+            "postTitle": post.title,
+            "comment": {
+                "id": comment.comment_id,
+                "content": comment.content,
+                "contentFormat": getattr(comment, "content_format", None) or "TEXT",
+                "createTime": comment.create_time.isoformat() if comment.create_time else None,
+                "likeCount": comment.like_count or 0,
+                "favoriteCount": cfav_counts.get(comment.comment_id, 0),
+                "user": _user_brief(comment_user_map.get(comment.user_id), comment.user_id),
+            },
+        })
+
+    items.sort(key=lambda x: x.get("time") or "", reverse=True)
+    total = len(items)
+    return {"total": total, "limit": limit, "offset": offset, "items": items[offset:offset + limit]}
 
 
 @router.get("/my-favorites", summary="我的收藏（五角星）")
@@ -1041,6 +1182,9 @@ async def get_post_comments(
         is_comment=True,
         user_id=current_user.user_id if current_user else None,
     )
+    favorite_counts, my_favorites = _comment_favorite_stats(
+        db, comment_ids, user_id=current_user.user_id if current_user else None
+    )
 
     return {
         "total": total,
@@ -1054,6 +1198,8 @@ async def get_post_comments(
                 reactions=reaction_counts.get(c.comment_id, {}),
                 my_reaction=my_reactions.get(c.comment_id),
                 reply_count=reply_counts.get(c.comment_id, 0),
+                favorite_count=favorite_counts.get(c.comment_id, 0),
+                favorited=c.comment_id in my_favorites,
             )
             for c in comments
         ]
@@ -1124,8 +1270,10 @@ async def create_comment(
         )
 
     final_content = content
+    if filter_result["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
+        # 命中即打码：review 级也落打码文本，人工任务照常保留
+        final_content = filter_result.get("masked_text") or content
     if filter_result["level"] == SensitiveLevel.MASKED:
-        final_content = filter_result["masked_text"]
         _log_violation(db, current_user.user_id, request, filter_result, "masked", content)
     elif filter_result["level"] == SensitiveLevel.REVIEWED:
         _log_violation(db, current_user.user_id, request, filter_result, "reviewed", content)
@@ -1209,6 +1357,37 @@ async def toggle_comment_like(
     # 点赞不是创建行为，不上报 E6 事件（P2-28）
 
     return {"liked": liked, "likeCount": comment.like_count}
+
+
+@router.post("/comments/{comment_id}/favorite", summary="评论收藏切换")
+async def toggle_comment_favorite(
+    comment_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(ForumComment).filter(
+        ForumComment.comment_id == comment_id,
+        ForumComment.status == 1,
+    ).first()
+    if not comment:
+        raise ResourceNotFoundError("评论", comment_id)
+    existing = (
+        db.query(ForumCommentFavorite)
+        .filter(
+            ForumCommentFavorite.comment_id == comment_id,
+            ForumCommentFavorite.user_id == current_user.user_id,
+        )
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+        favorited = False
+    else:
+        db.add(ForumCommentFavorite(comment_id=comment_id, user_id=current_user.user_id))
+        favorited = True
+    db.commit()
+    counts, _ = _comment_favorite_stats(db, [comment_id])
+    return {"favorited": favorited, "favoriteCount": counts.get(comment_id, 0)}
 
 
 # ============================== 表情反应 ==============================
@@ -1647,17 +1826,18 @@ async def get_my_posts(
     limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     keyword: Optional[str] = Query(None, description="标题/正文关键词"),
+    include_deleted: bool = Query(False, description="true=查看我的回收站（已删除帖子）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     获取当前登录用户的所有帖子
     - 必须登录
-    - 按时间倒序排列
+    - 默认只返回 NORMAL；include_deleted=true 返回回收站（DELETED）
     """
     query = db.query(ForumPost).filter(
         ForumPost.user_id == current_user.user_id,
-        ForumPost.status == "NORMAL"
+        ForumPost.status == ("DELETED" if include_deleted else "NORMAL")
     )
     if keyword:
         like = f"%{keyword.strip()}%"
@@ -1665,27 +1845,80 @@ async def get_my_posts(
             or_(ForumPost.title.like(like), ForumPost.content.like(like))
         )
     total = query.count()
-    posts = query.order_by(ForumPost.create_time.desc()).offset(offset).limit(limit).all()
+    order_col = ForumPost.deleted_at if include_deleted else ForumPost.create_time
+    posts = query.order_by(order_col.desc()).offset(offset).limit(limit).all()
 
     post_ids = [p.post_id for p in posts]
     reaction_counts, my_reactions = _load_reaction_stats(
         db, post_ids, user_id=current_user.user_id
     )
+    items = []
+    for p in posts:
+        item = _serialize_post(
+            p,
+            current_user,
+            p.post_id in my_reactions,
+            reactions=reaction_counts.get(p.post_id, {}),
+            my_reaction=my_reactions.get(p.post_id),
+        )
+        item["deletedAt"] = p.deleted_at.isoformat() if p.deleted_at else None
+        items.append(item)
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "posts": [
-            _serialize_post(
-                p,
-                current_user,
-                p.post_id in my_reactions,
-                reactions=reaction_counts.get(p.post_id, {}),
-                my_reaction=my_reactions.get(p.post_id),
-            )
-            for p in posts
-        ]
+        "posts": items
     }
+
+
+@router.post("/posts/batch-delete", summary="批量删除我的帖子（软删除进回收站）")
+async def batch_delete_posts(
+    payload: BatchPostIds,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """只允许删自己的帖子；删除后进回收站，30 天内可恢复。"""
+    posts = (
+        db.query(ForumPost)
+        .filter(
+            ForumPost.post_id.in_(payload.post_ids),
+            ForumPost.user_id == current_user.user_id,
+            ForumPost.status == "NORMAL",
+        )
+        .all()
+    )
+    now = datetime.now()
+    for post in posts:
+        post.status = "DELETED"
+        post.deleted_by = current_user.user_id
+        post.deleted_reason = "作者批量删除"
+        post.deleted_at = now
+    db.commit()
+    logger.info(f"用户 {current_user.user_id} 批量删除 {len(posts)} 篇帖子")
+    return {"success": True, "deleted": len(posts), "requested": len(payload.post_ids)}
+
+
+@router.post("/posts/{post_id}/restore", summary="从回收站恢复我的帖子（30 天内）")
+async def restore_post(
+    post_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
+    if not post:
+        raise ResourceNotFoundError("帖子", post_id)
+    if post.user_id != current_user.user_id:
+        raise BusinessLogicError("只能恢复自己的帖子", code="PERMISSION_DENIED")
+    if post.status != "DELETED":
+        raise ValidationError("帖子不在回收站")
+    if post.deleted_at and datetime.now() - post.deleted_at > timedelta(days=30):
+        raise ValidationError("已超过 30 天保留期，无法恢复")
+    post.status = "NORMAL"
+    post.deleted_by = None
+    post.deleted_reason = None
+    post.deleted_at = None
+    db.commit()
+    return {"success": True, "message": "已恢复"}
 
 
 # ============================== 论坛统计 ==============================
@@ -1847,9 +2080,9 @@ async def update_post(
         )
         _log_violation(db, current_user.user_id, None, blocked, "rejected", title)
         raise BusinessLogicError("内容包含违规词，无法发布")
-    if title_filter["level"] == SensitiveLevel.MASKED:
+    if title_filter["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         title = title_filter.get("masked_text") or title
-    if content_filter["level"] == SensitiveLevel.MASKED:
+    if content_filter["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         content = content_filter.get("masked_text") or content
 
     title_color = payload.get("title_color", post.title_color or "default")

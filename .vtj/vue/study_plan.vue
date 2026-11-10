@@ -446,6 +446,58 @@
           </div>
         </div>
 
+        <!-- 学习报告（周/月） -->
+        <div v-if="state.plan" class="report-card">
+          <div class="report-head">
+            <span class="section-title">📈 学习报告</span>
+            <div class="report-tabs">
+              <div class="report-tab" :class="{ active: state.report.period === 'week' }" @click="setReportPeriod('week')">本周</div>
+              <div class="report-tab" :class="{ active: state.report.period === 'month' }" @click="setReportPeriod('month')">本月</div>
+            </div>
+          </div>
+
+          <div class="report-grid">
+            <div class="report-item">
+              <div class="report-num">{{ rpt.minutes }}</div>
+              <div class="report-label">学习时长(分)</div>
+            </div>
+            <div class="report-item">
+              <div class="report-num">{{ rpt.questions }}</div>
+              <div class="report-label">完成题量</div>
+            </div>
+            <div class="report-item">
+              <div class="report-num">{{ rpt.accuracy }}%</div>
+              <div class="report-label">平均正确率</div>
+            </div>
+            <div class="report-item">
+              <div class="report-num">🔥 {{ rpt.streak }}</div>
+              <div class="report-label">连续打卡</div>
+            </div>
+          </div>
+
+          <div class="report-trend">
+            <div class="report-trend-title">正确率趋势</div>
+            <div class="report-bars">
+              <div v-for="(v, i) in rpt.trend" :key="i" class="report-bar-col">
+                <div class="report-bar" :style="{ height: v + '%' }"></div>
+                <div class="report-bar-label">{{ rpt.labels[i] }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-weak">
+            <div class="report-weak-title">薄弱科目 Top3</div>
+            <div v-for="w in rpt.weak" :key="w.name" class="report-weak-row">
+              <span class="report-weak-name">{{ w.name }}</span>
+              <div class="report-weak-bar"><div class="report-weak-fill" :style="{ width: w.rate + '%' }"></div></div>
+              <span class="report-weak-rate">{{ w.rate }}%</span>
+            </div>
+          </div>
+
+          <div class="report-comment">💬 {{ rpt.comment }}</div>
+          <button class="report-print-btn" @click="printReport">🖨️ 导出 / 打印报告</button>
+        </div>
+
         <!-- AI 提示 -->
         <div v-if="state.plan.tips" class="tips-card">
           <div class="tips-icon">💡</div>
@@ -476,7 +528,7 @@
 
 <script lang="ts">
   // @ts-nocheck
-  import { defineComponent, reactive, onMounted } from 'vue';
+  import { defineComponent, reactive, onMounted, computed } from 'vue';
 
   export default defineComponent({
     name: 'StudyPlan',
@@ -522,6 +574,10 @@
           content: '',
           result: null,
           grading: false,
+        },
+        // 学习报告（周/月，前端模拟汇总）
+        report: {
+          period: 'week',
         },
       });
 
@@ -806,6 +862,49 @@
         }
       }
 
+      // ===== 学习报告（周/月，前端模拟汇总，后续可接真实统计接口） =====
+      const reportData = {
+        week: {
+          minutes: 326,
+          questions: 148,
+          accuracy: 78,
+          weak: [
+            { name: '资料分析', rate: 62 },
+            { name: '数量关系', rate: 58 },
+            { name: '图形推理', rate: 55 },
+          ],
+          trend: [65, 70, 74, 72, 78, 81, 84],
+          labels: ['一', '二', '三', '四', '五', '六', '日'],
+          comment: '本周整体状态稳步上升，正确率连续 3 天走高。资料分析仍是短板，建议每天加练 2 篇增长率/比重题。',
+        },
+        month: {
+          minutes: 1280,
+          questions: 562,
+          accuracy: 75,
+          weak: [
+            { name: '数量关系', rate: 55 },
+            { name: '资料分析', rate: 60 },
+            { name: '申论大作文', rate: 63 },
+          ],
+          trend: [68, 73, 76, 79],
+          labels: ['第1周', '第2周', '第3周', '第4周'],
+          comment: '本月累计学习时长充足，正确率环比提升 7 个百分点。数量关系基础薄弱，建议优先攻克工程、行程等高频题型。',
+        },
+      };
+
+      const rpt = computed(() => {
+        const base = reportData[state.report.period] || reportData.week;
+        return { ...base, streak: state.streak };
+      });
+
+      function setReportPeriod(p) {
+        state.report.period = p;
+      }
+
+      function printReport() {
+        window.print();
+      }
+
       function reset() {
         state.plan = null;
         state.error = '';
@@ -899,6 +998,8 @@
         toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
         formatTime, togglePomodoro, resetPomodoro,
         toggleSlotTask, getScheduleProgress, gradeEssay,
+        slot: state.slot, essay: state.essay, scrollToOverview, scrollToToday,
+        rpt, setReportPeriod, printReport,
       };
     },
   });
@@ -906,6 +1007,61 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+
+  /* ===== 学习报告 ===== */
+  .report-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .report-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .report-tabs { display: flex; gap: 6px; background: #f2f4f8; border-radius: 10px; padding: 3px; }
+  .report-tab {
+    padding: 5px 14px; border-radius: 8px; font-size: 13px; color: #666; cursor: pointer;
+  }
+  .report-tab.active {
+    background: linear-gradient(135deg, #c8161e, #ef4444);
+    color: #fff; font-weight: 600;
+  }
+  .report-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 18px;
+  }
+  .report-item {
+    background: #f8f9fc; border-radius: 12px; padding: 12px 8px; text-align: center;
+  }
+  .report-num { font-size: 18px; font-weight: 700; color: #c8161e; }
+  .report-label { font-size: 11px; color: #888; margin-top: 4px; }
+  .report-trend { margin-bottom: 18px; }
+  .report-trend-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 10px; }
+  .report-bars { display: flex; align-items: flex-end; gap: 10px; height: 90px; }
+  .report-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; }
+  .report-bar {
+    width: 100%; max-width: 26px; border-radius: 6px 6px 0 0;
+    background: linear-gradient(180deg, #ef4444, #c8161e);
+    min-height: 6px;
+  }
+  .report-bar-label { font-size: 10px; color: #888; }
+  .report-weak { margin-bottom: 16px; }
+  .report-weak-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 10px; }
+  .report-weak-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .report-weak-name { width: 72px; font-size: 12px; color: #555; }
+  .report-weak-bar { flex: 1; height: 10px; background: #f0f2f6; border-radius: 6px; overflow: hidden; }
+  .report-weak-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #f59e0b, #ef4444); }
+  .report-weak-rate { width: 40px; text-align: right; font-size: 12px; color: #666; }
+  .report-comment {
+    background: #fff5f5; border-left: 3px solid #c8161e; border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; color: #555; line-height: 1.6; margin-bottom: 14px;
+  }
+  .report-print-btn {
+    width: 100%; background: linear-gradient(135deg, #c8161e, #ef4444);
+    color: #fff; border: none; border-radius: 12px; padding: 12px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
 
   /* ===== 智能排课 ===== */
   .smart-schedule-card {

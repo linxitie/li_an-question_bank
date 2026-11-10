@@ -31,7 +31,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
-import { HomeFilled, Edit, ChatLineRound, User } from '@vtj/icons';
+import { HomeFilled, Edit, ChatLineRound, User, Shop } from '@vtj/icons';
 
 // 激活/未激活配色：与 design-tokens 主色保持一致
 const ACTIVE = '#1A365D';
@@ -47,6 +47,8 @@ const props = defineProps<{ active: string }>();
 const tabs = [
   { key: 'home', label: '首页', icon: HomeFilled, path: '/mobile/home' },
   { key: 'practice', label: '练习', icon: Edit, path: '/mobile/practice' },
+  // 2026-11-05：商城放在底部栏正中间（用户要求）
+  { key: 'shop', label: '商城', icon: Shop, path: '/mobile/gold-purchase' },
   { key: 'forum', label: '论坛', icon: ChatLineRound, path: '/mobile/forum' },
   { key: 'profile', label: '我的', icon: User, path: '/mobile/profile' },
 ];

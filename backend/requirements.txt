@@ -80,3 +80,4 @@ PyPDF2>=3.0.0  # pdf_reader 扫描件回退与图片提取显式 import PyPDF2�
 bleach
 Pillow
 jieba==0.42.1  # P3b 论坛数据看板：帖子关键词分词（中文分词，无外网依赖）
+PyYAML>=6.0

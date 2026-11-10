@@ -1,5 +1,11 @@
 """ORM 模型包：导入时注册独立模型，保证 create_all 能解析全部 FK。"""
 from .media_asset import MediaAsset  # noqa: F401
+from .weekly_task import (  # noqa: F401
+    WeeklyTaskInstance,
+    WeeklyTaskPlan,
+    WeeklyTaskTemplate,
+    WeeklyTaskTheme,
+)
 from .content_guard import (  # noqa: F401
     CgAuditEvent,
     CgCase,

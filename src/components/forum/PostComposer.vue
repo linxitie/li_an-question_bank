@@ -8,6 +8,12 @@
         </div>
 
         <div class="pc-bd">
+          <!-- 2026-11-07：草稿改为“手动恢复”，打开弹窗默认空白，避免把上次测试内容带进新帖 -->
+          <div v-if="pendingDraft" class="draft-bar">
+            <span>检测到上次未发布的草稿</span>
+            <button type="button" class="draft-restore" @click="restoreDraft">恢复草稿</button>
+            <button type="button" class="draft-ignore" @click="pendingDraft = null">忽略</button>
+          </div>
           <div class="f-row">
             <label>标题 <span class="req">*</span></label>
             <div class="title-row">
@@ -234,6 +240,23 @@ const form = reactive<PostDraft>({
 const uploading = ref(false);
 const error = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
+/** 2026-11-07：待恢复的草稿。打开弹窗不再自动回填，由用户点“恢复草稿”。 */
+const pendingDraft = ref<Partial<PostDraft> | null>(null);
+
+function hasDraftContent(init: Partial<PostDraft> | null | undefined): boolean {
+  if (!init) return false;
+  return Boolean(
+    String(init.title || '').trim() ||
+      stripHtml(String(init.content || '')) ||
+      (init.attachments && init.attachments.length)
+  );
+}
+
+function restoreDraft() {
+  if (!pendingDraft.value) return;
+  applyInitial(pendingDraft.value);
+  pendingDraft.value = null;
+}
 
 // ===== AI 标题建议（v4 2026-11-04）=====
 const suggesting = ref(false);
@@ -325,7 +348,9 @@ watch(
       error.value = '';
       return;
     }
-    applyInitial(props.initial || {});
+    // 默认空白；有草稿时只展示“恢复草稿”提示
+    applyInitial({});
+    pendingDraft.value = hasDraftContent(props.initial) ? { ...props.initial } : null;
   },
   { immediate: true }
 );
@@ -340,7 +365,8 @@ watch(
   (init) => {
     if (!props.visible || !init) return;
     if (!isFormEmpty()) return;
-    applyInitial(init);
+    // 异步到达的草稿：不再自动回填，只标记为可恢复
+    if (hasDraftContent(init)) pendingDraft.value = { ...init };
   }
 );
 
@@ -816,5 +842,33 @@ function onSaveDraft() {
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+/* 草稿手动恢复条（2026-11-07） */
+.draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff8e6;
+  border: 1px solid #f5d58a;
+  color: #8a5a00;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.draft-restore {
+  border: none;
+  background: #b45309;
+  color: #fff;
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.draft-ignore {
+  border: none;
+  background: transparent;
+  color: #8a5a00;
+  cursor: pointer;
+  text-decoration: underline;
 }
 </style>

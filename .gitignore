@@ -206,4 +206,5 @@ node_modules/
 /test-results/
 /playwright-report/
 
-
+# 管理员上传的商品图（运行时数据，不入库）
+backend/app/static/shop/

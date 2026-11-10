@@ -733,7 +733,9 @@ export default defineComponent({
         }
         var subject = self.$route.query.subject || 'xc';
         var kpId = self.$route.query.kpId || '';
-        var scId = self.$route.query.scId || '';
+        // scId=0 是「未分类」虚拟子科目，不能被 || '' 吞掉
+        var scIdRaw = self.$route.query.scId;
+        var scId = (scIdRaw === undefined || scIdRaw === null) ? '' : String(scIdRaw);
         var count = parseInt(self.$route.query.count || '20', 10);
         var yearRange = self.$route.query.yearRange || '';
         var scope = self.$route.query.scope || '';
@@ -767,9 +769,14 @@ export default defineComponent({
           if (yearRange && yearRange !== '0') {
             url += '&year=' + yearRange;
           }
-        } else if (scId) {
-          // 通过子科目ID加载题目（自定义刷题）
+        } else if (scId !== '') {
+          // 通过子科目ID加载题目（自定义刷题）；0 号是未分类虚拟子科目
+          var subjectIdMap = { xc: 1, sl: 2, ga: 3 };
+          var subjectId = subjectIdMap[subject] || (/^[123]$/.test(subject) ? Number(subject) : '');
           url = '/api/quick-practice/questions?knowledge_point_ids=' + scId + '&limit=' + count + '&bySubCategory=true';
+          if (subjectId) {
+            url += '&subjectId=' + subjectId;
+          }
           if (yearRange && yearRange !== '0') {
             url += '&year=' + yearRange;
           }

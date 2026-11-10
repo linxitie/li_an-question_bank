@@ -137,6 +137,20 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    // M3.5（2026-11-05）：我的知识图谱（手写页，不改 .vtj 模板）
+    path: '/student/knowledge/graph',
+    name: 'StudentKnowledgeGraph',
+    component: () => import('@/views/student/pc/knowledge_graph.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'], title: '我的知识图谱' }
+  },
+  {
+    // 金币购 M1.5（2026-11-05）：我的兑换（手写页，放在 src/views，不改 .vtj 模板）
+    path: '/student/shop/exchanges',
+    name: 'StudentShopExchanges',
+    component: () => import('@/views/student/pc/shop_exchanges.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'], title: '我的兑换' }
+  },
+  {
     path: '/paper-answer',
     name: 'PaperAnswer',
     component: () => import('$vtj/vue/paper_answer.vue'),
@@ -271,6 +285,13 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       },
       {
+        // 2026-11-05：金币商城挂到 AdminLayout 下，保证左侧导航常驻
+        path: 'shop',
+        name: 'AdminShop',
+        component: () => import('$vtj/vue/admin_shop.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
         path: 'settings',
         name: 'AdminSettings',
         component: () => import('$vtj/vue/admin_settings.vue'),
@@ -322,6 +343,12 @@ const routes: RouteRecordRaw[] = [
         path: 'forum',
         name: 'AdminForum',
         component: () => import('@/views/admin/admin_forum.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'feedback',
+        name: 'AdminFeedback',
+        component: () => import('@/views/admin/admin_feedback.vue'),
         meta: { roles: ['admin'] }
       },
       {

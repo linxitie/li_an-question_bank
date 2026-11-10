@@ -50,16 +50,24 @@ def test_seed_is_idempotent(seeded, db_session):
 
 
 def test_engine_detects_three_levels(seeded, db_session):
+    # 2026-11-07 用户决策：blocked 级词条也降级为“打码可发布”，
+    # 词库原始等级仍可通过 judgments 层看到。
     blocked = guard_text(db_session, "有人在这里赌博", scene="test")
+    raw_blocked = judgments.guard_text(db_session, "有人在这里赌博", scene="test")
     masked = guard_text(db_session, "你这个傻逼", scene="test")
     reviewed = guard_text(db_session, "求代考包过", scene="test")
     db_session.commit()
 
-    assert blocked["level"] == "blocked"
-    assert blocked["decision"] == "block"
+    assert raw_blocked["level"] == "blocked"
+    assert raw_blocked["decision"] == "block"
+    assert blocked["level"] == "masked"
+    assert blocked["decision"] == "mask"
     assert masked["level"] == "masked"
     assert masked["decision"] in ("mask", "review")
-    assert reviewed["decision"] == "review"
+    # 2026-11-06：政策层（vault ruleset）对考试作弊类给出 hold，按"命中即打码"升级为 mask；
+    # 唯一红线是不得降级为 pass。
+    assert reviewed["decision"] in ("review", "mask")
+    assert reviewed["decision"] != "pass"
     assert blocked["evidence"][1]["step"] == "dfa_match"
 
 
@@ -87,16 +95,18 @@ def test_judgment_and_task_persisted(seeded, db_session):
     assert result["task_id"]
     assert db_session.query(CgJudgment).count() == before + 1
     task = db_session.query(CgTask).filter(CgTask.task_id == result["task_id"]).first()
-    assert task.state == "auto_blocked"
+    # blocked 级已按决策降级为打码发布
+    assert task.state == "auto_masked"
     judgment = db_session.query(CgJudgment).filter(
         CgJudgment.judgment_id == result["judgment_id"]
     ).first()
     assert judgment.content_hash
     assert "赌博" not in judgment.content_snippet
-    assert judgment.evidence[-1]["decision"] == "block"
+    assert judgment.decision == "mask"
+    assert judgment.evidence[-1]["decision"] == "mask"
     term = db_session.query(CgTerm).filter(CgTerm.term == "赌博").first()
     assert term.hit_count >= 1
-    assert term.block_count >= 1
+    assert term.mask_count >= 1  # blocked 级已降级为打码
     daily = stats.overview(db_session)
     assert daily["today"]["total"] >= 1
 
@@ -157,7 +167,8 @@ def test_proposal_approve_adds_variant_to_engine(seeded, db_session):
     engine.reset_engine()
     result = guard_text(db_session, "堵博", scene="test")
     assert result["has_sensitive"] is True
-    assert result["level"] == "blocked"
+    assert result["decision"] == "mask"
+    assert judgments.guard_text(db_session, "堵博", scene="test")["level"] == "blocked"
     assert audit.verify_chain(db_session)["ok"] is True
 
 
@@ -180,7 +191,8 @@ def test_redteam_generates_samples_and_proposals(seeded, db_session):
 
 def test_obsidian_export_and_review_import(seeded, db_session, tmp_path):
     vault = tmp_path / "vault"
-    result = guard_text(db_session, "求代考", scene="test")
+    # 用只命中 reviewed 级、且不触发 vault 政策层的词，保证任务状态是 pending
+    result = guard_text(db_session, "存在漏洞", scene="test")
     db_session.commit()
     assert result["task_id"]
 
@@ -338,19 +350,137 @@ def test_forum_masks_and_binds_source(client, seeded, auth_headers, db_session):
     assert judgment.source_id == post_id
 
 
-def test_forum_post_is_blocked_and_recorded(client, seeded, auth_headers, db_session):
+def test_forum_post_blocked_word_is_masked_and_recorded(client, seeded, auth_headers, db_session):
+    """2026-11-07：blocked 级词条改为打码发布，帖子不再被 400 拒绝。"""
     before = db_session.query(CgJudgment).count()
     response = client.post(
         "/api/forum/posts",
         headers=auth_headers,
         data={"title": "测试", "content": "这里有赌博信息"},
     )
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "SENSITIVE_CONTENT_BLOCKED"
+    assert response.status_code == 200
+    assert "*" in response.json()["content"]
     db_session.expire_all()
     assert db_session.query(CgJudgment).count() == before + 1
     judgment = (
         db_session.query(CgJudgment).order_by(CgJudgment.judgment_id.desc()).first()
     )
     assert judgment.scene == "forum_post"
-    assert judgment.decision == "block"
+    assert judgment.decision == "mask"
+
+# ===== 2026-11-06：命中即打码 / 链接四层 回归 =====
+
+def _add_terms(db, specs):
+    for term, level, category, confidence in specs:
+        db.add(
+            CgTerm(
+                term=term,
+                normalized=term,
+                level=level,
+                category=category,
+                weight=0.9,
+                confidence=confidence,
+                status="active",
+                source="test",
+            )
+        )
+    db.commit()
+    engine.reset_engine()
+
+
+def test_wrapper_never_downgrades_hit(seeded, db_session):
+    _add_terms(
+        db_session,
+        [
+            ("黄片", "masked", "色情引流", 0.7),
+            ("智障", "masked", "脏话粗口", 0.9),
+            ("sb", "reviewed", "脏话粗口", 0.7),
+            ("诈骗", "masked", "诈骗引流", 0.8),
+        ],
+    )
+    cases = [
+        ("卖黄片的加我", "卖**的加我"),
+        ("加我微信卖黄片", "加我微信卖**"),
+        ("楼主就是个智障", "楼主就是个**"),
+        ("这篇新闻讲的是黄片治理", "这篇新闻讲的是**治理"),
+    ]
+    for text, expected_mask in cases:
+        result = guard_text(db_session, text, scene="forum_post", persist=False)
+        assert result["decision"] == "mask", (text, result["decision"])
+        assert result["masked_text"] == expected_mask, (text, result["masked_text"])
+
+    # 新闻/科普语境不再把 review 降成 pass
+    news = guard_text(db_session, "如何防范网络诈骗？警方通报来了", scene="forum_post", persist=False)
+    assert news["decision"] != "pass"
+    assert "**" in news["masked_text"]
+
+    # reviewed 级也打码，但保留 review 人工档
+    reviewed = guard_text(db_session, "sb", scene="forum_post", persist=False)
+    assert reviewed["decision"] == "review"
+    assert reviewed["masked_text"] == "**"
+
+
+def test_link_four_layers(seeded, db_session):
+    short = guard_text(db_session, "资料在这 t.cn/abc123", scene="forum_post", persist=False)
+    assert short["decision"] == "block"
+    assert "短链" in short["words"]
+
+    black = guard_text(
+        db_session, "看这个 https://www.pornhub.com/x", scene="forum_post", persist=False
+    )
+    assert black["decision"] == "block"
+
+    internal = guard_text(
+        db_session, "站内 http://127.0.0.1:9527/x", scene="forum_post", persist=False
+    )
+    assert internal["decision"] == "pass"
+
+    normal = guard_text(
+        db_session, "参考 https://www.example.com/a", scene="forum_post", persist=True
+    )
+    db_session.commit()
+    assert normal["decision"] == "review"
+    assert "http://****" in normal["masked_text"]
+    assert normal["task_id"]
+    task = db_session.query(CgTask).filter(CgTask.task_id == normal["task_id"]).first()
+    assert task is not None and task.state == "pending"
+
+
+def test_policy_signal_only_masks_deciding_rule_terms(monkeypatch):
+    import app.services.content_guard as cg
+    from app.services import policy_compiler as pc
+
+    ruleset = {
+        "rules": [
+            {
+                "id": "R1",
+                "lexicon_terms": {"insult_zh_v1": ["智障"]},
+                "match": {"any": [{"operator": "lexicon", "value": "insult_zh_v1"}]},
+            },
+            {
+                "id": "R2",
+                "lexicon_terms": {"other_v1": ["就是"]},
+                "match": {"any": [{"operator": "lexicon", "value": "other_v1"}]},
+            },
+        ]
+    }
+    monkeypatch.setattr(cg, "_get_ruleset", lambda: ruleset)
+    monkeypatch.setattr(
+        pc, "score_text", lambda *args, **kwargs: {"bucket": "mask", "hits": [{"id": "R1"}]}
+    )
+    bucket, terms, ids = cg._policy_signal("楼主就是个智障", "forum_post")
+    assert bucket == "mask"
+    assert terms == ["智障"]  # 不遍历其它词表，不会把"就是"打掉
+    assert ids == ["R1"]
+
+
+def test_forum_review_masks_content(client, seeded, auth_headers, db_session):
+    _add_terms(db_session, [("sb", "reviewed", "脏话粗口", 0.7)])
+    response = client.post(
+        "/api/forum/posts",
+        headers=auth_headers,
+        data={"title": "测试", "content": "你这个sb"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "*" in body["content"]

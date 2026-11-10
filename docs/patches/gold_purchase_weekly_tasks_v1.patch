@@ -1,0 +1,103 @@
+--- a/.vtj/vue/gold_purchase.vue
++++ b/.vtj/vue/gold_purchase.vue
+@@ -122,6 +122,44 @@
+             </button>
+           </div>
+         </div>
++
++        <!-- 周任务设计分配（2027.1）：第01–12 周，待补题仅展示、可试点可开始 -->
++        <div class="gp-card" v-if="state.weekly && state.weekly.plan">
++          <h4>
++            🗓️ {{ state.weekly.plan.title }}
++            <span class="week-meta">
++              {{ state.weekly.plan.start_date }} ~ {{ state.weekly.plan.end_date }} ·
++              {{ state.weekly.is_preview ? '预告' : '本周' }} ·
++              {{ state.weekly.summary.tasks }} 项 / {{ state.weekly.summary.minutes }} 分钟
++            </span>
++          </h4>
++          <div v-for="day in state.weekly.days" :key="day.date">
++            <p class="task-note">{{ day.date }} {{ day.weekday }}</p>
++            <div v-for="t in day.tasks" :key="t.instance_id" class="task-item">
++              <span class="task-title">
++                <span class="pin-badge">{{ t.subject }}</span>{{ t.title }}
++              </span>
++              <span class="task-progress">{{ t.qty }}{{ t.unit }}</span>
++              <span class="task-reward">🪙{{ t.coins }}</span>
++              <button class="task-btn" :disabled="!t.startable" @click="startWeeklyTask(t)">
++                {{ t.startable ? '开始' : '待补题' }}
++              </button>
++            </div>
++          </div>
++          <div v-if="state.weekly.pilot_tasks.length">
++            <p class="task-note">🚀 可试点（现在就能做）</p>
++            <div v-for="t in state.weekly.pilot_tasks" :key="'p-' + t.instance_id" class="task-item">
++              <span class="task-title">{{ t.title }}</span>
++              <span class="task-progress">{{ t.task_date }}</span>
++              <span class="task-reward">🪙{{ t.coins }}</span>
++              <button class="task-btn" @click="startWeeklyTask(t)">开始</button>
++            </div>
++          </div>
++          <p class="task-note" v-if="state.weekly.later_weeks.length">
++            后续 {{ state.weekly.later_weeks.length }} 周已排期：{{ laterWeeksText }}
++          </p>
++        </div>
++
+       </div>
+ 
+       <!-- 目标 Tab -->
+@@ -209,6 +247,8 @@
+         products: [],
+         records: [],
+         tasks: { checkin: {}, daily: [], random: [], weekly: [] },
++        // 周任务设计分配（2027.1）概览；null 表示未加载
++        weekly: null,
+         goals: [],
+         achievements: { categories: {} },
+         detailVisible: false,
+@@ -227,6 +267,10 @@
+       };
+     },
+     computed: {
++      laterWeeksText() {
++        const weeks = (this.state.weekly && this.state.weekly.later_weeks) || [];
++        return weeks.map((w) => '第' + w.week_no + '周').join('、');
++      },
+       tabs() {
+         return [
+           { key: 'shop', label: '商城' },
+@@ -246,6 +290,23 @@
+       goKnowledgeGraph() {
+         this.state.showKnowledgeGraph = true;
+       },
++      // 周任务设计分配（2027.1）：只有「可试点」实例可开始；待补题给提示
++      startWeeklyTask(t) {
++        if (!t || !t.startable) {
++          ElMessage.info('该任务待补题，暂不可开始');
++          return;
++        }
++        const subject = t.start_subject || 'xc';
++        const count = t.qty || 10;
++        const path = '/exercise?subject=' + subject + '&count=' + count + '&from=weekly';
++        if (this.$router && typeof this.$router.push === 'function') {
++          this.$router.push(path).catch(() => {
++            window.location.hash = '#' + path;
++          });
++        } else {
++          window.location.hash = '#' + path;
++        }
++      },
+       // 独立页入口：保留给需要直接发链接的场景（/student/shop/exchanges）
+       openExchangesPage() {
+         const path = '/student/shop/exchanges';
+@@ -318,6 +379,11 @@
+           const data = await res.json();
+           if (res.ok) this.state.tasks = data;
+         } catch (e) { /* 静默 */ }
++        try {
++          const weeklyRes = await window.__VTJ_AUTH__.apiFetch('/api/v1/weekly-tasks/overview');
++          const weeklyData = await weeklyRes.json();
++          if (weeklyRes.ok) this.state.weekly = weeklyData;
++        } catch (e) { /* 静默：周任务不可用不影响任务页 */ }
+       },
+       async claimTask(t) {
+         try {
