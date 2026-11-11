@@ -88,6 +88,17 @@
     },
     mounted() {
       this.updateLoginState();
+      // 2026-11-11 修（用户反馈）：小红线与浅色块永远停在「首页」。
+      // 原因：`state.activeMenu` 只在点击时改，而每个页面各自内嵌一份 NavBar ——
+      // 换页后组件重新挂载，state 回到初始值 'home_page'。
+      // 现在改为**以当前路由为准**：进入任何页面/浏览器地址栏直达，高亮都落在对应菜单。
+      this.syncActiveFromRoute();
+    },
+    watch: {
+      // 同一页内做前进/后退或点击菜单时，路由变化后立刻对齐（不再依赖组件重挂载）
+      '$route.path'() {
+        this.syncActiveFromRoute();
+      }
     },
     methods: {
       navigateTo(id) {
@@ -95,7 +106,24 @@
           this.$router.push(id === 'news' ? '/news' : '/page/' + id);
         }
       },
+      /** 路由 → 菜单 id（只在这里定义一次，点击与直达共用）；菜单里没有的页面返回 ''（不高亮） */
+      menuIdFromRoute(path) {
+        const p = String(path || '').split('?')[0].split('#').pop() || '/';
+        if (p === '/' || p === '' || p === '/page/home_page') return 'home_page';
+        if (p.indexOf('/page/question_bank') === 0) return 'question_bank';
+        if (p === '/news' || p.indexOf('/news/') === 0) return 'news';
+        if (p.indexOf('/page/about') === 0) return 'about';
+        if (p === '/forum' || p.indexOf('/forum/') === 0 || p.indexOf('/page/forum') === 0) return 'forum';
+        // 不在菜单里的页面（下载客户端/答题/收藏…）不高亮任何一项，避免"停在首页"的错觉
+        return '';
+      },
+      /** 让高亮跟着路由走（挂载时 + 路由变化时各调一次） */
+      syncActiveFromRoute() {
+        const path = (this.$route && this.$route.path) || '';
+        this.state.activeMenu = this.menuIdFromRoute(path);
+      },
       handleMenuClick(id) {
+        // 先给即时反馈，路由切换后 `syncActiveFromRoute` 会再对齐一次（两边同口径）
         this.state.activeMenu = id;
         this.navigateTo(id);
       },
