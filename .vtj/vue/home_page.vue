@@ -144,6 +144,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   import CountdownTimer from './countdown_timer.vue';
   import ExamCalendar from './exam_calendar_block.vue';
   import StudyMaterialsEntry from './study_materials.vue';
+  import RecruitmentRadarEntry from '@/components/recruitment/RecruitmentRadarEntry.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCheckinStore } from '@/modules/checkin/store';
@@ -193,6 +194,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       CountdownTimer,
       ExamCalendar,
       StudyMaterialsEntry,
+      RecruitmentRadarEntry,
       XIcon
     },
     setup(props) {
