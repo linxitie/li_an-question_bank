@@ -1,0 +1,68 @@
+[
+  {
+    "post_id": 1,
+    "recruitment_id": 4005,
+    "job_name": "物业主管",
+    "employer": "南平市城发人力资源服务有限公司",
+    "province": "福建省",
+    "city": "南平市",
+    "job_code": null,
+    "plan_count": 1,
+    "education_req": "大专及以上学历",
+    "major_req": null,
+    "political_req": null,
+    "fresh_grad_req": null,
+    "age_req": "35周岁（1991年6月后出生）",
+    "physical_req": null,
+    "official_url": "https://www.rszk.net/qiye/49107.html",
+    "evidence": {
+      "education_req": "大专及以上学历；2年以上物业服务工作经验，独立负责过物业服务项目者优先考虑；熟悉公文写作及档案管理；具备良好的沟通协调能力。",
+      "major_req": "大专及以上学历；2年以上物业服务工作经验，独立负责过物业服务项目者优先考虑；熟悉公文写作及档案管理；具备良好的沟通协调能力。"
+    },
+    "confidence": 0.95
+  },
+  {
+    "post_id": 2,
+    "recruitment_id": 4005,
+    "job_name": "物业服务项目经理",
+    "employer": "南平市城发人力资源服务有限公司",
+    "province": "福建省",
+    "city": "南平市",
+    "job_code": null,
+    "plan_count": 1,
+    "education_req": "大专及以上学历",
+    "major_req": null,
+    "political_req": null,
+    "fresh_grad_req": null,
+    "age_req": "45周岁（1981年6月后出生）",
+    "physical_req": null,
+    "official_url": "https://www.rszk.net/qiye/49107.html",
+    "evidence": {
+      "education_req": "大专及以上学历；3年以上住宅物业项目管理工作经验，具备10万及以上平方米住宅物业项目管理经验者优先考虑。",
+      "major_req": "大专及以上学历；3年以上住宅物业项目管理工作经验，具备10万及以上平方米住宅物业项目管理经验者优先考虑。"
+    },
+    "confidence": 0.95
+  },
+  {
+    "post_id": 3,
+    "recruitment_id": 3932,
+    "job_name": "出纳",
+    "employer": "蒙铁特钢（内蒙古）有限公司",
+    "province": "内蒙古自治区",
+    "city": "锡林郭勒盟",
+    "job_code": null,
+    "plan_count": 1,
+    "education_req": "专科及以上",
+    "major_req": "财务、会计专业",
+    "political_req": null,
+    "fresh_grad_req": null,
+    "age_req": null,
+    "physical_req": null,
+    "official_url": "https://www.rszk.net/qiye/49325.html",
+    "evidence": {
+      "education_req": "学历要求：专科及以上",
+      "major_req": "专业要求：财务、会计专业"
+    },
+    "confidence": 0.95
+  }
+]

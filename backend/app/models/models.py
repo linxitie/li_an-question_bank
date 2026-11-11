@@ -3064,6 +3064,19 @@ class RecruitmentSourceStatus(Base):
     inserted = Column(Integer, default=0)
 
 
+class JobParseRun(Base):
+    """LLM 岗位解析任务记录。"""
+
+    __tablename__ = "job_parse_run"
+
+    run_id = Column(Integer, primary_key=True, autoincrement=True)
+    recruitment_id = Column(Integer, ForeignKey("recruitment_info.recruitment_id"), nullable=False)
+    status = Column(String(20), default="pending")
+    model = Column(String(100))
+    error = Column(Text)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class KgRelationType(Base):
     """关系类型注册表：新增关系只加一行"""
 

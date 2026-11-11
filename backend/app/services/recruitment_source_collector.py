@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import re
 from datetime import datetime
@@ -28,6 +29,59 @@ _CONTENT_SELECTORS = (
     ".main-content",
     ".detail",
 )
+_RECRUITMENT_TERMS = (
+    "公务员",
+    "招录",
+    "招聘",
+    "选调",
+    "遴选",
+    "事业单位",
+    "公安",
+    "招警",
+    "三支一扶",
+    "职位",
+    "报名",
+    "资格审查",
+    "资格复审",
+    "笔试",
+    "面试",
+    "体检",
+    "考察",
+    "公示",
+)
+_NOISE_TERMS = (
+    "习近平",
+    "党委",
+    "代表大会",
+    "长征",
+    "红军",
+    "图讯",
+    "要闻",
+    "时政",
+    "理论",
+    "学习贯彻",
+    "会议",
+    "讲话",
+    "活动",
+    "政务服务",
+)
+
+
+def _clean_title(value: str) -> str:
+    text = html_lib.unescape(value or "")
+    return BeautifulSoup(text, "html.parser").get_text(" ", strip=True).strip()
+
+
+def _is_recruitment_text(title: str, content: str = "") -> bool:
+    title = _clean_title(title)
+    if not title or len(title) < 8:
+        return False
+    if any(term in title for term in _NOISE_TERMS):
+        return False
+    if any(term in title for term in _RECRUITMENT_TERMS):
+        return True
+    return any(term in (content or "") for term in ("公务员招录", "公开招聘", "招录公告"))
+
 
 
 def _source_status(db: Session, source: RecruitmentSource) -> RecruitmentSourceStatus:
@@ -59,8 +113,10 @@ def _links(source: RecruitmentSource, html: str, limit: int) -> list[str]:
         url = urljoin(source.list_url, anchor["href"]).split("#")[0]
         if urlparse(url).netloc.lower() != source.host:
             continue
-        text = anchor.get_text(" ", strip=True)
+        text = _clean_title(anchor.get_text(" ", strip=True))
         if len(text) < 8:
+            continue
+        if not _is_recruitment_text(text):
             continue
         if not re.search(source.link_regex, urlparse(url).path):
             continue
@@ -75,15 +131,18 @@ def _links(source: RecruitmentSource, html: str, limit: int) -> list[str]:
 
 def _parse_detail(html: str, url: str, source: RecruitmentSource) -> tuple[str, str, str]:
     soup = BeautifulSoup(html, "html.parser")
-    title = ""
-    for selector in ('meta[property="og:title"]', "h1", ".title", ".article-title"):
-        node = soup.select_one(selector)
-        if node:
-            title = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
-            if title:
-                break
-    if not title and soup.title:
-        title = soup.title.get_text(" ", strip=True)
+    candidates = []
+    for selector in ('meta[property="og:title"]', "h1", ".article-title", ".title"):
+        for node in soup.select(selector):
+            value = node.get("content") if node.name == "meta" else node.get_text(" ", strip=True)
+            cleaned = _clean_title(value or "")
+            if cleaned:
+                candidates.append(cleaned)
+    if soup.title:
+        candidates.append(_clean_title(soup.title.get_text(" ", strip=True)))
+    title = max(candidates, key=len) if candidates else ""
+    if title == source.name or title == source.list_url:
+        title = ""
     node = None
     best = 0
     for selector in _CONTENT_SELECTORS:
@@ -155,8 +214,8 @@ def collect_source(
             try:
                 html, used = _fetch(link, source)
                 title, content, published = _parse_detail(html, link, source)
-                if not title or len(content) < 80:
-                    report["errors"].append(f"{link[:100]}: empty title/content")
+                if not title or len(content) < 80 or not _is_recruitment_text(title, content):
+                    report["errors"].append(f"{link[:100]}: not a recruitment article")
                     continue
                 exists = db.query(RecruitmentInfo).filter(RecruitmentInfo.url == link).first()
                 if exists:
@@ -180,7 +239,6 @@ def collect_source(
                     )
                     db.add(rec)
                     db.flush()
-                    _ensure_post(db, rec)
                     db.commit()
                 report["inserted"] += 1
             except Exception as exc:
