@@ -91,11 +91,12 @@
                 ></textarea>
               </div>
 
-              <!-- 结果显示 -->
+              <!-- 结果显示：对错来自**服务端**交卷回包的 details（考试取题不含答案） -->
               <div v-if="state.showResult" class="q-result">
-                <span :class="['result-badge', isCorrect(q) ? 'correct-badge' : 'incorrect-badge']">
-                  {{ isCorrect(q) ? '✓ 正确' : '✗ 错误' }}
+                <span :class="['result-badge', reviewClass(q)]">
+                  {{ reviewLabel(q) }}
                 </span>
+                <span v-if="reviewAnswerHint(q)" class="result-right-answer">{{ reviewAnswerHint(q) }}</span>
                 <p v-if="q.explain" class="result-explain">📖 {{ q.explain }}</p>
               </div>
 
@@ -148,17 +149,35 @@
       </div>
     </div>
 
-    <!-- 成绩弹窗 -->
+    <!-- 成绩弹窗（2026-11-11 P0/P1：数字全部来自服务端回包，口径见 utils/examSummary.ts） -->
     <div v-if="state.showResultDialog" class="modal-overlay">
       <div class="modal-dialog result-dialog">
         <div class="result-icon">🎉</div>
         <h3>交卷成功！</h3>
         <div class="result-stats">
-          <div class="rs-item"><span class="rs-label">得分</span><span class="rs-value score">{{ state.submitScore }} / {{ state.submitMaxScore }}</span></div>
-          <div class="rs-item"><span class="rs-label">正确率</span><span class="rs-value green">{{ state.submitAccuracy }}%</span></div>
-          <div class="rs-item"><span class="rs-label">正确/错误</span><span class="rs-value">{{ state.submitCorrect }} / {{ state.submitWrong }}</span></div>
-          <div class="rs-item"><span class="rs-label">用时</span><span class="rs-value">{{ formatTime(state.submitTimeSpent) }}</span></div>
+          <div class="rs-item">
+            <span class="rs-label">得分</span>
+            <span class="rs-value score">{{ summary.scoreText }}</span>
+          </div>
+          <div class="rs-item">
+            <span class="rs-label">得分率</span>
+            <span class="rs-value green">{{ summary.rateText }}</span>
+            <span class="rs-sub">{{ summary.rateRatioText }}</span>
+          </div>
+          <div class="rs-item">
+            <span class="rs-label">正确 / 错误</span>
+            <span class="rs-value">{{ summary.correctText }} / {{ summary.wrongText }}</span>
+          </div>
+          <div class="rs-item">
+            <span class="rs-label">用时</span>
+            <span class="rs-value">{{ summary.timeText }}</span>
+          </div>
         </div>
+        <p class="result-line">
+          已答 <b>{{ summary.answeredText }}</b> 题 · 未答 <b>{{ summary.unansweredText }}</b> 题（未答按错计）
+          <span v-if="summary.accuracyAnsweredText !== '—'"> · 答对率（按已答）<b>{{ summary.accuracyAnsweredText }}</b></span>
+        </p>
+        <p v-if="summary.pendingText" class="result-line result-line--warn">{{ summary.pendingText }}</p>
         <p class="result-hint">✅ 成绩已同步到「成绩分析 → 自测」</p>
         <div class="modal-actions">
           <button class="pa-btn generate-btn" @click="viewDetails">查看详情</button>
@@ -175,6 +194,7 @@ import { defineComponent, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
+import { buildExamSummary } from '@/utils/examSummary';
 
 export default defineComponent({
   name: 'PaperAnswer',
@@ -197,11 +217,9 @@ export default defineComponent({
       showExitDialog: false,
       showSubmitDialog: false,
       showResultDialog: false,
-      submitScore: 0,
-      submitMaxScore: 0,
-      submitAccuracy: 0,
-      submitCorrect: 0,
-      submitWrong: 0,
+      // 2026-11-11 P0/P1：交卷结果一律以**服务端回包**为准，不再前端拼数
+      submitSummary: null,
+      submitDetails: {},
       submitTimeSpent: 0,
     });
     return { state, provider, renderQuestionContent };
@@ -221,6 +239,14 @@ export default defineComponent({
     },
     totalQuestions() {
       return this.questionsParsed.length;
+    },
+    /** 交卷结果的统一口径（见 utils/examSummary.ts）；未交卷时给全 0 占位 */
+    summary() {
+      if (this.state.submitSummary) return this.state.submitSummary;
+      return buildExamSummary({
+        score: 0, maxScore: 0, correct: 0, wrong: 0, unanswered: 0,
+        total: this.totalQuestions, answered: 0, manualPending: 0, seconds: 0
+      });
     },
   },
   methods: {
@@ -309,8 +335,12 @@ export default defineComponent({
 
         this.state.questions = JSON.stringify(questions);
 
-        // 恢复localStorage进度
-        this.restoreProgress();
+        // 2026-11-11 P1：断点续答**以服务端为准**（与手机端同一套 resume）。
+        // 以前只读 localStorage：换设备/清缓存就丢答案，且计时器每次都从满时长重来
+        // （实测同一场：页面显示 45 秒、库里 139 秒）。
+        await this.restoreFromServer();
+        // localStorage 仅作离线兜底：服务端没给答案时才用
+        if (!Object.keys(this.answersParsed).length) this.restoreProgress();
         // 等 v-for 渲染完成后，把材料块插到每组首题的题干上方
         this.$nextTick(this.mountGroupMaterials);
       } catch(e) {
@@ -738,7 +768,9 @@ export default defineComponent({
       this._timer = setInterval(function() {
         if (self.state.timeLeft > 0) {
           self.state.timeLeft--;
-        } else {
+        } else if (!self._submitting && !self.state.showResult) {
+          // 到点自动交卷：只用一次（`_submitting` 守卫），否则提交失败会每秒重试
+          self._submitting = true;
           self.confirmSubmit();
         }
       }, 1000);
@@ -762,6 +794,8 @@ export default defineComponent({
         };
         localStorage.setItem('paper_progress_' + this.state.recordId, JSON.stringify(progress));
       } catch(e) {}
+      // 2026-11-11 P1：同时推到服务端（换设备/清缓存也能续答；localStorage 只做离线兜底）
+      this.pushProgressToServer();
     },
 
     restoreProgress() {
@@ -777,6 +811,68 @@ export default defineComponent({
         if (progress.currentIndex !== undefined) this.state.currentIndex = progress.currentIndex;
         if (progress.timeLeft !== undefined) this.state.timeLeft = progress.timeLeft;
       } catch(e) {}
+    },
+
+    /** 服务端续答：题目 + 已存答案 + 剩余秒数（与手机端同一接口） */
+    async restoreFromServer() {
+      if (!this.state.recordId) return;
+      try {
+        var res = await window.__VTJ_AUTH__.apiFetch(
+          '/api/exams/records/' + this.state.recordId + '/resume');
+        if (!res.ok) return;          // 409 = 已完成；404 = 记录没了，静默回落 localStorage
+        var data = await res.json();
+        if (data.remaining_seconds !== null && data.remaining_seconds !== undefined) {
+          this.state.timeLeft = Math.max(0, Number(data.remaining_seconds) || 0);
+        }
+        var saved = data.saved_answers || {};
+        var labels = this.state.optionLabels;
+        var map = {};
+        var self = this;
+        Object.keys(saved).forEach(function (qid) {
+          var raw = String(saved[qid] || '').trim();
+          if (!raw) return;
+          var letters = raw.replace(/，/g, ',').split(',').map(function (s) { return s.trim().toUpperCase(); });
+          var q = self.questionsParsed.filter(function (x) { return String(x.id) === String(qid); })[0];
+          var isMulti = q && self.getRenderMode(q.type) === 'checkbox';
+          var idxs = letters.map(function (l) { return labels.indexOf(l); })
+            .filter(function (i) { return i >= 0; });
+          if (!idxs.length) return;
+          map[qid] = isMulti ? idxs : idxs[0];
+        });
+        if (Object.keys(map).length) this.state.answers = JSON.stringify(map);
+      } catch(e) {
+        console.warn('[PaperAnswer] 服务端续答失败，回落本地缓存:', e);
+      }
+    },
+
+    /** 把当前作答推到服务端（`PUT /api/exams/{record_id}/progress`，幂等 UPSERT） */
+    async pushProgressToServer() {
+      if (!this.state.recordId || this.state.showResult) return;
+      var self = this;
+      var answers = this.answersParsed;
+      var items = [];
+      Object.keys(answers).forEach(function (qid) {
+        var a = answers[qid];
+        var answer = '';
+        if (Array.isArray(a)) {
+          answer = a.map(function (i) { return self.state.optionLabels[i]; }).sort().join(',');
+        } else if (typeof a === 'string' && isNaN(parseInt(a))) {
+          answer = a;
+        } else if (a !== undefined && a !== null) {
+          answer = self.state.optionLabels[parseInt(a)] || '';
+        }
+        if (String(answer).trim()) items.push({ question_id: Number(qid), answer: answer, time_spent: 0 });
+      });
+      if (!items.length) return;
+      try {
+        await window.__VTJ_AUTH__.apiFetch('/api/exams/' + this.state.recordId + '/progress', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(items),
+        });
+      } catch(e) {
+        console.warn('[PaperAnswer] 进度上云失败（不影响本地作答）:', e);
+      }
     },
 
     // ===== 选项操作 =====
@@ -884,6 +980,7 @@ export default defineComponent({
 
       try {
         var timeSpent = Math.max(0, this.state.totalDuration - this.state.timeLeft);
+        this._submitting = true;
         var res = await window.__VTJ_AUTH__.apiFetch('/api/exams/' + this.state.recordId + '/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -895,35 +992,87 @@ export default defineComponent({
           throw new Error(e.detail || '提交失败');
         }
         var data = await res.json();
-        this.state.submitScore = data.data ? data.data.total_score : (data.total_score || 0);
-        this.state.submitMaxScore = data.data ? data.data.max_score : (data.max_score || 100);
-        this.state.submitAccuracy = data.data ? Math.round((this.state.submitScore / this.state.submitMaxScore) * 100) : 0;
-        this.state.submitCorrect = data.data ? (data.data.scored_count || 0) : 0;
-        this.state.submitWrong = this.totalQuestions - this.state.submitCorrect;
-        this.state.submitTimeSpent = timeSpent;
+        // 2026-11-11 P0：交卷结果一律以服务端回包为准。
+        // 旧代码把 `scored_count`（参与评分题数=97）当答对数 → 弹窗显示 97/0。
+        var payload = data.data || data || {};
+        var detailMap = {};
+        (payload.details || []).forEach(function (d) { detailMap[d.question_id] = d; });
+        this.state.submitDetails = detailMap;
+        this.state.submitSummary = buildExamSummary({
+          score: payload.total_score || 0,
+          maxScore: payload.max_score || 0,
+          correct: payload.correct_count || 0,
+          wrong: payload.wrong_count || 0,
+          unanswered: payload.unanswered_count || 0,
+          total: payload.question_total || this.totalQuestions,
+          answered: payload.answered_count || 0,
+          manualPending: payload.manual_pending_count || 0,
+          // 用时用服务端 time_used（客户端计时器在页面刷新后会重置，实测 45s vs 库内 139s）
+          seconds: payload.time_used != null ? payload.time_used : timeSpent
+        });
+        this.state.submitTimeSpent = this.state.submitSummary.timeText;
         this.state.showResult = true;
         this.state.showResultDialog = true;
 
-        if (this._timer) clearInterval(this._timer);
-        if (this._autoSave) clearInterval(this._autoSave);
-        // 清除进度
+        if (this._timer) { clearInterval(this._timer); this._timer = null; }
+        if (this._autoSave) { clearInterval(this._autoSave); this._autoSave = null; }
+        // 清除本地进度（服务端已保存答案，不需要兜底了）
         localStorage.removeItem('paper_progress_' + this.state.recordId);
       } catch(err) {
+        this._submitting = false;
         alert('提交失败: ' + (err.message || '网络错误'));
       }
     },
 
     // ===== 结果 =====
+    /** 该题在服务端回包里的结果（null = 未参与评分/未知） */
+    detailOf(q) {
+      var map = this.state.submitDetails || {};
+      var d = map[q && q.id];
+      return d === undefined ? null : d;
+    },
+
     isCorrect(q) {
-      // 仅在showResult后有效（考试模式下没有answer字段，无法判断）
-      return false;
+      var d = this.detailOf(q);
+      return !!(d && d.is_correct === true);
+    },
+
+    /** 交卷后逐题的标签：正确 / 错误 / 未作答（不再一律显示"错误"） */
+    reviewLabel(q) {
+      var d = this.detailOf(q);
+      if (!d) return '— 未评分';
+      if (d.is_correct === null) return '📝 待人工评分';
+      var ans = String(d.student_answer || '').trim();
+      if (!ans) return '— 未作答';
+      return d.is_correct ? '✓ 正确' : '✗ 错误';
+    },
+
+    reviewClass(q) {
+      var d = this.detailOf(q);
+      if (!d) return 'incorrect-badge';
+      if (d.is_correct === null) return 'pending-badge';
+      if (d.is_correct) return 'correct-badge';
+      return String(d.student_answer || '').trim() ? 'incorrect-badge' : 'unanswered-badge';
+    },
+
+    /** 错题给出正确答案（考试取题里没有答案，只有交卷回包有） */
+    reviewAnswerHint(q) {
+      var d = this.detailOf(q);
+      if (!d || d.is_correct === true) return '';
+      var right = String(d.correct_answer || '').trim();
+      return right ? '正确答案：' + right : '';
     },
 
     isCorrectOption(q, oidx) {
       if (!this.state.showResult) return false;
-      var correctLetter = q.answer;
-      if (!correctLetter) return false;
-      return this.state.optionLabels[oidx] === correctLetter;
+      // 考试取题里没有答案；正确答案只存在于交卷回包的 details 里
+      var d = this.detailOf(q);
+      var right = d ? String(d.correct_answer || '').trim() : '';
+      if (!right) return false;
+      var letter = this.state.optionLabels[oidx];
+      // 多选题答案是 "A,C" 这种，用逗号/中文逗号切分后逐项比对
+      return right.replace(/，/g, ',').split(',').map(function (s) { return s.trim(); })
+        .indexOf(letter) >= 0;
     },
 
     viewDetails() {
@@ -1070,6 +1219,14 @@ export default defineComponent({
 .result-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; }
 .correct-badge { background: #f0f9eb; color: #67c23a; }
 .incorrect-badge { background: #fef0f0; color: #f56c6c; }
+/* 未作答 ≠ 错误：用灰蓝，避免"没答"被误读成"答错"；待人工评分用琥珀 */
+.unanswered-badge { background: #f4f4f5; color: #909399; }
+.pending-badge { background: #fff7e6; color: #b45309; }
+.result-right-answer { margin-left: 8px; font-size: 13px; color: #67c23a; font-weight: 600; }
+.rs-sub { display: block; margin-top: 2px; font-size: 11px; color: #909399; font-weight: 400; }
+.result-line { margin: 6px 0 0; font-size: 13px; color: #606266; line-height: 1.6; }
+.result-line b { color: #1A3C6D; }
+.result-line--warn { color: #b45309; }
 .result-explain { margin-top: 8px; color: #666; font-size: 14px; line-height: 1.6; }
 
 /* 操作 */

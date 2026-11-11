@@ -55,7 +55,7 @@ async def get_self_test_records(
     for r in records:
         paper = paper_map.get(r.paper_id)
         max_score = float(paper.total_score) if paper else 100
-        accuracy = round(float(r.total_score) / max_score * 100, 1) if max_score > 0 else 0
+        accuracy = round(float(r.total_score) / max_score * 100, 2) if max_score > 0 else 0
 
         data.append({
             "record_id": r.record_id,
@@ -111,7 +111,7 @@ async def get_mock_exam_records(
     for r in records:
         paper = paper_map.get(r.paper_id)
         max_score = float(paper.total_score) if paper else 100
-        accuracy = round(float(r.total_score) / max_score * 100, 1) if max_score > 0 else 0
+        accuracy = round(float(r.total_score) / max_score * 100, 2) if max_score > 0 else 0
 
         # 计算排名（分数 >= 当前用户分数的人数占比）
         higher_count = sum(1 for rec in all_mock_records if float(rec.total_score) > float(r.total_score))
@@ -181,7 +181,7 @@ async def get_exam_stats(
 
     total_questions = len(answer_details)
     correct_questions = sum(1 for a in answer_details if a.is_correct == 1)
-    accuracy_rate = round(correct_questions / total_questions * 100, 1) if total_questions > 0 else 0
+    accuracy_rate = round(correct_questions / total_questions * 100, 2) if total_questions > 0 else 0
 
     # 计算排名（模考模式）
     rank_percent = None
@@ -235,7 +235,7 @@ async def get_exam_trend(
     for i, r in enumerate(records):
         paper = paper_map.get(r.paper_id)
         max_score = float(paper.total_score) if paper else 100
-        accuracy = round(float(r.total_score) / max_score * 100, 1) if max_score > 0 else 0
+        accuracy = round(float(r.total_score) / max_score * 100, 2) if max_score > 0 else 0
 
         trend.append({
             "index": i + 1,

@@ -73,9 +73,10 @@ class ExamService:
         #   免得"有题却因字段漏更被挡住"。
         from ..api.v1.exam import contract
         questions = contract.question_total(db, paper)
-        if not contract.exam_ready(paper, questions=questions):
+        missing = contract.answer_gap(db, paper)
+        if not contract.exam_ready(paper, questions=questions, answers_missing=missing):
             raise ValueError(contract.exam_block_message(
-                contract.exam_state(paper, questions=questions)))
+                contract.exam_state(paper, questions=questions, answers_missing=missing)))
 
         # 3. 创建新的考试记录
         exam_record = ExamRecord(

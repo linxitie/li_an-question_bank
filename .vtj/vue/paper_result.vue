@@ -18,21 +18,21 @@
           </div>
           <div class="score-summary">
             <div class="score-main">
-              <span class="score-big">{{ state.record.total_score || 0 }}</span>
+              <span class="score-big">{{ state.summary ? state.summary.scoreText.split(' / ')[0] : (state.record.total_score || 0) }}</span>
               <span class="score-divider">/</span>
-              <span class="score-max">{{ state.record.max_score || 100 }}</span>
+              <span class="score-max">{{ state.summary ? state.summary.scoreText.split(' / ')[1] : '—' }}</span>
             </div>
             <div class="score-meta">
               <div class="meta-item">
-                <span class="meta-label">正确率</span>
-                <span class="meta-value green">{{ state.accuracy }}%</span>
+                <span class="meta-label">得分率</span>
+                <span class="meta-value green">{{ state.summary ? state.summary.rateText : '—' }}</span>
               </div>
               <div class="meta-item">
                 <span class="meta-label">用时</span>
                 <span class="meta-value">{{ formatTime(state.record.duration_used || 0) }}</span>
               </div>
               <div class="meta-item">
-                <span class="meta-label">正确/错误</span>
+                <span class="meta-label">正确 / 错误</span>
                 <span class="meta-value">{{ state.correctCount }} / {{ state.wrongCount }}</span>
               </div>
               <div class="meta-item">
@@ -41,6 +41,14 @@
               </div>
             </div>
           </div>
+          <!-- 2026-11-11 P1：把"答了多少 / 未答多少 / 待人工评分"说清楚，避免"为什么 97 题只对 2 题"的困惑 -->
+          <p v-if="state.summary" class="score-note">
+            已答 <b>{{ state.summary.answeredText }}</b> 题 · 未答 <b>{{ state.summary.unansweredText }}</b> 题（未答按错计）
+            <span v-if="state.summary.accuracyAnsweredText !== '—'"> · 答对率（按已答）<b>{{ state.summary.accuracyAnsweredText }}</b></span>
+          </p>
+          <p v-if="state.summary && state.summary.pendingText" class="score-note score-note--warn">
+            {{ state.summary.pendingText }}
+          </p>
           <div class="result-actions">
             <button class="pr-btn primary" @click="$router.push('/student/papers')">返回试卷列表</button>
             <button class="pr-btn outline" @click="retakeExam">再考一次</button>
@@ -114,6 +122,7 @@
 import { defineComponent, reactive, onMounted } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { buildExamSummary } from '@/utils/examSummary';
 
 export default defineComponent({
   name: 'PaperResult',
@@ -126,6 +135,8 @@ export default defineComponent({
       correctCount: 0,
       wrongCount: 0,
       accuracy: 0,
+      // 2026-11-11 P1：与交卷弹窗共用同一份口径（utils/examSummary.ts）
+      summary: null,
       expandedAnalysis: {},
     });
     return { state, provider, renderQuestionContent };
@@ -208,9 +219,26 @@ export default defineComponent({
         this.state.details = details;
         this.state.correctCount = details.filter(function(d) { return d.is_correct; }).length;
         this.state.wrongCount = details.length - this.state.correctCount;
-        this.state.accuracy = details.length > 0
-          ? Math.round((this.state.correctCount / details.length) * 100)
-          : 0;
+
+        // 2026-11-11 P1：口径只在 examSummary 里算一次（弹窗/结果页/成绩分析共用）。
+        // 记录详情里 `max_score` 是权威满分（97 分卷就是 97），不再 `|| 100` 兜底。
+        var total = Number(data.question_total) || details.length;
+        var answered = Number(data.answered_count);
+        if (!Number.isFinite(answered)) {
+          answered = details.filter(function (d) { return String(d.student_answer || '').trim(); }).length;
+        }
+        this.state.summary = buildExamSummary({
+          score: Number(data.total_score) || 0,
+          maxScore: Number(data.max_score),
+          correct: this.state.correctCount,
+          wrong: this.state.wrongCount,
+          unanswered: Math.max(total - answered, 0),
+          total: total,
+          answered: answered,
+          manualPending: Number(data.manual_pending_count) || 0,
+          seconds: Number(data.duration_used) || 0
+        });
+        this.state.accuracy = this.state.summary.rateText;
       } catch(e) {
         console.error('[PaperResult] 加载失败:', e);
       } finally {
@@ -263,6 +291,10 @@ export default defineComponent({
 .meta-label { font-size: 12px; color: #999; }
 .meta-value { font-size: 18px; font-weight: 700; color: #1A3C6D; }
 .meta-value.green { color: #67c23a; }
+/* 2026-11-11 P1：把"已答/未答/答对率/待人工评分"写清楚，减少"为什么只对 2 题"的困惑 */
+.score-note { margin: 0 0 12px; font-size: 13px; color: #606266; line-height: 1.7; }
+.score-note b { color: #1A3C6D; }
+.score-note--warn { color: #b45309; }
 
 /* 分母口径（2026-11-09）：结果页原来并排两个「0 / 97」——一个是分数、一个是题数，容易看混。
    这里只加**视觉后缀**，不改模板结构（R3：.vtj 页面的 <template> 由设计器维护）：

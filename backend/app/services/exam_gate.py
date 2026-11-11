@@ -55,7 +55,8 @@ def state_of(db: Session, material: StudyMaterial,
     code = paper_code_of(material)
     paper = find_paper(db, code) if code else None
     state = contract.exam_state(paper, now,
-                                questions=contract.question_total(db, paper))
+                                questions=contract.question_total(db, paper),
+                                answers_missing=contract.answer_gap(db, paper))
     state["paper_code"] = code or None
     state["paper_id"] = paper.paper_id if paper is not None else None
     # 手动总闸原值（前端开关只认这一条）：NULL 视为 1；不能用 `or 1`，否则 0 会被吞成 1
@@ -68,7 +69,8 @@ def set_open(db: Session, material: StudyMaterial, *, open_: bool) -> dict:
     """手动总闸。**不 commit**（调用方与审计同一事务）。"""
     paper = _resolve(db, material)
     paper.exam_open = 1 if open_ else 0
-    return contract.exam_state(paper, questions=contract.question_total(db, paper))
+    return contract.exam_state(paper, questions=contract.question_total(db, paper),
+                               answers_missing=contract.answer_gap(db, paper))
 
 
 def set_window(db: Session, material: StudyMaterial, *,
@@ -79,7 +81,8 @@ def set_window(db: Session, material: StudyMaterial, *,
     paper = _resolve(db, material)
     paper.exam_open_at = open_at
     paper.exam_close_at = close_at
-    return contract.exam_state(paper, questions=contract.question_total(db, paper))
+    return contract.exam_state(paper, questions=contract.question_total(db, paper),
+                               answers_missing=contract.answer_gap(db, paper))
 
 
 def parse_dt(value) -> Optional[datetime]:
@@ -114,7 +117,8 @@ def open_conditions(now: Optional[datetime] = None) -> list:
 def paper_state(db: Session, paper, now: Optional[datetime] = None) -> dict:
     """卷的考试状态块（catalog 列表用；与资料页 `paper.exam` 同一份契约）。"""
     return contract.exam_state(paper, now,
-                               questions=contract.question_total(db, paper))
+                               questions=contract.question_total(db, paper),
+                               answers_missing=contract.answer_gap(db, paper))
 
 
 def paper_hint(db: Session, paper, now: Optional[datetime] = None) -> str:

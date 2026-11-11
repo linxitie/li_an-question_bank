@@ -170,37 +170,83 @@ def exam_is_open(paper, now: Optional[datetime] = None) -> bool:
     return True
 
 
+def answer_gap(db: Optional[Session], paper) -> int:
+    """卷面有多少道题**还没有答案**（2026-11-11 用户批准的开考闸门）。
+
+    为什么必须拦：答案没录的卷，学生交卷后 `is_correct` 全为 0 —— 白考一场，
+    而且结果页看不出"是没答案还是全错"。判分完全依赖 `question_bank.answer`，
+    所以这里与 `question_total` 同源：以 `paper_question_relation` 为准，
+    **题目行丢失也算缺失**（否则会漏判）。
+
+    返回：缺失答案的题数；`0` 表示可以开考。取不到卷/无 db 时返回 0（不拦）。
+    """
+    if db is None or paper is None:
+        return 0
+    from sqlalchemy import func
+
+    from ....models.models import PaperQuestionRelation, QuestionBank
+
+    paper_id = getattr(paper, "paper_id", None)
+    if paper_id is None:
+        return 0
+    rel_n = int(db.query(func.count(PaperQuestionRelation.relation_id))
+                .filter(PaperQuestionRelation.paper_id == paper_id)
+                .scalar() or 0)
+    if rel_n <= 0:
+        return 0
+    filled = int(db.query(func.count(PaperQuestionRelation.relation_id))
+                 .join(QuestionBank,
+                       QuestionBank.question_id == PaperQuestionRelation.question_id)
+                 .filter(PaperQuestionRelation.paper_id == paper_id,
+                         QuestionBank.answer.isnot(None),
+                         func.trim(QuestionBank.answer) != "")
+                 .scalar() or 0)
+    return max(rel_n - filled, 0)
+
+
 def exam_ready(paper, now: Optional[datetime] = None, *,
-               questions: Optional[int] = None) -> bool:
-    """完整判据：已发布 + 开关/窗口放行 + 有题。学生端只应看这个值。
+               questions: Optional[int] = None,
+               answers_missing: Optional[int] = None) -> bool:
+    """完整判据：已发布 + 开关/窗口放行 + 有题 + **答案已录全**。学生端只应看这个值。
 
     Args:
         questions: 真实题量（调用方有 db 时传 `question_total(db, paper)`）；
             不传则退回缓存值 `paper.question_count`。
+        answers_missing: 未录答案的题数（传 `answer_gap(db, paper)`）；
+            `None` 表示跳过该校验（兼容老调用方/纯单测）。
     """
     if paper is None or paper.paper_type != VISIBLE_TYPE:
         return False
     count = int(paper.question_count or 0) if questions is None else int(questions)
     if count <= 0:
         return False
+    if answers_missing is not None and int(answers_missing) > 0:
+        return False
     return exam_is_open(paper, now)
 
 
 def exam_state(paper, now: Optional[datetime] = None, *,
-               questions: Optional[int] = None) -> dict:
-    """给管理端/资料页的只读状态块（含"为什么不能考"的原因码）。"""
+               questions: Optional[int] = None,
+               answers_missing: Optional[int] = None) -> dict:
+    """给管理端/资料页的只读状态块（含"为什么不能考"的原因码）。
+
+    `answers_missing`（未录答案题数）为 2026-11-11 新增闸门；不传则不校验。
+    判定顺序：未发布 → 无题 → 开关/窗口 → **答案未录全** → ready
+    （时间类原因优先：学生先该知道"这场考试关了/没到点"，而不是"题库没答案"）。
+    """
     now = now or datetime.now()
     stamp = now.replace(microsecond=0).isoformat(sep=" ")
     if paper is None:
         return {"known": False, "published": False, "open": False, "ready": False,
                 "reason": "no_paper", "open_at": None, "close_at": None,
-                "question_count": 0, "server_now": stamp}
+                "question_count": 0, "answers_missing": None, "server_now": stamp}
     open_at = _get(paper, "exam_open_at")
     close_at = _get(paper, "exam_close_at")
     is_open = exam_is_open(paper, now)
     published = paper.paper_type == VISIBLE_TYPE
     count = int(paper.question_count or 0) if questions is None else int(questions)
     has_questions = count > 0
+    missing = None if answers_missing is None else max(int(answers_missing), 0)
     if not published:
         reason = "draft"
     elif not has_questions:
@@ -213,17 +259,21 @@ def exam_state(paper, now: Optional[datetime] = None, *,
             reason = "not_started"
         else:
             reason = "expired"
+    elif missing:
+        # 答案没录全：判分全靠 question_bank.answer，进来只会得到一片 0 分
+        reason = "no_answers" if missing >= count else "answers_incomplete"
     else:
         reason = "ready"
     return {
         "known": True,
         "published": published,
         "open": is_open,
-        "ready": published and is_open and has_questions,
+        "ready": published and is_open and has_questions and not (missing or 0),
         "reason": reason,
         "open_at": open_at.isoformat(sep=" ") if open_at else None,
         "close_at": close_at.isoformat(sep=" ") if close_at else None,
         "question_count": count,
+        "answers_missing": missing,
         # 判定用的是**服务器本地时间**（决策 S1）；把它回给前端，
         # 管理端弹层显示"现在 20:41 在窗口内"才是准的（浏览器时区可能不同）。
         "server_now": stamp,
@@ -271,6 +321,9 @@ REASON_TEXT = {
     "closed": "考试已关闭，暂时不能开始（历史成绩不受影响）",
     "not_started": "考试还没到开始时间",
     "expired": "考试已结束",
+    # 2026-11-11：答案没录全的卷不允许开考（否则判分全靠空答案，学生白考一场）
+    "no_answers": "这套卷还没有录入正确答案，暂时不能开始",
+    "answers_incomplete": "这套卷还有部分题没录正确答案，暂时不能开始",
     "ready": "",
 }
 
@@ -290,4 +343,6 @@ def exam_block_message(state: Optional[dict] = None, now: Optional[datetime] = N
         text = f"{text}（{state['open_at'][:16]} 开始）"
     elif reason == "expired" and state.get("close_at"):
         text = f"{text}（{state['close_at'][:16]} 结束）"
+    elif reason in ("no_answers", "answers_incomplete") and state.get("answers_missing"):
+        text = f"{text}（还差 {state['answers_missing']} 题，请联系管理员补答案）"
     return text

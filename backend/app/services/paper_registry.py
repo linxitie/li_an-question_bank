@@ -70,7 +70,8 @@ def paper_block(db: Session, material: StudyMaterial) -> dict:
     #   的完整判据（`contract.exam_ready`）。原因：P2 之后 PUBLISHED 只是必要条件 ——
     #   管理员可能已关闭这场考试，或卷里还是 0 题；前端若仍显示「开始考试」，
     #   学生点进去只会拿到 400。同时把完整 `exam` 状态块给出，前端不必自己拼文案。
-    state = contract.exam_state(exam, questions=contract.question_total(db, exam))
+    state = contract.exam_state(exam, questions=contract.question_total(db, exam),
+                                answers_missing=contract.answer_gap(db, exam))
     return {
         "paper_code": code or None,
         "year": merged.get("year"),

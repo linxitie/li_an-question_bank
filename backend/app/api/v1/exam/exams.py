@@ -74,7 +74,8 @@ async def get_exams_list(
         # 浏览器时区不同就会算错；原因码也只有后端知道（closed / not_started / expired /
         # no_questions / draft）。口径与资料页的 `paper.exam` 完全一致（同一份 contract）。
         exam_state = exam_contract.exam_state(
-            p, now, questions=exam_contract.question_total(db, p))
+            p, now, questions=exam_contract.question_total(db, p),
+            answers_missing=exam_contract.answer_gap(db, p))
         items.append({
             "paper_id": p.paper_id,
             "paper_name": p.paper_name,
@@ -284,11 +285,12 @@ async def start_exam(
     # 与 `POST /api/exams/start` 用同一个判定函数，避免两条链路口径漂移。
     from . import contract
     questions = contract.question_total(db, paper)
-    if not contract.exam_ready(paper, questions=questions):
+    missing = contract.answer_gap(db, paper)
+    if not contract.exam_ready(paper, questions=questions, answers_missing=missing):
         raise HTTPException(
             status_code=400,
             detail=contract.exam_block_message(
-                contract.exam_state(paper, questions=questions)))
+                contract.exam_state(paper, questions=questions, answers_missing=missing)))
 
     # 检查答题次数
     attempt_count = db.query(ExamRecord).filter(
@@ -463,6 +465,14 @@ async def submit_answers(
         f"得分: {total_score}/{paper.total_score}"
     )
 
+    # 2026-11-11（P0）：答题页要显示「正确/错误」与逐题对错，必须由后端给准数。
+    # 之前前端拿 `scored_count`（= 参与评分的题数，97）当"答对数"，于是显示成 97/0。
+    # 口径：wrong_count 只算"作答了但答错"，空白归 unanswered_count，
+    # 这样 correct + wrong + unanswered == question_total（三数互不重叠）。
+    correct_count = sum(1 for d in created_details if d.is_correct == 1)
+    wrong_count = sum(
+        1 for d in created_details
+        if d.is_correct == 0 and (d.student_answer or "").strip())
     return SuccessResponse(
         message="提交成功",
         data={
@@ -471,12 +481,29 @@ async def submit_answers(
             "max_score": float(paper.total_score),
             "time_used": int(max(0, elapsed_seconds)),
             "is_late": is_late,
+            # `scored_count` 语义 = 参与评分的题数（≠答对/已答），保留只为兼容老前端
             "scored_count": scored_count,
             # 口径 A 的三个派生字段（只增不改；结果页/成绩单可直接用）
             "is_scored": bool(scoring.is_scored),
             "manual_pending_count": scoring.manual_pending_count,
             "answered_count": scoring.answered_count,
-            "question_total": scoring.question_total
+            "question_total": scoring.question_total,
+            # P0 新增：对/错/未答 三个数（和为 question_total）
+            "correct_count": correct_count,
+            "wrong_count": wrong_count,
+            "unanswered_count": max(scoring.question_total - scoring.answered_count, 0),
+            # P0 新增：逐题结果（交卷后回给前端渲染"✓/✗、正确答案、得分"）
+            "details": [
+                {
+                    "question_id": d.question_id,
+                    "student_answer": d.student_answer,
+                    "correct_answer": question_dict[d.question_id].answer
+                    if d.question_id in question_dict else None,
+                    "is_correct": (None if d.is_correct is None else bool(d.is_correct)),
+                    "score_obtained": float(d.score_obtained or 0),
+                }
+                for d in created_details
+            ],
         }
     )
 
