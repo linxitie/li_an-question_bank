@@ -12,7 +12,7 @@ from sqlalchemy import desc
 
 from ....core.database import get_db
 from ....core.security import get_current_user, require_teacher_or_admin
-from ....models.models import SysUser, UserFeedback, FeedbackReply
+from ....models.models import SysUser, UserFeedback, FeedbackReply, UserNotification
 
 router = APIRouter(prefix="/api/feedback", tags=["意见反馈"])
 admin_router = APIRouter(prefix="/api/admin/feedback", tags=["反馈管理"])
@@ -126,6 +126,23 @@ async def submit_feedback(
     from datetime import datetime as _dt
 
     fb.ticket_no = f"FB{_dt.now().strftime('%Y%m%d')}-{fb.feedback_id:06d}"
+    # 2026-11-07：反馈同步进管理员消息中心（铃铛）
+    admin_ids = [
+        row[0]
+        for row in db.query(SysUser.user_id).filter(SysUser.user_type == "admin").all()
+    ]
+    for admin_id in admin_ids:
+        db.add(
+            UserNotification(
+                user_id=admin_id,
+                type="feedback",
+                title="收到新的问题反馈",
+                content=(content or "")[:80],
+                link=f"/admin/feedback?open={fb.feedback_id}",
+                related_type="feedback",
+                related_id=fb.feedback_id,
+            )
+        )
     db.commit()
     db.refresh(fb)
     return {
@@ -135,6 +152,7 @@ async def submit_feedback(
     }
 
 
+@admin_router.get("/{feedback_id}", summary="反馈工单详情（管理员）")
 @router.get("/{feedback_id}", summary="反馈工单详情")
 async def get_feedback_detail(
     feedback_id: int,
@@ -149,6 +167,12 @@ async def get_feedback_detail(
         raise HTTPException(status_code=403, detail="无权查看该反馈")
 
     data = _serialize_feedback(fb)
+    if getattr(fb, "is_anonymous", 0):
+        data["user_name"] = "匿名"
+        data["user_no"] = ""
+    else:
+        data["user_name"] = fb.user.username if fb.user else ""
+        data["user_no"] = fb.user.user_no if fb.user else ""
     replies = (
         db.query(FeedbackReply)
         .filter(FeedbackReply.feedback_id == feedback_id)

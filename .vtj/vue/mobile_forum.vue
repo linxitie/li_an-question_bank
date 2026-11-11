@@ -102,7 +102,9 @@
                 {{ post.likes }}
               </span>
               <span class="stat-item" @click.stop="toggleFavorite(post)">
-                <XIcon :icon="Star" :size="16" :color="post.favorited ? '#f59e0b' : '#8899aa'"></XIcon>
+                <span class="star-ico" :class="{ on: post.favorited }">
+                  <XIcon :icon="Star" :size="16" :color="post.favorited ? '#f59e0b' : '#8899aa'"></XIcon>
+                </span>
                 {{ post.favoriteCount || 0 }}
               </span>
             </div>
@@ -819,4 +821,12 @@ export default defineComponent({
 .main-content { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
 .m-collapse-row { display: flex; justify-content: center; padding: 2px 0 0; }
 .m-collapse-arrow { font-size: 16px; color: #94a3b8; line-height: 1; cursor: pointer; }
+/* 2026-11-09：手机论坛点赞/收藏动效 */
+@keyframes mf-icon-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  70% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.heart-ico.on, .star-ico.on { display: inline-block; animation: mf-icon-pop 0.45s ease; }
 </style>

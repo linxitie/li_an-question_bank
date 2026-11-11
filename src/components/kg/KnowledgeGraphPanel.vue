@@ -1,5 +1,5 @@
 <template>
-  <div class="kgp" :class="{ 'is-compact': compact }">
+  <div class="kgp" :class="{ 'is-compact': compact, 'is-global': mode === 'global' }">
     <div v-if="error" class="kgp-error">{{ error }}</div>
 
     <section class="kgp-grid">
@@ -10,17 +10,16 @@
           <p class="kgp-hint">去刷几道题，系统会自动为你的知识点建节点、连边。</p>
         </div>
 
-        <svg v-else class="kgp-svg" :viewBox="`0 0 ${svgW} ${svgH}`" role="img" aria-label="知识图谱">
+        <svg v-else ref="svgRef" class="kgp-svg" :viewBox="zoomViewBox"
+          preserveAspectRatio="xMidYMid slice" role="img" aria-label="知识图谱" @wheel.prevent="onWheel" style="touch-action: none" @pointermove="onDragMove" @pointerup="endDrag" @pointerleave="endDrag">
           <g class="kgp-edges">
-            <line
+            <path
               v-for="e in edges"
-              :key="`${e.src_point}-${e.dst_point}`"
-              :x1="pos[e.src_point]?.x ?? 0"
-              :y1="pos[e.src_point]?.y ?? 0"
-              :x2="pos[e.dst_point]?.x ?? 0"
-              :y2="pos[e.dst_point]?.y ?? 0"
-              :stroke-width="edgeWidth(e)"
-              :stroke-opacity="edgeOpacity(e)"
+              :key="e.src_point + '-' + e.dst_point"
+              :d="edgePath(e)"
+              fill="none"
+              :stroke-width="Math.min(1.6, edgeWidth(e) * 0.55)"
+              :stroke-opacity="0.16"
               stroke="#94a3b8"
             />
           </g>
@@ -31,19 +30,20 @@
               class="kgp-node"
               :class="{ 'is-active': activeId === node.point_id }"
               @click="activeId = node.point_id"
+              @pointerdown.stop="startDrag(node, $event)"
             >
               <circle
-                :cx="pos[node.point_id]?.x ?? 0"
-                :cy="pos[node.point_id]?.y ?? 0"
+                :cx="displayPos(node).x"
+                :cy="displayPos(node).y"
                 :r="nodeRadius(node)"
-                :fill="masteryColor(node.mastery)"
+                :fill="nodeColor(node)"
                 fill-opacity="0.85"
                 stroke="#1f2937"
                 stroke-width="1"
               />
               <text
-                :x="pos[node.point_id]?.x ?? 0"
-                :y="(pos[node.point_id]?.y ?? 0) + 4"
+                :x="displayPos(node).x"
+                :y="displayPos(node).y + 4"
                 class="kgp-label"
                 text-anchor="middle"
               >
@@ -53,13 +53,7 @@
           </g>
         </svg>
 
-        <div v-if="activeNode" class="kgp-node-detail">
-          <strong>{{ activeNode.point_name }}</strong>
-          <span>掌握度 {{ (activeNode.mastery * 100).toFixed(0) }}%</span>
-          <span>热度 {{ activeNode.heat.toFixed(2) }}</span>
-          <span>贡献度 {{ activeNode.contribution.toFixed(2) }}</span>
-          <span>答题 {{ activeNode.attempt_count }} 次 / 对 {{ activeNode.correct_count }}</span>
-        </div>
+
       </div>
 
       <aside class="kgp-side">
@@ -96,6 +90,13 @@
           </ul>
         </div>
       </aside>
+      <div v-if="activeNode" class="kgp-node-detail kgp-node-detail-bottom">
+        <strong>{{ activeNode.point_name }}</strong>
+        <span>掌握度 {{ (activeNode.mastery * 100).toFixed(0) }}%</span>
+        <span>热度 {{ activeNode.heat.toFixed(2) }}</span>
+        <span>贡献度 {{ activeNode.contribution.toFixed(2) }}</span>
+        <span>答题 {{ activeNode.attempt_count }} 次 / 对 {{ activeNode.correct_count }}</span>
+      </div>
     </section>
   </div>
 </template>
@@ -135,9 +136,10 @@ interface HabitProfile {
   slot_distribution: Record<string, number>;
 }
 
-const props = withDefaults(defineProps<{ compact?: boolean; generateSignal?: number }>(), {
+const props = withDefaults(defineProps<{ compact?: boolean; generateSignal?: number; mode?: 'mine' | 'global' }>(), {
   compact: false,
-  generateSignal: 0
+  generateSignal: 0,
+  mode: 'mine'
 });
 const emit = defineEmits<{ (e: 'changed'): void }>();
 
@@ -173,20 +175,174 @@ const temperatureHint = computed(() =>
 );
 
 const pos = computed<Record<number, { x: number; y: number }>>(() => {
-  const list = [...nodes.value].sort((a, b) => b.heat - a.heat);
-  const cx = svgW / 2;
-  const cy = svgH / 2;
+  const list = [...nodes.value];
+  const n = list.length;
   const map: Record<number, { x: number; y: number }> = {};
+  if (!n) return map;
+
+  const idx: Record<number, number> = {};
+  const xs: number[] = [];
+  const ys: number[] = [];
   list.forEach((node, i) => {
-    const angle = (i / Math.max(1, list.length)) * Math.PI * 2 - Math.PI / 2;
-    const ring = 80 + (i % 3) * 50;
+    idx[node.point_id] = i;
+    const angle = i * 2.399963229728653; // 黄金角，打散初始圆环
+    const radius = Math.min(svgW, svgH) * (0.12 + ((i * 37) % 100) / 100 * 0.3);
+    xs[i] = svgW / 2 + Math.cos(angle) * radius;
+    ys[i] = svgH / 2 + Math.sin(angle) * radius;
+  });
+
+  const links = edges.value.filter(
+    (e) => idx[e.src_point] !== undefined && idx[e.dst_point] !== undefined
+  );
+  const k = Math.sqrt((svgW * svgH) / Math.max(1, n)) * 0.9;
+  let temp = Math.min(svgW, svgH) / 8;
+
+  for (let it = 0; it < 240; it++) {
+    const dx = new Array<number>(n).fill(0);
+    const dy = new Array<number>(n).fill(0);
+
+    // 斥力
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let vx = xs[i] - xs[j];
+        let vy = ys[i] - ys[j];
+        let d2 = vx * vx + vy * vy;
+        if (d2 < 1) {
+          vx = (Math.random() - 0.5) * 2;
+          vy = (Math.random() - 0.5) * 2;
+          d2 = vx * vx + vy * vy;
+        }
+        const d = Math.sqrt(d2);
+        const f = (k * k) / d;
+        const fx = (vx / d) * f;
+        const fy = (vy / d) * f;
+        dx[i] += fx;
+        dy[i] += fy;
+        dx[j] -= fx;
+        dy[j] -= fy;
+      }
+    }
+
+    // 弹簧（边）
+    for (const e of links) {
+      const i = idx[e.src_point];
+      const j = idx[e.dst_point];
+      const vx = xs[i] - xs[j];
+      const vy = ys[i] - ys[j];
+      const d = Math.max(1, Math.sqrt(vx * vx + vy * vy));
+      const f = ((d * d) / k) * 0.95;
+      const fx = (vx / d) * f;
+      const fy = (vy / d) * f;
+      dx[i] -= fx;
+      dy[i] -= fy;
+      dx[j] += fx;
+      dy[j] += fy;
+    }
+
+    // 向心力
+    for (let i = 0; i < n; i++) {
+      dx[i] += (svgW / 2 - xs[i]) * 0.006;
+      dy[i] += (svgH / 2 - ys[i]) * 0.006;
+    }
+
+    // 位移动画（退火）
+    for (let i = 0; i < n; i++) {
+      const d = Math.max(0.001, Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]));
+      const step = Math.min(d, temp);
+      xs[i] = Math.max(34, Math.min(svgW - 34, xs[i] + (dx[i] / d) * step));
+      ys[i] = Math.max(34, Math.min(svgH - 34, ys[i] + (dy[i] / d) * step));
+    }
+    temp *= 0.97;
+  }
+
+  // 归一化到画布：保证节点铺满可视区域，而不是缩在中心
+  const pad = 100;
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+  const scaleX = (svgW - pad * 2) / spanX;
+  const scaleY = (svgH - pad * 2) / spanY;
+
+  list.forEach((node, i) => {
     map[node.point_id] = {
-      x: cx + Math.cos(angle) * ring,
-      y: cy + Math.sin(angle) * ring
+      x: pad + (xs[i] - minX) * scaleX,
+      y: pad + (ys[i] - minY) * scaleY
     };
   });
   return map;
 });
+
+const zoom = ref(1);
+const zoomViewBox = computed(() => {
+  const w = svgW / zoom.value;
+  const h = svgH / zoom.value;
+  const x = (svgW - w) / 2;
+  const y = (svgH - h) / 2;
+  return x + ' ' + y + ' ' + w + ' ' + h;
+});
+function onWheel(e: WheelEvent) {
+  zoom.value = Math.max(0.05, zoom.value * (e.deltaY > 0 ? 0.9 : 1.1));
+}
+
+const svgRef = ref<SVGSVGElement | null>(null);
+const dragPos = ref<Record<number, { x: number; y: number }>>({});
+const dragId = ref<number | null>(null);
+const dragOffset = ref({ dx: 0, dy: 0 });
+
+function displayPos(node: KgNode): { x: number; y: number } {
+  return dragPos.value[node.point_id] || pos.value[node.point_id] || { x: 0, y: 0 };
+}
+function displayPosById(id: number): { x: number; y: number } {
+  return dragPos.value[id] || pos.value[id] || { x: 0, y: 0 };
+}
+function edgePath(e: any): string {
+  const a = displayPosById(e.src_point);
+  const b = displayPosById(e.dst_point);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const bend = Math.min(60, len * 0.15);
+  const mx = (a.x + b.x) / 2 + nx * bend;
+  const my = (a.y + b.y) / 2 + ny * bend;
+  return 'M' + a.x + ',' + a.y + ' Q' + mx + ',' + my + ' ' + b.x + ',' + b.y;
+}
+
+function toSvg(e: PointerEvent): { x: number; y: number } {
+  const el = svgRef.value;
+  if (!el) return { x: 0, y: 0 };
+  const r = el.getBoundingClientRect();
+  const sx = svgW / r.width;
+  const sy = svgH / r.height;
+  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+}
+function startDrag(node: KgNode, e: PointerEvent) {
+  const p = displayPos(node);
+  const q = toSvg(e);
+  dragOffset.value = { dx: p.x - q.x, dy: p.y - q.y };
+  dragId.value = node.point_id;
+  (e.target as Element).setPointerCapture?.(e.pointerId);
+}
+function onDragMove(e: PointerEvent) {
+  if (dragId.value == null) return;
+  const q = toSvg(e);
+  dragPos.value = {
+    ...dragPos.value,
+    [dragId.value]: { x: q.x + dragOffset.value.dx, y: q.y + dragOffset.value.dy }
+  };
+}
+function endDrag() {
+  dragId.value = null;
+}
+
+const NODE_PALETTE = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4'];
+function nodeColor(node: KgNode): string {
+  return NODE_PALETTE[Math.abs(node.point_id) % NODE_PALETTE.length];
+}
 
 function nodeRadius(node: KgNode): number {
   return Math.min(28, 9 + Math.sqrt(Math.max(0, node.heat)) * 6);
@@ -225,6 +381,29 @@ function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 async function loadAll(): Promise<void> {
   loading.value = true;
   error.value = '';
+  if (props.mode === 'global') {
+    try {
+      const res = await apiFetch('/api/knowledge/kg/global?limit=800');
+      const data = await res.json();
+      nodes.value = (data.nodes || []).map((n: any) => ({
+        point_id: n.point_id,
+        point_name: n.point_name,
+        mastery: n.mastery || 0,
+        heat: n.heat || 0,
+        attempt_count: n.attempt_count || 0,
+        correct_count: n.correct_count || 0,
+        contribution: n.contribution || 0
+      }));
+      edges.value = data.edges || [];
+      dragPos.value = {};
+      if (!activeId.value && nodes.value.length) activeId.value = nodes.value[0].point_id;
+    } catch (e: any) {
+      error.value = e?.message || '加载失败';
+    } finally {
+      loading.value = false;
+    }
+    return;
+  }
   try {
     const [nodeRes, edgeRes, habitRes, sampleRes] = await Promise.all([
       apiFetch('/api/knowledge/kg/nodes/mine?limit=60'),
@@ -377,4 +556,29 @@ onMounted(loadAll);
     grid-template-columns: 1fr;
   }
 }
+/* 2026-11-09：手机端图谱布局（单列、矮画布、紧凑标签） */
+@media (max-width: 768px) {
+  .kgp-svg { height: 260px; }
+  .is-compact .kgp-svg { height: 240px; }
+  .kgp-label { font-size: 9px; }
+  .kgp-canvas-card { padding: 6px; }
+  .kgp-node-detail { gap: 4px 10px; font-size: 12px; padding: 6px 8px; }
+  .kgp-side { gap: 10px; }
+  .kgp-card { padding: 10px 12px; }
+}
+.kgp-node-detail-bottom {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+}
+/* 2026-11-09：弹窗内撑满高度，画布占据左侧全部空间，详情条固定在底部 */
+.kgp { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.kgp-grid { flex: 1; min-height: 0; }
+.kgp-canvas-card { min-height: 0; display: flex; flex-direction: column; }
+.kgp-svg { flex: 1; height: auto; min-height: 320px; }
+.is-compact .kgp-svg { flex: 1; height: auto; min-height: 260px; }
+.kgp-side { overflow-y: auto; min-height: 0; }
+.is-global .kgp-grid { grid-template-columns: minmax(0, 1fr); }
+.is-global .kgp-side { display: none; }
 </style>

@@ -6,6 +6,9 @@
         <p>全站内容管理 · 教师隐藏复核 · 回收站</p>
       </div>
       <div class="head-actions">
+        <button class="btn" @click="openQuick('favorites')">⭐ 收藏</button>
+        <button class="btn" @click="openQuick('hot')">今日热门</button>
+        <button class="btn" @click="openQuick('my')">我的帖子</button>
         <button class="btn" @click="exportReport">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M8 2.4v8" /><path d="M5 7.6l3 3 3-3" /><path d="M2.6 12.4h10.8" />
@@ -174,8 +177,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in posts" :key="p.id">
-              <td class="cb-col"><input v-model="selectedIds" type="checkbox" class="cb" :value="p.id" /></td>
+            <tr v-for="p in posts" :key="p.id" class="post-row" @click="openDrawer(p)">
+              <td class="cb-col"><input v-model="selectedIds" type="checkbox" class="cb" :value="p.id" @click.stop /></td>
               <td>
                 <div class="cell-post">
                   <div class="t">
@@ -200,7 +203,7 @@
               </td>
               <td>
                 <div class="who">
-                  <div class="ava">{{ (p.author || '?').slice(0, 1) }}</div>
+                  <div class="ava"><img v-if="p.authorAvatar" :src="p.authorAvatar" alt="" /><span v-else>{{ (p.author || '?').slice(0, 1) }}</span></div>
                   <span class="n">{{ p.author || '匿名' }}</span>
                 </div>
               </td>
@@ -304,7 +307,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in trashPosts" :key="`p-${p.id}`">
+            <tr v-for="p in trashPosts" :key="p.id" class="post-row" @click="openDrawer(p)">
               <td>
                 <div class="cell-post">
                   <div class="t"><a class="ttl" @click="openDrawer(p)">{{ p.title || '（无标题）' }}</a></div>
@@ -358,9 +361,9 @@
       </div>
     </template>
 
-    <!-- ============ 详情抽屉 ============ -->
-    <div class="scrim" :class="{ on: drawerOpen }" @click="closeDrawer"></div>
-    <aside class="drawer" :class="{ on: drawerOpen }">
+    <!-- ============ 详情弹窗（2026-11-07：抽屉改为 1220×888 弹窗） ============ -->
+    <div v-if="drawerOpen" class="detail-mask" @click.self="closeDrawer">
+    <aside class="drawer detail-modal">
       <div class="drawer-hd">
         <h3>帖子详情</h3>
         <button class="close-x" @click="closeDrawer">×</button>
@@ -369,7 +372,7 @@
         <template v-if="activePost">
           <div class="post-main">
             <div class="post-meta">
-              <div class="ava">{{ (activePost.author || '?').slice(0, 1) }}</div>
+              <div class="ava"><img v-if="activePost.authorAvatar" :src="activePost.authorAvatar" alt="" /><span v-else>{{ (activePost.author || '?').slice(0, 1) }}</span></div>
               <div>
                 <div class="nm">{{ activePost.author || '匿名' }}</div>
                 <div class="sub">{{ activePost.authorClass || '未分班' }} · 帖子编号 #{{ activePost.id }}</div>
@@ -405,9 +408,9 @@
             />
             <div class="post-stats">
               <span>浏览 <b>{{ activePost.viewCount ?? 0 }}</b></span>
-              <span>点赞 <b>{{ activePost.likeCount ?? 0 }}</b></span>
+              <button class="stat-act" :class="{ on: activePost.liked }" @click.stop="likeActivePost">❤ 点赞 <b>{{ activePost.likeCount ?? 0 }}</b></button>
               <span>评论 <b>{{ activePost.commentCount ?? 0 }}</b></span>
-              <span>收藏 <b>{{ activePost.favoriteCount ?? 0 }}</b></span>
+              <button class="stat-act" :class="{ on: activePost.favorited }" @click.stop="favActivePost">★ 收藏 <b>{{ activePost.favoriteCount ?? 0 }}</b></button>
             </div>
             <div v-if="activePost.status !== 'DELETED'" class="post-admin">
               <span class="lbl">管理操作</span>
@@ -425,12 +428,21 @@
 
           <div class="cmt-sec">
             <h4>评论区 <span>共 {{ drawerComments.length }} 条</span></h4>
+            <div class="cmt-sort">
+              <button
+                v-for="s in [{ key: 'time', label: '时间' }, { key: 'likes', label: '点赞' }, { key: 'replies', label: '回复' }]"
+                :key="s.key"
+                :class="{ on: commentSort === s.key }"
+                @click="setCommentSort(s.key as any)">{{ s.label }}</button>
+              <button class="cmt-order" @click="toggleCommentOrder">{{ commentOrder === 'desc' ? '倒序' : '正序' }}</button>
+            </div>
             <div v-for="c in drawerComments" :key="c.id" class="cmt">
-              <div class="ava">{{ (c.user?.nickname || c.author || '?').slice(0, 1) }}</div>
+              <div class="ava"><img v-if="c.user?.avatar" :src="c.user.avatar" alt="" /><span v-else>{{ (c.user?.nickname || c.author || '?').slice(0, 1) }}</span></div>
               <div class="bd">
                 <div class="hd">
                   <span class="n">{{ c.user?.nickname || c.author || '匿名' }}</span>
                   <span>{{ c.user?.className || '' }}</span>
+                  <span class="cmt-time">{{ c.createTime ? String(c.createTime).replace('T', ' ').slice(0, 16) : '' }}</span>
                 </div>
                 <div class="tx text-body"><ForumContent :content="c.content" :format="c.contentFormat" /></div>
                 <AttachmentList
@@ -439,7 +451,9 @@
                   mode="comment"
                 />
                 <div class="ft">
-                  <button class="lnk danger" @click="deleteCommentRow(c)">删除评论</button>
+                  <button class="lnk" :class="{ on: c.liked }" @click.stop="likeCommentRow(c)">❤ {{ c.likeCount || 0 }}</button>
+                  <button class="lnk" :class="{ on: c.favorited }" @click.stop="favCommentRow(c)">★ {{ c.favoriteCount || 0 }}</button>
+                  <button class="lnk danger" @click.stop="deleteCommentRow(c)">删除评论</button>
                 </div>
               </div>
             </div>
@@ -447,14 +461,17 @@
 
             <!-- 管理员代发评论：此前管理端只能看和删，不能评论（用户反馈） -->
             <div class="cmt-input">
-              <textarea
-                v-model="adminComment"
-                maxlength="2000"
-                rows="2"
-                class="cmt-textarea"
-                placeholder="以管理员身份评论… Ctrl+Enter 发送"
-                @keyup.ctrl.enter="submitAdminComment"
-              />
+              <div class="cmt-input-box">
+                <textarea
+                  v-model="adminComment"
+                  maxlength="2000"
+                  rows="2"
+                  class="cmt-textarea"
+                  placeholder="以管理员身份评论… Ctrl+Enter 发送"
+                  @keyup.ctrl.enter="submitAdminComment"
+                />
+                <button class="cmt-fs-btn" title="全屏输入" @click="adminFullscreen = true">⛶</button>
+              </div>
               <div class="cmt-tools">
                 <button class="cmt-icon-btn" title="表情 / 表情包" @click="showAdminEmoji = !showAdminEmoji">😊</button>
                 <FileUploader v-model="adminCommentAttachments" :max-docs="0" class="cmt-uploader" />
@@ -472,6 +489,54 @@
         </template>
       </div>
     </aside>
+    </div>
+
+    <!-- 管理员评论全屏输入（2026-11-09） -->
+    <div v-if="adminFullscreen" class="cmt-fs-mask" @click.self="adminFullscreen = false">
+      <div class="cmt-fs-card">
+        <div class="cmt-fs-head">
+          <h3>发表评论</h3>
+          <button class="close-x" @click="adminFullscreen = false">×</button>
+        </div>
+        <div class="cmt-fs-body">
+          <textarea v-model="adminComment" class="cmt-fs-textarea" maxlength="2000" placeholder="以管理员身份评论…"></textarea>
+          <div class="cmt-fs-tools">
+            <button class="cmt-icon-btn" title="表情 / 表情包" @click="showAdminEmoji = !showAdminEmoji">😊</button>
+            <FileUploader v-model="adminCommentAttachments" :max-docs="0" />
+            <button class="btn btn-primary" :disabled="sendingComment || !adminComment.trim()" @click="submitAdminComment">
+              {{ sendingComment ? '发送中…' : '发送' }}
+            </button>
+          </div>
+          <div v-if="showAdminEmoji" class="cmt-fs-picker">
+            <EmojiStickerPicker @select="onAdminEmojiSelect" @close="showAdminEmoji = false" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快捷列表：收藏 / 热门 / 我的帖子（2026-11-09） -->
+    <div v-if="quickVisible" class="quick-mask" @click.self="quickVisible = false">
+      <div class="quick-card">
+        <div class="quick-hd">
+          <h3>{{ quickTitle }}</h3>
+          <button class="close-x" @click="quickVisible = false">×</button>
+        </div>
+        <div class="quick-bd">
+          <p v-if="quickLoading" class="empty">加载中…</p>
+          <p v-else-if="!quickItems.length" class="empty">暂无数据</p>
+          <div v-for="p in quickItems" :key="p.id" class="quick-item" @click="quickOpen(p)">
+            <div class="quick-author">
+              <img v-if="p.user && p.user.avatar" :src="p.user.avatar" class="quick-avatar" alt="" />
+              <span v-else class="quick-avatar quick-avatar-text">{{ ((p.user && p.user.nickname) || p.author || '匿').slice(0, 1) }}</span>
+              <span class="quick-name">{{ (p.user && p.user.nickname) || p.author || '匿名' }}</span>
+              <span class="quick-date">{{ fmtTime(p.createTime) }}</span>
+            </div>
+            <span class="quick-title">{{ p.title || '（无标题）' }}</span>
+            <span class="quick-num">❤ {{ p.likeCount || 0 }} · ★ {{ p.favoriteCount || 0 }} · 💬 {{ p.commentCount || 0 }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ============ 确认弹窗 ============ -->
     <div v-if="modal.open" class="modal-mask on" @click.self="closeModal">
@@ -596,9 +661,16 @@ const audit = ref<any>(null);
 const drawerOpen = ref(false);
 const activePost = ref<ModerationPost | null>(null);
 const drawerComments = ref<ModerationComment[]>([]);
+const quickVisible = ref(false);
+const quickTitle = ref('');
+const quickLoading = ref(false);
+const quickItems = ref<any[]>([]);
+const commentSort = ref<'time' | 'likes' | 'replies'>('time');
+const commentOrder = ref<'desc' | 'asc'>('desc');
 const adminComment = ref('');
 const adminCommentAttachments = ref<any[]>([]);
 const showAdminEmoji = ref(false);
+const adminFullscreen = ref(false);
 const sendingComment = ref(false);
 
 function onAdminEmojiSelect(p: { value: string }) {
@@ -1184,16 +1256,120 @@ async function submitModal() {
   }
 }
 
+async function openQuick(kind: 'favorites' | 'likes' | 'hot' | 'my') {
+  quickVisible.value = true;
+  quickTitle.value = { favorites: '我的收藏', likes: '我的喜欢', hot: '今日热门', my: '我的帖子' }[kind];
+  quickLoading.value = true;
+  try {
+    const auth = (window as any).__VTJ_AUTH__;
+    const url =
+      kind === 'favorites' ? '/api/forum/my-favorites?limit=50'
+      : kind === 'likes' ? '/api/forum/my-likes?limit=50'
+      : kind === 'hot' ? '/api/forum/posts?sort=hot&limit=50'
+      : '/api/forum/my-posts?limit=50';
+    const r = await auth.apiFetch(url);
+    const d = await r.json();
+    quickItems.value = d.posts || d.items || [];
+  } catch (e) {
+    quickItems.value = [];
+  } finally {
+    quickLoading.value = false;
+  }
+}
+
+function quickOpen(p: any) {
+  quickVisible.value = false;
+  openDrawer(p as ModerationPost);
+}
+
+async function likeActivePost() {
+  if (!activePost.value) return;
+  const auth = (window as any).__VTJ_AUTH__;
+  const r = await auth.apiFetch('/api/forum/posts/' + activePost.value.id + '/like', { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) {
+    (activePost.value as any).liked = d.liked;
+    (activePost.value as any).likeCount = d.likeCount;
+  }
+}
+
+async function favActivePost() {
+  if (!activePost.value) return;
+  const auth = (window as any).__VTJ_AUTH__;
+  const r = await auth.apiFetch('/api/forum/posts/' + activePost.value.id + '/favorite', { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) {
+    (activePost.value as any).favorited = d.favorited;
+    (activePost.value as any).favoriteCount = d.favoriteCount;
+  }
+}
+
+async function likeCommentRow(c: any) {
+  const auth = (window as any).__VTJ_AUTH__;
+  const r = await auth.apiFetch('/api/forum/comments/' + c.id + '/like', { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) {
+    c.liked = d.liked;
+    c.likeCount = d.likeCount;
+  }
+}
+
+async function favCommentRow(c: any) {
+  const auth = (window as any).__VTJ_AUTH__;
+  const r = await auth.apiFetch('/api/forum/comments/' + c.id + '/favorite', { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) {
+    c.favorited = d.favorited;
+    c.favoriteCount = d.favoriteCount;
+  }
+}
+
 async function openDrawer(post: ModerationPost) {
-  activePost.value = post;
+  activePost.value = { ...post };
   drawerOpen.value = true;
   drawerComments.value = [];
   try {
-    const data = await adminForumApi.comments(post.id);
-    drawerComments.value = data.items;
+    const auth = (window as any).__VTJ_AUTH__;
+    const fullRes = await auth.apiFetch('/api/forum/posts/' + post.id);
+    if (fullRes.ok) {
+      const full = await fullRes.json();
+      activePost.value = { ...post, ...full };
+    }
+  } catch {
+    /* 详情失败保留列表数据 */
+  }
+  await loadDrawerComments(post.id);
+}
+
+async function loadDrawerComments(postId: number) {
+  try {
+    const auth = (window as any).__VTJ_AUTH__;
+    const [admRes, stuRes] = await Promise.all([
+      adminForumApi.comments(postId).catch(() => ({ items: [] })),
+      auth.apiFetch(
+        '/api/forum/posts/' + postId + '/comments?limit=100&sort_by=' +
+        commentSort.value + '&order=' + commentOrder.value
+      ).then((r: Response) => r.json()).catch(() => ({ comments: [] }))
+    ]);
+    const interMap = new Map<number, any>();
+    for (const c of (stuRes as any).comments || []) interMap.set(c.id, c);
+    drawerComments.value = ((admRes as any).items || []).map((c: any) => ({
+      ...c,
+      ...(interMap.get(c.id) || {})
+    }));
   } catch {
     drawerComments.value = [];
   }
+}
+
+async function setCommentSort(key: 'time' | 'likes' | 'replies') {
+  commentSort.value = key;
+  if (activePost.value) await loadDrawerComments(activePost.value.id);
+}
+
+async function toggleCommentOrder() {
+  commentOrder.value = commentOrder.value === 'desc' ? 'asc' : 'desc';
+  if (activePost.value) await loadDrawerComments(activePost.value.id);
 }
 
 function closeDrawer() {
@@ -1731,14 +1907,60 @@ input[type='checkbox'].cb {
   bottom: 0;
   background: #fff;
   border: 1px solid #e6ebf3;
-  border-radius: 10px;
-  padding: 9px 11px;
-  margin-top: 12px;
+  border-radius: 16px;
+  padding: 10px 20px;
+  margin: 12px -16px -35px;
   display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 13px;
+  align-items: flex-end;
   box-shadow: 0 -4px 14px rgba(23, 35, 58, 0.05);
 }
+.cmt-input .cmt-icon-btn[title="全屏输入"] {
+  position: absolute;
+  right: 10px;
+  top: 4px;
+  border: 0;
+  background: transparent;
+}
+.cmt-fs-mask { position: fixed; inset: 0; z-index: 9999; background: rgba(12,26,44,.45); display: flex; align-items: center; justify-content: center; }
+.cmt-fs-card { width: 1220px; max-width: 96vw; height: 888px; max-height: 92vh; background: #fff; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+.cmt-fs-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #f0f2f7; }
+.cmt-fs-head h3 { margin: 0; font-size: 16px; color: #1a2b5f; }
+.cmt-fs-body { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; overflow-y: auto; }
+.cmt-fs-textarea { flex: 1; min-height: 300px; border: 1px solid #dfe3ee; border-radius: 12px; padding: 12px 14px; font-size: 14px; resize: vertical; font-family: inherit; }
+.cmt-fs-tools { display: flex; align-items: center; gap: 13px; }
+.cmt-fs-tools .btn { margin-left: auto; }
+.cmt-fs-picker { align-self: flex-start; }
+.cmt-input .cmt-textarea {
+  flex: 1 1 100%;
+  min-height: 72px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+}
+.cmt-input .cmt-tools { width: 100%; margin-top: 0; }
+.cmt-input .cmt-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f7f9fc;
+  font-size: 17px;
+}
+.cmt-input :deep(.fu-add) {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border-style: solid;
+  background: #f7f9fc;
+  font-size: 0;
+}
+.cmt-input :deep(.fu-add::before) { content: '+'; font-size: 18px; color: #5b6b84; }
+.cmt-input :deep(.fu-thumb) { width: 36px; height: 36px; }
 .cmt-input input {
   flex: 1;
   border: 0;
@@ -2638,4 +2860,57 @@ input[type='checkbox'].cb {
 .risk .go:hover {
   background: #eaf1f8;
 }
+
+/* 2026-11-07：管理员端帖子详情由右侧抽屉改为 1220×888 居中弹窗 */
+.detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(12, 26, 44, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.drawer.detail-modal {
+  position: static;
+  transform: none;
+  width: 1220px;
+  max-width: 96vw;
+  height: 888px;
+  max-height: 92vh;
+  z-index: auto;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(12, 26, 44, 0.28);
+}
+.drawer.detail-modal .drawer-bd { padding-bottom: 24px; }
+.post-row { cursor: pointer; }
+.post-row:hover td { background: #f7f9fd; }
+.ava { overflow: hidden; }
+.ava img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.cmt-input-box { position: relative; flex: 1 1 100%; display: flex; }
+.cmt-input-box .cmt-textarea { flex: 1; width: 100%; }
+.cmt-fs-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8a8faa; font-size: 15px; cursor: pointer; }
+.stat-act { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 1px 10px; font-size: 12px; color: #5b6b84; cursor: pointer; }
+.stat-act.on { color: #c41e3a; border-color: #f0c4cc; background: #fff5f7; }
+.cmt .ft .lnk.on { color: #c41e3a; }
+.quick-mask { position: fixed; inset: 0; z-index: 2400; background: rgba(12,26,44,.45); display: flex; align-items: center; justify-content: center; }
+.quick-card { width: 760px; max-width: 94vw; max-height: 80vh; background: #fff; border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; }
+.quick-hd { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #f0f2f7; }
+.quick-hd h3 { margin: 0; font-size: 16px; color: #1a2b5f; }
+.quick-bd { padding: 10px 14px 16px; overflow-y: auto; }
+.quick-item { display: flex; flex-direction: column; gap: 4px; padding: 10px 4px; border-bottom: 1px solid #f3f5f9; cursor: pointer; }
+.quick-item:hover { background: #f7f9fd; }
+.quick-title { font-size: 14px; color: #1a2b5f; }
+.quick-num { font-size: 12px; color: #8a8faa; }
+.cmt-sort { display: flex; align-items: center; gap: 8px; margin: 8px 0 6px; }
+.cmt-sort button { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 3px 12px; font-size: 12px; color: #5b6b84; cursor: pointer; }
+.cmt-sort button.on { background: #1a365d; border-color: #1a365d; color: #fff; }
+.cmt-sort .cmt-order { margin-left: auto; }
+.cmt-time { margin-left: auto; color: #8a8faa; font-size: 12px; }
+.quick-author { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6b7896; }
+.quick-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.quick-avatar-text { display: inline-flex; align-items: center; justify-content: center; background: #eef1f8; color: #1a2b5f; }
+.quick-name { font-weight: 600; color: #1a2b5f; }
+.quick-date { margin-left: auto; color: #8a8faa; }
 </style>

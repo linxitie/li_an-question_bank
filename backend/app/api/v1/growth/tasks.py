@@ -133,6 +133,10 @@ def _task_view(task: Task, user_id: int, db: Session, pinned_slot: int = 0) -> d
         "task_code": task.task_code,
         "title": task.title,
         "description": task.description,
+        "is_kg_generated": bool(
+            getattr(task, "personalized_for", None)
+            and str(task.metric or "").startswith("kg_")
+        ),
         "metric": task.metric,
         "threshold": task.threshold,
         "reward_coins": reward,

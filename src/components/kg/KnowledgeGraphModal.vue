@@ -6,7 +6,7 @@
           <div>
             <h3>我的知识图谱</h3>
             <p class="kgm-sub">
-              节点大小 = 生长热度，颜色 = 掌握度（红→绿）；连线粗细 = 边权重。只反映你自己的学习轨迹。
+              节点大小 = 生长热度，颜色区分知识点；只反映你自己的学习轨迹。
             </p>
           </div>
           <div class="kgm-actions">
@@ -86,7 +86,7 @@ onBeforeUnmount(() => {
 }
 .kgm-modal {
   width: min(1080px, 100%);
-  max-height: min(88vh, 820px);
+  height: min(88vh, 820px);
   display: flex;
   flex-direction: column;
   background: #f9fafc;
@@ -174,4 +174,17 @@ onBeforeUnmount(() => {
     border-radius: 16px 16px 0 0;
   }
 }
+/* 2026-11-09：手机端图谱弹窗全屏化，避免拥挤 */
+@media (max-width: 768px) {
+  .kgm-mask { padding: 8px; align-items: stretch; }
+  .kgm-modal { width: 100%; height: calc(100vh - 16px); max-height: 100%; border-radius: 12px; }
+  .kgm-head { flex-direction: column; gap: 8px; padding: 12px 14px 10px; }
+  .kgm-head h3 { font-size: 16px; }
+  .kgm-sub { font-size: 11px; }
+  .kgm-actions { width: 100%; justify-content: space-between; }
+  .kgm-body { padding: 8px; }
+}
+/* 2026-11-09：内容区不滚动，图谱撑满，详情条贴弹窗底部 */
+.kgm-body { flex: 1; min-height: 0; overflow: hidden; display: flex; }
+.kgm-body :deep(.kgp) { flex: 1; min-height: 0; }
 </style>

@@ -82,27 +82,15 @@
         <div class="gp-card">
           <h4>📋 每日任务</h4>
           <div v-for="t in state.tasks.daily" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
+            <span class="task-title">
+              {{ t.description || t.title }}<em v-if="t.description" class="task-title-badge">（可获得「{{ t.title }}」）</em>
+            </span>
             <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
             <span class="task-reward">🪙{{ t.reward_coins }}</span>
             <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">
               {{ t.claimed ? '已领取' : t.completed ? '领取' : '未完成' }}
             </button>
           </div>
-        </div>
-
-        <!-- 随机任务 -->
-        <div class="gp-card">
-          <h4>🎲 随机任务 <button class="refresh-btn" @click="refreshRandom">刷新</button></h4>
-          <div v-for="t in state.tasks.random" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
-            <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
-            <span class="task-reward">🪙{{ t.reward_coins }}</span>
-            <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">
-              {{ t.claimed ? '已领取' : t.completed ? '领取' : '未完成' }}
-            </button>
-          </div>
-          <div v-if="!state.tasks.random.length" class="gp-empty">暂无随机任务</div>
         </div>
 
         <!-- 周常任务（M2：置顶槽位 + 生效奖励） -->
@@ -115,7 +103,9 @@
           </h4>
           <div v-for="t in state.tasks.weekly" :key="t.task_id" class="task-item">
             <span class="task-title">
-              <span v-if="t.pinned" class="pin-badge">置顶</span>{{ t.title }}
+              <span v-if="t.pinned" class="pin-badge">置顶</span>
+              <span v-if="t.is_kg_generated" class="kg-badge">知识图谱生成</span>
+              {{ t.description || t.title }}<em v-if="t.description" class="task-title-badge">（可获得「{{ t.title }}」）</em>
             </span>
             <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
             <span class="task-reward">🪙{{ t.reward_coins }}</span>
@@ -834,4 +824,7 @@
   padding: 8px 20px;
   cursor: pointer;
 }
+
+.task-title-badge { font-style: normal; font-weight: 400; color: #8a8faa; }
+.kg-badge { display: inline-block; background: #eef2ff; color: #4f46e5; border-radius: 6px; padding: 1px 6px; font-size: 11px; margin-right: 4px; }
 </style>
