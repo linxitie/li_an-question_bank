@@ -1,0 +1,1134 @@
+{
+ "version": 1,
+ "terms": [
+  {
+   "term": "卧槽",
+   "level": "masked",
+   "category": "abuse",
+   "variants": []
+  },
+  {
+   "term": "去死",
+   "level": "masked",
+   "category": "abuse",
+   "variants": []
+  },
+  {
+   "term": "妈的",
+   "level": "masked",
+   "category": "abuse",
+   "variants": [
+    "马的"
+   ]
+  },
+  {
+   "term": "屁眼",
+   "level": "masked",
+   "category": "abuse",
+   "variants": []
+  },
+  {
+   "term": "我操",
+   "level": "masked",
+   "category": "abuse",
+   "variants": [
+    "我草"
+   ]
+  },
+  {
+   "term": "滚蛋",
+   "level": "masked",
+   "category": "abuse",
+   "variants": []
+  },
+  {
+   "term": "狗屎",
+   "level": "masked",
+   "category": "abuse",
+   "variants": []
+  },
+  {
+   "term": "王八蛋",
+   "level": "masked",
+   "category": "abuse",
+   "variants": []
+  },
+  {
+   "term": "草泥马",
+   "level": "masked",
+   "category": "abuse",
+   "variants": []
+  },
+  {
+   "term": "中奖了",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "代刷",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "免费领取",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "兼职加我",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "加qq",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "加微信",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "扫码",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "点击链接",
+   "level": "masked",
+   "category": "ad",
+   "variants": []
+  },
+  {
+   "term": "后门",
+   "level": "reviewed",
+   "category": "culture",
+   "variants": []
+  },
+  {
+   "term": "漏洞",
+   "level": "reviewed",
+   "category": "culture",
+   "variants": []
+  },
+  {
+   "term": "破解",
+   "level": "reviewed",
+   "category": "culture",
+   "variants": []
+  },
+  {
+   "term": "绕过",
+   "level": "reviewed",
+   "category": "culture",
+   "variants": []
+  },
+  {
+   "term": "k粉",
+   "level": "blocked",
+   "category": "drug",
+   "variants": []
+  },
+  {
+   "term": "冰毒",
+   "level": "blocked",
+   "category": "drug",
+   "variants": [
+    "冰独"
+   ]
+  },
+  {
+   "term": "可卡因",
+   "level": "blocked",
+   "category": "drug",
+   "variants": []
+  },
+  {
+   "term": "吸毒",
+   "level": "blocked",
+   "category": "drug",
+   "variants": [
+    "吸独"
+   ]
+  },
+  {
+   "term": "吸毒工具",
+   "level": "blocked",
+   "category": "drug",
+   "variants": [
+    "吸独工具"
+   ]
+  },
+  {
+   "term": "大麻",
+   "level": "blocked",
+   "category": "drug",
+   "variants": []
+  },
+  {
+   "term": "摇头丸",
+   "level": "blocked",
+   "category": "drug",
+   "variants": []
+  },
+  {
+   "term": "毒品交易",
+   "level": "blocked",
+   "category": "drug",
+   "variants": [
+    "独品交易"
+   ]
+  },
+  {
+   "term": "海洛因",
+   "level": "blocked",
+   "category": "drug",
+   "variants": []
+  },
+  {
+   "term": "贩毒",
+   "level": "blocked",
+   "category": "drug",
+   "variants": [
+    "贩独"
+   ]
+  },
+  {
+   "term": "代考",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "保过班",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "内部题库",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "包过",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "卖答案",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "泄露题",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "真题泄露",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "考前答案",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "试题答案",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "透题",
+   "level": "reviewed",
+   "category": "exam_fraud",
+   "variants": []
+  },
+  {
+   "term": "六合彩",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": []
+  },
+  {
+   "term": "出千",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": []
+  },
+  {
+   "term": "庄家",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": []
+  },
+  {
+   "term": "开盘",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": []
+  },
+  {
+   "term": "押注",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": []
+  },
+  {
+   "term": "私彩",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": []
+  },
+  {
+   "term": "网络赌博",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": [
+    "网络睹博"
+   ]
+  },
+  {
+   "term": "赌博",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": [
+    "睹博"
+   ]
+  },
+  {
+   "term": "赌场",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": [
+    "睹场"
+   ]
+  },
+  {
+   "term": "赌局",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": [
+    "睹局"
+   ]
+  },
+  {
+   "term": "赌资",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": [
+    "睹资"
+   ]
+  },
+  {
+   "term": "赔率",
+   "level": "blocked",
+   "category": "gambling",
+   "variants": []
+  },
+  {
+   "term": "分裂国家",
+   "level": "blocked",
+   "category": "political",
+   "variants": []
+  },
+  {
+   "term": "反动",
+   "level": "blocked",
+   "category": "political",
+   "variants": []
+  },
+  {
+   "term": "颠覆政权",
+   "level": "blocked",
+   "category": "political",
+   "variants": []
+  },
+  {
+   "term": "av女优",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "一夜情",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "包夜",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "卖淫",
+   "level": "blocked",
+   "category": "porn",
+   "variants": [
+    "卖银"
+   ]
+  },
+  {
+   "term": "嫖娼",
+   "level": "blocked",
+   "category": "porn",
+   "variants": [
+    "嫖昌",
+    "飘娼"
+   ]
+  },
+  {
+   "term": "性服务",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "成人电影",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "找小姐",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "援交",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "色情",
+   "level": "blocked",
+   "category": "porn",
+   "variants": [
+    "涩情"
+   ]
+  },
+  {
+   "term": "裸照",
+   "level": "blocked",
+   "category": "porn",
+   "variants": []
+  },
+  {
+   "term": "黄色视频",
+   "level": "blocked",
+   "category": "porn",
+   "variants": [
+    "皇色视频",
+    "黄涩视频"
+   ]
+  },
+  {
+   "term": "开车",
+   "level": "masked",
+   "category": "social_ethics",
+   "variants": []
+  },
+  {
+   "term": "撩妹",
+   "level": "masked",
+   "category": "social_ethics",
+   "variants": []
+  },
+  {
+   "term": "泡妞",
+   "level": "masked",
+   "category": "social_ethics",
+   "variants": []
+  },
+  {
+   "term": "约炮",
+   "level": "masked",
+   "category": "social_ethics",
+   "variants": []
+  },
+  {
+   "term": "老司机",
+   "level": "masked",
+   "category": "social_ethics",
+   "variants": []
+  },
+  {
+   "term": "圣战",
+   "level": "blocked",
+   "category": "violence",
+   "variants": []
+  },
+  {
+   "term": "杀人方法",
+   "level": "blocked",
+   "category": "violence",
+   "variants": [
+    "沙人方法"
+   ]
+  },
+  {
+   "term": "极端组织",
+   "level": "blocked",
+   "category": "violence",
+   "variants": []
+  },
+  {
+   "term": "炸弹制作",
+   "level": "blocked",
+   "category": "violence",
+   "variants": [
+    "诈弹制作"
+   ]
+  },
+  {
+   "term": "爆炸物配方",
+   "level": "blocked",
+   "category": "violence",
+   "variants": [
+    "爆诈物配方"
+   ]
+  },
+  {
+   "term": "自制刀具",
+   "level": "blocked",
+   "category": "violence",
+   "variants": []
+  },
+  {
+   "term": "不要脸",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": []
+  },
+  {
+   "term": "丑八怪",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": []
+  },
+  {
+   "term": "人渣",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": []
+  },
+  {
+   "term": "垃圾",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": []
+  },
+  {
+   "term": "废物",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": []
+  },
+  {
+   "term": "死胖子",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": []
+  },
+  {
+   "term": "畜生",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": []
+  },
+  {
+   "term": "贱人",
+   "level": "masked",
+   "category": "人身羞辱",
+   "variants": [
+    "溅人"
+   ]
+  },
+  {
+   "term": "危险吞食挑战",
+   "level": "masked",
+   "category": "危险挑战",
+   "variants": []
+  },
+  {
+   "term": "怂恿跳楼",
+   "level": "masked",
+   "category": "危险挑战",
+   "variants": []
+  },
+  {
+   "term": "极端节食打卡",
+   "level": "masked",
+   "category": "危险挑战",
+   "variants": []
+  },
+  {
+   "term": "窒息挑战",
+   "level": "masked",
+   "category": "危险挑战",
+   "variants": []
+  },
+  {
+   "term": "组队飙车挑战",
+   "level": "masked",
+   "category": "危险挑战",
+   "variants": []
+  },
+  {
+   "term": "家暴",
+   "level": "reviewed",
+   "category": "性暴力虐待",
+   "variants": []
+  },
+  {
+   "term": "猥亵",
+   "level": "reviewed",
+   "category": "性暴力虐待",
+   "variants": []
+  },
+  {
+   "term": "虐狗",
+   "level": "reviewed",
+   "category": "性暴力虐待",
+   "variants": []
+  },
+  {
+   "term": "虐猫",
+   "level": "reviewed",
+   "category": "性暴力虐待",
+   "variants": []
+  },
+  {
+   "term": "虐童",
+   "level": "reviewed",
+   "category": "性暴力虐待",
+   "variants": []
+  },
+  {
+   "term": "不给就曝光",
+   "level": "masked",
+   "category": "性羞辱骚扰",
+   "variants": []
+  },
+  {
+   "term": "发裸照给我",
+   "level": "masked",
+   "category": "性羞辱骚扰",
+   "variants": []
+  },
+  {
+   "term": "婊子",
+   "level": "masked",
+   "category": "性羞辱骚扰",
+   "variants": [
+    "表子"
+   ]
+  },
+  {
+   "term": "荡妇",
+   "level": "masked",
+   "category": "性羞辱骚扰",
+   "variants": []
+  },
+  {
+   "term": "骚货",
+   "level": "masked",
+   "category": "性羞辱骚扰",
+   "variants": []
+  },
+  {
+   "term": "弄死你",
+   "level": "masked",
+   "category": "暴力威胁",
+   "variants": []
+  },
+  {
+   "term": "我要杀了你",
+   "level": "masked",
+   "category": "暴力威胁",
+   "variants": []
+  },
+  {
+   "term": "放学堵你",
+   "level": "masked",
+   "category": "暴力威胁",
+   "variants": []
+  },
+  {
+   "term": "砍死你",
+   "level": "masked",
+   "category": "暴力威胁",
+   "variants": []
+  },
+  {
+   "term": "虐杀视频",
+   "level": "masked",
+   "category": "暴力威胁",
+   "variants": []
+  },
+  {
+   "term": "血腥现场原图",
+   "level": "masked",
+   "category": "暴力威胁",
+   "variants": []
+  },
+  {
+   "term": "以礼物换私密照",
+   "level": "blocked",
+   "category": "未成年性剥削",
+   "variants": []
+  },
+  {
+   "term": "传播未成年人私密影像",
+   "level": "blocked",
+   "category": "未成年性剥削",
+   "variants": []
+  },
+  {
+   "term": "索要未成年人裸照",
+   "level": "blocked",
+   "category": "未成年性剥削",
+   "variants": []
+  },
+  {
+   "term": "死",
+   "level": "reviewed",
+   "category": "歧义",
+   "variants": []
+  },
+  {
+   "term": "滚",
+   "level": "reviewed",
+   "category": "歧义",
+   "variants": []
+  },
+  {
+   "term": "强奸",
+   "level": "reviewed",
+   "category": "歧义高危词",
+   "variants": []
+  },
+  {
+   "term": "恐怖袭击",
+   "level": "reviewed",
+   "category": "歧义高危词",
+   "variants": []
+  },
+  {
+   "term": "爆炸",
+   "level": "reviewed",
+   "category": "歧义高危词",
+   "variants": []
+  },
+  {
+   "term": "自杀",
+   "level": "reviewed",
+   "category": "歧义高危词",
+   "variants": []
+  },
+  {
+   "term": "诈骗",
+   "level": "reviewed",
+   "category": "歧义高危词",
+   "variants": []
+  },
+  {
+   "term": "代购违禁药",
+   "level": "blocked",
+   "category": "毒品违禁品",
+   "variants": []
+  },
+  {
+   "term": "出售冰毒",
+   "level": "blocked",
+   "category": "毒品违禁品",
+   "variants": []
+  },
+  {
+   "term": "卖枪",
+   "level": "blocked",
+   "category": "毒品违禁品",
+   "variants": []
+  },
+  {
+   "term": "卖炸药",
+   "level": "blocked",
+   "category": "毒品违禁品",
+   "variants": []
+  },
+  {
+   "term": "侵害英烈名誉",
+   "level": "reviewed",
+   "category": "法定内容风险",
+   "variants": []
+  },
+  {
+   "term": "宣扬邪教",
+   "level": "reviewed",
+   "category": "法定内容风险",
+   "variants": []
+  },
+  {
+   "term": "泄露国家秘密",
+   "level": "reviewed",
+   "category": "法定内容风险",
+   "variants": []
+  },
+  {
+   "term": "煽动分裂",
+   "level": "reviewed",
+   "category": "法定内容风险",
+   "variants": []
+  },
+  {
+   "term": "人肉",
+   "level": "masked",
+   "category": "网暴开盒",
+   "variants": []
+  },
+  {
+   "term": "去冲他",
+   "level": "masked",
+   "category": "网暴开盒",
+   "variants": []
+  },
+  {
+   "term": "开盒",
+   "level": "masked",
+   "category": "网暴开盒",
+   "variants": []
+  },
+  {
+   "term": "扒地址",
+   "level": "masked",
+   "category": "网暴开盒",
+   "variants": []
+  },
+  {
+   "term": "把他手机号发出来",
+   "level": "masked",
+   "category": "网暴开盒",
+   "variants": []
+  },
+  {
+   "term": "挂人",
+   "level": "masked",
+   "category": "网暴开盒",
+   "variants": []
+  },
+  {
+   "term": "他妈的",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": [
+    "他马的"
+   ]
+  },
+  {
+   "term": "傻叉",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "傻缺",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "傻逼",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": [
+    "傻比",
+    "沙逼"
+   ]
+  },
+  {
+   "term": "制杖",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "操你妈",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "智熄",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "智障",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "滚你妈的",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "狗东西",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "狗杂种",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "狗腿子",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "白痴",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "神经病",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "脑残",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "至章",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "致障",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "蠢货",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "蠢驴",
+   "level": "masked",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "cnm",
+   "level": "reviewed",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "sb",
+   "level": "reviewed",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "wcnm",
+   "level": "reviewed",
+   "category": "脏话粗口",
+   "variants": []
+  },
+  {
+   "term": "你怎么不去死",
+   "level": "reviewed",
+   "category": "自残自杀诱导",
+   "variants": []
+  },
+  {
+   "term": "怂恿自残",
+   "level": "reviewed",
+   "category": "自残自杀诱导",
+   "variants": []
+  },
+  {
+   "term": "相约自杀",
+   "level": "reviewed",
+   "category": "自残自杀诱导",
+   "variants": []
+  },
+  {
+   "term": "自杀教程",
+   "level": "reviewed",
+   "category": "自残自杀诱导",
+   "variants": []
+  },
+  {
+   "term": "付费看裸照",
+   "level": "masked",
+   "category": "色情引流",
+   "variants": []
+  },
+  {
+   "term": "成人视频",
+   "level": "masked",
+   "category": "色情引流",
+   "variants": []
+  },
+  {
+   "term": "成人视频付费群",
+   "level": "masked",
+   "category": "色情引流",
+   "variants": []
+  },
+  {
+   "term": "私聊发黄片",
+   "level": "masked",
+   "category": "色情引流",
+   "variants": []
+  },
+  {
+   "term": "色情资源",
+   "level": "masked",
+   "category": "色情引流",
+   "variants": []
+  },
+  {
+   "term": "裸聊",
+   "level": "masked",
+   "category": "色情引流",
+   "variants": []
+  },
+  {
+   "term": "黄片",
+   "level": "masked",
+   "category": "色情引流",
+   "variants": []
+  },
+  {
+   "term": "代做假证",
+   "level": "blocked",
+   "category": "诈骗黑灰产",
+   "variants": []
+  },
+  {
+   "term": "代实名",
+   "level": "blocked",
+   "category": "诈骗黑灰产",
+   "variants": []
+  },
+  {
+   "term": "出售公民信息",
+   "level": "blocked",
+   "category": "诈骗黑灰产",
+   "variants": []
+  },
+  {
+   "term": "收银行卡",
+   "level": "blocked",
+   "category": "诈骗黑灰产",
+   "variants": []
+  },
+  {
+   "term": "洗钱跑分",
+   "level": "blocked",
+   "category": "诈骗黑灰产",
+   "variants": []
+  },
+  {
+   "term": "盗号教程",
+   "level": "blocked",
+   "category": "诈骗黑灰产",
+   "variants": []
+  },
+  {
+   "term": "假冒官方通报",
+   "level": "reviewed",
+   "category": "谣言炒作",
+   "variants": []
+  },
+  {
+   "term": "散布虚假灾情",
+   "level": "reviewed",
+   "category": "谣言炒作",
+   "variants": []
+  },
+  {
+   "term": "某人已被抓",
+   "level": "reviewed",
+   "category": "谣言炒作",
+   "variants": []
+  },
+  {
+   "term": "网传紧急封城",
+   "level": "reviewed",
+   "category": "谣言炒作",
+   "variants": []
+  },
+  {
+   "term": "下注群",
+   "level": "masked",
+   "category": "赌博引流",
+   "variants": []
+  },
+  {
+   "term": "代充赌资",
+   "level": "masked",
+   "category": "赌博引流",
+   "variants": []
+  },
+  {
+   "term": "包赢带单",
+   "level": "masked",
+   "category": "赌博引流",
+   "variants": []
+  },
+  {
+   "term": "博彩代理",
+   "level": "masked",
+   "category": "赌博引流",
+   "variants": []
+  },
+  {
+   "term": "赌场开户链接",
+   "level": "masked",
+   "category": "赌博引流",
+   "variants": []
+  }
+ ]
+}

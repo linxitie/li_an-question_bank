@@ -162,6 +162,20 @@ async def overview(
     return data
 
 
+@router.post("/sync-lexicon", summary="从 Obsidian 词表同步敏感词")
+async def sync_lexicon(
+    current_user: SysUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ....core.config import settings
+    from ....services.content_guard.vault_sync import sync_vault_lexicons
+
+    vault = str(getattr(settings, "MODERATION_VAULT_DIR", "") or "")
+    if not vault:
+        raise HTTPException(status_code=400, detail="未配置 MODERATION_VAULT_DIR")
+    return sync_vault_lexicons(db, vault)
+
+
 @router.get("/terms", summary="词条列表")
 async def list_terms(
     query: Optional[str] = Query(None, max_length=100),

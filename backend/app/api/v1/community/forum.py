@@ -461,6 +461,9 @@ async def get_forum_posts(
         query = query.filter(
             or_(ForumPost.title.like(like), ForumPost.content.like(like))
         )
+    # 热门兜底用的基础查询（不含日期）
+    base_query = query
+
     # P3：日期区间（两端都含当天）
     if date_from:
         try:
@@ -494,6 +497,24 @@ async def get_forum_posts(
         sort_expr,
         ForumPost.create_time.desc()
     ).offset(offset).limit(limit).all()
+
+    # 2026-11-09：热门榜在「当天/指定区间无帖」时自动回退近 7 天，任何机器一致
+    if sort == "hot" and not posts and (date_from or date_to):
+        week_start = datetime.now() - timedelta(days=7)
+        hot_fallback = (
+            base_query.filter(ForumPost.create_time >= week_start)
+            .order_by(
+                ForumPost.is_top.desc(),
+                (ForumPost.like_count * 2 + ForumPost.comment_count * 3).desc(),
+                ForumPost.create_time.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        if hot_fallback:
+            posts = hot_fallback
+            total = base_query.filter(ForumPost.create_time >= week_start).count()
 
     if not posts:
         return {"total": total, "limit": limit, "offset": offset, "posts": []}

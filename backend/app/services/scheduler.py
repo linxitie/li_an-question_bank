@@ -303,6 +303,30 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 2026-11-09：Obsidian 词表自动同步（每 10 分钟，文件变化才导入）
+    def _sync_vault_lexicons():
+        from ..core.database import SessionLocal
+        from .content_guard.vault_sync import sync_if_changed
+
+        db = SessionLocal()
+        try:
+            report = sync_if_changed(db)
+            if report.get("changed"):
+                logger.info("Obsidian 词表同步: %s", report)
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning("Obsidian 词表同步失败: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _sync_vault_lexicons,
+        trigger=CronTrigger(minute="*/10", timezone=CST),
+        id="sync_vault_lexicons",
+        name="Obsidian 敏感词表同步（每 10 分钟）",
+        replace_existing=True,
+    )
+
     # 模块4 v2：每日 20:00 站内提醒——今日任务未完成的用户
     def _remind_unfinished_tasks():
         from datetime import datetime as _dt

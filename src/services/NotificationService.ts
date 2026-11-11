@@ -2,11 +2,20 @@
 
 export interface Notification {
   id: number;
-  type: 'system' | 'approval' | 'security' | 'message';
+  type: 'system' | 'approval' | 'security' | 'message' | 'feedback' | 'forum';
   title: string;
   content: string;
   time: string;
   read: boolean;
+  link?: string | null;
+  relatedType?: string | null;
+  relatedId?: number | null;
+}
+
+function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const auth = (window as any).__VTJ_AUTH__;
+  if (auth && typeof auth.apiFetch === 'function') return auth.apiFetch(url, init);
+  return fetch(url, { credentials: 'include', ...(init || {}) });
 }
 
 class NotificationService {
@@ -42,41 +51,51 @@ class NotificationService {
     return this.notifications.filter(n => !n.read).length;
   }
 
-  markAsRead(id: number) {
+  async markAsRead(id: number) {
     const notification = this.notifications.find(n => n.id === id);
-    if (notification) {
+    if (notification && !notification.read) {
       notification.read = true;
       this.notify();
+      try {
+        await apiFetch('/api/notifications/' + id + '/read', { method: 'PUT' });
+      } catch {
+        /* 标记失败不阻塞跳转 */
+      }
+    }
+  }
+
+  async markAllAsRead() {
+    this.notifications.forEach(n => (n.read = true));
+    this.notify();
+    try {
+      await apiFetch('/api/notifications/read-all', { method: 'PUT' });
+    } catch {
+      /* 忽略 */
     }
   }
 
   private async fetchNotifications() {
-    // 后端API就绪后，替换为真实调用
-    // const res = await fetch('/api/notifications');
-    // this.notifications = await res.json();
-    this.notifications = this.generateMockNotifications();
-    this.notify();
-  }
-
-  private generateMockNotifications(): Notification[] {
-    const templates: Record<string, string[]> = {
-      system: ['系统已更新至最新版本', '数据库备份完成', '新功能已上线'],
-      approval: ['3份试卷待审批', '本周已通过12份试卷', '有新提交的试卷'],
-      security: ['检测到异常登录', '密码修改成功', '登录IP变更提醒']
-    };
-    const types: Array<'system' | 'approval' | 'security'> = ['system', 'approval', 'security'];
-    return Array.from({ length: 5 }, (_, i) => {
-      const type = types[Math.floor(Math.random() * 3)];
-      return {
-        id: i + 1,
-        type,
-        title: templates[type][Math.floor(Math.random() * 3)],
-        content: '',
-        time: `${Math.floor(Math.random() * 24)}小时前`,
-        read: Math.random() > 0.5
-      };
-    });
+    try {
+      const res = await apiFetch('/api/notifications?page=1&page_size=20');
+      if (!res.ok) return;
+      const data = await res.json();
+      this.notifications = (data.items || []).map((n: any) => ({
+        id: n.notification_id,
+        type: n.type || 'system',
+        title: n.title || '',
+        content: n.content || '',
+        time: n.created_at ? String(n.created_at).replace('T', ' ').slice(5, 16) : '',
+        read: !!n.is_read,
+        link: n.link || null,
+        relatedType: n.related_type || null,
+        relatedId: n.related_id || null
+      }));
+      this.notify();
+    } catch {
+      /* 轮询失败保留上一次数据 */
+    }
   }
 }
 
 export const notificationService = new NotificationService();
+export default notificationService;

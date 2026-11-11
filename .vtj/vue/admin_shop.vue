@@ -321,7 +321,16 @@
             return;
           }
           this.state.form.image_url = d.url;
-          ElMessage.success(`图片已处理：自动抠像 + 白底（清晰度 ${d.sharpness}）`);
+          if (this.state.editingId) {
+            await this.api('/api/admin/shop/products/' + this.state.editingId, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: d.url })
+            });
+            ElMessage.success('图片已抠像并保存（清晰度 ' + d.sharpness + '）');
+          } else {
+            ElMessage.success('图片已处理：自动抠像 + 白底（清晰度 ' + d.sharpness + '），请点击保存商品');
+          }
         } catch (e) {
           ElMessage.error(e.message || '上传失败');
         } finally {

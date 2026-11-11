@@ -35,8 +35,8 @@
             <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
             <div v-if="showNotifications" class="notification-dropdown">
               <div class="notification-header">消息中心</div>
-              <div v-for="n in notifications" :key="n.id" class="notification-item" :class="{ unread: !n.read }" @click="notificationService.markAsRead(n.id)">
-                <span class="notification-type">{{ {system:'系统',approval:'审批',security:'安全',message:'消息'}[n.type] }}</span>
+              <div v-for="n in notifications" :key="n.id" class="notification-item" :class="{ unread: !n.read }" @click="onNotificationClick(n)">
+                <span class="notification-type">{{ {system:'系统',approval:'审批',security:'安全',message:'消息',feedback:'反馈',forum:'论坛'}[n.type] }}</span>
                 <span class="notification-title">{{ n.title }}</span>
                 <span class="notification-time">{{ n.time }}</span>
               </div>
@@ -146,6 +146,21 @@ export default defineComponent({
       notificationService.stopPolling();
     });
 
+    /** 2026-11-07：点击通知 → 标记已读并跳转（反馈会打开 /admin/feedback?open=ID） */
+    async function onNotificationClick(n: Notification) {
+      showNotifications.value = false;
+      await notificationService.markAsRead(n.id);
+      // 2026-11-09：没有 link 的通知按类型给默认落地页，保证每条都能跳转
+      const fallback: Record<string, string> = {
+        approval: '/admin/papers',
+        feedback: '/admin/feedback',
+        forum: '/admin/forum',
+        security: '/admin/logs'
+      };
+      const target = n.link || fallback[n.type] || '/admin/dashboard';
+      router.push(target);
+    }
+
     // 加载当前用户头像
     async function loadAvatar() {
       try {
@@ -226,7 +241,8 @@ export default defineComponent({
       avatarUrl,
       confirmLogout,
       changePassword,
-      notificationService
+      notificationService,
+      onNotificationClick
     };
   }
 });

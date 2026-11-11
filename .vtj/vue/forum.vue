@@ -455,12 +455,15 @@
                 <div class="comment-image-upload">
                   <FileUploader v-model="state.newCommentImages" :max-docs="3" />
                 </div>
-                <textarea
-                  v-model="state.newComment"
-                  rows="3"
-                  class="modal-textarea"
-                  :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
-                  maxlength="2000"></textarea>
+                <div class="comment-input-box">
+                  <textarea
+                    v-model="state.newComment"
+                    rows="3"
+                    class="modal-textarea"
+                    :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
+                    maxlength="2000"></textarea>
+                  <button class="fullscreen-btn" title="全屏输入" @click="state.fullscreenInput = true">⛶</button>
+                </div>
                 <div class="modal-actions">
                   <button class="cancel-btn" @click="closePostDetail">关闭</button>
                   <button
@@ -475,6 +478,39 @@
           </template>
         </div>
       </div>
+
+      <!-- 评论输入全屏弹窗（2026-11-09） -->
+      <div v-if="state.fullscreenInput" class="fullscreen-mask" @click.self="state.fullscreenInput = false">
+        <div class="fullscreen-card">
+          <div class="fullscreen-head">
+            <h3>发表评论</h3>
+            <button class="fullscreen-close" @click="state.fullscreenInput = false">×</button>
+          </div>
+          <div class="fullscreen-body">
+            <textarea
+              v-model="state.newComment"
+              class="fullscreen-textarea"
+              :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
+              maxlength="2000"></textarea>
+            <div class="fullscreen-tools">
+              <button class="emoji-btn" title="表情 / 表情包" @click="state.showCommentPicker = !state.showCommentPicker">😀</button>
+              <FileUploader v-model="state.newCommentImages" :max-docs="3" />
+              <button
+                class="confirm-btn"
+                :disabled="state.commentSubmitting || !state.newComment.trim()"
+                @click="submitComment">
+                {{ state.commentSubmitting ? '提交中...' : '发表评论' }}
+              </button>
+            </div>
+            <div v-if="state.showCommentPicker" class="fullscreen-picker">
+              <EmojiStickerPicker
+                @select="insertCommentEmoji"
+                @close="state.showCommentPicker = false" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 热门帖子前 100 条 Modal -->
       <div v-if="state.showHotAll" class="modal-overlay modal-l1" @click.self="closeHotAll">
         <div class="modal-card post-detail-card hot-all-card">
@@ -672,6 +708,7 @@
         searchDateFrom: '',
         searchDateTo: '',
         showCommentPicker: false,
+        fullscreenInput: false,
         posts: [] as any[],
         total: 0,
         loading: false,
@@ -2580,10 +2617,10 @@
   }
   /* === 帖子详情 Modal === */
   .post-detail-card {
-    width: 680px;
-    max-width: 95vw;
-    height: 85vh;          /* 固定高度，底部固定条才能与弹窗底边精确对齐 */
-    max-height: 85vh;
+    width: 1220px;
+    max-width: 96vw;
+    height: 888px;         /* 2026-11-07：按需求放大到 1220×888 */
+    max-height: 92vh;
     overflow-y: auto;
     /* 底部留出固定输入区的高度，最后一条评论仍可滚到可见位置 */
     padding-bottom: 90px;
@@ -2808,29 +2845,38 @@
     margin-top: 4px;
   }
   .comment-input-area {
-    /* 吸底：详情弹窗(.post-detail-card)是滚动容器，输入区常驻可视底部，
-       否则上传/表情/发送位于内容末尾(2100px+)，用户看不到。
-       负外边距抵消 .modal-card 的 28px 内边距，让吸底条铺到卡片底边与两侧，
-       否则下方会露出 28px 的滚动内容。 */
     margin: 0;
-    padding: 12px 28px;
+    margin-bottom: -35px;
+    padding: 10px 20px;
     border-top: 1px solid #f0f2f5;
-    /* 弹窗高度固定为 85vh 且垂直居中，所以其底边恒在 92.5vh；
-       固定条贴同一条线，打开即在视口内，不依赖滚动 */
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 7.5vh;
-    width: 680px;
-    max-width: 95vw;
+    bottom: calc((100vh - min(888px, 92vh)) / 2);
+    width: 1220px;
+    max-width: 96vw;
     background: #ffffff;
     z-index: 2100;
     box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.06);
-    border-radius: 0 0 16px 16px;
+    border-radius: 16px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 13px;
+  }
+  .comment-input-box { position: relative; order: 3; flex: 1 1 0; display: flex; }
+  .comment-input-box textarea { flex: 1; width: 100%; }
+  .comment-input-area .fullscreen-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    border: 0;
+    background: transparent;
+    color: #8a8faa;
+    font-size: 15px;
+    padding: 2px 4px;
   }
   /* 单行：😊 → ＋ → 输入框 → 发表评论（DOM 顺序不变，仅改视觉顺序） */
   .comment-input-area textarea {
@@ -2838,10 +2884,10 @@
     flex: 1 1 0;
     width: auto;          /* 覆盖 .modal-textarea 的 width:100%，否则整行被占满导致换行 */
     min-width: 120px;
-    height: 40px;
-    min-height: 40px;
-    max-height: 120px;
-    resize: vertical;
+    height: 50px;
+    min-height: 50px;
+    max-height: 180px;
+    resize: none;
   }
   .comment-input-area .comment-toolbar { order: 1; margin: 0; }
   .comment-input-area .comment-image-upload { order: 2; margin: 0; }
@@ -3125,4 +3171,52 @@
     font-family: inherit;
   }
   .fb-anon { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 13px; color: #5a6488; }
+
+  /* 2026-11-09：评论输入全屏弹窗 */
+  .fullscreen-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(12, 26, 44, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fullscreen-card {
+    width: 1220px;
+    max-width: 96vw;
+    height: 888px;
+    max-height: 92vh;
+    background: #fff;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .fullscreen-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid #f0f2f5;
+  }
+  .fullscreen-head h3 { margin: 0; font-size: 16px; }
+  .fullscreen-close { border: 0; background: transparent; font-size: 22px; color: #8a8faa; cursor: pointer; }
+  .fullscreen-body { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; overflow-y: auto; }
+  .fullscreen-textarea {
+    flex: 1;
+    min-height: 300px;
+    border: 1px solid #dfe3ee;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .fullscreen-tools { display: flex; align-items: center; gap: 13px; }
+  .fullscreen-tools :deep(.fu-add) { width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 0; }
+  .fullscreen-tools :deep(.fu-add::before) { content: '+'; font-size: 20px; }
+  .fullscreen-tools .confirm-btn { margin-left: auto; }
+  .fullscreen-picker { align-self: flex-start; }
+  .fullscreen-btn { border: 1px solid #dfe3ee; background: #fff; border-radius: 8px; padding: 4px 8px; cursor: pointer; font-size: 15px; }
 </style>

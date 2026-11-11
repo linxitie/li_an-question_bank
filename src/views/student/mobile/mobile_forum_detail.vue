@@ -120,6 +120,14 @@
                 >
                   {{ c.liked ? '❤' : '♡' }}<span v-if="c.likeCount">{{ c.likeCount }}</span>
                 </button>
+                <button
+                  class="mini-reaction"
+                  :class="{ active: c.favorited }"
+                  title="收藏"
+                  @click="reactToCommentFavorite(c)"
+                >
+                  {{ c.favorited ? '★' : '☆' }}<span v-if="c.favoriteCount">{{ c.favoriteCount }}</span>
+                </button>
               </div>
               <div class="comment-time">{{ formatDateTime(c.createTime) }}</div>
             </div>
@@ -404,6 +412,20 @@ const reactToComment = async (commentId: number, reaction: ForumReactionCode) =>
     await store.reactToComment(commentId, reaction);
   } catch (e) {
     console.error('评论表情反应失败:', e);
+  }
+};
+
+const reactToCommentFavorite = async (c: any) => {
+  try {
+    const auth = (window as any).__VTJ_AUTH__;
+    const res = await auth.apiFetch('/api/forum/comments/' + c.id + '/favorite', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      c.favorited = data.favorited;
+      c.favoriteCount = data.favoriteCount;
+    }
+  } catch (e) {
+    console.error('评论收藏失败:', e);
   }
 };
 
@@ -908,4 +930,13 @@ onMounted(() => {
   width: 36px;
   height: 36px;
 }
+/* 2026-11-09：手机端点赞/收藏动效 */
+@keyframes m-icon-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  70% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.reaction-btn.active .reaction-emoji,
+.mini-reaction.active { animation: m-icon-pop 0.45s ease; }
 </style>
