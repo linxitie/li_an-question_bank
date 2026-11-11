@@ -46,6 +46,13 @@ export interface ModerationPost {
   viewCount?: number;
   createTime?: string | null;
   attachments?: Array<{ name: string; url: string; size?: number; type?: string }>;
+  user?: {
+    id?: number;
+    nickname?: string;
+    avatar?: string;
+    userType?: string;
+    className?: string | null;
+  } | null;
 }
 
 export interface ModerationComment {

@@ -94,6 +94,8 @@ export interface ForumCommentItem {
   attachments?: ForumAttachment[];
   replyCount?: number;
   liked: boolean;
+  favorited?: boolean;
+  favoriteCount?: number;
   myReaction?: ForumReactionCode | null;
   reactions?: Record<string, number>;
   user?: ForumUserBrief;
