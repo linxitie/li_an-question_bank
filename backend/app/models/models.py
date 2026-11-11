@@ -3020,6 +3020,7 @@ class JobHistoryStat(Base):
     recruitment_id = Column(Integer, ForeignKey("recruitment_info.recruitment_id"), nullable=True)
     province = Column(String(50))
     employer = Column(String(200))
+    job_name = Column(String(300))
     post_type = Column(String(50))
     year = Column(Integer, nullable=False)
     min_score = Column(Float)

@@ -440,20 +440,19 @@ async def job_history(post_id: int, db: Session = Depends(get_db)):
         .filter(
             or_(
                 JobHistoryStat.post_id == post_id,
-                (
-                    (JobHistoryStat.province == post.province)
-                    & (JobHistoryStat.post_type == post.post_type)
-                ),
+                JobHistoryStat.province == post.province,
             )
         )
-        .order_by(JobHistoryStat.year.desc())
-        .limit(10)
+        .order_by(JobHistoryStat.year.desc(), JobHistoryStat.stat_id)
+        .limit(50)
         .all()
     )
     return {
         "items": [
             {
                 "year": row.year,
+                "job_name": row.job_name or "",
+                "employer": row.employer or "",
                 "min_score": row.min_score,
                 "avg_score": row.avg_score,
                 "applicants": row.applicants,

@@ -376,6 +376,14 @@ async def lifespan(app: FastAPI):
                         conn.commit()
                     logger.info(f"自动迁移: user_profile 添加列 {col_name}")
 
+        if "job_history_stat" in inspector.get_table_names():
+            history_cols = [c["name"] for c in inspector.get_columns("job_history_stat")]
+            if "job_name" not in history_cols:
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE job_history_stat ADD COLUMN job_name VARCHAR(300)"))
+                    conn.commit()
+                logger.info("自动迁移: job_history_stat 添加列 job_name")
+
         # 检查 news_article 表
         if "news_article" in inspector.get_table_names():
             news_cols = [c["name"] for c in inspector.get_columns("news_article")]
