@@ -8,6 +8,7 @@
         <span class="header-title">招考信息</span>
       </div>
       <span class="header-badge pulse-dot">实时更新</span>
+      <RecruitmentRadarEntry />
     </div>
 
     <!-- 加载状态 -->
