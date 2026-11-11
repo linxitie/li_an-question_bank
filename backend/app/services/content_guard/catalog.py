@@ -5,7 +5,9 @@ content_guard_schema.ensure_schema 调用，测试可显式调用。
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -81,6 +83,39 @@ def seed_policies(db: Session) -> int:
     return created
 
 
+_DATA_FILE = Path(__file__).resolve().parent / "data" / "seed_terms.json"
+
+
+def _load_portable_terms() -> list[tuple[str, str, str, list[str]]]:
+    """读取随仓库分发的完整词表（2026-11-07）。
+
+    背景：vault 词表不进版本库，换一台电脑只拉代码时，仅 88 条内置种子会漏掉
+    人工/知识库补充的词，表现为「敏感词不打码」。这里把当前库 180 条导出为
+    JSON 一起发版，任何机器首次启动即可得到同一套词表。
+    """
+    try:
+        payload = json.loads(_DATA_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[tuple[str, str, str, list[str]]] = []
+    for item in payload.get("terms") or []:
+        word = str(item.get("term") or "").strip()
+        if not word:
+            continue
+        out.append(
+            (
+                word,
+                str(item.get("level") or "reviewed"),
+                str(item.get("category") or "other"),
+                [str(v) for v in (item.get("variants") or []) if str(v).strip()],
+            )
+        )
+    return out
+
+
+_PORTABLE_TERMS = _load_portable_terms()
+
+
 def _variant_candidates(term: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for idx, ch in enumerate(term):
@@ -92,59 +127,84 @@ def _variant_candidates(term: str) -> list[tuple[str, str]]:
     return out
 
 
+def _ensure_term(
+    db: Session,
+    word: str,
+    level: str,
+    category: str,
+    policies: dict[str, CgPolicy],
+    extra_variants: tuple[str, ...] = (),
+) -> tuple[int, int]:
+    norm = normalizer.normalize(word)
+    if not norm:
+        return 0, 0
+    policy = policies.get(category)
+    term = db.query(CgTerm).filter(CgTerm.normalized == norm).first()
+    created_terms = 0
+    if term is None:
+        term = CgTerm(
+            term=word,
+            normalized=norm,
+            level=level,
+            category=category,
+            weight=0.9 if level == "blocked" else (0.8 if level == "masked" else 0.65),
+            confidence=0.9 if level == "blocked" else (0.8 if level == "masked" else 0.65),
+            status="active",
+            source="seed",
+            policy_clause_id=policy.clause_id if policy else None,
+            created_by=0,
+            first_seen_at=datetime.now(),
+            note="内置/随仓库词表",
+        )
+        db.add(term)
+        db.flush()
+        created_terms = 1
+    graph.add_edge(db, "term", term.term_id, "cites", "policy", policy.clause_id if policy else "none")
+    graph.add_edge(db, "term", term.term_id, "belongs_to", "category", category)
+
+    candidates = list(_variant_candidates(term.term))
+    for extra in extra_variants:
+        candidates.append((extra, "manual"))
+    created_variants = 0
+    for variant_text, kind in candidates:
+        vnorm = normalizer.normalize(variant_text)
+        if not vnorm or vnorm == term.normalized:
+            continue
+        exists = (
+            db.query(CgVariant)
+            .filter(CgVariant.term_id == term.term_id, CgVariant.normalized == vnorm)
+            .first()
+        )
+        if exists:
+            continue
+        db.add(
+            CgVariant(
+                term_id=term.term_id,
+                variant=variant_text,
+                normalized=vnorm,
+                kind=kind,
+                status="active",
+                created_by=0,
+            )
+        )
+        db.flush()
+        created_variants += 1
+        graph.add_edge(db, "variant", db.query(CgVariant).filter(CgVariant.term_id == term.term_id, CgVariant.normalized == vnorm).first().variant_id, "variant_of", "term", term.term_id)
+    return created_terms, created_variants
+
+
 def seed_terms(db: Session, actor: str = "system") -> dict[str, int]:
     policies = _category_policy(db)
     created_terms = 0
     created_variants = 0
     for category, level, words in TERM_BUCKETS:
-        policy = policies.get(category)
         for word in words:
-            norm = normalizer.normalize(word)
-            if not norm:
-                continue
-            term = db.query(CgTerm).filter(CgTerm.normalized == norm).first()
-            if term is None:
-                term = CgTerm(
-                    term=word,
-                    normalized=norm,
-                    level=level,
-                    category=category,
-                    weight=0.9 if level == "blocked" else (0.8 if level == "masked" else 0.65),
-                    confidence=0.9 if level == "blocked" else (0.8 if level == "masked" else 0.65),
-                    status="active",
-                    source="seed",
-                    policy_clause_id=policy.clause_id if policy else None,
-                    created_by=0,
-                    first_seen_at=datetime.now(),
-                    note="内置种子词",
-                )
-                db.add(term)
-                db.flush()
-                created_terms += 1
-            graph.add_edge(db, "term", term.term_id, "cites", "policy", policy.clause_id if policy else "none")
-            graph.add_edge(db, "term", term.term_id, "belongs_to", "category", category)
-
-            for variant_text, kind in _variant_candidates(term.term):
-                vnorm = normalizer.normalize(variant_text)
-                if not vnorm or vnorm == term.normalized:
-                    continue
-                exists = (
-                    db.query(CgVariant)
-                    .filter(CgVariant.term_id == term.term_id, CgVariant.normalized == vnorm)
-                    .first()
-                )
-                if exists:
-                    continue
-                variant = CgVariant(
-                    term_id=term.term_id,
-                    variant=variant_text,
-                    normalized=vnorm,
-                    kind=kind,
-                    status="active",
-                    created_by=0,
-                )
-                db.add(variant)
-                db.flush()
-                created_variants += 1
-                graph.add_edge(db, "variant", variant.variant_id, "variant_of", "term", term.term_id)
+            t, v = _ensure_term(db, word, level, category, policies)
+            created_terms += t
+            created_variants += v
+    # 随仓库分发的完整词表（包含 vault / 人工补充的词）
+    for word, level, category, variants in _PORTABLE_TERMS:
+        t, v = _ensure_term(db, word, level, category, policies, tuple(variants))
+        created_terms += t
+        created_variants += v
     return {"terms": created_terms, "variants": created_variants}

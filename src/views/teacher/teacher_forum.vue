@@ -70,17 +70,39 @@
       </div>
 
       <div v-if="detail" class="tf-modal tf-modal-l2" @click.self="detail = null">
-        <div class="tf-modal-card">
+        <div class="tf-modal-card tf-detail-card">
           <button class="tf-close" @click="detail = null">×</button>
           <div class="tf-modal-scroll">
           <h2 :style="{ color: titleColorValue(detail.titleColor) }"><span v-if="detail.aiTitle" class="ai-title-tag">AI生成</span>{{ detail.title }}</h2>
-          <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
-          <p class="tf-stats">❤ {{ detail.likeCount || 0 }} · ★ {{ detail.favoriteCount || 0 }} · 💬 {{ detail.commentCount || 0 }} · 👁 {{ detail.viewCount || 0 }}</p>
+          <div class="tf-detail-author">
+            <UserBadge
+              size="sm"
+              :src="detail.authorAvatar || detail.user?.avatar"
+              :name="detail.author"
+              :user-id="detail.user?.id"
+              :user-type="detail.user?.userType || 'student'" />
+            <span class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</span>
+            <span class="tf-meta">{{ formatDateTime(detail.createTime) }}</span>
+          </div>
           <p class="tf-content"><ForumContent :content="detail.content" :format="detail.contentFormat" /></p>
           <AttachmentList
             v-if="detail.attachments && detail.attachments.length"
             :attachments="detail.attachments"
             mode="post" />
+          <div class="tf-stats tf-detail-actions">
+            <button class="tf-detail-act" :class="{ on: detail.liked }" @click.stop="detailPostLike">❤ {{ detail.likeCount || 0 }}</button>
+            <button class="tf-detail-act" :class="{ on: detail.favorited }" @click.stop="detailPostFavorite">★ {{ detail.favoriteCount || 0 }}</button>
+            <span>💬 {{ detail.commentCount || 0 }}</span>
+            <span>👁 {{ detail.viewCount || 0 }}</span>
+          </div>
+          <div class="tf-comment-sort">
+            <button
+              v-for="s in [{ key: 'time', label: '时间' }, { key: 'likes', label: '点赞' }, { key: 'replies', label: '回复' }]"
+              :key="s.key"
+              :class="{ on: commentSort === s.key }"
+              @click="setCommentSort(s.key as any)">{{ s.label }}</button>
+            <button class="tf-sort-order" @click="toggleCommentOrder">{{ commentOrder === 'desc' ? '倒序' : '正序' }}</button>
+          </div>
           <h3>评论（{{ comments.length }}）</h3>
           <p v-if="!comments.length" class="tf-empty">暂无评论</p>
           <div v-for="c in comments" :key="c.id" class="tf-comment">
@@ -111,6 +133,7 @@
                 <button class="tf-act" :class="{ on: c.liked }" @click.stop="commentLike(c)">❤ {{ c.likeCount || 0 }}</button>
                 <button class="tf-act" :class="{ on: c.favorited }" @click.stop="commentFavorite(c)">★ {{ c.favoriteCount || 0 }}</button>
                 <button class="tf-act" @click.stop="commentReport(c)">举报</button>
+                <button class="tf-act" @click.stop="startReplyComment(c)">回复</button>
                 <span class="tf-act-r">回复 {{ c.replyCount || 0 }}</span>
               </div>
             </div>
@@ -120,12 +143,19 @@
 
           <!-- 教师评论输入（与学生端一致：文字 + 发送） -->
           <div class="tf-comment-input">
-            <textarea
-              v-model="commentDraft"
-              class="tf-comment-textarea"
-              rows="2"
-              placeholder="写下你的评论… Ctrl+Enter 发送"
-              @keyup.ctrl.enter="submitComment" />
+            <div v-if="replyTarget" class="tf-reply-hint">
+              回复 @{{ replyTarget.user?.nickname || replyTarget.author || '匿名' }}
+              <button class="tf-reply-cancel" @click="replyTarget = null">取消</button>
+            </div>
+            <div class="tf-comment-box">
+              <textarea
+                v-model="commentDraft"
+                class="tf-comment-textarea"
+                rows="2"
+                placeholder="写下你的评论… Ctrl+Enter 发送"
+                @keyup.ctrl.enter="submitComment" />
+              <button class="tf-fs-btn" title="全屏输入" @click="fullscreenInput = true">⛶</button>
+            </div>
             <button class="tf-icon-btn" title="表情" @click="showCommentEmoji = !showCommentEmoji">😊</button>
             <FileUploader v-model="commentAttachments" :max-docs="0" class="tf-comment-uploader" />
             <div v-if="showCommentEmoji" class="tf-emoji-pop">
@@ -281,6 +311,28 @@
       @submit="submitPost"
       @save-draft="savePostDraft"
     />
+
+    <div v-if="fullscreenInput" class="tf-fs-mask" @click.self="fullscreenInput = false">
+      <div class="tf-fs-card">
+        <div class="tf-fs-head">
+          <h3>发表评论</h3>
+          <button class="tf-close" @click="fullscreenInput = false">×</button>
+        </div>
+        <div class="tf-fs-body">
+          <textarea v-model="commentDraft" class="tf-fs-textarea" rows="10" placeholder="写下你的评论… Ctrl+Enter 发送"></textarea>
+          <div class="tf-fs-tools">
+            <button class="tf-icon-btn" title="表情 / 表情包" @click="showCommentEmoji = !showCommentEmoji">😊</button>
+            <FileUploader v-model="commentAttachments" :max-docs="0" />
+            <button class="tf-btn" :disabled="commentSubmitting || !commentDraft.trim()" @click="submitComment">
+              {{ commentSubmitting ? '发送中…' : '发送' }}
+            </button>
+          </div>
+          <div v-if="showCommentEmoji" class="tf-fs-picker">
+            <EmojiStickerPicker @select="onEmojiSelect" @close="showCommentEmoji = false" />
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -295,7 +347,7 @@ import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
 import { createForumComment } from '@/modules/community/api';
-import { toggleForumPostLike, toggleForumFavorite } from '@/modules/community/api';
+import { toggleForumPostLike, toggleForumFavorite, fetchForumPostDetail } from '@/modules/community/api';
 import {
   fetchForumComments,
   toggleForumCommentLike,
@@ -321,6 +373,8 @@ import {
 
 const posts = ref<ModerationPost[]>([]);
 const comments = ref<ModerationComment[]>([]);
+const commentSort = ref<'time' | 'likes' | 'replies'>('time');
+const commentOrder = ref<'desc' | 'asc'>('desc');
 const detail = ref<ModerationPost | null>(null);
 const loading = ref(false);
 const keyword = ref('');
@@ -356,14 +410,22 @@ const postForm = reactive({
 const postDraftInitial = ref<Partial<PostDraft> | null>(null);
 const commentAttachments = ref<any[]>([]);
 const showCommentEmoji = ref(false);
+const fullscreenInput = ref(false);
 
 // T4：我的收藏 / 我的喜欢
 const favVisible = ref(false);
 const favTab = ref<'favorites' | 'likes'>('favorites');
 const favList = ref<any[]>([]);
 const favLoading = ref(false);
-const onEmojiSelect = (p: { value: string }) => {
-  commentDraft.value += p.value;
+const commentStickers = ref<any[]>([]);
+const replyTarget = ref<any>(null);
+const onEmojiSelect = (p: { value: string; type?: string; name?: string }) => {
+  // 2026-11-07：表情包不再把 URL 当文本拼进正文（会显示成一串路径），改走图片附件
+  if (p.type === 'sticker') {
+    commentStickers.value.push({ name: p.name || '表情包', url: p.value, size: 0, type: 'image' });
+  } else {
+    commentDraft.value += p.value;
+  }
   showCommentEmoji.value = false;
 };
 
@@ -566,15 +628,49 @@ const commentReport = async (c: any) => {
   }
 };
 
+const detailPostLike = async () => {
+  if (!detail.value) return;
+  try {
+    const r = await toggleForumPostLike(detail.value.id);
+    detail.value.liked = r.liked;
+    detail.value.likeCount = r.likeCount;
+  } catch (e) {
+    ElMessage.error('点赞失败');
+  }
+};
+
+const detailPostFavorite = async () => {
+  if (!detail.value) return;
+  try {
+    const r = await toggleForumFavorite(detail.value.id);
+    detail.value.favorited = r.favorited;
+    detail.value.favoriteCount = r.favoriteCount;
+  } catch (e) {
+    ElMessage.error('收藏失败');
+  }
+};
+
+const startReplyComment = (c: any) => {
+  replyTarget.value = c;
+  showCommentEmoji.value = false;
+};
+
 const submitComment = async () => {
   const text = commentDraft.value.trim();
   if (!text || !detail.value) return;
   commentSubmitting.value = true;
   try {
-    await createForumComment(detail.value.id, { content: text, attachments: commentAttachments.value });
-    ElMessage.success('评论已发送');
+    const allAttachments = [...(commentAttachments.value || []), ...commentStickers.value];
+    await createForumComment(detail.value.id, {
+      content: text,
+      attachments: allAttachments,
+      parentCommentId: replyTarget.value?.id || null
+    });
+    ElMessage.success(replyTarget.value ? '回复已发送' : '评论已发送');
     commentDraft.value = '';
     commentAttachments.value = [];
+    commentStickers.value = [];
+    replyTarget.value = null;
     await openPost(detail.value);
   } catch (e: any) {
     ElMessage.error(e && e.message ? e.message : '评论失败');
@@ -641,13 +737,15 @@ const loadPosts = async () => {
   }
 };
 
-const openPost = async (post: ModerationPost) => {
-  detail.value = post;
+const loadComments = async (postId: number) => {
   try {
-    // 教师端评论：合并「教师审核字段（canDelete/status）+ 学生端互动字段（liked/favorited/回复数）」
     const [teacherData, studentData] = await Promise.all([
-      teacherForumApi.comments(post.id).catch(() => ({ items: [] })),
-      fetchForumComments(post.id, { limit: 100, sortBy: 'time', order: 'asc' }).catch(() => ({ comments: [] }))
+      teacherForumApi.comments(postId).catch(() => ({ items: [] })),
+      fetchForumComments(postId, {
+        limit: 100,
+        sortBy: commentSort.value,
+        order: commentOrder.value
+      }).catch(() => ({ comments: [] }))
     ]);
     const interMap = new Map<number, any>();
     for (const c of (studentData as any).comments || []) interMap.set(c.id, c);
@@ -655,6 +753,27 @@ const openPost = async (post: ModerationPost) => {
       ...c,
       ...(interMap.get(c.id) || {})
     }));
+  } catch (e) {
+    comments.value = [];
+  }
+};
+
+const setCommentSort = async (key: 'time' | 'likes' | 'replies') => {
+  commentSort.value = key;
+  if (detail.value) await loadComments(detail.value.id);
+};
+
+const toggleCommentOrder = async () => {
+  commentOrder.value = commentOrder.value === 'desc' ? 'asc' : 'desc';
+  if (detail.value) await loadComments(detail.value.id);
+};
+
+const openPost = async (post: ModerationPost) => {
+  detail.value = post;
+  try {
+    const postDetail = await fetchForumPostDetail(post.id).catch(() => null);
+    if (postDetail) detail.value = { ...post, ...(postDetail as any) };
+    await loadComments(post.id);
   } catch (e) {
     comments.value = [];
   }
@@ -1019,6 +1138,85 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
   box-sizing: border-box;
 }
 .tf-side .tf-mini-card:last-child { margin-bottom: 8px; }
+
+/* 2026-11-07：点赞/收藏图标特效 */
+@keyframes tf-icon-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.28); }
+  60% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+@keyframes tf-icon-glow {
+  0% { box-shadow: 0 0 0 0 rgba(196,30,58,.35); }
+  100% { box-shadow: 0 0 0 10px rgba(196,30,58,0); }
+}
+.tf-ico.on, .tf-act.on { animation: tf-icon-pop .45s ease; }
+.tf-ico.on { box-shadow: 0 0 10px rgba(196,30,58,.18); }
+.tf-act.on { text-shadow: 0 0 8px rgba(196,30,58,.35); }
+.tf-star-btn:hover { transform: scale(1.12) rotate(-6deg); transition: transform .18s ease; }
+
+/* 2026-11-07：教师端帖子详情弹窗放大到 1220×888，评论输入框 95px */
+.tf-detail-card {
+  width: 1220px;
+  max-width: 96vw;
+  height: 888px;
+  max-height: 92vh;
+}
+.tf-detail-card .tf-modal-scroll { flex: 1 1 auto; min-height: 0; }
+.tf-detail-card .tf-comment-textarea { height: 95px; min-height: 95px; }
+/* 2026-11-09：评论输入条参数与全屏输入 */
+.tf-comment-input {
+  margin: 0 -20px -35px;
+  border-radius: 16px;
+  gap: 13px;
+  padding: 10px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  position: relative;
+}
+.tf-comment-input .tf-comment-textarea {
+  flex: 1 1 100%;
+  width: 100%;
+}
+.tf-comment-input .tf-icon-btn,
+.tf-comment-input .tf-comment-uploader,
+.tf-comment-input .tf-btn {
+  flex: 0 0 auto;
+}
+.tf-comment-input .tf-btn { margin-left: auto; }
+.tf-comment-input .tf-icon-btn[title="全屏输入"] {
+  position: absolute;
+  right: 10px;
+  top: 6px;
+  border: 0;
+  background: transparent;
+}
+.tf-comment-textarea { min-height: 50px; height: 50px; }
+.tf-fs-mask { position: fixed; inset: 0; z-index: 9999; background: rgba(12,26,44,.45); display: flex; align-items: center; justify-content: center; }
+.tf-fs-card { width: 1220px; max-width: 96vw; height: 888px; max-height: 92vh; background: #fff; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+.tf-fs-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #f0f2f5; }
+.tf-fs-head h3 { margin: 0; font-size: 16px; }
+.tf-fs-body { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; overflow-y: auto; }
+.tf-fs-textarea { flex: 1; min-height: 300px; border: 1px solid #dfe3ee; border-radius: 12px; padding: 12px 14px; font-size: 14px; resize: vertical; font-family: inherit; }
+.tf-fs-tools { display: flex; align-items: center; gap: 13px; }
+.tf-fs-tools .tf-btn { margin-left: auto; }
+.tf-fs-picker { align-self: flex-start; }
+/* 2026-11-09：教师帖子详情顺序与互动 */
+.tf-detail-author { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.tf-detail-author .tf-meta { margin: 0; }
+.tf-detail-actions { display: flex; align-items: center; gap: 14px; margin: 10px 0 14px; }
+.tf-detail-act { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 3px 12px; font-size: 13px; color: #5b6b84; cursor: pointer; }
+.tf-detail-act.on { color: #c41e3a; border-color: #f0c4cc; background: #fff5f7; }
+.tf-comment-box { position: relative; flex: 1 1 100%; display: flex; }
+.tf-comment-box .tf-comment-textarea { flex: 1; width: 100%; }
+.tf-fs-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8a8faa; font-size: 15px; cursor: pointer; }
+.tf-comment-sort { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
+.tf-comment-sort button { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 3px 12px; font-size: 12px; color: #5b6b84; cursor: pointer; }
+.tf-comment-sort button.on { background: #1a365d; border-color: #1a365d; color: #fff; }
+.tf-comment-sort .tf-sort-order { margin-left: auto; }
+.tf-reply-hint { flex: 1 1 100%; font-size: 12px; color: #5b6b84; display: flex; align-items: center; gap: 8px; }
+.tf-reply-cancel { border: 0; background: transparent; color: #c41e3a; cursor: pointer; font-size: 12px; }
 </style>
 
 

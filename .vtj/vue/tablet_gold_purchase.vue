@@ -61,14 +61,6 @@
           </div>
         </div>
         <div class="gp-card">
-          <h4>🎲 随机任务 <button class="refresh-btn" @click="refreshRandom">刷新</button></h4>
-          <div v-for="t in state.tasks.random" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
-            <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
-            <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">{{ t.claimed ? '已领取' : t.completed ? '领取' : '未完成' }}</button>
-          </div>
-        </div>
-        <div class="gp-card">
           <h4>📅 周常任务</h4>
           <div v-for="t in state.tasks.weekly" :key="t.task_id" class="task-item">
             <span class="task-title">{{ t.title }}</span>

@@ -12,6 +12,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
@@ -143,6 +144,65 @@ async def generate(
             }
             for t in tasks
         ],
+    }
+
+
+@router.get("/global", summary="全局知识图谱（全部知识点 + 聚合关系边）")
+async def global_graph(
+    limit: int = Query(800, ge=50, le=3000),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """全局视图：所有知识点 + 跨用户聚合的关系边（不暴露别人的学习数据）。"""
+    points = (
+        db.query(KnowledgePoint)
+        .filter(or_(KnowledgePoint.status.is_(None), KnowledgePoint.status != 0))
+        .limit(limit)
+        .all()
+    )
+    ids = {p.point_id for p in points}
+    rows = (
+        db.query(
+            KgUserEdge.src_point,
+            KgUserEdge.dst_point,
+            func.max(KgUserEdge.weight),
+        )
+        .filter(KgUserEdge.src_point.in_(ids), KgUserEdge.dst_point.in_(ids))
+        .group_by(KgUserEdge.src_point, KgUserEdge.dst_point)
+        .all()
+    )
+    seen = set()
+    edges = []
+    for src, dst, weight in rows:
+        if src == dst:
+            continue
+        key = tuple(sorted((src, dst)))
+        if key in seen:
+            continue
+        seen.add(key)
+        edges.append({"src_point": src, "dst_point": dst, "weight": float(weight or 1.0), "heat": float(weight or 1.0)})
+
+    degree: dict[int, int] = {}
+    for e in edges:
+        degree[e["src_point"]] = degree.get(e["src_point"], 0) + 1
+        degree[e["dst_point"]] = degree.get(e["dst_point"], 0) + 1
+
+    return {
+        "total": len(points),
+        "nodes": [
+            {
+                "point_id": p.point_id,
+                "point_name": p.point_name,
+                "subject_id": p.subject_id,
+                "mastery": 0.0,
+                "heat": float(degree.get(p.point_id, 0)),
+                "attempt_count": 0,
+                "correct_count": 0,
+                "contribution": 0.0,
+            }
+            for p in points
+        ],
+        "edges": edges,
     }
 
 

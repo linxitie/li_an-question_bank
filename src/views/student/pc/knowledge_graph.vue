@@ -4,10 +4,12 @@
       <div>
         <h1>我的知识图谱</h1>
         <p class="kg-sub">
-          节点大小 = 生长热度，颜色 = 掌握度（红→绿）；连线粗细 = 边权重。图谱只反映你自己的学习轨迹。
+          节点大小 = 生长热度，颜色区分知识点；图谱只反映你自己的学习轨迹。
         </p>
       </div>
       <div class="kg-actions">
+        <button class="kg-btn" :class="{ on: mode === 'mine' }" @click="mode = 'mine'; panelRef?.loadAll()">我的图谱</button>
+        <button class="kg-btn" :class="{ on: mode === 'global' }" @click="mode = 'global'; panelRef?.loadAll()">全局图谱</button>
         <button class="kg-btn" :disabled="generating" @click="generateTasks">
           {{ generating ? '生成中…' : '生成本周个性化任务' }}
         </button>
@@ -15,7 +17,7 @@
       </div>
     </header>
 
-    <KnowledgeGraphPanel ref="panelRef" />
+    <KnowledgeGraphPanel ref="panelRef" :mode="mode" />
   </div>
 </template>
 
@@ -26,6 +28,7 @@ import KnowledgeGraphPanel from '@/components/kg/KnowledgeGraphPanel.vue';
 
 const panelRef = ref<InstanceType<typeof KnowledgeGraphPanel> | null>(null);
 const generating = ref(false);
+const mode = ref<'mine' | 'global'>('mine');
 
 function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   const auth = (window as any).__VTJ_AUTH__;
@@ -92,4 +95,5 @@ async function generateTasks(): Promise<void> {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.kg-btn.on { background: #1a365d; color: #fff; border-color: #1a365d; }
 </style>
