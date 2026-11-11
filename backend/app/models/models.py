@@ -3049,6 +3049,20 @@ class UserJobCompare(Base):
     )
 
 
+class RecruitmentSourceStatus(Base):
+    """招考来源采集状态（含 blocked/playwright 降级）。"""
+
+    __tablename__ = "recruitment_source_status"
+
+    source_key = Column(String(50), primary_key=True)
+    source_name = Column(String(100), nullable=False)
+    status = Column(String(20), default="configured")
+    last_error = Column(Text)
+    last_run_at = Column(DateTime)
+    fetched = Column(Integer, default=0)
+    inserted = Column(Integer, default=0)
+
+
 class KgRelationType(Base):
     """关系类型注册表：新增关系只加一行"""
 

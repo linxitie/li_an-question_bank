@@ -125,7 +125,28 @@ def init_scheduler():
         _broadcast_sync("新闻更新")
 
     def _recruitment_with_broadcast():
-        scrape_all_recruitment()
+        from ..core.database import SessionLocal
+        from .recruitment_source_collector import collect_all_recruitment_sources
+
+        db = SessionLocal()
+        try:
+            reports = collect_all_recruitment_sources(db, limit=5, dry_run=False)
+            logger.info(
+                "招考来源采集完成: %s",
+                [
+                    {
+                        "source": report["source"],
+                        "links": report["links"],
+                        "inserted": report["inserted"],
+                        "errors": len(report["errors"]),
+                    }
+                    for report in reports
+                ],
+            )
+        except Exception:
+            logger.exception("招考来源采集失败")
+        finally:
+            db.close()
         _broadcast_sync("招考信息更新")
 
     def _job_reminders_with_broadcast():
@@ -232,9 +253,9 @@ def init_scheduler():
     )
     scheduler.add_job(
         _recruitment_with_broadcast,
-        trigger=CronTrigger(hour=0, minute=5, timezone=CST),
+        trigger=CronTrigger(hour=2, minute=0, timezone=CST),
         id="scrape_recruitment",
-        name="招考信息爬取",
+        name="招考官方来源采集",
         replace_existing=True,
     )
     scheduler.add_job(
