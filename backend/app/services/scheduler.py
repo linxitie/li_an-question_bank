@@ -128,6 +128,20 @@ def init_scheduler():
         scrape_all_recruitment()
         _broadcast_sync("招考信息更新")
 
+    def _job_reminders_with_broadcast():
+        from ..core.database import SessionLocal
+        from .recruitment_reminder_service import dispatch_job_reminders
+
+        db = SessionLocal()
+        try:
+            report = dispatch_job_reminders(db)
+            logger.info("招考提醒派发: %s", report)
+        except Exception:
+            logger.exception("招考提醒派发失败")
+        finally:
+            db.close()
+        _broadcast_sync("招考提醒")
+
     def _generate_daily_quote():
         from ..core.database import SessionLocal
         from .quote_daily_service import ensure_daily_quote
@@ -221,6 +235,13 @@ def init_scheduler():
         trigger=CronTrigger(hour=0, minute=5, timezone=CST),
         id="scrape_recruitment",
         name="招考信息爬取",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _job_reminders_with_broadcast,
+        trigger=CronTrigger(hour="*", minute=5, timezone=CST),
+        id="dispatch_job_reminders",
+        name="招考截止提醒派发",
         replace_existing=True,
     )
     scheduler.add_job(

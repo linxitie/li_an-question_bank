@@ -25,6 +25,7 @@ from .api.v1.growth import goals
 from .api.v1.identity import auth
 from .api.v1.personal import collection, notes
 from .api.v1.content import news, recruitment, calendar
+from .api.v1.content import recruitment_radar
 from .api.v1.platform import admin as admin_api
 from .api.v1.platform import teacher as teacher_api
 from .api.v1.platform import admin_approval
@@ -289,7 +290,18 @@ async def lifespan(app: FastAPI):
         # 检查 recruitment_info 表
         if "recruitment_info" in inspector.get_table_names():
             rec_cols = [c["name"] for c in inspector.get_columns("recruitment_info")]
-            for col_name, col_type in [("url", "VARCHAR(500)"), ("publish_date", "VARCHAR(20)")]:
+            for col_name, col_type in [
+                ("url", "VARCHAR(500)"),
+                ("publish_date", "VARCHAR(20)"),
+                ("source_key", "VARCHAR(40)"),
+                ("source_name", "VARCHAR(100)"),
+                ("raw_hash", "VARCHAR(64)"),
+                ("parse_status", "VARCHAR(20) DEFAULT 'pending'"),
+                ("parsed_at", "DATETIME"),
+                ("parse_confidence", "FLOAT"),
+                ("attachment_count", "INTEGER DEFAULT 0"),
+                ("last_seen_at", "DATETIME"),
+            ]:
                 if col_name not in rec_cols:
                     with engine.connect() as conn:
                         conn.execute(
@@ -297,6 +309,72 @@ async def lifespan(app: FastAPI):
                         )
                         conn.commit()
                     logger.info(f"自动迁移: recruitment_info 添加列 {col_name}")
+
+        if "police_post" in inspector.get_table_names():
+            post_cols = [c["name"] for c in inspector.get_columns("police_post")]
+            for col_name, col_type in [
+                ("recruitment_id", "INTEGER"),
+                ("job_code", "VARCHAR(100)"),
+                ("job_name", "VARCHAR(200)"),
+                ("employer", "VARCHAR(200)"),
+                ("province", "VARCHAR(50)"),
+                ("city", "VARCHAR(50)"),
+                ("category", "VARCHAR(50)"),
+                ("education_req", "VARCHAR(200)"),
+                ("major_req", "TEXT"),
+                ("major_categories", "JSON"),
+                ("political_req", "VARCHAR(50)"),
+                ("fresh_grad_req", "VARCHAR(50)"),
+                ("grassroots_years", "INTEGER"),
+                ("age_req", "VARCHAR(100)"),
+                ("physical_req", "TEXT"),
+                ("other_req", "TEXT"),
+                ("registration_start", "VARCHAR(20)"),
+                ("registration_end", "VARCHAR(20)"),
+                ("exam_date", "VARCHAR(20)"),
+                ("official_url", "VARCHAR(500)"),
+                ("timeline_data", "JSON"),
+                ("history_data", "JSON"),
+                ("exam_tags", "JSON"),
+                ("evidence_json", "JSON"),
+                ("parse_status", "VARCHAR(20) DEFAULT 'pending'"),
+                ("parse_confidence", "FLOAT"),
+                ("updated_at", "DATETIME"),
+            ]:
+                if col_name not in post_cols:
+                    with engine.connect() as conn:
+                        conn.execute(
+                            text(f"ALTER TABLE police_post ADD COLUMN {col_name} {col_type}")
+                        )
+                        conn.commit()
+                    logger.info(f"自动迁移: police_post 添加列 {col_name}")
+
+        if "user_profile" in inspector.get_table_names():
+            profile_cols = [c["name"] for c in inspector.get_columns("user_profile")]
+            for col_name, col_type in [
+                ("degree", "VARCHAR(20)"),
+                ("major_name", "VARCHAR(100)"),
+                ("major_category", "VARCHAR(100)"),
+                ("graduation_year", "INTEGER"),
+                ("fresh_grad", "INTEGER"),
+                ("age", "INTEGER"),
+                ("political_status", "VARCHAR(20)"),
+                ("gender", "VARCHAR(10)"),
+                ("veteran", "INTEGER DEFAULT 0"),
+                ("grassroots_years", "INTEGER DEFAULT 0"),
+                ("physical_ok", "INTEGER"),
+                ("preferred_regions", "JSON"),
+                ("preferred_categories", "JSON"),
+                ("eligibility_completed", "INTEGER DEFAULT 0"),
+                ("eligibility_updated_at", "DATETIME"),
+            ]:
+                if col_name not in profile_cols:
+                    with engine.connect() as conn:
+                        conn.execute(
+                            text(f"ALTER TABLE user_profile ADD COLUMN {col_name} {col_type}")
+                        )
+                        conn.commit()
+                    logger.info(f"自动迁移: user_profile 添加列 {col_name}")
 
         # 检查 news_article 表
         if "news_article" in inspector.get_table_names():
@@ -1035,6 +1113,7 @@ app.include_router(media.router)
 app.include_router(media_assets_api.router)
 app.include_router(websocket_router)
 app.include_router(news.router)
+app.include_router(recruitment_radar.router)
 app.include_router(recruitment.router)
 app.include_router(calendar.router)
 app.include_router(practice.router)

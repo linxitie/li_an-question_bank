@@ -1070,6 +1070,35 @@ class PolicePost(Base):
     plan_count = Column(Integer, default=0, comment="招录人数")
     ratio = Column(String(30), comment="竞争比（如 1:12）")
     source = Column(String(200), comment="数据来源（官方公告等）")
+    recruitment_id = Column(
+        Integer, ForeignKey("recruitment_info.recruitment_id"), nullable=True
+    )
+    job_code = Column(String(100), comment="职位代码")
+    job_name = Column(String(200), comment="职位名称")
+    employer = Column(String(200), comment="招录单位")
+    province = Column(String(50), comment="省份")
+    city = Column(String(50), comment="地市")
+    category = Column(String(50), comment="考试类型")
+    education_req = Column(String(200), comment="学历要求")
+    major_req = Column(Text, comment="专业要求原文")
+    major_categories = Column(JSON, comment="专业大类/专业列表")
+    political_req = Column(String(50), comment="政治面貌")
+    fresh_grad_req = Column(String(50), comment="应届要求")
+    grassroots_years = Column(Integer, comment="基层年限")
+    age_req = Column(String(100), comment="年龄要求")
+    physical_req = Column(Text, comment="体能/体检要求")
+    other_req = Column(Text, comment="其他要求")
+    registration_start = Column(String(20))
+    registration_end = Column(String(20))
+    exam_date = Column(String(20))
+    official_url = Column(String(500))
+    timeline_data = Column(JSON, comment="时间节点 JSON")
+    history_data = Column(JSON, comment="历年考情摘要")
+    exam_tags = Column(JSON, comment="大纲标签")
+    evidence_json = Column(JSON, comment="字段原文证据")
+    parse_status = Column(String(20), default="pending")
+    parse_confidence = Column(Float)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     status = Column(Integer, default=1, comment="1有效/0停用")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
 
@@ -1567,6 +1596,14 @@ class RecruitmentInfo(Base):
     tag_color = Column(String(20), comment="标签颜色")
     view_count = Column(Integer, default=0, comment="浏览量")
     url = Column(String(500), comment="原始链接")
+    source_key = Column(String(40), comment="来源代码")
+    source_name = Column(String(100), comment="来源显示名")
+    raw_hash = Column(String(64), comment="正文归一化哈希")
+    parse_status = Column(String(20), default="pending", comment="解析状态")
+    parsed_at = Column(DateTime, comment="解析时间")
+    parse_confidence = Column(Float, comment="解析置信度")
+    attachment_count = Column(Integer, default=0, comment="附件数")
+    last_seen_at = Column(DateTime, comment="最后一次在来源出现时间")
     status = Column(Integer, default=1, comment="状态")
     create_time = Column(
         DateTime, default=datetime.now, comment="入库时间(爬取时刻,非内容发布时间)"
@@ -2886,6 +2923,21 @@ class UserProfile(Base):
     exam_date = Column(String(10), nullable=True, comment="备考截止日期 YYYY-MM-DD")
     target_region = Column(String(50), nullable=True, comment="岗位意向地区")
     target_post = Column(String(100), nullable=True, comment="岗位意向/方向")
+    degree = Column(String(20), comment="学历")
+    major_name = Column(String(100), comment="专业名称")
+    major_category = Column(String(100), comment="专业大类")
+    graduation_year = Column(Integer, comment="毕业年份")
+    fresh_grad = Column(Integer, comment="是否应届 1/0")
+    age = Column(Integer, comment="年龄")
+    political_status = Column(String(20), comment="政治面貌")
+    gender = Column(String(10), comment="性别")
+    veteran = Column(Integer, default=0, comment="退役士兵")
+    grassroots_years = Column(Integer, default=0, comment="基层年限")
+    physical_ok = Column(Integer, comment="体能自评")
+    preferred_regions = Column(JSON, comment="意向地区")
+    preferred_categories = Column(JSON, comment="意向考试类型")
+    eligibility_completed = Column(Integer, default=0)
+    eligibility_updated_at = Column(DateTime)
     profile_status = Column(Integer, default=0, comment="画像完成度 0未完成/1已完成")
     create_time = Column(DateTime, default=datetime.now, comment="创建时间")
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
@@ -2895,6 +2947,105 @@ class UserProfile(Base):
     __table_args__ = (
         Index("idx_profile_user", user_id),
         Index("idx_profile_status", profile_status),
+    )
+
+
+class JobTimelineNode(Base):
+    """招考公告/职位关键时间节点。"""
+
+    __tablename__ = "job_timeline_node"
+
+    node_id = Column(Integer, primary_key=True, autoincrement=True)
+    recruitment_id = Column(Integer, ForeignKey("recruitment_info.recruitment_id"), nullable=True)
+    post_id = Column(Integer, ForeignKey("police_post.post_id"), nullable=True)
+    node_type = Column(String(30), nullable=False)
+    title = Column(String(100), nullable=False)
+    start_at = Column(String(50))
+    end_at = Column(String(50))
+    evidence = Column(Text)
+    confidence = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class UserJobTask(Base):
+    """用户报名材料待办。"""
+
+    __tablename__ = "user_job_task"
+
+    task_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    post_id = Column(Integer, ForeignKey("police_post.post_id"), nullable=False)
+    task_code = Column(String(50), nullable=False)
+    title = Column(String(200), nullable=False)
+    due_at = Column(String(50))
+    status = Column(Integer, default=0, comment="0待办/1完成")
+    source = Column(String(20), default="auto")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", "task_code", name="uq_user_job_task"),
+        Index("idx_job_task_user", user_id, status),
+    )
+
+
+class JobReminder(Base):
+    """招考时间节点提醒计划。"""
+
+    __tablename__ = "job_reminder"
+
+    reminder_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    post_id = Column(Integer, ForeignKey("police_post.post_id"), nullable=False)
+    node_type = Column(String(30), nullable=False)
+    remind_at = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime)
+    channel = Column(String(20), default="notification")
+    status = Column(String(20), default="pending")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", "node_type", "remind_at", name="uq_job_reminder"),
+        Index("idx_job_reminder_due", remind_at, status),
+    )
+
+
+class JobHistoryStat(Base):
+    """历年进面分数/报录比导入数据。"""
+
+    __tablename__ = "job_history_stat"
+
+    stat_id = Column(Integer, primary_key=True, autoincrement=True)
+    post_id = Column(Integer, ForeignKey("police_post.post_id"), nullable=True)
+    recruitment_id = Column(Integer, ForeignKey("recruitment_info.recruitment_id"), nullable=True)
+    province = Column(String(50))
+    employer = Column(String(200))
+    post_type = Column(String(50))
+    year = Column(Integer, nullable=False)
+    min_score = Column(Float)
+    avg_score = Column(Float)
+    applicants = Column(Integer)
+    plan_count = Column(Integer)
+    ratio = Column(String(30))
+    source_name = Column(String(200))
+    source_url = Column(String(500))
+    confidence = Column(Float, default=1.0)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class UserJobCompare(Base):
+    """用户岗位对比篮，最多 3 个。"""
+
+    __tablename__ = "user_job_compare"
+
+    compare_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False)
+    post_id = Column(Integer, ForeignKey("police_post.post_id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", name="uq_user_job_compare"),
+        Index("idx_job_compare_user", user_id),
     )
 
 

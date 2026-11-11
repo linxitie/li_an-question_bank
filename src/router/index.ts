@@ -34,6 +34,12 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/recruitment/radar',
+    name: 'RecruitmentRadar',
+    component: () => import('@/views/student/shared/recruitment_radar.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/unauthorized',
     name: 'Unauthorized',
     component: () => import('@/views/system/shared/unauthorized.vue')
@@ -594,6 +600,12 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/recruit',
     name: 'MobileRecruitment',
     component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/recruitment/radar',
+    name: 'MobileRecruitmentRadar',
+    component: () => import('@/views/student/shared/recruitment_radar.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
