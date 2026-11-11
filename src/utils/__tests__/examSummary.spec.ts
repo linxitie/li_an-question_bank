@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildExamSummary, formatDuration, percent2 } from '../examSummary';
+import { buildExamSummary, formatDuration, percent2, pickLatestProgress } from '../examSummary';
 
 /**
  * 口径单测（2026-11-11 用户真机验收发现"2/97 显示成 2%、正确/错误 97/0"后补）。
@@ -76,5 +76,48 @@ describe('examSummary · 用时格式化', () => {
       total: 97, answered: 2, seconds: 139
     });
     expect(s.timeText).toBe('02:19');
+  });
+});
+
+/**
+ * 试卷列表「我的得分」取哪一条（2026-11-11 用户复测发现：
+ * 刚考完 2 分，卡片仍显示 0 / 97 —— 旧的 0 分记录把新的盖掉了）。
+ */
+describe('examSummary · 每套卷取最近一次已完成成绩', () => {
+  it('接口按时间倒序返回时，不能被最老那条覆盖', () => {
+    const progress = pickLatestProgress([
+      { paper_id: 5, record_id: 3, is_completed: 1, total_score: 2 },
+      { paper_id: 5, record_id: 2, is_completed: 1, total_score: 2 },
+      { paper_id: 5, record_id: 1, is_completed: 1, total_score: 0 },
+    ]);
+    expect(progress['5'].score).toBe(2);
+    expect(progress['5'].recordId).toBe(3);
+  });
+
+  it('未完成的记录不能盖掉已完成的成绩', () => {
+    const progress = pickLatestProgress([
+      { paper_id: 5, record_id: 9, is_completed: 0, total_score: 0 },
+      { paper_id: 5, record_id: 4, is_completed: 1, total_score: 7 },
+    ]);
+    expect(progress['5'].score).toBe(7);
+    expect(progress['5'].completed).toBe(true);
+  });
+
+  it('全是未完成时取最新的一条（显示"进行中"）', () => {
+    const progress = pickLatestProgress([
+      { paper_id: 5, record_id: 9, is_completed: 0, total_score: 0 },
+      { paper_id: 5, record_id: 8, is_completed: 0, total_score: 0 },
+    ]);
+    expect(progress['5'].recordId).toBe(9);
+    expect(progress['5'].completed).toBe(false);
+  });
+
+  it('多套卷互不干扰', () => {
+    const progress = pickLatestProgress([
+      { paper_id: 2, record_id: 1, is_completed: 1, total_score: 88 },
+      { paper_id: 5, record_id: 3, is_completed: 1, total_score: 2 },
+    ]);
+    expect(progress['2'].score).toBe(88);
+    expect(progress['5'].score).toBe(2);
   });
 });

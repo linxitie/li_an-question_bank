@@ -64,6 +64,57 @@ export function formatDuration(seconds?: number | null): string {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+// ==================== 试卷列表的"我的进度" ====================
+// 2026-11-11 修：卡片上「得分 0 / 97」——同一套卷考过多次时，旧的 0 分记录盖掉了新的 2 分。
+// 根因是页面上原来的判断 `if (!progress[pid] || r.is_completed)` 让**每条已完成记录都覆盖**前者，
+// 而接口按 create_time DESC 返回，循环最后落进去的是**最老**那条。
+// 抽成纯函数后：已完成优先于未完成；同类取 record_id 最大（最近一次）。
+
+export interface ProgressRecordLike {
+  paper_id: number;
+  record_id?: number | string | null;
+  is_completed?: boolean | number | null;
+  total_score?: number | string | null;
+  max_score?: number | string | null;
+}
+
+export interface PaperProgress {
+  completed: boolean;
+  score: number;
+  maxScore?: number;
+  recordId: number;
+}
+
+/** 每套卷只保留一条进度：已完成优先，同级取 record_id 最大的 */
+export function pickLatestProgress(
+  records: ProgressRecordLike[]
+): Record<string, PaperProgress> {
+  const progress: Record<string, PaperProgress> = {};
+  (records || []).forEach((r) => {
+    const pid = String(r.paper_id);
+    if (!pid || pid === 'undefined') return;
+    const rid = Number(r.record_id) || 0;
+    const done = !!r.is_completed;
+    const candidate: PaperProgress = {
+      completed: done,
+      score: Number(r.total_score) || 0,
+      maxScore: r.max_score === undefined || r.max_score === null ? undefined : Number(r.max_score),
+      recordId: rid
+    };
+    const cur = progress[pid];
+    if (!cur) {
+      progress[pid] = candidate;
+      return;
+    }
+    if (done !== cur.completed) {
+      if (done) progress[pid] = candidate;   // 已完成 > 未完成（有分数的才算数）
+      return;
+    }
+    if (rid > cur.recordId) progress[pid] = candidate;  // 同类取最近一次
+  });
+  return progress;
+}
+
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;

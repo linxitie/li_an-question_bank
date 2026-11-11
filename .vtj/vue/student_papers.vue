@@ -130,6 +130,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
+import { pickLatestProgress } from '@/utils/examSummary';
 import { usePapersStore } from '@/modules/papers/store';
 
 export default defineComponent({
@@ -199,22 +200,11 @@ export default defineComponent({
         const res = await auth.apiFetch('/api/exams/records?page_size=100');
         const data = await res.json();
         const records = data.data || data || [];
-        const progress: any = {};
-        records.forEach((r: any) => {
-          const pid = r.paper_id;
-          if (!progress[pid] || r.is_completed) {
-            progress[pid] = {
-              completed: !!r.is_completed,
-              score: r.total_score,
-              // 2026-11-09 修：原来写的是 `data.max_score || 100` —— `data` 是**列表响应体**
-              // （{total, page, page_size, data:[...]}），根本没有 max_score，于是永远退到 100，
-              // 97 分的卷在卡片上显示成「得分 0 / 100」。改取单条记录的 max_score（没有就留给
-              // 模板里的 `|| p.total_score` 兜底，试卷自己的满分才是权威）。
-              maxScore: r.max_score,
-            };
-          }
-        });
-        userProgress.value = progress;
+        // 2026-11-11 修（用户复测：「答对 2 题考完，卡片还是 0 / 97」）：
+        // 原写法 `if (!progress[pid] || r.is_completed)` 让每一条已完成记录都覆盖前者，
+        // 而接口按 create_time DESC 返回 —— 最后落进去的是**最老**那条（#1，0 分）。
+        // 现在统一走 `pickLatestProgress`：已完成优先、同级取 record_id 最大（见 utils/examSummary.ts）。
+        userProgress.value = pickLatestProgress(records);
       } catch (e) {
         console.error('加载进度失败:', e);
       }
