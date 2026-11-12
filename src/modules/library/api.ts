@@ -439,6 +439,57 @@ export function fetchMaterialPreview(id: number): Promise<MaterialPreview> {
   });
 }
 
+// ==================== 手写资料（S2，2026-11-12）====================
+//
+// 为什么需要这两个：新版页只支持"上传文件"，短文/说明类内容以前只能进旧版页的
+// 「＋新建资料」富文本弹窗。这两条是它的替代入口，**没有新端点**。
+
+export interface MaterialSaveResult {
+  id?: number;
+  status?: number;
+  ok?: boolean;
+}
+
+/** 新建资料（默认未上架；同内容重复会 409 并提示已存在的 id） */
+export async function createMaterial(body: Record<string, unknown>): Promise<MaterialSaveResult> {
+  const res = await libraryClient.request<MaterialSaveResult>({
+    url: '/api/materials/admin',
+    method: 'POST',
+    baseURL: '',
+    data: body
+  });
+  return res.data;
+}
+
+/** 改资料（partial；只传要改的字段，后端按白名单落库） */
+export async function updateMaterial(
+  id: number,
+  body: Record<string, unknown>
+): Promise<MaterialSaveResult> {
+  const res = await libraryClient.request<MaterialSaveResult>({
+    url: `/api/materials/admin/${id}`,
+    method: 'PUT',
+    baseURL: '',
+    data: body
+  });
+  return res.data;
+}
+
+/** 上传封面/插图（返回可直接写进 `<img src>` 的 url） */
+export async function uploadMaterialImage(file: File, purpose: 'cover' | 'inline' = 'inline'): Promise<string> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await libraryClient.request<{ url: string }>({
+    url: `/api/materials/admin/upload/image?purpose=${purpose}`,
+    method: 'POST',
+    baseURL: '',
+    data: form,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  });
+  return res.data.url;
+}
+
 /**
  * 下载原件（B1）。
  *

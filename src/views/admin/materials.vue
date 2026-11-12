@@ -20,6 +20,8 @@
         <button class="adm-btn adm-btn--line" :disabled="loading" @click="cardXlsxOpen = true">
           卡片导入（xlsx）
         </button>
+        <!-- S2（2026-11-12）：手写文章/讲义正文、卡片正反面 —— 旧版「＋新建资料」的替代 -->
+        <button class="adm-btn" :disabled="loading" @click="openEditor()">＋ 新建资料</button>
       </template>
     </AdminPageHeader>
 
@@ -292,6 +294,13 @@
                   :title="`上传答案 PDF 补这 ${row.exam.question_count} 题的答案与解析`"
                   @click="openAnswer(row)"
                 >补答案</a>
+                <!-- S2（2026-11-12）：手写内容的正文/卡片内容（旧版「＋新建资料」的替代入口） -->
+                <a
+                  v-if="row.type === 'article' || row.type === 'lecture' || row.type === 'card'"
+                  class="mm-op"
+                  :title="row.type === 'card' ? '改卡片正面/背面/封面' : '改正文/摘要（富文本）'"
+                  @click="openEditor(row)"
+                >{{ row.type === 'card' ? '改内容' : '改正文' }}</a>
                 <a class="mm-op" @click="openMeta(row)">改信息</a>
                 <a class="mm-op is-danger" @click="remove(row)">删除</a>
               </template>
@@ -359,6 +368,17 @@
       @done="onCardsImported"
     />
 
+    <!-- S2（2026-11-12）：手写资料（文章/讲义正文、卡片正反面）—— 旧版「＋新建资料」的替代 -->
+    <MaterialEditorDialog
+      :open="editorOpen"
+      :mode="editorMode"
+      :material-id="editorId"
+      :default-type="editorDefaultType"
+      :default-subject="articleDefaultSubject"
+      @close="editorOpen = false"
+      @saved="onEditorSaved"
+    />
+
     <!-- P3（2026-11-09）：导题确认抽屉（拆题结果逐题核对 → 确认入库） -->
     <ParseDraftDrawer
       :open="draftOpen"
@@ -409,7 +429,8 @@ import {
   ExamGateDialog,
   ParseDraftDrawer,
   AnswerDraftDrawer,
-  CardXlsxImportDialog
+  CardXlsxImportDialog,
+  MaterialEditorDialog
 } from '@/components/admin';
 import {
   MATERIAL_PLACEMENTS,
@@ -1028,6 +1049,30 @@ async function onCardsImported(payload: { created: number }): Promise<void> {
   page.value = 1;
   await reload();
   if (payload.created) ElMessage.success(`已创建 ${payload.created} 张卡片（未上架），核对后逐张上架`);
+}
+
+// ---------------- 手写内容（S2，2026-11-12） ----------------
+const editorOpen = ref(false);
+const editorMode = ref<'create' | 'edit'>('create');
+const editorId = ref<number | null>(null);
+/** 新建时默认类型：跟着当前筛选走（筛了卡片就建卡片），否则文章 */
+const editorDefaultType = computed(() => {
+  const t = filters.type;
+  return (t === 'card' || t === 'lecture' ? t : 'article') as 'article' | 'lecture' | 'card';
+});
+
+/** 不带参数 = 新建；带行 = 改该行正文（文章/讲义）或正反面（卡片） */
+function openEditor(row?: AdminMaterialListItem): void {
+  editorMode.value = row ? 'edit' : 'create';
+  editorId.value = row ? row.id : null;
+  editorOpen.value = true;
+}
+
+/** 保存成功：关窗 + 回第一页刷新（新建的是未上架，落在默认视图） */
+async function onEditorSaved(): Promise<void> {
+  editorOpen.value = false;
+  page.value = 1;
+  await reload();
 }
 
 // ---------------- 改信息（C2b） ----------------

@@ -34,3 +34,5 @@ export { default as ParseDraftDrawer } from './ParseDraftDrawer.vue';
 export { default as AnswerDraftDrawer } from './AnswerDraftDrawer.vue';
 // S3（2026-11-12）：xlsx 卡片智能导入（旧版独有能力搬回新版；预览表头 + 手选列映射 → 建 N 张卡）
 export { default as CardXlsxImportDialog } from './CardXlsxImportDialog.vue';
+// S2（2026-11-12）：手写资料弹窗（文章/讲义富文本正文、卡片正反面；旧版「＋新建资料」的替代）
+export { default as MaterialEditorDialog } from './MaterialEditorDialog.vue';
