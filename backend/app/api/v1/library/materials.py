@@ -2310,8 +2310,13 @@ async def admin_parse_answers(paper_id: int,
         except OSError:
             pass
 
-    payload = answer_ingest.draft_payload(db, draft)
+    # 2026-11-12 修：这里原来回的是 `draft_payload(db, draft)`（with_items 默认 False），
+    # 回包**没有 items**，而前端上传后直接读 `data.items` → 抽屉空表（提示"已解析 97 题"、
+    # 表格却 0 行、按钮"确认写入 0 题"）。关掉重开走 `/answers/latest`（带 items）才正常。
+    # 现在与 `/latest`、`/drafts/{id}` 回同一份形状；前端另留了"无 items 时补拉明细"的兜底。
+    payload = answer_ingest.draft_payload(db, draft, with_items=True)
     payload["ok"] = draft.status != "failed"
+    payload["can_edit"] = draft.status == "pending"
     return payload
 
 

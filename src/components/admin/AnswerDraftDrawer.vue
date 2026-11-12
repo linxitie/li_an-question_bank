@@ -101,7 +101,9 @@
                 </em>
               </span>
             </div>
-            <p v-if="!visibleItems.length" class="adm-empty">没有需要确认的题</p>
+            <p v-if="!visibleItems.length" class="adm-empty">
+              {{ items.length ? '没有待确认的题（可取消勾选「只看需确认」查看全部）' : '这份草稿没有可显示的题——请点「重新上传」' }}
+            </p>
           </div>
 
           <footer class="ad-foot">
@@ -111,11 +113,18 @@
                 <input v-model="overwrite" type="checkbox" :disabled="busy !== ''" />
                 覆盖已有答案
               </label>
+              <em v-if="zeroWriteHint" class="ad-foot__warn">{{ zeroWriteHint }}</em>
             </span>
             <button class="adm-btn adm-btn--line" type="button" :disabled="busy !== ''" @click="reset">重新上传</button>
             <button class="adm-btn adm-btn--danger" type="button" :disabled="busy !== ''" @click="discard">放弃</button>
-            <button class="adm-btn adm-btn--primary" type="button" :disabled="busy !== ''" @click="apply">
-              {{ busy === 'apply' ? '写入中…' : `确认写入 ${filledCount} 题` }}
+            <button
+              class="adm-btn adm-btn--primary"
+              type="button"
+              :disabled="busy !== '' || writableCount === 0"
+              :title="zeroWriteHint || ''"
+              @click="apply"
+            >
+              {{ busy === 'apply' ? '写入中…' : `确认写入 ${writableCount} 题` }}
             </button>
           </footer>
         </template>
@@ -140,12 +149,14 @@ import { ElMessage } from 'element-plus';
 import {
   applyAnswerDraft,
   discardAnswerDraft,
+  fetchAnswerDraft,
   fetchLatestAnswerDraft,
   parseAnswerFile,
   saveAnswerDraftItems,
   type AnswerDraftDetail,
   type AnswerDraftItem
 } from '@/modules/library/api';
+import { countAnswered, countDiffering, countIdentical, countWritable } from '@/utils/answerDraft';
 import { errorMessage } from '@/utils/apiError';
 import { confirmOverlay } from '@/utils/overlay';
 
@@ -173,6 +184,28 @@ const onlyFlagged = ref(false);
 const overwrite = ref(false);
 
 const filledCount = computed(() => items.value.filter((i) => i.answer).length);
+/**
+ * 本次**真正会写入**的题数（2026-11-12）。
+ * 原来按钮用的是 `filledCount`（= 有答案的题数）：库里已有相同答案时仍显示 97，
+ * 点下去结果却是"写入 0、保留 97"，很容易被当成"没写进去"。
+ */
+const writableCount = computed(() => countWritable(items.value, overwrite.value));
+/** 解析里"与库里答案一致"的题数（成功提示用，讲清"为什么可写 0"） */
+const identicalCount = computed(() => countIdentical(items.value));
+/** 与库里**不同**的题数（勾「覆盖」才会写） */
+const differingCount = computed(() => countDiffering(items.value));
+/** 一句话解释"为什么按钮是 0" */
+const zeroWriteHint = computed(() => {
+  if (!items.value.length || writableCount.value > 0) return '';
+  if (differingCount.value > 0) {
+    // 有不同但没勾覆盖：这才是"勾覆盖可写"的场景
+    return `${differingCount.value} 题与现有答案不同，默认保留；要替换请勾选「覆盖已有答案」`;
+  }
+  if (identicalCount.value) {
+    return `${identicalCount.value} 题与现有答案一致，无需写入`;
+  }
+  return '没有可写入的答案：解析结果里答案为空';
+});
 const visibleItems = computed(() =>
   onlyFlagged.value ? items.value.filter((i) => i.flags?.length) : items.value
 );
@@ -239,10 +272,19 @@ async function upload(file: File): Promise<void> {
   error.value = '';
   percent.value = 0;
   try {
-    const data = await parseAnswerFile(props.paperId, file, (p) => (percent.value = p));
+    let data = await parseAnswerFile(props.paperId, file, (p) => (percent.value = p));
     if (data.status === 'failed') {
       error.value = data.message || '解析失败';
       return;
+    }
+    // 2026-11-12 兜底：上传接口曾经只回 metadata（没有 items），前端就地空屏；
+    // 现在后端已带 items，这里再留一道：没有就按 draft_id 补拉一次明细。
+    if (!data.items?.length && data.draft_id) {
+      try {
+        data = await fetchAnswerDraft(data.draft_id);
+      } catch {
+        // 补拉失败不阻断：下面会按空表展示，用户可「重新上传」
+      }
     }
     draft.value = data;
     items.value = (data.items || []).map((it) => ({
@@ -251,7 +293,13 @@ async function upload(file: File): Promise<void> {
       suggestion: it.suggestion || '',
       flags: [...(it.flags || [])]
     }));
-    ElMessage.success(`已解析 ${data.item_count} 题${data.conflict_count ? `，${data.conflict_count} 题需确认` : ''}`);
+    const answered = countAnswered(items.value);
+    const identical = countIdentical(items.value);
+    let msg = `已解析 ${data.item_count} 题`;
+    if (data.conflict_count) msg += `，${data.conflict_count} 题需确认`;
+    if (identical) msg += `（其中 ${identical} 题与现有答案一致）`;
+    else if (answered) msg += `（识别到 ${answered} 题答案）`;
+    ElMessage.success(msg);
   } catch (e) {
     error.value = errorMessage(e, '解析失败');
   } finally {
@@ -274,9 +322,9 @@ function adopt(it: AnswerDraftItem, _idx: number): void {
 
 async function apply(): Promise<void> {
   if (!draft.value) return;
-  const n = filledCount.value;
+  const n = writableCount.value;
   if (!n) {
-    ElMessage.error('还没有任何答案可写入');
+    ElMessage.error(zeroWriteHint.value || '还没有任何答案可写入');
     return;
   }
   try {
@@ -477,4 +525,14 @@ function close(): void {
 .ad-foot__hint { flex: 1; font-size: 11px; color: var(--adm-text-weak, #93a0b5); }
 .ad-overwrite { margin-left: 8px; color: #b4620a; font-weight: 600; }
 .ad-foot__hint input { vertical-align: -1px; }
+/* 2026-11-12：按钮为 0 时给一句原因，避免"坏了"的错觉 */
+.ad-foot__warn {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #fff4e5;
+  color: #b35309;
+  font-style: normal;
+}
 </style>
