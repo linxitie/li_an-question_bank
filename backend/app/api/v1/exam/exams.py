@@ -446,17 +446,27 @@ async def submit_answers(
     exam_record.is_late = 1 if is_late else 0
 
     # 自动将错题写入个人错题集
+    # 2026-11-12 修（静默失效）：session 是 `autoflush=False`（core/database.py:45），
+    # 原来这里在 commit 前用 `query(ExamAnswerDetail)` 查刚 `db.add()` 的明细 → 恒 None，
+    # 于是错题本**从来没写进去过**（实测 `wrong_question_personal` 0 行，而明细里有 6 条答错）。
+    # 现在直接用内存里的 `created_details`，并按结果页同一口径只收「作答了且答错」：
+    # 空白 = 未作答（`is_correct=0` 但答案为空），不进错题本。
     from .practice import _auto_record_wrong
-    for question_id, student_answer in answers.items():
-        question = question_dict.get(question_id)
-        if not question:
+    wrong_booked = 0
+    for detail in created_details:
+        if detail.is_correct != 0:
             continue
-        detail = db.query(ExamAnswerDetail).filter(
-            ExamAnswerDetail.record_id == record_id,
-            ExamAnswerDetail.question_id == question_id
-        ).first()
-        if detail and not detail.is_correct:
-            _auto_record_wrong(current_user.user_id, question_id, question.subject_id, db)
+        answer_text = (detail.student_answer or "").strip()
+        if not answer_text:
+            continue
+        question = question_dict.get(detail.question_id)
+        if question is None:
+            continue
+        if _auto_record_wrong(current_user.user_id, detail.question_id,
+                              question.subject_id, db, answer_text) in ("new", "updated"):
+            wrong_booked += 1
+    if wrong_booked:
+        logger.info("[exam] record=%s 错题入库 %s 条", record_id, wrong_booked)
 
     db.commit()
 

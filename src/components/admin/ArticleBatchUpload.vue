@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <Teleport to="body">
     <div v-if="open" class="abu-root" role="dialog" aria-modal="true" aria-label="批量上传文章">
       <div class="abu-mask" @click="onMask" />
@@ -8,7 +8,7 @@
             <h2 class="abu-title">{{ title }}</h2>
             <p class="abu-desc">
               一次最多 {{ MAX_BATCH_FILES }} 个文件。文章必须有正文，所以走「解析导入」：
-              逐条上传 → 解析 → 入库（默认未上架）。扫描版 PDF 需要 OCR，未就绪会明确失败。
+              逐条上传 → 解析 → 入库（默认未上架；可勾选「立即上架」）。扫描版 PDF 需要 OCR，未就绪会明确失败。
             </p>
           </div>
           <button class="abu-x" type="button" :disabled="running" @click="requestClose">×</button>
@@ -51,6 +51,11 @@
                   <option value="shenlun">申论</option>
                   <option value="gongzhuan">公专</option>
                 </select>
+              </label>
+              <!-- 2026-11-12：批量文章默认仍是"未上架"，但给一个显式开关 -->
+              <label class="abu-check" title="勾选后本批文章直接上架（学生立刻可见）；默认不勾，先逐篇预览再上架">
+                <input v-model="publishNow" type="checkbox" :disabled="running" />
+                <span>立即上架（{{ publishNow ? '本批直接对学生可见' : '默认不上架，需去列表点上架' }}）</span>
               </label>
               <span class="abu-note">标题默认取文件名（不含扩展名），入库后可在「改信息」里改。</span>
             </div>
@@ -142,6 +147,8 @@ const picked = ref<File[]>([]);
 const rows = ref<Row[]>([]);
 const running = ref(false);
 const subject = ref<LibrarySubject>(props.defaultSubject);
+/** 2026-11-12：本批是否直接上架（默认 false = 沿用"上架即审批"的安全默认） */
+const publishNow = ref(false);
 
 const totalBytes = computed(() => picked.value.reduce((n, f) => n + f.size, 0));
 
@@ -288,7 +295,9 @@ async function start(): Promise<void> {
       const res = await confirmMaterialImport(importId, {
         subject: subject.value,
         type: 'article',
-        title: stem
+        title: stem,
+        // 2026-11-12：以前不传 → 后端文档分支写死 status=0，只能逐条再点上架
+        publish: publishNow.value
       });
       if (!res.created) {
         row.status = 'duplicate';
@@ -308,7 +317,11 @@ async function start(): Promise<void> {
 
   running.value = false;
   emit('done', { created, skipped, failed });
-  if (created) ElMessage.success(`已创建 ${created} 篇文章（未上架），去列表上架后学生可见`);
+  if (created) {
+    ElMessage.success(publishNow.value
+      ? `已创建并上架 ${created} 篇文章，学生端立即可见`
+      : `已创建 ${created} 篇文章（未上架），去列表上架后学生可见`);
+  }
   if (failed) ElMessage.warning(`${failed} 个文件失败，详见队列里的原因`);
 }
 </script>
@@ -366,6 +379,13 @@ async function start(): Promise<void> {
 .abu-issues { margin: 8px 0 0; padding-left: 18px; color: var(--adm-warn); font-size: 12px; }
 .abu-form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .abu-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--adm-text-mid); }
+.abu-check {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border: 1px dashed var(--adm-line); border-radius: var(--adm-r-ctl);
+  font-size: 12px; color: var(--adm-text-mid); cursor: pointer;
+}
+.abu-check input { margin: 0; }
+.abu-check:hover { border-color: var(--adm-blue); color: var(--adm-blue); }
 .abu-note { font-size: 12px; color: var(--adm-text-weak); }
 .abu-progress-text { margin-left: 8px; font-weight: 400; color: var(--adm-text-weak); }
 .abu-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

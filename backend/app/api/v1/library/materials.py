@@ -3246,6 +3246,28 @@ def _stash_fingerprint(db: Session, rec: MaterialImportRecord, sha256: str) -> N
     _commit_material_import(db, rec)
 
 
+def _row_content_hash(m, *, allow_title_fallback: bool = True) -> str:
+    """按**已入库行**重算内容哈希（与 `_material_content_hash` 同口径）。
+
+    为什么需要：W2（2026-11-09）之前入库的 98 条资料 `content_hash` 是 NULL，
+    而 `_find_duplicate_material_id` 只比这一列 → 老资料永远查不到重。
+    回填脚本与"去重兜底"共用本函数，保证两处算法一致（改口径只改这一处）。
+    """
+    if (getattr(m, "type", "") or "") == "card":
+        raw = f"{getattr(m, 'card_front', '') or ''}{getattr(m, 'card_back', '') or ''}"
+    else:
+        raw = getattr(m, "content", "") or ""
+        if not raw and allow_title_fallback:
+            # 与 `_material_content_hash` 的兜底一致：正文为空时用 标题+摘要。
+            # 回填脚本会传 False，避免"无正文的试卷行"按标题算出一个可被误撞的 hash。
+            raw = f"{getattr(m, 'title', '') or ''}{getattr(m, 'summary', '') or ''}"
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    from ....services.material_sanitizer import content_cleaner
+    return content_cleaner.calculate_content_hash(raw)
+
+
 def _find_duplicate_material_id(db: Session, content_hash: str,
                                 user_id: Optional[int] = None) -> Optional[int]:
     """按内容哈希找已入库的同内容资料 id。
@@ -3254,6 +3276,10 @@ def _find_duplicate_material_id(db: Session, content_hash: str,
     与入库时写入的哈希同一口径（`calculate_content_hash` 会再清洗一次，
     拿原始字符串去算 MD5 有可能对不上）。口径同样排除软删除（status=-1），
     否则"删掉后重新导入"会被自己挡住。
+
+    **兜底（2026-11-12）**：W2 之前入库的老资料该列为 NULL，按列比永远查不到；
+    列匹配未命中时，只扫 `content_hash IS NULL` 的未删除行逐行重算（回填后是空集，
+    成本≈0；上限 500 行防意外），命中即视为重复。
     """
     q = db.query(StudyMaterial.material_id).filter(
         StudyMaterial.content_hash == content_hash,
@@ -3263,7 +3289,21 @@ def _find_duplicate_material_id(db: Session, content_hash: str,
         q = q.filter(or_(StudyMaterial.status != 2,
                          StudyMaterial.creator_id == user_id))
     row = q.order_by(StudyMaterial.material_id.asc()).first()
-    return row[0] if row else None
+    if row:
+        return row[0]
+
+    if not content_hash:
+        return None
+    legacy = db.query(StudyMaterial).filter(
+        StudyMaterial.content_hash.is_(None),
+        StudyMaterial.status >= 0)
+    if user_id is not None:
+        legacy = legacy.filter(or_(StudyMaterial.status != 2,
+                                   StudyMaterial.creator_id == user_id))
+    for m in legacy.order_by(StudyMaterial.material_id.asc()).limit(500).all():
+        if _row_content_hash(m) == content_hash:
+            return m.material_id
+    return None
 
 
 def _load_result(rec: MaterialImportRecord) -> dict:
@@ -3683,7 +3723,11 @@ async def import_confirm(import_id: int, body: dict,
             category=category, badge=badge,
             title=title, summary=summary_text,
             content=content, content_hash=content_hash,
-            status=0, read_time=max(1, word_count // 400),
+            # 2026-11-12 修：文档分支原来写死 status=0（`publish` 只对 xlsx 卡片生效），
+            # 于是"批量上传文章"永远要逐条再点上架；而回包还照传 `published: publish`
+            # —— 传了 publish=true 会谎报已上架。现在与卡片分支同口径。
+            status=(1 if publish else 0),
+            read_time=max(1, word_count // 400),
             creator_id=current_user.user_id)
         db.add(m)
         db.flush()
