@@ -190,7 +190,10 @@ async def radar(
     db: Session = Depends(get_db),
 ):
     profile = _profile(db, current_user.user_id) if current_user else None
-    query = db.query(PolicePost).filter(PolicePost.status == 1)
+    query = db.query(PolicePost).filter(
+        PolicePost.status == 1,
+        PolicePost.parse_status == "parsed",
+    )
     if province.strip():
         query = query.filter(
             or_(

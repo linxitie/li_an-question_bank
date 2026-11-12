@@ -65,21 +65,29 @@
             + 对比
           </button>
         </div>
+        <p class="job-employer">{{ item.employer }}</p>
         <h2>{{ item.job_name }}</h2>
         <p class="job-org">
-          {{ item.employer }} · {{ item.province }}{{ item.city }}
+          {{ item.province }}{{ item.city }} · 招录
+          {{ item.plan_count || '未写明' }} 人
         </p>
         <div class="job-tags">
-          <span v-if="item.education_req">{{ item.education_req }}</span>
-          <span v-if="item.major_req">{{ item.major_req }}</span>
-          <span v-if="item.political_req">{{ item.political_req }}</span>
-          <span v-if="item.fresh_grad_req">{{ item.fresh_grad_req }}</span>
+          <span>学历：{{ item.education_req || '未写明' }}</span>
+          <span>专业：{{ item.major_req || '未写明' }}</span>
+          <span>政治面貌：{{ item.political_req || '未写明' }}</span>
+          <span>应届：{{ item.fresh_grad_req || '未写明' }}</span>
         </div>
         <p v-if="item.registration_end" class="deadline">
           报名截止：{{ item.registration_end }}
         </p>
         <div class="job-card__actions">
           <button type="button" @click="openDetail(item)">查看详情</button>
+          <button
+            type="button"
+            class="match-action"
+            @click="openProfileForMatch">
+            一键匹配我的资格
+          </button>
           <a
             v-if="item.official_url"
             :href="item.official_url"
@@ -455,6 +463,10 @@ async function saveProfile(): Promise<void> {
   }
 }
 
+function openProfileForMatch(): void {
+  profileOpen.value = true;
+}
+
 async function openDetail(item: JobItem): Promise<void> {
   detail.value = item;
   const [t, taskData, h] = await Promise.all([
@@ -640,6 +652,11 @@ onMounted(() => {
   font-size: 17px;
   line-height: 1.45;
 }
+.job-employer {
+  margin: 9px 0 0;
+  color: #7b8794;
+  font-size: 12px;
+}
 .job-org {
   margin: 0;
   color: var(--ds-muted);
@@ -677,6 +694,12 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
   text-decoration: none;
+}
+.job-card__actions .match-action {
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--ds-ink);
+  color: #fff;
 }
 .pager {
   display: flex;
