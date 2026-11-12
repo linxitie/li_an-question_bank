@@ -45,8 +45,13 @@ class AnswerIngestError(ValueError):
 
 
 # ------------------------------------------------------------------ 读文件
-def read_text_of(abs_path: str, ext: str) -> str:
-    """把 pdf / docx / xlsx / txt 统一读成文本（分行）。"""
+def read_text_of(abs_path: str, ext: str, *, meta: Optional[dict] = None) -> str:
+    """把 pdf / docx / xlsx / txt 统一读成文本（分行）。
+
+    `meta`（可选，出参）：调用方传一个 dict 进来，扫描件走 OCR 时会把识别信息
+    （页数/耗时/失败页）塞进 `meta["ocr"]`，用于在草稿提示里如实说明"这是 OCR 出来的"。
+    文字版链路从不写这个键。
+    """
     ext = (ext or "").lower().lstrip(".")
     if ext == "pdf":
         try:
@@ -58,9 +63,13 @@ def read_text_of(abs_path: str, ext: str) -> str:
         except Exception as exc:                   # noqa: BLE001
             raise AnswerIngestError(f"这个 pdf 打不开（可能已加密或损坏）：{exc}") from exc
         try:
-            return "\n".join((doc[i].get_text() or "") for i in range(doc.page_count))
+            text = "\n".join((doc[i].get_text() or "") for i in range(doc.page_count))
         finally:
             doc.close()
+        if text.strip():
+            return text
+        # 文字层为空 = 扫描图片版 → OCR sidecar（P1，2026-11-12 批准）
+        return _read_scanned_pdf(abs_path, meta)
     if ext == "docx":
         try:
             from docx import Document
@@ -98,6 +107,27 @@ def read_text_of(abs_path: str, ext: str) -> str:
                 continue
         raise AnswerIngestError("文本文件编码无法识别（试过 utf-8 / gbk）")
     raise AnswerIngestError(f"暂不支持 .{ext} 的答案解析（支持 pdf / docx / xlsx / txt）")
+
+
+def _read_scanned_pdf(abs_path: str, meta: Optional[dict]) -> str:
+    """扫描图片版 PDF → OCR 文本（P1）。
+
+    **只有"文字层为空"的 PDF 才会走到这里**，文字版/Word/Excel 一行不受影响。
+    OCR 失败时抛 `AnswerIngestError`，消息里已经带页号与原因（由 sidecar 保证），
+    不再出现"组件未就绪"这类一句话。
+    """
+    from .. import ocr_sidecar
+
+    try:
+        text, info = ocr_sidecar.read_pdf_text(abs_path)
+    except ocr_sidecar.OcrError as exc:
+        raise AnswerIngestError(str(exc)) from exc
+    if meta is not None:
+        meta["ocr"] = info
+    if not (text or "").strip():
+        raise AnswerIngestError("这份扫描件 OCR 跑完了但没识别出文字，"
+                                "多半是拍照/扫描太糊，建议换清晰的图片版或转成文字版 Word")
+    return text
 
 
 # ------------------------------------------------------------------ 卷的题目
@@ -172,6 +202,18 @@ def _extract_items(text: str, ext: str) -> List[dict]:
     return extractor.parse_text(text)
 
 
+def _ocr_note(meta: Optional[dict]) -> str:
+    """扫描件的"这是 OCR 出来的"提示（非扫描件返回空串）。"""
+    info = (meta or {}).get("ocr") or {}
+    if not info:
+        return ""
+    note = (f"扫描件已 OCR {info.get('pages_done', '?')}/{info.get('pages', '?')} 页"
+            f"（{info.get('seconds', '?')}s，{info.get('dpi', '?')}dpi），识别文字请逐题核对")
+    if info.get("pages_failed"):
+        note += f"，另有 {info['pages_failed']} 页识别失败"
+    return note
+
+
 # ------------------------------------------------------------------ 解析入口
 def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
                   source_name: str = "", actor_id: Optional[int] = None) -> PaperAnswerDraft:
@@ -203,7 +245,8 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
     db.flush()
 
     try:
-        text = read_text_of(abs_path, ext)
+        ocr_meta: dict = {}
+        text = read_text_of(abs_path, ext, meta=ocr_meta)
     except AnswerIngestError as exc:
         draft.status = "failed"
         draft.message = str(exc)[:500]
@@ -218,6 +261,9 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
     if not items:
         draft.status = "failed"
         draft.message = "没有从这份文件里识别出任何题号（是不是传错了文件？）"
+        note = _ocr_note(ocr_meta)
+        if note:
+            draft.message = f"{note}；但没识别出任何题号"
         return draft
 
     # 阻断级：题号必须都落在该卷的题号范围内
@@ -226,6 +272,9 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
         draft.status = "failed"
         draft.message = (f"有 {len(bad)} 个题号不属于这张卷（{bad[:10]}"
                          f"{' 等' if len(bad) > 10 else ''}）：多半传了别的卷的答案")[:500]
+        note = _ocr_note(ocr_meta)
+        if note:
+            draft.message = f"{note}；{draft.message}"[:500]
         return draft
 
     items, conflict, empty = _validate(items, questions)
@@ -236,6 +285,10 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
     draft.empty_count = empty
     next_yet = len(questions) - covered
     msgs = [f"识别 {len(items)} 题 / 卷共 {len(questions)} 题"]
+    # 扫描件：把"这是 OCR 出来的"说清楚，并把失败页数带上（P1）
+    note = _ocr_note(ocr_meta)
+    if note:
+        msgs.insert(0, note)
     if next_yet > 0:
         msgs.append(f"还差 {next_yet} 题没在这份文件里")
     if conflict:

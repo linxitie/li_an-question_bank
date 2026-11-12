@@ -28,25 +28,29 @@ from typing import Dict, List, Optional
 
 #: 题号行：`1、` / `1.` / `1．`
 QNO_RE = re.compile(r"^\s*(\d{1,3})\s*[、.．]")
+#: 2026-11-12（P1）：OCR 会把答案字母识别成小写（实测 `c项错误`），
+#: 所以所有"答案字母"相关正则统一 re.IGNORECASE，取到的字母再由
+#: `normalize_letters` 统一大写 —— 否则 `C项正确 + c项错误` 会被算成"建议 C"。
+CI = re.IGNORECASE
 #: L0：题号后独立成词的字母（不能是 `A项…` 这种解析正文）
 L0_PATTERNS = (
-    re.compile(r"^([A-D]{1,4})$"),
-    re.compile(r"^([A-D]{1,4})[。.、,，；;：:]"),
-    re.compile(r"^([A-D]{1,4})(?:本题|答案|故|解析)"),
+    re.compile(r"^([A-D]{1,4})$", CI),
+    re.compile(r"^([A-D]{1,4})[。.、,，；;：:]", CI),
+    re.compile(r"^([A-D]{1,4})(?:本题|答案|故|解析)", CI),
 )
 #: 列举式解析：`A、B、C 项：正确` / `A、B项` —— 这不是答案，是逐项评议
-ENUM_HEAD_RE = re.compile(r"^[A-D][、.．,，]\s*[A-D]")
+ENUM_HEAD_RE = re.compile(r"^[A-D][、.．,，]\s*[A-D]", CI)
 #: L1：显式答案标记
-L1_RE = re.compile(r"(?:【\s*答案\s*】|正确答案|参考答案|答案)\s*[:：是为]?\s*([A-D]{1,4})")
+L1_RE = re.compile(r"(?:【\s*答案\s*】|正确答案|参考答案|答案)\s*[:：是为]?\s*([A-D]{1,4})", CI)
 #: L2：句尾结论
-L2_RE = re.compile(r"(?:故\s*)?(?:正确)?答案(?:应)?(?:为|是|选)\s*[:：]?\s*([A-D]{1,4})")
-L2B_RE = re.compile(r"故\s*(?:本题)?\s*选\s*[:：]?\s*([A-D]{1,4})")
+L2_RE = re.compile(r"(?:故\s*)?(?:正确)?答案(?:应)?(?:为|是|选)\s*[:：]?\s*([A-D]{1,4})", CI)
+L2B_RE = re.compile(r"故\s*(?:本题)?\s*选\s*[:：]?\s*([A-D]{1,4})", CI)
 #: L3：解析推断（允许 `项：正确` 这种带全角冒号的写法，实测 2017 江苏就是这种）
 #: 支持"成串"写法：`A、B、C 项：正确` → ABC（单个 `D 项正确` 也吃得住）
-L3_OK_RE = re.compile(r"((?:[A-D]\s*[、,，]\s*)*[A-D])\s*项?\s*[:：]?\s*正确")
-L3_NO_RE = re.compile(r"([A-D]{1,4})\s*项?\s*[:：]?\s*错误")
+L3_OK_RE = re.compile(r"((?:[A-D]\s*[、,，]\s*)*[A-D])\s*项?\s*[:：]?\s*正确", CI)
+L3_NO_RE = re.compile(r"([A-D]{1,4})\s*项?\s*[:：]?\s*错误", CI)
 #: 纯文本 `1 A` / `1、AB` / `1.AB`（Excel/粘贴通道）
-PLAIN_RE = re.compile(r"^\s*(\d{1,3})\s*[、.．,，]?\s*([A-D]{1,4})\s*$")
+PLAIN_RE = re.compile(r"^\s*(\d{1,3})\s*[、.．,，]?\s*([A-D]{1,4})\s*$", CI)
 
 CJK = "\u4e00-\u9fff"
 #: 答案字母合法集合（题库只有四选一）
@@ -129,7 +133,8 @@ def extract_one(text: str, head: str = "") -> dict:
         cand.update(normalize_letters(m.group(1)))
     wrong = set()
     for grp in L3_NO_RE.findall(flat):
-        wrong.update(grp)
+        # 归一后再比：OCR 会输出 `c项错误`，直接拿原串会把大写 C 漏掉
+        wrong.update(normalize_letters(grp))
     cand = {c for c in cand if c not in wrong}
     suggestion = "".join(sorted(cand)) if 0 < len(cand) <= 4 else ""
     return {"answer": "", "tier": "L3" if suggestion else "L4",
@@ -164,8 +169,8 @@ def parse_text(text: str) -> List[dict]:
         analysis = block
         # 去掉题号行开头那个"答案字母"（`1、A 本题考查…` → `本题考查…`）
         analysis = re.sub(r"^\s*(?:第\s*)?\d{1,3}\s*[、.．]\s*", "", analysis)
-        if re.match(r"^[A-D]{1,4}(?![A-Za-z\u4e00-\u9fff])", analysis):
-            analysis = analysis[len(re.match(r"^[A-D]{1,4}", analysis).group(0)):].strip()
+        if re.match(r"^[A-D]{1,4}(?![A-Za-z\u4e00-\u9fff])", analysis, CI):
+            analysis = analysis[len(re.match(r"^[A-D]{1,4}", analysis, CI).group(0)):].strip()
         flags: List[str] = []
         if not info["answer"] and info["suggestion"]:
             flags.append("仅推断建议")
