@@ -1,5 +1,11 @@
 <template>
   <div class="mp" :style="{ '--c': theme.color }">
+    <!-- 2026-11-12 用户反馈：进资料页后只能用浏览器返回 → 三科页面统一给一个「返回首页」。
+         跳 `/page/home_page`（与顶部导航「首页」同一个地址），这样导航栏高亮也能落在"首页"上。 -->
+    <div class="mp-crumb">
+      <button class="mp-back" type="button" @click="go('/page/home_page')">← 返回首页</button>
+    </div>
+
     <!-- 头部：三科切换 + 进度 -->
     <header class="mp-head">
       <div class="mp-title">
@@ -32,7 +38,7 @@
       <div class="mp-empty-icon">📚</div>
       <p>{{ theme.label }}的备考资料正在加紧制作中，敬请期待…</p>
       <div class="mp-empty-btns">
-        <button @click="go('/home')">返回首页</button>
+        <button @click="go('/page/home_page')">返回首页</button>
         <button class="ghost" @click="switchSubject('xingce')">去看行测</button>
       </div>
     </div>
@@ -468,6 +474,30 @@ onMounted(loadAll);
   background: #f5f7fb;
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: #1f2d3d;
+}
+/* ---------- 返回首页（2026-11-12） ---------- */
+.mp-crumb {
+  display: flex;
+  margin-bottom: 10px;
+}
+.mp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--c);
+  background: #fff;
+  color: var(--c);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.mp-back:hover {
+  background: var(--c);
+  color: #fff;
 }
 /* ---------- 头部 ---------- */
 .mp-head {

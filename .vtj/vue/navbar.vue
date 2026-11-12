@@ -109,7 +109,8 @@
       /** 路由 → 菜单 id（只在这里定义一次，点击与直达共用）；菜单里没有的页面返回 ''（不高亮） */
       menuIdFromRoute(path) {
         const p = String(path || '').split('?')[0].split('#').pop() || '/';
-        if (p === '/' || p === '' || p === '/page/home_page') return 'home_page';
+        // `/home` 是 HomePage 的别名（与 `/page/home_page` 同一个组件），两个都算首页
+        if (p === '/' || p === '' || p === '/home' || p === '/page/home_page') return 'home_page';
         if (p.indexOf('/page/question_bank') === 0) return 'question_bank';
         if (p === '/news' || p.indexOf('/news/') === 0) return 'news';
         if (p.indexOf('/page/about') === 0) return 'about';
