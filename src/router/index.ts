@@ -289,14 +289,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/materials.vue'),
         meta: { title: '资料管理', roles: ['admin'] }
       },
-      {
-        // 旧版保留（R1：`.vtj` 文件不删不改），过渡期供「智能导入 / 富文本编辑 / 批量操作」使用，
-        // B 批在新页重建这些能力后下线本路由（届时页面计数 106 → 105，两处门禁同步）。
-        path: 'materials/legacy',
-        name: 'AdminMaterialsLegacy',
-        component: () => import('$vtj/vue/admin_materials.vue'),
-        meta: { title: '资料管理（旧版）', roles: ['admin'] }
-      },
+      // S4（2026-11-12）：旧版资料页**路由已下线**（原 `materials/legacy` + `$vtj/vue/admin_materials.vue`）。
+      // 下线前提：S3（xlsx 卡片智能导入）与 S2（富文本正文/卡片正反面）已搬进新版页，
+      // 覆盖度审计见 `docs/plans/旧版资料页_覆盖度审计与清理方案_v1.md` §2/§10/§11。
+      // 守 R1：`.vtj/vue/admin_materials.vue` **文件保留**（不删不改），只是不再挂路由；
+      // 页面计数 105 → 104（L6 与 test_route_roles 两处已同步）。
+      // 若需临时找回：把这条路由（path/name/component/meta）加回来即可，页面文件还在。
       {
         // A0（2026-11-07）：管理端画风组件库预览页 —— E1/E2 改造的视觉基准。
         // 新增 1 条页面路由 → L6/L7 的页面计数 104 → 105（两处门禁已同步）。

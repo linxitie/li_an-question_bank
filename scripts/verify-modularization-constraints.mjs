@@ -46,7 +46,10 @@ const VTJ_LOCKED_VERSIONS = {
 //   平板论坛页移除，净减少 1 处动态 import；与 test_route_roles 的 104 同步）
 // 105 = 104 + 1（2026-11-07 A0：管理端画风组件库预览页 /admin/dev/style 新增 1 条页面路由，
 //   供 E1/E2 画风改造做视觉基准、仅 admin 可见；与 test_route_roles 的 105 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 105;
+// 104 = 105 - 1（2026-11-12 S4：旧版资料页 /admin/materials/legacy 路由下线 ——
+//   S3/xlsx 卡片智能导入与 S2/富文本正文已搬进新版页；`.vtj` 页面文件按 R1 保留，
+//   只是不再挂路由。与 test_route_roles 的 104 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 104;
 
 const violations = [];
 

@@ -37,8 +37,12 @@ def test_page_route_count():
     #            平板论坛页移除，净减 1 条（与 scripts/verify-modularization-constraints.mjs 的 104 同步）
     # 104 → 105：2026-11-07 A0 管理端画风组件库预览页 /admin/dev/style（仅 admin 可见），
     #            供 E1/E2 画风改造做视觉基准（与 verify-modularization-constraints.mjs 的 105 同步）
+    # 105 → 104：2026-11-12 S4 **旧版资料页 /admin/materials/legacy 路由下线** ——
+    #            S3（xlsx 卡片智能导入）与 S2（富文本正文/卡片正反面）已搬进新版页；
+    #            `.vtj/vue/admin_materials.vue` 按 R1 保留（不删不改），只是不再挂路由。
+    #            与 scripts/verify-modularization-constraints.mjs 的 104 同步。
     # 路由只增不减（本次例外均为用户明确要求的模块调整或远端重构，已在提交信息写明）。
-    assert len(_pages()) == 105
+    assert len(_pages()) == 104
 
 
 def test_whitelist_has_no_roles():
