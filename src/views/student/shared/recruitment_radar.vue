@@ -6,6 +6,7 @@
         <h1>警考雷达</h1>
         <p>按你的资格卡筛选职位，先看匹配原因，再看公告原文。</p>
       </div>
+      <router-link class="home-link" to="/">← 返回首页</router-link>
       <button class="profile-btn" type="button" @click="profileOpen = true">
         资格卡 {{ eligibility.completed ? '已完善' : '待完善' }}
       </button>
@@ -245,7 +246,12 @@
         <p v-else class="muted">暂无历年数据，以官方公布为准。</p>
 
         <div class="modal-actions">
-          <button type="button" @click="remind(detail)">截止提醒</button>
+          <input
+            v-model="reminderAt"
+            class="reminder-input"
+            type="datetime-local"
+            title="选择提醒时间" />
+          <button type="button" @click="remind(detail)">设置提醒</button>
           <a
             v-if="detail.official_url"
             :href="detail.official_url"
@@ -254,6 +260,9 @@
             查看公告原文
           </a>
         </div>
+        <p v-if="reminderMessage" class="reminder-message">
+          {{ reminderMessage }}
+        </p>
       </section>
     </div>
 
@@ -356,6 +365,8 @@ const pageSize = 20;
 const loading = ref(false);
 const error = ref('');
 const profileOpen = ref(false);
+const reminderAt = ref('');
+const reminderMessage = ref('');
 const detail = ref<JobItem | null>(null);
 const timeline = ref<any[]>([]);
 const tasks = ref<any[]>([]);
@@ -467,8 +478,20 @@ function openProfileForMatch(): void {
   profileOpen.value = true;
 }
 
+function toLocalInput(value: string): string {
+  const match = String(value || '').match(
+    /(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})/
+  );
+  if (!match) return '';
+  const month = match[2].padStart(2, '0');
+  const day = match[3].padStart(2, '0');
+  return `${match[1]}-${month}-${day}T09:00`;
+}
+
 async function openDetail(item: JobItem): Promise<void> {
   detail.value = item;
+  reminderMessage.value = '';
+  reminderAt.value = toLocalInput(item.registration_end);
   const [t, taskData, h] = await Promise.all([
     request<any>(`/api/recruitment/jobs/${item.post_id}/timeline`),
     request<any>(`/api/recruitment/jobs/${item.post_id}/tasks`).catch(() => ({
@@ -489,13 +512,22 @@ async function toggleTask(task: any): Promise<void> {
 }
 
 async function remind(item: JobItem): Promise<void> {
+  if (!reminderAt.value) {
+    reminderMessage.value = '请选择提醒日期和时间';
+    return;
+  }
   try {
-    await request(`/api/recruitment/jobs/${item.post_id}/remind`, {
-      method: 'POST'
-    });
+    const data = await request<any>(
+      `/api/recruitment/jobs/${item.post_id}/remind`,
+      {
+        method: 'POST',
+        data: { remind_at: reminderAt.value }
+      }
+    );
+    reminderMessage.value = `提醒已设置：${data.remind_at || reminderAt.value}`;
     error.value = '';
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '提醒设置失败';
+    reminderMessage.value = e instanceof Error ? e.message : '提醒设置失败';
   }
 }
 
@@ -572,6 +604,14 @@ onMounted(() => {
   background: #fff;
   color: var(--ds-ink);
   cursor: pointer;
+}
+.home-link {
+  margin-left: auto;
+  padding: 8px 10px;
+  color: var(--ds-ink);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
 }
 .filters {
   display: flex;
@@ -890,8 +930,22 @@ onMounted(() => {
 }
 .modal-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   margin-top: 20px;
+}
+.reminder-input {
+  padding: 7px 8px;
+  border: 1px solid var(--ds-border);
+  border-radius: 7px;
+  color: var(--ds-ink);
+  font-size: 12px;
+}
+.reminder-message {
+  margin: 9px 0 0;
+  color: #2f6b4b;
+  font-size: 12px;
 }
 .compare-modal table {
   width: 100%;

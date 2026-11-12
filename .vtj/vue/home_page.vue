@@ -364,11 +364,20 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   .study-materials-section {
     margin-bottom: 28px;
   }
+  .recruit-section {
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
   .section-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 12px;
     margin-bottom: 16px;
+  }
+  .section-header :deep(.radar-entry) {
+    margin-left: auto;
   }
   .section-title {
     display: flex;

@@ -52,6 +52,10 @@ class TaskPayload(BaseModel):
     due_at: str = ""
 
 
+class ReminderPayload(BaseModel):
+    remind_at: str | None = None
+
+
 def _profile(db: Session, user_id: int) -> UserProfile | None:
     return db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
 
@@ -132,6 +136,16 @@ def _parse_date(value: str | None) -> datetime | None:
         return datetime(int(digits[0]), int(digits[1]), int(digits[2]))
     except (IndexError, ValueError):
         return None
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    clean = value.strip().replace("/", "-").replace("年", "-").replace("月", "-").replace("日", "")
+    try:
+        return datetime.fromisoformat(clean)
+    except ValueError:
+        return _parse_date(clean)
 
 
 @router.get("/eligibility")
@@ -474,16 +488,23 @@ async def job_history(post_id: int, db: Session = Depends(get_db)):
 @router.post("/jobs/{post_id}/remind")
 async def create_reminder(
     post_id: int,
+    body: ReminderPayload | None = None,
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     post = db.query(PolicePost).filter(PolicePost.post_id == post_id).first()
     if post is None:
         raise HTTPException(status_code=404, detail="职位不存在")
-    when = _parse_date(post.registration_end)
+    supplied = _parse_datetime(body.remind_at if body else None)
+    when = supplied or _parse_date(post.registration_end)
     if when is None:
-        raise HTTPException(status_code=400, detail="该职位没有可提醒的报名截止时间")
-    remind_at = max(datetime.now(), when - timedelta(hours=24))
+        raise HTTPException(
+            status_code=400,
+            detail="该公告没有明确报名截止时间，请选择提醒日期",
+        )
+    if when <= datetime.now():
+        raise HTTPException(status_code=400, detail="提醒时间必须晚于当前时间")
+    remind_at = when
     exists = (
         db.query(JobReminder)
         .filter(
@@ -504,5 +525,10 @@ async def create_reminder(
                 status="pending",
             )
         )
+        db.commit()
+    else:
+        exists.remind_at = remind_at
+        exists.status = "pending"
+        exists.sent_at = None
         db.commit()
     return {"ok": True, "remind_at": remind_at.isoformat()}
