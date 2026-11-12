@@ -26,7 +26,6 @@ from ....models.models import (
     UserJobTask,
     UserProfile,
 )
-from ....services.recruitment_match_service import match_job
 
 router = APIRouter(prefix="/api/recruitment", tags=["招考雷达"])
 
@@ -113,12 +112,21 @@ def _safe_official_url(value: str | None) -> str:
     return url
 
 
-def _post_dict(post: PolicePost, profile: UserProfile | None = None) -> dict[str, Any]:
-    match = match_job(profile, post)
+def _post_dict(post: PolicePost, announcement: RecruitmentInfo | None = None) -> dict[str, Any]:
     return {
         "post_id": post.post_id,
         "recruitment_id": post.recruitment_id,
-        "job_name": post.job_name or post.region or "",
+        "announcement_title": (announcement.title if announcement else "") or "",
+        "announcement_url": _safe_official_url(announcement.url if announcement else ""),
+        "announcement_source": (
+            (announcement.source_name if announcement else "")
+            or (announcement.organization if announcement else "")
+            or ""
+        ),
+        "announcement_publish_date": (
+            (announcement.publish_date if announcement else "") or ""
+        ),
+        "job_name": post.job_name or "",
         "employer": post.employer or "",
         "province": post.province or "",
         "city": post.city or "",
@@ -135,8 +143,7 @@ def _post_dict(post: PolicePost, profile: UserProfile | None = None) -> dict[str
         "ratio": post.ratio or "",
         "registration_start": post.registration_start or "",
         "registration_end": post.registration_end or "",
-        "official_url": _safe_official_url(post.official_url),
-        "match": match,
+        "official_url": _safe_official_url(post.official_url or (announcement.url if announcement else "")),
     }
 
 
@@ -231,13 +238,10 @@ async def radar(
     education: str = Query("", max_length=30),
     major: str = Query("", max_length=100),
     political: str = Query("", max_length=30),
-    match_level: str = Query("", pattern="^(|green|yellow|red)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
-    current_user: SysUser | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    profile = _profile(db, current_user.user_id) if current_user else None
     query = db.query(PolicePost).filter(
         PolicePost.status == 1,
         PolicePost.parse_status == "parsed",
@@ -261,16 +265,20 @@ async def radar(
     if political.strip():
         query = query.filter(PolicePost.political_req.like(f"%{political.strip()}%"))
     rows = query.order_by(PolicePost.post_id.desc()).all()
-    items = [_post_dict(post, profile) for post in rows]
-    if match_level:
-        items = [item for item in items if item["match"]["level"] == match_level]
+    rec_ids = {post.recruitment_id for post in rows if post.recruitment_id}
+    rec_map = {
+        rec.recruitment_id: rec
+        for rec in db.query(RecruitmentInfo)
+        .filter(RecruitmentInfo.recruitment_id.in_(rec_ids))
+        .all()
+    } if rec_ids else {}
+    items = [_post_dict(post, rec_map.get(post.recruitment_id)) for post in rows]
     total = len(items)
     start = (page - 1) * page_size
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "profile": _eligibility(profile),
         "items": items[start : start + page_size],
     }
 
@@ -278,14 +286,17 @@ async def radar(
 @router.get("/jobs/{post_id}")
 async def job_detail(
     post_id: int,
-    current_user: SysUser | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     post = db.query(PolicePost).filter(PolicePost.post_id == post_id).first()
     if post is None:
         raise HTTPException(status_code=404, detail="职位不存在")
-    profile = _profile(db, current_user.user_id) if current_user else None
-    return _post_dict(post, profile)
+    rec = (
+        db.query(RecruitmentInfo)
+        .filter(RecruitmentInfo.recruitment_id == post.recruitment_id)
+        .first()
+    )
+    return _post_dict(post, rec)
 
 
 @router.get("/jobs/{post_id}/timeline")
@@ -444,8 +455,15 @@ async def list_compare(
         .filter(UserJobCompare.user_id == current_user.user_id)
         .all()
     )
-    profile = _profile(db, current_user.user_id)
-    return {"items": [_post_dict(post, profile) for post in rows]}
+    items = []
+    for post in rows:
+        rec = (
+            db.query(RecruitmentInfo)
+            .filter(RecruitmentInfo.recruitment_id == post.recruitment_id)
+            .first()
+        )
+        items.append(_post_dict(post, rec))
+    return {"items": items}
 
 
 @router.post("/compare/{post_id}")

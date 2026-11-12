@@ -2,14 +2,11 @@
   <div class="radar-page ds-page">
     <header class="radar-head">
       <div>
-        <span class="ds-eyebrow">招考决策 · 资格预筛</span>
+        <span class="ds-eyebrow">招考信息 · 岗位表</span>
         <h1>警考雷达</h1>
-        <p>按你的资格卡筛选职位，先看匹配原因，再看公告原文。</p>
+        <p>岗位表与招考公告一一对应，查看学历、专业、人数和报名时间。</p>
       </div>
       <router-link class="home-link" to="/">← 返回首页</router-link>
-      <button class="profile-btn" type="button" @click="profileOpen = true">
-        资格卡 {{ eligibility.completed ? '已完善' : '待完善' }}
-      </button>
     </header>
 
     <section class="filters ds-card">
@@ -33,72 +30,64 @@
         <option value="党员">党员</option>
         <option value="团员">团员</option>
       </select>
-      <select v-model="filters.match_level" @change="load">
-        <option value="">全部匹配</option>
-        <option value="green">完美匹配</option>
-        <option value="yellow">风险提示</option>
-        <option value="red">不可报考</option>
-      </select>
       <button type="button" class="search-btn" @click="load">筛选</button>
     </section>
 
     <div class="result-head">
-      <span>共 {{ total }} 个职位</span>
-      <span v-if="!eligibility.completed" class="profile-warning">
-        资格卡未完善，当前结果仅作参考
-      </span>
+      <span>共 {{ total }} 个岗位 / {{ announcementCount }} 条公告</span>
+      <span class="hint">岗位条件来自公告解析，最终以招录单位审核为准</span>
     </div>
 
     <div v-if="error" class="state error">{{ error }}</div>
-    <div v-else-if="loading" class="state">雷达扫描中...</div>
-    <div v-else-if="!items.length" class="state">暂无匹配职位</div>
+    <div v-else-if="loading" class="state">正在加载岗位表...</div>
+    <div v-else-if="!items.length" class="state">暂无可展示岗位</div>
 
-    <div v-else class="job-grid">
-      <article
-        v-for="item in items"
-        :key="item.post_id"
-        class="job-card ds-card">
-        <div class="job-card__head">
-          <span :class="['match-badge', item.match.level]">
-            {{ matchLabel(item.match.level) }}
-          </span>
-          <button type="button" class="compare-btn" @click="addCompare(item)">
-            + 对比
-          </button>
-        </div>
-        <p class="job-employer">{{ item.employer }}</p>
-        <h2>{{ item.job_name }}</h2>
-        <p class="job-org">
-          {{ item.province }}{{ item.city }} · 招录
-          {{ item.plan_count || '未写明' }} 人
-        </p>
-        <div class="job-tags">
-          <span>学历：{{ item.education_req || '未写明' }}</span>
-          <span>专业：{{ item.major_req || '未写明' }}</span>
-          <span>政治面貌：{{ item.political_req || '未写明' }}</span>
-          <span>应届：{{ item.fresh_grad_req || '未写明' }}</span>
-        </div>
-        <p v-if="item.registration_end" class="deadline">
-          报名截止：{{ item.registration_end }}
-        </p>
-        <div class="job-card__actions">
-          <button type="button" @click="openDetail(item)">查看详情</button>
-          <button
-            type="button"
-            class="match-action"
-            @click="openProfileForMatch">
-            一键匹配我的资格
-          </button>
-          <a
-            v-if="item.official_url"
-            :href="item.official_url"
-            target="_blank"
-            rel="noopener">
-            公告原文
-          </a>
-          <span v-else class="source-unavailable">原文链接暂不可用</span>
-        </div>
-      </article>
+    <div v-else class="table-wrap ds-card">
+      <table class="job-table">
+        <thead>
+          <tr>
+            <th>公告</th>
+            <th>招录单位</th>
+            <th>岗位</th>
+            <th>地区</th>
+            <th>学历</th>
+            <th>专业</th>
+            <th>政治面貌</th>
+            <th>招录人数</th>
+            <th>报名截止</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in items" :key="item.post_id">
+            <td class="announcement-cell">
+              <strong>{{ item.announcement_title || '未关联公告' }}</strong>
+              <small>
+                {{ item.announcement_source || '来源未写明' }}
+                <template v-if="item.announcement_publish_date">
+                  · {{ item.announcement_publish_date }}
+                </template>
+              </small>
+            </td>
+            <td>{{ item.employer || '未写明' }}</td>
+            <td class="job-name">{{ item.job_name }}</td>
+            <td>{{ item.province }}{{ item.city }}</td>
+            <td>{{ item.education_req || '未写明' }}</td>
+            <td>{{ item.major_req || '未写明' }}</td>
+            <td>{{ item.political_req || '未写明' }}</td>
+            <td>{{ item.plan_count || '未写明' }}</td>
+            <td>{{ item.registration_end || '未写明' }}</td>
+            <td>
+              <button
+                type="button"
+                class="detail-btn"
+                @click="openDetail(item)">
+                查看详情
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div v-if="total > pageSize" class="pager">
@@ -114,105 +103,57 @@
       </button>
     </div>
 
-    <div v-if="compared.length" class="compare-bar">
-      <span>对比篮 {{ compared.length }}/3</span>
-      <span v-for="item in compared" :key="item.post_id" class="compare-item">
-        {{ item.job_name }}
-        <button type="button" @click="removeCompare(item.post_id)">×</button>
-      </span>
-      <button type="button" @click="compareOpen = true">查看对比</button>
-    </div>
-
-    <div
-      v-if="profileOpen"
-      class="drawer-mask"
-      @click.self="profileOpen = false">
-      <aside class="drawer">
-        <h2>我的资格卡</h2>
-        <label
-          >学历
-          <select v-model="form.degree">
-            <option value="">请选择</option>
-            <option>大专</option>
-            <option>本科</option>
-            <option>硕士</option>
-            <option>博士</option>
-          </select>
-        </label>
-        <label>专业名称 <input v-model="form.major_name" /></label>
-        <label>专业大类 <input v-model="form.major_category" /></label>
-        <label
-          >是否应届
-          <select v-model.number="form.fresh_grad">
-            <option :value="null">请选择</option>
-            <option :value="1">是</option>
-            <option :value="0">否</option>
-          </select>
-        </label>
-        <label
-          >年龄
-          <input v-model.number="form.age" type="number" min="16" max="60"
-        /></label>
-        <label
-          >政治面貌
-          <select v-model="form.political_status">
-            <option value="">请选择</option>
-            <option>群众</option>
-            <option>团员</option>
-            <option>党员</option>
-            <option>预备党员</option>
-          </select>
-        </label>
-        <label
-          >性别
-          <select v-model="form.gender">
-            <option value="">请选择</option>
-            <option>男</option>
-            <option>女</option>
-          </select>
-        </label>
-        <label
-          >基层年限
-          <input v-model.number="form.grassroots_years" type="number" min="0"
-        /></label>
-        <label
-          >体能自评
-          <select v-model.number="form.physical_ok">
-            <option :value="null">未自评</option>
-            <option :value="1">通过</option>
-            <option :value="0">未通过</option>
-          </select>
-        </label>
-        <div class="drawer-actions">
-          <button type="button" @click="profileOpen = false">取消</button>
-          <button type="button" class="primary" @click="saveProfile">
-            保存并刷新
-          </button>
-        </div>
-      </aside>
-    </div>
-
     <div v-if="detail" class="modal-mask" @click.self="detail = null">
       <section class="detail-modal">
         <button class="modal-close" type="button" @click="detail = null">
           ×
         </button>
+        <span class="ds-eyebrow">岗位详情</span>
         <h2>{{ detail.job_name }}</h2>
         <p class="job-org">
           {{ detail.employer }} · {{ detail.province }}{{ detail.city }}
         </p>
-        <span :class="['match-badge', detail.match.level]">
-          {{ matchLabel(detail.match.level) }}
-        </span>
-        <ul class="reason-list">
-          <li
-            v-for="reason in detail.match.reasons"
-            :key="reason.field"
-            :class="reason.result">
-            {{ reason.message }}
-          </li>
-        </ul>
-        <p class="disclaimer">{{ detail.match.disclaimer }}</p>
+
+        <div class="fact-grid">
+          <div>
+            <span>学历要求</span
+            ><strong>{{ detail.education_req || '未写明' }}</strong>
+          </div>
+          <div>
+            <span>专业要求</span
+            ><strong>{{ detail.major_req || '未写明' }}</strong>
+          </div>
+          <div>
+            <span>政治面貌</span
+            ><strong>{{ detail.political_req || '未写明' }}</strong>
+          </div>
+          <div>
+            <span>应届要求</span
+            ><strong>{{ detail.fresh_grad_req || '未写明' }}</strong>
+          </div>
+          <div>
+            <span>招录人数</span
+            ><strong>{{ detail.plan_count || '未写明' }}</strong>
+          </div>
+          <div>
+            <span>报名截止</span
+            ><strong>{{ detail.registration_end || '未写明' }}</strong>
+          </div>
+        </div>
+
+        <h3>对应招考公告</h3>
+        <p class="announcement-text">
+          {{ detail.announcement_title || '未关联公告' }}
+        </p>
+        <a
+          v-if="detail.official_url"
+          class="official-link"
+          :href="detail.official_url"
+          target="_blank"
+          rel="noopener">
+          查看公告原文
+        </a>
+        <span v-else class="source-unavailable">原文链接暂不可用</span>
 
         <h3>关键时间轴</h3>
         <div class="timeline">
@@ -236,6 +177,7 @@
             @change="toggleTask(task)" />
           <span>{{ task.title }}</span>
         </label>
+        <p v-if="!tasks.length" class="muted">暂无待办，请按公告准备材料。</p>
 
         <h3>历年考情</h3>
         <div v-if="history.length" class="history-list">
@@ -246,101 +188,34 @@
         </div>
         <p v-else class="muted">暂无历年数据，以官方公布为准。</p>
 
-        <div class="modal-actions">
+        <h3>报名提醒</h3>
+        <div class="reminder-row">
           <input
             v-model="reminderAt"
             class="reminder-input"
             type="datetime-local"
             title="选择提醒时间" />
           <button type="button" @click="remind(detail)">设置提醒</button>
-          <a
-            v-if="detail.official_url"
-            :href="detail.official_url"
-            target="_blank"
-            rel="noopener">
-            查看公告原文
-          </a>
-          <span v-else class="source-unavailable">原文链接暂不可用</span>
         </div>
         <p v-if="reminderMessage" class="reminder-message">
           {{ reminderMessage }}
         </p>
       </section>
     </div>
-
-    <div
-      v-if="compareOpen"
-      class="modal-mask"
-      @click.self="compareOpen = false">
-      <section class="compare-modal">
-        <button class="modal-close" type="button" @click="compareOpen = false">
-          ×
-        </button>
-        <h2>岗位对比</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>项目</th>
-              <th v-for="item in compared" :key="item.post_id">
-                {{ item.job_name }}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>招录人数</td>
-              <td v-for="item in compared" :key="item.post_id">
-                {{ item.plan_count }}
-              </td>
-            </tr>
-            <tr>
-              <td>学历</td>
-              <td v-for="item in compared" :key="item.post_id">
-                {{ item.education_req || '不限' }}
-              </td>
-            </tr>
-            <tr>
-              <td>专业</td>
-              <td v-for="item in compared" :key="item.post_id">
-                {{ item.major_req || '不限' }}
-              </td>
-            </tr>
-            <tr>
-              <td>政治面貌</td>
-              <td v-for="item in compared" :key="item.post_id">
-                {{ item.political_req || '不限' }}
-              </td>
-            </tr>
-            <tr>
-              <td>报名截止</td>
-              <td v-for="item in compared" :key="item.post_id">
-                {{ item.registration_end || '暂无' }}
-              </td>
-            </tr>
-            <tr>
-              <td>匹配</td>
-              <td v-for="item in compared" :key="item.post_id">
-                {{ matchLabel(item.match.level) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { apiClient } from '@/services/api/client';
 
-interface MatchReason {
-  field: string;
-  result: string;
-  message: string;
-}
 interface JobItem {
   post_id: number;
+  recruitment_id: number | null;
+  announcement_title: string;
+  announcement_url: string;
+  announcement_source: string;
+  announcement_publish_date: string;
   job_name: string;
   employer: string;
   province: string;
@@ -352,12 +227,6 @@ interface JobItem {
   registration_end: string;
   official_url: string;
   plan_count: number;
-  match: {
-    level: string;
-    score: number;
-    reasons: MatchReason[];
-    disclaimer: string;
-  };
 }
 
 const items = ref<JobItem[]>([]);
@@ -366,15 +235,12 @@ const page = ref(1);
 const pageSize = 20;
 const loading = ref(false);
 const error = ref('');
-const profileOpen = ref(false);
-const reminderAt = ref('');
-const reminderMessage = ref('');
 const detail = ref<JobItem | null>(null);
 const timeline = ref<any[]>([]);
 const tasks = ref<any[]>([]);
 const history = ref<any[]>([]);
-const compared = ref<JobItem[]>([]);
-const compareOpen = ref(false);
+const reminderAt = ref('');
+const reminderMessage = ref('');
 const provinces = [
   '北京',
   '天津',
@@ -412,22 +278,13 @@ const filters = reactive({
   province: '',
   education: '',
   major: '',
-  political: '',
-  match_level: ''
+  political: ''
 });
-const eligibility = reactive({ completed: false, missing: [] as string[] });
-const form = reactive<any>({
-  degree: '',
-  major_name: '',
-  major_category: '',
-  graduation_year: null,
-  fresh_grad: null,
-  age: null,
-  political_status: '',
-  gender: '',
-  grassroots_years: 0,
-  physical_ok: null
-});
+
+const announcementCount = computed(
+  () =>
+    new Set(items.value.map((item) => item.recruitment_id).filter(Boolean)).size
+);
 
 async function request<T>(url: string, config: any = {}) {
   const response = await apiClient.request<T>({ url, baseURL: '', ...config });
@@ -444,40 +301,11 @@ async function load(): Promise<void> {
     });
     items.value = data.items || [];
     total.value = data.total || 0;
-    Object.assign(eligibility, data.profile || {});
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '雷达加载失败';
+    error.value = e instanceof Error ? e.message : '岗位表加载失败';
   } finally {
     loading.value = false;
   }
-}
-
-async function loadProfile(): Promise<void> {
-  try {
-    const data = await request<any>('/api/recruitment/eligibility');
-    Object.assign(eligibility, data);
-    Object.assign(form, data);
-  } catch {
-    // 未登录时保持空资格卡
-  }
-}
-
-async function saveProfile(): Promise<void> {
-  try {
-    const data = await request<any>('/api/recruitment/eligibility', {
-      method: 'PUT',
-      data: form
-    });
-    Object.assign(eligibility, data);
-    profileOpen.value = false;
-    await load();
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '资格卡保存失败';
-  }
-}
-
-function openProfileForMatch(): void {
-  profileOpen.value = true;
 }
 
 function toLocalInput(value: string): string {
@@ -485,9 +313,7 @@ function toLocalInput(value: string): string {
     /(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})/
   );
   if (!match) return '';
-  const month = match[2].padStart(2, '0');
-  const day = match[3].padStart(2, '0');
-  return `${match[1]}-${month}-${day}T09:00`;
+  return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}T09:00`;
 }
 
 async function openDetail(item: JobItem): Promise<void> {
@@ -520,8 +346,14 @@ async function openDetail(item: JobItem): Promise<void> {
 }
 
 async function toggleTask(task: any): Promise<void> {
-  await request(`/api/recruitment/tasks/${task.task_id}`, { method: 'PATCH' });
-  task.status = task.status ? 0 : 1;
+  try {
+    await request(`/api/recruitment/tasks/${task.task_id}`, {
+      method: 'PATCH'
+    });
+    task.status = task.status ? 0 : 1;
+  } catch (e) {
+    reminderMessage.value = e instanceof Error ? e.message : '待办更新失败';
+  }
 }
 
 async function remind(item: JobItem): Promise<void> {
@@ -538,35 +370,9 @@ async function remind(item: JobItem): Promise<void> {
       }
     );
     reminderMessage.value = `提醒已设置：${data.remind_at || reminderAt.value}`;
-    error.value = '';
   } catch (e) {
     reminderMessage.value = e instanceof Error ? e.message : '提醒设置失败';
   }
-}
-
-async function loadCompare(): Promise<void> {
-  try {
-    const data = await request<any>('/api/recruitment/compare');
-    compared.value = data.items || [];
-  } catch {
-    compared.value = [];
-  }
-}
-
-async function addCompare(item: JobItem): Promise<void> {
-  try {
-    await request(`/api/recruitment/compare/${item.post_id}`, {
-      method: 'POST'
-    });
-    await loadCompare();
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '加入对比失败';
-  }
-}
-
-async function removeCompare(postId: number): Promise<void> {
-  await request(`/api/recruitment/compare/${postId}`, { method: 'DELETE' });
-  await loadCompare();
 }
 
 function changePage(delta: number): void {
@@ -574,24 +380,15 @@ function changePage(delta: number): void {
   void load();
 }
 
-function matchLabel(level: string): string {
-  return level === 'green'
-    ? '完美匹配'
-    : level === 'red'
-      ? '不可报考'
-      : '风险提示';
-}
-
 onMounted(() => {
-  void loadProfile();
   void load();
-  void loadCompare();
 });
 </script>
 
 <style scoped>
 .radar-page {
-  max-width: 1180px;
+  max-width: 1280px;
+  margin: 0 auto;
 }
 .radar-head {
   display: flex;
@@ -610,16 +407,7 @@ onMounted(() => {
   color: var(--ds-muted);
   font-size: 13px;
 }
-.profile-btn {
-  padding: 8px 13px;
-  border: 1px solid var(--ds-border);
-  border-radius: 9px;
-  background: #fff;
-  color: var(--ds-ink);
-  cursor: pointer;
-}
 .home-link {
-  margin-left: auto;
   padding: 8px 10px;
   color: var(--ds-ink);
   font-size: 12px;
@@ -659,104 +447,59 @@ onMounted(() => {
   color: var(--ds-muted);
   font-size: 12px;
 }
-.profile-warning {
-  color: #a36a28;
+.hint {
+  color: #9aa3ad;
 }
-.job-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.table-wrap {
+  padding: 0;
+  overflow-x: auto;
 }
-.job-card {
-  padding: 18px;
-}
-.job-card__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-.match-badge {
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-}
-.match-badge.green {
-  background: #e8f4ec;
-  color: #2f6b4b;
-}
-.match-badge.yellow {
-  background: #fff4df;
-  color: #946b22;
-}
-.match-badge.red {
-  background: #fff0ee;
-  color: #a33b2d;
-}
-.compare-btn {
-  border: 0;
-  background: transparent;
-  color: var(--ds-ink);
+.job-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 12px;
-  cursor: pointer;
 }
-.job-card h2 {
-  margin: 10px 0 5px;
+.job-table th {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--ds-border);
+  background: #f7faf8;
+  color: #59635c;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.job-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #edf1ee;
+  color: #3c4a42;
+  vertical-align: top;
+}
+.job-table tr:last-child td {
+  border-bottom: 0;
+}
+.announcement-cell strong {
+  display: block;
   color: var(--ds-navy-deep);
-  font-size: 17px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
-.job-employer {
-  margin: 9px 0 0;
-  color: #7b8794;
-  font-size: 12px;
-}
-.job-org {
-  margin: 0;
-  color: var(--ds-muted);
-  font-size: 12px;
-}
-.job-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
-}
-.job-tags span {
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: #f0f4f8;
-  color: #53657a;
-  font-size: 11px;
-}
-.deadline {
-  margin: 9px 0 0;
-  color: #a36a28;
-  font-size: 12px;
-}
-.job-card__actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-top: 13px;
-}
-.job-card__actions button,
-.job-card__actions a {
-  border: 0;
-  background: transparent;
-  color: var(--ds-ink);
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: none;
-}
-.job-card__actions .match-action {
-  padding: 5px 9px;
-  border-radius: 7px;
-  background: var(--ds-ink);
-  color: #fff;
-}
-.source-unavailable {
+.announcement-cell small {
+  display: block;
+  margin-top: 4px;
   color: #9aa3ad;
   font-size: 11px;
+}
+.job-name {
+  color: var(--ds-navy-deep);
+  font-weight: 600;
+}
+.detail-btn {
+  border: 1px solid var(--ds-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ds-ink);
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 .pager {
   display: flex;
@@ -773,107 +516,19 @@ onMounted(() => {
   padding: 5px 9px;
   cursor: pointer;
 }
-.compare-bar {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  align-items: center;
-  max-width: 760px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #163a5f;
-  color: #fff;
-  box-shadow: 0 8px 26px rgba(16, 42, 71, 0.25);
-  font-size: 12px;
-}
-.compare-item {
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.14);
-}
-.compare-item button {
-  border: 0;
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-}
-.compare-bar > button {
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 6px;
-  background: transparent;
-  color: #fff;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-.drawer-mask,
 .modal-mask {
   position: fixed;
   inset: 0;
   z-index: 20;
   display: flex;
-  justify-content: flex-end;
-  background: rgba(16, 42, 71, 0.28);
-}
-.drawer {
-  width: min(390px, 92vw);
-  height: 100%;
-  padding: 24px;
-  overflow: auto;
-  background: #fff;
-}
-.drawer h2 {
-  margin-top: 0;
-  color: var(--ds-navy-deep);
-}
-.drawer label {
-  display: block;
-  margin: 11px 0;
-  color: #59635c;
-  font-size: 12px;
-}
-.drawer label input,
-.drawer label select {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-  margin-top: 5px;
-  padding: 8px;
-  border: 1px solid var(--ds-border);
-  border-radius: 7px;
-}
-.drawer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 18px;
-}
-.drawer-actions button,
-.modal-actions button {
-  padding: 7px 12px;
-  border: 1px solid var(--ds-border);
-  border-radius: 7px;
-  background: #fff;
-  cursor: pointer;
-}
-.drawer-actions .primary {
-  border-color: var(--ds-ink);
-  background: var(--ds-ink);
-  color: #fff;
-}
-.modal-mask {
   justify-content: center;
   align-items: center;
   padding: 20px;
+  background: rgba(16, 42, 71, 0.28);
 }
-.detail-modal,
-.compare-modal {
+.detail-modal {
   position: relative;
-  width: min(720px, 100%);
+  width: min(760px, 100%);
   max-height: 90vh;
   overflow: auto;
   padding: 24px;
@@ -891,7 +546,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .detail-modal h2 {
-  margin: 0 0 5px;
+  margin: 4px 0 5px;
   color: var(--ds-navy-deep);
 }
 .detail-modal h3 {
@@ -899,19 +554,49 @@ onMounted(() => {
   color: #34413a;
   font-size: 14px;
 }
-.reason-list {
-  padding-left: 18px;
-  color: #59635c;
-  font-size: 13px;
-  line-height: 1.8;
+.job-org {
+  margin: 0;
+  color: var(--ds-muted);
+  font-size: 12px;
 }
-.reason-list .fail {
-  color: #a33b2d;
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
 }
-.reason-list .risk {
-  color: #946b22;
+.fact-grid div {
+  padding: 9px;
+  border-radius: 8px;
+  background: #f7faf8;
 }
-.disclaimer {
+.fact-grid span {
+  display: block;
+  color: #9aa3ad;
+  font-size: 11px;
+}
+.fact-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #3c4a42;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.announcement-text {
+  margin: 0;
+  color: #3c4a42;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.official-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--ds-ink);
+  font-size: 12px;
+}
+.source-unavailable {
+  display: inline-block;
+  margin-top: 8px;
   color: #9aa3ad;
   font-size: 11px;
 }
@@ -945,12 +630,11 @@ onMounted(() => {
   color: #9aa3ad;
   font-size: 12px;
 }
-.modal-actions {
+.reminder-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-top: 20px;
 }
 .reminder-input {
   padding: 7px 8px;
@@ -959,21 +643,17 @@ onMounted(() => {
   color: var(--ds-ink);
   font-size: 12px;
 }
+.reminder-row button {
+  padding: 7px 12px;
+  border: 1px solid var(--ds-border);
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
 .reminder-message {
   margin: 9px 0 0;
   color: #2f6b4b;
   font-size: 12px;
-}
-.compare-modal table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-.compare-modal th,
-.compare-modal td {
-  padding: 8px;
-  border-bottom: 1px solid var(--ds-border);
-  text-align: left;
 }
 .state {
   padding: 50px;
@@ -987,15 +667,15 @@ onMounted(() => {
   .radar-head {
     display: block;
   }
-  .profile-btn {
-    margin-top: 12px;
+  .home-link {
+    display: inline-block;
+    margin-top: 10px;
   }
-  .job-grid {
-    grid-template-columns: 1fr;
+  .job-table {
+    min-width: 820px;
   }
-  .compare-bar {
-    bottom: 8px;
-    width: calc(100% - 24px);
+  .fact-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 </style>
