@@ -32,3 +32,5 @@ export { default as ExamGateDialog } from './ExamGateDialog.vue';
 export { default as ParseDraftDrawer } from './ParseDraftDrawer.vue';
 // P4（2026-11-09）：补答案抽屉（上传答案 PDF → 逐题核对 → 写入答案/解析）
 export { default as AnswerDraftDrawer } from './AnswerDraftDrawer.vue';
+// S3（2026-11-12）：xlsx 卡片智能导入（旧版独有能力搬回新版；预览表头 + 手选列映射 → 建 N 张卡）
+export { default as CardXlsxImportDialog } from './CardXlsxImportDialog.vue';

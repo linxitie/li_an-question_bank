@@ -756,18 +756,62 @@ export function fetchMaterialImportStatus(importId: number): Promise<MaterialImp
   });
 }
 
+/** xlsx 卡片导入的解析预览：表头 + 前 200 行（S3，2026-11-12） */
+export interface MaterialImportPreviewResult {
+  file_type: string;
+  headers: string[];
+  row_count: number;
+  result?: { headers?: string[]; rows?: string[][]; [key: string]: unknown };
+}
+
+export function fetchMaterialImportPreview(importId: number): Promise<MaterialImportPreviewResult> {
+  return request<MaterialImportPreviewResult>({
+    url: `/api/materials/admin/import/${importId}/preview`,
+    method: 'GET'
+  });
+}
+
 export interface MaterialImportConfirmResult {
   created: number;
   material_ids: number[];
   type?: string;
   published?: boolean;
   skipped_count?: number;
+  /** xlsx 卡片通道：内容重复被跳过的行 */
+  skipped?: { row: number; reason: string }[];
+  /** xlsx 卡片通道：正面/背面为空被丢弃的行号 */
+  invalid_rows?: number[];
+  /** xlsx 卡片通道：分类/考点列非法但已回退自动分类（两种形状：入库回退 kind/value；格式校验 code/message） */
+  warnings?: {
+    row: number;
+    code?: string;
+    column?: string;
+    message?: string;
+    kind?: string;
+    value?: string;
+    replaced_by?: string;
+  }[];
 }
 
-/** 确认入库（文章批量：type='article'；默认未上架，与上传路径一致） */
+/**
+ * 确认入库。
+ *
+ * - 文档通道（文章/讲义）：`type='article' | 'lecture'`；
+ * - **xlsx 卡片通道（S3）**：`type='card'` + `column_mapping`（0 基列号，
+ *   `front`/`back` 必填），后端按表建 N 张卡，上限 500 行；
+ * - 默认 `publish=false`（落未上架，等人工核对后再上架）。
+ */
 export function confirmMaterialImport(
   importId: number,
-  body: { subject: LibrarySubject; type: 'article' | 'lecture'; title?: string; publish?: boolean }
+  body: {
+    subject: LibrarySubject;
+    type: 'article' | 'lecture' | 'card';
+    title?: string;
+    category?: string;
+    publish?: boolean;
+    /** xlsx 卡片：列映射（0 基列号），只传填了的字段 */
+    column_mapping?: Record<string, number>;
+  }
 ): Promise<MaterialImportConfirmResult> {
   return request<MaterialImportConfirmResult>({
     url: `/api/materials/admin/import/${importId}/confirm`,

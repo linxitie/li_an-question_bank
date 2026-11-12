@@ -127,7 +127,12 @@ describe('AnswerDraftDrawer', () => {
     await uploadAndSettle(w);
     await w.find('.ad-adopt').trigger('click');
     await nextTick();
-    expect(w.text()).toContain('确认写入 2 题');
+    // 采纳后 #87 的答案列变成 ABCD（第 2 行是 #87：表头、#1、#87、#88）
+    const adopted = w.findAll('.ad-answer')[1];
+    expect((adopted.element as HTMLInputElement).value).toBe('ABCD');
+    // 2026-11-12 修：按钮数字是"**会写入**的题数"，不是"填了答案的题数"——
+    // #87 库中已有 A、默认 overwrite=false 会保留，所以只有 #1（库中为空）算写入 → 1 题。
+    expect(w.text()).toContain('确认写入 1 题');
   });
 
   it('默认 overwrite=false；勾选后 true', async () => {

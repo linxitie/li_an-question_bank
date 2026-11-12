@@ -16,6 +16,10 @@
         <button class="adm-btn adm-btn--line" :disabled="loading" @click="articleUploadOpen = true">
           批量上传文章
         </button>
+        <!-- S3（2026-11-12）：xlsx 卡片智能导入 —— 旧版独有能力，搬回新版后旧页才能下线 -->
+        <button class="adm-btn adm-btn--line" :disabled="loading" @click="cardXlsxOpen = true">
+          卡片导入（xlsx）
+        </button>
       </template>
     </AdminPageHeader>
 
@@ -347,6 +351,14 @@
       @done="onUploaded"
     />
 
+    <!-- S3（2026-11-12）：xlsx 卡片智能导入（预览表头 → 手选列映射 → 建 N 张卡） -->
+    <CardXlsxImportDialog
+      :open="cardXlsxOpen"
+      :default-subject="articleDefaultSubject"
+      @close="cardXlsxOpen = false"
+      @done="onCardsImported"
+    />
+
     <!-- P3（2026-11-09）：导题确认抽屉（拆题结果逐题核对 → 确认入库） -->
     <ParseDraftDrawer
       :open="draftOpen"
@@ -396,7 +408,8 @@ import {
   ArticleBatchUpload,
   ExamGateDialog,
   ParseDraftDrawer,
-  AnswerDraftDrawer
+  AnswerDraftDrawer,
+  CardXlsxImportDialog
 } from '@/components/admin';
 import {
   MATERIAL_PLACEMENTS,
@@ -990,6 +1003,8 @@ async function batchRemove(): Promise<void> {
 const uploadOpen = ref(false);
 /** L4：文章批量上传（解析链路） */
 const articleUploadOpen = ref(false);
+/** S3（2026-11-12）：xlsx 卡片智能导入开关 */
+const cardXlsxOpen = ref(false);
 /** 文章批量上传的默认科目：跟当前筛选走（没筛就公专） */
 const articleDefaultSubject = computed(() => (filters.subject || 'gongzhuan') as 'xingce' | 'shenlun' | 'gongzhuan');
 const uploadType = ref<'article' | 'lecture' | 'paper'>('lecture');
@@ -1006,6 +1021,13 @@ async function onUploaded(payload: { created: number }): Promise<void> {
   page.value = 1;
   await reload();
   if (payload.created) ElMessage.success(`已导入 ${payload.created} 条，可在列表里预览并上架`);
+}
+
+/** S3：xlsx 卡片导入完成 → 刷新列表（**不关窗**：结果面板要显示跳过/无效行明细），用户自己关 */
+async function onCardsImported(payload: { created: number }): Promise<void> {
+  page.value = 1;
+  await reload();
+  if (payload.created) ElMessage.success(`已创建 ${payload.created} 张卡片（未上架），核对后逐张上架`);
 }
 
 // ---------------- 改信息（C2b） ----------------
