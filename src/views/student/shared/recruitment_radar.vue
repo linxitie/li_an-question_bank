@@ -96,6 +96,7 @@
             rel="noopener">
             公告原文
           </a>
+          <span v-else class="source-unavailable">原文链接暂不可用</span>
         </div>
       </article>
     </div>
@@ -259,6 +260,7 @@
             rel="noopener">
             查看公告原文
           </a>
+          <span v-else class="source-unavailable">原文链接暂不可用</span>
         </div>
         <p v-if="reminderMessage" class="reminder-message">
           {{ reminderMessage }}
@@ -492,18 +494,29 @@ async function openDetail(item: JobItem): Promise<void> {
   detail.value = item;
   reminderMessage.value = '';
   reminderAt.value = toLocalInput(item.registration_end);
-  const [t, taskData, h] = await Promise.all([
+  const [t, taskData, h, reminder] = await Promise.all([
     request<any>(`/api/recruitment/jobs/${item.post_id}/timeline`),
     request<any>(`/api/recruitment/jobs/${item.post_id}/tasks`).catch(() => ({
       items: []
     })),
     request<any>(`/api/recruitment/jobs/${item.post_id}/history`).catch(() => ({
       items: []
-    }))
+    })),
+    request<any>(
+      `/api/recruitment/jobs/${item.post_id}/reminder-suggestion`
+    ).catch(() => null)
   ]);
   timeline.value = t.nodes || [];
   tasks.value = taskData.items || [];
   history.value = h.items || [];
+  if (reminder?.suggested_at) {
+    reminderAt.value = toLocalInput(reminder.suggested_at);
+    reminderMessage.value = reminder.message || '';
+  } else {
+    reminderAt.value = '';
+    reminderMessage.value =
+      reminder?.message || '公告未写明确报名截止时间，请手动选择提醒日期';
+  }
 }
 
 async function toggleTask(task: any): Promise<void> {
@@ -740,6 +753,10 @@ onMounted(() => {
   border-radius: 7px;
   background: var(--ds-ink);
   color: #fff;
+}
+.source-unavailable {
+  color: #9aa3ad;
+  font-size: 11px;
 }
 .pager {
   display: flex;

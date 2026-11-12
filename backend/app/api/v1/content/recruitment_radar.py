@@ -6,6 +6,7 @@ import json
 import re
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from ....models.models import (
     JobReminder,
     JobTimelineNode,
     PolicePost,
+    RecruitmentInfo,
     SysUser,
     UserJobCompare,
     UserJobTask,
@@ -29,6 +31,8 @@ from ....services.recruitment_match_service import match_job
 router = APIRouter(prefix="/api/recruitment", tags=["招考雷达"])
 
 CORE_FIELDS = ("degree", "major_name", "fresh_grad", "political_status", "gender")
+DEAD_SOURCE_HOSTS = {"www.rszk.net", "rszk.net"}
+
 
 
 class EligibilityPayload(BaseModel):
@@ -100,6 +104,15 @@ def _eligibility(profile: UserProfile | None) -> dict[str, Any]:
     return data
 
 
+def _safe_official_url(value: str | None) -> str:
+    url = (value or "").strip()
+    if not url:
+        return ""
+    if urlparse(url).netloc.lower() in DEAD_SOURCE_HOSTS:
+        return ""
+    return url
+
+
 def _post_dict(post: PolicePost, profile: UserProfile | None = None) -> dict[str, Any]:
     match = match_job(profile, post)
     return {
@@ -122,7 +135,7 @@ def _post_dict(post: PolicePost, profile: UserProfile | None = None) -> dict[str
         "ratio": post.ratio or "",
         "registration_start": post.registration_start or "",
         "registration_end": post.registration_end or "",
-        "official_url": post.official_url or post.source or "",
+        "official_url": _safe_official_url(post.official_url),
         "match": match,
     }
 
@@ -146,6 +159,27 @@ def _parse_datetime(value: str | None) -> datetime | None:
         return datetime.fromisoformat(clean)
     except ValueError:
         return _parse_date(clean)
+
+
+def _deadline_for_post(db: Session, post: PolicePost) -> tuple[datetime | None, str]:
+    """先读结构化截止日期，再从公告正文的报名截止句提取；不猜测。"""
+    direct = _parse_date(post.registration_end)
+    if direct:
+        return direct, "registration_end"
+    rec = (
+        db.query(RecruitmentInfo)
+        .filter(RecruitmentInfo.recruitment_id == post.recruitment_id)
+        .first()
+    )
+    if rec is None:
+        return None, ""
+    text = f"{rec.content or ''}\n{rec.registration_start or ''}\n{rec.registration_end or ''}"
+    for sentence in re.split(r"[。；;\n]", text):
+        if any(term in sentence for term in ("报名截止", "截止时间", "截止日期", "报名结束")):
+            found = _parse_date(sentence)
+            if found:
+                return found, "公告正文"
+    return None, ""
 
 
 @router.get("/eligibility")
@@ -485,6 +519,30 @@ async def job_history(post_id: int, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/jobs/{post_id}/reminder-suggestion")
+async def reminder_suggestion(post_id: int, db: Session = Depends(get_db)):
+    post = db.query(PolicePost).filter(PolicePost.post_id == post_id).first()
+    if post is None:
+        raise HTTPException(status_code=404, detail="职位不存在")
+    deadline, source = _deadline_for_post(db, post)
+    if deadline is None:
+        return {
+            "deadline_at": None,
+            "suggested_at": None,
+            "source": "",
+            "message": "公告未写明确报名截止时间，请手动选择提醒日期",
+        }
+    suggested = deadline - timedelta(hours=24)
+    if suggested <= datetime.now():
+        suggested = datetime.now() + timedelta(hours=1)
+    return {
+        "deadline_at": deadline.isoformat(),
+        "suggested_at": suggested.isoformat(),
+        "source": source,
+        "message": f"已识别报名截止时间（{source}），默认提前 24 小时提醒",
+    }
+
+
 @router.post("/jobs/{post_id}/remind")
 async def create_reminder(
     post_id: int,
@@ -496,15 +554,18 @@ async def create_reminder(
     if post is None:
         raise HTTPException(status_code=404, detail="职位不存在")
     supplied = _parse_datetime(body.remind_at if body else None)
-    when = supplied or _parse_date(post.registration_end)
-    if when is None:
+    deadline, _source = _deadline_for_post(db, post)
+    if supplied is not None:
+        remind_at = supplied
+    elif deadline is not None:
+        remind_at = deadline - timedelta(hours=24)
+    else:
         raise HTTPException(
             status_code=400,
             detail="该公告没有明确报名截止时间，请选择提醒日期",
         )
-    if when <= datetime.now():
+    if remind_at <= datetime.now():
         raise HTTPException(status_code=400, detail="提醒时间必须晚于当前时间")
-    remind_at = when
     exists = (
         db.query(JobReminder)
         .filter(

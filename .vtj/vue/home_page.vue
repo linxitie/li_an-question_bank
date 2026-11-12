@@ -376,6 +376,12 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
     gap: 12px;
     margin-bottom: 16px;
   }
+  .recruit-section .section-header {
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
   .section-header :deep(.radar-entry) {
     margin-left: auto;
   }
@@ -394,6 +400,10 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   }
   .recruit-grid {
     display: grid;
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
     grid-template-columns: repeat(3, 1fr);
     gap: 14px;
   }
