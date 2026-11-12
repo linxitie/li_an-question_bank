@@ -208,10 +208,10 @@
                 <div class="mm-exam">
                   <button
                     class="mm-switch"
-                    :class="{ 'is-on': row.exam?.manual_open !== 0 }"
+                    :class="{ 'is-on': examSwitchOn(row.exam) }"
                     :disabled="!examSwitchEnabled(row.exam) || examBusyId === row.id"
                     :title="examSwitchHint(row.exam)"
-                    :aria-label="row.exam?.manual_open === 0 ? '打开考试' : '关闭考试'"
+                    :aria-label="examSwitchOn(row.exam) ? '关闭考试' : '打开考试'"
                     @click="toggleExam(row)"
                   >
                     <i />
@@ -435,8 +435,11 @@ import {
   examStatusTone,
   examSwitchEnabled,
   examSwitchHint,
+  examSwitchOn,
   examSwitchVisible,
-  examTimingText
+  examTimingText,
+  mergeExamState,
+  nextExamOpen
 } from '@/utils/examGate';
 
 const SUBJECT_LABEL: Record<string, string> = { xingce: '行测', shenlun: '申论', gongzhuan: '公专' };
@@ -720,15 +723,20 @@ const examWinExam = ref<LibraryExamState | null>(null);
  */
 async function toggleExam(row: AdminMaterialListItem): Promise<void> {
   if (!examSwitchEnabled(row.exam) || examBusyId.value === row.id) return;
-  const nextOpen = row.exam?.manual_open === 0;
+  // 2026-11-12 修：以前用 `row.exam?.manual_open === 0` 直接算下一步。
+  // 一旦回包缺 `manual_open`（写端点曾漏字段），这里恒为 false → 永远发"关闭"，开关再也打不开。
+  // 现在统一走 `nextExamOpen`（与视觉 `examSwitchOn` 同源，缺字段时按 reason 兜底）。
+  const nextOpen = nextExamOpen(row.exam);
   examBusyId.value = row.id;
   try {
     const state = await setMaterialExamOpen(row.id, nextOpen);
-    row.exam = state;
+    // 合并而不是整体替换：保留 paper_code/paper_id 等列表字段，并用本次意图补 manual_open
+    const merged = mergeExamState(row.exam, state, nextOpen);
+    row.exam = merged;
     if (nextOpen) {
-      ElMessage.success(state.ready
+      ElMessage.success(merged?.ready
         ? '已打开：学生现在可以进入这场考试'
-        : `已打开，但学生现在还进不去（${examStatusLabel(state)}）——${examTimingText(state)}`);
+        : `已打开，但学生现在还进不去（${examStatusLabel(merged)}）——${examTimingText(merged)}`);
     } else {
       ElMessage.success('已关闭：学生不能再新开这场考试（进行中的仍可交卷，历史成绩保留）');
     }
@@ -748,10 +756,11 @@ function openExamWindow(row: AdminMaterialListItem): void {
   examWinOpen.value = true;
 }
 
-/** 保存定时成功：用后端回的新状态覆盖本行（不整表刷新，避免页码/滚动位置乱跳） */
+/** 保存定时成功：合并后端回的新状态（保留行内字段；不整表刷新，避免页码/滚动位置乱跳） */
 function onExamWindowSaved(state: LibraryExamState): void {
   const target = rows.value.find((r) => r.id === examWinId.value);
-  if (target) target.exam = state;
+  // 2026-11-12：同样用 merge，不能整体替换（写端点回包缺 manual_open 会把开关打回"未知"）
+  if (target) target.exam = mergeExamState(target.exam, state);
   examWinOpen.value = false;
 }
 

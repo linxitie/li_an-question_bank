@@ -65,7 +65,7 @@ export function examTimingText(exam: LibraryExamState | null | undefined): strin
   if (openAt && closeAt) return `${openAt}-${closeAt} 定时`;
   if (openAt) return `${openAt} 起可考`;
   if (closeAt) return `${closeAt} 前可考`;
-  return exam.manual_open === 0 ? '已手动关闭' : '手动开启';
+  return examSwitchOn(exam) ? '手动开启' : '已手动关闭';
 }
 
 /**
@@ -93,6 +93,59 @@ export function examSwitchHint(exam: LibraryExamState | null | undefined): strin
   if (!exam.question_count) return '这张卷还没有题目（0 题），打开后学生也进不去';
   return exam.ready ? '当前学生可以进入考试；关闭后不能再新开（进行中的仍可交卷）'
     : '打开后学生即可进入考试（资料还需已上架）';
+}
+
+/**
+ * 开关当前是不是"开"（视觉真值）。
+ *
+ * **为什么要兜底**：2026-11-12 实测事故——写端点曾经只返回 `exam_state`
+ * （缺 `manual_open`），前端整体替换后 `manual_open` 变 `undefined`：
+ * `manual_open !== 0` 恒真 → 按钮亮着但考试已关；下一次点击又算出"关闭"→ 再也打不开。
+ * 这里对"缺字段"按 `reason` 兜底（只有明确 `closed` 才判关），
+ * 这样即使某一侧再漏字段，也不会把开关锁死。
+ */
+export function examSwitchOn(exam: LibraryExamState | null | undefined): boolean {
+  if (!exam || !exam.known) return false;
+  if (exam.manual_open === 0) return false;
+  if (exam.manual_open === 1) return true;
+  return exam.reason !== 'closed';
+}
+
+/** 下一次点击应发的目标值（与 `examSwitchOn` 同源，避免两处算法漂移） */
+export function nextExamOpen(exam: LibraryExamState | null | undefined): boolean {
+  return !examSwitchOn(exam);
+}
+
+/**
+ * 合并写端点回的局部状态：保留列表行里已有的字段（`paper_code` / `paper_id` …），
+ * 只用回包覆盖同名项。
+ *
+ * `fallbackOpen` = 本次请求的意图；**仅当回包没有** `manual_open` 时用它补齐
+ * （正常情况后端会带，这里只是最后一道保险，避免"缺字段 → undefined → 开关锁死"）。
+ */
+export function mergeExamState(
+  prev: LibraryExamState | null | undefined,
+  next: LibraryExamState | null | undefined,
+  fallbackOpen?: boolean
+): LibraryExamState | null {
+  const base = (prev || null) as LibraryExamState | null;
+  if (!next) return base;
+  const merged: LibraryExamState = { ...(base as LibraryExamState), ...next };
+  // `manual_open` 的优先级：**回包** > **本次意图** > `reason=closed` > 上一份。
+  // 为什么意图要高于上一份：写操作刚发生，上一份可能是"变更前"的旧值；
+  // 若回包缺字段还沿用旧值，会出现"关掉了但开关仍显示开"（正是本次事故形态）。
+  // 为什么 `reason=closed` 也要压过上一份：服务端明确说"关着"，旧值不能翻案。
+  const nextManual = next.manual_open;
+  if (nextManual === 0 || nextManual === 1) {
+    merged.manual_open = nextManual;
+  } else if (typeof fallbackOpen === 'boolean') {
+    merged.manual_open = fallbackOpen ? 1 : 0;
+  } else if (merged.reason === 'closed') {
+    merged.manual_open = 0;
+  } else if (typeof base?.manual_open === 'number') {
+    merged.manual_open = base.manual_open;
+  }
+  return merged;
 }
 
 /** `datetime-local` 输入框的值格式：`YYYY-MM-DDTHH:mm` */

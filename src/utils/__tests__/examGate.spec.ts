@@ -11,9 +11,12 @@ import {
   examStatusTone,
   examSwitchEnabled,
   examSwitchHint,
+  examSwitchOn,
   examSwitchVisible,
   examTimingText,
   fromDatetimeLocal,
+  mergeExamState,
+  nextExamOpen,
   tonightWindow,
   toDatetimeLocal
 } from '@/utils/examGate';
@@ -129,5 +132,63 @@ describe('tonightWindow / examNowLine', () => {
     expect(examNowLine({ ...READY, reason: 'closed', ready: false }))
       .toBe('当前：已关闭（服务器时间 20:41）');
     expect(examNowLine(null)).toBe('当前：还没有可作答卷');
+  });
+});
+
+/**
+ * 2026-11-12 事故回归：写端点回包缺 `manual_open` 时，
+ * 开关必须不能"显示开却已关闭"，更不能永远发关闭（再也打不开）。
+ */
+describe('examSwitchOn / nextExamOpen（缺字段兜底）', () => {
+  it('manual_open 有值时以它为准', () => {
+    expect(examSwitchOn(READY)).toBe(true);
+    expect(examSwitchOn({ ...READY, manual_open: 0 })).toBe(false);
+  });
+  it('manual_open 缺失时按 reason 兜底（只有 closed 判关）', () => {
+    const noField = { ...READY } as Partial<LibraryExamState>;
+    delete noField.manual_open;
+    expect(examSwitchOn({ ...(noField as LibraryExamState), reason: 'closed', ready: false })).toBe(false);
+    expect(examSwitchOn({ ...(noField as LibraryExamState), reason: 'ready' })).toBe(true);
+    expect(examSwitchOn({ ...(noField as LibraryExamState), reason: 'not_started' })).toBe(true);
+  });
+  it('没有状态块按"关"处理（开关本来也会被灰掉）', () => {
+    expect(examSwitchOn(null)).toBe(false);
+    expect(examSwitchOn({ ...READY, known: false })).toBe(false);
+  });
+  it('下一次点击 = 取反：关着能打开、开着能关闭', () => {
+    expect(nextExamOpen({ ...READY, manual_open: 0, reason: 'closed' })).toBe(true);
+    expect(nextExamOpen(READY)).toBe(false);
+    const noField = { ...READY } as Partial<LibraryExamState>;
+    delete noField.manual_open;
+    // 事故现场：reason=closed 但没有 manual_open —— 必须能"再次打开"
+    expect(nextExamOpen({ ...(noField as LibraryExamState), reason: 'closed' })).toBe(true);
+  });
+});
+
+describe('mergeExamState（写回不丢字段）', () => {
+  it('保留列表行里的 paper_code/paper_id，只覆盖回包里的字段', () => {
+    const prev = { ...READY, paper_code: 'GZ-2016-JX-T', paper_id: 5 };
+    const next = { ...READY, manual_open: 0, open: false, ready: false, reason: 'closed' } as LibraryExamState;
+    delete (next as Partial<LibraryExamState>).paper_code;
+    delete (next as Partial<LibraryExamState>).paper_id;
+    const merged = mergeExamState(prev, next, false);
+    expect(merged?.paper_code).toBe('GZ-2016-JX-T');
+    expect(merged?.paper_id).toBe(5);
+    expect(merged?.manual_open).toBe(0);
+  });
+  it('回包缺 manual_open 时用本次意图补齐（最后一道保险）', () => {
+    const prev = { ...READY };
+    const partial = { ...READY, open: false, ready: false, reason: 'closed' } as LibraryExamState;
+    delete (partial as Partial<LibraryExamState>).manual_open;
+    expect(mergeExamState(prev, partial, false)?.manual_open).toBe(0);
+    expect(mergeExamState(prev, partial)?.manual_open).toBe(0);   // 没给意图时按 reason 兜底
+  });
+  it('服务端给了值就听服务端的（不被 fallback 覆盖）', () => {
+    const partial = { ...READY, manual_open: 1 } as LibraryExamState;
+    expect(mergeExamState({ ...READY, manual_open: 0 }, partial, false)?.manual_open).toBe(1);
+  });
+  it('回包为空时保留原行', () => {
+    expect(mergeExamState(READY, null)).toEqual(READY);
+    expect(mergeExamState(null, null)).toBeNull();
   });
 });

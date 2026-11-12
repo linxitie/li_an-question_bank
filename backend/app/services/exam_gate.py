@@ -49,6 +49,25 @@ def _resolve(db: Session, material: StudyMaterial):
     return paper
 
 
+def _enrich(state: dict, material: StudyMaterial, paper) -> dict:
+    """给状态块补「管理端字段」：`paper_code` / `paper_id` / `manual_open`。
+
+    **唯一实现点**：列表（`state_of`）与两个写端点（`set_open` / `set_window`）
+    必须回**同一份形状**。2026-11-12 实测事故：写端点当初直接返回
+    `contract.exam_state()`（没有本函数补的三个字段），前端 `row.exam = state`
+    整体替换后 `manual_open` 变 `undefined` →
+      · 开关视觉 `manual_open !== 0` 恒真（显示"开"却已关闭）；
+      · 下一次点击 `manual_open === 0` 恒假（永远发 `open:false`，再也打不开）。
+    所以这里刻意做成单一函数，杜绝"只补一半"。
+    """
+    state["paper_code"] = paper_code_of(material) or None
+    state["paper_id"] = paper.paper_id if paper is not None else None
+    # 手动总闸原值（前端开关只认这一条）：NULL 视为 1；不能用 `or 1`，否则 0 会被吞成 1
+    state["manual_open"] = (1 if getattr(paper, "exam_open", 1) is None
+                            else int(getattr(paper, "exam_open", 1))) if paper is not None else 0
+    return state
+
+
 def state_of(db: Session, material: StudyMaterial,
              now: Optional[datetime] = None) -> dict:
     """只读状态（管理端列表/资料页用）。没有卷时返回 known=False，不抛错。"""
@@ -57,32 +76,29 @@ def state_of(db: Session, material: StudyMaterial,
     state = contract.exam_state(paper, now,
                                 questions=contract.question_total(db, paper),
                                 answers_missing=contract.answer_gap(db, paper))
-    state["paper_code"] = code or None
-    state["paper_id"] = paper.paper_id if paper is not None else None
-    # 手动总闸原值（前端开关只认这一条）：NULL 视为 1；不能用 `or 1`，否则 0 会被吞成 1
-    state["manual_open"] = (1 if getattr(paper, "exam_open", 1) is None
-                            else int(getattr(paper, "exam_open", 1))) if paper is not None else 0
-    return state
+    return _enrich(state, material, paper)
 
 
 def set_open(db: Session, material: StudyMaterial, *, open_: bool) -> dict:
-    """手动总闸。**不 commit**（调用方与审计同一事务）。"""
+    """手动总闸。**不 commit**（调用方与审计同一事务）。回包与列表同形（见 `_enrich`）。"""
     paper = _resolve(db, material)
     paper.exam_open = 1 if open_ else 0
-    return contract.exam_state(paper, questions=contract.question_total(db, paper),
-                               answers_missing=contract.answer_gap(db, paper))
+    state = contract.exam_state(paper, questions=contract.question_total(db, paper),
+                                answers_missing=contract.answer_gap(db, paper))
+    return _enrich(state, material, paper)
 
 
 def set_window(db: Session, material: StudyMaterial, *,
                open_at: Optional[datetime], close_at: Optional[datetime]) -> dict:
-    """设置/清空定时窗口。空值 = 该侧不限。**不 commit**。"""
+    """设置/清空定时窗口。空值 = 该侧不限。**不 commit**。回包与列表同形。"""
     if open_at and close_at and open_at >= close_at:
         raise ExamGateError("开始时间必须早于结束时间")
     paper = _resolve(db, material)
     paper.exam_open_at = open_at
     paper.exam_close_at = close_at
-    return contract.exam_state(paper, questions=contract.question_total(db, paper),
-                               answers_missing=contract.answer_gap(db, paper))
+    state = contract.exam_state(paper, questions=contract.question_total(db, paper),
+                                answers_missing=contract.answer_gap(db, paper))
+    return _enrich(state, material, paper)
 
 
 def parse_dt(value) -> Optional[datetime]:
