@@ -26,6 +26,7 @@
             <span>招考信息</span>
           </h2>
           <span class="section-subtitle">最新招考动态，助你把握每一个机会</span>
+          <RecruitmentRadarEntry />
         </div>
         <div class="recruit-grid">
           <div v-for="(item, index) in state.recruitCategories"
