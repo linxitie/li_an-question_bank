@@ -404,22 +404,24 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
     max-width: 1200px;
     margin-left: auto;
     margin-right: auto;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
+    justify-content: center;
   }
   @media (max-width: 900px) {
     .recruit-grid {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
   @media (max-width: 600px) {
     .recruit-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 
   /* 招考卡片 — 纯白底色 */
   .recruit-card {
+    min-width: 0;
     background: #ffffff; border-radius: 14px; padding: 18px;
     box-shadow: 0 1px 8px rgba(26,43,95,0.04); border: 1px solid #f0f2f5;
     transition: all 0.3s; display: flex; flex-direction: column;
@@ -488,6 +490,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   }
 
   .recruit-title-text {
+    min-width: 0;
     font-size: 20px; color: #2c3e50; flex: 1;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
