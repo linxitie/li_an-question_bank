@@ -6,7 +6,8 @@
     >
       <template #actions>
         <button class="adm-btn adm-btn--line" :disabled="loading" @click="reload">刷新</button>
-        <router-link class="adm-btn adm-btn--line" to="/admin/materials/legacy">旧版（临时）</router-link>
+        <!-- 2026-11-12（方案 A）：旧版入口已摘。页面与路由按 R1/R11 保留（直达 URL 仍可进），
+             等 xlsx 卡片导入 / 新建资料搬进新版后，再按方案 C 删路由。 -->
         <button class="adm-btn" :disabled="loading" @click="openUpload('paper')">＋ 上传试卷</button>
         <button class="adm-btn adm-btn--primary" :disabled="loading" @click="openUpload('lecture')">
           批量导入
@@ -374,8 +375,8 @@
  *
  * 为什么替换：R3 禁止改 `.vtj` 模板，而本轮要加 6 类筛选、发布者列、上传时间列（可排序）、
  * 时间范围、每行预览、试卷列、上架即审批——这些都在表格结构里，低代码页做不了。
- * 旧页**不删不改**（R1），保留在 `/admin/materials/legacy` 供「智能导入 / 富文本编辑 / 批量操作」
- * 过渡使用，B 批用新页重建后下线。
+ * 旧页**不删不改**（R1），仍保留在 `/admin/materials/legacy`（2026-11-12 起**入口已摘**，直达 URL 仍可进），
+ * 供「智能导入 / 富文本编辑 / 批量操作」过渡使用；等这些能力搬进新版后再按方案 C 删路由。
  *
  * 本版（v1）范围：列表/筛选/排序/分页 + 5 格统计 + 上架（=审批）+ 删除 + 预览抽屉。
  * 未在 v1：上传试卷（等 B 批 material_file）、改信息（C 批）、批量操作、智能导入向导。
