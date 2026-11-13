@@ -8,6 +8,7 @@
             <h2 class="ad-title">
               补答案
               <span class="ad-mono">{{ paperCode || '—' }}</span>
+              <span v-if="ocrDraft" class="ad-badge">扫描件 OCR</span>
             </h2>
             <p class="ad-desc">
               {{ paperName || `卷 #${paperId}` }} · 现有答案素材都是 PDF，**PDF 是一等通道**
@@ -37,7 +38,7 @@
               @change="onPick"
             />
           </div>
-          <p v-if="uploading" class="ad-hint">上传解析中… {{ percent }}%（大 PDF 约 1–2 秒）</p>
+          <p v-if="uploading" class="ad-hint">上传中… {{ percent }}%（文字版 1–2 秒；扫描件转后台 OCR，进度显示在抽屉里）</p>
           <p v-if="error" class="ad-error">{{ error }}</p>
           <p class="ad-note">
             解析只生成草稿，**不会改题库**；下一屏逐题看过后点「确认写入」才生效。
@@ -46,6 +47,16 @@
 
         <!-- 2. 预览 -->
         <template v-else>
+          <!-- P4（2026-11-13）：扫描件在后台 OCR，进度写 draft.message；完成自动出表 -->
+          <div v-if="parsing" class="ad-parsing" role="status">
+            <b>扫描件 OCR 解析中</b>
+            <span class="ad-parsing__text">{{ progressText }}</span>
+            <span class="ad-parsing__hint">完成后会自动列出答案（这一步可能要几分钟），先别关抽屉。</span>
+          </div>
+          <div v-else-if="ocrDraft" class="ad-warn">
+            这是扫描件 OCR 出来的答案：<b>答案字母可能认错</b>（尤其 A/D、B/8），
+            请逐题核对后再点「确认写入」。
+          </div>
           <div class="ad-stats">
             <span><i>识别答案</i><b class="is-ok">{{ filledCount }} / {{ items.length }}</b></span>
             <span><i>需确认</i><b :class="draft.conflict_count ? 'is-warn' : 'is-ok'">{{ draft.conflict_count }}</b></span>
@@ -102,7 +113,8 @@
               </span>
             </div>
             <p v-if="!visibleItems.length" class="adm-empty">
-              {{ items.length ? '没有待确认的题（可取消勾选「只看需确认」查看全部）' : '这份草稿没有可显示的题——请点「重新上传」' }}
+              <template v-if="parsing">扫描件正在 OCR，识别完会在这里逐题列出答案（先别关抽屉）</template>
+              <template v-else>{{ items.length ? '没有待确认的题（可取消勾选「只看需确认」查看全部）' : '这份草稿没有可显示的题——请点「重新上传」' }}</template>
             </p>
           </div>
 
@@ -115,12 +127,12 @@
               </label>
               <em v-if="zeroWriteHint" class="ad-foot__warn">{{ zeroWriteHint }}</em>
             </span>
-            <button class="adm-btn adm-btn--line" type="button" :disabled="busy !== ''" @click="reset">重新上传</button>
+            <button class="adm-btn adm-btn--line" type="button" :disabled="busy !== '' || parsing" @click="reset">重新上传</button>
             <button class="adm-btn adm-btn--danger" type="button" :disabled="busy !== ''" @click="discard">放弃</button>
             <button
               class="adm-btn adm-btn--primary"
               type="button"
-              :disabled="busy !== '' || writableCount === 0"
+              :disabled="busy !== '' || parsing || writableCount === 0"
               :title="zeroWriteHint || ''"
               @click="apply"
             >
@@ -144,7 +156,7 @@
  *  ③ 解析正文会跟答案一起入库（表格里能看摘要）；
  *  ④ 只按卷上传，不做文件名自动匹配（入口就在具体那一行卷上）。
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   applyAnswerDraft,
@@ -182,6 +194,19 @@ const draft = ref<AnswerDraftDetail | null>(null);
 const items = ref<AnswerDraftItem[]>([]);
 const onlyFlagged = ref(false);
 const overwrite = ref(false);
+
+// ---------------- P4 扫描件：后台 OCR 的进度与轮询（2026-11-13）----------------
+const pollTimer = ref<number | null>(null);
+/** 后台 OCR 中（后端 status=parsing） */
+const parsing = computed(() => draft.value?.status === 'parsing');
+/** 这份草稿是不是 OCR 出来的（扫描件）：parsing 阶段直接算，完成后看后端写的 message */
+const ocrDraft = computed(() => {
+  const d = draft.value;
+  if (!d) return false;
+  if (d.status === 'parsing') return true;
+  return /扫描件|OCR/.test(d.message || '');
+});
+const progressText = computed(() => draft.value?.message || 'OCR 解析中…');
 
 const filledCount = computed(() => items.value.filter((i) => i.answer).length);
 /**
@@ -224,18 +249,60 @@ async function loadExisting(): Promise<void> {
   if (props.paperId == null) return;
   try {
     const data = await fetchLatestAnswerDraft(props.paperId);
-    if (!data?.exists || data.status !== 'pending') return;
-    draft.value = data;
-    items.value = (data.items || []).map((it) => ({
-      ...it,
-      answer: it.answer || '',
-      suggestion: it.suggestion || '',
-      flags: [...(it.flags || [])]
-    }));
+    if (!data?.exists) return;
+    // P4：parsing 也要续上——扫描件 OCR 期间关掉抽屉再打开，应该还能看到进度
+    if (data.status !== 'pending' && data.status !== 'parsing') return;
+    setDraft(data);
   } catch {
     // 续不上就当新建：不打断用户
   }
 }
+
+/** 把后端回包灌进抽屉（items 归一），并按状态决定要不要开始轮询 */
+function setDraft(data: AnswerDraftDetail): void {
+  draft.value = data;
+  items.value = (data.items || []).map((it) => ({
+    ...it,
+    answer: it.answer || '',
+    suggestion: it.suggestion || '',
+    flags: [...(it.flags || [])]
+  }));
+  startPollingIfNeeded();
+}
+
+function stopPolling(): void {
+  if (pollTimer.value != null) {
+    window.clearInterval(pollTimer.value);
+    pollTimer.value = null;
+  }
+}
+
+/** 扫描件在后台 OCR：每 2.5s 拉一次，完成（pending/failed）后自动停并出表 */
+function startPollingIfNeeded(): void {
+  stopPolling();
+  const d = draft.value;
+  if (!d || d.status !== 'parsing') return;
+  const id = d.draft_id;
+  pollTimer.value = window.setInterval(() => {
+    void (async () => {
+      try {
+        const data = await fetchAnswerDraft(id);
+        if (data.status === 'parsing') return;
+        stopPolling();
+        setDraft(data);
+        if (data.status === 'pending') {
+          ElMessage.success(`扫描件识别完成：${data.item_count} 题，请逐题核对后写入`);
+        } else if (data.status === 'failed') {
+          error.value = data.message || '解析失败';
+        }
+      } catch {
+        stopPolling();            // 网络抖动就停：用户可以关掉抽屉重开，别一直打接口
+      }
+    })();
+  }, 2500);
+}
+
+onBeforeUnmount(stopPolling);
 
 const TIER_LABEL: Record<string, string> = {
   L0: '题号后直给', L1: '正确答案', L2: '句尾结论', L3: '推断（建议）', L4: '未识别', P: '一行一题'
@@ -245,6 +312,7 @@ function tierLabel(tier?: string): string {
 }
 
 function reset(): void {
+  stopPolling();
   draft.value = null;
   items.value = [];
   error.value = '';
@@ -277,6 +345,12 @@ async function upload(file: File): Promise<void> {
       error.value = data.message || '解析失败';
       return;
     }
+    // P4：扫描件已转后台 OCR —— 立刻进「解析中」界面并开始轮询（不再干等 3–7 分钟）
+    if (data.status === 'parsing') {
+      setDraft(data);
+      ElMessage.info('扫描件已转 OCR，正在识别…进度会显示在抽屉里');
+      return;
+    }
     // 2026-11-12 兜底：上传接口曾经只回 metadata（没有 items），前端就地空屏；
     // 现在后端已带 items，这里再留一道：没有就按 draft_id 补拉一次明细。
     if (!data.items?.length && data.draft_id) {
@@ -286,13 +360,7 @@ async function upload(file: File): Promise<void> {
         // 补拉失败不阻断：下面会按空表展示，用户可「重新上传」
       }
     }
-    draft.value = data;
-    items.value = (data.items || []).map((it) => ({
-      ...it,
-      answer: it.answer || '',
-      suggestion: it.suggestion || '',
-      flags: [...(it.flags || [])]
-    }));
+    setDraft(data);
     const answered = countAnswered(items.value);
     const identical = countIdentical(items.value);
     let msg = `已解析 ${data.item_count} 题`;
@@ -425,6 +493,42 @@ function close(): void {
   gap: 8px;
 }
 .ad-mono { font-family: var(--adm-mono, monospace); font-size: 12px; color: var(--adm-text-sub); }
+/* P4：扫描件 OCR 的角标 / 进度条 / 警告条 */
+.ad-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #b26a00;
+  background: #fff5e6;
+  border: 1px solid #f0d4a6;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.ad-parsing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 18px 0;
+  padding: 9px 12px;
+  background: #fff8e8;
+  border: 1px solid #f3d79b;
+  border-radius: 8px;
+  color: #8a5a00;
+  font-size: 12px;
+}
+.ad-parsing b { color: #b26a00; }
+.ad-parsing__text { font-variant-numeric: tabular-nums; font-weight: 700; }
+.ad-parsing__hint { color: #a07a2a; font-size: 11px; }
+.ad-warn {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  background: #fff8e8;
+  border: 1px solid #f3d79b;
+  border-radius: 8px;
+  color: #8a5a00;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
 .ad-desc { margin: 6px 0 0; font-size: 11.5px; color: var(--adm-text-sub); line-height: 1.65; }
 .ad-x { border: none; background: transparent; font-size: 20px; color: var(--adm-text-weak, #93a0b5); cursor: pointer; }
 .ad-body { padding: 16px 18px; }

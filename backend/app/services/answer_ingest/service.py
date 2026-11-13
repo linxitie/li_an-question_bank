@@ -45,7 +45,34 @@ class AnswerIngestError(ValueError):
 
 
 # ------------------------------------------------------------------ 读文件
-def read_text_of(abs_path: str, ext: str, *, meta: Optional[dict] = None) -> str:
+def pdf_text_layer_empty(abs_path: str, *, sample: int = 3) -> bool:
+    """前 `sample` 页都没有非空白字符 → 判定为扫描件（P4，2026-11-13）。
+
+    为什么要单独一个函数：路由需要**在解析之前**决定"走同步还是异步"，
+    而 `read_text_of()` 是重量级操作（扫描件会直接触发 OCR，几分钟）。
+    这个探测只看前几页文字层，毫秒级，且与 `read_text_of` 的判据一致
+    （那边是"整份 0 字"，这边是"前 N 页 0 字"，只会更保守）。
+    """
+    try:
+        import pymupdf
+    except ImportError:                            # pragma: no cover
+        return False
+    try:
+        doc = pymupdf.open(abs_path)
+    except Exception:                              # noqa: BLE001  坏文件交给后面的解析去报错
+        return False
+    try:
+        n = min(sample, doc.page_count)
+        for i in range(n):
+            if (doc[i].get_text() or "").strip():
+                return False
+        return n > 0
+    finally:
+        doc.close()
+
+
+def read_text_of(abs_path: str, ext: str, *, meta: Optional[dict] = None,
+                 progress=None) -> str:
     """把 pdf / docx / xlsx / txt 统一读成文本（分行）。
 
     `meta`（可选，出参）：调用方传一个 dict 进来，扫描件走 OCR 时会把识别信息
@@ -69,7 +96,7 @@ def read_text_of(abs_path: str, ext: str, *, meta: Optional[dict] = None) -> str
         if text.strip():
             return text
         # 文字层为空 = 扫描图片版 → OCR sidecar（P1，2026-11-12 批准）
-        return _read_scanned_pdf(abs_path, meta)
+        return _read_scanned_pdf(abs_path, meta, progress=progress)
     if ext == "docx":
         try:
             from docx import Document
@@ -109,17 +136,18 @@ def read_text_of(abs_path: str, ext: str, *, meta: Optional[dict] = None) -> str
     raise AnswerIngestError(f"暂不支持 .{ext} 的答案解析（支持 pdf / docx / xlsx / txt）")
 
 
-def _read_scanned_pdf(abs_path: str, meta: Optional[dict]) -> str:
+def _read_scanned_pdf(abs_path: str, meta: Optional[dict], progress=None) -> str:
     """扫描图片版 PDF → OCR 文本（P1）。
 
     **只有"文字层为空"的 PDF 才会走到这里**，文字版/Word/Excel 一行不受影响。
+    `progress(done, total)`：P4 起透传给 sidecar，用于把「OCR 12/24 页」写进草稿。
     OCR 失败时抛 `AnswerIngestError`，消息里已经带页号与原因（由 sidecar 保证），
     不再出现"组件未就绪"这类一句话。
     """
     from .. import ocr_sidecar
 
     try:
-        text, info = ocr_sidecar.read_pdf_text(abs_path)
+        text, info = ocr_sidecar.read_pdf_text(abs_path, progress=progress)
     except ocr_sidecar.OcrError as exc:
         raise AnswerIngestError(str(exc)) from exc
     if meta is not None:
@@ -215,9 +243,15 @@ def _ocr_note(meta: Optional[dict]) -> str:
 
 
 # ------------------------------------------------------------------ 解析入口
-def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
-                  source_name: str = "", actor_id: Optional[int] = None) -> PaperAnswerDraft:
-    """解析答案文件 → 新建草稿（同卷旧 pending 草稿先作废）。**不 commit**。"""
+def create_answer_draft(db: Session, *, paper_id: int, ext: str,
+                        source_name: str = "", actor_id: Optional[int] = None,
+                        status: str = "pending", message: str = "") -> PaperAnswerDraft:
+    """建一份空草稿（同卷旧 `pending`/`parsing` 先作废）。**不 commit、不解析**。
+
+    P4（2026-11-13）：扫描答案件 OCR 要 3–7 分钟，路由先建 `status="parsing"` 的草稿
+    并立刻返回，再由后台 `fill_answer_draft()` 填内容；xlsx/docx/文字版 PDF 仍走
+    `parse_answers()`（同步，行为不变）。
+    """
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
     if paper is None:
         raise AnswerIngestError("试卷不存在")
@@ -227,34 +261,59 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
 
     for old in (db.query(PaperAnswerDraft)
                   .filter(PaperAnswerDraft.paper_id == paper_id,
-                          PaperAnswerDraft.status == "pending").all()):
+                          PaperAnswerDraft.status.in_(("pending", "parsing"))).all()):
         old.status = "discarded"
         old.message = "被新的解析覆盖"
         old.update_time = datetime.now()
 
     draft = PaperAnswerDraft(
         paper_id=paper_id,
-        status="pending",
+        status=status,
         source_ext=(ext or "").lower().lstrip("."),
         source_name=(source_name or "")[:255],
         created_by=actor_id,
+        message=(message or None),
         create_time=datetime.now(),
         expires_at=datetime.now() + timedelta(days=RETENTION_DAYS),
     )
     db.add(draft)
     db.flush()
+    return draft
+
+
+def fill_answer_draft(db: Session, draft: PaperAnswerDraft, *, ext: str, abs_path: str,
+                      progress_cb=None) -> PaperAnswerDraft:
+    """读文件 → 抽答案 → 校验 → 回写草稿（成功置 `pending` / 失败置 `failed`）。**不 commit**。
+
+    `progress_cb(文本)`：扫描件 OCR 时逐段回调（调用方负责落库+commit，用于前端进度）。
+    """
+    if draft.status == "discarded":                 # 已人工放弃：后台任务别再把它救活
+        return draft
+    questions = paper_questions(db, draft.paper_id)
+    if not questions:                               # 卷被清空/题被删：说清楚而不是写脏数据
+        draft.status = "failed"
+        draft.message = "这张卷现在已经没有题目了，无法校验答案"
+        draft.update_time = datetime.now()
+        return draft
+
+    cb = None
+    if progress_cb is not None:
+        def cb(done: int, total: int) -> None:      # noqa: ANN001
+            progress_cb(f"OCR {done}/{total} 页")
 
     try:
         ocr_meta: dict = {}
-        text = read_text_of(abs_path, ext, meta=ocr_meta)
+        text = read_text_of(abs_path, ext, meta=ocr_meta, progress=cb)
     except AnswerIngestError as exc:
         draft.status = "failed"
         draft.message = str(exc)[:500]
+        draft.update_time = datetime.now()
         return draft
     except Exception as exc:                       # noqa: BLE001
-        logger.exception("[answer_ingest] 解析失败 paper=%s", paper_id)
+        logger.exception("[answer_ingest] 解析失败 paper=%s", draft.paper_id)
         draft.status = "failed"
         draft.message = f"解析失败：{exc}"[:500]
+        draft.update_time = datetime.now()
         return draft
 
     items = _extract_items(text, ext)
@@ -264,6 +323,7 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
         note = _ocr_note(ocr_meta)
         if note:
             draft.message = f"{note}；但没识别出任何题号"
+        draft.update_time = datetime.now()
         return draft
 
     # 阻断级：题号必须都落在该卷的题号范围内
@@ -275,6 +335,7 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
         note = _ocr_note(ocr_meta)
         if note:
             draft.message = f"{note}；{draft.message}"[:500]
+        draft.update_time = datetime.now()
         return draft
 
     items, conflict, empty = _validate(items, questions)
@@ -293,9 +354,18 @@ def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
         msgs.append(f"还差 {next_yet} 题没在这份文件里")
     if conflict:
         msgs.append(f"{conflict} 题需确认")
+    draft.status = "pending"
     draft.message = "；".join(msgs)[:500]
     draft.update_time = datetime.now()
     return draft
+
+
+def parse_answers(db: Session, *, paper_id: int, ext: str, abs_path: str,
+                  source_name: str = "", actor_id: Optional[int] = None) -> PaperAnswerDraft:
+    """同步壳：建草稿 + 立刻解析（docx/xlsx/文字版 PDF/txt 走这条）。**不 commit**。"""
+    draft = create_answer_draft(db, paper_id=paper_id, ext=ext,
+                                source_name=source_name, actor_id=actor_id)
+    return fill_answer_draft(db, draft, ext=ext, abs_path=abs_path)
 
 
 def paper_brief(db: Session, paper_id: int) -> Optional[dict]:

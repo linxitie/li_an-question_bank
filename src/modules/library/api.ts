@@ -1026,7 +1026,8 @@ export interface AnswerDraftDetail {
   paper_id: number;
   paper_code: string | null;
   paper_name: string | null;
-  status: 'pending' | 'applied' | 'discarded' | 'failed' | string;
+  /** `parsing` = 扫描件转后台 OCR 中（P4，2026-11-13）：此时 items 为空、can_edit=false */
+  status: 'pending' | 'parsing' | 'applied' | 'discarded' | 'failed' | string;
   source_ext: string | null;
   source_name: string | null;
   item_count: number;

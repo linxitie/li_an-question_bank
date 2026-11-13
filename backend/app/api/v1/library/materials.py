@@ -2052,6 +2052,43 @@ async def admin_set_exam_window(material_id: int, body: dict,
 #: 允许自动导题的扩展名（xlsx 是卡片/表格链路，不在这里）
 PARSE_EXTS = ("docx", "pdf")
 
+#: P4（2026-11-13）：≤8MB 走内存（快，且 sha256 一次算完），更大的落临时文件流式入档。
+#: 真扫描试卷 41 页 56.97MB —— 整读内存峰值就是 57MB，并发几个就危险。
+_UPLOAD_MEM_LIMIT = 8 * 1024 * 1024
+
+
+def _upload_size_of(stream) -> int | None:
+    """上传流的总字节数；拿不到（内存里的 BytesIO）返回 None 交给后面流式兜底。"""
+    try:
+        return _os.fstat(stream.fileno()).st_size
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _read_head(stream, n: int = 8) -> bytes:
+    """读开头 n 字节做 magic 校验，**读完把指针归零**（否则后面读到的文件是残缺的）。"""
+    try:
+        stream.seek(0)
+        head = stream.read(n) or b""
+    finally:
+        try:
+            stream.seek(0)
+        except (OSError, ValueError):
+            pass
+    return head
+
+
+def _spool_upload(stream, ext: str) -> str:
+    """把上传流分块写到临时文件，返回路径（调用方负责删）。"""
+    tmp_dir = _os.path.join(str(UPLOAD_TMP_DIR), "big")
+    _os.makedirs(tmp_dir, exist_ok=True)
+    path = _os.path.join(tmp_dir, f"{_uuid.uuid4().hex}.{ext or 'bin'}")
+    stream.seek(0)
+    with open(path, "wb") as out:
+        _shutil.copyfileobj(stream, out, 1024 * 1024)
+    return path
+
+
 
 def _draft_payload(db: Session, draft, material=None) -> dict:
     """草稿的统一回包（列表/明细/动作回执共用一个形状）。"""
@@ -2358,10 +2395,82 @@ async def admin_discard_parse_draft(draft_id: int,
 #: 答案文件允许的扩展名（xlsx 走"一行一题"通道；txt 便于小批量手写）
 ANSWER_EXTS = ("pdf", "docx", "xlsx", "xls", "txt", "csv")
 
+#: P4（2026-11-13）：扫描答案件转后台后，草稿超过这个时长仍未完成 → 查询时判失败
+_ANSWER_PARSE_STALE_SECONDS = 40 * 60
+#: 测试用开关：`ANSWER_INLINE=1` 时扫描件也同步解析（与 `IMPORT_INLINE` 同思路），
+#: 这样既有「上传即拿到 pending 草稿」的测试不用改。
+_ANSWER_INLINE = _os.environ.get("ANSWER_INLINE") == "1"
+
+
+def _answer_parse_job(draft_id: int, ext: str, abs_path: str,
+                      session_factory=None) -> None:
+    """后台线程：OCR/取答案 → 回写草稿（独立会话）。进度写 `draft.message`。
+
+    `abs_path` 是**上传时留下的临时文件**，本函数负责在结束时删掉它（成功/失败都删）。
+    """
+    from datetime import datetime as _dt
+
+    from ....core.database import SessionLocal
+    from ....models.models import PaperAnswerDraft
+    from ....services import answer_ingest
+
+    s = (session_factory or SessionLocal)()
+    try:
+        draft = s.get(PaperAnswerDraft, draft_id)
+        if draft is None:
+            return
+
+        def on_progress(text: str) -> None:
+            try:
+                draft.message = text[:500]
+                draft.update_time = _dt.now()
+                s.commit()
+            except Exception:                      # 进度写失败不能拖死解析
+                s.rollback()
+
+        answer_ingest.fill_answer_draft(s, draft, ext=ext, abs_path=abs_path,
+                                        progress_cb=on_progress)
+        s.commit()
+        logger.info("[materials] 答案解析完成 draft=%s status=%s 题数=%s",
+                    draft_id, draft.status, draft.item_count)
+    except Exception as e:                         # noqa: BLE001
+        logger.warning("[materials] 答案解析失败 draft=%s: %s", draft_id, e, exc_info=True)
+        try:
+            s.rollback()
+            draft = s.get(PaperAnswerDraft, draft_id)
+            if draft is not None and draft.status != "discarded":
+                draft.status = "failed"
+                draft.message = f"解析失败：{e}"[:500]
+                s.commit()
+        except Exception:                          # noqa: BLE001
+            logger.exception("[materials] 答案失败状态回写也失败 draft=%s", draft_id)
+    finally:
+        s.close()
+        try:
+            _os.unlink(abs_path)                   # 临时答案文件只活到解析结束
+        except OSError:
+            pass
+
+
+def _fail_stale_answer_draft(db: Session, draft) -> None:
+    """卡在 `parsing` 超过 40 分钟 → 判失败（多半是后台线程随重启没了）。"""
+    if draft is None or getattr(draft, "status", "") != "parsing":
+        return
+    age = (datetime.now() - (draft.update_time or draft.create_time)).total_seconds()
+    if age > _ANSWER_PARSE_STALE_SECONDS:
+        draft.status = "failed"
+        draft.message = "OCR 超时中断（>40 分钟），请重新上传"
+        draft.update_time = datetime.now()
+        try:
+            db.commit()
+        except Exception:                          # noqa: BLE001
+            db.rollback()
+
 
 @router.post("/admin/papers/{paper_id}/answers/parse",
              summary="上传答案文件并解析(管理员)")
 async def admin_parse_answers(paper_id: int,
+                              background_tasks: BackgroundTasks,
                               file: UploadFile = File(...),
                               current_user: SysUser = Depends(get_current_user),
                               db: Session = Depends(get_db)):
@@ -2387,7 +2496,44 @@ async def admin_parse_answers(paper_id: int,
     tmp_path = _os.path.join(tmp_dir, f"{_uuid.uuid4().hex}.{ext}")
     with open(tmp_path, "wb") as fh:
         fh.write(raw)
+    keep_tmp = False                 # 起后台任务时由 job 负责删；其余路径这里删
     try:
+        # P4（2026-11-13）：扫描答案件 OCR 要 3–7 分钟（24–43 页），同步跑会把请求挂死。
+        # 判扫描只看前 3 页文字层（毫秒级），扫描件转后台 + 进度写 draft.message（零迁移）。
+        scanned = ext == "pdf" and answer_ingest.pdf_text_layer_empty(tmp_path)
+        if scanned and not _ANSWER_INLINE:
+            from ....models.models import PaperAnswerDraft
+            running = (db.query(PaperAnswerDraft)
+                       .filter(PaperAnswerDraft.paper_id == paper_id,
+                               PaperAnswerDraft.status == "parsing")
+                       .order_by(PaperAnswerDraft.draft_id.desc()).first())
+            if running is not None:
+                age = (datetime.now()
+                       - (running.update_time or running.create_time)).total_seconds()
+                if 0 <= age <= _ANSWER_PARSE_STALE_SECONDS:
+                    # 幂等：OCR 已经在跑就复用，别起第二个（双份 CPU，前一份还会被置 discarded）
+                    payload = answer_ingest.draft_payload(db, running, with_items=True)
+                    payload["ok"] = True
+                    payload["reused"] = True
+                    payload["can_edit"] = False
+                    return payload
+            from sqlalchemy.orm import sessionmaker
+            draft = answer_ingest.create_answer_draft(
+                db, paper_id=paper_id, ext=ext, source_name=name,
+                actor_id=current_user.user_id, status="parsing", message="OCR 排队中")
+            _audit(db, current_user, "answer_parse", f"paper:{paper_id}",
+                   f"扫描件转 OCR 异步解析 {name}")
+            db.commit()
+            db.refresh(draft)
+            factory = sessionmaker(bind=db.get_bind(), autocommit=False, autoflush=False)
+            background_tasks.add_task(run_in_threadpool, _answer_parse_job,
+                                      draft.draft_id, ext, tmp_path, factory)
+            keep_tmp = True
+            payload = answer_ingest.draft_payload(db, draft, with_items=True)
+            payload["ok"] = True
+            payload["can_edit"] = False
+            return payload
+
         draft = answer_ingest.parse_answers(
             db, paper_id=paper_id, ext=ext, abs_path=tmp_path,
             source_name=name, actor_id=current_user.user_id)
@@ -2399,10 +2545,11 @@ async def admin_parse_answers(paper_id: int,
         db.rollback()
         raise HTTPException(400, str(e))
     finally:
-        try:
-            _os.unlink(tmp_path)
-        except OSError:
-            pass
+        if not keep_tmp:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
 
     # 2026-11-12 修：这里原来回的是 `draft_payload(db, draft)`（with_items 默认 False），
     # 回包**没有 items**，而前端上传后直接读 `data.items` → 抽屉空表（提示"已解析 97 题"、
@@ -2429,6 +2576,7 @@ async def admin_latest_answer_draft(paper_id: int,
     draft = answer_ingest.latest_of(db, paper_id)
     if draft is None:
         return {"exists": False}
+    _fail_stale_answer_draft(db, draft)
     payload = answer_ingest.draft_payload(db, draft, with_items=True)
     payload["exists"] = True
     payload["can_edit"] = draft.status == "pending"
@@ -2448,6 +2596,7 @@ async def admin_get_answer_draft(draft_id: int,
         PaperAnswerDraft.draft_id == draft_id).first()
     if not draft:
         raise HTTPException(404, "答案草稿不存在")
+    _fail_stale_answer_draft(db, draft)
     return answer_ingest.draft_payload(db, draft, with_items=True)
 
 
@@ -2728,21 +2877,46 @@ async def admin_upload_file(
     # 只有显式 publish=1 才直接写成已上架并同步卷状态 —— 省掉"传完再去列表点一次"。
     want_publish = (publish or "0").strip().lower() in ("1", "true", "yes", "on")
 
-    data = file.file.read()
+    # 2026-11-13（P4）：真扫描试卷 41 页就有 56.97MB，原来 `file.file.read()` 一次读进内存
+    # 再比 20MB 上限 → 真实真卷**根本传不进来**。现在：按类型取上限（PDF 60MB，其余 20MB），
+    # 小文件仍走内存（快），大文件**流式落临时文件**再按 sha256 去重，峰值内存与文件大小无关。
     name = (file.filename or "未命名").replace("\\", "/").split("/")[-1][:255]
     ext = _os.path.splitext(name)[1].lower().lstrip(".")
     if ext not in material_files.ALLOWED_EXT_MIME:
         raise HTTPException(400, "仅支持 docx / doc / pdf / xlsx / xls 原件")
-    if not data:
-        raise HTTPException(400, "空文件不能上传")
-    if len(data) > material_files.MAX_FILE_BYTES:
-        raise HTTPException(400,
-                            f"文件超过 {material_files.MAX_FILE_BYTES // 1024 // 1024}MB 上限")
-    magic = MAGIC_BYTES.get("." + ext)
-    if magic and not data.startswith(magic):
-        raise HTTPException(400, "文件实际格式与扩展名不符")
+    stream = file.file
+    tmp_path = None
+    data: bytes | None = None
+    try:
+        size = _upload_size_of(stream)
+        limit = material_files.max_bytes_for(ext)
+        if size is not None and size > limit:
+            raise HTTPException(400, f".{ext} 文件超过 {limit // 1024 // 1024}MB 上限")
+        head = _read_head(stream, 8)              # 顺带把指针归零
+        magic = MAGIC_BYTES.get("." + ext)
+        if magic and head and not head.startswith(magic):
+            raise HTTPException(400, "文件实际格式与扩展名不符")
 
-    sha = material_files.sha256_of_bytes(data)
+        if size is not None and 0 < size <= _UPLOAD_MEM_LIMIT:
+            data = stream.read()
+            if not data:
+                raise HTTPException(400, "空文件不能上传")
+            sha = material_files.sha256_of_bytes(data)
+        else:
+            tmp_path = _spool_upload(stream, ext)
+            real = _os.path.getsize(tmp_path)
+            if real == 0:
+                raise HTTPException(400, "空文件不能上传")
+            if real > limit:
+                raise HTTPException(400, f".{ext} 文件超过 {limit // 1024 // 1024}MB 上限")
+            sha = material_files.sha256_of_file(tmp_path)
+    except HTTPException:
+        if tmp_path:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
+        raise
     # 同内容已存在（且资料没被删）→ 跳过，回已有 id，便于前端标"重复"
     dup = (db.query(MaterialFile, StudyMaterial)
            .join(StudyMaterial, StudyMaterial.material_id == MaterialFile.material_id)
@@ -2750,6 +2924,11 @@ async def admin_upload_file(
            .order_by(MaterialFile.file_id.asc()).first())
     if dup:
         dup_file, dup_material = dup
+        if tmp_path:                       # 重复内容也要把临时文件清掉，别攒垃圾
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
         return JSONResponse({
             "duplicate": True, "created": False,
             "material_id": dup_material.material_id,
@@ -2837,9 +3016,16 @@ async def admin_upload_file(
                 except ValueError as exc:      # 理论上不会走到（已判过编号）
                     paper_auto = {"created": False, "reason": "invalid",
                                   "hint": str(exc)}
-        row = material_files.save_bytes(
-            db, target_material.material_id, data, name,
-            role=role, source="upload", uploader_id=current_user.user_id)
+        if tmp_path:                       # 大文件：直接从临时文件流式入档（不经过内存）
+            row = material_files.save_from_path(
+                db, target_material.material_id, tmp_path, name,
+                role=role, source="upload", uploader_id=current_user.user_id)
+            _os.unlink(tmp_path)
+            tmp_path = None
+        else:
+            row = material_files.save_bytes(
+                db, target_material.material_id, data, name,
+                role=role, source="upload", uploader_id=current_user.user_id)
         # C1：讲义 docx 上传后顺手抽大纲（字数/章节），列表与抽屉直接有数据
         if role == "primary" and name.lower().endswith(".docx"):
             try:
@@ -2851,9 +3037,19 @@ async def admin_upload_file(
         db.commit()
     except ValueError as exc:
         db.rollback()
+        if tmp_path:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
         raise HTTPException(400, str(exc))
     except OSError:
         db.rollback()
+        if tmp_path:
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
         logger.exception("[materials] 原件写盘失败")
         raise HTTPException(503, "原件写入失败（磁盘不可用），请稍后重试")
 

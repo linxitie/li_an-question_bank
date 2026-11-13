@@ -41,10 +41,33 @@ ALLOWED_EXT_MIME = {
     "xls": "application/vnd.ms-excel",
     "pdf": "application/pdf",
 }
-#: 单文件上限（与导入上传一致，20MB）
+#: 单文件上限（默认口径，20MB）
 MAX_FILE_BYTES = 20 * 1024 * 1024
+#: 按扩展名的上限（2026-11-13，P4）：真实扫描试卷 41 页就 **56.97MB**，
+#: 全局 20MB 会把整类真卷挡在门外（实测：P3 只能验 5 页 5.2MB 的探针）。
+#: 只给 PDF 放宽到 60MB——扫描件全是 PDF，docx/xlsx 体积小且没有这个诉求。
+MAX_BYTES_BY_EXT = {"pdf": 60 * 1024 * 1024}
 #: 角色白名单
 ROLES = ("primary", "attachment")
+
+
+def max_bytes_for(ext: str) -> int:
+    """该扩展名的单文件上限（未登记的类型回落到 `MAX_FILE_BYTES`）。"""
+    return MAX_BYTES_BY_EXT.get((ext or "").lower().lstrip("."), MAX_FILE_BYTES)
+
+
+def size_limit_text(ext: str) -> str:
+    """人读上限文案（错误提示与前端提示共用，避免两处数字不一致）。"""
+    return f"{max_bytes_for(ext) // 1024 // 1024}MB"
+
+
+def check_size(ext: str, size: int) -> None:
+    """超限即抛 `ValueError`；文案里说清是哪种类型、多少 MB。"""
+    limit = max_bytes_for(ext)
+    if size > limit:
+        kind = (ext or "").lower().lstrip(".")
+        raise ValueError(f".{kind} 文件超过 {limit // 1024 // 1024}MB 上限")
+
 
 
 def files_root() -> Path:
@@ -117,8 +140,7 @@ def save_bytes(db: Session, material_id: int, data: bytes, file_name: str,
         raise ValueError("仅支持 docx/doc/xlsx/xls/pdf 原件")
     if not data:
         raise ValueError("空文件不能留档")
-    if len(data) > MAX_FILE_BYTES:
-        raise ValueError(f"文件超过 {MAX_FILE_BYTES // 1024 // 1024}MB 上限")
+    check_size(ext, len(data))
 
     sha = sha256_of_bytes(data)
     rel = storage_rel_path(sha, ext)
@@ -146,8 +168,7 @@ def save_from_path(db: Session, material_id: int, src_path: Path | str, file_nam
     size = src.stat().st_size
     if size <= 0:
         raise ValueError("空文件不能留档")
-    if size > MAX_FILE_BYTES:
-        raise ValueError(f"文件超过 {MAX_FILE_BYTES // 1024 // 1024}MB 上限")
+    check_size(ext, size)
 
     sha = sha256_of_file(src)
     rel = storage_rel_path(sha, ext)
