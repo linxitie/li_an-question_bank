@@ -1,13 +1,19 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 <#
 .SYNOPSIS
-    一键重启备考资料模块开发环境（后端 8000 + 前端 9527），并自检 + 自动探测手机端地址。
+    一键重启开发环境（后端 8001 + 前端 9527），并自检 + 自动探测手机端地址。
 
 .DESCRIPTION
-    背景：手工重启最容易踩两个坑——
-      1) 前端漏设 DEV_BACKEND_ORIGIN，/api 会代理到 8000 → 全站 404；
-      2) 端口被旧进程占用时，新进程会静默退出（ERROR: [Errno 10048]），看起来"重启了但没生效"。
-    本脚本固定做四步：杀端口 → 等端口释放 → 分离启动（日志落 _run/）→ 自检（health / openapi / 代理）。
+    背景：手工重启最容易踩四个坑——
+      1) 前端漏设 DEV_BACKEND_ORIGIN，/api 会代理到 8000 → 全站 404「请求的资源不存在」；
+      2) 端口被旧进程占用时，新进程会静默退出（ERROR: [Errno 10048]），看起来"重启了但没生效"；
+      3) **PYTHONNOUSERSITE 必须清掉**：DSH/沙箱会给子进程设 `PYTHONNOUSERSITE=1`，而本项目
+         后端依赖装在**用户级** site-packages（`%APPDATA%\Python\Python314\site-packages`），
+         不清掉就会 `No module named uvicorn`（换成系统 Python 也一样）；
+      4) **不要按端口号瞎杀**：在 DSH 里 `9527` 的监听者可能显示成 `DSH Desktop.exe`（宿主替
+         子进程做端口转发），按端口杀会误杀宿主。本脚本会跳过 `DSH*` 进程，前端改按命令行
+         (`npm run dev` + 本项目路径) 找自己的进程。
+    固定五步：停旧进程 → 等端口释放 → 分离启动（日志落 _run/）→ 自检（health / openapi / 代理）→ 打印地址。
 
     手机端地址探测会**排除虚拟网卡**（VMware / VirtualBox / Hyper-V / Loopback / APIPA），
     优先取默认路由所在网卡的 IPv4，避免给出 192.168.189.1 这类连不上的地址。
@@ -16,13 +22,20 @@
     只重启后端。
 .PARAMETER SkipBackend
     只重启前端。
+.PARAMETER BePort
+    后端端口，默认 8001（本机 Docker 占了 8000）。
+.PARAMETER FePort
+    前端端口，默认 9527。
 
 .EXAMPLE
     .\scripts\dev-restart.ps1
+    .\scripts\dev-restart.ps1 -SkipFrontend
 #>
 param(
     [switch]$SkipFrontend,
-    [switch]$SkipBackend
+    [switch]$SkipBackend,
+    [int]$BePort = 8001,
+    [int]$FePort = 9527
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,33 +44,70 @@ $backend = Join-Path $repo 'backend'
 $runDir = Join-Path (Split-Path -Parent $repo) '_run'
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 
-$BE_PORT = 8000
-$FE_PORT = 9527
+$BE_PORT = $BePort
+$FE_PORT = $FePort
 
 function Write-Step([string]$msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
-function Stop-Port([int]$port) {
+function Stop-Port([int]$port, [string]$kind) {
     $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-    if (-not $conns) { Write-Host "    $port 未被占用"; return }
-    $pids = $conns.OwningProcess | Select-Object -Unique
-    foreach ($procId in $pids) {
-        try {
-            $p = Get-Process -Id $procId -ErrorAction Stop
-            Write-Host "    停止 $($p.ProcessName) (PID $procId) 占用 $port"
-            Stop-Process -Id $procId -Force -ErrorAction Stop
-        } catch {
-            Write-Host "    跳过 PID $procId（已退出或无权限）" -ForegroundColor DarkYellow
+    if (-not $conns) { Write-Host "    $port 未被占用" }
+    else {
+        $pids = $conns.OwningProcess | Select-Object -Unique
+        foreach ($procId in $pids) {
+            $ci = Get-CimInstance Win32_Process -Filter "ProcessId=$procId" -ErrorAction SilentlyContinue
+            $cmd = if ($ci) { [string]$ci.CommandLine } else { '' }
+            $name = if ($ci) { $ci.Name } else { 'unknown' }
+            # 判断依据是**命令行**，不是进程名：
+            # · 后端 uvicorn 的命令行里没有项目路径（靠工作目录），只能认 `uvicorn` + `app.main:app`；
+            # · 前端 vite 被 DSH 包成 "DSH Desktop.exe ...\node_modules\.bin\vite.js"，命令行里**有**项目路径；
+            # · 真正的宿主转发器两个特征都不满足 → 跳过，绝不误杀。
+            $ours = if ($kind -eq 'backend') {
+                $cmd -like '*uvicorn*' -and $cmd -like '*app.main:app*'
+            } else {
+                $cmd -like "*$repo*" -and $cmd -like '*vite*'
+            }
+            if (-not $ours) {
+                Write-Host "    $port 的监听者 $name (PID $procId) 不是本项目进程，跳过不杀"
+                continue
+            }
+            try {
+                Write-Host "    停止 $name (PID $procId) 占用 $port"
+                & "$env:SystemRoot\System32\taskkill.exe" /T /F /PID $procId 2>&1 | Out-Null
+            } catch {
+                Write-Host "    跳过 PID $procId（已退出或无权限）" -ForegroundColor DarkYellow
+            }
         }
+    }
+    if ($kind -eq 'frontend') { Stop-FrontendByCmd }
+}
+
+#: 前端真正的进程：命令行里带本项目路径的 `npm run dev` / vite 链（含被宿主包了一层的情况）
+function Stop-FrontendByCmd {
+    $hits = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.CommandLine -and $_.CommandLine -like "*$repo*" -and
+        ($_.CommandLine -like '*npm run dev*' -or
+         $_.CommandLine -like '*ENV_TYPE=local vite*' -or
+         $_.CommandLine -like '*vite\bin\vite.js*' -or
+         $_.CommandLine -like '*node_modules\.bin*vite*')
+    }
+    foreach ($h in $hits) {
+        Write-Host "    停止前端进程 $($h.Name) (PID $($h.ProcessId))"
+        & "$env:SystemRoot\System32\taskkill.exe" /T /F /PID $h.ProcessId 2>&1 | Out-Null
     }
 }
 
-function Wait-PortFree([int]$port, [int]$timeoutSec = 20) {
+function Wait-PortFree([int]$port, [int]$timeoutSec = 20, [switch]$Soft) {
     $deadline = (Get-Date).AddSeconds($timeoutSec)
     while ((Get-Date) -lt $deadline) {
         if (-not (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)) {
             Write-Host "    $port 已释放"; return $true
         }
         Start-Sleep -Milliseconds 400
+    }
+    if ($Soft) {
+        Write-Host "    $port 在 ${timeoutSec}s 内未释放 —— 继续尝试启动（宿主可能仍持有转发）" -ForegroundColor DarkYellow
+        return $true
     }
     Write-Host "    $port 在 ${timeoutSec}s 内未释放" -ForegroundColor Red
     return $false
@@ -105,16 +155,24 @@ function Get-LanIPv4 {
 }
 
 Write-Step "1/5 停止旧进程"
-if (-not $SkipBackend) { Stop-Port $BE_PORT | Out-Null }
-if (-not $SkipFrontend) { Stop-Port $FE_PORT | Out-Null }
+if (-not $SkipBackend) { Stop-Port $BE_PORT 'backend' | Out-Null }
+if (-not $SkipFrontend) { Stop-Port $FE_PORT 'frontend' | Out-Null }
 if (-not $SkipBackend) { if (-not (Wait-PortFree $BE_PORT)) { throw "后端端口 $BE_PORT 未释放，中止" } }
-if (-not $SkipFrontend) { if (-not (Wait-PortFree $FE_PORT)) { throw "前端端口 $FE_PORT 未释放，中止" } }
+if (-not $SkipFrontend) { Wait-PortFree $FE_PORT -Soft | Out-Null }
 
 Write-Step "2/5 启动后端（$BE_PORT）"
 if (-not $SkipBackend) {
     $beOut = Join-Path $runDir 'backend.out.log'
     $beErr = Join-Path $runDir 'backend.err.log'
-    Start-Process -FilePath 'python' `
+    # 关键：清掉 PYTHONNOUSERSITE（沙箱会设成 1），否则用户级 site-packages 里的 uvicorn/fastapi 不可见
+    $env:PYTHONNOUSERSITE = ''
+    if (-not $env:PYTHONIOENCODING) { $env:PYTHONIOENCODING = 'utf-8' }
+    # 优先用系统 Python 的绝对路径：`python` 在部分 shell 里会被沙箱垫片劫持到没有依赖的解释器
+    $pyExe = 'python'
+    foreach ($cand in @('C:\Python314\python.exe', "$env:LOCALAPPDATA\Programs\Python\Python314\python.exe")) {
+        if (Test-Path $cand) { $pyExe = $cand; break }
+    }
+    Start-Process -FilePath $pyExe `
         -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', "$BE_PORT" `
         -WorkingDirectory $backend `
         -RedirectStandardOutput $beOut -RedirectStandardError $beErr `
