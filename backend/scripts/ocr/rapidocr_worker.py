@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 
@@ -52,40 +53,29 @@ def ocr_page(engine, cv2, np, png: bytes):
     return [it["text"] for it in items]
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="RapidOCR 扫描件识别（JSONL 输出）")
-    ap.add_argument("pdf", help="待识别的 PDF 绝对路径")
-    ap.add_argument("--dpi", type=int, default=200)
-    ap.add_argument("--max-pages", type=int, default=60)
-    args = ap.parse_args()
+def ocr_document(engine, cv2, np, pymupdf, path: str, dpi: int, max_pages: int) -> int:
+    """识别一份 PDF 并逐事件输出。返回 0=有页成功 / 4=全失败 / 2=PDF 打不开。
 
+    一次性模式与常驻模式**共用**这一段，保证两条路径行为一致（常驻只是模型不重复加载）。
+    """
     try:
-        import cv2
-        import numpy as np
-        import pymupdf
-        from rapidocr_onnxruntime import RapidOCR
-    except Exception as exc:                        # noqa: BLE001
-        sys.stderr.write(f"OCR 环境不完整：{exc}\n")
-        return 3
-
-    try:
-        doc = pymupdf.open(args.pdf)
+        doc = pymupdf.open(path)
     except Exception as exc:                        # noqa: BLE001
         sys.stderr.write(f"PDF 打不开：{exc}\n")
+        emit({"t": "error", "message": f"PDF 打不开：{exc}"[:300]})
         return 2
 
     total = int(doc.page_count)
-    will_do = min(total, max(1, args.max_pages))
+    will_do = min(total, max(1, max_pages))
     emit({"t": "meta", "pages": total, "will_do": will_do,
-          "dpi": args.dpi, "engine": "rapidocr"})
+          "dpi": dpi, "engine": "rapidocr"})
 
-    engine = RapidOCR()
     done = failed = 0
     t_all = time.time()
     for i in range(will_do):
         t0 = time.time()
         try:
-            png = render_png(doc[i], args.dpi)
+            png = render_png(doc[i], dpi)
             lines = ocr_page(engine, cv2, np, png)
         except Exception as exc:                    # noqa: BLE001
             failed += 1
@@ -99,7 +89,67 @@ def main() -> int:
     emit({"t": "done", "pages_done": done, "pages_failed": failed,
           "secs": round(time.time() - t_all, 1),
           "truncated": will_do < total})
+    doc.close()
     return 0 if done else 4
+
+
+def serve(engine, cv2, np, pymupdf) -> int:
+    """**常驻模式**（S-C）：加载一次模型，之后按行收命令、按事件回写。
+
+    协议（stdin 一行一个 JSON）：
+      {"cmd":"ping"}                                  -> {"t":"pong"}
+      {"cmd":"ocr","path":"...","dpi":200,"max_pages":60}
+                                                      -> meta / page* / (page_error)* / done
+      {"cmd":"quit"}                                  -> 退出
+    """
+    emit({"t": "ready", "pid": os.getpid()})
+    for raw in sys.stdin:
+        line = (raw or "").strip()
+        if not line:
+            continue
+        try:
+            cmd = json.loads(line)
+        except ValueError:
+            emit({"t": "error", "message": "命令不是合法 JSON"})
+            continue
+        action = cmd.get("cmd")
+        if action == "quit":
+            break
+        if action == "ping":
+            emit({"t": "pong", "pid": os.getpid()})
+            continue
+        if action != "ocr":
+            emit({"t": "error", "message": f"未知命令 {action}"})
+            continue
+        ocr_document(engine, cv2, np, pymupdf, str(cmd.get("path") or ""),
+                     int(cmd.get("dpi") or 200), int(cmd.get("max_pages") or 60))
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="RapidOCR 扫描件识别（JSONL 输出）")
+    ap.add_argument("pdf", nargs="?", help="待识别的 PDF 绝对路径（一次性模式）")
+    ap.add_argument("--dpi", type=int, default=200)
+    ap.add_argument("--max-pages", type=int, default=60)
+    ap.add_argument("--serve", action="store_true", help="常驻模式：从 stdin 收命令（S-C）")
+    args = ap.parse_args()
+
+    try:
+        import cv2
+        import numpy as np
+        import pymupdf
+        from rapidocr_onnxruntime import RapidOCR
+    except Exception as exc:                        # noqa: BLE001
+        sys.stderr.write(f"OCR 环境不完整：{exc}\n")
+        return 3
+
+    engine = RapidOCR()
+    if args.serve:
+        return serve(engine, cv2, np, pymupdf)
+    if not args.pdf:
+        sys.stderr.write("一次性模式需要 PDF 路径；常驻模式请加 --serve\n")
+        return 2
+    return ocr_document(engine, cv2, np, pymupdf, args.pdf, args.dpi, args.max_pages)
 
 
 if __name__ == "__main__":

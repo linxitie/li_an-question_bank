@@ -47,14 +47,71 @@ else:
 
 @pytest.fixture()
 def fake_worker(tmp_path, monkeypatch):
-    """把 sidecar 指向"当前解释器 + 假 worker"。"""
+    """把 sidecar 指向"当前解释器 + 假 worker"（**强制 oneshot 模式**测 P1 老路径）。"""
     def make(mode: str = "ok") -> str:
         path = tmp_path / f"worker_{mode}.py"
         path.write_text(FAKE_WORKER.replace("__MODE__", mode), encoding="utf-8")
         monkeypatch.setenv(ocr_sidecar.OCR_PYTHON_ENV, sys.executable)
+        monkeypatch.setenv(ocr_sidecar.OCR_MODE_ENV, "oneshot")
         monkeypatch.setattr(ocr_sidecar, "WORKER_PATH", path)
         return mode
     return make
+
+
+#: S-C：常驻模式假 worker —— 支持 --serve，用 pid 证明"进程被复用"
+FAKE_DAEMON = r'''
+import json, os, sys, time
+
+MODE = "__MODE__"
+
+
+def emit(obj):
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+if "--serve" not in sys.argv:
+    emit({"t": "error", "message": "常驻测试要求 --serve"})
+    sys.exit(9)
+
+emit({"t": "ready", "pid": os.getpid()})
+served = 0
+for raw in sys.stdin:
+    line = raw.strip()
+    if not line:
+        continue
+    cmd = json.loads(line)
+    if cmd.get("cmd") == "quit":
+        break
+    if cmd.get("cmd") != "ocr":
+        continue
+    served += 1
+    emit({"t": "meta", "pages": 2})
+    if MODE == "hang":
+        time.sleep(30)
+    emit({"t": "page", "page": 1, "chars": 8, "secs": 0.1,
+          "text": "pid=%d page1" % os.getpid()})
+    emit({"t": "page", "page": 2, "chars": 8, "secs": 0.1,
+          "text": "pid=%d page2" % os.getpid()})
+    emit({"t": "done", "pages_done": 2, "pages_failed": 0, "secs": 0.2, "truncated": False})
+    if MODE == "die_after_first" and served == 1:
+        sys.exit(0)
+'''
+
+
+@pytest.fixture()
+def fake_daemon(tmp_path, monkeypatch):
+    """常驻模式：指向假 daemon worker，并在用前后清掉单例。"""
+    def make(mode: str = "ok") -> str:
+        path = tmp_path / f"daemon_{mode}.py"
+        path.write_text(FAKE_DAEMON.replace("__MODE__", mode), encoding="utf-8")
+        monkeypatch.setenv(ocr_sidecar.OCR_PYTHON_ENV, sys.executable)
+        monkeypatch.setenv(ocr_sidecar.OCR_MODE_ENV, "daemon")
+        monkeypatch.setattr(ocr_sidecar, "WORKER_PATH", path)
+        ocr_sidecar.shutdown()
+        return mode
+    yield make
+    ocr_sidecar.shutdown()
 
 
 def _pdf(tmp_path: Path, pages: int, text: str = "") -> str:
@@ -152,3 +209,34 @@ def test_ocr_lowercase_letters_are_understood():
         "2、解析\nA项正确\nc项错误，理由：主体不对\nB项正确")
     assert items[0]["suggestion"] == "AB"
     assert "C" not in items[0]["suggestion"]
+
+
+# --------------------------------------------------------------- S-C 常驻模式
+def test_daemon_reuses_same_process_for_two_files(tmp_path, fake_daemon):
+    """连续两份 PDF 必须复用同一个 worker 进程（模型只加载一次）。"""
+    fake_daemon("ok")
+    t1, m1 = ocr_sidecar.read_pdf_text(_pdf(tmp_path, 2))
+    t2, m2 = ocr_sidecar.read_pdf_text(_pdf(tmp_path, 3))
+    pid1 = t1.split()[0]
+    pid2 = t2.split()[0]
+    assert pid1 == pid2, (pid1, pid2)          # 同一个 pid ⇒ 没重启进程
+    assert m1["pages_done"] == 2 and m2["pages_done"] == 2
+
+
+def test_daemon_crash_is_reported_then_restart_works(tmp_path, fake_daemon):
+    """worker 半路退出：本次报错，下一次自动重启（不能永久坏掉）。"""
+    fake_daemon("die_after_first")
+    text, _ = ocr_sidecar.read_pdf_text(_pdf(tmp_path, 2))
+    assert "page1" in text
+    with pytest.raises(ocr_sidecar.OcrError) as err:
+        ocr_sidecar.read_pdf_text(_pdf(tmp_path, 2))
+    assert "退出" in str(err.value) or "失败" in str(err.value)
+    text2, _ = ocr_sidecar.read_pdf_text(_pdf(tmp_path, 2))
+    assert "page1" in text2
+
+
+def test_daemon_timeout_kills_process(tmp_path, fake_daemon):
+    fake_daemon("hang")
+    with pytest.raises(ocr_sidecar.OcrError) as err:
+        ocr_sidecar.read_pdf_text(_pdf(tmp_path, 1), page_timeout=1.0)
+    assert "超时" in str(err.value)

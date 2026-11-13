@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
-"""扫描件 OCR sidecar（P1，2026-11-12 用户批准）。
+"""扫描件 OCR sidecar（P1 交付；S-C 增加常驻模式）。
 
 **为什么是子进程**：主后端跑 Python 3.14、不装 onnxruntime/opencv；OCR 运行时是独立的
 `C:\\ocr-env`（Python 3.11 + rapidocr-onnxruntime，287MB，模型随包自带、不联网）。
 主进程只起子进程、读 JSONL —— 主环境**零新增依赖**，OCR 环境坏了也不影响文字版链路。
 
-方案与 P0 实测见 `docs/plans/扫描件OCR能力_方案_v1.md` §3 / §9；
-worker 协议见 `backend/scripts/ocr/rapidocr_worker.py` 的模块文档。
+两种运行模式（`OCR_MODE` 环境变量，默认 `daemon`）：
 
-边界（刻意不做的事）：
-  · 不写库、不建表、不新增端点（守 R11）；
-  · 不缓存识别结果（P4 再做 sha256 缓存）；
-  · 只吃 PDF 文件的绝对路径；页数上限默认 60 页，超了截断并在 meta 里标 `truncated`。
+| 模式 | 行为 | 用途 |
+|---|---|---|
+| `daemon`（S-C 默认） | 起一个常驻 worker（`--serve`），模型只加载一次，之后每份 PDF 发一条命令复用 | 省掉每篇 **20–25s** 的模型加载（实测首条进度固定晚 25s 就是它） |
+| `oneshot` | 每份 PDF 起一个新进程，跑完退出 | 兜底/排障；P1 的老路径，行为完全不变 |
+
+协议见 `backend/scripts/ocr/rapidocr_worker.py` 的模块文档。
+边界（刻意不做）：不写库、不建表、不新增端点（守 R11）；不缓存识别结果（P4）。
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import queue
@@ -30,6 +33,14 @@ OCR_PYTHON_ENV = "OCR_PYTHON"
 DEFAULT_OCR_PYTHON = r"C:\ocr-env\Scripts\python.exe"
 #: worker 脚本（仓库内，随代码走）
 WORKER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "ocr" / "rapidocr_worker.py"
+
+#: 运行模式：daemon（常驻，默认）/ oneshot（每次新进程）
+OCR_MODE_ENV = "OCR_MODE"
+DEFAULT_OCR_MODE = "daemon"
+#: 常驻进程首次就绪（解释器 + 模型加载）最多等多久
+DAEMON_READY_TIMEOUT = 150.0
+#: 常驻进程空闲多久回收（避免长期挂着占内存；下次调用会重新拉起）
+DAEMON_IDLE_SECONDS = 30 * 60
 
 #: 默认参数（与方案 §7 风险表一致：60s/页、60 页、封顶 30 分钟、200dpi）
 DEFAULT_DPI = 200
@@ -49,11 +60,13 @@ def python_exe() -> str:
     return (os.environ.get(OCR_PYTHON_ENV) or DEFAULT_OCR_PYTHON).strip()
 
 
-def available() -> Tuple[bool, str]:
-    """快速自检：只看文件在不在（不跑 import，便于健康检查/报错前置）。
+def ocr_mode() -> str:
+    mode = (os.environ.get(OCR_MODE_ENV) or DEFAULT_OCR_MODE).strip().lower()
+    return mode if mode in ("daemon", "oneshot") else DEFAULT_OCR_MODE
 
-    返回 `(是否可用, 原因)`；不可用时原因直接可以给用户看。
-    """
+
+def available() -> Tuple[bool, str]:
+    """快速自检：只看文件在不在（不跑 import，便于健康检查/报错前置）。"""
     exe = python_exe()
     if not os.path.isfile(exe):
         return False, (f"OCR 运行时没装：找不到 {exe}"
@@ -85,116 +98,90 @@ def _pump(pipe, sink: queue.Queue, tag: str) -> None:
         sink.put((tag, None))
 
 
-def read_pdf_text(
-        abs_path: str,
-        *,
-        max_pages: int = DEFAULT_MAX_PAGES,
-        dpi: int = DEFAULT_DPI,
-        page_timeout: float = DEFAULT_PAGE_TIMEOUT,
-        total_timeout: float = DEFAULT_TOTAL_TIMEOUT,
-        progress: Progress = None) -> Tuple[str, Dict]:
-    """扫描版 PDF → 文本（按页拼接）+ 识别元信息。
-
-    失败一律抛 `OcrError`，消息里带**页号与原因**（这是 P1 的 DoD：
-    不要再出现"组件未就绪"这种一句话）。
-    """
-    ok, reason = available()
-    if not ok:
-        raise OcrError(reason)
-    if not os.path.isfile(abs_path):
-        raise OcrError(f"待识别的文件不见了：{abs_path}")
-
-    cmd = [python_exe(), "-u", str(WORKER_PATH), abs_path,
-           "--dpi", str(int(dpi)), "--max-pages", str(int(max_pages))]
+def _spawn(extra_args: List[str]) -> Tuple[subprocess.Popen, queue.Queue]:
+    cmd = [python_exe(), "-u", str(WORKER_PATH)] + extra_args
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     try:
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace", bufsize=1,
-            env=env, creationflags=flags)
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, encoding="utf-8",
+            errors="replace", bufsize=1, env=env, creationflags=flags)
     except OSError as exc:
         raise OcrError(f"OCR 进程起不来：{exc}") from exc
-
     q: queue.Queue = queue.Queue()
-    errs: List[str] = []
     threading.Thread(target=_pump, args=(proc.stdout, q, "out"), daemon=True).start()
     threading.Thread(target=_pump, args=(proc.stderr, q, "err"), daemon=True).start()
+    return proc, q
 
+
+def _consume(q: queue.Queue, *, page_timeout: float, total_timeout: float,
+             progress: Progress, errs: List[str],
+             first_wait: float = 120.0) -> Dict:
+    """读事件直到 `done`（或超时/EOF）。返回聚合结果；超时抛 OcrError。"""
     texts: List[str] = []
     fails: List[Dict] = []
     total = 0
     page_secs = 0.0
     truncated = False
-    finished = False
     got_meta = False
     deadline = time.monotonic() + total_timeout
-    last_page = 0
-
-    try:
-        while not finished:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise OcrError(
-                    f"OCR 超时：总时长超过 {int(total_timeout)}s"
-                    f"（已识别 {len(texts)}/{total or '?'} 页）")
-            # 首个事件要等解释器 + 模型加载（≈3–8s），给 120s 兜底；
-            # 之后每页按 page_timeout 卡，超时说明卡在"下一页"
-            wait = min(page_timeout, remaining) if got_meta else min(120.0, remaining)
-            try:
-                tag, line = q.get(timeout=max(0.1, wait))
-            except queue.Empty:
-                done_pages = len(texts) + len(fails)
-                raise OcrError(
-                    f"OCR 超时：第 {done_pages + 1} 页超过 {int(page_timeout)}s 没有结果"
-                    f"（已识别 {len(texts)} 页）")
-            if line is None:
-                if tag == "err":
-                    continue
-                break
-            if tag == "err":
-                errs.append(line)
-                continue
-            try:
-                evt = json.loads(line)
-            except ValueError:
-                errs.append(line)
-                continue
-            kind = evt.get("t")
-            if kind == "meta":
-                total = int(evt.get("pages") or 0)
-                got_meta = True
-            elif kind == "page":
-                last_page = int(evt.get("page") or 0)
-                texts.append(evt.get("text") or "")
-                page_secs += float(evt.get("secs") or 0)
-                if progress:
-                    try:
-                        progress(len(texts), total)
-                    except Exception:              # noqa: BLE001
-                        pass
-            elif kind == "page_error":
-                fails.append({"page": int(evt.get("page") or 0),
-                              "message": (evt.get("message") or "")[:300]})
-            elif kind == "done":
-                truncated = bool(evt.get("truncated"))
-                finished = True
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise OcrError(f"OCR 超时：总时长超过 {int(total_timeout)}s"
+                           f"（已识别 {len(texts)}/{total or '?'} 页）")
+        wait = min(page_timeout, remaining) if got_meta else min(first_wait, remaining)
         try:
-            proc.wait(timeout=10)
-        except Exception:                          # noqa: BLE001
-            _kill(proc)
-    finally:
-        if proc.poll() is None:
-            _kill(proc)
+            tag, line = q.get(timeout=max(0.1, wait))
+        except queue.Empty:
+            done_pages = len(texts) + len(fails)
+            raise OcrError(f"OCR 超时：第 {done_pages + 1} 页超过 {int(page_timeout)}s 没有结果"
+                           f"（已识别 {len(texts)} 页）")
+        if tag == "err":
+            if line is not None:
+                errs.append(line)
+            continue
+        if line is None:
+            raise OcrError("OCR 进程意外退出"
+                           + (f"：{'；'.join(errs[-3:])[:300]}" if errs else ""))
+        try:
+            evt = json.loads(line)
+        except ValueError:
+            errs.append(line)
+            continue
+        kind = evt.get("t")
+        if kind == "meta":
+            total = int(evt.get("pages") or 0)
+            got_meta = True
+        elif kind == "page":
+            texts.append(evt.get("text") or "")
+            page_secs += float(evt.get("secs") or 0)
+            if progress:
+                try:
+                    progress(len(texts), total)
+                except Exception:                  # noqa: BLE001
+                    pass
+        elif kind == "page_error":
+            fails.append({"page": int(evt.get("page") or 0),
+                          "message": (evt.get("message") or "")[:300]})
+        elif kind == "done":
+            truncated = bool(evt.get("truncated"))
+            break
+        elif kind == "error":
+            raise OcrError(f"OCR 失败：{(evt.get('message') or '')[:300]}")
+        # ready / pong 等控制事件直接忽略
+    return {"texts": texts, "fails": fails, "total": total,
+            "page_secs": page_secs, "truncated": truncated}
 
+
+def _result(texts: List[str], fails: List[Dict], total: int, page_secs: float,
+            truncated: bool, dpi: int) -> Tuple[str, Dict]:
     if not texts:
         detail = ""
         if fails:
-            detail = f"首条：第 {fails[0]['page']} 页 {fails[0]['message']}"
-        elif errs:
-            detail = "；".join(errs[-3:])[:600]
-        raise OcrError(f"OCR 没有识别出任何文字（失败 {len(fails)} 页）" + (f"，{detail}" if detail else ""))
-
+            detail = f"，首条：第 {fails[0]['page']} 页 {fails[0]['message']}"
+        raise OcrError(f"OCR 没有识别出任何文字（失败 {len(fails)} 页）{detail}")
     meta = {
         "engine": "rapidocr",
         "dpi": int(dpi),
@@ -206,3 +193,162 @@ def read_pdf_text(
         "errors": fails[:5],
     }
     return "\n".join(texts), meta
+
+
+# --------------------------------------------------------------- 常驻 worker
+class _Daemon:
+    """常驻 OCR worker：模型只加载一次，之后复用进程。"""
+
+    def __init__(self) -> None:
+        self.proc: Optional[subprocess.Popen] = None
+        self.q: Optional[queue.Queue] = None
+        self.errs: List[str] = []
+        self.pid: Optional[int] = None
+        self.last_used = 0.0
+
+    def _ensure(self) -> None:
+        if self.proc is not None and self.proc.poll() is None:
+            if self.last_used and (time.monotonic() - self.last_used) > DAEMON_IDLE_SECONDS:
+                self.close()          # 空闲回收
+            else:
+                return
+        self.close()
+        proc, q = _spawn(["--serve"])
+        self.proc, self.q, self.errs = proc, q, []
+        deadline = time.monotonic() + DAEMON_READY_TIMEOUT
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.close()
+                raise OcrError(f"OCR 常驻进程启动超时（模型加载 >{int(DAEMON_READY_TIMEOUT)}s）")
+            try:
+                tag, line = q.get(timeout=min(5.0, remaining))
+            except queue.Empty:
+                if proc.poll() is not None:
+                    detail = "；".join(self.errs[-3:])[:300]
+                    self.close()
+                    raise OcrError(f"OCR 常驻进程启动失败（exit {proc.returncode}）"
+                                   + (f"：{detail}" if detail else ""))
+                continue
+            if tag == "err":
+                if line:
+                    self.errs.append(line)
+                continue
+            if line is None:
+                detail = "；".join(self.errs[-3:])[:300]
+                self.close()
+                raise OcrError("OCR 常驻进程启动时退出" + (f"：{detail}" if detail else ""))
+            try:
+                evt = json.loads(line)
+            except ValueError:
+                continue
+            if evt.get("t") == "ready":
+                self.pid = evt.get("pid")
+                return
+
+    def read(self, abs_path: str, *, dpi: int, max_pages: int,
+             page_timeout: float, total_timeout: float,
+             progress: Progress) -> Tuple[str, Dict]:
+        self._ensure()
+        self.last_used = time.monotonic()
+        assert self.proc is not None and self.q is not None
+        cmd = json.dumps({"cmd": "ocr", "path": abs_path,
+                          "dpi": int(dpi), "max_pages": int(max_pages)},
+                         ensure_ascii=False)
+        try:
+            self.proc.stdin.write(cmd + "\n")      # type: ignore[union-attr]
+            self.proc.stdin.flush()                # type: ignore[union-attr]
+        except Exception as exc:                    # noqa: BLE001
+            self.close()
+            raise OcrError(f"OCR 常驻进程写命令失败：{exc}") from exc
+        try:
+            out = _consume(self.q, page_timeout=page_timeout,
+                           total_timeout=total_timeout, progress=progress,
+                           errs=self.errs)
+        except OcrError:
+            # 超时/崩溃后进程状态不可信，直接回收，下次调用自动重启
+            self.close()
+            raise
+        return _result(out["texts"], out["fails"], out["total"],
+                       out["page_secs"], out["truncated"], dpi)
+
+    def close(self) -> None:
+        if self.proc is None:
+            return
+        try:
+            if self.proc.poll() is None and self.proc.stdin:
+                self.proc.stdin.write('{"cmd":"quit"}\n')
+                self.proc.stdin.flush()
+                self.proc.wait(timeout=3)
+        except Exception:                          # noqa: BLE001
+            pass
+        if self.proc.poll() is None:
+            _kill(self.proc)
+        self.proc = None
+        self.q = None
+        self.pid = None
+
+
+_DAEMON_LOCK = threading.Lock()
+_DAEMON: Optional[_Daemon] = None
+
+
+def _get_daemon() -> _Daemon:
+    global _DAEMON
+    if _DAEMON is None:
+        _DAEMON = _Daemon()
+        atexit.register(_DAEMON.close)
+    return _DAEMON
+
+
+def shutdown() -> None:
+    """关闭常驻进程（测试与进程退出用）。"""
+    global _DAEMON
+    with _DAEMON_LOCK:
+        if _DAEMON is not None:
+            _DAEMON.close()
+            _DAEMON = None
+
+
+# --------------------------------------------------------------- 对外入口
+def read_pdf_text(
+        abs_path: str,
+        *,
+        max_pages: int = DEFAULT_MAX_PAGES,
+        dpi: int = DEFAULT_DPI,
+        page_timeout: float = DEFAULT_PAGE_TIMEOUT,
+        total_timeout: float = DEFAULT_TOTAL_TIMEOUT,
+        progress: Progress = None) -> Tuple[str, Dict]:
+    """扫描版 PDF → 文本（按页拼接）+ 识别元信息。
+
+    失败一律抛 `OcrError`，消息里带**页号与原因**。模式由 `OCR_MODE` 决定：
+    `daemon`（默认，复用常驻进程）/ `oneshot`（每份新进程）。
+    """
+    ok, reason = available()
+    if not ok:
+        raise OcrError(reason)
+    if not os.path.isfile(abs_path):
+        raise OcrError(f"待识别的文件不见了：{abs_path}")
+
+    if ocr_mode() == "daemon":
+        with _DAEMON_LOCK:
+            return _get_daemon().read(
+                abs_path, dpi=dpi, max_pages=max_pages,
+                page_timeout=page_timeout, total_timeout=total_timeout,
+                progress=progress)
+
+    proc, q = _spawn([abs_path, "--dpi", str(int(dpi)),
+                      "--max-pages", str(int(max_pages))])
+    errs: List[str] = []
+    try:
+        out = _consume(q, page_timeout=page_timeout, total_timeout=total_timeout,
+                       progress=progress, errs=errs)
+        try:
+            proc.wait(timeout=10)
+        except Exception:                          # noqa: BLE001
+            _kill(proc)
+    finally:
+        if proc.poll() is None:
+            _kill(proc)
+    return _result(out["texts"], out["fails"], out["total"],
+                   out["page_secs"], out["truncated"], dpi)
