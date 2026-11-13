@@ -9,12 +9,12 @@
 
 其它（`readers` / `splitter`）是纯函数实现细节，测试可以单独 import。
 """
-from .service import (IngestError, cleanup_expired, confirm_draft, discard_draft,
-                      draft_brief, items_of, latest_of, latest_pending,
-                      parse_material, update_items, warnings_of)
+from .service import (IngestError, cleanup_expired, confirm_draft, create_draft,
+                      discard_draft, draft_brief, fill_draft, items_of, latest_of,
+                      latest_pending, parse_material, update_items, warnings_of)
 
 __all__ = [
     "IngestError", "cleanup_expired", "confirm_draft", "discard_draft",
-    "draft_brief", "items_of", "latest_of", "latest_pending",
+    "create_draft", "fill_draft", "draft_brief", "items_of", "latest_of", "latest_pending",
     "parse_material", "update_items", "warnings_of",
 ]

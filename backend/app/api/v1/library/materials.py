@@ -2064,8 +2064,56 @@ def _draft_payload(db: Session, draft, material=None) -> dict:
     return data
 
 
+#: P3（2026-11-13）：扫描件导题的草稿超出这个时长仍未完成 → 查询时判失败
+_PAPER_PARSE_STALE_SECONDS = 40 * 60
+
+
+def _paper_parse_job(draft_id: int, ext: str, abs_path: str, expected,
+                     session_factory=None) -> None:
+    """后台线程：OCR/拆题 → 回写草稿（独立会话）。进度写 `draft.message`（零迁移）。"""
+    from datetime import datetime as _dt
+
+    from ....core.database import SessionLocal
+    from ....models.models import PaperParseDraft
+    from ....services import paper_ingest
+
+    s = (session_factory or SessionLocal)()
+    try:
+        draft = s.get(PaperParseDraft, draft_id)
+        if draft is None:
+            return
+
+        def on_progress(text: str) -> None:
+            try:
+                draft.message = text[:200]
+                draft.update_time = _dt.now()
+                s.commit()
+            except Exception:                      # 进度写失败不能拖死解析
+                s.rollback()
+
+        paper_ingest.fill_draft(s, draft, ext=ext, abs_path=abs_path,
+                                expected=expected, progress_cb=on_progress)
+        s.commit()
+        logger.info("[materials] 导题完成 draft=%s status=%s 题数=%s",
+                    draft_id, draft.status, draft.item_count)
+    except Exception as e:                         # noqa: BLE001
+        logger.warning("[materials] 导题失败 draft=%s: %s", draft_id, e, exc_info=True)
+        try:
+            s.rollback()
+            draft = s.get(PaperParseDraft, draft_id)
+            if draft is not None:
+                draft.status = "failed"
+                draft.message = f"解析失败：{e}"[:500]
+                s.commit()
+        except Exception:                          # noqa: BLE001
+            logger.exception("[materials] 导题失败状态回写也失败 draft=%s", draft_id)
+    finally:
+        s.close()
+
+
 @router.post("/admin/{material_id}/parse", summary="解析原件生成题目草稿(管理员)")
 async def admin_parse_material(material_id: int,
+                               background_tasks: BackgroundTasks,
                                current_user: SysUser = Depends(get_current_user),
                                db: Session = Depends(get_db)):
     """把这条资料的**主文件**解析成题目草稿（P3）。
@@ -2102,6 +2150,45 @@ async def admin_parse_material(material_id: int,
     merged = paper_meta_edit.merge_meta(m, paper_meta_edit.load_override(m))
     if merged.get("question_count"):
         expected = int(merged["question_count"])
+
+    # P3：扫描件 OCR 要几分钟（41 页 ≈6.5 分钟）→ 异步；docx/文字版 PDF 仍同步（行为不变）
+    scanned = False
+    if ext == "pdf":
+        from ....services.material_parser import parse_pdf_once
+        try:
+            scanned = bool(parse_pdf_once(abs_path).get("scanned"))
+        except Exception:                          # 个别损坏件让同步分支去报错
+            scanned = False
+
+    if scanned:
+        from sqlalchemy.orm import sessionmaker
+        # 幂等（2026-11-13）：OCR 已经在跑就别再起第二个后台任务——双击/刷新会白烧一份 CPU，
+        # 而且 `create_draft` 会把前一份置 discarded，前一份的进度就白等了。
+        from ....models.models import PaperParseDraft
+        running = (db.query(PaperParseDraft)
+                   .filter(PaperParseDraft.material_id == material_id,
+                           PaperParseDraft.status == "parsing")
+                   .order_by(PaperParseDraft.draft_id.desc()).first())
+        if running is not None:
+            age = (datetime.now() - (running.update_time or running.create_time)).total_seconds()
+            if 0 <= age <= _PAPER_PARSE_STALE_SECONDS:
+                payload = _draft_payload(db, running, m)
+                payload["ok"] = True
+                payload["reused"] = True
+                return payload
+        draft = paper_ingest.create_draft(db, m, ext=ext, status="parsing",
+                                          actor_id=current_user.user_id,
+                                          message="OCR 排队中")
+        _audit(db, current_user, "paper_parse", f"material:{material_id}",
+               f"扫描件转 OCR 异步解析 {primary.file_name}")
+        db.commit()
+        db.refresh(draft)
+        factory = sessionmaker(bind=db.get_bind(), autocommit=False, autoflush=False)
+        background_tasks.add_task(run_in_threadpool, _paper_parse_job,
+                                  draft.draft_id, ext, abs_path, expected, factory)
+        payload = _draft_payload(db, draft, m)
+        payload["ok"] = True
+        return payload
 
     draft = paper_ingest.parse_material(db, m, ext=ext, abs_path=abs_path,
                                         actor_id=current_user.user_id,
@@ -2151,6 +2238,13 @@ async def admin_get_parse_draft(draft_id: int,
         PaperParseDraft.draft_id == draft_id).first()
     if not draft:
         raise HTTPException(404, "草稿不存在")
+    # P3：后台任务随进程重启会丢 → 卡在 parsing 超 40 分钟就判失败（可重试）
+    if draft.status == "parsing" and draft.create_time:
+        age = (datetime.now() - draft.create_time).total_seconds()
+        if age > _PAPER_PARSE_STALE_SECONDS:
+            draft.status = "failed"
+            draft.message = "OCR 超时中断（>40 分钟），请点「重新解析」或拆分文件"
+            db.commit()
     material = db.query(StudyMaterial).filter(
         StudyMaterial.material_id == draft.material_id).first()
     pay = _draft_payload(db, draft, material)
@@ -2793,22 +2887,38 @@ async def admin_upload_file(
     parse_auto = None
     if (role == "primary" and type == "paper" and ext in PARSE_EXTS
             and (auto_parse or "1").strip().lower() not in ("0", "false", "no")):
-        try:
-            from ....services import paper_ingest
-            draft = paper_ingest.parse_material(
-                db, target_material, ext=ext,
-                abs_path=material_files.resolve_abs_path(row),
-                actor_id=current_user.user_id)
-            _audit(db, current_user, "paper_parse",
-                   f"material:{target_material.material_id}",
-                   f"上传即导题：{draft.item_count} 题（{draft.status}）")
-            db.commit()
-            db.refresh(draft)
-            parse_auto = _draft_payload(db, draft, target_material)
-        except Exception:       # noqa: BLE001 — 解析失败绝不影响上传结果
-            db.rollback()
-            logger.warning("[materials] 上传即导题失败 material=%s",
-                           target_material.material_id, exc_info=True)
+        # P3（2026-11-13）：扫描件 OCR 要几分钟，**不在上传请求里同步跑**；
+        # 回包给"已跳过"的说明，引导用户回列表点「导题」（异步 + 进度）。
+        scanned_upload = False
+        if ext == "pdf":
+            from ....services.material_parser import parse_pdf_once
+            try:
+                scanned_upload = bool(parse_pdf_once(
+                    material_files.resolve_abs_path(row)).get("scanned"))
+            except Exception:                    # noqa: BLE001 — 判定失败按文字版走
+                scanned_upload = False
+        if scanned_upload:
+            parse_auto = {
+                "status": "skipped",
+                "reason": "扫描件：请回列表点「导题」，后台 OCR 约 10–20 秒/页",
+            }
+        else:
+            try:
+                from ....services import paper_ingest
+                draft = paper_ingest.parse_material(
+                    db, target_material, ext=ext,
+                    abs_path=material_files.resolve_abs_path(row),
+                    actor_id=current_user.user_id)
+                _audit(db, current_user, "paper_parse",
+                       f"material:{target_material.material_id}",
+                       f"上传即导题：{draft.item_count} 题（{draft.status}）")
+                db.commit()
+                db.refresh(draft)
+                parse_auto = _draft_payload(db, draft, target_material)
+            except Exception:       # noqa: BLE001 — 解析失败绝不影响上传结果
+                db.rollback()
+                logger.warning("[materials] 上传即导题失败 material=%s",
+                               target_material.material_id, exc_info=True)
 
     return JSONResponse({
         "duplicate": False, "created": created_new,

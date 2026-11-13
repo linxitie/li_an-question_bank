@@ -24,7 +24,7 @@ import logging
 import os
 import shutil
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 from sqlalchemy.orm import Session
 
@@ -76,15 +76,18 @@ def _questions_root() -> str:
 
 
 # ------------------------------------------------------------------ 解析入口
-def parse_material(db: Session, material: StudyMaterial, *, ext: str,
-                   abs_path: str, actor_id: Optional[int] = None,
-                   expected: Optional[int] = None) -> PaperParseDraft:
-    """解析一份原件 → 新建草稿（同资料旧 pending 草稿先作废）。**不 commit**。"""
+def create_draft(db: Session, material: StudyMaterial, *, ext: str,
+                 status: str = "pending", actor_id: Optional[int] = None,
+                 message: str = "") -> PaperParseDraft:
+    """建一份草稿（同资料旧 pending 先作废）。**不 commit、不解析**。
+
+    P3（2026-11-13）：扫描件解析要几分钟，路由先建 `status="parsing"` 的草稿并立刻返回，
+    再由后台 `fill_draft()` 填内容；文字版仍走 `parse_material()`（同步，行为不变）。
+    """
     ext = (ext or "").lower().lstrip(".")
-    # 同一份资料重复解析：旧的 pending 直接标 discarded，避免列表里出现两条待确认
     for old in (db.query(PaperParseDraft)
                   .filter(PaperParseDraft.material_id == material.material_id,
-                          PaperParseDraft.status == "pending").all()):
+                          PaperParseDraft.status.in_(("pending", "parsing"))).all()):
         old.status = "discarded"
         old.message = "被新的解析覆盖"
         old.update_time = datetime.now()
@@ -92,24 +95,35 @@ def parse_material(db: Session, material: StudyMaterial, *, ext: str,
     draft = PaperParseDraft(
         material_id=material.material_id,
         paper_id=_paper_id_of(db, material),
-        status="pending",
+        status=status,
         source_ext=ext,
         item_count=0,
         created_by=actor_id or material.creator_id,
+        message=(message or None),
         create_time=datetime.now(),
         expires_at=datetime.now() + timedelta(days=RETENTION_DAYS),
     )
     db.add(draft)
     db.flush()                                  # 拿 draft_id（图片目录要用）
+    return draft
 
+
+def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
+               expected: Optional[int] = None,
+               progress_cb: Optional[Callable[[str], None]] = None) -> PaperParseDraft:
+    """读原件 → 拆题 → 回写草稿（成功置 pending / 失败置 failed）。**不 commit**。
+
+    `progress_cb(文本)`：扫描件 OCR 时逐段回调（调用方负责落库+commit，用于前端进度）。
+    """
+    ext = (ext or "").lower().lstrip(".")
     try:
-        payload = readers.read_any(abs_path, ext)
+        payload = readers.read_any(abs_path, ext, progress=progress_cb)
     except readers.ReaderError as exc:
         draft.status = "failed"
         draft.message = str(exc)[:500]
         return draft
     except Exception as exc:                    # noqa: BLE001 — 解析异常不能把上传搞崩
-        logger.exception("[paper_ingest] 解析失败 material=%s", material.material_id)
+        logger.exception("[paper_ingest] 解析失败 draft=%s", draft.draft_id)
         draft.status = "failed"
         draft.message = f"解析失败：{exc}"[:500]
         return draft
@@ -121,17 +135,26 @@ def parse_material(db: Session, material: StudyMaterial, *, ext: str,
         return draft
 
     orphans = readers.attach_images(items, payload["images"])[0]
-    # 有图但题干里没写「如图」→ 归属可疑（卷首水印/末尾二维码常被挂到最后一题），交给确认页人工删
     for it in items:
         if it.get("images") and "依赖图" not in it["flags"]:
             it["flags"].append("有图待核对")
     warnings = splitter.draft_warnings(items, expected=expected)
     if orphans:
         warnings.append(f"{orphans} 张图没归到任何题（卷首图/页首图）已跳过，未硬塞")
-    if payload["meta"].get("pages"):
-        warnings.insert(0, f"PDF 共 {payload['meta']['pages']} 页，已按版面坐标归属图片")
+    meta = payload.get("meta") or {}
+    # P3：扫描件把"无图/需核对/失败页"说清楚（这些警告在确认页顶部黄条里展示）
+    if meta.get("scanned"):
+        warnings.insert(0, "这是扫描件 OCR 出来的文字草稿：没有原图，公式/表格/双栏可能错位，请逐题核对")
+        warnings.append("题号/选项由 OCR 识别，可能与原卷不一致，请逐题核对后再入库")
+        if meta.get("failed_pages"):
+            warnings.append(f"有 {len(meta['failed_pages'])} 页识别失败（第 "
+                            f"{'、'.join(str(p) for p in meta['failed_pages'][:5])} 页）")
+        if meta.get("truncated"):
+            warnings.append(f"仅解析前 {meta.get('parsed_pages') or 60} 页，后续内容请拆分上传")
+    elif meta.get("pages"):
+        warnings.insert(0, f"PDF 共 {meta['pages']} 页，已按版面坐标归属图片")
 
-    # 图片落草稿目录（只落"挂到题上"的那些）
+    # 图片落草稿目录（只落"挂到题上"的那些；扫描件 images=[] → 空转）
     target = draft_dir(draft.draft_id)
     kept = {name for it in items for name in
             [img["name"] for img in it.get("images") or []]}
@@ -145,8 +168,18 @@ def parse_material(db: Session, material: StudyMaterial, *, ext: str,
     draft.warnings_json = json.dumps(warnings, ensure_ascii=False)
     draft.item_count = len(items)
     draft.images_dir = os.path.basename(target)
+    draft.status = "pending"
+    draft.message = f"拆出 {len(items)} 题，请核对后点「确认入库」"
     draft.update_time = datetime.now()
     return draft
+
+
+def parse_material(db: Session, material: StudyMaterial, *, ext: str,
+                   abs_path: str, actor_id: Optional[int] = None,
+                   expected: Optional[int] = None) -> PaperParseDraft:
+    """同步解析一份原件 → 草稿（文字版/docx 走这条；扫描件走 create_draft + 后台 fill_draft）。"""
+    draft = create_draft(db, material, ext=ext, status="pending", actor_id=actor_id)
+    return fill_draft(db, draft, ext=ext, abs_path=abs_path, expected=expected)
 
 
 def _paper_id_of(db: Session, material: StudyMaterial) -> Optional[int]:

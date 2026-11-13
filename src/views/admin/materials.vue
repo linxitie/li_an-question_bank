@@ -852,11 +852,16 @@ async function openDraft(row: AdminMaterialListItem): Promise<void> {
   try {
     const brief = await parseMaterialPaper(row.id);
     row.parse_draft = brief;
-    if (brief.status === 'pending') {
+    // P3：扫描件返回 parsing（后台 OCR 中）也直接开抽屉，里面显示进度并轮询
+    if (brief.status === 'pending' || brief.status === 'parsing') {
       draftId.value = brief.draft_id;
       draftMaterialId.value = row.id;
       draftOpen.value = true;
-      ElMessage.success(`已拆出 ${brief.item_count} 题，请核对后点「确认入库」`);
+      if (brief.status === 'parsing') {
+        ElMessage.info('扫描件已转 OCR，正在识别…进度会显示在抽屉里');
+      } else {
+        ElMessage.success(`已拆出 ${brief.item_count} 题，请核对后点「确认入库」`);
+      }
     } else {
       ElMessage.error(brief.message || '解析失败，请检查原件是不是题本');
     }

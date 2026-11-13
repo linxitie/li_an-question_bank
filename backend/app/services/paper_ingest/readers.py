@@ -153,13 +153,19 @@ def read_docx(path: str) -> dict:
 
 
 # ----------------------------------------------------------------------- pdf
-def read_pdf(path: str) -> dict:
+def read_pdf(path: str, progress=None) -> dict:
     """pdf → {lines, images, meta}。
 
     文本用 `get_text()`（与 `_run/smoke_2024_gk_parse_v3.py` 同口径），
     图片用 `get_images(full=True)` + `get_image_rects()` 取版面坐标，
     再按"同页上下两题谁更近"归属（跨页时回退到全卷最后一个更早的题）。
     """
+    # P3（2026-11-13）：扫描件没有文字层 → 走 OCR（只出逐行文本，不带图/版式）。
+    from ..material_parser import parse_pdf_once
+    info = parse_pdf_once(path)
+    if info.get("scanned"):
+        return read_pdf_ocr(path, pages=int(info.get("pages") or 0), progress=progress)
+
     try:
         import pymupdf  # PyMuPDF
     except ImportError as exc:                     # pragma: no cover
@@ -232,6 +238,101 @@ def read_pdf(path: str) -> dict:
             "meta": {"reader": "pdf", "pages": page_count}}
 
 
+#: 试卷特有的广告/导流噪声（与 ocr_html 的通用噪声互补）。
+#: 注意「扫码」只在**带引导动作**时算噪声——否则会误杀「下列属于新型支付方式：A、扫码支付」。
+PAPER_NOISE = re.compile(
+    r"店主|加微信|公众号|扫码(?:关注|领取|进群|加群|获取|下载|免费)|其他机构"
+    r"|本PDF|本 PDF|参考答案在最后|题库均未更新|获取更新")
+
+#: 广告**粘在正文行末**时的锚点（2026-11-13 真机发现：OCR 会把页脚广告并到选项行尾，
+#: 例如「B、用党的创新理论武装全党 常加微信 txw1663 赠送最新」）。只认「像广告」的片段：
+#: 带微信号/QQ 号，或带赠送/领取/免费 + 资料类词——避免误伤「关于微信支付的说法」这类题干。
+AD_CONTACT = re.compile(
+    r"(?:店主|客服)?\s*(?:加|添加|关注)?\s*(?:微信号|微信|公众号|[Qq]{2}|[Qq]群)\s*(?:群)?\s*[:：]?\s*"
+    r"[A-Za-z0-9][A-Za-z0-9_\-]{4,}")
+AD_PROMO = re.compile(
+    r"(?:免费|赠送|领取|获取|更新)\s*(?:最新|更多|全套|全套最新)?\s*"
+    r"(?:资料|课程|题库|押题|真题集|视频)")
+#: 「扫码 + 引导动作」才算广告（单独一个「扫码」可能只是题干在问扫码支付）
+AD_SCAN = re.compile(
+    r"(?:扫码|扫一扫|二维码)\s*(?:关注|领取|进群|加群|添加|获取|下载|免费|赠送|资料)")
+#: 被切断后残留在行尾的广告引导字（「常」「请」「可」…），只在结尾出现时剥掉
+AD_LEAD_TAIL = "常请可欢迎快立即赶紧扫码关注添加加"
+#: 切完后行尾可能还剩「加」「Q」「qq」「微信群」这类半截引导词，逐层剥掉（最多 3 层）
+AD_TAIL_STUB = re.compile(
+    r"[\s，,、;；:：·\-—|/]*(?:加|添加|关注|请|可|常|立即|欢迎|快)?\s*"
+    r"(?:微信|公众号|[Qq]{2}群|[Qq]{2}|[Qq]群|群|[Qq])\s*$")
+#: 光秃秃的号（真机第二轮 OCR 把「加微信」吃掉了，只剩「xwl663赠送最」）：
+#: 字母+数字的号后面跟的若是纯推广字，一律从号处切掉——这是判定「号」最稳的特征。
+AD_BARE_ID = re.compile(r"[A-Za-z]{1,6}\d{3,}[A-Za-z0-9_\-]*")
+PROMO_CHARS = set("赠送最新全套资料微信公共号QQ群免费领取课件视频课程题库押题加关注扫码店铺客服")
+
+
+def strip_inline_noise(line: str) -> str:
+    """把粘在正文行末的广告片段切掉，保留正文（切不出正文就整行丢弃）。"""
+    text = line or ""
+    cut = None
+    for pat in (AD_CONTACT, AD_PROMO, AD_SCAN):
+        m = pat.search(text)
+        if m and (cut is None or m.start() < cut):
+            cut = m.start()
+    if cut is None:                             # 只剩「xwl663赠送最」这种裸号时
+        m = AD_BARE_ID.search(text)
+        if m and all((ch in PROMO_CHARS or ch.isspace() or not ch.isalnum())
+                     for ch in text[m.end():]):
+            cut = m.start()
+    if cut is None:
+        return text
+    head = text[:cut].rstrip(" \t　，,、;；:：·-—|/")
+    for _ in range(3):
+        head = head.rstrip(AD_LEAD_TAIL + " \t　")
+        trimmed = AD_TAIL_STUB.sub("", head).rstrip(" \t　，,、;；:：·-—|/")
+        if trimmed == head:
+            break
+        head = trimmed
+    # 切完只剩题号/选项字母（「B、」「3.」）说明原本就是纯广告行 → 丢掉
+    if len(re.sub(r"^[\s\d一二三四五六七八九十]+[、.．)）]?\s*[ABCD]?\s*[、.．)）]?\s*$", "", head)) < 2:
+        return ""
+    return head
+
+
+MAX_OCR_PAGES = 60
+
+
+def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
+    """扫描版试卷 → `{lines, images: [], meta}`（P3 v1：只出文字，不带图/版式）。
+
+    - OCR 复用 P1/S-C 的 `ocr_sidecar`（常驻 worker）；
+    - 去噪：通用噪声（`ocr_html.drop_noise`）+ 试卷专属（`PAPER_NOISE`）；
+    - 超过 `MAX_OCR_PAGES` 页会被 sidecar 截断，`meta.truncated=True` 交给警告提示。
+    """
+    from .. import ocr_html, ocr_sidecar
+
+    cb = None
+    if progress is not None:
+        def cb(done: int, total: int) -> None:      # noqa: ANN001
+            progress(f"OCR {done}/{total} 页")
+
+    text, meta = ocr_sidecar.read_pdf_text(path, max_pages=MAX_OCR_PAGES, progress=cb)
+    raw_lines = (text or "").splitlines()
+    clean = ocr_html.drop_noise(raw_lines)
+    clean = [ln for ln in (strip_inline_noise(x) for x in clean)
+             if ln and not PAPER_NOISE.search(ln)]
+    return {
+        "lines": clean,
+        "images": [],
+        "meta": {
+            "reader": "pdf-ocr",
+            "pages": int(meta.get("pages") or pages or 0),
+            "parsed_pages": int(meta.get("pages_done") or 0),
+            "scanned": True,
+            "truncated": bool(meta.get("truncated")),
+            "failed_pages": [e.get("page") for e in (meta.get("errors") or [])],
+            "seconds": meta.get("seconds"),
+        },
+    }
+
+
 def _attribute(starts: List[tuple], page: int, y: float) -> tuple:
     """图归哪道题：同页上一题/下一题谁更近；跨页回退到最后一个更早的题。"""
     prev = nxt = None
@@ -252,13 +353,13 @@ def _attribute(starts: List[tuple], page: int, y: float) -> tuple:
 
 
 # ------------------------------------------------------------------- 统一入口
-def read_any(path: str, ext: str) -> dict:
+def read_any(path: str, ext: str, progress=None) -> dict:
     """按扩展名分派。不支持的格式抛 `ReaderError`（调用方标 failed，不炸上传）。"""
     ext = (ext or "").lower().lstrip(".")
     if ext == "docx":
         return read_docx(path)
     if ext == "pdf":
-        return read_pdf(path)
+        return read_pdf(path, progress=progress)
     raise ReaderError(f"暂不支持自动导题的文件类型：.{ext}（目前支持 docx / pdf）")
 
 

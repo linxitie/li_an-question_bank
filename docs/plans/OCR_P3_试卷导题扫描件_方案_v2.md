@@ -167,3 +167,65 @@ POST /admin/{id}/parse
 | 真机现状 + 预期效果标注图 | `docs/plans/assets/OCR_P3/01_现状_导题抽屉_真机.png`、`02_预期效果_扫描件导题.png` |
 | PoC 脚本（不入库） | `_run/p3_poc.py`、`_run/find_scanned_papers.py`、`_run/p3_annotate.py` |
 | 交付记录 | 实现后写入本文 §9 |
+
+---
+
+## 9. 交付记录（2026-11-13 实施完成）
+
+> 口径：全部数字来自真机跑（后端 8001 + 前端 9527）+ 日志时间戳 + pytest 输出，不估算。
+
+### 9.1 代码落点
+
+| 文件 | 改动 |
+|---|---|
+| `backend/app/services/paper_ingest/readers.py` | 新增 `read_pdf_ocr()`（走 sidecar OCR、去噪、`images=[]`）、`PAPER_NOISE`、`strip_inline_noise()`（广告粘行处理）、`MAX_OCR_PAGES=60`；`read_pdf()` 先 `parse_pdf_once` 判扫描再分流 |
+| `backend/app/services/paper_ingest/service.py` | 拆出 `create_draft()` / `fill_draft()`；`parse_material()` = 两者串起来（文字版行为不变）；`fill_draft` 对扫描件补三条警告（无原图 / 逐题核对 / 失败页或截断） |
+| `backend/app/api/v1/library/materials.py` | `POST /admin/{id}/parse` 对扫描件走「建 parsing 草稿 → 立刻返回 → 后台 `_paper_parse_job`」；**幂等**：已有新鲜 parsing 草稿就返回同一份（不再起第二个 OCR）；`GET /parse-drafts/{id}` 对 >40 分钟的 parsing 惰性判 failed；`admin_upload_file` 对扫描件跳过同步解析并给出提示 |
+| `src/components/admin/ParseDraftDrawer.vue` | `parsing` 状态横幅 + 2.5s 轮询 + 组件卸载停止 + 空清单文案（解析中不再说「都被过滤了」） |
+| `src/views/admin/materials.vue` | 「导题」对 `pending`/`parsing` 都开抽屉，`parsing` 给 info 提示 |
+| `backend/tests/test_paper_ingest_ocr_p3.py` | 9 例：OCR 分流 / 噪声（含 3 例粘行广告 + 反例）/ 警告 / 路由 parsing / 幂等 / 40 分钟超时 |
+
+### 9.2 真机结果（真实 41 页扫描试卷取前 5 页）
+
+| 项 | 实测 |
+|---|---|
+| 源文件 | `题库/公安题目（打印）/2025多省联考公安《公安专业》.pdf`（41 页 56MB，唯一一份纯扫描**试卷**；其余 6 份扫描件都是答案解析） |
+| 探针 | 前 5 页重建为 `_run/p3_scan_5p.pdf`（5 页 / 5.3MB / 文本层 0 字符，脚本 `_run/make_p3_subset.py` 强校验） |
+| 「导题」响应 | **0.14s**（日志：11:45:16.858 收到请求 → 11:45:16.999 返回，草稿 `parsing`） |
+| OCR 进度 | `OCR 1/5 页`→`2/5`→`3/5`→`4/5` 每页约 21s，最后 `pending` |
+| 总耗时 | **114.0s / 5 页 = 22.8s/页**（另一轮 107.6s = 21.5s/页）；按 41 页线性外推 ≈ 15 分钟 |
+| 拆题 | **19 题**，四选项齐全 **15 题**；警告如实报「题号缺号 1 个：[6]」「选项不全 4 题：[3, 9, 17, 20]」 |
+| 内容正确性 | 首题「2024年7月15日至18日，党的二十届三中全会在北京召开…」与原卷一致（此前一轮读错成 2017 年**答案** PDF，原因是探针 material id 被复用后挂上了孤儿 `material_file`；产品删除是软删、不会产生孤儿，已按 `_run/cleanup_p3_probe.py` 清干净并核对 `orphan_count=0`） |
+
+**真机图**（`docs/plans/assets/OCR_P3/`）：
+
+![列表：扫描件行可直接点「导题」](assets/OCR_P3/03_真机_列表_扫描件待导题.png)
+![抽屉：解析中显示 OCR 进度与提示](assets/OCR_P3/04_真机_导题抽屉_OCR进度.png)
+![抽屉：拆出 19 题 + 三条警告 + 逐题可改](assets/OCR_P3/05_真机_导题抽屉_待确认清单.png)
+
+### 9.3 实施中发现并修掉的 4 个缺陷（都是真机才暴露的）
+
+| # | 现象 | 修法 |
+|---|---|---|
+| 1 | OCR 把页脚广告**粘进选项行尾**：「B、用党的创新理论武装全党 常加微信 txw1663 赠送最新」 | `strip_inline_noise()`：按「联系人/推广词/扫码动作」三种锚点切掉广告尾巴，保留正文；第二轮又出现裸号 `xwl663赠送最`（“加微信”被 OCR 吃掉）→ 补「字母+数字号 + 纯推广字」规则 |
+| 2 | `PAPER_NOISE` 里的 `扫码` 会把正常题干整行误杀（如「A、扫码支付」） | 收紧为 `扫码(关注|领取|进群|加群|获取|下载|免费)`，并加反例测试 |
+| 3 | 解析中抽屉正文写「没有可显示的题目（可能都被过滤了）」 | 改为「扫描件正在 OCR，识别完会在这里逐题列出来（先别关抽屉）」 |
+| 4 | 双击「导题」会起第二个 OCR，前一份被置 discarded 白等 | 路由幂等：已有新鲜 `parsing` 草稿直接返回（`reused=true`），并加单测断言只起 1 个后台任务 |
+
+### 9.4 验收
+
+| 项 | 结果 |
+|---|---|
+| `pytest backend/tests/test_paper_ingest_ocr_p3.py` | **9 passed** |
+| `pytest tests -k "paper or upload or import or material"`（cwd=`backend`） | **550 passed / 4 skipped / 0 failed**（13 分 38 秒）。⚠️ 同一命令若从仓库根目录跑会 47 failed——`conftest`/`rootdir` 按 `backend` 解析，**必须 `cd backend` 再跑** |
+| `vue-tsc --noEmit` | **0 error**（exit 0） |
+| `vitest run ParseDraftDrawer.spec.ts` | **5 passed** |
+| `gate_all` | 9/10（唯一红仍是既有 L1-G 行测 397 < 3085/3632，与本次无关） |
+| 数据清理 | 探针资料 138 + 草稿 3/4/5/6 已清；`study_material` 回到 132；`pragma integrity_check=ok`；`orphan_count=0` |
+
+### 9.5 与方案 v2 的差异（都已在上表说明，无范围外改动）
+
+- 方案只说「噪声去行」，实测必须**去行尾片段**才可用（9.3-1）；
+- 方案没提双击并发，实测会白烧一份 OCR（9.3-4）；
+- 未做：版面/双栏还原、图片切图、>60 页续跑——仍按 v1 口径留给后续。
+

@@ -24,6 +24,13 @@
           <ul><li v-for="(w, k) in warnings" :key="k">{{ w }}</li></ul>
         </div>
 
+        <!-- P3（2026-11-13）：扫描件异步导题 —— 进度可见，完成前不能确认 -->
+        <div v-if="parsing" class="pd-parsing" role="status">
+          <b>扫描件 OCR 解析中</b>
+          <span class="pd-parsing__text">{{ progressText }}</span>
+          <span class="pd-parsing__hint">完成后会自动出现逐题清单（这一步可能要几分钟），先别关抽屉。</span>
+        </div>
+
         <div class="pd-tools">
           <label class="pd-check">
             <input v-model="onlyFlagged" type="checkbox" />
@@ -72,7 +79,7 @@
                 </span>
               </div>
             </article>
-            <p v-if="!visibleItems.length" class="adm-empty">没有可显示的题目（可能都被过滤了）</p>
+            <p v-if="!visibleItems.length" class="adm-empty">{{ emptyHint }}</p>
           </template>
         </div>
 
@@ -105,7 +112,7 @@
  *
  * 弹层为什么手写：Element Plus 在本项目按需引入，`el-dialog` 全局不存在（实测渲染成未知元素）。
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   confirmParseDraft,
@@ -142,6 +149,32 @@ const busy = ref<'' | 'save' | 'confirm' | 'discard'>('');
 const isBusy = computed(() => busy.value !== '');
 
 const warnings = computed(() => detail.value?.warnings || []);
+/** P3：扫描件异步导题 —— parsing 时轮询，直到 pending/failed */
+const parsing = computed(() => detail.value?.status === 'parsing');
+const progressText = computed(() => (detail.value?.message || 'OCR 解析中…'));
+let pollTimer: number | null = null;
+let pollDeadline = 0;
+
+function stopPolling(): void {
+  if (pollTimer !== null) {
+    window.clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startPollingIfNeeded(): void {
+  stopPolling();
+  if (!parsing.value) return;
+  pollDeadline = Date.now() + 15 * 60 * 1000;      // 最多轮询 15 分钟
+  pollTimer = window.setInterval(async () => {
+    if (!props.open || Date.now() > pollDeadline) {
+      stopPolling();
+      return;
+    }
+    await load();
+    if (!parsing.value) stopPolling();
+  }, 2500);
+}
 const canEdit = computed(() => Boolean(detail.value?.can_edit));
 const flaggedCount = computed(() => items.value.filter((i) => i.flags?.length).length);
 const visibleItems = computed(() =>
@@ -155,6 +188,12 @@ const footHint = computed(() => {
   if (onlyFlagged.value) return `正在只看 ${flaggedCount.value} 题有标记的`;
   return `共 ${items.value.length} 题 · 确认后学生才能考这张卷`;
 });
+/** 空清单的说明：解析中不能说「都被过滤了」，那会让管理员以为没识别到东西 */
+const emptyHint = computed(() => {
+  if (parsing.value) return '扫描件正在 OCR，识别完会在这里逐题列出来（先别关抽屉）';
+  if (onlyFlagged.value && items.value.length) return '这 ' + items.value.length + ' 题都没有标记';
+  return '没有可显示的题目（可能都被过滤了）';
+});
 
 watch(
   () => [props.open, props.draftId],
@@ -164,6 +203,8 @@ watch(
   },
   { immediate: true }
 );
+
+onBeforeUnmount(stopPolling);
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -183,6 +224,7 @@ async function load(): Promise<void> {
       flags: [...(it.flags || [])]
     }));
     if (data.status === 'failed') loadError.value = data.message || '解析失败，请重新解析';
+    startPollingIfNeeded();
   } catch (e) {
     loadError.value = errorMessage(e, '草稿加载失败');
   } finally {
@@ -286,6 +328,23 @@ function close(): void {
 </script>
 
 <style scoped>
+.pd-parsing {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 16px 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff8e6;
+  border: 1px solid #ffe1a8;
+  color: #8a5a00;
+  font-size: 13px;
+}
+.pd-parsing b { color: #b26a00; }
+.pd-parsing__text { font-variant-numeric: tabular-nums; }
+.pd-parsing__hint { color: #a07a2a; font-size: 12px; }
+
 .pd-root {
   position: fixed;
   inset: 0;
