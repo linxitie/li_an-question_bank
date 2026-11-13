@@ -797,6 +797,17 @@ export interface MaterialImportStatusResult {
   parse_status: 'success' | 'failed' | 'processing' | string;
   error_message?: string;
   result?: unknown;
+  /** 已经过多少秒（后端按 create_time 算，前端用于"已用 1:36"） */
+  elapsed_seconds?: number;
+  /** P2（2026-11-12）：扫描件 OCR 页级进度；非扫描件/无进度时为 undefined */
+  progress?: {
+    done: number;
+    total: number;
+    percent: number;
+    phase?: string;
+    truncated?: boolean;
+    failed_pages?: number[];
+  };
 }
 
 /** 轮询解析状态（前端 3s 一次；扫描版 pdf 会经历 processing） */

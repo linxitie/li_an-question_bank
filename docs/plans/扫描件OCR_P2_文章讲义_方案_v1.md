@@ -254,3 +254,56 @@ text, meta = read_pdf_text(path, max_pages=60, dpi=200,
 | PoC 脚本（不入库） | `_run/p2_reflow_poc.py`、`_run/p2_annotate.py` |
 | 索引 | `docs/README.md`（待本次提交一并更新） |
 | 交付记录 | 获批实现后写入本文 §12 |
+
+---
+
+## 12. 交付记录（2026-11-13 完成，你已批准 D1–D6 全按建议）
+
+### 12.1 改了什么
+
+| 文件 | 类型 | 内容 |
+|---|---|---|
+| `backend/app/services/ocr_html.py` | 新增 | 纯函数三件套：`drop_noise`（8 条噪声正则）/ `reflow`（断行合并 + 新块断段 + 超长切分）/ `to_html`（`<p>` + `html.escape`）+ `text_to_html` 返回 stats |
+| `backend/tests/test_ocr_html.py` | 新增 | **10 例**：去噪、断行合并、新块断段、句末断段、标题不与题号粘连、超长切分、HTML 转义、空输入、stats 计纯文本、drop 开关 |
+| `backend/app/api/v1/library/materials.py` | 改 | 新增 `_OCR_ENGINE`（`sidecar` 默认 / `mineru` 可切）、`_write_ocr_progress()`（进度写 `parse_result._ocr`，**零迁移**）、`_ocr_sidecar_job()`（后台 OCR → 段落 HTML → 回写；失败页号进 `_ocr.failed_pages`）；扫描分支改为 `async(ocr)`；`import_status` 回 `progress` + **40 分钟惰性超时** |
+| `backend/tests/test_ocr_article_progress.py` | 新增 | **3 例**：进度合并写入、`status` 回 `progress`（9/24=37%）、超 40 分钟 processing → failed |
+| `src/utils/ocrProgress.ts` + `__tests__/ocrProgress.spec.ts` | 新增 | `formatElapsed` / `ocrProgressText` / `ocrResultNote`，**7 例**（含 `total=0` 不显示 `x/0`、截断与失败页提示） |
+| `src/modules/library/api.ts` | 改 | `MaterialImportStatusResult` 加 `progress` 与 `elapsed_seconds` |
+| `src/components/admin/ArticleBatchUpload.vue` | 改 | 等待上限 **180s → 30 分钟**（720×2.5s）；行内显示「OCR 12/24 页 · 已用 1:36」；成功后显示「已 OCR 24/24 页」；说明文案改为「扫描版 PDF 自动 OCR」 |
+
+**端点 / 表 / 迁移：0**（`progress` 只是回包新字段，进度存在 `parse_result` 内部键）。
+
+### 12.2 真机验证
+
+**A. 24 页全量（API 全链路，`_run/verify_p2_live.py`）**
+
+| 项 | 实测 |
+|---|---|
+| 上传 | `200`，`parse_mode=async(ocr)`，`processing` |
+| 进度 | 第 25 秒出现第一条（模型加载开销），之后稳定爬升 `1/24 → 24/24`，**共 272 秒（11.3 s/页）** |
+| 完成 | `success`；`word_count=28,632`、`html` **32,082 字节**、**492 个 `<p>` 段** |
+| 入库 | `confirm {type:'article'}` → `created=1`、`material_ids=[138]`、`published=false`（未上架） |
+| 核对 | 资料详情 `content_html` 32,082 字节、`status=0`、标题取文件名 |
+| 清理 | 探针资料 + 导入记录已删（删前 `sqlite3.backup`，`integrity ok`，库回到 132 行） |
+
+**B. 3 页界面链路（真机截图，`assets/扫描件OCR_P2/03_…png`）**
+
+| 步 | 实测 |
+|---|---|
+| 传 3 页扫描件 | 行内即时显示「解析中 · OCR 识别中 · 已用 0:02」 |
+| 完成 | 「成功 · 资料 #138 · **已 OCR 3/3 页**」（截图即此状态） |
+| 重复上传同一文件 | 第二次被 409 拦下，行标「重复」并说明记录号（去重仍有效） |
+
+### 12.3 与方案的差异（如实说明）
+
+| 方案写的 | 实际 | 原因 |
+|---|---|---|
+| 进度「每 2 页或 3 秒写一次」 | 实现即如此（`done % 2` + 3s 阈值），实测 Web 端每 5 秒轮询能看到跨页增长 | — |
+| 成功行显示「已 OCR 24 页 / N 字」 | **字数没显示**：confirm 回包不带字数，前端拿不到（只有 `progress`） | 少一次 preview 请求换更快的入库；要显示字数可后续在 confirm 回包加字段（1 行） |
+| 失败页号提示 | 已实现（`_ocr.failed_pages` → 前端「N 页未识别」），但本次真机样本无失败页，**仅单测覆盖** | 需要一份"部分页损坏"的样本才能真机复现 |
+
+### 12.4 验收
+
+- `pytest`：**13 passed**（10 + 3）；`vitest`：**67 文件 / 730 用例全绿**；`vue-tsc` 0；
+- 门禁不受影响（0 端点/0 路由/0 迁移，L6 仍 104）；
+- 失败路径：OCR 组件缺失、全页失败、超时三段文案均来自 P1 的 sidecar，P2 只是搬运；40 分钟僵尸兜底已单测。

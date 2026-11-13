@@ -3378,6 +3378,101 @@ def _commit_material_import(db: Session, rec: MaterialImportRecord) -> None:
     db.commit()
 
 
+#: P2（2026-11-12）：扫描件 OCR 引擎 —— `sidecar`（本地 RapidOCR，默认）/ `mineru`（历史路径，保留可切回）
+_OCR_ENGINE = _os.environ.get("OCR_ENGINE", "sidecar").strip().lower()
+#: 后台 OCR 超过这个时长还没回写 → 查询时判定中断（P2 D6=A：惰性判定，不加启动钩子）
+_OCR_STALE_SECONDS = 40 * 60
+
+
+def _write_ocr_progress(db: Session, import_id: int, **fields) -> None:
+    """把 OCR 进度写进 `parse_result._ocr`（**零迁移**；每 2 页或 3 秒写一次）。
+
+    为什么不用新表/新列：`parse_result` 已经是 JSON 文本列，且早有 `_tmp/_sha256/_seconds`
+    这类内部键（见 `_stash_fingerprint`），沿用同一套口径最省事、也不用迁移。
+    """
+    rec = (db.query(MaterialImportRecord)
+             .filter(MaterialImportRecord.import_id == import_id).first())
+    if rec is None:
+        return
+    result = _load_result(rec)
+    info = dict(result.get("_ocr") or {})
+    info.update(fields)
+    result["_ocr"] = info
+    rec.parse_result = _json.dumps(result, ensure_ascii=False)
+    _commit_material_import(db, rec)
+
+
+def _ocr_sidecar_job(import_id: int, path: str, sha256: str) -> None:
+    """后台线程：sidecar OCR → 段落 HTML → 回写导入记录（**独立 DB 会话**）。
+
+    失败语义（P2 D4=A）：只要有一页成功就成文，把失败页号写进 `_ocr.failed_pages`；
+    全部失败才把记录标 `failed`（不建空文章）。
+    """
+    import time as _time
+
+    from ....core.database import SessionLocal
+    from ....services import ocr_html, ocr_sidecar
+
+    s = SessionLocal()
+    try:
+        last = {"t": 0.0}
+
+        def on_progress(done: int, total: int) -> None:
+            now = _time.time()
+            if done % 2 and (now - last["t"]) < 3.0:
+                return                       # 每 2 页或每 3 秒写一次，别把库写炸
+            last["t"] = now
+            try:
+                _write_ocr_progress(s, import_id, done=done, total=total, phase="ocr")
+            except Exception:                # 进度写失败不能拖死 OCR 本身
+                logger.warning("[materials] OCR 进度写入失败 import=%s",
+                               import_id, exc_info=True)
+
+        text, meta = ocr_sidecar.read_pdf_text(path, progress=on_progress)
+        html_out, stats = ocr_html.text_to_html(text)
+        if not stats["chars"]:
+            raise ocr_sidecar.OcrError("OCR 跑完了但没识别出文字（扫描太糊或不是文字页）")
+
+        rec = (s.query(MaterialImportRecord)
+                 .filter(MaterialImportRecord.import_id == import_id).first())
+        result = _load_result(rec)
+        result.update({
+            "chapters": [], "html": html_out, "images": [],
+            "word_count": stats["chars"],
+            "_seconds": meta.get("seconds"),
+            "_sha256": sha256,             # 异步回写会整段覆盖，指纹必须带着走
+            "_ocr": {
+                "done": meta.get("pages_done", 0),
+                "total": meta.get("pages", 0),
+                "phase": "done",
+                "seconds": meta.get("seconds"),
+                "paragraphs": stats["paragraphs"],
+                "truncated": bool(meta.get("truncated")),
+                "failed_pages": [e.get("page") for e in (meta.get("errors") or [])],
+            },
+        })
+        rec.parse_status = "success"
+        rec.error_message = None
+        rec.parse_result = _json.dumps(result, ensure_ascii=False)
+        _commit_material_import(s, rec)
+        logger.info("[materials] OCR 完成 import=%s 页=%s 段=%s 字=%s 用时=%ss",
+                    import_id, meta.get("pages_done"), stats["paragraphs"],
+                    stats["chars"], meta.get("seconds"))
+    except Exception as e:                   # noqa: BLE001
+        logger.warning("[materials] OCR 失败 import=%s: %s", import_id, e, exc_info=True)
+        try:
+            rec = (s.query(MaterialImportRecord)
+                     .filter(MaterialImportRecord.import_id == import_id).first())
+            if rec is not None:
+                rec.parse_status = "failed"
+                rec.error_message = f"OCR 失败：{e}"[:400]
+                _commit_material_import(s, rec)
+        except Exception:                    # noqa: BLE001
+            logger.exception("[materials] OCR 失败状态回写也失败 import=%s", import_id)
+    finally:
+        s.close()
+
+
 @router.post("/admin/import/upload", summary="上传素材并解析(docx/xlsx/文字pdf同步；扫描pdf异步)")
 async def import_upload(background_tasks: BackgroundTasks,
                         file: UploadFile = File(...),
@@ -3458,7 +3553,7 @@ async def import_upload(background_tasks: BackgroundTasks,
             rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
         _commit_material_import(db, rec)
     elif ext == ".pdf":
-        if scanned:
+        if scanned and _OCR_ENGINE == "mineru":
             from ....services.mineru_material_service import (
                 mineru_available, run_mineru, MineruError)
             if not mineru_available():
@@ -3502,6 +3597,17 @@ async def import_upload(background_tasks: BackgroundTasks,
             background_tasks.add_task(run_in_threadpool,
                                       _ocr_job, rec.import_id, tmp_path,
                                       str(UPLOAD_TMP_DIR), sha256)
+        elif scanned:
+            # P2（2026-11-12）：扫描件走本地 OCR sidecar（与答案链路 P1 共用）
+            rec.parse_mode = "async(ocr)"
+            rec.parse_status = "processing"
+            rec.parse_result = _json.dumps(
+                {"_tmp": tmp_path,
+                 "_ocr": {"done": 0, "total": 0, "phase": "queued"}},
+                ensure_ascii=False)
+            _commit_material_import(db, rec)
+            background_tasks.add_task(run_in_threadpool,
+                                      _ocr_sidecar_job, rec.import_id, tmp_path, sha256)
         else:
             try:
                 from ....services.material_parser import parse_pdf_text
@@ -3544,8 +3650,30 @@ async def import_status(import_id: int,
         raise HTTPException(404, "导入记录不存在")
     elapsed = ((datetime.now() - rec.create_time).total_seconds()
                if rec.create_time else 0)
-    return {"parse_status": rec.parse_status, "elapsed_seconds": int(elapsed),
-            "error_message": rec.error_message}
+    # P2（2026-11-12，D6=A）：卡在 processing 超过 40 分钟 → 查询时惰性判失败
+    # （后台线程随进程重启会丢，不判定就会永远显示"解析中"）
+    if rec.parse_status == "processing" and elapsed > _OCR_STALE_SECONDS:
+        rec.parse_status = "failed"
+        rec.error_message = "OCR 超时中断（>40 分钟），请重试或拆分文件"
+        _commit_material_import(db, rec)
+
+    payload = {"parse_status": rec.parse_status, "elapsed_seconds": int(elapsed),
+               "error_message": rec.error_message}
+    # P2：把 OCR 页级进度回给前端（只加字段，不改路径；老前端会忽略）
+    info = (_load_result(rec).get("_ocr") or {})
+    if info:
+        total = int(info.get("total") or 0)
+        done = int(info.get("done") or 0)
+        payload["progress"] = {
+            "done": done,
+            "total": total,
+            "percent": (100 if rec.parse_status in ("success", "consumed")
+                        else int(done * 100 / total) if total else 0),
+            "phase": info.get("phase") or "ocr",
+            "truncated": bool(info.get("truncated")),
+            "failed_pages": [p for p in (info.get("failed_pages") or []) if p],
+        }
+    return payload
 
 
 @router.get("/admin/import/{import_id}/preview", summary="取解析预览")

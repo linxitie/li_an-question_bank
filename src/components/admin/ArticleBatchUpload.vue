@@ -8,7 +8,8 @@
             <h2 class="abu-title">{{ title }}</h2>
             <p class="abu-desc">
               一次最多 {{ MAX_BATCH_FILES }} 个文件。文章必须有正文，所以走「解析导入」：
-              逐条上传 → 解析 → 入库（默认未上架；可勾选「立即上架」）。扫描版 PDF 需要 OCR，未就绪会明确失败。
+              逐条上传 → 解析 → 入库（默认未上架；可勾选「立即上架」）。
+              <b>扫描版 PDF 自动 OCR</b>（约 10–20 秒/页，长文请耐心等，界面会显示页级进度）。
             </p>
           </div>
           <button class="abu-x" type="button" :disabled="running" @click="requestClose">×</button>
@@ -77,6 +78,11 @@
                 <span class="abu-row__meta">
                   <template v-if="r.materialId">资料 #{{ r.materialId }} · </template>{{ humanBytes(r.size) }}
                 </span>
+                <span
+                  v-if="r.status === 'parsing' && r.progress"
+                  class="abu-row__note is-busy"
+                >{{ ocrProgressText(r.progress, r.elapsed) }}</span>
+                <span v-else-if="r.note" class="abu-row__note">{{ r.note }}</span>
                 <span v-if="r.error" class="abu-row__err" :title="r.error">{{ r.error }}</span>
               </li>
             </ul>
@@ -120,6 +126,7 @@ import {
 } from '@/modules/library/api';
 import { MAX_BATCH_BYTES, MAX_BATCH_FILES, humanBytes } from '@/utils/batchUploadPlan';
 import { errorMessage } from '@/utils/apiError';
+import { ocrProgressText, ocrResultNote, type OcrProgress } from '@/utils/ocrProgress';
 
 const props = withDefaults(
   defineProps<{ open: boolean; defaultSubject?: LibrarySubject; title?: string }>(),
@@ -140,6 +147,12 @@ interface Row {
   status: RowStatus;
   materialId: number | null;
   error: string;
+  /** P2：扫描件 OCR 的页级进度（非扫描件为 null，界面不显示） */
+  progress?: OcrProgress | null;
+  /** P2：解析已用秒数（用于"已用 1:36"） */
+  elapsed?: number;
+  /** P2：成功后的补充说明（已 OCR x/y 页 / 截断 / 未识别页数） */
+  note?: string;
 }
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -220,13 +233,24 @@ function requestClose(): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** 等解析完成：同步成功的直接返回；processing（扫描版 OCR）最多等 180s */
+/** 等解析完成：同步成功的直接返回；processing（扫描版 OCR）**最多等 30 分钟**。
+ *
+ * P2（2026-11-12）修正：原来是 72 次 × 2.5s = **180 秒**，实测 24 页扫描件要 3.4–6.6 分钟，
+ * 界面会在后台还在跑的时候先报"解析超时"。现在与后端 1800s 上限对齐，并把页级进度写回行。
+ */
 async function waitParsed(importId: number, row: Row): Promise<string> {
   let status = '';
-  for (let i = 0; i < 72; i += 1) {
+  for (let i = 0; i < 720; i += 1) {
     const res = await fetchMaterialImportStatus(importId);
     status = res.parse_status;
-    if (status === 'success') return 'success';
+    row.elapsed = res.elapsed_seconds ?? row.elapsed;
+    if (res.progress) {
+      row.progress = res.progress as OcrProgress;
+    }
+    if (status === 'success') {
+      row.note = ocrResultNote(res.progress as OcrProgress | undefined) || '';
+      return 'success';
+    }
     if (status !== 'processing') {
       row.error = res.error_message || `解析失败（${status}）`;
       return 'failed';
@@ -234,7 +258,7 @@ async function waitParsed(importId: number, row: Row): Promise<string> {
     row.status = 'parsing';
     await sleep(2500);
   }
-  row.error = '解析超时（>3 分钟），请稍后在导入记录里重试';
+  row.error = '解析超时（>30 分钟），请稍后在导入记录里重试或拆分文件';
   return 'failed';
 }
 
@@ -248,7 +272,10 @@ async function start(): Promise<void> {
     file: f,
     status: 'waiting' as RowStatus,
     materialId: null,
-    error: ''
+    error: '',
+    progress: null,
+    elapsed: undefined,
+    note: ''
   }));
   let created = 0;
   let skipped = 0;
@@ -406,6 +433,12 @@ async function start(): Promise<void> {
 .abu-row__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .abu-row__meta { color: var(--adm-text-weak); }
 .abu-row__err { grid-column: 2 / -1; color: #b42318; }
+.abu-row__note {
+  grid-column: 2 / -1;
+  font-size: 12px;
+  color: #1a5fb4;
+}
+.abu-row__note.is-busy { color: #b26a00; }
 .abu-foot {
   display: flex;
   align-items: center;

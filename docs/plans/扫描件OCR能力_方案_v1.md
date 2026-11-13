@@ -301,6 +301,6 @@ C:\ocr-env\Scripts\python.exe -c "import rapidocr_onnxruntime, onnxruntime, fitz
 
 | 阶段 | 消费方 | 现状 |
 |---|---|---|
-| P2 | 文章 / 讲义（`import/upload` 扫描分支） | **方案已出、待批准**：`扫描件OCR_P2_文章讲义_方案_v1.md`（复用 P1 sidecar + 段落重排 + 进度 + 超时/页数 + 部分失败语义，≈1.9 天，0 迁移 0 新端点）。你今晚传的 9 份里那 1 份扫描件仍卡在这里 |
+| P2 | 文章 / 讲义（`import/upload` 扫描分支） | ✅ **已交付（2026-11-13）**：复用 P1 sidecar + 段落重排（`ocr_html.py`）+ 页级进度（`progress` 回包）+ 部分失败成文 + 60 页上限 + 40 分钟惰性兜底；真机 24 页 → 272s / 28,632 字 / 492 段。详见 `扫描件OCR_P2_文章讲义_方案_v1.md` §12 |
 | P3 | 试卷导题（`paper_ingest` 的 PDF reader） | 未接；版式还原最容易错，必须带人工确认，单独批 |
-| P4 | 缓存（同文件 sha256 复用）、限流、`/health` 自检项、逐页进度 | 未做 |
+| P4 | 缓存（同文件 sha256 复用）、限流、`/health` 自检项、OCR 常驻 worker（省 20–25s/篇） | 未做；常驻 worker 已写进 `文件上传提速_方案_v1.md` 的 O3 |
