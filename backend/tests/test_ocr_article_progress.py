@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
-from app.api.v1.library.materials import _write_ocr_progress
+from app.api.v1.library.materials import _write_import_progress
 from app.models.models import MaterialImportRecord
 
 
@@ -28,13 +28,13 @@ def _mk_record(db, *, status="processing", ocr=None, age_minutes=0):
     return rec
 
 
-def test_write_ocr_progress_merges_into_parse_result(db_session):
+def test_write_import_progress_merges_into_parse_result(db_session):
     rec = _mk_record(db_session, ocr={"done": 0, "total": 24, "phase": "queued"})
-    _write_ocr_progress(db_session, rec.import_id, done=6, total=24, phase="ocr")
+    _write_import_progress(db_session, rec.import_id, done=6, total=24, phase="ocr")
     db_session.expire_all()
     row = db_session.query(MaterialImportRecord).filter(
         MaterialImportRecord.import_id == rec.import_id).first()
-    info = json.loads(row.parse_result)["_ocr"]
+    info = json.loads(row.parse_result)["_progress"]
     assert info["done"] == 6 and info["total"] == 24 and info["phase"] == "ocr"
     # 原有内部键不能被吞掉
     assert "_tmp" in json.loads(row.parse_result)

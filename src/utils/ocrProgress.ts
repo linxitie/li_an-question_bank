@@ -31,7 +31,12 @@ export function ocrProgressText(p?: OcrProgress | null, elapsedSeconds?: number)
   const done = Number.isFinite(p.done) ? p.done : 0;
   const total = Number.isFinite(p.total) ? p.total : 0;
   const parts: string[] = [];
-  parts.push(total > 0 ? `OCR ${done}/${total} 页` : 'OCR 识别中');
+  // O5：文档类（docx/xlsx/文字 pdf）后台解析时 phase=parse，不能显示成「OCR 识别中」
+  if (p.phase && p.phase !== 'ocr') {
+    parts.push('解析中');
+  } else {
+    parts.push(total > 0 ? `OCR ${done}/${total} 页` : 'OCR 识别中');
+  }
   if (typeof elapsedSeconds === 'number' && elapsedSeconds >= 0) {
     parts.push(`已用 ${formatElapsed(elapsedSeconds)}`);
   }

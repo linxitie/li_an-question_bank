@@ -24,6 +24,11 @@ _TEST_UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), "li_an_test_uploads")
 _TEST_FILES_ROOT = os.path.join(tempfile.gettempdir(), "li_an_test_material_files")
 os.environ.setdefault("UPLOAD_DIR", _TEST_UPLOAD_ROOT)
 os.environ.setdefault("MATERIAL_FILES_DIR", _TEST_FILES_ROOT)
+
+# 2026-11-13（O5）：上传接口默认"落盘即返回 + 后台解析"。测试里同步执行后台 job
+# （IMPORT_INLINE=1），否则几百个老用例都要改成"上传后轮询"；异步路径由
+# tests/test_import_async_o5.py 用 monkeypatch 单独覆盖。
+os.environ.setdefault("IMPORT_INLINE", "1")
 # StaticFiles 挂载要求目录已存在（main.py 里 mount /uploads），否则 import 阶段直接抛 RuntimeError
 os.makedirs(_TEST_UPLOAD_ROOT, exist_ok=True)
 os.makedirs(_TEST_FILES_ROOT, exist_ok=True)

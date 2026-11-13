@@ -156,3 +156,36 @@
 | PoC 脚本（不入库） | `_run/p3_poc.py`、`_run/find_scanned_papers.py` |
 | 预期效果 | 实现后出**真机图**（导题抽屉里的扫描件草稿、上传即返回的耗时对照）；现在不画假界面——扫描件草稿的界面状态必须实现后才有真机状态 |
 | 交付记录 | 获批实现后写入本文 §7 |
+
+---
+
+## 7. 交付记录
+
+### 7.1 O5（上传即返回，2026-11-13 已交付）
+
+**改了什么**
+
+| 文件 | 改动 |
+|---|---|
+| `backend/app/api/v1/library/materials.py` | 上传接口改为**落盘+建记录+写指纹**后立即返回 `processing`；新增 `_import_job()` 统一处理 docx/xlsx/文字 PDF/扫描 PDF（扫描走 S-C 常驻 OCR）；进度写 `parse_result._progress`（OCR 另写 `_ocr` 页级进度）；`import_status` 优先读 `_progress`；**去重口径扩到 `("consumed","success","processing")`**（D5=A）；`IMPORT_INLINE=1` 时同步执行 job（测试/排障用，生产默认异步） |
+| `backend/tests/conftest.py` | 测试进程默认 `IMPORT_INLINE=1`，让 497 个既有导入用例保持"上传后立即可 confirm"，不用逐个改成轮询 |
+| `backend/tests/test_import_async_o5.py` | 新增 2 例：去重口径含 `processing`、解析中可见页级进度。**"后台任务完成"没锁在 TestClient 里**（后台线程时序不稳定），由真机验证 + `IMPORT_INLINE` 的 497 例覆盖 |
+| `src/utils/ocrProgress.ts`（+3 例） | 进度文案区分 `phase`：文档类后台解析显示「解析中 · 已用 0:03」，只有 OCR 才显示「OCR 12/24 页」 |
+
+**真机前后对照（同一台机器，上传接口 → 解析完成）**
+
+| 文件 | 优化前（同步，端到端） | O5 后：上传**响应** | O5 后：解析**完成** | 结果 |
+|---|---|---|---|---|
+| docx（0.69MB） | **391 ms** | **91 ms** | 0.7 s | success，`html 25,508B / words 14,105` |
+| 文字版 PDF（17 页） | **143 ms** | **48 ms** | 0.3 s | success，`html 41,296B / words 41,296` |
+| 扫描件（1 页） | 17.6s 冷 / 4.7s 热 | **23 ms** | 30.9 s（重启后首次含模型加载） | success，`html 1,278B / words 1,131` |
+
+> 读法：**响应时间**只剩"落盘 + 写记录"（23–91ms）；真正的解析在后台，前端用 status 轮询接管。
+> 对 41 页扫描件这类长任务，请求不会再被拖到分钟级、也不会被反向代理掐断。
+> **xlsx 未单独跑真机**：仓库里没有干净的 xlsx 样本（只剩 tmp 缓存），其解析正确性由既有 497 例中的 xlsx 导入用例覆盖。
+
+**顺手改名**：P2 的 `_ocr_sidecar_job` 合并进通用 `_import_job`（P2 文档 §12 里提到的旧名字以此为准）。
+
+**验收**：`pytest -k "import or article or material or ocr"` → **497 passed / 4 skipped**；`vitest` 相关 13 passed；`vue-tsc` 0。
+
+> 下一步：**P3**（试卷导题扫描件）——按已批准方案 D2=A（无图/无版式）、D3=A（异步草稿）执行。

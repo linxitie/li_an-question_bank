@@ -21,6 +21,11 @@ describe('ocrProgressText', () => {
     expect(ocrProgressText(null)).toBe('OCR 排队中');
   });
 
+  it('O5：文档类后台解析（phase=parse）显示「解析中」而不是 OCR', () => {
+    expect(ocrProgressText({ done: 0, total: 0, percent: 5, phase: 'parse' }, 3))
+      .toBe('解析中 · 已用 0:03');
+  });
+
   it('有失败页时补一句', () => {
     const t = ocrProgressText({ done: 22, total: 24, percent: 92, failed_pages: [7, 9] }, 200);
     expect(t).toContain('22/24 页');
