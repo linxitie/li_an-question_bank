@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-30 15:55:48",
+  "generated_at": "2026-11-12 19:10:14",
   "source": "scripts/qbdm/gen_module_ledger.py",
   "note": "端点以 api_surface.json 为准；页面/测试为登记口径+候选口径，候选需人工确认",
   "totals": {
@@ -8,18 +8,34 @@
     "endpoints": 343,
     "api_files": 37,
     "api_files_unassigned": [],
-    "pages_assigned": 95,
+    "pages_assigned": 96,
     "pages_unassigned": {
       "app_navigation": ".vtj/vue/app_navigation.vue",
       "download_client": ".vtj/vue/download_client.vue",
       "footer_info": ".vtj/vue/footer_info.vue",
+      "knowledge_view": ".vtj/vue/knowledge_view.vue",
+      "memories": ".vtj/vue/memories.vue",
       "navbar": ".vtj/vue/navbar.vue",
+      "profile_quiz": ".vtj/vue/profile_quiz.vue",
+      "study_plan": ".vtj/vue/study_plan.vue",
       "TeacherNavHeader": ".vtj/vue/TeacherNavHeader.vue",
+      "admin_feedback": "src/views/admin/admin_feedback.vue",
       "admin_forum": "src/views/admin/admin_forum.vue",
+      "material_rules": "src/views/admin/material_rules.vue",
+      "MaterialsPreview": "src/views/dev/MaterialsPreview.vue",
+      "material_detail": "src/views/pc/material_detail.vue",
+      "material_upload": "src/views/student/material_upload.vue",
       "teacher_forum": "src/views/teacher/teacher_forum.vue",
+      "AdminUsersWorkspace": "src/views/admin/pc/AdminUsersWorkspace.vue",
+      "knowledge_graph": "src/views/student/pc/knowledge_graph.vue",
+      "shop_exchanges": "src/views/student/pc/shop_exchanges.vue",
+      "news_detail": "src/views/student/shared/news_detail.vue",
+      "news_timeline": "src/views/student/shared/news_timeline.vue",
+      "tablet_forum_detail": "src/views/student/tablet/tablet_forum_detail.vue",
       "not-found": "src/views/system/shared/not-found.vue",
       "unauthorized": "src/views/system/shared/unauthorized.vue",
-      "tablet_forum_detail": "src/views/student/tablet/tablet_forum_detail.vue"
+      "TeacherPaperEditor": "src/views/teacher/pc/TeacherPaperEditor.vue",
+      "TeacherScoresWorkspace": "src/views/teacher/pc/TeacherScoresWorkspace.vue"
     },
     "card_gaps": [
       "identity",
@@ -27,7 +43,6 @@
     ],
     "stub_cards": [
       "checkin",
-      "ai-assistant",
       "mock-exam",
       "mini-exam"
     ],
@@ -124,6 +139,7 @@
         "backend/tests/test_catalog_module.py",
         "backend/tests/test_platform_question_visibility.py",
         "backend/tests/test_question_stats_service.py",
+        "backend/tests/test_weekly_task_catalog.py",
         "src/modules/catalog/__tests__/store.spec.ts"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"catalog|question_visibility|question_stats\"",
@@ -170,6 +186,7 @@
         "backend/tests/test_quick_practice_consistency.py",
         "backend/tests/test_quick_practice_subcategories.py",
         "backend/tests/test_quick_practice_tree.py",
+        "backend/tests/test_quick_practice_unclassified.py",
         "src/modules/practice/__tests__/store.spec.ts"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"practice|quick_practice|answer_doc\"",
@@ -417,15 +434,22 @@
       "tests_registered": [],
       "tests_candidates": [
         "backend/tests/test_community_module.py",
+        "backend/tests/test_daily_quote_service.py",
+        "backend/tests/test_forum_ai_title.py",
+        "backend/tests/test_forum_ai_title_switch.py",
         "backend/tests/test_forum_favorite.py",
         "backend/tests/test_forum_moderation.py",
         "backend/tests/test_forum_p1.py",
         "backend/tests/test_forum_p3_schema.py",
         "backend/tests/test_forum_posting.py",
+        "backend/tests/test_forum_recycle.py",
         "backend/tests/test_forum_report.py",
+        "backend/tests/test_forum_rich_text.py",
         "backend/tests/test_forum_upload.py",
         "backend/tests/test_forum_visibility.py",
         "backend/tests/test_quote_favorite.py",
+        "backend/tests/test_quote_filter.py",
+        "backend/tests/test_quote_review.py",
         "src/modules/community/__tests__/avatar.spec.ts",
         "src/modules/community/__tests__/categories.spec.ts",
         "src/modules/community/__tests__/reactions.spec.ts",
@@ -465,7 +489,15 @@
       "pages_missing": [],
       "tests_registered": [],
       "tests_candidates": [
+        "backend/tests/test_news_ai.py",
+        "backend/tests/test_news_collector.py",
         "backend/tests/test_news_module.py",
+        "backend/tests/test_news_projection.py",
+        "backend/tests/test_news_r2.py",
+        "backend/tests/test_news_review.py",
+        "backend/tests/test_news_robots.py",
+        "backend/tests/test_news_schema.py",
+        "backend/tests/test_news_storage.py",
         "src/modules/news/__tests__/store.spec.ts"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"news\"",
@@ -610,10 +642,20 @@
         "backend/tests/test_composite_material_groups.py",
         "backend/tests/test_gongzhuan_regression.py",
         "backend/tests/test_library_module.py",
+        "backend/tests/test_material_classification_point.py",
+        "backend/tests/test_material_classify_format.py",
+        "backend/tests/test_material_format_validator.py",
         "backend/tests/test_material_import_card_type.py",
+        "backend/tests/test_material_import_d2_d5.py",
         "backend/tests/test_material_ownership.py",
         "backend/tests/test_material_parser.py",
+        "backend/tests/test_material_recovery.py",
         "backend/tests/test_materials_admin.py",
+        "backend/tests/test_materials_admin_search.py",
+        "backend/tests/test_materials_my.py",
+        "backend/tests/test_materials_my_card.py",
+        "backend/tests/test_materials_my_upload.py",
+        "backend/tests/test_materials_share.py",
         "backend/tests/test_question_material.py",
         "backend/tests/test_xingce_material_sets.py",
         "src/modules/library/__tests__/api.spec.ts",
@@ -661,7 +703,11 @@
         "src/modules/growth/__tests__/store.spec.ts"
       ],
       "tests_candidates": [
-        "backend/tests/test_achievement_judge.py"
+        "backend/tests/test_achievement_admin.py",
+        "backend/tests/test_achievement_judge.py",
+        "backend/tests/test_goal_verification_m2.py",
+        "backend/tests/test_weekly_task_catalog.py",
+        "backend/tests/test_weekly_tasks_m2.py"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"achievement|goal|task\"",
       "events_publish": [
@@ -712,6 +758,9 @@
       "pages_missing": [],
       "tests_registered": [],
       "tests_candidates": [
+        "backend/tests/test_admin_shop_shelf_m2.py",
+        "backend/tests/test_coin_shop_m1.py",
+        "backend/tests/test_coin_shop_m15.py",
         "backend/tests/test_reward_module.py",
         "src/modules/reward/__tests__/store.spec.ts",
         "src/modules/reward/__tests__/user-profile.spec.ts"
@@ -762,8 +811,8 @@
       "status": "未开发（端点已预留）",
       "dir": "src/modules/ai-assistant",
       "card": "src/modules/ai-assistant/README.md",
-      "card_filled": false,
-      "card_status_line": "由 scripts/scaffold-module.mjs 生成（P1-13）。当前状态：**外壳，功能还未开发**。",
+      "card_filled": true,
+      "card_status_line": "已实现：后端 `/api/llm/*` 五端点 + 前端聊天页 + 会话管理 store；三端入口为题库页「联考小智」按钮。",
       "api_domains": [
         "UNASSIGNED"
       ],
@@ -774,13 +823,20 @@
       "endpoint_prefixes": [
         "/api/llm"
       ],
-      "card_endpoint_count": 0,
-      "pages": [],
+      "card_endpoint_count": 5,
+      "pages": [
+        ".vtj/vue/ai_chat.vue",
+        ".vtj/vue/question_bank.vue"
+      ],
       "pages_missing": [],
       "tests_registered": [],
-      "tests_candidates": [],
-      "test_command": "",
-      "events_publish": [],
+      "tests_candidates": [
+        "backend/tests/test_llm_client_config.py"
+      ],
+      "test_command": "cd backend; python -m pytest tests -q -k \"llm|assistant\"",
+      "events_publish": [
+        "ai-assistant:sessions-updated"
+      ],
       "events_subscribe": []
     },
     {
@@ -861,11 +917,23 @@
       "tests_candidates": [
         "backend/tests/test_batch_parsed_import.py",
         "backend/tests/test_composite_material_groups.py",
+        "backend/tests/test_forum_rich_text.py",
+        "backend/tests/test_import_segmentation_gate.py",
         "backend/tests/test_intelligent_matcher.py",
+        "backend/tests/test_material_classification_point.py",
+        "backend/tests/test_material_classify_format.py",
+        "backend/tests/test_material_format_validator.py",
         "backend/tests/test_material_import_card_type.py",
+        "backend/tests/test_material_import_d2_d5.py",
         "backend/tests/test_material_ownership.py",
         "backend/tests/test_material_parser.py",
+        "backend/tests/test_material_recovery.py",
         "backend/tests/test_materials_admin.py",
+        "backend/tests/test_materials_admin_search.py",
+        "backend/tests/test_materials_my.py",
+        "backend/tests/test_materials_my_card.py",
+        "backend/tests/test_materials_my_upload.py",
+        "backend/tests/test_materials_share.py",
         "backend/tests/test_mineru_service.py",
         "backend/tests/test_mineru_timeout.py",
         "backend/tests/test_playwright_import.py",
@@ -885,6 +953,7 @@
         "backend/tests/test_taxonomy_unique_sibling_index.py",
         "backend/tests/test_text_cache_scope.py",
         "backend/tests/test_text_preprocessor.py",
+        "backend/tests/test_vault_import.py",
         "backend/tests/test_xingce_material_sets.py"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"import|parser|recognizer|mineru|material|taxonomy|text_|rich_text|subjective|similarity|matcher\"",
@@ -975,7 +1044,11 @@
       "pages_missing": [],
       "tests_registered": [],
       "tests_candidates": [
-        "backend/tests/test_materials_admin.py"
+        "backend/tests/test_achievement_admin.py",
+        "backend/tests/test_admin_permissions.py",
+        "backend/tests/test_admin_shop_shelf_m2.py",
+        "backend/tests/test_materials_admin.py",
+        "backend/tests/test_materials_admin_search.py"
       ],
       "test_command": "cd backend; python -m pytest tests -q -k \"admin|approval|materials_admin\"",
       "events_publish": [],

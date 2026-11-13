@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db, commit_with_retry
-from ....models.models import SysUser
+from ....models.models import SysUser, UserProfile
 from ....schemas.schemas import UserResponse, LoginResponse, TokenData
 from ....core.config import settings
 from ....core.security import (
@@ -256,6 +256,15 @@ async def register_user(
     )
 
     db.add(new_user)
+    # 先 flush 拿自增 user_id，不提交：画像与账号必须在同一事务落库，
+    # 避免「账号建成功、画像没建」的半成品状态（那正是 A3 的根因）。
+    db.flush()
+
+    # 注册即建画像骨架（A3 接线）：所有业务字段留空表示"未填写"，
+    # profile_status=0 标记未完成，等用户在画像问卷里补全后置 1。
+    # 备考方案 /generate 会按 user_id 查这张表注入 PlanAgent 推理。
+    db.add(UserProfile(user_id=new_user.user_id, profile_status=0))
+
     commit_with_retry(db)
     db.refresh(new_user)
 
