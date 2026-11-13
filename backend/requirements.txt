@@ -27,6 +27,8 @@ redis>=5.0.0
 pandas>=2.2.0
 numpy>=1.26.0,<3.0
 openpyxl>=3.1.0
+# knowledge_ops.py / 知识库配置解析；最新 main 启动必需
+PyYAML>=6.0
 
 # ==================== HTTP / 网络 ====================
 requests>=2.31.0
