@@ -18,6 +18,9 @@ from ..services import media_service as ms
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/media", tags=["媒体资产"])
+# 2026-10-31：别名前缀。/media 需要 vite 代理才可达（改配置必须重启），
+# /api/media 走已代理的 /api，开发/生产都不依赖额外代理。
+router_api = APIRouter(prefix="/api/media", tags=["媒体资产(别名)"])
 
 _CACHE = "public, max-age=31536000, immutable"
 # 浏览器原生可渲染、允许内联预览的类型（其余一律下载）
@@ -102,6 +105,7 @@ def _unavailable(exc: Exception) -> JSONResponse:
 
 
 @router.api_route("/{asset_id}", methods=["GET", "HEAD"], summary="读取媒体资产")
+@router_api.api_route("/{asset_id}", methods=["GET", "HEAD"], summary="读取媒体资产(别名)")
 def get_media(asset_id: str, request: Request, db: Session = Depends(get_db)):
     try:
         asset = ms.get_asset(db, asset_id)

@@ -21,6 +21,7 @@
             <option value="PENDING">待审批</option>
             <option value="APPROVED">已审批</option>
             <option value="PUBLISHED">已发布</option>
+            <option value="ENDED">回收站</option>
           </select>
           <button type="button" @click="loadPapers">查询</button>
           <button type="button" @click="loadPapers">刷新</button>
@@ -31,19 +32,25 @@
             <table class="pw-table">
               <thead><tr><th>试卷</th><th>科目</th><th>题数</th><th>总分</th><th>状态</th><th>更新时间</th><th></th></tr></thead>
               <tbody>
-                <tr v-for="p in filteredPapers" :key="p.paper_id">
+                <tr v-for="p in filteredPapers" :key="p.paper_id" :class="{ 'is-recycled': isEnded(p) }">
                   <td><strong>{{ p.paper_name }}</strong><small>#{{ p.paper_id }}</small></td>
-                  <td>{{ subjectName(p.subject_id) }}</td>
+                  <td><span class="pw-badge" :class="subjectBadgeClass(p.subject_id)">{{ subjectName(p.subject_id) }}</span></td>
                   <td>{{ p.question_count || 0 }}</td>
                   <td>{{ p.total_score || 0 }}</td>
-                  <td><span class="pw-tag">{{ statusLabel(p.paper_type || p.status) }}</span></td>
+                  <td><span class="pw-badge" :class="statusBadgeClass(p.paper_type || p.status)">{{ statusLabel(p.paper_type || p.status) }}</span></td>
                   <td>{{ formatTime(p.update_time || p.create_time) }}</td>
-                  <td>
-                    <button v-if="isOwner(p)" type="button" class="pw-link" @click="openPaper(p)">编辑</button>
+                  <td class="pw-actions-cell">
+                    <template v-if="isOwner(p)">
+                      <button v-if="!isEnded(p)" type="button" class="pw-link" @click="openPaper(p)">编辑</button>
+                      <button v-if="canDeletePaper(p)" type="button" class="pw-link pw-danger" :disabled="deletingId === p.paper_id" @click="removePaper(p)">{{ deletingId === p.paper_id ? '处理中…' : '删除' }}</button>
+                      <button v-if="isEnded(p)" type="button" class="pw-link" :disabled="restoringId === p.paper_id" @click="restorePaper(p)">{{ restoringId === p.paper_id ? '恢复中…' : '恢复' }}</button>
+                      <button v-if="isEnded(p)" type="button" class="pw-link pw-danger" :disabled="purgingId === p.paper_id" @click="purgePaper(p)">{{ purgingId === p.paper_id ? '清理中…' : '彻底删除' }}</button>
+                      <span v-if="isPublished(p)" class="pw-readonly" title="已发布试卷不可删除，避免学生端引用断裂">已发布不可删</span>
+                    </template>
                     <span v-else class="pw-readonly">只读</span>
                   </td>
                 </tr>
-                <tr v-if="!filteredPapers.length"><td colspan="7" class="pw-empty">暂无试卷，点击右上角新建。</td></tr>
+                <tr v-if="!filteredPapers.length"><td colspan="7" class="pw-empty">{{ listStatus === 'ENDED' ? '回收站为空。' : '暂无试卷，点击右上角新建。' }}</td></tr>
               </tbody>
             </table>
             <footer class="pw-pager">
@@ -71,7 +78,7 @@
           <button type="button" class="pw-back" @click="backToList">← 返回列表</button>
           <div class="pw-title">
             <input v-model.trim="paperForm.paper_name" class="pw-title-input" aria-label="试卷名称">
-            <span class="pw-tag">{{ statusLabel(paperForm.paper_type || paperForm.status) }}</span>
+            <span class="pw-badge" :class="statusBadgeClass(paperForm.paper_type || paperForm.status)">{{ statusLabel(paperForm.paper_type || paperForm.status) }}</span>
           </div>
           <div class="pw-editor-actions">
             <button type="button" :class="{ on: rightMode === 'edit' }" @click="rightMode = 'edit'">编辑</button>
@@ -115,6 +122,9 @@
               <article v-for="q in availableQuestions" :key="q.question_id" class="pw-q"
                        :class="{ checked: checked.includes(q.question_id), 'in-paper': inPaper(q.question_id) }"
                        @click="toggleCheck(q.question_id)">
+                <button type="button" class="pw-drag-handle" :disabled="!canDrag || inPaper(q.question_id)" :draggable="canDrag && !inPaper(q.question_id)"
+                        title="拖到右侧加入本卷" aria-label="拖到右侧加入本卷" @click.stop
+                        @dragstart.stop="onBankDragStart($event, q)" @dragend.stop="onDragEnd">⠿</button>
                 <input type="checkbox" :checked="checked.includes(q.question_id)"
                        :disabled="inPaper(q.question_id)" @click.stop="toggleCheck(q.question_id)">
                 <div class="pw-q-body">
@@ -127,6 +137,9 @@
                     <span v-if="q.point_name" class="pw-point" :title="q.point_name">{{ q.point_name }}</span>
                   </div>
                   <p class="pw-q-text">{{ truncate(q.question_content, 96) }}</p>
+                  <div class="pw-q-actions">
+                    <button type="button" class="pw-preview-btn" @click.stop="openPreview(q)">预览</button>
+                  </div>
                 </div>
               </article>
               <div v-if="!availableQuestions.length && !pickerLoading" class="pw-empty">没有匹配题目，试试放宽筛选。</div>
@@ -145,10 +158,19 @@
               </div>
             </header>
 
-            <div class="pw-questions right" :class="{ preview: rightMode === 'preview' }">
-              <article v-for="(q, index) in filteredPaperQuestions" :key="q.question_id" class="pw-paper-q">
+            <div ref="rightList" class="pw-questions right" :class="{ preview: rightMode === 'preview' }"
+                 @dragover="onRightListDragOver" @drop="onRightListDrop">
+              <p v-if="paperKeyword" class="pw-drag-hint">卷内搜索时已暂停拖拽排序，清空搜索后可调整顺序。</p>
+              <article v-for="q in filteredPaperQuestions" :key="q.question_id" class="pw-paper-q"
+                       :class="{ 'drop-before': dropTargetId === q.question_id && dropPosition === 'before', 'drop-after': dropTargetId === q.question_id && dropPosition === 'after' }"
+                       @dragover="onPaperDragOver($event, q)"
+                       @dragleave="onPaperDragLeave($event, q)"
+                       @drop="onPaperDrop($event, q)">
                 <div class="pw-paper-q-head">
-                  <span class="pw-order">{{ index + 1 }}</span>
+                  <button type="button" class="pw-drag-handle" :disabled="!canDrag" :draggable="canDrag"
+                          title="拖拽调整顺序" aria-label="拖拽调整顺序" @click.stop
+                          @dragstart.stop="onPaperDragStart($event, q)" @dragend.stop="onDragEnd">⠿</button>
+                  <span class="pw-order">{{ displayOrder(q.question_id) }}</span>
                   <div class="pw-q-meta">
                     <span class="pw-tag">{{ q.type_name || '未标注' }}</span>
                     <span v-if="q.group_id > 0" class="pw-tag group">题组 {{ q.group_id }}</span>
@@ -156,8 +178,8 @@
                   <input class="pw-score" type="number" min="0.5" step="0.5" :value="q.question_score"
                          aria-label="本题分值" @change="updateScore(q, $event)">
                   <div class="pw-row-actions">
-                    <button type="button" title="上移" @click="moveQuestion(q.question_id, -1)">↑</button>
-                    <button type="button" title="下移" @click="moveQuestion(q.question_id, 1)">↓</button>
+                    <button type="button" title="上移" :disabled="!canDrag" @click="moveQuestion(q.question_id, -1)">↑</button>
+                    <button type="button" title="下移" :disabled="!canDrag" @click="moveQuestion(q.question_id, 1)">↓</button>
                     <button type="button" title="移除" @click="removeQuestion(q.question_id)">✕</button>
                   </div>
                 </div>
@@ -184,6 +206,53 @@
       </template>
     </main>
 
+    <!-- 题库题目预览：不离开试卷即可核对材料/选项/解析 -->
+    <div v-if="previewOpen" class="pw-modal-mask" @click.self="closePreview">
+      <section class="pw-modal pw-preview-modal" role="dialog" aria-modal="true" aria-label="题目预览">
+        <header class="pw-preview-head">
+          <h2>题目预览 <small v-if="previewQuestion">#{{ previewQuestion.question_id }}</small></h2>
+          <button ref="previewCloseBtn" type="button" class="pw-modal-close" aria-label="关闭预览" @click="closePreview">×</button>
+        </header>
+        <div v-if="previewLoading" class="pw-empty">加载中…</div>
+        <div v-else-if="previewError" class="pw-preview-error">
+          <p>{{ previewError }}</p>
+          <button type="button" @click="retryPreview">重试</button>
+        </div>
+        <div v-else-if="previewQuestion" class="pw-preview-body">
+          <div class="pw-preview-meta">
+            <span class="pw-tag">{{ previewQuestion.type_name || '未标注' }}</span>
+            <span class="pw-tag">{{ subjectName(previewQuestion.subject_id) }}</span>
+            <span v-if="previewQuestion.group_id > 0" class="pw-tag group">题组 {{ previewQuestion.group_id }}</span>
+            <span class="pw-stars">{{ '★'.repeat(previewQuestion.difficulty || 3) }}</span>
+          </div>
+          <section v-if="previewMaterialHtml" class="pw-preview-material">
+            <h3>题组材料</h3>
+            <div v-html="previewMaterialHtml"></div>
+          </section>
+          <section class="pw-preview-section">
+            <h3>题干</h3>
+            <div v-html="render(previewQuestion.question_content)"></div>
+          </section>
+          <section v-if="previewOptions.length" class="pw-preview-section">
+            <h3>选项</h3>
+            <div class="pw-preview-options">
+              <div v-for="opt in previewOptions" :key="opt.key" class="pw-option">
+                <b>{{ opt.key }}</b><span v-html="render(opt.value)"></span>
+              </div>
+            </div>
+          </section>
+          <section class="pw-preview-section">
+            <h3>正确答案</h3>
+            <p class="pw-preview-answer">{{ previewQuestion.answer || '—' }}</p>
+          </section>
+          <section class="pw-preview-section">
+            <h3>答案解析</h3>
+            <div v-html="render(previewQuestion.answer_analysis || '暂无解析')"></div>
+          </section>
+        </div>
+      </section>
+    </div>
+
     <!-- 新建试卷 -->
     <div v-if="createOpen" class="pw-modal-mask" @click.self="createOpen = false">
       <section class="pw-modal" role="dialog" aria-label="新建试卷">
@@ -206,11 +275,12 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { computed, defineComponent, onMounted, reactive, ref } from 'vue';
+import { computed, defineComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import TeacherNavHeader from '$vtj/vue/TeacherNavHeader.vue';
 import { renderQuestionContent, renderQuestionSummary } from '@/utils/questionRender';
+import { moveItem, displayOrder as paperDisplayOrder } from '@/utils/paperOrder';
 
 const HISTORY_KEY = 'teacher-paper-editor-history';
 
@@ -235,6 +305,31 @@ export default defineComponent({
     const paperQuestions = ref<any[]>([]);
     const paperKeyword = ref('');
     const rightMode = ref('edit');
+
+    // 只有草稿且未做卷内搜索时才允许拖拽：搜索态下可见顺序与真实顺序不一致，
+    // 继续拖拽会把题目插到用户看不见的位置。
+    const canDrag = computed(function () {
+      return String(paperForm.paper_type || paperForm.status || '') === 'DRAFT' && !paperKeyword.value;
+    });
+    const deletingId = ref(0);
+    const restoringId = ref(0);
+    const purgingId = ref(0);
+
+    const draggingSource = ref('');
+    const dragQid = ref(0);
+    const dropTargetId = ref(0);
+    const dropPosition = ref('before');
+    const rightList = ref<HTMLElement | null>(null);
+    let dragScrollRaf = 0;
+
+    const previewOpen = ref(false);
+    const previewLoading = ref(false);
+    const previewError = ref('');
+    const previewQuestion = ref<any>(null);
+    const previewQid = ref(0);
+    const previewOptions = ref<any[]>([]);
+    const previewMaterialHtml = ref('');
+    const previewCloseBtn = ref<HTMLElement | null>(null);
 
     const availableQuestions = ref<any[]>([]);
     const availableTotal = ref(0);
@@ -307,6 +402,12 @@ export default defineComponent({
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch (e) { /* 忽略隐私模式写入失败 */ }
     }
 
+    function dropHistory(paperId: number) {
+      const next = history.value.filter(function (h: any) { return h.id !== paperId; });
+      history.value = next;
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch (e) { /* 同上 */ }
+    }
+
     async function loadPapers() {
       try {
         const params = new URLSearchParams();
@@ -318,6 +419,81 @@ export default defineComponent({
         if (data.success) { papers.value = data.items || []; total.value = data.total || 0; }
       } catch (e) {
         ElMessage.error('试卷列表加载失败');
+      }
+    }
+
+    // ---------- 试卷软删除 / 回收站 ----------
+    function isEnded(paper: any) {
+      return String(paper.paper_type || paper.status || '') === 'ENDED';
+    }
+    function isPublished(paper: any) {
+      return String(paper.paper_type || paper.status || '') === 'PUBLISHED';
+    }
+    function canDeletePaper(paper: any) {
+      if (!isOwner(paper)) return false;
+      const status = String(paper.paper_type || paper.status || '');
+      return ['DRAFT', 'PENDING', 'APPROVED'].indexOf(status) >= 0;
+    }
+
+    function confirmAction(message: string, title: string, confirmText: string) {
+      return ElMessageBox.confirm(message, title, {
+        confirmButtonText: confirmText,
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(function () { return true; }).catch(function () { return false; });
+    }
+
+    async function removePaper(paper: any) {
+      if (!canDeletePaper(paper)) { ElMessage.warning('当前状态不可删除'); return; }
+      const ok = await confirmAction('试卷「' + paper.paper_name + '」将移入回收站，可在回收站恢复。', '移入回收站', '移入回收站');
+      if (!ok) return;
+      deletingId.value = paper.paper_id;
+      try {
+        const res = await authFetch('/api/teacher/papers/' + paper.paper_id, { method: 'DELETE' });
+        const data = await json(res);
+        if (!data.success) throw new Error(data.message || '删除失败');
+        ElMessage.success('已移入回收站');
+        dropHistory(paper.paper_id);
+        if (papers.value.length === 1 && page.value > 1) page.value -= 1;
+        await loadPapers();
+      } catch (e: any) {
+        ElMessage.error(e.message || '删除失败');
+      } finally {
+        deletingId.value = 0;
+      }
+    }
+
+    async function restorePaper(paper: any) {
+      restoringId.value = paper.paper_id;
+      try {
+        const res = await authFetch('/api/teacher/papers/' + paper.paper_id + '/restore', { method: 'POST' });
+        const data = await json(res);
+        if (!data.success) throw new Error(data.message || '恢复失败');
+        ElMessage.success('已恢复为草稿');
+        await loadPapers();
+      } catch (e: any) {
+        ElMessage.error(e.message || '恢复失败');
+      } finally {
+        restoringId.value = 0;
+      }
+    }
+
+    async function purgePaper(paper: any) {
+      const ok = await confirmAction('彻底删除后不可恢复，确认清理「' + paper.paper_name + '」？', '彻底删除', '彻底删除');
+      if (!ok) return;
+      purgingId.value = paper.paper_id;
+      try {
+        const res = await authFetch('/api/teacher/papers/' + paper.paper_id + '/permanent', { method: 'DELETE' });
+        const data = await json(res);
+        if (!data.success) throw new Error(data.message || '清理失败');
+        ElMessage.success('已彻底删除');
+        dropHistory(paper.paper_id);
+        if (papers.value.length === 1 && page.value > 1) page.value -= 1;
+        await loadPapers();
+      } catch (e: any) {
+        ElMessage.error(e.message || '清理失败');
+      } finally {
+        purgingId.value = 0;
       }
     }
 
@@ -554,10 +730,15 @@ export default defineComponent({
       }
     }
 
-    async function reloadPaperQuestions() {
+    async function fetchPaperQuestions() {
       const res = await authFetch('/api/teacher/papers/' + paperForm.paper_id);
       const data = await json(res);
-      if (data.success) paperQuestions.value = data.questions || [];
+      if (!data.success) throw new Error(data.message || '试卷题目加载失败');
+      paperQuestions.value = data.questions || [];
+    }
+
+    async function reloadPaperQuestions() {
+      await fetchPaperQuestions();
       await loadPicker(true);
     }
 
@@ -598,6 +779,278 @@ export default defineComponent({
       } catch (e) { ElMessage.error('排序失败'); }
     }
 
+    // ---------- 拖拽排序 / 左侧拖入 ----------
+    function displayOrder(qid: number) {
+      return paperDisplayOrder(paperQuestions.value, qid);
+    }
+
+    function onBankDragStart(ev: DragEvent, q: any) {
+      if (!canDrag.value || inPaper(q.question_id)) { ev.preventDefault(); return; }
+      draggingSource.value = 'bank';
+      dragQid.value = q.question_id;
+      try {
+        if (ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = 'copy';
+          ev.dataTransfer.setData('application/x-paper-question', String(q.question_id));
+          ev.dataTransfer.setData('text/plain', String(q.question_id));
+        }
+      } catch (e) { /* 某些浏览器禁用自定义 MIME，仍可用内部状态 */ }
+    }
+
+    function onPaperDragStart(ev: DragEvent, q: any) {
+      if (!canDrag.value) {
+        ev.preventDefault();
+        return;
+      }
+      draggingSource.value = 'paper';
+      dragQid.value = q.question_id;
+      try {
+        if (ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = 'move';
+          ev.dataTransfer.setData('application/x-paper-question', String(q.question_id));
+          ev.dataTransfer.setData('text/plain', String(q.question_id));
+        }
+      } catch (e) { /* 同上 */ }
+    }
+
+    function autoScrollRight(clientY: number) {
+      const el = rightList.value;
+      if (!el || dragScrollRaf) return;
+      const rect = el.getBoundingClientRect();
+      let delta = 0;
+      if (clientY < rect.top + 48) delta = -12;
+      else if (clientY > rect.bottom - 48) delta = 12;
+      if (!delta) return;
+      const step = function () {
+        if (!draggingSource.value) { dragScrollRaf = 0; return; }
+        el.scrollTop += delta;
+        dragScrollRaf = requestAnimationFrame(step);
+      };
+      dragScrollRaf = requestAnimationFrame(step);
+    }
+
+    function onPaperDragOver(ev: DragEvent, q: any) {
+      if (!draggingSource.value) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = draggingSource.value === 'bank' ? 'copy' : 'move';
+      const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+      dropTargetId.value = q.question_id;
+      dropPosition.value = (ev.clientY - rect.top) > rect.height / 2 ? 'after' : 'before';
+      autoScrollRight(ev.clientY);
+    }
+
+    function onPaperDragLeave(ev: DragEvent, q: any) {
+      const related = ev.relatedTarget as Node | null;
+      if (related && (ev.currentTarget as HTMLElement).contains(related)) return;
+      if (dropTargetId.value === q.question_id) {
+        dropTargetId.value = 0;
+        dropPosition.value = 'before';
+      }
+    }
+
+    function onPaperDrop(ev: DragEvent, q: any) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!canDrag.value) return;
+      if (draggingSource.value === 'bank') {
+        const bankId = dragQid.value;
+        if (!bankId) return;
+        if (inPaper(bankId)) {
+          ElMessage.info('该题已在卷内，可直接在右侧拖拽调整顺序');
+          onDragEnd();
+          return;
+        }
+        const targetIndex = paperQuestions.value.findIndex(function (item: any) { return item.question_id === q.question_id; });
+        if (targetIndex < 0) return;
+        addBankQuestionAt(bankId, targetIndex + (dropPosition.value === 'after' ? 1 : 0));
+      } else if (draggingSource.value === 'paper') {
+        const targetIndex = paperQuestions.value.findIndex(function (item: any) { return item.question_id === q.question_id; });
+        if (targetIndex < 0) return;
+        reorderPaperTo(dragQid.value, targetIndex + (dropPosition.value === 'after' ? 1 : 0));
+      }
+      onDragEnd();
+    }
+
+    function onRightListDragOver(ev: DragEvent) {
+      if (!draggingSource.value) return;
+      ev.preventDefault();
+      dropTargetId.value = 0;
+      dropPosition.value = 'before';
+      autoScrollRight(ev.clientY);
+    }
+
+    function onRightListDrop(ev: DragEvent) {
+      ev.preventDefault();
+      if (!canDrag.value) { onDragEnd(); return; }
+      const targetIndex = paperQuestions.value.length;
+      if (draggingSource.value === 'bank') {
+        const bankId = dragQid.value;
+        if (bankId && !inPaper(bankId)) addBankQuestionAt(bankId, targetIndex);
+      } else if (draggingSource.value === 'paper') {
+        reorderPaperTo(dragQid.value, targetIndex);
+      }
+      onDragEnd();
+    }
+
+    function onDragEnd() {
+      draggingSource.value = '';
+      dragQid.value = 0;
+      dropTargetId.value = 0;
+      dropPosition.value = 'before';
+      if (dragScrollRaf) {
+        cancelAnimationFrame(dragScrollRaf);
+        dragScrollRaf = 0;
+      }
+    }
+
+    async function reorderPaperTo(qid: number, insertIndex: number) {
+      const from = paperQuestions.value.findIndex(function (item: any) { return item.question_id === qid; });
+      if (from < 0) return;
+      let to = Math.max(0, Math.min(insertIndex, paperQuestions.value.length));
+      if (from < to) to -= 1;
+      if (to === from) return;
+      const prev = paperQuestions.value.slice();
+      paperQuestions.value = moveItem(prev, from, to);
+      const ids = paperQuestions.value.map(function (item: any) { return item.question_id; });
+      try {
+        const res = await authFetch('/api/teacher/papers/' + paperForm.paper_id + '/questions/order', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question_ids: ids }),
+        });
+        const data = await json(res);
+        if (!data.success) throw new Error(data.message || '排序失败');
+      } catch (e) {
+        paperQuestions.value = prev;
+        ElMessage.error('排序失败，已恢复原顺序');
+      }
+    }
+
+    async function addBankQuestionAt(qid: number, insertIndex: number) {
+      if (inPaper(qid)) return;
+      const source = availableQuestions.value.find(function (item: any) { return item.question_id === qid; });
+      if (source && Number(source.group_id) > 0) {
+        ElMessage.warning('该题属于题组 ' + source.group_id + '，建议整组加入以免材料缺失');
+      }
+      try {
+        const res = await authFetch('/api/teacher/papers/' + paperForm.paper_id + '/questions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questions: [{ question_id: qid, question_order: paperQuestions.value.length + 1, question_score: 5 }] }),
+        });
+        const data = await json(res);
+        if (!data.success) throw new Error(data.message || '加入失败');
+        await fetchPaperQuestions();
+        const from = paperQuestions.value.findIndex(function (item: any) { return item.question_id === qid; });
+        const to = Math.max(0, Math.min(insertIndex, paperQuestions.value.length - 1));
+        if (from >= 0 && to >= 0 && from !== to) {
+          paperQuestions.value = moveItem(paperQuestions.value, from, to);
+          const ids = paperQuestions.value.map(function (item: any) { return item.question_id; });
+          try {
+            await authFetch('/api/teacher/papers/' + paperForm.paper_id + '/questions/order', {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question_ids: ids }),
+            });
+          } catch (e) {
+            ElMessage.warning('题目已加入卷末，目标位置排序未生效');
+          }
+        }
+        ElMessage.success('已加入本卷');
+        await loadPicker(true);
+      } catch (e: any) {
+        ElMessage.error(e.message || '加入失败');
+      }
+    }
+
+    // ---------- 单题预览 ----------
+    function normalizeOptions(raw: any) {
+      let list = raw;
+      if (typeof raw === 'string') {
+        try { list = JSON.parse(raw); } catch (e) { list = []; }
+      }
+      if (!Array.isArray(list)) return [];
+      return list.map(function (item: any, index: number) {
+        if (typeof item === 'string') return { key: String.fromCharCode(65 + index), value: item };
+        return {
+          key: item && (item.key || item.label) ? String(item.key || item.label) : String.fromCharCode(65 + index),
+          value: item && (item.value || item.content) ? String(item.value || item.content) : '',
+        };
+      });
+    }
+
+    function buildPreviewMaterial(detail: any) {
+      const shared = detail.shared_content ? renderQuestionContent(detail.shared_content) : '';
+      let raw = detail.shared_content_images;
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch (e) { raw = raw ? [raw] : []; }
+      }
+      if (!Array.isArray(raw)) raw = raw ? [raw] : [];
+      const extra: string[] = [];
+      raw.forEach(function (item: any) {
+        let tag = '';
+        if (typeof item === 'string') {
+          if (/^\s*<img/i.test(item)) tag = item;
+          else if (/^\[?IMAGE:/i.test(item)) tag = renderQuestionContent(item);
+          else if (item) tag = '<img src="' + item + '" class="q-img" loading="lazy" />';
+        } else if (item && (item.url || item.src)) {
+          tag = '<img src="' + (item.url || item.src) + '" class="q-img" loading="lazy" />';
+        }
+        if (!tag) return;
+        const srcMatch = tag.match(/src=["']([^"']+)/);
+        if (!srcMatch || shared.indexOf(srcMatch[1]) < 0) extra.push(tag);
+      });
+      return shared + extra.join('');
+    }
+
+    async function fetchPreview(qid: number) {
+      previewLoading.value = true;
+      previewError.value = '';
+      try {
+        const res = await authFetch('/api/questions/' + qid);
+        const data = await json(res);
+        if (!res.ok) throw new Error((data && data.detail) || '题目详情加载失败');
+        const detail = data && data.question ? data.question : data;
+        if (!detail || !detail.question_id) throw new Error('题目详情为空');
+        previewQuestion.value = detail;
+        previewOptions.value = normalizeOptions(detail.options);
+        previewMaterialHtml.value = buildPreviewMaterial(detail);
+      } catch (e: any) {
+        previewError.value = e.message || '题目详情加载失败';
+      } finally {
+        previewLoading.value = false;
+      }
+    }
+
+    function openPreview(q: any) {
+      previewOpen.value = true;
+      previewQid.value = q.question_id;
+      previewQuestion.value = Object.assign({}, q);
+      previewOptions.value = normalizeOptions(q.options);
+      previewMaterialHtml.value = '';
+      previewError.value = '';
+      nextTick(function () {
+        if (previewCloseBtn.value) previewCloseBtn.value.focus();
+      });
+      fetchPreview(q.question_id);
+    }
+
+    function closePreview() {
+      previewOpen.value = false;
+      previewQuestion.value = null;
+      previewOptions.value = [];
+      previewMaterialHtml.value = '';
+      previewError.value = '';
+    }
+
+    function retryPreview() {
+      if (previewQid.value) fetchPreview(previewQid.value);
+    }
+
+    function onPreviewKeydown(ev: KeyboardEvent) {
+      if (!previewOpen.value) return;
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closePreview();
+      }
+    }
+
     function isOwner(paper: any) {
       try {
         const auth = (window as any).__VTJ_AUTH__;
@@ -609,8 +1062,19 @@ export default defineComponent({
     }
 
     function statusLabel(value: string) {
-      const map: Record<string, string> = { DRAFT: '草稿', PENDING: '待审批', APPROVED: '已审批', PUBLISHED: '已发布', ENDED: '已结束' };
+      const map: Record<string, string> = { DRAFT: '草稿', PENDING: '待审批', APPROVED: '已审批', PUBLISHED: '已发布', ENDED: '回收站' };
       return map[value] || value || '草稿';
+    }
+    function statusBadgeClass(value: string) {
+      const key = String(value || 'DRAFT').toUpperCase();
+      const map: Record<string, string> = {
+        DRAFT: 'pw-badge--draft', PENDING: 'pw-badge--pending', APPROVED: 'pw-badge--approved',
+        PUBLISHED: 'pw-badge--published', ENDED: 'pw-badge--ended',
+      };
+      return map[key] || 'pw-badge--draft';
+    }
+    function subjectBadgeClass(id: number) {
+      return ({ 1: 'pw-badge--xingce', 2: 'pw-badge--shenlun', 3: 'pw-badge--gongzhuan' } as any)[id] || 'pw-badge--neutral';
     }
     function subjectName(id: number) { return ({ 1: '行测', 2: '申论', 3: '公专' } as any)[id] || '—'; }
     function formatTime(value: string) { return value ? String(value).substring(0, 16).replace('T', ' ') : '—'; }
@@ -626,16 +1090,28 @@ export default defineComponent({
     onMounted(function () {
       loadHistory();
       loadPapers();
+      window.addEventListener('keydown', onPreviewKeydown);
+    });
+
+    onBeforeUnmount(function () {
+      window.removeEventListener('keydown', onPreviewKeydown);
+      if (dragScrollRaf) cancelAnimationFrame(dragScrollRaf);
     });
 
     return {
       view, papers, total, page, pageSize, listKeyword, listStatus, history, filteredPapers,
-      createOpen, creating, createForm, paperForm, paperQuestions, paperKeyword, rightMode,
+      createOpen, creating, createForm, paperForm, paperQuestions, paperKeyword, rightMode, canDrag,
+      deletingId, restoringId, purgingId, draggingSource, dragQid, dropTargetId, dropPosition, rightList,
+      previewOpen, previewLoading, previewError, previewQuestion, previewQid, previewOptions, previewMaterialHtml, previewCloseBtn,
       availableQuestions, availableTotal, pickerLoading, checked, filters, questionTypes, knowledgePoints,
       filteredPaperQuestions, paperTotalScore, allVisibleChecked, inPaper,
       loadPapers, openCreate, createPaper, openPaper, openPaperById, backToList, saveMeta, publishPaper,
       onSubjectChange, loadPicker, resetAndSearch, resetFilters, onLeftScroll, toggleCheck, toggleVisible,
-      addChecked, removeQuestion, updateScore, moveQuestion, isOwner, statusLabel, subjectName, formatTime, truncate, render, handleLogout,
+      addChecked, removeQuestion, updateScore, moveQuestion, isEnded, isPublished, canDeletePaper,
+      removePaper, restorePaper, purgePaper, displayOrder, onBankDragStart, onPaperDragStart, onPaperDragOver,
+      onPaperDragLeave, onPaperDrop, onRightListDragOver, onRightListDrop, onDragEnd, onPreviewKeydown,
+      openPreview, closePreview, retryPreview, isOwner, statusLabel, statusBadgeClass, subjectBadgeClass,
+      subjectName, formatTime, truncate, render, handleLogout,
     };
   },
 });
@@ -744,6 +1220,70 @@ export default defineComponent({
   .pw-questions { height: 420px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pw-q, .pw-paper-q { transition: none; }
+  .pw-q, .pw-paper-q, .pw-drag-handle { transition: none; }
+}
+
+/* 状态/科目徽章：低饱和底色，避免整张表被高饱和色块切碎 */
+.pw-badge { display: inline-block; border: 1px solid transparent; border-radius: 999px; padding: 1px 9px; font-size: 11px; line-height: 1.7; font-weight: 600; white-space: nowrap; }
+.pw-badge--xingce { background: #e8f0fe; color: #1a4fa0; border-color: #c7d9f5; }
+.pw-badge--shenlun { background: #f5edff; color: #7e22ce; border-color: #e9d5ff; }
+.pw-badge--gongzhuan { background: #e7f7f1; color: #0f766e; border-color: #c7eee1; }
+.pw-badge--neutral { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.pw-badge--draft { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.pw-badge--pending { background: #fff7e6; color: #b45309; border-color: #fde68a; }
+.pw-badge--approved { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.pw-badge--published { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.pw-badge--ended { background: #f8fafc; color: #94a3b8; border-color: #e2e8f0; }
+
+.pw-actions-cell { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+.pw-link { padding: 0; font-size: 12px; }
+.pw-link:disabled { color: #cbd5e1; cursor: not-allowed; }
+.pw-danger { color: #dc2626; }
+.is-recycled td { color: #94a3b8; background: #fcfcfd; }
+
+/* 拖拽：手柄、插入线与边缘滚动 */
+.pw-drag-handle { border: 0; background: transparent; color: #94a3b8; cursor: grab; padding: 0 2px; font-size: 15px; line-height: 1; align-self: stretch; }
+.pw-drag-handle:disabled { cursor: not-allowed; opacity: .35; }
+.pw-drag-handle:active { cursor: grabbing; }
+.pw-paper-q { position: relative; }
+.pw-paper-q.drop-before::before,
+.pw-paper-q.drop-after::after { content: ''; position: absolute; left: 8px; right: 8px; height: 2px; background: #2563eb; border-radius: 2px; box-shadow: 0 0 0 3px rgba(37, 99, 235, .13); }
+.pw-paper-q.drop-before::before { top: -6px; }
+.pw-paper-q.drop-after::after { bottom: -6px; }
+.pw-drag-hint { margin: 0 0 8px; padding: 7px 9px; background: #eff6ff; color: #1d4ed8; border-radius: 6px; font-size: 12px; }
+.pw-q-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.pw-preview-btn { border: 1px solid #cbd5e1; background: #fff; border-radius: 5px; padding: 2px 8px; color: #1a3c6d; font-size: 11px; cursor: pointer; }
+.pw-q:hover .pw-preview-btn { border-color: #93b4e0; }
+.pw-q.in-paper .pw-drag-handle { opacity: .2; }
+
+/* 主按钮级联：后置的 .pw-editor-actions button 等规则曾把主按钮覆盖成白底白字 */
+.pw-editor-actions button.pw-primary,
+.pw-filters button.pw-primary,
+.pw-modal footer button.pw-primary,
+button.pw-primary { background: #1a3c6d; border-color: #1a3c6d; color: #fff; }
+.pw-editor-actions button.pw-primary:hover:not(:disabled),
+.pw-filters button.pw-primary:hover:not(:disabled),
+.pw-modal footer button.pw-primary:hover:not(:disabled),
+button.pw-primary:hover:not(:disabled) { background: #15325c; border-color: #15325c; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* 单题预览弹窗 */
+.pw-preview-modal { width: min(980px, 96vw); max-height: 88vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.pw-preview-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #e2e8f0; }
+.pw-preview-head h2 { margin: 0; font-size: 17px; }
+.pw-preview-head small { color: #94a3b8; font-weight: 400; margin-left: 6px; }
+.pw-modal-close { border: 0; background: transparent; font-size: 22px; line-height: 1; color: #64748b; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+.pw-modal-close:hover { background: #f1f5f9; color: #1f2937; }
+.pw-preview-body { overflow-y: auto; padding: 16px 20px 24px; }
+.pw-preview-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.pw-preview-material { background: #f8fafc; border-left: 3px solid #1a3c6d; border-radius: 6px; padding: 10px 12px; margin: 0 0 14px; }
+.pw-preview-material h3, .pw-preview-section h3 { margin: 0 0 7px; font-size: 13px; color: #1a3c6d; }
+.pw-preview-material :deep(img), .pw-preview-section :deep(img) { max-width: 100%; height: auto; }
+.pw-preview-section { margin-top: 14px; font-size: 13px; line-height: 1.8; color: #1f2937; }
+.pw-preview-answer { color: #15803d; font-weight: 600; margin: 0; }
+.pw-preview-error { padding: 28px; text-align: center; color: #b91c1c; }
+.pw-preview-error button { margin-top: 10px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+@media (max-width: 720px) {
+  .pw-preview-modal { width: 96vw; max-height: 92vh; }
 }
 </style>

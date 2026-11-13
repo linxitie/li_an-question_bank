@@ -17,26 +17,32 @@
   GET    /api/forum/stats                    论坛统计
 """
 import os
+import re
 import json
+import time
 import uuid
 import logging
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Literal
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, Request, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, UploadFile, File, Form, Request, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, or_, and_, String
 
-from ....core.database import get_db
+from ....core.database import get_db, SessionLocal
 from ....core.config import settings
+from pydantic import BaseModel, Field
 from ....core.security import get_current_user, get_optional_user
 from ....services import media_service
 from ....models.models import (
-    ForumPost, ForumComment, ForumLike, ForumFavorite, ForumSticker, ForumReport,
-    SysUser, SysOperationLog
+    ForumPost, ForumComment, ForumLike, ForumFavorite, ForumCommentFavorite,
+    ForumSticker, ForumReport, ForumDraft, SysUser, SysOperationLog
 )
-from ....services.sensitive_words import sensitive_filter, SensitiveLevel
+from ....services.sensitive_words import SensitiveLevel
+from ....services.content_guard import guard_text, judgments as content_guard_judgments
+from ....services.rich_text import sanitize_rich_text
+from ....services.forum_title_ai import generate_forum_title, needs_ai_title
 from ....services.event_consumer import outbox_mode_enabled, record_user_action
 from ....core.trigger_types import TRIGGER_FORUM_POSTED
 from ....core.exceptions import (
@@ -49,6 +55,12 @@ from ....core.exceptions import (
 router = APIRouter(prefix="/api/forum", tags=["论坛"])
 
 TITLE_COLORS = {"default", "red", "gold", "blue", "green", "purple"}
+
+
+class BatchPostIds(BaseModel):
+    """批量操作帖子 ID（上限 100，避免单次请求过重）。"""
+
+    post_ids: List[int] = Field(..., min_length=1, max_length=100)
 logger = logging.getLogger(__name__)
 
 # 点赞表情白名单：只接受固定码，避免任意文本/图片进入
@@ -178,8 +190,45 @@ def _serialize_post(
         "favorited": bool(favorited),
         "visibility": post.visibility or "ALL",
         "visibleClasses": post.visible_classes or [],
+        # 正文格式（2026-11-03）：前端据此决定走纯文本渲染还是消毒后的 HTML 渲染
+        "contentFormat": getattr(post, "content_format", None) or "TEXT",
+        # AI 标题标记（2026-11-03 第 3 轮）：前端据此在标题前加「AI生成」
+        "aiTitle": bool(getattr(post, "ai_title", 0)),
+        # 发帖人是否允许 AI 总结标题（2026-11-04 v4），便于管理端统计
+        "aiTitleEnabled": bool(getattr(post, "ai_title_enabled", 1)),
         "user": _user_brief(user, post.user_id),
     }
+
+
+async def _generate_title_in_background(post_id: int, content: str, content_format: str) -> None:
+    """后台为无标题帖生成 AI 标题（2026-11-03 第 3 轮）。
+
+    约定：
+    - **必须用独立 Session**：请求级 db 在响应返回后就关闭了，复用会拿到已关闭的会话；
+    - 写库前再校验一次标题仍为空，避免用户在这几秒内手动填了标题被覆盖；
+    - 任何失败只记日志，不抛出（后台任务抛错不会影响已返回的响应，但会污染日志）。
+    """
+    title = await generate_forum_title(content, content_format or "TEXT")
+    if not title:
+        return
+
+    db = SessionLocal()
+    try:
+        post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
+        if not post:
+            return
+        if not needs_ai_title(post.title, post.content):
+            logger.info("AI 标题跳过：帖子 %s 已有标题", post_id)
+            return
+        post.title = title
+        post.ai_title = 1
+        db.commit()
+        logger.info("AI 标题已写入：帖子 %s -> %s", post_id, title)
+    except Exception as exc:  # noqa: BLE001 - 后台任务不能因单条失败中断
+        logger.warning("AI 标题写库失败：帖子 %s: %s", post_id, exc)
+        db.rollback()
+    finally:
+        db.close()
 
 
 def _apply_visibility_filter(query, current_user: Optional[SysUser]):
@@ -251,6 +300,31 @@ def _load_favorite_stats(db: Session, post_ids: List[int], user_id: Optional[int
     return counts, mine
 
 
+def _comment_favorite_stats(db: Session, comment_ids: List[int], user_id: Optional[int] = None):
+    """批量取评论收藏数 + 当前用户是否收藏（避免 N+1）。"""
+    if not comment_ids:
+        return {}, set()
+    rows = (
+        db.query(ForumCommentFavorite.comment_id, func.count(ForumCommentFavorite.favorite_id))
+        .filter(ForumCommentFavorite.comment_id.in_(comment_ids))
+        .group_by(ForumCommentFavorite.comment_id)
+        .all()
+    )
+    counts = {cid: int(cnt or 0) for cid, cnt in rows}
+    mine = set()
+    if user_id:
+        mine_rows = (
+            db.query(ForumCommentFavorite.comment_id)
+            .filter(
+                ForumCommentFavorite.comment_id.in_(comment_ids),
+                ForumCommentFavorite.user_id == user_id,
+            )
+            .all()
+        )
+        mine = {row[0] for row in mine_rows}
+    return counts, mine
+
+
 def _serialize_comment(
     comment: ForumComment,
     user: Optional[SysUser] = None,
@@ -258,6 +332,8 @@ def _serialize_comment(
     reactions: Optional[Dict[str, int]] = None,
     my_reaction: Optional[str] = None,
     reply_count: int = 0,
+    favorite_count: int = 0,
+    favorited: bool = False,
 ) -> Dict[str, Any]:
     """序列化评论为响应字典"""
     return {
@@ -270,9 +346,13 @@ def _serialize_comment(
         "replyToUserId": comment.reply_to_user_id,
         "attachments": comment.attachments or [],
         "liked": liked or my_reaction is not None,
+        "favorited": favorited,
+        "favoriteCount": favorite_count,
         "myReaction": my_reaction,
         "reactions": reactions or {},
         "replyCount": reply_count or 0,
+        # 正文格式（2026-11-03）
+        "contentFormat": getattr(comment, "content_format", None) or "TEXT",
         "user": _user_brief(user, comment.user_id),
     }
 
@@ -349,7 +429,10 @@ async def get_forum_posts(
     sort: Optional[Literal["new", "hot"]] = Query(None, description="快捷排序: new/hot"),
     date_from: Optional[str] = Query(None, description="起始日期 YYYY-MM-DD（含当天）"),
     date_to: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD（含当天）"),
-    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    visibility: Optional[Literal["ALL", "CLASSES"]] = Query(
+        None, description="可见范围筛选：ALL=校园论坛 / CLASSES=班级论坛（不传=全部）"
+    ),
+    limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
     db: Session = Depends(get_db)
@@ -365,6 +448,12 @@ async def get_forum_posts(
     # P3：可见范围（教师/管理员不过滤；学生仅本校班级或全校；游客仅全校）
     query = _apply_visibility_filter(query, current_user)
 
+    # 校园 / 班级 论坛筛选（2026-11-03）。
+    # 顺序很关键：必须放在 _apply_visibility_filter 之后 —— 前者是「谁能看」的权限边界，
+    # 后者只是「看哪一类」的业务筛选。若顺序反过来，班级帖会被业务筛选绕开权限暴露。
+    if visibility:
+        query = query.filter(ForumPost.visibility == visibility)
+
     if share_type:
         query = query.filter(ForumPost.share_type == share_type)
     if keyword:
@@ -372,6 +461,9 @@ async def get_forum_posts(
         query = query.filter(
             or_(ForumPost.title.like(like), ForumPost.content.like(like))
         )
+    # 热门兜底用的基础查询（不含日期）
+    base_query = query
+
     # P3：日期区间（两端都含当天）
     if date_from:
         try:
@@ -405,6 +497,24 @@ async def get_forum_posts(
         sort_expr,
         ForumPost.create_time.desc()
     ).offset(offset).limit(limit).all()
+
+    # 2026-11-09：热门榜在「当天/指定区间无帖」时自动回退近 7 天，任何机器一致
+    if sort == "hot" and not posts and (date_from or date_to):
+        week_start = datetime.now() - timedelta(days=7)
+        hot_fallback = (
+            base_query.filter(ForumPost.create_time >= week_start)
+            .order_by(
+                ForumPost.is_top.desc(),
+                (ForumPost.like_count * 2 + ForumPost.comment_count * 3).desc(),
+                ForumPost.create_time.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        if hot_fallback:
+            posts = hot_fallback
+            total = base_query.filter(ForumPost.create_time >= week_start).count()
 
     if not posts:
         return {"total": total, "limit": limit, "offset": offset, "posts": []}
@@ -509,8 +619,9 @@ async def get_post_detail(
 @router.post("/posts", summary="发布新帖")
 async def create_post(
     request: Request,
-    title: str = Form(..., max_length=200),
-    content: str = Form(..., max_length=10000),
+    background_tasks: BackgroundTasks,
+    title: str = Form("", max_length=200),  # 2026-10-31：允许空标题（附件/正文至少一项即可）
+    content: str = Form("", max_length=10000),  # 2026-10-31：允许空正文
     share_type: str = Form("EXPERIENCE"),
     tags: Optional[str] = Form(None),
     attachments: Optional[str] = Form(None, description="附件列表 JSON 字符串"),
@@ -518,6 +629,12 @@ async def create_post(
     question_id: Optional[int] = Form(None, description="关联题目ID"),
     visibility: Optional[str] = Form(None, description="可见范围: ALL 全校 | CLASSES 本班/指定班级"),
     visible_classes: Optional[str] = Form(None, description="班级名 JSON 数组，visibility=CLASSES 时生效"),
+    content_format: str = Form("TEXT", description="正文格式：TEXT 纯文本 / HTML 富文本（落库前消毒）"),
+    # 用 str 解析而不是 bool：实测这版 FastAPI 对「缺省的 bool Form 字段」
+    # 会统一喂 False（连 Form(True) 的默认值都不生效，隔离实验已验证），
+    # 这会把「老客户端没传该字段」误判成「用户明确关闭 AI」。
+    ai_title_enabled: str = Form("true", description="是否允许 AI 总结标题（缺省=允许）"),
+    title_from_ai: str = Form("false", description="标题是否原样来自模型建议（缺省=否）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -529,13 +646,32 @@ async def create_post(
     """
     title = (title or "").strip()
     content = (content or "").strip()
-    if not title:
-        raise ValidationError("标题不能为空")
-    if not content:
-        raise ValidationError("正文不能为空")
+    # 布尔字段按字符串解析后再判定（原因见签名处注释）
+    ai_allowed = str(ai_title_enabled).strip().lower() not in ("false", "0", "no", "off")
+    title_is_ai = str(title_from_ai).strip().lower() in ("true", "1", "yes", "on")
+    # 富文本（2026-11-03）：HTML 正文必须先过信任边界再参与后续校验/落库。
+    # 顺序很重要：先消毒 → 再判空 → 再敏感词过滤，避免把未消毒的标记写进库或写进审计日志。
+    content_format = "HTML" if (content_format or "").upper() == "HTML" else "TEXT"
+    if content_format == "HTML" and content:
+        content = sanitize_rich_text(content, allow_inline_style=True).strip()
+        # 只剩空标签（如 <p><br></p>）时视为空正文
+        if not re.sub(r"<[^>]+>|&nbsp;|\s", "", content):
+            content = ""
+    # 2026-10-31：标题 / 正文 / 附件 至少满足一项即可发布
+    _has_att = bool(attachments and attachments.strip() not in ("", "[]", "null"))
+    if not title and not content and not _has_att:
+        raise ValidationError("标题、正文、附件至少填写一项")
 
-    # 1. 关键词过滤(关键词工程核心)
-    filter_result = sensitive_filter.detect(f"{title} {content}")
+    if not title:
+        title = "(无标题)"
+
+    # 1. 关键词过滤(关键词工程核心) + 知识库判定（落 cg_judgment/cg_task）
+    filter_result = guard_text(
+        db,
+        f"{title} {content}",
+        scene="forum_post",
+        user_id=current_user.user_id,
+    )
 
     if filter_result["level"] == SensitiveLevel.BLOCKED:
         # 记录审计日志
@@ -545,13 +681,16 @@ async def create_post(
             code="SENSITIVE_CONTENT_BLOCKED"
         )
 
-    # masked 级别:自动屏蔽后发布
+    # masked / reviewed 级别:标题与正文分别打码后发布（命中即打码，review 也落打码文本）
+    final_title = title
     final_content = content
-    if filter_result["level"] == SensitiveLevel.MASKED:
-        final_content = filter_result["masked_text"]
-        _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
+    if filter_result["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
+        final_title = guard_text(db, title, scene="forum_post", persist=False).get("masked_text") or title
+        final_content = guard_text(db, content, scene="forum_post", persist=False).get("masked_text") or content
 
-    # reviewed 级别:记录但不阻断
+    if filter_result["level"] == SensitiveLevel.MASKED:
+        _log_violation(db, current_user.user_id, request, filter_result, "masked", f"{title} {content}")
+    # reviewed 级别:已打码发布，同时保留人工复核记录
     if filter_result["level"] == SensitiveLevel.REVIEWED:
         _log_violation(db, current_user.user_id, request, filter_result, "reviewed", f"{title} {content}")
 
@@ -594,8 +733,9 @@ async def create_post(
         title_color = "default"
     post = ForumPost(
         user_id=current_user.user_id,
-        title=title.strip(),
+        title=final_title.strip(),
         content=final_content,
+        content_format=content_format,
         share_type=share_type if share_type in ("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION") else "EXPERIENCE",
         tags=tags,
         attachments=parsed_attachments,
@@ -605,10 +745,16 @@ async def create_post(
         status="NORMAL",
         visibility=visibility,
         visible_classes=classes,
+        # v4（2026-11-04）：记录发帖人的 AI 标题选择；标题若原样来自模型建议则标记 AI 生成。
+        # title_from_ai 只在「标题由模型产出且用户没改过」时为真，手改过的标题不冒充 AI 产物。
+        ai_title_enabled=1 if ai_allowed else 0,
+        ai_title=1 if (title_is_ai and final_title.strip()) else 0,
     )
     db.add(post)
     # F2b：先 flush 拿 post_id，事件与帖子同一事务提交。
     db.flush()
+    if filter_result.get("judgment_id"):
+        content_guard_judgments.bind_source(db, filter_result["judgment_id"], post.post_id)
 
     logger.info(f"用户 {current_user.user_id} 发布帖子 {post.post_id}")
 
@@ -620,6 +766,18 @@ async def create_post(
     emit_forum_content(db, post.post_id, producer="community.forum.create")
     db.commit()
     db.refresh(post)
+
+    # AI 标题（2026-11-03 第 3 轮）：标题为空且有正文时，放到后台生成，不阻塞发帖。
+    # 为什么用 BackgroundTasks 而不是同步：模型调用通常 2–5s，同步会让「发布」按钮明显卡顿。
+    # 2026-11-04 v4：发帖人可以在弹窗里**关闭**该能力（ai_title_enabled=False）——
+    # 关闭后一律不投递后台任务，按原样落库，这是「用户不想让 AI 插手」的唯一出口。
+    if ai_allowed and needs_ai_title(post.title, post.content):
+        background_tasks.add_task(
+            _generate_title_in_background,
+            post.post_id,
+            post.content,
+            post.content_format or "TEXT",
+        )
 
     # 4. 返回完整数据(前端 unshift 到列表头)
     return _serialize_post(post, current_user, liked=False, content_full=True)
@@ -646,8 +804,11 @@ async def delete_post(
     if not is_owner and not is_admin:
         raise BusinessLogicError("无权删除他人帖子", code="PERMISSION_DENIED")
 
-    # 软删除
+    # 软删除进回收站（2026-11-07）：保留 30 天，超期由定时任务彻底删除
     post.status = "DELETED"
+    post.deleted_by = current_user.user_id
+    post.deleted_reason = "作者删除" if is_owner else "管理员删除"
+    post.deleted_at = datetime.now()
     from ....foundation.document_events import emit_forum_content
     emit_forum_content(db, post_id, producer="community.forum.delete")
     db.commit()
@@ -750,6 +911,108 @@ async def toggle_post_favorite(
         "favorited": favorited,
         "favoriteCount": counts.get(post_id, post.collect_count or 0),
     }
+
+
+@router.get("/my-interactions", summary="我的收藏/喜欢（帖子+评论混排）")
+async def my_interactions(
+    kind: Literal["favorites", "likes"],
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """统一返回帖子与评论两种收藏/点赞；评论项带所属帖子 ID 与标题。"""
+    items: List[Dict[str, Any]] = []
+    if kind == "favorites":
+        post_rows = (
+            db.query(ForumFavorite, ForumPost)
+            .join(ForumPost, ForumPost.post_id == ForumFavorite.post_id)
+            .filter(ForumFavorite.user_id == current_user.user_id, ForumPost.status == "NORMAL")
+            .all()
+        )
+        comment_rows = (
+            db.query(ForumCommentFavorite, ForumComment, ForumPost)
+            .join(ForumComment, ForumComment.comment_id == ForumCommentFavorite.comment_id)
+            .join(ForumPost, ForumPost.post_id == ForumComment.post_id)
+            .filter(
+                ForumCommentFavorite.user_id == current_user.user_id,
+                ForumComment.status == 1,
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+    else:
+        post_rows = (
+            db.query(ForumLike, ForumPost)
+            .join(ForumPost, ForumPost.post_id == ForumLike.post_id)
+            .filter(
+                ForumLike.user_id == current_user.user_id,
+                ForumLike.post_id.isnot(None),
+                ForumLike.reaction_code == "like",
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+        comment_rows = (
+            db.query(ForumLike, ForumComment, ForumPost)
+            .join(ForumComment, ForumComment.comment_id == ForumLike.comment_id)
+            .join(ForumPost, ForumPost.post_id == ForumComment.post_id)
+            .filter(
+                ForumLike.user_id == current_user.user_id,
+                ForumLike.comment_id.isnot(None),
+                ForumLike.reaction_code == "like",
+                ForumComment.status == 1,
+                ForumPost.status == "NORMAL",
+            )
+            .all()
+        )
+
+    post_ids = [post.post_id for _, post in post_rows]
+    fav_counts, my_favs = _load_favorite_stats(db, post_ids, user_id=current_user.user_id)
+    react_counts, my_react = _load_reaction_stats(db, post_ids, user_id=current_user.user_id)
+    post_user_ids = {post.user_id for _, post in post_rows}
+    post_users = db.query(SysUser).filter(SysUser.user_id.in_(post_user_ids)).all() if post_user_ids else []
+    post_user_map = {u.user_id: u for u in post_users}
+    for fav, post in post_rows:
+        items.append({
+            "type": "post",
+            "time": fav.create_time.isoformat() if fav.create_time else None,
+            "post": _serialize_post(
+                post,
+                post_user_map.get(post.user_id),
+                post.post_id in my_react,
+                reactions=react_counts.get(post.post_id, {}),
+                my_reaction=my_react.get(post.post_id),
+                favorite_count=fav_counts.get(post.post_id, 0),
+                favorited=post.post_id in my_favs,
+            ),
+        })
+
+    comment_ids = [c.comment_id for _, c, _ in comment_rows]
+    cfav_counts, _ = _comment_favorite_stats(db, comment_ids)
+    comment_user_ids = {c.user_id for _, c, _ in comment_rows}
+    comment_users = db.query(SysUser).filter(SysUser.user_id.in_(comment_user_ids)).all() if comment_user_ids else []
+    comment_user_map = {u.user_id: u for u in comment_users}
+    for fav, comment, post in comment_rows:
+        items.append({
+            "type": "comment",
+            "time": fav.create_time.isoformat() if fav.create_time else None,
+            "postId": post.post_id,
+            "postTitle": post.title,
+            "comment": {
+                "id": comment.comment_id,
+                "content": comment.content,
+                "contentFormat": getattr(comment, "content_format", None) or "TEXT",
+                "createTime": comment.create_time.isoformat() if comment.create_time else None,
+                "likeCount": comment.like_count or 0,
+                "favoriteCount": cfav_counts.get(comment.comment_id, 0),
+                "user": _user_brief(comment_user_map.get(comment.user_id), comment.user_id),
+            },
+        })
+
+    items.sort(key=lambda x: x.get("time") or "", reverse=True)
+    total = len(items)
+    return {"total": total, "limit": limit, "offset": offset, "items": items[offset:offset + limit]}
 
 
 @router.get("/my-favorites", summary="我的收藏（五角星）")
@@ -940,6 +1203,9 @@ async def get_post_comments(
         is_comment=True,
         user_id=current_user.user_id if current_user else None,
     )
+    favorite_counts, my_favorites = _comment_favorite_stats(
+        db, comment_ids, user_id=current_user.user_id if current_user else None
+    )
 
     return {
         "total": total,
@@ -953,6 +1219,8 @@ async def get_post_comments(
                 reactions=reaction_counts.get(c.comment_id, {}),
                 my_reaction=my_reactions.get(c.comment_id),
                 reply_count=reply_counts.get(c.comment_id, 0),
+                favorite_count=favorite_counts.get(c.comment_id, 0),
+                favorited=c.comment_id in my_favorites,
             )
             for c in comments
         ]
@@ -967,6 +1235,7 @@ async def create_comment(
     parent_comment_id: Optional[int] = Form(None),
     reply_to_user_id: Optional[int] = Form(None),
     attachments: Optional[str] = Form(None, description="评论图片 JSON 字符串"),
+    content_format: str = Form("TEXT", description="正文格式：TEXT 纯文本 / HTML 富文本（落库前消毒）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -977,6 +1246,12 @@ async def create_comment(
     - 支持楼中楼回复(parent_comment_id)
     """
     content = (content or "").strip()
+    # 富文本评论（2026-11-03）：与发帖同一套信任边界，先消毒再判空
+    content_format = "HTML" if (content_format or "").upper() == "HTML" else "TEXT"
+    if content_format == "HTML" and content:
+        content = sanitize_rich_text(content, allow_inline_style=True).strip()
+        if not re.sub(r"<[^>]+>|&nbsp;|\s", "", content):
+            content = ""
     if not content:
         raise ValidationError("评论内容不能为空")
 
@@ -1000,8 +1275,14 @@ async def create_comment(
         if not reply_to_user_id:
             reply_to_user_id = parent.user_id
 
-    # 关键词过滤
-    filter_result = sensitive_filter.detect(content)
+    # 关键词过滤 + 知识库判定
+    filter_result = guard_text(
+        db,
+        content,
+        scene="forum_comment",
+        source_id=post_id,
+        user_id=current_user.user_id,
+    )
     if filter_result["level"] == SensitiveLevel.BLOCKED:
         _log_violation(db, current_user.user_id, request, filter_result, "rejected", content)
         raise BusinessLogicError(
@@ -1010,8 +1291,10 @@ async def create_comment(
         )
 
     final_content = content
+    if filter_result["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
+        # 命中即打码：review 级也落打码文本，人工任务照常保留
+        final_content = filter_result.get("masked_text") or content
     if filter_result["level"] == SensitiveLevel.MASKED:
-        final_content = filter_result["masked_text"]
         _log_violation(db, current_user.user_id, request, filter_result, "masked", content)
     elif filter_result["level"] == SensitiveLevel.REVIEWED:
         _log_violation(db, current_user.user_id, request, filter_result, "reviewed", content)
@@ -1033,6 +1316,7 @@ async def create_comment(
         reply_to_user_id=reply_to_user_id,
         attachments=parsed_attachments,
         content=final_content,
+        content_format=content_format,
         status=1,
     )
     db.add(comment)
@@ -1043,6 +1327,8 @@ async def create_comment(
 
     # F2b：评论与帖子计数、事件同一事务提交（先 flush 拿 comment_id）。
     db.flush()
+    if filter_result.get("judgment_id"):
+        content_guard_judgments.bind_source(db, filter_result["judgment_id"], comment.comment_id)
 
     # 回帖同样走 forum.posted；同一帖子只在首次创建时上报一次（P2-28）
     await _publish_forum_posted(
@@ -1092,6 +1378,37 @@ async def toggle_comment_like(
     # 点赞不是创建行为，不上报 E6 事件（P2-28）
 
     return {"liked": liked, "likeCount": comment.like_count}
+
+
+@router.post("/comments/{comment_id}/favorite", summary="评论收藏切换")
+async def toggle_comment_favorite(
+    comment_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(ForumComment).filter(
+        ForumComment.comment_id == comment_id,
+        ForumComment.status == 1,
+    ).first()
+    if not comment:
+        raise ResourceNotFoundError("评论", comment_id)
+    existing = (
+        db.query(ForumCommentFavorite)
+        .filter(
+            ForumCommentFavorite.comment_id == comment_id,
+            ForumCommentFavorite.user_id == current_user.user_id,
+        )
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+        favorited = False
+    else:
+        db.add(ForumCommentFavorite(comment_id=comment_id, user_id=current_user.user_id))
+        favorited = True
+    db.commit()
+    counts, _ = _comment_favorite_stats(db, [comment_id])
+    return {"favorited": favorited, "favoriteCount": counts.get(comment_id, 0)}
 
 
 # ============================== 表情反应 ==============================
@@ -1393,6 +1710,15 @@ async def upload_attachment(
         ".rar": (b"Rar!\x1a\x07",),
         ".7z": (b"7z\xbc\xaf\x27\x1c",),
     }
+    # 2026-11-01：Office / PDF / 文本 也必须校验文件头，
+    # 防止把网页(index.html)当作文档上传后入库（曾出现 3081 字节 HTML 冒充 docx/pdf）。
+    OOXML_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+    FILE_MAGIC = {
+        ".docx": OOXML_MAGIC, ".xlsx": OOXML_MAGIC, ".pptx": OOXML_MAGIC,
+        ".doc": (b"\xd0\xcf\x11\xe0",), ".xls": (b"\xd0\xcf\x11\xe0",), ".ppt": (b"\xd0\xcf\x11\xe0",),
+        ".pdf": (b"%PDF",),
+        ".txt": (b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff"),  # txt 只挡掉明显非文本
+    }
 
     original_name = file.filename or ""
     ext = os.path.splitext(original_name)[1].lower()
@@ -1405,6 +1731,15 @@ async def upload_attachment(
     contents = await file.read()
     if len(contents) > MAX_SIZE:
         raise ValidationError("文件大小不能超过 20MB")
+
+    # 文件头校验：压缩包 + Office + PDF
+    magic_sigs = ARCHIVE_MAGIC.get(ext) or FILE_MAGIC.get(ext)
+    if magic_sigs and not any(contents.startswith(sig) for sig in magic_sigs):
+        raise ValidationError(
+            f"文件内容与扩展名不符（{ext}）——请确认上传的是真实文件，而不是网页或占位文件"
+        )
+    if contents.lstrip()[:1] == b"<":
+        raise ValidationError("检测到 HTML 内容，已拒绝：该请求没有取到真实文件")
 
     if settings.MEDIA_STORE_ENABLED:
         # F3：附件字节进对象存储，URL 走稳定代理；MIME 由服务端按扩展名决定。
@@ -1436,9 +1771,6 @@ async def upload_attachment(
         }
 
     # 回滚分支：保留原 uploads 写路径。
-    if ext in ARCHIVE_MAGIC:
-        if not any(contents.startswith(sig) for sig in ARCHIVE_MAGIC[ext]):
-            raise ValidationError("压缩包文件头校验失败")
     elif file.content_type not in ALLOWED_MIME:
         raise ValidationError(f"文件 MIME 类型不合法: {file.content_type}")
 
@@ -1512,42 +1844,102 @@ async def get_user_public(
 
 @router.get("/my-posts", summary="获取我的帖子")
 async def get_my_posts(
-    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    limit: int = Query(20, ge=1, le=100, description="返回数量"),
     offset: int = Query(0, ge=0, description="偏移量"),
+    keyword: Optional[str] = Query(None, description="标题/正文关键词"),
+    include_deleted: bool = Query(False, description="true=查看我的回收站（已删除帖子）"),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     获取当前登录用户的所有帖子
     - 必须登录
-    - 按时间倒序排列
+    - 默认只返回 NORMAL；include_deleted=true 返回回收站（DELETED）
     """
     query = db.query(ForumPost).filter(
         ForumPost.user_id == current_user.user_id,
-        ForumPost.status == "NORMAL"
+        ForumPost.status == ("DELETED" if include_deleted else "NORMAL")
     )
+    if keyword:
+        like = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(ForumPost.title.like(like), ForumPost.content.like(like))
+        )
     total = query.count()
-    posts = query.order_by(ForumPost.create_time.desc()).offset(offset).limit(limit).all()
+    order_col = ForumPost.deleted_at if include_deleted else ForumPost.create_time
+    posts = query.order_by(order_col.desc()).offset(offset).limit(limit).all()
 
     post_ids = [p.post_id for p in posts]
     reaction_counts, my_reactions = _load_reaction_stats(
         db, post_ids, user_id=current_user.user_id
     )
+    items = []
+    for p in posts:
+        item = _serialize_post(
+            p,
+            current_user,
+            p.post_id in my_reactions,
+            reactions=reaction_counts.get(p.post_id, {}),
+            my_reaction=my_reactions.get(p.post_id),
+        )
+        item["deletedAt"] = p.deleted_at.isoformat() if p.deleted_at else None
+        items.append(item)
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "posts": [
-            _serialize_post(
-                p,
-                current_user,
-                p.post_id in my_reactions,
-                reactions=reaction_counts.get(p.post_id, {}),
-                my_reaction=my_reactions.get(p.post_id),
-            )
-            for p in posts
-        ]
+        "posts": items
     }
+
+
+@router.post("/posts/batch-delete", summary="批量删除我的帖子（软删除进回收站）")
+async def batch_delete_posts(
+    payload: BatchPostIds,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """只允许删自己的帖子；删除后进回收站，30 天内可恢复。"""
+    posts = (
+        db.query(ForumPost)
+        .filter(
+            ForumPost.post_id.in_(payload.post_ids),
+            ForumPost.user_id == current_user.user_id,
+            ForumPost.status == "NORMAL",
+        )
+        .all()
+    )
+    now = datetime.now()
+    for post in posts:
+        post.status = "DELETED"
+        post.deleted_by = current_user.user_id
+        post.deleted_reason = "作者批量删除"
+        post.deleted_at = now
+    db.commit()
+    logger.info(f"用户 {current_user.user_id} 批量删除 {len(posts)} 篇帖子")
+    return {"success": True, "deleted": len(posts), "requested": len(payload.post_ids)}
+
+
+@router.post("/posts/{post_id}/restore", summary="从回收站恢复我的帖子（30 天内）")
+async def restore_post(
+    post_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
+    if not post:
+        raise ResourceNotFoundError("帖子", post_id)
+    if post.user_id != current_user.user_id:
+        raise BusinessLogicError("只能恢复自己的帖子", code="PERMISSION_DENIED")
+    if post.status != "DELETED":
+        raise ValidationError("帖子不在回收站")
+    if post.deleted_at and datetime.now() - post.deleted_at > timedelta(days=30):
+        raise ValidationError("已超过 30 天保留期，无法恢复")
+    post.status = "NORMAL"
+    post.deleted_by = None
+    post.deleted_reason = None
+    post.deleted_at = None
+    db.commit()
+    return {"success": True, "message": "已恢复"}
 
 
 # ============================== 论坛统计 ==============================
@@ -1690,8 +2082,14 @@ async def update_post(
     if not title or not content:
         raise ValidationError("标题和正文不能为空")
 
-    title_filter = sensitive_filter.detect(title)
-    content_filter = sensitive_filter.detect(content)
+    title_filter = guard_text(
+        db, title, scene="forum_post_update", source_id=post.post_id,
+        user_id=current_user.user_id,
+    )
+    content_filter = guard_text(
+        db, content, scene="forum_post_update", source_id=post.post_id,
+        user_id=current_user.user_id,
+    )
     if (
         title_filter["level"] == SensitiveLevel.BLOCKED
         or content_filter["level"] == SensitiveLevel.BLOCKED
@@ -1703,9 +2101,9 @@ async def update_post(
         )
         _log_violation(db, current_user.user_id, None, blocked, "rejected", title)
         raise BusinessLogicError("内容包含违规词，无法发布")
-    if title_filter["level"] == SensitiveLevel.MASKED:
+    if title_filter["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         title = title_filter.get("masked_text") or title
-    if content_filter["level"] == SensitiveLevel.MASKED:
+    if content_filter["level"] in (SensitiveLevel.MASKED, SensitiveLevel.REVIEWED):
         content = content_filter.get("masked_text") or content
 
     title_color = payload.get("title_color", post.title_color or "default")
@@ -1773,4 +2171,136 @@ async def delete_comment(
     if post:
         post.comment_count = max(0, (post.comment_count or 0) - 1)
     db.commit()
+    return {"success": True}
+
+
+# =====================================================================
+# 发帖草稿（P2）：每人一条，覆盖式 upsert
+# =====================================================================
+
+
+class AiTitleSuggestPayload(BaseModel):
+    """「AI 生成标题」预览请求体（2026-11-04 v4）。"""
+
+    content: str = Field("", max_length=10000)
+    content_format: str = Field("TEXT")
+
+
+# 预览接口的进程内限流（单实例部署足够；重启清零）。
+# 为什么要限流：这是直接花 token 的接口，必须挡住连点/脚本刷。
+_AI_SUGGEST_HITS: Dict[int, List[float]] = {}
+AI_SUGGEST_LIMIT = 30          # 每用户每小时最多 30 次
+AI_SUGGEST_WINDOW_SECONDS = 3600
+
+
+def _consume_ai_suggest_quota(user_id: int) -> int:
+    """占用一次配额并返回剩余次数；超限抛 429。"""
+    now = time.time()
+    hits = [t for t in _AI_SUGGEST_HITS.get(user_id, []) if now - t < AI_SUGGEST_WINDOW_SECONDS]
+    if len(hits) >= AI_SUGGEST_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"AI 生成标题过于频繁，请稍后再试（每 {AI_SUGGEST_WINDOW_SECONDS // 60} 分钟 {AI_SUGGEST_LIMIT} 次）",
+        )
+    hits.append(now)
+    _AI_SUGGEST_HITS[user_id] = hits
+    return AI_SUGGEST_LIMIT - len(hits)
+
+
+@router.post("/ai-title/suggest", summary="按正文生成标题建议（预览，不落库）")
+async def suggest_forum_title(
+    payload: AiTitleSuggestPayload,
+    current_user: SysUser = Depends(get_current_user),
+):
+    """给发帖弹窗的「AI 生成标题 / 重新生成」按钮用。
+
+    设计取舍：
+    - **不落库**：用户可能点好几次才满意，落库只会产生垃圾数据；
+    - **限流**：每次调用都花 token，按用户每小时 30 次；
+    - **正文不足直接拒绝**，不浪费调用（复用论坛 AI 标题的有效文字门槛）。
+    """
+    from ....services.forum_title_ai import generate_forum_title, has_meaningful_content
+
+    if not has_meaningful_content(payload.content):
+        return {"title": None, "reason": "no_content", "remaining": None}
+
+    remaining = _consume_ai_suggest_quota(current_user.user_id)
+    title = await generate_forum_title(payload.content, payload.content_format or "TEXT")
+    if not title:
+        return {"title": None, "reason": "llm_unavailable", "remaining": remaining}
+    return {"title": title, "reason": None, "remaining": remaining}
+
+
+class DraftPayload(BaseModel):
+    """草稿载荷。与会话内编辑器的字段一一对应。"""
+
+    title: str = Field("", max_length=200)
+    content: str = Field("", max_length=5000)
+    attachments: Optional[List[Dict[str, Any]]] = None
+    visibility: str = Field("ALL", pattern="^(ALL|CLASSES)$")
+    visible_classes: Optional[List[str]] = None
+    is_top: bool = False
+    # v4（2026-11-04）：草稿也记住发帖人的 AI 标题开关，重开弹窗能恢复
+    ai_title_enabled: bool = True
+
+
+def _draft_item(draft: ForumDraft) -> Dict[str, Any]:
+    return {
+        "draftId": draft.draft_id,
+        "title": draft.title or "",
+        "content": draft.content or "",
+        "attachments": draft.attachments or [],
+        "visibility": draft.visibility or "ALL",
+        "visibleClasses": draft.visible_classes or [],
+        "isTop": bool(draft.is_top),
+        # v4（2026-11-04）：草稿恢复 AI 标题开关
+        "aiTitleEnabled": bool(getattr(draft, "ai_title_enabled", 1)),
+        "updateTime": draft.update_time.isoformat() if draft.update_time else None,
+    }
+
+
+@router.get("/drafts/mine", summary="获取我的发帖草稿")
+async def get_my_draft(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """未登录/无草稿时返回 `{"draft": null}`，前端据此决定是否回填。"""
+    draft = db.query(ForumDraft).filter(ForumDraft.user_id == current_user.user_id).first()
+    return {"draft": _draft_item(draft) if draft else None}
+
+
+@router.post("/drafts", summary="保存发帖草稿（覆盖式）")
+async def save_my_draft(
+    payload: DraftPayload,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """同一用户重复保存只更新同一条记录，不会产生多条草稿。"""
+    draft = db.query(ForumDraft).filter(ForumDraft.user_id == current_user.user_id).first()
+    if not draft:
+        draft = ForumDraft(user_id=current_user.user_id)
+        db.add(draft)
+    draft.title = payload.title
+    draft.content = payload.content
+    draft.attachments = payload.attachments
+    draft.visibility = payload.visibility
+    draft.visible_classes = payload.visible_classes
+    # 置顶只在教师/管理员侧有意义，学生侧一律落 0，防止越权置顶
+    draft.is_top = 1 if payload.is_top and _can_moderate_forum(current_user, db) else 0
+    # v4：默认允许；显式关闭才落 0
+    draft.ai_title_enabled = 1 if payload.ai_title_enabled else 0
+    db.commit()
+    db.refresh(draft)
+    return {"success": True, "draft": _draft_item(draft)}
+
+
+@router.delete("/drafts/mine", summary="删除我的发帖草稿")
+async def delete_my_draft(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    draft = db.query(ForumDraft).filter(ForumDraft.user_id == current_user.user_id).first()
+    if draft:
+        db.delete(draft)
+        db.commit()
     return {"success": True}

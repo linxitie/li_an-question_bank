@@ -91,6 +91,11 @@ export default {
     ...baseProxy,
     configure: createProxyConfigure('api'),
   },
+  // /health 由前端启动时做版本自检，开发态必须透传给后端，否则会被 SPA 兜底成 index.html
+  '/health': {
+    ...baseProxy,
+    configure: createProxyConfigure('health'),
+  },
   '/ws': {
     ...baseProxy,
     ws: true,
@@ -103,5 +108,11 @@ export default {
   '/uploads': {
     ...baseProxy,
     configure: createProxyConfigure('uploads'),
+  },
+
+  // 2026-10-30：媒体资产（附件/图片/PDF/头像）走对象存储代理，需转发到后端
+  '/media': {
+    ...baseProxy,
+    configure: createProxyConfigure('media'),
   },
 };

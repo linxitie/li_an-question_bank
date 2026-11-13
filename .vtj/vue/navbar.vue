@@ -80,8 +80,10 @@
         return [
           { id: 'home_page', label: '首页' },
           { id: 'question_bank', label: '题库' },
+          { id: 'news', label: '新闻' },
           { id: 'about', label: '关于砺安题库' },
-          { id: 'forum', label: '论坛' }
+          { id: 'forum', label: '论坛' },
+          { id: 'gold_purchase', label: '商城' }
         ];
       }
     },
@@ -91,7 +93,7 @@
     methods: {
       navigateTo(id) {
         if (this.$router) {
-          this.$router.push('/page/' + id);
+          this.$router.push(id === 'news' ? '/news' : '/page/' + id);
         }
       },
       handleMenuClick(id) {

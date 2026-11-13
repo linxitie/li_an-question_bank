@@ -86,40 +86,16 @@ def init_scheduler():
     """初始化并启动定时任务调度器"""
     from .difficulty import update_all_difficulties
     from .exam_scraper import scrape_all_exams
+    from .news_collector import collect_all_sources
     from .recruitment_scraper import scrape_all_recruitment
 
-    # 新新闻管线：配置来源采集 → AI 摘要 → Obsidian 待审卡片；不自动发布。
-    def _collect_news_with_broadcast():
-        from pathlib import Path
-
+    # 包装：爬取完成后广播同步事件（通知前端刷新）
+    def _news_with_broadcast():
         from ..core.database import SessionLocal
-        from .news_ai_service import process_news
-        from .news_collector import collect_all_sources
-        from .news_obsidian_export import export_news_board
 
         db = SessionLocal()
         try:
-            collect_report = collect_all_sources(
-                db, limit=5, scan_limit=15, daily_limit=5, dry_run=False
-            )
-            ai_report = process_news(db, limit=100)
-            vault = Path(__file__).resolve().parents[2] / "content_hub_vault"
-            export_report = export_news_board(db, vault, dry_run=False)
-            logger.info(
-                "新闻自动任务完成: 采集=%s AI=%s 导出=%s",
-                {
-                    "sources": len(collect_report),
-                    "inserted": sum(r.get("inserted", 0) for r in collect_report),
-                    "errors": sum(len(r.get("errors", [])) for r in collect_report),
-                },
-                ai_report,
-                {
-                    "written": export_report.get("written"),
-                    "skipped": export_report.get("skipped"),
-                },
-            )
-        except Exception:
-            logger.exception("新闻自动任务失败")
+            collect_all_sources(db, limit=5, dry_run=False)
         finally:
             db.close()
         _broadcast_sync("新闻更新")
@@ -163,92 +139,16 @@ def init_scheduler():
             db.close()
         _broadcast_sync("招考提醒")
 
-    def _generate_daily_quote():
-        from ..core.database import SessionLocal
-        from .quote_daily_service import ensure_daily_quote
-
-        db = SessionLocal()
-        try:
-            quote, record, created = ensure_daily_quote(db)
-            logger.info(
-                "每日金句预生成: created=%s date=%s quote_id=%s",
-                created,
-                record.quote_date if record else None,
-                quote.quote_id if quote else None,
-            )
-        except Exception:
-            logger.exception("每日金句预生成失败")
-        finally:
-            db.close()
-
-    def _sync_quotes_with_broadcast():
-        from ..core.database import SessionLocal
-        from .quote_ai_service import review_quotes
-        from .quote_sync_service import sync_obsidian_quotes
-
-        db = SessionLocal()
-        try:
-            report = sync_obsidian_quotes(db)
-            quality = review_quotes(db, limit=30, apply=True)
-            logger.info("金句自动同步完成: sync=%s quality=%s", report, quality)
-        except Exception:
-            logger.exception("金句自动同步失败")
-        finally:
-            db.close()
-        _broadcast_sync("金句更新")
-
-    def _collect_external_quotes_with_broadcast():
-        from ..core.database import SessionLocal
-        from .quote_ai_service import review_quotes
-        from .quote_external_collector import collect_external_quotes
-
-        db = SessionLocal()
-        try:
-            reports = collect_external_quotes(db, dry_run=False)
-            quality = review_quotes(db, limit=30, apply=True)
-            logger.info(
-                "外部金句采集完成: inserted=%s errors=%s quality=%s",
-                sum(r.get("inserted", 0) for r in reports),
-                sum(len(r.get("errors", [])) for r in reports),
-                quality,
-            )
-        except Exception:
-            logger.exception("外部金句采集失败")
-        finally:
-            db.close()
-        _broadcast_sync("金句更新")
-
     def _exams_with_broadcast():
         scrape_all_exams()
         _broadcast_sync("考试日历更新")
 
-    # 每天 08:00 / 18:00（北京时间）执行新采集器。
+    # 每日 08:00 / 18:00（北京时间）采集白名单新闻
     scheduler.add_job(
-        _collect_news_with_broadcast,
+        _news_with_broadcast,
         trigger=CronTrigger(hour="8,18", minute=0, timezone=CST),
-        id="collect_news",
-        name="每日新闻采集（新采集器）",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _generate_daily_quote,
-        trigger=CronTrigger(hour=0, minute=5, timezone=CST),
-        id="generate_daily_quote",
-        name="每日金句预生成",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _sync_quotes_with_broadcast,
-        trigger=CronTrigger(hour=0, minute=10, timezone=CST),
-        id="sync_quotes",
-        name="每日金句 Obsidian 同步",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _collect_external_quotes_with_broadcast,
-        trigger=CronTrigger(hour=6, minute=0, timezone=CST),
-        id="collect_external_quotes",
-        name="每日外部金句采集",
+        id="collect_news_8_18",
+        name="每日新闻采集 08:00/18:00",
         replace_existing=True,
     )
     scheduler.add_job(
@@ -279,6 +179,193 @@ def init_scheduler():
         trigger=CronTrigger(hour=2, minute=0, timezone=CST),
         id="update_difficulties",
         name="每日IRT难度更新",
+        replace_existing=True,
+    )
+
+    # 每日 03:30（北京时间）内容安全知识库自维护：
+    # 红队找盲区 → 跨层对账 → 导出 Obsidian 待审队列。
+    # 离线链路，任何一步失败都只告警，不影响实时审核。
+    def _content_guard_maintenance():
+        from ..core.database import SessionLocal
+        from .content_guard import obsidian, reconcile, redteam
+
+        db = SessionLocal()
+        try:
+            redteam.run(db, limit=50)
+            reconcile.run(db)
+            obsidian.export_all(db)
+            db.commit()
+            logger.info("内容安全知识库自维护完成")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"内容安全知识库自维护失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _content_guard_maintenance,
+        trigger=CronTrigger(hour=3, minute=30, timezone=CST),
+        id="content_guard_maintenance",
+        name="敏感词知识库自维护（红队/对账/投影）",
+        replace_existing=True,
+    )
+
+    # 每日 03:10（北京时间）金币到期清零（2026-11-04 M1）
+    # 金币有效期 12 个月滚动清零：把 expire_at 已过的批次剩余额度扣掉并写 EXPIRE 流水。
+    def _expire_coins():
+        from ..core.database import SessionLocal
+        from .coin_ledger import expire_due
+
+        db = SessionLocal()
+        try:
+            report = expire_due(db)
+            logger.info(f"金币到期清零完成: {report}")
+        except Exception as exc:  # noqa: BLE001 - 定时任务失败不影响主流程
+            db.rollback()
+            logger.warning(f"金币到期清零失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _expire_coins,
+        trigger=CronTrigger(hour=3, minute=10, timezone=CST),
+        id="expire_coins",
+        name="金币到期清零（12 个月滚动）",
+        replace_existing=True,
+    )
+
+    # 每周一 00:05（北京时间）重建周任务置顶池（2026-11-05 M2）
+    def _rebuild_weekly_pool():
+        from ..core.database import SessionLocal
+        from .weekly_tasks import ensure_week_pool
+
+        db = SessionLocal()
+        try:
+            rows = ensure_week_pool(db)
+            logger.info(f"周任务置顶池重建完成: {len(rows)} 条")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"周任务置顶池重建失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _rebuild_weekly_pool,
+        trigger=CronTrigger(day_of_week="mon", hour=0, minute=5, timezone=CST),
+        id="rebuild_weekly_pool",
+        name="周任务置顶池（每周一 00:05）",
+        replace_existing=True,
+    )
+
+    # 每日 03:20（北京时间）把过期的未完成周任务置为已失效
+    def _expire_weekly_tasks():
+        from datetime import datetime as _dt
+
+        from ..core.database import SessionLocal
+        from ..models.models import Task, UserTaskProgress
+        from .weekly_tasks import week_key
+
+        db = SessionLocal()
+        try:
+            week = week_key()
+            rows = (
+                db.query(UserTaskProgress, Task)
+                .join(Task, Task.task_id == UserTaskProgress.task_id)
+                .filter(
+                    Task.t_type == "weekly",
+                    UserTaskProgress.period_key != week,
+                    UserTaskProgress.claimed == 0,
+                    UserTaskProgress.expired == 0,
+                )
+                .all()
+            )
+            for prog, _task in rows:
+                prog.expired = 1
+            db.commit()
+            if rows:
+                logger.info(f"周任务失效处理: {len(rows)} 条")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"周任务失效处理失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _expire_weekly_tasks,
+        trigger=CronTrigger(hour=3, minute=20, timezone=CST),
+        id="expire_weekly_tasks",
+        name="周任务失效处理（每日 03:20）",
+        replace_existing=True,
+    )
+
+    # 每日 03:30（北京时间）自生长知识图谱热度衰减（2026-11-05 M3）
+    def _decay_kg():
+        from ..core.database import SessionLocal
+        from .kg_growth import decay
+
+        db = SessionLocal()
+        try:
+            report = decay(db)
+            logger.info(f"知识图谱衰减完成: {report}")
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"知识图谱衰减失败: {exc}")
+        finally:
+            db.close()
+
+    # 每日 03:40（北京时间）摘除已过期的头像框（2026-11-05）
+    def _expire_decorations():
+        from ..core.database import SessionLocal
+        from .decoration_expiry import expire_all
+
+        db = SessionLocal()
+        try:
+            report = expire_all(db)
+            if report["removed"]:
+                logger.info("头像框到期处理: %s", report)
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning("头像框到期处理失败: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _expire_decorations,
+        trigger=CronTrigger(hour=3, minute=40, timezone=CST),
+        id="expire_decorations",
+        name="头像框到期摘除（每日 03:40）",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _decay_kg,
+        trigger=CronTrigger(hour=3, minute=30, timezone=CST),
+        id="decay_kg_heat",
+        name="知识图谱热度衰减（每日 03:30）",
+        replace_existing=True,
+    )
+
+    # 2026-11-09：Obsidian 词表自动同步（每 10 分钟，文件变化才导入）
+    def _sync_vault_lexicons():
+        from ..core.database import SessionLocal
+        from .content_guard.vault_sync import sync_if_changed
+
+        db = SessionLocal()
+        try:
+            report = sync_if_changed(db)
+            if report.get("changed"):
+                logger.info("Obsidian 词表同步: %s", report)
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning("Obsidian 词表同步失败: %s", exc)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _sync_vault_lexicons,
+        trigger=CronTrigger(minute="*/10", timezone=CST),
+        id="sync_vault_lexicons",
+        name="Obsidian 敏感词表同步（每 10 分钟）",
         replace_existing=True,
     )
 
@@ -489,18 +576,41 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    def purge_forum_recycle():
+        """回收站保留 30 天，超期物理删除（帖子 + 其评论）。"""
+        from ..core.database import SessionLocal
+        from .forum_recycle import purge_expired
+
+        db = SessionLocal()
+        try:
+            result = purge_expired(db)
+            logger.info("论坛回收站到期清理完成: %s", result)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("论坛回收站到期清理失败: %s", exc)
+            db.rollback()
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        purge_forum_recycle,
+        trigger=CronTrigger(hour=3, minute=40, timezone=CST),
+        id="purge_forum_recycle",
+        name="论坛回收站 30 天到期清理",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("定时任务调度器已启动（新闻 08:00/18:00 CST）")
+    logger.info("定时任务调度器已启动（每日 24:00 CST）")
 
     # 启动时立即执行一次（延迟 30 秒，等数据库就绪）
     def _initial_run():
         try:
-            logger.info("执行首次招考/考试爬取...")
-            # 新闻由 collect_news 在 08:00/18:00 执行；服务重启不重复全量新闻，
-            # 避免频繁重启产生大量待审堆积。
+            logger.info("执行首次全量爬取...")
+            # 新闻：v2 采集器统一走 collect_all_sources（旧的 scrape_all_news 已不存在）
+            _news_with_broadcast()
             scrape_all_recruitment()
             scrape_all_exams()
-            logger.info("首次招考/考试爬取完成")
+            logger.info("首次全量爬取完成")
         except Exception as e:
             logger.error(f"首次爬取失败（服务继续运行）: {e}")
 

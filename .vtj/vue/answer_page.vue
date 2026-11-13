@@ -221,7 +221,6 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { renderQuestionContent } from '@/utils/questionRender';
-import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
   import { emitWrongQuestionsChanged } from '@/modules/practice/events';
   export default defineComponent({
     name: 'AnswerPage',
@@ -565,17 +564,13 @@ import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
       // 材料来源：优先题组接口缓存，其次随题返回的 shared_content（兜底）
       materialOf(q) {
         if (!q) return null;
-        var mat = null;
         if (q.group_id && this.state.groupMaterials[q.group_id]) {
-          mat = this.state.groupMaterials[q.group_id];
-        } else if (q.shared_content) {
-          mat = { title: '题组材料', shared_content: q.shared_content };
+          return this.state.groupMaterials[q.group_id];
         }
-        if (!mat) return null;
-        // 材料分段在数据出口统一做：模板只消费 shared_content，
-        // 这样教师/管理/学生三端拿到的是同一套「材料N」高亮与段间距。
-        mat.shared_content = formatMaterialHtml(mat.shared_content || '');
-        return mat;
+        if (q.shared_content) {
+          return { title: '题组材料', shared_content: q.shared_content };
+        }
+        return null;
       },
       // 折叠状态键：题组用 group_id，随题材料用 q<id> 区分
       materialKey(q) {
@@ -601,11 +596,17 @@ import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
       loadQuestions() {
         console.log('[AnswerPage] loadQuestions v20260623 - real API');
         this.state.questions = [];
+        var rq = (this.$route && this.$route.query) || {};
+        var isResume = String(rq.resume || '') === '1' && !!rq.record_id;
         this.ensureLogin().then(() => {
           const headers = this.getJsonHeaders();
-          // Use GET with query params for random endpoint
-          let params = new URLSearchParams({ count: 20 });
-          fetch('/api/questions/random?' + params.toString(), {
+          // 未完成答题卡续答：走 resume 端点回填题目 + 断点答案；
+          // 其余情况保持原有随机练习加载逻辑。
+          let url = '/api/questions/random?count=20';
+          if (isResume) {
+            url = '/api/exams/records/' + encodeURIComponent(rq.record_id) + '/resume';
+          }
+          fetch(url, {
             method: 'GET',
             headers: headers
           }).then(res => res.json()).then(data => {
@@ -691,8 +692,49 @@ import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
                 };
               });
             }
+            // 续答：把服务端断点答案回填到 state.answers（选择类字母 → 选项下标）
+            if (isResume && Array.isArray(data.questions) && this.state.questions.length) {
+              var self = this;
+              data.questions.forEach(function(q) {
+                var saved = q.saved_answer;
+                if (saved === null || saved === undefined || saved === '') return;
+                var target = null;
+                for (var i = 0; i < self.state.questions.length; i++) {
+                  if (String(self.state.questions[i].id) === String(q.question_id)) {
+                    target = self.state.questions[i];
+                    break;
+                  }
+                }
+                if (!target) return;
+                if (target.type === '多选') {
+                  var letters = String(saved).toUpperCase().replace(/[^A-Z]/g, '').split('');
+                  var arr = [];
+                  letters.forEach(function(l) {
+                    var idx = l.charCodeAt(0) - 65;
+                    if (idx >= 0 && idx < target.options.length) arr.push(idx);
+                  });
+                  self.state.answers[target.id] = arr;
+                } else if (target.type === '单选' || target.type === '判断') {
+                  var l0 = String(saved).toUpperCase().replace(/[^A-Z]/g, '').charAt(0);
+                  if (l0) {
+                    var idx0 = l0.charCodeAt(0) - 65;
+                    if (idx0 >= 0 && idx0 < target.options.length) {
+                      self.state.answers[target.id] = idx0;
+                    }
+                  }
+                } else {
+                  self.state.answers[target.id] = String(saved);
+                }
+              });
+              if (data.record_id) this.state.resumeRecordId = data.record_id;
+              if (data.paper_id) this.state.resumePaperId = data.paper_id;
+            }
             if (!this.state.questions.length) {
-              this.state.questions = [{
+              this.state.questions = [isResume ? {
+                id: 0, type: '提示',
+                stem: '该答题记录没有可恢复的题目（试卷题目可能已被撤下）。请返回练习记录重新开始一场练习。',
+                options: [], answer: '', explain: ''
+              } : {
                 id: 0, type: '提示', stem: '题库暂无题目数据，请先在题目导入页面添加题目',
                 options: [], answer: '', explain: ''
               }];
@@ -797,7 +839,6 @@ import { formatMaterialHtml, ensureMaterialStyles } from '@/utils/materialDock';
     },
     mounted() {
       console.log('[AnswerPage] mounted v20260623 - VUE SOURCE loaded');
-      ensureMaterialStyles();
       this.loadQuestions();
       this.loadPracticeSession();
       this.startTimer();

@@ -1,12 +1,22 @@
 <template>
   <div class="tf-page">
     <div class="tf-nav-sticky"><TeacherNavHeader active-nav="forum" /></div>
-    <main class="tf-main">
-      <div class="tf-left">
       <div class="tf-topbar">
       <header class="tf-head">
         <div class="tf-head-row">
           <h1>论坛管理</h1>
+          <section class="tf-filters">
+          <input v-model="keyword" placeholder="搜索标题/内容" @keyup.enter="loadPosts" />
+          <input v-model="dateFrom" type="date" class="tf-date" title="开始日期" />
+          <span class="tf-tilde">~</span>
+          <input v-model="dateTo" type="date" class="tf-date" title="结束日期" />
+          <select v-model="className">
+          <option value="">全部班级</option>
+          <option v-for="name in classOptions" :key="name" :value="name">{{ name }}</option>
+          </select>
+          <button class="tf-btn" @click="loadPosts">查询</button>
+          <button class="tf-btn ghost" @click="resetFilters">重置</button>
+          </section>
           <div class="tf-head-actions">
             <button class="tf-star-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
             <button class="tf-post-btn" @click="openPostForm">发布新帖</button>
@@ -15,18 +25,9 @@
         <p class="tf-sub">全校帖子可见；只能隐藏本班学生的内容，需填写原因并提交管理员复核。</p>
       </header>
 
-      <section class="tf-filters">
-        <input v-model="keyword" placeholder="搜索标题/内容" @keyup.enter="loadPosts" />
-        <input v-model="dateFrom" type="date" class="tf-date" title="开始日期" />
-        <span class="tf-tilde">~</span>
-        <input v-model="dateTo" type="date" class="tf-date" title="结束日期" />
-        <select v-model="className">
-          <option value="">全部班级</option>
-          <option v-for="name in classOptions" :key="name" :value="name">{{ name }}</option>
-        </select>
-        <button class="tf-btn" @click="loadPosts">查询</button>
-      </section>
       </div>
+    <main class="tf-main">
+      <div class="tf-left">
 
       <p v-if="!canModerate" class="tf-warn">
         当前账号未绑定班级，暂不能隐藏本班学生内容。请先在「班级管理」中创建/绑定班级，并让学生填写班级。
@@ -47,10 +48,10 @@
               :user-id="post.id"
               :user-type="post.authorType || 'student'" />
             <span class="tf-status" :class="`st-${post.status}`">{{ statusLabel(post.status) }}</span>
-            <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</span>
+            <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }"><span v-if="post.aiTitle" class="ai-title-tag">AI生成</span>{{ post.title }}</span>
             <span class="tf-meta">{{ post.authorClass || '未分班' }}</span>
           </div>
-          <p class="tf-content"><ForumContent :content="post.content" /></p>
+          <p class="tf-content"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
           <AttachmentList
             v-if="post.attachments && post.attachments.length"
             :attachments="post.attachments"
@@ -68,17 +69,40 @@
         </article>
       </div>
 
-      <div v-if="detail" class="tf-modal" @click.self="detail = null">
-        <div class="tf-modal-card">
+      <div v-if="detail" class="tf-modal tf-modal-l2" @click.self="detail = null">
+        <div class="tf-modal-card tf-detail-card">
           <button class="tf-close" @click="detail = null">×</button>
           <div class="tf-modal-scroll">
-          <h2 :style="{ color: titleColorValue(detail.titleColor) }">{{ detail.title }}</h2>
-          <p class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</p>
-          <p class="tf-content"><ForumContent :content="detail.content" /></p>
+          <h2 :style="{ color: titleColorValue(detail.titleColor) }"><span v-if="detail.aiTitle" class="ai-title-tag">AI生成</span>{{ detail.title }}</h2>
+          <div class="tf-detail-author">
+            <UserBadge
+              size="sm"
+              :src="detail.authorAvatar || detail.user?.avatar"
+              :name="detail.author"
+              :user-id="detail.user?.id"
+              :user-type="detail.user?.userType || 'student'" />
+            <span class="tf-meta">{{ detail.author }} · {{ detail.authorClass || '未分班' }}</span>
+            <span class="tf-meta">{{ formatDateTime(detail.createTime) }}</span>
+          </div>
+          <p class="tf-content"><ForumContent :content="detail.content" :format="detail.contentFormat" /></p>
           <AttachmentList
             v-if="detail.attachments && detail.attachments.length"
             :attachments="detail.attachments"
             mode="post" />
+          <div class="tf-stats tf-detail-actions">
+            <button class="tf-detail-act" :class="{ on: detail.liked }" @click.stop="detailPostLike">❤ {{ detail.likeCount || 0 }}</button>
+            <button class="tf-detail-act" :class="{ on: detail.favorited }" @click.stop="detailPostFavorite">★ {{ detail.favoriteCount || 0 }}</button>
+            <span>💬 {{ detail.commentCount || 0 }}</span>
+            <span>👁 {{ detail.viewCount || 0 }}</span>
+          </div>
+          <div class="tf-comment-sort">
+            <button
+              v-for="s in [{ key: 'time', label: '时间' }, { key: 'likes', label: '点赞' }, { key: 'replies', label: '回复' }]"
+              :key="s.key"
+              :class="{ on: commentSort === s.key }"
+              @click="setCommentSort(s.key as any)">{{ s.label }}</button>
+            <button class="tf-sort-order" @click="toggleCommentOrder">{{ commentOrder === 'desc' ? '倒序' : '正序' }}</button>
+          </div>
           <h3>评论（{{ comments.length }}）</h3>
           <p v-if="!comments.length" class="tf-empty">暂无评论</p>
           <div v-for="c in comments" :key="c.id" class="tf-comment">
@@ -90,6 +114,7 @@
                 :user-id="c.user?.id"
                 :user-type="c.user?.userType || 'student'" />
               <span class="tf-meta">{{ c.user?.className || '未分班' }}</span>
+              <span class="tf-comment-date">{{ formatDateTime(c.createTime) }}</span>
               <button
                 v-if="c.canDelete && c.status === 1"
                 class="tf-danger small tf-comment-hide"
@@ -99,11 +124,18 @@
               </button>
             </div>
             <div class="tf-comment-body">
-              <p><ForumContent :content="c.content" /></p>
+              <p><ForumContent :content="c.content" :format="c.contentFormat" /></p>
               <AttachmentList
                 v-if="c.attachments && c.attachments.length"
                 :attachments="c.attachments"
                 mode="comment" />
+              <div class="tf-comment-actions">
+                <button class="tf-act" :class="{ on: c.liked }" @click.stop="commentLike(c)">❤ {{ c.likeCount || 0 }}</button>
+                <button class="tf-act" :class="{ on: c.favorited }" @click.stop="commentFavorite(c)">★ {{ c.favoriteCount || 0 }}</button>
+                <button class="tf-act" @click.stop="commentReport(c)">举报</button>
+                <button class="tf-act" @click.stop="startReplyComment(c)">回复</button>
+                <span class="tf-act-r">回复 {{ c.replyCount || 0 }}</span>
+              </div>
             </div>
           </div>
 
@@ -111,12 +143,19 @@
 
           <!-- 教师评论输入（与学生端一致：文字 + 发送） -->
           <div class="tf-comment-input">
-            <textarea
-              v-model="commentDraft"
-              class="tf-comment-textarea"
-              rows="2"
-              placeholder="写下你的评论… Ctrl+Enter 发送"
-              @keyup.ctrl.enter="submitComment" />
+            <div v-if="replyTarget" class="tf-reply-hint">
+              回复 @{{ replyTarget.user?.nickname || replyTarget.author || '匿名' }}
+              <button class="tf-reply-cancel" @click="replyTarget = null">取消</button>
+            </div>
+            <div class="tf-comment-box">
+              <textarea
+                v-model="commentDraft"
+                class="tf-comment-textarea"
+                rows="2"
+                placeholder="写下你的评论… Ctrl+Enter 发送"
+                @keyup.ctrl.enter="submitComment" />
+              <button class="tf-fs-btn" title="全屏输入" @click="fullscreenInput = true">⛶</button>
+            </div>
             <button class="tf-icon-btn" title="表情" @click="showCommentEmoji = !showCommentEmoji">😊</button>
             <FileUploader v-model="commentAttachments" :max-docs="0" class="tf-comment-uploader" />
             <div v-if="showCommentEmoji" class="tf-emoji-pop">
@@ -144,39 +183,93 @@
 
       <aside class="tf-side">
         <section class="tf-mini-card">
-          <h3>热门帖子</h3>
+          <h3>今日热门（{{ hotIsWeek ? '近 7 天' : '当天' }}）</h3>
           <p v-if="!hotPosts.length" class="tf-mini-empty">暂无数据</p>
-          <ul v-else>
-            <li v-for="h in hotPosts" :key="h.id" @click="openPost(h)">
-              <span class="tf-mini-title" :style="{ color: titleColorValue(h.titleColor) }">{{ h.title }}</span>
-              <span class="tf-mini-num">❤ {{ h.likeCount }}</span>
-            </li>
-          </ul>
-        </section>
-
-        <section class="tf-mini-card">
-          <h3>论坛活跃</h3>
-          <div class="tf-stats">
-            <div><b>{{ stats.posts }}</b><span>帖子</span></div>
-            <div><b>{{ stats.users }}</b><span>用户</span></div>
-            <div><b>{{ stats.online }}</b><span>在线</span></div>
-          </div>
+          <template v-else>
+            <ul>
+              <li v-for="(h, i) in hotPosts.slice(0, 5)" :key="h.id" class="right-item" @click="openPost(h)">
+                <span class="right-rank" :class="'rank-' + (i + 1)">{{ i + 1 }}</span>
+                <span class="right-title" :style="{ color: titleColorValue(h.titleColor) }">{{ h.title }}</span>
+                <span class="right-excerpt">{{ excerptOf(h) }}</span>
+                <span class="right-num">{{ h.commentCount || 0 }} 回复</span>
+              </li>
+            </ul>
+            <p class="tf-mini-more" @click="openHotAll">查看更多 →</p>
+          </template>
         </section>
 
         <section class="tf-mini-card">
           <h3>我的帖子</h3>
-          <p v-if="!myPosts.length" class="tf-mini-empty">还没有发过帖</p>
-          <ul v-else>
-            <li v-for="m in myPosts" :key="m.id" @click="openPost(m)">
-              <span class="tf-mini-title">{{ m.title }}</span>
-              <span class="tf-mini-num">💬 {{ m.commentCount }}</span>
-            </li>
-          </ul>
+          <p v-if="!myPosts.length" class="tf-mini-empty">还没有发过帖，去发布第一篇吧</p>
+          <template v-else>
+            <ul>
+              <li v-for="m in myPosts.slice(0, 5)" :key="m.id" class="right-item" @click="openPost(m)">
+                <span class="right-title">{{ m.title }}</span>
+                <span class="right-excerpt">{{ excerptOf(m) }}</span>
+                <span class="right-num">❤ {{ m.likeCount || 0 }} · 💬 {{ m.commentCount || 0 }}</span>
+              </li>
+            </ul>
+            <p class="tf-mini-more" @click="openMyAll">查看更多 →</p>
+          </template>
         </section>
       </aside>
     </main>
+    <!-- D'：热门帖子前 100 / 我的帖子全部 -->
+    <div v-if="showHotAll" class="tf-modal tf-modal-l1" @click.self="showHotAll = false">
+      <div class="tf-modal-card tf-fav-card">
+        <h3>今日热门 · 前 100 条</h3>
+        <div class="tf-hot-range">
+          <input v-model="hotFrom" type="date" />
+          <span>~</span>
+          <input v-model="hotTo" type="date" />
+          <button class="tf-btn" @click="openHotAll">查询</button>
+        </div>
+        <p v-if="hotAllLoading" class="tf-empty">加载中…</p>
+        <p v-else-if="!hotAll.length" class="tf-empty">暂无热门</p>
+        <div v-else class="tf-fav-list">
+          <div v-for="h in hotAll" :key="h.id" class="tf-fav-item" @click="openPost(h)">
+            <span class="tf-fav-author">
+              <img v-if="h.authorAvatar || (h.user && h.user.avatar)" :src="h.authorAvatar || (h.user && h.user.avatar)" class="tf-fav-avatar" alt="头像" />
+              <span v-else class="tf-fav-avatar tf-fav-avatar-text">{{ ((h.author || (h.user && h.user.nickname) || '匿')).charAt(0) }}</span>
+              <span class="tf-fav-name">{{ h.author || (h.user && h.user.nickname) || '匿名' }}</span>
+              <span class="tf-fav-date">{{ formatDateTime(h.createTime) }}</span>
+            </span>
+            <span class="tf-fav-title">{{ h.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(h) }}</span>
+            <span class="tf-fav-num">❤ {{ h.likeCount || 0 }} · ★ {{ h.favoriteCount || 0 }} · 💬 {{ h.commentCount || 0 }} · 👁 {{ h.viewCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showHotAll = false">关闭</button></div>
+      </div>
+    </div>
+    <div v-if="showMyAll" class="tf-modal tf-modal-l1" @click.self="showMyAll = false">
+      <div class="tf-modal-card tf-fav-card">
+        <h3>我的帖子（全部）</h3>
+        <div class="tf-hot-range">
+          <input v-model="myKeyword" placeholder="搜索我的帖子…" @keyup.enter="openMyAll" />
+          <button class="tf-btn" @click="openMyAll">搜索</button>
+        </div>
+        <p v-if="myAllLoading" class="tf-empty">加载中…</p>
+        <p v-else-if="!myAll.length" class="tf-empty">还没有发过帖</p>
+        <div v-else class="tf-fav-list">
+          <div v-for="m in myAll" :key="m.id" class="tf-fav-item" @click="openPost(m)">
+            <span class="tf-fav-author">
+              <img v-if="m.authorAvatar || (m.user && m.user.avatar)" :src="m.authorAvatar || (m.user && m.user.avatar)" class="tf-fav-avatar" alt="头像" />
+              <span v-else class="tf-fav-avatar tf-fav-avatar-text">{{ ((m.author || (m.user && m.user.nickname) || '匿')).charAt(0) }}</span>
+              <span class="tf-fav-name">{{ m.author || (m.user && m.user.nickname) || '匿名' }}</span>
+              <span class="tf-fav-date">{{ formatDateTime(m.createTime) }}</span>
+            </span>
+            <span class="tf-fav-title">{{ m.title }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(m) }}</span>
+            <span class="tf-fav-num">❤ {{ m.likeCount || 0 }} · ★ {{ m.favoriteCount || 0 }} · 💬 {{ m.commentCount || 0 }} · 👁 {{ m.viewCount || 0 }}</span>
+          </div>
+        </div>
+        <div class="tf-modal-actions"><button class="tf-btn ghost" @click="showMyAll = false">关闭</button></div>
+      </div>
+    </div>
+
     <!-- T4：我的收藏 / 我的喜欢 -->
-    <div v-if="favVisible" class="tf-modal" @click.self="favVisible = false">
+    <div v-if="favVisible" class="tf-modal tf-modal-l1" @click.self="favVisible = false">
       <div class="tf-modal-card tf-fav-card">
         <h3>{{ favTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
         <div class="tf-fav-tabs">
@@ -189,8 +282,15 @@
         </p>
         <div v-else class="tf-fav-list">
           <div v-for="p in favList" :key="p.id" class="tf-fav-item" @click="openPost(p)">
+            <span class="tf-fav-author">
+              <img v-if="p.authorAvatar || (p.user && p.user.avatar)" :src="p.authorAvatar || (p.user && p.user.avatar)" class="tf-fav-avatar" alt="头像" />
+              <span v-else class="tf-fav-avatar tf-fav-avatar-text">{{ ((p.author || (p.user && p.user.nickname) || '匿')).charAt(0) }}</span>
+              <span class="tf-fav-name">{{ p.author || (p.user && p.user.nickname) || '匿名' }}</span>
+              <span class="tf-fav-date">{{ formatDateTime(p.createTime) }}</span>
+            </span>
             <span class="tf-fav-title" :style="{ color: titleColorValue(p.titleColor) }">{{ p.title }}</span>
-            <span class="tf-fav-num">❤ {{ p.likeCount || 0 }} · ⭐ {{ p.favoriteCount || 0 }}</span>
+            <span class="tf-fav-excerpt">{{ excerptOf(p) }}</span>
+            <span class="tf-fav-num">❤ {{ p.likeCount || 0 }} · ★ {{ p.favoriteCount || 0 }} · 💬 {{ p.commentCount || 0 }} · 👁 {{ p.viewCount || 0 }}</span>
           </div>
         </div>
         <div class="tf-modal-actions">
@@ -199,32 +299,37 @@
       </div>
     </div>
 
-    <!-- P3-07：教师发帖（含可见范围） -->
-    <div v-if="postForm.visible" class="tf-modal" @click.self="postForm.visible = false">
-      <div class="tf-modal-card">
-        <h3>发布新帖</h3>
-        <input v-model="postForm.title" class="tf-input" placeholder="请输入标题…" maxlength="200" />
-        <textarea v-model="postForm.content" class="tf-textarea" rows="6" placeholder="请输入内容…"></textarea>
-        <div class="tf-upload-row">
-          <span class="tf-label">附件（不限个数，单个 ≤20MB）</span>
-          <FileUploader v-model="postForm.attachments" :max-docs="0" />
+    <!-- P3-07 + 统一发帖弹窗：与管理员端/学生端共用 PostComposer（含草稿、可见范围、置顶） -->
+    <PostComposer
+      v-model:visible="postForm.visible"
+      title="发布新帖"
+      :initial="postDraftInitial"
+      :can-pin="true"
+      :classes="classOptions"
+      :submitting="postForm.submitting"
+      :saving-draft="postForm.savingDraft"
+      @submit="submitPost"
+      @save-draft="savePostDraft"
+    />
+
+    <div v-if="fullscreenInput" class="tf-fs-mask" @click.self="fullscreenInput = false">
+      <div class="tf-fs-card">
+        <div class="tf-fs-head">
+          <h3>发表评论</h3>
+          <button class="tf-close" @click="fullscreenInput = false">×</button>
         </div>
-        <div class="tf-visibility">
-          <span class="tf-label">可见范围</span>
-          <label><input type="radio" value="ALL" v-model="postForm.visibility" /> 全校</label>
-          <label><input type="radio" value="CLASSES" v-model="postForm.visibility" /> 自己班级</label>
-        </div>
-        <div v-if="postForm.visibility === 'CLASSES'" class="tf-classes">
-          <label v-for="c in classOptions" :key="c" class="tf-class-chip">
-            <input type="checkbox" :value="c" v-model="postForm.classes" /> {{ c }}
-          </label>
-          <p v-if="!classOptions.length" class="tf-mini-empty">未查到可管理班级，请先绑定班级</p>
-        </div>
-        <div class="tf-modal-actions">
-          <button class="tf-btn ghost" @click="postForm.visible = false">取消</button>
-          <button class="tf-btn" :disabled="postForm.submitting" @click="submitPost">
-            {{ postForm.submitting ? '发布中…' : '发布' }}
-          </button>
+        <div class="tf-fs-body">
+          <textarea v-model="commentDraft" class="tf-fs-textarea" rows="10" placeholder="写下你的评论… Ctrl+Enter 发送"></textarea>
+          <div class="tf-fs-tools">
+            <button class="tf-icon-btn" title="表情 / 表情包" @click="showCommentEmoji = !showCommentEmoji">😊</button>
+            <FileUploader v-model="commentAttachments" :max-docs="0" />
+            <button class="tf-btn" :disabled="commentSubmitting || !commentDraft.trim()" @click="submitComment">
+              {{ commentSubmitting ? '发送中…' : '发送' }}
+            </button>
+          </div>
+          <div v-if="showCommentEmoji" class="tf-fs-picker">
+            <EmojiStickerPicker @select="onEmojiSelect" @close="showCommentEmoji = false" />
+          </div>
         </div>
       </div>
     </div>
@@ -232,7 +337,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import TeacherNavHeader from '$vtj/vue/TeacherNavHeader.vue';
@@ -242,9 +347,17 @@ import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
 import { createForumComment } from '@/modules/community/api';
-import { toggleForumPostLike, toggleForumFavorite } from '@/modules/community/api';
+import { toggleForumPostLike, toggleForumFavorite, fetchForumPostDetail } from '@/modules/community/api';
+import {
+  fetchForumComments,
+  toggleForumCommentLike,
+  toggleForumCommentFavorite,
+  reportForumTarget
+} from '@/modules/community/api';
 import { fetchMyForumFavorites, fetchMyForumLikes } from '@/modules/community/api';
 import FileUploader from '@/components/forum/FileUploader.vue';
+import PostComposer, { type PostDraft } from '@/components/forum/PostComposer.vue';
+import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import {
   createForumPostWithVisibility,
@@ -260,6 +373,8 @@ import {
 
 const posts = ref<ModerationPost[]>([]);
 const comments = ref<ModerationComment[]>([]);
+const commentSort = ref<'time' | 'likes' | 'replies'>('time');
+const commentOrder = ref<'desc' | 'asc'>('desc');
 const detail = ref<ModerationPost | null>(null);
 const loading = ref(false);
 const keyword = ref('');
@@ -274,28 +389,43 @@ const commentSubmitting = ref(false);
 
 // P3-07：侧栏三卡 + 发帖弹窗
 const hotPosts = ref<any[]>([]);
+const hotIsWeek = ref(false);
 const stats = reactive({ posts: 0, users: 0, online: 0 });
 const myPosts = ref<any[]>([]);
+// D'：查看更多
+const hotAll = ref<any[]>([]);
+const hotFrom = ref(new Date().toISOString().slice(0, 10));
+const hotTo = ref(new Date().toISOString().slice(0, 10));
+const showHotAll = ref(false);
+const hotAllLoading = ref(false);
+const myAll = ref<any[]>([]);
+const myKeyword = ref('');
+const showMyAll = ref(false);
+const myAllLoading = ref(false);
 const postForm = reactive({
   visible: false,
   submitting: false,
-  title: '',
-  titleColor: 'default',
-  content: '',
-  visibility: 'ALL' as 'ALL' | 'CLASSES',
-  classes: [] as string[],
-  attachments: [] as any[]
+  savingDraft: false
 });
+const postDraftInitial = ref<Partial<PostDraft> | null>(null);
 const commentAttachments = ref<any[]>([]);
 const showCommentEmoji = ref(false);
+const fullscreenInput = ref(false);
 
 // T4：我的收藏 / 我的喜欢
 const favVisible = ref(false);
 const favTab = ref<'favorites' | 'likes'>('favorites');
 const favList = ref<any[]>([]);
 const favLoading = ref(false);
-const onEmojiSelect = (p: { value: string }) => {
-  commentDraft.value += p.value;
+const commentStickers = ref<any[]>([]);
+const replyTarget = ref<any>(null);
+const onEmojiSelect = (p: { value: string; type?: string; name?: string }) => {
+  // 2026-11-07：表情包不再把 URL 当文本拼进正文（会显示成一串路径），改走图片附件
+  if (p.type === 'sticker') {
+    commentStickers.value.push({ name: p.name || '表情包', url: p.value, size: 0, type: 'image' });
+  } else {
+    commentDraft.value += p.value;
+  }
   showCommentEmoji.value = false;
 };
 
@@ -311,14 +441,64 @@ const statusLabel = (status: string) =>
   ({ NORMAL: '正常', BLOCKED: '待复核隐藏', DELETED: '已删除' } as Record<string, string>)[status] ||
   status;
 
+/**
+ * 列表正文摘要（2026-11-03）：收藏/喜欢/热门/我的帖子 弹窗此前只显示标题。
+ * 后端已带 200 字 content，这里去表情包占位符 + 压平空白后截 120 字。
+ */
+const excerptOf = (post: any): string => {
+  const raw = String(post?.content ?? post?.excerpt ?? '');
+  const text = raw
+    // 富文本正文先去掉标签再截断
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '（无正文）';
+  return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+};
+
 const openPostForm = () => {
+  postDraftInitial.value = null;
   postForm.visible = true;
+  fetchMyForumDraft()
+    .then((draft) => {
+      if (!draft) return;
+      postDraftInitial.value = {
+        title: draft.title,
+        content: draft.content,
+        attachments: draft.attachments,
+        visibility: draft.visibility,
+        visibleClasses: draft.visibleClasses,
+        isTop: draft.isTop
+      };
+      ElMessage.info('已载入上次保存的草稿');
+    })
+    .catch(() => { /* 草稿读取失败不阻塞发帖 */ });
 };
 
 const loadSideCards = async () => {
   try {
-    const hot: any = await fetchForumPosts({ sortBy: 'likes', limit: 5 });
-    hotPosts.value = (hot && hot.posts) || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+    const hot: any = await fetchForumPosts({
+      sortBy: 'likes', order: 'desc', dateFrom: today, dateTo: today, limit: 5
+    });
+    let list = (hot && hot.posts) || [];
+    hotIsWeek.value = false;
+    if (list.length < 5) {
+      // B2：当天不足 5 条时用最近 7 天补足
+      const week: any = await fetchForumPosts({
+        sortBy: 'likes', order: 'desc', dateFrom: weekAgo, dateTo: today, limit: 5
+      });
+      const merged = [...list];
+      for (const item of ((week && week.posts) || [])) {
+        if (merged.length >= 5) break;
+        if (!merged.some((x: any) => x.id === item.id)) merged.push(item);
+      }
+      list = merged;
+      hotIsWeek.value = list.length > 0;
+    }
+    hotPosts.value = list.slice(0, 5);
   } catch (e) { hotPosts.value = []; }
   try {
     const s: any = await fetchForumStats();
@@ -330,34 +510,48 @@ const loadSideCards = async () => {
   } catch (e) { myPosts.value = []; }
 };
 
-const submitPost = async () => {
-  if (!postForm.title.trim() || !postForm.content.trim()) {
-    ElMessage.warning('标题和正文不能为空');
-    return;
-  }
-  if (postForm.visibility === 'CLASSES' && !postForm.classes.length) {
-    ElMessage.warning('请选择可见班级');
-    return;
-  }
+const submitPost = async (payload: PostDraft) => {
   postForm.submitting = true;
   try {
     await createForumPostWithVisibility({
-      title: postForm.title.trim(),
-      content: postForm.content.trim(),
-      titleColor: postForm.titleColor,
-      visibility: postForm.visibility,
-      attachments: postForm.attachments,
-      visibleClasses: postForm.visibility === 'CLASSES' ? postForm.classes : undefined
+      title: payload.title,
+      content: payload.content,
+      visibility: payload.visibility,
+      attachments: payload.attachments,
+      visibleClasses: payload.visibility === 'CLASSES' ? payload.visibleClasses : undefined,
+      contentFormat: payload.contentFormat,
+      // v4：AI 标题开关与「标题是否原样来自模型」
+      aiTitleEnabled: payload.aiTitleEnabled !== false,
+      titleFromAi: Boolean(payload.titleFromAi)
     });
     ElMessage.success('发布成功');
     postForm.visible = false;
-    postForm.title = '';
-    postForm.content = '';
+    postDraftInitial.value = null;
     await Promise.all([loadPosts(), loadSideCards()]);
   } catch (e: any) {
     ElMessage.error(e && e.message ? e.message : '发布失败');
   } finally {
     postForm.submitting = false;
+  }
+};
+
+const savePostDraft = async (payload: PostDraft) => {
+  postForm.savingDraft = true;
+  try {
+    await saveMyForumDraft({
+      title: payload.title,
+      content: payload.content,
+      attachments: payload.attachments,
+      visibility: payload.visibility,
+      visible_classes: payload.visibleClasses,
+      is_top: payload.isTop,
+      ai_title_enabled: payload.aiTitleEnabled !== false
+    });
+    ElMessage.success('已保存到草稿箱');
+  } catch (e: any) {
+    ElMessage.error(e && e.message ? e.message : '保存草稿失败');
+  } finally {
+    postForm.savingDraft = false;
   }
 };
 
@@ -397,21 +591,125 @@ const loadFavTab = async () => {
   }
 };
 
+const formatDateTime = (v?: string | null) =>
+  v ? String(v).replace('T', ' ').slice(0, 16) : '';
+
+const commentLike = async (c: any) => {
+  try {
+    const r = await toggleForumCommentLike(c.id);
+    c.liked = r.liked;
+    c.likeCount = r.likeCount;
+  } catch (e) {
+    /* 静默 */
+  }
+};
+
+const commentFavorite = async (c: any) => {
+  try {
+    const r = await toggleForumCommentFavorite(c.id);
+    c.favorited = r.favorited;
+    c.favoriteCount = r.favoriteCount;
+  } catch (e) {
+    /* 静默 */
+  }
+};
+
+const commentReport = async (c: any) => {
+  try {
+    await reportForumTarget({
+      targetType: 'COMMENT',
+      targetId: c.id,
+      reasonCode: 'other',
+      reasonText: '教师举报评论'
+    });
+    ElMessage.success('已举报，等待管理员处理');
+  } catch (e) {
+    ElMessage.error('举报失败');
+  }
+};
+
+const detailPostLike = async () => {
+  if (!detail.value) return;
+  try {
+    const r = await toggleForumPostLike(detail.value.id);
+    detail.value.liked = r.liked;
+    detail.value.likeCount = r.likeCount;
+  } catch (e) {
+    ElMessage.error('点赞失败');
+  }
+};
+
+const detailPostFavorite = async () => {
+  if (!detail.value) return;
+  try {
+    const r = await toggleForumFavorite(detail.value.id);
+    detail.value.favorited = r.favorited;
+    detail.value.favoriteCount = r.favoriteCount;
+  } catch (e) {
+    ElMessage.error('收藏失败');
+  }
+};
+
+const startReplyComment = (c: any) => {
+  replyTarget.value = c;
+  showCommentEmoji.value = false;
+};
+
 const submitComment = async () => {
   const text = commentDraft.value.trim();
   if (!text || !detail.value) return;
   commentSubmitting.value = true;
   try {
-    await createForumComment(detail.value.id, { content: text, attachments: commentAttachments.value });
-    ElMessage.success('评论已发送');
+    const allAttachments = [...(commentAttachments.value || []), ...commentStickers.value];
+    await createForumComment(detail.value.id, {
+      content: text,
+      attachments: allAttachments,
+      parentCommentId: replyTarget.value?.id || null
+    });
+    ElMessage.success(replyTarget.value ? '回复已发送' : '评论已发送');
     commentDraft.value = '';
     commentAttachments.value = [];
+    commentStickers.value = [];
+    replyTarget.value = null;
     await openPost(detail.value);
   } catch (e: any) {
     ElMessage.error(e && e.message ? e.message : '评论失败');
   } finally {
     commentSubmitting.value = false;
   }
+};
+
+const openHotAll = async () => {
+  showHotAll.value = true;
+  hotAllLoading.value = true;
+  try {
+    const res: any = await fetchForumPosts({
+      sortBy: 'likes', order: 'desc',
+      dateFrom: hotFrom.value || undefined,
+      dateTo: hotTo.value || undefined,
+      limit: 100
+    });
+    hotAll.value = (res && res.posts) || [];
+  } catch (e) { hotAll.value = []; } finally { hotAllLoading.value = false; }
+};
+const openMyAll = async () => {
+  showMyAll.value = true;
+  myAllLoading.value = true;
+  try {
+    const res: any = await fetchMyForumPosts({
+      limit: 50, offset: 0, keyword: myKeyword.value || undefined
+    });
+    myAll.value = (res && res.posts) || [];
+  } catch (e) { myAll.value = []; } finally { myAllLoading.value = false; }
+};
+
+/** 一键清空筛选条件（2026-11-03）：关键词 / 日期区间 / 班级，然后重新加载 */
+const resetFilters = async () => {
+  keyword.value = '';
+  dateFrom.value = '';
+  dateTo.value = '';
+  className.value = '';
+  await loadPosts();
 };
 
 const loadPosts = async () => {
@@ -439,11 +737,43 @@ const loadPosts = async () => {
   }
 };
 
+const loadComments = async (postId: number) => {
+  try {
+    const [teacherData, studentData] = await Promise.all([
+      teacherForumApi.comments(postId).catch(() => ({ items: [] })),
+      fetchForumComments(postId, {
+        limit: 100,
+        sortBy: commentSort.value,
+        order: commentOrder.value
+      }).catch(() => ({ comments: [] }))
+    ]);
+    const interMap = new Map<number, any>();
+    for (const c of (studentData as any).comments || []) interMap.set(c.id, c);
+    comments.value = ((teacherData as any).items || []).map((c: any) => ({
+      ...c,
+      ...(interMap.get(c.id) || {})
+    }));
+  } catch (e) {
+    comments.value = [];
+  }
+};
+
+const setCommentSort = async (key: 'time' | 'likes' | 'replies') => {
+  commentSort.value = key;
+  if (detail.value) await loadComments(detail.value.id);
+};
+
+const toggleCommentOrder = async () => {
+  commentOrder.value = commentOrder.value === 'desc' ? 'asc' : 'desc';
+  if (detail.value) await loadComments(detail.value.id);
+};
+
 const openPost = async (post: ModerationPost) => {
   detail.value = post;
   try {
-    const data = await teacherForumApi.comments(post.id);
-    comments.value = data.items;
+    const postDetail = await fetchForumPostDetail(post.id).catch(() => null);
+    if (postDetail) detail.value = { ...post, ...(postDetail as any) };
+    await loadComments(post.id);
   } catch (e) {
     comments.value = [];
   }
@@ -490,6 +820,36 @@ const submitReason = async (reason: string) => {
 
 onMounted(loadSideCards);
 onMounted(loadPosts);
+
+/**
+ * 关闭「最上层」弹窗（2026-11-03）：帖子详情(二级) 先关，再关热门/我的/收藏(一级)。
+ * 与模板里的 tf-modal-l1 / tf-modal-l2 层级保持一致。
+ */
+function closeTopModal() {
+  if (detail.value) {
+    detail.value = null;
+    return;
+  }
+  if (favVisible.value) {
+    favVisible.value = false;
+    return;
+  }
+  if (showHotAll.value) {
+    showHotAll.value = false;
+    return;
+  }
+  if (showMyAll.value) {
+    showMyAll.value = false;
+  }
+}
+
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeTopModal();
+}
+
+onMounted(() => window.addEventListener('keydown', onGlobalKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
+
 </script>
 
 <style scoped>
@@ -556,8 +916,10 @@ onMounted(loadPosts);
 }
 /* P3-07：两列布局 + 侧栏三卡 + 发帖弹窗 */
 .tf-main { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
-.tf-left { min-width: 0; }
-.tf-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* 2026-10-31：左列表独立滚动 */
+.tf-left { min-width: 0; height: 100%; overflow-y: auto;
+  overscroll-behavior: contain; padding-right: 6px; }
+.tf-head-row { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
 .tf-post-btn { padding: 10px 18px; border: none; border-radius: 10px; background: #c41e3a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
 /* 右侧三卡固定：与学生端 PC 右栏同款做法（sticky + align-self:start） */
 .tf-side {
@@ -583,6 +945,11 @@ onMounted(loadPosts);
 .tf-stats b { font-size: 18px; color: #c41e3a; }
 .tf-stats span { font-size: 12px; color: #94a3b8; }
 .tf-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 2200; }
+/* 弹窗分层（2026-11-03）：一级列表（热门/我的/收藏）< 二级帖子详情。
+ * 本文件里 .tf-modal 有两处定义，后者会覆盖前者的 z-index；层级必须写在最后并提权，
+ * 否则同层里详情会被列表弹窗盖住。 */
+.tf-modal.tf-modal-l1 { z-index: 2200; }
+.tf-modal.tf-modal-l2 { z-index: 2400; }
 .tf-modal-card { width: 560px; max-width: 92vw; background: #fff; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .tf-modal-card h3 { margin: 0; font-size: 17px; color: #1a2b5f; }
 .tf-input, .tf-textarea, .tf-select { width: 100%; padding: 10px 12px; border: 1px solid #e3e8ef; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
@@ -619,10 +986,23 @@ onMounted(loadPosts);
 .tf-fav-tab { padding: 8px 16px; border-radius: 999px; border: 1px solid #e3e8ef; background: #fff; color: #475569; font-size: 13px; cursor: pointer; }
 .tf-fav-tab.on { background: #fdf2f4; border-color: #f0c4cc; color: #c41e3a; font-weight: 600; }
 .tf-fav-list { max-height: 380px; overflow-y: auto; }
-.tf-fav-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; }
+.tf-fav-item { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "title num" "excerpt excerpt"; align-items: center; gap: 2px 12px; padding: 10px 8px; border-radius: 10px; cursor: pointer; }
 .tf-fav-item:hover { background: #f7f9fc; }
-.tf-fav-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tf-fav-num { color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
+.tf-fav-title { grid-area: title; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 列表正文摘要（2026-11-03）：2 行截断，占满第二行 */
+.tf-fav-excerpt {
+  grid-area: excerpt;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6b7896;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.tf-fav-num { grid-area: num; color: #94a3b8; font-size: 12px; flex: 0 0 auto; }
 /* 单个五角星入口，避免窄屏换行 */
 .tf-star-btn { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
   border: none; border-radius: 50%; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
@@ -641,6 +1021,202 @@ onMounted(loadPosts);
 .tf-head { margin: 0; padding-bottom: 6px; }
 .tf-sub { margin: 0 0 10px; }
 .tf-filters { margin-bottom: 0; }
+.tf-mini-more { margin: 8px 0 0; font-size: 12px; color: #c41e3a; cursor: pointer; text-align: right; }
+/* 2026-10-31：与导航「工作台」左对齐（实测 186px），左右留白对称，控件等比缩小 */
+.tf-page { --tf-gutter: 185px; }
+.tf-topbar { position: sticky; top: 56px; z-index: 30; background: #f5f7fb;
+  padding: 8px var(--tf-gutter) 6px; box-shadow: 0 8px 10px -12px rgba(15,23,42,.35); }
+.tf-head { margin: 0; }
+.tf-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
+.tf-head-row h1 { margin: 0; font-size: 26px; line-height: 38px; white-space: nowrap; flex: 0 0 auto; }
+.tf-head-row .tf-filters { flex: 1 1 auto; min-width: 0; margin: 0;
+  display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.tf-head-row .tf-filters input { flex: 1 1 160px; min-width: 120px; height: 38px;
+  padding: 0 12px; font-size: 14px; }
+.tf-head-row .tf-filters .tf-date { flex: 0 0 auto; width: 132px; height: 38px; padding: 0 8px; font-size: 13px; }
+.tf-head-row .tf-filters select { flex: 0 0 auto; height: 38px; width: 128px; font-size: 13px; }
+.tf-head-row .tf-filters .tf-btn { flex: 0 0 auto; height: 38px; padding: 0 20px; font-size: 14px; }
+.tf-head-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.tf-head-actions .tf-star-btn { width: 38px; height: 38px; font-size: 20px; }
+.tf-head-actions .tf-post-btn { height: 38px; padding: 0 22px; font-size: 14px; border-radius: 10px; }
+.tf-sub { margin: 4px 0 0; font-size: 12px; color: #6b7896; }
+/* 内容区与工具栏同宽同起点：左卡片与「论坛管理」对齐，右卡片右缘与「发布新帖」对齐 */
+.tf-page { overflow: hidden; }
+.tf-main { width: 100%; max-width: none; margin: 10px 0 0;
+  padding: 0 var(--tf-gutter) 16px; box-sizing: border-box;
+  height: calc(100vh - 56px - 110px); display: grid;
+  grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+.tf-side { width: 300px; }
+@media (max-width: 1500px) {
+  .tf-page { --tf-gutter: 120px; }
+  .tf-head-row h1 { font-size: 22px; }
+  .tf-head-row .tf-filters input { flex: 1 1 120px; min-width: 100px; }
+  .tf-head-row .tf-filters .tf-date { width: 118px; }
+}
+@media (max-width: 1180px) {
+  .tf-page { --tf-gutter: 24px; }
+  .tf-head-row { flex-wrap: wrap; }
+}
+/* 2026-10-31：右卡样式与学生端对齐（白卡 + 编号徽章 + 居中红字链接） */
+.tf-side .tf-mini-card { background: #fff; border-radius: 16px; padding: 18px 20px;
+  box-shadow: 0 2px 12px rgba(26,43,93,.08); }
+.tf-side .tf-mini-card h3 { margin: 0 0 12px; font-size: 17px; font-weight: 700; color: #1a2b5f;
+  display: flex; align-items: center; gap: 8px; }
+.tf-side .tf-mini-card ul { list-style: none; margin: 0; padding: 0; }
+.tf-side .right-item { display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  border-bottom: 1px solid #f2f4f8; cursor: pointer; }
+.tf-side .right-item:hover { background: #fafbfe; }
+.tf-side .right-rank { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; background: #94a3b8; }
+.tf-side .right-rank.rank-1 { background: #ef4444; }
+.tf-side .right-rank.rank-2 { background: #f59e0b; }
+.tf-side .right-rank.rank-3 { background: #f59e0b; }
+.tf-side .right-rank.rank-4, .tf-side .right-rank.rank-5 { background: #94a3b8; }
+.tf-side .right-title { flex: 1 1 auto; font-size: 14px; color: #1a2b5f;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-side .right-num { flex: 0 0 auto; font-size: 12px; color: #94a3b8; }
+.tf-side .tf-mini-more { margin: 12px 0 0; text-align: center; color: #c41e3a;
+  font-size: 14px; font-weight: 600; cursor: pointer; }
+.tf-side .tf-mini-empty { color: #94a3b8; font-size: 13px; margin: 6px 0; }
+
+/* 2026-11-07：教师端列表作者信息 + 评论操作 */
+.tf-fav-author { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6b7896; }
+.tf-fav-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.tf-fav-avatar-text { display: inline-flex; align-items: center; justify-content: center; background: #eef1f8; color: #1a2b5f; }
+.tf-fav-name { font-weight: 600; color: #1a2b5f; }
+.tf-fav-date { color: #8a8faa; }
+.tf-stats { font-size: 12px; color: #8a8faa; margin: 2px 0 8px; }
+.tf-comment-date { font-size: 12px; color: #8a8faa; margin-left: auto; }
+.tf-comment-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.tf-act { border: none; background: transparent; color: #6b7896; font-size: 12px; cursor: pointer; padding: 0; }
+.tf-act.on { color: #c41e3a; }
+.tf-act-r { font-size: 12px; color: #8a8faa; margin-left: auto; }
+
+.right-excerpt { display: block; font-size: 12px; color: #8a8faa; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* 2026-11-07：右侧「今日热门 / 我的帖子」改为标题一行、摘要一行的学生端同款布局 */
+.tf-mini-card li.right-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'rank title num'
+    'rank excerpt excerpt';
+  align-items: start;
+  column-gap: 8px;
+  row-gap: 2px;
+}
+.right-item .right-rank { grid-area: rank; }
+.right-item .right-title { grid-area: title; display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.right-item .right-excerpt {
+  grid-area: excerpt;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  font-size: 12px;
+  color: #8a8faa;
+  line-height: 1.5;
+}
+.right-item .right-num { grid-area: num; white-space: nowrap; }
+
+/* 2026-11-07：固定高度布局下，右侧「今日热门/我的帖子」独立滚动到底 */
+.tf-main {
+  align-items: stretch;
+  min-height: 0;
+}
+.tf-left {
+  min-height: 0;
+}
+.tf-side {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 20px;
+  box-sizing: border-box;
+}
+.tf-side .tf-mini-card:last-child { margin-bottom: 8px; }
+
+/* 2026-11-07：点赞/收藏图标特效 */
+@keyframes tf-icon-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.28); }
+  60% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+@keyframes tf-icon-glow {
+  0% { box-shadow: 0 0 0 0 rgba(196,30,58,.35); }
+  100% { box-shadow: 0 0 0 10px rgba(196,30,58,0); }
+}
+.tf-ico.on, .tf-act.on { animation: tf-icon-pop .45s ease; }
+.tf-ico.on { box-shadow: 0 0 10px rgba(196,30,58,.18); }
+.tf-act.on { text-shadow: 0 0 8px rgba(196,30,58,.35); }
+.tf-star-btn:hover { transform: scale(1.12) rotate(-6deg); transition: transform .18s ease; }
+
+/* 2026-11-07：教师端帖子详情弹窗放大到 1220×888，评论输入框 95px */
+.tf-detail-card {
+  width: 1220px;
+  max-width: 96vw;
+  height: 888px;
+  max-height: 92vh;
+}
+.tf-detail-card .tf-modal-scroll { flex: 1 1 auto; min-height: 0; }
+.tf-detail-card .tf-comment-textarea { height: 95px; min-height: 95px; }
+/* 2026-11-09：评论输入条参数与全屏输入 */
+.tf-comment-input {
+  margin: 0 -20px -35px;
+  border-radius: 16px;
+  gap: 13px;
+  padding: 10px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  position: relative;
+}
+.tf-comment-input .tf-comment-textarea {
+  flex: 1 1 100%;
+  width: 100%;
+}
+.tf-comment-input .tf-icon-btn,
+.tf-comment-input .tf-comment-uploader,
+.tf-comment-input .tf-btn {
+  flex: 0 0 auto;
+}
+.tf-comment-input .tf-btn { margin-left: auto; }
+.tf-comment-input .tf-icon-btn[title="全屏输入"] {
+  position: absolute;
+  right: 10px;
+  top: 6px;
+  border: 0;
+  background: transparent;
+}
+.tf-comment-textarea { min-height: 50px; height: 50px; }
+.tf-fs-mask { position: fixed; inset: 0; z-index: 9999; background: rgba(12,26,44,.45); display: flex; align-items: center; justify-content: center; }
+.tf-fs-card { width: 1220px; max-width: 96vw; height: 888px; max-height: 92vh; background: #fff; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+.tf-fs-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #f0f2f5; }
+.tf-fs-head h3 { margin: 0; font-size: 16px; }
+.tf-fs-body { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; overflow-y: auto; }
+.tf-fs-textarea { flex: 1; min-height: 300px; border: 1px solid #dfe3ee; border-radius: 12px; padding: 12px 14px; font-size: 14px; resize: vertical; font-family: inherit; }
+.tf-fs-tools { display: flex; align-items: center; gap: 13px; }
+.tf-fs-tools .tf-btn { margin-left: auto; }
+.tf-fs-picker { align-self: flex-start; }
+/* 2026-11-09：教师帖子详情顺序与互动 */
+.tf-detail-author { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.tf-detail-author .tf-meta { margin: 0; }
+.tf-detail-actions { display: flex; align-items: center; gap: 14px; margin: 10px 0 14px; }
+.tf-detail-act { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 3px 12px; font-size: 13px; color: #5b6b84; cursor: pointer; }
+.tf-detail-act.on { color: #c41e3a; border-color: #f0c4cc; background: #fff5f7; }
+.tf-comment-box { position: relative; flex: 1 1 100%; display: flex; }
+.tf-comment-box .tf-comment-textarea { flex: 1; width: 100%; }
+.tf-fs-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8a8faa; font-size: 15px; cursor: pointer; }
+.tf-comment-sort { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
+.tf-comment-sort button { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 3px 12px; font-size: 12px; color: #5b6b84; cursor: pointer; }
+.tf-comment-sort button.on { background: #1a365d; border-color: #1a365d; color: #fff; }
+.tf-comment-sort .tf-sort-order { margin-left: auto; }
+.tf-reply-hint { flex: 1 1 100%; font-size: 12px; color: #5b6b84; display: flex; align-items: center; gap: 8px; }
+.tf-reply-cancel { border: 0; background: transparent; color: #c41e3a; cursor: pointer; font-size: 12px; }
 </style>
 
 

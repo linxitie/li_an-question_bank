@@ -337,25 +337,24 @@ export default defineComponent({
     };
   },
   mounted() {
+    // 登录页 = 未登录态。
+    // 原实现：已登录时提示 1 秒后自动跳走 → 学生端 PC 没有退出按钮，用户无法换账号
+    // （表现为"进登录页就自动登录学生账号"）。现改为：进入登录页即清除旧会话，
+    // 保证任何时候都能在此页切换账号。?logout=1 仍保留（用于显式退出提示）。
     if (window.__VTJ_AUTH__ && window.__VTJ_AUTH__.isLoggedIn()) {
-      // 支持 /login?logout=1 强制退出登录，打破"已登录但仪表盘白屏"的死循环
-      // 解析 hash 路由中的查询参数（Vue Router hash 模式下 URL 形如 /#/login?logout=1）
       var hashSearch = '';
       var hashIdx = window.location.hash.indexOf('?');
       if (hashIdx >= 0) hashSearch = window.location.hash.substring(hashIdx + 1);
       var urlParams = new URLSearchParams(hashSearch);
+      var prevUser = '';
+      try { prevUser = window.__VTJ_AUTH__.getUsername() || ''; } catch (e) { prevUser = ''; }
+      window.__VTJ_AUTH__.logout();
       if (urlParams.get('logout') === '1') {
-        window.__VTJ_AUTH__.logout();
         this.showMessage('已退出登录，请重新登录', 'success');
-        return;  // 留在登录页，不跳转
+      } else {
+        this.showMessage((prevUser ? '已退出 ' + prevUser + ' 的登录，' : '') + '请重新登录', 'success');
       }
-      const username = window.__VTJ_AUTH__.getUsername();
-      this.showMessage('已登录为 ' + username + '，即将跳转...', 'success');
-      setTimeout(function() {
-        const dash = this.getDashboardPath();
-        if (this.$router) this.$router.push(dash);
-        else window.location.href = dash;
-      }.bind(this), 1000);
+      return;  // 留在登录页，绝不自动跳转
     }
   },
   methods: {

@@ -18,8 +18,10 @@ from ..models.models import (
     SysUser, UserAchievement, Achievement, PracticeRecord,
     WrongQuestionPersonal, ForumPost, ForumComment, FavoriteQuestion,
     QuestionNote, NewsNote, QuoteFavorite, DailyCheckin,
+    UserMaterialProgress,
 )
 from ..core.trigger_types import LEGACY_TRIGGER_ALIASES
+from .badge_service import tier_for_condition
 from .growth_service import get_level_info
 
 logger = logging.getLogger(__name__)
@@ -117,19 +119,23 @@ def _tier_for_value(threshold: int, current: int, tier_times) -> int:
 
 
 def seed_achievements(db: Session) -> int:
-    """初始化成就目录（幂等）：空则插入；已存在则补 tier_times"""
+    """初始化成就目录（幂等）：空则插入；已存在则补 tier_times / badge_tier"""
     for cat, name, icon, desc, coins, trigger, code, th, extra, sort in ACHIEVEMENTS:
         existing = db.query(Achievement).filter(Achievement.name == name).first()
         if existing:
             tt = _tier_times_for(code, th)
             if existing.tier_times is None and tt is not None:
                 existing.tier_times = tt
+            # 存量库补 badge_tier；成色只由条件与门槛决定，历史数据可安全回填。
+            if getattr(existing, "badge_tier", None) is None:
+                existing.badge_tier = tier_for_condition(code, th)
             continue
         db.add(Achievement(
             category=cat, name=name, icon=icon, condition_desc=desc,
             reward_coins=coins, trigger_type=trigger, condition_code=code,
             threshold=th, extra=extra, sort_order=sort,
             tier_times=_tier_times_for(code, th),
+            badge_tier=tier_for_condition(code, th),
         ))
     db.commit()
     total = db.query(Achievement).count()
@@ -290,6 +296,8 @@ def _current_value(user: SysUser, ach: Achievement, db: Session) -> int:
         return _post_count(user.user_id, db)
     if code == "total_likes":
         return _total_likes(user.user_id, db)
+    if code == "material_read_count":
+        return _material_read_count(user.user_id, db)
     if code == "favorite_count":
         return db.query(FavoriteQuestion).filter(FavoriteQuestion.user_id == user.user_id).count()
     if code == "note_count":
@@ -305,6 +313,9 @@ def _check_condition(user: SysUser, ach: Achievement, db: Session,
     """按 condition_code 分发判定"""
     code = ach.condition_code
     th = ach.threshold
+
+    if code == "material_read_count":
+        return _material_read_count(user.user_id, db) >= th
 
     if code == "first_login":
         return True  # 有用户即已登录过，幂等保证只发一次
@@ -533,3 +544,12 @@ def _three_subject_accuracy(user_id: int, db: Session, threshold: int) -> bool:
         if total <= 0 or (correct / total * 100) < threshold:
             return False
     return True
+
+def _material_read_count(user_id: int, db: Session) -> int:
+    """累计读完的资料卡篇数（user_material_progress.status == 2）。"""
+    return (
+        db.query(UserMaterialProgress)
+        .filter(UserMaterialProgress.user_id == user_id,
+                UserMaterialProgress.status == 2)
+        .count()
+    )

@@ -7,7 +7,6 @@ POST   /api/quotes             - 创建金句（管理员）
 POST   /api/quotes/{id}/favorite - 切换金句收藏
 GET    /api/quotes/favorites   - 我的金句收藏列表
 """
-
 import logging
 import os
 import re
@@ -19,12 +18,12 @@ from typing import Optional
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, or_, text
+from sqlalchemy import desc, func
 
 from ....core.database import get_db
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import EssayQuote, QuoteFavorite, SysUser
-from ....services.quote_daily_service import ensure_daily_quote
+from ....services import daily_quote_service, quote_filter_service
 
 router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
@@ -33,38 +32,40 @@ logger = logging.getLogger(__name__)
 # 优先使用环境变量；如果环境变量指向的路径下没有 01-金句素材库 子目录，
 # 则自动回退到常见的默认路径
 _OB_ENV_PATH = os.environ.get("OBSIDIAN_VAULT_PATH", "")
-_DEFAULT_VAULT = r"D:\Obsidian仓库\每日金句知识库"
-_REPO_QUOTE_VAULT = Path(__file__).resolve().parents[5] / "每日金句知识库"
-
+_DEFAULT_VAULT = str(Path(__file__).resolve().parents[4] / "content_hub_vault")
+_QUOTE_SUBDIRS = ("01-金句素材库", "01-金句")
 
 def _resolve_quote_dir() -> str:
     """解析 Obsidian 金句目录，自动检测路径是否正确"""
-    candidates = []
+    roots = []
     if _OB_ENV_PATH:
-        candidates.append(os.path.join(_OB_ENV_PATH, "01-金句素材库"))
-    candidates.append(str(_REPO_QUOTE_VAULT / "01-金句素材库"))
-    candidates.append(os.path.join(_DEFAULT_VAULT, "01-金句素材库"))
+        roots.append(_OB_ENV_PATH)
+    roots.append(_DEFAULT_VAULT)
+    candidates = [
+        os.path.join(root, sub)
+        for root in roots
+        for sub in _QUOTE_SUBDIRS
+    ]
     for path in candidates:
         if os.path.isdir(path):
             return path
     # 都不存在则返回默认值（让后续报错信息更清晰）
-    return candidates[-1] if candidates else os.path.join(_DEFAULT_VAULT, "01-金句素材库")
-
+    return candidates[0] if candidates else os.path.join(_DEFAULT_VAULT, _QUOTE_SUBDIRS[0])
 
 OBSIDIAN_QUOTE_DIR = _resolve_quote_dir()
 
 # 过滤规则
-CORRUPTION_PATTERN = re.compile(r"\?{3,}")
+CORRUPTION_PATTERN = re.compile(r'\?{3,}')
 PLACEHOLDER_PATTERN = re.compile(
-    r"(这句话是|引用的内容|你的引用|此处插入|金句内容|示例|测试|"
-    r"这是某个|这是一段|被引用的内容|placeholder|test|example|content)",
-    re.IGNORECASE,
+    r'(这句话是|引用的内容|你的引用|此处插入|金句内容|示例|测试|'
+    r'这是某个|这是一段|被引用的内容|placeholder|test|example|content)',
+    re.IGNORECASE
 )
 QUOTE_FIELD_PATTERN = re.compile(r'^quote:\s*"(.+?)"\s*$', re.MULTILINE)
-STATUS_PATTERN = re.compile(r"^status:\s*(.+)$", re.MULTILINE)
+STATUS_PATTERN = re.compile(r'^status:\s*(.+)$', re.MULTILINE)
 SOURCE_PATTERN = re.compile(r'^source:\s*"?(.+?)"?\s*$', re.MULTILINE)
 AUTHOR_PATTERN = re.compile(r'^author:\s*"?(.+?)"?\s*$', re.MULTILINE)
-TOPICS_PATTERN = re.compile(r"^applicable_topics:\s*\n((?:\s*-\s*.+\n?)+)", re.MULTILINE)
+TOPICS_PATTERN = re.compile(r'^applicable_topics:\s*\n((?:\s*-\s*.+\n?)+)', re.MULTILINE)
 
 
 def _parse_obsidian_quote(content: str) -> Optional[dict]:
@@ -72,43 +73,43 @@ def _parse_obsidian_quote(content: str) -> Optional[dict]:
     quote_match = QUOTE_FIELD_PATTERN.search(content)
     if not quote_match:
         return None
-
+    
     quote = quote_match.group(1).strip()
-
+    
     # 过滤乱码
     if CORRUPTION_PATTERN.search(quote):
         return None
-
+    
     # 过滤模板占位符
     if PLACEHOLDER_PATTERN.search(quote):
         return None
-
+    
     # 过滤过短的金句
     if len(quote) < 5:
         return None
-
+    
     # 检查是否已审核
     status_match = STATUS_PATTERN.search(content)
     if status_match:
         status = status_match.group(1).strip()
         if status != "已审核":
             return None
-
+    
     source_match = SOURCE_PATTERN.search(content)
     source = source_match.group(1).strip() if source_match else ""
-
+    
     author_match = AUTHOR_PATTERN.search(content)
     author = author_match.group(1).strip() if author_match else ""
-
+    
     topics_match = TOPICS_PATTERN.search(content)
     topics = []
     if topics_match:
         topics = [
-            line.strip().lstrip("- ").strip()
-            for line in topics_match.group(1).split("\n")
-            if line.strip() and line.strip().startswith("-")
+            line.strip().lstrip('- ').strip()
+            for line in topics_match.group(1).split('\n')
+            if line.strip() and line.strip().startswith('-')
         ]
-
+    
     return {
         "content": quote,
         "source": source,
@@ -120,35 +121,35 @@ def _parse_obsidian_quote(content: str) -> Optional[dict]:
 def _read_obsidian_quotes() -> list[dict]:
     """从 Obsidian 知识库读取所有已审核的有效金句"""
     quotes = []
-
+    
     if not os.path.exists(OBSIDIAN_QUOTE_DIR):
         logger.warning(f"Obsidian quote dir not found: {OBSIDIAN_QUOTE_DIR}")
         return quotes
-
+    
     try:
         for root, dirs, files in os.walk(OBSIDIAN_QUOTE_DIR):
             for fname in files:
-                if not fname.endswith(".md") or fname.startswith("_"):
+                if not fname.endswith('.md') or fname.startswith('_'):
                     continue
-
+                
                 fpath = os.path.join(root, fname)
                 try:
-                    with open(fpath, "r", encoding="utf-8") as f:
+                    with open(fpath, 'r', encoding='utf-8') as f:
                         content = f.read()
-
+                    
                     parsed = _parse_obsidian_quote(content)
                     if parsed:
                         # 用文件名的哈希作为唯一 ID
                         file_hash = hashlib.md5(fname.encode()).hexdigest()[:12]
-                        parsed["id"] = f"obsidian_{file_hash}"
-                        parsed["filename"] = fname
+                        parsed['id'] = f"obsidian_{file_hash}"
+                        parsed['filename'] = fname
                         quotes.append(parsed)
                 except Exception as e:
                     logger.warning(f"Failed to read quote file {fname}: {e}")
                     continue
     except Exception as e:
         logger.error(f"Failed to list Obsidian quote dir: {e}")
-
+    
     return quotes
 
 
@@ -162,75 +163,38 @@ def _select_daily_quote(quotes: list[dict]) -> Optional[dict]:
     """按日期轮转选取每日金句（去重）"""
     if not quotes:
         return None
-
+    
     # 用日期作为种子，确保同一天返回相同金句
     day_index = get_random_int(len(quotes))
     return quotes[day_index]
 
 
-def _select_daily_db_quote(db: Session) -> Optional[EssayQuote]:
-    """数据库回退也按日期种子选句，保证同一天刷新不变。"""
-    ids = [
-        row[0]
-        for row in db.query(EssayQuote.quote_id)
-        .filter(EssayQuote.status == 1)
-        .order_by(EssayQuote.quote_id)
-        .all()
-    ]
-    if not ids:
-        return None
-    return db.get(EssayQuote, ids[get_random_int(len(ids))])
-
-
-def _filter_rejected_obsidian(db: Session, quotes: list[dict]) -> list[dict]:
-    """Obsidian 里仍可能保留被 AI 拒绝的原文；按数据库 status=0 过滤。"""
-    rejected = {
-        re.sub(r"\s+", "", row[0] or "")
-        for row in db.query(EssayQuote.content).filter(EssayQuote.status == 0).all()
-    }
-    if not rejected:
-        return quotes
-    return [
-        quote for quote in quotes if re.sub(r"\s+", "", quote.get("content") or "") not in rejected
-    ]
-
-
 @router.get("/quote/daily", summary="每日金句（从 Obsidian 知识库读取）")
 async def get_daily_quote(
-    current_user: Optional[SysUser] = Depends(get_optional_user), db: Session = Depends(get_db)
+    current_user: Optional[SysUser] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
 ):
     """
     获取每日金句：
-    1. 优先从 Obsidian 知识库读取已审核的有效金句
-    2. 按日期轮转选取（同一天返回相同金句）
-    3. 如果 Obsidian 不可用，回退到 SQLite 数据库
+    1. 优先使用 SQLite 预生成的 daily_quote（同一天稳定）
+    2. 无数据库候选时回退到 Obsidian 知识库
+    3. 再回退到随机数据库金句
     """
-    # 0. 优先读取每日快照；不存在时幂等生成，保证三端同日一致。
-    daily_quote, _, _ = ensure_daily_quote(db)
-    if daily_quote is not None:
+    daily = daily_quote_service.get_or_create_daily(db)
+    if daily:
+        row, quote = daily
         favorited = False
         if current_user:
-            favorited = (
-                db.query(QuoteFavorite)
-                .filter(
-                    QuoteFavorite.user_id == current_user.user_id,
-                    QuoteFavorite.quote_id == daily_quote.quote_id,
-                )
-                .first()
-                is not None
-            )
-        return {
-            "quote_id": daily_quote.quote_id,
-            "content": daily_quote.content,
-            "source": daily_quote.source or "",
-            "category": daily_quote.category or "",
-            "author": daily_quote.author or "",
-            "favorited": favorited,
-            "source_type": "database",
-        }
+            favorited = db.query(QuoteFavorite).filter(
+                QuoteFavorite.user_id == current_user.user_id,
+                QuoteFavorite.quote_id == quote.quote_id
+            ).first() is not None
+        payload = daily_quote_service.serialize_daily(row, quote)
+        payload["favorited"] = favorited
+        return payload
 
     # 1. 尝试从 Obsidian 读取
-    obsidian_quotes = _filter_rejected_obsidian(db, _read_obsidian_quotes())
+    obsidian_quotes = _read_obsidian_quotes()
     if obsidian_quotes:
         selected = _select_daily_quote(obsidian_quotes)
         if selected:
@@ -240,128 +204,101 @@ async def get_daily_quote(
             # 检查收藏状态（按 obsidian_source 查询）
             favorited = False
             if current_user:
-                fav = (
-                    db.query(QuoteFavorite)
-                    .filter(
-                        QuoteFavorite.user_id == current_user.user_id,
-                        QuoteFavorite.obsidian_source == selected["filename"],
-                    )
-                    .first()
-                )
+                fav = db.query(QuoteFavorite).filter(
+                    QuoteFavorite.user_id == current_user.user_id,
+                    QuoteFavorite.obsidian_source == selected['filename']
+                ).first()
                 favorited = fav is not None
 
             return {
-                "quote_id": 0,  # Obsidian 金句没有数据库 ID，保持兼容
-                "obsidian_id": obsidian_id,  # 稳定的 Obsidian 金句 ID
-                "content": selected["content"],
-                "source": selected["source"],
-                "category": ", ".join(selected["topics"][:2]) if selected["topics"] else "",
-                "author": selected["author"],
-                "favorited": favorited,
-                "source_type": "obsidian",  # 标记来源
-                "obsidian_source": selected["filename"],  # 文件名标识
+                'quote_id': 0,  # Obsidian 金句没有数据库 ID，保持兼容
+                'obsidian_id': obsidian_id,  # 稳定的 Obsidian 金句 ID
+                'content': selected['content'],
+                'source': selected['source'],
+                'category': ', '.join(selected['topics'][:2]) if selected['topics'] else '',
+                'author': selected['author'],
+                'favorited': favorited,
+                'source_type': 'obsidian',  # 标记来源
+                'obsidian_source': selected['filename'],  # 文件名标识
             }
-
-    # 2. 回退到 SQLite 数据库；仍按日期种子选择，避免同一天刷新换句。
-    quote = _select_daily_db_quote(db)
-
+    
+    # 2. 回退到 SQLite 数据库
+    quote = db.query(EssayQuote).filter(EssayQuote.status == 1)\
+        .order_by(func.random()).first()
+    
     if not quote:
         return {
-            "quote_id": 0,
-            "content": "暂无金句",
-            "source": "",
-            "category": "",
-            "author": "",
-            "favorited": False,
-            "source_type": "database",
+            'quote_id': 0,
+            'content': '暂无金句',
+            'source': '',
+            'category': '',
+            'author': '',
+            'favorited': False,
+            'source_type': 'database',
         }
-
+    
     favorited = False
     if current_user:
-        favorited = (
-            db.query(QuoteFavorite)
-            .filter(
-                QuoteFavorite.user_id == current_user.user_id,
-                QuoteFavorite.quote_id == quote.quote_id,
-            )
-            .first()
-            is not None
-        )
-
+        favorited = db.query(QuoteFavorite).filter(
+            QuoteFavorite.user_id == current_user.user_id,
+            QuoteFavorite.quote_id == quote.quote_id
+        ).first() is not None
+    
     return {
-        "quote_id": quote.quote_id,
-        "content": quote.content,
-        "source": quote.source or "",
-        "category": quote.category or "",
-        "author": quote.author or "",
-        "favorited": favorited,
-        "source_type": "database",
+        'quote_id': quote.quote_id,
+        'content': quote.content,
+        'source': quote.source or '',
+        'category': quote.category or '',
+        'author': quote.author or '',
+        'favorited': favorited,
+        'source_type': 'database',
     }
 
 
 @router.get("", summary="金句列表")
 async def get_quotes(
     category: Optional[str] = Query(None, description="分类筛选: 哲理/治国/民生/法治/品德"),
-    keyword: Optional[str] = Query(None, description="关键词：内容/作者/出处"),
-    author: Optional[str] = Query(None, description="作者或出处"),
+    topic: Optional[str] = Query(None, description="主题 slug 或名称"),
+    q: Optional[str] = Query(None, description="金句内容模糊搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: SysUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
     """分页获取金句列表"""
     query = db.query(EssayQuote).filter(EssayQuote.status == 1)
     if category:
         query = query.filter(EssayQuote.category == category)
-    if keyword:
-        value = f"%{keyword.strip()}%"
-        query = query.filter(
-            or_(
-                EssayQuote.content.like(value),
-                EssayQuote.author.like(value),
-                EssayQuote.source.like(value),
-            )
-        )
-    if author:
-        value = f"%{author.strip()}%"
-        query = query.filter(or_(EssayQuote.author.like(value), EssayQuote.source.like(value)))
+    if topic or q:
+        ids = quote_filter_service.filter_quote_ids(db, topic=topic, q=q)
+        query = query.filter(EssayQuote.quote_id.in_(ids))
 
     total = query.count()
-    items = (
-        query.order_by(desc(EssayQuote.create_time))
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    items = query.order_by(desc(EssayQuote.create_time))\
+        .offset((page - 1) * page_size).limit(page_size).all()
 
     # 标记当前用户是否已收藏
     favorited_ids = set()
     if items:
-        favs = (
-            db.query(QuoteFavorite.quote_id)
-            .filter(
-                QuoteFavorite.user_id == current_user.user_id,
-                QuoteFavorite.quote_id.in_([q.quote_id for q in items]),
-            )
-            .all()
-        )
+        favs = db.query(QuoteFavorite.quote_id).filter(
+            QuoteFavorite.user_id == current_user.user_id,
+            QuoteFavorite.quote_id.in_([q.quote_id for q in items])
+        ).all()
         favorited_ids = {f[0] for f in favs}
 
     result = []
     for q in items:
-        result.append(
-            {
-                "quote_id": q.quote_id,
-                "content": q.content,
-                "source": q.source or "",
-                "category": q.category or "",
-                "author": q.author or "",
-                "create_time": q.create_time.isoformat() if q.create_time else "",
-                "favorited": q.quote_id in favorited_ids,
-            }
-        )
+        result.append({
+            'quote_id': q.quote_id,
+            'content': q.content,
+            'source': q.source or '',
+            'category': q.category or '',
+            'author': q.author or '',
+            'create_time': q.create_time.isoformat() if q.create_time else '',
+            'favorited': q.quote_id in favorited_ids,
+        })
 
-    return {"total": total, "page": page, "page_size": page_size, "items": result}
+    return {'total': total, 'page': page, 'page_size': page_size, 'items': result}
 
 
 import random as _random
@@ -370,40 +307,40 @@ import random as _random
 def _format_obsidian_quote(selected: dict, favorited: bool = False) -> dict:
     """将 Obsidian 金句格式化为统一的 API 返回格式"""
     return {
-        "quote_id": 0,
-        "obsidian_id": f"obsidian_{selected['filename']}",
-        "content": selected["content"],
-        "source": selected.get("source", ""),
-        "category": ", ".join(selected["topics"][:2]) if selected["topics"] else "",
-        "author": selected["author"],
-        "favorited": favorited,
-        "source_type": "obsidian",
-        "obsidian_source": selected["filename"],
+        'quote_id': 0,
+        'obsidian_id': f"obsidian_{selected['filename']}",
+        'content': selected['content'],
+        'source': selected.get('source', ''),
+        'category': ', '.join(selected['topics'][:2]) if selected['topics'] else '',
+        'author': selected['author'],
+        'favorited': favorited,
+        'source_type': 'obsidian',
+        'obsidian_source': selected['filename'],
     }
 
 
 def _format_db_quote(quote, favorited: bool = False) -> dict:
     """将数据库金句格式化为统一的 API 返回格式"""
     return {
-        "quote_id": quote.quote_id,
-        "content": quote.content,
-        "source": quote.source or "",
-        "category": quote.category or "",
-        "author": quote.author or "",
-        "favorited": favorited,
-        "source_type": "database",
+        'quote_id': quote.quote_id,
+        'content': quote.content,
+        'source': quote.source or '',
+        'category': quote.category or '',
+        'author': quote.author or '',
+        'favorited': favorited,
+        'source_type': 'database',
     }
 
 
 def _get_empty_quote() -> dict:
     return {
-        "quote_id": 0,
-        "content": "暂无金句",
-        "source": "",
-        "category": "",
-        "author": "",
-        "favorited": False,
-        "source_type": "database",
+        'quote_id': 0,
+        'content': '暂无金句',
+        'source': '',
+        'category': '',
+        'author': '',
+        'favorited': False,
+        'source_type': 'database',
     }
 
 
@@ -411,7 +348,7 @@ def _get_empty_quote() -> dict:
 async def get_random_quote(
     exclude: Optional[str] = Query(None, description="排除的当前金句内容，保证「换一句」一定换掉"),
     current_user: Optional[SysUser] = Depends(get_optional_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
     """随机获取一条金句：优先从 Obsidian 读取，回退到数据库
 
@@ -422,24 +359,19 @@ async def get_random_quote(
     import random as _rnd
 
     # 1. 尝试从 Obsidian 随机读取
-    obsidian_quotes = _filter_rejected_obsidian(db, _read_obsidian_quotes())
+    obsidian_quotes = _read_obsidian_quotes()
     if obsidian_quotes:
-        pool = [
-            q for q in obsidian_quotes if q.get("content", "").strip() != (exclude or "").strip()
-        ]
+        pool = [q for q in obsidian_quotes
+                if q.get('content', '').strip() != (exclude or '').strip()]
         if not pool:
             pool = obsidian_quotes
         selected = _rnd.choice(pool)
         favorited = False
         if current_user:
-            fav = (
-                db.query(QuoteFavorite)
-                .filter(
-                    QuoteFavorite.user_id == current_user.user_id,
-                    QuoteFavorite.obsidian_source == selected["filename"],
-                )
-                .first()
-            )
+            fav = db.query(QuoteFavorite).filter(
+                QuoteFavorite.user_id == current_user.user_id,
+                QuoteFavorite.obsidian_source == selected['filename']
+            ).first()
             favorited = fav is not None
         return _format_obsidian_quote(selected, favorited)
 
@@ -454,65 +386,63 @@ async def get_random_quote(
 
     favorited = False
     if current_user:
-        favorited = (
-            db.query(QuoteFavorite)
-            .filter(
-                QuoteFavorite.user_id == current_user.user_id,
-                QuoteFavorite.quote_id == quote.quote_id,
-            )
-            .first()
-            is not None
-        )
+        favorited = db.query(QuoteFavorite).filter(
+            QuoteFavorite.user_id == current_user.user_id,
+            QuoteFavorite.quote_id == quote.quote_id
+        ).first() is not None
 
     return _format_db_quote(quote, favorited)
 
 
 @router.post("", summary="创建金句（管理员）")
 async def create_quote(
-    payload: dict, current_user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)
+    payload: dict,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """创建金句（仅管理员）"""
     if current_user.role_level < 2:
         raise HTTPException(status_code=403, detail="仅管理员可创建金句")
 
-    content = payload.get("content", "").strip()
+    content = payload.get('content', '').strip()
     if not content:
         raise HTTPException(status_code=400, detail="金句内容不能为空")
 
     quote = EssayQuote(
         content=content,
-        source=payload.get("source", ""),
-        category=payload.get("category", ""),
-        author=payload.get("author", ""),
+        source=payload.get('source', ''),
+        category=payload.get('category', ''),
+        author=payload.get('author', ''),
     )
     db.add(quote)
     db.commit()
     db.refresh(quote)
 
     return {
-        "quote_id": quote.quote_id,
-        "content": quote.content,
-        "source": quote.source,
-        "category": quote.category,
-        "author": quote.author,
-        "message": "金句创建成功",
+        'quote_id': quote.quote_id,
+        'content': quote.content,
+        'source': quote.source,
+        'category': quote.category,
+        'author': quote.author,
+        'message': '金句创建成功'
     }
 
 
 @router.post("/{quote_id}/favorite", summary="切换金句收藏")
 async def toggle_quote_favorite(
-    quote_id: int, current_user: SysUser = Depends(get_current_user), db: Session = Depends(get_db)
+    quote_id: int,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """添加或取消金句收藏"""
     quote = db.query(EssayQuote).filter(EssayQuote.quote_id == quote_id).first()
     if not quote:
         raise HTTPException(status_code=404, detail="金句不存在")
 
-    existing = (
-        db.query(QuoteFavorite)
-        .filter(QuoteFavorite.user_id == current_user.user_id, QuoteFavorite.quote_id == quote_id)
-        .first()
-    )
+    existing = db.query(QuoteFavorite).filter(
+        QuoteFavorite.user_id == current_user.user_id,
+        QuoteFavorite.quote_id == quote_id
+    ).first()
 
     if existing:
         db.delete(existing)
@@ -536,22 +466,18 @@ async def toggle_quote_favorite(
 async def toggle_obsidian_quote_favorite(
     obsidian_source: str,
     current_user: SysUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
     """添加或取消 Obsidian 金句收藏（以文件名作为稳定 ID）"""
     # 校验参数格式（只允许文件名，不允许路径分隔符）
-    if not re.match(r"^[\w\-\.]+\.md$", obsidian_source):
+    if not re.match(r'^[\w\-\.]+\.md$', obsidian_source):
         raise HTTPException(status_code=400, detail="无效的金句来源标识")
 
     # 检查是否已收藏
-    existing = (
-        db.query(QuoteFavorite)
-        .filter(
-            QuoteFavorite.user_id == current_user.user_id,
-            QuoteFavorite.obsidian_source == obsidian_source,
-        )
-        .first()
-    )
+    existing = db.query(QuoteFavorite).filter(
+        QuoteFavorite.user_id == current_user.user_id,
+        QuoteFavorite.obsidian_source == obsidian_source
+    ).first()
 
     if existing:
         db.delete(existing)
@@ -573,100 +499,34 @@ async def toggle_obsidian_quote_favorite(
     return {"favorited": True, "message": "已收藏"}
 
 
-@router.get("/search", summary="金句全文检索")
-async def search_quotes(
-    q: str = Query(..., min_length=1, max_length=100),
-    limit: int = Query(20, ge=1, le=50),
-    current_user: SysUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """FTS5 全文检索；表不存在时回退 LIKE。"""
-    try:
-        rows = (
-            db.execute(
-                text("""
-                SELECT q.quote_id, q.content, q.author, q.source, q.category
-                FROM quote_fts
-                JOIN essay_quote q ON q.quote_id = quote_fts.quote_id
-                WHERE quote_fts MATCH :q AND q.status = 1
-                ORDER BY rank
-                LIMIT :limit
-                """),
-                {"q": q, "limit": limit},
-            )
-            .mappings()
-            .all()
-        )
-        items = [
-            {
-                "quote_id": row["quote_id"],
-                "content": row["content"],
-                "author": row["author"] or "",
-                "source": row["source"] or "",
-                "category": row["category"] or "",
-            }
-            for row in rows
-        ]
-    except Exception:
-        value = f"%{q}%"
-        rows = (
-            db.query(EssayQuote)
-            .filter(
-                EssayQuote.status == 1,
-                or_(
-                    EssayQuote.content.like(value),
-                    EssayQuote.author.like(value),
-                    EssayQuote.source.like(value),
-                ),
-            )
-            .limit(limit)
-            .all()
-        )
-        items = [
-            {
-                "quote_id": row.quote_id,
-                "content": row.content,
-                "author": row.author or "",
-                "source": row.source or "",
-                "category": row.category or "",
-            }
-            for row in rows
-        ]
-    return {"query": q, "items": items}
-
-
 @router.get("/favorites", summary="我的金句收藏列表")
 async def get_quote_favorites(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: SysUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
     """获取当前用户的金句收藏列表"""
-    query = db.query(QuoteFavorite).filter(QuoteFavorite.user_id == current_user.user_id)
+    query = db.query(QuoteFavorite).filter(
+        QuoteFavorite.user_id == current_user.user_id
+    )
 
     total = query.count()
-    favs = (
-        query.order_by(desc(QuoteFavorite.create_time))
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    favs = query.order_by(desc(QuoteFavorite.create_time))\
+        .offset((page - 1) * page_size).limit(page_size).all()
 
     items = []
     for fav in favs:
         quote = fav.quote
         if quote and quote.status == 1:
-            items.append(
-                {
-                    "fav_id": fav.fav_id,
-                    "quote_id": quote.quote_id,
-                    "content": quote.content,
-                    "source": quote.source or "",
-                    "category": quote.category or "",
-                    "author": quote.author or "",
-                    "create_time": fav.create_time.isoformat() if fav.create_time else "",
-                }
-            )
+            items.append({
+                'fav_id': fav.fav_id,
+                'quote_id': quote.quote_id,
+                'content': quote.content,
+                'source': quote.source or '',
+                'category': quote.category or '',
+                'author': quote.author or '',
+                'create_time': fav.create_time.isoformat() if fav.create_time else '',
+            })
 
-    return {"total": total, "page": page, "page_size": page_size, "items": items}
+    return {'total': total, 'page': page, 'page_size': page_size, 'items': items}

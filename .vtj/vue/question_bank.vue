@@ -119,8 +119,11 @@
               </div>
               <!-- 展开的考点列表（L2 二级 / L3 三级） -->
               <div class="kp-list" v-if="state.expandedSubCategory === sub.key">
-                <div class="kp-empty" v-if="!sub.knowledge_points || !sub.knowledge_points.length">
-                  <span>暂无考点数据</span>
+                <div class="kp-empty" v-if="!hasVisiblePoints(sub)">
+                  <span>{{ (sub.knowledge_points && sub.knowledge_points.length) ? '考点下暂无题目' : '该题型暂未关联考点' }}</span>
+                  <button class="kp-fallback-btn" @click.stop="practiceBySubcard(sub)">
+                    直接练习该题型（{{ sub.total_questions || sub.count || 0 }} 题）
+                  </button>
                 </div>
                 <template v-for="l2 in sub.knowledge_points" :key="l2.point_id">
                   <div class="kp-l2" v-if="(l2.total_questions || 0) > 0">
@@ -193,20 +196,19 @@
                 <span class="log-sub-value" :class="state.unifiedStats.total.accuracy >= 70 ? 'accuracy-good' : 'accuracy-warn'">{{ state.unifiedStats.total.accuracy }}%</span>
               </div>
             </div>
-            <!-- 题目类型进度 -->
+            <!-- 题目类型进度：柱（完成率）+ 折线（正确率）组合图 -->
             <div class="type-progress-section">
-              <div class="type-progress-title">题目类型进度</div>
-              <div class="type-badges">
-                <div v-for="t in state.practiceTypeSummary" :key="t.subject_code + '_' + t.subcategory"
-                     class="type-badge"
-                     :class="t.is_completed ? 'badge-done' : 'badge-undone'"
-                     @click="startTypePractice(t)">
-                  <span class="badge-name">{{ t.subject_name }}·{{ t.subcategory }}</span>
-                  <span class="badge-status">{{ t.is_completed ? '已完成' : '未完成' }}</span>
-                  <span class="badge-bar"><i :style="{ width: (t.completion_rate || 0) + '%' }"></i></span>
-                </div>
+              <div class="type-progress-title">
+                题目类型进度
+                <span class="type-progress-legend">柱=完成率 · 折线=正确率 · 点柱子开始练习</span>
               </div>
-              <div class="type-progress-empty" v-if="!state.practiceTypeSummary.length">
+              <EChart
+                v-if="state.practiceTypeSummary.length"
+                :option="typeChartOption"
+                height="230px"
+                @chart-click="onTypeChartClick"
+              />
+              <div class="type-progress-empty" v-else>
                 <span>暂无做题记录，快去练习吧~</span>
               </div>
             </div>
@@ -268,13 +270,6 @@
               <div class="tool-item" @click="navigateTo('score_analysis')">
                 <XIcon :icon="DataAnalysis" :size="20" color="#10b981"></XIcon>
                 <span> 成绩分析</span>
-              </div>
-              <div class="tool-item" @click="navigateTo('gold_purchase')">
-                <XIcon
-                  :icon="ShoppingCartFull"
-                  :size="20"
-                  color="#8b5cf6"></XIcon>
-                <span> 金币购</span>
               </div>
             </div>
           </div>
@@ -356,7 +351,7 @@
 <script lang="ts">
   // @ts-nocheck
   import { defineComponent, reactive } from 'vue';
-  import { ElMessage } from 'element-plus';
+  import { ElMessage, ElMessageBox } from 'element-plus';
   import { XIcon } from '@vtj/ui';
   import {
     Timer,
@@ -373,6 +368,7 @@
   } from '@vtj/icons';
   import NavBar from './navbar.vue';
   import GoalCard from './goal_card.vue';
+  import EChart from '@/components/charts/EChart.vue';
   import { useProvider } from '@vtj/renderer';
   // P2-73：题库浏览域（② catalog）store 接入；仅只读列表/筛选/详情，不涉及 ⑱⑲⑳
   import { useCatalogStore } from '@/modules/catalog/store';
@@ -416,7 +412,7 @@
 
   export default defineComponent({
     name: 'QuestionBank',
-    components: { NavBar, XIcon, GoalCard },
+    components: { NavBar, XIcon, GoalCard, EChart },
     setup(props) {
       const provider = useProvider({ id: 'question_bank', version: '1787547281992' });
       // ② 题库浏览域：只读列表数据（题目列表 / 筛选 / 详情）
@@ -524,12 +520,92 @@
       if (this._rpVisHandler) document.removeEventListener('visibilitychange', this._rpVisHandler);
     },
     computed: {
+      // 练习记录面板：题目类型「柱（完成率）+ 折线（正确率）」组合图配置
+      typeChartOption() {
+        // 卡片宽度约 330px，超过 8 根柱 x 轴标签必然重叠；与 onTypeChartClick 的截取长度必须一致
+        var list = (this.state.practiceTypeSummary || []).slice(0, 8);
+        var names = list.map(function(t) { return t.subject_name + '·' + t.subcategory; });
+        var doneRates = list.map(function(t) { return Number(t.completion_rate || 0); });
+        var accRates = list.map(function(t) {
+          // 旧后端未返回 accuracy 时按 0 处理，图仍可读
+          return Number(t.accuracy || 0);
+        });
+        return {
+          grid: { left: 8, right: 12, top: 34, bottom: 8, containLabel: true },
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: function(params) {
+              if (!params || !params.length) return '';
+              var idx = params[0].dataIndex;
+              var t = list[idx] || {};
+              return names[idx] + '<br/>完成 ' + (t.done_count || 0) + '/' + (t.total_questions || 0) +
+                '（' + doneRates[idx] + '%）<br/>正确率 ' + accRates[idx] + '%' +
+                '<br/>作答 ' + (t.attempts || 0) + ' 次';
+            }
+          },
+          legend: {
+            data: ['完成率', '正确率'],
+            right: 0, top: 0, itemWidth: 10, itemHeight: 10,
+            textStyle: { fontSize: 11, color: '#666' }
+          },
+          xAxis: {
+            type: 'category',
+            data: names,
+            axisTick: { show: false },
+            axisLine: { lineStyle: { color: '#e5e7eb' } },
+            axisLabel: {
+              fontSize: 10, color: '#666', interval: 0, rotate: 38, margin: 10,
+              formatter: function(v) {
+                var s = String(v).replace('行测·', '').replace('申论·', '').replace('公专·', '');
+                return s.length > 6 ? s.slice(0, 6) + '…' : s;
+              }
+            }
+          },
+          yAxis: [
+            {
+              type: 'value', max: 100, min: 0,
+              axisLabel: { fontSize: 10, color: '#999', formatter: '{value}%' },
+              splitLine: { lineStyle: { color: '#f1f2f4' } }
+            },
+            { type: 'value', max: 100, min: 0, show: false }
+          ],
+          series: [
+            {
+              name: '完成率',
+              type: 'bar',
+              barMaxWidth: 22,
+              data: doneRates,
+              itemStyle: {
+                borderRadius: [4, 4, 0, 0],
+                color: function(p) {
+                  return (list[p.dataIndex] && list[p.dataIndex].is_completed) ? '#1a2b5f' : '#8fa3d9';
+                }
+              },
+              label: {
+                show: true, position: 'top', fontSize: 9, color: '#96939d',
+                formatter: function(p) { return p.value > 0 ? p.value + '%' : ''; }
+              }
+            },
+            {
+              name: '正确率',
+              type: 'line',
+              yAxisIndex: 0,
+              smooth: true,
+              symbolSize: 6,
+              data: accRates,
+              lineStyle: { width: 2, color: '#d32f2f' },
+              itemStyle: { color: '#d32f2f' }
+            }
+          ]
+        };
+      },
       topActions() {
         const actions = [
           { key: 'quick', name: '快速练习', icon: '⚡', tag: 'NEW' },
           { key: 'history', name: '历年试卷', icon: '📋' },
           { key: 'smart', name: '智能组卷', icon: '🤖' },
-          { key: 'plan', name: '学习计划', icon: '📅' },
+          { key: 'plan', name: '学习计划', icon: '📅', tag: '' },
           { key: 'ai', name: '联考小智', icon: '🧠', tag: 'AI' },
         ];
         // 题目导入仅教师和管理员可见
@@ -817,14 +893,91 @@
         }
       },
       startTypePractice(type) {
-        // 跳转到答题页，携带科目和子科目参数
-        if (type.subject_code === 'xc') {
-          this.$router.push('/exercise?subject=xc&subcategory=' + encodeURIComponent(type.subcategory));
-        } else if (type.subject_code === 'sl') {
-          this.$router.push('/exercise?subject=sl&subcategory=' + encodeURIComponent(type.subcategory));
-        } else if (type.subject_code === 'ga') {
-          this.$router.push('/exercise?subject=ga&subcategory=' + encodeURIComponent(type.subcategory));
+        // 题型卡片 / 图表柱子 → 练习页；先查服务端草稿，有未完成记录就弹「继续 / 重新」
+        var subject = type.subject_code;
+        if (!subject) return;
+        var path = '/exercise?subject=' + subject + '&subcategory=' + encodeURIComponent(type.subcategory || '');
+        this.checkDraftThenGo('sub:' + subject + ':' + (type.subcategory || ''), path, type.subject_name + '·' + (type.subcategory || ''));
+      },
+      // 考点树是否可点：只要有一个 L2 考点挂着题，就按原设计走考点练习；
+      // 否则回退到"按题型直接抽题"——不依赖 question_bank.point_id 是否有值。
+      hasVisiblePoints(sub) {
+        var kps = (sub && sub.knowledge_points) || [];
+        for (var i = 0; i < kps.length; i++) {
+          if ((kps[i].total_questions || 0) > 0) return true;
         }
+        return false;
+      },
+      practiceBySubcard(sub) {
+        // 子科目卡片 → 练习页。必须把真实的 sub.id（含 0 号「未分类」）
+        // 作为 scId 传下去；只传名称会落到旧接口，未分类题恒为空。
+        var cat = this.state.activeCategory;
+        var catNameMap = { xc: '行测', sl: '申论', ga: '公专' };
+        var subjectIdMap = { xc: 1, sl: 2, ga: 3 };
+        var subjectId = subjectIdMap[cat] || '';
+        var hasId = sub && sub.id !== undefined && sub.id !== null && sub.id !== '';
+        var path = '/exercise?subject=' + cat +
+          '&subcategory=' + encodeURIComponent(sub.name || '') +
+          '&count=20' + (subjectId ? '&subjectId=' + subjectId : '');
+        if (hasId) {
+          path += '&scId=' + encodeURIComponent(sub.id);
+        }
+        this.checkDraftThenGo(
+          'sub:' + cat + ':' + (sub.name || ''),
+          path,
+          (catNameMap[cat] || '') + '·' + (sub.name || '')
+        );
+      },
+      async checkDraftThenGo(scopeKey, path, label) {
+        var self = this;
+        var go = function(extra) { self.$router.push(path + (extra || '')); };
+        try {
+          var headers = this.getJsonHeaders();
+          var res = await fetch('/api/practice/drafts', { headers: headers });
+          if (!res.ok) { go(); return; }
+          var data = await res.json();
+          var list = Array.isArray(data.items) ? data.items : [];
+          var hit = null;
+          for (var i = 0; i < list.length; i++) {
+            if (list[i].scope_key === scopeKey) { hit = list[i]; break; }
+          }
+          if (!hit) { go(); return; }
+          var answered = Number(hit.answered_count) || 0;
+          var total = Number(hit.question_count) || 0;
+          try {
+            await ElMessageBox.confirm(
+              '「' + label + '」有一份未完成的答题记录（已答 ' + answered + ' / ' + total + ' 题）。\n' +
+              '继续答题将从您保留的答题记录继续；重新答题会清空这份记录并重新抽题。',
+              '继续上次练习？',
+              {
+                confirmButtonText: '继续答题',
+                cancelButtonText: '重新开始',
+                distinguishCancelAndClose: true,
+                type: 'info',
+              }
+            );
+            go('&continue=1');
+          } catch (action) {
+            if (action === 'cancel') {
+              // 「重新开始」= 显式丢弃草稿，避免下次又被弹回来
+              await fetch('/api/practice/draft?scope=' + encodeURIComponent(hit.scope) +
+                '&scope_key=' + encodeURIComponent(scopeKey), { method: 'DELETE', headers: headers });
+              go();
+            }
+            // 关闭弹窗（Esc / 点遮罩）→ 不做任何跳转
+          }
+        } catch (e) {
+          // 草稿查询本身失败不应挡住练习入口
+          go();
+        }
+      },
+      onTypeChartClick(params) {
+        // 点柱子/折线点 → 进对应子科目练习（复用 startTypePractice 的跳转口径）
+        // 与 typeChartOption 的截取长度保持一致，否则 dataIndex 会错位
+        var list = (this.state.practiceTypeSummary || []).slice(0, 8);
+        var t = list[params && params.dataIndex];
+        if (!t) return;
+        this.startTypePractice(t);
       },
       barHeight(count) {
         var maxVal = 1;
@@ -961,6 +1114,12 @@
         this.fetchRecentRecords(false);
       },
       goRecordDetail(item) {
+        // 未完成但没有可恢复题目的记录（resumable=false）：直接提示，
+        // 否则会跳到空白答题卡（旧版「答题卡 1/0 · 暂无题目数据」的根因）。
+        if (item && item.status === 'in_progress' && item.resumable === false) {
+          ElMessage.warning('该记录没有可恢复的题目，试卷题目可能已被撤下，请重新开始一场练习');
+          return;
+        }
         var jump = item.jump || { path: '/', params: {} };
         var p = jump.params || {};
         var qs = Object.keys(p).map(function (k) {
@@ -1387,6 +1546,7 @@
   /* 题目类型进度 */
   .type-progress-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #f0f2f5; }
   .type-progress-title { font-size: 15px; font-weight: 700; color: #1a2b5f; margin-bottom: 10px; }
+  .type-progress-legend { font-size: 11px; font-weight: 400; color: #96939d; margin-left: 6px; }
   .type-badges { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
   .type-badges::-webkit-scrollbar { width: 3px; }
   .type-badges::-webkit-scrollbar-thumb { background: #d9dce8; border-radius: 3px; }
@@ -1533,6 +1693,19 @@
   .count-badge { font-size: 12px; font-weight: 700; color: #1a2b5f; background: #f0f2f5; padding: 2px 8px; border-radius: 10px; }
   .kp-list { margin: -4px 8px 8px 8px; padding: 8px 0; background: #fafbfc; border-radius: 0 0 12px 12px; border: 1px solid #f0f2f5; border-top: none; }
   .kp-empty { text-align: center; padding: 12px; font-size: 12px; color: #8a8faa; }
+  .kp-fallback-btn {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 6px 14px;
+    border: 1px solid #1a2b5f;
+    border-radius: 16px;
+    background: #1a2b5f;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .kp-fallback-btn:hover { background: #24397a; }
   .kp-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; transition: all 0.2s; border-bottom: 1px solid #f0f2f5; }
   .kp-row:last-child { border-bottom: none; }
   .kp-row:hover { background: #f0f4ff; }

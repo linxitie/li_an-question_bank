@@ -51,12 +51,19 @@ def test_create_post_requires_auth(client):
     assert response.status_code == 401
 
 
-def test_create_post_rejects_blank_title_or_content(client, auth_headers):
+def test_create_post_allows_blank_title_or_content(client, auth_headers):
+    # 2026-11-01：标题/正文/附件 任一即可发布，因此单独空标题或空正文应成功
     blank_title = _create_post(client, auth_headers, title="   ")
     blank_content = _create_post(client, auth_headers, content="   ")
 
-    assert blank_title.status_code == 422
-    assert blank_content.status_code == 422
+    assert blank_title.status_code == 200
+    assert blank_content.status_code == 200
+
+
+def test_create_post_rejects_when_all_empty(client, auth_headers):
+    # 三者都空才拒绝
+    resp = _create_post(client, auth_headers, title="", content="")
+    assert resp.status_code == 422
 
 
 def test_create_post_rejects_overlong_fields(client, auth_headers):
@@ -68,10 +75,16 @@ def test_create_post_rejects_overlong_fields(client, auth_headers):
 
 
 def test_create_post_blocks_sensitive_content(client, auth_headers, monkeypatch):
-    def fake_detect(text):
-        return {"level": SensitiveLevel.BLOCKED, "words": ["违规词"], "masked_text": text}
+    def fake_guard(db, text, **kwargs):
+        return {
+            "level": SensitiveLevel.BLOCKED,
+            "words": ["违规词"],
+            "masked_text": text,
+            "decision": "block",
+            "judgment_id": None,
+        }
 
-    monkeypatch.setattr(forum.sensitive_filter, "detect", fake_detect)
+    monkeypatch.setattr(forum, "guard_text", fake_guard)
     response = _create_post(client, auth_headers)
 
     assert response.status_code == 400
@@ -79,10 +92,16 @@ def test_create_post_blocks_sensitive_content(client, auth_headers, monkeypatch)
 
 
 def test_create_post_masks_sensitive_content(client, auth_headers, monkeypatch):
-    def fake_detect(text):
-        return {"level": SensitiveLevel.MASKED, "words": ["敏感"], "masked_text": "已屏蔽内容"}
+    def fake_guard(db, text, **kwargs):
+        return {
+            "level": SensitiveLevel.MASKED,
+            "words": ["敏感"],
+            "masked_text": "已屏蔽内容",
+            "decision": "mask",
+            "judgment_id": None,
+        }
 
-    monkeypatch.setattr(forum.sensitive_filter, "detect", fake_detect)
+    monkeypatch.setattr(forum, "guard_text", fake_guard)
     response = _create_post(client, auth_headers)
 
     assert response.status_code == 200

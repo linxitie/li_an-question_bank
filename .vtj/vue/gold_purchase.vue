@@ -14,6 +14,11 @@
           <span class="balance-value"> {{ state.balance }}</span>
           <XIcon :icon="Medal" :size="20" color="#f59e0b"></XIcon>
         </div>
+        <!-- 2026-11-07：金币居中，我的兑换/知识图谱并排右侧 -->
+        <div class="gp-header-actions">
+          <button class="gp-my-exchanges" @click="goExchanges">我的兑换</button>
+          <button class="gp-my-exchanges gp-kg-entry" @click="goKnowledgeGraph">知识图谱</button>
+        </div>
       </div>
 
       <!-- Tab 导航 -->
@@ -31,7 +36,10 @@
       <div v-if="state.activeTab === 'shop'" class="gp-panel">
         <div class="goods-grid">
           <div v-for="item in state.products" :key="item.id" class="goods-card" @click="openDetail(item)">
-            <div class="goods-image"><span class="goods-emoji">{{ item.image_url || '🎁' }}</span></div>
+            <div class="goods-image">
+              <img v-if="isImageUrl(item.image_url)" :src="item.image_url" class="goods-img" alt="" />
+              <span v-else class="goods-emoji">{{ item.image_url || '🎁' }}</span>
+            </div>
             <div class="goods-info">
               <h4 class="goods-name">{{ item.name }}</h4>
               <p class="goods-desc">{{ item.description }}</p>
@@ -74,7 +82,9 @@
         <div class="gp-card">
           <h4>📋 每日任务</h4>
           <div v-for="t in state.tasks.daily" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
+            <span class="task-title">
+              {{ t.description || t.title }}<em v-if="t.description" class="task-title-badge">（可获得「{{ t.title }}」）</em>
+            </span>
             <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
             <span class="task-reward">🪙{{ t.reward_coins }}</span>
             <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">
@@ -83,25 +93,20 @@
           </div>
         </div>
 
-        <!-- 随机任务 -->
+        <!-- 周常任务（M2：置顶槽位 + 生效奖励） -->
         <div class="gp-card">
-          <h4>🎲 随机任务 <button class="refresh-btn" @click="refreshRandom">刷新</button></h4>
-          <div v-for="t in state.tasks.random" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
-            <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
-            <span class="task-reward">🪙{{ t.reward_coins }}</span>
-            <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">
-              {{ t.claimed ? '已领取' : t.completed ? '领取' : '未完成' }}
-            </button>
-          </div>
-          <div v-if="!state.tasks.random.length" class="gp-empty">暂无随机任务</div>
-        </div>
-
-        <!-- 周常任务 -->
-        <div class="gp-card">
-          <h4>📅 周常任务</h4>
+          <h4>
+            📅 周常任务
+            <span v-if="state.tasks.weekly_meta" class="week-meta">
+              {{ state.tasks.weekly_meta.week_key }} · 本周已领 {{ state.tasks.weekly_meta.claimed_total }}/{{ state.tasks.weekly_meta.reward_cap }}
+            </span>
+          </h4>
           <div v-for="t in state.tasks.weekly" :key="t.task_id" class="task-item">
-            <span class="task-title">{{ t.title }}</span>
+            <span class="task-title">
+              <span v-if="t.pinned" class="pin-badge">置顶</span>
+              <span v-if="t.is_kg_generated" class="kg-badge">知识图谱生成</span>
+              {{ t.description || t.title }}<em v-if="t.description" class="task-title-badge">（可获得「{{ t.title }}」）</em>
+            </span>
             <span class="task-progress">{{ t.current }}/{{ t.threshold }}</span>
             <span class="task-reward">🪙{{ t.reward_coins }}</span>
             <button class="task-btn" :disabled="!t.completed || t.claimed" @click="claimTask(t)">
@@ -109,6 +114,46 @@
             </button>
           </div>
         </div>
+
+        <!-- 周任务设计分配（2027.1）：第01–12 周，待补题仅展示、可试点可开始 -->
+        <div class="gp-card" v-if="state.weekly && state.weekly.plan">
+          <h4>
+            🗓️ {{ state.weekly.plan.title }}
+            <span class="week-meta">
+              {{ state.weekly.plan.start_date }} ~ {{ state.weekly.plan.end_date }} ·
+              {{ state.weekly.is_preview ? '预告' : '本周' }} ·
+              {{ state.weekly.summary.tasks }} 项 / {{ state.weekly.summary.minutes }} 分钟
+            </span>
+          </h4>
+          <div v-for="day in state.weekly.days" :key="day.date">
+            <p class="task-note">{{ day.date }} {{ day.weekday }}</p>
+            <div v-for="t in day.tasks" :key="t.instance_id" class="task-item">
+              <span class="task-title">
+                <span class="pin-badge">{{ t.subject }}</span>{{ t.title }}
+              </span>
+              <span class="task-progress">{{ t.qty }}{{ t.unit }}</span>
+              <span class="task-reward">🪙{{ t.coins }}</span>
+              <button class="task-btn" :disabled="!t.startable" @click="startWeeklyTask(t)">
+                {{ t.startable ? '开始' : (t.blocked_label || '待补题') }}
+              </button>
+            </div>
+          </div>
+          <div v-if="state.weekly.pilot_tasks.length">
+            <p class="task-note">🚀 可试点（现在就能做）</p>
+            <div v-for="t in state.weekly.pilot_tasks" :key="'p-' + t.instance_id" class="task-item">
+              <span class="task-title">{{ t.title }}</span>
+              <span class="task-progress">{{ t.task_date }}</span>
+              <span class="task-reward">🪙{{ t.coins }}</span>
+              <button class="task-btn" :disabled="!t.startable" @click="startWeeklyTask(t)">
+                {{ t.startable ? '开始' : (t.blocked_label || '待补题') }}
+              </button>
+            </div>
+          </div>
+          <p class="task-note" v-if="state.weekly.later_weeks.length">
+            后续 {{ state.weekly.later_weeks.length }} 周已排期：{{ laterWeeksText }}
+          </p>
+        </div>
+
       </div>
 
       <!-- 目标 Tab -->
@@ -137,6 +182,46 @@
           </div>
         </div>
       </div>
+      <!-- 新建目标弹窗（2026-11-07，替换 window.prompt） -->
+      <div v-if="state.goalModal.visible" class="gp-modal-mask" @click.self="closeGoalModal">
+        <div class="gp-modal">
+          <h3>新增目标</h3>
+          <div class="gp-field">
+            <label>目标名称</label>
+            <input v-model="state.goalModal.title" maxlength="50" placeholder="例如：每日做题100道" />
+          </div>
+          <div class="gp-field">
+            <label>目标数量（题）</label>
+            <input v-model.number="state.goalModal.count" type="number" min="1" max="10000" />
+          </div>
+          <div class="gp-field">
+            <label>目标类型</label>
+            <select v-model="state.goalModal.type">
+              <option value="DAILY">每日</option>
+              <option value="WEEKLY">每周</option>
+              <option value="MONTHLY">每月</option>
+              <option value="CUSTOM">自定义</option>
+            </select>
+          </div>
+          <div class="gp-field">
+            <label>截止日期（可选）</label>
+            <input v-model="state.goalModal.deadline" type="date" />
+          </div>
+          <div class="gp-field">
+            <label>优先级</label>
+            <select v-model="state.goalModal.priority">
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+            </select>
+          </div>
+          <div class="gp-modal-actions">
+            <button class="gp-cancel" @click="closeGoalModal">取消</button>
+            <button class="gp-save" :disabled="state.goalModal.submitting" @click="submitGoal">保存</button>
+          </div>
+        </div>
+      </div>
+
     </main>
 
     <!-- 详情弹窗 -->
@@ -157,6 +242,18 @@
         </div>
       </div>
     </div>
+
+    <!-- M1.5：我的兑换弹窗（用户要求以弹窗形式出现） -->
+    <MyExchangesModal
+      v-if="state.showExchanges"
+      @close="state.showExchanges = false"
+    />
+
+    <!-- M3.5：知识图谱弹窗 -->
+    <KnowledgeGraphModal
+      v-if="state.showKnowledgeGraph"
+      @close="state.showKnowledgeGraph = false"
+    />
   </div>
 </template>
 
@@ -169,10 +266,12 @@
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useRewardStore } from '@/modules/reward/store';
+  import MyExchangesModal from '@/components/shop/MyExchangesModal.vue';
+  import KnowledgeGraphModal from '@/components/kg/KnowledgeGraphModal.vue';
 
   export default defineComponent({
     name: 'GoldPurchase',
-    components: { NavBar, XIcon },
+    components: { NavBar, XIcon, MyExchangesModal, KnowledgeGraphModal },
     setup(props) {
       const provider = useProvider({ id: 'gold_purchase', version: '1778918740312' });
       const rewardStore = useRewardStore();
@@ -182,11 +281,26 @@
         products: [],
         records: [],
         tasks: { checkin: {}, daily: [], random: [], weekly: [] },
+        // 周任务设计分配（2027.1）概览；null 表示未加载
+        weekly: null,
         goals: [],
         achievements: { categories: {} },
         detailVisible: false,
         detailProduct: null,
-        exchanging: false
+        exchanging: false,
+        // M1.5：我的兑换弹窗开关
+        showExchanges: false,
+        showKnowledgeGraph: false,
+        // 2026-11-07：新建目标改为弹窗（替换 window.prompt）
+        goalModal: {
+          visible: false,
+          submitting: false,
+          title: '',
+          count: 1,
+          type: 'DAILY',
+          deadline: '',
+          priority: 'medium'
+        }
       });
       return {
         state,
@@ -197,6 +311,10 @@
       };
     },
     computed: {
+      laterWeeksText() {
+        const weeks = (this.state.weekly && this.state.weekly.later_weeks) || [];
+        return weeks.map((w) => '第' + w.week_no + '周').join('、');
+      },
       tabs() {
         return [
           { key: 'shop', label: '商城' },
@@ -208,6 +326,45 @@
       }
     },
     methods: {
+      // M1.5：我的兑换改为弹窗（用户要求，2026-11-05）
+      goExchanges() {
+        this.state.showExchanges = true;
+      },
+      // M3.5：知识图谱独立页
+      goKnowledgeGraph() {
+        this.state.showKnowledgeGraph = true;
+      },
+      // 周任务设计分配（2027.1）：只有「可试点」实例可开始；待补题给提示
+      startWeeklyTask(t) {
+        if (!t || !t.startable) {
+          ElMessage.info('该任务待补题，暂不可开始');
+          return;
+        }
+        const subject = t.start_subject || 'xc';
+        const count = t.qty || 10;
+        const path = '/exercise?subject=' + subject + '&count=' + count + '&from=weekly';
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push(path).catch(() => {
+            window.location.hash = '#' + path;
+          });
+        } else {
+          window.location.hash = '#' + path;
+        }
+      },
+      // 独立页入口：保留给需要直接发链接的场景（/student/shop/exchanges）
+      openExchangesPage() {
+        const path = '/student/shop/exchanges';
+        if (this.$router && typeof this.$router.push === 'function') {
+          this.$router.push(path).catch(() => {
+            window.location.hash = '#' + path;
+          });
+        } else {
+          window.location.hash = '#' + path;
+        }
+      },
+      isImageUrl(v) {
+        return typeof v === 'string' && /^(\/|https?:\/\/)/.test(v);
+      },
       switchTab(key) {
         this.state.activeTab = key;
         if (key === 'records') this.loadRecords();
@@ -266,6 +423,11 @@
           const data = await res.json();
           if (res.ok) this.state.tasks = data;
         } catch (e) { /* 静默 */ }
+        try {
+          const weeklyRes = await window.__VTJ_AUTH__.apiFetch('/api/v1/weekly-tasks/overview');
+          const weeklyData = await weeklyRes.json();
+          if (weeklyRes.ok) this.state.weekly = weeklyData;
+        } catch (e) { /* 静默：周任务不可用不影响任务页 */ }
       },
       async claimTask(t) {
         try {
@@ -312,11 +474,51 @@
         } catch (e) { /* 静默 */ }
       },
       showCreateGoal() {
-        const title = window.prompt('请输入目标标题（如：每日完成30题）');
-        if (!title) return;
-        const target = window.prompt('请输入目标数量');
-        if (!target) return;
-        this.createGoal(title, parseInt(target, 10));
+        this.state.goalModal = {
+          visible: true,
+          submitting: false,
+          title: '',
+          count: 1,
+          type: 'DAILY',
+          deadline: '',
+          priority: 'medium'
+        };
+      },
+      closeGoalModal() {
+        this.state.goalModal.visible = false;
+      },
+      async submitGoal() {
+        const m = this.state.goalModal;
+        const title = (m.title || '').trim();
+        const count = parseInt(m.count, 10);
+        if (!title) { ElMessage.warning('请填写目标名称'); return; }
+        if (!count || count < 1) { ElMessage.warning('目标数量需大于 0'); return; }
+        m.submitting = true;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/goals/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title,
+              target_count: count,
+              goal_type: m.type,
+              deadline: m.deadline || null,
+              priority: m.priority
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            ElMessage.success('目标已创建');
+            m.visible = false;
+            this.loadGoals();
+          } else {
+            ElMessage.warning(data.detail || '创建失败');
+          }
+        } catch (e) {
+          ElMessage.error('创建失败');
+        } finally {
+          m.submitting = false;
+        }
       },
       async createGoal(title, targetCount) {
         try {
@@ -408,6 +610,23 @@
   }
   .balance-label { font-size: 13px; color: #92400e; font-weight: 500; }
   .balance-value { font-size: 28px; font-weight: 900; color: #b45309; font-family: 'DIN Alternate', sans-serif; }
+  /* M1.5：我的兑换入口 */
+  .gp-my-exchanges {
+    margin-left: 12px;
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .gp-my-exchanges:hover {
+    background: #dbeafe;
+    transform: translateY(-1px);
+  }
   .gp-tabs {
     display: flex;
     gap: 8px;
@@ -452,6 +671,7 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .goods-emoji { font-size: 30px; }
+  .goods-img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; background: #fff; }
   .goods-info { flex: 1; display: flex; flex-direction: column; }
   .goods-name { font-size: 15px; font-weight: 700; color: #1a2b5f; margin: 0 0 4px; }
   .goods-desc { font-size: 12px; color: #8a8faa; margin: 0 0 12px; flex: 1; }
@@ -484,6 +704,24 @@
   .task-title { flex: 1; color: #333; font-weight: 500; }
   .task-progress { color: #6b7280; min-width: 60px; text-align: center; }
   .task-reward { color: #b45309; font-weight: 700; min-width: 50px; }
+  /* M2：周任务置顶标记与本周统计 */
+  .pin-badge {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #fef3c7;
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 700;
+    vertical-align: middle;
+  }
+  .week-meta {
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+  }
   .task-btn {
     padding: 5px 14px; background: #1a2b5f; color: #fff; border: none;
     border-radius: 8px; cursor: pointer; font-size: 12px;
@@ -527,4 +765,66 @@
   .modal-price { font-weight: 700; color: #b45309; font-size: 16px !important; }
   .modal-balance { color: #6b7280; }
   .modal-footer { display: flex; gap: 12px; margin-top: 20px; }
+
+/* 2026-11-07：头部居中 + 新建目标弹窗 */
+.gp-header { position: relative; }
+.gp-header .gold-balance {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+}
+.gp-header-actions { margin-left: auto; display: flex; gap: 8px; }
+@media (max-width: 900px) {
+  .gp-header .gold-balance { position: static; transform: none; margin: 0 auto; }
+}
+.gp-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+.gp-modal {
+  width: 460px;
+  max-width: 92vw;
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px 22px 16px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+}
+.gp-modal h3 { margin: 0 0 14px; font-size: 18px; color: #1a2b5f; }
+.gp-field { margin-bottom: 12px; }
+.gp-field label { display: block; font-size: 13px; color: #5a6488; margin-bottom: 6px; }
+.gp-field input,
+.gp-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #dfe3ee;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: #f7f9fd;
+}
+.gp-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.gp-cancel {
+  border: 1px solid #dfe3ee;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 18px;
+  cursor: pointer;
+}
+.gp-save {
+  border: none;
+  background: #c41e3a;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 20px;
+  cursor: pointer;
+}
+
+.task-title-badge { font-style: normal; font-weight: 400; color: #8a8faa; }
+.kg-badge { display: inline-block; background: #eef2ff; color: #4f46e5; border-radius: 6px; padding: 1px 6px; font-size: 11px; margin-right: 4px; }
 </style>

@@ -167,7 +167,8 @@ export default defineComponent({
     const topActions = ref([
       { key: 'paper', name: '历年试卷', icon: Trophy, tag: '' },
       { key: 'smart', name: '智能组卷', icon: Cpu, tag: 'AI' },
-      { key: 'ai', name: '联考小智', icon: Cpu, tag: '开发中' },
+      { key: 'plan', name: '学习计划', icon: Calendar, tag: '' },
+      { key: 'ai', name: '联考小智', icon: Cpu, tag: 'AI' },
       { key: 'wrong', name: '错题本', icon: Warning, tag: '' },
       { key: 'mock', name: '模拟考试', icon: Trophy, tag: '' }
     ]);
@@ -287,9 +288,10 @@ export default defineComponent({
         if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else if (key === 'smart') {
         router.push('/smart-exam');
+      } else if (key === 'plan') {
+        router.push('/study-plan');
       } else if (key === 'ai') {
-        // 联考小智：功能还在开发中
-        ElMessage.info('联考小智功能还在开发中，敬请期待！');
+        router.push('/ai-assistant');
       } else if (key === 'wrong') {
         router.push('/mobile/wrong-questions');
       } else if (key === 'mock') {

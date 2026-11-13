@@ -127,7 +127,8 @@ def parse_xlsx(xlsx_path: str, max_rows: int = 500) -> dict:
 
 
 def build_cards(rows: list, col_front: int, col_back: int,
-                col_category=None, limit: int = 500) -> list:
+                col_category=None, limit: int = 500, col_point=None,
+                col_cover=None) -> list:
     """按列映射生成卡片。空行跳过、正反面去重；超 limit 抛 ValueError。"""
     cards, seen = [], set()
     for r in rows:
@@ -142,7 +143,14 @@ def build_cards(rows: list, col_front: int, col_back: int,
         cat = ""
         if col_category is not None and col_category < len(r):
             cat = r[col_category].strip()
-        cards.append({"card_front": front[:200], "card_back": back, "category": cat})
+        point = ""
+        if col_point is not None and col_point < len(r):
+            point = r[col_point].strip()
+        cover = ""
+        if col_cover is not None and col_cover < len(r):
+            cover = r[col_cover].strip()
+        cards.append({"card_front": front[:200], "card_back": back,
+                      "category": cat, "point": point, "cover": cover})
     if len(cards) > limit:
         raise ValueError(f"有效卡片 {len(cards)} 张超过上限 {limit}，请拆分文件")
     return cards
@@ -239,3 +247,30 @@ def parse_image_ocr(file_path: str) -> str:
         return text.strip()
     except Exception:
         return ""
+
+# ===== 2026-10-30 修复：pdfplumber 对部分嵌入字体取不到文字（实测 3 份文本型 PDF 全空），
+# 改用 pymupdf 取文本；本定义在文件末尾，覆盖上方的同名实现。=====
+def parse_pdf_text(pdf_path: str) -> dict:  # noqa: F811
+    """PDF -> {chapters, html, word_count}（pymupdf 版）。"""
+    import pymupdf
+
+    doc = pymupdf.open(pdf_path)
+    chapters, parts = [], []
+    try:
+        for page in doc:
+            for raw in (page.get_text("text") or "").split("\n"):
+                line = raw.strip()
+                if not line:
+                    continue
+                # 标题启发式：短行、不以句末标点结尾、不含连续长句
+                is_head = (len(line) <= 24 and not re.search(r"[。！？；，,]$", line)
+                           and not re.search(r"\d{3,}", line))
+                if is_head:
+                    chapters.append({"title": line})
+                    parts.append(f"<h2>{line}</h2>")
+                else:
+                    parts.append(f"<p>{line}</p>")
+    finally:
+        doc.close()
+    html = "".join(parts)
+    return {"chapters": chapters, "html": html, "word_count": len(html)}

@@ -4,19 +4,20 @@ POST /api/practice/record — 记录练习行为
 GET /api/practice/records — 查询用户练习历史
 GET /api/practice/type-summary — 按题目类型统计完成/未完成状态
 """
+import json
 import logging
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, case, distinct
+from sqlalchemy import func, desc, case, distinct, or_, cast, String
 
 from ....core.database import get_db, commit_with_retry
 from ....core.security import get_current_user
 from ....models.models import (
     PracticeRecord, QuestionBank, QuestionSubject, QuestionType, SysUser,
     SmartExamRecord, ExamRecord, ExamAnswerDetail,
-    YearPaper, ExamPaper, KnowledgePoint
+    YearPaper, ExamPaper, KnowledgePoint, PracticeDraft
 )
 from ....services.growth_service import add_growth, GROWTH_RULES
 from ....services.practice_grading import submit_answers, upsert_wrong_question
@@ -266,69 +267,94 @@ async def get_practice_type_summary(
     """
     按科目+子科目统计用户做题情况
     返回每个类型的完成/未完成状态
+
+    性能：原实现"整科目题目读进内存 + 每子科目 2 条 count"是 N+1（16 个子科目 ≈ 34 条 SQL）。
+    现改为固定 3 条 SQL（科目表 + 题目聚合 + 用户已做聚合），返回结构完全不变。
     """
-    # 获取所有科目的子科目分类
+    # 子科目列按科目取：行测→xingce、申论→shenlun、公专→gongzhuan
+    # 注意：这三列在模型里是 Enum 类型，库中存在枚举外的历史值（如「判断推理」），
+    # 直接 SELECT 会抛 "'判断推理' is not among the defined enum values" → 500。
+    # 因此一律 cast 成 String 读取，跳过 ORM 的枚举校验。
+    sc_col = case(
+        (QuestionBank.subject_id == 1, cast(QuestionBank.xingce_subcategory, String)),
+        (QuestionBank.subject_id == 2, cast(QuestionBank.shenlun_subcategory, String)),
+        (QuestionBank.subject_id == 3, cast(QuestionBank.gongzhuan_subcategory, String)),
+        else_=None,
+    ).label("sc")
+
     subjects = db.query(QuestionSubject).filter(QuestionSubject.status == 1).all()
+    subj_meta = {s.subject_id: s for s in subjects}
+
+    # ① 每个子科目的题目总数
+    total_rows = db.query(
+        QuestionBank.subject_id, sc_col, func.count(QuestionBank.question_id)
+    ).filter(
+        QuestionBank.status == 1
+    ).group_by(QuestionBank.subject_id, sc_col).all()
+
+    totals: Dict[Any, int] = {}
+    for subject_id, sc, cnt in total_rows:
+        # 子科目缺失或占位值('无')的题目不参与类型进度统计
+        if not sc or sc == '无':
+            continue
+        totals[(subject_id, sc)] = int(cnt or 0)
+
+    # ② 当前用户在每个子科目下已做过的题目数（distinct：一题多次只算一次）
+    done_rows = db.query(
+        QuestionBank.subject_id, sc_col,
+        func.count(distinct(PracticeRecord.question_id))
+    ).join(
+        PracticeRecord, PracticeRecord.question_id == QuestionBank.question_id
+    ).filter(
+        PracticeRecord.user_id == current_user.user_id,
+        QuestionBank.status == 1
+    ).group_by(QuestionBank.subject_id, sc_col).all()
+
+    done: Dict[Any, int] = {}
+    for subject_id, sc, cnt in done_rows:
+        if not sc or sc == '无':
+            continue
+        done[(subject_id, sc)] = int(cnt or 0)
+
+    # ③ 当前用户在每个子科目下的正确率（供练习记录折线用，按作答次数计）
+    acc_rows = db.query(
+        QuestionBank.subject_id, sc_col,
+        func.count(PracticeRecord.record_id),
+        func.coalesce(func.sum(PracticeRecord.is_correct), 0),
+    ).join(
+        PracticeRecord, PracticeRecord.question_id == QuestionBank.question_id
+    ).filter(
+        PracticeRecord.user_id == current_user.user_id,
+        QuestionBank.status == 1
+    ).group_by(QuestionBank.subject_id, sc_col).all()
+
+    acc_map: Dict[Any, tuple] = {}
+    for subject_id, sc, attempts, correct in acc_rows:
+        if not sc or sc == '无':
+            continue
+        acc_map[(subject_id, sc)] = (int(attempts or 0), int(correct or 0))
 
     type_stats = []
-    for subj in subjects:
-        subj_name = subj.subject_name  # 行测/申论/公专
-
-        # 获取该科目下所有题目
-        questions = db.query(QuestionBank).filter(
-            QuestionBank.subject_id == subj.subject_id,
-            QuestionBank.status == 1
-        ).all()
-
-        # 按子科目分组（v2.1：无效子科目直接跳过，不再产生"综合"兜底类型）
-        subcategories = {}
-        for q in questions:
-            # 确定子科目
-            if subj.subject_id == 1:  # 行测
-                sc = q.xingce_subcategory
-            elif subj.subject_id == 2:  # 申论
-                sc = q.shenlun_subcategory
-            elif subj.subject_id == 3:  # 公专
-                sc = q.gongzhuan_subcategory
-            else:
-                sc = None
-
-            # 子科目缺失或占位值('无')的题目不参与类型进度统计
-            # （系统中不存在"综合"这一真实分类，兜底会产生幻影徽章）
-            if not sc or sc == '无':
-                continue
-
-            if sc not in subcategories:
-                subcategories[sc] = {'total': 0, 'done': 0, 'question_ids': []}
-            subcategories[sc]['total'] += 1
-            subcategories[sc]['question_ids'].append(q.question_id)
-
-        # 统计用户在该子科目下的做题情况
-        for sc_name, sc_data in subcategories.items():
-            # 用户做过的该子科目题目数
-            done_count = db.query(func.count(PracticeRecord.record_id)).filter(
-                PracticeRecord.user_id == current_user.user_id,
-                PracticeRecord.question_id.in_(sc_data['question_ids'])
-            ).scalar() or 0
-
-            # 去重题目数（同一题可能做多次）
-            unique_done = db.query(func.count(func.distinct(PracticeRecord.question_id))).filter(
-                PracticeRecord.user_id == current_user.user_id,
-                PracticeRecord.question_id.in_(sc_data['question_ids'])
-            ).scalar() or 0
-
-            is_completed = unique_done >= sc_data['total'] if sc_data['total'] > 0 else False
-
-            type_stats.append({
-                "subject_id": subj.subject_id,
-                "subject_name": subj_name,
-                "subject_code": subj.subject_code,
-                "subcategory": sc_name,
-                "total_questions": sc_data['total'],
-                "done_count": unique_done,
-                "is_completed": is_completed,
-                "completion_rate": round(unique_done * 100 / max(sc_data['total'], 1), 1)
-            })
+    for (subject_id, sc_name), total in totals.items():
+        subj = subj_meta.get(subject_id)
+        if subj is None:
+            continue  # 科目已停用，其子科目不展示
+        unique_done = done.get((subject_id, sc_name), 0)
+        is_completed = unique_done >= total if total > 0 else False
+        attempts, correct = acc_map.get((subject_id, sc_name), (0, 0))
+        type_stats.append({
+            "subject_id": subject_id,
+            "subject_name": subj.subject_name,
+            "subject_code": subj.subject_code,
+            "subcategory": sc_name,
+            "total_questions": total,
+            "done_count": unique_done,
+            "is_completed": is_completed,
+            "completion_rate": round(unique_done * 100 / max(total, 1), 1),
+            # 练习记录面板组合图：柱=completion_rate，折线=accuracy
+            "attempts": attempts,
+            "accuracy": round(correct * 100 / attempts, 1) if attempts else 0,
+        })
 
     # 按科目排序，再按完成率排序
     type_stats.sort(key=lambda x: (x['subject_id'], -x['completion_rate']))
@@ -776,9 +802,15 @@ async def get_recent_records(
         if completed:
             jump = {"path": "/paper-result", "params": {"record_id": er.record_id}}
         else:
+            # 未完成记录统一走答题卡续答（/answer + resume=1），
+            # 由 GET /api/exams/records/{id}/resume 回填题目与断点答案。
             jump = {
-                "path": "/paper-answer",
-                "params": {"record_id": er.record_id, "paper_id": er.paper_id},
+                "path": "/answer",
+                "params": {
+                    "record_id": er.record_id,
+                    "paper_id": er.paper_id,
+                    "resume": "1",
+                },
             }
         merged.append({
             "record_key": f"exam_{er.record_id}",
@@ -791,6 +823,9 @@ async def get_recent_records(
             "time_spent_seconds": int(er.duration_used or 0),
             "started_at": _fmt_dt(er.start_time),
             "completed_at": _fmt_dt(rec_dt),
+            # resumable=false 表示该试卷没有可用题目（题目被撤下/未关联），
+            # 前端据此提示「该记录无题目」而不是跳到空白答题卡。
+            "resumable": completed or q_cnt > 0,
             "jump": jump,
             "_sort": _recency_dt(rec_dt),
         })
@@ -843,8 +878,16 @@ async def get_recent_records(
             )
             .filter(
                 PracticeRecord.user_id == uid,
-                PracticeRecord.source_type == "快速练习",
                 PracticeRecord.practice_date.isnot(None),
+                # 练习流水来源名历史上不统一（'快速练习'/'练习'/前端页面名/NULL），
+                # 若严格等值匹配会导致「最近做题记录」缺失整组快速练习。
+                # 这里改为「排除试卷类与智能组卷」的补集口径。
+                or_(
+                    PracticeRecord.source_type.is_(None),
+                    PracticeRecord.source_type.notin_(
+                        ["智能组卷", "小模考", "历年试卷"]
+                    ),
+                ),
             )
             .group_by(
                 PracticeRecord.practice_date, PracticeRecord.subject_id
@@ -881,3 +924,168 @@ async def get_recent_records(
     ]
 
     return {"total": total, "limit": limit, "offset": offset, "items": page_items}
+
+
+# ============================================================
+# 练习草稿（未完成答题卡，跨设备续答）
+# 设计规格: docs/superpowers/specs/学生端练习记录可视化与未完成答题卡续答_v1.md §14
+# 约束: 草稿与 practice_record 严格分离，交卷后才写正式记录，不污染统计口径
+# ============================================================
+
+DRAFT_SCOPES = ("type", "subject", "paper")
+DRAFT_MAX_QUESTIONS = 200
+DRAFT_MAX_ANSWERS_BYTES = 64 * 1024
+DRAFT_TTL_DAYS = 30
+
+
+def _loads(raw, default):
+    if not raw:
+        return default
+    try:
+        val = json.loads(raw)
+        return val if isinstance(val, type(default)) else default
+    except (TypeError, ValueError):
+        logger.warning("[practice] 草稿 JSON 非法，按空处理")
+        return default
+
+
+def _draft_to_dict(draft: PracticeDraft) -> Dict[str, Any]:
+    return {
+        "draft_id": draft.draft_id,
+        "scope": draft.scope,
+        "scope_key": draft.scope_key,
+        "questions": _loads(draft.questions, []),
+        "answers": _loads(draft.answers, {}),
+        "cursor": int(draft.cursor or 0),
+        "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
+        "expires_at": draft.expires_at.isoformat() if draft.expires_at else None,
+    }
+
+
+@router.post("/draft", summary="保存/更新练习草稿")
+async def save_practice_draft(
+    payload: Dict[str, Any],
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """按 (user_id, scope, scope_key) 唯一键 upsert 草稿，供未完成答题卡续答。"""
+    scope = str(payload.get("scope") or "type")
+    scope_key = str(payload.get("scope_key") or "").strip()
+    if scope not in DRAFT_SCOPES:
+        raise HTTPException(status_code=400, detail=f"scope 必须是 {DRAFT_SCOPES} 之一")
+    if not scope_key or len(scope_key) > 100:
+        raise HTTPException(status_code=400, detail="scope_key 不能为空且不超过 100 字符")
+
+    questions = payload.get("questions") or []
+    if not isinstance(questions, list):
+        raise HTTPException(status_code=400, detail="questions 必须是数组")
+    if len(questions) > DRAFT_MAX_QUESTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"单份草稿最多 {DRAFT_MAX_QUESTIONS} 题",
+        )
+    # 两种存法都接受：
+    #   ① 题目 ID 数组 —— 体积小，恢复时需再请求一次题目详情；
+    #   ② 完整题目对象数组 —— 练习页手上就有 questions，直接上送，恢复时可零请求渲染。
+    # 早期只允许 ①，前端却按 ② 上送，导致每次保存都 400（"继续上次练习"永不出现）。
+    normalized_questions = []
+    for q in questions:
+        if isinstance(q, dict):
+            if q.get("question_id") is None:
+                raise HTTPException(status_code=400, detail="题目对象必须带 question_id")
+            normalized_questions.append(q)
+        else:
+            try:
+                normalized_questions.append(int(q))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="questions 只能是题目ID或题目对象数组")
+    q_json = json.dumps(normalized_questions, ensure_ascii=False)
+
+    answers = payload.get("answers") or {}
+    if not isinstance(answers, dict):
+        raise HTTPException(status_code=400, detail="answers 必须是对象")
+    a_json = json.dumps({str(k): v for k, v in answers.items()}, ensure_ascii=False)
+    if len(a_json.encode("utf-8")) > DRAFT_MAX_ANSWERS_BYTES:
+        raise HTTPException(status_code=400, detail="答案数据超过 64KB 上限")
+
+    now = datetime.now()
+    draft = db.query(PracticeDraft).filter(
+        PracticeDraft.user_id == current_user.user_id,
+        PracticeDraft.scope == scope,
+        PracticeDraft.scope_key == scope_key,
+    ).first()
+    if draft is None:
+        draft = PracticeDraft(
+            user_id=current_user.user_id,
+            scope=scope,
+            scope_key=scope_key,
+            created_at=now,
+        )
+        db.add(draft)
+
+    draft.questions = q_json
+    draft.answers = a_json
+    draft.cursor = int(payload.get("cursor") or 0)
+    draft.updated_at = now
+    draft.expires_at = now + timedelta(days=DRAFT_TTL_DAYS)
+    commit_with_retry(db)
+
+    return {"status": "ok", **_draft_to_dict(draft)}
+
+
+@router.get("/draft", summary="读取练习草稿")
+async def get_practice_draft(
+    scope: str = Query("type", description="type/subject/paper"),
+    scope_key: str = Query(..., description="范围键，如 1:12"),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """读取草稿；不存在返回 404，交卷后前端据 404 走「开始新练习」。"""
+    draft = db.query(PracticeDraft).filter(
+        PracticeDraft.user_id == current_user.user_id,
+        PracticeDraft.scope == scope,
+        PracticeDraft.scope_key == scope_key,
+    ).first()
+    if draft is None or (draft.expires_at and draft.expires_at < datetime.now()):
+        raise HTTPException(status_code=404, detail="暂无草稿")
+    return _draft_to_dict(draft)
+
+
+@router.get("/drafts", summary="我的草稿列表（未完成答题卡）")
+async def list_practice_drafts(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """列出未过期草稿，供练习入口展示「继续作答」入口。"""
+    rows = db.query(PracticeDraft).filter(
+        PracticeDraft.user_id == current_user.user_id
+    ).order_by(desc(PracticeDraft.updated_at)).all()
+    now = datetime.now()
+    items = []
+    for d in rows:
+        if d.expires_at and d.expires_at < now:
+            continue
+        data = _draft_to_dict(d)
+        data["question_count"] = len(data["questions"])
+        data["answered_count"] = len(data["answers"])
+        items.append(data)
+    return {"total": len(items), "items": items}
+
+
+@router.delete("/draft", summary="删除练习草稿（交卷后调用）")
+async def delete_practice_draft(
+    scope: str = Query("type"),
+    scope_key: str = Query(...),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    draft = db.query(PracticeDraft).filter(
+        PracticeDraft.user_id == current_user.user_id,
+        PracticeDraft.scope == scope,
+        PracticeDraft.scope_key == scope_key,
+    ).first()
+    if draft is None:
+        return {"status": "ok", "deleted": 0}
+    db.delete(draft)
+    commit_with_retry(db)
+    return {"status": "ok", "deleted": 1}

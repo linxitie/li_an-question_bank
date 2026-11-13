@@ -3,32 +3,39 @@
     <button
       v-if="visible"
       class="back-to-top"
+      :style="posStyle"
       type="button"
       aria-label="回到顶部"
-      title="回到顶部"
-      @click="scrollToTop">
+      title="回到顶部（可拖动）"
+      @pointerdown="onPointerDown"
+      @click="onClick">
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-        <path
-          d="M12 5l-7 7h4v7h6v-7h4l-7-7z"
-          fill="currentColor" />
+        <path d="M12 5l-7 7h4v7h6v-7h4l-7-7z" fill="currentColor" />
       </svg>
     </button>
   </Transition>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 /**
- * 全局「回到顶部」按钮。
- *
- * 为什么放在 App.vue 而不是各页面里：
- * 学生端 PC 论坛是 VTJ raw 页（R3 禁止 AI 改 template），
- * 做成全局组件后三端都能用，且不触碰任何 .vtj 模板。
+ * 全局「回到顶部」按钮（2026-11-07：改为可拖动，避免遮挡页面功能）。
+ * 位置存 localStorage，三端共用。
  */
 const route = useRoute();
 const visible = ref(false);
+const STORAGE_KEY = 'btt-position-v1';
+const MIN_VISIBLE = 8;
+
+const pos = reactive<{ right: number; bottom: number }>({ right: 24, bottom: 24 });
+const drag = reactive({ active: false, moved: false, startX: 0, startY: 0, startRight: 0, startBottom: 0 });
+
+const posStyle = computed(() => ({
+  right: `${pos.right}px`,
+  bottom: `${pos.bottom}px`
+}));
 
 const FORUM_ROUTE_PATTERNS = [
   /^\/forum$/,
@@ -36,13 +43,14 @@ const FORUM_ROUTE_PATTERNS = [
   /^\/mobile\/forum/,
   /^\/tablet\/forum/
 ];
-
 const isForumPage = (path: string) => FORUM_ROUTE_PATTERNS.some((re) => re.test(path));
 
-/** 学生端 PC 论坛把自己的主区做成了滚动容器，其余页面仍是 window 滚动 */
+const SCROLL_ROOTS = ['.forum-main', '.tf-page', '.tablet-forum-page', '.main-content'];
 const getScrollRoot = (): HTMLElement | null => {
-  const main = document.querySelector('.forum-main') as HTMLElement | null;
-  if (main && main.scrollHeight > main.clientHeight + 4) return main;
+  for (const sel of SCROLL_ROOTS) {
+    const el = document.querySelector(sel) as HTMLElement | null;
+    if (el && el.scrollHeight > el.clientHeight + 4) return el;
+  }
   return null;
 };
 
@@ -61,19 +69,93 @@ const scrollToTop = () => {
   else window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
+function clampPosition() {
+  const maxRight = Math.max(MIN_VISIBLE, window.innerWidth - 60);
+  const maxBottom = Math.max(MIN_VISIBLE, window.innerHeight - 60);
+  pos.right = Math.min(Math.max(pos.right, MIN_VISIBLE), maxRight);
+  pos.bottom = Math.min(Math.max(pos.bottom, MIN_VISIBLE), maxBottom);
+}
+
+function savePosition() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ right: pos.right, bottom: pos.bottom }));
+  } catch {
+    /* 忽略 */
+  }
+}
+
+function restorePosition() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.right === 'number' && typeof data.bottom === 'number') {
+      pos.right = data.right;
+      pos.bottom = data.bottom;
+      clampPosition();
+    }
+  } catch {
+    /* 忽略 */
+  }
+}
+
+function onPointerDown(e: PointerEvent) {
+  drag.active = true;
+  drag.moved = false;
+  drag.startX = e.clientX;
+  drag.startY = e.clientY;
+  drag.startRight = pos.right;
+  drag.startBottom = pos.bottom;
+  (e.target as HTMLElement | null)?.setPointerCapture?.(e.pointerId);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+}
+
+function onPointerMove(e: PointerEvent) {
+  if (!drag.active) return;
+  const dx = e.clientX - drag.startX;
+  const dy = e.clientY - drag.startY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+  pos.right = drag.startRight - dx;
+  pos.bottom = drag.startBottom - dy;
+  clampPosition();
+}
+
+function onPointerUp() {
+  drag.active = false;
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerup', onPointerUp);
+  if (drag.moved) savePosition();
+}
+
+function onClick() {
+  if (drag.moved) {
+    drag.moved = false;
+    return;
+  }
+  scrollToTop();
+}
+
 onMounted(() => {
-  // capture: true 才能捕获内部滚动容器的 scroll 事件
+  restorePosition();
   window.addEventListener('scroll', update, { passive: true, capture: true });
+  window.addEventListener('resize', clampPosition);
   update();
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', update, { capture: true } as EventListenerOptions);
+  window.removeEventListener('resize', clampPosition);
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerup', onPointerUp);
 });
 
-watch(() => route.path, () => {
-  update();
-});
+watch(
+  () => route.path,
+  () => {
+    update();
+  }
+);
 </script>
 
 <style scoped>
@@ -90,24 +172,16 @@ watch(() => route.path, () => {
   border-radius: 50%;
   background: #1a365d;
   color: #fff;
-  cursor: pointer;
-  /* 低于弹窗遮罩（2000/2100），避免盖住详情弹窗 */
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   z-index: 1500;
   box-shadow: 0 6px 18px rgba(26, 54, 93, 0.28);
 }
-
-.back-to-top:hover {
-  background: #24476f;
-}
-
+.back-to-top:active { cursor: grabbing; }
+.back-to-top:hover { background: #24476f; }
 .btt-fade-enter-active,
-.btt-fade-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
+.btt-fade-leave-active { transition: opacity 0.2s ease; }
 .btt-fade-enter-from,
-.btt-fade-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
-}
+.btt-fade-leave-to { opacity: 0; }
 </style>

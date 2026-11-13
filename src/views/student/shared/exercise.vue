@@ -104,17 +104,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" :fill="currentActions.hasMarker ? '#e8384f' : 'none'" :stroke="currentActions.hasMarker ? '#e8384f' : '#8899aa'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
               <span>{{ currentActions.markerLabel || '标记' }}</span>
             </button>
-            <button class="ex-action-btn" @click="state.showFeedback = true" title="题目报错">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8899aa" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              <span>报错</span>
-            </button>
           </div>
-          <FeedbackDrawer
-            :visible="state.showFeedback"
-            :question-id="currentQ.question_id"
-            source="practice"
-            @close="state.showFeedback = false"
-          />
         </div>
         <!-- B4: 复合题材料（可折叠，仅 group_id>0 时显示） -->
         <div v-if="currentQ.group_id" class="ex-group-material">
@@ -302,15 +292,12 @@
 
 <script>
 import { defineComponent, reactive, computed, watch } from 'vue';
-import { sanitizeHtml } from '@/utils/questionRender';
-import FeedbackDrawer from '@/components/forum/FeedbackDrawer.vue';
 import { renderQuestionContent } from '@/utils/questionRender';
 
 var apiBase = '/api/questions';
 
 export default defineComponent({
   name: 'ExercisePage',
-  components: { FeedbackDrawer },
   setup() {
     var state = reactive({
       questions: [],
@@ -328,8 +315,6 @@ export default defineComponent({
       noteText: '',
       // 标记选择
       showMarkerPopup: false,
-      // 题目报错/反馈
-      showFeedback: false,
       // B4: 复合题材料（可折叠）
       materialExpanded: true,
       groupMaterial: '',       // 当前题组共享材料（HTML）
@@ -343,6 +328,10 @@ export default defineComponent({
       correctCount: 0,
       wrongCount: 0,
       resultDetails: [],
+      // 练习草稿：从服务端 practice_draft 还原时置 true（顶部会提示"已恢复上次进度"）
+      resumedFromDraft: false,
+      // 草稿自动保存定时器（10s），与计时器分开，避免互相 clear
+      draftTimer: null,
     });
 
     var markerTypes = [
@@ -383,6 +372,7 @@ export default defineComponent({
       },
       set(val) {
         this.state.userAnswers[this.state.currentIndex] = val;
+        this.queueDraftSave();
       }
     },
     // P1-6: 主观题作答文本（存于 userAnswers，与客观题同一容器，切题自动保留）
@@ -393,6 +383,7 @@ export default defineComponent({
       },
       set(val) {
         this.state.userAnswers[this.state.currentIndex] = val;
+        this.queueDraftSave();
       }
     },
     // 字数统计：非空白字符数
@@ -505,6 +496,9 @@ export default defineComponent({
   },
   beforeUnmount() {
     if (this.state.timerInterval) clearInterval(this.state.timerInterval);
+    // 离开页面立刻存一次草稿：定时器 10s 内关页最多丢 10 秒，这里再收一次尾
+    if (this.state.draftTimer) clearInterval(this.state.draftTimer);
+    if (!this.state.submitted) this.saveDraft(true);
   },
   methods: {
     // === B4: 复合题材料加载（会话内缓存，切题不重复请求） ===
@@ -589,6 +583,86 @@ export default defineComponent({
         : function(url, opts) { return fetch(url, opts); };
     },
 
+    // ==== 练习草稿（服务端 practice_draft，30 天 TTL）====
+    // 为什么放服务端而不是 localStorage：
+    //   1) 一次练习 20~50 题的完整题目对象可达数百 KB，localStorage 5MB 上限而且换设备就读不到；
+    //   2) 后端唯一键 (user_id, scope, scope_key) 天然做"同一题型只保留一份"，重进即覆盖；
+    //   3) 与续答卷（/api/exams/records/{id}/resume）用两套存储互不干扰：草稿是"还没交卷的快照"。
+    draftScope() {
+      var q = this.$route.query || {};
+      return (q.kpId || q.scId) ? 'type' : 'subject';
+    },
+    draftKey() {
+      var q = this.$route.query || {};
+      if (q.kpId) return 'kp:' + q.kpId;
+      if (q.scId) return 'sc:' + q.scId;
+      return 'sub:' + (q.subject || 'xc') + ':' + (q.subcategory || '');
+    },
+    async resumeDraft() {
+      var self = this;
+      try {
+        var fetchFn = this.getFetch();
+        var url = '/api/practice/draft?scope=' + encodeURIComponent(this.draftScope()) +
+          '&scope_key=' + encodeURIComponent(this.draftKey());
+        var res = await fetchFn(url, { headers: { 'Content-Type': 'application/json' } });
+        if (!res.ok) return false;
+        var draft = await res.json();
+        // 只接受"完整题目对象"：老草稿存的是题目ID数组，没有题干无法渲染，当作没有草稿
+        var qs = (Array.isArray(draft.questions) ? draft.questions : []).filter(function(q) {
+          return q && typeof q === 'object' && (q.question_id !== undefined || q.id !== undefined);
+        });
+        if (!qs.length) return false;
+        self.state.questions = qs;
+        self.state.userAnswers = (draft.answers && typeof draft.answers === 'object') ? draft.answers : {};
+        var cursor = Number(draft.cursor);
+        self.state.currentIndex = (cursor >= 0 && cursor < qs.length) ? cursor : 0;
+        self.state.resumedFromDraft = true;
+        self.state.timerInterval = setInterval(function() { self.state.seconds++; }, 1000);
+        self.loadQuestionActions();
+        return true;
+      } catch (e) {
+        console.warn('[草稿] 读取失败:', e);
+        return false;
+      }
+    },
+    saveDraft(silent) {
+      var self = this;
+      if (!self.state.questions.length || self.state.submitted) return;
+      var payload = {
+        scope: self.draftScope(),
+        scope_key: self.draftKey(),
+        questions: self.state.questions,
+        answers: self.state.userAnswers,
+        cursor: self.state.currentIndex,
+      };
+      var fetchFn = self.getFetch();
+      fetchFn('/api/practice/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(function(e) {
+        if (!silent) console.warn('[草稿] 保存失败:', e);
+      });
+    },
+    // 答题即存：1.5s 防抖，避免多选题连续勾选把接口打爆；
+    // 与 10s 定时器、离开页面补存三层配合，任何一层成功都不会丢进度。
+    queueDraftSave() {
+      var self = this;
+      if (self.state._draftDebounce) clearTimeout(self.state._draftDebounce);
+      self.state._draftDebounce = setTimeout(function() { self.saveDraft(true); }, 1500);
+    },
+    clearDraft() {
+      var fetchFn = this.getFetch();
+      var url = '/api/practice/draft?scope=' + encodeURIComponent(this.draftScope()) +
+        '&scope_key=' + encodeURIComponent(this.draftKey());
+      fetchFn(url, { method: 'DELETE' }).catch(function() { /* 交卷后清草稿，失败不影响成绩 */ });
+    },
+    startDraftTimer() {
+      var self = this;
+      if (self.state.draftTimer) clearInterval(self.state.draftTimer);
+      self.state.draftTimer = setInterval(function() { self.saveDraft(true); }, 10000);
+    },
+
     // 前端兜底去重：移除题干内容高度相似的题目（>80%相似度）
     dedupQuestions(questions) {
       if (!questions || questions.length <= 1) return questions || [];
@@ -647,9 +721,18 @@ export default defineComponent({
             return;
           }
         }
+        // 续答入口带 continue=1：优先还原服务端草稿，不再重新抽题
+        // （重新抽题会换一批题目，用户上次的答案就全对不上了）
+        if (String(self.$route.query.continue || '') === '1' && await self.resumeDraft()) {
+          self.startDraftTimer();
+          self.state.loading = false;
+          return;
+        }
         var subject = self.$route.query.subject || 'xc';
         var kpId = self.$route.query.kpId || '';
-        var scId = self.$route.query.scId || '';
+        // scId=0 是「未分类」虚拟子科目，不能被 || '' 吞掉
+        var scIdRaw = self.$route.query.scId;
+        var scId = (scIdRaw === undefined || scIdRaw === null) ? '' : String(scIdRaw);
         var count = parseInt(self.$route.query.count || '20', 10);
         var yearRange = self.$route.query.yearRange || '';
 
@@ -660,9 +743,14 @@ export default defineComponent({
           if (yearRange && yearRange !== '0') {
             url += '&year=' + yearRange;
           }
-        } else if (scId) {
-          // 通过子科目ID加载题目（自定义刷题）
+        } else if (scId !== '') {
+          // 通过子科目ID加载题目（自定义刷题）；0 号是未分类虚拟子科目
+          var subjectIdMap = { xc: 1, sl: 2, ga: 3 };
+          var subjectId = subjectIdMap[subject] || (/^[123]$/.test(subject) ? Number(subject) : '');
           url = '/api/quick-practice/questions?knowledge_point_ids=' + scId + '&limit=' + count + '&bySubCategory=true';
+          if (subjectId) {
+            url += '&subjectId=' + subjectId;
+          }
           if (yearRange && yearRange !== '0') {
             url += '&year=' + yearRange;
           }
@@ -703,6 +791,8 @@ export default defineComponent({
       } catch (e) {
         console.warn('加载题目失败:', e);
       } finally {
+        // 首题拉取成功才开始自动存草稿：空题库不该产生空草稿
+        if (self.state.questions.length && !self.state.submitted) self.startDraftTimer();
         self.state.loading = false;
       }
     },
@@ -745,6 +835,7 @@ export default defineComponent({
       } else {
         this.state.userAnswers[this.state.currentIndex] = key;
       }
+      this.queueDraftSave();
     },
     prevQuestion() {
       if (this.state.currentIndex > 0) this.state.currentIndex--;
@@ -1048,7 +1139,9 @@ export default defineComponent({
       this.collectWrongAnswers(details);
 
       if (this.state.timerInterval) clearInterval(this.state.timerInterval);
-      // 结果直接呈现在每题下方，避免“交卷后跳走、看不到答案”的割裂体验
+      if (this.state.draftTimer) clearInterval(this.state.draftTimer);
+      // 交卷后草稿即失效：留着会让"继续答题"把人带回已交卷的卷子
+      this.clearDraft();
       this.state.submitted = true;
       this.state.score = score;
       this.state.correctCount = correct;

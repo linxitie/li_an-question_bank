@@ -8,14 +8,33 @@
           <XIcon :icon="ChatRound" :size="24" color="#c41e3a"></XIcon>
           <span> 备考论坛</span>
         </h2>
+        <div class="forum-search-bar in-header">
+        <input
+        v-model="state.searchKeyword"
+        class="search-input"
+        placeholder="搜索帖子标题或内容…"
+        @keyup.enter="applySearch" />
+        <input v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
+        <span class="search-tilde">~</span>
+        <input v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
+        <button class="search-btn" @click="applySearch">搜索</button>
+        <button class="search-reset" @click="resetSearch">重置</button>
+        </div>
+
+        <!-- 校园 / 班级论坛筛选（2026-11-03）：作用域 ALL=校园、CLASSES=班级 -->
+        <div class="scope-filter" role="group" aria-label="论坛范围筛选">
+          <button
+            v-for="opt in scopeOptions"
+            :key="opt.key"
+            :class="['scope-chip', { on: state.scopeFilter === opt.key }]"
+            @click="selectScope(opt.key)">{{ opt.label }}</button>
+        </div>
+
+        <button class="feedback-btn" @click="openFeedback">反馈</button>
+
         <div class="forum-header-actions">
-          <button class="post-btn ghost" @click="openFavorites('favorites')">
-            <XIcon :icon="Star" :size="16" color="#c41e3a"></XIcon>
-            <span> 我的收藏</span>
-          </button>
-          <button class="post-btn ghost" @click="openFavorites('likes')">
-            <XIcon :icon="StarFilled" :size="16" color="#c41e3a"></XIcon>
-            <span> 我的喜欢</span>
+          <button class="post-btn ghost star-only" title="我的收藏 / 我的喜欢" @click="openFavorites('favorites')">
+            <XIcon :icon="Star" :size="18" color="#c41e3a"></XIcon>
           </button>
           <button class="post-btn" @click="openNewPost">
             <XIcon :icon="EditPen" :size="16" color="#ffffff"></XIcon>
@@ -24,28 +43,7 @@
         </div>
       </div>
       <div class="forum-body">
-        <div class="forum-left">
-          <div class="category-bar">
-            <button
-              v-for="cat in categoryTabs"
-              :key="cat.key"
-              :class="['category-chip', { active: state.activeCategory === cat.key }]"
-              @click="selectCategory(cat.key)">
-              {{ cat.name }}
-            </button>
-          </div>
-          <div class="forum-search-bar">
-            <input
-              v-model="state.searchKeyword"
-              class="search-input"
-              placeholder="搜索帖子标题或内容…"
-              @keyup.enter="applySearch" />
-            <input v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
-            <span class="search-tilde">~</span>
-            <input v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
-            <button class="search-btn" @click="applySearch">搜索</button>
-            <button class="search-reset" @click="resetSearch">重置</button>
-          </div>
+        <div class="forum-left" @scroll.passive="onForumScroll">
           <div class="post-list" v-if="state.posts.length">
             <div
               v-for="(post, index) in filteredPosts"
@@ -61,33 +59,25 @@
                 :user-id="post.userId"
                 @click="viewUser(post.userId)" />
               <div class="post-content" @click="viewPost(post)">
-                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }">{{ post.title }}</h4>
-                <p class="post-excerpt"><ForumContent :content="post.content" /></p>
+                <div class="post-author-line" @click.stop="viewUser(post.userId)">
+                  <span class="meta-author">{{ post.author }}</span>
+                  <span class="meta-dot"> ·</span>
+                  <span class="meta-date">{{ post.date }}</span>
+                </div>
+                <h4 class="post-title" :style="{ color: titleColorValue(post.titleColor) }"><span v-if="post.aiTitle" class="ai-title-tag">AI生成</span>{{ post.title }}</h4>
+                <p class="post-excerpt"><ForumContent :content="post.content" :format="post.contentFormat" /></p>
                 <AttachmentList
                   v-if="post.attachments && post.attachments.length"
                   :attachments="post.attachments"
                   mode="post" />
-                <div class="post-attachments" v-if="post.fileAttachments && post.fileAttachments.length">
-                  <span
-                    v-for="(att, idx) in post.fileAttachments"
-                    :key="idx"
-                    class="attachment-chip"
-                    @click.stop="downloadAttachment(att)">
-                    <XIcon :icon="Document" :size="12" color="#1a2b5f"></XIcon>
-                    <span> {{ att.name }}</span>
-                  </span>
-                </div>
+
                 <div class="post-meta">
-                  <span class="meta-author" @click.stop="viewUser(post.userId)">{{ post.author }}</span>
-                  <span class="meta-dot"> ·</span>
-                  <span class="meta-date">{{ post.date }}</span>
-                  <span class="meta-dot"> ·</span>
-                  <span class="meta-likes" @click.stop="toggleHeart(post)" title="喜欢">
+                  <span class="meta-likes" :class="{ active: post.liked }" @click.stop="toggleHeart(post)" :title="post.reactionSummary || '喜欢'">
                     <span class="heart-icon" :class="{ active: post.liked }">{{ post.liked ? '❤' : '♡' }}</span>
                     <span> {{ post.likeCount }}</span>
                   </span>
                   <span class="meta-dot"> ·</span>
-                  <span class="meta-favs" @click.stop="toggleFavorite(post)" title="收藏">
+                  <span class="meta-favs" :class="{ active: post.favorited }" @click.stop="toggleFavorite(post)" title="收藏">
                     <XIcon
                       :icon="post.favorited ? StarFilled : Star"
                       :size="13"
@@ -105,21 +95,14 @@
           </div>
           <div v-else-if="state.loading" class="empty-tip">加载中...</div>
           <div v-else class="empty-tip">暂无帖子,快来发表第一篇吧!</div>
-          <div class="pagination" v-if="state.total > state.pageSize">
-            <button :disabled="state.page === 1" @click="prevPage">上一页</button>
-            <span class="page-info">
-              <span> {{ state.page }} </span>
-              <span> / </span>
-              <span> {{ totalPages }} </span>
-            </span>
-            <button :disabled="state.page >= totalPages" @click="nextPage">下一页</button>
-          </div>
+          <div v-if="state.loadingMore" class="empty-tip">加载中...</div>
+          <div v-else-if="state.posts.length && state.posts.length >= state.total" class="empty-tip">已经到底了</div>
         </div>
         <aside class="forum-right">
           <div class="right-card hot-posts">
             <h4>
               <XIcon :icon="TrendCharts" :size="16" color="#ef4444"></XIcon>
-              <span> 热门帖子</span>
+              <span> 今日热门（{{ state.hotIsWeek ? '近 7 天' : '当天' }}）</span>
             </h4>
             <div
               v-for="(hot, index) in hotPosts"
@@ -127,34 +110,22 @@
               class="hot-item"
               @click="viewPost(hot)">
               <span class="hot-rank" :class="'rank-' + hot.rank">{{ hot.rank }}</span>
-              <span class="hot-title">{{ hot.title }}</span>
+              <span class="hot-main">
+                <span class="hot-title"><span v-if="hot.aiTitle" class="ai-title-tag">AI生成</span>{{ hot.title }}</span>
+                <!-- 2026-11-03：列表只显示标题已不够用，补 2 行正文摘要（后端已带 200 字 content） -->
+                <span class="list-excerpt">{{ excerptOf(hot) }}</span>
+              </span>
               <span class="hot-replies">
                 <span> {{ hot.commentCount }} </span>
                 <span> 回复</span>
               </span>
             </div>
             <div v-if="!hotPosts.length" class="empty-tip-mini">暂无热门</div>
-          </div>
-          <div class="right-card user-stats">
-            <h4>
-              <XIcon :icon="User" :size="16" color="#1a2b5f"></XIcon>
-              <span> 论坛活跃</span>
-            </h4>
-            <div class="stats-grid">
-              <div class="stats-item">
-                <span class="stats-number">{{ state.forumStats.posts }}</span>
-                <span class="stats-label"> 帖子</span>
-              </div>
-              <div class="stats-item">
-                <span class="stats-number">{{ state.forumStats.users }}</span>
-                <span class="stats-label"> 用户</span>
-              </div>
-              <div class="stats-item">
-                <span class="stats-number">{{ state.forumStats.online }}</span>
-                <span class="stats-label"> 在线</span>
-              </div>
+            <div v-if="hotPosts.length" class="my-posts-view-all" @click="openHotAll">
+              查看更多 →
             </div>
           </div>
+
           <div v-if="isLoggedIn" class="right-card my-posts">
             <h4>
               <XIcon :icon="User" :size="16" color="#1a2b5f"></XIcon>
@@ -166,7 +137,8 @@
                 :key="mp.id"
                 class="my-post-item"
                 @click="openPostDetail(mp)">
-                <span class="my-post-title">{{ mp.title }}</span>
+                <span class="my-post-title"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
+                <span class="list-excerpt">{{ excerptOf(mp) }}</span>
                 <span class="my-post-stats">
                   <span class="my-stat">❤️ {{ mp.likeCount }}</span>
                   <span class="my-stat">💬 {{ mp.commentCount }}</span>
@@ -181,59 +153,23 @@
           </div>
         </aside>
       </div>
-      <div
-        v-if="state.showNewPost"
-        class="modal-overlay"
-        @click.self="state.showNewPost = false">
-        <div class="modal-card">
-          <h3>发布新帖</h3>
-          <input
-            v-model="state.newPost.title"
-            class="modal-input"
-            placeholder="请输入标题..."
-            maxlength="200"/>
-
-          <textarea
-            v-model="state.newPost.content"
-            rows="6"
-            class="modal-textarea"
-            placeholder="请输入内容(分享观点、学习经验...)"
-            maxlength="10000"></textarea>
-          <div class="post-image-upload">
-            <label class="post-color-label">图片（不限张数）</label>
-            <FileUploader v-model="state.newPost.images" :max-docs="10" />
-          </div>
-          <div class="upload-area">
-            <input
-              type="file"
-              ref="fileInput"
-              multiple
-              accept=".doc,.docx,.pdf,.xls,.xlsx"
-              @change="handleFileUpload"
-              style="display:none"/>
-            <button class="upload-btn" @click="triggerUpload">
-              <XIcon :icon="Upload" :size="14" color="#1a2b5f"></XIcon>
-              <span> 上传学习资料(Word/PDF/Excel)</span>
-            </button>
-            <div v-for="(f, i) in state.newPost.attachments" :key="i" class="file-chip">
-              <XIcon :icon="Document" :size="12" color="#1a2b5f"></XIcon>
-              <span class="file-name"> {{ f.name }} </span>
-              <span class="file-size"> ({{ formatFileSize(f.size) }}) </span>
-              <span class="file-remove" @click="removeFile(i)"> ×</span>
-            </div>
-          </div>
-          <div class="modal-actions">
-            <button class="cancel-btn" @click="state.showNewPost = false">取消</button>
-            <button class="confirm-btn" :disabled="state.submitting" @click="submitPost">
-              {{ state.submitting ? '发布中...' : '发布' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- 发帖弹窗：与教师端/管理员端共用 PostComposer（含可见范围、附件、草稿）
+           注：本页为 raw 页，模板改动经用户明确授权（2026-11-02），改前已备份
+           forum.vue.bak_20261102_p2composer -->
+      <PostComposer
+        v-model:visible="state.showNewPost"
+        title="发布新帖"
+        :initial="state.postDraftInitial"
+        :classes="state.myClasses"
+        :submitting="state.submitting"
+        :saving-draft="state.savingDraft"
+        @submit="submitPostFromComposer"
+        @save-draft="savePostDraft"
+      />
       <!-- 我的收藏 / 我的喜欢（P2 为空态外壳，列表数据在 P3 接入） -->
       <div
         v-if="state.showFavorites"
-        class="modal-overlay"
+        class="modal-overlay modal-l1"
         @click.self="closeFavorites">
         <div class="modal-card fav-modal">
           <h3>{{ state.favoriteTab === 'favorites' ? '我的收藏' : '我的喜欢' }}</h3>
@@ -250,26 +186,39 @@
             </button>
           </div>
           <div v-if="state.favoriteLoading" class="fav-empty">加载中...</div>
-          <div v-else-if="!state.favoriteList.length" class="fav-empty">
+          <div v-else-if="!state.interactionItems.length" class="fav-empty">
             {{ state.favoriteTab === 'favorites' ? '还没有收藏的帖子' : '还没有喜欢的帖子' }}
           </div>
           <div v-else class="fav-list">
             <div
-              v-for="fp in state.favoriteList"
-              :key="fp.id"
-              class="fav-item"
-              @click="openPostDetail(fp)">
-              <span class="fav-item-title" :style="{ color: titleColorValue(fp.titleColor) }">{{ fp.title }}</span>
-              <span class="fav-item-meta">
-                <span class="heart-icon" :class="{ active: fp.liked }">{{ fp.liked ? '❤' : '♡' }}</span>
-                <span>{{ fp.likeCount }}</span>
-                <span class="fav-sep">·</span>
-                <XIcon
-                  :icon="StarFilled"
-                  :size="12"
-                  color="#f59e0b"></XIcon>
-                <span>{{ fp.favoriteCount }}</span>
+              v-for="it in state.interactionItems"
+              :key="it.type + '-' + (it.type === 'post' ? it.post.id : it.comment.id)"
+              class="fav-item fav-item-rich"
+              @click="openInteraction(it)">
+              <span class="list-author list-author-left">
+                <img v-if="_avatarOf(it)" :src="_avatarOf(it)" class="list-avatar" alt="头像" />
+                <span v-else class="list-avatar list-avatar-text">{{ _authorOf(it).charAt(0) }}</span>
+                <span class="list-author-name">{{ _authorOf(it) }}</span>
+                <span class="list-author-date">{{ _timeOf(it) }}</span>
               </span>
+              <template v-if="it.type === 'post'">
+                <span class="fav-item-title"><span v-if="it.post.aiTitle" class="ai-title-tag">AI生成</span>{{ it.post.title }}</span>
+                <span class="list-excerpt">{{ excerptOf(it.post) }}</span>
+                <span class="my-post-stats">
+                  <span class="my-stat">❤️ {{ it.post.likeCount }}</span>
+                  <span class="my-stat">★ {{ it.post.favoriteCount }}</span>
+                  <span class="my-stat">💬 {{ it.post.commentCount }}</span>
+                  <span class="my-stat">👁 {{ it.post.viewCount }}</span>
+                </span>
+              </template>
+              <template v-else>
+                <span class="fav-item-title">评论 · {{ it.postTitle }}</span>
+                <span class="list-excerpt">{{ it.comment.content }}</span>
+                <span class="my-post-stats">
+                  <span class="my-stat">❤️ {{ it.comment.likeCount }}</span>
+                  <span class="my-stat">★ {{ it.comment.favoriteCount }}</span>
+                </span>
+              </template>
             </div>
           </div>
           <div class="modal-actions">
@@ -279,7 +228,7 @@
       </div>
       <div
         v-if="state.showUserProfile"
-        class="modal-overlay"
+        class="modal-overlay modal-l3"
         @click.self="state.showUserProfile = false">
         <div class="profile-card">
           <div class="profile-avatar-wrap">
@@ -319,7 +268,7 @@
       <!-- 帖子详情 Modal -->
       <div
         v-if="state.showPostDetail"
-        class="modal-overlay"
+        class="modal-overlay modal-l2"
         @click.self="closePostDetail">
         <div class="modal-card post-detail-card">
           <div v-if="state.detailLoading && !state.currentPost" class="empty-tip">加载中...</div>
@@ -349,22 +298,25 @@
             </div>
             <!-- 帖子正文 -->
             <h3 class="detail-title" :style="{ color: titleColorValue(state.currentPost.titleColor) }">
-              {{ state.currentPost.title }}
+              <span v-if="state.currentPost.aiTitle" class="ai-title-tag">AI生成</span>{{ state.currentPost.title }}
             </h3>
-            <div class="detail-content"><ForumContent :content="state.currentPost.content" /></div>
+            <div class="detail-content"><ForumContent :content="state.currentPost.content" :format="state.currentPost.contentFormat" /></div>
             <!-- 图片 + 文档附件 -->
             <AttachmentList
               v-if="state.currentPost.attachments && state.currentPost.attachments.length"
               :attachments="state.currentPost.attachments"
               mode="post" />
             <!-- 帖子互动数据 -->
+            <!-- 2026-11-04 v5：详情页把「喜欢」和「收藏」分成两个按钮。
+                 之前这里用五角星图标调 toggleLike，用户会误以为那是收藏（且没有收藏入口）。 -->
             <div class="detail-stats">
-              <span class="stat-action" @click="toggleLike(state.currentPost)">
-                <XIcon
-                  :icon="state.currentPost.liked ? StarFilled : Star"
-                  :size="14"
-                  :color="state.currentPost.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+              <span class="stat-action" :class="{ active: state.currentPost.liked }" @click="toggleLike(state.currentPost)" title="喜欢">
+                <span class="heart-icon">{{ state.currentPost.liked ? '❤' : '♡' }}</span>
                 <span> {{ state.currentPost.likeCount }}</span>
+              </span>
+              <span class="stat-action fav" :class="{ active: state.currentPost.favorited }" @click="toggleFavorite(state.currentPost)" title="收藏">
+                <span class="fav-star">{{ state.currentPost.favorited ? '★' : '☆' }}</span>
+                <span> {{ state.currentPost.favoriteCount || 0 }}</span>
               </span>
               <span class="stat-label">
                 <XIcon :icon="ChatLineRound" :size="14" color="#8a8faa"></XIcon>
@@ -405,18 +357,19 @@
                         <span class="comment-author" @click.stop="viewUser(comment.user?.id)">{{ comment.user?.nickname }}</span>
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
-                      <div class="comment-text"><ForumContent :content="comment.content" /></div>
+                      <div class="comment-text"><ForumContent :content="comment.content" :format="comment.contentFormat" /></div>
                       <AttachmentList
                         v-if="comment.attachments && comment.attachments.length"
                         :attachments="comment.attachments"
                         mode="comment" />
                       <div class="comment-actions">
                         <span @click="toggleCommentLike(comment)" class="comment-action">
-                          <XIcon
-                            :icon="comment.liked ? StarFilled : Star"
-                            :size="12"
-                            :color="comment.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+                          <span class="heart-icon" :class="{ active: comment.liked }">{{ comment.liked ? '❤' : '♡' }}</span>
                           <span> {{ comment.likeCount }}</span>
+                        </span>
+                        <span @click.stop="toggleCommentFavorite(comment)" class="comment-action" title="收藏评论">
+                          <span class="fav-star" :class="{ active: comment.favorited }">{{ comment.favorited ? '★' : '☆' }}</span>
+                          <span> {{ comment.favoriteCount || 0 }}</span>
                         </span>
                         <span @click="startReply(comment)" class="comment-action comment-reply">
                           <XIcon :icon="ChatLineRound" :size="12" color="#8a8faa"></XIcon>
@@ -456,17 +409,14 @@
                             <span class="comment-author" @click.stop="viewUser(child.user?.id)">{{ child.user?.nickname }}</span>
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
-                          <div class="comment-text"><ForumContent :content="child.content" /></div>
+                          <div class="comment-text"><ForumContent :content="child.content" :format="child.contentFormat" /></div>
                           <AttachmentList
                             v-if="child.attachments && child.attachments.length"
                             :attachments="child.attachments"
                             mode="comment" />
                           <div class="comment-actions">
                             <span @click="toggleCommentLike(child)" class="comment-action">
-                              <XIcon
-                                :icon="child.liked ? StarFilled : Star"
-                                :size="12"
-                                :color="child.liked ? '#c41e3a' : '#8a8faa'"></XIcon>
+                              <span class="heart-icon" :class="{ active: child.liked }">{{ child.liked ? '❤' : '♡' }}</span>
                               <span> {{ child.likeCount }}</span>
                             </span>
                             <span
@@ -505,12 +455,15 @@
                 <div class="comment-image-upload">
                   <FileUploader v-model="state.newCommentImages" :max-docs="3" />
                 </div>
-                <textarea
-                  v-model="state.newComment"
-                  rows="3"
-                  class="modal-textarea"
-                  :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
-                  maxlength="2000"></textarea>
+                <div class="comment-input-box">
+                  <textarea
+                    v-model="state.newComment"
+                    rows="3"
+                    class="modal-textarea"
+                    :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
+                    maxlength="2000"></textarea>
+                  <button class="fullscreen-btn" title="全屏输入" @click="state.fullscreenInput = true">⛶</button>
+                </div>
                 <div class="modal-actions">
                   <button class="cancel-btn" @click="closePostDetail">关闭</button>
                   <button
@@ -525,37 +478,150 @@
           </template>
         </div>
       </div>
-      <!-- 我的帖子完整列表 Modal -->
+
+      <!-- 评论输入全屏弹窗（2026-11-09） -->
+      <div v-if="state.fullscreenInput" class="fullscreen-mask" @click.self="state.fullscreenInput = false">
+        <div class="fullscreen-card">
+          <div class="fullscreen-head">
+            <h3>发表评论</h3>
+            <button class="fullscreen-close" @click="state.fullscreenInput = false">×</button>
+          </div>
+          <div class="fullscreen-body">
+            <textarea
+              v-model="state.newComment"
+              class="fullscreen-textarea"
+              :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
+              maxlength="2000"></textarea>
+            <div class="fullscreen-tools">
+              <button class="emoji-btn" title="表情 / 表情包" @click="state.showCommentPicker = !state.showCommentPicker">😀</button>
+              <FileUploader v-model="state.newCommentImages" :max-docs="3" />
+              <button
+                class="confirm-btn"
+                :disabled="state.commentSubmitting || !state.newComment.trim()"
+                @click="submitComment">
+                {{ state.commentSubmitting ? '提交中...' : '发表评论' }}
+              </button>
+            </div>
+            <div v-if="state.showCommentPicker" class="fullscreen-picker">
+              <EmojiStickerPicker
+                @select="insertCommentEmoji"
+                @close="state.showCommentPicker = false" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 热门帖子前 100 条 Modal -->
+      <div v-if="state.showHotAll" class="modal-overlay modal-l1" @click.self="closeHotAll">
+        <div class="modal-card post-detail-card hot-all-card">
+          <h3>热门帖子 · 前 100 条</h3>
+          <div class="hot-range">
+            <input v-model="state.hotFrom" type="date" />
+            <span>~</span>
+            <input v-model="state.hotTo" type="date" />
+            <button @click="openHotAll">查询</button>
+          </div>
+          <div v-if="state.hotAllLoading" class="empty-tip-mini">加载中...</div>
+          <div v-else-if="!state.hotAll.length" class="empty-tip-mini">暂无热门</div>
+          <div v-else class="my-posts-full-list">
+            <div
+              v-for="hp in state.hotAll"
+              :key="hp.id"
+              class="my-post-item my-post-item-rich"
+              @click="viewPost(hp)">
+              <span class="hot-rank" :class="'rank-' + (hp.rank <= 3 ? hp.rank : '')">{{ hp.rank }}</span>
+              <span class="list-author list-author-left">
+                <img v-if="hp.avatar" :src="hp.avatar" class="list-avatar" alt="头像" />
+                <span v-else class="list-avatar list-avatar-text">{{ (hp.author || '匿').charAt(0) }}</span>
+                <span class="list-author-name">{{ hp.author }}</span>
+                <span class="list-author-date">{{ hp.date }}</span>
+              </span>
+              <span class="my-post-title"><span v-if="hp.aiTitle" class="ai-title-tag">AI生成</span>{{ hp.title }}</span>
+              <span class="list-excerpt">{{ excerptOf(hp) }}</span>
+              <span class="my-post-stats">
+                <span class="my-stat">❤️ {{ hp.likeCount }}</span>
+                <span class="my-stat">★ {{ hp.favoriteCount }}</span>
+                <span class="my-stat">💬 {{ hp.commentCount }}</span>
+                <span class="my-stat">👁 {{ hp.viewCount }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button @click="closeHotAll">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 反馈弹窗（2026-11-07） -->
+      <div v-if="state.feedbackModal.visible" class="modal-overlay modal-l1" @click.self="closeFeedback">
+        <div class="modal-card feedback-card">
+          <h3>问题反馈</h3>
+          <textarea
+            v-model="state.feedbackModal.content"
+            rows="5"
+            maxlength="1000"
+            placeholder="请描述你遇到的问题或建议…"></textarea>
+          <label class="fb-anon">
+            <input type="checkbox" v-model="state.feedbackModal.anonymous" />
+            匿名提交（列表中显示为「匿名」）
+          </label>
+          <div class="modal-actions">
+            <button class="cancel-btn" @click="closeFeedback">取消</button>
+            <button
+              class="confirm-btn"
+              :disabled="state.feedbackModal.submitting || !state.feedbackModal.content.trim()"
+              @click="submitFeedback">
+              {{ state.feedbackModal.submitting ? '提交中...' : '提交' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 我的帖子完整列表 Modal（2026-11-07：批量删除 + 回收站，去分页） -->
       <div
         v-if="state.showMyPosts"
-        class="modal-overlay"
+        class="modal-overlay modal-l1"
         @click.self="closeMyPosts">
         <div class="modal-card post-detail-card">
           <h3>我的帖子（{{ state.myPostsTotal }}）</h3>
+          <div class="my-posts-toolbar">
+            <button :class="['fav-tab', { active: state.myPostsTab === 'normal' }]" @click="switchMyPostsTab('normal')">我的帖子</button>
+            <button :class="['fav-tab', { active: state.myPostsTab === 'recycle' }]" @click="switchMyPostsTab('recycle')">回收站</button>
+            <button
+              v-if="state.myPostsTab === 'normal'"
+              class="batch-delete-btn"
+              :disabled="!state.myPostsSelected.length"
+              @click="batchDeleteMyPosts">批量删除({{ state.myPostsSelected.length }})</button>
+          </div>
           <div v-if="state.myPostsLoading" class="empty-tip-mini">加载中...</div>
-          <div v-else-if="!state.myPosts.length" class="empty-tip-mini">暂无帖子</div>
+          <div v-else-if="!state.myPosts.length" class="empty-tip-mini">{{ state.myPostsTab === 'recycle' ? '回收站为空' : '暂无帖子' }}</div>
           <div v-else class="my-posts-full-list">
-            <div
-              v-for="mp in state.myPosts"
-              :key="mp.id"
-              class="my-post-item"
-              @click="openPostDetail(mp)">
-              <span class="my-post-title">{{ mp.title }}</span>
+            <div v-for="mp in state.myPosts" :key="mp.id" class="my-post-item">
+              <input
+                v-if="state.myPostsTab === 'normal'"
+                type="checkbox"
+                class="post-select"
+                :checked="state.myPostsSelected.includes(mp.id)"
+                @change="toggleMyPostSelect(mp.id)" />
+              <span class="list-author list-author-left" @click="openPostDetail(mp)">
+                <img v-if="mp.avatar" :src="mp.avatar" class="list-avatar" alt="头像" />
+                <span v-else class="list-avatar list-avatar-text">{{ (mp.author || '匿').charAt(0) }}</span>
+                <span class="list-author-name">{{ mp.author }}</span>
+                <span class="list-author-date">{{ mp.date }}</span>
+              </span>
+              <span class="my-post-title" @click="openPostDetail(mp)"><span v-if="mp.aiTitle" class="ai-title-tag">AI生成</span>{{ mp.title }}</span>
+              <span class="list-excerpt" @click="openPostDetail(mp)">{{ excerptOf(mp) }}</span>
               <span class="my-post-stats">
                 <span class="my-stat">❤️ {{ mp.likeCount }}</span>
+                <span class="my-stat">★ {{ mp.favoriteCount }}</span>
                 <span class="my-stat">💬 {{ mp.commentCount }}</span>
+                <span class="my-stat">👁 {{ mp.viewCount }}</span>
               </span>
-              <span class="my-post-date">{{ mp.date }}</span>
+              <button v-if="state.myPostsTab === 'recycle'" class="restore-post-btn" @click.stop="restoreMyPost(mp)">恢复</button>
             </div>
           </div>
-          <div v-if="myPostsTotalPages > 1" class="pagination">
-            <button :disabled="state.myPostsPage === 1" @click="prevMyPostsPage">上一页</button>
-            <span class="page-info">
-              <span> {{ state.myPostsPage }} </span>
-              <span> / </span>
-              <span> {{ myPostsTotalPages }} </span>
-            </span>
-            <button :disabled="state.myPostsPage >= myPostsTotalPages" @click="nextMyPostsPage">下一页</button>
+          <div class="modal-actions">
+            <button @click="closeMyPosts">关闭</button>
           </div>
         </div>
       </div>
@@ -603,6 +669,9 @@
   import ImageGrid from '@/components/forum/ImageGrid.vue';
   import ImageUploader from '@/components/forum/ImageUploader.vue';
   import FileUploader from '@/components/forum/FileUploader.vue';
+  import PostComposer from '@/components/forum/PostComposer.vue';
+  import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
+  import { loadMyClasses } from '@/modules/community/classScope';
   import AttachmentList from '@/components/forum/AttachmentList.vue';
   import CommentSortBar from '@/components/forum/CommentSortBar.vue';
   import UserBadge from '@/components/forum/UserBadge.vue';
@@ -620,6 +689,7 @@
       ImageGrid,
       ImageUploader,
       FileUploader,
+      PostComposer,
       AttachmentList,
       CommentSortBar,
       UserBadge
@@ -631,18 +701,25 @@
         page: 1,
         pageSize: 8,
         activeCategory: 'all',
+        /** 校园/班级论坛筛选：'' 全部 / 'ALL' 校园 / 'CLASSES' 班级（2026-11-03） */
+        scopeFilter: '' as '' | 'ALL' | 'CLASSES',
         // P3：搜索与日期筛选
         searchKeyword: '',
         searchDateFrom: '',
         searchDateTo: '',
         showCommentPicker: false,
+        fullscreenInput: false,
         posts: [] as any[],
         total: 0,
         loading: false,
+        loadingMore: false,
         submitting: false,
         showNewPost: false,
         showUserProfile: false,
         userProfile: {} as any,
+        savingDraft: false,
+        postDraftInitial: null as any,
+        myClasses: [] as string[],
         newPost: {
           title: '',
           content: '',
@@ -668,14 +745,27 @@
         myPosts: [] as any[],
         myPostsLoaded: false,
         myPostsTotal: 0,
+        // 今日热门
+        hotToday: [],
+        hotIsWeek: false,
+        hotFrom: new Date().toISOString().slice(0, 10),
+        hotTo: new Date().toISOString().slice(0, 10),
+        // 热门帖子「查看更多」
+        hotAll: [],
+        showHotAll: false,
+        hotAllLoading: false,
         showMyPosts: false,
         // === 我的收藏 / 我的喜欢（P2 仅外壳，数据 P3 接入）===
         showFavorites: false,
         favoriteTab: 'favorites' as 'favorites' | 'likes',
         favoriteList: [] as any[],
+        interactionItems: [] as any[],
         favoriteTotal: 0,
         favoriteLoading: false,
         myPostsPage: 1,
+        myPostsTab: 'normal',
+        myPostsSelected: [] as number[],
+        feedbackModal: { visible: false, content: '', anonymous: false, submitting: false },
         myPostsPageSize: 20,
         myPostsLoading: false,
         _refreshTimer: null as any,
@@ -685,11 +775,35 @@
       const markAvatarFailed = (key: string) => {
         avatarFailed[key] = true;
       };
+      /**
+       * 列表正文摘要（2026-11-03）：收藏/喜欢/热门/我的帖子 这些弹窗此前只显示标题，
+       * 用户看不到任何正文。后端 `_serialize_post` 已带 200 字 content，这里只需截断展示。
+       * - 去掉表情包占位符 [[sticker:url]]，否则列表里会出现一长串 URL
+       * - 压平空白，避免换行把两行摘要撑成一行空行
+       */
+      const excerptOf = (post: any): string => {
+        const raw = String(post?.content ?? post?.excerpt ?? '');
+        const text = raw
+          // 富文本正文先去掉标签再截断，否则列表里会出现 <p style=...>
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\[\[sticker:[^\]]+\]\]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!text) return '（无正文）';
+        return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+      };
       return {
         state,
         props,
         provider,
         community,
+        excerptOf,
+        // 校园 / 班级论坛筛选项（2026-11-03）
+        scopeOptions: [
+          { key: '', label: '全部' },
+          { key: 'ALL', label: '校园论坛' },
+          { key: 'CLASSES', label: '班级论坛' }
+        ],
         avatarInitial,
         avatarFailed,
         markAvatarFailed,
@@ -715,11 +829,12 @@
         // 后端已分页,直接返回(避免前端切片导致显示数量不准)
         return this.state.posts;
       },
+      /** 今日热门：只取当天按点赞量前 5（B 方案：当天无帖则为空） */
       hotPosts(): any[] {
-        return [...this.state.posts]
-          .sort((a, b) => (b.reactionTotal + b.commentCount * 2) - (a.reactionTotal + a.commentCount * 2))
-          .slice(0, 5)
-          .map((p, i) => ({ ...p, rank: i + 1 }));
+        return (this.state.hotToday || []).slice(0, 5).map((p: any, i: number) => ({
+          ...p,
+          rank: i + 1
+        }));
       },
       canDeleteCurrentPost(): boolean {
         if (!this.state.currentPost) return false;
@@ -777,12 +892,55 @@
           this.state.loading = false;
         }
       },
+      /** 2026-11-07：触底加载下一页（替代分页按钮） */
+      async loadMore() {
+        if (this.state.loading || this.state.loadingMore) return;
+        if (this.state.posts.length >= this.state.total) return;
+        this.state.loadingMore = true;
+        try {
+          const res: any = await fetchForumPosts({
+            limit: this.state.pageSize,
+            offset: this.state.posts.length,
+            shareType: toShareTypeParam(this.state.activeCategory),
+            keyword: this.state.searchKeyword || undefined,
+            dateFrom: this.state.searchDateFrom || undefined,
+            dateTo: this.state.searchDateTo || undefined
+          });
+          const seen = new Set(this.state.posts.map((x: any) => x.id));
+          for (const item of res.posts || []) {
+            const mapped = this._mapPost(item);
+            if (!seen.has(mapped.id)) this.state.posts.push(mapped);
+          }
+          this.state.total = res.total || this.state.total;
+        } catch (e) {
+          /* 静默：滚动加载失败不打断浏览 */
+        } finally {
+          this.state.loadingMore = false;
+        }
+      },
+      onForumScroll(e: any) {
+        const el = e && e.target;
+        if (el && el.scrollHeight) {
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) this.loadMore();
+          return;
+        }
+        const doc = document.documentElement;
+        if (window.innerHeight + window.scrollY >= doc.scrollHeight - 300) this.loadMore();
+      },
       async selectCategory(key: string) {
         if (this.state.activeCategory === key) return;
         this.state.activeCategory = key;
         this.state.page = 1;
         this.state.showCommentPicker = false;
         this.community.setShareType(toShareTypeParam(key));
+        await this.loadPosts();
+      },
+      /** 校园 / 班级 论坛筛选：先写进 store 再重拉第一页（2026-11-03） */
+      async selectScope(key: '' | 'ALL' | 'CLASSES') {
+        if (this.state.scopeFilter === key) return;
+        this.state.scopeFilter = key;
+        this.state.page = 1;
+        this.community.setVisibilityFilter(key);
         await this.loadPosts();
       },
       insertCommentEmoji(payload: { type: 'emoji' | 'sticker'; value: string }) {
@@ -810,12 +968,11 @@
         }
       },
       async submitPost() {
-        if (!this.state.newPost.title.trim()) {
-          ElMessage.warning('请输入标题');
-          return;
-        }
-        if (!this.state.newPost.content.trim()) {
-          ElMessage.warning('请输入内容');
+        // 2026-10-31：标题 / 正文 / 附件(图片或文件) 至少一项即可发布
+        const np: any = this.state.newPost;
+        const hasAtt = (np.images?.length || 0) + (np.attachments?.length || 0) > 0;
+        if (!np.title.trim() && !np.content.trim() && !hasAtt) {
+          ElMessage.warning('标题、正文、附件至少填写一项');
           return;
         }
         const auth = (window as any).__VTJ_AUTH__;
@@ -916,8 +1073,11 @@
             post.reactions = data.reactions;
             post.reactionTotal = data.reactionCount;
             post.liked = data.myReaction !== null;
-            post.likeCount =
-              formatReactionSummary(data.reactions) || String(data.reactionCount);
+            // 2026-11-03 第 2 轮：计数只显示数字。
+            // 之前把 formatReactionSummary() 的结果（"👍1"）当计数渲染，
+            // 爱心图标旁就多出一个大拇指。emoji 汇总改放 title 里悬停可见。
+            post.likeCount = String(data.reactionCount ?? 0);
+            post.reactionSummary = formatReactionSummary(data.reactions) || '';
           }
         } catch (e) {
           /* 静默 */
@@ -966,7 +1126,89 @@
           ElMessage.warning('请先登录后发帖');
           return;
         }
+        // 班级候选的事实来源是 /api/auth/profile（JWT 里没有班级字段）。
+        // 2026-11-03 修正：此前读 auth.parseUserInfo().className 恒为空，
+        // 导致「仅指定班级」显示「当前账号没有可选班级」。
+        this.state.myClasses = [];
+        this.state.postDraftInitial = null;
         this.state.showNewPost = true;
+        loadMyClasses()
+          .then((scope) => {
+            this.state.myClasses = scope.classes;
+          })
+          .catch(() => {
+            this.state.myClasses = [];
+          });
+        fetchMyForumDraft()
+          .then((draft) => {
+            if (!draft) return;
+            this.state.postDraftInitial = {
+              title: draft.title,
+              content: draft.content,
+              attachments: draft.attachments,
+              visibility: draft.visibility,
+              visibleClasses: draft.visibleClasses,
+              isTop: false
+            };
+            ElMessage.info('已载入上次保存的草稿');
+          })
+          .catch(() => {
+            /* 草稿读取失败不阻塞发帖 */
+          });
+      },
+      async submitPostFromComposer(payload: any) {
+        const hasAtt = (payload.attachments || []).length > 0;
+        if (!payload.title && !payload.content && !hasAtt) {
+          ElMessage.warning('标题、正文、附件至少填写一项');
+          return;
+        }
+        this.state.submitting = true;
+        try {
+          const created = await this.community.createPost({
+            title: payload.title,
+            content: payload.content,
+            shareType: 'EXPERIENCE',
+            attachments: payload.attachments,
+            visibility: payload.visibility,
+            visibleClasses: payload.visibleClasses,
+            contentFormat: payload.contentFormat,
+            // v4：把发帖人的 AI 标题开关与「标题是否原样来自模型」透传给后端
+            aiTitleEnabled: payload.aiTitleEnabled !== false,
+            titleFromAi: Boolean(payload.titleFromAi)
+          });
+          if (!created) return;
+          this.state.posts.unshift(this._mapPost(created));
+          this.state.total += 1;
+          this.state.myPosts.unshift(this._mapPost(created, false));
+          this.state.myPostsTotal = (this.state.myPostsTotal || 0) + 1;
+          this.state.showNewPost = false;
+          this.state.postDraftInitial = null;
+          ElMessage.success('发布成功!');
+        } catch (e) {
+          this._safeMsg('error', this.community.error || '发布失败,请稍后重试');
+        } finally {
+          this.state.submitting = false;
+        }
+      },
+      async savePostDraft(payload: any) {
+        this.state.savingDraft = true;
+        try {
+          await saveMyForumDraft({
+            title: payload.title,
+            content: payload.content,
+            attachments: payload.attachments,
+            visibility: payload.visibility,
+            visible_classes: payload.visibleClasses,
+            is_top: false,
+            // v4：草稿也记住 AI 标题开关，重开弹窗能恢复
+            ai_title_enabled: payload.aiTitleEnabled !== false
+          });
+          ElMessage.success('已保存到草稿箱');
+        } catch (e) {
+          this._safeMsg('error', '保存草稿失败');
+        } finally {
+          this.state.savingDraft = false;
+        }
       },
       onAvatarError(e: any) {
         // 头像加载失败,隐藏 img 显示首字母
@@ -1173,6 +1415,21 @@
         this.state.newComment = '';
       },
       // ===== 我的帖子 =====
+      async toggleCommentFavorite(comment: any) {
+        const auth = (window as any).__VTJ_AUTH__;
+        if (!auth || !auth.isLoggedIn()) return;
+        try {
+          const res = await auth.apiFetch('/api/forum/comments/' + comment.id + '/favorite', { method: 'POST' });
+          const data = await res.json();
+          if (res.ok) {
+            comment.favorited = data.favorited;
+            comment.favoriteCount = data.favoriteCount;
+          }
+        } catch (e) {
+          /* 静默 */
+        }
+      },
+
       async loadMyPosts() {
         const auth = (window as any).__VTJ_AUTH__;
         if (!auth || !auth.isLoggedIn()) return;
@@ -1197,23 +1454,45 @@
         const auth = (window as any).__VTJ_AUTH__;
         if (!auth || !auth.isLoggedIn()) {
           this.state.favoriteList = [];
+          this.state.interactionItems = [];
           this.state.favoriteTotal = 0;
           return;
         }
         this.state.favoriteLoading = true;
         try {
-          const isFav = this.state.favoriteTab === 'favorites';
-          const res = isFav
-            ? await fetchMyForumFavorites(20, 0)
-            : await fetchMyForumLikes(20, 0);
-          const list = (res && res.posts) || [];
-          this.state.favoriteList = list.map((p: any) => this._mapPost(p));
-          this.state.favoriteTotal = (res && res.total) || list.length;
+          const kind = this.state.favoriteTab === 'favorites' ? 'favorites' : 'likes';
+          const res = await auth.apiFetch('/api/forum/my-interactions?kind=' + kind + '&limit=50');
+          const data = await res.json();
+          const items = (data.items || []).map((it: any) =>
+            it.type === 'post' ? { ...it, post: this._mapPost(it.post) } : it
+          );
+          this.state.interactionItems = items;
+          this.state.favoriteTotal = data.total || items.length;
         } catch (e) {
-          this.state.favoriteList = [];
+          this.state.interactionItems = [];
           this.state.favoriteTotal = 0;
         } finally {
           this.state.favoriteLoading = false;
+        }
+      },
+      _authorOf(it: any) {
+        if (it.type === 'post') return it.post.author || '匿名';
+        return (it.comment && it.comment.user && it.comment.user.nickname) || '匿名';
+      },
+      _avatarOf(it: any) {
+        if (it.type === 'post') return it.post.avatar || '';
+        return (it.comment && it.comment.user && it.comment.user.avatar) || '';
+      },
+      _timeOf(it: any) {
+        if (it.type === 'post') return it.post.date || '';
+        const t = (it.comment && it.comment.createTime) || '';
+        return t ? String(t).replace('T', ' ').slice(0, 16) : '';
+      },
+      openInteraction(it: any) {
+        if (it.type === 'post') {
+          this.openPostDetail(it.post);
+        } else {
+          this.openPostDetail({ id: it.postId });
         }
       },
       /** 爱心：喜欢（复用点赞接口，reaction 固定 like） */
@@ -1237,9 +1516,64 @@
           /* 静默 */
         }
       },
+      /** 热门帖子查看更多：按点赞量取前 100 条 */
+      /** 拉今日热门（标题卡片） */
+      async loadHotToday() {
+        const today = new Date().toISOString().slice(0, 10);
+        const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+        try {
+          const res: any = await fetchForumPosts({
+            sortBy: 'likes', order: 'desc', dateFrom: today, dateTo: today, limit: 5
+          });
+          let list = (res.posts || []).map((p: any) => this._mapPost(p));
+          this.state.hotIsWeek = false;
+          if (list.length < 5) {
+            const week: any = await fetchForumPosts({
+              sortBy: 'likes', order: 'desc', dateFrom: weekAgo, dateTo: today, limit: 5
+            });
+            const merged = [...list];
+            for (const item of (week.posts || [])) {
+              if (merged.length >= 5) break;
+              if (!merged.some((x: any) => x.id === item.id)) merged.push(this._mapPost(item));
+            }
+            list = merged;
+            this.state.hotIsWeek = list.length > 0;
+          }
+          this.state.hotToday = list.slice(0, 5);
+        } catch (e) {
+          this.state.hotToday = [];
+        }
+      },
+
+      async openHotAll() {
+        this.state.showHotAll = true;
+        this.state.hotAllLoading = true;
+        try {
+          const res: any = await fetchForumPosts({
+            sortBy: 'likes',
+            order: 'desc',
+            dateFrom: this.state.hotFrom || undefined,
+            dateTo: this.state.hotTo || undefined,
+            limit: 100
+          });
+          this.state.hotAll = (res.posts || []).map((p: any, i: number) => ({
+            ...this._mapPost(p),
+            rank: i + 1
+          }));
+        } catch (e) {
+          this.state.hotAll = [];
+        } finally {
+          this.state.hotAllLoading = false;
+        }
+      },
+      closeHotAll() {
+        this.state.showHotAll = false;
+      },
+
       async openMyPosts() {
         this.state.showMyPosts = true;
-        this.state.myPostsPage = 1;
+        this.state.myPostsTab = 'normal';
+        this.state.myPostsSelected = [];
         await this.loadMyPostsPage();
       },
       async loadMyPostsPage() {
@@ -1247,30 +1581,94 @@
         if (!auth || !auth.isLoggedIn()) return;
         this.state.myPostsLoading = true;
         try {
-          const offset = (this.state.myPostsPage - 1) * this.state.myPostsPageSize;
-          await this.community.loadMyPosts({
-            limit: this.state.myPostsPageSize,
-            offset
-          });
-          this.state.myPosts = this.community.myPosts.map((p: any) => this._mapPost(p, false));
-          this.state.myPostsTotal = this.community.myPostsTotal;
+          const includeDeleted = this.state.myPostsTab === 'recycle';
+          const url = '/api/forum/my-posts?limit=100&offset=0' + (includeDeleted ? '&include_deleted=true' : '');
+          const res = await auth.apiFetch(url);
+          const data = await res.json();
+          this.state.myPosts = (data.posts || []).map((p: any) => this._mapPost(p, false));
+          this.state.myPostsTotal = data.total || 0;
         } finally {
           this.state.myPostsLoading = false;
+        }
+      },
+      async switchMyPostsTab(tab: string) {
+        if (this.state.myPostsTab === tab) return;
+        this.state.myPostsTab = tab;
+        this.state.myPostsSelected = [];
+        await this.loadMyPostsPage();
+      },
+      toggleMyPostSelect(id: number) {
+        const list = this.state.myPostsSelected;
+        const idx = list.indexOf(id);
+        if (idx >= 0) list.splice(idx, 1);
+        else list.push(id);
+      },
+      async batchDeleteMyPosts() {
+        const ids = this.state.myPostsSelected;
+        if (!ids.length) { this._safeMsg('info', '请先勾选要删除的帖子'); return; }
+        if (!window.confirm('确定把这 ' + ids.length + ' 篇帖子移入回收站？30 天内可恢复')) return;
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/forum/posts/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ post_ids: ids })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this._safeMsg('success', '已移入回收站 ' + (data.deleted || 0) + ' 篇');
+          this.state.myPostsSelected = [];
+          await this.loadMyPostsPage();
+        } else {
+          this._safeMsg('error', data.detail || '批量删除失败');
+        }
+      },
+      async restoreMyPost(mp: any) {
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/forum/posts/' + mp.id + '/restore', { method: 'POST' });
+        if (res.ok) {
+          this._safeMsg('success', '已恢复');
+          await this.loadMyPostsPage();
+        } else {
+          const data = await res.json();
+          this._safeMsg('error', data.detail || '恢复失败');
         }
       },
       closeMyPosts() {
         this.state.showMyPosts = false;
       },
-      prevMyPostsPage() {
-        if (this.state.myPostsPage > 1) {
-          this.state.myPostsPage--;
-          this.loadMyPostsPage();
-        }
+      openFeedback() {
+        this.state.feedbackModal = { visible: true, content: '', anonymous: false, submitting: false };
       },
-      nextMyPostsPage() {
-        if (this.state.myPostsPage < this.myPostsTotalPages) {
-          this.state.myPostsPage++;
-          this.loadMyPostsPage();
+      closeFeedback() {
+        this.state.feedbackModal.visible = false;
+      },
+      async submitFeedback() {
+        const m = this.state.feedbackModal;
+        const content = (m.content || '').trim();
+        if (!content) { this._safeMsg('warning', '请填写反馈内容'); return; }
+        m.submitting = true;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content,
+              category: '其他',
+              source: 'forum',
+              is_anonymous: m.anonymous ? 1 : 0
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            this._safeMsg('success', data.ticket_no ? '反馈已提交：' + data.ticket_no : '反馈已提交');
+            m.visible = false;
+          } else {
+            this._safeMsg('error', data.detail || '提交失败');
+          }
+        } catch (e) {
+          this._safeMsg('error', '提交失败');
+        } finally {
+          m.submitting = false;
         }
       },
       // ===== 安全辅助 =====
@@ -1296,6 +1694,10 @@
           id: p?.id ?? 0,
           title: p?.title ?? '',
           content: p?.content ?? '',
+          // 正文格式（2026-11-03）：后端下发 TEXT/HTML，渲染时据此选纯文本还是富文本
+          contentFormat: p?.contentFormat === 'HTML' ? 'HTML' : 'TEXT',
+          // AI 标题标记（2026-11-03 第 3 轮）
+          aiTitle: Boolean(p?.aiTitle),
           author: (p?.user && p.user.nickname) || '匿名',
           avatar: (p?.user && p.user.avatar) || '',
           date: this.formatTime(p?.createTime),
@@ -1320,6 +1722,37 @@
           isTop: p?.isTop ?? false,
           isEssence: p?.isEssence ?? false
         };
+      },
+      /**
+       * 关闭「最上层」的弹窗（2026-11-03）。
+       * 顺序必须从高到低：用户卡片(3) → 帖子详情(2) → 我的帖子/热门/收藏(1) → 发帖弹窗。
+       * 为什么要有：二三级弹窗叠在一级之上时，Esc/遮罩只应关掉最上层那一个，
+       * 否则用户按一次就把三层全关了，或者反过来关了底层留着顶层。
+       */
+      closeTopModal() {
+        if (this.state.showUserProfile) {
+          this.state.showUserProfile = false;
+          return;
+        }
+        if (this.state.showPostDetail) {
+          this.closePostDetail();
+          return;
+        }
+        if (this.state.showMyPosts) {
+          this.closeMyPosts();
+          return;
+        }
+        if (this.state.showHotAll) {
+          this.closeHotAll();
+          return;
+        }
+        if (this.state.showFavorites) {
+          this.closeFavorites();
+          return;
+        }
+        if (this.state.showNewPost) {
+          this.state.showNewPost = false;
+        }
       }
     },
     mounted() {
@@ -1327,6 +1760,7 @@
       this.state.activeCategory = 'all';
       this.community.setShareType('');
       this.loadPosts();
+      this.loadHotToday();
       this.loadStats();
       this.loadMyPosts();
       this.state._visibilityHandler = () => {
@@ -1335,6 +1769,13 @@
       this.state._refreshTimer = setInterval(() => this.refreshSilently(), 15000);
       window.addEventListener('focus', this.state._visibilityHandler);
       document.addEventListener('visibilitychange', this.state._visibilityHandler);
+      // Esc 只关最上层弹窗（层级见 closeTopModal 注释）
+      this.state._escHandler = (e) => {
+        if (e.key === 'Escape') this.closeTopModal();
+      };
+      window.addEventListener('keydown', this.state._escHandler);
+      this.state._scrollHandler = () => this.onForumScroll();
+      window.addEventListener('scroll', this.state._scrollHandler, { passive: true });
     },
     beforeUnmount() {
       if (this.state._refreshTimer) {
@@ -1346,10 +1787,25 @@
         document.removeEventListener('visibilitychange', this.state._visibilityHandler);
         this.state._visibilityHandler = null;
       }
+      if (this.state._scrollHandler) {
+        window.removeEventListener('scroll', this.state._scrollHandler);
+        this.state._scrollHandler = null;
+      }
+      if (this.state._escHandler) {
+        window.removeEventListener('keydown', this.state._escHandler);
+        this.state._escHandler = null;
+      }
     }
   })
 </script>
 <style lang="css" scoped>
+  /* 弹窗层级（2026-11-03）：一级列表弹窗 < 二级帖子详情 < 三级用户卡片。
+   * 背景：此前收藏/热门/我的（一级）与帖子详情（二级）共用 z-index:2000，
+   * 同层里谁后插入谁在上，导致二级被一级盖住、必须先关一级才能看到详情。 */
+  .modal-overlay.modal-l1 { z-index: 2000; }
+  .modal-overlay.modal-l2 { z-index: 2200; }
+  .modal-overlay.modal-l3 { z-index: 2400; }
+
   .forum-page {
     /* 自己成为滚动容器：VTJ 外壳存在 overflow 祖先，sticky 绑不到视口 */
     height: 100vh;
@@ -1451,13 +1907,69 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    /* 2026-11-03：与右侧范围筛选同行排布，不再独占整行 */
+    flex: 1 1 auto;
+    min-width: 0;
     margin: 0 0 12px;
     padding: 10px 12px;
     background: #ffffff;
     border-radius: 12px;
   }
+  /* 校园 / 班级 论坛筛选（2026-11-03） */
+  .scope-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: #f1f5fb;
+    border-radius: 9px;
+    flex: 0 0 auto;
+  }
+  .scope-chip {
+    height: 28px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: #5a6488;
+    font-size: 12.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .scope-chip:hover { color: #1a365d; }
+  .scope-chip.on {
+    background: #ffffff;
+    color: #1a365d;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(23, 35, 58, .12);
+  }
+
+  /* 列表正文摘要（2026-11-03）：2 行截断 */
+  .list-excerpt {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #6b7896;
+    text-align: left;
+    width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .hot-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .search-input {
-    flex: 1 1 auto;
+    /* 2026-11-03：搜索框缩短，给右侧「校园/班级论坛」筛选让位 */
+    flex: 0 1 260px;
+    max-width: 260px;
     min-width: 0;
     height: 34px;
     padding: 0 12px;
@@ -1505,10 +2017,15 @@
   .heart-icon {
     font-size: 13px;
     line-height: 1;
-    color: #8a8faa;
+    color: #e5484d;
   }
   .heart-icon.active {
-    color: #e5484d;
+    color: #c41e3a;
+  }
+  .fav-star {
+    color: #f59e0b;
+    font-size: 13px;
+    line-height: 1;
   }
   .meta-favs {
     display: inline-flex;
@@ -2100,10 +2617,10 @@
   }
   /* === 帖子详情 Modal === */
   .post-detail-card {
-    width: 680px;
-    max-width: 95vw;
-    height: 85vh;          /* 固定高度，底部固定条才能与弹窗底边精确对齐 */
-    max-height: 85vh;
+    width: 1220px;
+    max-width: 96vw;
+    height: 888px;         /* 2026-11-07：按需求放大到 1220×888 */
+    max-height: 92vh;
     overflow-y: auto;
     /* 底部留出固定输入区的高度，最后一条评论仍可滚到可见位置 */
     padding-bottom: 90px;
@@ -2328,29 +2845,38 @@
     margin-top: 4px;
   }
   .comment-input-area {
-    /* 吸底：详情弹窗(.post-detail-card)是滚动容器，输入区常驻可视底部，
-       否则上传/表情/发送位于内容末尾(2100px+)，用户看不到。
-       负外边距抵消 .modal-card 的 28px 内边距，让吸底条铺到卡片底边与两侧，
-       否则下方会露出 28px 的滚动内容。 */
     margin: 0;
-    padding: 12px 28px;
+    margin-bottom: -35px;
+    padding: 10px 20px;
     border-top: 1px solid #f0f2f5;
-    /* 弹窗高度固定为 85vh 且垂直居中，所以其底边恒在 92.5vh；
-       固定条贴同一条线，打开即在视口内，不依赖滚动 */
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 7.5vh;
-    width: 680px;
-    max-width: 95vw;
+    bottom: calc((100vh - min(888px, 92vh)) / 2);
+    width: 1220px;
+    max-width: 96vw;
     background: #ffffff;
     z-index: 2100;
     box-shadow: 0 -8px 16px rgba(26, 54, 93, 0.06);
-    border-radius: 0 0 16px 16px;
+    border-radius: 16px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 13px;
+  }
+  .comment-input-box { position: relative; order: 3; flex: 1 1 0; display: flex; }
+  .comment-input-box textarea { flex: 1; width: 100%; }
+  .comment-input-area .fullscreen-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    border: 0;
+    background: transparent;
+    color: #8a8faa;
+    font-size: 15px;
+    padding: 2px 4px;
   }
   /* 单行：😊 → ＋ → 输入框 → 发表评论（DOM 顺序不变，仅改视觉顺序） */
   .comment-input-area textarea {
@@ -2358,10 +2884,10 @@
     flex: 1 1 0;
     width: auto;          /* 覆盖 .modal-textarea 的 width:100%，否则整行被占满导致换行 */
     min-width: 120px;
-    height: 40px;
-    min-height: 40px;
-    max-height: 120px;
-    resize: vertical;
+    height: 50px;
+    min-height: 50px;
+    max-height: 180px;
+    resize: none;
   }
   .comment-input-area .comment-toolbar { order: 1; margin: 0; }
   .comment-input-area .comment-image-upload { order: 2; margin: 0; }
@@ -2524,4 +3050,173 @@
     flex-shrink: 0;
     white-space: nowrap;
   }
+
+/* 2026-10-30：分类与搜索固定（学生 PC）——标题行 68px 之下依次吸附 */
+.category-bar { position: sticky; top: var(--forum-toolbar-h, 84px); z-index: 24; background: #fff;
+  padding-top: 8px; padding-bottom: 8px; margin-bottom: 0; }
+/* in-header：搜索栏并入标题行后不再单独吸顶 */
+.forum-search-bar.in-header { position: static; flex: 1 1 auto; min-width: 320px; background: #fff;
+  padding-bottom: 8px; margin-bottom: 8px;
+  box-shadow: 0 8px 10px -12px rgba(15,23,42,.45); }
+
+/* 2026-10-30：窄屏（平板/小笔记本）压缩标题行，避免拥挤与标题换行 */
+@media (max-width: 1560px) {
+  .forum-header { gap: 10px; }
+  .forum-header h2 { font-size: 22px; white-space: nowrap; }
+  .forum-search-bar.in-header { min-width: 0; gap: 6px; }
+  .forum-search-bar.in-header .search-input { min-width: 130px; padding: 7px 10px; font-size: 13px; }
+  .forum-search-bar.in-header .search-date { width: 116px; padding: 6px 6px; font-size: 12px; }
+  .forum-search-bar.in-header .search-btn,
+  .forum-search-bar.in-header .search-reset {
+    padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+  .forum-header-actions { gap: 6px; }
+  .forum-header-actions .post-btn { padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+}
+@media (max-width: 1280px) {
+  .forum-header h2 { font-size: 19px; }
+  .forum-search-bar.in-header .search-input { min-width: 100px; }
+  .forum-search-bar.in-header .search-date { width: 104px; }
+  .forum-header-actions .post-btn { padding: 6px 8px; font-size: 12px; }
+}
+/* 收藏/喜欢合并为单个五角星 */
+.post-btn.star-only { padding: 0; width: 38px; height: 38px; display: inline-flex;
+  align-items: center; justify-content: center; border-radius: 50%; }
+/* 2026-10-31：整页固定高度，左右两栏各自滚动（互不带动） */
+.forum-page { height: 100vh; overflow: hidden; }
+.forum-main { height: calc(100vh - 0px); overflow: hidden; }
+.forum-body { display: flex; gap: 20px; align-items: flex-start;
+  height: calc(100vh - 148px); overflow: hidden; }
+.forum-left { flex: 1 1 auto; min-width: 0; height: 100%;
+  overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+.forum-right { flex: 0 0 300px; height: 100%;
+  overflow-y: auto; overscroll-behavior: contain; }
+.post-author-line { display: flex; align-items: center; gap: 4px;
+  font-size: 13px; color: #6b7896; margin-bottom: 4px; }
+.post-author-line .meta-author { font-weight: 600; color: #1a2b5f; }
+
+  /* 2026-11-07 UI 批量修复：列表作者/计数、热门弹窗自适应、批量删除与恢复 */
+  .hot-all-card { height: auto; max-height: 85vh; padding-bottom: 16px; }
+  .hot-all-card .my-posts-full-list { max-height: 60vh; }
+  .list-author {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #6b7896;
+    min-width: 0;
+  }
+  .list-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: 0 0 auto;
+  }
+  .list-avatar-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef1f8;
+    color: #1a2b5f;
+    font-size: 12px;
+  }
+  .list-author-name { font-weight: 600; color: #1a2b5f; }
+  .list-author-date { color: #8a8faa; }
+  .fav-item-rich { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+  .my-post-item-rich,
+  .my-posts-full-list .my-post-item { flex-wrap: wrap; }
+  .my-post-item-rich .list-author { flex-basis: 100%; }
+  .post-select { width: 16px; height: 16px; flex: 0 0 auto; }
+  .my-posts-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .batch-delete-btn {
+    margin-left: auto;
+    border: 1px solid #f0c2bd;
+    background: #fff5f4;
+    color: #c0392b;
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .batch-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .restore-post-btn {
+    border: 1px solid #b7e1c1;
+    background: #f0fbf3;
+    color: #1e7b3c;
+    border-radius: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+
+  /* 2026-11-07：反馈按钮与弹窗 */
+  .feedback-btn {
+    border: 1px solid #dfe3ee;
+    background: #fff;
+    color: #1a365d;
+    border-radius: 10px;
+    padding: 8px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .feedback-btn:hover { border-color: #1a365d; }
+  .feedback-card { width: 520px; max-width: 92vw; }
+  .feedback-card h3 { margin: 0 0 12px; }
+  .feedback-card textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #dfe3ee;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .fb-anon { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 13px; color: #5a6488; }
+
+  /* 2026-11-09：评论输入全屏弹窗 */
+  .fullscreen-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(12, 26, 44, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fullscreen-card {
+    width: 1220px;
+    max-width: 96vw;
+    height: 888px;
+    max-height: 92vh;
+    background: #fff;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .fullscreen-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid #f0f2f5;
+  }
+  .fullscreen-head h3 { margin: 0; font-size: 16px; }
+  .fullscreen-close { border: 0; background: transparent; font-size: 22px; color: #8a8faa; cursor: pointer; }
+  .fullscreen-body { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px 20px; overflow-y: auto; }
+  .fullscreen-textarea {
+    flex: 1;
+    min-height: 300px;
+    border: 1px solid #dfe3ee;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .fullscreen-tools { display: flex; align-items: center; gap: 13px; }
+  .fullscreen-tools :deep(.fu-add) { width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 0; }
+  .fullscreen-tools :deep(.fu-add::before) { content: '+'; font-size: 20px; }
+  .fullscreen-tools .confirm-btn { margin-left: auto; }
+  .fullscreen-picker { align-self: flex-start; }
+  .fullscreen-btn { border: 1px solid #dfe3ee; background: #fff; border-radius: 8px; padding: 4px 8px; cursor: pointer; font-size: 15px; }
 </style>

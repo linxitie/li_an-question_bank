@@ -12,11 +12,11 @@ from ....models.models import (
     ExamRecord,
     ExamAnswerDetail,
     QuestionBank,
-    QuestionGroup,
     PaperQuestionRelation,
     QuestionType,
     SysUser
 )
+from ..catalog import contract as catalog_contract
 from ....schemas.schemas import (
     ExamRecordResponse,
     AnswerDetailResponse,
@@ -164,10 +164,8 @@ async def get_paper_questions(
     #   学生答题页是独立前端（/paper-answer），没有题库详情页可再请求
     #   /questions/group/{id}；若不在这里返回组材料，复合题必然只剩设问。
     group_ids = sorted({int(q.group_id) for q in questions if int(q.group_id or 0) > 0})
-    group_dict = {}
-    if group_ids:
-        groups = db.query(QuestionGroup).filter(QuestionGroup.id.in_(group_ids)).all()
-        group_dict = {int(g.id): g for g in groups}
+    # 题组属 catalog 域，按 P4.1 边界只经 catalog 契约读取（返回纯 dict）
+    group_dict = catalog_contract.question_groups_by_ids(db, group_ids)
 
     # 按顺序组装题目列表（不含答案和解析）
     paper_questions = []
@@ -185,14 +183,16 @@ async def get_paper_questions(
 
         group = group_dict.get(int(q.group_id or 0))
         group_images: List[str] = []
-        if group and group.shared_content_images:
+        group_images_raw = (group or {}).get("shared_content_images") or ""
+        if group_images_raw:
             try:
-                parsed = json.loads(group.shared_content_images)
+                parsed = json.loads(group_images_raw)
                 if isinstance(parsed, list):
                     group_images = [str(x) for x in parsed if x]
             except (TypeError, ValueError):
                 # 历史坏数据不应让整份试卷 500；材料正文仍可显示
-                logger.warning("[exam] 题组%s shared_content_images 非法 JSON", group.id)
+                logger.warning("[exam] 题组%s shared_content_images 非法 JSON",
+                               (group or {}).get("id"))
 
         paper_questions.append({
             "question_id": q.question_id,
@@ -211,8 +211,8 @@ async def get_paper_questions(
             "group_id": int(q.group_id or 0),
             "question_level": int(q.question_level or 0),
             "sort_order": int(q.sort_order or 0),
-            "group_title": group.title if group else '',
-            "shared_content": group.shared_content if group else '',
+            "group_title": (group or {}).get("title", ""),
+            "shared_content": (group or {}).get("shared_content", ""),
             "shared_content_images": group_images,
         })
 
@@ -663,3 +663,122 @@ async def preview_exam(
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/records/{record_id}/resume", response_model=Dict[str, Any],
+            summary="恢复未完成的答题卡")
+async def resume_exam_record(
+        record_id: int,
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """按 record_id 取回未完成答题卡：题目 + 已保存答案 + 剩余时间。
+
+    - 只允许本人记录；他人记录与不存在一律 404（不泄露存在性）
+    - 已完成返回 409
+    - 题目顺序与 `GET /{paper_id}/questions` 一致（PaperQuestionRelation.question_order）
+    - 已保存答案来自 exam_answer_detail（断点续答由 ExamService.save_progress 写入），
+      因此跨设备也能继续，不依赖浏览器 localStorage
+    """
+    record = db.query(ExamRecord).filter(
+        ExamRecord.record_id == record_id,
+        ExamRecord.user_id == current_user.user_id
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="考试记录不存在")
+    if record.is_completed:
+        raise HTTPException(status_code=409, detail="该记录已完成，无法继续作答")
+
+    paper = db.query(ExamPaper).filter(ExamPaper.paper_id == record.paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="试卷不存在")
+
+    relations = db.query(PaperQuestionRelation).filter(
+        PaperQuestionRelation.paper_id == record.paper_id
+    ).order_by(PaperQuestionRelation.question_order).all()
+    if not relations:
+        raise HTTPException(status_code=404, detail="该试卷暂无题目")
+
+    question_ids = [r.question_id for r in relations]
+    questions = db.query(QuestionBank).filter(
+        QuestionBank.question_id.in_(question_ids)
+    ).all()
+    qmap = {q.question_id: q for q in questions}
+
+    # 已保存答案
+    saved_answers: Dict[str, str] = {}
+    for d in db.query(ExamAnswerDetail).filter(ExamAnswerDetail.record_id == record_id).all():
+        if d.student_answer:
+            saved_answers[str(d.question_id)] = d.student_answer
+
+    # 复合题：一次性取回素材，答题页无需再请求 /questions/group/{id}
+    group_ids = sorted({int(q.group_id) for q in questions if int(q.group_id or 0) > 0})
+    gmap = {}
+    if group_ids:
+        for g in db.query(QuestionGroup).filter(QuestionGroup.id.in_(group_ids)).all():
+            gmap[int(g.id)] = g
+
+    type_map = {t.type_id: t for t in db.query(QuestionType).all()}
+
+    items = []
+    for rel in relations:
+        q = qmap.get(rel.question_id)
+        if not q:
+            # 题目已被删除：跳过该题，而不是让整张答题卡 404
+            logger.warning("[exam] resume record=%s 缺少题目 question_id=%s", record_id, rel.question_id)
+            continue
+        qtype = type_map.get(q.type_id)
+        is_subjective = is_subjective_question(q, qtype)
+        group = gmap.get(int(q.group_id or 0))
+        group_images: List[str] = []
+        if group and group.shared_content_images:
+            try:
+                parsed = json.loads(group.shared_content_images)
+                if isinstance(parsed, list):
+                    group_images = [str(x) for x in parsed if x]
+            except (TypeError, ValueError):
+                logger.warning("[exam] 题组%s shared_content_images 非法 JSON", group.id)
+
+        items.append({
+            "question_id": q.question_id,
+            "question_order": rel.question_order,
+            "question_score": float(rel.question_score),
+            "question_content": q.question_content,
+            "options": [] if is_subjective else q.options,
+            "type_name": qtype.type_name if qtype else "单选题",
+            "type_id": q.type_id,
+            "is_subjective": is_subjective,
+            "difficulty": q.difficulty,
+            "subject_id": q.subject_id,
+            "year": q.year,
+            "source": q.source,
+            "group_id": int(q.group_id or 0),
+            "question_level": int(q.question_level or 0),
+            "sort_order": int(q.sort_order or 0),
+            "group_title": group.title if group else '',
+            "shared_content": group.shared_content if group else '',
+            "shared_content_images": group_images,
+            "saved_answer": saved_answers.get(str(q.question_id), ''),
+        })
+
+    # 剩余时间（秒）：无时长限制的试卷返回 None
+    remaining_seconds = None
+    if paper.duration and record.start_time:
+        elapsed = int((datetime.now() - record.start_time).total_seconds())
+        remaining_seconds = max(int(paper.duration) * 60 - elapsed, 0)
+
+    return {
+        "record_id": record.record_id,
+        "paper_id": paper.paper_id,
+        "paper_name": paper.paper_name,
+        "subject_id": paper.subject_id,
+        "exam_type": record.exam_type,
+        "status": "in_progress",
+        "duration": paper.duration,
+        "remaining_seconds": remaining_seconds,
+        "answered_count": len(saved_answers),
+        "start_time": record.start_time.isoformat() if record.start_time else None,
+        "saved_answers": saved_answers,
+        "question_count": len(items),
+        "questions": items,
+    }

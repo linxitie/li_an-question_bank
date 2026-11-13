@@ -46,3 +46,28 @@ def spend_coins(db, user, amount: int, *, source_type: str,
         description=description,
     ))
     return user.total_coins
+
+
+def has_grant(db, user_id: int, *, source_type: str, related_id: int) -> bool:
+    """是否已发过该来源/关联对象的币（供其他域做幂等判断，不必直接查 CoinRecord）。"""
+    from sqlalchemy import func as _f
+
+    n = (db.query(_f.count(CoinRecord.record_id))
+         .filter(CoinRecord.user_id == user_id,
+                 CoinRecord.source_type == source_type,
+                 CoinRecord.related_id == related_id)
+         .scalar() or 0)
+    return int(n) > 0
+
+
+def sum_granted(db, user_id: int, *, source_type: str, since=None) -> int:
+    """某来源的累计发币量（since 传 datetime 时只统计该时间之后）。"""
+    from sqlalchemy import func as _f
+
+    q = (db.query(_f.coalesce(_f.sum(CoinRecord.coin_change), 0))
+         .filter(CoinRecord.user_id == user_id,
+                 CoinRecord.source_type == source_type,
+                 CoinRecord.coin_change > 0))
+    if since is not None:
+        q = q.filter(CoinRecord.transaction_time >= since)
+    return int(q.scalar() or 0)
