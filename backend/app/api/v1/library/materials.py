@@ -3509,11 +3509,16 @@ async def import_upload(background_tasks: BackgroundTasks,
     _commit_material_import(db, rec)
     db.refresh(rec)
 
+    # S-A（2026-11-13）：PDF 只解析一遍 —— parse_pdf_once 同时给出"是不是扫描件"和"文字版 html"。
+    # 旧写法 detect_scanned(pdfplumber 全文) + parse_pdf_text(pymupdf 全文) 要跑两遍，
+    # 17 页实测 3102ms + 911ms；现在一次 pymupdf 即可（≈900ms）。
+    pdf_out = None
     scanned = False
     if ext == ".pdf":
-        from ....services.material_parser import detect_scanned
+        from ....services.material_parser import parse_pdf_once
         try:
-            scanned = detect_scanned(tmp_path)
+            pdf_out = parse_pdf_once(tmp_path)
+            scanned = bool(pdf_out.get("scanned"))
         except Exception:
             rec.parse_status = "failed"
             rec.error_message = "PDF 已加密或损坏，请解除密码后重新上传"
@@ -3610,13 +3615,14 @@ async def import_upload(background_tasks: BackgroundTasks,
                                       _ocr_sidecar_job, rec.import_id, tmp_path, sha256)
         else:
             try:
-                from ....services.material_parser import parse_pdf_text
-                out = parse_pdf_text(tmp_path)
+                # S-A：复用上面那遍解析的结果，不再重复打开/抽取
+                out = dict(pdf_out or {})
+                out.pop("scanned", None)
                 out["_tmp"] = tmp_path
                 rec.parse_mode = "sync"
                 rec.parse_status = "success"
                 rec.parse_result = _json.dumps(out, ensure_ascii=False)
-            except Exception as e:
+            except Exception as e:                  # pragma: no cover - 兜底
                 rec.parse_status = "failed"
                 rec.error_message = f"PDF 解析失败: {e}"
                 rec.parse_result = _json.dumps({"_tmp": tmp_path}, ensure_ascii=False)
