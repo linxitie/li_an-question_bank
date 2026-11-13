@@ -8,6 +8,7 @@
         <QuoteCategoryTag :category="state.category" />
       </div>
       <span class="quote-date"> {{ state.currentDate }}</span>
+      <QuoteLibraryLink />
     </div>
     <div class="quote-body">
       <div class="quote-mark left-mark">“</div>
