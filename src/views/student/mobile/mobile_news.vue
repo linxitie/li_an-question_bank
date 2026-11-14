@@ -7,11 +7,22 @@
       <button v-if="!currentNews" class="timeline-btn" @click="openTimeline">
         时间线/日报
       </button>
-      <span v-else class="spacer"></span>
+      <router-link class="fav-link" :to="favoritesPath">收藏库</router-link>
+      <span v-if="currentNews" class="spacer"></span>
     </header>
 
+    <div v-if="route.params.id && detailLoading" class="detail-state">
+      新闻详情加载中...
+    </div>
+    <div v-else-if="route.params.id && detailError" class="detail-state error">
+      <span>{{ detailError }}</span>
+      <button type="button" @click="loadDetail(String(route.params.id))">
+        重试
+      </button>
+    </div>
+
     <!-- 新闻列表 -->
-    <main v-if="!currentNews" class="news-list">
+    <main v-if="!currentNews && !route.params.id" class="news-list">
       <div
         v-for="item in newsList"
         :key="item.id"
@@ -27,7 +38,7 @@
     </main>
 
     <!-- 新闻详情 -->
-    <main v-else class="news-detail">
+    <main v-else-if="currentNews" class="news-detail">
       <h2 class="detail-title">{{ currentNews.title }}</h2>
       <div class="detail-meta">
         {{ currentNews.source || '' }} ·
@@ -47,6 +58,10 @@
         :summary="currentNews.ai_summary"
         :exam-points="currentNews.ai_exam_points"
         :entities="currentNews.ai_entities" />
+      <div v-else class="ai-empty">
+        <strong>AI 摘要与申论考点</strong>
+        <span>该新闻暂无 AI 解析内容。</span>
+      </div>
       <div
         ref="contentEl"
         class="detail-content"
@@ -144,6 +159,13 @@ const hasAi = computed(
 );
 const notes = ref<any[]>([]);
 const favoriteError = ref('');
+const detailLoading = ref(Boolean(route.params.id));
+const detailError = ref('');
+const favoritesPath = computed(() =>
+  route.path.startsWith('/tablet')
+    ? '/tablet/news/favorites'
+    : '/mobile/favorites'
+);
 /** 正文容器引用：划线时用于判定选区是否落在正文内 */
 const contentEl = ref<HTMLElement | null>(null);
 
@@ -225,11 +247,28 @@ const fetchNews = async () => {
   await newsStore.load({ limit: 20 });
 };
 
+const loadDetail = async (id: string): Promise<NewsItem | null> => {
+  detailLoading.value = true;
+  detailError.value = '';
+  try {
+    const detail = await newsStore.openArticle(id);
+    if (!detail) {
+      detailError.value = '新闻详情加载失败，请检查网络后重试';
+      return null;
+    }
+    return detail;
+  } catch (e) {
+    detailError.value = e instanceof Error ? e.message : '新闻详情加载失败';
+    return null;
+  } finally {
+    detailLoading.value = false;
+  }
+};
+
 const openDetail = async (item: NewsItem) => {
   notes.value = [];
-  // 详情接口即阅读上报入口：登录用户首次打开由后端记录已读并发布 news.read
-  const detail = await newsStore.openArticle(item.id, item);
-  await fetchNotes(detail ? detail.id : item.id);
+  const detail = await loadDetail(String(item.id));
+  if (detail) await fetchNotes(detail.id);
 };
 
 /**
@@ -397,7 +436,7 @@ onMounted(() => {
   if (id) {
     // 直接打开指定新闻详情（同样经详情端点上报阅读）
     (async () => {
-      const detail = await newsStore.openArticle(String(id));
+      const detail = await loadDetail(String(id));
       if (detail) await fetchNotes(detail.id);
     })();
   } else {
@@ -456,6 +495,47 @@ onBeforeUnmount(() => {
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
+}
+.fav-link {
+  padding: 5px 8px;
+  color: #1a2b5f;
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.detail-state {
+  margin: 16px 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #fff;
+  color: #59635c;
+  font-size: 13px;
+  text-align: center;
+}
+.detail-state.error {
+  color: #a33b2d;
+}
+.detail-state button {
+  margin-left: 8px;
+  border: 1px solid #d6dfea;
+  border-radius: 6px;
+  background: #fff;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.ai-empty {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f7faf8;
+  color: #59635c;
+  font-size: 12px;
+}
+.ai-empty strong {
+  color: #1a2b5f;
+  font-size: 13px;
 }
 .news-list {
   flex: 1;
