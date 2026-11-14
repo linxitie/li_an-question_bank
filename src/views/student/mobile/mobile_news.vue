@@ -140,6 +140,7 @@
         </div>
       </div>
     </main>
+    <MobileTabBar active="home" />
   </div>
 </template>
 
@@ -151,6 +152,7 @@ import { useNewsStore } from '@/modules/news/store';
 import type { NewsItem } from '@/modules/news/api';
 import { toggleNewsFavorite } from '@/modules/news/api';
 import NewsAICard from '@/components/news/NewsAICard.vue';
+import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -484,6 +486,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .mobile-news-page {
   min-height: 100vh;
+  padding-bottom: 76px;
+  box-sizing: border-box;
   background: #f5f7fa;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   display: flex;
