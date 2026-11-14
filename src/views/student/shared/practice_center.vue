@@ -295,8 +295,18 @@ export default defineComponent({
       { id: 5, name: '判断' }
     ];
 
+    // 入口既可能传科目 key（xc/sl/ga），也可能传科目 ID（1/2/3）——
+    // 旧版只认 key，导致 /practice-center?subject=3 静默落回行测（实测截图）。
+    const normalizeSubject = (raw: unknown): string => {
+      const v = String(raw ?? '').trim();
+      if (v === '1') return 'xc';
+      if (v === '2') return 'sl';
+      if (v === '3') return 'ga';
+      return ['xc', 'sl', 'ga'].includes(v) ? v : 'xc';
+    };
+
     const state = reactive({
-      subject: (route.query.subject as string) || 'xc',
+      subject: normalizeSubject(route.query.subject),
       loading: true,
       error: '',
       subCategories: [] as SubCategoryItem[],
