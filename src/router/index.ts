@@ -692,7 +692,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/mobile/recruitment/radar',
     name: 'MobileRecruitmentRadar',
-    component: () => import('@/views/student/mobile/mobile_recruitment_radar.vue'),
+    component: () =>
+      import('@/views/student/mobile/mobile_recruitment_radar.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
@@ -806,6 +807,36 @@ const router = createRouter({
 });
 
 // ==================== 路由守卫 — 三端权限控制 ====================
+/**
+ * 内容模块的 PC → 移动/平板路由映射。
+ *
+ * `resolveDevicePath()`（R4 文件）只覆盖首页/登录/题库等旧路由，不能修改；
+ * 新闻、金句、招考是后加模块，必须在这里补齐，否则手机访问 /news 会渲染 PC 的
+ * news_timeline.vue，而不是 /mobile/news 的 mobile_news.vue。
+ */
+function resolveContentDevicePath(
+  path: string,
+  device: 'mobile' | 'tablet'
+): string | null {
+  const prefix = device === 'tablet' ? '/tablet' : '/mobile';
+  const exact: Record<string, string> = {
+    '/news': `${prefix}/news`,
+    '/news/favorites':
+      device === 'tablet' ? '/tablet/news/favorites' : '/mobile/favorites',
+    '/quotes': `${prefix}/quotes`,
+    '/quotes/favorites': `${prefix}/quotes/favorites`,
+    '/recruit': `${prefix}/recruit`,
+    '/recruitment/radar': `${prefix}/recruitment/radar`,
+    '/favorites':
+      device === 'tablet' ? '/tablet/favorites' : '/mobile/favorites'
+  };
+  if (exact[path]) return exact[path];
+  if (path.startsWith('/news/') && path !== '/news/favorites') {
+    return `${prefix}/news/${path.slice('/news/'.length)}`;
+  }
+  return null;
+}
+
 router.beforeEach((to, _from, next) => {
   const device = detectDevice();
 
@@ -842,11 +873,13 @@ router.beforeEach((to, _from, next) => {
     return next();
   }
 
-  // 2) 仅「手机」访问 PC 路径 → 映射到手机端
-  //    2026-10-26 用户决定：平板与电脑端使用同一套页面，因此平板不再自动跳 /tablet/*
-  //    （平板版仍可通过显式 URL 访问，如 /#/tablet/login、/#/tablet/forum/4）
-  //    保留原「登录页也区分设备」的行为：手机访问 /login 仍映射到 /mobile/login
-  if (device === 'mobile') {
+  // 2) 手机/平板访问内容模块的 PC 路径 → 映射到对应端
+  //    旧 resolveDevicePath 仅覆盖旧路由；新闻/金句/招考在此补齐。
+  if (device === 'mobile' || device === 'tablet') {
+    const mapped = resolveContentDevicePath(to.path, device);
+    if (mapped) {
+      return next({ path: mapped, replace: true });
+    }
     const target = resolveDevicePath(to.path, device);
     if (target) {
       return next({ path: target, replace: true });
