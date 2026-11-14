@@ -115,6 +115,11 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
 
     `progress_cb(文本)`：扫描件 OCR 时逐段回调（调用方负责落库+commit，用于前端进度）。
     """
+    # D2（2026-11-14）：用户在 OCR 期间点了「放弃草稿」→ 后台任务跑完**不许把它救回 pending**。
+    # 之前这里无条件写 pending，实测（探针）放弃后草稿又冒出来、带 1 题，弃稿语义失效。
+    # 与 P4 的 `fill_answer_draft` 同款口径（answer_ingest/service.py 早退）。
+    if draft.status == "discarded":
+        return draft
     ext = (ext or "").lower().lstrip(".")
     try:
         payload = readers.read_any(abs_path, ext, progress=progress_cb)

@@ -131,6 +131,34 @@ def test_fill_draft_scanned_adds_three_warnings(monkeypatch, db_session):
     assert "识别失败" in warns
 
 
+def test_fill_draft_does_not_resurrect_discarded(monkeypatch, db_session):
+    """D2（2026-11-14）：OCR 期间用户点了「放弃草稿」→ 后台任务跑完不许把它救回 pending。
+
+    实测缺陷：`fill_draft` 无条件 `status="pending"`，放弃后草稿又冒出来（还带题），
+    列表里像"没点成功"。修法与 P4 `fill_answer_draft` 一致：进门先判 discarded。
+    """
+    material = StudyMaterial(subject="gongzhuan", type="paper", status=1,
+                             title="D2 放弃后不被救活探针", creator_id=2)
+    db_session.add(material)
+    db_session.commit()
+
+    def fake_read(path, ext, progress=None):
+        return {"lines": ["1、题干（　　）。", "A、甲", "B、乙", "C、丙", "D、丁"],
+                "images": [], "meta": {"reader": "pdf"}}
+    monkeypatch.setattr(readers, "read_any", fake_read)
+
+    draft = service.create_draft(db_session, material, ext="pdf", status="parsing",
+                                 message="OCR 排队中")
+    db_session.commit()
+    draft.status = "discarded"
+    db_session.commit()
+
+    service.fill_draft(db_session, draft, ext="pdf", abs_path="x.pdf")
+    db_session.commit()
+    assert draft.status == "discarded", "放弃的草稿被后台任务救活了"
+    assert draft.item_count == 0
+
+
 def test_parse_route_scanned_returns_parsing(client, admin_headers, db_session,
                                              monkeypatch, tmp_path):
     pdf = _blank_pdf(tmp_path / "scan_paper.pdf", pages=1)

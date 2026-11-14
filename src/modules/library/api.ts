@@ -321,6 +321,11 @@ export interface LibraryExamState {
   paper_id?: number | null;
   /** 手动总闸：1 开 / 0 关（管理端列表行才有） */
   manual_open?: number;
+  /**
+   * 卷的原始状态（D1，2026-11-14）：`PUBLISHED` / `DRAFT` / `ENDED`。
+   * 列表据此判断「资料上架 ↔ 卷发布」是否一致（`utils/materialDrift.ts`）。
+   */
+  paper_type?: string | null;
 }
 
 /** C2b：改信息的提交体（全部非必填；null / 空串 = 清除该项） */

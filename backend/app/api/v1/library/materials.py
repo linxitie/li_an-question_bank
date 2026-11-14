@@ -2484,18 +2484,33 @@ async def admin_parse_answers(paper_id: int,
     ext = _os.path.splitext(name)[1].lower().lstrip(".")
     if ext not in ANSWER_EXTS:
         raise HTTPException(400, "答案文件仅支持 pdf / docx / xlsx / txt / csv")
-    raw = file.file.read()
-    if not raw:
-        raise HTTPException(400, "空文件不能上传")
-    if len(raw) > 30 * 1024 * 1024:
-        raise HTTPException(400, "答案文件超过 30MB 上限")
 
+    # D4（2026-11-14）：与原件上传同一套 —— 上限按扩展名（PDF 60MB / 其余 20MB）、
+    # >8MB **流式落盘**。原来 `file.file.read()` 整读进内存 + 30MB 一刀切，
+    # 26.79MB 的扫描答案件就是 26.79MB 峰值内存，且与材料上限不一致。
     from ....services import answer_ingest
-    tmp_dir = _os.path.join(UPLOAD_TMP_DIR, "answers")
-    _os.makedirs(tmp_dir, exist_ok=True)
-    tmp_path = _os.path.join(tmp_dir, f"{_uuid.uuid4().hex}.{ext}")
-    with open(tmp_path, "wb") as fh:
-        fh.write(raw)
+    limit = material_files.max_bytes_for(ext)
+    size = _upload_size_of(file.file)
+    if size is not None and size > limit:
+        raise HTTPException(400, f".{ext} 答案文件超过 {limit // 1024 // 1024}MB 上限")
+    head = _read_head(file.file, 8)
+    magic = MAGIC_BYTES.get("." + ext)
+    if magic and head and not head.startswith(magic):
+        raise HTTPException(400, "文件实际格式与扩展名不符")
+    tmp_path = _spool_upload(file.file, ext)
+    real = _os.path.getsize(tmp_path)
+    if real == 0:
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise HTTPException(400, "空文件不能上传")
+    if real > limit:
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise HTTPException(400, f".{ext} 答案文件超过 {limit // 1024 // 1024}MB 上限")
     keep_tmp = False                 # 起后台任务时由 job 负责删；其余路径这里删
     try:
         # P4（2026-11-13）：扫描答案件 OCR 要 3–7 分钟（24–43 页），同步跑会把请求挂死。
@@ -2844,7 +2859,8 @@ async def admin_upload_file(
     为什么是"一次一个文件"而不是一次 50 个：50 个 × 20MB 放一个请求里既不能显示进度，
     失败整批重来；前端按队列逐个小请求发，进度、失败重试、跳过重复都能精确到行，
     服务端也不必为 2GB 请求体设超时。**数量（≤50）与总量（≤2GB）由前端队列把关**，
-    服务端只守单文件上限 20MB（`material_files.MAX_FILE_BYTES`）。
+    服务端守**按类型**的单文件上限（`material_files.max_bytes_for`：PDF 60MB / 其余 20MB，
+    2026-11-14 D3 起）；>8MB 走流式落盘，峰值内存与文件大小无关。
 
     两种用法：
       · 不带 `material_id` → **建一条资料**（`status=0` 未上架）+ 原件作 `primary`；
@@ -3489,7 +3505,9 @@ from fastapi.responses import JSONResponse  # noqa: E402
 from starlette.concurrency import run_in_threadpool  # noqa: E402
 
 ALLOWED_DOC_EXT = {".docx", ".xlsx", ".pdf"}
-DOC_SIZE_LIMIT = 20 * 1024 * 1024
+#: D3（2026-11-14）：docx 仍是 20MB；**PDF 已放宽到 60MB**（扫描试卷/讲义能到 26–57MB），
+#: 上限口径统一走 `material_files.max_bytes_for()`，不再在这里各写一份。
+DOC_SIZE_LIMIT = 20 * 1024 * 1024       # 仅 docx 使用（PDF 见 max_bytes_for）
 XLSX_SIZE_LIMIT = 5 * 1024 * 1024
 CARD_ROW_LIMIT = 500
 
@@ -3501,21 +3519,62 @@ def _save_tmp(file: UploadFile) -> tuple:
     为什么用文件字节哈希而不是标题/内容：用户重复上传同一个 docx 时，文件名、
     大小、字节都相同，这是最不容易误判的"同一份东西"证据；
     不同文件名的同内容仍由 confirm 阶段的内容哈希去重负责。
+
+    D3（2026-11-14）：原来只有「20MB 一刀切」，26.79MB 的扫描讲义会被 400 挡住，
+    与原件上传（PDF 60MB）不一致。现在按扩展名取上限；>8MB 走**流式落盘**，
+    峰值内存与文件大小无关（与 `admin_upload_file` 同一套）。
     """
     ext = _os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_DOC_EXT:
         raise HTTPException(400, "仅支持 docx/xlsx/pdf")
-    content = file.file.read()
-    limit = XLSX_SIZE_LIMIT if ext == ".xlsx" else DOC_SIZE_LIMIT
-    if len(content) > limit:
-        raise HTTPException(400, f"文件超过 {limit // 1024 // 1024}MB 上限")
+    kind = ext.lstrip(".")
+    limit = (XLSX_SIZE_LIMIT if ext == ".xlsx"
+             else (DOC_SIZE_LIMIT if kind == "docx" else material_files.max_bytes_for(kind)))
+    stream = file.file
+    size = _upload_size_of(stream)
+    if size is not None and size > limit:
+        raise HTTPException(400, f".{kind} 文件超过 {limit // 1024 // 1024}MB 上限")
+    head = _read_head(stream, 8)
     magic = MAGIC_BYTES.get(ext)
-    if magic and not content.startswith(magic):
+    if magic and head and not head.startswith(magic):
         raise HTTPException(400, "文件实际格式与扩展名不符")
+
     UPLOAD_TMP_DIR.mkdir(parents=True, exist_ok=True)
-    tmp_name = f"{_uuid.uuid4().hex}{ext}"
-    (UPLOAD_TMP_DIR / tmp_name).write_bytes(content)
-    return str(UPLOAD_TMP_DIR / tmp_name), ext, _hashlib.sha256(content).hexdigest()
+    tmp_path = UPLOAD_TMP_DIR / f"{_uuid.uuid4().hex}{ext}"
+    if size is not None and 0 < size <= _UPLOAD_MEM_LIMIT:
+        content = stream.read()
+        if not content:
+            raise HTTPException(400, "空文件不能上传")
+        tmp_path.write_bytes(content)
+        return str(tmp_path), ext, _hashlib.sha256(content).hexdigest()
+
+    # 大文件（或拿不到大小）：流式写 + 边写边算 sha256
+    stream.seek(0)
+    digest = _hashlib.sha256()
+    total = 0
+    with open(tmp_path, "wb") as out:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                out.close()
+                try:
+                    _os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise HTTPException(400,
+                                    f".{kind} 文件超过 {limit // 1024 // 1024}MB 上限")
+            digest.update(chunk)
+            out.write(chunk)
+    if total == 0:
+        try:
+            _os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise HTTPException(400, "空文件不能上传")
+    return str(tmp_path), ext, digest.hexdigest()
 
 
 # 重复上传检测只看「已确认入库」的记录。

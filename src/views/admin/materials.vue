@@ -251,17 +251,27 @@
                 <AdminTag tone="danger">已删除</AdminTag>
               </template>
               <template v-else>
-                <button
-                  class="mm-switch"
-                  :class="{ 'is-on': row.status === 1 }"
-                  :aria-label="row.status === 1 ? '下架' : '上架（=审批通过）'"
-                  @click="toggleStatus(row)"
-                >
-                  <i />
-                </button>
-                <AdminTag :tone="row.status === 1 ? 'ok' : 'muted'" style="margin-left: 6px">
-                  {{ row.status === 1 ? '已通过' : '未通过' }}
-                </AdminTag>
+                <div class="mm-status">
+                  <button
+                    class="mm-switch"
+                    :class="{ 'is-on': row.status === 1 }"
+                    :aria-label="row.status === 1 ? '下架' : '上架（=审批通过）'"
+                    @click="toggleStatus(row)"
+                  >
+                    <i />
+                  </button>
+                  <AdminTag :tone="row.status === 1 ? 'ok' : 'muted'">
+                    {{ row.status === 1 ? '已通过' : '未通过' }}
+                  </AdminTag>
+                  <!-- D1（2026-11-14）：卷状态与上架状态不一致 → 红标（只说事实，不阻断操作） -->
+                  <AdminTag
+                    v-if="driftOf(row).kind"
+                    tone="danger"
+                    :title="driftOf(row).hint"
+                  >
+                    {{ driftOf(row).label }}
+                  </AdminTag>
+                </div>
               </template>
             </td>
             <td class="mm-ops">
@@ -476,9 +486,16 @@ import {
   mergeExamState,
   nextExamOpen
 } from '@/utils/examGate';
+// D1（2026-11-14）：资料上架 ↔ 卷发布 不一致的标记（4 处旧入口仍能直写 PUBLISHED）
+import { paperDrift, type DriftResult } from '@/utils/materialDrift';
 
 const SUBJECT_LABEL: Record<string, string> = { xingce: '行测', shenlun: '申论', gongzhuan: '公专' };
 const subjectLabel = (s: string): string => SUBJECT_LABEL[s] || s;
+
+/** 列表行的一致性标记（纯函数；非试卷/未建卷/ENDED 返回空） */
+function driftOf(row: AdminMaterialListItem): DriftResult {
+  return paperDrift(row);
+}
 
 const loading = ref(false);
 const rows = ref<AdminMaterialListItem[]>([]);
@@ -1275,6 +1292,13 @@ onMounted(reload);
 
 .mm-ops { white-space: nowrap; }
 .mm-status-cell { white-space: nowrap; }
+/* D1：开关 + 已通过 + 上架不一致红标 允许换行，避免压到「操作」列 */
+.mm-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
 .mm-pub-cell { white-space: nowrap; }
 
 /* P2：考试开关列（开关 + 状态 + 定时摘要 + 设置定时） */

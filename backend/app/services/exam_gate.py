@@ -65,6 +65,10 @@ def _enrich(state: dict, material: StudyMaterial, paper) -> dict:
     # 手动总闸原值（前端开关只认这一条）：NULL 视为 1；不能用 `or 1`，否则 0 会被吞成 1
     state["manual_open"] = (1 if getattr(paper, "exam_open", 1) is None
                             else int(getattr(paper, "exam_open", 1))) if paper is not None else 0
+    # D1（2026-11-14）：卷状态原样带给前端 —— 列表据此判「资料上架 ↔ 卷发布」是否一致。
+    # 为什么必须给 paper_type 而不只看 published：ENDED（历史卷）不参与上架语义，
+    # 资料仍可挂在资料库给人看；只靠 published=False 会把 ENDED 误判成漂移。
+    state["paper_type"] = getattr(paper, "paper_type", None) if paper is not None else None
     return state
 
 
