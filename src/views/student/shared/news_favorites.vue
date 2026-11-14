@@ -12,7 +12,7 @@
         <h1>新闻收藏</h1>
         <p>你在新闻模块保存的内容</p>
       </div>
-      <router-link class="quote-fav-link" to="/quotes/favorites">
+      <router-link class="quote-fav-link" :to="quoteFavoritesPath">
         金句收藏 →
       </router-link>
     </header>
@@ -29,7 +29,7 @@
         v-for="item in items"
         :key="item.fav_id"
         class="fav-card"
-        :to="`/news/${item.news_id}`">
+        :to="`${devicePrefix}/news/${item.news_id}`">
         <span class="type-badge">新闻</span>
         <div class="fav-card__body">
           <h2>{{ item.title || item.content }}</h2>
@@ -46,8 +46,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { apiClient } from '@/services/api/client';
 
 interface NewsFavorite {
@@ -61,6 +61,21 @@ interface NewsFavorite {
 }
 
 const router = useRouter();
+const route = useRoute();
+const devicePrefix = computed(() =>
+  route.path.startsWith('/tablet')
+    ? '/tablet'
+    : route.path.startsWith('/mobile')
+      ? '/mobile'
+      : ''
+);
+const quoteFavoritesPath = computed(() =>
+  route.path.startsWith('/tablet')
+    ? '/tablet/quotes/favorites'
+    : route.path.startsWith('/mobile')
+      ? '/mobile/quotes/favorites'
+      : '/quotes/favorites'
+);
 const items = ref<NewsFavorite[]>([]);
 const loading = ref(false);
 const error = ref('');
@@ -88,7 +103,7 @@ async function load(): Promise<void> {
 }
 
 function goBack(): void {
-  router.replace('/news');
+  router.replace(`${devicePrefix.value}/news`);
 }
 
 onMounted(() => {

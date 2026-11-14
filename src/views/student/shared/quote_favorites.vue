@@ -12,7 +12,7 @@
         <h1>金句收藏</h1>
         <p>你在金句库和每日金句保存的内容</p>
       </div>
-      <router-link class="news-fav-link" to="/news/favorites">
+      <router-link class="news-fav-link" :to="newsFavoritesPath">
         新闻收藏 →
       </router-link>
     </header>
@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { apiClient } from '@/services/api/client';
 import QuoteCategoryTag from '@/components/quotes/QuoteCategoryTag.vue';
@@ -70,6 +70,13 @@ interface QuoteFavorite {
 
 const router = useRouter();
 const route = useRoute();
+const newsFavoritesPath = computed(() =>
+  route.path.startsWith('/tablet')
+    ? '/tablet/news/favorites'
+    : route.path.startsWith('/mobile')
+      ? '/mobile/favorites'
+      : '/news/favorites'
+);
 const items = ref<QuoteFavorite[]>([]);
 const loading = ref(false);
 const error = ref('');
@@ -115,7 +122,11 @@ async function removeFavorite(item: QuoteFavorite): Promise<void> {
 
 function goBack(): void {
   router.replace(
-    route.path.startsWith('/mobile') ? '/mobile/quotes' : '/quotes'
+    route.path.startsWith('/tablet')
+      ? '/tablet/quotes'
+      : route.path.startsWith('/mobile')
+        ? '/mobile/quotes'
+        : '/quotes'
   );
 }
 

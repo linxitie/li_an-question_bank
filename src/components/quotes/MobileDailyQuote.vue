@@ -6,9 +6,7 @@
         <QuoteCategoryTag :category="category" />
       </div>
       <div class="quote-actions">
-        <router-link to="/mobile/quotes" class="library-link"
-          >金句库</router-link
-        >
+        <router-link :to="libraryPath" class="library-link">金句库</router-link>
         <button
           type="button"
           class="favorite-btn"
@@ -33,8 +31,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import QuoteCategoryTag from '@/components/quotes/QuoteCategoryTag.vue';
 import { quoteAttribution as formatAttribution } from '@/utils/quote';
+
+const route = useRoute();
+const libraryPath = computed(() =>
+  route.path.startsWith('/tablet') ? '/tablet/quotes' : '/mobile/quotes'
+);
 
 const quote = ref('正在加载今日金句...');
 const author = ref('');

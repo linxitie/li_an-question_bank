@@ -8,7 +8,7 @@
         <h1>新闻时间线</h1>
         <p class="subtitle">已发布新闻 · 按日聚合 · 日报速览</p>
       </div>
-      <router-link class="news-favorites-link" to="/news/favorites">
+      <router-link class="news-favorites-link" :to="favoritesPath">
         我的收藏 →
       </router-link>
     </header>
@@ -163,6 +163,13 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+const favoritesPath = computed(() =>
+  route.path.startsWith('/tablet')
+    ? '/tablet/news/favorites'
+    : route.path.startsWith('/mobile')
+      ? '/mobile/favorites'
+      : '/news/favorites'
+);
 const tab = ref<'timeline' | 'digest'>('timeline');
 const loading = ref(false);
 const error = ref('');
@@ -196,6 +203,14 @@ function goBack(): void {
 }
 
 function openSource(item: NewsTimelineItem): void {
+  if (route.path.startsWith('/tablet')) {
+    router.push(`/tablet/news/${item.news_id}`);
+    return;
+  }
+  if (route.path.startsWith('/mobile')) {
+    router.push(`/mobile/news/${item.news_id}`);
+    return;
+  }
   if (route.path === '/news') {
     router.push(`/news/${item.news_id}`);
     return;

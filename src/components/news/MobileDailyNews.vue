@@ -5,7 +5,7 @@
         <span class="eyebrow">每日新闻</span>
         <p>权威时政 · 公安要闻</p>
       </div>
-      <router-link to="/mobile/news" class="more-link">更多 →</router-link>
+      <router-link :to="morePath" class="more-link">更多 →</router-link>
     </header>
 
     <div v-if="loading" class="state">加载中...</div>
@@ -40,8 +40,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 interface MobileNewsItem {
   id: number;
@@ -54,6 +54,11 @@ interface MobileNewsItem {
 }
 
 const router = useRouter();
+const route = useRoute();
+const devicePrefix = computed(() =>
+  route.path.startsWith('/tablet') ? '/tablet' : '/mobile'
+);
+const morePath = computed(() => `${devicePrefix.value}/news`);
 const items = ref<MobileNewsItem[]>([]);
 const loading = ref(false);
 
@@ -62,7 +67,7 @@ function formatDate(value?: string): string {
 }
 
 function openNews(item: MobileNewsItem): void {
-  router.push(`/mobile/news/${item.id}`);
+  router.push(`${devicePrefix.value}/news/${item.id}`);
 }
 
 function authHeaders(): Record<string, string> {

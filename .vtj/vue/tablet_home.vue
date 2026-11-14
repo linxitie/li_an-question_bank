@@ -230,13 +230,15 @@ import { useProvider } from '@vtj/renderer';
 import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
 import MobileDailyQuote from '@/components/quotes/MobileDailyQuote.vue';
 import MobileDailyNews from '@/components/news/MobileDailyNews.vue';
+import RecruitmentRadarEntry from '@/components/recruitment/RecruitmentRadarEntry.vue';
 
 export default defineComponent({
   name: 'TabletHome',
   components: {
     XIcon,
     MobileDailyQuote,
-    MobileDailyNews
+    MobileDailyNews,
+    RecruitmentRadarEntry
   },
   setup() {
     const router = useRouter();

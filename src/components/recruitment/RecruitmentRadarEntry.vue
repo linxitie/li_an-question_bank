@@ -1,12 +1,24 @@
 <template>
-  <router-link class="radar-entry" to="/recruitment/radar">
+  <router-link class="radar-entry" :to="target">
     <span class="radar-entry__dot"></span>
     <span>进入警考雷达</span>
     <span class="radar-entry__arrow" aria-hidden="true">→</span>
   </router-link>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
+const target = computed(() =>
+  route.path.startsWith('/tablet')
+    ? '/tablet/recruitment/radar'
+    : route.path.startsWith('/mobile')
+      ? '/mobile/recruitment/radar'
+      : '/recruitment/radar'
+);
+</script>
 
 <style scoped>
 .radar-entry {

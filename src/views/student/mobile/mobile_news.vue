@@ -32,7 +32,16 @@
       <div class="detail-meta">
         {{ currentNews.source || '' }} ·
         {{ formatTime(currentNews.publish_date) }}
+        <button
+          type="button"
+          class="detail-favorite"
+          :class="{ active: currentNews.is_favorited }"
+          :aria-label="currentNews.is_favorited ? '取消收藏' : '收藏新闻'"
+          @click="toggleFavorite">
+          {{ currentNews.is_favorited ? '★' : '☆' }}
+        </button>
       </div>
+      <p v-if="favoriteError" class="favorite-error">{{ favoriteError }}</p>
       <NewsAICard
         v-if="hasAi"
         :summary="currentNews.ai_summary"
@@ -106,6 +115,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { renderNewsContent, dedupeNewsImages } from '@/utils/newsRender';
 import { useNewsStore } from '@/modules/news/store';
 import type { NewsItem } from '@/modules/news/api';
+import { toggleNewsFavorite } from '@/modules/news/api';
 import NewsAICard from '@/components/news/NewsAICard.vue';
 
 const route = useRoute();
@@ -133,6 +143,7 @@ const hasAi = computed(
     )
 );
 const notes = ref<any[]>([]);
+const favoriteError = ref('');
 /** 正文容器引用：划线时用于判定选区是否落在正文内 */
 const contentEl = ref<HTMLElement | null>(null);
 
@@ -334,6 +345,17 @@ const saveNote = async () => {
   }
 };
 
+async function toggleFavorite(): Promise<void> {
+  if (!currentNews.value) return;
+  favoriteError.value = '';
+  try {
+    const result = await toggleNewsFavorite(currentNews.value.id);
+    currentNews.value.is_favorited = result.favorited;
+  } catch (e) {
+    favoriteError.value = e instanceof Error ? e.message : '收藏失败';
+  }
+}
+
 const fetchNotes = async (newsId: number) => {
   try {
     const res = await (window as any).__VTJ_AUTH__.apiFetch(
@@ -476,11 +498,30 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 .detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: #8899aa;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f0f2f5;
+}
+.detail-favorite {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #a0a9b3;
+  font-size: 20px;
+  cursor: pointer;
+}
+.detail-favorite.active {
+  color: #c8763f;
+}
+.favorite-error {
+  margin: -8px 0 12px;
+  color: #a33b2d;
+  font-size: 12px;
 }
 .detail-content :deep(p) {
   font-size: 15px;

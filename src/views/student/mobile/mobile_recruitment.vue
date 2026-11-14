@@ -12,32 +12,53 @@
         v-for="cat in categories"
         :key="cat"
         :class="['tab', { active: activeCat === cat }]"
-        @click="activeCat = cat"
-      >
+        @click="activeCat = cat">
         {{ cat }}
       </div>
     </div>
+
+    <router-link :to="radarPath" class="radar-link">
+      进入警考雷达 · 岗位表 →
+    </router-link>
 
     <main class="list">
       <div
         v-for="item in currentItems"
         :key="item.id"
         class="card"
-        @click="toggleDetail(item)"
-      >
+        @click="toggleDetail(item)">
         <div class="r-title">{{ item.title }}</div>
         <div class="r-meta">
-          <span class="status" :style="{ color: item.status_color }">{{ item.status_label || item.tag }}</span>
+          <span class="status" :style="{ color: item.status_color }">{{
+            item.status_label || item.tag
+          }}</span>
           <span v-if="item.region" class="region">{{ item.region }}</span>
-          <span v-if="item.registration_end" class="date">截止 {{ item.registration_end }}</span>
+          <span v-if="item.registration_end" class="date"
+            >截止 {{ item.registration_end }}</span
+          >
         </div>
         <div v-if="expandedId === item.id" class="detail" @click.stop>
-          <div class="detail-content" v-html="renderContent(item.content_html || item.content || '')"></div>
-          <div v-if="item.contact_info" class="contact">联系电话：{{ item.contact_info }}</div>
-          <a v-if="item.url" :href="item.url" target="_blank" rel="noopener" class="origin-link">查看原文</a>
+          <div
+            class="detail-content"
+            v-html="
+              renderContent(item.content_html || item.content || '')
+            "></div>
+          <div v-if="item.contact_info" class="contact">
+            联系电话：{{ item.contact_info }}
+          </div>
+          <a
+            v-if="item.url"
+            :href="item.url"
+            target="_blank"
+            rel="noopener"
+            class="origin-link"
+            >查看原文</a
+          >
         </div>
       </div>
-      <div v-if="!currentItems.length && !loading" class="empty">该分类暂无招考信息</div>
+      <div v-if="!currentItems.length && !loading" class="empty">
+        该分类暂无招考信息
+      </div>
       <div v-if="loading" class="empty">加载中...</div>
     </main>
   </div>
@@ -45,13 +66,18 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
 import { useRecruitmentStore } from '@/modules/recruitment/store';
 
 const router = useRouter();
+const route = useRoute();
+const devicePrefix = computed(() =>
+  route.path.startsWith('/tablet') ? '/tablet' : '/mobile'
+);
+const radarPath = computed(() => `${devicePrefix.value}/recruitment/radar`);
 const recruitmentStore = useRecruitmentStore();
 
 // 招聘正文来自服务端 HTML，此前直接 v-html 输出，缺少白名单清洗。
@@ -69,7 +95,7 @@ const expandedId = ref<number | null>(null);
 
 const goBack = () => {
   if (window.history.length > 1) router.back();
-  else router.push('/mobile/home');
+  else router.push(`${devicePrefix.value}/home`);
 };
 
 const toggleDetail = (item: any) => {
@@ -90,18 +116,21 @@ let refresher: any = null;
 onMounted(() => {
   refresher = createRecruitmentRefresher({
     fetchFn: (ctx: any) => fetchRecruitment(ctx),
-    pollMs: 15 * 60 * 1000,
+    pollMs: 15 * 60 * 1000
   });
 });
 onBeforeUnmount(() => {
-  if (refresher) { refresher.destroy(); refresher = null; }
+  if (refresher) {
+    refresher.destroy();
+    refresher = null;
+  }
 });
 </script>
 
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #F5F7FA;
+  background: #f5f7fa;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   display: flex;
   flex-direction: column;
@@ -153,6 +182,17 @@ onBeforeUnmount(() => {
 .tab.active {
   background: #1a2b5f;
   color: #fff;
+}
+.radar-link {
+  display: block;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #eef6f1;
+  color: #2f5d50;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
 }
 .list {
   flex: 1;

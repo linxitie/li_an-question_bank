@@ -143,9 +143,11 @@ const categories = [
 const router = useRouter();
 const route = useRoute();
 const favoritesPath = computed(() =>
-  route.path.startsWith('/mobile')
-    ? '/mobile/quotes/favorites'
-    : '/quotes/favorites'
+  route.path.startsWith('/tablet')
+    ? '/tablet/quotes/favorites'
+    : route.path.startsWith('/mobile')
+      ? '/mobile/quotes/favorites'
+      : '/quotes/favorites'
 );
 const activeCategory = ref('全部');
 const keyword = ref('');

@@ -482,6 +482,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    path: '/tablet/news/favorites',
+    name: 'TabletNewsFavorites',
+    component: () => import('@/views/student/shared/news_favorites.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
     path: '/tablet/news/timeline',
     name: 'TabletNewsTimeline',
     component: () => import('@/views/student/shared/news_timeline.vue'),
@@ -491,6 +497,18 @@ const routes: RouteRecordRaw[] = [
     path: '/tablet/news/:id',
     name: 'TabletNewsDetail',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/quotes',
+    name: 'TabletQuotes',
+    component: () => import('@/views/student/shared/quotes_browser.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/quotes/favorites',
+    name: 'TabletQuoteFavorites',
+    component: () => import('@/views/student/shared/quote_favorites.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -522,6 +540,12 @@ const routes: RouteRecordRaw[] = [
     path: '/tablet/recruit',
     name: 'TabletRecruitment',
     component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/recruitment/radar',
+    name: 'TabletRecruitmentRadar',
+    component: () => import('@/views/student/shared/recruitment_radar.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -791,14 +815,18 @@ router.beforeEach((to, _from, next) => {
   //    - 教师/管理员：跳 /unauthorized
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
     const auth = (window as any).__VTJ_AUTH__;
-    const logged = auth && typeof auth.isLoggedIn === 'function'
-      ? !!auth.isLoggedIn()
-      : false;
-    const isLoginPage = /^\/(tablet|mobile)\/login\/?$/.test(to.path)
-      || to.path === '/unauthorized';
+    const logged =
+      auth && typeof auth.isLoggedIn === 'function'
+        ? !!auth.isLoggedIn()
+        : false;
+    const isLoginPage =
+      /^\/(tablet|mobile)\/login\/?$/.test(to.path) ||
+      to.path === '/unauthorized';
     if (!logged) {
       if (isLoginPage) return next();
-      const loginPath = to.path.startsWith('/tablet') ? '/tablet/login' : '/mobile/login';
+      const loginPath = to.path.startsWith('/tablet')
+        ? '/tablet/login'
+        : '/mobile/login';
       return next({ path: loginPath, query: { redirect: to.fullPath } });
     }
     const role = auth ? auth.getUserRole() : null;
@@ -837,7 +865,11 @@ router.beforeEach((to, _from, next) => {
     return next();
   }
 
-  if (to.path === '/login' || to.path === '/unauthorized' || to.path === '/forum') {
+  if (
+    to.path === '/login' ||
+    to.path === '/unauthorized' ||
+    to.path === '/forum'
+  ) {
     return next();
   }
 
