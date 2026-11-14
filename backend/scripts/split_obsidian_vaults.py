@@ -62,7 +62,11 @@ def collect(source: Path, targets: dict[str, Path], apply: bool = False) -> dict
             continue
         status = infer_status(meta, path, source)
         target_root = targets[kind]
-        target = unique_target(target_root / STATUS_DIRS[status] / path.name)
+        desired = target_root / STATUS_DIRS[status] / path.name
+        if desired.resolve() == path.resolve():
+            report["skipped"] += 1
+            continue
+        target = unique_target(desired)
         if target.resolve() == path.resolve():
             report["skipped"] += 1
             continue

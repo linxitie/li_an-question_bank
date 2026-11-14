@@ -117,7 +117,7 @@ def infer_status(meta: dict[str, Any], source: Path, vault: Path) -> str:
     """优先使用 frontmatter；缺失时按历史审核目录兜底，避免归档文件回流收件箱。"""
     explicit = normalize_status(meta.get("status") or meta.get("review_status"))
     parts = source.relative_to(vault).parts
-    if "07-归档" in parts:
+    if "07-归档" in parts or "04-归档" in parts or "99-归档" in parts:
         return "archived"
     if "03-建议拒绝" in parts:
         return "rejected"
