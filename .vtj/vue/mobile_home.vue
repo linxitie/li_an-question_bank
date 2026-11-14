@@ -71,6 +71,7 @@
       <!-- 每日新闻 -->
       <!-- 每日新闻 -->
       <MobileDailyNews />
+      <RecruitmentRadarEntry />
 
       <!-- 最近做题记录：三端共用同一组件 src/components/RecentPracticeRecords.vue，
            排序与条数完全一致（后端已按 recency 倒序，前端不二次排序）。 -->

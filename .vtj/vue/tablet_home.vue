@@ -164,6 +164,7 @@
         <!-- 招考信息 -->
         <div class="recruit-card">
           <div class="card-header">
+            <RecruitmentRadarEntry />
             <h2 class="card-title">
               <XIcon :icon="Suitcase" :size="20" color="#c41e3a"></XIcon>
               招考信息
