@@ -838,7 +838,14 @@ function resolveContentDevicePath(
 }
 
 router.beforeEach((to, _from, next) => {
-  const device = detectDevice();
+  const detected = detectDevice();
+  // 兼容手机浏览器的“桌面模式”/旧 WebView：UA 被判为 pc 时，仍按视口宽度回到移动布局
+  const device: 'pc' | 'mobile' | 'tablet' =
+    detected === 'pc' && window.innerWidth <= 1024
+      ? window.innerWidth >= 768
+        ? 'tablet'
+        : 'mobile'
+      : detected;
 
   // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再验角色
   //    - 未登录：只放行各端登录页，其余跳转到对应端登录页并带 redirect
