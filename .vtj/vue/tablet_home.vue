@@ -164,13 +164,13 @@
         <!-- 招考信息 -->
         <div class="recruit-card">
           <div class="card-header">
-            <RecruitmentRadarEntry />
             <h2 class="card-title">
               <XIcon :icon="Suitcase" :size="20" color="#c41e3a"></XIcon>
               招考信息
             </h2>
             <span class="card-action" @click="viewAllRecruit">查看全部</span>
           </div>
+          <RecruitmentRadarEntry />
           <div class="recruit-list">
             <div class="recruit-item" v-for="(recruit, index) in recruitList" :key="index" @click="viewRecruit(recruit)">
               <span class="recruit-status" :style="{ background: recruit.statusColor + '18', color: recruit.statusColor }">{{ recruit.status }}</span>
