@@ -121,7 +121,10 @@
         </div>
 
         <div class="pc-field">
-          <span class="pc-label">范围</span>
+          <span class="pc-label">
+            范围
+            <span class="pc-label-sub">{{ subjectWide ? '未选＝' + scopeName : '已选 ' + state.bpSubIds.length + ' 个分类' }}</span>
+          </span>
           <div class="pc-chips">
             <button
               v-for="sub in blueprintSubCategories"
@@ -140,7 +143,7 @@
           <input v-model="state.includeFallback" type="checkbox" />
           <span>包含「其他（未细分）」收容题</span>
         </label>
-        <p v-if="!state.includeFallback && state.bpSubIds.length" class="pc-warn" role="status">
+        <p v-if="!state.includeFallback" class="pc-warn" role="status">
           当前题库大量题目落在「其他（未细分）」，不勾选时范围可能为空。
         </p>
 
@@ -206,6 +209,7 @@
         <div class="pc-preview" aria-live="polite">
           <div v-if="state.previewLoading" class="pc-preview-line">正在计算…</div>
           <template v-else>
+            <div class="pc-preview-scope">{{ scopeName }}</div>
             <div class="pc-preview-line">
               预计 <strong>{{ state.preview.picked || 0 }}</strong> 题 ·
               约 <strong>{{ state.preview.estimatedMinutes || 0 }}</strong> 分钟
@@ -334,6 +338,25 @@ export default defineComponent({
       visibleSubCategories.value.reduce((sum, sub) => sum + (sub.total_questions || 0), 0)
     );
 
+    // 未勾选任何子科目时，范围默认=当前整个科目。
+    // 为什么：进来时 6 个 chip 全不选，预览恒为「0 题 / 请先选择练习范围」、按钮灰，
+    // 用户会以为系统没题可练（实测截图）。默认整科目是唯一不需要教学就能开始的语义。
+    const subjectWide = computed(() => state.bpSubIds.length === 0);
+    const effectiveSubIds = computed(() =>
+      subjectWide.value ? blueprintSubCategories.value.map(sub => sub.id) : state.bpSubIds.slice()
+    );
+    const scopeName = computed(() => {
+      const s = subjects.find(item => item.key === state.subject);
+      const subjectLabel = s ? s.name : '当前科目';
+      if (!subjectWide.value) {
+        const names = blueprintSubCategories.value
+          .filter(sub => state.bpSubIds.indexOf(sub.id) >= 0)
+          .map(sub => sub.name);
+        return names.join('、');
+      }
+      return '整个' + subjectLabel;
+    });
+
     const canStart = computed(() => {
       const preview = state.preview || {};
       return Number(preview.picked || 0) > 0;
@@ -443,7 +466,7 @@ export default defineComponent({
     const buildBlueprintBody = () => ({
       subject: state.subject,
       subjectId: subjectId.value,
-      subCategoryIds: state.bpSubIds.slice(),
+      subCategoryIds: effectiveSubIds.value,
       pointIds: [],
       includeFallback: state.includeFallback,
       yearRange: state.yearRange,
@@ -454,8 +477,8 @@ export default defineComponent({
     });
 
     const previewBlueprint = async () => {
-      if (!state.bpSubIds.length) {
-        state.preview = { available: 0, picked: 0, estimatedMinutes: 0, distribution: [], note: '请先选择练习范围' };
+      if (!effectiveSubIds.value.length) {
+        state.preview = { available: 0, picked: 0, estimatedMinutes: 0, distribution: [], note: '当前科目没有可练习的题目' };
         return;
       }
       const seq = ++state.previewSeq;
@@ -480,12 +503,9 @@ export default defineComponent({
 
     const startBlueprint = () => {
       if (!canStart.value) return;
-      const names = blueprintSubCategories.value
-        .filter(sub => state.bpSubIds.indexOf(sub.id) >= 0)
-        .map(sub => sub.name);
       gotoPractice(
         {
-          subCategoryIds: state.bpSubIds.slice(),
+          subCategoryIds: effectiveSubIds.value,
           includeFallback: state.includeFallback,
           yearRange: state.yearRange,
           types: state.types.slice(),
@@ -493,7 +513,7 @@ export default defineComponent({
           minutes: state.minutes,
           order: state.order
         },
-        names.join('、') || '自定义范围'
+        scopeName.value || '自定义范围'
       );
     };
 
@@ -525,6 +545,8 @@ export default defineComponent({
       visibleSubCategories,
       blueprintSubCategories,
       currentAvailable,
+      subjectWide,
+      scopeName,
       canStart,
       switchSubject,
       toggleSub,
@@ -776,6 +798,19 @@ export default defineComponent({
 }
 .pc-field-inline .pc-label {
   margin-bottom: 0;
+}
+/* 范围标题的补充说明：只在需要解释「默认范围」时出现，弱化处理 */
+.pc-label-sub {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+/* 预演区顶部的「实际作用范围」：让用户明确这次会从哪些分类出题 */
+.pc-preview-scope {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
 }
 .pc-chips {
   display: flex;

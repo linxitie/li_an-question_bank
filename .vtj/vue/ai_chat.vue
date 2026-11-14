@@ -94,34 +94,25 @@
         </div>
         <div class="dash-body">
           <div class="dash-card">
-            <div class="dash-num">12.5h</div>
+            <div class="dash-num">{{ fmtDuration(coach.weekMinutes) }}</div>
             <div class="dash-label">本周学习时长</div>
           </div>
           <div class="dash-card">
-            <div class="dash-num">78%</div>
+            <div class="dash-num">{{ fmtPct(coach.weekAccuracy, coach.weekMinutes > 0) }}</div>
             <div class="dash-label">平均正确率</div>
           </div>
           <div class="dash-section">
             <div class="dash-section-title">薄弱科目</div>
-            <div class="dash-bar">
-              <span class="dash-bar-label">资料分析</span>
-              <div class="dash-bar-track"><div class="dash-bar-fill" style="width: 45%"></div></div>
-              <span class="dash-bar-pct">45%</span>
+            <div v-for="(w, i) in coach.weak" :key="'weak-' + i" class="dash-bar">
+              <span class="dash-bar-label">{{ w.name }}</span>
+              <div class="dash-bar-track"><div class="dash-bar-fill" :style="{ width: w.rate + '%' }"></div></div>
+              <span class="dash-bar-pct">{{ w.rate }}%</span>
             </div>
-            <div class="dash-bar">
-              <span class="dash-bar-label">数量关系</span>
-              <div class="dash-bar-track"><div class="dash-bar-fill" style="width: 38%"></div></div>
-              <span class="dash-bar-pct">38%</span>
-            </div>
-            <div class="dash-bar">
-              <span class="dash-bar-label">申论</span>
-              <div class="dash-bar-track"><div class="dash-bar-fill" style="width: 52%"></div></div>
-              <span class="dash-bar-pct">52%</span>
-            </div>
+            <div v-if="coach.loaded && !coach.weak.length" class="dash-empty">样本不足，先做 3 题/科目再定位短板</div>
           </div>
           <div class="dash-section">
             <div class="dash-section-title">连续打卡</div>
-            <div class="dash-streak">🔥 7天</div>
+            <div class="dash-streak">🔥 {{ coach.streak }}天</div>
           </div>
         </div>
       </div>
@@ -227,30 +218,30 @@
             </div>
             <div class="coach-stats">
               <div class="stat-item">
-                <div class="stat-num">12.5h</div>
+                <div class="stat-num">{{ fmtDuration(coach.yesterdayMinutes) }}</div>
                 <div class="stat-label">昨日学习</div>
               </div>
               <div class="stat-item">
-                <div class="stat-num">78%</div>
+                <div class="stat-num">{{ fmtPct(coach.yesterdayAccuracy, coach.yesterdayQuestions > 0) }}</div>
                 <div class="stat-label">正确率</div>
               </div>
               <div class="stat-item">
-                <div class="stat-num">328题</div>
+                <div class="stat-num">{{ coach.yesterdayQuestions ? coach.yesterdayQuestions + '题' : '—' }}</div>
                 <div class="stat-label">完成题目</div>
               </div>
               <div class="stat-item">
-                <div class="stat-num">🔥7天</div>
+                <div class="stat-num">🔥{{ coach.streak }}天</div>
                 <div class="stat-label">连续打卡</div>
               </div>
             </div>
             <div class="coach-suggest">
               <div class="suggest-item">
                 <span class="suggest-label">今日推荐：</span>
-                <span class="suggest-value">资料分析 · 20题 · 重点：增长率</span>
+                <span class="suggest-value">{{ coachRecommend }}</span>
               </div>
               <div class="suggest-item">
                 <span class="suggest-label">待复习：</span>
-                <span class="suggest-value">判断推理-图形推理、言语理解-逻辑填空</span>
+                <span class="suggest-value">{{ coachReviewText }}</span>
               </div>
             </div>
             <div class="coach-quote">
@@ -540,7 +531,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, reactive, ref, onMounted, nextTick } from 'vue';
+import { computed, defineComponent, reactive, ref, onMounted, nextTick } from 'vue';
 import { XIcon } from '@vtj/ui';
 import {
   Promotion,
@@ -1092,6 +1083,75 @@ export default defineComponent({
     ];
     const coachQuote = ref(coachQuotes[new Date().getDay() % coachQuotes.length]);
 
+    // ===== 学习数据（真实聚合，取代此前的 12.5h / 78% / 328题 / 7天 写死值）=====
+    // 数据来源：/api/stats/learning-report（昨天整天 + 最近 7 天）、/api/review/due（到期复习）。
+    // 全部来自 practice_record / review_schedule，没有练习记录时显示「—」而不是假数字。
+    const coach = reactive({
+      loaded: false,
+      weekMinutes: 0,
+      weekAccuracy: 0,
+      yesterdayMinutes: 0,
+      yesterdayQuestions: 0,
+      yesterdayAccuracy: 0,
+      streak: 0,
+      weak: [] as Array<{ name: string; rate: number }>,
+      reviewDue: [] as string[]
+    });
+
+    function fmtDuration(minutes) {
+      const m = Number(minutes) || 0;
+      if (!m) return '—';
+      if (m < 60) return m + '分钟';
+      return (m / 60).toFixed(1) + 'h';
+    }
+    function fmtPct(value, hasData) {
+      return hasData ? Number(value || 0).toFixed(1) + '%' : '—';
+    }
+
+    async function loadCoachData() {
+      const auth = window.__VTJ_AUTH__;
+      if (!auth || !auth.apiFetch) return;
+      try {
+        const [dayRes, weekRes, dueRes] = await Promise.all([
+          auth.apiFetch('/api/stats/learning-report?period=day'),
+          auth.apiFetch('/api/stats/learning-report?period=week'),
+          auth.apiFetch('/api/review/due?limit=3')
+        ]);
+        if (dayRes.ok) {
+          const d = await dayRes.json();
+          coach.yesterdayMinutes = d.minutes || 0;
+          coach.yesterdayQuestions = d.questions || 0;
+          coach.yesterdayAccuracy = d.accuracy || 0;
+          coach.streak = d.streak || 0;
+        }
+        if (weekRes.ok) {
+          const w = await weekRes.json();
+          coach.weekMinutes = w.minutes || 0;
+          coach.weekAccuracy = w.accuracy || 0;
+          coach.weak = Array.isArray(w.weak) ? w.weak.slice(0, 3) : [];
+        }
+        if (dueRes.ok) {
+          const due = await dueRes.json();
+          const items = Array.isArray(due.items) ? due.items : [];
+          coach.reviewDue = items.map((it) => it.point_name || ('题目 #' + it.question_id)).slice(0, 3);
+        }
+        coach.loaded = true;
+      } catch (e) {
+        // 取数失败保持「—」，不回落假数据
+        coach.loaded = true;
+      }
+    }
+
+    // 今日推荐：优先推最薄弱的子科目（30 天样本），否则给可执行的起步建议
+    const coachRecommend = computed(() => {
+      const first = coach.weak[0];
+      if (first) return first.name + ' · 20题 · 当前正确率 ' + first.rate + '%';
+      return '先做 20 道行测题建立基线，报告立刻就有内容';
+    });
+    const coachReviewText = computed(() =>
+      coach.reviewDue.length ? coach.reviewDue.join('、') : '暂无到期复习'
+    );
+
     // 一次性 AI 任务调用（/api/llm/chat，persist=false：不落会话、不写消息）
     async function callAiOneShot(message, scene) {
       const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/chat', {
@@ -1262,6 +1322,7 @@ export default defineComponent({
       checkOfflineStatus();
       loadSessions();
       loadCoachSuggestion();
+      loadCoachData();
     });
 
     return {
@@ -1290,6 +1351,12 @@ export default defineComponent({
       showMindMap,
       todayDate,
       coachQuote,
+      coach,
+      coachRecommend,
+      coachReviewText,
+      fmtDuration,
+      fmtPct,
+      loadCoachData,
       startTodayStudy,
       hideCoachCard,
       startInterview,
@@ -1567,6 +1634,13 @@ export default defineComponent({
 .dash-section {
   margin-top: 16px;
 }
+.dash-empty {
+  font-size: 12px;
+  color: var(--text-3, #8a94a6);
+  padding: 8px 0;
+  line-height: 1.6;
+}
+
 .dash-section-title {
   font-size: 13px;
   font-weight: 600;

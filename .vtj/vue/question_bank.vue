@@ -1794,5 +1794,52 @@
     .rp-mask { padding: 0; }
     .rp-dialog { width: 100%; height: 100%; max-height: none; border-radius: 0; }
     .kp-line-name { width: 96px; }
+
+    /* 手机窄屏修复（实测 390px）：
+       1) 子操作条不换行时，两个按钮被挤成 40px 宽 → 文字变竖排（"院校联考机考系统"竖着显示）；
+       2) 分类卡片三列时每列约 110px，卡片文字竖排且右侧被裁。 */
+    .qb-sub-actions {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .sub-btn {
+      padding: 8px 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .search-box {
+      order: 3;
+      flex: 1 1 100%;
+      width: auto;
+      margin-left: 0;
+    }
+    /* 三列/两列在 390px 下仍会竖排（每列可用宽度 ~132px）：
+       主体改为单列、卡片内部图标缩小，分类名一行放得下 */
+    .qb-body {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .subcategory-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .subcard {
+      padding: 12px 10px;
+      gap: 8px;
+    }
+    .subcard-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+    .subcard-name {
+      font-size: 13px;
+      line-height: 1.3;
+      margin-bottom: 2px;
+    }
+    .subcard-count {
+      font-size: 10px;
+    }
   }
 </style>

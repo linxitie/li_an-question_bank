@@ -212,8 +212,8 @@ async def get_weekly_stats(
 
 @router.get("/learning-report", response_model=Dict[str, Any], summary="学习报告（周/月真实聚合）")
 async def get_learning_report(
-        period: str = Query("week", pattern="^(week|month)$",
-                            description="week=最近 7 天；month=最近 30 天"),
+        period: str = Query("week", pattern="^(day|week|month)$",
+                            description="day=昨天一整天；week=最近 7 天；month=最近 30 天"),
         current_user: SysUser = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
@@ -223,14 +223,16 @@ async def get_learning_report(
     78% 等前端模拟数，用户看到的是假数据。这里用三条聚合 SQL 出真值，
     不再逐个日期循环查询（旧 /weekly 是 7 天 × 3 次查询，月报会放大到 90 次）。
     """
-    days = 7 if period == "week" else 30
+    days = 1 if period == "day" else (7 if period == "week" else 30)
     now = datetime.now()
-    window_start = now - timedelta(days=days)
-
-    base = db.query(PracticeRecord).filter(
-        PracticeRecord.user_id == current_user.user_id,
-        PracticeRecord.practice_time >= window_start
-    )
+    # day 的语义是「昨天一整天」而不是「最近 24 小时」：AI 教练日报的四个数字
+    # （昨日学习/正确率/完成题目/连续打卡）必须能和日历对得上，故用自然日窗口。
+    if period == "day":
+        window_end = datetime(now.year, now.month, now.day)
+        window_start = window_end - timedelta(days=1)
+    else:
+        window_end = now
+        window_start = now - timedelta(days=days)
 
     totals = db.query(
         func.count(PracticeRecord.record_id),
@@ -239,7 +241,8 @@ async def get_learning_report(
         func.count(PracticeRecord.is_correct)
     ).filter(
         PracticeRecord.user_id == current_user.user_id,
-        PracticeRecord.practice_time >= window_start
+        PracticeRecord.practice_time >= window_start,
+        PracticeRecord.practice_time < window_end
     ).one()
     questions_done = int(totals[0] or 0)
     study_minutes = int(totals[1] or 0)
@@ -255,7 +258,7 @@ async def get_learning_report(
         func.count(PracticeRecord.is_correct)
     ).filter(
         PracticeRecord.user_id == current_user.user_id,
-        PracticeRecord.practice_time >= window_start
+        PracticeRecord.practice_time >= (now - timedelta(days=7) if period == "day" else window_start)
     ).group_by("d").all()
     day_map = {str(r[0]): (int(r[1] or 0), int(r[2] or 0), int(r[3] or 0)) for r in day_rows}
 
@@ -264,7 +267,7 @@ async def get_learning_report(
 
     trend: List[float] = []
     labels: List[str] = []
-    if period == "week":
+    if period in ("week", "day"):
         for i in range(7):
             date = (now - timedelta(days=6 - i)).date()
             q, c, g = day_map.get(str(date), (0, 0, 0))
@@ -286,6 +289,9 @@ async def get_learning_report(
             labels.append(f"第{bucket + 1}周")
 
     # 短板：按子科目聚合，样本 >=3 题且正确率最低的 3 个（无子科目的记录不计）
+    # 短板用「至少 30 天」的窗口：day 视图只有 1 天样本时几乎必然为空，
+    # 而用户要的是「我现在该补什么」，用 30 天更稳定（week/month 不变）。
+    weak_window_start = min(window_start, now - timedelta(days=30))
     weak_rows = db.query(
         PracticeRecord.sub_category_id,
         func.count(PracticeRecord.record_id),
@@ -293,7 +299,8 @@ async def get_learning_report(
         func.count(PracticeRecord.is_correct)
     ).filter(
         PracticeRecord.user_id == current_user.user_id,
-        PracticeRecord.practice_time >= window_start,
+        PracticeRecord.practice_time >= weak_window_start,
+        PracticeRecord.practice_time < now,
         PracticeRecord.sub_category_id.isnot(None)
     ).group_by(PracticeRecord.sub_category_id).all()
 
@@ -322,10 +329,11 @@ async def get_learning_report(
     streak = checkin.continuous_days if checkin else 0
 
     # 结论文案由数据决定，不编造：没数据时说没数据
+    scope_text = "昨天" if period == "day" else f"最近 {days} 天"
     if questions_done == 0:
-        comment = f"最近 {days} 天还没有练习记录，先做 20 道题，报告就会有内容。"
+        comment = f"{scope_text}还没有练习记录，先做 20 道题，报告就会有内容。"
     else:
-        head = (f"最近 {days} 天做了 {questions_done} 题，正确率 {accuracy}%，"
+        head = (f"{scope_text}做了 {questions_done} 题，正确率 {accuracy}%，"
                 f"累计 {study_minutes} 分钟")
         if weak:
             comment = head + "；短板：" + "、".join(f"{w['name']}({w['rate']}%)" for w in weak) + "，建议优先加练。"

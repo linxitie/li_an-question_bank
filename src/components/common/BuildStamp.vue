@@ -8,7 +8,7 @@
   <div
     v-if="visible"
     class="build-stamp"
-    :class="{ 'is-mismatch': isMismatch }"
+    :class="{ 'is-mismatch': isMismatch && !isDev, 'is-dev-drift': isMismatch && isDev }"
     role="status"
     :title="tip"
     @click="copyInfo">
@@ -57,9 +57,18 @@ const isMismatch = computed(() => {
   return s !== '' && s !== 'dev' && s !== b;
 });
 
+// dev server 的 __BUILD_SHA__ 是 vite 启动那一刻的提交，与后端启动时刻天然不同，
+// main.ts 也会打印「dev 模式前后端 SHA 不同属正常」。所以 dev 下只标琥珀色提示，
+// 不报警红——只有构建产物（生产预览）才真的要求两端 SHA 一致。
+const isDev = computed(() => Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV));
+
 const tip = computed(() => {
   const base = `前端 ${info.value.sha || 'dev'} @ ${info.value.time || '-'}\n后端 ${info.value.backend || '未获取'}`;
-  return isMismatch.value ? base + '\n⚠️ 前后端版本不一致：页面可能是旧代码，请刷新或重启后端' : base;
+  if (!isMismatch.value) return base;
+  if (isDev.value) {
+    return base + '\nℹ️ dev 模式下两端 SHA 不同属正常（vite 与后端启动时刻不同），构建产物才要求一致';
+  }
+  return base + '\n⚠️ 前后端版本不一致：页面可能是旧代码，请刷新或重启后端';
 });
 
 async function copyInfo() {
@@ -117,6 +126,15 @@ onUnmounted(() => {
 .build-stamp.is-mismatch {
   background: #b91c1c;
   opacity: 1;
+}
+
+/* dev 模式下的 SHA 漂移：只做琥珀提示，不噪声化报警 */
+.build-stamp.is-dev-drift {
+  opacity: 0.75;
+}
+
+.build-stamp.is-dev-drift .dot {
+  background: #fbbf24;
 }
 
 .dot {
