@@ -21,12 +21,15 @@ import { vtj, name } from '../package.json';
 import './style/index.scss';
 import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
 import { registerImageRetry } from './image-retry';  // 第9层防线：图片智能重试
+import { installChunkRecovery } from './utils/chunkRecovery';  // 第10层防线：页面模块加载失败自动恢复
 // 2026-11-04：徽章展示模块下线 → 「我的」页内徽章入口注入一并移除
 import { installMaterialsCreateEntry } from './utils/materialsCreateEntry';  // PC 资料页「创建卡片」入口（DOM 注入）
 import { installTabletMaterialsEntry } from './utils/tabletMaterialsEntry';  // 平板首页「备考资料」入口（DOM 注入）
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
+// 页面模块加载失败自动重载（第10层防线）
+installChunkRecovery();
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -108,6 +111,12 @@ onReady(async () => {
   app.use(provider);
   app.use(IconsPlugin);
   app.mount('#app');
+  // 自动恢复重载后清掉 URL 上的临时参数，避免脏链接被复制/收藏
+  if (window.location.search.includes('__reload=')) {
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete('__reload');
+    window.history.replaceState(window.history.state, '', clean.toString());
+  }
   void checkVersionConsistency();
   // 三科资料页是 VTJ 页面 → 运行时在顶栏下方注入「创建卡片 / Excel 批量导入」入口
   installMaterialsCreateEntry();

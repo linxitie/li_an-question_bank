@@ -913,6 +913,8 @@ async def admin_batch_posts(
 
 class PinPayload(BaseModel):
     pinned: bool = True
+    # 置顶时长（天）：不传 / <=0 = 永久置顶；1/3/7/30 等由前端给出
+    days: Optional[int] = Field(None, ge=0, le=365)
 
 
 @admin_router.post("/posts/{post_id}/pin", summary="管理员置顶/取消置顶帖子")
@@ -925,15 +927,28 @@ async def admin_pin_post(
     post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="帖子不存在")
-    post.is_top = 1 if payload.pinned else 0
+    now = datetime.now()
+    if payload.pinned:
+        days = int(payload.days or 0)
+        post.is_top = 1
+        post.pin_until = now + timedelta(days=days) if days > 0 else None
+        detail = f"post_id={post_id}, duration={'永久' if days <= 0 else f'{days}天'}"
+    else:
+        post.is_top = 0
+        post.pin_until = None
+        detail = f"post_id={post_id}, duration=取消"
     _audit(
         db,
         current_user,
         "管理员置顶帖子" if payload.pinned else "管理员取消置顶帖子",
-        f"post_id={post_id}",
+        detail,
     )
     db.commit()
-    return {"success": True, "isTop": bool(post.is_top)}
+    return {
+        "success": True,
+        "isTop": bool(post.is_top),
+        "pinUntil": post.pin_until.isoformat() if post.pin_until else None,
+    }
 
 
 # =====================================================================

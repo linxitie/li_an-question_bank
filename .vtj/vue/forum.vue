@@ -10,13 +10,15 @@
         </h2>
         <div class="forum-search-bar in-header">
         <input
+        id="forum-search-input"
+        name="forumSearch"
         v-model="state.searchKeyword"
         class="search-input"
         placeholder="搜索帖子标题或内容…"
         @keyup.enter="applySearch" />
-        <input v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
+        <input id="forum-search-date-from" name="forumSearchFrom" v-model="state.searchDateFrom" type="date" class="search-date" title="开始日期" />
         <span class="search-tilde">~</span>
-        <input v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
+        <input id="forum-search-date-to" name="forumSearchTo" v-model="state.searchDateTo" type="date" class="search-date" title="结束日期" />
         <button class="search-btn" @click="applySearch">搜索</button>
         <button class="search-reset" @click="resetSearch">重置</button>
         </div>
@@ -358,10 +360,7 @@
                         <span class="comment-time">{{ formatTime(comment.createTime) }}</span>
                       </div>
                       <div class="comment-text"><ForumContent :content="comment.content" :format="comment.contentFormat" /></div>
-                      <AttachmentList
-                        v-if="comment.attachments && comment.attachments.length"
-                        :attachments="comment.attachments"
-                        mode="comment" />
+                      <!-- 2026-11-14：正文已内联展示附件，不再在评论下方汇总列出（用户要求三端统一去掉） -->
                       <div class="comment-actions">
                         <span @click="toggleCommentLike(comment)" class="comment-action">
                           <span class="heart-icon" :class="{ active: comment.liked }">{{ comment.liked ? '❤' : '♡' }}</span>
@@ -387,6 +386,12 @@
                           @click="reportComment(comment)">
                           举报
                         </span>
+                        <span
+                          v-if="canDeleteComment(comment)"
+                          class="comment-action comment-delete"
+                          @click.stop="deleteMyComment(comment)">
+                          删除
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -410,10 +415,6 @@
                             <span class="comment-time">{{ formatTime(child.createTime) }}</span>
                           </div>
                           <div class="comment-text"><ForumContent :content="child.content" :format="child.contentFormat" /></div>
-                          <AttachmentList
-                            v-if="child.attachments && child.attachments.length"
-                            :attachments="child.attachments"
-                            mode="comment" />
                           <div class="comment-actions">
                             <span @click="toggleCommentLike(child)" class="comment-action">
                               <span class="heart-icon" :class="{ active: child.liked }">{{ child.liked ? '❤' : '♡' }}</span>
@@ -424,6 +425,12 @@
                               class="comment-action"
                               @click="reportComment(child)">
                               举报
+                            </span>
+                            <span
+                              v-if="canDeleteComment(child)"
+                              class="comment-action comment-delete"
+                              @click.stop="deleteMyComment(child)">
+                              删除
                             </span>
                           </div>
                         </div>
@@ -456,12 +463,12 @@
                   <FileUploader v-model="state.newCommentImages" :max-docs="3" />
                 </div>
                 <div class="comment-input-box">
-                  <textarea
+                  <InlineCommentEditor
+                    ref="commentEditorRef"
                     v-model="state.newComment"
-                    rows="3"
-                    class="modal-textarea"
                     :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
-                    maxlength="2000"></textarea>
+                    :maxlength="2000"
+                    @submit="submitComment" />
                   <button class="fullscreen-btn" title="全屏输入" @click="state.fullscreenInput = true">⛶</button>
                 </div>
                 <div class="modal-actions">
@@ -487,11 +494,13 @@
             <button class="fullscreen-close" @click="state.fullscreenInput = false">×</button>
           </div>
           <div class="fullscreen-body">
-            <textarea
+            <InlineCommentEditor
+              ref="fullscreenEditorRef"
               v-model="state.newComment"
               class="fullscreen-textarea"
               :placeholder="state.replyTarget ? '输入回复内容...' : '写下你的评论...'"
-              maxlength="2000"></textarea>
+              :maxlength="2000"
+              @submit="submitComment" />
             <div class="fullscreen-tools">
               <button class="emoji-btn" title="表情 / 表情包" @click="state.showCommentPicker = !state.showCommentPicker">😀</button>
               <FileUploader v-model="state.newCommentImages" :max-docs="3" />
@@ -673,6 +682,7 @@
   import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
   import { loadMyClasses } from '@/modules/community/classScope';
   import AttachmentList from '@/components/forum/AttachmentList.vue';
+import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
   import CommentSortBar from '@/components/forum/CommentSortBar.vue';
   import UserBadge from '@/components/forum/UserBadge.vue';
   import { pinForumComment, reportForumTarget } from '@/modules/community/api';
@@ -691,6 +701,7 @@
       FileUploader,
       PostComposer,
       AttachmentList,
+      InlineCommentEditor,
       CommentSortBar,
       UserBadge
     },
@@ -943,10 +954,16 @@
         this.community.setVisibilityFilter(key);
         await this.loadPosts();
       },
-      insertCommentEmoji(payload: { type: 'emoji' | 'sticker'; value: string }) {
-        const text =
-          payload.type === 'emoji' ? payload.value : `[[sticker:${payload.value}]]`;
-        this.state.newComment = `${this.state.newComment || ''}${text}`;
+      insertCommentEmoji(payload: { type: 'emoji' | 'sticker'; value: string; name?: string }) {
+        const editor = (this.state.fullscreenInput
+          ? this.$refs.fullscreenEditorRef
+          : this.$refs.commentEditorRef) as any;
+        if (payload.type === 'sticker') {
+          editor?.insertAttachment({ url: payload.value, name: payload.name || '表情包' });
+        } else {
+          editor?.insertText(payload.value);
+        }
+        this.state.showCommentPicker = false;
       },
       async refreshSilently() {
         if (this.community.loading) return;
@@ -1336,6 +1353,26 @@
           this._safeMsg('error', this.community.error || '评论失败');
         } finally {
           this.state.commentSubmitting = false;
+        }
+      },
+      canDeleteComment(comment: any) {
+        return comment && comment.user && comment.user.id === this._currentUserId();
+      },
+      async deleteMyComment(comment: any) {
+        if (!window.confirm('确定删除这条评论？')) return;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/forum/comments/' + comment.id, {
+            method: 'DELETE'
+          });
+          const data = await res.json();
+          if (res.ok) {
+            this._safeMsg('success', '评论已删除');
+            if (this.state.currentPost) await this.loadComments(this.state.currentPost.id);
+          } else {
+            this._safeMsg('error', data.detail || '删除失败');
+          }
+        } catch (e) {
+          this._safeMsg('error', '删除失败');
         }
       },
       _currentUserId() {
@@ -1755,6 +1792,21 @@
         }
       }
     },
+    watch: {
+      'state.newCommentImages': {
+        handler(next: any[], prev: any[]) {
+          if (!next || !prev || next.length <= prev.length) return;
+          const editor = (this.state.fullscreenInput
+          ? this.$refs.fullscreenEditorRef
+          : this.$refs.commentEditorRef) as any;
+          for (const att of next.slice(prev.length)) {
+            editor?.insertAttachment(att);
+          }
+        },
+        deep: true
+      }
+    },
+
     mounted() {
       // 分类状态以当前页面为准，避免 store 里残留上次的分类筛选
       this.state.activeCategory = 'all';
@@ -2875,8 +2927,9 @@
     border: 0;
     background: transparent;
     color: #8a8faa;
-    font-size: 15px;
-    padding: 2px 4px;
+    font-size: 30px;
+    line-height: 1;
+    padding: 0;
   }
   /* 单行：😊 → ＋ → 输入框 → 发表评论（DOM 顺序不变，仅改视觉顺序） */
   .comment-input-area textarea {
@@ -3219,4 +3272,5 @@
   .fullscreen-tools .confirm-btn { margin-left: auto; }
   .fullscreen-picker { align-self: flex-start; }
   .fullscreen-btn { border: 1px solid #dfe3ee; background: #fff; border-radius: 8px; padding: 4px 8px; cursor: pointer; font-size: 15px; }
+.comment-action.comment-delete { color: #c41e3a; }
 </style>
