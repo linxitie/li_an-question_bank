@@ -21,6 +21,25 @@
       </button>
     </div>
 
+    <form
+      v-if="!currentNews && !route.params.id"
+      class="news-search"
+      @submit.prevent="searchNews">
+      <input
+        v-model="keyword"
+        type="search"
+        placeholder="搜索新闻标题、摘要、正文"
+        aria-label="搜索新闻" />
+      <button type="submit">搜索</button>
+      <button
+        v-if="keyword"
+        type="button"
+        class="clear-search"
+        @click="clearSearch">
+        清除
+      </button>
+    </form>
+
     <!-- 新闻列表 -->
     <main v-if="!currentNews && !route.params.id" class="news-list">
       <div
@@ -161,6 +180,7 @@ const notes = ref<any[]>([]);
 const favoriteError = ref('');
 const detailLoading = ref(Boolean(route.params.id));
 const detailError = ref('');
+const keyword = ref('');
 const favoritesPath = computed(() =>
   route.path.startsWith('/tablet')
     ? '/tablet/news/favorites'
@@ -244,7 +264,19 @@ const formatTime = (iso?: string | null) => {
 
 const fetchNews = async () => {
   // 列表只读，不上报阅读；已读标记由后端随列表返回
-  await newsStore.load({ limit: 20 });
+  await newsStore.load({
+    limit: 50,
+    keyword: keyword.value.trim() || undefined
+  });
+};
+
+const searchNews = async () => {
+  await fetchNews();
+};
+
+const clearSearch = async () => {
+  keyword.value = '';
+  await fetchNews();
 };
 
 const loadDetail = async (id: string): Promise<NewsItem | null> => {
@@ -536,6 +568,35 @@ onBeforeUnmount(() => {
 .ai-empty strong {
   color: #1a2b5f;
   font-size: 13px;
+}
+.news-search {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+.news-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #d6dfea;
+  border-radius: 8px;
+  background: #fff;
+  color: #1a2b5f;
+  font-size: 13px;
+}
+.news-search button {
+  border: 1px solid #1a2b5f;
+  border-radius: 8px;
+  background: #1a2b5f;
+  color: #fff;
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.news-search .clear-search {
+  border-color: #d6dfea;
+  background: #fff;
+  color: #59635c;
 }
 .news-list {
   flex: 1;

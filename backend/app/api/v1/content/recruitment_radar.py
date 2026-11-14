@@ -238,6 +238,7 @@ async def radar(
     education: str = Query("", max_length=30),
     major: str = Query("", max_length=100),
     political: str = Query("", max_length=30),
+    keyword: str = Query("", max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -246,6 +247,15 @@ async def radar(
         PolicePost.status == 1,
         PolicePost.parse_status == "parsed",
     )
+    if keyword.strip():
+        kw = f"%{keyword.strip()}%"
+        query = query.filter(
+            or_(
+                PolicePost.job_name.like(kw),
+                PolicePost.employer.like(kw),
+                PolicePost.major_req.like(kw),
+            )
+        )
     if province.strip():
         query = query.filter(
             or_(

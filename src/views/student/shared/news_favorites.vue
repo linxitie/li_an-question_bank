@@ -94,7 +94,9 @@ async function load(): Promise<void> {
       params: { type: 'news', page: 1, page_size: 100 },
       baseURL: ''
     });
-    items.value = response.data.items || [];
+    items.value = (response.data.items || []).filter(
+      (item) => (item as any).fav_type === 'news' || !(item as any).fav_type
+    );
   } catch (e) {
     error.value = e instanceof Error ? e.message : '收藏加载失败';
   } finally {

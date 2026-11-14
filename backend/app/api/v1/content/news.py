@@ -120,7 +120,10 @@ async def get_news(
     size = limit or page_size
     total = query.count()
     articles = (
-        query.order_by(NewsArticle.create_time.desc()).offset((page - 1) * size).limit(size).all()
+        query.order_by(NewsArticle.publish_date.desc(), NewsArticle.news_id.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+        .all()
     )
 
     # 批量预取图片与收藏状态，消除 N+1 查询

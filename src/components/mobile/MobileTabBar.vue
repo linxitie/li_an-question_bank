@@ -20,9 +20,11 @@
       v-for="item in tabs"
       :key="item.key"
       :class="['mtb-item', { active: active === item.key }]"
-      @click="go(item)"
-    >
-      <XIcon :icon="item.icon" :size="22" :color="active === item.key ? ACTIVE : INACTIVE"></XIcon>
+      @click="go(item)">
+      <XIcon
+        :icon="item.icon"
+        :size="22"
+        :color="active === item.key ? ACTIVE : INACTIVE"></XIcon>
       <span class="mtb-label">{{ item.label }}</span>
     </div>
   </nav>
@@ -31,7 +33,14 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
-import { HomeFilled, Edit, ChatLineRound, User, Shop } from '@vtj/icons';
+import {
+  HomeFilled,
+  Edit,
+  ChatLineRound,
+  User,
+  Shop,
+  Suitcase
+} from '@vtj/icons';
 
 // 激活/未激活配色：与 design-tokens 主色保持一致
 const ACTIVE = '#1A365D';
@@ -49,8 +58,14 @@ const tabs = [
   { key: 'practice', label: '练习', icon: Edit, path: '/mobile/practice' },
   // 2026-11-05：商城放在底部栏正中间（用户要求）
   { key: 'shop', label: '商城', icon: Shop, path: '/mobile/gold-purchase' },
+  {
+    key: 'recruitment',
+    label: '招考',
+    icon: Suitcase,
+    path: '/mobile/recruitment/radar'
+  },
   { key: 'forum', label: '论坛', icon: ChatLineRound, path: '/mobile/forum' },
-  { key: 'profile', label: '我的', icon: User, path: '/mobile/profile' },
+  { key: 'profile', label: '我的', icon: User, path: '/mobile/profile' }
 ];
 
 const router = useRouter();
@@ -90,12 +105,13 @@ const go = (item: { key: string; path: string }) => {
   cursor: pointer;
   background: transparent;
   /* 与全站统一：使用 design-tokens 动画令牌 */
-  transition: color var(--duration-normal, 300ms) var(--easing-default, cubic-bezier(0.4, 0, 0.2, 1));
+  transition: color var(--duration-normal, 300ms)
+    var(--easing-default, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 /* 激活态：白底 + 深藏青文字/图标。严禁加实心深底（会遮住图标与文字） */
 .mtb-item.active {
-  color: #1A365D;
+  color: #1a365d;
   background: transparent;
 }
 

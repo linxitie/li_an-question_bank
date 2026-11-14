@@ -692,7 +692,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/mobile/recruitment/radar',
     name: 'MobileRecruitmentRadar',
-    component: () => import('@/views/student/shared/recruitment_radar.vue'),
+    component: () => import('@/views/student/mobile/mobile_recruitment_radar.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
