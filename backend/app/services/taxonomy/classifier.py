@@ -192,6 +192,70 @@ def _score_one(rule: Dict[str, Any], body: str, tail: str,
             "score": score, "hits": hits, "excluded": False}
 
 
+_EMPTY = {"point_id": None, "name": None, "score": 0, "tier": "unmatched",
+          "second_score": 0, "margin": 0, "hits": []}
+
+
+@lru_cache(maxsize=1)
+def _point_sc_map() -> Dict[int, int]:
+    """考点 → 所属知识点（sub_category）。
+
+    跨知识点纠正需要知道「命中的考点挂在哪个知识点下」，
+    否则无法判断这道题是否被标错了知识点。
+    """
+    out: Dict[int, int] = {}
+    for sc_id, points in _load_rules_bundle()["rules"].items():
+        for p in points:
+            out[int(p["point_id"])] = int(sc_id)
+    return out
+
+
+def point_sc_index() -> Dict[int, int]:
+    return dict(_point_sc_map())
+
+
+def expected_sub_category(point_id: Optional[int]) -> Optional[int]:
+    """考点对应的知识点 ID；未知考点返回 None。"""
+    if not point_id:
+        return None
+    return _point_sc_map().get(int(point_id))
+
+
+def _texts(question_text: str, options_text: Optional[str],
+           context_text: Optional[str]) -> Optional[Dict[str, Any]]:
+    stem = normalize_text(question_text)
+    opts = normalize_text(options_to_text(options_text))
+    body = (stem + "\n" + opts) if opts else stem
+    if not body:
+        return None
+    tail = stem[-_TAIL_CHARS:] if stem else body[-_TAIL_CHARS:]
+    ctx = normalize_text(context_text)[:4000] if context_text else ""
+    # 情境分析子题（题干只有「正确的做法是：」，二十来个字）本身不含情境，
+    # 材料才是题干；此时放宽材料权重上限，但仍低于「题干+选项」的合成分。
+    ctx_cap = 6 if (ctx and len(stem) < 40) else 3
+    return {"stem": stem, "body": body, "tail": tail, "ctx": ctx, "ctx_cap": ctx_cap}
+
+
+def _rank(rules: List[Dict[str, Any]], parts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    scored = [_score_one(r, parts["body"], parts["tail"], parts["ctx"], parts["ctx_cap"])
+              for r in rules]
+    scored.sort(key=lambda x: (-x["score"], x["point_id"]))
+    best = scored[0]
+    second = scored[1]["score"] if len(scored) > 1 else 0
+    if best["score"] <= 0:
+        return None
+    margin = best["score"] - second
+    if best["score"] >= AUTO_SCORE and margin >= AUTO_MARGIN:
+        tier = "auto"
+    elif best["score"] >= REVIEW_SCORE:
+        tier = "review"
+    else:
+        tier = "unmatched"
+    return {"point_id": best["point_id"], "name": best["name"], "score": best["score"],
+            "tier": tier, "second_score": second, "margin": margin,
+            "hits": best["hits"][:8]}
+
+
 def classify(question_text: str,
              sub_category_id: Optional[int],
              options_text: Optional[str] = None,
@@ -203,36 +267,42 @@ def classify(question_text: str,
     tier ∈ auto（可直接落库）/ review（进人工复核队列）/ unmatched（保留收容）。
     """
     rules = _candidates(sub_category_id, subject_id)
-    empty = {"point_id": None, "name": None, "score": 0, "tier": "unmatched",
-             "second_score": 0, "margin": 0, "hits": []}
-    if not rules:
-        return empty
+    parts = _texts(question_text, options_text, context_text)
+    if not rules or not parts:
+        return dict(_EMPTY)
+    return _rank(rules, parts) or dict(_EMPTY)
 
-    stem = normalize_text(question_text)
-    opts = normalize_text(options_to_text(options_text))
-    body = (stem + "\n" + opts) if opts else stem
-    if not body:
-        return empty
-    tail = stem[-_TAIL_CHARS:] if stem else body[-_TAIL_CHARS:]
 
-    ctx = normalize_text(context_text)[:4000] if context_text else ""
-    # 情境分析子题（题干只有「正确的做法是：」，二十来个字）本身不含情境，
-    # 材料才是题干；此时放宽材料权重上限，但仍低于「题干+选项」的合成分。
-    ctx_cap = 6 if (ctx and len(stem) < 40) else 3
-    scored = [_score_one(r, body, tail, ctx, ctx_cap) for r in rules]
-    scored.sort(key=lambda x: (-x["score"], x["point_id"]))
-    best = scored[0]
-    second = scored[1]["score"] if len(scored) > 1 else 0
-    if best["score"] <= 0:
-        return empty
+def classify_cross(question_text: str,
+                   subject_id: Optional[int],
+                   current_sub_category_id: Optional[int] = None,
+                   options_text: Optional[str] = None,
+                   context_text: Optional[str] = None) -> Dict[str, Any]:
+    """跨知识点打分（v8.1 跨知识点纠正用）。
 
-    margin = best["score"] - second
-    if best["score"] >= AUTO_SCORE and margin >= AUTO_MARGIN:
-        tier = "auto"
-    elif best["score"] >= REVIEW_SCORE:
-        tier = "review"
-    else:
-        tier = "unmatched"
-    return {"point_id": best["point_id"], "name": best["name"], "score": best["score"],
-            "tier": tier, "second_score": second, "margin": margin,
-            "hits": best["hits"][:8]}
+    与 classify 的区别：候选集是整个科目的 91 个考点，不按题目现有知识点收缩。
+    用途是识别「知识点本身就标错了」的题——导入时按试卷大题贴标签，
+    会把图形推理贴成言语理解、把微生物发酵贴成判断推理，此时按标签收缩只会
+    在错误的知识点里挑一个错得最像的考点。
+
+    返回在 classify 的字段上追加：
+    - sc_id      ：命中考点所属知识点
+    - old_sc_id  ：传入的当前知识点
+    - sc_changed ：两者不一致时 True（需同步纠正知识点）
+    """
+    bundle = _load_rules_bundle()
+    rules: List[Dict[str, Any]] = []
+    scs = bundle["subjects"].get(int(subject_id)) if subject_id else None
+    for sc in (scs or sorted(bundle["rules"])):
+        rules.extend(bundle["rules"].get(sc) or [])
+    parts = _texts(question_text, options_text, context_text)
+    res = _rank(rules, parts) if (rules and parts) else None
+    if not res:
+        out = dict(_EMPTY)
+        out.update({"sc_id": None, "old_sc_id": current_sub_category_id, "sc_changed": False})
+        return out
+    sc_id = _point_sc_map().get(int(res["point_id"]))
+    res["sc_id"] = sc_id
+    res["old_sc_id"] = current_sub_category_id
+    res["sc_changed"] = bool(sc_id and int(sc_id) != int(current_sub_category_id or 0))
+    return res

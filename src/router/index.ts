@@ -260,6 +260,13 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['teacher', 'admin'] }
   },
   {
+    // 考点复核（手写页）：低置信考点分配的人工确认/驳回，写回 point_assign_audit
+    path: '/teacher/point-review',
+    name: 'TeacherPointReview',
+    component: () => import('@/views/teacher/pc/PointReview.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
     path: '/teacher/papers',
     name: 'TeacherPapers',
     // P5：旧 raw 页左栏固定 50 条、无预览解析；改为手写双栏工作台。

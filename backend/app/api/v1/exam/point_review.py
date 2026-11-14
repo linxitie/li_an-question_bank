@@ -122,7 +122,8 @@ async def decide_review(
     _require_reviewer(current_user)
     row = db.execute(
         text(
-            "SELECT question_id, old_point_id, new_point_id, reason, review_status "
+            "SELECT question_id, old_point_id, new_point_id, reason, review_status, "
+            "old_sub_category_id, new_sub_category_id "
             "FROM point_assign_audit WHERE audit_id = :a"
         ),
         {"a": audit_id},
@@ -134,8 +135,14 @@ async def decide_review(
 
     status = "accepted" if body.accept else "rejected"
     if not body.accept:
+        # 驳回必须连知识点一起还原：v8c 起考点与 sub_category 是一次改动的两半，
+        # 只还原 point_id 会留下「考点属于 A 知识点、题目却挂在 B 知识点」的矛盾，
+        # 正是本轮要消灭的那种数据。
+        revert = {QuestionBank.point_id: row[1]}
+        if row[6] is not None:                      # old_sub_category_id 有快照才还原
+            revert[QuestionBank.sub_category_id] = row[5]
         db.query(QuestionBank).filter(QuestionBank.question_id == row[0]).update(
-            {QuestionBank.point_id: row[1]}, synchronize_session=False
+            revert, synchronize_session=False
         )
     db.execute(
         text(
