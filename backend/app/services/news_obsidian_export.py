@@ -130,13 +130,13 @@ def export_news_board(db: Session, vault: Path, dry_run: bool = False) -> dict[s
     images_copied, images_missing = (0, 0)
     if not dry_run:
         images_copied, images_missing = _copy_images(db, news_list, vault)
-    root = vault / "00-收件箱" / "新闻"
+    root = vault / "01-待审核"
     written = 0
     skipped = 0
     rows = []
     for news in news_list:
         date_dir = news.publish_date.date().isoformat() if news.publish_date else "未分期"
-        target = _safe_path(vault, "00-收件箱", "新闻", date_dir, f"{_uid(news)}.md")
+        target = _safe_path(vault, "01-待审核", date_dir, f"{_uid(news)}.md")
         rows.append((date_dir, news))
         if target.exists():
             skipped += 1
@@ -162,7 +162,7 @@ def export_news_board(db: Session, vault: Path, dry_run: bool = False) -> dict[s
     for date_dir, news in rows:
         risks = json.loads(news.ai_risk_flags or "[]")
         lines.append(
-            f"| {date_dir} | [[00-收件箱/新闻/{date_dir}/{_uid(news)}]] | {news.source} | "
+            f"| {date_dir} | [[01-待审核/{date_dir}/{_uid(news)}]] | {news.source} | "
             f"{news.review_status} | {'；'.join(risks) or '低'} |"
         )
     if not dry_run:

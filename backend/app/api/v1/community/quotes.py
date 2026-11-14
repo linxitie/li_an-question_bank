@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 
 from ....core.database import get_db
+from ....core.config import settings
 from ....core.security import get_current_user, get_optional_user
 from ....models.models import EssayQuote, QuoteFavorite, SysUser
 from ....services import daily_quote_service, quote_filter_service
@@ -28,12 +29,10 @@ from ....services import daily_quote_service, quote_filter_service
 router = APIRouter(prefix="/api/quotes", tags=["申论金句"])
 logger = logging.getLogger(__name__)
 
-# Obsidian 知识库配置
-# 优先使用环境变量；如果环境变量指向的路径下没有 01-金句素材库 子目录，
-# 则自动回退到常见的默认路径
-_OB_ENV_PATH = os.environ.get("OBSIDIAN_VAULT_PATH", "")
-_DEFAULT_VAULT = str(Path(__file__).resolve().parents[4] / "content_hub_vault")
-_QUOTE_SUBDIRS = ("01-金句素材库", "01-金句")
+# Obsidian 金句独立 Vault；不再与新闻共用根目录。
+_OB_ENV_PATH = os.environ.get("VAULT_PATH_QUOTE", "") or settings.VAULT_PATH_QUOTE
+_DEFAULT_VAULT = _OB_ENV_PATH
+_QUOTE_SUBDIRS = ("01-金句素材库", "01-金句", "02-每日金句", "01-待审核", "02-已发布")
 
 def _resolve_quote_dir() -> str:
     """解析 Obsidian 金句目录，自动检测路径是否正确"""

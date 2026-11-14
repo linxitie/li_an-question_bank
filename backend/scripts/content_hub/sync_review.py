@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services.obsidian_sync import sync_review_inbox
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_VAULT = os.environ.get("OBSIDIAN_VAULT_PATH") or str(BACKEND_ROOT / "content_hub_vault")
+DEFAULT_VAULT = str(Path(settings.VAULT_PATH_QUOTE))
 
 
 def main() -> int:

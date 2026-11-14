@@ -248,6 +248,18 @@ class Settings(BaseSettings):
     # 去重检测开关
     MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
 
+    # ==================== Obsidian 独立 Vault ====================
+    # 三个业务模块物理隔离，禁止写入同一个根目录
+    VAULT_PATH_QUOTE: str = Field(
+        r"D:\砺安题库\li_an-question_bank\每日金句知识库", env="VAULT_PATH_QUOTE"
+    )
+    VAULT_PATH_NEWS: str = Field(
+        r"D:\砺安题库\li_an-question_bank\backend\content_hub_vault", env="VAULT_PATH_NEWS"
+    )
+    VAULT_PATH_JOB: str = Field(
+        r"D:\砺安题库\li_an-question_bank\招考信息知识库", env="VAULT_PATH_JOB"
+    )
+
     # ==================== 评论区舆情审核（M0 影子期，默认全关） ====================
     # 政策库来源：Obsidian vault 根目录；编译器内部再拼「AI舆情审核知识库/政策库」
     MODERATION_VAULT_DIR: str = Field(r"D:\Obsidian仓库", env="MODERATION_VAULT_DIR")

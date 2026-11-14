@@ -70,7 +70,7 @@ def test_export_news_board(tmp_path, db_session):
     report = export_news_board(db_session, vault)
 
     assert report["written"] == 1
-    assert (vault / "00-收件箱" / "新闻" / "时效性看板.md").is_file()
-    assert any((vault / "00-收件箱" / "新闻").rglob("news_*.md"))
-    card = next((vault / "00-收件箱" / "新闻").rglob("news_*.md"))
+    assert (vault / "01-待审核" / "时效性看板.md").is_file()
+    assert any((vault / "01-待审核").rglob("news_*.md"))
+    card = next((vault / "01-待审核").rglob("news_*.md"))
     assert "## 图片" not in card.read_text(encoding="utf-8")

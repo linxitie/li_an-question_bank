@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ..core.config import settings
 from ..models.models import EssayQuote, KgEdge, NewsArticle, RecruitmentInfo, Topic
 
 MANIFEST_REL = "99-系统/导出清单.json"
@@ -147,7 +148,7 @@ def _write_inbox_once(
 ) -> None:
     """待审收件箱只写一次；已存在的文件可能含人工修改，绝不覆盖。"""
     uid = quote.quote_uid or f"q_{quote.quote_id:06d}"
-    target = _safe_path(vault, "00-收件箱", "金句", f"{uid}.md")
+    target = _safe_path(vault, "01-待审核", f"{uid}.md")
     if target.exists():
         stats["skipped"] += 1
         return
@@ -160,8 +161,121 @@ def _write_inbox_once(
     tmp.replace(target)
 
 
-def export_all(db: Session, vault: Path, dry_run: bool = False) -> dict[str, Any]:
-    """导出 R0 投影；返回 {ok, written, skipped, vault, error?}。"""
+def _load_manifest(vault: Path) -> tuple[Path, dict[str, str]]:
+    manifest_path = _safe_path(vault, *MANIFEST_REL.split("/"))
+    manifest: dict[str, str] = {}
+    if manifest_path.is_file():
+        try:
+            loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                manifest = {str(k): str(v) for k, v in loaded.items()}
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+    return manifest_path, manifest
+
+
+def _save_manifest(path: Path, manifest: dict[str, str], dry_run: bool) -> None:
+    if dry_run:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def export_split(db: Session, dry_run: bool = False) -> dict[str, Any]:
+    """按三个独立 Vault 导出：金句、新闻索引、招考索引互不混写。"""
+    paths = {
+        "quote": Path(settings.VAULT_PATH_QUOTE).expanduser(),
+        "news": Path(settings.VAULT_PATH_NEWS).expanduser(),
+        "job": Path(settings.VAULT_PATH_JOB).expanduser(),
+    }
+    if not dry_run:
+        for path in paths.values():
+            path.mkdir(parents=True, exist_ok=True)
+    missing = [name for name, path in paths.items() if not path.is_dir()]
+    if missing:
+        return {"ok": False, "error": "vault_not_found", "missing": missing}
+
+    stats = {"written": 0, "skipped": 0}
+    quote_manifest_path, quote_manifest = _load_manifest(paths["quote"])
+    news_manifest_path, news_manifest = _load_manifest(paths["news"])
+    job_manifest_path, job_manifest = _load_manifest(paths["job"])
+
+    for topic in db.query(Topic).filter(Topic.status == 1).order_by(Topic.topic_id).all():
+        count = (
+            db.query(KgEdge)
+            .filter(KgEdge.dst_type == "topic", KgEdge.dst_id == topic.topic_id)
+            .count()
+        )
+        _write_if_changed(
+            paths["quote"],
+            f"04-主题地图/{topic.slug}.md",
+            _render_topic(topic, count),
+            quote_manifest,
+            dry_run,
+            stats,
+        )
+
+    for quote in db.query(EssayQuote).order_by(EssayQuote.quote_id).all():
+        status = quote.review_status or "published"
+        if status in ("pending", "draft"):
+            _write_inbox_once(paths["quote"], quote, _render_quote(db, quote), dry_run, stats)
+            continue
+        if status == "rejected" or quote.status != 1:
+            uid = quote.quote_uid or f"q_{quote.quote_id:06d}"
+            _write_if_changed(
+                paths["quote"],
+                f"03-已拒绝/{uid}.md",
+                _render_quote(db, quote),
+                quote_manifest,
+                dry_run,
+                stats,
+            )
+            continue
+        uid = quote.quote_uid or f"q_{quote.quote_id:06d}"
+        _write_if_changed(
+            paths["quote"],
+            f"02-已发布/{uid}.md",
+            _render_quote(db, quote),
+            quote_manifest,
+            dry_run,
+            stats,
+        )
+
+    _write_if_changed(
+        paths["news"],
+        "02-已发布/index.md",
+        _render_news_index(db),
+        news_manifest,
+        dry_run,
+        stats,
+    )
+    _write_if_changed(
+        paths["job"],
+        "02-已发布/index.md",
+        _render_recruitment_index(db),
+        job_manifest,
+        dry_run,
+        stats,
+    )
+    _save_manifest(quote_manifest_path, quote_manifest, dry_run)
+    _save_manifest(news_manifest_path, news_manifest, dry_run)
+    _save_manifest(job_manifest_path, job_manifest, dry_run)
+    return {
+        "ok": True,
+        "written": stats["written"],
+        "skipped": stats["skipped"],
+        "vaults": {name: str(path.resolve()) for name, path in paths.items()},
+        "exported_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def export_all(db: Session, vault: Path | None, dry_run: bool = False) -> dict[str, Any]:
+    """兼容旧调用；vault=None 时按三个独立 Vault 导出。"""
+    if vault is None:
+        return export_split(db, dry_run=dry_run)
     vault = Path(vault).expanduser()
     if not vault.exists() or not vault.is_dir():
         return {"ok": False, "error": "vault_not_found", "vault": str(vault)}
@@ -206,12 +320,21 @@ def export_all(db: Session, vault: Path, dry_run: bool = False) -> dict[str, Any
                 stats,
             )
             continue
-        if quote.status != 1:
+        if status == "rejected" or quote.status != 1:
+            uid = quote.quote_uid or f"q_{quote.quote_id:06d}"
+            _write_if_changed(
+                vault,
+                f"03-已拒绝/{uid}.md",
+                _render_quote(db, quote),
+                manifest,
+                dry_run,
+                stats,
+            )
             continue
         uid = quote.quote_uid or f"q_{quote.quote_id:06d}"
         _write_if_changed(
             vault,
-            f"01-金句/{uid}.md",
+            f"02-已发布/{uid}.md",
             _render_quote(db, quote),
             manifest,
             dry_run,

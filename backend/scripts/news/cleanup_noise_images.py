@@ -12,13 +12,14 @@ from pathlib import Path
 
 from PIL import Image
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.models import NewsArticle, NewsImage
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_VAULT = BACKEND_DIR / "content_hub_vault"
+DEFAULT_VAULT = Path(settings.VAULT_PATH_NEWS)
 ARCHIVE_DIR = BACKEND_DIR / "data" / "archive" / "news_noise_images"
-_CARD_ROOT = ("00-收件箱", "新闻")
+_CARD_ROOT = ("01-待审核",)
 
 
 def inspect_image(path: Path) -> tuple[str, str]:

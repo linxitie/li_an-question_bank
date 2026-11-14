@@ -6,10 +6,11 @@ import argparse
 import json
 from pathlib import Path
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services.news_obsidian_export import export_news_board
 
-DEFAULT_VAULT = Path(__file__).resolve().parents[2] / "content_hub_vault"
+DEFAULT_VAULT = Path(settings.VAULT_PATH_NEWS)
 
 
 def main() -> int:
