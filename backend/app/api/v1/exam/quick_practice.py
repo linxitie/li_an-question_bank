@@ -27,6 +27,7 @@ from ....services.image_service import sanitize_content_images, sanitize_options
 from ....services.practice_grading import submit_answers
 from ....services.question_stats import QuestionStatsService
 from ....services.question_material import get_question_group
+from ....services import review_scheduler
 
 router = APIRouter(prefix="/api/quick-practice", tags=["快速练习"])
 logger = logging.getLogger(__name__)
@@ -442,6 +443,10 @@ async def get_practice_questions(
         None, ge=1, le=3, alias="subjectId",
         description="未分类（0号）范围必填：1=行测 2=申论 3=公专",
     ),
+    review: int = Query(
+        0, ge=0, le=1,
+        description="1=艾宾浩斯复习队列（题目集来自 /api/review/due 的到期排程，忽略考点入参）",
+    ),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -457,91 +462,117 @@ async def get_practice_questions(
     except ValueError:
         return {"error": "考点ID格式错误，请使用逗号分隔的整数", "items": [], "total": 0}
 
-    if not raw_ids:
-        return {"error": "请至少选择一个考点或子科目", "items": [], "total": 0}
-
-    from sqlalchemy import func as sql_func
-
-    sc_list: List[int] = []
-    if sub_category_ids:
-        try:
-            sc_list = [int(x.strip()) for x in sub_category_ids.split(",") if x.strip()]
-        except ValueError:
-            return {"error": "子科目ID格式错误", "items": [], "total": 0}
-
-    if sc_list:
-        # 多子科目联合练习（自定义刷题蓝图用）：OR 拼接，仍走同一可见口径
-        conditions = [QuestionBank.sub_category_id.in_([s for s in sc_list if s != 0])]
-        if 0 in sc_list:
-            conditions.append(QuestionBank.sub_category_id.is_(None))
-        if fallback_only:
-            for sid in sc_list:
-                fb_ids = _fallback_point_ids_by_subcat(db, sid) if sid else []
-                if fb_ids:
-                    conditions.append(QuestionBank.point_id.in_(fb_ids))
-        visible_query = QuestionStatsService.visible_query(db).filter(or_(*conditions))
-        if subject_id is not None:
-            visible_query = visible_query.filter(QuestionBank.subject_id == subject_id)
-        if visible_query.count() == 0:
-            return {"total": 0, "items": [], "message": "所选范围下暂无题目"}
-        sub = visible_query.with_entities(
-            sql_func.min(QuestionBank.question_id).label('min_id')
-        ).group_by(QuestionBank.question_content).subquery()
-    elif by_sub_category:
-        # P1-3 直查：按 question_bank.sub_category_id 取可见题，不依赖
-        # question_knowledge，未挂知识点的题也能练。
-        sc_id = raw_ids[0]
-        if sc_id == 0:
-            # 0 是前端合成的「未分类」虚拟子科目，不是真实 sub_categories.id。
-            # 未分类题必须限定科目，避免把三科混在一次练习里。
-            if subject_id is None:
-                return {
-                    "total": 0,
-                    "items": [],
-                    "message": "未分类练习需指定科目（subjectId=1/2/3）",
-                }
-            visible_query = QuestionStatsService.visible_query(db).filter(
-                QuestionBank.sub_category_id.is_(None),
-                QuestionBank.subject_id == subject_id,
-            )
-        elif fallback_only:
-            # 「其他（未细分）」直练：收容叶子主考点 + 主考点为空的题，二者合起来
-            # 就是 sub-categories 里 fallback.total_questions 的口径。
-            fb_ids = _fallback_point_ids_by_subcat(db, sc_id)
-            condition = QuestionBank.sub_category_id == sc_id
-            if fb_ids:
-                condition = or_(condition, QuestionBank.point_id.in_(fb_ids))
-            visible_query = QuestionStatsService.visible_query(db).filter(condition)
-            if subject_id is not None:
-                visible_query = visible_query.filter(
-                    QuestionBank.subject_id == subject_id
-                )
-        else:
-            visible_query = QuestionStatsService.visible_query(db).filter(
-                QuestionBank.sub_category_id == sc_id
-            )
-            if subject_id is not None:
-                visible_query = visible_query.filter(
-                    QuestionBank.subject_id == subject_id
-                )
-        if visible_query.count() == 0:
-            return {"total": 0, "items": [], "message": "该子科目下暂无题目"}
-
-        # 按题干内容去重（保留 question_id 最小的）
-        sub = visible_query.with_entities(
-            sql_func.min(QuestionBank.question_id).label('min_id')
-        ).group_by(QuestionBank.question_content).subquery()
-    else:
-        # 按考点直练：用 question_bank.point_id（唯一主考点）取题。
-        # 旧实现走 question_knowledge 反查，与 sub-categories 的计数口径不一致，
-        # 会出现"列表显示 706 题、点进去 0 题"的错位（P1-8 遗留，本次对齐）。
-        visible_query = QuestionStatsService.visible_query(db).filter(
-            QuestionBank.point_id.in_(raw_ids)
+    review_order = {}
+    if review:
+        # 复习队列的前端入口：题目集合完全来自艾宾浩斯排程（review_scheduler.due），
+        # 考点入参只作为"不校验"的占位，所以放在 raw_ids 校验之前处理。
+        due_payload = review_scheduler.due(
+            db, current_user.user_id, limit=max(limit, 1), subject_id=subject_id
         )
-        if visible_query.count() == 0:
-            return {"total": 0, "items": [], "message": "该考点下暂无题目"}
+        due_ids = [int(it["question_id"]) for it in (due_payload.get("items") or [])]
+        if not due_ids:
+            return {
+                "total": 0,
+                "items": [],
+                "message": due_payload.get("note") or "今天没有到期复习，先做几组新题吧",
+                "review": True,
+                "phase": due_payload.get("phase"),
+            }
+        # 走同一条可见口径（QuestionStatsService.visible_query），
+        # 保证"复习队列里的题"与平时练的题完全一致，不会出现复习到不可见题。
+        due_visible = QuestionStatsService.visible_query(db).filter(
+            QuestionBank.question_id.in_(due_ids)
+        ).with_entities(QuestionBank.question_id.label("min_id")).subquery()
+        review_order = {qid: idx for idx, qid in enumerate(due_ids)}
 
-        # 按题干内容去重（保留 question_id 最小的）
+    if review:
+        sub = due_visible
+    else:
+        if not raw_ids:
+            return {"error": "请至少选择一个考点或子科目", "items": [], "total": 0}
+
+        from sqlalchemy import func as sql_func
+
+        sc_list: List[int] = []
+        if sub_category_ids:
+            try:
+                sc_list = [int(x.strip()) for x in sub_category_ids.split(",") if x.strip()]
+            except ValueError:
+                return {"error": "子科目ID格式错误", "items": [], "total": 0}
+
+        if sc_list:
+            # 多子科目联合练习（自定义刷题蓝图用）：OR 拼接，仍走同一可见口径
+            conditions = [QuestionBank.sub_category_id.in_([s for s in sc_list if s != 0])]
+            if 0 in sc_list:
+                conditions.append(QuestionBank.sub_category_id.is_(None))
+            if fallback_only:
+                for sid in sc_list:
+                    fb_ids = _fallback_point_ids_by_subcat(db, sid) if sid else []
+                    if fb_ids:
+                        conditions.append(QuestionBank.point_id.in_(fb_ids))
+            visible_query = QuestionStatsService.visible_query(db).filter(or_(*conditions))
+            if subject_id is not None:
+                visible_query = visible_query.filter(QuestionBank.subject_id == subject_id)
+            if visible_query.count() == 0:
+                return {"total": 0, "items": [], "message": "所选范围下暂无题目"}
+            sub = visible_query.with_entities(
+                sql_func.min(QuestionBank.question_id).label('min_id')
+            ).group_by(QuestionBank.question_content).subquery()
+        elif by_sub_category:
+            # P1-3 直查：按 question_bank.sub_category_id 取可见题，不依赖
+            # question_knowledge，未挂知识点的题也能练。
+            sc_id = raw_ids[0]
+            if sc_id == 0:
+                # 0 是前端合成的「未分类」虚拟子科目，不是真实 sub_categories.id。
+                # 未分类题必须限定科目，避免把三科混在一次练习里。
+                if subject_id is None:
+                    return {
+                        "total": 0,
+                        "items": [],
+                        "message": "未分类练习需指定科目（subjectId=1/2/3）",
+                    }
+                visible_query = QuestionStatsService.visible_query(db).filter(
+                    QuestionBank.sub_category_id.is_(None),
+                    QuestionBank.subject_id == subject_id,
+                )
+            elif fallback_only:
+                # 「其他（未细分）」直练：收容叶子主考点 + 主考点为空的题，二者合起来
+                # 就是 sub-categories 里 fallback.total_questions 的口径。
+                fb_ids = _fallback_point_ids_by_subcat(db, sc_id)
+                condition = QuestionBank.sub_category_id == sc_id
+                if fb_ids:
+                    condition = or_(condition, QuestionBank.point_id.in_(fb_ids))
+                visible_query = QuestionStatsService.visible_query(db).filter(condition)
+                if subject_id is not None:
+                    visible_query = visible_query.filter(
+                        QuestionBank.subject_id == subject_id
+                    )
+            else:
+                visible_query = QuestionStatsService.visible_query(db).filter(
+                    QuestionBank.sub_category_id == sc_id
+                )
+                if subject_id is not None:
+                    visible_query = visible_query.filter(
+                        QuestionBank.subject_id == subject_id
+                    )
+            if visible_query.count() == 0:
+                return {"total": 0, "items": [], "message": "该子科目下暂无题目"}
+
+            # 按题干内容去重（保留 question_id 最小的）
+            sub = visible_query.with_entities(
+                sql_func.min(QuestionBank.question_id).label('min_id')
+            ).group_by(QuestionBank.question_content).subquery()
+        else:
+            # 按考点直练：用 question_bank.point_id（唯一主考点）取题。
+            # 旧实现走 question_knowledge 反查，与 sub-categories 的计数口径不一致，
+            # 会出现"列表显示 706 题、点进去 0 题"的错位（P1-8 遗留，本次对齐）。
+            visible_query = QuestionStatsService.visible_query(db).filter(
+                QuestionBank.point_id.in_(raw_ids)
+            )
+            if visible_query.count() == 0:
+                return {"total": 0, "items": [], "message": "该考点下暂无题目"}
+
+            # 按题干内容去重（保留 question_id 最小的）
         sub = visible_query.with_entities(
             sql_func.min(QuestionBank.question_id).label('min_id')
         ).group_by(QuestionBank.question_content).subquery()
@@ -582,6 +613,11 @@ async def get_practice_questions(
         questions = query.order_by(QuestionBank.difficulty.desc(), QuestionBank.question_id).limit(limit).all()
     else:
         questions = query.order_by(func.random()).limit(limit).all()
+
+    if review_order:
+        # 复习队列必须按艾宾浩斯优先级（due() 已排好序）出题，
+        # 不能被 random 打乱：逾期最久的题要第一个出现。
+        questions.sort(key=lambda q: review_order.get(q.question_id, 10 ** 6))
 
     items = []
     type_cache = {}
@@ -663,7 +699,10 @@ async def get_practice_questions(
             "images": valid_images,
         })
 
-    return {"total": total, "limit": limit, "items": items}
+    payload = {"total": total, "limit": limit, "items": items}
+    if review_order:
+        payload["review"] = True
+    return payload
 
 
 @router.post("/submit", summary="提交练习结果")

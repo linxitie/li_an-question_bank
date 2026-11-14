@@ -642,6 +642,41 @@ async def get_unified_practice_stats(
     }
 
 
+def _merge_fallback_rows(kps: list) -> list:
+    """把同一科目下所有兜底考点（「其他」）合并成一行汇总。
+
+    done 取各行 done 之和（题目互不重叠，兜底节点之间没有共享题），
+    accuracy 按 attempts 加权，避免小样本行把整块正确率带偏。
+    """
+    kept, fallbacks = [], []
+    for k in kps:
+        (fallbacks if k.get("is_fallback") else kept).append(k)
+    if len(fallbacks) <= 1:
+        if fallbacks:
+            fb = dict(fallbacks[0])
+            fb["point_name"] = "未细分类"
+            fb["is_fallback"] = True
+            kept.append(fb)
+        return kept
+
+    total = sum(int(k.get("total") or 0) for k in fallbacks)
+    done = sum(int(k.get("done") or 0) for k in fallbacks)
+    weighted = sum((k.get("accuracy") or 0) * (k.get("done") or 0) for k in fallbacks)
+    done = min(done, total) if total else done
+    kept.append({
+        "point_id": fallbacks[0].get("point_id"),
+        "point_name": "未细分类",
+        "is_fallback": True,
+        "sub_category_name": fallbacks[0].get("sub_category_name"),
+        "total": total,
+        "done": done,
+        "done_pct": round(done * 100 / total, 1) if total else 0,
+        "accuracy": round(weighted / done, 1) if done else 0,
+        "grouped_points": len(fallbacks),
+    })
+    return kept
+
+
 @router.get("/knowledge-progress", summary="知识点粒度练习进度")
 async def get_knowledge_progress(
     current_user: SysUser = Depends(get_current_user),
@@ -726,8 +761,14 @@ async def get_knowledge_progress(
             "accuracy": round(corrects * 100 / attempts, 1) if attempts > 0 else 0,
         })
 
+    # 兜底考点（名为「其他」的 L3）在库里是分散的 31 个节点，逐行输出就是用户
+    # 截图里「其他 / 其他 / 其他…」的满屏噪声。这里按科目把兜底行合并成唯一一行
+    # 「未细分类」，只做汇总、不再下钻——这正是 m02318 第 2 条要求：
+    # 考点以下不得再用「其他」做分类，能下钻的只有真实考点。
     for sid in subject_order:
-        # 薄弱优先（完成率升序），但「其他（未细分）」固定排最后，避免它霸占首位
+        merged = _merge_fallback_rows(subjects[sid]["kps"])
+        subjects[sid]["kps"] = merged
+        # 薄弱优先（完成率升序），但「未细分类」固定排最后，避免它霸占首位
         subjects[sid]["kps"].sort(key=lambda k: (k["is_fallback"], k["done_pct"]))
 
     return {"subjects": [subjects[sid] for sid in subject_order]}

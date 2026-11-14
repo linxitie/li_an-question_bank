@@ -83,3 +83,10 @@
   max-width: 100%;
   height: auto;
 }
+
+/* 题图独立成行：qr-p 是两端对齐，若 img 仍为行内元素，图前那行文字会被
+   当成「非末行」强行拉开字距（2026-11-14 手机端实拍），故改为块级。 */
+.qr-rich .qr-p > img {
+  display: block;
+  margin: 10px auto;
+}

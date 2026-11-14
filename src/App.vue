@@ -40,7 +40,6 @@ import VtjErrorBoundary from './components/common/VtjErrorBoundary.vue';
 import BackToTop from './components/common/BackToTop.vue';
 import BuildStamp from './components/common/BuildStamp.vue';
 import ReviewBell from './components/domain/ReviewBell.vue';
-import BuildStamp from './components/common/BuildStamp.vue';
 const { disabled, title, menus, logo, themeSwitchable, pure } = useMask();
 
 const actions: ActionBarItems = [

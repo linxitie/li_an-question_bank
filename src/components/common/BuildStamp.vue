@@ -1,81 +1,78 @@
 <template>
   <!--
-    构建戳：常驻右下角，显示「前端 SHA · 后端 SHA」。
-    为什么需要它：2026-11-14 出现过「联考小智变成功能开发中」，真实原因是工作区被切到旧分支，
-    而界面上没有任何"我现在跑的是哪份代码"的可视信号，只能靠翻 git 才查得出来。
-    这个角标让版本不一致一眼可见，点击可复制完整信息用于排查。
+    版本角标：常驻右下角，统一显示「应用版本号」。
+    为什么改成版本号而不是两串 SHA：2026-11-14 用户实拍到的角标是「c4639296 · f88b771」——
+    前端是 vite 启动那一刻的提交、后端是后端启动那一刻的提交，两串字面永不相同，
+    用户只能读成"版本不一致"。现在两端都读仓库根 VERSION 文件，角标只有一个值；
+    SHA / 构建时间 / 后端 SHA 全部降级到 tooltip，供排查时才看。
   -->
   <div
-    v-if="visible"
+    v-if="visible && showStamp"
     class="build-stamp"
-    :class="{ 'is-mismatch': isMismatch && !isDev, 'is-dev-drift': isMismatch && isDev }"
+    :class="{ 'is-mismatch': isMismatch }"
     role="status"
     :title="tip"
     @click="copyInfo">
     <span class="dot"></span>
-    <span class="sha">{{ shortSha }}</span>
-    <span class="sep">·</span>
-    <span class="be">{{ shortBackend }}</span>
+    <span class="ver">v{{ version || '—' }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 
 interface AppBuild {
+  version?: string;
   sha?: string;
   time?: string;
   backend?: string;
+  backendVersion?: string;
 }
 
+const route = useRoute();
 const info = ref<AppBuild>({});
 const visible = ref(false);
-const copied = ref(false);
 let timer: number | undefined;
 
 function read() {
-  const w = window as unknown as {
-    __APP_BUILD__?: AppBuild;
-    __VERSION_MISMATCH__?: { frontend: string; backend: string };
-  };
+  const w = window as unknown as { __APP_BUILD__?: AppBuild };
   info.value = w.__APP_BUILD__ || {};
-  // main.ts 在拿到 /health 后回填 backend；这里轮询到有值为止（最多 30 秒）
-  if (info.value.sha) visible.value = true;
+  // main.ts 在拿到 /health 前就会写入 version；有值即可显示
+  if (info.value.version) visible.value = true;
 }
 
-const shortSha = computed(() => (info.value.sha || 'dev').slice(0, 7));
-const shortBackend = computed(() => {
-  const b = info.value.backend;
-  if (!b) return '后端…';
-  return b === 'unknown' ? '未知' : b.slice(0, 7);
-});
+const version = computed(() => info.value.version || '');
+const backendVersion = computed(() => info.value.backendVersion || '');
 
+// 只有版本号（VERSION 文件）不同才是真不一致；SHA 差异是 dev 常态，不报警
 const isMismatch = computed(() => {
-  const b = info.value.backend;
-  if (!b || b === 'unknown') return false;
-  const s = info.value.sha || '';
-  return s !== '' && s !== 'dev' && s !== b;
+  const b = backendVersion.value;
+  if (!b || b === '0.0.0' || !version.value) return false;
+  return b !== version.value;
 });
 
-// dev server 的 __BUILD_SHA__ 是 vite 启动那一刻的提交，与后端启动时刻天然不同，
-// main.ts 也会打印「dev 模式前后端 SHA 不同属正常」。所以 dev 下只标琥珀色提示，
-// 不报警红——只有构建产物（生产预览）才真的要求两端 SHA 一致。
-const isDev = computed(() => Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV));
+// 答题页底部有「上一题 / 下一题 / 交卷」满宽操作条，角标会压住按钮；
+// 但版本真的不一致时必须继续显示（这是排查线索，不能因为页面类型被藏掉）
+const isAnswering = computed(() => route.path.indexOf('/exercise') === 0);
+const showStamp = computed(() => !isAnswering.value || isMismatch.value);
 
 const tip = computed(() => {
-  const base = `前端 ${info.value.sha || 'dev'} @ ${info.value.time || '-'}\n后端 ${info.value.backend || '未获取'}`;
-  if (!isMismatch.value) return base;
-  if (isDev.value) {
-    return base + '\nℹ️ dev 模式下两端 SHA 不同属正常（vite 与后端启动时刻不同），构建产物才要求一致';
+  const lines = [
+    `应用版本 v${version.value || '—'}`,
+    `前端构建 ${info.value.sha || 'dev'} @ ${info.value.time || '-'}`,
+    `后端版本 v${backendVersion.value || '未获取'}（提交 ${info.value.backend || '未获取'}）`,
+  ];
+  if (isMismatch.value) {
+    lines.push('⚠️ 前后端版本号不一致：页面可能是旧产物，请刷新；仍不一致则重启后端');
   }
-  return base + '\n⚠️ 前后端版本不一致：页面可能是旧代码，请刷新或重启后端';
+  lines.push('点击复制排查信息');
+  return lines.join('\n');
 });
 
 async function copyInfo() {
   try {
     await navigator.clipboard.writeText(`${tip.value}\nUA: ${navigator.userAgent}`);
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 1200);
   } catch {
     // 剪贴板不可用时静默：角标本身已能看见版本号
   }
@@ -83,7 +80,7 @@ async function copyInfo() {
 
 onMounted(() => {
   read();
-  timer = window.setInterval(read, 1000);
+  timer = window.setInterval(read, 800);
   window.setTimeout(() => {
     if (timer) window.clearInterval(timer);
   }, 30000);
@@ -102,8 +99,8 @@ onUnmounted(() => {
   z-index: 3000;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 5px;
+  padding: 3px 9px;
   border-radius: 999px;
   background: rgb(0 0 0 / 55%);
   color: #fff;
@@ -112,7 +109,7 @@ onUnmounted(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   cursor: pointer;
   user-select: none;
-  opacity: 0.35;
+  opacity: 0.4;
   transition: opacity 0.2s;
 }
 
@@ -128,15 +125,6 @@ onUnmounted(() => {
   opacity: 1;
 }
 
-/* dev 模式下的 SHA 漂移：只做琥珀提示，不噪声化报警 */
-.build-stamp.is-dev-drift {
-  opacity: 0.75;
-}
-
-.build-stamp.is-dev-drift .dot {
-  background: #fbbf24;
-}
-
 .dot {
   width: 6px;
   height: 6px;
@@ -148,10 +136,12 @@ onUnmounted(() => {
   background: #fbbf24;
 }
 
-/* 手机端不遮挡底部操作条 */
+/* 手机端贴底会盖住操作条，上移到安全区之上 */
 @media (width <= 700px) {
   .build-stamp {
-    bottom: 64px;
+    bottom: 72px;
+    right: 10px;
+    font-size: 11px;
   }
 }
 

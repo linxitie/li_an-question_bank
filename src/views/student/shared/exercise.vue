@@ -325,6 +325,8 @@ export default defineComponent({
       _groupCache: {},         // group_id → 材料（会话内缓存）
       // 做题 / 背题模式：背题模式直接展示答案与解析
       mode: 'practice',
+      // 艾宾浩斯复习模式：题目来自 /api/review/due 排程，交卷后逐题回写复习结果
+      reviewMode: false,
       // 交卷后停留本页做逐题回顾，不再强制跳转结果页
       submitted: false,
       score: 0,
@@ -803,33 +805,43 @@ export default defineComponent({
         var yearRange = self.$route.query.yearRange || '';
 
         var url;
-        var bp = self.blueprint();
-        if (bp) {
-          // 练习蓝图（练习中心 → 按考点/自定义刷题）：考点、子科目、年份、题型、
-          // 顺序全部由蓝图决定，不在 URL 里逐个展开，避免参数爆炸。
-          url = self.buildBlueprintUrl(bp);
-        } else if (kpId) {
-          // 通过考点ID加载题目（快速练习三级分类）
-          url = '/api/quick-practice/questions?knowledge_point_ids=' + kpId + '&limit=' + count;
-          if (yearRange && yearRange !== '0') {
-            url += '&year=' + yearRange;
-          }
-        } else if (scId !== '') {
-          // 通过子科目ID加载题目（自定义刷题）；0 号是未分类虚拟子科目
-          var subjectIdMap = { xc: 1, sl: 2, ga: 3 };
-          var subjectId = subjectIdMap[subject] || (/^[123]$/.test(subject) ? Number(subject) : '');
-          url = '/api/quick-practice/questions?knowledge_point_ids=' + scId + '&limit=' + count + '&bySubCategory=true';
-          if (subjectId) {
-            url += '&subjectId=' + subjectId;
-          }
-          if (yearRange && yearRange !== '0') {
-            url += '&year=' + yearRange;
-          }
+        var isReviewMode = String(self.$route.query.review || '') === '1';
+        self.state.reviewMode = isReviewMode;
+        if (isReviewMode) {
+          // 艾宾浩斯复习：题目集合由后端排程决定（/api/quick-practice/questions?review=1），
+          // 不受练习蓝图/考点参数影响，否则复习会练到队列之外的题。
+          var reviewSubjectId = { xc: 1, sl: 2, ga: 3 }[subject] || '';
+          url = '/api/quick-practice/questions?knowledge_point_ids=0&review=1&limit=' + count;
+          if (reviewSubjectId) url += '&subjectId=' + reviewSubjectId;
         } else {
-          // 回退到旧版API
-          var subcategory = self.$route.query.subcategory || '';
-          url = '/api/questions/exercise/questions?subject=' + subject +
-            '&subcategory=' + encodeURIComponent(subcategory) + '&count=' + count;
+          var bp = self.blueprint();
+          if (bp) {
+            // 练习蓝图（练习中心 → 按考点/自定义刷题）：考点、子科目、年份、题型、
+            // 顺序全部由蓝图决定，不在 URL 里逐个展开，避免参数爆炸。
+            url = self.buildBlueprintUrl(bp);
+          } else if (kpId) {
+            // 通过考点ID加载题目（快速练习三级分类）
+            url = '/api/quick-practice/questions?knowledge_point_ids=' + kpId + '&limit=' + count;
+            if (yearRange && yearRange !== '0') {
+              url += '&year=' + yearRange;
+            }
+          } else if (scId !== '') {
+            // 通过子科目ID加载题目（自定义刷题）；0 号是未分类虚拟子科目
+            var subjectIdMap = { xc: 1, sl: 2, ga: 3 };
+            var subjectId = subjectIdMap[subject] || (/^[123]$/.test(subject) ? Number(subject) : '');
+            url = '/api/quick-practice/questions?knowledge_point_ids=' + scId + '&limit=' + count + '&bySubCategory=true';
+            if (subjectId) {
+              url += '&subjectId=' + subjectId;
+            }
+            if (yearRange && yearRange !== '0') {
+              url += '&year=' + yearRange;
+            }
+          } else {
+            // 回退到旧版API
+            var subcategory = self.$route.query.subcategory || '';
+            url = '/api/questions/exercise/questions?subject=' + subject +
+              '&subcategory=' + encodeURIComponent(subcategory) + '&count=' + count;
+          }
         }
 
         var fetchFn = self.getFetch();
@@ -1141,6 +1153,27 @@ export default defineComponent({
       }
     },
 
+    /**
+     * 把复习结果回写排程：POST /api/review/{question_id}/grade（result 1 对 0 错）。
+     * 逐题发是因为后端按题更新 stability/next_due_at；失败不阻塞交卷流程。
+     */
+    async submitReviewGrades(details) {
+      var fetchFn = this.getFetch();
+      var objective = (details || []).filter(function(d) { return d.is_subjective !== true; });
+      for (var i = 0; i < objective.length; i++) {
+        var d = objective[i];
+        try {
+          await fetchFn('/api/review/' + d.question_id + '/grade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ result: d.is_correct ? 1 : 0 }),
+          });
+        } catch (e) {
+          // 单题回写失败不影响其他题：下次进入复习队列时该题仍是待复习
+        }
+      }
+    },
+
     async handleSubmit() {
       var unanswered = 0;
       var questions = this.state.questions;
@@ -1229,6 +1262,9 @@ export default defineComponent({
       if (!submitResult.success) {
         alert('练习记录提交失败: ' + (submitResult.error || '未知错误') + '\n\n答题结果已保存，返回后可重试提交。');
       }
+
+      // 复习模式：把每题的作答结果回写给艾宾浩斯排程（决定下一档间隔）
+      if (this.state.reviewMode) this.submitReviewGrades(details);
 
       // 自动收录错题（fire-and-forget，不阻塞跳转）
       this.collectWrongAnswers(details);
@@ -1923,5 +1959,78 @@ export default defineComponent({
   .ex-live-stats { width: 100%; margin-left: 0; text-align: center; }
   .ex-result-bar { margin: 0 12px 12px; gap: 8px 16px; }
   .ex-result-item b { font-size: 16px; }
+}
+
+/* ===== 手机端答题页（2026-11-14）：头部原为单行 justify-between，
+   窄屏下每个按钮被压成竖排文字，故整体换行重排 ===== */
+@media (max-width: 700px) {
+  .exercise-page { padding-bottom: 24px; }
+  .ex-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 10px 12px;
+  }
+  /* 返回按钮只留箭头，避免 4 个汉字占满一行 */
+  .ex-back-btn { padding: 7px 10px; font-size: 12px; }
+  .ex-back-btn span { display: none; }
+  .ex-title { gap: 8px; min-width: 0; }
+  .ex-subject-tag { font-size: 12px; padding: 3px 8px; }
+  .ex-subcat-name {
+    font-size: 13px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 第二行整宽：模式切换 / 答题卡 / 计时器平分，不再被压扁 */
+  .ex-header-right {
+    width: 100%;
+    gap: 8px;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+  .ex-mode-switch { order: 0; flex: 0 0 auto; }
+  .ex-mode-btn { padding: 6px 10px; font-size: 12px; }
+  .ex-answer-sheet-btn { padding: 7px 10px; font-size: 12px; flex: 0 0 auto; }
+  .ex-answer-sheet-btn span { display: none; }
+  .ex-timer { font-size: 15px; margin-left: auto; }
+
+  .ex-progress-bar { margin: 10px 12px 6px; }
+  .ex-progress-label { margin: 0 12px 10px; font-size: 13px; }
+  .ex-result-bar { margin: 0 12px 12px; padding: 12px 14px; }
+  .ex-question-card {
+    margin: 0 12px;
+    padding: 16px 14px;
+    border-radius: 12px;
+  }
+  .ex-q-header { gap: 8px; margin-bottom: 12px; padding-bottom: 10px; }
+  .ex-q-num { font-size: 14px; }
+  .ex-q-type-badge { font-size: 13px; padding: 3px 9px; }
+  .ex-q-difficulty { font-size: 13px; letter-spacing: 1px; }
+  .ex-q-content { font-size: 15px; line-height: 1.85; }
+  .ex-options { gap: 10px; }
+  .ex-option { padding: 12px; gap: 10px; font-size: 14px; }
+  .ex-answer-panel { padding: 14px; }
+  .ex-analysis-body { font-size: 14px; }
+
+  /* 底部操作栏：三个按钮原本固定 padding 不换行，390px 下「交卷」被挤出屏幕 */
+  .ex-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 16px 12px 0;
+    padding: 12px;
+    border-radius: 12px;
+  }
+  .ex-actions .btn-ex-outline,
+  .ex-actions .btn-ex-primary,
+  .ex-actions .btn-ex-submit {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 11px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  /* 圆点导航在手机上不可点准，改用头部「答题卡」按钮 */
+  .ex-dot-nav { display: none; }
 }
 </style>

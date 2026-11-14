@@ -449,7 +449,7 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
-import { renderQuestionContent } from '@/utils/questionRender';
+import { renderQuestionContent, renderQuestionSummary } from '@/utils/questionRender';
 import { useWrongbookStore } from '@/modules/wrongbook/store';
 import DueReviewCard from '@/components/review/DueReviewCard.vue';
 import MemoryCurve from '@/components/review/MemoryCurve.vue';
@@ -663,7 +663,10 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
                 subject: subjectKey,
                 type: item.question_type_detail || '单选题',
                 date: item.add_time || '',
-                title: item.question_content || '',
+                // 列表标题一律走摘要渲染：原始题干里的 <img src="/static/..."> 曾被
+                // 直接插值成纯文本，用户看到的就是一整串图片路径（2026-11-14 截图）。
+                // renderQuestionSummary 把图片折成「[图片]」并剥掉全部标签。
+                title: renderQuestionSummary(item.question_content) || '',
                 tags: item.sub_category ? [item.sub_category] : [],
                 status: item.is_cut ? 'chopped' : (item.mastery_level === 'MASTERED' ? 'mastered' : 'needs-review'),
                 statusText: item.is_cut ? '已斩题' : (item.mastery_level === 'MASTERED' ? '已掌握' : '待复习'),
@@ -884,7 +887,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
           subject: subjectKey,
           type: unifiedType,
           date: item.add_time || '',
-          title: item.question_content || '',
+          title: renderQuestionSummary(item.question_content) || '',
           tags: item.subcategory ? [item.subcategory] : [],
           status: item.is_cut ? 'chopped' : 'needs-review',
           statusText: item.is_cut ? '已斩题' : '待复习',
@@ -1118,7 +1121,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
           return;
         }
         try {
-          ElMessage.info('加载题目详情...');
+          // 不再弹「加载题目详情...」：手机端它正好压在弹窗头部，且默认 3s 才消失
           const res = await window.__VTJ_AUTH__.apiFetch('/api/wrong-questions/' + q.wrong_id + '/detail', {
             headers: this.getJsonHeaders()
           });
@@ -1183,9 +1186,11 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
             .replace(/>/g, '&gt;');
           // javascript: 等危险协议一律降级为占位图
           if (/^\s*javascript:/i.test(String(src))) safeSrc = '/static/images/placeholder.png';
-          return '<img src="' + safeSrc + '" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" ' +
+          // 缺图兜底走全局重试：最终落到统一「配图缺失」占位图，不再出现碎图图标
+          return '<img src="' + safeSrc + '" class="q-img" loading="lazy" ' +
+                 'onerror="window.__retryImg ? window.__retryImg(this) : (this.onerror=null,this.src=\'/static/images/placeholder.png\')" ' +
                  'style="max-width:100%;height:auto;border:1px solid #e8eaf0;' +
-                 'border-radius:8px;margin:4px 0;" alt="题目图片" />';
+                 'border-radius:8px;margin:4px 0;" alt="题目配图" />';
         });
         // 交给单一真源：还原被转义的 <img>、归一化地址、白名单清洗并补 onerror。
         // 之前只调 sanitizeHtml，数据库里的 &lt;img ...&gt; 会原样显示成路径文本。
@@ -1657,7 +1662,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
               id: item.wrong_id,
               originalQuestionId: item.question_id,
               subject: item.subject_name || '',
-              title: item.question_content || '',
+              title: renderQuestionSummary(item.question_content) || '',
               createTime: createTime,
               daysLeft: daysLeft
             };
@@ -2906,4 +2911,100 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     color: #1a2b5f;
   }
   .close-btn:hover { background: #cbd5e0; }
+  /* 手机/平板：200px 侧栏 + 300px 内容列在 390–834px 下会把标题、筛选标签
+     全部挤成竖排（2026-11-14 实拍），因此侧栏转横向滚动条、筛选栏换行。 */
+  @media (max-width: 900px) {
+    .wq-main {
+      padding: 16px 12px 96px;
+    }
+    .wq-filter-bar {
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    .filter-group {
+      flex: 1 1 calc(50% - 5px);
+      min-width: 0;
+    }
+    .filter-group-search {
+      flex: 1 1 100%;
+    }
+    .filter-group label {
+      white-space: nowrap;
+    }
+    .filter-group select,
+    .filter-group .filter-input {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+    }
+    .filter-group .filter-input {
+      min-width: 0;
+    }
+    .wq-body {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
+    .wq-nav {
+      flex-direction: row;
+      gap: 6px;
+      padding: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .wq-nav::-webkit-scrollbar {
+      display: none;
+    }
+    .nav-item {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .wq-content {
+      padding: 14px;
+    }
+    .section-top h3 {
+      font-size: 15px;
+      white-space: nowrap;
+    }
+    /* 详情弹窗手机端全屏：1400×800 的固定尺寸会让头部「单选题/难度/正确率/关闭」
+       挤成竖排（2026-11-14 实拍） */
+    .wq-detail-modal {
+      width: 100vw;
+      max-width: 100vw;
+      height: 100vh;
+      max-height: 100vh;
+      border-radius: 0;
+    }
+    .wq-detail-header {
+      padding: 12px 14px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .detail-meta {
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .detail-type,
+    .detail-close-btn,
+    .detail-difficulty,
+    .detail-rate {
+      white-space: nowrap;
+    }
+    .detail-difficulty,
+    .detail-rate {
+      font-size: 12px;
+    }
+    .wq-detail-body {
+      padding: 16px 14px 96px;
+    }
+    .detail-stem {
+      font-size: 15px;
+      line-height: 1.9;
+      text-align: left;
+      letter-spacing: normal;
+    }
+  }
 </style>
