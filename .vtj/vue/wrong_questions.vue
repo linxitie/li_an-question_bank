@@ -14,6 +14,16 @@
       <!-- 记忆强度曲线（4-2） -->
       <MemoryCurve />
       <div class="wq-filter-bar">
+        <div class="filter-group filter-group-search">
+          <label> 搜索</label>
+          <input
+            v-model="state.filter.keyword"
+            class="filter-input"
+            type="search"
+            placeholder="题干 / 材料 / 来源 模糊搜索"
+            aria-label="搜索错题（题干、材料、来源）"
+            @keyup.enter="applyFilter" />
+        </div>
         <div class="filter-group">
           <label> 收录时间</label>
           <select v-model="state.filter.time">
@@ -36,7 +46,25 @@
             <option value="综合分析">综合分析</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label> 年份</label>
+          <select v-model="state.filter.year" aria-label="按题目年份筛选">
+            <option value="">全部年份</option>
+            <option v-for="y in yearOptions" :key="y" :value="String(y)">{{ y }}年</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label> 来源</label>
+          <input
+            v-model="state.filter.source"
+            class="filter-input filter-input-sm"
+            type="text"
+            placeholder="如 安徽 / 北京 / 联考"
+            aria-label="按题目来源筛选"
+            @keyup.enter="applyFilter" />
+        </div>
         <button class="filter-btn" @click="applyFilter">筛选</button>
+        <button class="filter-btn filter-btn-ghost" @click="goHeatmap">错题热力</button>
       </div>
       <div class="wq-body">
         <nav class="wq-nav">
@@ -433,7 +461,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       const provider = useProvider({ id: 'wrong_questions', version: '1785754600000' });
       const wrongbookStore = useWrongbookStore();
       const state = reactive({
-        filter: { time: 'all', knowledge: 'all' },
+        filter: { time: 'all', knowledge: 'all', keyword: '', year: '', source: '' },
         activeNav: 'xc',
         navNameMap: { xc: '行测', sl: '申论', ga: '公专' },
         zhantiList: [],
@@ -492,6 +520,16 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       };
     },
     computed: {
+      // M5：年份选项取自当前数据集（只列出真实存在的年份，避免用户选到空结果）
+      yearOptions() {
+        var set = {};
+        (this.state.allQuestions || []).forEach(function(q) {
+          if (q.year) set[q.year] = true;
+        });
+        var list = Object.keys(set).map(Number).filter(function(y) { return !isNaN(y); });
+        list.sort(function(a, b) { return b - a; });
+        return list;
+      },
       navList() {
         return [
           { key: 'xc', name: '行测', icon: EditPen, badge: this.getSubjectBadgeCount('xc') },
@@ -525,6 +563,23 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         // 知识点筛选
         if (this.state.filter.knowledge !== 'all') {
           list = list.filter((q) => q.tags.includes(this.state.filter.knowledge));
+        }
+
+        // M5：关键词 / 年份 / 来源（服务端已过滤一遍，这里是切 tab 时的本地兜底）
+        const kw = (this.state.filter.keyword || '').trim().toLowerCase();
+        if (kw) {
+          list = list.filter((q) => {
+            const hay = ((q.title || '') + ' ' + (q.source || '') + ' ' + (q.category || '')).toLowerCase();
+            return hay.indexOf(kw) >= 0;
+          });
+        }
+        if (this.state.filter.year) {
+          const y = Number(this.state.filter.year);
+          list = list.filter((q) => Number(q.year) === y);
+        }
+        const src = (this.state.filter.source || '').trim().toLowerCase();
+        if (src) {
+          list = list.filter((q) => String(q.source || '').toLowerCase().indexOf(src) >= 0);
         }
 
         return list;
@@ -585,7 +640,12 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         var self = this;
         this.wrongbookStore.reset();
         this.ensureLogin().then(function() {
-          return self.wrongbookStore.load({ pageSize: 100 });
+          return self.wrongbookStore.load({
+            pageSize: 100,
+            keyword: self.state.filter.keyword,
+            year: self.state.filter.year ? Number(self.state.filter.year) : undefined,
+            source: self.state.filter.source
+          });
         }).then(function() {
           var items = self.wrongbookStore.items || [];
           if (items.length) {
@@ -619,6 +679,8 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
                 masteryLevel: item.mastery_level === 'MASTERED' ? 100 : (item.mastery_level === 'PARTIAL' ? 50 : 0),
                 chopped: !!item.is_cut,
                 errorCount: item.error_count || 1,
+                year: item.year || null,
+                source: item.source || '',
                 category: item.subject_name || ''
               };
             });
@@ -687,8 +749,15 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         } catch(e) { console.warn('删除笔记失败:', e); }
       },
       
+      goHeatmap() {
+        // D6：错题分布热力（考点/知识点）落在「知识图谱」页的第三种视图
+        this.$router.push('/student/knowledge/graph?view=heat');
+      },
       applyFilter() {
-        ElMessage.success('筛选条件已更新');
+        // M5：关键词/年份/来源必须回到服务端查（本地只加载了第一页 100 条）
+        this.loadData();
+        const kw = (this.state.filter.keyword || '').trim();
+        ElMessage.success(kw ? '已按「' + kw + '」搜索' : '筛选条件已更新');
       },
       
       // 设置复习模式
@@ -1095,12 +1164,16 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       renderImageMarkers(html, imageMap) {
         if (!html) return '';
         var imgMap = imageMap || {};
-        var replaced = String(html).replace(/\[IMAGE:([a-fA-F0-9]+)_(\d+)\]/g, function(match, hash, seq) {
-          var key = hash + '_' + seq;
-          var src = imgMap[key];
+        // M5：真实标记是三段式 [IMAGE:{8位hash}_{题号}_{图序}]，此前只写了
+        // 两段式正则，三段标记匹配不上 → 裸文字 "[IMAGE:5d739001_79_0]" 直接显示在题目里。
+        // 磁盘命名恰好是 {hash}_{seq}_{idx}.png（平铺在 static/questions/ 下），
+        // 故命中映射优先、否则按三段拼真实路径，两段旧标记继续兼容。
+        var replaced = String(html).replace(/\[IMAGE:([a-fA-F0-9]+)_(\d+)(?:_(\d+))?\]/g, function(match, hash, seq, idx) {
+          var key = idx ? hash + '_' + seq + '_' + idx : hash + '_' + seq;
+          var src = imgMap[key] || imgMap[hash + '_' + seq];
           if (!src) {
-            // 无映射记录，尝试扁平路径格式
-            src = '/static/questions/' + hash + '_' + seq + '.png';
+            // 无映射记录：按磁盘真实命名拼路径（三段优先，缺 idx 时退回两段）
+            src = '/static/questions/' + key + '.png';
           }
           // 转义属性值，防止 image_map 中的数据破坏属性边界造成注入
           var safeSrc = String(src)
@@ -1666,13 +1739,30 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     color: #5a6488;
     font-weight: 600;
   }
-  .filter-group select {
+  .filter-group select,
+  .filter-group .filter-input {
     padding: 6px 12px;
     border: 1px solid #e8eaf0;
     border-radius: 8px;
     font-size: 13px;
     color: #1a2b5f;
     outline: none;
+    background: #fff;
+  }
+  .filter-group .filter-input {
+    min-width: 220px;
+  }
+  .filter-group .filter-input-sm {
+    min-width: 130px;
+  }
+  .filter-group .filter-input:focus-visible,
+  .filter-group select:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+    border-color: #2563eb;
+  }
+  .filter-group-search {
+    flex: 1 1 260px;
   }
   .filter-btn {
     padding: 8px 20px;
@@ -1682,6 +1772,16 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     border-radius: 10px;
     cursor: pointer;
     font-weight: 600;
+  }
+  .filter-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+  .filter-btn-ghost {
+    background: #fff;
+    color: #1a2b5f;
+    border: 1px solid #e8eaf0;
+    margin-left: auto;
   }
   .wq-body {
     display: grid;

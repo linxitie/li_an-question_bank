@@ -106,6 +106,13 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    // 练习中心（手写页）：统一「快速练习 / 自定义刷题」的考点选择与练习蓝图
+    path: '/practice-center',
+    name: 'PracticeCenter',
+    component: () => import('@/views/student/shared/practice_center.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/solution',
     name: 'Solution',
     component: () => import('@/views/student/shared/solution.vue'),

@@ -22,9 +22,13 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           <span>答题卡</span>
         </button>
-        <div class="ex-timer" v-if="state.questions.length">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8899aa" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          <span>{{ formattedTime }}</span>
+        <div
+          :class="['ex-timer', { 'is-overtime': limitLabel.indexOf('已超时') === 0 }]"
+          v-if="state.questions.length"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <!-- 蓝图带限时则显示剩余时间，超时只标红提示，不强制交卷 -->
+          <span>{{ limitLabel || formattedTime }}</span>
         </div>
       </div>
     </div>
@@ -353,7 +357,17 @@ export default defineComponent({
       // 优先显示考点名称（快速练习三级分类）
       var kpName = this.$route.query.kpName;
       if (kpName) return decodeURIComponent(kpName);
+      var bp = this.blueprint();
+      if (bp && bp.label) return bp.label;
       return this.$route.query.subcategory || '';
+    },
+    // 限时标签：蓝图里 minutes>0 时给出"剩余 M:SS"，超时只提示不强制交卷
+    limitLabel() {
+      var bp = this.blueprint();
+      if (!bp || !bp.minutes) return '';
+      var left = bp.minutes * 60 - (this.state.seconds || 0);
+      if (left <= 0) return '已超时 ' + this.formatClock(-left);
+      return '剩余 ' + this.formatClock(left);
     },
     currentQ() {
       return this.state.questions[this.state.currentIndex] || {};
@@ -583,6 +597,54 @@ export default defineComponent({
         : function(url, opts) { return fetch(url, opts); };
     },
 
+    // 练习蓝图：练习中心把 {科目/考点/子科目/年份/题型/顺序/题量/时长} 序列化成
+    // base64 放在 blueprint 查询参数里，这里解码成对象。
+    // 为什么不放 sessionStorage：刷新、复制链接、新标签页都能原样复原同一份练习。
+    blueprint() {
+      var raw = this.$route.query.blueprint;
+      if (!raw) return null;
+      try {
+        var json = decodeURIComponent(escape(atob(decodeURIComponent(String(raw)))));
+        var bp = JSON.parse(json);
+        return bp && typeof bp === 'object' ? bp : null;
+      } catch (e) {
+        console.warn('[蓝图] 解析失败，回退到普通练习参数:', e);
+        return null;
+      }
+    },
+
+    formatClock(seconds) {
+      var s = Math.max(0, Math.round(seconds));
+      var m = Math.floor(s / 60);
+      var r = s % 60;
+      return m + ':' + (r < 10 ? '0' + r : r);
+    },
+
+    // 蓝图 → 快速练习取题 URL。口径必须与后端 /blueprint 预览一致，
+    // 否则会出现"预览 63 题、进来 0 题"。
+    buildBlueprintUrl(bp) {
+      var params = [];
+      var pointIds = Array.isArray(bp.pointIds) ? bp.pointIds.filter(function(x) { return x; }) : [];
+      var scIds = Array.isArray(bp.subCategoryIds) ? bp.subCategoryIds : [];
+      params.push('limit=' + (bp.count || 20));
+      if (pointIds.length) {
+        // 按考点练习：只按考点取题。绝不能同时带 subCategoryIds —— 后端看到
+        // 子科目列表会走「多子科目联合」分支，把整个子科目的题全端出来，
+        // 用户点的是"某一考点"，进来却是整模块。
+        params.push('knowledge_point_ids=' + pointIds.join(','));
+      } else if (scIds.length) {
+        // 按子科目/自定义范围：knowledge_point_ids 只是后端的非空校验占位，
+        // 真正生效的是 subCategoryIds。
+        params.push('knowledge_point_ids=' + scIds[0]);
+        params.push('subCategoryIds=' + scIds.join(','));
+      }
+      if (bp.subjectId) params.push('subjectId=' + bp.subjectId);
+      if (bp.yearRange && String(bp.yearRange) !== '0') params.push('year=' + bp.yearRange);
+      if (Array.isArray(bp.types) && bp.types.length) params.push('types=' + bp.types.join(','));
+      if (bp.order) params.push('order=' + bp.order);
+      return '/api/quick-practice/questions?' + params.join('&');
+    },
+
     // ==== 练习草稿（服务端 practice_draft，30 天 TTL）====
     // 为什么放服务端而不是 localStorage：
     //   1) 一次练习 20~50 题的完整题目对象可达数百 KB，localStorage 5MB 上限而且换设备就读不到；
@@ -594,6 +656,10 @@ export default defineComponent({
     },
     draftKey() {
       var q = this.$route.query || {};
+      if (q.blueprint) {
+        // 蓝图整串做键：同一份蓝图重复进入能续答，换范围则各自独立
+        return 'bp:' + String(q.blueprint).slice(0, 40);
+      }
       if (q.kpId) return 'kp:' + q.kpId;
       if (q.scId) return 'sc:' + q.scId;
       return 'sub:' + (q.subject || 'xc') + ':' + (q.subcategory || '');
@@ -737,7 +803,12 @@ export default defineComponent({
         var yearRange = self.$route.query.yearRange || '';
 
         var url;
-        if (kpId) {
+        var bp = self.blueprint();
+        if (bp) {
+          // 练习蓝图（练习中心 → 按考点/自定义刷题）：考点、子科目、年份、题型、
+          // 顺序全部由蓝图决定，不在 URL 里逐个展开，避免参数爆炸。
+          url = self.buildBlueprintUrl(bp);
+        } else if (kpId) {
           // 通过考点ID加载题目（快速练习三级分类）
           url = '/api/quick-practice/questions?knowledge_point_ids=' + kpId + '&limit=' + count;
           if (yearRange && yearRange !== '0') {
@@ -1026,10 +1097,34 @@ export default defineComponent({
           };
         });
 
+        // 练习蓝图的考点信息随交卷回传：「练习记录」按考点归类靠它。
+        // 不回传时后端只能按题目主考点兜底（往往落到「其他（未细分）」）。
+        var bp = self.blueprint();
+        var scope = null;
+        if (bp) {
+          var pointIds = Array.isArray(bp.pointIds) ? bp.pointIds : [];
+          var scIds = Array.isArray(bp.subCategoryIds) ? bp.subCategoryIds : [];
+          if (pointIds.length) {
+            scope = {
+              type: 'point',
+              id: pointIds[0],
+              name: bp.label || '考点练习',
+              sub_category_id: scIds[0] || null
+            };
+          } else if (scIds.length) {
+            scope = {
+              type: 'sub_category',
+              id: scIds[0],
+              name: bp.label || '子科目练习',
+              sub_category_id: scIds[0]
+            };
+          }
+        }
+
         var res = await fetchFn('/api/practice/batch-record', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ records: records })
+          body: JSON.stringify({ records: records, scope: scope })
         });
 
         if (!res.ok) {
@@ -1232,6 +1327,8 @@ export default defineComponent({
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* 超时：只换色提醒，不改变交互（用户仍可继续作答/交卷） */
+.ex-timer.is-overtime { color: #ff8a8a; }
 /* 加载 */
 .ex-loading {
   display: flex;

@@ -135,6 +135,7 @@ import {
   Edit,
   ChatLineRound,
   Cpu,
+  Calendar,
   Clock,
   Warning,
   Trophy
@@ -157,14 +158,15 @@ export default defineComponent({
     const searchQuery = ref('');
     
     // 顶部操作
-    // 已移除「快速练习」：它与下方三大科目分类入口职责重叠，
-    // 科目化练习统一走「练习」页的科目/子科目/知识点下钻。
+    // 「快速练习」回归（第 7 个入口）：练习中心按 drillable 展示考点树，
+    // 不能下钻的考点直接给"直接练习"，解决过去 L3 全是「其他」的问题。
     // 首屏没有任何「被选中」的操作项：所有按钮都是跳转或提示，
     // 高亮其中之一会造成误导（原实现默认高亮「历年试卷」）。
     const activeTopAction = ref('');
     // 「历年试卷」并回功能按钮行：其内容虽是下方首屏直出的列表，
     // 但作为四大功能之一并列于此，入口更醒目、与其他功能视觉对齐。
     const topActions = ref([
+      { key: 'quick', name: '快速练习', icon: Reading, tag: 'NEW' },
       { key: 'paper', name: '历年试卷', icon: Trophy, tag: '' },
       { key: 'smart', name: '智能组卷', icon: Cpu, tag: 'AI' },
       { key: 'plan', name: '学习计划', icon: Calendar, tag: '' },
@@ -286,6 +288,9 @@ export default defineComponent({
         // 不做路由跳转（跳转会产生一次无意义的 loading）。
         const el = document.querySelector('.question-list');
         if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (key === 'quick') {
+        // 快速练习 → 练习中心（移动端与 PC 共用同一手写页）
+        router.push('/practice-center?subject=xc');
       } else if (key === 'smart') {
         router.push('/smart-exam');
       } else if (key === 'plan') {

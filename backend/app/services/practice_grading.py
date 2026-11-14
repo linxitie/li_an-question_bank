@@ -132,9 +132,50 @@ def _load_questions(db: Session, question_ids: Iterable[int]) -> Dict[int, Quest
     return {row.question_id: row for row in rows}
 
 
+_FALLBACK_SUFFIX = "（未细分）"
+
+
+def resolve_practice_scope(questions: Dict[int, QuestionBank],
+                           scope: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """把「这次练习点的是哪个考点/子科目」解析成可写入 practice_record 的四个字段。
+
+    背景（2026-11-14）：此前 _grade_item 只写 user_id/question_id/subject_id/type_id，
+    scope_type/scope_id/scope_name/sub_category_id 四个字段从未被写入（全库恒 NULL），
+    于是「练习记录」只能显示空值，前端回落成「其他」——用户看到的是"考点类型全是其他"。
+    这里按「显式传入 > 题目主考点 > 子科目」的优先级解析，保证新记录不再落空。
+    """
+    scope = scope or {}
+    scope_type = scope.get("type")
+    scope_id = scope.get("id")
+    scope_name = scope.get("name")
+    sub_category_id = scope.get("sub_category_id")
+
+    if not scope_name and questions:
+        # 没有显式范围时，用第一道题的主考点（question_bank.point_id）兜底，
+        # 这样即使调用方还没升级，历史口径也不再是 NULL。
+        first = next(iter(questions.values()), None)
+        point = getattr(first, "point", None) if first is not None else None
+        if point is not None and getattr(point, "point_name", None):
+            # 收容叶子单独标 fallback：前端据此渲染"未细分题库"，不按普通考点下钻
+            _is_fb = str(point.point_name).strip() in ("其他（未细分）", "其他")
+            scope_type = scope_type or ("fallback" if _is_fb else "point")
+            scope_id = scope_id or point.point_id
+            scope_name = point.point_name
+        if sub_category_id is None and first is not None:
+            sub_category_id = getattr(first, "sub_category_id", None)
+
+    return {
+        "scope_type": scope_type,
+        "scope_id": scope_id,
+        "scope_name": scope_name,
+        "sub_category_id": sub_category_id,
+    }
+
+
 def _grade_item(db: Session, user_id: int, item: Dict[str, Any],
                 questions: Dict[int, QuestionBank], source_type: str,
-                subject_id: Optional[int]) -> Dict[str, Any]:
+                subject_id: Optional[int],
+                scope: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     question_id = item.get("question_id")
     if question_id is None:
         raise ValueError("records 中存在缺少 question_id 的条目")
@@ -142,6 +183,9 @@ def _grade_item(db: Session, user_id: int, item: Dict[str, Any],
     question = questions.get(question_id)
     if question is None:
         raise ValueError(f"题目不存在: {question_id}")
+
+    # 先按「调用方显式范围 > 本题主考点」解析一次，保证练习记录能落考点名
+    scope = resolve_practice_scope({question_id: question}, scope)
 
     user_answer = item.get("user_answer", item.get("answer", ""))
     if user_answer in (None, ""):
@@ -161,6 +205,10 @@ def _grade_item(db: Session, user_id: int, item: Dict[str, Any],
         practice_date=date.today(),
         practice_time=datetime.now(),
         source_type=item.get("source") or source_type,
+        scope_type=scope.get("scope_type"),
+        scope_id=scope.get("scope_id"),
+        scope_name=scope.get("scope_name"),
+        sub_category_id=scope.get("sub_category_id"),
     )
     db.add(record)
     db.flush()
@@ -205,8 +253,13 @@ async def submit_answers(
     subject_id: Optional[int] = None,
     session_id: Optional[str] = None,
     publish_event: bool = True,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """判分 + 记录 + 错题入库（单事务），提交后发布一次 E1 事件。"""
+    """判分 + 记录 + 错题入库（单事务），提交后发布一次 E1 事件。
+
+    scope 是本次练习的「范围」（考点/子科目/其他收容），会写进 practice_record 的
+    scope_type/scope_id/scope_name/sub_category_id，供「练习记录」按考点归类展示。
+    """
     if not records:
         return {
             "status": "ok",
@@ -226,7 +279,7 @@ async def submit_answers(
         questions = _load_questions(db, (item.get("question_id") for item in records))
         for item in records:
             result = _grade_item(db, user_id, item, questions,
-                                 source_type, subject_id)
+                                 source_type, subject_id, scope)
             results.append(result)
             if not result["is_correct"] and result["wrong_result"] in wrong_stats:
                 wrong_stats[result["wrong_result"]] += 1

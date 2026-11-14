@@ -13,6 +13,38 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 
+def paragraph_text_with_underline(para) -> str:
+    """按 run 还原下划线，返回段落文本（下划线空格 → `____`，下划线文字 → `<u>…</u>`）。
+
+    为什么不能直接用 `para.text`：Word 里的填空横线是「带下划线格式的空格/制表位」，
+    `run.text` 只能取到纯空白，落库后横线就消失了——实测题 3666（"编译工作是寂寞的…"）
+    原始题干在「岗位上」与「的写照」之间只剩一个半角空格，正是该原因。
+
+    为什么纯空白要换成四个下划线而不是保留空格：空格在 HTML 里会被折叠，
+    用户看到的仍是一条空白，等于横线没修好；`____` 是可见、可复制、可被
+    `GLOB '*___*'` 检索到的占位符。
+    """
+    try:
+        runs = para.runs
+    except Exception:
+        return para.text or ''
+    buf = []
+    for run in runs:
+        text = run.text or ''
+        try:
+            underlined = bool(run.underline)
+        except Exception:
+            underlined = False
+        if not underlined:
+            buf.append(text)
+        elif text.strip():
+            buf.append('<u>' + text + '</u>')
+        else:
+            buf.append('____')
+    merged = ''.join(buf)
+    return merged if merged.strip() else (para.text or '')
+
+
 def _rels_base_dir(rels_name: str) -> str:
     """`<dir>/_rels/<name>.rels` → `<dir>/`（关系目标相对于其宿主 part 所在目录）。"""
     d = os.path.dirname(rels_name)          # e.g. word/_rels
@@ -213,7 +245,7 @@ def _extract_text_from_docx(buf: bytes) -> str:
     pending_imgs = []  # 缓冲首题之前或独立图片段的 rId
 
     for para in paragraphs:
-        text = para.text or ''
+        text = paragraph_text_with_underline(para)
         stripped = text.strip()
 
         # 检测题号（search 而非 match，支持段首或段中）

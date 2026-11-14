@@ -565,6 +565,7 @@ export default defineComponent({
       loading: false,
       notice: '',
       agentName: '', // 模块7 v2：当前路由命中的专业 Agent
+      offline: false, // M6：AI 不可用时切离线教练（本地数据作答）
       // 工作台模式（模块7 v2）
       workMode: false,
       workTasks: [],
@@ -622,11 +623,84 @@ export default defineComponent({
       advice: '想怎么复习？我来给你出主意'
     };
 
-    const quickQuestions = [
+    // 联网时的推荐问题；离线模式会被换成固定问题池（见 enterOfflineMode）
+    const quickQuestions = ref([
       '行测资料分析总是做不完怎么办？',
       '申论大作文总是跑题，怎么破？',
       '最近模考成绩上不去，有点焦虑'
-    ];
+    ]);
+    const offlinePool = ref([]); // [{ key, label }]，来自后端 /api/llm/offline/status
+
+    // 离线教练（方案 §7.2）：AI 不可用时切本地作答，不显示"正在思考"的假状态。
+    // 为什么在脚本里做而不是加模板：.vtj 页面 template 禁止 AI 直改（AGENTS.md R3），
+    // 复用已有的 notice 条与"当前顾问"条表达离线状态即可。
+    function enterOfflineMode(items) {
+      state.offline = true;
+      state.agentName = '离线教练（本地数据）';
+      state.notice = '⚠ 离线模式：AI 服务未配置或暂时不可用，以下回答由你的本地练习数据生成';
+      if (Array.isArray(items) && items.length) {
+        offlinePool.value = items;
+        quickQuestions.value = items.map((it) => it.label);
+      }
+    }
+
+    function exitOfflineMode() {
+      state.offline = false;
+      state.notice = '';
+      offlinePool.value = [];
+      quickQuestions.value = [
+        '行测资料分析总是做不完怎么办？',
+        '申论大作文总是跑题，怎么破？',
+        '最近模考成绩上不去，有点焦虑'
+      ];
+    }
+
+    async function checkOfflineStatus() {
+      try {
+        const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/offline/status');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.llm_configured) {
+          // 后端有密钥，但上游仍可能超时——那种情况在 send() 里按 fallback 兜底
+          if (state.offline) exitOfflineMode();
+        } else {
+          enterOfflineMode(data.questions);
+        }
+      } catch (e) {
+        // 状态探测失败不打扰用户，等真正发送时再降级
+      }
+    }
+
+    // 离线提问：走 /api/llm/offline/answer，本地数据作答，不调用大模型
+    async function offlineSend(text) {
+      const matched = offlinePool.value.find((it) => it.label === text);
+      state.loading = true;
+      try {
+        const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/offline/answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question_key: matched ? matched.key : '',
+            message: text
+          })
+        });
+        const data = await res.json();
+        state.loading = false;
+        if (res.ok && data.reply) {
+          state.messages.push({ role: 'assistant', content: data.reply });
+        } else {
+          state.messages.push({
+            role: 'assistant',
+            content: '离线作答暂时不可用，请直接去「快速练习」做题。'
+          });
+        }
+      } catch (e) {
+        state.loading = false;
+        state.messages.push({ role: 'assistant', content: '网络异常，请稍后再试。' });
+      } finally {
+        scrollToBottom();
+      }
+    }
 
     function sceneLabel(v) {
       const o = sceneOptions.find((x) => x.value === v);
@@ -758,8 +832,15 @@ export default defineComponent({
       state.notice = '';
       state.messages.push({ role: 'user', content: text });
       state.input = '';
-      state.loading = true;
       scrollToBottom();
+
+      // 已经是离线态：直接用本地数据作答，不再打 /api/llm/chat（避免每次都等超时）
+      if (state.offline) {
+        await offlineSend(text);
+        return;
+      }
+
+      state.loading = true;
 
       try {
         const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/chat', {
@@ -778,6 +859,10 @@ export default defineComponent({
           state.agentName = data.agent_name || '';
           await typewriter(data.reply);
           loadSessions();
+        } else if (data && data.fallback) {
+          // 后端降级契约：503 + fallback=true → 切离线教练，用本地数据回答这一条
+          enterOfflineMode(data.offline_questions);
+          await offlineSend(text);
         } else {
           state.messages.push({
             role: 'assistant',
@@ -1174,6 +1259,7 @@ export default defineComponent({
 
     onMounted(() => {
       state.__listEl = document.querySelector('.ai-chat-page .message-list');
+      checkOfflineStatus();
       loadSessions();
       loadCoachSuggestion();
     });

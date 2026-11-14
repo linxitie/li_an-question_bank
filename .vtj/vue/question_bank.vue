@@ -1199,10 +1199,13 @@
         } else if (key === 'adminmaterials') {
           this.$router.push('/admin/materials');
         } else if (key === 'quick') {
-          // 快速练习：进入当前选中科目的综合练习（不限子科目，传空subcategory由后端返回该科目所有题目）
+          // 快速练习：统一进「练习中心」手写页。
+          // 旧实现在本页用手风琴展示 科目→L2→L3，L3 全是「其他（未细分）」，
+          // 用户看到的就是一屏"其他"；练习中心按 drillable 分支展示，
+          // 可下钻的才下钻，不能下钻的直接给"直接练习"入口。
           var catKey = this.state.activeCategory;
           if (catKey === 'custom') catKey = 'xc';
-          this.$router.push('/exercise?subject=' + catKey + '&subcategory=');
+          this.$router.push('/practice-center?subject=' + catKey);
         } else if (key === 'history') {
           this.$router.push('/student/papers');
         } else if (key === 'smart') {
@@ -1214,6 +1217,14 @@
         }
       },
       switchCategory(key) {
+        // 「自定义刷题」Tab 直接跳练习中心：刷题的筛选条件（范围/年份/题型/顺序/
+        // 题量/时长）与预览必须与后端蓝图口径联动，本页内嵌表单无法表达。
+        if (key === 'custom') {
+          var cur = this.state.activeCategory;
+          if (cur === 'custom' || cur === undefined) cur = 'xc';
+          this.$router.push('/practice-center?subject=' + cur + '&focus=blueprint');
+          return;
+        }
         this.state.activeCategory = key;
         this.state.expandedSubCategory = null;
         this.state.expandedL2 = {};

@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     # 多轮会话携带的最大历史条数
     LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
 
+    # ==================== 艾宾浩斯复习（M3）====================
+    # 笔试日期。方案按「次年 1 月第一个周末」推得 2027-01-02（2027 届）；
+    # 官方公告发布后只改这一个值，排程的 D-day 收缩会自动跟着变。
+    EXAM_DATE: str = Field("2027-01-02", env="EXAM_DATE")
+    # 每日复习配额上限（题）。超出部分顺延，防止疲劳导致复习无效。
+    REVIEW_DAILY_MAX: int = Field(60, env="REVIEW_DAILY_MAX")
+    # 站内复习提醒开关。关掉后仍可在错题集手动复习，只是不推送。
+    REVIEW_REMINDER_ENABLED: bool = Field(True, env="REVIEW_REMINDER_ENABLED")
+
     # 全局限流（每 IP 每分钟请求数）。默认 300 与线上一致；
     # 本机跑 e2e 时请求量会超过它，可在 backend/.env 里调高，避免自己把自己限流。
     RATE_LIMIT_PER_MINUTE: int = Field(300, env="RATE_LIMIT_PER_MINUTE")

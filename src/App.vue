@@ -16,6 +16,9 @@
     <BackToTop />
     <!-- 番茄钟挂件：全局常驻，任何页面都能随时专注（用户要求：不要埋在页面里） -->
     <PomodoroWidget />
+    <!-- 复习提醒铃铛 + 版本角标：全局常驻，答题页内部自行隐藏 -->
+    <ReviewBell />
+    <BuildStamp />
   </ElConfigProvider>
 </template>
 <script setup lang="ts">
@@ -35,6 +38,9 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import _logo from './assets/logo.svg';
 import VtjErrorBoundary from './components/common/VtjErrorBoundary.vue';
 import BackToTop from './components/common/BackToTop.vue';
+import BuildStamp from './components/common/BuildStamp.vue';
+import ReviewBell from './components/domain/ReviewBell.vue';
+import BuildStamp from './components/common/BuildStamp.vue';
 const { disabled, title, menus, logo, themeSwitchable, pure } = useMask();
 
 const actions: ActionBarItems = [
