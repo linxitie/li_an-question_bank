@@ -281,11 +281,15 @@
               </template>
               <template v-else>
                 <!-- A2（2026-11-08）：试卷资料 → 题库里的可作答卷（DRAFT；上架后经 P5 自动 PUBLISHED）。
-                     没有编号的试卷资料不显示；已有卷时不显示（P1 起上传即建卷，重复建没有意义）。 -->
+                     D10（2026-11-15）：**没有编号也显示**（点开先补编号，预填后端建议值）——
+                     以前这里要求有编号，于是「没编号 → 没按钮 → 入库被拦却无处可点」，成了死路。
+                     已有卷时不显示（P1 起上传即建卷，重复建没有意义）。 -->
                 <a
-                  v-if="row.type === 'paper' && paperCodeOf(row) && !row.exam?.known"
+                  v-if="canBuildPaper(row)"
                   class="mm-op"
-                  title="在题库里为这份试卷资料建一张可作答卷（草稿；资料上架后学生即可考）"
+                  :title="paperCodeOf(row)
+                    ? '在题库里为这份试卷资料建一张可作答卷（草稿；资料上架后学生即可考）'
+                    : '这份资料还没有编号：点这里先补编号，再生成可作答卷'"
                   @click="ensurePaper(row)"
                 >建卷</a>
                 <!-- P3（2026-11-09）：导题。有草稿 → 打开确认页；没草稿 → 直接解析原件 -->
@@ -453,7 +457,7 @@ import {
 import { BOOK_KINDS, PAPER_REGIONS } from '@/utils/paperRegions';
 import { parseListQuery } from '@/utils/materialListQuery';
 import { errorMessage } from '@/utils/apiError';
-import { confirmOverlay, notify } from '@/utils/overlay';
+import { confirmOverlay, notify, promptOverlay } from '@/utils/overlay';
 import {
   batchSummary,
   isAllSelected,
@@ -488,6 +492,8 @@ import {
 } from '@/utils/examGate';
 // D1（2026-11-14）：资料上架 ↔ 卷发布 不一致的标记（4 处旧入口仍能直写 PUBLISHED）
 import { paperDrift, type DriftResult } from '@/utils/materialDrift';
+// D10（2026-11-15）：编号读取/建卷入口/建议编号抽成纯函数，便于单测（见 utils/paperCode.ts）
+import { canBuildPaper, isValidPaperCode, paperCodeOf, suggestPaperCode } from '@/utils/paperCode';
 
 const SUBJECT_LABEL: Record<string, string> = { xingce: '行测', shenlun: '申论', gongzhuan: '公专' };
 const subjectLabel = (s: string): string => SUBJECT_LABEL[s] || s;
@@ -568,11 +574,6 @@ const stats = reactive({
 function fmtTime(iso?: string | null): string {
   if (!iso) return '—';
   return iso.replace('T', ' ').slice(0, 16);
-}
-
-/** 试卷编号：约定写在 badge 字段（C 批会迁到 paper_code 列） */
-function paperCodeOf(row: AdminMaterialListItem): string {
-  return row.badge || '';
 }
 
 /** 字数展示：`1.2 万字` / `8600 字`（后端也给了同口径的 label，列表这里只需数值） */
@@ -728,10 +729,35 @@ async function remove(row: AdminMaterialListItem): Promise<void> {
  * A2（2026-11-08）：为试卷资料在题库里建一张可作答卷。
  * 后端幂等（同编号已存在则复用、不会覆盖状态），所以可以放心点第二次。
  * 新卷是 DRAFT：资料上架后由 P5 联动自动变 PUBLISHED，学生才看得到。
+ *
+ * D10（2026-11-15）：**没有编号也能建**。以前 `if (!code) return;` 静默返回、
+ * 按钮本身又被 `v-if` 隐藏，于是「导题 → 入库」被打回后管理员无路可走
+ * （material 139 的真机现场）。现在先弹框确认/补编号（预填后端建议值），
+ * 编号随请求送后端写回资料，再建卷。
  */
 async function ensurePaper(row: AdminMaterialListItem): Promise<void> {
-  const code = paperCodeOf(row);
-  if (!code) return;
+  let code = paperCodeOf(row);
+  if (!code) {
+    const suggest = suggestPaperCode(row);
+    let input = '';
+    try {
+      const res = (await promptOverlay(
+        '这份资料还没有试卷编号。\n编号会写回资料（之后可在「改信息」改），并用来生成可作答卷。',
+        '先给这份资料一个编号',
+        {
+          inputValue: suggest,
+          confirmButtonText: '用这个编号建卷',
+          cancelButtonText: '取消',
+          inputValidator: (v: string) => isValidPaperCode(v) || '只能字母/数字/-/_，3–40 位'
+        }
+      )) as { value?: string };
+      input = (res?.value || '').trim().toUpperCase();
+    } catch {
+      return;
+    }
+    if (!input) return;
+    code = input;
+  }
   try {
     await confirmOverlay(
       `将在题库里为「${row.title}」建一张可作答卷（编号 ${code}，草稿状态）。\n`
@@ -746,11 +772,13 @@ async function ensurePaper(row: AdminMaterialListItem): Promise<void> {
     const res = (await libraryClient.request({
       url: `/api/materials/admin/${row.id}/ensure-paper`,
       method: 'POST',
-      baseURL: ''
+      baseURL: '',
+      data: { paper_code: code }
     })) as unknown as { data?: { created?: boolean; paper_id?: number; paper_code?: string; paper_type?: string } };
     const data = res?.data || {};
     if (data.created) {
-      ElMessage.success(`已生成可作答卷 #${data.paper_id}（${data.paper_type}），接下来请导入题目`);
+      ElMessage.success(`已生成可作答卷 #${data.paper_id}（${data.paper_type}，编号 ${data.paper_code || code}），接下来请导入题目`);
+      await reload();
     } else {
       ElMessage.info(`该编号已有可作答卷 #${data.paper_id}（${data.paper_type}），未重复创建`);
     }

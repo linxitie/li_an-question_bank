@@ -48,3 +48,16 @@ export function notify(
 ): unknown {
   return ElMessage({ ...options, type, message, zIndex: EP_Z });
 }
+
+/**
+ * 带输入框的浮层（D10，2026-11-15：「建卷」前补编号用）。
+ *
+ * 与 `confirmOverlay` 同一套层级口径；取消时 EP 会 reject，调用方 `try/catch` 即可。
+ */
+export function promptOverlay(
+  message: string,
+  title: string,
+  options: ElMessageBoxOptions = {}
+): Promise<unknown> {
+  return ElMessageBox.prompt(message, title, options);
+}

@@ -8,7 +8,7 @@
 - 建卷成功（元数据来自 paper_meta，状态固定 DRAFT）
 - 幂等（同编号复用，不覆盖已有卷、不重复建）
 - 已有 PUBLISHED 卷时只复用、不改状态
-- 非试卷类型 / 无编号 → 400（带可操作提示）
+- 非试卷类型 / 无编号 → 400（带可操作提示）；D10 起「无编号」改为自动推编号并建卷
 - 权限：非管理员 403
 - 无 paper_meta 时用兜底 120 分钟 / 100 分
 - 建出的卷与资料 `paper_code` 一致；上架后经 P5 联动变 PUBLISHED（联动回归）
@@ -113,15 +113,26 @@ def test_rejects_non_paper_material(client, db_session, admin_headers):
     assert "只有" in r.json()["detail"]
 
 
-def test_rejects_paper_without_code(client, db_session, admin_headers):
+def test_paper_without_code_gets_suggested_code(client, db_session, admin_headers):
+    """D10（2026-11-15）：没有编号不再 400 —— 自动推一个编号（`MAT-...`）并建卷。
+
+    以前这里是"没编号 → 400 请先去改信息补编号"，但列表又因为没编号**不显示建卷按钮**，
+    管理员在「导题 → 入库」最后一步被拦后无路可走（material 139 的真机现场）。
+    """
     m = _mk_material(db_session, code="", title="没编号的试卷资料")
     # badge 也清空，模拟"上传时解析失败"
     m.badge = None
     db_session.commit()
     r = _ensure(client, admin_headers, m.material_id)
-    assert r.status_code == 400
-    assert "编号" in r.json()["detail"]
-    assert len(_papers(db_session)) == 0
+    assert r.status_code == 200, r.text
+    body = r.json()
+    data = body.get("data") if isinstance(body, dict) and "data" in body else body
+    assert data["created"] is True
+    assert (data["paper_code"] or "").startswith("MAT-")
+    db_session.expire_all()
+    db_session.refresh(m)
+    assert (m.paper_code or "").startswith("MAT-")      # 编号写回资料
+    assert len(_papers(db_session)) == 1
 
 
 def test_student_forbidden(client, db_session, auth_headers):

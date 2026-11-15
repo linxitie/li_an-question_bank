@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 # ---------------------------------------------------------------- 词表
@@ -167,6 +168,31 @@ def build_paper_code(meta: PaperMeta) -> Optional[str]:
     if meta.volume:
         parts.append(f"V{meta.volume}")
     return "-".join(parts)
+
+
+def suggest_paper_code(title: str, subject: str = "", *, existing: str = "",
+                       material_id: int = 0, today=None) -> str:
+    """给「没有编号」的试卷资料推一个可用编号（D10，2026-11-15）。
+
+    优先级（越靠前越可读，都不成功才用兜底，保证**永远有编号可用**）：
+      1. 资料已有编号（`paper_code` / `badge`）→ 原样返回；
+      2. 标题能解析出「科目 + 年份 + 地区」→ `build_paper_code()`，如 `GZ-2025-LK`；
+      3. 兜底 `MAT-{YYYYMMDD}-{material_id}`，唯一且能一眼看出是自动生成的。
+
+    为什么需要它：文件名叫「验收探针_扫描5页」这种，解析不出年份/地区 → 没有编号 →
+    没有编号就没有可作答卷 → 导题最后一步入库被打回（material 139 的真机现场）。
+    """
+    code = (existing or "").strip().upper()
+    if code:
+        return code
+    meta = parse_paper_file_name(title or "")
+    if subject and not getattr(meta, "subject", None):
+        meta = PaperMeta(**{**meta.as_dict(), "subject": subject})
+    built = build_paper_code(meta)
+    if built:
+        return built
+    day = (today or date.today()).strftime("%Y%m%d")
+    return f"MAT-{day}-{int(material_id or 0)}"
 
 
 def parse_paper_file_name(name: str) -> PaperMeta:

@@ -304,16 +304,21 @@ def discard_draft(db: Session, draft: PaperParseDraft, *, reason: str = "") -> P
 def confirm_draft(db: Session, draft: PaperParseDraft, *,
                   actor_id: Optional[int] = None,
                   replace: bool = False,
-                  subject_id: Optional[int] = None) -> dict:
+                  subject_id: Optional[int] = None,
+                  auto_paper: bool = True) -> dict:
     """草稿 → 题目入库并挂卷。**不 commit**（与审计同事务）。
 
     Args:
         replace: 该卷已有题目时是否清空重挂。默认 False → 直接 409，避免"又导一遍"把卷搞重。
+        auto_paper: 资料还没有可作答卷时是否**自动建一张**（D10，2026-11-15）。
+            今天之前这里是直接 400 → 管理员被卡在最后一步且界面上没有补救入口
+            （material 139 就是这么撞上的）。编号规则见 `suggest_paper_code`。
 
     返回::
 
         {"paper_id": int|None, "created": int, "question_ids": [...],
-         "replaced": int, "warnings": [...]}
+         "replaced": int, "warnings": [...], "paper_auto_created": bool,
+         "paper_code": str|None}
     """
     if draft.status == "confirmed":
         raise IngestError("这份草稿已经入库过了")
@@ -330,8 +335,26 @@ def confirm_draft(db: Session, draft: PaperParseDraft, *,
         raise IngestError("来源资料已不存在")
 
     paper_id = draft.paper_id or _paper_id_of(db, material)
+    paper_auto_created = False
     if paper_id is None:
-        raise IngestError("这条资料还没有可作答卷：先「建卷」（或重新上传试卷）再入库")
+        if not auto_paper:
+            raise IngestError(
+                "这条资料还没有可作答卷：先点该行的「建卷」（没有编号也能建），"
+                "或在「改信息」里补编号后再入库")
+        if (material.type or "") != "paper":
+            raise IngestError("只有「试卷」类资料才能导题入库")
+        from ..material_paper_link import ensure_paper_for_material
+        from ..paper_meta_parser import suggest_paper_code
+        code = suggest_paper_code(
+            material.title or "", material.subject or "",
+            existing=(material.paper_code or material.badge or ""),
+            material_id=material.material_id)
+        material.paper_code = code[:40]
+        db.flush()
+        created = ensure_paper_for_material(db, material, actor_id=actor_id)
+        paper_id = int(created["paper"].paper_id)
+        draft.paper_id = paper_id          # 留痕：这份草稿最终入到了哪张卷
+        paper_auto_created = True
     paper = db.query(ExamPaper).filter(ExamPaper.paper_id == paper_id).first()
     if paper is None:
         raise IngestError("可作答卷不存在")
@@ -408,6 +431,9 @@ def confirm_draft(db: Session, draft: PaperParseDraft, *,
         "replaced": replaced,
         "total_score": new_total,
         "warnings": warnings_of(draft),
+        # D10：无卷时自动建的那张卷（前端据此提示"记得上架"）
+        "paper_auto_created": paper_auto_created,
+        "paper_code": (paper.paper_code or None),
     }
 
 

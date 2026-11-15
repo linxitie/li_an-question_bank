@@ -121,7 +121,7 @@ def _item_brief(m: StudyMaterial, prog: Optional[UserMaterialProgress] = None,
         "id": m.material_id, "subject": m.subject, "type": m.type,
         "category": m.category, "point_id": m.point_id,
         "title": m.title, "summary": m.summary,
-        "badge": m.badge, "cover_image": m.cover_image,
+        "badge": m.badge, "paper_code": m.paper_code, "cover_image": m.cover_image,
         "duration": m.duration or 0, "read_time": m.read_time or 0,
         "difficulty": m.difficulty or 1, "view_count": m.view_count or 0,
         "card_front": m.card_front, "sort_order": m.sort_order or 0,
@@ -1772,6 +1772,17 @@ async def admin_list(subject: Optional[str] = Query(None),
                                       if m.type == "paper" else None),
                      "paper_book_kind": (_paper_meta_for_filter(m).get("book_kind")
                                          if m.type == "paper" else None)})
+        # D10（2026-11-15）：试卷资料**没有编号**时，顺手给一个可用的建议编号，
+        # 前端「建卷」弹窗直接预填（文件名叫「验收探针…」这种解析不出年份/地区，
+        # 以前会因为"没编号"连按钮都不显示 → 建卷/入库都走不通）。
+        if m.type == "paper" and not (m.paper_code or m.badge):
+            try:
+                from ....services.paper_meta_parser import suggest_paper_code
+                item["paper_code_suggest"] = suggest_paper_code(
+                    m.title or "", m.subject or "",
+                    material_id=m.material_id)
+            except Exception:              # noqa: BLE001 — 建议值算不出来不能拖垮列表
+                item["paper_code_suggest"] = None
         # P2（2026-11-09）：试卷行附「考试开关注」状态，列表直接渲染开关与定时摘要。
         # 只在试卷行查一次（每科几套卷），不做的代价是要前端逐行再发请求。
         if m.type == "paper":
@@ -1944,6 +1955,7 @@ async def admin_backfill_papers(body: Optional[dict] = None,
 @router.post("/admin/{material_id}/ensure-paper",
              summary="为试卷资料生成可作答卷(管理员)")
 async def admin_ensure_paper(material_id: int,
+                             body: dict | None = None,
                              current_user: SysUser = Depends(get_current_user),
                              db: Session = Depends(get_db)):
     """A2（2026-11-08）：把一份**试卷类资料**变成题库里的可作答卷。
@@ -1954,17 +1966,32 @@ async def admin_ensure_paper(material_id: int,
     行为：
       · 用资料的 `paper_code`（回落 `badge`）建一张 `exam_paper`，**状态固定 `DRAFT`**；
         是否可考由「资料上架」经 P5 联动决定（方案 §2.3 的唯一真源）；
+      · **D10（2026-11-15）**：body 里可带 `paper_code` 当场编号；都没编号时按
+        `suggest_paper_code()` 推一个（`MAT-{YYYYMMDD}-{id}` 兜底）并写回资料 ——
+        以前这里是 400「请先在改信息里补编号」，而列表又因为没编号不显示「建卷」，管理员无路可走；
       · 元数据取"人工订正 > 文件名解析"（与预览抽屉同口径），缺省 120 分钟 / 100 分；
       · **幂等**：同编号已存在则原样返回（`created=false`），绝不覆盖已有卷的状态与题目；
       · 不 commit 前先 flush 拿 `paper_id`，与审计、提交在同一事务。
     """
     _require_admin(current_user)
+    body = body or {}
     m = db.query(StudyMaterial).filter(
         StudyMaterial.material_id == material_id).first()
     if not m:
         raise HTTPException(404, "资料不存在")
 
     from ....services import material_paper_link
+    from ....services.paper_meta_parser import suggest_paper_code
+
+    want = (body.get("paper_code") or "").strip().upper()
+    if want:
+        m.paper_code = want[:40]
+        db.flush()
+    elif not (m.paper_code or m.badge):
+        m.paper_code = suggest_paper_code(
+            m.title or "", m.subject or "", material_id=m.material_id)[:40]
+        db.flush()
+
     try:
         result = material_paper_link.ensure_paper_for_material(
             db, m, actor_id=current_user.user_id)
@@ -2344,12 +2371,15 @@ async def admin_confirm_parse_draft(draft_id: int, body: dict | None = None,
         result = paper_ingest.confirm_draft(
             db, draft, actor_id=current_user.user_id,
             replace=bool(body.get("replace")),
-            subject_id=body.get("subject_id"))
+            subject_id=body.get("subject_id"),
+            # D10：默认允许"没卷就自动建一张"；传 auto_paper=false 回到旧的报错行为
+            auto_paper=bool(body.get("auto_paper", True)))
     except paper_ingest.IngestError as e:
         db.rollback()
         raise HTTPException(409 if "已有" in str(e) else 400, str(e))
     _audit(db, current_user, "paper_import", f"material:{draft.material_id}",
            f"确认入库 {result['created']} 题 → 卷 #{result['paper_id']}"
+           + (f"（自动建卷 {result.get('paper_code')}）" if result.get("paper_auto_created") else "")
            + (f"（覆盖 {result['replaced']} 题）" if result.get("replaced") else ""))
     # 入库后卷已有题：如果资料本来就是「已上架」，按 P5 的唯一真源把它推成可作答（PUBLISHED）。
     # 不这么做会出现「资料已上架 + 卷有 100 题，但卷还是 DRAFT」→ 学生看不到，要等下次上/下架才生效。

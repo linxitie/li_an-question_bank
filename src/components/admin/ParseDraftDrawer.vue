@@ -265,8 +265,13 @@ async function confirm(): Promise<void> {
     dup.add(it.no);
   }
   try {
+    // D10（2026-11-15）：没有可作答卷时不再让入库卡死 —— 后端会自动建一张草稿卷，
+    // 这里先把"会自动建卷"说清楚，免得管理员以为挂到了什么卷上。
+    const codeText = detail.value?.paper_code
+      ? `挂到卷 ${detail.value.paper_code}`
+      : '挂到本资料的可作答卷（还没有 → 入库时自动建一张草稿卷）';
     await confirmOverlay(
-      `将把 ${items.value.length} 道题写进题库并挂到卷 ${detail.value?.paper_code || ''}。\n`
+      `将把 ${items.value.length} 道题写进题库并${codeText}。\n`
         + '图片会同时复制到正式目录。入库后可在题库里改题/补答案。确认入库？',
       '确认入库',
       { confirmButtonText: '确认入库', cancelButtonText: '再看看', type: 'success' }
@@ -292,7 +297,11 @@ async function confirm(): Promise<void> {
       );
       result = await confirmParseDraft(props.draftId, { replace: true });
     }
-    ElMessage.success(`已入库 ${result.created} 题 → 卷 #${result.paper_id}`);
+    // D10：入库时自动建过卷 → 明确告诉管理员编号与"还需上架"
+    const auto = result.paper_auto_created
+      ? `（已自动建卷 ${result.paper_code || ''}，草稿；把资料上架，学生才能考）`
+      : '';
+    ElMessage.success(`已入库 ${result.created} 题 → 卷 #${result.paper_id}${auto}`);
     emit('confirmed', { draftId: props.draftId, created: result.created });
   } catch (e) {
     ElMessage.error(errorMessage(e, '入库失败'));

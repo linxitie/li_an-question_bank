@@ -668,6 +668,13 @@ export interface MaterialChapter {
   exam?: LibraryExamState | null;
   /** P3：最近一条解析草稿（列表据此显示「待确认 N 题 / 解析失败 / 已入库」） */
   parse_draft?: ParseDraftBrief | null;
+  /**
+   * D10（2026-11-15）：试卷编号。C2b「改信息」之后主要写在这一列，
+   * 前端取值必须 `paper_code || badge`（老数据把编号写在 badge 里）。
+   */
+  paper_code?: string | null;
+  /** D10：没有编号时后端给的建议编号，供「建卷」弹窗预填（如 MAT-20261115-139） */
+  paper_code_suggest?: string | null;
 }
 
 /**
@@ -979,6 +986,10 @@ export interface ParseConfirmResult {
   question_ids: number[];
   warnings?: string[];
   paper_sync?: { before?: string | null; after?: string | null } | null;
+  /** D10（2026-11-15）：资料本来没有可作答卷、入库时自动建了一张（卷固定 DRAFT） */
+  paper_auto_created?: boolean;
+  /** 自动建卷用的编号（已有编号时就是它本身） */
+  paper_code?: string | null;
 }
 
 /** 确认入库：题目写题库 + 挂卷 + 图片落地；卷里已有题时必须 replace=true */
