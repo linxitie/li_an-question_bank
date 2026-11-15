@@ -135,6 +135,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/ai_chat.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
+  // 小智 Studio：ChatGPT 式对话 + Codex 式工具调用（新增页，旧 ai_chat 保留）
+  {
+    path: '/ai-studio',
+    name: 'AiStudio',
+    component: () => import('@/views/student/pc/ai_studio.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
   {
     path: '/study-plan',
     name: 'StudyPlan',

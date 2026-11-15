@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from .core.config import settings
 from .core.redis_client import get_redis, close_redis
 from .api.v1.platform import llm
+from .api.v1.platform import codex as llm_codex
 from .api.v1 import agent
 from .api.v1 import knowledge
 from .api.v1 import post
@@ -1000,6 +1001,7 @@ app.include_router(question_import_router)
 app.include_router(exams.router)
 app.include_router(videos.router)
 app.include_router(llm.router)
+app.include_router(llm_codex.router)  # 小智 Codex 模式（流式 + Agent，新增端点）
 app.include_router(study_plan.router)
 app.include_router(review.router)  # 错题遗忘曲线复习（模块4 P4，新增端点）
 app.include_router(agent.router)
