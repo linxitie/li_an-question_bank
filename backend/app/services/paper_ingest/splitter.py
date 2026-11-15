@@ -151,6 +151,28 @@ def split_options(block: List[str]) -> tuple:
     return clean_cn("".join(stem)), {k: clean_cn(v) for k, v in options.items()}
 
 
+def option_overwrites(block: List[str]) -> List[str]:
+    """同一题号块里出现**第二组**同名选项字母 → 返回被覆盖的字母（T6，2026-11-15）。
+
+    这是「下一题的题号行被 OCR 整行漏掉、两题并成一块」的直接症状：
+    `split_options` 里 `options[key] = ...` 是直接赋值，后一组会**静默覆盖**前一组，
+    于是题面看起来"四选项齐全"、一个 flag 都没有（第 5 题吃掉第 6 题就是这样）。
+    这里**只检测、不改拆题行为**：拆错比不拆更难查，先让人一眼看见。
+    """
+    seen = set()
+    dup: List[str] = []
+    for raw in block or []:
+        line = (raw or "").strip()
+        if not line or MARK_RE.match(line) or _is_structural(line):
+            continue
+        for m in OPT_RE.finditer(line):
+            key = m.group(1).translate(str.maketrans("ＡＢＣＤ", "ABCD"))
+            if key in seen and key not in dup:
+                dup.append(key)
+            seen.add(key)
+    return dup
+
+
 def repair_option_tags(items: List[dict], *, band_px: float = 40.0) -> List[dict]:
     """T3（2026-11-14）：把**丢了 `A-D` 标签**的选项行按缩进带补回标签。
 
@@ -282,6 +304,10 @@ def split_questions(lines: List[str], *, default_type: str = "单选") -> List[d
             med = median(lens)
             if med and max(lens) > max(3 * med, 120):
                 flags.append("选项可能粘连")
+        # T6（2026-11-15）：同一块里选项字母重复 = 后一组覆盖前一组（多半是下一题的题号行被漏）
+        dups = option_overwrites(block)
+        if dups:
+            flags.append(f"选项被覆盖({'/'.join(dups)})")
         if FIGURE_HINT_RE.search(stem + shared):
             flags.append("依赖图")
         if len(stem) < 4:

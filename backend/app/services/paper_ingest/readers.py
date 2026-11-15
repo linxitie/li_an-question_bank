@@ -331,6 +331,32 @@ def is_watermark_row(row: dict, base_h: float) -> bool:
     return len(row["text"]) <= 8 and bool(WATERMARK_WORDS.match(row["text"]))
 
 
+def _drop_page_numbers(rows: List[dict]) -> List[dict]:
+    """丢掉页脚页码（T6，2026-11-15）。
+
+    真机现场：第 2 页页脚 `2`（x=802 / w=25 / h=29）没有被任何规则挡掉，被 `splitter`
+    当成上一选项的续行 → 草稿里出现 `C.忠诚 2`。判据刻意收得很紧，只认**最靠下的那一行**
+    且是 1–4 位纯数字、宽度很短、同排 ±60px 内没有别的行（表格里的数字有邻居，不动）。
+    """
+    by_page: Dict[int, List[dict]] = {}
+    for r in rows:
+        by_page.setdefault(int(r["page"]), []).append(r)
+    drop = set()
+    for group in by_page.values():
+        bottom = max(group, key=lambda r: float(r["y"]))
+        text = (bottom.get("text") or "").strip()
+        if not re.fullmatch(r"\d{1,4}", text):
+            continue
+        if float(bottom.get("w") or 0.0) > 60.0:
+            continue
+        if any(other is not bottom
+               and abs(float(other["y"]) - float(bottom["y"])) <= 60.0
+               for other in group):
+            continue
+        drop.add(id(bottom))
+    return [r for r in rows if id(r) not in drop]
+
+
 def _layout_lines(layout: List[List[dict]]) -> List[dict]:
     """带坐标的 OCR 框 →（已丢水印、按阅读顺序）的行列表。T2（2026-11-14）。
 
@@ -358,7 +384,8 @@ def _layout_lines(layout: List[List[dict]]) -> List[dict]:
         return flat
 
     base_h = base_height(flat)
-    return [it for it in flat if not is_watermark_row(it, base_h)]
+    kept = [it for it in flat if not is_watermark_row(it, base_h)]
+    return _drop_page_numbers(kept)
 
 
 def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:

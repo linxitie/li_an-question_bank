@@ -11,6 +11,9 @@
              （`ocr_sidecar.read_region_text`；实测二值化/400dpi 反而掉字）；
   **S3 回填**：pt→px 换回版面坐标插回行序，坐标 + 文本两道去重，水印仍走几何过滤。
 
+**T6（2026-11-15）补第二类洞**：块内出现**第二组 `A.`** → 中间那行（含题号）被漏，
+此时补回来的行**必须以题号开头**才收（否则丢弃），避免把半截正文塞进去。
+
 开关：`PAPER_OCR_RETRY=0` 关闭（默认开）。**没有洞时零额外耗时**（纯内存判断）。
 """
 from __future__ import annotations
@@ -85,6 +88,39 @@ def _base_by_page(rows: List[dict]) -> Dict[int, float]:
     return out
 
 
+def _option_letter(row: dict) -> Optional[str]:
+    """这一行以哪个选项字母开头（A–D）；不是选项行就 None。"""
+    m = splitter.OPT_RE.match((row.get("text") or "").strip())
+    if not m:
+        return None
+    return m.group(1).translate(str.maketrans("ＡＢＣＤ", "ABCD"))
+
+
+def _first_option_index(block: List[dict]) -> Optional[int]:
+    """块内第一个选项行的下标。"""
+    for i, r in enumerate(block):
+        if _option_letter(r):
+            return i
+    return None
+
+
+def _option_restart(block: List[dict]) -> Optional[int]:
+    """块内**第二次**出现 `A.` 的下标（T6，2026-11-15）。
+
+    为什么这能当"缺题号行"的判据：一道题的选项只会有一次 A–D；
+    同一题号块里又冒出第二组 A.，说明中间那道题的**题号行**被 OCR 整行漏了，
+    拆题器认不出新题，才把两道题并成一块（实测第 5 题吃掉第 6 题就是这样）。
+    """
+    seen_a = False
+    for i, r in enumerate(block):
+        if _option_letter(r) != "A":
+            continue
+        if seen_a:
+            return i
+        seen_a = True
+    return None
+
+
 def find_holes(rows: List[dict], *, gap_ratio: float = GAP_RATIO,
                min_extra: float = MIN_EXTRA) -> List[dict]:
     """找出「缺选项字母 + 行间距异常」的位置 → 待重跑的条带（纯内存，零 IO）。
@@ -114,11 +150,21 @@ def find_holes(rows: List[dict], *, gap_ratio: float = GAP_RATIO,
             continue
         block = rows[start:end]
         missing = _missing_letters(block)
-        if not (1 <= len(missing) <= 3):
+        restart = _option_restart(block)
+        if restart is not None:
+            # T6（2026-11-15）：块里出现第二组 A. → 中间那一行（含题号）被 OCR 漏了。
+            # 只在这两组 A 之间找缝：前一组 A 之前的行属于上一题，不该动。
+            kind = "number"
+            first_a = _first_option_index(block)
+            scope = block[first_a:restart] if first_a is not None else block[:restart]
+        elif 1 <= len(missing) <= 3:
+            kind = "option"
+            scope = block
+        else:
             continue
         best: Optional[dict] = None
-        for page in sorted({int(r["page"]) for r in block}):
-            group = sorted((r for r in block if int(r["page"]) == page),
+        for page in sorted({int(r["page"]) for r in scope}):
+            group = sorted((r for r in scope if int(r["page"]) == page),
                            key=lambda r: r["y"])
             med = med_page.get(page) or med_all
             if not med or len(group) < 2:
@@ -128,7 +174,7 @@ def find_holes(rows: List[dict], *, gap_ratio: float = GAP_RATIO,
                 if gap < gap_ratio * med or (gap - med) < min_extra:
                     continue
                 if best is None or gap > best["gap"]:
-                    best = {"page": page, "qno": qno, "missing": missing,
+                    best = {"page": page, "qno": qno, "missing": missing, "kind": kind,
                             "gap": gap, "median": med, "prev": a, "next": b}
         if best is None:
             continue
@@ -145,7 +191,7 @@ def find_holes(rows: List[dict], *, gap_ratio: float = GAP_RATIO,
         x0 = 0.0
         x1 = max(float(r["x"]) + float(r["w"]) for r in by_page[page]) + PAD_PX
         per_page[page] = per_page.get(page, 0) + 1
-        holes.append({"page": page, "qno": qno, "missing": missing,
+        holes.append({"page": page, "qno": qno, "missing": missing, "kind": kind,
                       "gap": round(float(best["gap"]), 1),
                       "median": round(float(best["median"]), 1),
                       "y0": y0, "y1": y1, "x0": x0, "x1": x1})
@@ -199,7 +245,7 @@ def merge(rows: List[dict], recovered: List[dict], *, base_h: float = 0.0) -> Li
 def recover_into(path: str, rows: List[dict], *, layout_dpi: int = 200,
                  progress=None) -> Tuple[List[dict], dict]:
     """检测缺行 → 逐条带重跑 → 回填。返回 `(新行序, 统计)`；任何异常都只记失败、不抛出。"""
-    stats: dict = {"holes": 0, "recovered": 0, "rows": 0, "failed": 0,
+    stats: dict = {"holes": 0, "recovered": 0, "rows": 0, "failed": 0, "rejected": 0,
                    "qnos": [], "recovered_qnos": [], "seconds": 0.0, "skipped": ""}
     if not rows:
         return rows, stats
@@ -259,6 +305,10 @@ def recover_into(path: str, rows: List[dict], *, layout_dpi: int = 200,
         for ln in lines:
             text = (ln.get("text") or "").strip()
             if not text:
+                continue
+            # T6：题号行的洞只收「以题号开头」的行 —— 同一条缝里可能夹页眉/图表碎片
+            if hole.get("kind") == "number" and splitter.qno_of(text) is None:
+                stats["rejected"] += 1
                 continue
             rec = {"text": text,
                    "x": float(ln.get("x") or 0.0) * k,
