@@ -16,7 +16,15 @@ logger = logging.getLogger(__name__)
 # 北京时间时区
 CST = timezone(timedelta(hours=8))
 
-scheduler = BackgroundScheduler(timezone=CST, job_defaults={"misfire_grace_time": 300})
+scheduler = BackgroundScheduler(
+    timezone=CST,
+    # 电脑睡眠/休眠后允许补跑最近一次任务；coalesce 防止多次补跑叠加。
+    job_defaults={
+        "misfire_grace_time": None,
+        "coalesce": True,
+        "max_instances": 1,
+    },
+)
 
 # ========== 主事件循环引用（供跨线程 WebSocket 广播） ==========
 # scheduler 运行在独立线程，WebSocket 对象绑定在 FastAPI 主事件循环，
@@ -88,18 +96,66 @@ def init_scheduler():
     from .difficulty import update_all_difficulties
     from .exam_scraper import scrape_all_exams
     from .news_collector import collect_all_sources
-    from .recruitment_scraper import scrape_all_recruitment
 
     # 包装：爬取完成后广播同步事件（通知前端刷新）
+    def _export_news(db):
+        from pathlib import Path
+
+        from ..core.config import settings
+        from .news_obsidian_export import export_news_board
+
+        try:
+            report = export_news_board(db, Path(settings.VAULT_PATH_NEWS), dry_run=False)
+            logger.info("新闻 Obsidian 导出: %s", report)
+        except Exception:
+            logger.exception("新闻 Obsidian 导出失败")
+
+    def _export_quotes(db):
+        from .obsidian_export import export_all
+
+        try:
+            report = export_all(db, None, dry_run=False)
+            logger.info("金句 Obsidian 导出: %s", report)
+        except Exception:
+            logger.exception("金句 Obsidian 导出失败")
+
     def _news_with_broadcast():
         from ..core.database import SessionLocal
 
         db = SessionLocal()
         try:
             collect_all_sources(db, limit=5, dry_run=False)
+            _export_news(db)
         finally:
             db.close()
         _broadcast_sync("新闻更新")
+
+    def _quotes_with_broadcast():
+        from ..core.database import SessionLocal
+        from .quote_external_collector import collect_external_quotes
+
+        db = SessionLocal()
+        try:
+            reports = collect_external_quotes(db, dry_run=False, max_articles=5)
+            logger.info(
+                "金句外部来源采集完成: %s",
+                [
+                    {
+                        "source": report["source"],
+                        "links": report["links"],
+                        "inserted": report["inserted"],
+                        "duplicates": report["duplicates"],
+                        "errors": len(report["errors"]),
+                    }
+                    for report in reports
+                ],
+            )
+            _export_quotes(db)
+        except Exception:
+            logger.exception("金句外部来源采集失败")
+        finally:
+            db.close()
+        _broadcast_sync("金句更新")
 
     def _recruitment_with_broadcast():
         from ..core.database import SessionLocal
@@ -150,6 +206,14 @@ def init_scheduler():
         trigger=CronTrigger(hour="8,18", minute=0, timezone=CST),
         id="collect_news_8_18",
         name="每日新闻采集 08:00/18:00",
+        replace_existing=True,
+    )
+    # 每日 07:00 采集金句外部来源；此前只有手动 CLI，没有定时任务
+    scheduler.add_job(
+        _quotes_with_broadcast,
+        trigger=CronTrigger(hour=7, minute=0, timezone=CST),
+        id="collect_quotes_7",
+        name="每日金句采集 07:00",
         replace_existing=True,
     )
     scheduler.add_job(
@@ -629,9 +693,12 @@ def init_scheduler():
     def _initial_run():
         try:
             logger.info("执行首次全量爬取...")
-            # 新闻：v2 采集器统一走 collect_all_sources（旧的 scrape_all_news 已不存在）
+            # 新闻：v2 采集器统一走 collect_all_sources
             _news_with_broadcast()
-            scrape_all_recruitment()
+            # 金句：新增每日来源采集（此前仅手动 CLI）
+            _quotes_with_broadcast()
+            # 招考：走官方来源采集器；旧的 rszk.net 爬虫已 404
+            _recruitment_with_broadcast()
             scrape_all_exams()
             logger.info("首次全量爬取完成")
         except Exception as e:

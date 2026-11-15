@@ -13,9 +13,16 @@ import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
-from ..models.models import ContentSource, EssayQuote, QuoteTag, Topic
-from .quote_dedupe_service import normalized_hash
+from ..models.models import ContentSource, EssayQuote, KgEdge, Topic
 from .quote_external_sources import EXTERNAL_QUOTE_SOURCES, ExternalQuoteSource
+
+_PUNCT_RE = re.compile(r"[^\u4e00-\u9fffA-Za-z0-9]")
+
+
+def normalized_hash(content: str) -> str:
+    """与 quote_dedupe_service 一致，但避免引入已缺失的 QuoteRelation 模型。"""
+    normalized = _PUNCT_RE.sub("", content or "").lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; LiAnQuoteBot/1.0; +https://localhost)",
@@ -159,17 +166,26 @@ def _insert_tag(db: Session, quote: EssayQuote, category: str) -> None:
         db.add(topic)
         db.flush()
     exists = (
-        db.query(QuoteTag)
-        .filter(QuoteTag.quote_id == quote.quote_id, QuoteTag.tag_id == topic.topic_id)
+        db.query(KgEdge)
+        .filter(
+            KgEdge.src_type == "quote",
+            KgEdge.src_id == quote.quote_id,
+            KgEdge.dst_type == "topic",
+            KgEdge.dst_id == topic.topic_id,
+            KgEdge.relation == "has_topic",
+        )
         .first()
     )
     if exists is None:
         db.add(
-            QuoteTag(
-                quote_id=quote.quote_id,
-                tag_id=topic.topic_id,
+            KgEdge(
+                src_type="quote",
+                src_id=quote.quote_id,
+                dst_type="topic",
+                dst_id=topic.topic_id,
+                relation="has_topic",
                 confidence=0.8,
-                source="external",
+                origin="rule",
             )
         )
 
@@ -231,7 +247,6 @@ def collect_external_quotes(
                             author=author,
                             status=0,
                             review_status="pending",
-                            ai_quality="pending",
                             normalized_hash=digest,
                         )
                         db.add(quote)
