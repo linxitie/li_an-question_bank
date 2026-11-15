@@ -60,6 +60,36 @@ function emitValue(value: string) {
   emit('update:modelValue', value);
 }
 
+/**
+ * 在光标处插入一段 HTML（2026-11-10：论坛发帖的内联附件走这里）。
+ * 编辑器加载失败退化成 textarea 时，直接追加到文本值，至少内容不会丢。
+ */
+function insertHtml(html: string) {
+  if (!html) return;
+  if (!editor) {
+    emitValue((props.modelValue || '') + html);
+    return;
+  }
+  try {
+    // 没有选区时 cmd.do('insertHTML') 会静默返回，改为追加到正文末尾
+    const range = editor.selection && typeof editor.selection.getRange === 'function'
+      ? editor.selection.getRange()
+      : null;
+    if (range) editor.cmd.do('insertHTML', html);
+    else editor.txt.append(html);
+    emitValue(editor.txt.html());
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[RichTextEditor] 插入 HTML 失败', error);
+  }
+}
+
+function focus() {
+  if (editor && typeof editor.focus === 'function') editor.focus();
+}
+
+defineExpose({ insertHtml, focus });
+
 function onFallbackInput() {
   emitValue(fallbackText.value);
 }

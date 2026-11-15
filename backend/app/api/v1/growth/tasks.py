@@ -208,6 +208,13 @@ async def overview(
     db: Session = Depends(get_db),
 ):
     """聚合返回签到状态 + 每日任务 + 随机任务 + 周常任务"""
+    # 2026-11-10：首页任务卡与任务中心都读这个接口，进来先把「已完成未领取」的金币补齐，
+    # 保证「已完成」的任务不需要再点领取（幂等，失败不影响列表展示）。
+    try:
+        _auto_claim_completed_tasks(current_user, db)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.warning("任务自动发放失败: %s", exc)
     today = date.today().strftime("%Y-%m-%d")
 
     # 签到状态
@@ -324,6 +331,79 @@ async def refresh_random(
         "random": [_task_view(t, current_user.user_id, db) for t in random_tasks if t],
     }
 
+
+def _auto_claim_completed_tasks(current_user: SysUser, db: Session) -> list:
+    """把「已完成但没领」的任务奖励补给用户（幂等）。返回本次发放条目。
+
+    完成瞬间的发放由行为事件链路负责（achievement_judge → task_reward.auto_claim）；
+    本函数覆盖功能上线前已完成的历史任务、以及事件链路没跑到的任务。
+    """
+    from ....services import task_reward
+
+    _ensure_random_tasks(current_user.user_id, db)
+    tasks = db.query(Task).filter(
+        Task.enabled == 1,
+        (Task.personalized_for.is_(None)) | (Task.personalized_for == current_user.user_id),
+    ).all()
+
+    now = datetime.now()
+    granted = []
+    for task in tasks:
+        period_key = _period_key_for(task)
+        prog = db.query(UserTaskProgress).filter(
+            UserTaskProgress.user_id == current_user.user_id,
+            UserTaskProgress.task_id == task.task_id,
+            UserTaskProgress.period_key == period_key,
+        ).first()
+        if prog is not None and (prog.claimed == 1 or prog.expired == 1):
+            continue
+
+        if (task.mode or "calc").lower() == "event":
+            if prog is None:
+                continue  # 事件任务没有进度行 = 没发生过对应行为
+            current = int(prog.current or 0)
+        else:
+            current = int(_calc_metric(current_user.user_id, task.metric, db, task.metric_param))
+
+        if current < int(task.threshold or 1):
+            continue
+        if prog is None:
+            prog = UserTaskProgress(
+                user_id=current_user.user_id, task_id=task.task_id,
+                period_key=period_key, current=0, completed=0, claimed=0,
+            )
+            db.add(prog)
+            db.flush()
+
+        prog.current = current
+        prog.completed = 1
+        if not prog.completed_at:
+            prog.completed_at = now
+        reward = task_reward.auto_claim(db, current_user, task, prog, now)
+        if reward > 0:
+            granted.append({
+                "task_id": task.task_id,
+                "title": task.title or task.description,
+                "reward_coins": reward,
+            })
+
+    db.commit()  # 没有发放时也要提交 _ensure_random_tasks 的懒分配
+    return granted
+
+
+@router.post("/auto-claim", summary="自动领取已完成任务的金币（幂等）")
+async def auto_claim_completed(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """兜底发放：把「已完成但没领」的任务奖励一次性补给用户（页面可反复调用）。"""
+    granted = _auto_claim_completed_tasks(current_user, db)
+    return {
+        "granted": granted,
+        "total_coins": sum(item["reward_coins"] for item in granted),
+        "balance": current_user.total_coins,
+        "message": f"自动领取 {len(granted)} 项任务奖励" if granted else "暂无待发放的任务奖励",
+    }
 
 @router.post("/{task_id}/claim", summary="领取任务奖励")
 async def claim_task(

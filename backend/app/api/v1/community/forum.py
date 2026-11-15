@@ -170,6 +170,8 @@ def _serialize_post(
         "tags": post.tags.split(",") if post.tags else [],
         "attachments": post.attachments or [],
         "isTop": bool(post.is_top),
+        # 置顶到期时间（2026-11-10）：NULL = 永久
+        "pinUntil": post.pin_until.isoformat() if getattr(post, "pin_until", None) else None,
         "isEssence": bool(post.is_essence),
         "isLocked": bool(post.is_locked),
         "titleColor": post.title_color or "default",

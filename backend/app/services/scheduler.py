@@ -9,6 +9,7 @@ from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +296,28 @@ def init_scheduler():
         trigger=CronTrigger(hour=3, minute=20, timezone=CST),
         id="expire_weekly_tasks",
         name="周任务失效处理（每日 03:20）",
+        replace_existing=True,
+    )
+
+    # 每 10 分钟取消到期置顶（2026-11-10）
+    def _expire_forum_pins():
+        from ..core.database import SessionLocal
+        from .forum_pin import expire_due
+
+        db = SessionLocal()
+        try:
+            expire_due(db)
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.warning(f"过期置顶清理失败: {exc}")
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _expire_forum_pins,
+        trigger=IntervalTrigger(minutes=10),
+        id="expire_forum_pins",
+        name="过期置顶自动取消（每 10 分钟）",
         replace_existing=True,
     )
 

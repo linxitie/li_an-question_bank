@@ -42,6 +42,8 @@ export interface ModerationPost {
   favorited?: boolean;
   /** 置顶 / 精华 / 浏览（后端 _serialize_post 已输出） */
   isTop?: boolean;
+  /** 置顶到期时间（null = 永久） */
+  pinUntil?: string | null;
   isEssence?: boolean;
   viewCount?: number;
   createTime?: string | null;
@@ -118,9 +120,12 @@ export const adminForumApi = {
     post<{ success: boolean; status: string }>(`/api/admin/forum/posts/${postId}/hide`, { reason }),
   unhidePost: (postId: number) =>
     post<{ success: boolean; status: string }>(`/api/admin/forum/posts/${postId}/unhide`),
-  /** 置顶 / 取消置顶 */
-  pinPost: (postId: number, pinned: boolean) =>
-    post<{ success: boolean; isTop: boolean }>(`/api/admin/forum/posts/${postId}/pin`, { pinned }),
+  /** 置顶 / 取消置顶：days 为置顶天数，0/省略 = 永久 */
+  pinPost: (postId: number, pinned: boolean, days?: number) =>
+    post<{ success: boolean; isTop: boolean; pinUntil: string | null }>(
+      `/api/admin/forum/posts/${postId}/pin`,
+      days === undefined ? { pinned } : { pinned, days }
+    ),
   /** 批量操作：hide / unhide / delete / restore / purge，单条失败只跳过 */
   batchPosts: (action: 'hide' | 'unhide' | 'delete' | 'restore' | 'purge', ids: number[], reason?: string) =>
     post<{ success: boolean; affected: number; skipped: number[] }>('/api/admin/forum/posts/batch', {

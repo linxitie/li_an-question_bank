@@ -7,6 +7,7 @@ import {
   type RouteRecordRaw
 } from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
+import { reloadForChunkError } from '@/utils/chunkRecovery';
 import { canAccess } from './access';
 
 const routes: RouteRecordRaw[] = [
@@ -866,6 +867,13 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes
+});
+
+// 2026-11-14：懒加载模块失败（dev server 重启/浏览器缓存损坏）时自动重载一次，
+// 避免停在「模块加载失败」页面反复手动刷新。
+router.onError((error) => {
+  if (reloadForChunkError()) return;
+  console.error('[router] 页面模块加载失败:', error);
 });
 
 // ==================== 路由守卫 — 三端权限控制 ====================

@@ -10,17 +10,40 @@
           <p class="kgp-hint">去刷几道题，系统会自动为你的知识点建节点、连边。</p>
         </div>
 
-        <svg v-else ref="svgRef" class="kgp-svg" :viewBox="zoomViewBox"
-          preserveAspectRatio="xMidYMid slice" role="img" aria-label="知识图谱" @wheel.prevent="onWheel" style="touch-action: none" @pointermove="onDragMove" @pointerup="endDrag" @pointerleave="endDrag">
+        <svg
+          v-else
+          ref="svgRef"
+          class="kgp-svg"
+          :class="{ 'is-panning': panning }"
+          :viewBox="viewBox"
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label="知识图谱"
+          style="touch-action: none"
+          @wheel.prevent="onWheel"
+          @pointerdown="onPointerDown"
+          @pointermove="onPointerMove"
+          @pointerup="onPointerUp"
+          @pointercancel="onPointerUp"
+          @dblclick="fitView"
+        >
+          <rect
+            class="kgp-bg"
+            :x="view.x - 2000"
+            :y="view.y - 2000"
+            :width="view.w + 4000"
+            :height="view.h + 4000"
+            fill="transparent"
+          />
           <g class="kgp-edges">
             <path
-              v-for="e in edges"
-              :key="e.src_point + '-' + e.dst_point"
+              v-for="(e, index) in edges"
+              :key="index"
               :d="edgePath(e)"
               fill="none"
-              :stroke-width="Math.min(1.6, edgeWidth(e) * 0.55)"
-              :stroke-opacity="0.16"
-              stroke="#94a3b8"
+              :stroke="edgeStroke(e)"
+              :stroke-width="edgeStrokeWidth(e)"
+              :stroke-opacity="edgeOpacity(e)"
             />
           </g>
           <g class="kgp-nodes">
@@ -28,8 +51,14 @@
               v-for="node in nodes"
               :key="node.point_id"
               class="kgp-node"
-              :class="{ 'is-active': activeId === node.point_id }"
-              @click="activeId = node.point_id"
+              :class="{
+                'is-active': activeId === node.point_id,
+                'is-hovered': hoverId === node.point_id,
+                'is-dimmed': isDimmed(node)
+              }"
+              :style="{ opacity: nodeOpacity(node) }"
+              @pointerenter="onNodeEnter(node)"
+              @pointerleave="onNodeLeave(node)"
               @pointerdown.stop="startDrag(node, $event)"
             >
               <circle
@@ -37,21 +66,32 @@
                 :cy="displayPos(node).y"
                 :r="nodeRadius(node)"
                 :fill="nodeColor(node)"
-                fill-opacity="0.85"
-                stroke="#1f2937"
-                stroke-width="1"
+                fill-opacity="0.9"
+                :stroke="hoverId === node.point_id ? '#0f172a' : isRelated(node) ? '#334155' : '#ffffff'"
+                :stroke-width="hoverId === node.point_id ? 2 : 1.5"
               />
               <text
-                :x="displayPos(node).x"
-                :y="displayPos(node).y + 4"
                 class="kgp-label"
+                :x="displayPos(node).x"
+                :y="displayPos(node).y + nodeRadius(node) + 12"
                 text-anchor="middle"
-              >
-                {{ shortName(node.point_name) }}
-              </text>
+              >{{ shortName(node.point_name) }}</text>
             </g>
           </g>
+          <g
+            v-if="hoverNode"
+            class="kgp-tip"
+            :transform="'translate(' + tooltip.x + ',' + tooltip.y + ')'"
+            pointer-events="none"
+          >
+            <rect :width="tooltip.w" height="46" rx="9" fill="#ffffff" stroke="#e2e8f0" />
+            <text class="kgp-tip-name" x="10" y="19">{{ hoverNode.point_name }}</text>
+            <text class="kgp-tip-meta" x="10" y="36">
+              热度 {{ hoverNode.heat.toFixed(2) }} · 掌握 {{ (hoverNode.mastery * 100).toFixed(0) }}% · 答题 {{ hoverNode.attempt_count }} 次
+            </text>
+          </g>
         </svg>
+        <p class="kgp-canvas-tip">滚轮缩放 · 按住空白处拖拽平移 · 悬停节点高亮关联 · 双击复位</p>
 
 
       </div>
@@ -102,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 
 interface KgNode {
   point_id: number;
@@ -160,12 +200,30 @@ const loading = ref(false);
 const error = ref('');
 const activeId = ref<number | null>(null);
 
-const svgW = 640;
-const svgH = 420;
+const SVG_W = 1200;
+const SVG_H = 800;
 
-const activeNode = computed(() => nodes.value.find((n) => n.point_id === activeId.value) || null);
+/** 视图（viewBox）：任意方向拖拽平移 + 以鼠标位置为中心缩放 */
+const view = reactive({ x: -SVG_W / 2, y: -SVG_H / 2, w: SVG_W, h: SVG_H });
+const viewBox = computed(() => view.x + ' ' + view.y + ' ' + view.w + ' ' + view.h);
+
+const hoverId = ref<number | null>(null);
+const panning = ref(false);
+let panStart: { clientX: number; clientY: number; viewX: number; viewY: number } | null = null;
+
+/** 节点拖拽 */
+const dragPos = ref<Record<number, { x: number; y: number }>>({});
+const dragId = ref<number | null>(null);
+let dragOffset = { dx: 0, dy: 0 };
+let dragMoved = 0;
+let dragStart = { x: 0, y: 0 };
+
+const svgRef = ref<SVGSVGElement | null>(null);
+
+const activeNode = computed(
+  () => nodes.value.find((node) => node.point_id === activeId.value) || null
+);
 const topNodes = computed(() => [...nodes.value].sort((a, b) => b.heat - a.heat).slice(0, 5));
-
 const temperatureHint = computed(() =>
   habits.value.temperature < 0.7
     ? '节奏稳定，聚焦薄弱点'
@@ -174,30 +232,79 @@ const temperatureHint = computed(() =>
       : '节奏一般，正常探索'
 );
 
-const pos = computed<Record<number, { x: number; y: number }>>(() => {
+const hoverNode = computed(
+  () => nodes.value.find((node) => node.point_id === hoverId.value) || null
+);
+
+const adjacency = computed(() => {
+  const map = new Map<number, Set<number>>();
+  for (const node of nodes.value) map.set(node.point_id, new Set());
+  for (const edge of edges.value) {
+    map.get(edge.src_point)?.add(edge.dst_point);
+    map.get(edge.dst_point)?.add(edge.src_point);
+  }
+  return map;
+});
+
+/** 悬停节点 + 直接邻居；null 表示当前没有悬停 */
+const relatedIds = computed<Set<number> | null>(() => {
+  if (hoverId.value == null) return null;
+  const set = new Set<number>([hoverId.value]);
+  for (const id of adjacency.value.get(hoverId.value) || []) set.add(id);
+  return set;
+});
+
+function isRelated(node: KgNode): boolean {
+  return relatedIds.value ? relatedIds.value.has(node.point_id) : false;
+}
+function isDimmed(node: KgNode): boolean {
+  return relatedIds.value ? !relatedIds.value.has(node.point_id) : false;
+}
+function nodeOpacity(node: KgNode): number {
+  return isDimmed(node) ? 0.12 : 1;
+}
+
+/** 标签宽度估算（10px 字号，中文按 10px/字） */
+function labelWidth(node: KgNode): number {
+  return shortName(node.point_name).length * 10;
+}
+
+/** 碰撞半径：圆 + 下方标签都算进去，保证节点不重叠 */
+function collisionRadius(node: KgNode): number {
+  return Math.max(nodeRadius(node), labelWidth(node) / 2) + 8;
+}
+
+/**
+ * 力导向布局 + 碰撞分离。
+ * 先跑斥力/弹簧/向心力，再对每一对节点做碰撞分离，最后以质心为原点。
+ * 不再把布局强行拉伸铺满画布，避免压缩后节点互相压住。
+ */
+const layout = computed<Record<number, { x: number; y: number }>>(() => {
   const list = [...nodes.value];
   const n = list.length;
   const map: Record<number, { x: number; y: number }> = {};
   if (!n) return map;
 
+  const xs = new Array<number>(n).fill(0);
+  const ys = new Array<number>(n).fill(0);
+  const radii = list.map((node) => collisionRadius(node));
   const idx: Record<number, number> = {};
-  const xs: number[] = [];
-  const ys: number[] = [];
+
   list.forEach((node, i) => {
     idx[node.point_id] = i;
-    const angle = i * 2.399963229728653; // 黄金角，打散初始圆环
-    const radius = Math.min(svgW, svgH) * (0.12 + ((i * 37) % 100) / 100 * 0.3);
-    xs[i] = svgW / 2 + Math.cos(angle) * radius;
-    ys[i] = svgH / 2 + Math.sin(angle) * radius;
+    const angle = i * 2.399963229728653;
+    const radius = 90 + (i % 5) * 40;
+    xs[i] = Math.cos(angle) * radius;
+    ys[i] = Math.sin(angle) * radius;
   });
 
   const links = edges.value.filter(
     (e) => idx[e.src_point] !== undefined && idx[e.dst_point] !== undefined
   );
-  const k = Math.sqrt((svgW * svgH) / Math.max(1, n)) * 0.9;
-  let temp = Math.min(svgW, svgH) / 8;
+  const k = Math.sqrt((SVG_W * SVG_H) / Math.max(1, n)) * 0.62;
+  let temp = 40;
 
-  for (let it = 0; it < 240; it++) {
+  for (let it = 0; it < 420; it++) {
     const dx = new Array<number>(n).fill(0);
     const dy = new Array<number>(n).fill(0);
 
@@ -230,7 +337,7 @@ const pos = computed<Record<number, { x: number; y: number }>>(() => {
       const vx = xs[i] - xs[j];
       const vy = ys[i] - ys[j];
       const d = Math.max(1, Math.sqrt(vx * vx + vy * vy));
-      const f = ((d * d) / k) * 0.95;
+      const f = ((d * d) / k) * 0.55;
       const fx = (vx / d) * f;
       const fy = (vy / d) * f;
       dx[i] -= fx;
@@ -239,66 +346,122 @@ const pos = computed<Record<number, { x: number; y: number }>>(() => {
       dy[j] += fy;
     }
 
-    // 向心力
+    // 向心力（防散架）
     for (let i = 0; i < n; i++) {
-      dx[i] += (svgW / 2 - xs[i]) * 0.006;
-      dy[i] += (svgH / 2 - ys[i]) * 0.006;
+      dx[i] -= xs[i] * 0.03;
+      dy[i] -= ys[i] * 0.03;
     }
 
     // 位移动画（退火）
     for (let i = 0; i < n; i++) {
       const d = Math.max(0.001, Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]));
       const step = Math.min(d, temp);
-      xs[i] = Math.max(34, Math.min(svgW - 34, xs[i] + (dx[i] / d) * step));
-      ys[i] = Math.max(34, Math.min(svgH - 34, ys[i] + (dy[i] / d) * step));
+      xs[i] += (dx[i] / d) * step;
+      ys[i] += (dy[i] / d) * step;
     }
-    temp *= 0.97;
+
+    // 碰撞分离：任何两个节点（含标签）都不允许重叠
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let vx = xs[j] - xs[i];
+        let vy = ys[j] - ys[i];
+        let d = Math.sqrt(vx * vx + vy * vy);
+        const minD = radii[i] + radii[j];
+        if (d >= minD) continue;
+        if (d < 0.001) {
+          vx = 1;
+          vy = 0;
+          d = 1;
+        }
+        const push = (minD - d) / 2;
+        xs[i] -= (vx / d) * push;
+        ys[i] -= (vy / d) * push;
+        xs[j] += (vx / d) * push;
+        ys[j] += (vy / d) * push;
+      }
+    }
+
+    temp *= 0.965;
   }
 
-  // 归一化到画布：保证节点铺满可视区域，而不是缩在中心
-  const pad = 100;
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const spanX = Math.max(1, maxX - minX);
-  const spanY = Math.max(1, maxY - minY);
-  const scaleX = (svgW - pad * 2) / spanX;
-  const scaleY = (svgH - pad * 2) / spanY;
+  // 收缩到合理视口范围：孤立节点/长链容易被斥力推到很远，会把整张图压小
+  const maxRadius = Math.min(SVG_W, SVG_H) * 0.38;
+  for (let i = 0; i < n; i++) {
+    const d = Math.sqrt(xs[i] * xs[i] + ys[i] * ys[i]);
+    if (d > maxRadius) {
+      const ratio = maxRadius / d;
+      xs[i] *= ratio;
+      ys[i] *= ratio;
+    }
+  }
+  // 收缩后可能产生新的重叠，再松弛若干轮
+  for (let pass = 0; pass < 200; pass++) {
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let vx = xs[j] - xs[i];
+        let vy = ys[j] - ys[i];
+        let d = Math.sqrt(vx * vx + vy * vy);
+        const minD = radii[i] + radii[j];
+        if (d >= minD) continue;
+        if (d < 0.001) {
+          vx = 1;
+          vy = 0;
+          d = 1;
+        }
+        const push = (minD - d) / 2;
+        xs[i] -= (vx / d) * push;
+        ys[i] -= (vy / d) * push;
+        xs[j] += (vx / d) * push;
+        ys[j] += (vy / d) * push;
+      }
+    }
+  }
 
+  const cx = xs.reduce((sum, value) => sum + value, 0) / n;
+  const cy = ys.reduce((sum, value) => sum + value, 0) / n;
   list.forEach((node, i) => {
-    map[node.point_id] = {
-      x: pad + (xs[i] - minX) * scaleX,
-      y: pad + (ys[i] - minY) * scaleY
-    };
+    map[node.point_id] = { x: xs[i] - cx, y: ys[i] - cy };
   });
   return map;
 });
 
-const zoom = ref(1);
-const zoomViewBox = computed(() => {
-  const w = svgW / zoom.value;
-  const h = svgH / zoom.value;
-  const x = (svgW - w) / 2;
-  const y = (svgH - h) / 2;
-  return x + ' ' + y + ' ' + w + ' ' + h;
-});
-function onWheel(e: WheelEvent) {
-  zoom.value = Math.max(0.05, zoom.value * (e.deltaY > 0 ? 0.9 : 1.1));
-}
-
-const svgRef = ref<SVGSVGElement | null>(null);
-const dragPos = ref<Record<number, { x: number; y: number }>>({});
-const dragId = ref<number | null>(null);
-const dragOffset = ref({ dx: 0, dy: 0 });
-
 function displayPos(node: KgNode): { x: number; y: number } {
-  return dragPos.value[node.point_id] || pos.value[node.point_id] || { x: 0, y: 0 };
+  return dragPos.value[node.point_id] || layout.value[node.point_id] || { x: 0, y: 0 };
 }
 function displayPosById(id: number): { x: number; y: number } {
-  return dragPos.value[id] || pos.value[id] || { x: 0, y: 0 };
+  return dragPos.value[id] || layout.value[id] || { x: 0, y: 0 };
 }
-function edgePath(e: any): string {
+
+/** 把当前布局完整装进视口 */
+function fitView() {
+  const list = nodes.value;
+  if (!list.length) return;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const node of list) {
+    const point = dragPos.value[node.point_id] || layout.value[node.point_id];
+    if (!point) continue;
+    const r = nodeRadius(node);
+    const halfLabel = labelWidth(node) / 2;
+    const half = Math.max(r, halfLabel);
+    minX = Math.min(minX, point.x - half);
+    maxX = Math.max(maxX, point.x + half);
+    minY = Math.min(minY, point.y - r);
+    maxY = Math.max(maxY, point.y + r + 16);
+  }
+  if (!isFinite(minX)) return;
+  const pad = 40;
+  const width = Math.max(260, maxX - minX + pad * 2);
+  const height = Math.max(200, maxY - minY + pad * 2);
+  view.w = width;
+  view.h = height;
+  view.x = (minX + maxX) / 2 - width / 2;
+  view.y = (minY + maxY) / 2 - height / 2;
+}
+
+function edgePath(e: KgEdge): string {
   const a = displayPosById(e.src_point);
   const b = displayPosById(e.dst_point);
   const dx = b.x - a.x;
@@ -306,38 +469,115 @@ function edgePath(e: any): string {
   const len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len;
   const ny = dx / len;
-  const bend = Math.min(60, len * 0.15);
+  const bend = Math.min(50, len * 0.12);
   const mx = (a.x + b.x) / 2 + nx * bend;
   const my = (a.y + b.y) / 2 + ny * bend;
   return 'M' + a.x + ',' + a.y + ' Q' + mx + ',' + my + ' ' + b.x + ',' + b.y;
 }
 
-function toSvg(e: PointerEvent): { x: number; y: number } {
+/** client 坐标 → SVG 用户坐标（自动处理 viewBox 缩放/平移与 letterbox） */
+function toSvg(e: PointerEvent | WheelEvent): { x: number; y: number } {
   const el = svgRef.value;
   if (!el) return { x: 0, y: 0 };
-  const r = el.getBoundingClientRect();
-  const sx = svgW / r.width;
-  const sy = svgH / r.height;
-  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+  const ctm = el.getScreenCTM();
+  if (!ctm) {
+    const rect = el.getBoundingClientRect();
+    return {
+      x: view.x + ((e.clientX - rect.left) / Math.max(1, rect.width)) * view.w,
+      y: view.y + ((e.clientY - rect.top) / Math.max(1, rect.height)) * view.h
+    };
+  }
+  const point = el.createSVGPoint();
+  point.x = e.clientX;
+  point.y = e.clientY;
+  const mapped = point.matrixTransform(ctm.inverse());
+  return { x: mapped.x, y: mapped.y };
 }
+
+function onWheel(e: WheelEvent) {
+  const cursor = toSvg(e);
+  const factor = e.deltaY > 0 ? 1.15 : 0.87;
+  const nextW = Math.min(6000, Math.max(140, view.w * factor));
+  const k = nextW / view.w;
+  view.x = cursor.x - (cursor.x - view.x) * k;
+  view.y = cursor.y - (cursor.y - view.y) * k;
+  view.w = nextW;
+  view.h = view.h * k;
+}
+
+function onPointerDown(e: PointerEvent) {
+  if (dragId.value != null) return;
+  const target = e.target as Element | null;
+  if (!target) return;
+  const isBackground = target === svgRef.value || target.classList.contains('kgp-bg');
+  if (!isBackground) return;
+  panStart = { clientX: e.clientX, clientY: e.clientY, viewX: view.x, viewY: view.y };
+  panning.value = true;
+  svgRef.value?.setPointerCapture?.(e.pointerId);
+}
+
+function onPointerMove(e: PointerEvent) {
+  if (dragId.value != null) {
+    dragMoved = Math.max(
+      dragMoved,
+      Math.abs(e.clientX - dragStart.x) + Math.abs(e.clientY - dragStart.y)
+    );
+    const cursor = toSvg(e);
+    dragPos.value = {
+      ...dragPos.value,
+      [dragId.value]: { x: cursor.x + dragOffset.dx, y: cursor.y + dragOffset.dy }
+    };
+    return;
+  }
+  if (!panStart) return;
+  const el = svgRef.value;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  // preserveAspectRatio=meet：x/y 使用同一个缩放比
+  const unitsPerPx = Math.max(
+    view.w / Math.max(1, rect.width),
+    view.h / Math.max(1, rect.height)
+  );
+  view.x = panStart.viewX - (e.clientX - panStart.clientX) * unitsPerPx;
+  view.y = panStart.viewY - (e.clientY - panStart.clientY) * unitsPerPx;
+}
+
+function onPointerUp() {
+  if (dragId.value != null) {
+    if (dragMoved < 5) activeId.value = dragId.value;
+    dragId.value = null;
+  }
+  panStart = null;
+  panning.value = false;
+}
+
+function onNodeEnter(node: KgNode) {
+  if (dragId.value == null) hoverId.value = node.point_id;
+}
+function onNodeLeave(node: KgNode) {
+  if (hoverId.value === node.point_id) hoverId.value = null;
+}
+
 function startDrag(node: KgNode, e: PointerEvent) {
-  const p = displayPos(node);
-  const q = toSvg(e);
-  dragOffset.value = { dx: p.x - q.x, dy: p.y - q.y };
+  const point = displayPos(node);
+  const cursor = toSvg(e);
+  dragOffset = { dx: point.x - cursor.x, dy: point.y - cursor.y };
   dragId.value = node.point_id;
-  (e.target as Element).setPointerCapture?.(e.pointerId);
+  dragMoved = 0;
+  dragStart = { x: e.clientX, y: e.clientY };
+  (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
 }
-function onDragMove(e: PointerEvent) {
-  if (dragId.value == null) return;
-  const q = toSvg(e);
-  dragPos.value = {
-    ...dragPos.value,
-    [dragId.value]: { x: q.x + dragOffset.value.dx, y: q.y + dragOffset.value.dy }
-  };
-}
-function endDrag() {
-  dragId.value = null;
-}
+
+const tooltip = computed(() => {
+  const node = hoverNode.value;
+  if (!node) return { x: 0, y: 0, w: 0 };
+  const point = displayPos(node);
+  const r = nodeRadius(node);
+  const w = Math.max(170, Math.min(280, 30 + node.point_name.length * 12));
+  const right = point.x + r + 10;
+  const x = right + w > view.x + view.w ? point.x - r - 10 - w : right;
+  return { x, y: point.y - 18, w };
+});
 
 const NODE_PALETTE = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#06b6d4'];
 function nodeColor(node: KgNode): string {
@@ -345,7 +585,7 @@ function nodeColor(node: KgNode): string {
 }
 
 function nodeRadius(node: KgNode): number {
-  return Math.min(28, 9 + Math.sqrt(Math.max(0, node.heat)) * 6);
+  return Math.min(30, 12 + Math.sqrt(Math.max(0, node.heat)) * 5);
 }
 
 function masteryColor(mastery: number): string {
@@ -360,12 +600,25 @@ function shortName(name: string): string {
   return name.length > 7 ? `${name.slice(0, 6)}…` : name;
 }
 
-function edgeWidth(e: KgEdge): number {
-  return Math.min(6, 1 + Math.max(0, e.weight - 1) * 3);
+function isEdgeRelated(e: KgEdge): boolean {
+  if (hoverId.value == null) return false;
+  return e.src_point === hoverId.value || e.dst_point === hoverId.value;
+}
+
+/** 悬停时：相关边高亮成节点色，其余边淡到几乎看不见 */
+function edgeStroke(e: KgEdge): string {
+  if (isEdgeRelated(e) && hoverNode.value) return nodeColor(hoverNode.value);
+  return '#94a3b8';
+}
+
+function edgeStrokeWidth(e: KgEdge): number {
+  if (isEdgeRelated(e)) return Math.min(4, 1.4 + Math.max(0, e.weight - 1) * 0.6);
+  return Math.min(1.6, 0.8 + Math.max(0, e.weight - 1) * 0.3);
 }
 
 function edgeOpacity(e: KgEdge): number {
-  return Math.min(0.8, 0.25 + (e.weight - 1) * 0.4);
+  if (hoverId.value != null) return isEdgeRelated(e) ? 0.6 : 0.04;
+  return Math.min(0.45, 0.12 + Math.max(0, e.weight - 1) * 0.08);
 }
 
 function slotText(slot: string | null): string {
@@ -425,6 +678,17 @@ async function loadAll(): Promise<void> {
 
 defineExpose({ loadAll });
 
+// 数据变化后重置拖拽并重新适配视口（节点铺满但不重叠）
+watch(
+  [nodes, edges],
+  () => {
+    dragPos.value = {};
+    hoverId.value = null;
+    nextTick(() => fitView());
+  },
+  { flush: 'post' }
+);
+
 onMounted(loadAll);
 </script>
 
@@ -435,6 +699,7 @@ onMounted(loadAll);
   gap: 14px;
 }
 .kgp-canvas-card {
+  position: relative;
   border: 1px solid #e5e7eb;
   border-radius: 14px;
   background: #fff;
@@ -443,21 +708,58 @@ onMounted(loadAll);
 .kgp-svg {
   width: 100%;
   height: 380px;
+  cursor: grab;
+  background: #fff;
+}
+.kgp-svg.is-panning {
+  cursor: grabbing;
 }
 .is-compact .kgp-svg {
   height: 330px;
 }
 .kgp-label {
   font-size: 10px;
-  fill: #1f2937;
+  fill: #475569;
   pointer-events: none;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 .kgp-node {
-  cursor: pointer;
+  cursor: grab;
+  transition: opacity 0.16s ease;
+}
+.kgp-node:active {
+  cursor: grabbing;
+}
+.kgp-node circle {
+  transition: stroke 0.16s ease, stroke-width 0.16s ease;
 }
 .kgp-node.is-active circle {
   stroke: #f59e0b;
   stroke-width: 3;
+}
+.kgp-tip-name {
+  font-size: 12px;
+  font-weight: 600;
+  fill: #0f172a;
+}
+.kgp-tip-meta {
+  font-size: 10.5px;
+  fill: #64748b;
+}
+.kgp-canvas-tip {
+  position: absolute;
+  left: 18px;
+  bottom: 14px;
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  font-size: 11px;
+  color: #94a3b8;
+  pointer-events: none;
 }
 .kgp-node-detail {
   display: flex;
@@ -559,6 +861,7 @@ onMounted(loadAll);
 /* 2026-11-09：手机端图谱布局（单列、矮画布、紧凑标签） */
 @media (max-width: 768px) {
   .kgp-svg { height: 260px; }
+  .kgp-canvas-tip { left: 10px; bottom: 8px; font-size: 10px; }
   .is-compact .kgp-svg { height: 240px; }
   .kgp-label { font-size: 9px; }
   .kgp-canvas-card { padding: 6px; }

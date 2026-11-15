@@ -425,7 +425,13 @@ const loadDailyGoal = async () => {
       if (!trendHasData.value) return;
       const el = trendChartRef.value;
       if (!el) return;
+      // 2026-11-11：容器还没布局完（0 宽高）时稍后重试，避免 ECharts 初始化告警
+      if (!el.clientWidth || !el.clientHeight) {
+        setTimeout(renderTrendChart, 80);
+        return;
+      }
       if (!trendInstance) trendInstance = echarts.init(el);
+      else trendInstance.resize();
       const isBar = chartType.value === 'bar';
       const series: any = isBar
         ? {

@@ -27,6 +27,7 @@
 
 <script lang="ts">
 import { defineComponent, ref, onErrorCaptured } from 'vue';
+import { isChunkLoadError, reloadForChunkError } from '../../utils/chunkRecovery';
 
 export default defineComponent({
   name: 'VtjErrorBoundary',
@@ -42,6 +43,10 @@ export default defineComponent({
     const errorMessage = ref('组件渲染异常');
 
     onErrorCaptured((err: any, instance, info) => {
+      // 页面模块没加载下来时先自动重载一次（有次数保护），仍失败再展示兜底页
+      if (isChunkLoadError(err) && reloadForChunkError()) {
+        return false;
+      }
       console.error('[VtjErrorBoundary] 捕获到组件错误:', err);
       console.error('[VtjErrorBoundary] 错误信息:', info);
       hasError.value = true;

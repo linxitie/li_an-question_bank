@@ -382,7 +382,7 @@
             <div class="post-title">
               <span v-if="activePost.aiTitle" class="ai-title-tag">AI生成</span>{{ activePost.title || '（无标题）' }}
               <span :class="['pill', statusClass(activePost.status)]"><i></i>{{ statusText(activePost.status) }}</span>
-              <span v-if="activePost.isTop" class="pill pin"><i></i>置顶</span>
+              <span v-if="activePost.isTop" class="pill pin"><i></i>置顶<template v-if="activePost.pinUntil"> 至 {{ activePost.pinUntil.slice(0, 10) }}</template></span>
               <span v-if="activePost.isEssence" class="pill essence"><i></i>精华</span>
             </div>
             <!-- 富文本帖子（contentFormat=HTML）不能再去表情包占位符后当纯文本渲染，否则标签会显示出来 -->
@@ -414,7 +414,7 @@
             </div>
             <div v-if="activePost.status !== 'DELETED'" class="post-admin">
               <span class="lbl">管理操作</span>
-              <button class="btn btn-sm" @click="togglePin">
+              <button class="btn btn-sm" @click="openPinModal">
                 {{ activePost.isTop ? '取消置顶' : '置顶' }}
               </button>
               <button v-if="activePost.status === 'BLOCKED'" class="btn btn-sm" @click="askAction('unhide', activePost)">
@@ -445,11 +445,7 @@
                   <span class="cmt-time">{{ c.createTime ? String(c.createTime).replace('T', ' ').slice(0, 16) : '' }}</span>
                 </div>
                 <div class="tx text-body"><ForumContent :content="c.content" :format="c.contentFormat" /></div>
-                <AttachmentList
-                  v-if="c.attachments && c.attachments.length"
-                  :attachments="c.attachments"
-                  mode="comment"
-                />
+                <!-- 2026-11-14：评论附件已在正文内联展示，不再汇总（与学生端一致） -->
                 <div class="ft">
                   <button class="lnk" :class="{ on: c.liked }" @click.stop="likeCommentRow(c)">❤ {{ c.likeCount || 0 }}</button>
                   <button class="lnk" :class="{ on: c.favorited }" @click.stop="favCommentRow(c)">★ {{ c.favoriteCount || 0 }}</button>
@@ -460,34 +456,28 @@
             <p v-if="!drawerComments.length" class="empty">暂无评论</p>
 
             <!-- 管理员代发评论：此前管理端只能看和删，不能评论（用户反馈） -->
-            <div class="cmt-input">
+          </div>
+        </template>
+      </div>
+      <div class="cmt-input">
+              <button class="cmt-icon-btn" title="表情 / 表情包" @click="showAdminEmoji = !showAdminEmoji">😊</button>
+              <FileUploader v-model="adminCommentAttachments" :max-docs="0" class="cmt-uploader" />
               <div class="cmt-input-box">
-                <textarea
+                <InlineCommentEditor
+                  ref="adminEditorRef"
                   v-model="adminComment"
-                  maxlength="2000"
-                  rows="2"
-                  class="cmt-textarea"
                   placeholder="以管理员身份评论… Ctrl+Enter 发送"
-                  @keyup.ctrl.enter="submitAdminComment"
-                />
+                  :maxlength="2000"
+                  @submit="submitAdminComment" />
                 <button class="cmt-fs-btn" title="全屏输入" @click="adminFullscreen = true">⛶</button>
               </div>
-              <div class="cmt-tools">
-                <button class="cmt-icon-btn" title="表情 / 表情包" @click="showAdminEmoji = !showAdminEmoji">😊</button>
-                <FileUploader v-model="adminCommentAttachments" :max-docs="0" class="cmt-uploader" />
-                <button
-                  class="btn btn-sm btn-primary"
-                  :disabled="sendingComment || !adminComment.trim()"
-                  @click="submitAdminComment"
-                >{{ sendingComment ? '发送中…' : '发送' }}</button>
-              </div>
+              <button class="btn btn-sm btn-primary cmt-send" :disabled="sendingComment || !adminComment.trim()" @click="submitAdminComment">
+                {{ sendingComment ? '发送中…' : '发送' }}
+              </button>
               <div v-if="showAdminEmoji" class="cmt-emoji-pop">
                 <EmojiStickerPicker @select="onAdminEmojiSelect" @close="showAdminEmoji = false" />
               </div>
             </div>
-          </div>
-        </template>
-      </div>
     </aside>
     </div>
 
@@ -499,7 +489,13 @@
           <button class="close-x" @click="adminFullscreen = false">×</button>
         </div>
         <div class="cmt-fs-body">
-          <textarea v-model="adminComment" class="cmt-fs-textarea" maxlength="2000" placeholder="以管理员身份评论…"></textarea>
+          <InlineCommentEditor
+            ref="fullscreenEditorRef"
+            v-model="adminComment"
+            class="cmt-fs-textarea"
+            placeholder="以管理员身份评论…"
+            :maxlength="2000"
+            @submit="submitAdminComment" />
           <div class="cmt-fs-tools">
             <button class="cmt-icon-btn" title="表情 / 表情包" @click="showAdminEmoji = !showAdminEmoji">😊</button>
             <FileUploader v-model="adminCommentAttachments" :max-docs="0" />
@@ -573,6 +569,38 @@
       </div>
     </div>
 
+    <!-- ============ 置顶时长弹窗（2026-11-10） ============ -->
+    <div v-if="pinOpen" class="modal-mask on" @click.self="pinOpen = false">
+      <div class="modal">
+        <div class="modal-hd">
+          <h3>置顶帖子</h3>
+          <button class="close-x" @click="pinOpen = false">×</button>
+        </div>
+        <div class="modal-bd">
+          <div class="info-box">
+            <div class="wi">!</div>
+            <p>置顶后帖子出现在列表最上方；到期自动取消置顶，也可随时手动取消。</p>
+          </div>
+          <div class="f-row">
+            <label>置顶时长</label>
+            <div class="seg-time">
+              <button
+                v-for="opt in pinOptions"
+                :key="opt.value"
+                :class="{ on: pinDays === opt.value }"
+                @click="pinDays = opt.value">{{ opt.label }}</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn" @click="pinOpen = false">取消</button>
+          <button class="btn btn-primary" :disabled="pinSubmitting" @click="submitPin">
+            {{ pinSubmitting ? '处理中…' : '确认置顶' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ============ 发布新帖 ============ -->
     <PostComposer
       v-model:visible="composerOpen"
@@ -592,7 +620,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { XChart } from '@vtj/charts';
 
@@ -602,6 +630,7 @@ import ForumContent from '@/components/forum/ForumContent.vue';
 import ImageGrid from '@/components/forum/ImageGrid.vue';
 import FileUploader from '@/components/forum/FileUploader.vue';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
+import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
 import { isImageUrl } from '@/components/forum/imageUtils';
 import {
   adminForumApi,
@@ -673,10 +702,25 @@ const showAdminEmoji = ref(false);
 const adminFullscreen = ref(false);
 const sendingComment = ref(false);
 
-function onAdminEmojiSelect(p: { value: string }) {
-  adminComment.value += p.value;
+const adminEditorRef = ref<any>(null);
+const fullscreenEditorRef = ref<any>(null);
+
+function onAdminEmojiSelect(p: { value: string; type?: string; name?: string }) {
+  const target = adminFullscreen.value ? fullscreenEditorRef : adminEditorRef;
+  if (p.type === 'sticker') {
+    target.value?.insertAttachment({ url: p.value, name: p.name || '表情包' });
+  } else {
+    target.value?.insertText(p.value);
+  }
   showAdminEmoji.value = false;
 }
+
+watch(adminCommentAttachments, (next, prev) => {
+  if (!next || !prev || next.length <= prev.length) return;
+  for (const att of next.slice(prev.length)) {
+    (adminFullscreen.value ? fullscreenEditorRef : adminEditorRef).value?.insertAttachment(att);
+  }
+});
 
 /** 表情包在正文里以 [[sticker:url]] 形式存储，抽出来按图片渲染 */
 const STICKER_RE = /\[\[sticker:([^\]]+)\]\]/g;
@@ -1353,10 +1397,27 @@ async function loadDrawerComments(postId: number) {
     ]);
     const interMap = new Map<number, any>();
     for (const c of (stuRes as any).comments || []) interMap.set(c.id, c);
-    drawerComments.value = ((admRes as any).items || []).map((c: any) => ({
+    const list = ((admRes as any).items || []).map((c: any) => ({
       ...c,
       ...(interMap.get(c.id) || {})
     }));
+    const dir = commentOrder.value === 'asc' ? 1 : -1;
+    list.sort((a: any, b: any) => {
+      let av = 0;
+      let bv = 0;
+      if (commentSort.value === 'likes') {
+        av = a.likeCount || 0;
+        bv = b.likeCount || 0;
+      } else if (commentSort.value === 'replies') {
+        av = a.replyCount || 0;
+        bv = b.replyCount || 0;
+      } else {
+        av = a.createTime ? new Date(a.createTime).getTime() : 0;
+        bv = b.createTime ? new Date(b.createTime).getTime() : 0;
+      }
+      return (av - bv) * dir;
+    });
+    drawerComments.value = list;
   } catch {
     drawerComments.value = [];
   }
@@ -1383,16 +1444,55 @@ async function refreshDrawer() {
   if (inList) activePost.value = inList;
 }
 
-async function togglePin() {
+// 置顶时长（2026-11-10）：不再一键永久置顶，先选 1/3/7/30 天或永久
+const pinOpen = ref(false);
+const pinDays = ref(7);
+const pinSubmitting = ref(false);
+const pinOptions = [
+  { value: 1, label: '1 天' },
+  { value: 3, label: '3 天' },
+  { value: 7, label: '7 天' },
+  { value: 30, label: '30 天' },
+  { value: 0, label: '永久' }
+];
+
+function openPinModal() {
   if (!activePost.value) return;
-  const next = !activePost.value.isTop;
+  if (activePost.value.isTop) {
+    void togglePin(false);
+    return;
+  }
+  pinDays.value = 7;
+  pinOpen.value = true;
+}
+
+async function submitPin() {
+  pinSubmitting.value = true;
   try {
-    await adminForumApi.pinPost(activePost.value.id, next);
-    showToast(next ? '已置顶' : '已取消置顶');
-    activePost.value = { ...activePost.value, isTop: next };
+    const ok = await togglePin(true, pinDays.value);
+    if (ok) pinOpen.value = false;
+  } finally {
+    pinSubmitting.value = false;
+  }
+}
+
+async function togglePin(next: boolean, days?: number) {
+  if (!activePost.value) return false;
+  try {
+    const res = await adminForumApi.pinPost(activePost.value.id, next, days);
+    showToast(
+      next ? (days && days > 0 ? `已置顶 ${days} 天` : '已永久置顶') : '已取消置顶'
+    );
+    activePost.value = {
+      ...activePost.value,
+      isTop: next,
+      pinUntil: res?.pinUntil ?? null
+    };
     await loadPosts();
+    return true;
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '置顶失败');
+    return false;
   }
 }
 
@@ -1903,19 +2003,33 @@ input[type='checkbox'].cb {
 }
 .cmt-emoji-pop { margin-top: 8px; }
 .cmt-input {
-  position: sticky;
-  bottom: 0;
+  position: relative;
+  bottom: auto;
   background: #fff;
   border: 1px solid #e6ebf3;
   border-radius: 16px;
-  padding: 10px 20px;
-  margin: 12px -16px -35px;
+  padding: 8px 16px;
+  margin: 0 16px 16px;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 13px;
-  align-items: flex-end;
+  align-items: center;
   box-shadow: 0 -4px 14px rgba(23, 35, 58, 0.05);
 }
+.cmt-input .cmt-icon-btn { order: 1; flex: 0 0 auto; }
+.cmt-input .cmt-uploader { order: 1; flex: 0 0 auto; }
+.cmt-input .cmt-input-box { order: 2; flex: 1 1 auto; }
+.cmt-input .cmt-send { order: 3; flex: 0 0 auto; }
+.cmt-input .cmt-input-box { flex: 1 1 auto; }
+.cmt-input .cmt-tools { width: auto; margin-left: auto; }
+.cmt-input .cmt-textarea {
+  font-size: 14px;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  resize: none;
+}
+.drawer-bd { padding-bottom: 0; }
 .cmt-input .cmt-icon-btn[title="全屏输入"] {
   position: absolute;
   right: 10px;
@@ -1933,7 +2047,7 @@ input[type='checkbox'].cb {
 .cmt-fs-tools .btn { margin-left: auto; }
 .cmt-fs-picker { align-self: flex-start; }
 .cmt-input .cmt-textarea {
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   min-height: 72px;
   border: 0;
   padding: 0;
@@ -2379,7 +2493,9 @@ input[type='checkbox'].cb {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 70;
+  /* 2026-11-10：必须高于帖子详情弹窗（.detail-mask z-index 2000），
+     否则隐藏/删除/置顶确认框会被详情弹窗盖住、点不到按钮 */
+  z-index: 3000;
 }
 .modal {
   width: 520px;
@@ -2890,7 +3006,7 @@ input[type='checkbox'].cb {
 .ava img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .cmt-input-box { position: relative; flex: 1 1 100%; display: flex; }
 .cmt-input-box .cmt-textarea { flex: 1; width: 100%; }
-.cmt-fs-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8a8faa; font-size: 15px; cursor: pointer; }
+.cmt-fs-btn { z-index: 10; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8a8faa; font-size: 40px; line-height: 1; padding: 0; cursor: pointer; }
 .stat-act { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 1px 10px; font-size: 12px; color: #5b6b84; cursor: pointer; }
 .stat-act.on { color: #c41e3a; border-color: #f0c4cc; background: #fff5f7; }
 .cmt .ft .lnk.on { color: #c41e3a; }

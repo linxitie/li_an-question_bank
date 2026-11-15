@@ -418,6 +418,20 @@
         this.state.records = this.rewardStore.records;
       },
       async loadTasks() {
+        // 2026-11-10：完成任务自动发金币的兜底——把历史上「已完成未领取」的任务一次补齐，
+        // 之后每条任务达成时由后端事件链路即时发放，不再需要手动点「领取」。
+        try {
+          const autoRes = await window.__VTJ_AUTH__.apiFetch('/api/tasks/auto-claim', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          const autoData = await autoRes.json();
+          if (autoRes.ok && autoData.total_coins > 0) {
+            ElMessage.success('🪙' + autoData.total_coins + ' 任务奖励已自动到账');
+            this.state.balance = autoData.balance;
+          }
+        } catch (e) { /* 静默：自动领取失败不影响任务列表展示 */ }
         try {
           const res = await window.__VTJ_AUTH__.apiFetch('/api/tasks/overview');
           const data = await res.json();

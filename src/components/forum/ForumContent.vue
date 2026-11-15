@@ -12,6 +12,21 @@
         class="forum-content-sticker"
         alt="表情包"
       />
+      <span v-else-if="segment.fileUrl" class="forum-inline-file">
+        <img
+          v-if="segment.fileIsImage"
+          :src="segment.fileUrl"
+          class="forum-inline-img"
+          :alt="segment.fileName"
+        />
+        <a
+          v-else
+          :href="segment.fileUrl"
+          target="_blank"
+          rel="noopener"
+          class="forum-inline-doc"
+        >📎 {{ segment.fileName }}</a>
+      </span>
       <strong v-else-if="segment.bold">{{ segment.text }}</strong>
       <em v-else-if="segment.italic">{{ segment.text }}</em>
       <u v-else-if="segment.underline">{{ segment.text }}</u>
@@ -74,12 +89,15 @@ const safeHtml = computed(() => {
 interface Segment {
   text?: string;
   url?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileIsImage?: boolean;
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
 }
 
-const STICKER_PATTERN = /\[\[sticker:([^\]]+)\]\]/g;
+const TOKEN_PATTERN = /\[\[(sticker|file):([^\]]*?)\]\]/g;
 
 /**
  * 行内格式：**加粗**、*斜体*、__下划线__。
@@ -116,12 +134,24 @@ const segments = computed<Segment[]>(() => {
   const result: Segment[] = [];
   let cursor = 0;
 
-  for (const match of text.matchAll(STICKER_PATTERN)) {
+  for (const match of text.matchAll(TOKEN_PATTERN)) {
     const index = match.index ?? 0;
     if (index > cursor) {
       result.push(...parseInline(text.slice(cursor, index)));
     }
-    result.push({ url: match[1] });
+    if (match[1] === 'sticker') {
+      result.push({ url: match[2] });
+    } else {
+      const payload = match[2] || '';
+      const sep = payload.lastIndexOf('|');
+      const fileUrl = sep >= 0 ? payload.slice(0, sep) : payload;
+      const fileName = sep >= 0 ? payload.slice(sep + 1) : (fileUrl.split('/').pop() || '附件');
+      result.push({
+        fileUrl,
+        fileName,
+        fileIsImage: /\.(png|jpe?g|gif|webp)(\?|$)/i.test(fileUrl)
+      });
+    }
     cursor = index + match[0].length;
   }
 
@@ -187,4 +217,8 @@ const segments = computed<Segment[]>(() => {
   color: #5b6b84;
   background: #f8fafd;
 }
+.forum-inline-file { display: inline-block; vertical-align: middle; margin: 2px 4px; }
+/* 2026-11-14：正文内联图片缩到原来的一半（原 180×140），三端共用 */
+.forum-inline-img { max-width: 90px; max-height: 70px; border-radius: 6px; object-fit: cover; }
+.forum-inline-doc { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid #e6ebf3; border-radius: 8px; background: #f8fafc; font-size: 12px; color: #1a365d; text-decoration: none; }
 </style>

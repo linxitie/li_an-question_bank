@@ -7,7 +7,9 @@
         <XIcon :icon="ArrowLeft" :size="22" color="#1A365D" class="nav-back" @click="goBack"></XIcon>
       </div>
       <h1 class="nav-title">学习论坛</h1>
-      <div class="nav-right"></div>
+      <div class="nav-right">
+        <button class="m-feedback-btn" @click="showFeedback = true">反馈</button>
+      </div>
     </header>
 
     <!-- 固定工具条：全部 / 今日热门 / 我的帖子 + 五角星 + 搜索筛选 -->
@@ -128,6 +130,23 @@
     </div>
 
     <!-- 底部Tab栏：统一使用单一真源组件 src/components/MobileTabBar.vue -->
+    <div v-if="showFeedback" class="m-fb-mask" @click.self="showFeedback = false">
+      <div class="m-fb-card">
+        <div class="m-fb-head">
+          <h3>问题反馈</h3>
+          <button class="m-fb-close" @click="showFeedback = false">×</button>
+        </div>
+        <textarea v-model="feedbackText" rows="5" maxlength="1000" placeholder="请描述你遇到的问题或建议…"></textarea>
+        <label class="m-fb-anon"><input type="checkbox" v-model="feedbackAnonymous" /> 匿名提交（管理员端显示「匿名」）</label>
+        <div class="m-fb-actions">
+          <button class="m-fb-cancel" @click="showFeedback = false">取消</button>
+          <button class="m-fb-submit" :disabled="feedbackSubmitting || !feedbackText.trim()" @click="submitFeedback">
+            {{ feedbackSubmitting ? '提交中…' : '提交' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <MobileTabBar active="forum" />
   </div>
 
@@ -207,6 +226,10 @@ export default defineComponent({
     const searchCollapsed = ref(false);
     const searchDateFrom = ref('');
     const searchDateTo = ref('');
+    const showFeedback = ref(false);
+    const feedbackText = ref('');
+    const feedbackAnonymous = ref(false);
+    const feedbackSubmitting = ref(false);
     // key 必须与后端 forum_post.share_type 枚举一致
     // 2026-10-31：取消原分类，改为 全部 / 今日热门 / 我的帖子
     const tabs = ref([
@@ -431,6 +454,38 @@ export default defineComponent({
       }
     };
 
+    const submitFeedback = async () => {
+      const content = feedbackText.value.trim();
+      if (!content) return;
+      feedbackSubmitting.value = true;
+      try {
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            category: '其他',
+            source: 'mobile_forum',
+            is_anonymous: feedbackAnonymous.value ? 1 : 0
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback.value = false;
+          feedbackText.value = '';
+          feedbackAnonymous.value = false;
+          alert('反馈已提交：' + (data.ticket_no || ''));
+        } else {
+          alert(data.detail || '提交失败');
+        }
+      } catch (e) {
+        alert('提交失败');
+      } finally {
+        feedbackSubmitting.value = false;
+      }
+    };
+
     const viewPost = (post: any) => {
       // 2026-11-04 v5：进详情前记住列表滚动位置，返回后能接着看（此前会跳回顶部）
       saveScroll();
@@ -464,6 +519,11 @@ export default defineComponent({
       viewPost,
       // 收藏弹窗里用的是 goToDetail，之前没有定义 → 点了没反应（v5 修正）
       goToDetail: viewPost,
+      showFeedback,
+      feedbackText,
+      feedbackAnonymous,
+      feedbackSubmitting,
+      submitFeedback,
       onAvatarError,
       ArrowLeft,
       Plus,
@@ -829,4 +889,15 @@ export default defineComponent({
   100% { transform: scale(1); }
 }
 .heart-ico.on, .star-ico.on { display: inline-block; animation: mf-icon-pop 0.45s ease; }
+.m-feedback-btn { border: 1px solid #dfe3ee; background: #fff; color: #1a365d; border-radius: 999px; padding: 4px 12px; font-size: 12px; }
+.m-fb-mask { position: fixed; inset: 0; z-index: 3000; background: rgba(12,26,44,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.m-fb-card { width: 100%; max-width: 420px; background: #fff; border-radius: 14px; padding: 16px; }
+.m-fb-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.m-fb-head h3 { margin: 0; font-size: 16px; color: #1a2b5f; }
+.m-fb-close { border: 0; background: transparent; font-size: 22px; color: #8a8faa; }
+.m-fb-card textarea { width: 100%; box-sizing: border-box; border: 1px solid #dfe3ee; border-radius: 10px; padding: 10px 12px; font-size: 14px; resize: vertical; font-family: inherit; }
+.m-fb-anon { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 12px; color: #5a6488; }
+.m-fb-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.m-fb-cancel { border: 1px solid #dfe3ee; background: #fff; border-radius: 8px; padding: 7px 16px; }
+.m-fb-submit { border: none; background: #c41e3a; color: #fff; border-radius: 8px; padding: 7px 18px; }
 </style>

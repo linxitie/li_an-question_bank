@@ -459,6 +459,8 @@ async def lifespan(app: FastAPI):
                 ('ai_title', 'INTEGER DEFAULT 0'),
                 # AI 标题开关（2026-11-04 v4）：默认允许，关闭后不调用大模型
                 ('ai_title_enabled', 'INTEGER DEFAULT 1'),
+                # 置顶时长（2026-11-10）：NULL=永久；到点由调度任务自动取消置顶
+                ('pin_until', 'DATETIME'),
             ]
             with engine.connect() as conn:
                 for col_name, col_type in forum_new_cols:

@@ -125,15 +125,13 @@
             </div>
             <div class="tf-comment-body">
               <p><ForumContent :content="c.content" :format="c.contentFormat" /></p>
-              <AttachmentList
-                v-if="c.attachments && c.attachments.length"
-                :attachments="c.attachments"
-                mode="comment" />
+              <!-- 2026-11-14：评论附件已在正文内联展示，不再汇总（与学生端一致） -->
               <div class="tf-comment-actions">
                 <button class="tf-act" :class="{ on: c.liked }" @click.stop="commentLike(c)">❤ {{ c.likeCount || 0 }}</button>
                 <button class="tf-act" :class="{ on: c.favorited }" @click.stop="commentFavorite(c)">★ {{ c.favoriteCount || 0 }}</button>
                 <button class="tf-act" @click.stop="commentReport(c)">举报</button>
                 <button class="tf-act" @click.stop="startReplyComment(c)">回复</button>
+                <button v-if="canDeleteOwnComment(c)" class="tf-act tf-act-danger" @click.stop="deleteOwnComment(c)">删除</button>
                 <span class="tf-act-r">回复 {{ c.replyCount || 0 }}</span>
               </div>
             </div>
@@ -147,17 +145,17 @@
               回复 @{{ replyTarget.user?.nickname || replyTarget.author || '匿名' }}
               <button class="tf-reply-cancel" @click="replyTarget = null">取消</button>
             </div>
-            <div class="tf-comment-box">
-              <textarea
-                v-model="commentDraft"
-                class="tf-comment-textarea"
-                rows="2"
-                placeholder="写下你的评论… Ctrl+Enter 发送"
-                @keyup.ctrl.enter="submitComment" />
-              <button class="tf-fs-btn" title="全屏输入" @click="fullscreenInput = true">⛶</button>
-            </div>
             <button class="tf-icon-btn" title="表情" @click="showCommentEmoji = !showCommentEmoji">😊</button>
             <FileUploader v-model="commentAttachments" :max-docs="0" class="tf-comment-uploader" />
+            <div class="tf-comment-box">
+              <InlineCommentEditor
+                ref="commentEditorRef"
+                v-model="commentDraft"
+                placeholder="写下你的评论… Ctrl+Enter 发送"
+                :maxlength="2000"
+                @submit="submitComment" />
+              <button class="tf-fs-btn" title="全屏输入" @click="fullscreenInput = true">⛶</button>
+            </div>
             <div v-if="showCommentEmoji" class="tf-emoji-pop">
               <EmojiStickerPicker @select="onEmojiSelect" @close="showCommentEmoji = false" />
             </div>
@@ -319,7 +317,13 @@
           <button class="tf-close" @click="fullscreenInput = false">×</button>
         </div>
         <div class="tf-fs-body">
-          <textarea v-model="commentDraft" class="tf-fs-textarea" rows="10" placeholder="写下你的评论… Ctrl+Enter 发送"></textarea>
+          <InlineCommentEditor
+            ref="fullscreenEditorRef"
+            v-model="commentDraft"
+            class="tf-fs-textarea"
+            placeholder="写下你的评论… Ctrl+Enter 发送"
+            :maxlength="2000"
+            @submit="submitComment" />
           <div class="tf-fs-tools">
             <button class="tf-icon-btn" title="表情 / 表情包" @click="showCommentEmoji = !showCommentEmoji">😊</button>
             <FileUploader v-model="commentAttachments" :max-docs="0" />
@@ -337,11 +341,12 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 
 import TeacherNavHeader from '$vtj/vue/TeacherNavHeader.vue';
 import ModerationReasonDialog from '@/components/forum/ModerationReasonDialog.vue';
+import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
@@ -419,12 +424,15 @@ const favList = ref<any[]>([]);
 const favLoading = ref(false);
 const commentStickers = ref<any[]>([]);
 const replyTarget = ref<any>(null);
+const commentEditorRef = ref<any>(null);
+const fullscreenEditorRef = ref<any>(null);
 const onEmojiSelect = (p: { value: string; type?: string; name?: string }) => {
-  // 2026-11-07：表情包不再把 URL 当文本拼进正文（会显示成一串路径），改走图片附件
   if (p.type === 'sticker') {
-    commentStickers.value.push({ name: p.name || '表情包', url: p.value, size: 0, type: 'image' });
+    const att = { name: p.name || '表情包', url: p.value, size: 0, type: 'image' };
+    commentStickers.value.push(att);
+    (fullscreenInput.value ? fullscreenEditorRef : commentEditorRef).value?.insertAttachment(att);
   } else {
-    commentDraft.value += p.value;
+    (fullscreenInput.value ? fullscreenEditorRef : commentEditorRef).value?.insertText(p.value);
   }
   showCommentEmoji.value = false;
 };
@@ -650,6 +658,40 @@ const detailPostFavorite = async () => {
   }
 };
 
+const currentUserId = () => {
+  const auth = (window as any).__VTJ_AUTH__;
+  const info = auth && auth.parseUserInfo ? auth.parseUserInfo() : null;
+  return info && info.userId ? info.userId : null;
+};
+
+const canDeleteOwnComment = (c: any) => {
+  const uid = currentUserId();
+  return !!(uid && c.user && c.user.id === uid);
+};
+
+const deleteOwnComment = async (c: any) => {
+  if (!window.confirm('确定删除这条评论？')) return;
+  try {
+    const auth = (window as any).__VTJ_AUTH__;
+    const r = await auth.apiFetch('/api/forum/comments/' + c.id, { method: 'DELETE' });
+    if (r.ok) {
+      ElMessage.success('评论已删除');
+      if (detail.value) await loadComments(detail.value.id);
+    } else {
+      ElMessage.error('删除失败');
+    }
+  } catch (e) {
+    ElMessage.error('删除失败');
+  }
+};
+
+watch(commentAttachments, (next, prev) => {
+  if (!next || !prev || next.length <= prev.length) return;
+  for (const att of next.slice(prev.length)) {
+    (fullscreenInput.value ? fullscreenEditorRef : commentEditorRef).value?.insertAttachment(att);
+  }
+});
+
 const startReplyComment = (c: any) => {
   replyTarget.value = c;
   showCommentEmoji.value = false;
@@ -749,10 +791,27 @@ const loadComments = async (postId: number) => {
     ]);
     const interMap = new Map<number, any>();
     for (const c of (studentData as any).comments || []) interMap.set(c.id, c);
-    comments.value = ((teacherData as any).items || []).map((c: any) => ({
+    const list = ((teacherData as any).items || []).map((c: any) => ({
       ...c,
       ...(interMap.get(c.id) || {})
     }));
+    const dir = commentOrder.value === 'asc' ? 1 : -1;
+    list.sort((a: any, b: any) => {
+      let av = 0;
+      let bv = 0;
+      if (commentSort.value === 'likes') {
+        av = a.likeCount || 0;
+        bv = b.likeCount || 0;
+      } else if (commentSort.value === 'replies') {
+        av = a.replyCount || 0;
+        bv = b.replyCount || 0;
+      } else {
+        av = a.createTime ? new Date(a.createTime).getTime() : 0;
+        bv = b.createTime ? new Date(b.createTime).getTime() : 0;
+      }
+      return (av - bv) * dir;
+    });
+    comments.value = list;
   } catch (e) {
     comments.value = [];
   }
@@ -1012,6 +1071,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
 .tf-comment-hide { margin-left: auto; }
 .tf-comment-body { padding-left: 44px; display: flex; flex-direction: column; gap: 6px; }
 .tf-comment-body :deep(img) { max-width: 220px; border-radius: 10px; }
+/* 2026-11-14：正文内联图片与学生端统一（原 180×140 的一半），覆盖上面的通配 img 规则 */
+.tf-comment-body :deep(.forum-inline-img) { max-width: 90px; max-height: 70px; }
 .tf-comment { display: block; }
 .tf-nav-sticky { position: sticky; top: 0; z-index: 100; }
 /* 标题行 + 筛选栏合并为一层吸顶，中间不留缝 */
@@ -1166,18 +1227,26 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
 .tf-detail-card .tf-comment-textarea { height: 95px; min-height: 95px; }
 /* 2026-11-09：评论输入条参数与全屏输入 */
 .tf-comment-input {
-  margin: 0 -20px -35px;
+  margin: 0 -20px -12px;
   border-radius: 16px;
   gap: 13px;
-  padding: 10px 20px;
+  padding: 8px 20px;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   position: relative;
 }
+.tf-comment-input .tf-comment-box { flex: 1 1 auto; order: 2; }
+.tf-comment-input .tf-icon-btn { order: 1; }
+.tf-comment-input .tf-comment-uploader { order: 1; }
+.tf-comment-input .tf-btn { order: 3; }
 .tf-comment-input .tf-comment-textarea {
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   width: 100%;
+  height: 40px;
+  min-height: 40px;
+  max-height: 120px;
+  font-size: 14px;
 }
 .tf-comment-input .tf-icon-btn,
 .tf-comment-input .tf-comment-uploader,
@@ -1210,13 +1279,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
 .tf-detail-act.on { color: #c41e3a; border-color: #f0c4cc; background: #fff5f7; }
 .tf-comment-box { position: relative; flex: 1 1 100%; display: flex; }
 .tf-comment-box .tf-comment-textarea { flex: 1; width: 100%; }
-.tf-fs-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8a8faa; font-size: 15px; cursor: pointer; }
+.tf-fs-btn { z-index: 10; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #8a8faa; font-size: 40px; line-height: 1; padding: 0; cursor: pointer; }
 .tf-comment-sort { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
 .tf-comment-sort button { border: 1px solid #e6ebf3; background: #fff; border-radius: 999px; padding: 3px 12px; font-size: 12px; color: #5b6b84; cursor: pointer; }
 .tf-comment-sort button.on { background: #1a365d; border-color: #1a365d; color: #fff; }
 .tf-comment-sort .tf-sort-order { margin-left: auto; }
 .tf-reply-hint { flex: 1 1 100%; font-size: 12px; color: #5b6b84; display: flex; align-items: center; gap: 8px; }
 .tf-reply-cancel { border: 0; background: transparent; color: #c41e3a; cursor: pointer; font-size: 12px; }
+.tf-act-danger { color: #c41e3a; }
 </style>
 
 

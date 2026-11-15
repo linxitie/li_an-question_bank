@@ -55,6 +55,7 @@
                  正文以 HTML 存储，落库前后端会走 bleach 白名单消毒。 -->
             <div class="editor-rich">
               <RichTextEditor
+                ref="richEditorRef"
                 v-model="form.content"
                 :menus="richMenus"
                 :height="200"
@@ -77,7 +78,7 @@
               <span v-if="uploading">上传中…</span>
               <template v-else>
                 拖拽文件到此处，或 <b>点击选择文件</b>
-                <small>{{ attachHint }}</small>
+                <small>上传后直接插入正文 · {{ attachHint }}</small>
               </template>
             </div>
             <div v-if="form.attachments.length" class="pc-files">
@@ -239,6 +240,10 @@ const form = reactive<PostDraft>({
 
 const uploading = ref(false);
 const error = ref('');
+/** 富文本编辑器实例（用于把附件插进正文） */
+const richEditorRef = ref<any>(null);
+/** 已插入正文的附件数量（附件不再走独立列表，用计数守住上限） */
+const inlineAttachCount = ref(0);
 const fileInput = ref<HTMLInputElement | null>(null);
 /** 2026-11-07：待恢复的草稿。打开弹窗不再自动回填，由用户点“恢复草稿”。 */
 const pendingDraft = ref<Partial<PostDraft> | null>(null);
@@ -285,6 +290,7 @@ function applyInitial(init: Partial<PostDraft>) {
   form.attachments = [...(init.attachments ?? [])];
   form.visibility = init.visibility === 'CLASSES' ? 'CLASSES' : 'ALL';
   form.visibleClasses = [...(init.visibleClasses ?? [])];
+  inlineAttachCount.value = form.attachments.length;
   form.isTop = Boolean(init.isTop);
   // v4：草稿里存的开关状态优先；没有则默认允许
   form.aiTitleEnabled = init.aiTitleEnabled !== false;
@@ -396,11 +402,33 @@ function removeAttachment(index: number) {
   form.attachments.splice(index, 1);
 }
 
+function escapeHtml(value: string): string {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * 上传完成后把文件直接插进正文（2026-11-10「发帖内联附件」）。
+ * 图片渲染成 <img>，文档渲染成下载链接；不再另外进附件卡片，避免详情页重复展示。
+ */
+function insertAttachmentInline(att: { url: string; name?: string }, fileName: string) {
+  const name = att.name || fileName || '附件';
+  const isImage = isImageFile(name) || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(att.url);
+  const html = isImage
+    ? `<img src="${att.url}" alt="${escapeHtml(name)}" />`
+    : `<a href="${att.url}" target="_blank" rel="noopener">📎 ${escapeHtml(name)}</a>`;
+  richEditorRef.value?.insertHtml(html);
+}
+
 async function addFiles(files: File[]) {
   if (!files.length) return;
   error.value = '';
-  if (form.attachments.length + files.length > props.maxAttachments) {
-    error.value = `最多 ${props.maxAttachments} 个附件`;
+  if (inlineAttachCount.value + files.length > props.maxAttachments) {
+    error.value = `最多插入 ${props.maxAttachments} 个附件`;
     return;
   }
   for (const file of files) {
@@ -421,7 +449,9 @@ async function addFiles(files: File[]) {
   uploading.value = true;
   try {
     for (const file of files) {
-      form.attachments.push(isImageFile(file.name) ? await uploadForumImage(file) : await uploadForumFile(file));
+      const att = isImageFile(file.name) ? await uploadForumImage(file) : await uploadForumFile(file);
+      insertAttachmentInline(att, file.name);
+      inlineAttachCount.value += 1;
     }
   } catch (err: any) {
     error.value = err?.response?.data?.detail || err?.message || '上传失败';
@@ -449,7 +479,9 @@ function validate(): boolean {
   // 与三端既定规则一致：标题 / 正文 / 附件 任一即可，三者全空才拒绝。
   // 富文本正文要按「去标签后的可见文字」判空，否则 <p><br></p> 会被当成有内容。
   const hasText = stripHtml(payload.content).length > 0;
-  if (!payload.title && !hasText && !payload.attachments.length) {
+  // 内联附件只有标签、没有可见文字，判定空正文时要单独算作有内容
+  const hasInlineMedia = /<img\b|<a\b[^>]*href=/i.test(payload.content);
+  if (!payload.title && !hasText && !payload.attachments.length && !hasInlineMedia) {
     error.value = '标题、正文、附件至少填写一项';
     return false;
   }
@@ -467,7 +499,7 @@ function onSubmit() {
 
 function onSaveDraft() {
   const payload = toPayload();
-  if (!payload.title && !stripHtml(payload.content) && !payload.attachments.length) {
+  if (!payload.title && !stripHtml(payload.content) && !payload.attachments.length && !/<img\b|<a\b[^>]*href=/i.test(payload.content)) {
     error.value = '空草稿无需保存';
     return;
   }

@@ -666,6 +666,8 @@ class ForumPost(Base):
     share_type = Column(Enum("EXPERIENCE", "RESOURCE", "DISCUSSION", "FEELING", "QUESTION"), default="EXPERIENCE", comment="分享类型")
     tags = Column(String(500), comment="标签")
     is_top = Column(Integer, default=0, comment="是否置顶")
+    # 置顶到期时间（2026-11-10）：NULL = 永久置顶；到点由调度任务自动取消
+    pin_until = Column(DateTime, comment="置顶到期时间，NULL=永久")
     is_essence = Column(Integer, default=0, comment="是否精华")
     like_count = Column(Integer, default=0, comment="点赞数")
     comment_count = Column(Integer, default=0, comment="评论数")
