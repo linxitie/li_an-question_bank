@@ -134,6 +134,8 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
         return draft
 
     items = splitter.split_questions(payload["lines"])
+    # F3（2026-11-15）：图表/答案页的零星标签会被拆成假题，按题兜底丢掉（只做安全判定）
+    items, dropped_junk = splitter.drop_junk_items(items)
     if not items:
         draft.status = "failed"
         draft.message = "没有拆出题目（请确认上传的是题本而不是答案/解析，或该排版需人工处理）"
@@ -146,6 +148,8 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
     warnings = splitter.draft_warnings(items, expected=expected)
     if orphans:
         warnings.append(f"{orphans} 张图没归到任何题（卷首图/页首图）已跳过，未硬塞")
+    if dropped_junk:
+        warnings.append(f"已丢弃 {dropped_junk} 条疑似图表/答案行（题干无中文或过短、无选项）")
     meta = payload.get("meta") or {}
     # P3：扫描件把"无图/需核对/失败页"说清楚（这些警告在确认页顶部黄条里展示）
     if meta.get("scanned"):
@@ -156,6 +160,11 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
                             f"{'、'.join(str(p) for p in meta['failed_pages'][:5])} 页）")
         if meta.get("truncated"):
             warnings.append(f"仅解析前 {meta.get('parsed_pages') or 60} 页，后续内容请拆分上传")
+        # F4（2026-11-15）：跳过的图表页/答案页要说清楚（否则"题怎么少了"没人知道）
+        pages = meta.get("ocr_pages") or {}
+        if pages.get("dropped_pages"):
+            ps = "、".join(f"p{p}" for p in pages["dropped_pages"][:8])
+            warnings.append(f"已跳过 {len(pages['dropped_pages'])} 页图表/答案页（{ps}）")
         # T5（2026-11-14）：有整行被水印压住没识别出来、已局部重跑补回的，明确说一句
         retry = meta.get("ocr_retry") or {}
         if retry.get("recovered"):

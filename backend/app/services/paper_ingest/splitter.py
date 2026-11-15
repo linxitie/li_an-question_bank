@@ -326,6 +326,31 @@ def split_questions(lines: List[str], *, default_type: str = "单选") -> List[d
     return items
 
 
+CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
+def is_junk_item(item: dict) -> bool:
+    """这条"题"是不是图表/答案行凑出来的假题（F3，2026-11-15）。
+
+    整卷里图表页/答案页的标签（`800`、`125.60%`、`C.` 这种）会被拆成"题号 + 题干"，
+    整页过滤（F1/F2）挡掉大部分，但混排在正常页里的零星标签还得按**题**兜底。
+    只做两条安全判定，不清洗正文：
+      ①题干里一个中文都没有（纯数字/符号/英文 —— 图表数据行的典型形态）；
+      ②四个选项全空 **且** 题干不足 15 字（长材料题允许暂时没选项；有选项的一律保留）。
+    """
+    stem = (item.get("stem") or "").strip()
+    if not CJK_RE.search(stem):
+        return True
+    options = item.get("options") or {}
+    return (not any(options.values())) and len(stem) < 15
+
+
+def drop_junk_items(items: List[dict]) -> tuple:
+    """丢掉假题 → `(保留的题, 丢掉几条)`。"""
+    kept = [it for it in items if not is_junk_item(it)]
+    return kept, len(items) - len(kept)
+
+
 def draft_warnings(items: List[dict], *, expected: Optional[int] = None) -> List[str]:
     """整卷级告警（给管理员一眼看质量，不要埋在 100 行里）。"""
     out: List[str] = []

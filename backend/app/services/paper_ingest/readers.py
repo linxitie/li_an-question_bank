@@ -16,12 +16,15 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import re
 from typing import Dict, List, Optional
 
 from . import ocr_retry
 from .splitter import qno_of
+
+logger = logging.getLogger(__name__)
 
 #: 过滤"伪图"的门槛：短边 ≥60 **且** 面积 ≥8000 才算题图。
 #: 口径依据（两轮实测）：
@@ -357,6 +360,109 @@ def _drop_page_numbers(rows: List[dict]) -> List[dict]:
     return [r for r in rows if id(r) not in drop]
 
 
+#: 页级过滤（F1/F2，2026-11-15）：整卷里的图表页/答案页会被拆成大量假题
+PAGE_FILTER_ENV = "PAPER_OCR_PAGE_FILTER"
+#: 少于这么多行的页不判（多是承上启下的半页，误判代价大）
+MIN_PAGE_LINES = 20
+#: "短行"门槛：图表标签/答案字母基本都在 6 字以内
+SHORT_LEN = 6
+#: "正文长行"门槛：题干/选项一般 ≥30 字
+LONG_LEN = 30
+#: 纯数字/百分比/区间（图表数据行的典型形态）
+NUMERIC_ONLY = re.compile(r"^[\d.,%％\-—~～\s]+$")
+
+
+def page_filter_enabled() -> bool:
+    """页级过滤开关（`PAPER_OCR_PAGE_FILTER=0/off/false` 关闭，默认开）。"""
+    raw = (os.environ.get(PAGE_FILTER_ENV) or "1").strip().lower()
+    return raw not in ("0", "off", "false", "no")
+
+
+def page_profile(rows: List[dict]) -> dict:
+    """一页的版面指标：行数 / 短行 / 纯数字行 / **正文**长行 / 题号行。
+
+    为什么"正文长行"要单独算：这份卷每一页页眉都印着两行广告
+    （"本PDF最后面放了…答案""店主微信…"），都 ≥30 字；不剔掉的话每页都凭空多 2 行长行，
+    图表页就再也判不出来了。
+    """
+    texts = [r.get("text") or "" for r in rows]
+    n = len(texts)
+    short = sum(1 for t in texts if len(t) <= SHORT_LEN)
+    numeric = sum(1 for t in texts if NUMERIC_ONLY.match(t.strip()))
+    long_body = sum(1 for t in texts
+                    if len(t) >= LONG_LEN and not PAPER_NOISE.search(t))
+    qno = sum(1 for t in texts if qno_of(t) is not None)
+    return {"n": n, "short": short, "numeric": numeric,
+            "long_body": long_body, "qno": qno,
+            "short_ratio": round(short / n, 2) if n else 0.0,
+            "numeric_ratio": round(numeric / n, 2) if n else 0.0}
+
+
+def page_kind(rows: List[dict]) -> str:
+    """这一页是 `answer`（答案页）/ `chart`（图表页）/ `text`（正文页）。F1/F2。
+
+    实测标定（41 页真卷，200dpi）：
+      · p41 答案页 121 行 / 短行 0.86 / 数字 0.41 / 题号 3 → answer；
+      · p11 图表页  61 行 / 数字 0.52 / 正文长行 3（短行 0.77 但题号被误认成 16）→ chart；
+      · p16/p19/p25 图表页：短行 0.59/0.85/0.61、正文长行 4/3/3、题号 0/1 → chart；
+      · p38（短行 0.45）、p12（0.38）、p13（0.43，含真题 41）→ **text，必须保留**。
+    """
+    p = page_profile(rows)
+    if p["n"] < MIN_PAGE_LINES:
+        return "text"
+    if p["short_ratio"] >= 0.7 and p["numeric_ratio"] >= 0.2 and p["qno"] <= 4:
+        return "answer"
+    # 首版还判过"短行多但没数字"的表格页（p16/p19/p25），实测会把夹在图表里的真题
+    # （题号 39/47/50/66）一起丢掉 —— 那些页的零星噪声交给 F3 按题兜底，不再整页动。
+    if p["numeric_ratio"] >= 0.2 and p["long_body"] <= 4:
+        return "chart"
+    return "text"
+
+
+def _is_option_like(text: str) -> bool:
+    """`A.` / `A、` / `A．` 开头（水印/图表标签不会长这样）。"""
+    from .splitter import OPT_RE
+    return bool(OPT_RE.match((text or "").strip()))
+
+
+def _trim_chart_page(rows: List[dict]) -> List[dict]:
+    """图表页但**含真题**时：只丢图表标签行，保留题干/选项/题号（保持顺序）。
+
+    为什么要留一手：实测 p19/p25 各有 1 个真题号（39/47 那类），整页丢会丢真题；
+    而图表标签的形态很固定 —— 纯数字/百分比，或 ≤6 字且不是选项行/题号行。
+    """
+    kept = []
+    for r in rows:
+        text = (r.get("text") or "").strip()
+        if NUMERIC_ONLY.match(text):
+            continue
+        if len(text) <= SHORT_LEN and not _is_option_like(text) and qno_of(text) is None:
+            continue
+        kept.append(r)
+    return kept
+
+
+def _drop_non_text_pages(rows: List[dict]) -> tuple:
+    """整页丢弃图表页/答案页 → `(保留的行, meta)`；meta 为空表示一页没丢。
+
+    只丢两类页（实测标定见 `page_kind`）：
+      · **答案页**（p41）：整页都是答案字母/数字，没有任何题干；
+      · **数字图表页**（p11）：整页百分比/数字，题号成片是假题号。
+    表格页（p16/p19/p25 那种"表格 + 夹着真题"）**不整页动** —— 首版整页丢后真题
+    39/47/50/66 跟着消失；它们的零星标签由 F3 `drop_junk_items` 按题兜底。
+    """
+    by_page: Dict[int, List[dict]] = {}
+    for r in rows:
+        by_page.setdefault(int(r["page"]), []).append(r)
+    reasons = {page: page_kind(group) for page, group in sorted(by_page.items())}
+    reasons = {page: kind for page, kind in reasons.items() if kind != "text"}
+    if not reasons:
+        return rows, {}
+    kept = [r for r in rows if int(r["page"]) not in reasons]
+    logger.info("[paper_ingest] 跳过图表/答案页 %s", sorted(reasons))
+    return kept, {"dropped_pages": sorted(reasons), "reasons": reasons}
+
+
 def _layout_lines(layout: List[List[dict]]) -> List[dict]:
     """带坐标的 OCR 框 →（已丢水印、按阅读顺序）的行列表。T2（2026-11-14）。
 
@@ -407,6 +513,7 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
                                            progress=cb, with_layout=True)
     layout = meta.get("layout") or []
     retry: dict = {}
+    pages_meta: dict = {}
     if layout:
         rows = _layout_lines(layout)
         # T5（2026-11-14）：被斜向水印压住的整行，OCR 会**连框都不出**（第 9 题 C）。
@@ -414,6 +521,10 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
         # 没有洞时是纯内存判断，零额外耗时（开关 PAPER_OCR_RETRY=0 可整体关掉）。
         rows, retry = ocr_retry.recover_into(
             path, rows, layout_dpi=int(meta.get("dpi") or 200), progress=progress)
+        # F1/F2（2026-11-15）：整卷里的图表页/答案页会被拆成大量假题（41 页实测 p11 出 16 个假题号、
+        # p41 答案页 104/121 行是短标签）→ 按版面指标整页丢弃；5 页探针一页都不会命中。
+        if page_filter_enabled():
+            rows, pages_meta = _drop_non_text_pages(rows)
         from . import splitter
         rows = splitter.repair_option_tags(rows)
         # 修复后再做文本级去噪；顺序很重要：水印必须在校验/分词之前就没了
@@ -433,6 +544,8 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
     }
     if retry.get("holes") or retry.get("recovered"):   # 只有真的判过洞/补过行才回传
         info["ocr_retry"] = retry
+    if pages_meta.get("dropped_pages"):                # F4：跳过的图表/答案页
+        info["ocr_pages"] = pages_meta
     return {"lines": clean, "images": [], "meta": info}
 
 
