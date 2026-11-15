@@ -18,6 +18,7 @@
         </section>
 
         <StudyPlanCard variant="profile" />
+        <ProfileRadar />
 
       </aside>
 
@@ -297,6 +298,7 @@ import NavBar from '$vtj/vue/navbar.vue';
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
+import ProfileRadar from '@/components/profile/ProfileRadar.vue';
 // 学习分布（科目占比 + 对错比例）与错题知识点：数据来自 P2 新增的两个只读聚合端点
 import SubjectDistributionCard from '@/components/domain/SubjectDistributionCard.vue';
 import WrongPointStatsCard from '@/components/domain/WrongPointStatsCard.vue';

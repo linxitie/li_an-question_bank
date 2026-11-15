@@ -78,6 +78,10 @@ async def due_reviews(
             "review_count": r.review_count,
             "interval_days": r.review_interval_days or 1,
             "overdue_days": max(0, (now - due).days),
+            # 记忆曲线用（附加字段，不影响老客户端）
+            "ease": float(r.review_ease or 2.5),
+            "reps": int(r.review_reps or 0),
+            "next_review_at": r.next_review_at.isoformat() if r.next_review_at else None,
         })
     return {"total": len(items), "items": items}
 
