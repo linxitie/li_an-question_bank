@@ -23,7 +23,6 @@
         <button class="ds__menu" @click="sideOpen = !sideOpen">☰</button>
         <div class="ds__model">
           <button :class="{ on: state.model === 'deepseek-chat' }" @click="state.model = 'deepseek-chat'">对话</button>
-          <button :class="{ on: state.model === 'deepseek-reasoner' }" @click="state.model = 'deepseek-reasoner'">深度思考</button>
           <button :class="{ on: state.mode === 'agent' }" @click="state.mode = 'agent'">Agent</button>
         </div>
       </header>
