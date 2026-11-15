@@ -6,42 +6,45 @@
         <h3 class="inline-quiz__title">先答 6 个问题，方案才准</h3>
       </div>
       <div class="inline-quiz__dots">
-        <span v-for="(s, i) in state.steps" :key="i"
-              class="dot" :class="{ done: i < state.step, active: i === state.step }"></span>
+        <span v-for="(s, i) in state.steps" :key="i" class="dot"
+              :class="{ done: i < state.step, active: i === state.step }"></span>
       </div>
     </header>
 
     <div v-if="state.loading" class="inline-quiz__skeleton"></div>
 
-    <div v-else-if="state.step < state.steps.length" class="inline-quiz__body" :key="state.step">
-      <p class="inline-quiz__step-title">{{ state.steps[state.step].title }}</p>
+    <div v-else-if="!finished && currentField" class="inline-quiz__body">
+      <p class="inline-quiz__step-title">{{ currentStep.title }}</p>
 
-      <div v-for="f in state.steps[state.step].fields" :key="f.key" class="field">
-        <label class="field__label">{{ f.label }}</label>
+      <div class="field">
+        <label class="field__label">{{ currentField.label }}</label>
 
-        <div v-if="f.type === 'single' || f.type === 'multi'" class="chips">
-          <button v-for="opt in f.options" :key="opt" type="button"
-                  class="chip" :class="{ on: isOn(f, opt) }"
-                  @click="pick(f, opt)">{{ opt }}</button>
+        <div v-if="isChoice" class="chips">
+          <button v-for="opt in currentField.options" :key="opt" type="button"
+                  class="chip" :class="{ on: isOn(opt) }" @click="pick(opt)">{{ opt }}</button>
         </div>
 
-        <input v-else-if="f.type === 'text'" v-model="state.answers[f.key]" class="input"
-               :placeholder="f.placeholder || '选填'" />
-        <input v-else-if="f.type === 'date'" type="date" v-model="state.answers[f.key]" class="input" />
-        <textarea v-else-if="f.type === 'textarea'" v-model="state.answers[f.key]" class="textarea"
-                  rows="4" :placeholder="f.placeholder || '随便说说你的情况'"></textarea>
+        <input v-if="currentField.type === 'text'" class="input"
+               :value="value" :placeholder="currentField.placeholder || '选填'"
+               @input="setValue($event)" />
 
-        <div v-else-if="f.type === 'slider'" class="slider">
-          <input type="range" :min="f.min || 1" :max="f.max || 12" v-model.number="state.answers[f.key]" />
-          <span class="slider__val">{{ state.answers[f.key] }} 小时/天</span>
+        <input v-if="currentField.type === 'date'" class="input" type="date"
+               :value="value" @input="setValue($event)" />
+
+        <textarea v-if="currentField.type === 'textarea'" class="textarea" rows="4"
+                  :value="value" :placeholder="currentField.placeholder || '随便说说你的情况'"
+                  @input="setValue($event)"></textarea>
+
+        <div v-if="currentField.type === 'slider'" class="slider">
+          <input type="range" :min="currentField.min || 1" :max="currentField.max || 12"
+                 :value="value" @input="setValue($event)" />
+          <span class="slider__val">{{ value }} 小时/天</span>
         </div>
       </div>
 
       <div class="inline-quiz__actions">
         <button v-if="state.step > 0" class="btn ghost" @click="prev">上一步</button>
-        <button class="btn primary" :disabled="!canNext" @click="next">
-          {{ isLast ? '保存并继续' : '下一步' }}
-        </button>
+        <button class="btn primary" :disabled="!canNext" @click="next">{{ isLast ? "保存并继续" : "下一步" }}</button>
         <button class="btn text" @click="skip">先跳过</button>
       </div>
       <p v-if="state.error" class="inline-quiz__err">{{ state.error }}</p>
@@ -69,6 +72,24 @@ const state = reactive({
 })
 
 const isLast = computed(() => state.step === state.steps.length - 1)
+const finished = computed(() => state.step >= state.steps.length)
+const currentStep = computed(() => state.steps[state.step] || { title: "", fields: [] })
+const currentField = computed(() => (currentStep.value.fields || [])[0] || null)
+const isChoice = computed(() => {
+  const t = currentField.value && currentField.value.type
+  return t === "single" || t === "multi"
+})
+const value = computed(() => {
+  const f = currentField.value
+  if (!f) return ""
+  return state.answers[f.key]
+})
+function setValue(e) {
+  const f = currentField.value
+  if (!f) return
+  const raw = e && e.target ? e.target.value : e
+  state.answers[f.key] = f.type === "slider" ? Number(raw) : raw
+}
 
 function getToken() {
   try {
@@ -81,12 +102,16 @@ function getToken() {
   return localStorage.getItem('token') || ''
 }
 
-function isOn(f, opt) {
+function isOn(opt) {
+  const f = currentField.value
+  if (!f) return false
   const v = state.answers[f.key]
   return f.type === 'multi' ? Array.isArray(v) && v.includes(opt) : v === opt
 }
 
-function pick(f, opt) {
+function pick(opt) {
+  const f = currentField.value
+  if (!f) return
   if (f.type === 'multi') {
     const arr = Array.isArray(state.answers[f.key]) ? state.answers[f.key] : []
     const i = arr.indexOf(opt)

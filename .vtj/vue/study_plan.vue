@@ -1,14 +1,8 @@
 <!-- 学习计划智能推荐 - 模块4 全面改造版 -->
 <template>
   <div class="plan-page">
-    <!-- 画像问卷内嵌（模块7）：放在学习计划第一步，答完自动回填表单 -->
-    <div class="page-pad">
-      <ProfileQuizInline
-        v-if="state.showQuiz"
-        @done="onQuizDone"
-        @skip="skipQuiz"
-      />
-    </div>
+    <!-- 顶部导航：与首页同一套导航，保证各页观感一致 -->
+    <NavBar />
 
     <!-- 顶部渐变横幅 -->
     <div class="hero">
@@ -54,6 +48,11 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 画像问卷内嵌（模块7）：放在正文第一步，答完自动回填表单 -->
+    <div v-if="state.showQuiz" class="page-pad">
+      <ProfileQuizInline @done="onQuizDone" @skip="skipQuiz" />
     </div>
 
     <div class="plan-body">
@@ -539,10 +538,11 @@
   // @ts-nocheck
   import { defineComponent, reactive, onMounted, computed } from 'vue';
   import ProfileQuizInline from '@/components/plan/ProfileQuizInline.vue';
+  import NavBar from './navbar.vue';
 
   export default defineComponent({
     name: 'StudyPlan',
-    components: { ProfileQuizInline },
+    components: { ProfileQuizInline, NavBar },
     setup() {
       const state = reactive({
         loading: false,
@@ -2106,7 +2106,13 @@
 .hero-title { color: #1a2b5f; font-weight: 700; }
 .hero-sub { color: #8a8faa; }
 .hero-badge { background: rgba(196, 30, 58, 0.1); color: #c41e3a; }
+/* 内容宽度与首页一致：首页主容器 1400px / 24px 32px */
 .plan-main, .page-pad { max-width: 1400px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }
+.plan-body { max-width: 1400px; margin: 0 auto; padding: 24px 32px 48px; }
+.hero-content { max-width: 1400px; margin: 0 auto; padding: 18px 32px; }
+/* hero 与首页卡片同款：不再是全宽色带，而是内容区里的一张白卡 */
+.hero { margin: 0 auto; max-width: 1400px; border: 1px solid #eef1f7; border-radius: 12px; box-shadow: 0 1px 4px rgba(17, 24, 39, 0.06); }
+.page-pad { padding-top: 28px; }
 .card, .panel, .section { border-radius: 12px; background: #fff; box-shadow: 0 1px 4px rgba(17, 24, 39, 0.06); border: 1px solid #eef1f7; }
 .section-title { color: #1a2b5f; font-weight: 700; }
 .stat-num, .wb-num, .report-num { color: #1a2b5f; }
