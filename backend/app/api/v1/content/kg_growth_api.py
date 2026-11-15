@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_admin, get_current_user
-from ....models.models import KgUserEdge, KgUserNodeState, KnowledgePoint, SysUser
+from ....models.models import KgEdge, KgUserEdge, KgUserNodeState, KnowledgePoint, SysUser
 from ....services import kg_growth
 from ....services import kg_habits
 
@@ -181,6 +181,28 @@ async def global_graph(
             continue
         seen.add(key)
         edges.append({"src_point": src, "dst_point": dst, "weight": float(weight or 1.0), "heat": float(weight or 1.0)})
+
+    # 结构边：知识点父子关系（builtin / contains），保证即便没有用户行为数据，
+    # 图谱也能呈现科目 -> 模块 -> 考点 的骨架（模块7 P6）。
+    structural = (
+        db.query(KgEdge.src_id, KgEdge.dst_id, KgEdge.weight)
+        .filter(
+            KgEdge.src_type == "knowledge_point",
+            KgEdge.dst_type == "knowledge_point",
+            KgEdge.relation == "contains",
+            KgEdge.src_id.in_(ids),
+            KgEdge.dst_id.in_(ids),
+        )
+        .all()
+    )
+    for src, dst, weight in structural:
+        if src == dst:
+            continue
+        key = tuple(sorted((src, dst)))
+        if key in seen:
+            continue
+        seen.add(key)
+        edges.append({"src_point": src, "dst_point": dst, "weight": float(weight or 1.0), "heat": 0.0})
 
     degree: dict[int, int] = {}
     for e in edges:

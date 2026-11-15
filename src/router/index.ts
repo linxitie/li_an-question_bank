@@ -441,6 +441,37 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/tablet_login.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
+  // ---- 模块4/7 补齐：平板端复用同一组件（R12）----
+  {
+    path: '/tablet/profile-quiz',
+    name: 'TabletProfileQuiz',
+    component: () => import('$vtj/vue/profile_quiz.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/study-plan',
+    name: 'TabletStudyPlan',
+    component: () => import('$vtj/vue/study_plan.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/ai-assistant',
+    name: 'TabletAiAssistant',
+    component: () => import('$vtj/vue/ai_chat.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/signin',
+    name: 'TabletSignin',
+    component: () => import('$vtj/vue/signin_card.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/knowledge-graph',
+    name: 'TabletKnowledgeGraph',
+    component: () => import('@/views/student/pc/knowledge_graph.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
   {
     // 2026-11-02：平板与电脑使用同一套页面（你的要求），首页直接复用电脑首页组件。
     // 注意：不能 redirect 到 /home —— device.ts（R4 原样保留）会把平板访问的 /home 映射回
@@ -614,6 +645,37 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/scan',
     name: 'MobileScan',
     component: () => import('@/views/student/mobile/mobile_scan.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  // ---- 模块4/7 补齐：手机端复用 PC 页面（R12：不复制页面，靠 platform 区分）----
+  {
+    path: '/mobile/profile-quiz',
+    name: 'MobileProfileQuiz',
+    component: () => import('$vtj/vue/profile_quiz.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/study-plan',
+    name: 'MobileStudyPlan',
+    component: () => import('$vtj/vue/study_plan.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/ai-assistant',
+    name: 'MobileAiAssistant',
+    component: () => import('$vtj/vue/ai_chat.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/signin',
+    name: 'MobileSignin',
+    component: () => import('$vtj/vue/signin_card.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/knowledge-graph',
+    name: 'MobileKnowledgeGraph',
+    component: () => import('@/views/student/pc/knowledge_graph.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {

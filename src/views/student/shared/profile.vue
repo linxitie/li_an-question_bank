@@ -17,6 +17,8 @@
           <button class="btn-edit" @click="openEditProfile">编辑资料</button>
         </section>
 
+        <StudyPlanCard variant="profile" />
+
       </aside>
 
       <!-- 右栏：成就 + 等级 + 设置 -->
@@ -59,6 +61,39 @@
 
       <!-- 中栏：学习数据 + 学习内容 -->
       <section class="center-col">
+        <!-- 备考画像 + 当前方案：修复方案在「我的」断层回显（模块4，只读既有端点） -->
+        <div class="card profile-plan-card">
+          <h3 class="card-title"><XIcon :icon="UserFilled" :size="18" color="#1A365D" /> 备考画像</h3>
+          <template v-if="profileCard.has_profile">
+            <div class="pp-tags">
+              <span v-if="profileCard.grade" class="pp-tag">{{ profileCard.grade }}</span>
+              <span v-if="profileCard.self_level" class="pp-tag">{{ profileCard.self_level }}</span>
+              <span v-if="profileCard.daily_hours" class="pp-tag">{{ profileCard.daily_hours }} 小时/天</span>
+              <span v-if="profileCard.exam_date" class="pp-tag">{{ profileCard.exam_date }}</span>
+            </div>
+            <p v-if="profileCard.target_score" class="pp-line">目标分数：{{ profileCard.target_score }}</p>
+            <p v-if="(profileCard.subject_weaknesses || []).length" class="pp-line">薄弱科目：{{ (profileCard.subject_weaknesses || []).join('、') }}</p>
+            <p v-if="profileCard.self_intro" class="pp-intro">{{ profileCard.self_intro }}</p>
+          </template>
+          <div v-else class="pp-empty">还没填写备考画像，完善后小智才能为你定制方案</div>
+          <button class="btn-mini full" @click="go('/profile-quiz')">{{ profileCard.has_profile ? '编辑画像' : '去完善画像' }}</button>
+        </div>
+
+        <div class="card profile-plan-card">
+          <h3 class="card-title"><XIcon :icon="TrendCharts" :size="18" color="#1A365D" /> 当前备考方案</h3>
+          <template v-if="planCard.has_plan">
+            <div class="pp-progress-row">
+              <span>今日任务 {{ planCard.progress?.done ?? 0 }}/{{ planCard.progress?.total ?? 0 }}</span>
+              <span class="pp-percent">{{ planCard.progress?.percent ?? 0 }}%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" :style="{ width: (planCard.progress?.percent ?? 0) + '%' }"></div></div>
+            <p v-if="planCard.days_left" class="pp-line">距考试还有 {{ planCard.days_left }} 天</p>
+            <p v-if="planCard.summary" class="pp-intro">{{ planCard.summary }}</p>
+          </template>
+          <div v-else class="pp-empty">还没有生成备考方案</div>
+          <button class="btn-mini full" @click="go('/study-plan')">{{ planCard.has_plan ? '查看方案' : '生成备考方案' }}</button>
+        </div>
+
         <div class="card">
           <h3 class="card-title"><XIcon :icon="DataLine" :size="18" color="#1A365D" /> 学习数据</h3>
           <div class="stats-grid">
@@ -261,6 +296,7 @@ import NavBar from '$vtj/vue/navbar.vue';
 // 2026-11-04：徽章展示模块下线，BadgeIcon / BADGE_TIERS 依赖随之移除
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
+import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
 // 学习分布（科目占比 + 对错比例）与错题知识点：数据来自 P2 新增的两个只读聚合端点
 import SubjectDistributionCard from '@/components/domain/SubjectDistributionCard.vue';
 import WrongPointStatsCard from '@/components/domain/WrongPointStatsCard.vue';
@@ -280,6 +316,9 @@ const coinRecords = ref<any[]>([]);
 // 题型掌握度：来自 /api/stats/type-mastery（用户维度按 type_id 聚合），
 // 与题库库存量统计是完全不同的东西，不可混用。
 const typeMastery = ref<any[]>([]);
+// 备考画像（/api/profile）与当前备考方案（/api/plan/current）——修复方案在首页/我的断层回显
+const profileCard = ref<any>({ has_profile: false });
+const planCard = ref<any>({ has_plan: false });
 
 /** 掌握度进度条配色：低正确率偏红，高正确率偏绿，参照移动端金色主题 */
 function masteryColor(accuracy: number) {
@@ -335,6 +374,16 @@ async function loadStudyData() {
   typeMastery.value = Array.isArray(m) ? m : [];
 }
 
+// 备考画像 + 当前方案：两个既有只读端点，失败静默不阻断页面
+async function loadProfilePlan() {
+  const [pf, pl] = await Promise.allSettled([
+    apiGet('/api/profile'),
+    apiGet('/api/plan/current'),
+  ]);
+  if (pf.status === 'fulfilled') profileCard.value = pf.value || { has_profile: false };
+  if (pl.status === 'fulfilled') planCard.value = pl.value || { has_plan: false };
+}
+
 // ===== 三端实时同步 =====
 // 只订阅会改变个人统计的域；题目导入、资讯发布等事件不再触发整页重拉。
 // 防抖 500ms：连续答题会连发事件，合并为一次刷新。
@@ -348,7 +397,7 @@ useDataSync({
 
 onMounted(async () => {
   try {
-    const [p] = await Promise.all([apiGet('/api/auth/profile'), loadStudyData()]);
+    const [p] = await Promise.all([apiGet('/api/auth/profile'), loadStudyData(), loadProfilePlan()]);
     user.value = p;
   } catch (e) {
     console.error('加载个人中心数据失败', e);
@@ -574,6 +623,15 @@ function handleLogout() {
 .btn-mini.full { width: 100%; }
 .btn-mini.ghost { background: #f0f2f5; color: #555; }
 .btn-mini.danger-outline { background: transparent; color: #c41e3a; border: 1px solid #c41e3a; margin-top: 16px; width: 100%; }
+
+.profile-plan-card { display: flex; flex-direction: column; gap: 10px; }
+.pp-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.pp-tag { padding: 4px 10px; border-radius: 12px; background: #eff6ff; color: #2563eb; font-size: 12px; }
+.pp-line { margin: 0; font-size: 13px; color: #374151; }
+.pp-intro { margin: 0; font-size: 13px; color: #6b7280; line-height: 1.6; }
+.pp-empty { font-size: 13px; color: #9ca3af; }
+.pp-progress-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #374151; }
+.pp-percent { font-weight: 700; color: #2563eb; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   .stat { text-align: center; }
