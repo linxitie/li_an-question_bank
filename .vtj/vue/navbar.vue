@@ -80,6 +80,7 @@
         return [
           { id: 'home_page', label: '首页' },
           { id: 'question_bank', label: '题库' },
+          { id: 'ai_studio', label: '小智' },
           { id: 'news', label: '新闻' },
           { id: 'about', label: '关于砺安题库' },
           { id: 'forum', label: '论坛' },
@@ -92,9 +93,10 @@
     },
     methods: {
       navigateTo(id) {
-        if (this.$router) {
-          this.$router.push(id === 'news' ? '/news' : '/page/' + id);
-        }
+        if (!this.$router) return;
+        // 走前缀 /page/ 的是 VTJ 设计器页；小智 Studio 是中国手写页，单独路由
+        if (id === 'ai_studio') { this.$router.push('/ai-studio'); return; }
+        this.$router.push(id === 'news' ? '/news' : '/page/' + id);
       },
       handleMenuClick(id) {
         this.state.activeMenu = id;

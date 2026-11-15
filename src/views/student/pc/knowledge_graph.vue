@@ -13,11 +13,15 @@
         <button class="kg-btn" :disabled="generating" @click="generateTasks">
           {{ generating ? '生成中…' : '生成本周个性化任务' }}
         </button>
+        <button class="kg-btn" :class="{ on: view === '3d' }" @click="view = view === '3d' ? '2d' : '3d'">
+          {{ view === '3d' ? '2D 视图' : '3D 星图' }}
+        </button>
         <button class="kg-btn" @click="panelRef?.loadAll()">刷新</button>
       </div>
     </header>
 
-    <KnowledgeGraphPanel ref="panelRef" :mode="mode" />
+    <ForceGraph3D v-if="view === '3d'" @select="onNodeSelect" />
+    <KnowledgeGraphPanel v-else ref="panelRef" :mode="mode" />
   </div>
 </template>
 
@@ -25,10 +29,16 @@
 import { ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import KnowledgeGraphPanel from '@/components/kg/KnowledgeGraphPanel.vue';
+import ForceGraph3D from '@/components/kg/ForceGraph3D.vue';
 
 const panelRef = ref<InstanceType<typeof KnowledgeGraphPanel> | null>(null);
 const generating = ref(false);
 const mode = ref<'mine' | 'global'>('mine');
+const view = ref<'2d' | '3d'>('3d');
+
+function onNodeSelect(node: { name?: string }): void {
+  ElMessage.info(String(node?.name || '节点'));
+}
 
 function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   const auth = (window as any).__VTJ_AUTH__;
