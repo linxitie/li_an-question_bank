@@ -80,12 +80,12 @@
             <span v-if="m.streaming" class="cursor"></span>
 
             <div v-if="!m.streaming && m.content" class="xz-msg__ops">
-              <button @click="copyText(m.content)">复制</button>
-              <button v-if="m.role === 'assistant'" @click="regenerate(i)">重新生成</button>
-              <button v-if="m.role === 'user'" @click="editMessage(i)">编辑</button>
-              <button v-if="m.role === 'assistant'" :class="{ on: m.rated === 'up' }" @click="feedback(m, true)">👍</button>
-              <button v-if="m.role === 'assistant'" :class="{ on: m.rated === 'down' }" @click="feedback(m, false)">👎</button>
-              <button @click="delMessage(i)">删除</button>
+              <button title="复制" @click="copyText(m.content)">⧉</button>
+              <button v-if="m.role === 'assistant'" title="重新生成" @click="regenerate(i)">↻</button>
+              <button v-if="m.role === 'user'" title="编辑重发" @click="editMessage(i)">✎</button>
+              <button v-if="m.role === 'assistant'" title="有帮助" :class="{ on: m.rated === 'up' }" @click="feedback(m, true)">👍</button>
+              <button v-if="m.role === 'assistant'" title="没帮助" :class="{ on: m.rated === 'down' }" @click="feedback(m, false)">👎</button>
+              <button title="删除" @click="delMessage(i)">🗑</button>
             </div>
           </div>
         </div>
@@ -94,11 +94,19 @@
       <button v-if="showJump" class="xz-jump" @click="scrollBottom">↓</button>
 
       <footer class="xz-composer">
+        <div v-if="state.attachments.length" class="atts">
+          <span v-for="(a, i) in state.attachments" :key="i" class="att">
+            📄 {{ a.name }}
+            <button class="att__x" @click="removeAttachment(i)">×</button>
+          </span>
+        </div>
         <div class="composer" :class="{ 'has-text': state.input.trim() }">
           <textarea ref="inputRef" v-model="state.input" class="composer__input" rows="1"
                     :placeholder="state.mode === 'agent' ? '交给小智去做…' : '给联考小智发送消息'"
                     @keydown.enter.exact.prevent="send()"></textarea>
           <div class="composer__bar">
+            <button class="chip chip--icon" title="添加附件（图片 / PDF / 文档）" @click="pickFile">📎</button>
+            <input id="xz-file" type="file" multiple class="xz-file" @change="onFileChange" />
             <button class="chip" :class="{ on: state.model === 'reason' }"
                     @click="state.model = state.model === 'reason' ? 'fast' : 'reason'">
               <span class="chip__icon">✦</span> 深度思考
@@ -169,6 +177,7 @@ const state = reactive({
   messages: [],
   fontSize: 14,
   theme: "light",
+  attachments: [],
 })
 let controller = null
 
@@ -451,6 +460,36 @@ function toggleTheme() {
   try { localStorage.setItem('li_an_xiaozhi_theme', state.theme) } catch (e) { /* ignore */ }
 }
 
+function pickFile() {
+  const el = document.getElementById("xz-file")
+  if (el) el.click()
+}
+
+async function onFileChange(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ""
+  for (const file of files) {
+    if (file.size > 10 * 1024 * 1024) { flash("单个文件不能超过 10MB"); continue }
+    const fd = new FormData()
+    fd.append("file", file)
+    try {
+      const res = await fetch("/api/agent/upload", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token() },
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || "上传失败")
+      state.attachments.push({ name: data.filename || file.name, url: data.file_url })
+      flash("已添加附件")
+    } catch (err) { flash(err.message || "上传失败") }
+  }
+}
+
+function removeAttachment(i) {
+  state.attachments.splice(i, 1)
+}
+
 function clearChat() {
   if (!window.confirm("清空当前对话？")) return
   state.messages = []
@@ -470,7 +509,12 @@ async function send(preset, isRetry) {
     .slice(-20)
     .map(function (m) { return { role: m.role, content: m.content } })
 
-  if (!isRetry) state.messages.push({ role: "user", content: text, at: Date.now() })
+  let outgoing = text
+  if (!isRetry && state.attachments.length) {
+    outgoing += "\n\n附件：" + state.attachments.map(function (a) { return a.name + " (" + a.url + ")" }).join("、")
+  }
+  if (!isRetry && state.attachments.length) state.attachments = []
+  if (!isRetry) state.messages.push({ role: "user", content: outgoing, at: Date.now() })
   const reply = reactive({
     role: "assistant", content: "", reasoning: "", tools: [], streaming: true,
     thinking: state.model === "reason", thinkOpen: true, thinkSeconds: 0, rated: "", at: Date.now(),
@@ -685,55 +729,77 @@ onMounted(function () {
   .xz-card { transition: none; }
 }
 
-/* ===== 深色工作台（参考 Agent Harness 的观感：深底、等宽、工具块）===== */
-.xz.xz--dark { background: #0d1117; color: #e6edf3; }
-.xz--dark .xz-side { background: #11161d; border-right-color: #1f2630; }
-.xz--dark .xz-side__brand { color: #7a90ff; }
-.xz--dark .xz-side__new { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
-.xz--dark .xz-side__new:hover { border-color: #4d6bfe; color: #8fa6ff; }
-.xz--dark .xz-side__search { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
-.xz--dark .xz-side__item { color: #aeb6c2; }
-.xz--dark .xz-side__item:hover { background: #1a212b; }
-.xz--dark .xz-side__item.on { background: #1c2740; color: #8fa6ff; }
-.xz--dark .xz-side__group { color: #6b7481; }
-.xz--dark .xz-side__foot { border-top-color: #1f2630; }
-.xz--dark .xz-side__foot button { background: #161b22; border-color: #2a323d; color: #aeb6c2; }
-.xz--dark .xz-top { border-bottom-color: #1f2630; }
-.xz--dark .xz-top__modes { background: #161b22; }
-.xz--dark .xz-top__modes button { color: #aeb6c2; }
-.xz--dark .xz-top__modes button.on { background: #223049; color: #8fa6ff; box-shadow: none; }
-.xz--dark .xz-top__hint { color: #6b7481; }
-.xz--dark .xz-welcome h1 { color: #e6edf3; }
-.xz--dark .xz-welcome__sub { color: #7d8694; }
-.xz--dark .xz-card { background: #131922; border-color: #1f2630; }
-.xz--dark .xz-card:hover { background: #18202b; border-color: #33405a; }
-.xz--dark .xz-card__t { color: #dfe6ef; }
-.xz--dark .xz-card__d { color: #6b7481; }
-.xz--dark .xz-msg--user .xz-msg__main { background: #18202b; }
-.xz--dark .xz-msg__text { color: #dfe6ef; }
-.xz--dark .xz-msg__text :deep(blockquote) { background: #131922; border-left-color: #2f3d5c; color: #aeb6c2; }
-.xz--dark .xz-msg__text :deep(.md-table th) { background: #131922; }
-.xz--dark .xz-msg__text :deep(.md-table th), .xz--dark .xz-msg__text :deep(.md-table td) { border-color: #1f2630; }
-.xz--dark .xz-msg__text :deep(.codeblock) { border-color: #1f2630; }
-.xz--dark .xz-msg__text :deep(.codeblock__bar) { background: #131922; color: #7d8694; }
-.xz--dark .xz-msg__text :deep(code.inline) { background: #1b2330; color: #c9d1d9; }
-.xz--dark .think { border-left-color: #33405a; }
-.xz--dark .think__head { color: #8b94a1; }
-.xz--dark .think__body { color: #7d8694; }
-.xz--dark .tool { background: #131922; border-color: #1f2630; }
-.xz--dark .tool__result { background: #0f151d; border-top-color: #1f2630; color: #aeb6c2; }
-.xz--dark .xz-msg__ops button { color: #6b7481; }
-.xz--dark .xz-msg__ops button:hover { background: #1a212b; color: #8fa6ff; }
-.xz--dark .composer { background: #131922; border-color: #2a323d; }
-.xz--dark .composer.has-text { border-color: #3b4f7a; box-shadow: 0 4px 18px rgba(77,107,254,.16); }
-.xz--dark .composer__input { color: #e6edf3; }
-.xz--dark .chip { background: #161b22; border-color: #2a323d; color: #aeb6c2; }
-.xz--dark .chip.on { background: #1c2740; border-color: #4d6bfe; color: #8fa6ff; }
-.xz--dark .xz-tip { color: #5b6472; }
-.xz--dark .xz-drawer__panel { background: #11161d; color: #e6edf3; }
-.xz--dark .xz-drawer__row { color: #aeb6c2; }
-.xz--dark .xz-drawer__btn { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
-.xz--dark .xz-drawer__close { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
-.xz--dark .xz-jump { background: #161b22; border-color: #2a323d; color: #aeb6c2; }
-.xz-drawer__btn { flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid #e3e6ec; background: #fff; font-size: 12.5px; cursor: pointer; }
+/* ===== 深色工作台：设计令牌取自 DeepSeek Harness（MIT）theme/design-platform.css ===== */
+.xz--dark {
+  --xz-bg-base: rgb(21, 21, 23);
+  --xz-bg-layer-1: rgb(35, 35, 36);
+  --xz-bg-layer-2: rgb(44, 44, 46);
+  --xz-bg-layer-3: rgb(53, 54, 56);
+  --xz-border-l1: rgba(255, 255, 255, 0.06);
+  --xz-border-l2: rgba(255, 255, 255, 0.12);
+  --xz-border-l3: rgba(255, 255, 255, 0.16);
+  --xz-text-primary: rgb(249, 250, 251);
+  --xz-text-secondary: rgb(173, 178, 184);
+  --xz-text-tertiary: rgb(129, 133, 140);
+  --xz-brand: rgb(86, 134, 254);
+  --xz-brand-bright: rgb(122, 170, 255);
+  --xz-radius-sm: 8px;
+  --xz-radius-md: 12px;
+  --xz-radius-lg: 16px;
+  --xz-radius-panel: 20px;
+  --xz-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--xz-bg-base);
+  color: var(--xz-text-primary);
+}
+.xz--dark .xz-side { background: var(--xz-bg-layer-1); border-right-color: var(--xz-border-l1); }
+.xz--dark .xz-side__brand { color: var(--xz-brand-bright); }
+.xz--dark .xz-side__new { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l2); color: var(--xz-text-primary); border-radius: var(--xz-radius-md); }
+.xz--dark .xz-side__new:hover { border-color: var(--xz-brand); color: var(--xz-brand-bright); }
+.xz--dark .xz-side__search { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l1); color: var(--xz-text-primary); }
+.xz--dark .xz-side__group { color: var(--xz-text-tertiary); }
+.xz--dark .xz-side__item { color: var(--xz-text-secondary); border-radius: var(--xz-radius-sm); }
+.xz--dark .xz-side__item:hover { background: var(--xz-bg-layer-2); }
+.xz--dark .xz-side__item.on { background: var(--xz-bg-layer-3); color: var(--xz-text-primary); }
+.xz--dark .xz-side__foot { border-top-color: var(--xz-border-l1); }
+.xz--dark .xz-side__foot button { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l1); color: var(--xz-text-secondary); }
+.xz--dark .xz-top { border-bottom-color: var(--xz-border-l1); }
+.xz--dark .xz-top__modes { background: var(--xz-bg-layer-2); border-radius: var(--xz-radius-md); }
+.xz--dark .xz-top__modes button { color: var(--xz-text-secondary); }
+.xz--dark .xz-top__modes button.on { background: var(--xz-bg-layer-3); color: var(--xz-text-primary); box-shadow: none; }
+.xz--dark .xz-top__hint { color: var(--xz-text-tertiary); }
+.xz--dark .xz-welcome h1 { color: var(--xz-text-primary); }
+.xz--dark .xz-welcome__sub { color: var(--xz-text-secondary); }
+.xz--dark .xz-card { background: var(--xz-bg-layer-1); border-color: var(--xz-border-l1); border-radius: var(--xz-radius-lg); transition: border-color var(--xz-ease) 0.2s, background var(--xz-ease) 0.2s; }
+.xz--dark .xz-card:hover { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l3); transform: none; }
+.xz--dark .xz-card__t { color: var(--xz-text-primary); }
+.xz--dark .xz-card__d { color: var(--xz-text-tertiary); }
+.xz--dark .xz-msg--user .xz-msg__main { background: var(--xz-bg-layer-2); border-radius: var(--xz-radius-md); }
+.xz--dark .xz-msg__text { color: var(--xz-text-primary); }
+.xz--dark .xz-msg__who { background: var(--xz-bg-layer-3); color: var(--xz-text-secondary); }
+.xz--dark .xz-msg--assistant .xz-msg__who { background: var(--xz-brand); color: #fff; }
+.xz--dark .xz-msg__text :deep(blockquote) { background: var(--xz-bg-layer-1); border-left-color: var(--xz-border-l3); color: var(--xz-text-secondary); }
+.xz--dark .xz-msg__text :deep(.md-table th) { background: var(--xz-bg-layer-1); }
+.xz--dark .xz-msg__text :deep(.md-table th), .xz--dark .xz-msg__text :deep(.md-table td) { border-color: var(--xz-border-l1); }
+.xz--dark .xz-msg__text :deep(.codeblock) { border-color: var(--xz-border-l1); border-radius: var(--xz-radius-md); }
+.xz--dark .xz-msg__text :deep(.codeblock__bar) { background: var(--xz-bg-layer-2); color: var(--xz-text-tertiary); }
+.xz--dark .xz-msg__text :deep(code.inline) { background: var(--xz-bg-layer-3); color: var(--xz-text-primary); }
+.xz--dark .think { border-left-color: var(--xz-border-l2); }
+.xz--dark .think__head { color: var(--xz-text-secondary); }
+.xz--dark .think__body { color: var(--xz-text-tertiary); }
+.xz--dark .tool { background: var(--xz-bg-layer-1); border-color: var(--xz-border-l1); border-radius: var(--xz-radius-md); }
+.xz--dark .tool__result { background: var(--xz-bg-base); border-top-color: var(--xz-border-l1); color: var(--xz-text-secondary); }
+.xz--dark .xz-msg__ops button { color: var(--xz-text-tertiary); border-radius: 6px; }
+.xz--dark .xz-msg__ops button:hover { background: var(--xz-bg-layer-2); color: var(--xz-text-primary); }
+.xz--dark .composer { background: var(--xz-bg-layer-1); border-color: var(--xz-border-l2); border-radius: var(--xz-radius-panel); }
+.xz--dark .composer.has-text { border-color: var(--xz-brand); box-shadow: 0 0 0 3px rgba(86, 134, 254, 0.16); }
+.xz--dark .composer__input { color: var(--xz-text-primary); }
+.xz--dark .chip { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l1); color: var(--xz-text-secondary); border-radius: var(--xz-radius-lg); }
+.xz--dark .chip:hover { border-color: var(--xz-border-l3); color: var(--xz-text-primary); }
+.xz--dark .chip.on { background: rgba(86, 134, 254, 0.16); border-color: var(--xz-brand); color: var(--xz-brand-bright); }
+.xz--dark .att { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l1); color: var(--xz-text-secondary); }
+.xz--dark .xz-tip { color: var(--xz-text-tertiary); }
+.xz--dark .xz-jump { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l1); color: var(--xz-text-secondary); border-radius: 50%; }
+.xz--dark .xz-drawer__panel { background: var(--xz-bg-layer-1); color: var(--xz-text-primary); }
+.xz--dark .xz-drawer__row { color: var(--xz-text-secondary); }
+.xz--dark .xz-drawer__btn, .xz--dark .xz-drawer__close { background: var(--xz-bg-layer-2); border-color: var(--xz-border-l1); color: var(--xz-text-primary); }
 </style>
