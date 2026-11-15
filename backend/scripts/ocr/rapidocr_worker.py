@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
@@ -106,6 +107,34 @@ def ocr_document(engine, cv2, np, pymupdf, path: str, dpi: int, max_pages: int,
     return 0 if done else 4
 
 
+def crop_event(engine, cv2, np, pymupdf, path: str, page_no: int, rect, dpi: int) -> dict:
+    """只识别**一页里的一个矩形**（单位 pt）→ `{"t":"crop", ...}`（T4 缺行回收，2026-11-14）。
+
+    为什么收 pt 而不是 px：上层手里的版面坐标是 px，而 px 与渲染 dpi 绑定；
+    传 pt 就与 dpi 解耦 —— 300dpi 裁剪重跑后还能换回 200dpi 版面坐标插回原行序。
+    """
+    doc = pymupdf.open(path)
+    try:
+        total = int(doc.page_count)
+        if not (1 <= page_no <= total):
+            raise ValueError(f"页码越界：{page_no}/{total}")
+        page = doc[page_no - 1]
+        clip = pymupdf.Rect(*[float(v) for v in rect]) & page.rect   # 越界部分裁掉
+        if clip.is_empty:
+            raise ValueError("裁剪区域不在页面内")
+        t0 = time.time()
+        png = page.get_pixmap(dpi=dpi, clip=clip).tobytes("png")
+        items = ocr_page(engine, cv2, np, png, with_layout=True)
+        k = 72.0 / float(dpi)                                      # 像素 → pt
+        lines = [{"text": it["text"], "score": it["score"],
+                  "x": clip.x0 + it["x"] * k, "y": clip.y0 + it["y"] * k,
+                  "w": it["w"] * k, "h": it["h"] * k} for it in items]
+        return {"t": "crop", "page": page_no, "secs": round(time.time() - t0, 2),
+                "lines": lines}
+    finally:
+        doc.close()
+
+
 def serve(engine, cv2, np, pymupdf) -> int:
     """**常驻模式**（S-C）：加载一次模型，之后按行收命令、按事件回写。
 
@@ -131,6 +160,18 @@ def serve(engine, cv2, np, pymupdf) -> int:
         if action == "ping":
             emit({"t": "pong", "pid": os.getpid()})
             continue
+        if action == "crop":
+            try:
+                evt = crop_event(engine, cv2, np, pymupdf,
+                                 str(cmd.get("path") or ""),
+                                 int(cmd.get("page") or 0),
+                                 [float(v) for v in (cmd.get("rect") or [])],
+                                 int(cmd.get("dpi") or 300))
+            except Exception as exc:                # noqa: BLE001 — 单条带失败不能带崩常驻进程
+                emit({"t": "error", "message": str(exc)[:300]})
+            else:
+                emit(evt)
+            continue
         if action != "ocr":
             emit({"t": "error", "message": f"未知命令 {action}"})
             continue
@@ -148,6 +189,10 @@ def main() -> int:
     ap.add_argument("--serve", action="store_true", help="常驻模式：从 stdin 收命令（S-C）")
     ap.add_argument("--with-layout", action="store_true",
                     help="每页多回带坐标的框（水印/缩进判断用；T1，2026-11-14）")
+    ap.add_argument("--page", type=int, default=0,
+                    help="只识别这一页（1 基）；与 --clip 一起做条带重跑（T4）")
+    ap.add_argument("--clip", default="",
+                    help="裁剪矩形 x0,y0,x1,y1（单位 pt）；配合 --page 使用（T4）")
     args = ap.parse_args()
 
     try:
@@ -162,6 +207,18 @@ def main() -> int:
     engine = RapidOCR()
     if args.serve:
         return serve(engine, cv2, np, pymupdf)
+    if args.page and args.clip:
+        rect = [float(v) for v in re.split(r"[, ]+", args.clip.strip()) if v]
+        if len(rect) != 4:
+            sys.stderr.write("--clip 需要 4 个数（x0,y0,x1,y1，单位 pt）\n")
+            return 2
+        try:
+            emit(crop_event(engine, cv2, np, pymupdf, args.pdf or "",
+                            args.page, rect, args.dpi))
+        except Exception as exc:                    # noqa: BLE001
+            emit({"t": "error", "message": str(exc)[:300]})
+            return 4
+        return 0
     if not args.pdf:
         sys.stderr.write("一次性模式需要 PDF 路径；常驻模式请加 --serve\n")
         return 2

@@ -20,6 +20,7 @@ import os
 import re
 from typing import Dict, List, Optional
 
+from . import ocr_retry
 from .splitter import qno_of
 
 #: 过滤"伪图"的门槛：短边 ≥60 **且** 面积 ≥8000 才算题图。
@@ -310,6 +311,26 @@ WATERMARK_WORDS = re.compile(
     r"xwl?\d{0,6}|txw\d{0,6}|xw\d{0,6}|微信号?|公众号)$", re.IGNORECASE)
 
 
+def base_height(rows: List[dict]) -> float:
+    """正文行高中位数（只在 10–80px 取样；斜向水印框 187–343px 自然被排除）。"""
+    heights = [r["h"] for r in rows if WATERMARK_MIN_HEIGHT <= r["h"] <= 80.0]
+    return sorted(heights)[len(heights) // 2] if heights else 0.0
+
+
+def is_watermark_row(row: dict, base_h: float) -> bool:
+    """这一行是不是水印/装饰框（T2：几何优先、词表兜底）。
+
+    抽成函数是因为缺行回收（`ocr_retry`）也要用同一套判定过滤补回来的行 ——
+    两处各写一份的话，水印迟早从补行这条路漏回正文。
+    """
+    if base_h and row["h"] > base_h * WATERMARK_HEIGHT_RATIO:
+        return True                                    # 斜向水印（高瘦框）
+    if row["w"] < ISOLATED_MAX_W and row["h"] < base_h * 1.6 \
+            and row["score"] < ISOLATED_LOW_SCORE:
+        return True                                    # 孤立水印碎片（如 X）
+    return len(row["text"]) <= 8 and bool(WATERMARK_WORDS.match(row["text"]))
+
+
 def _layout_lines(layout: List[List[dict]]) -> List[dict]:
     """带坐标的 OCR 框 →（已丢水印、按阅读顺序）的行列表。T2（2026-11-14）。
 
@@ -336,20 +357,8 @@ def _layout_lines(layout: List[List[dict]]) -> List[dict]:
     if not flat:
         return flat
 
-    heights = [it["h"] for it in flat if WATERMARK_MIN_HEIGHT <= it["h"] <= 80.0]
-    base_h = sorted(heights)[len(heights) // 2] if heights else 0.0
-
-    kept: List[dict] = []
-    for it in flat:
-        if base_h and it["h"] > base_h * WATERMARK_HEIGHT_RATIO:
-            continue                                   # 斜向水印（高瘦框）
-        if it["w"] < ISOLATED_MAX_W and it["h"] < base_h * 1.6 \
-                and it["score"] < ISOLATED_LOW_SCORE:
-            continue                                   # 孤立水印碎片（如 X）
-        if len(it["text"]) <= 8 and WATERMARK_WORDS.match(it["text"]):
-            continue                                   # 短水印词兜底
-        kept.append(it)
-    return kept
+    base_h = base_height(flat)
+    return [it for it in flat if not is_watermark_row(it, base_h)]
 
 
 def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
@@ -370,8 +379,14 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
     text, meta = ocr_sidecar.read_pdf_text(path, max_pages=MAX_OCR_PAGES,
                                            progress=cb, with_layout=True)
     layout = meta.get("layout") or []
+    retry: dict = {}
     if layout:
         rows = _layout_lines(layout)
+        # T5（2026-11-14）：被斜向水印压住的整行，OCR 会**连框都不出**（第 9 题 C）。
+        # 这里按「缺选项字母 + 行距异常」定位那个洞，只把那一小条带重跑一次再插回行序；
+        # 没有洞时是纯内存判断，零额外耗时（开关 PAPER_OCR_RETRY=0 可整体关掉）。
+        rows, retry = ocr_retry.recover_into(
+            path, rows, layout_dpi=int(meta.get("dpi") or 200), progress=progress)
         from . import splitter
         rows = splitter.repair_option_tags(rows)
         # 修复后再做文本级去噪；顺序很重要：水印必须在校验/分词之前就没了
@@ -380,19 +395,18 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
         clean = (text or "").splitlines()
     clean = ocr_html.drop_noise([ln for ln in clean if ln])
     clean = [ln for ln in clean if ln and not PAPER_NOISE.search(ln)]
-    return {
-        "lines": clean,
-        "images": [],
-        "meta": {
-            "reader": "pdf-ocr",
-            "pages": int(meta.get("pages") or pages or 0),
-            "parsed_pages": int(meta.get("pages_done") or 0),
-            "scanned": True,
-            "truncated": bool(meta.get("truncated")),
-            "failed_pages": [e.get("page") for e in (meta.get("errors") or [])],
-            "seconds": meta.get("seconds"),
-        },
+    info = {
+        "reader": "pdf-ocr",
+        "pages": int(meta.get("pages") or pages or 0),
+        "parsed_pages": int(meta.get("pages_done") or 0),
+        "scanned": True,
+        "truncated": bool(meta.get("truncated")),
+        "failed_pages": [e.get("page") for e in (meta.get("errors") or [])],
+        "seconds": meta.get("seconds"),
     }
+    if retry.get("holes") or retry.get("recovered"):   # 只有真的判过洞/补过行才回传
+        info["ocr_retry"] = retry
+    return {"lines": clean, "images": [], "meta": info}
 
 
 def _attribute(starts: List[tuple], page: int, y: float) -> tuple:

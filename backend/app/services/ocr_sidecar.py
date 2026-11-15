@@ -48,11 +48,21 @@ DEFAULT_MAX_PAGES = 60
 DEFAULT_PAGE_TIMEOUT = 60.0
 DEFAULT_TOTAL_TIMEOUT = 1800.0
 
+#: 条带重跑（T4，2026-11-14）：被水印压住的整行在 200dpi 整页里会被漏掉，
+#: 按 300dpi 把那一小条带**原样**重跑才逐字正确（二值化/400dpi 会掉字，实测见方案 §2）。
+REGION_DPI = 300
+#: 单条带（一次裁剪）默认超时
+REGION_TIMEOUT = 30.0
+
 Progress = Optional[Callable[[int, int], None]]
 
 
 class OcrError(RuntimeError):
     """OCR 不可用或识别失败（调用方转成可读的业务错误）。"""
+
+
+class OcrTimeout(OcrError):
+    """条带重跑超时 —— 调用方可据此停止继续补行，而不是逐条等满。"""
 
 
 def python_exe() -> str:
@@ -203,6 +213,36 @@ def _result(texts: List[str], fails: List[Dict], total: int, page_secs: float,
     return "\n".join(texts), meta
 
 
+def _await_crop(q: queue.Queue, *, proc: Optional[subprocess.Popen] = None,
+                timeout: float = REGION_TIMEOUT) -> List[Dict]:
+    """读一条 `crop` 事件（跳过 stderr 噪声与控制事件）。返回带 pt 坐标的框。"""
+    deadline = time.monotonic() + max(1.0, float(timeout))
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise OcrTimeout(f"OCR 条带重跑超时（>{int(timeout)}s）")
+        try:
+            tag, line = q.get(timeout=max(0.1, min(5.0, remaining)))
+        except queue.Empty:
+            if proc is not None and proc.poll() is not None:
+                raise OcrError(f"OCR 进程已退出（exit {proc.returncode}），条带重跑没有结果")
+            continue
+        if line is None:
+            raise OcrError("OCR 进程意外退出，条带重跑没有结果")
+        if tag == "err":
+            continue
+        try:
+            evt = json.loads(line)
+        except ValueError:
+            continue
+        kind = evt.get("t")
+        if kind == "crop":
+            return [it for it in (evt.get("lines") or []) if isinstance(it, dict)]
+        if kind == "error":
+            raise OcrError(f"OCR 条带重跑失败：{(evt.get('message') or '')[:200]}")
+        # ready / pong 等控制事件直接忽略
+
+
 # --------------------------------------------------------------- 常驻 worker
 class _Daemon:
     """常驻 OCR worker：模型只加载一次，之后复用进程。"""
@@ -281,6 +321,31 @@ class _Daemon:
         return _result(out["texts"], out["fails"], out["total"],
                        out["page_secs"], out["truncated"], dpi,
                        layouts=out.get("layouts") or None)
+
+    def crop(self, abs_path: str, *, page: int, rect: List[float], dpi: int,
+             timeout: float) -> List[Dict]:
+        """只识别一页的一个矩形（pt）→ 带 pt 坐标的框（T4 缺行回收）。"""
+        self._ensure()
+        self.last_used = time.monotonic()
+        assert self.proc is not None and self.q is not None
+        cmd = json.dumps({"cmd": "crop", "path": abs_path, "page": int(page),
+                          "rect": [float(v) for v in rect], "dpi": int(dpi)},
+                         ensure_ascii=False)
+        try:
+            self.proc.stdin.write(cmd + "\n")      # type: ignore[union-attr]
+            self.proc.stdin.flush()                # type: ignore[union-attr]
+        except Exception as exc:                    # noqa: BLE001
+            self.close()
+            raise OcrError(f"OCR 常驻进程写命令失败：{exc}") from exc
+        try:
+            return _await_crop(self.q, proc=self.proc, timeout=timeout)
+        except OcrTimeout:
+            self.close()                            # 超时后进程状态不可信，回收下次重建
+            raise
+        except OcrError:
+            if self.proc.poll() is not None:        # 进程死了才回收；业务错误保留常驻进程
+                self.close()
+            raise
 
     def close(self) -> None:
         if self.proc is None:
@@ -369,3 +434,43 @@ def read_pdf_text(
     return _result(out["texts"], out["fails"], out["total"],
                    out["page_secs"], out["truncated"], dpi,
                    layouts=out.get("layouts") or None)
+
+
+def read_region_text(
+        abs_path: str,
+        *,
+        page: int,
+        rect: List[float],
+        dpi: int = REGION_DPI,
+        timeout: float = REGION_TIMEOUT) -> List[Dict]:
+    """只识别 PDF 某一页的一个矩形（单位 pt）→ 带 pt 坐标的框（T4，2026-11-14）。
+
+    用途：扫描件「整行漏检」的回收 —— 只把那一小条带按 300dpi **原样**重跑一遍
+    （200dpi 整页里被斜向水印压住的行，行检测会整行跳过）。
+    返回项：`{text, x, y, w, h, score}`，其中 `y` 是框中心、坐标单位 **pt**；
+    调用方按自己的版面 dpi 换回像素（`px = pt × dpi / 72`）即可插回原行序。
+    失败抛 `OcrError`（超时为子类 `OcrTimeout`）；调用方只记失败数，不让整份导入失败。
+    """
+    ok, reason = available()
+    if not ok:
+        raise OcrError(reason)
+    if not os.path.isfile(abs_path):
+        raise OcrError(f"待识别的文件不见了：{abs_path}")
+    if int(page) < 1 or len(list(rect or [])) != 4:
+        raise OcrError("条带重跑参数不合法（需要 1 基页码 + 4 个 pt 坐标）")
+
+    if ocr_mode() == "daemon":
+        with _DAEMON_LOCK:
+            return _get_daemon().crop(abs_path, page=int(page), rect=list(rect),
+                                      dpi=int(dpi), timeout=float(timeout))
+
+    extra = [abs_path, "--page", str(int(page)), "--dpi", str(int(dpi)),
+             "--clip", ",".join(f"{float(v):.2f}" for v in rect)]
+    proc, q = _spawn(extra)
+    try:
+        return _await_crop(q, proc=proc, timeout=timeout)
+    finally:
+        try:
+            proc.wait(timeout=5)
+        except Exception:                          # noqa: BLE001
+            _kill(proc)

@@ -156,6 +156,12 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
                             f"{'、'.join(str(p) for p in meta['failed_pages'][:5])} 页）")
         if meta.get("truncated"):
             warnings.append(f"仅解析前 {meta.get('parsed_pages') or 60} 页，后续内容请拆分上传")
+        # T5（2026-11-14）：有整行被水印压住没识别出来、已局部重跑补回的，明确说一句
+        retry = meta.get("ocr_retry") or {}
+        if retry.get("recovered"):
+            qnos = "、".join(str(n) for n in (retry.get("recovered_qnos") or [])[:6])
+            warnings.append(f"有 {retry['recovered']} 处整行漏检（水印遮挡）已局部重跑补回"
+                            f"（第 {qnos} 题），请对着原卷核对")
     elif meta.get("pages"):
         warnings.insert(0, f"PDF 共 {meta['pages']} 页，已按版面坐标归属图片")
 
