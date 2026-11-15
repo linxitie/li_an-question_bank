@@ -2093,4 +2093,27 @@
     .task-item { padding: 14px 16px; }
     .task-title { font-size: 15px; }
   }
+
+/* ===== 与首页视觉统一（2026-11-15 团队要求）
+   首页令牌：底色 linear-gradient(180deg,#f8f9fc,#f1f3f8)、主容器 1400px/24px 32px、
+   深蓝标题 #1a2b5f、强调红 #c41e3a、次文字 #8a8faa、卡片圆角 12px + 轻阴影 ===== */
+.plan-page {
+  background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.hero { background: #ffffff; border-bottom: 1px solid #e8ecf4; box-shadow: 0 1px 4px rgba(17, 24, 39, 0.04); }
+.hero-bg { display: none; }
+.hero-title { color: #1a2b5f; font-weight: 700; }
+.hero-sub { color: #8a8faa; }
+.hero-badge { background: rgba(196, 30, 58, 0.1); color: #c41e3a; }
+.plan-main, .page-pad { max-width: 1400px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }
+.card, .panel, .section { border-radius: 12px; background: #fff; box-shadow: 0 1px 4px rgba(17, 24, 39, 0.06); border: 1px solid #eef1f7; }
+.section-title { color: #1a2b5f; font-weight: 700; }
+.stat-num, .wb-num, .report-num { color: #1a2b5f; }
+.stat-label, .report-label, .time-label { color: #8a8faa; }
+.action-btn:not(.ghost), .btn-primary, .primary-btn { background: #c41e3a; border-color: #c41e3a; }
+.action-btn:not(.ghost):hover, .btn-primary:hover, .primary-btn:hover { background: #a8172f; }
+.task-item { border-radius: 10px; background: #fff; border: 1px solid #eef1f7; box-shadow: none; }
+.task-item:hover { border-color: #dfe5f2; }
+@media (max-width: 900px) { .plan-main, .page-pad { padding-left: 16px; padding-right: 16px; } }
 </style>

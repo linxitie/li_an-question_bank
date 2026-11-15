@@ -77,14 +77,13 @@
     },
     computed: {
       menuItems() {
+        // 团队约定（2026-11-15）：导航只保留这五项，其余入口不往这里加
         return [
           { id: 'home_page', label: '首页' },
           { id: 'question_bank', label: '题库' },
-          { id: 'ai_studio', label: '小智' },
-          { id: 'news', label: '新闻' },
-          { id: 'about', label: '关于砺安题库' },
+          { id: 'gold_purchase', label: '商城' },
           { id: 'forum', label: '论坛' },
-          { id: 'gold_purchase', label: '商城' }
+          { id: 'about', label: '关于砺安题库' }
         ];
       }
     },
