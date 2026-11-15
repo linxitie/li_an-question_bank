@@ -56,3 +56,34 @@ VAULT_PATH_JOB="D:/砺安题库/li_an-question_bank/招考信息知识库"
 - `招考信息知识库` 已建立基础目录；
 - 建议在 Obsidian 中分别打开三个根目录作为三个库；
 - 旧的单 Vault 目录规范已废弃，以《Obsidian三Vault拆分规范_v1.md》为准。
+
+
+## 新闻 Vault 二次清理（2026-11-15）
+
+清理脚本：
+
+```text
+backend/scripts/clean_news_vault.py
+```
+
+已将新闻 Vault 中残留的金句主题地图、旧审核看板、旧金句清单和招考索引移出：
+
+```text
+移动：60
+新闻类型：81
+新闻库剩余非新闻 Markdown：
+- 00-系统总览看板.md（看板）
+- 02-新闻/index.md（新闻索引）
+- 00-收件箱/新闻/时效性看板.md（新闻审核看板）
+```
+
+现在 `backend/content_hub_vault` 顶层只保留：
+
+```text
+00-收件箱
+02-新闻
+04-归档
+99-系统
+.obsidian
+uploads
+```
