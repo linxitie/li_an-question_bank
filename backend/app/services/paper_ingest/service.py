@@ -133,7 +133,9 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
         draft.message = f"解析失败：{exc}"[:500]
         return draft
 
-    items = splitter.split_questions(payload["lines"])
+    # P1-2（2026-11-15）：扫描件走的是**行级题号自洽**（readers 用坐标算好 starts 再传进来）；
+    # 非扫描件 payload 里没有 starts → 传 None，行为与旧版一致。
+    items = splitter.split_questions(payload["lines"], starts=payload.get("starts"))
     # F3（2026-11-15）：图表/答案页的零星标签会被拆成假题，按题兜底丢掉（只做安全判定）
     items, dropped_junk = splitter.drop_junk_items(items)
     if not items:
@@ -171,6 +173,33 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
             qnos = "、".join(str(n) for n in (retry.get("recovered_qnos") or [])[:6])
             warnings.append(f"有 {retry['recovered']} 处整行漏检（水印遮挡）已局部重跑补回"
                             f"（第 {qnos} 题），请对着原卷核对")
+        # P1-4（2026-11-15）：按题号缺号补回收的，单独说一句（与 T5 的缺选项补行区分开）
+        qno_retry = meta.get("ocr_qno_retry") or {}
+        if qno_retry.get("recovered"):
+            qnos = "、".join(str(n) for n in (qno_retry.get("recovered_qnos") or [])[:6])
+            warnings.append(f"有 {qno_retry['recovered']} 处题号行整行漏检，已按缺号局部重跑补回"
+                            f"（第 {qnos} 题），请对着原卷核对")
+        # P1-5（2026-11-15）：题号自洽的处置要说清楚 —— 哪些假题号被挡、哪些重复页被跳过
+        issues = meta.get("qno_issues") or {}
+        loose = issues.get("loose") or []
+        if loose:
+            nos = "、".join(str(n) for n in loose[:6])
+            warnings.append(f"有 {len(loose)} 个题号在原卷上没带分隔符（如第 {nos} 题），"
+                            f"已按题号连续性识别，请核对起点")
+        rejected = issues.get("rejected") or []
+        if rejected:
+            nos = "、".join(str(x["no"]) for x in rejected[:6])
+            warnings.append(f"已忽略 {len(rejected)} 处不像题干的「题号行」（图内数字/百分比，如 {nos}）")
+        dup = issues.get("dup_dropped") or []
+        if dup:
+            nos = "、".join(str(x["no"]) for x in dup[:6])
+            warnings.append(f"已忽略 {len(dup)} 处重复题号（影印重复页/折行重复，如 {nos}）")
+        if meta.get("dedup_pages"):
+            ps = "、".join(f"p{p}" for p in meta["dedup_pages"][:6])
+            warnings.append(f"已跳过 {len(meta['dedup_pages'])} 页重复影印页（{ps}），内容与上一页逐字相同")
+        if meta.get("merged_half_qno"):
+            nos = "、".join(str(x["no"]) for x in meta["merged_half_qno"][:6])
+            warnings.append(f"有 {len(meta['merged_half_qno'])} 处题号行被拆成两框，已合并（第 {nos} 题）")
     elif meta.get("pages"):
         warnings.insert(0, f"PDF 共 {meta['pages']} 页，已按版面坐标归属图片")
 

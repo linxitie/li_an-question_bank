@@ -131,6 +131,43 @@ def test_fill_draft_scanned_adds_three_warnings(monkeypatch, db_session):
     assert "识别失败" in warns
 
 
+def test_fill_draft_reports_qno_issues(monkeypatch, db_session):
+    """P1-5（2026-11-15）：题号治理的处置必须出现在草稿体检里，不能静默改数。"""
+    material = StudyMaterial(subject="gongzhuan", type="paper", status=1,
+                             title="P1 题号治理探针", creator_id=2)
+    db_session.add(material)
+    db_session.commit()
+
+    def fake_read_any(path, ext, progress=None):
+        return {"lines": ["1、题干（　　）。", "A、甲", "B、乙", "C、丙", "D、丁"],
+                "starts": None,
+                "images": [],
+                "meta": {"reader": "pdf-ocr", "pages": 41, "parsed_pages": 41,
+                         "scanned": True, "truncated": False, "failed_pages": [],
+                         "dedup_pages": [33],
+                         "merged_half_qno": [{"no": 98, "kept": "98.为了提高反诈宣传"}],
+                         "ocr_qno_retry": {"holes": 6, "recovered": 2,
+                                           "recovered_qnos": [47, 87]},
+                         "qno_issues": {"rejected": [{"no": 125, "text": "125.60%"}],
+                                        "dup_dropped": [{"no": 4, "text": "4.小时以内"}],
+                                        "restarts": [], "loose": [27, 45]}}}
+    monkeypatch.setattr(readers, "read_any", fake_read_any)
+
+    draft = service.create_draft(db_session, material, ext="pdf", status="parsing",
+                                 actor_id=2, message="OCR 排队中")
+    db_session.commit()
+    service.fill_draft(db_session, draft, ext="pdf", abs_path="x.pdf")
+    db_session.commit()
+
+    warns = "\n".join(json.loads(draft.warnings_json))
+    assert "题号行整行漏检" in warns and "第 47、87 题" in warns      # P1-4
+    assert "没带分隔符" in warns and "27、45" in warns                 # 无分隔符题号
+    assert "不像题干的「题号行」" in warns                              # 假题号被挡
+    assert "重复题号" in warns                                         # 重复题号被忽略
+    assert "重复影印页（p33）" in warns                                # P1-3a
+    assert "题号行被拆成两框" in warns                                  # P1-3b
+
+
 def test_fill_draft_does_not_resurrect_discarded(monkeypatch, db_session):
     """D2（2026-11-14）：OCR 期间用户点了「放弃草稿」→ 后台任务跑完不许把它救回 pending。
 

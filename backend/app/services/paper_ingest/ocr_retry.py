@@ -39,6 +39,9 @@ PAD_PX = 6.0
 MAX_PER_QUESTION = 1
 MAX_PER_PAGE = 8
 MAX_TOTAL = 40
+#: P1-4（2026-11-15）：按"题号缺号"补回收的条带上限。41 页实测 5 组缺号 → 6 条带，
+#: 每组最坏跨 3 页；上限 12 条 ≈ 最坏 +35s（实测单条带 1–3s）。
+MAX_QNO_GAPS = 12
 #: 重跑 dpi 与单条带超时（实测单条带 1–2s）
 RETRY_DPI = 300
 RETRY_TIMEOUT = 30.0
@@ -198,6 +201,62 @@ def find_holes(rows: List[dict], *, gap_ratio: float = GAP_RATIO,
     return holes
 
 
+def _consecutive_groups(nums: List[int]) -> List[List[int]]:
+    out: List[List[int]] = []
+    for n in nums:
+        if out and n == out[-1][-1] + 1:
+            out[-1].append(n)
+        else:
+            out.append([n])
+    return out
+
+
+def find_number_holes(rows: List[dict], starts: List[Tuple[int, int]],
+                      *, max_total: int = MAX_QNO_GAPS) -> List[dict]:
+    """按「题号缺号」找待重跑的条带（P1-4，2026-11-15）。纯内存，零 IO。
+
+    为什么要单开一条：T5/T6 的洞检测盯的是**缺选项字母**，而 41 页整卷里 27/45/47/87
+    这些题是**题号行整行没被 OCR 出框**（题还是有的，题干接着上一行往下走）。
+    实测：对这些缺口做 300dpi 条带重跑，47、87 能逐字捞回、
+    27/45 能捞回「27在…」「45东江市…」这种**无分隔符题号**行。
+
+    条带取「上一题最后一行」到「下一题第一行」之间：同页一条；跨页则页尾 + 中间整页 + 页首。
+    """
+    if not rows or len(starts) < 2:
+        return []
+    nos = [no for _, no in starts]
+    seen = set(nos)
+    idx_by_no = {no: i for i, no in starts}
+    missing = [n for n in range(1, max(nos) + 1) if n not in seen]
+    if not missing:
+        return []
+    bottom = max(float(r["y"]) + float(r["h"]) for r in rows)
+    width = max(float(r["x"]) + float(r.get("w") or 0.0) for r in rows) + PAD_PX
+
+    holes: List[dict] = []
+    for grp in _consecutive_groups(missing):
+        prev_no, next_no = grp[0] - 1, grp[-1] + 1
+        if prev_no not in idx_by_no or next_no not in idx_by_no:
+            continue
+        a = rows[idx_by_no[prev_no]]
+        b = rows[idx_by_no[next_no]]
+        p0, p1 = int(a["page"]), int(b["page"])
+        base = {"qno": grp[0], "missing_nos": list(grp), "kind": "qno_missing",
+                "median": 0.0, "gap": 0.0, "x0": 0.0, "x1": width}
+        y_after_a = float(a["y"]) + float(a["h"]) / 2.0 + PAD_PX
+        y_before_b = float(b["y"]) - float(b["h"]) / 2.0 - PAD_PX
+        if p0 == p1:
+            holes.append({**base, "page": p0, "y0": y_after_a, "y1": y_before_b})
+        else:
+            holes.append({**base, "page": p0, "y0": y_after_a, "y1": bottom})
+            for mid in range(p0 + 1, p1):
+                holes.append({**base, "page": mid, "y0": 0.0, "y1": bottom})
+            holes.append({**base, "page": p1, "y0": 0.0, "y1": y_before_b})
+        if len(holes) >= max_total:
+            break
+    return holes[:max_total]
+
+
 def _norm(text: str) -> str:
     return re.sub(r"\s+", "", text or "")
 
@@ -243,8 +302,12 @@ def merge(rows: List[dict], recovered: List[dict], *, base_h: float = 0.0) -> Li
 
 
 def recover_into(path: str, rows: List[dict], *, layout_dpi: int = 200,
-                 progress=None) -> Tuple[List[dict], dict]:
-    """检测缺行 → 逐条带重跑 → 回填。返回 `(新行序, 统计)`；任何异常都只记失败、不抛出。"""
+                 progress=None, holes: Optional[List[dict]] = None) -> Tuple[List[dict], dict]:
+    """检测缺行 → 逐条带重跑 → 回填。返回 `(新行序, 统计)`；任何异常都只记失败、不抛出。
+
+    :param holes: 指定要重跑的条带（P1-4 的题号缺号走这条路径）；不传就按 T5/T6 的
+        「缺选项字母 + 行距异常」自己找。
+    """
     stats: dict = {"holes": 0, "recovered": 0, "rows": 0, "failed": 0, "rejected": 0,
                    "qnos": [], "recovered_qnos": [], "seconds": 0.0, "skipped": ""}
     if not rows:
@@ -252,7 +315,7 @@ def recover_into(path: str, rows: List[dict], *, layout_dpi: int = 200,
     if not enabled():
         stats["skipped"] = f"{ENV_SWITCH}=0"
         return rows, stats
-    holes = find_holes(rows)
+    holes = list(holes) if holes is not None else find_holes(rows)
     stats["holes"] = len(holes)
     stats["qnos"] = [h["qno"] for h in holes]
     if not holes:
@@ -306,10 +369,19 @@ def recover_into(path: str, rows: List[dict], *, layout_dpi: int = 200,
             text = (ln.get("text") or "").strip()
             if not text:
                 continue
-            # T6：题号行的洞只收「以题号开头」的行 —— 同一条缝里可能夹页眉/图表碎片
-            if hole.get("kind") == "number" and splitter.qno_of(text) is None:
+            # T6：题号行的洞只收「以题号开头」的行 —— 同一条缝里可能夹页眉/图表碎片。
+            kind = hole.get("kind")
+            if kind == "number" and splitter.qno_of(text) is None:
                 stats["rejected"] += 1
                 continue
+            # P1-4：缺号条带还认「27在…」这种**无分隔符题号**，但必须是本组缺号里的那一个
+            if kind == "qno_missing":
+                got_no = splitter.qno_of(text)
+                if got_no is None:
+                    got_no = splitter.qno_of_loose(text)
+                if got_no is None or got_no not in (hole.get("missing_nos") or [hole["qno"]]):
+                    stats["rejected"] += 1
+                    continue
             rec = {"text": text,
                    "x": float(ln.get("x") or 0.0) * k,
                    "y": float(ln.get("y") or 0.0) * k,

@@ -53,6 +53,18 @@ MAX_PARA_CHARS = 1000
 MIN_PARA_CHARS = 1
 
 
+def is_noise_line(line: str) -> bool:
+    """这一行是不是页眉/页脚/页码噪声（P1，2026-11-15）。
+
+    为什么要单独暴露：`paper_ingest` 需要**按行保留坐标**地过滤噪声（页过滤/题号自洽都要
+    用 x/y），不能先把行拍平成文本再筛；共用同一套 `NOISE_RE` 才不会有第二份口径。
+    """
+    text = (line or "").strip()
+    if not text:
+        return True
+    return bool(NOISE_RE.search(text))
+
+
 def drop_noise(lines: Iterable[str]) -> List[str]:
     """去掉页眉/页脚/页码等噪声行，并做基础去空白。"""
     out: List[str] = []

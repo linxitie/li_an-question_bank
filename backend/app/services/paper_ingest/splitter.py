@@ -18,14 +18,19 @@
 """
 from __future__ import annotations
 
+import os
 import re
 from statistics import median
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
 #: 题号行：`1.` / `1．` / `1、` / `第1题`（行首，最多三位数）
 QNO_RE = re.compile(r"^\s*(?:第\s*)?(\d{1,3})\s*(?:题\s*)?[.．、]?\s*")
 #: 更严格的一版：必须带分隔符或"第N题"，避免把 "2023 年" 当成题号
 QNO_STRICT_RE = re.compile(r"^\s*(?:第\s*(\d{1,3})\s*题|(\d{1,3})\s*[.．、])\s*")
+#: 宽松版：行首数字**紧跟汉字**（P1-4，2026-11-15）。这份卷里第 27、45 题印的就是
+#: 「27在公安队伍建设中…」「45东江市人民群众业余文化生活十分丰富…」——**没有分隔符**，
+#: 严格正则看不见它们。宽松版只在"与已识别题号连续"时才会被采纳（见 `guard_qno_starts`）。
+QNO_LOOSE_RE = re.compile(r"^\s*(\d{1,3})\s*(?=[\u4e00-\u9fff])")
 #: 选项行内切分：`A.` / `A、` / `A．`（含全角字母）
 OPT_RE = re.compile(r"([A-DＡ-Ｄ])\s*[.．、]\s*")
 #: `【题型】单选题`
@@ -107,22 +112,190 @@ def qno_of(line: str) -> Optional[int]:
 
 def _strip_qno(line: str) -> str:
     m = QNO_STRICT_RE.match(line or "")
-    return line[m.end():] if m else (line or "")
+    if m:
+        return line[m.end():]
+    m2 = QNO_LOOSE_RE.match(line or "")
+    return line[m2.end():] if m2 else (line or "")
 
 
-def split_options(block: List[str]) -> tuple:
+def qno_of_loose(line: str) -> Optional[int]:
+    """行首「数字+汉字」→ 题号（宽松版，仅供 `guard_qno_starts` 在连续位置采纳）。"""
+    m = QNO_LOOSE_RE.match(line or "")
+    if not m:
+        return None
+    no = int(m.group(1))
+    return no if 1 <= no <= 999 else None
+
+
+def looks_like_question_start_loose(line: str) -> bool:
+    """宽松题号版"像不像题干行"（判据与严格版一致，只是去前缀的正则不同）。"""
+    if qno_of_loose(line) is None:
+        return False
+    m = QNO_LOOSE_RE.match(line or "")
+    tail = (line or "")[m.end():].strip() if m else ""
+    if len(tail) < QNO_MIN_TAIL:
+        return False
+    return len(CJK_RE.findall(tail)) >= QNO_MIN_CJK
+
+
+# ==================== P1：题号自洽（2026-11-15）====================
+# 41 页真卷实测：题号 8 个缺号、5 组重号。重号里 1 / 4 是**图内数字**被当成题号
+# （p28「1.12-2」楼层图标注、p12「4.小时以内数封定神」流程图串读），79/80 是**影印重复页**，
+# 98 是**题号行被拆成两框**。所以除了「页级去重」（readers），行级还要三条约束。
+#: 题号后至少这么多字符（"1.12-2" 去掉 "1." 只剩 5 个，挡掉）
+QNO_MIN_TAIL = 6
+#: 题号后至少这么多汉字（"33.40%" "125.60%" 一个汉字都没有，挡掉）
+QNO_MIN_CJK = 3
+#: 一键关掉题号自洽（`PAPER_QNO_GUARD=0`），回到"行首有题号就当新题"的旧行为
+QNO_GUARD_ENV = "PAPER_QNO_GUARD"
+#: 折行题号合并：两行 y 差上限（200dpi 下正文行距约 60px）
+HALF_LINE_MAX_GAP = 60.0
+#: 宽松题号只允许出现在"上一个已识别题号 +1 ~ +N"的窗口里（防止把 `2024年` 当题号）
+LOOSE_WINDOW = 3
+
+
+def qno_guard_enabled() -> bool:
+    """题号自洽开关（`PAPER_QNO_GUARD=0/off/false` 关闭，默认开）。"""
+    raw = (os.environ.get(QNO_GUARD_ENV) or "1").strip().lower()
+    return raw not in ("0", "off", "false", "no")
+
+
+def looks_like_question_start(line: str) -> bool:
+    """行首题号**且**像一句真题干的开头（P1）。
+
+    只挡"看起来一定不是题干"的行：题号后面太短（`1.12-2`）、或者几乎没有汉字
+    （`125.60%` / `685`）。宁松勿紧——真正的题干哪怕短，只要≥3 个汉字就放行。
+    """
+    if qno_of(line) is None:
+        return False
+    tail = _strip_qno(line).strip()
+    if len(tail) < QNO_MIN_TAIL:
+        return False
+    return len(CJK_RE.findall(tail)) >= QNO_MIN_CJK
+
+
+def _is_section_header(line: str) -> bool:
+    """题型标记 / 章节标题行（`二、多项选择题` / `【题型】单选` / `（一）…`）。"""
+    text = (line or "").strip()
+    if not text:
+        return False
+    if MARK_RE.match(text) or SECTION_TYPE_RE.match(text):
+        return True
+    return bool(re.match(r"^\s*[（(]?\s*[一二三四五六七八九十]+\s*[）)]?\s*[、.]", text))
+
+
+def guard_qno_starts(rows: List[dict]) -> tuple:
+    """按行做题号自洽 → `(starts, issues)`。
+
+    `rows` 是按阅读顺序、已去噪、**保留坐标**的行（`[{"text": ...}, ...]`）。
+    `starts` 是 `[(行下标, 题号)]`，直接交给 `split_questions(starts=...)`。
+
+    三条规则（被挡的行**不删**，只是不当成新题起点，文字仍归到上一题）：
+      1. 必须 `looks_like_question_start`（挡图内数字/百分比）；
+      2. 同一题号只能出现一次（挡影印重复页与折行重复）；
+      3. 唯一的例外是**分段重新编号**：中间出现过题型/章节标题，则允许小号重启（记 `restarts`）。
+
+    外加 P1-4 的"宽松题号"：原卷把第 27、45 题印成「27在…」「45东江市…」（没有分隔符），
+    严格正则看不见。仅在**紧接上一个已识别题号（+1 ~ +LOOSE_WINDOW）**且未被占用时才采纳，
+    命中记进 `loose`，便于事后核对。
+    """
+    starts: List[tuple] = []
+    rejected: List[dict] = []
+    dup_dropped: List[dict] = []
+    restarts: List[int] = []
+    loose_used: List[int] = []
+    first_seen: Dict[int, int] = {}      # 题号 → 首次出现时的"段号"
+    last_no: Optional[int] = None
+    section = 0
+    for idx, row in enumerate(rows):
+        text = (row.get("text") or "").strip()
+        if _is_section_header(text):
+            section += 1
+            continue
+        no = qno_of(text)
+        is_loose = False
+        if no is None:
+            cand = qno_of_loose(text)
+            if (cand is not None and last_no is not None
+                    and last_no < cand <= last_no + LOOSE_WINDOW
+                    and cand not in first_seen
+                    and looks_like_question_start_loose(text)):
+                no, is_loose = cand, True
+        if no is None:
+            continue
+        if not is_loose and not looks_like_question_start(text):
+            rejected.append({"no": no, "text": text[:48]})
+            continue
+        prev_section = first_seen.get(no)
+        if prev_section is not None and prev_section >= section:
+            dup_dropped.append({"no": no, "text": text[:48]})
+            continue
+        if prev_section is not None:
+            restarts.append(no)
+        first_seen[no] = section
+        starts.append((idx, no))
+        last_no = no
+        if is_loose:
+            loose_used.append(no)
+    return starts, {"rejected": rejected, "dup_dropped": dup_dropped,
+                    "restarts": restarts, "loose": loose_used}
+
+
+def merge_split_qno_rows(rows: List[dict]) -> tuple:
+    """同一题号在**相邻两行**各出一次（题号行被 OCR 拆成两框）→ 合并成一行，取长的那行。
+
+    实测 p40：y=1081「98.为了提高反诈室」（半行）+ y=1125「98.为了提高反诈宣传的精准性…」（完整行）。
+    合并后题号只出现一次，`split_questions` 拿到的题干就是完整那句。
+    """
+    out: List[dict] = []
+    merged: List[dict] = []
+    i = 0
+    while i < len(rows):
+        cur = rows[i]
+        nxt = rows[i + 1] if i + 1 < len(rows) else None
+        no = qno_of((cur or {}).get("text") or "")
+        same_no = (
+            nxt is not None
+            and no is not None
+            and qno_of(nxt.get("text") or "") == no
+            and int(nxt.get("page") or 0) == int(cur.get("page") or 0)
+            and abs(float(nxt.get("y") or 0.0) - float(cur.get("y") or 0.0)) <= HALF_LINE_MAX_GAP
+        )
+        if same_no:
+            keep = cur if len(cur["text"]) >= len(nxt["text"]) else nxt
+            out.append(keep)
+            merged.append({"no": no, "kept": keep["text"][:48]})
+            i += 2
+            continue
+        out.append(cur)
+        i += 1
+    return out, merged
+
+
+def split_options(block: List[str], *, body_from: Optional[set] = None) -> tuple:
     """把一块内容拆成 (题干, {A..D})。
 
     - 选项可以一行多个（`A.甲 B.乙 C.丙 D.丁`），也可以每行一个；
     - 选项文本跨行时会**续接到当前选项**（PDF 经常把长选项折行）；
     - 第一个选项之前的行都算题干。
+
+    :param body_from: 块内**行下标**集合：这些行虽然长得像题号行，但题号自洽判定它们
+        不是新题起点（`1.12-2` 这类图内标注）。把它们**当正文**处理而不是当结构性行丢掉
+        —— 否则"被挡掉的假题号"会连文字一起消失（P1，2026-11-15）。
     """
+    skip_structural = body_from or set()
     stem: List[str] = []
     options: Dict[str, str] = {"A": "", "B": "", "C": "", "D": ""}
     current: Optional[str] = None
-    for raw in block:
+    for idx, raw in enumerate(block):
         line = (raw or "").strip()
         if not line or MARK_RE.match(line):
+            continue
+        if idx in skip_structural:
+            if current:
+                options[current] = f"{options[current]} {line}".strip()
+            else:
+                stem.append(line)
             continue
         if _is_structural(line):
             # 结构性行终止"选项续行"状态；否则标题会被吸进上一个选项
@@ -246,11 +419,20 @@ def _default_type_for(line_no: int, marks: Dict[int, str]) -> str:
     return state
 
 
-def split_questions(lines: List[str], *, default_type: str = "单选") -> List[dict]:
-    """文本行 → 题目草稿列表。**不做任何 IO**，纯内存。"""
+def split_questions(lines: List[str], *, default_type: str = "单选",
+                    starts: Optional[Sequence[Tuple[int, int]]] = None) -> List[dict]:
+    """文本行 → 题目草稿列表。**不做任何 IO**，纯内存。
+
+    :param starts: 可选的"题号起点"清单 `[(行下标, 题号)]`。给了就用它，不再自己扫行首
+        （P1，2026-11-15：`readers.read_pdf_ocr` 有坐标，能在**行级**做题号自洽，
+        挡掉图内数字/重复页/折行重复；纯文本调用方不传 → 行为与旧版完全一致）。
+    """
     norm = [(ln or "").replace("\u3000", " ").rstrip() for ln in lines]
-    starts = [(i, no) for i, ln in enumerate(norm) for no in [qno_of(ln)] if no]
-    if not starts:
+    if starts is None:
+        start_pairs = [(i, no) for i, ln in enumerate(norm) for no in [qno_of(ln)] if no]
+    else:
+        start_pairs = [(int(i), int(no)) for i, no in starts if 0 <= int(i) < len(norm)]
+    if not start_pairs:
         return []
     marks = _scan_type_state(norm)
 
@@ -263,14 +445,18 @@ def split_questions(lines: List[str], *, default_type: str = "单选") -> List[d
         lo, hi = int(m.group(1)), int(m.group(2))
         if hi < lo:
             lo, hi = hi, lo
-        nxt = next((s for s, _ in starts if s > i), len(norm))
+        nxt = next((s for s, _ in start_pairs if s > i), len(norm))
         body = " ".join(x.strip() for x in norm[i + 1:nxt]
                         if x.strip() and not qno_of(x))
         shared_spans.append((i, lo, hi, clean_cn(body)))
 
     items: List[dict] = []
-    for idx, (line_no, no) in enumerate(starts):
-        end = starts[idx + 1][0] if idx + 1 < len(starts) else len(norm)
+    # 只在"调用方给了 starts"时才区分"假题号行"：没给就不改旧行为（纯文本调用方）
+    start_lines = {i for i, _ in start_pairs}
+    fake_lines = ({i for i, ln in enumerate(norm) if qno_of(ln) is not None} - start_lines
+                  if starts is not None else set())
+    for idx, (line_no, no) in enumerate(start_pairs):
+        end = start_pairs[idx + 1][0] if idx + 1 < len(start_pairs) else len(norm)
         block = [norm[j] for j in range(line_no, end)]
         # 块里如果出现了下一段情境材料的标题（"根据以下情境材料，回答 4~5 题"），
         # 从那一行起的内容属于**下一组**，不属于本题 —— 截断，否则材料正文会被吸进上一题题干
@@ -279,7 +465,9 @@ def split_questions(lines: List[str], *, default_type: str = "单选") -> List[d
                 block = block[:k]
                 break
         block[0] = _strip_qno(block[0])
-        stem, options = split_options(block)
+        # 假题号行（题号自洽挡掉的）当正文，不丢字
+        body_from = {j - line_no for j in fake_lines if line_no <= j < end} if fake_lines else None
+        stem, options = split_options(block, body_from=body_from)
 
         joined = re.sub(r"\s+", "", " ".join(x.strip() for x in block))
         m = INLINE_TYPE_RE.search(joined)

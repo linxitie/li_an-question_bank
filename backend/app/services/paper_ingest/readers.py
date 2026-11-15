@@ -398,6 +398,17 @@ def page_profile(rows: List[dict]) -> dict:
             "numeric_ratio": round(numeric / n, 2) if n else 0.0}
 
 
+def looks_like_real_question_row(row: dict) -> bool:
+    """图表页里"这一行像不像一道真题的题号行"（P1，2026-11-15）。
+
+    为什么需要：41 页整卷的 p11 既是图表页**又夹着第 39 题**，整页丢会把真题丢掉
+    （v1 的回归）。判据刻意保守 —— 只认"行首题号 + 题号后像句子"，图里的
+    `685` / `33.40%` / `1.12-2` 一律不算。
+    """
+    from .splitter import looks_like_question_start
+    return looks_like_question_start((row or {}).get("text") or "")
+
+
 def page_kind(rows: List[dict]) -> str:
     """这一页是 `answer`（答案页）/ `chart`（图表页）/ `text`（正文页）。F1/F2。
 
@@ -415,6 +426,11 @@ def page_kind(rows: List[dict]) -> str:
     # 首版还判过"短行多但没数字"的表格页（p16/p19/p25），实测会把夹在图表里的真题
     # （题号 39/47/50/66）一起丢掉 —— 那些页的零星噪声交给 F3 按题兜底，不再整页动。
     if p["numeric_ratio"] >= 0.2 and p["long_body"] <= 4:
+        # P1（2026-11-15）：图表页里可能**夹着真题**（41 页的 p11 就有第 39 题）。
+        # 整页丢会丢真题（v1 实测丢了 39）；有"像真题的题号行"就按正文页保留，
+        # 图里的假题号（125.60% / 1.12-2 这类）交给 splitter 的题号自洽去挡。
+        if any(looks_like_real_question_row(r) for r in rows):
+            return "text"
         return "chart"
     return "text"
 
@@ -425,21 +441,46 @@ def _is_option_like(text: str) -> bool:
     return bool(OPT_RE.match((text or "").strip()))
 
 
-def _trim_chart_page(rows: List[dict]) -> List[dict]:
-    """图表页但**含真题**时：只丢图表标签行，保留题干/选项/题号（保持顺序）。
+# 注：v1 曾有个 `_trim_chart_page()`（图表页只丢标签行），实测会连带削掉真题里的短行且从未被调用；
+# P1（2026-11-15）改用「有真题号行就整页保留 + 行级题号自洽」，该函数已删除。
 
-    为什么要留一手：实测 p19/p25 各有 1 个真题号（39/47 那类），整页丢会丢真题；
-    而图表标签的形态很固定 —— 纯数字/百分比，或 ≤6 字且不是选项行/题号行。
+#: 影印重复页判据：相邻两页的"行文本集合"Jaccard ≥ 这个值就丢后一页（P1，2026-11-15）
+DUP_PAGE_JACCARD = 0.95
+
+
+def _normalize_row_text(text: str) -> str:
+    return re.sub(r"\s+", "", text or "")
+
+
+def _dedup_pages(rows: List[dict]) -> tuple:
+    """相邻两页**逐字重复**（影印页被插了两遍）→ 丢后一页。
+
+    实测 41 页：p32 与 p33 的题号 79/80 行 y、x、文本全同（1071.6/196.2、1882.8/196.2），
+    是同一张影印页在 PDF 里出现两次，不丢就会变成"题号重复 79/80"。
+
+    只比较**相邻**页、且要求文本集合几乎相同（0.95）：正常相邻页共享页眉广告，
+    但那两行占比很低，不会误判（实测正常相邻页 Jaccard ≤ 0.2）。
     """
-    kept = []
+    by_page: Dict[int, List[dict]] = {}
     for r in rows:
-        text = (r.get("text") or "").strip()
-        if NUMERIC_ONLY.match(text):
-            continue
-        if len(text) <= SHORT_LEN and not _is_option_like(text) and qno_of(text) is None:
-            continue
-        kept.append(r)
-    return kept
+        by_page.setdefault(int(r["page"]), []).append(r)
+    drop = set()
+    prev_page = None
+    prev_set = set()
+    for page in sorted(by_page):
+        cur = {_normalize_row_text(r.get("text")) for r in by_page[page]}
+        cur.discard("")
+        if prev_set and cur and prev_page is not None and page == prev_page + 1:
+            union = cur | prev_set
+            inter = cur & prev_set
+            if union and len(inter) / len(union) >= DUP_PAGE_JACCARD:
+                drop.add(page)
+                continue          # 连续三页重复时也只留第一页
+        prev_page, prev_set = page, cur
+    kept = [r for r in rows if int(r["page"]) not in drop]
+    if drop:
+        logger.info("[paper_ingest] 跳过重复影印页 %s", sorted(drop))
+    return kept, {"duplicated_pages": sorted(drop)}
 
 
 def _drop_non_text_pages(rows: List[dict]) -> tuple:
@@ -447,7 +488,7 @@ def _drop_non_text_pages(rows: List[dict]) -> tuple:
 
     只丢两类页（实测标定见 `page_kind`）：
       · **答案页**（p41）：整页都是答案字母/数字，没有任何题干；
-      · **数字图表页**（p11）：整页百分比/数字，题号成片是假题号。
+      · **数字图表页**（p11 这类，且**页里没有真题号行**）：整页百分比/数字，题号成片是假题号。
     表格页（p16/p19/p25 那种"表格 + 夹着真题"）**不整页动** —— 首版整页丢后真题
     39/47/50/66 跟着消失；它们的零星标签由 F3 `drop_junk_items` 按题兜底。
     """
@@ -526,13 +567,50 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
         if page_filter_enabled():
             rows, pages_meta = _drop_non_text_pages(rows)
         from . import splitter
+        # P1-3a（2026-11-15）：影印重复页（p32/p33 逐字相同）→ 丢后一页，否则题号 79/80 必重
+        rows, dup_info = _dedup_pages(rows)
         rows = splitter.repair_option_tags(rows)
-        # 修复后再做文本级去噪；顺序很重要：水印必须在校验/分词之前就没了
-        clean = [strip_inline_noise(r["text"]) for r in rows]
+        # P1-3b：题号行被拆成两框（p40 的 98）→ 相邻同号行合并，取长的那行
+        rows, merged_half = splitter.merge_split_qno_rows(rows)
+        # 修复后再做文本级去噪；顺序很重要：水印必须在校验/分词之前就没了。
+        # 这里**按行保留坐标**地过滤（而不是拍平成文本再筛），因为题号自洽要用 y/page。
+        def _clean_rows(src: List[dict]) -> List[dict]:
+            out = []
+            for r in src:
+                t = strip_inline_noise(r["text"])
+                if not t or ocr_html.is_noise_line(t) or PAPER_NOISE.search(t):
+                    continue
+                out.append({**r, "text": t})
+            return out
+
+        clean_rows = _clean_rows(rows)
+        # P1-2（2026-11-15）：行级题号自洽 —— 图内数字、重复题号在这里被挡掉
+        starts, qno_issues = ([], {"rejected": [], "dup_dropped": [], "restarts": [], "loose": []})
+        qno_retry: dict = {}
+        if splitter.qno_guard_enabled():
+            starts, qno_issues = splitter.guard_qno_starts(clean_rows)
+            # P1-4（2026-11-15）：还缺号的，按「上一题到下一题」的条带 300dpi 重跑一次再重算。
+            # 实测 41 页：47、87 逐字捞回；27/45 捞回的是「27在…」这种无分隔符题号行，
+            # 由宽松题号规则接住；46/86/92 连 300dpi 也捞不到 → 体检里点名，交人工核对。
+            if starts and ocr_retry.enabled():
+                holes = ocr_retry.find_number_holes(clean_rows, starts)
+                if holes:
+                    rows, qno_retry = ocr_retry.recover_into(
+                        path, rows, layout_dpi=int(meta.get("dpi") or 200),
+                        progress=progress, holes=holes)
+                    if qno_retry.get("recovered"):
+                        clean_rows = _clean_rows(rows)
+                        starts, qno_issues = splitter.guard_qno_starts(clean_rows)
+        clean = [r["text"] for r in clean_rows]
+        # 说明：行已经在上面用**同一套噪声规则**逐行筛过（`ocr_html.is_noise_line` + `PAPER_NOISE`），
+        # 所以这里**不再**对 clean 做二次过滤 —— 那会让 `starts` 的行下标整体错位。
     else:                                          # 兜底：旧 worker / 拿不到坐标
         clean = (text or "").splitlines()
-    clean = ocr_html.drop_noise([ln for ln in clean if ln])
-    clean = [ln for ln in clean if ln and not PAPER_NOISE.search(ln)]
+        starts, dup_info, merged_half = [], {}, []
+        qno_issues = {"rejected": [], "dup_dropped": [], "restarts": [], "loose": []}
+        qno_retry = {}
+        clean = ocr_html.drop_noise([ln for ln in clean if ln])
+        clean = [ln for ln in clean if ln and not PAPER_NOISE.search(ln)]
     info = {
         "reader": "pdf-ocr",
         "pages": int(meta.get("pages") or pages or 0),
@@ -544,9 +622,17 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
     }
     if retry.get("holes") or retry.get("recovered"):   # 只有真的判过洞/补过行才回传
         info["ocr_retry"] = retry
+    if qno_retry.get("holes"):                         # P1-4：按题号缺号补回收的统计
+        info["ocr_qno_retry"] = qno_retry
     if pages_meta.get("dropped_pages"):                # F4：跳过的图表/答案页
         info["ocr_pages"] = pages_meta
-    return {"lines": clean, "images": [], "meta": info}
+    if dup_info.get("duplicated_pages"):               # P1-3a：影印重复页
+        info["dedup_pages"] = dup_info["duplicated_pages"]
+    if merged_half:                                    # P1-3b：折行题号合并
+        info["merged_half_qno"] = merged_half
+    if any(qno_issues.values()):                       # P1-5：题号自洽的处置明细
+        info["qno_issues"] = qno_issues
+    return {"lines": clean, "starts": starts or None, "images": [], "meta": info}
 
 
 def _attribute(starts: List[tuple], page: int, y: float) -> tuple:
