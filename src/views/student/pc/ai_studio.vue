@@ -1,48 +1,61 @@
 <template>
-  <div class="ds">
+  <div class="xz" :style="{ fontSize: state.fontSize + 'px' }">
     <!-- 侧栏 -->
-    <aside class="ds__side" :class="{ 'is-open': sideOpen }">
-      <div class="side__brand">联考小智</div>
-      <button class="side__new" @click="newChat">＋ 开启新对话</button>
+    <aside class="xz-side" :class="{ 'is-open': sideOpen }">
+      <div class="xz-side__top">
+        <span class="xz-side__brand">联考小智</span>
+        <button class="xz-side__icon" title="设置" @click="settingsOpen = true">⚙</button>
+      </div>
+      <button class="xz-side__new" @click="newChat">＋ 开启新对话</button>
+      <input class="xz-side__search" v-model="query" placeholder="搜索对话" />
 
-      <div class="side__scroll">
+      <div class="xz-side__scroll">
         <template v-for="group in groupedSessions" :key="group.label">
-          <p class="side__group" v-if="group.items.length">{{ group.label }}</p>
-          <div v-for="s in group.items" :key="s.id" class="side__item"
+          <div v-if="group.items.length" class="xz-side__group">{{ group.label }}</div>
+          <div v-for="s in group.items" :key="s.id" class="xz-side__item"
                :class="{ on: s.id === state.sessionId }" @click="switchChat(s.id)">
-            <span class="side__title">{{ s.title || "未命名对话" }}</span>
-            <button class="side__del" @click.stop="removeChat(s.id)">×</button>
+            <span class="xz-side__title" @dblclick.stop="renameChat(s)">{{ s.title || "新对话" }}</span>
+            <button class="xz-side__mini" title="置顶" @click.stop="pinChat(s)">📌</button>
+            <button class="xz-side__mini" title="删除" @click.stop="removeChat(s.id)">×</button>
           </div>
         </template>
+        <p v-if="!sessions.length" class="xz-side__empty">还没有对话</p>
+      </div>
+
+      <div class="xz-side__foot">
+        <button @click="exportChat">导出对话</button>
+        <button @click="clearChat">清空当前</button>
       </div>
     </aside>
 
     <!-- 主区 -->
-    <main class="ds__main">
-      <header class="ds__top">
-        <button class="ds__menu" @click="sideOpen = !sideOpen">☰</button>
-        <div class="ds__model">
-          <button :class="{ on: state.model === 'deepseek-chat' }" @click="state.model = 'deepseek-chat'">对话</button>
+    <main class="xz-main">
+      <header class="xz-top">
+        <button class="xz-top__menu" @click="sideOpen = !sideOpen">☰</button>
+        <div class="xz-top__modes">
+          <button :class="{ on: state.model === 'fast' && state.mode === 'chat' }"
+                  @click="state.model = 'fast'; state.mode = 'chat'">标准</button>
+          <button :class="{ on: state.model === 'reason' }" @click="state.model = 'reason'">深度思考</button>
           <button :class="{ on: state.mode === 'agent' }" @click="state.mode = 'agent'">Agent</button>
         </div>
+        <span class="xz-top__hint">{{ state.mode === "agent" ? "会调用工具多步执行" : (state.model === "reason" ? "先推理再作答" : "快问快答") }}</span>
       </header>
 
-      <section class="ds__thread" ref="threadRef">
-        <div v-if="!state.messages.length" class="ds__welcome">
+      <section class="xz-thread" ref="threadRef" @scroll="onScroll" @click="onThreadClick">
+        <div v-if="!state.messages.length" class="xz-welcome">
           <h1>{{ greeting }}</h1>
-          <p class="ds__welcome-sub">我可以帮你分析错题、拆解考点、排复习节奏。</p>
-          <div class="ds__cards">
-            <button v-for="c in suggestions" :key="c" class="ds__card" @click="send(c)">
-              <span class="ds__card-title">{{ c }}</span>
-              <span class="ds__card-desc">{{ cardDesc(c) }}</span>
+          <p class="xz-welcome__sub">我可以帮你分析错题、拆解考点、排复习节奏。</p>
+          <div class="xz-cards">
+            <button v-for="c in suggestions" :key="c.q" class="xz-card" @click="send(c.q)">
+              <span class="xz-card__t">{{ c.q }}</span>
+              <span class="xz-card__d">{{ c.d }}</span>
             </button>
           </div>
         </div>
 
-        <div v-for="(m, i) in state.messages" :key="i" class="ds-msg" :class="'ds-msg--' + m.role">
-          <div class="ds-msg__who">{{ m.role === "user" ? "你" : "小智" }}</div>
-          <div class="ds-msg__main">
-            <!-- 深度思考折叠区 -->
+        <div v-for="(m, i) in state.messages" :key="i" class="xz-msg" :class="'xz-msg--' + m.role">
+          <div class="xz-msg__who">{{ m.role === "user" ? "我" : "智" }}</div>
+          <div class="xz-msg__main">
             <div v-if="m.reasoning || m.thinking" class="think" :class="{ 'is-open': m.thinkOpen }">
               <button class="think__head" @click="m.thinkOpen = !m.thinkOpen">
                 <span class="think__spark">✦</span>
@@ -63,48 +76,95 @@
               </details>
             </div>
 
-            <div class="ds-msg__text" v-html="render(m.content)"></div>
+            <div class="xz-msg__text" v-html="render(m.content)"></div>
             <span v-if="m.streaming" class="cursor"></span>
+
+            <div v-if="!m.streaming && m.content" class="xz-msg__ops">
+              <button @click="copyText(m.content)">复制</button>
+              <button v-if="m.role === 'assistant'" @click="regenerate(i)">重新生成</button>
+              <button v-if="m.role === 'user'" @click="editMessage(i)">编辑</button>
+              <button v-if="m.role === 'assistant'" :class="{ on: m.rated === 'up' }" @click="feedback(m, true)">👍</button>
+              <button v-if="m.role === 'assistant'" :class="{ on: m.rated === 'down' }" @click="feedback(m, false)">👎</button>
+              <button @click="delMessage(i)">删除</button>
+            </div>
           </div>
         </div>
       </section>
 
-      <footer class="ds__composer">
+      <button v-if="showJump" class="xz-jump" @click="scrollBottom">↓</button>
+
+      <footer class="xz-composer">
         <div class="composer" :class="{ 'has-text': state.input.trim() }">
-          <textarea v-model="state.input" class="composer__input" rows="1"
+          <textarea ref="inputRef" v-model="state.input" class="composer__input" rows="1"
                     :placeholder="state.mode === 'agent' ? '交给小智去做…' : '给联考小智发送消息'"
                     @keydown.enter.exact.prevent="send()"></textarea>
           <div class="composer__bar">
-            <button class="chip" :class="{ on: state.model === 'deepseek-reasoner' }"
-                    @click="state.model = state.model === 'deepseek-reasoner' ? 'deepseek-chat' : 'deepseek-reasoner'">
+            <button class="chip" :class="{ on: state.model === 'reason' }"
+                    @click="state.model = state.model === 'reason' ? 'fast' : 'reason'">
               <span class="chip__icon">✦</span> 深度思考
             </button>
             <button class="chip" :class="{ on: state.mode === 'agent' }"
                     @click="state.mode = state.mode === 'agent' ? 'chat' : 'agent'">
               <span class="chip__icon">⚙</span> Agent
             </button>
+            <span class="composer__count" v-if="state.input.length">{{ state.input.length }} 字</span>
             <button v-if="state.busy" class="send stop" @click="stop">■</button>
             <button v-else class="send" :disabled="!state.input.trim()" @click="send()">↑</button>
           </div>
         </div>
-        <p class="ds__tip">内容由 AI 生成，请仔细甄别 · Enter 发送，Shift+Enter 换行</p>
+        <p class="xz-tip">内容由 AI 生成，请仔细甄别 · Enter 发送，Shift+Enter 换行</p>
       </footer>
     </main>
+
+    <!-- 设置抽屉 -->
+    <div v-if="settingsOpen" class="xz-drawer" @click.self="settingsOpen = false">
+      <div class="xz-drawer__panel">
+        <h3>设置</h3>
+        <label class="xz-drawer__row">
+          <span>正文字号</span>
+          <input type="range" min="12" max="18" v-model.number="state.fontSize" />
+          <em>{{ state.fontSize }} px</em>
+        </label>
+        <p class="xz-drawer__note">会话保存在本机浏览器，换设备不同步。</p>
+        <button class="xz-drawer__close" @click="settingsOpen = false">关闭</button>
+      </div>
+    </div>
+
+    <transition name="fade">
+      <div v-if="toast" class="xz-toast">{{ toast }}</div>
+    </transition>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue"
 
-const KEY = "li_an_ai_studio_v2"
+/* ===== 联考小智 · 工作台 ===== */
+const STORE_KEY = "li_an_xiaozhi_v3"
 const BT = String.fromCharCode(96)
 const FENCE = BT + BT + BT
-const INLINE = new RegExp(BT + "([^" + BT + "]+)" + BT, "g")
+
+/* 后端模型档位（对外只暴露「标准 / 深度思考」两个名字） */
+// 后端模型档位映射：只在请求体里出现，界面上统一叫「标准 / 深度思考」
+const MODEL_IDS = { fast: "deepseek-chat", reason: "deepseek-reasoner" }
 
 const threadRef = ref(null)
+const inputRef = ref(null)
 const sideOpen = ref(false)
+const settingsOpen = ref(false)
 const sessions = ref([])
-const state = reactive({ sessionId: "", mode: "chat", model: "deepseek-chat", input: "", busy: false, messages: [] })
+const query = ref("")
+const showJump = ref(false)
+const toast = ref("")
+const state = reactive({
+  sessionId: "",
+  mode: "chat",        // chat | agent
+  model: "fast",       // fast | reason
+  input: "",
+  busy: false,
+  messages: [],
+  fontSize: 14,
+})
 let controller = null
 
 const greeting = computed(function () {
@@ -116,21 +176,14 @@ const greeting = computed(function () {
 })
 
 const suggestions = [
-  "我的错题今天该复习哪些?",
-  "资料分析有哪些考点",
-  "三天内怎么排复习节奏",
-  "行测 65 申论 58，平均多少分",
+  { q: "我的错题今天该复习哪些", d: "按遗忘曲线挑出今天该看的题" },
+  { q: "资料分析有哪些考点", d: "查知识库里的知识点与关系" },
+  { q: "三天内怎么排复习节奏", d: "结合剩余天数和每日时长排" },
+  { q: "行测 65 申论 58，平均多少分", d: "直接算，不用自己按计算器" },
 ]
 
-function cardDesc(q) {
-  if (q.indexOf("错题") >= 0) return "按遗忘曲线挑出今天该看的题"
-  if (q.indexOf("考点") >= 0) return "查知识库里的知识点与关系"
-  if (q.indexOf("节奏") >= 0) return "结合剩余天数和每日时长排"
-  return "直接算，不用自己按计算器"
-}
-
+/* ---------- 小工具 ---------- */
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }
-
 function token() {
   try {
     const raw = localStorage.getItem("__VTJ_AUTH_STATE__")
@@ -138,31 +191,44 @@ function token() {
   } catch (e) { /* ignore */ }
   return localStorage.getItem("token") || ""
 }
+function flash(msg) {
+  toast.value = msg
+  setTimeout(function () { toast.value = "" }, 1600)
+}
 
+/* ---------- 会话持久化 ---------- */
 function loadStore() {
-  try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : [] } catch (e) { return [] }
+  try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : [] } catch (e) { return [] }
 }
 function saveStore() {
-  try { localStorage.setItem(KEY, JSON.stringify(sessions.value.slice(0, 40))) } catch (e) { /* ignore */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(sessions.value.slice(0, 60))) } catch (e) { /* ignore */ }
 }
-
+const filtered = computed(function () {
+  const k = query.value.trim()
+  if (!k) return sessions.value
+  return sessions.value.filter(function (s) {
+    if ((s.title || "").indexOf(k) >= 0) return true
+    return (s.messages || []).some(function (m) { return String(m.content || "").indexOf(k) >= 0 })
+  })
+})
 const groupedSessions = computed(function () {
   const now = new Date()
   const today = now.toDateString()
   const weekAgo = now.getTime() - 7 * 86400000
+  const pinned = { label: "置顶", items: [] }
   const g = [
     { label: "今天", items: [] },
     { label: "最近 7 天", items: [] },
     { label: "更早", items: [] },
   ]
-  sessions.value.forEach(function (s) {
-    const t = s.at || 0
-    const d = new Date(t)
+  filtered.value.forEach(function (s) {
+    if (s.pinned) { pinned.items.push(s); return }
+    const d = new Date(s.at || 0)
     if (d.toDateString() === today) g[0].items.push(s)
-    else if (t >= weekAgo) g[1].items.push(s)
+    else if ((s.at || 0) >= weekAgo) g[1].items.push(s)
     else g[2].items.push(s)
   })
-  return g
+  return [pinned].concat(g)
 })
 
 function persistCurrent() {
@@ -171,16 +237,17 @@ function persistCurrent() {
   cur.messages = state.messages.filter(function (m) { return !m.streaming })
   cur.at = Date.now()
   const firstUser = cur.messages.find(function (m) { return m.role === "user" })
-  cur.title = firstUser ? String(firstUser.content).slice(0, 18) : "未命名对话"
+  if (!cur.renamed) cur.title = firstUser ? String(firstUser.content).slice(0, 18) : "新对话"
   saveStore()
 }
 function newChat() {
   const id = uid()
-  sessions.value.unshift({ id: id, title: "未命名对话", messages: [], at: Date.now() })
+  sessions.value.unshift({ id: id, title: "新对话", messages: [], at: Date.now() })
   state.sessionId = id
   state.messages = []
   saveStore()
   sideOpen.value = false
+  nextTick(function () { if (inputRef.value) inputRef.value.focus() })
 }
 function switchChat(id) {
   persistCurrent()
@@ -198,57 +265,205 @@ function removeChat(id) {
     else newChat()
   }
   saveStore()
+  flash("已删除对话")
+}
+function renameChat(s) {
+  const name = window.prompt("重命名对话", s.title || "")
+  if (name === null) return
+  s.title = name.trim() || s.title
+  s.renamed = true
+  saveStore()
+}
+function pinChat(s) {
+  s.pinned = !s.pinned
+  saveStore()
+  flash(s.pinned ? "已置顶" : "已取消置顶")
 }
 
+/* ---------- 渲染 ---------- */
 function esc(v) {
   return String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
-function render(text) {
-  const raw = esc(text)
-  const parts = raw.split(FENCE)
-  return parts.map(function (p, i) {
-    if (i % 2 === 1) {
-      const body = p.replace(/^[a-zA-Z0-9]*\n/, "")
-      return "<pre class=\"code\"><code>" + body + "</code></pre>"
-    }
-    return p
-      .replace(INLINE, "<code class=\"inline\">$1</code>")
-      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-      .replace(/\n/g, "<br/>")
-  }).join("")
+function renderTable(block) {
+  const rows = block.split("\n").filter(function (r) { return r.trim() })
+  if (rows.length < 2) return esc(block)
+  const head = rows[0].split("|").filter(function (c) { return c.trim() !== "" })
+  const body = rows.slice(2)
+  let html = "<table class=\"md-table\"><thead><tr>"
+  head.forEach(function (c) { html += "<th>" + esc(c.trim()) + "</th>" })
+  html += "</tr></thead><tbody>"
+  body.forEach(function (r) {
+    const cells = r.split("|").filter(function (c, i, a) { return i > 0 && i < a.length - 1 })
+    html += "<tr>"
+    cells.forEach(function (c) { html += "<td>" + esc(c.trim()) + "</td>" })
+    html += "</tr>"
+  })
+  return html + "</tbody></table>"
 }
+function renderInline(p) {
+  return esc(p)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\u0060([^\u0060]+)\u0060/g, "<code class=\"inline\">$1</code>")
+}
+function render(text) {
+  const src = String(text || "")
+  const parts = src.split(FENCE)
+  let html = ""
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1) {
+      const body = parts[i].replace(/^[a-zA-Z0-9]*\n/, "")
+      html += "<div class=\"codeblock\"><div class=\"codeblock__bar\"><span>代码</span><button class=\"copy\" type=\"button\">复制</button></div><pre class=\"code\"><code>" + esc(body) + "</code></pre></div>"
+      continue
+    }
+    const lines = parts[i].split("\n")
+    let buf = []
+    let list = null
+    const flush = function () {
+      if (list) { html += "<" + list + ">" + buf.join("") + "</" + list + ">"; buf = []; list = null }
+    }
+    for (let j = 0; j < lines.length; j++) {
+      const line = lines[j]
+      if (/^\s*\|/.test(line)) {
+        flush()
+        let tbl = [line]
+        while (j + 1 < lines.length && /^\s*\|/.test(lines[j + 1])) { j += 1; tbl.push(lines[j]) }
+        html += renderTable(tbl.join("\n"))
+        continue
+      }
+      if (/^###\s+/.test(line)) { flush(); html += "<h4>" + renderInline(line.replace(/^###\s+/, "")) + "</h4>"; continue }
+      if (/^##\s+/.test(line)) { flush(); html += "<h3>" + renderInline(line.replace(/^##\s+/, "")) + "</h3>"; continue }
+      if (/^#\s+/.test(line)) { flush(); html += "<h3>" + renderInline(line.replace(/^#\s+/, "")) + "</h3>"; continue }
+      if (/^>\s?/.test(line)) { flush(); html += "<blockquote>" + renderInline(line.replace(/^>\s?/, "")) + "</blockquote>"; continue }
+      const ol = line.match(/^\s*(\d+)\.\s+(.*)$/)
+      if (ol) {
+        if (list !== "ol") { flush(); list = "ol" }
+        buf.push("<li>" + renderInline(ol[2]) + "</li>")
+        continue
+      }
+      const ul = line.match(/^\s*[-*]\s+(.*)$/)
+      if (ul) {
+        if (list !== "ul") { flush(); list = "ul" }
+        buf.push("<li>" + renderInline(ul[1]) + "</li>")
+        continue
+      }
+      flush()
+      if (line.trim() === "") continue
+      html += "<p>" + renderInline(line) + "</p>"
+    }
+    flush()
+  }
+  return html
+}
+
 function shortArgs(args) {
   if (!args) return ""
   const s = JSON.stringify(args)
   return s.length > 46 ? s.slice(0, 46) + "…" : s
 }
 function pretty(v) {
-  try { return JSON.stringify(v, null, 2).slice(0, 800) } catch (e) { return String(v) }
+  try { return JSON.stringify(v, null, 2).slice(0, 900) } catch (e) { return String(v) }
 }
-function thinkLabel(m) {
-  const sec = m.thinkSeconds || 1
-  return "已深度思考（用时 " + sec + " 秒）"
-}
+function thinkLabel(m) { return "已深度思考（用时 " + (m.thinkSeconds || 1) + " 秒）" }
 function scrollBottom() {
   nextTick(function () { const el = threadRef.value; if (el) el.scrollTop = el.scrollHeight })
 }
+function onScroll() {
+  const el = threadRef.value
+  if (!el) return
+  showJump.value = el.scrollHeight - el.scrollTop - el.clientHeight > 240
+}
 
-async function send(preset) {
+/* ---------- 消息操作 ---------- */
+function copyText(t) {
+  try {
+    if (navigator.clipboard) navigator.clipboard.writeText(String(t || ""))
+    else {
+      const ta = document.createElement("textarea")
+      ta.value = String(t || "")
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove()
+    }
+    flash("已复制")
+  } catch (e) { flash("复制失败") }
+}
+function onThreadClick(e) {
+  const btn = e.target.closest && e.target.closest("button.copy")
+  if (!btn) return
+  const box = btn.closest(".codeblock")
+  const code = box ? box.querySelector("code") : null
+  if (code) copyText(code.textContent)
+}
+function delMessage(i) {
+  state.messages.splice(i, 1)
+  persistCurrent()
+}
+function editMessage(i) {
+  const m = state.messages[i]
+  if (!m) return
+  state.input = m.content
+  state.messages.splice(i, state.messages.length - i)
+  nextTick(function () { if (inputRef.value) inputRef.value.focus() })
+}
+async function regenerate(i) {
+  const m = state.messages[i]
+  if (!m) return
+  let q = ""
+  for (let k = i; k >= 0; k--) {
+    if (state.messages[k].role === "user") { q = state.messages[k].content; break }
+  }
+  if (!q) return
+  state.messages.splice(i, state.messages.length - i)
+  await send(q, true)
+}
+async function feedback(m, good) {
+  m.rated = good ? "up" : "down"
+  try {
+    const r = await fetch("/api/agent/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
+      body: JSON.stringify({ message_id: m.messageId || null, rating: good ? "up" : "down" }),
+    })
+    flash(good ? "感谢反馈" : "已记录，会改进")
+  } catch (e) { flash(good ? "感谢反馈" : "已记录") }
+}
+function exportChat() {
+  const lines = []
+  state.messages.forEach(function (m) {
+    lines.push("## " + (m.role === "user" ? "我" : "联考小智"))
+    if (m.reasoning) lines.push("> 思考：" + m.reasoning.replace(/\n/g, " "))
+    lines.push(m.content || "")
+    lines.push("")
+  })
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" })
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(blob)
+  a.download = "联考小智-" + new Date().toISOString().slice(0, 10) + ".md"
+  a.click()
+  URL.revokeObjectURL(a.href)
+  flash("已导出")
+}
+function clearChat() {
+  if (!window.confirm("清空当前对话？")) return
+  state.messages = []
+  persistCurrent()
+}
+
+/* ---------- 发送 ---------- */
+async function send(preset, isRetry) {
   const text = (typeof preset === "string" ? preset : state.input).trim()
   if (!text || state.busy) return
-  state.input = ""
+  if (!isRetry) state.input = ""
   state.busy = true
   sideOpen.value = false
 
   const history = state.messages
-    .filter(function (m) { return !m.streaming && m.content })
+    .filter(function (m) { return !m.streaming && m.content && m.role })
     .slice(-20)
     .map(function (m) { return { role: m.role, content: m.content } })
 
-  state.messages.push({ role: "user", content: text })
+  if (!isRetry) state.messages.push({ role: "user", content: text, at: Date.now() })
   const reply = reactive({
     role: "assistant", content: "", reasoning: "", tools: [], streaming: true,
-    thinking: state.model === "deepseek-reasoner", thinkOpen: true, thinkSeconds: 0,
+    thinking: state.model === "reason", thinkOpen: true, thinkSeconds: 0, rated: "", at: Date.now(),
   })
   state.messages.push(reply)
   scrollBottom()
@@ -260,7 +475,7 @@ async function send(preset) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
-      body: JSON.stringify({ message: text, history: history, model: state.model }),
+      body: JSON.stringify({ message: text, history: history, model: MODEL_IDS[state.model] || MODEL_IDS.fast }),
       signal: controller.signal,
     })
     if (!res.ok || !res.body) throw new Error("HTTP " + res.status)
@@ -274,8 +489,8 @@ async function send(preset) {
       buf += decoder.decode(r.value, { stream: true })
       const chunks = buf.split("\n\n")
       buf = chunks.pop() || ""
-      for (const chunk of chunks) {
-        const line = chunk.trim()
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const line = chunks[ci].trim()
         if (line.indexOf("data:") !== 0) continue
         let evt = null
         try { evt = JSON.parse(line.slice(5).trim()) } catch (e) { continue }
@@ -328,52 +543,76 @@ onMounted(function () {
 </script>
 
 <style scoped>
-.ds { display: flex; height: 100vh; background: #fff; color: #1f2329; font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
+.xz { display: flex; height: 100vh; background: #fff; color: #1f2329; font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; position: relative; }
 
 /* 侧栏 */
-.ds__side { width: 250px; flex: 0 0 250px; background: #f9fafb; border-right: 1px solid #eef0f3; display: flex; flex-direction: column; padding: 14px 10px; }
-.side__brand { font-size: 14px; font-weight: 700; color: #4d6bfe; padding: 4px 8px 12px; letter-spacing: 0.02em; }
-.side__new { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 4px 12px; padding: 9px 0; border-radius: 10px; border: 1px solid #dfe3ea; background: #fff; font-size: 13px; color: #1f2329; cursor: pointer; }
-.side__new:hover { border-color: #4d6bfe; color: #4d6bfe; }
-.side__scroll { flex: 1; overflow-y: auto; }
-.side__group { margin: 12px 8px 6px; font-size: 11px; color: #9aa0aa; }
-.side__item { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: #3d434d; cursor: pointer; }
-.side__item:hover { background: #eef1f6; }
-.side__item.on { background: #e8eeff; color: #4d6bfe; font-weight: 600; }
-.side__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side__del { border: none; background: none; color: #c2c7cf; cursor: pointer; opacity: 0; }
-.side__item:hover .side__del { opacity: 1; }
+.xz-side { width: 252px; flex: 0 0 252px; background: #f9fafb; border-right: 1px solid #eef0f3; display: flex; flex-direction: column; padding: 12px 10px; }
+.xz-side__top { display: flex; align-items: center; justify-content: space-between; padding: 2px 8px 10px; }
+.xz-side__brand { font-size: 14px; font-weight: 700; color: #4d6bfe; }
+.xz-side__icon { border: none; background: none; font-size: 14px; color: #9aa0aa; cursor: pointer; }
+.xz-side__new { padding: 9px 0; border-radius: 10px; border: 1px solid #dfe3ea; background: #fff; font-size: 13px; cursor: pointer; margin-bottom: 8px; }
+.xz-side__new:hover { border-color: #4d6bfe; color: #4d6bfe; }
+.xz-side__search { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 7px 10px; border: 1px solid #e6e9ef; border-radius: 8px; font-size: 12.5px; outline: none; background: #fff; }
+.xz-side__search:focus { border-color: #c9d4ff; }
+.xz-side__scroll { flex: 1; overflow-y: auto; }
+.xz-side__group { margin: 10px 8px 4px; font-size: 11px; color: #9aa0aa; }
+.xz-side__item { display: flex; align-items: center; gap: 2px; padding: 7px 8px; border-radius: 8px; font-size: 13px; color: #3d434d; cursor: pointer; }
+.xz-side__item:hover { background: #eef1f6; }
+.xz-side__item.on { background: #e8eeff; color: #4d6bfe; font-weight: 600; }
+.xz-side__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xz-side__mini { border: none; background: none; color: #c2c7cf; cursor: pointer; font-size: 11px; opacity: 0; }
+.xz-side__item:hover .xz-side__mini { opacity: 1; }
+.xz-side__empty { color: #c2c7cf; font-size: 12px; padding: 12px; }
+.xz-side__foot { display: flex; gap: 6px; padding-top: 8px; border-top: 1px solid #eef0f3; }
+.xz-side__foot button { flex: 1; border: 1px solid #e6e9ef; background: #fff; border-radius: 8px; padding: 6px 0; font-size: 11.5px; color: #5c6270; cursor: pointer; }
+.xz-side__foot button:hover { border-color: #c9d4ff; color: #4d6bfe; }
 
 /* 主区 */
-.ds__main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.ds__top { display: flex; align-items: center; gap: 12px; padding: 12px 22px; border-bottom: 1px solid #f0f2f5; }
-.ds__menu { display: none; border: none; background: none; font-size: 16px; cursor: pointer; }
-.ds__model { display: flex; gap: 4px; background: #f4f5f7; padding: 3px; border-radius: 10px; }
-.ds__model button { border: none; background: none; padding: 6px 14px; border-radius: 8px; font-size: 12.5px; color: #5c6270; cursor: pointer; }
-.ds__model button.on { background: #fff; color: #4d6bfe; font-weight: 600; box-shadow: 0 1px 3px rgba(77,107,254,.14); }
+.xz-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.xz-top { display: flex; align-items: center; gap: 10px; padding: 11px 20px; border-bottom: 1px solid #f0f2f5; }
+.xz-top__menu { display: none; border: none; background: none; font-size: 16px; cursor: pointer; }
+.xz-top__modes { display: flex; gap: 4px; background: #f4f5f7; padding: 3px; border-radius: 10px; }
+.xz-top__modes button { border: none; background: none; padding: 6px 13px; border-radius: 8px; font-size: 12.5px; color: #5c6270; cursor: pointer; }
+.xz-top__modes button.on { background: #fff; color: #4d6bfe; font-weight: 600; box-shadow: 0 1px 3px rgba(77,107,254,.14); }
+.xz-top__hint { margin-left: auto; font-size: 11.5px; color: #a8aeb8; }
 
-.ds__thread { flex: 1; overflow-y: auto; padding: 28px 22px 10px; }
-.ds__welcome { max-width: 640px; margin: 10vh auto 0; }
-.ds__welcome h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #1f2329; }
-.ds__welcome-sub { margin: 0 0 22px; font-size: 13px; color: #8a909c; }
-.ds__cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.ds__card { text-align: left; border: 1px solid #eef0f3; background: #fbfcfd; border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: all 160ms ease; }
-.ds__card:hover { border-color: #c9d4ff; background: #f6f9ff; transform: translateY(-1px); }
-.ds__card-title { display: block; font-size: 13px; font-weight: 600; color: #2b3140; margin-bottom: 4px; }
-.ds__card-desc { display: block; font-size: 11.5px; color: #9aa0aa; }
+.xz-thread { flex: 1; overflow-y: auto; padding: 26px 20px 10px; }
+.xz-welcome { max-width: 640px; margin: 9vh auto 0; }
+.xz-welcome h1 { margin: 0 0 6px; font-size: 23px; font-weight: 700; }
+.xz-welcome__sub { margin: 0 0 20px; font-size: 13px; color: #8a909c; }
+.xz-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.xz-card { text-align: left; border: 1px solid #eef0f3; background: #fbfcfd; border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: all 160ms ease; }
+.xz-card:hover { border-color: #c9d4ff; background: #f6f9ff; transform: translateY(-1px); }
+.xz-card__t { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.xz-card__d { display: block; font-size: 11.5px; color: #9aa0aa; }
 
-.ds-msg { max-width: 760px; margin: 0 auto 22px; display: flex; gap: 12px; }
-.ds-msg__who { width: 26px; flex: 0 0 26px; font-size: 11px; font-weight: 700; color: #fff; background: #c9ced8; border-radius: 7px; display: flex; align-items: center; justify-content: center; height: 26px; }
-.ds-msg--assistant .ds-msg__who { background: linear-gradient(135deg, #4d6bfe, #7a90ff); }
-.ds-msg__main { flex: 1; min-width: 0; }
-.ds-msg--user .ds-msg__main { background: #f4f6fa; border-radius: 12px; padding: 10px 14px; }
-.ds-msg__text { font-size: 14px; line-height: 1.8; color: #1f2329; word-break: break-word; }
-.ds-msg__text :deep(pre.code) { background: #0f172a; color: #e6edf3; padding: 13px 15px; border-radius: 10px; overflow-x: auto; font-size: 12.5px; margin: 10px 0; }
-.ds-msg__text :deep(code.inline) { background: #eef1f6; padding: 1px 5px; border-radius: 5px; font-size: 12.5px; }
+.xz-msg { max-width: 780px; margin: 0 auto 20px; display: flex; gap: 12px; }
+.xz-msg__who { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; background: #c9ced8; }
+.xz-msg--assistant .xz-msg__who { background: linear-gradient(135deg, #4d6bfe, #7a90ff); }
+.xz-msg__main { flex: 1; min-width: 0; }
+.xz-msg--user .xz-msg__main { background: #f4f6fa; border-radius: 12px; padding: 10px 14px; }
+.xz-msg__text { line-height: 1.85; color: #1f2329; word-break: break-word; }
+.xz-msg__text :deep(p) { margin: 0 0 8px; }
+.xz-msg__text :deep(h3), .xz-msg__text :deep(h4) { margin: 14px 0 8px; font-size: 1.02em; }
+.xz-msg__text :deep(blockquote) { margin: 8px 0; padding: 6px 12px; border-left: 3px solid #dbe2ff; color: #5c6270; background: #f7f9ff; }
+.xz-msg__text :deep(ul), .xz-msg__text :deep(ol) { margin: 6px 0 10px; padding-left: 22px; }
+.xz-msg__text :deep(.md-table) { border-collapse: collapse; margin: 10px 0; font-size: 0.92em; }
+.xz-msg__text :deep(.md-table th), .xz-msg__text :deep(.md-table td) { border: 1px solid #e6e9ef; padding: 6px 10px; text-align: left; }
+.xz-msg__text :deep(.md-table th) { background: #f7f9ff; font-weight: 600; }
+.xz-msg__text :deep(.codeblock) { margin: 10px 0; border-radius: 10px; overflow: hidden; border: 1px solid #e6e9ef; }
+.xz-msg__text :deep(.codeblock__bar) { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #f4f6fa; font-size: 11.5px; color: #8a909c; }
+.xz-msg__text :deep(.codeblock__bar button) { border: none; background: none; color: #4d6bfe; font-size: 11.5px; cursor: pointer; }
+.xz-msg__text :deep(pre.code) { margin: 0; background: #0f172a; color: #e6edf3; padding: 13px 15px; overflow-x: auto; font-size: 0.86em; line-height: 1.6; }
+.xz-msg__text :deep(code.inline) { background: #eef1f6; padding: 1px 5px; border-radius: 5px; font-size: 0.92em; }
 .cursor { display: inline-block; width: 7px; height: 15px; background: #4d6bfe; vertical-align: -2px; animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
-/* 深度思考 */
+.xz-msg__ops { display: flex; gap: 4px; margin-top: 6px; opacity: 0; transition: opacity 160ms ease; }
+.xz-msg:hover .xz-msg__ops { opacity: 1; }
+.xz-msg__ops button { border: none; background: none; padding: 3px 7px; border-radius: 6px; font-size: 11.5px; color: #9aa0aa; cursor: pointer; }
+.xz-msg__ops button:hover { background: #f1f3f7; color: #4d6bfe; }
+.xz-msg__ops button.on { color: #4d6bfe; }
+
 .think { margin-bottom: 10px; border-left: 2px solid #dbe2ff; padding-left: 12px; }
 .think__head { display: flex; align-items: center; gap: 6px; border: none; background: none; padding: 2px 0; font-size: 12.5px; color: #7a828f; cursor: pointer; }
 .think__spark { color: #4d6bfe; }
@@ -381,7 +620,6 @@ onMounted(function () {
 .think__arrow.up { transform: rotate(180deg); }
 .think__body { margin-top: 6px; font-size: 12.5px; line-height: 1.75; color: #8a909c; font-style: italic; white-space: pre-wrap; }
 
-/* 工具卡 */
 .tools { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .tool { border: 1px solid #eef0f3; border-radius: 10px; background: #fbfcfd; font-size: 11.5px; }
 .tool summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; list-style: none; }
@@ -392,31 +630,44 @@ onMounted(function () {
 .tool__arg { color: #a8aeb8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool__result { margin: 0; padding: 8px 10px; background: #fff; border-top: 1px solid #f0f2f5; font-size: 11px; color: #5c6270; max-height: 200px; overflow: auto; }
 
-/* 输入区 */
-.ds__composer { padding: 8px 22px 14px; }
-.composer { max-width: 760px; margin: 0 auto; border: 1px solid #e3e6ec; border-radius: 18px; background: #fff; padding: 10px 12px 8px; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.xz-jump { position: absolute; right: 26px; bottom: 120px; width: 32px; height: 32px; border-radius: 50%; border: 1px solid #e6e9ef; background: #fff; color: #5c6270; cursor: pointer; box-shadow: 0 4px 12px rgba(17,24,39,.08); }
+
+.xz-composer { padding: 8px 20px 14px; }
+.composer { max-width: 780px; margin: 0 auto; border: 1px solid #e3e6ec; border-radius: 18px; background: #fff; padding: 10px 12px 8px; transition: border-color 160ms ease, box-shadow 160ms ease; }
 .composer.has-text { border-color: #c9d4ff; box-shadow: 0 4px 18px rgba(77,107,254,.08); }
-.composer__input { width: 100%; border: none; outline: none; resize: none; font-size: 14px; line-height: 1.7; max-height: 150px; background: none; color: #1f2329; padding: 0; }
+.composer__input { width: 100%; border: none; outline: none; resize: none; font-size: inherit; line-height: 1.7; max-height: 150px; background: none; color: #1f2329; padding: 0; }
 .composer__bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #e3e6ec; background: #fff; border-radius: 999px; padding: 5px 12px; font-size: 12px; color: #5c6270; cursor: pointer; }
 .chip.on { border-color: #4d6bfe; background: #f2f5ff; color: #4d6bfe; font-weight: 600; }
 .chip__icon { font-size: 11px; }
-.send { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: none; background: #4d6bfe; color: #fff; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.composer__count { margin-left: 4px; font-size: 11px; color: #c2c7cf; }
+.send { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: none; background: #4d6bfe; color: #fff; font-size: 15px; cursor: pointer; }
 .send:disabled { background: #d7dbe4; cursor: not-allowed; }
 .send.stop { background: #ef4444; }
-.ds__tip { max-width: 760px; margin: 8px auto 0; text-align: center; font-size: 10.5px; color: #b6bcc8; }
+.xz-tip { max-width: 780px; margin: 8px auto 0; text-align: center; font-size: 10.5px; color: #b6bcc8; }
+
+.xz-drawer { position: absolute; inset: 0; background: rgba(17,24,39,.22); display: flex; justify-content: flex-end; z-index: 30; }
+.xz-drawer__panel { width: 280px; background: #fff; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.xz-drawer__panel h3 { margin: 0; font-size: 14px; }
+.xz-drawer__row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #5c6270; }
+.xz-drawer__row input { flex: 1; }
+.xz-drawer__note { font-size: 11.5px; color: #a8aeb8; margin: 0; }
+.xz-drawer__close { margin-top: auto; padding: 9px 0; border-radius: 10px; border: 1px solid #e3e6ec; background: #fff; cursor: pointer; }
+
+.xz-toast { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); background: rgba(31,35,41,.88); color: #fff; padding: 8px 16px; border-radius: 10px; font-size: 12.5px; z-index: 40; }
+.fade-enter-active, .fade-leave-active { transition: opacity 200ms ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 @media (max-width: 860px) {
-  .ds__side { position: absolute; z-index: 20; height: 100%; transform: translateX(-100%); transition: transform 220ms ease; }
-  .ds__side.is-open { transform: none; }
-  .ds__menu { display: block; }
-  .ds__cards { grid-template-columns: 1fr; }
-  .ds-msg { max-width: none; }
+  .xz-side { position: absolute; z-index: 20; height: 100%; transform: translateX(-100%); transition: transform 220ms ease; }
+  .xz-side.is-open { transform: none; }
+  .xz-top__menu { display: block; }
+  .xz-cards { grid-template-columns: 1fr; }
+  .xz-msg { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cursor { animation: none; }
-  .ds__side { transition: none; }
-  .ds__card { transition: none; }
+  .xz-side { transition: none; }
+  .xz-card { transition: none; }
 }
 </style>
-
