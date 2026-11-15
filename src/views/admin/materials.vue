@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mm-page">
     <AdminPageHeader
       title="资料管理"
@@ -105,9 +105,11 @@
       <button class="adm-btn adm-btn--sm" :disabled="batchRunning" @click="batchSetStatus(1)">批量上架</button>
       <button class="adm-btn adm-btn--sm adm-btn--line" :disabled="batchRunning" @click="batchSetStatus(0)">批量下架</button>
       <button class="adm-btn adm-btn--sm adm-btn--danger" :disabled="batchRunning" @click="batchRemove">批量删除</button>
+      <!-- D7（2026-11-15）：批量改科目/分类/投放位（以前只能逐条点「改信息」） -->
+      <button class="adm-btn adm-btn--sm adm-btn--line" :disabled="batchRunning" @click="openBatchMeta">批量改信息</button>
       <button class="adm-btn adm-btn--sm adm-btn--line" :disabled="batchRunning" @click="clearSelection">取消选择</button>
       <span v-if="batchRunning" class="mm-batchbar__hint">处理中…</span>
-      <span v-else class="mm-batchbar__hint">删除=移入回收站（可恢复）；上/下架会同步影响学生端可见性</span>
+      <span v-else class="mm-batchbar__hint">删除=移入回收站（可恢复）；上/下架会同步影响学生端可见性；批量改信息只改勾选项</span>
     </div>
 
     <AdminTable :empty="!loading && rows.length === 0" empty-text="暂无数据 · 换个筛选条件试试">
@@ -358,6 +360,61 @@
       @saved="onExamWindowSaved"
     />
 
+    <!-- D7（2026-11-15）：批量改信息（科目/分类/投放位，三项都可「不改」） -->
+    <Teleport to="body">
+      <div v-if="batchMetaOpen" class="bmd-root" role="dialog" aria-modal="true" aria-label="批量改信息">
+        <div class="bmd-mask" @click="batchMetaOpen = false" />
+        <section class="bmd-panel">
+          <header class="bmd-head">
+            <div>
+              <h2 class="bmd-title">批量改信息</h2>
+              <p class="bmd-desc">已选 {{ selected.length }} 条；三项都可以「不改」，只提交改过的字段。</p>
+            </div>
+            <button class="bmd-x" type="button" :disabled="batchMetaSaving" @click="batchMetaOpen = false">×</button>
+          </header>
+          <div class="bmd-body">
+            <label class="bmd-field">
+              <span>科目</span>
+              <select v-model="batchMetaForm.subject" class="adm-select" :disabled="batchMetaSaving">
+                <option value="">不改</option>
+                <option value="xingce">行测</option>
+                <option value="shenlun">申论</option>
+                <option value="gongzhuan">公专</option>
+              </select>
+            </label>
+            <label class="bmd-field">
+              <span>分类</span>
+              <input
+                v-model="batchMetaForm.category"
+                class="adm-input"
+                maxlength="100"
+                placeholder="留空=不改"
+                :disabled="batchMetaSaving"
+              />
+            </label>
+            <label class="bmd-field">
+              <span>投放位</span>
+              <select v-model="batchMetaForm.placement" class="adm-select" :disabled="batchMetaSaving">
+                <option value="">不改</option>
+                <option value="library">仅资料页</option>
+                <option value="exam">仅考试页</option>
+                <option value="both">都投</option>
+              </select>
+              <em class="bmd-hint">仅试卷类生效，非试卷会被跳过</em>
+            </label>
+          </div>
+          <footer class="bmd-foot">
+            <button class="adm-btn" :disabled="batchMetaSaving" @click="batchMetaOpen = false">取消</button>
+            <button
+              class="adm-btn adm-btn--primary"
+              :disabled="batchMetaSaving || !batchMetaDirty"
+              @click="applyBatchMeta"
+            >{{ batchMetaSaving ? '提交中…' : `应用到 ${selected.length} 条` }}</button>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
+
     <MaterialBatchUpload
       :open="uploadOpen"
       :preset-type="uploadType"
@@ -492,6 +549,13 @@ import {
 } from '@/utils/examGate';
 // D1（2026-11-14）：资料上架 ↔ 卷发布 不一致的标记（4 处旧入口仍能直写 PUBLISHED）
 import { paperDrift, type DriftResult } from '@/utils/materialDrift';
+// D7（2026-11-15）：批量改信息的纯函数（只提交改过的字段）
+import {
+  BATCH_META_EMPTY,
+  buildBatchMetaPayload,
+  hasBatchMetaChange,
+  type BatchMetaForm
+} from '@/utils/batchMeta';
 // D10（2026-11-15）：编号读取/建卷入口/建议编号抽成纯函数，便于单测（见 utils/paperCode.ts）
 import { canBuildPaper, isValidPaperCode, paperCodeOf, suggestPaperCode } from '@/utils/paperCode';
 
@@ -517,6 +581,48 @@ const selected = ref<number[]>([]);
 const batchRunning = ref(false);
 /** 回收站视图不显示勾选（那边的动作是单条「恢复」） */
 const isRecycleView = computed(() => filters.status === '-1');
+
+// ---------------- D7（2026-11-15）：批量改信息 ----------------
+const batchMetaOpen = ref(false);
+const batchMetaSaving = ref(false);
+const batchMetaForm = reactive<BatchMetaForm>({ ...BATCH_META_EMPTY });
+const batchMetaDirty = computed(() => hasBatchMetaChange(batchMetaForm));
+
+function openBatchMeta(): void {
+  if (!selected.value.length) return;
+  Object.assign(batchMetaForm, BATCH_META_EMPTY);
+  batchMetaOpen.value = true;
+}
+
+/** 只提交改过的字段；一项都没改直接拦下（后端会 400） */
+async function applyBatchMeta(): Promise<void> {
+  const payload = buildBatchMetaPayload(selected.value, batchMetaForm);
+  if (!payload) {
+    ElMessage.warning('至少选一项要改的内容（科目 / 分类 / 投放位）');
+    return;
+  }
+  batchMetaSaving.value = true;
+  try {
+    const res = (await libraryClient.request({
+      url: '/api/materials/admin/batch-meta',
+      method: 'PATCH',
+      baseURL: '',
+      data: payload
+    })) as unknown as { data?: { updated?: number; skipped?: { id: number; reason: string }[] } };
+    const data = res?.data || {};
+    const skipped = (data.skipped || []).length;
+    ElMessage.success(
+      `已更新 ${data.updated ?? 0} 条` + (skipped ? `；跳过 ${skipped} 条（非试卷/已删除）` : '')
+    );
+    batchMetaOpen.value = false;
+    clearSelection();
+    await reload();
+  } catch (e) {
+    ElMessage.error(errorMessage(e, '批量改信息失败'));
+  } finally {
+    batchMetaSaving.value = false;
+  }
+}
 
 function clearSelection(): void {
   selected.value = [];
@@ -1398,4 +1504,81 @@ onMounted(reload);
   font-size: 11.5px;
   color: var(--adm-text-sub);
 }
-</style>
+
+/* D7（2026-11-15）：批量改信息弹层（与改信息弹窗同一层级口径） */
+.bmd-root {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bmd-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+.bmd-panel {
+  position: relative;
+  width: 560px;
+  max-width: calc(100vw - 40px);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+  display: flex;
+  flex-direction: column;
+}
+.bmd-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid #eef1f6;
+}
+.bmd-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2a44;
+}
+.bmd-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6b778c;
+}
+.bmd-x {
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #8a94a6;
+}
+.bmd-body {
+  padding: 14px 18px;
+  display: grid;
+  gap: 12px;
+}
+.bmd-field {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.bmd-field > span {
+  color: #6b778c;
+}
+.bmd-hint {
+  grid-column: 2;
+  font-size: 11.5px;
+  color: #98a2b3;
+  font-style: normal;
+}
+.bmd-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+}</style>

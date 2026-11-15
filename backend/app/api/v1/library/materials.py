@@ -3273,6 +3273,104 @@ async def admin_set_status(material_id: int, body: dict,
     return {"ok": True, "paper_sync": _paper_sync_payload(sync)}
 
 
+@router.patch("/admin/batch-meta", summary="批量改资料信息(管理员)")
+async def admin_batch_meta(
+    body: dict,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """D7（2026-11-15）：一次改多条的 **科目 / 分类 / 投放位**（只改传进来的字段）。
+
+    背景：列表早就有"勾选 + 批量上架/下架/删除"，但没有批量改信息——38 份卡片统一改科目
+    只能逐条点「改信息」。这里按与单条 `PATCH /admin/{id}/meta` **完全同口径**实现，避免两套校验。
+
+    body::
+
+        {"ids": [116, 117], "subject": "gongzhuan", "category": "行测", "placement": "both"}
+
+    规则：
+      · ids 1–100 条、自动去重；`status<0`（回收站）的进 `skipped: deleted`；
+      · 三个字段至少给一个；`subject` 必须在允许科目里；`placement` ∈ exam/library/both；
+      · `placement` **只对试卷类生效**，批次里的非试卷进 `skipped: not_paper`，不整批失败；
+      · 改了投放位的试卷逐条 `material_paper_sync.sync_material()`（与单条改信息同一路径）；
+      · 审计一条 `batch_update_meta`。
+
+    ⚠️ 路由顺序：与 `DELETE /admin/batch` 同一个坑 —— 必须声明在任何
+    `/admin/{material_id}...` 动态段之前（本例是 PATCH，且 `batch-meta` 与 `{id}/meta` 段数不同，
+    但仍按"批量在前"的既有约定放这里）。
+    """
+    _require_admin(current_user)
+
+    raw_ids = body.get("ids") or []
+    if not isinstance(raw_ids, (list, tuple)):
+        raise HTTPException(400, "ids 必须是数组")
+    ids: list = []
+    for v in raw_ids:
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            continue
+        if 0 < n and n not in ids:
+            ids.append(n)
+    if not ids:
+        raise HTTPException(400, "ids 不能为空")
+    if len(ids) > 100:
+        raise HTTPException(400, "一次最多改 100 条")
+
+    fields = [k for k in ("subject", "category", "placement") if k in body]
+    if not fields:
+        raise HTTPException(400, "至少要改一项（subject / category / placement）")
+
+    subject = None
+    if "subject" in body:
+        subject = (body.get("subject") or "").strip()
+        if subject not in _SUBJECT_LABEL:
+            raise HTTPException(400, "科目只能是 xingce / shenlun / gongzhuan")
+
+    category_given = "category" in body
+    category = (body.get("category") or "").strip() or None
+    if category and len(category) > 100:
+        raise HTTPException(400, "分类太长（≤100 字）")
+
+    placement = None
+    if "placement" in body:
+        placement = (body.get("placement") or "").strip().lower()
+        if placement not in PLACEMENTS:
+            raise HTTPException(400, "投放位只能是 exam（仅考试页）/ library（仅资料页）/ both（都投）")
+
+    targets = (db.query(StudyMaterial)
+                 .filter(StudyMaterial.material_id.in_(ids)).all())
+    by_id = {m.material_id: m for m in targets}
+    updated = 0
+    skipped: list = []
+    syncs: list = []
+    for mid in ids:
+        m = by_id.get(mid)
+        if m is None or (m.status or 0) < 0:
+            skipped.append({"id": mid, "reason": "deleted"})
+            continue
+        if placement and (m.type or "") != "paper":
+            skipped.append({"id": mid, "reason": "not_paper"})
+            continue
+        if subject and subject != (m.subject or ""):
+            m.subject = subject
+        if category_given and category != m.category:
+            m.category = category
+        if placement and placement != (m.placement or "library"):
+            m.placement = placement
+            from ....services import material_paper_sync
+            syncs.append(material_paper_sync.sync_material(db, m))
+        updated += 1
+
+    db.flush()
+    _audit(db, current_user, "batch_update_meta", f"updated={updated}",
+           f"改信息：{','.join(fields)}" + (f"；跳过 {len(skipped)} 条" if skipped else ""))
+    db.commit()
+    changed = [p for p in (_paper_sync_payload(s) for s in syncs) if p and p.get("changed")]
+    return {"updated": updated, "fields": fields, "skipped": skipped,
+            "paper_sync": changed}
+
+
 @router.delete("/admin/batch", summary="批量删除资料(管理员)")
 async def admin_batch_delete(
     body: dict,
