@@ -27,6 +27,7 @@
       <div class="pomo__actions">
         <button class="pomo__btn primary" @click="toggle">{{ state.running ? '暂停' : (state.remain < total ? '继续' : '开始') }}</button>
         <button class="pomo__btn ghost" @click="reset">重置</button>
+        <button class="pomo__btn ghost" @click="openImmersive">沉浸</button>
       </div>
 
       <div class="pomo__foot">
@@ -36,16 +37,27 @@
         </button>
       </div>
     </div>
+
+    <!-- 沉浸式专注：全屏黑场 + 呼吸光晕 + 粒子（4-4） -->
+    <FocusImmersive
+      :visible="immersive"
+      :seconds="state.remain"
+      :mode="state.mode"
+      @close="onImmersiveClose"
+      @finish="onImmersiveFinish"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import FocusImmersive from './FocusImmersive.vue'
 
 const FOCUS_MIN = 25
 const BREAK_MIN = 5
 
 const open = ref(false)
+const immersive = ref(false)
 const state = reactive({
   mode: 'focus',       // focus | break
   running: false,
@@ -194,6 +206,25 @@ async function autoCheckin() {
       headers: { Authorization: 'Bearer ' + token },
     })
   } catch (e) { /* 网络失败静默，不打断专注 */ }
+}
+
+function openImmersive() {
+  // 进入沉浸前暂停小窗计时，避免两处同时倒数
+  if (state.running) toggle()
+  immersive.value = true
+}
+
+function onImmersiveClose(remainSeconds) {
+  immersive.value = false
+  if (typeof remainSeconds === 'number' && remainSeconds > 0) {
+    state.remain = remainSeconds
+    persist()
+  }
+}
+
+function onImmersiveFinish() {
+  immersive.value = false
+  finish()
 }
 
 onMounted(() => { restore() })
