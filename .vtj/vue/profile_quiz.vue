@@ -167,7 +167,10 @@ function reshuffle() {
   state.dir = 1
 }
 
-function goHome() { location.hash = '#/question_bank' }
+function goHome() {
+  // /question_bank 路由不存在（根路径 '/' 才是题库页），此前点「跳过」会跳空白
+  location.hash = '#/home'
+}
 
 function getToken() {
   try {

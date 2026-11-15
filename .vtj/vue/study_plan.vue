@@ -1,6 +1,15 @@
 <!-- 学习计划智能推荐 - 模块4 全面改造版 -->
 <template>
   <div class="plan-page">
+    <!-- 画像问卷内嵌（模块7）：放在学习计划第一步，答完自动回填表单 -->
+    <div class="page-pad">
+      <ProfileQuizInline
+        v-if="state.showQuiz"
+        @done="onQuizDone"
+        @skip="skipQuiz"
+      />
+    </div>
+
     <!-- 顶部渐变横幅 -->
     <div class="hero">
       <div class="hero-bg"></div>
@@ -529,14 +538,17 @@
 <script lang="ts">
   // @ts-nocheck
   import { defineComponent, reactive, onMounted, computed } from 'vue';
+  import ProfileQuizInline from '@/components/plan/ProfileQuizInline.vue';
 
   export default defineComponent({
     name: 'StudyPlan',
+    components: { ProfileQuizInline },
     setup() {
       const state = reactive({
         loading: false,
         error: '',
         plan: null,
+        showQuiz: false,      // 画像问卷内嵌在学习计划里（未完成画像时展开）
         today: null,
         daysLeft: 0,
         streak: 0,
@@ -971,6 +983,16 @@
           }
         } catch (e) {}
         loadToday();
+        // 画像内嵌：未完成画像就先在本页答完，再生成方案
+        try {
+          const pr = await window.__VTJ_AUTH__.apiFetch('/api/profile');
+          const pd = await pr.json();
+          // /api/profile 无画像时只返回 { has_profile: false }，有画像才带 profile_status
+          const has = pr.ok && pd && pd.has_profile !== false;
+          const status = pd ? pd.profile_status : undefined;
+          const done = has && (status === undefined || status === null ? true : Number(status) === 1);
+          state.showQuiz = !done;
+        } catch (e) { state.showQuiz = false }
         // 连续打卡：拉真实签到数据（不再硬编码假数据）
         try {
           const ck = await window.__VTJ_AUTH__.apiFetch('/api/v1/growth/checkin/status');
@@ -993,8 +1015,30 @@
         } catch (e) {}
       });
 
+      /** 画像答完：把答案映射到生成表单，减少重复填写 */
+      function onQuizDone(answers) {
+        state.showQuiz = false;
+        if (!answers) return;
+        const map = { '行测': '行测', '申论': '申论', '公安': '公专' };
+        const weak = (answers.subject_weaknesses || [])
+          .map((s) => {
+            const key = String(s).slice(0, 2);
+            return map[key] || null;
+          })
+          .filter(Boolean);
+        if (weak.length) state.form.weak_subjects = Array.from(new Set(weak));
+        if (answers.daily_hours) state.form.daily_hours = Number(answers.daily_hours);
+        if (answers.self_level) state.form.level = String(answers.self_level);
+        if (answers.exam_date) state.form.exam_date = answers.exam_date;
+      }
+
+      function skipQuiz() {
+        state.showQuiz = false;
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
+        onQuizDone, skipQuiz,
         toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
         formatTime, togglePomodoro, resetPomodoro,
         toggleSlotTask, getScheduleProgress, gradeEssay,
@@ -1007,6 +1051,7 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+  .page-pad { padding: 16px 20px 0; }
 
   /* ===== 学习报告 ===== */
   .report-card {

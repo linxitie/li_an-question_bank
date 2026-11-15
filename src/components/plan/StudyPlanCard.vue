@@ -97,7 +97,7 @@ function open() {
 }
 
 function goQuiz() {
-  location.hash = '#/profile_quiz'
+  location.hash = '#/profile-quiz'
 }
 
 onMounted(load)

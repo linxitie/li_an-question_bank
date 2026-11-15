@@ -153,6 +153,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/knowledge_view.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
+  // 错题集（PC）：页面一直存在但此前没有注册路由，属孤儿页；
+  // 遗忘曲线复习提醒卡（DueReviewCard）挂在该页，必须可达。
+  {
+    path: '/wrong-questions',
+    name: 'WrongQuestions',
+    component: () => import('$vtj/vue/wrong_questions.vue'),
+    meta: { roles: ['student'] }
+  },
   {
     path: '/memories',
     name: 'MemoriesView',
