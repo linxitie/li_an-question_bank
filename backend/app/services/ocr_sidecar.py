@@ -121,6 +121,7 @@ def _consume(q: queue.Queue, *, page_timeout: float, total_timeout: float,
     """读事件直到 `done`（或超时/EOF）。返回聚合结果；超时抛 OcrError。"""
     texts: List[str] = []
     fails: List[Dict] = []
+    layouts: List[List[Dict]] = []          # T1：每页的带坐标框（只有 with_layout 才有）
     total = 0
     page_secs = 0.0
     truncated = False
@@ -156,6 +157,9 @@ def _consume(q: queue.Queue, *, page_timeout: float, total_timeout: float,
             got_meta = True
         elif kind == "page":
             texts.append(evt.get("text") or "")
+            page_lines = evt.get("lines")
+            if isinstance(page_lines, list):
+                layouts.append(page_lines)
             page_secs += float(evt.get("secs") or 0)
             if progress:
                 try:
@@ -172,11 +176,12 @@ def _consume(q: queue.Queue, *, page_timeout: float, total_timeout: float,
             raise OcrError(f"OCR 失败：{(evt.get('message') or '')[:300]}")
         # ready / pong 等控制事件直接忽略
     return {"texts": texts, "fails": fails, "total": total,
-            "page_secs": page_secs, "truncated": truncated}
+            "page_secs": page_secs, "truncated": truncated, "layouts": layouts}
 
 
 def _result(texts: List[str], fails: List[Dict], total: int, page_secs: float,
-            truncated: bool, dpi: int) -> Tuple[str, Dict]:
+            truncated: bool, dpi: int,
+            layouts: Optional[List[List[Dict]]] = None) -> Tuple[str, Dict]:
     if not texts:
         detail = ""
         if fails:
@@ -192,6 +197,9 @@ def _result(texts: List[str], fails: List[Dict], total: int, page_secs: float,
         "seconds": round(page_secs, 1),
         "errors": fails[:5],
     }
+    if layouts:
+        # T1（2026-11-14）：只有请求了 with_layout 才带坐标，避免文章/答案链路白白多传数据
+        meta["layout"] = layouts
     return "\n".join(texts), meta
 
 
@@ -248,12 +256,13 @@ class _Daemon:
 
     def read(self, abs_path: str, *, dpi: int, max_pages: int,
              page_timeout: float, total_timeout: float,
-             progress: Progress) -> Tuple[str, Dict]:
+             progress: Progress, with_layout: bool = False) -> Tuple[str, Dict]:
         self._ensure()
         self.last_used = time.monotonic()
         assert self.proc is not None and self.q is not None
         cmd = json.dumps({"cmd": "ocr", "path": abs_path,
-                          "dpi": int(dpi), "max_pages": int(max_pages)},
+                          "dpi": int(dpi), "max_pages": int(max_pages),
+                          "with_layout": bool(with_layout)},
                          ensure_ascii=False)
         try:
             self.proc.stdin.write(cmd + "\n")      # type: ignore[union-attr]
@@ -270,7 +279,8 @@ class _Daemon:
             self.close()
             raise
         return _result(out["texts"], out["fails"], out["total"],
-                       out["page_secs"], out["truncated"], dpi)
+                       out["page_secs"], out["truncated"], dpi,
+                       layouts=out.get("layouts") or None)
 
     def close(self) -> None:
         if self.proc is None:
@@ -318,8 +328,12 @@ def read_pdf_text(
         dpi: int = DEFAULT_DPI,
         page_timeout: float = DEFAULT_PAGE_TIMEOUT,
         total_timeout: float = DEFAULT_TOTAL_TIMEOUT,
-        progress: Progress = None) -> Tuple[str, Dict]:
+        progress: Progress = None,
+        with_layout: bool = False) -> Tuple[str, Dict]:
     """扫描版 PDF → 文本（按页拼接）+ 识别元信息。
+
+    `with_layout=True`（T1，2026-11-14）：`meta["layout"]` 里带**每页的带坐标框**
+    （text/x/y/w/h/score），供试卷拆题判水印与选项缩进；默认关，文章/答案链路零影响。
 
     失败一律抛 `OcrError`，消息里带**页号与原因**。模式由 `OCR_MODE` 决定：
     `daemon`（默认，复用常驻进程）/ `oneshot`（每份新进程）。
@@ -335,10 +349,12 @@ def read_pdf_text(
             return _get_daemon().read(
                 abs_path, dpi=dpi, max_pages=max_pages,
                 page_timeout=page_timeout, total_timeout=total_timeout,
-                progress=progress)
+                progress=progress, with_layout=with_layout)
 
-    proc, q = _spawn([abs_path, "--dpi", str(int(dpi)),
-                      "--max-pages", str(int(max_pages))])
+    extra = [abs_path, "--dpi", str(int(dpi)), "--max-pages", str(int(max_pages))]
+    if with_layout:
+        extra.append("--with-layout")
+    proc, q = _spawn(extra)
     errs: List[str] = []
     try:
         out = _consume(q, page_timeout=page_timeout, total_timeout=total_timeout,
@@ -351,4 +367,5 @@ def read_pdf_text(
         if proc.poll() is None:
             _kill(proc)
     return _result(out["texts"], out["fails"], out["total"],
-                   out["page_secs"], out["truncated"], dpi)
+                   out["page_secs"], out["truncated"], dpi,
+                   layouts=out.get("layouts") or None)

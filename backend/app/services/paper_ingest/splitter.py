@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import re
+from statistics import median
 from typing import Dict, List, Optional
 
 #: 题号行：`1.` / `1．` / `1、` / `第1题`（行首，最多三位数）
@@ -150,6 +151,55 @@ def split_options(block: List[str]) -> tuple:
     return clean_cn("".join(stem)), {k: clean_cn(v) for k, v in options.items()}
 
 
+def repair_option_tags(items: List[dict], *, band_px: float = 40.0) -> List[dict]:
+    """T3（2026-11-14）：把**丢了 `A-D` 标签**的选项行按缩进带补回标签。
+
+    真机缺陷：第 3 题 C 行 OCR 输出成 `坚持以人民安全为宗旨`（标签被吃掉），
+    `split_options` 把它当成 B 的续行 → C 空、B 变长。这里在拆题前修：
+
+    1. 按题号把行分块；取本题**已有标签选项**的 `x` 中位数当缩进带（实测 264.3）；
+    2. 块内无标签行若 `x` 落在缩进带 ±`band_px`（C 行 278.4，差 12–14px）→ 判为新选项；
+    3. 按 `A→B→C→D` 里**缺的字母顺序**补标签（不猜内容，只补字母）。
+
+    输入输出都是带 `x` 的行字典（`readers._layout_lines` 的产物）；没有坐标时不要调用。
+    """
+    starts = [i for i, it in enumerate(items) if qno_of(it.get("text") or "")]
+    if not starts:
+        starts = [0]                                # 一页里没有题号行（题目从上一页续过来）
+    elif starts[0] != 0:
+        starts.insert(0, 0)                         # 页首那段也要成块，否则开头几行永远修不到
+
+    for k, start in enumerate(starts):
+        end = starts[k + 1] if k + 1 < len(starts) else len(items)
+        block = range(start, end)
+        tagged = []
+        for i in block:
+            text = (items[i].get("text") or "").strip()
+            m = OPT_RE.match(text)
+            if m:
+                tagged.append((items[i].get("x") or 0.0,
+                               m.group(1).translate(str.maketrans("ＡＢＣＤ", "ABCD"))))
+        if not tagged:
+            continue
+        band = median([x for x, _ in tagged])
+        have = {letter for _, letter in tagged}
+        missing = [c for c in "ABCD" if c not in have]
+        if not missing:
+            continue
+        for i in block:
+            if not missing:
+                break
+            text = (items[i].get("text") or "").strip()
+            if not text or OPT_RE.match(text) or MARK_RE.match(text) or _is_structural(text):
+                continue
+            x = items[i].get("x")
+            if x is None or abs(float(x) - band) > band_px:
+                continue                            # 缩进不符：多半是题干续行，别动
+            tag = missing.pop(0)
+            items[i]["text"] = f"{tag}.{text}"
+    return items
+
+
 def _scan_type_state(lines: List[str]) -> Dict[int, str]:
     """扫一遍题型标记，产出「行号 → 从这行起默认题型」。"""
     marks: Dict[int, str] = {}
@@ -225,6 +275,13 @@ def split_questions(lines: List[str], *, default_type: str = "单选") -> List[d
         if not all(options[k] for k in "ABCD"):
             missing = [k for k in "ABCD" if not options[k]]
             flags.append(f"选项不全({'/'.join(missing)})")
+        # T3（2026-11-14）：某选项比同题其它选项长 3 倍以上 → 可能把两行/两题粘在一起，
+        # 给个标记让人一眼看到（不自动切，切错比不切更难查）
+        lens = [len(options[k]) for k in "ABCD" if options[k]]
+        if len(lens) >= 3:
+            med = median(lens)
+            if med and max(lens) > max(3 * med, 120):
+                flags.append("选项可能粘连")
         if FIGURE_HINT_RE.search(stem + shared):
             flags.append("依赖图")
         if len(stem) < 4:

@@ -298,11 +298,65 @@ def strip_inline_noise(line: str) -> str:
 
 MAX_OCR_PAGES = 60
 
+#: 水印/装饰框的判定（T2，2026-11-14）：真机实测正文行框高 30–34px，
+#: 斜向水印框高 187 / 343px；孤立小水印（`X`）宽 34px、置信 0.866。
+WATERMARK_HEIGHT_RATIO = 2.5
+WATERMARK_MIN_HEIGHT = 10.0
+ISOLATED_MAX_W = 40.0
+ISOLATED_LOW_SCORE = 0.92
+#: 短水印词（只在**整行 ≤ 8 字**时兜底删，避免误伤「微信支付」这类正文）
+WATERMARK_WORDS = re.compile(
+    r"^(?:五星好评?|公安院校联考真题|赠送最新?|真题|好评|扫码关注|"
+    r"xwl?\d{0,6}|txw\d{0,6}|xw\d{0,6}|微信号?|公众号)$", re.IGNORECASE)
+
+
+def _layout_lines(layout: List[List[dict]]) -> List[dict]:
+    """带坐标的 OCR 框 →（已丢水印、按阅读顺序）的行列表。T2（2026-11-14）。
+
+    两步：
+      1. **几何**：框高 > 2.5×正文行高中位数 → 斜向水印；孤立低置信小框 → 水印碎片；
+      2. **词表兜底**：整行 ≤8 字且命中水印词（`五星好` / `xwl663` 等）。
+    为什么先几何后词表：水印文案会换（"五星好评"→别的），但斜排必然"高瘦"，这一条最稳。
+    """
+    flat: List[dict] = []
+    for page_no, page_lines in enumerate(layout, 1):
+        for it in page_lines or []:
+            text = (it.get("text") or "").strip()
+            if not text:
+                continue
+            flat.append({
+                "text": text,
+                "x": float(it.get("x") or 0.0),
+                "y": float(it.get("y") or 0.0),
+                "w": float(it.get("w") or 0.0),
+                "h": float(it.get("h") or 0.0),
+                "score": float(it.get("score") or 1.0),
+                "page": page_no,
+            })
+    if not flat:
+        return flat
+
+    heights = [it["h"] for it in flat if WATERMARK_MIN_HEIGHT <= it["h"] <= 80.0]
+    base_h = sorted(heights)[len(heights) // 2] if heights else 0.0
+
+    kept: List[dict] = []
+    for it in flat:
+        if base_h and it["h"] > base_h * WATERMARK_HEIGHT_RATIO:
+            continue                                   # 斜向水印（高瘦框）
+        if it["w"] < ISOLATED_MAX_W and it["h"] < base_h * 1.6 \
+                and it["score"] < ISOLATED_LOW_SCORE:
+            continue                                   # 孤立水印碎片（如 X）
+        if len(it["text"]) <= 8 and WATERMARK_WORDS.match(it["text"]):
+            continue                                   # 短水印词兜底
+        kept.append(it)
+    return kept
+
 
 def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
     """扫描版试卷 → `{lines, images: [], meta}`（P3 v1：只出文字，不带图/版式）。
 
     - OCR 复用 P1/S-C 的 `ocr_sidecar`（常驻 worker）；
+    - T1/T2（2026-11-14）：带坐标取回 → 先按几何剔水印 → 再用缩进把丢标签的选项补回（`splitter`）；
     - 去噪：通用噪声（`ocr_html.drop_noise`）+ 试卷专属（`PAPER_NOISE`）；
     - 超过 `MAX_OCR_PAGES` 页会被 sidecar 截断，`meta.truncated=True` 交给警告提示。
     """
@@ -313,11 +367,19 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
         def cb(done: int, total: int) -> None:      # noqa: ANN001
             progress(f"OCR {done}/{total} 页")
 
-    text, meta = ocr_sidecar.read_pdf_text(path, max_pages=MAX_OCR_PAGES, progress=cb)
-    raw_lines = (text or "").splitlines()
-    clean = ocr_html.drop_noise(raw_lines)
-    clean = [ln for ln in (strip_inline_noise(x) for x in clean)
-             if ln and not PAPER_NOISE.search(ln)]
+    text, meta = ocr_sidecar.read_pdf_text(path, max_pages=MAX_OCR_PAGES,
+                                           progress=cb, with_layout=True)
+    layout = meta.get("layout") or []
+    if layout:
+        rows = _layout_lines(layout)
+        from . import splitter
+        rows = splitter.repair_option_tags(rows)
+        # 修复后再做文本级去噪；顺序很重要：水印必须在校验/分词之前就没了
+        clean = [strip_inline_noise(r["text"]) for r in rows]
+    else:                                          # 兜底：旧 worker / 拿不到坐标
+        clean = (text or "").splitlines()
+    clean = ocr_html.drop_noise([ln for ln in clean if ln])
+    clean = [ln for ln in clean if ln and not PAPER_NOISE.search(ln)]
     return {
         "lines": clean,
         "images": [],

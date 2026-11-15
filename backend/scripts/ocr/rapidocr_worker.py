@@ -36,8 +36,13 @@ def render_png(page, dpi: int) -> bytes:
     return page.get_pixmap(dpi=dpi).tobytes("png")
 
 
-def ocr_page(engine, cv2, np, png: bytes):
-    """PNG 字节 → 按"先上后下、同行从左到右"排好的文本行列表。"""
+def ocr_page(engine, cv2, np, png: bytes, *, with_layout: bool = False):
+    """PNG 字节 → 按"先上后下、同行从左到右"排好的文本行列表。
+
+    T1（2026-11-14）：`with_layout=True` 时返回**带坐标的框**（text/x/y/w/h/score），
+    让下游能区分「正文行」和「斜向水印框」（水印框高 187–343px，正文只有 30–34px）。
+    默认仍返回纯文本，老调用方零改动。
+    """
     arr = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
     result = engine(arr)
     boxes = result[0] if isinstance(result, tuple) else result
@@ -48,15 +53,20 @@ def ocr_page(engine, cv2, np, png: bytes):
         ys = [p[1] for p in box]
         xs = [p[0] for p in box]
         items.append({"y": sum(ys) / len(ys), "x": min(xs),
+                      "w": max(xs) - min(xs), "h": max(ys) - min(ys),
                       "text": text.strip(), "score": float(score)})
     items.sort(key=lambda it: (round(it["y"] / LINE_BUCKET), it["x"]))
+    if with_layout:
+        return items
     return [it["text"] for it in items]
 
 
-def ocr_document(engine, cv2, np, pymupdf, path: str, dpi: int, max_pages: int) -> int:
+def ocr_document(engine, cv2, np, pymupdf, path: str, dpi: int, max_pages: int,
+                 with_layout: bool = False) -> int:
     """识别一份 PDF 并逐事件输出。返回 0=有页成功 / 4=全失败 / 2=PDF 打不开。
 
     一次性模式与常驻模式**共用**这一段，保证两条路径行为一致（常驻只是模型不重复加载）。
+    `with_layout=True` 时每页事件多带 `lines`（带坐标的框），供试卷拆题用水印/缩进判断。
     """
     try:
         doc = pymupdf.open(path)
@@ -68,7 +78,7 @@ def ocr_document(engine, cv2, np, pymupdf, path: str, dpi: int, max_pages: int) 
     total = int(doc.page_count)
     will_do = min(total, max(1, max_pages))
     emit({"t": "meta", "pages": total, "will_do": will_do,
-          "dpi": dpi, "engine": "rapidocr"})
+          "dpi": dpi, "engine": "rapidocr", "layout": bool(with_layout)})
 
     done = failed = 0
     t_all = time.time()
@@ -76,15 +86,18 @@ def ocr_document(engine, cv2, np, pymupdf, path: str, dpi: int, max_pages: int) 
         t0 = time.time()
         try:
             png = render_png(doc[i], dpi)
-            lines = ocr_page(engine, cv2, np, png)
+            lines = ocr_page(engine, cv2, np, png, with_layout=with_layout)
         except Exception as exc:                    # noqa: BLE001
             failed += 1
             emit({"t": "page_error", "page": i + 1, "message": str(exc)[:300]})
             continue
         done += 1
-        text = "\n".join(lines)
-        emit({"t": "page", "page": i + 1, "chars": len(text),
-              "secs": round(time.time() - t0, 2), "text": text})
+        text = "\n".join(it["text"] if isinstance(it, dict) else it for it in lines)
+        evt = {"t": "page", "page": i + 1, "chars": len(text),
+               "secs": round(time.time() - t0, 2), "text": text}
+        if with_layout:
+            evt["lines"] = lines
+        emit(evt)
 
     emit({"t": "done", "pages_done": done, "pages_failed": failed,
           "secs": round(time.time() - t_all, 1),
@@ -122,7 +135,8 @@ def serve(engine, cv2, np, pymupdf) -> int:
             emit({"t": "error", "message": f"未知命令 {action}"})
             continue
         ocr_document(engine, cv2, np, pymupdf, str(cmd.get("path") or ""),
-                     int(cmd.get("dpi") or 200), int(cmd.get("max_pages") or 60))
+                     int(cmd.get("dpi") or 200), int(cmd.get("max_pages") or 60),
+                     with_layout=bool(cmd.get("with_layout")))
     return 0
 
 
@@ -132,6 +146,8 @@ def main() -> int:
     ap.add_argument("--dpi", type=int, default=200)
     ap.add_argument("--max-pages", type=int, default=60)
     ap.add_argument("--serve", action="store_true", help="常驻模式：从 stdin 收命令（S-C）")
+    ap.add_argument("--with-layout", action="store_true",
+                    help="每页多回带坐标的框（水印/缩进判断用；T1，2026-11-14）")
     args = ap.parse_args()
 
     try:
@@ -149,7 +165,8 @@ def main() -> int:
     if not args.pdf:
         sys.stderr.write("一次性模式需要 PDF 路径；常驻模式请加 --serve\n")
         return 2
-    return ocr_document(engine, cv2, np, pymupdf, args.pdf, args.dpi, args.max_pages)
+    return ocr_document(engine, cv2, np, pymupdf, args.pdf, args.dpi, args.max_pages,
+                        with_layout=bool(args.with_layout))
 
 
 if __name__ == "__main__":
