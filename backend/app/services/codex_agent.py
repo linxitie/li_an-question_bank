@@ -179,14 +179,29 @@ def _headers() -> Dict[str, str]:
     return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
 
-async def stream_chat(messages: List[Dict[str, str]], temperature: float = 0.7) -> AsyncIterator[str]:
-    """真流式：逐 token yield 文本增量。"""
+# 官方 DeepSeek 风格的两个模型档位
+MODEL_CHAT = "deepseek-chat"          # V3 普通对话
+MODEL_REASONER = "deepseek-reasoner"  # R1 深度思考
+
+
+async def stream_chat(
+    messages: List[Dict[str, str]],
+    temperature: float = 0.7,
+    model: str = "",
+) -> AsyncIterator[Dict[str, str]]:
+    """真流式：逐块 yield {"kind": "reasoning"|"text", "text": ...}。
+
+    deepseek-reasoner 先返回 reasoning_content（思考过程）再返回正式答案，
+    这里把两者分开推给前端，前端分别渲染成「深度思考」折叠区与正文。
+    """
+    use_model = model or settings.LLM_MODEL or MODEL_CHAT
     payload = {
-        "model": settings.LLM_MODEL,
+        "model": use_model,
         "messages": [{"role": "system", "content": CODEX_SYSTEM}, *messages],
-        "temperature": temperature,
         "stream": True,
     }
+    if use_model != MODEL_REASONER:
+        payload["temperature"] = temperature
     async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
         async with client.stream("POST", _endpoint(), headers=_headers(), json=payload) as resp:
             if resp.status_code != 200:
@@ -202,11 +217,15 @@ async def stream_chat(messages: List[Dict[str, str]], temperature: float = 0.7) 
                     break
                 try:
                     obj = json.loads(data)
-                    delta = obj["choices"][0]["delta"].get("content")
+                    delta = obj["choices"][0]["delta"]
                 except (KeyError, IndexError, ValueError):
                     continue
-                if delta:
-                    yield delta
+                reasoning = delta.get("reasoning_content")
+                if reasoning:
+                    yield {"kind": "reasoning", "text": reasoning}
+                content = delta.get("content")
+                if content:
+                    yield {"kind": "text", "text": content}
 
 
 async def run_agent(

@@ -27,6 +27,8 @@ MAX_HISTORY = 20
 class StreamChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     history: Optional[List[Dict[str, str]]] = Field(default=None, description="[{role, content}]")
+    # deepseek-chat（V3 快答） / deepseek-reasoner（R1 深度思考）
+    model: Optional[str] = Field(default=None, description="模型档位")
 
 
 def _build_messages(req_message: str, history: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
@@ -53,8 +55,12 @@ async def chat_stream(
 
     async def gen():
         try:
-            async for delta in codex_agent.stream_chat(messages):
-                yield _sse({"type": "token", "text": delta})
+            async for chunk in codex_agent.stream_chat(messages, model=payload.model or ""):
+                kind = chunk.get("kind", "text")
+                if kind == "reasoning":
+                    yield _sse({"type": "reasoning", "text": chunk.get("text", "")})
+                else:
+                    yield _sse({"type": "token", "text": chunk.get("text", "")})
             yield _sse({"type": "done"})
         except Exception as e:  # noqa: BLE001
             logger.exception("chat_stream 失败")

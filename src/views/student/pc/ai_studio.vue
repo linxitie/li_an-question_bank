@@ -1,44 +1,58 @@
-﻿<template>
-  <div class="studio">
-    <aside class="studio__side" :class="{ 'is-open': sideOpen }">
-      <div class="side__head">
-        <span>会话</span>
-        <button class="side__new" @click="newChat">＋ 新对话</button>
+<template>
+  <div class="ds">
+    <!-- 侧栏 -->
+    <aside class="ds__side" :class="{ 'is-open': sideOpen }">
+      <div class="side__brand">联考小智</div>
+      <button class="side__new" @click="newChat">＋ 开启新对话</button>
+
+      <div class="side__scroll">
+        <template v-for="group in groupedSessions" :key="group.label">
+          <p class="side__group" v-if="group.items.length">{{ group.label }}</p>
+          <div v-for="s in group.items" :key="s.id" class="side__item"
+               :class="{ on: s.id === state.sessionId }" @click="switchChat(s.id)">
+            <span class="side__title">{{ s.title || "未命名对话" }}</span>
+            <button class="side__del" @click.stop="removeChat(s.id)">×</button>
+          </div>
+        </template>
       </div>
-      <ul class="side__list">
-        <li v-for="s in sessions" :key="s.id" :class="{ on: s.id === state.sessionId }" @click="switchChat(s.id)">
-          <span class="side__title">{{ s.title || "未命名对话" }}</span>
-          <button class="side__del" @click.stop="removeChat(s.id)">×</button>
-        </li>
-        <li v-if="!sessions.length" class="side__empty">还没有对话</li>
-      </ul>
     </aside>
 
-    <main class="studio__main">
-      <header class="studio__top">
-        <button class="studio__menu" @click="sideOpen = !sideOpen">☰</button>
-        <div class="studio__brand">
-          <span class="studio__name">联考小智</span>
-          <span class="studio__tag" :class="{ 'is-agent': state.mode === 'agent' }">{{ state.mode === 'agent' ? "Codex" : "Chat" }}</span>
-        </div>
-        <div class="studio__modes">
-          <button :class="{ on: state.mode === 'chat' }" @click="state.mode = 'chat'">对话</button>
+    <!-- 主区 -->
+    <main class="ds__main">
+      <header class="ds__top">
+        <button class="ds__menu" @click="sideOpen = !sideOpen">☰</button>
+        <div class="ds__model">
+          <button :class="{ on: state.model === 'deepseek-chat' }" @click="state.model = 'deepseek-chat'">对话</button>
+          <button :class="{ on: state.model === 'deepseek-reasoner' }" @click="state.model = 'deepseek-reasoner'">深度思考</button>
           <button :class="{ on: state.mode === 'agent' }" @click="state.mode = 'agent'">Agent</button>
         </div>
       </header>
 
-      <section class="studio__thread" ref="threadRef">
-        <div v-if="!state.messages.length" class="studio__hello">
-          <h2>有什么要搞定的？</h2>
-          <p>对话模式像 ChatGPT；Agent 模式会自己查库、算数、多步执行。</p>
-          <div class="studio__chips">
-            <button v-for="q in suggestions" :key="q" @click="send(q)">{{ q }}</button>
+      <section class="ds__thread" ref="threadRef">
+        <div v-if="!state.messages.length" class="ds__welcome">
+          <h1>{{ greeting }}</h1>
+          <p class="ds__welcome-sub">我可以帮你分析错题、拆解考点、排复习节奏。</p>
+          <div class="ds__cards">
+            <button v-for="c in suggestions" :key="c" class="ds__card" @click="send(c)">
+              <span class="ds__card-title">{{ c }}</span>
+              <span class="ds__card-desc">{{ cardDesc(c) }}</span>
+            </button>
           </div>
         </div>
 
-        <div v-for="(m, i) in state.messages" :key="i" class="msg" :class="'msg--' + m.role">
-          <div class="msg__avatar">{{ m.role === "user" ? "我" : "智" }}</div>
-          <div class="msg__body">
+        <div v-for="(m, i) in state.messages" :key="i" class="ds-msg" :class="'ds-msg--' + m.role">
+          <div class="ds-msg__who">{{ m.role === "user" ? "你" : "小智" }}</div>
+          <div class="ds-msg__main">
+            <!-- 深度思考折叠区 -->
+            <div v-if="m.reasoning || m.thinking" class="think" :class="{ 'is-open': m.thinkOpen }">
+              <button class="think__head" @click="m.thinkOpen = !m.thinkOpen">
+                <span class="think__spark">✦</span>
+                <span>{{ m.thinking ? "深度思考中…" : thinkLabel(m) }}</span>
+                <span class="think__arrow" :class="{ up: m.thinkOpen }">⌄</span>
+              </button>
+              <div v-if="m.thinkOpen && m.reasoning" class="think__body">{{ m.reasoning }}</div>
+            </div>
+
             <div v-if="m.tools && m.tools.length" class="tools">
               <details v-for="(t, ti) in m.tools" :key="ti" class="tool">
                 <summary>
@@ -49,30 +63,41 @@
                 <pre class="tool__result">{{ pretty(t.result) }}</pre>
               </details>
             </div>
-            <div class="msg__text" v-html="render(m.content)"></div>
+
+            <div class="ds-msg__text" v-html="render(m.content)"></div>
             <span v-if="m.streaming" class="cursor"></span>
           </div>
         </div>
       </section>
 
-      <footer class="studio__composer">
-        <div class="composer">
+      <footer class="ds__composer">
+        <div class="composer" :class="{ 'has-text': state.input.trim() }">
           <textarea v-model="state.input" class="composer__input" rows="1"
-                    :placeholder="state.mode === 'agent' ? '让我做什么？（可多步执行）' : '问点什么…'"
+                    :placeholder="state.mode === 'agent' ? '交给小智去做…' : '给联考小智发送消息'"
                     @keydown.enter.exact.prevent="send()"></textarea>
-          <button v-if="state.busy" class="composer__btn stop" @click="stop">停止</button>
-          <button v-else class="composer__btn" :disabled="!state.input.trim()" @click="send()">发送</button>
+          <div class="composer__bar">
+            <button class="chip" :class="{ on: state.model === 'deepseek-reasoner' }"
+                    @click="state.model = state.model === 'deepseek-reasoner' ? 'deepseek-chat' : 'deepseek-reasoner'">
+              <span class="chip__icon">✦</span> 深度思考
+            </button>
+            <button class="chip" :class="{ on: state.mode === 'agent' }"
+                    @click="state.mode = state.mode === 'agent' ? 'chat' : 'agent'">
+              <span class="chip__icon">⚙</span> Agent
+            </button>
+            <button v-if="state.busy" class="send stop" @click="stop">■</button>
+            <button v-else class="send" :disabled="!state.input.trim()" @click="send()">↑</button>
+          </div>
         </div>
-        <p class="composer__hint">Enter 发送 · Shift+Enter 换行 · 当前模型 DeepSeek</p>
+        <p class="ds__tip">内容由 AI 生成，请仔细甄别 · Enter 发送，Shift+Enter 换行</p>
       </footer>
     </main>
   </div>
 </template>
 
 <script setup>
-import { nextTick, onMounted, reactive, ref, watch } from "vue"
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue"
 
-const KEY = "li_an_ai_studio_v1"
+const KEY = "li_an_ai_studio_v2"
 const BT = String.fromCharCode(96)
 const FENCE = BT + BT + BT
 const INLINE = new RegExp(BT + "([^" + BT + "]+)" + BT, "g")
@@ -80,15 +105,30 @@ const INLINE = new RegExp(BT + "([^" + BT + "]+)" + BT, "g")
 const threadRef = ref(null)
 const sideOpen = ref(false)
 const sessions = ref([])
-const state = reactive({ sessionId: "", mode: "chat", input: "", busy: false, messages: [] })
+const state = reactive({ sessionId: "", mode: "chat", model: "deepseek-chat", input: "", busy: false, messages: [] })
 let controller = null
 
+const greeting = computed(function () {
+  const h = new Date().getHours()
+  if (h < 6) return "夜深了，还要再练一会儿吗？"
+  if (h < 12) return "早上好，今天想先攻哪科？"
+  if (h < 18) return "下午好，我来帮你拆题。"
+  return "晚上好，今天辛苦了。"
+})
+
 const suggestions = [
-  "我的错题今天该复习哪些？",
-  "帮我查资料分析有哪些考点",
-  "行测 65 分、申论 58 分，平均多少？",
-  "三天内怎么排复习？",
+  "我的错题今天该复习哪些?",
+  "资料分析有哪些考点",
+  "三天内怎么排复习节奏",
+  "行测 65 申论 58，平均多少分",
 ]
+
+function cardDesc(q) {
+  if (q.indexOf("错题") >= 0) return "按遗忘曲线挑出今天该看的题"
+  if (q.indexOf("考点") >= 0) return "查知识库里的知识点与关系"
+  if (q.indexOf("节奏") >= 0) return "结合剩余天数和每日时长排"
+  return "直接算，不用自己按计算器"
+}
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }
 
@@ -104,19 +144,40 @@ function loadStore() {
   try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : [] } catch (e) { return [] }
 }
 function saveStore() {
-  try { localStorage.setItem(KEY, JSON.stringify(sessions.value.slice(0, 30))) } catch (e) { /* ignore */ }
+  try { localStorage.setItem(KEY, JSON.stringify(sessions.value.slice(0, 40))) } catch (e) { /* ignore */ }
 }
+
+const groupedSessions = computed(function () {
+  const now = new Date()
+  const today = now.toDateString()
+  const weekAgo = now.getTime() - 7 * 86400000
+  const g = [
+    { label: "今天", items: [] },
+    { label: "最近 7 天", items: [] },
+    { label: "更早", items: [] },
+  ]
+  sessions.value.forEach(function (s) {
+    const t = s.at || 0
+    const d = new Date(t)
+    if (d.toDateString() === today) g[0].items.push(s)
+    else if (t >= weekAgo) g[1].items.push(s)
+    else g[2].items.push(s)
+  })
+  return g
+})
+
 function persistCurrent() {
-  const cur = sessions.value.find((x) => x.id === state.sessionId)
+  const cur = sessions.value.find(function (x) { return x.id === state.sessionId })
   if (!cur) return
-  cur.messages = state.messages.filter((m) => !m.streaming)
-  const firstUser = cur.messages.find((m) => m.role === "user")
+  cur.messages = state.messages.filter(function (m) { return !m.streaming })
+  cur.at = Date.now()
+  const firstUser = cur.messages.find(function (m) { return m.role === "user" })
   cur.title = firstUser ? String(firstUser.content).slice(0, 18) : "未命名对话"
   saveStore()
 }
 function newChat() {
   const id = uid()
-  sessions.value.unshift({ id, title: "未命名对话", messages: [] })
+  sessions.value.unshift({ id: id, title: "未命名对话", messages: [], at: Date.now() })
   state.sessionId = id
   state.messages = []
   saveStore()
@@ -124,15 +185,15 @@ function newChat() {
 }
 function switchChat(id) {
   persistCurrent()
-  const s = sessions.value.find((x) => x.id === id)
+  const s = sessions.value.find(function (x) { return x.id === id })
   if (!s) return
   state.sessionId = id
-  state.messages = (s.messages || []).map((m) => Object.assign({}, m, { streaming: false }))
+  state.messages = (s.messages || []).map(function (m) { return Object.assign({}, m, { streaming: false }) })
   sideOpen.value = false
   scrollBottom()
 }
 function removeChat(id) {
-  sessions.value = sessions.value.filter((x) => x.id !== id)
+  sessions.value = sessions.value.filter(function (x) { return x.id !== id })
   if (state.sessionId === id) {
     if (sessions.value.length) switchChat(sessions.value[0].id)
     else newChat()
@@ -157,7 +218,6 @@ function render(text) {
       .replace(/\n/g, "<br/>")
   }).join("")
 }
-
 function shortArgs(args) {
   if (!args) return ""
   const s = JSON.stringify(args)
@@ -165,6 +225,10 @@ function shortArgs(args) {
 }
 function pretty(v) {
   try { return JSON.stringify(v, null, 2).slice(0, 800) } catch (e) { return String(v) }
+}
+function thinkLabel(m) {
+  const sec = m.thinkSeconds || 1
+  return "已深度思考（用时 " + sec + " 秒）"
 }
 function scrollBottom() {
   nextTick(function () { const el = threadRef.value; if (el) el.scrollTop = el.scrollHeight })
@@ -178,22 +242,26 @@ async function send(preset) {
   sideOpen.value = false
 
   const history = state.messages
-    .filter((m) => !m.streaming && m.content)
+    .filter(function (m) { return !m.streaming && m.content })
     .slice(-20)
-    .map((m) => ({ role: m.role, content: m.content }))
+    .map(function (m) { return { role: m.role, content: m.content } })
 
   state.messages.push({ role: "user", content: text })
-  const reply = reactive({ role: "assistant", content: "", tools: [], streaming: true })
+  const reply = reactive({
+    role: "assistant", content: "", reasoning: "", tools: [], streaming: true,
+    thinking: state.model === "deepseek-reasoner", thinkOpen: true, thinkSeconds: 0,
+  })
   state.messages.push(reply)
   scrollBottom()
 
+  const startedAt = Date.now()
   controller = new AbortController()
   try {
     const url = state.mode === "agent" ? "/api/llm/agent/stream" : "/api/llm/chat/stream"
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
-      body: JSON.stringify({ message: text, history: history }),
+      body: JSON.stringify({ message: text, history: history, model: state.model }),
       signal: controller.signal,
     })
     if (!res.ok || !res.body) throw new Error("HTTP " + res.status)
@@ -212,14 +280,25 @@ async function send(preset) {
         if (line.indexOf("data:") !== 0) continue
         let evt = null
         try { evt = JSON.parse(line.slice(5).trim()) } catch (e) { continue }
-        if (evt.type === "token") { reply.content += evt.text || ""; scrollBottom() }
-        else if (evt.type === "tool_call") {
+        if (evt.type === "reasoning") {
+          reply.reasoning += evt.text || ""
+          reply.thinkSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+          scrollBottom()
+        } else if (evt.type === "token") {
+          if (reply.thinking) {
+            reply.thinking = false
+            reply.thinkOpen = false
+            reply.thinkSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+          }
+          reply.content += evt.text || ""
+          scrollBottom()
+        } else if (evt.type === "tool_call") {
           if (!reply.tools) reply.tools = []
           reply.tools.push({ name: evt.name, args: evt.args, status: "running" })
           scrollBottom()
         } else if (evt.type === "tool_result") {
           const list = (reply.tools || []).slice().reverse()
-          const hit = list.find((t) => t.name === evt.name && t.status === "running")
+          const hit = list.find(function (t) { return t.name === evt.name && t.status === "running" })
           if (hit) { hit.result = evt.result; hit.status = "ok" }
           scrollBottom()
         } else if (evt.type === "error") {
@@ -230,6 +309,7 @@ async function send(preset) {
   } catch (e) {
     if (e.name !== "AbortError") reply.content += (reply.content ? "\n\n" : "") + "⚠️ " + e.message
   } finally {
+    reply.thinking = false
     reply.streaming = false
     state.busy = false
     controller = null
@@ -249,70 +329,95 @@ onMounted(function () {
 </script>
 
 <style scoped>
-.studio { display: flex; height: 100vh; background: #f7f8fb; color: #111827; }
-.studio__side { width: 244px; flex: 0 0 244px; background: #fff; border-right: 1px solid #eef1f7; display: flex; flex-direction: column; }
-.side__head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px; font-size: 12px; color: #6b7280; }
-.side__new { border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
-.side__new:hover { background: #f9fafb; }
-.side__list { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; flex: 1; }
-.side__list li { display: flex; align-items: center; gap: 6px; padding: 9px 10px; border-radius: 8px; font-size: 12.5px; color: #4b5563; cursor: pointer; }
-.side__list li:hover { background: #f3f4f6; }
-.side__list li.on { background: #eef2ff; color: #1d4ed8; font-weight: 600; }
+.ds { display: flex; height: 100vh; background: #fff; color: #1f2329; font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif; }
+
+/* 侧栏 */
+.ds__side { width: 250px; flex: 0 0 250px; background: #f9fafb; border-right: 1px solid #eef0f3; display: flex; flex-direction: column; padding: 14px 10px; }
+.side__brand { font-size: 14px; font-weight: 700; color: #4d6bfe; padding: 4px 8px 12px; letter-spacing: 0.02em; }
+.side__new { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 4px 12px; padding: 9px 0; border-radius: 10px; border: 1px solid #dfe3ea; background: #fff; font-size: 13px; color: #1f2329; cursor: pointer; }
+.side__new:hover { border-color: #4d6bfe; color: #4d6bfe; }
+.side__scroll { flex: 1; overflow-y: auto; }
+.side__group { margin: 12px 8px 6px; font-size: 11px; color: #9aa0aa; }
+.side__item { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: #3d434d; cursor: pointer; }
+.side__item:hover { background: #eef1f6; }
+.side__item.on { background: #e8eeff; color: #4d6bfe; font-weight: 600; }
 .side__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side__del { border: none; background: none; color: #c7cbd4; cursor: pointer; }
-.side__empty { color: #c7cbd4; font-size: 12px; padding: 12px; }
-.studio__main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.studio__top { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #fff; border-bottom: 1px solid #eef1f7; }
-.studio__menu { display: none; border: none; background: none; font-size: 16px; cursor: pointer; }
-.studio__brand { display: flex; align-items: center; gap: 8px; }
-.studio__name { font-size: 14px; font-weight: 700; }
-.studio__tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #eef2ff; color: #2563eb; }
-.studio__tag.is-agent { background: #ecfdf5; color: #059669; }
-.studio__modes { margin-left: auto; display: flex; gap: 4px; background: #f3f4f6; padding: 3px; border-radius: 9px; }
-.studio__modes button { border: none; background: none; padding: 5px 12px; border-radius: 7px; font-size: 12px; color: #6b7280; cursor: pointer; }
-.studio__modes button.on { background: #fff; color: #111827; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-.studio__thread { flex: 1; overflow-y: auto; padding: 24px 20px 12px; }
-.studio__hello { max-width: 620px; margin: 8vh auto 0; text-align: center; }
-.studio__hello h2 { margin: 0 0 8px; font-size: 22px; font-weight: 700; }
-.studio__hello p { margin: 0 0 20px; font-size: 13px; color: #6b7280; }
-.studio__chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.studio__chips button { border: 1px solid #e5e7eb; background: #fff; border-radius: 999px; padding: 8px 14px; font-size: 12px; color: #4b5563; cursor: pointer; }
-.studio__chips button:hover { border-color: #c7d2fe; color: #1d4ed8; }
-.msg { display: flex; gap: 10px; max-width: 760px; margin: 0 auto 18px; }
-.msg__avatar { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; background: #9ca3af; }
-.msg--assistant .msg__avatar { background: #2563eb; }
-.msg__body { flex: 1; min-width: 0; }
-.msg--user .msg__body { background: #f3f4f6; border-radius: 12px; padding: 10px 14px; }
-.msg__text { font-size: 13.5px; line-height: 1.75; color: #1f2937; word-break: break-word; }
-.msg__text :deep(pre.code) { background: #0f172a; color: #e2e8f0; padding: 12px 14px; border-radius: 10px; overflow-x: auto; font-size: 12px; }
-.msg__text :deep(code.inline) { background: #eef1f7; padding: 1px 5px; border-radius: 5px; font-size: 12px; }
-.cursor { display: inline-block; width: 7px; height: 15px; background: #2563eb; vertical-align: -2px; animation: blink 1s steps(2) infinite; }
+.side__del { border: none; background: none; color: #c2c7cf; cursor: pointer; opacity: 0; }
+.side__item:hover .side__del { opacity: 1; }
+
+/* 主区 */
+.ds__main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ds__top { display: flex; align-items: center; gap: 12px; padding: 12px 22px; border-bottom: 1px solid #f0f2f5; }
+.ds__menu { display: none; border: none; background: none; font-size: 16px; cursor: pointer; }
+.ds__model { display: flex; gap: 4px; background: #f4f5f7; padding: 3px; border-radius: 10px; }
+.ds__model button { border: none; background: none; padding: 6px 14px; border-radius: 8px; font-size: 12.5px; color: #5c6270; cursor: pointer; }
+.ds__model button.on { background: #fff; color: #4d6bfe; font-weight: 600; box-shadow: 0 1px 3px rgba(77,107,254,.14); }
+
+.ds__thread { flex: 1; overflow-y: auto; padding: 28px 22px 10px; }
+.ds__welcome { max-width: 640px; margin: 10vh auto 0; }
+.ds__welcome h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #1f2329; }
+.ds__welcome-sub { margin: 0 0 22px; font-size: 13px; color: #8a909c; }
+.ds__cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ds__card { text-align: left; border: 1px solid #eef0f3; background: #fbfcfd; border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: all 160ms ease; }
+.ds__card:hover { border-color: #c9d4ff; background: #f6f9ff; transform: translateY(-1px); }
+.ds__card-title { display: block; font-size: 13px; font-weight: 600; color: #2b3140; margin-bottom: 4px; }
+.ds__card-desc { display: block; font-size: 11.5px; color: #9aa0aa; }
+
+.ds-msg { max-width: 760px; margin: 0 auto 22px; display: flex; gap: 12px; }
+.ds-msg__who { width: 26px; flex: 0 0 26px; font-size: 11px; font-weight: 700; color: #fff; background: #c9ced8; border-radius: 7px; display: flex; align-items: center; justify-content: center; height: 26px; }
+.ds-msg--assistant .ds-msg__who { background: linear-gradient(135deg, #4d6bfe, #7a90ff); }
+.ds-msg__main { flex: 1; min-width: 0; }
+.ds-msg--user .ds-msg__main { background: #f4f6fa; border-radius: 12px; padding: 10px 14px; }
+.ds-msg__text { font-size: 14px; line-height: 1.8; color: #1f2329; word-break: break-word; }
+.ds-msg__text :deep(pre.code) { background: #0f172a; color: #e6edf3; padding: 13px 15px; border-radius: 10px; overflow-x: auto; font-size: 12.5px; margin: 10px 0; }
+.ds-msg__text :deep(code.inline) { background: #eef1f6; padding: 1px 5px; border-radius: 5px; font-size: 12.5px; }
+.cursor { display: inline-block; width: 7px; height: 15px; background: #4d6bfe; vertical-align: -2px; animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* 深度思考 */
+.think { margin-bottom: 10px; border-left: 2px solid #dbe2ff; padding-left: 12px; }
+.think__head { display: flex; align-items: center; gap: 6px; border: none; background: none; padding: 2px 0; font-size: 12.5px; color: #7a828f; cursor: pointer; }
+.think__spark { color: #4d6bfe; }
+.think__arrow { transition: transform 200ms ease; }
+.think__arrow.up { transform: rotate(180deg); }
+.think__body { margin-top: 6px; font-size: 12.5px; line-height: 1.75; color: #8a909c; font-style: italic; white-space: pre-wrap; }
+
+/* 工具卡 */
 .tools { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-.tool { border: 1px solid #e8ecfa; border-radius: 10px; background: #fafbff; font-size: 11.5px; }
+.tool { border: 1px solid #eef0f3; border-radius: 10px; background: #fbfcfd; font-size: 11.5px; }
 .tool summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; list-style: none; }
 .tool summary::-webkit-details-marker { display: none; }
 .tool__dot { width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; }
 .tool__dot.ok { background: #10b981; }
-.tool__name { font-weight: 700; color: #1d4ed8; }
-.tool__arg { color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tool__result { margin: 0; padding: 8px 10px; background: #fff; border-top: 1px solid #eef1f7; font-size: 11px; color: #4b5563; max-height: 200px; overflow: auto; }
-.studio__composer { padding: 10px 20px 16px; }
-.composer { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 8px 8px 8px 14px; box-shadow: 0 2px 10px rgba(17,24,39,.04); }
-.composer__input { flex: 1; border: none; outline: none; resize: none; font-size: 13.5px; line-height: 1.6; max-height: 140px; padding: 6px 0; background: none; }
-.composer__btn { border: none; background: #2563eb; color: #fff; padding: 8px 16px; border-radius: 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.composer__btn:disabled { background: #c7d2fe; cursor: not-allowed; }
-.composer__btn.stop { background: #ef4444; }
-.composer__hint { max-width: 760px; margin: 6px auto 0; font-size: 10.5px; color: #b6bcc8; text-align: center; }
-@media (max-width: 820px) {
-  .studio__side { position: absolute; z-index: 20; height: 100%; transform: translateX(-100%); transition: transform 220ms ease; }
-  .studio__side.is-open { transform: none; }
-  .studio__menu { display: block; }
-  .msg { max-width: none; }
+.tool__name { font-weight: 700; color: #4d6bfe; }
+.tool__arg { color: #a8aeb8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool__result { margin: 0; padding: 8px 10px; background: #fff; border-top: 1px solid #f0f2f5; font-size: 11px; color: #5c6270; max-height: 200px; overflow: auto; }
+
+/* 输入区 */
+.ds__composer { padding: 8px 22px 14px; }
+.composer { max-width: 760px; margin: 0 auto; border: 1px solid #e3e6ec; border-radius: 18px; background: #fff; padding: 10px 12px 8px; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.composer.has-text { border-color: #c9d4ff; box-shadow: 0 4px 18px rgba(77,107,254,.08); }
+.composer__input { width: 100%; border: none; outline: none; resize: none; font-size: 14px; line-height: 1.7; max-height: 150px; background: none; color: #1f2329; padding: 0; }
+.composer__bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #e3e6ec; background: #fff; border-radius: 999px; padding: 5px 12px; font-size: 12px; color: #5c6270; cursor: pointer; }
+.chip.on { border-color: #4d6bfe; background: #f2f5ff; color: #4d6bfe; font-weight: 600; }
+.chip__icon { font-size: 11px; }
+.send { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: none; background: #4d6bfe; color: #fff; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.send:disabled { background: #d7dbe4; cursor: not-allowed; }
+.send.stop { background: #ef4444; }
+.ds__tip { max-width: 760px; margin: 8px auto 0; text-align: center; font-size: 10.5px; color: #b6bcc8; }
+
+@media (max-width: 860px) {
+  .ds__side { position: absolute; z-index: 20; height: 100%; transform: translateX(-100%); transition: transform 220ms ease; }
+  .ds__side.is-open { transform: none; }
+  .ds__menu { display: block; }
+  .ds__cards { grid-template-columns: 1fr; }
+  .ds-msg { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cursor { animation: none; }
-  .studio__side { transition: none; }
+  .ds__side { transition: none; }
+  .ds__card { transition: none; }
 }
 </style>
 
