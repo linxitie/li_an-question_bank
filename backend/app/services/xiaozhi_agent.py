@@ -179,9 +179,9 @@ def _headers() -> Dict[str, str]:
     return {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
 
-# 官方 DeepSeek 风格的两个模型档位
-MODEL_CHAT = "deepseek-chat"          # V3 普通对话
-MODEL_REASONER = "deepseek-reasoner"  # R1 深度思考
+# 两个模型档位（ID 由服务商约定，换服务商只改这里）
+MODEL_CHAT = "deepseek-chat"          # 标准对话档
+MODEL_REASONER = "deepseek-reasoner"  # 深度思考档
 
 
 async def stream_chat(
@@ -191,7 +191,7 @@ async def stream_chat(
 ) -> AsyncIterator[Dict[str, str]]:
     """真流式：逐块 yield {"kind": "reasoning"|"text", "text": ...}。
 
-    deepseek-reasoner 先返回 reasoning_content（思考过程）再返回正式答案，
+    深度思考档会先返回 reasoning_content（思考过程）再返回正式答案，
     这里把两者分开推给前端，前端分别渲染成「深度思考」折叠区与正文。
     """
     use_model = model or settings.LLM_MODEL or MODEL_CHAT

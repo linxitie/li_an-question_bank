@@ -1,5 +1,5 @@
 <template>
-  <div class="xz" :style="{ fontSize: state.fontSize + 'px' }">
+  <div class="xz" :class="{ 'xz--dark': state.theme === 'dark' }" :style="{ fontSize: state.fontSize + 'px' }">
     <!-- 侧栏 -->
     <aside class="xz-side" :class="{ 'is-open': sideOpen }">
       <div class="xz-side__top">
@@ -121,6 +121,10 @@
       <div class="xz-drawer__panel">
         <h3>设置</h3>
         <label class="xz-drawer__row">
+          <span>外观</span>
+          <button class="xz-drawer__btn" @click="toggleTheme">{{ state.theme === "dark" ? "深色（工作台）" : "浅色（默认）" }}</button>
+        </label>
+        <label class="xz-drawer__row">
           <span>正文字号</span>
           <input type="range" min="12" max="18" v-model.number="state.fontSize" />
           <em>{{ state.fontSize }} px</em>
@@ -164,6 +168,7 @@ const state = reactive({
   busy: false,
   messages: [],
   fontSize: 14,
+  theme: "light",
 })
 let controller = null
 
@@ -441,6 +446,11 @@ function exportChat() {
   URL.revokeObjectURL(a.href)
   flash("已导出")
 }
+function toggleTheme() {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark'
+  try { localStorage.setItem('li_an_xiaozhi_theme', state.theme) } catch (e) { /* ignore */ }
+}
+
 function clearChat() {
   if (!window.confirm("清空当前对话？")) return
   state.messages = []
@@ -536,6 +546,10 @@ function stop() { if (controller) controller.abort() }
 watch(function () { return state.sessionId }, function () { scrollBottom() })
 
 onMounted(function () {
+  try {
+    const t = localStorage.getItem("li_an_xiaozhi_theme")
+    if (t === "dark" || t === "light") state.theme = t
+  } catch (e) { /* ignore */ }
   sessions.value = loadStore()
   if (sessions.value.length) switchChat(sessions.value[0].id)
   else newChat()
@@ -670,4 +684,56 @@ onMounted(function () {
   .xz-side { transition: none; }
   .xz-card { transition: none; }
 }
+
+/* ===== 深色工作台（参考 Agent Harness 的观感：深底、等宽、工具块）===== */
+.xz.xz--dark { background: #0d1117; color: #e6edf3; }
+.xz--dark .xz-side { background: #11161d; border-right-color: #1f2630; }
+.xz--dark .xz-side__brand { color: #7a90ff; }
+.xz--dark .xz-side__new { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
+.xz--dark .xz-side__new:hover { border-color: #4d6bfe; color: #8fa6ff; }
+.xz--dark .xz-side__search { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
+.xz--dark .xz-side__item { color: #aeb6c2; }
+.xz--dark .xz-side__item:hover { background: #1a212b; }
+.xz--dark .xz-side__item.on { background: #1c2740; color: #8fa6ff; }
+.xz--dark .xz-side__group { color: #6b7481; }
+.xz--dark .xz-side__foot { border-top-color: #1f2630; }
+.xz--dark .xz-side__foot button { background: #161b22; border-color: #2a323d; color: #aeb6c2; }
+.xz--dark .xz-top { border-bottom-color: #1f2630; }
+.xz--dark .xz-top__modes { background: #161b22; }
+.xz--dark .xz-top__modes button { color: #aeb6c2; }
+.xz--dark .xz-top__modes button.on { background: #223049; color: #8fa6ff; box-shadow: none; }
+.xz--dark .xz-top__hint { color: #6b7481; }
+.xz--dark .xz-welcome h1 { color: #e6edf3; }
+.xz--dark .xz-welcome__sub { color: #7d8694; }
+.xz--dark .xz-card { background: #131922; border-color: #1f2630; }
+.xz--dark .xz-card:hover { background: #18202b; border-color: #33405a; }
+.xz--dark .xz-card__t { color: #dfe6ef; }
+.xz--dark .xz-card__d { color: #6b7481; }
+.xz--dark .xz-msg--user .xz-msg__main { background: #18202b; }
+.xz--dark .xz-msg__text { color: #dfe6ef; }
+.xz--dark .xz-msg__text :deep(blockquote) { background: #131922; border-left-color: #2f3d5c; color: #aeb6c2; }
+.xz--dark .xz-msg__text :deep(.md-table th) { background: #131922; }
+.xz--dark .xz-msg__text :deep(.md-table th), .xz--dark .xz-msg__text :deep(.md-table td) { border-color: #1f2630; }
+.xz--dark .xz-msg__text :deep(.codeblock) { border-color: #1f2630; }
+.xz--dark .xz-msg__text :deep(.codeblock__bar) { background: #131922; color: #7d8694; }
+.xz--dark .xz-msg__text :deep(code.inline) { background: #1b2330; color: #c9d1d9; }
+.xz--dark .think { border-left-color: #33405a; }
+.xz--dark .think__head { color: #8b94a1; }
+.xz--dark .think__body { color: #7d8694; }
+.xz--dark .tool { background: #131922; border-color: #1f2630; }
+.xz--dark .tool__result { background: #0f151d; border-top-color: #1f2630; color: #aeb6c2; }
+.xz--dark .xz-msg__ops button { color: #6b7481; }
+.xz--dark .xz-msg__ops button:hover { background: #1a212b; color: #8fa6ff; }
+.xz--dark .composer { background: #131922; border-color: #2a323d; }
+.xz--dark .composer.has-text { border-color: #3b4f7a; box-shadow: 0 4px 18px rgba(77,107,254,.16); }
+.xz--dark .composer__input { color: #e6edf3; }
+.xz--dark .chip { background: #161b22; border-color: #2a323d; color: #aeb6c2; }
+.xz--dark .chip.on { background: #1c2740; border-color: #4d6bfe; color: #8fa6ff; }
+.xz--dark .xz-tip { color: #5b6472; }
+.xz--dark .xz-drawer__panel { background: #11161d; color: #e6edf3; }
+.xz--dark .xz-drawer__row { color: #aeb6c2; }
+.xz--dark .xz-drawer__btn { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
+.xz--dark .xz-drawer__close { background: #161b22; border-color: #2a323d; color: #c9d1d9; }
+.xz--dark .xz-jump { background: #161b22; border-color: #2a323d; color: #aeb6c2; }
+.xz-drawer__btn { flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid #e3e6ec; background: #fff; font-size: 12.5px; cursor: pointer; }
 </style>

@@ -107,6 +107,12 @@ class LLMClientError(Exception):
         super().__init__(message)
 
 
+def _chat_completions_url() -> str:
+    """把配置的基址规整成 chat/completions 完整地址（配基址或配全路径都能用）。"""
+    base_url = settings.LLM_API_URL.rstrip("/")
+    return base_url if base_url.endswith("/chat/completions") else base_url + "/chat/completions"
+
+
 async def _post(
     messages: List[Dict[str, str]],
     temperature: float,
@@ -119,8 +125,7 @@ async def _post(
     - 非 200、解析失败立即抛 LLMClientError（不重试，重试无意义）；
     - 日志不回显响应原文与请求内容。
     """
-    base_url = settings.LLM_API_URL.rstrip("/")
-    url = base_url if base_url.endswith("/chat/completions") else base_url + "/chat/completions"
+    url = _chat_completions_url()
     # 未配置密钥时必须在这里报明确的配置错误：此前会带着 "Bearer None" 打上游，
     # 上游回 401，用户只能看到「大模型返回错误（401）」，无法判断是配置缺失。
     api_key = (settings.LLM_API_KEY or "").strip()

@@ -15,7 +15,7 @@ except ImportError:
 
     AliasChoices = None  # type: ignore[assignment]
 
-# 大模型密钥的两种历史写法：规范名 LLM_API_KEY，以及仓库根 .env 里的 DEEPSEEK_API_KEY。
+# 大模型密钥的两种历史写法：规范名 LLM_API_KEY，以及仓库根 .env 里的历史变量名（向后兼容保留）。
 # 放到模块级常量，既让两种写法都生效，也避免在 config 类里写多行 Field() 被凭据扫描误判。
 _LLM_KEY_ALIASES = (
     AliasChoices("LLM_API_KEY", "DEEPSEEK_API_KEY") if AliasChoices else "LLM_API_KEY"
@@ -64,11 +64,11 @@ class Settings(BaseSettings):
     FFMPEG_PATH: str = Field("ffmpeg", env="FFMPEG_PATH")
 
     # ==================== 大模型配置（联考小智/学习计划）====================
-    # 密钥两种写法都认：LLM_API_KEY（本文件模板的规范名）与 DEEPSEEK_API_KEY
+    # 密钥两种写法都认：LLM_API_KEY（规范名）与历史变量名（只做兼容，不再新写）
     # （仓库根 .env 的历史写法）。此前只认 LLM_API_KEY，根 .env 里已有可用密钥
     # 却读不到，请求带着 "Bearer None" 打到上游，表现为「大模型返回错误（401）」。
     LLM_API_KEY: Optional[str] = Field(None, validation_alias=_LLM_KEY_ALIASES)
-    # DeepSeek 的 OpenAI 兼容地址；旧的 http://localhost:8080 默认值会导致必然连不上
+    # 大模型服务的 OpenAI 兼容地址（可换任意兼容网关）；旧的 localhost:8080 默认值必然连不上
     LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
     # 模型名（OpenAI Chat Completions 兼容协议）
     LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")

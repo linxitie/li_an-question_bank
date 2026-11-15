@@ -1,4 +1,4 @@
-# docs/ 文档索引
+﻿# docs/ 文档索引
 
 > 本索引由 `solve_problems_files/README.md` 迁移而来（目录分层重构）。
 > 归档规则：展示方案的同时落盘；定稿当场归档；归档即更新本索引。
@@ -17,6 +17,7 @@
 
 | 文档 | 版本 | 状态 | 说明 |
 |---|---|---|---|
+| `superpowers/specs/模块4与7炫技功能方案_v1.md` | v1 | 📋 待挑选（2026-11-15） | 12 个炫技功能（模块4：热力图/记忆曲线/签到星图/沉浸专注/反馈音效/周报卡；模块7：3D力导向图谱/画像雷达/溯源气泡/方案diff/多角色互评/知识定位）+ S/A/B/C/D 性价比排序 + 零新依赖技术底线 |
 | `superpowers/specs/模块4与7全面升级方案_v1.md` | v1 | 📋 待审批（2026-11-14） | 注册画像询问（动画/动态问题/自述）+ 备考方案回流 + 3D签到日历 + 番茄钟 + 遗忘曲线复习 + 三端补齐；联考小智 Obsidian 知识库与知识图谱框架；P0–P6 分阶段、20 工作日、6 项未决需拍板 |
 | `superpowers/specs/AI名师讲解视频_v1.md` | v1.0 | 📋 待审批（2026-11-03） | AI 名师讲解视频模块可落地方案：749 行，六个判定 + 与 AI讲师知识库 的媒资台账衔接 |
 | `superpowers/specs/AI讲师知识库_搭建说明_v1.md` | v1 | 🗄️ 历史版本（被 v2 取代） | Obsidian 子库 `D:\Obsidian仓库\AI讲师知识库` 首版：15 目录 + 76 集台账 + 7 系列总览 + 4 Canvas |
@@ -99,7 +100,7 @@
 
 - 2026-11-13：**仓库文件全面只读扫描**。实测顶层体积（`.git` 946.6 MB / `node_modules` 708.3 MB / `backend` 608.9 MB / `题库` 497.3 MB / `docs` 65.6 MB）、2461 个业务文件类型分布、后端 `api/v1` 十子域与 foundation/core/services 分层、前端 20 模块 + `.vtj` 80 页（PC66/手机7/平板7）、Git 工作区改动；报告 `superpowers/specs/仓库文件全面扫描_报告_20261113.md`。11 项与基线偏差待复核，其中 pre-wipe 行测备份位置需人工确认，清理前一律不得动。
 
-- 2026-11-13：**提取 dsh（DeepSeek Harness）侧砺安题库记忆**。覆盖 neuron 运行记忆、仓库内 switchman 交接（10 份 handover + tasks + artifacts）、`.memory` 跨会话档案三层；梳理出远端 `linxitie/li_an-question_bank` 与 socks5h 代理 7897、前端 9527/后端 8001（8000 WinError 10013 拒绑、5173/8000 为 svchost 假监听）、三套测试账号、模块4/7 十条改造进度（A3 注册建画像已三层验证、台账已刷新 25 模块/343 端点、A2 动态问题前端 12/12 断言通过，待 commit+push）、关键 file:line 定位与禁提交杂物清单；报告 `superpowers/specs/dsh项目记忆提取_报告_20261113.md`。dsh 记忆里的旧克隆路径、19999 端口、26 模块等过期口径已在报告 §6 标注漂移。
+- 2026-11-13：**提取 dsh（大模型服务 Harness）侧砺安题库记忆**。覆盖 neuron 运行记忆、仓库内 switchman 交接（10 份 handover + tasks + artifacts）、`.memory` 跨会话档案三层；梳理出远端 `linxitie/li_an-question_bank` 与 socks5h 代理 7897、前端 9527/后端 8001（8000 WinError 10013 拒绑、5173/8000 为 svchost 假监听）、三套测试账号、模块4/7 十条改造进度（A3 注册建画像已三层验证、台账已刷新 25 模块/343 端点、A2 动态问题前端 12/12 断言通过，待 commit+push）、关键 file:line 定位与禁提交杂物清单；报告 `superpowers/specs/dsh项目记忆提取_报告_20261113.md`。dsh 记忆里的旧克隆路径、19999 端口、26 模块等过期口径已在报告 §6 标注漂移。
 
 - 2026-11-06：**「未分类题目可答题与分类回填」已批准并实施可答题链路，PC 浏览器真机验收通过**。668 题 `sub_category_id IS NULL`（行测 341 / 申论 11 / 公专 316）；160 题有旧字段/qk 证据，**已 apply，未分类 668→508**（行测 192 / 申论 0 / 公专 316）；508 题保留「未分类」可答题；已改 0 号 API（`subjectId` + `sub_category_id IS NULL`）、PC/手机入口、回填脚本、3 条接口测试；Obsidian 429 文件/断链 0；**PC 真机 20 题进入→作答→交卷，控制台 20 条记录，落库后按 ID 清理**；**160 行仅改 sub_category_id，核心字段指纹不变**。报告 `superpowers/specs/快速练习未分类题目可答题与分类回填_实施报告_v1.md`。
 
@@ -762,7 +763,7 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 - （2）playwright-MCP--用于模拟人的行为进行查看浏览器内容，可以用来让AI测试前端设计效果、也可以用来进行爬虫应对反爬机制等等
 - （3）superpower（skills）--主要使用模块是其brainstorm、writting-plans，它是用一套可组合的“工程纪律”技能，保证设计的可靠性、多维、多方面、全方位的思考要求。
 强制让AI走完思考 → 计划 → 编码 → 验证 → 审查的完整工程闭环
-- （4）工作流--大家可以去多问一下其他AI（deepseek、千问、智普等等），让他们来设计针对你使用的AI设计你相应的功能模块的必须工作流，保证使用时可以按照工作流的内容设计、不至于让其胡思乱下、偷工减料、出现AI幻觉等（这个可能需要在不断地测试，摸索之后才有点头绪）
+- （4）工作流--大家可以去多问一下其他AI（大模型服务、千问、智普等等），让他们来设计针对你使用的AI设计你相应的功能模块的必须工作流，保证使用时可以按照工作流的内容设计、不至于让其胡思乱下、偷工减料、出现AI幻觉等（这个可能需要在不断地测试，摸索之后才有点头绪）
 -（5）大家若有其他好的skills、MCP-server、工作流或者其他的能够高效使用AI的方法都可以交流分享
 
 ## 3.我自己一般使用的约束提示词（大家参考着用吧，可以天马行空的想其他的约束词，高效能用就是好的）
@@ -903,8 +904,8 @@ docker compose cp backend:/app/data/backups/<备份文件>.db .\backup_from_dock
 | `ops/变更清单_学生端练习记录可视化_v1.md` | v1 | ✅ 已归档（2026-11-01） | 按功能主题拆分的改动清单（env / db 迁移 / 草稿与 type-summary / 续答端点 / 统计端点 / 前端图表与卡片 / 导航高亮 / 文档 / 启动脚本）+ 第 10 节按主题回滚指引；仓库新建后首提交为整仓基线，此清单保留原「按功能拆分」意图 |
 | `superpowers/specs/联考小智功能开发中与前后端版本一致性_报告_20261102.md` | v1 | ✅ 已落地（2026-11-02） | 「功能开发中/请求参数验证失败」根因是旧 bundle 与旧后端进程，非代码缺失；新增前后端版本自检（`buildStamp` 注入 SHA、`/health.revision`、前端不一致弹窗）+ 排障规约（父子进程、端口残留、硬刷新）；改用 SSH deploy key 推送，合并远端 27+ 提交后 main 同步 |
 | `superpowers/specs/论坛图片上传接口405排查_报告_20261102.md` | v1 | ✅ 已修复（2026-11-02） | `POST /api/media/image` 405 根因：`60ca515` 合并时丢掉了 `app.include_router(image_media.router)`，请求落到 `GET /api/media/{asset_id}` 兜底路由；修复后 openapi 恢复该路由、无 token 401、教师实传 200；新增 `tests/test_router_registration.py` 关键路由清单守卫（媒体/论坛/小智/计划/考试/登录/健康），防止同类「合并丢注册」静默复发 |
-| `superpowers/specs/向量投影Embedding服务配置与故障治理_v1.md` | v1 | 📋 方案（待批准实施） | `embedding_error … HTTP 404` 根因：DeepSeek 官方无 `/embeddings`（模型清单仅 deepseek-flash / deepseek-v4-pro），被误当向量服务。含 A/B/C/D/E 五套方案（SiliconFlow bge-m3 / DashScope text-embedding-v3 / 智谱 embedding-3 / 本地 Ollama / 关闭降级）、维度一致性规则、三步自检、索引重建与 4 项代码加固计划 |
-| `superpowers/specs/学习计划大模型401与503修复_报告_20261031.md` | v1 | ✅ 已修复（2026-10-31） | 学习计划 `POST /api/plan/generate` 503、前端「大模型返回错误（401）」：根 .env 用 `DEEPSEEK_API_KEY`、后端只认 `LLM_API_KEY` 且只读 `backend/.env`（该文件缺失），叠加 config.py 中重复的大模型配置块互相覆盖；改为 `AliasChoices` 双名兼容 + `env_file=(".env","../.env")` + 去重 + 缺密钥/401 分别报 `llm_no_key`/`llm_unauthorized`；实测 generate 200（49 天 4 任务），新增 4 条回归测试 |
+| `superpowers/specs/向量投影Embedding服务配置与故障治理_v1.md` | v1 | 📋 方案（待批准实施） | `embedding_error … HTTP 404` 根因：大模型服务 官方无 `/embeddings`（模型清单仅 大模型服务-flash / 大模型服务-v4-pro），被误当向量服务。含 A/B/C/D/E 五套方案（SiliconFlow bge-m3 / DashScope text-embedding-v3 / 智谱 embedding-3 / 本地 Ollama / 关闭降级）、维度一致性规则、三步自检、索引重建与 4 项代码加固计划 |
+| `superpowers/specs/学习计划大模型401与503修复_报告_20261031.md` | v1 | ✅ 已修复（2026-10-31） | 学习计划 `POST /api/plan/generate` 503、前端「大模型返回错误（401）」：根 .env 用 `大模型服务_API_KEY`、后端只认 `LLM_API_KEY` 且只读 `backend/.env`（该文件缺失），叠加 config.py 中重复的大模型配置块互相覆盖；改为 `AliasChoices` 双名兼容 + `env_file=(".env","../.env")` + 去重 + 缺密钥/401 分别报 `llm_no_key`/`llm_unauthorized`；实测 generate 200（49 天 4 任务），新增 4 条回归测试 |
 | `superpowers/specs/教师账号无法登录排查_报告_20261101.md` | v1 | ✅ 已修复（2026-11-01） | 教师账号 `ycc5678` 登录报「用户名不存在」：备份对照证明 `sys_user.user_id=3` 的 `username` 在 10-26 之后被从 `ycc5678` 改成中文姓名（密码哈希、注册时间未变），而登录只匹配 username/phone；登录代码自创建起即如此、应用内无任何写 username 的代码 → 属数据层改动而非代码回归。修复：按 R10 用 `sqlite3.backup()` 快照后把 username 复原，并把 `user_no` 纳入登录标识；新增 5 条回归测试 |
 | `superpowers/specs/试卷管理交互缺陷修复与拖拽设计_v1.md` | v1 | ✅ 已实施 / 已验收（2026-11-01） | 教师端试卷管理 5 项缺陷：删除闭环/空白按钮/拖拽排序/左栏预览/状态科目徽章；实测根因、D1–D6、I1–I4 微创新、DoD 与待拍板 4 项；不改后端 API/DB 与 .vtj raw 模板 |
 | `superpowers/plans/试卷管理交互缺陷修复与拖拽实施计划_v1.md` | v1 | ✅ P0–P7 已完成（2026-11-01） | 与设计配套的 P0–P7：纯函数+vitest→按钮/徽章→删除回收站→右栏拖拽→左栏拖入→预览→验证→归档；含依赖顺序、风险检查点与只提交本任务文件的约束 |
