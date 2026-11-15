@@ -40,3 +40,31 @@
 - 卡片完整度：定义 / 样例 / 易错点 三要素齐全率
 - 断链数：必须为 0
 - 孤儿页：无入链的页面数量
+
+
+## 索引
+
+### 科目与考点（脚本生成）
+
+- 科目总览：[[01-科目/行测|行测]]
+- 考点页：[[02-考点/行测/言语理解与表达|言语理解与表达]] · [[02-考点/行测/判断推理|判断推理]] · [[02-考点/行测/数量关系|数量关系]] · [[02-考点/行测/资料分析|资料分析]] · [[02-考点/行测/常识判断|常识判断]] · [[02-考点/行测/综合考点|综合考点]]
+
+### 画像与方案
+
+- [[06-画像与方案/画像维度说明|画像维度说明]]
+- [[06-画像与方案/方案生成链路|方案生成链路]]
+
+### 系统
+
+- [[99-系统/命名与同步规则|命名与同步规则]]
+- [[99-系统/知识图谱模型|知识图谱模型]]
+
+### 维护命令
+
+```bash
+python backend/scripts/build_kg_framework.py     # 建知识点树
+python backend/scripts/build_kg_edges.py         # 建 contains 结构边
+python backend/scripts/build_kg_relations.py     # 建前置/易混语义边
+python backend/scripts/export_knowledge_vault.py # SQLite -> vault 导出
+python backend/scripts/check_vault_health.py     # 断链/孤儿/健康度
+```
