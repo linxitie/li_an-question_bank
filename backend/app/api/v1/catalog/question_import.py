@@ -37,7 +37,8 @@ from ....services.question_classifier import (
     QuestionClassifier, detect_subcategory_enhanced, UNCLASSIFIED,
 )
 from ....services import text_cache  # 文档提取文本缓存（P0 提速，260s→0.02s）
-from ....services.paper_stats import recount_paper_questions, next_question_order
+from ....services.paper_stats import (
+    recount_paper_questions, next_question_order, normalize_question_orders)
 from ....services.question_ingest.excel_reader import (  # J-3：列名容错 + 表头探测 + GBK 嗅探
     get_field_value as _xlsx_field,          # 别名容忍的取值（同一列名多种写法）
     parse_excel_buffer as _parse_excel_buffer,   # 多 sheet + 表头行探测
@@ -1552,6 +1553,7 @@ async def batch_import_parsed(
 
     paper_id: Optional[int] = None
     linked = 0
+    order_fixed = 0            # D8：本次按题号对齐的题序条数（没有卷/未触发时为 0）
     if is_paper_doc and (ok_ids or reused_ids):
         try:
             paper = _get_or_create_import_paper(
@@ -1602,6 +1604,17 @@ async def batch_import_parsed(
             # 实测 110 题的试卷被记成 1 题。
             paper.question_count = recount_paper_questions(db, paper)
             paper_id = paper.paper_id
+            # D8（2026-11-15）：追加模型（max+1）会让分批补录的题排到卷尾 →
+            # 关联写完后按题号把整卷题序对齐；不满足前提（无题号/重复）时一条不改。
+            try:
+                norm = normalize_question_orders(db, paper_id)
+                order_fixed = int(norm.get("changed") or 0)
+                if order_fixed:
+                    logger.info(f"[batch-parsed] 卷#{paper_id} 题序按题号对齐 {order_fixed} 条")
+                elif norm.get("skipped_reason"):
+                    logger.info(f"[batch-parsed] 卷#{paper_id} 题序未对齐（{norm['skipped_reason']}）")
+            except Exception as ne:  # noqa: BLE001 — 规整失败绝不能影响导入
+                logger.warning(f"[batch-parsed] 题序对齐失败(不阻断): {ne}")
             logger.info(f"[batch-parsed] 试卷#{paper_id} 关联{linked}题 "
                         f"(累计{paper.question_count})")
         except Exception as pe:  # noqa: BLE001 — 建卷失败不阻断题库入库
@@ -1703,6 +1716,8 @@ async def batch_import_parsed(
         'match_rate': match_rate,
         'paper_id': paper_id,
         'paper_name': paper_name or None,
+        # D8：本次导入后按题号对齐了多少条题序（0/缺省 = 没动或本来对齐）
+        'order_fixed': order_fixed,
         'message': msg,
     }
 
@@ -2935,6 +2950,14 @@ async def confirm_batch_import(
                         linked_count += 1
                     # P1-3：与批量导入一致，question_count 以关联行实际数量重算
                     paper.question_count = recount_paper_questions(db, paper)
+                    # D8（2026-11-15）：确认导入同样是追加模型 → 写完关联按题号对齐一次
+                    try:
+                        norm = normalize_question_orders(db, paper.paper_id)
+                        if norm.get("changed"):
+                            logger.info(f"[import] 卷#{paper.paper_id} 题序按题号对齐 "
+                                        f"{norm['changed']} 条")
+                    except Exception as ne:  # noqa: BLE001 — 规整失败不阻断导入
+                        logger.warning(f"[import] 题序对齐失败(不阻断): {ne}")
                     db.commit()
                     logger.info(f"[import] 题目已关联到试卷: paper_id={paper.paper_id} linked={linked_count}")
             except Exception as e:

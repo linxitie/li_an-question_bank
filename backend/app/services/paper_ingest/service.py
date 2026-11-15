@@ -401,6 +401,9 @@ def confirm_draft(db: Session, draft: PaperParseDraft, *,
             status=1,
             audit_status=1,
             question_level=2 if item.get("section") else 1,
+            # D8（2026-11-15）：把题号也写进 question_number —— 以前只写 question_order，
+            # 导致"按题号定序"（paper_stats.normalize_question_orders）对导题入库的卷不成立。
+            question_number=(str(item["no"]) if str(item.get("no") or "").isdigit() else None),
             sort_order=order,
         )
         db.add(q)

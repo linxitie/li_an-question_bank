@@ -11,7 +11,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models.models import ExamPaper, PaperQuestionRelation
+from ..models.models import ExamPaper, PaperQuestionRelation, QuestionBank
 
 
 def recount_paper_questions(db: Session, paper: ExamPaper) -> int:
@@ -43,3 +43,50 @@ def next_question_order(db: Session, paper_id: int) -> int:
         or 0
     )
     return int(current_max) + 1
+
+
+def normalize_question_orders(db: Session, paper_id: int, *, apply: bool = True) -> dict:
+    """按**题号**把卷内题序对齐（D8，2026-11-15）。不满足前提就一条不改。
+
+    为什么需要它：导入路径是"追加模型"（`next_question_order` = max+1），
+    只要一张卷**分批补录**，后补的题就会排到卷尾 —— 2024 国考卷 #4 实测 100 条里 60 条错位，
+    当时只能靠 `backend/scripts/seed_2024_gk/fix_relation_order.py` 事后修。
+    这里把那条规则（`question_order = question_number`）搬进服务层，导入完自动对齐。
+
+    前提（与修复脚本同口径，**宁可不改也不误伤**）：
+      · 该卷所有关联题都有**纯数字题号**；
+      · 题号**互不重复**。
+
+    Returns:
+        {"total": int, "changed": int, "skipped_reason": str|None}
+        `skipped_reason`: empty / non-numeric / duplicate
+    """
+    db.flush()
+    rels = (db.query(PaperQuestionRelation)
+              .filter(PaperQuestionRelation.paper_id == paper_id).all())
+    total = len(rels)
+    if not total:
+        return {"total": 0, "changed": 0, "skipped_reason": "empty"}
+
+    qids = [r.question_id for r in rels]
+    nums = dict(db.query(QuestionBank.question_id, QuestionBank.question_number)
+                  .filter(QuestionBank.question_id.in_(qids)).all())
+    want: dict = {}
+    for qid in qids:
+        raw = str(nums.get(qid) or "").strip()
+        if not raw.isdigit() or len(raw) > 4:
+            return {"total": total, "changed": 0, "skipped_reason": "non-numeric"}
+        want[qid] = int(raw)
+    if len(set(want.values())) != len(want):
+        return {"total": total, "changed": 0, "skipped_reason": "duplicate"}
+
+    changed = 0
+    for rel in rels:
+        target = want[rel.question_id]
+        if int(rel.question_order or 0) != target:
+            changed += 1
+            if apply:
+                rel.question_order = target
+    if apply and changed:
+        db.flush()
+    return {"total": total, "changed": changed, "skipped_reason": None}
