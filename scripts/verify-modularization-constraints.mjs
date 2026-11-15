@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * 模块化约束校验脚本（P1-02）
  *
@@ -49,7 +49,9 @@ const VTJ_LOCKED_VERSIONS = {
 // 104 = 105 - 1（2026-11-12 S4：旧版资料页 /admin/materials/legacy 路由下线 ——
 //   S3/xlsx 卡片智能导入与 S2/富文本正文已搬进新版页；`.vtj` 页面文件按 R1 保留，
 //   只是不再挂路由。与 test_route_roles 的 104 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 104;
+// 105 = 104 + 1（2026-11-15 D6：手机端结果页 /mobile/paper-result 新增 1 条页面路由，
+//   与 test_route_roles 的 105 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 105;
 
 const violations = [];
 

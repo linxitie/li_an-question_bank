@@ -684,6 +684,13 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
+    // D6（2026-11-15）：手机端结果页 —— 以前答完试直接跳 PC 的 /paper-result（桌面版式）
+    path: '/mobile/paper-result',
+    name: 'MobilePaperResult',
+    component: () => import('@/views/student/mobile/mobile_paper_result.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
     path: '/mobile/notifications',
     name: 'MobileNotifications',
     component: () => import('@/views/student/mobile/mobile_notifications.vue'),

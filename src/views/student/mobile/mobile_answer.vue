@@ -800,9 +800,11 @@ const submitPaperExam = async (opts: { auto?: boolean } = {}) => {
       window.alert(json?.detail || json?.message || '交卷失败，请重试');
       return;
     }
-    // 交卷成功 → 结果页（PC/手机共用；结果页口径已统一为 is_scored + answered_count）
+    // 交卷成功 → 结果页。D6（2026-11-15）：手机端走**自己的**结果页，
+    // 以前这里跳 `/paper-result`（PC 版式，手机上元素挤）；数据与口径复用同一接口
+    // 与 `buildExamSummary`，所以两端分数/正确率不会打架。
     stopTimer();
-    router.replace(`/paper-result?record_id=${recordId.value}&paper_id=${paperId.value}`);
+    router.replace(`/mobile/paper-result?record_id=${recordId.value}&paper_id=${paperId.value}`);
   } catch (e) {
     console.error('交卷失败:', e);
     window.alert('网络异常，交卷未成功，请重试');
