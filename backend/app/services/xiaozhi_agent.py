@@ -1,7 +1,7 @@
-# 联考小智 · Codex 模式（模块7）
+# 联考小智 · 工作台能力（模块7）
 # 提供两件事：
 #   1) 真流式对话（SSE token 增量）
-#   2) 带工具调用的 Agent 循环（读知识库 / 统计 / 计算），像 Codex 一样多步执行
+#   2) 带工具调用的执行循环（读知识库 / 统计 / 计算），可多步完成复杂问题
 # 全部为新增端点，不改既有 /api/llm/* 契约（R11 只增不改）。
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ from ..models.models import (
 
 logger = logging.getLogger(__name__)
 
-CODEX_SYSTEM = (
-    "你是联考小智的 Codex 模式：一个能调用工具完成多步任务的学习助理。\n"
+XIAOZHI_SYSTEM = (
+    "你是联考小智，公安联考备考助手：能调用工具完成多步任务，帮学生查考点、看数据、算分数、排计划。\n"
     "规则：1) 能查就别猜，需要事实时调用工具；2) 工具结果为空就说「库里没有」，不要编造；\n"
     "3) 回答直接、可执行，不写免责声明；4) 涉及代码/命令时给完整可运行版本。"
 )
@@ -197,7 +197,7 @@ async def stream_chat(
     use_model = model or settings.LLM_MODEL or MODEL_CHAT
     payload = {
         "model": use_model,
-        "messages": [{"role": "system", "content": CODEX_SYSTEM}, *messages],
+        "messages": [{"role": "system", "content": XIAOZHI_SYSTEM}, *messages],
         "stream": True,
     }
     if use_model != MODEL_REASONER:
@@ -235,7 +235,7 @@ async def run_agent(
     max_steps: int = 6,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Agent 循环：模型决定是否调工具，逐步执行，最后给答案。yield 事件字典。"""
-    convo: List[Dict[str, Any]] = [{"role": "system", "content": CODEX_SYSTEM}, *messages]
+    convo: List[Dict[str, Any]] = [{"role": "system", "content": XIAOZHI_SYSTEM}, *messages]
     headers = _headers()
     model = settings.LLM_MODEL
 

@@ -1,4 +1,4 @@
-# 联考小智 · Codex 模式 API（模块7）
+# 联考小智 · 工作台 API（模块7）
 # - POST /api/llm/chat/stream   SSE 真流式对话
 # - POST /api/llm/agent/stream  SSE Agent 循环（工具调用可见）
 # 两者均为新增端点，不改既有 /api/llm/* 契约。
@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 from ....core.database import get_db
 from ....core.security import get_current_user
 from ....models.models import SysUser
-from ....services import codex_agent
+from ....services import xiaozhi_agent
 
-router = APIRouter(prefix="/api/llm", tags=["联考小智-Codex"])
+router = APIRouter(prefix="/api/llm", tags=["联考小智"])
 logger = logging.getLogger(__name__)
 
 MAX_HISTORY = 20
@@ -55,7 +55,7 @@ async def chat_stream(
 
     async def gen():
         try:
-            async for chunk in codex_agent.stream_chat(messages, model=payload.model or ""):
+            async for chunk in xiaozhi_agent.stream_chat(messages, model=payload.model or ""):
                 kind = chunk.get("kind", "text")
                 if kind == "reasoning":
                     yield _sse({"type": "reasoning", "text": chunk.get("text", "")})
@@ -83,7 +83,7 @@ async def agent_stream(
 
     async def gen():
         try:
-            async for event in codex_agent.run_agent(messages, db, current_user):
+            async for event in xiaozhi_agent.run_agent(messages, db, current_user):
                 yield _sse(event)
         except Exception as e:  # noqa: BLE001
             logger.exception("agent_stream 失败")
@@ -101,6 +101,6 @@ async def list_tools(current_user: SysUser = Depends(get_current_user)):
     return {
         "tools": [
             {"name": t["function"]["name"], "description": t["function"]["description"]}
-            for t in codex_agent.TOOLS
+            for t in xiaozhi_agent.TOOLS
         ]
     }
