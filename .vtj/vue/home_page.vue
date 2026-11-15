@@ -16,6 +16,9 @@
           <ExamCalendar></ExamCalendar>
         </div>
       </section>
+      <section class="plan-section">
+        <StudyPlanCard variant="home" />
+      </section>
       <section class="study-materials-section">
         <StudyMaterialsEntry></StudyMaterialsEntry>
       </section>
@@ -126,6 +129,9 @@
         </p>
       </footer>
     </main>
+
+    <!-- 番茄钟小窗（模块4 P3）：固定在右下角，专注结束顺手补签到 -->
+    <PomodoroWidget />
   </div>
 </template>
 <script lang="ts">
@@ -144,6 +150,8 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   import CountdownTimer from './countdown_timer.vue';
   import ExamCalendar from './exam_calendar_block.vue';
   import StudyMaterialsEntry from './study_materials.vue';
+  import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
+  import PomodoroWidget from '@/components/focus/PomodoroWidget.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCheckinStore } from '@/modules/checkin/store';
@@ -193,6 +201,8 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       CountdownTimer,
       ExamCalendar,
       StudyMaterialsEntry,
+      StudyPlanCard,
+      PomodoroWidget,
       XIcon
     },
     setup(props) {

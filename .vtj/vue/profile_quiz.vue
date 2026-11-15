@@ -30,7 +30,7 @@
       </div>
 
       <!-- 问卷向导 -->
-      <div v-else class="form-card">
+      <div v-else class="form-card" :class="state.dir > 0 ? 'slide-next' : 'slide-prev'" :key="state.step">
         <div class="step-progress">
           <div v-for="(s, i) in state.template.steps" :key="i" class="step-dot"
                :class="{ active: i === state.step, done: i < state.step }">
@@ -60,6 +60,11 @@
           <input v-else-if="f.type === 'text'" type="text" v-model="state.answers[f.key]"
                  class="form-input" :placeholder="f.label"/>
 
+          <!-- 长文本（自述学习情况） -->
+          <textarea v-else-if="f.type === 'textarea'" v-model="state.answers[f.key]"
+                    class="form-textarea" rows="5"
+                    :placeholder="f.placeholder || f.label"></textarea>
+
           <!-- 日期 -->
           <input v-else-if="f.type === 'date'" type="date" v-model="state.answers[f.key]"
                  class="form-input"/>
@@ -78,6 +83,7 @@
         <div class="step-actions">
           <button v-if="state.step > 0" class="btn ghost" @click="prevStep">上一步</button>
           <button v-else class="btn ghost" @click="state.template = null">换风格</button>
+          <button class="btn ghost" @click="reshuffle">换一批问题</button>
           <button v-if="!isLastStep" class="btn primary" :disabled="!canNext" @click="nextStep">下一步</button>
           <button v-else class="btn primary" :disabled="state.saving" @click="submit">
             {{ state.saving ? '保存中…' : '生成我的备考方案' }}
@@ -90,11 +96,14 @@
 
 <script setup>
 import { reactive, computed, onMounted } from 'vue'
+import { buildSteps, initialAnswers } from '@/modules/profile-quiz/pool'
 
 const state = reactive({
   templates: [],
   template: null,
   step: 0,
+  dir: 1,
+  seed: '',
   answers: {},
   loading: false,
   saving: false,
@@ -127,17 +136,36 @@ function selectTemplate(id) {
   if (!t) return
   state.template = t
   state.step = 0
+  state.dir = 1
+  state.seed = String(Date.now()) + ':' + Math.random().toString(36).slice(2)
+  // 动态问题池：每次进入换一批问法，避免“问题单一”
+  const dynamic = buildSteps({ seed: state.seed })
+  if (dynamic.length) t.steps = dynamic
   state.answers = {}
   t.steps.forEach((s) => {
     s.fields.forEach((f) => {
-      state.answers[f.key] = f.type === 'multi' ? [] : (f.type === 'slider' ? f.min : '')
+      state.answers[f.key] = f.type === 'multi' ? [] : (f.type === 'slider' ? (f.min ?? 1) : '')
     })
   })
 }
 
-function prevStep() { if (state.step > 0) state.step -= 1 }
+function prevStep() {
+  if (state.step > 0) { state.dir = -1; state.step -= 1 }
+}
 
-function nextStep() { if (!isLastStep.value) state.step += 1 }
+function nextStep() {
+  if (!isLastStep.value) { state.dir = 1; state.step += 1 }
+}
+
+/** 换一批问题：问法轮换，已答内容保留 */
+function reshuffle() {
+  if (!state.template) return
+  state.seed = String(Date.now()) + ':' + Math.random().toString(36).slice(2)
+  const dynamic = buildSteps({ seed: state.seed })
+  if (dynamic.length) state.template.steps = dynamic
+  state.step = 0
+  state.dir = 1
+}
 
 function goHome() { location.hash = '#/question_bank' }
 
@@ -244,3 +272,53 @@ onMounted(loadTemplates)
 .btn.primary:disabled { background: #93c5fd; cursor: not-allowed; }
 .btn.ghost { background: #f3f4f6; color: #374151; }
 </style>
+
+<style scoped>
+/* ---- 动态过渡：卡片滑动进场（参考多邻国/百词斩的节奏） ---- */
+.form-card { will-change: transform, opacity; }
+.form-card.slide-next { animation: slideNext 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.form-card.slide-prev { animation: slidePrev 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes slideNext {
+  from { opacity: 0; transform: translateX(28px) scale(0.985); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes slidePrev {
+  from { opacity: 0; transform: translateX(-28px) scale(0.985); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.step-dot.done { animation: pop 220ms ease-out both; }
+@keyframes pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+/* 长文本（自述学习情况） */
+.form-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.form-textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .form-card.slide-next,
+  .form-card.slide-prev,
+  .step-dot.done { animation: none; }
+}
+</style>
+
