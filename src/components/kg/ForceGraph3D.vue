@@ -89,10 +89,16 @@ function tick() {
     a.vx += (dx / d) * f; a.vy += (dy / d) * f; a.vz += (dz / d) * f
     b.vx -= (dx / d) * f; b.vy -= (dy / d) * f; b.vz -= (dz / d) * f
   })
+  const LIMIT = 300  // 越界钳制：防止力导后期把球体顶出画布
   nodes.forEach(function (n) {
     n.vx -= n.x * 0.0016; n.vy -= n.y * 0.0016; n.vz -= n.z * 0.0016
     n.vx *= 0.86; n.vy *= 0.86; n.vz *= 0.86
     n.x += n.vx; n.y += n.vy; n.z += n.vz
+    const len = Math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z)
+    if (len > LIMIT) {
+      const k = LIMIT / len
+      n.x *= k; n.y *= k; n.z *= k
+    }
   })
 }
 
