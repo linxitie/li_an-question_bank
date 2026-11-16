@@ -539,6 +539,7 @@
   import { defineComponent, reactive, onMounted, computed } from 'vue';
   import ProfileQuizInline from '@/components/plan/ProfileQuizInline.vue';
   import NavBar from './navbar.vue';
+  import { bindTaskFeedback } from '@/composables/useTaskFeedback';
 
   export default defineComponent({
     name: 'StudyPlan',
@@ -973,6 +974,8 @@
       }
 
       onMounted(async () => {
+        // 任务勾选反馈（4-5）：音效 + 卡片弹动，模板零改动
+        bindTaskFeedback();
         try {
           const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
           const data = await res.json();
