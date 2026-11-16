@@ -99,6 +99,45 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+def _ensure_exam_record_scoring_columns(engine, inspector) -> list[str]:
+    """D5-b（2026-11-16）：给存量库补 `exam_record` 的 4 个评分字段并按口径 A 回填。
+
+    为什么必须进启动自愈：`exam_record` 是本批唯一**没有**自愈分支的核心表，
+    而 `Base.metadata.create_all` 只建新表、不补旧表列 —— 老库缺这 4 列时，
+    任何考试查询都会 500（实测 `no such column: exam_record.is_scored`）。
+    补列后立刻回填：4 列的默认值都是 0，若不回填，老库里"已交卷"的记录会被
+    读成"未评分"（`agent_router` 用 `ExamRecord.is_scored == 1` 做统计会漏掉它们）。
+
+    只加列 + 只改"从未算过"（`question_total = 0`）的行，可重复执行。
+    返回本次新加的列名（测试与日志用）；`inspector` 参数保留以便调用方传入，
+    实际列检查用新建的 inspector，避免 ALTER 后被旧缓存误导。
+    """
+    from sqlalchemy import inspect as _inspect, text as _text
+
+    insp = _inspect(engine)
+    if 'exam_record' not in insp.get_table_names():
+        return []
+    cols = [c['name'] for c in insp.get_columns('exam_record')]
+    added: list[str] = []
+    for _col, _type in (("is_scored", "INTEGER DEFAULT 0"),
+                        ("manual_pending_count", "INTEGER DEFAULT 0"),
+                        ("answered_count", "INTEGER DEFAULT 0"),
+                        ("question_total", "INTEGER DEFAULT 0")):
+        if _col not in cols:
+            with engine.connect() as conn:
+                conn.execute(_text(f"ALTER TABLE exam_record ADD COLUMN {_col} {_type}"))
+                conn.commit()
+            added.append(_col)
+            logger.info(f"自动迁移: exam_record 添加列 {_col}")
+
+    if added:
+        from .services.exam_scoring import backfill_stale_records
+        n = backfill_stale_records(engine)
+        logger.info(f"自动迁移: exam_record 补列 {added}，按口径 A 回填 {n} 行历史记录")
+    return added
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("启动公安联考题库系统服务...")
@@ -340,6 +379,10 @@ async def lifespan(app: FastAPI):
                             f"ALTER TABLE exam_paper ADD COLUMN {_col} {_type}"))
                         conn.commit()
                     logger.info(f"自动迁移: exam_paper 添加列 {_col}")
+
+        # 检查 exam_record 表（口径 A 的 4 个字段；D5-b 2026-11-16 补自愈分支）
+        if 'exam_record' in inspector.get_table_names():
+            _ensure_exam_record_scoring_columns(engine, inspector)
 
         # 检查 forum_post 表(论坛模块完善 + P1 个性化字段)
         if 'forum_post' in inspector.get_table_names():

@@ -235,6 +235,13 @@ KNOWN_EXTRA_OPERATIONS = {
     ("POST", "/api/media/image"),
     ("PUT", "/api/admin/users/{user_id}/permissions"),
     ("PUT", "/api/admin/users/{user_id}/role"),
+    # ===== 备考资料批新增（2026-11-15/16，R11 已在方案与 README 登记）=====
+    # D7 批量改信息：一次改多条资料的科目/分类/投放位；逐条 skipped 原因，投放位变更逐条同步卷。
+    # 声明在 /admin/{material_id} 动态段之前（与批量删除同一约定），故路径是全静态的 batch-meta。
+    ("PATCH", "/api/materials/admin/batch-meta"),
+    # 导题缺号定位：按题号取原卷那一页（只读渲染 + 0–1 相对高亮框）。
+    # admin、PDF only、原件经 resolve_abs_path 防越界；不写库、不改原文件。
+    ("GET", "/api/materials/admin/parse-drafts/{draft_id}/page-image"),
 }
 
 

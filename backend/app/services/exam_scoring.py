@@ -88,4 +88,57 @@ def finalize_record(
     return flags
 
 
-__all__ = ["ScoringFlags", "scoring_flags", "finalize_record"]
+# 存量库补列后的回填（D5-b，2026-11-16）。
+#
+# 为什么需要：`exam_record` 的这 4 列是 2026-11-09 口径 A 落地时新增的，
+# 老库补列后 4 列全是默认值 0 —— 于是"已交卷"的老记录会被读成"未评分"
+# （`agent_router` 里 `ExamRecord.is_scored == 1` 的统计会漏掉它们）。
+#
+# 为什么只扫描 `question_total = 0` 的行：那正是"从未按口径 A 算过"的特征。
+# 新记录在交卷写点已写好 4 个列（值必然 ≥0；有明细时 >0），因此不会被重复改写，
+# 天然幂等；没有明细的空记录每次启动会算一次同样的值，写入等价、无副作用。
+#
+# 分母取明细条数（与 `scoring_flags(question_total=0)` 的退化规则一致）：
+# 老记录没有地方能取到"卷面题量"，用卷面题量反而会与当时页面显示的分母不一致。
+_BACKFILL_STALE_SQL = """
+UPDATE exam_record SET
+       manual_pending_count = (
+           SELECT COUNT(*) FROM exam_answer_detail d
+            WHERE d.record_id = exam_record.record_id AND d.is_correct IS NULL),
+       answered_count = (
+           SELECT COUNT(*) FROM exam_answer_detail d
+            WHERE d.record_id = exam_record.record_id
+              AND TRIM(COALESCE(d.student_answer, '')) <> ''),
+       question_total = (
+           SELECT COUNT(*) FROM exam_answer_detail d
+            WHERE d.record_id = exam_record.record_id),
+       is_scored = CASE
+           WHEN COALESCE(is_completed, 0) = 1 AND (
+               SELECT COUNT(*) FROM exam_answer_detail d
+                WHERE d.record_id = exam_record.record_id
+                  AND d.is_correct IS NULL) = 0
+           THEN 1 ELSE 0 END
+ WHERE COALESCE(question_total, 0) = 0
+"""
+
+
+def backfill_stale_records(engine) -> int:
+    """把"从未算过"的历史记录按口径 A 回填一次，返回受影响行数。
+
+    `engine` 为 SQLAlchemy 的 Engine 或 Connection。
+    缺 `exam_answer_detail` 表（极老库）时返回 0 并打印告警，不抛异常 ——
+    启动自愈不能因为回填失败把整个应用拦住。
+    """
+    from sqlalchemy import text
+
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text(_BACKFILL_STALE_SQL))
+            return int(result.rowcount or 0)
+    except Exception as exc:  # noqa: BLE001 - 回填失败不阻塞启动
+        print(f"[WARN] exam_record 评分字段回填跳过: {exc}")
+        return 0
+
+
+__all__ = ["ScoringFlags", "scoring_flags", "finalize_record", "backfill_stale_records"]
+
