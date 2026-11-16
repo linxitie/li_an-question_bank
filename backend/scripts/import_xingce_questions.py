@@ -45,6 +45,27 @@ def qhash(stem: str, options: dict) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
+ANSWER_RE = re.compile(r"^\s*(\d{1,3})[.、]\s*正确答案[:：]\s*([A-D])")
+
+
+ANSWER_CACHE = ROOT / "backend" / "data" / "tmp_answers.json"
+_CACHE: dict | None = None
+
+
+def _cache() -> dict:
+    global _CACHE
+    if _CACHE is None:
+        _CACHE = json.loads(ANSWER_CACHE.read_text(encoding="utf-8")) if ANSWER_CACHE.exists() else {}
+    return _CACHE
+
+
+def load_answers(src_stem: str) -> dict[int, str]:
+    """从预建缓存取 qno→答案（键为去掉「题本」的册名）。"""
+    key = src_stem.replace("题本", "").strip()
+    raw = _cache().get(key) or {}
+    return {int(k): v for k, v in raw.items()}
+
+
 def load_items() -> list[dict]:
     files = sorted(SRC.glob("*.json"))
     out: list[dict] = []
@@ -54,14 +75,18 @@ def load_items() -> list[dict]:
         except Exception:
             continue
         year = int(YEAR_RE.search(f.stem).group(1)) if YEAR_RE.search(f.stem) else None
+        answers = load_answers(f.stem)
         for d in data:
             if len(d.get("options", {})) != 4:
                 continue
             # 跨页污染：选项过长整题丢弃
             if any(len(v) > 120 for v in d["options"].values()):
                 continue
+            answer = answers.get(d["qno"])
+            if not answer:
+                continue          # 没答案的题不入库，避免「刷了也不知道对错」
             out.append({"qno": d["qno"], "stem": d["stem"], "options": d["options"],
-                        "year": year, "source": f.stem[:180]})
+                        "answer": answer, "year": year, "source": f.stem[:180]})
     return out
 
 
@@ -127,13 +152,16 @@ def main() -> int:
         cur.execute(
             """INSERT INTO question_bank
                (subject_id, type_id, question_content, options, answer, answer_analysis,
-                difficulty, year, source, creator_id, audit_status, status, create_time, update_time,
+                difficulty, score, accuracy_rate, exam_frequency, version,
+                year, source, creator_id, audit_status, status, create_time, update_time,
                 xingce_subcategory, question_number)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 SUBJECT_ID, type_ids["single_choice"], it["stem"],
-                json.dumps(it["options"], ensure_ascii=False), "", "",
-                3, it["year"], it["source"], CREATOR_ID, 1, 1, now, now,
+                json.dumps([{"key": k, "value": v} for k, v in it["options"].items()], ensure_ascii=False),
+                it["answer"], "",
+                3, 1.0, 0.0, 0, 1,
+                it["year"], it["source"], CREATOR_ID, 1, 1, now, now,
                 "无", str(it["qno"]),
             ),
         )
