@@ -4,6 +4,8 @@
     <div class="profile-nav"><NavBar /></div>
     <main class="profile-main">
       <!-- 顶部：学习周报 + 方案版本对比（主区第一屏可见） -->
+      <OnboardingChecklist />
+
       <div class="top-insights">
         <WeeklyReportCard />
         <PlanDiffPanel />
@@ -316,6 +318,7 @@ import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
 import ProfileRadar from '@/components/profile/ProfileRadar.vue';
 import WeeklyReportCard from '@/components/growth/WeeklyReportCard.vue';
 import PlanDiffPanel from '@/components/plan/PlanDiffPanel.vue';
+import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist.vue';
 
 const quickLinks = [
   { path: '/wrong-questions', icon: '📕', label: '错题集', desc: '错题与复习排程' },
