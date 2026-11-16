@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * 模块化约束校验脚本（P1-02）
  *
@@ -51,7 +51,12 @@ const VTJ_LOCKED_VERSIONS = {
 //   只是不再挂路由。与 test_route_roles 的 104 同步）
 // 105 = 104 + 1（2026-11-15 D6：手机端结果页 /mobile/paper-result 新增 1 条页面路由，
 //   与 test_route_roles 的 105 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 105;
+// 134 = 133 + 1（2026-11-16 合并远端 main 的 201 个提交：远端侧新增 29 条页面路由
+//   —— 招聘雷达 / 报价与收藏 / 签到 / 成长复习 / 内容守卫 / 小智 Studio / 知识图谱等 ——
+//   使远端为 133；再叠加本线 /mobile/paper-result 1 条 = 134。
+//   注：`/admin/papers` 页面路由在本线已按「试卷收敛 P4=A」改成 redirect（无 component），
+//   远端仍保留页面版，合并取本线的 redirect，所以不是 135。与 test_route_roles 的 134 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 134;
 
 const violations = [];
 

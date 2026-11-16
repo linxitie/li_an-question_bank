@@ -334,6 +334,39 @@ KNOWN_EXTRA_OPERATIONS = {
     # 导题缺号定位：按题号取原卷那一页（只读渲染 + 0–1 相对高亮框）。
     # admin、PDF only、原件经 resolve_abs_path 防越界；不写库、不改原文件。
     ("GET", "/api/materials/admin/parse-drafts/{draft_id}/page-image"),
+    # ===== 合并远端 main（201 提交）后补登记（2026-11-16）=====
+    # 远端主线在 2026-11-05 ~ 11-16 新增的端点：招聘雷达/对比/资格/任务、报价与收藏、
+    # 成长复习（间隔重复评分）、内容守卫词库同步、LLM 流式（chat/agent）、论坛批量与恢复、
+    # 管理端反馈详情、知识图谱全局视图、任务自动认领。
+    # 仍按 R11「只登记、不重算基线」处理，api_surface.json 保持冻结口径。
+    ("DELETE", "/api/recruitment/compare/{post_id}"),
+    ("GET", "/api/admin/feedback/{feedback_id}"),
+    ("GET", "/api/forum/my-interactions"),
+    ("GET", "/api/knowledge/kg/global"),
+    ("GET", "/api/llm/agent/tools"),
+    ("GET", "/api/recruitment/compare"),
+    ("GET", "/api/recruitment/eligibility"),
+    ("GET", "/api/recruitment/jobs/{post_id}"),
+    ("GET", "/api/recruitment/jobs/{post_id}/history"),
+    ("GET", "/api/recruitment/jobs/{post_id}/reminder-suggestion"),
+    ("GET", "/api/recruitment/jobs/{post_id}/tasks"),
+    ("GET", "/api/recruitment/jobs/{post_id}/timeline"),
+    ("GET", "/api/recruitment/radar"),
+    ("GET", "/api/v1/growth/review/due"),
+    ("GET", "/api/v1/growth/review/summary"),
+    ("PATCH", "/api/recruitment/tasks/{task_id}"),
+    ("POST", "/api/forum/comments/{comment_id}/favorite"),
+    ("POST", "/api/forum/posts/batch-delete"),
+    ("POST", "/api/forum/posts/{post_id}/restore"),
+    ("POST", "/api/llm/agent/stream"),
+    ("POST", "/api/llm/chat/stream"),
+    ("POST", "/api/recruitment/compare/{post_id}"),
+    ("POST", "/api/recruitment/jobs/{post_id}/remind"),
+    ("POST", "/api/recruitment/jobs/{post_id}/tasks"),
+    ("POST", "/api/tasks/auto-claim"),
+    ("POST", "/api/v1/admin/content-guard/sync-lexicon"),
+    ("POST", "/api/v1/growth/review/{wrong_id}/grade"),
+    ("PUT", "/api/recruitment/eligibility"),
 }
 
 

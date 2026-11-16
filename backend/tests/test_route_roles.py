@@ -44,8 +44,12 @@ def test_page_route_count():
     # 104 → 105：2026-11-15 D6 手机端结果页 /mobile/paper-result ——
     #            手机答完试不再跳 PC 的 /paper-result（桌面版式），改用手机版式；
     #            与 scripts/verify-modularization-constraints.mjs 的 105 同步。
-    # 路由只增不减（本次例外均为用户明确要求的模块调整或远端重构，已在提交信息写明）。
-    assert len(_pages()) == 105
+    # 105 → 134：2026-11-16 合并远端 main（201 个提交）。远端侧新增 29 条页面路由
+    #            （招聘雷达/报价与收藏/签到/成长复习/内容守卫/小智 Studio/知识图谱/换卷等）
+    #            使远端为 133，叠加本线 /mobile/paper-result 1 条 = 134。
+    #            注：`/admin/papers` 页面路由在本线已按「试卷收敛 P4=A」改为 redirect（无 component），
+    #            远端仍是页面版，合并取本线 redirect，故不是 135。两处门禁已同步为 134。
+    assert len(_pages()) == 134
 
 
 def test_whitelist_has_no_roles():

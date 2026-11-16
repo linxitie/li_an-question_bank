@@ -1,3 +1,11 @@
 [
-  "cross_import|library|materials|api.v1.catalog"
+  "cross_import|growth|tasks|api.v1.reward.coupons",
+  "cross_import|library|materials|api.v1.catalog",
+  "cross_write|content|kg_growth_api|KnowledgePoint (他域: catalog,exam,personal,platform)",
+  "cross_write|growth|review|WrongQuestionPersonal (他域: catalog,exam)",
+  "cross_write|growth|weekly_task_catalog|KnowledgePoint (他域: catalog,exam,personal,platform)",
+  "cross_write|growth|weekly_task_catalog|QuestionBank (他域: catalog,exam,library,personal,platform)",
+  "cross_write|growth|weekly_task_catalog|QuestionKnowledge (他域: catalog,exam,personal)",
+  "cross_write|personal|decoration|CoinExchange (他域: reward)",
+  "cross_write|personal|decoration|ShopProduct (他域: reward)"
 ]
