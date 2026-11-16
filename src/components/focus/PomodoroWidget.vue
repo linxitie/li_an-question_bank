@@ -1,7 +1,7 @@
 <template>
   <div class="pomo" :class="{ 'pomo--open': open, 'pomo--running': state.running }">
     <!-- 收起态：圆形气泡 -->
-    <button v-if="!open" class="pomo__bubble" @click="open = true" :title="'番茄钟 ' + display">
+    <button v-if="!open" class="pomo__bubble" @click="open = true; refreshOnOpen()" :title="'番茄钟 ' + display">
       <span class="pomo__bubble-icon">🍅</span>
       <span class="pomo__bubble-time">{{ display }}</span>
     </button>
@@ -31,7 +31,7 @@
       </div>
 
       <div class="pomo__foot">
-        <span>今日 {{ state.minutesToday }} 分钟 · {{ state.sessionsToday }} 次</span>
+        <span>今日 {{ state.minutesToday }} 分钟</span>
         <button class="pomo__switch" @click="switchMode">
           {{ state.mode === 'focus' ? '切到休息' : '切回专注' }}
         </button>
@@ -224,6 +224,11 @@ async function autoCheckin() {
   } catch (e) { /* 网络失败静默，不打断专注 */ }
 }
 
+function refreshOnOpen() {
+  // 挂件挂在 App 根级，挂载时用户可能还没登录；每次展开都补拉一次
+  loadTodayMinutes()
+}
+
 function openImmersive() {
   // 进入沉浸前暂停小窗计时，避免两处同时倒数
   if (state.running) toggle()
@@ -260,7 +265,16 @@ async function loadTodayMinutes() {
   } catch (e) { /* 静默 */ }
 }
 
-onMounted(() => { restore(); loadTodayMinutes() })
+onMounted(() => {
+  restore()
+  let tries = 0
+  const tick = setInterval(() => {
+    tries += 1
+    loadTodayMinutes()
+    if (tries >= 10 || state.minutesToday > 0) clearInterval(tick)
+  }, 3000)
+  loadTodayMinutes()
+})
 onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 </script>
 
