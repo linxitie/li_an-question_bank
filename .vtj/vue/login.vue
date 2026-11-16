@@ -299,6 +299,9 @@ import {
   ArrowRight
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+// 三端登录方案 P2（2026-11-16）：设备准入被拒时弹「去电脑端登录」
+// 只改 script，不动 <template>（守 R3）
+import { guideToPcLogin, isDeviceDeniedMessage } from '@/utils/deviceLoginGuide';
 export default defineComponent({
   name: 'AuthPage',
   components: { XIcon },
@@ -475,6 +478,11 @@ export default defineComponent({
           }.bind(this), 800);
         } else {
           this.showMessage(result.message);
+          // 三端登录方案 P2：电脑端登录页理论上不会被设备准入拒，
+          // 但用户可能带着平板/手机的入口链接来这里，统一给"去电脑端"引导，避免只看到一行红字。
+          if (isDeviceDeniedMessage(result.message)) {
+            guideToPcLogin(result.message);
+          }
         }
       } catch (e) {
         this.showMessage('登录失败：' + (e.message || '网络异常'));

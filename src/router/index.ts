@@ -7,6 +7,11 @@ import {
   type RouteRecordRaw
 } from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
+import {
+  deviceOfPathPrefix,
+  resolveTeacherDevicePath,
+  unauthorizedReasonForDevice,
+} from './loginPolicy';
 import { reloadForChunkError } from '@/utils/chunkRecovery';
 import { canAccess } from './access';
 
@@ -474,7 +479,16 @@ const routes: RouteRecordRaw[] = [
     path: '/tablet/login',
     name: 'TabletLogin',
     component: () => import('$vtj/vue/tablet_login.vue'),
-    meta: { platform: 'tablet', roles: ['student'] }
+    // 教师也可在平板登录（三端登录方案 P2）：登录页本身对 student/teacher 都放行；
+    // 管理员的拦截不靠 meta.roles（canAccess 对 admin 有 bypass），而在守卫设备分支里显式判。
+    meta: { platform: 'tablet', roles: ['student', 'teacher'] }
+  },
+  {
+    // 教师设备端工作台（P2 落地页，P3/P4 接数据）——同一组件供平板与手机复用（守 R12）
+    path: '/tablet/teacher/home',
+    name: 'TabletTeacherHome',
+    component: () => import('@/views/teacher/shared/TeacherHome.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
   },
   // ---- 模块4/7 补齐：平板端复用同一组件（R12）----
   {
@@ -674,7 +688,15 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/login',
     name: 'MobileLogin',
     component: () => import('$vtj/vue/mobile_login.vue'),
-    meta: { platform: 'mobile', roles: ['student'] }
+    // 教师也可在手机登录（三端登录方案 P2）；管理员拦截在守卫设备分支里显式判。
+    meta: { platform: 'mobile', roles: ['student', 'teacher'] }
+  },
+  {
+    // 教师设备端工作台（P2 落地页）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/home',
+    name: 'MobileTeacherHome',
+    component: () => import('@/views/teacher/shared/TeacherHome.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
   },
   {
     path: '/mobile/scan',
@@ -958,10 +980,14 @@ router.beforeEach((to, _from, next) => {
         : 'mobile'
       : detected;
 
-  // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再验角色
-  //    - 未登录：只放行各端登录页，其余跳转到对应端登录页并带 redirect
-  //      （此前这里直接 `next()`，导致 /mobile/* 未登录也能进——已修）
-  //    - 教师/管理员：跳 /unauthorized
+  // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再按「角色 × 端」矩阵判定
+  //    矩阵口径见 src/router/loginPolicy.ts（镜像后端 app/core/device_policy.py）：
+  //      · student / teacher 三端可用；
+  //      · admin 仅电脑端 —— **必须在这里显式拦**：
+  //        canAccess() 对 admin 有 bypass（src/router/access.ts），靠 meta.roles 拦不住管理员。
+  //    - 未登录：只放行各端登录页，其余跳对应端登录页并带 redirect
+  //    - 教师：设备端放行；访问「学生首页」时改投教师设备端首页
+  //    - 管理员：跳 /unauthorized?reason=admin_pc_only
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
     const auth = (window as any).__VTJ_AUTH__;
     const logged =
@@ -978,10 +1004,26 @@ router.beforeEach((to, _from, next) => {
         : '/mobile/login';
       return next({ path: loginPath, query: { redirect: to.fullPath } });
     }
+
     const role = auth ? auth.getUserRole() : null;
-    if (role && role !== 'student') {
-      return next('/unauthorized?reason=mobile_student_only');
+    const prefix = deviceOfPathPrefix(to.path) || 'tablet';
+
+    // 管理员：设备端一律拒绝（需求「管理员必须为电脑」）
+    const denyReason = unauthorizedReasonForDevice(role);
+    if (denyReason) {
+      return next(`/unauthorized?reason=${denyReason}`);
     }
+
+    // 教师：设备端放行；只把「学生首页」改投教师设备端首页，其余页面照常
+    if (role === 'teacher') {
+      const teacherTarget = resolveTeacherDevicePath(to.path, prefix);
+      if (teacherTarget && teacherTarget !== to.path) {
+        return next({ path: teacherTarget, replace: true });
+      }
+      return next();
+    }
+
+    // 学生：既有权限校验不变
     if (role) {
       const permissions = auth?.getPermissions ? auth.getPermissions() : [];
       if (!canAccess(to.meta as any, role, permissions)) {

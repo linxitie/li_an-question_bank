@@ -164,6 +164,9 @@ import {
   Refresh
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
+// 三端登录方案 P2（2026-11-16）：设备准入被拒时弹「去电脑端登录」
+// 只改 script，不动 <template>（守 R3）
+import { guideToPcLogin, isDeviceDeniedMessage } from '@/utils/deviceLoginGuide';
 
 export default defineComponent({
   name: 'TabletLogin',
@@ -234,15 +237,21 @@ export default defineComponent({
           showMessage('认证模块未就绪，请刷新页面重试', 'error');
           return;
         }
-        // client_type='tablet' 触发后端三端分离校验：平板端仅学生可登录
+        // client_type='tablet'：后端按「角色 × 端」矩阵判定（学生/教师放行，管理员拒绝）
         const result = await auth.login(username, password, 'tablet');
         if (result && result.success) {
           showMessage('登录成功', 'success');
+          // 教师登录后由路由守卫改投 /tablet/teacher/home；学生仍去学生首页
           setTimeout(() => {
             router.push('/tablet/home');
           }, 1000);
         } else {
-          showMessage((result && result.message) || '登录失败，请检查用户名和密码', 'error');
+          const denyMsg = (result && result.message) || '登录失败，请检查用户名和密码';
+          showMessage(denyMsg, 'error');
+          // 设备准入被拒（管理员在平板端）→ 弹「去电脑端登录」
+          if (isDeviceDeniedMessage(denyMsg)) {
+            guideToPcLogin(denyMsg);
+          }
         }
       } catch (error) {
         console.error('登录失败:', error);
