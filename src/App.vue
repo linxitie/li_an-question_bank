@@ -14,10 +14,13 @@
       </VtjErrorBoundary>
     </Suspense>
     <BackToTop />
+    <!-- 番茄钟挂件：全局常驻，任何页面都能随时专注（用户要求：不要埋在页面里） -->
+    <PomodoroWidget />
   </ElConfigProvider>
 </template>
 <script setup lang="ts">
 import { Suspense } from 'vue';
+import PomodoroWidget from '@/components/focus/PomodoroWidget.vue';
 import { ElConfigProvider, ElMessage } from 'element-plus';
 import {
   XMask,

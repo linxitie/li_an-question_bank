@@ -162,6 +162,9 @@
       </div>
     </div>
 
+    <!-- 申论作文批改：挂在联考小智里（原在学习计划页，与模块主题不符） -->
+    <EssayReviewPanel />
+
     <transition name="fade">
       <div v-if="toast" class="xz-toast">{{ toast }}</div>
     </transition>
@@ -170,6 +173,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue"
+import EssayReviewPanel from '@/components/assistant/EssayReviewPanel.vue'
 
 /* ===== 联考小智 · 工作台 ===== */
 const STORE_KEY = "li_an_xiaozhi_v3"

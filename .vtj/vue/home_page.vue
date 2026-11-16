@@ -132,8 +132,6 @@
       </footer>
     </main>
 
-    <!-- 番茄钟小窗（模块4 P3）：固定在右下角，专注结束顺手补签到 -->
-    <PomodoroWidget />
   </div>
 </template>
 <script lang="ts">
