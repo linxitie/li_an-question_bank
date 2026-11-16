@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db, commit_with_retry
+from ....core.device_policy import denial, is_role_allowed_on_device
+from ....core.exceptions import DeviceForbiddenError
 from ....models.models import SysUser, UserProfile
 from ....schemas.schemas import UserResponse, LoginResponse, TokenData
 from ....core.config import settings
@@ -139,16 +141,27 @@ async def login_for_access_token(
             detail="账户已被禁用",
         )
 
-    # 移动端/平板端仅允许学生登录（教师/管理员请使用电脑端）
-    # 三端分离安全约束：移动端是学生学习端，教师端/管理员端仅限电脑端访问
-    if client_type in ("mobile", "tablet") and user.user_type != "student":
+    # 设备准入（三端登录方案 P1，2026-11-16）：学生 / 教师三端可用，管理员仅电脑端。
+    # 判定集中在 app/core/device_policy.py：
+    #   · 矩阵唯一真源（可配 MOBILE_TABLET_ROLES，默认 student,teacher）；
+    #   · admin 是硬约束，环境变量也放不开（防误配）；
+    #   · web 端维持历史行为（任何角色都放行），所以本改造不引入老角色回归。
+    # 为什么用 DeviceForbiddenError 而不是 HTTPException：
+    #   本仓库全局错误处理器只对 BaseAPIException 子类转发 headers，
+    #   而前端要靠 X-Auth-Deny + error.code 区分"设备受限"，并弹「去电脑端登录」；
+    #   `detail` 仍是字符串，老前端（.vtj 登录页）照旧直接显示，零回归。
+    if not is_role_allowed_on_device(user.user_type, client_type):
+        info = denial(user.user_type, client_type)
         logger.warning(
-            f"移动端登录被拒: 非学生角色 username={form_data.username} "
-            f"role={user.user_type} client_type={client_type}"
+            f"设备准入拒绝: role={user.user_type} client_type={client_type} "
+            f"code={info['code']}"
         )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="移动端/平板端仅支持学生登录，教师/管理员请使用电脑端",
+        raise DeviceForbiddenError(
+            info["message"],
+            role=info["role"],
+            client_type=info["client_type"],
+            action=info["action"],
+            pc_login_path=info["pc_login_path"],
         )
 
     # 三端分离：JWT payload 含角色和权限，前端路由守卫依赖此信息

@@ -33,6 +33,43 @@ class AuthorizationError(BaseAPIException):
     def __init__(self, message: str = "权限不足", code: str = "FORBIDDEN", details: Optional[Dict[str, Any]] = None):
         super().__init__(status_code=403, message=message, code=code, details=details)
 
+class DeviceForbiddenError(BaseAPIException):
+    """设备准入被拒（三端登录方案 P1，2026-11-16）。
+
+    为什么单列一个类而不是直接 `raise HTTPException(403, headers=...)`：
+    本仓库的全局错误处理器对**普通 HTTPException 不转发 headers**（只有
+    `BaseAPIException` 子类才转发，见 `ExceptionHandlers.http_exception_handler`），
+    而前端需要 `X-Auth-Deny` 头 + `error.code` 来区分"设备受限"和"权限不足"，
+    并据此弹「去电脑端登录」。用本类可同时拿到：`detail` 仍是人话字符串（老前端兼容）、
+    `error.code=DEVICE_FORBIDDEN`、`error.details`（role/client_type/action/pc_login_path）、
+    以及响应头 `X-Auth-Deny`。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        role: str,
+        client_type: str,
+        action: str = "use_pc_login",
+        pc_login_path: str = "/#/login",
+    ):
+        super().__init__(
+            status_code=403,
+            message=message,
+            code="DEVICE_FORBIDDEN",
+            details={
+                "role": role,
+                "client_type": client_type,
+                "action": action,
+                "pc_login_path": pc_login_path,
+            },
+            headers={
+                "X-Auth-Deny": "DEVICE_FORBIDDEN",
+                "X-Auth-Deny-Action": action,
+            },
+        )
+
 class ResourceNotFoundError(BaseAPIException):
     def __init__(self, resource: str = "资源", resource_id: Optional[Any] = None):
         message = f"{resource}{f' (ID: {resource_id})' if resource_id else ''}不存在"
