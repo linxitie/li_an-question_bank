@@ -76,3 +76,105 @@ export function isDeviceDeniedMessage(message: string | null | undefined): boole
 
 /** 电脑端登录地址（登录页弹窗引导用） */
 export const PC_LOGIN_PATH = '/#/login'
+
+/* ==========================================================================
+ * 设备 × 界面一致性（D-28，2026-11-16）
+ *
+ * 实测缺陷：`/#/tablet/home`、`/#/mobile/teacher/papers` 在**电脑**上直接渲染成了
+ * 平板/手机界面；`/#/teacher/dashboard` 在**手机/平板**上直接渲染成了电脑版教师端。
+ * 原因：守卫只有「PC 路径 → 设备路径」单向映射，没有反向校验。
+ *
+ * 本段只提供**纯映射函数**，是否跳转由 `src/router/index.ts` 的守卫决定
+ * （守卫要结合登录态与角色，纯函数不掺业务）。
+ * ========================================================================== */
+
+/** 设备端路径 → 电脑端等价路径；没有等价页返回 null（调用方兜底到 '/'） */
+const DEVICE_TO_PC: Record<string, string> = {
+  '/tablet/login': '/login',
+  '/mobile/login': '/login',
+  '/tablet/home': '/home',
+  '/mobile/home': '/home',
+  '/tablet/question-bank': '/question-bank',
+  '/mobile/question-bank': '/question-bank',
+  '/tablet/forum': '/forum',
+  '/mobile/forum': '/forum',
+  '/tablet/practice': '/practice',
+  '/mobile/practice': '/practice',
+  '/tablet/profile': '/profile',
+  '/mobile/profile': '/profile',
+  '/tablet/news': '/news',
+  '/mobile/news': '/news',
+  '/tablet/quotes': '/quotes',
+  '/mobile/quotes': '/quotes',
+  '/tablet/recruit': '/recruit',
+  '/mobile/recruit': '/recruit',
+  '/tablet/materials': '/materials/xingce',
+  '/mobile/materials': '/materials/xingce',
+  '/tablet/teacher/home': '/teacher/dashboard',
+  '/mobile/teacher/home': '/teacher/dashboard',
+  '/tablet/teacher/questions': '/teacher/questions',
+  '/mobile/teacher/questions': '/teacher/questions',
+  '/tablet/teacher/papers': '/teacher/papers',
+  '/mobile/teacher/papers': '/teacher/papers',
+  '/tablet/teacher/scores': '/teacher/scores',
+  '/mobile/teacher/scores': '/teacher/scores',
+}
+
+function normalizePath(path: string): string {
+  const clean = String(path || '/').split('?')[0].replace(/\/+$/, '')
+  return clean || '/'
+}
+
+/** 设备端路径 → 电脑端等价路径（无等价返回 null） */
+export function pcPathForDevicePath(path: string): string | null {
+  return DEVICE_TO_PC[normalizePath(path)] ?? null
+}
+
+/** 换个设备前缀：/tablet/a → /mobile/a，/mobile/a → /tablet/a；无前缀返回 null */
+export function swapDevicePrefix(path: string, target: DevicePrefix): string | null {
+  const clean = normalizePath(path)
+  const current = deviceOfPathPrefix(clean)
+  if (!current || current === target) return null
+  return `/${target}${clean.slice(current.length + 1)}`
+}
+
+/** 电脑端路径 → 设备端等价路径（教师端为主；无对应设备页返回 null） */
+export function devicePathForPcPath(
+  path: string,
+  prefix: DevicePrefix
+): string | null {
+  const clean = normalizePath(path)
+  const exact: Record<string, string> = {
+    '/teacher/dashboard': `/${prefix}/teacher/home`,
+    '/teacher': `/${prefix}/teacher/home`,
+    '/teacher/questions': `/${prefix}/teacher/questions`,
+    '/teacher/papers': `/${prefix}/teacher/papers`,
+    '/teacher/scores': `/${prefix}/teacher/scores`,
+    '/teacher/forum': `/${prefix}/forum`,
+    '/question-import': `/${prefix}/teacher/questions`,
+  }
+  if (exact[clean]) return exact[clean]
+  // 教师端其它 PC 页（班级/消息/个人/分析）在设备端没有对应页 →
+  // 回教师设备端首页，避免把电脑版界面塞进手机/平板
+  if (clean === '/teacher' || clean.startsWith('/teacher/')) {
+    return `/${prefix}/teacher/home`
+  }
+  return null
+}
+
+/**
+ * 设备无关页：两种设备形态下都可以停（登录页已在各自端实现，这里只列跨端通用页，
+ * 避免把「未授权页 / 帮助页 / 资料预览页」也跳走）。
+ */
+export const DEVICE_AGNOSTIC_PATHS: readonly string[] = [
+  '/unauthorized',
+  '/login',
+  '/help',
+  '/materials-preview',
+  '/about',
+]
+
+export function isDeviceAgnosticPath(path: string): boolean {
+  return DEVICE_AGNOSTIC_PATHS.includes(normalizePath(path))
+}
+

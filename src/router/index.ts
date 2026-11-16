@@ -9,7 +9,11 @@ import {
 import { detectDevice, resolveDevicePath } from '@/utils/device';
 import {
   deviceOfPathPrefix,
+  devicePathForPcPath,
+  isDeviceAgnosticPath,
+  pcPathForDevicePath,
   resolveTeacherDevicePath,
+  swapDevicePrefix,
   unauthorizedReasonForDevice,
 } from './loginPolicy';
 import { reloadForChunkError } from '@/utils/chunkRecovery';
@@ -1012,15 +1016,53 @@ function resolveContentDevicePath(
   return null;
 }
 
+/**
+ * 已注册的路由路径集合（懒构建，只算一次）。
+ *
+ * 为什么要它：D-28 的「平板 ↔ 手机换前缀」可能指向不存在的路由
+ * （例如 /tablet/x 在手机端没有 /mobile/x），必须落地前先验存在，
+ * 否则会静默停在空白页 —— 这正是历史上的「手机端不生效」根因之一。
+ */
+let knownRoutePaths: Set<string> | null = null;
+function routePathExists(path: string): boolean {
+  if (!knownRoutePaths) {
+    knownRoutePaths = new Set(router.getRoutes().map((r) => r.path));
+  }
+  return knownRoutePaths.has(path);
+}
+
 router.beforeEach((to, _from, next) => {
-  const detected = detectDevice();
-  // 兼容手机浏览器的“桌面模式”/旧 WebView：UA 被判为 pc 时，仍按视口宽度回到移动布局
+  const detected = detectDevice();  // 兼容手机浏览器的“桌面模式”/旧 WebView：UA 被判为 pc 时，仍按视口宽度回到移动布局
   const device: 'pc' | 'mobile' | 'tablet' =
     detected === 'pc' && window.innerWidth <= 1024
       ? window.innerWidth >= 768
         ? 'tablet'
         : 'mobile'
       : detected;
+
+  // 0) 设备 × 界面一致性（D-28，2026-11-16）
+  //    实测缺陷：电脑打开 /#/tablet/home、/#/mobile/teacher/papers 会**直接渲染平板/手机界面**；
+  //    手机/平板打开 /#/teacher/dashboard 会**直接渲染电脑版教师端**。
+  //    这里在进入任何分支前先纠正「路由前缀 ≠ 本机设备」的情况：
+  //      · 电脑 → 设备端路径：回到电脑端等价页（无等价 → '/'）
+  //      · 平板 ↔ 手机互串：换前缀（目标路由不存在 → 该端首页）
+  //    注意：/unauthorized、/login、/help、/materials-preview、/about 是设备无关页，不参与纠正。
+  if (!isDeviceAgnosticPath(to.path)) {
+    const pathPrefix = deviceOfPathPrefix(to.path);
+    const expectedPrefix: 'tablet' | 'mobile' | null =
+      device === 'tablet' ? 'tablet' : device === 'mobile' ? 'mobile' : null;
+    if (pathPrefix && pathPrefix !== expectedPrefix) {
+      if (!expectedPrefix) {
+        const pcPath = pcPathForDevicePath(to.path);
+        return next({ path: pcPath || '/', replace: true });
+      }
+      const swapped = swapDevicePrefix(to.path, expectedPrefix);
+      if (swapped && routePathExists(swapped)) {
+        return next({ path: swapped, replace: true });
+      }
+      return next({ path: `/${expectedPrefix}/home`, replace: true });
+    }
+  }
 
   // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再按「角色 × 端」矩阵判定
   //    矩阵口径见 src/router/loginPolicy.ts（镜像后端 app/core/device_policy.py）：
@@ -1085,6 +1127,12 @@ router.beforeEach((to, _from, next) => {
     const target = resolveDevicePath(to.path, device);
     if (target) {
       return next({ path: target, replace: true });
+    }
+    // D-28：教师端/题目导入等电脑端页面在设备端没有实现 → 改投设备端对应页，
+    // 否则手机会渲染整套电脑版界面（实测缺陷）。
+    const teacherTarget = devicePathForPcPath(to.path, device);
+    if (teacherTarget && routePathExists(teacherTarget)) {
+      return next({ path: teacherTarget, replace: true });
     }
   }
 
