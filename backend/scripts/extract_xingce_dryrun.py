@@ -53,9 +53,25 @@ def parse_pages(text: str) -> list[dict]:
 
     if cur and len(cur.get("options", {})) >= 2:
         items.append(cur)
+    items = [it for it in items if not _is_meta(it)]
     for it in items:
         it["task_kind"] = "single_choice" if len(it["options"]) == 4 else "multi_or_other"
     return items
+
+
+# 题本里混着「本题正确率…默认答案为A」「缺失」这类元信息行，必须剔除，否则会当成题目入库
+META_MARKERS = ("默认答案为", "正确率", "本题得分率", "答案见解析")
+PLACEHOLDER = {"缺失", "无", "略", "选项缺失"}
+
+
+def _is_meta(it: dict) -> bool:
+    stem = it.get("stem", "")
+    if any(m in stem for m in META_MARKERS):
+        return True
+    opts = list(it.get("options", {}).values())
+    if opts and all(o.strip() in PLACEHOLDER for o in opts):
+        return True
+    return False
 
 
 def main() -> int:
