@@ -69,6 +69,50 @@ def draft_dir(draft_id: int) -> str:
     return path
 
 
+# ------------------------------------------------------------------ 缺号定位（Q1）
+#: sidecar 文件名 / schema 版本（只加字段就升 v，不动库）
+QNO_GAPS_FILE = "qno_gaps.json"
+QNO_GAPS_SCHEMA = 1
+
+
+def write_qno_gaps(draft_id: int, gaps: list, *, dpi: int = 200, page_count: int = 0) -> str:
+    """把"仍缺号的页/坐标"写进 `<draft_dir>/qno_gaps.json`（Q1）。
+
+    - **没有缺口就直接删掉旧文件**（重新导题可能把缺口补上了，不能让旧文件骗人）；
+    - 坐标单位是 `dpi` 像素（与 `_layout_lines` 一致），前端会换算成 0–1 相对坐标；
+    - 纯诊断数据，写失败由调用方记日志吞掉。
+    """
+    target = draft_dir(draft_id)
+    path = os.path.join(target, QNO_GAPS_FILE)
+    if not gaps:
+        if os.path.exists(path):
+            os.remove(path)
+        return path
+    payload = {"v": QNO_GAPS_SCHEMA, "dpi": int(dpi),
+               "page_count": int(page_count or 0), "gaps": gaps}
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)                          # 原子替换：避免读到半个文件
+    return path
+
+
+def read_qno_gaps(draft_id: int) -> dict:
+    """读回 `<draft_dir>/qno_gaps.json`；没有/坏了都返回空壳（调用方当"无定位信息"处理）。"""
+    path = os.path.join(draft_dir(draft_id), QNO_GAPS_FILE)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict) or not isinstance(data.get("gaps"), list):
+            return {"v": 0, "dpi": 0, "page_count": 0, "gaps": []}
+        return data
+    except FileNotFoundError:
+        return {"v": 0, "dpi": 0, "page_count": 0, "gaps": []}
+    except Exception:                              # noqa: BLE001
+        logger.warning("[paper_ingest] qno_gaps 读取失败 draft=%s", draft_id, exc_info=True)
+        return {"v": 0, "dpi": 0, "page_count": 0, "gaps": []}
+
+
 def _questions_root() -> str:
     """正式题目图片根：`backend/app/static/questions`（与 image_service 同口径）。"""
     from ..image_service import STATIC_IMG_ROOT
@@ -220,6 +264,14 @@ def fill_draft(db: Session, draft: PaperParseDraft, *, ext: str, abs_path: str,
     draft.status = "pending"
     draft.message = f"拆出 {len(items)} 题，请核对后点「确认入库」"
     draft.update_time = datetime.now()
+    # Q1（2026-11-15，导题缺号定位）：把"仍缺号的页/坐标"落到草稿目录（**零迁移**）。
+    # 写失败只记日志 —— 少了定位信息不影响导题，草稿照常 pending。
+    try:
+        write_qno_gaps(draft.draft_id, meta.get("qno_gaps") or [],
+                       dpi=int(meta.get("qno_gaps_dpi") or 200),
+                       page_count=int(meta.get("pages") or 0))
+    except Exception:                              # noqa: BLE001
+        logger.warning("[paper_ingest] qno_gaps 落盘失败 draft=%s", draft.draft_id, exc_info=True)
     return draft
 
 

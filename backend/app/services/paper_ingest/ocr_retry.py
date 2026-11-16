@@ -227,7 +227,10 @@ def find_number_holes(rows: List[dict], starts: List[Tuple[int, int]],
     nos = [no for _, no in starts]
     seen = set(nos)
     idx_by_no = {no: i for i, no in starts}
-    missing = [n for n in range(1, max(nos) + 1) if n not in seen]
+    # 下界用**卷内最小题号**：拆分上传只传片段时，从 1 算会把前面所有号都报成缺号
+    # （Q5 探针实测：3 页片段被算成"缺号 44 个"）。
+    lo = min(nos)
+    missing = [n for n in range(lo, max(nos) + 1) if n not in seen]
     if not missing:
         return []
     bottom = max(float(r["y"]) + float(r["h"]) for r in rows)
@@ -238,20 +241,33 @@ def find_number_holes(rows: List[dict], starts: List[Tuple[int, int]],
         prev_no, next_no = grp[0] - 1, grp[-1] + 1
         if prev_no not in idx_by_no or next_no not in idx_by_no:
             continue
-        a = rows[idx_by_no[prev_no]]
+        # 用「上一题的**最后一行**」而不是它题号行的 y：一题的选项往往横跨到页尾，
+        # 缺号行大概率就在这些行之后（第 46 题实测在 p16 的下半页）。
+        a = rows[max(idx_by_no[prev_no], 0)]
         b = rows[idx_by_no[next_no]]
-        p0, p1 = int(a["page"]), int(b["page"])
+        same_page = int(a["page"]) == int(b["page"])
+        upper = float(b["y"]) if same_page else float("inf")
+        a_rows = [r for r in rows
+                  if int(r["page"]) == int(a["page"])
+                  and float(a["y"]) <= float(r["y"]) < upper]
+        a_last = max(a_rows, key=lambda r: float(r["y"])) if a_rows else a
+        p0, p1 = int(a_last["page"]), int(b["page"])
         base = {"qno": grp[0], "missing_nos": list(grp), "kind": "qno_missing",
                 "median": 0.0, "gap": 0.0, "x0": 0.0, "x1": width}
-        y_after_a = float(a["y"]) + float(a["h"]) / 2.0 + PAD_PX
+        y_after_a = float(a_last["y"]) + float(a_last["h"]) / 2.0 + PAD_PX
         y_before_b = float(b["y"]) - float(b["h"]) / 2.0 - PAD_PX
         if p0 == p1:
-            holes.append({**base, "page": p0, "y0": y_after_a, "y1": y_before_b})
+            holes.append({**base, "page": p0, "y0": y_after_a, "y1": y_before_b,
+                          "alt_page": 0})
         else:
-            holes.append({**base, "page": p0, "y0": y_after_a, "y1": bottom})
+            # 跨页缺口：**主选上一题所在页的页尾**（第 46 题就在这），下一题页首作为备选页
+            holes.append({**base, "page": p0, "y0": y_after_a, "y1": bottom,
+                          "alt_page": p1})
             for mid in range(p0 + 1, p1):
-                holes.append({**base, "page": mid, "y0": 0.0, "y1": bottom})
-            holes.append({**base, "page": p1, "y0": 0.0, "y1": y_before_b})
+                holes.append({**base, "page": mid, "y0": 0.0, "y1": bottom,
+                              "alt_page": 0})
+            holes.append({**base, "page": p1, "y0": 0.0, "y1": y_before_b,
+                          "alt_page": p0})
         if len(holes) >= max_total:
             break
     return holes[:max_total]
@@ -376,12 +392,20 @@ def recover_into(path: str, rows: List[dict], *, layout_dpi: int = 200,
                 continue
             # P1-4：缺号条带还认「27在…」这种**无分隔符题号**，但必须是本组缺号里的那一个
             if kind == "qno_missing":
+                allowed = hole.get("missing_nos") or [hole["qno"]]
                 got_no = splitter.qno_of(text)
                 if got_no is None:
                     got_no = splitter.qno_of_loose(text)
-                if got_no is None or got_no not in (hole.get("missing_nos") or [hole["qno"]]):
-                    stats["rejected"] += 1
-                    continue
+                if got_no is None or got_no not in allowed:
+                    # Q5 实测缺陷③：条带从半句开始出框（`的46.为提升…`）→ 题号不在行首，
+                    # 这种行补回也不会成为题号起点（第 45 题会把第 46 题吞掉）。
+                    # 只在前缀很短时把题号削到行首，其余照旧拒绝。
+                    fixed = splitter.locate_qno_in_line(text, allowed)
+                    if fixed is None:
+                        stats["rejected"] += 1
+                        continue
+                    text = fixed
+                    stats["reanchored"] = int(stats.get("reanchored") or 0) + 1
             rec = {"text": text,
                    "x": float(ln.get("x") or 0.0) * k,
                    "y": float(ln.get("y") or 0.0) * k,

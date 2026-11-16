@@ -127,6 +127,25 @@ def qno_of_loose(line: str) -> Optional[int]:
     return no if 1 <= no <= 999 else None
 
 
+#: 行内任意位置的题号（`的46.为提升…` 这种：OCR 框从半句开始）
+QNO_ANY_RE = re.compile(r"(?<!\d)(\d{1,3})\s*[.．、]")
+
+
+def locate_qno_in_line(text: str, allowed, *, max_prefix: int = 8) -> Optional[str]:
+    """题号不在行首时把它削到行首（Q5 实测缺陷③）。`allowed` 是允许的题号集合。
+
+    为什么需要：300dpi 条带重跑有时从半句开始出框（`的46.为提升地铁站…`），
+    这种行 `qno_of()` 看不见，于是**补回了却仍不成题**（第 45 题吞掉第 46 题就是这样）。
+    只在前缀很短（≤`max_prefix` 字）时动手，避免把正常句子削掉。
+    """
+    body = text or ""
+    for m in QNO_ANY_RE.finditer(body):
+        no = int(m.group(1))
+        if no in set(allowed or ()) and m.start() <= max_prefix:
+            return body[m.start():]
+    return None
+
+
 def looks_like_question_start_loose(line: str) -> bool:
     """宽松题号版"像不像题干行"（判据与严格版一致，只是去前缀的正则不同）。"""
     if qno_of_loose(line) is None:
@@ -549,7 +568,10 @@ def draft_warnings(items: List[dict], *, expected: Optional[int] = None) -> List
         dup = sorted({n for n in numbers if numbers.count(n) > 1})
         out.append(f"题号重复：{dup[:10]}{' 等' if len(dup) > 10 else ''}")
     top = max(numbers)
-    missing = sorted(set(range(1, top + 1)) - set(numbers))
+    # 缺号下界用**卷内最小题号**而不是 1：拆分上传（只传从 p15 起的片段）时，
+    # 从 1 算会把 1–43 全报成缺号（Q5 探针实测 3 页片段报过"缺号 44 个"，完全误导）。
+    lo = min(numbers)
+    missing = sorted(set(range(lo, top + 1)) - set(numbers))
     if missing:
         out.append(f"题号缺号 {len(missing)} 个：{missing[:12]}{' 等' if len(missing) > 12 else ''}")
     if expected:

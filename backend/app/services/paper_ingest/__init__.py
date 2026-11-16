@@ -11,10 +11,13 @@
 """
 from .service import (IngestError, cleanup_expired, confirm_draft, create_draft,
                       discard_draft, draft_brief, fill_draft, items_of, latest_of,
-                      latest_pending, parse_material, update_items, warnings_of)
+                      latest_pending, parse_material, read_qno_gaps, update_items,
+                      warnings_of, write_qno_gaps)
 
 __all__ = [
     "IngestError", "cleanup_expired", "confirm_draft", "discard_draft",
     "create_draft", "fill_draft", "draft_brief", "items_of", "latest_of", "latest_pending",
     "parse_material", "update_items", "warnings_of",
+    # Q1/Q2（2026-11-15，导题缺号定位）：缺号坐标的读写（sidecar，非库表）
+    "read_qno_gaps", "write_qno_gaps",
 ]

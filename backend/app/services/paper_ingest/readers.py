@@ -587,6 +587,7 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
         # P1-2（2026-11-15）：行级题号自洽 —— 图内数字、重复题号在这里被挡掉
         starts, qno_issues = ([], {"rejected": [], "dup_dropped": [], "restarts": [], "loose": []})
         qno_retry: dict = {}
+        qno_gaps: List[dict] = []
         if splitter.qno_guard_enabled():
             starts, qno_issues = splitter.guard_qno_starts(clean_rows)
             # P1-4（2026-11-15）：还缺号的，按「上一题到下一题」的条带 300dpi 重跑一次再重算。
@@ -601,6 +602,25 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
                     if qno_retry.get("recovered"):
                         clean_rows = _clean_rows(rows)
                         starts, qno_issues = splitter.guard_qno_starts(clean_rows)
+            # Q1（2026-11-15，导题缺号定位）：补回收之后**仍然**缺的题号 → 留下页/坐标，
+            # 供草稿页"点题号看原卷页"。（补回收跑过了就不会再变，所以这里算的是最终态）
+            # 跨页缺口会有好几条带：**主选"上一题所在页的页尾"**（第 46 题实测就在 p16），
+            # 同时把"下一题所在页"记为 alt_page，前端可以一键翻过去看（第 86 题在下一页）。
+            if starts:
+                by_no: Dict[int, dict] = {}
+                for hole in ocr_retry.find_number_holes(clean_rows, starts):
+                    for no in hole.get("missing_nos") or [hole.get("qno")]:
+                        key = int(no)
+                        if key in by_no:            # 先到先得：第一条就是主选页
+                            continue
+                        by_no[key] = {
+                            "no": key, "page": int(hole["page"]),
+                            "y0": round(float(hole["y0"]), 1), "y1": round(float(hole["y1"]), 1),
+                            "x0": round(float(hole["x0"]), 1), "x1": round(float(hole["x1"]), 1),
+                            "alt_page": int(hole.get("alt_page") or 0),
+                            "missing": list(hole.get("missing_nos") or []),
+                        }
+                qno_gaps = [by_no[k] for k in sorted(by_no)]
         clean = [r["text"] for r in clean_rows]
         # 说明：行已经在上面用**同一套噪声规则**逐行筛过（`ocr_html.is_noise_line` + `PAPER_NOISE`），
         # 所以这里**不再**对 clean 做二次过滤 —— 那会让 `starts` 的行下标整体错位。
@@ -609,6 +629,7 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
         starts, dup_info, merged_half = [], {}, []
         qno_issues = {"rejected": [], "dup_dropped": [], "restarts": [], "loose": []}
         qno_retry = {}
+        qno_gaps = []
         clean = ocr_html.drop_noise([ln for ln in clean if ln])
         clean = [ln for ln in clean if ln and not PAPER_NOISE.search(ln)]
     info = {
@@ -632,6 +653,9 @@ def read_pdf_ocr(path: str, *, pages: int = 0, progress=None) -> dict:
         info["merged_half_qno"] = merged_half
     if any(qno_issues.values()):                       # P1-5：题号自洽的处置明细
         info["qno_issues"] = qno_issues
+    if qno_gaps:                                       # Q1：仍缺号的页/坐标（导题缺号定位）
+        info["qno_gaps"] = qno_gaps
+        info["qno_gaps_dpi"] = int(meta.get("dpi") or 200)
     return {"lines": clean, "starts": starts or None, "images": [], "meta": info}
 
 

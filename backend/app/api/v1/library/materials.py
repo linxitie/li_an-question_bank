@@ -2125,6 +2125,12 @@ def _draft_payload(db: Session, draft, material=None) -> dict:
     if material is not None:
         data["paper_code"] = (material.paper_code or material.badge
                               or "").strip() or None
+    # Q4（2026-11-15，导题缺号定位）：这份草稿有没有"缺号页坐标"。
+    # 只读判断（读 sidecar 是否存在），**不加库字段**；前端据此决定 chips 是彩色还是置灰。
+    try:
+        data["qno_gaps_available"] = bool(paper_ingest.read_qno_gaps(draft.draft_id).get("gaps"))
+    except Exception:                              # noqa: BLE001 — 只读标记不能拖垮回包
+        data["qno_gaps_available"] = False
     return data
 
 
@@ -2347,6 +2353,135 @@ async def admin_update_parse_items(draft_id: int, body: dict,
     material = db.query(StudyMaterial).filter(
         StudyMaterial.material_id == draft.material_id).first()
     return _draft_payload(db, draft, material)
+
+
+@router.get("/admin/parse-drafts/{draft_id}/page-image",
+            summary="按题号取原卷页图(管理员·缺号定位)")
+async def admin_parse_draft_page_image(draft_id: int,
+                                       no: int = Query(..., ge=1, le=999, description="缺号题号"),
+                                       dpi: int = Query(150, ge=96, le=200, description="渲染 dpi"),
+                                       page: Optional[int] = Query(
+                                           None, ge=1, description="覆盖页码（只能选主选页或 alt_page）"),
+                                       current_user: SysUser = Depends(get_current_user),
+                                       db: Session = Depends(get_db)):
+    """导题缺号定位（Q2）：把「第 N 题」在原卷的那一页渲染出来，并给出高亮条带。
+
+    - **只读**：不写库、不改原文件；每次现渲染（A4@150dpi ≈ 40–80ms）；
+    - 为什么回 JSON+base64 而不是图片流：浏览器 `<img src>` 发不了 `Authorization`，
+      改用 `?token=` 又会把令牌写进 URL/日志；走 `apiFetch` 拿 JSON 最干净；
+    - 高亮坐标回 **0–1 相对值**：弹窗宽度随屏幕变，百分比定位天然随图缩放；
+    - 安全：只按 `draft.material_id → primary file → resolve_abs_path()` 取原件，
+      **不接受任何前端传路径**（越界/绝对路径在 `resolve_abs_path` 里已当不存在）。
+    """
+    _require_admin(current_user)
+    from ....models.models import MaterialFile, PaperParseDraft
+    from ....services import material_files, paper_ingest
+
+    def _fail(status: int, code: str, message: str):
+        raise HTTPException(status, detail={"code": code, "message": message})
+
+    draft = db.query(PaperParseDraft).filter(
+        PaperParseDraft.draft_id == draft_id).first()
+    if not draft:
+        _fail(404, "DRAFT_NOT_FOUND", "草稿不存在（可能已被放弃），刷新列表再看")
+    if (draft.source_ext or "").lower() != "pdf":
+        _fail(409, "NOT_PDF",
+              f".{draft.source_ext or '?'} 没有「页」的概念，无法定位原卷页；"
+              f"缺号请按题号人工核对原文件")
+
+    gaps_doc = paper_ingest.read_qno_gaps(draft_id)
+    gap = next((g for g in gaps_doc.get("gaps") or [] if int(g.get("no") or 0) == int(no)), None)
+    if gap is None:
+        _fail(404, "GAP_NOT_FOUND",
+              f"这份草稿没有第 {no} 题的定位信息（旧版本草稿需要重新导题；"
+              f"或该题号已不再缺号）")
+    side_dpi = int(gaps_doc.get("dpi") or 200)
+    page_no = int(gap.get("page") or 0)
+    alt_page = int(gap.get("alt_page") or 0)
+    # 跨页缺口：主选页是"上一题所在页"，备选页是"下一题所在页"（第 86 题在备选页上）。
+    # 只允许在这两页里切换，避免变成"任意页渲染器"。
+    on_alt = False
+    if page is not None:
+        if int(page) == page_no:
+            on_alt = False
+        elif alt_page and int(page) == alt_page:
+            page_no, on_alt = alt_page, True
+        else:
+            _fail(400, "PAGE_NOT_ALLOWED",
+                  f"第 {no} 题只登记了第 {page_no} 页"
+                  + (f"（备选第 {alt_page} 页）" if alt_page else "")
+                  + "，不能渲染其它页")
+    if page_no < 1:
+        _fail(404, "GAP_NOT_FOUND", f"第 {no} 题的定位信息不完整（页码缺失），请重新导题")
+
+    files = (db.query(MaterialFile)
+             .filter(MaterialFile.material_id == draft.material_id)
+             .order_by(MaterialFile.role.asc(), MaterialFile.file_id.asc()).all())
+    primary = next((f for f in files if (f.role or "") == "primary"), None) \
+        or (files[0] if files else None)
+    if primary is None:
+        _fail(404, "FILE_MISSING", "这条资料没有原件，无法渲染原页")
+    try:
+        abs_path = material_files.resolve_abs_path(primary)
+    except FileNotFoundError:
+        _fail(404, "FILE_MISSING", "原件已不在（或被移动），无法渲染原页")
+
+    import base64
+
+    import pymupdf
+
+    try:
+        doc = pymupdf.open(str(abs_path))
+        try:
+            if page_no > doc.page_count:
+                _fail(409, "NOT_PDF",
+                      f"原卷只有 {doc.page_count} 页，第 {page_no} 页不存在（草稿与原件可能不匹配）")
+            page = doc.load_page(page_no - 1)
+            pix = page.get_pixmap(dpi=int(dpi))
+            png = pix.tobytes("png")
+            img_w, img_h = int(pix.width), int(pix.height)
+        finally:
+            doc.close()
+    except HTTPException:
+        raise
+    except Exception as e:                          # noqa: BLE001 — 渲染异常不能把接口打成 500 栈
+        logger.warning("[materials] 缺号页渲染失败 draft=%s no=%s: %s", draft_id, no, e)
+        _fail(500, "RENDER_FAILED", f"原页渲染失败：{type(e).__name__}")
+
+    # sidecar 的坐标是 side_dpi 像素 → 本页渲染像素 → 0–1（clamp，防越界画到框外）
+    scale = float(dpi) / float(side_dpi or 200)
+    if on_alt:
+        # 备选页只知道"该题可能在页首/页尾"，没有精确坐标 → 用整幅宽 + 顶部条带提示
+        x0, x1, y0, y1 = 0.0, 1.0, 0.0, 0.18
+    else:
+        x0 = max(0.0, min(1.0, float(gap.get("x0") or 0.0) * scale / img_w))
+        x1 = max(0.0, min(1.0, float(gap.get("x1") or 0.0) * scale / img_w))
+        y0 = max(0.0, min(1.0, float(gap.get("y0") or 0.0) * scale / img_h))
+        y1 = max(0.0, min(1.0, float(gap.get("y1") or 0.0) * scale / img_h))
+        if x1 <= x0:
+            x0, x1 = 0.0, 1.0
+        if y1 <= y0:
+            y0, y1 = max(0.0, y0 - 0.01), min(1.0, y0 + 0.01)
+
+    pages_total = int(gaps_doc.get("page_count") or 0)
+    return {
+        "ok": True,
+        "no": int(no),
+        "page": page_no,
+        "alt_page": alt_page,
+        "on_alt_page": on_alt,
+        "page_count": pages_total,
+        "dpi": int(dpi),
+        "image_w": img_w,
+        "image_h": img_h,
+        "image_b64": base64.b64encode(png).decode("ascii"),
+        "highlight": {"x0": round(x0, 4), "y0": round(y0, 4),
+                      "x1": round(x1, 4), "y1": round(y1, 4)},
+        "file_name": primary.file_name or "",
+        "hint": (f"第 {no} 题 · 备选第 {page_no} 页（该题可能在页首/页尾，红框为提示范围）"
+                 if on_alt else
+                 f"第 {no} 题 · 原卷第 {page_no} 页（单页渲染，仅用于核对缺号位置）"),
+    }
 
 
 @router.post("/admin/parse-drafts/{draft_id}/confirm", summary="确认入库(管理员)")

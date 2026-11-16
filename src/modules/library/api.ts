@@ -714,6 +714,11 @@ export interface ParseDraftItem {
 export interface ParseDraftDetail extends ParseDraftBrief {
   items: ParseDraftItem[];
   can_edit: boolean;
+  /**
+   * Q4（2026-11-15，导题缺号定位）：这份草稿有没有「缺号页坐标」。
+   * 旧版本草稿没有 → 前端把缺号数字置灰、点了不发请求（避免弹 404）。
+   */
+  qno_gaps_available?: boolean;
 }
 
 /** 管理端列表查询（A2 新增 created_within / order / publisher_id） */
@@ -953,6 +958,43 @@ export function fetchParseDraft(draftId: number): Promise<ParseDraftDetail> {
   return request<ParseDraftDetail>({
     url: `/api/materials/admin/parse-drafts/${draftId}`,
     method: 'GET'
+  });
+}
+
+/**
+ * 导题缺号定位（Q2，2026-11-15）：取「第 no 题」在原卷的那一页。
+ *
+ * 为什么不是图片直链：`<img src>` 带不了 `Authorization`，用 `?token=` 又会把令牌写进
+ * URL/日志 → 后端回 JSON（base64 PNG + 0–1 相对高亮框），由组件转成 `data:` URL。
+ */
+export interface ParseDraftPageImage {
+  ok: boolean;
+  no: number;
+  page: number;
+  /** 跨页缺口的备选页（"下一题所在页"，第 86 题就在这一页）；0 = 没有 */
+  alt_page?: number;
+  /** 本次渲染的是不是备选页（备选页只给顶部提示条，没有精确坐标） */
+  on_alt_page?: boolean;
+  page_count: number;
+  dpi: number;
+  image_w: number;
+  image_h: number;
+  image_b64: string;
+  highlight: { x0: number; y0: number; x1: number; y1: number };
+  file_name: string;
+  hint: string;
+}
+
+export function fetchDraftPageImage(
+  draftId: number,
+  no: number,
+  dpi = 150,
+  page?: number
+): Promise<ParseDraftPageImage> {
+  return request<ParseDraftPageImage>({
+    url: `/api/materials/admin/parse-drafts/${draftId}/page-image`,
+    method: 'GET',
+    params: { no, dpi, page: page || undefined }
   });
 }
 
