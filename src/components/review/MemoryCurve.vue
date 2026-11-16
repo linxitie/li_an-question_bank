@@ -1,5 +1,6 @@
 <template>
-  <section class="mc">
+  <!-- 无错题时整块隐藏，避免与上方的复习引导卡重复 -->
+  <section v-if="state.loading || state.items.length > 0" class="mc">
     <header class="mc__head">
       <div>
         <p class="mc__title">记忆强度</p>
