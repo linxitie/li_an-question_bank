@@ -88,12 +88,12 @@
             <span v-if="m.streaming" class="cursor"></span>
 
             <div v-if="!m.streaming && m.content" class="xz-msg__ops">
-              <button title="复制" @click="copyText(m.content)">⧉</button>
-              <button v-if="m.role === 'assistant'" title="重新生成" @click="regenerate(i)">↻</button>
-              <button v-if="m.role === 'user'" title="编辑重发" @click="editMessage(i)">✎</button>
-              <button v-if="m.role === 'assistant'" title="有帮助" :class="{ on: m.rated === 'up' }" @click="feedback(m, true)">👍</button>
-              <button v-if="m.role === 'assistant'" title="没帮助" :class="{ on: m.rated === 'down' }" @click="feedback(m, false)">👎</button>
-              <button title="删除" @click="delMessage(i)">🗑</button>
+              <button title="复制" aria-label="复制这条回复" @click="copyText(m.content)">⧉</button>
+              <button v-if="m.role === 'assistant'" title="重新生成" aria-label="重新生成回复" @click="regenerate(i)">↻</button>
+              <button v-if="m.role === 'user'" title="编辑重发" aria-label="编辑并重发" @click="editMessage(i)">✎</button>
+              <button v-if="m.role === 'assistant'" title="有帮助" aria-label="这条回答有帮助" :class="{ on: m.rated === 'up' }" @click="feedback(m, true)">👍</button>
+              <button v-if="m.role === 'assistant'" title="没帮助" aria-label="这条回答没帮助" :class="{ on: m.rated === 'down' }" @click="feedback(m, false)">👎</button>
+              <button title="删除" aria-label="删除这条消息" @click="delMessage(i)">🗑</button>
             </div>
           </div>
         </div>
@@ -109,13 +109,15 @@
           </span>
         </div>
         <div class="composer" :class="{ 'has-text': state.input.trim() }">
-          <textarea ref="inputRef" v-model="state.input" class="composer__input" rows="1"
+          <textarea ref="inputRef" v-model="state.input" class="composer__input" rows="1" aria-label="给联考小智发送消息"
                     :placeholder="state.mode === 'agent' ? '交给小智去做…' : '给联考小智发送消息'"
                     @keydown.enter.exact.prevent="send()"></textarea>
           <div class="composer__bar">
-            <button class="chip chip--icon" title="添加附件（图片 / PDF / 文档）" @click="pickFile">📎</button>
+            <button class="chip chip--icon" title="添加附件（图片 / PDF / 文档）" aria-label="添加附件" @click="pickFile">📎</button>
             <button class="chip chip--icon" :class="{ on: state.listening }"
                     :title="state.listening ? '正在听…点一下停止' : '语音输入'"
+                    :aria-label="state.listening ? '停止语音输入' : '开始语音输入'"
+                    :aria-pressed="state.listening"
                     @click="toggleVoice">{{ state.listening ? "●" : "🎤" }}</button>
             <input id="xz-file" type="file" multiple class="xz-file" @change="onFileChange" />
             <button class="chip" :class="{ on: state.model === 'reason' }"

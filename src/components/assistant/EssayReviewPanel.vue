@@ -1,6 +1,6 @@
 <template>
   <div class="essay">
-    <button v-if="!open" class="essay__fab" title="申论作文 AI 批改" @click="open = true">✍️</button>
+    <button v-if="!open" class="essay__fab" title="申论作文 AI 批改" aria-label="打开申论作文 AI 批改" @click="open = true">✍️</button>
 
     <transition name="fade">
       <div v-if="open" class="essay__mask" @click.self="open = false">
