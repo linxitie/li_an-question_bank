@@ -20,7 +20,24 @@
       </div>
     </header>
 
-    <ForceGraph3D v-if="view === '3d'" @select="onNodeSelect" />
+    <div v-if="view === '3d'" class="kg-stage">
+      <ForceGraph3D @select="onNodeSelect" />
+      <aside v-if="selected" class="kg-panel">
+        <header class="kg-panel__head">
+          <span class="kg-panel__name">{{ selected.name }}</span>
+          <button class="kg-panel__close" @click="selected = null">×</button>
+        </header>
+        <p class="kg-panel__meta">关联考点 {{ selected.degree }} 个</p>
+        <div class="kg-panel__chips">
+          <button v-for="n in selected.neighbors" :key="n.rel + n.id"
+                  class="kg-chip" :class="'rel-' + n.rel"
+                  :title="relLabel(n.rel)"
+                  @click="selected = { id: n.id, name: n.name, degree: 0, neighbors: [] }">
+            {{ n.name }}
+          </button>
+        </div>
+      </aside>
+    </div>
     <KnowledgeGraphPanel v-else ref="panelRef" :mode="mode" />
   </div>
 </template>
@@ -62,6 +79,17 @@ async function generateTasks(): Promise<void> {
 </script>
 
 <style scoped>
+.kg-stage { position: relative; }
+.kg-panel { position: absolute; right: 16px; top: 16px; width: 240px; max-height: 70%; overflow: auto; background: rgba(255,255,255,.96); border: 1px solid #e8ecf4; border-radius: 12px; padding: 14px; box-shadow: 0 8px 28px rgba(17,24,39,.14); }
+.kg-panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.kg-panel__name { font-size: 13.5px; font-weight: 700; color: #1a2b5f; }
+.kg-panel__close { border: none; background: none; color: #9aa0aa; cursor: pointer; font-size: 15px; line-height: 1; }
+.kg-panel__meta { margin: 6px 0 10px; font-size: 11px; color: #8a8faa; }
+.kg-panel__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kg-chip { border: 1px solid #e3e6ec; background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 11.5px; color: #4b5563; cursor: pointer; }
+.kg-chip:hover { border-color: #4d6bfe; color: #3b5bdb; }
+.kg-chip.rel-prerequisite_of { border-color: #fde68a; background: #fffdf5; }
+.kg-chip.rel-confusable { border-color: #fbd5db; background: #fff7f8; }
 .kg-page {
   max-width: 1180px;
   margin: 0 auto;

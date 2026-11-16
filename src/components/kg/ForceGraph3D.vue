@@ -176,7 +176,24 @@ function onClick(e) {
     if (d < bestD) { bestD = d; best = n }
   })
   state.nodes.forEach(function (n) { n.hover = n === best })
-  if (best) emit("select", best)
+  if (best) {
+    // 带上一跳邻居，供外层做下钻面板
+    const neighbors = state.edges
+      .filter(function (e) { return e.source === best.id || e.target === best.id })
+      .map(function (e) {
+        const otherId = e.source === best.id ? e.target : e.source
+        const other = state.nodes.find(function (n) { return n.id === otherId })
+        return other ? { id: other.id, name: other.name, rel: e.rel } : null
+      })
+      .filter(Boolean)
+    emit("select", {
+      id: best.id,
+      name: best.name,
+      level: best.level,
+      degree: neighbors.length,
+      neighbors: neighbors.slice(0, 12),
+    })
+  }
 }
 
 function token() {
