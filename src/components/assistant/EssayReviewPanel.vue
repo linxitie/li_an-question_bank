@@ -98,6 +98,10 @@ async function grade() {
   font-size: 19px; cursor: pointer; transition: transform 160ms ease;
 }
 .essay__fab:hover { transform: translateY(-2px); }
+/* 窄屏：番茄钟挂件在 bottom:84px 占位，作文按钮必须让开，否则两个浮球重叠 */
+@media (max-width: 768px) {
+  .essay__fab { right: 14px; bottom: 150px; }
+}
 
 .essay__mask { position: fixed; inset: 0; background: rgba(17,24,39,.35); z-index: 2000; display: flex; justify-content: flex-end; }
 .essay__panel {
